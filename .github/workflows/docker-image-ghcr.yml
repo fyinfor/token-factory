@@ -1,0 +1,71 @@
+# 手动触发：构建根目录 Dockerfile，推送到 GitHub Container Registry (ghcr.io)。
+# 拉取示例：docker pull ghcr.io/<小写 owner>/<小写仓库名>:latest
+# 缓存：GHA Buildx 层缓存（按仓库隔离的 scope）
+# 多架构发布、Docker Hub 等另见 workflows/docker-image-arm64.yml、release.yml
+
+name: 编译 Docker 镜像 (GHCR)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  DOCKER_BUILDKIT: 1
+
+jobs:
+  build-image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: GHCR 镜像路径（owner / 仓库名必须小写）
+        id: ghcr
+        run: |
+          owner_lower=$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')
+          repo_lower=$(echo '${{ github.event.repository.name }}' | tr '[:upper:]' '[:lower:]')
+          echo "image=ghcr.io/${owner_lower}/${repo_lower}" >> "$GITHUB_OUTPUT"
+          echo "repo_pkg=${repo_lower}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: |
+            ${{ steps.ghcr.outputs.image }}
+          tags: |
+            type=raw,value=latest
+            type=sha,prefix=,format=short
+
+      - name: Build and push
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64
+          cache-from: type=gha,scope=ghcr-docker-${{ github.repository_id }}
+          cache-to: type=gha,mode=max,scope=ghcr-docker-${{ github.repository_id }}
+
+      - name: 构建摘要（拉取地址）
+        run: |
+          echo "## GHCR 镜像已推送" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **Packages**：\`https://github.com/${{ github.repository }}/pkgs/container/${{ steps.ghcr.outputs.repo_pkg }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **拉取 latest**：\`docker pull ${{ steps.ghcr.outputs.image }}:latest\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **按提交短 SHA**：\`docker pull ${{ steps.ghcr.outputs.image }}:$(echo '${{ github.sha }}' | cut -c1-7)\`" >> "$GITHUB_STEP_SUMMARY"
