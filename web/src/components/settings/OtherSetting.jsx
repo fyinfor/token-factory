@@ -242,32 +242,33 @@ const OtherSetting = () => {
       // );
 
       // Option 2: Use the JSON proxy approach which often works better with GitHub API
-      const res = await fetch(
-        'https://api.github.com/repos/Calcium-Ion/new-api/releases/latest',
-        {
-          headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            // Adding User-Agent which is often required by GitHub API
-            'User-Agent': 'new-api-update-checker',
-          },
-        },
-      ).then((response) => response.json());
+      // const res = await fetch(
+      //   'https://api.github.com/repos/Calcium-Ion/new-api/releases/latest',
+      //   {
+      //     headers: {
+      //       Accept: 'application/json',
+      //       'Content-Type': 'application/json',
+      //       // Adding User-Agent which is often required by GitHub API
+      //       'User-Agent': 'new-api-update-checker',
+      //     },
+      //   },
+      // ).then((response) => response.json());
 
       // Option 3: Use a local proxy endpoint
       // Create a cached version of the response to avoid frequent GitHub API calls
       // const res = await API.get('/api/status/github-latest-release');
 
-      const { tag_name, body } = res;
-      if (tag_name === statusState?.status?.version) {
-        showSuccess(`已是最新版本：${tag_name}`);
-      } else {
-        setUpdateData({
-          tag_name: tag_name,
-          content: marked.parse(body),
-        });
-        setShowUpdateModal(true);
-      }
+      // const { tag_name, body } = res;
+      // if (tag_name === statusState?.status?.version) {
+      //   showSuccess(`已是最新版本：${tag_name}`);
+      // } else {
+      //   setUpdateData({
+      //     tag_name: tag_name,
+      //     content: marked.parse(body),
+      //   });
+      //   setShowUpdateModal(true);
+      // }
+      showInfo('更新检查功能已禁用');
     } catch (error) {
       console.error('Failed to check for updates:', error);
       showError('检查更新失败，请稍后再试');
@@ -301,12 +302,12 @@ const OtherSetting = () => {
   }, []);
 
   // Function to open GitHub release page
-  const openGitHubRelease = () => {
-    window.open(
-      `https://github.com/Calcium-Ion/new-api/releases/tag/${updateData.tag_name}`,
-      '_blank',
-    );
-  };
+  // const openGitHubRelease = () => {
+  //   window.open(
+  //     `https://github.com/Calcium-Ion/new-api/releases/tag/${updateData.tag_name}`,
+  //     '_blank',
+  //   );
+  // };
 
   const getStartTimeString = () => {
     const timestamp = statusState?.status?.start_time;
