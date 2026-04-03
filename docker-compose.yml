@@ -16,8 +16,8 @@ version: '3.4' # For compatibility with older Docker versions
 
 services:
   new-api:
-    image: calciumion/new-api:latest
-    container_name: new-api
+    image: ghcr.io/fyinfor/token-factory:latest
+    container_name: token-factory
     restart: always
     command: --log-dir /app/logs
     ports:
