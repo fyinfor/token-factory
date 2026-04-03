@@ -49,7 +49,7 @@ func main() {
 		return
 	}
 
-	common.SysLog("Token Factory " + common.Version + " started")
+	common.SysLog("TokenFactory " + common.Version + " started")
 	if os.Getenv("GIN_MODE") != "debug" {
 		gin.SetMode(gin.ReleaseMode)
 	}

@@ -2,7 +2,7 @@
 
 set -e
 
-echo "Building Token Factory Electron App..."
+echo "Building TokenFactory Electron App..."
 
 echo "Step 1: Building frontend..."
 cd ../web

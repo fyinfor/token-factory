@@ -2,9 +2,11 @@
 
 ![token-factory](/web/public/logo.png)
 
-# Token Factory
+# TokenFactory
 
 🍥 **Passerelle de modèles étendus de nouvelle génération et système de gestion d'actifs d'IA**
+
+*TokenFactory* est une œuvre dérivée de [QuantumNous/new-api](https://github.com/QuantumNous/new-api) (« New API »). Ce dépôt est sous licence **GNU AGPL v3.0** ; voir [`LICENSE`](./LICENSE) et [`NOTICE`](./NOTICE). Si vous fournissez ce logiciel (modifié ou non) en service sur un réseau, vous devez respecter les obligations AGPL concernant la mise à disposition du code source correspondant.
 
 <p align="center">
   <a href="./README.zh_CN.md">简体中文</a> |
@@ -38,7 +40,7 @@
     <img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=539ac4217e69431684ad4a0bab768811&claim_uid=tbFPfKIDHpc4TzR" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" />
   </a><!--
   --><a href="https://www.producthunt.com/products/new-api/launches/new-api?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-new-api" target="_blank" rel="noopener noreferrer">
-    <img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1047693&theme=light&t=1769577875005" alt="Token Factory - All-in-one AI asset management gateway. | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" />
+    <img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1047693&theme=light&t=1769577875005" alt="TokenFactory - All-in-one AI asset management gateway. | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" />
   </a>
 </p>
 
@@ -55,6 +57,7 @@
 ## 📝 Description du projet
 
 > [!IMPORTANT]
+> - **Amont & licence :** TokenFactory est dérivé de [QuantumNous/new-api](https://github.com/QuantumNous/new-api). L’amont et les modifications restent sous **AGPL-3.0** ; ne supprimez pas les mentions de droits d’auteur ni le fichier de licence. Voir [`NOTICE`](./NOTICE).
 > - Ce projet est uniquement destiné à des fins d'apprentissage personnel, sans garantie de stabilité ni de support technique.
 > - Les utilisateurs doivent se conformer aux [Conditions d'utilisation](https://openai.com/policies/terms-of-use) d'OpenAI et aux **lois et réglementations applicables**, et ne doivent pas l'utiliser à des fins illégales.
 > - Conformément aux [《Mesures provisoires pour la gestion des services d'intelligence artificielle générative》](http://www.cac.gov.cn/2023-07/13/c_1690898327029107.htm), veuillez ne fournir aucun service d'IA générative non enregistré au public en Chine.
@@ -110,7 +113,7 @@
 
 ```bash
 # Cloner le projet
-git clone https://github.com/QuantumNous/new-api.git
+git clone https://github.com/QuantumNous/token-factory.git
 cd token-factory
 
 # Modifier la configuration docker-compose.yml
@@ -336,7 +339,7 @@ docker run --name token-factory -d --restart always \
 
 ```bash
 # Cloner le projet
-git clone https://github.com/QuantumNous/new-api.git
+git clone https://github.com/QuantumNous/token-factory.git
 cd token-factory
 
 # Modifier la configuration
@@ -380,7 +383,7 @@ docker run --name token-factory -d --restart always \
 <summary><strong>Méthode 3: Panneau BaoTa</strong></summary>
 
 1. Installez le panneau BaoTa (version ≥ 9.2.0)
-2. Recherchez **Token Factory** dans le magasin d'applications
+2. Recherchez **TokenFactory** dans le magasin d'applications
 3. Installation en un clic
 
 📖 [Tutoriel avec des images](./docs/BT.md)
@@ -409,7 +412,8 @@ docker run --name token-factory -d --restart always \
 
 | Projet | Description |
 |------|------|
-| [One API](https://github.com/songquanpeng/one-api) | Base du projet original |
+| [QuantumNous/new-api](https://github.com/QuantumNous/new-api) | **New API** — amont direct de TokenFactory (AGPL-3.0) |
+| [One API](https://github.com/songquanpeng/one-api) | Base antérieure (licence MIT) |
 | [Midjourney-Proxy](https://github.com/novicezk/midjourney-proxy) | Prise en charge de l'interface Midjourney |
 
 ### Outils d'accompagnement
@@ -417,7 +421,7 @@ docker run --name token-factory -d --restart always \
 | Projet | Description |
 |------|------|
 | [neko-api-key-tool](https://github.com/Calcium-Ion/neko-api-key-tool) | Outil de recherche de quota d'utilisation avec une clé |
-| [token-factory-horizon](https://github.com/Calcium-Ion/new-api-horizon) | Version optimisée haute performance de Token Factory |
+| [token-factory-horizon](https://github.com/Calcium-Ion/new-api-horizon) | Version optimisée haute performance de TokenFactory |
 
 ---
 
@@ -445,9 +449,9 @@ Bienvenue à toutes les formes de contribution!
 
 ## 📜 Licence
 
-Ce projet est sous licence [GNU Affero General Public License v3.0 (AGPLv3)](./LICENSE).
+Ce projet (**TokenFactory**) est sous licence [GNU Affero General Public License v3.0 (AGPLv3)](./LICENSE). Les modifications et œuvres dérivées restent sous **AGPL-3.0**, sauf accord commercial distinct avec les titulaires des droits.
 
-Il s'agit d'un projet open-source développé sur la base de [One API](https://github.com/songquanpeng/one-api) (licence MIT).
+**Attribution :** TokenFactory est dérivé de [QuantumNous/new-api](https://github.com/QuantumNous/new-api) (New API), également sous AGPL-3.0 ; la chaîne inclut [One API](https://github.com/songquanpeng/one-api) (licence MIT). Conservez les mentions en amont, ce dépôt [`LICENSE`](./LICENSE) et [`NOTICE`](./NOTICE). Conformément à l’**article 13 de l’AGPL-3.0**, si vous exploitez une version modifiée en service réseau pour des tiers, vous devez leur fournir le code source complet correspondant sous la même licence.
 
 Si les politiques de votre organisation ne permettent pas l'utilisation de logiciels sous licence AGPLv3, ou si vous souhaitez éviter les obligations open-source de l'AGPLv3, veuillez nous contacter à : [support@quantumnous.com](mailto:support@quantumnous.com)
 
@@ -465,7 +469,7 @@ Si les politiques de votre organisation ne permettent pas l'utilisation de logic
 
 <div align="center">
 
-### 💖 Merci d'utiliser Token Factory
+### 💖 Merci d'utiliser TokenFactory
 
 Si ce projet vous est utile, bienvenue à nous donner une ⭐️ Étoile！
 

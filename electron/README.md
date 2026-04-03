@@ -1,6 +1,6 @@
-# Token Factory Electron Desktop App
+# TokenFactory Electron Desktop App
 
-This directory contains the Electron wrapper for Token Factory, providing a native desktop application with system tray support for Windows, macOS, and Linux.
+This directory contains the Electron wrapper for TokenFactory, providing a native desktop application with system tray support for Windows, macOS, and Linux.
 
 ## Prerequisites
 
@@ -68,6 +68,6 @@ const PORT = 3000; // Change to desired port
 ### Database Location
 - **Development**: `../data/token-factory.db` (project directory)
 - **Production**:
-  - macOS: `~/Library/Application Support/Token Factory/data/`
-  - Windows: `%APPDATA%/Token Factory/data/`
-  - Linux: `~/.config/Token Factory/data/`
+  - macOS: `~/Library/Application Support/TokenFactory/data/`
+  - Windows: `%APPDATA%/TokenFactory/data/`
+  - Linux: `~/.config/TokenFactory/data/`

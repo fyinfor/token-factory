@@ -2,9 +2,11 @@
 
 ![token-factory](/web/public/logo.png)
 
-# Token Factory
+# TokenFactory
 
 🍥 **次世代大規模モデルゲートウェイとAI資産管理システム**
+
+**TokenFactory** は [QuantumNous/new-api](https://github.com/QuantumNous/new-api)（New API）を派生元とします。本リポジトリは **GNU AGPL v3.0** でライセンスされます。詳細は [`LICENSE`](./LICENSE) および [`NOTICE`](./NOTICE) を参照してください。ネットワーク経由で本ソフトウェア（改変版を含む）を第三者に提供する場合は、AGPL に基づく対応する完全なソースコード提供義務に従ってください。
 
 <p align="center">
   <a href="./README.zh_CN.md">简体中文</a> |
@@ -38,7 +40,7 @@
     <img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=539ac4217e69431684ad4a0bab768811&claim_uid=tbFPfKIDHpc4TzR" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" />
   </a><!--
   --><a href="https://www.producthunt.com/products/new-api/launches/new-api?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-new-api" target="_blank" rel="noopener noreferrer">
-    <img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1047693&theme=light&t=1769577875005" alt="Token Factory - All-in-one AI asset management gateway. | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" />
+    <img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1047693&theme=light&t=1769577875005" alt="TokenFactory - All-in-one AI asset management gateway. | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" />
   </a>
 </p>
 
@@ -55,6 +57,7 @@
 ## 📝 プロジェクト説明
 
 > [!IMPORTANT]
+> - **上流とライセンス：** TokenFactory は [QuantumNous/new-api](https://github.com/QuantumNous/new-api) から派生しています。上流および本リポジトリの改変は **AGPL-3.0** の下にあります。著作権表示やライセンス文書を削除しないでください。詳細は [`NOTICE`](./NOTICE) を参照してください。
 > - 本プロジェクトは個人学習用のみであり、安定性の保証や技術サポートは提供しません。
 > - ユーザーは、OpenAIの[利用規約](https://openai.com/policies/terms-of-use)および**法律法規**を遵守する必要があり、違法な目的で使用してはいけません。
 > - [《生成式人工智能服务管理暂行办法》](http://www.cac.gov.cn/2023-07/13/c_1690898327029107.htm)の要求に従い、中国地域の公衆に未登録の生成式AI サービスを提供しないでください。
@@ -110,7 +113,7 @@
 
 ```bash
 # プロジェクトをクローン
-git clone https://github.com/QuantumNous/new-api.git
+git clone https://github.com/QuantumNous/token-factory.git
 cd token-factory
 
 # docker-compose.yml 設定を編集
@@ -338,7 +341,7 @@ docker run --name token-factory -d --restart always \
 
 ```bash
 # プロジェクトをクローン
-git clone https://github.com/QuantumNous/new-api.git
+git clone https://github.com/QuantumNous/token-factory.git
 cd token-factory
 
 # 設定を編集
@@ -381,7 +384,7 @@ docker run --name token-factory -d --restart always \
 <details>
 <summary><strong>方法 3: 宝塔パネル</strong></summary>
 
-1. 宝塔パネル（**9.2.0バージョン**以上）をインストールし、アプリケーションストアで**Token Factory**を検索してインストールします。
+1. 宝塔パネル（**9.2.0バージョン**以上）をインストールし、アプリケーションストアで**TokenFactory**を検索してインストールします。
 
 📖 [画像付きチュートリアル](./docs/BT.md)
 
@@ -409,7 +412,8 @@ docker run --name token-factory -d --restart always \
 
 | プロジェクト | 説明 |
 |------|------|
-| [One API](https://github.com/songquanpeng/one-api) | オリジナルプロジェクトベース |
+| [QuantumNous/new-api](https://github.com/QuantumNous/new-api) | **New API** — TokenFactory の直接の上流（AGPL-3.0） |
+| [One API](https://github.com/songquanpeng/one-api) | より早い基盤（MIT ライセンス） |
 | [Midjourney-Proxy](https://github.com/novicezk/midjourney-proxy) | Midjourneyインターフェースサポート |
 
 ### 補助ツール
@@ -417,7 +421,7 @@ docker run --name token-factory -d --restart always \
 | プロジェクト | 説明 |
 |------|------|
 | [neko-api-key-tool](https://github.com/Calcium-Ion/neko-api-key-tool) | キー使用量クォータ照会ツール |
-| [token-factory-horizon](https://github.com/Calcium-Ion/new-api-horizon) | Token Factory高性能最適化版 |
+| [token-factory-horizon](https://github.com/Calcium-Ion/new-api-horizon) | TokenFactory高性能最適化版 |
 
 ---
 
@@ -445,9 +449,9 @@ docker run --name token-factory -d --restart always \
 
 ## 📜 ライセンス
 
-このプロジェクトは [GNU Affero General Public License v3.0 (AGPLv3)](./LICENSE) の下でライセンスされています。
+本プロジェクト（**TokenFactory**）は [GNU Affero General Public License v3.0 (AGPLv3)](./LICENSE) の下でライセンスされます。改変および二次的著作物も **AGPL-3.0** が適用されます（著作権者との別途の商用ライセンス契約がある場合を除きます）。
 
-本プロジェクトは、[One API](https://github.com/songquanpeng/one-api)（MITライセンス）をベースに開発されたオープンソースプロジェクトです。
+**帰属表示：** TokenFactory は [QuantumNous/new-api](https://github.com/QuantumNous/new-api)（New API）から派生しており、上流も AGPL-3.0 です。系譜には [One API](https://github.com/songquanpeng/one-api)（MIT ライセンス）が含まれます。上流および本リポジトリの著作権表示、[`LICENSE`](./LICENSE)、[`NOTICE`](./NOTICE) を保持してください。**AGPL-3.0 第13条：** 改変版をネットワークサービスとして第三者に提供する場合、対応する完全なソースコードを同一ライセンスの下で提供する必要があります。
 
 お客様の組織のポリシーがAGPLv3ライセンスのソフトウェアの使用を許可していない場合、またはAGPLv3のオープンソース義務を回避したい場合は、こちらまでお問い合わせください：[support@quantumnous.com](mailto:support@quantumnous.com)
 
@@ -465,7 +469,7 @@ docker run --name token-factory -d --restart always \
 
 <div align="center">
 
-### 💖 Token Factoryをご利用いただきありがとうございます
+### 💖 TokenFactoryをご利用いただきありがとうございます
 
 このプロジェクトがあなたのお役に立てたなら、ぜひ ⭐️ スターをください！
 

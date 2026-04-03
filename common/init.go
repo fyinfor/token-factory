@@ -22,8 +22,9 @@ var (
 )
 
 func printHelp() {
-	fmt.Println("Token Factory (Based OneAPI) " + Version + " - The next-generation LLM gateway and AI asset management system supports multiple languages.")
+	fmt.Println("TokenFactory (Based OneAPI) " + Version + " - The next-generation LLM gateway and AI asset management system supports multiple languages.")
 	fmt.Println("Original Project: OneAPI by JustSong - https://github.com/songquanpeng/one-api")
+	fmt.Println("Upstream: QuantumNous/new-api (AGPL-3.0) - https://github.com/QuantumNous/new-api")
 	fmt.Println("Maintainer: QuantumNous - https://github.com/QuantumNous/new-api")
 	fmt.Println("Usage: newapi [--port <port>] [--log-dir <log directory>] [--version] [--help]")
 }

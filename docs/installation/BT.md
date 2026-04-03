@@ -1,6 +1,6 @@
 # 宝塔面板部署教程
 
-本文档提供使用宝塔面板 Docker 功能部署 Token Factory 的图文教程。
+本文档提供使用宝塔面板 Docker 功能部署 TokenFactory 的图文教程。
 
 > 📖 官方文档：[宝塔面板部署](https://docs.newapi.pro/zh/docs/installation/deployment-methods/bt-docker-installation)
 
@@ -32,12 +32,12 @@
 
 ***
 
-## 步骤三：安装 Token Factory
+## 步骤三：安装 TokenFactory
 
 ### 方法一：使用宝塔应用商店（推荐）
 
 1. 在宝塔面板 Docker 功能中，点击 **应用商店**
-2. 搜索并找到 **Token Factory**
+2. 搜索并找到 **TokenFactory**
 3. 点击 **安装**
 4. 配置以下基本选项：
    - **容器名称**：可自定义，默认为 `token-factory`

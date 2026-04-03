@@ -2,9 +2,11 @@
 
 ![token-factory](/web/public/logo.png)
 
-# Token Factory
+# TokenFactory
 
 🍥 **新一代大模型網關與AI資產管理系統**
+
+**TokenFactory** 派生自 [QuantumNous/new-api](https://github.com/QuantumNous/new-api)（New API）。本程式碼庫以 **GNU AGPL v3.0** 授權，詳見根目錄 [`LICENSE`](./LICENSE) 與 [`NOTICE`](./NOTICE)。若您透過網路向他人提供本軟體的修改版服務，須遵守 AGPL 關於提供對應完整原始碼的義務。
 
 <p align="center">
   繁體中文 |
@@ -38,7 +40,7 @@
     <img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=539ac4217e69431684ad4a0bab768811&claim_uid=tbFPfKIDHpc4TzR" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" />
   </a>
   <a href="https://www.producthunt.com/products/new-api/launches/new-api?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-new-api" target="_blank" rel="noopener noreferrer">
-    <img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1047693&theme=light&t=1769577875005" alt="Token Factory - All-in-one AI asset management gateway. | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" />
+    <img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1047693&theme=light&t=1769577875005" alt="TokenFactory - All-in-one AI asset management gateway. | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" />
   </a>
 </p>
 
@@ -55,6 +57,7 @@
 ## 📝 項目說明
 
 > [!IMPORTANT]
+> - **上游與許可：** TokenFactory 派生自 [QuantumNous/new-api](https://github.com/QuantumNous/new-api)。上游與本倉庫修改均以 **AGPL-3.0** 授權；請勿刪除版權聲明或許可檔案。詳見 [`NOTICE`](./NOTICE)。
 > - 本項目僅供個人學習使用，不保證穩定性，且不提供任何技術支援
 > - 使用者必須在遵循 OpenAI 的 [使用條款](https://openai.com/policies/terms-of-use) 以及**法律法規**的情況下使用，不得用於非法用途
 > - 根據 [《生成式人工智慧服務管理暫行辦法》](http://www.cac.gov.cn/2023-07/13/c_1690898327029107.htm) 的要求，請勿對中國地區公眾提供一切未經備案的生成式人工智慧服務
@@ -110,7 +113,7 @@
 
 ```bash
 # 複製項目
-git clone https://github.com/QuantumNous/new-api.git
+git clone https://github.com/QuantumNous/token-factory.git
 cd token-factory
 
 # 編輯 docker-compose.yml 配置
@@ -336,7 +339,7 @@ docker run --name token-factory -d --restart always \
 
 ```bash
 # 複製項目
-git clone https://github.com/QuantumNous/new-api.git
+git clone https://github.com/QuantumNous/token-factory.git
 cd token-factory
 
 # 編輯配置
@@ -380,7 +383,7 @@ docker run --name token-factory -d --restart always \
 <summary><strong>方式 3：寶塔面板</strong></summary>
 
 1. 安裝寶塔面板（≥ 9.2.0 版本）
-2. 在應用商店搜尋 **Token Factory**
+2. 在應用商店搜尋 **TokenFactory**
 3. 一鍵安裝
 
 📖 [圖文教學](./docs/BT.md)
@@ -409,7 +412,8 @@ docker run --name token-factory -d --restart always \
 
 | 項目 | 說明 |
 |------|------|
-| [One API](https://github.com/songquanpeng/one-api) | 原版項目基礎 |
+| [QuantumNous/new-api](https://github.com/QuantumNous/new-api) | **New API** — TokenFactory 的直接上游（AGPL-3.0） |
+| [One API](https://github.com/songquanpeng/one-api) | 更早的基礎實作（MIT 許可證） |
 | [Midjourney-Proxy](https://github.com/novicezk/midjourney-proxy) | Midjourney 接口支援 |
 
 ### 配套工具
@@ -417,7 +421,7 @@ docker run --name token-factory -d --restart always \
 | 項目 | 說明 |
 |------|------|
 | [neko-api-key-tool](https://github.com/Calcium-Ion/neko-api-key-tool) | Key 額度查詢工具 |
-| [token-factory-horizon](https://github.com/Calcium-Ion/new-api-horizon) | Token Factory 高性能優化版 |
+| [token-factory-horizon](https://github.com/Calcium-Ion/new-api-horizon) | TokenFactory 高性能優化版 |
 
 ---
 
@@ -445,9 +449,9 @@ docker run --name token-factory -d --restart always \
 
 ## 📜 許可證
 
-本項目採用 [GNU Affero 通用公共許可證 v3.0 (AGPLv3)](./LICENSE) 授權。
+本項目（**TokenFactory**）採用 [GNU Affero 通用公共許可證 v3.0 (AGPLv3)](./LICENSE) 授權；後續修改與再衍生作品在 AGPL-3.0 下繼續適用，除非您另行取得著作權人的商業許可。
 
-本項目為開源項目，在 [One API](https://github.com/songquanpeng/one-api)（MIT 許可證）的基礎上進行二次開發。
+**署名說明：** TokenFactory 派生自 [QuantumNous/new-api](https://github.com/QuantumNous/new-api)（New API），上游亦為 AGPL-3.0；項目鏈條中更早的基礎為 [One API](https://github.com/songquanpeng/one-api)（MIT 許可證）。請保留上游與本倉庫的版權聲明、[`LICENSE`](./LICENSE) 及 [`NOTICE`](./NOTICE)。**AGPL 第 13 條：** 若您將修改版以網路服務形式向他人提供，須向其提供對應完整原始碼（同等許可）。
 
 如果您所在的組織政策不允許使用 AGPLv3 許可的軟體，或您希望規避 AGPLv3 的開源義務，請發送郵件至：[support@quantumnous.com](mailto:support@quantumnous.com)
 
@@ -465,7 +469,7 @@ docker run --name token-factory -d --restart always \
 
 <div align="center">
 
-### 💖 感謝使用 Token Factory
+### 💖 感謝使用 TokenFactory
 
 如果這個項目對你有幫助，歡迎給我們一個 ⭐️ Star！
 

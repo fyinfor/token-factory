@@ -1,0 +1,18 @@
+TokenFactory — derivative work notice
+=====================================
+
+This software (TokenFactory) is derived from New API:
+  https://github.com/QuantumNous/new-api
+
+The upstream New API project is developed by QuantumNous and contributors
+and is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
+
+This derivative (TokenFactory) is also licensed under AGPL-3.0. See the
+LICENSE file in this repository for the full license text.
+
+You must retain copyright notices, this NOTICE, and the LICENSE file when
+redistributing or offering modified versions, including over a network, in
+accordance with AGPL-3.0.
+
+The project incorporates code whose lineage includes One API (MIT License);
+see the upstream New API repository and documentation for full attribution.
