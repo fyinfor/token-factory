@@ -128,14 +128,14 @@ docker-compose up -d
 
 ```bash
 # 拉取最新鏡像
-docker pull calciumion/token-factory:latest
+docker pull ghcr.io/fyinfor/token-factory:latest
 
 # 使用 SQLite（預設）
 docker run --name token-factory -d --restart always \
   -p 3000:3000 \
   -e TZ=Asia/Shanghai \
   -v ./data:/data \
-  calciumion/token-factory:latest
+  ghcr.io/fyinfor/token-factory:latest
 
 # 使用 MySQL
 docker run --name token-factory -d --restart always \
@@ -143,7 +143,7 @@ docker run --name token-factory -d --restart always \
   -e SQL_DSN="root:123456@tcp(localhost:3306)/oneapi" \
   -e TZ=Asia/Shanghai \
   -v ./data:/data \
-  calciumion/token-factory:latest
+  ghcr.io/fyinfor/token-factory:latest
 ```
 
 > **💡 提示：** `-v ./data:/data` 會將數據保存在當前目錄的 `data` 資料夾中，你也可以改為絕對路徑如 `-v /your/custom/path:/data`
@@ -294,7 +294,7 @@ docker run --name token-factory -d --restart always \
 ## 🚢 部署
 
 > [!TIP]
-> **最新版 Docker 鏡像：** `calciumion/token-factory:latest`
+> **最新版 Docker 鏡像：** `ghcr.io/fyinfor/token-factory:latest`
 
 ### 📋 部署要求
 
@@ -360,7 +360,7 @@ docker run --name token-factory -d --restart always \
   -p 3000:3000 \
   -e TZ=Asia/Shanghai \
   -v ./data:/data \
-  calciumion/token-factory:latest
+  ghcr.io/fyinfor/token-factory:latest
 ```
 
 **使用 MySQL：**
@@ -370,7 +370,7 @@ docker run --name token-factory -d --restart always \
   -e SQL_DSN="root:123456@tcp(localhost:3306)/oneapi" \
   -e TZ=Asia/Shanghai \
   -v ./data:/data \
-  calciumion/token-factory:latest
+  ghcr.io/fyinfor/token-factory:latest
 ```
 
 > **💡 路徑說明：**

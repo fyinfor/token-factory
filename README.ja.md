@@ -128,14 +128,14 @@ docker-compose up -d
 
 ```bash
 # 最新のイメージをプル
-docker pull calciumion/token-factory:latest
+docker pull ghcr.io/fyinfor/token-factory:latest
 
 # SQLiteを使用（デフォルト）
 docker run --name token-factory -d --restart always \
   -p 3000:3000 \
   -e TZ=Asia/Shanghai \
   -v ./data:/data \
-  calciumion/token-factory:latest
+  ghcr.io/fyinfor/token-factory:latest
 
 # MySQLを使用
 docker run --name token-factory -d --restart always \
@@ -143,7 +143,7 @@ docker run --name token-factory -d --restart always \
   -e SQL_DSN="root:123456@tcp(localhost:3306)/oneapi" \
   -e TZ=Asia/Shanghai \
   -v ./data:/data \
-  calciumion/token-factory:latest
+  ghcr.io/fyinfor/token-factory:latest
 ```
 
 > **💡 ヒント:** `-v ./data:/data` は現在のディレクトリの `data` フォルダにデータを保存します。絶対パスに変更することもできます：`-v /your/custom/path:/data`
@@ -296,7 +296,7 @@ docker run --name token-factory -d --restart always \
 ## 🚢 デプロイ
 
 > [!TIP]
-> **最新のDockerイメージ:** `calciumion/token-factory:latest`
+> **最新のDockerイメージ:** `ghcr.io/fyinfor/token-factory:latest`
 
 ### 📋 デプロイ要件
 
@@ -362,7 +362,7 @@ docker run --name token-factory -d --restart always \
   -p 3000:3000 \
   -e TZ=Asia/Shanghai \
   -v ./data:/data \
-  calciumion/token-factory:latest
+  ghcr.io/fyinfor/token-factory:latest
 ```
 
 **MySQLを使用:**
@@ -372,7 +372,7 @@ docker run --name token-factory -d --restart always \
   -e SQL_DSN="root:123456@tcp(localhost:3306)/oneapi" \
   -e TZ=Asia/Shanghai \
   -v ./data:/data \
-  calciumion/token-factory:latest
+  ghcr.io/fyinfor/token-factory:latest
 ```
 
 > **💡 パス説明:**

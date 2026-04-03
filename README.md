@@ -81,14 +81,14 @@ docker-compose up -d
 
 ```bash
 # Pull the latest image
-docker pull calciumion/token-factory:latest
+docker pull ghcr.io/fyinfor/token-factory:latest
 
 # Using SQLite (default)
 docker run --name token-factory -d --restart always \
   -p 3000:3000 \
   -e TZ=Asia/Shanghai \
   -v ./data:/data \
-  calciumion/token-factory:latest
+  ghcr.io/fyinfor/token-factory:latest
 
 # Using MySQL
 docker run --name token-factory -d --restart always \
@@ -96,7 +96,7 @@ docker run --name token-factory -d --restart always \
   -e SQL_DSN="root:123456@tcp(localhost:3306)/oneapi" \
   -e TZ=Asia/Shanghai \
   -v ./data:/data \
-  calciumion/token-factory:latest
+  ghcr.io/fyinfor/token-factory:latest
 ```
 
 > **💡 Tip:** `-v ./data:/data` will save data in the `data` folder of the current directory, you can also change it to an absolute path like `-v /your/custom/path:/data`
@@ -142,7 +142,7 @@ For model-by-model and endpoint-by-endpoint detail, use the **[API docs](https:/
 ## Deployment
 
 > [!TIP]
-> **Latest Docker image:** `calciumion/token-factory:latest`
+> **Latest Docker image:** `ghcr.io/fyinfor/token-factory:latest`
 
 ### 📋 Deployment Requirements
 
@@ -193,7 +193,7 @@ docker run --name token-factory -d --restart always \
   -p 3000:3000 \
   -e TZ=Asia/Shanghai \
   -v ./data:/data \
-  calciumion/token-factory:latest
+  ghcr.io/fyinfor/token-factory:latest
 ```
 
 **Using MySQL:**
@@ -203,7 +203,7 @@ docker run --name token-factory -d --restart always \
   -e SQL_DSN="root:123456@tcp(localhost:3306)/oneapi" \
   -e TZ=Asia/Shanghai \
   -v ./data:/data \
-  calciumion/token-factory:latest
+  ghcr.io/fyinfor/token-factory:latest
 ```
 
 > **💡 Path explanation:**

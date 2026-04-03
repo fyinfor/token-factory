@@ -57,7 +57,7 @@
 version: '3'
 services:
   token-factory:
-    image: calciumion/token-factory:latest
+    image: ghcr.io/fyinfor/token-factory:latest
     container_name: token-factory
     restart: always
     ports:
@@ -126,7 +126,7 @@ volumes:
 
 ```bash
 # 拉取最新镜像
-docker pull calciumion/token-factory:latest
+docker pull ghcr.io/fyinfor/token-factory:latest
 
 # 重启容器
 docker-compose down && docker-compose up -d
