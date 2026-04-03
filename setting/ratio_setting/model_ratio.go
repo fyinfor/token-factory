@@ -19,7 +19,7 @@ const (
 // https://platform.openai.com/docs/models/model-endpoint-compatibility
 // https://cloud.baidu.com/doc/WENXINWORKSHOP/s/Blfmc9dlf
 // https://openai.com/pricing
-// TODO: when a new api is enabled, check the pricing here
+// TODO: when a token factory channel is enabled, check the pricing here
 // 1 === $0.002 / 1K tokens
 // 1 === ￥0.014 / 1k tokens
 

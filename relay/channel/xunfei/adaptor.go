@@ -80,7 +80,7 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 	return dummyResp, nil
 }
 
-func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.NewAPIError) {
+func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.TokenFactoryError) {
 	splits := strings.Split(info.ApiKey, "|")
 	if len(splits) != 3 {
 		return nil, types.NewError(errors.New("invalid auth"), types.ErrorCodeChannelInvalidKey)
