@@ -47,11 +47,11 @@ func TestResetStatusCode(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			newAPIError := &types.NewAPIError{
+			tokenFactoryError := &types.TokenFactoryError{
 				StatusCode: tc.statusCode,
 			}
-			ResetStatusCode(newAPIError, tc.statusCodeConfig)
-			require.Equal(t, tc.expectedCode, newAPIError.StatusCode)
+			ResetStatusCode(tokenFactoryError, tc.statusCodeConfig)
+			require.Equal(t, tc.expectedCode, tokenFactoryError.StatusCode)
 		})
 	}
 }

@@ -1,9 +1,9 @@
 ---
-description: Project conventions and coding standards for new-api
+description: Project conventions and coding standards for token-factory
 alwaysApply: true
 ---
 
-# Project Conventions — new-api
+# Project Conventions — token-factory
 
 ## Overview
 

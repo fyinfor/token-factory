@@ -1,4 +1,4 @@
-# CLAUDE.md — Project Conventions for new-api
+# CLAUDE.md — Project Conventions for token-factory
 
 ## Overview
 
