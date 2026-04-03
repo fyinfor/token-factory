@@ -1,7 +1,8 @@
-# New-API Docker Compose Configuration
-# 
+# Token Factory Docker Compose Configuration
+#
 # Quick Start:
-#   1. docker-compose up -d
+#   0. cp .env.example .env  # 复制后在 .env 中填写密码等敏感信息（.env 勿提交仓库）
+#   1. docker compose up -d
 #   2. Access at http://localhost:3000
 #
 # Using MySQL instead of PostgreSQL:
@@ -26,8 +27,9 @@ services:
       - ./data:/data
       - ./logs:/app/logs
     environment:
-      - SQL_DSN=postgresql://root:123456@postgres:5432/new-api # ⚠️ IMPORTANT: Change the password in production!
-#      - SQL_DSN=root:123456@tcp(mysql:3306)/new-api  # Point to the mysql service, uncomment if using MySQL
+      # 与下方 postgres 的账号库名一致；密码勿含 : @ / # ? 等字符，否则需自行 URL 编码后写入 SQL_DSN
+      - SQL_DSN=postgresql://${POSTGRES_USER:-root}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-token-factory}
+#      - SQL_DSN=root:${MYSQL_ROOT_PASSWORD}@tcp(mysql:3306)/${MYSQL_DATABASE:-token-factory}  # 使用 MySQL 时取消注释并配置 .env
       - REDIS_CONN_STRING=redis://redis
       - TZ=Asia/Shanghai
       - ERROR_LOG_ENABLED=true # 是否启用错误日志记录 (Whether to enable error log recording)
@@ -63,9 +65,9 @@ services:
     container_name: postgres
     restart: always
     environment:
-      POSTGRES_USER: root
-      POSTGRES_PASSWORD: 123456  # ⚠️ IMPORTANT: Change this password in production!
-      POSTGRES_DB: new-api
+      POSTGRES_USER: ${POSTGRES_USER:-root}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 中设置 POSTGRES_PASSWORD，可参考 .env.example}
+      POSTGRES_DB: ${POSTGRES_DB:-token-factory}
     volumes:
       - pg_data:/var/lib/postgresql/data
     networks:
@@ -78,8 +80,8 @@ services:
 #    container_name: mysql
 #    restart: always
 #    environment:
-#      MYSQL_ROOT_PASSWORD: 123456  # ⚠️ IMPORTANT: Change this password in production!
-#      MYSQL_DATABASE: new-api
+#      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 中设置 MYSQL_ROOT_PASSWORD}
+#      MYSQL_DATABASE: ${MYSQL_DATABASE:-token-factory}
 #    volumes:
 #      - mysql_data:/var/lib/mysql
 #    networks:
