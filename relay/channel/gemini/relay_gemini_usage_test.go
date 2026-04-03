@@ -58,8 +58,8 @@ func TestGeminiChatHandlerCompletionTokensExcludeToolUsePromptTokens(t *testing.
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	usage, newAPIError := GeminiChatHandler(c, info, resp)
-	require.Nil(t, newAPIError)
+	usage, tokenFactoryError := GeminiChatHandler(c, info, resp)
+	require.Nil(t, tokenFactoryError)
 	require.NotNil(t, usage)
 	require.Equal(t, 18480, usage.PromptTokens)
 	require.Equal(t, 2209, usage.CompletionTokens)
@@ -113,10 +113,10 @@ func TestGeminiStreamHandlerCompletionTokensExcludeToolUsePromptTokens(t *testin
 		Body: io.NopCloser(bytes.NewReader(streamBody)),
 	}
 
-	usage, newAPIError := geminiStreamHandler(c, info, resp, func(_ string, _ *dto.GeminiChatResponse) bool {
+	usage, tokenFactoryError := geminiStreamHandler(c, info, resp, func(_ string, _ *dto.GeminiChatResponse) bool {
 		return true
 	})
-	require.Nil(t, newAPIError)
+	require.Nil(t, tokenFactoryError)
 	require.NotNil(t, usage)
 	require.Equal(t, 18480, usage.PromptTokens)
 	require.Equal(t, 2209, usage.CompletionTokens)
@@ -165,8 +165,8 @@ func TestGeminiTextGenerationHandlerPromptTokensIncludeToolUsePromptTokens(t *te
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	usage, newAPIError := GeminiTextGenerationHandler(c, info, resp)
-	require.Nil(t, newAPIError)
+	usage, tokenFactoryError := GeminiTextGenerationHandler(c, info, resp)
+	require.Nil(t, tokenFactoryError)
 	require.NotNil(t, usage)
 	require.Equal(t, 18480, usage.PromptTokens)
 	require.Equal(t, 2209, usage.CompletionTokens)
@@ -217,8 +217,8 @@ func TestGeminiChatHandlerUsesEstimatedPromptTokensWhenUsagePromptMissing(t *tes
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	usage, newAPIError := GeminiChatHandler(c, info, resp)
-	require.Nil(t, newAPIError)
+	usage, tokenFactoryError := GeminiChatHandler(c, info, resp)
+	require.Nil(t, tokenFactoryError)
 	require.NotNil(t, usage)
 	require.Equal(t, 20, usage.PromptTokens)
 	require.Equal(t, 100, usage.CompletionTokens)
@@ -272,10 +272,10 @@ func TestGeminiStreamHandlerUsesEstimatedPromptTokensWhenUsagePromptMissing(t *t
 		Body: io.NopCloser(bytes.NewReader(streamBody)),
 	}
 
-	usage, newAPIError := geminiStreamHandler(c, info, resp, func(_ string, _ *dto.GeminiChatResponse) bool {
+	usage, tokenFactoryError := geminiStreamHandler(c, info, resp, func(_ string, _ *dto.GeminiChatResponse) bool {
 		return true
 	})
-	require.Nil(t, newAPIError)
+	require.Nil(t, tokenFactoryError)
 	require.NotNil(t, usage)
 	require.Equal(t, 20, usage.PromptTokens)
 	require.Equal(t, 100, usage.CompletionTokens)
@@ -324,8 +324,8 @@ func TestGeminiTextGenerationHandlerUsesEstimatedPromptTokensWhenUsagePromptMiss
 		Body: io.NopCloser(bytes.NewReader(body)),
 	}
 
-	usage, newAPIError := GeminiTextGenerationHandler(c, info, resp)
-	require.Nil(t, newAPIError)
+	usage, tokenFactoryError := GeminiTextGenerationHandler(c, info, resp)
+	require.Nil(t, tokenFactoryError)
 	require.NotNil(t, usage)
 	require.Equal(t, 20, usage.PromptTokens)
 	require.Equal(t, 100, usage.CompletionTokens)

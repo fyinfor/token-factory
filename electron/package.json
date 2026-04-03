@@ -1,7 +1,7 @@
 {
-  "name": "new-api-electron",
+  "name": "token-factory-electron",
   "version": "1.0.0",
-  "description": "New API - AI Model Gateway Desktop Application",
+  "description": "Token Factory - AI Model Gateway Desktop Application",
   "main": "main.js",
   "scripts": {
     "start-app": "electron .",
@@ -29,8 +29,8 @@
     "electron-builder": "^26.7.0"
   },
   "build": {
-    "appId": "com.newapi.desktop",
-    "productName": "New-API-App",
+    "appId": "com.tokenfactory.desktop",
+    "productName": "Token Factory",
     "publish": null,
     "directories": {
       "output": "dist"
@@ -57,8 +57,8 @@
       ],
       "extraResources": [
         {
-          "from": "../new-api",
-          "to": "bin/new-api"
+          "from": "../token-factory",
+          "to": "bin/token-factory"
         },
         {
           "from": "../web/dist",
@@ -74,8 +74,8 @@
       ],
       "extraResources": [
         {
-          "from": "../new-api.exe",
-          "to": "bin/new-api.exe"
+          "from": "../token-factory.exe",
+          "to": "bin/token-factory.exe"
         }
       ]
     },
@@ -88,8 +88,8 @@
       "category": "Development",
       "extraResources": [
         {
-          "from": "../new-api",
-          "to": "bin/new-api"
+          "from": "../token-factory",
+          "to": "bin/token-factory"
         }
       ]
     },

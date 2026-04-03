@@ -1,21 +1,21 @@
-# New-API Docker Compose Configuration
+# Token Factory Docker Compose Configuration
 # 
 # Quick Start:
 #   1. docker-compose up -d
 #   2. Access at http://localhost:3000
 #
 # Using MySQL instead of PostgreSQL:
-#   1. Comment out the postgres service and SQL_DSN line 15
-#   2. Uncomment the mysql service and SQL_DSN line 16
-#   3. Uncomment mysql in depends_on (line 28)
-#   4. Uncomment mysql_data in volumes section (line 64)
+#   1. Comment out the postgres service and SQL_DSN (token-factory.environment)
+#   2. Uncomment the mysql service and SQL_DSN for MySQL
+#   3. Uncomment mysql in token-factory.depends_on
+#   4. Map mysql_data to ./mysql_data in mysql service volumes (see mysql service)
 #
 # ⚠️  IMPORTANT: Change all default passwords before deploying to production!
 
 version: '3.4' # For compatibility with older Docker versions
 
 services:
-  new-api:
+  token-factory:
     image: ghcr.io/fyinfor/token-factory:latest
     container_name: token-factory
     restart: always
@@ -26,8 +26,8 @@ services:
       - ./data:/data
       - ./logs:/app/logs
     environment:
-      - SQL_DSN=postgresql://root:123456@postgres:5432/new-api # ⚠️ IMPORTANT: Change the password in production!
-#      - SQL_DSN=root:123456@tcp(mysql:3306)/new-api  # Point to the mysql service, uncomment if using MySQL
+      - SQL_DSN=postgresql://root:KGzKjZpWBp4R4RSa@postgres:5432/token-factory # ⚠️ IMPORTANT: Change the password in production!
+#      - SQL_DSN=root:123456@tcp(mysql:3306)/token-factory  # Point to the mysql service, uncomment if using MySQL
       - REDIS_CONN_STRING=redis://redis
       - TZ=Asia/Shanghai
       - ERROR_LOG_ENABLED=true # 是否启用错误日志记录 (Whether to enable error log recording)
@@ -44,7 +44,7 @@ services:
       - postgres
 #      - mysql  # Uncomment if using MySQL
     networks:
-      - new-api-network
+      - token-factory-network
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/api/status | grep -o '\"success\":\\s*true' || exit 1"]
       interval: 30s
@@ -56,7 +56,7 @@ services:
     container_name: redis
     restart: always
     networks:
-      - new-api-network
+      - token-factory-network
 
   postgres:
     image: postgres:15
@@ -64,12 +64,13 @@ services:
     restart: always
     environment:
       POSTGRES_USER: root
-      POSTGRES_PASSWORD: 123456  # ⚠️ IMPORTANT: Change this password in production!
-      POSTGRES_DB: new-api
+      POSTGRES_PASSWORD: KGzKjZpWBp4R4RSa  # ⚠️ IMPORTANT: Change this password in production!
+      POSTGRES_DB: token-factory
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      # 绑定到宿主机目录，便于备份与迁移（复制整个 postgres_data 目录即可）
+      - ./postgres_data:/var/lib/postgresql/data
     networks:
-      - new-api-network
+      - token-factory-network
 #    ports:
 #      - "5432:5432"  # Uncomment if you need to access PostgreSQL from outside Docker
 
@@ -79,18 +80,14 @@ services:
 #    restart: always
 #    environment:
 #      MYSQL_ROOT_PASSWORD: 123456  # ⚠️ IMPORTANT: Change this password in production!
-#      MYSQL_DATABASE: new-api
+#      MYSQL_DATABASE: token-factory
 #    volumes:
-#      - mysql_data:/var/lib/mysql
+#      - ./mysql_data:/var/lib/mysql
 #    networks:
-#      - new-api-network
+#      - token-factory-network
 #    ports:
 #      - "3306:3306"  # Uncomment if you need to access MySQL from outside Docker
 
-volumes:
-  pg_data:
-#  mysql_data:
-
 networks:
-  new-api-network:
+  token-factory-network:
     driver: bridge

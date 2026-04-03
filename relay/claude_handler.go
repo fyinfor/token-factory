@@ -21,7 +21,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.NewAPIError) {
+func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (tokenFactoryError *types.TokenFactoryError) {
 
 	info.InitChannelMeta(c)
 
@@ -117,9 +117,9 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 			return types.NewError(convErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 		}
 
-		usage, newApiErr := chatCompletionsViaResponses(c, info, adaptor, openAIRequest)
-		if newApiErr != nil {
-			return newApiErr
+		usage, tokenFactoryErr := chatCompletionsViaResponses(c, info, adaptor, openAIRequest)
+		if tokenFactoryErr != nil {
+			return tokenFactoryErr
 		}
 
 		service.PostTextConsumeQuota(c, info, usage, nil)
@@ -154,7 +154,7 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		if len(info.ParamOverride) > 0 {
 			jsonData, err = relaycommon.ApplyParamOverrideWithRelayInfo(jsonData, info)
 			if err != nil {
-				return newAPIErrorFromParamOverride(err)
+				return tokenFactoryErrorFromParamOverride(err)
 			}
 		}
 
@@ -175,19 +175,19 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 		httpResp = resp.(*http.Response)
 		info.IsStream = info.IsStream || strings.HasPrefix(httpResp.Header.Get("Content-Type"), "text/event-stream")
 		if httpResp.StatusCode != http.StatusOK {
-			newAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)
+			tokenFactoryError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)
 			// reset status code 重置状态码
-			service.ResetStatusCode(newAPIError, statusCodeMappingStr)
-			return newAPIError
+			service.ResetStatusCode(tokenFactoryError, statusCodeMappingStr)
+			return tokenFactoryError
 		}
 	}
 
-	usage, newAPIError := adaptor.DoResponse(c, httpResp, info)
+	usage, tokenFactoryError := adaptor.DoResponse(c, httpResp, info)
 	//log.Printf("usage: %v", usage)
-	if newAPIError != nil {
+	if tokenFactoryError != nil {
 		// reset status code 重置状态码
-		service.ResetStatusCode(newAPIError, statusCodeMappingStr)
-		return newAPIError
+		service.ResetStatusCode(tokenFactoryError, statusCodeMappingStr)
+		return tokenFactoryError
 	}
 
 	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), nil)
