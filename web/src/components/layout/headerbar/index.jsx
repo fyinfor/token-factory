@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useHeaderBar } from '../../../hooks/common/useHeaderBar';
 import { useNotifications } from '../../../hooks/common/useNotifications';
 import { useNavigation } from '../../../hooks/common/useNavigation';
@@ -26,6 +26,7 @@ import MobileMenuButton from './MobileMenuButton';
 import HeaderLogo from './HeaderLogo';
 import Navigation from './Navigation';
 import ActionButtons from './ActionButtons';
+import SearchDropdown from './SearchDropdown';
 
 const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
   const {
@@ -65,7 +66,7 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
   const { mainNavLinks } = useNavigation(t, docsLink, headerNavModules);
 
   return (
-    <header className='text-semi-color-text-0 sticky top-0 z-50 transition-colors duration-300 bg-white/75 dark:bg-zinc-900/75 backdrop-blur-lg'>
+    <header className='text-semi-color-text-0 sticky top-0 z-50 transition-colors duration-300 bg-white/75 dark:bg-zinc-900/75 backdrop-blur-lg border-b border-[#f5f5f5]'>
       <NoticeModal
         visible={noticeVisible}
         onClose={handleNoticeClose}
@@ -74,9 +75,9 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
         unreadKeys={getUnreadKeys()}
       />
 
-      <div className='w-full px-2'>
-        <div className='flex items-center justify-between h-16'>
-          <div className='flex items-center'>
+      <div className='w-full px-4 md:px-6'>
+        <div className='flex items-center justify-between h-14'>
+          <div className='flex items-center gap-3 md:gap-4 flex-shrink-0'>
             <MobileMenuButton
               isConsoleRoute={isConsoleRoute}
               isMobile={isMobile}
@@ -97,32 +98,36 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
               isDemoSiteMode={isDemoSiteMode}
               t={t}
             />
+
+            {!isMobile && <SearchDropdown isMobile={isMobile} />}
           </div>
 
-          <Navigation
-            mainNavLinks={mainNavLinks}
-            isMobile={isMobile}
-            isLoading={isLoading}
-            userState={userState}
-            pricingRequireAuth={pricingRequireAuth}
-          />
+          <div className='flex items-center gap-4 md:gap-6'>
+            <Navigation
+              mainNavLinks={mainNavLinks}
+              isMobile={isMobile}
+              isLoading={isLoading}
+              userState={userState}
+              pricingRequireAuth={pricingRequireAuth}
+            />
 
-          <ActionButtons
-            isNewYear={isNewYear}
-            unreadCount={unreadCount}
-            onNoticeOpen={handleNoticeOpen}
-            theme={theme}
-            onThemeToggle={handleThemeToggle}
-            currentLang={currentLang}
-            onLanguageChange={handleLanguageChange}
-            userState={userState}
-            isLoading={isLoading}
-            isMobile={isMobile}
-            isSelfUseMode={isSelfUseMode}
-            logout={logout}
-            navigate={navigate}
-            t={t}
-          />
+            <ActionButtons
+              isNewYear={isNewYear}
+              unreadCount={unreadCount}
+              onNoticeOpen={handleNoticeOpen}
+              theme={theme}
+              onThemeToggle={handleThemeToggle}
+              currentLang={currentLang}
+              onLanguageChange={handleLanguageChange}
+              userState={userState}
+              isLoading={isLoading}
+              isMobile={isMobile}
+              isSelfUseMode={isSelfUseMode}
+              logout={logout}
+              navigate={navigate}
+              t={t}
+            />
+          </div>
         </div>
       </div>
     </header>

@@ -999,7 +999,7 @@
     "多密钥渠道操作项目组": "Multi-key channel operation project group",
     "多密钥管理": "Multi-key management",
     "多种充值方式，安全便捷": "Multiple recharge methods, safe and convenient",
-    "大模型接口网关": "LLM API Gateway",
+    "大语言模型的统一入口": "LLM API Gateway",
     "天": "day",
     "天前": "days ago",
     "失败": "Failed",
@@ -3376,6 +3376,23 @@
     "从剪贴板粘贴配置": "Paste Config",
     "剪贴板中未检测到连接信息": "No connection info found in clipboard",
     "连接信息已填入": "Connection info applied",
-    "无法读取剪贴板": "Cannot read clipboard"
+    "无法读取剪贴板": "Cannot read clipboard",
+    "获取 API Key": "Get API Key",
+    "清空缓存": "Clear Cache",
+    "更优的": "Better ",
+    "更稳的": "more stable ",
+    "无需订阅即用。": "no subscription required.",
+    "一个 API，调用任意模型": "One API, Any Model",
+    "通过统一接口同主流模型，OpenAI 兼容 SDK 可直接使用。": "Unified interface for mainstream models, compatible with OpenAI SDK.",
+    "浏览全部": "View All",
+    "更高可用性": "Higher Availability",
+    "分布式集群设施承载库，单路故障时可自动切换其他应路。": "Distributed cluster infrastructure with automatic failover on single path failure.",
+    "了解更多": "Learn More",
+    "灵活计费方式": "Flexible Billing",
+    "按需付费无需订阅，支持多种计费模式和用户分组定价。": "Pay-as-you-go with no subscription, supporting multiple billing modes and group pricing.",
+    "查看定价": "View Pricing",
+    "完整使用日志": "Complete Usage Logs",
+    "实时监控每次调用，详细记录请求和响应便于调试分析。": "Real-time monitoring of every call with detailed request and response logs for easy debugging.",
+    "查看文档": "View Docs"
   }
 }

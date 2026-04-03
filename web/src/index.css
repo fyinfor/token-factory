@@ -783,6 +783,31 @@ html:not(.dark) .blur-ball-teal {
   opacity: 0.2;
 }
 
+/* ==================== Home Page Clean Background ==================== */
+.home-banner-bg {
+  position: relative;
+  background: linear-gradient(180deg, 
+    #e8f0fe 0%, 
+    #ffffff 50%,
+    #f8f9fa 100%);
+}
+
+/* 浅色主题 - 清晰的渐变效果 */
+html:not(.dark) .home-banner-bg {
+  background: linear-gradient(180deg, 
+    #e8f0fe 0%, 
+    #ffffff 50%,
+    #f8f9fa 100%);
+}
+
+/* 暗色主题 */
+html.dark .home-banner-bg {
+  background: linear-gradient(180deg, 
+    rgba(99, 102, 241, 0.1) 0%, 
+    transparent 50%,
+    rgba(20, 184, 166, 0.08) 100%);
+}
+
 /* ==================== 卡片马卡龙模糊球（类封装） ==================== */
 /* 使用方式：给容器加上 with-pastel-balls 类即可，无需在 JSX 中插入额外节点 */
 .with-pastel-balls {
