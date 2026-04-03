@@ -1,5 +1,7 @@
 .idea
-.vscode
+.vscode/*
+!.vscode/launch.json
+!.vscode/DELVE.md
 .zed
 .history
 upload
