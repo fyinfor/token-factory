@@ -35,6 +35,7 @@ const ConfigManager = ({
   onConfigReset,
   styleState,
   messages,
+  userId,
 }) => {
   const { t } = useTranslation();
   const fileInputRef = useRef(null);
@@ -51,7 +52,7 @@ const ConfigManager = ({
         JSON.stringify(configWithTimestamp),
       );
 
-      exportConfig(currentConfig, messages);
+      exportConfig(currentConfig, messages, userId);
       Toast.success({
         content: t('配置已导出到下载文件夹'),
         duration: 3,
@@ -73,7 +74,7 @@ const ConfigManager = ({
     if (!file) return;
 
     try {
-      const importedConfig = await importConfig(file);
+      const importedConfig = await importConfig(file, userId);
 
       Modal.confirm({
         title: t('确认导入配置'),
@@ -123,7 +124,7 @@ const ConfigManager = ({
             type: 'danger',
           },
           onOk: () => {
-            clearConfig();
+            clearConfig(userId);
             onConfigReset({ resetMessages: true });
             Toast.success({
               content: t('配置和消息已全部重置'),
@@ -131,7 +132,7 @@ const ConfigManager = ({
             });
           },
           onCancel: () => {
-            clearConfig();
+            clearConfig(userId);
             onConfigReset({ resetMessages: false });
             Toast.success({
               content: t('配置已重置，对话消息已保留'),

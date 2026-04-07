@@ -34,13 +34,13 @@ import {
 } from '../../components/playground/configStorage';
 import { processIncompleteThinkTags } from '../../helpers';
 
-export const usePlaygroundState = () => {
+export const usePlaygroundState = (userId) => {
   const { t } = useTranslation();
 
   // 使用惰性初始化，确保只在组件首次挂载时加载配置和消息
   const [savedConfig] = useState(() => loadConfig());
   const [initialMessages] = useState(() => {
-    const loaded = loadMessages();
+    const loaded = loadMessages(userId);
     // 检查是否是旧的中文默认消息，如果是则清除
     if (
       loaded &&
@@ -98,6 +98,16 @@ export const usePlaygroundState = () => {
     }
   }, [t, initialMessages]); // 当语言改变时
 
+  // 当用户ID变化时，重新加载该用户的消息
+  useEffect(() => {
+    const loaded = loadMessages(userId);
+    if (loaded) {
+      setMessage(loaded);
+    } else {
+      setMessage(getDefaultMessages(t));
+    }
+  }, [userId, t]);
+
   // 调试状态
   const [debugData, setDebugData] = useState({
     request: null,
@@ -135,9 +145,9 @@ export const usePlaygroundState = () => {
   const saveMessagesImmediately = useCallback(
     (messagesToSave) => {
       // 如果提供了参数，使用参数；否则使用当前状态
-      saveMessages(messagesToSave || message);
+      saveMessages(messagesToSave || message, userId);
     },
-    [message],
+    [message, userId],
   );
 
   // 配置保存
