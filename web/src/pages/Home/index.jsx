@@ -40,6 +40,7 @@ import {
 } from '@douyinfe/semi-icons';
 import { Link } from 'react-router-dom';
 import NoticeModal from '../../components/layout/NoticeModal';
+import HomeModelList from '../../components/home/HomeModelList';
 import {
   Moonshot,
   OpenAI,
@@ -158,10 +159,10 @@ const Home = () => {
       {homePageContentLoaded && homePageContent === '' ? (
         <div className='w-full overflow-x-hidden'>
           {/* Banner 部分 */}
-          <div className='home-banner-bg w-full min-h-[400px] md:min-h-[500px] flex items-center justify-center'>
-            <div className='flex items-center justify-center h-full px-4 py-16 md:py-20'>
+          <div className='home-banner-bg w-full min-h-[400px] md:min-h-[500px]'>
+            <div className='h-full px-4 py-16 md:py-20'>
               {/* 居中内容区 */}
-              <div className='flex flex-col items-center justify-center text-center max-w-3xl mx-auto'>
+              <div className='flex flex-col items-center justify-center text-center max-w-3xl mx-auto my-32'>
                 <h1
                   className={`text-4xl md:text-5xl lg:text-6xl font-medium text-semi-color-text-0 leading-tight mb-4 ${isChinese ? 'tracking-wide' : ''}`}
                 >
@@ -188,17 +189,11 @@ const Home = () => {
                       {t('获取 API Key')}
                     </Button>
                   </Link>
-                  <Button
-                    theme='borderless'
-                    size={isMobile ? 'default' : 'large'}
-                    className='!rounded-md px-8 !border !border-semi-color-border'
-                    style={{ fontWeight: 500 }}
-                    onClick={() => window.location.reload()}
-                  >
-                    {t('清空缓存')}
-                  </Button>
                 </div>
               </div>
+
+              {/* 模型列表区域 */}
+              <HomeModelList />
             </div>
           </div>
 
