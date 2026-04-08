@@ -39,6 +39,7 @@
 <p align="center">
   <a href="#quick-start">Quick Start</a> •
   <a href="#documentation">Documentation</a> •
+  <a href="#supported-languages">Languages</a> •
   <a href="#deployment">Deployment</a> •
   <a href="#license">License</a> •
   <a href="#help">Help</a>
@@ -136,6 +137,24 @@ Capabilities come from the upstream codebase; this is a **summary**, not an exha
 - **Storage** — SQLite, MySQL, or PostgreSQL; optional Redis for sessions/cache/crypto as documented upstream.
 
 For model-by-model and endpoint-by-endpoint detail, use the **[API docs](https://docs.newapi.pro/en/docs/api)** and **[QuantumNous/new-api](https://github.com/QuantumNous/new-api)** releases.
+
+---
+
+## Supported languages
+
+| Code | Language |
+|------|----------|
+| `zh-CN` | Chinese (Simplified) |
+| `zh-TW` | Chinese (Traditional) |
+| `en` | English |
+| `fr` | French |
+| `ru` | Russian |
+| `ja` | Japanese |
+| `vi` | Vietnamese |
+| `id` | Indonesian |
+| `ms` | Malay |
+| `th` | Thai |
+| `sw` | Swahili |
 
 ---
 

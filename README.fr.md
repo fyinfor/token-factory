@@ -47,6 +47,7 @@
 <p align="center">
   <a href="#-démarrage-rapide">Démarrage rapide</a> •
   <a href="#-fonctionnalités-clés">Fonctionnalités clés</a> •
+  <a href="#langues-prises-en-charge">Langues</a> •
   <a href="#-déploiement">Déploiement</a> •
   <a href="#-documentation">Documentation</a> •
   <a href="#-aide-support">Aide</a>
@@ -175,6 +176,24 @@ docker run --name token-factory -d --restart always \
 | 📡 Documentation de l'API | [Documentation de l'API](https://docs.newapi.pro/en/docs/api) |
 | ❓ FAQ | [FAQ](https://docs.newapi.pro/en/docs/support/faq) |
 | 💬 Interaction avec la communauté | [Canaux de communication](https://docs.newapi.pro/en/docs/support/community-interaction) |
+
+---
+
+## Langues prises en charge
+
+| Code | Langue |
+|------|--------|
+| `zh-CN` | Chinois (simplifié) |
+| `zh-TW` | Chinois (traditionnel) |
+| `en` | Anglais |
+| `fr` | Français |
+| `ru` | Russe |
+| `ja` | Japonais |
+| `vi` | Vietnamien |
+| `id` | Indonésien |
+| `ms` | Malais |
+| `th` | Thaï |
+| `sw` | Swahili |
 
 ---
 
