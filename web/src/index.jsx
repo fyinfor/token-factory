@@ -43,12 +43,17 @@ import en_GB from '@douyinfe/semi-ui/lib/es/locale/source/en_GB';
 //   );
 // }
 
+const semiEnglishChromeLanguages = new Set(['id', 'ms', 'th', 'sw']);
+
 function SemiLocaleWrapper({ children }) {
   const { i18n } = useTranslation();
-  const semiLocale = React.useMemo(
-    () => ({ zh: zh_CN, en: en_GB })[i18n.language] || zh_CN,
-    [i18n.language],
-  );
+  const semiLocale = React.useMemo(() => {
+    const lang = i18n.language;
+    if (semiEnglishChromeLanguages.has(lang)) {
+      return en_GB;
+    }
+    return ({ zh: zh_CN, en: en_GB })[lang] || zh_CN;
+  }, [i18n.language]);
   return <LocaleProvider locale={semiLocale}>{children}</LocaleProvider>;
 }
 
