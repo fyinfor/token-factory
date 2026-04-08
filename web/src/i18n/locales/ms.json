@@ -2471,7 +2471,7 @@
     "自定义货币": "Mata uang tersuai",
     "自定义货币符号": "Simbol mata uang tersuai",
     "自定义货币符号将显示在所有额度数值前，例如 €1.50": "Simbol mata uang tersuai ditampilkan sebelum semua nilai kuota, mis. €1.50",
-    "额度展示类型": "Jenis tampilan kuota",
+    "额度展示类型": "Jenis paparan kuota",
     "站点所有额度将以美元 ($) 显示": "Semua kuota tapak ditampilkan dalam USD ($)",
     "站点所有额度将按汇率换算为人民币 (¥) 显示": "Semua kuota tapak dikonversi ke CNY (¥) dengan kurs",
     "站点所有额度将以原始 Token 数显示，不做货币换算": "Semua kuota tapak ditampilkan sebagai jumlah token mentah tanpa konversi mata uang",
