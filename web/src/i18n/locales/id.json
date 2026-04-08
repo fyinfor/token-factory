@@ -2257,7 +2257,7 @@
     "站点额度展示类型及汇率": "Jenis tampilan kuota situs dan kurs",
     "端口号必须在1-65535之间": "Nomor port harus antara 1-65535",
     "端口配置详细说明": "Batasi permintaan eksternal ke port tertentu. Gunakan port tunggal (80, 443) atau rentang (8000-8999). Daftar kosong mengizinkan semua port. Default mencakup port web umum.",
-    "端点": "Endpoint",
+    "端点": "Titik akhir",
     "端点 URL 必须以 http:// 或 https:// 开头：": "URL endpoint harus diawali dengan http:// atau https://: ",
     "端点 URL 必须是完整地址（以 http:// 或 https:// 开头）": "URL endpoint harus berupa alamat lengkap (diawali http:// atau https://)",
     "端点映射": "Pemetaan endpoint",
