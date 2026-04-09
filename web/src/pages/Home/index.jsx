@@ -166,19 +166,19 @@ const Home = () => {
                 <h1
                   className={`text-4xl md:text-5xl lg:text-6xl font-medium text-semi-color-text-0 leading-tight mb-4 ${isChinese ? 'tracking-wide' : ''}`}
                 >
-                  {t('大语言模型的统一入口')}
+                  {t('定制化大模型服务，一站式统一入口')}
                 </h1>
                 <p className='text-sm md:text-base text-semi-color-text-2 mb-8'>
-                  {t('更优的')}
+                  {t('按需定制，更优')}
                   <span className='font-semibold text-semi-color-text-0'>{t('价格')}</span>
                   {t('，更稳的')}
-                  <span className='font-semibold text-semi-color-text-0'>{t('可靠性')}</span>
-                  {t('，无需订阅即用。')}
+                  <span className='font-semibold text-semi-color-text-0'>{t('可靠')}</span>
+                  {t('，开箱即用')}
                 </p>
 
                 {/* 操作按钮 */}
                 <div className='flex flex-row gap-3 justify-center items-center'>
-                  <Link to='/console'>
+                  <Link to='/about'>
                     <Button
                       theme='solid'
                       type='primary'
@@ -186,7 +186,7 @@ const Home = () => {
                       className='!rounded-md px-8'
                       style={{ fontWeight: 500 }}
                     >
-                      {t('获取 API Key')}
+                      {t('立即获取专属方案')}
                     </Button>
                   </Link>
                 </div>
