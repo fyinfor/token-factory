@@ -46,6 +46,7 @@ import { IconChevronDown, IconChevronUp } from '@douyinfe/semi-icons';
  * @param {boolean} withCheckbox 是否启用前缀 Checkbox 来控制激活状态
  * @param {boolean} loading 是否处于加载状态
  * @param {string} variant 颜色变体: 'violet' | 'teal' | 'amber' | 'rose' | 'green'，不传则使用默认蓝色
+ * @param {string} layout 布局模式: 'vertical'（默认，标题在上）| 'inline'（标题和选项同行）
  */
 const SelectableButtonGroup = ({
   title,
@@ -59,6 +60,7 @@ const SelectableButtonGroup = ({
   withCheckbox = false,
   loading = false,
   variant,
+  layout = 'vertical',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [skeletonCount] = useState(12);
@@ -97,8 +99,9 @@ const SelectableButtonGroup = ({
 
   const { columns: perRow, showTags: shouldShowTags } = getResponsiveConfig();
   const maxVisibleRows = Math.max(1, Math.floor(collapseHeight / 32)); // Approx row height 32
-  const needCollapse = collapsible && items.length > perRow * maxVisibleRows;
+  const needCollapse = layout === 'vertical' && collapsible && items.length > perRow * maxVisibleRows;
   const showSkeleton = useMinimumLoadingTime(loading);
+  const isInlineLayout = layout === 'inline';
 
   // 统一使用紧凑的网格间距
   const gutterSize = [4, 4];
@@ -136,6 +139,39 @@ const SelectableButtonGroup = ({
   };
 
   const renderSkeletonButtons = () => {
+    if (isInlineLayout) {
+      return (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', ...style }}>
+          {Array.from({ length: Math.min(skeletonCount, 6) }).map((_, index) => (
+            <div
+              key={index}
+              style={{
+                height: '32px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-start',
+                border: '1px solid var(--semi-color-border)',
+                borderRadius: 'var(--semi-border-radius-medium)',
+                padding: '0 12px',
+                gap: '6px',
+              }}
+            >
+              {withCheckbox && (
+                <Skeleton.Title active style={{ width: 14, height: 14 }} />
+              )}
+              <Skeleton.Title
+                active
+                style={{
+                  width: `${60 + (index % 3) * 20}px`,
+                  height: 14,
+                }}
+              />
+            </div>
+          ))}
+        </div>
+      );
+    }
+
     const placeholder = (
       <Row gutter={gutterSize} style={{ lineHeight: '32px', ...style }}>
         {Array.from({ length: skeletonCount }).map((_, index) => (
@@ -174,8 +210,72 @@ const SelectableButtonGroup = ({
     );
   };
 
+  const renderInlineButtons = () => (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', ...style }}>
+      {items.map((item) => {
+        const isActive = Array.isArray(activeValue)
+          ? activeValue.includes(item.value)
+          : activeValue === item.value;
+
+        if (withCheckbox) {
+          return (
+            <Button
+              key={item.value}
+              onClick={() => {
+                /* disabled */
+              }}
+              theme={isActive ? 'light' : 'outline'}
+              type={isActive ? 'primary' : 'tertiary'}
+              className='sbg-button'
+              icon={
+                <Checkbox
+                  checked={isActive}
+                  onChange={() => onChange(item.value)}
+                  style={{ pointerEvents: 'auto' }}
+                />
+              }
+              style={{ cursor: 'default' }}
+            >
+              <div className='sbg-content'>
+                {item.icon && <span className='sbg-icon'>{item.icon}</span>}
+                <span style={{ whiteSpace: 'nowrap' }}>{item.label}</span>
+                {item.tagCount !== undefined && (
+                  <span className={`sbg-badge ${isActive ? 'sbg-badge-active' : ''}`}>
+                    {item.tagCount}
+                  </span>
+                )}
+              </div>
+            </Button>
+          );
+        }
+
+        return (
+          <Button
+            key={item.value}
+            onClick={() => onChange(item.value)}
+            theme={isActive ? 'light' : 'outline'}
+            type={isActive ? 'primary' : 'tertiary'}
+            className='sbg-button'
+          >
+            <div className='sbg-content'>
+              {item.icon && <span className='sbg-icon'>{item.icon}</span>}
+              <span style={{ whiteSpace: 'nowrap' }}>{item.label}</span>
+              {item.tagCount !== undefined && item.tagCount !== '' && (
+                <span className={`sbg-badge ${isActive ? 'sbg-badge-active' : ''}`}>
+                  {item.tagCount}
+                </span>
+              )}
+            </div>
+          </Button>
+        );
+      })}
+    </div>
+  );
+
   const contentElement = showSkeleton ? (
     renderSkeletonButtons()
+  ) : isInlineLayout ? (
+    renderInlineButtons()
   ) : (
     <Row gutter={gutterSize} style={{ lineHeight: '32px', ...style }}>
       {items.map((item) => {
@@ -240,6 +340,28 @@ const SelectableButtonGroup = ({
       })}
     </Row>
   );
+
+  if (isInlineLayout) {
+    return (
+      <div
+        className={`mb-3${variant ? ` sbg-variant-${variant}` : ''}`}
+        ref={containerRef}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+          {title && (
+            <div style={{ fontWeight: 500, fontSize: '14px', color: 'var(--semi-color-text-0)', whiteSpace: 'nowrap' }}>
+              {showSkeleton ? (
+                <Skeleton.Title active style={{ width: 80, height: 14 }} />
+              ) : (
+                title
+              )}
+            </div>
+          )}
+          {contentElement}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

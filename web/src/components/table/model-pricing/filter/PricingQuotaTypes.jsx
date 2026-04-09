@@ -27,6 +27,7 @@ import SelectableButtonGroup from '../../../common/ui/SelectableButtonGroup';
  * @param {Array} models 模型列表
  * @param {boolean} loading 是否加载中
  * @param {Function} t i18n
+ * @param {string} layout 布局模式
  */
 const PricingQuotaTypes = ({
   filterQuotaType,
@@ -34,6 +35,7 @@ const PricingQuotaTypes = ({
   models = [],
   loading = false,
   t,
+  layout,
 }) => {
   const qtyCount = (type) =>
     models.filter((m) => (type === 'all' ? true : m.quota_type === type))
@@ -54,6 +56,7 @@ const PricingQuotaTypes = ({
       loading={loading}
       variant='amber'
       t={t}
+      layout={layout}
     />
   );
 };

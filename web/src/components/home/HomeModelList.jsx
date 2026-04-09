@@ -76,7 +76,7 @@ const HomeModelList = () => {
           />
         </div>
 
-        <div className='mb-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3'>
+        <div className='mb-4'>
           <PricingVendors
             filterVendor={pricingData.filterVendor}
             setFilterVendor={pricingData.setFilterVendor}
@@ -84,6 +84,7 @@ const HomeModelList = () => {
             allModels={pricingData.models}
             loading={pricingData.loading}
             t={pricingData.t}
+            layout='inline'
           />
 
           <PricingQuotaTypes
@@ -92,6 +93,7 @@ const HomeModelList = () => {
             models={quotaTypeModels}
             loading={pricingData.loading}
             t={pricingData.t}
+            layout='inline'
           />
 
           <PricingTags
@@ -101,6 +103,7 @@ const HomeModelList = () => {
             allModels={pricingData.models}
             loading={pricingData.loading}
             t={pricingData.t}
+            layout='inline'
           />
         </div>
 

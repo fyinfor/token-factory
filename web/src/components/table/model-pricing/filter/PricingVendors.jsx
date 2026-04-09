@@ -29,6 +29,7 @@ import { getLobeHubIcon } from '../../../../helpers';
  * @param {Array} allModels 所有模型列表（用于获取全部供应商）
  * @param {boolean} loading 是否加载中
  * @param {Function} t i18n
+ * @param {string} layout 布局模式
  */
 const PricingVendors = ({
   filterVendor,
@@ -37,6 +38,7 @@ const PricingVendors = ({
   allModels = [],
   loading = false,
   t,
+  layout,
 }) => {
   // 获取系统中所有供应商（基于 allModels，如果未提供则退化为 models）
   const getAllVendors = React.useMemo(() => {
@@ -120,6 +122,7 @@ const PricingVendors = ({
       loading={loading}
       variant='violet'
       t={t}
+      layout={layout}
     />
   );
 };
