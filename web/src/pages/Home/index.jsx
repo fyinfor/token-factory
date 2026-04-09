@@ -217,9 +217,9 @@ const Home = () => {
                   <p className='text-sm text-semi-color-text-2 mb-4'>
                     {t('通过统一接口同主流模型，OpenAI 兼容 SDK 可直接使用。')}
                   </p>
-                  <Link to='/model' className='text-sm text-semi-color-primary font-medium hover:underline'>
+                  {/* <Link to='/model' className='text-sm text-semi-color-primary font-medium hover:underline'>
                     {t('浏览全部')} →
-                  </Link>
+                  </Link> */}
                 </div>
 
                 {/* 卡片2: 更高可用性 */}
@@ -237,9 +237,9 @@ const Home = () => {
                   <p className='text-sm text-semi-color-text-2 mb-4'>
                     {t('分布式集群设施承载库，单路故障时可自动切换其他应路。')}
                   </p>
-                  <Link to='/channel' className='text-sm text-semi-color-primary font-medium hover:underline'>
+                  {/* <Link to='/channel' className='text-sm text-semi-color-primary font-medium hover:underline'>
                     {t('了解更多')} →
-                  </Link>
+                  </Link> */}
                 </div>
 
                 {/* 卡片3: 灵活计费方式 */}
@@ -257,9 +257,9 @@ const Home = () => {
                   <p className='text-sm text-semi-color-text-2 mb-4'>
                     {t('按需付费无需订阅，支持多种计费模式和用户分组定价。')}
                   </p>
-                  <Link to='/pricing' className='text-sm text-semi-color-primary font-medium hover:underline'>
+                  {/* <Link to='/pricing' className='text-sm text-semi-color-primary font-medium hover:underline'>
                     {t('查看定价')} →
-                  </Link>
+                  </Link> */}
                 </div>
 
                 {/* 卡片4: 完整使用日志 */}
@@ -278,9 +278,9 @@ const Home = () => {
                   <p className='text-sm text-semi-color-text-2 mb-4'>
                     {t('实时监控每次调用，详细记录请求和响应便于调试分析。')}
                   </p>
-                  <Link to='/log' className='text-sm text-semi-color-primary font-medium hover:underline'>
+                  {/* <Link to='/log' className='text-sm text-semi-color-primary font-medium hover:underline'>
                     {t('查看文档')} →
-                  </Link>
+                  </Link> */}
                 </div>
               </div>
             </div>
