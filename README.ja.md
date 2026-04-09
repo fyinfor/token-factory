@@ -47,6 +47,7 @@
 <p align="center">
   <a href="#-クイックスタート">クイックスタート</a> •
   <a href="#-主な機能">主な機能</a> •
+  <a href="#対応言語">言語</a> •
   <a href="#-デプロイ">デプロイ</a> •
   <a href="#-ドキュメント">ドキュメント</a> •
   <a href="#-ヘルプサポート">ヘルプ</a>
@@ -175,6 +176,24 @@ docker run --name token-factory -d --restart always \
 | 📡 APIドキュメント | [APIドキュメント](https://docs.newapi.pro/ja/docs/api) |
 | ❓ よくある質問 | [FAQ](https://docs.newapi.pro/ja/docs/support/faq) |
 | 💬 コミュニティ交流 | [交流チャネル](https://docs.newapi.pro/ja/docs/support/community-interaction) |
+
+---
+
+## 対応言語
+
+| コード | 言語 |
+|--------|------|
+| `zh-CN` | 簡体中国語 |
+| `zh-TW` | 繁体中国語 |
+| `en` | 英語 |
+| `fr` | フランス語 |
+| `ru` | ロシア語 |
+| `ja` | 日本語 |
+| `vi` | ベトナム語 |
+| `id` | インドネシア語 |
+| `ms` | マレー語 |
+| `th` | タイ語 |
+| `sw` | スワヒリ語 |
 
 ---
 

@@ -47,6 +47,7 @@
 <p align="center">
   <a href="#-快速開始">快速開始</a> •
   <a href="#-主要特性">主要特性</a> •
+  <a href="#支援的語言">介面語言</a> •
   <a href="#-部署">部署</a> •
   <a href="#-文件">文件</a> •
   <a href="#-幫助支援">幫助</a>
@@ -175,6 +176,24 @@ docker run --name token-factory -d --restart always \
 | 📡 接口文件 | [API 文件](https://docs.newapi.pro/zh/docs/api) |
 | ❓ 常見問題 | [FAQ](https://docs.newapi.pro/zh/docs/support/faq) |
 | 💬 社群交流 | [交流管道](https://docs.newapi.pro/zh/docs/support/community-interaction) |
+
+---
+
+## 支援的語言
+
+| 代碼 | 語言 |
+|------|------|
+| `zh-CN` | 簡體中文 |
+| `zh-TW` | 繁體中文 |
+| `en` | 英語 |
+| `fr` | 法語 |
+| `ru` | 俄語 |
+| `ja` | 日語 |
+| `vi` | 越南語 |
+| `id` | 印尼語 |
+| `ms` | 馬來語 |
+| `th` | 泰語 |
+| `sw` | 史瓦希里語 |
 
 ---
 

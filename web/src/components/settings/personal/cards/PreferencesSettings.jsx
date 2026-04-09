@@ -34,6 +34,10 @@ const languageOptions = [
 	{ value: 'ru', label: 'Русский'},
 	{ value: 'ja', label: '日本語'},
 	{ value: "vi", label: "Tiếng Việt" },
+	{ value: "id", label: "Bahasa Indonesia" },
+	{ value: "ms", label: "Bahasa Melayu" },
+	{ value: "th", label: "ไทย" },
+	{ value: "sw", label: "Kiswahili" },
 ];
 
 const PreferencesSettings = ({ t }) => {
