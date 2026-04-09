@@ -99,7 +99,7 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
               t={t}
             />
 
-            {!isMobile && <SearchDropdown isMobile={isMobile} />}
+            {/* {!isMobile && <SearchDropdown isMobile={isMobile} />} */}
           </div>
 
           <div className='flex items-center gap-4 md:gap-6'>
