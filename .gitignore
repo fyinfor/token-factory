@@ -1,5 +1,7 @@
 .idea
-.vscode
+.vscode/
+.github/
+.cursor/
 .zed
 .history
 upload
@@ -11,7 +13,7 @@ logs
 web/dist
 .env
 one-api
-new-api
+token-factory
 /__debug_bin*
 .DS_Store
 tiktoken_cache
@@ -26,6 +28,8 @@ plans
 electron/node_modules
 electron/dist
 data/
+postgres_data/
+mysql_data/
 .gomodcache/
 .gocache-temp
 .gopath
