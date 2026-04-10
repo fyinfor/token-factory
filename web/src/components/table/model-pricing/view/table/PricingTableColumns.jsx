@@ -208,7 +208,7 @@ export const getPricingTableColumns = ({
     ),
     dataIndex: 'model_ratio',
     render: (text, record, index) => {
-      const completionRatio = parseFloat(record.completion_ratio.toFixed(3));
+      const completionRatio = parseFloat(record.completion_ratio.toFixed(2));
       const priceData = getPriceData(record);
 
       return (

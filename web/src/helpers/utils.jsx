@@ -616,7 +616,7 @@ export const calculateModelPrice = ({
   displayPrice,
   currency,
   quotaDisplayType = 'USD',
-  precision = 4,
+  precision = 2,
 }) => {
   // 1. 选择实际使用的分组
   let usedGroup = selectedGroup;
@@ -698,7 +698,7 @@ export const calculateModelPrice = ({
       const rawDisplayPrice = displayPrice(priceUSD);
       const numericPrice =
         parseFloat(rawDisplayPrice.replace(/[^0-9.]/g, '')) / unitDivisor;
-      return `${symbol}${numericPrice.toFixed(precision)}`;
+      return `${symbol}${parseFloat(numericPrice.toFixed(precision))}`;
     };
 
     const inputPrice = formatTokenPrice(inputRatioPriceUSD);

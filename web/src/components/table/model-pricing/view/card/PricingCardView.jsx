@@ -343,7 +343,7 @@ const PricingCardView = ({
                         <div>
                           {t('补全')}:{' '}
                           {model.quota_type === 0
-                            ? parseFloat(model.completion_ratio.toFixed(3))
+                            ? parseFloat(model.completion_ratio.toFixed(2))
                             : t('无')}
                         </div>
                         <div>
