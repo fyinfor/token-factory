@@ -19,12 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 export const supportedLanguages = [
   'zh-CN',
-  'zh-TW',
   'en',
-  'fr',
-  'ru',
-  'ja',
-  'vi',
 ];
 
 export const normalizeLanguage = (language) => {
@@ -51,6 +46,22 @@ export const normalizeLanguage = (language) => {
     lower.startsWith('zh-hant')
   ) {
     return 'zh-TW';
+  }
+
+  if (lower === 'id' || lower.startsWith('id-')) {
+    return 'id';
+  }
+
+  if (lower === 'ms' || lower.startsWith('ms-')) {
+    return 'ms';
+  }
+
+  if (lower === 'th' || lower.startsWith('th-')) {
+    return 'th';
+  }
+
+  if (lower === 'sw' || lower.startsWith('sw-')) {
+    return 'sw';
   }
 
   const matchedLanguage = supportedLanguages.find(

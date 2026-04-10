@@ -84,7 +84,7 @@ const Playground = () => {
   const styleState = { isMobile };
   const [searchParams] = useSearchParams();
 
-  const state = usePlaygroundState();
+  const state = usePlaygroundState(userState?.user?.id);
   const {
     inputs,
     parameterEnabled,
@@ -492,6 +492,7 @@ const Playground = () => {
                 onCustomRequestBodyChange={setCustomRequestBody}
                 previewPayload={previewPayload}
                 messages={message}
+                userId={userState?.user?.id}
               />
             </Layout.Sider>
           )}

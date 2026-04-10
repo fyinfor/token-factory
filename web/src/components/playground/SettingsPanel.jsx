@@ -45,6 +45,7 @@ const SettingsPanel = ({
   onCustomRequestBodyChange,
   previewPayload,
   messages,
+  userId,
 }) => {
   const { t } = useTranslation();
 
@@ -99,6 +100,7 @@ const SettingsPanel = ({
             onConfigReset={onConfigReset}
             styleState={{ ...styleState, isMobile: false }}
             messages={messages}
+            userId={userId}
           />
         </div>
       )}
@@ -235,6 +237,7 @@ const SettingsPanel = ({
             onConfigReset={onConfigReset}
             styleState={styleState}
             messages={messages}
+            userId={userId}
           />
         </div>
       )}

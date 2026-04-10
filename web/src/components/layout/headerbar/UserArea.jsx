@@ -145,31 +145,20 @@ const UserArea = ({
     const showRegisterButton = !isSelfUseMode;
 
     const commonSizingAndLayoutClass =
-      'flex items-center justify-center !py-[10px] !px-1.5';
+      'flex items-center justify-center !py-[10px] !px-1.5 !rounded-full';
 
     const loginButtonSpecificStyling =
       '!bg-semi-color-fill-0 dark:!bg-semi-color-fill-1 hover:!bg-semi-color-fill-1 dark:hover:!bg-gray-700 transition-colors';
-    let loginButtonClasses = `${commonSizingAndLayoutClass} ${loginButtonSpecificStyling}`;
+    const loginButtonClasses = `${commonSizingAndLayoutClass} ${loginButtonSpecificStyling}`;
 
-    let registerButtonClasses = `${commonSizingAndLayoutClass}`;
+    const registerButtonClasses = `${commonSizingAndLayoutClass}`;
 
     const loginButtonTextSpanClass =
       '!text-xs !text-semi-color-text-1 dark:!text-gray-300 !p-1.5';
     const registerButtonTextSpanClass = '!text-xs !text-white !p-1.5';
 
-    if (showRegisterButton) {
-      if (isMobile) {
-        loginButtonClasses += ' !rounded-full';
-      } else {
-        loginButtonClasses += ' !rounded-l-full !rounded-r-none';
-      }
-      registerButtonClasses += ' !rounded-r-full !rounded-l-none';
-    } else {
-      loginButtonClasses += ' !rounded-full';
-    }
-
     return (
-      <div className='flex items-center'>
+      <div className='flex items-center gap-2'>
         <Link to='/login' className='flex'>
           <Button
             theme='borderless'
@@ -181,7 +170,7 @@ const UserArea = ({
         </Link>
         {showRegisterButton && (
           <div className='hidden md:block'>
-            <Link to='/register' className='flex -ml-px'>
+            <Link to='/register' className='flex'>
               <Button
                 theme='solid'
                 type='primary'

@@ -134,6 +134,24 @@ func MaskEmail(email string) string {
 	return "***@" + email[atIndex+1:]
 }
 
+// MaskCredentialForAdminDisplay 将管理员配置的密钥脱敏后返回给前端展示（保留首尾少量字符便于识别是否已配置）。
+func MaskCredentialForAdminDisplay(secret string) string {
+	s := strings.TrimSpace(secret)
+	if s == "" {
+		return ""
+	}
+	r := []rune(s)
+	n := len(r)
+	switch {
+	case n <= 4:
+		return strings.Repeat("*", n)
+	case n <= 8:
+		return string(r[:1]) + strings.Repeat("*", n-2) + string(r[n-1:])
+	default:
+		return string(r[:2]) + strings.Repeat("*", n-4) + string(r[n-2:])
+	}
+}
+
 // maskHostTail returns the tail parts of a domain/host that should be preserved.
 // It keeps 2 parts for likely country-code TLDs (e.g., co.uk, com.cn), otherwise keeps only the TLD.
 func maskHostTail(parts []string) []string {

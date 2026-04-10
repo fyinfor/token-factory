@@ -76,6 +76,14 @@ func InitOptionMap() {
 	common.OptionMap["CustomCallbackAddress"] = ""
 	common.OptionMap["EpayId"] = ""
 	common.OptionMap["EpayKey"] = ""
+	common.OptionMap["YipayAppSecret"] = operation_setting.YipayAppSecret
+	common.OptionMap["OnlinePayProvider"] = operation_setting.OnlinePayProvider
+	common.OptionMap["YipayMchNo"] = operation_setting.YipayMchNo
+	common.OptionMap["YipayAppId"] = operation_setting.YipayAppId
+	common.OptionMap["YipayWayCode"] = operation_setting.YipayWayCode
+	common.OptionMap["YipayNotifyUrl"] = operation_setting.YipayNotifyUrl
+	common.OptionMap["YipayReturnUrl"] = operation_setting.YipayReturnUrl
+	common.OptionMap["YipayRequestURL"] = operation_setting.YipayRequestURL
 	common.OptionMap["Price"] = strconv.FormatFloat(operation_setting.Price, 'f', -1, 64)
 	common.OptionMap["USDExchangeRate"] = strconv.FormatFloat(operation_setting.USDExchangeRate, 'f', -1, 64)
 	common.OptionMap["MinTopUp"] = strconv.Itoa(operation_setting.MinTopUp)
@@ -349,6 +357,29 @@ func updateOptionMap(key string, value string) (err error) {
 		operation_setting.EpayId = value
 	case "EpayKey":
 		operation_setting.EpayKey = value
+	case "YipayAppSecret":
+		operation_setting.YipayAppSecret = strings.TrimSpace(value)
+		common.OptionMap[key] = operation_setting.YipayAppSecret
+	case "OnlinePayProvider":
+		operation_setting.OnlinePayProvider = value
+	case "YipayMchNo":
+		operation_setting.YipayMchNo = strings.TrimSpace(value)
+		common.OptionMap[key] = operation_setting.YipayMchNo
+	case "YipayAppId":
+		operation_setting.YipayAppId = strings.TrimSpace(value)
+		common.OptionMap[key] = operation_setting.YipayAppId
+	case "YipayWayCode":
+		operation_setting.YipayWayCode = strings.TrimSpace(value)
+		common.OptionMap[key] = operation_setting.YipayWayCode
+	case "YipayNotifyUrl":
+		operation_setting.YipayNotifyUrl = strings.TrimSpace(value)
+		common.OptionMap[key] = operation_setting.YipayNotifyUrl
+	case "YipayReturnUrl":
+		operation_setting.YipayReturnUrl = strings.TrimSpace(value)
+		common.OptionMap[key] = operation_setting.YipayReturnUrl
+	case "YipayRequestURL":
+		operation_setting.YipayRequestURL = strings.TrimSpace(value)
+		common.OptionMap[key] = operation_setting.YipayRequestURL
 	case "Price":
 		operation_setting.Price, _ = strconv.ParseFloat(value, 64)
 	case "USDExchangeRate":

@@ -28,6 +28,7 @@ import SelectableButtonGroup from '../../../common/ui/SelectableButtonGroup';
  * @param {Array} allModels 所有模型列表（用于获取所有标签）
  * @param {boolean} loading 是否加载中
  * @param {Function} t i18n
+ * @param {string} layout 布局模式
  */
 const PricingTags = ({
   filterTag,
@@ -36,6 +37,7 @@ const PricingTags = ({
   allModels = [],
   loading = false,
   t,
+  layout,
 }) => {
   // 提取系统所有标签
   const getAllTags = React.useMemo(() => {
@@ -102,6 +104,7 @@ const PricingTags = ({
       loading={loading}
       variant='rose'
       t={t}
+      layout={layout}
     />
   );
 };

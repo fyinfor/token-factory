@@ -9,38 +9,13 @@ import (
 	"github.com/QuantumNous/new-api/common"
 )
 
-var PayAddress = ""
-var CustomCallbackAddress = ""
-var EpayId = ""
-var EpayKey = ""
-var Price = 7.3
-var MinTopUp = 1
-var USDExchangeRate = 7.3
-
-var PayMethods = []map[string]string{
-	{
-		"name":  "支付宝",
-		"color": "rgba(var(--semi-blue-5), 1)",
-		"type":  "alipay",
-	},
-	{
-		"name":  "微信",
-		"color": "rgba(var(--semi-green-5), 1)",
-		"type":  "wxpay",
-	},
-	{
-		"name":      "自定义1",
-		"color":     "black",
-		"type":      "custom1",
-		"min_topup": "50",
-	},
-}
-
+// UpdatePayMethodsByJsonString 兼容旧版调用，更新支付方式配置。
 func UpdatePayMethodsByJsonString(jsonString string) error {
 	PayMethods = make([]map[string]string, 0)
 	return common.Unmarshal([]byte(jsonString), &PayMethods)
 }
 
+// PayMethods2JsonString 兼容旧版调用，输出支付方式 JSON。
 func PayMethods2JsonString() string {
 	jsonBytes, err := common.Marshal(PayMethods)
 	if err != nil {
@@ -49,6 +24,7 @@ func PayMethods2JsonString() string {
 	return string(jsonBytes)
 }
 
+// ContainsPayMethod 检查支付方式是否存在。
 func ContainsPayMethod(method string) bool {
 	for _, payMethod := range PayMethods {
 		if payMethod["type"] == method {

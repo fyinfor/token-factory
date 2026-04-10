@@ -39,6 +39,7 @@
 <p align="center">
   <a href="#快速开始">快速开始</a> •
   <a href="#文档">文档</a> •
+  <a href="#支持的语言">界面语言</a> •
   <a href="#部署">部署</a> •
   <a href="#许可证">许可证</a> •
   <a href="#帮助">帮助</a>
@@ -136,6 +137,24 @@ docker run --name token-factory -d --restart always \
 - **存储** — SQLite / MySQL / PostgreSQL；可选 Redis（会话、缓存、加解密等按文档配置）。
 
 逐模型、逐接口细节请查阅 **[API 文档](https://docs.newapi.pro/zh/docs/api)** 与 **[QuantumNous/new-api](https://github.com/QuantumNous/new-api)** 的发行说明。
+
+---
+
+## 支持的语言
+
+| 代码 | 语言 |
+|------|------|
+| `zh-CN` | 简体中文 |
+| `zh-TW` | 繁体中文 |
+| `en` | 英语 |
+| `fr` | 法语 |
+| `ru` | 俄语 |
+| `ja` | 日语 |
+| `vi` | 越南语 |
+| `id` | 印尼语 |
+| `ms` | 马来语 |
+| `th` | 泰语 |
+| `sw` | 斯瓦希里语 |
 
 ---
 

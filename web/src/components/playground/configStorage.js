@@ -43,14 +43,19 @@ export const saveConfig = (config) => {
 /**
  * 保存消息到 localStorage
  * @param {Array} messages - 要保存的消息数组
+ * @param {string|number} userId - 用户ID，用于隔离不同用户的消息
  */
-export const saveMessages = (messages) => {
+export const saveMessages = (messages, userId) => {
   try {
+    const storageKey = userId
+      ? `${STORAGE_KEYS.MESSAGES}_${userId}`
+      : STORAGE_KEYS.MESSAGES;
     const messagesToSave = {
       messages,
       timestamp: new Date().toISOString(),
+      userId,
     };
-    localStorage.setItem(STORAGE_KEYS.MESSAGES, JSON.stringify(messagesToSave));
+    localStorage.setItem(storageKey, JSON.stringify(messagesToSave));
   } catch (error) {
     console.error('保存消息失败:', error);
   }
@@ -94,14 +99,20 @@ export const loadConfig = () => {
 
 /**
  * 从 localStorage 加载消息
+ * @param {string|number} userId - 用户ID，用于加载特定用户的消息
  * @returns {Array} 消息数组，如果不存在则返回 null
  */
-export const loadMessages = () => {
+export const loadMessages = (userId) => {
   try {
-    const savedMessages = localStorage.getItem(STORAGE_KEYS.MESSAGES);
+    const storageKey = userId
+      ? `${STORAGE_KEYS.MESSAGES}_${userId}`
+      : STORAGE_KEYS.MESSAGES;
+    const savedMessages = localStorage.getItem(storageKey);
     if (savedMessages) {
       const parsedMessages = JSON.parse(savedMessages);
-      return parsedMessages.messages || null;
+      if (parsedMessages.userId === userId || !userId) {
+        return parsedMessages.messages || null;
+      }
     }
   } catch (error) {
     console.error('加载消息失败:', error);
@@ -112,11 +123,15 @@ export const loadMessages = () => {
 
 /**
  * 清除保存的配置
+ * @param {string|number} userId - 用户ID，用于清除特定用户的消息
  */
-export const clearConfig = () => {
+export const clearConfig = (userId) => {
   try {
     localStorage.removeItem(STORAGE_KEYS.CONFIG);
-    localStorage.removeItem(STORAGE_KEYS.MESSAGES); // 同时清除消息
+    const messageKey = userId
+      ? `${STORAGE_KEYS.MESSAGES}_${userId}`
+      : STORAGE_KEYS.MESSAGES;
+    localStorage.removeItem(messageKey);
   } catch (error) {
     console.error('清除配置失败:', error);
   }
@@ -124,10 +139,14 @@ export const clearConfig = () => {
 
 /**
  * 清除保存的消息
+ * @param {string|number} userId - 用户ID，用于清除特定用户的消息
  */
-export const clearMessages = () => {
+export const clearMessages = (userId) => {
   try {
-    localStorage.removeItem(STORAGE_KEYS.MESSAGES);
+    const messageKey = userId
+      ? `${STORAGE_KEYS.MESSAGES}_${userId}`
+      : STORAGE_KEYS.MESSAGES;
+    localStorage.removeItem(messageKey);
   } catch (error) {
     console.error('清除消息失败:', error);
   }
@@ -167,12 +186,13 @@ export const getConfigTimestamp = () => {
  * 导出配置为 JSON 文件（包含消息）
  * @param {Object} config - 要导出的配置
  * @param {Array} messages - 要导出的消息
+ * @param {string|number} userId - 用户ID
  */
-export const exportConfig = (config, messages = null) => {
+export const exportConfig = (config, messages = null, userId = null) => {
   try {
     const configToExport = {
       ...config,
-      messages: messages || loadMessages(), // 包含消息数据
+      messages: messages || loadMessages(userId), // 包含消息数据
       exportTime: new Date().toISOString(),
       version: '1.0',
     };
@@ -194,9 +214,10 @@ export const exportConfig = (config, messages = null) => {
 /**
  * 从文件导入配置（包含消息）
  * @param {File} file - 包含配置的 JSON 文件
+ * @param {string|number} userId - 用户ID
  * @returns {Promise<Object>} 导入的配置对象
  */
-export const importConfig = (file) => {
+export const importConfig = (file, userId = null) => {
   return new Promise((resolve, reject) => {
     try {
       const reader = new FileReader();
@@ -210,7 +231,7 @@ export const importConfig = (file) => {
               importedConfig.messages &&
               Array.isArray(importedConfig.messages)
             ) {
-              saveMessages(importedConfig.messages);
+              saveMessages(importedConfig.messages, userId);
             }
 
             resolve(importedConfig);

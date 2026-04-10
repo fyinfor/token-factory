@@ -24,3 +24,7 @@ yarn-error.log*
 .idea
 package-lock.json
 yarn.lock
+
+# i18n translation chunk artifacts (local only)
+src/i18n/locales/.build/
+src/i18n/locales/.chunks/
