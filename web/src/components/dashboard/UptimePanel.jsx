@@ -51,20 +51,29 @@ const UptimePanel = ({
       {...CARD_PROPS}
       className='shadow-sm !rounded-2xl lg:col-span-1'
       title={
-        <div className='flex items-center justify-between w-full gap-2'>
-          <div className='flex items-center gap-2'>
-            <Gauge size={16} />
-            {t('服务可用性')}
+        <div className='flex flex-col gap-2 w-full'>
+          <div className='flex items-center justify-between w-full gap-2'>
+            <div className='flex items-center gap-2 min-w-0'>
+              <Gauge size={16} className='shrink-0' />
+              <span className='truncate font-semibold'>
+                {t('大模型部署定制服务')}
+              </span>
+            </div>
+            <Button
+              icon={<RefreshCw size={14} />}
+              onClick={loadUptimeData}
+              loading={uptimeLoading}
+              size='small'
+              theme='borderless'
+              type='tertiary'
+              className='text-gray-500 hover:text-blue-500 hover:bg-blue-50 !rounded-full shrink-0'
+            />
           </div>
-          <Button
-            icon={<RefreshCw size={14} />}
-            onClick={loadUptimeData}
-            loading={uptimeLoading}
-            size='small'
-            theme='borderless'
-            type='tertiary'
-            className='text-gray-500 hover:text-blue-500 hover:bg-blue-50 !rounded-full'
-          />
+          <p className='text-xs text-gray-500 font-normal leading-relaxed pr-1'>
+            {t(
+              '支持构建高效稳定的 Token 工厂，实现大规模生成能力的标准化与可控化',
+            )}
+          </p>
         </div>
       }
       bodyStyle={{ padding: 0 }}

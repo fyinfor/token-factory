@@ -471,7 +471,7 @@ function getUsageLogDetailSummary(record, text, billingDisplayMode, t) {
         groupText ? { text: groupText, tone: 'primary' } : null,
         { text: t('违规扣费'), tone: 'primary' },
         {
-          text: `${t('扣费')}：${renderQuota(feeQuota, 6)}`,
+          text: `${t('扣费')}：${renderQuota(feeQuota)}`,
           tone: 'secondary',
         },
         text
@@ -876,12 +876,12 @@ export const getLogsColumns = ({
         if (isSubscription) {
           // Subscription billed: show only tag (no $0), but keep tooltip for equivalent cost.
           return (
-            <Tooltip content={`${t('由订阅抵扣')}：${renderQuota(text, 6)}`}>
+            <Tooltip content={`${t('由订阅抵扣')}：${renderQuota(text)}`}>
               <span>{renderBillingTag(record, t)}</span>
             </Tooltip>
           );
         }
-        return <>{renderQuota(text, 6)}</>;
+        return <>{renderQuota(text)}</>;
       },
     },
     {

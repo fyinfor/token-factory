@@ -139,7 +139,7 @@ export const useDashboardCharts = (
         content: [
           {
             key: (datum) => datum['Model'],
-            value: (datum) => renderQuota(datum['rawQuota'] || 0, 4),
+            value: (datum) => renderQuota(datum['rawQuota'] || 0),
           },
         ],
       },
@@ -164,11 +164,11 @@ export const useDashboardCharts = (
             if (array[i].datum && array[i].datum.TimeSum) {
               sum = array[i].datum.TimeSum;
             }
-            array[i].value = renderQuota(value, 4);
+            array[i].value = renderQuota(value);
           }
           array.unshift({
             key: t('总计'),
-            value: renderQuota(sum, 4),
+            value: renderQuota(sum),
           });
           return array;
         },

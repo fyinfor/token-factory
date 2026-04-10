@@ -40,7 +40,7 @@ function resolveDevProxyTarget(mode) {
   if (raw) {
     return raw.replace(/\/$/, '');
   }
-  return 'http://127.0.0.1:3000';
+  return 'http://192.168.0.169:3000';
 }
 
 // https://vitejs.dev/config/
@@ -51,6 +51,12 @@ export default defineConfig(({ mode }) => {
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      // semi-ui 的 package exports 未声明 dist/css 子路径，Vite/Rollup 会报 Missing specifier；
+      // 仍指向包内同一份 semi.css，不增加或替换样式内容。
+      '@douyinfe/semi-ui/dist/css/semi.css': path.resolve(
+        __dirname,
+        'node_modules/@douyinfe/semi-ui/dist/css/semi.css',
+      ),
     },
   },
   plugins: [

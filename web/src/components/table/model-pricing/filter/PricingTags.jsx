@@ -87,7 +87,7 @@ const PricingTags = ({
       const count = getTagCount(tag);
       result.push({
         value: tag,
-        label: tag,
+        label: t(tag, { defaultValue: tag }),
         tagCount: count,
       });
     });

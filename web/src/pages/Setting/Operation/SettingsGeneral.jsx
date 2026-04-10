@@ -185,15 +185,15 @@ export default function GeneralSettings(props) {
   }, [quotaDisplayType, t]);
 
   const previewText = useMemo(() => {
-    if (quotaDisplayType === 'USD') return '$1.00';
+    if (quotaDisplayType === 'USD') return '$1';
     const rate = parseFloat(combinedRate);
     if (!rate || isNaN(rate)) return t('请输入汇率');
-    if (quotaDisplayType === 'CNY') return `$1.00 → ¥${rate.toFixed(2)}`;
+    if (quotaDisplayType === 'CNY') return `$1 → ¥${parseFloat(rate.toFixed(2))}`;
     if (quotaDisplayType === 'TOKENS')
-      return `$1.00 → ${Number(rate).toLocaleString()} Tokens`;
+      return `$1 → ${Number(rate).toLocaleString()} Tokens`;
     if (quotaDisplayType === 'CUSTOM') {
       const symbol = inputs['general_setting.custom_currency_symbol'] || '¤';
-      return `$1.00 → ${symbol}${rate.toFixed(2)}`;
+      return `$1 → ${symbol}${parseFloat(rate.toFixed(2))}`;
     }
     return '';
   }, [quotaDisplayType, combinedRate, inputs, t]);

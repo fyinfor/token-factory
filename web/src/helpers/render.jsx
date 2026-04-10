@@ -89,7 +89,6 @@ import {
   SiGitlab,
   SiGoogle,
   SiKeycloak,
-  SiLinkedin,
   SiNextcloud,
   SiNotion,
   SiOkta,
@@ -497,6 +496,23 @@ export function getLobeHubIcon(iconName, size = 14) {
   return <IconComponent {...props} />;
 }
 
+/** react-icons 已移除 SiLinkedin（Simple Icons 品牌策略），用同形 SVG 保持 OAuth 展示一致 */
+function OAuthLinkedinIcon({ size = 24 }) {
+  const s = Number(size) > 0 ? Number(size) : 24;
+  return (
+    <svg
+      xmlns='http://www.w3.org/2000/svg'
+      viewBox='0 0 24 24'
+      width={s}
+      height={s}
+      fill='currentColor'
+      aria-hidden
+    >
+      <path d='M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z' />
+    </svg>
+  );
+}
+
 const oauthProviderIconMap = {
   github: SiGithub,
   gitlab: SiGitlab,
@@ -504,7 +520,7 @@ const oauthProviderIconMap = {
   google: SiGoogle,
   discord: SiDiscord,
   facebook: SiFacebook,
-  linkedin: SiLinkedin,
+  linkedin: OAuthLinkedinIcon,
   x: SiX,
   twitter: SiX,
   slack: SiSlack,
@@ -1018,7 +1034,7 @@ export function renderQuotaNumberWithDigit(num, digits = 2) {
 
 export function renderNumberWithPoint(num) {
   if (num === undefined) return '';
-  num = num.toFixed(2);
+  num = parseFloat(num.toFixed(2));
   if (num >= 100000) {
     // Convert number to string to manipulate it
     let numStr = num.toString();
@@ -1132,7 +1148,7 @@ export function getCurrencyConfig() {
 export function convertUSDToCurrency(usdAmount, digits = 2) {
   const { symbol, rate } = getCurrencyConfig();
   const convertedAmount = usdAmount * rate;
-  return symbol + convertedAmount.toFixed(digits);
+  return symbol + parseFloat(convertedAmount.toFixed(digits));
 }
 
 export function renderQuota(quota, digits = 2) {
@@ -1170,8 +1186,8 @@ export function renderQuota(quota, digits = 2) {
     value = resultUSD * rate;
     symbol = symbolCustom;
   }
-  const fixedResult = value.toFixed(digits);
-  if (parseFloat(fixedResult) === 0 && quota > 0 && value > 0) {
+  const fixedResult = parseFloat(value.toFixed(digits));
+  if (fixedResult === 0 && quota > 0 && value > 0) {
     const minValue = Math.pow(10, -digits);
     return symbol + trimFixedDecimalDisplay(minValue, digits);
   }
@@ -1270,20 +1286,20 @@ function getGroupRatioText(groupRatio, user_group_ratio) {
   });
 }
 
-function formatRatioValue(value, digits = 6) {
+function formatRatioValue(value, digits = 2) {
   const num = Number(value);
   if (!Number.isFinite(num)) {
     return 0;
   }
-  return Number(num.toFixed(digits));
+  return parseFloat(num.toFixed(digits));
 }
 
-function renderDisplayAmountFromUsd(usdAmount, digits = 6) {
+function renderDisplayAmountFromUsd(usdAmount, digits = 2) {
   return renderQuotaWithAmount(Number(Number(usdAmount || 0).toFixed(digits)));
 }
 
-function formatBillingDisplayPrice(usdAmount, rate, digits = 6) {
-  return (usdAmount * rate).toFixed(digits);
+function formatBillingDisplayPrice(usdAmount, rate, digits = 2) {
+  return parseFloat((usdAmount * rate).toFixed(digits));
 }
 
 function buildBillingText(key, vars) {
@@ -1292,7 +1308,7 @@ function buildBillingText(key, vars) {
 
 function buildBillingPriceText(
   key,
-  { symbol, usdAmount, rate, amountKey = 'price', digits = 6, ...vars },
+  { symbol, usdAmount, rate, amountKey = 'price', digits = 2, ...vars },
 ) {
   return buildBillingText(key, {
     symbol,
@@ -1507,12 +1523,12 @@ function renderPriceSimpleCore({
       return joinBillingSummary([
         i18next.t('模型价格：{{symbol}}{{price}}', {
           symbol: symbol,
-          price: (modelPrice * rate).toFixed(6),
+          price: parseFloat((modelPrice * rate).toFixed(2)),
         }),
         getGroupRatioText(groupRatio, user_group_ratio),
       ]);
     }
-    const displayPrice = (modelPrice * rate).toFixed(6);
+    const displayPrice = parseFloat((modelPrice * rate).toFixed(2));
     return i18next.t('价格：{{symbol}}{{price}} * {{ratioType}}：{{ratio}}', {
       symbol: symbol,
       price: displayPrice,
@@ -1898,8 +1914,8 @@ export function renderModelPrice(
   }
 
   if (modelPrice !== -1) {
-    const displayPrice = (modelPrice * rate).toFixed(6);
-    const displayTotal = (modelPrice * groupRatio * rate).toFixed(6);
+    const displayPrice = parseFloat((modelPrice * rate).toFixed(2));
+    const displayTotal = parseFloat((modelPrice * groupRatio * rate).toFixed(2));
     return i18next.t(
       '按次：{{symbol}}{{price}} * {{ratioType}}：{{ratio}} = {{symbol}}{{total}}',
       {
@@ -2129,7 +2145,7 @@ export function renderLogContent(
       return joinBillingSummary([
         i18next.t('模型价格 {{symbol}}{{price}} / 次', {
           symbol,
-          price: (modelPrice * rate).toFixed(6),
+          price: parseFloat((modelPrice * rate).toFixed(2)),
         }),
         getGroupRatioText(groupRatio, user_group_ratio),
       ]);
@@ -2138,11 +2154,11 @@ export function renderLogContent(
     const parts = [
       i18next.t('输入价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
-        price: (modelRatio * 2.0 * rate).toFixed(6),
+        price: parseFloat((modelRatio * 2.0 * rate).toFixed(2)),
       }),
       i18next.t('输出价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
-        price: (modelRatio * 2.0 * completionRatio * rate).toFixed(6),
+        price: parseFloat((modelRatio * 2.0 * completionRatio * rate).toFixed(2)),
       }),
     ];
     appendPricePart(
@@ -2151,7 +2167,7 @@ export function renderLogContent(
       '缓存读取价格 {{symbol}}{{price}} / 1M tokens',
       {
         symbol,
-        price: (modelRatio * 2.0 * cacheRatio * rate).toFixed(6),
+        price: parseFloat((modelRatio * 2.0 * cacheRatio * rate).toFixed(2)),
       },
     );
     appendPricePart(
@@ -2160,7 +2176,7 @@ export function renderLogContent(
       '图片输入价格 {{symbol}}{{price}} / 1M tokens',
       {
         symbol,
-        price: (modelRatio * 2.0 * imageRatio * rate).toFixed(6),
+        price: parseFloat((modelRatio * 2.0 * imageRatio * rate).toFixed(2)),
       },
     );
     appendPricePart(
@@ -2186,7 +2202,7 @@ export function renderLogContent(
   if (modelPrice !== -1) {
     return i18next.t('模型价格 {{symbol}}{{price}}，{{ratioType}} {{ratio}}', {
       symbol: symbol,
-      price: (modelPrice * rate).toFixed(6),
+      price: parseFloat((modelPrice * rate).toFixed(2)),
       ratioType: ratioLabel,
       ratio,
     });
@@ -2321,7 +2337,7 @@ export function renderAudioModelPrice(
     if (completionRatio === undefined) {
       completionRatio = 0;
     }
-    audioRatio = parseFloat(audioRatio).toFixed(6);
+    audioRatio = parseFloat(parseFloat(audioRatio).toFixed(2));
     const inputRatioPrice = modelRatio * 2.0;
     const completionRatioPrice = modelRatio * 2.0 * completionRatio;
     const textPrice =
@@ -2401,9 +2417,9 @@ export function renderAudioModelPrice(
       '模型价格：{{symbol}}{{price}} * {{ratioType}}：{{ratio}} = {{symbol}}{{total}}',
       {
         symbol: symbol,
-        price: (modelPrice * rate).toFixed(6),
+        price: parseFloat((modelPrice * rate).toFixed(2)),
         ratio: groupRatio,
-        total: (modelPrice * groupRatio * rate).toFixed(6),
+        total: parseFloat((modelPrice * groupRatio * rate).toFixed(2)),
         ratioType: ratioLabel,
       },
     );
@@ -2650,7 +2666,7 @@ export function renderClaudeModelPrice(
       i18next.t('提示 {{input}} tokens / 1M tokens * {{symbol}}{{price}}', {
         input: inputTokens,
         symbol,
-        price: inputUnitPrice.toFixed(6),
+        price: inputUnitPrice.toFixed(2),
       }),
     ];
 
@@ -2659,7 +2675,7 @@ export function renderClaudeModelPrice(
         i18next.t('缓存 {{tokens}} tokens / 1M tokens * {{symbol}}{{price}}', {
           tokens: cacheTokens,
           symbol,
-          price: cacheUnitPrice.toFixed(6),
+          price: cacheUnitPrice.toFixed(2),
         }),
       );
     }
@@ -2671,7 +2687,7 @@ export function renderClaudeModelPrice(
           {
             tokens: cacheCreationTokens,
             symbol,
-            price: cacheCreationUnitPrice.toFixed(6),
+            price: cacheCreationUnitPrice.toFixed(2),
           },
         ),
       );
@@ -2684,7 +2700,7 @@ export function renderClaudeModelPrice(
           {
             tokens: cacheCreationTokens5m,
             symbol,
-            price: cacheCreationUnitPrice5m.toFixed(6),
+            price: cacheCreationUnitPrice5m.toFixed(2),
           },
         ),
       );
@@ -2697,7 +2713,7 @@ export function renderClaudeModelPrice(
           {
             tokens: cacheCreationTokens1h,
             symbol,
-            price: cacheCreationUnitPrice1h.toFixed(6),
+            price: cacheCreationUnitPrice1h.toFixed(2),
           },
         ),
       );
@@ -2709,7 +2725,7 @@ export function renderClaudeModelPrice(
         {
           completion: completionTokens,
           symbol,
-          price: completionUnitPrice.toFixed(6),
+          price: completionUnitPrice.toFixed(2),
         },
       ),
     );
@@ -2785,10 +2801,10 @@ export function renderClaudeModelPrice(
       '模型价格：{{symbol}}{{price}} * {{ratioType}}：{{ratio}} = {{symbol}}{{total}}',
       {
         symbol: symbol,
-        price: (modelPrice * rate).toFixed(6),
+        price: parseFloat((modelPrice * rate).toFixed(2)),
         ratioType: ratioLabel,
         ratio: groupRatio,
-        total: (modelPrice * groupRatio * rate).toFixed(6),
+        total: parseFloat((modelPrice * groupRatio * rate).toFixed(2)),
       },
     );
   }
@@ -2994,7 +3010,7 @@ export function renderClaudeLogContent(
       return joinBillingSummary([
         i18next.t('模型价格 {{symbol}}{{price}} / 次', {
           symbol,
-          price: (modelPrice * rate).toFixed(6),
+          price: parseFloat((modelPrice * rate).toFixed(2)),
         }),
         getGroupRatioText(groupRatio, user_group_ratio),
       ]);
@@ -3003,15 +3019,15 @@ export function renderClaudeLogContent(
     const parts = [
       i18next.t('输入价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
-        price: (modelRatio * 2.0 * rate).toFixed(6),
+        price: parseFloat((modelRatio * 2.0 * rate).toFixed(2)),
       }),
       i18next.t('输出价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
-        price: (modelRatio * 2.0 * completionRatio * rate).toFixed(6),
+        price: parseFloat((modelRatio * 2.0 * completionRatio * rate).toFixed(2)),
       }),
       i18next.t('缓存读取价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
-        price: (modelRatio * 2.0 * cacheRatio * rate).toFixed(6),
+        price: parseFloat((modelRatio * 2.0 * cacheRatio * rate).toFixed(2)),
       }),
     ];
     const hasSplitCacheCreation =
@@ -3022,7 +3038,7 @@ export function renderClaudeLogContent(
       '5m缓存创建价格 {{symbol}}{{price}} / 1M tokens',
       {
         symbol,
-        price: (modelRatio * 2.0 * cacheCreationRatio5m * rate).toFixed(6),
+        price: parseFloat((modelRatio * 2.0 * cacheCreationRatio5m * rate).toFixed(2)),
       },
     );
     appendPricePart(
@@ -3031,7 +3047,7 @@ export function renderClaudeLogContent(
       '1h缓存创建价格 {{symbol}}{{price}} / 1M tokens',
       {
         symbol,
-        price: (modelRatio * 2.0 * cacheCreationRatio1h * rate).toFixed(6),
+        price: parseFloat((modelRatio * 2.0 * cacheCreationRatio1h * rate).toFixed(2)),
       },
     );
     appendPricePart(
@@ -3040,7 +3056,7 @@ export function renderClaudeLogContent(
       '缓存创建价格 {{symbol}}{{price}} / 1M tokens',
       {
         symbol,
-        price: (modelRatio * 2.0 * cacheCreationRatio * rate).toFixed(6),
+        price: parseFloat((modelRatio * 2.0 * cacheCreationRatio * rate).toFixed(2)),
       },
     );
     parts.push(getGroupRatioText(groupRatio, user_group_ratio));
@@ -3050,7 +3066,7 @@ export function renderClaudeLogContent(
   if (modelPrice !== -1) {
     return i18next.t('模型价格 {{symbol}}{{price}}，{{ratioType}} {{ratio}}', {
       symbol: symbol,
-      price: (modelPrice * rate).toFixed(6),
+      price: parseFloat((modelPrice * rate).toFixed(2)),
       ratioType: ratioLabel,
       ratio: groupRatio,
     });

@@ -94,7 +94,7 @@ const PricingVendors = ({
       const icon = getAllVendors.vendorIcons.get(vendor);
       result.push({
         value: vendor,
-        label: vendor,
+        label: t(vendor, { defaultValue: vendor }),
         icon: icon ? getLobeHubIcon(icon, 16) : null,
         tagCount: count,
       });

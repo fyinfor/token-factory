@@ -28,7 +28,7 @@ import {
   Space,
   Modal,
   Table,
-  InputNumber,
+  // InputNumber, // 暂时禁用分销比例编辑功能
 } from '@douyinfe/semi-ui';
 import { Copy, Users, BarChart2, TrendingUp, Gift, Zap, Phone, MessageCircle } from 'lucide-react';
 import {
@@ -70,12 +70,13 @@ const InvitationCard = ({
           return;
         }
         const items = data?.items || [];
-        setInviteRows(
-          items.map((row) => ({
-            ...row,
-            _bps: row.commission_ratio_bps,
-          })),
-        );
+        setInviteRows(items);
+        // setInviteRows(
+        //   items.map((row) => ({
+        //     ...row,
+        //     _bps: row.commission_ratio_bps,
+        //   })),
+        // ); // 暂时禁用分销比例编辑功能
         setInviteTotal(data?.total ?? 0);
         setInvitePage(p);
       } catch {
@@ -87,52 +88,56 @@ const InvitationCard = ({
     [invitePageSize, t],
   );
 
-  // 仅在打开弹窗时拉第一页；翻页、改 pageSize 由 Table pagination 回调触发，避免重复请求
+  // 如果是分销商，组件加载时直接拉取数据；否则仅在打开弹窗时拉取
   useEffect(() => {
-    if (inviteModalOpen) {
+    if (isDistributor()) {
+      loadInvitees(1, invitePageSize);
+    } else if (inviteModalOpen) {
       loadInvitees(1, invitePageSize);
     }
   }, [inviteModalOpen]);
 
-  const updateRowBps = (inviteeId, value) => {
-    setInviteRows((prev) =>
-      prev.map((r) =>
-        r.invitee_id === inviteeId ? { ...r, _bps: value } : r,
-      ),
-    );
-  };
+  // ====== 暂时禁用分销比例编辑功能 ======
+  // const updateRowBps = (inviteeId, value) => {
+  //   setInviteRows((prev) =>
+  //     prev.map((r) =>
+  //       r.invitee_id === inviteeId ? { ...r, _bps: value } : r,
+  //     ),
+  //   );
+  // };
 
-  const saveCommission = async (record) => {
-    const bps = Math.round(Number(record._bps));
-    if (Number.isNaN(bps) || bps < 0 || bps > 10000) {
-      showError(t('分销比例范围错误'));
-      return;
-    }
-    setSavingId(record.invitee_id);
-    try {
-      const res = await API.put('/api/user/aff_invitees/commission', {
-        invitee_id: record.invitee_id,
-        commission_ratio_bps: bps,
-      });
-      const { success, message } = res.data;
-      if (!success) {
-        showError(message || t('保存失败'));
-        return;
-      }
-      showSuccess(t('保存成功'));
-      setInviteRows((prev) =>
-        prev.map((r) =>
-          r.invitee_id === record.invitee_id
-            ? { ...r, commission_ratio_bps: bps, _bps: bps }
-            : r,
-        ),
-      );
-    } catch {
-      showError(t('保存失败'));
-    } finally {
-      setSavingId(null);
-    }
-  };
+  // const saveCommission = async (record) => {
+  //   const bps = Math.round(Number(record._bps));
+  //   if (Number.isNaN(bps) || bps < 0 || bps > 10000) {
+  //     showError(t('分销比例范围错误'));
+  //     return;
+  //   }
+  //   setSavingId(record.invitee_id);
+  //   try {
+  //     const res = await API.put('/api/user/aff_invitees/commission', {
+  //       invitee_id: record.invitee_id,
+  //       commission_ratio_bps: bps,
+  //     });
+  //     const { success, message } = res.data;
+  //     if (!success) {
+  //       showError(message || t('保存失败'));
+  //       return;
+  //     }
+  //     showSuccess(t('保存成功'));
+  //     setInviteRows((prev) =>
+  //       prev.map((r) =>
+  //         r.invitee_id === record.invitee_id
+  //           ? { ...r, commission_ratio_bps: bps, _bps: bps }
+  //           : r,
+  //       ),
+  //     );
+  //   } catch {
+  //     showError(t('保存失败'));
+  //   } finally {
+  //     setSavingId(null);
+  //   }
+  // };
+  // ====== 暂时禁用分销比例编辑功能 END ======
 
   const inviteColumns = [
     {
@@ -290,17 +295,17 @@ const InvitationCard = ({
 
                   {/* 邀请人数 */}
                   <div
-                    className='text-center cursor-pointer rounded-lg outline-none transition-opacity hover:opacity-95 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent'
-                    role='button'
+                    className='text-center rounded-lg outline-none transition-opacity hover:opacity-95 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent'
+                    // role='button'
                     tabIndex={0}
                     aria-label={t('邀请人数')}
-                    onClick={() => setInviteModalOpen(true)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        setInviteModalOpen(true);
-                      }
-                    }}
+                    // onClick={() => setInviteModalOpen(true)}
+                    // onKeyDown={(e) => {
+                    //   if (e.key === 'Enter' || e.key === ' ') {
+                    //     e.preventDefault();
+                    //     setInviteModalOpen(true);
+                    //   }
+                    // }}
                   >
                     <div
                       className='text-base sm:text-2xl font-bold mb-2'

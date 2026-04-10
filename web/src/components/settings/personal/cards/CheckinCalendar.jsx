@@ -298,13 +298,13 @@ const CheckinCalendar = ({ t, status, turnstileEnabled, turnstileSiteKey }) => {
           </div>
           <div className='text-center p-2.5 bg-slate-50 dark:bg-slate-800 rounded-lg'>
             <div className='text-xl font-bold text-orange-600'>
-              {renderQuota(monthlyQuota, 6)}
+              {renderQuota(monthlyQuota)}
             </div>
             <div className='text-xs text-gray-500'>{t('本月获得')}</div>
           </div>
           <div className='text-center p-2.5 bg-slate-50 dark:bg-slate-800 rounded-lg'>
             <div className='text-xl font-bold text-blue-600'>
-              {renderQuota(checkinData.stats?.total_quota || 0, 6)}
+              {renderQuota(checkinData.stats?.total_quota || 0)}
             </div>
             <div className='text-xs text-gray-500'>{t('累计获得')}</div>
           </div>
