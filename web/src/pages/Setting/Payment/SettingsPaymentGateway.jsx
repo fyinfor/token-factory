@@ -34,8 +34,16 @@ export default function SettingsPaymentGateway(props) {
   const [loading, setLoading] = useState(false);
   const [inputs, setInputs] = useState({
     PayAddress: '',
+    OnlinePayProvider: 'yipay',
     EpayId: '',
     EpayKey: '',
+    YipayAppSecret: '',
+    YipayMchNo: '',
+    YipayAppId: '',
+    YipayWayCode: '',
+    YipayNotifyUrl: '',
+    YipayReturnUrl: '',
+    YipayRequestURL: '',
     Price: 7.3,
     MinTopUp: 1,
     TopupGroupRatio: '',
@@ -47,12 +55,43 @@ export default function SettingsPaymentGateway(props) {
   const [originInputs, setOriginInputs] = useState({});
   const formApiRef = useRef(null);
 
+  /**
+   * 规范化在线支付通道值，兼容历史大小写或别名。
+   * @param {string} provider 在线支付通道原始值
+   * @returns {string} 规范化后的通道值（epay / yipay）
+   */
+  const normalizeOnlinePayProvider = (provider) => {
+    const value = (provider || '').toLowerCase();
+    if (value === 'yipay' || value === 'jeepay') {
+      return 'yipay';
+    }
+    return 'epay';
+  };
+
+  /**
+   * 当前在线支付通道（规范化后）。
+   * @type {'epay' | 'yipay'}
+   */
+  const currentProvider = normalizeOnlinePayProvider(
+    inputs.OnlinePayProvider || 'yipay',
+  );
+
   useEffect(() => {
     if (props.options && formApiRef.current) {
       const currentInputs = {
         PayAddress: props.options.PayAddress || '',
+        OnlinePayProvider: normalizeOnlinePayProvider(
+          props.options.OnlinePayProvider || 'yipay',
+        ),
         EpayId: props.options.EpayId || '',
         EpayKey: props.options.EpayKey || '',
+        YipayAppSecret: props.options.YipayAppSecret || '',
+        YipayMchNo: props.options.YipayMchNo || '',
+        YipayAppId: props.options.YipayAppId || '',
+        YipayWayCode: props.options.YipayWayCode || '',
+        YipayNotifyUrl: props.options.YipayNotifyUrl || '',
+        YipayReturnUrl: props.options.YipayReturnUrl || '',
+        YipayRequestURL: props.options.YipayRequestURL || '',
         Price:
           props.options.Price !== undefined
             ? parseFloat(props.options.Price)
@@ -95,7 +134,13 @@ export default function SettingsPaymentGateway(props) {
   }, [props.options]);
 
   const handleFormChange = (values) => {
-    setInputs(values);
+    setInputs((prev) => {
+      const next = { ...prev, ...values };
+      next.OnlinePayProvider = normalizeOnlinePayProvider(
+        next.OnlinePayProvider || 'yipay',
+      );
+      return next;
+    });
   };
 
   const submitPayAddress = async () => {
@@ -138,17 +183,76 @@ export default function SettingsPaymentGateway(props) {
       }
     }
 
+    if (currentProvider === 'yipay') {
+      if (!inputs.YipayMchNo?.trim()) {
+        showError(t('Yipay 模式下必须填写商户号'));
+        return;
+      }
+      if (!inputs.YipayAppId?.trim()) {
+        showError(t('Yipay 模式下必须填写应用ID（AppId）'));
+        return;
+      }
+      if (!inputs.YipayAppSecret?.trim()) {
+        showError(t('Yipay 模式下必须填写 AppSecret'));
+        return;
+      }
+      if (!inputs.YipayWayCode?.trim()) {
+        showError(t('Yipay 模式下必须填写支付方式（WayCode）'));
+        return;
+      }
+      if (!inputs.YipayRequestURL?.trim() && !inputs.PayAddress?.trim()) {
+        showError(t('Yipay 模式下必须填写请求URL或支付地址'));
+        return;
+      }
+    }
+
     setLoading(true);
     try {
       const options = [
         { key: 'PayAddress', value: removeTrailingSlash(inputs.PayAddress) },
+        {
+          key: 'OnlinePayProvider',
+          value: normalizeOnlinePayProvider(inputs.OnlinePayProvider || 'yipay'),
+        },
       ];
 
-      if (inputs.EpayId !== '') {
+      if (currentProvider === 'epay' && inputs.EpayId !== '') {
         options.push({ key: 'EpayId', value: inputs.EpayId });
       }
-      if (inputs.EpayKey !== undefined && inputs.EpayKey !== '') {
+      if (currentProvider === 'yipay' && inputs.YipayMchNo !== '') {
+        options.push({ key: 'YipayMchNo', value: inputs.YipayMchNo.trim() });
+      }
+      if (
+        currentProvider === 'epay' &&
+        inputs.EpayKey !== undefined &&
+        inputs.EpayKey !== ''
+      ) {
         options.push({ key: 'EpayKey', value: inputs.EpayKey });
+      }
+      if (currentProvider === 'yipay' && inputs.YipayAppId !== '') {
+        options.push({ key: 'YipayAppId', value: inputs.YipayAppId.trim() });
+      }
+      if (currentProvider === 'yipay' && inputs.YipayWayCode !== '') {
+        options.push({ key: 'YipayWayCode', value: inputs.YipayWayCode.trim() });
+      }
+      if (currentProvider === 'yipay' && inputs.YipayRequestURL !== '') {
+        options.push({
+          key: 'YipayRequestURL',
+          value: removeTrailingSlash(inputs.YipayRequestURL.trim()),
+        });
+      }
+      if (currentProvider === 'yipay' && inputs.YipayNotifyUrl !== '') {
+        options.push({ key: 'YipayNotifyUrl', value: inputs.YipayNotifyUrl.trim() });
+      }
+      if (currentProvider === 'yipay' && inputs.YipayReturnUrl !== '') {
+        options.push({ key: 'YipayReturnUrl', value: inputs.YipayReturnUrl.trim() });
+      }
+      if (
+        currentProvider === 'yipay' &&
+        inputs.YipayAppSecret !== undefined &&
+        inputs.YipayAppSecret !== ''
+      ) {
+        options.push({ key: 'YipayAppSecret', value: inputs.YipayAppSecret.trim() });
       }
       if (inputs.Price !== '') {
         options.push({ key: 'Price', value: inputs.Price.toString() });
@@ -219,10 +323,20 @@ export default function SettingsPaymentGateway(props) {
         <Form.Section text={t('支付设置')}>
           <Text>
             {t(
-              '（当前仅支持易支付接口，默认使用上方服务器地址作为回调地址！）',
+              '（当前支持易支付/Yipay 配置，默认使用上方服务器地址作为回调地址！）',
             )}
           </Text>
           <Row gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}>
+            <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+              <Form.Select
+                field='OnlinePayProvider'
+                label={t('在线支付通道')}
+                optionList={[
+                  { label: t('易支付'), value: 'epay' },
+                  { label: t('Yipay'), value: 'yipay' },
+                ]}
+              />
+            </Col>
             <Col xs={24} sm={24} md={8} lg={8} xl={8}>
               <Form.Input
                 field='PayAddress'
@@ -230,22 +344,69 @@ export default function SettingsPaymentGateway(props) {
                 placeholder={t('例如：https://yourdomain.com')}
               />
             </Col>
-            <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+            {currentProvider === 'epay' && (
+              <Col xs={24} sm={24} md={8} lg={8} xl={8}>
               <Form.Input
                 field='EpayId'
-                label={t('易支付商户ID')}
+                label={t('易支付商户号')}
                 placeholder={t('例如：0001')}
               />
-            </Col>
-            <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+              </Col>
+            )}
+            {currentProvider === 'epay' && (
+              <Col xs={24} sm={24} md={8} lg={8} xl={8}>
               <Form.Input
                 field='EpayKey'
                 label={t('易支付商户密钥')}
                 placeholder={t('敏感信息不会发送到前端显示')}
                 type='password'
               />
-            </Col>
+              </Col>
+            )}
           </Row>
+          {currentProvider === 'yipay' && (
+            <Row
+              gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
+              style={{ marginTop: 16 }}
+            >
+              <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+                <Form.Input
+                  field='YipayMchNo'
+                  label={t('Yipay 商户号（可选覆盖）')}
+                  placeholder={t('例如：M1691xxxx')}
+                />
+              </Col>
+              <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+                <Form.Input
+                  field='YipayAppId'
+                  label={t('Yipay 应用ID')}
+                  placeholder={t('例如：62b2f8f6xxxxxx')}
+                />
+              </Col>
+              <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+                <Form.Input
+                  field='YipayAppSecret'
+                  label={t('Yipay AppSecret')}
+                  placeholder={t('用于 MD5 签名的密钥')}
+                  type='password'
+                />
+              </Col>
+            </Row>
+          )}
+          {currentProvider === 'yipay' && (
+            <Row
+              gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
+              style={{ marginTop: 16 }}
+            >
+              <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+                <Form.Input
+                  field='YipayWayCode'
+                  label={t('Yipay 支付方式')}
+                  placeholder={t('例如：WX_JSAPI / ALIPAY_WAP')}
+                />
+              </Col>
+            </Row>
+          )}
           <Row
             gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
             style={{ marginTop: 16 }}
@@ -273,6 +434,34 @@ export default function SettingsPaymentGateway(props) {
               />
             </Col>
           </Row>
+          {currentProvider === 'yipay' && (
+            <Row
+              gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
+              style={{ marginTop: 16 }}
+            >
+            <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+              <Form.Input
+                field='YipayRequestURL'
+                label={t('Yipay 请求URL')}
+                placeholder={t('例如：https://pay.xxx.com')}
+              />
+            </Col>
+            <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+              <Form.Input
+                field='YipayNotifyUrl'
+                label={t('Yipay 异步通知地址')}
+                placeholder={t('例如：https://yourdomain.com/api/user/epay/notify')}
+              />
+            </Col>
+            <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+              <Form.Input
+                field='YipayReturnUrl'
+                label={t('Yipay 同步通知地址')}
+                placeholder={t('例如：https://yourdomain.com/console/log')}
+              />
+            </Col>
+          </Row>
+          )}
           <Form.TextArea
             field='TopupGroupRatio'
             label={t('充值分组倍率')}

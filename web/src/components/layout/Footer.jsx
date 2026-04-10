@@ -126,7 +126,7 @@ const FooterBar = () => {
                   {t('相关项目')}
                 </p>
                 <div className='flex flex-col gap-4'>
-                  <a
+                  {/* <a
                     href='https://github.com/songquanpeng/one-api'
                     target='_blank'
                     rel='noopener noreferrer'
@@ -149,7 +149,8 @@ const FooterBar = () => {
                     className='!text-semi-color-text-1'
                   >
                     neko-api-key-tool
-                  </a>
+                  </a> */}
+                  <></>
                 </div>
               </div>
 
@@ -158,7 +159,7 @@ const FooterBar = () => {
                   {t('友情链接')}
                 </p>
                 <div className='flex flex-col gap-4'>
-                  <a
+                  {/* <a
                     href='https://github.com/Calcium-Ion/new-api-horizon'
                     target='_blank'
                     rel='noopener noreferrer'
@@ -173,7 +174,7 @@ const FooterBar = () => {
                     className='!text-semi-color-text-1'
                   >
                     CoAI
-                  </a>
+                  </a> */}
                   <a
                     href='https://www.gpt-load.com/'
                     target='_blank'
@@ -195,7 +196,7 @@ const FooterBar = () => {
             </Typography.Text>
           </div>
 
-          <div className='text-sm'>
+          {/* <div className='text-sm'>
             <span className='!text-semi-color-text-1'>
               {t('设计与开发由')}{' '}
             </span>
@@ -207,7 +208,7 @@ const FooterBar = () => {
             >
               New API
             </a>
-          </div>
+          </div> */}
         </div>
       </footer>
     ),
@@ -231,14 +232,14 @@ const FooterBar = () => {
               <span className='!text-semi-color-text-1'>
                 {t('设计与开发由')}{' '}
               </span>
-              <a
+              {/* <a
                 href='https://github.com/QuantumNous/new-api'
                 target='_blank'
                 rel='noopener noreferrer'
                 className='!text-semi-color-primary font-medium'
               >
                 New API
-              </a>
+              </a> */}
             </div>
           </div>
         </footer>

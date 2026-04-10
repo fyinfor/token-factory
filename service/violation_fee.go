@@ -27,7 +27,7 @@ func IsViolationFeeCode(code types.ErrorCode) bool {
 	return strings.HasPrefix(string(code), ViolationFeeCodePrefix)
 }
 
-func HasCSAMViolationMarker(err *types.NewAPIError) bool {
+func HasCSAMViolationMarker(err *types.TokenFactoryError) bool {
 	if err == nil {
 		return false
 	}
@@ -38,7 +38,7 @@ func HasCSAMViolationMarker(err *types.NewAPIError) bool {
 	return strings.Contains(msg, CSAMViolationMarker) || strings.Contains(err.Error(), ContentViolatesUsageMarker)
 }
 
-func WrapAsViolationFeeGrokCSAM(err *types.NewAPIError) *types.NewAPIError {
+func WrapAsViolationFeeGrokCSAM(err *types.TokenFactoryError) *types.TokenFactoryError {
 	if err == nil {
 		return nil
 	}
@@ -53,7 +53,7 @@ func WrapAsViolationFeeGrokCSAM(err *types.NewAPIError) *types.NewAPIError {
 // - if error.code already has the violation-fee prefix, skip-retry is enabled.
 //
 // It must be called before retry decision logic.
-func NormalizeViolationFeeError(err *types.NewAPIError) *types.NewAPIError {
+func NormalizeViolationFeeError(err *types.TokenFactoryError) *types.TokenFactoryError {
 	if err == nil {
 		return nil
 	}
@@ -70,7 +70,7 @@ func NormalizeViolationFeeError(err *types.NewAPIError) *types.NewAPIError {
 	return err
 }
 
-func shouldChargeViolationFee(err *types.NewAPIError) bool {
+func shouldChargeViolationFee(err *types.TokenFactoryError) bool {
 	if err == nil {
 		return false
 	}
@@ -101,7 +101,7 @@ func calcViolationFeeQuota(amount, groupRatio float64) int {
 
 // ChargeViolationFeeIfNeeded charges an additional fee after the normal flow finishes (including refund).
 // It uses Grok fee settings as the fee policy.
-func ChargeViolationFeeIfNeeded(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, apiErr *types.NewAPIError) bool {
+func ChargeViolationFeeIfNeeded(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, apiErr *types.TokenFactoryError) bool {
 	if ctx == nil || relayInfo == nil || apiErr == nil {
 		return false
 	}

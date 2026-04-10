@@ -75,6 +75,7 @@ const PricingCardView = ({
   selectedRowKeys = [],
   setSelectedRowKeys,
   openModelDetail,
+  showSizeChanger = true,
 }) => {
   const showSkeleton = useMinimumLoadingTime(loading);
   const startIndex = (currentPage - 1) * pageSize;
@@ -365,7 +366,7 @@ const PricingCardView = ({
             currentPage={currentPage}
             pageSize={pageSize}
             total={filteredModels.length}
-            showSizeChanger={true}
+            showSizeChanger={showSizeChanger}
             pageSizeOptions={[10, 20, 50, 100]}
             size={isMobile ? 'small' : 'default'}
             showQuickJumper={isMobile}

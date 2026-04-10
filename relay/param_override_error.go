@@ -5,9 +5,9 @@ import (
 	"github.com/QuantumNous/new-api/types"
 )
 
-func newAPIErrorFromParamOverride(err error) *types.NewAPIError {
+func tokenFactoryErrorFromParamOverride(err error) *types.TokenFactoryError {
 	if fixedErr, ok := relaycommon.AsParamOverrideReturnError(err); ok {
-		return relaycommon.NewAPIErrorFromParamOverride(fixedErr)
+		return relaycommon.TokenFactoryErrorFromParamOverride(fixedErr)
 	}
 	return types.NewError(err, types.ErrorCodeChannelParamOverrideInvalid, types.ErrOptionWithSkipRetry())
 }

@@ -1,10 +1,16 @@
 package controller
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -79,23 +85,32 @@ func GetTopUpInfo(c *gin.Context) {
 	}
 
 	data := gin.H{
-		"enable_online_topup": operation_setting.PayAddress != "" && operation_setting.EpayId != "" && operation_setting.EpayKey != "",
+		"enable_online_topup": (operation_setting.OnlinePayProvider == "yipay" &&
+			(operation_setting.YipayRequestURL != "" || operation_setting.PayAddress != "") &&
+			operation_setting.YipayMchNo != "" &&
+			operation_setting.YipayAppId != "" &&
+			operation_setting.YipayAppSecret != "") ||
+			(operation_setting.OnlinePayProvider != "yipay" &&
+				operation_setting.PayAddress != "" &&
+				operation_setting.EpayId != "" &&
+				operation_setting.EpayKey != ""),
 		"enable_stripe_topup": setting.StripeApiSecret != "" && setting.StripeWebhookSecret != "" && setting.StripePriceId != "",
 		"enable_creem_topup":  setting.CreemApiKey != "" && setting.CreemProducts != "[]",
-		"enable_waffo_topup": enableWaffo,
+		"enable_waffo_topup":  enableWaffo,
 		"waffo_pay_methods": func() interface{} {
 			if enableWaffo {
 				return setting.GetWaffoPayMethods()
 			}
 			return nil
 		}(),
-		"creem_products": setting.CreemProducts,
+		"creem_products":      setting.CreemProducts,
 		"pay_methods":         payMethods,
 		"min_topup":           operation_setting.MinTopUp,
 		"stripe_min_topup":    setting.StripeMinTopUp,
 		"waffo_min_topup":     setting.WaffoMinTopUp,
 		"amount_options":      operation_setting.GetPaymentSetting().AmountOptions,
 		"discount":            operation_setting.GetPaymentSetting().AmountDiscount,
+		"online_pay_provider": operation_setting.OnlinePayProvider,
 	}
 	common.ApiSuccess(c, data)
 }
@@ -109,6 +124,190 @@ type AmountRequest struct {
 	Amount int64 `json:"amount"`
 }
 
+// buildUserEpayNotifyURL 规范化用户充值异步回调地址，避免重复拼接 notify 路径。
+func buildUserEpayNotifyURL(callbackAddress string) string {
+	normalized := strings.TrimRight(strings.TrimSpace(callbackAddress), "/")
+	if strings.HasSuffix(normalized, "/api/user/epay/notify") {
+		return normalized
+	}
+	return normalized + "/api/user/epay/notify"
+}
+
+// verifyYipayNotify 验证 Yipay 回调签名。
+func verifyYipayNotify(params map[string]string) bool {
+	sign := strings.TrimSpace(params["sign"])
+	if sign == "" || operation_setting.YipayAppSecret == "" {
+		return false
+	}
+	expected := signYipayMD5(params, operation_setting.YipayAppSecret)
+	return strings.EqualFold(sign, expected)
+}
+
+// sortedParamKeys 返回回调参数的有序键列表，便于日志排查。
+func sortedParamKeys(params map[string]string) []string {
+	keys := make([]string, 0, len(params))
+	for k := range params {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// signYipayMD5 生成 Yipay MD5 签名（参数按 ASCII 排序）。
+func signYipayMD5(params map[string]string, appSecret string) string {
+	keys := make([]string, 0, len(params))
+	for k, v := range params {
+		if k == "sign" || strings.TrimSpace(v) == "" {
+			continue
+		}
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys)+1)
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%s", k, params[k]))
+	}
+	parts = append(parts, "key="+appSecret)
+	raw := strings.Join(parts, "&")
+	sum := md5.Sum([]byte(raw))
+	return strings.ToUpper(hex.EncodeToString(sum[:]))
+}
+
+// requestYipayOrder 按 Yipay OpenAPI 创建统一下单请求。
+func requestYipayOrder(req EpayRequest, id int, payMoney float64, paymentMethod string) (string, map[string]string, error) {
+	requestURL := operation_setting.YipayRequestURL
+	if requestURL == "" {
+		requestURL = operation_setting.PayAddress
+	}
+	requestURL = strings.TrimRight(requestURL, "/")
+	if requestURL == "" {
+		return "", nil, fmt.Errorf("未配置 Yipay 请求地址")
+	}
+	if operation_setting.YipayMchNo == "" || operation_setting.YipayAppId == "" || operation_setting.YipayAppSecret == "" {
+		return "", nil, fmt.Errorf("未配置完整的 Yipay 参数")
+	}
+	callBackAddress := service.GetCallbackAddress()
+	returnURLString := system_setting.ServerAddress + "/console/log"
+	if operation_setting.YipayReturnUrl != "" {
+		returnURLString = operation_setting.YipayReturnUrl
+	}
+	notifyURLString := buildUserEpayNotifyURL(callBackAddress)
+	if operation_setting.YipayNotifyUrl != "" {
+		notifyURLString = operation_setting.YipayNotifyUrl
+	}
+	tradeNo := fmt.Sprintf("%s%d", common.GetRandomString(6), time.Now().Unix())
+	tradeNo = fmt.Sprintf("USR%dNO%s", id, tradeNo)
+	amountFen := int64(payMoney * 100)
+	if amountFen < 1 {
+		amountFen = 1
+	}
+	reqTime := strconv.FormatInt(time.Now().UnixMilli(), 10)
+	params := map[string]string{
+		"mchNo":      operation_setting.YipayMchNo,
+		"appId":      operation_setting.YipayAppId,
+		"mchOrderNo": tradeNo,
+		"wayCode":    paymentMethod,
+		"amount":     strconv.FormatInt(amountFen, 10),
+		"currency":   "cny",
+		"clientIp":   "127.0.0.1",
+		"subject":    fmt.Sprintf("TUC%d", req.Amount),
+		"body":       fmt.Sprintf("TUC%d", req.Amount),
+		"notifyUrl":  notifyURLString,
+		"returnUrl":  returnURLString,
+		"reqTime":    reqTime,
+		"version":    "1.0",
+		"signType":   "MD5",
+	}
+	// 调试日志：输出关键参数的可见信息，便于定位是否包含前后空格（不输出 AppSecret 明文）。
+	common.SysLog(fmt.Sprintf(
+		"[Yipay] unifiedOrder params: mchNo=%q(len=%d,trimChanged=%t), appId=%q(len=%d,trimChanged=%t), wayCode=%q, notifyUrl=%q, returnUrl=%q, reqTime=%q",
+		params["mchNo"], len(params["mchNo"]), strings.TrimSpace(params["mchNo"]) != params["mchNo"],
+		params["appId"], len(params["appId"]), strings.TrimSpace(params["appId"]) != params["appId"],
+		params["wayCode"], params["notifyUrl"], params["returnUrl"], params["reqTime"],
+	))
+	params["sign"] = signYipayMD5(params, operation_setting.YipayAppSecret)
+	requestJSON, err := common.Marshal(params)
+	if err != nil {
+		return "", nil, err
+	}
+	unifiedOrderURL := requestURL
+	if !strings.Contains(strings.ToLower(unifiedOrderURL), "/api/pay/unifiedorder") {
+		unifiedOrderURL = requestURL + "/api/pay/unifiedOrder"
+	}
+	httpResp, err := http.Post(unifiedOrderURL, "application/json", strings.NewReader(string(requestJSON)))
+	if err != nil {
+		return "", nil, err
+	}
+	defer httpResp.Body.Close()
+	respBody, err := io.ReadAll(httpResp.Body)
+	if err != nil {
+		return "", nil, err
+	}
+	var yipayResp map[string]any
+	if err = common.Unmarshal(respBody, &yipayResp); err != nil {
+		respPreview := string(respBody)
+		if len(respPreview) > 300 {
+			respPreview = respPreview[:300]
+		}
+		return "", nil, fmt.Errorf("Yipay 响应解析失败(status=%d,url=%s): %s", httpResp.StatusCode, unifiedOrderURL, respPreview)
+	}
+	code := fmt.Sprintf("%v", yipayResp["code"])
+	if code != "0" && code != "200" {
+		msg := fmt.Sprintf("%v", yipayResp["msg"])
+		if msg == "<nil>" || msg == "" {
+			if v, ok := yipayResp["message"]; ok {
+				msg = fmt.Sprintf("%v", v)
+			}
+		}
+		if msg == "<nil>" || msg == "" {
+			if v, ok := yipayResp["errMsg"]; ok {
+				msg = fmt.Sprintf("%v", v)
+			}
+		}
+		if msg == "<nil>" || msg == "" {
+			msg = string(respBody)
+			if len(msg) > 300 {
+				msg = msg[:300]
+			}
+		}
+		return "", nil, fmt.Errorf("Yipay 下单失败(status=%d,code=%s,url=%s): %s", httpResp.StatusCode, code, unifiedOrderURL, msg)
+	}
+	var payURL string
+	if dataObj, ok := yipayResp["data"].(map[string]any); ok {
+		if v, ok := dataObj["payUrl"]; ok {
+			payURL = fmt.Sprintf("%v", v)
+		}
+		if payURL == "" {
+			if payData, ok := dataObj["payData"]; ok {
+				payURL = fmt.Sprintf("%v", payData)
+			}
+		}
+	}
+	if payURL == "" {
+		return "", nil, fmt.Errorf("Yipay 返回支付链接为空")
+	}
+	amount := req.Amount
+	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
+		dAmount := decimal.NewFromInt(int64(amount))
+		dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+		amount = dAmount.Div(dQuotaPerUnit).IntPart()
+	}
+	topUp := &model.TopUp{
+		UserId:        id,
+		Amount:        amount,
+		Money:         payMoney,
+		TradeNo:       tradeNo,
+		PaymentMethod: paymentMethod,
+		CreateTime:    time.Now().Unix(),
+		Status:        "pending",
+	}
+	if err = topUp.Insert(); err != nil {
+		return "", nil, err
+	}
+	return payURL, map[string]string{}, nil
+}
+
+// GetEpayClient 创建并返回在线充值客户端。
 func GetEpayClient() *epay.Client {
 	if operation_setting.PayAddress == "" || operation_setting.EpayId == "" || operation_setting.EpayKey == "" {
 		return nil
@@ -163,6 +362,7 @@ func getMinTopup() int64 {
 	return int64(minTopup)
 }
 
+// RequestEpay 创建在线充值订单并拉起支付。
 func RequestEpay(c *gin.Context) {
 	var req EpayRequest
 	err := c.ShouldBindJSON(&req)
@@ -187,14 +387,27 @@ func RequestEpay(c *gin.Context) {
 		return
 	}
 
-	if !operation_setting.ContainsPayMethod(req.PaymentMethod) {
+	paymentMethod := req.PaymentMethod
+	if paymentMethod == "" && operation_setting.OnlinePayProvider == "yipay" && operation_setting.YipayWayCode != "" {
+		paymentMethod = operation_setting.YipayWayCode
+	}
+	if !operation_setting.ContainsPayMethod(paymentMethod) {
 		c.JSON(200, gin.H{"message": "error", "data": "支付方式不存在"})
+		return
+	}
+	if operation_setting.OnlinePayProvider == "yipay" {
+		payURL, params, yipayErr := requestYipayOrder(req, id, payMoney, paymentMethod)
+		if yipayErr != nil {
+			c.JSON(200, gin.H{"message": "error", "data": yipayErr.Error()})
+			return
+		}
+		c.JSON(200, gin.H{"message": "success", "data": params, "url": payURL})
 		return
 	}
 
 	callBackAddress := service.GetCallbackAddress()
 	returnUrl, _ := url.Parse(system_setting.ServerAddress + "/console/log")
-	notifyUrl, _ := url.Parse(callBackAddress + "/api/user/epay/notify")
+	notifyUrl, _ := url.Parse(buildUserEpayNotifyURL(callBackAddress))
 	tradeNo := fmt.Sprintf("%s%d", common.GetRandomString(6), time.Now().Unix())
 	tradeNo = fmt.Sprintf("USR%dNO%s", id, tradeNo)
 	client := GetEpayClient()
@@ -203,7 +416,7 @@ func RequestEpay(c *gin.Context) {
 		return
 	}
 	uri, params, err := client.Purchase(&epay.PurchaseArgs{
-		Type:           req.PaymentMethod,
+		Type:           paymentMethod,
 		ServiceTradeNo: tradeNo,
 		Name:           fmt.Sprintf("TUC%d", req.Amount),
 		Money:          strconv.FormatFloat(payMoney, 'f', 2, 64),
@@ -226,7 +439,7 @@ func RequestEpay(c *gin.Context) {
 		Amount:        amount,
 		Money:         payMoney,
 		TradeNo:       tradeNo,
-		PaymentMethod: req.PaymentMethod,
+		PaymentMethod: paymentMethod,
 		CreateTime:    time.Now().Unix(),
 		Status:        "pending",
 	}
@@ -294,6 +507,19 @@ func EpayNotify(c *gin.Context) {
 			r[t] = c.Request.PostForm.Get(t)
 			return r
 		}, map[string]string{})
+		// 兼容 JSON 回调体（部分 Yipay/Jeepay 部署会使用 application/json 推送）。
+		if len(params) == 0 {
+			bodyBytes, readErr := io.ReadAll(c.Request.Body)
+			if readErr == nil && len(bodyBytes) > 0 {
+				var payload map[string]any
+				if unmarshalErr := common.Unmarshal(bodyBytes, &payload); unmarshalErr == nil {
+					params = lo.Reduce(lo.Keys(payload), func(r map[string]string, t string, i int) map[string]string {
+						r[t] = fmt.Sprintf("%v", payload[t])
+						return r
+					}, map[string]string{})
+				}
+			}
+		}
 	} else {
 		// GET 请求：从 URL Query 解析参数
 		params = lo.Reduce(lo.Keys(c.Request.URL.Query()), func(r map[string]string, t string, i int) map[string]string {
@@ -303,10 +529,65 @@ func EpayNotify(c *gin.Context) {
 	}
 
 	if len(params) == 0 {
-		log.Println("易支付回调参数为空")
+		log.Printf("易支付回调参数为空，method=%s, contentType=%s, remoteIP=%s, rawQuery=%s", c.Request.Method, c.ContentType(), c.ClientIP(), c.Request.URL.RawQuery)
 		_, _ = c.Writer.Write([]byte("fail"))
 		return
 	}
+	// 回调入站日志：用于确认回调是否到达以及携带了哪些参数。
+	log.Printf("支付回调已到达，provider=%s, method=%s, contentType=%s, remoteIP=%s, keys=%v",
+		operation_setting.OnlinePayProvider, c.Request.Method, c.ContentType(), c.ClientIP(), sortedParamKeys(params))
+
+	// 先尝试按 Yipay 回调处理：使用 Yipay AppSecret 做 MD5 验签，并按 mchOrderNo/state 更新订单。
+	if operation_setting.OnlinePayProvider == "yipay" {
+		log.Printf("Yipay 回调关键参数：mchOrderNo=%s, state=%s, payOrderId=%s",
+			params["mchOrderNo"], params["state"], params["payOrderId"])
+		if !verifyYipayNotify(params) {
+			log.Printf("Yipay 回调签名验证失败，mchOrderNo=%s, state=%s", params["mchOrderNo"], params["state"])
+			_, _ = c.Writer.Write([]byte("fail"))
+			return
+		}
+		tradeNo := strings.TrimSpace(params["mchOrderNo"])
+		state := strings.TrimSpace(params["state"])
+		if tradeNo == "" {
+			log.Println("Yipay 回调缺少 mchOrderNo")
+			_, _ = c.Writer.Write([]byte("fail"))
+			return
+		}
+		if state != "2" {
+			log.Printf("Yipay 回调非成功状态，mchOrderNo=%s, state=%s", tradeNo, state)
+			_, _ = c.Writer.Write([]byte("success"))
+			return
+		}
+		LockOrder(tradeNo)
+		defer UnlockOrder(tradeNo)
+		topUp := model.GetTopUpByTradeNo(tradeNo)
+		if topUp == nil {
+			log.Printf("Yipay 回调未找到订单: %s", tradeNo)
+			_, _ = c.Writer.Write([]byte("fail"))
+			return
+		}
+		if topUp.Status == "pending" {
+			topUp.Status = "success"
+			if err := topUp.Update(); err != nil {
+				log.Printf("Yipay 回调更新订单失败: %v", topUp)
+				_, _ = c.Writer.Write([]byte("fail"))
+				return
+			}
+			dAmount := decimal.NewFromInt(int64(topUp.Amount))
+			dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+			quotaToAdd := int(dAmount.Mul(dQuotaPerUnit).IntPart())
+			if err := model.IncreaseUserQuota(topUp.UserId, quotaToAdd, true); err != nil {
+				log.Printf("Yipay 回调更新用户失败: %v", topUp)
+				_, _ = c.Writer.Write([]byte("fail"))
+				return
+			}
+			log.Printf("Yipay 回调更新用户成功 %v", topUp)
+			model.RecordLog(topUp.UserId, model.LogTypeTopup, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%f", logger.LogQuota(quotaToAdd), topUp.Money))
+		}
+		_, _ = c.Writer.Write([]byte("success"))
+		return
+	}
+
 	client := GetEpayClient()
 	if client == nil {
 		log.Println("易支付回调失败 未找到配置信息")
@@ -463,4 +744,3 @@ func AdminCompleteTopUp(c *gin.Context) {
 	}
 	common.ApiSuccess(c, nil)
 }
-

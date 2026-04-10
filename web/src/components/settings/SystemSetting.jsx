@@ -744,13 +744,15 @@ const SystemSetting = () => {
                   />
                   <Text>
                     {t('仅支持')}{' '}
-                    <a
+                    {/* <a
                       href='https://github.com/Calcium-Ion/new-api-worker'
                       target='_blank'
                       rel='noreferrer'
                     >
                       new-api-worker
-                    </a>{' '}
+                    </a> */}
+                    new-api-worker
+                    {' '}
                     {t('或其兼容new-api-worker格式的其他版本')}
                   </Text>
                   <Row

@@ -138,14 +138,14 @@ const ModelsActions = ({
                   '模型社区需要大家的共同维护，如发现数据有误或想贡献新的模型数据，请访问：',
                 )}
               </div>
-              <a
+              {/* <a
                 href='https://github.com/basellm/llm-metadata'
                 target='_blank'
                 rel='noreferrer'
                 className='text-blue-600 underline'
               >
                 https://github.com/basellm/llm-metadata
-              </a>
+              </a> */}
             </div>
           }
         >
