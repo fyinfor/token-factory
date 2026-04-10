@@ -19,7 +19,16 @@ For commercial licensing, please contact support@quantumnous.com
 
 export const supportedLanguages = [
   'zh-CN',
+  'zh-TW',
   'en',
+  'fr',
+  'ru',
+  'ja',
+  'vi',
+  'id',
+  'ms',
+  'th',
+  'sw',
 ];
 
 export const normalizeLanguage = (language) => {
