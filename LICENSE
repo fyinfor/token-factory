@@ -1,3 +1,37 @@
+SPDX-License-Identifier: AGPL-3.0-or-later
+
+================================================================================
+TokenFactory -- copyright and how this repository is licensed
+================================================================================
+
+Copyright (C) 2026 the contributors to the TokenFactory software in this
+repository, unless otherwise stated in individual source files.
+
+This software is a derivative work based on New API
+(https://github.com/QuantumNous/new-api). Portions of the code and
+documentation may be copyrighted by QuantumNous, prior contributors to New
+API, contributors to One API, and others, as indicated in upstream notices
+and in the NOTICE file in this repository.
+
+You may copy, modify, and distribute this software under the terms of the
+GNU Affero General Public License, either version 3 of the License, or (at
+your option) any later version, as published by the Free Software
+Foundation. The complete license text begins below the next separator. If you
+offer a modified version to users over a network, section 13 of that license
+imposes additional requirements to provide corresponding source code.
+
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License
+below for details.
+
+If your organization requires a non-copyleft license, you may inquire with
+the copyright holders of the upstream New API project about commercial
+licensing (see the project README).
+
+================================================================================
+
+
                     GNU AFFERO GENERAL PUBLIC LICENSE
                        Version 3, 19 November 2007
 

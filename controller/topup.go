@@ -388,9 +388,6 @@ func RequestEpay(c *gin.Context) {
 	}
 
 	paymentMethod := req.PaymentMethod
-	if paymentMethod == "" && operation_setting.OnlinePayProvider == "yipay" && operation_setting.YipayWayCode != "" {
-		paymentMethod = operation_setting.YipayWayCode
-	}
 	if !operation_setting.ContainsPayMethod(paymentMethod) {
 		c.JSON(200, gin.H{"message": "error", "data": "支付方式不存在"})
 		return

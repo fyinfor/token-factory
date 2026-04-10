@@ -1,10 +1,12 @@
 <div align="center">
 
-![new-api](/web/public/logo.png)
+![token-factory](/web/public/logo.png)
 
-# New API
+# TokenFactory
 
 🍥 **Passerelle de modèles étendus de nouvelle génération et système de gestion d'actifs d'IA**
+
+*TokenFactory* est une œuvre dérivée de [QuantumNous/new-api](https://github.com/QuantumNous/new-api) (« New API »). Ce dépôt est sous licence **GNU AGPL v3.0** ; voir [`LICENSE`](./LICENSE) et [`NOTICE`](./NOTICE). Si vous fournissez ce logiciel (modifié ou non) en service sur un réseau, vous devez respecter les obligations AGPL concernant la mise à disposition du code source correspondant.
 
 <p align="center">
   <a href="./README.zh_CN.md">简体中文</a> |
@@ -31,20 +33,21 @@
 
 <p align="center">
   <a href="https://trendshift.io/repositories/20180" target="_blank">
-    <img src="https://trendshift.io/api/badge/repositories/20180" alt="QuantumNous%2Fnew-api | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/>
+    <img src="https://trendshift.io/api/badge/repositories/20180" alt="QuantumNous%2Ftoken-factory | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/>
   </a>
   <br>
   <a href="https://hellogithub.com/repository/QuantumNous/new-api" target="_blank">
     <img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=539ac4217e69431684ad4a0bab768811&claim_uid=tbFPfKIDHpc4TzR" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" />
   </a><!--
   --><a href="https://www.producthunt.com/products/new-api/launches/new-api?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-new-api" target="_blank" rel="noopener noreferrer">
-    <img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1047693&theme=light&t=1769577875005" alt="New API - All-in-one AI asset management gateway. | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" />
+    <img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1047693&theme=light&t=1769577875005" alt="TokenFactory - All-in-one AI asset management gateway. | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" />
   </a>
 </p>
 
 <p align="center">
   <a href="#-démarrage-rapide">Démarrage rapide</a> •
   <a href="#-fonctionnalités-clés">Fonctionnalités clés</a> •
+  <a href="#langues-prises-en-charge">Langues</a> •
   <a href="#-déploiement">Déploiement</a> •
   <a href="#-documentation">Documentation</a> •
   <a href="#-aide-support">Aide</a>
@@ -55,6 +58,7 @@
 ## 📝 Description du projet
 
 > [!IMPORTANT]
+> - **Amont & licence :** TokenFactory est dérivé de [QuantumNous/new-api](https://github.com/QuantumNous/new-api). L’amont et les modifications restent sous **AGPL-3.0** ; ne supprimez pas les mentions de droits d’auteur ni le fichier de licence. Voir [`NOTICE`](./NOTICE).
 > - Ce projet est uniquement destiné à des fins d'apprentissage personnel, sans garantie de stabilité ni de support technique.
 > - Les utilisateurs doivent se conformer aux [Conditions d'utilisation](https://openai.com/policies/terms-of-use) d'OpenAI et aux **lois et réglementations applicables**, et ne doivent pas l'utiliser à des fins illégales.
 > - Conformément aux [《Mesures provisoires pour la gestion des services d'intelligence artificielle générative》](http://www.cac.gov.cn/2023-07/13/c_1690898327029107.htm), veuillez ne fournir aucun service d'IA générative non enregistré au public en Chine.
@@ -110,8 +114,8 @@
 
 ```bash
 # Cloner le projet
-git clone https://github.com/QuantumNous/new-api.git
-cd new-api
+git clone https://github.com/QuantumNous/token-factory.git
+cd token-factory
 
 # Modifier la configuration docker-compose.yml
 nano docker-compose.yml
@@ -125,22 +129,22 @@ docker-compose up -d
 
 ```bash
 # Tirer la dernière image
-docker pull calciumion/new-api:latest
+docker pull ghcr.io/fyinfor/token-factory:latest
 
 # Utilisation de SQLite (par défaut)
-docker run --name new-api -d --restart always \
+docker run --name token-factory -d --restart always \
   -p 3000:3000 \
   -e TZ=Asia/Shanghai \
   -v ./data:/data \
-  calciumion/new-api:latest
+  ghcr.io/fyinfor/token-factory:latest
 
 # Utilisation de MySQL
-docker run --name new-api -d --restart always \
+docker run --name token-factory -d --restart always \
   -p 3000:3000 \
   -e SQL_DSN="root:123456@tcp(localhost:3306)/oneapi" \
   -e TZ=Asia/Shanghai \
   -v ./data:/data \
-  calciumion/new-api:latest
+  ghcr.io/fyinfor/token-factory:latest
 ```
 
 > **💡 Astuce:** `-v ./data:/data` sauvegardera les données dans le dossier `data` du répertoire actuel, vous pouvez également le changer en chemin absolu comme `-v /your/custom/path:/data`
@@ -172,6 +176,24 @@ docker run --name new-api -d --restart always \
 | 📡 Documentation de l'API | [Documentation de l'API](https://docs.newapi.pro/en/docs/api) |
 | ❓ FAQ | [FAQ](https://docs.newapi.pro/en/docs/support/faq) |
 | 💬 Interaction avec la communauté | [Canaux de communication](https://docs.newapi.pro/en/docs/support/community-interaction) |
+
+---
+
+## Langues prises en charge
+
+| Code | Langue |
+|------|--------|
+| `zh-CN` | Chinois (simplifié) |
+| `zh-TW` | Chinois (traditionnel) |
+| `en` | Anglais |
+| `fr` | Français |
+| `ru` | Russe |
+| `ja` | Japonais |
+| `vi` | Vietnamien |
+| `id` | Indonésien |
+| `ms` | Malais |
+| `th` | Thaï |
+| `sw` | Swahili |
 
 ---
 
@@ -291,7 +313,7 @@ docker run --name new-api -d --restart always \
 ## 🚢 Déploiement
 
 > [!TIP]
-> **Dernière image Docker:** `calciumion/new-api:latest`
+> **Dernière image Docker:** `ghcr.io/fyinfor/token-factory:latest`
 
 ### 📋 Exigences de déploiement
 
@@ -318,12 +340,12 @@ docker run --name new-api -d --restart always \
 | `AZURE_DEFAULT_API_VERSION` | Version de l'API Azure | `2025-04-01-preview` |
 | `ERROR_LOG_ENABLED` | Interrupteur du journal d'erreurs | `false` |
 | `PYROSCOPE_URL` | Adresse du serveur Pyroscope | - |
-| `PYROSCOPE_APP_NAME` | Nom de l'application Pyroscope | `new-api` |
+| `PYROSCOPE_APP_NAME` | Nom de l'application Pyroscope | `token-factory` |
 | `PYROSCOPE_BASIC_AUTH_USER` | Utilisateur Basic Auth Pyroscope | - |
 | `PYROSCOPE_BASIC_AUTH_PASSWORD` | Mot de passe Basic Auth Pyroscope | - |
 | `PYROSCOPE_MUTEX_RATE` | Taux d'échantillonnage mutex Pyroscope | `5` |
 | `PYROSCOPE_BLOCK_RATE` | Taux d'échantillonnage block Pyroscope | `5` |
-| `HOSTNAME` | Nom d'hôte tagué pour Pyroscope | `new-api` |
+| `HOSTNAME` | Nom d'hôte tagué pour Pyroscope | `token-factory` |
 
 📖 **Configuration complète:** [Documentation des variables d'environnement](https://docs.newapi.pro/en/docs/installation/config-maintenance/environment-variables)
 
@@ -336,8 +358,8 @@ docker run --name new-api -d --restart always \
 
 ```bash
 # Cloner le projet
-git clone https://github.com/QuantumNous/new-api.git
-cd new-api
+git clone https://github.com/QuantumNous/token-factory.git
+cd token-factory
 
 # Modifier la configuration
 nano docker-compose.yml
@@ -353,21 +375,21 @@ docker-compose up -d
 
 **Utilisation de SQLite:**
 ```bash
-docker run --name new-api -d --restart always \
+docker run --name token-factory -d --restart always \
   -p 3000:3000 \
   -e TZ=Asia/Shanghai \
   -v ./data:/data \
-  calciumion/new-api:latest
+  ghcr.io/fyinfor/token-factory:latest
 ```
 
 **Utilisation de MySQL:**
 ```bash
-docker run --name new-api -d --restart always \
+docker run --name token-factory -d --restart always \
   -p 3000:3000 \
   -e SQL_DSN="root:123456@tcp(localhost:3306)/oneapi" \
   -e TZ=Asia/Shanghai \
   -v ./data:/data \
-  calciumion/new-api:latest
+  ghcr.io/fyinfor/token-factory:latest
 ```
 
 > **💡 Explication du chemin:**
@@ -380,7 +402,7 @@ docker run --name new-api -d --restart always \
 <summary><strong>Méthode 3: Panneau BaoTa</strong></summary>
 
 1. Installez le panneau BaoTa (version ≥ 9.2.0)
-2. Recherchez **New-API** dans le magasin d'applications
+2. Recherchez **TokenFactory** dans le magasin d'applications
 3. Installation en un clic
 
 📖 [Tutoriel avec des images](./docs/BT.md)
@@ -409,7 +431,8 @@ docker run --name new-api -d --restart always \
 
 | Projet | Description |
 |------|------|
-| [One API](https://github.com/songquanpeng/one-api) | Base du projet original |
+| [QuantumNous/new-api](https://github.com/QuantumNous/new-api) | **New API** — amont direct de TokenFactory (AGPL-3.0) |
+| [One API](https://github.com/songquanpeng/one-api) | Base antérieure (licence MIT) |
 | [Midjourney-Proxy](https://github.com/novicezk/midjourney-proxy) | Prise en charge de l'interface Midjourney |
 
 ### Outils d'accompagnement
@@ -417,7 +440,7 @@ docker run --name new-api -d --restart always \
 | Projet | Description |
 |------|------|
 | [neko-api-key-tool](https://github.com/Calcium-Ion/neko-api-key-tool) | Outil de recherche de quota d'utilisation avec une clé |
-| [new-api-horizon](https://github.com/Calcium-Ion/new-api-horizon) | Version optimisée haute performance de New API |
+| [token-factory-horizon](https://github.com/Calcium-Ion/new-api-horizon) | Version optimisée haute performance de TokenFactory |
 
 ---
 
@@ -445,9 +468,9 @@ Bienvenue à toutes les formes de contribution!
 
 ## 📜 Licence
 
-Ce projet est sous licence [GNU Affero General Public License v3.0 (AGPLv3)](./LICENSE).
+Ce projet (**TokenFactory**) est sous licence [GNU Affero General Public License v3.0 (AGPLv3)](./LICENSE). Les modifications et œuvres dérivées restent sous **AGPL-3.0**, sauf accord commercial distinct avec les titulaires des droits.
 
-Il s'agit d'un projet open-source développé sur la base de [One API](https://github.com/songquanpeng/one-api) (licence MIT).
+**Attribution :** TokenFactory est dérivé de [QuantumNous/new-api](https://github.com/QuantumNous/new-api) (New API), également sous AGPL-3.0 ; la chaîne inclut [One API](https://github.com/songquanpeng/one-api) (licence MIT). Conservez les mentions en amont, ce dépôt [`LICENSE`](./LICENSE) et [`NOTICE`](./NOTICE). Conformément à l’**article 13 de l’AGPL-3.0**, si vous exploitez une version modifiée en service réseau pour des tiers, vous devez leur fournir le code source complet correspondant sous la même licence.
 
 Si les politiques de votre organisation ne permettent pas l'utilisation de logiciels sous licence AGPLv3, ou si vous souhaitez éviter les obligations open-source de l'AGPLv3, veuillez nous contacter à : [support@quantumnous.com](mailto:support@quantumnous.com)
 
@@ -465,7 +488,7 @@ Si les politiques de votre organisation ne permettent pas l'utilisation de logic
 
 <div align="center">
 
-### 💖 Merci d'utiliser New API
+### 💖 Merci d'utiliser TokenFactory
 
 Si ce projet vous est utile, bienvenue à nous donner une ⭐️ Étoile！
 

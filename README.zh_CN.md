@@ -1,10 +1,24 @@
 <div align="center">
 
-![new-api](/web/public/logo.png)
+![token-factory](/web/public/logo.png)
 
-# New API
+# TokenFactory
 
-🍥 **新一代大模型网关与AI资产管理系统**
+**自托管的 AI 网关：** 把多家模型供应商收口到统一 API，配套用户/令牌/配额与 Web 管理台。
+
+---
+
+### 上游仓库（请务必阅读）
+
+**TokenFactory 派生自 [QuantumNous/new-api](https://github.com/QuantumNous/new-api)（New API）。** 该仓库是设计理念、协议覆盖与社区演进的主要来源；本 fork 可能与之不同，行为与接口请以官方文档为基准，并结合你实际运行的版本验证。
+
+| | |
+| --- | --- |
+| **上游仓库** | **[github.com/QuantumNous/new-api](https://github.com/QuantumNous/new-api)** |
+| **许可** | [GNU AGPL v3.0](./LICENSE) — 本仓库修改同样适用；详见 [`NOTICE`](./NOTICE) |
+| **网络提供服务** | 若向他人提供修改版的网络访问，须遵守 **AGPL 第 13 条**，提供对应完整源代码（同等许可）。 |
+
+---
 
 <p align="center">
   简体中文 |
@@ -15,103 +29,46 @@
 </p>
 
 <p align="center">
-  <a href="https://raw.githubusercontent.com/Calcium-Ion/new-api/main/LICENSE">
-    <img src="https://img.shields.io/github/license/Calcium-Ion/new-api?color=brightgreen" alt="license">
-  </a><!--
-  --><a href="https://github.com/Calcium-Ion/new-api/releases/latest">
-    <img src="https://img.shields.io/github/v/release/Calcium-Ion/new-api?color=brightgreen&include_prereleases" alt="release">
-  </a><!--
-  --><a href="https://hub.docker.com/r/CalciumIon/new-api">
-    <img src="https://img.shields.io/badge/docker-dockerHub-blue" alt="docker">
-  </a><!--
-  --><a href="https://goreportcard.com/report/github.com/Calcium-Ion/new-api">
-    <img src="https://goreportcard.com/badge/github.com/Calcium-Ion/new-api" alt="GoReportCard">
-  </a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-AGPL--v3-blue.svg" alt="AGPL-3.0"></a>
+  &nbsp;
+  <a href="https://github.com/QuantumNous/new-api"><img src="https://img.shields.io/badge/上游-QuantumNous%2Fnew--api-555555?logo=github" alt="上游 QuantumNous/new-api"></a>
+  &nbsp;
+  <a href="https://github.com/QuantumNous/token-factory"><img src="https://img.shields.io/badge/本仓库-TokenFactory-2ea043?logo=github" alt="本仓库"></a>
 </p>
 
 <p align="center">
-  <a href="https://trendshift.io/repositories/20180" target="_blank">
-    <img src="https://trendshift.io/api/badge/repositories/20180" alt="QuantumNous%2Fnew-api | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/>
-  </a>
-  <br>
-  <a href="https://hellogithub.com/repository/QuantumNous/new-api" target="_blank">
-    <img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=539ac4217e69431684ad4a0bab768811&claim_uid=tbFPfKIDHpc4TzR" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" />
-  </a><!--
-  --><a href="https://www.producthunt.com/products/new-api/launches/new-api?embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-new-api" target="_blank" rel="noopener noreferrer">
-    <img src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1047693&theme=light&t=1769577875005" alt="New API - All-in-one AI asset management gateway. | Product Hunt" style="width: 250px; height: 54px;" width="250" height="54" />
-  </a>
-</p>
-
-<p align="center">
-  <a href="#-快速开始">快速开始</a> •
-  <a href="#-主要特性">主要特性</a> •
-  <a href="#-部署">部署</a> •
-  <a href="#-文档">文档</a> •
-  <a href="#-帮助支持">帮助</a>
+  <a href="#快速开始">快速开始</a> •
+  <a href="#文档">文档</a> •
+  <a href="#支持的语言">界面语言</a> •
+  <a href="#部署">部署</a> •
+  <a href="#许可证">许可证</a> •
+  <a href="#帮助">帮助</a>
 </p>
 
 </div>
 
-## 📝 项目说明
+## 关于本仓库
 
-> [!IMPORTANT]
-> - 本项目仅供个人学习使用，不保证稳定性，且不提供任何技术支持
-> - 使用者必须在遵循 OpenAI 的 [使用条款](https://openai.com/policies/terms-of-use) 以及**法律法规**的情况下使用，不得用于非法用途
-> - 根据 [《生成式人工智能服务管理暂行办法》](http://www.cac.gov.cn/2023-07/13/c_1690898327029107.htm) 的要求，请勿对中国地区公众提供一切未经备案的生成式人工智能服务
+TokenFactory 提供的是一套可 **私有化部署的控制面**：集中配置渠道、模型映射、访问策略与用量观测，由你本地运行服务并对外暴露端点。
 
----
+本 README 只描述 **本 fork** 的定位与入口，**不**替代上游的功能清单与法律文本——后者始终与 **[QuantumNous/new-api](https://github.com/QuantumNous/new-api)** 及本树中的许可文件绑定。
 
-## 🤝 我们信任的合作伙伴
+## 合规与免责
 
-<p align="center">
-  <em>排名不分先后</em>
-</p>
-
-<p align="center">
-  <a href="https://www.cherry-ai.com/" target="_blank">
-    <img src="./docs/images/cherry-studio.png" alt="Cherry Studio" height="80" />
-  </a><!--
-  --><a href="https://github.com/iOfficeAI/AionUi/" target="_blank">
-    <img src="./docs/images/aionui.png" alt="Aion UI" height="80" />
-  </a><!--
-  --><a href="https://bda.pku.edu.cn/" target="_blank">
-    <img src="./docs/images/pku.png" alt="北京大学" height="80" />
-  </a><!--
-  --><a href="https://www.compshare.cn/?ytag=GPU_yy_gh_newapi" target="_blank">
-    <img src="./docs/images/ucloud.png" alt="UCloud 优刻得" height="80" />
-  </a><!--
-  --><a href="https://www.aliyun.com/" target="_blank">
-    <img src="./docs/images/aliyun.png" alt="阿里云" height="80" />
-  </a><!--
-  --><a href="https://io.net/" target="_blank">
-    <img src="./docs/images/io-net.png" alt="IO.NET" height="80" />
-  </a>
-</p>
+- 使用须遵守各模型/平台条款（如 OpenAI [使用条款](https://openai.com/policies/terms-of-use)）及所在地**法律法规**，禁止违法或滥用。
+- 在中国大陆请遵守生成式人工智能服务备案等要求（如 [《生成式人工智能服务管理暂行办法》](http://www.cac.gov.cn/2023-07/13/c_1690898327029107.htm)），勿向公众提供未按规定完成的生成式 AI 服务。
+- **不作稳定性或服务承诺**：除非你自行或第三方提供支持，否则按基础设施软件自行运维。
 
 ---
 
-## 🙏 特别鸣谢
-
-<p align="center">
-  <a href="https://www.jetbrains.com/?from=new-api" target="_blank">
-    <img src="https://resources.jetbrains.com/storage/products/company/brand/logos/jb_beam.png" alt="JetBrains Logo" width="120" />
-  </a>
-</p>
-
-<p align="center">
-  <strong>感谢 <a href="https://www.jetbrains.com/?from=new-api">JetBrains</a> 为本项目提供免费的开源开发许可证</strong>
-</p>
-
----
-
-## 🚀 快速开始
+## 快速开始
 
 ### 使用 Docker Compose（推荐）
 
 ```bash
 # 克隆项目
-git clone https://github.com/QuantumNous/new-api.git
-cd new-api
+git clone https://github.com/QuantumNous/token-factory.git
+cd token-factory
 
 # 编辑 docker-compose.yml 配置
 nano docker-compose.yml
@@ -125,22 +82,22 @@ docker-compose up -d
 
 ```bash
 # 拉取最新镜像
-docker pull calciumion/new-api:latest
+docker pull ghcr.io/fyinfor/token-factory:latest
 
 # 使用 SQLite（默认）
-docker run --name new-api -d --restart always \
+docker run --name token-factory -d --restart always \
   -p 3000:3000 \
   -e TZ=Asia/Shanghai \
   -v ./data:/data \
-  calciumion/new-api:latest
+  ghcr.io/fyinfor/token-factory:latest
 
 # 使用 MySQL
-docker run --name new-api -d --restart always \
+docker run --name token-factory -d --restart always \
   -p 3000:3000 \
   -e SQL_DSN="root:123456@tcp(localhost:3306)/oneapi" \
   -e TZ=Asia/Shanghai \
   -v ./data:/data \
-  calciumion/new-api:latest
+  ghcr.io/fyinfor/token-factory:latest
 ```
 
 > **💡 提示：** `-v ./data:/data` 会将数据保存在当前目录的 `data` 文件夹中，你也可以改为绝对路径如 `-v /your/custom/path:/data`
@@ -149,149 +106,62 @@ docker run --name new-api -d --restart always \
 
 ---
 
-🎉 部署完成后，访问 `http://localhost:3000` 即可使用！
-
-📖 更多部署方式请参考 [部署指南](https://docs.newapi.pro/zh/docs/installation)
+服务就绪后访问 **`http://localhost:3000`**。更多安装方式见 **[安装文档](https://docs.newapi.pro/zh/docs/installation)**。
 
 ---
 
-## 📚 文档
+## 文档
 
-<div align="center">
+**[QuantumNous/new-api](https://github.com/QuantumNous/new-api)** 生态站点发布 API、模型与运维说明；TokenFactory 继承该栈，请以官方文档为**准绳**，并结合你本地构建验证。
 
-### 📖 [官方文档](https://docs.newapi.pro/zh/docs) | [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/QuantumNous/new-api)
+| | |
+| --- | --- |
+| 手册（中 / 英） | [简体中文](https://docs.newapi.pro/zh/docs) · [English](https://docs.newapi.pro/en/docs) |
+| 环境变量 | [配置说明](https://docs.newapi.pro/zh/docs/installation/config-maintenance/environment-variables) |
+| 中继 / REST | [API 文档](https://docs.newapi.pro/zh/docs/api) |
+| 功能总览 | [特性说明](https://docs.newapi.pro/zh/docs/guide/wiki/basic-concepts/features-introduction) |
+| 问答与社区 | [FAQ](https://docs.newapi.pro/zh/docs/support/faq) · [交流渠道](https://docs.newapi.pro/zh/docs/support/community-interaction) |
+| 第三方深度梳理 | [DeepWiki — QuantumNous/new-api](https://deepwiki.com/QuantumNous/new-api) |
 
-</div>
+**本仓库：** 打包、默认配置、CI 等 **fork 特有问题** 请在本仓库提 Issue。若与上游行为一致，请先在 **[QuantumNous/new-api](https://github.com/QuantumNous/new-api)** 复现并按其规范反馈。
 
-**快速导航：**
+---
 
-| 分类 | 链接 |
+## 能力概览（精简）
+
+以下为对上游能力的**摘要**，非完整规格：
+
+- **中继** — 多家供应商适配器，统一对外 API（含 OpenAI 兼容及其他格式，详见上游）。
+- **控制台** — 渠道、模型映射、用户与令牌、用量与计费相关配置。
+- **策略** — 配额、限流、失败重试；启用 Redis 时可使用缓存等能力（见上游文档）。
+- **存储** — SQLite / MySQL / PostgreSQL；可选 Redis（会话、缓存、加解密等按文档配置）。
+
+逐模型、逐接口细节请查阅 **[API 文档](https://docs.newapi.pro/zh/docs/api)** 与 **[QuantumNous/new-api](https://github.com/QuantumNous/new-api)** 的发行说明。
+
+---
+
+## 支持的语言
+
+| 代码 | 语言 |
 |------|------|
-| 🚀 部署指南 | [安装文档](https://docs.newapi.pro/zh/docs/installation) |
-| ⚙️ 环境配置 | [环境变量](https://docs.newapi.pro/zh/docs/installation/config-maintenance/environment-variables) |
-| 📡 接口文档 | [API 文档](https://docs.newapi.pro/zh/docs/api) |
-| ❓ 常见问题 | [FAQ](https://docs.newapi.pro/zh/docs/support/faq) |
-| 💬 社区交流 | [交流渠道](https://docs.newapi.pro/zh/docs/support/community-interaction) |
+| `zh-CN` | 简体中文 |
+| `zh-TW` | 繁体中文 |
+| `en` | 英语 |
+| `fr` | 法语 |
+| `ru` | 俄语 |
+| `ja` | 日语 |
+| `vi` | 越南语 |
+| `id` | 印尼语 |
+| `ms` | 马来语 |
+| `th` | 泰语 |
+| `sw` | 斯瓦希里语 |
 
 ---
 
-## ✨ 主要特性
-
-> 详细特性请参考 [特性说明](https://docs.newapi.pro/zh/docs/guide/wiki/basic-concepts/features-introduction)
-
-### 🎨 核心功能
-
-| 特性 | 说明 |
-|------|------|
-| 🎨 全新 UI | 现代化的用户界面设计 |
-| 🌍 多语言 | 支持中文、英文、法语、日语 |
-| 🔄 数据兼容 | 完全兼容原版 One API 数据库 |
-| 📈 数据看板 | 可视化控制台与统计分析 |
-| 🔒 权限管理 | 令牌分组、模型限制、用户管理 |
-
-### 💰 支付与计费
-
-- ✅ 在线充值（易支付、Stripe）
-- ✅ 模型按次数收费
-- ✅ 缓存计费支持（OpenAI、Azure、DeepSeek、Claude、Qwen等所有支持的模型）
-- ✅ 灵活的计费策略配置
-
-### 🔐 授权与安全
-
-- 😈 Discord 授权登录
-- 🤖 LinuxDO 授权登录
-- 📱 Telegram 授权登录
-- 🔑 OIDC 统一认证
-- 🔍 Key 查询使用额度（配合 [neko-api-key-tool](https://github.com/Calcium-Ion/neko-api-key-tool)）
-
-### 🚀 高级功能
-
-**API 格式支持：**
-- ⚡ [OpenAI Responses](https://docs.newapi.pro/zh/docs/api/ai-model/chat/openai/create-response)
-- ⚡ [OpenAI Realtime API](https://docs.newapi.pro/zh/docs/api/ai-model/realtime/create-realtime-session)（含 Azure）
-- ⚡ [Claude Messages](https://docs.newapi.pro/zh/docs/api/ai-model/chat/create-message)
-- ⚡ [Google Gemini](https://doc.newapi.pro/api/google-gemini-chat)
-- 🔄 [Rerank 模型](https://docs.newapi.pro/zh/docs/api/ai-model/rerank/create-rerank)（Cohere、Jina）
-
-**智能路由：**
-- ⚖️ 渠道加权随机
-- 🔄 失败自动重试
-- 🚦 用户级别模型限流
-
-**格式转换：**
-- 🔄 **OpenAI Compatible ⇄ Claude Messages**
-- 🔄 **OpenAI Compatible → Google Gemini**
-- 🔄 **Google Gemini → OpenAI Compatible** - 仅支持文本，暂不支持函数调用
-- 🚧 **OpenAI Compatible ⇄ OpenAI Responses** - 开发中
-- 🔄 **思考转内容功能**
-
-**Reasoning Effort 支持：**
-
-<details>
-<summary>查看详细配置</summary>
-
-**OpenAI 系列模型：**
-- `o3-mini-high` - High reasoning effort
-- `o3-mini-medium` - Medium reasoning effort
-- `o3-mini-low` - Low reasoning effort
-- `gpt-5-high` - High reasoning effort
-- `gpt-5-medium` - Medium reasoning effort
-- `gpt-5-low` - Low reasoning effort
-
-**Claude 思考模型：**
-- `claude-3-7-sonnet-20250219-thinking` - 启用思考模式
-
-**Google Gemini 系列模型：**
-- `gemini-2.5-flash-thinking` - 启用思考模式
-- `gemini-2.5-flash-nothinking` - 禁用思考模式
-- `gemini-2.5-pro-thinking` - 启用思考模式
-- `gemini-2.5-pro-thinking-128` - 启用思考模式，并设置思考预算为128tokens
-- 也可以直接在 Gemini 模型名称后追加 `-low` / `-medium` / `-high` 来控制思考力度（无需再设置思考预算后缀）
-
-</details>
-
----
-
-## 🤖 模型支持
-
-> 详情请参考 [接口文档 - 中继接口](https://docs.newapi.pro/zh/docs/api)
-
-| 模型类型 | 说明 | 文档 |
-|---------|------|------|
-| 🤖 OpenAI-Compatible | OpenAI 兼容模型 | [文档](https://docs.newapi.pro/zh/docs/api/ai-model/chat/openai/createchatcompletion) |
-| 🤖 OpenAI Responses | OpenAI Responses 格式 | [文档](https://docs.newapi.pro/zh/docs/api/ai-model/chat/openai/createresponse) |
-| 🎨 Midjourney-Proxy | [Midjourney-Proxy(Plus)](https://github.com/novicezk/midjourney-proxy) | [文档](https://doc.newapi.pro/api/midjourney-proxy-image) |
-| 🎵 Suno-API | [Suno API](https://github.com/Suno-API/Suno-API) | [文档](https://doc.newapi.pro/api/suno-music) |
-| 🔄 Rerank | Cohere、Jina | [文档](https://docs.newapi.pro/zh/docs/api/ai-model/rerank/create-rerank) |
-| 💬 Claude | Messages 格式 | [文档](https://docs.newapi.pro/zh/docs/api/ai-model/chat/createmessage) |
-| 🌐 Gemini | Google Gemini 格式 | [文档](https://docs.newapi.pro/zh/docs/api/ai-model/chat/gemini/geminirelayv1beta) |
-| 🔧 Dify | ChatFlow 模式 | - |
-| 🎯 自定义 | 支持完整调用地址 | - |
-
-### 📡 支持的接口
-
-<details>
-<summary>查看完整接口列表</summary>
-
-- [聊天接口 (Chat Completions)](https://docs.newapi.pro/zh/docs/api/ai-model/chat/openai/createchatcompletion)
-- [响应接口 (Responses)](https://docs.newapi.pro/zh/docs/api/ai-model/chat/openai/createresponse)
-- [图像接口 (Image)](https://docs.newapi.pro/zh/docs/api/ai-model/images/openai/post-v1-images-generations)
-- [音频接口 (Audio)](https://docs.newapi.pro/zh/docs/api/ai-model/audio/openai/create-transcription)
-- [视频接口 (Video)](https://docs.newapi.pro/zh/docs/api/ai-model/audio/openai/createspeech)
-- [嵌入接口 (Embeddings)](https://docs.newapi.pro/zh/docs/api/ai-model/embeddings/createembedding)
-- [重排序接口 (Rerank)](https://docs.newapi.pro/zh/docs/api/ai-model/rerank/creatererank)
-- [实时对话 (Realtime)](https://docs.newapi.pro/zh/docs/api/ai-model/realtime/createrealtimesession)
-- [Claude 聊天](https://docs.newapi.pro/zh/docs/api/ai-model/chat/createmessage)
-- [Google Gemini 聊天](https://docs.newapi.pro/zh/docs/api/ai-model/chat/gemini/geminirelayv1beta)
-
-</details>
-
----
-
-## 🚢 部署
+## 部署
 
 > [!TIP]
-> **最新版 Docker 镜像：** `calciumion/new-api:latest`
+> **最新版 Docker 镜像：** `ghcr.io/fyinfor/token-factory:latest`
 
 ### 📋 部署要求
 
@@ -318,12 +188,12 @@ docker run --name new-api -d --restart always \
 | `AZURE_DEFAULT_API_VERSION` | Azure API 版本                                                 | `2025-04-01-preview` |
 | `ERROR_LOG_ENABLED` | 错误日志开关                                                       | `false` |
 | `PYROSCOPE_URL` | Pyroscope 服务地址                                            | - |
-| `PYROSCOPE_APP_NAME` | Pyroscope 应用名                                        | `new-api` |
+| `PYROSCOPE_APP_NAME` | Pyroscope 应用名                                        | `token-factory` |
 | `PYROSCOPE_BASIC_AUTH_USER` | Pyroscope Basic Auth 用户名                        | - |
 | `PYROSCOPE_BASIC_AUTH_PASSWORD` | Pyroscope Basic Auth 密码                  | - |
 | `PYROSCOPE_MUTEX_RATE` | Pyroscope mutex 采样率                               | `5` |
 | `PYROSCOPE_BLOCK_RATE` | Pyroscope block 采样率                               | `5` |
-| `HOSTNAME` | Pyroscope 标签里的主机名                                          | `new-api` |
+| `HOSTNAME` | Pyroscope 标签里的主机名                                          | `token-factory` |
 
 📖 **完整配置：** [环境变量文档](https://docs.newapi.pro/zh/docs/installation/config-maintenance/environment-variables)
 
@@ -331,43 +201,28 @@ docker run --name new-api -d --restart always \
 
 ### 🔧 部署方式
 
-<details>
-<summary><strong>方式 1：Docker Compose（推荐）</strong></summary>
-
-```bash
-# 克隆项目
-git clone https://github.com/QuantumNous/new-api.git
-cd new-api
-
-# 编辑配置
-nano docker-compose.yml
-
-# 启动服务
-docker-compose up -d
-```
-
-</details>
+**Docker Compose：** 见上文 [快速开始](#快速开始)（克隆 → 编辑 `docker-compose.yml` → `docker-compose up -d`）。
 
 <details>
-<summary><strong>方式 2：Docker 命令</strong></summary>
+<summary><strong>备选：直接 docker run</strong></summary>
 
 **使用 SQLite：**
 ```bash
-docker run --name new-api -d --restart always \
+docker run --name token-factory -d --restart always \
   -p 3000:3000 \
   -e TZ=Asia/Shanghai \
   -v ./data:/data \
-  calciumion/new-api:latest
+  ghcr.io/fyinfor/token-factory:latest
 ```
 
 **使用 MySQL：**
 ```bash
-docker run --name new-api -d --restart always \
+docker run --name token-factory -d --restart always \
   -p 3000:3000 \
   -e SQL_DSN="root:123456@tcp(localhost:3306)/oneapi" \
   -e TZ=Asia/Shanghai \
   -v ./data:/data \
-  calciumion/new-api:latest
+  ghcr.io/fyinfor/token-factory:latest
 ```
 
 > **💡 路径说明：**
@@ -377,10 +232,10 @@ docker run --name new-api -d --restart always \
 </details>
 
 <details>
-<summary><strong>方式 3：宝塔面板</strong></summary>
+<summary><strong>宝塔面板</strong></summary>
 
 1. 安装宝塔面板（≥ 9.2.0 版本）
-2. 在应用商店搜索 **New-API**
+2. 在应用商店搜索 **TokenFactory**
 3. 一键安装
 
 📖 [图文教程](./docs/installation/BT.md)
@@ -403,25 +258,19 @@ docker run --name new-api -d --restart always \
 
 ---
 
-## 🔗 相关项目
+## 谱系
 
-### 上游项目
+| 仓库 | 角色 |
+| --- | --- |
+| **[QuantumNous/new-api](https://github.com/QuantumNous/new-api)** | **上游** — New API（AGPL-3.0）。**非本 fork 专属问题**、功能设计与主社区请优先关注此处。 |
+| [One API](https://github.com/songquanpeng/one-api) | 同族谱系中更早的 MIT 许可实现。 |
+| [Midjourney-Proxy](https://github.com/novicezk/midjourney-proxy) | 可选 Midjourney 对接（详见上游文档）。 |
 
-| 项目 | 说明 |
-|------|------|
-| [One API](https://github.com/songquanpeng/one-api) | 原版项目基础 |
-| [Midjourney-Proxy](https://github.com/novicezk/midjourney-proxy) | Midjourney 接口支持 |
-
-### 配套工具
-
-| 项目 | 说明 |
-|------|------|
-| [neko-api-key-tool](https://github.com/Calcium-Ion/neko-api-key-tool) | Key 额度查询工具 |
-| [new-api-horizon](https://github.com/Calcium-Ion/new-api-horizon) | New API 高性能优化版 |
+周边工具（如 [neko-api-key-tool](https://github.com/Calcium-Ion/neko-api-key-tool)）见上游与社区说明。
 
 ---
 
-## 💬 帮助支持
+## 帮助
 
 ### 📖 文档资源
 
@@ -443,34 +292,22 @@ docker run --name new-api -d --restart always \
 
 ---
 
-## 📜 许可证
+## 许可证
 
-本项目采用 [GNU Affero 通用公共许可证 v3.0 (AGPLv3)](./LICENSE) 授权。
+本项目（**TokenFactory**）采用 [GNU Affero 通用公共许可证 v3.0 (AGPLv3)](./LICENSE) 授权；后续修改与再衍生作品在 AGPL-3.0 下继续适用，除非您另行取得著作权人的商业许可。
 
-本项目为开源项目，在 [One API](https://github.com/songquanpeng/one-api)（MIT 许可证）的基础上进行二次开发。
+**署名说明：** TokenFactory 派生自 [QuantumNous/new-api](https://github.com/QuantumNous/new-api)（New API），上游亦为 AGPL-3.0；项目链条中更早的基础为 [One API](https://github.com/songquanpeng/one-api)（MIT 许可证）。请保留上游与本仓库的版权声明、[`LICENSE`](./LICENSE) 及 [`NOTICE`](./NOTICE)。**AGPL 第 13 条：** 若您将修改版以网络服务形式向他人提供，须向其提供对应完整源代码（同等许可）。
 
 如果您所在的组织政策不允许使用 AGPLv3 许可的软件，或您希望规避 AGPLv3 的开源义务，请发送邮件至：[support@quantumnous.com](mailto:support@quantumnous.com)
 
 ---
 
-## 🌟 Star History
-
 <div align="center">
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Calcium-Ion/new-api&type=Date)](https://star-history.com/#Calcium-Ion/new-api&Date)
+**TokenFactory** — 本 fork 提供的自托管 AI 网关发行版。
 
-</div>
+**上游：** **[QuantumNous/new-api](https://github.com/QuantumNous/new-api)** · **文档：** [docs.newapi.pro](https://docs.newapi.pro/zh/docs) · **本仓库：** [Issues](https://github.com/QuantumNous/token-factory/issues)
 
----
-
-<div align="center">
-
-### 💖 感谢使用 New API
-
-如果这个项目对你有帮助，欢迎给我们一个 ⭐️ Star！
-
-**[官方文档](https://docs.newapi.pro/zh/docs)** • **[问题反馈](https://github.com/Calcium-Ion/new-api/issues)** • **[最新发布](https://github.com/Calcium-Ion/new-api/releases)**
-
-<sub>Built with ❤️ by QuantumNous</sub>
+<sub>New API 项目由 **QuantumNous** 与贡献者维护。JetBrains 通过免费 IDE 许可支持开源开发。</sub>
 
 </div>

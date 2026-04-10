@@ -65,6 +65,10 @@ func GetOptions(c *gin.Context) {
 	optionValues := make(map[string]string)
 	common.OptionMapRWMutex.Lock()
 	for k, v := range common.OptionMap {
+		// YipayAppSecret 在循环结束后单独追加，以 operation_setting 为准并避免与 OptionMap 不同步
+		if k == "YipayAppSecret" {
+			continue
+		}
 		value := common.Interface2String(v)
 		if strings.HasSuffix(k, "Token") ||
 			strings.HasSuffix(k, "Secret") ||
@@ -84,6 +88,20 @@ func GetOptions(c *gin.Context) {
 			}
 		}
 	}
+	rawYipay := strings.TrimSpace(operation_setting.YipayAppSecret)
+	if rawYipay == "" {
+		if v, ok := common.OptionMap["YipayAppSecret"]; ok {
+			rawYipay = strings.TrimSpace(common.Interface2String(v))
+		}
+	}
+	yipayDisp := ""
+	if rawYipay != "" {
+		yipayDisp = common.MaskCredentialForAdminDisplay(rawYipay)
+	}
+	options = append(options, &model.Option{
+		Key:   "YipayAppSecret",
+		Value: yipayDisp,
+	})
 	common.OptionMapRWMutex.Unlock()
 	options = append(options, &model.Option{
 		Key:   "CompletionRatioMeta",
@@ -121,6 +139,16 @@ func UpdateOption(c *gin.Context) {
 		option.Value = common.Interface2String(option.Value.(int))
 	default:
 		option.Value = fmt.Sprintf("%v", option.Value)
+	}
+	valStr := strings.TrimSpace(option.Value.(string))
+	if option.Key == "YipayAppSecret" && strings.TrimSpace(operation_setting.YipayAppSecret) != "" {
+		if valStr == common.MaskCredentialForAdminDisplay(operation_setting.YipayAppSecret) {
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"message": "",
+			})
+			return
+		}
 	}
 	switch option.Key {
 	case "GitHubOAuthEnabled":
