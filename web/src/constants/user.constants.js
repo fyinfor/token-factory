@@ -36,3 +36,17 @@ export const userConstants = {
   DELETE_SUCCESS: 'USERS_DELETE_SUCCESS',
   DELETE_FAILURE: 'USERS_DELETE_FAILURE',
 };
+
+export const USER_ROLES = {
+  USER: 1,
+  DISTRIBUTOR: 5,
+  ADMIN: 10,
+  ROOT: 100,
+};
+
+export const USER_ROLE_NAMES = {
+  [USER_ROLES.USER]: '普通用户',
+  [USER_ROLES.DISTRIBUTOR]: '分销商',
+  [USER_ROLES.ADMIN]: '管理员',
+  [USER_ROLES.ROOT]: '超级管理员',
+};
