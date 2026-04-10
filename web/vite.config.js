@@ -18,14 +18,36 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import react from '@vitejs/plugin-react';
-import { defineConfig, transformWithEsbuild } from 'vite';
+import { defineConfig, transformWithEsbuild, loadEnv } from 'vite';
 import pkg from '@douyinfe/vite-plugin-semi';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { codeInspectorPlugin } from 'code-inspector-plugin';
 const { vitePluginSemi } = pkg;
 
+/** 本配置文件所在目录（ESM 下无全局 __dirname） */
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * 解析 Vite 开发代理指向的后端地址（与 Go 网关同一主机端口）。
+ * 可在 web/.env.development.local 中设置 VITE_DEV_PROXY_TARGET（例如 http://192.168.0.169:3000）。
+ * @param {string} mode Vite 运行模式
+ * @returns {string} 代理 target，例如 http://127.0.0.1:3000
+ */
+function resolveDevProxyTarget(mode) {
+  const env = loadEnv(mode, __dirname, '');
+  const raw = (env.VITE_DEV_PROXY_TARGET || '').trim();
+  if (raw) {
+    return raw.replace(/\/$/, '');
+  }
+  return 'http://127.0.0.1:3000';
+}
+
 // https://vitejs.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  const devProxyTarget = resolveDevProxyTarget(mode);
+
+  return {
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -91,17 +113,18 @@ export default defineConfig({
     host: '0.0.0.0',
     proxy: {
       '/api': {
-        target: 'http://192.168.0.169:3000',
+        target: devProxyTarget,
         changeOrigin: true,
       },
       '/mj': {
-        target: 'http://192.168.0.169:3000',
+        target: devProxyTarget,
         changeOrigin: true,
       },
       '/pg': {
-        target: 'http://192.168.0.169:3000',
+        target: devProxyTarget,
         changeOrigin: true,
       },
     },
   },
+  };
 });

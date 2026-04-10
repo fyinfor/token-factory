@@ -27,13 +27,21 @@ import SettingsPaymentGatewayWaffo from '../../pages/Setting/Payment/SettingsPay
 import { API, showError, toBoolean } from '../../helpers';
 import { useTranslation } from 'react-i18next';
 
+/** 系统设置中的支付 Tab：拉取 option 并渲染各支付子表单。 */
 const PaymentSetting = () => {
   const { t } = useTranslation();
   let [inputs, setInputs] = useState({
     ServerAddress: '',
     PayAddress: '',
+    OnlinePayProvider: 'yipay',
     EpayId: '',
     EpayKey: '',
+    YipayAppSecret: '',
+    YipayMchNo: '',
+    YipayAppId: '',
+    YipayNotifyUrl: '',
+    YipayReturnUrl: '',
+    YipayRequestURL: '',
     Price: 7.3,
     MinTopUp: 1,
     TopupGroupRatio: '',
@@ -97,6 +105,12 @@ const PaymentSetting = () => {
           case 'StripeUnitPrice':
           case 'StripeMinTopUp':
             newInputs[item.key] = parseFloat(item.value);
+            break;
+          case 'YipayAppSecret':
+            newInputs[item.key] =
+              item.value != null && item.value !== undefined
+                ? String(item.value)
+                : '';
             break;
           default:
             if (item.key.endsWith('Enabled')) {

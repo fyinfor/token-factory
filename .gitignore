@@ -1,7 +1,7 @@
 .idea
-.vscode/*
-!.vscode/launch.json
-!.vscode/DELVE.md
+.vscode/
+.github/
+.cursor/
 .zed
 .history
 upload
@@ -21,7 +21,6 @@ tiktoken_cache
 .gocache
 .gomodcache/
 .cache
-web/bun.lock
 plans
 .claude
 
