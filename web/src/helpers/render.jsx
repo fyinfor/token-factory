@@ -995,11 +995,12 @@ export function renderQuotaNumberWithDigit(num, digits = 2) {
     return 0;
   }
   const quotaDisplayType = localStorage.getItem('quota_display_type') || 'USD';
-  num = num.toFixed(digits);
+  num = parseFloat(num.toFixed(digits));
+  const trimmed = trimFixedDecimalDisplay(num, digits);
   if (quotaDisplayType === 'CNY') {
-    return '¥' + num;
+    return '¥' + trimmed;
   } else if (quotaDisplayType === 'USD') {
-    return '$' + num;
+    return '$' + trimmed;
   } else if (quotaDisplayType === 'CUSTOM') {
     const statusStr = localStorage.getItem('status');
     let symbol = '¤';
@@ -1009,9 +1010,9 @@ export function renderQuotaNumberWithDigit(num, digits = 2) {
         symbol = s?.custom_currency_symbol || symbol;
       }
     } catch (e) {}
-    return symbol + num;
+    return symbol + trimmed;
   } else {
-    return num;
+    return trimmed;
   }
 }
 
@@ -1071,7 +1072,7 @@ export function renderQuotaWithAmount(amount) {
 
   const numericAmount = Number(amount);
   const formattedAmount = Number.isFinite(numericAmount)
-    ? numericAmount.toFixed(2)
+    ? trimFixedDecimalDisplay(parseFloat(numericAmount.toFixed(2)), 2)
     : amount;
 
   if (quotaDisplayType === 'CNY') {
@@ -1087,7 +1088,7 @@ export function renderQuotaWithAmount(amount) {
     } catch (e) {}
     return symbol + formattedAmount;
   }
-  return '$' + formattedAmount;
+  return '$' + String(formattedAmount);
 }
 
 /**
@@ -1172,9 +1173,9 @@ export function renderQuota(quota, digits = 2) {
   const fixedResult = value.toFixed(digits);
   if (parseFloat(fixedResult) === 0 && quota > 0 && value > 0) {
     const minValue = Math.pow(10, -digits);
-    return symbol + minValue.toFixed(digits);
+    return symbol + trimFixedDecimalDisplay(minValue, digits);
   }
-  return symbol + fixedResult;
+  return symbol + trimFixedDecimalDisplay(fixedResult, digits);
 }
 
 function isValidGroupRatio(ratio) {
@@ -1223,8 +1224,26 @@ function shouldUseRatioBillingProcess(modelPrice = -1) {
   return modelPrice === -1 && getQuotaDisplayType() === 'TOKENS';
 }
 
+/** 固定小数位后去掉末尾多余的 0（如 1.50→1.5，2.00→2），用于金额等展示 */
+export function trimFixedDecimalDisplay(num, fractionDigits = 2) {
+  const n = Number(num);
+  if (!Number.isFinite(n)) {
+    return String(num ?? '');
+  }
+  let s = n.toFixed(fractionDigits);
+  if (s.includes('.')) {
+    s = s.replace(/\.?0+$/, '');
+  }
+  return s;
+}
+
 function formatCompactDisplayPrice(usdAmount, digits = 6) {
   const { symbol, rate } = getCurrencyConfig();
+  const raw = Number(usdAmount) * rate;
+  if (!Number.isFinite(raw)) {
+    return `${symbol}0`;
+  }
+  return `${symbol}${trimFixedDecimalDisplay(raw, digits)}`;
   const amount = Number((usdAmount * rate).toFixed(digits));
   return `${symbol}${amount}`;
 }
@@ -1242,9 +1261,12 @@ function joinBillingSummary(parts) {
 
 function getGroupRatioText(groupRatio, user_group_ratio) {
   const { ratio, label } = getEffectiveRatio(groupRatio, user_group_ratio);
+  const ratioDisplay = Number.isFinite(Number(ratio))
+    ? trimFixedDecimalDisplay(Number(ratio), 6)
+    : ratio;
   return i18next.t('{{ratioType}} {{ratio}}x', {
     ratioType: label,
-    ratio,
+    ratio: ratioDisplay,
   });
 }
 

@@ -476,7 +476,12 @@ func updateOptionMap(key string, value string) (err error) {
 		common.QuotaForInvitee, _ = strconv.Atoi(value)
 	case "AffiliateDefaultCommissionBps":
 		if n, err := strconv.Atoi(value); err == nil && n >= 0 && n <= 10000 {
-			common.AffiliateDefaultCommissionBps = n
+			if n == 0 {
+				// 历史或未配置为 0 时按系统默认 10% 计，避免分销奖励恒为 0
+				common.AffiliateDefaultCommissionBps = 1000
+			} else {
+				common.AffiliateDefaultCommissionBps = n
+			}
 		}
 	case "QuotaRemindThreshold":
 		common.QuotaRemindThreshold, _ = strconv.Atoi(value)

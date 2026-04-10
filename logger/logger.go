@@ -7,6 +7,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -114,6 +116,55 @@ func logHelper(ctx context.Context, level string, msg string) {
 		gopool.Go(func() {
 			SetupLogger()
 		})
+	}
+}
+
+// trimNumericTrailingZeros 去掉小数部分末尾多余的 0 及孤立的小数点。
+func trimNumericTrailingZeros(s string) string {
+	if i := strings.IndexByte(s, '.'); i >= 0 {
+		s = strings.TrimRight(s, "0")
+		s = strings.TrimSuffix(s, ".")
+	}
+	return s
+}
+
+// FormatCommissionRatioAsPercent 分销比例存储为「万分之一」单位（1 表示 0.01%），格式化为百分比文案如 10%、0.01%。
+func FormatCommissionRatioAsPercent(ratioTenThousandth int) string {
+	if ratioTenThousandth < 0 {
+		ratioTenThousandth = 0
+	}
+	p := float64(ratioTenThousandth) / 100.0
+	s := strconv.FormatFloat(p, 'f', -1, 64)
+	return trimNumericTrailingZeros(s) + "%"
+}
+
+// LogQuotaConcise 与 LogQuota 相同展示规则，但金额数字去掉小数点后多余 0，用于日志简洁展示。
+func LogQuotaConcise(quota int) string {
+	q := float64(quota)
+	switch operation_setting.GetQuotaDisplayType() {
+	case operation_setting.QuotaDisplayTypeCNY:
+		usd := q / common.QuotaPerUnit
+		cny := usd * operation_setting.USDExchangeRate
+		num := trimNumericTrailingZeros(fmt.Sprintf("%.10f", cny))
+		return fmt.Sprintf("¥%s 额度", num)
+	case operation_setting.QuotaDisplayTypeCustom:
+		usd := q / common.QuotaPerUnit
+		rate := operation_setting.GetGeneralSetting().CustomCurrencyExchangeRate
+		symbol := operation_setting.GetGeneralSetting().CustomCurrencySymbol
+		if symbol == "" {
+			symbol = "¤"
+		}
+		if rate <= 0 {
+			rate = 1
+		}
+		v := usd * rate
+		num := trimNumericTrailingZeros(fmt.Sprintf("%.10f", v))
+		return fmt.Sprintf("%s%s 额度", symbol, num)
+	case operation_setting.QuotaDisplayTypeTokens:
+		return fmt.Sprintf("%d 点额度", quota)
+	default:
+		num := trimNumericTrailingZeros(fmt.Sprintf("%.10f", q/common.QuotaPerUnit))
+		return fmt.Sprintf("＄%s 额度", num)
 	}
 }
 

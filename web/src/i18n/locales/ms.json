@@ -3042,7 +3042,7 @@
     "被邀请用户ID": "ID pengguna dijemput",
     "分销比例": "Komisen (mata asas)",
     "分销比例范围错误": "Komisen mesti integer 0–10000 (mata asas)",
-    "分销比例邀请说明行": "Komisen tambah nilai setiap dijemput (0–10000 bp; 100 = 1% kuota mereka untuk anda). Lalai sistem {{bps}} bp. Dikreditkan ke baki selepas tambah nilai berjaya.",
+    "分销比例邀请说明行": "Komisen tambah nilai setiap dijemput: disimpan per 1/10000 % (1 = 0,01 %; 0–10000). Lalai {{percent}} jika tidak ditetapkan. Dikreditkan ke pendapatan afiliasi menunggu dan jumlah selepas tambah nilai berjaya; boleh pindah ke baki.",
     "邀请人": "Penjemput",
     "邀请人数": "Bilangan dijemput",
     "邀请信息": "Maklumat jemputan",

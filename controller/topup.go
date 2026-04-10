@@ -580,6 +580,8 @@ func EpayNotify(c *gin.Context) {
 			}
 			log.Printf("Yipay 回调更新用户成功 %v", topUp)
 			model.RecordLog(topUp.UserId, model.LogTypeTopup, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%f", logger.LogQuota(quotaToAdd), topUp.Money))
+			// 与易支付成功路径一致：到账后按邀请关系给邀请人分销提成
+			model.ApplyAffiliateTopupReward(topUp.UserId, quotaToAdd)
 		}
 		_, _ = c.Writer.Write([]byte("success"))
 		return
@@ -637,6 +639,7 @@ func EpayNotify(c *gin.Context) {
 			}
 			log.Printf("易支付回调更新用户成功 %v", topUp)
 			model.RecordLog(topUp.UserId, model.LogTypeTopup, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%f", logger.LogQuota(quotaToAdd), topUp.Money))
+			// 支付回调成功且额度已入账后发放邀请人分销奖励（与 model.Recharge / Yipay 等路径一致）
 			model.ApplyAffiliateTopupReward(topUp.UserId, quotaToAdd)
 		}
 	} else {

@@ -3490,7 +3490,7 @@
     "被邀请用户ID": "ID người được mời",
     "分销比例": "Hoa hồng (điểm cơ sở)",
     "分销比例范围错误": "Hoa hồng phải là số nguyên 0–10000 (điểm cơ sở)",
-    "分销比例邀请说明行": "Hoa hồng nạp tiền theo từng người (0–10000 bp; 100 = 1% hạn mức họ nạp cho bạn). Mặc định hệ thống {{bps}} bp nếu chưa đặt. Cộng vào số dư sau khi họ nạp thành công.",
+    "分销比例邀请说明行": "Hoa hồng nạp theo từng người: lưu theo 1/10000 % (1 = 0,01 %; 0–10000). Mặc định {{percent}} nếu chưa đặt. Ghi vào thu nhập giới thiệu chờ dùng và tổng sau khi họ nạp thành công; có thể chuyển vào số dư.",
     "邀请人": "Người mời",
     "邀请人数": "Số người được mời",
     "邀请信息": "Thông tin mời",

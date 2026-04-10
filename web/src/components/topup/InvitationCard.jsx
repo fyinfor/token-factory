@@ -30,8 +30,14 @@ import {
   Table,
   InputNumber,
 } from '@douyinfe/semi-ui';
-import { Copy, Users, BarChart2, TrendingUp, Gift, Zap } from 'lucide-react';
-import { API, showError, showSuccess } from '../../helpers';
+import { Copy, Users, BarChart2, TrendingUp, Gift, Zap, Phone, MessageCircle } from 'lucide-react';
+import {
+  API,
+  showError,
+  showSuccess,
+  isDistributor,
+  formatCommissionRatioPercent,
+} from '../../helpers';
 
 const { Text } = Typography;
 
@@ -49,8 +55,7 @@ const InvitationCard = ({
   const [inviteTotal, setInviteTotal] = useState(0);
   const [invitePage, setInvitePage] = useState(1);
   const [invitePageSize, setInvitePageSize] = useState(10);
-  const [defaultCommissionBps, setDefaultCommissionBps] = useState(0);
-  const [savingId, setSavingId] = useState(null);
+  // const [savingId, setSavingId] = useState(null); // 暂时禁用分销比例编辑功能
 
   const loadInvitees = useCallback(
     async (p = 1, ps = invitePageSize) => {
@@ -72,7 +77,6 @@ const InvitationCard = ({
           })),
         );
         setInviteTotal(data?.total ?? 0);
-        setDefaultCommissionBps(data?.default_commission_ratio_bps ?? 0);
         setInvitePage(p);
       } catch {
         showError(t('加载失败'));
@@ -147,28 +151,36 @@ const InvitationCard = ({
     },
     {
       title: t('分销比例'),
-      dataIndex: '_bps',
-      width: 220,
-      render: (_, record) => (
-        <div className='flex items-center gap-2 flex-wrap'>
-          <InputNumber
-            min={0}
-            max={10000}
-            value={record._bps ?? 0}
-            onChange={(v) => updateRowBps(record.invitee_id, v)}
-            className='!w-28'
-          />
-          <Button
-            size='small'
-            type='primary'
-            loading={savingId === record.invitee_id}
-            onClick={() => saveCommission(record)}
-          >
-            {t('保存')}
-          </Button>
-        </div>
-      ),
+      dataIndex: 'commission_ratio_bps',
+      width: 120,
+      render: (bps) => <Text>{formatCommissionRatioPercent(bps)}</Text>,
     },
+    // ====== 暂时禁用分销比例编辑功能 - 可编辑版本 ======
+    // {
+    //   title: t('分销比例'),
+    //   dataIndex: '_bps',
+    //   width: 220,
+    //   render: (_, record) => (
+    //     <div className='flex items-center gap-2 flex-wrap'>
+    //       <InputNumber
+    //         min={0}
+    //         max={10000}
+    //         value={record._bps ?? 0}
+    //         onChange={(v) => updateRowBps(record.invitee_id, v)}
+    //         className='!w-28'
+    //       />
+    //       <Button
+    //         size='small'
+    //         type='primary'
+    //         loading={savingId === record.invitee_id}
+    //         onClick={() => saveCommission(record)}
+    //       >
+    //         {t('保存')}
+    //       </Button>
+    //     </div>
+    //   ),
+    // },
+    // ====== 暂时禁用分销比例编辑功能 END ======
   ];
 
   return (
@@ -337,6 +349,83 @@ const InvitationCard = ({
           />
         </Card>
 
+        {/* 分销商专属：邀请人列表 */}
+        {isDistributor() && (
+          <Card
+            className='!rounded-xl w-full'
+            title={
+              <div className='flex items-center gap-2'>
+                <Users size={16} />
+                <Text type='tertiary'>{t('邀请人列表')}</Text>
+              </div>
+            }
+          >
+            <Table
+              rowKey='invitee_id'
+              columns={inviteColumns}
+              dataSource={inviteRows}
+              loading={inviteLoading}
+              pagination={{
+                currentPage: invitePage,
+                pageSize: invitePageSize,
+                total: inviteTotal,
+                showSizeChanger: true,
+                pageSizeOpts: [10, 20, 50],
+                onPageChange: (p) => loadInvitees(p, invitePageSize),
+                onPageSizeChange: (ps) => {
+                  setInvitePageSize(ps);
+                  setInvitePage(1);
+                  loadInvitees(1, ps);
+                },
+              }}
+            />
+          </Card>
+        )}
+
+        {/* 非分销商：成为分销商 */}
+        {!isDistributor() && (
+          <Card
+            className='!rounded-xl w-full'
+            title={
+              <div className='flex items-center gap-2'>
+                <Text type='tertiary'>{t('成为分销商')}</Text>
+              </div>
+            }
+          >
+            <div className='space-y-4'>
+              {/* 联系电话 */}
+              <div className='flex items-center gap-3'>
+                <Phone size={18} className='text-gray-500' />
+                <div>
+                  <Text type='tertiary' className='text-xs block'>
+                    {t('联系电话')}
+                  </Text>
+                  <Text strong className='text-base'>
+                    156 25689773
+                  </Text>
+                </div>
+              </div>
+
+              {/* 企业微信二维码 */}
+              <div>
+                <div className='flex items-center gap-3'>
+                  <MessageCircle size={18} className='text-gray-500' />
+                  <Text type='tertiary' className='text-xs block'>
+                    {t('企业微信')}
+                  </Text>
+                </div>
+                <div className='flex justify-center'>
+                  <img
+                    src='/wechat.png'
+                    alt='企业微信二维码'
+                    className='w-48 h-48 rounded-lg'
+                  />
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
+
         {/* 奖励说明 */}
         <Card
           className='!rounded-xl w-full'
@@ -381,9 +470,6 @@ const InvitationCard = ({
         centered
         maskClosable
       >
-        <Text type='tertiary' className='text-xs block mb-3'>
-          {t('分销比例邀请说明行', { bps: defaultCommissionBps })}
-        </Text>
         <Table
           rowKey='invitee_id'
           columns={inviteColumns}

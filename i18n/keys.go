@@ -82,6 +82,7 @@ const (
 	MsgUserCannotDemoteRootUser      = "user.cannot_demote_root_user"
 	MsgUserAlreadyAdmin              = "user.already_admin"
 	MsgUserAlreadyCommon             = "user.already_common"
+	MsgUserCannotPromoteFurther      = "user.cannot_promote_further"
 	MsgUserAdminCannotPromote        = "user.admin_cannot_promote"
 	MsgUserOriginalPasswordError     = "user.original_password_error"
 	MsgUserInviteQuotaInsufficient   = "user.invite_quota_insufficient"
