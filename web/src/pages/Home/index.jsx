@@ -221,7 +221,7 @@ const Home = () => {
                   </Link> */}
                 </div>
 
-                {/* 卡片2: 更高可用性 */}
+                {/* 卡片2: 大模型部署定制服务 */}
                 <div className='bg-semi-color-bg-1 rounded-2xl p-8 border border-semi-color-border hover:shadow-lg transition-shadow'>
                   <div className='mb-6 h-24 flex items-center justify-center'>
                     <svg className='w-20 h-20' viewBox='0 0 200 200' fill='none' xmlns='http://www.w3.org/2000/svg'>
@@ -231,10 +231,12 @@ const Home = () => {
                     </svg>
                   </div>
                   <h3 className='text-xl font-semibold text-semi-color-text-0 mb-3'>
-                    {t('更高可用性')}
+                    {t('大模型部署定制服务')}
                   </h3>
                   <p className='text-sm text-semi-color-text-2 mb-4'>
-                    {t('分布式集群设施承载库，单路故障时可自动切换其他应路。')}
+                    {t(
+                      '支持构建高效稳定的 Token 工厂，实现大规模生成能力的标准化与可控化',
+                    )}
                   </p>
                   {/* <Link to='/channel' className='text-sm text-semi-color-primary font-medium hover:underline'>
                     {t('了解更多')} →

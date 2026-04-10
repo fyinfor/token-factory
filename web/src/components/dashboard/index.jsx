@@ -234,7 +234,7 @@ const Dashboard = () => {
               />
             )}
 
-            {/* 服务可用性卡片 */}
+            {/* 大模型部署定制服务 / 可用性监控卡片 */}
             {dashboardData.uptimeEnabled && (
               <UptimePanel
                 uptimeData={dashboardData.uptimeData}
