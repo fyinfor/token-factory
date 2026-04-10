@@ -66,6 +66,31 @@ import {
 
 const { Text } = Typography;
 
+/** 首页功能卡片：与首张相同的左图右文布局，顺序对应 public/home-card-1..4.png */
+const HOME_FEATURE_CARDS = [
+  {
+    image: '/home-card-1.png',
+    titleKey: '一个 API，调用任意模型',
+    descKey: '通过统一接口同主流模型，OpenAI 兼容 SDK 可直接使用。',
+  },
+  {
+    image: '/home-card-2.png',
+    titleKey: '大模型部署定制服务',
+    descKey:
+      '支持构建高效稳定的 Token 工厂，实现大规模生成能力的标准化与可控化',
+  },
+  {
+    image: '/home-card-3.png',
+    titleKey: '灵活计费方式',
+    descKey: '按需付费无需订阅，支持多种计费模式和用户分组定价。',
+  },
+  {
+    image: '/home-card-4.png',
+    titleKey: '完整使用日志',
+    descKey: '实时监控每次调用，详细记录请求和响应便于调试分析。',
+  },
+];
+
 const Home = () => {
   const { t, i18n } = useTranslation();
   const [statusState] = useContext(StatusContext);
@@ -200,89 +225,31 @@ const Home = () => {
           <div className='w-full px-4 py-16 md:py-20'>
             <div className='max-w-6xl mx-auto'>
               <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
-                {/* 卡片1: 一个 API，调用任意模型 */}
-                <div className='bg-semi-color-bg-1 rounded-2xl p-8 border border-semi-color-border hover:shadow-lg transition-shadow'>
-                  <div className='mb-6 h-24 flex items-center justify-center'>
-                    <svg className='w-20 h-20' viewBox='0 0 200 200' fill='none' xmlns='http://www.w3.org/2000/svg'>
-                      <circle cx='40' cy='40' r='8' fill='#c7d2fe' />
-                      <circle cx='160' cy='40' r='8' fill='#bfdbfe' />
-                      <line x1='50' y1='100' x2='150' y2='50' stroke='#c7d2fe' strokeWidth='4' strokeLinecap='round' />
-                      <line x1='50' y1='100' x2='150' y2='150' stroke='#c7d2fe' strokeWidth='4' strokeLinecap='round' />
-                    </svg>
+                {HOME_FEATURE_CARDS.map((card) => (
+                  <div
+                    key={card.image}
+                    className='group flex flex-col overflow-hidden rounded-2xl border border-semi-color-border bg-semi-color-bg-1 shadow-sm transition-shadow hover:shadow-lg md:flex-row md:items-stretch md:gap-10'
+                  >
+                    <div className='relative flex shrink-0 items-center justify-center bg-semi-color-bg-1 px-5 pb-2 pt-6 md:w-[42%] md:max-w-[300px] md:p-6 md:pb-6'>
+                      <div className='relative aspect-[4/3] w-full max-w-[320px] overflow-hidden rounded-xl bg-semi-color-bg-0 shadow-md ring-1 ring-semi-color-border md:max-w-none'>
+                        <img
+                          src={card.image}
+                          alt=''
+                          className='h-full w-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-[1.02]'
+                          decoding='async'
+                        />
+                      </div>
+                    </div>
+                    <div className='flex flex-1 flex-col justify-center px-6 pb-6 pt-5 md:px-8 md:py-8 md:pl-0'>
+                      <h3 className='text-xl font-semibold leading-snug text-semi-color-text-0 md:text-[1.35rem]'>
+                        {t(card.titleKey)}
+                      </h3>
+                      <p className='mt-3 text-sm leading-relaxed text-semi-color-text-2'>
+                        {t(card.descKey)}
+                      </p>
+                    </div>
                   </div>
-                  <h3 className='text-xl font-semibold text-semi-color-text-0 mb-3'>
-                    {t('一个 API，调用任意模型')}
-                  </h3>
-                  <p className='text-sm text-semi-color-text-2 mb-4'>
-                    {t('通过统一接口同主流模型，OpenAI 兼容 SDK 可直接使用。')}
-                  </p>
-                  {/* <Link to='/model' className='text-sm text-semi-color-primary font-medium hover:underline'>
-                    {t('浏览全部')} →
-                  </Link> */}
-                </div>
-
-                {/* 卡片2: 大模型部署定制服务 */}
-                <div className='bg-semi-color-bg-1 rounded-2xl p-8 border border-semi-color-border hover:shadow-lg transition-shadow'>
-                  <div className='mb-6 h-24 flex items-center justify-center'>
-                    <svg className='w-20 h-20' viewBox='0 0 200 200' fill='none' xmlns='http://www.w3.org/2000/svg'>
-                      <rect x='40' y='120' width='120' height='4' rx='2' fill='#86efac' />
-                      <path d='M 60 80 Q 100 20 140 80' stroke='#d1d5db' strokeWidth='3' strokeDasharray='8 4' strokeLinecap='round' fill='none' />
-                      <text x='20' y='100' fontSize='14' fill='#6366f1' fontFamily='monospace'>anthropic/claude-opus-4.6</text>
-                    </svg>
-                  </div>
-                  <h3 className='text-xl font-semibold text-semi-color-text-0 mb-3'>
-                    {t('大模型部署定制服务')}
-                  </h3>
-                  <p className='text-sm text-semi-color-text-2 mb-4'>
-                    {t(
-                      '支持构建高效稳定的 Token 工厂，实现大规模生成能力的标准化与可控化',
-                    )}
-                  </p>
-                  {/* <Link to='/channel' className='text-sm text-semi-color-primary font-medium hover:underline'>
-                    {t('了解更多')} →
-                  </Link> */}
-                </div>
-
-                {/* 卡片3: 灵活计费方式 */}
-                <div className='bg-semi-color-bg-1 rounded-2xl p-8 border border-semi-color-border hover:shadow-lg transition-shadow'>
-                  <div className='mb-6 h-24 flex items-center justify-center'>
-                    <svg className='w-20 h-20' viewBox='0 0 200 200' fill='none' xmlns='http://www.w3.org/2000/svg'>
-                      <rect x='30' y='80' width='40' height='80' rx='4' fill='#e0e7ff' />
-                      <rect x='80' y='50' width='40' height='110' rx='4' fill='#c7d2fe' />
-                      <rect x='130' y='100' width='40' height='60' rx='4' fill='#a5b4fc' />
-                    </svg>
-                  </div>
-                  <h3 className='text-xl font-semibold text-semi-color-text-0 mb-3'>
-                    {t('灵活计费方式')}
-                  </h3>
-                  <p className='text-sm text-semi-color-text-2 mb-4'>
-                    {t('按需付费无需订阅，支持多种计费模式和用户分组定价。')}
-                  </p>
-                  {/* <Link to='/pricing' className='text-sm text-semi-color-primary font-medium hover:underline'>
-                    {t('查看定价')} →
-                  </Link> */}
-                </div>
-
-                {/* 卡片4: 完整使用日志 */}
-                <div className='bg-semi-color-bg-1 rounded-2xl p-8 border border-semi-color-border hover:shadow-lg transition-shadow'>
-                  <div className='mb-6 h-24 flex items-center justify-center'>
-                    <svg className='w-20 h-20' viewBox='0 0 200 200' fill='none' xmlns='http://www.w3.org/2000/svg'>
-                      <rect x='40' y='40' width='120' height='120' rx='8' stroke='#d1d5db' strokeWidth='3' fill='none' />
-                      <line x1='60' y1='70' x2='140' y2='70' stroke='#a5b4fc' strokeWidth='3' strokeLinecap='round' />
-                      <line x1='60' y1='100' x2='120' y2='100' stroke='#c7d2fe' strokeWidth='3' strokeLinecap='round' />
-                      <line x1='60' y1='130' x2='140' y2='130' stroke='#c7d2fe' strokeWidth='3' strokeLinecap='round' />
-                    </svg>
-                  </div>
-                  <h3 className='text-xl font-semibold text-semi-color-text-0 mb-3'>
-                    {t('完整使用日志')}
-                  </h3>
-                  <p className='text-sm text-semi-color-text-2 mb-4'>
-                    {t('实时监控每次调用，详细记录请求和响应便于调试分析。')}
-                  </p>
-                  {/* <Link to='/log' className='text-sm text-semi-color-primary font-medium hover:underline'>
-                    {t('查看文档')} →
-                  </Link> */}
-                </div>
+                ))}
               </div>
             </div>
           </div>
