@@ -49,14 +49,12 @@ const Navigation = ({
       const linkContent = <span>{link.text}</span>;
 
       if (link.isExternal) {
-        const openInNewTab = link.openInNewTab !== false;
         return (
           <a
             key={link.itemKey}
             href={link.externalLink}
-            {...(openInNewTab
-              ? { target: '_blank', rel: 'noopener noreferrer' }
-              : {})}
+            target='_blank'
+            rel='noopener noreferrer'
             className={`${baseClasses} ${spacingClasses} ${hoverClasses} !text-semi-color-text-1 dark:!text-gray-300`}
           >
             {linkContent}

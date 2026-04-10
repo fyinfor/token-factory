@@ -25,7 +25,6 @@ import { StatusContext } from '../../context/Status';
 import { useSetTheme, useTheme, useActualTheme } from '../../context/Theme';
 import { getLogo, getSystemName, API, showSuccess } from '../../helpers';
 import { normalizeLanguage } from '../../i18n/language';
-import { resolveDocsNav } from '../../helpers/docsLink';
 import { useIsMobile } from './useIsMobile';
 import { useSidebarCollapsed } from './useSidebarCollapsed';
 import { useMinimumLoadingTime } from './useMinimumLoadingTime';
@@ -50,11 +49,7 @@ export const useHeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
   const isNewYear = currentDate.getMonth() === 0 && currentDate.getDate() === 1;
 
   const isSelfUseMode = statusState?.status?.self_use_mode_enabled || false;
-  const rawDocsLink = (statusState?.status?.docs_link || '').trim();
-  const docsNav = useMemo(
-    () => resolveDocsNav(rawDocsLink, i18n.language),
-    [rawDocsLink, i18n.language],
-  );
+  const docsLink = statusState?.status?.docs_link || '';
   const isDemoSiteMode = statusState?.status?.demo_site_enabled || false;
 
   // 获取顶栏模块配置
@@ -236,7 +231,7 @@ export const useHeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
     logo,
     isNewYear,
     isSelfUseMode,
-    docsNav,
+    docsLink,
     isDemoSiteMode,
     isConsoleRoute,
     theme,
