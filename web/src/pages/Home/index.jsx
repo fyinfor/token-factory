@@ -165,7 +165,7 @@ const Home = () => {
                 <h1
                   className={`text-4xl md:text-5xl lg:text-6xl font-medium text-semi-color-text-0 leading-tight mb-4 ${isChinese ? 'tracking-wide' : ''}`}
                 >
-                  {t('定制化大模型服务，一站式统一入口')}
+                  {t('一站式大模型服务统一入口')}
                 </h1>
                 <p className='text-sm md:text-base text-semi-color-text-2 mb-8'>
                   {t('按需定制，更优')}
