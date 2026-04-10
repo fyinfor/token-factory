@@ -280,9 +280,13 @@ func migrateDB() error {
 		&SubscriptionPreConsumeRecord{},
 		&CustomOAuthProvider{},
 		&UserOAuthBinding{},
+		&AffInviteRelation{},
 	)
 	if err != nil {
 		return err
+	}
+	if err := BackfillAffInviteRelationsIfNeeded(); err != nil {
+		common.SysError("aff_invite_relations backfill: " + err.Error())
 	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
@@ -328,6 +332,7 @@ func migrateDBFast() error {
 		{&SubscriptionPreConsumeRecord{}, "SubscriptionPreConsumeRecord"},
 		{&CustomOAuthProvider{}, "CustomOAuthProvider"},
 		{&UserOAuthBinding{}, "UserOAuthBinding"},
+		{&AffInviteRelation{}, "AffInviteRelation"},
 	}
 	// 动态计算migration数量，确保errChan缓冲区足够大
 	errChan := make(chan error, len(migrations))
@@ -360,6 +365,9 @@ func migrateDBFast() error {
 		if err := DB.AutoMigrate(&SubscriptionPlan{}); err != nil {
 			return err
 		}
+	}
+	if err := BackfillAffInviteRelationsIfNeeded(); err != nil {
+		common.SysError("aff_invite_relations backfill: " + err.Error())
 	}
 	common.SysLog("database migrated")
 	return nil

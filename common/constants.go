@@ -103,6 +103,8 @@ var TelegramBotName = ""
 var QuotaForNewUser = 0
 var QuotaForInviter = 0
 var QuotaForInvitee = 0
+// AffiliateDefaultCommissionBps 被邀请用户充值时，给邀请人的默认分销比例（万分比，100=1%，10000=100%）。单用户可在 aff_invite_relations 表覆盖。
+var AffiliateDefaultCommissionBps = 0
 var ChannelDisableThreshold = 5.0
 var AutomaticDisableChannelEnabled = false
 var AutomaticEnableChannelEnabled = false

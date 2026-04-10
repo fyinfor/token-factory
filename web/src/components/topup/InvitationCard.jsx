@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   Avatar,
   Typography,
@@ -26,8 +26,12 @@ import {
   Input,
   Badge,
   Space,
+  Modal,
+  Table,
+  InputNumber,
 } from '@douyinfe/semi-ui';
 import { Copy, Users, BarChart2, TrendingUp, Gift, Zap } from 'lucide-react';
+import { API, showError, showSuccess } from '../../helpers';
 
 const { Text } = Typography;
 
@@ -39,6 +43,134 @@ const InvitationCard = ({
   affLink,
   handleAffLinkClick,
 }) => {
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteRows, setInviteRows] = useState([]);
+  const [inviteTotal, setInviteTotal] = useState(0);
+  const [invitePage, setInvitePage] = useState(1);
+  const [invitePageSize, setInvitePageSize] = useState(10);
+  const [defaultCommissionBps, setDefaultCommissionBps] = useState(0);
+  const [savingId, setSavingId] = useState(null);
+
+  const loadInvitees = useCallback(
+    async (p = 1, ps = invitePageSize) => {
+      setInviteLoading(true);
+      try {
+        const res = await API.get(
+          `/api/user/aff_invitees?p=${p}&page_size=${ps}`,
+        );
+        const { success, message, data } = res.data;
+        if (!success) {
+          showError(message || t('加载失败'));
+          return;
+        }
+        const items = data?.items || [];
+        setInviteRows(
+          items.map((row) => ({
+            ...row,
+            _bps: row.commission_ratio_bps,
+          })),
+        );
+        setInviteTotal(data?.total ?? 0);
+        setDefaultCommissionBps(data?.default_commission_ratio_bps ?? 0);
+        setInvitePage(p);
+      } catch {
+        showError(t('加载失败'));
+      } finally {
+        setInviteLoading(false);
+      }
+    },
+    [invitePageSize, t],
+  );
+
+  // 仅在打开弹窗时拉第一页；翻页、改 pageSize 由 Table pagination 回调触发，避免重复请求
+  useEffect(() => {
+    if (inviteModalOpen) {
+      loadInvitees(1, invitePageSize);
+    }
+  }, [inviteModalOpen]);
+
+  const updateRowBps = (inviteeId, value) => {
+    setInviteRows((prev) =>
+      prev.map((r) =>
+        r.invitee_id === inviteeId ? { ...r, _bps: value } : r,
+      ),
+    );
+  };
+
+  const saveCommission = async (record) => {
+    const bps = Math.round(Number(record._bps));
+    if (Number.isNaN(bps) || bps < 0 || bps > 10000) {
+      showError(t('分销比例范围错误'));
+      return;
+    }
+    setSavingId(record.invitee_id);
+    try {
+      const res = await API.put('/api/user/aff_invitees/commission', {
+        invitee_id: record.invitee_id,
+        commission_ratio_bps: bps,
+      });
+      const { success, message } = res.data;
+      if (!success) {
+        showError(message || t('保存失败'));
+        return;
+      }
+      showSuccess(t('保存成功'));
+      setInviteRows((prev) =>
+        prev.map((r) =>
+          r.invitee_id === record.invitee_id
+            ? { ...r, commission_ratio_bps: bps, _bps: bps }
+            : r,
+        ),
+      );
+    } catch {
+      showError(t('保存失败'));
+    } finally {
+      setSavingId(null);
+    }
+  };
+
+  const inviteColumns = [
+    {
+      title: t('被邀请用户ID'),
+      dataIndex: 'invitee_id',
+      width: 110,
+    },
+    {
+      title: t('用户名'),
+      dataIndex: 'username',
+    },
+    {
+      title: t('显示名称'),
+      dataIndex: 'display_name',
+      render: (v) => (v && String(v).trim() ? v : '—'),
+    },
+    {
+      title: t('分销比例'),
+      dataIndex: '_bps',
+      width: 220,
+      render: (_, record) => (
+        <div className='flex items-center gap-2 flex-wrap'>
+          <InputNumber
+            min={0}
+            max={10000}
+            value={record._bps ?? 0}
+            onChange={(v) => updateRowBps(record.invitee_id, v)}
+            className='!w-28'
+          />
+          <Button
+            size='small'
+            type='primary'
+            loading={savingId === record.invitee_id}
+            onClick={() => saveCommission(record)}
+          >
+            {t('保存')}
+          </Button>
+        </div>
+      ),
+    },
+  ];
+
   return (
     <Card className='!rounded-2xl shadow-sm border-0'>
       {/* 卡片头部 */}
@@ -145,7 +277,19 @@ const InvitationCard = ({
                   </div>
 
                   {/* 邀请人数 */}
-                  <div className='text-center'>
+                  <div
+                    className='text-center cursor-pointer rounded-lg outline-none transition-opacity hover:opacity-95 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent'
+                    role='button'
+                    tabIndex={0}
+                    aria-label={t('邀请人数')}
+                    onClick={() => setInviteModalOpen(true)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setInviteModalOpen(true);
+                      }
+                    }}
+                  >
                     <div
                       className='text-base sm:text-2xl font-bold mb-2'
                       style={{ color: 'white' }}
@@ -222,6 +366,44 @@ const InvitationCard = ({
           </div>
         </Card>
       </Space>
+
+      <Modal
+        title={
+          <div className='flex items-center gap-2'>
+            <Users size={18} />
+            {t('邀请人列表')}
+          </div>
+        }
+        visible={inviteModalOpen}
+        onCancel={() => setInviteModalOpen(false)}
+        footer={null}
+        width={720}
+        centered
+        maskClosable
+      >
+        <Text type='tertiary' className='text-xs block mb-3'>
+          {t('分销比例邀请说明行', { bps: defaultCommissionBps })}
+        </Text>
+        <Table
+          rowKey='invitee_id'
+          columns={inviteColumns}
+          dataSource={inviteRows}
+          loading={inviteLoading}
+          pagination={{
+            currentPage: invitePage,
+            pageSize: invitePageSize,
+            total: inviteTotal,
+            showSizeChanger: true,
+            pageSizeOpts: [10, 20, 50],
+            onPageChange: (p) => loadInvitees(p, invitePageSize),
+            onPageSizeChange: (ps) => {
+              setInvitePageSize(ps);
+              setInvitePage(1);
+              loadInvitees(1, ps);
+            },
+          }}
+        />
+      </Modal>
     </Card>
   );
 };
