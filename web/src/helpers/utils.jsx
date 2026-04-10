@@ -32,6 +32,13 @@ const HTMLToastContent = ({ htmlContent }) => {
   return <div dangerouslySetInnerHTML={{ __html: htmlContent }} />;
 };
 export default HTMLToastContent;
+export function isDistributor() {
+  let user = localStorage.getItem('user');
+  if (!user) return false;
+  user = JSON.parse(user);
+  return user.role >= 5;
+}
+
 export function isAdmin() {
   let user = localStorage.getItem('user');
   if (!user) return false;

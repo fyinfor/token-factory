@@ -28,10 +28,10 @@ import {
   Space,
   Modal,
   Table,
-  InputNumber,
+  // InputNumber, // 暂时禁用分销比例编辑功能
 } from '@douyinfe/semi-ui';
-import { Copy, Users, BarChart2, TrendingUp, Gift, Zap } from 'lucide-react';
-import { API, showError, showSuccess } from '../../helpers';
+import { Copy, Users, BarChart2, TrendingUp, Gift, Zap, Phone, MessageCircle } from 'lucide-react';
+import { API, showError, showSuccess, isDistributor } from '../../helpers';
 
 const { Text } = Typography;
 
@@ -50,7 +50,7 @@ const InvitationCard = ({
   const [invitePage, setInvitePage] = useState(1);
   const [invitePageSize, setInvitePageSize] = useState(10);
   const [defaultCommissionBps, setDefaultCommissionBps] = useState(0);
-  const [savingId, setSavingId] = useState(null);
+  // const [savingId, setSavingId] = useState(null); // 暂时禁用分销比例编辑功能
 
   const loadInvitees = useCallback(
     async (p = 1, ps = invitePageSize) => {
@@ -65,12 +65,13 @@ const InvitationCard = ({
           return;
         }
         const items = data?.items || [];
-        setInviteRows(
-          items.map((row) => ({
-            ...row,
-            _bps: row.commission_ratio_bps,
-          })),
-        );
+        setInviteRows(items);
+        // setInviteRows(
+        //   items.map((row) => ({
+        //     ...row,
+        //     _bps: row.commission_ratio_bps,
+        //   })),
+        // ); // 暂时禁用分销比例编辑功能
         setInviteTotal(data?.total ?? 0);
         setDefaultCommissionBps(data?.default_commission_ratio_bps ?? 0);
         setInvitePage(p);
@@ -83,52 +84,56 @@ const InvitationCard = ({
     [invitePageSize, t],
   );
 
-  // 仅在打开弹窗时拉第一页；翻页、改 pageSize 由 Table pagination 回调触发，避免重复请求
+  // 如果是分销商，组件加载时直接拉取数据；否则仅在打开弹窗时拉取
   useEffect(() => {
-    if (inviteModalOpen) {
+    if (isDistributor()) {
+      loadInvitees(1, invitePageSize);
+    } else if (inviteModalOpen) {
       loadInvitees(1, invitePageSize);
     }
   }, [inviteModalOpen]);
 
-  const updateRowBps = (inviteeId, value) => {
-    setInviteRows((prev) =>
-      prev.map((r) =>
-        r.invitee_id === inviteeId ? { ...r, _bps: value } : r,
-      ),
-    );
-  };
+  // ====== 暂时禁用分销比例编辑功能 ======
+  // const updateRowBps = (inviteeId, value) => {
+  //   setInviteRows((prev) =>
+  //     prev.map((r) =>
+  //       r.invitee_id === inviteeId ? { ...r, _bps: value } : r,
+  //     ),
+  //   );
+  // };
 
-  const saveCommission = async (record) => {
-    const bps = Math.round(Number(record._bps));
-    if (Number.isNaN(bps) || bps < 0 || bps > 10000) {
-      showError(t('分销比例范围错误'));
-      return;
-    }
-    setSavingId(record.invitee_id);
-    try {
-      const res = await API.put('/api/user/aff_invitees/commission', {
-        invitee_id: record.invitee_id,
-        commission_ratio_bps: bps,
-      });
-      const { success, message } = res.data;
-      if (!success) {
-        showError(message || t('保存失败'));
-        return;
-      }
-      showSuccess(t('保存成功'));
-      setInviteRows((prev) =>
-        prev.map((r) =>
-          r.invitee_id === record.invitee_id
-            ? { ...r, commission_ratio_bps: bps, _bps: bps }
-            : r,
-        ),
-      );
-    } catch {
-      showError(t('保存失败'));
-    } finally {
-      setSavingId(null);
-    }
-  };
+  // const saveCommission = async (record) => {
+  //   const bps = Math.round(Number(record._bps));
+  //   if (Number.isNaN(bps) || bps < 0 || bps > 10000) {
+  //     showError(t('分销比例范围错误'));
+  //     return;
+  //   }
+  //   setSavingId(record.invitee_id);
+  //   try {
+  //     const res = await API.put('/api/user/aff_invitees/commission', {
+  //       invitee_id: record.invitee_id,
+  //       commission_ratio_bps: bps,
+  //     });
+  //     const { success, message } = res.data;
+  //     if (!success) {
+  //       showError(message || t('保存失败'));
+  //       return;
+  //     }
+  //     showSuccess(t('保存成功'));
+  //     setInviteRows((prev) =>
+  //       prev.map((r) =>
+  //         r.invitee_id === record.invitee_id
+  //           ? { ...r, commission_ratio_bps: bps, _bps: bps }
+  //           : r,
+  //       ),
+  //     );
+  //   } catch {
+  //     showError(t('保存失败'));
+  //   } finally {
+  //     setSavingId(null);
+  //   }
+  // };
+  // ====== 暂时禁用分销比例编辑功能 END ======
 
   const inviteColumns = [
     {
@@ -147,28 +152,38 @@ const InvitationCard = ({
     },
     {
       title: t('分销比例'),
-      dataIndex: '_bps',
-      width: 220,
-      render: (_, record) => (
-        <div className='flex items-center gap-2 flex-wrap'>
-          <InputNumber
-            min={0}
-            max={10000}
-            value={record._bps ?? 0}
-            onChange={(v) => updateRowBps(record.invitee_id, v)}
-            className='!w-28'
-          />
-          <Button
-            size='small'
-            type='primary'
-            loading={savingId === record.invitee_id}
-            onClick={() => saveCommission(record)}
-          >
-            {t('保存')}
-          </Button>
-        </div>
+      dataIndex: 'commission_ratio_bps',
+      width: 120,
+      render: (bps) => (
+        <Text>{bps ?? 0}</Text>
       ),
     },
+    // ====== 暂时禁用分销比例编辑功能 - 可编辑版本 ======
+    // {
+    //   title: t('分销比例'),
+    //   dataIndex: '_bps',
+    //   width: 220,
+    //   render: (_, record) => (
+    //     <div className='flex items-center gap-2 flex-wrap'>
+    //       <InputNumber
+    //         min={0}
+    //         max={10000}
+    //         value={record._bps ?? 0}
+    //         onChange={(v) => updateRowBps(record.invitee_id, v)}
+    //         className='!w-28'
+    //       />
+    //       <Button
+    //         size='small'
+    //         type='primary'
+    //         loading={savingId === record.invitee_id}
+    //         onClick={() => saveCommission(record)}
+    //       >
+    //         {t('保存')}
+    //       </Button>
+    //     </div>
+    //   ),
+    // },
+    // ====== 暂时禁用分销比例编辑功能 END ======
   ];
 
   return (
@@ -278,17 +293,17 @@ const InvitationCard = ({
 
                   {/* 邀请人数 */}
                   <div
-                    className='text-center cursor-pointer rounded-lg outline-none transition-opacity hover:opacity-95 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent'
-                    role='button'
+                    className='text-center rounded-lg outline-none transition-opacity hover:opacity-95 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent'
+                    // role='button'
                     tabIndex={0}
                     aria-label={t('邀请人数')}
-                    onClick={() => setInviteModalOpen(true)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        setInviteModalOpen(true);
-                      }
-                    }}
+                    // onClick={() => setInviteModalOpen(true)}
+                    // onKeyDown={(e) => {
+                    //   if (e.key === 'Enter' || e.key === ' ') {
+                    //     e.preventDefault();
+                    //     setInviteModalOpen(true);
+                    //   }
+                    // }}
                   >
                     <div
                       className='text-base sm:text-2xl font-bold mb-2'
@@ -336,6 +351,86 @@ const InvitationCard = ({
             }
           />
         </Card>
+
+        {/* 分销商专属：邀请人列表 */}
+        {isDistributor() && (
+          <Card
+            className='!rounded-xl w-full'
+            title={
+              <div className='flex items-center gap-2'>
+                <Users size={16} />
+                <Text type='tertiary'>{t('邀请人列表')}</Text>
+              </div>
+            }
+          >
+            <Text type='tertiary' className='text-xs block mb-3'>
+              {t('分销比例邀请说明行', { bps: defaultCommissionBps })}
+            </Text>
+            <Table
+              rowKey='invitee_id'
+              columns={inviteColumns}
+              dataSource={inviteRows}
+              loading={inviteLoading}
+              pagination={{
+                currentPage: invitePage,
+                pageSize: invitePageSize,
+                total: inviteTotal,
+                showSizeChanger: true,
+                pageSizeOpts: [10, 20, 50],
+                onPageChange: (p) => loadInvitees(p, invitePageSize),
+                onPageSizeChange: (ps) => {
+                  setInvitePageSize(ps);
+                  setInvitePage(1);
+                  loadInvitees(1, ps);
+                },
+              }}
+            />
+          </Card>
+        )}
+
+        {/* 非分销商：成为分销商 */}
+        {!isDistributor() && (
+          <Card
+            className='!rounded-xl w-full'
+            title={
+              <div className='flex items-center gap-2'>
+                <Text type='tertiary'>{t('成为分销商')}</Text>
+              </div>
+            }
+          >
+            <div className='space-y-4'>
+              {/* 联系电话 */}
+              <div className='flex items-center gap-3'>
+                <Phone size={18} className='text-gray-500' />
+                <div>
+                  <Text type='tertiary' className='text-xs block'>
+                    {t('联系电话')}
+                  </Text>
+                  <Text strong className='text-base'>
+                    156 25689773
+                  </Text>
+                </div>
+              </div>
+
+              {/* 企业微信二维码 */}
+              <div>
+                <div className='flex items-center gap-3'>
+                  <MessageCircle size={18} className='text-gray-500' />
+                  <Text type='tertiary' className='text-xs block'>
+                    {t('企业微信')}
+                  </Text>
+                </div>
+                <div className='flex justify-center'>
+                  <img
+                    src='/wechat.png'
+                    alt='企业微信二维码'
+                    className='w-48 h-48 rounded-lg'
+                  />
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
 
         {/* 奖励说明 */}
         <Card
