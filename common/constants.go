@@ -103,8 +103,8 @@ var TelegramBotName = ""
 var QuotaForNewUser = 0
 var QuotaForInviter = 0
 var QuotaForInvitee = 0
-// AffiliateDefaultCommissionBps 被邀请用户充值时，给邀请人的默认分销比例（万分比，100=1%，10000=100%）。单用户可在 aff_invite_relations 表覆盖。
-var AffiliateDefaultCommissionBps = 0
+// AffiliateDefaultCommissionBps 被邀请用户充值时给邀请人的默认分销比例，存储为万分之一单位（1=0.01%，100=1%，1000=10%）。单用户可在 aff_invite_relations 覆盖。默认 1000 即 10%。
+var AffiliateDefaultCommissionBps = 1000
 var ChannelDisableThreshold = 5.0
 var AutomaticDisableChannelEnabled = false
 var AutomaticEnableChannelEnabled = false
@@ -140,14 +140,15 @@ const (
 )
 
 const (
-	RoleGuestUser  = 0
-	RoleCommonUser = 1
-	RoleAdminUser  = 10
-	RoleRootUser   = 100
+	RoleGuestUser       = 0
+	RoleCommonUser      = 1
+	RoleDistributorUser = 5 // 分销商：无管理后台权限，可参与邀请分销等业务
+	RoleAdminUser       = 10
+	RoleRootUser        = 100
 )
 
 func IsValidateRole(role int) bool {
-	return role == RoleGuestUser || role == RoleCommonUser || role == RoleAdminUser || role == RoleRootUser
+	return role == RoleGuestUser || role == RoleCommonUser || role == RoleDistributorUser || role == RoleAdminUser || role == RoleRootUser
 }
 
 var (

@@ -33,6 +33,7 @@ import {
   getLogOther,
   renderModelTag,
   renderModelPriceSimple,
+  trimFixedDecimalDisplay,
 } from '../../../helpers';
 import { IconHelpCircle } from '@douyinfe/semi-icons';
 import { CircleAlert, Route, Sparkles } from 'lucide-react';
@@ -59,8 +60,9 @@ function formatRatio(ratio) {
   if (ratio === undefined || ratio === null) {
     return '-';
   }
-  if (typeof ratio === 'number') {
-    return ratio.toFixed(4);
+  const n = typeof ratio === 'number' ? ratio : Number(ratio);
+  if (Number.isFinite(n)) {
+    return trimFixedDecimalDisplay(n, 4);
   }
   return String(ratio);
 }
@@ -375,6 +377,23 @@ function normalizeDetailText(detail) {
     .replace(/\r\n/g, '\n');
 }
 
+/** 详情文案里的小数金额去掉末尾多余 0（不改变整数 token 等） */
+function trimDecimalsInLogDetailText(raw) {
+  const s = normalizeDetailText(raw);
+  return s.replace(/\b\d+\.\d+\b/g, (match) => {
+    const m = match.match(/^(\d+)\.(\d+)$/);
+    if (!m) {
+      return match;
+    }
+    const fracLen = m[2].length;
+    const v = parseFloat(match);
+    if (!Number.isFinite(v)) {
+      return match;
+    }
+    return trimFixedDecimalDisplay(v, Math.min(fracLen, 12));
+  });
+}
+
 function getUsageLogGroupSummary(groupRatio, userGroupRatio, t) {
   const parsedUserGroupRatio = Number(userGroupRatio);
   const useUserGroupRatio =
@@ -455,7 +474,12 @@ function getUsageLogDetailSummary(record, text, billingDisplayMode, t) {
           text: `${t('扣费')}：${renderQuota(feeQuota)}`,
           tone: 'secondary',
         },
-        text ? { text: `${t('详情')}：${text}`, tone: 'secondary' } : null,
+        text
+          ? {
+              text: `${t('详情')}：${trimDecimalsInLogDetailText(text)}`,
+              tone: 'secondary',
+            }
+          : null,
       ].filter(Boolean),
     };
   }
@@ -950,7 +974,7 @@ export const getLogsColumns = ({
               }}
               style={{ maxWidth: 200, marginBottom: 0 }}
             >
-              {text}
+              {trimDecimalsInLogDetailText(text)}
             </Typography.Paragraph>
           );
         }

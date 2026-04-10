@@ -3052,7 +3052,7 @@
     "被邀请用户ID": "Kitambulisho cha mtumiaji aliyealikwa",
     "分销比例": "Komisheni (pointi za msingi)",
     "分销比例范围错误": "Komisheni lazima iwe nambari kamili 0–10000",
-    "分销比例邀请说明行": "Komisheni ya uwekaji kwa kila mwalikwa (0–10000 bp; 100 = 1% ya kwota yao kwako). Chaguo-msingi {{bps}} bp. Inaongezwa kwenye salio baada ya uwekaji kufanikiwa.",
+    "分销比例邀请说明行": "Komisheni ya uwekaji kwa kila mwalikwa: imehifadhiwa kama sehemu 1/10000 ya asilimia (1 = 0.01%; 0–10000). Chaguo-msingi {{percent}}. Inaongezwa kwenye mapato ya ubia yanasubiri na jumla baada ya uwekaji; unaweza kuhamisha kwenye salio.",
     "邀请人": "Mwalike",
     "邀请人数": "Idadi ya walioalikwa",
     "邀请信息": "Taarifa za mialiko",

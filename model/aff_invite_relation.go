@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -11,7 +12,7 @@ import (
 )
 
 // AffInviteRelation 邀请人与被邀请人关系表：为每个被邀请人单独配置充值分销比例。
-// CommissionRatioBps 为万分比（basis points），100 表示 1%，10000 表示 100%。
+// CommissionRatioBps 存储单位为万分之一（相对于「百分比」）：1 表示 0.01%，100 表示 1%，10000 表示 100%。
 type AffInviteRelation struct {
 	Id                 int   `json:"id" gorm:"primaryKey;autoIncrement"`
 	InviterId          int   `json:"inviter_id" gorm:"not null;uniqueIndex:idx_aff_inv_pair"`
@@ -33,7 +34,7 @@ type AffInviteeListItem struct {
 	InviteeId          int    `json:"invitee_id"`
 	Username           string `json:"username"`
 	DisplayName        string `json:"display_name"`
-	CommissionRatioBps int    `json:"commission_ratio_bps"`
+	CommissionRatioBps int    `json:"commission_ratio_bps"` // 万分之一单位（1=0.01%），前端展示为百分比
 }
 
 // EnsureAffInviteRelation 注册成功后建立关系行，比例初始为系统默认 AffiliateDefaultCommissionBps。
@@ -97,11 +98,15 @@ func resolveCommissionBps(inviterId, inviteeId int) int {
 		common.SysError("resolveCommissionBps: " + err.Error())
 		return 0
 	}
+	// 历史数据中 0 表示未按新默认落库，按系统默认比例计奖；显式配置由管理员在后台写入正数比例
+	if rel.CommissionRatioBps <= 0 {
+		return common.AffiliateDefaultCommissionBps
+	}
 	return rel.CommissionRatioBps
 }
 
-// ApplyAffiliateTopupReward 被邀请用户获得充值额度 quotaAdded 后，按独立配置比例奖励邀请人账户余额（quota）。
-// 在各类充值成功路径的事务提交之后调用，避免与订单事务耦合；额度更新本身为原子 SQL。
+// ApplyAffiliateTopupReward 被邀请用户获得充值额度 quotaAdded 后，按邀请关系比例将提成记入邀请人 aff_quota / aff_history（与 resolveCommissionBps 一致，不增加 quota）。
+// 须在支付回调完成入账后调用，与订单事务解耦。
 func ApplyAffiliateTopupReward(inviteeUserId int, quotaAdded int) {
 	if inviteeUserId <= 0 || quotaAdded <= 0 {
 		return
@@ -125,11 +130,20 @@ func ApplyAffiliateTopupReward(inviteeUserId int, quotaAdded int) {
 	if reward <= 0 {
 		return
 	}
-	if err := IncreaseUserQuota(inviterId, reward, true); err != nil {
+	if err := IncreaseUserAffCommissionQuota(inviterId, reward); err != nil {
 		common.SysError(fmt.Sprintf("ApplyAffiliateTopupReward: inviter=%d invitee=%d reward=%d err=%v", inviterId, inviteeUserId, reward, err))
 		return
 	}
-	RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请分销奖励（被邀请用户 %d 充值）%s，比例 %d 万分点", inviteeUserId, logger.LogQuota(reward), bps))
+	inviteeLabel := strings.TrimSpace(invitee.Username)
+	if inviteeLabel == "" {
+		inviteeLabel = strings.TrimSpace(invitee.DisplayName)
+	}
+	if inviteeLabel == "" {
+		inviteeLabel = fmt.Sprintf("ID:%d", invitee.Id)
+	}
+	pct := logger.FormatCommissionRatioAsPercent(bps)
+	amt := logger.LogQuotaConcise(reward)
+	RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请分销奖励（被邀请用户 %s 充值）%s，分成比例 %s", inviteeLabel, amt, pct))
 }
 
 // ListAffInvitees 分页返回当前用户邀请注册的用户及其分销比例。
@@ -166,6 +180,8 @@ func ListAffInvitees(inviterId int, pageInfo *common.PageInfo) ([]AffInviteeList
 		bps, ok := bpsMap[u.Id]
 		if !ok {
 			bps = defaultBps
+		} else if bps <= 0 {
+			bps = defaultBps
 		}
 		items = append(items, AffInviteeListItem{
 			InviteeId:          u.Id,
@@ -183,7 +199,7 @@ func UpdateAffInviteeCommission(inviterId, inviteeUserId, commissionBps int) err
 		return errors.New("invalid id")
 	}
 	if commissionBps < 0 || commissionBps > maxAffiliateCommissionBps {
-		return fmt.Errorf("commission_ratio_bps must be 0..%d", maxAffiliateCommissionBps)
+		return fmt.Errorf("commission_ratio_bps must be 0..%d (万分之一单位，1=0.01%%)", maxAffiliateCommissionBps)
 	}
 	invitee, err := GetUserById(inviteeUserId, false)
 	if err != nil {

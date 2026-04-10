@@ -901,6 +901,24 @@ func increaseUserQuota(id int, quota int) (err error) {
 	return err
 }
 
+// IncreaseUserAffCommissionQuota 分销提成计入邀请人待使用收益(aff_quota)与累计总收益(aff_history)，不增加 quota。
+func IncreaseUserAffCommissionQuota(inviterId int, delta int) error {
+	if inviterId <= 0 || delta <= 0 {
+		return nil
+	}
+	tx := DB.Model(&User{}).Where("id = ?", inviterId).Updates(map[string]interface{}{
+		"aff_quota":   gorm.Expr("aff_quota + ?", delta),
+		"aff_history": gorm.Expr("aff_history + ?", delta),
+	})
+	if tx.Error != nil {
+		return tx.Error
+	}
+	if tx.RowsAffected == 0 {
+		return fmt.Errorf("inviter user not found: %d", inviterId)
+	}
+	return nil
+}
+
 func DecreaseUserQuota(id int, quota int) (err error) {
 	if quota < 0 {
 		return errors.New("quota 不能为负数！")

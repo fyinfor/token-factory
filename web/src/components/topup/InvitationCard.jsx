@@ -31,7 +31,13 @@ import {
   // InputNumber, // 暂时禁用分销比例编辑功能
 } from '@douyinfe/semi-ui';
 import { Copy, Users, BarChart2, TrendingUp, Gift, Zap, Phone, MessageCircle } from 'lucide-react';
-import { API, showError, showSuccess, isDistributor } from '../../helpers';
+import {
+  API,
+  showError,
+  showSuccess,
+  isDistributor,
+  formatCommissionRatioPercent,
+} from '../../helpers';
 
 const { Text } = Typography;
 
@@ -49,7 +55,6 @@ const InvitationCard = ({
   const [inviteTotal, setInviteTotal] = useState(0);
   const [invitePage, setInvitePage] = useState(1);
   const [invitePageSize, setInvitePageSize] = useState(10);
-  const [defaultCommissionBps, setDefaultCommissionBps] = useState(0);
   // const [savingId, setSavingId] = useState(null); // 暂时禁用分销比例编辑功能
 
   const loadInvitees = useCallback(
@@ -73,7 +78,6 @@ const InvitationCard = ({
         //   })),
         // ); // 暂时禁用分销比例编辑功能
         setInviteTotal(data?.total ?? 0);
-        setDefaultCommissionBps(data?.default_commission_ratio_bps ?? 0);
         setInvitePage(p);
       } catch {
         showError(t('加载失败'));
@@ -154,9 +158,7 @@ const InvitationCard = ({
       title: t('分销比例'),
       dataIndex: 'commission_ratio_bps',
       width: 120,
-      render: (bps) => (
-        <Text>{bps ?? 0}</Text>
-      ),
+      render: (bps) => <Text>{formatCommissionRatioPercent(bps)}</Text>,
     },
     // ====== 暂时禁用分销比例编辑功能 - 可编辑版本 ======
     // {
@@ -363,9 +365,6 @@ const InvitationCard = ({
               </div>
             }
           >
-            <Text type='tertiary' className='text-xs block mb-3'>
-              {t('分销比例邀请说明行', { bps: defaultCommissionBps })}
-            </Text>
             <Table
               rowKey='invitee_id'
               columns={inviteColumns}
@@ -476,9 +475,6 @@ const InvitationCard = ({
         centered
         maskClosable
       >
-        <Text type='tertiary' className='text-xs block mb-3'>
-          {t('分销比例邀请说明行', { bps: defaultCommissionBps })}
-        </Text>
         <Table
           rowKey='invitee_id'
           columns={inviteColumns}

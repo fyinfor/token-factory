@@ -3002,7 +3002,7 @@
     "被邀请用户ID": "ID utilisateur filleul",
     "分销比例": "Commission (points de base)",
     "分销比例范围错误": "La commission doit être un entier entre 0 et 10000 (points de base)",
-    "分销比例邀请说明行": "Commission par filleul en points de base (0–10000 ; 100 = 1 % de son quota rechargé). Sinon défaut système {{bps}} pb. Créditée sur votre solde après recharge réussie.",
+    "分销比例邀请说明行": "Commission par filleul : stockée en dix-millièmes de pour cent (1 = 0,01 % ; 0–10000). Défaut système {{percent}} si non défini. Créditée sur gains d’affiliation en attente et totaux après recharge ; transfert possible vers le solde.",
     "邀请人": "Inviteur",
     "邀请人数": "Nombre de personnes invitées",
     "邀请信息": "Informations sur l'invitation",

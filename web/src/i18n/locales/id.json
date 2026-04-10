@@ -3052,7 +3052,7 @@
     "被邀请用户ID": "ID pengguna diundang",
     "分销比例": "Komisi (basis point)",
     "分销比例范围错误": "Komisi harus bilangan bulat 0–10000 (basis point)",
-    "分销比例邀请说明行": "Komisi isi ulang per undangan (0–10000 bp; 100 = 1% kuota mereka untuk Anda). Default sistem {{bps}} bp. Dikreditkan ke saldo setelah isi ulang berhasil.",
+    "分销比例邀请说明行": "Komisi isi ulang per undangan: disimpan per 1/10000 % (1 = 0,01 %; 0–10000). Default {{percent}} jika belum diatur. Dikreditkan ke pendapatan afiliasi tertunda dan total setelah isi ulang berhasil; bisa dipindahkan ke saldo.",
     "邀请人": "Pengundang",
     "邀请人数": "Jumlah yang diundang",
     "邀请信息": "Informasi undangan",

@@ -26,6 +26,7 @@ import {
   MESSAGE_ROLES,
 } from '../constants/playground.constants';
 import { TABLE_COMPACT_MODES_KEY } from '../constants';
+import { USER_ROLES } from '../constants/user.constants';
 import { MOBILE_BREAKPOINT } from '../hooks/common/useIsMobile';
 
 const HTMLToastContent = ({ htmlContent }) => {
@@ -51,6 +52,19 @@ export function isRoot() {
   if (!user) return false;
   user = JSON.parse(user);
   return user.role >= 100;
+}
+
+/** 分销比例 commission_ratio_bps：后端万分之一单位（1=0.01%），转为百分比展示如 10%、0.01% */
+export function formatCommissionRatioPercent(bps) {
+  if (bps == null || Number.isNaN(Number(bps))) {
+    return '—';
+  }
+  const n = Number(bps) / 100;
+  if (!Number.isFinite(n)) {
+    return '—';
+  }
+  const s = n.toFixed(8).replace(/\.?0+$/, '');
+  return `${s}%`;
 }
 
 export function getSystemName() {

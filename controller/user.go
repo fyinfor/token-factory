@@ -437,10 +437,10 @@ func calculateUserPermissions(userRole int) map[string]interface{} {
 			},
 		}
 	} else {
-		// 普通用户只能设置个人功能，不包含管理员区域
+		// 普通用户、分销商：仅个人功能，不含管理后台
 		permissions["sidebar_settings"] = true
 		permissions["sidebar_modules"] = map[string]interface{}{
-			"admin": false, // 普通用户不能访问管理员区域
+			"admin": false,
 		}
 	}
 
@@ -843,12 +843,10 @@ type ManageRequest struct {
 	Action string `json:"action"`
 }
 
-// ManageUser Only admin user can do this
+// ManageUser 管理员对用户启用/禁用、删除、提升/降级身份（含分销商 RoleDistributorUser）。
 func ManageUser(c *gin.Context) {
 	var req ManageRequest
-	err := json.NewDecoder(c.Request.Body).Decode(&req)
-
-	if err != nil {
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}
@@ -888,25 +886,44 @@ func ManageUser(c *gin.Context) {
 			return
 		}
 	case "promote":
-		if myRole != common.RoleRootUser {
-			common.ApiErrorI18n(c, i18n.MsgUserAdminCannotPromote)
+		// 普通用户 → 分销商：管理员或超级管理员；分销商 → 管理员：仅超级管理员
+		switch user.Role {
+		case common.RoleCommonUser:
+			user.Role = common.RoleDistributorUser
+		case common.RoleDistributorUser:
+			if myRole != common.RoleRootUser {
+				common.ApiErrorI18n(c, i18n.MsgUserAdminCannotPromote)
+				return
+			}
+			user.Role = common.RoleAdminUser
+		case common.RoleAdminUser, common.RoleRootUser:
+			common.ApiErrorI18n(c, i18n.MsgUserCannotPromoteFurther)
+			return
+		default:
+			common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 			return
 		}
-		if user.Role >= common.RoleAdminUser {
-			common.ApiErrorI18n(c, i18n.MsgUserAlreadyAdmin)
-			return
-		}
-		user.Role = common.RoleAdminUser
 	case "demote":
 		if user.Role == common.RoleRootUser {
 			common.ApiErrorI18n(c, i18n.MsgUserCannotDemoteRootUser)
 			return
 		}
-		if user.Role == common.RoleCommonUser {
+		switch user.Role {
+		case common.RoleAdminUser:
+			if myRole != common.RoleRootUser {
+				common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
+				return
+			}
+			user.Role = common.RoleDistributorUser
+		case common.RoleDistributorUser:
+			user.Role = common.RoleCommonUser
+		case common.RoleCommonUser:
 			common.ApiErrorI18n(c, i18n.MsgUserAlreadyCommon)
 			return
+		default:
+			common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+			return
 		}
-		user.Role = common.RoleCommonUser
 	}
 
 	if err := user.Update(false); err != nil {
