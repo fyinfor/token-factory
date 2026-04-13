@@ -138,6 +138,3 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.40.1 // indirect
 )
-
-// 本地 monorepo：发布 router-engine 并打 v* tag 后，可删除本行，仅用 require 固定版本。
-replace github.com/fyinfor/router-engine => ../router-engine
