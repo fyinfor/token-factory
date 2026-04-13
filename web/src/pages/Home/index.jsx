@@ -201,7 +201,7 @@ const Home = () => {
                 </p>
 
                 {/* 操作按钮 */}
-                <div className='flex flex-row gap-3 justify-center items-center'>
+                <div className='flex flex-row gap-3 justify-center items-center mb-8'>
                   <Link to='/about'>
                     <Button
                       theme='solid'
@@ -214,6 +214,19 @@ const Home = () => {
                     </Button>
                   </Link>
                 </div>
+              </div>
+
+              {/* 广告展示位 */}
+              <div className='w-full max-w-[800px] mx-auto mb-8'>
+                <Link to='/console/provider'>
+                  <div className='relative w-full h-[140px] md:h-[280px] overflow-hidden cursor-pointer transition-transform duration-300 hover:scale-[1.01]'>
+                    <img
+                      src='/ad.jpg'
+                      alt='Advertisement'
+                      className='w-full h-full object-cover rounded-[10px]'
+                    />
+                  </div>
+                </Link>
               </div>
 
               {/* 模型列表区域 */}
