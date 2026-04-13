@@ -42,6 +42,13 @@ const (
 	ContextKeyAutoGroupIndex      ContextKey = "auto_group_index"
 	ContextKeyAutoGroupRetryIndex ContextKey = "auto_group_retry_index"
 
+	// OpenRouter-style provider routing (parsed from chat completion body).
+	ContextKeyOpenRouterProviderJSON ContextKey = "openrouter_provider_json"
+	ContextKeyRequestModelsList      ContextKey = "request_models_list"
+	ContextKeyRequestHasTools        ContextKey = "request_has_tools"
+	ContextKeySmartRouteChannelOrder ContextKey = "smart_route_channel_order"
+	ContextKeySmartRouteSelectGroup  ContextKey = "smart_route_select_group"
+
 	/* user related keys */
 	ContextKeyUserId      ContextKey = "id"
 	ContextKeyUserSetting ContextKey = "user_setting"

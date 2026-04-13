@@ -190,6 +190,24 @@ func GetRandomSatisfiedChannel(group string, model string, retry int) (*Channel,
 	return nil, errors.New("channel not found")
 }
 
+// ListChannelIDsForGroupModel returns cached channel ids for a group/model (priority order).
+// When memory cache is disabled, returns nil (smart routing falls back to legacy selection).
+func ListChannelIDsForGroupModel(group, model string) []int {
+	if !common.MemoryCacheEnabled {
+		return nil
+	}
+	channelSyncLock.RLock()
+	defer channelSyncLock.RUnlock()
+	channels := group2model2channels[group][model]
+	if len(channels) == 0 {
+		normalizedModel := ratio_setting.FormatMatchingModelName(model)
+		channels = group2model2channels[group][normalizedModel]
+	}
+	out := make([]int, len(channels))
+	copy(out, channels)
+	return out
+}
+
 func CacheGetChannel(id int) (*Channel, error) {
 	if !common.MemoryCacheEnabled {
 		return GetChannelById(id, true)

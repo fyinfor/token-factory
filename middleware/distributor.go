@@ -79,8 +79,10 @@ func Distribute() func(c *gin.Context) {
 					abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorModelNameRequired))
 					return
 				}
+				service.IngestChatCompletionRoutingHints(c, modelRequest.Model)
 				var selectGroup string
 				usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
+				userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
 				// check path is /pg/chat/completions
 				if strings.HasPrefix(c.Request.URL.Path, "/pg/chat/completions") {
 					playgroundRequest := &dto.PlayGroundRequest{}
@@ -108,7 +110,6 @@ func Distribute() func(c *gin.Context) {
 								return
 							}
 						} else if usingGroup == "auto" {
-							userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
 							autoGroups := service.GetUserAutoGroup(userGroup)
 							for _, g := range autoGroups {
 								if model.IsChannelEnabledForGroupModel(g, modelRequest.Model, preferred.Id) {
@@ -128,12 +129,22 @@ func Distribute() func(c *gin.Context) {
 				}
 
 				if channel == nil {
-					channel, selectGroup, err = service.CacheGetRandomSatisfiedChannel(&service.RetryParam{
-						Ctx:        c,
-						ModelName:  modelRequest.Model,
-						TokenGroup: usingGroup,
-						Retry:      common.GetPointer(0),
-					})
+					var err error
+					providerJSON := common.GetContextKeyString(c, constant.ContextKeyOpenRouterProviderJSON)
+					if ch, sg, ok := service.TrySmartRouteChannel(c, usingGroup, userGroup, modelRequest.Model, providerJSON); ok {
+						channel = ch
+						selectGroup = sg
+						if usingGroup == "auto" {
+							common.SetContextKey(c, constant.ContextKeyAutoGroup, sg)
+						}
+					} else {
+						channel, selectGroup, err = service.CacheGetRandomSatisfiedChannel(&service.RetryParam{
+							Ctx:        c,
+							ModelName:  modelRequest.Model,
+							TokenGroup: usingGroup,
+							Retry:      common.GetPointer(0),
+						})
+					}
 					if err != nil {
 						showGroup := usingGroup
 						if usingGroup == "auto" {
