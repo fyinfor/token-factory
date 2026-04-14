@@ -53,6 +53,9 @@ func SetApiRouter(router *gin.Engine) {
 		// Universal secure verification routes
 		apiRouter.POST("/verify", middleware.UserAuth(), middleware.CriticalRateLimit(), controller.UniversalVerify)
 
+		// 阿里云 OSS 通用上传（需在运营设置中启用 OSS）
+		apiRouter.POST("/oss/upload", middleware.UserAuth(), middleware.UploadRateLimit(), controller.OssUpload)
+
 		userRoute := apiRouter.Group("/user")
 		{
 			userRoute.POST("/register", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.Register)

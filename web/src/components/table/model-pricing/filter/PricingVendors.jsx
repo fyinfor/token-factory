@@ -83,7 +83,7 @@ const PricingVendors = ({
     const result = [
       {
         value: 'all',
-        label: t('全部供应商'),
+        label: t('全部模型'),
         tagCount: getVendorCount('all'),
       },
     ];
@@ -115,7 +115,7 @@ const PricingVendors = ({
 
   return (
     <SelectableButtonGroup
-      title={t('供应商')}
+      title={t('模型类型')}
       items={items}
       activeValue={filterVendor}
       onChange={setFilterVendor}

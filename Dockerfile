@@ -8,7 +8,7 @@ COPY ./web .
 COPY ./VERSION .
 RUN DISABLE_ESLINT_PLUGIN='true' VITE_REACT_APP_VERSION=$(cat VERSION) bun run build
 
-FROM golang:1.26.1-alpine@sha256:2389ebfa5b7f43eeafbd6be0c3700cc46690ef842ad962f6c5bd6be49ed82039 AS builder2
+FROM golang:1.26.2-alpine@sha256:c2a1f7b2095d046ae14b286b18413a05bb82c9bca9b25fe7ff5efef0f0826166 AS builder2
 ENV GO111MODULE=on CGO_ENABLED=0
 
 ARG TARGETOS
@@ -18,8 +18,20 @@ ENV GOEXPERIMENT=greenteagc
 
 WORKDIR /build
 
+RUN apk add --no-cache git ca-certificates
+
 ADD go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=secret,id=github_token \
+    set -eux; \
+    token="$(cat /run/secrets/github_token || true)"; \
+    if [ -n "$token" ]; then \
+      git config --global url."https://x-access-token:${token}@github.com/".insteadOf "https://github.com/"; \
+    fi; \
+    go env -w GOPRIVATE=github.com/fyinfor/*; \
+    go mod download; \
+    if [ -n "$token" ]; then \
+      git config --global --unset-all url."https://x-access-token:${token}@github.com/".insteadOf || true; \
+    fi
 
 COPY . .
 COPY --from=builder /build/dist ./web/dist
