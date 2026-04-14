@@ -318,7 +318,7 @@ export const getModelsColumns = ({
       render: (text) => renderDescription(text, 200),
     },
     {
-      title: t('供应商'),
+      title: t('模型类型'),
       dataIndex: 'vendor_id',
       render: (vendorId, record) => renderVendorTag(vendorId, vendorMap, t),
     },

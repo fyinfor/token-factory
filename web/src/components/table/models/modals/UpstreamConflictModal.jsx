@@ -39,7 +39,7 @@ const FIELD_LABELS = {
   description: '描述',
   icon: '图标',
   tags: '标签',
-  vendor: '供应商',
+  vendor: '模型类型',
   name_rule: '命名规则',
   status: '状态',
 };
