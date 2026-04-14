@@ -47,6 +47,7 @@ import Playground from './pages/Playground';
 import Subscription from './pages/Subscription';
 import OAuth2Callback from './components/auth/OAuth2Callback';
 import PersonalSetting from './components/settings/PersonalSetting';
+import ProviderPage from './pages/Provider';
 import Setup from './pages/Setup';
 import SetupCheck from './components/layout/SetupCheck';
 
@@ -264,6 +265,14 @@ function App() {
               <Suspense fallback={<Loading></Loading>} key={location.pathname}>
                 <PersonalSetting />
               </Suspense>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/provider'
+          element={
+            <PrivateRoute>
+              <ProviderPage />
             </PrivateRoute>
           }
         />
