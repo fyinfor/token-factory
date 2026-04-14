@@ -20,6 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 import React from 'react';
 import { Input, ImagePreview } from '@douyinfe/semi-ui';
 import { IconSearch } from '@douyinfe/semi-icons';
+import PricingProviderType from '../table/model-pricing/filter/PricingProviderType';
 import PricingVendors from '../table/model-pricing/filter/PricingVendors';
 import PricingQuotaTypes from '../table/model-pricing/filter/PricingQuotaTypes';
 import PricingTags from '../table/model-pricing/filter/PricingTags';
@@ -39,6 +40,8 @@ const HomeModelList = () => {
     filterTag: pricingData.filterTag,
     searchValue: pricingData.searchValue,
   });
+
+  const [filterProviderType, setFilterProviderType] = React.useState('all');
 
   React.useEffect(() => {
     pricingData.setPageSize(40);
@@ -77,6 +80,15 @@ const HomeModelList = () => {
         </div>
 
         <div className='mb-4'>
+          <PricingProviderType
+            filterProviderType={filterProviderType}
+            setFilterProviderType={setFilterProviderType}
+            totalCount={pricingData.filteredModels.length}
+            loading={pricingData.loading}
+            t={pricingData.t}
+            layout='inline'
+          />
+
           <PricingVendors
             filterVendor={pricingData.filterVendor}
             setFilterVendor={pricingData.setFilterVendor}
