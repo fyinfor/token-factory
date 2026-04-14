@@ -18,8 +18,20 @@ ENV GOEXPERIMENT=greenteagc
 
 WORKDIR /build
 
+RUN apk add --no-cache git ca-certificates
+
 ADD go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=secret,id=github_token \
+    set -eux; \
+    token="$(cat /run/secrets/github_token || true)"; \
+    if [ -n "$token" ]; then \
+      git config --global url."https://x-access-token:${token}@github.com/".insteadOf "https://github.com/"; \
+    fi; \
+    go env -w GOPRIVATE=github.com/fyinfor/*; \
+    go mod download; \
+    if [ -n "$token" ]; then \
+      git config --global --unset-all url."https://x-access-token:${token}@github.com/".insteadOf || true; \
+    fi
 
 COPY . .
 COPY --from=builder /build/dist ./web/dist
