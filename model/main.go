@@ -15,6 +15,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 var commonGroupCol string
@@ -252,6 +253,12 @@ func migrateDB() error {
 	migrateSubscriptionPlanPriceAmount()
 	// Migrate model_limits column from varchar to text for existing tables
 	if err := migrateTokenModelLimitsToText(); err != nil {
+		return err
+	}
+	// GORM AutoMigrate + Postgres: MigrateColumnUnique drops NamingStrategy.UniqueName(table, col)
+	// when the column is UNIQUE in information_schema but the model uses uniqueIndex (field.Unique=false).
+	// If the live constraint was created with another name (e.g. Postgres default), DROP uni_* fails (SQLSTATE 42704).
+	if err := migratePrefillGroupsPostgresNameUniqueConstraint(); err != nil {
 		return err
 	}
 
@@ -587,6 +594,44 @@ func CloseDB() error {
 		}
 	}
 	return closeDB(DB)
+}
+
+// migratePrefillGroupsPostgresNameUniqueConstraint removes legacy UNIQUE constraints on
+// prefill_groups.name so GORM's MigrateColumnUnique does not issue a failing
+// DROP CONSTRAINT for the default namingStrategy name when the DB used a different name.
+func migratePrefillGroupsPostgresNameUniqueConstraint() error {
+	if !common.UsingPostgreSQL {
+		return nil
+	}
+	const tableName = "prefill_groups"
+	if !DB.Migrator().HasTable(tableName) {
+		return nil
+	}
+	var conNames []string
+	if err := DB.Raw(`
+		SELECT c.conname
+		FROM pg_constraint c
+		JOIN pg_class t ON c.conrelid = t.oid
+		JOIN pg_namespace n ON t.relnamespace = n.oid AND n.nspname = current_schema()
+		WHERE t.relname = ?
+		  AND c.contype = 'u'
+		  AND cardinality(c.conkey) = 1
+		  AND EXISTS (
+			SELECT 1 FROM pg_attribute a
+			WHERE a.attrelid = c.conrelid
+			  AND a.attnum = c.conkey[1]
+			  AND a.attname = 'name'
+			  AND NOT a.attisdropped
+		  )
+	`, tableName).Scan(&conNames).Error; err != nil {
+		return fmt.Errorf("prefill_groups: list unique constraints on name: %w", err)
+	}
+	for _, n := range conNames {
+		if err := DB.Exec("ALTER TABLE ? DROP CONSTRAINT IF EXISTS ?", clause.Table{Name: tableName}, clause.Column{Name: n}).Error; err != nil {
+			return fmt.Errorf("prefill_groups: drop constraint %q: %w", n, err)
+		}
+	}
+	return nil
 }
 
 // checkMySQLChineseSupport ensures the MySQL connection and current schema
