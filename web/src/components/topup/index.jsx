@@ -33,6 +33,8 @@ import { Modal, Toast } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
 import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
+import { QRCodeSVG } from 'qrcode.react';
+import { SiWechat } from 'react-icons/si';
 
 import RechargeCard from './RechargeCard';
 import InvitationCard from './InvitationCard';
@@ -83,6 +85,9 @@ const TopUp = () => {
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [payMethods, setPayMethods] = useState([]);
+  const [wechatQrOpen, setWechatQrOpen] = useState(false);
+  const [wechatQrValue, setWechatQrValue] = useState('');
+  const [wechatQrBaseQuota, setWechatQrBaseQuota] = useState(null);
 
   const affFetchedRef = useRef(false);
 
@@ -234,6 +239,22 @@ const TopUp = () => {
             // 普通支付表单提交
             let params = data;
             let url = res.data.url;
+            /**
+             * 桌面端遇到 weixin:// deep link 时，不直接唤起本地微信，
+             * 改为展示二维码给用户扫码支付。
+             */
+            const isWeixinDeepLink =
+              typeof url === 'string' &&
+              url.toLowerCase().startsWith('weixin://');
+            const isMobileDevice = /android|iphone|ipad|ipod|mobile/i.test(
+              navigator.userAgent || '',
+            );
+            if (isWeixinDeepLink && !isMobileDevice) {
+              setWechatQrBaseQuota(Number(userState?.user?.quota ?? 0));
+              setWechatQrValue(url);
+              setWechatQrOpen(true);
+              return;
+            }
             let form = document.createElement('form');
             form.action = url;
             form.method = 'POST';
@@ -356,8 +377,28 @@ const TopUp = () => {
     const { success, message, data } = res.data;
     if (success) {
       userDispatch({ type: 'login', payload: data });
+      return data;
     } else {
       showError(message);
+      return null;
+    }
+  };
+
+  /**
+   * 静默拉取用户信息（用于二维码支付轮询，不弹错误提示，避免干扰用户）。
+   * @returns {Promise<null|Record<string, unknown>>}
+   */
+  const getUserQuotaSilently = async () => {
+    try {
+      const res = await API.get(`/api/user/self`, { skipErrorHandler: true });
+      const { success, data } = res.data || {};
+      if (success && data) {
+        userDispatch({ type: 'login', payload: data });
+        return data;
+      }
+      return null;
+    } catch {
+      return null;
     }
   };
 
@@ -688,6 +729,52 @@ const TopUp = () => {
     setSelectedCreemProduct(null);
   };
 
+  /**
+   * 关闭微信扫码弹窗并清理二维码内容。
+   */
+  const handleWechatQrCancel = () => {
+    setWechatQrOpen(false);
+    setWechatQrValue('');
+    setWechatQrBaseQuota(null);
+  };
+
+  /**
+   * 微信扫码弹窗打开时轮询用户额度；检测到额度增长即认为支付到账并自动关闭弹窗。
+   */
+  useEffect(() => {
+    if (!wechatQrOpen) {
+      return;
+    }
+    let active = true;
+    const startTs = Date.now();
+    const timer = setInterval(async () => {
+      if (!active) {
+        return;
+      }
+      const user = await getUserQuotaSilently();
+      if (!user) {
+        return;
+      }
+      const currentQuota = Number(user.quota ?? 0);
+      const baseQuota = Number(wechatQrBaseQuota ?? 0);
+      if (currentQuota > baseQuota) {
+        showSuccess(t('检测到支付已完成，二维码已自动关闭'));
+        handleWechatQrCancel();
+        // PC 扫码支付不会触发当前浏览器回跳，这里在到账后主动跳转到回调页面。
+        window.location.href = '/console/log?show_history=true';
+        return;
+      }
+      // 超过 10 分钟自动停止轮询，避免页面长时间空转。
+      if (Date.now() - startTs > 10 * 60 * 1000) {
+        handleWechatQrCancel();
+      }
+    }, 3000);
+    return () => {
+      active = false;
+      clearInterval(timer);
+    };
+  }, [wechatQrOpen, wechatQrBaseQuota]);
+
   // 选择预设充值额度
   const selectPresetAmount = (preset) => {
     setTopUpCount(preset.value);
@@ -750,6 +837,50 @@ const TopUp = () => {
         onCancel={handleHistoryCancel}
         t={t}
       />
+
+      {/* 微信二维码支付弹窗（PC 遇到 weixin:// deep link 时展示） */}
+      <Modal
+        title={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <SiWechat size={18} color='#07C160' />
+            <span>{t('微信扫码支付')}</span>
+          </div>
+        }
+        visible={wechatQrOpen}
+        onCancel={handleWechatQrCancel}
+        footer={null}
+        maskClosable
+        centered
+        width={420}
+      >
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 12,
+            paddingTop: 8,
+            paddingBottom: 8,
+          }}
+        >
+          <QRCodeSVG value={wechatQrValue || 'about:blank'} size={240} />
+          <div style={{ color: 'var(--semi-color-text-1)' }}>
+            {t('请使用微信扫一扫完成支付')}
+          </div>
+          <div
+            style={{
+              color: 'var(--semi-color-text-2)',
+              fontSize: 12,
+              wordBreak: 'break-all',
+              textAlign: 'center',
+            }}
+          >
+            {t('若扫码失败，可复制以下链接到其他设备打开：')}
+            <br />
+            {wechatQrValue}
+          </div>
+        </div>
+      </Modal>
 
       {/* Creem 充值确认模态框 */}
       <Modal
