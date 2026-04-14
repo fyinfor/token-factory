@@ -269,6 +269,9 @@ const PricingCardView = ({
                       </h3>
                       <div className='flex flex-col gap-1 text-xs mt-1'>
                         {formatPriceInfo(priceData, t, siteDisplayType)}
+                        <div className='text-gray-600'>
+                          {t('供应商')}：{t('官方')}
+                        </div>
                       </div>
                     </div>
                   </div>
