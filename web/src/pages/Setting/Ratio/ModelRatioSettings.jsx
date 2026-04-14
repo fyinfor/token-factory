@@ -228,7 +228,7 @@ export default function ModelRatioSettings(props) {
         <Row gutter={16}>
           <Col xs={24} sm={16}>
             <Form.TextArea
-              label={t('模型补全倍率（仅对自定义模型有效）')}
+              label={t('模型输出倍率（仅对自定义模型有效）')}
               extraText={t('仅对自定义模型有效')}
               placeholder={t('为一个 JSON 文本，键为模型名称，值为倍率')}
               field={'CompletionRatio'}
@@ -296,9 +296,9 @@ export default function ModelRatioSettings(props) {
         <Row gutter={16}>
           <Col xs={24} sm={16}>
             <Form.TextArea
-              label={t('音频补全倍率（仅部分模型支持该计费）')}
+              label={t('音频输出倍率（仅部分模型支持该计费）')}
               extraText={t(
-                '音频输出补全相关的倍率设置，键为模型名称，值为倍率',
+                '音频输出相关的倍率设置，键为模型名称，值为倍率',
               )}
               placeholder={t(
                 '为一个 JSON 文本，键为模型名称，值为倍率，例如：{"gpt-4o-realtime": 2}',

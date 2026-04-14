@@ -43,6 +43,7 @@ import {
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 import CustomOAuthSetting from './CustomOAuthSetting';
+import SettingsOss from '../../pages/Setting/System/SettingsOss';
 
 const SystemSetting = () => {
   const { t } = useTranslation();
@@ -109,6 +110,14 @@ const SystemSetting = () => {
     'fetch_setting.ip_list': [],
     'fetch_setting.allowed_ports': [],
     'fetch_setting.apply_ip_filter_for_domain': true,
+    'oss_setting.enabled': false,
+    'oss_setting.endpoint': '',
+    'oss_setting.bucket': '',
+    'oss_setting.access_key_id': '',
+    'oss_setting.access_key_secret': '',
+    'oss_setting.public_base_url': '',
+    'oss_setting.object_key_prefix': 'uploads/',
+    'oss_setting.max_file_size_mb': 20,
   });
 
   const [originInputs, setOriginInputs] = useState({});
@@ -204,6 +213,14 @@ const SystemSetting = () => {
             // 确保有默认值
             item.value = item.value || 'preferred';
             break;
+          case 'oss_setting.enabled':
+            item.value = toBoolean(item.value);
+            break;
+          case 'oss_setting.max_file_size_mb': {
+            const n = parseInt(item.value, 10);
+            item.value = Number.isFinite(n) ? n : 20;
+            break;
+          }
           case 'Price':
           case 'MinTopUp':
             item.value = parseFloat(item.value);
@@ -697,6 +714,7 @@ const SystemSetting = () => {
   return (
     <div>
       {isLoaded ? (
+        <>
         <Form
           initValues={inputs}
           onValueChange={handleFormChange}
@@ -1646,6 +1664,10 @@ const SystemSetting = () => {
             </div>
           )}
         </Form>
+        <Card style={{ marginTop: '10px' }}>
+          <SettingsOss options={inputs} refresh={getOptions} />
+        </Card>
+        </>
       ) : (
         <div
           style={{
