@@ -56,6 +56,8 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
+          secrets: |
+            github_token=${{ secrets.FYINFOR_GH_PAT }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           platforms: linux/amd64
