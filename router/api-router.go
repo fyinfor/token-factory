@@ -94,6 +94,11 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/aff_transfer", controller.TransferAffQuota)
 				selfRoute.GET("/aff_invitees", controller.GetAffInvitees)
 				selfRoute.PUT("/setting", controller.UpdateUserSetting)
+				selfRoute.POST("/supplier/application", controller.SubmitSupplierApplication)
+				selfRoute.GET("/supplier/application/self", controller.ListMySupplierApplications)
+				selfRoute.GET("/messages/self", controller.ListMyMessages)
+				selfRoute.POST("/messages/:id/read", controller.MarkMyMessageRead)
+				selfRoute.GET("/messages/unread_count", controller.GetMyUnreadMessageCount)
 
 				// 2FA routes
 				selfRoute.GET("/2fa/status", controller.Get2FAStatus)
@@ -118,6 +123,8 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.GET("/topup", controller.GetAllTopUps)
 				adminRoute.POST("/topup/complete", controller.AdminCompleteTopUp)
 				adminRoute.GET("/search", controller.SearchUsers)
+				adminRoute.GET("/supplier/application", controller.AdminListSupplierApplications)
+				adminRoute.POST("/supplier/application/:id/review", controller.AdminReviewSupplierApplication)
 				adminRoute.GET("/:id/oauth/bindings", controller.GetUserOAuthBindingsByAdmin)
 				adminRoute.DELETE("/:id/oauth/bindings/:provider_id", controller.UnbindCustomOAuthByAdmin)
 				adminRoute.DELETE("/:id/bindings/:binding_type", controller.AdminClearUserBinding)

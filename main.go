@@ -24,15 +24,26 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	_ "github.com/QuantumNous/new-api/setting/performance_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	_ "github.com/QuantumNous/new-api/docs"
 
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 
 	_ "net/http/pprof"
 )
+
+// @title TokenFactory API
+// @version 1.0
+// @description TokenFactory backend API documentation powered by swaggo.
+// @BasePath /api
+// @securityDefinitions.apikey ApiKeyAuth
+// @in header
+// @name Authorization
 
 //go:embed web/dist
 var buildFS embed.FS
@@ -181,6 +192,9 @@ func main() {
 
 	InjectUmamiAnalytics()
 	InjectGoogleAnalytics()
+
+	// 注册 Swagger 文档路由。
+	server.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// 设置路由
 	router.SetRouter(server, buildFS, indexPage)
