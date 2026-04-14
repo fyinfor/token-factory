@@ -798,7 +798,7 @@ export const getModelPriceItems = (
         },
         {
           key: 'completion-ratio',
-          label: t('补全倍率'),
+          label: t('输出倍率'),
           value: priceData.completionRatio,
           suffix: 'x',
         },
@@ -828,7 +828,7 @@ export const getModelPriceItems = (
         },
         {
           key: 'audio-output-ratio',
-          label: t('音频补全倍率'),
+          label: t('音频输出倍率'),
           value: priceData.audioOutputRatio,
           suffix: 'x',
         },
@@ -848,7 +848,7 @@ export const getModelPriceItems = (
       },
       {
         key: 'completion',
-        label: t('补全价格'),
+        label: t('输出价格'),
         value: priceData.completionPrice,
         suffix: unitSuffix,
       },
@@ -878,7 +878,7 @@ export const getModelPriceItems = (
       },
       {
         key: 'audio-output',
-        label: t('音频补全价格'),
+        label: t('音频输出价格'),
         value: priceData.audioOutputPrice,
         suffix: unitSuffix,
       },
