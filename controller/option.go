@@ -69,6 +69,10 @@ func GetOptions(c *gin.Context) {
 		if k == "YipayAppSecret" {
 			continue
 		}
+		// OSS AccessKey 与 Secret 在循环结束后单独追加（脱敏）
+		if k == "oss_setting.access_key_id" || k == "oss_setting.access_key_secret" {
+			continue
+		}
 		value := common.Interface2String(v)
 		if strings.HasSuffix(k, "Token") ||
 			strings.HasSuffix(k, "Secret") ||
@@ -101,6 +105,34 @@ func GetOptions(c *gin.Context) {
 	options = append(options, &model.Option{
 		Key:   "YipayAppSecret",
 		Value: yipayDisp,
+	})
+	rawOssID := strings.TrimSpace(operation_setting.GetOssSetting().AccessKeyID)
+	if rawOssID == "" {
+		if v, ok := common.OptionMap["oss_setting.access_key_id"]; ok {
+			rawOssID = strings.TrimSpace(common.Interface2String(v))
+		}
+	}
+	ossIDDisp := ""
+	if rawOssID != "" {
+		ossIDDisp = common.MaskCredentialForAdminDisplay(rawOssID)
+	}
+	options = append(options, &model.Option{
+		Key:   "oss_setting.access_key_id",
+		Value: ossIDDisp,
+	})
+	rawOssSecret := strings.TrimSpace(operation_setting.GetOssSetting().AccessKeySecret)
+	if rawOssSecret == "" {
+		if v, ok := common.OptionMap["oss_setting.access_key_secret"]; ok {
+			rawOssSecret = strings.TrimSpace(common.Interface2String(v))
+		}
+	}
+	ossSecretDisp := ""
+	if rawOssSecret != "" {
+		ossSecretDisp = common.MaskCredentialForAdminDisplay(rawOssSecret)
+	}
+	options = append(options, &model.Option{
+		Key:   "oss_setting.access_key_secret",
+		Value: ossSecretDisp,
 	})
 	common.OptionMapRWMutex.Unlock()
 	options = append(options, &model.Option{
@@ -143,6 +175,24 @@ func UpdateOption(c *gin.Context) {
 	valStr := strings.TrimSpace(option.Value.(string))
 	if option.Key == "YipayAppSecret" && strings.TrimSpace(operation_setting.YipayAppSecret) != "" {
 		if valStr == common.MaskCredentialForAdminDisplay(operation_setting.YipayAppSecret) {
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"message": "",
+			})
+			return
+		}
+	}
+	if option.Key == "oss_setting.access_key_id" && strings.TrimSpace(operation_setting.GetOssSetting().AccessKeyID) != "" {
+		if valStr == common.MaskCredentialForAdminDisplay(operation_setting.GetOssSetting().AccessKeyID) {
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"message": "",
+			})
+			return
+		}
+	}
+	if option.Key == "oss_setting.access_key_secret" && strings.TrimSpace(operation_setting.GetOssSetting().AccessKeySecret) != "" {
+		if valStr == common.MaskCredentialForAdminDisplay(operation_setting.GetOssSetting().AccessKeySecret) {
 			c.JSON(http.StatusOK, gin.H{
 				"success": true,
 				"message": "",
