@@ -246,6 +246,7 @@ export default function SettingsSidebarModulesAdmin(props) {
           title: t('个人设置'),
           description: t('个人信息设置'),
         },
+        { key: 'provider', title: t('供应商管理'), description: t('供应商相关管理') },
       ],
     },
     {
