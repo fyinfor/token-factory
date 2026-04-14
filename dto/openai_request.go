@@ -87,6 +87,8 @@ type GeneralOpenAIRequest struct {
 	// OpenRouter Params
 	Usage     json.RawMessage `json:"usage,omitempty"`
 	Reasoning json.RawMessage `json:"reasoning,omitempty"`
+	// Provider mirrors https://openrouter.ai/docs/guides/routing/provider-selection (optional).
+	Provider json.RawMessage `json:"provider,omitempty"`
 	// Ali Qwen Params
 	VlHighResolutionImages json.RawMessage `json:"vl_high_resolution_images,omitempty"`
 	EnableThinking         json.RawMessage `json:"enable_thinking,omitempty"`

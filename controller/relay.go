@@ -297,6 +297,21 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 			AutoBan: &autoBanInt,
 		}, nil
 	}
+	if orderAny, ok := common.GetContextKey(c, constant.ContextKeySmartRouteChannelOrder); ok {
+		if order, ok := orderAny.([]int); ok && len(order) > 0 {
+			idx := retryParam.GetRetry()
+			if idx < len(order) {
+				ch, chErr := model.CacheGetChannel(order[idx])
+				if chErr == nil && ch != nil && ch.Status == common.ChannelStatusEnabled {
+					info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
+					if tfErr := middleware.SetupContextForSelectedChannel(c, ch, info.OriginModelName); tfErr != nil {
+						return nil, tfErr
+					}
+					return ch, nil
+				}
+			}
+		}
+	}
 	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)
 
 	info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
