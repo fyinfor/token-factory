@@ -176,6 +176,11 @@ definitions:
       legal_representative:
         type: string
     type: object
+  controller.SupplierDeactivateRequest:
+    properties:
+      reason:
+        type: string
+    type: object
   dto.VideoRequest:
     properties:
       duration:
@@ -748,6 +753,36 @@ paths:
       summary: 管理员审核供应商申请
       tags:
       - SupplierAdmin
+  /user/supplier/application/deactivate:
+    post:
+      consumes:
+      - application/json
+      description: 仅审核通过状态可注销；注销后清空用户表 supplier_id 并将申请状态置为已注销
+      parameters:
+      - description: 注销说明
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/controller.SupplierDeactivateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success + data{id,status}
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      - ApiUserID: []
+      summary: 当前供应商注销
+      tags:
+      - Supplier
   /user/supplier/application/self:
     get:
       produces:
@@ -869,6 +904,36 @@ paths:
       summary: 当前供应商新增渠道
       tags:
       - Supplier
+  /user/supplier/list:
+    get:
+      description: 支持按供应商名称模糊查询，返回分页数据
+      parameters:
+      - description: 页码
+        in: query
+        name: p
+        type: integer
+      - description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      - description: 供应商名称（模糊）
+        in: query
+        name: company_name
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 分页结果
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      - ApiUserID: []
+      summary: 管理员分页查询供应商列表
+      tags:
+      - SupplierAdmin
   /user/supplier/models:
     get:
       description: 仅返回当前登录供应商创建的模型

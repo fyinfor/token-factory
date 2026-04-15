@@ -128,6 +128,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/supplier/application", controller.SubmitSupplierApplication)
 				selfRoute.GET("/supplier/application/self", controller.GetMySupplierApplication)
 				selfRoute.PUT("/supplier/application/self", controller.UpdateMySupplierApplication)
+				selfRoute.POST("/supplier/application/deactivate", controller.DeactivateMySupplierApplication)
 				selfRoute.POST("/supplier/channels", controller.CreateMySupplierChannel)
 				selfRoute.GET("/supplier/channels", controller.ListMySupplierChannels)
 				selfRoute.POST("/supplier/models", controller.CreateMySupplierModel)

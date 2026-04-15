@@ -17,6 +17,8 @@ const (
 	SupplierApplicationStatusApproved = 1
 	// SupplierApplicationStatusRejected 表示审核驳回。
 	SupplierApplicationStatusRejected = 2
+	// SupplierApplicationStatusDeactivated 表示供应商已注销。
+	SupplierApplicationStatusDeactivated = 3
 )
 
 const (
@@ -26,6 +28,8 @@ const (
 	SupplierApplicationAuditActionApprove = 1
 	// SupplierApplicationAuditActionReject 表示审核驳回。
 	SupplierApplicationAuditActionReject = 2
+	// SupplierApplicationAuditActionDeactivate 表示供应商注销。
+	SupplierApplicationAuditActionDeactivate = 3
 )
 
 const (
@@ -44,6 +48,8 @@ var (
 	ErrSupplierApplicationAlreadyReviewed = errors.New("supplier application already reviewed")
 	// ErrSupplierApplicationStatusNotEditable 表示申请当前状态不可修改（已审核通过）。
 	ErrSupplierApplicationStatusNotEditable = errors.New("supplier application status is not editable")
+	// ErrSupplierApplicationStatusNotApproved 表示申请当前不处于审核通过状态，不能执行供应商注销。
+	ErrSupplierApplicationStatusNotApproved = errors.New("supplier application status is not approved")
 )
 
 // SupplierApplication 供应商入驻申请主表。
@@ -59,7 +65,7 @@ type SupplierApplication struct {
 	ContactName         string `json:"contact_name" gorm:"type:varchar(128);not null;comment:对接人姓名"`
 	ContactMobile       string `json:"contact_mobile" gorm:"type:varchar(32);not null;comment:对接人手机号"`
 	ContactWechat       string `json:"contact_wechat" gorm:"type:varchar(128);not null;comment:对接人微信或企业微信"`
-	Status              int    `json:"status" gorm:"type:int;index;default:0;not null;comment:审核状态 0待审核 1已通过 2已驳回"`
+	Status              int    `json:"status" gorm:"type:int;index;default:0;not null;comment:审核状态 0待审核 1已通过 2已驳回 3已注销"`
 	ReviewReason        string `json:"review_reason" gorm:"type:text;comment:审核备注或驳回原因"`
 	ReviewedBy          int    `json:"reviewed_by" gorm:"type:int;index;default:0;comment:审核人用户ID"`
 	ReviewedAt          int64  `json:"reviewed_at" gorm:"type:bigint;default:0;comment:审核时间戳"`
@@ -357,11 +363,84 @@ func ReviewSupplierApplication(applicationID int, reviewerUserID int, toStatus i
 		tx.Rollback()
 		return nil, err
 	}
+	if toStatus == SupplierApplicationStatusApproved {
+		// 审核通过后，回填用户表 supplier_id，建立用户与供应商关联。
+		if err := tx.Model(&User{}).Where("id = ?", app.ApplicantUserID).
+			Updates(map[string]any{
+				"supplier_id": app.ID,
+			}).Error; err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+	}
 
 	app.Status = toStatus
 	app.ReviewReason = reason
 	app.ReviewedBy = reviewerUserID
 	app.ReviewedAt = now
+	app.UpdatedAt = now
+	if err := tx.Commit().Error; err != nil {
+		return nil, err
+	}
+	return &app, nil
+}
+
+// DeactivateSupplierApplication 注销供应商（仅允许审核通过状态）。
+// 注销后会将 supplier_applications.status 置为已注销，并清空用户表 supplier_id。
+func DeactivateSupplierApplication(applicantUserID int, reason string) (*SupplierApplication, error) {
+	tx := DB.Begin()
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+	var app SupplierApplication
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("applicant_user_id = ?", applicantUserID).
+		Order("id desc").
+		First(&app).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	if app.Status != SupplierApplicationStatusApproved {
+		tx.Rollback()
+		return nil, ErrSupplierApplicationStatusNotApproved
+	}
+	now := time.Now().Unix()
+	if err := tx.Model(&SupplierApplication{}).
+		Where("id = ?", app.ID).
+		Updates(map[string]any{
+			"status":        SupplierApplicationStatusDeactivated,
+			"review_reason": strings.TrimSpace(reason),
+			"updated_at":    now,
+		}).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	if err := tx.Model(&User{}).Where("id = ?", applicantUserID).
+		Updates(map[string]any{
+			"supplier_id": 0,
+		}).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	if err := tx.Create(&SupplierApplicationAudit{
+		ApplicationID:  app.ID,
+		OperatorUserID: applicantUserID,
+		Action:         SupplierApplicationAuditActionDeactivate,
+		FromStatus:     SupplierApplicationStatusApproved,
+		ToStatus:       SupplierApplicationStatusDeactivated,
+		Reason:         strings.TrimSpace(reason),
+		CreatedAt:      now,
+	}).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	app.Status = SupplierApplicationStatusDeactivated
+	app.ReviewReason = strings.TrimSpace(reason)
 	app.UpdatedAt = now
 	if err := tx.Commit().Error; err != nil {
 		return nil, err

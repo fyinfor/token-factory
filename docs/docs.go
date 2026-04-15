@@ -413,6 +413,55 @@ const docTemplate = `{
                 }
             }
         },
+        "/user/supplier/application/deactivate": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "仅审核通过状态可注销；注销后清空用户表 supplier_id 并将申请状态置为已注销",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Supplier"
+                ],
+                "summary": "当前供应商注销",
+                "parameters": [
+                    {
+                        "description": "注销说明",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/controller.SupplierDeactivateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "success + data{id,status}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/user/supplier/application/self": {
             "get": {
                 "security": [
@@ -658,6 +707,55 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "创建结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/user/supplier/list": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "支持按供应商名称模糊查询，返回分页数据",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SupplierAdmin"
+                ],
+                "summary": "管理员分页查询供应商列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "p",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "供应商名称（模糊）",
+                        "name": "company_name",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "分页结果",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -1170,6 +1268,14 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "legal_representative": {
+                    "type": "string"
+                }
+            }
+        },
+        "controller.SupplierDeactivateRequest": {
+            "type": "object",
+            "properties": {
+                "reason": {
                     "type": "string"
                 }
             }

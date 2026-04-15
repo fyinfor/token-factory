@@ -34,6 +34,11 @@ type SupplierApplicationReviewRequest struct {
 	Reason string `json:"reason"`
 }
 
+// SupplierDeactivateRequest 供应商注销请求体。
+type SupplierDeactivateRequest struct {
+	Reason string `json:"reason"`
+}
+
 // SupplierApplicationUpdateRequest 供应商修改申请请求体（必须带申请ID）。
 type SupplierApplicationUpdateRequest struct {
 	ID int `json:"id"`
@@ -64,7 +69,7 @@ func readOptionalStatusQuery(c *gin.Context) (*int, error) {
 	if err != nil {
 		return nil, err
 	}
-	if status < model.SupplierApplicationStatusPending || status > model.SupplierApplicationStatusRejected {
+	if status < model.SupplierApplicationStatusPending || status > model.SupplierApplicationStatusDeactivated {
 		return nil, errors.New("invalid status")
 	}
 	return &status, nil
@@ -437,6 +442,50 @@ func GetMyUnreadMessageCount(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, gin.H{"unread_count": total})
+}
+
+// DeactivateMySupplierApplication godoc
+// @Summary 当前供应商注销
+// @Description 仅审核通过状态可注销；注销后清空用户表 supplier_id 并将申请状态置为已注销
+// @Tags Supplier
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Security ApiUserID
+// @Param request body SupplierDeactivateRequest false "注销说明"
+// @Success 200 {object} map[string]interface{} "success + data{id,status}"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Router /user/supplier/application/deactivate [post]
+func DeactivateMySupplierApplication(c *gin.Context) {
+	var req SupplierDeactivateRequest
+	_ = c.ShouldBindJSON(&req)
+	reason := strings.TrimSpace(req.Reason)
+	app, err := model.DeactivateSupplierApplication(c.GetInt("id"), reason)
+	if err != nil {
+		if errors.Is(err, model.ErrSupplierApplicationStatusNotApproved) {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "当前供应商状态不支持注销"})
+			return
+		}
+		if model.IsSupplierApplicationNotFound(err) {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "未找到可注销的供应商申请"})
+			return
+		}
+		common.ApiError(c, err)
+		return
+	}
+	_ = model.CreateUserMessage(&model.UserMessage{
+		ReceiverUserID:  0,
+		ReceiverMinRole: common.RoleAdminUser,
+		Type:            model.UserMessageTypeSupplierRejected,
+		Title:           "供应商已注销",
+		Content:         fmt.Sprintf("供应商“%s”已注销。", app.CompanyName),
+		BizType:         model.UserMessageBizTypeSupplierApplication,
+		BizID:           app.ID,
+	})
+	common.ApiSuccess(c, gin.H{
+		"id":     app.ID,
+		"status": app.Status,
+	})
 }
 
 // CreateMySupplierChannel godoc
