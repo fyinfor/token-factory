@@ -63,7 +63,7 @@ const COMPONENT_STYLES = {
 
 const CONTENT_TEXTS = {
   unknown: {
-    displayName: (t) => t('未知供应商'),
+    displayName: (t) => t('未知模型类型'),
     description: (t) =>
       t(
         '包含来自未知或未标明供应商的AI模型，这些模型可能来自小型供应商或开源项目。',

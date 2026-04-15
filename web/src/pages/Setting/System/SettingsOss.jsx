@@ -89,10 +89,8 @@ export default function SettingsOss(props) {
       });
   }
 
-  async function onTestUpload() {
-    const file = fileInputRef.current?.files?.[0];
+  async function uploadTestFile(file) {
     if (!file) {
-      showWarning(t('请先选择要上传的测试文件'));
       return;
     }
     setTestLoading(true);
@@ -162,7 +160,7 @@ export default function SettingsOss(props) {
         type='info'
         closeIcon={null}
         description={t(
-          '配置后，已登录用户可调用 POST /api/oss/upload（multipart 字段 file）上传文件。请先保存配置再使用下方「测试上传」；返回的 url 需 Bucket/对象可读或 CDN 可访问才能预览。',
+          '配置后，已登录用户可调用 POST /api/oss/upload（multipart 字段 file）上传文件。请先保存配置，再在下方选择文件自动测试上传；返回的 url 需 Bucket/对象可读或 CDN 可访问才能预览。',
         )}
         style={{ marginBottom: 16 }}
       />
@@ -269,7 +267,9 @@ export default function SettingsOss(props) {
 
           <Form.Section text={t('测试上传与预览')} style={{ marginTop: 24 }}>
             <Text type='tertiary' style={{ display: 'block', marginBottom: 8 }}>
-              {t('使用当前已保存到服务端的 OSS 配置进行实际上传（未保存的修改不会参与测试）。')}
+              {t(
+                '使用当前已保存到服务端的 OSS 配置；选择文件后将自动上传并显示访问地址（未保存的修改不会参与上传）。',
+              )}
             </Text>
             <Row type='flex' align='middle' gutter={12} style={{ flexWrap: 'wrap' }}>
               <Col>
@@ -277,26 +277,30 @@ export default function SettingsOss(props) {
                   ref={fileInputRef}
                   type='file'
                   style={{ display: 'none' }}
-                  onChange={() => {
-                    setTestUrl('');
-                    setTestMime('');
+                  disabled={testLoading}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      uploadTestFile(file);
+                    }
+                    e.target.value = '';
                   }}
                 />
                 <Button
+                  loading={testLoading}
+                  disabled={testLoading}
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  {t('选择测试文件')}
+                  {testLoading ? t('上传中…') : t('选择测试文件')}
                 </Button>
               </Col>
-              <Col>
-                <Button
-                  type='secondary'
-                  loading={testLoading}
-                  onClick={onTestUpload}
-                >
-                  {t('测试上传到 OSS')}
-                </Button>
-              </Col>
+              {testLoading ? (
+                <Col>
+                  <Text type='tertiary' size='small'>
+                    {t('正在上传到 OSS…')}
+                  </Text>
+                </Col>
+              ) : null}
             </Row>
             {testUrl ? (
               <div style={{ marginTop: 16 }}>

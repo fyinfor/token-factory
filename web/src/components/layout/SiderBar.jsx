@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getLucideIcon } from '../../helpers/render';
@@ -25,7 +25,8 @@ import { ChevronLeft } from 'lucide-react';
 import { useSidebarCollapsed } from '../../hooks/common/useSidebarCollapsed';
 import { useSidebar } from '../../hooks/common/useSidebar';
 import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime';
-import { isAdmin, isRoot, showError } from '../../helpers';
+import { isAdmin, isRoot, showError, isDistributor } from '../../helpers';
+import { UserContext } from '../../context/User';
 import SkeletonWrapper from './components/SkeletonWrapper';
 
 import { Nav, Divider, Button } from '@douyinfe/semi-ui';
@@ -50,10 +51,13 @@ const routerMap = {
   playground: '/console/playground',
   personal: '/console/personal',
   provider: '/console/provider',
+  distributor: '/console/distributor/admin',
+  distributor_center: '/console/distributor/center',
 };
 
 const SiderBar = ({ onNavigate = () => {} }) => {
   const { t } = useTranslation();
+  const [userState] = useContext(UserContext);
   const [collapsed, toggleCollapsed] = useSidebarCollapsed();
   const {
     isModuleVisible,
@@ -140,6 +144,12 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         itemKey: 'provider',
         to: '/provider',
       },
+      {
+        text: t('分销中心'),
+        itemKey: 'distributor_center',
+        to: '/console/distributor/center',
+        className: isDistributor() ? '' : 'tableHiddle',
+      },
     ];
 
     // 根据配置过滤项目
@@ -149,7 +159,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
     });
 
     return filteredItems;
-  }, [t, isModuleVisible]);
+  }, [t, isModuleVisible, userState?.user?.role]);
 
   const adminItems = useMemo(() => {
     const items = [
@@ -190,6 +200,12 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         className: isAdmin() ? '' : 'tableHiddle',
       },
       {
+        text: t('分销商管理'),
+        itemKey: 'distributor',
+        to: '/console/distributor/admin',
+        className: isAdmin() ? '' : 'tableHiddle',
+      },
+      {
         text: t('系统设置'),
         itemKey: 'setting',
         to: '/setting',
@@ -204,7 +220,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
     });
 
     return filteredItems;
-  }, [isAdmin(), isRoot(), t, isModuleVisible]);
+  }, [isAdmin(), isRoot(), t, isModuleVisible, userState?.user?.role]);
 
   const chatMenuItems = useMemo(() => {
     const items = [

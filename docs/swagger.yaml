@@ -1,0 +1,1112 @@
+basePath: /api
+definitions:
+  constant.MultiKeyMode:
+    enum:
+    - random
+    - polling
+    type: string
+    x-enum-comments:
+      MultiKeyModePolling: 轮询
+      MultiKeyModeRandom: 随机
+    x-enum-descriptions:
+    - 随机
+    - 轮询
+    x-enum-varnames:
+    - MultiKeyModeRandom
+    - MultiKeyModePolling
+  controller.AddChannelRequest:
+    properties:
+      batch_add_set_key_prefix_2_name:
+        type: boolean
+      channel:
+        $ref: '#/definitions/model.Channel'
+      mode:
+        type: string
+      multi_key_mode:
+        $ref: '#/definitions/constant.MultiKeyMode'
+    type: object
+  controller.KlingCameraConfig:
+    properties:
+      horizontal:
+        example: 2.5
+        type: number
+      pan:
+        example: 0
+        type: number
+      roll:
+        example: 0
+        type: number
+      tilt:
+        example: 0
+        type: number
+      vertical:
+        example: 0
+        type: number
+      zoom:
+        example: 0
+        type: number
+    type: object
+  controller.KlingCameraControl:
+    properties:
+      config:
+        $ref: '#/definitions/controller.KlingCameraConfig'
+      type:
+        example: simple
+        type: string
+    type: object
+  controller.KlingImage2VideoRequest:
+    properties:
+      aspect_ratio:
+        example: "16:9"
+        type: string
+      callback_url:
+        example: https://your.domain/callback
+        type: string
+      camera_control:
+        $ref: '#/definitions/controller.KlingCameraControl'
+      cfg_scale:
+        example: 0.7
+        type: number
+      duration:
+        example: "5"
+        type: string
+      external_task_id:
+        example: custom-task-002
+        type: string
+      image:
+        example: https://h2.inkwai.com/bs2/upload-ylab-stunt/se/ai_portal_queue_mmu_image_upscale_aiweb/3214b798-e1b4-4b00-b7af-72b5b0417420_raw_image_0.jpg
+        type: string
+      mode:
+        example: std
+        type: string
+      model_name:
+        example: kling-v2-master
+        type: string
+      negative_prompt:
+        example: blurry, low quality
+        type: string
+      prompt:
+        example: A cat playing piano in the garden
+        type: string
+    required:
+    - image
+    type: object
+  controller.KlingText2VideoRequest:
+    properties:
+      aspect_ratio:
+        example: "16:9"
+        type: string
+      callback_url:
+        example: https://your.domain/callback
+        type: string
+      camera_control:
+        $ref: '#/definitions/controller.KlingCameraControl'
+      cfg_scale:
+        example: 0.7
+        type: number
+      duration:
+        example: "5"
+        type: string
+      external_task_id:
+        example: custom-task-001
+        type: string
+      mode:
+        example: std
+        type: string
+      model_name:
+        example: kling-v1
+        type: string
+      negative_prompt:
+        example: blurry, low quality
+        type: string
+      prompt:
+        example: A cat playing piano in the garden
+        type: string
+    required:
+    - prompt
+    type: object
+  controller.SupplierApplicationReviewRequest:
+    properties:
+      reason:
+        type: string
+      status:
+        type: integer
+    type: object
+  controller.SupplierApplicationSubmitRequest:
+    properties:
+      business_license_file:
+        type: string
+      business_license_url:
+        type: string
+      company_name:
+        type: string
+      company_size:
+        type: string
+      contact_mobile:
+        type: string
+      contact_name:
+        type: string
+      contact_wechat:
+        type: string
+      credit_code:
+        type: string
+      legal_representative:
+        type: string
+    type: object
+  controller.SupplierApplicationUpdateRequest:
+    properties:
+      business_license_file:
+        type: string
+      business_license_url:
+        type: string
+      company_name:
+        type: string
+      company_size:
+        type: string
+      contact_mobile:
+        type: string
+      contact_name:
+        type: string
+      contact_wechat:
+        type: string
+      credit_code:
+        type: string
+      id:
+        type: integer
+      legal_representative:
+        type: string
+    type: object
+  controller.SupplierDeactivateRequest:
+    properties:
+      reason:
+        type: string
+    type: object
+  dto.VideoRequest:
+    properties:
+      duration:
+        description: Video duration (seconds)
+        example: 5
+        type: number
+      fps:
+        description: Video frame rate
+        example: 30
+        type: integer
+      height:
+        description: Video height
+        example: 512
+        type: integer
+      image:
+        description: Image input (URL/Base64)
+        example: https://h2.inkwai.com/bs2/upload-ylab-stunt/se/ai_portal_queue_mmu_image_upscale_aiweb/3214b798-e1b4-4b00-b7af-72b5b0417420_raw_image_0.jpg
+        type: string
+      metadata:
+        additionalProperties: {}
+        description: Vendor-specific/custom params (e.g. negative_prompt, style, quality_level,
+          etc.)
+        type: object
+      model:
+        description: Model/style ID
+        example: kling-v1
+        type: string
+      "n":
+        description: Number of videos to generate
+        example: 1
+        type: integer
+      prompt:
+        description: Text prompt
+        example: 宇航员站起身走了
+        type: string
+      response_format:
+        description: Response format
+        example: url
+        type: string
+      seed:
+        description: Random seed
+        example: 20231234
+        type: integer
+      user:
+        description: User identifier
+        example: user-1234
+        type: string
+      width:
+        description: Video width
+        example: 512
+        type: integer
+    type: object
+  dto.VideoTaskError:
+    properties:
+      code:
+        type: integer
+      message:
+        type: string
+    type: object
+  dto.VideoTaskMetadata:
+    properties:
+      duration:
+        description: 实际生成的视频时长
+        example: 5
+        type: number
+      fps:
+        description: 实际帧率
+        example: 30
+        type: integer
+      height:
+        description: 实际高度
+        example: 512
+        type: integer
+      seed:
+        description: 使用的随机种子
+        example: 20231234
+        type: integer
+      width:
+        description: 实际宽度
+        example: 512
+        type: integer
+    type: object
+  dto.VideoTaskResponse:
+    properties:
+      error:
+        allOf:
+        - $ref: '#/definitions/dto.VideoTaskError'
+        description: 错误信息（失败时）
+      format:
+        description: 视频格式
+        example: mp4
+        type: string
+      metadata:
+        allOf:
+        - $ref: '#/definitions/dto.VideoTaskMetadata'
+        description: 结果元数据
+      status:
+        description: 任务状态
+        example: succeeded
+        type: string
+      task_id:
+        description: 任务ID
+        example: abcd1234efgh
+        type: string
+      url:
+        description: 视频资源URL（成功时）
+        type: string
+    type: object
+  model.BoundChannel:
+    properties:
+      name:
+        type: string
+      type:
+        type: integer
+    type: object
+  model.Channel:
+    properties:
+      auto_ban:
+        type: integer
+      balance:
+        description: in USD
+        type: number
+      balance_updated_time:
+        type: integer
+      base_url:
+        type: string
+      channel_info:
+        allOf:
+        - $ref: '#/definitions/model.ChannelInfo'
+        description: add after v0.8.5
+      created_time:
+        type: integer
+      group:
+        type: string
+      header_override:
+        type: string
+      id:
+        type: integer
+      key:
+        type: string
+      model_mapping:
+        type: string
+      models:
+        type: string
+      name:
+        type: string
+      openai_organization:
+        type: string
+      other:
+        type: string
+      other_info:
+        type: string
+      owner_user_id:
+        description: 渠道归属用户ID（供应商场景）
+        type: integer
+      param_override:
+        type: string
+      priority:
+        type: integer
+      remark:
+        maxLength: 255
+        type: string
+      response_time:
+        description: in milliseconds
+        type: integer
+      setting:
+        description: 渠道额外设置
+        type: string
+      settings:
+        description: 其他设置，存储azure版本等不需要检索的信息，详见dto.ChannelOtherSettings
+        type: string
+      status:
+        type: integer
+      status_code_mapping:
+        description: MaxInputTokens     *int    `json:"max_input_tokens" gorm:"default:0"`
+        type: string
+      supplier_application_id:
+        description: 关联 supplier_applications.id
+        type: integer
+      tag:
+        type: string
+      test_model:
+        type: string
+      test_time:
+        type: integer
+      type:
+        type: integer
+      used_quota:
+        type: integer
+      weight:
+        type: integer
+    type: object
+  model.ChannelInfo:
+    properties:
+      is_multi_key:
+        description: 是否多Key模式
+        type: boolean
+      multi_key_disabled_reason:
+        additionalProperties:
+          type: string
+        description: key禁用原因列表，key index -> reason
+        type: object
+      multi_key_disabled_time:
+        additionalProperties:
+          format: int64
+          type: integer
+        description: key禁用时间列表，key index -> time
+        type: object
+      multi_key_mode:
+        $ref: '#/definitions/constant.MultiKeyMode'
+      multi_key_polling_index:
+        description: 多Key模式下轮询的key索引
+        type: integer
+      multi_key_size:
+        description: 多Key模式下的Key数量
+        type: integer
+      multi_key_status_list:
+        additionalProperties:
+          type: integer
+        description: key状态列表，key index -> status
+        type: object
+    type: object
+  model.Model:
+    properties:
+      bound_channels:
+        items:
+          $ref: '#/definitions/model.BoundChannel'
+        type: array
+      created_time:
+        type: integer
+      description:
+        type: string
+      enable_groups:
+        items:
+          type: string
+        type: array
+      endpoints:
+        type: string
+      icon:
+        type: string
+      id:
+        type: integer
+      matched_count:
+        type: integer
+      matched_models:
+        items:
+          type: string
+        type: array
+      model_name:
+        type: string
+      name_rule:
+        type: integer
+      owner_user_id:
+        description: 模型归属用户ID（供应商场景）
+        type: integer
+      quota_types:
+        items:
+          type: integer
+        type: array
+      status:
+        type: integer
+      supplier_application_id:
+        description: 关联 supplier_applications.id
+        type: integer
+      sync_official:
+        type: integer
+      tags:
+        type: string
+      updated_time:
+        type: integer
+      vendor_id:
+        type: integer
+    type: object
+info:
+  contact: {}
+  description: TokenFactory backend API documentation powered by swaggo.
+  title: TokenFactory API
+  version: "1.0"
+paths:
+  /kling/v1/videos/image2video:
+    post:
+      consumes:
+      - application/json
+      description: 调用可灵AI图生视频接口，生成视频内容
+      parameters:
+      - description: '用户认证令牌 (Aeess-Token: sk-xxxx)'
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: 图生视频请求参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.KlingImage2VideoRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 任务状态和结果
+          schema:
+            $ref: '#/definitions/dto.VideoTaskResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 无权限
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 可灵官方-图生视频
+      tags:
+      - Video
+  /kling/v1/videos/image2video/{task_id}:
+    get:
+      consumes:
+      - application/json
+      description: Query the status and result of a Kling video generation task by
+        task ID
+      parameters:
+      - description: Task ID
+        in: path
+        name: task_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses: {}
+      summary: 可灵任务查询--图生视频
+      tags:
+      - Origin
+  /kling/v1/videos/text2video:
+    post:
+      consumes:
+      - application/json
+      description: 调用可灵AI文生视频接口，生成视频内容
+      parameters:
+      - description: '用户认证令牌 (Aeess-Token: sk-xxxx)'
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: 视频生成请求参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.KlingText2VideoRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 任务状态和结果
+          schema:
+            $ref: '#/definitions/dto.VideoTaskResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 无权限
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 可灵文生视频
+      tags:
+      - Video
+  /kling/v1/videos/text2video/{task_id}:
+    get:
+      consumes:
+      - application/json
+      description: Query the status and result of a Kling text-to-video generation
+        task by task ID
+      parameters:
+      - description: Task ID
+        in: path
+        name: task_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses: {}
+      summary: 可灵任务查询--文生视频
+      tags:
+      - Origin
+  /user/messages/{id}/read:
+    post:
+      parameters:
+      - description: 消息ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success + data{updated}
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      - ApiUserID: []
+      summary: 标记当前用户消息为已读
+      tags:
+      - Message
+  /user/messages/self:
+    get:
+      parameters:
+      - description: 页码
+        in: query
+        name: p
+        type: integer
+      - description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 分页结果
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      - ApiUserID: []
+      summary: 查询当前用户站内消息
+      tags:
+      - Message
+  /user/messages/unread_count:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success + data{unread_count}
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      - ApiUserID: []
+      summary: 获取当前用户未读站内消息数量
+      tags:
+      - Message
+  /user/supplier/application:
+    get:
+      parameters:
+      - description: 页码
+        in: query
+        name: p
+        type: integer
+      - description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      - description: 状态：0待审核 1审核通过 2审核驳回
+        in: query
+        name: status
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 分页结果
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      - ApiUserID: []
+      summary: 管理员分页查询供应商申请
+      tags:
+      - SupplierAdmin
+    post:
+      consumes:
+      - application/json
+      description: 普通用户提交供应商申请，提交后生成管理员待审核站内消息
+      parameters:
+      - description: 申请信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.SupplierApplicationSubmitRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success + data{id,status}
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      - ApiUserID: []
+      summary: 提交供应商入驻申请
+      tags:
+      - Supplier
+  /user/supplier/application/{id}/review:
+    post:
+      consumes:
+      - application/json
+      description: 任一管理员可审核一次，仅待审核状态允许处理
+      parameters:
+      - description: 申请ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 审核信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.SupplierApplicationReviewRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success + data{id,status}
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      - ApiUserID: []
+      summary: 管理员审核供应商申请
+      tags:
+      - SupplierAdmin
+  /user/supplier/application/deactivate:
+    post:
+      consumes:
+      - application/json
+      description: 仅审核通过状态可注销；注销后清空用户表 supplier_id 并将申请状态置为已注销
+      parameters:
+      - description: 注销说明
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/controller.SupplierDeactivateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success + data{id,status}
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      - ApiUserID: []
+      summary: 当前供应商注销
+      tags:
+      - Supplier
+  /user/supplier/application/self:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success + data{申请对象或null}
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      - ApiUserID: []
+      summary: 查询当前用户供应商申请
+      tags:
+      - Supplier
+    put:
+      consumes:
+      - application/json
+      description: 当前申请只要未审核通过都可修改，修改后状态重置为待审核(0)
+      parameters:
+      - description: 申请信息（含id）
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.SupplierApplicationUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success + data{id,status}
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      - ApiUserID: []
+      summary: 修改当前用户供应商申请并重新提交
+      tags:
+      - Supplier
+  /user/supplier/channels:
+    get:
+      description: 供应商返回本人渠道；管理员返回所有供应商渠道
+      parameters:
+      - description: 页码
+        in: query
+        name: p
+        type: integer
+      - description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      - description: 渠道ID
+        in: query
+        name: channel_id
+        type: integer
+      - description: 渠道名称（模糊）
+        in: query
+        name: name
+        type: string
+      - description: 渠道密钥（精确或模糊）
+        in: query
+        name: key
+        type: string
+      - description: API地址（模糊）
+        in: query
+        name: base_url
+        type: string
+      - description: 模型关键字（模糊）
+        in: query
+        name: model
+        type: string
+      - description: 分组
+        in: query
+        name: group
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 分页结果
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      - ApiUserID: []
+      summary: 查询当前供应商渠道列表
+      tags:
+      - Supplier
+    post:
+      consumes:
+      - application/json
+      description: 仅审核通过的供应商可新增，自动写入 owner_user_id 与 supplier_application_id
+      parameters:
+      - description: 渠道创建参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.AddChannelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 创建结果
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      - ApiUserID: []
+      summary: 当前供应商新增渠道
+      tags:
+      - Supplier
+  /user/supplier/list:
+    get:
+      description: 支持按供应商名称模糊查询，返回分页数据
+      parameters:
+      - description: 页码
+        in: query
+        name: p
+        type: integer
+      - description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      - description: 供应商名称（模糊）
+        in: query
+        name: company_name
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 分页结果
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      - ApiUserID: []
+      summary: 管理员分页查询供应商列表
+      tags:
+      - SupplierAdmin
+  /user/supplier/models:
+    get:
+      description: 仅返回当前登录供应商创建的模型
+      parameters:
+      - description: 页码
+        in: query
+        name: p
+        type: integer
+      - description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      - description: 模型名称（模糊）
+        in: query
+        name: model_name
+        type: string
+      - description: 模型类型（映射 vendor，支持名称或ID）
+        in: query
+        name: model_type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 分页结果
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      - ApiUserID: []
+      summary: 查询当前供应商模型列表
+      tags:
+      - Supplier
+    post:
+      consumes:
+      - application/json
+      description: 仅审核通过供应商可新增，自动写入 owner_user_id 与 supplier_application_id
+      parameters:
+      - description: 模型创建参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.Model'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 创建结果
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      - ApiUserID: []
+      summary: 当前供应商新增模型
+      tags:
+      - Supplier
+  /user/token:
+    get:
+      description: 生成并返回当前登录用户的 access_token，用于在 Authorization 请求头中进行接口鉴权
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success + data{access_token}
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      - ApiUserID: []
+      summary: 生成当前用户 AccessToken
+      tags:
+      - 用户
+  /v1/video/generations:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        调用视频生成接口生成视频
+        支持多种视频生成服务：
+        - 可灵AI (Kling): https://app.klingai.com/cn/dev/document-api/apiReference/commonInfo
+        - 即梦 (Jimeng): https://www.volcengine.com/docs/85621/1538636
+      parameters:
+      - description: '用户认证令牌 (Aeess-Token: sk-xxxx)'
+        in: header
+        name: Authorization
+        required: true
+        type: string
+      - description: 视频生成请求参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/dto.VideoRequest'
+      produces:
+      - application/json
+      responses:
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 无权限
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      summary: 生成视频
+      tags:
+      - Video
+  /v1/video/generations/{task_id}:
+    get:
+      consumes:
+      - application/json
+      description: 根据任务ID查询视频生成任务的状态和结果
+      parameters:
+      - description: Task ID
+        in: path
+        name: task_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 任务状态和结果
+          schema:
+            $ref: '#/definitions/dto.VideoTaskResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 无权限
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器内部错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 查询视频
+      tags:
+      - Video
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+  ApiUserID:
+    in: header
+    name: New-Api-User
+    type: apiKey
+swagger: "2.0"

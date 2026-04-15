@@ -29,6 +29,7 @@ import { API, showError, copy, showSuccess } from '../../helpers';
 import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { API_ENDPOINTS } from '../../constants/common.constant';
 import { StatusContext } from '../../context/Status';
+import { UserContext } from '../../context/User';
 import { useActualTheme } from '../../context/Theme';
 import { marked } from 'marked';
 import { useTranslation } from 'react-i18next';
@@ -39,6 +40,7 @@ import {
   IconCopy,
 } from '@douyinfe/semi-icons';
 import { Link } from 'react-router-dom';
+import { USER_ROLES } from '../../constants/user.constants';
 import NoticeModal from '../../components/layout/NoticeModal';
 import HomeModelList from '../../components/home/HomeModelList';
 import {
@@ -94,6 +96,7 @@ const HOME_FEATURE_CARDS = [
 const Home = () => {
   const { t, i18n } = useTranslation();
   const [statusState] = useContext(StatusContext);
+  const [userState] = useContext(UserContext);
   const actualTheme = useActualTheme();
   const [homePageContentLoaded, setHomePageContentLoaded] = useState(false);
   const [homePageContent, setHomePageContent] = useState('');
@@ -105,6 +108,19 @@ const Home = () => {
   const endpointItems = API_ENDPOINTS.map((e) => ({ value: e }));
   const [endpointIndex, setEndpointIndex] = useState(0);
   const isChinese = i18n.language.startsWith('zh');
+
+  let userRole = null;
+  try {
+    if (userState?.user && typeof userState.user.role === 'number') {
+      userRole = userState.user.role;
+    } else {
+      const raw = localStorage.getItem('user');
+      if (raw) userRole = JSON.parse(raw).role;
+    }
+  } catch {
+    userRole = null;
+  }
+  const showDistributorRecruit = userRole !== USER_ROLES.DISTRIBUTOR;
 
   const displayHomePageContent = async () => {
     setHomePageContent(localStorage.getItem('home_page_content') || '');
@@ -214,6 +230,40 @@ const Home = () => {
                     </Button>
                   </Link>
                 </div>
+
+                {showDistributorRecruit && (
+                  <div className='home-distributor-recruit-card w-full max-w-xl mx-auto mb-6 rounded-2xl border border-semi-color-border bg-semi-color-bg-1/90 backdrop-blur-sm px-4 py-4 text-left'>
+                    <div className='flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3'>
+                      <div>
+                        <div className='font-semibold text-semi-color-text-0'>
+                          {t('分销伙伴招募')}
+                        </div>
+                        <div className='text-sm text-semi-color-text-2 mt-1'>
+                          {userRole == null
+                            ? t('登录后可提交申请，成为分销商获得邀请分成')
+                            : t('提交资料申请成为分销商，邀请好友获得充值分成')}
+                        </div>
+                      </div>
+                      <Link
+                        to={
+                          userRole == null
+                            ? '/login'
+                            : '/console/distributor/apply'
+                        }
+                      >
+                        <Button
+                          theme='solid'
+                          type='primary'
+                          className='home-distributor-cta-btn !rounded-lg shrink-0'
+                        >
+                          {userRole == null
+                            ? t('登录并申请')
+                            : t('申请成为分销商')}
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* 广告展示位 */}

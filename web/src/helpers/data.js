@@ -59,3 +59,24 @@ export function setStatusData(data) {
 export function setUserData(data) {
   localStorage.setItem('user', JSON.stringify(data));
 }
+
+/**
+ * 将 GET /api/user/self 返回的 data 合并进本地 user，并可选 dispatch 登录态。
+ * 会去掉 permissions、sidebar_modules（与登录接口存库字段不一致）。
+ */
+export function mergeSelfResponseIntoLocalUser(data, dispatch) {
+  if (!data || data.id == null) return;
+  try {
+    const { permissions: _p, sidebar_modules: _s, ...serverProfile } = data;
+    let prev = {};
+    const raw = localStorage.getItem('user');
+    if (raw) prev = JSON.parse(raw);
+    const nextUser = { ...prev, ...serverProfile };
+    localStorage.setItem('user', JSON.stringify(nextUser));
+    if (dispatch) {
+      dispatch({ type: 'login', payload: nextUser });
+    }
+  } catch (e) {
+    /* ignore */
+  }
+}

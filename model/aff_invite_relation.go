@@ -17,10 +17,11 @@ type AffInviteRelation struct {
 	Id                 int   `json:"id" gorm:"primaryKey;autoIncrement"`
 	InviterId          int   `json:"inviter_id" gorm:"not null;uniqueIndex:idx_aff_inv_pair"`
 	InviteeUserId      int   `json:"invitee_user_id" gorm:"not null;uniqueIndex:idx_aff_inv_pair;column:invitee_user_id"`
-	CommissionRatioBps int   `json:"commission_ratio_bps" gorm:"not null;default:0;column:commission_ratio_bps"`
+	CommissionRatioBps     int `json:"commission_ratio_bps" gorm:"not null;default:0;column:commission_ratio_bps"`
+	CommissionEarnedQuota  int `json:"commission_earned_quota" gorm:"not null;default:0;column:commission_earned_quota"` // 该被邀请人为邀请人累计贡献的分销额度（与 aff_quota 增量一致）
 	// 自动时间戳：创建/更新时 GORM 自动赋值
-	CreatedAt          int64 `json:"created_at" gorm:"autoCreateTime;bigint;comment:创建时间"`
-	UpdatedAt          int64 `json:"updated_at" gorm:"autoUpdateTime;bigint;comment:更新时间"`
+	CreatedAt int64 `json:"created_at" gorm:"autoCreateTime;bigint;comment:创建时间"`
+	UpdatedAt int64 `json:"updated_at" gorm:"autoUpdateTime;bigint;comment:更新时间"`
 }
 
 func (AffInviteRelation) TableName() string {
@@ -31,13 +32,27 @@ const maxAffiliateCommissionBps = 10000
 
 // AffInviteeListItem 邀请人视角下的被邀请人列表项
 type AffInviteeListItem struct {
-	InviteeId          int    `json:"invitee_id"`
-	Username           string `json:"username"`
-	DisplayName        string `json:"display_name"`
-	CommissionRatioBps int    `json:"commission_ratio_bps"` // 万分之一单位（1=0.01%），前端展示为百分比
+	InviteeId             int    `json:"invitee_id"`
+	Username              string `json:"username"`
+	DisplayName           string `json:"display_name"`
+	CommissionRatioBps    int    `json:"commission_ratio_bps"` // 万分之一单位（1=0.01%），前端展示为百分比
+	CommissionEarnedQuota int    `json:"commission_earned_quota"`
+	CreatedAt             int64  `json:"created_at"` // 邀请关系建立时间（aff_invite_relations.created_at）
 }
 
-// EnsureAffInviteRelation 注册成功后建立关系行，比例初始为系统默认 AffiliateDefaultCommissionBps。
+func defaultCommissionBpsForNewInviteRelation(inviterId int) int {
+	var inviter User
+	err := DB.Select("id", "role", "distributor_commission_bps").Where("id = ?", inviterId).First(&inviter).Error
+	if err != nil {
+		return common.AffiliateDefaultCommissionBps
+	}
+	if inviter.Role == common.RoleDistributorUser && inviter.DistributorCommissionBps > 0 {
+		return inviter.DistributorCommissionBps
+	}
+	return common.AffiliateDefaultCommissionBps
+}
+
+// EnsureAffInviteRelation 注册成功后建立关系行，比例初始为系统默认或分销商单独默认。
 func EnsureAffInviteRelation(inviterId, inviteeUserId int) error {
 	if inviterId <= 0 || inviteeUserId <= 0 {
 		return nil
@@ -51,12 +66,14 @@ func EnsureAffInviteRelation(inviterId, inviteeUserId int) error {
 		return nil
 	}
 	ts := common.GetTimestamp()
+	bps := defaultCommissionBpsForNewInviteRelation(inviterId)
 	rel := AffInviteRelation{
-		InviterId:          inviterId,
-		InviteeUserId:      inviteeUserId,
-		CommissionRatioBps: common.AffiliateDefaultCommissionBps,
-		CreatedAt:          ts,
-		UpdatedAt:          ts,
+		InviterId:             inviterId,
+		InviteeUserId:         inviteeUserId,
+		CommissionRatioBps:    bps,
+		CommissionEarnedQuota: 0,
+		CreatedAt:             ts,
+		UpdatedAt:             ts,
 	}
 	return DB.Create(&rel).Error
 }
@@ -88,24 +105,36 @@ func BackfillAffInviteRelationsFromUsers() error {
 	return nil
 }
 
-func resolveCommissionBps(inviterId, inviteeId int) int {
+// effectiveAffiliateCommissionBps 计算本次充值应采用的分销比例（万分之一）：
+// - 分销商账号若设置了 distributor_commission_bps > 0，始终以当前账号设置为准（管理员调到 50% 后，后续充值均按 50%）；
+// - 否则回退到 aff_invite_relations 行上的比例，再回退系统默认。
+func effectiveAffiliateCommissionBps(inviter *User, inviteeUserId int) int {
+	if inviter == nil || inviter.Id <= 0 {
+		return common.AffiliateDefaultCommissionBps
+	}
+	if inviter.Role == common.RoleDistributorUser && inviter.DistributorCommissionBps > 0 {
+		bps := inviter.DistributorCommissionBps
+		if bps > maxAffiliateCommissionBps {
+			bps = maxAffiliateCommissionBps
+		}
+		return bps
+	}
 	var rel AffInviteRelation
-	err := DB.Where("inviter_id = ? AND invitee_user_id = ?", inviterId, inviteeId).First(&rel).Error
+	err := DB.Where("inviter_id = ? AND invitee_user_id = ?", inviter.Id, inviteeUserId).First(&rel).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return common.AffiliateDefaultCommissionBps
 		}
-		common.SysError("resolveCommissionBps: " + err.Error())
-		return 0
+		common.SysError("effectiveAffiliateCommissionBps: " + err.Error())
+		return common.AffiliateDefaultCommissionBps
 	}
-	// 历史数据中 0 表示未按新默认落库，按系统默认比例计奖；显式配置由管理员在后台写入正数比例
 	if rel.CommissionRatioBps <= 0 {
 		return common.AffiliateDefaultCommissionBps
 	}
 	return rel.CommissionRatioBps
 }
 
-// ApplyAffiliateTopupReward 被邀请用户获得充值额度 quotaAdded 后，按邀请关系比例将提成记入邀请人 aff_quota / aff_history（与 resolveCommissionBps 一致，不增加 quota）。
+// ApplyAffiliateTopupReward 被邀请用户获得充值额度 quotaAdded 后，按 effectiveAffiliateCommissionBps 将提成记入邀请人 aff_quota / aff_history（不增加 quota）。
 // 须在支付回调完成入账后调用，与订单事务解耦。
 func ApplyAffiliateTopupReward(inviteeUserId int, quotaAdded int) {
 	if inviteeUserId <= 0 || quotaAdded <= 0 {
@@ -119,7 +148,11 @@ func ApplyAffiliateTopupReward(inviteeUserId int, quotaAdded int) {
 	if inviterId <= 0 {
 		return
 	}
-	bps := resolveCommissionBps(inviterId, inviteeUserId)
+	inviterUser, errInv := GetUserById(inviterId, false)
+	if errInv != nil || inviterUser.Role != common.RoleDistributorUser {
+		return
+	}
+	bps := effectiveAffiliateCommissionBps(inviterUser, inviteeUserId)
 	if bps <= 0 {
 		return
 	}
@@ -134,6 +167,14 @@ func ApplyAffiliateTopupReward(inviteeUserId int, quotaAdded int) {
 		common.SysError(fmt.Sprintf("ApplyAffiliateTopupReward: inviter=%d invitee=%d reward=%d err=%v", inviterId, inviteeUserId, reward, err))
 		return
 	}
+	if err := InsertAffInviteCommissionLog(inviterId, inviteeUserId, quotaAdded, bps, reward); err != nil {
+		common.SysError(fmt.Sprintf("ApplyAffiliateTopupReward commission log: inviter=%d invitee=%d err=%v", inviterId, inviteeUserId, err))
+	}
+	if err := DB.Model(&AffInviteRelation{}).
+		Where("inviter_id = ? AND invitee_user_id = ?", inviterId, inviteeUserId).
+		UpdateColumn("commission_earned_quota", gorm.Expr("commission_earned_quota + ?", reward)).Error; err != nil {
+		common.SysError(fmt.Sprintf("ApplyAffiliateTopupReward update earned: inviter=%d invitee=%d err=%v", inviterId, inviteeUserId, err))
+	}
 	inviteeLabel := strings.TrimSpace(invitee.Username)
 	if inviteeLabel == "" {
 		inviteeLabel = strings.TrimSpace(invitee.DisplayName)
@@ -146,7 +187,7 @@ func ApplyAffiliateTopupReward(inviteeUserId int, quotaAdded int) {
 	RecordLog(inviterId, LogTypeSystem, fmt.Sprintf("邀请分销奖励（被邀请用户 %s 充值）%s，分成比例 %s", inviteeLabel, amt, pct))
 }
 
-// ListAffInvitees 分页返回当前用户邀请注册的用户及其分销比例。
+// ListAffInvitees 分页返回当前用户邀请注册的用户（含关系表累计分成等；单笔明细见 aff_invite_commission_logs）。
 func ListAffInvitees(inviterId int, pageInfo *common.PageInfo) ([]AffInviteeListItem, int64, error) {
 	if inviterId <= 0 {
 		return nil, 0, errors.New("invalid inviter")
@@ -171,8 +212,12 @@ func ListAffInvitees(inviterId int, pageInfo *common.PageInfo) ([]AffInviteeList
 	var rels []AffInviteRelation
 	_ = DB.Where("inviter_id = ? AND invitee_user_id IN ?", inviterId, ids).Find(&rels).Error
 	bpsMap := make(map[int]int, len(rels))
+	earnedMap := make(map[int]int, len(rels))
+	relCreatedMap := make(map[int]int64, len(rels))
 	for _, r := range rels {
 		bpsMap[r.InviteeUserId] = r.CommissionRatioBps
+		earnedMap[r.InviteeUserId] = r.CommissionEarnedQuota
+		relCreatedMap[r.InviteeUserId] = r.CreatedAt
 	}
 	defaultBps := common.AffiliateDefaultCommissionBps
 	items := make([]AffInviteeListItem, 0, len(users))
@@ -183,11 +228,15 @@ func ListAffInvitees(inviterId int, pageInfo *common.PageInfo) ([]AffInviteeList
 		} else if bps <= 0 {
 			bps = defaultBps
 		}
+		earned := earnedMap[u.Id]
+		relAt := relCreatedMap[u.Id]
 		items = append(items, AffInviteeListItem{
-			InviteeId:          u.Id,
-			Username:           u.Username,
-			DisplayName:        u.DisplayName,
-			CommissionRatioBps: bps,
+			InviteeId:             u.Id,
+			Username:              u.Username,
+			DisplayName:           u.DisplayName,
+			CommissionRatioBps:    bps,
+			CommissionEarnedQuota: earned,
+			CreatedAt:             relAt,
 		})
 	}
 	return items, total, nil
