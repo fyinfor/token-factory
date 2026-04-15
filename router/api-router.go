@@ -46,6 +46,34 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/oauth/:provider", middleware.CriticalRateLimit(), controller.HandleOAuth)
 		apiRouter.GET("/ratio_config", middleware.CriticalRateLimit(), controller.GetRatioConfig)
 
+		// 分销商：申请、中心（需登录）
+		distributorRoute := apiRouter.Group("/distributor")
+		distributorRoute.Use(middleware.UserAuth())
+		{
+			distributorRoute.GET("/my_application", controller.GetMyDistributorApplication)
+			distributorRoute.POST("/application", controller.PostDistributorApplication)
+			distributorRoute.GET("/center", controller.GetDistributorCenterInfo)
+			distributorRoute.GET("/invitee/:invitee_id/commissions", controller.GetDistributorInviteeCommissionLogs)
+			distributorRoute.POST("/withdrawal", controller.PostDistributorWithdrawal)
+			distributorRoute.GET("/withdrawals", controller.GetDistributorWithdrawals)
+			distributorRoute.POST("/withdrawals/:id/cancel", controller.PostDistributorWithdrawalCancel)
+		}
+		distributorAdminRoute := apiRouter.Group("/distributor/admin")
+		distributorAdminRoute.Use(middleware.AdminAuth())
+		{
+			distributorAdminRoute.GET("/applications", controller.ListDistributorApplicationsAdmin)
+			distributorAdminRoute.GET("/applications/:id", controller.GetDistributorApplicationAdmin)
+			distributorAdminRoute.POST("/applications/:id/approve", controller.ApproveDistributorApplicationAdmin)
+			distributorAdminRoute.POST("/applications/:id/reject", controller.RejectDistributorApplicationAdmin)
+			distributorAdminRoute.GET("/distributors", controller.ListDistributorsAdmin)
+			distributorAdminRoute.PUT("/distributors/:id/commission", controller.PutDistributorCommissionAdmin)
+			distributorAdminRoute.GET("/distributors/:id/invitees", controller.GetDistributorInviteesAdmin)
+			distributorAdminRoute.POST("/distributors/:id/settle", controller.PostDistributorSettleAdmin)
+			distributorAdminRoute.GET("/withdrawals", controller.ListDistributorWithdrawalsAdmin)
+			distributorAdminRoute.POST("/withdrawals/:id/approve", controller.ApproveDistributorWithdrawalAdmin)
+			distributorAdminRoute.POST("/withdrawals/:id/reject", controller.RejectDistributorWithdrawalAdmin)
+		}
+
 		apiRouter.POST("/stripe/webhook", controller.StripeWebhook)
 		apiRouter.POST("/creem/webhook", controller.CreemWebhook)
 		apiRouter.POST("/waffo/webhook", controller.WaffoWebhook)

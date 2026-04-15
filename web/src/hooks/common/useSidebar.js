@@ -44,6 +44,7 @@ export const DEFAULT_ADMIN_CONFIG = {
     topup: true,
     personal: true,
     provider: true,
+    distributor_center: true,
   },
   admin: {
     enabled: true,
@@ -54,6 +55,7 @@ export const DEFAULT_ADMIN_CONFIG = {
     user: true,
     subscription: true,
     setting: true,
+    distributor: true,
   },
 };
 

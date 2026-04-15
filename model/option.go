@@ -131,6 +131,9 @@ func InitOptionMap() {
 	common.OptionMap["QuotaForInviter"] = strconv.Itoa(common.QuotaForInviter)
 	common.OptionMap["QuotaForInvitee"] = strconv.Itoa(common.QuotaForInvitee)
 	common.OptionMap["AffiliateDefaultCommissionBps"] = strconv.Itoa(common.AffiliateDefaultCommissionBps)
+	common.OptionMap["DistributorApplyCsImageUrl"] = ""
+	common.OptionMap["DistributorWithdrawCsImageUrl"] = ""
+	common.OptionMap["DistributorMinWithdrawQuota"] = ""
 	common.OptionMap["QuotaRemindThreshold"] = strconv.Itoa(common.QuotaRemindThreshold)
 	common.OptionMap["PreConsumedQuota"] = strconv.Itoa(common.PreConsumedQuota)
 	common.OptionMap["ModelRequestRateLimitCount"] = strconv.Itoa(setting.ModelRequestRateLimitCount)

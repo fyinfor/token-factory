@@ -25,7 +25,7 @@ import { ChevronLeft } from 'lucide-react';
 import { useSidebarCollapsed } from '../../hooks/common/useSidebarCollapsed';
 import { useSidebar } from '../../hooks/common/useSidebar';
 import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime';
-import { isAdmin, isRoot, showError } from '../../helpers';
+import { isAdmin, isRoot, showError, isDistributor } from '../../helpers';
 import SkeletonWrapper from './components/SkeletonWrapper';
 
 import { Nav, Divider, Button } from '@douyinfe/semi-ui';
@@ -50,6 +50,8 @@ const routerMap = {
   playground: '/console/playground',
   personal: '/console/personal',
   provider: '/console/provider',
+  distributor: '/console/distributor/admin',
+  distributor_center: '/console/distributor/center',
 };
 
 const SiderBar = ({ onNavigate = () => {} }) => {
@@ -140,6 +142,12 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         itemKey: 'provider',
         to: '/provider',
       },
+      {
+        text: t('分销中心'),
+        itemKey: 'distributor_center',
+        to: '/console/distributor/center',
+        className: isDistributor() ? '' : 'tableHiddle',
+      },
     ];
 
     // 根据配置过滤项目
@@ -149,7 +157,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
     });
 
     return filteredItems;
-  }, [t, isModuleVisible]);
+  }, [t, isModuleVisible, localStorage.getItem('user')]);
 
   const adminItems = useMemo(() => {
     const items = [
@@ -187,6 +195,12 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('用户管理'),
         itemKey: 'user',
         to: '/user',
+        className: isAdmin() ? '' : 'tableHiddle',
+      },
+      {
+        text: t('分销商管理'),
+        itemKey: 'distributor',
+        to: '/console/distributor/admin',
         className: isAdmin() ? '' : 'tableHiddle',
       },
       {

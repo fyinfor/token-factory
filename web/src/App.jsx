@@ -53,6 +53,10 @@ import SetupCheck from './components/layout/SetupCheck';
 
 const Home = lazy(() => import('./pages/Home'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
+const DistributorApply = lazy(() => import('./pages/DistributorApply'));
+const DistributorCenter = lazy(() => import('./pages/DistributorCenter'));
+const DistributorAdmin = lazy(() => import('./pages/DistributorAdmin'));
+const InviteRedirect = lazy(() => import('./pages/InviteRedirect'));
 const About = lazy(() => import('./pages/About'));
 const UserAgreement = lazy(() => import('./pages/UserAgreement'));
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
@@ -201,6 +205,14 @@ function App() {
           }
         />
         <Route
+          path='/r/:aff'
+          element={
+            <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+              <InviteRedirect />
+            </Suspense>
+          }
+        />
+        <Route
           path='/reset'
           element={
             <Suspense fallback={<Loading></Loading>} key={location.pathname}>
@@ -274,6 +286,36 @@ function App() {
             <PrivateRoute>
               <ProviderPage />
             </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/distributor/apply'
+          element={
+            <PrivateRoute>
+              <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+                <DistributorApply />
+              </Suspense>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/distributor/center'
+          element={
+            <PrivateRoute>
+              <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+                <DistributorCenter />
+              </Suspense>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/distributor/admin'
+          element={
+            <AdminRoute>
+              <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+                <DistributorAdmin />
+              </Suspense>
+            </AdminRoute>
           }
         />
         <Route
