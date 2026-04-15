@@ -82,7 +82,20 @@ func UpsertDistributorApplication(userId int, realName, idCardNo, qualificationU
 		return errors.New("申请正在审核中，请耐心等待")
 	}
 	if app.Status == DistributorAppStatusApproved {
-		return errors.New("申请已通过")
+		// 记录仍为「已通过」，但账号已被降级为普通用户时需允许再次提交（与驳回后重提相同，重置为待审核）
+		if u.Role == common.RoleDistributorUser {
+			return errors.New("申请已通过")
+		}
+		app.RealName = realName
+		app.IdCardNo = idCardNo
+		app.QualificationUrls = qualificationUrlsJSON
+		app.Contact = contact
+		app.Status = DistributorAppStatusPending
+		app.RejectReason = ""
+		app.ReviewerId = 0
+		app.ReviewedAt = 0
+		app.UpdatedAt = ts
+		return DB.Save(&app).Error
 	}
 	// rejected -> resubmit
 	app.RealName = realName

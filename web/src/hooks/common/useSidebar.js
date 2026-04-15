@@ -20,7 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState, useEffect, useMemo, useContext, useRef } from 'react';
 import { StatusContext } from '../../context/Status';
 import { UserContext } from '../../context/User';
-import { API } from '../../helpers';
+import { API, mergeSelfResponseIntoLocalUser } from '../../helpers';
 
 // 创建一个全局事件系统来同步所有useSidebar实例
 const sidebarEventTarget = new EventTarget();
@@ -123,18 +123,7 @@ export const useSidebar = () => {
         const payload = res.data.data;
         // 与登录态一致：用服务端最新资料（含 role）覆盖本地 user，避免仅刷新页面时侧栏仍用旧的「非分销商」等缓存
         if (payload.id != null) {
-          try {
-            const { permissions: _p, sidebar_modules: _s, ...serverProfile } =
-              payload;
-            let prev = {};
-            const raw = localStorage.getItem('user');
-            if (raw) prev = JSON.parse(raw);
-            const nextUser = { ...prev, ...serverProfile };
-            localStorage.setItem('user', JSON.stringify(nextUser));
-            userDispatch({ type: 'login', payload: nextUser });
-          } catch (e) {
-            // 合并失败时不阻断侧栏模块配置加载
-          }
+          mergeSelfResponseIntoLocalUser(payload, userDispatch);
         }
 
         if (payload.sidebar_modules) {

@@ -29,6 +29,7 @@ import { API, showError, copy, showSuccess } from '../../helpers';
 import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { API_ENDPOINTS } from '../../constants/common.constant';
 import { StatusContext } from '../../context/Status';
+import { UserContext } from '../../context/User';
 import { useActualTheme } from '../../context/Theme';
 import { marked } from 'marked';
 import { useTranslation } from 'react-i18next';
@@ -95,6 +96,7 @@ const HOME_FEATURE_CARDS = [
 const Home = () => {
   const { t, i18n } = useTranslation();
   const [statusState] = useContext(StatusContext);
+  const [userState] = useContext(UserContext);
   const actualTheme = useActualTheme();
   const [homePageContentLoaded, setHomePageContentLoaded] = useState(false);
   const [homePageContent, setHomePageContent] = useState('');
@@ -109,8 +111,12 @@ const Home = () => {
 
   let userRole = null;
   try {
-    const raw = localStorage.getItem('user');
-    if (raw) userRole = JSON.parse(raw).role;
+    if (userState?.user && typeof userState.user.role === 'number') {
+      userRole = userState.user.role;
+    } else {
+      const raw = localStorage.getItem('user');
+      if (raw) userRole = JSON.parse(raw).role;
+    }
   } catch {
     userRole = null;
   }

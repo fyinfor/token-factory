@@ -7,7 +7,7 @@ published by the Free Software Foundation, either version 3 of the
 License, or (at your option) any later version.
 */
 
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import {
   Button,
   Card,
@@ -22,6 +22,7 @@ import { IconFile, IconUserGroup } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
 import { API, showError, showSuccess } from '../helpers';
 import { StatusContext } from '../context/Status';
+import { UserContext } from '../context/User';
 import { USER_ROLES } from '../constants/user.constants';
 
 const { Text } = Typography;
@@ -36,6 +37,7 @@ const statusText = (s) => {
 export default function DistributorApply() {
   const { t } = useTranslation();
   const [statusState] = useContext(StatusContext);
+  const [userState] = useContext(UserContext);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [app, setApp] = useState(null);
@@ -71,6 +73,48 @@ export default function DistributorApply() {
     load();
   }, []);
 
+  const role = useMemo(() => {
+    try {
+      if (userState?.user && typeof userState.user.role === 'number') {
+        return userState.user.role;
+      }
+      const raw = localStorage.getItem('user');
+      if (raw) return JSON.parse(raw).role ?? USER_ROLES.USER;
+    } catch {
+      // ignore
+    }
+    return USER_ROLES.USER;
+  }, [userState?.user?.role]);
+
+  /** 申请记录为已通过，且当前账号仍是分销商：显示「去分销中心」 */
+  const showApprovedForActiveDistributor =
+    app?.status === 2 && role === USER_ROLES.DISTRIBUTOR;
+
+  /** 记录曾为已通过，但账号已非分销商（如被降级）：应允许重新提交 */
+  const showReapplyAfterRevoked =
+    app?.status === 2 && role !== USER_ROLES.DISTRIBUTOR;
+
+  useEffect(() => {
+    if (!showReapplyAfterRevoked || !app || loading) return;
+    const tid = window.setTimeout(() => {
+      try {
+        formApi.current?.setValues({
+          real_name: app.real_name || '',
+          id_card_no: app.id_card_no || '',
+          contact: app.contact || '',
+        });
+        const raw = app.qualification_urls;
+        if (raw) {
+          const j = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          if (Array.isArray(j) && j.length) setUrls(j.filter(Boolean));
+        }
+      } catch {
+        // ignore
+      }
+    }, 0);
+    return () => window.clearTimeout(tid);
+  }, [showReapplyAfterRevoked, app, loading]);
+
   const onSubmit = async () => {
     const api = formApi.current;
     if (!api) return;
@@ -105,14 +149,6 @@ export default function DistributorApply() {
       setSubmitting(false);
     }
   };
-
-  const userRaw = localStorage.getItem('user');
-  let role = USER_ROLES.USER;
-  try {
-    if (userRaw) role = JSON.parse(userRaw).role ?? USER_ROLES.USER;
-  } catch {
-    // ignore
-  }
 
   if (role === USER_ROLES.DISTRIBUTOR) {
     return (
@@ -189,7 +225,7 @@ export default function DistributorApply() {
                 {t('您的申请正在审核中，请耐心等待。')}
               </Text>
             </div>
-          ) : app?.status === 2 ? (
+          ) : showApprovedForActiveDistributor ? (
             <div className='py-10 px-4 text-center'>
               <Text className='!text-lg md:!text-xl !leading-relaxed !font-medium text-[var(--semi-color-text-0)]'>
                 {t('申请已通过，请从侧栏进入「分销中心」。')}
@@ -197,6 +233,15 @@ export default function DistributorApply() {
             </div>
           ) : (
             <Spin spinning={loading}>
+              {showReapplyAfterRevoked ? (
+                <Banner
+                  type='info'
+                  className='mb-4'
+                  description={t(
+                    '您的分销商资格已失效（例如已被管理员调整），可修改资料后重新提交审核。',
+                  )}
+                />
+              ) : null}
               <Form
                 getFormApi={(f) => (formApi.current = f)}
                 layout='vertical'
@@ -338,7 +383,9 @@ export default function DistributorApply() {
                   loading={submitting}
                   onClick={onSubmit}
                 >
-                  {t('提交申请')}
+                  {showReapplyAfterRevoked
+                    ? t('重新提交审核')
+                    : t('提交申请')}
                 </Button>
               </Form>
             </Spin>

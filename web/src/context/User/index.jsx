@@ -21,6 +21,7 @@ import React, { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { reducer, initialState } from './reducer';
 import { normalizeLanguage } from '../../i18n/language';
+import { API, mergeSelfResponseIntoLocalUser } from '../../helpers';
 
 export const UserContext = React.createContext({
   state: initialState,
@@ -30,6 +31,24 @@ export const UserContext = React.createContext({
 export const UserProvider = ({ children }) => {
   const [state, dispatch] = React.useReducer(reducer, initialState);
   const { i18n } = useTranslation();
+
+  // 已登录时拉取服务端最新资料（含 role），避免仅依赖本地缓存：例如管理员将分销商降级后首页仍显示「已是分销商」、不显示申请入口
+  useEffect(() => {
+    if (!localStorage.getItem('user')) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await API.get('/api/user/self');
+        if (cancelled || !res.data.success || !res.data.data) return;
+        mergeSelfResponseIntoLocalUser(res.data.data, dispatch);
+      } catch (e) {
+        // 未登录 / token 失效时忽略
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [dispatch]);
 
   // Sync language preference when user data is loaded
   useEffect(() => {
