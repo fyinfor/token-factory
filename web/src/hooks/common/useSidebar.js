@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 import { useState, useEffect, useMemo, useContext, useRef } from 'react';
 import { StatusContext } from '../../context/Status';
+import { UserContext } from '../../context/User';
 import { API } from '../../helpers';
 
 // 创建一个全局事件系统来同步所有useSidebar实例
@@ -81,6 +82,7 @@ export const mergeAdminConfig = (savedConfig) => {
 
 export const useSidebar = () => {
   const [statusState] = useContext(StatusContext);
+  const [, userDispatch] = useContext(UserContext);
   const [userConfig, setUserConfig] = useState(null);
   const [loading, setLoading] = useState(true);
   const instanceIdRef = useRef(null);
@@ -117,23 +119,55 @@ export const useSidebar = () => {
       }
 
       const res = await API.get('/api/user/self');
-      if (res.data.success && res.data.data.sidebar_modules) {
-        let config;
-        // 检查sidebar_modules是字符串还是对象
-        if (typeof res.data.data.sidebar_modules === 'string') {
-          config = JSON.parse(res.data.data.sidebar_modules);
-        } else {
-          config = res.data.data.sidebar_modules;
+      if (res.data.success && res.data.data) {
+        const payload = res.data.data;
+        // 与登录态一致：用服务端最新资料（含 role）覆盖本地 user，避免仅刷新页面时侧栏仍用旧的「非分销商」等缓存
+        if (payload.id != null) {
+          try {
+            const { permissions: _p, sidebar_modules: _s, ...serverProfile } =
+              payload;
+            let prev = {};
+            const raw = localStorage.getItem('user');
+            if (raw) prev = JSON.parse(raw);
+            const nextUser = { ...prev, ...serverProfile };
+            localStorage.setItem('user', JSON.stringify(nextUser));
+            userDispatch({ type: 'login', payload: nextUser });
+          } catch (e) {
+            // 合并失败时不阻断侧栏模块配置加载
+          }
         }
-        setUserConfig(config);
+
+        if (payload.sidebar_modules) {
+          let config;
+          if (typeof payload.sidebar_modules === 'string') {
+            config = JSON.parse(payload.sidebar_modules);
+          } else {
+            config = payload.sidebar_modules;
+          }
+          setUserConfig(config);
+        } else {
+          // 当用户没有配置时，生成一个基于管理员配置的默认用户配置
+          const defaultUserConfig = {};
+          Object.keys(adminConfig).forEach((sectionKey) => {
+            if (adminConfig[sectionKey]?.enabled) {
+              defaultUserConfig[sectionKey] = { enabled: true };
+              Object.keys(adminConfig[sectionKey]).forEach((moduleKey) => {
+                if (
+                  moduleKey !== 'enabled' &&
+                  adminConfig[sectionKey][moduleKey]
+                ) {
+                  defaultUserConfig[sectionKey][moduleKey] = true;
+                }
+              });
+            }
+          });
+          setUserConfig(defaultUserConfig);
+        }
       } else {
-        // 当用户没有配置时，生成一个基于管理员配置的默认用户配置
-        // 这样可以确保权限控制正确生效
         const defaultUserConfig = {};
         Object.keys(adminConfig).forEach((sectionKey) => {
           if (adminConfig[sectionKey]?.enabled) {
             defaultUserConfig[sectionKey] = { enabled: true };
-            // 为每个管理员允许的模块设置默认值为true
             Object.keys(adminConfig[sectionKey]).forEach((moduleKey) => {
               if (
                 moduleKey !== 'enabled' &&
