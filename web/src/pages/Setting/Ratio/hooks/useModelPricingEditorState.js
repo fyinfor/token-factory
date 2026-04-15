@@ -237,7 +237,7 @@ export const getModelWarnings = (model, t) => {
     hasValue(model.audioOutputPrice) &&
     !hasValue(model.audioInputPrice)
   ) {
-    warnings.push(t('填写音频补全价格前，需要先填写音频输入价格。'));
+    warnings.push(t('填写音频输出价格前，需要先填写音频输入价格。'));
   }
 
   return warnings;
@@ -315,7 +315,7 @@ const serializeModel = (model, t) => {
     if (hasDependentPrice) {
       throw new Error(
         t(
-          '模型 {{name}} 缺少输入价格，无法计算补全/缓存/图片/音频价格对应的倍率',
+          '模型 {{name}} 缺少输入价格，无法计算输出/缓存/图片/音频价格对应的倍率',
           {
             name: model.name,
           },
@@ -380,7 +380,7 @@ const serializeModel = (model, t) => {
   if (audioOutputPrice !== null) {
     if (audioInputPrice === null || audioInputPrice === 0) {
       throw new Error(
-        t('模型 {{name}} 缺少音频输入价格，无法计算音频补全倍率', {
+        t('模型 {{name}} 缺少音频输入价格，无法计算音频输出倍率', {
           name: model.name,
         }),
       );

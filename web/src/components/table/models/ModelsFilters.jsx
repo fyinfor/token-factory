@@ -71,7 +71,7 @@ const ModelsFilters = ({
           <Form.Input
             field='searchVendor'
             prefix={<IconSearch />}
-            placeholder={t('搜索供应商')}
+            placeholder={t('搜索模型类型')}
             showClear
             pure
             size='small'

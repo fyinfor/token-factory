@@ -67,17 +67,17 @@ const EditModelModal = (props) => {
   const isEdit = props.editingModel && props.editingModel.id !== undefined;
   const placement = useMemo(() => (isEdit ? 'right' : 'left'), [isEdit]);
 
-  // 供应商列表
+  // 模型类型列表
   const [vendors, setVendors] = useState([]);
 
   // 预填组（标签、端点）
   const [tagGroups, setTagGroups] = useState([]);
   const [endpointGroups, setEndpointGroups] = useState([]);
 
-  // 获取供应商列表
+  // 获取模型类型列表
   const fetchVendors = async () => {
     try {
-      const res = await API.get('/api/vendors/?page_size=1000'); // 获取全部供应商
+      const res = await API.get('/api/vendors/?page_size=1000'); // 获取全部模型类型
       if (res.data.success) {
         const items = res.data.data.items || res.data.data || [];
         setVendors(Array.isArray(items) ? items : []);
@@ -426,8 +426,8 @@ const EditModelModal = (props) => {
                   <Col span={24}>
                     <Form.Select
                       field='vendor_id'
-                      label={t('供应商')}
-                      placeholder={t('选择模型供应商')}
+                      label={t('模型类型')}
+                      placeholder={t('选择模型类型')}
                       optionList={vendors.map((v) => ({
                         label: v.name,
                         value: v.id,
