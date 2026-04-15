@@ -44,6 +44,9 @@ import (
 // @securityDefinitions.apikey ApiKeyAuth
 // @in header
 // @name Authorization
+// @securityDefinitions.apikey ApiUserID
+// @in header
+// @name New-Api-User
 
 //go:embed web/dist
 var buildFS embed.FS

@@ -1,5 +1,30 @@
 basePath: /api
 definitions:
+  constant.MultiKeyMode:
+    enum:
+    - random
+    - polling
+    type: string
+    x-enum-comments:
+      MultiKeyModePolling: 轮询
+      MultiKeyModeRandom: 随机
+    x-enum-descriptions:
+    - 随机
+    - 轮询
+    x-enum-varnames:
+    - MultiKeyModeRandom
+    - MultiKeyModePolling
+  controller.AddChannelRequest:
+    properties:
+      batch_add_set_key_prefix_2_name:
+        type: boolean
+      channel:
+        $ref: '#/definitions/model.Channel'
+      mode:
+        type: string
+      multi_key_mode:
+        $ref: '#/definitions/constant.MultiKeyMode'
+    type: object
   controller.KlingCameraConfig:
     properties:
       horizontal:
@@ -109,6 +134,8 @@ definitions:
     type: object
   controller.SupplierApplicationSubmitRequest:
     properties:
+      business_license_file:
+        type: string
       business_license_url:
         type: string
       company_name:
@@ -123,6 +150,29 @@ definitions:
         type: string
       credit_code:
         type: string
+      legal_representative:
+        type: string
+    type: object
+  controller.SupplierApplicationUpdateRequest:
+    properties:
+      business_license_file:
+        type: string
+      business_license_url:
+        type: string
+      company_name:
+        type: string
+      company_size:
+        type: string
+      contact_mobile:
+        type: string
+      contact_name:
+        type: string
+      contact_wechat:
+        type: string
+      credit_code:
+        type: string
+      id:
+        type: integer
       legal_representative:
         type: string
     type: object
@@ -233,6 +283,171 @@ definitions:
       url:
         description: 视频资源URL（成功时）
         type: string
+    type: object
+  model.BoundChannel:
+    properties:
+      name:
+        type: string
+      type:
+        type: integer
+    type: object
+  model.Channel:
+    properties:
+      auto_ban:
+        type: integer
+      balance:
+        description: in USD
+        type: number
+      balance_updated_time:
+        type: integer
+      base_url:
+        type: string
+      channel_info:
+        allOf:
+        - $ref: '#/definitions/model.ChannelInfo'
+        description: add after v0.8.5
+      created_time:
+        type: integer
+      group:
+        type: string
+      header_override:
+        type: string
+      id:
+        type: integer
+      key:
+        type: string
+      model_mapping:
+        type: string
+      models:
+        type: string
+      name:
+        type: string
+      openai_organization:
+        type: string
+      other:
+        type: string
+      other_info:
+        type: string
+      owner_user_id:
+        description: 渠道归属用户ID（供应商场景）
+        type: integer
+      param_override:
+        type: string
+      priority:
+        type: integer
+      remark:
+        maxLength: 255
+        type: string
+      response_time:
+        description: in milliseconds
+        type: integer
+      setting:
+        description: 渠道额外设置
+        type: string
+      settings:
+        description: 其他设置，存储azure版本等不需要检索的信息，详见dto.ChannelOtherSettings
+        type: string
+      status:
+        type: integer
+      status_code_mapping:
+        description: MaxInputTokens     *int    `json:"max_input_tokens" gorm:"default:0"`
+        type: string
+      supplier_application_id:
+        description: 关联 supplier_applications.id
+        type: integer
+      tag:
+        type: string
+      test_model:
+        type: string
+      test_time:
+        type: integer
+      type:
+        type: integer
+      used_quota:
+        type: integer
+      weight:
+        type: integer
+    type: object
+  model.ChannelInfo:
+    properties:
+      is_multi_key:
+        description: 是否多Key模式
+        type: boolean
+      multi_key_disabled_reason:
+        additionalProperties:
+          type: string
+        description: key禁用原因列表，key index -> reason
+        type: object
+      multi_key_disabled_time:
+        additionalProperties:
+          format: int64
+          type: integer
+        description: key禁用时间列表，key index -> time
+        type: object
+      multi_key_mode:
+        $ref: '#/definitions/constant.MultiKeyMode'
+      multi_key_polling_index:
+        description: 多Key模式下轮询的key索引
+        type: integer
+      multi_key_size:
+        description: 多Key模式下的Key数量
+        type: integer
+      multi_key_status_list:
+        additionalProperties:
+          type: integer
+        description: key状态列表，key index -> status
+        type: object
+    type: object
+  model.Model:
+    properties:
+      bound_channels:
+        items:
+          $ref: '#/definitions/model.BoundChannel'
+        type: array
+      created_time:
+        type: integer
+      description:
+        type: string
+      enable_groups:
+        items:
+          type: string
+        type: array
+      endpoints:
+        type: string
+      icon:
+        type: string
+      id:
+        type: integer
+      matched_count:
+        type: integer
+      matched_models:
+        items:
+          type: string
+        type: array
+      model_name:
+        type: string
+      name_rule:
+        type: integer
+      owner_user_id:
+        description: 模型归属用户ID（供应商场景）
+        type: integer
+      quota_types:
+        items:
+          type: integer
+        type: array
+      status:
+        type: integer
+      supplier_application_id:
+        description: 关联 supplier_applications.id
+        type: integer
+      sync_official:
+        type: integer
+      tags:
+        type: string
+      updated_time:
+        type: integer
+      vendor_id:
+        type: integer
     type: object
 info:
   contact: {}
@@ -393,6 +608,7 @@ paths:
             type: object
       security:
       - ApiKeyAuth: []
+      - ApiUserID: []
       summary: 标记当前用户消息为已读
       tags:
       - Message
@@ -417,6 +633,7 @@ paths:
             type: object
       security:
       - ApiKeyAuth: []
+      - ApiUserID: []
       summary: 查询当前用户站内消息
       tags:
       - Message
@@ -432,6 +649,7 @@ paths:
             type: object
       security:
       - ApiKeyAuth: []
+      - ApiUserID: []
       summary: 获取当前用户未读站内消息数量
       tags:
       - Message
@@ -460,6 +678,7 @@ paths:
             type: object
       security:
       - ApiKeyAuth: []
+      - ApiUserID: []
       summary: 管理员分页查询供应商申请
       tags:
       - SupplierAdmin
@@ -489,6 +708,7 @@ paths:
             type: object
       security:
       - ApiKeyAuth: []
+      - ApiUserID: []
       summary: 提交供应商入驻申请
       tags:
       - Supplier
@@ -524,11 +744,59 @@ paths:
             type: object
       security:
       - ApiKeyAuth: []
+      - ApiUserID: []
       summary: 管理员审核供应商申请
       tags:
       - SupplierAdmin
   /user/supplier/application/self:
     get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success + data{申请对象或null}
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      - ApiUserID: []
+      summary: 查询当前用户供应商申请
+      tags:
+      - Supplier
+    put:
+      consumes:
+      - application/json
+      description: 当前申请只要未审核通过都可修改，修改后状态重置为待审核(0)
+      parameters:
+      - description: 申请信息（含id）
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.SupplierApplicationUpdateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success + data{id,status}
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      - ApiUserID: []
+      summary: 修改当前用户供应商申请并重新提交
+      tags:
+      - Supplier
+  /user/supplier/channels:
+    get:
+      description: 供应商返回本人渠道；管理员返回所有供应商渠道
       parameters:
       - description: 页码
         in: query
@@ -538,10 +806,30 @@ paths:
         in: query
         name: page_size
         type: integer
-      - description: 状态：0待审核 1审核通过 2审核驳回
+      - description: 渠道ID
         in: query
-        name: status
+        name: channel_id
         type: integer
+      - description: 渠道名称（模糊）
+        in: query
+        name: name
+        type: string
+      - description: 渠道密钥（精确或模糊）
+        in: query
+        name: key
+        type: string
+      - description: API地址（模糊）
+        in: query
+        name: base_url
+        type: string
+      - description: 模型关键字（模糊）
+        in: query
+        name: model
+        type: string
+      - description: 分组
+        in: query
+        name: group
+        type: string
       produces:
       - application/json
       responses:
@@ -552,9 +840,111 @@ paths:
             type: object
       security:
       - ApiKeyAuth: []
-      summary: 查询当前用户提交的供应商申请
+      - ApiUserID: []
+      summary: 查询当前供应商渠道列表
       tags:
       - Supplier
+    post:
+      consumes:
+      - application/json
+      description: 仅审核通过的供应商可新增，自动写入 owner_user_id 与 supplier_application_id
+      parameters:
+      - description: 渠道创建参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.AddChannelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 创建结果
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      - ApiUserID: []
+      summary: 当前供应商新增渠道
+      tags:
+      - Supplier
+  /user/supplier/models:
+    get:
+      description: 仅返回当前登录供应商创建的模型
+      parameters:
+      - description: 页码
+        in: query
+        name: p
+        type: integer
+      - description: 每页数量
+        in: query
+        name: page_size
+        type: integer
+      - description: 模型名称（模糊）
+        in: query
+        name: model_name
+        type: string
+      - description: 模型类型（映射 vendor，支持名称或ID）
+        in: query
+        name: model_type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 分页结果
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      - ApiUserID: []
+      summary: 查询当前供应商模型列表
+      tags:
+      - Supplier
+    post:
+      consumes:
+      - application/json
+      description: 仅审核通过供应商可新增，自动写入 owner_user_id 与 supplier_application_id
+      parameters:
+      - description: 模型创建参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/model.Model'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 创建结果
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      - ApiUserID: []
+      summary: 当前供应商新增模型
+      tags:
+      - Supplier
+  /user/token:
+    get:
+      description: 生成并返回当前登录用户的 access_token，用于在 Authorization 请求头中进行接口鉴权
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success + data{access_token}
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      - ApiUserID: []
+      summary: 生成当前用户 AccessToken
+      tags:
+      - 用户
   /v1/video/generations:
     post:
       consumes:
@@ -649,5 +1039,9 @@ securityDefinitions:
   ApiKeyAuth:
     in: header
     name: Authorization
+    type: apiKey
+  ApiUserID:
+    in: header
+    name: New-Api-User
     type: apiKey
 swagger: "2.0"

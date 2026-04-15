@@ -281,6 +281,15 @@ func GetUser(c *gin.Context) {
 	return
 }
 
+// GenerateAccessToken godoc
+// @Summary 生成当前用户 AccessToken
+// @Description 生成并返回当前登录用户的 access_token，用于在 Authorization 请求头中进行接口鉴权
+// @Tags 用户
+// @Produce json
+// @Security ApiKeyAuth
+// @Security ApiUserID
+// @Success 200 {object} map[string]interface{} "success + data{access_token}"
+// @Router /user/token [get]
 func GenerateAccessToken(c *gin.Context) {
 	id := c.GetInt("id")
 	user, err := model.GetUserById(id, true)

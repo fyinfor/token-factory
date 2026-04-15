@@ -208,6 +208,9 @@ const docTemplate = `{
                 "security": [
                     {
                         "ApiKeyAuth": []
+                    },
+                    {
+                        "ApiUserID": []
                     }
                 ],
                 "produces": [
@@ -247,6 +250,9 @@ const docTemplate = `{
                 "security": [
                     {
                         "ApiKeyAuth": []
+                    },
+                    {
+                        "ApiUserID": []
                     }
                 ],
                 "produces": [
@@ -272,6 +278,9 @@ const docTemplate = `{
                 "security": [
                     {
                         "ApiKeyAuth": []
+                    },
+                    {
+                        "ApiUserID": []
                     }
                 ],
                 "produces": [
@@ -313,6 +322,9 @@ const docTemplate = `{
                 "security": [
                     {
                         "ApiKeyAuth": []
+                    },
+                    {
+                        "ApiUserID": []
                     }
                 ],
                 "produces": [
@@ -356,6 +368,9 @@ const docTemplate = `{
                 "security": [
                     {
                         "ApiKeyAuth": []
+                    },
+                    {
+                        "ApiUserID": []
                     }
                 ],
                 "description": "普通用户提交供应商申请，提交后生成管理员待审核站内消息",
@@ -403,6 +418,9 @@ const docTemplate = `{
                 "security": [
                     {
                         "ApiKeyAuth": []
+                    },
+                    {
+                        "ApiUserID": []
                     }
                 ],
                 "produces": [
@@ -411,30 +429,58 @@ const docTemplate = `{
                 "tags": [
                     "Supplier"
                 ],
-                "summary": "查询当前用户提交的供应商申请",
+                "summary": "查询当前用户供应商申请",
+                "responses": {
+                    "200": {
+                        "description": "success + data{申请对象或null}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "当前申请只要未审核通过都可修改，修改后状态重置为待审核(0)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Supplier"
+                ],
+                "summary": "修改当前用户供应商申请并重新提交",
                 "parameters": [
                     {
-                        "type": "integer",
-                        "description": "页码",
-                        "name": "p",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "每页数量",
-                        "name": "page_size",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "状态：0待审核 1审核通过 2审核驳回",
-                        "name": "status",
-                        "in": "query"
+                        "description": "申请信息（含id）",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.SupplierApplicationUpdateRequest"
+                        }
                     }
                 ],
                 "responses": {
                     "200": {
-                        "description": "分页结果",
+                        "description": "success + data{id,status}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -448,6 +494,9 @@ const docTemplate = `{
                 "security": [
                     {
                         "ApiKeyAuth": []
+                    },
+                    {
+                        "ApiUserID": []
                     }
                 ],
                 "description": "任一管理员可审核一次，仅待审核状态允许处理",
@@ -489,6 +538,251 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/user/supplier/channels": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "供应商返回本人渠道；管理员返回所有供应商渠道",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Supplier"
+                ],
+                "summary": "查询当前供应商渠道列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "p",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "渠道ID",
+                        "name": "channel_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "渠道名称（模糊）",
+                        "name": "name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "渠道密钥（精确或模糊）",
+                        "name": "key",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "API地址（模糊）",
+                        "name": "base_url",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "模型关键字（模糊）",
+                        "name": "model",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "分组",
+                        "name": "group",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "分页结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "仅审核通过的供应商可新增，自动写入 owner_user_id 与 supplier_application_id",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Supplier"
+                ],
+                "summary": "当前供应商新增渠道",
+                "parameters": [
+                    {
+                        "description": "渠道创建参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.AddChannelRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "创建结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/user/supplier/models": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "仅返回当前登录供应商创建的模型",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Supplier"
+                ],
+                "summary": "查询当前供应商模型列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "p",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "模型名称（模糊）",
+                        "name": "model_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "模型类型（映射 vendor，支持名称或ID）",
+                        "name": "model_type",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "分页结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "仅审核通过供应商可新增，自动写入 owner_user_id 与 supplier_application_id",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Supplier"
+                ],
+                "summary": "当前供应商新增模型",
+                "parameters": [
+                    {
+                        "description": "模型创建参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/model.Model"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "创建结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/user/token": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "生成并返回当前登录用户的 access_token，用于在 Authorization 请求头中进行接口鉴权",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "用户"
+                ],
+                "summary": "生成当前用户 AccessToken",
+                "responses": {
+                    "200": {
+                        "description": "success + data{access_token}",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -627,6 +921,42 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "constant.MultiKeyMode": {
+            "type": "string",
+            "enum": [
+                "random",
+                "polling"
+            ],
+            "x-enum-comments": {
+                "MultiKeyModePolling": "轮询",
+                "MultiKeyModeRandom": "随机"
+            },
+            "x-enum-descriptions": [
+                "随机",
+                "轮询"
+            ],
+            "x-enum-varnames": [
+                "MultiKeyModeRandom",
+                "MultiKeyModePolling"
+            ]
+        },
+        "controller.AddChannelRequest": {
+            "type": "object",
+            "properties": {
+                "batch_add_set_key_prefix_2_name": {
+                    "type": "boolean"
+                },
+                "channel": {
+                    "$ref": "#/definitions/model.Channel"
+                },
+                "mode": {
+                    "type": "string"
+                },
+                "multi_key_mode": {
+                    "$ref": "#/definitions/constant.MultiKeyMode"
+                }
+            }
+        },
         "controller.KlingCameraConfig": {
             "type": "object",
             "properties": {
@@ -780,6 +1110,9 @@ const docTemplate = `{
         "controller.SupplierApplicationSubmitRequest": {
             "type": "object",
             "properties": {
+                "business_license_file": {
+                    "type": "string"
+                },
                 "business_license_url": {
                     "type": "string"
                 },
@@ -800,6 +1133,41 @@ const docTemplate = `{
                 },
                 "credit_code": {
                     "type": "string"
+                },
+                "legal_representative": {
+                    "type": "string"
+                }
+            }
+        },
+        "controller.SupplierApplicationUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "business_license_file": {
+                    "type": "string"
+                },
+                "business_license_url": {
+                    "type": "string"
+                },
+                "company_name": {
+                    "type": "string"
+                },
+                "company_size": {
+                    "type": "string"
+                },
+                "contact_mobile": {
+                    "type": "string"
+                },
+                "contact_name": {
+                    "type": "string"
+                },
+                "contact_wechat": {
+                    "type": "string"
+                },
+                "credit_code": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
                 },
                 "legal_representative": {
                     "type": "string"
@@ -951,12 +1319,260 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
+        },
+        "model.BoundChannel": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.Channel": {
+            "type": "object",
+            "properties": {
+                "auto_ban": {
+                    "type": "integer"
+                },
+                "balance": {
+                    "description": "in USD",
+                    "type": "number"
+                },
+                "balance_updated_time": {
+                    "type": "integer"
+                },
+                "base_url": {
+                    "type": "string"
+                },
+                "channel_info": {
+                    "description": "add after v0.8.5",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/model.ChannelInfo"
+                        }
+                    ]
+                },
+                "created_time": {
+                    "type": "integer"
+                },
+                "group": {
+                    "type": "string"
+                },
+                "header_override": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "model_mapping": {
+                    "type": "string"
+                },
+                "models": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "openai_organization": {
+                    "type": "string"
+                },
+                "other": {
+                    "type": "string"
+                },
+                "other_info": {
+                    "type": "string"
+                },
+                "owner_user_id": {
+                    "description": "渠道归属用户ID（供应商场景）",
+                    "type": "integer"
+                },
+                "param_override": {
+                    "type": "string"
+                },
+                "priority": {
+                    "type": "integer"
+                },
+                "remark": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "response_time": {
+                    "description": "in milliseconds",
+                    "type": "integer"
+                },
+                "setting": {
+                    "description": "渠道额外设置",
+                    "type": "string"
+                },
+                "settings": {
+                    "description": "其他设置，存储azure版本等不需要检索的信息，详见dto.ChannelOtherSettings",
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "status_code_mapping": {
+                    "description": "MaxInputTokens     *int    ` + "`" + `json:\"max_input_tokens\" gorm:\"default:0\"` + "`" + `",
+                    "type": "string"
+                },
+                "supplier_application_id": {
+                    "description": "关联 supplier_applications.id",
+                    "type": "integer"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "test_model": {
+                    "type": "string"
+                },
+                "test_time": {
+                    "type": "integer"
+                },
+                "type": {
+                    "type": "integer"
+                },
+                "used_quota": {
+                    "type": "integer"
+                },
+                "weight": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.ChannelInfo": {
+            "type": "object",
+            "properties": {
+                "is_multi_key": {
+                    "description": "是否多Key模式",
+                    "type": "boolean"
+                },
+                "multi_key_disabled_reason": {
+                    "description": "key禁用原因列表，key index -\u003e reason",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "multi_key_disabled_time": {
+                    "description": "key禁用时间列表，key index -\u003e time",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer",
+                        "format": "int64"
+                    }
+                },
+                "multi_key_mode": {
+                    "$ref": "#/definitions/constant.MultiKeyMode"
+                },
+                "multi_key_polling_index": {
+                    "description": "多Key模式下轮询的key索引",
+                    "type": "integer"
+                },
+                "multi_key_size": {
+                    "description": "多Key模式下的Key数量",
+                    "type": "integer"
+                },
+                "multi_key_status_list": {
+                    "description": "key状态列表，key index -\u003e status",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "model.Model": {
+            "type": "object",
+            "properties": {
+                "bound_channels": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.BoundChannel"
+                    }
+                },
+                "created_time": {
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "enable_groups": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "endpoints": {
+                    "type": "string"
+                },
+                "icon": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "matched_count": {
+                    "type": "integer"
+                },
+                "matched_models": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "model_name": {
+                    "type": "string"
+                },
+                "name_rule": {
+                    "type": "integer"
+                },
+                "owner_user_id": {
+                    "description": "模型归属用户ID（供应商场景）",
+                    "type": "integer"
+                },
+                "quota_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "supplier_application_id": {
+                    "description": "关联 supplier_applications.id",
+                    "type": "integer"
+                },
+                "sync_official": {
+                    "type": "integer"
+                },
+                "tags": {
+                    "type": "string"
+                },
+                "updated_time": {
+                    "type": "integer"
+                },
+                "vendor_id": {
+                    "type": "integer"
+                }
+            }
         }
     },
     "securityDefinitions": {
         "ApiKeyAuth": {
             "type": "apiKey",
             "name": "Authorization",
+            "in": "header"
+        },
+        "ApiUserID": {
+            "type": "apiKey",
+            "name": "New-Api-User",
             "in": "header"
         }
     }
