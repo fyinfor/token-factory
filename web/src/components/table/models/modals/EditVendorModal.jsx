@@ -62,7 +62,7 @@ const EditVendorModal = ({ visible, handleClose, refresh, editingVendor }) => {
         showError(message);
       }
     } catch (error) {
-      showError(t('加载供应商信息失败'));
+      showError(t('加载模型类型信息失败'));
     }
     setLoading(false);
   };
@@ -93,7 +93,7 @@ const EditVendorModal = ({ visible, handleClose, refresh, editingVendor }) => {
         const res = await API.put('/api/vendors/', submitData);
         const { success, message } = res.data;
         if (success) {
-          showSuccess(t('供应商更新成功！'));
+          showSuccess(t('模型类型更新成功！'));
           refresh();
           handleClose();
         } else {
@@ -103,7 +103,7 @@ const EditVendorModal = ({ visible, handleClose, refresh, editingVendor }) => {
         const res = await API.post('/api/vendors/', submitData);
         const { success, message } = res.data;
         if (success) {
-          showSuccess(t('供应商创建成功！'));
+          showSuccess(t('模型类型创建成功！'));
           refresh();
           handleClose();
         } else {
@@ -118,7 +118,7 @@ const EditVendorModal = ({ visible, handleClose, refresh, editingVendor }) => {
 
   return (
     <Modal
-      title={isEdit ? t('编辑供应商') : t('新增供应商')}
+      title={isEdit ? t('编辑模型类型') : t('新增模型类型')}
       visible={visible}
       onOk={() => formApiRef.current?.submitForm()}
       onCancel={handleCancel}
@@ -134,9 +134,9 @@ const EditVendorModal = ({ visible, handleClose, refresh, editingVendor }) => {
           <Col span={24}>
             <Form.Input
               field='name'
-              label={t('供应商名称')}
-              placeholder={t('请输入供应商名称，如：OpenAI')}
-              rules={[{ required: true, message: t('请输入供应商名称') }]}
+              label={t('模型类型名称')}
+              placeholder={t('请输入模型类型名称，如：OpenAI')}
+              rules={[{ required: true, message: t('请输入模型类型名称') }]}
               showClear
             />
           </Col>
@@ -144,7 +144,7 @@ const EditVendorModal = ({ visible, handleClose, refresh, editingVendor }) => {
             <Form.TextArea
               field='description'
               label={t('描述')}
-              placeholder={t('请输入供应商描述')}
+              placeholder={t('请输入模型类型描述')}
               rows={3}
               showClear
             />
@@ -152,7 +152,7 @@ const EditVendorModal = ({ visible, handleClose, refresh, editingVendor }) => {
           <Col span={24}>
             <Form.Input
               field='icon'
-              label={t('供应商图标')}
+              label={t('模型类型图标')}
               placeholder={t('请输入图标名称')}
               extraText={
                 <span>
