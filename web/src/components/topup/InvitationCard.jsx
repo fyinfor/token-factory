@@ -30,14 +30,23 @@ import {
   Table,
   // InputNumber, // 暂时禁用分销比例编辑功能
 } from '@douyinfe/semi-ui';
-import { Copy, Users, BarChart2, TrendingUp, Gift, Zap, Phone, MessageCircle } from 'lucide-react';
+import {
+  Copy,
+  Users,
+  BarChart2,
+  TrendingUp,
+  Gift,
+  Zap,
+} from 'lucide-react';
+import { Link } from 'react-router-dom';
+import dayjs from 'dayjs';
 import {
   API,
   showError,
   showSuccess,
   isDistributor,
-  formatCommissionRatioPercent,
 } from '../../helpers';
+import AffInviteeCommissionDetailModal from '../distributor/AffInviteeCommissionDetailModal';
 
 const { Text } = Typography;
 
@@ -55,6 +64,9 @@ const InvitationCard = ({
   const [inviteTotal, setInviteTotal] = useState(0);
   const [invitePage, setInvitePage] = useState(1);
   const [invitePageSize, setInvitePageSize] = useState(10);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailInviteeId, setDetailInviteeId] = useState(null);
+  const [detailInviteeLabel, setDetailInviteeLabel] = useState('');
   // const [savingId, setSavingId] = useState(null); // 暂时禁用分销比例编辑功能
 
   const loadInvitees = useCallback(
@@ -155,10 +167,38 @@ const InvitationCard = ({
       render: (v) => (v && String(v).trim() ? v : '—'),
     },
     {
-      title: t('分销比例'),
-      dataIndex: 'commission_ratio_bps',
-      width: 120,
-      render: (bps) => <Text>{formatCommissionRatioPercent(bps)}</Text>,
+      title: t('邀请时间'),
+      dataIndex: 'created_at',
+      width: 170,
+      render: (ts) =>
+        ts ? dayjs.unix(Number(ts)).format('YYYY-MM-DD HH:mm') : '—',
+    },
+    {
+      title: t('累计分成额度'),
+      dataIndex: 'commission_earned_quota',
+      width: 140,
+      render: (q) => renderQuota(q || 0),
+    },
+    {
+      title: t('操作'),
+      width: 88,
+      render: (_, record) => (
+        <Button
+          size='small'
+          type='tertiary'
+          onClick={() => {
+            setDetailInviteeId(record.invitee_id);
+            setDetailInviteeLabel(
+              String(
+                record.display_name || record.username || `#${record.invitee_id}`,
+              ).trim(),
+            );
+            setDetailOpen(true);
+          }}
+        >
+          {t('详情')}
+        </Button>
+      ),
     },
     // ====== 暂时禁用分销比例编辑功能 - 可编辑版本 ======
     // {
@@ -387,47 +427,16 @@ const InvitationCard = ({
           </Card>
         )}
 
-        {/* 非分销商：成为分销商 */}
         {!isDistributor() && (
-          <Card
-            className='!rounded-xl w-full'
-            title={
-              <div className='flex items-center gap-2'>
-                <Text type='tertiary'>{t('成为分销商')}</Text>
-              </div>
-            }
-          >
-            <div className='space-y-4'>
-              {/* 联系电话 */}
-              <div className='flex items-center gap-3'>
-                <Phone size={18} className='text-gray-500' />
-                <div>
-                  <Text type='tertiary' className='text-xs block'>
-                    {t('联系电话')}
-                  </Text>
-                  <Text strong className='text-base'>
-                    156 25689773
-                  </Text>
-                </div>
-              </div>
-
-              {/* 企业微信二维码 */}
-              <div>
-                <div className='flex items-center gap-3'>
-                  <MessageCircle size={18} className='text-gray-500' />
-                  <Text type='tertiary' className='text-xs block'>
-                    {t('企业微信')}
-                  </Text>
-                </div>
-                <div className='flex justify-center'>
-                  <img
-                    src='/wechat.png'
-                    alt='企业微信二维码'
-                    className='w-48 h-48 rounded-lg'
-                  />
-                </div>
-              </div>
-            </div>
+          <Card className='!rounded-xl w-full'>
+            <Text type='tertiary' className='block mb-3'>
+              {t('成为分销商后可获得邀请链接与充值分成，请先提交资料审核。')}
+            </Text>
+            <Link to='/console/distributor/apply'>
+              <Button theme='solid' type='primary' className='!rounded-lg'>
+                {t('申请成为分销商')}
+              </Button>
+            </Link>
           </Card>
         )}
 
@@ -495,6 +504,17 @@ const InvitationCard = ({
           }}
         />
       </Modal>
+
+      <AffInviteeCommissionDetailModal
+        visible={detailOpen}
+        onCancel={() => {
+          setDetailOpen(false);
+          setDetailInviteeId(null);
+          setDetailInviteeLabel('');
+        }}
+        inviteeId={detailInviteeId}
+        inviteeLabel={detailInviteeLabel}
+      />
     </Card>
   );
 };

@@ -12,6 +12,11 @@ import (
 // GetAffInvitees 分页返回当前登录用户邀请注册的用户列表及各自分销比例（万分比）。
 func GetAffInvitees(c *gin.Context) {
 	inviterId := c.GetInt("id")
+	u, err := model.GetUserById(inviterId, false)
+	if err != nil || u.Role != common.RoleDistributorUser {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "仅分销商可查看邀请列表"})
+		return
+	}
 	pageInfo := common.GetPageQuery(c)
 	items, total, err := model.ListAffInvitees(inviterId, pageInfo)
 	if err != nil {

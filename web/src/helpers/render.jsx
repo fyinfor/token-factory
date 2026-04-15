@@ -76,6 +76,8 @@ import {
   Server,
   CalendarClock,
   Store,
+  Share2,
+  Handshake,
 } from 'lucide-react';
 import {
   SiAtlassian,
@@ -149,6 +151,10 @@ export function getLucideIcon(key, selected = false) {
       return <Settings {...commonProps} color={iconColor} />;
     case 'provider':
       return <Store {...commonProps} color={iconColor} />;
+    case 'distributor_center':
+      return <Share2 {...commonProps} color={iconColor} />;
+    case 'distributor':
+      return <Handshake {...commonProps} color={iconColor} />;
     default:
       return <CircleUser {...commonProps} color={iconColor} />;
   }
@@ -1068,6 +1074,82 @@ export function getQuotaPerUnit() {
   let quotaPerUnit = localStorage.getItem('quota_per_unit');
   quotaPerUnit = parseFloat(quotaPerUnit);
   return quotaPerUnit;
+}
+
+/**
+ * 内部额度（点数）→ 与「余额/划转」展示货币一致的数值，用于划转等输入框（非 TOKENS）。
+ * TOKENS 模式下与额度点数一致，直接返回 quota。
+ */
+export function quotaToDisplayInputAmount(quota) {
+  if (quota == null || Number.isNaN(Number(quota))) return 0;
+  const q = Number(quota);
+  let quotaPerUnit = localStorage.getItem('quota_per_unit');
+  quotaPerUnit = parseFloat(quotaPerUnit || '500000');
+  const displayType = localStorage.getItem('quota_display_type') || 'USD';
+  if (displayType === 'TOKENS') {
+    return q;
+  }
+  const resultUSD = q / quotaPerUnit;
+  if (displayType === 'CNY') {
+    const statusStr = localStorage.getItem('status');
+    let usdRate = 7;
+    try {
+      if (statusStr) {
+        const s = JSON.parse(statusStr);
+        usdRate = s?.usd_exchange_rate || 7;
+      }
+    } catch (e) {}
+    return resultUSD * usdRate;
+  }
+  if (displayType === 'CUSTOM') {
+    const statusStr = localStorage.getItem('status');
+    let rate = 1;
+    try {
+      if (statusStr) {
+        const s = JSON.parse(statusStr);
+        rate = s?.custom_currency_exchange_rate || 1;
+      }
+    } catch (e) {}
+    return resultUSD * rate;
+  }
+  return resultUSD;
+}
+
+/**
+ * 划转输入框中的标价数值 → 内部额度点数（与 renderQuota / 后端 aff_transfer 一致）。
+ */
+export function displayInputAmountToQuota(amount) {
+  if (amount == null || Number.isNaN(Number(amount))) return 0;
+  const a = Number(amount);
+  let quotaPerUnit = localStorage.getItem('quota_per_unit');
+  quotaPerUnit = parseFloat(quotaPerUnit || '500000');
+  const displayType = localStorage.getItem('quota_display_type') || 'USD';
+  if (displayType === 'TOKENS') {
+    return Math.round(a);
+  }
+  let resultUSD = a;
+  if (displayType === 'CNY') {
+    const statusStr = localStorage.getItem('status');
+    let usdRate = 7;
+    try {
+      if (statusStr) {
+        const s = JSON.parse(statusStr);
+        usdRate = s?.usd_exchange_rate || 7;
+      }
+    } catch (e) {}
+    resultUSD = a / usdRate;
+  } else if (displayType === 'CUSTOM') {
+    const statusStr = localStorage.getItem('status');
+    let rate = 1;
+    try {
+      if (statusStr) {
+        const s = JSON.parse(statusStr);
+        rate = s?.custom_currency_exchange_rate || 1;
+      }
+    } catch (e) {}
+    resultUSD = a / rate;
+  }
+  return Math.round(resultUSD * quotaPerUnit);
 }
 
 export function renderUnitWithQuota(quota) {

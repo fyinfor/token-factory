@@ -36,6 +36,10 @@ const OperationSetting = () => {
     PreConsumedQuota: 0,
     QuotaForInviter: 0,
     QuotaForInvitee: 0,
+    AffiliateDefaultCommissionBps: '1000',
+    DistributorApplyCsImageUrl: '',
+    DistributorWithdrawCsImageUrl: '',
+    DistributorMinWithdrawQuota: '',
     'quota_setting.enable_free_model_pre_consume': true,
 
     /* 通用设置 */
