@@ -282,6 +282,31 @@ func AdminListSupplierApplications(c *gin.Context) {
 	common.ApiSuccess(c, pageInfo)
 }
 
+// AdminListSuppliers godoc
+// @Summary 管理员分页查询供应商列表
+// @Description 支持按供应商名称模糊查询，返回分页数据
+// @Tags SupplierAdmin
+// @Produce json
+// @Security ApiKeyAuth
+// @Security ApiUserID
+// @Param p query int false "页码"
+// @Param page_size query int false "每页数量"
+// @Param company_name query string false "供应商名称（模糊）"
+// @Success 200 {object} map[string]interface{} "分页结果"
+// @Router /user/supplier/list [get]
+func AdminListSuppliers(c *gin.Context) {
+	pageInfo := common.GetPageQuery(c)
+	companyName := strings.TrimSpace(c.Query("company_name"))
+	items, total, err := model.ListSuppliersByCompanyName(companyName, pageInfo)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(items)
+	common.ApiSuccess(c, pageInfo)
+}
+
 // AdminReviewSupplierApplication godoc
 // @Summary 管理员审核供应商申请
 // @Description 任一管理员可审核一次，仅待审核状态允许处理

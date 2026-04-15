@@ -158,6 +158,28 @@ func ListSupplierApplicationsByApplicant(applicantUserID int, status *int, pageI
 	return items, total, nil
 }
 
+// ListSuppliersByCompanyName 分页查询供应商列表（支持按供应商名称模糊搜索）。
+func ListSuppliersByCompanyName(companyName string, pageInfo *common.PageInfo) ([]*SupplierApplication, int64, error) {
+	var (
+		items []*SupplierApplication
+		total int64
+	)
+	query := DB.Model(&SupplierApplication{})
+	if strings.TrimSpace(companyName) != "" {
+		query = query.Where("company_name LIKE ?", "%"+strings.TrimSpace(companyName)+"%")
+	}
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if err := query.Order("id desc").
+		Limit(pageInfo.GetPageSize()).
+		Offset(pageInfo.GetStartIdx()).
+		Find(&items).Error; err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
+}
+
 // GetMySupplierApplication 获取当前用户最近一条供应商申请（按ID倒序）。
 func GetMySupplierApplication(applicantUserID int) (*SupplierApplication, error) {
 	var app SupplierApplication

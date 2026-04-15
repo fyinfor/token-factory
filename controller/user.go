@@ -336,6 +336,10 @@ func TransferAffQuota(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	if user.Role != common.RoleDistributorUser {
+		common.ApiErrorMsg(c, "仅分销商可划转邀请收益")
+		return
+	}
 	tran := TransferAffQuotaRequest{}
 	if err := c.ShouldBindJSON(&tran); err != nil {
 		common.ApiError(c, err)
@@ -354,6 +358,10 @@ func GetAffCode(c *gin.Context) {
 	user, err := model.GetUserById(id, true)
 	if err != nil {
 		common.ApiError(c, err)
+		return
+	}
+	if user.Role != common.RoleDistributorUser {
+		common.ApiErrorMsg(c, "仅分销商可使用邀请链接")
 		return
 	}
 	if user.AffCode == "" {
@@ -411,8 +419,9 @@ func GetSelf(c *gin.Context) {
 		"aff_code":          user.AffCode,
 		"aff_count":         user.AffCount,
 		"aff_quota":         user.AffQuota,
-		"aff_history_quota": user.AffHistoryQuota,
-		"inviter_id":        user.InviterId,
+		"aff_history_quota":          user.AffHistoryQuota,
+		"distributor_commission_bps": user.DistributorCommissionBps,
+		"inviter_id":                 user.InviterId,
 		"linux_do_id":       user.LinuxDOId,
 		"setting":           user.Setting,
 		"stripe_customer":   user.StripeCustomer,

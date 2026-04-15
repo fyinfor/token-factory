@@ -37,7 +37,7 @@ export function isDistributor() {
   let user = localStorage.getItem('user');
   if (!user) return false;
   user = JSON.parse(user);
-  return user.role >= 5;
+  return user.role === USER_ROLES.DISTRIBUTOR;
 }
 
 export function isAdmin() {
@@ -65,6 +65,27 @@ export function formatCommissionRatioPercent(bps) {
   }
   const s = n.toFixed(8).replace(/\.?0+$/, '');
   return `${s}%`;
+}
+
+/** 万分之一 bps → 百分比数字字符串（供输入框，如 10、10.5）；0 → '0' */
+export function commissionBpsToPercentInputString(bps) {
+  if (bps == null || Number(bps) === 0) return '0';
+  const n = Number(bps) / 100;
+  if (!Number.isFinite(n)) return '0';
+  return n.toFixed(8).replace(/\.?0+$/, '');
+}
+
+/**
+ * 输入框中的百分比（0～100）→ 万分之一 bps。
+ * 非法时返回 NaN；空串视为 0。
+ */
+export function parseCommissionPercentStringToBps(s) {
+  const t = String(s ?? '').trim();
+  if (t === '' || t === '-') return 0;
+  const p = parseFloat(t);
+  if (Number.isNaN(p)) return NaN;
+  if (p < 0 || p > 100) return NaN;
+  return Math.round(p * 100);
 }
 
 export function getSystemName() {

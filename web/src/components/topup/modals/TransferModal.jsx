@@ -17,9 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Modal, Typography, Input, InputNumber } from '@douyinfe/semi-ui';
 import { CreditCard } from 'lucide-react';
+import {
+  quotaToDisplayInputAmount,
+  displayInputAmountToQuota,
+} from '../../../helpers';
 
 const TransferModal = ({
   t,
@@ -27,11 +31,32 @@ const TransferModal = ({
   transfer,
   handleTransferCancel,
   userState,
-  renderQuota,
-  getQuotaPerUnit,
+  renderQuota: renderQuotaProp,
+  getQuotaPerUnit: getQuotaPerUnitProp,
   transferAmount,
   setTransferAmount,
 }) => {
+  const qpu = getQuotaPerUnitProp() || 1;
+  const aff = userState?.user?.aff_quota || 0;
+  const isTokens = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return (localStorage.getItem('quota_display_type') || 'USD') === 'TOKENS';
+  }, [openTransfer]);
+
+  const minDisplay = quotaToDisplayInputAmount(qpu);
+  const maxDisplay = aff > 0 ? quotaToDisplayInputAmount(aff) : undefined;
+
+  const onFiatChange = (v) => {
+    if (v == null || Number.isNaN(Number(v))) {
+      setTransferAmount(qpu);
+      return;
+    }
+    let quota = displayInputAmountToQuota(v);
+    if (quota < qpu) quota = qpu;
+    if (aff > 0 && quota > aff) quota = aff;
+    setTransferAmount(quota);
+  };
+
   return (
     <Modal
       title={
@@ -52,22 +77,56 @@ const TransferModal = ({
             {t('可用邀请额度')}
           </Typography.Text>
           <Input
-            value={renderQuota(userState?.user?.aff_quota)}
+            value={renderQuotaProp(userState?.user?.aff_quota)}
             disabled
             className='!rounded-lg'
           />
         </div>
         <div>
           <Typography.Text strong className='block mb-2'>
-            {t('划转额度')} · {t('最低') + renderQuota(getQuotaPerUnit())}
+            {t('划转额度')} · {t('最低')}
+            {renderQuotaProp(getQuotaPerUnitProp())}
           </Typography.Text>
-          <InputNumber
-            min={getQuotaPerUnit()}
-            max={userState?.user?.aff_quota || 0}
-            value={transferAmount}
-            onChange={(value) => setTransferAmount(value)}
-            className='w-full !rounded-lg'
-          />
+          {isTokens ? (
+            <>
+              <InputNumber
+                min={qpu}
+                max={aff > 0 ? aff : undefined}
+                value={transferAmount}
+                onChange={(v) => setTransferAmount(v ?? qpu)}
+                className='w-full !rounded-lg'
+              />
+              <Typography.Text
+                type='tertiary'
+                size='small'
+                className='block mt-2'
+              >
+                {t(
+                  '额度以系统内部点数记账，与上方展示一致；最小划转为一档点数。',
+                )}
+              </Typography.Text>
+            </>
+          ) : (
+            <>
+              <InputNumber
+                min={minDisplay}
+                max={maxDisplay}
+                value={quotaToDisplayInputAmount(transferAmount)}
+                onChange={onFiatChange}
+                precision={4}
+                step={0.01}
+                className='w-full !rounded-lg'
+              />
+              <Typography.Text
+                type='tertiary'
+                size='small'
+                className='block mt-2'
+              >
+                {t('输入数值与钱包展示货币一致，对应')}
+                {renderQuotaProp(transferAmount)}
+              </Typography.Text>
+            </>
+          )}
         </div>
       </div>
     </Modal>

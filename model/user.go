@@ -44,8 +44,9 @@ type User struct {
 	AffCount         int            `json:"aff_count" gorm:"type:int;default:0;column:aff_count"`
 	AffQuota         int            `json:"aff_quota" gorm:"type:int;default:0;column:aff_quota"`           // 邀请剩余额度
 	AffHistoryQuota  int            `json:"aff_history_quota" gorm:"type:int;default:0;column:aff_history"` // 邀请历史额度
-	InviterId        int            `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
-	DeletedAt        gorm.DeletedAt `gorm:"index"`
+	InviterId                int            `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
+	DistributorCommissionBps int            `json:"distributor_commission_bps" gorm:"type:int;default:0;column:distributor_commission_bps"` // 分销商名下新邀请关系的默认分成（万分之一），0 表示跟随系统 AffiliateDefaultCommissionBps
+	DeletedAt                gorm.DeletedAt `gorm:"index"`
 	LinuxDOId        string         `json:"linux_do_id" gorm:"column:linux_do_id;index"`
 	Setting          string         `json:"setting" gorm:"type:text;column:setting"`
 	Remark           string         `json:"remark,omitempty" gorm:"type:varchar(255)" validate:"max=255"`
