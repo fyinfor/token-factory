@@ -39,6 +39,7 @@ const OperationSetting = () => {
     AffiliateDefaultCommissionBps: '1000',
     DistributorApplyCsImageUrl: '',
     DistributorWithdrawCsImageUrl: '',
+    DistributorWithdrawNotice: '',
     DistributorMinWithdrawQuota: '',
     'quota_setting.enable_free_model_pre_consume': true,
 

@@ -133,6 +133,7 @@ func InitOptionMap() {
 	common.OptionMap["AffiliateDefaultCommissionBps"] = strconv.Itoa(common.AffiliateDefaultCommissionBps)
 	common.OptionMap["DistributorApplyCsImageUrl"] = ""
 	common.OptionMap["DistributorWithdrawCsImageUrl"] = ""
+	common.OptionMap["DistributorWithdrawNotice"] = ""
 	common.OptionMap["DistributorMinWithdrawQuota"] = ""
 	common.OptionMap["QuotaRemindThreshold"] = strconv.Itoa(common.QuotaRemindThreshold)
 	common.OptionMap["PreConsumedQuota"] = strconv.Itoa(common.PreConsumedQuota)

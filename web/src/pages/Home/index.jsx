@@ -247,7 +247,8 @@ const Home = () => {
                       <Link
                         to={
                           userRole == null
-                            ? '/login'
+                            ? '/login?redirect=' +
+                              encodeURIComponent('/console/distributor/apply')
                             : '/console/distributor/apply'
                         }
                       >

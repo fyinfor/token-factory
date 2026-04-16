@@ -51,6 +51,7 @@ export default function SettingsCreditLimit(props) {
     AffiliateDefaultCommissionBps: '1000',
     DistributorApplyCsImageUrl: '',
     DistributorWithdrawCsImageUrl: '',
+    DistributorWithdrawNotice: '',
     DistributorMinWithdrawQuota: '',
     'quota_setting.enable_free_model_pre_consume': true,
   });
@@ -424,6 +425,26 @@ export default function SettingsCreditLimit(props) {
                     </Button>
                   </Upload>
                 )}
+              </Col>
+            </Row>
+            <Row gutter={16}>
+              <Col span={24}>
+                <Form.TextArea
+                  field='DistributorWithdrawNotice'
+                  label={t('分销中心线下提现说明（用户可见）')}
+                  extraText={t(
+                    '展示在分销商提现弹窗内；留空则不显示。可换行，建议填写到账周期、手续费或所需材料等。',
+                  )}
+                  placeholder={t('例如：工作日 1–3 个工作日到账；请确保银行卡信息与实名一致。')}
+                  autosize={{ minRows: 4, maxRows: 12 }}
+                  showClear
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      DistributorWithdrawNotice: value ?? '',
+                    })
+                  }
+                />
               </Col>
             </Row>
             <Row>

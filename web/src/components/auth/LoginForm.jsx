@@ -39,6 +39,7 @@ import {
   prepareCredentialRequestOptions,
   buildAssertionResult,
   isPasskeySupported,
+  safeInternalRedirectPath,
 } from '../../helpers';
 import Turnstile from 'react-turnstile';
 import {
@@ -82,6 +83,13 @@ const LoginForm = () => {
   });
   const { username, password } = inputs;
   const [searchParams, setSearchParams] = useSearchParams();
+  const postLoginRedirect = useMemo(
+    () => safeInternalRedirectPath(searchParams.get('redirect')),
+    [searchParams],
+  );
+  const navigateAfterLogin = (fallbackPath) => {
+    navigate(postLoginRedirect || fallbackPath);
+  };
   const [submitted, setSubmitted] = useState(false);
   const [userState, userDispatch] = useContext(UserContext);
   const [statusState] = useContext(StatusContext);
@@ -198,7 +206,7 @@ const LoginForm = () => {
         localStorage.setItem('user', JSON.stringify(data));
         setUserData(data);
         updateAPI();
-        navigate('/');
+        navigateAfterLogin('/');
         showSuccess('登录成功！');
         setShowWeChatLoginModal(false);
       } else {
@@ -255,7 +263,7 @@ const LoginForm = () => {
               centered: true,
             });
           }
-          navigate('/console');
+          navigateAfterLogin('/console');
         } else {
           showError(message);
         }
@@ -300,7 +308,7 @@ const LoginForm = () => {
         showSuccess('登录成功！');
         setUserData(data);
         updateAPI();
-        navigate('/');
+        navigateAfterLogin('/');
       } else {
         showError(message);
       }
@@ -456,7 +464,7 @@ const LoginForm = () => {
         setUserData(finish.data);
         updateAPI();
         showSuccess('登录成功！');
-        navigate('/console');
+        navigateAfterLogin('/console');
       } else {
         showError(finish.message || 'Passkey 登录失败，请重试');
       }
@@ -491,7 +499,7 @@ const LoginForm = () => {
     setUserData(data);
     updateAPI();
     showSuccess('登录成功！');
-    navigate('/console');
+    navigateAfterLogin('/console');
   };
 
   // 返回登录页面
