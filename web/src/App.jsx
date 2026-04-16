@@ -47,7 +47,11 @@ import Playground from './pages/Playground';
 import Subscription from './pages/Subscription';
 import OAuth2Callback from './components/auth/OAuth2Callback';
 import PersonalSetting from './components/settings/PersonalSetting';
-import ProviderPage from './pages/Provider';
+import SupplierApplyPage from './pages/Supplier/Apply';
+import SupplierChannelPage from './pages/Supplier/Channel';
+import SupplierModelsPage from './pages/Supplier/Models';
+import SupplierApplication from './pages/SupplierAdmin/application';
+import Suppliers from './pages/SupplierAdmin/list';
 import Setup from './pages/Setup';
 import SetupCheck from './components/layout/SetupCheck';
 
@@ -177,6 +181,22 @@ function App() {
           }
         />
         <Route
+          path='/console/supplier-application'
+          element={
+            <AdminRoute>
+              <SupplierApplication />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path='/console/suppliers'
+          element={
+            <AdminRoute>
+              <Suppliers />
+            </AdminRoute>
+          }
+        />
+        <Route
           path='/user/reset'
           element={
             <Suspense fallback={<Loading></Loading>} key={location.pathname}>
@@ -281,10 +301,34 @@ function App() {
           }
         />
         <Route
-          path='/console/provider'
+          path='/console/supplier'
           element={
             <PrivateRoute>
-              <ProviderPage />
+              <SupplierApplyPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/supplier/apply'
+          element={
+            <PrivateRoute>
+              <SupplierApplyPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/supplier/channel'
+          element={
+            <PrivateRoute>
+              <SupplierChannelPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/supplier/models'
+          element={
+            <PrivateRoute>
+              <SupplierModelsPage />
             </PrivateRoute>
           }
         />
