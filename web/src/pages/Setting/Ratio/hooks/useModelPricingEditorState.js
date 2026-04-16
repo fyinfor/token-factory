@@ -259,12 +259,12 @@ export const buildSummaryText = (model, t) => {
     ].filter(hasValue).length;
     const inputLabel = `$${model.inputPrice}`;
     if (extraCount > 0) {
-      return t('model_price_summary_with_extras', {
+      return t('价格摘要（含附加价）', {
         input: inputLabel,
         count: extraCount,
       });
     }
-    return t('model_price_summary_input_only', { input: inputLabel });
+    return t('价格摘要（仅输入价）', { input: inputLabel });
   }
 
   return t('未设置价格');
