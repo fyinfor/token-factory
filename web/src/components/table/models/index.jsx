@@ -34,8 +34,8 @@ import { createCardProPagination } from '../../../helpers/utils';
 const MARKETPLACE_DISPLAY_NOTICE_STORAGE_KEY =
   'models_marketplace_display_notice_dismissed';
 
-const ModelsPage = () => {
-  const modelsData = useModelsData();
+const ModelsPage = ({ apiBasePath } = {}) => {
+  const modelsData = useModelsData({ apiBasePath });
   const isMobile = useIsMobile();
 
   const {
