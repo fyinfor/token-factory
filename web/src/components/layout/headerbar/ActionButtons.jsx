@@ -40,15 +40,18 @@ const ActionButtons = ({
   navigate,
   t,
 }) => {
+  const shouldShowNoticeButton = Boolean(userState?.user?.id);
+
   return (
     <div className='flex items-center gap-2 md:gap-3'>
-      {/* <NewYearButton isNewYear={isNewYear} />
-
-      <NotificationButton
-        unreadCount={unreadCount}
-        onNoticeOpen={onNoticeOpen}
-        t={t}
-      /> */}
+      {/* <NewYearButton isNewYear={isNewYear} /> */}
+      {shouldShowNoticeButton && (
+        <NotificationButton
+          unreadCount={unreadCount}
+          onNoticeOpen={onNoticeOpen}
+          t={t}
+        />
+      )}
 
       <ThemeToggle theme={theme} onThemeToggle={onThemeToggle} t={t} />
 

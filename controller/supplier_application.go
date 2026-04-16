@@ -17,6 +17,7 @@ import (
 
 // SupplierApplicationSubmitRequest 供应商提交申请请求体。
 type SupplierApplicationSubmitRequest struct {
+	ApplicantUserID     int    `json:"applicant_user_id"`
 	CompanyName         string `json:"company_name"`
 	CreditCode          string `json:"credit_code"`
 	BusinessLicenseURL  string `json:"business_license_url"`
@@ -37,6 +38,17 @@ type SupplierApplicationReviewRequest struct {
 // SupplierDeactivateRequest 供应商注销请求体。
 type SupplierDeactivateRequest struct {
 	Reason string `json:"reason"`
+}
+
+// PublishUserMessageRequest 管理员发布站内消息请求体。
+type PublishUserMessageRequest struct {
+	ReceiverUserID  int    `json:"receiver_user_id"`
+	ReceiverMinRole int    `json:"receiver_min_role"`
+	Type            string `json:"type"`
+	Title           string `json:"title"`
+	Content         string `json:"content"`
+	BizType         string `json:"biz_type"`
+	BizID           int    `json:"biz_id"`
 }
 
 // SupplierApplicationUpdateRequest 供应商修改申请请求体（必须带申请ID）。
@@ -112,8 +124,21 @@ func SubmitSupplierApplication(c *gin.Context) {
 		return
 	}
 
+	isAdminOrAbove := c.GetInt("role") >= common.RoleAdminUser
+	applicantUserID := c.GetInt("id")
+	if isAdminOrAbove {
+		if req.ApplicantUserID <= 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "管理员代添加供应商时必须提供有效的applicant_user_id"})
+			return
+		}
+		if _, err := model.GetUserById(req.ApplicantUserID, false); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "指定的关联用户不存在"})
+			return
+		}
+		applicantUserID = req.ApplicantUserID
+	}
 	app := &model.SupplierApplication{
-		ApplicantUserID:     c.GetInt("id"),
+		ApplicantUserID:     applicantUserID,
 		CompanyName:         req.CompanyName,
 		CreditCode:          req.CreditCode,
 		BusinessLicenseURL:  req.BusinessLicenseURL,
@@ -123,9 +148,15 @@ func SubmitSupplierApplication(c *gin.Context) {
 		ContactName:         req.ContactName,
 		ContactMobile:       req.ContactMobile,
 		ContactWechat:       req.ContactWechat,
-		Status:              model.SupplierApplicationStatusPending,
 	}
-	if err := model.CreateSupplierApplication(app); err != nil {
+	var err error
+	if isAdminOrAbove {
+		err = model.CreateSupplierApplicationAutoApproved(app, c.GetInt("id"))
+	} else {
+		app.Status = model.SupplierApplicationStatusPending
+		err = model.CreateSupplierApplication(app)
+	}
+	if err != nil {
 		if model.IsSupplierCreditCodeDuplicateError(err) {
 			common.ApiErrorMsg(c, "统一社会信用代码已存在，请核对后重试")
 			return
@@ -133,23 +164,25 @@ func SubmitSupplierApplication(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	_ = model.CreateSupplierApplicationAudit(&model.SupplierApplicationAudit{
-		ApplicationID:  app.ID,
-		OperatorUserID: app.ApplicantUserID,
-		Action:         model.SupplierApplicationAuditActionSubmit,
-		FromStatus:     model.SupplierApplicationStatusPending,
-		ToStatus:       model.SupplierApplicationStatusPending,
-		Reason:         "",
-	})
-	_ = model.CreateUserMessage(&model.UserMessage{
-		ReceiverUserID:  0,
-		ReceiverMinRole: common.RoleAdminUser,
-		Type:            model.UserMessageTypeSupplierSubmitted,
-		Title:           "供应商入驻待审核",
-		Content:         fmt.Sprintf("收到新的供应商申请：%s（统一社会信用代码：%s）", app.CompanyName, app.CreditCode),
-		BizType:         model.UserMessageBizTypeSupplierApplication,
-		BizID:           app.ID,
-	})
+	if !isAdminOrAbove {
+		_ = model.CreateSupplierApplicationAudit(&model.SupplierApplicationAudit{
+			ApplicationID:  app.ID,
+			OperatorUserID: app.ApplicantUserID,
+			Action:         model.SupplierApplicationAuditActionSubmit,
+			FromStatus:     model.SupplierApplicationStatusPending,
+			ToStatus:       model.SupplierApplicationStatusPending,
+			Reason:         "",
+		})
+		_ = service.PublishUserMessage(&model.UserMessage{
+			ReceiverUserID:  0,
+			ReceiverMinRole: common.RoleAdminUser,
+			Type:            model.UserMessageTypeSupplierSubmitted,
+			Title:           "供应商入驻待审核",
+			Content:         fmt.Sprintf("收到新的供应商申请：%s（统一社会信用代码：%s）", app.CompanyName, app.CreditCode),
+			BizType:         model.UserMessageBizTypeSupplierApplication,
+			BizID:           app.ID,
+		})
+	}
 	common.ApiSuccess(c, gin.H{
 		"id":     app.ID,
 		"status": app.Status,
@@ -244,7 +277,7 @@ func UpdateMySupplierApplication(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	_ = model.CreateUserMessage(&model.UserMessage{
+	_ = service.PublishUserMessage(&model.UserMessage{
 		ReceiverUserID:  0,
 		ReceiverMinRole: common.RoleAdminUser,
 		Type:            model.UserMessageTypeSupplierSubmitted,
@@ -364,7 +397,7 @@ func AdminReviewSupplierApplication(c *gin.Context) {
 		msgTitle = "供应商入驻审核驳回"
 		msgContent = fmt.Sprintf("你的供应商申请“%s”已驳回，原因：%s", app.CompanyName, req.Reason)
 	}
-	_ = model.CreateUserMessage(&model.UserMessage{
+	_ = service.PublishUserMessage(&model.UserMessage{
 		ReceiverUserID:  app.ApplicantUserID,
 		ReceiverMinRole: 0,
 		Type:            msgType,
@@ -387,13 +420,24 @@ func AdminReviewSupplierApplication(c *gin.Context) {
 // @Security ApiUserID
 // @Param p query int false "页码"
 // @Param page_size query int false "每页数量"
+// @Param title query string false "标题模糊查询"
+// @Param read_status query string false "读取状态：all/read/unread，默认all"
 // @Success 200 {object} map[string]interface{} "分页结果"
 // @Router /user/messages/self [get]
 func ListMyMessages(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	userID := c.GetInt("id")
 	role := c.GetInt("role")
-	items, total, err := model.ListUserMessagesForUser(userID, role, pageInfo)
+	titleKeyword := strings.TrimSpace(c.Query("title"))
+	readStatus := strings.TrimSpace(c.Query("read_status"))
+	if readStatus == "" {
+		readStatus = "all"
+	}
+	if readStatus != "all" && readStatus != "read" && readStatus != "unread" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的read_status参数"})
+		return
+	}
+	items, total, err := model.ListUserMessagesForUser(userID, role, pageInfo, titleKeyword, readStatus)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -419,12 +463,67 @@ func MarkMyMessageRead(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的消息ID"})
 		return
 	}
-	ok, err := model.MarkUserMessageAsRead(messageID, c.GetInt("id"))
+	ok, err := model.MarkUserMessageAsRead(messageID, c.GetInt("id"), c.GetInt("role"))
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 	common.ApiSuccess(c, gin.H{"updated": ok})
+}
+
+// MarkAllMyMessagesRead godoc
+// @Summary 标记当前用户全部站内消息为已读
+// @Tags Message
+// @Produce json
+// @Security ApiKeyAuth
+// @Security ApiUserID
+// @Success 200 {object} map[string]interface{} "success + data{updated_count}"
+// @Router /user/messages/read_all [post]
+func MarkAllMyMessagesRead(c *gin.Context) {
+	updatedCount, err := model.MarkAllUserMessagesAsRead(c.GetInt("id"), c.GetInt("role"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{"updated_count": updatedCount})
+}
+
+// AdminPublishUserMessage godoc
+// @Summary 管理员发布站内消息
+// @Description 支持按指定用户或按最小角色发布站内消息，至少设置 receiver_user_id 或 receiver_min_role 之一
+// @Tags MessageAdmin
+// @Accept json
+// @Produce json
+// @Security ApiKeyAuth
+// @Security ApiUserID
+// @Param request body PublishUserMessageRequest true "消息内容"
+// @Success 200 {object} map[string]interface{} "success + data{published:true}"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Router /user/messages/publish [post]
+func AdminPublishUserMessage(c *gin.Context) {
+	var req PublishUserMessageRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的参数"})
+		return
+	}
+	if req.ReceiverUserID <= 0 && req.ReceiverMinRole <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请至少指定接收用户或角色门槛"})
+		return
+	}
+	msg := &model.UserMessage{
+		ReceiverUserID:  req.ReceiverUserID,
+		ReceiverMinRole: req.ReceiverMinRole,
+		Type:            req.Type,
+		Title:           req.Title,
+		Content:         req.Content,
+		BizType:         req.BizType,
+		BizID:           req.BizID,
+	}
+	if err := service.PublishUserMessage(msg); err != nil {
+		common.ApiErrorMsg(c, err.Error())
+		return
+	}
+	common.ApiSuccess(c, gin.H{"published": true})
 }
 
 // GetMyUnreadMessageCount godoc
@@ -473,7 +572,7 @@ func DeactivateMySupplierApplication(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	_ = model.CreateUserMessage(&model.UserMessage{
+	_ = service.PublishUserMessage(&model.UserMessage{
 		ReceiverUserID:  0,
 		ReceiverMinRole: common.RoleAdminUser,
 		Type:            model.UserMessageTypeSupplierRejected,

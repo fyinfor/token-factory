@@ -21,10 +21,11 @@ import React from 'react';
 import { Button, Badge } from '@douyinfe/semi-ui';
 import { Bell } from 'lucide-react';
 
+// NotificationButton 展示站内消息铃铛与未读角标。
 const NotificationButton = ({ unreadCount, onNoticeOpen, t }) => {
   const buttonProps = {
     icon: <Bell size={18} />,
-    'aria-label': t('系统公告'),
+    'aria-label': t('站内消息'),
     onClick: onNoticeOpen,
     theme: 'borderless',
     type: 'tertiary',
