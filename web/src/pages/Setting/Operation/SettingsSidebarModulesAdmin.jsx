@@ -70,6 +70,9 @@ export default function SettingsSidebarModulesAdmin(props) {
       subscription: true,
       setting: true,
       distributor: true,
+      'supplier-management': true,
+      'supplier-application-approval': true,
+      'supplier-list': true,
     },
   });
 
@@ -210,6 +213,9 @@ export default function SettingsSidebarModulesAdmin(props) {
             subscription: true,
             setting: true,
             distributor: true,
+            'supplier-management': true,
+            'supplier-application-approval': true,
+            'supplier-list': true,
           },
         };
         setSidebarModulesAdmin(defaultModules);
@@ -294,6 +300,21 @@ export default function SettingsSidebarModulesAdmin(props) {
           key: 'distributor',
           title: t('分销商管理'),
           description: t('分销商申请与人员管理'),
+        },
+        {
+          key: 'supplier-management',
+          title: t('供应商管理'),
+          description: t('供应商相关管理'),
+        },
+        {
+          key: 'supplier-application-approval',
+          title: t('申请审批'),
+          description: t('供应商申请审批管理'),
+        },
+        {
+          key: 'supplier-list',
+          title: t('供应商列表'),
+          description: t('管理所有供应商信息'),
         },
         {
           key: 'setting',

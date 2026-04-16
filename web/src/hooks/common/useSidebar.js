@@ -44,8 +44,11 @@ export const DEFAULT_ADMIN_CONFIG = {
     enabled: true,
     topup: true,
     personal: true,
-    provider: true,
+    supplier: true,
     distributor_center: true,
+    'supplier-apply': true,
+    'supplier-channel': true,
+    'supplier-models': true,
   },
   admin: {
     enabled: true,
@@ -57,6 +60,8 @@ export const DEFAULT_ADMIN_CONFIG = {
     subscription: true,
     setting: true,
     distributor: true,
+    'supplier-management': true,
+    'supplier-application-approval': true,
   },
 };
 

@@ -28,7 +28,7 @@ import {
   Typography,
   Dropdown,
 } from '@douyinfe/semi-ui';
-import { IconMore } from '@douyinfe/semi-icons';
+import { IconMore, IconTick, IconClose } from '@douyinfe/semi-icons';
 import { renderGroup, renderNumber, renderQuota } from '../../../helpers';
 
 /**
@@ -173,6 +173,22 @@ const renderQuotaUsage = (text, record, t) => {
         </div>
       </Tag>
     </Popover>
+  );
+};
+
+/**
+ * Render supplier status
+ */
+const renderSupplier = (text, record) => {
+  const hasSupplier = record.supplier_id && record.supplier_id !== 0;
+  return (
+    <div className='flex justify-center'>
+      {hasSupplier ? (
+        <IconTick style={{ color: '#52c41a', fontSize: '18px' }} />
+      ) : (
+        <IconClose style={{ color: '#ff4d4f', fontSize: '18px' }} />
+      )}
+    </div>
   );
 };
 
@@ -350,6 +366,11 @@ export const getUsersColumns = ({
       render: (text, record, index) => {
         return <div>{renderRole(text, t)}</div>;
       },
+    },
+    {
+      title: t('供应商'),
+      dataIndex: 'supplier_id',
+      render: (text, record) => renderSupplier(text, record),
     },
     {
       title: t('邀请信息'),

@@ -54,6 +54,13 @@ export function isRoot() {
   return user.role >= 100;
 }
 
+export function isSupplier() {
+  let user = localStorage.getItem('user');
+  if (!user) return false;
+  user = JSON.parse(user);
+  return user.supplier_id && user.supplier_id !== 0;
+}
+
 /** 分销比例 commission_ratio_bps：后端万分之一单位（1=0.01%），转为百分比展示如 10%、0.01% */
 export function formatCommissionRatioPercent(bps) {
   if (bps == null || Number.isNaN(Number(bps))) {
