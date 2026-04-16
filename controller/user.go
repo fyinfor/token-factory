@@ -281,6 +281,15 @@ func GetUser(c *gin.Context) {
 	return
 }
 
+// GenerateAccessToken godoc
+// @Summary 生成当前用户 AccessToken
+// @Description 生成并返回当前登录用户的 access_token，用于在 Authorization 请求头中进行接口鉴权
+// @Tags 用户
+// @Produce json
+// @Security ApiKeyAuth
+// @Security ApiUserID
+// @Success 200 {object} map[string]interface{} "success + data{access_token}"
+// @Router /user/token [get]
 func GenerateAccessToken(c *gin.Context) {
 	id := c.GetInt("id")
 	user, err := model.GetUserById(id, true)
@@ -392,32 +401,33 @@ func GetSelf(c *gin.Context) {
 
 	// 构建响应数据，包含用户信息和权限
 	responseData := map[string]interface{}{
-		"id":                user.Id,
-		"username":          user.Username,
-		"display_name":      user.DisplayName,
-		"role":              user.Role,
-		"status":            user.Status,
-		"email":             user.Email,
-		"github_id":         user.GitHubId,
-		"discord_id":        user.DiscordId,
-		"oidc_id":           user.OidcId,
-		"wechat_id":         user.WeChatId,
-		"telegram_id":       user.TelegramId,
-		"group":             user.Group,
-		"quota":             user.Quota,
-		"used_quota":        user.UsedQuota,
-		"request_count":     user.RequestCount,
-		"aff_code":          user.AffCode,
-		"aff_count":         user.AffCount,
-		"aff_quota":         user.AffQuota,
+		"id":                         user.Id,
+		"username":                   user.Username,
+		"display_name":               user.DisplayName,
+		"role":                       user.Role,
+		"status":                     user.Status,
+		"email":                      user.Email,
+		"github_id":                  user.GitHubId,
+		"discord_id":                 user.DiscordId,
+		"oidc_id":                    user.OidcId,
+		"wechat_id":                  user.WeChatId,
+		"telegram_id":                user.TelegramId,
+		"group":                      user.Group,
+		"quota":                      user.Quota,
+		"used_quota":                 user.UsedQuota,
+		"request_count":              user.RequestCount,
+		"aff_code":                   user.AffCode,
+		"aff_count":                  user.AffCount,
+		"aff_quota":                  user.AffQuota,
 		"aff_history_quota":          user.AffHistoryQuota,
 		"distributor_commission_bps": user.DistributorCommissionBps,
 		"inviter_id":                 user.InviterId,
-		"linux_do_id":       user.LinuxDOId,
-		"setting":           user.Setting,
-		"stripe_customer":   user.StripeCustomer,
-		"sidebar_modules":   userSetting.SidebarModules, // 正确提取sidebar_modules字段
-		"permissions":       permissions,                // 新增权限字段
+		"linux_do_id":                user.LinuxDOId,
+		"setting":                    user.Setting,
+		"stripe_customer":            user.StripeCustomer,
+		"supplier_id":                user.SupplierID,
+		"sidebar_modules":            userSetting.SidebarModules, // 正确提取sidebar_modules字段
+		"permissions":                permissions,                // 新增权限字段
 	}
 
 	c.JSON(http.StatusOK, gin.H{

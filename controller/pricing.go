@@ -10,6 +10,10 @@ import (
 
 func GetPricing(c *gin.Context) {
 	pricing := model.GetPricing()
+	suppliers, err := model.ListApprovedSuppliersForPricing()
+	if err != nil {
+		suppliers = []model.SupplierSimplePricingItem{}
+	}
 	userId, exists := c.Get("id")
 	usableGroup := map[string]string{}
 	groupRatio := map[string]float64{}
@@ -42,6 +46,7 @@ func GetPricing(c *gin.Context) {
 		"success":            true,
 		"data":               pricing,
 		"vendors":            model.GetVendors(),
+		"suppliers":          suppliers,
 		"group_ratio":        groupRatio,
 		"usable_group":       usableGroup,
 		"supported_endpoint": model.GetSupportedEndpointMap(),

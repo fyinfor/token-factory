@@ -34,10 +34,12 @@ type Model struct {
 	UpdatedTime  int64          `json:"updated_time" gorm:"bigint"`
 	DeletedAt    gorm.DeletedAt `json:"-" gorm:"index;uniqueIndex:uk_model_name_delete_at,priority:2"`
 
-	BoundChannels []BoundChannel `json:"bound_channels,omitempty" gorm:"-"`
-	EnableGroups  []string       `json:"enable_groups,omitempty" gorm:"-"`
-	QuotaTypes    []int          `json:"quota_types,omitempty" gorm:"-"`
-	NameRule      int            `json:"name_rule" gorm:"default:0"`
+	BoundChannels         []BoundChannel `json:"bound_channels,omitempty" gorm:"-"`
+	EnableGroups          []string       `json:"enable_groups,omitempty" gorm:"-"`
+	QuotaTypes            []int          `json:"quota_types,omitempty" gorm:"-"`
+	NameRule              int            `json:"name_rule" gorm:"default:0"`
+	OwnerUserID           int            `json:"owner_user_id" gorm:"type:int;index;default:0"`           // 模型归属用户ID（供应商场景）
+	SupplierApplicationID int            `json:"supplier_application_id" gorm:"type:int;index;default:0"` // 关联 supplier_applications.id
 
 	MatchedModels []string `json:"matched_models,omitempty" gorm:"-"`
 	MatchedCount  int      `json:"matched_count,omitempty" gorm:"-"`
@@ -77,7 +79,7 @@ func (mi *Model) Update() error {
 	mi.UpdatedTime = common.GetTimestamp()
 	// 使用 Select 强制更新所有字段，包括零值
 	return DB.Model(&Model{}).Where("id = ?", mi.Id).
-		Select("model_name", "description", "icon", "tags", "vendor_id", "endpoints", "status", "sync_official", "name_rule", "updated_time").
+		Select("model_name", "description", "icon", "tags", "vendor_id", "endpoints", "status", "sync_official", "name_rule", "owner_user_id", "supplier_application_id", "updated_time").
 		Updates(mi).Error
 }
 
@@ -107,6 +109,54 @@ func GetAllModels(offset int, limit int) ([]*Model, error) {
 	var models []*Model
 	err := DB.Order("id DESC").Offset(offset).Limit(limit).Find(&models).Error
 	return models, err
+}
+
+// ListModelsByOwnerUser 分页查询指定归属用户创建的模型。
+func ListModelsByOwnerUser(ownerUserID int, offset int, limit int) ([]*Model, int64, error) {
+	var (
+		models []*Model
+		total  int64
+	)
+	query := DB.Model(&Model{}).Where("owner_user_id = ?", ownerUserID)
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if err := query.Order("id DESC").Offset(offset).Limit(limit).Find(&models).Error; err != nil {
+		return nil, 0, err
+	}
+	return models, total, nil
+}
+
+// SearchSupplierModels 搜索供应商模型（供应商查自己，管理员查全部供应商）。
+func SearchSupplierModels(ownerUserID *int, keyword string, vendor string, offset int, limit int) ([]*Model, int64, error) {
+	var (
+		models []*Model
+		total  int64
+	)
+	db := DB.Model(&Model{})
+	if ownerUserID != nil {
+		db = db.Where("owner_user_id = ?", *ownerUserID)
+	} else {
+		db = db.Where("owner_user_id > ? AND supplier_application_id > ?", 0, 0)
+	}
+	if keyword != "" {
+		like := "%" + keyword + "%"
+		db = db.Where("model_name LIKE ? OR description LIKE ? OR tags LIKE ?", like, like, like)
+	}
+	if vendor != "" {
+		if vid, err := strconv.Atoi(vendor); err == nil {
+			db = db.Where("models.vendor_id = ?", vid)
+		} else {
+			db = db.Joins("JOIN vendors ON vendors.id = models.vendor_id").Where("vendors.name LIKE ?", "%"+vendor+"%")
+		}
+	}
+	if err := db.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if err := db.Order("models.id DESC").Offset(offset).Limit(limit).Find(&models).Error; err != nil {
+		return nil, 0, err
+	}
+	return models, total, nil
 }
 
 func GetBoundChannelsByModelsMap(modelNames []string) (map[string][]BoundChannel, error) {

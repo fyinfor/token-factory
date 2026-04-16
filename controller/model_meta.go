@@ -17,18 +17,37 @@ import (
 func GetAllModelsMeta(c *gin.Context) {
 
 	pageInfo := common.GetPageQuery(c)
-	modelsMeta, err := model.GetAllModels(pageInfo.GetStartIdx(), pageInfo.GetPageSize())
-	if err != nil {
-		common.ApiError(c, err)
-		return
+	var (
+		modelsMeta []*model.Model
+		total      int64
+		err        error
+	)
+	if c.GetInt("role") >= common.RoleAdminUser {
+		modelsMeta, err = model.GetAllModels(pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		model.DB.Model(&model.Model{}).Count(&total)
+	} else {
+		ownerUserID := c.GetInt("id")
+		modelsMeta, total, err = model.SearchSupplierModels(&ownerUserID, "", "", pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
 	}
 	// 批量填充附加字段，提升列表接口性能
 	enrichModels(modelsMeta)
-	var total int64
-	model.DB.Model(&model.Model{}).Count(&total)
 
 	// 统计供应商计数（全部数据，不受分页影响）
 	vendorCounts, _ := model.GetVendorModelCounts()
+	if c.GetInt("role") < common.RoleAdminUser {
+		vendorCounts = make(map[int64]int64)
+		for _, item := range modelsMeta {
+			vendorCounts[int64(item.VendorID)]++
+		}
+	}
 
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(modelsMeta)
@@ -48,7 +67,17 @@ func SearchModelsMeta(c *gin.Context) {
 	vendor := c.Query("vendor")
 	pageInfo := common.GetPageQuery(c)
 
-	modelsMeta, total, err := model.SearchModels(keyword, vendor, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	var (
+		modelsMeta []*model.Model
+		total      int64
+		err        error
+	)
+	if c.GetInt("role") >= common.RoleAdminUser {
+		modelsMeta, total, err = model.SearchModels(keyword, vendor, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	} else {
+		ownerUserID := c.GetInt("id")
+		modelsMeta, total, err = model.SearchSupplierModels(&ownerUserID, keyword, vendor, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	}
 	if err != nil {
 		common.ApiError(c, err)
 		return

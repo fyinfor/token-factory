@@ -84,6 +84,46 @@ func GetAllChannels(c *gin.Context) {
 			typeFilter = t
 		}
 	}
+	// 供应商复用原渠道列表接口：仅查看自己渠道，管理员保持原有全量逻辑。
+	if c.GetInt("role") < common.RoleAdminUser {
+		baseQuery := model.DB.Model(&model.Channel{}).Where("owner_user_id = ?", c.GetInt("id"))
+		if typeFilter >= 0 {
+			baseQuery = baseQuery.Where("type = ?", typeFilter)
+		}
+		if statusFilter == common.ChannelStatusEnabled {
+			baseQuery = baseQuery.Where("status = ?", common.ChannelStatusEnabled)
+		} else if statusFilter == 0 {
+			baseQuery = baseQuery.Where("status != ?", common.ChannelStatusEnabled)
+		}
+		var total int64
+		if err := baseQuery.Count(&total).Error; err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		order := "priority desc"
+		if idSort {
+			order = "id desc"
+		}
+		if err := baseQuery.Order(order).Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Omit("key").Find(&channelData).Error; err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		for _, datum := range channelData {
+			clearChannelInfo(datum)
+		}
+		typeCounts := make(map[int64]int64)
+		for _, channel := range channelData {
+			typeCounts[int64(channel.Type)]++
+		}
+		common.ApiSuccess(c, gin.H{
+			"items":       channelData,
+			"total":       total,
+			"page":        pageInfo.GetPage(),
+			"page_size":   pageInfo.GetPageSize(),
+			"type_counts": typeCounts,
+		})
+		return
+	}
 
 	var total int64
 
@@ -253,6 +293,89 @@ func SearchChannels(c *gin.Context) {
 	statusFilter := parseStatusFilter(statusParam)
 	idSort, _ := strconv.ParseBool(c.Query("id_sort"))
 	enableTagMode, _ := strconv.ParseBool(c.Query("tag_mode"))
+	// 供应商复用原渠道搜索接口：仅查询自己渠道。
+	if c.GetInt("role") < common.RoleAdminUser {
+		channelID, _ := model.ParseSupplierChannelIDFilter(keyword)
+		filter := model.SupplierChannelSearchFilter{
+			ChannelID:    channelID,
+			Name:         keyword,
+			Key:          keyword,
+			BaseURL:      keyword,
+			ModelKeyword: modelKeyword,
+			Group:        group,
+		}
+		ownerUserID := c.GetInt("id")
+		channelData, total, err := model.SearchSupplierChannels(&ownerUserID, 0, 100000, filter)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		if statusFilter == common.ChannelStatusEnabled || statusFilter == 0 {
+			filtered := make([]*model.Channel, 0, len(channelData))
+			for _, ch := range channelData {
+				if statusFilter == common.ChannelStatusEnabled && ch.Status != common.ChannelStatusEnabled {
+					continue
+				}
+				if statusFilter == 0 && ch.Status == common.ChannelStatusEnabled {
+					continue
+				}
+				filtered = append(filtered, ch)
+			}
+			channelData = filtered
+			total = int64(len(filtered))
+		}
+		typeParam := c.Query("type")
+		typeFilter := -1
+		if typeParam != "" {
+			if tp, err := strconv.Atoi(typeParam); err == nil {
+				typeFilter = tp
+			}
+		}
+		if typeFilter >= 0 {
+			filtered := make([]*model.Channel, 0, len(channelData))
+			for _, ch := range channelData {
+				if ch.Type == typeFilter {
+					filtered = append(filtered, ch)
+				}
+			}
+			channelData = filtered
+			total = int64(len(filtered))
+		}
+		typeCounts := make(map[int64]int64)
+		for _, channel := range channelData {
+			typeCounts[int64(channel.Type)]++
+		}
+		page, _ := strconv.Atoi(c.DefaultQuery("p", "1"))
+		pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+		if page < 1 {
+			page = 1
+		}
+		if pageSize <= 0 {
+			pageSize = 20
+		}
+		startIdx := (page - 1) * pageSize
+		if startIdx > len(channelData) {
+			startIdx = len(channelData)
+		}
+		endIdx := startIdx + pageSize
+		if endIdx > len(channelData) {
+			endIdx = len(channelData)
+		}
+		pagedData := channelData[startIdx:endIdx]
+		for _, datum := range pagedData {
+			clearChannelInfo(datum)
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "",
+			"data": gin.H{
+				"items":       pagedData,
+				"total":       total,
+				"type_counts": typeCounts,
+			},
+		})
+		return
+	}
 	channelData := make([]*model.Channel, 0)
 	if enableTagMode {
 		tags, err := model.SearchTags(keyword, group, modelKeyword, idSort)
