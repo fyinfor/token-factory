@@ -100,6 +100,16 @@ type UserMessage struct {
 	CreatedAt       int64  `json:"created_at" gorm:"type:bigint;index;comment:创建时间戳"`
 }
 
+// UserMessageRead 站内广播消息的用户已读记录。
+// 仅用于 receiver_user_id=0 的广播消息按用户追踪已读状态。
+type UserMessageRead struct {
+	ID        int   `json:"id" gorm:"primaryKey;comment:主键ID"`
+	UserID    int   `json:"user_id" gorm:"type:int;not null;uniqueIndex:idx_user_message_reads_user_message,priority:1;comment:用户ID"`
+	MessageID int   `json:"message_id" gorm:"type:int;not null;uniqueIndex:idx_user_message_reads_user_message,priority:2;comment:消息ID"`
+	ReadAt    int64 `json:"read_at" gorm:"type:bigint;not null;default:0;comment:已读时间戳"`
+	CreatedAt int64 `json:"created_at" gorm:"type:bigint;index;comment:创建时间戳"`
+}
+
 // SupplierSimplePricingItem pricing 接口使用的供应商精简信息。
 type SupplierSimplePricingItem struct {
 	SupplierID   int    `json:"supplier_id"`
@@ -112,6 +122,63 @@ func CreateSupplierApplication(app *SupplierApplication) error {
 	app.CreatedAt = now
 	app.UpdatedAt = now
 	return DB.Create(app).Error
+}
+
+// CreateSupplierApplicationAutoApproved 创建直接审核通过的供应商申请。
+// 该方法用于管理员及以上角色提交申请时，保证申请创建、用户绑定与审计记录在同一事务内完成。
+func CreateSupplierApplicationAutoApproved(app *SupplierApplication, reviewerUserID int) error {
+	tx := DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+	now := time.Now().Unix()
+	app.Status = SupplierApplicationStatusApproved
+	app.ReviewedBy = reviewerUserID
+	app.ReviewedAt = now
+	app.ReviewReason = ""
+	app.CreatedAt = now
+	app.UpdatedAt = now
+	if err := tx.Create(app).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	if err := tx.Model(&User{}).Where("id = ?", app.ApplicantUserID).
+		Updates(map[string]any{
+			"supplier_id": app.ID,
+		}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	if err := tx.Create(&SupplierApplicationAudit{
+		ApplicationID:  app.ID,
+		OperatorUserID: app.ApplicantUserID,
+		Action:         SupplierApplicationAuditActionSubmit,
+		FromStatus:     SupplierApplicationStatusPending,
+		ToStatus:       SupplierApplicationStatusPending,
+		Reason:         "",
+		CreatedAt:      now,
+	}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	if err := tx.Create(&SupplierApplicationAudit{
+		ApplicationID:  app.ID,
+		OperatorUserID: reviewerUserID,
+		Action:         SupplierApplicationAuditActionApprove,
+		FromStatus:     SupplierApplicationStatusPending,
+		ToStatus:       SupplierApplicationStatusApproved,
+		Reason:         "管理员提交自动通过",
+		CreatedAt:      now,
+	}).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit().Error
 }
 
 // CreateSupplierApplicationAudit 创建供应商审核审计记录。
@@ -455,12 +522,21 @@ func CreateUserMessage(msg *UserMessage) error {
 }
 
 // ListUserMessagesForUser 分页查询当前用户可见消息。
-func ListUserMessagesForUser(userID int, role int, pageInfo *common.PageInfo) ([]*UserMessage, int64, error) {
+// readStatus: all/read/unread；titleKeyword: 标题模糊查询关键字。
+func ListUserMessagesForUser(userID int, role int, pageInfo *common.PageInfo, titleKeyword string, readStatus string) ([]*UserMessage, int64, error) {
 	var (
 		items []*UserMessage
 		total int64
 	)
 	query := DB.Model(&UserMessage{}).Where("receiver_user_id = ? OR (receiver_user_id = 0 AND receiver_min_role > 0 AND receiver_min_role <= ?)", userID, role)
+	if strings.TrimSpace(titleKeyword) != "" {
+		query = query.Where("title LIKE ?", "%"+strings.TrimSpace(titleKeyword)+"%")
+	}
+	if readStatus == "read" {
+		query = query.Where("(receiver_user_id = ? AND is_read = ?) OR (receiver_user_id = 0 AND EXISTS (SELECT 1 FROM user_message_reads umr WHERE umr.message_id = user_messages.id AND umr.user_id = ?))", userID, true, userID)
+	} else if readStatus == "unread" {
+		query = query.Where("(receiver_user_id = ? AND is_read = ?) OR (receiver_user_id = 0 AND NOT EXISTS (SELECT 1 FROM user_message_reads umr WHERE umr.message_id = user_messages.id AND umr.user_id = ?))", userID, false, userID)
+	}
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
@@ -470,31 +546,148 @@ func ListUserMessagesForUser(userID int, role int, pageInfo *common.PageInfo) ([
 		Find(&items).Error; err != nil {
 		return nil, 0, err
 	}
+	broadcastIDs := make([]int, 0)
+	for _, item := range items {
+		if item.ReceiverUserID == 0 {
+			broadcastIDs = append(broadcastIDs, item.ID)
+		}
+	}
+	if len(broadcastIDs) > 0 {
+		var readRows []UserMessageRead
+		if err := DB.Model(&UserMessageRead{}).
+			Select("message_id").
+			Where("user_id = ? AND message_id IN ?", userID, broadcastIDs).
+			Find(&readRows).Error; err != nil {
+			return nil, 0, err
+		}
+		readMap := make(map[int]bool, len(readRows))
+		for _, row := range readRows {
+			readMap[row.MessageID] = true
+		}
+		for _, item := range items {
+			if item.ReceiverUserID == 0 {
+				item.IsRead = readMap[item.ID]
+			}
+		}
+	}
 	return items, total, nil
 }
 
-// CountUnreadUserMessages 统计当前用户未读消息（广播消息默认视为未读）。
+// CountUnreadUserMessages 统计当前用户未读消息（支持广播消息按用户已读追踪）。
 func CountUnreadUserMessages(userID int, role int) (int64, error) {
-	var total int64
-	err := DB.Model(&UserMessage{}).
-		Where("(receiver_user_id = ? AND is_read = ?) OR (receiver_user_id = 0 AND receiver_min_role > 0 AND receiver_min_role <= ?)", userID, false, role).
-		Count(&total).Error
-	return total, err
+	var (
+		directTotal    int64
+		broadcastTotal int64
+	)
+	if err := DB.Model(&UserMessage{}).
+		Where("receiver_user_id = ? AND is_read = ?", userID, false).
+		Count(&directTotal).Error; err != nil {
+		return 0, err
+	}
+	if err := DB.Model(&UserMessage{}).
+		Where("receiver_user_id = 0 AND receiver_min_role > 0 AND receiver_min_role <= ? AND NOT EXISTS (SELECT 1 FROM user_message_reads umr WHERE umr.message_id = user_messages.id AND umr.user_id = ?)", role, userID).
+		Count(&broadcastTotal).Error; err != nil {
+		return 0, err
+	}
+	return directTotal + broadcastTotal, nil
 }
 
-// MarkUserMessageAsRead 将用户定向消息标记已读（广播消息不做个人已读标记）。
-func MarkUserMessageAsRead(messageID int, userID int) (bool, error) {
+// MarkUserMessageAsRead 将用户可见消息标记为已读。
+// 定向消息更新 user_messages.is_read；广播消息写入 user_message_reads 用户已读记录。
+func MarkUserMessageAsRead(messageID int, userID int, role int) (bool, error) {
+	var msg UserMessage
+	if err := DB.Where("id = ? AND (receiver_user_id = ? OR (receiver_user_id = 0 AND receiver_min_role > 0 AND receiver_min_role <= ?))", messageID, userID, role).
+		First(&msg).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
 	now := time.Now().Unix()
-	res := DB.Model(&UserMessage{}).
-		Where("id = ? AND receiver_user_id = ? AND is_read = ?", messageID, userID, false).
+	if msg.ReceiverUserID == userID {
+		res := DB.Model(&UserMessage{}).
+			Where("id = ? AND receiver_user_id = ? AND is_read = ?", messageID, userID, false).
+			Updates(map[string]any{
+				"is_read": true,
+				"read_at": now,
+			})
+		if res.Error != nil {
+			return false, res.Error
+		}
+		return res.RowsAffected > 0, nil
+	}
+	read := UserMessageRead{
+		UserID:    userID,
+		MessageID: messageID,
+		ReadAt:    now,
+		CreatedAt: now,
+	}
+	res := DB.Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "user_id"}, {Name: "message_id"}},
+		DoUpdates: clause.Assignments(map[string]any{"read_at": now}),
+	}).Create(&read)
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return true, nil
+}
+
+// MarkAllUserMessagesAsRead 将当前用户可见消息全部标记为已读。
+// 定向消息写回 user_messages；广播消息写入 user_message_reads。
+func MarkAllUserMessagesAsRead(userID int, role int) (int64, error) {
+	tx := DB.Begin()
+	if tx.Error != nil {
+		return 0, tx.Error
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+	now := time.Now().Unix()
+	res := tx.Model(&UserMessage{}).
+		Where("receiver_user_id = ? AND is_read = ?", userID, false).
 		Updates(map[string]any{
 			"is_read": true,
 			"read_at": now,
 		})
 	if res.Error != nil {
-		return false, res.Error
+		tx.Rollback()
+		return 0, res.Error
 	}
-	return res.RowsAffected > 0, nil
+	updatedCount := res.RowsAffected
+	var broadcastIDs []int
+	if err := tx.Model(&UserMessage{}).
+		Select("id").
+		Where("receiver_user_id = 0 AND receiver_min_role > 0 AND receiver_min_role <= ?", role).
+		Find(&broadcastIDs).Error; err != nil {
+		tx.Rollback()
+		return 0, err
+	}
+	if len(broadcastIDs) > 0 {
+		reads := make([]UserMessageRead, 0, len(broadcastIDs))
+		for _, messageID := range broadcastIDs {
+			reads = append(reads, UserMessageRead{
+				UserID:    userID,
+				MessageID: messageID,
+				ReadAt:    now,
+				CreatedAt: now,
+			})
+		}
+		insertRes := tx.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "user_id"}, {Name: "message_id"}},
+			DoUpdates: clause.Assignments(map[string]any{"read_at": now}),
+		}).Create(&reads)
+		if insertRes.Error != nil {
+			tx.Rollback()
+			return 0, insertRes.Error
+		}
+		updatedCount += insertRes.RowsAffected
+	}
+	if err := tx.Commit().Error; err != nil {
+		return 0, err
+	}
+	return updatedCount, nil
 }
 
 // IsSupplierApplicationNotFound 判断是否未找到供应商申请记录。

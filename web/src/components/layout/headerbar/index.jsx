@@ -17,21 +17,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useHeaderBar } from '../../../hooks/common/useHeaderBar';
-import { useNotifications } from '../../../hooks/common/useNotifications';
 import { useNavigation } from '../../../hooks/common/useNavigation';
-import NoticeModal from '../NoticeModal';
+import { useUserMessageUnreadCount } from '../../../hooks/common/useUserMessageUnreadCount';
+import UserMessageModal from './UserMessageModal';
 import MobileMenuButton from './MobileMenuButton';
 import HeaderLogo from './HeaderLogo';
 import Navigation from './Navigation';
 import ActionButtons from './ActionButtons';
-import SearchDropdown from './SearchDropdown';
 
 const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
   const {
     userState,
-    statusState,
     isMobile,
     collapsed,
     logoLoaded,
@@ -55,24 +53,29 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
     t,
   } = useHeaderBar({ onMobileMenuToggle, drawerOpen });
 
-  const {
-    noticeVisible,
-    unreadCount,
-    handleNoticeOpen,
-    handleNoticeClose,
-    getUnreadKeys,
-  } = useNotifications(statusState);
+  const [messageModalVisible, setMessageModalVisible] = useState(false);
+  const { unreadCount: messageUnreadCount, refreshUnreadCount } =
+    useUserMessageUnreadCount(userState?.user);
+  // handleMessageModalOpen 打开站内消息弹窗。
+  const handleMessageModalOpen = useCallback(() => {
+    setMessageModalVisible(true);
+  }, []);
+  // handleMessageModalClose 关闭站内消息弹窗并刷新未读计数。
+  const handleMessageModalClose = useCallback(async () => {
+    setMessageModalVisible(false);
+    await refreshUnreadCount();
+  }, [refreshUnreadCount]);
 
   const { mainNavLinks } = useNavigation(t, docsNav, headerNavModules);
 
   return (
     <header className='text-semi-color-text-0 sticky top-0 z-50 transition-colors duration-300 bg-white/75 dark:bg-zinc-900/75 backdrop-blur-lg border-b border-[#f5f5f5]'>
-      <NoticeModal
-        visible={noticeVisible}
-        onClose={handleNoticeClose}
+      <UserMessageModal
+        visible={messageModalVisible}
+        onClose={handleMessageModalClose}
+        onReadStateChanged={refreshUnreadCount}
         isMobile={isMobile}
-        defaultTab={unreadCount > 0 ? 'system' : 'inApp'}
-        unreadKeys={getUnreadKeys()}
+        t={t}
       />
 
       <div className='w-full px-4 md:px-6'>
@@ -113,8 +116,8 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
 
             <ActionButtons
               isNewYear={isNewYear}
-              unreadCount={unreadCount}
-              onNoticeOpen={handleNoticeOpen}
+              unreadCount={messageUnreadCount}
+              onNoticeOpen={handleMessageModalOpen}
               theme={theme}
               onThemeToggle={handleThemeToggle}
               currentLang={currentLang}
