@@ -33,11 +33,26 @@ const HTMLToastContent = ({ htmlContent }) => {
   return <div dangerouslySetInnerHTML={{ __html: htmlContent }} />;
 };
 export default HTMLToastContent;
+
+/** 是否为分销商：后端 is_distributor 为 0/1，兼容历史 true 与 role===5 */
+export function userIsDistributorUser(userLike) {
+  if (!userLike || typeof userLike !== 'object') return false;
+  if (userLike.is_distributor === 1 || userLike.is_distributor === true) {
+    return true;
+  }
+  if (userLike.role === USER_ROLES.DISTRIBUTOR) return true;
+  return false;
+}
+
 export function isDistributor() {
-  let user = localStorage.getItem('user');
-  if (!user) return false;
-  user = JSON.parse(user);
-  return user.role === USER_ROLES.DISTRIBUTOR;
+  let raw = localStorage.getItem('user');
+  if (!raw) return false;
+  try {
+    const user = JSON.parse(raw);
+    return userIsDistributorUser(user);
+  } catch {
+    return false;
+  }
 }
 
 export function isAdmin() {

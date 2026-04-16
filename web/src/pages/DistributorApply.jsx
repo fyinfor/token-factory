@@ -20,10 +20,9 @@ import {
 } from '@douyinfe/semi-ui';
 import { IconFile, IconUserGroup } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
-import { API, showError, showSuccess } from '../helpers';
+import { API, showError, showSuccess, userIsDistributorUser } from '../helpers';
 import { StatusContext } from '../context/Status';
 import { UserContext } from '../context/User';
-import { USER_ROLES } from '../constants/user.constants';
 
 const { Text } = Typography;
 
@@ -73,26 +72,23 @@ export default function DistributorApply() {
     load();
   }, []);
 
-  const role = useMemo(() => {
+  const isDist = useMemo(() => {
+    const u = userState?.user;
+    if (u) return userIsDistributorUser(u);
     try {
-      if (userState?.user && typeof userState.user.role === 'number') {
-        return userState.user.role;
-      }
       const raw = localStorage.getItem('user');
-      if (raw) return JSON.parse(raw).role ?? USER_ROLES.USER;
+      if (raw) return userIsDistributorUser(JSON.parse(raw));
     } catch {
       // ignore
     }
-    return USER_ROLES.USER;
-  }, [userState?.user?.role]);
+    return false;
+  }, [userState?.user]);
 
   /** 申请记录为已通过，且当前账号仍是分销商：显示「去分销中心」 */
-  const showApprovedForActiveDistributor =
-    app?.status === 2 && role === USER_ROLES.DISTRIBUTOR;
+  const showApprovedForActiveDistributor = app?.status === 2 && isDist;
 
   /** 记录曾为已通过，但账号已非分销商（如被降级）：应允许重新提交 */
-  const showReapplyAfterRevoked =
-    app?.status === 2 && role !== USER_ROLES.DISTRIBUTOR;
+  const showReapplyAfterRevoked = app?.status === 2 && !isDist;
 
   useEffect(() => {
     if (!showReapplyAfterRevoked || !app || loading) return;
@@ -150,7 +146,7 @@ export default function DistributorApply() {
     }
   };
 
-  if (role === USER_ROLES.DISTRIBUTOR) {
+  if (isDist) {
     return (
       <div className='mt-16 px-4 max-w-3xl mx-auto'>
         <Banner

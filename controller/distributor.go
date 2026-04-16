@@ -8,6 +8,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -73,7 +74,7 @@ func GetDistributorCenterInfo(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
-	if user.Role != common.RoleDistributorUser {
+	if !model.UserIsDistributor(user) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "您不是分销商"})
 		return
 	}
@@ -107,7 +108,7 @@ func GetDistributorCenterInfo(c *gin.Context) {
 func GetDistributorInviteeCommissionLogs(c *gin.Context) {
 	userId := c.GetInt("id")
 	u, err := model.GetUserById(userId, false)
-	if err != nil || u.Role != common.RoleDistributorUser {
+	if err != nil || !model.UserIsDistributor(u) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "仅分销商可查看"})
 		return
 	}
@@ -234,6 +235,9 @@ func ApproveDistributorApplicationAdmin(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
+	if app, _, err := model.GetDistributorApplicationByIdAdmin(id); err == nil && app != nil {
+		service.NotifyDistributorApplicationApproved(app.UserId)
+	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
 }
 
@@ -250,9 +254,13 @@ func RejectDistributorApplicationAdmin(c *gin.Context) {
 		return
 	}
 	reviewerId := c.GetInt("id")
+	app, _, errApp := model.GetDistributorApplicationByIdAdmin(id)
 	if err := model.RejectDistributorApplication(id, reviewerId, req.Reason); err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
+	}
+	if errApp == nil && app != nil {
+		service.NotifyDistributorApplicationRejected(app.UserId, req.Reason)
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
 }
@@ -320,7 +328,7 @@ func GetDistributorInviteesAdmin(c *gin.Context) {
 		return
 	}
 	u, err := model.GetUserById(id, false)
-	if err != nil || u.Role != common.RoleDistributorUser {
+	if err != nil || !model.UserIsDistributor(u) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "用户不是分销商"})
 		return
 	}
@@ -368,6 +376,7 @@ func PostDistributorWithdrawal(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
+	service.NotifyDistributorWithdrawalSubmitted(userId, quotaAmt)
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
 }
 
@@ -444,9 +453,16 @@ func ApproveDistributorWithdrawalAdmin(c *gin.Context) {
 		return
 	}
 	reviewerId := c.GetInt("id")
+	var wUserId int
+	if w, err := model.GetDistributorWithdrawalByID(id); err == nil && w != nil {
+		wUserId = w.UserId
+	}
 	if err := model.ApproveDistributorWithdrawalAdmin(id, reviewerId); err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
+	}
+	if wUserId > 0 {
+		service.NotifyDistributorWithdrawalApproved(wUserId)
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
 }
@@ -468,9 +484,16 @@ func RejectDistributorWithdrawalAdmin(c *gin.Context) {
 		return
 	}
 	reviewerId := c.GetInt("id")
+	var wUserId int
+	if w, err := model.GetDistributorWithdrawalByID(id); err == nil && w != nil {
+		wUserId = w.UserId
+	}
 	if err := model.RejectDistributorWithdrawalAdmin(id, reviewerId, req.Reason); err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
+	}
+	if wUserId > 0 {
+		service.NotifyDistributorWithdrawalRejected(wUserId, req.Reason)
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
 }

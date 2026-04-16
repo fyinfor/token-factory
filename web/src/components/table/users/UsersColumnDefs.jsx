@@ -30,43 +30,59 @@ import {
 } from '@douyinfe/semi-ui';
 import { IconMore } from '@douyinfe/semi-icons';
 import { renderGroup, renderNumber, renderQuota } from '../../../helpers';
+import { USER_ROLES } from '../../../constants/user.constants';
 
 /**
- * Render user role
+ * Render user role（身份等级 + 可选「分销商」标记）
  */
-const renderRole = (role, t) => {
-  switch (role) {
-    case 1:
-      return (
+const renderRole = (role, isDistributor, t) => {
+  const legacyDistributorRole = role === USER_ROLES.DISTRIBUTOR;
+  const showDistTag =
+    isDistributor === 1 ||
+    isDistributor === true ||
+    legacyDistributorRole;
+  const baseRole = legacyDistributorRole ? USER_ROLES.USER : role;
+  let baseTag;
+  switch (baseRole) {
+    case USER_ROLES.USER:
+      baseTag = (
         <Tag color='blue' shape='circle'>
           {t('普通用户')}
         </Tag>
       );
-    case 5:
-      return (
-        <Tag color='green' shape='circle'>
-          {t('分销商')}
-        </Tag>
-      );
-    case 10:
-      return (
+      break;
+    case USER_ROLES.ADMIN:
+      baseTag = (
         <Tag color='yellow' shape='circle'>
           {t('管理员')}
         </Tag>
       );
-    case 100:
-      return (
+      break;
+    case USER_ROLES.ROOT:
+      baseTag = (
         <Tag color='orange' shape='circle'>
           {t('超级管理员')}
         </Tag>
       );
+      break;
     default:
-      return (
+      baseTag = (
         <Tag color='red' shape='circle'>
           {t('未知身份')}
         </Tag>
       );
   }
+  if (!showDistTag) {
+    return baseTag;
+  }
+  return (
+    <Space spacing={4}>
+      {baseTag}
+      <Tag color='green' shape='circle'>
+        {t('分销商')}
+      </Tag>
+    </Space>
+  );
 };
 
 /**
@@ -215,6 +231,7 @@ const renderOperations = (
     showResetPasskeyModal,
     showResetTwoFAModal,
     showUserSubscriptionsModal,
+    manageUser,
     t,
   },
 ) => {
@@ -294,6 +311,31 @@ const renderOperations = (
       >
         {t('降级')}
       </Button>
+      {record.role === USER_ROLES.USER &&
+        record.is_distributor !== 1 &&
+        record.is_distributor !== true &&
+        record.role < USER_ROLES.ADMIN && (
+          <Button
+            type='primary'
+            theme='light'
+            size='small'
+            onClick={() => manageUser(record.id, 'set_distributor', record)}
+          >
+            {t('设为分销商')}
+          </Button>
+        )}
+      {(record.is_distributor === 1 ||
+        record.is_distributor === true ||
+        record.role === USER_ROLES.DISTRIBUTOR) &&
+        record.role < USER_ROLES.ADMIN && (
+          <Button
+            type='tertiary'
+            size='small'
+            onClick={() => manageUser(record.id, 'unset_distributor', record)}
+          >
+            {t('取消分销商')}
+          </Button>
+        )}
       <Dropdown menu={moreMenu} trigger='click' position='bottomRight'>
         <Button type='tertiary' size='small' icon={<IconMore />} />
       </Dropdown>
@@ -315,6 +357,7 @@ export const getUsersColumns = ({
   showResetPasskeyModal,
   showResetTwoFAModal,
   showUserSubscriptionsModal,
+  manageUser,
 }) => {
   return [
     {
@@ -348,7 +391,9 @@ export const getUsersColumns = ({
       title: t('角色'),
       dataIndex: 'role',
       render: (text, record, index) => {
-        return <div>{renderRole(text, t)}</div>;
+        return (
+          <div>{renderRole(text, record.is_distributor, t)}</div>
+        );
       },
     },
     {
@@ -372,6 +417,7 @@ export const getUsersColumns = ({
           showResetPasskeyModal,
           showResetTwoFAModal,
           showUserSubscriptionsModal,
+          manageUser,
           t,
         }),
     },

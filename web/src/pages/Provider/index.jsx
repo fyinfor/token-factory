@@ -23,7 +23,7 @@ import { Store, Package, Layers, TrendingUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { UserContext } from '../../context/User';
 import { USER_ROLES } from '../../constants/user.constants';
-import { stringToColor } from '../../helpers';
+import { stringToColor, userIsDistributorUser } from '../../helpers';
 import ProvidersPage from '../../components/table/providers';
 
 const ProviderInfoHeader = ({ t, userState }) => {
@@ -171,7 +171,11 @@ const ProviderPage = () => {
   const { t } = useTranslation();
   const [userState] = useContext(UserContext);
   const userRole = userState?.user?.role ?? 0;
-  const isProvider = userRole >= USER_ROLES.DISTRIBUTOR;
+  const supplierId = userState?.user?.supplier_id ?? 0;
+  const isProvider =
+    userIsDistributorUser(userState?.user) ||
+    userRole >= USER_ROLES.ADMIN ||
+    supplierId > 0;
 
   return (
     <div className='mt-[60px] px-2'>

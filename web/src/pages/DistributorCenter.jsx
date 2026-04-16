@@ -58,10 +58,10 @@ import {
   getQuotaPerUnit,
   quotaToDisplayInputAmount,
   displayInputAmountToQuota,
+  userIsDistributorUser,
 } from '../helpers';
 import { StatusContext } from '../context/Status';
 import { UserContext } from '../context/User';
-import { USER_ROLES } from '../constants/user.constants';
 import { useNavigate } from 'react-router-dom';
 import AffInviteeCommissionDetailModal from '../components/distributor/AffInviteeCommissionDetailModal';
 import TransferModal from '../components/topup/modals/TransferModal';
@@ -150,13 +150,17 @@ export default function DistributorCenter() {
     return quotaToDisplayInputAmount(affQuotaFloor);
   }, [isQuotaTokensMode, affQuotaFloor]);
 
-  const userRaw = localStorage.getItem('user');
-  let role = USER_ROLES.USER;
-  try {
-    if (userRaw) role = JSON.parse(userRaw).role ?? USER_ROLES.USER;
-  } catch {
-    // ignore
-  }
+  const isUserDistributor = useMemo(() => {
+    const u = userState?.user;
+    if (u) return userIsDistributorUser(u);
+    try {
+      const raw = localStorage.getItem('user');
+      if (raw) return userIsDistributorUser(JSON.parse(raw));
+    } catch {
+      // ignore
+    }
+    return false;
+  }, [userState?.user]);
 
   const loadCenter = async () => {
     const res = await API.get('/api/distributor/center');
@@ -198,7 +202,7 @@ export default function DistributorCenter() {
   );
 
   useEffect(() => {
-    if (role !== USER_ROLES.DISTRIBUTOR) {
+    if (!isUserDistributor) {
       navigate('/console/topup');
       return;
     }
@@ -212,7 +216,7 @@ export default function DistributorCenter() {
         setLoading(false);
       }
     })();
-  }, [role]);
+  }, [isUserDistributor]);
 
   useEffect(() => {
     setTransferAmount(getQuotaPerUnit());
@@ -516,7 +520,7 @@ export default function DistributorCenter() {
     },
   ];
 
-  if (role !== USER_ROLES.DISTRIBUTOR) {
+  if (!isUserDistributor) {
     return null;
   }
 

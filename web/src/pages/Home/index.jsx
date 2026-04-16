@@ -25,7 +25,13 @@ import {
   ScrollList,
   ScrollItem,
 } from '@douyinfe/semi-ui';
-import { API, showError, copy, showSuccess } from '../../helpers';
+import {
+  API,
+  showError,
+  copy,
+  showSuccess,
+  userIsDistributorUser,
+} from '../../helpers';
 import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { API_ENDPOINTS } from '../../constants/common.constant';
 import { StatusContext } from '../../context/Status';
@@ -40,7 +46,6 @@ import {
   IconCopy,
 } from '@douyinfe/semi-icons';
 import { Link } from 'react-router-dom';
-import { USER_ROLES } from '../../constants/user.constants';
 import NoticeModal from '../../components/layout/NoticeModal';
 import HomeModelList from '../../components/home/HomeModelList';
 import {
@@ -109,18 +114,16 @@ const Home = () => {
   const [endpointIndex, setEndpointIndex] = useState(0);
   const isChinese = i18n.language.startsWith('zh');
 
-  let userRole = null;
-  try {
-    if (userState?.user && typeof userState.user.role === 'number') {
-      userRole = userState.user.role;
-    } else {
+  let u = userState?.user;
+  if (!u) {
+    try {
       const raw = localStorage.getItem('user');
-      if (raw) userRole = JSON.parse(raw).role;
+      if (raw) u = JSON.parse(raw);
+    } catch {
+      u = null;
     }
-  } catch {
-    userRole = null;
   }
-  const showDistributorRecruit = userRole !== USER_ROLES.DISTRIBUTOR;
+  const showDistributorRecruit = !userIsDistributorUser(u);
 
   const displayHomePageContent = async () => {
     setHomePageContent(localStorage.getItem('home_page_content') || '');
