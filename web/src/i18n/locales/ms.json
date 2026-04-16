@@ -3338,6 +3338,8 @@
     "基础价格": "Harga asas",
     "扩展价格": "Harga tambahan",
     "额外价格项": "Item harga tambahan",
+    "价格摘要（仅输入价）": "{{input}} /1M tokens (input). Aktifkan harga pilihan di bawah jika perlu.",
+    "价格摘要（含附加价）": "{{input}} /1M tokens (input), ditambah {{count}} medan harga pilihan (cth. output, cache, imej atau audio).",
     "输出价格": "Harga output",
     "缓存读取价格": "Harga baca cache",
     "缓存创建价格": "Harga penciptaan cache",

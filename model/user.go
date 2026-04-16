@@ -46,6 +46,8 @@ type User struct {
 	AffHistoryQuota          int            `json:"aff_history_quota" gorm:"type:int;default:0;column:aff_history"` // 邀请历史额度
 	InviterId                int            `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
 	DistributorCommissionBps int            `json:"distributor_commission_bps" gorm:"type:int;default:0;column:distributor_commission_bps"` // 分销商名下新邀请关系的默认分成（万分之一），0 表示跟随系统 AffiliateDefaultCommissionBps
+	// IsDistributor 分销商资格 0/1（与 role 解耦）；普通用户 role=1 时可同时为分销商。旧版 role=5 已迁移为 role=1 + is_distributor=1。
+	IsDistributor            int            `json:"is_distributor" gorm:"column:is_distributor;type:integer;default:0;index"`
 	DeletedAt                gorm.DeletedAt `gorm:"index"`
 	LinuxDOId                string         `json:"linux_do_id" gorm:"column:linux_do_id;index"`
 	Setting                  string         `json:"setting" gorm:"type:text;column:setting"`
@@ -508,7 +510,8 @@ func (user *User) Update(updatePassword bool) error {
 	}
 	newUser := *user
 	DB.First(&user, user.Id)
-	if err = DB.Model(user).Updates(newUser).Error; err != nil {
+	// Select("*") 否则 Updates(struct) 会忽略零值字段（如 is_distributor=0、quota=0），导致无法取消分销商等操作失效
+	if err = DB.Model(user).Select("*").Updates(newUser).Error; err != nil {
 		return err
 	}
 
@@ -1061,4 +1064,19 @@ func RootUserExists() bool {
 		return false
 	}
 	return true
+}
+
+// UserIsDistributor 是否具备分销商能力：is_distributor=1 且非管理员/超级管理员。
+// 兼容尚未迁移的 role=5（启动迁移后会转为 role=1 + is_distributor=1）。
+func UserIsDistributor(u *User) bool {
+	if u == nil {
+		return false
+	}
+	if u.Role >= common.RoleAdminUser {
+		return false
+	}
+	if u.Role == common.RoleDistributorUser {
+		return true
+	}
+	return u.IsDistributor == common.DistributorFlagYes
 }

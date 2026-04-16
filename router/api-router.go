@@ -135,6 +135,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.GET("/supplier/models", controller.ListMySupplierModels)
 				selfRoute.GET("/messages/self", controller.ListMyMessages)
 				selfRoute.POST("/messages/:id/read", controller.MarkMyMessageRead)
+				selfRoute.POST("/messages/read_all", controller.MarkAllMyMessagesRead)
 				selfRoute.GET("/messages/unread_count", controller.GetMyUnreadMessageCount)
 
 				// 2FA routes
@@ -161,8 +162,11 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.POST("/topup/complete", controller.AdminCompleteTopUp)
 				adminRoute.GET("/search", controller.SearchUsers)
 				adminRoute.GET("/supplier/application", controller.AdminListSupplierApplications)
+				adminRoute.PUT("/supplier/application/:id", controller.AdminUpdateSupplierApplication)
 				adminRoute.GET("/supplier/list", controller.AdminListSuppliers)
+				adminRoute.GET("/supplier/:id", controller.AdminGetSupplierDetail)
 				adminRoute.POST("/supplier/application/:id/review", controller.AdminReviewSupplierApplication)
+				adminRoute.POST("/messages/publish", controller.AdminPublishUserMessage)
 				adminRoute.GET("/:id/oauth/bindings", controller.GetUserOAuthBindingsByAdmin)
 				adminRoute.DELETE("/:id/oauth/bindings/:provider_id", controller.UnbindCustomOAuthByAdmin)
 				adminRoute.DELETE("/:id/bindings/:binding_type", controller.AdminClearUserBinding)
@@ -213,14 +217,13 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/subscription/epay/return", controller.SubscriptionEpayReturn)
 		apiRouter.POST("/subscription/epay/return", controller.SubscriptionEpayReturn)
 		optionRoute := apiRouter.Group("/option")
-		optionRoute.Use(middleware.RootAuth())
 		{
-			optionRoute.GET("/", controller.GetOptions)
-			optionRoute.PUT("/", controller.UpdateOption)
-			optionRoute.GET("/channel_affinity_cache", controller.GetChannelAffinityCacheStats)
-			optionRoute.DELETE("/channel_affinity_cache", controller.ClearChannelAffinityCache)
-			optionRoute.POST("/rest_model_ratio", controller.ResetModelRatio)
-			optionRoute.POST("/migrate_console_setting", controller.MigrateConsoleSetting) // 用于迁移检测的旧键，下个版本会删除
+			optionRoute.GET("/", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.GetOptions)
+			optionRoute.PUT("/", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.UpdateOption)
+			optionRoute.GET("/channel_affinity_cache", middleware.RootAuth(), controller.GetChannelAffinityCacheStats)
+			optionRoute.DELETE("/channel_affinity_cache", middleware.RootAuth(), controller.ClearChannelAffinityCache)
+			optionRoute.POST("/rest_model_ratio", middleware.RootAuth(), controller.ResetModelRatio)
+			optionRoute.POST("/migrate_console_setting", middleware.RootAuth(), controller.MigrateConsoleSetting) // 用于迁移检测的旧键，下个版本会删除
 		}
 
 		// Custom OAuth provider management (root only)
@@ -254,16 +257,16 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			channelRoute.GET("/", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.GetAllChannels)
 			channelRoute.GET("/search", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.SearchChannels)
-			channelRoute.GET("/models", middleware.AdminAuth(), controller.ChannelListModels)
+			channelRoute.GET("/models", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.ChannelListModels)
 			channelRoute.GET("/models_enabled", middleware.AdminAuth(), controller.EnabledListModels)
-			channelRoute.GET("/:id", middleware.AdminAuth(), controller.GetChannel)
+			channelRoute.GET("/:id", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.GetChannel)
 			channelRoute.POST("/:id/key", middleware.RootAuth(), middleware.CriticalRateLimit(), middleware.DisableCache(), middleware.SecureVerificationRequired(), controller.GetChannelKey)
 			channelRoute.GET("/test", middleware.AdminAuth(), controller.TestAllChannels)
-			channelRoute.GET("/test/:id", middleware.AdminAuth(), controller.TestChannel)
+			channelRoute.GET("/test/:id", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.TestChannel)
 			channelRoute.GET("/update_balance", middleware.AdminAuth(), controller.UpdateAllChannelsBalance)
 			channelRoute.GET("/update_balance/:id", middleware.AdminAuth(), controller.UpdateChannelBalance)
-			channelRoute.POST("/", middleware.AdminAuth(), controller.AddChannel)
-			channelRoute.PUT("/", middleware.AdminAuth(), controller.UpdateChannel)
+			channelRoute.POST("/", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.AddChannel)
+			channelRoute.PUT("/", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.UpdateChannel)
 			channelRoute.DELETE("/disabled", middleware.AdminAuth(), controller.DeleteDisabledChannel)
 			channelRoute.POST("/tag/disabled", middleware.AdminAuth(), controller.DisableTagChannels)
 			channelRoute.POST("/tag/enabled", middleware.AdminAuth(), controller.EnableTagChannels)
@@ -271,8 +274,8 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.DELETE("/:id", middleware.AdminAuth(), controller.DeleteChannel)
 			channelRoute.POST("/batch", middleware.AdminAuth(), controller.DeleteChannelBatch)
 			channelRoute.POST("/fix", middleware.AdminAuth(), controller.FixChannelsAbilities)
-			channelRoute.GET("/fetch_models/:id", middleware.AdminAuth(), controller.FetchUpstreamModels)
-			channelRoute.POST("/fetch_models", middleware.RootAuth(), controller.FetchModels)
+			channelRoute.GET("/fetch_models/:id", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.FetchUpstreamModels)
+			channelRoute.POST("/fetch_models", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.FetchModels)
 			channelRoute.POST("/codex/oauth/start", middleware.AdminAuth(), controller.StartCodexOAuth)
 			channelRoute.POST("/codex/oauth/complete", middleware.AdminAuth(), controller.CompleteCodexOAuth)
 			channelRoute.POST("/:id/codex/oauth/start", middleware.AdminAuth(), controller.StartCodexOAuthForChannel)
@@ -345,15 +348,14 @@ func SetApiRouter(router *gin.Engine) {
 			logRoute.GET("/token", middleware.TokenAuthReadOnly(), controller.GetLogByKey)
 		}
 		groupRoute := apiRouter.Group("/group")
-		groupRoute.Use(middleware.AdminAuth())
 		{
-			groupRoute.GET("/", controller.GetGroups)
+			groupRoute.GET("/", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.GetGroups)
 		}
 
 		prefillGroupRoute := apiRouter.Group("/prefill_group")
-		prefillGroupRoute.Use(middleware.AdminAuth())
 		{
-			prefillGroupRoute.GET("/", controller.GetPrefillGroups)
+			prefillGroupRoute.GET("/", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.GetPrefillGroups)
+			prefillGroupRoute.Use(middleware.AdminAuth())
 			prefillGroupRoute.POST("/", controller.CreatePrefillGroup)
 			prefillGroupRoute.PUT("/", controller.UpdatePrefillGroup)
 			prefillGroupRoute.DELETE("/:id", controller.DeletePrefillGroup)
@@ -370,14 +372,13 @@ func SetApiRouter(router *gin.Engine) {
 		}
 
 		vendorRoute := apiRouter.Group("/vendors")
-		vendorRoute.Use(middleware.AdminAuth())
 		{
-			vendorRoute.GET("/", controller.GetAllVendors)
-			vendorRoute.GET("/search", controller.SearchVendors)
-			vendorRoute.GET("/:id", controller.GetVendorMeta)
-			vendorRoute.POST("/", controller.CreateVendorMeta)
-			vendorRoute.PUT("/", controller.UpdateVendorMeta)
-			vendorRoute.DELETE("/:id", controller.DeleteVendorMeta)
+			vendorRoute.GET("/", middleware.AdminAuth(), controller.GetAllVendors)
+			vendorRoute.GET("/search", middleware.AdminAuth(), controller.SearchVendors)
+			vendorRoute.GET("/:id", middleware.AdminAuth(), controller.GetVendorMeta)
+			vendorRoute.POST("/", middleware.AdminAuth(), controller.CreateVendorMeta)
+			vendorRoute.PUT("/", middleware.AdminAuth(), controller.UpdateVendorMeta)
+			vendorRoute.DELETE("/:id", middleware.AdminAuth(), controller.DeleteVendorMeta)
 		}
 
 		modelsRoute := apiRouter.Group("/models")

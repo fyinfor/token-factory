@@ -248,6 +248,22 @@ func InitLogDB() (err error) {
 	return err
 }
 
+// migrateLegacyDistributorRole 将旧版「分销商」身份 role=5 迁移为普通用户 role=1 + is_distributor=1。
+func migrateLegacyDistributorRole() error {
+	var cnt int64
+	if err := DB.Model(&User{}).Where("role = ?", common.RoleDistributorUser).Count(&cnt).Error; err != nil {
+		return err
+	}
+	if cnt == 0 {
+		return nil
+	}
+	common.SysLog(fmt.Sprintf("migrate legacy distributor role: %d user(s) (role 5 -> role 1 + is_distributor)", cnt))
+	return DB.Model(&User{}).Where("role = ?", common.RoleDistributorUser).Updates(map[string]interface{}{
+		"role":           common.RoleCommonUser,
+		"is_distributor": common.DistributorFlagYes,
+	}).Error
+}
+
 func migrateDB() error {
 	// Migrate price_amount column from float/double to decimal for existing tables
 	migrateSubscriptionPlanPriceAmount()
@@ -291,11 +307,15 @@ func migrateDB() error {
 		&SupplierApplication{},
 		&SupplierApplicationAudit{},
 		&UserMessage{},
+		&UserMessageRead{},
 		&AffInviteCommissionLog{},
 		&DistributorApplication{},
 		&DistributorWithdrawal{},
 	)
 	if err != nil {
+		return err
+	}
+	if err := migrateLegacyDistributorRole(); err != nil {
 		return err
 	}
 	if err := BackfillAffInviteRelationsIfNeeded(); err != nil {
@@ -349,6 +369,7 @@ func migrateDBFast() error {
 		{&SupplierApplication{}, "SupplierApplication"},
 		{&SupplierApplicationAudit{}, "SupplierApplicationAudit"},
 		{&UserMessage{}, "UserMessage"},
+		{&UserMessageRead{}, "UserMessageRead"},
 		{&AffInviteCommissionLog{}, "AffInviteCommissionLog"},
 		{&DistributorApplication{}, "DistributorApplication"},
 		{&DistributorWithdrawal{}, "DistributorWithdrawal"},

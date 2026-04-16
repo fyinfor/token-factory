@@ -3275,6 +3275,8 @@
     "基础价格": "Prix de base",
     "扩展价格": "Prix supplémentaires",
     "额外价格项": "Éléments de prix supplémentaires",
+    "价格摘要（仅输入价）": "{{input}} /1M tokens (saisie). Activez les prix optionnels ci-dessous si besoin.",
+    "价格摘要（含附加价）": "{{input}} /1M tokens (saisie), plus {{count}} champs de prix optionnels (ex. sortie, cache, image ou audio).",
     "缓存读取价格": "Prix de lecture du cache d'entrée",
     "缓存创建价格": "Prix de création du cache d'entrée",
     "图片输入价格": "Prix d'entrée image",

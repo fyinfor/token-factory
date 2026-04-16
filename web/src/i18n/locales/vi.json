@@ -3827,6 +3827,8 @@
     "基础价格": "Giá cơ bản",
     "扩展价格": "Giá mở rộng",
     "额外价格项": "Mục giá bổ sung",
+    "价格摘要（仅输入价）": "{{input}} /1M tokens (đầu vào). Bật các mức giá tùy chọn bên dưới khi cần.",
+    "价格摘要（含附加价）": "{{input}} /1M tokens (đầu vào), cộng thêm {{count}} mục giá tùy chọn (vd. đầu ra, cache, hình ảnh hoặc âm thanh).",
     "缓存读取价格": "Giá đọc bộ nhớ đệm đầu vào",
     "缓存创建价格": "Giá tạo bộ nhớ đệm đầu vào",
     "图片输入价格": "Giá đầu vào hình ảnh",

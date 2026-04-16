@@ -203,11 +203,89 @@ const docTemplate = `{
                 "responses": {}
             }
         },
+        "/user/messages/publish": {
+            "post": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "支持按指定用户或按最小角色发布站内消息，至少设置 receiver_user_id 或 receiver_min_role 之一",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "MessageAdmin"
+                ],
+                "summary": "管理员发布站内消息",
+                "parameters": [
+                    {
+                        "description": "消息内容",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.PublishUserMessageRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "success + data{published:true}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/user/messages/read_all": {
+            "post": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Message"
+                ],
+                "summary": "标记当前用户全部站内消息为已读",
+                "responses": {
+                    "200": {
+                        "description": "success + data{updated_count}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/user/messages/self": {
             "get": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "CookieAuth": []
                     },
                     {
                         "ApiUserID": []
@@ -232,6 +310,18 @@ const docTemplate = `{
                         "description": "每页数量",
                         "name": "page_size",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "标题模糊查询",
+                        "name": "title",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "读取状态：all/read/unread，默认all",
+                        "name": "read_status",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -249,7 +339,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "CookieAuth": []
                     },
                     {
                         "ApiUserID": []
@@ -277,7 +367,7 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "CookieAuth": []
                     },
                     {
                         "ApiUserID": []
@@ -321,7 +411,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "CookieAuth": []
                     },
                     {
                         "ApiUserID": []
@@ -367,7 +457,7 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "CookieAuth": []
                     },
                     {
                         "ApiUserID": []
@@ -417,7 +507,7 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "CookieAuth": []
                     },
                     {
                         "ApiUserID": []
@@ -466,7 +556,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "CookieAuth": []
                     },
                     {
                         "ApiUserID": []
@@ -492,7 +582,7 @@ const docTemplate = `{
             "put": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "CookieAuth": []
                     },
                     {
                         "ApiUserID": []
@@ -538,11 +628,68 @@ const docTemplate = `{
                 }
             }
         },
+        "/user/supplier/application/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "管理员可修改任意供应商申请资料；审核通过(status=1)状态也允许修改，且修改后保持原状态",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SupplierAdmin"
+                ],
+                "summary": "管理员修改供应商申请资料",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "供应商申请ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "申请信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.SupplierApplicationSubmitRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "success + data{id,status}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/user/supplier/application/{id}/review": {
             "post": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "CookieAuth": []
                     },
                     {
                         "ApiUserID": []
@@ -599,7 +746,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "CookieAuth": []
                     },
                     {
                         "ApiUserID": []
@@ -676,7 +823,7 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "CookieAuth": []
                     },
                     {
                         "ApiUserID": []
@@ -719,7 +866,7 @@ const docTemplate = `{
             "get": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "CookieAuth": []
                     },
                     {
                         "ApiUserID": []
@@ -750,6 +897,12 @@ const docTemplate = `{
                         "type": "string",
                         "description": "供应商名称（模糊）",
                         "name": "company_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "状态筛选，支持逗号分隔（如1,3）；默认查询1和3",
+                        "name": "status",
                         "in": "query"
                     }
                 ],
@@ -821,7 +974,7 @@ const docTemplate = `{
             "post": {
                 "security": [
                     {
-                        "ApiKeyAuth": []
+                        "CookieAuth": []
                     },
                     {
                         "ApiUserID": []
@@ -852,6 +1005,51 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "创建结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/user/supplier/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "根据供应商ID查询供应商详情，返回申请人用户名 applicant_username",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SupplierAdmin"
+                ],
+                "summary": "管理员查询供应商详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "供应商ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "供应商详情",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -1194,6 +1392,32 @@ const docTemplate = `{
                 }
             }
         },
+        "controller.PublishUserMessageRequest": {
+            "type": "object",
+            "properties": {
+                "biz_id": {
+                    "type": "integer"
+                },
+                "biz_type": {
+                    "type": "string"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "receiver_min_role": {
+                    "type": "integer"
+                },
+                "receiver_user_id": {
+                    "type": "integer"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
         "controller.SupplierApplicationReviewRequest": {
             "type": "object",
             "properties": {
@@ -1208,6 +1432,9 @@ const docTemplate = `{
         "controller.SupplierApplicationSubmitRequest": {
             "type": "object",
             "properties": {
+                "applicant_user_id": {
+                    "type": "integer"
+                },
                 "business_license_file": {
                     "type": "string"
                 },
@@ -1240,6 +1467,9 @@ const docTemplate = `{
         "controller.SupplierApplicationUpdateRequest": {
             "type": "object",
             "properties": {
+                "applicant_user_id": {
+                    "type": "integer"
+                },
                 "business_license_file": {
                     "type": "string"
                 },
@@ -1277,6 +1507,9 @@ const docTemplate = `{
             "properties": {
                 "reason": {
                     "type": "string"
+                },
+                "supplier_id": {
+                    "type": "integer"
                 }
             }
         },
@@ -1671,14 +1904,16 @@ const docTemplate = `{
         }
     },
     "securityDefinitions": {
-        "ApiKeyAuth": {
-            "type": "apiKey",
-            "name": "Authorization",
-            "in": "header"
-        },
         "ApiUserID": {
+            "description": "必填。当前登录用户ID，需与会话用户或 access_token 对应用户一致。",
             "type": "apiKey",
             "name": "New-Api-User",
+            "in": "header"
+        },
+        "CookieAuth": {
+            "description": "可选。手动传浏览器会话 Cookie，例如：session=xxx; session_2=yyy。",
+            "type": "apiKey",
+            "name": "Cookie",
             "in": "header"
         }
     }

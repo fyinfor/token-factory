@@ -42,11 +42,11 @@ type AffInviteeListItem struct {
 
 func defaultCommissionBpsForNewInviteRelation(inviterId int) int {
 	var inviter User
-	err := DB.Select("id", "role", "distributor_commission_bps").Where("id = ?", inviterId).First(&inviter).Error
+	err := DB.Select("id", "role", "distributor_commission_bps", "is_distributor").Where("id = ?", inviterId).First(&inviter).Error
 	if err != nil {
 		return common.AffiliateDefaultCommissionBps
 	}
-	if inviter.Role == common.RoleDistributorUser && inviter.DistributorCommissionBps > 0 {
+	if UserIsDistributor(&inviter) && inviter.DistributorCommissionBps > 0 {
 		return inviter.DistributorCommissionBps
 	}
 	return common.AffiliateDefaultCommissionBps
@@ -112,7 +112,7 @@ func effectiveAffiliateCommissionBps(inviter *User, inviteeUserId int) int {
 	if inviter == nil || inviter.Id <= 0 {
 		return common.AffiliateDefaultCommissionBps
 	}
-	if inviter.Role == common.RoleDistributorUser && inviter.DistributorCommissionBps > 0 {
+	if UserIsDistributor(inviter) && inviter.DistributorCommissionBps > 0 {
 		bps := inviter.DistributorCommissionBps
 		if bps > maxAffiliateCommissionBps {
 			bps = maxAffiliateCommissionBps
@@ -149,7 +149,7 @@ func ApplyAffiliateTopupReward(inviteeUserId int, quotaAdded int) {
 		return
 	}
 	inviterUser, errInv := GetUserById(inviterId, false)
-	if errInv != nil || inviterUser.Role != common.RoleDistributorUser {
+	if errInv != nil || !UserIsDistributor(inviterUser) {
 		return
 	}
 	bps := effectiveAffiliateCommissionBps(inviterUser, inviteeUserId)

@@ -53,7 +53,7 @@ func UpsertDistributorApplication(userId int, realName, idCardNo, qualificationU
 	if err != nil {
 		return err
 	}
-	if u.Role == common.RoleDistributorUser {
+	if UserIsDistributor(u) {
 		return errors.New("您已是分销商")
 	}
 	if u.Role >= common.RoleAdminUser {
@@ -82,8 +82,8 @@ func UpsertDistributorApplication(userId int, realName, idCardNo, qualificationU
 		return errors.New("申请正在审核中，请耐心等待")
 	}
 	if app.Status == DistributorAppStatusApproved {
-		// 记录仍为「已通过」，但账号已被降级为普通用户时需允许再次提交（与驳回后重提相同，重置为待审核）
-		if u.Role == common.RoleDistributorUser {
+		// 记录仍为「已通过」，但账号已被取消分销商资格时需允许再次提交（与驳回后重提相同，重置为待审核）
+		if UserIsDistributor(u) {
 			return errors.New("申请已通过")
 		}
 		app.RealName = realName
@@ -213,7 +213,7 @@ func ApproveDistributorApplication(appId, reviewerId int) error {
 		if u.Role >= common.RoleAdminUser {
 			return errors.New("不能将管理员设为分销商")
 		}
-		if u.Role == common.RoleDistributorUser {
+		if UserIsDistributor(&u) {
 			return errors.New("用户已是分销商")
 		}
 		ts := common.GetTimestamp()
@@ -224,7 +224,7 @@ func ApproveDistributorApplication(appId, reviewerId int) error {
 		if err := tx.Save(&app).Error; err != nil {
 			return err
 		}
-		err := tx.Model(&User{}).Where("id = ?", app.UserId).Update("role", common.RoleDistributorUser).Error
+		err := tx.Model(&User{}).Where("id = ?", app.UserId).Update("is_distributor", common.DistributorFlagYes).Error
 		if err != nil {
 			return err
 		}
@@ -261,7 +261,7 @@ func RejectDistributorApplication(appId, reviewerId int, reason string) error {
 
 // ListDistributorsAdmin 分销商用户列表
 func ListDistributorsAdmin(keyword string, pageInfo *common.PageInfo) ([]User, int64, error) {
-	tx := DB.Model(&User{}).Where("role = ?", common.RoleDistributorUser)
+	tx := DB.Model(&User{}).Where("is_distributor = ? AND role < ?", common.DistributorFlagYes, common.RoleAdminUser)
 	kw := strings.TrimSpace(keyword)
 	if kw != "" {
 		pattern := "%" + kw + "%"
@@ -288,7 +288,7 @@ func SetUserDistributorCommissionBps(userId, bps int) error {
 	if err := DB.Where("id = ?", userId).First(&u).Error; err != nil {
 		return err
 	}
-	if u.Role != common.RoleDistributorUser {
+	if !UserIsDistributor(&u) {
 		return errors.New("用户不是分销商")
 	}
 	return DB.Model(&User{}).Where("id = ?", userId).Update("distributor_commission_bps", bps).Error
@@ -303,7 +303,7 @@ func AdminSettleDistributorAffQuota(userId int) error {
 	if err := DB.Where("id = ?", userId).First(&u).Error; err != nil {
 		return err
 	}
-	if u.Role != common.RoleDistributorUser {
+	if !UserIsDistributor(&u) {
 		return errors.New("用户不是分销商")
 	}
 	return DB.Model(&User{}).Where("id = ?", userId).Update("aff_quota", 0).Error

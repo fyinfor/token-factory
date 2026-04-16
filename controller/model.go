@@ -241,6 +241,27 @@ func ListModels(c *gin.Context, modelType int) {
 }
 
 func ChannelListModels(c *gin.Context) {
+	// 管理员查看全量模型；已审核供应商仅查看自己渠道/模型关联的模型。
+	if c.GetInt("role") < common.RoleAdminUser {
+		ownedModels, err := collectSupplierOwnedModelNames(c.GetInt("id"))
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		models := make([]dto.OpenAIModels, 0, len(openAIModels))
+		for _, item := range openAIModels {
+			if _, ok := ownedModels[item.Id]; !ok {
+				continue
+			}
+			models = append(models, item)
+		}
+		c.JSON(200, gin.H{
+			"success": true,
+			"data":    models,
+		})
+		return
+	}
+
 	c.JSON(200, gin.H{
 		"success": true,
 		"data":    openAIModels,

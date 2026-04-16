@@ -3338,6 +3338,8 @@
     "基础价格": "Bei ya msingi",
     "扩展价格": "Bei ya ziada",
     "额外价格项": "Vipengee vya bei vya ziada",
+    "价格摘要（仅输入价）": "{{input}} /1M tokens (ingizo). Wezesha bei za hiari hapa chini unapohitaji.",
+    "价格摘要（含附加价）": "{{input}} /1M tokens (ingizo), pamoja na sehemu {{count}} za bei za hiari (mf. matokeo, akiba, picha au sauti).",
     "输出价格": "Bei ya ukamilishaji",
     "缓存读取价格": "Bei ya kusoma akiba",
     "缓存创建价格": "Bei ya kuunda akiba",
