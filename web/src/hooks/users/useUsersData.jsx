@@ -141,7 +141,12 @@ export const useUsersData = () => {
           if (action === 'delete') {
             return { ...u, DeletedAt: new Date() };
           }
-          return { ...u, status: user.status, role: user.role };
+          return {
+            ...u,
+            status: user.status,
+            role: user.role,
+            is_distributor: user.is_distributor,
+          };
         }
         return u;
       });

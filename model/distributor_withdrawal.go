@@ -46,6 +46,18 @@ func (DistributorWithdrawal) TableName() string {
 	return "distributor_withdrawals"
 }
 
+// GetDistributorWithdrawalByID 按主键查询提现记录。
+func GetDistributorWithdrawalByID(id int) (*DistributorWithdrawal, error) {
+	if id <= 0 {
+		return nil, errors.New("invalid id")
+	}
+	var w DistributorWithdrawal
+	if err := DB.Where("id = ?", id).First(&w).Error; err != nil {
+		return nil, err
+	}
+	return &w, nil
+}
+
 // GetDistributorMinWithdrawQuota 最低提现额度（内部点数），未配置时与 QuotaPerUnit 一致（约等于展示 1 单位）
 func GetDistributorMinWithdrawQuota() int {
 	common.OptionMapRWMutex.RLock()
@@ -116,7 +128,7 @@ func CreateDistributorWithdrawal(userId int, realName, bankName, bankAccount, vo
 	if err != nil {
 		return err
 	}
-	if u.Role != common.RoleDistributorUser {
+	if !UserIsDistributor(u) {
 		return errors.New("仅分销商可申请提现")
 	}
 	if u.AffQuota < quotaAmount {

@@ -13,7 +13,7 @@ import (
 func GetAffInvitees(c *gin.Context) {
 	inviterId := c.GetInt("id")
 	u, err := model.GetUserById(inviterId, false)
-	if err != nil || u.Role != common.RoleDistributorUser {
+	if err != nil || !model.UserIsDistributor(u) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "仅分销商可查看邀请列表"})
 		return
 	}

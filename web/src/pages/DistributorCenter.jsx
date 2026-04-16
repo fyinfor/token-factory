@@ -58,10 +58,10 @@ import {
   getQuotaPerUnit,
   quotaToDisplayInputAmount,
   displayInputAmountToQuota,
+  userIsDistributorUser,
 } from '../helpers';
 import { StatusContext } from '../context/Status';
 import { UserContext } from '../context/User';
-import { USER_ROLES } from '../constants/user.constants';
 import { useNavigate } from 'react-router-dom';
 import AffInviteeCommissionDetailModal from '../components/distributor/AffInviteeCommissionDetailModal';
 import TransferModal from '../components/topup/modals/TransferModal';
@@ -113,6 +113,10 @@ export default function DistributorCenter() {
     statusState?.status?.distributor_withdraw_cs_image_url || ''
   ).trim();
 
+  const withdrawNotice = (
+    statusState?.status?.distributor_withdraw_notice || ''
+  ).trim();
+
   const minWithdrawQuota = (() => {
     const n = Number(statusState?.status?.distributor_min_withdraw_quota);
     if (Number.isFinite(n) && n > 0) return Math.floor(n);
@@ -146,13 +150,17 @@ export default function DistributorCenter() {
     return quotaToDisplayInputAmount(affQuotaFloor);
   }, [isQuotaTokensMode, affQuotaFloor]);
 
-  const userRaw = localStorage.getItem('user');
-  let role = USER_ROLES.USER;
-  try {
-    if (userRaw) role = JSON.parse(userRaw).role ?? USER_ROLES.USER;
-  } catch {
-    // ignore
-  }
+  const isUserDistributor = useMemo(() => {
+    const u = userState?.user;
+    if (u) return userIsDistributorUser(u);
+    try {
+      const raw = localStorage.getItem('user');
+      if (raw) return userIsDistributorUser(JSON.parse(raw));
+    } catch {
+      // ignore
+    }
+    return false;
+  }, [userState?.user]);
 
   const loadCenter = async () => {
     const res = await API.get('/api/distributor/center');
@@ -194,7 +202,7 @@ export default function DistributorCenter() {
   );
 
   useEffect(() => {
-    if (role !== USER_ROLES.DISTRIBUTOR) {
+    if (!isUserDistributor) {
       navigate('/console/topup');
       return;
     }
@@ -208,7 +216,7 @@ export default function DistributorCenter() {
         setLoading(false);
       }
     })();
-  }, [role]);
+  }, [isUserDistributor]);
 
   useEffect(() => {
     setTransferAmount(getQuotaPerUnit());
@@ -512,7 +520,7 @@ export default function DistributorCenter() {
     },
   ];
 
-  if (role !== USER_ROLES.DISTRIBUTOR) {
+  if (!isUserDistributor) {
     return null;
   }
 
@@ -744,8 +752,19 @@ export default function DistributorCenter() {
             <div className='w-full flex flex-col items-center'>
               {registerLink ? (
                 <>
-                  <div className='bg-white p-2 rounded-lg' id='dist-qr-wrap'>
-                    <QRCodeSVG value={registerLink} size={168} />
+                  <div className='inline-flex rounded-xl bg-[var(--semi-color-fill-0)] p-2 ring-1 ring-[var(--semi-color-border)]'>
+                    <div
+                      className='rounded-lg bg-semi-color-white p-2 shadow-[0_2px_8px_rgba(0,0,0,0.08)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.55)] ring-1 ring-black/[0.06] dark:ring-white/[0.12]'
+                      id='dist-qr-wrap'
+                    >
+                      <QRCodeSVG
+                        value={registerLink}
+                        size={168}
+                        level='M'
+                        bgColor='#ffffff'
+                        fgColor='#000000'
+                      />
+                    </div>
                   </div>
                   <Button
                     className='mt-2'
@@ -935,6 +954,20 @@ export default function DistributorCenter() {
               <Text type='tertiary' size='small' className='block mt-1'>
                 {t('支持图片或 PDF；点击图片可大图预览')}
               </Text>
+              {withdrawNotice ? (
+                <div className='mt-3 rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)] px-3 py-2'>
+                  <Text strong size='small' className='block mb-1'>
+                    {t('提现说明')}
+                  </Text>
+                  <Text
+                    type='secondary'
+                    size='small'
+                    className='block whitespace-pre-wrap break-words'
+                  >
+                    {withdrawNotice}
+                  </Text>
+                </div>
+              ) : null}
               {wdVoucherUrls.length > 0 ? (
                 <div className='mt-3 flex flex-wrap gap-3'>
                   {wdVoucherUrls.map((u, idx) =>
