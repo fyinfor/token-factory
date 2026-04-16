@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -47,6 +48,13 @@ func GetStatus(c *gin.Context) {
 
 	passkeySetting := system_setting.GetPasskeySettings()
 	legalSetting := system_setting.GetLegalSettings()
+
+	distributorMinWithdrawQuota := int(common.QuotaPerUnit)
+	if raw := strings.TrimSpace(common.Interface2String(common.OptionMap["DistributorMinWithdrawQuota"])); raw != "" {
+		if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+			distributorMinWithdrawQuota = n
+		}
+	}
 
 	data := gin.H{
 		"version":                     common.Version,
@@ -117,6 +125,11 @@ func GetStatus(c *gin.Context) {
 		"user_agreement_enabled":      legalSetting.UserAgreement != "",
 		"privacy_policy_enabled":      legalSetting.PrivacyPolicy != "",
 		"checkin_enabled":             operation_setting.GetCheckinSetting().Enabled,
+		"distributor_apply_cs_image_url":    common.OptionMap["DistributorApplyCsImageUrl"],
+		"distributor_withdraw_cs_image_url": common.OptionMap["DistributorWithdrawCsImageUrl"],
+		"distributor_withdraw_notice":       common.OptionMap["DistributorWithdrawNotice"],
+		"distributor_min_withdraw_quota":    distributorMinWithdrawQuota,
+		"affiliate_default_commission_bps":  common.AffiliateDefaultCommissionBps,
 	}
 
 	// 根据启用状态注入可选内容

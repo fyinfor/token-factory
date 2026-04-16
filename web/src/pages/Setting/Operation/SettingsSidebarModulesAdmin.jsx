@@ -57,6 +57,8 @@ export default function SettingsSidebarModulesAdmin(props) {
       enabled: true,
       topup: true,
       personal: true,
+      provider: true,
+      distributor_center: true,
     },
     admin: {
       enabled: true,
@@ -67,6 +69,10 @@ export default function SettingsSidebarModulesAdmin(props) {
       user: true,
       subscription: true,
       setting: true,
+      distributor: true,
+      'supplier-management': true,
+      'supplier-application-approval': true,
+      'supplier-list': true,
     },
   });
 
@@ -118,6 +124,8 @@ export default function SettingsSidebarModulesAdmin(props) {
         enabled: true,
         topup: true,
         personal: true,
+        provider: true,
+        distributor_center: true,
       },
       admin: {
         enabled: true,
@@ -128,6 +136,7 @@ export default function SettingsSidebarModulesAdmin(props) {
         user: true,
         subscription: true,
         setting: true,
+        distributor: true,
       },
     };
     setSidebarModulesAdmin(defaultModules);
@@ -187,7 +196,13 @@ export default function SettingsSidebarModulesAdmin(props) {
             midjourney: true,
             task: true,
           },
-          personal: { enabled: true, topup: true, personal: true },
+          personal: {
+            enabled: true,
+            topup: true,
+            personal: true,
+            provider: true,
+            distributor_center: true,
+          },
           admin: {
             enabled: true,
             channel: true,
@@ -197,6 +212,10 @@ export default function SettingsSidebarModulesAdmin(props) {
             user: true,
             subscription: true,
             setting: true,
+            distributor: true,
+            'supplier-management': true,
+            'supplier-application-approval': true,
+            'supplier-list': true,
           },
         };
         setSidebarModulesAdmin(defaultModules);
@@ -247,6 +266,11 @@ export default function SettingsSidebarModulesAdmin(props) {
           description: t('个人信息设置'),
         },
         { key: 'provider', title: t('供应商管理'), description: t('供应商相关管理') },
+        {
+          key: 'distributor_center',
+          title: t('分销中心'),
+          description: t('分销商邀请与收益'),
+        },
       ],
     },
     {
@@ -272,6 +296,26 @@ export default function SettingsSidebarModulesAdmin(props) {
           description: t('兑换码生成管理'),
         },
         { key: 'user', title: t('用户管理'), description: t('用户账户管理') },
+        {
+          key: 'distributor',
+          title: t('分销商管理'),
+          description: t('分销商申请与人员管理'),
+        },
+        {
+          key: 'supplier-management',
+          title: t('供应商管理'),
+          description: t('供应商相关管理'),
+        },
+        {
+          key: 'supplier-application-approval',
+          title: t('申请审批'),
+          description: t('供应商申请审批管理'),
+        },
+        {
+          key: 'supplier-list',
+          title: t('供应商列表'),
+          description: t('管理所有供应商信息'),
+        },
         {
           key: 'setting',
           title: t('系统设置'),

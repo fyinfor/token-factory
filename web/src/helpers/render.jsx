@@ -76,6 +76,10 @@ import {
   Server,
   CalendarClock,
   Store,
+  Share2,
+  Handshake,
+  UserPlus,
+  ClipboardList,
 } from 'lucide-react';
 import {
   SiAtlassian,
@@ -147,7 +151,23 @@ export function getLucideIcon(key, selected = false) {
       return <CalendarClock {...commonProps} color={iconColor} />;
     case 'setting':
       return <Settings {...commonProps} color={iconColor} />;
-    case 'provider':
+    case 'supplier':
+      return <Store {...commonProps} color={iconColor} />;
+    case 'distributor_center':
+      return <Share2 {...commonProps} color={iconColor} />;
+    case 'distributor':
+      return <Handshake {...commonProps} color={iconColor} />;
+    case 'supplier-apply':
+      return <UserPlus {...commonProps} color={iconColor} />;
+    case 'supplier-channel':
+      return <Layers {...commonProps} color={iconColor} />;
+    case 'supplier-models':
+      return <Package {...commonProps} color={iconColor} />;
+    case 'supplier-management':
+      return <Store {...commonProps} color={iconColor} />;
+    case 'supplier-application-approval':
+      return <ClipboardList {...commonProps} color={iconColor} />;
+    case 'supplier-list':
       return <Store {...commonProps} color={iconColor} />;
     default:
       return <CircleUser {...commonProps} color={iconColor} />;
@@ -1068,6 +1088,82 @@ export function getQuotaPerUnit() {
   let quotaPerUnit = localStorage.getItem('quota_per_unit');
   quotaPerUnit = parseFloat(quotaPerUnit);
   return quotaPerUnit;
+}
+
+/**
+ * 内部额度（点数）→ 与「余额/划转」展示货币一致的数值，用于划转等输入框（非 TOKENS）。
+ * TOKENS 模式下与额度点数一致，直接返回 quota。
+ */
+export function quotaToDisplayInputAmount(quota) {
+  if (quota == null || Number.isNaN(Number(quota))) return 0;
+  const q = Number(quota);
+  let quotaPerUnit = localStorage.getItem('quota_per_unit');
+  quotaPerUnit = parseFloat(quotaPerUnit || '500000');
+  const displayType = localStorage.getItem('quota_display_type') || 'USD';
+  if (displayType === 'TOKENS') {
+    return q;
+  }
+  const resultUSD = q / quotaPerUnit;
+  if (displayType === 'CNY') {
+    const statusStr = localStorage.getItem('status');
+    let usdRate = 7;
+    try {
+      if (statusStr) {
+        const s = JSON.parse(statusStr);
+        usdRate = s?.usd_exchange_rate || 7;
+      }
+    } catch (e) {}
+    return resultUSD * usdRate;
+  }
+  if (displayType === 'CUSTOM') {
+    const statusStr = localStorage.getItem('status');
+    let rate = 1;
+    try {
+      if (statusStr) {
+        const s = JSON.parse(statusStr);
+        rate = s?.custom_currency_exchange_rate || 1;
+      }
+    } catch (e) {}
+    return resultUSD * rate;
+  }
+  return resultUSD;
+}
+
+/**
+ * 划转输入框中的标价数值 → 内部额度点数（与 renderQuota / 后端 aff_transfer 一致）。
+ */
+export function displayInputAmountToQuota(amount) {
+  if (amount == null || Number.isNaN(Number(amount))) return 0;
+  const a = Number(amount);
+  let quotaPerUnit = localStorage.getItem('quota_per_unit');
+  quotaPerUnit = parseFloat(quotaPerUnit || '500000');
+  const displayType = localStorage.getItem('quota_display_type') || 'USD';
+  if (displayType === 'TOKENS') {
+    return Math.round(a);
+  }
+  let resultUSD = a;
+  if (displayType === 'CNY') {
+    const statusStr = localStorage.getItem('status');
+    let usdRate = 7;
+    try {
+      if (statusStr) {
+        const s = JSON.parse(statusStr);
+        usdRate = s?.usd_exchange_rate || 7;
+      }
+    } catch (e) {}
+    resultUSD = a / usdRate;
+  } else if (displayType === 'CUSTOM') {
+    const statusStr = localStorage.getItem('status');
+    let rate = 1;
+    try {
+      if (statusStr) {
+        const s = JSON.parse(statusStr);
+        rate = s?.custom_currency_exchange_rate || 1;
+      }
+    } catch (e) {}
+    resultUSD = a / rate;
+  }
+  return Math.round(resultUSD * quotaPerUnit);
 }
 
 export function renderUnitWithQuota(quota) {
@@ -1991,7 +2087,7 @@ export function renderModelPrice(
       buildBillingText('模型倍率 {{modelRatio}}', {
         modelRatio: modelRatioValue,
       }),
-      buildBillingText('补全倍率 {{completionRatio}}', {
+      buildBillingText('输出倍率 {{completionRatio}}', {
         completionRatio: completionRatioValue,
       }),
       cacheInputTokens > 0
@@ -2068,7 +2164,7 @@ export function renderModelPrice(
         )
       : null,
     buildBillingText(
-      '输出：{{tokens}} / 1M * 模型倍率 {{modelRatio}} * 补全倍率 {{completionRatio}} * {{ratioType}} {{ratio}} = {{amount}}',
+      '输出：{{tokens}} / 1M * 模型倍率 {{modelRatio}} * 输出倍率 {{completionRatio}} * {{ratioType}} {{ratio}} = {{amount}}',
       {
         tokens: completionTokens,
         modelRatio: modelRatioValue,
@@ -2383,13 +2479,13 @@ export function renderAudioModelPrice(
         usdAmount: inputRatioPrice * audioRatio,
         rate,
       }),
-      buildBillingPriceText('音频补全价格：{{symbol}}{{price}} / 1M tokens', {
+      buildBillingPriceText('音频输出价格：{{symbol}}{{price}} / 1M tokens', {
         symbol,
         usdAmount: inputRatioPrice * audioRatio * audioCompletionRatio,
         rate,
       }),
       buildBillingText(
-        '文字提示 {{input}} tokens / 1M tokens * {{symbol}}{{textInputPrice}} + 文字补全 {{completion}} tokens / 1M tokens * {{symbol}}{{textCompPrice}} + 音频提示 {{audioInput}} tokens / 1M tokens * {{symbol}}{{audioInputPrice}} + 音频补全 {{audioCompletion}} tokens / 1M tokens * {{symbol}}{{audioCompPrice}} * {{ratioType}} {{ratio}} = {{symbol}}{{total}}',
+        '文字提示 {{input}} tokens / 1M tokens * {{symbol}}{{textInputPrice}} + 文字输出 {{completion}} tokens / 1M tokens * {{symbol}}{{textCompPrice}} + 音频提示 {{audioInput}} tokens / 1M tokens * {{symbol}}{{audioInputPrice}} + 音频输出 {{audioCompletion}} tokens / 1M tokens * {{symbol}}{{audioCompPrice}} * {{ratioType}} {{ratio}} = {{symbol}}{{total}}',
         {
           input: inputTokens,
           completion: completionTokens,
@@ -2461,7 +2557,7 @@ export function renderAudioModelPrice(
 
   return renderBillingArticle([
     buildBillingText(
-      '模型倍率 {{modelRatio}}，补全倍率 {{completionRatio}}，音频倍率 {{audioRatio}}，音频补全倍率 {{audioCompletionRatio}}，{{cachePart}}{{ratioType}} {{ratio}}',
+      '模型倍率 {{modelRatio}}，输出倍率 {{completionRatio}}，音频倍率 {{audioRatio}}，音频输出倍率 {{audioCompletionRatio}}，{{cachePart}}{{ratioType}} {{ratio}}',
       {
         modelRatio: modelRatioValue,
         completionRatio: completionRatioValue,
@@ -2508,7 +2604,7 @@ export function renderAudioModelPrice(
         )
       : null,
     buildBillingText(
-      '文字输出：{{tokens}} / 1M * 模型倍率 {{modelRatio}} * 补全倍率 {{completionRatio}} * {{ratioType}} {{ratio}} = {{amount}}',
+      '文字输出：{{tokens}} / 1M * 模型倍率 {{modelRatio}} * 输出倍率 {{completionRatio}} * {{ratioType}} {{ratio}} = {{amount}}',
       {
         tokens: completionTokens,
         modelRatio: modelRatioValue,
@@ -2540,7 +2636,7 @@ export function renderAudioModelPrice(
       },
     ),
     buildBillingText(
-      '音频输出：{{tokens}} / 1M * 模型倍率 {{modelRatio}} * 音频倍率 {{audioRatio}} * 音频补全倍率 {{audioCompletionRatio}} * {{ratioType}} {{ratio}} = {{amount}}',
+      '音频输出：{{tokens}} / 1M * 模型倍率 {{modelRatio}} * 音频倍率 {{audioRatio}} * 音频输出倍率 {{audioCompletionRatio}} * {{ratioType}} {{ratio}} = {{amount}}',
       {
         tokens: audioCompletionTokens,
         modelRatio: modelRatioValue,
@@ -2724,7 +2820,7 @@ export function renderClaudeModelPrice(
 
     breakdownSegments.push(
       i18next.t(
-        '补全 {{completion}} tokens / 1M tokens * {{symbol}}{{price}}',
+        '输出 {{completion}} tokens / 1M tokens * {{symbol}}{{price}}',
         {
           completion: completionTokens,
           symbol,
@@ -2957,7 +3053,7 @@ export function renderClaudeModelPrice(
         )
       : null,
     buildBillingText(
-      '补全 {{completion}} tokens * 输出倍率 {{completionRatio}}',
+      '输出 {{completion}} tokens * 输出倍率 {{completionRatio}}',
       {
         completion: completionTokens,
         completionRatio: completionRatioValue,

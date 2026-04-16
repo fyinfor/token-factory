@@ -1,0 +1,1913 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "TokenFactory backend API documentation powered by swaggo.",
+        "title": "TokenFactory API",
+        "contact": {},
+        "version": "1.0"
+    },
+    "basePath": "/api",
+    "paths": {
+        "/kling/v1/videos/image2video": {
+            "post": {
+                "description": "调用可灵AI图生视频接口，生成视频内容",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Video"
+                ],
+                "summary": "可灵官方-图生视频",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "用户认证令牌 (Aeess-Token: sk-xxxx)",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "图生视频请求参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.KlingImage2VideoRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "任务状态和结果",
+                        "schema": {
+                            "$ref": "#/definitions/dto.VideoTaskResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/kling/v1/videos/image2video/{task_id}": {
+            "get": {
+                "description": "Query the status and result of a Kling video generation task by task ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Origin"
+                ],
+                "summary": "可灵任务查询--图生视频",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Task ID",
+                        "name": "task_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/kling/v1/videos/text2video": {
+            "post": {
+                "description": "调用可灵AI文生视频接口，生成视频内容",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Video"
+                ],
+                "summary": "可灵文生视频",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "用户认证令牌 (Aeess-Token: sk-xxxx)",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "视频生成请求参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.KlingText2VideoRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "任务状态和结果",
+                        "schema": {
+                            "$ref": "#/definitions/dto.VideoTaskResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/kling/v1/videos/text2video/{task_id}": {
+            "get": {
+                "description": "Query the status and result of a Kling text-to-video generation task by task ID",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Origin"
+                ],
+                "summary": "可灵任务查询--文生视频",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Task ID",
+                        "name": "task_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {}
+            }
+        },
+        "/user/messages/publish": {
+            "post": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "支持按指定用户或按最小角色发布站内消息，至少设置 receiver_user_id 或 receiver_min_role 之一",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "MessageAdmin"
+                ],
+                "summary": "管理员发布站内消息",
+                "parameters": [
+                    {
+                        "description": "消息内容",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.PublishUserMessageRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "success + data{published:true}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/user/messages/read_all": {
+            "post": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Message"
+                ],
+                "summary": "标记当前用户全部站内消息为已读",
+                "responses": {
+                    "200": {
+                        "description": "success + data{updated_count}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/user/messages/self": {
+            "get": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Message"
+                ],
+                "summary": "查询当前用户站内消息",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "p",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "标题模糊查询",
+                        "name": "title",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "读取状态：all/read/unread，默认all",
+                        "name": "read_status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "分页结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/user/messages/unread_count": {
+            "get": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Message"
+                ],
+                "summary": "获取当前用户未读站内消息数量",
+                "responses": {
+                    "200": {
+                        "description": "success + data{unread_count}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/user/messages/{id}/read": {
+            "post": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Message"
+                ],
+                "summary": "标记当前用户消息为已读",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "消息ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "success + data{updated}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/user/supplier/application": {
+            "get": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SupplierAdmin"
+                ],
+                "summary": "管理员分页查询供应商申请",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "p",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "状态：0待审核 1审核通过 2审核驳回",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "分页结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "普通用户提交供应商申请，提交后生成管理员待审核站内消息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Supplier"
+                ],
+                "summary": "提交供应商入驻申请",
+                "parameters": [
+                    {
+                        "description": "申请信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.SupplierApplicationSubmitRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "success + data{id,status}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/user/supplier/application/deactivate": {
+            "post": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "仅审核通过状态可注销；注销后清空用户表 supplier_id 并将申请状态置为已注销",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Supplier"
+                ],
+                "summary": "当前供应商注销",
+                "parameters": [
+                    {
+                        "description": "注销说明",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/controller.SupplierDeactivateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "success + data{id,status}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/user/supplier/application/self": {
+            "get": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Supplier"
+                ],
+                "summary": "查询当前用户供应商申请",
+                "responses": {
+                    "200": {
+                        "description": "success + data{申请对象或null}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "当前申请只要未审核通过都可修改，修改后状态重置为待审核(0)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Supplier"
+                ],
+                "summary": "修改当前用户供应商申请并重新提交",
+                "parameters": [
+                    {
+                        "description": "申请信息（含id）",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.SupplierApplicationUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "success + data{id,status}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/user/supplier/application/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "管理员可修改任意供应商申请资料；审核通过(status=1)状态也允许修改，且修改后保持原状态",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SupplierAdmin"
+                ],
+                "summary": "管理员修改供应商申请资料",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "供应商申请ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "申请信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.SupplierApplicationSubmitRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "success + data{id,status}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/user/supplier/application/{id}/review": {
+            "post": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "任一管理员可审核一次，仅待审核状态允许处理",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SupplierAdmin"
+                ],
+                "summary": "管理员审核供应商申请",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "申请ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "审核信息",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.SupplierApplicationReviewRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "success + data{id,status}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/user/supplier/channels": {
+            "get": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "供应商返回本人渠道；管理员返回所有供应商渠道",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Supplier"
+                ],
+                "summary": "查询当前供应商渠道列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "p",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "渠道ID",
+                        "name": "channel_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "渠道名称（模糊）",
+                        "name": "name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "渠道密钥（精确或模糊）",
+                        "name": "key",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "API地址（模糊）",
+                        "name": "base_url",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "模型关键字（模糊）",
+                        "name": "model",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "分组",
+                        "name": "group",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "分页结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "仅审核通过的供应商可新增，自动写入 owner_user_id 与 supplier_application_id",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Supplier"
+                ],
+                "summary": "当前供应商新增渠道",
+                "parameters": [
+                    {
+                        "description": "渠道创建参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/controller.AddChannelRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "创建结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/user/supplier/list": {
+            "get": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "支持按供应商名称模糊查询，返回分页数据",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SupplierAdmin"
+                ],
+                "summary": "管理员分页查询供应商列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "p",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "供应商名称（模糊）",
+                        "name": "company_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "状态筛选，支持逗号分隔（如1,3）；默认查询1和3",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "分页结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/user/supplier/models": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "仅返回当前登录供应商创建的模型",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Supplier"
+                ],
+                "summary": "查询当前供应商模型列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "p",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页数量",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "模型名称（模糊）",
+                        "name": "model_name",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "模型类型（映射 vendor，支持名称或ID）",
+                        "name": "model_type",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "分页结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "仅审核通过供应商可新增，自动写入 owner_user_id 与 supplier_application_id",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Supplier"
+                ],
+                "summary": "当前供应商新增模型",
+                "parameters": [
+                    {
+                        "description": "模型创建参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/model.Model"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "创建结果",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/user/supplier/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "根据供应商ID查询供应商详情，返回申请人用户名 applicant_username",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "SupplierAdmin"
+                ],
+                "summary": "管理员查询供应商详情",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "供应商ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "供应商详情",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/user/token": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    },
+                    {
+                        "ApiUserID": []
+                    }
+                ],
+                "description": "生成并返回当前登录用户的 access_token，用于在 Authorization 请求头中进行接口鉴权",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "用户"
+                ],
+                "summary": "生成当前用户 AccessToken",
+                "responses": {
+                    "200": {
+                        "description": "success + data{access_token}",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/video/generations": {
+            "post": {
+                "description": "调用视频生成接口生成视频\n支持多种视频生成服务：\n- 可灵AI (Kling): https://app.klingai.com/cn/dev/document-api/apiReference/commonInfo\n- 即梦 (Jimeng): https://www.volcengine.com/docs/85621/1538636",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Video"
+                ],
+                "summary": "生成视频",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "用户认证令牌 (Aeess-Token: sk-xxxx)",
+                        "name": "Authorization",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "视频生成请求参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/dto.VideoRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/video/generations/{task_id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "根据任务ID查询视频生成任务的状态和结果",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Video"
+                ],
+                "summary": "查询视频",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Task ID",
+                        "name": "task_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "任务状态和结果",
+                        "schema": {
+                            "$ref": "#/definitions/dto.VideoTaskResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "constant.MultiKeyMode": {
+            "type": "string",
+            "enum": [
+                "random",
+                "polling"
+            ],
+            "x-enum-comments": {
+                "MultiKeyModePolling": "轮询",
+                "MultiKeyModeRandom": "随机"
+            },
+            "x-enum-descriptions": [
+                "随机",
+                "轮询"
+            ],
+            "x-enum-varnames": [
+                "MultiKeyModeRandom",
+                "MultiKeyModePolling"
+            ]
+        },
+        "controller.AddChannelRequest": {
+            "type": "object",
+            "properties": {
+                "batch_add_set_key_prefix_2_name": {
+                    "type": "boolean"
+                },
+                "channel": {
+                    "$ref": "#/definitions/model.Channel"
+                },
+                "mode": {
+                    "type": "string"
+                },
+                "multi_key_mode": {
+                    "$ref": "#/definitions/constant.MultiKeyMode"
+                }
+            }
+        },
+        "controller.KlingCameraConfig": {
+            "type": "object",
+            "properties": {
+                "horizontal": {
+                    "type": "number",
+                    "example": 2.5
+                },
+                "pan": {
+                    "type": "number",
+                    "example": 0
+                },
+                "roll": {
+                    "type": "number",
+                    "example": 0
+                },
+                "tilt": {
+                    "type": "number",
+                    "example": 0
+                },
+                "vertical": {
+                    "type": "number",
+                    "example": 0
+                },
+                "zoom": {
+                    "type": "number",
+                    "example": 0
+                }
+            }
+        },
+        "controller.KlingCameraControl": {
+            "type": "object",
+            "properties": {
+                "config": {
+                    "$ref": "#/definitions/controller.KlingCameraConfig"
+                },
+                "type": {
+                    "type": "string",
+                    "example": "simple"
+                }
+            }
+        },
+        "controller.KlingImage2VideoRequest": {
+            "type": "object",
+            "required": [
+                "image"
+            ],
+            "properties": {
+                "aspect_ratio": {
+                    "type": "string",
+                    "example": "16:9"
+                },
+                "callback_url": {
+                    "type": "string",
+                    "example": "https://your.domain/callback"
+                },
+                "camera_control": {
+                    "$ref": "#/definitions/controller.KlingCameraControl"
+                },
+                "cfg_scale": {
+                    "type": "number",
+                    "example": 0.7
+                },
+                "duration": {
+                    "type": "string",
+                    "example": "5"
+                },
+                "external_task_id": {
+                    "type": "string",
+                    "example": "custom-task-002"
+                },
+                "image": {
+                    "type": "string",
+                    "example": "https://h2.inkwai.com/bs2/upload-ylab-stunt/se/ai_portal_queue_mmu_image_upscale_aiweb/3214b798-e1b4-4b00-b7af-72b5b0417420_raw_image_0.jpg"
+                },
+                "mode": {
+                    "type": "string",
+                    "example": "std"
+                },
+                "model_name": {
+                    "type": "string",
+                    "example": "kling-v2-master"
+                },
+                "negative_prompt": {
+                    "type": "string",
+                    "example": "blurry, low quality"
+                },
+                "prompt": {
+                    "type": "string",
+                    "example": "A cat playing piano in the garden"
+                }
+            }
+        },
+        "controller.KlingText2VideoRequest": {
+            "type": "object",
+            "required": [
+                "prompt"
+            ],
+            "properties": {
+                "aspect_ratio": {
+                    "type": "string",
+                    "example": "16:9"
+                },
+                "callback_url": {
+                    "type": "string",
+                    "example": "https://your.domain/callback"
+                },
+                "camera_control": {
+                    "$ref": "#/definitions/controller.KlingCameraControl"
+                },
+                "cfg_scale": {
+                    "type": "number",
+                    "example": 0.7
+                },
+                "duration": {
+                    "type": "string",
+                    "example": "5"
+                },
+                "external_task_id": {
+                    "type": "string",
+                    "example": "custom-task-001"
+                },
+                "mode": {
+                    "type": "string",
+                    "example": "std"
+                },
+                "model_name": {
+                    "type": "string",
+                    "example": "kling-v1"
+                },
+                "negative_prompt": {
+                    "type": "string",
+                    "example": "blurry, low quality"
+                },
+                "prompt": {
+                    "type": "string",
+                    "example": "A cat playing piano in the garden"
+                }
+            }
+        },
+        "controller.PublishUserMessageRequest": {
+            "type": "object",
+            "properties": {
+                "biz_id": {
+                    "type": "integer"
+                },
+                "biz_type": {
+                    "type": "string"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "receiver_min_role": {
+                    "type": "integer"
+                },
+                "receiver_user_id": {
+                    "type": "integer"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "controller.SupplierApplicationReviewRequest": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                }
+            }
+        },
+        "controller.SupplierApplicationSubmitRequest": {
+            "type": "object",
+            "properties": {
+                "applicant_user_id": {
+                    "type": "integer"
+                },
+                "business_license_file": {
+                    "type": "string"
+                },
+                "business_license_url": {
+                    "type": "string"
+                },
+                "company_name": {
+                    "type": "string"
+                },
+                "company_size": {
+                    "type": "string"
+                },
+                "contact_mobile": {
+                    "type": "string"
+                },
+                "contact_name": {
+                    "type": "string"
+                },
+                "contact_wechat": {
+                    "type": "string"
+                },
+                "credit_code": {
+                    "type": "string"
+                },
+                "legal_representative": {
+                    "type": "string"
+                }
+            }
+        },
+        "controller.SupplierApplicationUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "applicant_user_id": {
+                    "type": "integer"
+                },
+                "business_license_file": {
+                    "type": "string"
+                },
+                "business_license_url": {
+                    "type": "string"
+                },
+                "company_name": {
+                    "type": "string"
+                },
+                "company_size": {
+                    "type": "string"
+                },
+                "contact_mobile": {
+                    "type": "string"
+                },
+                "contact_name": {
+                    "type": "string"
+                },
+                "contact_wechat": {
+                    "type": "string"
+                },
+                "credit_code": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "legal_representative": {
+                    "type": "string"
+                }
+            }
+        },
+        "controller.SupplierDeactivateRequest": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string"
+                },
+                "supplier_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "dto.VideoRequest": {
+            "type": "object",
+            "properties": {
+                "duration": {
+                    "description": "Video duration (seconds)",
+                    "type": "number",
+                    "example": 5
+                },
+                "fps": {
+                    "description": "Video frame rate",
+                    "type": "integer",
+                    "example": 30
+                },
+                "height": {
+                    "description": "Video height",
+                    "type": "integer",
+                    "example": 512
+                },
+                "image": {
+                    "description": "Image input (URL/Base64)",
+                    "type": "string",
+                    "example": "https://h2.inkwai.com/bs2/upload-ylab-stunt/se/ai_portal_queue_mmu_image_upscale_aiweb/3214b798-e1b4-4b00-b7af-72b5b0417420_raw_image_0.jpg"
+                },
+                "metadata": {
+                    "description": "Vendor-specific/custom params (e.g. negative_prompt, style, quality_level, etc.)",
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "model": {
+                    "description": "Model/style ID",
+                    "type": "string",
+                    "example": "kling-v1"
+                },
+                "n": {
+                    "description": "Number of videos to generate",
+                    "type": "integer",
+                    "example": 1
+                },
+                "prompt": {
+                    "description": "Text prompt",
+                    "type": "string",
+                    "example": "宇航员站起身走了"
+                },
+                "response_format": {
+                    "description": "Response format",
+                    "type": "string",
+                    "example": "url"
+                },
+                "seed": {
+                    "description": "Random seed",
+                    "type": "integer",
+                    "example": 20231234
+                },
+                "user": {
+                    "description": "User identifier",
+                    "type": "string",
+                    "example": "user-1234"
+                },
+                "width": {
+                    "description": "Video width",
+                    "type": "integer",
+                    "example": 512
+                }
+            }
+        },
+        "dto.VideoTaskError": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "dto.VideoTaskMetadata": {
+            "type": "object",
+            "properties": {
+                "duration": {
+                    "description": "实际生成的视频时长",
+                    "type": "number",
+                    "example": 5
+                },
+                "fps": {
+                    "description": "实际帧率",
+                    "type": "integer",
+                    "example": 30
+                },
+                "height": {
+                    "description": "实际高度",
+                    "type": "integer",
+                    "example": 512
+                },
+                "seed": {
+                    "description": "使用的随机种子",
+                    "type": "integer",
+                    "example": 20231234
+                },
+                "width": {
+                    "description": "实际宽度",
+                    "type": "integer",
+                    "example": 512
+                }
+            }
+        },
+        "dto.VideoTaskResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "description": "错误信息（失败时）",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/dto.VideoTaskError"
+                        }
+                    ]
+                },
+                "format": {
+                    "description": "视频格式",
+                    "type": "string",
+                    "example": "mp4"
+                },
+                "metadata": {
+                    "description": "结果元数据",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/dto.VideoTaskMetadata"
+                        }
+                    ]
+                },
+                "status": {
+                    "description": "任务状态",
+                    "type": "string",
+                    "example": "succeeded"
+                },
+                "task_id": {
+                    "description": "任务ID",
+                    "type": "string",
+                    "example": "abcd1234efgh"
+                },
+                "url": {
+                    "description": "视频资源URL（成功时）",
+                    "type": "string"
+                }
+            }
+        },
+        "model.BoundChannel": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.Channel": {
+            "type": "object",
+            "properties": {
+                "auto_ban": {
+                    "type": "integer"
+                },
+                "balance": {
+                    "description": "in USD",
+                    "type": "number"
+                },
+                "balance_updated_time": {
+                    "type": "integer"
+                },
+                "base_url": {
+                    "type": "string"
+                },
+                "channel_info": {
+                    "description": "add after v0.8.5",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/model.ChannelInfo"
+                        }
+                    ]
+                },
+                "created_time": {
+                    "type": "integer"
+                },
+                "group": {
+                    "type": "string"
+                },
+                "header_override": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "model_mapping": {
+                    "type": "string"
+                },
+                "models": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "openai_organization": {
+                    "type": "string"
+                },
+                "other": {
+                    "type": "string"
+                },
+                "other_info": {
+                    "type": "string"
+                },
+                "owner_user_id": {
+                    "description": "渠道归属用户ID（供应商场景）",
+                    "type": "integer"
+                },
+                "param_override": {
+                    "type": "string"
+                },
+                "priority": {
+                    "type": "integer"
+                },
+                "remark": {
+                    "type": "string",
+                    "maxLength": 255
+                },
+                "response_time": {
+                    "description": "in milliseconds",
+                    "type": "integer"
+                },
+                "setting": {
+                    "description": "渠道额外设置",
+                    "type": "string"
+                },
+                "settings": {
+                    "description": "其他设置，存储azure版本等不需要检索的信息，详见dto.ChannelOtherSettings",
+                    "type": "string"
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "status_code_mapping": {
+                    "description": "MaxInputTokens     *int    `json:\"max_input_tokens\" gorm:\"default:0\"`",
+                    "type": "string"
+                },
+                "supplier_application_id": {
+                    "description": "关联 supplier_applications.id",
+                    "type": "integer"
+                },
+                "tag": {
+                    "type": "string"
+                },
+                "test_model": {
+                    "type": "string"
+                },
+                "test_time": {
+                    "type": "integer"
+                },
+                "type": {
+                    "type": "integer"
+                },
+                "used_quota": {
+                    "type": "integer"
+                },
+                "weight": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.ChannelInfo": {
+            "type": "object",
+            "properties": {
+                "is_multi_key": {
+                    "description": "是否多Key模式",
+                    "type": "boolean"
+                },
+                "multi_key_disabled_reason": {
+                    "description": "key禁用原因列表，key index -\u003e reason",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "multi_key_disabled_time": {
+                    "description": "key禁用时间列表，key index -\u003e time",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer",
+                        "format": "int64"
+                    }
+                },
+                "multi_key_mode": {
+                    "$ref": "#/definitions/constant.MultiKeyMode"
+                },
+                "multi_key_polling_index": {
+                    "description": "多Key模式下轮询的key索引",
+                    "type": "integer"
+                },
+                "multi_key_size": {
+                    "description": "多Key模式下的Key数量",
+                    "type": "integer"
+                },
+                "multi_key_status_list": {
+                    "description": "key状态列表，key index -\u003e status",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "model.Model": {
+            "type": "object",
+            "properties": {
+                "bound_channels": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.BoundChannel"
+                    }
+                },
+                "created_time": {
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "enable_groups": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "endpoints": {
+                    "type": "string"
+                },
+                "icon": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "matched_count": {
+                    "type": "integer"
+                },
+                "matched_models": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "model_name": {
+                    "type": "string"
+                },
+                "name_rule": {
+                    "type": "integer"
+                },
+                "owner_user_id": {
+                    "description": "模型归属用户ID（供应商场景）",
+                    "type": "integer"
+                },
+                "quota_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "status": {
+                    "type": "integer"
+                },
+                "supplier_application_id": {
+                    "description": "关联 supplier_applications.id",
+                    "type": "integer"
+                },
+                "sync_official": {
+                    "type": "integer"
+                },
+                "tags": {
+                    "type": "string"
+                },
+                "updated_time": {
+                    "type": "integer"
+                },
+                "vendor_id": {
+                    "type": "integer"
+                }
+            }
+        }
+    },
+    "securityDefinitions": {
+        "ApiUserID": {
+            "description": "必填。当前登录用户ID，需与会话用户或 access_token 对应用户一致。",
+            "type": "apiKey",
+            "name": "New-Api-User",
+            "in": "header"
+        },
+        "CookieAuth": {
+            "description": "可选。手动传浏览器会话 Cookie，例如：session=xxx; session_2=yyy。",
+            "type": "apiKey",
+            "name": "Cookie",
+            "in": "header"
+        }
+    }
+}

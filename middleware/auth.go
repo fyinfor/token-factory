@@ -160,6 +160,28 @@ func AdminAuth() func(c *gin.Context) {
 	}
 }
 
+// AdminOrApprovedSupplierAuth 允许管理员或审核通过的供应商访问。
+// 需配合 UserAuth 使用：先完成登录态解析，再基于角色/供应商状态放行。
+func AdminOrApprovedSupplierAuth() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		role := c.GetInt("role")
+		if role >= common.RoleAdminUser {
+			c.Next()
+			return
+		}
+		_, err := model.GetApprovedSupplierApplicationByApplicant(c.GetInt("id"))
+		if err != nil {
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"message": "当前用户未通过供应商审核，无权访问该接口",
+			})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
 func RootAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		authHelper(c, common.RoleRootUser)

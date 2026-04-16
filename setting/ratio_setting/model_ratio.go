@@ -467,9 +467,12 @@ func GetCompletionRatio(name string) float64 {
 		}
 	}
 	hardCodedRatio, contain := getHardcodedCompletionModelRatio(name)
-	if contain {
-		return hardCodedRatio
-	}
+	// Temporary override: disable hardcoded completion-ratio enforcement.
+	// Keep the original logic/commented variables for easy rollback.
+	// if contain {
+	// 	return hardCodedRatio
+	// }
+	_ = contain
 	if ratio, ok := completionRatioMap.Get(name); ok {
 		return ratio
 	}
@@ -494,6 +497,10 @@ func GetCompletionRatioInfo(name string) CompletionRatioInfo {
 	}
 
 	hardCodedRatio, locked := getHardcodedCompletionModelRatio(name)
+	// Temporary override: allow manual editing in admin pricing UI.
+	// Keep hardcoded ratio fallback, but disable all lock constraints for now.
+	// To restore original behavior, remove this line.
+	locked = false
 	if locked {
 		return CompletionRatioInfo{
 			Ratio:  hardCodedRatio,

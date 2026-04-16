@@ -18,8 +18,25 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { history } from './history';
+
+/** 登录/注册页 ?redirect= 仅允许站内相对路径，防止开放重定向 */
+export function safeInternalRedirectPath(raw) {
+  if (raw == null || typeof raw !== 'string') return null;
+  let path = raw.trim();
+  if (!path) return null;
+  try {
+    path = decodeURIComponent(path);
+  } catch {
+    return null;
+  }
+  if (!path.startsWith('/') || path.startsWith('//')) return null;
+  if (/[\s\r\n]/.test(path)) return null;
+  const lower = path.toLowerCase();
+  if (lower.startsWith('javascript:') || path.includes('://')) return null;
+  return path;
+}
 
 export function authHeader() {
   // return authorization header with jwt token
@@ -33,10 +50,12 @@ export function authHeader() {
 }
 
 export const AuthRedirect = ({ children }) => {
+  const [searchParams] = useSearchParams();
   const user = localStorage.getItem('user');
 
   if (user) {
-    return <Navigate to='/console' replace />;
+    const next = safeInternalRedirectPath(searchParams.get('redirect'));
+    return <Navigate to={next || '/console'} replace />;
   }
 
   return children;

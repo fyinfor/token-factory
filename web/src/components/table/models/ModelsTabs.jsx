@@ -55,15 +55,15 @@ const ModelsTabs = ({
     try {
       const res = await API.delete(`/api/vendors/${vendor.id}`);
       if (res.data.success) {
-        showSuccess(t('供应商删除成功'));
-        // 如果删除的是当前选中的供应商，切换到"全部"
+        showSuccess(t('模型类型删除成功'));
+        // 如果删除的是当前选中的模型类型，切换到"全部"
         if (activeVendorKey === String(vendor.id)) {
           setActiveVendorKey('all');
           loadModels(1, pageSize, 'all');
         } else {
           loadModels(activePage, pageSize, activeVendorKey);
         }
-        loadVendors(); // 重新加载供应商列表
+        loadVendors(); // 重新加载模型类型列表
       } else {
         showError(res.data.message || t('删除失败'));
       }
@@ -85,7 +85,7 @@ const ModelsTabs = ({
           size='small'
           onClick={() => setShowAddVendor(true)}
         >
-          {t('新增供应商')}
+          {t('新增模型类型')}
         </Button>
       }
     >
@@ -140,7 +140,7 @@ const ModelsTabs = ({
                           Modal.confirm({
                             title: t('确认删除'),
                             content: t(
-                              '确定要删除供应商 "{{name}}" 吗？此操作不可撤销。',
+                              '确定要删除模型类型 "{{name}}" 吗？此操作不可撤销。',
                               { name: vendor.name },
                             ),
                             onOk: () => handleDeleteVendor(vendor, e),

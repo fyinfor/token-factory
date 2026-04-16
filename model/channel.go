@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -51,7 +52,9 @@ type Channel struct {
 	// add after v0.8.5
 	ChannelInfo ChannelInfo `json:"channel_info" gorm:"type:json"`
 
-	OtherSettings string `json:"settings" gorm:"column:settings"` // 其他设置，存储azure版本等不需要检索的信息，详见dto.ChannelOtherSettings
+	OtherSettings         string `json:"settings" gorm:"column:settings"`                         // 其他设置，存储azure版本等不需要检索的信息，详见dto.ChannelOtherSettings
+	OwnerUserID           int    `json:"owner_user_id" gorm:"type:int;index;default:0"`           // 渠道归属用户ID（供应商场景）
+	SupplierApplicationID int    `json:"supplier_application_id" gorm:"type:int;index;default:0"` // 关联 supplier_applications.id
 
 	// cache info
 	Keys []string `json:"-" gorm:"-"`
@@ -275,6 +278,112 @@ func GetAllChannels(startIdx int, num int, selectAll bool, idSort bool) ([]*Chan
 	return channels, err
 }
 
+// ListChannelsByOwnerUser 分页查询指定归属用户创建的渠道。
+func ListChannelsByOwnerUser(ownerUserID int, startIdx int, num int) ([]*Channel, int64, error) {
+	var (
+		channels []*Channel
+		total    int64
+	)
+	query := DB.Model(&Channel{}).Where("owner_user_id = ?", ownerUserID)
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if err := query.Order("id desc").Limit(num).Offset(startIdx).Omit("key").Find(&channels).Error; err != nil {
+		return nil, 0, err
+	}
+	return channels, total, nil
+}
+
+// ListAllSupplierChannels 分页查询所有供应商归属渠道（管理员视角）。
+func ListAllSupplierChannels(startIdx int, num int) ([]*Channel, int64, error) {
+	var (
+		channels []*Channel
+		total    int64
+	)
+	query := DB.Model(&Channel{}).Where("owner_user_id > ? AND supplier_application_id > ?", 0, 0)
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if err := query.Order("id desc").Limit(num).Offset(startIdx).Omit("key").Find(&channels).Error; err != nil {
+		return nil, 0, err
+	}
+	return channels, total, nil
+}
+
+// SupplierChannelSearchFilter 供应商渠道搜索过滤参数。
+type SupplierChannelSearchFilter struct {
+	ChannelID    int
+	Keyword      string
+	Name         string
+	Key          string
+	BaseURL      string
+	ModelKeyword string
+	Group        string
+}
+
+// SearchSupplierChannels 搜索供应商渠道（供应商只查自己，管理员可查全部供应商渠道）。
+func SearchSupplierChannels(ownerUserID *int, startIdx int, num int, filter SupplierChannelSearchFilter) ([]*Channel, int64, error) {
+	var (
+		channels []*Channel
+		total    int64
+	)
+	query := DB.Model(&Channel{})
+	if ownerUserID != nil {
+		query = query.Where("owner_user_id = ?", *ownerUserID)
+	} else {
+		query = query.Where("owner_user_id > ? AND supplier_application_id > ?", 0, 0)
+	}
+	if filter.ChannelID > 0 {
+		query = query.Where("id = ?", filter.ChannelID)
+	}
+	if filter.Keyword != "" {
+		keywordLike := "%" + filter.Keyword + "%"
+		query = query.Where("(name LIKE ? OR "+commonKeyCol+" LIKE ? OR base_url LIKE ?)", keywordLike, keywordLike, keywordLike)
+	}
+	if filter.Name != "" {
+		query = query.Where("name LIKE ?", "%"+filter.Name+"%")
+	}
+	if filter.Key != "" {
+		// commonKeyCol 兼容不同数据库对保留字 key 的转义差异
+		query = query.Where(commonKeyCol+" = ? OR "+commonKeyCol+" LIKE ?", filter.Key, "%"+filter.Key+"%")
+	}
+	if filter.BaseURL != "" {
+		query = query.Where("base_url LIKE ?", "%"+filter.BaseURL+"%")
+	}
+	if filter.ModelKeyword != "" {
+		query = query.Where("models LIKE ?", "%"+filter.ModelKeyword+"%")
+	}
+	if filter.Group != "" && filter.Group != "null" {
+		var groupCondition string
+		if common.UsingMySQL {
+			groupCondition = "CONCAT(',', " + commonGroupCol + ", ',') LIKE ?"
+		} else {
+			groupCondition = "(',' || " + commonGroupCol + " || ',') LIKE ?"
+		}
+		query = query.Where(groupCondition, "%,"+filter.Group+",%")
+	}
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if err := query.Order("id desc").Limit(num).Offset(startIdx).Omit("key").Find(&channels).Error; err != nil {
+		return nil, 0, err
+	}
+	return channels, total, nil
+}
+
+// ParseSupplierChannelIDFilter 解析渠道ID筛选参数（支持空值）。
+func ParseSupplierChannelIDFilter(raw string) (int, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return 0, nil
+	}
+	id, err := strconv.Atoi(raw)
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
 func GetChannelsByTag(tag string, idSort bool, selectAll bool) ([]*Channel, error) {
 	var channels []*Channel
 	order := "priority desc"
@@ -348,9 +457,6 @@ func GetChannelById(id int, selectAll bool) (*Channel, error) {
 	}
 	if err != nil {
 		return nil, err
-	}
-	if channel == nil {
-		return nil, errors.New("channel not found")
 	}
 	return channel, nil
 }

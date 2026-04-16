@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { getLucideIcon } from '../../helpers/render';
@@ -25,7 +25,8 @@ import { ChevronLeft } from 'lucide-react';
 import { useSidebarCollapsed } from '../../hooks/common/useSidebarCollapsed';
 import { useSidebar } from '../../hooks/common/useSidebar';
 import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime';
-import { isAdmin, isRoot, showError } from '../../helpers';
+import { isAdmin, isRoot, showError, isDistributor } from '../../helpers';
+import { UserContext } from '../../context/User';
 import SkeletonWrapper from './components/SkeletonWrapper';
 
 import { Nav, Divider, Button } from '@douyinfe/semi-ui';
@@ -49,11 +50,20 @@ const routerMap = {
   deployment: '/console/deployment',
   playground: '/console/playground',
   personal: '/console/personal',
-  provider: '/console/provider',
+  supplier: null,
+  distributor: '/console/distributor/admin',
+  distributor_center: '/console/distributor/center',
+  'supplier-apply': '/console/supplier/apply',
+  'supplier-channel': '/console/supplier/channel',
+  'supplier-models': '/console/supplier/models',
+  'supplier-management': null,
+  'supplier-application-approval': '/console/supplier-application',
+  'supplier-list': '/console/suppliers',
 };
 
 const SiderBar = ({ onNavigate = () => {} }) => {
   const { t } = useTranslation();
+  const [userState] = useContext(UserContext);
   const [collapsed, toggleCollapsed] = useSidebarCollapsed();
   const {
     isModuleVisible,
@@ -136,20 +146,44 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         to: '/personal',
       },
       {
-        text: t('供应商管理'),
-        itemKey: 'provider',
-        to: '/provider',
+        text: t('供应商'),
+        itemKey: 'supplier',
+        className: isAdmin() ? 'tableHiddle' : '',
+        items: [
+          {
+            text: t('申请'),
+            itemKey: 'supplier-apply',
+            to: '/console/supplier/apply',
+          },
+          {
+            text: t('渠道管理'),
+            itemKey: 'supplier-channel',
+            to: '/console/supplier/channel',
+          },
+          {
+            text: t('模型管理'),
+            itemKey: 'supplier-models',
+            to: '/console/supplier/models',
+          },
+        ],
+      },
+      {
+        text: t('分销中心'),
+        itemKey: 'distributor_center',
+        to: '/console/distributor/center',
+        className: isDistributor() ? '' : 'tableHiddle',
       },
     ];
 
     // 根据配置过滤项目
     const filteredItems = items.filter((item) => {
+      if (item.className === 'tableHiddle') return false;
       const configVisible = isModuleVisible('personal', item.itemKey);
       return configVisible;
     });
 
     return filteredItems;
-  }, [t, isModuleVisible]);
+  }, [t, isModuleVisible, userState?.user?.role]);
 
   const adminItems = useMemo(() => {
     const items = [
@@ -190,6 +224,29 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         className: isAdmin() ? '' : 'tableHiddle',
       },
       {
+        text: t('分销商管理'),
+        itemKey: 'distributor',
+        to: '/console/distributor/admin',
+        className: isAdmin() ? '' : 'tableHiddle',
+      },
+      {
+        text: t('供应商管理'),
+        itemKey: 'supplier-management',
+        className: isAdmin() ? '' : 'tableHiddle',
+        items: [
+          {
+            text: t('申请审批'),
+            itemKey: 'supplier-application-approval',
+            to: '/console/supplier-application',
+          },
+          {
+            text: t('供应商列表'),
+            itemKey: 'supplier-list',
+            to: '/console/suppliers',
+          },
+        ],
+      },
+      {
         text: t('系统设置'),
         itemKey: 'setting',
         to: '/setting',
@@ -198,13 +255,25 @@ const SiderBar = ({ onNavigate = () => {} }) => {
     ];
 
     // 根据配置过滤项目
-    const filteredItems = items.filter((item) => {
-      const configVisible = isModuleVisible('admin', item.itemKey);
-      return configVisible;
-    });
+    const filteredItems = items
+      .map((item) => {
+        // 如果有子菜单，过滤子菜单项
+        if (item.items && item.items.length > 0) {
+          const visibleSubItems = item.items.filter((subItem) =>
+            isModuleVisible('admin', subItem.itemKey),
+          );
+          // 如果没有可见的子项，则隐藏父项
+          if (visibleSubItems.length === 0) return null;
+          return { ...item, items: visibleSubItems };
+        }
+        // 检查当前项是否可见
+        const configVisible = isModuleVisible('admin', item.itemKey);
+        return configVisible ? item : null;
+      })
+      .filter((item) => item !== null);
 
     return filteredItems;
-  }, [isAdmin(), isRoot(), t, isModuleVisible]);
+  }, [isAdmin(), isRoot(), t, isModuleVisible, userState?.user?.role]);
 
   const chatMenuItems = useMemo(() => {
     const items = [
@@ -476,7 +545,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
                 {!collapsed && (
                   <div className='sidebar-group-label'>{t('个人中心')}</div>
                 )}
-                {financeItems.map((item) => renderNavItem(item))}
+                {financeItems.map((item) => renderSubItem(item))}
               </div>
             </>
           )}
@@ -489,7 +558,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
                 {!collapsed && (
                   <div className='sidebar-group-label'>{t('管理员')}</div>
                 )}
-                {adminItems.map((item) => renderNavItem(item))}
+                {adminItems.map((item) => renderSubItem(item))}
               </div>
             </>
           )}

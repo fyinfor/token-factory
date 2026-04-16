@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/controller"
+	_ "github.com/QuantumNous/new-api/docs"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/middleware"
@@ -30,9 +31,24 @@ import (
 	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 
 	_ "net/http/pprof"
 )
+
+// @title TokenFactory API
+// @version 1.0
+// @description TokenFactory backend API documentation powered by swaggo.
+// @BasePath /api
+// @securityDefinitions.apikey ApiUserID
+// @in header
+// @name New-Api-User
+// @description 必填。当前登录用户ID，需与会话用户或 access_token 对应用户一致。
+// @securityDefinitions.apikey CookieAuth
+// @in header
+// @name Cookie
+// @description 可选。手动传浏览器会话 Cookie，例如：session=xxx; session_2=yyy。
 
 //go:embed web/dist
 var buildFS embed.FS
@@ -181,6 +197,9 @@ func main() {
 
 	InjectUmamiAnalytics()
 	InjectGoogleAnalytics()
+
+	// 注册 Swagger 文档路由。
+	server.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// 设置路由
 	router.SetRouter(server, buildFS, indexPage)

@@ -23,7 +23,8 @@ import { API, showError, showSuccess } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
 
-export const useModelsData = () => {
+export const useModelsData = (options = {}) => {
+  const { apiBasePath = '/api/models' } = options;
   const { t } = useTranslation();
   const [compactMode, setCompactMode] = useTableCompactMode('models');
 
@@ -127,10 +128,10 @@ export const useModelsData = () => {
   ) => {
     setLoading(true);
     try {
-      let url = `/api/models/?p=${page}&page_size=${size}`;
+      let url = `${apiBasePath}/?p=${page}&page_size=${size}`;
       if (vendorKey && vendorKey !== 'all') {
         // Filter by vendor ID
-        url = `/api/models/search?vendor=${vendorKey}&p=${page}&page_size=${size}`;
+        url = `${apiBasePath}/search?vendor=${vendorKey}&p=${page}&page_size=${size}`;
       }
 
       const res = await API.get(url);
@@ -263,7 +264,7 @@ export const useModelsData = () => {
     setSearching(true);
     try {
       const res = await API.get(
-        `/api/models/search?keyword=${searchKeyword}&vendor=${searchVendor}&p=1&page_size=${pageSize}`,
+        `${apiBasePath}/search?keyword=${searchKeyword}&vendor=${searchVendor}&p=1&page_size=${pageSize}`,
       );
       const { success, message, data } = res.data;
       if (success) {
@@ -295,13 +296,13 @@ export const useModelsData = () => {
     let res;
     switch (action) {
       case 'delete':
-        res = await API.delete(`/api/models/${id}`);
+        res = await API.delete(`${apiBasePath}/${id}`);
         break;
       case 'enable':
-        res = await API.put('/api/models/?status_only=true', { id, status: 1 });
+        res = await API.put(`${apiBasePath}/?status_only=true`, { id, status: 1 });
         break;
       case 'disable':
-        res = await API.put('/api/models/?status_only=true', { id, status: 0 });
+        res = await API.put(`${apiBasePath}/?status_only=true`, { id, status: 0 });
         break;
       default:
         return;
@@ -382,7 +383,7 @@ export const useModelsData = () => {
 
     try {
       const deletePromises = selectedKeys.map((model) =>
-        API.delete(`/api/models/${model.id}`),
+        API.delete(`${apiBasePath}/${model.id}`),
       );
 
       const results = await Promise.all(deletePromises);

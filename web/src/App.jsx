@@ -47,12 +47,20 @@ import Playground from './pages/Playground';
 import Subscription from './pages/Subscription';
 import OAuth2Callback from './components/auth/OAuth2Callback';
 import PersonalSetting from './components/settings/PersonalSetting';
-import ProviderPage from './pages/Provider';
+import SupplierApplyPage from './pages/Supplier/Apply';
+import SupplierChannelPage from './pages/Supplier/Channel';
+import SupplierModelsPage from './pages/Supplier/Models';
+import SupplierApplication from './pages/SupplierAdmin/application';
+import Suppliers from './pages/SupplierAdmin/list';
 import Setup from './pages/Setup';
 import SetupCheck from './components/layout/SetupCheck';
 
 const Home = lazy(() => import('./pages/Home'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
+const DistributorApply = lazy(() => import('./pages/DistributorApply'));
+const DistributorCenter = lazy(() => import('./pages/DistributorCenter'));
+const DistributorAdmin = lazy(() => import('./pages/DistributorAdmin'));
+const InviteRedirect = lazy(() => import('./pages/InviteRedirect'));
 const About = lazy(() => import('./pages/About'));
 const UserAgreement = lazy(() => import('./pages/UserAgreement'));
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
@@ -173,6 +181,22 @@ function App() {
           }
         />
         <Route
+          path='/console/supplier-application'
+          element={
+            <AdminRoute>
+              <SupplierApplication />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path='/console/suppliers'
+          element={
+            <AdminRoute>
+              <Suppliers />
+            </AdminRoute>
+          }
+        />
+        <Route
           path='/user/reset'
           element={
             <Suspense fallback={<Loading></Loading>} key={location.pathname}>
@@ -197,6 +221,14 @@ function App() {
               <AuthRedirect>
                 <RegisterForm />
               </AuthRedirect>
+            </Suspense>
+          }
+        />
+        <Route
+          path='/r/:aff'
+          element={
+            <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+              <InviteRedirect />
             </Suspense>
           }
         />
@@ -269,11 +301,65 @@ function App() {
           }
         />
         <Route
-          path='/console/provider'
+          path='/console/supplier'
           element={
             <PrivateRoute>
-              <ProviderPage />
+              <SupplierApplyPage />
             </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/supplier/apply'
+          element={
+            <PrivateRoute>
+              <SupplierApplyPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/supplier/channel'
+          element={
+            <PrivateRoute>
+              <SupplierChannelPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/supplier/models'
+          element={
+            <PrivateRoute>
+              <SupplierModelsPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/distributor/apply'
+          element={
+            <PrivateRoute>
+              <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+                <DistributorApply />
+              </Suspense>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/distributor/center'
+          element={
+            <PrivateRoute>
+              <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+                <DistributorCenter />
+              </Suspense>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/distributor/admin'
+          element={
+            <AdminRoute>
+              <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+                <DistributorAdmin />
+              </Suspense>
+            </AdminRoute>
           }
         />
         <Route

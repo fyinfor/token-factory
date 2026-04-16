@@ -52,6 +52,7 @@ func GetPricing(c *gin.Context) {
 		"success":            true,
 		"data":               filtered,
 		"vendors":            model.GetVendors(),
+		"suppliers":          suppliers,
 		"group_ratio":        groupRatio,
 		"usable_group":       usableGroup,
 		"supported_endpoint": model.GetSupportedEndpointMap(),

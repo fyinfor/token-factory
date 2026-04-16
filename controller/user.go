@@ -101,12 +101,13 @@ func setupLogin(user *model.User, c *gin.Context) {
 		"message": "",
 		"success": true,
 		"data": map[string]any{
-			"id":           user.Id,
-			"username":     user.Username,
-			"display_name": user.DisplayName,
-			"role":         user.Role,
-			"status":       user.Status,
-			"group":        user.Group,
+			"id":              user.Id,
+			"username":        user.Username,
+			"display_name":    user.DisplayName,
+			"role":            user.Role,
+			"status":          user.Status,
+			"group":           user.Group,
+			"is_distributor":  user.IsDistributor,
 		},
 	})
 }
@@ -281,6 +282,15 @@ func GetUser(c *gin.Context) {
 	return
 }
 
+// GenerateAccessToken godoc
+// @Summary 生成当前用户 AccessToken
+// @Description 生成并返回当前登录用户的 access_token，用于在 Authorization 请求头中进行接口鉴权
+// @Tags 用户
+// @Produce json
+// @Security ApiKeyAuth
+// @Security ApiUserID
+// @Success 200 {object} map[string]interface{} "success + data{access_token}"
+// @Router /user/token [get]
 func GenerateAccessToken(c *gin.Context) {
 	id := c.GetInt("id")
 	user, err := model.GetUserById(id, true)
@@ -327,6 +337,10 @@ func TransferAffQuota(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	if !model.UserIsDistributor(user) {
+		common.ApiErrorMsg(c, "仅分销商可划转邀请收益")
+		return
+	}
 	tran := TransferAffQuotaRequest{}
 	if err := c.ShouldBindJSON(&tran); err != nil {
 		common.ApiError(c, err)
@@ -345,6 +359,10 @@ func GetAffCode(c *gin.Context) {
 	user, err := model.GetUserById(id, true)
 	if err != nil {
 		common.ApiError(c, err)
+		return
+	}
+	if !model.UserIsDistributor(user) {
+		common.ApiErrorMsg(c, "仅分销商可使用邀请链接")
 		return
 	}
 	if user.AffCode == "" {
@@ -384,31 +402,34 @@ func GetSelf(c *gin.Context) {
 
 	// 构建响应数据，包含用户信息和权限
 	responseData := map[string]interface{}{
-		"id":                user.Id,
-		"username":          user.Username,
-		"display_name":      user.DisplayName,
-		"role":              user.Role,
-		"status":            user.Status,
-		"email":             user.Email,
-		"github_id":         user.GitHubId,
-		"discord_id":        user.DiscordId,
-		"oidc_id":           user.OidcId,
-		"wechat_id":         user.WeChatId,
-		"telegram_id":       user.TelegramId,
-		"group":             user.Group,
-		"quota":             user.Quota,
-		"used_quota":        user.UsedQuota,
-		"request_count":     user.RequestCount,
-		"aff_code":          user.AffCode,
-		"aff_count":         user.AffCount,
-		"aff_quota":         user.AffQuota,
-		"aff_history_quota": user.AffHistoryQuota,
-		"inviter_id":        user.InviterId,
-		"linux_do_id":       user.LinuxDOId,
-		"setting":           user.Setting,
-		"stripe_customer":   user.StripeCustomer,
-		"sidebar_modules":   userSetting.SidebarModules, // 正确提取sidebar_modules字段
-		"permissions":       permissions,                // 新增权限字段
+		"id":                         user.Id,
+		"username":                   user.Username,
+		"display_name":               user.DisplayName,
+		"role":                       user.Role,
+		"status":                     user.Status,
+		"email":                      user.Email,
+		"github_id":                  user.GitHubId,
+		"discord_id":                 user.DiscordId,
+		"oidc_id":                    user.OidcId,
+		"wechat_id":                  user.WeChatId,
+		"telegram_id":                user.TelegramId,
+		"group":                      user.Group,
+		"quota":                      user.Quota,
+		"used_quota":                 user.UsedQuota,
+		"request_count":              user.RequestCount,
+		"aff_code":                   user.AffCode,
+		"aff_count":                  user.AffCount,
+		"aff_quota":                  user.AffQuota,
+		"aff_history_quota":          user.AffHistoryQuota,
+		"distributor_commission_bps": user.DistributorCommissionBps,
+		"inviter_id":                 user.InviterId,
+		"linux_do_id":                user.LinuxDOId,
+		"setting":                    user.Setting,
+		"stripe_customer":            user.StripeCustomer,
+		"supplier_id":                user.SupplierID,
+		"is_distributor":             user.IsDistributor,
+		"sidebar_modules":            userSetting.SidebarModules, // 正确提取sidebar_modules字段
+		"permissions":                permissions,                // 新增权限字段
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -814,6 +835,10 @@ func CreateUser(c *gin.Context) {
 	if user.DisplayName == "" {
 		user.DisplayName = user.Username
 	}
+	if user.Role == common.RoleDistributorUser {
+		user.Role = common.RoleCommonUser
+		user.IsDistributor = common.DistributorFlagYes
+	}
 	myRole := c.GetInt("role")
 	if user.Role >= myRole {
 		common.ApiErrorI18n(c, i18n.MsgUserCannotCreateHigherLevel)
@@ -821,10 +846,11 @@ func CreateUser(c *gin.Context) {
 	}
 	// Even for admin users, we cannot fully trust them!
 	cleanUser := model.User{
-		Username:    user.Username,
-		Password:    user.Password,
-		DisplayName: user.DisplayName,
-		Role:        user.Role, // 保持管理员设置的角色
+		Username:       user.Username,
+		Password:       user.Password,
+		DisplayName:    user.DisplayName,
+		Role:           user.Role,
+		IsDistributor:  user.IsDistributor,
 	}
 	if err := cleanUser.Insert(0); err != nil {
 		common.ApiError(c, err)
@@ -843,7 +869,7 @@ type ManageRequest struct {
 	Action string `json:"action"`
 }
 
-// ManageUser 管理员对用户启用/禁用、删除、提升/降级身份（含分销商 RoleDistributorUser）。
+// ManageUser 管理员对用户启用/禁用、删除、提升/降级身份；分销商资格使用 is_distributor 与 set_distributor / unset_distributor。
 func ManageUser(c *gin.Context) {
 	var req ManageRequest
 	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
@@ -864,6 +890,7 @@ func ManageUser(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
 		return
 	}
+	beforeAdminDemote := false
 	switch req.Action {
 	case "disable":
 		user.Status = common.UserStatusDisabled
@@ -886,16 +913,22 @@ func ManageUser(c *gin.Context) {
 			return
 		}
 	case "promote":
-		// 普通用户 → 分销商：管理员或超级管理员；分销商 → 管理员：仅超级管理员
+		// 仅超级管理员可将普通用户（含已开通分销商）提升为管理员；开通分销请使用 set_distributor
 		switch user.Role {
 		case common.RoleCommonUser:
-			user.Role = common.RoleDistributorUser
+			if myRole != common.RoleRootUser {
+				common.ApiErrorMsg(c, "仅超级管理员可提升为管理员；为普通用户开通分销请使用「设为分销商」")
+				return
+			}
+			user.Role = common.RoleAdminUser
+			user.IsDistributor = common.DistributorFlagNo
 		case common.RoleDistributorUser:
 			if myRole != common.RoleRootUser {
 				common.ApiErrorI18n(c, i18n.MsgUserAdminCannotPromote)
 				return
 			}
 			user.Role = common.RoleAdminUser
+			user.IsDistributor = common.DistributorFlagNo
 		case common.RoleAdminUser, common.RoleRootUser:
 			common.ApiErrorI18n(c, i18n.MsgUserCannotPromoteFurther)
 			return
@@ -914,30 +947,74 @@ func ManageUser(c *gin.Context) {
 				common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
 				return
 			}
-			user.Role = common.RoleDistributorUser
+			user.Role = common.RoleCommonUser
+			user.IsDistributor = common.DistributorFlagNo
+			beforeAdminDemote = true
 		case common.RoleDistributorUser:
 			user.Role = common.RoleCommonUser
+			user.IsDistributor = common.DistributorFlagNo
 		case common.RoleCommonUser:
-			common.ApiErrorI18n(c, i18n.MsgUserAlreadyCommon)
+			common.ApiErrorMsg(c, "已是普通用户；取消分销资格请使用「取消分销商」")
 			return
 		default:
 			common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 			return
 		}
+	case "set_distributor":
+		if myRole != common.RoleAdminUser && myRole != common.RoleRootUser {
+			common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
+			return
+		}
+		if user.Role >= common.RoleAdminUser {
+			common.ApiErrorMsg(c, "管理员账号无需开通分销商")
+			return
+		}
+		if model.UserIsDistributor(&user) {
+			common.ApiErrorMsg(c, "该用户已是分销商")
+			return
+		}
+		user.IsDistributor = common.DistributorFlagYes
+	case "unset_distributor":
+		if myRole != common.RoleAdminUser && myRole != common.RoleRootUser {
+			common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
+			return
+		}
+		if user.Role >= common.RoleAdminUser {
+			common.ApiErrorMsg(c, "管理员账号无分销商标记")
+			return
+		}
+		if !model.UserIsDistributor(&user) {
+			common.ApiErrorMsg(c, "该用户不是分销商")
+			return
+		}
+		user.IsDistributor = common.DistributorFlagNo
+	default:
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
 	}
 
 	if err := user.Update(false); err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	clearUser := model.User{
-		Role:   user.Role,
-		Status: user.Status,
+	switch req.Action {
+	case "set_distributor":
+		service.NotifyDistributorRoleGranted(user.Id)
+	case "unset_distributor":
+		service.NotifyDistributorRoleRevoked(user.Id)
+	case "demote":
+		if beforeAdminDemote {
+			service.NotifyUserDemotedFromAdmin(user.Id)
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    clearUser,
+		"data": gin.H{
+			"role":            user.Role,
+			"status":          user.Status,
+			"is_distributor":  user.IsDistributor,
+		},
 	})
 	return
 }

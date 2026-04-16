@@ -142,9 +142,15 @@ const (
 const (
 	RoleGuestUser       = 0
 	RoleCommonUser      = 1
-	RoleDistributorUser = 5 // 分销商：无管理后台权限，可参与邀请分销等业务
+	RoleDistributorUser = 5 // 已废弃：历史「分销商」曾用 role=5，现已迁移为 role=1 + is_distributor=1；请勿在新逻辑中使用该角色值
 	RoleAdminUser       = 10
 	RoleRootUser        = 100
+)
+
+// DistributorFlagNo / DistributorFlagYes：users.is_distributor 存库与 JSON 统一用 0/1（与 role 解耦的分销资格标记）。
+const (
+	DistributorFlagNo  = 0
+	DistributorFlagYes = 1
 )
 
 func IsValidateRole(role int) bool {
