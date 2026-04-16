@@ -3338,6 +3338,8 @@
     "基础价格": "Bei ya msingi",
     "扩展价格": "Bei ya ziada",
     "额外价格项": "Vipengee vya bei vya ziada",
+    "model_price_summary_input_only": "{{input}} /1M tokens (input). Turn on optional prices below when you need them.",
+    "model_price_summary_with_extras": "{{input}} /1M tokens (input), plus {{count}} optional price fields (e.g. output, cache, image, or audio).",
     "输出价格": "Bei ya ukamilishaji",
     "缓存读取价格": "Bei ya kusoma akiba",
     "缓存创建价格": "Bei ya kuunda akiba",

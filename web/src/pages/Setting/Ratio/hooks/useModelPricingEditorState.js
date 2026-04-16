@@ -257,9 +257,14 @@ export const buildSummaryText = (model, t) => {
       model.audioInputPrice,
       model.audioOutputPrice,
     ].filter(hasValue).length;
-    const extraLabel =
-      extraCount > 0 ? `，${t('额外价格项')} ${extraCount}` : '';
-    return `${t('输入')} $${model.inputPrice}${extraLabel}`;
+    const inputLabel = `$${model.inputPrice}`;
+    if (extraCount > 0) {
+      return t('model_price_summary_with_extras', {
+        input: inputLabel,
+        count: extraCount,
+      });
+    }
+    return t('model_price_summary_input_only', { input: inputLabel });
   }
 
   return t('未设置价格');

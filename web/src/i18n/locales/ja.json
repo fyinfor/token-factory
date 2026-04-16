@@ -3257,6 +3257,8 @@
     "基础价格": "基本価格",
     "扩展价格": "追加価格",
     "额外价格项": "追加価格項目",
+    "model_price_summary_input_only": "{{input}} /1M tokens (input). Turn on optional prices below when you need them.",
+    "model_price_summary_with_extras": "{{input}} /1M tokens (input), plus {{count}} optional price fields (e.g. output, cache, image, or audio).",
     "缓存读取价格": "入力キャッシュ読み取り価格",
     "缓存创建价格": "入力キャッシュ作成価格",
     "图片输入价格": "画像入力価格",
