@@ -35,12 +35,13 @@ import { USER_ROLES } from '../../../constants/user.constants';
 /**
  * Render user role（身份等级 + 可选「分销商」标记）
  */
-const renderRole = (role, isDistributor, t) => {
+const renderRole = (role, record, t) => {
   const legacyDistributorRole = role === USER_ROLES.DISTRIBUTOR;
-  const showDistTag =
-    isDistributor === 1 ||
-    isDistributor === true ||
+  const isDistributor =
+    record.is_distributor === 1 ||
+    record.is_distributor === true ||
     legacyDistributorRole;
+  const isSupplier = !!record.supplier_id && record.supplier_id !== 0
   const baseRole = legacyDistributorRole ? USER_ROLES.USER : role;
   let baseTag;
   switch (baseRole) {
@@ -72,15 +73,16 @@ const renderRole = (role, isDistributor, t) => {
         </Tag>
       );
   }
-  if (!showDistTag) {
-    return baseTag;
-  }
+
   return (
     <Space spacing={4}>
       {baseTag}
-      <Tag color='green' shape='circle'>
+      {isDistributor && <Tag color='green' shape='circle'>
         {t('分销商')}
-      </Tag>
+      </Tag>}
+      {isSupplier && <Tag color='purple' shape='circle'>
+        {t('供应商')}
+      </Tag>}
     </Space>
   );
 };
@@ -189,22 +191,6 @@ const renderQuotaUsage = (text, record, t) => {
         </div>
       </Tag>
     </Popover>
-  );
-};
-
-/**
- * Render supplier status
- */
-const renderSupplier = (text, record) => {
-  const hasSupplier = record.supplier_id && record.supplier_id !== 0;
-  return (
-    <div className='flex justify-center'>
-      {hasSupplier ? (
-        <IconTick style={{ color: '#52c41a', fontSize: '18px' }} />
-      ) : (
-        <IconClose style={{ color: '#ff4d4f', fontSize: '18px' }} />
-      )}
-    </div>
   );
 };
 
@@ -408,14 +394,9 @@ export const getUsersColumns = ({
       dataIndex: 'role',
       render: (text, record, index) => {
         return (
-          <div>{renderRole(text, record.is_distributor, t)}</div>
+          <div>{renderRole(text, record, t)}</div>
         );
       },
-    },
-    {
-      title: t('供应商'),
-      dataIndex: 'supplier_id',
-      render: (text, record) => renderSupplier(text, record),
     },
     {
       title: t('邀请信息'),
