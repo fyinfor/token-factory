@@ -259,21 +259,63 @@ func RejectDistributorApplication(appId, reviewerId int, reason string) error {
 	return DB.Save(&app).Error
 }
 
-// ListDistributorsAdmin 分销商用户列表
-func ListDistributorsAdmin(keyword string, pageInfo *common.PageInfo) ([]User, int64, error) {
-	tx := DB.Model(&User{}).Where("is_distributor = ? AND role < ?", common.DistributorFlagYes, common.RoleAdminUser)
+// DistributorAdminListItem 管理端分销商列表行（含申请真实姓名、是否需补录资料）
+type DistributorAdminListItem struct {
+	User
+	ApplicationRealName string `json:"application_real_name"`
+	NeedsSupplement     bool   `json:"needs_supplement"`
+}
+
+// ListDistributorsAdmin 分销商用户列表（LEFT JOIN 申请资料；关键字可搜用户名、显示名、申请姓名、联系方式、身份证）
+func ListDistributorsAdmin(keyword string, pageInfo *common.PageInfo) ([]DistributorAdminListItem, int64, error) {
+	q := DB.Table("users").
+		Joins("LEFT JOIN distributor_applications ON distributor_applications.user_id = users.id").
+		Where("users.is_distributor = ? AND users.role < ?", common.DistributorFlagYes, common.RoleAdminUser)
 	kw := strings.TrimSpace(keyword)
 	if kw != "" {
 		pattern := "%" + kw + "%"
-		tx = tx.Where("(username LIKE ? OR display_name LIKE ?)", pattern, pattern)
+		q = q.Where(
+			"(users.username LIKE ? OR users.display_name LIKE ? OR distributor_applications.real_name LIKE ? OR distributor_applications.contact LIKE ? OR distributor_applications.id_card_no LIKE ?)",
+			pattern, pattern, pattern, pattern, pattern,
+		)
 	}
 	var total int64
-	if err := tx.Count(&total).Error; err != nil {
+	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	var users []User
-	err := tx.Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&users).Error
-	return users, total, err
+	type distAdminScan struct {
+		User
+		AppRealName string `gorm:"column:app_rn"`
+		AppIdCard   string `gorm:"column:app_ic"`
+		AppContact  string `gorm:"column:app_ct"`
+		AppQual     string `gorm:"column:app_ql"`
+	}
+	var scans []distAdminScan
+	err := q.Select(`users.*, distributor_applications.real_name AS app_rn, distributor_applications.id_card_no AS app_ic, distributor_applications.contact AS app_ct, distributor_applications.qualification_urls AS app_ql`).
+		Order("users.id DESC").
+		Limit(pageInfo.GetPageSize()).
+		Offset(pageInfo.GetStartIdx()).
+		Scan(&scans).Error
+	if err != nil {
+		return nil, 0, err
+	}
+	out := make([]DistributorAdminListItem, 0, len(scans))
+	for i := range scans {
+		s := scans[i]
+		fake := &DistributorApplication{
+			RealName:          s.AppRealName,
+			IdCardNo:          s.AppIdCard,
+			Contact:           s.AppContact,
+			QualificationUrls: s.AppQual,
+		}
+		rn := strings.TrimSpace(s.AppRealName)
+		out = append(out, DistributorAdminListItem{
+			User:                s.User,
+			ApplicationRealName: rn,
+			NeedsSupplement:     !IsDistributorApplicationProfileComplete(fake),
+		})
+	}
+	return out, total, nil
 }
 
 // SetUserDistributorCommissionBps 管理员设置单个分销商默认分成比例（万分之一）
@@ -307,4 +349,108 @@ func AdminSettleDistributorAffQuota(userId int) error {
 		return errors.New("用户不是分销商")
 	}
 	return DB.Model(&User{}).Where("id = ?", userId).Update("aff_quota", 0).Error
+}
+
+// IsDistributorApplicationProfileComplete 判断分销商申请资料是否已完整（用于手工开通后补录提示）
+func IsDistributorApplicationProfileComplete(app *DistributorApplication) bool {
+	if app == nil {
+		return false
+	}
+	if strings.TrimSpace(app.RealName) == "" || strings.TrimSpace(app.IdCardNo) == "" || strings.TrimSpace(app.Contact) == "" {
+		return false
+	}
+	raw := strings.TrimSpace(app.QualificationUrls)
+	if raw == "" {
+		return false
+	}
+	var urls []string
+	if common.UnmarshalJsonStr(raw, &urls) != nil {
+		return false
+	}
+	for _, u := range urls {
+		if strings.TrimSpace(u) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// GetDistributorApplicationProfileByUserIdAdmin 管理端：某分销商的申请资料；无记录或资料不全时 needsManualEntry 为 true
+func GetDistributorApplicationProfileByUserIdAdmin(userId int) (username string, app *DistributorApplication, needsManualEntry bool, err error) {
+	if userId <= 0 {
+		return "", nil, false, errors.New("invalid id")
+	}
+	u, err := GetUserById(userId, false)
+	if err != nil {
+		return "", nil, false, err
+	}
+	if !UserIsDistributor(u) {
+		return "", nil, false, errors.New("用户不是分销商")
+	}
+	app, err = GetDistributorApplicationByUserId(userId)
+	if err != nil {
+		return "", nil, false, err
+	}
+	needsManualEntry = !IsDistributorApplicationProfileComplete(app)
+	return u.Username, app, needsManualEntry, nil
+}
+
+// AdminUpsertDistributorApplicationByUser 管理端补录/修改分销商申请资料（无记录时创建为已通过）
+func AdminUpsertDistributorApplicationByUser(userId, reviewerId int, realName, idCardNo, qualificationUrlsJSON, contact string) error {
+	if userId <= 0 || reviewerId <= 0 {
+		return errors.New("invalid params")
+	}
+	realName = strings.TrimSpace(realName)
+	idCardNo = strings.TrimSpace(idCardNo)
+	contact = strings.TrimSpace(contact)
+	qualificationUrlsJSON = strings.TrimSpace(qualificationUrlsJSON)
+	if realName == "" || idCardNo == "" || qualificationUrlsJSON == "" || contact == "" {
+		return errors.New("请填写完整资料")
+	}
+	u, err := GetUserById(userId, false)
+	if err != nil {
+		return err
+	}
+	if !UserIsDistributor(u) {
+		return errors.New("用户不是分销商")
+	}
+	if u.Role >= common.RoleAdminUser {
+		return errors.New("管理员账号无需维护申请资料")
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var app DistributorApplication
+		err := tx.Where("user_id = ?", userId).First(&app).Error
+		ts := common.GetTimestamp()
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			app = DistributorApplication{
+				UserId:            userId,
+				RealName:          realName,
+				IdCardNo:          idCardNo,
+				QualificationUrls: qualificationUrlsJSON,
+				Contact:           contact,
+				Status:            DistributorAppStatusApproved,
+				RejectReason:      "",
+				ReviewerId:        reviewerId,
+				ReviewedAt:        ts,
+				CreatedAt:         ts,
+				UpdatedAt:         ts,
+			}
+			return tx.Create(&app).Error
+		}
+		if err != nil {
+			return err
+		}
+		app.RealName = realName
+		app.IdCardNo = idCardNo
+		app.QualificationUrls = qualificationUrlsJSON
+		app.Contact = contact
+		app.RejectReason = ""
+		app.ReviewerId = reviewerId
+		app.ReviewedAt = ts
+		if app.Status != DistributorAppStatusApproved {
+			app.Status = DistributorAppStatusApproved
+		}
+		app.UpdatedAt = ts
+		return tx.Save(&app).Error
+	})
 }

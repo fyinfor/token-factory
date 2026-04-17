@@ -37,6 +37,7 @@ import {
   Upload,
   Popconfirm,
   Tag,
+  Spin,
 } from '@douyinfe/semi-ui';
 import { QRCodeSVG } from 'qrcode.react';
 import {
@@ -85,6 +86,9 @@ export default function DistributorCenter() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
+  const [withdrawNoticeOpen, setWithdrawNoticeOpen] = useState(false);
+  const [withdrawNoticeLoading, setWithdrawNoticeLoading] = useState(false);
+  const [withdrawNoticeContent, setWithdrawNoticeContent] = useState('');
   const [withdrawLogOpen, setWithdrawLogOpen] = useState(false);
   const [wdRealName, setWdRealName] = useState('');
   const [wdBankName, setWdBankName] = useState('');
@@ -111,10 +115,6 @@ export default function DistributorCenter() {
 
   const withdrawImg = (
     statusState?.status?.distributor_withdraw_cs_image_url || ''
-  ).trim();
-
-  const withdrawNotice = (
-    statusState?.status?.distributor_withdraw_notice || ''
   ).trim();
 
   const minWithdrawQuota = (() => {
@@ -161,6 +161,26 @@ export default function DistributorCenter() {
     }
     return false;
   }, [userState?.user]);
+
+  const openWithdrawNoticeModal = useCallback(async () => {
+    setWithdrawNoticeOpen(true);
+    setWithdrawNoticeLoading(true);
+    setWithdrawNoticeContent('');
+    try {
+      const res = await API.get('/api/status');
+      const { success, data, message } = res.data || {};
+      if (!success) {
+        showError(message || t('加载失败'));
+        return;
+      }
+      const txt = String(data?.distributor_withdraw_notice ?? '').trim();
+      setWithdrawNoticeContent(txt);
+    } catch {
+      showError(t('加载失败'));
+    } finally {
+      setWithdrawNoticeLoading(false);
+    }
+  }, [t]);
 
   const loadCenter = async () => {
     const res = await API.get('/api/distributor/center');
@@ -300,7 +320,7 @@ export default function DistributorCenter() {
         Number.isNaN(Number(wdFiatAmount)) ||
         Number(wdFiatAmount) <= 0
       ) {
-        showError(t('请填写与上方待使用收益展示一致的提现金额'));
+        showError(t('请填写与上方待使用收益一致的提现金额'));
         return;
       }
       const fiatRounded =
@@ -845,7 +865,7 @@ export default function DistributorCenter() {
       />
 
       <Modal
-        title={t('线下提现')}
+        title={t('提现')}
         visible={withdrawOpen}
         onCancel={() => setWithdrawOpen(false)}
         footer={
@@ -866,11 +886,22 @@ export default function DistributorCenter() {
           typeof window !== 'undefined' ? window.innerWidth - 48 : 960,
         )}
       >
-        <Text type='tertiary' size='small' className='block mb-4'>
-          {t(
-            '提交后将暂扣对应待使用收益，审核通过即完成提现；驳回或取消将退回额度。',
-          )}
-        </Text>
+        <div className='mb-4 flex flex-wrap items-start justify-between gap-2'>
+          <Text type='tertiary' size='small' className='flex-1 min-w-0'>
+            {t(
+              '提交后将暂扣对应待使用收益，审核通过即完成提现；驳回或取消将退回额度。',
+            )}
+          </Text>
+          <Button
+            type='tertiary'
+            theme='borderless'
+            size='small'
+            className='flex-shrink-0'
+            onClick={openWithdrawNoticeModal}
+          >
+            {t('提现说明')}
+          </Button>
+        </div>
         <div className='flex flex-col lg:flex-row gap-6 items-start'>
           <div className='flex-1 min-w-0 w-full space-y-3'>
             <Input
@@ -927,16 +958,23 @@ export default function DistributorCenter() {
               <Text type='tertiary' size='small' className='block mt-1'>
                 {affQuotaFloor >= minQInternal ? (
                   <>
-                    {t('单笔最低（展示）')}: {renderQuota(minQInternal)} ·{' '}
+                    {t('单笔最低')}: {renderQuota(minQInternal)} ·{' '}
+                    {t('当前待使用余额')}:{' '}
+                    {renderQuota(center?.aff_quota || 0)}
                   </>
                 ) : (
                   <>
-                    {t('当前余额低于系统最低门槛时，可提范围（展示）')}:{' '}
-                    {renderQuota(1)}～{renderQuota(affQuotaFloor)} ·{' '}
+                    {t('单笔最低')}: {renderQuota(minQInternal)} ·{' '}
+                    {affQuotaFloor > 0 ? (
+                      <>
+                        {t('当前余额低于系统最低门槛时，可提范围')}:{' '}
+                        {renderQuota(1)}～{renderQuota(affQuotaFloor)} ·{' '}
+                      </>
+                    ) : null}
+                    {t('当前待使用余额')}:{' '}
+                    {renderQuota(center?.aff_quota || 0)}
                   </>
                 )}
-                {t('当前待使用余额')}:{' '}
-                {renderQuota(center?.aff_quota || 0)}
               </Text>
             </div>
             <div>
@@ -954,20 +992,6 @@ export default function DistributorCenter() {
               <Text type='tertiary' size='small' className='block mt-1'>
                 {t('支持图片或 PDF；点击图片可大图预览')}
               </Text>
-              {withdrawNotice ? (
-                <div className='mt-3 rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)] px-3 py-2'>
-                  <Text strong size='small' className='block mb-1'>
-                    {t('提现说明')}
-                  </Text>
-                  <Text
-                    type='secondary'
-                    size='small'
-                    className='block whitespace-pre-wrap break-words'
-                  >
-                    {withdrawNotice}
-                  </Text>
-                </div>
-              ) : null}
               {wdVoucherUrls.length > 0 ? (
                 <div className='mt-3 flex flex-wrap gap-3'>
                   {wdVoucherUrls.map((u, idx) =>
@@ -1059,6 +1083,39 @@ export default function DistributorCenter() {
             )}
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        title={t('提现说明')}
+        visible={withdrawNoticeOpen}
+        onCancel={() => setWithdrawNoticeOpen(false)}
+        footer={
+          <Button onClick={() => setWithdrawNoticeOpen(false)}>
+            {t('关闭')}
+          </Button>
+        }
+        width={Math.min(
+          560,
+          typeof window !== 'undefined' ? window.innerWidth - 48 : 560,
+        )}
+      >
+        <Spin spinning={withdrawNoticeLoading}>
+          {withdrawNoticeContent ? (
+            <Text
+              type='secondary'
+              size='small'
+              className='block whitespace-pre-wrap break-words'
+            >
+              {withdrawNoticeContent}
+            </Text>
+          ) : (
+            !withdrawNoticeLoading && (
+              <Text type='tertiary' size='small'>
+                {t('管理员未配置提现说明')}
+              </Text>
+            )
+          )}
+        </Spin>
       </Modal>
 
       <Modal
