@@ -892,18 +892,44 @@ func convertModelsDevToRatioData(reader io.Reader) (map[string]any, error) {
 }
 
 func GetSyncableChannels(c *gin.Context) {
-	channels, err := model.GetAllChannels(0, 0, true, false)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
-	}
-
 	var syncableChannels []dto.SyncableChannel
-	for _, channel := range channels {
-		if channel.GetBaseURL() != "" {
+
+	// 管理员可见全部渠道；已审核供应商仅可见自己归属渠道。
+	if c.GetInt("role") >= common.RoleAdminUser {
+		channels, err := model.GetAllChannels(0, 0, true, false)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			return
+		}
+		for _, channel := range channels {
+			if channel.GetBaseURL() == "" {
+				continue
+			}
+			syncableChannels = append(syncableChannels, dto.SyncableChannel{
+				ID:      channel.Id,
+				Name:    channel.Name,
+				BaseURL: channel.GetBaseURL(),
+				Status:  channel.Status,
+				Type:    channel.Type,
+			})
+		}
+	} else {
+		ownerUserID := c.GetInt("id")
+		ownedChannels, _, err := model.SearchSupplierChannels(&ownerUserID, 0, 100000, model.SupplierChannelSearchFilter{})
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			return
+		}
+		for _, channel := range ownedChannels {
+			if channel.GetBaseURL() == "" {
+				continue
+			}
 			syncableChannels = append(syncableChannels, dto.SyncableChannel{
 				ID:      channel.Id,
 				Name:    channel.Name,

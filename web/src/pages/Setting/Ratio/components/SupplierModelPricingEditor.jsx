@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Empty, Select } from '@douyinfe/semi-ui';
 import { API, showError } from '../../../../helpers';
 import { useTranslation } from 'react-i18next';
@@ -23,6 +23,7 @@ export default function SupplierModelPricingEditor({
 }) {
   const { t } = useTranslation();
   const [channelId, setChannelId] = useState('all');
+  const [channelModelNamesMap, setChannelModelNamesMap] = useState({});
 
   const channels = useMemo(() => {
     const raw = options.__pricingChannels || [];
@@ -62,6 +63,52 @@ export default function SupplierModelPricingEditor({
   );
 
   const activeChannelId = channelId === 'all' ? '' : channelId;
+
+  // parseChannelModelNamesFromChannelData 解析渠道详情中的模型列表（逗号分隔）。
+  const parseChannelModelNamesFromChannelData = (channelData) => {
+    const raw = String(channelData?.models || '').trim();
+    if (!raw) return [];
+    return Array.from(
+      new Set(
+        raw
+          .split(',')
+          .map((name) => name.trim())
+          .filter(Boolean),
+      ),
+    );
+  };
+
+  // loadChannelModelNames 加载指定渠道下配置的模型名，用于渠道模型定价页筛选。
+  const loadChannelModelNames = async (targetChannelId) => {
+    if (!targetChannelId) return;
+    if (channelModelNamesMap[targetChannelId]) return;
+    try {
+      const res = await API.get(`/api/channel/${targetChannelId}`, {
+        skipErrorHandler: true,
+      });
+      if (!res?.data?.success) {
+        showError(res?.data?.message || t('获取渠道模型列表失败'));
+        return;
+      }
+      const names = parseChannelModelNamesFromChannelData(res.data.data);
+      setChannelModelNamesMap((prev) => ({
+        ...prev,
+        [targetChannelId]: names,
+      }));
+    } catch (error) {
+      showError(error?.message || t('获取渠道模型列表失败'));
+    }
+  };
+
+  useEffect(() => {
+    if (!activeChannelId) return;
+    loadChannelModelNames(activeChannelId);
+  }, [activeChannelId]);
+
+  const channelScopedCandidateModelNames = useMemo(() => {
+    if (!activeChannelId) return candidateModelNames;
+    return channelModelNamesMap[activeChannelId] || [];
+  }, [activeChannelId, candidateModelNames, channelModelNamesMap]);
 
   const scopedOptions = useMemo(() => {
     if (!activeChannelId) return options;
@@ -176,7 +223,8 @@ export default function SupplierModelPricingEditor({
             <ModelPricingEditor
               options={scopedOptions}
               refresh={refresh}
-              candidateModelNames={candidateModelNames}
+              candidateModelNames={channelScopedCandidateModelNames}
+              forceCandidateModelNames
               filterMode={filterMode}
               listDescription={listDescription}
               onSaveOutput={handleSaveOutput}

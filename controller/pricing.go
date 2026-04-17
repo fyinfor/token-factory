@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -8,6 +9,69 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// filterChannelPricingMapByVisibleChannels 仅保留可见渠道的渠道倍率配置。
+func filterChannelPricingMapByVisibleChannels(source map[string]map[string]float64, visibleChannelIDs map[int]struct{}) map[string]map[string]float64 {
+	filtered := make(map[string]map[string]float64, len(source))
+	for channelID, modelRatio := range source {
+		id, err := model.ParseSupplierChannelIDFilter(channelID)
+		if err != nil {
+			continue
+		}
+		if _, ok := visibleChannelIDs[id]; !ok {
+			continue
+		}
+		filtered[channelID] = modelRatio
+	}
+	return filtered
+}
+
+// getPricingVisibleChannelsForUser 根据登录用户返回定价页可见渠道列表（供应商仅可见自己渠道）。
+func getPricingVisibleChannelsForUser(c *gin.Context) ([]model.ChannelSimplePricingItem, map[int]struct{}, error) {
+	channels, err := model.ListChannelsForPricing()
+	if err != nil {
+		return nil, nil, err
+	}
+	userID, exists := c.Get("id")
+	if !exists {
+		visibleChannelIDs := make(map[int]struct{}, len(channels))
+		for _, item := range channels {
+			visibleChannelIDs[item.ChannelID] = struct{}{}
+		}
+		return channels, visibleChannelIDs, nil
+	}
+	user, err := model.GetUserById(userID.(int), false)
+	if err == nil && user.Role >= common.RoleAdminUser {
+		visibleChannelIDs := make(map[int]struct{}, len(channels))
+		for _, item := range channels {
+			visibleChannelIDs[item.ChannelID] = struct{}{}
+		}
+		return channels, visibleChannelIDs, nil
+	}
+	if _, err := model.GetApprovedSupplierApplicationByApplicant(userID.(int)); err != nil {
+		visibleChannelIDs := make(map[int]struct{}, len(channels))
+		for _, item := range channels {
+			visibleChannelIDs[item.ChannelID] = struct{}{}
+		}
+		return channels, visibleChannelIDs, nil
+	}
+	ownerUserID := userID.(int)
+	ownedChannels, _, err := model.SearchSupplierChannels(&ownerUserID, 0, 100000, model.SupplierChannelSearchFilter{})
+	if err != nil {
+		return nil, nil, err
+	}
+	visibleChannelIDs := make(map[int]struct{}, len(ownedChannels))
+	visibleChannels := make([]model.ChannelSimplePricingItem, 0, len(ownedChannels))
+	for _, item := range ownedChannels {
+		visibleChannelIDs[item.Id] = struct{}{}
+		visibleChannels = append(visibleChannels, model.ChannelSimplePricingItem{
+			ChannelID:   item.Id,
+			ChannelName: item.Name,
+		})
+	}
+	return visibleChannels, visibleChannelIDs, nil
+}
+
+// GetPricing 返回前端定价展示数据。
 func GetPricing(c *gin.Context) {
 	pricing := model.GetPricing()
 	filtered := make([]model.Pricing, 0, len(pricing))
@@ -16,9 +80,10 @@ func GetPricing(c *gin.Context) {
 			filtered = append(filtered, p)
 		}
 	}
-	channels, err := model.ListChannelsForPricing()
+	channels, visibleChannelIDs, err := getPricingVisibleChannelsForUser(c)
 	if err != nil {
 		channels = []model.ChannelSimplePricingItem{}
+		visibleChannelIDs = map[int]struct{}{}
 	}
 	userId, exists := c.Get("id")
 	usableGroup := map[string]string{}
@@ -93,6 +158,14 @@ func GetPricing(c *gin.Context) {
 	for channelID, modelRatio := range ratio_setting.GetChannelAudioCompletionRatioCopy() {
 		channelAudioCompletionRatio[channelID] = modelRatio
 	}
+	channelModelPrice = filterChannelPricingMapByVisibleChannels(channelModelPrice, visibleChannelIDs)
+	channelModelRatio = filterChannelPricingMapByVisibleChannels(channelModelRatio, visibleChannelIDs)
+	channelCompletionRatio = filterChannelPricingMapByVisibleChannels(channelCompletionRatio, visibleChannelIDs)
+	channelCacheRatio = filterChannelPricingMapByVisibleChannels(channelCacheRatio, visibleChannelIDs)
+	channelCreateCacheRatio = filterChannelPricingMapByVisibleChannels(channelCreateCacheRatio, visibleChannelIDs)
+	channelImageRatio = filterChannelPricingMapByVisibleChannels(channelImageRatio, visibleChannelIDs)
+	channelAudioRatio = filterChannelPricingMapByVisibleChannels(channelAudioRatio, visibleChannelIDs)
+	channelAudioCompletionRatio = filterChannelPricingMapByVisibleChannels(channelAudioCompletionRatio, visibleChannelIDs)
 	for supplierID, modelPrice := range ratio_setting.GetSupplierModelPriceCopy() {
 		supplierModelPrice[supplierID] = modelPrice
 	}
