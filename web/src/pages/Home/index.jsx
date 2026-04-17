@@ -123,6 +123,7 @@ const Home = () => {
       u = null;
     }
   }
+  const userRole = u?.role ?? null;
   const showDistributorRecruit = !userIsDistributorUser(u);
 
   const displayHomePageContent = async () => {
