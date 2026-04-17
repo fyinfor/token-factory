@@ -88,9 +88,28 @@ func buildRouterCandidates(group, modelName string) ([]*router.EndpointCandidate
 		if !model.IsChannelEnabledForGroupModel(group, modelName, ch.Id) {
 			continue
 		}
-		ratio, _, _ := ratio_setting.GetModelRatio(modelName)
-		if ratio <= 0 {
-			ratio = 1
+		// UnitPrice is the primary sorting signal for smart routing.
+		// Priority: channel-level model price > channel-level model ratio > supplier-level > global model ratio.
+		unitPrice := 1.0
+		if channelPrice, ok := ratio_setting.GetChannelModelPrice(ch.Id, modelName); ok {
+			unitPrice = channelPrice
+		} else if channelRatio, ok := ratio_setting.GetChannelModelRatio(ch.Id, modelName); ok {
+			unitPrice = channelRatio
+		} else if ch.SupplierApplicationID > 0 {
+			if supplierPrice, ok := ratio_setting.GetSupplierModelPrice(ch.SupplierApplicationID, modelName); ok {
+				unitPrice = supplierPrice
+			} else if supplierRatio, ok := ratio_setting.GetSupplierModelRatio(ch.SupplierApplicationID, modelName); ok {
+				unitPrice = supplierRatio
+			}
+		}
+		if unitPrice <= 0 {
+			ratio, _, _ := ratio_setting.GetModelRatio(modelName)
+			if ratio > 0 {
+				unitPrice = ratio
+			}
+		}
+		if unitPrice <= 0 {
+			unitPrice = 1
 		}
 		latSec := float64(ch.ResponseTime) / 1000.0
 		if latSec <= 0 {
@@ -109,7 +128,7 @@ func buildRouterCandidates(group, modelName string) ([]*router.EndpointCandidate
 			ChannelID:         ch.Id,
 			Model:             modelName,
 			ProviderSlug:      channelProviderSlug(ch),
-			UnitPrice:         ratio,
+			UnitPrice:         unitPrice,
 			Healthy:           true,
 			LatencyP50Seconds: latSec,
 			ThroughputTps:     tps,

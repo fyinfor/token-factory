@@ -21,13 +21,15 @@ type TestResult struct {
 }
 
 // DifferenceItem 差异项
-// Current 为本地值，可能为 nil
-// Upstreams 为各渠道的上游值，具体数值 / "same" / nil
+// Current 为系统全局默认（全局 ModelRatio / ModelPrice 等）
+// UpstreamOld 为各渠道列「当前生效」旧值：有渠道覆盖则用渠道价，否则同 Current 语义（全局）
+// Upstreams 为各渠道列上游拉取的新定价（数值），与 UpstreamOld 对照展示 旧/新
 
 type DifferenceItem struct {
-	Current    interface{}            `json:"current"`
-	Upstreams  map[string]interface{} `json:"upstreams"`
-	Confidence map[string]bool        `json:"confidence"`
+	Current      interface{}            `json:"current"`
+	UpstreamOld  map[string]interface{} `json:"upstream_old,omitempty"`
+	Upstreams    map[string]interface{} `json:"upstreams"`
+	Confidence   map[string]bool        `json:"confidence"`
 }
 
 type SyncableChannel struct {

@@ -93,6 +93,29 @@ func LoadFromJsonStringWithCallback[K comparable, V any](m *RWMap[K, V], jsonStr
 	return err
 }
 
+// LoadFloat64MapFromJSONStringFlexibleWithCallback replaces a string-keyed float64 map from JSON,
+// accepting either numeric values or {"ratio": number} objects (tolerates mis-stored option rows).
+func LoadFloat64MapFromJSONStringFlexibleWithCallback(
+	m *RWMap[string, float64],
+	jsonStr string,
+	onSuccess func(),
+) error {
+	normalized, err := common.ParseStringFloat64MapFlexible(jsonStr)
+	if err != nil {
+		return err
+	}
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.data = make(map[string]float64, len(normalized))
+	for k, v := range normalized {
+		m.data[k] = v
+	}
+	if onSuccess != nil {
+		onSuccess()
+	}
+	return nil
+}
+
 // MarshalJSONString returns the JSON string representation of the RWMap.
 func (m *RWMap[K, V]) MarshalJSONString() string {
 	bytes, err := m.MarshalJSON()

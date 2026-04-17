@@ -48,6 +48,11 @@ export const useModelPricingData = () => {
   const [vendorsMap, setVendorsMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [groupRatio, setGroupRatio] = useState({});
+  const [groupModelPrice, setGroupModelPrice] = useState({});
+  const [groupModelRatio, setGroupModelRatio] = useState({});
+  const [channelModelPrice, setChannelModelPrice] = useState({});
+  const [channelModelRatio, setChannelModelRatio] = useState({});
+  const [pricingChannels, setPricingChannels] = useState([]);
   const [usableGroup, setUsableGroup] = useState({});
   const [endpointMap, setEndpointMap] = useState({});
   const [autoGroups, setAutoGroups] = useState([]);
@@ -235,12 +240,22 @@ export const useModelPricingData = () => {
       data,
       vendors,
       group_ratio,
+      group_model_price,
+      group_model_ratio,
+      channel_model_price,
+      channel_model_ratio,
+      channels,
       usable_group,
       supported_endpoint,
       auto_groups,
     } = res.data;
     if (success) {
       setGroupRatio(group_ratio);
+      setGroupModelPrice(group_model_price || {});
+      setGroupModelRatio(group_model_ratio || {});
+      setChannelModelPrice(channel_model_price || {});
+      setChannelModelRatio(channel_model_ratio || {});
+      setPricingChannels(channels || []);
       setUsableGroup(usable_group);
       setSelectedGroup('all');
       // 构建供应商 Map 方便查找
@@ -371,6 +386,11 @@ export const useModelPricingData = () => {
     models,
     loading,
     groupRatio,
+    groupModelPrice,
+    groupModelRatio,
+    channelModelPrice,
+    channelModelRatio,
+    pricingChannels,
     usableGroup,
     endpointMap,
     autoGroups,

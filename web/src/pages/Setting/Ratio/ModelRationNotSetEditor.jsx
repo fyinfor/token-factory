@@ -20,11 +20,14 @@ For commercial licensing, please contact support@quantumnous.com
 import React, { useEffect, useState } from 'react';
 import { API, showError } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
+import { Tabs } from '@douyinfe/semi-ui';
 import ModelPricingEditor from './components/ModelPricingEditor';
+import SupplierModelPricingEditor from './components/SupplierModelPricingEditor';
 
 export default function ModelRatioNotSetEditor(props) {
   const { t } = useTranslation();
   const [enabledModels, setEnabledModels] = useState([]);
+  const [pricingChannels, setPricingChannels] = useState([]);
 
   const getAllEnabledModels = async () => {
     try {
@@ -41,24 +44,53 @@ export default function ModelRatioNotSetEditor(props) {
     }
   };
 
+  const getPricingSuppliers = async () => {
+    try {
+      const res = await API.get('/api/pricing');
+      if (res?.data?.success) {
+        setPricingChannels(res.data.channels || []);
+      }
+    } catch (error) {
+      console.error(t('获取渠道商列表失败:'), error);
+    }
+  };
+
   useEffect(() => {
     // 获取所有启用的模型
     getAllEnabledModels();
+    getPricingSuppliers();
   }, []);
+  const extendedOptions = {
+    ...props.options,
+    __pricingChannels: pricingChannels,
+  };
   return (
-    <ModelPricingEditor
-      options={props.options}
-      refresh={props.refresh}
-      candidateModelNames={enabledModels}
-      filterMode='unset'
-      allowAddModel={false}
-      allowDeleteModel={false}
-      showConflictFilter={false}
-      listDescription={t(
-        '此页面仅显示未设置价格或基础倍率的模型，设置后会自动从列表中移出',
-      )}
-      emptyTitle={t('没有未设置定价的模型')}
-      emptyDescription={t('当前没有未设置定价的模型')}
-    />
+    <Tabs type='line' defaultActiveKey='global_unset'>
+      <Tabs.TabPane tab={t('全局未设置模型')} itemKey='global_unset'>
+        <ModelPricingEditor
+          options={props.options}
+          refresh={props.refresh}
+          candidateModelNames={enabledModels}
+          filterMode='unset'
+          allowAddModel={false}
+          allowDeleteModel={false}
+          showConflictFilter={false}
+          listDescription={t(
+            '此页面仅显示未设置价格或基础倍率的模型，设置后会自动从列表中移出',
+          )}
+          emptyTitle={t('没有未设置定价的模型')}
+          emptyDescription={t('当前没有未设置定价的模型')}
+        />
+      </Tabs.TabPane>
+      <Tabs.TabPane tab={t('渠道未设置模型')} itemKey='supplier_unset'>
+        <SupplierModelPricingEditor
+          options={extendedOptions}
+          refresh={props.refresh}
+          candidateModelNames={enabledModels}
+          filterMode='unset'
+          listDescription={t('渠道未设置模型列表说明')}
+        />
+      </Tabs.TabPane>
+    </Tabs>
   );
 }

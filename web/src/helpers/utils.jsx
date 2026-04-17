@@ -676,6 +676,8 @@ export const calculateModelPrice = ({
   record,
   selectedGroup,
   groupRatio,
+  groupModelPrice = {},
+  groupModelRatio = {},
   tokenUnit,
   displayPrice,
   currency,
@@ -709,11 +711,28 @@ export const calculateModelPrice = ({
     }
   }
 
+  const groupPriceMap = groupModelPrice?.[usedGroup] || {};
+  const groupRatioMap = groupModelRatio?.[usedGroup] || {};
+  const hasGroupModelPrice = Object.prototype.hasOwnProperty.call(
+    groupPriceMap,
+    record.model_name,
+  );
+  const hasGroupModelRatio = Object.prototype.hasOwnProperty.call(
+    groupRatioMap,
+    record.model_name,
+  );
+  const effectiveModelPrice = hasGroupModelPrice
+    ? Number(groupPriceMap[record.model_name])
+    : Number(record.model_price);
+  const effectiveModelRatio = hasGroupModelRatio
+    ? Number(groupRatioMap[record.model_name])
+    : Number(record.model_ratio);
+
   // 2. 根据计费类型计算价格
   if (record.quota_type === 0) {
     // 按量计费
     const isTokensDisplay = quotaDisplayType === 'TOKENS';
-    const inputRatioPriceUSD = record.model_ratio * 2 * usedGroupRatio;
+    const inputRatioPriceUSD = effectiveModelRatio * 2 * usedGroupRatio;
     const unitDivisor = tokenUnit === 'K' ? 1000 : 1;
     const unitLabel = tokenUnit === 'K' ? 'K' : 'M';
     const hasRatioValue = (value) =>
@@ -727,7 +746,8 @@ export const calculateModelPrice = ({
 
     if (isTokensDisplay) {
       return {
-        inputRatio: formatRatio(record.model_ratio),
+        inputRatio: formatRatio(effectiveModelRatio),
+        modelRatioSource: hasGroupModelRatio ? 'group' : 'global',
         completionRatio: formatRatio(record.completion_ratio),
         cacheRatio: formatRatio(record.cache_ratio),
         createCacheRatio: formatRatio(record.create_cache_ratio),
@@ -772,6 +792,7 @@ export const calculateModelPrice = ({
 
     return {
       inputPrice,
+      modelRatioSource: hasGroupModelRatio ? 'group' : 'global',
       completionPrice: formatTokenPrice(
         inputRatioPriceUSD * Number(record.completion_ratio),
       ),
@@ -803,11 +824,12 @@ export const calculateModelPrice = ({
 
   if (record.quota_type === 1) {
     // 按次计费
-    const priceUSD = parseFloat(record.model_price) * usedGroupRatio;
+    const priceUSD = effectiveModelPrice * usedGroupRatio;
     const displayVal = displayPrice(priceUSD);
 
     return {
       price: displayVal,
+      modelPriceSource: hasGroupModelPrice ? 'group' : 'global',
       isPerToken: false,
       isTokensDisplay: false,
       usedGroup,
@@ -830,6 +852,16 @@ export const getModelPriceItems = (
   t,
   quotaDisplayType = 'USD',
 ) => {
+  const getSourceText = () => {
+    if (priceData?.modelPriceSource === 'group') {
+      return t('分组模型价格配置');
+    }
+    if (priceData?.modelRatioSource === 'group') {
+      return t('分组模型倍率配置');
+    }
+    return t('全局模型配置');
+  };
+
   if (priceData.isPerToken) {
     if (quotaDisplayType === 'TOKENS' || priceData.isTokensDisplay) {
       return [
@@ -874,6 +906,12 @@ export const getModelPriceItems = (
           label: t('音频输出倍率'),
           value: priceData.audioOutputRatio,
           suffix: 'x',
+        },
+        {
+          key: 'price-source',
+          label: t('价格来源'),
+          value: getSourceText(),
+          suffix: '',
         },
       ].filter(
         (item) =>
@@ -925,6 +963,12 @@ export const getModelPriceItems = (
         value: priceData.audioOutputPrice,
         suffix: unitSuffix,
       },
+      {
+        key: 'price-source',
+        label: t('价格来源'),
+        value: getSourceText(),
+        suffix: '',
+      },
     ].filter((item) => item.value !== null && item.value !== undefined && item.value !== '');
   }
 
@@ -934,6 +978,12 @@ export const getModelPriceItems = (
       label: t('模型价格'),
       value: priceData.price,
       suffix: ` / ${t('次')}`,
+    },
+    {
+      key: 'price-source',
+      label: t('价格来源'),
+      value: getSourceText(),
+      suffix: '',
     },
   ].filter((item) => item.value !== null && item.value !== undefined && item.value !== '');
 };

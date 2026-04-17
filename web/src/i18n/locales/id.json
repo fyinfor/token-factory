@@ -3425,6 +3425,15 @@
     "查看定价": "Lihat harga",
     "完整使用日志": "Log penggunaan lengkap",
     "实时监控每次调用，详细记录请求和响应便于调试分析。": "Pemantauan waktu nyata setiap panggilan, mencatat permintaan dan respons untuk debugging.",
-    "查看文档": "Lihat dokumentasi"
+    "查看文档": "Lihat dokumentasi",
+    "查看供应商详情": "Lihat detail pemasok",
+    "供应商详情": "Detail pemasok",
+    "获取供应商信息失败": "Gagal mendapatkan informasi pemasok",
+    "审核状态": "Status peninjauan",
+    "审核备注：": "Catatan peninjauan: ",
+    "申请时间：": "Waktu pengajuan: ",
+    "审核信息": "Informasi peninjauan",
+    "审核备注": "Catatan peninjauan",
+    "申请时间": "Waktu pengajuan"
   }
 }

@@ -63,6 +63,8 @@ const PricingCardView = ({
   setCurrentPage,
   selectedGroup,
   groupRatio,
+  groupModelPrice,
+  groupModelRatio,
   copyText,
   setModalImageUrl,
   setIsModalOpenurl,
@@ -245,6 +247,8 @@ const PricingCardView = ({
             record: model,
             selectedGroup,
             groupRatio,
+            groupModelPrice,
+            groupModelRatio,
             tokenUnit,
             displayPrice,
             currency,
@@ -341,7 +345,9 @@ const PricingCardView = ({
                       <div className='grid grid-cols-3 gap-2 text-xs text-gray-600'>
                         <div>
                           {t('模型')}:{' '}
-                          {model.quota_type === 0 ? model.model_ratio : t('无')}
+                          {model.quota_type === 0
+                            ? priceData?.inputRatio ?? model.model_ratio
+                            : t('无')}
                         </div>
                         <div>
                           {t('输出')}:{' '}

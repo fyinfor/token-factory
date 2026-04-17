@@ -63,6 +63,91 @@ const MODELS_DEV_PRESET_NAME = 'models.dev 价格预设';
 const MODELS_DEV_PRESET_BASE_URL = 'https://models.dev';
 const MODELS_DEV_PRESET_ENDPOINT = 'https://models.dev/api.json';
 
+const CHANNEL_PRICING_OPTION_KEYS = [
+  'ChannelModelPrice',
+  'ChannelModelRatio',
+  'ChannelCompletionRatio',
+  'ChannelCacheRatio',
+];
+
+const UPSTREAM_NAME_ID_RE = /\((-?\d+)\)\s*$/;
+
+function parseUpstreamListChannelId(upstreamDisplayName) {
+  const m = String(upstreamDisplayName).match(UPSTREAM_NAME_ID_RE);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  return Number.isNaN(n) ? null : n;
+}
+
+function parseNestedOption(json) {
+  try {
+    const o = JSON.parse(json || '{}');
+    return o && typeof o === 'object' && !Array.isArray(o) ? o : {};
+  } catch {
+    return {};
+  }
+}
+
+function ratioTypeToPascal(ratioType) {
+  return ratioType
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join('');
+}
+
+function channelOptionKeyForRatioType(ratioType) {
+  return `Channel${ratioTypeToPascal(ratioType)}`;
+}
+
+function cloneDeep(obj) {
+  return JSON.parse(JSON.stringify(obj));
+}
+
+/** 解析勾选的上游列名（兼容 number / string 与上游 JSON 类型差异） */
+function findUpstreamColumnName(upMap, value) {
+  if (!upMap || value === undefined || value === null) return null;
+  const same = (a, b) => {
+    if (a === b) return true;
+    const na = Number(a);
+    const nb = Number(b);
+    if (Number.isNaN(na) || Number.isNaN(nb)) return false;
+    return na === nb;
+  };
+  const hit = Object.entries(upMap).find(([_, v]) => same(v, value));
+  return hit ? hit[0] : null;
+}
+
+function resolutionMatchesUpstream(selected, upstreamVal) {
+  if (selected === undefined || selected === null) return false;
+  if (selected === upstreamVal) return true;
+  const ns = Number(selected);
+  const nu = Number(upstreamVal);
+  return !Number.isNaN(ns) && !Number.isNaN(nu) && ns === nu;
+}
+
+function formatCellNumber(v) {
+  if (v === null || v === undefined || v === 'same') return '—';
+  const n = Number(v);
+  if (Number.isNaN(n)) return String(v);
+  const r = Math.round(n * 1e6) / 1e6;
+  if (Math.abs(r - Math.round(r)) < 1e-9) return String(Math.round(r));
+  return String(r).replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.$/, '');
+}
+
+function formatOldNewPair(oldVal, newVal) {
+  return `${formatCellNumber(oldVal)}/${formatCellNumber(newVal)}`;
+}
+
+/** 是否可勾选同步：存在上游新价且与当前生效价不同 */
+function isUpstreamCellSelectable(oldVal, newVal) {
+  if (newVal === null || newVal === undefined || newVal === 'same')
+    return false;
+  const nu = Number(newVal);
+  if (Number.isNaN(nu)) return false;
+  if (oldVal === null || oldVal === undefined) return true;
+  return !resolutionMatchesUpstream(oldVal, newVal);
+}
+
 function ConflictConfirmModal({ t, visible, items, onOk, onCancel }) {
   const isMobile = useIsMobile();
   const columns = [
@@ -288,67 +373,112 @@ export default function UpstreamRatioSync(props) {
     [setResolutions],
   );
 
-  const applySync = async () => {
-    const currentRatios = {
-      ModelRatio: JSON.parse(props.options.ModelRatio || '{}'),
-      CompletionRatio: JSON.parse(props.options.CompletionRatio || '{}'),
-      CacheRatio: JSON.parse(props.options.CacheRatio || '{}'),
-      ModelPrice: JSON.parse(props.options.ModelPrice || '{}'),
+  const buildPricingBaseline = useCallback(() => {
+    const global = {
+      ModelRatio: parseNestedOption(props.options.ModelRatio),
+      CompletionRatio: parseNestedOption(props.options.CompletionRatio),
+      CacheRatio: parseNestedOption(props.options.CacheRatio),
+      ModelPrice: parseNestedOption(props.options.ModelPrice),
     };
+    const channel = {};
+    CHANNEL_PRICING_OPTION_KEYS.forEach((k) => {
+      channel[k] = parseNestedOption(props.options[k]);
+    });
+    return { global, channel };
+  }, [props.options]);
+
+  const applySync = async () => {
+    const baseline = buildPricingBaseline();
 
     const conflicts = [];
 
-    const getLocalBillingCategory = (model) => {
-      if (currentRatios.ModelPrice[model] !== undefined) return 'price';
+    const findSourceChannel = (model, ratioType, value) => {
+      const upMap = differences[model]?.[ratioType]?.upstreams;
+      return findUpstreamColumnName(upMap, value) || t('未知');
+    };
+
+    const billingCategoryForChannel = (model, channelIdStr, chMaps) => {
+      const priceMap = chMaps.ChannelModelPrice[channelIdStr];
+      if (priceMap && priceMap[model] !== undefined) return 'price';
+      const mr = chMaps.ChannelModelRatio[channelIdStr];
+      const cr = chMaps.ChannelCompletionRatio[channelIdStr];
+      const cache = chMaps.ChannelCacheRatio[channelIdStr];
       if (
-        currentRatios.ModelRatio[model] !== undefined ||
-        currentRatios.CompletionRatio[model] !== undefined ||
-        currentRatios.CacheRatio[model] !== undefined
+        (mr && mr[model] !== undefined) ||
+        (cr && cr[model] !== undefined) ||
+        (cache && cache[model] !== undefined)
       )
         return 'ratio';
       return null;
     };
 
-    const findSourceChannel = (model, ratioType, value) => {
-      if (differences[model] && differences[model][ratioType]) {
-        const upMap = differences[model][ratioType].upstreams || {};
-        const entry = Object.entries(upMap).find(([_, v]) => v === value);
-        if (entry) return entry[0];
-      }
-      return t('未知');
+    const billingCategoryGlobal = (model, g) => {
+      if (g.ModelPrice[model] !== undefined) return 'price';
+      if (
+        g.ModelRatio[model] !== undefined ||
+        g.CompletionRatio[model] !== undefined ||
+        g.CacheRatio[model] !== undefined
+      )
+        return 'ratio';
+      return null;
     };
 
     Object.entries(resolutions).forEach(([model, ratios]) => {
-      const localCat = getLocalBillingCategory(model);
-      const newCat = 'model_price' in ratios ? 'price' : 'ratio';
-
-      if (localCat && localCat !== newCat) {
-        const currentDesc =
-          localCat === 'price'
-            ? `${t('固定价格')} : ${currentRatios.ModelPrice[model]}`
-            : `${t('模型倍率')} : ${currentRatios.ModelRatio[model] ?? '-'}\n${t('输出倍率')} : ${currentRatios.CompletionRatio[model] ?? '-'}`;
-
-        let newDesc = '';
-        if (newCat === 'price') {
-          newDesc = `${t('固定价格')} : ${ratios['model_price']}`;
-        } else {
-          const newModelRatio = ratios['model_ratio'] ?? '-';
-          const newCompRatio = ratios['completion_ratio'] ?? '-';
-          newDesc = `${t('模型倍率')} : ${newModelRatio}\n${t('输出倍率')} : ${newCompRatio}`;
+      const groups = new Map();
+      Object.entries(ratios).forEach(([ratioType, value]) => {
+        const src = findSourceChannel(model, ratioType, value);
+        const cid = parseUpstreamListChannelId(src);
+        const tkey = cid !== null && cid > 0 ? `c:${cid}` : 'global';
+        if (!groups.has(tkey)) {
+          groups.set(tkey, { cid: cid > 0 ? cid : null, ratios: {} });
         }
+        groups.get(tkey).ratios[ratioType] = value;
+      });
 
-        const channels = Object.entries(ratios)
-          .map(([rt, val]) => findSourceChannel(model, rt, val))
-          .filter((v, idx, arr) => arr.indexOf(v) === idx)
-          .join(', ');
+      groups.forEach(({ cid, ratios: r }) => {
+        const newCat = 'model_price' in r ? 'price' : 'ratio';
+        const localCat =
+          cid != null && cid > 0
+            ? billingCategoryForChannel(model, String(cid), baseline.channel)
+            : billingCategoryGlobal(model, baseline.global);
 
-        conflicts.push({
-          channel: channels,
-          model,
-          current: currentDesc,
-          newVal: newDesc,
-        });
-      }
+        if (localCat && localCat !== newCat) {
+          let currentDesc = '';
+          if (cid != null && cid > 0) {
+            const idStr = String(cid);
+            if (localCat === 'price') {
+              currentDesc = `${t('固定价格')} : ${baseline.channel.ChannelModelPrice[idStr]?.[model]}`;
+            } else {
+              currentDesc = `${t('模型倍率')} : ${baseline.channel.ChannelModelRatio[idStr]?.[model] ?? '-'}\n${t('输出倍率')} : ${baseline.channel.ChannelCompletionRatio[idStr]?.[model] ?? '-'}`;
+            }
+          } else if (localCat === 'price') {
+            currentDesc = `${t('固定价格')} : ${baseline.global.ModelPrice[model]}`;
+          } else {
+            currentDesc = `${t('模型倍率')} : ${baseline.global.ModelRatio[model] ?? '-'}\n${t('输出倍率')} : ${baseline.global.CompletionRatio[model] ?? '-'}`;
+          }
+
+          let newDesc = '';
+          if (newCat === 'price') {
+            newDesc = `${t('固定价格')} : ${r['model_price']}`;
+          } else {
+            const newModelRatio = r['model_ratio'] ?? '-';
+            const newCompRatio = r['completion_ratio'] ?? '-';
+            newDesc = `${t('模型倍率')} : ${newModelRatio}\n${t('输出倍率')} : ${newCompRatio}`;
+          }
+
+          const channels = Object.entries(r)
+            .map(([rt, val]) => findSourceChannel(model, rt, val))
+            .filter((v, idx, arr) => arr.indexOf(v) === idx)
+            .join(', ');
+
+          conflicts.push({
+            channel: channels,
+            model,
+            current: currentDesc,
+            newVal: newDesc,
+          });
+        }
+      });
     });
 
     if (conflicts.length > 0) {
@@ -357,49 +487,123 @@ export default function UpstreamRatioSync(props) {
       return;
     }
 
-    await performSync(currentRatios);
+    await performSync(baseline);
   };
 
   const performSync = useCallback(
-    async (currentRatios) => {
-      const finalRatios = {
-        ModelRatio: { ...currentRatios.ModelRatio },
-        CompletionRatio: { ...currentRatios.CompletionRatio },
-        CacheRatio: { ...currentRatios.CacheRatio },
-        ModelPrice: { ...currentRatios.ModelPrice },
+    async (baseline) => {
+      const findSourceChannel = (model, ratioType, value) => {
+        const upMap = differences[model]?.[ratioType]?.upstreams;
+        return findUpstreamColumnName(upMap, value) || t('未知');
       };
 
+      const finalRatios = {
+        ModelRatio: { ...baseline.global.ModelRatio },
+        CompletionRatio: { ...baseline.global.CompletionRatio },
+        CacheRatio: { ...baseline.global.CacheRatio },
+        ModelPrice: { ...baseline.global.ModelPrice },
+      };
+
+      const finalChannel = {};
+      CHANNEL_PRICING_OPTION_KEYS.forEach((k) => {
+        finalChannel[k] = cloneDeep(baseline.channel[k] || {});
+      });
+
       Object.entries(resolutions).forEach(([model, ratios]) => {
-        const selectedTypes = Object.keys(ratios);
-        const hasPrice = selectedTypes.includes('model_price');
-        const hasRatio = selectedTypes.some((rt) => rt !== 'model_price');
-
-        if (hasPrice) {
-          delete finalRatios.ModelRatio[model];
-          delete finalRatios.CompletionRatio[model];
-          delete finalRatios.CacheRatio[model];
-        }
-        if (hasRatio) {
-          delete finalRatios.ModelPrice[model];
-        }
-
+        const groups = new Map();
         Object.entries(ratios).forEach(([ratioType, value]) => {
-          const optionKey = ratioType
-            .split('_')
-            .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-            .join('');
-          finalRatios[optionKey][model] = parseFloat(value);
+          const src = findSourceChannel(model, ratioType, value);
+          const cid = parseUpstreamListChannelId(src);
+          const tkey = cid !== null && cid > 0 ? `c:${cid}` : 'global';
+          if (!groups.has(tkey)) {
+            groups.set(tkey, { cid: cid > 0 ? cid : null, ratios: {} });
+          }
+          groups.get(tkey).ratios[ratioType] = value;
+        });
+
+        groups.forEach(({ cid, ratios: r }) => {
+          const selectedTypes = Object.keys(r);
+          const hasPrice = selectedTypes.includes('model_price');
+          const hasRatio = selectedTypes.some((rt) => rt !== 'model_price');
+
+          if (cid != null && cid > 0) {
+            const idStr = String(cid);
+            if (hasPrice) {
+              ['ChannelModelRatio', 'ChannelCompletionRatio', 'ChannelCacheRatio'].forEach(
+                (rk) => {
+                  if (finalChannel[rk][idStr]) {
+                    delete finalChannel[rk][idStr][model];
+                  }
+                },
+              );
+            }
+            if (hasRatio && finalChannel.ChannelModelPrice[idStr]) {
+              delete finalChannel.ChannelModelPrice[idStr][model];
+            }
+
+            Object.entries(r).forEach(([ratioType, value]) => {
+              const ck = channelOptionKeyForRatioType(ratioType);
+              if (!finalChannel[ck][idStr]) finalChannel[ck][idStr] = {};
+              finalChannel[ck][idStr][model] = parseFloat(value);
+            });
+          } else {
+            if (hasPrice) {
+              delete finalRatios.ModelRatio[model];
+              delete finalRatios.CompletionRatio[model];
+              delete finalRatios.CacheRatio[model];
+            }
+            if (hasRatio) {
+              delete finalRatios.ModelPrice[model];
+            }
+
+            Object.entries(r).forEach(([ratioType, value]) => {
+              const gk = ratioTypeToPascal(ratioType);
+              finalRatios[gk][model] = parseFloat(value);
+            });
+          }
         });
       });
 
       setLoading(true);
       try {
-        const updates = Object.entries(finalRatios).map(([key, value]) =>
-          API.put('/api/option/', {
-            key,
-            value: JSON.stringify(value, null, 2),
-          }),
-        );
+        const updates = [];
+        const globalKeys = [
+          'ModelRatio',
+          'CompletionRatio',
+          'CacheRatio',
+          'ModelPrice',
+        ];
+        globalKeys.forEach((key) => {
+          const before = JSON.stringify(baseline.global[key] || {});
+          const after = JSON.stringify(finalRatios[key] || {});
+          if (before !== after) {
+            updates.push(
+              API.put('/api/option/', {
+                key,
+                value: JSON.stringify(finalRatios[key], null, 2),
+              }),
+            );
+          }
+        });
+
+        CHANNEL_PRICING_OPTION_KEYS.forEach((key) => {
+          const before = JSON.stringify(baseline.channel[key] || {});
+          const after = JSON.stringify(finalChannel[key] || {});
+          if (before !== after) {
+            updates.push(
+              API.put('/api/option/', {
+                key,
+                value: JSON.stringify(finalChannel[key], null, 2),
+              }),
+            );
+          }
+        });
+
+        if (updates.length === 0) {
+          showWarning(t('没有需要保存的变更'));
+          setLoading(false);
+          return;
+        }
 
         const results = await Promise.all(updates);
 
@@ -408,21 +612,25 @@ export default function UpstreamRatioSync(props) {
           props.refresh();
 
           setDifferences((prevDifferences) => {
-            const newDifferences = { ...prevDifferences };
+            const next = cloneDeep(prevDifferences);
 
             Object.entries(resolutions).forEach(([model, ratios]) => {
-              Object.keys(ratios).forEach((ratioType) => {
-                if (newDifferences[model] && newDifferences[model][ratioType]) {
-                  delete newDifferences[model][ratioType];
+              Object.entries(ratios).forEach(([ratioType, value]) => {
+                const diff = next[model]?.[ratioType];
+                if (!diff || typeof diff.upstreams !== 'object') return;
 
-                  if (Object.keys(newDifferences[model]).length === 0) {
-                    delete newDifferences[model];
-                  }
-                }
+                const srcName = findUpstreamColumnName(diff.upstreams, value);
+                if (!srcName) return;
+
+                const num = parseFloat(value);
+                const synced = Number.isNaN(num) ? value : num;
+                if (!diff.upstream_old) diff.upstream_old = {};
+                diff.upstream_old[srcName] = synced;
+                diff.upstreams[srcName] = synced;
               });
             });
 
-            return newDifferences;
+            return next;
           });
 
           setResolutions({});
@@ -435,7 +643,7 @@ export default function UpstreamRatioSync(props) {
         setLoading(false);
       }
     },
-    [resolutions, props.options, props.refresh],
+    [resolutions, differences, props.refresh, t],
   );
 
   const getCurrentPageData = (dataSource) => {
@@ -527,6 +735,7 @@ export default function UpstreamRatioSync(props) {
             model,
             ratioType,
             current: diff.current,
+            upstream_old: diff.upstream_old || {},
             upstreams: diff.upstreams,
             confidence: diff.confidence || {},
             billingConflict,
@@ -667,7 +876,7 @@ export default function UpstreamRatioSync(props) {
         },
       },
       {
-        title: t('当前值'),
+        title: t('当前值（系统默认）'),
         dataIndex: 'current',
         render: (text) => (
           <Tag
@@ -685,14 +894,13 @@ export default function UpstreamRatioSync(props) {
 
           filteredDataSource.forEach((row) => {
             const upstreamVal = row.upstreams?.[upName];
-            if (
-              upstreamVal !== null &&
-              upstreamVal !== undefined &&
-              upstreamVal !== 'same'
-            ) {
+            const oldVal = row.upstream_old?.[upName];
+            if (isUpstreamCellSelectable(oldVal, upstreamVal)) {
               selectableCount++;
-              const isSelected =
-                resolutions[row.model]?.[row.ratioType] === upstreamVal;
+              const isSelected = resolutionMatchesUpstream(
+                resolutions[row.model]?.[row.ratioType],
+                upstreamVal,
+              );
               if (isSelected) {
                 selectedCount++;
               }
@@ -714,11 +922,8 @@ export default function UpstreamRatioSync(props) {
           if (checked) {
             filteredDataSource.forEach((row) => {
               const upstreamVal = row.upstreams?.[upName];
-              if (
-                upstreamVal !== null &&
-                upstreamVal !== undefined &&
-                upstreamVal !== 'same'
-              ) {
+              const oldVal = row.upstream_old?.[upName];
+              if (isUpstreamCellSelectable(oldVal, upstreamVal)) {
                 selectValue(row.model, row.ratioType, upstreamVal);
               }
             });
@@ -753,7 +958,9 @@ export default function UpstreamRatioSync(props) {
           dataIndex: upName,
           render: (_, record) => {
             const upstreamVal = record.upstreams?.[upName];
+            const oldVal = record.upstream_old?.[upName];
             const isConfident = record.confidence?.[upName] !== false;
+            const pairText = formatOldNewPair(oldVal, upstreamVal);
 
             if (upstreamVal === null || upstreamVal === undefined) {
               return (
@@ -763,16 +970,38 @@ export default function UpstreamRatioSync(props) {
               );
             }
 
-            if (upstreamVal === 'same') {
+            const selectable = isUpstreamCellSelectable(oldVal, upstreamVal);
+            const isSelected = resolutionMatchesUpstream(
+              resolutions[record.model]?.[record.ratioType],
+              upstreamVal,
+            );
+
+            const pairEl = (
+              <Tooltip content={t('旧价新价对照说明')}>
+                <span
+                  className='font-mono text-sm tabular-nums'
+                  style={{ letterSpacing: '0.02em' }}
+                >
+                  {pairText}
+                </span>
+              </Tooltip>
+            );
+
+            if (!selectable) {
               return (
-                <Tag color='blue' shape='circle'>
-                  {t('与本地相同')}
-                </Tag>
+                <div className='flex items-center gap-2'>
+                  {pairEl}
+                  {!isConfident && (
+                    <Tooltip
+                      position='left'
+                      content={t('该数据可能不可信，请谨慎使用')}
+                    >
+                      <AlertTriangle size={16} className='text-yellow-500' />
+                    </Tooltip>
+                  )}
+                </div>
               );
             }
-
-            const isSelected =
-              resolutions[record.model]?.[record.ratioType] === upstreamVal;
 
             return (
               <div className='flex items-center gap-2'>
@@ -796,7 +1025,7 @@ export default function UpstreamRatioSync(props) {
                     }
                   }}
                 >
-                  {String(upstreamVal)}
+                  {pairEl}
                 </Checkbox>
                 {!isConfident && (
                   <Tooltip
@@ -876,13 +1105,7 @@ export default function UpstreamRatioSync(props) {
         items={conflictItems}
         onOk={async () => {
           setConfirmVisible(false);
-          const curRatios = {
-            ModelRatio: JSON.parse(props.options.ModelRatio || '{}'),
-            CompletionRatio: JSON.parse(props.options.CompletionRatio || '{}'),
-            CacheRatio: JSON.parse(props.options.CacheRatio || '{}'),
-            ModelPrice: JSON.parse(props.options.ModelPrice || '{}'),
-          };
-          await performSync(curRatios);
+          await performSync(buildPricingBaseline());
         }}
         onCancel={() => setConfirmVisible(false)}
       />
