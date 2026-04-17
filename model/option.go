@@ -147,6 +147,18 @@ func InitOptionMap() {
 	common.OptionMap["CreateCacheRatio"] = ratio_setting.CreateCacheRatio2JSONString()
 	common.OptionMap["GroupRatio"] = ratio_setting.GroupRatio2JSONString()
 	common.OptionMap["GroupGroupRatio"] = ratio_setting.GroupGroupRatio2JSONString()
+	common.OptionMap["GroupModelPrice"] = ratio_setting.GroupModelPrice2JSONString()
+	common.OptionMap["GroupModelRatio"] = ratio_setting.GroupModelRatio2JSONString()
+	common.OptionMap["ChannelModelPrice"] = ratio_setting.ChannelModelPrice2JSONString()
+	common.OptionMap["ChannelModelRatio"] = ratio_setting.ChannelModelRatio2JSONString()
+	common.OptionMap["ChannelCompletionRatio"] = ratio_setting.ChannelCompletionRatio2JSONString()
+	common.OptionMap["ChannelCacheRatio"] = ratio_setting.ChannelCacheRatio2JSONString()
+	common.OptionMap["ChannelCreateCacheRatio"] = ratio_setting.ChannelCreateCacheRatio2JSONString()
+	common.OptionMap["ChannelImageRatio"] = ratio_setting.ChannelImageRatio2JSONString()
+	common.OptionMap["ChannelAudioRatio"] = ratio_setting.ChannelAudioRatio2JSONString()
+	common.OptionMap["ChannelAudioCompletionRatio"] = ratio_setting.ChannelAudioCompletionRatio2JSONString()
+	common.OptionMap["SupplierModelPrice"] = ratio_setting.SupplierModelPrice2JSONString()
+	common.OptionMap["SupplierModelRatio"] = ratio_setting.SupplierModelRatio2JSONString()
 	common.OptionMap["UserUsableGroups"] = setting.UserUsableGroups2JSONString()
 	common.OptionMap["CompletionRatio"] = ratio_setting.CompletionRatio2JSONString()
 	common.OptionMap["ImageRatio"] = ratio_setting.ImageRatio2JSONString()
@@ -193,7 +205,7 @@ func loadOptionsFromDatabase() {
 	for _, option := range options {
 		err := updateOptionMap(option.Key, option.Value)
 		if err != nil {
-			common.SysLog("failed to update option map: " + err.Error())
+			common.SysLog("failed to update option map [" + option.Key + "]: " + err.Error())
 		}
 	}
 }
@@ -511,6 +523,30 @@ func updateOptionMap(key string, value string) (err error) {
 		err = ratio_setting.UpdateGroupRatioByJSONString(value)
 	case "GroupGroupRatio":
 		err = ratio_setting.UpdateGroupGroupRatioByJSONString(value)
+	case "GroupModelPrice":
+		err = ratio_setting.UpdateGroupModelPriceByJSONString(value)
+	case "GroupModelRatio":
+		err = ratio_setting.UpdateGroupModelRatioByJSONString(value)
+	case "ChannelModelPrice":
+		err = ratio_setting.UpdateChannelModelPriceByJSONString(value)
+	case "ChannelModelRatio":
+		err = ratio_setting.UpdateChannelModelRatioByJSONString(value)
+	case "ChannelCompletionRatio":
+		err = ratio_setting.UpdateChannelCompletionRatioByJSONString(value)
+	case "ChannelCacheRatio":
+		err = ratio_setting.UpdateChannelCacheRatioByJSONString(value)
+	case "ChannelCreateCacheRatio":
+		err = ratio_setting.UpdateChannelCreateCacheRatioByJSONString(value)
+	case "ChannelImageRatio":
+		err = ratio_setting.UpdateChannelImageRatioByJSONString(value)
+	case "ChannelAudioRatio":
+		err = ratio_setting.UpdateChannelAudioRatioByJSONString(value)
+	case "ChannelAudioCompletionRatio":
+		err = ratio_setting.UpdateChannelAudioCompletionRatioByJSONString(value)
+	case "SupplierModelPrice":
+		err = ratio_setting.UpdateSupplierModelPriceByJSONString(value)
+	case "SupplierModelRatio":
+		err = ratio_setting.UpdateSupplierModelRatioByJSONString(value)
 	case "UserUsableGroups":
 		err = setting.UpdateUserUsableGroupsByJSONString(value)
 	case "CompletionRatio":

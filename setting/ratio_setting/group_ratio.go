@@ -3,6 +3,7 @@ package ratio_setting
 import (
 	"encoding/json"
 	"errors"
+	"strconv"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/config"
@@ -24,6 +25,18 @@ var defaultGroupGroupRatio = map[string]map[string]float64{
 }
 
 var groupGroupRatioMap = types.NewRWMap[string, map[string]float64]()
+var groupModelPriceMap = types.NewRWMap[string, map[string]float64]()
+var groupModelRatioMap = types.NewRWMap[string, map[string]float64]()
+var channelModelPriceMap = types.NewRWMap[string, map[string]float64]()
+var channelModelRatioMap = types.NewRWMap[string, map[string]float64]()
+var channelCompletionRatioMap = types.NewRWMap[string, map[string]float64]()
+var channelCacheRatioMap = types.NewRWMap[string, map[string]float64]()
+var channelCreateCacheRatioMap = types.NewRWMap[string, map[string]float64]()
+var channelImageRatioMap = types.NewRWMap[string, map[string]float64]()
+var channelAudioRatioMap = types.NewRWMap[string, map[string]float64]()
+var channelAudioCompletionRatioMap = types.NewRWMap[string, map[string]float64]()
+var supplierModelPriceMap = types.NewRWMap[string, map[string]float64]()
+var supplierModelRatioMap = types.NewRWMap[string, map[string]float64]()
 
 var defaultGroupSpecialUsableGroup = map[string]map[string]string{
 	"vip": {
@@ -78,7 +91,7 @@ func GroupRatio2JSONString() string {
 }
 
 func UpdateGroupRatioByJSONString(jsonStr string) error {
-	return types.LoadFromJsonString(groupRatioMap, jsonStr)
+	return types.LoadFloat64MapFromJSONStringFlexibleWithCallback(groupRatioMap, jsonStr, nil)
 }
 
 func GetGroupRatio(name string) float64 {
@@ -100,6 +113,285 @@ func GetGroupGroupRatio(userGroup, usingGroup string) (float64, bool) {
 		return -1, false
 	}
 	return ratio, true
+}
+
+func GetGroupModelPrice(group, model string) (float64, bool) {
+	groupPrices, ok := groupModelPriceMap.Get(group)
+	if !ok {
+		return -1, false
+	}
+	model = FormatMatchingModelName(model)
+	price, ok := groupPrices[model]
+	if !ok {
+		return -1, false
+	}
+	return price, true
+}
+
+func GroupModelPrice2JSONString() string {
+	return groupModelPriceMap.MarshalJSONString()
+}
+
+func UpdateGroupModelPriceByJSONString(jsonStr string) error {
+	return types.LoadFromJsonString(groupModelPriceMap, jsonStr)
+}
+
+func GetGroupModelPriceCopy() map[string]map[string]float64 {
+	return groupModelPriceMap.ReadAll()
+}
+
+func GetGroupModelRatio(group, model string) (float64, bool) {
+	groupRatios, ok := groupModelRatioMap.Get(group)
+	if !ok {
+		return -1, false
+	}
+	model = FormatMatchingModelName(model)
+	ratio, ok := groupRatios[model]
+	if !ok {
+		return -1, false
+	}
+	return ratio, true
+}
+
+func GroupModelRatio2JSONString() string {
+	return groupModelRatioMap.MarshalJSONString()
+}
+
+func UpdateGroupModelRatioByJSONString(jsonStr string) error {
+	return types.LoadFromJsonString(groupModelRatioMap, jsonStr)
+}
+
+func GetGroupModelRatioCopy() map[string]map[string]float64 {
+	return groupModelRatioMap.ReadAll()
+}
+
+func normalizeChannelID(channelID int) string {
+	if channelID <= 0 {
+		return ""
+	}
+	return strconv.Itoa(channelID)
+}
+
+func GetChannelModelPrice(channelID int, model string) (float64, bool) {
+	key := normalizeChannelID(channelID)
+	if key == "" {
+		return -1, false
+	}
+	channelPrices, ok := channelModelPriceMap.Get(key)
+	if !ok {
+		return -1, false
+	}
+	model = FormatMatchingModelName(model)
+	price, ok := channelPrices[model]
+	if !ok {
+		return -1, false
+	}
+	return price, true
+}
+
+func ChannelModelPrice2JSONString() string {
+	return channelModelPriceMap.MarshalJSONString()
+}
+
+func UpdateChannelModelPriceByJSONString(jsonStr string) error {
+	return types.LoadFromJsonString(channelModelPriceMap, jsonStr)
+}
+
+func GetChannelModelPriceCopy() map[string]map[string]float64 {
+	return channelModelPriceMap.ReadAll()
+}
+
+func GetChannelModelRatio(channelID int, model string) (float64, bool) {
+	key := normalizeChannelID(channelID)
+	if key == "" {
+		return -1, false
+	}
+	channelRatios, ok := channelModelRatioMap.Get(key)
+	if !ok {
+		return -1, false
+	}
+	model = FormatMatchingModelName(model)
+	ratio, ok := channelRatios[model]
+	if !ok {
+		return -1, false
+	}
+	return ratio, true
+}
+
+func ChannelModelRatio2JSONString() string {
+	return channelModelRatioMap.MarshalJSONString()
+}
+
+func UpdateChannelModelRatioByJSONString(jsonStr string) error {
+	return types.LoadFromJsonString(channelModelRatioMap, jsonStr)
+}
+
+func GetChannelModelRatioCopy() map[string]map[string]float64 {
+	return channelModelRatioMap.ReadAll()
+}
+
+func getChannelScopedValue(
+	channelID int,
+	model string,
+	m *types.RWMap[string, map[string]float64],
+) (float64, bool) {
+	key := normalizeChannelID(channelID)
+	if key == "" {
+		return -1, false
+	}
+	channelMap, ok := m.Get(key)
+	if !ok {
+		return -1, false
+	}
+	model = FormatMatchingModelName(model)
+	val, ok := channelMap[model]
+	if !ok {
+		return -1, false
+	}
+	return val, true
+}
+
+func GetChannelCompletionRatio(channelID int, model string) (float64, bool) {
+	return getChannelScopedValue(channelID, model, channelCompletionRatioMap)
+}
+func ChannelCompletionRatio2JSONString() string {
+	return channelCompletionRatioMap.MarshalJSONString()
+}
+func UpdateChannelCompletionRatioByJSONString(jsonStr string) error {
+	return types.LoadFromJsonString(channelCompletionRatioMap, jsonStr)
+}
+func GetChannelCompletionRatioCopy() map[string]map[string]float64 {
+	return channelCompletionRatioMap.ReadAll()
+}
+
+func GetChannelCacheRatio(channelID int, model string) (float64, bool) {
+	return getChannelScopedValue(channelID, model, channelCacheRatioMap)
+}
+func ChannelCacheRatio2JSONString() string {
+	return channelCacheRatioMap.MarshalJSONString()
+}
+func UpdateChannelCacheRatioByJSONString(jsonStr string) error {
+	return types.LoadFromJsonString(channelCacheRatioMap, jsonStr)
+}
+func GetChannelCacheRatioCopy() map[string]map[string]float64 {
+	return channelCacheRatioMap.ReadAll()
+}
+
+func GetChannelCreateCacheRatio(channelID int, model string) (float64, bool) {
+	return getChannelScopedValue(channelID, model, channelCreateCacheRatioMap)
+}
+func ChannelCreateCacheRatio2JSONString() string {
+	return channelCreateCacheRatioMap.MarshalJSONString()
+}
+func UpdateChannelCreateCacheRatioByJSONString(jsonStr string) error {
+	return types.LoadFromJsonString(channelCreateCacheRatioMap, jsonStr)
+}
+func GetChannelCreateCacheRatioCopy() map[string]map[string]float64 {
+	return channelCreateCacheRatioMap.ReadAll()
+}
+
+func GetChannelImageRatio(channelID int, model string) (float64, bool) {
+	return getChannelScopedValue(channelID, model, channelImageRatioMap)
+}
+func ChannelImageRatio2JSONString() string {
+	return channelImageRatioMap.MarshalJSONString()
+}
+func UpdateChannelImageRatioByJSONString(jsonStr string) error {
+	return types.LoadFromJsonString(channelImageRatioMap, jsonStr)
+}
+func GetChannelImageRatioCopy() map[string]map[string]float64 {
+	return channelImageRatioMap.ReadAll()
+}
+
+func GetChannelAudioRatio(channelID int, model string) (float64, bool) {
+	return getChannelScopedValue(channelID, model, channelAudioRatioMap)
+}
+func ChannelAudioRatio2JSONString() string {
+	return channelAudioRatioMap.MarshalJSONString()
+}
+func UpdateChannelAudioRatioByJSONString(jsonStr string) error {
+	return types.LoadFromJsonString(channelAudioRatioMap, jsonStr)
+}
+func GetChannelAudioRatioCopy() map[string]map[string]float64 {
+	return channelAudioRatioMap.ReadAll()
+}
+
+func GetChannelAudioCompletionRatio(channelID int, model string) (float64, bool) {
+	return getChannelScopedValue(channelID, model, channelAudioCompletionRatioMap)
+}
+func ChannelAudioCompletionRatio2JSONString() string {
+	return channelAudioCompletionRatioMap.MarshalJSONString()
+}
+func UpdateChannelAudioCompletionRatioByJSONString(jsonStr string) error {
+	return types.LoadFromJsonString(channelAudioCompletionRatioMap, jsonStr)
+}
+func GetChannelAudioCompletionRatioCopy() map[string]map[string]float64 {
+	return channelAudioCompletionRatioMap.ReadAll()
+}
+
+func normalizeSupplierID(supplierID int) string {
+	if supplierID <= 0 {
+		return ""
+	}
+	return strconv.Itoa(supplierID)
+}
+
+func GetSupplierModelPrice(supplierID int, model string) (float64, bool) {
+	key := normalizeSupplierID(supplierID)
+	if key == "" {
+		return -1, false
+	}
+	supplierPrices, ok := supplierModelPriceMap.Get(key)
+	if !ok {
+		return -1, false
+	}
+	model = FormatMatchingModelName(model)
+	price, ok := supplierPrices[model]
+	if !ok {
+		return -1, false
+	}
+	return price, true
+}
+
+func SupplierModelPrice2JSONString() string {
+	return supplierModelPriceMap.MarshalJSONString()
+}
+
+func UpdateSupplierModelPriceByJSONString(jsonStr string) error {
+	return types.LoadFromJsonString(supplierModelPriceMap, jsonStr)
+}
+
+func GetSupplierModelPriceCopy() map[string]map[string]float64 {
+	return supplierModelPriceMap.ReadAll()
+}
+
+func GetSupplierModelRatio(supplierID int, model string) (float64, bool) {
+	key := normalizeSupplierID(supplierID)
+	if key == "" {
+		return -1, false
+	}
+	supplierRatios, ok := supplierModelRatioMap.Get(key)
+	if !ok {
+		return -1, false
+	}
+	model = FormatMatchingModelName(model)
+	ratio, ok := supplierRatios[model]
+	if !ok {
+		return -1, false
+	}
+	return ratio, true
+}
+
+func SupplierModelRatio2JSONString() string {
+	return supplierModelRatioMap.MarshalJSONString()
+}
+
+func UpdateSupplierModelRatioByJSONString(jsonStr string) error {
+	return types.LoadFromJsonString(supplierModelRatioMap, jsonStr)
+}
+
+func GetSupplierModelRatioCopy() map[string]map[string]float64 {
+	return supplierModelRatioMap.ReadAll()
 }
 
 func GroupGroupRatio2JSONString() string {

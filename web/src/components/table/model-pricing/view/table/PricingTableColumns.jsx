@@ -105,6 +105,8 @@ export const getPricingTableColumns = ({
   t,
   selectedGroup,
   groupRatio,
+  groupModelPrice,
+  groupModelRatio,
   copyText,
   setModalImageUrl,
   setIsModalOpenurl,
@@ -124,6 +126,8 @@ export const getPricingTableColumns = ({
         record,
         selectedGroup,
         groupRatio,
+        groupModelPrice,
+        groupModelRatio,
         tokenUnit,
         displayPrice,
         currency,
@@ -214,7 +218,10 @@ export const getPricingTableColumns = ({
       return (
         <div className='space-y-1'>
           <div className='text-gray-700'>
-            {t('模型倍率')}：{record.quota_type === 0 ? text : t('无')}
+            {t('模型倍率')}：
+            {record.quota_type === 0
+              ? priceData?.inputRatio ?? text
+              : t('无')}
           </div>
           <div className='text-gray-700'>
             {t('输出倍率')}：

@@ -27,6 +27,8 @@ const { Text } = Typography;
 const ModelPricingTable = ({
   modelData,
   groupRatio,
+  groupModelPrice,
+  groupModelRatio,
   currency,
   siteDisplayType,
   tokenUnit,
@@ -55,6 +57,8 @@ const ModelPricingTable = ({
             record: modelData,
             selectedGroup: group,
             groupRatio,
+            groupModelPrice,
+            groupModelRatio,
             tokenUnit,
             displayPrice,
             currency,

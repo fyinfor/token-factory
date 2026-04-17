@@ -62,9 +62,10 @@ func valuesEqual(a, b interface{}) bool {
 var ratioTypes = []string{"model_ratio", "completion_ratio", "cache_ratio", "model_price"}
 
 type upstreamResult struct {
-	Name string         `json:"name"`
-	Data map[string]any `json:"data,omitempty"`
-	Err  string         `json:"err,omitempty"`
+	Name      string         `json:"name"`
+	ChannelID int            `json:"channel_id"`
+	Data      map[string]any `json:"data,omitempty"`
+	Err       string         `json:"err,omitempty"`
 }
 
 func FetchUpstreamRatios(c *gin.Context) {
@@ -182,7 +183,7 @@ func FetchUpstreamRatios(c *gin.Context) {
 			httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
 			if err != nil {
 				logger.LogWarn(c.Request.Context(), "build request failed: "+err.Error())
-				ch <- upstreamResult{Name: uniqueName, Err: err.Error()}
+				ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: err.Error()}
 				return
 			}
 
@@ -190,21 +191,21 @@ func FetchUpstreamRatios(c *gin.Context) {
 			if isOpenRouter && chItem.ID != 0 {
 				dbCh, err := model.GetChannelById(chItem.ID, true)
 				if err != nil {
-					ch <- upstreamResult{Name: uniqueName, Err: "failed to get channel key: " + err.Error()}
+					ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: "failed to get channel key: " + err.Error()}
 					return
 				}
 				key, _, apiErr := dbCh.GetNextEnabledKey()
 				if apiErr != nil {
-					ch <- upstreamResult{Name: uniqueName, Err: "failed to get enabled channel key: " + apiErr.Error()}
+					ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: "failed to get enabled channel key: " + apiErr.Error()}
 					return
 				}
 				if strings.TrimSpace(key) == "" {
-					ch <- upstreamResult{Name: uniqueName, Err: "no API key configured for this channel"}
+					ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: "no API key configured for this channel"}
 					return
 				}
 				httpReq.Header.Set("Authorization", "Bearer "+strings.TrimSpace(key))
 			} else if isOpenRouter {
-				ch <- upstreamResult{Name: uniqueName, Err: "OpenRouter requires a valid channel with API key"}
+				ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: "OpenRouter requires a valid channel with API key"}
 				return
 			}
 
@@ -220,13 +221,13 @@ func FetchUpstreamRatios(c *gin.Context) {
 			}
 			if lastErr != nil {
 				logger.LogWarn(c.Request.Context(), "http error on "+chItem.Name+": "+lastErr.Error())
-				ch <- upstreamResult{Name: uniqueName, Err: lastErr.Error()}
+				ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: lastErr.Error()}
 				return
 			}
 			defer resp.Body.Close()
 			if resp.StatusCode != http.StatusOK {
 				logger.LogWarn(c.Request.Context(), "non-200 from "+chItem.Name+": "+resp.Status)
-				ch <- upstreamResult{Name: uniqueName, Err: resp.Status}
+				ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: resp.Status}
 				return
 			}
 
@@ -238,7 +239,7 @@ func FetchUpstreamRatios(c *gin.Context) {
 			bodyBytes, err := io.ReadAll(limited)
 			if err != nil {
 				logger.LogWarn(c.Request.Context(), "read response failed from "+chItem.Name+": "+err.Error())
-				ch <- upstreamResult{Name: uniqueName, Err: err.Error()}
+				ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: err.Error()}
 				return
 			}
 
@@ -247,10 +248,10 @@ func FetchUpstreamRatios(c *gin.Context) {
 				converted, err := convertOpenRouterToRatioData(bytes.NewReader(bodyBytes))
 				if err != nil {
 					logger.LogWarn(c.Request.Context(), "OpenRouter parse failed from "+chItem.Name+": "+err.Error())
-					ch <- upstreamResult{Name: uniqueName, Err: err.Error()}
+					ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: err.Error()}
 					return
 				}
-				ch <- upstreamResult{Name: uniqueName, Data: converted}
+				ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Data: converted}
 				return
 			}
 
@@ -259,10 +260,10 @@ func FetchUpstreamRatios(c *gin.Context) {
 				converted, err := convertModelsDevToRatioData(bytes.NewReader(bodyBytes))
 				if err != nil {
 					logger.LogWarn(c.Request.Context(), "models.dev parse failed from "+chItem.Name+": "+err.Error())
-					ch <- upstreamResult{Name: uniqueName, Err: err.Error()}
+					ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: err.Error()}
 					return
 				}
-				ch <- upstreamResult{Name: uniqueName, Data: converted}
+				ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Data: converted}
 				return
 			}
 
@@ -277,12 +278,12 @@ func FetchUpstreamRatios(c *gin.Context) {
 
 			if err := common.DecodeJson(bytes.NewReader(bodyBytes), &body); err != nil {
 				logger.LogWarn(c.Request.Context(), "json decode failed from "+chItem.Name+": "+err.Error())
-				ch <- upstreamResult{Name: uniqueName, Err: err.Error()}
+				ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: err.Error()}
 				return
 			}
 
 			if !body.Success {
-				ch <- upstreamResult{Name: uniqueName, Err: body.Message}
+				ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: body.Message}
 				return
 			}
 
@@ -300,7 +301,7 @@ func FetchUpstreamRatios(c *gin.Context) {
 					}
 				}
 				if isType1 {
-					ch <- upstreamResult{Name: uniqueName, Data: type1Data}
+					ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Data: type1Data}
 					return
 				}
 			}
@@ -315,7 +316,7 @@ func FetchUpstreamRatios(c *gin.Context) {
 			}
 			if err := common.Unmarshal(body.Data, &pricingItems); err != nil {
 				logger.LogWarn(c.Request.Context(), "unrecognized data format from "+chItem.Name+": "+err.Error())
-				ch <- upstreamResult{Name: uniqueName, Err: "无法解析上游返回数据"}
+				ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: "无法解析上游返回数据"}
 				return
 			}
 
@@ -359,7 +360,7 @@ func FetchUpstreamRatios(c *gin.Context) {
 				converted["model_price"] = priceAny
 			}
 
-			ch <- upstreamResult{Name: uniqueName, Data: converted}
+			ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Data: converted}
 		}(chn)
 	}
 
@@ -369,10 +370,7 @@ func FetchUpstreamRatios(c *gin.Context) {
 	localData := ratio_setting.GetExposedData()
 
 	var testResults []dto.TestResult
-	var successfulChannels []struct {
-		name string
-		data map[string]any
-	}
+	var successfulChannels []upstreamSyncSource
 
 	for r := range ch {
 		if r.Err != "" {
@@ -386,10 +384,11 @@ func FetchUpstreamRatios(c *gin.Context) {
 				Name:   r.Name,
 				Status: "success",
 			})
-			successfulChannels = append(successfulChannels, struct {
-				name string
-				data map[string]any
-			}{name: r.Name, data: r.Data})
+			successfulChannels = append(successfulChannels, upstreamSyncSource{
+				name:      r.Name,
+				channelID: r.ChannelID,
+				data:      r.Data,
+			})
 		}
 	}
 
@@ -404,10 +403,45 @@ func FetchUpstreamRatios(c *gin.Context) {
 	})
 }
 
-func buildDifferences(localData map[string]any, successfulChannels []struct {
-	name string
-	data map[string]any
-}) map[string]map[string]dto.DifferenceItem {
+type upstreamSyncSource struct {
+	name      string
+	channelID int
+	data      map[string]any
+}
+
+// oldEffectiveForUpstream 返回该渠道列在同步前的生效价：正渠道 ID 时优先渠道覆盖，否则回落全局。
+func oldEffectiveForUpstream(channelID int, ratioType string, modelName string, localData map[string]any) interface{} {
+	if channelID > 0 {
+		switch ratioType {
+		case "model_ratio":
+			if v, ok := ratio_setting.GetChannelModelRatio(channelID, modelName); ok {
+				return v
+			}
+		case "completion_ratio":
+			if v, ok := ratio_setting.GetChannelCompletionRatio(channelID, modelName); ok {
+				return v
+			}
+		case "cache_ratio":
+			if v, ok := ratio_setting.GetChannelCacheRatio(channelID, modelName); ok {
+				return v
+			}
+		case "model_price":
+			if v, ok := ratio_setting.GetChannelModelPrice(channelID, modelName); ok {
+				return v
+			}
+		}
+	}
+	if localRatioAny, ok := localData[ratioType]; ok {
+		if localRatio, ok := localRatioAny.(map[string]float64); ok {
+			if val, exists := localRatio[modelName]; exists {
+				return val
+			}
+		}
+	}
+	return nil
+}
+
+func buildDifferences(localData map[string]any, successfulChannels []upstreamSyncSource) map[string]map[string]dto.DifferenceItem {
 	differences := make(map[string]map[string]dto.DifferenceItem)
 
 	allModels := make(map[string]struct{})
@@ -481,59 +515,36 @@ func buildDifferences(localData map[string]any, successfulChannels []struct {
 			}
 
 			upstreamValues := make(map[string]interface{})
+			upstreamOldVals := make(map[string]interface{})
 			confidenceValues := make(map[string]bool)
 			hasUpstreamValue := false
-			hasDifference := false
 
 			for _, channel := range successfulChannels {
-				var upstreamValue interface{} = nil
+				oldEff := oldEffectiveForUpstream(channel.channelID, ratioType, modelName, localData)
 
 				if upstreamRatio, ok := channel.data[ratioType].(map[string]any); ok {
 					if val, exists := upstreamRatio[modelName]; exists {
-						upstreamValue = val
 						hasUpstreamValue = true
-
-						if localValue != nil && !valuesEqual(localValue, val) {
-							hasDifference = true
-						} else if valuesEqual(localValue, val) {
-							upstreamValue = "same"
-						}
+						upstreamValues[channel.name] = val
+						upstreamOldVals[channel.name] = oldEff
 					}
 				}
-				if upstreamValue == nil && localValue == nil {
-					upstreamValue = "same"
-				}
-
-				if localValue == nil && upstreamValue != nil && upstreamValue != "same" {
-					hasDifference = true
-				}
-
-				upstreamValues[channel.name] = upstreamValue
 
 				confidenceValues[channel.name] = confidenceMap[channel.name][modelName]
 			}
 
-			shouldInclude := false
-
-			if localValue != nil {
-				if hasDifference {
-					shouldInclude = true
-				}
-			} else {
-				if hasUpstreamValue {
-					shouldInclude = true
-				}
+			if !hasUpstreamValue {
+				continue
 			}
 
-			if shouldInclude {
-				if differences[modelName] == nil {
-					differences[modelName] = make(map[string]dto.DifferenceItem)
-				}
-				differences[modelName][ratioType] = dto.DifferenceItem{
-					Current:    localValue,
-					Upstreams:  upstreamValues,
-					Confidence: confidenceValues,
-				}
+			if differences[modelName] == nil {
+				differences[modelName] = make(map[string]dto.DifferenceItem)
+			}
+			differences[modelName][ratioType] = dto.DifferenceItem{
+				Current:     localValue,
+				UpstreamOld: upstreamOldVals,
+				Upstreams:   upstreamValues,
+				Confidence:  confidenceValues,
 			}
 		}
 	}
@@ -541,8 +552,12 @@ func buildDifferences(localData map[string]any, successfulChannels []struct {
 	channelHasDiff := make(map[string]bool)
 	for _, ratioMap := range differences {
 		for _, item := range ratioMap {
-			for chName, val := range item.Upstreams {
-				if val != nil && val != "same" {
+			for chName, newV := range item.Upstreams {
+				if newV == nil {
+					continue
+				}
+				oldV, _ := item.UpstreamOld[chName]
+				if !valuesEqual(oldV, newV) {
 					channelHasDiff[chName] = true
 				}
 			}
@@ -555,17 +570,24 @@ func buildDifferences(localData map[string]any, successfulChannels []struct {
 				if !channelHasDiff[chName] {
 					delete(item.Upstreams, chName)
 					delete(item.Confidence, chName)
+					if item.UpstreamOld != nil {
+						delete(item.UpstreamOld, chName)
+					}
 				}
 			}
 
-			allSame := true
-			for _, v := range item.Upstreams {
-				if v != "same" {
-					allSame = false
+			allAligned := true
+			for chName, newV := range item.Upstreams {
+				if newV == nil {
+					continue
+				}
+				oldV, _ := item.UpstreamOld[chName]
+				if !valuesEqual(oldV, newV) {
+					allAligned = false
 					break
 				}
 			}
-			if len(item.Upstreams) == 0 || allSame {
+			if len(item.Upstreams) == 0 || allAligned {
 				delete(ratioMap, ratioType)
 			} else {
 				differences[modelName][ratioType] = item

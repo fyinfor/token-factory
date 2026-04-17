@@ -535,6 +535,8 @@ export function useModelPricingEditorState({
   t,
   candidateModelNames = EMPTY_CANDIDATE_MODEL_NAMES,
   filterMode = 'all',
+  optionKeys,
+  onSaveOutput,
 }) {
   const [models, setModels] = useState([]);
   const [initialVisibleModelNames, setInitialVisibleModelNames] = useState([]);
@@ -545,18 +547,42 @@ export function useModelPricingEditorState({
   const [loading, setLoading] = useState(false);
   const [conflictOnly, setConflictOnly] = useState(false);
   const [optionalFieldToggles, setOptionalFieldToggles] = useState({});
+  const resolvedOptionKeys = useMemo(
+    () => ({
+      ModelPrice: optionKeys?.ModelPrice || 'ModelPrice',
+      ModelRatio: optionKeys?.ModelRatio || 'ModelRatio',
+      CompletionRatio: optionKeys?.CompletionRatio || 'CompletionRatio',
+      CompletionRatioMeta:
+        optionKeys?.CompletionRatioMeta || 'CompletionRatioMeta',
+      CacheRatio: optionKeys?.CacheRatio || 'CacheRatio',
+      CreateCacheRatio: optionKeys?.CreateCacheRatio || 'CreateCacheRatio',
+      ImageRatio: optionKeys?.ImageRatio || 'ImageRatio',
+      AudioRatio: optionKeys?.AudioRatio || 'AudioRatio',
+      AudioCompletionRatio:
+        optionKeys?.AudioCompletionRatio || 'AudioCompletionRatio',
+    }),
+    [optionKeys],
+  );
 
   useEffect(() => {
     const sourceMaps = {
-      ModelPrice: parseOptionJSON(options.ModelPrice),
-      ModelRatio: parseOptionJSON(options.ModelRatio),
-      CompletionRatio: parseOptionJSON(options.CompletionRatio),
-      CompletionRatioMeta: parseOptionJSON(options.CompletionRatioMeta),
-      CacheRatio: parseOptionJSON(options.CacheRatio),
-      CreateCacheRatio: parseOptionJSON(options.CreateCacheRatio),
-      ImageRatio: parseOptionJSON(options.ImageRatio),
-      AudioRatio: parseOptionJSON(options.AudioRatio),
-      AudioCompletionRatio: parseOptionJSON(options.AudioCompletionRatio),
+      ModelPrice: parseOptionJSON(options[resolvedOptionKeys.ModelPrice]),
+      ModelRatio: parseOptionJSON(options[resolvedOptionKeys.ModelRatio]),
+      CompletionRatio: parseOptionJSON(
+        options[resolvedOptionKeys.CompletionRatio],
+      ),
+      CompletionRatioMeta: parseOptionJSON(
+        options[resolvedOptionKeys.CompletionRatioMeta],
+      ),
+      CacheRatio: parseOptionJSON(options[resolvedOptionKeys.CacheRatio]),
+      CreateCacheRatio: parseOptionJSON(
+        options[resolvedOptionKeys.CreateCacheRatio],
+      ),
+      ImageRatio: parseOptionJSON(options[resolvedOptionKeys.ImageRatio]),
+      AudioRatio: parseOptionJSON(options[resolvedOptionKeys.AudioRatio]),
+      AudioCompletionRatio: parseOptionJSON(
+        options[resolvedOptionKeys.AudioCompletionRatio],
+      ),
     };
 
     const names = new Set([
@@ -600,7 +626,7 @@ export function useModelPricingEditorState({
           : nextModels;
       return nextVisibleModels[0]?.name || '';
     });
-  }, [candidateModelNames, filterMode, options]);
+  }, [candidateModelNames, filterMode, options, resolvedOptionKeys]);
 
   const visibleModels = useMemo(() => {
     return filterMode === 'unset'
@@ -929,17 +955,21 @@ export function useModelPricingEditorState({
         });
       }
 
-      const requestQueue = Object.entries(output).map(([key, value]) =>
-        API.put('/api/option/', {
-          key,
-          value: JSON.stringify(value, null, 2),
-        }),
-      );
+      if (onSaveOutput) {
+        await onSaveOutput(output);
+      } else {
+        const requestQueue = Object.entries(output).map(([key, value]) =>
+          API.put('/api/option/', {
+            key,
+            value: JSON.stringify(value, null, 2),
+          }),
+        );
 
-      const results = await Promise.all(requestQueue);
-      for (const res of results) {
-        if (!res?.data?.success) {
-          throw new Error(res?.data?.message || t('保存失败，请重试'));
+        const results = await Promise.all(requestQueue);
+        for (const res of results) {
+          if (!res?.data?.success) {
+            throw new Error(res?.data?.message || t('保存失败，请重试'));
+          }
         }
       }
 

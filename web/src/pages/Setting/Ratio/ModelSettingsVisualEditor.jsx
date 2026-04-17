@@ -17,9 +17,48 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { Tabs } from '@douyinfe/semi-ui';
+import { useTranslation } from 'react-i18next';
 import ModelPricingEditor from './components/ModelPricingEditor';
+import SupplierModelPricingEditor from './components/SupplierModelPricingEditor';
+import { API } from '../../../helpers';
 
 export default function ModelSettingsVisualEditor(props) {
-  return <ModelPricingEditor options={props.options} refresh={props.refresh} />;
+  const { t } = useTranslation();
+  const [pricingSuppliers, setPricingSuppliers] = useState([]);
+
+  useEffect(() => {
+    const loadSuppliers = async () => {
+      try {
+        const res = await API.get('/api/pricing');
+        if (res?.data?.success) {
+          setPricingSuppliers(res.data.channels || []);
+        }
+      } catch (error) {
+        console.error('failed to load suppliers:', error);
+      }
+    };
+    loadSuppliers();
+  }, []);
+
+  const extendedOptions = {
+    ...props.options,
+    __pricingChannels: pricingSuppliers,
+  };
+
+  return (
+    <Tabs type='line' defaultActiveKey='global'>
+      <Tabs.TabPane tab={t('全局模型定价')} itemKey='global'>
+        <ModelPricingEditor options={props.options} refresh={props.refresh} />
+      </Tabs.TabPane>
+      <Tabs.TabPane tab={t('渠道模型定价')} itemKey='supplier'>
+        <SupplierModelPricingEditor
+          options={extendedOptions}
+          refresh={props.refresh}
+          candidateModelNames={props.candidateModelNames}
+        />
+      </Tabs.TabPane>
+    </Tabs>
+  );
 }
