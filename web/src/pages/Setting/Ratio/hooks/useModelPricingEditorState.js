@@ -534,6 +534,7 @@ export function useModelPricingEditorState({
   refresh,
   t,
   candidateModelNames = EMPTY_CANDIDATE_MODEL_NAMES,
+  strictCandidateModelNames = false,
   filterMode = 'all',
   optionKeys,
   onSaveOutput,
@@ -585,18 +586,21 @@ export function useModelPricingEditorState({
       ),
     };
 
-    const names = new Set([
-      ...candidateModelNames,
-      ...Object.keys(sourceMaps.ModelPrice),
-      ...Object.keys(sourceMaps.ModelRatio),
-      ...Object.keys(sourceMaps.CompletionRatio),
-      ...Object.keys(sourceMaps.CompletionRatioMeta),
-      ...Object.keys(sourceMaps.CacheRatio),
-      ...Object.keys(sourceMaps.CreateCacheRatio),
-      ...Object.keys(sourceMaps.ImageRatio),
-      ...Object.keys(sourceMaps.AudioRatio),
-      ...Object.keys(sourceMaps.AudioCompletionRatio),
-    ]);
+    // strictCandidateModelNames=true 时，模型列表严格限制为外部传入候选模型（用于按渠道筛模型）。
+    const names = strictCandidateModelNames
+      ? new Set(candidateModelNames)
+      : new Set([
+          ...candidateModelNames,
+          ...Object.keys(sourceMaps.ModelPrice),
+          ...Object.keys(sourceMaps.ModelRatio),
+          ...Object.keys(sourceMaps.CompletionRatio),
+          ...Object.keys(sourceMaps.CompletionRatioMeta),
+          ...Object.keys(sourceMaps.CacheRatio),
+          ...Object.keys(sourceMaps.CreateCacheRatio),
+          ...Object.keys(sourceMaps.ImageRatio),
+          ...Object.keys(sourceMaps.AudioRatio),
+          ...Object.keys(sourceMaps.AudioCompletionRatio),
+        ]);
 
     const nextModels = Array.from(names)
       .map((name) => buildModelState(name, sourceMaps))
@@ -626,7 +630,13 @@ export function useModelPricingEditorState({
           : nextModels;
       return nextVisibleModels[0]?.name || '';
     });
-  }, [candidateModelNames, filterMode, options, resolvedOptionKeys]);
+  }, [
+    candidateModelNames,
+    filterMode,
+    options,
+    resolvedOptionKeys,
+    strictCandidateModelNames,
+  ]);
 
   const visibleModels = useMemo(() => {
     return filterMode === 'unset'

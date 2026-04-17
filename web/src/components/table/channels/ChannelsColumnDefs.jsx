@@ -683,6 +683,20 @@ export const getChannelsColumns = ({
       },
     },
     {
+      key: COLUMN_KEYS.SUPPLIER,
+      title: t('供应商'),
+      dataIndex: 'supplier_name',
+      render: (text, record) => {
+        if (record.children !== undefined) {
+          return '-';
+        }
+        if (!text || text.trim() === '') {
+          return '-';
+        }
+        return text;
+      },
+    },
+    {
       key: COLUMN_KEYS.OPERATE,
       title: '',
       dataIndex: 'operate',

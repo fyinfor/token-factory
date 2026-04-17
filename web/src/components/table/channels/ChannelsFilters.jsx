@@ -105,6 +105,16 @@ const ChannelsFilters = ({
               pure
             />
           </div>
+          <div className='w-full md:w-40'>
+            <Form.Input
+              size='small'
+              field='searchSupplier'
+              prefix={<IconSearch />}
+              placeholder={t('供应商')}
+              showClear
+              pure
+            />
+          </div>
           <div className='w-full md:w-32'>
             <Form.Select
               size='small'
