@@ -80,6 +80,7 @@ import {
   Handshake,
   UserPlus,
   ClipboardList,
+  DollarSign,
 } from 'lucide-react';
 import {
   SiAtlassian,
@@ -161,10 +162,10 @@ export function getLucideIcon(key, selected = false) {
       return <UserPlus {...commonProps} color={iconColor} />;
     case 'supplier-channel':
       return <Layers {...commonProps} color={iconColor} />;
-    case 'supplier-models':
-      return <Package {...commonProps} color={iconColor} />;
     case 'supplier-management':
       return <Store {...commonProps} color={iconColor} />;
+    case 'supplier-pricing-settings':
+      return <DollarSign {...commonProps} color={iconColor} />;
     case 'supplier-application-approval':
       return <ClipboardList {...commonProps} color={iconColor} />;
     case 'supplier-list':

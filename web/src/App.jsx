@@ -49,7 +49,7 @@ import OAuth2Callback from './components/auth/OAuth2Callback';
 import PersonalSetting from './components/settings/PersonalSetting';
 import SupplierApplyPage from './pages/Supplier/Apply';
 import SupplierChannelPage from './pages/Supplier/Channel';
-import SupplierModelsPage from './pages/Supplier/Models';
+import PricingSettingsPage from './pages/Supplier/PricingSettings';
 import SupplierApplication from './pages/SupplierAdmin/application';
 import Suppliers from './pages/SupplierAdmin/list';
 import Setup from './pages/Setup';
@@ -325,10 +325,10 @@ function App() {
           }
         />
         <Route
-          path='/console/supplier/models'
+          path='/console/supplier/pricing-settings'
           element={
             <PrivateRoute>
-              <SupplierModelsPage />
+              <PricingSettingsPage />
             </PrivateRoute>
           }
         />
