@@ -485,10 +485,13 @@ func updateOptionMap(key string, value string) (err error) {
 	case "TurnstileSecretKey":
 		common.TurnstileSecretKey = value
 	case "QuotaForNewUser":
+		// 站内额度整数；管理端以美元填写，提交前已按 QuotaPerUnit 换算（与 common.QuotaFromUSD 一致）
 		common.QuotaForNewUser, _ = strconv.Atoi(value)
 	case "QuotaForInviter":
+		// 站内额度整数；管理端以美元填写，提交前已按 QuotaPerUnit 换算（与 common.QuotaFromUSD 一致）
 		common.QuotaForInviter, _ = strconv.Atoi(value)
 	case "QuotaForInvitee":
+		// 同上：被邀请人注册奖励写入 quota，存库为换算后的额度整数
 		common.QuotaForInvitee, _ = strconv.Atoi(value)
 	case "AffiliateDefaultCommissionBps":
 		if n, err := strconv.Atoi(value); err == nil && n >= 0 && n <= 10000 {

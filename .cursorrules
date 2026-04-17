@@ -1,0 +1,4 @@
+# AI Commit Message 中文设置
+- 生成 commit message 时请使用中文
+- commit message 遵循 Conventional Commits 规范，格式：[类型]: 简短中文描述
+- 示例：feat: 添加用户登录功能；fix: 修复支付模块接口超时
