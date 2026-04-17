@@ -332,19 +332,59 @@ func HardDeleteUserById(id int) error {
 	return err
 }
 
-// inviteUser 在有新用户通过邀请注册时更新邀请人：邀请人数始终 +1；
-// 邀请奖励额度（aff_quota / aff_history）仅在 QuotaForInviter > 0 时累加，与历史配置一致。
+// inviteUser 在新用户通过邀请注册成功后调用：邀请人数（aff_count）+1；
+// 若运营配置了邀请人注册奖励（QuotaForInviter），则直接增加邀请人可用额度（quota）。
+//
+// 说明：注册类邀请奖励与「分销充值提成」分流——后者仍通过 IncreaseUserAffCommissionQuota
+// 写入 aff_quota / aff_history；本函数不再触碰 aff_quota、aff_history，避免与分销待结算/历史统计混淆。
+// 历史已写入 aff_* 的数据不做迁移，仅新产生的注册奖励走 quota。
 func inviteUser(inviterId int) (err error) {
-	user, err := GetUserById(inviterId, true)
+	if inviterId <= 0 {
+		return nil
+	}
+	if _, err = GetUserById(inviterId, true); err != nil {
+		return err
+	}
+
+	reward := common.QuotaForInviter
+	// 与 IncreaseUserQuota 一致：Batch 模式下额度写入走批处理队列，不能在事务内直接改 quota。
+	useBatchQuota := reward > 0 && common.BatchUpdateEnabled
+
+	tx := DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	defer tx.Rollback()
+
+	if err = tx.Model(&User{}).Where("id = ?", inviterId).UpdateColumn("aff_count", gorm.Expr("aff_count + ?", 1)).Error; err != nil {
+		return err
+	}
+	if reward > 0 && !useBatchQuota {
+		if err = tx.Model(&User{}).Where("id = ?", inviterId).UpdateColumn("quota", gorm.Expr("quota + ?", reward)).Error; err != nil {
+			return err
+		}
+	}
+	if err = tx.Commit().Error; err != nil {
+		return err
+	}
+
+	if useBatchQuota {
+		if err = IncreaseUserQuota(inviterId, reward, true); err != nil {
+			return err
+		}
+	} else if reward > 0 {
+		gopool.Go(func() {
+			if err := cacheIncrUserQuota(inviterId, int64(reward)); err != nil {
+				common.SysLog("inviteUser cacheIncrUserQuota: " + err.Error())
+			}
+		})
+	}
+
+	inviter, err := GetUserById(inviterId, true)
 	if err != nil {
 		return err
 	}
-	user.AffCount++
-	if common.QuotaForInviter > 0 {
-		user.AffQuota += common.QuotaForInviter
-		user.AffHistoryQuota += common.QuotaForInviter
-	}
-	return DB.Save(user).Error
+	return updateUserCache(*inviter)
 }
 
 func (user *User) TransferAffQuotaToQuota(quota int) error {
