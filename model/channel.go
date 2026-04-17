@@ -56,6 +56,7 @@ type Channel struct {
 	OtherSettings         string `json:"settings" gorm:"column:settings"`                         // 其他设置，存储azure版本等不需要检索的信息，详见dto.ChannelOtherSettings
 	OwnerUserID           int    `json:"owner_user_id" gorm:"type:int;index;default:0"`           // 渠道归属用户ID（供应商场景）
 	SupplierApplicationID int    `json:"supplier_application_id" gorm:"type:int;index;default:0"` // 关联 supplier_applications.id
+	SupplierName          string `json:"supplier_name,omitempty" gorm:"-"`                        // 供应商用户名（由控制器回填，不落库）
 
 	// cache info
 	Keys []string `json:"-" gorm:"-"`
@@ -315,6 +316,7 @@ func ListAllSupplierChannels(startIdx int, num int) ([]*Channel, int64, error) {
 type SupplierChannelSearchFilter struct {
 	ChannelID    int
 	Keyword      string
+	Supplier     string
 	Name         string
 	Key          string
 	BaseURL      string
@@ -359,6 +361,9 @@ func SearchSupplierChannels(ownerUserID *int, startIdx int, num int, filter Supp
 	if filter.Keyword != "" {
 		keywordLike := "%" + filter.Keyword + "%"
 		query = query.Where("(name LIKE ? OR "+commonKeyCol+" LIKE ? OR base_url LIKE ?)", keywordLike, keywordLike, keywordLike)
+	}
+	if filter.Supplier != "" {
+		query = query.Joins("LEFT JOIN users ON users.id = channels.owner_user_id").Where("users.username LIKE ?", "%"+filter.Supplier+"%")
 	}
 	if filter.Name != "" {
 		query = query.Where("name LIKE ?", "%"+filter.Name+"%")
