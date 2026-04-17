@@ -61,6 +61,35 @@ func buildCompletionRatioMetaValue(optionValues map[string]string) string {
 }
 
 func GetOptions(c *gin.Context) {
+	// 已审核供应商仅返回其自有模型相关配置项，避免读取全局敏感配置。
+	if c.GetInt("role") < common.RoleAdminUser {
+		ownedModels, err := collectSupplierOwnedModelNames(c.GetInt("id"))
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		options := make([]*model.Option, 0, len(supplierEditableModelOptionKeys))
+		common.OptionMapRWMutex.Lock()
+		for key := range supplierEditableModelOptionKeys {
+			value := strings.TrimSpace(common.Interface2String(common.OptionMap[key]))
+			filteredValue, filterErr := filterModelJSONByOwnedModels(value, ownedModels)
+			if filterErr != nil {
+				continue
+			}
+			options = append(options, &model.Option{
+				Key:   key,
+				Value: filteredValue,
+			})
+		}
+		common.OptionMapRWMutex.Unlock()
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "",
+			"data":    options,
+		})
+		return
+	}
+
 	var options []*model.Option
 	optionValues := make(map[string]string)
 	common.OptionMapRWMutex.Lock()
@@ -144,7 +173,6 @@ func GetOptions(c *gin.Context) {
 		"message": "",
 		"data":    options,
 	})
-	return
 }
 
 type OptionUpdateRequest struct {
@@ -173,6 +201,42 @@ func UpdateOption(c *gin.Context) {
 		option.Value = fmt.Sprintf("%v", option.Value)
 	}
 	valStr := strings.TrimSpace(option.Value.(string))
+	// 已审核供应商仅可更新自己模型范围内的倍率相关配置，不可修改其他全局设置。
+	if c.GetInt("role") < common.RoleAdminUser {
+		if _, ok := supplierEditableModelOptionKeys[option.Key]; !ok {
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"message": "供应商仅可修改模型倍率相关配置",
+			})
+			return
+		}
+		ownedModels, err := collectSupplierOwnedModelNames(c.GetInt("id"))
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		common.OptionMapRWMutex.Lock()
+		currentValue := strings.TrimSpace(common.Interface2String(common.OptionMap[option.Key]))
+		common.OptionMapRWMutex.Unlock()
+		mergedValue, err := mergeModelJSONByOwnedModels(currentValue, valStr, ownedModels)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"success": false,
+				"message": "配置格式错误，仅支持 JSON 对象",
+			})
+			return
+		}
+		if err := model.UpdateOption(option.Key, mergedValue); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "",
+		})
+		return
+	}
+
 	if option.Key == "YipayAppSecret" && strings.TrimSpace(operation_setting.YipayAppSecret) != "" {
 		if valStr == common.MaskCredentialForAdminDisplay(operation_setting.YipayAppSecret) {
 			c.JSON(http.StatusOK, gin.H{
@@ -384,5 +448,4 @@ func UpdateOption(c *gin.Context) {
 		"success": true,
 		"message": "",
 	})
-	return
 }

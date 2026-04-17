@@ -313,6 +313,7 @@ func ListAllSupplierChannels(startIdx int, num int) ([]*Channel, int64, error) {
 // SupplierChannelSearchFilter 供应商渠道搜索过滤参数。
 type SupplierChannelSearchFilter struct {
 	ChannelID    int
+	Keyword      string
 	Name         string
 	Key          string
 	BaseURL      string
@@ -334,6 +335,10 @@ func SearchSupplierChannels(ownerUserID *int, startIdx int, num int, filter Supp
 	}
 	if filter.ChannelID > 0 {
 		query = query.Where("id = ?", filter.ChannelID)
+	}
+	if filter.Keyword != "" {
+		keywordLike := "%" + filter.Keyword + "%"
+		query = query.Where("(name LIKE ? OR "+commonKeyCol+" LIKE ? OR base_url LIKE ?)", keywordLike, keywordLike, keywordLike)
 	}
 	if filter.Name != "" {
 		query = query.Where("name LIKE ?", "%"+filter.Name+"%")

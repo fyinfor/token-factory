@@ -252,6 +252,14 @@ func FetchUpstreamModels(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	// 供应商只允许拉取自己渠道的上游模型，防止跨供应商越权读取。
+	if c.GetInt("role") < common.RoleAdminUser && channel.OwnerUserID != c.GetInt("id") {
+		c.JSON(http.StatusForbidden, gin.H{
+			"success": false,
+			"message": "无权访问其他供应商渠道",
+		})
+		return
+	}
 
 	ids, err := fetchChannelUpstreamModelIDs(channel)
 	if err != nil {
@@ -298,9 +306,7 @@ func SearchChannels(c *gin.Context) {
 		channelID, _ := model.ParseSupplierChannelIDFilter(keyword)
 		filter := model.SupplierChannelSearchFilter{
 			ChannelID:    channelID,
-			Name:         keyword,
-			Key:          keyword,
-			BaseURL:      keyword,
+			Keyword:      keyword,
 			ModelKeyword: modelKeyword,
 			Group:        group,
 		}
@@ -492,6 +498,14 @@ func GetChannel(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	// 供应商仅允许查看自己归属的渠道。
+	if c.GetInt("role") < common.RoleAdminUser && channel.OwnerUserID != c.GetInt("id") {
+		c.JSON(http.StatusForbidden, gin.H{
+			"success": false,
+			"message": "无权访问其他供应商渠道",
+		})
+		return
+	}
 	if channel != nil {
 		clearChannelInfo(channel)
 	}
@@ -654,6 +668,28 @@ type AddChannelRequest struct {
 	Channel                   *model.Channel        `json:"channel"`
 }
 
+// applySupplierChannelOwnershipForCreate 在供应商创建渠道时强制写入归属信息，防止越权伪造 owner 字段。
+func applySupplierChannelOwnershipForCreate(c *gin.Context, channel *model.Channel) error {
+	if c.GetInt("role") >= common.RoleAdminUser {
+		return nil
+	}
+	app, err := model.GetApprovedSupplierApplicationByApplicant(c.GetInt("id"))
+	if err != nil {
+		return err
+	}
+	channel.OwnerUserID = c.GetInt("id")
+	channel.SupplierApplicationID = app.ID
+	return nil
+}
+
+// validateSupplierChannelOwnershipForUpdate 校验供应商仅可更新自己的渠道，管理员不受限制。
+func validateSupplierChannelOwnershipForUpdate(c *gin.Context, originChannel *model.Channel) bool {
+	if c.GetInt("role") >= common.RoleAdminUser {
+		return true
+	}
+	return originChannel.OwnerUserID == c.GetInt("id")
+}
+
 func getVertexArrayKeys(keys string) ([]string, error) {
 	if keys == "" {
 		return nil, nil
@@ -699,6 +735,13 @@ func AddChannel(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": err.Error(),
+		})
+		return
+	}
+	if err := applySupplierChannelOwnershipForCreate(c, addChannelRequest.Channel); err != nil {
+		c.JSON(http.StatusForbidden, gin.H{
+			"success": false,
+			"message": "当前用户未通过供应商审核，无权创建渠道",
 		})
 		return
 	}
@@ -986,6 +1029,18 @@ func UpdateChannel(c *gin.Context) {
 			"message": err.Error(),
 		})
 		return
+	}
+	if !validateSupplierChannelOwnershipForUpdate(c, originChannel) {
+		c.JSON(http.StatusForbidden, gin.H{
+			"success": false,
+			"message": "无权修改其他供应商渠道",
+		})
+		return
+	}
+	// 供应商更新时强制保持归属信息不变，防止通过请求体篡改 owner/supplier 关联。
+	if c.GetInt("role") < common.RoleAdminUser {
+		channel.OwnerUserID = originChannel.OwnerUserID
+		channel.SupplierApplicationID = originChannel.SupplierApplicationID
 	}
 
 	// Always copy the original ChannelInfo so that fields like IsMultiKey and MultiKeySize are retained.

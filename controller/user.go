@@ -427,7 +427,13 @@ func GetSelf(c *gin.Context) {
 		"setting":                    user.Setting,
 		"stripe_customer":            user.StripeCustomer,
 		"supplier_id":                user.SupplierID,
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
 		"is_distributor":             user.IsDistributor,
+=======
+>>>>>>> origin/dev
 		"sidebar_modules":            userSetting.SidebarModules, // 正确提取sidebar_modules字段
 		"permissions":                permissions,                // 新增权限字段
 	}

@@ -125,6 +125,23 @@ definitions:
     required:
     - prompt
     type: object
+  controller.PublishUserMessageRequest:
+    properties:
+      biz_id:
+        type: integer
+      biz_type:
+        type: string
+      content:
+        type: string
+      receiver_min_role:
+        type: integer
+      receiver_user_id:
+        type: integer
+      title:
+        type: string
+      type:
+        type: string
+    type: object
   controller.SupplierApplicationReviewRequest:
     properties:
       reason:
@@ -134,6 +151,8 @@ definitions:
     type: object
   controller.SupplierApplicationSubmitRequest:
     properties:
+      applicant_user_id:
+        type: integer
       business_license_file:
         type: string
       business_license_url:
@@ -155,6 +174,8 @@ definitions:
     type: object
   controller.SupplierApplicationUpdateRequest:
     properties:
+      applicant_user_id:
+        type: integer
       business_license_file:
         type: string
       business_license_url:
@@ -180,6 +201,8 @@ definitions:
     properties:
       reason:
         type: string
+      supplier_id:
+        type: integer
     type: object
   dto.VideoRequest:
     properties:
@@ -612,9 +635,56 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - ApiKeyAuth: []
+      - CookieAuth: []
       - ApiUserID: []
       summary: 标记当前用户消息为已读
+      tags:
+      - Message
+  /user/messages/publish:
+    post:
+      consumes:
+      - application/json
+      description: 支持按指定用户或按最小角色发布站内消息，至少设置 receiver_user_id 或 receiver_min_role 之一
+      parameters:
+      - description: 消息内容
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.PublishUserMessageRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success + data{published:true}
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - CookieAuth: []
+      - ApiUserID: []
+      summary: 管理员发布站内消息
+      tags:
+      - MessageAdmin
+  /user/messages/read_all:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success + data{updated_count}
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - CookieAuth: []
+      - ApiUserID: []
+      summary: 标记当前用户全部站内消息为已读
       tags:
       - Message
   /user/messages/self:
@@ -628,6 +698,14 @@ paths:
         in: query
         name: page_size
         type: integer
+      - description: 标题模糊查询
+        in: query
+        name: title
+        type: string
+      - description: 读取状态：all/read/unread，默认all
+        in: query
+        name: read_status
+        type: string
       produces:
       - application/json
       responses:
@@ -637,7 +715,7 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - ApiKeyAuth: []
+      - CookieAuth: []
       - ApiUserID: []
       summary: 查询当前用户站内消息
       tags:
@@ -653,11 +731,39 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - ApiKeyAuth: []
+      - CookieAuth: []
       - ApiUserID: []
       summary: 获取当前用户未读站内消息数量
       tags:
       - Message
+  /user/supplier/{id}:
+    get:
+      description: 根据供应商ID查询供应商详情，返回申请人用户名 applicant_username
+      parameters:
+      - description: 供应商ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 供应商详情
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - CookieAuth: []
+      - ApiUserID: []
+      summary: 管理员查询供应商详情
+      tags:
+      - SupplierAdmin
   /user/supplier/application:
     get:
       parameters:
@@ -682,7 +788,7 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - ApiKeyAuth: []
+      - CookieAuth: []
       - ApiUserID: []
       summary: 管理员分页查询供应商申请
       tags:
@@ -712,11 +818,47 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - ApiKeyAuth: []
+      - CookieAuth: []
       - ApiUserID: []
       summary: 提交供应商入驻申请
       tags:
       - Supplier
+  /user/supplier/application/{id}:
+    put:
+      consumes:
+      - application/json
+      description: 管理员可修改任意供应商申请资料；审核通过(status=1)状态也允许修改，且修改后保持原状态
+      parameters:
+      - description: 供应商申请ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 申请信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/controller.SupplierApplicationSubmitRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: success + data{id,status}
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - CookieAuth: []
+      - ApiUserID: []
+      summary: 管理员修改供应商申请资料
+      tags:
+      - SupplierAdmin
   /user/supplier/application/{id}/review:
     post:
       consumes:
@@ -748,7 +890,7 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - ApiKeyAuth: []
+      - CookieAuth: []
       - ApiUserID: []
       summary: 管理员审核供应商申请
       tags:
@@ -778,7 +920,7 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - ApiKeyAuth: []
+      - CookieAuth: []
       - ApiUserID: []
       summary: 当前供应商注销
       tags:
@@ -794,7 +936,7 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - ApiKeyAuth: []
+      - CookieAuth: []
       - ApiUserID: []
       summary: 查询当前用户供应商申请
       tags:
@@ -824,7 +966,7 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - ApiKeyAuth: []
+      - CookieAuth: []
       - ApiUserID: []
       summary: 修改当前用户供应商申请并重新提交
       tags:
@@ -874,7 +1016,7 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - ApiKeyAuth: []
+      - CookieAuth: []
       - ApiUserID: []
       summary: 查询当前供应商渠道列表
       tags:
@@ -899,7 +1041,7 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - ApiKeyAuth: []
+      - CookieAuth: []
       - ApiUserID: []
       summary: 当前供应商新增渠道
       tags:
@@ -920,6 +1062,10 @@ paths:
         in: query
         name: company_name
         type: string
+      - description: 状态筛选，支持逗号分隔（如1,3）；默认查询1和3
+        in: query
+        name: status
+        type: string
       produces:
       - application/json
       responses:
@@ -929,7 +1075,7 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - ApiKeyAuth: []
+      - CookieAuth: []
       - ApiUserID: []
       summary: 管理员分页查询供应商列表
       tags:
@@ -988,7 +1134,7 @@ paths:
             additionalProperties: true
             type: object
       security:
-      - ApiKeyAuth: []
+      - CookieAuth: []
       - ApiUserID: []
       summary: 当前供应商新增模型
       tags:
@@ -1101,12 +1247,14 @@ paths:
       tags:
       - Video
 securityDefinitions:
-  ApiKeyAuth:
-    in: header
-    name: Authorization
-    type: apiKey
   ApiUserID:
+    description: 必填。当前登录用户ID，需与会话用户或 access_token 对应用户一致。
     in: header
     name: New-Api-User
+    type: apiKey
+  CookieAuth:
+    description: 可选。手动传浏览器会话 Cookie，例如：session=xxx; session_2=yyy。
+    in: header
+    name: Cookie
     type: apiKey
 swagger: "2.0"

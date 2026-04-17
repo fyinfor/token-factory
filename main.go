@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/controller"
+	_ "github.com/QuantumNous/new-api/docs"
 	"github.com/QuantumNous/new-api/i18n"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/middleware"
@@ -24,7 +25,6 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	_ "github.com/QuantumNous/new-api/setting/performance_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
-	_ "github.com/QuantumNous/new-api/docs"
 
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/gin-contrib/sessions"
@@ -41,12 +41,14 @@ import (
 // @version 1.0
 // @description TokenFactory backend API documentation powered by swaggo.
 // @BasePath /api
-// @securityDefinitions.apikey ApiKeyAuth
-// @in header
-// @name Authorization
 // @securityDefinitions.apikey ApiUserID
 // @in header
 // @name New-Api-User
+// @description 必填。当前登录用户ID，需与会话用户或 access_token 对应用户一致。
+// @securityDefinitions.apikey CookieAuth
+// @in header
+// @name Cookie
+// @description 可选。手动传浏览器会话 Cookie，例如：session=xxx; session_2=yyy。
 
 //go:embed web/dist
 var buildFS embed.FS

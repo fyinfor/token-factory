@@ -56,6 +56,7 @@ var (
 type SupplierApplication struct {
 	ID                  int    `json:"id" gorm:"primaryKey;comment:主键ID"`
 	ApplicantUserID     int    `json:"applicant_user_id" gorm:"index;not null;comment:申请人用户ID"`
+	ApplicantUsername   string `json:"applicant_username" gorm:"column:applicant_username;->;comment:申请人用户名（关联 users.username）"`
 	CompanyName         string `json:"company_name" gorm:"type:varchar(255);not null;comment:企业或主体名称"`
 	CreditCode          string `json:"credit_code" gorm:"type:varchar(32);not null;uniqueIndex;comment:统一社会信用代码"`
 	BusinessLicenseURL  string `json:"business_license_url" gorm:"type:varchar(1024);not null;comment:营业执照文件URL"`
@@ -231,26 +232,46 @@ func ListSupplierApplicationsByApplicant(applicantUserID int, status *int, pageI
 	return items, total, nil
 }
 
-// ListSuppliersByCompanyName 分页查询供应商列表（支持按供应商名称模糊搜索）。
-func ListSuppliersByCompanyName(companyName string, pageInfo *common.PageInfo) ([]*SupplierApplication, int64, error) {
+// ListSuppliersByCompanyName 分页查询供应商列表（支持按供应商名称模糊搜索与状态筛选）。
+func ListSuppliersByCompanyName(companyName string, statuses []int, pageInfo *common.PageInfo) ([]*SupplierApplication, int64, error) {
 	var (
 		items []*SupplierApplication
 		total int64
 	)
-	query := DB.Model(&SupplierApplication{})
+	query := DB.Model(&SupplierApplication{}).
+		Joins("LEFT JOIN users ON users.id = supplier_applications.applicant_user_id")
+	if len(statuses) > 0 {
+		query = query.Where("supplier_applications.status IN ?", statuses)
+	}
 	if strings.TrimSpace(companyName) != "" {
 		query = query.Where("company_name LIKE ?", "%"+strings.TrimSpace(companyName)+"%")
 	}
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
-	if err := query.Order("id desc").
+	if err := query.
+		Select("supplier_applications.*, users.username AS applicant_username").
+		Order("supplier_applications.id desc").
 		Limit(pageInfo.GetPageSize()).
 		Offset(pageInfo.GetStartIdx()).
 		Find(&items).Error; err != nil {
 		return nil, 0, err
 	}
 	return items, total, nil
+}
+
+// GetSupplierByID 根据供应商申请ID查询供应商详情（含申请人用户名）。
+func GetSupplierByID(supplierID int) (*SupplierApplication, error) {
+	var item SupplierApplication
+	err := DB.Model(&SupplierApplication{}).
+		Select("supplier_applications.*, users.username AS applicant_username").
+		Joins("LEFT JOIN users ON users.id = supplier_applications.applicant_user_id").
+		Where("supplier_applications.id = ?", supplierID).
+		First(&item).Error
+	if err != nil {
+		return nil, err
+	}
+	return &item, nil
 }
 
 // GetMySupplierApplication 获取当前用户最近一条供应商申请（按ID倒序）。
@@ -342,6 +363,60 @@ func UpdateMySupplierApplication(applicantUserID int, applicationID int, req *Su
 	}
 	return &app, nil
 
+}
+
+// AdminUpdateSupplierApplication 管理员更新指定供应商申请资料。
+// 与用户侧不同：即使申请处于审核通过状态，也允许管理员更新；更新后保持原状态不变。
+func AdminUpdateSupplierApplication(applicationID int, req *SupplierApplication) (*SupplierApplication, error) {
+	tx := DB.Begin()
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+	var app SupplierApplication
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("id = ?", applicationID).
+		First(&app).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	now := time.Now().Unix()
+	updates := map[string]any{
+		"company_name":          req.CompanyName,
+		"credit_code":           req.CreditCode,
+		"business_license_url":  req.BusinessLicenseURL,
+		"business_license_file": req.BusinessLicenseFile,
+		"legal_representative":  req.LegalRepresentative,
+		"company_size":          req.CompanySize,
+		"contact_name":          req.ContactName,
+		"contact_mobile":        req.ContactMobile,
+		"contact_wechat":        req.ContactWechat,
+		"updated_at":            now,
+	}
+	if err := tx.Model(&SupplierApplication{}).
+		Where("id = ?", app.ID).
+		Updates(updates).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	app.CompanyName = req.CompanyName
+	app.CreditCode = req.CreditCode
+	app.BusinessLicenseURL = req.BusinessLicenseURL
+	app.BusinessLicenseFile = req.BusinessLicenseFile
+	app.LegalRepresentative = req.LegalRepresentative
+	app.CompanySize = req.CompanySize
+	app.ContactName = req.ContactName
+	app.ContactMobile = req.ContactMobile
+	app.ContactWechat = req.ContactWechat
+	app.UpdatedAt = now
+	if err := tx.Commit().Error; err != nil {
+		return nil, err
+	}
+	return &app, nil
 }
 
 // ListApprovedSuppliersForPricing 查询定价页使用的已审核通过供应商列表。
@@ -453,8 +528,9 @@ func ReviewSupplierApplication(applicationID int, reviewerUserID int, toStatus i
 }
 
 // DeactivateSupplierApplication 注销供应商（仅允许审核通过状态）。
-// 注销后会将 supplier_applications.status 置为已注销，并清空用户表 supplier_id。
-func DeactivateSupplierApplication(applicantUserID int, reason string) (*SupplierApplication, error) {
+// 管理员（role>=RoleAdminUser）可按ID注销任意供应商；普通用户仅可注销自己提交的供应商。
+// 注销后会将 supplier_applications.status 置为已注销，并清空申请人用户表 supplier_id。
+func DeactivateSupplierApplication(operatorUserID int, operatorRole int, supplierID int, reason string) (*SupplierApplication, error) {
 	tx := DB.Begin()
 	if tx.Error != nil {
 		return nil, tx.Error
@@ -465,10 +541,11 @@ func DeactivateSupplierApplication(applicantUserID int, reason string) (*Supplie
 		}
 	}()
 	var app SupplierApplication
-	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
-		Where("applicant_user_id = ?", applicantUserID).
-		Order("id desc").
-		First(&app).Error; err != nil {
+	query := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", supplierID)
+	if operatorRole < common.RoleAdminUser {
+		query = query.Where("applicant_user_id = ?", operatorUserID)
+	}
+	if err := query.First(&app).Error; err != nil {
 		tx.Rollback()
 		return nil, err
 	}
@@ -487,7 +564,7 @@ func DeactivateSupplierApplication(applicantUserID int, reason string) (*Supplie
 		tx.Rollback()
 		return nil, err
 	}
-	if err := tx.Model(&User{}).Where("id = ?", applicantUserID).
+	if err := tx.Model(&User{}).Where("id = ?", app.ApplicantUserID).
 		Updates(map[string]any{
 			"supplier_id": 0,
 		}).Error; err != nil {
@@ -496,7 +573,7 @@ func DeactivateSupplierApplication(applicantUserID int, reason string) (*Supplie
 	}
 	if err := tx.Create(&SupplierApplicationAudit{
 		ApplicationID:  app.ID,
-		OperatorUserID: applicantUserID,
+		OperatorUserID: operatorUserID,
 		Action:         SupplierApplicationAuditActionDeactivate,
 		FromStatus:     SupplierApplicationStatusApproved,
 		ToStatus:       SupplierApplicationStatusDeactivated,

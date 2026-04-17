@@ -10,6 +10,12 @@ import (
 
 func GetPricing(c *gin.Context) {
 	pricing := model.GetPricing()
+	filtered := make([]model.Pricing, 0, len(pricing))
+	for _, p := range pricing {
+		if ratio_setting.ModelHasConfiguredPricing(p.ModelName) {
+			filtered = append(filtered, p)
+		}
+	}
 	suppliers, err := model.ListApprovedSuppliersForPricing()
 	if err != nil {
 		suppliers = []model.SupplierSimplePricingItem{}
@@ -44,7 +50,7 @@ func GetPricing(c *gin.Context) {
 
 	c.JSON(200, gin.H{
 		"success":            true,
-		"data":               pricing,
+		"data":               filtered,
 		"vendors":            model.GetVendors(),
 		"suppliers":          suppliers,
 		"group_ratio":        groupRatio,

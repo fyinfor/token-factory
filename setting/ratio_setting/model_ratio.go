@@ -15,6 +15,9 @@ const (
 	RMB     = USD / USD2RMB
 )
 
+// unsetModelRatioSelfUseFallback 倍率表未命中且开启自用模式时的占位倍率（不再使用 37.5 作为隐式默认）。
+const unsetModelRatioSelfUseFallback = 1.0
+
 // modelRatio
 // https://platform.openai.com/docs/models/model-endpoint-compatibility
 // https://cloud.baidu.com/doc/WENXINWORKSHOP/s/Blfmc9dlf
@@ -405,9 +408,30 @@ func GetModelRatio(name string) (float64, bool, string) {
 			}
 			//return 0, true, name
 		}
-		return 37.5, operation_setting.SelfUseModeEnabled, name
+		if operation_setting.SelfUseModeEnabled {
+			return unsetModelRatioSelfUseFallback, true, name
+		}
+		return 0, false, name
 	}
 	return ratio, true, name
+}
+
+// ModelHasConfiguredPricing 表示模型在价格表或倍率表中存在显式配置（含 compact 通配）。
+// 未命中表键时 GetModelRatio 不再提供可用倍率（非自用为 success=false；自用为占位倍率），此类模型不应出现在定价接口。
+func ModelHasConfiguredPricing(model string) bool {
+	if _, ok := GetModelPrice(model, false); ok {
+		return true
+	}
+	name := FormatMatchingModelName(model)
+	if _, ok := modelRatioMap.Get(name); ok {
+		return true
+	}
+	if strings.HasSuffix(name, CompactModelSuffix) {
+		if _, ok := modelRatioMap.Get(CompactWildcardModelKey); ok {
+			return true
+		}
+	}
+	return false
 }
 
 func DefaultModelRatio2JSONString() string {
@@ -737,5 +761,5 @@ func GetModelRatioOrPrice(model string) (float64, bool, bool) { // price or rati
 	if success {
 		return modelRatio, false, true
 	}
-	return 37.5, false, false
+	return 0, false, false
 }
