@@ -48,7 +48,7 @@ export const DEFAULT_ADMIN_CONFIG = {
     distributor_center: true,
     'supplier-apply': true,
     'supplier-channel': true,
-    'supplier-models': true,
+    'supplier-pricing-settings': true,
   },
   admin: {
     enabled: true,

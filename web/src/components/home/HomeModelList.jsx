@@ -130,6 +130,8 @@ const HomeModelList = () => {
             setCurrentPage={pricingData.setCurrentPage}
             selectedGroup={pricingData.selectedGroup}
             groupRatio={pricingData.groupRatio}
+            groupModelPrice={pricingData.groupModelPrice}
+            groupModelRatio={pricingData.groupModelRatio}
             copyText={pricingData.copyText}
             setModalImageUrl={pricingData.setModalImageUrl}
             setIsModalOpenurl={pricingData.setIsModalOpenurl}
@@ -157,6 +159,8 @@ const HomeModelList = () => {
           onClose={pricingData.closeModelDetail}
           modelData={pricingData.selectedModel}
           groupRatio={pricingData.groupRatio}
+          groupModelPrice={pricingData.groupModelPrice}
+          groupModelRatio={pricingData.groupModelRatio}
           usableGroup={pricingData.usableGroup}
           currency={pricingData.currency}
           siteDisplayType={pricingData.siteDisplayType}

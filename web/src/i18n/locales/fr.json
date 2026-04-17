@@ -675,6 +675,7 @@
     "分类名称": "Nom de la catégorie",
     "分组": "Groupe",
     "分组与模型定价设置": "Groupe et tarification",
+    "定价设置": "Paramètres de tarification",
     "分组价格": "Prix de groupe",
     "分组倍率": "Ratio",
     "分组倍率设置": "Ratio de groupe",
@@ -3375,6 +3376,15 @@
     "查看定价": "Voir les tarifs",
     "完整使用日志": "Journaux complets",
     "实时监控每次调用，详细记录请求和响应便于调试分析。": "Surveillance en temps réel de chaque appel, avec logs détaillés pour le débogage.",
-    "查看文档": "Voir la documentation"
+    "查看文档": "Voir la documentation",
+    "查看供应商详情": "Voir les détails du fournisseur",
+    "供应商详情": "Détails du fournisseur",
+    "获取供应商信息失败": "Échec de la récupération des informations du fournisseur",
+    "审核状态": "État de l'examen",
+    "审核备注：": "Notes d'examen : ",
+    "申请时间：": "Date de demande : ",
+    "审核信息": "Informations d'examen",
+    "审核备注": "Notes d'examen",
+    "申请时间": "Date de demande"
   }
 }

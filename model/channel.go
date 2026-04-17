@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/samber/lo"
@@ -55,6 +56,7 @@ type Channel struct {
 	OtherSettings         string `json:"settings" gorm:"column:settings"`                         // 其他设置，存储azure版本等不需要检索的信息，详见dto.ChannelOtherSettings
 	OwnerUserID           int    `json:"owner_user_id" gorm:"type:int;index;default:0"`           // 渠道归属用户ID（供应商场景）
 	SupplierApplicationID int    `json:"supplier_application_id" gorm:"type:int;index;default:0"` // 关联 supplier_applications.id
+	SupplierName          string `json:"supplier_name,omitempty" gorm:"-"`                        // 供应商用户名（由控制器回填，不落库）
 
 	// cache info
 	Keys []string `json:"-" gorm:"-"`
@@ -314,11 +316,31 @@ func ListAllSupplierChannels(startIdx int, num int) ([]*Channel, int64, error) {
 type SupplierChannelSearchFilter struct {
 	ChannelID    int
 	Keyword      string
+	Supplier     string
 	Name         string
 	Key          string
 	BaseURL      string
 	ModelKeyword string
 	Group        string
+}
+
+// ChannelSimplePricingItem pricing 页面使用的渠道精简信息。
+type ChannelSimplePricingItem struct {
+	ChannelID   int    `json:"channel_id"`
+	ChannelName string `json:"channel_name"`
+}
+
+// ListChannelsForPricing 查询定价页使用的渠道列表。
+func ListChannelsForPricing() ([]ChannelSimplePricingItem, error) {
+	items := make([]ChannelSimplePricingItem, 0)
+	err := DB.Model(&Channel{}).
+		Select("id as channel_id, name as channel_name").
+		Order("id asc").
+		Scan(&items).Error
+	if err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 // SearchSupplierChannels 搜索供应商渠道（供应商只查自己，管理员可查全部供应商渠道）。
@@ -339,6 +361,9 @@ func SearchSupplierChannels(ownerUserID *int, startIdx int, num int, filter Supp
 	if filter.Keyword != "" {
 		keywordLike := "%" + filter.Keyword + "%"
 		query = query.Where("(name LIKE ? OR "+commonKeyCol+" LIKE ? OR base_url LIKE ?)", keywordLike, keywordLike, keywordLike)
+	}
+	if filter.Supplier != "" {
+		query = query.Joins("LEFT JOIN users ON users.id = channels.owner_user_id").Where("users.username LIKE ?", "%"+filter.Supplier+"%")
 	}
 	if filter.Name != "" {
 		query = query.Where("name LIKE ?", "%"+filter.Name+"%")
@@ -475,11 +500,13 @@ func BatchInsertChannels(channels []Channel) error {
 		}
 	}()
 
+	createdChannels := make([]Channel, 0, len(channels))
 	for _, chunk := range lo.Chunk(channels, 50) {
 		if err := tx.Create(&chunk).Error; err != nil {
 			tx.Rollback()
 			return err
 		}
+		createdChannels = append(createdChannels, chunk...)
 		for _, channel_ := range chunk {
 			if err := channel_.AddAbilities(tx); err != nil {
 				tx.Rollback()
@@ -487,7 +514,84 @@ func BatchInsertChannels(channels []Channel) error {
 			}
 		}
 	}
-	return tx.Commit().Error
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+	// Best effort: initialize channel-level model pricing entries so newly imported
+	// channels are visible in channel pricing editor without blank mappings.
+	ensureChannelModelPricingDefaults(createdChannels)
+	return nil
+}
+
+func ensureChannelModelPricingDefaults(channels []Channel) {
+	if len(channels) == 0 {
+		return
+	}
+	channelModelPrice := ratio_setting.GetChannelModelPriceCopy()
+	channelModelRatio := ratio_setting.GetChannelModelRatioCopy()
+	changed := false
+
+	for _, ch := range channels {
+		if ch.Id <= 0 {
+			continue
+		}
+		channelID := strconv.Itoa(ch.Id)
+		if _, ok := channelModelPrice[channelID]; !ok {
+			channelModelPrice[channelID] = make(map[string]float64)
+		}
+		if _, ok := channelModelRatio[channelID]; !ok {
+			channelModelRatio[channelID] = make(map[string]float64)
+		}
+		seen := make(map[string]struct{})
+		for _, rawModel := range ch.GetModels() {
+			modelName := strings.TrimSpace(rawModel)
+			if modelName == "" {
+				continue
+			}
+			modelKey := ratio_setting.FormatMatchingModelName(modelName)
+			if _, ok := seen[modelKey]; ok {
+				continue
+			}
+			seen[modelKey] = struct{}{}
+
+			if _, exists := channelModelPrice[channelID][modelKey]; exists {
+				continue
+			}
+			if _, exists := channelModelRatio[channelID][modelKey]; exists {
+				continue
+			}
+
+			if modelPrice, ok := ratio_setting.GetModelPrice(modelKey, false); ok {
+				channelModelPrice[channelID][modelKey] = modelPrice
+				changed = true
+				continue
+			}
+			if modelRatio, ok, _ := ratio_setting.GetModelRatio(modelKey); ok {
+				channelModelRatio[channelID][modelKey] = modelRatio
+				changed = true
+			}
+		}
+	}
+
+	if !changed {
+		return
+	}
+	priceJSONBytes, err := common.Marshal(channelModelPrice)
+	if err != nil {
+		common.SysLog(fmt.Sprintf("failed to marshal ChannelModelPrice: %v", err))
+		return
+	}
+	ratioJSONBytes, err := common.Marshal(channelModelRatio)
+	if err != nil {
+		common.SysLog(fmt.Sprintf("failed to marshal ChannelModelRatio: %v", err))
+		return
+	}
+	if err := UpdateOption("ChannelModelPrice", string(priceJSONBytes)); err != nil {
+		common.SysLog(fmt.Sprintf("failed to update ChannelModelPrice option: %v", err))
+	}
+	if err := UpdateOption("ChannelModelRatio", string(ratioJSONBytes)); err != nil {
+		common.SysLog(fmt.Sprintf("failed to update ChannelModelRatio option: %v", err))
+	}
 }
 
 func BatchDeleteChannels(ids []int) error {

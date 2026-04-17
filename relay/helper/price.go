@@ -5,6 +5,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -15,6 +16,17 @@ import (
 
 // https://docs.claude.com/en/docs/build-with-claude/prompt-caching#1-hour-cache-duration
 const claudeCacheCreation1hMultiplier = 6 / 3.75
+
+func resolveSupplierIDByChannel(info *relaycommon.RelayInfo) int {
+	if info == nil || info.ChannelMeta == nil || info.ChannelId <= 0 {
+		return 0
+	}
+	channel, err := model.CacheGetChannel(info.ChannelId)
+	if err != nil || channel == nil {
+		return 0
+	}
+	return channel.SupplierApplicationID
+}
 
 // HandleGroupRatio checks for "auto_group" in the context and updates the group ratio and relayInfo.UsingGroup if present
 func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) types.GroupRatioInfo {
@@ -46,9 +58,34 @@ func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) types.
 }
 
 func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta) (types.PriceData, error) {
-	modelPrice, usePrice := ratio_setting.GetModelPrice(info.OriginModelName, false)
-
+	if info == nil {
+		return types.PriceData{}, fmt.Errorf("relay info is nil")
+	}
+	channelID := 0
+	if info.ChannelMeta != nil {
+		channelID = info.ChannelId
+	}
 	groupRatioInfo := HandleGroupRatio(c, info)
+	modelPrice, usePrice := ratio_setting.GetModelPrice(info.OriginModelName, false)
+	if channelPrice, ok := ratio_setting.GetChannelModelPrice(channelID, info.OriginModelName); ok {
+		modelPrice = channelPrice
+		usePrice = true
+	}
+	supplierID := resolveSupplierIDByChannel(info)
+	if supplierPrice, ok := ratio_setting.GetSupplierModelPrice(supplierID, info.OriginModelName); ok {
+		modelPrice = supplierPrice
+		usePrice = true
+	}
+	if groupPrice, ok := ratio_setting.GetGroupModelPrice(info.UsingGroup, info.OriginModelName); ok {
+		modelPrice = groupPrice
+		usePrice = true
+	}
+	channelCompletionRatio, hasChannelCompletionRatio := ratio_setting.GetChannelCompletionRatio(channelID, info.OriginModelName)
+	channelCacheRatio, hasChannelCacheRatio := ratio_setting.GetChannelCacheRatio(channelID, info.OriginModelName)
+	channelCreateCacheRatio, hasChannelCreateCacheRatio := ratio_setting.GetChannelCreateCacheRatio(channelID, info.OriginModelName)
+	channelImageRatio, hasChannelImageRatio := ratio_setting.GetChannelImageRatio(channelID, info.OriginModelName)
+	channelAudioRatio, hasChannelAudioRatio := ratio_setting.GetChannelAudioRatio(channelID, info.OriginModelName)
+	channelAudioCompletionRatio, hasChannelAudioCompletionRatio := ratio_setting.GetChannelAudioCompletionRatio(channelID, info.OriginModelName)
 
 	var preConsumedQuota int
 	var modelRatio float64
@@ -69,6 +106,18 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		var success bool
 		var matchName string
 		modelRatio, success, matchName = ratio_setting.GetModelRatio(info.OriginModelName)
+		if channelRatio, ok := ratio_setting.GetChannelModelRatio(channelID, info.OriginModelName); ok {
+			modelRatio = channelRatio
+			success = true
+		}
+		if supplierRatio, ok := ratio_setting.GetSupplierModelRatio(supplierID, info.OriginModelName); ok {
+			modelRatio = supplierRatio
+			success = true
+		}
+		if groupModelRatio, ok := ratio_setting.GetGroupModelRatio(info.UsingGroup, info.OriginModelName); ok {
+			modelRatio = groupModelRatio
+			success = true
+		}
 		if !success {
 			acceptUnsetRatio := false
 			if info.UserSetting.AcceptUnsetRatioModel {
@@ -87,6 +136,24 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		imageRatio, _ = ratio_setting.GetImageRatio(info.OriginModelName)
 		audioRatio = ratio_setting.GetAudioRatio(info.OriginModelName)
 		audioCompletionRatio = ratio_setting.GetAudioCompletionRatio(info.OriginModelName)
+		if hasChannelCompletionRatio {
+			completionRatio = channelCompletionRatio
+		}
+		if hasChannelCacheRatio {
+			cacheRatio = channelCacheRatio
+		}
+		if hasChannelCreateCacheRatio {
+			cacheCreationRatio = channelCreateCacheRatio
+		}
+		if hasChannelImageRatio {
+			imageRatio = channelImageRatio
+		}
+		if hasChannelAudioRatio {
+			audioRatio = channelAudioRatio
+		}
+		if hasChannelAudioCompletionRatio {
+			audioCompletionRatio = channelAudioCompletionRatio
+		}
 		ratio := modelRatio * groupRatioInfo.GroupRatio
 		preConsumedQuota = int(float64(preConsumedTokens) * ratio)
 	} else {
@@ -141,9 +208,29 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 
 // ModelPriceHelperPerCall 按次计费的 PriceHelper (MJ、Task)
 func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types.PriceData, error) {
+	if info == nil {
+		return types.PriceData{}, fmt.Errorf("relay info is nil")
+	}
+	channelID := 0
+	if info.ChannelMeta != nil {
+		channelID = info.ChannelId
+	}
 	groupRatioInfo := HandleGroupRatio(c, info)
 
 	modelPrice, success := ratio_setting.GetModelPrice(info.OriginModelName, true)
+	if channelPrice, ok := ratio_setting.GetChannelModelPrice(channelID, info.OriginModelName); ok {
+		modelPrice = channelPrice
+		success = true
+	}
+	supplierID := resolveSupplierIDByChannel(info)
+	if supplierPrice, ok := ratio_setting.GetSupplierModelPrice(supplierID, info.OriginModelName); ok {
+		modelPrice = supplierPrice
+		success = true
+	}
+	if groupPrice, ok := ratio_setting.GetGroupModelPrice(info.UsingGroup, info.OriginModelName); ok {
+		modelPrice = groupPrice
+		success = true
+	}
 	// 如果没有配置价格，检查模型倍率配置
 	if !success {
 

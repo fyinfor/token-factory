@@ -88,7 +88,10 @@ export default function ModelPricingEditor({
   options,
   refresh,
   candidateModelNames = EMPTY_CANDIDATE_MODEL_NAMES,
+  forceCandidateModelNames = false,
   filterMode = 'all',
+  optionKeys,
+  onSaveOutput,
   allowAddModel = true,
   allowDeleteModel = true,
   showConflictFilter = true,
@@ -132,7 +135,10 @@ export default function ModelPricingEditor({
     refresh,
     t,
     candidateModelNames,
+    strictCandidateModelNames: forceCandidateModelNames,
     filterMode,
+    optionKeys,
+    onSaveOutput,
   });
 
   const columns = useMemo(

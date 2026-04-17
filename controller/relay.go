@@ -149,6 +149,26 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 	relayInfo.SetEstimatePromptTokens(tokens)
 
+	retryParam := &service.RetryParam{
+		Ctx:        c,
+		TokenGroup: relayInfo.TokenGroup,
+		ModelName:  relayInfo.OriginModelName,
+		Retry:      common.GetPointer(0),
+	}
+	relayInfo.RetryIndex = 0
+	relayInfo.LastError = nil
+
+	// Select first channel before pricing so pre-consume uses selected channel pricing.
+	firstChannel, firstChannelErr := getChannel(c, relayInfo, retryParam)
+	if firstChannelErr != nil {
+		logger.LogError(c, firstChannelErr.Error())
+		tokenFactoryError = firstChannelErr
+		return
+	}
+	if relayInfo.ChannelMeta == nil {
+		relayInfo.InitChannelMeta(c)
+	}
+
 	priceData, err := helper.ModelPriceHelper(c, relayInfo, tokens, meta)
 	if err != nil {
 		tokenFactoryError = types.NewError(err, types.ErrorCodeModelPriceError)
@@ -177,22 +197,31 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 	}()
 
-	retryParam := &service.RetryParam{
-		Ctx:        c,
-		TokenGroup: relayInfo.TokenGroup,
-		ModelName:  relayInfo.OriginModelName,
-		Retry:      common.GetPointer(0),
-	}
-	relayInfo.RetryIndex = 0
-	relayInfo.LastError = nil
-
 	for ; retryParam.GetRetry() <= common.RetryTimes; retryParam.IncreaseRetry() {
 		relayInfo.RetryIndex = retryParam.GetRetry()
-		channel, channelErr := getChannel(c, relayInfo, retryParam)
-		if channelErr != nil {
-			logger.LogError(c, channelErr.Error())
-			tokenFactoryError = channelErr
-			break
+		channel := firstChannel
+		if retryParam.GetRetry() > 0 {
+			var channelErr *types.TokenFactoryError
+			channel, channelErr = getChannel(c, relayInfo, retryParam)
+			if channelErr != nil {
+				logger.LogError(c, channelErr.Error())
+				tokenFactoryError = channelErr
+				break
+			}
+		}
+
+		// Refresh PriceData after final channel decision of this attempt.
+		if relayInfo.ChannelMeta == nil {
+			relayInfo.InitChannelMeta(c)
+		}
+		if _, priceErr := helper.ModelPriceHelper(c, relayInfo, tokens, meta); priceErr != nil {
+			tokenFactoryError = types.NewError(priceErr, types.ErrorCodeModelPriceError)
+			relayInfo.LastError = tokenFactoryError
+			processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), tokenFactoryError)
+			if !shouldRetry(c, tokenFactoryError, common.RetryTimes-retryParam.GetRetry()) {
+				break
+			}
+			continue
 		}
 
 		addUsedChannel(c, channel.Id)
@@ -285,17 +314,7 @@ func fastTokenCountMetaForPricing(request dto.Request) *types.TokenCountMeta {
 
 func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service.RetryParam) (*model.Channel, *types.TokenFactoryError) {
 	if info.ChannelMeta == nil {
-		autoBan := c.GetBool("auto_ban")
-		autoBanInt := 1
-		if !autoBan {
-			autoBanInt = 0
-		}
-		return &model.Channel{
-			Id:      c.GetInt("channel_id"),
-			Type:    c.GetInt("channel_type"),
-			Name:    c.GetString("channel_name"),
-			AutoBan: &autoBanInt,
-		}, nil
+		info.InitChannelMeta(c)
 	}
 	if orderAny, ok := common.GetContextKey(c, constant.ContextKeySmartRouteChannelOrder); ok {
 		if order, ok := orderAny.([]int); ok && len(order) > 0 {

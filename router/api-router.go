@@ -66,6 +66,8 @@ func SetApiRouter(router *gin.Engine) {
 			distributorAdminRoute.POST("/applications/:id/approve", controller.ApproveDistributorApplicationAdmin)
 			distributorAdminRoute.POST("/applications/:id/reject", controller.RejectDistributorApplicationAdmin)
 			distributorAdminRoute.GET("/distributors", controller.ListDistributorsAdmin)
+			distributorAdminRoute.GET("/distributors/:id/application", controller.GetDistributorApplicationByUserAdmin)
+			distributorAdminRoute.PUT("/distributors/:id/application", controller.PutDistributorApplicationByUserAdmin)
 			distributorAdminRoute.PUT("/distributors/:id/commission", controller.PutDistributorCommissionAdmin)
 			distributorAdminRoute.GET("/distributors/:id/invitees", controller.GetDistributorInviteesAdmin)
 			distributorAdminRoute.POST("/distributors/:id/settle", controller.PostDistributorSettleAdmin)
@@ -248,17 +250,16 @@ func SetApiRouter(router *gin.Engine) {
 			performanceRoute.DELETE("/logs", controller.CleanupLogFiles)
 		}
 		ratioSyncRoute := apiRouter.Group("/ratio_sync")
-		ratioSyncRoute.Use(middleware.RootAuth())
 		{
-			ratioSyncRoute.GET("/channels", controller.GetSyncableChannels)
-			ratioSyncRoute.POST("/fetch", controller.FetchUpstreamRatios)
+			ratioSyncRoute.GET("/channels", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.GetSyncableChannels)
+			ratioSyncRoute.POST("/fetch", middleware.RootAuth(), controller.FetchUpstreamRatios)
 		}
 		channelRoute := apiRouter.Group("/channel")
 		{
 			channelRoute.GET("/", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.GetAllChannels)
 			channelRoute.GET("/search", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.SearchChannels)
 			channelRoute.GET("/models", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.ChannelListModels)
-			channelRoute.GET("/models_enabled", middleware.AdminAuth(), controller.EnabledListModels)
+			channelRoute.GET("/models_enabled", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.EnabledListModels)
 			channelRoute.GET("/:id", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.GetChannel)
 			channelRoute.POST("/:id/key", middleware.RootAuth(), middleware.CriticalRateLimit(), middleware.DisableCache(), middleware.SecureVerificationRequired(), controller.GetChannelKey)
 			channelRoute.GET("/test", middleware.AdminAuth(), controller.TestAllChannels)

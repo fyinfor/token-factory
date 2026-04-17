@@ -68,11 +68,45 @@ func clearChannelInfo(channel *model.Channel) {
 	}
 }
 
+// attachSupplierNames 为渠道列表补齐供应商用户名（owner_user_id 对应 users.username）。
+func attachSupplierNames(channels []*model.Channel) {
+	ownerIDs := make([]int, 0)
+	ownerSet := make(map[int]struct{})
+	for _, channel := range channels {
+		if channel == nil || channel.OwnerUserID <= 0 {
+			continue
+		}
+		if _, ok := ownerSet[channel.OwnerUserID]; ok {
+			continue
+		}
+		ownerSet[channel.OwnerUserID] = struct{}{}
+		ownerIDs = append(ownerIDs, channel.OwnerUserID)
+	}
+	if len(ownerIDs) == 0 {
+		return
+	}
+	var users []model.User
+	if err := model.DB.Select("id, username").Where("id IN ?", ownerIDs).Find(&users).Error; err != nil {
+		return
+	}
+	userMap := make(map[int]string, len(users))
+	for _, user := range users {
+		userMap[user.Id] = user.Username
+	}
+	for _, channel := range channels {
+		if channel == nil || channel.OwnerUserID <= 0 {
+			continue
+		}
+		channel.SupplierName = userMap[channel.OwnerUserID]
+	}
+}
+
 func GetAllChannels(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	channelData := make([]*model.Channel, 0)
 	idSort, _ := strconv.ParseBool(c.Query("id_sort"))
 	enableTagMode, _ := strconv.ParseBool(c.Query("tag_mode"))
+	supplierKeyword := strings.TrimSpace(c.Query("supplier"))
 	statusParam := c.Query("status")
 	// statusFilter: -1 all, 1 enabled, 0 disabled (include auto & manual)
 	statusFilter := parseStatusFilter(statusParam)
@@ -111,6 +145,7 @@ func GetAllChannels(c *gin.Context) {
 		for _, datum := range channelData {
 			clearChannelInfo(datum)
 		}
+		attachSupplierNames(channelData)
 		typeCounts := make(map[int64]int64)
 		for _, channel := range channelData {
 			typeCounts[int64(channel.Type)]++
@@ -160,6 +195,9 @@ func GetAllChannels(c *gin.Context) {
 		total, _ = model.CountAllTags()
 	} else {
 		baseQuery := model.DB.Model(&model.Channel{})
+		if supplierKeyword != "" {
+			baseQuery = baseQuery.Joins("LEFT JOIN users ON users.id = channels.owner_user_id").Where("users.username LIKE ?", "%"+supplierKeyword+"%")
+		}
 		if typeFilter >= 0 {
 			baseQuery = baseQuery.Where("type = ?", typeFilter)
 		}
@@ -187,6 +225,7 @@ func GetAllChannels(c *gin.Context) {
 	for _, datum := range channelData {
 		clearChannelInfo(datum)
 	}
+	attachSupplierNames(channelData)
 
 	countQuery := model.DB.Model(&model.Channel{})
 	if statusFilter == common.ChannelStatusEnabled {
@@ -295,6 +334,7 @@ func FixChannelsAbilities(c *gin.Context) {
 
 func SearchChannels(c *gin.Context) {
 	keyword := c.Query("keyword")
+	supplierKeyword := strings.TrimSpace(c.Query("supplier"))
 	group := c.Query("group")
 	modelKeyword := c.Query("model")
 	statusParam := c.Query("status")
@@ -307,6 +347,7 @@ func SearchChannels(c *gin.Context) {
 		filter := model.SupplierChannelSearchFilter{
 			ChannelID:    channelID,
 			Keyword:      keyword,
+			Supplier:     supplierKeyword,
 			ModelKeyword: modelKeyword,
 			Group:        group,
 		}
@@ -371,6 +412,7 @@ func SearchChannels(c *gin.Context) {
 		for _, datum := range pagedData {
 			clearChannelInfo(datum)
 		}
+		attachSupplierNames(pagedData)
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
 			"message": "",
@@ -410,6 +452,16 @@ func SearchChannels(c *gin.Context) {
 			return
 		}
 		channelData = channels
+	}
+	attachSupplierNames(channelData)
+	if supplierKeyword != "" {
+		filteredBySupplier := make([]*model.Channel, 0, len(channelData))
+		for _, ch := range channelData {
+			if strings.Contains(strings.ToLower(ch.SupplierName), strings.ToLower(supplierKeyword)) {
+				filteredBySupplier = append(filteredBySupplier, ch)
+			}
+		}
+		channelData = filteredBySupplier
 	}
 
 	if statusFilter == common.ChannelStatusEnabled || statusFilter == 0 {

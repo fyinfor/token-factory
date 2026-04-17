@@ -17,18 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import {
-  Button,
-  Col,
-  Form,
-  Row,
-  Spin,
-  Upload,
-  Typography,
-  Space,
-  InputNumber,
-} from '@douyinfe/semi-ui';
+import React, { useEffect, useState, useRef } from 'react';
+import { Button, Col, Form, Row, Spin } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
 import {
   compareObjects,
@@ -38,7 +28,42 @@ import {
   showWarning,
 } from '../../../helpers';
 
-const { Text } = Typography;
+/** 与后台 common/constants.go 默认 QuotaPerUnit 一致，仅当选项未加载时的兜底 */
+const DEFAULT_QUOTA_PER_UNIT = 500 * 1000;
+
+const CREDIT_LIMIT_FORM_KEYS = [
+  'QuotaForNewUser',
+  'PreConsumedQuota',
+  'QuotaForInviter',
+  'QuotaForInvitee',
+  'quota_setting.enable_free_model_pre_consume',
+];
+
+/** 运营后台以美元填写、保存时换算为站内额度整数的选项（与 common.QuotaFromUSD 一致） */
+const USD_QUOTA_OPTION_KEYS = [
+  'QuotaForNewUser',
+  'QuotaForInviter',
+  'QuotaForInvitee',
+];
+
+function parseQuotaPerUnit(raw) {
+  const n = parseFloat(raw);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_QUOTA_PER_UNIT;
+}
+
+/** 接口中的额度整数 → 表单展示的美元（与 LogQuota / 充值计价同一套 QuotaPerUnit） */
+function internalQuotaToUsd(quotaRaw, quotaPerUnit) {
+  const q = parseInt(String(quotaRaw ?? '0'), 10);
+  if (!Number.isFinite(q) || q <= 0) return 0;
+  return q / quotaPerUnit;
+}
+
+/** 美元 → 提交给后端的额度整数字符串（向零截断，与 common.QuotaFromUSD 一致） */
+function usdToInternalQuotaString(usdVal, quotaPerUnit) {
+  const u = Number(usdVal);
+  if (!Number.isFinite(u) || u <= 0) return '0';
+  return String(Math.trunc(u * quotaPerUnit));
+}
 
 export default function SettingsCreditLimit(props) {
   const { t } = useTranslation();
@@ -48,88 +73,21 @@ export default function SettingsCreditLimit(props) {
     PreConsumedQuota: '',
     QuotaForInviter: '',
     QuotaForInvitee: '',
-    AffiliateDefaultCommissionBps: '1000',
-    DistributorApplyCsImageUrl: '',
-    DistributorWithdrawCsImageUrl: '',
-    DistributorWithdrawNotice: '',
-    DistributorMinWithdrawQuota: '',
     'quota_setting.enable_free_model_pre_consume': true,
   });
   const refForm = useRef();
   const [inputsRow, setInputsRow] = useState(inputs);
-  const [uploadingKey, setUploadingKey] = useState(null);
-  const [showManualUrl, setShowManualUrl] = useState(false);
-
-  const persistOptionValue = useCallback(
-    async (key, value) => {
-      setLoading(true);
-      try {
-        const res = await API.put('/api/option/', {
-          key,
-          value: value ?? '',
-        });
-        if (!res.data.success) {
-          showError(res.data.message);
-          return;
-        }
-        setInputs((prev) => ({ ...prev, [key]: value }));
-        setInputsRow((prev) => ({ ...prev, [key]: value }));
-        refForm.current?.setValues({ [key]: value });
-        showSuccess(t('已保存'));
-        props.refresh?.();
-      } catch {
-        showError(t('保存失败'));
-      } finally {
-        setLoading(false);
-      }
-    },
-    [props, t],
-  );
-
-  const handleDistributorImageUpload = useCallback(
-    (optionKey) => async ({ file, onSuccess, onError }) => {
-      const inst = file.fileInstance || file;
-      if (!inst) {
-        onError(new Error('no file'));
-        return;
-      }
-      setUploadingKey(optionKey);
-      const fd = new FormData();
-      fd.append('file', inst);
-      try {
-        const res = await API.post('/api/oss/upload', fd, {
-          skipErrorHandler: true,
-        });
-        const { success, message, data } = res.data || {};
-        const url = data?.url;
-        if (!success || !url) {
-          showError(message || t('上传失败'));
-          onError(new Error(message));
-          return;
-        }
-        await persistOptionValue(optionKey, url);
-        onSuccess(data);
-      } catch (e) {
-        const msg =
-          e?.response?.data?.message ||
-          e?.message ||
-          t('上传失败，请确认已启用 OSS 并完成配置');
-        showError(msg);
-        onError(e);
-      } finally {
-        setUploadingKey(null);
-      }
-    },
-    [persistOptionValue, t],
-  );
 
   function onSubmit() {
+    const quotaPerUnit = parseQuotaPerUnit(props.options?.QuotaPerUnit);
     const updateArray = compareObjects(inputs, inputsRow);
     if (!updateArray.length) return showWarning(t('你似乎并没有修改什么'));
     const requestQueue = updateArray.map((item) => {
       let value = '';
       if (typeof inputs[item.key] === 'boolean') {
         value = String(inputs[item.key]);
+      } else if (USD_QUOTA_OPTION_KEYS.includes(item.key)) {
+        value = usdToInternalQuotaString(inputs[item.key], quotaPerUnit);
       } else {
         value = inputs[item.key];
       }
@@ -159,16 +117,28 @@ export default function SettingsCreditLimit(props) {
   }
 
   useEffect(() => {
+    const quotaPerUnit = parseQuotaPerUnit(props.options?.QuotaPerUnit);
     const currentInputs = {};
-    for (let key in props.options) {
-      if (Object.keys(inputs).includes(key)) {
+    for (const key of CREDIT_LIMIT_FORM_KEYS) {
+      if (props.options && Object.prototype.hasOwnProperty.call(props.options, key)) {
         currentInputs[key] = props.options[key];
+      }
+    }
+    for (const key of USD_QUOTA_OPTION_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(currentInputs, key)) {
+        currentInputs[key] = internalQuotaToUsd(
+          currentInputs[key],
+          quotaPerUnit,
+        );
       }
     }
     setInputs(currentInputs);
     setInputsRow(structuredClone(currentInputs));
-    refForm.current.setValues(currentInputs);
+    refForm.current?.setValues?.(currentInputs);
   }, [props.options]);
+
+  const usdQuotaExtraText = t('额度美元配置说明');
+
   return (
     <>
       <Spin spinning={loading}>
@@ -183,14 +153,16 @@ export default function SettingsCreditLimit(props) {
                 <Form.InputNumber
                   label={t('新用户初始额度')}
                   field={'QuotaForNewUser'}
-                  step={1}
+                  step={0.01}
                   min={0}
-                  suffix={'Token'}
-                  placeholder={''}
+                  precision={6}
+                  suffix={'USD'}
+                  extraText={usdQuotaExtraText}
+                  placeholder={t('例如：0.01')}
                   onChange={(value) =>
                     setInputs({
                       ...inputs,
-                      QuotaForNewUser: String(value),
+                      QuotaForNewUser: value,
                     })
                   }
                 />
@@ -216,15 +188,16 @@ export default function SettingsCreditLimit(props) {
                 <Form.InputNumber
                   label={t('邀请新用户奖励额度')}
                   field={'QuotaForInviter'}
-                  step={1}
+                  step={0.01}
                   min={0}
-                  suffix={'Token'}
-                  extraText={''}
-                  placeholder={t('例如：2000')}
+                  precision={6}
+                  suffix={'USD'}
+                  extraText={usdQuotaExtraText}
+                  placeholder={t('例如：0.01')}
                   onChange={(value) =>
                     setInputs({
                       ...inputs,
-                      QuotaForInviter: String(value),
+                      QuotaForInviter: value,
                     })
                   }
                 />
@@ -235,261 +208,21 @@ export default function SettingsCreditLimit(props) {
                 <Form.InputNumber
                   label={t('新用户使用邀请码奖励额度')}
                   field={'QuotaForInvitee'}
-                  step={1}
+                  step={0.01}
                   min={0}
-                  suffix={'Token'}
-                  extraText={''}
-                  placeholder={t('例如：1000')}
+                  precision={6}
+                  suffix={'USD'}
+                  extraText={usdQuotaExtraText}
+                  placeholder={t('例如：0.01')}
                   onChange={(value) =>
                     setInputs({
                       ...inputs,
-                      QuotaForInvitee: String(value),
+                      QuotaForInvitee: value,
                     })
                   }
                 />
               </Col>
             </Row>
-            <Row gutter={16}>
-              <Col xs={24} sm={12} md={8}>
-                <Form.InputNumber
-                  label={t('分销商线下提现最低额度（内部点数）')}
-                  field='DistributorMinWithdrawQuota'
-                  step={1}
-                  min={0}
-                  suffix={'Token'}
-                  extraText={t(
-                    '留空则与「单价对应额度」一致；超级管理员可限制单次线下提现下限',
-                  )}
-                  placeholder={t('留空为默认')}
-                  onChange={(value) =>
-                    setInputs({
-                      ...inputs,
-                      DistributorMinWithdrawQuota:
-                        value === null || value === undefined
-                          ? ''
-                          : String(value),
-                    })
-                  }
-                />
-              </Col>
-            </Row>
-            <Row gutter={16}>
-              <Col xs={24} sm={12} md={8}>
-                <div className='mb-4'>
-                  <Text strong className='block mb-2'>
-                    {t('默认分销比例')}
-                  </Text>
-                  <InputNumber
-                    value={Number(inputs.AffiliateDefaultCommissionBps || 0) / 100}
-                    onNumberChange={(n) =>
-                      setInputs({
-                        ...inputs,
-                        AffiliateDefaultCommissionBps:
-                          n === null ||
-                          n === undefined ||
-                          (typeof n === 'number' && Number.isNaN(n))
-                            ? '0'
-                            : String(Math.round(Number(n) * 100)),
-                      })
-                    }
-                    step={0.01}
-                    min={0}
-                    max={100}
-                    suffix='%'
-                    style={{ width: '100%' }}
-                  />
-                  <Text type='tertiary' size='small' className='block mt-2'>
-                    {t(
-                      '填写 0～100 之间的百分比，例如 10 表示 10%；被邀请用户充值时按此比例给邀请人分成',
-                    )}
-                  </Text>
-                </div>
-              </Col>
-            </Row>
-            <Row gutter={16}>
-              <Col xs={24} md={12}>
-                <Text strong className='block mb-2'>
-                  {t('分销商申请页右侧客服图片')}
-                </Text>
-                <Text type='tertiary' size='small' className='block mb-3'>
-                  {t('上传后自动保存；需先在系统设置中配置并启用阿里云 OSS')}
-                </Text>
-                {inputs.DistributorApplyCsImageUrl ? (
-                  <Space align='start' spacing='loose' wrap>
-                    <img
-                      src={inputs.DistributorApplyCsImageUrl}
-                      alt=''
-                      className='max-h-40 max-w-full rounded-lg border border-[var(--semi-color-border)] object-contain bg-[var(--semi-color-fill-0)]'
-                    />
-                    <Space vertical align='start' spacing='tight'>
-                      <Upload
-                        accept='image/*'
-                        showUploadList={false}
-                        customRequest={handleDistributorImageUpload(
-                          'DistributorApplyCsImageUrl',
-                        )}
-                      >
-                        <Button
-                          loading={
-                            uploadingKey === 'DistributorApplyCsImageUrl'
-                          }
-                        >
-                          {t('替换图片')}
-                        </Button>
-                      </Upload>
-                      <Button
-                        type='danger'
-                        theme='light'
-                        onClick={() =>
-                          persistOptionValue('DistributorApplyCsImageUrl', '')
-                        }
-                      >
-                        {t('清除')}
-                      </Button>
-                    </Space>
-                  </Space>
-                ) : (
-                  <Upload
-                    accept='image/*'
-                    showUploadList={false}
-                    customRequest={handleDistributorImageUpload(
-                      'DistributorApplyCsImageUrl',
-                    )}
-                  >
-                    <Button
-                      loading={uploadingKey === 'DistributorApplyCsImageUrl'}
-                    >
-                      {t('上传图片')}
-                    </Button>
-                  </Upload>
-                )}
-              </Col>
-              <Col xs={24} md={12}>
-                <Text strong className='block mb-2'>
-                  {t('分销中心提现联系客服图片')}
-                </Text>
-                <Text type='tertiary' size='small' className='block mb-3'>
-                  {t('上传后自动保存；需先在系统设置中配置并启用阿里云 OSS')}
-                </Text>
-                {inputs.DistributorWithdrawCsImageUrl ? (
-                  <Space align='start' spacing='loose' wrap>
-                    <img
-                      src={inputs.DistributorWithdrawCsImageUrl}
-                      alt=''
-                      className='max-h-40 max-w-full rounded-lg border border-[var(--semi-color-border)] object-contain bg-[var(--semi-color-fill-0)]'
-                    />
-                    <Space vertical align='start' spacing='tight'>
-                      <Upload
-                        accept='image/*'
-                        showUploadList={false}
-                        customRequest={handleDistributorImageUpload(
-                          'DistributorWithdrawCsImageUrl',
-                        )}
-                      >
-                        <Button
-                          loading={
-                            uploadingKey === 'DistributorWithdrawCsImageUrl'
-                          }
-                        >
-                          {t('替换图片')}
-                        </Button>
-                      </Upload>
-                      <Button
-                        type='danger'
-                        theme='light'
-                        onClick={() =>
-                          persistOptionValue(
-                            'DistributorWithdrawCsImageUrl',
-                            '',
-                          )
-                        }
-                      >
-                        {t('清除')}
-                      </Button>
-                    </Space>
-                  </Space>
-                ) : (
-                  <Upload
-                    accept='image/*'
-                    showUploadList={false}
-                    customRequest={handleDistributorImageUpload(
-                      'DistributorWithdrawCsImageUrl',
-                    )}
-                  >
-                    <Button
-                      loading={
-                        uploadingKey === 'DistributorWithdrawCsImageUrl'
-                      }
-                    >
-                      {t('上传图片')}
-                    </Button>
-                  </Upload>
-                )}
-              </Col>
-            </Row>
-            <Row gutter={16}>
-              <Col span={24}>
-                <Form.TextArea
-                  field='DistributorWithdrawNotice'
-                  label={t('分销中心线下提现说明（用户可见）')}
-                  extraText={t(
-                    '展示在分销商提现弹窗内；留空则不显示。可换行，建议填写到账周期、手续费或所需材料等。',
-                  )}
-                  placeholder={t('例如：工作日 1–3 个工作日到账；请确保银行卡信息与实名一致。')}
-                  autosize={{ minRows: 4, maxRows: 12 }}
-                  showClear
-                  onChange={(value) =>
-                    setInputs({
-                      ...inputs,
-                      DistributorWithdrawNotice: value ?? '',
-                    })
-                  }
-                />
-              </Col>
-            </Row>
-            <Row>
-              <Col span={24}>
-                <Button
-                  type='tertiary'
-                  size='small'
-                  onClick={() => setShowManualUrl((v) => !v)}
-                >
-                  {showManualUrl
-                    ? t('收起手动填写')
-                    : t('手动填写图片地址（高级）')}
-                </Button>
-              </Col>
-            </Row>
-            {showManualUrl ? (
-              <Row gutter={16}>
-                <Col xs={24} md={12}>
-                  <Form.Input
-                    label={t('分销商申请页右侧客服图片 URL')}
-                    field='DistributorApplyCsImageUrl'
-                    placeholder='https://'
-                    onChange={(value) =>
-                      setInputs({
-                        ...inputs,
-                        DistributorApplyCsImageUrl: value,
-                      })
-                    }
-                  />
-                </Col>
-                <Col xs={24} md={12}>
-                  <Form.Input
-                    label={t('分销中心提现联系客服图片 URL')}
-                    field='DistributorWithdrawCsImageUrl'
-                    placeholder='https://'
-                    onChange={(value) =>
-                      setInputs({
-                        ...inputs,
-                        DistributorWithdrawCsImageUrl: value,
-                      })
-                    }
-                  />
-                </Col>
-              </Row>
-            ) : null}
             <Row>
               <Col>
                 <Form.Switch
