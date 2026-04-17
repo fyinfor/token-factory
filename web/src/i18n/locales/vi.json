@@ -3927,6 +3927,15 @@
     "查看定价": "Xem giá",
     "完整使用日志": "Nhật ký đầy đủ",
     "实时监控每次调用，详细记录请求和响应便于调试分析。": "Giám sát thời gian thực mỗi cuộc gọi với nhật ký chi tiết để gỡ lỗi.",
-    "查看文档": "Xem tài liệu"
+    "查看文档": "Xem tài liệu",
+    "查看供应商详情": "Xem chi tiết nhà cung cấp",
+    "供应商详情": "Chi tiết nhà cung cấp",
+    "获取供应商信息失败": "Không thể lấy thông tin nhà cung cấp",
+    "审核状态": "Trạng thái xét duyệt",
+    "审核备注：": "Ghi chú xét duyệt: ",
+    "申请时间：": "Thời gian nộp đơn: ",
+    "审核信息": "Thông tin xét duyệt",
+    "审核备注": "Ghi chú xét duyệt",
+    "申请时间": "Thời gian nộp đơn"
   }
 }

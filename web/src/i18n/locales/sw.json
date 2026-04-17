@@ -3425,6 +3425,15 @@
     "查看定价": "Angalia bei",
     "完整使用日志": "Kumbukumbu kamili za matumizi",
     "实时监控每次调用，详细记录请求和响应便于调试分析。": "Ufuatiliaji wa wakati halisi kwa kila wito, rekodi maelezo ya maombi na majibu kwa utatuzi.",
-    "查看文档": "Angalia nyaraka"
+    "查看文档": "Angalia nyaraka",
+    "查看供应商详情": "Angalia maelezo ya msambazaji",
+    "供应商详情": "Maelezo ya msambazaji",
+    "获取供应商信息失败": "Imeshindwa kupata taarifa za msambazaji",
+    "审核状态": "Hali ya ukaguzi",
+    "审核备注：": "Maelezo ya ukaguzi: ",
+    "申请时间：": "Wakati wa maombi: ",
+    "审核信息": "Taarifa za ukaguzi",
+    "审核备注": "Maelezo ya ukaguzi",
+    "申请时间": "Wakati wa maombi"
   }
 }

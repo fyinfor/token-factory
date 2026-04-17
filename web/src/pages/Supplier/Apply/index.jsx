@@ -22,10 +22,12 @@ import { IllustrationNoAccess, IllustrationNoAccessDark } from '@douyinfe/semi-i
 import { useTranslation } from 'react-i18next';
 import { API, isSupplier } from '../../../helpers';
 import SupplierApplicationModal from '../../../components/supplier/SupplierApplicationModal';
+import SupplierDetailModal from '../../../components/supplier/SupplierDetailModal';
 
 const SupplierApplyPage = () => {
   const { t } = useTranslation();
   const [showApplicationModal, setShowApplicationModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
   const [applicationData, setApplicationData] = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -114,6 +116,10 @@ const SupplierApplyPage = () => {
         visible={showApplicationModal}
         handleClose={handleModalClose}
       />
+      <SupplierDetailModal
+        visible={showDetailModal}
+        handleClose={() => setShowDetailModal(false)}
+      />
       {!isSupplier() ? (
         <div className='flex items-center justify-center' style={{ minHeight: 'calc(100vh - 360px)' }}>
           <Empty
@@ -176,7 +182,18 @@ const SupplierApplyPage = () => {
             layout="horizontal"
             title={t('已是供应商')}
             description={t('您已经是供应商，可以在渠道管理和模型管理中管理您的供应商信息。')}
-          />
+          >
+            <Button
+              theme='solid'
+              type='primary'
+              size='large'
+              className='!rounded-md mt-4'
+              style={{ fontWeight: 500 }}
+              onClick={() => setShowDetailModal(true)}
+            >
+              {t('查看供应商详情')}
+            </Button>
+          </Empty>
         </div>
       )}
     </div>

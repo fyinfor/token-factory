@@ -3481,6 +3481,15 @@
     "管理所有供应商信息": "Manage all supplier information",
     "确定要注销该供应商吗？": "Are you sure you want to deactivate this supplier?",
     "注销后该供应商将无法使用": "The supplier will be unable to use after deactivation",
-    "修改供应商": "Edit Supplier"
+    "修改供应商": "Edit Supplier",
+    "查看供应商详情": "View Supplier Details",
+    "供应商详情": "Supplier Details",
+    "获取供应商信息失败": "Failed to get supplier information",
+    "审核状态": "Review Status",
+    "审核备注：": "Review Notes: ",
+    "申请时间：": "Application Time: ",
+    "审核信息": "Review Information",
+    "审核备注": "Review Notes",
+    "申请时间": "Application Time"
   }
 }
