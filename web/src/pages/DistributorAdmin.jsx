@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 import React, { useCallback, useEffect, useState } from 'react';
 import {
+  Banner,
   Button,
   Modal,
   Table,
@@ -28,6 +29,7 @@ import {
   TextArea,
   Select,
   Empty,
+  Upload,
 } from '@douyinfe/semi-ui';
 import {
   IllustrationNoResult,
@@ -54,6 +56,9 @@ const { Text } = Typography;
 
 /** 分销商管理筛选：关键字最大长度（与后端查询参数长度协调） */
 const ADMIN_KEYWORD_MAX_LEN = 120;
+
+/** 资格证书上传数量上限（与申请页一致） */
+const PROFILE_QUAL_MAX_FILES = 5;
 
 /** 解析后端存库的资格证书 JSON 数组字符串 */
 function parseQualificationUrls(raw) {
@@ -174,6 +179,19 @@ export default function DistributorAdmin() {
   const [invPs, setInvPs] = useState(10);
   const [invDistributorId, setInvDistributorId] = useState(null);
 
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileUserId, setProfileUserId] = useState(null);
+  const [profileUsername, setProfileUsername] = useState('');
+  const [profileNeedsManual, setProfileNeedsManual] = useState(false);
+  const [profileAppStatus, setProfileAppStatus] = useState(null);
+  const [profileRealName, setProfileRealName] = useState('');
+  const [profileIdCard, setProfileIdCard] = useState('');
+  const [profileContact, setProfileContact] = useState('');
+  /** 资格证书文件 URL 列表（上传 OSS 或历史数据解析） */
+  const [profileQualUrls, setProfileQualUrls] = useState([]);
+
   const [wdLoading, setWdLoading] = useState(false);
   const [wdRows, setWdRows] = useState([]);
   const [wdTotal, setWdTotal] = useState(0);
@@ -267,6 +285,103 @@ export default function DistributorAdmin() {
   useEffect(() => {
     if (tab === 'wd') loadWdWithdrawals();
   }, [tab, loadWdWithdrawals]);
+
+  const openDistributorProfile = async (row) => {
+    setProfileUserId(row.id);
+    setProfileUsername(row.username || '');
+    setProfileOpen(true);
+    setProfileLoading(true);
+    setProfileNeedsManual(false);
+    setProfileAppStatus(null);
+    setProfileRealName('');
+    setProfileIdCard('');
+    setProfileContact('');
+    setProfileQualUrls([]);
+    try {
+      const res = await API.get(
+        `/api/distributor/admin/distributors/${row.id}/application`,
+      );
+      const { success, message, data } = res.data;
+      if (!success) {
+        showError(message);
+        return;
+      }
+      setProfileNeedsManual(Boolean(data?.needs_manual_entry));
+      const app = data?.application;
+      if (app) {
+        setProfileAppStatus(app.status ?? null);
+        setProfileRealName(app.real_name || '');
+        setProfileIdCard(app.id_card_no || '');
+        setProfileContact(app.contact || '');
+        setProfileQualUrls(parseQualificationUrls(app.qualification_urls));
+      }
+    } catch {
+      showError(t('加载失败'));
+    } finally {
+      setProfileLoading(false);
+    }
+  };
+
+  const saveDistributorProfile = async () => {
+    if (!profileUserId) return;
+    const urls = profileQualUrls.filter(Boolean);
+    if (!profileRealName.trim()) {
+      showError(t('请填写真实姓名'));
+      return;
+    }
+    if (!profileIdCard.trim()) {
+      showError(t('请填写身份证号码'));
+      return;
+    }
+    if (!profileContact.trim()) {
+      showError(t('请填写联系方式'));
+      return;
+    }
+    if (urls.length === 0) {
+      showError(t('请上传资格证书'));
+      return;
+    }
+    setProfileSaving(true);
+    try {
+      const res = await API.put(
+        `/api/distributor/admin/distributors/${profileUserId}/application`,
+        {
+          real_name: profileRealName.trim(),
+          id_card_no: profileIdCard.trim(),
+          contact: profileContact.trim(),
+          qualification_urls: urls,
+        },
+      );
+      if (res.data.success) {
+        showSuccess(t('已保存'));
+        try {
+          const r2 = await API.get(
+            `/api/distributor/admin/distributors/${profileUserId}/application`,
+          );
+          const d = r2.data?.data;
+          if (r2.data.success && d) {
+            setProfileNeedsManual(Boolean(d.needs_manual_entry));
+            const app = d.application;
+            if (app) {
+              setProfileAppStatus(app.status ?? null);
+              setProfileRealName(app.real_name || '');
+              setProfileIdCard(app.id_card_no || '');
+              setProfileContact(app.contact || '');
+              setProfileQualUrls(parseQualificationUrls(app.qualification_urls));
+            }
+          }
+        } catch {
+          /* ignore */
+        }
+      } else {
+        showError(res.data.message);
+      }
+    } catch {
+      showError(t('保存失败'));
+    } finally {
+      setProfileSaving(false);
+    }
+  };
 
   const openDetail = async (id) => {
     try {
@@ -502,7 +617,14 @@ export default function DistributorAdmin() {
   const distColumns = [
     { title: 'ID', dataIndex: 'id', width: 80 },
     { title: t('用户名'), dataIndex: 'username' },
-    { title: t('显示名'), dataIndex: 'display_name' },
+    {
+      title: t('申请真实姓名'),
+      dataIndex: 'application_real_name',
+      render: (name) => {
+        const s = name != null ? String(name).trim() : '';
+        return s || '—';
+      },
+    },
     { title: 'aff', dataIndex: 'aff_code', width: 90 },
     {
       title: t('默认分成'),
@@ -518,6 +640,13 @@ export default function DistributorAdmin() {
       title: t('操作'),
       render: (_, r) => (
         <div className='flex flex-wrap gap-1'>
+          <Button
+            size='small'
+            type={r.needs_supplement ? 'warning' : 'tertiary'}
+            onClick={() => openDistributorProfile(r)}
+          >
+            {r.needs_supplement ? t('补充资料') : t('查看资料')}
+          </Button>
           <Button size='small' onClick={() => openInvitees(r.id)}>
             {t('邀请明细')}
           </Button>
@@ -848,7 +977,9 @@ export default function DistributorAdmin() {
                       showClear
                       pure
                       size='small'
-                      placeholder={t('搜索用户名、显示名')}
+                      placeholder={t(
+                        '搜索用户名、显示名、申请真实姓名、联系方式、身份证',
+                      )}
                       onChange={(v) =>
                         setDistKeyword(
                           String(v ?? '').slice(0, ADMIN_KEYWORD_MAX_LEN),
@@ -940,6 +1071,203 @@ export default function DistributorAdmin() {
                 urls={parseQualificationUrls(detail.qualification_urls)}
                 onImagePreview={(u) => setQualImagePreview(u)}
               />
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        title={t('分销商申请资料')}
+        visible={profileOpen}
+        onCancel={() => setProfileOpen(false)}
+        width={720}
+        footer={
+          <div className='flex justify-end gap-2'>
+            <Button onClick={() => setProfileOpen(false)}>{t('关闭')}</Button>
+            <Button
+              type='primary'
+              loading={profileSaving}
+              onClick={saveDistributorProfile}
+            >
+              {t('保存资料')}
+            </Button>
+          </div>
+        }
+      >
+        {profileLoading ? (
+          <div className='py-8 text-center text-[var(--semi-color-text-2)]'>
+            {t('加载中')}…
+          </div>
+        ) : (
+          <div className='space-y-3 text-sm'>
+            <div>
+              <Text strong>ID</Text>：{profileUserId}
+            </div>
+            <div>
+              <Text strong>{t('用户名')}</Text>：{profileUsername}
+            </div>
+            {profileAppStatus != null ? (
+              <div>
+                <Text strong>{t('申请状态')}</Text>：{appStatus(profileAppStatus)}
+              </div>
+            ) : null}
+            {profileNeedsManual ? (
+              <Banner
+                type='warning'
+                fullMode={false}
+                bordered
+                description={t(
+                  '该用户为管理员手动开通分销商，暂无完整申请资料，请代为补全并保存。',
+                )}
+              />
+            ) : null}
+            <div>
+              <div className='mb-1'>
+                <Text strong>{t('姓名')}</Text>
+              </div>
+              <Input
+                value={profileRealName}
+                onChange={(v) => setProfileRealName(String(v ?? ''))}
+                placeholder={t('真实姓名')}
+              />
+            </div>
+            <div>
+              <div className='mb-1'>
+                <Text strong>{t('身份证号码')}</Text>
+              </div>
+              <Input
+                value={profileIdCard}
+                onChange={(v) => setProfileIdCard(String(v ?? ''))}
+                placeholder={t('身份证号码')}
+              />
+            </div>
+            <div>
+              <div className='mb-1'>
+                <Text strong>{t('联系方式')}</Text>
+              </div>
+              <Input
+                value={profileContact}
+                onChange={(v) => setProfileContact(String(v ?? ''))}
+                placeholder={t('手机或邮箱等')}
+              />
+            </div>
+            <div>
+              <Text strong className='block mb-2'>
+                {t('资格证书')}
+              </Text>
+              <Upload
+                action=''
+                accept='image/*,.pdf'
+                showUploadList={false}
+                customRequest={async ({ file, onSuccess, onError }) => {
+                  const fd = new FormData();
+                  const inst = file.fileInstance || file;
+                  fd.append('file', inst);
+                  try {
+                    const res = await API.post('/api/oss/upload', fd, {
+                      skipErrorHandler: true,
+                    });
+                    const { success, message, data } = res.data || {};
+                    if (!success || !data?.url) {
+                      onError(new Error(message || 'upload'));
+                      showError(message || t('上传失败'));
+                      return;
+                    }
+                    setProfileQualUrls((prev) =>
+                      prev.length >= PROFILE_QUAL_MAX_FILES
+                        ? prev
+                        : [...prev, data.url],
+                    );
+                    onSuccess(data);
+                    showSuccess(t('已上传'));
+                  } catch (e) {
+                    onError(e);
+                    showError(e?.response?.data?.message || t('上传失败'));
+                  }
+                }}
+                limit={PROFILE_QUAL_MAX_FILES}
+                multiple
+                disabled={profileQualUrls.length >= PROFILE_QUAL_MAX_FILES}
+              >
+                <Button
+                  disabled={profileQualUrls.length >= PROFILE_QUAL_MAX_FILES}
+                >
+                  {t('上传文件')}
+                </Button>
+              </Upload>
+              <Text type='tertiary' size='small' className='block mt-1'>
+                {t('支持图片或 PDF，最多 5 个；点击图片可大图预览')}
+              </Text>
+              {profileQualUrls.length > 0 && (
+                <div className='mt-3 flex flex-wrap gap-3'>
+                  {profileQualUrls.map((u, idx) =>
+                    isPdfUrl(u) ? (
+                      <div
+                        key={`prof-pdf-${u}-${idx}`}
+                        className='relative flex h-24 w-24 flex-col items-center justify-center rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)]'
+                      >
+                        <IconFile size='large' />
+                        <span className='mt-1 text-xs text-[var(--semi-color-text-2)]'>
+                          PDF
+                        </span>
+                        <button
+                          type='button'
+                          className='absolute inset-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary'
+                          title={t('在新窗口打开')}
+                          onClick={() =>
+                            window.open(u, '_blank', 'noopener,noreferrer')
+                          }
+                        />
+                        <Button
+                          size='small'
+                          type='danger'
+                          theme='borderless'
+                          className='!absolute -right-1 -top-1 !min-w-0 z-10'
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setProfileQualUrls((prev) =>
+                              prev.filter((_, i) => i !== idx),
+                            );
+                          }}
+                        >
+                          ×
+                        </Button>
+                      </div>
+                    ) : (
+                      <div
+                        key={`prof-img-${u}-${idx}`}
+                        className='relative h-24 w-24 overflow-hidden rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)]'
+                      >
+                        <button
+                          type='button'
+                          className='block h-full w-full cursor-zoom-in border-0 bg-transparent p-0'
+                          onClick={() => setQualImagePreview(u)}
+                        >
+                          <img
+                            src={u}
+                            alt=''
+                            className='h-full w-full object-cover'
+                          />
+                        </button>
+                        <Button
+                          size='small'
+                          type='danger'
+                          theme='borderless'
+                          className='!absolute -right-1 -top-1 !min-w-0'
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setProfileQualUrls((prev) =>
+                              prev.filter((_, i) => i !== idx),
+                            );
+                          }}
+                        >
+                          ×
+                        </Button>
+                      </div>
+                    ),
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}

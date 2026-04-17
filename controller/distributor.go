@@ -269,13 +269,14 @@ func RejectDistributorApplicationAdmin(c *gin.Context) {
 func ListDistributorsAdmin(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	keyword := c.Query("keyword")
-	users, total, err := model.ListDistributorsAdmin(keyword, pageInfo)
+	rows, total, err := model.ListDistributorsAdmin(keyword, pageInfo)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
-	items := make([]gin.H, 0, len(users))
-	for _, u := range users {
+	items := make([]gin.H, 0, len(rows))
+	for _, it := range rows {
+		u := it.User
 		bps := u.DistributorCommissionBps
 		if bps <= 0 {
 			bps = common.AffiliateDefaultCommissionBps
@@ -284,6 +285,8 @@ func ListDistributorsAdmin(c *gin.Context) {
 			"id":                         u.Id,
 			"username":                   u.Username,
 			"display_name":               u.DisplayName,
+			"application_real_name":      it.ApplicationRealName,
+			"needs_supplement":           it.NeedsSupplement,
 			"aff_code":                   u.AffCode,
 			"aff_count":                  u.AffCount,
 			"aff_quota":                  u.AffQuota,
@@ -506,6 +509,74 @@ func PostDistributorSettleAdmin(c *gin.Context) {
 		return
 	}
 	if err := model.AdminSettleDistributorAffQuota(id); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+}
+
+type adminUpsertDistributorApplicationRequest struct {
+	RealName          string   `json:"real_name"`
+	IdCardNo          string   `json:"id_card_no"`
+	QualificationUrls []string `json:"qualification_urls"`
+	Contact           string   `json:"contact"`
+}
+
+// GetDistributorApplicationByUserAdmin 管理端：查看某分销商的申请/认证资料（手工开通可能无记录）
+func GetDistributorApplicationByUserAdmin(c *gin.Context) {
+	userId, err := strconv.Atoi(c.Param("id"))
+	if err != nil || userId <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "invalid id"})
+		return
+	}
+	username, app, needsManualEntry, err := model.GetDistributorApplicationProfileByUserIdAdmin(userId)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	data := gin.H{
+		"user_id":            userId,
+		"username":           username,
+		"needs_manual_entry": needsManualEntry,
+	}
+	if app != nil {
+		data["application"] = app
+	} else {
+		data["application"] = nil
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": data})
+}
+
+// PutDistributorApplicationByUserAdmin 管理端：补录或修改分销商申请资料
+func PutDistributorApplicationByUserAdmin(c *gin.Context) {
+	userId, err := strconv.Atoi(c.Param("id"))
+	if err != nil || userId <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "invalid id"})
+		return
+	}
+	var req adminUpsertDistributorApplicationRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的请求"})
+		return
+	}
+	urls := make([]string, 0, len(req.QualificationUrls))
+	for _, u := range req.QualificationUrls {
+		u = strings.TrimSpace(u)
+		if u != "" {
+			urls = append(urls, u)
+		}
+	}
+	if len(urls) == 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "请填写资格证书链接"})
+		return
+	}
+	urlsJSON, err := common.Marshal(urls)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "资料序列化失败"})
+		return
+	}
+	reviewerId := c.GetInt("id")
+	if err := model.AdminUpsertDistributorApplicationByUser(userId, reviewerId, req.RealName, req.IdCardNo, string(urlsJSON), req.Contact); err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
