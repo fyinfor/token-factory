@@ -155,6 +155,12 @@ func StripeWebhook(c *gin.Context) {
 
 	signature := c.GetHeader("Stripe-Signature")
 	endpointSecret := setting.StripeWebhookSecret
+	// 安全兜底：未配置 Webhook Secret 时拒绝处理，避免“空密钥验签”风险。
+	if strings.TrimSpace(endpointSecret) == "" {
+		log.Printf("[SECURITY][Stripe] StripeWebhookSecret 未配置，拒绝处理 webhook 请求")
+		c.AbortWithStatus(http.StatusServiceUnavailable)
+		return
+	}
 	event, err := webhook.ConstructEventWithOptions(payload, signature, endpointSecret, webhook.ConstructEventOptions{
 		IgnoreAPIVersionMismatch: true,
 	})
@@ -185,6 +191,10 @@ func sessionCompleted(event stripe.Event) {
 		log.Println("错误的Stripe Checkout完成状态:", status, ",", referenceId)
 		return
 	}
+	if !strings.HasPrefix(referenceId, "ref_") {
+		log.Printf("[SECURITY][Stripe] 拒绝可疑回调，订单号前缀非法: %s", referenceId)
+		return
+	}
 
 	// Try complete subscription order first
 	LockOrder(referenceId)
@@ -197,20 +207,26 @@ func sessionCompleted(event stripe.Event) {
 	}
 	if err := model.CompleteSubscriptionOrder(referenceId, common.GetJsonString(payload)); err == nil {
 		return
-	} else if err != nil && !errors.Is(err, model.ErrSubscriptionOrderNotFound) {
+	} else if !errors.Is(err, model.ErrSubscriptionOrderNotFound) {
 		log.Println("complete subscription order failed:", err.Error(), referenceId)
 		return
 	}
 
-	err := model.Recharge(referenceId, customerId)
+	total, err := strconv.ParseFloat(event.GetObjectValue("amount_total"), 64)
 	if err != nil {
-		log.Println(err.Error(), referenceId)
+		log.Printf("[SECURITY][Stripe] 支付金额解析失败，trade_no=%s, amount_total=%s, err=%v", referenceId, event.GetObjectValue("amount_total"), err)
+		return
+	}
+	paidMoney := total / 100
+	currency := strings.ToUpper(event.GetObjectValue("currency"))
+
+	err = model.RechargeStripe(referenceId, customerId, paidMoney, currency)
+	if err != nil {
+		log.Printf("[SECURITY][Stripe] 回调校验未通过，trade_no=%s, paid=%.2f, currency=%s, err=%s", referenceId, paidMoney, currency, err.Error())
 		return
 	}
 
-	total, _ := strconv.ParseFloat(event.GetObjectValue("amount_total"), 64)
-	currency := strings.ToUpper(event.GetObjectValue("currency"))
-	log.Printf("收到款项：%s, %.2f(%s)", referenceId, total/100, currency)
+	log.Printf("收到款项：%s, %.2f(%s)", referenceId, paidMoney, currency)
 }
 
 func sessionExpired(event stripe.Event) {
@@ -231,7 +247,7 @@ func sessionExpired(event stripe.Event) {
 	defer UnlockOrder(referenceId)
 	if err := model.ExpireSubscriptionOrder(referenceId); err == nil {
 		return
-	} else if err != nil && !errors.Is(err, model.ErrSubscriptionOrderNotFound) {
+	} else if !errors.Is(err, model.ErrSubscriptionOrderNotFound) {
 		log.Println("过期订阅订单失败", referenceId, ", err:", err.Error())
 		return
 	}
