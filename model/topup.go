@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -101,6 +102,73 @@ func Recharge(referenceId string, customerId string) (err error) {
 
 	RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%d", logger.FormatQuota(int(quota)), topUp.Amount))
 
+	ApplyAffiliateTopupReward(topUp.UserId, int(quota))
+	return nil
+}
+
+// RechargeStripe 按 Stripe 回调完成充值，并在事务中校验渠道、金额和币种。
+// 仅当订单为待支付且支付渠道为 stripe、回调金额与订单金额匹配、币种为 USD 时才会入账。
+func RechargeStripe(referenceId string, customerId string, paidMoney float64, currency string) (err error) {
+	if referenceId == "" {
+		return errors.New("未提供支付单号")
+	}
+	if paidMoney <= 0 {
+		return errors.New("无效的支付金额")
+	}
+	if strings.ToUpper(strings.TrimSpace(currency)) != "USD" {
+		return errors.New("不支持的支付币种")
+	}
+
+	var quota float64
+	topUp := &TopUp{}
+
+	refCol := "`trade_no`"
+	if common.UsingPostgreSQL {
+		refCol = `"trade_no"`
+	}
+
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		err := tx.Set("gorm:query_option", "FOR UPDATE").Where(refCol+" = ?", referenceId).First(topUp).Error
+		if err != nil {
+			return errors.New("充值订单不存在")
+		}
+		if topUp.Status != common.TopUpStatusPending {
+			return errors.New("充值订单状态错误")
+		}
+		if topUp.PaymentMethod != "stripe" {
+			return fmt.Errorf("支付渠道不匹配: expect stripe, got %s", topUp.PaymentMethod)
+		}
+
+		expectedMoney := decimal.NewFromFloat(topUp.Money)
+		actualMoney := decimal.NewFromFloat(paidMoney)
+		diff := expectedMoney.Sub(actualMoney).Abs()
+		// 允许 1 美分误差，兼容支付平台与本地浮点换算的微小偏差
+		if diff.GreaterThan(decimal.NewFromFloat(0.01)) {
+			return fmt.Errorf("支付金额不匹配: expect %s, got %s", expectedMoney.StringFixed(2), actualMoney.StringFixed(2))
+		}
+
+		topUp.CompleteTime = common.GetTimestamp()
+		topUp.Status = common.TopUpStatusSuccess
+		err = tx.Save(topUp).Error
+		if err != nil {
+			return err
+		}
+
+		quota = topUp.Money * common.QuotaPerUnit
+		err = tx.Model(&User{}).Where("id = ?", topUp.UserId).Updates(map[string]interface{}{"stripe_customer": customerId, "quota": gorm.Expr("quota + ?", quota)}).Error
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		common.SysError(fmt.Sprintf("stripe topup verify failed, trade_no=%s, currency=%s, paid=%.2f, err=%s", referenceId, strings.ToUpper(strings.TrimSpace(currency)), paidMoney, err.Error()))
+		return errors.New("充值失败，请稍后重试")
+	}
+
+	RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%d", logger.FormatQuota(int(quota)), topUp.Amount))
 	ApplyAffiliateTopupReward(topUp.UserId, int(quota))
 	return nil
 }
