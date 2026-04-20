@@ -58,9 +58,16 @@ func HandleGroupRatio(ctx *gin.Context, relayInfo *relaycommon.RelayInfo) types.
 }
 
 func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens int, meta *types.TokenCountMeta) (types.PriceData, error) {
+	if info == nil {
+		return types.PriceData{}, fmt.Errorf("relay info is nil")
+	}
+	channelID := 0
+	if info.ChannelMeta != nil {
+		channelID = info.ChannelId
+	}
 	groupRatioInfo := HandleGroupRatio(c, info)
 	modelPrice, usePrice := ratio_setting.GetModelPrice(info.OriginModelName, false)
-	if channelPrice, ok := ratio_setting.GetChannelModelPrice(info.ChannelId, info.OriginModelName); ok {
+	if channelPrice, ok := ratio_setting.GetChannelModelPrice(channelID, info.OriginModelName); ok {
 		modelPrice = channelPrice
 		usePrice = true
 	}
@@ -73,12 +80,12 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		modelPrice = groupPrice
 		usePrice = true
 	}
-	channelCompletionRatio, hasChannelCompletionRatio := ratio_setting.GetChannelCompletionRatio(info.ChannelId, info.OriginModelName)
-	channelCacheRatio, hasChannelCacheRatio := ratio_setting.GetChannelCacheRatio(info.ChannelId, info.OriginModelName)
-	channelCreateCacheRatio, hasChannelCreateCacheRatio := ratio_setting.GetChannelCreateCacheRatio(info.ChannelId, info.OriginModelName)
-	channelImageRatio, hasChannelImageRatio := ratio_setting.GetChannelImageRatio(info.ChannelId, info.OriginModelName)
-	channelAudioRatio, hasChannelAudioRatio := ratio_setting.GetChannelAudioRatio(info.ChannelId, info.OriginModelName)
-	channelAudioCompletionRatio, hasChannelAudioCompletionRatio := ratio_setting.GetChannelAudioCompletionRatio(info.ChannelId, info.OriginModelName)
+	channelCompletionRatio, hasChannelCompletionRatio := ratio_setting.GetChannelCompletionRatio(channelID, info.OriginModelName)
+	channelCacheRatio, hasChannelCacheRatio := ratio_setting.GetChannelCacheRatio(channelID, info.OriginModelName)
+	channelCreateCacheRatio, hasChannelCreateCacheRatio := ratio_setting.GetChannelCreateCacheRatio(channelID, info.OriginModelName)
+	channelImageRatio, hasChannelImageRatio := ratio_setting.GetChannelImageRatio(channelID, info.OriginModelName)
+	channelAudioRatio, hasChannelAudioRatio := ratio_setting.GetChannelAudioRatio(channelID, info.OriginModelName)
+	channelAudioCompletionRatio, hasChannelAudioCompletionRatio := ratio_setting.GetChannelAudioCompletionRatio(channelID, info.OriginModelName)
 
 	var preConsumedQuota int
 	var modelRatio float64
@@ -99,7 +106,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		var success bool
 		var matchName string
 		modelRatio, success, matchName = ratio_setting.GetModelRatio(info.OriginModelName)
-		if channelRatio, ok := ratio_setting.GetChannelModelRatio(info.ChannelId, info.OriginModelName); ok {
+		if channelRatio, ok := ratio_setting.GetChannelModelRatio(channelID, info.OriginModelName); ok {
 			modelRatio = channelRatio
 			success = true
 		}
@@ -201,10 +208,17 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 
 // ModelPriceHelperPerCall 按次计费的 PriceHelper (MJ、Task)
 func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types.PriceData, error) {
+	if info == nil {
+		return types.PriceData{}, fmt.Errorf("relay info is nil")
+	}
+	channelID := 0
+	if info.ChannelMeta != nil {
+		channelID = info.ChannelId
+	}
 	groupRatioInfo := HandleGroupRatio(c, info)
 
 	modelPrice, success := ratio_setting.GetModelPrice(info.OriginModelName, true)
-	if channelPrice, ok := ratio_setting.GetChannelModelPrice(info.ChannelId, info.OriginModelName); ok {
+	if channelPrice, ok := ratio_setting.GetChannelModelPrice(channelID, info.OriginModelName); ok {
 		modelPrice = channelPrice
 		success = true
 	}
