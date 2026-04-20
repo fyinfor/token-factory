@@ -136,6 +136,7 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
     if (supplierData) {
       formApiRef.current?.setValues({
         user_id: supplierData.user_id || null,
+        supplier_alias: supplierData.supplier_alias || '',
         company_name: supplierData.company_name || '',
         credit_code: supplierData.credit_code || '',
         legal_representative: supplierData.legal_representative || '',
@@ -221,6 +222,15 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
         credit_code: values.credit_code || '',
         legal_representative: values.legal_representative || '',
       };
+      if (isAdmin()) {
+        payload.supplier_alias = (values.supplier_alias || '').trim();
+      }
+
+      if (isAdmin() && !payload.supplier_alias) {
+        showError(t('请填写供应商别名'));
+        setLoading(false);
+        return;
+      }
 
       if (!supplier) {
         payload.user_id = values.user_id;
@@ -376,6 +386,19 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
         </Divider>
 
         <Row gutter={12}>
+          {isAdmin() && (
+            <Col span={24}>
+              <Form.Input
+                field='supplier_alias'
+                label={<Text strong>{t('供应商别名')}<Text type='danger'>*</Text></Text>}
+                placeholder={t('管理员填写，且全局唯一')}
+                rules={[{ required: true, message: t('请输入供应商别名') }]}
+                showClear
+                maxLength={128}
+                extraText={t('供应商别名只能由管理员填写和修改')}
+              />
+            </Col>
+          )}
           <Col span={24}>
             <Form.Input
               field='company_name'

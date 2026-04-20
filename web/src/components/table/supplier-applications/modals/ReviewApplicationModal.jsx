@@ -34,16 +34,28 @@ const ReviewApplicationModal = ({ visible, application, handleClose, handleRevie
   useEffect(() => {
     if (!visible) {
       formApiRef.current?.reset();
+      return;
     }
-  }, [visible]);
+    if (application) {
+      formApiRef.current?.setValues({
+        reason: '',
+        supplier_alias: application.supplier_alias || '',
+      });
+    }
+  }, [visible, application]);
 
   const handleApprove = async () => {
     if (!application) return;
     const values = formApiRef.current?.getValues();
+    if (!values.supplier_alias || values.supplier_alias.trim() === '') {
+      formApiRef.current?.setError('supplier_alias', t('审批通过时必须填写供应商别名'));
+      return;
+    }
     setLoading(true);
     await handleReview(application.id, {
       status: 1,
       reason: values.reason || '',
+      supplier_alias: values.supplier_alias.trim(),
     });
     setLoading(false);
   };
@@ -59,6 +71,7 @@ const ReviewApplicationModal = ({ visible, application, handleClose, handleRevie
     await handleReview(application.id, {
       status: 2,
       reason: values.reason,
+      supplier_alias: '',
     });
     setLoading(false);
   };
@@ -253,6 +266,14 @@ const ReviewApplicationModal = ({ visible, application, handleClose, handleRevie
         <Form
           getFormApi={(api) => (formApiRef.current = api)}
         >
+          <Form.Input
+            field='supplier_alias'
+            label={<Text strong>{t('供应商别名')}</Text>}
+            placeholder={t('请输入供应商别名（管理员填写且全局唯一）')}
+            maxLength={128}
+            showClear
+            disabled={isReviewed}
+          />
           <Form.TextArea
             field='reason'
             label={<Text strong>{t('审批意见')}</Text>}

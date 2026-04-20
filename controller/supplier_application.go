@@ -18,6 +18,7 @@ import (
 // SupplierApplicationSubmitRequest 供应商提交申请请求体。
 type SupplierApplicationSubmitRequest struct {
 	ApplicantUserID     int    `json:"applicant_user_id"`
+	SupplierAlias       string `json:"supplier_alias"`
 	CompanyName         string `json:"company_name"`
 	CreditCode          string `json:"credit_code"`
 	BusinessLicenseURL  string `json:"business_license_url"`
@@ -31,8 +32,9 @@ type SupplierApplicationSubmitRequest struct {
 
 // SupplierApplicationReviewRequest 管理员审核请求体。
 type SupplierApplicationReviewRequest struct {
-	Status int    `json:"status"`
-	Reason string `json:"reason"`
+	Status        int    `json:"status"`
+	Reason        string `json:"reason"`
+	SupplierAlias string `json:"supplier_alias"`
 }
 
 // SupplierDeactivateRequest 供应商注销请求体。
@@ -149,6 +151,7 @@ func SubmitSupplierApplication(c *gin.Context) {
 	req.ContactName = strings.TrimSpace(req.ContactName)
 	req.ContactMobile = strings.TrimSpace(req.ContactMobile)
 	req.ContactWechat = strings.TrimSpace(req.ContactWechat)
+	req.SupplierAlias = strings.TrimSpace(req.SupplierAlias)
 	if req.CompanyName == "" || req.CreditCode == "" || req.BusinessLicenseURL == "" ||
 		req.LegalRepresentative == "" || req.ContactName == "" || req.ContactMobile == "" || req.ContactWechat == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请填写完整的必填字段"})
@@ -160,8 +163,14 @@ func SubmitSupplierApplication(c *gin.Context) {
 	}
 
 	isAdminOrAbove := c.GetInt("role") >= common.RoleAdminUser
+	var supplierAliasPtr *string
 	applicantUserID := c.GetInt("id")
 	if isAdminOrAbove {
+		if req.SupplierAlias == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "管理员添加供应商时必须填写供应商别名"})
+			return
+		}
+		supplierAliasPtr = &req.SupplierAlias
 		if req.ApplicantUserID <= 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "管理员代添加供应商时必须提供有效的applicant_user_id"})
 			return
@@ -183,6 +192,7 @@ func SubmitSupplierApplication(c *gin.Context) {
 		ContactName:         req.ContactName,
 		ContactMobile:       req.ContactMobile,
 		ContactWechat:       req.ContactWechat,
+		SupplierAlias:       supplierAliasPtr,
 	}
 	var err error
 	if isAdminOrAbove {
@@ -194,6 +204,10 @@ func SubmitSupplierApplication(c *gin.Context) {
 	if err != nil {
 		if model.IsSupplierCreditCodeDuplicateError(err) {
 			common.ApiErrorMsg(c, "统一社会信用代码已存在，请核对后重试")
+			return
+		}
+		if model.IsSupplierAliasDuplicateError(err) {
+			common.ApiErrorMsg(c, "供应商别名已存在，请更换后重试")
 			return
 		}
 		common.ApiError(c, err)
@@ -276,9 +290,14 @@ func UpdateMySupplierApplication(c *gin.Context) {
 	req.ContactName = strings.TrimSpace(req.ContactName)
 	req.ContactMobile = strings.TrimSpace(req.ContactMobile)
 	req.ContactWechat = strings.TrimSpace(req.ContactWechat)
+	req.SupplierAlias = strings.TrimSpace(req.SupplierAlias)
 	if req.CompanyName == "" || req.CreditCode == "" || req.BusinessLicenseURL == "" ||
 		req.LegalRepresentative == "" || req.ContactName == "" || req.ContactMobile == "" || req.ContactWechat == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请填写完整的必填字段"})
+		return
+	}
+	if req.SupplierAlias == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请填写供应商别名"})
 		return
 	}
 	if len(req.CreditCode) != 18 {
@@ -448,9 +467,14 @@ func AdminUpdateSupplierApplication(c *gin.Context) {
 	req.ContactName = strings.TrimSpace(req.ContactName)
 	req.ContactMobile = strings.TrimSpace(req.ContactMobile)
 	req.ContactWechat = strings.TrimSpace(req.ContactWechat)
+	req.SupplierAlias = strings.TrimSpace(req.SupplierAlias)
 	if req.CompanyName == "" || req.CreditCode == "" || req.BusinessLicenseURL == "" ||
 		req.LegalRepresentative == "" || req.ContactName == "" || req.ContactMobile == "" || req.ContactWechat == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请填写完整的必填字段"})
+		return
+	}
+	if req.SupplierAlias == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请填写供应商别名"})
 		return
 	}
 	if len(req.CreditCode) != 18 {
@@ -467,6 +491,7 @@ func AdminUpdateSupplierApplication(c *gin.Context) {
 		ContactName:         req.ContactName,
 		ContactMobile:       req.ContactMobile,
 		ContactWechat:       req.ContactWechat,
+		SupplierAlias:       &req.SupplierAlias,
 	})
 	if err != nil {
 		if model.IsSupplierCreditCodeDuplicateError(err) {
@@ -475,6 +500,10 @@ func AdminUpdateSupplierApplication(c *gin.Context) {
 		}
 		if model.IsSupplierApplicationNotFound(err) {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "未找到可修改的供应商申请"})
+			return
+		}
+		if model.IsSupplierAliasDuplicateError(err) {
+			common.ApiErrorMsg(c, "供应商别名已存在，请更换后重试")
 			return
 		}
 		common.ApiError(c, err)
@@ -515,15 +544,24 @@ func AdminReviewSupplierApplication(c *gin.Context) {
 		return
 	}
 	req.Reason = strings.TrimSpace(req.Reason)
+	req.SupplierAlias = strings.TrimSpace(req.SupplierAlias)
 	if req.Status == model.SupplierApplicationStatusRejected && req.Reason == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "驳回时请填写原因"})
 		return
 	}
+	if req.Status == model.SupplierApplicationStatusApproved && req.SupplierAlias == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "审批通过时必须填写供应商别名"})
+		return
+	}
 
-	app, err := model.ReviewSupplierApplication(applicationID, c.GetInt("id"), req.Status, req.Reason)
+	app, err := model.ReviewSupplierApplication(applicationID, c.GetInt("id"), req.Status, req.Reason, req.SupplierAlias)
 	if err != nil {
 		if errors.Is(err, model.ErrSupplierApplicationAlreadyReviewed) {
 			c.JSON(http.StatusOK, gin.H{"success": false, "message": "该申请已被其他管理员处理"})
+			return
+		}
+		if model.IsSupplierAliasDuplicateError(err) {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "供应商别名已存在，请更换后重试"})
 			return
 		}
 		common.ApiError(c, err)
