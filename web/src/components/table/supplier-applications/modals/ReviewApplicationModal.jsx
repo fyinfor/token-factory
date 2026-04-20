@@ -86,6 +86,13 @@ const ReviewApplicationModal = ({ visible, application, handleClose, handleRevie
   };
 
   const isReviewed = application?.status !== 0;
+  const capability = application?.supplier_capability || null;
+  const renderListValue = (value) => {
+    if (!Array.isArray(value) || value.length === 0) {
+      return t('未填写');
+    }
+    return value.join('、');
+  };
 
   return (
     <Modal
@@ -256,6 +263,42 @@ const ReviewApplicationModal = ({ visible, application, handleClose, handleRevie
             </Col>
           ) : null}
         </Row>
+
+        <Divider margin='20px 12px'>
+          <Text strong style={{ fontSize: '16px' }}>
+            {t('技术能力信息')}
+          </Text>
+        </Divider>
+        {!capability ? (
+          <Text type='danger'>{t('申请方尚未填写技术能力信息')}</Text>
+        ) : (
+          <Row gutter={12}>
+            <Col span={24}>
+              <Text type='secondary'>{t('核心服务类型')}</Text>
+              <div style={{ marginTop: '4px' }}><Text>{renderListValue(capability.core_service_types)}</Text></div>
+            </Col>
+            <Col span={24}>
+              <Text type='secondary'>{t('支持的模型')}</Text>
+              <div style={{ marginTop: '4px' }}><Text>{renderListValue(capability.supported_models)}</Text></div>
+            </Col>
+            <Col span={24}>
+              <Text type='secondary'>{t('支持的API接口')}</Text>
+              <div style={{ marginTop: '4px' }}><Text>{renderListValue(capability.supported_api_endpoints)}</Text></div>
+            </Col>
+            <Col span={24}>
+              <Text type='secondary'>{t('支持的参数配置')}</Text>
+              <div style={{ marginTop: '4px' }}><Text>{renderListValue(capability.supported_params)}</Text></div>
+            </Col>
+            <Col span={24}>
+              <Text type='secondary'>{t('定价模式')}</Text>
+              <div style={{ marginTop: '4px' }}><Text>{renderListValue(capability.pricing_modes)}</Text></div>
+            </Col>
+            <Col span={24}>
+              <Text type='secondary'>{t('API接口地址')}</Text>
+              <div style={{ marginTop: '4px' }}><Text>{renderListValue(capability.api_base_urls)}</Text></div>
+            </Col>
+          </Row>
+        )}
 
         <Divider margin='20px 12px'>
           <Text strong style={{ fontSize: '16px' }}>

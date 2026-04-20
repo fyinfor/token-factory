@@ -54,25 +54,26 @@ var (
 
 // SupplierApplication 供应商入驻申请主表。
 type SupplierApplication struct {
-	ID                  int     `json:"id" gorm:"primaryKey;comment:主键ID"`
-	ApplicantUserID     int     `json:"applicant_user_id" gorm:"index;not null;comment:申请人用户ID"`
-	ApplicantUsername   string  `json:"applicant_username" gorm:"column:applicant_username;->;comment:申请人用户名（关联 users.username）"`
-	CompanyName         string  `json:"company_name" gorm:"type:varchar(255);not null;comment:企业或主体名称"`
-	CreditCode          string  `json:"credit_code" gorm:"type:varchar(32);not null;uniqueIndex;comment:统一社会信用代码"`
-	BusinessLicenseURL  string  `json:"business_license_url" gorm:"type:varchar(1024);not null;comment:营业执照文件URL"`
-	BusinessLicenseFile string  `json:"business_license_file" gorm:"type:varchar(255);not null;default:'';comment:营业执照文件名称"`
-	LegalRepresentative string  `json:"legal_representative" gorm:"type:varchar(128);not null;comment:法人或经营者姓名"`
-	CompanySize         string  `json:"company_size" gorm:"type:varchar(64);comment:企业规模"`
-	ContactName         string  `json:"contact_name" gorm:"type:varchar(128);not null;comment:对接人姓名"`
-	ContactMobile       string  `json:"contact_mobile" gorm:"type:varchar(32);not null;comment:对接人手机号"`
-	ContactWechat       string  `json:"contact_wechat" gorm:"type:varchar(128);not null;comment:对接人微信或企业微信"`
-	SupplierAlias       *string `json:"supplier_alias" gorm:"type:varchar(128);uniqueIndex;comment:供应商别名（管理员填写，唯一）"`
-	Status              int     `json:"status" gorm:"type:int;index;default:0;not null;comment:审核状态 0待审核 1已通过 2已驳回 3已注销"`
-	ReviewReason        string  `json:"review_reason" gorm:"type:text;comment:审核备注或驳回原因"`
-	ReviewedBy          int     `json:"reviewed_by" gorm:"type:int;index;default:0;comment:审核人用户ID"`
-	ReviewedAt          int64   `json:"reviewed_at" gorm:"type:bigint;default:0;comment:审核时间戳"`
-	CreatedAt           int64   `json:"created_at" gorm:"type:bigint;index;comment:创建时间戳"`
-	UpdatedAt           int64   `json:"updated_at" gorm:"type:bigint;comment:更新时间戳"`
+	ID                  int                 `json:"id" gorm:"primaryKey;comment:主键ID"`
+	ApplicantUserID     int                 `json:"applicant_user_id" gorm:"index;not null;comment:申请人用户ID"`
+	ApplicantUsername   string              `json:"applicant_username" gorm:"column:applicant_username;->;comment:申请人用户名（关联 users.username）"`
+	CompanyName         string              `json:"company_name" gorm:"type:varchar(255);not null;comment:企业或主体名称"`
+	CreditCode          string              `json:"credit_code" gorm:"type:varchar(32);not null;uniqueIndex;comment:统一社会信用代码"`
+	BusinessLicenseURL  string              `json:"business_license_url" gorm:"type:varchar(1024);not null;comment:营业执照文件URL"`
+	BusinessLicenseFile string              `json:"business_license_file" gorm:"type:varchar(255);not null;default:'';comment:营业执照文件名称"`
+	LegalRepresentative string              `json:"legal_representative" gorm:"type:varchar(128);not null;comment:法人或经营者姓名"`
+	CompanySize         string              `json:"company_size" gorm:"type:varchar(64);comment:企业规模"`
+	ContactName         string              `json:"contact_name" gorm:"type:varchar(128);not null;comment:对接人姓名"`
+	ContactMobile       string              `json:"contact_mobile" gorm:"type:varchar(32);not null;comment:对接人手机号"`
+	ContactWechat       string              `json:"contact_wechat" gorm:"type:varchar(128);not null;comment:对接人微信或企业微信"`
+	SupplierAlias       *string             `json:"supplier_alias" gorm:"type:varchar(128);uniqueIndex;comment:供应商别名（管理员填写，唯一）"`
+	SupplierCapability  *SupplierCapability `json:"supplier_capability" gorm:"-"`
+	Status              int                 `json:"status" gorm:"type:int;index;default:0;not null;comment:审核状态 0待审核 1已通过 2已驳回 3已注销"`
+	ReviewReason        string              `json:"review_reason" gorm:"type:text;comment:审核备注或驳回原因"`
+	ReviewedBy          int                 `json:"reviewed_by" gorm:"type:int;index;default:0;comment:审核人用户ID"`
+	ReviewedAt          int64               `json:"reviewed_at" gorm:"type:bigint;default:0;comment:审核时间戳"`
+	CreatedAt           int64               `json:"created_at" gorm:"type:bigint;index;comment:创建时间戳"`
+	UpdatedAt           int64               `json:"updated_at" gorm:"type:bigint;comment:更新时间戳"`
 }
 
 // SupplierApplicationAudit 供应商审核极简审计表。
