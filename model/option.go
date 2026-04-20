@@ -127,6 +127,15 @@ func InitOptionMap() {
 	common.OptionMap["WeChatAccountQRCodeImageURL"] = ""
 	common.OptionMap["TurnstileSiteKey"] = ""
 	common.OptionMap["TurnstileSecretKey"] = ""
+	common.OptionMap["SMSVerificationEnabled"] = strconv.FormatBool(common.SMSVerificationEnabled)
+	common.OptionMap["SMSAccessKeyID"] = common.SMSAccessKeyID
+	common.OptionMap["SMSAccessKeySecret"] = common.SMSAccessKeySecret
+	common.OptionMap["SMSCodeSignName"] = common.SMSCodeSignName
+	common.OptionMap["SMSCodeTemplateCode"] = common.SMSCodeTemplateCode
+	common.OptionMap["SMSCodeValidMinutes"] = strconv.Itoa(common.SMSCodeValidMinutes)
+	common.OptionMap["SMSCodeCooldownMinutes"] = strconv.Itoa(common.SMSCodeCooldownMinutes)
+	common.OptionMap["SMSCodeDailyLimit"] = strconv.Itoa(common.SMSCodeDailyLimit)
+	common.OptionMap["SMSPhoneBlacklist"] = strings.Join(common.SMSPhoneBlacklist, ",")
 	common.OptionMap["QuotaForNewUser"] = strconv.Itoa(common.QuotaForNewUser)
 	common.OptionMap["QuotaForInviter"] = strconv.Itoa(common.QuotaForInviter)
 	common.OptionMap["QuotaForInvitee"] = strconv.Itoa(common.QuotaForInvitee)
@@ -277,6 +286,8 @@ func updateOptionMap(key string, value string) (err error) {
 			common.TelegramOAuthEnabled = boolValue
 		case "TurnstileCheckEnabled":
 			common.TurnstileCheckEnabled = boolValue
+		case "SMSVerificationEnabled":
+			common.SMSVerificationEnabled = boolValue
 		case "RegisterEnabled":
 			common.RegisterEnabled = boolValue
 		case "EmailDomainRestrictionEnabled":
@@ -484,6 +495,40 @@ func updateOptionMap(key string, value string) (err error) {
 		common.TurnstileSiteKey = value
 	case "TurnstileSecretKey":
 		common.TurnstileSecretKey = value
+	case "SMSAccessKeyID":
+		common.SMSAccessKeyID = strings.TrimSpace(value)
+	case "SMSAccessKeySecret":
+		common.SMSAccessKeySecret = strings.TrimSpace(value)
+	case "SMSCodeSignName":
+		common.SMSCodeSignName = strings.TrimSpace(value)
+	case "SMSCodeTemplateCode":
+		common.SMSCodeTemplateCode = strings.TrimSpace(value)
+	case "SMSCodeValidMinutes":
+		if n, parseErr := strconv.Atoi(value); parseErr == nil && n > 0 {
+			common.SMSCodeValidMinutes = n
+		}
+	case "SMSCodeCooldownMinutes":
+		if n, parseErr := strconv.Atoi(value); parseErr == nil && n > 0 {
+			common.SMSCodeCooldownMinutes = n
+		}
+	case "SMSCodeDailyLimit":
+		if n, parseErr := strconv.Atoi(value); parseErr == nil && n > 0 {
+			common.SMSCodeDailyLimit = n
+		}
+	case "SMSPhoneBlacklist":
+		if strings.TrimSpace(value) == "" {
+			common.SMSPhoneBlacklist = []string{}
+		} else {
+			parts := strings.Split(value, ",")
+			list := make([]string, 0, len(parts))
+			for _, p := range parts {
+				phone := strings.TrimSpace(p)
+				if phone != "" {
+					list = append(list, phone)
+				}
+			}
+			common.SMSPhoneBlacklist = list
+		}
 	case "QuotaForNewUser":
 		// 站内额度整数；管理端以美元填写，提交前已按 QuotaPerUnit 换算（与 common.QuotaFromUSD 一致）
 		common.QuotaForNewUser, _ = strconv.Atoi(value)
