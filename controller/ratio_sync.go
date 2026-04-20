@@ -392,7 +392,7 @@ func FetchUpstreamRatios(c *gin.Context) {
 		}
 	}
 
-	differences := buildDifferences(localData, successfulChannels)
+	differences := buildDifferences(localData, successfulChannels, req.IncludeAligned)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -441,8 +441,13 @@ func oldEffectiveForUpstream(channelID int, ratioType string, modelName string, 
 	return nil
 }
 
-func buildDifferences(localData map[string]any, successfulChannels []upstreamSyncSource) map[string]map[string]dto.DifferenceItem {
+func buildDifferences(localData map[string]any, successfulChannels []upstreamSyncSource, includeAligned bool) map[string]map[string]dto.DifferenceItem {
 	differences := make(map[string]map[string]dto.DifferenceItem)
+
+	successUpstreamNames := make(map[string]struct{}, len(successfulChannels))
+	for _, src := range successfulChannels {
+		successUpstreamNames[src.name] = struct{}{}
+	}
 
 	allModels := make(map[string]struct{})
 
@@ -568,6 +573,11 @@ func buildDifferences(localData map[string]any, successfulChannels []upstreamSyn
 		for ratioType, item := range ratioMap {
 			for chName := range item.Upstreams {
 				if !channelHasDiff[chName] {
+					if includeAligned {
+						if _, ok := successUpstreamNames[chName]; ok {
+							continue
+						}
+					}
 					delete(item.Upstreams, chName)
 					delete(item.Confidence, chName)
 					if item.UpstreamOld != nil {
@@ -587,7 +597,7 @@ func buildDifferences(localData map[string]any, successfulChannels []upstreamSyn
 					break
 				}
 			}
-			if len(item.Upstreams) == 0 || allAligned {
+			if len(item.Upstreams) == 0 || (allAligned && !includeAligned) {
 				delete(ratioMap, ratioType)
 			} else {
 				differences[modelName][ratioType] = item

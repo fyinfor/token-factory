@@ -310,6 +310,8 @@ export default function UpstreamRatioSync(props) {
     const payload = {
       upstreams: upstreams,
       timeout: 10,
+      // 应用同步后再次拉取时仍返回已与上游一致的模型行，避免 differences 被清空
+      include_aligned: true,
     };
 
     try {
