@@ -273,7 +273,7 @@ const Home = () => {
 
               {/* 广告展示位 */}
               <div className='w-full max-w-[800px] mx-auto mb-8'>
-                <Link to='/console/provider'>
+                <Link to='/console/supplier/apply'>
                   <div className='relative w-full h-[140px] md:h-[280px] overflow-hidden cursor-pointer transition-transform duration-300 hover:scale-[1.01]'>
                     <img
                       src='/ad.jpg'

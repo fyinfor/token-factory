@@ -52,6 +52,12 @@ export const getSuppliersColumns = (t, openEdit, handleDeactivate) => {
       width: 200,
     },
     {
+      title: t('供应商别名'),
+      dataIndex: 'supplier_alias',
+      width: 160,
+      render: (text) => text || '-',
+    },
+    {
       title: t('统一社会信用代码'),
       dataIndex: 'credit_code',
       width: 180,

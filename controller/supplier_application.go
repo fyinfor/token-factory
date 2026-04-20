@@ -18,6 +18,7 @@ import (
 // SupplierApplicationSubmitRequest 供应商提交申请请求体。
 type SupplierApplicationSubmitRequest struct {
 	ApplicantUserID     int    `json:"applicant_user_id"`
+	SupplierAlias       string `json:"supplier_alias"`
 	CompanyName         string `json:"company_name"`
 	CreditCode          string `json:"credit_code"`
 	BusinessLicenseURL  string `json:"business_license_url"`
@@ -29,10 +30,33 @@ type SupplierApplicationSubmitRequest struct {
 	ContactWechat       string `json:"contact_wechat"`
 }
 
+// getSupplierApplicationMissingFieldMessage 返回供应商申请缺失字段的中文提示。
+func getSupplierApplicationMissingFieldMessage(req SupplierApplicationSubmitRequest) string {
+	switch {
+	case req.CompanyName == "":
+		return "请填写企业/主体名称（company_name）"
+	case req.CreditCode == "":
+		return "请填写统一社会信用代码（credit_code）"
+	case req.BusinessLicenseURL == "":
+		return "请上传营业执照（business_license_url）"
+	case req.LegalRepresentative == "":
+		return "请填写法人/经营者姓名（legal_representative）"
+	case req.ContactName == "":
+		return "请填写对接人姓名（contact_name）"
+	case req.ContactMobile == "":
+		return "请填写对接人手机号（contact_mobile）"
+	case req.ContactWechat == "":
+		return "请填写对接人微信/企业微信（contact_wechat）"
+	default:
+		return ""
+	}
+}
+
 // SupplierApplicationReviewRequest 管理员审核请求体。
 type SupplierApplicationReviewRequest struct {
-	Status int    `json:"status"`
-	Reason string `json:"reason"`
+	Status        int    `json:"status"`
+	Reason        string `json:"reason"`
+	SupplierAlias string `json:"supplier_alias"`
 }
 
 // SupplierDeactivateRequest 供应商注销请求体。
@@ -56,6 +80,31 @@ type PublishUserMessageRequest struct {
 type SupplierApplicationUpdateRequest struct {
 	ID int `json:"id"`
 	SupplierApplicationSubmitRequest
+}
+
+// SupplierCapabilityUpsertRequest 供应商技术能力档案写入请求体。
+type SupplierCapabilityUpsertRequest struct {
+	CoreServiceTypes          []string `json:"core_service_types"`
+	SupportedModels           []string `json:"supported_models"`
+	SupportedModelNotes       string   `json:"supported_model_notes"`
+	SupportedAPIEndpoints     []string `json:"supported_api_endpoints"`
+	SupportedAPIEndpointExtra string   `json:"supported_api_endpoint_extra"`
+	SupportedParams           []string `json:"supported_params"`
+	SupportedParamsExtra      string   `json:"supported_params_extra"`
+	StreamingSupported        bool     `json:"streaming_supported"`
+	StreamingNotes            string   `json:"streaming_notes"`
+	StructuredOutputSupported bool     `json:"structured_output_supported"`
+	StructuredOutputNotes     string   `json:"structured_output_notes"`
+	MultimodalTypes           []string `json:"multimodal_types"`
+	MultimodalExtra           string   `json:"multimodal_extra"`
+	PricingModes              []string `json:"pricing_modes"`
+	ReferenceInputPrice       string   `json:"reference_input_price"`
+	ReferenceOutputPrice      string   `json:"reference_output_price"`
+	FailureBillingMode        string   `json:"failure_billing_mode"`
+	FailureBillingNotes       string   `json:"failure_billing_notes"`
+	APIBaseURLs               []string `json:"api_base_urls"`
+	OpenAICompatible          bool     `json:"openai_compatible"`
+	TruthCommitmentConfirmed  bool     `json:"truth_commitment_confirmed"`
 }
 
 // requireApprovedSupplierApplication 要求当前用户为审核通过供应商。
@@ -122,6 +171,147 @@ func readSupplierStatusListQuery(c *gin.Context) ([]int, error) {
 	return statuses, nil
 }
 
+// trimAndFilterStrings 清理字符串数组中的空白项。
+func trimAndFilterStrings(values []string) []string {
+	cleaned := make([]string, 0, len(values))
+	for _, item := range values {
+		trimmed := strings.TrimSpace(item)
+		if trimmed == "" {
+			continue
+		}
+		cleaned = append(cleaned, trimmed)
+	}
+	return cleaned
+}
+
+// marshalStringArray 将字符串数组编码为 JSON 字符串。
+func marshalStringArray(values []string) (string, error) {
+	bytes, err := common.Marshal(trimAndFilterStrings(values))
+	if err != nil {
+		return "", err
+	}
+	return string(bytes), nil
+}
+
+// unmarshalStringArray 将 JSON 字符串解码为字符串数组。
+func unmarshalStringArray(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return []string{}
+	}
+	var items []string
+	if err := common.UnmarshalJsonStr(raw, &items); err != nil {
+		return []string{}
+	}
+	return trimAndFilterStrings(items)
+}
+
+// buildSupplierCapabilityModel 将请求体转换为模型对象。
+func buildSupplierCapabilityModel(req *SupplierCapabilityUpsertRequest) (*model.SupplierCapability, error) {
+	coreServiceTypes, err := marshalStringArray(req.CoreServiceTypes)
+	if err != nil {
+		return nil, err
+	}
+	supportedModels, err := marshalStringArray(req.SupportedModels)
+	if err != nil {
+		return nil, err
+	}
+	supportedAPIEndpoints, err := marshalStringArray(req.SupportedAPIEndpoints)
+	if err != nil {
+		return nil, err
+	}
+	supportedParams, err := marshalStringArray(req.SupportedParams)
+	if err != nil {
+		return nil, err
+	}
+	multimodalTypes, err := marshalStringArray(req.MultimodalTypes)
+	if err != nil {
+		return nil, err
+	}
+	pricingModes, err := marshalStringArray(req.PricingModes)
+	if err != nil {
+		return nil, err
+	}
+	apiBaseURLs, err := marshalStringArray(req.APIBaseURLs)
+	if err != nil {
+		return nil, err
+	}
+	return &model.SupplierCapability{
+		CoreServiceTypes:          coreServiceTypes,
+		SupportedModels:           supportedModels,
+		SupportedModelNotes:       strings.TrimSpace(req.SupportedModelNotes),
+		SupportedAPIEndpoints:     supportedAPIEndpoints,
+		SupportedAPIEndpointExtra: strings.TrimSpace(req.SupportedAPIEndpointExtra),
+		SupportedParams:           supportedParams,
+		SupportedParamsExtra:      strings.TrimSpace(req.SupportedParamsExtra),
+		StreamingSupported:        req.StreamingSupported,
+		StreamingNotes:            strings.TrimSpace(req.StreamingNotes),
+		StructuredOutputSupported: req.StructuredOutputSupported,
+		StructuredOutputNotes:     strings.TrimSpace(req.StructuredOutputNotes),
+		MultimodalTypes:           multimodalTypes,
+		MultimodalExtra:           strings.TrimSpace(req.MultimodalExtra),
+		PricingModes:              pricingModes,
+		ReferenceInputPrice:       strings.TrimSpace(req.ReferenceInputPrice),
+		ReferenceOutputPrice:      strings.TrimSpace(req.ReferenceOutputPrice),
+		FailureBillingMode:        strings.TrimSpace(req.FailureBillingMode),
+		FailureBillingNotes:       strings.TrimSpace(req.FailureBillingNotes),
+		APIBaseURLs:               apiBaseURLs,
+		OpenAICompatible:          req.OpenAICompatible,
+		TruthCommitmentConfirmed:  req.TruthCommitmentConfirmed,
+	}, nil
+}
+
+// buildSupplierCapabilityResponse 将模型对象转换为接口响应对象。
+func buildSupplierCapabilityResponse(capability *model.SupplierCapability) gin.H {
+	if capability == nil {
+		return nil
+	}
+	return gin.H{
+		"id":                           capability.ID,
+		"supplier_application_id":      capability.SupplierApplicationID,
+		"core_service_types":           unmarshalStringArray(capability.CoreServiceTypes),
+		"supported_models":             unmarshalStringArray(capability.SupportedModels),
+		"supported_model_notes":        capability.SupportedModelNotes,
+		"supported_api_endpoints":      unmarshalStringArray(capability.SupportedAPIEndpoints),
+		"supported_api_endpoint_extra": capability.SupportedAPIEndpointExtra,
+		"supported_params":             unmarshalStringArray(capability.SupportedParams),
+		"supported_params_extra":       capability.SupportedParamsExtra,
+		"streaming_supported":          capability.StreamingSupported,
+		"streaming_notes":              capability.StreamingNotes,
+		"structured_output_supported":  capability.StructuredOutputSupported,
+		"structured_output_notes":      capability.StructuredOutputNotes,
+		"multimodal_types":             unmarshalStringArray(capability.MultimodalTypes),
+		"multimodal_extra":             capability.MultimodalExtra,
+		"pricing_modes":                unmarshalStringArray(capability.PricingModes),
+		"reference_input_price":        capability.ReferenceInputPrice,
+		"reference_output_price":       capability.ReferenceOutputPrice,
+		"failure_billing_mode":         capability.FailureBillingMode,
+		"failure_billing_notes":        capability.FailureBillingNotes,
+		"api_base_urls":                unmarshalStringArray(capability.APIBaseURLs),
+		"openai_compatible":            capability.OpenAICompatible,
+		"truth_commitment_confirmed":   capability.TruthCommitmentConfirmed,
+		"created_at":                   capability.CreatedAt,
+		"updated_at":                   capability.UpdatedAt,
+	}
+}
+
+// attachSupplierCapability 为供应商申请对象补充技术能力档案。
+func attachSupplierCapability(app *model.SupplierApplication) error {
+	if app == nil {
+		return nil
+	}
+	capability, err := model.GetSupplierCapabilityByApplicationID(app.ID)
+	if err != nil {
+		if model.IsSupplierCapabilityNotFound(err) {
+			app.SupplierCapability = nil
+			return nil
+		}
+		return err
+	}
+	app.SupplierCapability = capability
+	return nil
+}
+
 // SubmitSupplierApplication godoc
 // @Summary 提交供应商入驻申请
 // @Description 普通用户提交供应商申请，提交后生成管理员待审核站内消息
@@ -149,9 +339,9 @@ func SubmitSupplierApplication(c *gin.Context) {
 	req.ContactName = strings.TrimSpace(req.ContactName)
 	req.ContactMobile = strings.TrimSpace(req.ContactMobile)
 	req.ContactWechat = strings.TrimSpace(req.ContactWechat)
-	if req.CompanyName == "" || req.CreditCode == "" || req.BusinessLicenseURL == "" ||
-		req.LegalRepresentative == "" || req.ContactName == "" || req.ContactMobile == "" || req.ContactWechat == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请填写完整的必填字段"})
+	req.SupplierAlias = strings.TrimSpace(req.SupplierAlias)
+	if missingFieldMessage := getSupplierApplicationMissingFieldMessage(req); missingFieldMessage != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": missingFieldMessage})
 		return
 	}
 	if len(req.CreditCode) != 18 {
@@ -160,8 +350,14 @@ func SubmitSupplierApplication(c *gin.Context) {
 	}
 
 	isAdminOrAbove := c.GetInt("role") >= common.RoleAdminUser
+	var supplierAliasPtr *string
 	applicantUserID := c.GetInt("id")
 	if isAdminOrAbove {
+		if req.SupplierAlias == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "管理员添加供应商时必须填写供应商别名"})
+			return
+		}
+		supplierAliasPtr = &req.SupplierAlias
 		if req.ApplicantUserID <= 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "管理员代添加供应商时必须提供有效的applicant_user_id"})
 			return
@@ -183,6 +379,7 @@ func SubmitSupplierApplication(c *gin.Context) {
 		ContactName:         req.ContactName,
 		ContactMobile:       req.ContactMobile,
 		ContactWechat:       req.ContactWechat,
+		SupplierAlias:       supplierAliasPtr,
 	}
 	var err error
 	if isAdminOrAbove {
@@ -194,6 +391,10 @@ func SubmitSupplierApplication(c *gin.Context) {
 	if err != nil {
 		if model.IsSupplierCreditCodeDuplicateError(err) {
 			common.ApiErrorMsg(c, "统一社会信用代码已存在，请核对后重试")
+			return
+		}
+		if model.IsSupplierAliasDuplicateError(err) {
+			common.ApiErrorMsg(c, "供应商别名已存在，请更换后重试")
 			return
 		}
 		common.ApiError(c, err)
@@ -242,7 +443,122 @@ func GetMySupplierApplication(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	common.ApiSuccess(c, app)
+	if err = attachSupplierCapability(app); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	response := gin.H{
+		"id":                    app.ID,
+		"applicant_user_id":     app.ApplicantUserID,
+		"company_name":          app.CompanyName,
+		"credit_code":           app.CreditCode,
+		"business_license_url":  app.BusinessLicenseURL,
+		"business_license_file": app.BusinessLicenseFile,
+		"legal_representative":  app.LegalRepresentative,
+		"company_size":          app.CompanySize,
+		"contact_name":          app.ContactName,
+		"contact_mobile":        app.ContactMobile,
+		"contact_wechat":        app.ContactWechat,
+		"supplier_alias":        app.SupplierAlias,
+		"status":                app.Status,
+		"review_reason":         app.ReviewReason,
+		"reviewed_by":           app.ReviewedBy,
+		"reviewed_at":           app.ReviewedAt,
+		"created_at":            app.CreatedAt,
+		"updated_at":            app.UpdatedAt,
+		"supplier_capability":   buildSupplierCapabilityResponse(app.SupplierCapability),
+	}
+	common.ApiSuccess(c, response)
+}
+
+// GetSupplierCapability godoc
+// @Summary 查询供应商技术能力档案
+// @Description 管理员可查任意申请；普通用户仅可查询自己的申请
+// @Tags Supplier
+// @Produce json
+// @Security CookieAuth
+// @Security ApiUserID
+// @Param id path int true "供应商申请ID"
+// @Success 200 {object} map[string]interface{} "success + data{供应商技术能力档案}"
+// @Router /user/supplier/application/{id}/capability [get]
+func GetSupplierCapability(c *gin.Context) {
+	applicationID, err := strconv.Atoi(c.Param("id"))
+	if err != nil || applicationID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的供应商申请ID"})
+		return
+	}
+	app, err := model.GetSupplierByID(applicationID)
+	if err != nil {
+		if model.IsSupplierApplicationNotFound(err) {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "未找到供应商申请"})
+			return
+		}
+		common.ApiError(c, err)
+		return
+	}
+	if c.GetInt("role") < common.RoleAdminUser && app.ApplicantUserID != c.GetInt("id") {
+		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "无权查看该供应商技术能力档案"})
+		return
+	}
+	capability, err := model.GetSupplierCapabilityByApplicationID(applicationID)
+	if err != nil {
+		if model.IsSupplierCapabilityNotFound(err) {
+			common.ApiSuccess(c, nil)
+			return
+		}
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, buildSupplierCapabilityResponse(capability))
+}
+
+// UpsertSupplierCapability godoc
+// @Summary 保存供应商技术能力档案
+// @Description 管理员可保存任意申请；普通用户仅可保存自己的申请
+// @Tags Supplier
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Security ApiUserID
+// @Param id path int true "供应商申请ID"
+// @Param request body SupplierCapabilityUpsertRequest true "供应商技术能力档案"
+// @Success 200 {object} map[string]interface{} "success + data{供应商技术能力档案}"
+// @Router /user/supplier/application/{id}/capability [put]
+func UpsertSupplierCapability(c *gin.Context) {
+	applicationID, err := strconv.Atoi(c.Param("id"))
+	if err != nil || applicationID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的供应商申请ID"})
+		return
+	}
+	app, err := model.GetSupplierByID(applicationID)
+	if err != nil {
+		if model.IsSupplierApplicationNotFound(err) {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "未找到供应商申请"})
+			return
+		}
+		common.ApiError(c, err)
+		return
+	}
+	if c.GetInt("role") < common.RoleAdminUser && app.ApplicantUserID != c.GetInt("id") {
+		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "无权修改该供应商技术能力档案"})
+		return
+	}
+	var req SupplierCapabilityUpsertRequest
+	if err = c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的参数"})
+		return
+	}
+	capabilityModel, err := buildSupplierCapabilityModel(&req)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	updated, err := model.UpsertSupplierCapabilityByApplicationID(applicationID, capabilityModel)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, buildSupplierCapabilityResponse(updated))
 }
 
 // UpdateMySupplierApplication godoc
@@ -276,6 +592,7 @@ func UpdateMySupplierApplication(c *gin.Context) {
 	req.ContactName = strings.TrimSpace(req.ContactName)
 	req.ContactMobile = strings.TrimSpace(req.ContactMobile)
 	req.ContactWechat = strings.TrimSpace(req.ContactWechat)
+	req.SupplierAlias = strings.TrimSpace(req.SupplierAlias)
 	if req.CompanyName == "" || req.CreditCode == "" || req.BusinessLicenseURL == "" ||
 		req.LegalRepresentative == "" || req.ContactName == "" || req.ContactMobile == "" || req.ContactWechat == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请填写完整的必填字段"})
@@ -412,7 +729,33 @@ func AdminGetSupplierDetail(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	common.ApiSuccess(c, item)
+	if err = attachSupplierCapability(item); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	response := gin.H{
+		"id":                    item.ID,
+		"applicant_user_id":     item.ApplicantUserID,
+		"applicant_username":    item.ApplicantUsername,
+		"company_name":          item.CompanyName,
+		"credit_code":           item.CreditCode,
+		"business_license_url":  item.BusinessLicenseURL,
+		"business_license_file": item.BusinessLicenseFile,
+		"legal_representative":  item.LegalRepresentative,
+		"company_size":          item.CompanySize,
+		"contact_name":          item.ContactName,
+		"contact_mobile":        item.ContactMobile,
+		"contact_wechat":        item.ContactWechat,
+		"supplier_alias":        item.SupplierAlias,
+		"status":                item.Status,
+		"review_reason":         item.ReviewReason,
+		"reviewed_by":           item.ReviewedBy,
+		"reviewed_at":           item.ReviewedAt,
+		"created_at":            item.CreatedAt,
+		"updated_at":            item.UpdatedAt,
+		"supplier_capability":   buildSupplierCapabilityResponse(item.SupplierCapability),
+	}
+	common.ApiSuccess(c, response)
 }
 
 // AdminUpdateSupplierApplication godoc
@@ -448,9 +791,14 @@ func AdminUpdateSupplierApplication(c *gin.Context) {
 	req.ContactName = strings.TrimSpace(req.ContactName)
 	req.ContactMobile = strings.TrimSpace(req.ContactMobile)
 	req.ContactWechat = strings.TrimSpace(req.ContactWechat)
+	req.SupplierAlias = strings.TrimSpace(req.SupplierAlias)
 	if req.CompanyName == "" || req.CreditCode == "" || req.BusinessLicenseURL == "" ||
 		req.LegalRepresentative == "" || req.ContactName == "" || req.ContactMobile == "" || req.ContactWechat == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请填写完整的必填字段"})
+		return
+	}
+	if req.SupplierAlias == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请填写供应商别名"})
 		return
 	}
 	if len(req.CreditCode) != 18 {
@@ -467,6 +815,7 @@ func AdminUpdateSupplierApplication(c *gin.Context) {
 		ContactName:         req.ContactName,
 		ContactMobile:       req.ContactMobile,
 		ContactWechat:       req.ContactWechat,
+		SupplierAlias:       &req.SupplierAlias,
 	})
 	if err != nil {
 		if model.IsSupplierCreditCodeDuplicateError(err) {
@@ -475,6 +824,10 @@ func AdminUpdateSupplierApplication(c *gin.Context) {
 		}
 		if model.IsSupplierApplicationNotFound(err) {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "未找到可修改的供应商申请"})
+			return
+		}
+		if model.IsSupplierAliasDuplicateError(err) {
+			common.ApiErrorMsg(c, "供应商别名已存在，请更换后重试")
 			return
 		}
 		common.ApiError(c, err)
@@ -515,15 +868,39 @@ func AdminReviewSupplierApplication(c *gin.Context) {
 		return
 	}
 	req.Reason = strings.TrimSpace(req.Reason)
+	req.SupplierAlias = strings.TrimSpace(req.SupplierAlias)
 	if req.Status == model.SupplierApplicationStatusRejected && req.Reason == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "驳回时请填写原因"})
 		return
 	}
+	if req.Status == model.SupplierApplicationStatusApproved && req.SupplierAlias == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "审批通过时必须填写供应商别名"})
+		return
+	}
+	if req.Status == model.SupplierApplicationStatusApproved {
+		capability, capabilityErr := model.GetSupplierCapabilityByApplicationID(applicationID)
+		if capabilityErr != nil {
+			if model.IsSupplierCapabilityNotFound(capabilityErr) {
+				c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "审批通过前请先完善供应商技术能力信息"})
+				return
+			}
+			common.ApiError(c, capabilityErr)
+			return
+		}
+		if !model.IsSupplierCapabilityComplete(capability) {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "审批通过前请先完善供应商技术能力必填字段"})
+			return
+		}
+	}
 
-	app, err := model.ReviewSupplierApplication(applicationID, c.GetInt("id"), req.Status, req.Reason)
+	app, err := model.ReviewSupplierApplication(applicationID, c.GetInt("id"), req.Status, req.Reason, req.SupplierAlias)
 	if err != nil {
 		if errors.Is(err, model.ErrSupplierApplicationAlreadyReviewed) {
 			c.JSON(http.StatusOK, gin.H{"success": false, "message": "该申请已被其他管理员处理"})
+			return
+		}
+		if model.IsSupplierAliasDuplicateError(err) {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "供应商别名已存在，请更换后重试"})
 			return
 		}
 		common.ApiError(c, err)

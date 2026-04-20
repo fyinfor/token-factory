@@ -11,6 +11,9 @@ type UpstreamRequest struct {
 	ChannelIDs []int64       `json:"channel_ids"`
 	Upstreams  []UpstreamDTO `json:"upstreams"`
 	Timeout    int           `json:"timeout"`
+	// IncludeAligned 为 true 时，即使本地已生效价与上游一致，仍在 differences 中返回该行
+	//（便于应用同步后再次拉取仍能对照上游模型列表；默认 false 保持旧行为）
+	IncludeAligned bool `json:"include_aligned"`
 }
 
 // TestResult 上游测试连通性结果

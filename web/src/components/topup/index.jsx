@@ -623,7 +623,18 @@ const TopUp = () => {
   }, [statusState?.status]);
 
   const renderAmount = () => {
-    return amount + ' ' + t('元');
+    const numericAmount = Number(amount);
+    const formattedAmount = Number.isFinite(numericAmount)
+      ? numericAmount.toFixed(2)
+      : '0.00';
+    return `$${formattedAmount} USD`;
+  };
+
+  // 充值数量统一按美元展示，避免在支付宝/微信场景被全局货币配置影响。
+  const renderTopUpCountInUSD = (value) => {
+    const numericValue = Number(value);
+    const safeValue = Number.isFinite(numericValue) ? numericValue : 0;
+    return `$${safeValue}`;
   };
 
   const getAmount = async (value) => {
@@ -793,7 +804,7 @@ const TopUp = () => {
         handleCancel={handleCancel}
         confirmLoading={confirmLoading}
         topUpCount={topUpCount}
-        renderQuotaWithAmount={renderQuotaWithAmount}
+        renderTopUpCount={renderTopUpCountInUSD}
         amountLoading={amountLoading}
         renderAmount={renderAmount}
         payWay={payWay}
@@ -900,7 +911,7 @@ const TopUp = () => {
           priceRatio={priceRatio}
           topUpCount={topUpCount}
           minTopUp={minTopUp}
-          renderQuotaWithAmount={renderQuotaWithAmount}
+          renderTopUpCount={renderTopUpCountInUSD}
           getAmount={getAmount}
           setTopUpCount={setTopUpCount}
           setSelectedPreset={setSelectedPreset}

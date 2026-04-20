@@ -51,6 +51,12 @@ export const getSupplierApplicationsColumns = (t, openReview) => {
       width: 180,
     },
     {
+      title: t('供应商别名'),
+      dataIndex: 'supplier_alias',
+      width: 160,
+      render: (text) => text || '-',
+    },
+    {
       title: t('法人/经营者姓名'),
       dataIndex: 'legal_representative',
       width: 150,

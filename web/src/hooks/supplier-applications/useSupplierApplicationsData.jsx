@@ -142,9 +142,29 @@ export const useSupplierApplicationsData = () => {
     }
   };
 
-  const openReview = (application) => {
-    setReviewingApplication(application);
-    setShowReview(true);
+  const openReview = async (application) => {
+    if (!application?.id) {
+      return;
+    }
+    setSearching(true);
+    try {
+      const [detailRes, capabilityRes] = await Promise.all([
+        API.get(`/api/user/supplier/${application.id}`),
+        API.get(`/api/user/supplier/application/${application.id}/capability`),
+      ]);
+      const detailData = detailRes?.data?.data || application;
+      const capabilityData = capabilityRes?.data?.data || null;
+      setReviewingApplication({
+        ...detailData,
+        supplier_capability: capabilityData,
+      });
+    } catch (error) {
+      showError(error.response?.data?.message || t('加载供应商详情失败'));
+      setReviewingApplication(application);
+    } finally {
+      setSearching(false);
+      setShowReview(true);
+    }
   };
 
   const closeReview = () => {

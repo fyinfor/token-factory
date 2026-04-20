@@ -66,7 +66,7 @@ const RechargeCard = ({
   priceRatio,
   topUpCount,
   minTopUp,
-  renderQuotaWithAmount,
+  renderTopUpCount,
   getAmount,
   setTopUpCount,
   setSelectedPreset,
@@ -241,7 +241,7 @@ const RechargeCard = ({
                       label={t('充值数量')}
                       disabled={!enableOnlineTopUp && !enableStripeTopUp && !enableWaffoTopUp}
                       placeholder={
-                        t('充值数量，最低 ') + renderQuotaWithAmount(minTopUp)
+                        t('充值数量，最低 ') + renderTopUpCount(minTopUp)
                       }
                       value={topUpCount}
                       min={minTopUp}
@@ -406,7 +406,8 @@ const RechargeCard = ({
                         }
                       } catch (e) { }
 
-                      let displayValue = preset.value; // 显示的数量
+                      // 充值数量始终以美元数量展示，不随全局展示货币切换。
+                      let displayValue = preset.value;
                       let displayActualPay = actualPay;
                       let displaySave = save;
 
@@ -414,12 +415,8 @@ const RechargeCard = ({
                         // 数量保持USD，价格从CNY转USD
                         displayActualPay = actualPay / usdRate;
                         displaySave = save / usdRate;
-                      } else if (type === 'CNY') {
-                        // 数量转CNY，价格已是CNY
-                        displayValue = preset.value * usdRate;
                       } else if (type === 'CUSTOM') {
-                        // 数量和价格都转自定义货币
-                        displayValue = preset.value * rate;
+                        // 自定义货币仅影响价格显示，数量仍显示为美元数量
                         displayActualPay = (actualPay / usdRate) * rate;
                         displaySave = (save / usdRate) * rate;
                       }
@@ -451,7 +448,7 @@ const RechargeCard = ({
                               style={{ margin: '0 0 8px 0' }}
                             >
                               <Coins size={18} />
-                              {formatLargeNumber(displayValue)} {symbol}
+                              ${formatLargeNumber(displayValue)}
                               {hasDiscount && (
                                 <Tag style={{ marginLeft: 4 }} color='green'>
                                   {t('折').includes('off')
