@@ -29,6 +29,17 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
+// RegisterRequest 用户注册请求体（手机号 + 短信验证码为必填）。
+type RegisterRequest struct {
+	Username         string `json:"username" validate:"required,max=20"`
+	Password         string `json:"password" validate:"required,min=8,max=20"`
+	Email            string `json:"email" validate:"max=50"`
+	VerificationCode string `json:"verification_code"`
+	AffCode          string `json:"aff_code"`
+	Phone            string `json:"phone" validate:"required"`
+	SMSCode          string `json:"sms_verification_code" validate:"required,len=6"`
+}
+
 func Login(c *gin.Context) {
 	if !common.PasswordLoginEnabled {
 		common.ApiErrorI18n(c, i18n.MsgUserPasswordLoginDisabled)
@@ -101,13 +112,13 @@ func setupLogin(user *model.User, c *gin.Context) {
 		"message": "",
 		"success": true,
 		"data": map[string]any{
-			"id":              user.Id,
-			"username":        user.Username,
-			"display_name":    user.DisplayName,
-			"role":            user.Role,
-			"status":          user.Status,
-			"group":           user.Group,
-			"is_distributor":  user.IsDistributor,
+			"id":             user.Id,
+			"username":       user.Username,
+			"display_name":   user.DisplayName,
+			"role":           user.Role,
+			"status":         user.Status,
+			"group":          user.Group,
+			"is_distributor": user.IsDistributor,
 		},
 	})
 }
@@ -138,27 +149,43 @@ func Register(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserPasswordRegisterDisabled)
 		return
 	}
-	var user model.User
-	err := json.NewDecoder(c.Request.Body).Decode(&user)
+	var req RegisterRequest
+	err := json.NewDecoder(c.Request.Body).Decode(&req)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}
-	if err := common.Validate.Struct(&user); err != nil {
+	req.Username = strings.TrimSpace(req.Username)
+	req.Email = strings.TrimSpace(req.Email)
+	req.Phone = common.NormalizePhone(req.Phone)
+	req.SMSCode = strings.TrimSpace(req.SMSCode)
+	if err := common.Validate.Struct(&req); err != nil {
 		common.ApiErrorI18n(c, i18n.MsgUserInputInvalid, map[string]any{"Error": err.Error()})
 		return
 	}
+	if !common.ValidateMainlandChinaPhone(req.Phone) {
+		common.ApiError(c, fmt.Errorf("手机号格式无效，请输入 11 位中国大陆手机号"))
+		return
+	}
+	if common.IsSMSPhoneBlacklisted(req.Phone) {
+		common.ApiError(c, fmt.Errorf("该手机号已被加入短信黑名单"))
+		return
+	}
+	if !common.VerifyAndConsumeSMSCode(req.Phone, req.SMSCode) {
+		common.ApiError(c, fmt.Errorf("短信验证码错误或已过期"))
+		return
+	}
 	if common.EmailVerificationEnabled {
-		if user.Email == "" || user.VerificationCode == "" {
+		if req.Email == "" || req.VerificationCode == "" {
 			common.ApiErrorI18n(c, i18n.MsgUserEmailVerificationRequired)
 			return
 		}
-		if !common.VerifyCodeWithKey(user.Email, user.VerificationCode, common.EmailVerificationPurpose) {
+		if !common.VerifyCodeWithKey(req.Email, req.VerificationCode, common.EmailVerificationPurpose) {
 			common.ApiErrorI18n(c, i18n.MsgUserVerificationCodeError)
 			return
 		}
 	}
-	exist, err := model.CheckUserExistOrDeleted(user.Username, user.Email)
+	exist, err := model.CheckUserExistOrDeleted(req.Username, req.Email)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgDatabaseError)
 		common.SysLog(fmt.Sprintf("CheckUserExistOrDeleted error: %v", err))
@@ -168,17 +195,22 @@ func Register(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserExists)
 		return
 	}
-	affCode := user.AffCode // this code is the inviter's code, not the user's own code
+	if model.IsPhoneAlreadyTaken(req.Phone) {
+		common.ApiError(c, fmt.Errorf("手机号已被占用"))
+		return
+	}
+	affCode := req.AffCode // this code is the inviter's code, not the user's own code
 	inviterId, _ := model.GetUserIdByAffCode(affCode)
 	cleanUser := model.User{
-		Username:    user.Username,
-		Password:    user.Password,
-		DisplayName: user.Username,
+		Username:    req.Username,
+		Password:    req.Password,
+		DisplayName: req.Username,
 		InviterId:   inviterId,
 		Role:        common.RoleCommonUser, // 明确设置角色为普通用户
+		Phone:       req.Phone,
 	}
 	if common.EmailVerificationEnabled {
-		cleanUser.Email = user.Email
+		cleanUser.Email = req.Email
 	}
 	if err := cleanUser.Insert(inviterId); err != nil {
 		common.ApiError(c, err)
@@ -846,11 +878,11 @@ func CreateUser(c *gin.Context) {
 	}
 	// Even for admin users, we cannot fully trust them!
 	cleanUser := model.User{
-		Username:       user.Username,
-		Password:       user.Password,
-		DisplayName:    user.DisplayName,
-		Role:           user.Role,
-		IsDistributor:  user.IsDistributor,
+		Username:      user.Username,
+		Password:      user.Password,
+		DisplayName:   user.DisplayName,
+		Role:          user.Role,
+		IsDistributor: user.IsDistributor,
 	}
 	if err := cleanUser.Insert(0); err != nil {
 		common.ApiError(c, err)
@@ -1011,9 +1043,9 @@ func ManageUser(c *gin.Context) {
 		"success": true,
 		"message": "",
 		"data": gin.H{
-			"role":            user.Role,
-			"status":          user.Status,
-			"is_distributor":  user.IsDistributor,
+			"role":           user.Role,
+			"status":         user.Status,
+			"is_distributor": user.IsDistributor,
 		},
 	})
 	return

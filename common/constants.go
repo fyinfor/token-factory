@@ -100,9 +100,21 @@ var TurnstileSecretKey = ""
 var TelegramBotToken = ""
 var TelegramBotName = ""
 
+// 短信注册配置（支持通过 options 动态调整）。
+var SMSVerificationEnabled = false
+var SMSAccessKeyID = ""
+var SMSAccessKeySecret = ""
+var SMSCodeSignName = ""
+var SMSCodeTemplateCode = ""
+var SMSCodeValidMinutes = 5
+var SMSCodeCooldownMinutes = 1
+var SMSCodeDailyLimit = 10
+var SMSPhoneBlacklist = []string{}
+
 var QuotaForNewUser = 0
 var QuotaForInviter = 0
 var QuotaForInvitee = 0
+
 // AffiliateDefaultCommissionBps 被邀请用户充值时给邀请人的默认分销比例，存储为万分之一单位（1=0.01%，100=1%，1000=10%）。单用户可在 aff_invite_relations 覆盖。默认 1000 即 10%。
 var AffiliateDefaultCommissionBps = 1000
 var ChannelDisableThreshold = 5.0

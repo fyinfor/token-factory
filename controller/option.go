@@ -102,6 +102,10 @@ func GetOptions(c *gin.Context) {
 		if k == "oss_setting.access_key_id" || k == "oss_setting.access_key_secret" {
 			continue
 		}
+		// 阿里云短信 AccessKey 在循环结束后单独追加（脱敏）。
+		if k == "SMSAccessKeyID" || k == "SMSAccessKeySecret" {
+			continue
+		}
 		value := common.Interface2String(v)
 		if strings.HasSuffix(k, "Token") ||
 			strings.HasSuffix(k, "Secret") ||
@@ -162,6 +166,34 @@ func GetOptions(c *gin.Context) {
 	options = append(options, &model.Option{
 		Key:   "oss_setting.access_key_secret",
 		Value: ossSecretDisp,
+	})
+	rawSMSID := strings.TrimSpace(common.SMSAccessKeyID)
+	if rawSMSID == "" {
+		if v, ok := common.OptionMap["SMSAccessKeyID"]; ok {
+			rawSMSID = strings.TrimSpace(common.Interface2String(v))
+		}
+	}
+	smsIDDisp := ""
+	if rawSMSID != "" {
+		smsIDDisp = common.MaskCredentialForAdminDisplay(rawSMSID)
+	}
+	options = append(options, &model.Option{
+		Key:   "SMSAccessKeyID",
+		Value: smsIDDisp,
+	})
+	rawSMSSecret := strings.TrimSpace(common.SMSAccessKeySecret)
+	if rawSMSSecret == "" {
+		if v, ok := common.OptionMap["SMSAccessKeySecret"]; ok {
+			rawSMSSecret = strings.TrimSpace(common.Interface2String(v))
+		}
+	}
+	smsSecretDisp := ""
+	if rawSMSSecret != "" {
+		smsSecretDisp = common.MaskCredentialForAdminDisplay(rawSMSSecret)
+	}
+	options = append(options, &model.Option{
+		Key:   "SMSAccessKeySecret",
+		Value: smsSecretDisp,
 	})
 	common.OptionMapRWMutex.Unlock()
 	options = append(options, &model.Option{
@@ -257,6 +289,24 @@ func UpdateOption(c *gin.Context) {
 	}
 	if option.Key == "oss_setting.access_key_secret" && strings.TrimSpace(operation_setting.GetOssSetting().AccessKeySecret) != "" {
 		if valStr == common.MaskCredentialForAdminDisplay(operation_setting.GetOssSetting().AccessKeySecret) {
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"message": "",
+			})
+			return
+		}
+	}
+	if option.Key == "SMSAccessKeySecret" && strings.TrimSpace(common.SMSAccessKeySecret) != "" {
+		if valStr == common.MaskCredentialForAdminDisplay(common.SMSAccessKeySecret) {
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"message": "",
+			})
+			return
+		}
+	}
+	if option.Key == "SMSAccessKeyID" && strings.TrimSpace(common.SMSAccessKeyID) != "" {
+		if valStr == common.MaskCredentialForAdminDisplay(common.SMSAccessKeyID) {
 			c.JSON(http.StatusOK, gin.H{
 				"success": true,
 				"message": "",
