@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useEffect, useState } from 'react';
-import { API, isSupplier, showError } from '../../../helpers';
+import { API, isAdmin, isSupplier, showError } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
 import { Button, Empty, Tabs } from '@douyinfe/semi-ui';
 import { IllustrationNoAccess, IllustrationNoAccessDark } from '@douyinfe/semi-illustrations';
@@ -78,7 +78,8 @@ export default function ModelRatioNotSetEditor(props) {
     __pricingChannels: pricingChannels,
   };
 
-  if (!isSupplier()) {
+  // 管理员或供应商均可访问；仅普通用户显示“需要供应商权限”提示。
+  if (!isSupplier() && !isAdmin()) {
     return (
       <div className='py-4'>
         <div className='flex items-center justify-center' style={{ minHeight: 320 }}>
