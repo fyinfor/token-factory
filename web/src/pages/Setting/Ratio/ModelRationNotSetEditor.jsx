@@ -19,7 +19,6 @@ For commercial licensing, please contact support@quantumnous.com
 
 import React, { useEffect, useState } from 'react';
 import { API, isAdmin, isSupplier, showError } from '../../../helpers';
-import { API, showError } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
 import { Tabs } from '@douyinfe/semi-ui';
 import ModelPricingEditor from './components/ModelPricingEditor';
