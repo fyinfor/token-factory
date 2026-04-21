@@ -50,10 +50,10 @@ const HomeModelList = () => {
 
   const handleResetFilters = () => {
     pricingData.setSearchValue('');
-    pricingData.setFilterVendor([]);
-    pricingData.setFilterQuotaType([]);
-    pricingData.setFilterTag([]);
-    pricingData.setFilterEndpointType([]);
+    pricingData.setFilterVendor('all');
+    pricingData.setFilterQuotaType('all');
+    pricingData.setFilterTag('all');
+    pricingData.setFilterEndpointType('all');
     pricingData.setCurrentPage(1);
   };
 
