@@ -98,6 +98,15 @@ const PricingCardView = ({
     rowSelection?.onChange?.(newKeys, null);
   };
 
+  // 获取供应商ID列表
+  const getSupplierIds = (model) => {
+    if (!model.channel_list || model.channel_list.length === 0) {
+      return [t('官方')];
+    }
+    const uniqueIds = [...new Set(model.channel_list.map(ch => ch.supplier_application_id))];
+    return uniqueIds.length > 0 ? uniqueIds : [t('官方')];
+  };
+
   // 获取模型图标
   const getModelIcon = (model) => {
     if (!model || !model.model_name) {
@@ -255,6 +264,8 @@ const PricingCardView = ({
             quotaDisplayType: siteDisplayType,
           });
 
+          const supplierIds = getSupplierIds(model);
+
           return (
             <Card
               key={modelKey || index}
@@ -274,7 +285,7 @@ const PricingCardView = ({
                       <div className='flex flex-col gap-1 text-xs mt-1'>
                         {formatPriceInfo(priceData, t, siteDisplayType)}
                         <div className='text-gray-600'>
-                          {t('供应商')}：{t('官方')}
+                          {t('供应商ID')}：{supplierIds.join(', ')}
                         </div>
                       </div>
                     </div>
