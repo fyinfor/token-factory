@@ -335,6 +335,17 @@ export const getChannelsColumns = ({
       dataIndex: 'id',
     },
     {
+      key: COLUMN_KEYS.CHANNEL_NO,
+      title: t('渠道编号'),
+      dataIndex: 'channel_no',
+      render: (text, record) => {
+        if (record.children !== undefined) {
+          return '-';
+        }
+        return text && String(text).trim() !== '' ? text : '-';
+      },
+    },
+    {
       key: COLUMN_KEYS.NAME,
       title: t('名称'),
       dataIndex: 'name',

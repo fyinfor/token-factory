@@ -2080,6 +2080,7 @@
     "清除失效兑换码": "Clear invalid redemption codes",
     "清除所有模型": "Clear all models",
     "渠道": "Channel",
+    "渠道编号": "Channel no.",
     "渠道 ID": "Channel ID",
     "渠道ID，名称，密钥，API地址": "Channel ID, name, key, Base URL",
     "渠道亲和性": "Channel affinity",

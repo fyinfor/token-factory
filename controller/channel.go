@@ -1425,6 +1425,7 @@ func CopyChannel(c *gin.Context) {
 		clone.Balance = 0
 		clone.UsedQuota = 0
 	}
+	clone.ChannelNo = ""
 
 	// insert
 	if err := model.BatchInsertChannels([]model.Channel{clone}); err != nil {

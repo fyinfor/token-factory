@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
@@ -66,7 +67,7 @@ type SupplierApplication struct {
 	ContactName         string              `json:"contact_name" gorm:"type:varchar(128);not null;comment:对接人姓名"`
 	ContactMobile       string              `json:"contact_mobile" gorm:"type:varchar(32);not null;comment:对接人手机号"`
 	ContactWechat       string              `json:"contact_wechat" gorm:"type:varchar(128);not null;comment:对接人微信或企业微信"`
-	SupplierAlias       *string             `json:"supplier_alias" gorm:"type:varchar(128);uniqueIndex;comment:供应商别名（管理员填写，唯一）"`
+	SupplierAlias       *string             `json:"supplier_alias" gorm:"type:varchar(128);uniqueIndex;comment:供应商别名，创建时默认 P+主键 id，可修改"`
 	SupplierCapability  *SupplierCapability `json:"supplier_capability" gorm:"-"`
 	Status              int                 `json:"status" gorm:"type:int;index;default:0;not null;comment:审核状态 0待审核 1已通过 2已驳回 3已注销"`
 	ReviewReason        string              `json:"review_reason" gorm:"type:text;comment:审核备注或驳回原因"`
@@ -119,12 +120,36 @@ type SupplierSimplePricingItem struct {
 	SupplierName string `json:"supplier_name"`
 }
 
+// SupplierApplicationAutoAlias 供应商库内编号：P + 主键 id（创建/编辑后由服务端写入，无需前端传入）。
+func SupplierApplicationAutoAlias(id int) string {
+	if id <= 0 {
+		return ""
+	}
+	return "P" + strconv.Itoa(id)
+}
+
+func ptrSupplierApplicationAlias(id int) *string {
+	if id <= 0 {
+		return nil
+	}
+	s := SupplierApplicationAutoAlias(id)
+	return &s
+}
+
 // CreateSupplierApplication 创建供应商申请记录。
 func CreateSupplierApplication(app *SupplierApplication) error {
 	now := time.Now().Unix()
 	app.CreatedAt = now
 	app.UpdatedAt = now
-	return DB.Create(app).Error
+	if err := DB.Create(app).Error; err != nil {
+		return err
+	}
+	alias := SupplierApplicationAutoAlias(app.ID)
+	if err := DB.Model(app).Update("supplier_alias", alias).Error; err != nil {
+		return err
+	}
+	app.SupplierAlias = ptrSupplierApplicationAlias(app.ID)
+	return nil
 }
 
 // CreateSupplierApplicationAutoApproved 创建直接审核通过的供应商申请。
@@ -150,6 +175,12 @@ func CreateSupplierApplicationAutoApproved(app *SupplierApplication, reviewerUse
 		tx.Rollback()
 		return err
 	}
+	alias := SupplierApplicationAutoAlias(app.ID)
+	if err := tx.Model(&SupplierApplication{}).Where("id = ?", app.ID).Update("supplier_alias", alias).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	app.SupplierAlias = ptrSupplierApplicationAlias(app.ID)
 	if err := tx.Model(&User{}).Where("id = ?", app.ApplicantUserID).
 		Updates(map[string]any{
 			"supplier_id": app.ID,
@@ -387,6 +418,13 @@ func AdminUpdateSupplierApplication(applicationID int, req *SupplierApplication)
 		return nil, err
 	}
 	now := time.Now().Unix()
+	aliasVal := ""
+	if req.SupplierAlias != nil {
+		aliasVal = strings.TrimSpace(*req.SupplierAlias)
+	}
+	if aliasVal == "" {
+		aliasVal = SupplierApplicationAutoAlias(applicationID)
+	}
 	updates := map[string]any{
 		"company_name":          req.CompanyName,
 		"credit_code":           req.CreditCode,
@@ -397,7 +435,7 @@ func AdminUpdateSupplierApplication(applicationID int, req *SupplierApplication)
 		"contact_name":          req.ContactName,
 		"contact_mobile":        req.ContactMobile,
 		"contact_wechat":        req.ContactWechat,
-		"supplier_alias":        req.SupplierAlias,
+		"supplier_alias":        aliasVal,
 		"updated_at":            now,
 	}
 	if err := tx.Model(&SupplierApplication{}).
@@ -415,7 +453,8 @@ func AdminUpdateSupplierApplication(applicationID int, req *SupplierApplication)
 	app.ContactName = req.ContactName
 	app.ContactMobile = req.ContactMobile
 	app.ContactWechat = req.ContactWechat
-	app.SupplierAlias = req.SupplierAlias
+	savedAlias := aliasVal
+	app.SupplierAlias = &savedAlias
 	app.UpdatedAt = now
 	if err := tx.Commit().Error; err != nil {
 		return nil, err
@@ -450,6 +489,7 @@ func GetApprovedSupplierApplicationByApplicant(applicantUserID int) (*SupplierAp
 }
 
 // ReviewSupplierApplication 审核申请（仅允许从待审核状态流转到通过/驳回）。
+// supplierAlias 为可选：通过时若为空则写入默认 P+id，否则写入管理员指定别名。
 func ReviewSupplierApplication(applicationID int, reviewerUserID int, toStatus int, reason string, supplierAlias string) (*SupplierApplication, error) {
 	tx := DB.Begin()
 	if tx.Error != nil {
@@ -483,7 +523,11 @@ func ReviewSupplierApplication(applicationID int, reviewerUserID int, toStatus i
 	}
 	if toStatus == SupplierApplicationStatusApproved {
 		trimmedAlias := strings.TrimSpace(supplierAlias)
-		updates["supplier_alias"] = &trimmedAlias
+		if trimmedAlias != "" {
+			updates["supplier_alias"] = trimmedAlias
+		} else {
+			updates["supplier_alias"] = SupplierApplicationAutoAlias(applicationID)
+		}
 	}
 	result := tx.Model(&SupplierApplication{}).
 		Where("id = ? AND status = ?", applicationID, SupplierApplicationStatusPending).
@@ -531,7 +575,11 @@ func ReviewSupplierApplication(applicationID int, reviewerUserID int, toStatus i
 	app.UpdatedAt = now
 	if toStatus == SupplierApplicationStatusApproved {
 		trimmedAlias := strings.TrimSpace(supplierAlias)
-		app.SupplierAlias = &trimmedAlias
+		if trimmedAlias != "" {
+			app.SupplierAlias = &trimmedAlias
+		} else {
+			app.SupplierAlias = ptrSupplierApplicationAlias(applicationID)
+		}
 	}
 	if err := tx.Commit().Error; err != nil {
 		return nil, err
@@ -782,6 +830,18 @@ func MarkAllUserMessagesAsRead(userID int, role int) (int64, error) {
 // IsSupplierApplicationNotFound 判断是否未找到供应商申请记录。
 func IsSupplierApplicationNotFound(err error) bool {
 	return errors.Is(err, gorm.ErrRecordNotFound)
+}
+
+// BackfillSupplierApplicationAlias 将 supplier_alias 统一为 P+id（迁移/修复用，可安全重复执行）。
+func BackfillSupplierApplicationAlias() error {
+	switch {
+	case common.UsingMySQL:
+		return DB.Exec("UPDATE supplier_applications SET supplier_alias = CONCAT('P', id) WHERE id > 0").Error
+	case common.UsingPostgreSQL:
+		return DB.Exec(`UPDATE supplier_applications SET supplier_alias = 'P' || id::text WHERE id > 0`).Error
+	default:
+		return DB.Exec("UPDATE supplier_applications SET supplier_alias = 'P' || id WHERE id > 0").Error
+	}
 }
 
 // IsSupplierCreditCodeDuplicateError 判断是否为统一社会信用代码重复错误。
