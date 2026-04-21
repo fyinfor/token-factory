@@ -125,6 +125,7 @@ export default function SettingsSidebarModulesAdmin(props) {
         topup: true,
         personal: true,
         provider: true,
+        'distributor-apply': true,
         distributor_center: true,
       },
       admin: {
@@ -201,6 +202,7 @@ export default function SettingsSidebarModulesAdmin(props) {
             topup: true,
             personal: true,
             provider: true,
+            'distributor-apply': true,
             distributor_center: true,
           },
           admin: {
@@ -383,8 +385,8 @@ export default function SettingsSidebarModulesAdmin(props) {
               {section.modules.map((module) => (
                 <Col key={module.key} xs={24} sm={12} md={8} lg={6} xl={6}>
                   <Card
+                    className='transition-shadow hover:shadow-md'
                     bodyStyle={{ padding: '16px' }}
-                    hoverable
                     style={{
                       opacity: sidebarModulesAdmin[section.key]?.enabled
                         ? 1

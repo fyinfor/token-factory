@@ -200,6 +200,7 @@ export default function SettingsHeaderNavModules(props) {
           {moduleConfigs.map((module) => (
             <Col key={module.key} xs={24} sm={12} md={6} lg={6} xl={6}>
               <Card
+                className='transition-shadow hover:shadow-md'
                 style={{
                   borderRadius: '8px',
                   border: '1px solid var(--semi-color-border)',
@@ -208,7 +209,6 @@ export default function SettingsHeaderNavModules(props) {
                   minHeight: '80px',
                 }}
                 bodyStyle={{ padding: '16px' }}
-                hoverable
               >
                 <div
                   style={{
