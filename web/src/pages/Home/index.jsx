@@ -48,6 +48,7 @@ import {
 import { Link } from 'react-router-dom';
 import NoticeModal from '../../components/layout/NoticeModal';
 import HomeModelList from '../../components/home/HomeModelList';
+import HomeLandingHeroCopy from '../../components/home/HomeLandingHeroCopy';
 import {
   Moonshot,
   OpenAI,
@@ -70,6 +71,7 @@ import {
   Hunyuan,
   Xinference,
 } from '@lobehub/icons';
+import FooterBar from '../../components/layout/Footer';
 
 const { Text } = Typography;
 
@@ -112,8 +114,6 @@ const Home = () => {
     statusState?.status?.server_address || `${window.location.origin}`;
   const endpointItems = API_ENDPOINTS.map((e) => ({ value: e }));
   const [endpointIndex, setEndpointIndex] = useState(0);
-  const isChinese = i18n.language.startsWith('zh');
-
   let u = userState?.user;
   if (!u) {
     try {
@@ -194,150 +194,150 @@ const Home = () => {
   }, [endpointItems.length]);
 
   return (
-    <div className='w-full overflow-x-hidden'>
-      <NoticeModal
-        visible={noticeVisible}
-        onClose={() => setNoticeVisible(false)}
-        isMobile={isMobile}
-      />
-      {homePageContentLoaded && homePageContent === '' ? (
-        <div className='w-full overflow-x-hidden'>
-          {/* Banner 部分 */}
-          <div className='home-banner-bg w-full min-h-[400px] md:min-h-[500px]'>
-            <div className='h-full px-4 py-16 md:py-20'>
-              {/* 居中内容区 */}
-              <div className='flex flex-col items-center justify-center text-center max-w-3xl mx-auto my-32'>
-                <h1
-                  className={`text-4xl md:text-5xl lg:text-6xl font-medium text-semi-color-text-0 leading-tight mb-4 ${isChinese ? 'tracking-wide' : ''}`}
-                >
-                  {t('一站式大模型服务统一入口')}
-                </h1>
-                <p className='text-sm md:text-base text-semi-color-text-2 mb-8'>
-                  {t('按需定制，更优')}
-                  <span className='font-semibold text-semi-color-text-0'>{t('价格')}</span>
-                  {t('，更稳的')}
-                  <span className='font-semibold text-semi-color-text-0'>{t('可靠')}</span>
-                  {t('，开箱即用')}
-                </p>
+    <>
+      <style>{`
+        .home-scroll-container {
+          scrollbar-width: none;
+        }
+        .home-scroll-container::-webkit-scrollbar {
+          display: none;
+        }
+      `}</style>
+      <div className='w-full h-[100dvh] overflow-y-auto home-scroll-container'>
+        <NoticeModal
+          visible={noticeVisible}
+          onClose={() => setNoticeVisible(false)}
+          isMobile={isMobile}
+        />
+        {homePageContentLoaded && homePageContent === '' ? (
+          <div className='w-full'>
+            {/* Banner 部分 */}
+            <div className='home-banner-bg w-full min-h-[400px] md:min-h-[500px]'>
+              <div className='h-full px-4 pt-16 md:pt-20'>
+                {/* 居中内容区 */}
+                <div className='my-16'>
+                  <HomeLandingHeroCopy />
 
-                {/* 操作按钮 */}
-                <div className='flex flex-row gap-3 justify-center items-center mb-8'>
-                  <Link to='/about'>
-                    <Button
-                      theme='solid'
-                      type='primary'
-                      size={isMobile ? 'default' : 'large'}
-                      className='!rounded-md px-8'
-                      style={{ fontWeight: 500 }}
-                    >
-                      {t('立即获取专属方案')}
-                    </Button>
-                  </Link>
+                  {/* 操作按钮 */}
+                  {/* <div className='flex flex-row gap-3 justify-center items-center mb-8'>
+                    <Link to='/about'>
+                      <Button
+                        theme='solid'
+                        type='primary'
+                        size={isMobile ? 'default' : 'large'}
+                        className='!rounded-md px-8'
+                        style={{ fontWeight: 500 }}
+                      >
+                        {t('立即获取专属方案')}
+                      </Button>
+                    </Link>
+                  </div>
+
+                  {showDistributorRecruit && (
+                    <div className='home-distributor-recruit-card w-full max-w-xl mx-auto mb-6 rounded-2xl border border-semi-color-border bg-semi-color-bg-1/90 backdrop-blur-sm px-4 py-4 text-left'>
+                      <div className='flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3'>
+                        <div>
+                          <div className='font-semibold text-semi-color-text-0'>
+                            {t('分销伙伴招募')}
+                          </div>
+                          <div className='text-sm text-semi-color-text-2 mt-1'>
+                            {userRole == null
+                              ? t('登录后可提交申请，成为分销商获得邀请分成')
+                              : t('提交资料申请成为分销商，邀请好友获得充值分成')}
+                          </div>
+                        </div>
+                        <Link
+                          to={
+                            userRole == null
+                              ? '/login?redirect=' +
+                                encodeURIComponent('/console/distributor/apply')
+                              : '/console/distributor/apply'
+                          }
+                        >
+                          <Button
+                            theme='solid'
+                            type='primary'
+                            className='home-distributor-cta-btn !rounded-lg shrink-0'
+                          >
+                            {userRole == null
+                              ? t('登录并申请')
+                              : t('申请成为分销商')}
+                          </Button>
+                        </Link>
+                      </div>
+                    </div>
+                  )} */}
                 </div>
 
-                {showDistributorRecruit && (
-                  <div className='home-distributor-recruit-card w-full max-w-xl mx-auto mb-6 rounded-2xl border border-semi-color-border bg-semi-color-bg-1/90 backdrop-blur-sm px-4 py-4 text-left'>
-                    <div className='flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3'>
-                      <div>
-                        <div className='font-semibold text-semi-color-text-0'>
-                          {t('分销伙伴招募')}
-                        </div>
-                        <div className='text-sm text-semi-color-text-2 mt-1'>
-                          {userRole == null
-                            ? t('登录后可提交申请，成为分销商获得邀请分成')
-                            : t('提交资料申请成为分销商，邀请好友获得充值分成')}
-                        </div>
-                      </div>
-                      <Link
-                        to={
-                          userRole == null
-                            ? '/login?redirect=' +
-                              encodeURIComponent('/console/distributor/apply')
-                            : '/console/distributor/apply'
-                        }
-                      >
-                        <Button
-                          theme='solid'
-                          type='primary'
-                          className='home-distributor-cta-btn !rounded-lg shrink-0'
-                        >
-                          {userRole == null
-                            ? t('登录并申请')
-                            : t('申请成为分销商')}
-                        </Button>
-                      </Link>
+                {/* 广告展示位 */}
+                {/* <div className='w-full max-w-[800px] mx-auto mb-8'>
+                  <Link to='/console/supplier/apply'>
+                    <div className='relative w-full h-[140px] md:h-[280px] overflow-hidden cursor-pointer transition-transform duration-300 hover:scale-[1.01]'>
+                      <img
+                        src='/ad.jpg'
+                        alt='Advertisement'
+                        className='w-full h-full object-cover rounded-[10px]'
+                      />
                     </div>
-                  </div>
-                )}
-              </div>
+                  </Link>
+                </div> */}
 
-              {/* 广告展示位 */}
-              <div className='w-full max-w-[800px] mx-auto mb-8'>
-                <Link to='/console/supplier/apply'>
-                  <div className='relative w-full h-[140px] md:h-[280px] overflow-hidden cursor-pointer transition-transform duration-300 hover:scale-[1.01]'>
-                    <img
-                      src='/ad.jpg'
-                      alt='Advertisement'
-                      className='w-full h-full object-cover rounded-[10px]'
-                    />
-                  </div>
-                </Link>
+                {/* 模型列表区域 */}
+                <HomeModelList />
               </div>
-
-              {/* 模型列表区域 */}
-              <HomeModelList />
             </div>
-          </div>
 
-          {/* 功能卡片区域 */}
-          <div className='w-full px-4 py-16 md:py-20'>
-            <div className='max-w-6xl mx-auto'>
-              <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
-                {HOME_FEATURE_CARDS.map((card) => (
-                  <div
-                    key={card.image}
-                    className='group flex flex-col overflow-hidden rounded-2xl border border-semi-color-border bg-semi-color-bg-1 shadow-sm transition-shadow hover:shadow-lg md:flex-row md:items-stretch md:gap-10'
-                  >
-                    <div className='relative flex shrink-0 items-center justify-center bg-semi-color-bg-1 px-5 pb-2 pt-6 md:w-[42%] md:max-w-[300px] md:p-6 md:pb-6'>
-                      <div className='relative aspect-[4/3] w-full max-w-[320px] overflow-hidden rounded-xl bg-semi-color-bg-0 shadow-md ring-1 ring-semi-color-border md:max-w-none'>
-                        <img
-                          src={card.image}
-                          alt=''
-                          className='h-full w-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-[1.02]'
-                          decoding='async'
-                        />
+            {/* 功能卡片区域 */}
+            <div className='w-full px-4 py-16 md:py-20'>
+              <div className='max-w-6xl mx-auto'>
+                <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
+                  {HOME_FEATURE_CARDS.map((card) => (
+                    <div
+                      key={card.image}
+                      className='group flex flex-col overflow-hidden rounded-2xl border border-semi-color-border bg-semi-color-bg-1 shadow-sm transition-shadow hover:shadow-lg md:flex-row md:items-stretch md:gap-10'
+                    >
+                      <div className='relative flex shrink-0 items-center justify-center bg-semi-color-bg-1 px-5 pb-2 pt-6 md:w-[42%] md:max-w-[300px] md:p-6 md:pb-6'>
+                        <div className='relative aspect-[4/3] w-full max-w-[320px] overflow-hidden rounded-xl bg-semi-color-bg-0 shadow-md ring-1 ring-semi-color-border md:max-w-none'>
+                          <img
+                            src={card.image}
+                            alt=''
+                            className='h-full w-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-[1.02]'
+                            decoding='async'
+                          />
+                        </div>
+                      </div>
+                      <div className='flex flex-1 flex-col justify-center px-6 pb-6 pt-5 md:px-8 md:py-8 md:pl-0'>
+                        <h3 className='text-xl font-semibold leading-snug text-semi-color-text-0 md:text-[1.35rem]'>
+                          {t(card.titleKey)}
+                        </h3>
+                        <p className='mt-3 text-sm leading-relaxed text-semi-color-text-2'>
+                          {t(card.descKey)}
+                        </p>
                       </div>
                     </div>
-                    <div className='flex flex-1 flex-col justify-center px-6 pb-6 pt-5 md:px-8 md:py-8 md:pl-0'>
-                      <h3 className='text-xl font-semibold leading-snug text-semi-color-text-0 md:text-[1.35rem]'>
-                        {t(card.titleKey)}
-                      </h3>
-                      <p className='mt-3 text-sm leading-relaxed text-semi-color-text-2'>
-                        {t(card.descKey)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      ) : (
-        <div className='overflow-x-hidden w-full'>
-          {homePageContent.startsWith('https://') ? (
-            <iframe
-              src={homePageContent}
-              className='w-full h-screen border-none'
-            />
-          ) : (
-            <div
-              className='mt-[60px]'
-              dangerouslySetInnerHTML={{ __html: homePageContent }}
-            />
-          )}
-        </div>
-      )}
-    </div>
+        ) : (
+          <div className='overflow-x-hidden w-full'>
+            {homePageContent.startsWith('https://') ? (
+              <iframe
+                src={homePageContent}
+                className='w-full h-screen border-none'
+              />
+            ) : (
+              <div
+                className='mt-[60px]'
+                dangerouslySetInnerHTML={{ __html: homePageContent }}
+              />
+            )}
+          </div>
+        )}
+        <FooterBar />
+      </div>
+    </>
   );
 };
 

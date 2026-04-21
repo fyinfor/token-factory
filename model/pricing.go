@@ -42,6 +42,179 @@ type PricingVendor struct {
 	Icon        string `json:"icon,omitempty"`
 }
 
+// PricingSupplierItem 定价 data 中的供应商摘要。
+type PricingSupplierItem struct {
+	SupplierID    int    `json:"supplier_id"`
+	SupplierAlias string `json:"supplier_alias"`
+}
+
+// PricingChannelItem 某模型在各渠道上的定价摘要。
+type PricingChannelItem struct {
+	ChannelID             int     `json:"channel_id"`
+	SupplierApplicationID int     `json:"supplier_application_id"`
+	ChannelNo             string  `json:"channel_no"`
+	SupplierAlias         string  `json:"supplier_alias"`
+	ModelPrice            float64 `json:"model_price"`
+	ModelRatio            float64 `json:"model_ratio"`
+	CompletionRatio       float64 `json:"completion_ratio"`
+}
+
+// PricingAPIItem 在 Pricing 基础上扩展渠道维度统计字段（定价接口 data 元素类型）。
+type PricingAPIItem struct {
+	Pricing
+	MinModelPrice      float64               `json:"minModelPrice"`
+	MinModelRatio      float64               `json:"minModelRatio"`
+	MinCompletionRatio float64               `json:"minCompletionRatio"`
+	MaxModelPrice      float64               `json:"maxModelPrice"`
+	MaxModelRatio      float64               `json:"maxModelRatio"`
+	MaxCompletionRatio float64               `json:"maxCompletionRatio"`
+	SupplierList       []PricingSupplierItem `json:"supplier_list"`
+	ChannelList        []PricingChannelItem  `json:"channel_list"`
+}
+
+func resolveChannelPricingTriple(channelID int, supplierApplicationID int, modelName string) (mp, mr, cr float64) {
+	cr = ratio_setting.GetCompletionRatio(modelName)
+	if v, ok := ratio_setting.GetChannelCompletionRatio(channelID, modelName); ok {
+		cr = v
+	}
+
+	if v, ok := ratio_setting.GetChannelModelPrice(channelID, modelName); ok {
+		mp = v
+	} else if supplierApplicationID > 0 {
+		if v, ok := ratio_setting.GetSupplierModelPrice(supplierApplicationID, modelName); ok {
+			mp = v
+		} else if v, ok := ratio_setting.GetModelPrice(modelName, false); ok {
+			mp = v
+		}
+	} else if v, ok := ratio_setting.GetModelPrice(modelName, false); ok {
+		mp = v
+	}
+
+	if v, ok := ratio_setting.GetChannelModelRatio(channelID, modelName); ok {
+		mr = v
+	} else if supplierApplicationID > 0 {
+		if v, ok := ratio_setting.GetSupplierModelRatio(supplierApplicationID, modelName); ok {
+			mr = v
+		} else if v, ok, _ := ratio_setting.GetModelRatio(modelName); ok {
+			mr = v
+		}
+	} else if v, ok, _ := ratio_setting.GetModelRatio(modelName); ok {
+		mr = v
+	}
+	return mp, mr, cr
+}
+
+func pricingSupplierAliasFromMeta(supplierApplicationID int, alias *string) string {
+	if supplierApplicationID == 0 {
+		return "P0"
+	}
+	if alias != nil {
+		s := strings.TrimSpace(*alias)
+		if s == "0" {
+			return "P0"
+		}
+		if s != "" {
+			return s
+		}
+	}
+	return SupplierApplicationAutoAlias(supplierApplicationID)
+}
+
+func minFloat64Slice(vs []float64) float64 {
+	m := vs[0]
+	for _, x := range vs[1:] {
+		if x < m {
+			m = x
+		}
+	}
+	return m
+}
+
+func maxFloat64Slice(vs []float64) float64 {
+	m := vs[0]
+	for _, x := range vs[1:] {
+		if x > m {
+			m = x
+		}
+	}
+	return m
+}
+
+// BuildPricingAPIItems 为定价接口组装带渠道统计的 data 列表。
+func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}, metas []ChannelPricingMeta) []PricingAPIItem {
+	out := make([]PricingAPIItem, 0, len(filtered))
+	for _, p := range filtered {
+		item := PricingAPIItem{Pricing: p}
+		var chItems []PricingChannelItem
+		var prices, ratios, completions []float64
+
+		modelName := p.ModelName
+		for _, row := range metas {
+			if row.ChannelID <= 0 {
+				continue
+			}
+			if _, ok := visibleChannelIDs[row.ChannelID]; !ok {
+				continue
+			}
+			if !ChannelModelsRawContains(row.Models, modelName) {
+				continue
+			}
+			mp, mr, cr := resolveChannelPricingTriple(row.ChannelID, row.SupplierApplicationID, modelName)
+			alias := pricingSupplierAliasFromMeta(row.SupplierApplicationID, row.SupplierAlias)
+			chItems = append(chItems, PricingChannelItem{
+				ChannelID:             row.ChannelID,
+				SupplierApplicationID: row.SupplierApplicationID,
+				ChannelNo:             row.ChannelNo,
+				SupplierAlias:         alias,
+				ModelPrice:            mp,
+				ModelRatio:            mr,
+				CompletionRatio:       cr,
+			})
+			prices = append(prices, mp)
+			ratios = append(ratios, mr)
+			completions = append(completions, cr)
+		}
+
+		if len(chItems) == 0 {
+			item.MinModelPrice = p.ModelPrice
+			item.MaxModelPrice = p.ModelPrice
+			item.MinModelRatio = p.ModelRatio
+			item.MaxModelRatio = p.ModelRatio
+			item.MinCompletionRatio = p.CompletionRatio
+			item.MaxCompletionRatio = p.CompletionRatio
+			item.SupplierList = []PricingSupplierItem{}
+			item.ChannelList = []PricingChannelItem{}
+			out = append(out, item)
+			continue
+		}
+
+		item.ChannelList = chItems
+		item.MinModelPrice = minFloat64Slice(prices)
+		item.MaxModelPrice = maxFloat64Slice(prices)
+		item.MinModelRatio = minFloat64Slice(ratios)
+		item.MaxModelRatio = maxFloat64Slice(ratios)
+		item.MinCompletionRatio = minFloat64Slice(completions)
+		item.MaxCompletionRatio = maxFloat64Slice(completions)
+
+		supplierSeen := make(map[int]struct{})
+		suppliers := make([]PricingSupplierItem, 0)
+		for _, ch := range chItems {
+			sid := ch.SupplierApplicationID
+			if _, ok := supplierSeen[sid]; ok {
+				continue
+			}
+			supplierSeen[sid] = struct{}{}
+			suppliers = append(suppliers, PricingSupplierItem{
+				SupplierID:    sid,
+				SupplierAlias: ch.SupplierAlias,
+			})
+		}
+		item.SupplierList = suppliers
+		out = append(out, item)
+	}
+	return out
+}
+
 var (
 	pricingMap           []Pricing
 	vendorsList          []PricingVendor

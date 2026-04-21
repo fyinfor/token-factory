@@ -21,7 +21,7 @@ import React from 'react';
 import Dashboard from '../../components/dashboard';
 
 const Detail = () => (
-  <div className='mt-[60px] px-2'>
+  <div className='mt-[60px] w-full max-w-[1600px] mx-auto px-3 sm:px-4 lg:px-6 pb-6'>
     <Dashboard />
   </div>
 );

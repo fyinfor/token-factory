@@ -46,6 +46,7 @@ func SetApiRouter(router *gin.Engine) {
 		// Standard OAuth providers (GitHub, Discord, OIDC, LinuxDO) - unified route
 		apiRouter.GET("/oauth/:provider", middleware.CriticalRateLimit(), controller.HandleOAuth)
 		apiRouter.GET("/ratio_config", middleware.CriticalRateLimit(), controller.GetRatioConfig)
+		apiRouter.POST("/aff/track", middleware.CriticalRateLimit(), controller.PostAffiliateTrack)
 
 		// 分销商：申请、中心（需登录）
 		distributorRoute := apiRouter.Group("/distributor")
@@ -54,6 +55,7 @@ func SetApiRouter(router *gin.Engine) {
 			distributorRoute.GET("/my_application", controller.GetMyDistributorApplication)
 			distributorRoute.POST("/application", controller.PostDistributorApplication)
 			distributorRoute.GET("/center", controller.GetDistributorCenterInfo)
+			distributorRoute.GET("/analytics", controller.GetDistributorAnalytics)
 			distributorRoute.GET("/invitee/:invitee_id/commissions", controller.GetDistributorInviteeCommissionLogs)
 			distributorRoute.POST("/withdrawal", controller.PostDistributorWithdrawal)
 			distributorRoute.GET("/withdrawals", controller.GetDistributorWithdrawals)
@@ -75,6 +77,7 @@ func SetApiRouter(router *gin.Engine) {
 			distributorAdminRoute.GET("/withdrawals", controller.ListDistributorWithdrawalsAdmin)
 			distributorAdminRoute.POST("/withdrawals/:id/approve", controller.ApproveDistributorWithdrawalAdmin)
 			distributorAdminRoute.POST("/withdrawals/:id/reject", controller.RejectDistributorWithdrawalAdmin)
+			distributorAdminRoute.GET("/analytics", controller.GetDistributorAdminAnalytics)
 		}
 
 		apiRouter.POST("/stripe/webhook", controller.StripeWebhook)
@@ -138,6 +141,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.GET("/supplier/channels", controller.ListMySupplierChannels)
 				selfRoute.POST("/supplier/models", controller.CreateMySupplierModel)
 				selfRoute.GET("/supplier/models", controller.ListMySupplierModels)
+				selfRoute.GET("/supplier-dashboard", controller.GetSupplierDashboardData)
 				selfRoute.GET("/messages/self", controller.ListMyMessages)
 				selfRoute.POST("/messages/:id/read", controller.MarkMyMessageRead)
 				selfRoute.POST("/messages/read_all", controller.MarkAllMyMessagesRead)

@@ -59,8 +59,8 @@ const SupplierCapabilityFormFields = ({ t, onCommitmentChange }) => {
           <Form.TagInput
             field='supported_models'
             label={<Text strong>{t('支持的模型')}<Text type='danger'>*</Text></Text>}
-            placeholder={t('输入后回车添加，如 GPT-4、文心一言4.0')}
-            rules={[{ required: true, message: t('请填写支持的模型') }]}
+            placeholder={t('请输入支持的模型，输入后回车确定添加，如 GPT-4、文心一言4.0')}
+            rules={[{ required: true, message: t('请填写支持的模型，输入后回车确定添加') }]}
             size='large'
             style={{ width: '100%' }}
           />
@@ -182,8 +182,8 @@ const SupplierCapabilityFormFields = ({ t, onCommitmentChange }) => {
           <Form.TagInput
             field='api_base_urls'
             label={<Text strong>{t('API接口地址')}<Text type='danger'>*</Text></Text>}
-            placeholder={t('输入后回车添加，例如 https://api.example.com/v1')}
-            rules={[{ required: true, message: t('请填写API接口地址') }]}
+            placeholder={t('请输入API接口地址，输入后回车确定添加，例如 https://api.example.com/v1')}
+            rules={[{ required: true, message: t('请填写API接口地址，输入后回车确定添加') }]}
             size='large'
             style={{ width: '100%' }}
           />

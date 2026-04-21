@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useContext, useEffect } from 'react';
-import { getRelativeTime } from '../../helpers';
+import { getRelativeTime, userIsDistributorUser } from '../../helpers';
 import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
 
@@ -30,6 +30,7 @@ import AnnouncementsPanel from './AnnouncementsPanel';
 import FaqPanel from './FaqPanel';
 import UptimePanel from './UptimePanel';
 import SearchModal from './modals/SearchModal';
+import DistributorAnalyticsBoard from '../distributor/DistributorAnalyticsBoard';
 
 import { useDashboardData } from '../../hooks/dashboard/useDashboardData';
 import { useDashboardStats } from '../../hooks/dashboard/useDashboardStats';
@@ -139,7 +140,7 @@ const Dashboard = () => {
   }, []);
 
   return (
-    <div className='h-full'>
+    <div className='h-full flex flex-col gap-6'>
       <DashboardHeader
         getGreeting={dashboardData.getGreeting}
         greetingVisible={dashboardData.greetingVisible}
@@ -170,10 +171,14 @@ const Dashboard = () => {
         CHART_CONFIG={CHART_CONFIG}
       />
 
+      {userIsDistributorUser(userState?.user) ? (
+        <DistributorAnalyticsBoard />
+      ) : null}
+
       {/* API信息和图表面板 */}
-      <div className='mb-4'>
+      <div>
         <div
-          className={`grid grid-cols-1 gap-4 ${dashboardData.hasApiInfoPanel ? 'lg:grid-cols-4' : ''}`}
+          className={`grid grid-cols-1 gap-6 ${dashboardData.hasApiInfoPanel ? 'lg:grid-cols-4' : ''}`}
         >
           <ChartsPanel
             activeChartTab={dashboardData.activeChartTab}
@@ -205,8 +210,8 @@ const Dashboard = () => {
 
       {/* 系统公告和常见问答卡片 */}
       {dashboardData.hasInfoPanels && (
-        <div className='mb-4'>
-          <div className='grid grid-cols-1 lg:grid-cols-4 gap-4'>
+        <div>
+          <div className='grid grid-cols-1 lg:grid-cols-4 gap-6'>
             {/* 公告卡片 */}
             {dashboardData.announcementsEnabled && (
               <AnnouncementsPanel

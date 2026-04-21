@@ -18,23 +18,17 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useEffect, useState } from 'react';
-import { API, isSupplier, showError } from '../../../helpers';
+import { API, isAdmin, isSupplier, showError } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
-import { Button, Empty, Tabs } from '@douyinfe/semi-ui';
-import { IllustrationNoAccess, IllustrationNoAccessDark } from '@douyinfe/semi-illustrations';
-import { useNavigate } from 'react-router-dom';
+import { Tabs } from '@douyinfe/semi-ui';
 import ModelPricingEditor from './components/ModelPricingEditor';
 import SupplierModelPricingEditor from './components/SupplierModelPricingEditor';
 
 export default function ModelRatioNotSetEditor(props) {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const [enabledModels, setEnabledModels] = useState([]);
   const [pricingChannels, setPricingChannels] = useState([]);
 
-  /**
-   * 获取启用模型列表；当 403 时提示先申请供应商资质。
-   */
   const getAllEnabledModels = async () => {
     try {
       const res = await API.get('/api/channel/models_enabled');
@@ -46,10 +40,6 @@ export default function ModelRatioNotSetEditor(props) {
       }
     } catch (error) {
       console.error(t('获取启用模型失败:'), error);
-      if (error?.response?.status === 403) {
-        showError(t('请先申请供应商资质'));
-        return;
-      }
       showError(error?.response?.data?.message || t('获取启用模型失败'));
     }
   };
@@ -69,16 +59,17 @@ export default function ModelRatioNotSetEditor(props) {
   };
 
   useEffect(() => {
-    // 获取所有启用的模型
     getAllEnabledModels();
     getPricingSuppliers();
   }, []);
+  
   const extendedOptions = {
     ...props.options,
     __pricingChannels: pricingChannels,
   };
 
-  if (!isSupplier()) {
+  // 管理员或供应商均可访问；仅普通用户显示“需要供应商权限”提示。
+  if (!isSupplier() && !isAdmin()) {
     return (
       <div className='py-4'>
         <div className='flex items-center justify-center' style={{ minHeight: 320 }}>
