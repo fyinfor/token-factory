@@ -29,15 +29,15 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
-// RegisterRequest 用户注册请求体（手机号 + 短信验证码为必填）。
+// RegisterRequest 用户注册请求体；开启短信注册时手机号与短信验证码必填（见 Register 内校验）。
 type RegisterRequest struct {
 	Username         string `json:"username" validate:"required,max=20"`
 	Password         string `json:"password" validate:"required,min=8,max=20"`
 	Email            string `json:"email" validate:"max=50"`
 	VerificationCode string `json:"verification_code"`
 	AffCode          string `json:"aff_code"`
-	Phone            string `json:"phone" validate:"required"`
-	SMSCode          string `json:"sms_verification_code" validate:"required,len=6"`
+	Phone            string `json:"phone"`
+	SMSCode          string `json:"sms_verification_code"`
 }
 
 func Login(c *gin.Context) {
@@ -163,17 +163,30 @@ func Register(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserInputInvalid, map[string]any{"Error": err.Error()})
 		return
 	}
-	if !common.ValidateMainlandChinaPhone(req.Phone) {
-		common.ApiError(c, fmt.Errorf("手机号格式无效，请输入 11 位中国大陆手机号"))
-		return
-	}
-	if common.IsSMSPhoneBlacklisted(req.Phone) {
-		common.ApiError(c, fmt.Errorf("该手机号已被加入短信黑名单"))
-		return
-	}
-	if !common.VerifyAndConsumeSMSCode(req.Phone, req.SMSCode) {
-		common.ApiError(c, fmt.Errorf("短信验证码错误或已过期"))
-		return
+	if common.SMSVerificationEnabled {
+		if !common.ValidateMainlandChinaPhone(req.Phone) {
+			common.ApiError(c, fmt.Errorf("手机号格式无效，请输入 11 位中国大陆手机号"))
+			return
+		}
+		if common.IsSMSPhoneBlacklisted(req.Phone) {
+			common.ApiError(c, fmt.Errorf("该手机号已被加入短信黑名单"))
+			return
+		}
+		if len(strings.TrimSpace(req.SMSCode)) != 6 {
+			common.ApiError(c, fmt.Errorf("请输入 6 位短信验证码"))
+			return
+		}
+		if !common.VerifyAndConsumeSMSCode(req.Phone, req.SMSCode) {
+			common.ApiError(c, fmt.Errorf("短信验证码错误或已过期"))
+			return
+		}
+		if model.IsPhoneAlreadyTaken(req.Phone) {
+			common.ApiError(c, fmt.Errorf("手机号已被占用"))
+			return
+		}
+	} else {
+		req.Phone = ""
+		req.SMSCode = ""
 	}
 	if common.EmailVerificationEnabled {
 		if req.Email == "" || req.VerificationCode == "" {
@@ -193,10 +206,6 @@ func Register(c *gin.Context) {
 	}
 	if exist {
 		common.ApiErrorI18n(c, i18n.MsgUserExists)
-		return
-	}
-	if model.IsPhoneAlreadyTaken(req.Phone) {
-		common.ApiError(c, fmt.Errorf("手机号已被占用"))
 		return
 	}
 	affCode := req.AffCode // this code is the inviter's code, not the user's own code
