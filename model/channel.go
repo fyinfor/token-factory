@@ -326,21 +326,55 @@ type SupplierChannelSearchFilter struct {
 
 // ChannelSimplePricingItem pricing 页面使用的渠道精简信息。
 type ChannelSimplePricingItem struct {
-	ChannelID   int    `json:"channel_id"`
-	ChannelName string `json:"channel_name"`
+	ChannelID int `json:"channel_id"`
+}
+
+// ChannelPricingMeta 定价接口计算渠道维度价格所需的渠道行（含供应商别名）。
+type ChannelPricingMeta struct {
+	ChannelID             int     `gorm:"column:channel_id"`
+	SupplierApplicationID int     `gorm:"column:supplier_application_id"`
+	Models                string  `gorm:"column:models"`
+	SupplierAlias         *string `gorm:"column:supplier_alias"`
 }
 
 // ListChannelsForPricing 查询定价页使用的渠道列表。
 func ListChannelsForPricing() ([]ChannelSimplePricingItem, error) {
 	items := make([]ChannelSimplePricingItem, 0)
 	err := DB.Model(&Channel{}).
-		Select("id as channel_id, name as channel_name").
+		Select("id as channel_id").
 		Order("id asc").
 		Scan(&items).Error
 	if err != nil {
 		return nil, err
 	}
 	return items, nil
+}
+
+// ListChannelPricingMeta 查询全部渠道的定价元数据（用于按模型汇总渠道价）。
+func ListChannelPricingMeta() ([]ChannelPricingMeta, error) {
+	items := make([]ChannelPricingMeta, 0)
+	err := DB.Model(&Channel{}).
+		Select("channels.id AS channel_id, channels.supplier_application_id, channels.models, supplier_applications.supplier_alias").
+		Joins("LEFT JOIN supplier_applications ON supplier_applications.id = channels.supplier_application_id").
+		Order("channels.id ASC").
+		Scan(&items).Error
+	if err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+// ChannelModelsRawContains 判断 channels.models 逗号列表是否包含指定模型名（去空格精确匹配）。
+func ChannelModelsRawContains(modelsRaw string, modelName string) bool {
+	if strings.TrimSpace(modelsRaw) == "" || strings.TrimSpace(modelName) == "" {
+		return false
+	}
+	for _, m := range strings.Split(modelsRaw, ",") {
+		if strings.TrimSpace(m) == modelName {
+			return true
+		}
+	}
+	return false
 }
 
 // SearchSupplierChannels 搜索供应商渠道（供应商只查自己，管理员可查全部供应商渠道）。
