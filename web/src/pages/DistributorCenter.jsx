@@ -499,9 +499,6 @@ export default function DistributorCenter() {
   const shortLink =
     center?.aff_code &&
     `${window.location.origin}/r/${center.aff_code}`;
-  const registerLink =
-    center?.aff_code &&
-    `${window.location.origin}/register?aff=${center.aff_code}`;
 
   const openDetail = (r) => {
     setDetailInviteeId(r.invitee_id);
@@ -720,7 +717,7 @@ export default function DistributorCenter() {
           >
             <Space vertical style={{ width: '100%' }} className='!gap-3'>
               <Input
-                value={registerLink || ''}
+                value={shortLink || ''}
                 readonly
                 className='!rounded-lg'
                 prefix={t('邀请链接')}
@@ -729,29 +726,8 @@ export default function DistributorCenter() {
                     type='primary'
                     theme='solid'
                     onClick={async () => {
-                      if (registerLink && (await copy(registerLink))) {
-                        showSuccess(t('邀请链接已复制到剪切板'));
-                      }
-                    }}
-                    icon={<Copy size={14} />}
-                    className='!rounded-lg'
-                  >
-                    {t('复制')}
-                  </Button>
-                }
-              />
-              <Input
-                value={shortLink || ''}
-                readonly
-                className='!rounded-lg'
-                prefix={t('短链接')}
-                suffix={
-                  <Button
-                    type='primary'
-                    theme='solid'
-                    onClick={async () => {
                       if (shortLink && (await copy(shortLink))) {
-                        showSuccess(t('已复制'));
+                        showSuccess(t('邀请链接已复制到剪切板'));
                       }
                     }}
                     icon={<Copy size={14} />}
@@ -770,7 +746,7 @@ export default function DistributorCenter() {
             bodyStyle={{ paddingTop: 20, paddingBottom: 24 }}
           >
             <div className='w-full flex flex-col items-center'>
-              {registerLink ? (
+              {shortLink ? (
                 <>
                   <div className='inline-flex rounded-xl bg-[var(--semi-color-fill-0)] p-2 ring-1 ring-[var(--semi-color-border)]'>
                     <div
@@ -778,7 +754,7 @@ export default function DistributorCenter() {
                       id='dist-qr-wrap'
                     >
                       <QRCodeSVG
-                        value={registerLink}
+                        value={shortLink}
                         size={168}
                         level='M'
                         bgColor='#ffffff'

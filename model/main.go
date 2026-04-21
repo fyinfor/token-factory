@@ -310,6 +310,7 @@ func migrateDB() error {
 		&UserMessage{},
 		&UserMessageRead{},
 		&AffInviteCommissionLog{},
+		&AffFunnelDaily{},
 		&DistributorApplication{},
 		&DistributorWithdrawal{},
 	)
@@ -373,6 +374,7 @@ func migrateDBFast() error {
 		{&UserMessage{}, "UserMessage"},
 		{&UserMessageRead{}, "UserMessageRead"},
 		{&AffInviteCommissionLog{}, "AffInviteCommissionLog"},
+		{&AffFunnelDaily{}, "AffFunnelDaily"},
 		{&DistributorApplication{}, "DistributorApplication"},
 		{&DistributorWithdrawal{}, "DistributorWithdrawal"},
 	}

@@ -51,6 +51,7 @@ import { useIsMobile } from '../hooks/common/useIsMobile';
 import CardPro from '../components/common/ui/CardPro';
 import CardTable from '../components/common/ui/CardTable';
 import { IconFile, IconSearch } from '@douyinfe/semi-icons';
+import DistributorAnalyticsBoard from '../components/distributor/DistributorAnalyticsBoard';
 
 const { Text } = Typography;
 
@@ -783,6 +784,9 @@ export default function DistributorAdmin() {
         type='line'
         className='mt-4 w-full distributor-admin-tabs'
       >
+        <Tabs.TabPane tab={t('分销数据大盘')} itemKey='dash'>
+          <DistributorAnalyticsBoard adminMode />
+        </Tabs.TabPane>
         <Tabs.TabPane tab={t('申请审核')} itemKey='app'>
           <CardPro
             className='w-full'
