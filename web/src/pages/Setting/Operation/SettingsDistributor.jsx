@@ -45,6 +45,7 @@ import {
   quotaToDisplayInputAmount,
   displayInputAmountToQuota,
 } from '../../../helpers';
+import DistributorApplyIntroEditor from '../../../components/distributor/DistributorApplyIntroEditor';
 
 const { Text } = Typography;
 
@@ -56,6 +57,7 @@ export default function SettingsDistributor(props) {
     DistributorApplyCsImageUrl: '',
     DistributorWithdrawCsImageUrl: '',
     DistributorWithdrawNotice: '',
+    DistributorApplyIntroHtml: '',
     DistributorMinWithdrawQuota: '',
   });
   const refForm = useRef();
@@ -277,6 +279,28 @@ export default function SettingsDistributor(props) {
               </Col>
             </Row>
             <Row gutter={16} className='mt-8'>
+              <Col span={24}>
+                <Text strong className='block mb-2'>
+                  {t('分销商申请页说明')}
+                </Text>
+                <Text type='tertiary' size='small' className='block mb-3'>
+                  {t(
+                    '展示在用户申请页面主标题下方；支持文字、排版与图片（图片需 OSS）。留空则不显示。',
+                  )}
+                </Text>
+                <DistributorApplyIntroEditor
+                  value={inputs.DistributorApplyIntroHtml}
+                  disabled={loading}
+                  onChange={(html) =>
+                    setInputs({
+                      ...inputs,
+                      DistributorApplyIntroHtml: html ?? '',
+                    })
+                  }
+                />
+              </Col>
+            </Row>
+            <Row gutter={16} className='mt-8'>
               <Col xs={24} sm={12} md={8}>
                 <div className='mb-4'>
                   <Text strong className='block mb-2'>
@@ -326,6 +350,7 @@ export default function SettingsDistributor(props) {
                     />
                     <Space vertical align='start' spacing='tight'>
                       <Upload
+                        action=''
                         accept='image/*'
                         showUploadList={false}
                         customRequest={handleDistributorImageUpload(
@@ -353,6 +378,7 @@ export default function SettingsDistributor(props) {
                   </Space>
                 ) : (
                   <Upload
+                    action=''
                     accept='image/*'
                     showUploadList={false}
                     customRequest={handleDistributorImageUpload(
@@ -383,6 +409,7 @@ export default function SettingsDistributor(props) {
                     />
                     <Space vertical align='start' spacing='tight'>
                       <Upload
+                        action=''
                         accept='image/*'
                         showUploadList={false}
                         customRequest={handleDistributorImageUpload(
@@ -413,6 +440,7 @@ export default function SettingsDistributor(props) {
                   </Space>
                 ) : (
                   <Upload
+                    action=''
                     accept='image/*'
                     showUploadList={false}
                     customRequest={handleDistributorImageUpload(

@@ -5,6 +5,16 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as
 published by the Free Software Foundation, either version 3 of the
 License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useContext, useEffect, useMemo, useState } from 'react';
@@ -23,6 +33,7 @@ import { useTranslation } from 'react-i18next';
 import { API, showError, showSuccess, userIsDistributorUser } from '../helpers';
 import { StatusContext } from '../context/Status';
 import { UserContext } from '../context/User';
+import DOMPurify from 'dompurify';
 
 const { Text } = Typography;
 
@@ -48,6 +59,13 @@ export default function DistributorApply() {
     statusState?.status?.distributor_apply_cs_image_url || ''
   ).trim();
   const showCsColumn = Boolean(csImage);
+
+  const applyIntroHtmlRaw = (
+    statusState?.status?.distributor_apply_intro_html || ''
+  ).trim();
+  const applyIntroHtml = applyIntroHtmlRaw
+    ? DOMPurify.sanitize(applyIntroHtmlRaw, { USE_PROFILES: { html: true } })
+    : '';
 
   const isPdfUrl = (u) => /\.pdf(\?|$)/i.test(u || '');
 
@@ -163,7 +181,7 @@ export default function DistributorApply() {
         className={`mx-auto flex flex-col gap-8 ${showCsColumn ? 'max-w-5xl lg:flex-row' : 'max-w-3xl'}`}
       >
         <Card className='flex-1 !rounded-2xl min-w-0 !overflow-hidden'>
-          <header className='distributor-apply-hero relative mb-6 rounded-xl  px-4 py-5 sm:px-6 sm:py-6'>
+          <header className='distributor-apply-hero relative mb-6 rounded-xl p-[12px]'>
             <span
               className='distributor-apply-hero-orb distributor-apply-hero-orb--a'
               aria-hidden
@@ -172,7 +190,7 @@ export default function DistributorApply() {
               className='distributor-apply-hero-orb distributor-apply-hero-orb--b'
               aria-hidden
             />
-            <div className='relative z-[1] flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-5'>
+            <div className='relative z-[1] flex flex-col gap-4'>
               <div
                 className='distributor-apply-hero-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[var(--semi-color-border)] bg-[var(--semi-color-bg-0)] text-[var(--semi-color-primary)] shadow-sm'
                 aria-hidden
@@ -186,6 +204,12 @@ export default function DistributorApply() {
                 >
                   {t('分销伙伴招募')}
                 </Typography.Title>
+                {applyIntroHtml ? (
+                  <div
+                    className='distributor-apply-intro-html max-w-none text-[15px] leading-relaxed text-[var(--semi-color-text-0)] [&_p]:mb-2 [&_p]:last:mb-0 [&_img]:max-w-full [&_img]:h-auto [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:text-[var(--semi-color-primary)] [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--semi-color-border)] [&_blockquote]:pl-3'
+                    dangerouslySetInnerHTML={{ __html: applyIntroHtml }}
+                  />
+                ) : null}
                 <Text
                   type='tertiary'
                   className='distributor-apply-hero-desc !block !text-[15px] !leading-relaxed'

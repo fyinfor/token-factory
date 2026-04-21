@@ -20,6 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 import React from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { history } from './history';
+import { userIsDistributorUser } from './utils';
 
 /** 登录/注册页 ?redirect= 仅允许站内相对路径，防止开放重定向 */
 export function safeInternalRedirectPath(raw) {
@@ -35,6 +36,41 @@ export function safeInternalRedirectPath(raw) {
   if (/[\s\r\n]/.test(path)) return null;
   const lower = path.toLowerCase();
   if (lower.startsWith('javascript:') || path.includes('://')) return null;
+  return path;
+}
+
+/**
+ * 顶栏「成为代理 / 提供算力」未登录时会带 ?redirect= 到申请页；登录后按需改写目标：
+ * - 分销申请：管理员 → 分销商管理；已是分销商 → 分销中心
+ * - 供应商申请：管理员 → 供应商审批
+ */
+export function redirectApplyIntentToAdminIfNeeded(path, userLike) {
+  if (path == null || path === '') return path;
+  if (typeof path !== 'string') return path;
+  if (!userLike || typeof userLike !== 'object') return path;
+
+  let pathname = path.split('?')[0].trim();
+  if (pathname.length > 1 && pathname.endsWith('/')) {
+    pathname = pathname.slice(0, -1);
+  }
+
+  if (pathname === '/console/distributor/apply') {
+    if (typeof userLike.role === 'number' && userLike.role >= 10) {
+      return '/console/distributor/admin';
+    }
+    if (userIsDistributorUser(userLike)) {
+      return '/console/distributor/center';
+    }
+    return path;
+  }
+
+  if (pathname === '/console/supplier/apply') {
+    if (typeof userLike.role === 'number' && userLike.role >= 10) {
+      return '/console/supplier-application';
+    }
+    return path;
+  }
+
   return path;
 }
 
@@ -54,8 +90,14 @@ export const AuthRedirect = ({ children }) => {
   const user = localStorage.getItem('user');
 
   if (user) {
-    const next = safeInternalRedirectPath(searchParams.get('redirect'));
-    return <Navigate to={next || '/console'} replace />;
+    const safe = safeInternalRedirectPath(searchParams.get('redirect'));
+    try {
+      const parsed = JSON.parse(user);
+      const next = redirectApplyIntentToAdminIfNeeded(safe, parsed);
+      return <Navigate to={next || '/console'} replace />;
+    } catch {
+      return <Navigate to={safe || '/console'} replace />;
+    }
   }
 
   return children;

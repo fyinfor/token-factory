@@ -24,7 +24,6 @@ import {
   Tag,
   Divider,
   Typography,
-  Badge,
 } from '@douyinfe/semi-ui';
 import {
   isRoot,
@@ -125,23 +124,26 @@ const UserInfoHeader = ({ t, userState }) => {
         </div>
       }
     >
-      {/* 当前余额和桌面版统计信息 */}
-      <div className='flex items-start justify-between gap-6'>
-        {/* 当前余额显示 */}
-        <Badge count={t('当前余额')} position='rightTop' type='danger'>
-          <div className='text-2xl sm:text-3xl md:text-4xl font-bold tracking-wide'>
+      {/* 当前余额和桌面版统计信息（勿用 Badge 展示长文案，会遮挡数字并挤压布局） */}
+      <div className='flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6'>
+        {/* 当前余额：标签在上、数字在下，避免与右侧统计区重叠 */}
+        <div className='min-w-0 flex-1'>
+          <Typography.Text type='tertiary' size='small' className='!block mb-1.5'>
+            {t('当前余额')}
+          </Typography.Text>
+          <div className='text-2xl sm:text-3xl md:text-4xl font-bold tracking-wide tabular-nums break-words text-[var(--semi-color-text-0)]'>
             {renderQuota(userState?.user?.quota)}
           </div>
-        </Badge>
+        </div>
 
         {/* 桌面版统计信息（Semi UI 卡片） */}
-        <div className='hidden lg:block flex-shrink-0'>
+        <div className='hidden min-w-0 shrink-0 lg:block'>
           <Card
             size='small'
-            className='!rounded-xl'
+            className='!rounded-xl max-w-full'
             bodyStyle={{ padding: '12px 16px' }}
           >
-            <div className='flex items-center gap-4'>
+            <div className='flex flex-wrap items-center gap-x-4 gap-y-2'>
               <div className='flex items-center gap-2'>
                 <Coins size={16} />
                 <Typography.Text size='small' type='tertiary'>

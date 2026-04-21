@@ -40,6 +40,7 @@ import {
   buildAssertionResult,
   isPasskeySupported,
   safeInternalRedirectPath,
+  redirectApplyIntentToAdminIfNeeded,
 } from '../../helpers';
 import Turnstile from 'react-turnstile';
 import {
@@ -87,8 +88,12 @@ const LoginForm = () => {
     () => safeInternalRedirectPath(searchParams.get('redirect')),
     [searchParams],
   );
-  const navigateAfterLogin = (fallbackPath) => {
-    navigate(postLoginRedirect || fallbackPath);
+  const navigateAfterLogin = (fallbackPath, loggedInUser) => {
+    const base = postLoginRedirect || fallbackPath;
+    const target = loggedInUser
+      ? redirectApplyIntentToAdminIfNeeded(base, loggedInUser)
+      : base;
+    navigate(target);
   };
   const [submitted, setSubmitted] = useState(false);
   const [userState, userDispatch] = useContext(UserContext);
@@ -206,7 +211,7 @@ const LoginForm = () => {
         localStorage.setItem('user', JSON.stringify(data));
         setUserData(data);
         updateAPI();
-        navigateAfterLogin('/');
+        navigateAfterLogin('/', data);
         showSuccess('登录成功！');
         setShowWeChatLoginModal(false);
       } else {
@@ -263,7 +268,7 @@ const LoginForm = () => {
               centered: true,
             });
           }
-          navigateAfterLogin('/console');
+          navigateAfterLogin('/console', data);
         } else {
           showError(message);
         }
@@ -308,7 +313,7 @@ const LoginForm = () => {
         showSuccess('登录成功！');
         setUserData(data);
         updateAPI();
-        navigateAfterLogin('/');
+        navigateAfterLogin('/', data);
       } else {
         showError(message);
       }
@@ -464,7 +469,7 @@ const LoginForm = () => {
         setUserData(finish.data);
         updateAPI();
         showSuccess('登录成功！');
-        navigateAfterLogin('/console');
+        navigateAfterLogin('/console', finish.data);
       } else {
         showError(finish.message || 'Passkey 登录失败，请重试');
       }
@@ -499,7 +504,7 @@ const LoginForm = () => {
     setUserData(data);
     updateAPI();
     showSuccess('登录成功！');
-    navigateAfterLogin('/console');
+    navigateAfterLogin('/console', data);
   };
 
   // 返回登录页面
