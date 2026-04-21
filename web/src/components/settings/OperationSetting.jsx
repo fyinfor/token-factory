@@ -41,6 +41,7 @@ const OperationSetting = () => {
     DistributorApplyCsImageUrl: '',
     DistributorWithdrawCsImageUrl: '',
     DistributorWithdrawNotice: '',
+    DistributorApplyIntroHtml: '',
     DistributorMinWithdrawQuota: '',
     'quota_setting.enable_free_model_pre_consume': true,
 

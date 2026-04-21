@@ -134,8 +134,46 @@ function formatCellNumber(v) {
   return String(r).replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.$/, '');
 }
 
+const RATIO_TO_PRICE_FACTOR = 2;
+const PRICE_DECIMAL_PLACES = 4;
+const RATIO_DECIMAL_PLACES = 6;
+
+function toFiniteNumber(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function roundToPlaces(value, places) {
+  const n = toFiniteNumber(value);
+  if (n === null) return null;
+  const factor = 10 ** places;
+  return Math.round(n * factor) / factor;
+}
+
+function ratioToDisplayPrice(ratio) {
+  const n = toFiniteNumber(ratio);
+  if (n === null) return null;
+  return roundToPlaces(n * RATIO_TO_PRICE_FACTOR, PRICE_DECIMAL_PLACES);
+}
+
+function formatPriceNumber(v) {
+  if (v === null || v === undefined || v === 'same') return '—';
+  const n = roundToPlaces(v, PRICE_DECIMAL_PLACES);
+  if (n === null) return String(v);
+  if (Math.abs(n - Math.round(n)) < 1e-9) return String(Math.round(n));
+  return String(n).replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.$/, '');
+}
+
 function formatOldNewPair(oldVal, newVal) {
   return `${formatCellNumber(oldVal)}/${formatCellNumber(newVal)}`;
+}
+
+function formatPriceOldNewPair(oldVal, newVal) {
+  const formatPriceWithSymbol = (value) => {
+    const formatted = formatPriceNumber(value);
+    return formatted === '—' ? '—' : `$${formatted}`;
+  };
+  return `${formatPriceWithSymbol(oldVal)}/${formatPriceWithSymbol(newVal)}`;
 }
 
 /** 是否可勾选同步：存在上游新价且与当前生效价不同 */
@@ -511,6 +549,62 @@ export default function UpstreamRatioSync(props) {
         finalChannel[k] = cloneDeep(baseline.channel[k] || {});
       });
 
+      const getCurrentEffectiveModelRatio = (model, cid) => {
+        if (cid != null && cid > 0) {
+          const channelRatio = baseline.channel.ChannelModelRatio?.[String(cid)]?.[
+            model
+          ];
+          const channelRatioNum = toFiniteNumber(channelRatio);
+          if (channelRatioNum !== null) {
+            return channelRatioNum;
+          }
+        }
+        return toFiniteNumber(baseline.global.ModelRatio?.[model]);
+      };
+
+      const normalizeRatioSelection = (model, cid, rawRatios) => {
+        const normalized = { ...rawRatios };
+        const selectedModelRatio = toFiniteNumber(normalized.model_ratio);
+
+        let effectiveModelRatio = selectedModelRatio;
+        if (effectiveModelRatio !== null) {
+          const normalizedInputPrice = ratioToDisplayPrice(effectiveModelRatio);
+          if (normalizedInputPrice !== null) {
+            effectiveModelRatio = roundToPlaces(
+              normalizedInputPrice / RATIO_TO_PRICE_FACTOR,
+              RATIO_DECIMAL_PLACES,
+            );
+            normalized.model_ratio = effectiveModelRatio;
+          }
+        } else {
+          effectiveModelRatio = getCurrentEffectiveModelRatio(model, cid);
+        }
+
+        const selectedCompletionRatio = toFiniteNumber(
+          normalized.completion_ratio,
+        );
+        if (
+          selectedCompletionRatio !== null &&
+          effectiveModelRatio !== null &&
+          effectiveModelRatio > 0
+        ) {
+          const normalizedOutputPrice = ratioToDisplayPrice(
+            effectiveModelRatio * selectedCompletionRatio,
+          );
+          if (normalizedOutputPrice !== null) {
+            const inputPrice = effectiveModelRatio * RATIO_TO_PRICE_FACTOR;
+            if (inputPrice > 0) {
+              normalized.completion_ratio = roundToPlaces(
+                normalizedOutputPrice / inputPrice,
+                RATIO_DECIMAL_PLACES,
+              );
+            }
+          }
+        }
+
+        return normalized;
+      };
+
       Object.entries(resolutions).forEach(([model, ratios]) => {
         const groups = new Map();
         Object.entries(ratios).forEach(([ratioType, value]) => {
@@ -524,7 +618,8 @@ export default function UpstreamRatioSync(props) {
         });
 
         groups.forEach(({ cid, ratios: r }) => {
-          const selectedTypes = Object.keys(r);
+          const normalizedRatios = normalizeRatioSelection(model, cid, r);
+          const selectedTypes = Object.keys(normalizedRatios);
           const hasPrice = selectedTypes.includes('model_price');
           const hasRatio = selectedTypes.some((rt) => rt !== 'model_price');
 
@@ -543,7 +638,7 @@ export default function UpstreamRatioSync(props) {
               delete finalChannel.ChannelModelPrice[idStr][model];
             }
 
-            Object.entries(r).forEach(([ratioType, value]) => {
+            Object.entries(normalizedRatios).forEach(([ratioType, value]) => {
               const ck = channelOptionKeyForRatioType(ratioType);
               if (!finalChannel[ck][idStr]) finalChannel[ck][idStr] = {};
               finalChannel[ck][idStr][model] = parseFloat(value);
@@ -558,7 +653,7 @@ export default function UpstreamRatioSync(props) {
               delete finalRatios.ModelPrice[model];
             }
 
-            Object.entries(r).forEach(([ratioType, value]) => {
+            Object.entries(normalizedRatios).forEach(([ratioType, value]) => {
               const gk = ratioTypeToPascal(ratioType);
               finalRatios[gk][model] = parseFloat(value);
             });
@@ -719,6 +814,94 @@ export default function UpstreamRatioSync(props) {
   );
 
   const renderDifferenceTable = () => {
+    const getModelRatioForDisplay = (model, upstreamName, mode) => {
+      const modelRatioDiff = differences?.[model]?.model_ratio;
+      if (!modelRatioDiff) return null;
+
+      if (mode === 'current') {
+        return toFiniteNumber(modelRatioDiff.current);
+      }
+
+      if (mode === 'old') {
+        const upstreamOldVal = modelRatioDiff.upstream_old?.[upstreamName];
+        if (upstreamOldVal !== undefined && upstreamOldVal !== null) {
+          return toFiniteNumber(upstreamOldVal);
+        }
+      }
+
+      if (mode === 'new') {
+        const upstreamNewVal = modelRatioDiff.upstreams?.[upstreamName];
+        if (upstreamNewVal !== undefined && upstreamNewVal !== null) {
+          return toFiniteNumber(upstreamNewVal);
+        }
+      }
+
+      return toFiniteNumber(modelRatioDiff.current);
+    };
+
+    const formatCurrentDisplayValue = (record) => {
+      if (record.current === null || record.current === undefined) {
+        return t('未设置');
+      }
+
+      if (record.ratioType === 'model_ratio') {
+        const inputPrice = ratioToDisplayPrice(record.current);
+        return inputPrice === null
+          ? t('未设置')
+          : `${formatPriceNumber(inputPrice)} $/1M Tokens`;
+      }
+
+      if (record.ratioType === 'completion_ratio') {
+        const completionRatio = toFiniteNumber(record.current);
+        const inputRatio = getModelRatioForDisplay(record.model, null, 'current');
+        if (completionRatio === null || inputRatio === null) return t('未设置');
+        const outputPrice = ratioToDisplayPrice(inputRatio * completionRatio);
+        return outputPrice === null
+          ? t('未设置')
+          : `${formatPriceNumber(outputPrice)} $/1M Tokens`;
+      }
+
+      return String(record.current);
+    };
+
+    const formatUpstreamPairDisplay = (record, upstreamName) => {
+      const oldVal = record.upstream_old?.[upstreamName];
+      const newVal = record.upstreams?.[upstreamName];
+
+      if (record.ratioType === 'model_ratio') {
+        return formatPriceOldNewPair(
+          ratioToDisplayPrice(oldVal),
+          ratioToDisplayPrice(newVal),
+        );
+      }
+
+      if (record.ratioType === 'completion_ratio') {
+        const oldCompletion = toFiniteNumber(oldVal);
+        const newCompletion = toFiniteNumber(newVal);
+        const oldInputRatio = getModelRatioForDisplay(
+          record.model,
+          upstreamName,
+          'old',
+        );
+        const newInputRatio = getModelRatioForDisplay(
+          record.model,
+          upstreamName,
+          'new',
+        );
+        const oldOutputPrice =
+          oldCompletion !== null && oldInputRatio !== null
+            ? ratioToDisplayPrice(oldCompletion * oldInputRatio)
+            : null;
+        const newOutputPrice =
+          newCompletion !== null && newInputRatio !== null
+            ? ratioToDisplayPrice(newCompletion * newInputRatio)
+            : null;
+        return formatPriceOldNewPair(oldOutputPrice, newOutputPrice);
+      }
+
+      return formatOldNewPair(oldVal, newVal);
+    };
+
     const dataSource = useMemo(() => {
       const tmp = [];
 
@@ -805,8 +988,8 @@ export default function UpstreamRatioSync(props) {
         dataIndex: 'ratioType',
         render: (text, record) => {
           const typeMap = {
-            model_ratio: t('模型倍率'),
-            completion_ratio: t('输出倍率'),
+            model_ratio: t('输入价格（由倍率换算）'),
+            completion_ratio: t('输出价格（由倍率换算）'),
             cache_ratio: t('缓存倍率'),
             model_price: t('固定价格'),
           };
@@ -880,12 +1063,16 @@ export default function UpstreamRatioSync(props) {
       {
         title: t('当前值（系统默认）'),
         dataIndex: 'current',
-        render: (text) => (
+        render: (_, record) => (
           <Tag
-            color={text !== null && text !== undefined ? 'blue' : 'default'}
+            color={
+              record.current !== null && record.current !== undefined
+                ? 'blue'
+                : 'default'
+            }
             shape='circle'
           >
-            {text !== null && text !== undefined ? String(text) : t('未设置')}
+            {formatCurrentDisplayValue(record)}
           </Tag>
         ),
       },
@@ -962,7 +1149,7 @@ export default function UpstreamRatioSync(props) {
             const upstreamVal = record.upstreams?.[upName];
             const oldVal = record.upstream_old?.[upName];
             const isConfident = record.confidence?.[upName] !== false;
-            const pairText = formatOldNewPair(oldVal, upstreamVal);
+            const pairText = formatUpstreamPairDisplay(record, upName);
 
             if (upstreamVal === null || upstreamVal === undefined) {
               return (
