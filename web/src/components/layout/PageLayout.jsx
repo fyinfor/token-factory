@@ -68,6 +68,8 @@ const PageLayout = () => {
 
   const shouldHideFooter = cardProPages.includes(location.pathname);
 
+  const pricingNaturalScroll = location.pathname === '/pricing';
+
   const shouldInnerPadding =
     location.pathname.includes('/console') &&
     !location.pathname.startsWith('/console/chat') &&
