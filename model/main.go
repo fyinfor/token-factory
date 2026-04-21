@@ -83,6 +83,7 @@ func createRootAccountIfNeed() error {
 			DisplayName: "Root User",
 			AccessToken: nil,
 			Quota:       100000000,
+			CreatedBy:   common.UserCreatedByBootstrap,
 		}
 		DB.Create(&rootUser)
 	}

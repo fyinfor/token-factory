@@ -108,6 +108,7 @@ func setupLogin(user *model.User, c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserSessionSaveFailed)
 		return
 	}
+	model.TouchUserLastLogin(user.Id)
 	c.JSON(http.StatusOK, gin.H{
 		"message": "",
 		"success": true,
@@ -892,6 +893,7 @@ func CreateUser(c *gin.Context) {
 		DisplayName:   user.DisplayName,
 		Role:          user.Role,
 		IsDistributor: user.IsDistributor,
+		CreatedBy:     common.UserCreatedByAdmin,
 	}
 	if err := cleanUser.Insert(0); err != nil {
 		common.ApiError(c, err)

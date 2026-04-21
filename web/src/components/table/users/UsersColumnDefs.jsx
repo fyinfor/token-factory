@@ -30,6 +30,7 @@ import {
 } from '@douyinfe/semi-ui';
 import { IconMore, IconTick, IconClose } from '@douyinfe/semi-icons';
 import { renderGroup, renderNumber, renderQuota } from '../../../helpers';
+import { formatDateTimeString } from '../../../helpers/utils';
 import { USER_ROLES } from '../../../constants/user.constants';
 
 /**
@@ -85,6 +86,32 @@ const renderRole = (role, record, t) => {
       </Tag>}
     </Space>
   );
+};
+
+/** users.created_by 枚举展示 */
+const renderCreatedBy = (v, t) => {
+  if (v == null || v === '') {
+    return '—';
+  }
+  const keyMap = {
+    registration: t('用户创建_系统注册'),
+    admin: t('用户创建_管理员创建'),
+    import: t('用户创建_导入'),
+    bootstrap: t('用户创建_安装初始化'),
+  };
+  return keyMap[v] || v;
+};
+
+/** API 返回 RFC3339 时间字符串；旧数据或零值显示为 — */
+const renderUserDateTime = (value) => {
+  if (value == null || value === '') {
+    return '—';
+  }
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime()) || d.getFullYear() < 1970) {
+    return '—';
+  }
+  return formatDateTimeString(d);
 };
 
 /**
@@ -402,6 +429,32 @@ export const getUsersColumns = ({
       title: t('邀请信息'),
       dataIndex: 'invite',
       render: (text, record, index) => renderInviteInfo(text, record, t),
+    },
+    {
+      title: t('创建人'),
+      dataIndex: 'created_by',
+      width: 120,
+      render: (v) => (
+        <span className='text-xs whitespace-nowrap'>{renderCreatedBy(v, t)}</span>
+      ),
+    },
+    {
+      title: t('注册时间'),
+      dataIndex: 'created_at',
+      width: 152,
+      render: (v) => <span className='text-xs whitespace-nowrap'>{renderUserDateTime(v)}</span>,
+    },
+    {
+      title: t('修改时间'),
+      dataIndex: 'updated_at',
+      width: 152,
+      render: (v) => <span className='text-xs whitespace-nowrap'>{renderUserDateTime(v)}</span>,
+    },
+    {
+      title: t('上次登录'),
+      dataIndex: 'last_login_at',
+      width: 152,
+      render: (v) => <span className='text-xs whitespace-nowrap'>{renderUserDateTime(v)}</span>,
     },
     {
       title: '',

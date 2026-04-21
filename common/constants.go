@@ -165,6 +165,14 @@ const (
 	DistributorFlagYes = 1
 )
 
+// UserCreatedBy：users.created_by，标记账号创建来源（管理端展示）。未显式设置时 Insert/InsertWithTx 默认为 registration。
+const (
+	UserCreatedByRegistration = "registration" // 自助注册（密码、短信、OAuth、微信等）
+	UserCreatedByAdmin        = "admin"        // 管理员后台创建
+	UserCreatedByImport       = "import"       // 批量导入或外部脚本写入
+	UserCreatedByBootstrap    = "bootstrap"    // 安装向导或首次启动自动创建 root
+)
+
 func IsValidateRole(role int) bool {
 	return role == RoleGuestUser || role == RoleCommonUser || role == RoleDistributorUser || role == RoleAdminUser || role == RoleRootUser
 }

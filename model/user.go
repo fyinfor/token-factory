@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
@@ -21,20 +22,24 @@ const UserNameMaxLength = 20
 // User if you add sensitive fields, don't forget to clean them in setupLogin function.
 // Otherwise, the sensitive information will be saved on local storage in plain text!
 type User struct {
-	Id                       int     `json:"id"`
-	Username                 string  `json:"username" gorm:"unique;index" validate:"max=20"`
-	Password                 string  `json:"password" gorm:"not null;" validate:"min=8,max=20"`
-	OriginalPassword         string  `json:"original_password" gorm:"-:all"` // this field is only for Password change verification, don't save it to database!
-	DisplayName              string  `json:"display_name" gorm:"index" validate:"max=20"`
-	Role                     int     `json:"role" gorm:"type:int;default:1"`   // admin, common
-	Status                   int     `json:"status" gorm:"type:int;default:1"` // enabled, disabled
-	Email                    string  `json:"email" gorm:"index" validate:"max=50"`
-	Phone                    string  `json:"phone" gorm:"column:phone;type:varchar(20);index"`
-	GitHubId                 string  `json:"github_id" gorm:"column:github_id;index"`
-	DiscordId                string  `json:"discord_id" gorm:"column:discord_id;index"`
-	OidcId                   string  `json:"oidc_id" gorm:"column:oidc_id;index"`
-	WeChatId                 string  `json:"wechat_id" gorm:"column:wechat_id;index"`
-	TelegramId               string  `json:"telegram_id" gorm:"column:telegram_id;index"`
+	Id                       int            `json:"id"`
+	CreatedAt                time.Time      `json:"created_at"`
+	UpdatedAt                time.Time      `json:"updated_at"`
+	LastLoginAt              *time.Time     `json:"last_login_at,omitempty" gorm:"column:last_login_at"`
+	CreatedBy                string         `json:"created_by,omitempty" gorm:"column:created_by;type:varchar(32)"`
+	Username                 string         `json:"username" gorm:"unique;index" validate:"max=20"`
+	Password                 string         `json:"password" gorm:"not null;" validate:"min=8,max=20"`
+	OriginalPassword         string         `json:"original_password" gorm:"-:all"` // this field is only for Password change verification, don't save it to database!
+	DisplayName              string         `json:"display_name" gorm:"index" validate:"max=20"`
+	Role                     int            `json:"role" gorm:"type:int;default:1"`   // admin, common
+	Status                   int            `json:"status" gorm:"type:int;default:1"` // enabled, disabled
+	Email                    string         `json:"email" gorm:"index" validate:"max=50"`
+	Phone                    string         `json:"phone" gorm:"column:phone;type:varchar(20);index"`
+	GitHubId                 string         `json:"github_id" gorm:"column:github_id;index"`
+	DiscordId                string         `json:"discord_id" gorm:"column:discord_id;index"`
+	OidcId                   string         `json:"oidc_id" gorm:"column:oidc_id;index"`
+	WeChatId                 string         `json:"wechat_id" gorm:"column:wechat_id;index"`
+	TelegramId               string         `json:"telegram_id" gorm:"column:telegram_id;index"`
 	VerificationCode         string  `json:"verification_code" gorm:"-:all"`                                    // this field is only for Email verification, don't save it to database!
 	AccessToken              *string `json:"access_token" gorm:"type:char(32);column:access_token;uniqueIndex"` // this token is for system management
 	Quota                    int     `json:"quota" gorm:"type:int;default:0"`
@@ -191,6 +196,17 @@ func GetMaxUserId() int {
 	var user User
 	DB.Unscoped().Last(&user)
 	return user.Id
+}
+
+// TouchUserLastLogin 在用户成功建立会话（登录）后更新上次登录时间。
+func TouchUserLastLogin(userId int) {
+	if userId <= 0 {
+		return
+	}
+	now := time.Now()
+	if err := DB.Model(&User{}).Where("id = ?", userId).Update("last_login_at", now).Error; err != nil {
+		common.SysLog("TouchUserLastLogin: " + err.Error())
+	}
 }
 
 func GetAllUsers(pageInfo *common.PageInfo) (users []*User, total int64, err error) {
@@ -443,6 +459,9 @@ func (user *User) Insert(inviterId int) error {
 		// 这里暂时不设置SidebarModules，因为需要在用户创建后根据角色设置
 		user.SetSetting(defaultSetting)
 	}
+	if user.CreatedBy == "" {
+		user.CreatedBy = common.UserCreatedByRegistration
+	}
 
 	result := DB.Create(user)
 	if result.Error != nil {
@@ -500,6 +519,9 @@ func (user *User) InsertWithTx(tx *gorm.DB, inviterId int) error {
 		defaultSetting := dto.UserSetting{}
 		user.SetSetting(defaultSetting)
 	}
+	if user.CreatedBy == "" {
+		user.CreatedBy = common.UserCreatedByRegistration
+	}
 
 	result := tx.Create(user)
 	if result.Error != nil {
@@ -551,6 +573,11 @@ func (user *User) Update(updatePassword bool) error {
 	}
 	newUser := *user
 	DB.First(&user, user.Id)
+	// 避免请求体/部分结构体中的零值覆盖注册时间、上次登录；并刷新修改时间
+	newUser.CreatedAt = user.CreatedAt
+	newUser.LastLoginAt = user.LastLoginAt
+	newUser.CreatedBy = user.CreatedBy
+	newUser.UpdatedAt = time.Now()
 	// Select("*") 否则 Updates(struct) 会忽略零值字段（如 is_distributor=0、quota=0），导致无法取消分销商等操作失效
 	if err = DB.Model(user).Select("*").Updates(newUser).Error; err != nil {
 		return err
@@ -576,6 +603,7 @@ func (user *User) Edit(updatePassword bool) error {
 		"group":        newUser.Group,
 		"quota":        newUser.Quota,
 		"remark":       newUser.Remark,
+		"updated_at":   time.Now(),
 	}
 	if updatePassword {
 		updates["password"] = newUser.Password
