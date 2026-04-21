@@ -56,6 +56,7 @@ const routerMap = {
   'supplier-apply': '/console/supplier/apply',
   'supplier-channel': '/console/supplier/channel',
   'supplier-pricing-settings': '/console/supplier/pricing-settings',
+  'supplier-dashboard': '/console/supplier/dashboard',
   'supplier-management': null,
   'supplier-application-approval': '/console/supplier-application',
   'supplier-list': '/console/suppliers',
@@ -165,6 +166,11 @@ const SiderBar = ({ onNavigate = () => {} }) => {
             itemKey: 'supplier-pricing-settings',
             to: '/console/supplier/pricing-settings',
           },
+          {
+            text: t('数据看板'),
+            itemKey: 'supplier-dashboard',
+            to: '/console/supplier/dashboard',
+          },
         ],
       },
       {
@@ -243,6 +249,11 @@ const SiderBar = ({ onNavigate = () => {} }) => {
             text: t('供应商列表'),
             itemKey: 'supplier-list',
             to: '/console/suppliers',
+          },
+          {
+            text: t('数据看板'),
+            itemKey: 'supplier-dashboard',
+            to: '/console/supplier/dashboard',
           },
         ],
       },

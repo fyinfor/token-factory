@@ -40,7 +40,7 @@ function resolveDevProxyTarget(mode) {
   if (raw) {
     return raw.replace(/\/$/, '');
   }
-  return 'http://192.168.0.15:3000';
+  return 'http://127.0.0.1:3000';
 }
 
 // https://vitejs.dev/config/

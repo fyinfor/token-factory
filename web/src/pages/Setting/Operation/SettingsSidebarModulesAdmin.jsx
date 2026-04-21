@@ -73,6 +73,7 @@ export default function SettingsSidebarModulesAdmin(props) {
       'supplier-management': true,
       'supplier-application-approval': true,
       'supplier-list': true,
+      'supplier-dashboard': true,
     },
   });
 
@@ -138,6 +139,10 @@ export default function SettingsSidebarModulesAdmin(props) {
         subscription: true,
         setting: true,
         distributor: true,
+        'supplier-management': true,
+        'supplier-application-approval': true,
+        'supplier-list': true,
+        'supplier-dashboard': true,
       },
     };
     setSidebarModulesAdmin(defaultModules);
@@ -218,6 +223,7 @@ export default function SettingsSidebarModulesAdmin(props) {
             'supplier-management': true,
             'supplier-application-approval': true,
             'supplier-list': true,
+            'supplier-dashboard': true,
           },
         };
         setSidebarModulesAdmin(defaultModules);
@@ -317,6 +323,11 @@ export default function SettingsSidebarModulesAdmin(props) {
           key: 'supplier-list',
           title: t('供应商列表'),
           description: t('管理所有供应商信息'),
+        },
+        {
+          key: 'supplier-dashboard',
+          title: t('数据看板'),
+          description: t('查看供应商模型聚合统计'),
         },
         {
           key: 'setting',

@@ -50,6 +50,7 @@ import PersonalSetting from './components/settings/PersonalSetting';
 import SupplierApplyPage from './pages/Supplier/Apply';
 import SupplierChannelPage from './pages/Supplier/Channel';
 import PricingSettingsPage from './pages/Supplier/PricingSettings';
+import SupplierDashboardPage from './pages/Supplier/Dashboard';
 import SupplierApplication from './pages/SupplierAdmin/application';
 import Suppliers from './pages/SupplierAdmin/list';
 import Setup from './pages/Setup';
@@ -329,6 +330,14 @@ function App() {
           element={
             <PrivateRoute>
               <PricingSettingsPage />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/supplier/dashboard'
+          element={
+            <PrivateRoute>
+              <SupplierDashboardPage />
             </PrivateRoute>
           }
         />

@@ -10,6 +10,7 @@ upload
 build
 *.db-journal
 logs
+web/vite.config.js
 web/dist
 .env
 one-api
@@ -29,6 +30,7 @@ electron/dist
 data/
 postgres_data/
 mysql_data/
+redis_data/
 .gomodcache/
 .gocache-temp
 .gopath
