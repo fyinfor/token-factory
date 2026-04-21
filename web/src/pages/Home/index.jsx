@@ -48,6 +48,7 @@ import {
 import { Link } from 'react-router-dom';
 import NoticeModal from '../../components/layout/NoticeModal';
 import HomeModelList from '../../components/home/HomeModelList';
+import HomeLandingHeroCopy from '../../components/home/HomeLandingHeroCopy';
 import {
   Moonshot,
   OpenAI,
@@ -112,8 +113,6 @@ const Home = () => {
     statusState?.status?.server_address || `${window.location.origin}`;
   const endpointItems = API_ENDPOINTS.map((e) => ({ value: e }));
   const [endpointIndex, setEndpointIndex] = useState(0);
-  const isChinese = i18n.language.startsWith('zh');
-
   let u = userState?.user;
   if (!u) {
     try {
@@ -206,19 +205,8 @@ const Home = () => {
           <div className='home-banner-bg w-full min-h-[400px] md:min-h-[500px]'>
             <div className='h-full px-4 py-16 md:py-20'>
               {/* 居中内容区 */}
-              <div className='flex flex-col items-center justify-center text-center max-w-3xl mx-auto my-32'>
-                <h1
-                  className={`text-4xl md:text-5xl lg:text-6xl font-medium text-semi-color-text-0 leading-tight mb-4 ${isChinese ? 'tracking-wide' : ''}`}
-                >
-                  {t('一站式大模型服务统一入口')}
-                </h1>
-                <p className='text-sm md:text-base text-semi-color-text-2 mb-8'>
-                  {t('按需定制，更优')}
-                  <span className='font-semibold text-semi-color-text-0'>{t('价格')}</span>
-                  {t('，更稳的')}
-                  <span className='font-semibold text-semi-color-text-0'>{t('可靠')}</span>
-                  {t('，开箱即用')}
-                </p>
+              <div className='my-32'>
+                <HomeLandingHeroCopy />
 
                 {/* 操作按钮 */}
                 <div className='flex flex-row gap-3 justify-center items-center mb-8'>

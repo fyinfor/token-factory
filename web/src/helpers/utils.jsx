@@ -69,11 +69,22 @@ export function isRoot() {
   return user.role >= 100;
 }
 
+/** 是否为已通过供应商身份的用户：后端 supplier_id 非 0 */
+export function userIsSupplierUser(userLike) {
+  if (!userLike || typeof userLike !== 'object') return false;
+  const id = userLike.supplier_id;
+  return id != null && id !== 0 && id !== '0';
+}
+
 export function isSupplier() {
-  let user = localStorage.getItem('user');
-  if (!user) return false;
-  user = JSON.parse(user);
-  return user.supplier_id && user.supplier_id !== 0;
+  let raw = localStorage.getItem('user');
+  if (!raw) return false;
+  try {
+    const user = JSON.parse(raw);
+    return userIsSupplierUser(user);
+  } catch {
+    return false;
+  }
 }
 
 /** 分销比例 commission_ratio_bps：后端万分之一单位（1=0.01%），转为百分比展示如 10%、0.01% */
