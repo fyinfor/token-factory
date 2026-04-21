@@ -32,6 +32,7 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/home_page_content", controller.GetHomePageContent)
 		apiRouter.GET("/pricing", middleware.TryUserAuth(), controller.GetPricing)
 		apiRouter.GET("/verification", middleware.EmailVerificationRateLimit(), middleware.TurnstileCheck(), controller.SendEmailVerification)
+		apiRouter.GET("/sms_verification", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.SendSMSVerification)
 		apiRouter.GET("/reset_password", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.SendPasswordResetEmail)
 		apiRouter.POST("/user/reset", middleware.CriticalRateLimit(), controller.ResetPassword)
 		// OAuth routes - specific routes must come before :provider wildcard
@@ -130,6 +131,8 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/supplier/application", controller.SubmitSupplierApplication)
 				selfRoute.GET("/supplier/application/self", controller.GetMySupplierApplication)
 				selfRoute.PUT("/supplier/application/self", controller.UpdateMySupplierApplication)
+				selfRoute.GET("/supplier/application/:id/capability", controller.GetSupplierCapability)
+				selfRoute.PUT("/supplier/application/:id/capability", controller.UpsertSupplierCapability)
 				selfRoute.POST("/supplier/application/deactivate", controller.DeactivateMySupplierApplication)
 				selfRoute.POST("/supplier/channels", controller.CreateMySupplierChannel)
 				selfRoute.GET("/supplier/channels", controller.ListMySupplierChannels)

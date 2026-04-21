@@ -31,7 +31,7 @@ const PaymentConfirmModal = ({
   handleCancel,
   confirmLoading,
   topUpCount,
-  renderQuotaWithAmount,
+  renderTopUpCount,
   amountLoading,
   renderAmount,
   payWay,
@@ -68,7 +68,7 @@ const PaymentConfirmModal = ({
                 {t('充值数量')}：
               </Text>
               <Text className='text-slate-900 dark:text-slate-100'>
-                {renderQuotaWithAmount(topUpCount)}
+                {renderTopUpCount(topUpCount)}
               </Text>
             </div>
             <div className='flex justify-between items-center'>
@@ -97,7 +97,7 @@ const PaymentConfirmModal = ({
                     {t('原价')}：
                   </Text>
                   <Text delete className='text-slate-500 dark:text-slate-400'>
-                    {`${originalAmount.toFixed(2)} ${t('元')}`}
+                    {`$${originalAmount.toFixed(2)} USD`}
                   </Text>
                 </div>
                 <div className='flex justify-between items-center'>
@@ -105,7 +105,7 @@ const PaymentConfirmModal = ({
                     {t('优惠')}：
                   </Text>
                   <Text className='text-emerald-600 dark:text-emerald-400'>
-                    {`- ${discountAmount.toFixed(2)} ${t('元')}`}
+                    {`- $${discountAmount.toFixed(2)} USD`}
                   </Text>
                 </div>
               </>

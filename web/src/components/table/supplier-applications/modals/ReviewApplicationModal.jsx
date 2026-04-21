@@ -34,16 +34,28 @@ const ReviewApplicationModal = ({ visible, application, handleClose, handleRevie
   useEffect(() => {
     if (!visible) {
       formApiRef.current?.reset();
+      return;
     }
-  }, [visible]);
+    if (application) {
+      formApiRef.current?.setValues({
+        reason: '',
+        supplier_alias: application.supplier_alias || '',
+      });
+    }
+  }, [visible, application]);
 
   const handleApprove = async () => {
     if (!application) return;
     const values = formApiRef.current?.getValues();
+    if (!values.supplier_alias || values.supplier_alias.trim() === '') {
+      formApiRef.current?.setError('supplier_alias', t('审批通过时必须填写供应商别名'));
+      return;
+    }
     setLoading(true);
     await handleReview(application.id, {
       status: 1,
       reason: values.reason || '',
+      supplier_alias: values.supplier_alias.trim(),
     });
     setLoading(false);
   };
@@ -59,6 +71,7 @@ const ReviewApplicationModal = ({ visible, application, handleClose, handleRevie
     await handleReview(application.id, {
       status: 2,
       reason: values.reason,
+      supplier_alias: '',
     });
     setLoading(false);
   };
@@ -73,6 +86,13 @@ const ReviewApplicationModal = ({ visible, application, handleClose, handleRevie
   };
 
   const isReviewed = application?.status !== 0;
+  const capability = application?.supplier_capability || null;
+  const renderListValue = (value) => {
+    if (!Array.isArray(value) || value.length === 0) {
+      return t('未填写');
+    }
+    return value.join('、');
+  };
 
   return (
     <Modal
@@ -246,6 +266,42 @@ const ReviewApplicationModal = ({ visible, application, handleClose, handleRevie
 
         <Divider margin='20px 12px'>
           <Text strong style={{ fontSize: '16px' }}>
+            {t('技术能力信息')}
+          </Text>
+        </Divider>
+        {!capability ? (
+          <Text type='danger'>{t('申请方尚未填写技术能力信息')}</Text>
+        ) : (
+          <Row gutter={12}>
+            <Col span={24}>
+              <Text type='secondary'>{t('核心服务类型')}</Text>
+              <div style={{ marginTop: '4px' }}><Text>{renderListValue(capability.core_service_types)}</Text></div>
+            </Col>
+            <Col span={24}>
+              <Text type='secondary'>{t('支持的模型')}</Text>
+              <div style={{ marginTop: '4px' }}><Text>{renderListValue(capability.supported_models)}</Text></div>
+            </Col>
+            <Col span={24}>
+              <Text type='secondary'>{t('支持的API接口')}</Text>
+              <div style={{ marginTop: '4px' }}><Text>{renderListValue(capability.supported_api_endpoints)}</Text></div>
+            </Col>
+            <Col span={24}>
+              <Text type='secondary'>{t('支持的参数配置')}</Text>
+              <div style={{ marginTop: '4px' }}><Text>{renderListValue(capability.supported_params)}</Text></div>
+            </Col>
+            <Col span={24}>
+              <Text type='secondary'>{t('定价模式')}</Text>
+              <div style={{ marginTop: '4px' }}><Text>{renderListValue(capability.pricing_modes)}</Text></div>
+            </Col>
+            <Col span={24}>
+              <Text type='secondary'>{t('API接口地址')}</Text>
+              <div style={{ marginTop: '4px' }}><Text>{renderListValue(capability.api_base_urls)}</Text></div>
+            </Col>
+          </Row>
+        )}
+
+        <Divider margin='20px 12px'>
+          <Text strong style={{ fontSize: '16px' }}>
             {t('审批操作')}
           </Text>
         </Divider>
@@ -253,6 +309,14 @@ const ReviewApplicationModal = ({ visible, application, handleClose, handleRevie
         <Form
           getFormApi={(api) => (formApiRef.current = api)}
         >
+          <Form.Input
+            field='supplier_alias'
+            label={<Text strong>{t('供应商别名')}</Text>}
+            placeholder={t('请输入供应商别名（管理员填写且全局唯一）')}
+            maxLength={128}
+            showClear
+            disabled={isReviewed}
+          />
           <Form.TextArea
             field='reason'
             label={<Text strong>{t('审批意见')}</Text>}

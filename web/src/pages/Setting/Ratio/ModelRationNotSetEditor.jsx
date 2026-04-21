@@ -18,17 +18,23 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useEffect, useState } from 'react';
-import { API, showError } from '../../../helpers';
+import { API, isSupplier, showError } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
-import { Tabs } from '@douyinfe/semi-ui';
+import { Button, Empty, Tabs } from '@douyinfe/semi-ui';
+import { IllustrationNoAccess, IllustrationNoAccessDark } from '@douyinfe/semi-illustrations';
+import { useNavigate } from 'react-router-dom';
 import ModelPricingEditor from './components/ModelPricingEditor';
 import SupplierModelPricingEditor from './components/SupplierModelPricingEditor';
 
 export default function ModelRatioNotSetEditor(props) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [enabledModels, setEnabledModels] = useState([]);
   const [pricingChannels, setPricingChannels] = useState([]);
 
+  /**
+   * 获取启用模型列表；当 403 时提示先申请供应商资质。
+   */
   const getAllEnabledModels = async () => {
     try {
       const res = await API.get('/api/channel/models_enabled');
@@ -40,10 +46,17 @@ export default function ModelRatioNotSetEditor(props) {
       }
     } catch (error) {
       console.error(t('获取启用模型失败:'), error);
-      showError(t('获取启用模型失败'));
+      if (error?.response?.status === 403) {
+        showError(t('请先申请供应商资质'));
+        return;
+      }
+      showError(error?.response?.data?.message || t('获取启用模型失败'));
     }
   };
 
+  /**
+   * 获取可配置定价的供应商渠道列表。
+   */
   const getPricingSuppliers = async () => {
     try {
       const res = await API.get('/api/pricing');
@@ -64,6 +77,34 @@ export default function ModelRatioNotSetEditor(props) {
     ...props.options,
     __pricingChannels: pricingChannels,
   };
+
+  if (!isSupplier()) {
+    return (
+      <div className='py-4'>
+        <div className='flex items-center justify-center' style={{ minHeight: 320 }}>
+          <Empty
+            image={<IllustrationNoAccess style={{ width: 180, height: 180 }} />}
+            darkModeImage={<IllustrationNoAccessDark style={{ width: 180, height: 180 }} />}
+            layout='horizontal'
+            title={t('需要供应商权限')}
+            description={t('您需要先成为供应商才能访问此页面。')}
+          >
+            <Button
+              theme='solid'
+              type='primary'
+              size='large'
+              className='!rounded-md mt-4'
+              style={{ fontWeight: 500 }}
+              onClick={() => navigate('/console/supplier/apply')}
+            >
+              {t('前往申请')}
+            </Button>
+          </Empty>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <Tabs type='line' defaultActiveKey='global_unset'>
       <Tabs.TabPane tab={t('全局未设置模型')} itemKey='global_unset'>

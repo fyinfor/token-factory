@@ -81,6 +81,15 @@ const SystemSetting = () => {
     TurnstileCheckEnabled: '',
     TurnstileSiteKey: '',
     TurnstileSecretKey: '',
+    SMSVerificationEnabled: '',
+    SMSCodeSignName: '',
+    SMSAccessKeyID: '',
+    SMSAccessKeySecret: '',
+    SMSCodeTemplateCode: '',
+    SMSCodeValidMinutes: 5,
+    SMSCodeCooldownMinutes: 1,
+    SMSCodeDailyLimit: 10,
+    SMSPhoneBlacklist: [],
     RegisterEnabled: '',
     'passkey.enabled': '',
     'passkey.rp_display_name': '',
@@ -134,6 +143,7 @@ const SystemSetting = () => {
   const [domainList, setDomainList] = useState([]);
   const [ipList, setIpList] = useState([]);
   const [allowedPorts, setAllowedPorts] = useState([]);
+  const [smsPhoneBlacklist, setSMSPhoneBlacklist] = useState([]);
 
   const getOptions = async () => {
     setLoading(true);
@@ -179,6 +189,19 @@ const SystemSetting = () => {
             } catch (e) {
               setAllowedPorts(['80', '443', '8080', '8443']);
             }
+            break;
+          case 'SMSVerificationEnabled':
+            item.value = toBoolean(item.value);
+            break;
+          case 'SMSCodeValidMinutes':
+          case 'SMSCodeCooldownMinutes':
+          case 'SMSCodeDailyLimit': {
+            const n = parseInt(item.value, 10);
+            item.value = Number.isFinite(n) ? n : 0;
+            break;
+          }
+          case 'SMSPhoneBlacklist':
+            setSMSPhoneBlacklist(item.value ? item.value.split(',') : []);
             break;
           case 'PasswordLoginEnabled':
           case 'PasswordRegisterEnabled':
@@ -375,6 +398,52 @@ const SystemSetting = () => {
     } else {
       showError(t('邮箱域名白名单格式不正确'));
     }
+  };
+
+  /**
+   * 提交短信配置（阿里云短信 + 验证码规则 + 黑名单）。
+   */
+  const submitSMSSettings = async () => {
+    const options = [];
+    const blacklist = Array.isArray(smsPhoneBlacklist)
+      ? smsPhoneBlacklist.map((x) => x.trim()).filter((x) => x !== '')
+      : [];
+
+    options.push({
+      key: 'SMSCodeSignName',
+      value: inputs.SMSCodeSignName || '',
+    });
+    options.push({
+      key: 'SMSAccessKeyID',
+      value: inputs.SMSAccessKeyID || '',
+    });
+    if (inputs.SMSAccessKeySecret && inputs.SMSAccessKeySecret !== '') {
+      options.push({
+        key: 'SMSAccessKeySecret',
+        value: inputs.SMSAccessKeySecret,
+      });
+    }
+    options.push({
+      key: 'SMSCodeTemplateCode',
+      value: inputs.SMSCodeTemplateCode || '',
+    });
+    options.push({
+      key: 'SMSCodeValidMinutes',
+      value: inputs.SMSCodeValidMinutes || 5,
+    });
+    options.push({
+      key: 'SMSCodeCooldownMinutes',
+      value: inputs.SMSCodeCooldownMinutes || 1,
+    });
+    options.push({
+      key: 'SMSCodeDailyLimit',
+      value: inputs.SMSCodeDailyLimit || 10,
+    });
+    options.push({
+      key: 'SMSPhoneBlacklist',
+      value: blacklist.join(','),
+    });
+    await updateOptions(options);
   };
 
   const submitSSRF = async () => {
@@ -1111,6 +1180,99 @@ const SystemSetting = () => {
                       </Form.Checkbox>
                     </Col>
                   </Row>
+                </Form.Section>
+              </Card>
+
+              <Card>
+                <Form.Section text={t('阿里云短信配置')}>
+                  <Row
+                    gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
+                  >
+                    <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+                      <Form.Checkbox
+                        field='SMSVerificationEnabled'
+                        noLabel
+                        onChange={(e) =>
+                          handleCheckboxChange('SMSVerificationEnabled', e)
+                        }
+                      >
+                        {t('启用短信验证码注册')}
+                      </Form.Checkbox>
+                    </Col>
+                    <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                      <Form.Input
+                        field='SMSCodeSignName'
+                        label={t('短信签名')}
+                        placeholder={t('例如：上海复易信息技术')}
+                      />
+                    </Col>
+                    <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                      <Form.Input
+                        field='SMSCodeTemplateCode'
+                        label={t('短信模板代码')}
+                        placeholder={t('例如：SMS_123456789')}
+                      />
+                    </Col>
+                    <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                      <Form.Input
+                        field='SMSAccessKeyID'
+                        label={t('短信API账号')}
+                        placeholder={t('阿里云 AccessKey ID')}
+                      />
+                    </Col>
+                    <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                      <Form.Input
+                        field='SMSAccessKeySecret'
+                        mode='password'
+                        label={t('短信API密钥')}
+                        placeholder={t('阿里云 AccessKey Secret')}
+                      />
+                    </Col>
+                    <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+                      <Form.InputNumber
+                        field='SMSCodeValidMinutes'
+                        label={t('短信验证码有效时间(分钟)')}
+                        min={1}
+                        max={30}
+                      />
+                    </Col>
+                    <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+                      <Form.InputNumber
+                        field='SMSCodeCooldownMinutes'
+                        label={t('发送间隔限制(分钟)')}
+                        min={1}
+                        max={10}
+                      />
+                    </Col>
+                    <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+                      <Form.InputNumber
+                        field='SMSCodeDailyLimit'
+                        label={t('单手机号每日发送上限')}
+                        min={1}
+                        max={200}
+                      />
+                    </Col>
+                    <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+                      <Text type='secondary'>
+                        {t('短信黑名单（支持多个手机号，回车分隔）')}
+                      </Text>
+                      <TagInput
+                        value={smsPhoneBlacklist}
+                        onChange={(value) => {
+                          setSMSPhoneBlacklist(value);
+                          setInputs((prev) => ({
+                            ...prev,
+                            SMSPhoneBlacklist: value,
+                          }));
+                        }}
+                        placeholder={t('输入手机号后回车，如 13800000000')}
+                        style={{ width: '100%', marginTop: 8 }}
+                      />
+                    </Col>
+                  </Row>
+                  <Button onClick={submitSMSSettings} style={{ marginTop: 16 }}>
+                    {t('保存短信设置')}
+                  </Button>
                 </Form.Section>
               </Card>
 

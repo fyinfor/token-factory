@@ -99,6 +99,12 @@ const SupplierDetailModal = ({ visible, handleClose }) => {
       </div>
     </Col>
   );
+  const renderListValue = (values) => {
+    if (!Array.isArray(values) || values.length === 0) {
+      return '-';
+    }
+    return values.join('、');
+  };
 
   return (
     <Modal
@@ -209,6 +215,24 @@ const SupplierDetailModal = ({ visible, handleClose }) => {
             <InfoItem label={t('对接人手机号')} value={supplierData?.contact_mobile || '-'} />
             <InfoItem label={t('对接人微信/企业微信')} value={supplierData?.contact_wechat || '-'} />
           </Row>
+
+          <Divider margin='20px 12px'>
+            <Text strong style={{ fontSize: '16px' }}>
+              {t('技术能力信息')}
+            </Text>
+          </Divider>
+          {!supplierData?.supplier_capability ? (
+            <Paragraph type='secondary'>{t('暂未提交技术能力信息')}</Paragraph>
+          ) : (
+            <Row gutter={12}>
+              <InfoItem label={t('核心服务类型')} value={renderListValue(supplierData.supplier_capability.core_service_types)} />
+              <InfoItem label={t('支持的模型')} value={renderListValue(supplierData.supplier_capability.supported_models)} />
+              <InfoItem label={t('支持的API接口')} value={renderListValue(supplierData.supplier_capability.supported_api_endpoints)} />
+              <InfoItem label={t('支持的参数配置')} value={renderListValue(supplierData.supplier_capability.supported_params)} />
+              <InfoItem label={t('定价模式')} value={renderListValue(supplierData.supplier_capability.pricing_modes)} />
+              <InfoItem label={t('API接口地址')} value={renderListValue(supplierData.supplier_capability.api_base_urls)} />
+            </Row>
+          )}
         </div>
       )}
     </Modal>

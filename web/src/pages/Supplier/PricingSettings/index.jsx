@@ -18,16 +18,21 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useEffect, useState } from 'react';
-import { Card, Spin, Tabs } from '@douyinfe/semi-ui';
+import { Button, Card, Empty, Spin, Tabs } from '@douyinfe/semi-ui';
+import { IllustrationNoAccess, IllustrationNoAccessDark } from '@douyinfe/semi-illustrations';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 
 import ModelSettingsVisualEditor from '../../Setting/Ratio/ModelSettingsVisualEditor';
 import ModelRatioNotSetEditor from '../../Setting/Ratio/ModelRationNotSetEditor';
 import UpstreamRatioSync from '../../Setting/Ratio/UpstreamRatioSync';
 
-import { API, showError, toBoolean } from '../../../helpers';
+import { API, isSupplier, showError, toBoolean } from '../../../helpers';
 
-const PricingSettingsPage = () => {
+/**
+ * SupplierPricingSettingsContent 供应商定价设置内容区。
+ */
+const SupplierPricingSettingsContent = () => {
   const { t } = useTranslation();
 
   let [inputs, setInputs] = useState({
@@ -50,30 +55,44 @@ const PricingSettingsPage = () => {
 
   const [loading, setLoading] = useState(false);
 
+  /**
+   * 获取供应商定价配置；若无供应商资质，给出明确引导提示。
+   */
   const getOptions = async () => {
-    const res = await API.get('/api/option/');
-    const { success, message, data } = res.data;
-    if (success) {
-      let newInputs = {};
-      data.forEach((item) => {
-        if (item.value.startsWith('{') || item.value.startsWith('[')) {
-          try {
-            item.value = JSON.stringify(JSON.parse(item.value), null, 2);
-          } catch (e) {
+    try {
+      const res = await API.get('/api/option/');
+      const { success, message, data } = res.data;
+      if (success) {
+        let newInputs = {};
+        data.forEach((item) => {
+          if (item.value.startsWith('{') || item.value.startsWith('[')) {
+            try {
+              item.value = JSON.stringify(JSON.parse(item.value), null, 2);
+            } catch (e) {
+            }
           }
-        }
-        if (['DefaultUseAutoGroup', 'ExposeRatioEnabled'].includes(item.key)) {
-          newInputs[item.key] = toBoolean(item.value);
-        } else {
-          newInputs[item.key] = item.value;
-        }
-      });
-      setInputs(newInputs);
-    } else {
-      showError(message);
+          if (['DefaultUseAutoGroup', 'ExposeRatioEnabled'].includes(item.key)) {
+            newInputs[item.key] = toBoolean(item.value);
+          } else {
+            newInputs[item.key] = item.value;
+          }
+        });
+        setInputs(newInputs);
+      } else {
+        showError(message);
+      }
+    } catch (error) {
+      if (error?.response?.status === 403) {
+        showError(t('请先申请供应商资质'));
+        return;
+      }
+      showError(error?.response?.data?.message || t('获取配置失败'));
     }
   };
 
+  /**
+   * 刷新当前页数据。
+   */
   const onRefresh = async () => {
     try {
       setLoading(true);
@@ -108,6 +127,43 @@ const PricingSettingsPage = () => {
       </Spin>
     </div>
   );
+};
+
+/**
+ * PricingSettingsPage 供应商定价设置页；非供应商时展示权限引导页。
+ */
+const PricingSettingsPage = () => {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+
+  if (!isSupplier()) {
+    return (
+      <div className='mt-[60px] px-2'>
+        <div className='flex items-center justify-center' style={{ minHeight: 'calc(100vh - 360px)' }}>
+          <Empty
+            image={<IllustrationNoAccess style={{ width: 200, height: 200 }} />}
+            darkModeImage={<IllustrationNoAccessDark style={{ width: 200, height: 200 }} />}
+            layout='horizontal'
+            title={t('需要供应商权限')}
+            description={t('您需要先成为供应商才能访问此页面。')}
+          >
+            <Button
+              theme='solid'
+              type='primary'
+              size='large'
+              className='!rounded-md mt-4'
+              style={{ fontWeight: 500 }}
+              onClick={() => navigate('/console/supplier/apply')}
+            >
+              {t('前往申请')}
+            </Button>
+          </Empty>
+        </div>
+      </div>
+    );
+  }
+
+  return <SupplierPricingSettingsContent />;
 };
 
 export default PricingSettingsPage;
