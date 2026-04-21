@@ -56,7 +56,8 @@ type Channel struct {
 	OtherSettings         string `json:"settings" gorm:"column:settings"`                         // 其他设置，存储azure版本等不需要检索的信息，详见dto.ChannelOtherSettings
 	OwnerUserID           int    `json:"owner_user_id" gorm:"type:int;index;default:0"`           // 渠道归属用户ID（供应商场景）
 	SupplierApplicationID int    `json:"supplier_application_id" gorm:"type:int;index;default:0"` // 关联 supplier_applications.id
-	SupplierName          string `json:"supplier_name,omitempty" gorm:"-"`                        // 供应商用户名（由控制器回填，不落库）
+	ChannelNo             string `json:"channel_no" gorm:"type:varchar(32);default:'';index;comment:供应商渠道编号 c1,c2 递增"`
+	SupplierName          string `json:"supplier_name,omitempty" gorm:"-"` // 供应商用户名（由控制器回填，不落库）
 
 	// cache info
 	Keys []string `json:"-" gorm:"-"`
@@ -334,6 +335,7 @@ type ChannelSimplePricingItem struct {
 type ChannelPricingMeta struct {
 	ChannelID             int     `gorm:"column:channel_id"`
 	SupplierApplicationID int     `gorm:"column:supplier_application_id"`
+	ChannelNo             string  `gorm:"column:channel_no"`
 	Models                string  `gorm:"column:models"`
 	SupplierAlias         *string `gorm:"column:supplier_alias"`
 }
@@ -355,7 +357,7 @@ func ListChannelsForPricing() ([]ChannelSimplePricingItem, error) {
 func ListChannelPricingMeta() ([]ChannelPricingMeta, error) {
 	items := make([]ChannelPricingMeta, 0)
 	err := DB.Model(&Channel{}).
-		Select("channels.id AS channel_id, channels.supplier_application_id, channels.models, supplier_applications.supplier_alias").
+		Select("channels.id AS channel_id, channels.supplier_application_id, channels.channel_no, channels.models, supplier_applications.supplier_alias").
 		Joins("LEFT JOIN supplier_applications ON supplier_applications.id = channels.supplier_application_id").
 		Order("channels.id ASC").
 		Scan(&items).Error
@@ -521,6 +523,93 @@ func GetChannelById(id int, selectAll bool) (*Channel, error) {
 	return channel, nil
 }
 
+func maxChannelNoNumericSuffixForSupplier(tx *gorm.DB, supplierApplicationID int) (int, error) {
+	var existing []string
+	if err := tx.Model(&Channel{}).Where("supplier_application_id = ?", supplierApplicationID).Pluck("channel_no", &existing).Error; err != nil {
+		return 0, err
+	}
+	maxN := 0
+	for _, no := range existing {
+		no = strings.TrimSpace(no)
+		if len(no) >= 2 && no[0] == 'c' {
+			if n, err := strconv.Atoi(no[1:]); err == nil && n > maxN {
+				maxN = n
+			}
+		}
+	}
+	return maxN, nil
+}
+
+// allocateSupplierChannelNosInBatch 为同一事务批次内待插入的渠道分配 channel_no（supplier_application_id 相同则 c1,c2… 连续不重复）。
+func allocateSupplierChannelNosInBatch(tx *gorm.DB, batch []Channel) error {
+	maxCache := make(map[int]int)
+	assigned := make(map[int]int)
+	for i := range batch {
+		sid := batch[i].SupplierApplicationID
+		if sid <= 0 {
+			continue
+		}
+		if strings.TrimSpace(batch[i].ChannelNo) != "" {
+			continue
+		}
+		m, ok := maxCache[sid]
+		if !ok {
+			var err error
+			m, err = maxChannelNoNumericSuffixForSupplier(tx, sid)
+			if err != nil {
+				return err
+			}
+			maxCache[sid] = m
+		}
+		assigned[sid]++
+		batch[i].ChannelNo = "c" + strconv.Itoa(m+assigned[sid])
+	}
+	return nil
+}
+
+// BackfillSupplierChannelNo 为历史数据补全 channel_no：按供应商分组、渠道 id 升序，已有非空编号的不覆盖，空编号接续已有最大 cN。
+func BackfillSupplierChannelNo() error {
+	type row struct {
+		ID                    int
+		SupplierApplicationID int
+		ChannelNo             string
+	}
+	var rows []row
+	if err := DB.Model(&Channel{}).
+		Select("id", "supplier_application_id", "channel_no").
+		Where("supplier_application_id > 0").
+		Order("supplier_application_id asc, id asc").
+		Scan(&rows).Error; err != nil {
+		return err
+	}
+	bySupplier := make(map[int][]row)
+	for _, r := range rows {
+		bySupplier[r.SupplierApplicationID] = append(bySupplier[r.SupplierApplicationID], r)
+	}
+	for _, list := range bySupplier {
+		maxN := 0
+		for _, r := range list {
+			no := strings.TrimSpace(r.ChannelNo)
+			if len(no) >= 2 && no[0] == 'c' {
+				if n, err := strconv.Atoi(no[1:]); err == nil && n > maxN {
+					maxN = n
+				}
+			}
+		}
+		for _, r := range list {
+			if strings.TrimSpace(r.ChannelNo) != "" {
+				continue
+			}
+			maxN++
+			no := "c" + strconv.Itoa(maxN)
+			if err := DB.Model(&Channel{}).Where("id = ?", r.ID).Update("channel_no", no).Error; err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func BatchInsertChannels(channels []Channel) error {
 	if len(channels) == 0 {
 		return nil
@@ -537,6 +626,10 @@ func BatchInsertChannels(channels []Channel) error {
 
 	createdChannels := make([]Channel, 0, len(channels))
 	for _, chunk := range lo.Chunk(channels, 50) {
+		if err := allocateSupplierChannelNosInBatch(tx, chunk); err != nil {
+			tx.Rollback()
+			return err
+		}
 		if err := tx.Create(&chunk).Error; err != nil {
 			tx.Rollback()
 			return err
@@ -691,13 +784,17 @@ func (channel *Channel) GetStatusCodeMapping() string {
 }
 
 func (channel *Channel) Insert() error {
-	var err error
-	err = DB.Create(channel).Error
-	if err != nil {
-		return err
-	}
-	err = channel.AddAbilities(nil)
-	return err
+	return DB.Transaction(func(tx *gorm.DB) error {
+		batch := []Channel{*channel}
+		if err := allocateSupplierChannelNosInBatch(tx, batch); err != nil {
+			return err
+		}
+		*channel = batch[0]
+		if err := tx.Create(channel).Error; err != nil {
+			return err
+		}
+		return channel.AddAbilities(tx)
+	})
 }
 
 func (channel *Channel) Update() error {

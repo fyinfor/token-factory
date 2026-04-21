@@ -118,7 +118,7 @@ const ModelChannelList = ({ modelData, displayPrice, currency, siteDisplayType, 
               <div className='flex items-center justify-between w-full pr-4'>
                 <span className='font-medium'>
                   <Tag color='blue' size='small' className='ml-2'>
-                    {t('供应商ID')}: {group.supplierId}
+                    {group.supplierAlias}
                   </Tag>
                 </span>
                 <span className='text-sm text-gray-500'>
@@ -133,7 +133,7 @@ const ModelChannelList = ({ modelData, displayPrice, currency, siteDisplayType, 
                 return (
                   <div key={`${channel.channel_id}-${idx}`} className='flex gap-3 items-start'>
                     <div className='flex items-center justify-center min-w-[24px] h-[24px] rounded-full bg-blue-100 text-blue-600 text-xs font-semibold mt-3'>
-                      {idx + 1}
+                      {channel.channel_no}
                     </div>
                     <Card
                       className='!rounded-lg shadow-sm !mb-2 flex-1'
