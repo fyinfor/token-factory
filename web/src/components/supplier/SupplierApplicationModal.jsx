@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { Modal, Form, Row, Col, Button, Typography, Upload, Divider, Progress, Steps } from '@douyinfe/semi-ui';
 import { IconUpload } from '@douyinfe/semi-icons';
 import { API, showError, showSuccess } from '../../helpers';
@@ -81,7 +81,8 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
         const data = res.data.data;
         setHasExistingApplication(true);
         setApplicationId(data.id);
-        let fetchedCapabilityData = null;
+        // 接口 /self 已附带 supplier_capability；单独拉取失败时仍可用于回显。
+        let fetchedCapabilityData = data.supplier_capability || null;
         try {
           const capabilityRes = await API.get(`/api/user/supplier/application/${data.id}/capability`, { skipErrorHandler: true });
           if (capabilityRes.data.success && capabilityRes.data.data) {
@@ -152,7 +153,41 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
           truth_commitment_confirmed: fetchedCapabilityData?.truth_commitment_confirmed || false,
         });
         setCommitmentChecked(!!fetchedCapabilityData?.truth_commitment_confirmed);
-        
+
+        // 等 Form 挂载完成后再写一次，避免 ref 未就绪时 setValues 被跳过。
+        requestAnimationFrame(() => {
+          formApiRef.current?.setValues({
+            company_name: data.company_name || '',
+            credit_code: data.credit_code || '',
+            legal_representative: data.legal_representative || '',
+            company_size: data.company_size || '',
+            contact_name: data.contact_name || '',
+            contact_mobile: data.contact_mobile || '',
+            contact_wechat: data.contact_wechat || '',
+            core_service_types: fetchedCapabilityData?.core_service_types || [],
+            supported_models: fetchedCapabilityData?.supported_models || [],
+            supported_model_notes: fetchedCapabilityData?.supported_model_notes || '',
+            supported_api_endpoints: fetchedCapabilityData?.supported_api_endpoints || [],
+            supported_api_endpoint_extra: fetchedCapabilityData?.supported_api_endpoint_extra || '',
+            supported_params: fetchedCapabilityData?.supported_params || [],
+            supported_params_extra: fetchedCapabilityData?.supported_params_extra || '',
+            streaming_supported: fetchedCapabilityData?.streaming_supported ? 'yes' : 'no',
+            streaming_notes: fetchedCapabilityData?.streaming_notes || '',
+            structured_output_supported: fetchedCapabilityData?.structured_output_supported ? 'yes' : 'no',
+            structured_output_notes: fetchedCapabilityData?.structured_output_notes || '',
+            multimodal_types: fetchedCapabilityData?.multimodal_types || [],
+            multimodal_extra: fetchedCapabilityData?.multimodal_extra || '',
+            pricing_modes: fetchedCapabilityData?.pricing_modes || [],
+            reference_input_price: fetchedCapabilityData?.reference_input_price || '',
+            reference_output_price: fetchedCapabilityData?.reference_output_price || '',
+            failure_billing_mode: fetchedCapabilityData?.failure_billing_mode || 'no_bill',
+            failure_billing_notes: fetchedCapabilityData?.failure_billing_notes || '',
+            api_base_urls: fetchedCapabilityData?.api_base_urls || [],
+            openai_compatible: fetchedCapabilityData?.openai_compatible ? 'yes' : 'no',
+            truth_commitment_confirmed: fetchedCapabilityData?.truth_commitment_confirmed || false,
+          });
+        });
+
         if (data.business_license_url) {
           setBusinessLicenseUrl(data.business_license_url);
         }
@@ -192,36 +227,42 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
     }
   };
 
-  const getInitValues = () => ({
-    company_name: '',
-    credit_code: '',
-    legal_representative: '',
-    company_size: '',
-    contact_name: '',
-    contact_mobile: '',
-    contact_wechat: '',
-    core_service_types: [],
-    supported_models: [],
-    supported_model_notes: '',
-    supported_api_endpoints: [],
-    supported_api_endpoint_extra: '',
-    supported_params: [],
-    supported_params_extra: '',
-    streaming_supported: 'no',
-    streaming_notes: '',
-    structured_output_supported: 'no',
-    structured_output_notes: '',
-    multimodal_types: [],
-    multimodal_extra: '',
-    pricing_modes: [],
-    reference_input_price: '',
-    reference_output_price: '',
-    failure_billing_mode: 'no_bill',
-    failure_billing_notes: '',
-    api_base_urls: [],
-    openai_compatible: 'yes',
-    truth_commitment_confirmed: false,
-  });
+  /**
+   * defaultFormInitValues 多步表单初始空值；用 useMemo 固定引用，避免每次渲染 initValues 变化导致表单被重置。
+   */
+  const defaultFormInitValues = useMemo(
+    () => ({
+      company_name: '',
+      credit_code: '',
+      legal_representative: '',
+      company_size: '',
+      contact_name: '',
+      contact_mobile: '',
+      contact_wechat: '',
+      core_service_types: [],
+      supported_models: [],
+      supported_model_notes: '',
+      supported_api_endpoints: [],
+      supported_api_endpoint_extra: '',
+      supported_params: [],
+      supported_params_extra: '',
+      streaming_supported: 'no',
+      streaming_notes: '',
+      structured_output_supported: 'no',
+      structured_output_notes: '',
+      multimodal_types: [],
+      multimodal_extra: '',
+      pricing_modes: [],
+      reference_input_price: '',
+      reference_output_price: '',
+      failure_billing_mode: 'no_bill',
+      failure_billing_notes: '',
+      api_base_urls: [],
+      openai_compatible: 'yes',
+      truth_commitment_confirmed: false,
+    }),
+    []
+  );
 
   const handleCancel = () => {
     handleClose();
@@ -485,12 +526,15 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
         </div>
       </div>
       <Form
-        initValues={getInitValues()}
+        initValues={defaultFormInitValues}
         getFormApi={(api) => (formApiRef.current = api)}
         onSubmit={submit}
       >
-        {currentStep === 0 && (
-          <>
+        {/*
+          三步同时挂载、用 display 切换，保证 Semi Form 注册全部 field；
+          若按 currentStep 条件卸载，未挂载字段无法接收 setValues，编辑申请时对接人/技术能力不回显。
+        */}
+        <div style={{ display: currentStep === 0 ? 'block' : 'none' }}>
             <Divider margin='12px'>
               <Text strong style={{ fontSize: '16px' }}>
                 {t('企业主体信息')}
@@ -571,11 +615,9 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
                 />
               </Col>
             </Row>
-          </>
-        )}
+        </div>
 
-        {currentStep === 1 && (
-          <>
+        <div style={{ display: currentStep === 1 ? 'block' : 'none' }}>
             <Divider margin='20px 12px'>
               <Text strong style={{ fontSize: '16px' }}>
                 {t('对接人信息')}
@@ -620,15 +662,14 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
                 />
               </Col>
             </Row>
-          </>
-        )}
+        </div>
 
-        {currentStep === 2 && (
+        <div style={{ display: currentStep === 2 ? 'block' : 'none' }}>
           <SupplierCapabilityFormFields
             t={t}
             onCommitmentChange={(checked) => setCommitmentChecked(checked)}
           />
-        )}
+        </div>
       </Form>
     </Modal>
   );

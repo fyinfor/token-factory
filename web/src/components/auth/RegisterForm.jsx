@@ -137,6 +137,11 @@ const RegisterForm = () => {
   }, [statusState?.status]);
   const hasCustomOAuthProviders =
     (status.custom_oauth_providers || []).length > 0;
+  /**
+   * 与系统设置「短信注册」开关一致：未开启则不展示手机号/短信验证码（/api/status.sms_verification_enabled）。
+   * 字段缺失时视为开启，兼容旧版缓存的 status。
+   */
+  const smsVerificationEnabled = status?.sms_verification_enabled !== false;
   const hasOAuthRegisterOptions = Boolean(
     status.github_oauth ||
       status.discord_oauth ||
@@ -243,13 +248,15 @@ const RegisterForm = () => {
       showInfo('两次输入的密码不一致');
       return;
     }
-    if (!/^1[3-9]\d{9}$/.test((inputs.phone || '').trim())) {
-      showInfo('请输入有效的 11 位手机号');
-      return;
-    }
-    if (!/^\d{6}$/.test((inputs.sms_verification_code || '').trim())) {
-      showInfo('请输入 6 位短信验证码');
-      return;
+    if (smsVerificationEnabled) {
+      if (!/^1[3-9]\d{9}$/.test((inputs.phone || '').trim())) {
+        showInfo('请输入有效的 11 位手机号');
+        return;
+      }
+      if (!/^\d{6}$/.test((inputs.sms_verification_code || '').trim())) {
+        showInfo('请输入 6 位短信验证码');
+        return;
+      }
     }
     if (username && password) {
       if (turnstileEnabled && turnstileToken === '') {
@@ -660,34 +667,40 @@ const RegisterForm = () => {
                   prefix={<IconLock />}
                 />
 
-                <Form.Input
-                  field='phone'
-                  label={t('手机号')}
-                  placeholder={t('输入 11 位手机号')}
-                  name='phone'
-                  onChange={(value) => handleChange('phone', value)}
-                  prefix={<IconUser />}
-                />
+                {smsVerificationEnabled && (
+                  <>
+                    <Form.Input
+                      field='phone'
+                      label={t('手机号')}
+                      placeholder={t('输入 11 位手机号')}
+                      name='phone'
+                      onChange={(value) => handleChange('phone', value)}
+                      prefix={<IconUser />}
+                    />
 
-                <Form.Input
-                  field='sms_verification_code'
-                  label={t('短信验证码')}
-                  placeholder={t('输入短信验证码')}
-                  name='sms_verification_code'
-                  onChange={(value) => handleChange('sms_verification_code', value)}
-                  prefix={<IconKey />}
-                  suffix={
-                    <Button
-                      onClick={sendSMSVerificationCode}
-                      loading={smsVerificationCodeLoading}
-                      disabled={disableSMSButton || smsVerificationCodeLoading}
-                    >
-                      {disableSMSButton
-                        ? `${t('重新发送')} (${smsCountdown})`
-                        : t('获取验证码')}
-                    </Button>
-                  }
-                />
+                    <Form.Input
+                      field='sms_verification_code'
+                      label={t('短信验证码')}
+                      placeholder={t('输入短信验证码')}
+                      name='sms_verification_code'
+                      onChange={(value) =>
+                        handleChange('sms_verification_code', value)
+                      }
+                      prefix={<IconKey />}
+                      suffix={
+                        <Button
+                          onClick={sendSMSVerificationCode}
+                          loading={smsVerificationCodeLoading}
+                          disabled={disableSMSButton || smsVerificationCodeLoading}
+                        >
+                          {disableSMSButton
+                            ? `${t('重新发送')} (${smsCountdown})`
+                            : t('获取验证码')}
+                        </Button>
+                      }
+                    />
+                  </>
+                )}
 
                 {showEmailVerification && (
                   <>
