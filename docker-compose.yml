@@ -60,6 +60,14 @@ services:
     image: redis:latest
     container_name: redis
     restart: always
+    # 持久化：官方镜像默认将 RDB 写入 /data/dump.rdb；此处挂载卷并开启 AOF，
+    # 容器删除后数据仍在宿主机 ./redis_data（备份/迁移时复制该目录即可）。
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+    volumes:
+      - ./redis_data:/data
     networks:
       - token-factory-network
     ports:
