@@ -18,7 +18,8 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import { Input, ImagePreview, Button } from '@douyinfe/semi-ui';
+import { Input, ImagePreview, Button, Collapsible } from '@douyinfe/semi-ui';
+import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { IconSearch } from '@douyinfe/semi-icons';
 import PricingVendors from '../table/model-pricing/filter/PricingVendors';
 import PricingQuotaTypes from '../table/model-pricing/filter/PricingQuotaTypes';
@@ -30,6 +31,7 @@ import { useModelPricingData } from '../../hooks/model-pricing/useModelPricingDa
 import { usePricingFilterCounts } from '../../hooks/model-pricing/usePricingFilterCounts';
 
 const HomeModelList = () => {
+  const isMobile = useIsMobile();
   const pricingData = useModelPricingData();
   const { quotaTypeModels, endpointTypeModels, vendorModels, tagModels } =
     usePricingFilterCounts({
@@ -62,6 +64,11 @@ const HomeModelList = () => {
           grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
           gap: 0.75rem !important;
         }
+        @media (max-width: 767px) {
+          .home-model-card-wrapper .grid {
+            grid-template-columns: repeat(1, minmax(0, 1fr)) !important;
+          }
+        }
         @media (min-width: 768px) {
           .home-model-card-wrapper .grid {
             grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
@@ -77,6 +84,12 @@ const HomeModelList = () => {
           gap: 1.5rem;
           width: 100%;
         }
+        @media (max-width: 767px) {
+          .home-model-layout {
+            flex-direction: column;
+            gap: 1rem;
+          }
+        }
         .home-model-sidebar {
           position: sticky;
           top: 60px;
@@ -88,6 +101,15 @@ const HomeModelList = () => {
           flex-shrink: 0;
           display: flex;
           flex-direction: column;
+        }
+        @media (max-width: 767px) {
+          .home-model-sidebar {
+            position: static;
+            width: 100%;
+            min-width: 100%;
+            max-width: 100%;
+            max-height: none;
+          }
         }
         .home-sidebar-header {
           position: sticky;
@@ -104,12 +126,71 @@ const HomeModelList = () => {
         .home-sidebar-filters::-webkit-scrollbar {
           display: none;
         }
+        @media (max-width: 767px) {
+          .home-sidebar-header {
+            padding: 0 0 1rem 0;
+            margin-bottom: 0.5rem;
+          }
+          .home-sidebar-filters {
+            padding: 0;
+            overflow-y: visible;
+          }
+        }
         .home-model-content {
           flex: 1;
           min-width: 0;
         }
+        .home-search-wrapper {
+          display: block;
+        }
+        .home-search-wrapper-mobile {
+          display: block;
+        }
+        @media (min-width: 768px) {
+          .home-search-wrapper-mobile {
+            display: none !important;
+          }
+        }
+        @media (max-width: 767px) {
+          .home-search-wrapper {
+            display: none !important;
+          }
+          .home-model-layout {
+            display: flex;
+            flex-direction: column;
+          }
+          .home-search-wrapper-mobile {
+            order: 1;
+            width: 100%;
+            margin-bottom: 1rem;
+          }
+          .home-model-sidebar {
+            order: 2;
+            padding-left: 0;
+            padding-right: 0;
+          }
+          .home-model-content {
+            order: 3;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+          }
+        }
       `}</style>
       <div className='home-model-layout'>
+        {/* 移动端搜索框 */}
+        <div className='home-search-wrapper-mobile'>
+          <Input
+            prefix={<IconSearch />}
+            placeholder={pricingData.t('模糊搜索模型名称')}
+            value={pricingData.searchValue}
+            onCompositionStart={pricingData.handleCompositionStart}
+            onCompositionEnd={pricingData.handleCompositionEnd}
+            onChange={pricingData.handleChange}
+            showClear
+            size='large'
+          />
+        </div>
+
         <div className='home-model-sidebar'>
           <div className='home-sidebar-header'>
             <div className='flex items-center justify-between mb-4'>
@@ -166,7 +247,7 @@ const HomeModelList = () => {
         </div>
 
         <div className='home-model-content px-4'>
-          <div className='w-full sticky top-[75px] z-index-[10] my-4 bg-[var(--semi-color-bg-0)] rounded-xl'>
+          <div className={`home-search-wrapper ${isMobile ? 'w-full mb-4' : 'w-full sticky top-[75px] z-index-[10] my-4 bg-[var(--semi-color-bg-0)] rounded-xl'}`}>
             <Input
               prefix={<IconSearch />}
               placeholder={pricingData.t('模糊搜索模型名称')}
