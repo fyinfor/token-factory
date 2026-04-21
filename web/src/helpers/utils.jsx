@@ -69,11 +69,22 @@ export function isRoot() {
   return user.role >= 100;
 }
 
+/** 是否为已通过供应商身份的用户：后端 supplier_id 非 0 */
+export function userIsSupplierUser(userLike) {
+  if (!userLike || typeof userLike !== 'object') return false;
+  const id = userLike.supplier_id;
+  return id != null && id !== 0 && id !== '0';
+}
+
 export function isSupplier() {
-  let user = localStorage.getItem('user');
-  if (!user) return false;
-  user = JSON.parse(user);
-  return user.supplier_id && user.supplier_id !== 0;
+  let raw = localStorage.getItem('user');
+  if (!raw) return false;
+  try {
+    const user = JSON.parse(raw);
+    return userIsSupplierUser(user);
+  } catch {
+    return false;
+  }
 }
 
 /** 分销比例 commission_ratio_bps：后端万分之一单位（1=0.01%），转为百分比展示如 10%、0.01% */
@@ -732,7 +743,26 @@ export const calculateModelPrice = ({
   if (record.quota_type === 0) {
     // 按量计费
     const isTokensDisplay = quotaDisplayType === 'TOKENS';
+    const hasMultipleChannels = record.channel_list && record.channel_list.length > 1;
+    
+    // 如果有多个渠道，使用 min/max 值；否则使用 effectiveModelRatio
+    const minRatio = hasMultipleChannels && record.minModelRatio !== undefined 
+      ? Number(record.minModelRatio) 
+      : effectiveModelRatio;
+    const maxRatio = hasMultipleChannels && record.maxModelRatio !== undefined 
+      ? Number(record.maxModelRatio) 
+      : effectiveModelRatio;
+    const minCompletionRatio = hasMultipleChannels && record.minCompletionRatio !== undefined
+      ? Number(record.minCompletionRatio)
+      : Number(record.completion_ratio);
+    const maxCompletionRatio = hasMultipleChannels && record.maxCompletionRatio !== undefined
+      ? Number(record.maxCompletionRatio)
+      : Number(record.completion_ratio);
+    
     const inputRatioPriceUSD = effectiveModelRatio * 2 * usedGroupRatio;
+    const minInputRatioPriceUSD = minRatio * 2 * usedGroupRatio;
+    const maxInputRatioPriceUSD = maxRatio * 2 * usedGroupRatio;
+    
     const unitDivisor = tokenUnit === 'K' ? 1000 : 1;
     const unitLabel = tokenUnit === 'K' ? 'K' : 'M';
     const hasRatioValue = (value) =>
@@ -790,12 +820,19 @@ export const calculateModelPrice = ({
       ? formatTokenPrice(inputRatioPriceUSD * Number(record.audio_ratio))
       : null;
 
+    // 计算价格范围
+    const hasRange = hasMultipleChannels && (minRatio !== maxRatio || minCompletionRatio !== maxCompletionRatio);
+    
     return {
       inputPrice,
+      inputPriceMin: hasRange ? formatTokenPrice(minInputRatioPriceUSD) : null,
+      inputPriceMax: hasRange ? formatTokenPrice(maxInputRatioPriceUSD) : null,
       modelRatioSource: hasGroupModelRatio ? 'group' : 'global',
       completionPrice: formatTokenPrice(
         inputRatioPriceUSD * Number(record.completion_ratio),
       ),
+      completionPriceMin: hasRange ? formatTokenPrice(minInputRatioPriceUSD * minCompletionRatio) : null,
+      completionPriceMax: hasRange ? formatTokenPrice(maxInputRatioPriceUSD * maxCompletionRatio) : null,
       cachePrice: hasRatioValue(record.cache_ratio)
         ? formatTokenPrice(inputRatioPriceUSD * Number(record.cache_ratio))
         : null,
@@ -817,6 +854,7 @@ export const calculateModelPrice = ({
       unitLabel,
       isPerToken: true,
       isTokensDisplay: false,
+      hasRange,
       usedGroup,
       usedGroupRatio,
     };
@@ -845,6 +883,88 @@ export const calculateModelPrice = ({
     usedGroup,
     usedGroupRatio,
   };
+};
+
+// 根据 channel_list 计算并格式化价格范围
+export const calculatePriceRange = ({
+  record,
+  displayPrice,
+  currency,
+  quotaDisplayType = 'USD',
+  precision = 2,
+}) => {
+  if (!record || !record.channel_list || record.channel_list.length <= 1) {
+    return null;
+  }
+
+  const {
+    minModelPrice,
+    maxModelPrice,
+    minModelRatio,
+    maxModelRatio,
+    quota_type,
+  } = record;
+
+  if (quota_type === 0) {
+    // 按量计费 - 使用倍率范围
+    if (minModelRatio === undefined || maxModelRatio === undefined) {
+      return null;
+    }
+    const isTokensDisplay = quotaDisplayType === 'TOKENS';
+    if (isTokensDisplay) {
+      return {
+        minRatio: Number(minModelRatio).toFixed(6),
+        maxRatio: Number(maxModelRatio).toFixed(6),
+        isRange: true,
+        isPerToken: true,
+      };
+    }
+
+    // 价格范围显示
+    let symbol = '$';
+    if (currency === 'CNY') {
+      symbol = '¥';
+    } else if (currency === 'CUSTOM') {
+      try {
+        const statusStr = localStorage.getItem('status');
+        if (statusStr) {
+          const s = JSON.parse(statusStr);
+          symbol = s?.custom_currency_symbol || '¤';
+        } else {
+          symbol = '¤';
+        }
+      } catch (e) {
+        symbol = '¤';
+      }
+    }
+
+    const minPriceUSD = minModelRatio * 2;
+    const maxPriceUSD = maxModelRatio * 2;
+    const minDisplay = displayPrice(minPriceUSD);
+    const maxDisplay = displayPrice(maxPriceUSD);
+
+    return {
+      minPrice: minDisplay,
+      maxPrice: maxDisplay,
+      isRange: true,
+      isPerToken: true,
+    };
+  } else if (quota_type === 1) {
+    // 按次计费 - 使用价格范围
+    if (minModelPrice === undefined || maxModelPrice === undefined) {
+      return null;
+    }
+    const minDisplay = displayPrice(minModelPrice);
+    const maxDisplay = displayPrice(maxModelPrice);
+    return {
+      minPrice: minDisplay,
+      maxPrice: maxDisplay,
+      isRange: true,
+      isPerToken: false,
+    };
+  }
+
+  return null;
 };
 
 export const getModelPriceItems = (
@@ -920,17 +1040,26 @@ export const getModelPriceItems = (
     }
 
     const unitSuffix = ` / 1${priceData.unitLabel} Tokens`;
+    
+    // 格式化价格显示，支持范围
+    const formatPriceValue = (price, minPrice, maxPrice) => {
+      if (priceData.hasRange && minPrice && maxPrice && minPrice !== maxPrice) {
+        return `${minPrice} ~ ${maxPrice}`;
+      }
+      return price;
+    };
+    
     return [
       {
         key: 'input',
         label: t('输入价格'),
-        value: priceData.inputPrice,
+        value: formatPriceValue(priceData.inputPrice, priceData.inputPriceMin, priceData.inputPriceMax),
         suffix: unitSuffix,
       },
       {
         key: 'completion',
         label: t('输出价格'),
-        value: priceData.completionPrice,
+        value: formatPriceValue(priceData.completionPrice, priceData.completionPriceMin, priceData.completionPriceMax),
         suffix: unitSuffix,
       },
       {

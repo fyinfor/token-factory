@@ -17,10 +17,23 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useCallback } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Typography, Tag } from '@douyinfe/semi-ui';
 import SkeletonWrapper from '../components/SkeletonWrapper';
+import {
+  userIsDistributorUser,
+  userIsSupplierUser,
+  showInfo,
+} from '../../../helpers';
+
+/** 顶栏申请入口：Element UI 默认主题主色 #409EFF 及浅色阶（light-9 / light-8 等） */
+const APPLY_BTN_BASE =
+  'flex-shrink-0 inline-flex items-center justify-center text-sm font-semibold transition-all duration-200 ease-in-out rounded-lg px-3.5 py-2 min-h-[2.25rem] border shadow-sm';
+const APPLY_BTN_IDLE =
+  'border-[#b3d8ff] bg-[#ecf5ff] text-[#409EFF] hover:bg-[#d9ecff] hover:border-[#409EFF] active:bg-[#c6e2ff] dark:border-[#409EFF]/45 dark:bg-[#409EFF]/12 dark:text-[#79bbff] dark:hover:bg-[#409EFF]/20 dark:hover:border-[#409EFF]/75';
+const APPLY_BTN_ACTIVE =
+  'border-[#409EFF] bg-[#d9ecff] text-[#337ecc] shadow-md dark:border-[#409EFF] dark:bg-[#409EFF]/22 dark:text-[#a0cfff]';
 
 const HeaderLogo = ({
   isMobile,
@@ -31,50 +44,110 @@ const HeaderLogo = ({
   systemName,
   isSelfUseMode,
   isDemoSiteMode,
+  userState,
   t,
 }) => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const user = userState?.user;
+
+  /** 未登录且已在登录页时：提示先登录，并同步 redirect 到目标申请页 */
+  const handleApplyEntryClick = useCallback(
+    (applyPath) => (e) => {
+      if (user) return;
+      if (location.pathname !== '/login') return;
+      e.preventDefault();
+      showInfo(t('请先登录'));
+      navigate(`/login?redirect=${encodeURIComponent(applyPath)}`, {
+        replace: true,
+      });
+    },
+    [user, location.pathname, navigate, t],
+  );
+
   if (isMobile && isConsoleRoute) {
     return null;
   }
 
+  const distributorApplyPath = '/console/distributor/apply';
+  const supplierApplyPath = '/console/supplier/apply';
+
+  const showDistributorApply = !userIsDistributorUser(user);
+  const showSupplierApply = !userIsSupplierUser(user);
+  const showApplyLinks = showDistributorApply || showSupplierApply;
+
+  const distributorTo = user
+    ? distributorApplyPath
+    : `/login?redirect=${encodeURIComponent(distributorApplyPath)}`;
+  const supplierTo = user
+    ? supplierApplyPath
+    : `/login?redirect=${encodeURIComponent(supplierApplyPath)}`;
+
+  const distributorActive = location.pathname.startsWith(distributorApplyPath);
+  const supplierActive = location.pathname.startsWith(supplierApplyPath);
+
   return (
-    <Link to='/' className='group flex items-center gap-2'>
-      <div className='relative w-8 h-8 md:w-8 md:h-8'>
-        <SkeletonWrapper loading={isLoading || !logoLoaded} type='image' />
-        <img
-          src={logo}
-          alt='logo'
-          className={`absolute inset-0 w-full h-full transition-all duration-200 group-hover:scale-110 rounded-full ${!isLoading && logoLoaded ? 'opacity-100' : 'opacity-0'}`}
-        />
-      </div>
-      <div className='hidden md:flex items-center gap-2'>
-        <div className='flex items-center gap-2'>
-          <SkeletonWrapper
-            loading={isLoading}
-            type='title'
-            width={120}
-            height={24}
-          >
-            <Typography.Title
-              heading={4}
-              className='!text-lg !font-semibold !mb-0'
+    <div className='flex items-center gap-2 md:gap-3 flex-shrink-0'>
+      <Link to='/' className='group flex items-center gap-2'>
+        <div className='relative w-8 h-8 md:w-8 md:h-8'>
+          <SkeletonWrapper loading={isLoading || !logoLoaded} type='image' />
+          <img
+            src={logo}
+            alt='logo'
+            className={`absolute inset-0 w-full h-full transition-all duration-200 group-hover:scale-110 rounded-full ${!isLoading && logoLoaded ? 'opacity-100' : 'opacity-0'}`}
+          />
+        </div>
+        <div className='hidden md:flex items-center gap-2'>
+          <div className='flex items-center gap-2'>
+            <SkeletonWrapper
+              loading={isLoading}
+              type='title'
+              width={120}
+              height={24}
             >
-              {systemName}
-            </Typography.Title>
-          </SkeletonWrapper>
-          {(isSelfUseMode || isDemoSiteMode) && !isLoading && (
-            <Tag
-              color={isSelfUseMode ? 'purple' : 'blue'}
-              className='text-xs px-1.5 py-0.5 rounded whitespace-nowrap shadow-sm'
-              size='small'
-              shape='circle'
+              <Typography.Title
+                heading={4}
+                className='!text-lg !font-semibold !mb-0'
+              >
+                {systemName}
+              </Typography.Title>
+            </SkeletonWrapper>
+            {(isSelfUseMode || isDemoSiteMode) && !isLoading && (
+              <Tag
+                color={isSelfUseMode ? 'purple' : 'blue'}
+                className='text-xs px-1.5 py-0.5 rounded whitespace-nowrap shadow-sm'
+                size='small'
+                shape='circle'
+              >
+                {isSelfUseMode ? t('自用模式') : t('演示站点')}
+              </Tag>
+            )}
+          </div>
+        </div>
+      </Link>
+      {showApplyLinks && (
+        <div className='hidden sm:flex items-center gap-2 flex-shrink-0'>
+          {showDistributorApply && (
+            <Link
+              to={distributorTo}
+              onClick={handleApplyEntryClick(distributorApplyPath)}
+              className={`${APPLY_BTN_BASE} ${distributorActive ? APPLY_BTN_ACTIVE : APPLY_BTN_IDLE}`}
             >
-              {isSelfUseMode ? t('自用模式') : t('演示站点')}
-            </Tag>
+              {t('成为代理')}
+            </Link>
+          )}
+          {showSupplierApply && (
+            <Link
+              to={supplierTo}
+              onClick={handleApplyEntryClick(supplierApplyPath)}
+              className={`${APPLY_BTN_BASE} ${supplierActive ? APPLY_BTN_ACTIVE : APPLY_BTN_IDLE}`}
+            >
+              {t('提供算力')}
+            </Link>
           )}
         </div>
-      </div>
-    </Link>
+      )}
+    </div>
   );
 };
 

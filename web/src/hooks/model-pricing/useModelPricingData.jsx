@@ -209,6 +209,10 @@ export const useModelPricingData = () => {
         m.vendor_icon = vendor.icon;
         m.vendor_description = vendor.description;
       }
+
+      if (!m.channel_list) {
+        m.channel_list = [];
+      }
     }
     models.sort((a, b) => {
       return a.quota_type - b.quota_type;
