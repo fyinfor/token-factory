@@ -173,9 +173,17 @@ func GetPricing(c *gin.Context) {
 		supplierModelRatio[supplierID] = modelRatio
 	}
 
+	channelMeta, metaErr := model.ListChannelsPricingMeta(visibleChannelIDs)
+	if metaErr != nil {
+		common.SysError("ListChannelsPricingMeta: " + metaErr.Error())
+		channelMeta = []model.ChannelPricingMeta{}
+	}
+	modelPriceList := model.BuildModelPriceList(pricing, channelMeta, channelModelPrice, channelModelRatio, channelCompletionRatio)
+
 	c.JSON(200, gin.H{
 		"success":                        true,
 		"data":                           filtered,
+		"model_price_list":               modelPriceList,
 		"vendors":                        model.GetVendors(),
 		"channels":                       channels,
 		"group_ratio":                    groupRatio,
@@ -194,7 +202,7 @@ func GetPricing(c *gin.Context) {
 		"usable_group":                   usableGroup,
 		"supported_endpoint":             model.GetSupportedEndpointMap(),
 		"auto_groups":                    service.GetUserAutoGroup(group),
-		"pricing_version":                "a42d372ccf0b5dd13ecf71203521f9d2",
+		"pricing_version":                "b91e4c0a2f8d3e1b5c6d7e8f9a0b1c2d",
 	})
 }
 
