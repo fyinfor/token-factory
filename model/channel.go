@@ -327,7 +327,8 @@ type SupplierChannelSearchFilter struct {
 
 // ChannelSimplePricingItem pricing 页面使用的渠道精简信息。
 type ChannelSimplePricingItem struct {
-	ChannelID int `json:"channel_id"`
+	ChannelID   int    `json:"channel_id"`
+	ChannelName string `json:"channel_name"`
 }
 
 // ChannelPricingMeta 定价接口计算渠道维度价格所需的渠道行（含供应商别名）。
@@ -343,7 +344,7 @@ type ChannelPricingMeta struct {
 func ListChannelsForPricing() ([]ChannelSimplePricingItem, error) {
 	items := make([]ChannelSimplePricingItem, 0)
 	err := DB.Model(&Channel{}).
-		Select("id as channel_id").
+		Select("id as channel_id, name as channel_name").
 		Order("id asc").
 		Scan(&items).Error
 	if err != nil {

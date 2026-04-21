@@ -25,15 +25,19 @@ import {
   userIsDistributorUser,
   userIsSupplierUser,
   showInfo,
+  isAdmin,
 } from '../../../helpers';
 
-/** 顶栏申请入口：Element UI 默认主题主色 #409EFF 及浅色阶（light-9 / light-8 等） */
+/**
+ * 顶栏申请入口：浅色用 #409EFF 系。
+ * 注意：tailwind.config 覆盖了默认 colors，无 blue/zinc 等键，暗色必须用任意值或 semi-color-*，否则 dark: 不会产出 CSS。
+ */
 const APPLY_BTN_BASE =
-  'flex-shrink-0 inline-flex items-center justify-center text-sm font-semibold transition-all duration-200 ease-in-out rounded-lg px-3.5 py-2 min-h-[2.25rem] border shadow-sm';
+  'flex-shrink-0 inline-flex items-center justify-center text-sm font-semibold transition-all duration-200 ease-in-out rounded-lg px-3.5 py-2 min-h-[2.25rem] border shadow-sm dark:shadow-none';
 const APPLY_BTN_IDLE =
-  'border-[#b3d8ff] bg-[#ecf5ff] text-[#409EFF] hover:bg-[#d9ecff] hover:border-[#409EFF] active:bg-[#c6e2ff] dark:border-[#409EFF]/45 dark:bg-[#409EFF]/12 dark:text-[#79bbff] dark:hover:bg-[#409EFF]/20 dark:hover:border-[#409EFF]/75';
+  'border-[#b3d8ff] bg-[#ecf5ff] text-[#409EFF] hover:bg-[#d9ecff] hover:border-[#409EFF] active:bg-[#c6e2ff] dark:border-[rgba(96,165,250,0.35)] dark:bg-[rgba(59,130,246,0.1)] dark:text-[rgba(147,197,253,0.92)] dark:hover:bg-[rgba(59,130,246,0.15)] dark:hover:border-[rgba(96,165,250,0.48)] dark:active:bg-[rgba(59,130,246,0.12)]';
 const APPLY_BTN_ACTIVE =
-  'border-[#409EFF] bg-[#d9ecff] text-[#337ecc] shadow-md dark:border-[#409EFF] dark:bg-[#409EFF]/22 dark:text-[#a0cfff]';
+  'border-[#409EFF] bg-[#d9ecff] text-[#337ecc] shadow-md dark:border-[rgba(96,165,250,0.55)] dark:bg-[rgba(59,130,246,0.18)] dark:text-[rgba(191,219,254,0.95)] dark:shadow-none dark:ring-1 dark:ring-[rgba(96,165,250,0.28)]';
 
 const HeaderLogo = ({
   isMobile,
@@ -72,8 +76,16 @@ const HeaderLogo = ({
   const distributorApplyPath = '/console/distributor/apply';
   const supplierApplyPath = '/console/supplier/apply';
 
-  const showDistributorApply = !userIsDistributorUser(user);
-  const showSupplierApply = !userIsSupplierUser(user);
+  /** 管理员不展示；已登录分销商仅隐藏「成为代理」（「提供算力」仍看是否已有供应商身份） */
+  const hideApplyLinks = isAdmin();
+  const hideDistributorApplyAsLoggedInDistributor = Boolean(
+    user && userIsDistributorUser(user),
+  );
+
+  const showDistributorApply =
+    !hideApplyLinks && !hideDistributorApplyAsLoggedInDistributor;
+  const showSupplierApply =
+    !hideApplyLinks && !userIsSupplierUser(user);
   const showApplyLinks = showDistributorApply || showSupplierApply;
 
   const distributorTo = user

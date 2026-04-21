@@ -27,24 +27,24 @@ const sidebarEventTarget = new EventTarget();
 const SIDEBAR_REFRESH_EVENT = 'sidebar-refresh';
 
 export const DEFAULT_ADMIN_CONFIG = {
-  chat: {
-    enabled: true,
-    playground: true,
-    chat: true,
-  },
-  console: {
-    enabled: true,
-    detail: true,
-    token: true,
-    log: true,
-    midjourney: true,
-    task: true,
-  },
-  personal: {
-    enabled: true,
-    topup: true,
-    personal: true,
-    supplier: true,
+    chat: {
+        enabled: true,
+        playground: true,
+        chat: true,
+    },
+    console: {
+        enabled: true,
+        detail: true,
+        token: true,
+        log: true,
+        midjourney: true,
+        task: true,
+    },
+    personal: {
+        enabled: true,
+        topup: true,
+        personal: true,
+        supplier: true,
     distributor_center: true,
     'supplier-apply': true,
     'supplier-channel': true,
@@ -62,271 +62,272 @@ export const DEFAULT_ADMIN_CONFIG = {
     distributor: true,
     'supplier-management': true,
     'supplier-application-approval': true,
+    'supplier-dashboard': true,
   },
 };
 
 const deepClone = (value) => JSON.parse(JSON.stringify(value));
 
 export const mergeAdminConfig = (savedConfig) => {
-  const merged = deepClone(DEFAULT_ADMIN_CONFIG);
-  if (!savedConfig || typeof savedConfig !== 'object') return merged;
+    const merged = deepClone(DEFAULT_ADMIN_CONFIG);
+    if (!savedConfig || typeof savedConfig !== 'object') return merged;
 
-  for (const [sectionKey, sectionConfig] of Object.entries(savedConfig)) {
-    if (!sectionConfig || typeof sectionConfig !== 'object') continue;
+    for (const [sectionKey, sectionConfig] of Object.entries(savedConfig)) {
+        if (!sectionConfig || typeof sectionConfig !== 'object') continue;
 
-    if (!merged[sectionKey]) {
-      merged[sectionKey] = { ...sectionConfig };
-      continue;
+        if (!merged[sectionKey]) {
+            merged[sectionKey] = { ...sectionConfig };
+            continue;
+        }
+
+        merged[sectionKey] = { ...merged[sectionKey], ...sectionConfig };
     }
 
-    merged[sectionKey] = { ...merged[sectionKey], ...sectionConfig };
-  }
-
-  return merged;
+    return merged;
 };
 
 export const useSidebar = () => {
-  const [statusState] = useContext(StatusContext);
-  const [, userDispatch] = useContext(UserContext);
-  const [userConfig, setUserConfig] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const instanceIdRef = useRef(null);
-  const hasLoadedOnceRef = useRef(false);
+    const [statusState] = useContext(StatusContext);
+    const [, userDispatch] = useContext(UserContext);
+    const [userConfig, setUserConfig] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const instanceIdRef = useRef(null);
+    const hasLoadedOnceRef = useRef(false);
 
-  if (!instanceIdRef.current) {
-    const randomPart = Math.random().toString(16).slice(2);
-    instanceIdRef.current = `sidebar-${Date.now()}-${randomPart}`;
-  }
+    if (!instanceIdRef.current) {
+        const randomPart = Math.random().toString(16).slice(2);
+        instanceIdRef.current = `sidebar-${Date.now()}-${randomPart}`;
+    }
 
-  // 获取管理员配置
-  const adminConfig = useMemo(() => {
-    if (statusState?.status?.SidebarModulesAdmin) {
-      try {
-        const config = JSON.parse(statusState.status.SidebarModulesAdmin);
-        return mergeAdminConfig(config);
-      } catch (error) {
+    // 获取管理员配置
+    const adminConfig = useMemo(() => {
+        if (statusState?.status?.SidebarModulesAdmin) {
+            try {
+                const config = JSON.parse(statusState.status.SidebarModulesAdmin);
+                return mergeAdminConfig(config);
+            } catch (error) {
+                return mergeAdminConfig(null);
+            }
+        }
         return mergeAdminConfig(null);
-      }
-    }
-    return mergeAdminConfig(null);
-  }, [statusState?.status?.SidebarModulesAdmin]);
+    }, [statusState?.status?.SidebarModulesAdmin]);
 
-  // 加载用户配置的通用方法
-  const loadUserConfig = async ({ withLoading } = {}) => {
-    const shouldShowLoader =
-      typeof withLoading === 'boolean'
-        ? withLoading
-        : !hasLoadedOnceRef.current;
+    // 加载用户配置的通用方法
+    const loadUserConfig = async ({ withLoading } = {}) => {
+        const shouldShowLoader =
+            typeof withLoading === 'boolean'
+                ? withLoading
+                : !hasLoadedOnceRef.current;
 
-    try {
-      if (shouldShowLoader) {
-        setLoading(true);
-      }
+        try {
+            if (shouldShowLoader) {
+                setLoading(true);
+            }
 
-      const res = await API.get('/api/user/self');
-      if (res.data.success && res.data.data) {
-        const payload = res.data.data;
-        // 与登录态一致：用服务端最新资料（含 role）覆盖本地 user，避免仅刷新页面时侧栏仍用旧的「非分销商」等缓存
-        if (payload.id != null) {
-          mergeSelfResponseIntoLocalUser(payload, userDispatch);
-        }
-
-        if (payload.sidebar_modules) {
-          let config;
-          if (typeof payload.sidebar_modules === 'string') {
-            config = JSON.parse(payload.sidebar_modules);
-          } else {
-            config = payload.sidebar_modules;
-          }
-          setUserConfig(config);
-        } else {
-          // 当用户没有配置时，生成一个基于管理员配置的默认用户配置
-          const defaultUserConfig = {};
-          Object.keys(adminConfig).forEach((sectionKey) => {
-            if (adminConfig[sectionKey]?.enabled) {
-              defaultUserConfig[sectionKey] = { enabled: true };
-              Object.keys(adminConfig[sectionKey]).forEach((moduleKey) => {
-                if (
-                  moduleKey !== 'enabled' &&
-                  adminConfig[sectionKey][moduleKey]
-                ) {
-                  defaultUserConfig[sectionKey][moduleKey] = true;
+            const res = await API.get('/api/user/self');
+            if (res.data.success && res.data.data) {
+                const payload = res.data.data;
+                // 与登录态一致：用服务端最新资料（含 role）覆盖本地 user，避免仅刷新页面时侧栏仍用旧的「非分销商」等缓存
+                if (payload.id != null) {
+                    mergeSelfResponseIntoLocalUser(payload, userDispatch);
                 }
-              });
+
+                if (payload.sidebar_modules) {
+                    let config;
+                    if (typeof payload.sidebar_modules === 'string') {
+                        config = JSON.parse(payload.sidebar_modules);
+                    } else {
+                        config = payload.sidebar_modules;
+                    }
+                    setUserConfig(config);
+                } else {
+                    // 当用户没有配置时，生成一个基于管理员配置的默认用户配置
+                    const defaultUserConfig = {};
+                    Object.keys(adminConfig).forEach((sectionKey) => {
+                        if (adminConfig[sectionKey]?.enabled) {
+                            defaultUserConfig[sectionKey] = { enabled: true };
+                            Object.keys(adminConfig[sectionKey]).forEach((moduleKey) => {
+                                if (
+                                    moduleKey !== 'enabled' &&
+                                    adminConfig[sectionKey][moduleKey]
+                                ) {
+                                    defaultUserConfig[sectionKey][moduleKey] = true;
+                                }
+                            });
+                        }
+                    });
+                    setUserConfig(defaultUserConfig);
+                }
+            } else {
+                const defaultUserConfig = {};
+                Object.keys(adminConfig).forEach((sectionKey) => {
+                    if (adminConfig[sectionKey]?.enabled) {
+                        defaultUserConfig[sectionKey] = { enabled: true };
+                        Object.keys(adminConfig[sectionKey]).forEach((moduleKey) => {
+                            if (
+                                moduleKey !== 'enabled' &&
+                                adminConfig[sectionKey][moduleKey]
+                            ) {
+                                defaultUserConfig[sectionKey][moduleKey] = true;
+                            }
+                        });
+                    }
+                });
+                setUserConfig(defaultUserConfig);
             }
-          });
-          setUserConfig(defaultUserConfig);
-        }
-      } else {
-        const defaultUserConfig = {};
-        Object.keys(adminConfig).forEach((sectionKey) => {
-          if (adminConfig[sectionKey]?.enabled) {
-            defaultUserConfig[sectionKey] = { enabled: true };
-            Object.keys(adminConfig[sectionKey]).forEach((moduleKey) => {
-              if (
-                moduleKey !== 'enabled' &&
-                adminConfig[sectionKey][moduleKey]
-              ) {
-                defaultUserConfig[sectionKey][moduleKey] = true;
-              }
+        } catch (error) {
+            // 出错时也生成默认配置，而不是设置为空对象
+            const defaultUserConfig = {};
+            Object.keys(adminConfig).forEach((sectionKey) => {
+                if (adminConfig[sectionKey]?.enabled) {
+                    defaultUserConfig[sectionKey] = { enabled: true };
+                    Object.keys(adminConfig[sectionKey]).forEach((moduleKey) => {
+                        if (moduleKey !== 'enabled' && adminConfig[sectionKey][moduleKey]) {
+                            defaultUserConfig[sectionKey][moduleKey] = true;
+                        }
+                    });
+                }
             });
-          }
-        });
-        setUserConfig(defaultUserConfig);
-      }
-    } catch (error) {
-      // 出错时也生成默认配置，而不是设置为空对象
-      const defaultUserConfig = {};
-      Object.keys(adminConfig).forEach((sectionKey) => {
-        if (adminConfig[sectionKey]?.enabled) {
-          defaultUserConfig[sectionKey] = { enabled: true };
-          Object.keys(adminConfig[sectionKey]).forEach((moduleKey) => {
-            if (moduleKey !== 'enabled' && adminConfig[sectionKey][moduleKey]) {
-              defaultUserConfig[sectionKey][moduleKey] = true;
+            setUserConfig(defaultUserConfig);
+        } finally {
+            if (shouldShowLoader) {
+                setLoading(false);
             }
-          });
+            hasLoadedOnceRef.current = true;
         }
-      });
-      setUserConfig(defaultUserConfig);
-    } finally {
-      if (shouldShowLoader) {
-        setLoading(false);
-      }
-      hasLoadedOnceRef.current = true;
-    }
-  };
+    };
 
-  // 刷新用户配置的方法（供外部调用）
-  const refreshUserConfig = async () => {
-    if (Object.keys(adminConfig).length > 0) {
-      await loadUserConfig({ withLoading: false });
-    }
+    // 刷新用户配置的方法（供外部调用）
+    const refreshUserConfig = async () => {
+        if (Object.keys(adminConfig).length > 0) {
+            await loadUserConfig({ withLoading: false });
+        }
 
-    // 触发全局刷新事件，通知所有useSidebar实例更新
-    sidebarEventTarget.dispatchEvent(
-      new CustomEvent(SIDEBAR_REFRESH_EVENT, {
-        detail: { sourceId: instanceIdRef.current, skipLoader: true },
-      }),
-    );
-  };
+        // 触发全局刷新事件，通知所有useSidebar实例更新
+        sidebarEventTarget.dispatchEvent(
+            new CustomEvent(SIDEBAR_REFRESH_EVENT, {
+                detail: { sourceId: instanceIdRef.current, skipLoader: true },
+            }),
+        );
+    };
 
-  // 加载用户配置
-  useEffect(() => {
-    // 只有当管理员配置加载完成后才加载用户配置
-    if (Object.keys(adminConfig).length > 0) {
-      loadUserConfig();
-    }
-  }, [adminConfig]);
+    // 加载用户配置
+    useEffect(() => {
+        // 只有当管理员配置加载完成后才加载用户配置
+        if (Object.keys(adminConfig).length > 0) {
+            loadUserConfig();
+        }
+    }, [adminConfig]);
 
-  // 监听全局刷新事件
-  useEffect(() => {
-    const handleRefresh = (event) => {
-      if (event?.detail?.sourceId === instanceIdRef.current) {
-        return;
-      }
+    // 监听全局刷新事件
+    useEffect(() => {
+        const handleRefresh = (event) => {
+            if (event?.detail?.sourceId === instanceIdRef.current) {
+                return;
+            }
 
-      if (Object.keys(adminConfig).length > 0) {
-        loadUserConfig({
-          withLoading: event?.detail?.skipLoader ? false : undefined,
+            if (Object.keys(adminConfig).length > 0) {
+                loadUserConfig({
+                    withLoading: event?.detail?.skipLoader ? false : undefined,
+                });
+            }
+        };
+
+        sidebarEventTarget.addEventListener(SIDEBAR_REFRESH_EVENT, handleRefresh);
+
+        return () => {
+            sidebarEventTarget.removeEventListener(
+                SIDEBAR_REFRESH_EVENT,
+                handleRefresh,
+            );
+        };
+    }, [adminConfig]);
+
+    // 计算最终的显示配置
+    const finalConfig = useMemo(() => {
+        const result = {};
+
+        // 确保adminConfig已加载
+        if (!adminConfig || Object.keys(adminConfig).length === 0) {
+            return result;
+        }
+
+        // 如果userConfig未加载，等待加载完成
+        if (!userConfig) {
+            return result;
+        }
+
+        // 遍历所有区域
+        Object.keys(adminConfig).forEach((sectionKey) => {
+            const adminSection = adminConfig[sectionKey];
+            const userSection = userConfig[sectionKey];
+
+            // 如果管理员禁用了整个区域，则该区域不显示
+            if (!adminSection?.enabled) {
+                result[sectionKey] = { enabled: false };
+                return;
+            }
+
+            // 区域级别：用户可以选择隐藏管理员允许的区域
+            // 当userSection存在时检查enabled状态，否则默认为true
+            const sectionEnabled = userSection ? userSection.enabled !== false : true;
+            result[sectionKey] = { enabled: sectionEnabled };
+
+            // 功能级别：只有管理员和用户都允许的功能才显示
+            Object.keys(adminSection).forEach((moduleKey) => {
+                if (moduleKey === 'enabled') return;
+
+                const adminAllowed = adminSection[moduleKey];
+                // 当userSection存在时检查模块状态，否则默认为true
+                const userAllowed = userSection
+                    ? userSection[moduleKey] !== false
+                    : true;
+
+                result[sectionKey][moduleKey] =
+                    adminAllowed && userAllowed && sectionEnabled;
+            });
         });
-      }
+
+        return result;
+    }, [adminConfig, userConfig]);
+
+    // 检查特定功能是否应该显示
+    const isModuleVisible = (sectionKey, moduleKey = null) => {
+        if (moduleKey) {
+            return finalConfig[sectionKey]?.[moduleKey] === true;
+        } else {
+            return finalConfig[sectionKey]?.enabled === true;
+        }
     };
 
-    sidebarEventTarget.addEventListener(SIDEBAR_REFRESH_EVENT, handleRefresh);
+    // 检查区域是否有任何可见的功能
+    const hasSectionVisibleModules = (sectionKey) => {
+        const section = finalConfig[sectionKey];
+        if (!section?.enabled) return false;
 
-    return () => {
-      sidebarEventTarget.removeEventListener(
-        SIDEBAR_REFRESH_EVENT,
-        handleRefresh,
-      );
+        return Object.keys(section).some(
+            (key) => key !== 'enabled' && section[key] === true,
+        );
     };
-  }, [adminConfig]);
 
-  // 计算最终的显示配置
-  const finalConfig = useMemo(() => {
-    const result = {};
+    // 获取区域的可见功能列表
+    const getVisibleModules = (sectionKey) => {
+        const section = finalConfig[sectionKey];
+        if (!section?.enabled) return [];
 
-    // 确保adminConfig已加载
-    if (!adminConfig || Object.keys(adminConfig).length === 0) {
-      return result;
-    }
+        return Object.keys(section).filter(
+            (key) => key !== 'enabled' && section[key] === true,
+        );
+    };
 
-    // 如果userConfig未加载，等待加载完成
-    if (!userConfig) {
-      return result;
-    }
-
-    // 遍历所有区域
-    Object.keys(adminConfig).forEach((sectionKey) => {
-      const adminSection = adminConfig[sectionKey];
-      const userSection = userConfig[sectionKey];
-
-      // 如果管理员禁用了整个区域，则该区域不显示
-      if (!adminSection?.enabled) {
-        result[sectionKey] = { enabled: false };
-        return;
-      }
-
-      // 区域级别：用户可以选择隐藏管理员允许的区域
-      // 当userSection存在时检查enabled状态，否则默认为true
-      const sectionEnabled = userSection ? userSection.enabled !== false : true;
-      result[sectionKey] = { enabled: sectionEnabled };
-
-      // 功能级别：只有管理员和用户都允许的功能才显示
-      Object.keys(adminSection).forEach((moduleKey) => {
-        if (moduleKey === 'enabled') return;
-
-        const adminAllowed = adminSection[moduleKey];
-        // 当userSection存在时检查模块状态，否则默认为true
-        const userAllowed = userSection
-          ? userSection[moduleKey] !== false
-          : true;
-
-        result[sectionKey][moduleKey] =
-          adminAllowed && userAllowed && sectionEnabled;
-      });
-    });
-
-    return result;
-  }, [adminConfig, userConfig]);
-
-  // 检查特定功能是否应该显示
-  const isModuleVisible = (sectionKey, moduleKey = null) => {
-    if (moduleKey) {
-      return finalConfig[sectionKey]?.[moduleKey] === true;
-    } else {
-      return finalConfig[sectionKey]?.enabled === true;
-    }
-  };
-
-  // 检查区域是否有任何可见的功能
-  const hasSectionVisibleModules = (sectionKey) => {
-    const section = finalConfig[sectionKey];
-    if (!section?.enabled) return false;
-
-    return Object.keys(section).some(
-      (key) => key !== 'enabled' && section[key] === true,
-    );
-  };
-
-  // 获取区域的可见功能列表
-  const getVisibleModules = (sectionKey) => {
-    const section = finalConfig[sectionKey];
-    if (!section?.enabled) return [];
-
-    return Object.keys(section).filter(
-      (key) => key !== 'enabled' && section[key] === true,
-    );
-  };
-
-  return {
-    loading,
-    adminConfig,
-    userConfig,
-    finalConfig,
-    isModuleVisible,
-    hasSectionVisibleModules,
-    getVisibleModules,
-    refreshUserConfig,
-  };
+    return {
+        loading,
+        adminConfig,
+        userConfig,
+        finalConfig,
+        isModuleVisible,
+        hasSectionVisibleModules,
+        getVisibleModules,
+        refreshUserConfig,
+    };
 };

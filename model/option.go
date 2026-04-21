@@ -143,6 +143,8 @@ func InitOptionMap() {
 	common.OptionMap["DistributorApplyCsImageUrl"] = ""
 	common.OptionMap["DistributorWithdrawCsImageUrl"] = ""
 	common.OptionMap["DistributorWithdrawNotice"] = ""
+	// 分销商申请页标题下方展示的富文本（HTML，内容由运营设置编辑）
+	common.OptionMap["DistributorApplyIntroHtml"] = ""
 	common.OptionMap["DistributorMinWithdrawQuota"] = ""
 	common.OptionMap["QuotaRemindThreshold"] = strconv.Itoa(common.QuotaRemindThreshold)
 	common.OptionMap["PreConsumedQuota"] = strconv.Itoa(common.PreConsumedQuota)

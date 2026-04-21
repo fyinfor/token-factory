@@ -56,6 +56,7 @@ const routerMap = {
   'supplier-apply': '/console/supplier/apply',
   'supplier-channel': '/console/supplier/channel',
   'supplier-pricing-settings': '/console/supplier/pricing-settings',
+  'supplier-dashboard': '/console/supplier/dashboard',
   'supplier-management': null,
   'supplier-application-approval': '/console/supplier-application',
   'supplier-list': '/console/suppliers',
@@ -165,6 +166,11 @@ const SiderBar = ({ onNavigate = () => {} }) => {
             itemKey: 'supplier-pricing-settings',
             to: '/console/supplier/pricing-settings',
           },
+          {
+            text: t('数据看板'),
+            itemKey: 'supplier-dashboard',
+            to: '/console/supplier/dashboard',
+          },
         ],
       },
       {
@@ -183,7 +189,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
     });
 
     return filteredItems;
-  }, [t, isModuleVisible, userState?.user?.role]);
+  }, [t, isModuleVisible, userState?.user?.role, isDistributor(), isAdmin()]);
 
   const adminItems = useMemo(() => {
     const items = [
@@ -243,6 +249,11 @@ const SiderBar = ({ onNavigate = () => {} }) => {
             text: t('供应商列表'),
             itemKey: 'supplier-list',
             to: '/console/suppliers',
+          },
+          {
+            text: t('数据看板'),
+            itemKey: 'supplier-dashboard',
+            to: '/console/supplier/dashboard',
           },
         ],
       },
@@ -366,6 +377,18 @@ const SiderBar = ({ onNavigate = () => {} }) => {
     // 如果找到匹配的键，更新选中的键
     if (matchingKey) {
       setSelectedKeys([matchingKey]);
+    }
+
+    // 供应商子菜单：进入申请/渠道/定价页时展开父级，便于看到当前选中项
+    const supplierSubKeys = [
+      'supplier-apply',
+      'supplier-channel',
+      'supplier-pricing-settings',
+    ];
+    if (matchingKey && supplierSubKeys.includes(matchingKey)) {
+      setOpenedKeys((prev) =>
+        prev.includes('supplier') ? prev : [...prev, 'supplier'],
+      );
     }
   }, [location.pathname, routerMapState]);
 
@@ -589,7 +612,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
               />
             }
             onClick={toggleCollapsed}
-            icononly={collapsed}
+            icononly={collapsed ? true : undefined}
             style={
               collapsed
                 ? { width: 36, height: 24, padding: 0 }

@@ -126,3 +126,18 @@ func GetAllQuotaDates(startTime int64, endTime int64, username string) (quotaDat
 	err = DB.Table("quota_data").Select("model_name, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used, created_at").Where("created_at >= ? and created_at <= ?", startTime, endTime).Group("model_name, created_at").Find(&quotaDatas).Error
 	return quotaDatas, err
 }
+
+// GetQuotaDataByModelNames 按模型集合聚合查询数据看板数据（按模型+小时）。
+func GetQuotaDataByModelNames(startTime int64, endTime int64, modelNames []string) (quotaData []*QuotaData, err error) {
+	quotaDatas := make([]*QuotaData, 0)
+	if len(modelNames) == 0 {
+		return quotaDatas, nil
+	}
+	err = DB.Table("quota_data").
+		Select("model_name, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used, created_at").
+		Where("created_at >= ? and created_at <= ?", startTime, endTime).
+		Where("model_name IN ?", modelNames).
+		Group("model_name, created_at").
+		Find(&quotaDatas).Error
+	return quotaDatas, err
+}

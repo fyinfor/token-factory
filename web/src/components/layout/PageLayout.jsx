@@ -50,6 +50,7 @@ const PageLayout = () => {
   const location = useLocation();
 
   const cardProPages = [
+    '/',
     '/console/channel',
     '/console/log',
     '/console/redemption',

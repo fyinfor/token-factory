@@ -129,6 +129,7 @@ func GetStatus(c *gin.Context) {
 		"distributor_apply_cs_image_url":    common.OptionMap["DistributorApplyCsImageUrl"],
 		"distributor_withdraw_cs_image_url": common.OptionMap["DistributorWithdrawCsImageUrl"],
 		"distributor_withdraw_notice":       common.OptionMap["DistributorWithdrawNotice"],
+		"distributor_apply_intro_html":      common.OptionMap["DistributorApplyIntroHtml"],
 		"distributor_min_withdraw_quota":    distributorMinWithdrawQuota,
 		"affiliate_default_commission_bps":  common.AffiliateDefaultCommissionBps,
 	}

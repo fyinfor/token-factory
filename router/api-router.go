@@ -141,6 +141,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.GET("/supplier/channels", controller.ListMySupplierChannels)
 				selfRoute.POST("/supplier/models", controller.CreateMySupplierModel)
 				selfRoute.GET("/supplier/models", controller.ListMySupplierModels)
+				selfRoute.GET("/supplier-dashboard", controller.GetSupplierDashboardData)
 				selfRoute.GET("/messages/self", controller.ListMyMessages)
 				selfRoute.POST("/messages/:id/read", controller.MarkMyMessageRead)
 				selfRoute.POST("/messages/read_all", controller.MarkAllMyMessagesRead)

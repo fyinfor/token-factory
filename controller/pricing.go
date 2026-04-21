@@ -64,7 +64,8 @@ func getPricingVisibleChannelsForUser(c *gin.Context) ([]model.ChannelSimplePric
 	for _, item := range ownedChannels {
 		visibleChannelIDs[item.Id] = struct{}{}
 		visibleChannels = append(visibleChannels, model.ChannelSimplePricingItem{
-			ChannelID: item.Id,
+			ChannelID:   item.Id,
+			ChannelName: item.Name,
 		})
 	}
 	return visibleChannels, visibleChannelIDs, nil
