@@ -11,7 +11,7 @@ import React, { useEffect } from 'react';
 import { Navigate, useParams } from 'react-router-dom';
 import { API } from '../helpers';
 
-/** 短链 /r/:aff → 带邀请码的注册页 */
+/** 邀请链接 /r/:aff → 带邀请码的注册页 */
 export default function InviteRedirect() {
   const { aff } = useParams();
   useEffect(() => {

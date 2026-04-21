@@ -162,7 +162,7 @@ export default function DistributorAnalyticsBoard({ adminMode = false }) {
 
   const funnelSpec = useMemo(() => {
     const fields = [
-      { key: 'short_link_clicks', label: t('短链点击') },
+      { key: 'short_link_clicks', label: t('邀请链接点击') },
       { key: 'register_page_views', label: t('注册页浏览') },
       { key: 'new_registrations', label: t('新增邀请注册') },
     ];
