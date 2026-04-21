@@ -167,6 +167,17 @@ const RegisterForm = () => {
   }, [status]);
 
   useEffect(() => {
+    const fromUrl = new URLSearchParams(window.location.search).get('aff');
+    const code = String(fromUrl || localStorage.getItem('aff') || '').trim();
+    if (!code) return;
+    API.post(
+      '/api/aff/track',
+      { event: 'register_page_view', aff: code },
+      { skipErrorHandler: true },
+    ).catch(() => {});
+  }, []);
+
+  useEffect(() => {
     let countdownInterval = null;
     if (disableButton && countdown > 0) {
       countdownInterval = setInterval(() => {

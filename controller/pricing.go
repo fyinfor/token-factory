@@ -64,8 +64,7 @@ func getPricingVisibleChannelsForUser(c *gin.Context) ([]model.ChannelSimplePric
 	for _, item := range ownedChannels {
 		visibleChannelIDs[item.Id] = struct{}{}
 		visibleChannels = append(visibleChannels, model.ChannelSimplePricingItem{
-			ChannelID:   item.Id,
-			ChannelName: item.Name,
+			ChannelID: item.Id,
 		})
 	}
 	return visibleChannels, visibleChannelIDs, nil
@@ -173,9 +172,15 @@ func GetPricing(c *gin.Context) {
 		supplierModelRatio[supplierID] = modelRatio
 	}
 
+	channelPricingMeta, err := model.ListChannelPricingMeta()
+	if err != nil {
+		channelPricingMeta = nil
+	}
+	pricingData := model.BuildPricingAPIItems(filtered, visibleChannelIDs, channelPricingMeta)
+
 	c.JSON(200, gin.H{
 		"success":                        true,
-		"data":                           filtered,
+		"data":                           pricingData,
 		"vendors":                        model.GetVendors(),
 		"channels":                       channels,
 		"group_ratio":                    groupRatio,
