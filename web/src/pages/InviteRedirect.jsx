@@ -9,19 +9,14 @@ License, or (at your option) any later version.
 
 import React, { useEffect } from 'react';
 import { Navigate, useParams } from 'react-router-dom';
-import { API } from '../helpers';
+import { postAffiliateTrackDeduped } from '../helpers';
 
 /** 邀请链接 /r/:aff → 带邀请码的注册页 */
 export default function InviteRedirect() {
   const { aff } = useParams();
   useEffect(() => {
     const raw = aff ? String(aff).trim() : '';
-    if (!raw) return;
-    API.post(
-      '/api/aff/track',
-      { event: 'short_link_click', aff: raw },
-      { skipErrorHandler: true },
-    ).catch(() => {});
+    postAffiliateTrackDeduped('short_link_click', raw);
   }, [aff]);
   const code = aff ? encodeURIComponent(aff) : '';
   return <Navigate to={`/register?aff=${code}`} replace />;

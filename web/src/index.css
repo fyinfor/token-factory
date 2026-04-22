@@ -958,6 +958,135 @@ html.dark .home-distributor-cta-btn {
   isolation: isolate;
 }
 
+/* 分销商申请主卡片：整体渐变底 + 淡边线 + 轻立体光（上沿高光 / 下沿浅影） */
+.distributor-apply-main-card.semi-card {
+  background: linear-gradient(
+    152deg,
+    var(--semi-color-primary-light-default) 0%,
+    var(--semi-color-bg-0) 42%,
+    color-mix(in srgb, var(--semi-color-primary) 10%, var(--semi-color-fill-0))
+      100%
+  );
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--semi-color-border) 32%,
+      var(--semi-color-bg-0)
+    );
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--semi-color-border) 8%, transparent),
+    0 1px 0 0 color-mix(in srgb, white 55%, transparent),
+    0 2px 6px -1px color-mix(in srgb, var(--semi-color-primary) 5%, rgba(15, 23, 42, 0.05)),
+    0 10px 28px -6px color-mix(in srgb, var(--semi-color-primary) 7%, rgba(15, 23, 42, 0.06));
+}
+
+.distributor-apply-main-card .semi-card-body {
+  background-color: transparent;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+/* 分销申请 - 细滚动条（低对比、淡色）：说明区独立滚动 或 窄屏整卡单列滚动 */
+.distributor-apply-intro-scroll,
+.distributor-apply-card-stacked-scroll {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(
+      in srgb,
+      var(--semi-color-primary) 18%,
+      var(--semi-color-fill-1)
+    )
+    color-mix(in srgb, var(--semi-color-border) 12%, transparent);
+}
+
+.distributor-apply-intro-scroll::-webkit-scrollbar,
+.distributor-apply-card-stacked-scroll::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.distributor-apply-intro-scroll::-webkit-scrollbar-track,
+.distributor-apply-card-stacked-scroll::-webkit-scrollbar-track {
+  margin: 6px 0 8px;
+  background: color-mix(in srgb, var(--semi-color-border) 12%, transparent);
+  border-radius: 100px;
+}
+
+.distributor-apply-intro-scroll::-webkit-scrollbar-thumb,
+.distributor-apply-card-stacked-scroll::-webkit-scrollbar-thumb {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--semi-color-primary) 16%, var(--semi-color-fill-2))
+      0%,
+    color-mix(in srgb, var(--semi-color-primary) 22%, var(--semi-color-fill-1))
+      100%
+  );
+  border-radius: 100px;
+  border: 2px solid
+    color-mix(in srgb, var(--semi-color-bg-0) 92%, var(--semi-color-border));
+  background-clip: padding-box;
+}
+
+.distributor-apply-intro-scroll::-webkit-scrollbar-thumb:hover,
+.distributor-apply-card-stacked-scroll::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--semi-color-primary) 26%, var(--semi-color-fill-1))
+      0%,
+    color-mix(in srgb, var(--semi-color-primary) 34%, var(--semi-color-fill-0))
+      100%
+  );
+  background-clip: padding-box;
+}
+
+/* 分销商申请页：固定主区域、避免外层滚动，仅卡片内部滚动 */
+.distributor-apply-page-root {
+  position: fixed;
+  z-index: 1;
+  top: 64px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 12px 16px;
+  overflow: hidden;
+  pointer-events: auto;
+}
+
+@media (min-width: 768px) {
+  .distributor-apply-page-root {
+    left: var(--sidebar-current-width, 220px);
+    padding: 20px 24px;
+  }
+}
+
+html.dark .distributor-apply-main-card.semi-card {
+  background: linear-gradient(
+    152deg,
+    color-mix(in srgb, var(--semi-color-primary) 24%, var(--semi-color-bg-0)) 0%,
+    var(--semi-color-bg-0) 45%,
+    color-mix(in srgb, var(--semi-color-primary) 14%, var(--semi-color-bg-1))
+      100%
+  );
+  border: 1px solid
+    color-mix(
+      in srgb,
+      var(--semi-color-border) 38%,
+      var(--semi-color-bg-0)
+    );
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, white 6%, transparent),
+    0 1px 0 0 color-mix(in srgb, white 8%, transparent),
+    0 2px 8px -2px rgba(0, 0, 0, 0.32),
+    0 10px 28px -8px color-mix(in srgb, var(--semi-color-primary) 10%, rgba(0, 0, 0, 0.25));
+}
+
 .distributor-apply-hero-orb {
   position: absolute;
   border-radius: 50%;
@@ -1003,9 +1132,31 @@ html.dark .home-distributor-cta-btn {
 }
 
 .distributor-apply-hero-icon {
+  border-color: color-mix(
+    in srgb,
+    var(--semi-color-border) 34%,
+    var(--semi-color-bg-0)
+  ) !important;
   animation:
     distributor-apply-fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both,
     distributor-apply-icon-soft 4s ease-in-out infinite 0.6s;
+}
+
+html.dark .distributor-apply-hero .distributor-apply-hero-icon {
+  border-color: color-mix(
+    in srgb,
+    var(--semi-color-border) 45%,
+    var(--semi-color-bg-0)
+  ) !important;
+}
+
+/* 左/上：说明 与 右/下：表单 之间分隔线（高混入底色，比默认 border 更淡） */
+.distributor-apply-panels-divider {
+  border-color: color-mix(
+    in srgb,
+    var(--semi-color-border) 26%,
+    var(--semi-color-bg-0)
+  ) !important;
 }
 
 html.dark .distributor-apply-hero-orb--a {

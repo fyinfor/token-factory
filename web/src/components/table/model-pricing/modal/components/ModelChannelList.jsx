@@ -17,9 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useMemo } from 'react';
-import { Card, Avatar, Typography, Collapse, Tag } from '@douyinfe/semi-ui';
-import { IconListView } from '@douyinfe/semi-icons';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { Card, Avatar, Typography, Collapse, Tag, Button, Toast } from '@douyinfe/semi-ui';
+import { IconListView, IconCopy } from '@douyinfe/semi-icons';
 
 const { Text } = Typography;
 
@@ -45,9 +45,30 @@ const ModelChannelList = ({ modelData, displayPrice, currency, siteDisplayType, 
     return Object.values(groups);
   }, [modelData.channel_list, t]);
 
+  // 生成所有面板的 keys，默认全部展开
+  const allKeys = useMemo(() =>
+    groupedChannels.map(group => `group-${group.supplierId}`)
+  , [groupedChannels]);
+
+  // 使用字符串形式来稳定比较
+  const allKeysStr = allKeys.join(',');
+  const prevKeysStr = useRef('');
+
+  // 管理展开状态
+  const [activeKey, setActiveKey] = useState(allKeys);
+
+  // 当 allKeys 实际变化时（基于字符串比较），更新 activeKey
+  useEffect(() => {
+    if (allKeysStr !== prevKeysStr.current) {
+      setActiveKey(allKeys);
+      prevKeysStr.current = allKeysStr;
+    }
+  }, [allKeysStr, allKeys]);
+
   // 格式化通道信息
   const formatChannelInfo = (channel) => {
-    const items = [];
+    const firstRow = [];
+    const secondRow = [];
     
     // 计算价格的辅助函数
     const calculatePrice = (ratio) => {
@@ -75,25 +96,43 @@ const ModelChannelList = ({ modelData, displayPrice, currency, siteDisplayType, 
       return `${symbol}${parseFloat(numericPrice.toFixed(2))} / 1${unitLabel} Tokens`;
     };
     
-    // 计算并显示输入价格（基于 model_ratio）
+    // 第一行：输入价格和输出价格
     if (channel.model_ratio !== undefined && channel.model_ratio !== null) {
-      items.push({ 
+      firstRow.push({ 
         label: t('输入价格'), 
         value: calculatePrice(channel.model_ratio)
       });
     }
     
-    // 计算并显示输出价格（基于 model_ratio * completion_ratio）
     if (channel.model_ratio !== undefined && channel.model_ratio !== null &&
         channel.completion_ratio !== undefined && channel.completion_ratio !== null) {
       const outputRatio = channel.model_ratio * channel.completion_ratio;
-      items.push({ 
+      firstRow.push({ 
         label: t('输出价格'), 
         value: calculatePrice(outputRatio)
       });
     }
     
-    return items;
+    // 第二行：缓存读取价格和缓存创建价格
+    if (channel.model_ratio !== undefined && channel.model_ratio !== null &&
+        channel.cache_ratio !== undefined && channel.cache_ratio !== null) {
+      const cacheRatio = channel.model_ratio * channel.cache_ratio;
+      secondRow.push({ 
+        label: t('缓存读取价格'), 
+        value: calculatePrice(cacheRatio)
+      });
+    }
+    
+    if (channel.model_ratio !== undefined && channel.model_ratio !== null &&
+        channel.create_cache_ratio !== undefined && channel.create_cache_ratio !== null) {
+      const createCacheRatio = channel.model_ratio * channel.create_cache_ratio;
+      secondRow.push({ 
+        label: t('缓存创建价格'), 
+        value: calculatePrice(createCacheRatio)
+      });
+    }
+    
+    return { firstRow, secondRow };
   };
 
   return (
@@ -110,10 +149,11 @@ const ModelChannelList = ({ modelData, displayPrice, currency, siteDisplayType, 
         </div>
       </div>
       
-      <Collapse accordion defaultActiveKey={groupedChannels.length > 0 ? `group-${groupedChannels[0].supplierId}` : undefined}>
+      <Collapse activeKey={activeKey} onChange={setActiveKey}>
         {groupedChannels.map((group) => (
           <Collapse.Panel
             key={`group-${group.supplierId}`}
+            itemKey={`group-${group.supplierId}`}
             header={
               <div className='flex items-center justify-between w-full pr-4'>
                 <span className='font-medium'>
@@ -130,6 +170,16 @@ const ModelChannelList = ({ modelData, displayPrice, currency, siteDisplayType, 
             <div className='space-y-3'>
               {group.channels.map((channel, idx) => {
                 const channelInfo = formatChannelInfo(channel);
+                const channelPath = `${channel.supplier_alias}/${modelData.model_name}/${channel.channel_no}`;
+                
+                const handleCopy = () => {
+                  navigator.clipboard.writeText(channelPath).then(() => {
+                    Toast.success({ content: t('已复制通道') });
+                  }).catch(() => {
+                    Toast.error({ content: t('复制失败') });
+                  });
+                };
+                
                 return (
                   <div key={`${channel.channel_id}-${idx}`} className='flex gap-3 items-start'>
                     <div className='flex items-center justify-center min-w-[24px] h-[24px] rounded-full bg-blue-100 text-blue-600 text-xs font-semibold mt-3'>
@@ -139,13 +189,38 @@ const ModelChannelList = ({ modelData, displayPrice, currency, siteDisplayType, 
                       className='!rounded-lg shadow-sm !mb-2 flex-1'
                       bodyStyle={{ padding: '12px' }}
                     >
-                      <div className='flex flex-wrap gap-4 text-sm'>
-                        {channelInfo.map((item) => (
-                          <div key={item.label} className='flex items-center gap-2 grow'>
-                            <span className='text-gray-600'>{item.label}:</span>
-                            <span className='font-medium text-gray-900'>{item.value}</span>
-                          </div>
-                        ))}
+                      <div className='flex items-center justify-between gap-4'>
+                        <div className='flex flex-col gap-2 text-sm flex-1'>
+                          {/* 第一行：输入和输出价格 */}
+                          {channelInfo.firstRow.length > 0 && (
+                            <div className='flex flex-wrap gap-4'>
+                              {channelInfo.firstRow.map((item) => (
+                                <div key={item.label} className='flex items-center gap-2 grow'>
+                                  <span className='text-gray-600'>{item.label}:</span>
+                                  <span className='font-medium text-gray-900'>{item.value}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {/* 第二行：缓存价格 */}
+                          {channelInfo.secondRow.length > 0 && (
+                            <div className='flex flex-wrap gap-4'>
+                              {channelInfo.secondRow.map((item) => (
+                                <div key={item.label} className='flex items-center gap-2 grow'>
+                                  <span className='text-gray-600'>{item.label}:</span>
+                                  <span className='font-medium text-gray-900'>{item.value}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <Button
+                          icon={<IconCopy />}
+                          size='small'
+                          type='tertiary'
+                          onClick={handleCopy}
+                          title={channelPath}
+                        />
                       </div>
                     </Card>
                   </div>

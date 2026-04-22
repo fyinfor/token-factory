@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -77,6 +78,7 @@ func RecordLog(userId int, logType int, content string) {
 		return
 	}
 	username, _ := GetUsernameById(userId, false)
+	content = prependUsernameBeforeRole(content, username)
 	log := &Log{
 		UserId:    userId,
 		Username:  username,
@@ -88,6 +90,24 @@ func RecordLog(userId int, logType int, content string) {
 	if err != nil {
 		common.SysLog("failed to record log: " + err.Error())
 	}
+}
+
+// prependUsernameBeforeRole 在日志详情以角色词开头时，自动在角色前补充用户名，便于审计操作者身份。
+func prependUsernameBeforeRole(content string, username string) string {
+	if content == "" || username == "" {
+		return content
+	}
+	rolePrefixes := []string{"管理员", "用户", "分销商", "供应商"}
+	for _, rolePrefix := range rolePrefixes {
+		withUsername := username + rolePrefix
+		if strings.HasPrefix(content, withUsername) {
+			return content
+		}
+		if strings.HasPrefix(content, rolePrefix) {
+			return username + content
+		}
+	}
+	return content
 }
 
 func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string, tokenName string, content string, tokenId int, useTimeSeconds int,

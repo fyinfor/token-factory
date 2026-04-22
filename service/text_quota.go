@@ -64,6 +64,20 @@ func cacheWriteTokensTotal(summary textQuotaSummary) int {
 	return summary.CacheCreationTokens
 }
 
+func resolveTextQuotaChannelDiscountPercent(relayInfo *relaycommon.RelayInfo) float64 {
+	if relayInfo == nil {
+		return 100
+	}
+	if relayInfo.PriceData.ChannelPriceDiscount != nil {
+		return *relayInfo.PriceData.ChannelPriceDiscount
+	}
+	chID := 0
+	if relayInfo.ChannelMeta != nil {
+		chID = relayInfo.ChannelId
+	}
+	return model.ResolveChannelPriceDiscountPercent(chID)
+}
+
 func isLegacyClaudeDerivedOpenAIUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) bool {
 	if relayInfo == nil || usage == nil {
 		return false
@@ -271,6 +285,8 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		}
 		summary.Quota = int(quotaCalculateDecimal.Round(0).IntPart())
 	}
+
+	summary.Quota = model.ApplyChannelPriceDiscountToQuota(summary.Quota, resolveTextQuotaChannelDiscountPercent(relayInfo))
 
 	if summary.TotalTokens == 0 {
 		summary.Quota = 0

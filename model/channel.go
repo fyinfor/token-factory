@@ -59,6 +59,9 @@ type Channel struct {
 	ChannelNo             string `json:"channel_no" gorm:"type:varchar(32);default:'';index;comment:供应商渠道编号 c1,c2 递增"`
 	SupplierName          string `json:"supplier_name,omitempty" gorm:"-"` // 供应商用户名（由控制器回填，不落库）
 
+	// 渠道计费折扣（百分数，100=原价无折扣，60=六折/按原价×0.6 计费）。nil=数据库默认/未设，按 100 处理。使用指针以便 GORM Updates 时可将 0% 写回。
+	PriceDiscountPercent *float64 `json:"price_discount_percent" gorm:"type:double precision;default:100"`
+
 	// cache info
 	Keys []string `json:"-" gorm:"-"`
 }
@@ -333,11 +336,12 @@ type ChannelSimplePricingItem struct {
 
 // ChannelPricingMeta 定价接口计算渠道维度价格所需的渠道行（含供应商别名）。
 type ChannelPricingMeta struct {
-	ChannelID             int     `gorm:"column:channel_id"`
-	SupplierApplicationID int     `gorm:"column:supplier_application_id"`
-	ChannelNo             string  `gorm:"column:channel_no"`
-	Models                string  `gorm:"column:models"`
-	SupplierAlias         *string `gorm:"column:supplier_alias"`
+	ChannelID              int      `gorm:"column:channel_id"`
+	SupplierApplicationID  int      `gorm:"column:supplier_application_id"`
+	ChannelNo              string   `gorm:"column:channel_no"`
+	Models                 string   `gorm:"column:models"`
+	SupplierAlias          *string  `gorm:"column:supplier_alias"`
+	PriceDiscountPercent   *float64 `gorm:"column:price_discount_percent"`
 }
 
 // ListChannelsForPricing 查询定价页使用的渠道列表。
@@ -357,7 +361,7 @@ func ListChannelsForPricing() ([]ChannelSimplePricingItem, error) {
 func ListChannelPricingMeta() ([]ChannelPricingMeta, error) {
 	items := make([]ChannelPricingMeta, 0)
 	err := DB.Model(&Channel{}).
-		Select("channels.id AS channel_id, channels.supplier_application_id, channels.channel_no, channels.models, supplier_applications.supplier_alias").
+		Select("channels.id AS channel_id, channels.supplier_application_id, channels.channel_no, channels.models, channels.price_discount_percent, supplier_applications.supplier_alias").
 		Joins("LEFT JOIN supplier_applications ON supplier_applications.id = channels.supplier_application_id").
 		Order("channels.id ASC").
 		Scan(&items).Error
@@ -521,6 +525,78 @@ func GetChannelById(id int, selectAll bool) (*Channel, error) {
 		return nil, err
 	}
 	return channel, nil
+}
+
+// ResolveSupplierApplicationIDByAlias 根据供应商别名返回 supplier_application_id。
+//
+//   - "P0"（不区分大小写）返回 0，代表未归属任何 supplier_applications 的渠道；
+//   - 其他别名到 supplier_applications.supplier_alias 精确匹配后返回其 id；
+//
+// 未找到别名时返回 (0, false, err)；找到 P0 或匹配记录时 found=true。
+func ResolveSupplierApplicationIDByAlias(alias string) (supplierApplicationID int, found bool, err error) {
+	aliasTrim := strings.TrimSpace(alias)
+	if aliasTrim == "" {
+		return 0, false, fmt.Errorf("alias 不能为空")
+	}
+	if strings.EqualFold(aliasTrim, "P0") {
+		return 0, true, nil
+	}
+	var app SupplierApplication
+	if err := DB.Select("id").Where("supplier_alias = ?", aliasTrim).First(&app).Error; err != nil {
+		return 0, false, fmt.Errorf("供应商别名未找到: %s", aliasTrim)
+	}
+	return app.ID, true, nil
+}
+
+// FindChannelIDBySupplierAliasAndNo 根据「供应商别名」+「渠道编号」定位具体渠道 ID。
+//
+// 支持两种别名形式：
+//  1. "P0"：特指未归属供应商申请（supplier_application_id = 0）的渠道；
+//  2. 其他：先到 supplier_applications.supplier_alias 精确匹配，取得 id 后再按
+//     (supplier_application_id, channel_no) 查找渠道。
+//
+// 该方法仅返回启用状态的渠道。未找到时返回 0 与具体错误信息。
+func FindChannelIDBySupplierAliasAndNo(alias string, channelNo string) (int, error) {
+	noTrim := strings.TrimSpace(channelNo)
+	if noTrim == "" {
+		return 0, fmt.Errorf("channel_no 不能为空")
+	}
+	supplierApplicationID, _, err := ResolveSupplierApplicationIDByAlias(alias)
+	if err != nil {
+		return 0, err
+	}
+
+	var channel Channel
+	if err := DB.Select("id, status").
+		Where("supplier_application_id = ? AND channel_no = ?", supplierApplicationID, noTrim).
+		First(&channel).Error; err != nil {
+		return 0, fmt.Errorf("未找到渠道: %s/%s", strings.TrimSpace(alias), noTrim)
+	}
+	if channel.Status != common.ChannelStatusEnabled {
+		return 0, fmt.Errorf("渠道已禁用: %s/%s", strings.TrimSpace(alias), noTrim)
+	}
+	return channel.Id, nil
+}
+
+// ValidateSupplierChannelNoUnique 校验同一 supplier_application_id 下 channel_no 不重复（空编号不校验）。
+// excludeChannelID 大于 0 时排除自身，用于更新；新建时传 0。
+func ValidateSupplierChannelNoUnique(excludeChannelID int, supplierApplicationID int, channelNo string) error {
+	no := strings.TrimSpace(channelNo)
+	if supplierApplicationID <= 0 || no == "" {
+		return nil
+	}
+	q := DB.Model(&Channel{}).Where("supplier_application_id = ? AND channel_no = ?", supplierApplicationID, no)
+	if excludeChannelID > 0 {
+		q = q.Where("id <> ?", excludeChannelID)
+	}
+	var cnt int64
+	if err := q.Count(&cnt).Error; err != nil {
+		return err
+	}
+	if cnt > 0 {
+		return fmt.Errorf("该供应商下已存在相同渠道编号")
+	}
+	return nil
 }
 
 func maxChannelNoNumericSuffixForSupplier(tx *gorm.DB, supplierApplicationID int) (int, error) {

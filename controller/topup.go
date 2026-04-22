@@ -739,7 +739,9 @@ func AdminCompleteTopUp(c *gin.Context) {
 	LockOrder(req.TradeNo)
 	defer UnlockOrder(req.TradeNo)
 
-	if err := model.ManualCompleteTopUp(req.TradeNo); err != nil {
+	// adminUsername 用于补单后写入使用日志详情，便于追溯具体操作者。
+	adminUsername := c.GetString("username")
+	if err := model.ManualCompleteTopUp(req.TradeNo, adminUsername); err != nil {
 		common.ApiError(c, err)
 		return
 	}

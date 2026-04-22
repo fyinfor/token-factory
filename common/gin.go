@@ -95,6 +95,34 @@ func GetBodyStorage(c *gin.Context) (BodyStorage, error) {
 	return bs, nil
 }
 
+// ReplaceRequestBody 使用新字节完全覆盖请求体缓存/存储。
+//
+// 适用场景：中间件在读取请求体后需要对其进行「就地改写」，例如路由命中特殊模型命名
+// 规则（如 {supplier_alias}/{model}/{channel_no}）后把 body 里的 model 字段替换为
+// 真实模型名。替换后后续 UnmarshalBodyReusable / GetBodyStorage 读到的都是新内容。
+func ReplaceRequestBody(c *gin.Context, newBody []byte) error {
+	if storage, exists := c.Get(KeyBodyStorage); exists && storage != nil {
+		if bs, ok := storage.(BodyStorage); ok {
+			bs.Close()
+		}
+		c.Set(KeyBodyStorage, nil)
+	}
+	c.Set(KeyRequestBody, nil)
+
+	newStorage, err := CreateBodyStorage(newBody)
+	if err != nil {
+		return err
+	}
+	c.Set(KeyBodyStorage, newStorage)
+	c.Set(KeyRequestBody, newBody)
+	if _, err := newStorage.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+	c.Request.Body = io.NopCloser(newStorage)
+	c.Request.ContentLength = int64(len(newBody))
+	return nil
+}
+
 // CleanupBodyStorage 清理请求体存储（应在请求结束时调用）
 func CleanupBodyStorage(c *gin.Context) {
 	if storage, exists := c.Get(KeyBodyStorage); exists && storage != nil {

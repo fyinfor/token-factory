@@ -171,6 +171,7 @@ const EditChannelModal = (props) => {
   };
   const originInputs = {
     name: '',
+    channel_no: '',
     type: 1,
     key: '',
     openai_organization: '',
@@ -186,6 +187,7 @@ const EditChannelModal = (props) => {
     groups: ['default'],
     priority: 0,
     weight: 0,
+    price_discount_percent: 100,
     tag: '',
     multi_key_mode: 'random',
     // 渠道额外设置的默认值
@@ -953,6 +955,9 @@ const EditChannelModal = (props) => {
       }
 
       initialBaseUrlRef.current = data.base_url || '';
+      if (data.price_discount_percent == null || data.price_discount_percent === undefined) {
+        data.price_discount_percent = 100;
+      }
       setInputs(data);
       if (formApiRef.current) {
         formApiRef.current.setValues(data);
@@ -1628,6 +1633,14 @@ const EditChannelModal = (props) => {
       delete localInputs.key;
     }
     delete localInputs.vertex_files;
+
+    if (isEdit && localInputs.channel_no !== undefined) {
+      localInputs.channel_no = String(localInputs.channel_no || '').trim();
+      if (localInputs.channel_no.length > 32) {
+        showInfo(t('渠道编号长度不能超过 32 个字符'));
+        return;
+      }
+    }
 
     if (!isEdit && (!localInputs.name || !localInputs.key)) {
       showInfo(t('请填写渠道名称和渠道密钥！'));
@@ -2461,6 +2474,22 @@ const EditChannelModal = (props) => {
                     </Col>
                   </Row>
 
+                  <Form.InputNumber
+                    field='price_discount_percent'
+                    label={t('价格折扣(%)')}
+                    placeholder={t('100 表示无折扣，60 表示按原价 60% 计费（六折）')}
+                    min={0}
+                    max={1000}
+                    precision={2}
+                    onNumberChange={(value) =>
+                      handleInputChange('price_discount_percent', value)
+                    }
+                    extraText={t(
+                      '本渠道上所有模型计费 = 系统原价算出的额度 × 该百分比 ÷ 100。0% 为全免。默认 100%。',
+                    )}
+                    style={{ width: '100%' }}
+                  />
+
                   {inputs.type === 1 && (
                     <>
                       <div className='mt-4 mb-2 text-sm font-medium text-gray-700'>
@@ -2640,6 +2669,20 @@ const EditChannelModal = (props) => {
                       onChange={(value) => handleInputChange('name', value)}
                       autoComplete='new-password'
                     />
+
+                    {isEdit && (
+                      <Form.Input
+                        field='channel_no'
+                        label={t('渠道编号')}
+                        placeholder={t('例如 c1、c2')}
+                        maxLength={32}
+                        showClear
+                        extraText={t('渠道编号编辑说明')}
+                        onChange={(value) =>
+                          handleInputChange('channel_no', value)
+                        }
+                      />
+                    )}
 
                     {inputs.type === 33 && (
                       <>

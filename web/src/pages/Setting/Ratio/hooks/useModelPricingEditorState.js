@@ -56,7 +56,16 @@ const formatNumber = (value) => {
   if (num === null) {
     return '';
   }
-  return parseFloat(num.toFixed(12)).toString();
+  const rounded = Number(num.toFixed(12));
+  if (Math.abs(rounded) < 1e-12) {
+    return '0';
+  }
+  const nearestInt = Math.round(rounded);
+  // Absorb floating-point epsilon like 33.000000000008 -> 33.
+  if (Math.abs(rounded - nearestInt) < 1e-9) {
+    return String(nearestInt);
+  }
+  return rounded.toString();
 };
 
 const toNormalizedNumber = (value) => {
@@ -249,22 +258,11 @@ export const buildSummaryText = (model, t) => {
   }
 
   if (hasValue(model.inputPrice)) {
-    const extraCount = [
-      model.completionPrice,
-      model.cachePrice,
-      model.createCachePrice,
-      model.imagePrice,
-      model.audioInputPrice,
-      model.audioOutputPrice,
-    ].filter(hasValue).length;
     const inputLabel = `$${model.inputPrice}`;
-    if (extraCount > 0) {
-      return t('价格摘要（含附加价）', {
-        input: inputLabel,
-        count: extraCount,
-      });
-    }
-    return t('价格摘要（仅输入价）', { input: inputLabel });
+    const outputLabel = hasValue(model.completionPrice)
+      ? `$${model.completionPrice}`
+      : '-';
+    return `${t('输入')}：${inputLabel}｜${t('输出')}：${outputLabel}`;
   }
 
   return t('未设置价格');

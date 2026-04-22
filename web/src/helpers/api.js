@@ -106,6 +106,28 @@ API.interceptors.response.use(
   },
 );
 
+/** 合并 React 18 Strict Mode 下 useEffect 双次执行导致的重复上报（开发环境）。 */
+const AFF_TRACK_DEDUP_MS = 5000;
+const affTrackLastSentAt = new Map();
+
+export function postAffiliateTrackDeduped(event, aff) {
+  const code = String(aff ?? '').trim();
+  if (!code) return;
+  const key = `${event}:${code}`;
+  const now = Date.now();
+  const prev = affTrackLastSentAt.get(key);
+  if (prev !== undefined && now - prev < AFF_TRACK_DEDUP_MS) return;
+  affTrackLastSentAt.set(key, now);
+  for (const [k, t] of affTrackLastSentAt) {
+    if (now - t > 60000) affTrackLastSentAt.delete(k);
+  }
+  API.post(
+    '/api/aff/track',
+    { event, aff: code },
+    { skipErrorHandler: true },
+  ).catch(() => {});
+}
+
 // playground
 
 // 构建API请求负载
