@@ -523,6 +523,27 @@ func GetChannelById(id int, selectAll bool) (*Channel, error) {
 	return channel, nil
 }
 
+// ValidateSupplierChannelNoUnique 校验同一 supplier_application_id 下 channel_no 不重复（空编号不校验）。
+// excludeChannelID 大于 0 时排除自身，用于更新；新建时传 0。
+func ValidateSupplierChannelNoUnique(excludeChannelID int, supplierApplicationID int, channelNo string) error {
+	no := strings.TrimSpace(channelNo)
+	if supplierApplicationID <= 0 || no == "" {
+		return nil
+	}
+	q := DB.Model(&Channel{}).Where("supplier_application_id = ? AND channel_no = ?", supplierApplicationID, no)
+	if excludeChannelID > 0 {
+		q = q.Where("id <> ?", excludeChannelID)
+	}
+	var cnt int64
+	if err := q.Count(&cnt).Error; err != nil {
+		return err
+	}
+	if cnt > 0 {
+		return fmt.Errorf("该供应商下已存在相同渠道编号")
+	}
+	return nil
+}
+
 func maxChannelNoNumericSuffixForSupplier(tx *gorm.DB, supplierApplicationID int) (int, error) {
 	var existing []string
 	if err := tx.Model(&Channel{}).Where("supplier_application_id = ?", supplierApplicationID).Pluck("channel_no", &existing).Error; err != nil {
