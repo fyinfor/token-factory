@@ -527,6 +527,57 @@ func GetChannelById(id int, selectAll bool) (*Channel, error) {
 	return channel, nil
 }
 
+// ResolveSupplierApplicationIDByAlias 根据供应商别名返回 supplier_application_id。
+//
+//   - "P0"（不区分大小写）返回 0，代表未归属任何 supplier_applications 的渠道；
+//   - 其他别名到 supplier_applications.supplier_alias 精确匹配后返回其 id；
+//
+// 未找到别名时返回 (0, false, err)；找到 P0 或匹配记录时 found=true。
+func ResolveSupplierApplicationIDByAlias(alias string) (supplierApplicationID int, found bool, err error) {
+	aliasTrim := strings.TrimSpace(alias)
+	if aliasTrim == "" {
+		return 0, false, fmt.Errorf("alias 不能为空")
+	}
+	if strings.EqualFold(aliasTrim, "P0") {
+		return 0, true, nil
+	}
+	var app SupplierApplication
+	if err := DB.Select("id").Where("supplier_alias = ?", aliasTrim).First(&app).Error; err != nil {
+		return 0, false, fmt.Errorf("供应商别名未找到: %s", aliasTrim)
+	}
+	return app.ID, true, nil
+}
+
+// FindChannelIDBySupplierAliasAndNo 根据「供应商别名」+「渠道编号」定位具体渠道 ID。
+//
+// 支持两种别名形式：
+//  1. "P0"：特指未归属供应商申请（supplier_application_id = 0）的渠道；
+//  2. 其他：先到 supplier_applications.supplier_alias 精确匹配，取得 id 后再按
+//     (supplier_application_id, channel_no) 查找渠道。
+//
+// 该方法仅返回启用状态的渠道。未找到时返回 0 与具体错误信息。
+func FindChannelIDBySupplierAliasAndNo(alias string, channelNo string) (int, error) {
+	noTrim := strings.TrimSpace(channelNo)
+	if noTrim == "" {
+		return 0, fmt.Errorf("channel_no 不能为空")
+	}
+	supplierApplicationID, _, err := ResolveSupplierApplicationIDByAlias(alias)
+	if err != nil {
+		return 0, err
+	}
+
+	var channel Channel
+	if err := DB.Select("id, status").
+		Where("supplier_application_id = ? AND channel_no = ?", supplierApplicationID, noTrim).
+		First(&channel).Error; err != nil {
+		return 0, fmt.Errorf("未找到渠道: %s/%s", strings.TrimSpace(alias), noTrim)
+	}
+	if channel.Status != common.ChannelStatusEnabled {
+		return 0, fmt.Errorf("渠道已禁用: %s/%s", strings.TrimSpace(alias), noTrim)
+	}
+	return channel.Id, nil
+}
+
 // ValidateSupplierChannelNoUnique 校验同一 supplier_application_id 下 channel_no 不重复（空编号不校验）。
 // excludeChannelID 大于 0 时排除自身，用于更新；新建时传 0。
 func ValidateSupplierChannelNoUnique(excludeChannelID int, supplierApplicationID int, channelNo string) error {

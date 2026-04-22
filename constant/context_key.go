@@ -49,6 +49,19 @@ const (
 	ContextKeySmartRouteChannelOrder ContextKey = "smart_route_channel_order"
 	ContextKeySmartRouteSelectGroup  ContextKey = "smart_route_select_group"
 
+	// ContextKeyForcedChannelID 当用户通过 {alias}/{model}/{channel_no} 形式指定具体渠道调用时，
+	// 由分发中间件解析后写入该上下文键；存在该键时跳过 SmartRouter 等自动路由逻辑。
+	ContextKeyForcedChannelID       ContextKey = "forced_channel_id"
+	ContextKeyForcedChannelModelKey ContextKey = "forced_channel_model_key"
+
+	// ContextKeyForcedSupplierApplicationID 当用户通过 {alias}/{model} 形式指定「某供应商下任意渠道」时，
+	// 由分发中间件解析后写入该上下文键（值为 supplier_applications.id，P0 时为 0），
+	// 用于将 SmartRouter / 随机回退的候选渠道限制在该供应商内。
+	ContextKeyForcedSupplierApplicationID ContextKey = "forced_supplier_application_id"
+	// ContextKeyForcedSupplierApplicationIDSet 标志上述键已被有效设置（包括 P0 / 0），
+	// 用于区分 "未设置" 与 "设置为 0" 两种语义。
+	ContextKeyForcedSupplierApplicationIDSet ContextKey = "forced_supplier_application_id_set"
+
 	/* user related keys */
 	ContextKeyUserId      ContextKey = "id"
 	ContextKeyUserSetting ContextKey = "user_setting"

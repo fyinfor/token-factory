@@ -331,6 +331,11 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 			}
 		}
 	}
+	// 命中「指定供应商 + 任意渠道」时，候选池已限定；order 列表耗尽意味着供应商内无更多可用渠道，
+	// 不应回落到全局的 CacheGetRandomSatisfiedChannel（那会跨供应商），直接结束重试。
+	if _, forced := service.ForcedSupplierFromContext(c); forced {
+		return nil, types.NewError(fmt.Errorf("分组 %s 下模型 %s 在指定供应商内已无可用渠道（retry）", retryParam.TokenGroup, info.OriginModelName), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
+	}
 	channel, selectGroup, err := service.CacheGetRandomSatisfiedChannel(retryParam)
 
 	info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
