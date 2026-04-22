@@ -187,6 +187,7 @@ const EditChannelModal = (props) => {
     groups: ['default'],
     priority: 0,
     weight: 0,
+    price_discount_percent: 100,
     tag: '',
     multi_key_mode: 'random',
     // 渠道额外设置的默认值
@@ -954,6 +955,9 @@ const EditChannelModal = (props) => {
       }
 
       initialBaseUrlRef.current = data.base_url || '';
+      if (data.price_discount_percent == null || data.price_discount_percent === undefined) {
+        data.price_discount_percent = 100;
+      }
       setInputs(data);
       if (formApiRef.current) {
         formApiRef.current.setValues(data);
@@ -2469,6 +2473,22 @@ const EditChannelModal = (props) => {
                       />
                     </Col>
                   </Row>
+
+                  <Form.InputNumber
+                    field='price_discount_percent'
+                    label={t('价格折扣(%)')}
+                    placeholder={t('100 表示无折扣，60 表示按原价 60% 计费（六折）')}
+                    min={0}
+                    max={1000}
+                    precision={2}
+                    onNumberChange={(value) =>
+                      handleInputChange('price_discount_percent', value)
+                    }
+                    extraText={t(
+                      '本渠道上所有模型计费 = 系统原价算出的额度 × 该百分比 ÷ 100。0% 为全免。默认 100%。',
+                    )}
+                    style={{ width: '100%' }}
+                  />
 
                   {inputs.type === 1 && (
                     <>

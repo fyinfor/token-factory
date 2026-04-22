@@ -182,6 +182,10 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		}
 	}
 
+	chDisc := model.ResolveChannelPriceDiscountPercent(channelID)
+	chDiscCopy := chDisc
+	preConsumedQuota = model.ApplyChannelPriceDiscountToQuota(preConsumedQuota, chDisc)
+
 	priceData := types.PriceData{
 		FreeModel:            freeModel,
 		ModelPrice:           modelPrice,
@@ -196,6 +200,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		CacheCreationRatio:   cacheCreationRatio,
 		CacheCreation5mRatio: cacheCreationRatio5m,
 		CacheCreation1hRatio: cacheCreationRatio1h,
+		ChannelPriceDiscount: &chDiscCopy,
 		QuotaToPreConsume:    preConsumedQuota,
 	}
 
@@ -263,12 +268,16 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 			freeModel = true
 		}
 	}
+	chDisc := model.ResolveChannelPriceDiscountPercent(channelID)
+	chDiscCopy := chDisc
+	quota = model.ApplyChannelPriceDiscountToQuota(quota, chDisc)
 
 	priceData := types.PriceData{
-		FreeModel:      freeModel,
-		ModelPrice:     modelPrice,
-		Quota:          quota,
-		GroupRatioInfo: groupRatioInfo,
+		FreeModel:            freeModel,
+		ModelPrice:           modelPrice,
+		Quota:                quota,
+		GroupRatioInfo:       groupRatioInfo,
+		ChannelPriceDiscount: &chDiscCopy,
 	}
 	return priceData, nil
 }
