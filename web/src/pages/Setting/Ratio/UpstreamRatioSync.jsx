@@ -150,6 +150,17 @@ function roundToPlaces(value, places) {
   return Math.round(n * factor) / factor;
 }
 
+function normalizeStoredNumber(value, places = RATIO_DECIMAL_PLACES) {
+  const rounded = roundToPlaces(value, places);
+  if (rounded === null) return null;
+  const nearestInt = Math.round(rounded);
+  // Absorb floating-point epsilon like 33.000000000008 -> 33.
+  if (Math.abs(rounded - nearestInt) < 1e-9) {
+    return nearestInt;
+  }
+  return rounded;
+}
+
 function ratioToDisplayPrice(ratio) {
   const n = toFiniteNumber(ratio);
   if (n === null) return null;
@@ -641,7 +652,8 @@ export default function UpstreamRatioSync(props) {
             Object.entries(normalizedRatios).forEach(([ratioType, value]) => {
               const ck = channelOptionKeyForRatioType(ratioType);
               if (!finalChannel[ck][idStr]) finalChannel[ck][idStr] = {};
-              finalChannel[ck][idStr][model] = parseFloat(value);
+              finalChannel[ck][idStr][model] =
+                normalizeStoredNumber(value) ?? value;
             });
           } else {
             if (hasPrice) {
@@ -655,7 +667,7 @@ export default function UpstreamRatioSync(props) {
 
             Object.entries(normalizedRatios).forEach(([ratioType, value]) => {
               const gk = ratioTypeToPascal(ratioType);
-              finalRatios[gk][model] = parseFloat(value);
+              finalRatios[gk][model] = normalizeStoredNumber(value) ?? value;
             });
           }
         });
@@ -720,7 +732,9 @@ export default function UpstreamRatioSync(props) {
                 if (!srcName) return;
 
                 const num = parseFloat(value);
-                const synced = Number.isNaN(num) ? value : num;
+                const synced = Number.isNaN(num)
+                  ? value
+                  : normalizeStoredNumber(num) ?? num;
                 if (!diff.upstream_old) diff.upstream_old = {};
                 diff.upstream_old[srcName] = synced;
                 diff.upstreams[srcName] = synced;

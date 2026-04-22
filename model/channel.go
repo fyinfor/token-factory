@@ -60,7 +60,7 @@ type Channel struct {
 	SupplierName          string `json:"supplier_name,omitempty" gorm:"-"` // 供应商用户名（由控制器回填，不落库）
 
 	// 渠道计费折扣（百分数，100=原价无折扣，60=六折/按原价×0.6 计费）。nil=数据库默认/未设，按 100 处理。使用指针以便 GORM Updates 时可将 0% 写回。
-	PriceDiscountPercent *float64 `json:"price_discount_percent" gorm:"type:double;default:100"`
+	PriceDiscountPercent *float64 `json:"price_discount_percent" gorm:"type:double precision;default:100"`
 
 	// cache info
 	Keys []string `json:"-" gorm:"-"`

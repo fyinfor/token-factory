@@ -56,7 +56,16 @@ const formatNumber = (value) => {
   if (num === null) {
     return '';
   }
-  return parseFloat(num.toFixed(12)).toString();
+  const rounded = Number(num.toFixed(12));
+  if (Math.abs(rounded) < 1e-12) {
+    return '0';
+  }
+  const nearestInt = Math.round(rounded);
+  // Absorb floating-point epsilon like 33.000000000008 -> 33.
+  if (Math.abs(rounded - nearestInt) < 1e-9) {
+    return String(nearestInt);
+  }
+  return rounded.toString();
 };
 
 const toNormalizedNumber = (value) => {
