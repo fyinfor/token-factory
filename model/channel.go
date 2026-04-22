@@ -59,6 +59,9 @@ type Channel struct {
 	ChannelNo             string `json:"channel_no" gorm:"type:varchar(32);default:'';index;comment:供应商渠道编号 c1,c2 递增"`
 	SupplierName          string `json:"supplier_name,omitempty" gorm:"-"` // 供应商用户名（由控制器回填，不落库）
 
+	// 渠道计费折扣（百分数，100=原价无折扣，60=六折/按原价×0.6 计费）。nil=数据库默认/未设，按 100 处理。使用指针以便 GORM Updates 时可将 0% 写回。
+	PriceDiscountPercent *float64 `json:"price_discount_percent" gorm:"type:double;default:100"`
+
 	// cache info
 	Keys []string `json:"-" gorm:"-"`
 }
@@ -333,11 +336,12 @@ type ChannelSimplePricingItem struct {
 
 // ChannelPricingMeta 定价接口计算渠道维度价格所需的渠道行（含供应商别名）。
 type ChannelPricingMeta struct {
-	ChannelID             int     `gorm:"column:channel_id"`
-	SupplierApplicationID int     `gorm:"column:supplier_application_id"`
-	ChannelNo             string  `gorm:"column:channel_no"`
-	Models                string  `gorm:"column:models"`
-	SupplierAlias         *string `gorm:"column:supplier_alias"`
+	ChannelID              int      `gorm:"column:channel_id"`
+	SupplierApplicationID  int      `gorm:"column:supplier_application_id"`
+	ChannelNo              string   `gorm:"column:channel_no"`
+	Models                 string   `gorm:"column:models"`
+	SupplierAlias          *string  `gorm:"column:supplier_alias"`
+	PriceDiscountPercent   *float64 `gorm:"column:price_discount_percent"`
 }
 
 // ListChannelsForPricing 查询定价页使用的渠道列表。
@@ -357,7 +361,7 @@ func ListChannelsForPricing() ([]ChannelSimplePricingItem, error) {
 func ListChannelPricingMeta() ([]ChannelPricingMeta, error) {
 	items := make([]ChannelPricingMeta, 0)
 	err := DB.Model(&Channel{}).
-		Select("channels.id AS channel_id, channels.supplier_application_id, channels.channel_no, channels.models, supplier_applications.supplier_alias").
+		Select("channels.id AS channel_id, channels.supplier_application_id, channels.channel_no, channels.models, channels.price_discount_percent, supplier_applications.supplier_alias").
 		Joins("LEFT JOIN supplier_applications ON supplier_applications.id = channels.supplier_application_id").
 		Order("channels.id ASC").
 		Scan(&items).Error

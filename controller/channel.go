@@ -683,6 +683,13 @@ func validateChannel(channel *model.Channel, isAdd bool) error {
 		return fmt.Errorf("渠道编号长度不能超过 32 个字符")
 	}
 
+	if channel != nil && channel.PriceDiscountPercent != nil {
+		v := *channel.PriceDiscountPercent
+		if v < 0 || v > 1000 {
+			return fmt.Errorf("价格折扣（百分比）须介于 0 与 1000 之间，100 表示无折扣，60 表示按原价 60%% 计费")
+		}
+	}
+
 	return nil
 }
 
@@ -797,6 +804,10 @@ func AddChannel(c *gin.Context) {
 			"message": err.Error(),
 		})
 		return
+	}
+	if addChannelRequest.Channel != nil && addChannelRequest.Channel.PriceDiscountPercent == nil {
+		v := 100.0
+		addChannelRequest.Channel.PriceDiscountPercent = &v
 	}
 	if err := applySupplierChannelOwnershipForCreate(c, addChannelRequest.Channel); err != nil {
 		c.JSON(http.StatusForbidden, gin.H{

@@ -694,6 +694,26 @@ export const getChannelsColumns = ({
       },
     },
     {
+      key: COLUMN_KEYS.PRICE_DISCOUNT,
+      title: t('价格折扣'),
+      dataIndex: 'price_discount_percent',
+      render: (text, record) => {
+        if (record.children !== undefined) {
+          return '-';
+        }
+        const raw = text;
+        if (raw === null || raw === undefined || raw === '') {
+          return '100%';
+        }
+        const n = Number(raw);
+        if (Number.isNaN(n)) {
+          return '-';
+        }
+        const s = n % 1 === 0 ? String(Math.trunc(n)) : n.toFixed(2);
+        return `${s}%`;
+      },
+    },
+    {
       key: COLUMN_KEYS.SUPPLIER,
       title: t('供应商'),
       dataIndex: 'supplier_name',
