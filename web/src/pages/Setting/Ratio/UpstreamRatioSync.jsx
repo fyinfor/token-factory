@@ -848,7 +848,7 @@ export default function UpstreamRatioSync(props) {
         const inputPrice = ratioToDisplayPrice(record.current);
         return inputPrice === null
           ? t('未设置')
-          : `${formatPriceNumber(inputPrice)} $/1M Tokens`;
+          : `$${formatPriceNumber(inputPrice)}`;
       }
 
       if (record.ratioType === 'completion_ratio') {
@@ -858,7 +858,7 @@ export default function UpstreamRatioSync(props) {
         const outputPrice = ratioToDisplayPrice(inputRatio * completionRatio);
         return outputPrice === null
           ? t('未设置')
-          : `${formatPriceNumber(outputPrice)} $/1M Tokens`;
+          : `$${formatPriceNumber(outputPrice)}`;
       }
 
       return String(record.current);
