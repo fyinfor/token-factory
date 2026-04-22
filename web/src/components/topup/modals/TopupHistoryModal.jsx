@@ -169,6 +169,13 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
         key: 'trade_no',
         render: (text) => <Text copyable>{text}</Text>,
       },
+      // 管理员与普通用户均展示用户名列；普通用户仅能看到自己的订单，接口仍返回 username 便于统一展示
+      {
+        title: t('用户名'),
+        dataIndex: 'username',
+        key: 'username',
+        render: (name) => <Text>{name || '-'}</Text>,
+      },
       {
         title: t('支付方式'),
         dataIndex: 'payment_method',

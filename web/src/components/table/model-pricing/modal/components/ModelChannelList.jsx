@@ -17,9 +17,9 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useMemo } from 'react';
-import { Card, Avatar, Typography, Collapse, Tag } from '@douyinfe/semi-ui';
-import { IconListView } from '@douyinfe/semi-icons';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { Card, Avatar, Typography, Collapse, Tag, Button, Toast } from '@douyinfe/semi-ui';
+import { IconListView, IconCopy } from '@douyinfe/semi-icons';
 
 const { Text } = Typography;
 
@@ -44,6 +44,26 @@ const ModelChannelList = ({ modelData, displayPrice, currency, siteDisplayType, 
     });
     return Object.values(groups);
   }, [modelData.channel_list, t]);
+
+  // 生成所有面板的 keys，默认全部展开
+  const allKeys = useMemo(() =>
+    groupedChannels.map(group => `group-${group.supplierId}`)
+  , [groupedChannels]);
+
+  // 使用字符串形式来稳定比较
+  const allKeysStr = allKeys.join(',');
+  const prevKeysStr = useRef('');
+
+  // 管理展开状态
+  const [activeKey, setActiveKey] = useState(allKeys);
+
+  // 当 allKeys 实际变化时（基于字符串比较），更新 activeKey
+  useEffect(() => {
+    if (allKeysStr !== prevKeysStr.current) {
+      setActiveKey(allKeys);
+      prevKeysStr.current = allKeysStr;
+    }
+  }, [allKeysStr, allKeys]);
 
   // 格式化通道信息
   const formatChannelInfo = (channel) => {
@@ -110,10 +130,11 @@ const ModelChannelList = ({ modelData, displayPrice, currency, siteDisplayType, 
         </div>
       </div>
       
-      <Collapse accordion defaultActiveKey={groupedChannels.length > 0 ? `group-${groupedChannels[0].supplierId}` : undefined}>
+      <Collapse activeKey={activeKey} onChange={setActiveKey}>
         {groupedChannels.map((group) => (
           <Collapse.Panel
             key={`group-${group.supplierId}`}
+            itemKey={`group-${group.supplierId}`}
             header={
               <div className='flex items-center justify-between w-full pr-4'>
                 <span className='font-medium'>
@@ -130,6 +151,16 @@ const ModelChannelList = ({ modelData, displayPrice, currency, siteDisplayType, 
             <div className='space-y-3'>
               {group.channels.map((channel, idx) => {
                 const channelInfo = formatChannelInfo(channel);
+                const channelPath = `${channel.supplier_alias}/${modelData.model_name}/${channel.channel_no}`;
+                
+                const handleCopy = () => {
+                  navigator.clipboard.writeText(channelPath).then(() => {
+                    Toast.success({ content: t('已复制通道') });
+                  }).catch(() => {
+                    Toast.error({ content: t('复制失败') });
+                  });
+                };
+                
                 return (
                   <div key={`${channel.channel_id}-${idx}`} className='flex gap-3 items-start'>
                     <div className='flex items-center justify-center min-w-[24px] h-[24px] rounded-full bg-blue-100 text-blue-600 text-xs font-semibold mt-3'>
@@ -139,13 +170,22 @@ const ModelChannelList = ({ modelData, displayPrice, currency, siteDisplayType, 
                       className='!rounded-lg shadow-sm !mb-2 flex-1'
                       bodyStyle={{ padding: '12px' }}
                     >
-                      <div className='flex flex-wrap gap-4 text-sm'>
-                        {channelInfo.map((item) => (
-                          <div key={item.label} className='flex items-center gap-2 grow'>
-                            <span className='text-gray-600'>{item.label}:</span>
-                            <span className='font-medium text-gray-900'>{item.value}</span>
-                          </div>
-                        ))}
+                      <div className='flex items-center justify-between gap-4'>
+                        <div className='flex flex-wrap gap-4 text-sm flex-1'>
+                          {channelInfo.map((item) => (
+                            <div key={item.label} className='flex items-center gap-2 grow'>
+                              <span className='text-gray-600'>{item.label}:</span>
+                              <span className='font-medium text-gray-900'>{item.value}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <Button
+                          icon={<IconCopy />}
+                          size='small'
+                          type='tertiary'
+                          onClick={handleCopy}
+                          title={channelPath}
+                        />
                       </div>
                     </Card>
                   </div>
