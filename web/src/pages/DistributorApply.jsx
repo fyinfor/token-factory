@@ -23,12 +23,18 @@ import {
   Card,
   Form,
   Typography,
-  Banner,
   Spin,
   Upload,
   Modal,
+  Popover,
 } from '@douyinfe/semi-ui';
-import { IconFile, IconUserGroup } from '@douyinfe/semi-icons';
+import {
+  IconFile,
+  IconUserGroup,
+  IconAlertTriangle,
+  IconInfoCircle,
+  IconTick,
+} from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
 import { API, showError, showSuccess, userIsDistributorUser } from '../helpers';
 import { StatusContext } from '../context/Status';
@@ -37,12 +43,98 @@ import DOMPurify from 'dompurify';
 
 const { Text } = Typography;
 
-const statusText = (s) => {
-  if (s === 1) return '审核中';
-  if (s === 2) return '已通过';
-  if (s === 3) return '已驳回';
-  return '—';
-};
+/** 分销商申请：必填项标题（红 * + 加粗），与资格证书区块一致 */
+function ApplyRequiredLabel({ children, className = '' }) {
+  return (
+    <Text
+      strong
+      className={`text-[var(--semi-color-text-0)] ${className}`.trim()}
+    >
+      <span
+        className='text-[var(--semi-color-danger)] mr-1 font-normal'
+        aria-hidden
+      >
+        *
+      </span>
+      {children}
+    </Text>
+  );
+}
+
+const applyTrimmedRequiredRule = (t) => ({
+  validator: (rule, value) => {
+    const v = value == null ? '' : String(value).trim();
+    if (!v) return Promise.reject(t('必填'));
+    return Promise.resolve();
+  },
+});
+
+const iconLg = 22;
+
+/**
+ * 自研圆角提示条（与主卡片 `rounded-2xl` 一致，替代 Semi Banner 直角/风格差异问题）
+ * @param {'danger' | 'info' | 'success'} variant
+ */
+function ApplyStatusNotice({ variant = 'info', title, className = '', children }) {
+  const tone =
+    variant === 'danger'
+      ? {
+          frame:
+            'border-[var(--semi-color-danger-light-hover)] bg-[var(--semi-color-danger-light-default)]',
+          icon: (
+            <IconAlertTriangle
+              size={iconLg}
+              style={{ color: 'var(--semi-color-danger)' }}
+            />
+          ),
+        }
+      : variant === 'success'
+        ? {
+            frame:
+              'border-[var(--semi-color-success-light-hover)] bg-[var(--semi-color-success-light-default)]',
+            icon: (
+              <IconTick
+                size={iconLg}
+                style={{ color: 'var(--semi-color-success)' }}
+              />
+            ),
+          }
+        : {
+            frame:
+              'border-[var(--semi-color-info-light-hover)] bg-[var(--semi-color-info-light-default)]',
+            icon: (
+              <IconInfoCircle
+                size={iconLg}
+                style={{ color: 'var(--semi-color-primary)' }}
+              />
+            ),
+          };
+
+  return (
+    <div
+      role={variant === 'danger' ? 'alert' : 'status'}
+      className={[
+        'distributor-apply-notice flex gap-3 rounded-2xl border border-solid p-3.5 shadow-sm md:p-4',
+        tone.frame,
+        className,
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      <span className='shrink-0 pt-0.5' aria-hidden>
+        {tone.icon}
+      </span>
+      <div className='min-w-0 flex-1 text-[15px] leading-relaxed [overflow-wrap:anywhere] text-[var(--semi-color-text-0)]'>
+        {title ? (
+          <div className='mb-1.5 font-semibold text-[var(--semi-color-text-0)]'>
+            {title}
+          </div>
+        ) : null}
+        {children}
+      </div>
+    </div>
+  );
+}
 
 export default function DistributorApply() {
   const { t } = useTranslation();
@@ -108,8 +200,11 @@ export default function DistributorApply() {
   /** 记录曾为已通过，但账号已非分销商（如被降级）：应允许重新提交 */
   const showReapplyAfterRevoked = app?.status === 2 && !isDist;
 
+  const shouldPrefillFormFromApp =
+    showReapplyAfterRevoked || app?.status === 3;
+
   useEffect(() => {
-    if (!showReapplyAfterRevoked || !app || loading) return;
+    if (!shouldPrefillFormFromApp || !app || loading) return;
     const tid = window.setTimeout(() => {
       try {
         formApi.current?.setValues({
@@ -127,7 +222,7 @@ export default function DistributorApply() {
       }
     }, 0);
     return () => window.clearTimeout(tid);
-  }, [showReapplyAfterRevoked, app, loading]);
+  }, [shouldPrefillFormFromApp, app, loading]);
 
   const onSubmit = async () => {
     const api = formApi.current;
@@ -166,270 +261,291 @@ export default function DistributorApply() {
 
   if (isDist) {
     return (
-      <div className='mt-16 px-4 max-w-3xl mx-auto'>
-        <Banner
-          type='success'
-          description={t('您已是分销商，无需再次申请')}
-        />
+      <div className='distributor-apply-page-root'>
+        <div className='w-full max-w-3xl px-1'>
+          <ApplyStatusNotice variant='success' className='w-full'>
+            {t('您已是分销商，无需再次申请')}
+          </ApplyStatusNotice>
+        </div>
       </div>
     );
   }
 
-  return (
-    <div className='mt-14 px-4 pb-16'>
-      <div
-        className={`mx-auto flex flex-col gap-8 ${showCsColumn ? 'max-w-5xl lg:flex-row' : 'max-w-3xl'}`}
+  const csPopoverContent = showCsColumn ? (
+    <div className='distributor-apply-cs-popover w-[min(100vw-3rem,260px)] max-w-[260px] p-1'>
+      <button
+        type='button'
+        className='w-full cursor-zoom-in rounded-lg border-0 bg-transparent p-0'
+        onClick={() => setPreviewUrl(csImage)}
       >
-        <Card className='flex-1 !rounded-2xl min-w-0 !overflow-hidden'>
-          <header className='distributor-apply-hero relative mb-6 rounded-xl p-[12px]'>
-            <span
-              className='distributor-apply-hero-orb distributor-apply-hero-orb--a'
-              aria-hidden
-            />
-            <span
-              className='distributor-apply-hero-orb distributor-apply-hero-orb--b'
-              aria-hidden
-            />
-            <div className='relative z-[1] flex flex-col gap-4'>
-              <div
-                className='distributor-apply-hero-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[var(--semi-color-border)] bg-[var(--semi-color-bg-0)] text-[var(--semi-color-primary)] shadow-sm'
-                aria-hidden
-              >
-                <IconUserGroup size={28} />
+        <img
+          src={csImage}
+          alt=''
+          className='h-auto w-full max-w-full rounded-md object-contain'
+        />
+      </button>
+    </div>
+  ) : null;
+
+  const rightBody =
+    app?.status === 1 ? (
+      <div className='flex min-h-0 flex-1 flex-col items-center justify-center py-8 text-center'>
+        <Text className='!text-lg md:!text-xl !leading-relaxed !font-medium text-[var(--semi-color-text-0)]'>
+          {t('您的申请正在审核中，请耐心等待。')}
+        </Text>
+      </div>
+    ) : showApprovedForActiveDistributor ? (
+      <div className='flex min-h-0 flex-1 flex-col items-center justify-center py-8 text-center'>
+        <Text className='!text-lg md:!text-xl !leading-relaxed !font-medium text-[var(--semi-color-text-0)]'>
+          {t('申请已通过，请从侧栏进入「分销中心」。')}
+        </Text>
+      </div>
+    ) : (
+      <Spin spinning={loading} className='w-full min-w-0'>
+        {app?.status === 3 ? (
+          <ApplyStatusNotice
+            variant='danger'
+            className='mb-4 shrink-0'
+            title={t('申请已被驳回')}
+          >
+            {app?.reject_reason ? (
+              <div className='whitespace-pre-wrap font-normal' style={{ lineHeight: 1.6 }}>
+                {app.reject_reason}
               </div>
-              <div className='min-w-0 flex-1 space-y-2'>
-                <Typography.Title
-                  heading={3}
-                  className='distributor-apply-hero-title !mb-0 !mt-0 !font-semibold !tracking-tight'
-                >
-                  {t('分销伙伴招募')}
-                </Typography.Title>
+            ) : (
+              <div className='font-normal'>
+                {t('请根据管理员说明修改资料后重新提交。')}
+              </div>
+            )}
+          </ApplyStatusNotice>
+        ) : null}
+        {showReapplyAfterRevoked ? (
+          <ApplyStatusNotice variant='info' className='mb-4 shrink-0'>
+            {t(
+              '您的分销商资格已失效（例如已被管理员调整），可修改资料后重新提交审核。',
+            )}
+          </ApplyStatusNotice>
+        ) : null}
+        <Form getFormApi={(f) => (formApi.current = f)} layout='vertical'>
+          <Form.Input
+            field='real_name'
+            label={<ApplyRequiredLabel>{t('姓名')}</ApplyRequiredLabel>}
+            rules={[applyTrimmedRequiredRule(t)]}
+          />
+          <Form.Input
+            field='id_card_no'
+            label={<ApplyRequiredLabel>{t('身份证')}</ApplyRequiredLabel>}
+            rules={[applyTrimmedRequiredRule(t)]}
+          />
+          <Form.Input
+            field='contact'
+            label={<ApplyRequiredLabel>{t('联系方式')}</ApplyRequiredLabel>}
+            rules={[applyTrimmedRequiredRule(t)]}
+          />
+          <div className='mb-4'>
+            <ApplyRequiredLabel className='block mb-2'>
+              {t('资格证书')}
+            </ApplyRequiredLabel>
+            <Upload
+              action=''
+              accept='image/*,.pdf'
+              showUploadList={false}
+              customRequest={async ({ file, onSuccess, onError }) => {
+                const fd = new FormData();
+                const inst = file.fileInstance || file;
+                fd.append('file', inst);
+                try {
+                  const res = await API.post('/api/oss/upload', fd, {
+                    skipErrorHandler: true,
+                  });
+                  const { success, message, data } = res.data || {};
+                  if (!success || !data?.url) {
+                    onError(new Error(message || 'upload'));
+                    showError(message || t('上传失败'));
+                    return;
+                  }
+                  setUrls((prev) =>
+                    prev.length >= 5 ? prev : [...prev, data.url],
+                  );
+                  onSuccess(data);
+                  showSuccess(t('已上传'));
+                } catch (e) {
+                  onError(e);
+                  showError(e?.response?.data?.message || t('上传失败'));
+                }
+              }}
+              limit={5}
+              multiple
+              disabled={urls.length >= 5}
+            >
+              <Button disabled={urls.length >= 5}>
+                {t('上传文件')}
+              </Button>
+            </Upload>
+            <Text type='tertiary' size='small' className='block mt-1'>
+              {t('支持图片或 PDF，最多 5 个；点击图片可大图预览')}
+            </Text>
+            {urls.length > 0 && (
+              <div className='mt-3 flex flex-wrap gap-3'>
+                {urls.map((u, idx) =>
+                  isPdfUrl(u) ? (
+                    <div
+                      key={`${u}-${idx}`}
+                      className='relative flex h-24 w-24 flex-col items-center justify-center rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)]'
+                    >
+                      <IconFile size='large' />
+                      <span className='mt-1 text-xs text-[var(--semi-color-text-2)]'>
+                        PDF
+                      </span>
+                      <button
+                        type='button'
+                        className='absolute inset-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary'
+                        title={t('在新窗口打开')}
+                        onClick={() =>
+                          window.open(u, '_blank', 'noopener,noreferrer')
+                        }
+                      />
+                      <Button
+                        size='small'
+                        type='danger'
+                        theme='borderless'
+                        className='!absolute -right-1 -top-1 !min-w-0 z-10'
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setUrls((prev) =>
+                            prev.filter((_, i) => i !== idx),
+                          );
+                        }}
+                      >
+                        ×
+                      </Button>
+                    </div>
+                  ) : (
+                    <div
+                      key={`${u}-${idx}`}
+                      className='relative h-24 w-24 overflow-hidden rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)]'
+                    >
+                      <button
+                        type='button'
+                        className='block h-full w-full cursor-zoom-in p-0 border-0 bg-transparent'
+                        onClick={() => setPreviewUrl(u)}
+                      >
+                        <img
+                          src={u}
+                          alt=''
+                          className='h-full w-full object-cover'
+                        />
+                      </button>
+                      <Button
+                        size='small'
+                        type='danger'
+                        theme='borderless'
+                        className='!absolute -right-1 -top-1 !min-w-0'
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setUrls((prev) =>
+                            prev.filter((_, i) => i !== idx),
+                          );
+                        }}
+                      >
+                        ×
+                      </Button>
+                    </div>
+                  ),
+                )}
+              </div>
+            )}
+          </div>
+          <div className='flex justify-center pt-1'>
+            <Button
+              theme='solid'
+              type='primary'
+              loading={submitting}
+              onClick={onSubmit}
+            >
+              {showReapplyAfterRevoked
+                ? t('重新提交审核')
+                : t('提交申请')}
+            </Button>
+          </div>
+        </Form>
+      </Spin>
+    );
+
+  return (
+    <div className='distributor-apply-page-root'>
+      <div className='mx-auto flex h-full min-h-0 w-full min-w-0 max-w-6xl flex-1 flex-col'>
+        <Card className='distributor-apply-main-card !rounded-2xl flex h-full min-h-0 w-full min-w-0 flex-1 flex-col !overflow-hidden !shadow-none'>
+          <div className='distributor-apply-card-stacked-scroll flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden overscroll-y-contain lg:flex-row lg:overflow-hidden'>
+            <section className='distributor-apply-panels-divider flex min-w-0 max-lg:shrink-0 flex-col border-b border-solid lg:min-h-0 lg:min-w-0 lg:flex-[3] lg:border-b-0 lg:border-r'>
+              <div className='shrink-0 p-4 pb-2 md:px-5 md:pt-5'>
+                <header className='distributor-apply-hero relative rounded-xl p-[12px]'>
+                  <span
+                    className='distributor-apply-hero-orb distributor-apply-hero-orb--a'
+                    aria-hidden
+                  />
+                  <span
+                    className='distributor-apply-hero-orb distributor-apply-hero-orb--b'
+                    aria-hidden
+                  />
+                  <div className='relative z-[1] min-w-0'>
+                    <div className='flex min-w-0 items-start justify-between gap-2 sm:gap-3'>
+                      <div className='flex min-w-0 flex-1 items-start gap-3'>
+                        <div
+                          className='distributor-apply-hero-icon flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-solid bg-[var(--semi-color-bg-0)] text-[var(--semi-color-primary)] shadow-sm'
+                          aria-hidden
+                        >
+                          <IconUserGroup size={28} />
+                        </div>
+                        <Typography.Title
+                          heading={3}
+                          className='distributor-apply-hero-title !mb-0 !mt-0 min-w-0 !font-semibold !tracking-tight !leading-snug sm:!leading-tight'
+                        >
+                          {t('分销伙伴招募')}
+                        </Typography.Title>
+                      </div>
+                      {showCsColumn ? (
+                        <Popover
+                          content={csPopoverContent}
+                          trigger='click'
+                          position='leftTop'
+                          showArrow
+                        >
+                          <Button
+                            theme='outline'
+                            type='primary'
+                            size='small'
+                            className='shrink-0 !font-medium'
+                          >
+                            {t('联系客服')}
+                          </Button>
+                        </Popover>
+                      ) : null}
+                    </div>
+                  </div>
+                </header>
+              </div>
+              <div className='distributor-apply-intro-scroll min-w-0 px-4 pb-4 pt-0 md:px-5 md:pb-5 max-lg:overflow-visible lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:overflow-x-hidden lg:overscroll-y-contain'>
                 {applyIntroHtml ? (
                   <div
-                    className='distributor-apply-intro-html max-w-none text-[15px] leading-relaxed text-[var(--semi-color-text-0)] [&_p]:mb-2 [&_p]:last:mb-0 [&_img]:max-w-full [&_img]:h-auto [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:text-[var(--semi-color-primary)] [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--semi-color-border)] [&_blockquote]:pl-3'
+                    className='distributor-apply-intro-html max-w-full break-words text-[15px] leading-relaxed text-[var(--semi-color-text-0)] [overflow-wrap:anywhere] [&_p]:mb-2 [&_p]:last:mb-0 [&_img]:!max-w-full [&_img]:h-auto [&_pre]:max-w-full [&_pre]:overflow-x-auto [&_table]:!max-w-full [&_table]:table-fixed [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-5 [&_a]:break-all [&_a]:text-[var(--semi-color-primary)] [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--semi-color-border)] [&_blockquote]:pl-3'
                     dangerouslySetInnerHTML={{ __html: applyIntroHtml }}
                   />
                 ) : null}
                 <Text
                   type='tertiary'
-                  className='distributor-apply-hero-desc !block !text-[15px] !leading-relaxed'
+                  className='distributor-apply-hero-desc mt-2 !block !text-[15px] !leading-relaxed [overflow-wrap:anywhere]'
                 >
                   {t('请如实填写以下信息，审核通过后即可获得分销商资格与邀请分成。')}
                 </Text>
               </div>
-            </div>
-          </header>
+            </section>
 
-          {/* {app && (
-            <Banner
-              className='mb-4'
-              type={
-                app.status === 3 ? 'danger' : app.status === 2 ? 'success' : 'info'
-              }
-              description={
-                <span>
-                  {t('当前状态')}：{statusText(app.status)}
-                  {app.status === 3 && app.reject_reason ? (
-                    <span className='block mt-1'>
-                      {t('驳回原因')}：{app.reject_reason}
-                    </span>
-                  ) : null}
-                </span>
-              }
-            />
-          )} */}
-
-          {app?.status === 1 ? (
-            <div className='py-10 px-4 text-center'>
-              <Text className='!text-lg md:!text-xl !leading-relaxed !font-medium text-[var(--semi-color-text-0)]'>
-                {t('您的申请正在审核中，请耐心等待。')}
-              </Text>
-            </div>
-          ) : showApprovedForActiveDistributor ? (
-            <div className='py-10 px-4 text-center'>
-              <Text className='!text-lg md:!text-xl !leading-relaxed !font-medium text-[var(--semi-color-text-0)]'>
-                {t('申请已通过，请从侧栏进入「分销中心」。')}
-              </Text>
-            </div>
-          ) : (
-            <Spin spinning={loading}>
-              {showReapplyAfterRevoked ? (
-                <Banner
-                  type='info'
-                  className='mb-4'
-                  description={t(
-                    '您的分销商资格已失效（例如已被管理员调整），可修改资料后重新提交审核。',
-                  )}
-                />
-              ) : null}
-              <Form
-                getFormApi={(f) => (formApi.current = f)}
-                layout='vertical'
-              >
-                <Form.Input
-                  field='real_name'
-                  label={t('姓名')}
-                  rules={[{ required: true, message: t('必填') }]}
-                />
-                <Form.Input
-                  field='id_card_no'
-                  label={t('身份证')}
-                  rules={[{ required: true, message: t('必填') }]}
-                />
-                <Form.Input
-                  field='contact'
-                  label={t('联系方式')}
-                  rules={[{ required: true, message: t('必填') }]}
-                />
-                <div className='mb-4'>
-                  <Text strong className='block mb-2'>
-                    {t('资格证书')}
-                  </Text>
-                  <Upload
-                    action=''
-                    accept='image/*,.pdf'
-                    showUploadList={false}
-                    customRequest={async ({ file, onSuccess, onError }) => {
-                      const fd = new FormData();
-                      const inst = file.fileInstance || file;
-                      fd.append('file', inst);
-                      try {
-                        const res = await API.post('/api/oss/upload', fd, {
-                          skipErrorHandler: true,
-                        });
-                        const { success, message, data } = res.data || {};
-                        if (!success || !data?.url) {
-                          onError(new Error(message || 'upload'));
-                          showError(message || t('上传失败'));
-                          return;
-                        }
-                        setUrls((prev) =>
-                          prev.length >= 5 ? prev : [...prev, data.url],
-                        );
-                        onSuccess(data);
-                        showSuccess(t('已上传'));
-                      } catch (e) {
-                        onError(e);
-                        showError(
-                          e?.response?.data?.message || t('上传失败'),
-                        );
-                      }
-                    }}
-                    limit={5}
-                    multiple
-                    disabled={urls.length >= 5}
-                  >
-                    <Button disabled={urls.length >= 5}>
-                      {t('上传文件')}
-                    </Button>
-                  </Upload>
-                  <Text type='tertiary' size='small' className='block mt-1'>
-                    {t('支持图片或 PDF，最多 5 个；点击图片可大图预览')}
-                  </Text>
-                  {urls.length > 0 && (
-                    <div className='mt-3 flex flex-wrap gap-3'>
-                      {urls.map((u, idx) =>
-                        isPdfUrl(u) ? (
-                          <div
-                            key={`${u}-${idx}`}
-                            className='relative flex h-24 w-24 flex-col items-center justify-center rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)]'
-                          >
-                            <IconFile size='large' />
-                            <span className='mt-1 text-xs text-[var(--semi-color-text-2)]'>
-                              PDF
-                            </span>
-                            <button
-                              type='button'
-                              className='absolute inset-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary'
-                              title={t('在新窗口打开')}
-                              onClick={() =>
-                                window.open(u, '_blank', 'noopener,noreferrer')
-                              }
-                            />
-                            <Button
-                              size='small'
-                              type='danger'
-                              theme='borderless'
-                              className='!absolute -right-1 -top-1 !min-w-0 z-10'
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setUrls((prev) =>
-                                  prev.filter((_, i) => i !== idx),
-                                );
-                              }}
-                            >
-                              ×
-                            </Button>
-                          </div>
-                        ) : (
-                          <div
-                            key={`${u}-${idx}`}
-                            className='relative h-24 w-24 overflow-hidden rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)]'
-                          >
-                            <button
-                              type='button'
-                              className='block h-full w-full cursor-zoom-in p-0 border-0 bg-transparent'
-                              onClick={() => setPreviewUrl(u)}
-                            >
-                              <img
-                                src={u}
-                                alt=''
-                                className='h-full w-full object-cover'
-                              />
-                            </button>
-                            <Button
-                              size='small'
-                              type='danger'
-                              theme='borderless'
-                              className='!absolute -right-1 -top-1 !min-w-0'
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setUrls((prev) =>
-                                  prev.filter((_, i) => i !== idx),
-                                );
-                              }}
-                            >
-                              ×
-                            </Button>
-                          </div>
-                        ),
-                      )}
-                    </div>
-                  )}
-                </div>
-                <Button
-                  theme='solid'
-                  type='primary'
-                  loading={submitting}
-                  onClick={onSubmit}
-                >
-                  {showReapplyAfterRevoked
-                    ? t('重新提交审核')
-                    : t('提交申请')}
-                </Button>
-              </Form>
-            </Spin>
-          )}
-        </Card>
-
-        {showCsColumn ? (
-          <div className='w-full lg:w-80 flex-shrink-0'>
-            <Text strong className='block mb-2 text-center'>
-              {t('联系客服')}
-            </Text>
-            <button
-              type='button'
-              className='w-full cursor-zoom-in rounded-xl border border-[var(--semi-color-border)] bg-transparent p-0'
-              onClick={() => setPreviewUrl(csImage)}
-            >
-              <img
-                src={csImage}
-                alt=''
-                className='w-full rounded-xl object-contain'
-              />
-            </button>
+            <section className='flex min-w-0 max-lg:shrink-0 flex-col p-4 md:p-5 max-lg:overflow-visible lg:min-h-0 lg:min-w-0 lg:flex-[2] lg:overflow-y-auto lg:overscroll-y-contain [scrollbar-gutter:stable]'>
+              {rightBody}
+            </section>
           </div>
-        ) : null}
+        </Card>
       </div>
 
       <Modal

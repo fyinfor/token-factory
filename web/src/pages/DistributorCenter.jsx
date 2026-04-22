@@ -72,6 +72,20 @@ function isPdfUrl(u) {
   return /\.pdf(\?|$)/i.test(u || '');
 }
 
+/** 提现表单：标题与输入区分行；必填项前置红色 * */
+function WithdrawFieldLabel({ required, children }) {
+  return (
+    <Text size='small' className='block mb-1.5 text-[var(--semi-color-text-0)]'>
+      {required ? (
+        <span className='text-[var(--semi-color-danger)] mr-1' aria-hidden>
+          *
+        </span>
+      ) : null}
+      {children}
+    </Text>
+  );
+}
+
 const { Text, Title } = Typography;
 
 export default function DistributorCenter() {
@@ -86,7 +100,6 @@ export default function DistributorCenter() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
-  const [withdrawNoticeOpen, setWithdrawNoticeOpen] = useState(false);
   const [withdrawNoticeLoading, setWithdrawNoticeLoading] = useState(false);
   const [withdrawNoticeContent, setWithdrawNoticeContent] = useState('');
   const [withdrawLogOpen, setWithdrawLogOpen] = useState(false);
@@ -162,25 +175,31 @@ export default function DistributorCenter() {
     return false;
   }, [userState?.user]);
 
-  const openWithdrawNoticeModal = useCallback(async () => {
-    setWithdrawNoticeOpen(true);
-    setWithdrawNoticeLoading(true);
-    setWithdrawNoticeContent('');
-    try {
-      const res = await API.get('/api/status');
-      const { success, data, message } = res.data || {};
-      if (!success) {
-        showError(message || t('加载失败'));
-        return;
+  useEffect(() => {
+    if (!withdrawOpen) return;
+    let cancelled = false;
+    (async () => {
+      setWithdrawNoticeLoading(true);
+      setWithdrawNoticeContent('');
+      try {
+        const res = await API.get('/api/status');
+        const { success, data, message } = res.data || {};
+        if (!success) {
+          if (!cancelled) showError(message || t('加载失败'));
+          return;
+        }
+        const txt = String(data?.distributor_withdraw_notice ?? '').trim();
+        if (!cancelled) setWithdrawNoticeContent(txt);
+      } catch {
+        if (!cancelled) showError(t('加载失败'));
+      } finally {
+        if (!cancelled) setWithdrawNoticeLoading(false);
       }
-      const txt = String(data?.distributor_withdraw_notice ?? '').trim();
-      setWithdrawNoticeContent(txt);
-    } catch {
-      showError(t('加载失败'));
-    } finally {
-      setWithdrawNoticeLoading(false);
-    }
-  }, [t]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [withdrawOpen, t]);
 
   const loadCenter = async () => {
     const res = await API.get('/api/distributor/center');
@@ -862,43 +881,49 @@ export default function DistributorCenter() {
           typeof window !== 'undefined' ? window.innerWidth - 48 : 960,
         )}
       >
-        <div className='mb-4 flex flex-wrap items-start justify-between gap-2'>
-          <Text type='tertiary' size='small' className='flex-1 min-w-0'>
+        <div className='mb-4'>
+          <Text type='tertiary' size='small' className='block'>
             {t(
               '提交后将暂扣对应待使用收益，审核通过即完成提现；驳回或取消将退回额度。',
             )}
           </Text>
-          <Button
-            type='tertiary'
-            theme='borderless'
-            size='small'
-            className='flex-shrink-0'
-            onClick={openWithdrawNoticeModal}
-          >
-            {t('提现说明')}
-          </Button>
         </div>
         <div className='flex flex-col lg:flex-row gap-6 items-start'>
-          <div className='flex-1 min-w-0 w-full space-y-3'>
-            <Input
-              value={wdRealName}
-              onChange={(v) => setWdRealName(String(v ?? ''))}
-              placeholder={t('真实姓名（必填）')}
-            />
-            <Input
-              value={wdBankName}
-              onChange={(v) => setWdBankName(String(v ?? ''))}
-              placeholder={t('开户行（必填）')}
-            />
-            <Input
-              value={wdBankAccount}
-              onChange={(v) => setWdBankAccount(String(v ?? ''))}
-              placeholder={t('银行卡号（必填）')}
-            />
-            <div>
-              <Text size='small' className='block mb-1'>
-                {t('提现余额（必填）')}
-              </Text>
+          <div className='flex-1 min-w-0 w-full space-y-5'>
+            <div className='space-y-0'>
+              <WithdrawFieldLabel required>
+                {t('真实姓名')}
+              </WithdrawFieldLabel>
+              <Input
+                value={wdRealName}
+                onChange={(v) => setWdRealName(String(v ?? ''))}
+                placeholder={t('真实姓名（必填）')}
+              />
+            </div>
+            <div className='space-y-0'>
+              <WithdrawFieldLabel required>
+                {t('开户行')}
+              </WithdrawFieldLabel>
+              <Input
+                value={wdBankName}
+                onChange={(v) => setWdBankName(String(v ?? ''))}
+                placeholder={t('开户行（必填）')}
+              />
+            </div>
+            <div className='space-y-0'>
+              <WithdrawFieldLabel required>
+                {t('银行卡号')}
+              </WithdrawFieldLabel>
+              <Input
+                value={wdBankAccount}
+                onChange={(v) => setWdBankAccount(String(v ?? ''))}
+                placeholder={t('银行卡号（必填）')}
+              />
+            </div>
+            <div className='space-y-0'>
+              <WithdrawFieldLabel required>
+                {t('提现余额')}
+              </WithdrawFieldLabel>
               {isQuotaTokensMode ? (
                 <>
                   <Text type='tertiary' size='small' className='block mb-2'>
@@ -915,21 +940,16 @@ export default function DistributorCenter() {
                   />
                 </>
               ) : (
-                <>
-                  <Text type='tertiary' size='small' className='block mb-2'>
-        
-                  </Text>
-                  <InputNumber
-                    style={{ width: '100%' }}
-                    value={wdFiatAmount}
-                    onChange={(v) => setWdFiatAmount(v)}
-                    min={wdFiatMin}
-                    max={wdFiatMax}
-                    precision={2}
-                    step={0.01}
-                    placeholder={t('填写收益金额')}
-                  />
-                </>
+                <InputNumber
+                  style={{ width: '100%' }}
+                  value={wdFiatAmount}
+                  onChange={(v) => setWdFiatAmount(v)}
+                  min={wdFiatMin}
+                  max={wdFiatMax}
+                  precision={2}
+                  step={0.01}
+                  placeholder={t('填写收益金额')}
+                />
               )}
               <Text type='tertiary' size='small' className='block mt-1'>
                 {affQuotaFloor >= minQInternal ? (
@@ -953,91 +973,115 @@ export default function DistributorCenter() {
                 )}
               </Text>
             </div>
-            <div>
-              <Text size='small' className='block mb-1'>
+            <div className='space-y-0'>
+              <WithdrawFieldLabel required>
                 {t('票据')}
-              </Text>
-              <Upload
-                accept='image/*,.pdf'
-                multiple
-                showUploadList={false}
-                customRequest={handleWdVoucherUpload}
-              >
-                <Button loading={wdUploading}>{t('上传票据')}</Button>
-              </Upload>
-              <Text type='tertiary' size='small' className='block mt-1'>
-                {t('支持图片或 PDF；点击图片可大图预览')}
-              </Text>
-              {wdVoucherUrls.length > 0 ? (
-                <div className='mt-3 flex flex-wrap gap-3'>
-                  {wdVoucherUrls.map((u, idx) =>
-                    isPdfUrl(u) ? (
-                      <div
-                        key={`wd-v-${u}-${idx}`}
-                        className='relative flex h-24 w-24 flex-col items-center justify-center rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)]'
-                      >
-                        <IconFile size='large' />
-                        <span className='mt-1 text-xs text-[var(--semi-color-text-2)]'>
-                          PDF
-                        </span>
-                        <button
-                          type='button'
-                          className='absolute inset-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary'
-                          title={t('在新窗口打开')}
-                          onClick={() =>
-                            window.open(u, '_blank', 'noopener,noreferrer')
-                          }
-                        />
-                        <Button
-                          size='small'
-                          type='danger'
-                          theme='borderless'
-                          className='!absolute -right-1 -top-1 !min-w-0 z-10'
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setWdVoucherUrls((prev) =>
-                              prev.filter((_, i) => i !== idx),
-                            );
-                          }}
+              </WithdrawFieldLabel>
+              <div>
+                <Upload
+                  accept='image/*,.pdf'
+                  multiple
+                  showUploadList={false}
+                  customRequest={handleWdVoucherUpload}
+                >
+                  <Button loading={wdUploading}>{t('上传票据')}</Button>
+                </Upload>
+                <Text type='tertiary' size='small' className='block mt-1'>
+                  {t('支持图片或 PDF；点击图片可大图预览')}
+                </Text>
+                {wdVoucherUrls.length > 0 ? (
+                  <div className='mt-3 flex flex-wrap gap-3'>
+                    {wdVoucherUrls.map((u, idx) =>
+                      isPdfUrl(u) ? (
+                        <div
+                          key={`wd-v-${u}-${idx}`}
+                          className='relative flex h-24 w-24 flex-col items-center justify-center rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)]'
                         >
-                          ×
-                        </Button>
-                      </div>
-                    ) : (
-                      <div
-                        key={`wd-v-${u}-${idx}`}
-                        className='relative h-24 w-24 overflow-hidden rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)]'
-                      >
-                        <button
-                          type='button'
-                          className='block h-full w-full cursor-zoom-in border-0 bg-transparent p-0'
-                          onClick={() => setWdVoucherPreview(u)}
-                        >
-                          <img
-                            src={u}
-                            alt=''
-                            className='h-full w-full object-cover'
+                          <IconFile size='large' />
+                          <span className='mt-1 text-xs text-[var(--semi-color-text-2)]'>
+                            PDF
+                          </span>
+                          <button
+                            type='button'
+                            className='absolute inset-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary'
+                            title={t('在新窗口打开')}
+                            onClick={() =>
+                              window.open(u, '_blank', 'noopener,noreferrer')
+                            }
                           />
-                        </button>
-                        <Button
-                          size='small'
-                          type='danger'
-                          theme='borderless'
-                          className='!absolute -right-1 -top-1 !min-w-0 z-10'
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setWdVoucherUrls((prev) =>
-                              prev.filter((_, i) => i !== idx),
-                            );
-                          }}
+                          <Button
+                            size='small'
+                            type='danger'
+                            theme='borderless'
+                            className='!absolute -right-1 -top-1 !min-w-0 z-10'
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setWdVoucherUrls((prev) =>
+                                prev.filter((_, i) => i !== idx),
+                              );
+                            }}
+                          >
+                            ×
+                          </Button>
+                        </div>
+                      ) : (
+                        <div
+                          key={`wd-v-${u}-${idx}`}
+                          className='relative h-24 w-24 overflow-hidden rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)]'
                         >
-                          ×
-                        </Button>
-                      </div>
-                    ),
-                  )}
-                </div>
-              ) : null}
+                          <button
+                            type='button'
+                            className='block h-full w-full cursor-zoom-in border-0 bg-transparent p-0'
+                            onClick={() => setWdVoucherPreview(u)}
+                          >
+                            <img
+                              src={u}
+                              alt=''
+                              className='h-full w-full object-cover'
+                            />
+                          </button>
+                          <Button
+                            size='small'
+                            type='danger'
+                            theme='borderless'
+                            className='!absolute -right-1 -top-1 !min-w-0 z-10'
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setWdVoucherUrls((prev) =>
+                                prev.filter((_, i) => i !== idx),
+                              );
+                            }}
+                          >
+                            ×
+                          </Button>
+                        </div>
+                      ),
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+            <div className='mt-4'>
+              <Text size='small' strong className='block mb-2'>
+                {t('提现说明')}
+              </Text>
+              <Spin spinning={withdrawNoticeLoading}>
+                {withdrawNoticeContent ? (
+                  <Text
+                    type='secondary'
+                    size='small'
+                    className='block whitespace-pre-wrap break-words'
+                  >
+                    {withdrawNoticeContent}
+                  </Text>
+                ) : (
+                  !withdrawNoticeLoading && (
+                    <Text type='tertiary' size='small'>
+                      {t('管理员未配置提现说明')}
+                    </Text>
+                  )
+                )}
+              </Spin>
             </div>
           </div>
           <div className='w-full lg:w-[280px] flex-shrink-0'>
@@ -1059,39 +1103,6 @@ export default function DistributorCenter() {
             )}
           </div>
         </div>
-      </Modal>
-
-      <Modal
-        title={t('提现说明')}
-        visible={withdrawNoticeOpen}
-        onCancel={() => setWithdrawNoticeOpen(false)}
-        footer={
-          <Button onClick={() => setWithdrawNoticeOpen(false)}>
-            {t('关闭')}
-          </Button>
-        }
-        width={Math.min(
-          560,
-          typeof window !== 'undefined' ? window.innerWidth - 48 : 560,
-        )}
-      >
-        <Spin spinning={withdrawNoticeLoading}>
-          {withdrawNoticeContent ? (
-            <Text
-              type='secondary'
-              size='small'
-              className='block whitespace-pre-wrap break-words'
-            >
-              {withdrawNoticeContent}
-            </Text>
-          ) : (
-            !withdrawNoticeLoading && (
-              <Text type='tertiary' size='small'>
-                {t('管理员未配置提现说明')}
-              </Text>
-            )
-          )}
-        </Spin>
       </Modal>
 
       <Modal

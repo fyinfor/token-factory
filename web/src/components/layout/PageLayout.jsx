@@ -60,6 +60,7 @@ const PageLayout = () => {
     '/console/task',
     '/console/models',
     '/console/supplier/apply',
+    '/console/distributor/apply',
     '/console/supplier/channel',
     '/console/supplier/models',
     '/console/supplier-application',
