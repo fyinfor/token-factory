@@ -15,6 +15,8 @@ import (
 type TopUp struct {
 	Id               int     `json:"id"`
 	UserId           int     `json:"user_id" gorm:"index"`
+	// Username 列表接口填充，关联 users.username，仅 JSON 输出，不参与持久化（不使用 omitempty，便于前端始终拿到字段）
+	Username         string  `json:"username" gorm:"-"`
 	Amount           int64   `json:"amount"`
 	Money            float64 `json:"money"`
 	TradeNo          string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
@@ -34,6 +36,47 @@ func (topUp *TopUp) Update() error {
 	var err error
 	err = DB.Save(topUp).Error
 	return err
+}
+
+// fillTopUpUsernamesWithDB 为充值记录批量填充关联用户名（管理员全平台列表与当前用户本人充值列表均使用）。
+// 使用独立 Session 避免与同一事务上先查 top_ups 再查 users 时 GORM 语句状态串扰；Unscoped 以包含已软删除用户，保证历史订单仍能显示用户名。
+func fillTopUpUsernamesWithDB(db *gorm.DB, topups []*TopUp) error {
+	if len(topups) == 0 {
+		return nil
+	}
+	idSet := make(map[int]struct{})
+	for _, t := range topups {
+		if t != nil && t.UserId > 0 {
+			idSet[t.UserId] = struct{}{}
+		}
+	}
+	if len(idSet) == 0 {
+		return nil
+	}
+	ids := make([]int, 0, len(idSet))
+	for id := range idSet {
+		ids = append(ids, id)
+	}
+	type idName struct {
+		Id       int    `gorm:"column:id"`
+		Username string `gorm:"column:username"`
+	}
+	var rows []idName
+	// NewDB: 与 TopUp 查询复用同一 *gorm.DB 时，避免 Statement 残留导致用户表查询异常
+	q := db.Session(&gorm.Session{NewDB: true}).Unscoped().Model(&User{}).Select("id", "username").Where("id IN ?", ids)
+	if err := q.Scan(&rows).Error; err != nil {
+		return err
+	}
+	nameByID := make(map[int]string, len(rows))
+	for i := range rows {
+		nameByID[rows[i].Id] = rows[i].Username
+	}
+	for _, t := range topups {
+		if t != nil {
+			t.Username = nameByID[t.UserId]
+		}
+	}
+	return nil
 }
 
 func GetTopUpById(id int) *TopUp {
@@ -198,6 +241,10 @@ func GetUserTopUps(userId int, pageInfo *common.PageInfo) (topups []*TopUp, tota
 		tx.Rollback()
 		return nil, 0, err
 	}
+	if err = fillTopUpUsernamesWithDB(tx, topups); err != nil {
+		tx.Rollback()
+		return nil, 0, err
+	}
 
 	// Commit transaction
 	if err = tx.Commit().Error; err != nil {
@@ -225,6 +272,10 @@ func GetAllTopUps(pageInfo *common.PageInfo) (topups []*TopUp, total int64, err 
 	}
 
 	if err = tx.Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&topups).Error; err != nil {
+		tx.Rollback()
+		return nil, 0, err
+	}
+	if err = fillTopUpUsernamesWithDB(tx, topups); err != nil {
 		tx.Rollback()
 		return nil, 0, err
 	}
@@ -263,6 +314,10 @@ func SearchUserTopUps(userId int, keyword string, pageInfo *common.PageInfo) (to
 		tx.Rollback()
 		return nil, 0, err
 	}
+	if err = fillTopUpUsernamesWithDB(tx, topups); err != nil {
+		tx.Rollback()
+		return nil, 0, err
+	}
 
 	if err = tx.Commit().Error; err != nil {
 		return nil, 0, err
@@ -297,6 +352,10 @@ func SearchAllTopUps(keyword string, pageInfo *common.PageInfo) (topups []*TopUp
 		tx.Rollback()
 		return nil, 0, err
 	}
+	if err = fillTopUpUsernamesWithDB(tx, topups); err != nil {
+		tx.Rollback()
+		return nil, 0, err
+	}
 
 	if err = tx.Commit().Error; err != nil {
 		return nil, 0, err
@@ -304,8 +363,9 @@ func SearchAllTopUps(keyword string, pageInfo *common.PageInfo) (topups []*TopUp
 	return topups, total, nil
 }
 
-// ManualCompleteTopUp 管理员手动完成订单并给用户充值
-func ManualCompleteTopUp(tradeNo string) error {
+// ManualCompleteTopUp 管理员手动完成订单并给用户充值。
+// adminUsername 会写入使用日志详情，便于审计是谁执行了补单。
+func ManualCompleteTopUp(tradeNo string, adminUsername string) error {
 	if tradeNo == "" {
 		return errors.New("未提供订单号")
 	}
@@ -373,7 +433,11 @@ func ManualCompleteTopUp(tradeNo string) error {
 
 	// 事务外记录日志，避免阻塞
 	if userId > 0 && quotaToAdd > 0 {
-		RecordLog(userId, LogTypeTopup, fmt.Sprintf("管理员补单成功，充值金额: %v，支付金额：%f", logger.FormatQuota(quotaToAdd), payMoney))
+		operatorPrefix := "管理员"
+		if adminUsername != "" {
+			operatorPrefix = adminUsername
+		}
+		RecordLog(userId, LogTypeTopup, fmt.Sprintf("%s管理员补单成功，充值金额: %v，支付金额：%f", operatorPrefix, logger.FormatQuota(quotaToAdd), payMoney))
 		ApplyAffiliateTopupReward(userId, quotaToAdd)
 	}
 	return nil

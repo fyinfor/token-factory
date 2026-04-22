@@ -52,6 +52,38 @@ func collectSupplierOwnedModelNames(userID int) (map[string]struct{}, error) {
 	return ownedModels, nil
 }
 
+// collectAllSupplierOwnedModelNames 收集全部供应商名下的模型名集合（管理员统计用）。
+func collectAllSupplierOwnedModelNames() (map[string]struct{}, error) {
+	ownedModels := make(map[string]struct{})
+
+	channels, _, err := model.SearchSupplierChannels(nil, 0, 100000, model.SupplierChannelSearchFilter{})
+	if err != nil {
+		return nil, err
+	}
+	for _, channel := range channels {
+		for _, modelName := range channel.GetModels() {
+			modelName = strings.TrimSpace(modelName)
+			if modelName == "" {
+				continue
+			}
+			ownedModels[modelName] = struct{}{}
+		}
+	}
+
+	models, _, err := model.SearchSupplierModels(nil, "", "", 0, 100000)
+	if err != nil {
+		return nil, err
+	}
+	for _, item := range models {
+		modelName := strings.TrimSpace(item.ModelName)
+		if modelName == "" {
+			continue
+		}
+		ownedModels[modelName] = struct{}{}
+	}
+	return ownedModels, nil
+}
+
 // filterModelJSONByOwnedModels 仅保留属于供应商自有模型的 JSON 键值。
 func filterModelJSONByOwnedModels(raw string, ownedModels map[string]struct{}) (string, error) {
 	raw = strings.TrimSpace(raw)

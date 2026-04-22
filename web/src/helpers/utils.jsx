@@ -972,16 +972,6 @@ export const getModelPriceItems = (
   t,
   quotaDisplayType = 'USD',
 ) => {
-  const getSourceText = () => {
-    if (priceData?.modelPriceSource === 'group') {
-      return t('分组模型价格配置');
-    }
-    if (priceData?.modelRatioSource === 'group') {
-      return t('分组模型倍率配置');
-    }
-    return t('全局模型配置');
-  };
-
   if (priceData.isPerToken) {
     if (quotaDisplayType === 'TOKENS' || priceData.isTokensDisplay) {
       return [
@@ -1026,12 +1016,6 @@ export const getModelPriceItems = (
           label: t('音频输出倍率'),
           value: priceData.audioOutputRatio,
           suffix: 'x',
-        },
-        {
-          key: 'price-source',
-          label: t('价格来源'),
-          value: getSourceText(),
-          suffix: '',
         },
       ].filter(
         (item) =>
@@ -1092,12 +1076,6 @@ export const getModelPriceItems = (
         value: priceData.audioOutputPrice,
         suffix: unitSuffix,
       },
-      {
-        key: 'price-source',
-        label: t('价格来源'),
-        value: getSourceText(),
-        suffix: '',
-      },
     ].filter((item) => item.value !== null && item.value !== undefined && item.value !== '');
   }
 
@@ -1107,12 +1085,6 @@ export const getModelPriceItems = (
       label: t('模型价格'),
       value: priceData.price,
       suffix: ` / ${t('次')}`,
-    },
-    {
-      key: 'price-source',
-      label: t('价格来源'),
-      value: getSourceText(),
-      suffix: '',
     },
   ].filter((item) => item.value !== null && item.value !== undefined && item.value !== '');
 };

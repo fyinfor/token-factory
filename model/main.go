@@ -83,6 +83,7 @@ func createRootAccountIfNeed() error {
 			DisplayName: "Root User",
 			AccessToken: nil,
 			Quota:       100000000,
+			CreatedBy:   common.UserCreatedByBootstrap,
 		}
 		DB.Create(&rootUser)
 	}
@@ -320,6 +321,12 @@ func migrateDB() error {
 	if err := migrateLegacyDistributorRole(); err != nil {
 		return err
 	}
+	if err := BackfillSupplierApplicationAlias(); err != nil {
+		return fmt.Errorf("backfill supplier_alias: %w", err)
+	}
+	if err := BackfillSupplierChannelNo(); err != nil {
+		return fmt.Errorf("backfill channel_no: %w", err)
+	}
 	if err := BackfillAffInviteRelationsIfNeeded(); err != nil {
 		common.SysError("aff_invite_relations backfill: " + err.Error())
 	}
@@ -409,6 +416,12 @@ func migrateDBFast() error {
 		if err := DB.AutoMigrate(&SubscriptionPlan{}); err != nil {
 			return err
 		}
+	}
+	if err := BackfillSupplierApplicationAlias(); err != nil {
+		return fmt.Errorf("backfill supplier_alias: %w", err)
+	}
+	if err := BackfillSupplierChannelNo(); err != nil {
+		return fmt.Errorf("backfill channel_no: %w", err)
 	}
 	if err := BackfillAffInviteRelationsIfNeeded(); err != nil {
 		common.SysError("aff_invite_relations backfill: " + err.Error())

@@ -335,6 +335,17 @@ export const getChannelsColumns = ({
       dataIndex: 'id',
     },
     {
+      key: COLUMN_KEYS.CHANNEL_NO,
+      title: t('渠道编号'),
+      dataIndex: 'channel_no',
+      render: (text, record) => {
+        if (record.children !== undefined) {
+          return '-';
+        }
+        return text && String(text).trim() !== '' ? text : '-';
+      },
+    },
+    {
       key: COLUMN_KEYS.NAME,
       title: t('名称'),
       dataIndex: 'name',
@@ -680,6 +691,26 @@ export const getChannelsColumns = ({
             />
           );
         }
+      },
+    },
+    {
+      key: COLUMN_KEYS.PRICE_DISCOUNT,
+      title: t('价格折扣'),
+      dataIndex: 'price_discount_percent',
+      render: (text, record) => {
+        if (record.children !== undefined) {
+          return '-';
+        }
+        const raw = text;
+        if (raw === null || raw === undefined || raw === '') {
+          return '100%';
+        }
+        const n = Number(raw);
+        if (Number.isNaN(n)) {
+          return '-';
+        }
+        const s = n % 1 === 0 ? String(Math.trunc(n)) : n.toFixed(2);
+        return `${s}%`;
       },
     },
     {

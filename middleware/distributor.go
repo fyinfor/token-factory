@@ -36,6 +36,41 @@ func Distribute() func(c *gin.Context) {
 			abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
 			return
 		}
+
+		// 解析特殊模型名形式，按优先级识别：
+		//   1) {supplier_alias}/{model}/{channel_no} —— 指定渠道直连；
+		//   2) {supplier_alias}/{model}             —— 指定供应商下任意渠道。
+		// 命中后把真实模型名回写到 modelRequest.Model 与请求体，后续路由/日志使用真实模型名。
+		if shouldSelectChannel && modelRequest != nil && strings.Contains(modelRequest.Model, "/") {
+			route, matched, routeErr := service.ParseForcedChannelModelName(modelRequest.Model)
+			if matched && routeErr != nil {
+				abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": routeErr.Error()}))
+				return
+			}
+			if route != nil {
+				originalModelKey := modelRequest.Model
+				if err := service.ApplyForcedChannelOnRequestBody(c, route, originalModelKey); err != nil {
+					abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
+					return
+				}
+				modelRequest.Model = route.ModelName
+			} else {
+				// 未命中三段形式时再尝试两段形式（{alias}/{model}）。
+				supplierRoute, supplierMatched, supplierErr := service.ParseForcedSupplierModelName(modelRequest.Model)
+				if supplierMatched && supplierErr != nil {
+					abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": supplierErr.Error()}))
+					return
+				}
+				if supplierRoute != nil {
+					originalModelKey := modelRequest.Model
+					if err := service.ApplyForcedSupplierOnRequestBody(c, supplierRoute, originalModelKey); err != nil {
+						abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
+						return
+					}
+					modelRequest.Model = supplierRoute.ModelName
+				}
+			}
+		}
 		if ok {
 			id, err := strconv.Atoi(channelId.(string))
 			if err != nil {
@@ -79,6 +114,32 @@ func Distribute() func(c *gin.Context) {
 					abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorModelNameRequired))
 					return
 				}
+
+				// 命中「指定渠道直连」：跳过所有自动路由（亲和/SmartRouter/随机）直接使用，
+				// 并同步写入 specific_channel_id，以便 controller.shouldRetry 关闭自动重试。
+				if rawForced, hasForced := common.GetContextKey(c, constant.ContextKeyForcedChannelID); hasForced {
+					if forcedID, fok := rawForced.(int); fok && forcedID > 0 {
+						forcedChannel, ferr := model.CacheGetChannel(forcedID)
+						if ferr != nil || forcedChannel == nil {
+							abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidChannelId))
+							return
+						}
+						if forcedChannel.Status != common.ChannelStatusEnabled {
+							abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorChannelDisabled))
+							return
+						}
+						common.SetContextKey(c, constant.ContextKeyTokenSpecificChannelId, strconv.Itoa(forcedID))
+						channel = forcedChannel
+						common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
+						SetupContextForSelectedChannel(c, channel, modelRequest.Model)
+						c.Next()
+						if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
+							service.RecordChannelAffinity(c, channel.Id)
+						}
+						return
+					}
+				}
+
 				service.IngestChatCompletionRoutingHints(c, modelRequest.Model)
 				var selectGroup string
 				usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
@@ -99,6 +160,28 @@ func Distribute() func(c *gin.Context) {
 						usingGroup = playgroundRequest.Group
 						common.SetContextKey(c, constant.ContextKeyUsingGroup, usingGroup)
 					}
+				}
+
+				// 命中「指定供应商 + 任意渠道」：跳过亲和选择，直接在供应商内按 SmartRouter / 优先级挑选。
+				// 若候选池为空，直接报"无可用渠道"，不再回落到跨供应商的全局池，保持用户显式意图。
+				if forcedSupplierID, hasForcedSupplier := service.ForcedSupplierFromContext(c); hasForcedSupplier {
+					providerJSON := common.GetContextKeyString(c, constant.ContextKeyOpenRouterProviderJSON)
+					service.IngestChatCompletionRoutingHints(c, modelRequest.Model)
+					ch, sg, ok := service.TrySupplierRouteChannel(c, usingGroup, userGroup, modelRequest.Model, providerJSON, forcedSupplierID)
+					if !ok || ch == nil {
+						abortWithOpenAiMessage(c, http.StatusServiceUnavailable, i18n.T(c, i18n.MsgDistributorNoAvailableChannel, map[string]any{"Group": usingGroup, "Model": modelRequest.Model}), types.ErrorCodeModelNotFound)
+						return
+					}
+					channel = ch
+					selectGroup = sg
+					common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
+					SetupContextForSelectedChannel(c, channel, modelRequest.Model)
+					c.Next()
+					if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
+						service.RecordChannelAffinity(c, channel.Id)
+					}
+					_ = selectGroup
+					return
 				}
 
 				if preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {

@@ -133,6 +133,7 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
   // Column keys
   const COLUMN_KEYS = {
     ID: 'id',
+    CHANNEL_NO: 'channel_no',
     NAME: 'name',
     GROUP: 'group',
     TYPE: 'type',
@@ -141,6 +142,7 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
     BALANCE: 'balance',
     PRIORITY: 'priority',
     WEIGHT: 'weight',
+    PRICE_DISCOUNT: 'price_discount',
     SUPPLIER: 'supplier',
     OPERATE: 'operate',
   };
@@ -174,6 +176,7 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
   const getDefaultColumnVisibility = () => {
     return {
       [COLUMN_KEYS.ID]: true,
+      [COLUMN_KEYS.CHANNEL_NO]: true,
       [COLUMN_KEYS.NAME]: true,
       [COLUMN_KEYS.GROUP]: true,
       [COLUMN_KEYS.TYPE]: true,
@@ -182,6 +185,7 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
       [COLUMN_KEYS.BALANCE]: true,
       [COLUMN_KEYS.PRIORITY]: true,
       [COLUMN_KEYS.WEIGHT]: true,
+      [COLUMN_KEYS.PRICE_DISCOUNT]: true,
       [COLUMN_KEYS.SUPPLIER]: true,
       [COLUMN_KEYS.OPERATE]: true,
     };

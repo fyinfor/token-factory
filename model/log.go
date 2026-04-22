@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -77,6 +78,7 @@ func RecordLog(userId int, logType int, content string) {
 		return
 	}
 	username, _ := GetUsernameById(userId, false)
+	content = prependUsernameBeforeRole(content, username)
 	log := &Log{
 		UserId:    userId,
 		Username:  username,
@@ -88,6 +90,24 @@ func RecordLog(userId int, logType int, content string) {
 	if err != nil {
 		common.SysLog("failed to record log: " + err.Error())
 	}
+}
+
+// prependUsernameBeforeRole 在日志详情以角色词开头时，自动在角色前补充用户名，便于审计操作者身份。
+func prependUsernameBeforeRole(content string, username string) string {
+	if content == "" || username == "" {
+		return content
+	}
+	rolePrefixes := []string{"管理员", "用户", "分销商", "供应商"}
+	for _, rolePrefix := range rolePrefixes {
+		withUsername := username + rolePrefix
+		if strings.HasPrefix(content, withUsername) {
+			return content
+		}
+		if strings.HasPrefix(content, rolePrefix) {
+			return username + content
+		}
+	}
+	return content
 }
 
 func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string, tokenName string, content string, tokenId int, useTimeSeconds int,
@@ -433,6 +453,39 @@ func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelNa
 		return stat, errors.New("查询统计数据失败")
 	}
 
+	return stat, nil
+}
+
+// SumUsedQuotaByModelNames 按模型集合统计消耗额度与最近一分钟 rpm/tpm。
+func SumUsedQuotaByModelNames(startTimestamp int64, endTimestamp int64, modelNames []string) (stat Stat, err error) {
+	if len(modelNames) == 0 {
+		return stat, nil
+	}
+	tx := LOG_DB.Table("logs").Select("sum(quota) quota")
+	rpmTpmQuery := LOG_DB.Table("logs").Select("count(*) rpm, sum(prompt_tokens) + sum(completion_tokens) tpm")
+
+	if startTimestamp != 0 {
+		tx = tx.Where("created_at >= ?", startTimestamp)
+	}
+	if endTimestamp != 0 {
+		tx = tx.Where("created_at <= ?", endTimestamp)
+	}
+	tx = tx.Where("model_name IN ?", modelNames)
+
+	rpmTpmQuery = rpmTpmQuery.Where("model_name IN ?", modelNames)
+	rpmTpmQuery = rpmTpmQuery.Where("created_at >= ?", time.Now().Add(-60*time.Second).Unix())
+
+	tx = tx.Where("type = ?", LogTypeConsume)
+	rpmTpmQuery = rpmTpmQuery.Where("type = ?", LogTypeConsume)
+
+	if err := tx.Scan(&stat).Error; err != nil {
+		common.SysError("failed to query supplier log stat: " + err.Error())
+		return stat, errors.New("查询统计数据失败")
+	}
+	if err := rpmTpmQuery.Scan(&stat).Error; err != nil {
+		common.SysError("failed to query supplier rpm/tpm stat: " + err.Error())
+		return stat, errors.New("查询统计数据失败")
+	}
 	return stat, nil
 }
 

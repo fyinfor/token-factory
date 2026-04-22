@@ -42,8 +42,6 @@ type PricingVendor struct {
 	Icon        string `json:"icon,omitempty"`
 }
 
-const pricingSupplierAliasTokenFactory = "词元工厂"
-
 // PricingSupplierItem 定价 data 中的供应商摘要。
 type PricingSupplierItem struct {
 	SupplierID    int    `json:"supplier_id"`
@@ -52,12 +50,14 @@ type PricingSupplierItem struct {
 
 // PricingChannelItem 某模型在各渠道上的定价摘要。
 type PricingChannelItem struct {
-	ChannelID             int     `json:"channel_id"`
-	SupplierApplicationID int     `json:"supplier_application_id"`
-	SupplierAlias         string  `json:"supplier_alias"`
-	ModelPrice            float64 `json:"model_price"`
-	ModelRatio            float64 `json:"model_ratio"`
-	CompletionRatio       float64 `json:"completion_ratio"`
+	ChannelID              int     `json:"channel_id"`
+	SupplierApplicationID  int     `json:"supplier_application_id"`
+	ChannelNo              string  `json:"channel_no"`
+	SupplierAlias          string  `json:"supplier_alias"`
+	ModelPrice             float64 `json:"model_price"`
+	ModelRatio             float64 `json:"model_ratio"`
+	CompletionRatio        float64 `json:"completion_ratio"`
+	PriceDiscountPercent   float64 `json:"price_discount_percent"`
 }
 
 // PricingAPIItem 在 Pricing 基础上扩展渠道维度统计字段（定价接口 data 元素类型）。
@@ -107,12 +107,18 @@ func resolveChannelPricingTriple(channelID int, supplierApplicationID int, model
 
 func pricingSupplierAliasFromMeta(supplierApplicationID int, alias *string) string {
 	if supplierApplicationID == 0 {
-		return pricingSupplierAliasTokenFactory
+		return "P0"
 	}
-	if alias != nil && strings.TrimSpace(*alias) != "" {
-		return strings.TrimSpace(*alias)
+	if alias != nil {
+		s := strings.TrimSpace(*alias)
+		if s == "0" {
+			return "P0"
+		}
+		if s != "" {
+			return s
+		}
 	}
-	return ""
+	return SupplierApplicationAutoAlias(supplierApplicationID)
 }
 
 func minFloat64Slice(vs []float64) float64 {
@@ -156,13 +162,22 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			}
 			mp, mr, cr := resolveChannelPricingTriple(row.ChannelID, row.SupplierApplicationID, modelName)
 			alias := pricingSupplierAliasFromMeta(row.SupplierApplicationID, row.SupplierAlias)
+			d := 100.0
+			if row.PriceDiscountPercent != nil {
+				d = *row.PriceDiscountPercent
+			}
+			mult := ChannelPriceDiscountMultiplierForPricing(d)
+			mp *= mult
+			mr *= mult
 			chItems = append(chItems, PricingChannelItem{
-				ChannelID:             row.ChannelID,
-				SupplierApplicationID: row.SupplierApplicationID,
-				SupplierAlias:         alias,
-				ModelPrice:            mp,
-				ModelRatio:            mr,
-				CompletionRatio:       cr,
+				ChannelID:              row.ChannelID,
+				SupplierApplicationID:  row.SupplierApplicationID,
+				ChannelNo:              row.ChannelNo,
+				SupplierAlias:          alias,
+				ModelPrice:             mp,
+				ModelRatio:             mr,
+				CompletionRatio:        cr,
+				PriceDiscountPercent:   d,
 			})
 			prices = append(prices, mp)
 			ratios = append(ratios, mr)

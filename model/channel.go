@@ -56,7 +56,11 @@ type Channel struct {
 	OtherSettings         string `json:"settings" gorm:"column:settings"`                         // 其他设置，存储azure版本等不需要检索的信息，详见dto.ChannelOtherSettings
 	OwnerUserID           int    `json:"owner_user_id" gorm:"type:int;index;default:0"`           // 渠道归属用户ID（供应商场景）
 	SupplierApplicationID int    `json:"supplier_application_id" gorm:"type:int;index;default:0"` // 关联 supplier_applications.id
-	SupplierName          string `json:"supplier_name,omitempty" gorm:"-"`                        // 供应商用户名（由控制器回填，不落库）
+	ChannelNo             string `json:"channel_no" gorm:"type:varchar(32);default:'';index;comment:供应商渠道编号 c1,c2 递增"`
+	SupplierName          string `json:"supplier_name,omitempty" gorm:"-"` // 供应商用户名（由控制器回填，不落库）
+
+	// 渠道计费折扣（百分数，100=原价无折扣，60=六折/按原价×0.6 计费）。nil=数据库默认/未设，按 100 处理。使用指针以便 GORM Updates 时可将 0% 写回。
+	PriceDiscountPercent *float64 `json:"price_discount_percent" gorm:"type:double precision;default:100"`
 
 	// cache info
 	Keys []string `json:"-" gorm:"-"`
@@ -326,22 +330,25 @@ type SupplierChannelSearchFilter struct {
 
 // ChannelSimplePricingItem pricing 页面使用的渠道精简信息。
 type ChannelSimplePricingItem struct {
-	ChannelID int `json:"channel_id"`
+	ChannelID   int    `json:"channel_id"`
+	ChannelName string `json:"channel_name"`
 }
 
 // ChannelPricingMeta 定价接口计算渠道维度价格所需的渠道行（含供应商别名）。
 type ChannelPricingMeta struct {
-	ChannelID             int     `gorm:"column:channel_id"`
-	SupplierApplicationID int     `gorm:"column:supplier_application_id"`
-	Models                string  `gorm:"column:models"`
-	SupplierAlias         *string `gorm:"column:supplier_alias"`
+	ChannelID              int      `gorm:"column:channel_id"`
+	SupplierApplicationID  int      `gorm:"column:supplier_application_id"`
+	ChannelNo              string   `gorm:"column:channel_no"`
+	Models                 string   `gorm:"column:models"`
+	SupplierAlias          *string  `gorm:"column:supplier_alias"`
+	PriceDiscountPercent   *float64 `gorm:"column:price_discount_percent"`
 }
 
 // ListChannelsForPricing 查询定价页使用的渠道列表。
 func ListChannelsForPricing() ([]ChannelSimplePricingItem, error) {
 	items := make([]ChannelSimplePricingItem, 0)
 	err := DB.Model(&Channel{}).
-		Select("id as channel_id").
+		Select("id as channel_id, name as channel_name").
 		Order("id asc").
 		Scan(&items).Error
 	if err != nil {
@@ -354,7 +361,7 @@ func ListChannelsForPricing() ([]ChannelSimplePricingItem, error) {
 func ListChannelPricingMeta() ([]ChannelPricingMeta, error) {
 	items := make([]ChannelPricingMeta, 0)
 	err := DB.Model(&Channel{}).
-		Select("channels.id AS channel_id, channels.supplier_application_id, channels.models, supplier_applications.supplier_alias").
+		Select("channels.id AS channel_id, channels.supplier_application_id, channels.channel_no, channels.models, channels.price_discount_percent, supplier_applications.supplier_alias").
 		Joins("LEFT JOIN supplier_applications ON supplier_applications.id = channels.supplier_application_id").
 		Order("channels.id ASC").
 		Scan(&items).Error
@@ -520,6 +527,165 @@ func GetChannelById(id int, selectAll bool) (*Channel, error) {
 	return channel, nil
 }
 
+// ResolveSupplierApplicationIDByAlias 根据供应商别名返回 supplier_application_id。
+//
+//   - "P0"（不区分大小写）返回 0，代表未归属任何 supplier_applications 的渠道；
+//   - 其他别名到 supplier_applications.supplier_alias 精确匹配后返回其 id；
+//
+// 未找到别名时返回 (0, false, err)；找到 P0 或匹配记录时 found=true。
+func ResolveSupplierApplicationIDByAlias(alias string) (supplierApplicationID int, found bool, err error) {
+	aliasTrim := strings.TrimSpace(alias)
+	if aliasTrim == "" {
+		return 0, false, fmt.Errorf("alias 不能为空")
+	}
+	if strings.EqualFold(aliasTrim, "P0") {
+		return 0, true, nil
+	}
+	var app SupplierApplication
+	if err := DB.Select("id").Where("supplier_alias = ?", aliasTrim).First(&app).Error; err != nil {
+		return 0, false, fmt.Errorf("供应商别名未找到: %s", aliasTrim)
+	}
+	return app.ID, true, nil
+}
+
+// FindChannelIDBySupplierAliasAndNo 根据「供应商别名」+「渠道编号」定位具体渠道 ID。
+//
+// 支持两种别名形式：
+//  1. "P0"：特指未归属供应商申请（supplier_application_id = 0）的渠道；
+//  2. 其他：先到 supplier_applications.supplier_alias 精确匹配，取得 id 后再按
+//     (supplier_application_id, channel_no) 查找渠道。
+//
+// 该方法仅返回启用状态的渠道。未找到时返回 0 与具体错误信息。
+func FindChannelIDBySupplierAliasAndNo(alias string, channelNo string) (int, error) {
+	noTrim := strings.TrimSpace(channelNo)
+	if noTrim == "" {
+		return 0, fmt.Errorf("channel_no 不能为空")
+	}
+	supplierApplicationID, _, err := ResolveSupplierApplicationIDByAlias(alias)
+	if err != nil {
+		return 0, err
+	}
+
+	var channel Channel
+	if err := DB.Select("id, status").
+		Where("supplier_application_id = ? AND channel_no = ?", supplierApplicationID, noTrim).
+		First(&channel).Error; err != nil {
+		return 0, fmt.Errorf("未找到渠道: %s/%s", strings.TrimSpace(alias), noTrim)
+	}
+	if channel.Status != common.ChannelStatusEnabled {
+		return 0, fmt.Errorf("渠道已禁用: %s/%s", strings.TrimSpace(alias), noTrim)
+	}
+	return channel.Id, nil
+}
+
+// ValidateSupplierChannelNoUnique 校验同一 supplier_application_id 下 channel_no 不重复（空编号不校验）。
+// excludeChannelID 大于 0 时排除自身，用于更新；新建时传 0。
+func ValidateSupplierChannelNoUnique(excludeChannelID int, supplierApplicationID int, channelNo string) error {
+	no := strings.TrimSpace(channelNo)
+	if supplierApplicationID <= 0 || no == "" {
+		return nil
+	}
+	q := DB.Model(&Channel{}).Where("supplier_application_id = ? AND channel_no = ?", supplierApplicationID, no)
+	if excludeChannelID > 0 {
+		q = q.Where("id <> ?", excludeChannelID)
+	}
+	var cnt int64
+	if err := q.Count(&cnt).Error; err != nil {
+		return err
+	}
+	if cnt > 0 {
+		return fmt.Errorf("该供应商下已存在相同渠道编号")
+	}
+	return nil
+}
+
+func maxChannelNoNumericSuffixForSupplier(tx *gorm.DB, supplierApplicationID int) (int, error) {
+	var existing []string
+	if err := tx.Model(&Channel{}).Where("supplier_application_id = ?", supplierApplicationID).Pluck("channel_no", &existing).Error; err != nil {
+		return 0, err
+	}
+	maxN := 0
+	for _, no := range existing {
+		no = strings.TrimSpace(no)
+		if len(no) >= 2 && no[0] == 'c' {
+			if n, err := strconv.Atoi(no[1:]); err == nil && n > maxN {
+				maxN = n
+			}
+		}
+	}
+	return maxN, nil
+}
+
+// allocateSupplierChannelNosInBatch 为同一事务批次内待插入的渠道分配 channel_no（supplier_application_id 相同则 c1,c2… 连续不重复）。
+func allocateSupplierChannelNosInBatch(tx *gorm.DB, batch []Channel) error {
+	maxCache := make(map[int]int)
+	assigned := make(map[int]int)
+	for i := range batch {
+		sid := batch[i].SupplierApplicationID
+		if sid <= 0 {
+			continue
+		}
+		if strings.TrimSpace(batch[i].ChannelNo) != "" {
+			continue
+		}
+		m, ok := maxCache[sid]
+		if !ok {
+			var err error
+			m, err = maxChannelNoNumericSuffixForSupplier(tx, sid)
+			if err != nil {
+				return err
+			}
+			maxCache[sid] = m
+		}
+		assigned[sid]++
+		batch[i].ChannelNo = "c" + strconv.Itoa(m+assigned[sid])
+	}
+	return nil
+}
+
+// BackfillSupplierChannelNo 为历史数据补全 channel_no：按供应商分组、渠道 id 升序，已有非空编号的不覆盖，空编号接续已有最大 cN。
+func BackfillSupplierChannelNo() error {
+	type row struct {
+		ID                    int
+		SupplierApplicationID int
+		ChannelNo             string
+	}
+	var rows []row
+	if err := DB.Model(&Channel{}).
+		Select("id", "supplier_application_id", "channel_no").
+		Where("supplier_application_id > 0").
+		Order("supplier_application_id asc, id asc").
+		Scan(&rows).Error; err != nil {
+		return err
+	}
+	bySupplier := make(map[int][]row)
+	for _, r := range rows {
+		bySupplier[r.SupplierApplicationID] = append(bySupplier[r.SupplierApplicationID], r)
+	}
+	for _, list := range bySupplier {
+		maxN := 0
+		for _, r := range list {
+			no := strings.TrimSpace(r.ChannelNo)
+			if len(no) >= 2 && no[0] == 'c' {
+				if n, err := strconv.Atoi(no[1:]); err == nil && n > maxN {
+					maxN = n
+				}
+			}
+		}
+		for _, r := range list {
+			if strings.TrimSpace(r.ChannelNo) != "" {
+				continue
+			}
+			maxN++
+			no := "c" + strconv.Itoa(maxN)
+			if err := DB.Model(&Channel{}).Where("id = ?", r.ID).Update("channel_no", no).Error; err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func BatchInsertChannels(channels []Channel) error {
 	if len(channels) == 0 {
 		return nil
@@ -536,6 +702,10 @@ func BatchInsertChannels(channels []Channel) error {
 
 	createdChannels := make([]Channel, 0, len(channels))
 	for _, chunk := range lo.Chunk(channels, 50) {
+		if err := allocateSupplierChannelNosInBatch(tx, chunk); err != nil {
+			tx.Rollback()
+			return err
+		}
 		if err := tx.Create(&chunk).Error; err != nil {
 			tx.Rollback()
 			return err
@@ -690,13 +860,17 @@ func (channel *Channel) GetStatusCodeMapping() string {
 }
 
 func (channel *Channel) Insert() error {
-	var err error
-	err = DB.Create(channel).Error
-	if err != nil {
-		return err
-	}
-	err = channel.AddAbilities(nil)
-	return err
+	return DB.Transaction(func(tx *gorm.DB) error {
+		batch := []Channel{*channel}
+		if err := allocateSupplierChannelNosInBatch(tx, batch); err != nil {
+			return err
+		}
+		*channel = batch[0]
+		if err := tx.Create(channel).Error; err != nil {
+			return err
+		}
+		return channel.AddAbilities(tx)
+	})
 }
 
 func (channel *Channel) Update() error {
