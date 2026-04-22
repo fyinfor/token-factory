@@ -67,7 +67,8 @@ const ModelChannelList = ({ modelData, displayPrice, currency, siteDisplayType, 
 
   // 格式化通道信息
   const formatChannelInfo = (channel) => {
-    const items = [];
+    const firstRow = [];
+    const secondRow = [];
     
     // 计算价格的辅助函数
     const calculatePrice = (ratio) => {
@@ -95,25 +96,43 @@ const ModelChannelList = ({ modelData, displayPrice, currency, siteDisplayType, 
       return `${symbol}${parseFloat(numericPrice.toFixed(2))} / 1${unitLabel} Tokens`;
     };
     
-    // 计算并显示输入价格（基于 model_ratio）
+    // 第一行：输入价格和输出价格
     if (channel.model_ratio !== undefined && channel.model_ratio !== null) {
-      items.push({ 
+      firstRow.push({ 
         label: t('输入价格'), 
         value: calculatePrice(channel.model_ratio)
       });
     }
     
-    // 计算并显示输出价格（基于 model_ratio * completion_ratio）
     if (channel.model_ratio !== undefined && channel.model_ratio !== null &&
         channel.completion_ratio !== undefined && channel.completion_ratio !== null) {
       const outputRatio = channel.model_ratio * channel.completion_ratio;
-      items.push({ 
+      firstRow.push({ 
         label: t('输出价格'), 
         value: calculatePrice(outputRatio)
       });
     }
     
-    return items;
+    // 第二行：缓存读取价格和缓存创建价格
+    if (channel.model_ratio !== undefined && channel.model_ratio !== null &&
+        channel.cache_ratio !== undefined && channel.cache_ratio !== null) {
+      const cacheRatio = channel.model_ratio * channel.cache_ratio;
+      secondRow.push({ 
+        label: t('缓存读取价格'), 
+        value: calculatePrice(cacheRatio)
+      });
+    }
+    
+    if (channel.model_ratio !== undefined && channel.model_ratio !== null &&
+        channel.create_cache_ratio !== undefined && channel.create_cache_ratio !== null) {
+      const createCacheRatio = channel.model_ratio * channel.create_cache_ratio;
+      secondRow.push({ 
+        label: t('缓存创建价格'), 
+        value: calculatePrice(createCacheRatio)
+      });
+    }
+    
+    return { firstRow, secondRow };
   };
 
   return (
@@ -171,13 +190,29 @@ const ModelChannelList = ({ modelData, displayPrice, currency, siteDisplayType, 
                       bodyStyle={{ padding: '12px' }}
                     >
                       <div className='flex items-center justify-between gap-4'>
-                        <div className='flex flex-wrap gap-4 text-sm flex-1'>
-                          {channelInfo.map((item) => (
-                            <div key={item.label} className='flex items-center gap-2 grow'>
-                              <span className='text-gray-600'>{item.label}:</span>
-                              <span className='font-medium text-gray-900'>{item.value}</span>
+                        <div className='flex flex-col gap-2 text-sm flex-1'>
+                          {/* 第一行：输入和输出价格 */}
+                          {channelInfo.firstRow.length > 0 && (
+                            <div className='flex flex-wrap gap-4'>
+                              {channelInfo.firstRow.map((item) => (
+                                <div key={item.label} className='flex items-center gap-2 grow'>
+                                  <span className='text-gray-600'>{item.label}:</span>
+                                  <span className='font-medium text-gray-900'>{item.value}</span>
+                                </div>
+                              ))}
                             </div>
-                          ))}
+                          )}
+                          {/* 第二行：缓存价格 */}
+                          {channelInfo.secondRow.length > 0 && (
+                            <div className='flex flex-wrap gap-4'>
+                              {channelInfo.secondRow.map((item) => (
+                                <div key={item.label} className='flex items-center gap-2 grow'>
+                                  <span className='text-gray-600'>{item.label}:</span>
+                                  <span className='font-medium text-gray-900'>{item.value}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </div>
                         <Button
                           icon={<IconCopy />}

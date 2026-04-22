@@ -37,7 +37,7 @@ import {
 import {
   stringToColor,
   calculateModelPrice,
-  formatPriceInfo,
+  getModelPriceItems,
   getLobeHubIcon,
 } from '../../../../../helpers';
 import PricingCardSkeleton from './PricingCardSkeleton';
@@ -98,13 +98,159 @@ const PricingCardView = ({
     rowSelection?.onChange?.(newKeys, null);
   };
 
-  // 获取供应商ID列表
+  // 获取供应商列表
   const getSupplierIds = (model) => {
     if (!model.channel_list || model.channel_list.length === 0) {
       return [t('官方')];
     }
-    const uniqueIds = [...new Set(model.channel_list.map(ch => ch.supplier_application_id))];
-    return uniqueIds.length > 0 ? uniqueIds : [t('官方')];
+    const uniqueAliases = [...new Set(model.channel_list.map(ch => ch.supplier_alias).filter(Boolean))];
+    return uniqueAliases.length > 0 ? uniqueAliases : [t('官方')];
+  };
+
+  // 从 channel_list 计算价格信息（用于按量计费模型）
+  const calculateChannelPrices = (model) => {
+    if (!model.channel_list || model.channel_list.length === 0 || model.quota_type !== 0) {
+      return null;
+    }
+
+    // 辅助函数：格式化价格
+    const formatPrice = (priceUSD) => {
+      const rawDisplayPrice = displayPrice(priceUSD);
+      const unitDivisor = tokenUnit === 'K' ? 1000 : 1;
+      const numericPrice = parseFloat(rawDisplayPrice.replace(/[^0-9.]/g, '')) / unitDivisor;
+      
+      let symbol = '$';
+      if (currency === 'CNY') {
+        symbol = '¥';
+      } else if (currency === 'CUSTOM') {
+        try {
+          const statusStr = localStorage.getItem('status');
+          if (statusStr) {
+            const s = JSON.parse(statusStr);
+            symbol = s?.custom_currency_symbol || '¤';
+          }
+        } catch (e) {
+          symbol = '¤';
+        }
+      }
+      
+      return { value: parseFloat(numericPrice.toFixed(2)), symbol };
+    };
+
+    // 提取所有通道的价格
+    const prices = {
+      input: [],
+      output: [],
+      cache: [],
+      createCache: [],
+    };
+
+    model.channel_list.forEach(ch => {
+      if (ch.model_ratio !== undefined && ch.model_ratio !== null) {
+        const inputPriceUSD = ch.model_ratio * 2;
+        prices.input.push(formatPrice(inputPriceUSD));
+
+        if (ch.completion_ratio !== undefined && ch.completion_ratio !== null) {
+          const outputPriceUSD = ch.model_ratio * ch.completion_ratio * 2;
+          prices.output.push(formatPrice(outputPriceUSD));
+        }
+
+        if (ch.cache_ratio !== undefined && ch.cache_ratio !== null) {
+          const cachePriceUSD = ch.model_ratio * ch.cache_ratio * 2;
+          prices.cache.push(formatPrice(cachePriceUSD));
+        }
+
+        if (ch.create_cache_ratio !== undefined && ch.create_cache_ratio !== null) {
+          const createCachePriceUSD = ch.model_ratio * ch.create_cache_ratio * 2;
+          prices.createCache.push(formatPrice(createCachePriceUSD));
+        }
+      }
+    });
+
+    // 计算范围
+    const calculateRange = (priceArray) => {
+      if (priceArray.length === 0) return null;
+      if (priceArray.length === 1) {
+        const p = priceArray[0];
+        return { single: `${p.symbol}${p.value}`, min: null, max: null, symbol: p.symbol };
+      }
+
+      const values = priceArray.map(p => p.value);
+      const uniqueValues = [...new Set(values)];
+      
+      if (uniqueValues.length === 1) {
+        const p = priceArray[0];
+        return { single: `${p.symbol}${p.value}`, min: null, max: null, symbol: p.symbol };
+      }
+
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      const symbol = priceArray[0].symbol;
+      return { single: null, min, max, symbol };
+    };
+
+    const unitLabel = tokenUnit === 'K' ? 'K' : 'M';
+    const unitSuffix = ` / 1${unitLabel} Tokens`;
+
+    return {
+      input: calculateRange(prices.input),
+      output: calculateRange(prices.output),
+      cache: calculateRange(prices.cache),
+      createCache: calculateRange(prices.createCache),
+      unitSuffix,
+    };
+  };
+
+  // 获取模型的价格项（优先使用 channel 价格）
+  const getModelPriceItemsForCard = (model, priceData) => {
+    const channelPrices = calculateChannelPrices(model);
+    
+    // 如果没有 channel 价格，使用原有逻辑
+    if (!channelPrices) {
+      return getModelPriceItems(priceData, t, siteDisplayType);
+    }
+
+    // 使用 channel 价格构建价格项
+    const items = [];
+    const { input, output, cache, createCache, unitSuffix } = channelPrices;
+
+    if (input) {
+      items.push({
+        key: 'input',
+        label: t('输入价格'),
+        value: input.single || `${input.symbol}${input.min} ~ ${input.symbol}${input.max}`,
+        suffix: unitSuffix,
+      });
+    }
+
+    if (output) {
+      items.push({
+        key: 'output',
+        label: t('输出价格'),
+        value: output.single || `${output.symbol}${output.min} ~ ${output.symbol}${output.max}`,
+        suffix: unitSuffix,
+      });
+    }
+
+    if (cache) {
+      items.push({
+        key: 'cache',
+        label: t('缓存读取价格'),
+        value: cache.single || `${cache.symbol}${cache.min} ~ ${cache.symbol}${cache.max}`,
+        suffix: unitSuffix,
+      });
+    }
+
+    if (createCache) {
+      items.push({
+        key: 'create-cache',
+        label: t('缓存创建价格'),
+        value: createCache.single || `${createCache.symbol}${createCache.min} ~ ${createCache.symbol}${createCache.max}`,
+        suffix: unitSuffix,
+      });
+    }
+
+    return items;
   };
 
   // 获取模型图标
@@ -247,7 +393,7 @@ const PricingCardView = ({
 
   return (
     <div className='px-2 pt-2'>
-      <div className='grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-4'>
+      <div className='flex flex-wrap gap-4'>
         {paginatedModels.map((model, index) => {
           const modelKey = getModelKey(model);
           const isSelected = selectedRowKeys.includes(modelKey);
@@ -269,7 +415,7 @@ const PricingCardView = ({
           return (
             <Card
               key={modelKey || index}
-              className={`!rounded-2xl transition-all duration-200 hover:shadow-lg border cursor-pointer ${isSelected ? CARD_STYLES.selected : CARD_STYLES.default}`}
+              className={`flex-1 min-w-[350px] max-w-[600px] !rounded-2xl transition-all duration-200 hover:shadow-lg border cursor-pointer ${isSelected ? CARD_STYLES.selected : CARD_STYLES.default}`}
               bodyStyle={{ height: '100%' }}
               onClick={() => openModelDetail && openModelDetail(model)}
             >
@@ -283,9 +429,15 @@ const PricingCardView = ({
                         {model.model_name}
                       </h3>
                       <div className='flex flex-col gap-1 text-xs mt-1'>
-                        {formatPriceInfo(priceData, t, siteDisplayType)}
-                        <div className='text-gray-600'>
-                          {t('供应商ID')}：{supplierIds.join(', ')}
+                        {getModelPriceItemsForCard(model, priceData).map((item) => (
+                          <div key={item.key} className='flex items-center'>
+                            <span className='w-20 flex-shrink-0'>{item.label}</span>
+                            <span className='flex-1 font-bold text-black'>{item.value}{item.suffix}</span>
+                          </div>
+                        ))}
+                        <div className='flex items-center'>
+                          <span className='w-20 flex-shrink-0'>{t('供应商')}</span>
+                          <span className='flex-1 font-bold text-black'>{supplierIds.join(', ')}</span>
                         </div>
                       </div>
                     </div>
