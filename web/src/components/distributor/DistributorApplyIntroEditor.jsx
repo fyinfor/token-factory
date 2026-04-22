@@ -105,12 +105,45 @@ export default function DistributorApplyIntroEditor({
 
     quillRef.current = quill;
 
+    // 程序化 setSelection 会调用 root.focus()。浏览器默认会把被聚焦的 contenteditable
+    // 滚进视口，与 Quill 的 SILENT/scrollIntoView 无关；在系统设置-运营等长页面上会整页跳转到本区块
+    const root = quill.root;
+    const origRootFocus = root.focus.bind(root);
+    root.focus = function quillRootFocusWithoutPageScroll(options) {
+      const opts =
+        options != null && typeof options === 'object'
+          ? { ...options, preventScroll: true }
+          : { preventScroll: true };
+      try {
+        return origRootFocus(opts);
+      } catch {
+        return origRootFocus.call(root, options);
+      }
+    };
+
     const initial = normalizeEmptyHtml(valueRef.current);
     if (initial) {
       syncingFromPropRef.current = true;
       quill.clipboard.dangerouslyPasteHTML(initial);
       syncingFromPropRef.current = false;
     }
+
+    // 再兜底：移除焦点并恢复视口，防止仍有异步时序在下一帧把页面顶下去
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    const restoreUnwantedScroll = () => {
+      try {
+        quill.blur();
+      } catch {
+        // ignore
+      }
+      if (window.scrollX !== scrollX || window.scrollY !== scrollY) {
+        window.scrollTo({ left: scrollX, top: scrollY, behavior: 'auto' });
+      }
+    };
+    const blurT0 = window.setTimeout(restoreUnwantedScroll, 0);
+    const blurT1 = window.setTimeout(restoreUnwantedScroll, 50);
+    const blurT2 = window.setTimeout(restoreUnwantedScroll, 200);
 
     const emitChange = () => {
       if (syncingFromPropRef.current) return;
@@ -121,6 +154,10 @@ export default function DistributorApplyIntroEditor({
     quill.on('text-change', emitChange);
 
     return () => {
+      window.clearTimeout(blurT0);
+      window.clearTimeout(blurT1);
+      window.clearTimeout(blurT2);
+      root.focus = origRootFocus;
       quill.off('text-change', emitChange);
       quillRef.current = null;
       // Snow 主题会把 .ql-toolbar 插在 quill.container 之前；只清空 el 会留下工具栏，Strict Mode / 重挂载会出现多个工具栏
@@ -148,6 +185,8 @@ export default function DistributorApplyIntroEditor({
     const next = normalizeEmptyHtml(value);
     const cur = normalizeEmptyHtml(quill.root.innerHTML);
     if (next === cur) return;
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
     syncingFromPropRef.current = true;
     if (!next) {
       quill.setText('');
@@ -155,11 +194,28 @@ export default function DistributorApplyIntroEditor({
       quill.clipboard.dangerouslyPasteHTML(next);
     }
     syncingFromPropRef.current = false;
+    // 与初始化相同：拉取配置后粘贴 HTML 会再次 focus，需避免整页被滚到本组件
+    const restore = () => {
+      try {
+        quill.blur();
+      } catch {
+        // ignore
+      }
+      if (window.scrollX !== scrollX || window.scrollY !== scrollY) {
+        window.scrollTo({ left: scrollX, top: scrollY, behavior: 'auto' });
+      }
+    };
+    const syncT0 = window.setTimeout(restore, 0);
+    const syncT1 = window.setTimeout(restore, 50);
+    return () => {
+      window.clearTimeout(syncT0);
+      window.clearTimeout(syncT1);
+    };
   }, [value]);
 
   return (
     <div
-      className='distributor-apply-intro-editor rounded-md overflow-hidden bg-[var(--semi-color-bg-0)] [&_.ql-toolbar.ql-snow]:border-[var(--semi-color-border)] [&_.ql-container.ql-snow]:border-[var(--semi-color-border)] [&_.ql-container]:!min-h-[360px] [&_.ql-editor]:!min-h-[300px]'
+      className='distributor-apply-intro-editor w-full max-w-4xl rounded-md overflow-hidden bg-[var(--semi-color-bg-0)] [&_.ql-toolbar.ql-snow]:border-[var(--semi-color-border)] [&_.ql-container.ql-snow]:border-[var(--semi-color-border)] [&_.ql-container]:!min-h-[360px] [&_.ql-editor]:!min-h-[300px]'
       style={{ minHeight: 420 }}
     >
       <div ref={wrapRef} />

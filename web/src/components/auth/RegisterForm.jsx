@@ -21,6 +21,7 @@ import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   API,
+  postAffiliateTrackDeduped,
   getLogo,
   showError,
   showInfo,
@@ -169,12 +170,7 @@ const RegisterForm = () => {
   useEffect(() => {
     const fromUrl = new URLSearchParams(window.location.search).get('aff');
     const code = String(fromUrl || localStorage.getItem('aff') || '').trim();
-    if (!code) return;
-    API.post(
-      '/api/aff/track',
-      { event: 'register_page_view', aff: code },
-      { skipErrorHandler: true },
-    ).catch(() => {});
+    postAffiliateTrackDeduped('register_page_view', code);
   }, []);
 
   useEffect(() => {

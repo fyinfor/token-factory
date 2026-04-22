@@ -25,6 +25,23 @@ import {
   displayInputAmountToQuota,
 } from '../../../helpers';
 
+function FieldLabel({ required, children, className = '' }) {
+  return (
+    <Typography.Text
+      size='small'
+      strong
+      className={`block mb-1.5 text-[var(--semi-color-text-0)] ${className}`.trim()}
+    >
+      {required ? (
+        <span className='text-[var(--semi-color-danger)] mr-1 font-normal' aria-hidden>
+          *
+        </span>
+      ) : null}
+      {children}
+    </Typography.Text>
+  );
+}
+
 const TransferModal = ({
   t,
   openTransfer,
@@ -71,22 +88,35 @@ const TransferModal = ({
       maskClosable={false}
       centered
     >
-      <div className='space-y-4'>
+      <div className='space-y-5'>
         <div>
-          <Typography.Text strong className='block mb-2'>
-            {t('可用邀请额度')}
-          </Typography.Text>
+          <FieldLabel>{t('可用邀请额度')}</FieldLabel>
           <Input
             value={renderQuotaProp(userState?.user?.aff_quota)}
             disabled
-            className='!rounded-lg'
+            className='!rounded-lg bg-[var(--semi-color-fill-0)]'
           />
         </div>
         <div>
-          <Typography.Text strong className='block mb-2'>
-            {t('划转额度')} · {t('最低')}
-            {renderQuotaProp(getQuotaPerUnitProp())}
-          </Typography.Text>
+          <div className='mb-1.5 flex flex-wrap items-baseline gap-x-1.5 gap-y-0'>
+            <span
+              className='text-[var(--semi-color-danger)] text-sm font-normal leading-snug'
+              aria-hidden
+            >
+              *
+            </span>
+            <Typography.Text
+              strong
+              size='small'
+              className='text-[var(--semi-color-text-0)] leading-snug'
+            >
+              {t('划转额度')}
+            </Typography.Text>
+            <Typography.Text type='tertiary' size='small' className='leading-snug'>
+             {t('最低')}
+              {renderQuotaProp(getQuotaPerUnitProp())}
+            </Typography.Text>
+          </div>
           {isTokens ? (
             <>
               <InputNumber
@@ -99,7 +129,7 @@ const TransferModal = ({
               <Typography.Text
                 type='tertiary'
                 size='small'
-                className='block mt-2'
+                className='block mt-2 leading-relaxed'
               >
                 {t(
                   '额度以系统内部点数记账，与上方展示一致；最小划转为一档点数。',
@@ -113,14 +143,14 @@ const TransferModal = ({
                 max={maxDisplay}
                 value={quotaToDisplayInputAmount(transferAmount)}
                 onChange={onFiatChange}
-                precision={4}
+                precision={2}
                 step={0.01}
                 className='w-full !rounded-lg'
               />
               <Typography.Text
                 type='tertiary'
                 size='small'
-                className='block mt-2'
+                className='block mt-2 leading-relaxed'
               >
                 {t('输入数值与钱包展示货币一致，对应')}
                 {renderQuotaProp(transferAmount)}

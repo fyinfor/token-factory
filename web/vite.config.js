@@ -35,12 +35,12 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
  * @returns {string} 代理 target，例如 http://127.0.0.1:3000
  */
 function resolveDevProxyTarget(mode) {
-  const env = loadEnv(mode, __dirname, '');
-  const raw = (env.VITE_DEV_PROXY_TARGET || '').trim();
-  if (raw) {
-    return raw.replace(/\/$/, '');
-  }
-  return 'http://192.168.0.15:3000';
+    const env = loadEnv(mode, __dirname, '');
+    const raw = (env.VITE_DEV_PROXY_TARGET || '').trim();
+    if (raw) {
+        return raw.replace(/\/$/, '');
+    }
+    return 'http://127.0.0.1:3000';
 }
 
 // https://vitejs.dev/config/
