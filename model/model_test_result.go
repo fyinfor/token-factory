@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -26,6 +27,10 @@ type ModelTestResult struct {
 	TestCountSuccess int `json:"test_count_success" gorm:"default:0;comment:累计测试成功次数"`
 	// TestCountFail 累计失败次数。
 	TestCountFail int `json:"test_count_fail" gorm:"default:0;comment:累计测试失败次数"`
+	// ManualDisplayResponseTime 运营手动覆盖的「展示用」响应时间（毫秒）；0 表示不覆盖展示耗时（仍用 LastResponseTime 与下列 ManualStabilityGrade 规则）。
+	ManualDisplayResponseTime int `json:"manual_display_response_time" gorm:"default:0;comment:运营展示用响应耗时(毫秒) 0=不覆盖"`
+	// ManualStabilityGrade 运营手动覆盖的稳定性等级 1-5，0 表示不覆盖（展示仍可按 LastResponseTime 分档）；与 ManualDisplayResponseTime 可同时使用，以手动为准参与 UI。
+	ManualStabilityGrade int `json:"manual_stability_grade" gorm:"default:0;comment:运营展示用稳定性等级1-5 0=不覆盖"`
 }
 
 // TableName 显式表名，避免 GORM 命名与迁移/手工表名不一致导致查询为空。
@@ -220,4 +225,80 @@ func GetLatestSuccessfulModelNames() (map[string]bool, error) {
 		result[list[i]] = true
 	}
 	return result, nil
+}
+
+// GetModelTestResultsByModelNameAndChannelIDs 按定价/元数据中的 model_name 与渠道 ID 列表查询 model_test_results（行键与 Upsert 写入的 model_name 一致）。
+// channelIds 为空时返回空切片，不查库。
+func GetModelTestResultsByModelNameAndChannelIDs(modelName string, channelIds []int) ([]ModelTestResult, error) {
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" || len(channelIds) == 0 {
+		return nil, nil
+	}
+	var out []ModelTestResult
+	err := DB.Model(&ModelTestResult{}).
+		Where("model_name = ? AND channel_id IN ?", modelName, channelIds).
+		Find(&out).Error
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// SetModelTestResultManualDisplay 更新 (channel_id, model_name) 的展示用运营字段；manualMs、manualGrade 均为 0 表示取消覆盖。
+// manualGrade 允许 0-5：0=不展示等级覆盖；1-5 为有效等级。manualMs 为毫秒，>0 表示用该值参与模型广场侧响应时间/颜色展示。
+func SetModelTestResultManualDisplay(channelId int, modelName string, manualMs int, manualGrade int) error {
+	modelName = strings.TrimSpace(modelName)
+	if channelId <= 0 || modelName == "" {
+		return errors.New("invalid channel_id or model_name")
+	}
+	if manualMs < 0 {
+		manualMs = 0
+	}
+	if manualGrade < 0 {
+		manualGrade = 0
+	}
+	if manualGrade > 5 {
+		manualGrade = 5
+	}
+	updates := map[string]interface{}{
+		"manual_display_response_time": manualMs,
+		"manual_stability_grade":       manualGrade,
+	}
+	// 使用 Assign + FirstOrCreate 做幂等写入，避免「字段值未变化导致 RowsAffected=0」时误判为不存在而重复插入主键。
+	return DB.Where("channel_id = ? AND model_name = ?", channelId, modelName).
+		Assign(updates).
+		FirstOrCreate(&ModelTestResult{
+		ChannelId:                 channelId,
+		ModelName:                 modelName,
+		ManualDisplayResponseTime: manualMs,
+		ManualStabilityGrade:      manualGrade,
+		}).Error
+}
+
+// GetModelTestResultsByChannelIDAndModelNames 渠道测试弹窗用：单渠道 + 多模型名，一次查出已有单测/运营行。
+func GetModelTestResultsByChannelIDAndModelNames(channelId int, modelNames []string) ([]ModelTestResult, error) {
+	if channelId <= 0 || len(modelNames) == 0 {
+		return nil, nil
+	}
+	var out []ModelTestResult
+	err := DB.Model(&ModelTestResult{}).
+		Where("channel_id = ? AND model_name IN ?", channelId, modelNames).
+		Find(&out).Error
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// GetAllModelTestResultsByChannelID 返回某渠道在 model_test_results 中的全部行（弹窗内避免 URL 携带超长 model_names）。
+func GetAllModelTestResultsByChannelID(channelId int) ([]ModelTestResult, error) {
+	if channelId <= 0 {
+		return nil, nil
+	}
+	var out []ModelTestResult
+	err := DB.Model(&ModelTestResult{}).Where("channel_id = ?", channelId).Find(&out).Error
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
