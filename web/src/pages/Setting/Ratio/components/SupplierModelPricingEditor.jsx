@@ -28,10 +28,17 @@ export default function SupplierModelPricingEditor({
   const channels = useMemo(() => {
     const raw = options.__pricingChannels || [];
     if (!Array.isArray(raw)) return [];
-    return raw.filter((s) => s?.channel_id).map((s) => ({
-      label: s.channel_name || `#${s.channel_id}`,
-      value: String(s.channel_id),
-      }));
+    return raw.filter((s) => s?.channel_id).map((s) => {
+      const alias = (s.supplier_alias && String(s.supplier_alias).trim()) || 'P0';
+      const no = (s.channel_no != null && String(s.channel_no).trim() !== '')
+        ? String(s.channel_no).trim()
+        : '-';
+      const name = s.channel_name || `#${s.channel_id}`;
+      return {
+        label: `${alias} - ${no} - ${name}`,
+        value: String(s.channel_id),
+      };
+    });
   }, [options.__pricingChannels]);
 
   const channelModelPrice = useMemo(() => parseJSON(options.ChannelModelPrice), [

@@ -683,6 +683,59 @@ export const selectFilter = (input, option) => {
 
 // -------------------------------
 // 模型定价计算工具函数
+
+/** 与定价行相同的分组与分组倍率解析（all 时取模型可用分组中倍率最小者） */
+export function getUsedGroupContext(record, selectedGroup, groupRatio) {
+  let usedGroup = selectedGroup;
+  let usedGroupRatio = groupRatio[selectedGroup];
+
+  if (selectedGroup === 'all' || usedGroupRatio === undefined) {
+    let minR = Number.POSITIVE_INFINITY;
+    if (Array.isArray(record.enable_groups) && record.enable_groups.length > 0) {
+      record.enable_groups.forEach((g) => {
+        const r = groupRatio[g];
+        if (r !== undefined && r < minR) {
+          minR = r;
+          usedGroup = g;
+          usedGroupRatio = r;
+        }
+      });
+    }
+    if (usedGroupRatio === undefined) {
+      usedGroupRatio = 1;
+    }
+  }
+  return { usedGroup, usedGroupRatio };
+}
+
+/** 从多渠道 channel_list 派生 min/max，替代 data 上聚合的 minModelRatio 等字段 */
+export function getBoundsFromChannelList(record) {
+  const ch = record?.channel_list;
+  if (!Array.isArray(ch) || ch.length <= 1) {
+    return null;
+  }
+  const pick = (key) =>
+    ch
+      .map((c) => Number(c[key]))
+      .filter((v) => Number.isFinite(v));
+  const ratios = pick('model_ratio');
+  const completions = pick('completion_ratio');
+  const prices = pick('model_price');
+  if (ratios.length === 0) {
+    return null;
+  }
+  return {
+    minModelRatio: Math.min(...ratios),
+    maxModelRatio: Math.max(...ratios),
+    minCompletionRatio:
+      completions.length > 0 ? Math.min(...completions) : undefined,
+    maxCompletionRatio:
+      completions.length > 0 ? Math.max(...completions) : undefined,
+    minModelPrice: prices.length > 0 ? Math.min(...prices) : undefined,
+    maxModelPrice: prices.length > 0 ? Math.max(...prices) : undefined,
+  };
+}
+
 export const calculateModelPrice = ({
   record,
   selectedGroup,
@@ -695,32 +748,11 @@ export const calculateModelPrice = ({
   quotaDisplayType = 'USD',
   precision = 2,
 }) => {
-  // 1. 选择实际使用的分组
-  let usedGroup = selectedGroup;
-  let usedGroupRatio = groupRatio[selectedGroup];
-
-  if (selectedGroup === 'all' || usedGroupRatio === undefined) {
-    // 在模型可用分组中选择倍率最小的分组，若无则使用 1
-    let minRatio = Number.POSITIVE_INFINITY;
-    if (
-      Array.isArray(record.enable_groups) &&
-      record.enable_groups.length > 0
-    ) {
-      record.enable_groups.forEach((g) => {
-        const r = groupRatio[g];
-        if (r !== undefined && r < minRatio) {
-          minRatio = r;
-          usedGroup = g;
-          usedGroupRatio = r;
-        }
-      });
-    }
-
-    // 如果找不到合适分组倍率，回退为 1
-    if (usedGroupRatio === undefined) {
-      usedGroupRatio = 1;
-    }
-  }
+  const { usedGroup, usedGroupRatio } = getUsedGroupContext(
+    record,
+    selectedGroup,
+    groupRatio,
+  );
 
   const groupPriceMap = groupModelPrice?.[usedGroup] || {};
   const groupRatioMap = groupModelRatio?.[usedGroup] || {};
@@ -743,20 +775,22 @@ export const calculateModelPrice = ({
   if (record.quota_type === 0) {
     // 按量计费
     const isTokensDisplay = quotaDisplayType === 'TOKENS';
-    const hasMultipleChannels = record.channel_list && record.channel_list.length > 1;
-    
-    // 如果有多个渠道，使用 min/max 值；否则使用 effectiveModelRatio
-    const minRatio = hasMultipleChannels && record.minModelRatio !== undefined 
-      ? Number(record.minModelRatio) 
+    const chBounds = getBoundsFromChannelList(record);
+    const hasMultipleChannels = chBounds != null;
+
+    const minRatio = hasMultipleChannels
+      ? chBounds.minModelRatio
       : effectiveModelRatio;
-    const maxRatio = hasMultipleChannels && record.maxModelRatio !== undefined 
-      ? Number(record.maxModelRatio) 
+    const maxRatio = hasMultipleChannels
+      ? chBounds.maxModelRatio
       : effectiveModelRatio;
-    const minCompletionRatio = hasMultipleChannels && record.minCompletionRatio !== undefined
-      ? Number(record.minCompletionRatio)
+    const minCompletionRatio = hasMultipleChannels
+      && chBounds.minCompletionRatio !== undefined
+      ? chBounds.minCompletionRatio
       : Number(record.completion_ratio);
-    const maxCompletionRatio = hasMultipleChannels && record.maxCompletionRatio !== undefined
-      ? Number(record.maxCompletionRatio)
+    const maxCompletionRatio = hasMultipleChannels
+      && chBounds.maxCompletionRatio !== undefined
+      ? chBounds.maxCompletionRatio
       : Number(record.completion_ratio);
     
     const inputRatioPriceUSD = effectiveModelRatio * 2 * usedGroupRatio;
@@ -893,17 +927,15 @@ export const calculatePriceRange = ({
   quotaDisplayType = 'USD',
   precision = 2,
 }) => {
-  if (!record || !record.channel_list || record.channel_list.length <= 1) {
+  if (!record) {
     return null;
   }
-
-  const {
-    minModelPrice,
-    maxModelPrice,
-    minModelRatio,
-    maxModelRatio,
-    quota_type,
-  } = record;
+  const b = getBoundsFromChannelList(record);
+  if (!b) {
+    return null;
+  }
+  const { minModelPrice, maxModelPrice, minModelRatio, maxModelRatio } = b;
+  const { quota_type } = record;
 
   if (quota_type === 0) {
     // 按量计费 - 使用倍率范围

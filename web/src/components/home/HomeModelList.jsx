@@ -314,6 +314,7 @@ const HomeModelList = () => {
         endpointMap={pricingData.endpointMap}
         autoGroups={pricingData.autoGroups}
         t={pricingData.t}
+        selectedGroup={pricingData.selectedGroup}
       />
     </div>
   );

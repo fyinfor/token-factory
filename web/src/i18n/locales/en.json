@@ -3038,6 +3038,8 @@
     "输入验证码完成设置": "Enter verification code to complete setup",
     "输出 {{completion}} tokens / 1M tokens * {{symbol}}{{compPrice}}) * {{ratioType}} {{ratio}}": "Output {{completion}} tokens / 1M tokens * {{symbol}}{{compPrice}} * {{ratioType}} {{ratio}}",
     "输出价格": "Output Price",
+    "渠道缓存价": "Channel cache read price",
+    "渠道缓存创建价": "Channel cache write price",
     "输出倍率 {{completionRatio}}": "Output ratio {{completionRatio}}",
     "边栏设置": "Sidebar Settings",
     "过期于": "Expires at",

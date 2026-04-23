@@ -20,13 +20,58 @@ For commercial licensing, please contact support@quantumnous.com
 import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Card, Avatar, Typography, Collapse, Tag, Button, Toast } from '@douyinfe/semi-ui';
 import { IconListView, IconCopy } from '@douyinfe/semi-icons';
+import { getUsedGroupContext } from '../../../../../helpers/utils';
+import { getUsedGroupContext } from '../../../../../helpers/utils';
 
 const { Text } = Typography;
 
-const ModelChannelList = ({ modelData, displayPrice, currency, siteDisplayType, tokenUnit, t }) => {
+const hasRatioValue = (value) =>
+  value !== undefined &&
+  value !== null &&
+  value !== '' &&
+  Number.isFinite(Number(value));
+
+const ModelChannelList = ({
+  modelData,
+  displayPrice,
+  currency,
+  siteDisplayType,
+  tokenUnit,
+  t,
+  selectedGroup,
+  groupRatio,
+}) => {
+const hasRatioValue = (value) =>
+  value !== undefined &&
+  value !== null &&
+  value !== '' &&
+  Number.isFinite(Number(value));
+
+const ModelChannelList = ({
+  modelData,
+  displayPrice,
+  currency,
+  siteDisplayType,
+  tokenUnit,
+  t,
+  selectedGroup,
+  groupRatio,
+}) => {
   if (!modelData?.channel_list || modelData.channel_list.length === 0) {
     return null;
   }
+
+  const { usedGroupRatio } = useMemo(
+    () =>
+      getUsedGroupContext(modelData, selectedGroup ?? 'all', groupRatio || {}),
+    [modelData, selectedGroup, groupRatio],
+  );
+
+  const { usedGroupRatio } = useMemo(
+    () =>
+      getUsedGroupContext(modelData, selectedGroup ?? 'all', groupRatio || {}),
+    [modelData, selectedGroup, groupRatio],
+  );
 
   // 按 supplier_application_id 分组通道
   const groupedChannels = useMemo(() => {
@@ -65,14 +110,13 @@ const ModelChannelList = ({ modelData, displayPrice, currency, siteDisplayType, 
     }
   }, [allKeysStr, allKeys]);
 
-  // 格式化通道信息
+  // 格式化通道信息（与 calculateModelPrice 一致：含分组倍率）（与 calculateModelPrice 一致：含分组倍率）
   const formatChannelInfo = (channel) => {
     const firstRow = [];
     const secondRow = [];
-    
-    // 计算价格的辅助函数
-    const calculatePrice = (ratio) => {
-      const priceUSD = ratio * 2; // 按量计费的标准计算方式
+
+    const calculatePrice = (nominalRatio) => {
+      const priceUSD = nominalRatio * 2 * usedGroupRatio;
       const rawDisplayPrice = displayPrice(priceUSD);
       const unitDivisor = tokenUnit === 'K' ? 1000 : 1;
       const numericPrice = parseFloat(rawDisplayPrice.replace(/[^0-9.]/g, '')) / unitDivisor;

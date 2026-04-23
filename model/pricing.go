@@ -57,20 +57,16 @@ type PricingChannelItem struct {
 	ModelPrice             float64 `json:"model_price"`
 	ModelRatio             float64 `json:"model_ratio"`
 	CompletionRatio        float64 `json:"completion_ratio"`
+	CacheRatio             float64 `json:"cache_ratio"`
+	CreateCacheRatio       float64 `json:"create_cache_ratio"`
 	PriceDiscountPercent   float64 `json:"price_discount_percent"`
 }
 
 // PricingAPIItem 在 Pricing 基础上扩展渠道维度统计字段（定价接口 data 元素类型）。
 type PricingAPIItem struct {
 	Pricing
-	MinModelPrice      float64               `json:"minModelPrice"`
-	MinModelRatio      float64               `json:"minModelRatio"`
-	MinCompletionRatio float64               `json:"minCompletionRatio"`
-	MaxModelPrice      float64               `json:"maxModelPrice"`
-	MaxModelRatio      float64               `json:"maxModelRatio"`
-	MaxCompletionRatio float64               `json:"maxCompletionRatio"`
-	SupplierList       []PricingSupplierItem `json:"supplier_list"`
-	ChannelList        []PricingChannelItem  `json:"channel_list"`
+	SupplierList []PricingSupplierItem `json:"supplier_list"`
+	ChannelList  []PricingChannelItem  `json:"channel_list"`
 }
 
 func resolveChannelPricingTriple(channelID int, supplierApplicationID int, modelName string) (mp, mr, cr float64) {
@@ -105,6 +101,18 @@ func resolveChannelPricingTriple(channelID int, supplierApplicationID int, model
 	return mp, mr, cr
 }
 
+func resolveChannelCachePair(channelID int, modelName string) (cacheRatio, createCacheRatio float64) {
+	cacheRatio, _ = ratio_setting.GetCacheRatio(modelName)
+	createCacheRatio, _ = ratio_setting.GetCreateCacheRatio(modelName)
+	if v, ok := ratio_setting.GetChannelCacheRatio(channelID, modelName); ok {
+		cacheRatio = v
+	}
+	if v, ok := ratio_setting.GetChannelCreateCacheRatio(channelID, modelName); ok {
+		createCacheRatio = v
+	}
+	return cacheRatio, createCacheRatio
+}
+
 func pricingSupplierAliasFromMeta(supplierApplicationID int, alias *string) string {
 	if supplierApplicationID == 0 {
 		return "P0"
@@ -121,33 +129,12 @@ func pricingSupplierAliasFromMeta(supplierApplicationID int, alias *string) stri
 	return SupplierApplicationAutoAlias(supplierApplicationID)
 }
 
-func minFloat64Slice(vs []float64) float64 {
-	m := vs[0]
-	for _, x := range vs[1:] {
-		if x < m {
-			m = x
-		}
-	}
-	return m
-}
-
-func maxFloat64Slice(vs []float64) float64 {
-	m := vs[0]
-	for _, x := range vs[1:] {
-		if x > m {
-			m = x
-		}
-	}
-	return m
-}
-
 // BuildPricingAPIItems 为定价接口组装带渠道统计的 data 列表。
 func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}, metas []ChannelPricingMeta) []PricingAPIItem {
 	out := make([]PricingAPIItem, 0, len(filtered))
 	for _, p := range filtered {
 		item := PricingAPIItem{Pricing: p}
 		var chItems []PricingChannelItem
-		var prices, ratios, completions []float64
 
 		modelName := p.ModelName
 		for _, row := range metas {
@@ -161,6 +148,7 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 				continue
 			}
 			mp, mr, cr := resolveChannelPricingTriple(row.ChannelID, row.SupplierApplicationID, modelName)
+			chCache, chCreate := resolveChannelCachePair(row.ChannelID, modelName)
 			alias := pricingSupplierAliasFromMeta(row.SupplierApplicationID, row.SupplierAlias)
 			d := 100.0
 			if row.PriceDiscountPercent != nil {
@@ -177,20 +165,13 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 				ModelPrice:             mp,
 				ModelRatio:             mr,
 				CompletionRatio:        cr,
+				CacheRatio:             chCache,
+				CreateCacheRatio:       chCreate,
 				PriceDiscountPercent:   d,
 			})
-			prices = append(prices, mp)
-			ratios = append(ratios, mr)
-			completions = append(completions, cr)
 		}
 
 		if len(chItems) == 0 {
-			item.MinModelPrice = p.ModelPrice
-			item.MaxModelPrice = p.ModelPrice
-			item.MinModelRatio = p.ModelRatio
-			item.MaxModelRatio = p.ModelRatio
-			item.MinCompletionRatio = p.CompletionRatio
-			item.MaxCompletionRatio = p.CompletionRatio
 			item.SupplierList = []PricingSupplierItem{}
 			item.ChannelList = []PricingChannelItem{}
 			out = append(out, item)
@@ -198,12 +179,6 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 		}
 
 		item.ChannelList = chItems
-		item.MinModelPrice = minFloat64Slice(prices)
-		item.MaxModelPrice = maxFloat64Slice(prices)
-		item.MinModelRatio = minFloat64Slice(ratios)
-		item.MaxModelRatio = maxFloat64Slice(ratios)
-		item.MinCompletionRatio = minFloat64Slice(completions)
-		item.MaxCompletionRatio = maxFloat64Slice(completions)
 
 		supplierSeen := make(map[int]struct{})
 		suppliers := make([]PricingSupplierItem, 0)
