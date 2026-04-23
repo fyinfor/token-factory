@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -23,6 +24,7 @@ import (
 )
 
 const (
+	channelUpstreamModelFetchDefaultTimeoutSeconds        = 45
 	channelUpstreamModelUpdateTaskDefaultIntervalMinutes  = 30
 	channelUpstreamModelUpdateTaskBatchSize               = 100
 	channelUpstreamModelUpdateMinCheckIntervalSeconds     = 300
@@ -228,6 +230,18 @@ func collectPendingUpstreamModelChanges(channel *model.Channel, settings dto.Cha
 	return pendingAddModels, pendingRemoveModels, nil
 }
 
+// channelUpstreamModelFetchTimeout 拉取上游 /v1/models 等列表用的总超时；避免 RELAY_TIMEOUT=0 时请求无限挂起。
+func channelUpstreamModelFetchTimeout() time.Duration {
+	sec := int64(common.GetEnvOrDefault("CHANNEL_UPSTREAM_MODEL_FETCH_TIMEOUT_SECONDS", 0))
+	if sec > 0 {
+		return time.Duration(sec) * time.Second
+	}
+	if common.RelayTimeout > 0 {
+		return time.Duration(common.RelayTimeout) * time.Second
+	}
+	return channelUpstreamModelFetchDefaultTimeoutSeconds * time.Second
+}
+
 func getUpstreamModelUpdateMinCheckIntervalSeconds() int64 {
 	interval := int64(common.GetEnvOrDefault(
 		"CHANNEL_UPSTREAM_MODEL_UPDATE_MIN_CHECK_INTERVAL_SECONDS",
@@ -240,6 +254,12 @@ func getUpstreamModelUpdateMinCheckIntervalSeconds() int64 {
 }
 
 func fetchChannelUpstreamModelIDs(channel *model.Channel) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), channelUpstreamModelFetchTimeout())
+	defer cancel()
+	return fetchChannelUpstreamModelIDsCtx(ctx, channel)
+}
+
+func fetchChannelUpstreamModelIDsCtx(ctx context.Context, channel *model.Channel) ([]string, error) {
 	baseURL := constant.ChannelBaseURLs[channel.Type]
 	if channel.GetBaseURL() != "" {
 		baseURL = channel.GetBaseURL()
@@ -247,7 +267,7 @@ func fetchChannelUpstreamModelIDs(channel *model.Channel) ([]string, error) {
 
 	if channel.Type == constant.ChannelTypeOllama {
 		key := strings.TrimSpace(strings.Split(channel.Key, "\n")[0])
-		models, err := ollama.FetchOllamaModels(baseURL, key)
+		models, err := ollama.FetchOllamaModels(ctx, baseURL, key)
 		if err != nil {
 			return nil, err
 		}
@@ -262,7 +282,7 @@ func fetchChannelUpstreamModelIDs(channel *model.Channel) ([]string, error) {
 			return nil, fmt.Errorf("获取渠道密钥失败: %w", apiErr)
 		}
 		key = strings.TrimSpace(key)
-		models, err := gemini.FetchGeminiModels(baseURL, key, channel.GetSetting().Proxy)
+		models, err := gemini.FetchGeminiModels(ctx, baseURL, key, channel.GetSetting().Proxy)
 		if err != nil {
 			return nil, err
 		}
@@ -306,7 +326,7 @@ func fetchChannelUpstreamModelIDs(channel *model.Channel) ([]string, error) {
 		return nil, err
 	}
 
-	body, err := GetResponseBody(http.MethodGet, url, channel, headers)
+	body, err := GetResponseBodyWithContext(ctx, http.MethodGet, url, channel, headers)
 	if err != nil {
 		return nil, err
 	}

@@ -327,6 +327,7 @@ export const getChannelsColumns = ({
   setCurrentMultiKeyChannel,
   openUpstreamUpdateModal,
   detectChannelUpstreamUpdates,
+  openOnboardModal,
 }) => {
   return [
     {
@@ -902,6 +903,17 @@ export const getChannelsColumns = ({
                   }}
                 >
                   {t('编辑')}
+                </Button>
+              )}
+
+              {openOnboardModal && (
+                <Button
+                  type='primary'
+                  theme='light'
+                  size='small'
+                  onClick={() => openOnboardModal(record)}
+                >
+                  {t('上架向导')}
                 </Button>
               )}
 

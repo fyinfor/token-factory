@@ -305,6 +305,12 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.POST("/upstream_updates/apply_all", middleware.AdminAuth(), controller.ApplyAllChannelUpstreamModelUpdates)
 			channelRoute.POST("/upstream_updates/detect", middleware.AdminAuth(), controller.DetectChannelUpstreamModelUpdates)
 			channelRoute.POST("/upstream_updates/detect_all", middleware.AdminAuth(), controller.DetectAllChannelUpstreamModelUpdates)
+			// 上架向导：诊断 + 局部模型更新 + 元数据自动推断
+			channelRoute.GET("/:id/onboard", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.OnboardChannel)
+			channelRoute.PATCH("/:id/models", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.UpdateChannelModels)
+			channelRoute.POST("/:id/onboard/auto_meta", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.AutoMetaChannelModels)
+			channelRoute.POST("/:id/onboard/test", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.BulkTestChannelModels)
+			channelRoute.GET("/:id/test_results", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.GetChannelTestResults)
 		}
 		tokenRoute := apiRouter.Group("/token")
 		tokenRoute.Use(middleware.UserAuth())

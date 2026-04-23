@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -137,7 +138,12 @@ func GetClaudeAuthHeader(token string) http.Header {
 }
 
 func GetResponseBody(method, url string, channel *model.Channel, headers http.Header) ([]byte, error) {
-	req, err := http.NewRequest(method, url, nil)
+	return GetResponseBodyWithContext(context.Background(), method, url, channel, headers)
+}
+
+// GetResponseBodyWithContext 与 GetResponseBody 相同，但将请求绑定到 ctx（用于取消与超时）。
+func GetResponseBodyWithContext(ctx context.Context, method, url string, channel *model.Channel, headers http.Header) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
 		return nil, err
 	}

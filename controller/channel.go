@@ -1263,7 +1263,7 @@ func FetchModels(c *gin.Context) {
 	key = strings.Split(key, "\n")[0]
 
 	if req.Type == constant.ChannelTypeOllama {
-		models, err := ollama.FetchOllamaModels(baseURL, key)
+		models, err := ollama.FetchOllamaModels(c.Request.Context(), baseURL, key)
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
@@ -1285,7 +1285,7 @@ func FetchModels(c *gin.Context) {
 	}
 
 	if req.Type == constant.ChannelTypeGemini {
-		models, err := gemini.FetchGeminiModels(baseURL, key, "")
+		models, err := gemini.FetchGeminiModels(c.Request.Context(), baseURL, key, "")
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
