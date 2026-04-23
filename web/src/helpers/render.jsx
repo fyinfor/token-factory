@@ -2230,6 +2230,7 @@ export function renderLogContent(
   fileSearch = false,
   fileSearchCallCount = 0,
   displayMode = 'price',
+  hideGroupRatioInDetail = false,
 ) {
   const {
     ratio,
@@ -2241,24 +2242,34 @@ export function renderLogContent(
   const { symbol, rate } = getCurrencyConfig();
 
   if (isPriceDisplayMode(displayMode, modelPrice)) {
+    const displayMultiplier = hideGroupRatioInDetail ? ratio || 1 : 1;
     if (modelPrice !== -1) {
-      return joinBillingSummary([
+      const parts = [
         i18next.t('模型价格 {{symbol}}{{price}} / 次', {
           symbol,
-          price: parseFloat((modelPrice * rate).toFixed(2)),
+          price: parseFloat((modelPrice * displayMultiplier * rate).toFixed(2)),
         }),
-        getGroupRatioText(groupRatio, user_group_ratio),
-      ]);
+      ];
+      if (!hideGroupRatioInDetail) {
+        parts.push(getGroupRatioText(groupRatio, user_group_ratio));
+      }
+      return joinBillingSummary(parts);
     }
 
     const parts = [
       i18next.t('输入价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
-        price: parseFloat((modelRatio * 2.0 * rate).toFixed(2)),
+        price: parseFloat(
+          (modelRatio * 2.0 * displayMultiplier * rate).toFixed(2),
+        ),
       }),
       i18next.t('输出价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
-        price: parseFloat((modelRatio * 2.0 * completionRatio * rate).toFixed(2)),
+        price: parseFloat(
+          (modelRatio * 2.0 * completionRatio * displayMultiplier * rate).toFixed(
+            2,
+          ),
+        ),
       }),
     ];
     appendPricePart(
@@ -2267,7 +2278,9 @@ export function renderLogContent(
       '缓存读取价格 {{symbol}}{{price}} / 1M tokens',
       {
         symbol,
-        price: parseFloat((modelRatio * 2.0 * cacheRatio * rate).toFixed(2)),
+        price: parseFloat(
+          (modelRatio * 2.0 * cacheRatio * displayMultiplier * rate).toFixed(2),
+        ),
       },
     );
     appendPricePart(
@@ -2276,7 +2289,9 @@ export function renderLogContent(
       '图片输入价格 {{symbol}}{{price}} / 1M tokens',
       {
         symbol,
-        price: parseFloat((modelRatio * 2.0 * imageRatio * rate).toFixed(2)),
+        price: parseFloat(
+          (modelRatio * 2.0 * imageRatio * displayMultiplier * rate).toFixed(2),
+        ),
       },
     );
     appendPricePart(
@@ -2295,7 +2310,9 @@ export function renderLogContent(
         fileSearchCallCount,
       },
     );
-    parts.push(getGroupRatioText(groupRatio, user_group_ratio));
+    if (!hideGroupRatioInDetail) {
+      parts.push(getGroupRatioText(groupRatio, user_group_ratio));
+    }
     return joinBillingSummary(parts);
   }
 
@@ -3095,6 +3112,7 @@ export function renderClaudeLogContent(
   cacheCreationTokens1h = 0,
   cacheCreationRatio1h = 1.0,
   displayMode = 'price',
+  hideGroupRatioInDetail = false,
 ) {
   const { ratio: effectiveGroupRatio, label: ratioLabel } = getEffectiveRatio(
     groupRatio,
@@ -3106,28 +3124,40 @@ export function renderClaudeLogContent(
   const { symbol, rate } = getCurrencyConfig();
 
   if (isPriceDisplayMode(displayMode, modelPrice)) {
+    const displayMultiplier = hideGroupRatioInDetail ? ratio || 1 : 1;
     if (modelPrice !== -1) {
-      return joinBillingSummary([
+      const parts = [
         i18next.t('模型价格 {{symbol}}{{price}} / 次', {
           symbol,
-          price: parseFloat((modelPrice * rate).toFixed(2)),
+          price: parseFloat((modelPrice * displayMultiplier * rate).toFixed(2)),
         }),
-        getGroupRatioText(groupRatio, user_group_ratio),
-      ]);
+      ];
+      if (!hideGroupRatioInDetail) {
+        parts.push(getGroupRatioText(groupRatio, user_group_ratio));
+      }
+      return joinBillingSummary(parts);
     }
 
     const parts = [
       i18next.t('输入价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
-        price: parseFloat((modelRatio * 2.0 * rate).toFixed(2)),
+        price: parseFloat(
+          (modelRatio * 2.0 * displayMultiplier * rate).toFixed(2),
+        ),
       }),
       i18next.t('输出价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
-        price: parseFloat((modelRatio * 2.0 * completionRatio * rate).toFixed(2)),
+        price: parseFloat(
+          (modelRatio * 2.0 * completionRatio * displayMultiplier * rate).toFixed(
+            2,
+          ),
+        ),
       }),
       i18next.t('缓存读取价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
-        price: parseFloat((modelRatio * 2.0 * cacheRatio * rate).toFixed(2)),
+        price: parseFloat(
+          (modelRatio * 2.0 * cacheRatio * displayMultiplier * rate).toFixed(2),
+        ),
       }),
     ];
     const hasSplitCacheCreation =
@@ -3138,7 +3168,11 @@ export function renderClaudeLogContent(
       '5m缓存创建价格 {{symbol}}{{price}} / 1M tokens',
       {
         symbol,
-        price: parseFloat((modelRatio * 2.0 * cacheCreationRatio5m * rate).toFixed(2)),
+        price: parseFloat(
+          (modelRatio * 2.0 * cacheCreationRatio5m * displayMultiplier * rate).toFixed(
+            2,
+          ),
+        ),
       },
     );
     appendPricePart(
@@ -3147,7 +3181,11 @@ export function renderClaudeLogContent(
       '1h缓存创建价格 {{symbol}}{{price}} / 1M tokens',
       {
         symbol,
-        price: parseFloat((modelRatio * 2.0 * cacheCreationRatio1h * rate).toFixed(2)),
+        price: parseFloat(
+          (modelRatio * 2.0 * cacheCreationRatio1h * displayMultiplier * rate).toFixed(
+            2,
+          ),
+        ),
       },
     );
     appendPricePart(
@@ -3156,10 +3194,16 @@ export function renderClaudeLogContent(
       '缓存创建价格 {{symbol}}{{price}} / 1M tokens',
       {
         symbol,
-        price: parseFloat((modelRatio * 2.0 * cacheCreationRatio * rate).toFixed(2)),
+        price: parseFloat(
+          (modelRatio * 2.0 * cacheCreationRatio * displayMultiplier * rate).toFixed(
+            2,
+          ),
+        ),
       },
     );
-    parts.push(getGroupRatioText(groupRatio, user_group_ratio));
+    if (!hideGroupRatioInDetail) {
+      parts.push(getGroupRatioText(groupRatio, user_group_ratio));
+    }
     return joinBillingSummary(parts);
   }
 

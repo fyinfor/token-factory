@@ -267,6 +267,9 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.GET("/search", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.SearchChannels)
 			channelRoute.GET("/models", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.ChannelListModels)
 			channelRoute.GET("/models_enabled", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.EnabledListModels)
+			// 须注册在 /:id 之前，否则会被当成 id
+			channelRoute.GET("/model-test-results", middleware.TryUserAuth(), controller.GetModelTestResultsForChannels)
+			channelRoute.PUT("/model-test-result-display", middleware.UserAuth(), middleware.AdminAuth(), controller.PutModelTestResultDisplay)
 			channelRoute.GET("/:id", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.GetChannel)
 			channelRoute.POST("/:id/key", middleware.RootAuth(), middleware.CriticalRateLimit(), middleware.DisableCache(), middleware.SecureVerificationRequired(), controller.GetChannelKey)
 			channelRoute.GET("/test", middleware.AdminAuth(), controller.TestAllChannels)

@@ -22,6 +22,8 @@ import { Card, Avatar, Typography, Collapse, Tag, Button, Toast } from '@douyinf
 import { IconListView, IconCopy } from '@douyinfe/semi-icons';
 import { getUsedGroupContext } from '../../../../../helpers/utils';
 
+import { renderModelTestResultSummary } from '../../../../../helpers/modelStability';
+
 const { Text } = Typography;
 
 const hasRatioValue = (value) =>
@@ -32,6 +34,7 @@ const hasRatioValue = (value) =>
 
 const ModelChannelList = ({
   modelData,
+  channelMtrMap = {},
   displayPrice,
   currency,
   siteDisplayType,
@@ -257,6 +260,15 @@ const ModelChannelList = ({
                               ))}
                             </div>
                           )}
+                          <div className='flex flex-wrap gap-2 items-center pt-1 border-t border-gray-100 mt-1'>
+                            <Text type='tertiary' size='small'>
+                              {t('单测/稳定性')}
+                            </Text>
+                            {renderModelTestResultSummary(
+                              channelMtrMap[String(channel.channel_id)],
+                              t,
+                            )}
+                          </div>
                         </div>
                         <Button
                           icon={<IconCopy />}

@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Modal,
   Button,
@@ -28,9 +28,20 @@ import {
   Select,
   Switch,
   Banner,
+  InputNumber,
 } from '@douyinfe/semi-ui';
 import { IconSearch, IconInfoCircle } from '@douyinfe/semi-icons';
-import { copy, showError, showInfo, showSuccess } from '../../../../helpers';
+import {
+  API,
+  copy,
+  showError,
+  showInfo,
+  showSuccess,
+} from '../../../../helpers';
+import {
+  getStabilityGradeLabel,
+  renderModelTestResultSummary,
+} from '../../../../helpers/modelStability';
 import { MODEL_TABLE_PAGE_SIZE } from '../../../../constants';
 
 const ModelTestModal = ({
@@ -56,6 +67,92 @@ const ModelTestModal = ({
   isMobile,
   t,
 }) => {
+  /** 渠道下各模型在 DB 中的单测/运营展示行，key 为 model_name */
+  const [mtrByModel, setMtrByModel] = useState({});
+  const [overrideVisible, setOverrideVisible] = useState(false);
+  const [overrideModel, setOverrideModel] = useState(null);
+  const [overrideMs, setOverrideMs] = useState(0);
+  const [overrideGrade, setOverrideGrade] = useState(0);
+  const [overrideSubmitting, setOverrideSubmitting] = useState(false);
+
+  const loadMtrForChannel = useCallback(async () => {
+    if (!currentTestChannel?.id) {
+      setMtrByModel({});
+      return;
+    }
+    try {
+      const res = await API.get(
+        `/api/channel/model-test-results?channel_id=${currentTestChannel.id}`,
+      );
+      if (!res.data?.success) {
+        return;
+      }
+      const map = {};
+      (res.data.data || []).forEach((row) => {
+        if (row.model_name) {
+          map[row.model_name] = row;
+        }
+      });
+      setMtrByModel(map);
+    } catch (e) {
+      setMtrByModel({});
+    }
+  }, [currentTestChannel?.id]);
+
+  useEffect(() => {
+    if (!showModelTestModal || !currentTestChannel) {
+      setMtrByModel({});
+      return;
+    }
+    const tmr = setTimeout(() => {
+      loadMtrForChannel();
+    }, 300);
+    return () => clearTimeout(tmr);
+  }, [
+    showModelTestModal,
+    currentTestChannel,
+    loadMtrForChannel,
+    modelTestResults,
+  ]);
+
+  const openOverride = (modelName) => {
+    setOverrideModel(modelName);
+    const row = mtrByModel[modelName];
+    setOverrideMs(
+      row?.manual_display_response_time > 0
+        ? row.manual_display_response_time
+        : 0,
+    );
+    setOverrideGrade(row?.manual_stability_grade > 0 ? row.manual_stability_grade : 0);
+    setOverrideVisible(true);
+  };
+
+  const submitOverride = async () => {
+    if (!currentTestChannel || !overrideModel) {
+      return;
+    }
+    setOverrideSubmitting(true);
+    try {
+      const res = await API.put('/api/channel/model-test-result-display', {
+        channel_id: currentTestChannel.id,
+        model_name: overrideModel,
+        manual_display_response_time: overrideMs > 0 ? Math.round(overrideMs) : 0,
+        manual_stability_grade: overrideGrade,
+      });
+      if (res.data?.success) {
+        showSuccess(t('已保存运营展示数据'));
+        setOverrideVisible(false);
+        loadMtrForChannel();
+      } else {
+        showError(res.data?.message || t('保存失败'));
+      }
+    } catch (e) {
+      showError(t('保存失败'));
+    } finally {
+      setOverrideSubmitting(false);
+    }
+  };
+
   const hasChannel = Boolean(currentTestChannel);
   const streamToggleDisabled = [
     'embeddings',
@@ -124,8 +221,12 @@ const ModelTestModal = ({
       .split(',')
       .filter((m) => m.toLowerCase().includes(modelSearchKeyword.toLowerCase()))
       .filter((m) => {
-        const result = modelTestResults[`${currentTestChannel.id}-${m}`];
-        return result && result.success;
+        const inMemory = modelTestResults[`${currentTestChannel.id}-${m}`];
+        if (inMemory) {
+          return inMemory.success;
+        }
+        const persisted = mtrByModel[m];
+        return Boolean(persisted?.last_test_success);
       });
     if (successKeys.length === 0) {
       showInfo(t('暂无成功模型'));
@@ -149,6 +250,7 @@ const ModelTestModal = ({
       render: (text, record) => {
         const testResult =
           modelTestResults[`${currentTestChannel.id}-${record.model}`];
+        const persisted = mtrByModel[record.model];
         const isTesting = testingModels.has(record.model);
 
         if (isTesting) {
@@ -159,7 +261,7 @@ const ModelTestModal = ({
           );
         }
 
-        if (!testResult) {
+        if (!testResult && !persisted) {
           return (
             <Tag color='grey' shape='circle'>
               {t('未开始')}
@@ -167,19 +269,42 @@ const ModelTestModal = ({
           );
         }
 
+        const mergedResult = testResult
+          ? {
+              success: Boolean(testResult.success),
+              time: Number(testResult.time || 0),
+            }
+          : {
+              success: Boolean(persisted?.last_test_success),
+              time: Number(persisted?.last_response_time || 0) / 1000,
+            };
+
         return (
           <div className='flex items-center gap-2'>
-            <Tag color={testResult.success ? 'green' : 'red'} shape='circle'>
-              {testResult.success ? t('成功') : t('失败')}
+            <Tag color={mergedResult.success ? 'green' : 'red'} shape='circle'>
+              {mergedResult.success ? t('成功') : t('失败')}
             </Tag>
-            {testResult.success && (
+            {mergedResult.success && mergedResult.time > 0 && (
               <Typography.Text type='tertiary'>
                 {t('请求时长: ${time}s').replace(
                   '${time}',
-                  testResult.time.toFixed(2),
+                  mergedResult.time.toFixed(2),
                 )}
               </Typography.Text>
             )}
+          </div>
+        );
+      },
+    },
+    {
+      title: t('展示状态'),
+      dataIndex: 'ops_display',
+      width: 220,
+      render: (_text, record) => {
+        const row = mtrByModel[record.model];
+        return (
+          <div className='flex flex-col gap-1 items-start max-w-[200px]'>
+            {renderModelTestResultSummary(row, t)}
           </div>
         );
       },
@@ -190,21 +315,30 @@ const ModelTestModal = ({
       render: (text, record) => {
         const isTesting = testingModels.has(record.model);
         return (
-          <Button
-            type='tertiary'
-            onClick={() =>
-              testChannel(
-                currentTestChannel,
-                record.model,
-                selectedEndpointType,
-                isStreamTest,
-              )
-            }
-            loading={isTesting}
-            size='small'
-          >
-            {t('测试')}
-          </Button>
+          <div className='flex items-center gap-2'>
+            <Button
+              type='tertiary'
+              onClick={() =>
+                testChannel(
+                  currentTestChannel,
+                  record.model,
+                  selectedEndpointType,
+                  isStreamTest,
+                )
+              }
+              loading={isTesting}
+              size='small'
+            >
+              {t('测试')}
+            </Button>
+            <Button
+              type='tertiary'
+              size='small'
+              onClick={() => openOverride(record.model)}
+            >
+              {t('手动调整')}
+            </Button>
+          </div>
         );
       },
     },
@@ -360,6 +494,86 @@ const ModelTestModal = ({
               onPageChange: (page) => setModelTablePage(page),
             }}
           />
+          <Modal
+            title={t('手动调整')}
+            visible={overrideVisible}
+            onCancel={() => setOverrideVisible(false)}
+            maskClosable={!overrideSubmitting}
+            footer={
+              <div className='flex justify-end gap-2'>
+                <Button onClick={() => setOverrideVisible(false)} disabled={overrideSubmitting}>
+                  {t('取消')}
+                </Button>
+                <Button
+                  type='tertiary'
+                  onClick={async () => {
+                    setOverrideMs(0);
+                    setOverrideGrade(0);
+                    if (!currentTestChannel || !overrideModel) {
+                      return;
+                    }
+                    setOverrideSubmitting(true);
+                    try {
+                      const res = await API.put('/api/channel/model-test-result-display', {
+                        channel_id: currentTestChannel.id,
+                        model_name: overrideModel,
+                        manual_display_response_time: 0,
+                        manual_stability_grade: 0,
+                      });
+                      if (res.data?.success) {
+                        showSuccess(t('已清除运营展示覆盖'));
+                        setOverrideVisible(false);
+                        loadMtrForChannel();
+                      } else {
+                        showError(res.data?.message || t('操作失败'));
+                      }
+                    } catch (e) {
+                      showError(t('操作失败'));
+                    } finally {
+                      setOverrideSubmitting(false);
+                    }
+                  }}
+                  loading={overrideSubmitting}
+                >
+                  {t('清除覆盖')}
+                </Button>
+                <Button type='primary' loading={overrideSubmitting} onClick={submitOverride}>
+                  {t('保存')}
+                </Button>
+              </div>
+            }
+          >
+            <div className='flex flex-col gap-3'>
+              <Banner type='info' fullWidth closeIcon={null} className='!rounded-lg' description={t('用于模型广场等处的展示；填 0 或「不覆盖」表示使用实测/默认。')} />
+              <div>
+                <Typography.Text strong>{t('展示耗时（毫秒）')}</Typography.Text>
+                <InputNumber
+                  value={overrideMs}
+                  onChange={(v) =>
+                    setOverrideMs(v == null || Number.isNaN(v) ? 0 : v)
+                  }
+                  min={0}
+                  className='w-full mt-1'
+                />
+              </div>
+              <div>
+                <Typography.Text strong>{t('稳定性等级')}</Typography.Text>
+                <Select
+                  value={overrideGrade}
+                  onChange={setOverrideGrade}
+                  className='w-full mt-1'
+                  optionList={[
+                    { value: 0, label: t('不覆盖（自动）') },
+                    { value: 1, label: getStabilityGradeLabel(1, t) },
+                    { value: 2, label: getStabilityGradeLabel(2, t) },
+                    { value: 3, label: getStabilityGradeLabel(3, t) },
+                    { value: 4, label: getStabilityGradeLabel(4, t) },
+                    { value: 5, label: getStabilityGradeLabel(5, t) },
+                  ]}
+                />
+              </div>
+            </div>
+          </Modal>
         </div>
       )}
     </Modal>
