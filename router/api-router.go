@@ -267,6 +267,9 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.GET("/search", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.SearchChannels)
 			channelRoute.GET("/models", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.ChannelListModels)
 			channelRoute.GET("/models_enabled", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.EnabledListModels)
+			// 须注册在 /:id 之前，否则会被当成 id
+			channelRoute.GET("/model-test-results", middleware.TryUserAuth(), controller.GetModelTestResultsForChannels)
+			channelRoute.PUT("/model-test-result-display", middleware.UserAuth(), middleware.AdminAuth(), controller.PutModelTestResultDisplay)
 			channelRoute.GET("/:id", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.GetChannel)
 			channelRoute.POST("/:id/key", middleware.RootAuth(), middleware.CriticalRateLimit(), middleware.DisableCache(), middleware.SecureVerificationRequired(), controller.GetChannelKey)
 			channelRoute.GET("/test", middleware.AdminAuth(), controller.TestAllChannels)
@@ -302,6 +305,12 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.POST("/upstream_updates/apply_all", middleware.AdminAuth(), controller.ApplyAllChannelUpstreamModelUpdates)
 			channelRoute.POST("/upstream_updates/detect", middleware.AdminAuth(), controller.DetectChannelUpstreamModelUpdates)
 			channelRoute.POST("/upstream_updates/detect_all", middleware.AdminAuth(), controller.DetectAllChannelUpstreamModelUpdates)
+			// 上架向导：诊断 + 局部模型更新 + 元数据自动推断
+			channelRoute.GET("/:id/onboard", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.OnboardChannel)
+			channelRoute.PATCH("/:id/models", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.UpdateChannelModels)
+			channelRoute.POST("/:id/onboard/auto_meta", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.AutoMetaChannelModels)
+			channelRoute.POST("/:id/onboard/test", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.BulkTestChannelModels)
+			channelRoute.GET("/:id/test_results", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.GetChannelTestResults)
 		}
 		tokenRoute := apiRouter.Group("/token")
 		tokenRoute.Use(middleware.UserAuth())

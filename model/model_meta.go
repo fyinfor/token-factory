@@ -208,3 +208,17 @@ func SearchModels(keyword string, vendor string, offset int, limit int) ([]*Mode
 	}
 	return models, total, nil
 }
+
+// GetExistingModelNames 从给定名称列表中返回已在 model_meta 表中存在记录的模型名。
+// 用于上架向导诊断：快速判断哪些模型需要手动去 /console/models 配置元数据。
+func GetExistingModelNames(names []string) ([]string, error) {
+	if len(names) == 0 {
+		return nil, nil
+	}
+	var result []string
+	err := DB.Model(&Model{}).
+		Select("model_name").
+		Where("model_name IN ?", names).
+		Pluck("model_name", &result).Error
+	return result, err
+}

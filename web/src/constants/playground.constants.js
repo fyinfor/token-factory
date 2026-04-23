@@ -84,6 +84,7 @@ export const API_ENDPOINTS = {
 export const DEFAULT_CONFIG = {
   inputs: {
     model: 'gpt-4o',
+    model_type: '',
     group: '',
     temperature: 0.7,
     top_p: 1,

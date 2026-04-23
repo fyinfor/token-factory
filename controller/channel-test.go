@@ -36,10 +36,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// testResult 渠道测试一次调用的结果；recordedModelName 为与模型元数据/操练场 model_name 对齐的用户侧名称（非上游 UpstreamModelName），仅成功路径会填充。
 type testResult struct {
-	context           *gin.Context
-	localErr          error
-	tokenFactoryError *types.TokenFactoryError
+	context            *gin.Context
+	localErr           error
+	tokenFactoryError  *types.TokenFactoryError
+	recordedModelName  string
 }
 
 func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointType string) string {
@@ -497,10 +499,16 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 		Other:            other,
 	})
 	common.SysLog(fmt.Sprintf("testing channel #%d, response: \n%s", channel.Id, string(respBody)))
+	// 与 model_test_results、操练场 GetUserModels 的 model_name 一致，供 Upsert 使用
+	recordedName := strings.TrimSpace(info.OriginModelName)
+	if recordedName == "" {
+		recordedName = strings.TrimSpace(common.GetContextKeyString(c, constant.ContextKeyOriginalModel))
+	}
 	return testResult{
 		context:           c,
 		localErr:          nil,
 		tokenFactoryError: nil,
+		recordedModelName: recordedName,
 	}
 }
 
@@ -763,19 +771,36 @@ func TestChannel(c *gin.Context) {
 	isStream, _ := strconv.ParseBool(c.Query("stream"))
 	tik := time.Now()
 	result := testChannel(channel, testModel, endpointType, isStream)
+	milliseconds := time.Since(tik).Milliseconds()
+	consumedTime := float64(milliseconds) / 1000.0
+	// 优先用 relay 解析后的用户侧名（与 models.model_name 一致）；否则与 testChannel 入参/渠道默认试测模型保持同一套兜底
+	modelForRecord := strings.TrimSpace(result.recordedModelName)
+	if modelForRecord == "" {
+		modelForRecord = strings.TrimSpace(testModel)
+		if modelForRecord == "" {
+			if channel.TestModel != nil && strings.TrimSpace(*channel.TestModel) != "" {
+				modelForRecord = strings.TrimSpace(*channel.TestModel)
+			} else {
+				models := channel.GetModels()
+				if len(models) > 0 {
+					modelForRecord = strings.TrimSpace(models[0])
+				}
+			}
+		}
+	}
 	if result.localErr != nil {
+		go channel.UpdateTestResult(false, milliseconds, result.localErr.Error(), modelForRecord)
+		go func() { _ = model.UpsertModelTestResult(channel.Id, modelForRecord, false, milliseconds, result.localErr.Error()) }()
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": result.localErr.Error(),
-			"time":    0.0,
+			"time":    consumedTime,
 		})
 		return
 	}
-	tok := time.Now()
-	milliseconds := tok.Sub(tik).Milliseconds()
-	go channel.UpdateResponseTime(milliseconds)
-	consumedTime := float64(milliseconds) / 1000.0
 	if result.tokenFactoryError != nil {
+		go channel.UpdateTestResult(false, milliseconds, result.tokenFactoryError.Error(), modelForRecord)
+		go func() { _ = model.UpsertModelTestResult(channel.Id, modelForRecord, false, milliseconds, result.tokenFactoryError.Error()) }()
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": result.tokenFactoryError.Error(),
@@ -783,6 +808,8 @@ func TestChannel(c *gin.Context) {
 		})
 		return
 	}
+	go channel.UpdateTestResult(true, milliseconds, "", modelForRecord)
+	go func() { _ = model.UpsertModelTestResult(channel.Id, modelForRecord, true, milliseconds, "") }()
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -827,6 +854,24 @@ func testAllChannels(notify bool) error {
 			result := testChannel(channel, "", "", false)
 			tok := time.Now()
 			milliseconds := tok.Sub(tik).Milliseconds()
+			testMessage := ""
+			if result.localErr != nil {
+				testMessage = result.localErr.Error()
+			} else if result.tokenFactoryError != nil {
+				testMessage = result.tokenFactoryError.Error()
+			}
+			testSuccess := result.localErr == nil && result.tokenFactoryError == nil
+			channel.UpdateTestResult(testSuccess, milliseconds, testMessage, "")
+			modelForRecord := ""
+			if channel.TestModel != nil && strings.TrimSpace(*channel.TestModel) != "" {
+				modelForRecord = strings.TrimSpace(*channel.TestModel)
+			} else {
+				models := channel.GetModels()
+				if len(models) > 0 {
+					modelForRecord = strings.TrimSpace(models[0])
+				}
+			}
+			_ = model.UpsertModelTestResult(channel.Id, modelForRecord, testSuccess, milliseconds, testMessage)
 
 			shouldBanChannel := false
 			tokenFactoryError := result.tokenFactoryError
@@ -854,7 +899,6 @@ func testAllChannels(notify bool) error {
 				service.EnableChannel(channel.Id, common.GetContextKeyString(result.context, constant.ContextKeyChannelKey), channel.Name)
 			}
 
-			channel.UpdateResponseTime(milliseconds)
 			time.Sleep(common.RequestInterval)
 		}
 

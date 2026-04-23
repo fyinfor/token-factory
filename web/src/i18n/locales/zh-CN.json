@@ -2504,6 +2504,8 @@
     "缓存目录": "缓存目录",
     "可用": "可用",
     "输出价格": "输出价格",
+    "渠道缓存价": "渠道缓存价",
+    "渠道缓存创建价": "渠道缓存创建价",
     "输出价格：{{symbol}}{{price}} * {{completionRatio}} = {{symbol}}{{total}} / 1M tokens (输出倍率: {{completionRatio}})": "输出价格：{{symbol}}{{price}} * {{completionRatio}} = {{symbol}}{{total}} / 1M tokens (输出倍率: {{completionRatio}})",
     "输出倍率 {{completionRatio}}": "输出倍率 {{completionRatio}}",
     "边栏设置": "边栏设置",

@@ -118,6 +118,20 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
   const [showMultiKeyManageModal, setShowMultiKeyManageModal] = useState(false);
   const [currentMultiKeyChannel, setCurrentMultiKeyChannel] = useState(null);
 
+  // 上架向导 modal 状态
+  const [showOnboardModal, setShowOnboardModal] = useState(false);
+  const [currentOnboardChannel, setCurrentOnboardChannel] = useState(null);
+
+  const openOnboardModal = (channel) => {
+    setCurrentOnboardChannel(channel);
+    setShowOnboardModal(true);
+  };
+
+  const closeOnboardModal = () => {
+    setShowOnboardModal(false);
+    setCurrentOnboardChannel(null);
+  };
+
   // Refs
   const requestCounter = useRef(0);
   const allSelectingRef = useRef(false);
@@ -1240,6 +1254,13 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
     currentMultiKeyChannel,
     setCurrentMultiKeyChannel,
     ...upstreamUpdates,
+
+    // 上架向导
+    showOnboardModal,
+    setShowOnboardModal,
+    currentOnboardChannel,
+    openOnboardModal,
+    closeOnboardModal,
 
     // Form
     formApi,

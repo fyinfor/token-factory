@@ -39,6 +39,7 @@ import {
   calculateModelPrice,
   getModelPriceItems,
   getLobeHubIcon,
+  getUsedGroupContext,
 } from '../../../../../helpers';
 import PricingCardSkeleton from './PricingCardSkeleton';
 import { useMinimumLoadingTime } from '../../../../../hooks/common/useMinimumLoadingTime';
@@ -113,6 +114,12 @@ const PricingCardView = ({
       return null;
     }
 
+    const { usedGroupRatio } = getUsedGroupContext(
+      model,
+      selectedGroup,
+      groupRatio,
+    );
+
     // 辅助函数：格式化价格
     const formatPrice = (priceUSD) => {
       const rawDisplayPrice = displayPrice(priceUSD);
@@ -147,21 +154,24 @@ const PricingCardView = ({
 
     model.channel_list.forEach(ch => {
       if (ch.model_ratio !== undefined && ch.model_ratio !== null) {
-        const inputPriceUSD = ch.model_ratio * 2;
+        const inputPriceUSD = ch.model_ratio * 2 * usedGroupRatio;
         prices.input.push(formatPrice(inputPriceUSD));
 
         if (ch.completion_ratio !== undefined && ch.completion_ratio !== null) {
-          const outputPriceUSD = ch.model_ratio * ch.completion_ratio * 2;
+          const outputPriceUSD =
+            ch.model_ratio * ch.completion_ratio * 2 * usedGroupRatio;
           prices.output.push(formatPrice(outputPriceUSD));
         }
 
         if (ch.cache_ratio !== undefined && ch.cache_ratio !== null) {
-          const cachePriceUSD = ch.model_ratio * ch.cache_ratio * 2;
+          const cachePriceUSD =
+            ch.model_ratio * ch.cache_ratio * 2 * usedGroupRatio;
           prices.cache.push(formatPrice(cachePriceUSD));
         }
 
         if (ch.create_cache_ratio !== undefined && ch.create_cache_ratio !== null) {
-          const createCachePriceUSD = ch.model_ratio * ch.create_cache_ratio * 2;
+          const createCachePriceUSD =
+            ch.model_ratio * ch.create_cache_ratio * 2 * usedGroupRatio;
           prices.createCache.push(formatPrice(createCachePriceUSD));
         }
       }
