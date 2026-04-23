@@ -21,7 +21,6 @@ import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { Card, Avatar, Typography, Collapse, Tag, Button, Toast } from '@douyinfe/semi-ui';
 import { IconListView, IconCopy } from '@douyinfe/semi-icons';
 import { getUsedGroupContext } from '../../../../../helpers/utils';
-import { getUsedGroupContext } from '../../../../../helpers/utils';
 
 const { Text } = Typography;
 
@@ -41,31 +40,9 @@ const ModelChannelList = ({
   selectedGroup,
   groupRatio,
 }) => {
-const hasRatioValue = (value) =>
-  value !== undefined &&
-  value !== null &&
-  value !== '' &&
-  Number.isFinite(Number(value));
-
-const ModelChannelList = ({
-  modelData,
-  displayPrice,
-  currency,
-  siteDisplayType,
-  tokenUnit,
-  t,
-  selectedGroup,
-  groupRatio,
-}) => {
   if (!modelData?.channel_list || modelData.channel_list.length === 0) {
     return null;
   }
-
-  const { usedGroupRatio } = useMemo(
-    () =>
-      getUsedGroupContext(modelData, selectedGroup ?? 'all', groupRatio || {}),
-    [modelData, selectedGroup, groupRatio],
-  );
 
   const { usedGroupRatio } = useMemo(
     () =>
@@ -110,10 +87,11 @@ const ModelChannelList = ({
     }
   }, [allKeysStr, allKeys]);
 
-  // 格式化通道信息（与 calculateModelPrice 一致：含分组倍率）（与 calculateModelPrice 一致：含分组倍率）
+  // 格式化通道信息（与 calculateModelPrice 一致：含分组倍率）
   const formatChannelInfo = (channel) => {
     const firstRow = [];
     const secondRow = [];
+    const items = [];
 
     const calculatePrice = (nominalRatio) => {
       const priceUSD = nominalRatio * 2 * usedGroupRatio;
@@ -154,6 +132,28 @@ const ModelChannelList = ({
       firstRow.push({ 
         label: t('输出价格'), 
         value: calculatePrice(outputRatio)
+      });
+    }
+
+    if (
+      hasRatioValue(channel.model_ratio) &&
+      hasRatioValue(channel.cache_ratio)
+    ) {
+      const cacheOutputRatio = channel.model_ratio * Number(channel.cache_ratio);
+      items.push({
+        label: t('渠道缓存价'),
+        value: calculatePrice(cacheOutputRatio),
+      });
+    }
+
+    if (
+      hasRatioValue(channel.model_ratio) &&
+      hasRatioValue(channel.create_cache_ratio)
+    ) {
+      const createCacheOutRatio = channel.model_ratio * Number(channel.create_cache_ratio);
+      items.push({
+        label: t('渠道缓存创建价'),
+        value: calculatePrice(createCacheOutRatio),
       });
     }
     
