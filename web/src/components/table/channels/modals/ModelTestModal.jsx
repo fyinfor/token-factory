@@ -221,8 +221,12 @@ const ModelTestModal = ({
       .split(',')
       .filter((m) => m.toLowerCase().includes(modelSearchKeyword.toLowerCase()))
       .filter((m) => {
-        const result = modelTestResults[`${currentTestChannel.id}-${m}`];
-        return result && result.success;
+        const inMemory = modelTestResults[`${currentTestChannel.id}-${m}`];
+        if (inMemory) {
+          return inMemory.success;
+        }
+        const persisted = mtrByModel[m];
+        return Boolean(persisted?.last_test_success);
       });
     if (successKeys.length === 0) {
       showInfo(t('暂无成功模型'));
@@ -246,6 +250,7 @@ const ModelTestModal = ({
       render: (text, record) => {
         const testResult =
           modelTestResults[`${currentTestChannel.id}-${record.model}`];
+        const persisted = mtrByModel[record.model];
         const isTesting = testingModels.has(record.model);
 
         if (isTesting) {
@@ -256,7 +261,7 @@ const ModelTestModal = ({
           );
         }
 
-        if (!testResult) {
+        if (!testResult && !persisted) {
           return (
             <Tag color='grey' shape='circle'>
               {t('未开始')}
@@ -264,16 +269,26 @@ const ModelTestModal = ({
           );
         }
 
+        const mergedResult = testResult
+          ? {
+              success: Boolean(testResult.success),
+              time: Number(testResult.time || 0),
+            }
+          : {
+              success: Boolean(persisted?.last_test_success),
+              time: Number(persisted?.last_response_time || 0) / 1000,
+            };
+
         return (
           <div className='flex items-center gap-2'>
-            <Tag color={testResult.success ? 'green' : 'red'} shape='circle'>
-              {testResult.success ? t('成功') : t('失败')}
+            <Tag color={mergedResult.success ? 'green' : 'red'} shape='circle'>
+              {mergedResult.success ? t('成功') : t('失败')}
             </Tag>
-            {testResult.success && (
+            {mergedResult.success && mergedResult.time > 0 && (
               <Typography.Text type='tertiary'>
                 {t('请求时长: ${time}s').replace(
                   '${time}',
-                  testResult.time.toFixed(2),
+                  mergedResult.time.toFixed(2),
                 )}
               </Typography.Text>
             )}
