@@ -330,8 +330,10 @@ type SupplierChannelSearchFilter struct {
 
 // ChannelSimplePricingItem pricing 页面使用的渠道精简信息。
 type ChannelSimplePricingItem struct {
-	ChannelID   int    `json:"channel_id"`
-	ChannelName string `json:"channel_name"`
+	ChannelID     int    `json:"channel_id"`
+	ChannelName   string `json:"channel_name"`
+	ChannelNo     string `json:"channel_no"`
+	SupplierAlias string `json:"supplier_alias"`
 }
 
 // ChannelPricingMeta 定价接口计算渠道维度价格所需的渠道行（含供应商别名）。
@@ -348,8 +350,10 @@ type ChannelPricingMeta struct {
 func ListChannelsForPricing() ([]ChannelSimplePricingItem, error) {
 	items := make([]ChannelSimplePricingItem, 0)
 	err := DB.Model(&Channel{}).
-		Select("id as channel_id, name as channel_name").
-		Order("id asc").
+		Select("channels.id AS channel_id, channels.name AS channel_name, channels.channel_no, COALESCE(supplier_applications.supplier_alias, '') AS supplier_alias").
+		Joins("LEFT JOIN supplier_applications ON supplier_applications.id = channels.supplier_application_id").
+		Where("channels.status = ?", common.ChannelStatusEnabled).
+		Order("channels.id ASC").
 		Scan(&items).Error
 	if err != nil {
 		return nil, err
@@ -363,6 +367,7 @@ func ListChannelPricingMeta() ([]ChannelPricingMeta, error) {
 	err := DB.Model(&Channel{}).
 		Select("channels.id AS channel_id, channels.supplier_application_id, channels.channel_no, channels.models, channels.price_discount_percent, supplier_applications.supplier_alias").
 		Joins("LEFT JOIN supplier_applications ON supplier_applications.id = channels.supplier_application_id").
+		Where("channels.status = ?", common.ChannelStatusEnabled).
 		Order("channels.id ASC").
 		Scan(&items).Error
 	if err != nil {
@@ -758,21 +763,29 @@ func ensureChannelModelPricingDefaults(channels []Channel) {
 			}
 			seen[modelKey] = struct{}{}
 
-			if _, exists := channelModelPrice[channelID][modelKey]; exists {
+			needPrice := false
+			if _, exists := channelModelPrice[channelID][modelKey]; !exists {
+				needPrice = true
+			}
+			needRatio := false
+			if _, exists := channelModelRatio[channelID][modelKey]; !exists {
+				needRatio = true
+			}
+			if !needPrice && !needRatio {
 				continue
 			}
-			if _, exists := channelModelRatio[channelID][modelKey]; exists {
-				continue
+			// 无渠道专属值时用全局同模型名（已 FormatMatching）兜底；与定价解析顺序一致。
+			if needPrice {
+				if modelPrice, ok := ratio_setting.GetModelPrice(modelKey, false); ok {
+					channelModelPrice[channelID][modelKey] = modelPrice
+					changed = true
+				}
 			}
-
-			if modelPrice, ok := ratio_setting.GetModelPrice(modelKey, false); ok {
-				channelModelPrice[channelID][modelKey] = modelPrice
-				changed = true
-				continue
-			}
-			if modelRatio, ok, _ := ratio_setting.GetModelRatio(modelKey); ok {
-				channelModelRatio[channelID][modelKey] = modelRatio
-				changed = true
+			if needRatio {
+				if modelRatio, ok, _ := ratio_setting.GetModelRatio(modelKey); ok {
+					channelModelRatio[channelID][modelKey] = modelRatio
+					changed = true
+				}
 			}
 		}
 	}

@@ -59,14 +59,22 @@ func getPricingVisibleChannelsForUser(c *gin.Context) ([]model.ChannelSimplePric
 	if err != nil {
 		return nil, nil, err
 	}
+	ownedIDSet := make(map[int]struct{}, len(ownedChannels))
+	for _, ch := range ownedChannels {
+		ownedIDSet[ch.Id] = struct{}{}
+	}
+	allChannels, err := model.ListChannelsForPricing()
+	if err != nil {
+		return nil, nil, err
+	}
 	visibleChannelIDs := make(map[int]struct{}, len(ownedChannels))
 	visibleChannels := make([]model.ChannelSimplePricingItem, 0, len(ownedChannels))
-	for _, item := range ownedChannels {
-		visibleChannelIDs[item.Id] = struct{}{}
-		visibleChannels = append(visibleChannels, model.ChannelSimplePricingItem{
-			ChannelID:   item.Id,
-			ChannelName: item.Name,
-		})
+	for _, item := range allChannels {
+		if _, ok := ownedIDSet[item.ChannelID]; !ok {
+			continue
+		}
+		visibleChannelIDs[item.ChannelID] = struct{}{}
+		visibleChannels = append(visibleChannels, item)
 	}
 	return visibleChannels, visibleChannelIDs, nil
 }
@@ -200,7 +208,7 @@ func GetPricing(c *gin.Context) {
 		"usable_group":                   usableGroup,
 		"supported_endpoint":             model.GetSupportedEndpointMap(),
 		"auto_groups":                    service.GetUserAutoGroup(group),
-		"pricing_version":                "a42d372ccf0b5dd13ecf71203521f9d2",
+		"pricing_version":                "b58e1c9a3f7d4e2a8c0b1d6e9f4a2c7d8e0f1b2a3",
 	})
 }
 

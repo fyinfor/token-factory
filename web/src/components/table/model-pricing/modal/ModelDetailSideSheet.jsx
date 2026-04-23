@@ -48,6 +48,7 @@ const ModelDetailSideSheet = ({
   endpointMap,
   autoGroups,
   t,
+  selectedGroup,
 }) => {
   const isMobile = useIsMobile();
   /**
@@ -148,6 +149,8 @@ const ModelDetailSideSheet = ({
               siteDisplayType={siteDisplayType}
               tokenUnit={tokenUnit}
               t={t}
+              selectedGroup={selectedGroup}
+              groupRatio={groupRatio}
             />
             <ModelPricingTable
               modelData={modelData}
