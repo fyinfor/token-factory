@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -590,6 +591,166 @@ func GetUserModels(c *gin.Context) {
 				models = append(models, g)
 			}
 		}
+	}
+	// scene=playground 时返回结构化模型列表：
+	// - 仅包含有 model_test_results 可匹配行且 last_test_success 为成功（1）的模型；无通过单测的模型时 items 可为空
+	// - vendor: 模型类型；类型选项仅由「通过单测后的」items 中出现的 vendor_id 推导
+	// - tested_success 在返回项中恒为 true（因已按单测成功过滤）
+	if c.Query("scene") == "playground" {
+		type playgroundModelItem struct {
+			ModelName     string `json:"model_name"`
+			VendorID      int    `json:"vendor_id"`
+			Vendor        string `json:"vendor"`
+			TestedSuccess bool   `json:"tested_success"`
+		}
+		modelRows := make([]struct {
+			ModelName string `gorm:"column:model_name"`
+			VendorID  int    `gorm:"column:vendor_id"`
+		}, 0)
+		modelVendorIDByName := make(map[string]int, len(models))
+		if len(models) > 0 {
+			// 与“模型广场”一致：按模型元数据(model_meta)中的模型类型(vendor_id)做归属映射（仅对 status=1 的元数据行建映射）
+			if err := model.DB.Model(&model.Model{}).
+				Select("model_name", "vendor_id").
+				Where("model_name IN ?", models).
+				Where("status = ?", 1).
+				Find(&modelRows).Error; err != nil {
+				common.ApiError(c, err)
+				return
+			}
+			for i := range modelRows {
+				modelVendorIDByName[modelRows[i].ModelName] = modelRows[i].VendorID
+			}
+		}
+		// 与无 scene 的 /user/models 一致：先列出分组内每个已启用模型名 + 元数据 vendor；再按 model_test_results 最近一次单测成功过滤，只返回「单测通过」的模型，并仅据此推导「模型类型」
+		playgroundNameRows := make([]struct {
+			ModelName string
+			VendorID  int
+		}, 0, len(models))
+		for _, name := range models {
+			vid := 0
+			if v, ok := modelVendorIDByName[name]; ok {
+				vid = v
+			}
+			playgroundNameRows = append(playgroundNameRows, struct {
+				ModelName string
+				VendorID  int
+			}{ModelName: name, VendorID: vid})
+		}
+		candidateNames := make([]string, len(playgroundNameRows))
+		for i := range playgroundNameRows {
+			candidateNames[i] = playgroundNameRows[i].ModelName
+		}
+		testedByName, err := model.GetPlaygroundTestSuccessByModelNames(candidateNames)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		// 仅保留 model_test_results 中可匹配到「最近一次成功」的模型（与 GetPlaygroundTestSuccess 规则一致：last_test_success=1/ true）
+		filteredNameRows := make([]struct {
+			ModelName string
+			VendorID  int
+		}, 0, len(playgroundNameRows))
+		for i := range playgroundNameRows {
+			if !testedByName[playgroundNameRows[i].ModelName] {
+				continue
+			}
+			filteredNameRows = append(filteredNameRows, playgroundNameRows[i])
+		}
+		vendorIDSet := make(map[int]struct{})
+		for i := range filteredNameRows {
+			if filteredNameRows[i].VendorID > 0 {
+				vendorIDSet[filteredNameRows[i].VendorID] = struct{}{}
+			}
+		}
+		vendorIDs := make([]int, 0, len(vendorIDSet))
+		for id := range vendorIDSet {
+			vendorIDs = append(vendorIDs, id)
+		}
+		vendorNameByID := make(map[int]string)
+		// 操练场按 vendor_id 筛选须与下拉的 id 一一对应；不限制 status，避免元数据有 vendor_id 但库中已禁用时名称为空导致前端「按类型无数据」
+		if len(vendorIDs) > 0 {
+			vendorRows := make([]struct {
+				Id   int    `gorm:"column:id"`
+				Name string `gorm:"column:name"`
+			}, 0)
+			if err := model.DB.Model(&model.Vendor{}).
+				Select("id", "name").
+				Where("id IN ?", vendorIDs).
+				Find(&vendorRows).Error; err != nil {
+				common.ApiError(c, err)
+				return
+			}
+			for i := range vendorRows {
+				vendorNameByID[vendorRows[i].Id] = vendorRows[i].Name
+			}
+		}
+		// 返回项均为单测成功的模型；有元数据则带 vendor
+		items := make([]playgroundModelItem, 0, len(filteredNameRows))
+		for i := range filteredNameRows {
+			modelName := filteredNameRows[i].ModelName
+			vendorID := filteredNameRows[i].VendorID
+			vendorName := vendorNameByID[vendorID]
+			items = append(items, playgroundModelItem{
+				ModelName:     modelName,
+				VendorID:      vendorID,
+				Vendor:        vendorName,
+				TestedSuccess: true,
+			})
+		}
+
+		// 与模型广场（PricingVendors 仅基于当前模型集推导供应商）一致：类型选项只含本页 items 中实际出现过的 vendor_id，不用 GetVendors 全量，避免多一个「幽灵类型」、按类型筛选与 vendor_id 对不上导致列表全空
+		// playgroundVendorOption 为操练场「模型类型」下拉中的一项，与 items[].vendor_id 一一可对应
+		type playgroundVendorOption struct {
+			id   int
+			name string
+		}
+		playgroundVendorOptions := make([]playgroundVendorOption, 0, len(vendorIDSet)+1)
+		for id := range vendorIDSet {
+			nm := strings.TrimSpace(vendorNameByID[id])
+			if nm == "" {
+				nm = fmt.Sprintf("未关联#%d", id)
+			}
+			playgroundVendorOptions = append(playgroundVendorOptions, playgroundVendorOption{
+				id:   id,
+				name: nm,
+			})
+		}
+		sort.Slice(playgroundVendorOptions, func(i, j int) bool {
+			if playgroundVendorOptions[i].name == playgroundVendorOptions[j].name {
+				return playgroundVendorOptions[i].id < playgroundVendorOptions[j].id
+			}
+			return strings.Compare(playgroundVendorOptions[i].name, playgroundVendorOptions[j].name) < 0
+		})
+		var hasUnassignedModel bool
+		for i := range filteredNameRows {
+			if filteredNameRows[i].VendorID == 0 {
+				hasUnassignedModel = true
+				break
+			}
+		}
+		vendorOptions := make([]map[string]interface{}, 0, len(playgroundVendorOptions)+1)
+		for i := range playgroundVendorOptions {
+			vendorOptions = append(vendorOptions, map[string]interface{}{
+				"id":   playgroundVendorOptions[i].id,
+				"name": playgroundVendorOptions[i].name,
+			})
+		}
+		if hasUnassignedModel {
+			vendorOptions = append(vendorOptions, map[string]interface{}{
+				"id":   0,
+				"name": "未知模型类型",
+			})
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "",
+			"data": gin.H{
+				"items":          items,
+				"vendor_options": vendorOptions,
+			},
+		})
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

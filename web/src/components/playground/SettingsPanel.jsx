@@ -31,6 +31,7 @@ const SettingsPanel = ({
   inputs,
   parameterEnabled,
   models,
+  modelTypes,
   groups,
   styleState,
   showDebugPanel,
@@ -149,6 +150,43 @@ const SettingsPanel = ({
 
         {/* 模型选择 */}
         <div className={customRequestMode ? 'opacity-50' : ''}>
+          <div className='flex items-center gap-2 mb-2'>
+            <Sparkles size={16} className='text-gray-500' />
+            <Typography.Text strong className='text-sm'>
+              {t('模型类型')}
+            </Typography.Text>
+            {customRequestMode && (
+              <Typography.Text className='text-xs text-orange-600'>
+                ({t('已在自定义模式中忽略')})
+              </Typography.Text>
+            )}
+          </div>
+          {/* model_type 为 0 表示未关联类型，与空字符串「全部」不同，不能用 value={x || ''} */}
+          <Select
+            placeholder={t('请选择模型类型')}
+            name='model_type'
+            selection
+            filter={selectFilter}
+            autoClearSearchValue={false}
+            onChange={(value) =>
+              onInputChange(
+                'model_type',
+                value === undefined || value === null ? '' : value,
+              )
+            }
+            value={
+              inputs.model_type === undefined || inputs.model_type === null
+                ? ''
+                : inputs.model_type
+            }
+            autoComplete='new-password'
+            optionList={modelTypes}
+            style={{ width: '100%' }}
+            dropdownStyle={{ width: '100%', maxWidth: '100%' }}
+            className='!rounded-lg mb-3'
+            disabled={customRequestMode}
+          />
+
           <div className='flex items-center gap-2 mb-2'>
             <Sparkles size={16} className='text-gray-500' />
             <Typography.Text strong className='text-sm'>

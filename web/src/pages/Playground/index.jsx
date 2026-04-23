@@ -93,6 +93,7 @@ const Playground = () => {
     customRequestBody,
     showSettings,
     models,
+    modelTypes,
     groups,
     status,
     message,
@@ -109,6 +110,7 @@ const Playground = () => {
     handleConfigReset,
     setShowSettings,
     setModels,
+    setModelTypes,
     setGroups,
     setStatus,
     setMessage,
@@ -129,8 +131,16 @@ const Playground = () => {
     saveMessagesImmediately,
   );
 
-  // 数据加载
-  useDataLoader(userState, inputs, handleInputChange, setModels, setGroups);
+  // 数据加载（modelTypes 参与按类型筛选，与模型广场一致在客户端过滤）
+  useDataLoader(
+    userState,
+    inputs,
+    modelTypes,
+    handleInputChange,
+    setModels,
+    setModelTypes,
+    setGroups,
+  );
 
   // 消息编辑
   const {
@@ -477,6 +487,7 @@ const Playground = () => {
                 inputs={inputs}
                 parameterEnabled={parameterEnabled}
                 models={models}
+                modelTypes={modelTypes}
                 groups={groups}
                 styleState={styleState}
                 showSettings={showSettings}

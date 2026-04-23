@@ -30,8 +30,8 @@ type Channel struct {
 	Name               string  `json:"name" gorm:"index"`
 	Weight             *uint   `json:"weight" gorm:"default:0"`
 	CreatedTime        int64   `json:"created_time" gorm:"bigint"`
-	TestTime           int64   `json:"test_time" gorm:"bigint"`
-	ResponseTime       int     `json:"response_time"` // in milliseconds
+	TestTime           int64   `json:"test_time" gorm:"bigint"` // 最近一次渠道测试时间（Unix 秒级时间戳）
+	ResponseTime       int     `json:"response_time"`           // 最近一次渠道测试响应耗时（毫秒）
 	BaseURL            *string `json:"base_url" gorm:"column:base_url;default:''"`
 	Other              string  `json:"other"`
 	Balance            float64 `json:"balance"` // in USD
@@ -44,7 +44,7 @@ type Channel struct {
 	StatusCodeMapping *string `json:"status_code_mapping" gorm:"type:varchar(1024);default:''"`
 	Priority          *int64  `json:"priority" gorm:"bigint;default:0"`
 	AutoBan           *int    `json:"auto_ban" gorm:"default:1"`
-	OtherInfo         string  `json:"other_info"`
+	OtherInfo         string  `json:"other_info"` // 渠道扩展信息（JSON），测试相关键：last_test_success/last_test_message/last_test_model/last_test_time
 	Tag               *string `json:"tag" gorm:"index"`
 	Setting           *string `json:"setting" gorm:"type:text"` // 渠道额外设置
 	ParamOverride     *string `json:"param_override" gorm:"type:text"`
@@ -929,6 +929,33 @@ func (channel *Channel) UpdateResponseTime(responseTime int64) {
 	}).Error
 	if err != nil {
 		common.SysLog(fmt.Sprintf("failed to update response time: channel_id=%d, error=%v", channel.Id, err))
+	}
+}
+
+// UpdateTestResult 持久化渠道测试结果（成功/失败）、响应时间与测试时间。
+// 同时会把最近一次测试的状态信息写入 other_info，供前端与运维排查使用。
+func (channel *Channel) UpdateTestResult(success bool, responseTime int64, message string, modelName string) {
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		var dbChannel Channel
+		if err := tx.Select("id", "other_info").First(&dbChannel, "id = ?", channel.Id).Error; err != nil {
+			return err
+		}
+
+		otherInfo := dbChannel.GetOtherInfo()
+		otherInfo["last_test_success"] = success
+		otherInfo["last_test_message"] = message
+		otherInfo["last_test_model"] = modelName
+		otherInfo["last_test_time"] = common.GetTimestamp()
+		dbChannel.SetOtherInfo(otherInfo)
+
+		return tx.Model(&Channel{}).Where("id = ?", channel.Id).Select("response_time", "test_time", "other_info").Updates(Channel{
+			TestTime:     common.GetTimestamp(),
+			ResponseTime: int(responseTime),
+			OtherInfo:    dbChannel.OtherInfo,
+		}).Error
+	})
+	if err != nil {
+		common.SysLog(fmt.Sprintf("failed to update test result: channel_id=%d, error=%v", channel.Id, err))
 	}
 }
 
