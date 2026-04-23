@@ -711,7 +711,7 @@ export function getUsedGroupContext(record, selectedGroup, groupRatio) {
 /** 从多渠道 channel_list 派生 min/max，替代 data 上聚合的 minModelRatio 等字段 */
 export function getBoundsFromChannelList(record) {
   const ch = record?.channel_list;
-  if (!Array.isArray(ch) || ch.length <= 1) {
+  if (!Array.isArray(ch) || ch.length === 0) {
     return null;
   }
   const pick = (key) =>
@@ -773,27 +773,38 @@ export const calculateModelPrice = ({
 
   // 2. 根据计费类型计算价格
   if (record.quota_type === 0) {
-    // 按量计费
+    // 按量计费：有 channel_list 时以渠道倍率（已含基础×折扣）为基准，再乘分组倍率
     const isTokensDisplay = quotaDisplayType === 'TOKENS';
-    const chBounds = getBoundsFromChannelList(record);
-    const hasMultipleChannels = chBounds != null;
+    const hasChannelPricing =
+      Array.isArray(record.channel_list) && record.channel_list.length > 0;
+    const chBounds = hasChannelPricing ? getBoundsFromChannelList(record) : null;
 
-    const minRatio = hasMultipleChannels
-      ? chBounds.minModelRatio
-      : effectiveModelRatio;
-    const maxRatio = hasMultipleChannels
-      ? chBounds.maxModelRatio
-      : effectiveModelRatio;
-    const minCompletionRatio = hasMultipleChannels
-      && chBounds.minCompletionRatio !== undefined
-      ? chBounds.minCompletionRatio
-      : Number(record.completion_ratio);
-    const maxCompletionRatio = hasMultipleChannels
-      && chBounds.maxCompletionRatio !== undefined
-      ? chBounds.maxCompletionRatio
-      : Number(record.completion_ratio);
-    
-    const inputRatioPriceUSD = effectiveModelRatio * 2 * usedGroupRatio;
+    let minRatio;
+    let maxRatio;
+    let minCompletionRatio;
+    let maxCompletionRatio;
+
+    if (chBounds) {
+      minRatio = chBounds.minModelRatio;
+      maxRatio = chBounds.maxModelRatio;
+      minCompletionRatio =
+        chBounds.minCompletionRatio !== undefined
+          ? chBounds.minCompletionRatio
+          : Number(record.completion_ratio);
+      maxCompletionRatio =
+        chBounds.maxCompletionRatio !== undefined
+          ? chBounds.maxCompletionRatio
+          : Number(record.completion_ratio);
+    } else {
+      minRatio = maxRatio = effectiveModelRatio;
+      minCompletionRatio = maxCompletionRatio = Number(record.completion_ratio);
+    }
+
+    const hasRange =
+      chBounds != null &&
+      (minRatio !== maxRatio || minCompletionRatio !== maxCompletionRatio);
+
+    const inputRatioPriceUSD = minRatio * 2 * usedGroupRatio;
     const minInputRatioPriceUSD = minRatio * 2 * usedGroupRatio;
     const maxInputRatioPriceUSD = maxRatio * 2 * usedGroupRatio;
     
@@ -809,8 +820,9 @@ export const calculateModelPrice = ({
       hasRatioValue(value) ? Number(Number(value).toFixed(6)) : null;
 
     if (isTokensDisplay) {
+      const inputRatioForTokens = chBounds ? minRatio : effectiveModelRatio;
       return {
-        inputRatio: formatRatio(effectiveModelRatio),
+        inputRatio: formatRatio(inputRatioForTokens),
         modelRatioSource: hasGroupModelRatio ? 'group' : 'global',
         completionRatio: formatRatio(record.completion_ratio),
         cacheRatio: formatRatio(record.cache_ratio),
@@ -850,20 +862,20 @@ export const calculateModelPrice = ({
     };
 
     const inputPrice = formatTokenPrice(inputRatioPriceUSD);
+    const completionSingleRatio = chBounds
+      ? minCompletionRatio
+      : Number(record.completion_ratio);
     const audioInputPrice = hasRatioValue(record.audio_ratio)
       ? formatTokenPrice(inputRatioPriceUSD * Number(record.audio_ratio))
       : null;
 
-    // 计算价格范围
-    const hasRange = hasMultipleChannels && (minRatio !== maxRatio || minCompletionRatio !== maxCompletionRatio);
-    
     return {
       inputPrice,
       inputPriceMin: hasRange ? formatTokenPrice(minInputRatioPriceUSD) : null,
       inputPriceMax: hasRange ? formatTokenPrice(maxInputRatioPriceUSD) : null,
       modelRatioSource: hasGroupModelRatio ? 'group' : 'global',
       completionPrice: formatTokenPrice(
-        inputRatioPriceUSD * Number(record.completion_ratio),
+        inputRatioPriceUSD * completionSingleRatio,
       ),
       completionPriceMin: hasRange ? formatTokenPrice(minInputRatioPriceUSD * minCompletionRatio) : null,
       completionPriceMax: hasRange ? formatTokenPrice(maxInputRatioPriceUSD * maxCompletionRatio) : null,

@@ -221,3 +221,76 @@ func GetLatestSuccessfulModelNames() (map[string]bool, error) {
 	}
 	return result, nil
 }
+
+type channelModelTestRow struct {
+	ChannelId int    `gorm:"column:channel_id"`
+	ModelName string `gorm:"column:model_name"`
+}
+
+func loadMTRPricingSuccessRows(table string) ([]channelModelTestRow, error) {
+	var rows []channelModelTestRow
+	q := DB.Table(table).Select("channel_id", "model_name")
+	if common.UsingPostgreSQL {
+		if err := q.Where("last_test_success = ?", true).Find(&rows).Error; err != nil {
+			return nil, err
+		}
+		return rows, nil
+	}
+	if err := q.Where("last_test_success = ?", 1).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// LoadChannelPricingTestSuccessIndex 返回 channel_id -> 该渠道下最近一次单测成功的模型名列表（去重，保留插入顺序）。
+// 会依次尝试 model_test_results / model_test_result 等与 Upsert 一致的表名。
+func LoadChannelPricingTestSuccessIndex() (map[int][]string, error) {
+	if DB == nil {
+		return map[int][]string{}, nil
+	}
+	mg := DB.Migrator()
+	out := make(map[int][]string)
+	seen := make(map[int]map[string]struct{})
+	for _, t := range mtrResultTableNames {
+		if !mg.HasTable(t) {
+			continue
+		}
+		rows, err := loadMTRPricingSuccessRows(t)
+		if err != nil {
+			return nil, err
+		}
+		for i := range rows {
+			cid := rows[i].ChannelId
+			name := strings.TrimSpace(rows[i].ModelName)
+			if cid <= 0 || name == "" {
+				continue
+			}
+			if seen[cid] == nil {
+				seen[cid] = make(map[string]struct{})
+			}
+			if _, ok := seen[cid][name]; ok {
+				continue
+			}
+			seen[cid][name] = struct{}{}
+			out[cid] = append(out[cid], name)
+		}
+	}
+	return out, nil
+}
+
+// ChannelPricingRowMatchesLastTestSuccess 判断 (channelID, pricingModelName) 是否在单测结果表中存在可匹配的成功记录。
+func ChannelPricingRowMatchesLastTestSuccess(byChannel map[int][]string, channelID int, pricingModelName string) bool {
+	if byChannel == nil || channelID <= 0 {
+		return false
+	}
+	names, ok := byChannel[channelID]
+	if !ok || len(names) == 0 {
+		return false
+	}
+	for i := range names {
+		if mtrNameMatchesForPlayground(names[i], pricingModelName) {
+			return true
+		}
+	}
+	return false
+}

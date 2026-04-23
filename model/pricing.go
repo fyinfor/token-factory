@@ -3,6 +3,7 @@ package model
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"sync"
@@ -75,40 +76,39 @@ func resolveChannelPricingTriple(channelID int, supplierApplicationID int, model
 		cr = v
 	}
 
+	// 渠道自身定价 -> 全局同模型名 -> 供应商兜底（避免供应商覆盖全局）
 	if v, ok := ratio_setting.GetChannelModelPrice(channelID, modelName); ok {
+		mp = v
+	} else if v, ok := ratio_setting.GetModelPrice(modelName, false); ok {
 		mp = v
 	} else if supplierApplicationID > 0 {
 		if v, ok := ratio_setting.GetSupplierModelPrice(supplierApplicationID, modelName); ok {
 			mp = v
-		} else if v, ok := ratio_setting.GetModelPrice(modelName, false); ok {
-			mp = v
 		}
-	} else if v, ok := ratio_setting.GetModelPrice(modelName, false); ok {
-		mp = v
 	}
 
 	if v, ok := ratio_setting.GetChannelModelRatio(channelID, modelName); ok {
 		mr = v
+	} else if v, ok, _ := ratio_setting.GetModelRatio(modelName); ok {
+		mr = v
 	} else if supplierApplicationID > 0 {
 		if v, ok := ratio_setting.GetSupplierModelRatio(supplierApplicationID, modelName); ok {
 			mr = v
-		} else if v, ok, _ := ratio_setting.GetModelRatio(modelName); ok {
-			mr = v
 		}
-	} else if v, ok, _ := ratio_setting.GetModelRatio(modelName); ok {
-		mr = v
 	}
 	return mp, mr, cr
 }
 
 func resolveChannelCachePair(channelID int, modelName string) (cacheRatio, createCacheRatio float64) {
-	cacheRatio, _ = ratio_setting.GetCacheRatio(modelName)
-	createCacheRatio, _ = ratio_setting.GetCreateCacheRatio(modelName)
 	if v, ok := ratio_setting.GetChannelCacheRatio(channelID, modelName); ok {
 		cacheRatio = v
+	} else {
+		cacheRatio, _ = ratio_setting.GetCacheRatio(modelName)
 	}
 	if v, ok := ratio_setting.GetChannelCreateCacheRatio(channelID, modelName); ok {
 		createCacheRatio = v
+	} else {
+		createCacheRatio, _ = ratio_setting.GetCreateCacheRatio(modelName)
 	}
 	return cacheRatio, createCacheRatio
 }
@@ -130,7 +130,14 @@ func pricingSupplierAliasFromMeta(supplierApplicationID int, alias *string) stri
 }
 
 // BuildPricingAPIItems 为定价接口组装带渠道统计的 data 列表。
+// 渠道项价格为：基础定价（resolveChannelPricingTriple）× 渠道专属折扣；用户/分组倍率由前端用 group_ratio 再乘（与 calculateModelPrice 一致）。
 func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}, metas []ChannelPricingMeta) []PricingAPIItem {
+	testSuccessByChannel, err := LoadChannelPricingTestSuccessIndex()
+	if err != nil {
+		common.SysLog(fmt.Sprintf("LoadChannelPricingTestSuccessIndex error: %v", err))
+		testSuccessByChannel = nil
+	}
+
 	out := make([]PricingAPIItem, 0, len(filtered))
 	for _, p := range filtered {
 		item := PricingAPIItem{Pricing: p}
@@ -147,7 +154,10 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			if !ChannelModelsRawContains(row.Models, modelName) {
 				continue
 			}
-			mp, mr, cr := resolveChannelPricingTriple(row.ChannelID, row.SupplierApplicationID, modelName)
+			if testSuccessByChannel != nil && !ChannelPricingRowMatchesLastTestSuccess(testSuccessByChannel, row.ChannelID, modelName) {
+				continue
+			}
+			baseMp, baseMr, cr := resolveChannelPricingTriple(row.ChannelID, row.SupplierApplicationID, modelName)
 			chCache, chCreate := resolveChannelCachePair(row.ChannelID, modelName)
 			alias := pricingSupplierAliasFromMeta(row.SupplierApplicationID, row.SupplierAlias)
 			d := 100.0
@@ -155,8 +165,8 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 				d = *row.PriceDiscountPercent
 			}
 			mult := ChannelPriceDiscountMultiplierForPricing(d)
-			mp *= mult
-			mr *= mult
+			mp := baseMp * mult
+			mr := baseMr * mult
 			chItems = append(chItems, PricingChannelItem{
 				ChannelID:              row.ChannelID,
 				SupplierApplicationID:  row.SupplierApplicationID,
@@ -172,11 +182,21 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 		}
 
 		if len(chItems) == 0 {
-			item.SupplierList = []PricingSupplierItem{}
-			item.ChannelList = []PricingChannelItem{}
-			out = append(out, item)
 			continue
 		}
+
+		sort.Slice(chItems, func(i, j int) bool {
+			var ai, aj float64
+			if p.QuotaType == 1 {
+				ai, aj = chItems[i].ModelPrice, chItems[j].ModelPrice
+			} else {
+				ai, aj = chItems[i].ModelRatio, chItems[j].ModelRatio
+			}
+			if ai != aj {
+				return ai < aj
+			}
+			return chItems[i].ChannelID < chItems[j].ChannelID
+		})
 
 		item.ChannelList = chItems
 
