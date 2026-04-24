@@ -3128,7 +3128,9 @@ export function renderClaudeLogContent(
   const { symbol, rate } = getCurrencyConfig();
 
   if (isPriceDisplayMode(displayMode, modelPrice)) {
-    const displayMultiplier = hideGroupRatioInDetail ? ratio || 1 : 1;
+    const displayMultiplier = hideGroupRatioInDetail
+      ? effectiveGroupRatio || 1
+      : 1;
     if (modelPrice !== -1) {
       const parts = [
         i18next.t('模型价格 {{symbol}}{{price}} / 次', {
