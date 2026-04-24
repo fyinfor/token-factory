@@ -41,6 +41,9 @@ const OFFICIAL_RATIO_PRESET_NAME = '官方倍率预设';
 const MODELS_DEV_PRESET_NAME = 'models.dev 价格预设';
 const OFFICIAL_RATIO_PRESET_BASE_URL = 'https://basellm.github.io';
 const MODELS_DEV_PRESET_BASE_URL = 'https://models.dev';
+const OFFICIAL_RATIO_PRESET_ENDPOINT =
+  '/llm-metadata/api/newapi/ratio_config-v1-base.json';
+const MODELS_DEV_PRESET_ENDPOINT = 'https://models.dev/api.json';
 
 const ChannelSelectorModal = forwardRef(
   (
@@ -123,6 +126,21 @@ const ChannelSelectorModal = forwardRef(
     const renderEndpointCell = (text, record) => {
       const channelId = record.key || record.value;
       const currentEndpoint = channelEndpoints[channelId] || '';
+      const isOfficialRatioPreset =
+        channelId === OFFICIAL_RATIO_PRESET_ID ||
+        record._originalData?.base_url === OFFICIAL_RATIO_PRESET_BASE_URL;
+      const isModelsDevPreset =
+        channelId === MODELS_DEV_PRESET_ID ||
+        record._originalData?.base_url === MODELS_DEV_PRESET_BASE_URL;
+      if (isOfficialRatioPreset || isModelsDevPreset) {
+        const fixedEndpoint = isModelsDevPreset
+          ? MODELS_DEV_PRESET_ENDPOINT
+          : OFFICIAL_RATIO_PRESET_ENDPOINT;
+        if (currentEndpoint !== fixedEndpoint) {
+          updateEndpoint(channelId, fixedEndpoint);
+        }
+        return <Tag color='blue'>{fixedEndpoint}</Tag>;
+      }
 
       const getEndpointType = (ep) => {
         if (ep === '/api/ratio_config') return 'ratio_config';
@@ -301,6 +319,11 @@ const ChannelSelectorModal = forwardRef(
             }}
             size='small'
           />
+          <div style={{ color: 'var(--semi-color-text-2)', fontSize: 12 }}>
+            {t(
+              'models.dev 价格预设将只同步官方 Provider（如 OpenAI/Anthropic/Google/DeepSeek/xAI/Moonshot/智谱/阿里 DashScope）模型到全局模型定价。',
+            )}
+          </div>
         </Space>
       </Modal>
     );

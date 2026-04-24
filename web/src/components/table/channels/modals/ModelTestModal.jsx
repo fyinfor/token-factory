@@ -44,6 +44,11 @@ import {
 } from '../../../../helpers/modelStability';
 import { MODEL_TABLE_PAGE_SIZE } from '../../../../constants';
 
+/**
+ * 渠道管理「测试」弹窗：单模型/批量测试、展示单测/稳定性、以及「稳定性等级」入口（覆盖展示耗时/等级选择）。
+ * @param {object} props 与父级共享的弹窗与测试状态
+ * @returns {JSX.Element}
+ */
 const ModelTestModal = ({
   showModelTestModal,
   currentTestChannel,
@@ -234,6 +239,32 @@ const ModelTestModal = ({
     setSelectedModelKeys(successKeys);
   };
 
+  /**
+   * 将本页内存中的「本次」测试结果与接口 DTO 合并，供「展示状态」单列展示（与原先「状态+展示」中合并逻辑一致）。
+   * @param {string} modelName 行模型名
+   * @returns {object|undefined} 可传入 renderModelTestResultSummary 的行，或需单独展示时由调用方处理
+   */
+  const getMergedMtrRowForDisplay = (modelName) => {
+    if (!currentTestChannel) {
+      return null;
+    }
+    const inMemory = modelTestResults[`${currentTestChannel.id}-${modelName}`];
+    const persisted = mtrByModel[modelName];
+    if (inMemory) {
+      const timeSec = Number(inMemory.time || 0);
+      return {
+        ...(persisted || {}),
+        last_test_success: Boolean(inMemory.success),
+        display_response_time_ms:
+          inMemory.success && timeSec > 0 ? Math.round(timeSec * 1000) : 0,
+        display_stability_grade: persisted?.display_stability_grade
+          ? persisted.display_stability_grade
+          : 0,
+      };
+    }
+    return persisted || null;
+  };
+
   const columns = [
     {
       title: t('模型名称'),
@@ -245,63 +276,20 @@ const ModelTestModal = ({
       ),
     },
     {
-      title: t('状态'),
-      dataIndex: 'status',
-      render: (text, record) => {
-        const testResult =
-          modelTestResults[`${currentTestChannel.id}-${record.model}`];
-        const persisted = mtrByModel[record.model];
-        const isTesting = testingModels.has(record.model);
-
-        if (isTesting) {
-          return (
-            <Tag color='blue' shape='circle'>
-              {t('测试中')}
-            </Tag>
-          );
-        }
-
-        if (!testResult && !persisted) {
-          return (
-            <Tag color='grey' shape='circle'>
-              {t('未开始')}
-            </Tag>
-          );
-        }
-
-        const mergedResult = testResult
-          ? {
-              success: Boolean(testResult.success),
-              time: Number(testResult.time || 0),
-            }
-          : {
-              success: Boolean(persisted?.last_test_success),
-              time: Number(persisted?.last_response_time || 0) / 1000,
-            };
-
-        return (
-          <div className='flex items-center gap-2'>
-            <Tag color={mergedResult.success ? 'green' : 'red'} shape='circle'>
-              {mergedResult.success ? t('成功') : t('失败')}
-            </Tag>
-            {mergedResult.success && mergedResult.time > 0 && (
-              <Typography.Text type='tertiary'>
-                {t('请求时长: ${time}s').replace(
-                  '${time}',
-                  mergedResult.time.toFixed(2),
-                )}
-              </Typography.Text>
-            )}
-          </div>
-        );
-      },
-    },
-    {
       title: t('展示状态'),
       dataIndex: 'ops_display',
       width: 220,
       render: (_text, record) => {
-        const row = mtrByModel[record.model];
+        if (testingModels.has(record.model)) {
+          return (
+            <div className='flex flex-col gap-1 items-start max-w-[200px]'>
+              <Tag color='blue' shape='circle'>
+                {t('测试中')}
+              </Tag>
+            </div>
+          );
+        }
+        const row = getMergedMtrRowForDisplay(record.model);
         return (
           <div className='flex flex-col gap-1 items-start max-w-[200px]'>
             {renderModelTestResultSummary(row, t)}
@@ -336,7 +324,7 @@ const ModelTestModal = ({
               size='small'
               onClick={() => openOverride(record.model)}
             >
-              {t('手动调整')}
+              {t('稳定性等级调整')}
             </Button>
           </div>
         );
@@ -495,7 +483,7 @@ const ModelTestModal = ({
             }}
           />
           <Modal
-            title={t('手动调整')}
+            title={t('稳定性等级')}
             visible={overrideVisible}
             onCancel={() => setOverrideVisible(false)}
             maskClosable={!overrideSubmitting}

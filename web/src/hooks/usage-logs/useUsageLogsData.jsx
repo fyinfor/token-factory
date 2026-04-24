@@ -181,6 +181,11 @@ export const useLogsData = () => {
     useState(null);
   const [showParamOverrideModal, setShowParamOverrideModal] = useState(false);
   const [paramOverrideTarget, setParamOverrideTarget] = useState(null);
+  /** 使用日志（错误类型）行内「错误详情」弹窗 */
+  const [errorLogDetail, setErrorLogDetail] = useState({
+    visible: false,
+    record: null,
+  });
 
   // Initialize default column visibility
   const initDefaultColumns = () => {
@@ -359,6 +364,24 @@ export const useLogsData = () => {
     setShowParamOverrideModal(true);
   };
 
+  /**
+   * 打开「错误类型」日志的完整错误内容弹窗。
+   * @param {object} record 表格行数据
+   */
+  const openErrorLogDetail = (record) => {
+    if (!record) {
+      return;
+    }
+    setErrorLogDetail({ visible: true, record });
+  };
+
+  /**
+   * 关闭错误详情弹窗。
+   */
+  const closeErrorLogDetail = () => {
+    setErrorLogDetail({ visible: false, record: null });
+  };
+
   // Format logs data
   const setLogsFormat = (logs) => {
     const requestConversionDisplayValue = (conversionChain) => {
@@ -389,6 +412,26 @@ export const useLogsData = () => {
           key: t('Request ID'),
           value: logs[i].request_id,
         });
+      }
+      if (logs[i].type === 5) {
+        const errContent = logs[i].content;
+        if (errContent != null && String(errContent).trim() !== '') {
+          expandDataLocal.push({
+            key: t('错误详情'),
+            value: (
+              <div
+                style={{
+                  maxWidth: 800,
+                  whiteSpace: 'pre-wrap',
+                  wordBreak: 'break-word',
+                  lineHeight: 1.6,
+                }}
+              >
+                {String(errContent)}
+              </div>
+            ),
+          });
+        }
       }
       if (other?.ws || other?.audio) {
         expandDataLocal.push({
@@ -840,6 +883,9 @@ export const useLogsData = () => {
     showParamOverrideModal,
     setShowParamOverrideModal,
     paramOverrideTarget,
+    errorLogDetail,
+    openErrorLogDetail,
+    closeErrorLogDetail,
 
     // Functions
     loadLogs,

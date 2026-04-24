@@ -180,13 +180,7 @@ func FetchUpstreamRatios(c *gin.Context) {
 			ctx, cancel := context.WithTimeout(c.Request.Context(), time.Duration(req.Timeout)*time.Second)
 			defer cancel()
 
-			httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
-			if err != nil {
-				logger.LogWarn(c.Request.Context(), "build request failed: "+err.Error())
-				ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: err.Error()}
-				return
-			}
-
+			var openRouterAuthHeader string
 			// OpenRouter requires Bearer token auth
 			if isOpenRouter && chItem.ID != 0 {
 				dbCh, err := model.GetChannelById(chItem.ID, true)
@@ -203,7 +197,7 @@ func FetchUpstreamRatios(c *gin.Context) {
 					ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: "no API key configured for this channel"}
 					return
 				}
-				httpReq.Header.Set("Authorization", "Bearer "+strings.TrimSpace(key))
+				openRouterAuthHeader = "Bearer " + strings.TrimSpace(key)
 			} else if isOpenRouter {
 				ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: "OpenRouter requires a valid channel with API key"}
 				return
@@ -213,9 +207,27 @@ func FetchUpstreamRatios(c *gin.Context) {
 			var resp *http.Response
 			var lastErr error
 			for attempt := 0; attempt < 3; attempt++ {
+				httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
+				if err != nil {
+					logger.LogWarn(c.Request.Context(), "build request failed: "+err.Error())
+					ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: err.Error()}
+					return
+				}
+				if openRouterAuthHeader != "" {
+					httpReq.Header.Set("Authorization", openRouterAuthHeader)
+				}
+				if isModelsDev {
+					// models.dev occasionally hits TLS record corruption on keep-alive reuse.
+					// Force fresh connection and browser-like UA to improve stability.
+					httpReq.Close = true
+					httpReq.Header.Set("User-Agent", "Mozilla/5.0")
+				}
 				resp, lastErr = client.Do(httpReq)
 				if lastErr == nil {
 					break
+				}
+				if isModelsDev && isTLSBadRecordMACError(lastErr) {
+					transport.CloseIdleConnections()
 				}
 				time.Sleep(time.Duration(200*(1<<attempt)) * time.Millisecond)
 			}
@@ -631,6 +643,13 @@ func isModelsDevAPIEndpoint(rawURL string) bool {
 	return path == modelsDevPath
 }
 
+func isTLSBadRecordMACError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "tls: bad record mac")
+}
+
 // convertOpenRouterToRatioData parses OpenRouter's /v1/models response and converts
 // per-token USD pricing into the local ratio format.
 // model_ratio = prompt_price_per_token * 1_000_000 * (USD / 1000)
@@ -724,6 +743,9 @@ func convertOpenRouterToRatioData(reader io.Reader) (map[string]any, error) {
 }
 
 type modelsDevProvider struct {
+	ID     string                    `json:"id"`
+	Name   string                    `json:"name"`
+	API    string                    `json:"api"`
 	Models map[string]modelsDevModel `json:"models"`
 }
 
@@ -742,6 +764,52 @@ type modelsDevCandidate struct {
 	Input     float64
 	Output    *float64
 	CacheRead *float64
+}
+
+var officialModelsDevProviderEndpointHosts = map[string]string{
+	"anthropic":  "api.anthropic.com",
+	"openai":     "api.openai.com",
+	"google":     "generativelanguage.googleapis.com",
+	"deepseek":   "api.deepseek.com",
+	"xai":        "api.x.ai",
+	"moonshotai": "api.moonshot.ai",
+	// models.dev current id for Zhipu AI(BigModel)
+	"zhipuai": "open.bigmodel.cn",
+	// DashScope(OpenAI compatible endpoint)
+	"alibaba": "dashscope-intl.aliyuncs.com",
+}
+
+// models.dev exposes Moonshot CN as a separate provider; only keep the global official endpoint.
+var officialModelsDevProviderIDs = map[string]struct{}{
+	"anthropic":  {},
+	"openai":     {},
+	"google":     {},
+	"deepseek":   {},
+	"xai":        {},
+	"moonshotai": {},
+	"zhipuai":    {},
+	"alibaba":    {},
+}
+
+func resolveProviderAPIHost(providerID string, apiURL string) string {
+	parsedURL, err := url.Parse(strings.TrimSpace(apiURL))
+	if err == nil && parsedURL.Hostname() != "" {
+		return strings.ToLower(parsedURL.Hostname())
+	}
+	// For some official providers, models.dev omits `api`; use canonical official host fallback.
+	return strings.ToLower(officialModelsDevProviderEndpointHosts[providerID])
+}
+
+func isOfficialModelsDevProvider(providerID string, provider modelsDevProvider) bool {
+	if _, ok := officialModelsDevProviderIDs[providerID]; !ok {
+		return false
+	}
+	expectedHost, ok := officialModelsDevProviderEndpointHosts[providerID]
+	if !ok {
+		return false
+	}
+	actualHost := resolveProviderAPIHost(providerID, provider.API)
+	return actualHost == strings.ToLower(expectedHost)
 }
 
 func cloneFloatPtr(v *float64) *float64 {
@@ -838,6 +906,13 @@ func convertModelsDevToRatioData(reader io.Reader) (map[string]any, error) {
 	selectedCandidates := make(map[string]modelsDevCandidate)
 	for _, provider := range providers {
 		providerData := upstreamData[provider]
+		providerID := strings.ToLower(strings.TrimSpace(providerData.ID))
+		if providerID == "" {
+			providerID = strings.ToLower(strings.TrimSpace(provider))
+		}
+		if !isOfficialModelsDevProvider(providerID, providerData) {
+			continue
+		}
 		if len(providerData.Models) == 0 {
 			continue
 		}
@@ -849,7 +924,7 @@ func convertModelsDevToRatioData(reader io.Reader) (map[string]any, error) {
 		sort.Strings(modelNames)
 
 		for _, modelName := range modelNames {
-			candidate, ok := buildModelsDevCandidate(provider, providerData.Models[modelName].Cost)
+			candidate, ok := buildModelsDevCandidate(providerID, providerData.Models[modelName].Cost)
 			if !ok {
 				continue
 			}

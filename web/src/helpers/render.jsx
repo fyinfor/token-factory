@@ -1473,19 +1473,19 @@ function renderPriceSimpleCore({
     hasSplitCacheCreation && cacheCreationTokens1h > 0;
 
   if (outputMode === 'segments') {
-    const segments = [
-      {
-        tone: 'primary',
-        text: getGroupRatioText(groupRatio, user_group_ratio),
-      },
-    ];
+    // 使用日志表「详情」等紧凑多行：不展示单独一行「分组/专属倍率」；各单价 = 原单价×有效分组倍率（与日志详情的折叠展示一致）。
+    const groupMult =
+      Number.isFinite(Number(finalGroupRatio)) && Number(finalGroupRatio) > 0
+        ? Number(finalGroupRatio)
+        : 1;
+    const segments = [];
 
     if (modelPrice !== -1) {
       segments.push({
         tone: 'secondary',
         text: isPriceDisplayMode(displayMode, modelPrice)
           ? i18next.t('模型价格 {{price}}', {
-              price: formatCompactDisplayPrice(modelPrice),
+              price: formatCompactDisplayPrice(modelPrice * groupMult),
             })
           : i18next.t('按次'),
       });
@@ -1493,7 +1493,7 @@ function renderPriceSimpleCore({
       segments.push({
         tone: 'secondary',
         text: i18next.t('输入 {{price}} / 1M tokens', {
-          price: formatCompactDisplayPrice(modelRatio * 2.0),
+          price: formatCompactDisplayPrice(modelRatio * 2.0 * groupMult),
         }),
       });
 
@@ -1501,7 +1501,9 @@ function renderPriceSimpleCore({
         segments.push({
           tone: 'secondary',
           text: i18next.t('缓存读 {{price}} / 1M tokens', {
-            price: formatCompactDisplayPrice(modelRatio * 2.0 * cacheRatio),
+            price: formatCompactDisplayPrice(
+              modelRatio * 2.0 * cacheRatio * groupMult,
+            ),
           }),
         });
       }
@@ -1511,7 +1513,7 @@ function renderPriceSimpleCore({
           tone: 'secondary',
           text: i18next.t('5m缓存创建 {{price}} / 1M tokens', {
             price: formatCompactDisplayPrice(
-              modelRatio * 2.0 * cacheCreationRatio5m,
+              modelRatio * 2.0 * cacheCreationRatio5m * groupMult,
             ),
           }),
         });
@@ -1521,7 +1523,7 @@ function renderPriceSimpleCore({
           tone: 'secondary',
           text: i18next.t('1h缓存创建 {{price}} / 1M tokens', {
             price: formatCompactDisplayPrice(
-              modelRatio * 2.0 * cacheCreationRatio1h,
+              modelRatio * 2.0 * cacheCreationRatio1h * groupMult,
             ),
           }),
         });
@@ -1531,7 +1533,7 @@ function renderPriceSimpleCore({
           tone: 'secondary',
           text: i18next.t('缓存创建 {{price}} / 1M tokens', {
             price: formatCompactDisplayPrice(
-              modelRatio * 2.0 * cacheCreationRatio,
+              modelRatio * 2.0 * cacheCreationRatio * groupMult,
             ),
           }),
         });
@@ -1541,7 +1543,9 @@ function renderPriceSimpleCore({
         segments.push({
           tone: 'secondary',
           text: i18next.t('图片输入 {{price}} / 1M tokens', {
-            price: formatCompactDisplayPrice(modelRatio * 2.0 * imageRatio),
+            price: formatCompactDisplayPrice(
+              modelRatio * 2.0 * imageRatio * groupMult,
+            ),
           }),
         });
       }
