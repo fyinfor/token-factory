@@ -85,6 +85,7 @@ export const DEFAULT_CONFIG = {
   inputs: {
     model: 'gpt-4o',
     model_type: '',
+    specific_channel_id: '',
     group: '',
     temperature: 0.7,
     top_p: 1,

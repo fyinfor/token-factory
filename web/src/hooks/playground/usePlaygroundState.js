@@ -83,6 +83,7 @@ export const usePlaygroundState = (userId) => {
   const [showSettings, setShowSettings] = useState(false);
   const [models, setModels] = useState([]);
   const [modelTypes, setModelTypes] = useState([]);
+  const [supplierOptions, setSupplierOptions] = useState([]);
   const [groups, setGroups] = useState([]);
   const [status, setStatus] = useState({});
 
@@ -270,6 +271,7 @@ export const usePlaygroundState = (userId) => {
     showSettings,
     models,
     modelTypes,
+    supplierOptions,
     groups,
     status,
 
@@ -299,6 +301,7 @@ export const usePlaygroundState = (userId) => {
     setShowSettings,
     setModels,
     setModelTypes,
+    setSupplierOptions,
     setGroups,
     setStatus,
     setMessage,

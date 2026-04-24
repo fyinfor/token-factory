@@ -32,6 +32,7 @@ const SettingsPanel = ({
   parameterEnabled,
   models,
   modelTypes,
+  supplierOptions,
   groups,
   styleState,
   showDebugPanel,
@@ -209,6 +210,43 @@ const SettingsPanel = ({
             value={inputs.model}
             autoComplete='new-password'
             optionList={models}
+            style={{ width: '100%' }}
+            dropdownStyle={{ width: '100%', maxWidth: '100%' }}
+            className='!rounded-lg'
+            disabled={customRequestMode}
+          />
+
+          <div className='flex items-center gap-2 mb-2 mt-3'>
+            <Sparkles size={16} className='text-gray-500' />
+            <Typography.Text strong className='text-sm'>
+              {t('渠道商')}
+            </Typography.Text>
+            {customRequestMode && (
+              <Typography.Text className='text-xs text-orange-600'>
+                ({t('已在自定义模式中忽略')})
+              </Typography.Text>
+            )}
+          </div>
+          <Select
+            placeholder={t('请选择渠道商')}
+            name='specific_channel_id'
+            selection
+            filter={selectFilter}
+            autoClearSearchValue={false}
+            onChange={(value) =>
+              onInputChange(
+                'specific_channel_id',
+                value === undefined || value === null ? '' : value,
+              )
+            }
+            value={
+              inputs.specific_channel_id === undefined ||
+              inputs.specific_channel_id === null
+                ? ''
+                : inputs.specific_channel_id
+            }
+            autoComplete='new-password'
+            optionList={supplierOptions}
             style={{ width: '100%' }}
             dropdownStyle={{ width: '100%', maxWidth: '100%' }}
             className='!rounded-lg'

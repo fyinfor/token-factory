@@ -94,6 +94,7 @@ const Playground = () => {
     showSettings,
     models,
     modelTypes,
+    supplierOptions,
     groups,
     status,
     message,
@@ -111,6 +112,7 @@ const Playground = () => {
     setShowSettings,
     setModels,
     setModelTypes,
+    setSupplierOptions,
     setGroups,
     setStatus,
     setMessage,
@@ -139,6 +141,7 @@ const Playground = () => {
     handleInputChange,
     setModels,
     setModelTypes,
+    setSupplierOptions,
     setGroups,
   );
 
@@ -488,6 +491,7 @@ const Playground = () => {
                 parameterEnabled={parameterEnabled}
                 models={models}
                 modelTypes={modelTypes}
+                supplierOptions={supplierOptions}
                 groups={groups}
                 styleState={styleState}
                 showSettings={showSettings}
