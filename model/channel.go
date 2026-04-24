@@ -584,10 +584,11 @@ func FindChannelIDBySupplierAliasAndNo(alias string, channelNo string) (int, err
 }
 
 // ValidateSupplierChannelNoUnique 校验同一 supplier_application_id 下 channel_no 不重复（空编号不校验）。
+// supplier_application_id 为 0（P0 未归属）时同样校验，以支持 alias/cN 唯一路由。
 // excludeChannelID 大于 0 时排除自身，用于更新；新建时传 0。
 func ValidateSupplierChannelNoUnique(excludeChannelID int, supplierApplicationID int, channelNo string) error {
 	no := strings.TrimSpace(channelNo)
-	if supplierApplicationID <= 0 || no == "" {
+	if no == "" {
 		return nil
 	}
 	q := DB.Model(&Channel{}).Where("supplier_application_id = ? AND channel_no = ?", supplierApplicationID, no)
@@ -621,15 +622,12 @@ func maxChannelNoNumericSuffixForSupplier(tx *gorm.DB, supplierApplicationID int
 	return maxN, nil
 }
 
-// allocateSupplierChannelNosInBatch 为同一事务批次内待插入的渠道分配 channel_no（supplier_application_id 相同则 c1,c2… 连续不重复）。
+// allocateSupplierChannelNosInBatch 为同一事务批次内待插入的渠道分配 channel_no（同一 supplier_application_id 下 c1,c2… 连续不重复，含 P0 即 id=0）。
 func allocateSupplierChannelNosInBatch(tx *gorm.DB, batch []Channel) error {
 	maxCache := make(map[int]int)
 	assigned := make(map[int]int)
 	for i := range batch {
 		sid := batch[i].SupplierApplicationID
-		if sid <= 0 {
-			continue
-		}
 		if strings.TrimSpace(batch[i].ChannelNo) != "" {
 			continue
 		}
@@ -648,7 +646,7 @@ func allocateSupplierChannelNosInBatch(tx *gorm.DB, batch []Channel) error {
 	return nil
 }
 
-// BackfillSupplierChannelNo 为历史数据补全 channel_no：按供应商分组、渠道 id 升序，已有非空编号的不覆盖，空编号接续已有最大 cN。
+// BackfillSupplierChannelNo 为历史数据补全 channel_no：按 supplier_application_id 分组（含 P0）、渠道 id 升序，已有非空编号的不覆盖，空编号接续已有最大 cN。
 func BackfillSupplierChannelNo() error {
 	type row struct {
 		ID                    int
@@ -658,7 +656,6 @@ func BackfillSupplierChannelNo() error {
 	var rows []row
 	if err := DB.Model(&Channel{}).
 		Select("id", "supplier_application_id", "channel_no").
-		Where("supplier_application_id > 0").
 		Order("supplier_application_id asc, id asc").
 		Scan(&rows).Error; err != nil {
 		return err

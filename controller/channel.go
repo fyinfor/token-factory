@@ -816,7 +816,7 @@ func AddChannel(c *gin.Context) {
 		})
 		return
 	}
-	if addChannelRequest.Channel.SupplierApplicationID > 0 && addChannelRequest.Channel.ChannelNo != "" {
+	if addChannelRequest.Channel.ChannelNo != "" {
 		if err := model.ValidateSupplierChannelNoUnique(0, addChannelRequest.Channel.SupplierApplicationID, addChannelRequest.Channel.ChannelNo); err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
@@ -1118,7 +1118,7 @@ func UpdateChannel(c *gin.Context) {
 		})
 		return
 	}
-	if originChannel.SupplierApplicationID > 0 && channel.ChannelNo != "" {
+	if channel.ChannelNo != "" {
 		if err := model.ValidateSupplierChannelNoUnique(channel.Id, originChannel.SupplierApplicationID, channel.ChannelNo); err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
