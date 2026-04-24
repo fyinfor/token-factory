@@ -20,10 +20,10 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  DEFAULT_MESSAGES,
   getDefaultMessages,
   DEFAULT_CONFIG,
   DEBUG_TABS,
+  MESSAGE_ROLES,
   MESSAGE_STATUS,
 } from '../../constants/playground.constants';
 import {
@@ -33,6 +33,40 @@ import {
   saveMessages,
 } from '../../components/playground/configStorage';
 import { processIncompleteThinkTags } from '../../helpers';
+
+/**
+ * 从 localStorage 恢复的会话若末尾仍为「生成中」状态，刷新后无法继续 SSE，会一直转圈。
+ * 在读出持久化数据时收口为已完成，并可选写回存储。
+ */
+const needsPersistedTailNormalize = (messages) => {
+  if (!Array.isArray(messages) || messages.length === 0) return false;
+  const last = messages[messages.length - 1];
+  if (!last || last.role !== MESSAGE_ROLES.ASSISTANT) return false;
+  return (
+    last.status === MESSAGE_STATUS.LOADING ||
+    last.status === MESSAGE_STATUS.INCOMPLETE
+  );
+};
+
+const normalizePersistedPlaygroundMessages = (messages) => {
+  if (!Array.isArray(messages) || messages.length === 0) return messages;
+  if (!needsPersistedTailNormalize(messages)) return messages;
+  const lastMsg = messages[messages.length - 1];
+  const processed = processIncompleteThinkTags(
+    lastMsg.content || '',
+    lastMsg.reasoningContent || '',
+  );
+  return [
+    ...messages.slice(0, -1),
+    {
+      ...lastMsg,
+      status: MESSAGE_STATUS.COMPLETE,
+      content: processed.content,
+      reasoningContent: processed.reasoningContent || null,
+      isThinkingComplete: true,
+    },
+  ];
+};
 
 export const usePlaygroundState = (userId) => {
   const { t } = useTranslation();
@@ -59,7 +93,12 @@ export const usePlaygroundState = (userId) => {
         return null;
       }
     }
-    return loaded;
+    if (!loaded) return null;
+    const normalized = normalizePersistedPlaygroundMessages(loaded);
+    if (needsPersistedTailNormalize(loaded)) {
+      setTimeout(() => saveMessages(normalized, userId), 0);
+    }
+    return normalized;
   });
 
   // 基础配置状态
@@ -83,6 +122,7 @@ export const usePlaygroundState = (userId) => {
   const [showSettings, setShowSettings] = useState(false);
   const [models, setModels] = useState([]);
   const [modelTypes, setModelTypes] = useState([]);
+  const [supplierOptions, setSupplierOptions] = useState([]);
   const [groups, setGroups] = useState([]);
   const [status, setStatus] = useState({});
 
@@ -103,7 +143,11 @@ export const usePlaygroundState = (userId) => {
   useEffect(() => {
     const loaded = loadMessages(userId);
     if (loaded) {
-      setMessage(loaded);
+      const normalized = normalizePersistedPlaygroundMessages(loaded);
+      if (needsPersistedTailNormalize(loaded)) {
+        saveMessages(normalized, userId);
+      }
+      setMessage(normalized);
     } else {
       setMessage(getDefaultMessages(t));
     }
@@ -228,36 +272,6 @@ export const usePlaygroundState = (userId) => {
     };
   }, []);
 
-  // 页面首次加载时，若最后一条消息仍处于 LOADING/INCOMPLETE 状态，自动修复
-  useEffect(() => {
-    if (!Array.isArray(message) || message.length === 0) return;
-
-    const lastMsg = message[message.length - 1];
-    if (
-      lastMsg.status === MESSAGE_STATUS.LOADING ||
-      lastMsg.status === MESSAGE_STATUS.INCOMPLETE
-    ) {
-      const processed = processIncompleteThinkTags(
-        lastMsg.content || '',
-        lastMsg.reasoningContent || '',
-      );
-
-      const fixedLastMsg = {
-        ...lastMsg,
-        status: MESSAGE_STATUS.COMPLETE,
-        content: processed.content,
-        reasoningContent: processed.reasoningContent || null,
-        isThinkingComplete: true,
-      };
-
-      const updatedMessages = [...message.slice(0, -1), fixedLastMsg];
-      setMessage(updatedMessages);
-
-      // 保存修复后的消息列表
-      setTimeout(() => saveMessagesImmediately(updatedMessages), 0);
-    }
-  }, []);
-
   return {
     // 配置状态
     inputs,
@@ -270,6 +284,7 @@ export const usePlaygroundState = (userId) => {
     showSettings,
     models,
     modelTypes,
+    supplierOptions,
     groups,
     status,
 
@@ -299,6 +314,7 @@ export const usePlaygroundState = (userId) => {
     setShowSettings,
     setModels,
     setModelTypes,
+    setSupplierOptions,
     setGroups,
     setStatus,
     setMessage,

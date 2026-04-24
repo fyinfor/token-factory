@@ -588,7 +588,7 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
           <Col span={24}>
             <Form.Input
               field='supplier_alias'
-              label={<Text strong>{t('供应商别名')}<Text type='danger'>*</Text></Text>}
+              label={<Text strong>{t('供应商别名')}</Text>}
               placeholder={t('管理员填写，且全局唯一')}
               rules={[{ required: true, message: t('请输入供应商别名') }]}
               showClear
@@ -600,7 +600,7 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
         <Col span={24}>
           <Form.Input
             field='company_name'
-            label={<Text strong>{t('企业/主体名称')}<Text type='danger'>*</Text></Text>}
+            label={<Text strong>{t('企业/主体名称')}</Text>}
             placeholder={t('填写与营业执照完全一致的全称')}
             rules={[{ required: true, message: t('请输入企业/主体名称') }]}
             showClear
@@ -610,7 +610,7 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
         <Col span={24}>
           <Form.Input
             field='credit_code'
-            label={<Text strong>{t('统一社会信用代码')}<Text type='danger'>*</Text></Text>}
+            label={<Text strong>{t('统一社会信用代码')}</Text>}
             placeholder={t('填写营业执照上的 18 位代码')}
             rules={[
               { required: true, message: t('请输入统一社会信用代码') },
@@ -647,7 +647,7 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
         <Col span={24}>
           <Form.Input
             field='legal_representative'
-            label={<Text strong>{t('法人/经营者姓名')}<Text type='danger'>*</Text></Text>}
+            label={<Text strong>{t('法人/经营者姓名')}</Text>}
             placeholder={t('填写营业执照上的法定代表人/经营者姓名')}
             rules={[{ required: true, message: t('请输入法人/经营者姓名') }]}
             showClear
@@ -687,7 +687,7 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
         <Col span={24}>
           <Form.Input
             field='contact_name'
-            label={<Text strong>{t('对接人姓名')}<Text type='danger'>*</Text></Text>}
+            label={<Text strong>{t('对接人姓名')}</Text>}
             placeholder={t('填写实际对接的负责人姓名')}
             rules={[{ required: true, message: t('请输入对接人姓名') }]}
             showClear
@@ -697,7 +697,7 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
         <Col span={24}>
           <Form.Input
             field='contact_mobile'
-            label={<Text strong>{t('对接人手机号')}<Text type='danger'>*</Text></Text>}
+            label={<Text strong>{t('对接人手机号')}</Text>}
             placeholder={t('填写实名手机号')}
             rules={[
               { required: true, message: t('请输入对接人手机号') },
@@ -713,7 +713,7 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
         <Col span={24}>
           <Form.Input
             field='contact_wechat'
-            label={<Text strong>{t('对接人微信/企业微信')}<Text type='danger'>*</Text></Text>}
+            label={<Text strong>{t('对接人微信/企业微信')}</Text>}
             placeholder={t('填写微信号/企业微信 ID')}
             rules={[{ required: true, message: t('请输入对接人微信/企业微信') }]}
             showClear
@@ -803,7 +803,7 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
             <Col span={24}>
               <Form.Input
                 field='supplier_alias'
-                label={<Text strong>{t('供应商别名')}<Text type='danger'>*</Text></Text>}
+                label={<Text strong>{t('供应商别名')}</Text>}
                 placeholder={t('管理员填写，且全局唯一')}
                 rules={[{ required: true, message: t('请输入供应商别名') }]}
                 showClear

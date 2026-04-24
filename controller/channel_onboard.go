@@ -32,6 +32,8 @@ type OnboardResult struct {
 	CanSyncRatio bool `json:"can_sync_ratio"`
 	// 满足测试条件：已导入模型 + 所有模型均有定价
 	ReadyToTest bool `json:"ready_to_test"`
+	// 为加速响应未请求上游模型列表；前端可带 fetch_upstream=1 再拉取
+	UpstreamSkipped bool `json:"upstream_skipped,omitempty"`
 	// 非阻断性警告信息
 	Warnings []string `json:"warnings,omitempty"`
 }
@@ -70,12 +72,20 @@ func OnboardChannel(c *gin.Context) {
 		Warnings:        []string{},
 	}
 
-	// 1. 拉取上游模型列表
-	upstreamModelIDs, fetchErr := fetchChannelUpstreamModelIDs(channel)
-	if fetchErr != nil {
-		result.Warnings = append(result.Warnings, "拉取上游模型列表失败: "+fetchErr.Error())
+	// 1. 拉取上游模型列表（已有导入时默认跳过以将响应控制在毫秒～百毫秒级；需列表时加 ?fetch_upstream=1）
+	importedForSkip := channel.GetModels()
+	fetchUpstream := strings.EqualFold(strings.TrimSpace(c.Query("fetch_upstream")), "1") ||
+		strings.EqualFold(strings.TrimSpace(c.Query("fetch_upstream")), "true")
+	skipUpstream := len(importedForSkip) > 0 && !fetchUpstream
+	if skipUpstream {
+		result.UpstreamSkipped = true
 	} else {
-		result.ModelsAvailable = upstreamModelIDs
+		upstreamModelIDs, fetchErr := fetchChannelUpstreamModelIDs(channel)
+		if fetchErr != nil {
+			result.Warnings = append(result.Warnings, "拉取上游模型列表失败: "+fetchErr.Error())
+		} else {
+			result.ModelsAvailable = upstreamModelIDs
+		}
 	}
 
 	// 2. 当前渠道已启用的模型
@@ -282,7 +292,7 @@ func AutoMetaChannelModels(c *gin.Context) {
 type BulkTestModelItem struct {
 	ModelName string  `json:"model_name"`
 	Success   bool    `json:"success"`
-	Time      float64 `json:"time"`    // 秒
+	Time      float64 `json:"time"` // 秒
 	Message   string  `json:"message"`
 }
 

@@ -20,6 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 import React from 'react';
 import {
   Avatar,
+  Button,
   Space,
   Tag,
   Tooltip,
@@ -55,17 +56,6 @@ const colors = [
   'violet',
   'yellow',
 ];
-
-function formatRatio(ratio) {
-  if (ratio === undefined || ratio === null) {
-    return '-';
-  }
-  const n = typeof ratio === 'number' ? ratio : Number(ratio);
-  if (Number.isFinite(n)) {
-    return trimFixedDecimalDisplay(n, 4);
-  }
-  return String(ratio);
-}
 
 function buildChannelAffinityTooltip(affinity, t) {
   if (!affinity) {
@@ -394,17 +384,6 @@ function trimDecimalsInLogDetailText(raw) {
   });
 }
 
-function getUsageLogGroupSummary(groupRatio, userGroupRatio, t) {
-  const parsedUserGroupRatio = Number(userGroupRatio);
-  const useUserGroupRatio =
-    Number.isFinite(parsedUserGroupRatio) && parsedUserGroupRatio !== -1;
-  const ratio = useUserGroupRatio ? userGroupRatio : groupRatio;
-  if (ratio === undefined || ratio === null || ratio === '') {
-    return '';
-  }
-  return `${useUserGroupRatio ? t('专属倍率') : t('分组')} ${formatRatio(ratio)}x`;
-}
-
 function renderCompactDetailSummary(summarySegments) {
   const segments = Array.isArray(summarySegments)
     ? summarySegments.filter((segment) => segment?.text)
@@ -461,14 +440,8 @@ function getUsageLogDetailSummary(record, text, billingDisplayMode, t) {
     Boolean(other?.violation_fee_marker)
   ) {
     const feeQuota = other?.fee_quota ?? record?.quota;
-    const groupText = getUsageLogGroupSummary(
-      other?.group_ratio,
-      other?.user_group_ratio,
-      t,
-    );
     return {
       segments: [
-        groupText ? { text: groupText, tone: 'primary' } : null,
         { text: t('违规扣费'), tone: 'primary' },
         {
           text: `${t('扣费')}：${renderQuota(feeQuota)}`,
@@ -537,6 +510,7 @@ export const getLogsColumns = ({
   openChannelAffinityUsageCacheModal,
   isAdminUser,
   billingDisplayMode = 'price',
+  openErrorLogDetail,
 }) => {
   return [
     {
@@ -961,6 +935,47 @@ export const getLogsColumns = ({
           billingDisplayMode,
           t,
         );
+
+        if (record.type === 5) {
+          const hasText = text != null && String(text).length > 0;
+          return (
+            <div style={{ maxWidth: 200 }}>
+              {hasText ? (
+                <>
+                  <Typography.Paragraph
+                    ellipsis={{
+                      rows: 2,
+                      showTooltip: {
+                        type: 'popover',
+                        opts: { style: { width: 280 } },
+                      },
+                    }}
+                    style={{ maxWidth: 200, marginBottom: 4 }}
+                  >
+                    {trimDecimalsInLogDetailText(text)}
+                  </Typography.Paragraph>
+                  {openErrorLogDetail ? (
+                    <Button
+                      type='tertiary'
+                      theme='borderless'
+                      size='small'
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openErrorLogDetail(record);
+                      }}
+                    >
+                      {t('错误详情')}
+                    </Button>
+                  ) : null}
+                </>
+              ) : (
+                <Typography.Text type='tertiary' size='small'>
+                  {t('无')}
+                </Typography.Text>
+              )}
+            </div>
+          );
+        }
 
         if (!detailSummary) {
           return (

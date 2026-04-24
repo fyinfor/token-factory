@@ -597,11 +597,17 @@ func GetUserModels(c *gin.Context) {
 	// - vendor: 模型类型；类型选项仅由「通过单测后的」items 中出现的 vendor_id 推导
 	// - tested_success 在返回项中恒为 true（因已按单测成功过滤）
 	if c.Query("scene") == "playground" {
+		type playgroundChannelOption struct {
+			ID        int    `json:"id"`
+			Name      string `json:"name"`
+			ChannelNo string `json:"channel_no,omitempty"`
+		}
 		type playgroundModelItem struct {
-			ModelName     string `json:"model_name"`
-			VendorID      int    `json:"vendor_id"`
-			Vendor        string `json:"vendor"`
-			TestedSuccess bool   `json:"tested_success"`
+			ModelName      string                    `json:"model_name"`
+			VendorID       int                       `json:"vendor_id"`
+			Vendor         string                    `json:"vendor"`
+			TestedSuccess  bool                      `json:"tested_success"`
+			ChannelOptions []playgroundChannelOption `json:"channel_options,omitempty"`
 		}
 		modelRows := make([]struct {
 			ModelName string `gorm:"column:model_name"`
@@ -685,17 +691,71 @@ func GetUserModels(c *gin.Context) {
 				vendorNameByID[vendorRows[i].Id] = vendorRows[i].Name
 			}
 		}
-		// 返回项均为单测成功的模型；有元数据则带 vendor
+		// 按用户可用分组 + 模型统计可选渠道（channels.id），供操练场前端做模型下的渠道联动下拉。
+		modelChannelIDSet := make(map[string]map[int]struct{}, len(filteredNameRows))
+		for i := range filteredNameRows {
+			modelName := filteredNameRows[i].ModelName
+			if modelName == "" {
+				continue
+			}
+			if _, ok := modelChannelIDSet[modelName]; !ok {
+				modelChannelIDSet[modelName] = make(map[int]struct{})
+			}
+			for group := range groups {
+				channelIDs := model.ListChannelIDsForGroupModel(group, modelName)
+				for _, channelID := range channelIDs {
+					ch, chErr := model.CacheGetChannel(channelID)
+					if chErr != nil || ch == nil || ch.Status != common.ChannelStatusEnabled {
+						continue
+					}
+					modelChannelIDSet[modelName][channelID] = struct{}{}
+				}
+			}
+		}
+		channelMeta := make(map[int]playgroundChannelOption)
+		for _, idSet := range modelChannelIDSet {
+			for channelID := range idSet {
+				if _, ok := channelMeta[channelID]; ok {
+					continue
+				}
+				ch, chErr := model.CacheGetChannel(channelID)
+				if chErr != nil || ch == nil || ch.Status != common.ChannelStatusEnabled {
+					continue
+				}
+				channelMeta[channelID] = playgroundChannelOption{
+					ID:        ch.Id,
+					Name:      strings.TrimSpace(ch.Name),
+					ChannelNo: strings.TrimSpace(ch.ChannelNo),
+				}
+			}
+		}
+
+		// 返回项均为单测成功的模型；有元数据则带 vendor，并附可选渠道列表
 		items := make([]playgroundModelItem, 0, len(filteredNameRows))
 		for i := range filteredNameRows {
 			modelName := filteredNameRows[i].ModelName
 			vendorID := filteredNameRows[i].VendorID
 			vendorName := vendorNameByID[vendorID]
+			channelOptions := make([]playgroundChannelOption, 0)
+			for channelID := range modelChannelIDSet[modelName] {
+				meta, ok := channelMeta[channelID]
+				if !ok {
+					continue
+				}
+				channelOptions = append(channelOptions, meta)
+			}
+			sort.Slice(channelOptions, func(i, j int) bool {
+				if channelOptions[i].Name == channelOptions[j].Name {
+					return channelOptions[i].ID < channelOptions[j].ID
+				}
+				return strings.Compare(channelOptions[i].Name, channelOptions[j].Name) < 0
+			})
 			items = append(items, playgroundModelItem{
-				ModelName:     modelName,
-				VendorID:      vendorID,
-				Vendor:        vendorName,
-				TestedSuccess: true,
+				ModelName:      modelName,
+				VendorID:       vendorID,
+				Vendor:         vendorName,
+				TestedSuccess:  true,
+				ChannelOptions: channelOptions,
 			})
 		}
 
