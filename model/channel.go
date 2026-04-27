@@ -330,10 +330,12 @@ type SupplierChannelSearchFilter struct {
 
 // ChannelSimplePricingItem pricing 页面使用的渠道精简信息。
 type ChannelSimplePricingItem struct {
-	ChannelID     int    `json:"channel_id"`
-	ChannelName   string `json:"channel_name"`
-	ChannelNo     string `json:"channel_no"`
-	SupplierAlias string `json:"supplier_alias"`
+	ChannelID      int    `json:"channel_id"`
+	ChannelName    string `json:"channel_name"`
+	ChannelNo      string `json:"channel_no"`
+	SupplierAlias  string `json:"supplier_alias"`
+	CompanyLogoURL string `json:"company_logo_url"`
+	SupplierType   string `json:"supplier_type"`
 }
 
 // ChannelPricingMeta 定价接口计算渠道维度价格所需的渠道行（含供应商别名）。
@@ -350,7 +352,7 @@ type ChannelPricingMeta struct {
 func ListChannelsForPricing() ([]ChannelSimplePricingItem, error) {
 	items := make([]ChannelSimplePricingItem, 0)
 	err := DB.Model(&Channel{}).
-		Select("channels.id AS channel_id, channels.name AS channel_name, channels.channel_no, COALESCE(supplier_applications.supplier_alias, '') AS supplier_alias").
+		Select("channels.id AS channel_id, channels.name AS channel_name, channels.channel_no, COALESCE(supplier_applications.supplier_alias, '') AS supplier_alias, COALESCE(supplier_applications.company_logo_url, '') AS company_logo_url, COALESCE(supplier_applications.supplier_type, '') AS supplier_type").
 		Joins("LEFT JOIN supplier_applications ON supplier_applications.id = channels.supplier_application_id").
 		Where("channels.status = ?", common.ChannelStatusEnabled).
 		Order("channels.id ASC").
