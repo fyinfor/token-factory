@@ -100,7 +100,7 @@ const InvitationCard = ({
     [invitePageSize, t],
   );
 
-  // 如果是分销商，组件加载时直接拉取数据；否则仅在打开弹窗时拉取
+  // 如果是代理，组件加载时直接拉取数据；否则仅在打开弹窗时拉取
   useEffect(() => {
     if (isDistributor()) {
       loadInvitees(1, invitePageSize);
@@ -394,7 +394,7 @@ const InvitationCard = ({
           />
         </Card>
 
-        {/* 分销商专属：邀请人列表 */}
+        {/* 代理专属：邀请人列表 */}
         {isDistributor() && (
           <Card
             className='!rounded-xl w-full'
@@ -430,11 +430,11 @@ const InvitationCard = ({
         {!isDistributor() && (
           <Card className='!rounded-xl w-full'>
             <Text type='tertiary' className='block mb-3'>
-              {t('成为分销商后可获得邀请链接与充值分成，请先提交资料审核。')}
+              {t('成为代理后可获得邀请链接与充值分成，请先提交资料审核。')}
             </Text>
             <Link to='/console/distributor/apply'>
               <Button theme='solid' type='primary' className='!rounded-lg'>
-                {t('申请成为分销商')}
+                {t('申请成为代理')}
               </Button>
             </Link>
           </Card>

@@ -30,7 +30,7 @@ function normalizeEmptyHtml(html) {
 }
 
 /**
- * 分销商申请页说明：富文本（原生 Quill，避免 react-quill 在部分环境下不渲染）
+ * 代理申请页说明：富文本（原生 Quill，避免 react-quill 在部分环境下不渲染）
  */
 export default function DistributorApplyIntroEditor({
   value,

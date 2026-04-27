@@ -34,7 +34,7 @@ import { formatDateTimeString } from '../../../helpers/utils';
 import { USER_ROLES } from '../../../constants/user.constants';
 
 /**
- * Render user role（身份等级 + 可选「分销商」标记）
+ * Render user role（身份等级 + 可选「代理」标记）
  */
 const renderRole = (role, record, t) => {
   const legacyDistributorRole = role === USER_ROLES.DISTRIBUTOR;
@@ -79,7 +79,7 @@ const renderRole = (role, record, t) => {
     <Space spacing={4}>
       {baseTag}
       {isDistributor && <Tag color='green' shape='circle'>
-        {t('分销商')}
+        {t('代理')}
       </Tag>}
       {isSupplier && <Tag color='purple' shape='circle'>
         {t('供应商')}
@@ -350,7 +350,7 @@ const renderOperations = (
             size='small'
             onClick={() => manageUser(record.id, 'set_distributor', record)}
           >
-            {t('设为分销商')}
+            {t('设为代理')}
           </Button>
         )}
       {(record.is_distributor === 1 ||
@@ -362,7 +362,7 @@ const renderOperations = (
             size='small'
             onClick={() => manageUser(record.id, 'unset_distributor', record)}
           >
-            {t('取消分销商')}
+            {t('取消代理')}
           </Button>
         )}
       <Dropdown menu={moreMenu} trigger='click' position='bottomRight'>

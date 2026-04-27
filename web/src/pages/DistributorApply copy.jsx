@@ -102,10 +102,10 @@ export default function DistributorApply() {
     return false;
   }, [userState?.user]);
 
-  /** 申请记录为已通过，且当前账号仍是分销商：显示「去分销中心」 */
+  /** 申请记录为已通过，且当前账号仍是代理：显示「去分销中心」 */
   const showApprovedForActiveDistributor = app?.status === 2 && isDist;
 
-  /** 记录曾为已通过，但账号已非分销商（如被降级）：应允许重新提交 */
+  /** 记录曾为已通过，但账号已非代理（如被降级）：应允许重新提交 */
   const showReapplyAfterRevoked = app?.status === 2 && !isDist;
 
   useEffect(() => {
@@ -169,7 +169,7 @@ export default function DistributorApply() {
       <div className='mt-16 px-4 max-w-3xl mx-auto'>
         <Banner
           type='success'
-          description={t('您已是分销商，无需再次申请')}
+          description={t('您已是代理，无需再次申请')}
         />
       </div>
     );
@@ -214,7 +214,7 @@ export default function DistributorApply() {
                   type='tertiary'
                   className='distributor-apply-hero-desc !block !text-[15px] !leading-relaxed'
                 >
-                  {t('请如实填写以下信息，审核通过后即可获得分销商资格与邀请分成。')}
+                  {t('请如实填写以下信息，审核通过后即可获得代理资格与邀请分成。')}
                 </Text>
               </div>
             </div>
@@ -258,7 +258,7 @@ export default function DistributorApply() {
                   type='info'
                   className='mb-4'
                   description={t(
-                    '您的分销商资格已失效（例如已被管理员调整），可修改资料后重新提交审核。',
+                    '您的代理资格已失效（例如已被管理员调整），可修改资料后重新提交审核。',
                   )}
                 />
               ) : null}

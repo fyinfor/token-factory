@@ -277,7 +277,7 @@ export default function SettingsSidebarModulesAdmin(props) {
         {
           key: 'distributor_center',
           title: t('分销中心'),
-          description: t('分销商邀请与收益'),
+          description: t('代理邀请与收益'),
         },
       ],
     },
@@ -306,8 +306,8 @@ export default function SettingsSidebarModulesAdmin(props) {
         { key: 'user', title: t('用户管理'), description: t('用户账户管理') },
         {
           key: 'distributor',
-          title: t('分销商管理'),
-          description: t('分销商申请与人员管理'),
+          title: t('代理管理'),
+          description: t('代理申请与人员管理'),
         },
         {
           key: 'supplier-management',

@@ -46,7 +46,7 @@ export const USER_ROLES = {
 
 export const USER_ROLE_NAMES = {
   [USER_ROLES.USER]: '普通用户',
-  [USER_ROLES.DISTRIBUTOR]: '分销商',
+  [USER_ROLES.DISTRIBUTOR]: '代理',
   [USER_ROLES.ADMIN]: '管理员',
   [USER_ROLES.ROOT]: '超级管理员',
 };

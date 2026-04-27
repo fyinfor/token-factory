@@ -806,7 +806,7 @@ html.dark .home-banner-bg {
   );
 }
 
-/* 首页「申请成为分销商」：扁平主色 + 轻微外圈光（无厚投影/内高光） */
+/* 首页「申请成为代理」：扁平主色 + 轻微外圈光（无厚投影/内高光） */
 @keyframes home-distributor-cta-glow {
   0%,
   100% {
@@ -915,7 +915,7 @@ html.dark .home-distributor-cta-btn {
   z-index: 1;
 }
 
-/* 分销商申请页：标题区背景光斑 + 文案入场 */
+/* 代理申请页：标题区背景光斑 + 文案入场 */
 @keyframes distributor-apply-blob {
   0%,
   100% {
@@ -958,7 +958,7 @@ html.dark .home-distributor-cta-btn {
   isolation: isolate;
 }
 
-/* 分销商申请主卡片：整体渐变底 + 淡边线 + 轻立体光（上沿高光 / 下沿浅影） */
+/* 代理申请主卡片：整体渐变底 + 淡边线 + 轻立体光（上沿高光 / 下沿浅影） */
 .distributor-apply-main-card.semi-card {
   background: linear-gradient(
     152deg,
@@ -1042,7 +1042,7 @@ html.dark .home-distributor-cta-btn {
   background-clip: padding-box;
 }
 
-/* 分销商申请页：固定主区域、避免外层滚动，仅卡片内部滚动 */
+/* 代理申请页：固定主区域、避免外层滚动，仅卡片内部滚动 */
 .distributor-apply-page-root {
   position: fixed;
   z-index: 1;
@@ -1282,7 +1282,7 @@ html.dark .with-pastel-balls::before {
 }
 
 /*
- * 分销商管理页：Tabs 标签栏与下方 Card 的间距。
+ * 代理管理页：Tabs 标签栏与下方 Card 的间距。
  * 全局 `.semi-tabs-content { padding: 0 !important; }` 会盖掉子元素 margin，此处用更高优先级覆盖上内边距。
  */
 .distributor-admin-tabs.semi-tabs .semi-tabs-content {

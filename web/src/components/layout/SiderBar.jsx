@@ -230,7 +230,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         className: isAdmin() ? '' : 'tableHiddle',
       },
       {
-        text: t('分销商管理'),
+        text: t('代理管理'),
         itemKey: 'distributor',
         to: '/console/distributor/admin',
         className: isAdmin() ? '' : 'tableHiddle',

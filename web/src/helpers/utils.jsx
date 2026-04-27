@@ -34,7 +34,7 @@ const HTMLToastContent = ({ htmlContent }) => {
 };
 export default HTMLToastContent;
 
-/** 是否为分销商：后端 is_distributor 为 0/1，兼容历史 true 与 role===5 */
+/** 是否为代理：后端 is_distributor 为 0/1，兼容历史 true 与 role===5 */
 export function userIsDistributorUser(userLike) {
   if (!userLike || typeof userLike !== 'object') return false;
   if (userLike.is_distributor === 1 || userLike.is_distributor === true) {
