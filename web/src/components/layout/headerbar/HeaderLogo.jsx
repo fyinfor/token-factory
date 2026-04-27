@@ -76,7 +76,7 @@ const HeaderLogo = ({
   const distributorApplyPath = '/console/distributor/apply';
   const supplierApplyPath = '/console/supplier/apply';
 
-  /** 管理员不展示；已登录分销商仅隐藏「成为代理」（「提供算力」仍看是否已有供应商身份） */
+  /** 管理员不展示；已登录代理仅隐藏「成为代理」（「提供算力」仍看是否已有供应商身份） */
   const hideApplyLinks = isAdmin();
   const hideDistributorApplyAsLoggedInDistributor = Boolean(
     user && userIsDistributorUser(user),

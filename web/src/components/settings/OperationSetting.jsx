@@ -157,7 +157,7 @@ const OperationSetting = () => {
         <Card style={{ marginTop: '10px' }}>
           <SettingsCreditLimit options={inputs} refresh={onRefresh} />
         </Card>
-        {/* 分销商设置 */}
+        {/* 代理设置 */}
         <Card style={{ marginTop: '10px' }}>
           <SettingsDistributor options={inputs} refresh={onRefresh} />
         </Card>

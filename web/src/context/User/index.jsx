@@ -32,7 +32,7 @@ export const UserProvider = ({ children }) => {
   const [state, dispatch] = React.useReducer(reducer, initialState);
   const { i18n } = useTranslation();
 
-  // 已登录时拉取服务端最新资料（含 role），避免仅依赖本地缓存：例如管理员将分销商降级后首页仍显示「已是分销商」、不显示申请入口
+  // 已登录时拉取服务端最新资料（含 role），避免仅依赖本地缓存：例如管理员将代理降级后首页仍显示「已是代理」、不显示申请入口
   useEffect(() => {
     if (!localStorage.getItem('user')) return;
     let cancelled = false;

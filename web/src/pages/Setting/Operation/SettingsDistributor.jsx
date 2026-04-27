@@ -65,7 +65,7 @@ export default function SettingsDistributor(props) {
   const [uploadingKey, setUploadingKey] = useState(null);
   const [showManualUrl, setShowManualUrl] = useState(false);
 
-  /** 与分销中心、余额展示一致：TOKENS 用整数点；否则用标价金额 */
+  /** 与代理中心、余额展示一致：TOKENS 用整数点；否则用标价金额 */
   const isQuotaTokensMode = useMemo(() => {
     const fromOpt = props.options?.['general_setting.quota_display_type'];
     if (typeof fromOpt === 'string' && fromOpt) {
@@ -201,20 +201,20 @@ export default function SettingsDistributor(props) {
           getFormApi={(formAPI) => (refForm.current = formAPI)}
           style={{ marginBottom: 15 }}
         >
-          <Form.Section text={t('分销商设置')}>
+          <Form.Section text={t('代理设置')}>
             <Typography.Text
               type='tertiary'
               style={{ marginBottom: 16, display: 'block' }}
             >
               {t(
-                '配置默认分销比例、申请页与提现页客服图、提现说明及最低提现额度等。',
+                '配置默认代理比例、申请页与提现页客服图、提现说明及最低提现额度等。',
               )}
             </Typography.Text>
             <Row gutter={16}>
               <Col xs={24} sm={12} md={10}>
                 {isQuotaTokensMode ? (
                   <Form.InputNumber
-                    label={t('分销商最低提现额度')}
+                    label={t('代理最低提现额度')}
                     field='DistributorMinWithdrawQuota'
                     step={1}
                     min={0}
@@ -235,7 +235,7 @@ export default function SettingsDistributor(props) {
                 ) : (
                   <div>
                     <Text strong className='block mb-2'>
-                      {t('分销商最低提现金额')}
+                      {t('代理最低提现金额')}
                     </Text>
                     <InputNumber
                       value={minWithdrawDisplayValue}
@@ -281,7 +281,7 @@ export default function SettingsDistributor(props) {
             <Row gutter={16} className='mt-8'>
               <Col span={24}>
                 <Text strong className='block mb-2'>
-                  {t('分销商申请页说明')}
+                  {t('代理申请页说明')}
                 </Text>
                 <Text type='tertiary' size='small' className='block mb-3'>
                   {t(
@@ -304,7 +304,7 @@ export default function SettingsDistributor(props) {
               <Col xs={24} sm={12} md={8}>
                 <div className='mb-4'>
                   <Text strong className='block mb-2'>
-                    {t('默认分销比例')}
+                  {t('默认代理比例')}
                   </Text>
                   <InputNumber
                     value={Number(inputs.AffiliateDefaultCommissionBps || 0) / 100}
@@ -336,7 +336,7 @@ export default function SettingsDistributor(props) {
             <Row gutter={16}>
               <Col xs={24} md={12}>
                 <Text strong className='block mb-2'>
-                  {t('分销商申请页右侧客服图片')}
+                  {t('代理申请页右侧客服图片')}
                 </Text>
                 <Text type='tertiary' size='small' className='block mb-3'>
                   {t('上传后自动保存；需先在系统设置中配置并启用阿里云 OSS')}
@@ -464,7 +464,7 @@ export default function SettingsDistributor(props) {
                   field='DistributorWithdrawNotice'
                   label={t('分销中心线下提现说明（用户可见）')}
                   extraText={t(
-                    '展示在分销商提现弹窗内；留空则不显示。可换行，建议填写到账周期、手续费或所需材料等。',
+                    '展示在代理提现弹窗内；留空则不显示。可换行，建议填写到账周期、手续费或所需材料等。',
                   )}
                   placeholder={t(
                     '例如：工作日 1–3 个工作日到账；请确保银行卡信息与实名一致。',
@@ -497,7 +497,7 @@ export default function SettingsDistributor(props) {
               <Row gutter={16}>
                 <Col xs={24} md={12}>
                   <Form.Input
-                    label={t('分销商申请页右侧客服图片 URL')}
+                    label={t('代理申请页右侧客服图片 URL')}
                     field='DistributorApplyCsImageUrl'
                     placeholder='https://'
                     onChange={(value) =>
@@ -525,7 +525,7 @@ export default function SettingsDistributor(props) {
             ) : null}
             <Row className='mt-8'>
               <Button size='default' onClick={onSubmit}>
-                {t('保存分销商设置')}
+                {t('保存代理设置')}
               </Button>
             </Row>
           </Form.Section>

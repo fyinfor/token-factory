@@ -242,8 +242,8 @@ const Home = () => {
                           </div>
                           <div className='text-sm text-semi-color-text-2 mt-1'>
                             {userRole == null
-                              ? t('登录后可提交申请，成为分销商获得邀请分成')
-                              : t('提交资料申请成为分销商，邀请好友获得充值分成')}
+                              ? t('登录后可提交申请，成为代理获得邀请分成')
+                              : t('提交资料申请成为代理，邀请好友获得充值分成')}
                           </div>
                         </div>
                         <Link
@@ -261,7 +261,7 @@ const Home = () => {
                           >
                             {userRole == null
                               ? t('登录并申请')
-                              : t('申请成为分销商')}
+                              : t('申请成为代理')}
                           </Button>
                         </Link>
                       </div>
