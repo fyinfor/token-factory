@@ -174,7 +174,6 @@ const ModelChannelList = ({
           : null;
       items.push(makeItem(t('缓存创建价格'), chCC, rootCC));
     }
-
     return items.filter(Boolean);
   };
 

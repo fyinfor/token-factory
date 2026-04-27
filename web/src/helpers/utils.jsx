@@ -1091,18 +1091,6 @@ export const getModelPriceItems = (
         suffix: unitSuffix,
       },
       {
-        key: 'cache',
-        label: t('缓存读取价格'),
-        value: priceData.cachePrice,
-        suffix: unitSuffix,
-      },
-      {
-        key: 'create-cache',
-        label: t('缓存创建价格'),
-        value: priceData.createCachePrice,
-        suffix: unitSuffix,
-      },
-      {
         key: 'image',
         label: t('图片输入价格'),
         value: priceData.imagePrice,

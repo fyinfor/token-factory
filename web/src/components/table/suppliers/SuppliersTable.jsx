@@ -34,6 +34,9 @@ const SuppliersTable = ({
 }) => {
   const isMobile = useIsMobile();
   const columns = getSuppliersColumns(t, openEdit, handleDeactivate);
+  const statusColumn = columns.find((col) => col.dataIndex === 'status');
+  const createdAtColumn = columns.find((col) => col.dataIndex === 'created_at');
+  const operateColumn = columns.find((col) => col.dataIndex === 'operate');
 
   if (isMobile) {
     return (
@@ -46,7 +49,7 @@ const SuppliersTable = ({
             <div className='space-y-2'>
               <div className='flex justify-between items-center'>
                 <Text strong>ID: {supplier.id}</Text>
-                {columns[1].render(supplier.status)}
+                {statusColumn?.render ? statusColumn.render(supplier.status) : null}
               </div>
               <div>
                 <Text type='secondary'>{t('用户名')}:</Text>
@@ -74,10 +77,10 @@ const SuppliersTable = ({
               </div>
               <div>
                 <Text type='secondary'>{t('创建时间')}:</Text>
-                <div>{columns[9].render(supplier.created_at)}</div>
+                <div>{createdAtColumn?.render ? createdAtColumn.render(supplier.created_at) : '-'}</div>
               </div>
               <div className='mt-2'>
-                {columns[10].render(null, supplier)}
+                {operateColumn?.render ? operateColumn.render(null, supplier) : null}
               </div>
             </div>
           </div>

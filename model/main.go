@@ -325,6 +325,10 @@ func migrateDB() error {
 	if err := BackfillSupplierApplicationAlias(); err != nil {
 		return fmt.Errorf("backfill supplier_alias: %w", err)
 	}
+	// 兼容旧库 supplier_capabilities 缺少新布尔字段（如 openai_compatible）场景。
+	if err := EnsureSupplierCapabilitySchemaColumns(); err != nil {
+		return fmt.Errorf("ensure supplier_capabilities schema: %w", err)
+	}
 	if err := BackfillSupplierChannelNo(); err != nil {
 		return fmt.Errorf("backfill channel_no: %w", err)
 	}
@@ -421,6 +425,10 @@ func migrateDBFast() error {
 	}
 	if err := BackfillSupplierApplicationAlias(); err != nil {
 		return fmt.Errorf("backfill supplier_alias: %w", err)
+	}
+	// 兼容旧库 supplier_capabilities 缺少新布尔字段（如 openai_compatible）场景。
+	if err := EnsureSupplierCapabilitySchemaColumns(); err != nil {
+		return fmt.Errorf("ensure supplier_capabilities schema: %w", err)
 	}
 	if err := BackfillSupplierChannelNo(); err != nil {
 		return fmt.Errorf("backfill channel_no: %w", err)
