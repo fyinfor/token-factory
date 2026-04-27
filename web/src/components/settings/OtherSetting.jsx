@@ -27,6 +27,7 @@ import {
   Modal,
   Space,
   Card,
+  Upload,
 } from '@douyinfe/semi-ui';
 import { API, showError, showSuccess, timestamp2string } from '../../helpers';
 import { marked } from 'marked';
@@ -174,10 +175,54 @@ const OtherSetting = () => {
     try {
       setLoadingInput((loadingInput) => ({ ...loadingInput, Logo: true }));
       await updateOption('Logo', inputs.Logo);
+      localStorage.setItem('logo', inputs.Logo || '');
+      let iconLink = document.querySelector("link[rel~='icon']");
+      if (!iconLink) {
+        iconLink = document.createElement('link');
+        iconLink.rel = 'icon';
+        document.head.appendChild(iconLink);
+      }
+      iconLink.href = inputs.Logo || '/logo.png';
       showSuccess('Logo 已更新');
     } catch (error) {
       console.error('Logo 更新失败', error);
       showError('Logo 更新失败');
+    } finally {
+      setLoadingInput((loadingInput) => ({ ...loadingInput, Logo: false }));
+    }
+  };
+  const uploadLogo = async ({ file, onSuccess, onError }) => {
+    const inst = file?.fileInstance || file;
+    if (!inst) {
+      onError(new Error('no file'));
+      return;
+    }
+    try {
+      setLoadingInput((loadingInput) => ({ ...loadingInput, Logo: true }));
+      const fd = new FormData();
+      fd.append('file', inst);
+      const res = await API.post('/api/oss/upload', fd, {
+        skipErrorHandler: true,
+      });
+      const { success, message, data } = res.data || {};
+      const url = data?.url;
+      if (!success || !url) {
+        const err = new Error(message || t('上传失败'));
+        onError(err);
+        showError(err.message);
+        return;
+      }
+      setInputs((prev) => ({ ...prev, Logo: url }));
+      formAPIPersonalization.current?.setValue('Logo', url);
+      onSuccess(data);
+      showSuccess(t('Logo 上传成功，请点击「设置 Logo」保存'));
+    } catch (error) {
+      onError(error);
+      showError(
+        error?.response?.data?.message ||
+          error?.message ||
+          t('上传失败，请确认已启用 OSS 并完成配置'),
+      );
     } finally {
       setLoadingInput((loadingInput) => ({ ...loadingInput, Logo: false }));
     }
@@ -442,9 +487,24 @@ const OtherSetting = () => {
                 field={'Logo'}
                 onChange={handleInputChange}
               />
-              <Button onClick={submitLogo} loading={loadingInput['Logo']}>
-                {t('设置 Logo')}
-              </Button>
+              <Space vertical align='start' spacing='tight' style={{ marginBottom: 12 }}>
+                <Space align='center' spacing='tight' wrap>
+                  <Upload
+                    action=''
+                    accept='image/*'
+                    showUploadList={false}
+                    customRequest={uploadLogo}
+                  >
+                    <Button loading={loadingInput['Logo']}>{t('上传 Logo 图片')}</Button>
+                  </Upload>
+                  <Button onClick={submitLogo} loading={loadingInput['Logo']}>
+                    {t('设置 Logo')}
+                  </Button>
+                </Space>
+                <Text type='tertiary' size='small'>
+                  {t('可直接上传图片自动填写地址，或手动输入 URL；上传需先配置并启用 OSS')}
+                </Text>
+              </Space>
               <Form.TextArea
                 label={t('首页内容')}
                 placeholder={t(

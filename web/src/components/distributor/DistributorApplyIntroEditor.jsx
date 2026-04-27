@@ -29,6 +29,10 @@ function normalizeEmptyHtml(html) {
   return html ?? '';
 }
 
+function hasBase64Image(html) {
+  return /<img[^>]+src\s*=\s*["']data:image\//i.test(String(html ?? ''));
+}
+
 /**
  * 代理申请页说明：富文本（原生 Quill，避免 react-quill 在部分环境下不渲染）
  */
@@ -50,6 +54,23 @@ export default function DistributorApplyIntroEditor({
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return undefined;
+
+    const uploadImageFile = async (q, file) => {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await API.post('/api/oss/upload', fd, {
+        skipErrorHandler: true,
+      });
+      const { success, message, data } = res.data || {};
+      const url = data?.url;
+      if (!success || !url) {
+        throw new Error(message || t('上传失败'));
+      }
+      const range = q.getSelection(true);
+      const index = range ? range.index : Math.max(0, q.getLength() - 1);
+      q.insertEmbed(index, 'image', url);
+      q.setSelection(index + 1, 0);
+    };
 
     const quill = new Quill(el, {
       theme: 'snow',
@@ -73,26 +94,13 @@ export default function DistributorApplyIntroEditor({
               input.onchange = async () => {
                 const file = input.files?.[0];
                 if (!file) return;
-                const fd = new FormData();
-                fd.append('file', file);
                 try {
-                  const res = await API.post('/api/oss/upload', fd, {
-                    skipErrorHandler: true,
-                  });
-                  const { success, message, data } = res.data || {};
-                  const url = data?.url;
-                  if (!success || !url) {
-                    showError(message || t('上传失败'));
-                    return;
-                  }
-                  const range = q.getSelection(true);
-                  const index = range ? range.index : Math.max(0, q.getLength() - 1);
-                  q.insertEmbed(index, 'image', url);
-                  q.setSelection(index + 1, 0);
+                  await uploadImageFile(q, file);
                   showSuccess(t('已插入图片'));
                 } catch (e) {
                   showError(
                     e?.response?.data?.message ||
+                      e?.message ||
                       t('上传失败，请确认已启用 OSS 并完成配置'),
                   );
                 }
@@ -104,6 +112,51 @@ export default function DistributorApplyIntroEditor({
     });
 
     quillRef.current = quill;
+    const rootEl = quill.root;
+
+    const handlePaste = async (event) => {
+      if (!event.clipboardData) return;
+      const files = Array.from(event.clipboardData.files || []);
+      const imageFiles = files.filter((file) =>
+        String(file?.type || '').startsWith('image/'),
+      );
+      if (!imageFiles.length) return;
+      event.preventDefault();
+      for (const imageFile of imageFiles) {
+        try {
+          await uploadImageFile(quill, imageFile);
+        } catch (e) {
+          showError(
+            e?.response?.data?.message ||
+              e?.message ||
+              t('上传失败，请确认已启用 OSS 并完成配置'),
+          );
+        }
+      }
+    };
+
+    const handleDrop = async (event) => {
+      if (!event.dataTransfer) return;
+      const files = Array.from(event.dataTransfer.files || []);
+      const imageFiles = files.filter((file) =>
+        String(file?.type || '').startsWith('image/'),
+      );
+      if (!imageFiles.length) return;
+      event.preventDefault();
+      for (const imageFile of imageFiles) {
+        try {
+          await uploadImageFile(quill, imageFile);
+        } catch (e) {
+          showError(
+            e?.response?.data?.message ||
+              e?.message ||
+              t('上传失败，请确认已启用 OSS 并完成配置'),
+          );
+        }
+      }
+    };
+    rootEl.addEventListener('paste', handlePaste);
+    rootEl.addEventListener('drop', handleDrop);
 
     // 程序化 setSelection 会调用 root.focus()。浏览器默认会把被聚焦的 contenteditable
     // 滚进视口，与 Quill 的 SILENT/scrollIntoView 无关；在系统设置-运营等长页面上会整页跳转到本区块
@@ -148,6 +201,9 @@ export default function DistributorApplyIntroEditor({
     const emitChange = () => {
       if (syncingFromPropRef.current) return;
       const html = quill.root.innerHTML;
+      if (hasBase64Image(html)) {
+        showError(t('检测到 base64 图片，请使用上传功能（需 OSS）'));
+      }
       onChangeRef.current(normalizeEmptyHtml(html));
     };
 
@@ -157,6 +213,8 @@ export default function DistributorApplyIntroEditor({
       window.clearTimeout(blurT0);
       window.clearTimeout(blurT1);
       window.clearTimeout(blurT2);
+      rootEl.removeEventListener('paste', handlePaste);
+      rootEl.removeEventListener('drop', handleDrop);
       root.focus = origRootFocus;
       quill.off('text-change', emitChange);
       quillRef.current = null;
