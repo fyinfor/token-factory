@@ -40,7 +40,7 @@ const SupplierCapabilityFormFields = ({ t, onCommitmentChange }) => {
         <Col span={12}>
           <Form.Select
             field='core_service_types'
-            label={<Text strong>{t('核心服务类型')}<Text type='danger'>*</Text></Text>}
+            label={<Text strong>{t('核心服务类型')}</Text>}
             multiple
             placeholder={t('请选择核心服务类型')}
             rules={[{ required: true, message: t('请选择核心服务类型') }]}
@@ -58,8 +58,8 @@ const SupplierCapabilityFormFields = ({ t, onCommitmentChange }) => {
         <Col span={12}>
           <Form.TagInput
             field='supported_models'
-            label={<Text strong>{t('支持的模型')}<Text type='danger'>*</Text></Text>}
-            placeholder={t('请输入支持的模型，输入后回车确定添加，如 GPT-4、文心一言4.0')}
+            label={<Text strong>{t('支持的模型')}</Text>}
+            placeholder={t('请输入支持的模型，回车添加')}
             rules={[{ required: true, message: t('请填写支持的模型，输入后回车确定添加') }]}
             size='large'
             style={{ width: '100%' }}
@@ -71,7 +71,7 @@ const SupplierCapabilityFormFields = ({ t, onCommitmentChange }) => {
         <Col span={12}>
           <Form.Select
             field='supported_api_endpoints'
-            label={<Text strong>{t('支持的API接口')}<Text type='danger'>*</Text></Text>}
+            label={<Text strong>{t('支持的API接口')}</Text>}
             multiple
             placeholder={t('请选择支持的API接口')}
             rules={[{ required: true, message: t('请选择支持的API接口') }]}
@@ -88,7 +88,7 @@ const SupplierCapabilityFormFields = ({ t, onCommitmentChange }) => {
         <Col span={12}>
           <Form.Select
             field='supported_params'
-            label={<Text strong>{t('支持的参数配置')}<Text type='danger'>*</Text></Text>}
+            label={<Text strong>{t('支持的参数配置')}</Text>}
             multiple
             placeholder={t('请选择支持的参数配置')}
             rules={[{ required: true, message: t('请选择支持的参数配置') }]}
@@ -164,7 +164,7 @@ const SupplierCapabilityFormFields = ({ t, onCommitmentChange }) => {
         <Col span={12}>
           <Form.Select
             field='pricing_modes'
-            label={<Text strong>{t('定价模式')}<Text type='danger'>*</Text></Text>}
+            label={<Text strong>{t('定价模式')}</Text>}
             multiple
             placeholder={t('请选择定价模式')}
             rules={[{ required: true, message: t('请选择定价模式') }]}
@@ -181,8 +181,8 @@ const SupplierCapabilityFormFields = ({ t, onCommitmentChange }) => {
         <Col span={12}>
           <Form.TagInput
             field='api_base_urls'
-            label={<Text strong>{t('API接口地址')}<Text type='danger'>*</Text></Text>}
-            placeholder={t('请输入API接口地址，输入后回车确定添加，例如 https://api.example.com/v1')}
+            label={<Text strong>{t('API接口地址')}</Text>}
+            placeholder={t('请输入API接口地址，回车添加')}
             rules={[{ required: true, message: t('请填写API接口地址，输入后回车确定添加') }]}
             size='large'
             style={{ width: '100%' }}

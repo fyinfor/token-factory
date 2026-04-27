@@ -824,6 +824,11 @@ export default function UpstreamRatioSync(props) {
           </div>
         </div>
       </div>
+      <div className='mt-2 text-xs text-[var(--semi-color-text-2)]'>
+        {t(
+          '提示：官方渠道预设（如 官方倍率预设、models.dev 价格预设）应用同步后会保存到全局模型定价。',
+        )}
+      </div>
     </div>
   );
 
@@ -875,6 +880,16 @@ export default function UpstreamRatioSync(props) {
           : `$${formatPriceNumber(outputPrice)}`;
       }
 
+      if (record.ratioType === 'cache_ratio') {
+        const cacheRatio = toFiniteNumber(record.current);
+        const inputRatio = getModelRatioForDisplay(record.model, null, 'current');
+        if (cacheRatio === null || inputRatio === null) return t('未设置');
+        const cachePrice = ratioToDisplayPrice(inputRatio * cacheRatio);
+        return cachePrice === null
+          ? t('未设置')
+          : `$${formatPriceNumber(cachePrice)}`;
+      }
+
       return String(record.current);
     };
 
@@ -911,6 +926,30 @@ export default function UpstreamRatioSync(props) {
             ? ratioToDisplayPrice(newCompletion * newInputRatio)
             : null;
         return formatPriceOldNewPair(oldOutputPrice, newOutputPrice);
+      }
+
+      if (record.ratioType === 'cache_ratio') {
+        const oldCacheRatio = toFiniteNumber(oldVal);
+        const newCacheRatio = toFiniteNumber(newVal);
+        const oldInputRatio = getModelRatioForDisplay(
+          record.model,
+          upstreamName,
+          'old',
+        );
+        const newInputRatio = getModelRatioForDisplay(
+          record.model,
+          upstreamName,
+          'new',
+        );
+        const oldCachePrice =
+          oldCacheRatio !== null && oldInputRatio !== null
+            ? ratioToDisplayPrice(oldCacheRatio * oldInputRatio)
+            : null;
+        const newCachePrice =
+          newCacheRatio !== null && newInputRatio !== null
+            ? ratioToDisplayPrice(newCacheRatio * newInputRatio)
+            : null;
+        return formatPriceOldNewPair(oldCachePrice, newCachePrice);
       }
 
       return formatOldNewPair(oldVal, newVal);
@@ -1004,7 +1043,7 @@ export default function UpstreamRatioSync(props) {
           const typeMap = {
             model_ratio: t('输入价格（由倍率换算）'),
             completion_ratio: t('输出价格（由倍率换算）'),
-            cache_ratio: t('缓存倍率'),
+            cache_ratio: t('缓存价格（由倍率换算）'),
             model_price: t('固定价格'),
           };
           const baseTag = (

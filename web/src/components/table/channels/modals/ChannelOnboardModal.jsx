@@ -132,9 +132,12 @@ const StepImport = ({ channel, onboardData, reloadOnboard, t }) => {
   const available = onboardData?.models_available ?? [];
   const metaLinked = onboardData?.meta_linked ?? [];
   const metaMissing = onboardData?.meta_missing ?? [];
+  const upstreamSkipped = onboardData?.upstream_skipped === true;
 
-  // 上游中尚未导入的模型
-  const notYetImported = available.filter((m) => !imported.includes(m));
+  // 上游中尚未导入的模型（跳过上拉时为 null，避免空列表被误判为「已全部导入」）
+  const notYetImported = upstreamSkipped
+    ? null
+    : available.filter((m) => !imported.includes(m));
 
   const handleSave = async () => {
     if (selected.length === 0) return;
@@ -277,24 +280,40 @@ const StepImport = ({ channel, onboardData, reloadOnboard, t }) => {
               <Avatar size='extra-small' color='purple' shape='square'>
                 <span className='text-xs'>↓</span>
               </Avatar>
-              <Text strong>{t('上游可导入模型')}（{notYetImported.length}）</Text>
+              <Text strong>
+                {t('上游可导入模型')}
+                {notYetImported != null ? `（${notYetImported.length}）` : ''}
+              </Text>
             </div>
             <Button
               size='small'
               theme='borderless'
               icon={<IconRefresh />}
-              onClick={reloadOnboard}
+              onClick={() => reloadOnboard({ fetchUpstream: true })}
             >
-              {t('刷新')}
+              {upstreamSkipped ? t('从上游拉取列表') : t('刷新')}
             </Button>
           </div>
 
-          {notYetImported.length === 0 ? (
+          {upstreamSkipped && (
+            <Banner
+              type='info'
+              closeIcon={null}
+              className='!rounded-lg mb-3'
+              description={
+                <Text size='small'>
+                  {t('为加快打开速度，未请求上游模型列表。点击「从上游拉取列表」可加载可导入模型。')}
+                </Text>
+              }
+            />
+          )}
+
+          {notYetImported != null && notYetImported.length === 0 ? (
             <div className='flex items-center gap-2 text-sm' style={{ color: 'var(--semi-color-success)' }}>
               <IconTickCircle />
               <Text type='success' size='small'>{t('所有上游模型已全部导入')}</Text>
             </div>
-          ) : (
+          ) : notYetImported != null ? (
             <>
               <div className='max-h-48 overflow-y-auto'>
                 <CheckboxGroup
@@ -333,7 +352,7 @@ const StepImport = ({ channel, onboardData, reloadOnboard, t }) => {
                 </Space>
               </div>
             </>
-          )}
+          ) : null}
         </Card>
       )}
 
@@ -761,11 +780,12 @@ const ChannelOnboardModal = ({ visible, channel, onClose, onRefresh }) => {
   const [loading, setLoading] = useState(false);
   const [onboardData, setOnboardData] = useState(null);
 
-  const loadOnboard = useCallback(async () => {
+  const loadOnboard = useCallback(async (opts) => {
     if (!channel?.id) return;
     setLoading(true);
     try {
-      const res = await API.get(`/api/channel/${channel.id}/onboard`);
+      const q = opts?.fetchUpstream ? '?fetch_upstream=1' : '';
+      const res = await API.get(`/api/channel/${channel.id}/onboard${q}`);
       if (res?.data?.success) {
         setOnboardData(res.data.data);
       } else {

@@ -177,6 +177,41 @@ const PricingCardView = ({
       }
     });
 
+    // 根数据价格（用同一口径计算，用于与 channel 价格比较）
+    const rootPrices = {};
+    if (model.model_ratio !== undefined && model.model_ratio !== null) {
+      rootPrices.input = formatPrice(model.model_ratio * 2 * usedGroupRatio);
+      if (model.completion_ratio !== undefined && model.completion_ratio !== null) {
+        rootPrices.output = formatPrice(
+          model.model_ratio * model.completion_ratio * 2 * usedGroupRatio,
+        );
+      }
+      if (model.cache_ratio !== undefined && model.cache_ratio !== null) {
+        rootPrices.cache = formatPrice(
+          model.model_ratio * model.cache_ratio * 2 * usedGroupRatio,
+        );
+      }
+      if (model.create_cache_ratio !== undefined && model.create_cache_ratio !== null) {
+        rootPrices.createCache = formatPrice(
+          model.model_ratio * model.create_cache_ratio * 2 * usedGroupRatio,
+        );
+      }
+    }
+
+    // 若根价格高于任意一个 channel 的对应价格，则返回划线原价与折扣
+    const getOriginal = (rootPrice, channelPriceArray) => {
+      if (!rootPrice || !channelPriceArray || channelPriceArray.length === 0) return null;
+      const minChannel = Math.min(...channelPriceArray.map((p) => p.value));
+      if (rootPrice.value > minChannel && rootPrice.value > 0) {
+        const discount = Math.round((1 - minChannel / rootPrice.value) * 100);
+        return {
+          text: `${rootPrice.symbol}${rootPrice.value}`,
+          discount,
+        };
+      }
+      return null;
+    };
+
     // 计算范围
     const calculateRange = (priceArray) => {
       if (priceArray.length === 0) return null;
@@ -207,6 +242,12 @@ const PricingCardView = ({
       output: calculateRange(prices.output),
       cache: calculateRange(prices.cache),
       createCache: calculateRange(prices.createCache),
+      original: {
+        input: getOriginal(rootPrices.input, prices.input),
+        output: getOriginal(rootPrices.output, prices.output),
+        cache: getOriginal(rootPrices.cache, prices.cache),
+        createCache: getOriginal(rootPrices.createCache, prices.createCache),
+      },
       unitSuffix,
     };
   };
@@ -222,7 +263,7 @@ const PricingCardView = ({
 
     // 使用 channel 价格构建价格项
     const items = [];
-    const { input, output, cache, createCache, unitSuffix } = channelPrices;
+    const { input, output, cache, createCache, original, unitSuffix } = channelPrices;
 
     if (input) {
       items.push({
@@ -230,6 +271,7 @@ const PricingCardView = ({
         label: t('输入价格'),
         value: input.single || `${input.symbol}${input.min} ~ ${input.symbol}${input.max}`,
         suffix: unitSuffix,
+        original: original?.input,
       });
     }
 
@@ -239,6 +281,7 @@ const PricingCardView = ({
         label: t('输出价格'),
         value: output.single || `${output.symbol}${output.min} ~ ${output.symbol}${output.max}`,
         suffix: unitSuffix,
+        original: original?.output,
       });
     }
 
@@ -248,6 +291,7 @@ const PricingCardView = ({
         label: t('缓存读取价格'),
         value: cache.single || `${cache.symbol}${cache.min} ~ ${cache.symbol}${cache.max}`,
         suffix: unitSuffix,
+        original: original?.cache,
       });
     }
 
@@ -257,6 +301,7 @@ const PricingCardView = ({
         label: t('缓存创建价格'),
         value: createCache.single || `${createCache.symbol}${createCache.min} ~ ${createCache.symbol}${createCache.max}`,
         suffix: unitSuffix,
+        original: original?.createCache,
       });
     }
 
@@ -442,7 +487,19 @@ const PricingCardView = ({
                         {getModelPriceItemsForCard(model, priceData).map((item) => (
                           <div key={item.key} className='flex items-center'>
                             <span className='w-20 flex-shrink-0'>{item.label}</span>
-                            <span className='flex-1 font-bold text-black'>{item.value}{item.suffix}</span>
+                            <span className='flex-1 font-bold text-black inline-flex items-center flex-wrap gap-1'>
+                              {item.original && (
+                                <>
+                                  <span className='line-through text-gray-400 font-normal text-[10px]'>
+                                    {item.original.text}
+                                  </span>
+                                  <Tag color='red' size='small' shape='circle'>
+                                    -{item.original.discount}%
+                                  </Tag>
+                                </>
+                              )}
+                              <span>{item.value}{item.suffix}</span>
+                            </span>
                           </div>
                         ))}
                         <div className='flex items-center'>

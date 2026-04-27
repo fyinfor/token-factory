@@ -110,8 +110,20 @@ export const loadMessages = (userId) => {
     const savedMessages = localStorage.getItem(storageKey);
     if (savedMessages) {
       const parsedMessages = JSON.parse(savedMessages);
-      if (parsedMessages.userId === userId || !userId) {
-        return parsedMessages.messages || null;
+      const hasMessagesField =
+        parsedMessages &&
+        Object.prototype.hasOwnProperty.call(parsedMessages, 'messages');
+      if (!hasMessagesField) {
+        return null;
+      }
+      // 兼容历史数据：userId 可能是 number/string，不应因类型不一致导致恢复失败
+      const sameUser =
+        !userId ||
+        parsedMessages.userId === undefined ||
+        parsedMessages.userId === null ||
+        String(parsedMessages.userId) === String(userId);
+      if (sameUser) {
+        return parsedMessages.messages;
       }
     }
   } catch (error) {
