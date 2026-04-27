@@ -25,6 +25,9 @@ import (
 type ModelRequest struct {
 	Model string `json:"model"`
 	Group string `json:"group,omitempty"`
+	// SpecificChannelID 指定 playground 请求直连某个渠道（channels.id）。
+	// nil 表示按默认逻辑随机/智能路由。
+	SpecificChannelID *int `json:"specific_channel_id,omitempty"`
 }
 
 func Distribute() func(c *gin.Context) {
@@ -427,6 +430,13 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		}
 		modelRequest.Model = req.Model
 		modelRequest.Group = req.Group
+		modelRequest.SpecificChannelID = req.SpecificChannelID
+		if req.SpecificChannelID != nil {
+			if *req.SpecificChannelID <= 0 {
+				return nil, false, errors.New(i18n.T(c, i18n.MsgDistributorInvalidPlayground, map[string]any{"Error": "specific_channel_id 必须大于 0"}))
+			}
+			common.SetContextKey(c, constant.ContextKeyTokenSpecificChannelId, strconv.Itoa(*req.SpecificChannelID))
+		}
 		common.SetContextKey(c, constant.ContextKeyTokenGroup, modelRequest.Group)
 	}
 

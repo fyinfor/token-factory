@@ -92,16 +92,13 @@ const ModelChannelList = ({
 
   // 格式化通道信息（与 calculateModelPrice 一致：含分组倍率）
   const formatChannelInfo = (channel) => {
-    const firstRow = [];
-    const secondRow = [];
-    const items = [];
-
+    // 计算价格，返回 { display, value }
     const calculatePrice = (nominalRatio) => {
       const priceUSD = nominalRatio * 2 * usedGroupRatio;
       const rawDisplayPrice = displayPrice(priceUSD);
       const unitDivisor = tokenUnit === 'K' ? 1000 : 1;
       const numericPrice = parseFloat(rawDisplayPrice.replace(/[^0-9.]/g, '')) / unitDivisor;
-      
+
       let symbol = '$';
       if (currency === 'CNY') {
         symbol = '¥';
@@ -116,70 +113,69 @@ const ModelChannelList = ({
           symbol = '¤';
         }
       }
-      
+
       const unitLabel = tokenUnit === 'K' ? 'K' : 'M';
-      return `${symbol}${parseFloat(numericPrice.toFixed(2))} / 1${unitLabel} Tokens`;
+      const value = parseFloat(numericPrice.toFixed(2));
+      return {
+        display: `${symbol}${value} / 1${unitLabel} Tokens`,
+        value,
+      };
     };
-    
-    // 第一行：输入价格和输出价格
-    if (channel.model_ratio !== undefined && channel.model_ratio !== null) {
-      firstRow.push({ 
-        label: t('输入价格'), 
-        value: calculatePrice(channel.model_ratio)
-      });
-    }
-    
-    if (channel.model_ratio !== undefined && channel.model_ratio !== null &&
-        channel.completion_ratio !== undefined && channel.completion_ratio !== null) {
-      const outputRatio = channel.model_ratio * channel.completion_ratio;
-      firstRow.push({ 
-        label: t('输出价格'), 
-        value: calculatePrice(outputRatio)
-      });
+
+    // 构造单条价格项，若根倍率高于通道倍率则附带原价与折扣
+    const makeItem = (label, channelRatio, rootRatio) => {
+      if (!hasRatioValue(channelRatio)) return null;
+      const current = calculatePrice(Number(channelRatio));
+      let original = null;
+      let discount = 0;
+      if (hasRatioValue(rootRatio) && Number(rootRatio) > Number(channelRatio)) {
+        const root = calculatePrice(Number(rootRatio));
+        if (root.value > current.value && root.value > 0) {
+          discount = Math.round((1 - current.value / root.value) * 100);
+          original = root.display;
+        }
+      }
+      return { label, value: current.display, original, discount };
+    };
+
+    const items = [];
+
+    // 输入
+    items.push(
+      makeItem(t('输入价格'), channel.model_ratio, modelData?.model_ratio),
+    );
+
+    // 输出
+    if (hasRatioValue(channel.model_ratio) && hasRatioValue(channel.completion_ratio)) {
+      const chOut = Number(channel.model_ratio) * Number(channel.completion_ratio);
+      const rootOut =
+        hasRatioValue(modelData?.model_ratio) && hasRatioValue(modelData?.completion_ratio)
+          ? Number(modelData.model_ratio) * Number(modelData.completion_ratio)
+          : null;
+      items.push(makeItem(t('输出价格'), chOut, rootOut));
     }
 
-    if (
-      hasRatioValue(channel.model_ratio) &&
-      hasRatioValue(channel.cache_ratio)
-    ) {
-      const cacheOutputRatio = channel.model_ratio * Number(channel.cache_ratio);
-      items.push({
-        label: t('渠道缓存价'),
-        value: calculatePrice(cacheOutputRatio),
-      });
+    // 缓存读取
+    if (hasRatioValue(channel.model_ratio) && hasRatioValue(channel.cache_ratio)) {
+      const chC = Number(channel.model_ratio) * Number(channel.cache_ratio);
+      const rootC =
+        hasRatioValue(modelData?.model_ratio) && hasRatioValue(modelData?.cache_ratio)
+          ? Number(modelData.model_ratio) * Number(modelData.cache_ratio)
+          : null;
+      items.push(makeItem(t('缓存读取价格'), chC, rootC));
     }
 
-    if (
-      hasRatioValue(channel.model_ratio) &&
-      hasRatioValue(channel.create_cache_ratio)
-    ) {
-      const createCacheOutRatio = channel.model_ratio * Number(channel.create_cache_ratio);
-      items.push({
-        label: t('渠道缓存创建价'),
-        value: calculatePrice(createCacheOutRatio),
-      });
+    // 缓存创建
+    if (hasRatioValue(channel.model_ratio) && hasRatioValue(channel.create_cache_ratio)) {
+      const chCC = Number(channel.model_ratio) * Number(channel.create_cache_ratio);
+      const rootCC =
+        hasRatioValue(modelData?.model_ratio) && hasRatioValue(modelData?.create_cache_ratio)
+          ? Number(modelData.model_ratio) * Number(modelData.create_cache_ratio)
+          : null;
+      items.push(makeItem(t('缓存创建价格'), chCC, rootCC));
     }
-    
-    // 第二行：缓存读取价格和缓存创建价格
-    if (channel.model_ratio !== undefined && channel.model_ratio !== null &&
-        channel.cache_ratio !== undefined && channel.cache_ratio !== null) {
-      const cacheRatio = channel.model_ratio * channel.cache_ratio;
-      secondRow.push({ 
-        label: t('缓存读取价格'), 
-        value: calculatePrice(cacheRatio)
-      });
-    }
-    
-    if (channel.model_ratio !== undefined && channel.model_ratio !== null &&
-        channel.create_cache_ratio !== undefined && channel.create_cache_ratio !== null) {
-      const createCacheRatio = channel.model_ratio * channel.create_cache_ratio;
-      secondRow.push({ 
-        label: t('缓存创建价格'), 
-        value: calculatePrice(createCacheRatio)
-      });
-    }
-    
-    return { firstRow, secondRow };
+
+    return items.filter(Boolean);
   };
 
   return (
@@ -216,7 +212,7 @@ const ModelChannelList = ({
           >
             <div className='space-y-3'>
               {group.channels.map((channel, idx) => {
-                const channelInfo = formatChannelInfo(channel);
+                const channelItems = formatChannelInfo(channel);
                 const channelPath = `${channel.supplier_alias}/${modelData.model_name}/${channel.channel_no}`;
                 
                 const handleCopy = () => {
@@ -237,29 +233,28 @@ const ModelChannelList = ({
                       bodyStyle={{ padding: '12px' }}
                     >
                       <div className='flex items-center justify-between gap-4'>
-                        <div className='flex flex-col gap-2 text-sm flex-1'>
-                          {/* 第一行：输入和输出价格 */}
-                          {channelInfo.firstRow.length > 0 && (
-                            <div className='flex flex-wrap gap-4'>
-                              {channelInfo.firstRow.map((item) => (
-                                <div key={item.label} className='flex items-center gap-2 grow'>
-                                  <span className='text-gray-600'>{item.label}:</span>
-                                  <span className='font-medium text-gray-900'>{item.value}</span>
-                                </div>
-                              ))}
+                        <div className='flex flex-col gap-1.5 text-sm flex-1'>
+                          {channelItems.map((item) => (
+                            <div
+                              key={item.label}
+                              className='flex items-center gap-2 flex-wrap'
+                            >
+                              <span className='text-gray-600'>{item.label}:</span>
+                              {item.original && (
+                                <>
+                                  <span className='text-gray-400 line-through text-xs'>
+                                    {item.original}
+                                  </span>
+                                  <Tag color='red' size='small' shape='circle'>
+                                    -{item.discount}%
+                                  </Tag>
+                                </>
+                              )}
+                              <span className='font-medium text-gray-900'>
+                                {item.value}
+                              </span>
                             </div>
-                          )}
-                          {/* 第二行：缓存价格 */}
-                          {channelInfo.secondRow.length > 0 && (
-                            <div className='flex flex-wrap gap-4'>
-                              {channelInfo.secondRow.map((item) => (
-                                <div key={item.label} className='flex items-center gap-2 grow'>
-                                  <span className='text-gray-600'>{item.label}:</span>
-                                  <span className='font-medium text-gray-900'>{item.value}</span>
-                                </div>
-                              ))}
-                            </div>
-                          )}
+                          ))}
                           <div className='flex flex-wrap gap-2 items-center pt-1 border-t border-gray-100 mt-1'>
                             <Text type='tertiary' size='small'>
                               {t('单测/稳定性')}

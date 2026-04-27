@@ -156,6 +156,16 @@ export const buildApiPayload = (
     messages: processedMessages,
     stream: inputs.stream,
   };
+  if (
+    inputs.specific_channel_id !== '' &&
+    inputs.specific_channel_id !== null &&
+    inputs.specific_channel_id !== undefined
+  ) {
+    const channelID = Number(inputs.specific_channel_id);
+    if (!Number.isNaN(channelID) && channelID > 0) {
+      payload.specific_channel_id = channelID;
+    }
+  }
 
   // 添加启用的参数
   const parameterMappings = {

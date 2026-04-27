@@ -71,11 +71,12 @@ const filterPlaygroundModelsByType = (listForPlayground, effectiveType, typeOpti
 /**
  * 操练场数据加载：拉取用户模型与类型（与模型广场同源元数据）、按「全部/类型」在客户端筛模型（同模型广场逻辑），分组单独加载。
  * @param {{ user?: object }} userState 已登录用户状态
- * @param {{ model?: string, model_type?: string|number, group?: string }} inputs 当前表单/配置
+ * @param {{ model?: string, model_type?: string|number, group?: string, specific_channel_id?: string|number }} inputs 当前表单/配置
  * @param {Array<{ label: string, value: string|number }>} modelTypes 类型下拉项（与接口同步后的状态，用于按类型重算模型列表）
  * @param {function(string, unknown): void} handleInputChange 更新单项输入
  * @param {import('react').Dispatch<import('react').SetStateAction<any[]>>} setModels 设置模型下拉选项
  * @param {import('react').Dispatch<import('react').SetStateAction<any[]>>} setModelTypes 设置模型类型下拉
+ * @param {import('react').Dispatch<import('react').SetStateAction<any[]>>} setSupplierOptions 设置渠道下拉
  * @param {import('react').Dispatch<import('react').SetStateAction<any[]>>} setGroups 设置分组下拉
  * @returns {{ loadModels: function, loadGroups: function }}
  */
@@ -86,6 +87,7 @@ export const useDataLoader = (
   handleInputChange,
   setModels,
   setModelTypes,
+  setSupplierOptions,
   setGroups,
 ) => {
   const { t } = useTranslation();
@@ -179,10 +181,12 @@ export const useDataLoader = (
     if (!userState?.user) {
       setPlaygroundRawModels([]);
       setModels([]);
+      setSupplierOptions([{ label: `${t('随机')} (${t('默认')})`, value: '' }]);
       return;
     }
     if (playgroundRawModels.length === 0) {
       setModels([]);
+      setSupplierOptions([{ label: `${t('随机')} (${t('默认')})`, value: '' }]);
       return;
     }
     const typeOptions =
@@ -213,14 +217,58 @@ export const useDataLoader = (
     if (selectedModel !== inputs.model) {
       handleInputChange('model', selectedModel);
     }
+    const selectedModelName =
+      selectedModel !== undefined && selectedModel !== null
+        ? selectedModel
+        : inputs.model;
+    const selectedModelRow = filteredItems.find(
+      (item) => item?.model_name === selectedModelName,
+    );
+    const supplierOptionsRaw = Array.isArray(selectedModelRow?.channel_options)
+      ? selectedModelRow.channel_options
+      : [];
+    const supplierOptions = [
+      { label: `${t('随机')} (${t('默认')})`, value: '' },
+      ...supplierOptionsRaw
+        .map((option) => {
+          const id = Number(option?.id);
+          if (!Number.isFinite(id) || id <= 0) {
+            return null;
+          }
+          const name = String(option?.name || '').trim() || `渠道#${id}`;
+          const channelNo = String(option?.channel_no || '').trim();
+          const label = channelNo ? `${name} (${channelNo})` : name;
+          return {
+            label,
+            value: id,
+          };
+        })
+        .filter(Boolean),
+    ];
+    setSupplierOptions(supplierOptions);
+    const selectedSupplierID = inputs.specific_channel_id;
+    const hasSelectedSupplier = supplierOptions.some((option) => {
+      if (option.value === '' && (selectedSupplierID === '' || selectedSupplierID == null)) {
+        return true;
+      }
+      if (option.value === '' || selectedSupplierID === '' || selectedSupplierID == null) {
+        return false;
+      }
+      return Number(option.value) === Number(selectedSupplierID);
+    });
+    if (!hasSelectedSupplier) {
+      handleInputChange('specific_channel_id', '');
+    }
   }, [
     userState?.user,
     playgroundRawModels,
     modelTypes,
     inputs.model_type,
     inputs.model,
+    inputs.specific_channel_id,
     t,
     setModels,
+    setSupplierOptions,
     handleInputChange,
   ]);
 
