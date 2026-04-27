@@ -41,7 +41,7 @@ export function safeInternalRedirectPath(raw) {
 
 /**
  * 顶栏「成为代理 / 提供算力」未登录时会带 ?redirect= 到申请页；登录后按需改写目标：
- * - 分销申请：管理员 → 分销商管理；已是分销商 → 分销中心
+ * - 分销申请：管理员 → 代理管理；已是代理 → 分销中心
  * - 供应商申请：管理员 → 供应商审批
  */
 export function redirectApplyIntentToAdminIfNeeded(path, userLike) {

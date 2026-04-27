@@ -34,7 +34,7 @@ const HTMLToastContent = ({ htmlContent }) => {
 };
 export default HTMLToastContent;
 
-/** 是否为分销商：后端 is_distributor 为 0/1，兼容历史 true 与 role===5 */
+/** 是否为代理：后端 is_distributor 为 0/1，兼容历史 true 与 role===5 */
 export function userIsDistributorUser(userLike) {
   if (!userLike || typeof userLike !== 'object') return false;
   if (userLike.is_distributor === 1 || userLike.is_distributor === true) {
@@ -1088,18 +1088,6 @@ export const getModelPriceItems = (
         key: 'completion',
         label: t('输出价格'),
         value: formatPriceValue(priceData.completionPrice, priceData.completionPriceMin, priceData.completionPriceMax),
-        suffix: unitSuffix,
-      },
-      {
-        key: 'cache',
-        label: t('缓存读取价格'),
-        value: priceData.cachePrice,
-        suffix: unitSuffix,
-      },
-      {
-        key: 'create-cache',
-        label: t('缓存创建价格'),
-        value: priceData.createCachePrice,
         suffix: unitSuffix,
       },
       {

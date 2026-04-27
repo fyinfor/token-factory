@@ -176,6 +176,30 @@ const SupplierDetailModal = ({ visible, handleClose }) => {
 
           <Row gutter={12}>
             <InfoItem label={t('企业/主体名称')} value={supplierData?.company_name || '-'} />
+            {supplierData?.company_logo_url && (
+              <Col span={24}>
+                <div className='mb-4'>
+                  <Text strong style={{ fontSize: '14px', display: 'block', marginBottom: '8px' }}>
+                    {t('企业Logo')}
+                  </Text>
+                  <div style={{
+                    padding: '12px',
+                    backgroundColor: isDark ? '#2d2e33' : '#f8f8f8',
+                    borderRadius: '4px',
+                  }}>
+                    <Image
+                      src={supplierData.company_logo_url}
+                      width={120}
+                      height={120}
+                      preview={{
+                        src: supplierData.company_logo_url,
+                      }}
+                      style={{ borderRadius: '8px', objectFit: 'contain' }}
+                    />
+                  </div>
+                </div>
+              </Col>
+            )}
             <InfoItem label={t('统一社会信用代码')} value={supplierData?.credit_code || '-'} />
             <InfoItem label={t('法人/经营者姓名')} value={supplierData?.legal_representative || '-'} />
             <InfoItem label={t('企业规模')} value={supplierData?.company_size || '-'} />

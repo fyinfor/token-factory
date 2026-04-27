@@ -89,7 +89,7 @@ const intTick = (v) => {
   return Number.isFinite(n) ? String(Math.round(n)) : String(v);
 };
 
-/** 管理端分销商 TOP 柱状图至少展示的档位数 */
+/** 管理端代理 TOP 柱状图至少展示的档位数 */
 const ADMIN_TOP_MIN_SLOTS = 5;
 
 export default function DistributorAnalyticsBoard({ adminMode = false }) {
@@ -404,7 +404,7 @@ export default function DistributorAnalyticsBoard({ adminMode = false }) {
         ) : (
           <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
             <Card
-              title={t('分销商累计收益 TOP')}
+              title={t('代理累计收益 TOP')}
               className='!rounded-2xl'
               bodyStyle={{ paddingBottom: 8 }}
             >
@@ -416,7 +416,7 @@ export default function DistributorAnalyticsBoard({ adminMode = false }) {
               </div>
             </Card>
             <Card
-              title={t('分销商近30日收益 TOP')}
+              title={t('代理近30日收益 TOP')}
               className='!rounded-2xl'
               bodyStyle={{ paddingBottom: 8 }}
             >
@@ -432,7 +432,7 @@ export default function DistributorAnalyticsBoard({ adminMode = false }) {
               </div>
             </Card>
             <Card
-              title={t('分销商邀请人数 TOP')}
+              title={t('代理邀请人数 TOP')}
               className='!rounded-2xl'
               bodyStyle={{ paddingBottom: 8 }}
             >

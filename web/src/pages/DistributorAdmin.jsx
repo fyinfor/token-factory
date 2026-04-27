@@ -55,7 +55,7 @@ import DistributorAnalyticsBoard from '../components/distributor/DistributorAnal
 
 const { Text } = Typography;
 
-/** 分销商管理筛选：关键字最大长度（与后端查询参数长度协调） */
+/** 代理管理筛选：关键字最大长度（与后端查询参数长度协调） */
 const ADMIN_KEYWORD_MAX_LEN = 120;
 
 /** 资格证书上传数量上限（与申请页一致） */
@@ -534,7 +534,7 @@ export default function DistributorAdmin() {
   const settle = async (userId) => {
     Modal.confirm({
       title: t('确认结账'),
-      content: t('将清空该分销商的待使用收益额度，是否继续？'),
+      content: t('将清空该代理的待使用收益额度，是否继续？'),
       onOk: async () => {
         try {
           const res = await API.post(
@@ -776,7 +776,7 @@ export default function DistributorAdmin() {
 
   return (
     <div className='mt-[60px] px-2 pb-16'>
-      <Typography.Title heading={3}>{t('分销商管理中心')}</Typography.Title>
+      <Typography.Title heading={3}>{t('代理管理中心')}</Typography.Title>
 
       <Tabs
         activeKey={tab}
@@ -966,7 +966,7 @@ export default function DistributorAdmin() {
             />
           </CardPro>
         </Tabs.TabPane>
-        <Tabs.TabPane tab={t('分销商人员')} itemKey='dist'>
+        <Tabs.TabPane tab={t('代理人员')} itemKey='dist'>
           <CardPro
             className='w-full'
             type='type1'
@@ -1081,7 +1081,7 @@ export default function DistributorAdmin() {
       </Modal>
 
       <Modal
-        title={t('分销商申请资料')}
+        title={t('代理申请资料')}
         visible={profileOpen}
         onCancel={() => setProfileOpen(false)}
         width={720}
@@ -1121,7 +1121,7 @@ export default function DistributorAdmin() {
                 fullMode={false}
                 bordered
                 description={t(
-                  '该用户为管理员手动开通分销商，暂无完整申请资料，请代为补全并保存。',
+                  '该用户为管理员手动开通代理，暂无完整申请资料，请代为补全并保存。',
                 )}
               />
             ) : null}

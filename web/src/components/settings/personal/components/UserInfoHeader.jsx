@@ -102,7 +102,7 @@ const UserInfoHeader = ({ t, userState }) => {
                         shape='circle'
                         style={{ color: 'white' }}
                       >
-                        {t('分销商')}
+                        {t('代理')}
                       </Tag>
                     ) : (
                       <Tag

@@ -35,11 +35,13 @@ const HomeLandingHeroCopy = ({ className = '' }) => {
         {t('一站式大模型服务统一入口')}
       </h1>
       <p className='text-sm md:text-base text-semi-color-text-2 mb-8'>
-        {t('按需定制，更优')}
+        {t('源头')}
+        <span className='font-semibold text-semi-color-text-0'>{t('安全')}</span>
+        {t('可控，')}
         <span className='font-semibold text-semi-color-text-0'>{t('价格')}</span>
-        {t('，更稳的')}
-        <span className='font-semibold text-semi-color-text-0'>{t('可靠')}</span>
-        {t('，开箱即用')}
+        {t('更具优势，')}
+        <span className='font-semibold text-semi-color-text-0'>{t('稳定')}</span>
+        {t('可靠。')}
       </p>
     </div>
   );

@@ -34,6 +34,8 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
 
   const [fileList, setFileList] = useState([]);
   const [businessLicenseUrl, setBusinessLicenseUrl] = useState('');
+  const [logoFileList, setLogoFileList] = useState([]);
+  const [companyLogoUrl, setCompanyLogoUrl] = useState('');
   const [fetchingData, setFetchingData] = useState(false);
   const [hasExistingApplication, setHasExistingApplication] = useState(false);
   const [applicationId, setApplicationId] = useState(null);
@@ -49,6 +51,8 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
       formApiRef.current?.reset();
       setFileList([]);
       setBusinessLicenseUrl('');
+      setLogoFileList([]);
+      setCompanyLogoUrl('');
       setHasExistingApplication(false);
       setApplicationId(null);
       setCapabilityData(null);
@@ -191,6 +195,17 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
         if (data.business_license_url) {
           setBusinessLicenseUrl(data.business_license_url);
         }
+        if (data.company_logo_url) {
+          setCompanyLogoUrl(data.company_logo_url);
+          setLogoFileList([
+            {
+              uid: 'existing-logo',
+              name: t('已上传的企业Logo'),
+              status: 'success',
+              url: data.company_logo_url,
+            },
+          ]);
+        }
 
         if (data.business_license_file) {
           try {
@@ -269,6 +284,8 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
     formApiRef.current?.reset();
     setFileList([]);
     setBusinessLicenseUrl('');
+    setLogoFileList([]);
+    setCompanyLogoUrl('');
     setHasExistingApplication(false);
     setApplicationId(null);
     setCapabilityData(null);
@@ -295,6 +312,10 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
       }
       if (!businessLicenseUrl) {
         showError(t('请上传营业执照'));
+        return;
+      }
+      if (!companyLogoUrl) {
+        showError(t('请上传企业Logo'));
         return;
       }
       setCurrentStep(1);
@@ -325,6 +346,10 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
       showError(t('请上传营业执照'));
       return;
     }
+    if (!companyLogoUrl) {
+      showError(t('请上传企业Logo'));
+      return;
+    }
     if (!mergedValues.truth_commitment_confirmed) {
       showError(t('请先勾选信息真实性承诺'));
       return;
@@ -344,6 +369,7 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
       const payload = {
         business_license_url: businessLicenseUrl,
         business_license_file: businessLicenseFile,
+        company_logo_url: companyLogoUrl,
         company_name: mergedValues.company_name || '',
         company_size: mergedValues.company_size || '',
         contact_mobile: mergedValues.contact_mobile || '',
@@ -403,6 +429,8 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
         formApiRef.current?.reset();
         setFileList([]);
         setBusinessLicenseUrl('');
+        setLogoFileList([]);
+        setCompanyLogoUrl('');
         setHasExistingApplication(false);
         setApplicationId(null);
         setCapabilityData(null);
@@ -474,6 +502,66 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
     } catch (error) {
       showError(error.response?.data?.message || t('上传失败'));
       setFileList([]);
+      onError();
+    }
+  };
+
+  /**
+   * 上传企业 Logo 图片并回填 URL。
+   */
+  const customLogoRequest = async ({ file, onSuccess, onError }) => {
+    const fileInstance = file.fileInstance;
+    const isImage = fileInstance.type === 'image/jpeg' || fileInstance.type === 'image/png';
+    const isLt5M = fileInstance.size / 1024 / 1024 < 5;
+
+    if (!isImage) {
+      showError(t('只支持 JPG/PNG 格式的图片'));
+      onError();
+      return;
+    }
+
+    if (!isLt5M) {
+      showError(t('图片大小不能超过 5MB'));
+      onError();
+      return;
+    }
+
+    setLogoFileList([{
+      uid: fileInstance.uid,
+      name: fileInstance.name,
+      status: 'uploading',
+      size: fileInstance.size,
+    }]);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', fileInstance);
+
+      const res = await API.post('/api/oss/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      const { success, data, message } = res.data;
+      if (success && data?.url) {
+        setCompanyLogoUrl(data.url);
+        setLogoFileList([{
+          uid: fileInstance.uid,
+          name: fileInstance.name,
+          status: 'success',
+          size: fileInstance.size,
+          url: data.url,
+        }]);
+        onSuccess();
+      } else {
+        showError(message || t('上传失败'));
+        setLogoFileList([]);
+        onError();
+      }
+    } catch (error) {
+      showError(error.response?.data?.message || t('上传失败'));
+      setLogoFileList([]);
       onError();
     }
   };
@@ -583,6 +671,27 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
                     setBusinessLicenseUrl('');
                   }}
                   extraText={t('支持 jpg/png，大小≤5M，信息完整无遮挡')}
+                >
+                  <Button icon={<IconUpload />} theme="light">
+                    {t('上传文件')}
+                  </Button>
+                </Form.Upload>
+              </Col>
+              <Col span={24}>
+                <Form.Upload
+                  field='company_logo_file'
+                  label={<Text strong>{t('企业Logo')}<Text type='danger'>*</Text></Text>}
+                  action=''
+                  accept='.jpg,.jpeg,.png'
+                  limit={1}
+                  fileList={logoFileList}
+                  onChange={({ fileList }) => setLogoFileList(fileList)}
+                  customRequest={customLogoRequest}
+                  onRemove={() => {
+                    setLogoFileList([]);
+                    setCompanyLogoUrl('');
+                  }}
+                  extraText={t('建议上传清晰方形Logo，支持 jpg/png，大小≤5M')}
                 >
                   <Button icon={<IconUpload />} theme="light">
                     {t('上传文件')}

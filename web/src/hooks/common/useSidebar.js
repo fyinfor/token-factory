@@ -127,7 +127,7 @@ export const useSidebar = () => {
             const res = await API.get('/api/user/self');
             if (res.data.success && res.data.data) {
                 const payload = res.data.data;
-                // 与登录态一致：用服务端最新资料（含 role）覆盖本地 user，避免仅刷新页面时侧栏仍用旧的「非分销商」等缓存
+                // 与登录态一致：用服务端最新资料（含 role）覆盖本地 user，避免仅刷新页面时侧栏仍用旧的「非代理」等缓存
                 if (payload.id != null) {
                     mergeSelfResponseIntoLocalUser(payload, userDispatch);
                 }

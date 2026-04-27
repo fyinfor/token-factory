@@ -19,10 +19,12 @@ import (
 type SupplierApplicationSubmitRequest struct {
 	ApplicantUserID     int    `json:"applicant_user_id"`
 	SupplierAlias       string `json:"supplier_alias"`
+	SupplierType        string `json:"supplier_type"`
 	CompanyName         string `json:"company_name"`
 	CreditCode          string `json:"credit_code"`
 	BusinessLicenseURL  string `json:"business_license_url"`
 	BusinessLicenseFile string `json:"business_license_file"`
+	CompanyLogoURL      string `json:"company_logo_url"`
 	LegalRepresentative string `json:"legal_representative"`
 	CompanySize         string `json:"company_size"`
 	ContactName         string `json:"contact_name"`
@@ -39,6 +41,8 @@ func getSupplierApplicationMissingFieldMessage(req SupplierApplicationSubmitRequ
 		return "请填写统一社会信用代码（credit_code）"
 	case req.BusinessLicenseURL == "":
 		return "请上传营业执照（business_license_url）"
+	case req.CompanyLogoURL == "":
+		return "请上传企业Logo（company_logo_url）"
 	case req.LegalRepresentative == "":
 		return "请填写法人/经营者姓名（legal_representative）"
 	case req.ContactName == "":
@@ -57,6 +61,20 @@ type SupplierApplicationReviewRequest struct {
 	Status        int    `json:"status"`
 	Reason        string `json:"reason"`
 	SupplierAlias string `json:"supplier_alias"`
+	SupplierType  string `json:"supplier_type"`
+}
+
+var allowedSupplierTypes = map[string]struct{}{
+	"公有云":   {},
+	"AIDC":  {},
+	"企业中转站": {},
+	"个人中转站": {},
+}
+
+// isValidSupplierType 判断供应商类型是否在允许枚举内。
+func isValidSupplierType(supplierType string) bool {
+	_, ok := allowedSupplierTypes[supplierType]
+	return ok
 }
 
 // SupplierDeactivateRequest 供应商注销请求体。
@@ -334,6 +352,8 @@ func SubmitSupplierApplication(c *gin.Context) {
 	req.CreditCode = strings.TrimSpace(req.CreditCode)
 	req.BusinessLicenseURL = strings.TrimSpace(req.BusinessLicenseURL)
 	req.BusinessLicenseFile = strings.TrimSpace(req.BusinessLicenseFile)
+	req.CompanyLogoURL = strings.TrimSpace(req.CompanyLogoURL)
+	req.SupplierType = strings.TrimSpace(req.SupplierType)
 	req.LegalRepresentative = strings.TrimSpace(req.LegalRepresentative)
 	req.CompanySize = strings.TrimSpace(req.CompanySize)
 	req.ContactName = strings.TrimSpace(req.ContactName)
@@ -351,6 +371,14 @@ func SubmitSupplierApplication(c *gin.Context) {
 	isAdminOrAbove := c.GetInt("role") >= common.RoleAdminUser
 	applicantUserID := c.GetInt("id")
 	if isAdminOrAbove {
+		if req.SupplierType == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "管理员代添加供应商时必须选择供应商类型"})
+			return
+		}
+		if !isValidSupplierType(req.SupplierType) {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的供应商类型"})
+			return
+		}
 		if req.ApplicantUserID <= 0 {
 			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "管理员代添加供应商时必须提供有效的applicant_user_id"})
 			return
@@ -367,6 +395,8 @@ func SubmitSupplierApplication(c *gin.Context) {
 		CreditCode:          req.CreditCode,
 		BusinessLicenseURL:  req.BusinessLicenseURL,
 		BusinessLicenseFile: req.BusinessLicenseFile,
+		CompanyLogoURL:      req.CompanyLogoURL,
+		SupplierType:        req.SupplierType,
 		LegalRepresentative: req.LegalRepresentative,
 		CompanySize:         req.CompanySize,
 		ContactName:         req.ContactName,
@@ -442,6 +472,8 @@ func GetMySupplierApplication(c *gin.Context) {
 		"credit_code":           app.CreditCode,
 		"business_license_url":  app.BusinessLicenseURL,
 		"business_license_file": app.BusinessLicenseFile,
+		"company_logo_url":      app.CompanyLogoURL,
+		"supplier_type":         app.SupplierType,
 		"legal_representative":  app.LegalRepresentative,
 		"company_size":          app.CompanySize,
 		"contact_name":          app.ContactName,
@@ -575,12 +607,14 @@ func UpdateMySupplierApplication(c *gin.Context) {
 	req.CreditCode = strings.TrimSpace(req.CreditCode)
 	req.BusinessLicenseURL = strings.TrimSpace(req.BusinessLicenseURL)
 	req.BusinessLicenseFile = strings.TrimSpace(req.BusinessLicenseFile)
+	req.CompanyLogoURL = strings.TrimSpace(req.CompanyLogoURL)
+	req.SupplierType = strings.TrimSpace(req.SupplierType)
 	req.LegalRepresentative = strings.TrimSpace(req.LegalRepresentative)
 	req.CompanySize = strings.TrimSpace(req.CompanySize)
 	req.ContactName = strings.TrimSpace(req.ContactName)
 	req.ContactMobile = strings.TrimSpace(req.ContactMobile)
 	req.ContactWechat = strings.TrimSpace(req.ContactWechat)
-	if req.CompanyName == "" || req.CreditCode == "" || req.BusinessLicenseURL == "" ||
+	if req.CompanyName == "" || req.CreditCode == "" || req.BusinessLicenseURL == "" || req.CompanyLogoURL == "" ||
 		req.LegalRepresentative == "" || req.ContactName == "" || req.ContactMobile == "" || req.ContactWechat == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请填写完整的必填字段"})
 		return
@@ -594,6 +628,8 @@ func UpdateMySupplierApplication(c *gin.Context) {
 		CreditCode:          req.CreditCode,
 		BusinessLicenseURL:  req.BusinessLicenseURL,
 		BusinessLicenseFile: req.BusinessLicenseFile,
+		CompanyLogoURL:      req.CompanyLogoURL,
+		SupplierType:        req.SupplierType,
 		LegalRepresentative: req.LegalRepresentative,
 		CompanySize:         req.CompanySize,
 		ContactName:         req.ContactName,
@@ -728,6 +764,8 @@ func AdminGetSupplierDetail(c *gin.Context) {
 		"credit_code":           item.CreditCode,
 		"business_license_url":  item.BusinessLicenseURL,
 		"business_license_file": item.BusinessLicenseFile,
+		"company_logo_url":      item.CompanyLogoURL,
+		"supplier_type":         item.SupplierType,
 		"legal_representative":  item.LegalRepresentative,
 		"company_size":          item.CompanySize,
 		"contact_name":          item.ContactName,
@@ -773,15 +811,25 @@ func AdminUpdateSupplierApplication(c *gin.Context) {
 	req.CreditCode = strings.TrimSpace(req.CreditCode)
 	req.BusinessLicenseURL = strings.TrimSpace(req.BusinessLicenseURL)
 	req.BusinessLicenseFile = strings.TrimSpace(req.BusinessLicenseFile)
+	req.CompanyLogoURL = strings.TrimSpace(req.CompanyLogoURL)
+	req.SupplierType = strings.TrimSpace(req.SupplierType)
 	req.LegalRepresentative = strings.TrimSpace(req.LegalRepresentative)
 	req.CompanySize = strings.TrimSpace(req.CompanySize)
 	req.ContactName = strings.TrimSpace(req.ContactName)
 	req.ContactMobile = strings.TrimSpace(req.ContactMobile)
 	req.ContactWechat = strings.TrimSpace(req.ContactWechat)
 	req.SupplierAlias = strings.TrimSpace(req.SupplierAlias)
-	if req.CompanyName == "" || req.CreditCode == "" || req.BusinessLicenseURL == "" ||
+	if req.CompanyName == "" || req.CreditCode == "" || req.BusinessLicenseURL == "" || req.CompanyLogoURL == "" ||
 		req.LegalRepresentative == "" || req.ContactName == "" || req.ContactMobile == "" || req.ContactWechat == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请填写完整的必填字段"})
+		return
+	}
+	if req.SupplierType == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请填写供应商类型"})
+		return
+	}
+	if !isValidSupplierType(req.SupplierType) {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的供应商类型"})
 		return
 	}
 	if len(req.CreditCode) != 18 {
@@ -794,6 +842,8 @@ func AdminUpdateSupplierApplication(c *gin.Context) {
 		CreditCode:          req.CreditCode,
 		BusinessLicenseURL:  req.BusinessLicenseURL,
 		BusinessLicenseFile: req.BusinessLicenseFile,
+		CompanyLogoURL:      req.CompanyLogoURL,
+		SupplierType:        req.SupplierType,
 		LegalRepresentative: req.LegalRepresentative,
 		CompanySize:         req.CompanySize,
 		ContactName:         req.ContactName,
@@ -852,6 +902,7 @@ func AdminReviewSupplierApplication(c *gin.Context) {
 		return
 	}
 	req.Reason = strings.TrimSpace(req.Reason)
+	req.SupplierType = strings.TrimSpace(req.SupplierType)
 	if req.Status == model.SupplierApplicationStatusRejected && req.Reason == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "驳回时请填写原因"})
 		return
@@ -873,7 +924,17 @@ func AdminReviewSupplierApplication(c *gin.Context) {
 	}
 
 	req.SupplierAlias = strings.TrimSpace(req.SupplierAlias)
-	app, err := model.ReviewSupplierApplication(applicationID, c.GetInt("id"), req.Status, req.Reason, req.SupplierAlias)
+	if req.Status == model.SupplierApplicationStatusApproved {
+		if req.SupplierType == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "审批通过时必须选择供应商类型"})
+			return
+		}
+		if !isValidSupplierType(req.SupplierType) {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的供应商类型"})
+			return
+		}
+	}
+	app, err := model.ReviewSupplierApplication(applicationID, c.GetInt("id"), req.Status, req.Reason, req.SupplierAlias, req.SupplierType)
 	if err != nil {
 		if errors.Is(err, model.ErrSupplierApplicationAlreadyReviewed) {
 			c.JSON(http.StatusOK, gin.H{"success": false, "message": "该申请已被其他管理员处理"})

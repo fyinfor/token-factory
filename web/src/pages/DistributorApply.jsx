@@ -43,7 +43,7 @@ import DOMPurify from 'dompurify';
 
 const { Text } = Typography;
 
-/** 分销商申请：必填项标题（红 * + 加粗），与资格证书区块一致 */
+/** 代理申请：必填项标题（红 * + 加粗），与资格证书区块一致 */
 function ApplyRequiredLabel({ children, className = '' }) {
   return (
     <Text
@@ -194,10 +194,10 @@ export default function DistributorApply() {
     return false;
   }, [userState?.user]);
 
-  /** 申请记录为已通过，且当前账号仍是分销商：显示「去分销中心」 */
+  /** 申请记录为已通过，且当前账号仍是代理：显示「去分销中心」 */
   const showApprovedForActiveDistributor = app?.status === 2 && isDist;
 
-  /** 记录曾为已通过，但账号已非分销商（如被降级）：应允许重新提交 */
+  /** 记录曾为已通过，但账号已非代理（如被降级）：应允许重新提交 */
   const showReapplyAfterRevoked = app?.status === 2 && !isDist;
 
   const shouldPrefillFormFromApp =
@@ -264,7 +264,7 @@ export default function DistributorApply() {
       <div className='distributor-apply-page-root'>
         <div className='w-full max-w-3xl px-1'>
           <ApplyStatusNotice variant='success' className='w-full'>
-            {t('您已是分销商，无需再次申请')}
+            {t('您已是代理，无需再次申请')}
           </ApplyStatusNotice>
         </div>
       </div>
@@ -322,7 +322,7 @@ export default function DistributorApply() {
         {showReapplyAfterRevoked ? (
           <ApplyStatusNotice variant='info' className='mb-4 shrink-0'>
             {t(
-              '您的分销商资格已失效（例如已被管理员调整），可修改资料后重新提交审核。',
+              '您的代理资格已失效（例如已被管理员调整），可修改资料后重新提交审核。',
             )}
           </ApplyStatusNotice>
         ) : null}
@@ -536,7 +536,7 @@ export default function DistributorApply() {
                   type='tertiary'
                   className='distributor-apply-hero-desc mt-2 !block !text-[15px] !leading-relaxed [overflow-wrap:anywhere]'
                 >
-                  {t('请如实填写以下信息，审核通过后即可获得分销商资格与邀请分成。')}
+                  {t('请如实填写以下信息，审核通过后即可获得代理资格与邀请分成。')}
                 </Text>
               </div>
             </section>

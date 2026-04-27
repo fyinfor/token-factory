@@ -24,6 +24,12 @@ import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import { timestamp2string } from '../../../../helpers';
 
 const { Text } = Typography;
+const supplierTypeOptions = [
+  { label: '公有云', value: '公有云' },
+  { label: 'AIDC', value: 'AIDC' },
+  { label: '企业中转站', value: '企业中转站' },
+  { label: '个人中转站', value: '个人中转站' },
+];
 
 const ReviewApplicationModal = ({ visible, application, handleClose, handleReview }) => {
   const { t } = useTranslation();
@@ -40,6 +46,7 @@ const ReviewApplicationModal = ({ visible, application, handleClose, handleRevie
       formApiRef.current?.setValues({
         reason: '',
         supplier_alias: application.supplier_alias || '',
+        supplier_type: application.supplier_type || '',
       });
     }
   }, [visible, application]);
@@ -51,11 +58,16 @@ const ReviewApplicationModal = ({ visible, application, handleClose, handleRevie
       formApiRef.current?.setError('supplier_alias', t('审批通过时必须填写供应商别名'));
       return;
     }
+    if (!values.supplier_type || values.supplier_type.trim() === '') {
+      formApiRef.current?.setError('supplier_type', t('审批通过时必须选择供应商类型'));
+      return;
+    }
     setLoading(true);
     await handleReview(application.id, {
       status: 1,
       reason: values.reason || '',
       supplier_alias: values.supplier_alias.trim(),
+      supplier_type: values.supplier_type.trim(),
     });
     setLoading(false);
   };
@@ -72,6 +84,7 @@ const ReviewApplicationModal = ({ visible, application, handleClose, handleRevie
       status: 2,
       reason: values.reason,
       supplier_alias: '',
+      supplier_type: '',
     });
     setLoading(false);
   };
@@ -145,6 +158,27 @@ const ReviewApplicationModal = ({ visible, application, handleClose, handleRevie
               <Text type='secondary'>{t('统一社会信用代码')}</Text>
               <div style={{ marginTop: '4px' }}>
                 <Text strong>{application.credit_code}</Text>
+              </div>
+            </div>
+          </Col>
+          <Col span={24}>
+            <div style={{ marginBottom: '16px' }}>
+              <Text type='secondary'>{t('企业Logo')}</Text>
+              <div style={{ marginTop: '4px' }}>
+                {application.company_logo_url ? (
+                  <Image
+                    src={application.company_logo_url}
+                    alt={t('企业Logo')}
+                    width={120}
+                    height={120}
+                    preview={{
+                      src: application.company_logo_url,
+                    }}
+                    style={{ borderRadius: '8px', objectFit: 'contain' }}
+                  />
+                ) : (
+                  <Text type='tertiary'>{t('未上传')}</Text>
+                )}
               </div>
             </div>
           </Col>
@@ -316,6 +350,14 @@ const ReviewApplicationModal = ({ visible, application, handleClose, handleRevie
             maxLength={128}
             showClear
             disabled={isReviewed}
+          />
+          <Form.Select
+            field='supplier_type'
+            label={<Text strong>{t('供应商类型')}</Text>}
+            placeholder={t('请选择供应商类型')}
+            optionList={supplierTypeOptions}
+            disabled={isReviewed}
+            rules={[{ required: true, message: t('请选择供应商类型') }]}
           />
           <Form.TextArea
             field='reason'
