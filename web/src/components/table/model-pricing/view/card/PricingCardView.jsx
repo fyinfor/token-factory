@@ -285,26 +285,6 @@ const PricingCardView = ({
       });
     }
 
-    if (cache) {
-      items.push({
-        key: 'cache',
-        label: t('缓存读取价格'),
-        value: cache.single || `${cache.symbol}${cache.min} ~ ${cache.symbol}${cache.max}`,
-        suffix: unitSuffix,
-        original: original?.cache,
-      });
-    }
-
-    if (createCache) {
-      items.push({
-        key: 'create-cache',
-        label: t('缓存创建价格'),
-        value: createCache.single || `${createCache.symbol}${createCache.min} ~ ${createCache.symbol}${createCache.max}`,
-        suffix: unitSuffix,
-        original: original?.createCache,
-      });
-    }
-
     return items;
   };
 

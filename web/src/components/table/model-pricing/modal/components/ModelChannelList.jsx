@@ -155,26 +155,6 @@ const ModelChannelList = ({
       items.push(makeItem(t('输出价格'), chOut, rootOut));
     }
 
-    // 缓存读取
-    if (hasRatioValue(channel.model_ratio) && hasRatioValue(channel.cache_ratio)) {
-      const chC = Number(channel.model_ratio) * Number(channel.cache_ratio);
-      const rootC =
-        hasRatioValue(modelData?.model_ratio) && hasRatioValue(modelData?.cache_ratio)
-          ? Number(modelData.model_ratio) * Number(modelData.cache_ratio)
-          : null;
-      items.push(makeItem(t('缓存读取价格'), chC, rootC));
-    }
-
-    // 缓存创建
-    if (hasRatioValue(channel.model_ratio) && hasRatioValue(channel.create_cache_ratio)) {
-      const chCC = Number(channel.model_ratio) * Number(channel.create_cache_ratio);
-      const rootCC =
-        hasRatioValue(modelData?.model_ratio) && hasRatioValue(modelData?.create_cache_ratio)
-          ? Number(modelData.model_ratio) * Number(modelData.create_cache_ratio)
-          : null;
-      items.push(makeItem(t('缓存创建价格'), chCC, rootCC));
-    }
-
     return items.filter(Boolean);
   };
 
