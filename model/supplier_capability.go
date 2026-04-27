@@ -2,7 +2,9 @@ package model
 
 import (
 	"errors"
+	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -31,10 +33,35 @@ type SupplierCapability struct {
 	FailureBillingMode        string `json:"failure_billing_mode" gorm:"type:varchar(32);comment:故障计费规则(bill/no_bill)"`
 	FailureBillingNotes       string `json:"failure_billing_notes" gorm:"type:text;comment:故障计费说明"`
 	APIBaseURLs               string `json:"api_base_urls" gorm:"type:text;comment:API接口地址(JSON数组)"`
-	OpenAICompatible          bool   `json:"openai_compatible" gorm:"type:boolean;default:false;comment:是否兼容OpenAI规范"`
+	OpenAICompatible          bool   `json:"openai_compatible" gorm:"column:open_ai_compatible;type:boolean;default:false;comment:是否兼容OpenAI规范"`
 	TruthCommitmentConfirmed  bool   `json:"truth_commitment_confirmed" gorm:"type:boolean;default:false;comment:信息真实性承诺"`
 	CreatedAt                 int64  `json:"created_at" gorm:"type:bigint;index;comment:创建时间戳"`
 	UpdatedAt                 int64  `json:"updated_at" gorm:"type:bigint;comment:更新时间戳"`
+}
+
+var (
+	ensureSupplierCapabilitySchemaOnce sync.Once
+	ensureSupplierCapabilitySchemaErr  error
+)
+
+// EnsureSupplierCapabilitySchemaColumns 确保供应商能力表关键布尔字段已存在（兼容旧库漏迁移场景）。
+func EnsureSupplierCapabilitySchemaColumns() error {
+	ensureSupplierCapabilitySchemaOnce.Do(func() {
+		// 兼容旧版本数据库缺列导致 upsert 报 "Unknown column"。
+		if !DB.Migrator().HasColumn(&SupplierCapability{}, "OpenAICompatible") {
+			if err := DB.Migrator().AddColumn(&SupplierCapability{}, "OpenAICompatible"); err != nil {
+				ensureSupplierCapabilitySchemaErr = fmt.Errorf("add column openai_compatible failed: %w", err)
+				return
+			}
+		}
+		if !DB.Migrator().HasColumn(&SupplierCapability{}, "TruthCommitmentConfirmed") {
+			if err := DB.Migrator().AddColumn(&SupplierCapability{}, "TruthCommitmentConfirmed"); err != nil {
+				ensureSupplierCapabilitySchemaErr = fmt.Errorf("add column truth_commitment_confirmed failed: %w", err)
+				return
+			}
+		}
+	})
+	return ensureSupplierCapabilitySchemaErr
 }
 
 // GetSupplierCapabilityByApplicationID 根据申请ID查询供应商技术能力档案。
@@ -48,6 +75,9 @@ func GetSupplierCapabilityByApplicationID(applicationID int) (*SupplierCapabilit
 
 // UpsertSupplierCapabilityByApplicationID 按申请ID新增或更新供应商技术能力档案。
 func UpsertSupplierCapabilityByApplicationID(applicationID int, capability *SupplierCapability) (*SupplierCapability, error) {
+	if err := EnsureSupplierCapabilitySchemaColumns(); err != nil {
+		return nil, err
+	}
 	tx := DB.Begin()
 	if tx.Error != nil {
 		return nil, tx.Error
@@ -96,7 +126,7 @@ func UpsertSupplierCapabilityByApplicationID(applicationID int, capability *Supp
 		"failure_billing_mode":         capability.FailureBillingMode,
 		"failure_billing_notes":        capability.FailureBillingNotes,
 		"api_base_urls":                capability.APIBaseURLs,
-		"openai_compatible":            capability.OpenAICompatible,
+		"open_ai_compatible":           capability.OpenAICompatible,
 		"truth_commitment_confirmed":   capability.TruthCommitmentConfirmed,
 		"updated_at":                   now,
 	}

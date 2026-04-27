@@ -62,6 +62,8 @@ type SupplierApplication struct {
 	CreditCode          string              `json:"credit_code" gorm:"type:varchar(32);not null;uniqueIndex;comment:统一社会信用代码"`
 	BusinessLicenseURL  string              `json:"business_license_url" gorm:"type:varchar(1024);not null;comment:营业执照文件URL"`
 	BusinessLicenseFile string              `json:"business_license_file" gorm:"type:varchar(255);not null;default:'';comment:营业执照文件名称"`
+	CompanyLogoURL      string              `json:"company_logo_url" gorm:"type:varchar(1024);not null;default:'';comment:企业Logo图片URL"`
+	SupplierType        string              `json:"supplier_type" gorm:"type:varchar(64);not null;default:'';comment:供应商类型"`
 	LegalRepresentative string              `json:"legal_representative" gorm:"type:varchar(128);not null;comment:法人或经营者姓名"`
 	CompanySize         string              `json:"company_size" gorm:"type:varchar(64);comment:企业规模"`
 	ContactName         string              `json:"contact_name" gorm:"type:varchar(128);not null;comment:对接人姓名"`
@@ -348,6 +350,7 @@ func UpdateMySupplierApplication(applicantUserID int, applicationID int, req *Su
 		"credit_code":           req.CreditCode,
 		"business_license_url":  req.BusinessLicenseURL,
 		"business_license_file": req.BusinessLicenseFile,
+		"company_logo_url":      req.CompanyLogoURL,
 		"legal_representative":  req.LegalRepresentative,
 		"company_size":          req.CompanySize,
 		"contact_name":          req.ContactName,
@@ -381,6 +384,7 @@ func UpdateMySupplierApplication(applicantUserID int, applicationID int, req *Su
 	app.CreditCode = req.CreditCode
 	app.BusinessLicenseURL = req.BusinessLicenseURL
 	app.BusinessLicenseFile = req.BusinessLicenseFile
+	app.CompanyLogoURL = req.CompanyLogoURL
 	app.LegalRepresentative = req.LegalRepresentative
 	app.CompanySize = req.CompanySize
 	app.ContactName = req.ContactName
@@ -430,6 +434,8 @@ func AdminUpdateSupplierApplication(applicationID int, req *SupplierApplication)
 		"credit_code":           req.CreditCode,
 		"business_license_url":  req.BusinessLicenseURL,
 		"business_license_file": req.BusinessLicenseFile,
+		"company_logo_url":      req.CompanyLogoURL,
+		"supplier_type":         req.SupplierType,
 		"legal_representative":  req.LegalRepresentative,
 		"company_size":          req.CompanySize,
 		"contact_name":          req.ContactName,
@@ -448,6 +454,8 @@ func AdminUpdateSupplierApplication(applicationID int, req *SupplierApplication)
 	app.CreditCode = req.CreditCode
 	app.BusinessLicenseURL = req.BusinessLicenseURL
 	app.BusinessLicenseFile = req.BusinessLicenseFile
+	app.CompanyLogoURL = req.CompanyLogoURL
+	app.SupplierType = req.SupplierType
 	app.LegalRepresentative = req.LegalRepresentative
 	app.CompanySize = req.CompanySize
 	app.ContactName = req.ContactName
@@ -490,7 +498,7 @@ func GetApprovedSupplierApplicationByApplicant(applicantUserID int) (*SupplierAp
 
 // ReviewSupplierApplication 审核申请（仅允许从待审核状态流转到通过/驳回）。
 // supplierAlias 为可选：通过时若为空则写入默认 P+id，否则写入管理员指定别名。
-func ReviewSupplierApplication(applicationID int, reviewerUserID int, toStatus int, reason string, supplierAlias string) (*SupplierApplication, error) {
+func ReviewSupplierApplication(applicationID int, reviewerUserID int, toStatus int, reason string, supplierAlias string, supplierType string) (*SupplierApplication, error) {
 	tx := DB.Begin()
 	if tx.Error != nil {
 		return nil, tx.Error
@@ -523,11 +531,13 @@ func ReviewSupplierApplication(applicationID int, reviewerUserID int, toStatus i
 	}
 	if toStatus == SupplierApplicationStatusApproved {
 		trimmedAlias := strings.TrimSpace(supplierAlias)
+		trimmedType := strings.TrimSpace(supplierType)
 		if trimmedAlias != "" {
 			updates["supplier_alias"] = trimmedAlias
 		} else {
 			updates["supplier_alias"] = SupplierApplicationAutoAlias(applicationID)
 		}
+		updates["supplier_type"] = trimmedType
 	}
 	result := tx.Model(&SupplierApplication{}).
 		Where("id = ? AND status = ?", applicationID, SupplierApplicationStatusPending).
@@ -575,11 +585,13 @@ func ReviewSupplierApplication(applicationID int, reviewerUserID int, toStatus i
 	app.UpdatedAt = now
 	if toStatus == SupplierApplicationStatusApproved {
 		trimmedAlias := strings.TrimSpace(supplierAlias)
+		trimmedType := strings.TrimSpace(supplierType)
 		if trimmedAlias != "" {
 			app.SupplierAlias = &trimmedAlias
 		} else {
 			app.SupplierAlias = ptrSupplierApplicationAlias(applicationID)
 		}
+		app.SupplierType = trimmedType
 	}
 	if err := tx.Commit().Error; err != nil {
 		return nil, err

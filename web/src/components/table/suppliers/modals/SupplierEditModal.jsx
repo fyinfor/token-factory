@@ -27,6 +27,12 @@ import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import SupplierCapabilityFormFields from '../../../supplier/SupplierCapabilityFormFields';
 
 const { Text } = Typography;
+const supplierTypeOptions = [
+  { label: '公有云', value: '公有云' },
+  { label: 'AIDC', value: 'AIDC' },
+  { label: '企业中转站', value: '企业中转站' },
+  { label: '个人中转站', value: '个人中转站' },
+];
 
 /**
  * 从用户下拉（数值或带 value 的对象）解析出关联用户 ID。
@@ -58,6 +64,7 @@ function getCreateFormInitValues() {
   return {
     user_id: undefined,
     supplier_alias: '',
+    supplier_type: '',
     company_name: '',
     credit_code: '',
     legal_representative: '',
@@ -137,6 +144,8 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
 
   const [fileList, setFileList] = useState([]);
   const [businessLicenseUrl, setBusinessLicenseUrl] = useState('');
+  const [logoFileList, setLogoFileList] = useState([]);
+  const [companyLogoUrl, setCompanyLogoUrl] = useState('');
   const [userOptions, setUserOptions] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [supplierData, setSupplierData] = useState(null);
@@ -240,6 +249,8 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
       formApiRef.current?.setValues(getCreateFormInitValues());
       setFileList([]);
       setBusinessLicenseUrl('');
+      setLogoFileList([]);
+      setCompanyLogoUrl('');
       setWizardDraftValues({});
       setCommitmentChecked(false);
       loadInitialUsers();
@@ -265,6 +276,7 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
       formApiRef.current?.setValues({
         user_id: supplierData.user_id || null,
         supplier_alias: supplierData.supplier_alias || '',
+        supplier_type: supplierData.supplier_type || '',
         company_name: supplierData.company_name || '',
         credit_code: supplierData.credit_code || '',
         legal_representative: supplierData.legal_representative || '',
@@ -298,6 +310,17 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
       
       if (supplierData.business_license_url) {
         setBusinessLicenseUrl(supplierData.business_license_url);
+      }
+      if (supplierData.company_logo_url) {
+        setCompanyLogoUrl(supplierData.company_logo_url);
+        setLogoFileList([
+          {
+            uid: 'existing-logo',
+            name: t('已上传的企业Logo'),
+            status: 'success',
+            url: supplierData.company_logo_url,
+          },
+        ]);
       }
 
       if (supplierData.business_license_file) {
@@ -336,6 +359,8 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
     formApiRef.current?.reset();
     setFileList([]);
     setBusinessLicenseUrl('');
+    setLogoFileList([]);
+    setCompanyLogoUrl('');
     setUserOptions([]);
     setSupplierData(null);
     setCurrentStep(0);
@@ -363,6 +388,10 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
         showError(t('请填写供应商别名'));
         return;
       }
+      if (!(values.supplier_type || '').trim()) {
+        showError(t('请选择供应商类型'));
+        return;
+      }
       setCurrentStep(1);
       return;
     }
@@ -374,6 +403,10 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
       }
       if (!businessLicenseUrl) {
         showError(t('请上传营业执照'));
+        return;
+      }
+      if (!companyLogoUrl) {
+        showError(t('请上传企业Logo'));
         return;
       }
       setCurrentStep(2);
@@ -408,6 +441,10 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
       showError(t('请上传营业执照'));
       return;
     }
+    if (!companyLogoUrl) {
+      showError(t('请上传企业Logo'));
+      return;
+    }
 
     if (!supplier) {
       const uid = resolveApplicantUserId(mergedValues.user_id);
@@ -435,6 +472,7 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
       const basePayload = {
         business_license_url: businessLicenseUrl,
         business_license_file: businessLicenseFile,
+        company_logo_url: companyLogoUrl,
         company_name: mergedValues.company_name || '',
         company_size: mergedValues.company_size || '',
         contact_mobile: mergedValues.contact_mobile || '',
@@ -446,10 +484,16 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
 
       if (isAdmin()) {
         basePayload.supplier_alias = (mergedValues.supplier_alias || '').trim();
+        basePayload.supplier_type = (mergedValues.supplier_type || '').trim();
       }
 
       if (isAdmin() && !basePayload.supplier_alias) {
         showError(t('请填写供应商别名'));
+        setLoading(false);
+        return;
+      }
+      if (isAdmin() && !basePayload.supplier_type) {
+        showError(t('请选择供应商类型'));
         setLoading(false);
         return;
       }
@@ -489,6 +533,8 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
         formApiRef.current?.reset();
         setFileList([]);
         setBusinessLicenseUrl('');
+        setLogoFileList([]);
+        setCompanyLogoUrl('');
         setUserOptions([]);
         setSupplierData(null);
         setCurrentStep(0);
@@ -571,6 +617,66 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
   };
 
   /**
+   * 企业 Logo 上传逻辑。
+   */
+  const customLogoRequest = async ({ file, onSuccess, onError }) => {
+    const fileInstance = file.fileInstance;
+    const isImage = fileInstance.type === 'image/jpeg' || fileInstance.type === 'image/png';
+    const isLt5M = fileInstance.size / 1024 / 1024 < 5;
+
+    if (!isImage) {
+      showError(t('只支持 JPG/PNG 格式的图片'));
+      onError();
+      return;
+    }
+
+    if (!isLt5M) {
+      showError(t('图片大小不能超过 5MB'));
+      onError();
+      return;
+    }
+
+    setLogoFileList([{
+      uid: fileInstance.uid,
+      name: fileInstance.name,
+      status: 'uploading',
+      size: fileInstance.size,
+    }]);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', fileInstance);
+
+      const res = await API.post('/api/oss/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      const { success, data, message } = res.data;
+      if (success && data?.url) {
+        setCompanyLogoUrl(data.url);
+        setLogoFileList([{
+          uid: fileInstance.uid,
+          name: fileInstance.name,
+          status: 'success',
+          size: fileInstance.size,
+          url: data.url,
+        }]);
+        onSuccess();
+      } else {
+        showError(message || t('上传失败'));
+        setLogoFileList([]);
+        onError();
+      }
+    } catch (error) {
+      showError(error.response?.data?.message || t('上传失败'));
+      setLogoFileList([]);
+      onError();
+    }
+  };
+
+  /**
    * 渲染企业主体区块（供应商别名可在编辑页展示，向导第二步不重复别名字段）。
    * @param {object} opts
    * @param {boolean} [opts.showAdminAlias=true] 是否展示供应商别名字段
@@ -594,6 +700,13 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
               showClear
               maxLength={128}
               extraText={t('供应商别名只能由管理员填写和修改')}
+            />
+            <Form.Select
+              field='supplier_type'
+              label={<Text strong>{t('供应商类型')}</Text>}
+              placeholder={t('请选择供应商类型')}
+              optionList={supplierTypeOptions}
+              rules={[{ required: true, message: t('请选择供应商类型') }]}
             />
           </Col>
         )}
@@ -638,6 +751,27 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
               setBusinessLicenseUrl('');
             }}
             extraText={t('支持 jpg/png，大小≤5M，信息完整无遮挡')}
+          >
+            <Button icon={<IconUpload />} theme="light">
+              {t('上传文件')}
+            </Button>
+          </Form.Upload>
+        </Col>
+        <Col span={24}>
+          <Form.Upload
+            field='company_logo_file'
+            label={<Text strong>{t('企业Logo')}<Text type='danger'>*</Text></Text>}
+            action=''
+            accept='.jpg,.jpeg,.png'
+            limit={1}
+            fileList={logoFileList}
+            onChange={({ fileList: fl }) => setLogoFileList(fl)}
+            customRequest={customLogoRequest}
+            onRemove={() => {
+              setLogoFileList([]);
+              setCompanyLogoUrl('');
+            }}
+            extraText={t('建议上传清晰方形Logo，支持 jpg/png，大小≤5M')}
           >
             <Button icon={<IconUpload />} theme="light">
               {t('上传文件')}
@@ -809,6 +943,15 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
                 showClear
                 maxLength={128}
                 extraText={t('提交后将自动审核通过并绑定该别名')}
+              />
+            </Col>
+            <Col span={24}>
+              <Form.Select
+                field='supplier_type'
+                label={<Text strong>{t('供应商类型')}</Text>}
+                placeholder={t('请选择供应商类型')}
+                optionList={supplierTypeOptions}
+                rules={[{ required: true, message: t('请选择供应商类型') }]}
               />
             </Col>
           </Row>

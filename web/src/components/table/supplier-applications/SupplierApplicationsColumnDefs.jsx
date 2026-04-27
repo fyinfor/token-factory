@@ -46,6 +46,18 @@ export const getSupplierApplicationsColumns = (t, openReview) => {
       width: 200,
     },
     {
+      title: t('企业Logo'),
+      dataIndex: 'company_logo_url',
+      width: 120,
+      render: (text) => text ? (
+        <img
+          src={text}
+          alt={t('企业Logo')}
+          style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover' }}
+        />
+      ) : '-',
+    },
+    {
       title: t('统一社会信用代码'),
       dataIndex: 'credit_code',
       width: 180,
