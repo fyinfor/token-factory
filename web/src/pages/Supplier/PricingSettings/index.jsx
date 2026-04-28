@@ -29,8 +29,31 @@ import { useNavigate } from 'react-router-dom';
 import ModelSettingsVisualEditor from '../../Setting/Ratio/ModelSettingsVisualEditor';
 import ModelRatioNotSetEditor from '../../Setting/Ratio/ModelRationNotSetEditor';
 import UpstreamRatioSync from '../../Setting/Ratio/UpstreamRatioSync';
-
 import { API, isSupplier, showError, toBoolean } from '../../../helpers';
+
+const SUPPLIER_OPTION_KEYS_FOR_PRICING_EDITOR = [
+  'ModelPrice',
+  'ModelRatio',
+  'CompletionRatio',
+  'CacheRatio',
+  'CreateCacheRatio',
+  'ImageRatio',
+  'AudioRatio',
+  'AudioCompletionRatio',
+];
+
+/**
+ * mergeSupplierPricingMapsIntoInputs 将 GET /api/user/supplier/pricing/global 返回的 map 合并进编辑器 inputs（字符串 JSON）。
+ */
+function mergeSupplierPricingMapsIntoInputs(target, mapsObj) {
+  if (!mapsObj || typeof mapsObj !== 'object') return;
+  SUPPLIER_OPTION_KEYS_FOR_PRICING_EDITOR.forEach((key) => {
+    const v = mapsObj[key];
+    if (v != null && typeof v === 'object' && !Array.isArray(v)) {
+      target[key] = JSON.stringify(v, null, 2);
+    }
+  });
+}
 
 /**
  * SupplierPricingSettingsContent 供应商定价设置内容区。
@@ -46,6 +69,14 @@ const SupplierPricingSettingsContent = () => {
     CompletionRatio: '',
     GroupRatio: '',
     GroupGroupRatio: '',
+    ChannelModelPrice: '',
+    ChannelModelRatio: '',
+    ChannelCompletionRatio: '',
+    ChannelCacheRatio: '',
+    ChannelCreateCacheRatio: '',
+    ChannelImageRatio: '',
+    ChannelAudioRatio: '',
+    ChannelAudioCompletionRatio: '',
     ImageRatio: '',
     AudioRatio: '',
     AudioCompletionRatio: '',
@@ -84,6 +115,16 @@ const SupplierPricingSettingsContent = () => {
             newInputs[item.key] = item.value;
           }
         });
+        if (isSupplier()) {
+          try {
+            const pr = await API.get('/api/user/supplier/pricing/global');
+            if (pr?.data?.success && pr.data.data) {
+              mergeSupplierPricingMapsIntoInputs(newInputs, pr.data.data);
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        }
         setInputs(newInputs);
       } else {
         showError(message);
@@ -127,7 +168,11 @@ const SupplierPricingSettingsContent = () => {
               <ModelRatioNotSetEditor options={inputs} refresh={onRefresh} />
             </Tabs.TabPane>
             <Tabs.TabPane tab={t('上游倍率同步')} itemKey='upstream_sync'>
-              <UpstreamRatioSync options={inputs} refresh={onRefresh} />
+              <UpstreamRatioSync
+                options={inputs}
+                refresh={onRefresh}
+                useSupplierPricingSave
+              />
             </Tabs.TabPane>
           </Tabs>
         </Card>

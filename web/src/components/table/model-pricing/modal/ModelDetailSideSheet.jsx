@@ -156,7 +156,7 @@ const ModelDetailSideSheet = ({
               selectedGroup={selectedGroup}
               groupRatio={groupRatio}
             />
-            <ModelPricingTable
+            {/* <ModelPricingTable
               modelData={modelData}
               groupRatio={groupRatio}
               groupModelPrice={groupModelPrice}
@@ -169,7 +169,7 @@ const ModelDetailSideSheet = ({
               usableGroup={usableGroup}
               autoGroups={autoGroups}
               t={t}
-            />
+            /> */}
           </>
         )}
       </div>

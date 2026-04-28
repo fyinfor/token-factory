@@ -39,6 +39,8 @@ export const useModelPricingData = () => {
   const [filterEndpointType, setFilterEndpointType] = useState('all'); // 端点类型筛选: 'all' | string
   const [filterVendor, setFilterVendor] = useState('all'); // 供应商筛选: 'all' | 'unknown' | string
   const [filterTag, setFilterTag] = useState('all'); // 模型标签筛选: 'all' | string
+  // 排序键: 'default' | 'price' | 'supplier_grade' | 'latency'
+  const [sortKey, setSortKey] = useState('default');
   const [pageSize, setPageSize] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
   const [currency, setCurrency] = useState('USD');
@@ -162,6 +164,81 @@ export const useModelPricingData = () => {
       );
     }
 
+    if (sortKey && sortKey !== 'default') {
+      const supplierGradeRank = (alias) => {
+        if (!alias) return Number.POSITIVE_INFINITY;
+        const m = /^P(\d+)$/i.exec(String(alias).trim());
+        if (m) return parseInt(m[1], 10);
+        // 非 P 等级（自定义别名）排到最后
+        return Number.POSITIVE_INFINITY;
+      };
+
+      const modelUnitPrice = (m) => {
+        const list = Array.isArray(m.channel_list) ? m.channel_list : [];
+        const pickField = m.quota_type === 1 ? 'model_price' : 'model_ratio';
+        let best = Number.POSITIVE_INFINITY;
+        for (const ch of list) {
+          const v = Number(ch?.[pickField]);
+          if (Number.isFinite(v) && v < best) best = v;
+        }
+        if (best === Number.POSITIVE_INFINITY) {
+          const fallback = m.quota_type === 1 ? m.model_price : m.model_ratio;
+          const v = Number(fallback);
+          if (Number.isFinite(v)) best = v;
+        }
+        return best;
+      };
+
+      const modelMinSupplierRank = (m) => {
+        const list = Array.isArray(m.channel_list) ? m.channel_list : [];
+        let best = Number.POSITIVE_INFINITY;
+        for (const ch of list) {
+          const r = supplierGradeRank(ch?.supplier_alias);
+          if (r < best) best = r;
+        }
+        return best;
+      };
+
+      const modelMinLatency = (m) => {
+        const list = Array.isArray(m.channel_list) ? m.channel_list : [];
+        let best = Number.POSITIVE_INFINITY;
+        for (const ch of list) {
+          const v = Number(ch?.test_response_time_ms);
+          // 0 / 缺失视为未知，放最后
+          if (Number.isFinite(v) && v > 0 && v < best) best = v;
+        }
+        return best;
+      };
+
+      const tieBreak = (a, b) => {
+        if (a.quota_type !== b.quota_type) return a.quota_type - b.quota_type;
+        return String(a.model_name).localeCompare(String(b.model_name));
+      };
+
+      const cmpAsc = (av, bv, a, b) => {
+        if (av === bv) return tieBreak(a, b);
+        return av < bv ? -1 : 1;
+      };
+
+      result = [...result].sort((a, b) => {
+        switch (sortKey) {
+          case 'price':
+            return cmpAsc(modelUnitPrice(a), modelUnitPrice(b), a, b);
+          case 'supplier_grade':
+            return cmpAsc(
+              modelMinSupplierRank(a),
+              modelMinSupplierRank(b),
+              a,
+              b,
+            );
+          case 'latency':
+            return cmpAsc(modelMinLatency(a), modelMinLatency(b), a, b);
+          default:
+            return tieBreak(a, b);
+        }
+      });
+    }
+
     return result;
   }, [
     models,
@@ -171,6 +248,7 @@ export const useModelPricingData = () => {
     filterEndpointType,
     filterVendor,
     filterTag,
+    sortKey,
   ]);
 
   const rowSelection = useMemo(
@@ -338,7 +416,7 @@ export const useModelPricingData = () => {
     refresh().then();
   }, []);
 
-  // 当筛选条件变化时重置到第一页
+  // 当筛选/排序变化时重置到第一页
   useEffect(() => {
     setCurrentPage(1);
   }, [
@@ -348,6 +426,7 @@ export const useModelPricingData = () => {
     filterVendor,
     filterTag,
     searchValue,
+    sortKey,
   ]);
 
   return {
@@ -376,6 +455,8 @@ export const useModelPricingData = () => {
     setFilterVendor,
     filterTag,
     setFilterTag,
+    sortKey,
+    setSortKey,
     pageSize,
     setPageSize,
     currentPage,

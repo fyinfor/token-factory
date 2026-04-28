@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Empty, Select } from '@douyinfe/semi-ui';
 import { API, showError } from '../../../../helpers';
 import { useTranslation } from 'react-i18next';
@@ -20,10 +20,14 @@ export default function SupplierModelPricingEditor({
   candidateModelNames = [],
   filterMode = 'all',
   listDescription = '',
+  /** 为 true 时使用表存储接口，不写全局 ChannelModel* Option */
+  useSupplierPricingApi = false,
 }) {
   const { t } = useTranslation();
   const [channelId, setChannelId] = useState('all');
   const [channelModelNamesMap, setChannelModelNamesMap] = useState({});
+  /** 供应商渠道定价 GET /api/user/supplier/pricing/channel/:id 返回的 maps */
+  const [supplierChannelMaps, setSupplierChannelMaps] = useState(null);
 
   const channels = useMemo(() => {
     const raw = options.__pricingChannels || [];
@@ -132,10 +136,36 @@ export default function SupplierModelPricingEditor({
     }
   };
 
+  // loadSupplierChannelPricingMaps 加载供应商渠道维度定价（表存储）。
+  const loadSupplierChannelPricingMaps = useCallback(async (targetChannelId) => {
+    try {
+      const res = await API.get(`/api/user/supplier/pricing/channel/${targetChannelId}`, {
+        skipErrorHandler: true,
+      });
+      if (!res?.data?.success) {
+        showError(res?.data?.message || t('获取渠道定价失败'));
+        setSupplierChannelMaps({});
+        return;
+      }
+      setSupplierChannelMaps(res.data.data || {});
+    } catch (error) {
+      showError(error?.message || t('获取渠道定价失败'));
+      setSupplierChannelMaps({});
+    }
+  }, [t]);
+
   useEffect(() => {
     if (!activeChannelId) return;
     loadChannelModelNames(activeChannelId);
   }, [activeChannelId]);
+
+  useEffect(() => {
+    if (!activeChannelId || !useSupplierPricingApi) {
+      setSupplierChannelMaps(null);
+      return;
+    }
+    loadSupplierChannelPricingMaps(activeChannelId);
+  }, [activeChannelId, useSupplierPricingApi, loadSupplierChannelPricingMaps]);
 
   const channelScopedCandidateModelNames = useMemo(() => {
     if (!activeChannelId) return candidateModelNames;
@@ -144,6 +174,20 @@ export default function SupplierModelPricingEditor({
 
   const scopedOptions = useMemo(() => {
     if (!activeChannelId) return options;
+    if (useSupplierPricingApi) {
+      const m = supplierChannelMaps || {};
+      return {
+        ...options,
+        ModelPrice: JSON.stringify(m.ModelPrice || {}, null, 2),
+        ModelRatio: JSON.stringify(m.ModelRatio || {}, null, 2),
+        CompletionRatio: JSON.stringify(m.CompletionRatio || {}, null, 2),
+        CacheRatio: JSON.stringify(m.CacheRatio || {}, null, 2),
+        CreateCacheRatio: JSON.stringify(m.CreateCacheRatio || {}, null, 2),
+        ImageRatio: JSON.stringify(m.ImageRatio || {}, null, 2),
+        AudioRatio: JSON.stringify(m.AudioRatio || {}, null, 2),
+        AudioCompletionRatio: JSON.stringify(m.AudioCompletionRatio || {}, null, 2),
+      };
+    }
     return {
       ...options,
       ModelPrice: JSON.stringify(
@@ -222,11 +266,31 @@ export default function SupplierModelPricingEditor({
     channelVideoPricingRules,
     channelVideoRatio,
     options,
+    supplierChannelMaps,
+    useSupplierPricingApi,
   ]);
 
   const handleSaveOutput = async (output) => {
     if (!activeChannelId) {
       throw new Error(t('请先选择渠道'));
+    }
+    if (useSupplierPricingApi) {
+      const res = await API.put(`/api/user/supplier/pricing/channel/${activeChannelId}`, {
+        ModelPrice: output.ModelPrice || {},
+        ModelRatio: output.ModelRatio || {},
+        CompletionRatio: output.CompletionRatio || {},
+        CacheRatio: output.CacheRatio || {},
+        CreateCacheRatio: output.CreateCacheRatio || {},
+        ImageRatio: output.ImageRatio || {},
+        AudioRatio: output.AudioRatio || {},
+        AudioCompletionRatio: output.AudioCompletionRatio || {},
+      });
+      if (!res?.data?.success) {
+        throw new Error(res?.data?.message || t('保存失败'));
+      }
+      await loadSupplierChannelPricingMaps(activeChannelId);
+      await refresh();
+      return;
     }
     const mergeChannelData = (fullMap, partialMap) => ({
       ...fullMap,

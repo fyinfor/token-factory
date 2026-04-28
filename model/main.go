@@ -315,6 +315,8 @@ func migrateDB() error {
 		&AffFunnelDaily{},
 		&DistributorApplication{},
 		&DistributorWithdrawal{},
+		&SupplierModelPricing{},
+		&SupplierChannelModelPricing{},
 	)
 	if err != nil {
 		return err

@@ -25,7 +25,8 @@ func filterChannelPricingMapByVisibleChannels(source map[string]map[string]float
 	return filtered
 }
 
-// getPricingVisibleChannelsForUser 根据登录用户返回定价页可见渠道列表（供应商仅可见自己渠道）。
+// getPricingVisibleChannelsForUser 返回定价/模型广场可见的渠道列表及 channel_* Option 过滤用的 ID 集合。
+// 未登录与管理员：全部渠道；已审核供应商：仅自己名下的渠道；其余已登录用户：全部渠道。
 func getPricingVisibleChannelsForUser(c *gin.Context) ([]model.ChannelSimplePricingItem, map[int]struct{}, error) {
 	channels, err := model.ListChannelsForPricing()
 	if err != nil {

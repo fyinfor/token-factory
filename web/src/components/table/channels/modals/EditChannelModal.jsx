@@ -40,6 +40,7 @@ import {
   Checkbox,
   Banner,
   Modal,
+  Image,
   ImagePreview,
   Card,
   Tag,
@@ -87,6 +88,7 @@ import {
   IconBolt,
   IconSearch,
   IconChevronDown,
+  IconUpload,
 } from '@douyinfe/semi-icons';
 
 const { Text, Title } = Typography;
@@ -131,6 +133,12 @@ const PARAM_OVERRIDE_OPERATIONS_TEMPLATE = {
 };
 
 const DEPRECATED_DOUBAO_CODING_PLAN_BASE_URL = 'doubao-coding-plan';
+const CHANNEL_SUPPLIER_TYPE_OPTIONS = [
+  { label: '公有云', value: '公有云' },
+  { label: 'AIDC', value: 'AIDC' },
+  { label: '企业中转站', value: '企业中转站' },
+  { label: '个人中转站', value: '个人中转站' },
+];
 
 // 支持并且已适配通过接口获取模型列表的渠道类型
 const MODEL_FETCHABLE_TYPES = new Set([
@@ -175,6 +183,8 @@ const EditChannelModal = (props) => {
   const originInputs = {
     name: '',
     channel_no: '',
+    company_logo_url: '',
+    supplier_type: '',
     type: 1,
     key: '',
     openai_organization: '',
@@ -248,6 +258,7 @@ const EditChannelModal = (props) => {
   const formApiRef = useRef(null);
   const [vertexKeys, setVertexKeys] = useState([]);
   const [vertexFileList, setVertexFileList] = useState([]);
+  const [logoFileList, setLogoFileList] = useState([]);
   const vertexErroredNames = useRef(new Set()); // 避免重复报错
   const [isMultiKeyChannel, setIsMultiKeyChannel] = useState(false);
   const [channelSearchValue, setChannelSearchValue] = useState('');
@@ -963,6 +974,19 @@ const EditChannelModal = (props) => {
       ) {
         data.price_discount_percent = 100;
       }
+      if (data.company_logo_url) {
+        setLogoFileList([
+          {
+            uid: 'existing-channel-logo',
+            name: t('已上传Logo'),
+            status: 'success',
+            url: data.company_logo_url,
+            thumbUrl: data.company_logo_url,
+          },
+        ]);
+      } else {
+        setLogoFileList([]);
+      }
       setInputs(data);
       if (formApiRef.current) {
         formApiRef.current.setValues(data);
@@ -1393,6 +1417,7 @@ const EditChannelModal = (props) => {
     }
     // 重置本地输入，避免下次打开残留上一次的 JSON 字段值
     setInputs(getInitValues());
+    setLogoFileList([]);
     // 重置密钥显示状态
     resetKeyDisplayState();
     // 重置剪贴板检测状态
@@ -1441,6 +1466,88 @@ const EditChannelModal = (props) => {
         );
       }
     })();
+  };
+
+  /**
+   * 处理渠道 Logo 上传。
+   */
+  const handleChannelLogoUpload = async ({ file, onSuccess, onError }) => {
+    const fileInstance = file?.fileInstance;
+    if (!fileInstance) {
+      onError?.();
+      return;
+    }
+    const isImage =
+      fileInstance.type === 'image/jpeg' || fileInstance.type === 'image/png';
+    const isLt5M = fileInstance.size / 1024 / 1024 < 5;
+    if (!isImage) {
+      showError(t('只支持 JPG/PNG 格式的图片'));
+      onError?.();
+      return;
+    }
+    if (!isLt5M) {
+      showError(t('图片大小不能超过 5MB'));
+      onError?.();
+      return;
+    }
+    setLogoFileList([
+      {
+        uid: fileInstance.uid,
+        name: fileInstance.name,
+        status: 'uploading',
+        size: fileInstance.size,
+      },
+    ]);
+    try {
+      const formData = new FormData();
+      formData.append('file', fileInstance);
+      const res = await API.post('/api/oss/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      const { success, data, message } = res.data;
+      if (success && data?.url) {
+        setLogoFileList([
+          {
+            uid: fileInstance.uid,
+            name: fileInstance.name,
+            status: 'success',
+            size: fileInstance.size,
+            url: data.url,
+            thumbUrl: data.url,
+          },
+        ]);
+        handleInputChange('company_logo_url', data.url);
+        onSuccess?.({ url: data.url, thumbUrl: data.url });
+        return;
+      }
+      showError(message || t('上传失败'));
+      setLogoFileList([]);
+      onError?.();
+    } catch (error) {
+      showError(error?.response?.data?.message || t('上传失败'));
+      setLogoFileList([]);
+      onError?.();
+    }
+  };
+
+  /**
+   * 处理 Logo 文件列表变更，确保已上传 URL 不被覆盖，保证回显稳定。
+   */
+  const handleChannelLogoFileListChange = ({ fileList }) => {
+    const logoUrl = String(inputs.company_logo_url || '').trim();
+    const nextFileList = (fileList || []).map((item) => {
+      if (item?.status === 'success' && logoUrl) {
+        return {
+          ...item,
+          url: item.url || logoUrl,
+          thumbUrl: item.thumbUrl || item.url || logoUrl,
+        };
+      }
+      return item;
+    });
+    setLogoFileList(nextFileList);
   };
 
   const confirmMissingModelMappings = (missingModels) =>
@@ -1744,6 +1851,12 @@ const EditChannelModal = (props) => {
     }
     if (localInputs.type === 18 && localInputs.other === '') {
       localInputs.other = 'v2.1';
+    }
+    localInputs.company_logo_url = String(localInputs.company_logo_url || '').trim();
+    localInputs.supplier_type = String(localInputs.supplier_type || '').trim();
+    if (!localInputs.supplier_type) {
+      showError(t('请选择供应商类型'));
+      return;
     }
 
     // 生成渠道额外设置JSON
@@ -2891,6 +3004,48 @@ const EditChannelModal = (props) => {
                           initValue={inputs.is_enterprise_account}
                         />
                       )}
+                    <Form.Upload
+                      field='company_logo_file'
+                      label={t('企业Logo')}
+                      action=''
+                      accept='.jpg,.jpeg,.png'
+                      limit={1}
+                      fileList={logoFileList}
+                      onChange={handleChannelLogoFileListChange}
+                      customRequest={handleChannelLogoUpload}
+                      onRemove={() => {
+                        setLogoFileList([]);
+                        handleInputChange('company_logo_url', '');
+                      }}
+                      extraText={t('建议上传清晰方形 Logo，支持 jpg/png，大小<=5MB')}
+                    >
+                      <Button icon={<IconUpload />} theme='light'>
+                        {t('上传文件')}
+                      </Button>
+                    </Form.Upload>
+                    {inputs.company_logo_url ? (
+                      <div className='mb-2'>
+                        <Text type='tertiary' size='small'>
+                          {t('当前Logo预览')}
+                        </Text>
+                        <div className='mt-2'>
+                          <Image
+                            src={inputs.company_logo_url}
+                            width={96}
+                            height={96}
+                            alt={t('企业Logo')}
+                          />
+                        </div>
+                      </div>
+                    ) : null}
+                    <Form.Select
+                      field='supplier_type'
+                      label={t('供应商类型')}
+                      placeholder={t('请选择供应商类型')}
+                      optionList={CHANNEL_SUPPLIER_TYPE_OPTIONS}
+                      rules={[{ required: true, message: t('请选择供应商类型') }]}
+                      onChange={(value) => handleInputChange('supplier_type', value)}
+                    />
 
                       <Form.Input
                         field='name'

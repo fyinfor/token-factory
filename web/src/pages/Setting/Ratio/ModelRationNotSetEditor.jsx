@@ -18,17 +18,28 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { API, isAdmin, isSupplier, showError } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
-import { Tabs } from '@douyinfe/semi-ui';
+import { Button, Empty, Tabs } from '@douyinfe/semi-ui';
+import {
+  IllustrationNoAccess,
+  IllustrationNoAccessDark,
+} from '@douyinfe/semi-illustrations';
 import ModelPricingEditor from './components/ModelPricingEditor';
 import SupplierModelPricingEditor from './components/SupplierModelPricingEditor';
 
+/**
+ * ModelRatioNotSetEditor 「未设置模型」定价页：全局未设置 / 渠道未设置两个 Tab。
+ * 管理员仍写 Option；供应商通过 `/api/user/supplier/pricing/*` 独立表存储。
+ */
 export default function ModelRatioNotSetEditor(props) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const [enabledModels, setEnabledModels] = useState([]);
   const [pricingChannels, setPricingChannels] = useState([]);
 
+  /** getAllEnabledModels 拉取当前启用模型列表，用于候选筛选。 */
   const getAllEnabledModels = async () => {
     try {
       const res = await API.get('/api/channel/models_enabled');
@@ -66,6 +77,25 @@ export default function ModelRatioNotSetEditor(props) {
   const extendedOptions = {
     ...props.options,
     __pricingChannels: pricingChannels,
+  };
+
+  /**
+   * saveSupplierGlobalUnsetPricingOutput 供应商「全局未设置模型」保存入口。
+   */
+  const saveSupplierGlobalUnsetPricingOutput = async (output) => {
+    const res = await API.put('/api/user/supplier/pricing/global', {
+      ModelPrice: output.ModelPrice || {},
+      ModelRatio: output.ModelRatio || {},
+      CompletionRatio: output.CompletionRatio || {},
+      CacheRatio: output.CacheRatio || {},
+      CreateCacheRatio: output.CreateCacheRatio || {},
+      ImageRatio: output.ImageRatio || {},
+      AudioRatio: output.AudioRatio || {},
+      AudioCompletionRatio: output.AudioCompletionRatio || {},
+    });
+    if (!res?.data?.success) {
+      throw new Error(res?.data?.message || t('保存失败'));
+    }
   };
 
   // 管理员或供应商均可访问；仅普通用户显示“需要供应商权限”提示。
@@ -117,6 +147,7 @@ export default function ModelRatioNotSetEditor(props) {
           )}
           emptyTitle={t('没有未设置定价的模型')}
           emptyDescription={t('当前没有未设置定价的模型')}
+          onSaveOutput={isSupplier() ? saveSupplierGlobalUnsetPricingOutput : undefined}
         />
       </Tabs.TabPane>
       <Tabs.TabPane tab={t('渠道未设置模型')} itemKey='supplier_unset'>
@@ -126,6 +157,7 @@ export default function ModelRatioNotSetEditor(props) {
           candidateModelNames={enabledModels}
           filterMode='unset'
           listDescription={t('渠道未设置模型列表说明')}
+          useSupplierPricingApi={isSupplier()}
         />
       </Tabs.TabPane>
     </Tabs>

@@ -379,8 +379,6 @@ func FetchUpstreamRatios(c *gin.Context) {
 	wg.Wait()
 	close(ch)
 
-	localData := ratio_setting.GetExposedData()
-
 	var testResults []dto.TestResult
 	var successfulChannels []upstreamSyncSource
 
@@ -404,7 +402,29 @@ func FetchUpstreamRatios(c *gin.Context) {
 		}
 	}
 
-	differences := buildDifferences(localData, successfulChannels, req.IncludeAligned)
+	userID := c.GetInt("id")
+	role := c.GetInt("role")
+	var localData gin.H
+	var differences map[string]map[string]dto.DifferenceItem
+	// 非管理员：按已审核供应商身份，仅自有渠道模型参与与上游的差异对比
+	if role < common.RoleAdminUser {
+		app, err := model.GetApprovedSupplierApplicationByApplicant(userID)
+		if err != nil {
+			c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "当前账号无供应商资质或未通过审核"})
+			return
+		}
+		ownedRaw, err := collectSupplierOwnedModelNames(userID)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		ownedNorm := model.NormalizeOwnedModelsForPricing(ownedRaw)
+		localData = buildSupplierRatioSyncLocalMaps(app.ID, ownedNorm)
+		differences = buildDifferences(localData, successfulChannels, req.IncludeAligned, app.ID, ownedNorm)
+	} else {
+		localData = ratio_setting.GetExposedData()
+		differences = buildDifferences(localData, successfulChannels, req.IncludeAligned, 0, nil)
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -453,7 +473,90 @@ func oldEffectiveForUpstream(channelID int, ratioType string, modelName string, 
 	return nil
 }
 
-func buildDifferences(localData map[string]any, successfulChannels []upstreamSyncSource, includeAligned bool) map[string]map[string]dto.DifferenceItem {
+// buildSupplierRatioSyncLocalMaps 构建供应商全局视角下的本地倍率/价格映射（仅自有模型，值与 ResolveSupplierScoped* 一致）。
+func buildSupplierRatioSyncLocalMaps(supplierApplicationID int, ownedNorm map[string]struct{}) gin.H {
+	mr := make(map[string]float64)
+	cr := make(map[string]float64)
+	cache := make(map[string]float64)
+	mp := make(map[string]float64)
+	seen := make(map[string]struct{})
+	ch0 := 0
+	for name := range ownedNorm {
+		mn := strings.TrimSpace(name)
+		if mn == "" {
+			continue
+		}
+		mn = ratio_setting.FormatMatchingModelName(mn)
+		if _, ok := seen[mn]; ok {
+			continue
+		}
+		seen[mn] = struct{}{}
+		if v, ok := model.ResolveSupplierScopedFixedModelPrice(ch0, supplierApplicationID, mn); ok {
+			mp[mn] = v
+		}
+		if vr, ok, _ := model.ResolveSupplierScopedModelRatio(ch0, supplierApplicationID, mn); ok {
+			mr[mn] = vr
+		}
+		cr[mn] = model.ResolveSupplierScopedCompletionRatio(ch0, supplierApplicationID, mn)
+		c0, _ := model.ResolveSupplierScopedCacheRatios(ch0, supplierApplicationID, mn)
+		cache[mn] = c0
+	}
+	return gin.H{
+		"model_ratio":      mr,
+		"completion_ratio": cr,
+		"cache_ratio":      cache,
+		"model_price":      mp,
+	}
+}
+
+// modelNameOwnedForSupplierSync 判断差集模型名是否在供应商自有模型集合内（含规范化名）。
+func modelNameOwnedForSupplierSync(modelName string, ownedNorm map[string]struct{}) bool {
+	if len(ownedNorm) == 0 {
+		return false
+	}
+	if _, ok := ownedNorm[modelName]; ok {
+		return true
+	}
+	if _, ok := ownedNorm[ratio_setting.FormatMatchingModelName(modelName)]; ok {
+		return true
+	}
+	return false
+}
+
+// oldEffectiveForUpstreamSupplier 供应商视角下，某上游列对应的「同步前」生效价（渠道/全局与 Resolve 链一致）。
+func oldEffectiveForUpstreamSupplier(supplierApplicationID int, channelID int, ratioType string, modelName string, localData map[string]any) interface{} {
+	mn := ratio_setting.FormatMatchingModelName(modelName)
+	if channelID > 0 {
+		switch ratioType {
+		case "model_ratio":
+			if v, ok, _ := model.ResolveSupplierScopedModelRatio(channelID, supplierApplicationID, mn); ok {
+				return v
+			}
+		case "completion_ratio":
+			return model.ResolveSupplierScopedCompletionRatio(channelID, supplierApplicationID, mn)
+		case "cache_ratio":
+			c, _ := model.ResolveSupplierScopedCacheRatios(channelID, supplierApplicationID, mn)
+			return c
+		case "model_price":
+			if v, ok := model.ResolveSupplierScopedFixedModelPrice(channelID, supplierApplicationID, mn); ok {
+				return v
+			}
+		}
+	}
+	if localRatioAny, ok := localData[ratioType]; ok {
+		if localRatio, ok := localRatioAny.(map[string]float64); ok {
+			if val, exists := localRatio[mn]; exists {
+				return val
+			}
+			if val, exists := localRatio[modelName]; exists {
+				return val
+			}
+		}
+	}
+	return nil
+}
+
+func buildDifferences(localData map[string]any, successfulChannels []upstreamSyncSource, includeAligned bool, supplierAppID int, ownedNorm map[string]struct{}) map[string]map[string]dto.DifferenceItem {
 	differences := make(map[string]map[string]dto.DifferenceItem)
 
 	successUpstreamNames := make(map[string]struct{}, len(successfulChannels))
@@ -481,6 +584,16 @@ func buildDifferences(localData map[string]any, successfulChannels []upstreamSyn
 				}
 			}
 		}
+	}
+
+	if supplierAppID > 0 {
+		filtered := make(map[string]struct{})
+		for m := range allModels {
+			if modelNameOwnedForSupplierSync(m, ownedNorm) {
+				filtered[m] = struct{}{}
+			}
+		}
+		allModels = filtered
 	}
 
 	confidenceMap := make(map[string]map[string]bool)
@@ -537,7 +650,12 @@ func buildDifferences(localData map[string]any, successfulChannels []upstreamSyn
 			hasUpstreamValue := false
 
 			for _, channel := range successfulChannels {
-				oldEff := oldEffectiveForUpstream(channel.channelID, ratioType, modelName, localData)
+				var oldEff interface{}
+				if supplierAppID > 0 {
+					oldEff = oldEffectiveForUpstreamSupplier(supplierAppID, channel.channelID, ratioType, modelName, localData)
+				} else {
+					oldEff = oldEffectiveForUpstream(channel.channelID, ratioType, modelName, localData)
+				}
 
 				if upstreamRatio, ok := channel.data[ratioType].(map[string]any); ok {
 					if val, exists := upstreamRatio[modelName]; exists {

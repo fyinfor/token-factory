@@ -97,19 +97,13 @@ func buildRouterCandidatesFiltered(group, modelName string, filter func(*model.C
 		if filter != nil && !filter(ch) {
 			continue
 		}
-		// UnitPrice is the primary sorting signal for smart routing.
-		// Priority: channel-level model price > channel-level model ratio > supplier-level > global model ratio.
+		// UnitPrice is the primary sorting signal for smart routing（与 relay 定价优先级对齐）。
 		unitPrice := 1.0
-		if channelPrice, ok := ratio_setting.GetChannelModelPrice(ch.Id, modelName); ok {
-			unitPrice = channelPrice
-		} else if channelRatio, ok := ratio_setting.GetChannelModelRatio(ch.Id, modelName); ok {
-			unitPrice = channelRatio
-		} else if ch.SupplierApplicationID > 0 {
-			if supplierPrice, ok := ratio_setting.GetSupplierModelPrice(ch.SupplierApplicationID, modelName); ok {
-				unitPrice = supplierPrice
-			} else if supplierRatio, ok := ratio_setting.GetSupplierModelRatio(ch.SupplierApplicationID, modelName); ok {
-				unitPrice = supplierRatio
-			}
+		sid := ch.SupplierApplicationID
+		if p, ok := model.ResolveSupplierScopedFixedModelPrice(ch.Id, sid, modelName); ok {
+			unitPrice = p
+		} else if r, ok, _ := model.ResolveSupplierScopedModelRatio(ch.Id, sid, modelName); ok {
+			unitPrice = r
 		}
 		if unitPrice <= 0 {
 			ratio, _, _ := ratio_setting.GetModelRatio(modelName)

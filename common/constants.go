@@ -115,6 +115,10 @@ var QuotaForNewUser = 0
 var QuotaForInviter = 0
 var QuotaForInvitee = 0
 
+// StudentApprovalRewardQuota: 学员申请审批通过时赠送给用户的额度（内部 quota 单位）。
+// 默认 50 USD（按默认 QuotaPerUnit=500000 换算为 25000000）。
+var StudentApprovalRewardQuota = 50 * 500 * 1000
+
 // AffiliateDefaultCommissionBps 被邀请用户充值时给邀请人的默认分销比例，存储为万分之一单位（1=0.01%，100=1%，1000=10%）。单用户可在 aff_invite_relations 覆盖。默认 1000 即 10%。
 var AffiliateDefaultCommissionBps = 1000
 var ChannelDisableThreshold = 5.0
@@ -216,6 +220,13 @@ var RateLimitKeyExpirationDuration = 20 * time.Minute
 const (
 	UserStatusEnabled  = 1 // don't use 0, 0 is the default value!
 	UserStatusDisabled = 2 // also don't use 0
+)
+
+const (
+	StudentStatusNone     = 0
+	StudentStatusPending  = 1
+	StudentStatusApproved = 2
+	StudentStatusRejected = 3
 )
 
 const (
