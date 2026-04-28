@@ -349,106 +349,110 @@ export default function DistributorAnalyticsBoard({ adminMode = false }) {
 
       <Spin spinning={loading}>
         <div className='flex flex-col gap-6'>
-        <div className='grid grid-cols-1 xl:grid-cols-2 gap-6'>
-          <Card
-            title={
-              <span className='flex items-center gap-2'>
-                <LineChart size={16} />
-                {t('近7日流量与注册')}
-              </span>
-            }
-            className='!rounded-2xl'
-            bodyStyle={{ paddingBottom: 8 }}
-          >
-            <div className='h-80'>
-              <VChart spec={funnelSpec} option={CHART_CONFIG} />
-            </div>
-          </Card>
-          <Card
-            title={
-              <span className='flex items-center gap-2'>
-                <LineChart size={16} />
-                {t('收益与充值带动')}
-                <Text type='tertiary' size='small' className='!font-normal'>
-                  ({t('所选区间')} · {t('金额为展示货币')})
-                </Text>
-              </span>
-            }
-            className='!rounded-2xl'
-            bodyStyle={{ paddingBottom: 8 }}
-          >
-            <div className='h-80'>
-              <VChart spec={revenueSpec} option={CHART_CONFIG} />
-            </div>
-          </Card>
-        </div>
-
-        {!adminMode ? (
-          <Card
-            title={
-              <span className='flex items-center gap-2'>
-                <BarChart3 size={16} />
-                {t('被邀请人收益 TOP10')}
-              </span>
-            }
-            className='!rounded-2xl'
-            bodyStyle={{ paddingBottom: 8 }}
-          >
-            <Text type='tertiary' size='small' className='block mb-2'>
-              {t('按累计分销收益排序；纵轴为展示货币金额。')}
-            </Text>
-            <div className='h-72'>
-              <VChart spec={inviteeBarSpec} option={CHART_CONFIG} />
-            </div>
-          </Card>
-        ) : (
-          <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
+          <div className='grid grid-cols-1 xl:grid-cols-2 gap-6'>
             <Card
-              title={t('代理累计收益 TOP')}
+              title={
+                <span className='flex items-center gap-2'>
+                  <LineChart size={16} />
+                  {t('近7日流量与注册')}
+                </span>
+              }
               className='!rounded-2xl'
               bodyStyle={{ paddingBottom: 8 }}
             >
-              <div className='h-64'>
-                <VChart
-                  spec={makeAdminBarSpec(topTotal, 'total_reward_quota', true)}
-                  option={CHART_CONFIG}
-                />
+              <div className='h-80'>
+                <VChart spec={funnelSpec} option={CHART_CONFIG} />
               </div>
             </Card>
             <Card
-              title={t('代理近30日收益 TOP')}
+              title={
+                <span className='flex items-center gap-2'>
+                  <LineChart size={16} />
+                  {t('收益与充值带动')}
+                  <Text type='tertiary' size='small' className='!font-normal'>
+                    ({t('所选区间')} · {t('金额为展示货币')})
+                  </Text>
+                </span>
+              }
               className='!rounded-2xl'
               bodyStyle={{ paddingBottom: 8 }}
             >
-              <div className='h-64'>
-                <VChart
-                  spec={makeAdminBarSpec(
-                    topPeriod,
-                    'total_reward_quota',
-                    true,
-                  )}
-                  option={CHART_CONFIG}
-                />
-              </div>
-            </Card>
-            <Card
-              title={t('代理邀请人数 TOP')}
-              className='!rounded-2xl'
-              bodyStyle={{ paddingBottom: 8 }}
-            >
-              <div className='h-64'>
-                <VChart
-                  spec={makeAdminBarSpec(
-                    topInviteCount,
-                    'invitee_count',
-                    false,
-                  )}
-                  option={CHART_CONFIG}
-                />
+              <div className='h-80'>
+                <VChart spec={revenueSpec} option={CHART_CONFIG} />
               </div>
             </Card>
           </div>
-        )}
+
+          {!adminMode ? (
+            <Card
+              title={
+                <span className='flex items-center gap-2'>
+                  <BarChart3 size={16} />
+                  {t('被邀请人收益 TOP10')}
+                </span>
+              }
+              className='!rounded-2xl'
+              bodyStyle={{ paddingBottom: 8 }}
+            >
+              <Text type='tertiary' size='small' className='block mb-2'>
+                {t('按累计分销收益排序；纵轴为展示货币金额。')}
+              </Text>
+              <div className='h-72'>
+                <VChart spec={inviteeBarSpec} option={CHART_CONFIG} />
+              </div>
+            </Card>
+          ) : (
+            <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
+              <Card
+                title={t('代理累计收益 TOP')}
+                className='!rounded-2xl'
+                bodyStyle={{ paddingBottom: 8 }}
+              >
+                <div className='h-64'>
+                  <VChart
+                    spec={makeAdminBarSpec(
+                      topTotal,
+                      'total_reward_quota',
+                      true,
+                    )}
+                    option={CHART_CONFIG}
+                  />
+                </div>
+              </Card>
+              <Card
+                title={t('代理近30日收益 TOP')}
+                className='!rounded-2xl'
+                bodyStyle={{ paddingBottom: 8 }}
+              >
+                <div className='h-64'>
+                  <VChart
+                    spec={makeAdminBarSpec(
+                      topPeriod,
+                      'total_reward_quota',
+                      true,
+                    )}
+                    option={CHART_CONFIG}
+                  />
+                </div>
+              </Card>
+              <Card
+                title={t('代理邀请人数 TOP')}
+                className='!rounded-2xl'
+                bodyStyle={{ paddingBottom: 8 }}
+              >
+                <div className='h-64'>
+                  <VChart
+                    spec={makeAdminBarSpec(
+                      topInviteCount,
+                      'invitee_count',
+                      false,
+                    )}
+                    option={CHART_CONFIG}
+                  />
+                </div>
+              </Card>
+            </div>
+          )}
         </div>
       </Spin>
     </div>

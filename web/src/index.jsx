@@ -52,7 +52,7 @@ function SemiLocaleWrapper({ children }) {
     if (semiEnglishChromeLanguages.has(lang)) {
       return en_GB;
     }
-    return ({ zh: zh_CN, en: en_GB })[lang] || zh_CN;
+    return { zh: zh_CN, en: en_GB }[lang] || zh_CN;
   }, [i18n.language]);
   return <LocaleProvider locale={semiLocale}>{children}</LocaleProvider>;
 }

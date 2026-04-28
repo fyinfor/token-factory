@@ -34,7 +34,13 @@ import { API, showError, timestamp2string } from '../../../helpers';
 const PAGE_SIZE = 10;
 
 // UserMessageModal 展示用户站内消息并支持逐条已读。
-const UserMessageModal = ({ visible, onClose, onReadStateChanged, t, isMobile }) => {
+const UserMessageModal = ({
+  visible,
+  onClose,
+  onReadStateChanged,
+  t,
+  isMobile,
+}) => {
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
@@ -58,7 +64,9 @@ const UserMessageModal = ({ visible, onClose, onReadStateChanged, t, isMobile })
       try {
         const effectiveReadStatus = overrideReadStatus || readTab;
         const effectiveTitleKeyword =
-          overrideTitleKeyword !== undefined ? overrideTitleKeyword : titleKeyword;
+          overrideTitleKeyword !== undefined
+            ? overrideTitleKeyword
+            : titleKeyword;
         const res = await API.get('/api/user/messages/self', {
           params: {
             p: targetPage,
@@ -93,9 +101,13 @@ const UserMessageModal = ({ visible, onClose, onReadStateChanged, t, isMobile })
       }
       setMarkingID(messageItem.id);
       try {
-        const res = await API.post(`/api/user/messages/${messageItem.id}/read`, null, {
-          skipErrorHandler: true,
-        });
+        const res = await API.post(
+          `/api/user/messages/${messageItem.id}/read`,
+          null,
+          {
+            skipErrorHandler: true,
+          },
+        );
         const { success, message } = res.data || {};
         if (!success) {
           showError(message || t('标记已读失败'));
@@ -273,7 +285,10 @@ const UserMessageModal = ({ visible, onClose, onReadStateChanged, t, isMobile })
       <div className='max-h-[60vh] overflow-y-auto pr-1'>
         {loading ? (
           <div className='space-y-3'>
-            <Skeleton placeholder={<Skeleton.Title style={{ width: '80%' }} />} loading />
+            <Skeleton
+              placeholder={<Skeleton.Title style={{ width: '80%' }} />}
+              loading
+            />
             <Skeleton placeholder={<Skeleton.Paragraph rows={2} />} loading />
             <Skeleton placeholder={<Skeleton.Paragraph rows={2} />} loading />
           </div>
@@ -341,4 +356,3 @@ const UserMessageModal = ({ visible, onClose, onReadStateChanged, t, isMobile })
 };
 
 export default UserMessageModal;
-

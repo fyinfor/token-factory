@@ -48,6 +48,9 @@ export default function ModelRatioSettings(props) {
     ImageRatio: '',
     AudioRatio: '',
     AudioCompletionRatio: '',
+    VideoRatio: '',
+    VideoCompletionRatio: '',
+    VideoPrice: '',
     ExposeRatioEnabled: false,
   });
   const refForm = useRef();
@@ -297,9 +300,7 @@ export default function ModelRatioSettings(props) {
           <Col xs={24} sm={16}>
             <Form.TextArea
               label={t('音频输出倍率（仅部分模型支持该计费）')}
-              extraText={t(
-                '音频输出相关的倍率设置，键为模型名称，值为倍率',
-              )}
+              extraText={t('音频输出相关的倍率设置，键为模型名称，值为倍率')}
               placeholder={t(
                 '为一个 JSON 文本，键为模型名称，值为倍率，例如：{"gpt-4o-realtime": 2}',
               )}
@@ -316,6 +317,74 @@ export default function ModelRatioSettings(props) {
               onChange={(value) =>
                 setInputs({ ...inputs, AudioCompletionRatio: value })
               }
+            />
+          </Col>
+        </Row>
+        <Row gutter={16}>
+          <Col xs={24} sm={16}>
+            <Form.TextArea
+              label={t('视频输入倍率（仅部分模型支持该计费）')}
+              extraText={t(
+                '视频输入相关的倍率设置，键为模型名称，值为倍率；按 token 计费时 token 数 = (输入时长 + 输出时长) × 宽 × 高 × 帧率 / 1024',
+              )}
+              placeholder={t('为一个 JSON 文本，键为模型名称，值为倍率')}
+              field={'VideoRatio'}
+              autosize={{ minRows: 6, maxRows: 12 }}
+              trigger='blur'
+              stopValidateWithError
+              rules={[
+                {
+                  validator: (rule, value) => verifyJSON(value),
+                  message: '不是合法的 JSON 字符串',
+                },
+              ]}
+              onChange={(value) => setInputs({ ...inputs, VideoRatio: value })}
+            />
+          </Col>
+        </Row>
+        <Row gutter={16}>
+          <Col xs={24} sm={16}>
+            <Form.TextArea
+              label={t('视频输出倍率（仅部分模型支持该计费）')}
+              extraText={t('视频输出相关的倍率设置，键为模型名称，值为倍率')}
+              placeholder={t('为一个 JSON 文本，键为模型名称，值为倍率')}
+              field={'VideoCompletionRatio'}
+              autosize={{ minRows: 6, maxRows: 12 }}
+              trigger='blur'
+              stopValidateWithError
+              rules={[
+                {
+                  validator: (rule, value) => verifyJSON(value),
+                  message: '不是合法的 JSON 字符串',
+                },
+              ]}
+              onChange={(value) =>
+                setInputs({ ...inputs, VideoCompletionRatio: value })
+              }
+            />
+          </Col>
+        </Row>
+        <Row gutter={16}>
+          <Col xs={24} sm={16}>
+            <Form.TextArea
+              label={t('视频按次价格（每生成一个视频的固定金额）')}
+              extraText={t(
+                '当模型按视频条数计费时使用，键为模型名称，值为美元。配置后会优先于视频倍率生效',
+              )}
+              placeholder={t(
+                '为一个 JSON 文本，键为模型名称，值为美元，例如：{"sora-1": 0.2}',
+              )}
+              field={'VideoPrice'}
+              autosize={{ minRows: 6, maxRows: 12 }}
+              trigger='blur'
+              stopValidateWithError
+              rules={[
+                {
+                  validator: (rule, value) => verifyJSON(value),
+                  message: '不是合法的 JSON 字符串',
+                },
+              ]}
+              onChange={(value) => setInputs({ ...inputs, VideoPrice: value })}
             />
           </Col>
         </Row>

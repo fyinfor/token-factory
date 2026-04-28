@@ -18,7 +18,15 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { Card, Avatar, Typography, Collapse, Tag, Button, Toast } from '@douyinfe/semi-ui';
+import {
+  Card,
+  Avatar,
+  Typography,
+  Collapse,
+  Tag,
+  Button,
+  Toast,
+} from '@douyinfe/semi-ui';
 import { IconListView, IconCopy } from '@douyinfe/semi-icons';
 import { getUsedGroupContext } from '../../../../../helpers/utils';
 
@@ -71,9 +79,10 @@ const ModelChannelList = ({
   }, [modelData.channel_list, t]);
 
   // 生成所有面板的 keys，默认全部展开
-  const allKeys = useMemo(() =>
-    groupedChannels.map(group => `group-${group.supplierId}`)
-  , [groupedChannels]);
+  const allKeys = useMemo(
+    () => groupedChannels.map((group) => `group-${group.supplierId}`),
+    [groupedChannels],
+  );
 
   // 使用字符串形式来稳定比较
   const allKeysStr = allKeys.join(',');
@@ -97,7 +106,8 @@ const ModelChannelList = ({
       const priceUSD = nominalRatio * 2 * usedGroupRatio;
       const rawDisplayPrice = displayPrice(priceUSD);
       const unitDivisor = tokenUnit === 'K' ? 1000 : 1;
-      const numericPrice = parseFloat(rawDisplayPrice.replace(/[^0-9.]/g, '')) / unitDivisor;
+      const numericPrice =
+        parseFloat(rawDisplayPrice.replace(/[^0-9.]/g, '')) / unitDivisor;
 
       let symbol = '$';
       if (currency === 'CNY') {
@@ -128,7 +138,10 @@ const ModelChannelList = ({
       const current = calculatePrice(Number(channelRatio));
       let original = null;
       let discount = 0;
-      if (hasRatioValue(rootRatio) && Number(rootRatio) > Number(channelRatio)) {
+      if (
+        hasRatioValue(rootRatio) &&
+        Number(rootRatio) > Number(channelRatio)
+      ) {
         const root = calculatePrice(Number(rootRatio));
         if (root.value > current.value && root.value > 0) {
           discount = Math.round((1 - current.value / root.value) * 100);
@@ -146,30 +159,44 @@ const ModelChannelList = ({
     );
 
     // 输出
-    if (hasRatioValue(channel.model_ratio) && hasRatioValue(channel.completion_ratio)) {
-      const chOut = Number(channel.model_ratio) * Number(channel.completion_ratio);
+    if (
+      hasRatioValue(channel.model_ratio) &&
+      hasRatioValue(channel.completion_ratio)
+    ) {
+      const chOut =
+        Number(channel.model_ratio) * Number(channel.completion_ratio);
       const rootOut =
-        hasRatioValue(modelData?.model_ratio) && hasRatioValue(modelData?.completion_ratio)
+        hasRatioValue(modelData?.model_ratio) &&
+        hasRatioValue(modelData?.completion_ratio)
           ? Number(modelData.model_ratio) * Number(modelData.completion_ratio)
           : null;
       items.push(makeItem(t('输出价格'), chOut, rootOut));
     }
 
     // 缓存读取
-    if (hasRatioValue(channel.model_ratio) && hasRatioValue(channel.cache_ratio)) {
+    if (
+      hasRatioValue(channel.model_ratio) &&
+      hasRatioValue(channel.cache_ratio)
+    ) {
       const chC = Number(channel.model_ratio) * Number(channel.cache_ratio);
       const rootC =
-        hasRatioValue(modelData?.model_ratio) && hasRatioValue(modelData?.cache_ratio)
+        hasRatioValue(modelData?.model_ratio) &&
+        hasRatioValue(modelData?.cache_ratio)
           ? Number(modelData.model_ratio) * Number(modelData.cache_ratio)
           : null;
       items.push(makeItem(t('缓存读取价格'), chC, rootC));
     }
 
     // 缓存创建
-    if (hasRatioValue(channel.model_ratio) && hasRatioValue(channel.create_cache_ratio)) {
-      const chCC = Number(channel.model_ratio) * Number(channel.create_cache_ratio);
+    if (
+      hasRatioValue(channel.model_ratio) &&
+      hasRatioValue(channel.create_cache_ratio)
+    ) {
+      const chCC =
+        Number(channel.model_ratio) * Number(channel.create_cache_ratio);
       const rootCC =
-        hasRatioValue(modelData?.model_ratio) && hasRatioValue(modelData?.create_cache_ratio)
+        hasRatioValue(modelData?.model_ratio) &&
+        hasRatioValue(modelData?.create_cache_ratio)
           ? Number(modelData.model_ratio) * Number(modelData.create_cache_ratio)
           : null;
       items.push(makeItem(t('缓存创建价格'), chCC, rootCC));
@@ -190,7 +217,7 @@ const ModelChannelList = ({
           </div>
         </div>
       </div>
-      
+
       <Collapse activeKey={activeKey} onChange={setActiveKey}>
         {groupedChannels.map((group) => (
           <Collapse.Panel
@@ -213,17 +240,23 @@ const ModelChannelList = ({
               {group.channels.map((channel, idx) => {
                 const channelItems = formatChannelInfo(channel);
                 const channelPath = `${channel.supplier_alias}/${modelData.model_name}/${channel.channel_no}`;
-                
+
                 const handleCopy = () => {
-                  navigator.clipboard.writeText(channelPath).then(() => {
-                    Toast.success({ content: t('已复制通道') });
-                  }).catch(() => {
-                    Toast.error({ content: t('复制失败') });
-                  });
+                  navigator.clipboard
+                    .writeText(channelPath)
+                    .then(() => {
+                      Toast.success({ content: t('已复制通道') });
+                    })
+                    .catch(() => {
+                      Toast.error({ content: t('复制失败') });
+                    });
                 };
-                
+
                 return (
-                  <div key={`${channel.channel_id}-${idx}`} className='flex gap-3 items-start'>
+                  <div
+                    key={`${channel.channel_id}-${idx}`}
+                    className='flex gap-3 items-start'
+                  >
                     <div className='flex items-center justify-center min-w-[24px] h-[24px] rounded-full bg-blue-100 text-blue-600 text-xs font-semibold mt-3'>
                       {channel.channel_no}
                     </div>
@@ -238,7 +271,9 @@ const ModelChannelList = ({
                               key={item.label}
                               className='flex items-center gap-2 flex-wrap'
                             >
-                              <span className='text-gray-600'>{item.label}:</span>
+                              <span className='text-gray-600'>
+                                {item.label}:
+                              </span>
                               {item.original && (
                                 <>
                                   <span className='text-gray-400 line-through text-xs'>

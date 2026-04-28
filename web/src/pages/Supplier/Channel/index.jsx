@@ -20,7 +20,10 @@ For commercial licensing, please contact support@quantumnous.com
 import React from 'react';
 import { Banner, Button, Empty } from '@douyinfe/semi-ui';
 import { IconAlertTriangle } from '@douyinfe/semi-icons';
-import { IllustrationNoAccess, IllustrationNoAccessDark } from '@douyinfe/semi-illustrations';
+import {
+  IllustrationNoAccess,
+  IllustrationNoAccessDark,
+} from '@douyinfe/semi-illustrations';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import CardPro from '../../../components/common/ui/CardPro';
@@ -124,11 +127,16 @@ const SupplierChannelPage = () => {
   if (!isSupplier()) {
     return (
       <div className='mt-[60px] px-2'>
-        <div className='flex items-center justify-center' style={{ minHeight: 'calc(100vh - 360px)' }}>
+        <div
+          className='flex items-center justify-center'
+          style={{ minHeight: 'calc(100vh - 360px)' }}
+        >
           <Empty
             image={<IllustrationNoAccess style={{ width: 200, height: 200 }} />}
-            darkModeImage={<IllustrationNoAccessDark style={{ width: 200, height: 200 }} />}
-            layout="horizontal"
+            darkModeImage={
+              <IllustrationNoAccessDark style={{ width: 200, height: 200 }} />
+            }
+            layout='horizontal'
             title={t('需要供应商权限')}
             description={t('您需要先成为供应商才能访问此页面。')}
           >

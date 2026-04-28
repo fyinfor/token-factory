@@ -26,17 +26,47 @@ const mockSearchData = [
     month: '四月 2026',
     items: [
       { id: 1, name: 'Google: Gemma 4 31B', icon: '⬥', color: 'text-blue-500' },
-      { id: 2, name: 'Qwen: Qwen3.6 Plus (free)', icon: '⬡', color: 'text-purple-500' },
-      { id: 3, name: 'Z.ai: GLM 5V Turbo', icon: '⬢', color: 'text-gray-800 dark:text-white' },
-      { id: 4, name: 'Arcee AI: Trinity Large Thinking', icon: '⬢', color: 'text-teal-500' },
-      { id: 5, name: 'xAI: Grok 4.20 Multi-Agent', icon: '⚡', color: 'text-gray-800 dark:text-white' },
-      { id: 6, name: 'xAI: Grok 4.20', icon: '⚡', color: 'text-gray-800 dark:text-white' },
+      {
+        id: 2,
+        name: 'Qwen: Qwen3.6 Plus (free)',
+        icon: '⬡',
+        color: 'text-purple-500',
+      },
+      {
+        id: 3,
+        name: 'Z.ai: GLM 5V Turbo',
+        icon: '⬢',
+        color: 'text-gray-800 dark:text-white',
+      },
+      {
+        id: 4,
+        name: 'Arcee AI: Trinity Large Thinking',
+        icon: '⬢',
+        color: 'text-teal-500',
+      },
+      {
+        id: 5,
+        name: 'xAI: Grok 4.20 Multi-Agent',
+        icon: '⚡',
+        color: 'text-gray-800 dark:text-white',
+      },
+      {
+        id: 6,
+        name: 'xAI: Grok 4.20',
+        icon: '⚡',
+        color: 'text-gray-800 dark:text-white',
+      },
     ],
   },
   {
     month: '三月 2026',
     items: [
-      { id: 7, name: 'Google: Lyria 3 Pro Preview', icon: '⬥', color: 'text-blue-500' },
+      {
+        id: 7,
+        name: 'Google: Lyria 3 Pro Preview',
+        icon: '⬥',
+        color: 'text-blue-500',
+      },
     ],
   },
 ];
@@ -56,7 +86,7 @@ const SearchDropdown = ({ isMobile }) => {
         .map((group) => ({
           ...group,
           items: group.items.filter((item) =>
-            item.name.toLowerCase().includes(searchValue.toLowerCase())
+            item.name.toLowerCase().includes(searchValue.toLowerCase()),
           ),
         }))
         .filter((group) => group.items.length > 0);
@@ -95,9 +125,7 @@ const SearchDropdown = ({ isMobile }) => {
         {filteredData.length > 0 ? (
           filteredData.map((group) => (
             <div key={group.month} className='py-2'>
-              <Typography.Text
-                className='!px-4 !py-2 !text-xs !font-semibold !text-semi-color-text-2 dark:!text-gray-400 uppercase tracking-wider block'
-              >
+              <Typography.Text className='!px-4 !py-2 !text-xs !font-semibold !text-semi-color-text-2 dark:!text-gray-400 uppercase tracking-wider block'>
                 {group.month}
               </Typography.Text>
               <div>
@@ -145,7 +173,9 @@ const SearchDropdown = ({ isMobile }) => {
           <Input
             ref={inputRef}
             placeholder='Search'
-            prefix={<IconSearch className='text-semi-color-text-2 dark:text-gray-400' />}
+            prefix={
+              <IconSearch className='text-semi-color-text-2 dark:text-gray-400' />
+            }
             suffix={
               <kbd className='px-1.5 py-0.5 text-xs font-semibold !text-semi-color-text-2 dark:!text-gray-400 !bg-semi-color-fill-0 dark:!bg-gray-700 border !border-semi-color-border dark:!border-gray-600 rounded'>
                 /

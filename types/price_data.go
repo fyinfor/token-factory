@@ -20,6 +20,8 @@ type PriceData struct {
 	ImageRatio           float64
 	AudioRatio           float64
 	AudioCompletionRatio float64
+	VideoRatio           float64
+	VideoCompletionRatio float64
 	OtherRatios          map[string]float64
 	UsePrice             bool
 	// ChannelPriceDiscount 非 nil 时，表示渠道折扣（百分数，100=不乘），用于与实际扣费、预扣费对齐
@@ -47,5 +49,5 @@ func (p *PriceData) ToSetting() string {
 	if p.ChannelPriceDiscount != nil {
 		chdStr = fmt.Sprintf("%f", *p.ChannelPriceDiscount)
 	}
-	return fmt.Sprintf("ModelPrice: %f, ModelRatio: %f, CompletionRatio: %f, CacheRatio: %f, GroupRatio: %f, UsePrice: %t, CacheCreationRatio: %f, CacheCreation5mRatio: %f, CacheCreation1hRatio: %f, QuotaToPreConsume: %d, ImageRatio: %f, AudioRatio: %f, AudioCompletionRatio: %f, ChannelPriceDiscount(%%): %s", p.ModelPrice, p.ModelRatio, p.CompletionRatio, p.CacheRatio, p.GroupRatioInfo.GroupRatio, p.UsePrice, p.CacheCreationRatio, p.CacheCreation5mRatio, p.CacheCreation1hRatio, p.QuotaToPreConsume, p.ImageRatio, p.AudioRatio, p.AudioCompletionRatio, chdStr)
+	return fmt.Sprintf("ModelPrice: %f, ModelRatio: %f, CompletionRatio: %f, CacheRatio: %f, GroupRatio: %f, UsePrice: %t, CacheCreationRatio: %f, CacheCreation5mRatio: %f, CacheCreation1hRatio: %f, QuotaToPreConsume: %d, ImageRatio: %f, AudioRatio: %f, AudioCompletionRatio: %f, VideoRatio: %f, VideoCompletionRatio: %f, ChannelPriceDiscount(%%): %s", p.ModelPrice, p.ModelRatio, p.CompletionRatio, p.CacheRatio, p.GroupRatioInfo.GroupRatio, p.UsePrice, p.CacheCreationRatio, p.CacheCreation5mRatio, p.CacheCreation1hRatio, p.QuotaToPreConsume, p.ImageRatio, p.AudioRatio, p.AudioCompletionRatio, p.VideoRatio, p.VideoCompletionRatio, chdStr)
 }

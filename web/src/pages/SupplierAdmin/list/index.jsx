@@ -22,7 +22,7 @@ import SuppliersPage from '../../../components/table/suppliers';
 
 const Suppliers = () => {
   return (
-    <div className="mt-[60px] px-2">
+    <div className='mt-[60px] px-2'>
       <SuppliersPage />
     </div>
   );

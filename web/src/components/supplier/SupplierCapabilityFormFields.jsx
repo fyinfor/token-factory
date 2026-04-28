@@ -60,13 +60,22 @@ const SupplierCapabilityFormFields = ({ t, onCommitmentChange }) => {
             field='supported_models'
             label={<Text strong>{t('支持的模型')}</Text>}
             placeholder={t('请输入支持的模型，回车添加')}
-            rules={[{ required: true, message: t('请填写支持的模型，输入后回车确定添加') }]}
+            rules={[
+              {
+                required: true,
+                message: t('请填写支持的模型，输入后回车确定添加'),
+              },
+            ]}
             size='large'
             style={{ width: '100%' }}
           />
         </Col>
         <Col span={24}>
-          <Form.Input field='supported_model_notes' label={<Text strong>{t('模型补充说明')}</Text>} showClear />
+          <Form.Input
+            field='supported_model_notes'
+            label={<Text strong>{t('模型补充说明')}</Text>}
+            showClear
+          />
         </Col>
         <Col span={12}>
           <Form.Select
@@ -104,15 +113,28 @@ const SupplierCapabilityFormFields = ({ t, onCommitmentChange }) => {
           />
         </Col>
         <Col span={12}>
-          <Form.Input field='supported_api_endpoint_extra' label={<Text strong>{t('API接口补充')}</Text>} showClear />
+          <Form.Input
+            field='supported_api_endpoint_extra'
+            label={<Text strong>{t('API接口补充')}</Text>}
+            showClear
+          />
         </Col>
         <Col span={12}>
-          <Form.Input field='supported_params_extra' label={<Text strong>{t('参数配置补充')}</Text>} showClear />
+          <Form.Input
+            field='supported_params_extra'
+            label={<Text strong>{t('参数配置补充')}</Text>}
+            showClear
+          />
         </Col>
         <Col span={12}>
           <Form.RadioGroup
             field='streaming_supported'
-            label={<Text strong>{t('流式响应支持')}<Text type='danger'>*</Text></Text>}
+            label={
+              <Text strong>
+                {t('流式响应支持')}
+                <Text type='danger'>*</Text>
+              </Text>
+            }
             type='button'
             options={[
               { label: t('是'), value: 'yes' },
@@ -121,12 +143,21 @@ const SupplierCapabilityFormFields = ({ t, onCommitmentChange }) => {
           />
         </Col>
         <Col span={12}>
-          <Form.Input field='streaming_notes' label={<Text strong>{t('流式响应说明')}</Text>} showClear />
+          <Form.Input
+            field='streaming_notes'
+            label={<Text strong>{t('流式响应说明')}</Text>}
+            showClear
+          />
         </Col>
         <Col span={12}>
           <Form.RadioGroup
             field='structured_output_supported'
-            label={<Text strong>{t('结构化输出支持')}<Text type='danger'>*</Text></Text>}
+            label={
+              <Text strong>
+                {t('结构化输出支持')}
+                <Text type='danger'>*</Text>
+              </Text>
+            }
             type='button'
             options={[
               { label: t('是'), value: 'yes' },
@@ -135,7 +166,11 @@ const SupplierCapabilityFormFields = ({ t, onCommitmentChange }) => {
           />
         </Col>
         <Col span={12}>
-          <Form.Input field='structured_output_notes' label={<Text strong>{t('结构化输出说明')}</Text>} showClear />
+          <Form.Input
+            field='structured_output_notes'
+            label={<Text strong>{t('结构化输出说明')}</Text>}
+            showClear
+          />
         </Col>
         <Col span={12}>
           <Form.Select
@@ -153,13 +188,25 @@ const SupplierCapabilityFormFields = ({ t, onCommitmentChange }) => {
           />
         </Col>
         <Col span={12}>
-          <Form.Input field='multimodal_extra' label={<Text strong>{t('多模态补充')}</Text>} showClear />
+          <Form.Input
+            field='multimodal_extra'
+            label={<Text strong>{t('多模态补充')}</Text>}
+            showClear
+          />
         </Col>
         <Col span={12}>
-          <Form.Input field='reference_input_price' label={<Text strong>{t('参考输入单价')}</Text>} showClear />
+          <Form.Input
+            field='reference_input_price'
+            label={<Text strong>{t('参考输入单价')}</Text>}
+            showClear
+          />
         </Col>
         <Col span={12}>
-          <Form.Input field='reference_output_price' label={<Text strong>{t('参考输出单价')}</Text>} showClear />
+          <Form.Input
+            field='reference_output_price'
+            label={<Text strong>{t('参考输出单价')}</Text>}
+            showClear
+          />
         </Col>
         <Col span={12}>
           <Form.Select
@@ -183,7 +230,12 @@ const SupplierCapabilityFormFields = ({ t, onCommitmentChange }) => {
             field='api_base_urls'
             label={<Text strong>{t('API接口地址')}</Text>}
             placeholder={t('请输入API接口地址，回车添加')}
-            rules={[{ required: true, message: t('请填写API接口地址，输入后回车确定添加') }]}
+            rules={[
+              {
+                required: true,
+                message: t('请填写API接口地址，输入后回车确定添加'),
+              },
+            ]}
             size='large'
             style={{ width: '100%' }}
           />
@@ -191,7 +243,12 @@ const SupplierCapabilityFormFields = ({ t, onCommitmentChange }) => {
         <Col span={12}>
           <Form.RadioGroup
             field='failure_billing_mode'
-            label={<Text strong>{t('故障计费规则')}<Text type='danger'>*</Text></Text>}
+            label={
+              <Text strong>
+                {t('故障计费规则')}
+                <Text type='danger'>*</Text>
+              </Text>
+            }
             type='button'
             options={[
               { label: t('计费'), value: 'bill' },
@@ -200,7 +257,11 @@ const SupplierCapabilityFormFields = ({ t, onCommitmentChange }) => {
           />
         </Col>
         <Col span={12}>
-          <Form.Input field='failure_billing_notes' label={<Text strong>{t('故障计费说明')}</Text>} showClear />
+          <Form.Input
+            field='failure_billing_notes'
+            label={<Text strong>{t('故障计费说明')}</Text>}
+            showClear
+          />
         </Col>
         <Col span={12}>
           <Form.RadioGroup
@@ -217,7 +278,13 @@ const SupplierCapabilityFormFields = ({ t, onCommitmentChange }) => {
           <Form.Checkbox
             field='truth_commitment_confirmed'
             noLabel
-            rules={[{ required: true, type: 'boolean', message: t('请勾选信息真实性承诺') }]}
+            rules={[
+              {
+                required: true,
+                type: 'boolean',
+                message: t('请勾选信息真实性承诺'),
+              },
+            ]}
             onChange={(checked) => onCommitmentChange?.(!!checked)}
           >
             {t('我承诺提交的信息真实有效，并同意平台审核')}

@@ -22,12 +22,22 @@ export function getLogOther(otherStr) {
     return {};
   }
   if (typeof otherStr === 'object') {
-    return otherStr;
+    // null is also typeof 'object'; downstream code expects a plain object.
+    return otherStr ?? {};
   }
   try {
-    return JSON.parse(otherStr);
+    const parsed = JSON.parse(otherStr);
+    // Guard against valid JSON whose decoded value is not a plain object,
+    // e.g. the literal string "null" (common for task-style logs that have
+    // no per-token billing breakdown). Downstream code dereferences fields
+    // like other.completion_ratio without optional chaining, so we must
+    // never return null / scalars here.
+    if (parsed === null || typeof parsed !== 'object') {
+      return {};
+    }
+    return parsed;
   } catch (e) {
     console.error(`Failed to parse record.other: "${otherStr}".`, e);
-    return null;
+    return {};
   }
 }

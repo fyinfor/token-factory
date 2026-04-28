@@ -21,6 +21,7 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay"
+	taskopenaivideo "github.com/QuantumNous/new-api/relay/channel/task/openaivideo"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -54,6 +55,9 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 	}
 	if channel != nil && channel.Type == constant.ChannelTypeCodex {
 		return string(constant.EndpointTypeOpenAIResponse)
+	}
+	if channel != nil && channel.Type == constant.ChannelTypeOpenAIVideo {
+		return string(constant.EndpointTypeOpenAIVideoGW)
 	}
 	return normalized
 }
@@ -167,6 +171,13 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 			localErr:          tokenFactoryError,
 			tokenFactoryError: tokenFactoryError,
 		}
+	}
+
+	// 视频生成端点走任务式异步上游协议（Sora /v1/videos、OpenAI 视频网关 /v1/videos/generations 等），
+	// 与同步 chat/embeddings/image 走的 relay.GetAdaptor 流程不兼容，因此在这里直接旁路：
+	// 仅校验上游能正确接收任务创建请求并返回 task_id，不做轮询。
+	if endpointType == string(constant.EndpointTypeOpenAIVideo) || endpointType == string(constant.EndpointTypeOpenAIVideoGW) {
+		return testChannelVideo(c, channel, testModel, endpointType, tik)
 	}
 
 	// Determine relay format based on endpoint type or request path
@@ -509,6 +520,275 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 		localErr:          nil,
 		tokenFactoryError: nil,
 		recordedModelName: recordedName,
+	}
+}
+
+// truncateForError 把请求/响应内容截短到 800 字符以内，避免错误消息过长。
+func truncateForError(s string) string {
+	const maxLen = 800
+	s = strings.TrimSpace(s)
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "...(truncated)"
+}
+
+// testChannelVideo 处理视频生成类端点（OpenAI Sora /v1/videos、OpenAI 视频网关 /v1/videos/generations）的渠道测试。
+// 视频生成是任务式异步接口，这里只验证上游能否正确创建任务（返回 task_id），不做轮询，
+// 避免长时间阻塞和测试期间产生真实视频生成费用。
+func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, endpointType string, tik time.Time) testResult {
+	endpoint, ok := common.GetDefaultEndpointInfo(constant.EndpointType(endpointType))
+	if !ok {
+		err := fmt.Errorf("unsupported video endpoint type: %s", endpointType)
+		return testResult{
+			context:           c,
+			localErr:          err,
+			tokenFactoryError: types.NewError(err, types.ErrorCodeInvalidApiType),
+		}
+	}
+
+	// 模型映射：保持与同步路径一致，使用渠道维度的 model_mapping 配置；支持链式映射，循环时退出。
+	originModel := strings.TrimSpace(testModel)
+	upstreamModel := originModel
+	if mapping := strings.TrimSpace(c.GetString("model_mapping")); mapping != "" && mapping != "{}" {
+		modelMap := make(map[string]string)
+		if err := common.UnmarshalJsonStr(mapping, &modelMap); err == nil {
+			current := upstreamModel
+			visited := map[string]bool{current: true}
+			for {
+				next, exists := modelMap[current]
+				if !exists || next == "" || next == current {
+					break
+				}
+				if visited[next] {
+					break
+				}
+				visited[next] = true
+				current = next
+			}
+			upstreamModel = current
+		}
+	}
+
+	apiKey := common.GetContextKeyString(c, constant.ContextKeyChannelKey)
+	if apiKey == "" {
+		apiKey = channel.Key
+	}
+	baseURL := strings.TrimRight(channel.GetBaseURL(), "/")
+	if baseURL == "" {
+		err := fmt.Errorf("channel base_url is empty")
+		return testResult{
+			context:           c,
+			localErr:          err,
+			tokenFactoryError: types.NewError(err, types.ErrorCodeChannelBaseUrlEmpty),
+		}
+	}
+	fullURL := baseURL + endpoint.Path
+
+	var bodyMap map[string]any
+	switch constant.EndpointType(endpointType) {
+	case constant.EndpointTypeOpenAIVideo:
+		// OpenAI Sora 风格：POST /v1/videos，body 字段参考 https://platform.openai.com/docs/api-reference/videos/create
+		bodyMap = map[string]any{
+			"model":   upstreamModel,
+			"prompt":  "a cute cat dancing in a sunny garden",
+			"size":    "720x1280",
+			"seconds": "4",
+		}
+	case constant.EndpointTypeOpenAIVideoGW:
+		// OpenAI 视频网关：根据 base URL 自动选 MaaS（Hidream 官方）或 ARK（ByteDance 兼容代理）。
+		// 提交路径统一是 /v1/videos/generations，是否带 /api/maas/gw 前缀由用户在 base URL 中决定。
+		// 两种协议的 body 结构其实一致（content 数组），仅模型字段名不同：MaaS 用 model_id，ARK 用 model。
+		// 数字人等少数 MaaS 平铺字段模型（image+sound_file）需要在自定义参数里手动调整 body，
+		// 测试入口只发主流 Seedance/Doubao 系列能通过校验的最小集合。
+		modelKey := "model"
+		if taskopenaivideo.DetectProtocol(baseURL) == taskopenaivideo.ProtocolMaaS {
+			modelKey = "model_id"
+		}
+		bodyMap = map[string]any{
+			modelKey: upstreamModel,
+			"content": []map[string]any{
+				{"type": "text", "text": "a cute cat dancing in a sunny garden  --duration 5"},
+			},
+		}
+	default:
+		err := fmt.Errorf("unsupported video endpoint type: %s", endpointType)
+		return testResult{
+			context:           c,
+			localErr:          err,
+			tokenFactoryError: types.NewError(err, types.ErrorCodeInvalidApiType),
+		}
+	}
+
+	bodyBytes, err := common.Marshal(bodyMap)
+	if err != nil {
+		return testResult{
+			context:           c,
+			localErr:          err,
+			tokenFactoryError: types.NewError(err, types.ErrorCodeJsonMarshalFailed),
+		}
+	}
+
+	method := endpoint.Method
+	if method == "" {
+		method = http.MethodPost
+	}
+	httpReq, err := http.NewRequestWithContext(c.Request.Context(), method, fullURL, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return testResult{
+			context:           c,
+			localErr:          err,
+			tokenFactoryError: types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError),
+		}
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	common.SysLog(fmt.Sprintf(
+		"video test channel #%d (%s) endpoint=%s url=%s model=%s -> upstream=%s, request body: %s",
+		channel.Id, channel.Name, endpointType, fullURL, originModel, upstreamModel, string(bodyBytes),
+	))
+
+	client := service.GetHttpClient()
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return testResult{
+			context:           c,
+			localErr:          err,
+			tokenFactoryError: types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError),
+		}
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return testResult{
+			context:           c,
+			localErr:          err,
+			tokenFactoryError: types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError),
+		}
+	}
+
+	// 无论成功失败都打印完整响应，便于排查上游字段对不上的问题。
+	common.SysLog(fmt.Sprintf(
+		"video test channel #%d response: status=%d, body=%s",
+		channel.Id, resp.StatusCode, string(respBody),
+	))
+
+	if resp.StatusCode != http.StatusOK {
+		msg := detectErrorMessageFromJSONBytes(respBody)
+		if msg == "" {
+			msg = strings.TrimSpace(string(respBody))
+		}
+		if msg == "" {
+			msg = fmt.Sprintf("upstream returned status %d", resp.StatusCode)
+		}
+		bodyErr := fmt.Errorf("status=%d, body=%s", resp.StatusCode, msg)
+		return testResult{
+			context:           c,
+			localErr:          bodyErr,
+			tokenFactoryError: types.NewOpenAIError(bodyErr, types.ErrorCodeBadResponse, http.StatusInternalServerError),
+		}
+	}
+
+	var taskID string
+	switch constant.EndpointType(endpointType) {
+	case constant.EndpointTypeOpenAIVideo:
+		// OpenAI Sora 风格：顶层 id（新接口）或 task_id（旧接口兼容）
+		taskID = strings.TrimSpace(gjson.GetBytes(respBody, "id").String())
+		if taskID == "" {
+			taskID = strings.TrimSpace(gjson.GetBytes(respBody, "task_id").String())
+		}
+		if errMsg := strings.TrimSpace(gjson.GetBytes(respBody, "error.message").String()); errMsg != "" {
+			bodyErr := fmt.Errorf("upstream error: %s, body: %s", errMsg, truncateForError(string(respBody)))
+			return testResult{
+				context:           c,
+				localErr:          bodyErr,
+				tokenFactoryError: types.NewOpenAIError(bodyErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError),
+			}
+		}
+	case constant.EndpointTypeOpenAIVideoGW:
+		// OpenAI 视频网关：两种响应格式根据顶层字段自动判断。
+		//   MaaS：{"code":0,"message":"","result":{"task_id":"..."}}
+		//         失败时 code != 0，错误消息在 message/messasge 里。
+		//   ARK： {"id":"cgt-...","model":"...","status":"queued",...}
+		//         失败时 {"error":{"code":"...","message":"...","type":"..."}}
+		if errMsg := strings.TrimSpace(gjson.GetBytes(respBody, "error.message").String()); errMsg != "" {
+			// 把完整响应附在错误里返回给前端，方便用户直接看到上游对哪些字段不满。
+			bodyErr := fmt.Errorf(
+				"upstream error: %s | request: %s | response: %s",
+				errMsg,
+				truncateForError(string(bodyBytes)),
+				truncateForError(string(respBody)),
+			)
+			return testResult{
+				context:           c,
+				localErr:          bodyErr,
+				tokenFactoryError: types.NewOpenAIError(bodyErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError),
+			}
+		}
+		// MaaS：顶层 code 字段存在且 != 0 表示失败。注意 code=0 是合法的成功值，
+		// 所以要先判断字段是否存在，再判断是否非零。
+		if codeRes := gjson.GetBytes(respBody, "code"); codeRes.Exists() && codeRes.Int() != 0 {
+			errMsg := strings.TrimSpace(gjson.GetBytes(respBody, "message").String())
+			if errMsg == "" {
+				errMsg = strings.TrimSpace(gjson.GetBytes(respBody, "messasge").String())
+			}
+			if errMsg == "" {
+				errMsg = fmt.Sprintf("upstream returned code=%d", codeRes.Int())
+			}
+			bodyErr := fmt.Errorf(
+				"upstream error: %s | request: %s | response: %s",
+				errMsg,
+				truncateForError(string(bodyBytes)),
+				truncateForError(string(respBody)),
+			)
+			return testResult{
+				context:           c,
+				localErr:          bodyErr,
+				tokenFactoryError: types.NewOpenAIError(bodyErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError),
+			}
+		}
+		// 优先取 ARK 风格的顶层 id，再取 MaaS 风格的 result.task_id，最后兜底顶层 task_id。
+		taskID = strings.TrimSpace(gjson.GetBytes(respBody, "id").String())
+		if taskID == "" {
+			taskID = strings.TrimSpace(gjson.GetBytes(respBody, "result.task_id").String())
+		}
+		if taskID == "" {
+			taskID = strings.TrimSpace(gjson.GetBytes(respBody, "task_id").String())
+		}
+	}
+
+	if taskID == "" {
+		bodyErr := fmt.Errorf("upstream did not return task_id, body: %s", string(respBody))
+		return testResult{
+			context:           c,
+			localErr:          bodyErr,
+			tokenFactoryError: types.NewOpenAIError(bodyErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError),
+		}
+	}
+
+	milliseconds := time.Since(tik).Milliseconds()
+	common.SysLog(fmt.Sprintf("video test channel #%d ok, task_id=%s, took %dms, body: %s",
+		channel.Id, taskID, milliseconds, string(respBody)))
+
+	group, _ := model.GetUserGroup(1, false)
+	model.RecordConsumeLog(c, 1, model.RecordConsumeLogParams{
+		ChannelId:      channel.Id,
+		ModelName:      originModel,
+		TokenName:      "模型测试",
+		Quota:          0,
+		Content:        fmt.Sprintf("模型测试-视频生成(task_id=%s)", taskID),
+		UseTimeSeconds: int(milliseconds / 1000),
+		IsStream:       false,
+		Group:          group,
+	})
+
+	return testResult{
+		context:           c,
+		localErr:          nil,
+		tokenFactoryError: nil,
+		recordedModelName: originModel,
 	}
 }
 

@@ -84,8 +84,7 @@ const HeaderLogo = ({
 
   const showDistributorApply =
     !hideApplyLinks && !hideDistributorApplyAsLoggedInDistributor;
-  const showSupplierApply =
-    !hideApplyLinks && !userIsSupplierUser(user);
+  const showSupplierApply = !hideApplyLinks && !userIsSupplierUser(user);
   const showApplyLinks = showDistributorApply || showSupplierApply;
 
   const distributorTo = user

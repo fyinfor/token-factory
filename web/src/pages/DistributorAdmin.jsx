@@ -368,7 +368,9 @@ export default function DistributorAdmin() {
               setProfileRealName(app.real_name || '');
               setProfileIdCard(app.id_card_no || '');
               setProfileContact(app.contact || '');
-              setProfileQualUrls(parseQualificationUrls(app.qualification_urls));
+              setProfileQualUrls(
+                parseQualificationUrls(app.qualification_urls),
+              );
             }
           }
         } catch {
@@ -590,11 +592,7 @@ export default function DistributorAdmin() {
           </Button>
           {r.status === 1 && (
             <>
-              <Button
-                size='small'
-                type='primary'
-                onClick={() => approve(r.id)}
-              >
+              <Button size='small' type='primary' onClick={() => approve(r.id)}>
                 {t('通过')}
               </Button>
               <Button
@@ -682,7 +680,9 @@ export default function DistributorAdmin() {
       render: (_, r) => (
         <div className='text-xs space-y-0.5 max-w-[200px]'>
           <div>{r.bank_name}</div>
-          <div className='text-[var(--semi-color-text-2)]'>{r.bank_account}</div>
+          <div className='text-[var(--semi-color-text-2)]'>
+            {r.bank_account}
+          </div>
         </div>
       ),
     },
@@ -728,7 +728,11 @@ export default function DistributorAdmin() {
         <div className='flex flex-wrap gap-1'>
           {r.status === 1 && (
             <>
-              <Button size='small' type='primary' onClick={() => wdApprove(r.id)}>
+              <Button
+                size='small'
+                type='primary'
+                onClick={() => wdApprove(r.id)}
+              >
                 {t('通过')}
               </Button>
               <Button
@@ -1049,7 +1053,9 @@ export default function DistributorAdmin() {
         title={t('申请详情')}
         visible={detailOpen}
         onCancel={() => setDetailOpen(false)}
-        footer={<Button onClick={() => setDetailOpen(false)}>{t('关闭')}</Button>}
+        footer={
+          <Button onClick={() => setDetailOpen(false)}>{t('关闭')}</Button>
+        }
         width={800}
       >
         {detail && (
@@ -1070,7 +1076,9 @@ export default function DistributorAdmin() {
               <Text strong>{t('联系方式')}</Text>：{detail.contact}
             </div>
             <div>
-              <Text strong className='block mb-2'>{t('资格证书')}</Text>
+              <Text strong className='block mb-2'>
+                {t('资格证书')}
+              </Text>
               <QualificationThumbnails
                 urls={parseQualificationUrls(detail.qualification_urls)}
                 onImagePreview={(u) => setQualImagePreview(u)}
@@ -1112,7 +1120,8 @@ export default function DistributorAdmin() {
             </div>
             {profileAppStatus != null ? (
               <div>
-                <Text strong>{t('申请状态')}</Text>：{appStatus(profileAppStatus)}
+                <Text strong>{t('申请状态')}</Text>：
+                {appStatus(profileAppStatus)}
               </div>
             ) : null}
             {profileNeedsManual ? (
@@ -1336,7 +1345,9 @@ export default function DistributorAdmin() {
         onCancel={() => setBpsOpen(false)}
       >
         <Text type='tertiary' size='small'>
-          {t('填写 0～100 之间的百分比，例如 10 表示 10%，10.5 表示 10.5%。填 0 表示跟随系统默认。')}
+          {t(
+            '填写 0～100 之间的百分比，例如 10 表示 10%，10.5 表示 10.5%。填 0 表示跟随系统默认。',
+          )}
         </Text>
         <Input
           className='mt-2'

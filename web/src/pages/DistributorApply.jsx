@@ -75,7 +75,12 @@ const iconLg = 22;
  * 自研圆角提示条（与主卡片 `rounded-2xl` 一致，替代 Semi Banner 直角/风格差异问题）
  * @param {'danger' | 'info' | 'success'} variant
  */
-function ApplyStatusNotice({ variant = 'info', title, className = '', children }) {
+function ApplyStatusNotice({
+  variant = 'info',
+  title,
+  className = '',
+  children,
+}) {
   const tone =
     variant === 'danger'
       ? {
@@ -200,8 +205,7 @@ export default function DistributorApply() {
   /** 记录曾为已通过，但账号已非代理（如被降级）：应允许重新提交 */
   const showReapplyAfterRevoked = app?.status === 2 && !isDist;
 
-  const shouldPrefillFormFromApp =
-    showReapplyAfterRevoked || app?.status === 3;
+  const shouldPrefillFormFromApp = showReapplyAfterRevoked || app?.status === 3;
 
   useEffect(() => {
     if (!shouldPrefillFormFromApp || !app || loading) return;
@@ -309,7 +313,10 @@ export default function DistributorApply() {
             title={t('申请已被驳回')}
           >
             {app?.reject_reason ? (
-              <div className='whitespace-pre-wrap font-normal' style={{ lineHeight: 1.6 }}>
+              <div
+                className='whitespace-pre-wrap font-normal'
+                style={{ lineHeight: 1.6 }}
+              >
                 {app.reject_reason}
               </div>
             ) : (
@@ -378,9 +385,7 @@ export default function DistributorApply() {
               multiple
               disabled={urls.length >= 5}
             >
-              <Button disabled={urls.length >= 5}>
-                {t('上传文件')}
-              </Button>
+              <Button disabled={urls.length >= 5}>{t('上传文件')}</Button>
             </Upload>
             <Text type='tertiary' size='small' className='block mt-1'>
               {t('支持图片或 PDF，最多 5 个；点击图片可大图预览')}
@@ -412,9 +417,7 @@ export default function DistributorApply() {
                         className='!absolute -right-1 -top-1 !min-w-0 z-10'
                         onClick={(e) => {
                           e.stopPropagation();
-                          setUrls((prev) =>
-                            prev.filter((_, i) => i !== idx),
-                          );
+                          setUrls((prev) => prev.filter((_, i) => i !== idx));
                         }}
                       >
                         ×
@@ -443,9 +446,7 @@ export default function DistributorApply() {
                         className='!absolute -right-1 -top-1 !min-w-0'
                         onClick={(e) => {
                           e.stopPropagation();
-                          setUrls((prev) =>
-                            prev.filter((_, i) => i !== idx),
-                          );
+                          setUrls((prev) => prev.filter((_, i) => i !== idx));
                         }}
                       >
                         ×
@@ -463,9 +464,7 @@ export default function DistributorApply() {
               loading={submitting}
               onClick={onSubmit}
             >
-              {showReapplyAfterRevoked
-                ? t('重新提交审核')
-                : t('提交申请')}
+              {showReapplyAfterRevoked ? t('重新提交审核') : t('提交申请')}
             </Button>
           </div>
         </Form>
@@ -536,7 +535,9 @@ export default function DistributorApply() {
                   type='tertiary'
                   className='distributor-apply-hero-desc mt-2 !block !text-[15px] !leading-relaxed [overflow-wrap:anywhere]'
                 >
-                  {t('请如实填写以下信息，审核通过后即可获得代理资格与邀请分成。')}
+                  {t(
+                    '请如实填写以下信息，审核通过后即可获得代理资格与邀请分成。',
+                  )}
                 </Text>
               </div>
             </section>
@@ -553,7 +554,10 @@ export default function DistributorApply() {
         visible={Boolean(previewUrl)}
         onCancel={() => setPreviewUrl(null)}
         footer={null}
-        width={Math.min(960, typeof window !== 'undefined' ? window.innerWidth - 48 : 960)}
+        width={Math.min(
+          960,
+          typeof window !== 'undefined' ? window.innerWidth - 48 : 960,
+        )}
       >
         {previewUrl &&
           (isPdfUrl(previewUrl) ? (

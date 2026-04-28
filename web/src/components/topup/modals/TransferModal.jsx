@@ -33,7 +33,10 @@ function FieldLabel({ required, children, className = '' }) {
       className={`block mb-1.5 text-[var(--semi-color-text-0)] ${className}`.trim()}
     >
       {required ? (
-        <span className='text-[var(--semi-color-danger)] mr-1 font-normal' aria-hidden>
+        <span
+          className='text-[var(--semi-color-danger)] mr-1 font-normal'
+          aria-hidden
+        >
           *
         </span>
       ) : null}
@@ -112,8 +115,12 @@ const TransferModal = ({
             >
               {t('划转额度')}
             </Typography.Text>
-            <Typography.Text type='tertiary' size='small' className='leading-snug'>
-             {t('最低')}
+            <Typography.Text
+              type='tertiary'
+              size='small'
+              className='leading-snug'
+            >
+              {t('最低')}
               {renderQuotaProp(getQuotaPerUnitProp())}
             </Typography.Text>
           </div>

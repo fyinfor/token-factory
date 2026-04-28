@@ -207,47 +207,49 @@ const HomeModelList = () => {
               </Button>
             </div>
           </div>
-          
+
           <div className='home-sidebar-filters'>
             <PricingVendors
-            filterVendor={pricingData.filterVendor}
-            setFilterVendor={pricingData.setFilterVendor}
-            models={vendorModels}
-            allModels={pricingData.models}
-            loading={pricingData.loading}
-            t={pricingData.t}
-          />
+              filterVendor={pricingData.filterVendor}
+              setFilterVendor={pricingData.setFilterVendor}
+              models={vendorModels}
+              allModels={pricingData.models}
+              loading={pricingData.loading}
+              t={pricingData.t}
+            />
 
-          <PricingQuotaTypes
-            filterQuotaType={pricingData.filterQuotaType}
-            setFilterQuotaType={pricingData.setFilterQuotaType}
-            models={quotaTypeModels}
-            loading={pricingData.loading}
-            t={pricingData.t}
-          />
+            <PricingQuotaTypes
+              filterQuotaType={pricingData.filterQuotaType}
+              setFilterQuotaType={pricingData.setFilterQuotaType}
+              models={quotaTypeModels}
+              loading={pricingData.loading}
+              t={pricingData.t}
+            />
 
-          <PricingTags
-            filterTag={pricingData.filterTag}
-            setFilterTag={pricingData.setFilterTag}
-            models={tagModels}
-            allModels={pricingData.models}
-            loading={pricingData.loading}
-            t={pricingData.t}
-          />
+            <PricingTags
+              filterTag={pricingData.filterTag}
+              setFilterTag={pricingData.setFilterTag}
+              models={tagModels}
+              allModels={pricingData.models}
+              loading={pricingData.loading}
+              t={pricingData.t}
+            />
 
-          <PricingEndpointTypes
-            filterEndpointType={pricingData.filterEndpointType}
-            setFilterEndpointType={pricingData.setFilterEndpointType}
-            models={endpointTypeModels}
-            allModels={pricingData.models}
-            loading={pricingData.loading}
-            t={pricingData.t}
-          />
+            <PricingEndpointTypes
+              filterEndpointType={pricingData.filterEndpointType}
+              setFilterEndpointType={pricingData.setFilterEndpointType}
+              models={endpointTypeModels}
+              allModels={pricingData.models}
+              loading={pricingData.loading}
+              t={pricingData.t}
+            />
           </div>
         </div>
 
         <div className='home-model-content px-4'>
-          <div className={`home-search-wrapper ${isMobile ? 'w-full mb-4' : 'w-full sticky top-[75px] z-index-[10] my-4 bg-[var(--semi-color-bg-0)] rounded-xl'}`}>
+          <div
+            className={`home-search-wrapper ${isMobile ? 'w-full mb-4' : 'w-full sticky top-[75px] z-index-[10] my-4 bg-[var(--semi-color-bg-0)] rounded-xl'}`}
+          >
             <Input
               prefix={<IconSearch />}
               placeholder={pricingData.t('模糊搜索模型名称')}

@@ -18,13 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import {
-  Avatar,
-  Card,
-  Tag,
-  Divider,
-  Typography,
-} from '@douyinfe/semi-ui';
+import { Avatar, Card, Tag, Divider, Typography } from '@douyinfe/semi-ui';
 import {
   isRoot,
   isAdmin,
@@ -128,7 +122,11 @@ const UserInfoHeader = ({ t, userState }) => {
       <div className='flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-6'>
         {/* 当前余额：标签在上、数字在下，避免与右侧统计区重叠 */}
         <div className='min-w-0 flex-1'>
-          <Typography.Text type='tertiary' size='small' className='!block mb-1.5'>
+          <Typography.Text
+            type='tertiary'
+            size='small'
+            className='!block mb-1.5'
+          >
             {t('当前余额')}
           </Typography.Text>
           <div className='text-2xl sm:text-3xl md:text-4xl font-bold tracking-wide tabular-nums break-words text-[var(--semi-color-text-0)]'>

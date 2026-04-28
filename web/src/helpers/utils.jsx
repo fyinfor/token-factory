@@ -691,7 +691,10 @@ export function getUsedGroupContext(record, selectedGroup, groupRatio) {
 
   if (selectedGroup === 'all' || usedGroupRatio === undefined) {
     let minR = Number.POSITIVE_INFINITY;
-    if (Array.isArray(record.enable_groups) && record.enable_groups.length > 0) {
+    if (
+      Array.isArray(record.enable_groups) &&
+      record.enable_groups.length > 0
+    ) {
       record.enable_groups.forEach((g) => {
         const r = groupRatio[g];
         if (r !== undefined && r < minR) {
@@ -715,9 +718,7 @@ export function getBoundsFromChannelList(record) {
     return null;
   }
   const pick = (key) =>
-    ch
-      .map((c) => Number(c[key]))
-      .filter((v) => Number.isFinite(v));
+    ch.map((c) => Number(c[key])).filter((v) => Number.isFinite(v));
   const ratios = pick('model_ratio');
   const completions = pick('completion_ratio');
   const prices = pick('model_price');
@@ -777,7 +778,9 @@ export const calculateModelPrice = ({
     const isTokensDisplay = quotaDisplayType === 'TOKENS';
     const hasChannelPricing =
       Array.isArray(record.channel_list) && record.channel_list.length > 0;
-    const chBounds = hasChannelPricing ? getBoundsFromChannelList(record) : null;
+    const chBounds = hasChannelPricing
+      ? getBoundsFromChannelList(record)
+      : null;
 
     let minRatio;
     let maxRatio;
@@ -807,7 +810,7 @@ export const calculateModelPrice = ({
     const inputRatioPriceUSD = minRatio * 2 * usedGroupRatio;
     const minInputRatioPriceUSD = minRatio * 2 * usedGroupRatio;
     const maxInputRatioPriceUSD = maxRatio * 2 * usedGroupRatio;
-    
+
     const unitDivisor = tokenUnit === 'K' ? 1000 : 1;
     const unitLabel = tokenUnit === 'K' ? 'K' : 'M';
     const hasRatioValue = (value) =>
@@ -877,13 +880,19 @@ export const calculateModelPrice = ({
       completionPrice: formatTokenPrice(
         inputRatioPriceUSD * completionSingleRatio,
       ),
-      completionPriceMin: hasRange ? formatTokenPrice(minInputRatioPriceUSD * minCompletionRatio) : null,
-      completionPriceMax: hasRange ? formatTokenPrice(maxInputRatioPriceUSD * maxCompletionRatio) : null,
+      completionPriceMin: hasRange
+        ? formatTokenPrice(minInputRatioPriceUSD * minCompletionRatio)
+        : null,
+      completionPriceMax: hasRange
+        ? formatTokenPrice(maxInputRatioPriceUSD * maxCompletionRatio)
+        : null,
       cachePrice: hasRatioValue(record.cache_ratio)
         ? formatTokenPrice(inputRatioPriceUSD * Number(record.cache_ratio))
         : null,
       createCachePrice: hasRatioValue(record.create_cache_ratio)
-        ? formatTokenPrice(inputRatioPriceUSD * Number(record.create_cache_ratio))
+        ? formatTokenPrice(
+            inputRatioPriceUSD * Number(record.create_cache_ratio),
+          )
         : null,
       imagePrice: hasRatioValue(record.image_ratio)
         ? formatTokenPrice(inputRatioPriceUSD * Number(record.image_ratio))
@@ -1011,11 +1020,7 @@ export const calculatePriceRange = ({
   return null;
 };
 
-export const getModelPriceItems = (
-  priceData,
-  t,
-  quotaDisplayType = 'USD',
-) => {
+export const getModelPriceItems = (priceData, t, quotaDisplayType = 'USD') => {
   if (priceData.isPerToken) {
     if (quotaDisplayType === 'TOKENS' || priceData.isTokensDisplay) {
       return [
@@ -1068,7 +1073,7 @@ export const getModelPriceItems = (
     }
 
     const unitSuffix = ` / 1${priceData.unitLabel} Tokens`;
-    
+
     // 格式化价格显示，支持范围
     const formatPriceValue = (price, minPrice, maxPrice) => {
       if (priceData.hasRange && minPrice && maxPrice && minPrice !== maxPrice) {
@@ -1076,18 +1081,26 @@ export const getModelPriceItems = (
       }
       return price;
     };
-    
+
     return [
       {
         key: 'input',
         label: t('输入价格'),
-        value: formatPriceValue(priceData.inputPrice, priceData.inputPriceMin, priceData.inputPriceMax),
+        value: formatPriceValue(
+          priceData.inputPrice,
+          priceData.inputPriceMin,
+          priceData.inputPriceMax,
+        ),
         suffix: unitSuffix,
       },
       {
         key: 'completion',
         label: t('输出价格'),
-        value: formatPriceValue(priceData.completionPrice, priceData.completionPriceMin, priceData.completionPriceMax),
+        value: formatPriceValue(
+          priceData.completionPrice,
+          priceData.completionPriceMin,
+          priceData.completionPriceMax,
+        ),
         suffix: unitSuffix,
       },
       {
@@ -1108,7 +1121,10 @@ export const getModelPriceItems = (
         value: priceData.audioOutputPrice,
         suffix: unitSuffix,
       },
-    ].filter((item) => item.value !== null && item.value !== undefined && item.value !== '');
+    ].filter(
+      (item) =>
+        item.value !== null && item.value !== undefined && item.value !== '',
+    );
   }
 
   return [
@@ -1118,7 +1134,10 @@ export const getModelPriceItems = (
       value: priceData.price,
       suffix: ` / ${t('次')}`,
     },
-  ].filter((item) => item.value !== null && item.value !== undefined && item.value !== '');
+  ].filter(
+    (item) =>
+      item.value !== null && item.value !== undefined && item.value !== '',
+  );
 };
 
 // 格式化价格信息（用于卡片视图）

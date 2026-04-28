@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/lingyiwanwu"
 	"github.com/QuantumNous/new-api/relay/channel/minimax"
 	"github.com/QuantumNous/new-api/relay/channel/moonshot"
+	taskopenaivideo "github.com/QuantumNous/new-api/relay/channel/task/openaivideo"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -87,6 +88,14 @@ func init() {
 			OwnedBy: "midjourney",
 		})
 	}
+	for _, modelName := range taskopenaivideo.ModelList {
+		openAIModels = append(openAIModels, dto.OpenAIModels{
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: taskopenaivideo.ChannelName,
+		})
+	}
 	openAIModelsMap = make(map[string]dto.OpenAIModels)
 	for _, aiModel := range openAIModels {
 		openAIModelsMap[aiModel.Id] = aiModel
@@ -104,6 +113,9 @@ func init() {
 		adaptor.Init(meta)
 		channelId2Models[i] = adaptor.GetModelList()
 	}
+	// 任务式渠道（如 OpenAI 视频网关）不走 ChannelType2APIType，需要手动登记默认
+	// 模型列表，否则前端「获取模型列表」按钮拿不到内置模型。
+	channelId2Models[constant.ChannelTypeOpenAIVideo] = taskopenaivideo.ModelList
 	openAIModels = lo.UniqBy(openAIModels, func(m dto.OpenAIModels) string {
 		return m.Id
 	})

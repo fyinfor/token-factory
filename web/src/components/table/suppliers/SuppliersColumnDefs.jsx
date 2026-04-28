@@ -55,13 +55,21 @@ export const getSuppliersColumns = (t, openEdit, handleDeactivate) => {
       title: t('企业Logo'),
       dataIndex: 'company_logo_url',
       width: 120,
-      render: (text) => text ? (
-        <img
-          src={text}
-          alt={t('企业Logo')}
-          style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover' }}
-        />
-      ) : '-',
+      render: (text) =>
+        text ? (
+          <img
+            src={text}
+            alt={t('企业Logo')}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 6,
+              objectFit: 'cover',
+            }}
+          />
+        ) : (
+          '-'
+        ),
     },
     {
       title: t('供应商别名'),
