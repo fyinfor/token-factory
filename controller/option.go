@@ -28,6 +28,8 @@ var completionRatioMetaOptionKeys = []string{
 	"VideoRatio",
 	"VideoCompletionRatio",
 	"VideoPrice",
+	"VideoPricingRules",
+	"ChannelVideoPricingRules",
 }
 
 func collectModelNamesFromOptionValue(raw string, modelNames map[string]struct{}) {
@@ -443,6 +445,24 @@ func UpdateOption(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
 				"message": "视频按次价格设置失败: " + err.Error(),
+			})
+			return
+		}
+	case "VideoPricingRules":
+		err = ratio_setting.UpdateVideoPricingRulesByJSONString(option.Value.(string))
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "视频规则价格设置失败: " + err.Error(),
+			})
+			return
+		}
+	case "ChannelVideoPricingRules":
+		err = ratio_setting.UpdateChannelVideoPricingRulesByJSONString(option.Value.(string))
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "渠道视频规则价格设置失败: " + err.Error(),
 			})
 			return
 		}

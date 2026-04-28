@@ -93,6 +93,10 @@ export default function SupplierModelPricingEditor({
     () => parseJSON(options.ChannelVideoPrice),
     [options.ChannelVideoPrice],
   );
+  const channelVideoPricingRules = useMemo(
+    () => parseJSON(options.ChannelVideoPricingRules),
+    [options.ChannelVideoPricingRules],
+  );
 
   const activeChannelId = channelId === 'all' ? '' : channelId;
 
@@ -241,6 +245,11 @@ export default function SupplierModelPricingEditor({
         null,
         2,
       ),
+      VideoPricingRules: JSON.stringify(
+        channelVideoPricingRules[activeChannelId] || {},
+        null,
+        2,
+      ),
     };
   }, [
     activeChannelId,
@@ -254,6 +263,7 @@ export default function SupplierModelPricingEditor({
     channelModelRatio,
     channelVideoCompletionRatio,
     channelVideoPrice,
+    channelVideoPricingRules,
     channelVideoRatio,
     options,
     supplierChannelMaps,
@@ -336,6 +346,10 @@ export default function SupplierModelPricingEditor({
       [
         'ChannelVideoPrice',
         mergeChannelData(channelVideoPrice, output.VideoPrice),
+      ],
+      [
+        'ChannelVideoPricingRules',
+        mergeChannelData(channelVideoPricingRules, output.VideoPricingRules),
       ],
     ].map(([key, value]) =>
       API.put('/api/option/', { key, value: JSON.stringify(value, null, 2) }),

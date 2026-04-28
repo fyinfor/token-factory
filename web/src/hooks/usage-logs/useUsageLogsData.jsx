@@ -506,6 +506,10 @@ export const useLogsData = () => {
                 other?.file_search_call_count || 0,
                 billingDisplayMode,
                 true,
+                other?.video_ratio || 0,
+                other?.video_completion_ratio || 1.0,
+                other?.video_output_tokens || 0,
+                other?.video_input_text_tokens || 0,
               ),
         });
         if (logs[i]?.content) {
@@ -580,6 +584,10 @@ export const useLogsData = () => {
                 other?.file_search_call_count || 0,
                 billingDisplayMode,
                 true,
+                other?.video_ratio || 0,
+                other?.video_completion_ratio || 1.0,
+                other?.video_output_tokens || 0,
+                other?.video_input_text_tokens || 0,
               );
           expandDataLocal.push({
             key: t('计费过程'),
@@ -730,7 +738,11 @@ export const useLogsData = () => {
       }
       if (isAdminUser && logs[i].type !== 6) {
         let localCountMode = '';
-        if (other?.admin_info?.local_count_tokens) {
+        if (other?.billing_mode === 'video_token') {
+          // Video task channels billed via duration*W*H*fps/1024 token estimate;
+          // fully computed locally from the request body, never reads upstream usage.
+          localCountMode = t('视频本地按 token 计费');
+        } else if (other?.admin_info?.local_count_tokens) {
           localCountMode = t('本地计费');
         } else {
           localCountMode = t('上游返回');

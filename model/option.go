@@ -172,6 +172,7 @@ func InitOptionMap() {
 	common.OptionMap["ChannelVideoRatio"] = ratio_setting.ChannelVideoRatio2JSONString()
 	common.OptionMap["ChannelVideoCompletionRatio"] = ratio_setting.ChannelVideoCompletionRatio2JSONString()
 	common.OptionMap["ChannelVideoPrice"] = ratio_setting.ChannelVideoPrice2JSONString()
+	common.OptionMap["ChannelVideoPricingRules"] = ratio_setting.ChannelVideoPricingRules2JSONString()
 	common.OptionMap["SupplierModelPrice"] = ratio_setting.SupplierModelPrice2JSONString()
 	common.OptionMap["SupplierModelRatio"] = ratio_setting.SupplierModelRatio2JSONString()
 	common.OptionMap["UserUsableGroups"] = setting.UserUsableGroups2JSONString()
@@ -182,6 +183,7 @@ func InitOptionMap() {
 	common.OptionMap["VideoRatio"] = ratio_setting.VideoRatio2JSONString()
 	common.OptionMap["VideoCompletionRatio"] = ratio_setting.VideoCompletionRatio2JSONString()
 	common.OptionMap["VideoPrice"] = ratio_setting.VideoPrice2JSONString()
+	common.OptionMap["VideoPricingRules"] = ratio_setting.VideoPricingRules2JSONString()
 	common.OptionMap["TopUpLink"] = common.TopUpLink
 	//common.OptionMap["ChatLink"] = common.ChatLink
 	//common.OptionMap["ChatLink2"] = common.ChatLink2
@@ -608,6 +610,8 @@ func updateOptionMap(key string, value string) (err error) {
 		err = ratio_setting.UpdateChannelVideoCompletionRatioByJSONString(value)
 	case "ChannelVideoPrice":
 		err = ratio_setting.UpdateChannelVideoPriceByJSONString(value)
+	case "ChannelVideoPricingRules":
+		err = ratio_setting.UpdateChannelVideoPricingRulesByJSONString(value)
 	case "SupplierModelPrice":
 		err = ratio_setting.UpdateSupplierModelPriceByJSONString(value)
 	case "SupplierModelRatio":
@@ -634,6 +638,8 @@ func updateOptionMap(key string, value string) (err error) {
 		err = ratio_setting.UpdateVideoCompletionRatioByJSONString(value)
 	case "VideoPrice":
 		err = ratio_setting.UpdateVideoPriceByJSONString(value)
+	case "VideoPricingRules":
+		err = ratio_setting.UpdateVideoPricingRulesByJSONString(value)
 	case "TopUpLink":
 		common.TopUpLink = value
 	//case "ChatLink":
