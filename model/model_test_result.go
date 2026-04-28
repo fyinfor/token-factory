@@ -5,6 +5,35 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+
+	"gorm.io/gorm"
+)
+
+// 熔断状态机三态，写入 ModelTestResult.CircuitState；空字符串视为 CircuitStateClosed（兼容旧行）。
+const (
+	CircuitStateClosed   = "closed"
+	CircuitStateOpen     = "open"
+	CircuitStateHalfOpen = "half_open"
+)
+
+// 健康信号来源；用于区分一次写入是测试触发还是真实流量回写，便于排错与运营观测。
+const (
+	HealthSignalSourceManual    = "manual"
+	HealthSignalSourceScheduled = "scheduled"
+	HealthSignalSourceOnboard   = "onboard"
+	HealthSignalSourceRelay     = "relay"
+)
+
+// 错误分类枚举：把上游返回的 HTTP 状态/错误对象归一化到少量类目，驱动差异化熔断与告警。
+const (
+	ErrorCategoryNone        = ""
+	ErrorCategoryTimeout     = "timeout"
+	ErrorCategoryRateLimit   = "rate_limit"
+	ErrorCategoryAuth        = "auth"
+	ErrorCategoryBadRequest  = "bad_request"
+	ErrorCategoryUpstream5xx = "upstream_5xx"
+	ErrorCategoryParse       = "parse_error"
+	ErrorCategoryOther       = "other"
 )
 
 // ModelTestResult 记录“某渠道 + 某模型”的最近一次测试结果与累计统计。
@@ -31,6 +60,37 @@ type ModelTestResult struct {
 	ManualDisplayResponseTime int `json:"manual_display_response_time" gorm:"default:0;comment:运营展示用响应耗时(毫秒) 0=不覆盖"`
 	// ManualStabilityGrade 运营手动覆盖的稳定性等级 1-5，0 表示不覆盖（展示仍可按 LastResponseTime 分档）；与 ManualDisplayResponseTime 可同时使用，以手动为准参与 UI。
 	ManualStabilityGrade int `json:"manual_stability_grade" gorm:"default:0;comment:运营展示用稳定性等级1-5 0=不覆盖"`
+
+	// === 智能路由健康度字段（PR1 加入；GORM AutoMigrate 自动添加列） ===
+	// 老行迁移后字段全部为 0 / 空串：路由消费方需把 0 / 空串视为「未估计」并退化到 LastResponseTime / 全局默认。
+
+	// LastTtftMs 最近一次首 token 时延（毫秒）；非流式或未采样为 0。
+	LastTtftMs int `json:"last_ttft_ms" gorm:"default:0;comment:最近一次首token时延(ms) 0=未采样"`
+	// LastThroughputTps 最近一次实测吞吐（输出 token/秒）；未采样为 0。
+	LastThroughputTps float64 `json:"last_throughput_tps" gorm:"default:0;comment:最近一次实测吞吐(tps) 0=未采样"`
+	// LatencyEwmaMs 指数加权平均时延（毫秒），α 见 service.channelHealthEwmaAlpha；驱动路由 LatencyP50Seconds 估算。
+	LatencyEwmaMs float64 `json:"latency_ewma_ms" gorm:"default:0;comment:EWMA时延(ms) 0=未估计"`
+	// LatencyP50Ms / LatencyP95Ms 滚动百分位估算（PR2 写入；当前列预留）。
+	LatencyP50Ms int `json:"latency_p50_ms" gorm:"default:0;comment:滚动P50时延(ms) 0=未估计"`
+	LatencyP95Ms int `json:"latency_p95_ms" gorm:"default:0;comment:滚动P95时延(ms) 0=未估计"`
+	// RecentSuccessRate 最近窗口内成功率 [0,1]；样本不足时为 0 且 RecentSampleCount<阈值，路由应忽略该信号。
+	RecentSuccessRate float64 `json:"recent_success_rate" gorm:"default:0;comment:最近窗口成功率[0,1]"`
+	// RecentSampleCount 最近窗口内参与统计的请求数（含成功+失败）；过小（<failureMinRequests）时不可信。
+	RecentSampleCount int `json:"recent_sample_count" gorm:"default:0;comment:最近窗口样本数"`
+	// ConsecutiveFailCount 连续失败次数；恢复一次成功即清零。
+	ConsecutiveFailCount int `json:"consecutive_fail_count" gorm:"default:0;comment:连续失败次数"`
+	// UnhealthyUntil 熔断到期 Unix 秒时间戳；now < UnhealthyUntil 时路由视为不健康，跳过候选。0 表示无熔断。
+	UnhealthyUntil int64 `json:"unhealthy_until" gorm:"bigint;default:0;comment:熔断到期(Unix秒) 0=未熔断"`
+	// CircuitState 熔断状态机：closed / open / half_open；空串等价 closed（兼容旧行）。
+	CircuitState string `json:"circuit_state" gorm:"type:varchar(16);default:'';comment:熔断状态 closed|open|half_open"`
+	// LastErrorCategory 最近一次失败的类目（timeout / rate_limit / auth / bad_request / upstream_5xx / parse_error / other）；成功时为空。
+	LastErrorCategory string `json:"last_error_category" gorm:"type:varchar(32);default:'';comment:最近一次错误类目"`
+	// LastHttpStatus 最近一次失败的 HTTP 状态码；成功或无 HTTP 上下文时为 0。
+	LastHttpStatus int `json:"last_http_status" gorm:"default:0;comment:最近一次失败HTTP状态码 0=无"`
+	// LastTestEndpointType 最近一次测试/调用使用的端点类型（chat / responses / embeddings 等）；用于区分同渠道多端点。
+	LastTestEndpointType string `json:"last_test_endpoint_type" gorm:"type:varchar(64);default:'';comment:最近一次端点类型"`
+	// LastSignalSource 最近一次健康信号来源（manual / scheduled / onboard / relay）；便于排错。
+	LastSignalSource string `json:"last_signal_source" gorm:"type:varchar(16);default:'';comment:最近一次信号来源"`
 }
 
 // TableName 显式表名，避免 GORM 命名与迁移/手工表名不一致导致查询为空。
@@ -38,38 +98,200 @@ func (ModelTestResult) TableName() string {
 	return "model_test_results"
 }
 
-// UpsertModelTestResult 按 (channel_id, model_name) 更新模型测试结果；不存在则插入。
+// HealthSignal 是 UpsertModelTestResultSignal 的入参，所有「快照型」字段用指针表示「nil=不更新该列」，
+// 累计计数（TestCountSuccess/Fail）始终 +1（与旧 Upsert 行为一致）。
+// 设计要点：
+//   - LatencyP50/P95、CircuitState、UnhealthyUntil 等字段允许置空（指针指向零值），与「未提供」区分；
+//   - 调用方一次构造一个 HealthSignal，避免在 service 层散落多个 update map。
+type HealthSignal struct {
+	ChannelID        int
+	ModelName        string
+	Success          bool
+	ResponseTimeMs   int64
+	Message          string
+	Source           string
+
+	// 以下为 PR1 新增的可选健康度快照字段；nil 表示该次不覆盖。
+	TtftMs               *int
+	ThroughputTps        *float64
+	LatencyEwmaMs        *float64
+	LatencyP50Ms         *int
+	LatencyP95Ms         *int
+	RecentSuccessRate    *float64
+	RecentSampleCount    *int
+	ConsecutiveFailCount *int
+	UnhealthyUntil       *int64
+	CircuitState         *string
+	LastErrorCategory    *string
+	LastHttpStatus       *int
+	LastTestEndpointType *string
+}
+
+// UpsertModelTestResult 旧签名兼容入口：仅写入「最近一次测试」基础字段与累计计数，不影响新增的健康度列。
+// 行为与 PR1 之前完全一致（包括不写 last_signal_source），便于 controller 层零改动；新代码请直接调用 UpsertModelTestResultSignal。
 func UpsertModelTestResult(channelId int, modelName string, success bool, responseTime int64, message string) error {
-	modelName = strings.TrimSpace(modelName)
-	if channelId <= 0 || modelName == "" {
+	return UpsertModelTestResultSignal(HealthSignal{
+		ChannelID:      channelId,
+		ModelName:      modelName,
+		Success:        success,
+		ResponseTimeMs: responseTime,
+		Message:        message,
+	})
+}
+
+// UpsertModelTestResultSignal 按 (channel_id, model_name) 更新模型测试结果；不存在则插入。
+//   - 始终更新「最近一次」类字段（last_test_success / last_test_time / last_response_time / last_test_message）；
+//   - 累计计数 test_count_success / test_count_fail 始终 +1；
+//   - HealthSignal 中非 nil 的指针字段才会写入对应列（避免误覆盖正在估算中的滚动指标）；
+//   - last_signal_source 在 Source 非空时写入，否则保持原值。
+func UpsertModelTestResultSignal(s HealthSignal) error {
+	modelName := strings.TrimSpace(s.ModelName)
+	if s.ChannelID <= 0 || modelName == "" {
 		return nil
 	}
 	now := common.GetTimestamp()
+
+	// 初始行（FirstOrCreate 命中插入分支时使用）：把可选字段也填上，避免新行落空值。
 	result := &ModelTestResult{
-		ChannelId:        channelId,
+		ChannelId:        s.ChannelID,
 		ModelName:        modelName,
-		LastTestSuccess:  success,
+		LastTestSuccess:  s.Success,
 		LastTestTime:     now,
-		LastResponseTime: int(responseTime),
-		LastTestMessage:  message,
+		LastResponseTime: int(s.ResponseTimeMs),
+		LastTestMessage:  s.Message,
+		LastSignalSource: s.Source,
 	}
-	if success {
+	if s.Success {
 		result.TestCountSuccess = 1
 	} else {
 		result.TestCountFail = 1
 	}
+	applySignalToInsertRow(result, s)
+
+	// Update 分支：基础字段 + 累计计数 + 可选快照字段。
 	update := map[string]interface{}{
-		"last_test_success":  success,
+		"last_test_success":  s.Success,
 		"last_test_time":     now,
-		"last_response_time": int(responseTime),
-		"last_test_message":  message,
+		"last_response_time": int(s.ResponseTimeMs),
+		"last_test_message":  s.Message,
 	}
-	if success {
+	if s.Source != "" {
+		update["last_signal_source"] = s.Source
+	}
+	if s.Success {
 		update["test_count_success"] = DB.Raw("test_count_success + 1")
 	} else {
 		update["test_count_fail"] = DB.Raw("test_count_fail + 1")
 	}
-	return DB.Where("channel_id = ? AND model_name = ?", channelId, modelName).Assign(update).FirstOrCreate(result).Error
+	applySignalToUpdateMap(update, s)
+
+	return DB.Where("channel_id = ? AND model_name = ?", s.ChannelID, modelName).
+		Assign(update).
+		FirstOrCreate(result).Error
+}
+
+// applySignalToInsertRow 把 HealthSignal 中非 nil 的字段拷贝到新行结构体（仅 FirstOrCreate 插入分支生效）。
+func applySignalToInsertRow(row *ModelTestResult, s HealthSignal) {
+	if s.TtftMs != nil {
+		row.LastTtftMs = *s.TtftMs
+	}
+	if s.ThroughputTps != nil {
+		row.LastThroughputTps = *s.ThroughputTps
+	}
+	if s.LatencyEwmaMs != nil {
+		row.LatencyEwmaMs = *s.LatencyEwmaMs
+	}
+	if s.LatencyP50Ms != nil {
+		row.LatencyP50Ms = *s.LatencyP50Ms
+	}
+	if s.LatencyP95Ms != nil {
+		row.LatencyP95Ms = *s.LatencyP95Ms
+	}
+	if s.RecentSuccessRate != nil {
+		row.RecentSuccessRate = *s.RecentSuccessRate
+	}
+	if s.RecentSampleCount != nil {
+		row.RecentSampleCount = *s.RecentSampleCount
+	}
+	if s.ConsecutiveFailCount != nil {
+		row.ConsecutiveFailCount = *s.ConsecutiveFailCount
+	}
+	if s.UnhealthyUntil != nil {
+		row.UnhealthyUntil = *s.UnhealthyUntil
+	}
+	if s.CircuitState != nil {
+		row.CircuitState = *s.CircuitState
+	}
+	if s.LastErrorCategory != nil {
+		row.LastErrorCategory = *s.LastErrorCategory
+	}
+	if s.LastHttpStatus != nil {
+		row.LastHttpStatus = *s.LastHttpStatus
+	}
+	if s.LastTestEndpointType != nil {
+		row.LastTestEndpointType = *s.LastTestEndpointType
+	}
+}
+
+// applySignalToUpdateMap 把 HealthSignal 中非 nil 的字段填入 GORM Assign map。
+func applySignalToUpdateMap(update map[string]interface{}, s HealthSignal) {
+	if s.TtftMs != nil {
+		update["last_ttft_ms"] = *s.TtftMs
+	}
+	if s.ThroughputTps != nil {
+		update["last_throughput_tps"] = *s.ThroughputTps
+	}
+	if s.LatencyEwmaMs != nil {
+		update["latency_ewma_ms"] = *s.LatencyEwmaMs
+	}
+	if s.LatencyP50Ms != nil {
+		update["latency_p50_ms"] = *s.LatencyP50Ms
+	}
+	if s.LatencyP95Ms != nil {
+		update["latency_p95_ms"] = *s.LatencyP95Ms
+	}
+	if s.RecentSuccessRate != nil {
+		update["recent_success_rate"] = *s.RecentSuccessRate
+	}
+	if s.RecentSampleCount != nil {
+		update["recent_sample_count"] = *s.RecentSampleCount
+	}
+	if s.ConsecutiveFailCount != nil {
+		update["consecutive_fail_count"] = *s.ConsecutiveFailCount
+	}
+	if s.UnhealthyUntil != nil {
+		update["unhealthy_until"] = *s.UnhealthyUntil
+	}
+	if s.CircuitState != nil {
+		update["circuit_state"] = *s.CircuitState
+	}
+	if s.LastErrorCategory != nil {
+		update["last_error_category"] = *s.LastErrorCategory
+	}
+	if s.LastHttpStatus != nil {
+		update["last_http_status"] = *s.LastHttpStatus
+	}
+	if s.LastTestEndpointType != nil {
+		update["last_test_endpoint_type"] = *s.LastTestEndpointType
+	}
+}
+
+// GetModelTestResult 读取单行 (channel_id, model_name) 记录；不存在返回 (nil, nil)。
+// 供 service.RecordChannelHealthSignal 等读后写场景使用。
+func GetModelTestResult(channelID int, modelName string) (*ModelTestResult, error) {
+	modelName = strings.TrimSpace(modelName)
+	if channelID <= 0 || modelName == "" {
+		return nil, nil
+	}
+	var row ModelTestResult
+	err := DB.Where("channel_id = ? AND model_name = ?", channelID, modelName).First(&row).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &row, nil
 }
 
 // mtrResultTableNames 以正式表名 model_test_results 为首；少数旧环境若仅有 model_test_result 会第二顺位尝试读。

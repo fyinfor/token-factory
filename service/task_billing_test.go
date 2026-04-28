@@ -35,6 +35,9 @@ func TestMain(m *testing.M) {
 	common.RedisEnabled = false
 	common.BatchUpdateEnabled = false
 	common.LogConsumeEnabled = true
+	// 触达 abilities / users 等带 `group` / `key` 保留字列的查询前必须初始化列名占位符；
+	// 否则 SQL 会拼出 `abilities. = ?` 这类语法错误。生产路径走 chooseDB 时隐式完成。
+	model.InitColumnsForTest()
 
 	if err := db.AutoMigrate(
 		&model.Task{},
@@ -43,6 +46,10 @@ func TestMain(m *testing.M) {
 		&model.Log{},
 		&model.Channel{},
 		&model.UserSubscription{},
+		&model.ModelTestResult{},
+		&model.RoutingPolicy{},
+		&model.RoutingPolicyTarget{},
+		&model.Ability{},
 	); err != nil {
 		panic("failed to migrate: " + err.Error())
 	}
@@ -63,6 +70,10 @@ func truncate(t *testing.T) {
 		model.DB.Exec("DELETE FROM logs")
 		model.DB.Exec("DELETE FROM channels")
 		model.DB.Exec("DELETE FROM user_subscriptions")
+		model.DB.Exec("DELETE FROM model_test_results")
+		model.DB.Exec("DELETE FROM routing_policies")
+		model.DB.Exec("DELETE FROM routing_policy_targets")
+		model.DB.Exec("DELETE FROM abilities")
 	})
 }
 

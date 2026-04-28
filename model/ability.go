@@ -45,6 +45,72 @@ func GetGroupEnabledModels(group string) []string {
 	return models
 }
 
+// UserAccessibleChannel 是「用户视角」下的 channel 投影：只暴露 id / name / type / models[]，
+// 把 key、base_url 这类敏感 / 内部字段全部隐去。前端在「路由偏好」候选池里用它做下拉选择源，
+// 避免让用户手填 channel_id（容易错且没法做 model 联动）。
+type UserAccessibleChannel struct {
+	ID     int      `json:"id"`
+	Name   string   `json:"name"`
+	Type   int      `json:"type"`
+	Models []string `json:"models"`
+}
+
+// GetUserAccessibleChannelsWithModels 返回 group 下所有「能服务任意模型」的渠道清单 +
+// 每个渠道下可用模型集合。
+//
+// 数据源是 abilities 表（与 distributor 选渠道走的同一份），保证「能选 → 能调」的一致性：
+// 如果 ability.enabled=false（含 channel.status≠1 时被批量更新），就不会出现在列表里。
+//
+// 实现要点：
+//
+//   - 一次 SQL 拉全 (channel_id, model, channel.name, channel.type)，避免 N+1；
+//   - 在 Go 内按 channel_id 分桶并保留首次出现顺序，让前端默认排序稳定；
+//   - 模型名按字母序排序，方便前端联动展示；
+//   - 不去 join channel.status——abilities.enabled 已镜像了渠道状态。
+func GetUserAccessibleChannelsWithModels(group string) ([]UserAccessibleChannel, error) {
+	group = strings.TrimSpace(group)
+	if group == "" {
+		return nil, nil
+	}
+	type row struct {
+		ChannelID int    `gorm:"column:channel_id"`
+		Model     string `gorm:"column:model"`
+		Name      string `gorm:"column:name"`
+		Type      int    `gorm:"column:type"`
+	}
+	var rows []row
+	err := DB.Table("abilities").
+		Select("abilities.channel_id, abilities.model, channels.name, channels.type").
+		Joins("left join channels on abilities.channel_id = channels.id").
+		Where("abilities."+commonGroupCol+" = ? and abilities.enabled = ?", group, true).
+		Order("abilities.channel_id, abilities.model").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	// 用 map 聚合 + 切片记录顺序：保持「按 channel_id 升序、模型字母序」的稳定输出。
+	grouped := make(map[int]*UserAccessibleChannel, 16)
+	ordered := make([]int, 0, 16)
+	for _, r := range rows {
+		info, ok := grouped[r.ChannelID]
+		if !ok {
+			info = &UserAccessibleChannel{
+				ID:   r.ChannelID,
+				Name: r.Name,
+				Type: r.Type,
+			}
+			grouped[r.ChannelID] = info
+			ordered = append(ordered, r.ChannelID)
+		}
+		info.Models = append(info.Models, r.Model)
+	}
+	out := make([]UserAccessibleChannel, 0, len(ordered))
+	for _, id := range ordered {
+		out = append(out, *grouped[id])
+	}
+	return out, nil
+}
+
 func GetEnabledModels() []string {
 	var models []string
 	// Find distinct models

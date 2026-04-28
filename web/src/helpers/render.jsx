@@ -81,6 +81,7 @@ import {
   UserPlus,
   ClipboardList,
   DollarSign,
+  Route,
 } from 'lucide-react';
 import {
   SiAtlassian,
@@ -156,6 +157,8 @@ export function getLucideIcon(key, selected = false) {
       return <Store {...commonProps} color={iconColor} />;
     case 'distributor_center':
       return <Share2 {...commonProps} color={iconColor} />;
+    case 'routing_policy':
+      return <Route {...commonProps} color={iconColor} />;
     case 'distributor':
       return <Handshake {...commonProps} color={iconColor} />;
     case 'supplier-apply':

@@ -26,6 +26,15 @@ var commonFalseVal string
 var logKeyCol string
 var logGroupCol string
 
+// InitColumnsForTest 把 SQL 列名占位（commonGroupCol / commonKeyCol 等）按当前 common.UsingPostgreSQL
+// 标志初始化好；专给单测使用——生产路径走 chooseDB 时已经隐式调用 initCol，不需要直接调它。
+//
+// 单测如果跑 SQLite 内存库且需要触达带 commonGroupCol 的查询（如 abilities / users），
+// 必须在建好 model.DB 后显式调一次本函数；否则 SQL 会拼出 `abilities. = ?` 这种语法错误。
+func InitColumnsForTest() {
+	initCol()
+}
+
 func initCol() {
 	// init common column names
 	if common.UsingPostgreSQL {
@@ -317,6 +326,8 @@ func migrateDB() error {
 		&DistributorWithdrawal{},
 		&SupplierModelPricing{},
 		&SupplierChannelModelPricing{},
+		&RoutingPolicy{},
+		&RoutingPolicyTarget{},
 	)
 	if err != nil {
 		return err
@@ -392,6 +403,8 @@ func migrateDBFast() error {
 		{&AffFunnelDaily{}, "AffFunnelDaily"},
 		{&DistributorApplication{}, "DistributorApplication"},
 		{&DistributorWithdrawal{}, "DistributorWithdrawal"},
+		{&RoutingPolicy{}, "RoutingPolicy"},
+		{&RoutingPolicyTarget{}, "RoutingPolicyTarget"},
 	}
 	// 动态计算migration数量，确保errChan缓冲区足够大
 	errChan := make(chan error, len(migrations))

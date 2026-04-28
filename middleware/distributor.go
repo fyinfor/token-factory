@@ -217,11 +217,54 @@ func Distribute() func(c *gin.Context) {
 				if channel == nil {
 					var err error
 					providerJSON := common.GetContextKeyString(c, constant.ContextKeyOpenRouterProviderJSON)
-					if ch, sg, ok := service.TrySmartRouteChannel(c, usingGroup, userGroup, modelRequest.Model, providerJSON); ok {
+
+					// 解析「用户路由策略」：把 user 默认 policy 翻译成 router-engine 偏好 + 候选池约束。
+					// 解析失败不打断主流程——降级为「无策略」继续走老逻辑。
+					resolved, resolveErr := service.ResolveRoutingPolicy(c.GetInt("id"), modelRequest.Model, providerJSON)
+					if resolveErr != nil {
+						common.SysLog("[routing_policy] resolve failed, fallback to legacy routing: " + resolveErr.Error())
+						service.RecordRoutingPolicyResolveError()
+						resolved = nil
+					}
+					if resolved != nil {
+						common.SetContextKey(c, constant.ContextKeyResolvedRoutingPolicy, resolved)
+						common.SetContextKey(c, constant.ContextKeyRoutingPolicySource, resolved.Source)
+						service.RecordResolveOutcome(resolved.Source)
+					}
+
+					if ch, sg, ok := service.TrySmartRouteChannelWithPolicy(c, usingGroup, userGroup, modelRequest.Model, providerJSON, resolved); ok {
 						channel = ch
 						selectGroup = sg
 						if usingGroup == "auto" {
 							common.SetContextKey(c, constant.ContextKeyAutoGroup, sg)
+						}
+					} else if resolved != nil && resolved.HasCandidatePoolConstraint() && resolved.FallbackStrategy != model.RoutingFallbackNone {
+						// 候选池筛完之后没活跃渠道；按用户配置的 fallback 策略再兜一次（不带候选池约束）。
+						// 严格模式（FallbackNone）则维持失败语义，让调用方看到 503，避免账单/合规事故。
+						fallbackProviderJSON := buildFallbackProviderJSON(resolved.FallbackStrategy, providerJSON)
+						if ch, sg, ok := service.TrySmartRouteChannel(c, usingGroup, userGroup, modelRequest.Model, fallbackProviderJSON); ok {
+							channel = ch
+							selectGroup = sg
+							common.SetContextKey(c, constant.ContextKeyRoutingPolicyFallbackUsed, true)
+							service.RecordRoutingPolicyFallback()
+							common.SysLog(fmt.Sprintf("[routing_policy] fallback_used=true source=%s strategy=%s fallback_strategy=%s user=%d model=%s via=fallback_strategy",
+								resolved.Source, resolved.Strategy, resolved.FallbackStrategy, c.GetInt("id"), modelRequest.Model))
+							if usingGroup == "auto" {
+								common.SetContextKey(c, constant.ContextKeyAutoGroup, sg)
+							}
+						} else {
+							channel, selectGroup, err = service.CacheGetRandomSatisfiedChannel(&service.RetryParam{
+								Ctx:        c,
+								ModelName:  modelRequest.Model,
+								TokenGroup: usingGroup,
+								Retry:      common.GetPointer(0),
+							})
+							if err == nil && channel != nil {
+								common.SetContextKey(c, constant.ContextKeyRoutingPolicyFallbackUsed, true)
+								service.RecordRoutingPolicyFallback()
+								common.SysLog(fmt.Sprintf("[routing_policy] fallback_used=true source=%s strategy=%s fallback_strategy=%s user=%d model=%s via=cache_random",
+									resolved.Source, resolved.Strategy, resolved.FallbackStrategy, c.GetInt("id"), modelRequest.Model))
+							}
 						}
 					} else {
 						channel, selectGroup, err = service.CacheGetRandomSatisfiedChannel(&service.RetryParam{
@@ -508,6 +551,30 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 		c.Set("bot_id", channel.Other)
 	}
 	return nil
+}
+
+// buildFallbackProviderJSON 在「主候选池为空 + 启用兜底」时拼一个 router-engine provider JSON。
+//
+// 规则：
+//   - fallback=price/latency/throughput → 用对应 sort；
+//   - fallback=any → 不设 sort，让 router-engine 走 default_price_lb（加权随机）。
+//   - fallback=none 不会进到这里（distributor 已先短路）。
+//
+// 始终设 allow_fallbacks=true：兜底意味着用户已经接受"随便挑一个能跑的"，硬关 fallback 没意义。
+// 入参 originalProviderJSON 仅用于将来扩展（例如保留 max_price 等字段透传），当前 PR 暂不合并。
+func buildFallbackProviderJSON(fallback string, _ string) string {
+	switch fallback {
+	case "price":
+		return `{"sort":"price","allow_fallbacks":true}`
+	case "latency":
+		return `{"sort":"latency","allow_fallbacks":true}`
+	case "throughput":
+		return `{"sort":"throughput","allow_fallbacks":true}`
+	case "any":
+		return `{"allow_fallbacks":true}`
+	default:
+		return ""
+	}
 }
 
 // extractModelNameFromGeminiPath 从 Gemini API URL 路径中提取模型名

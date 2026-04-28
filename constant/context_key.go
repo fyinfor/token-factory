@@ -49,6 +49,16 @@ const (
 	ContextKeySmartRouteChannelOrder ContextKey = "smart_route_channel_order"
 	ContextKeySmartRouteSelectGroup  ContextKey = "smart_route_select_group"
 
+	// ContextKeyResolvedRoutingPolicy 缓存 distributor 解析出的 user 路由策略（*service.ResolvedRoutingPolicy）。
+	// 后续在同一请求里被多次消费（distributor 主路径、retry 路径、observability）时避免重复查 DB。
+	// 值类型 any 是为了避免 constant 包反向依赖 service 包（循环依赖）。
+	ContextKeyResolvedRoutingPolicy ContextKey = "resolved_routing_policy"
+	// ContextKeyRoutingPolicySource 仅记录 ResolvedRoutingPolicy.Source（便于日志/监控直接拉取，不必类型断言）。
+	ContextKeyRoutingPolicySource ContextKey = "routing_policy_source"
+	// ContextKeyRoutingPolicyFallbackUsed 标志主候选池已耗尽且本次请求走过 fallback 兜底（true）。
+	// 为 false 表示要么没有候选池约束、要么主候选池就够用。供日志统计兜底命中率使用。
+	ContextKeyRoutingPolicyFallbackUsed ContextKey = "routing_policy_fallback_used"
+
 	// ContextKeyForcedChannelID 当用户通过 {alias}/{model}/{channel_no} 形式指定具体渠道调用时，
 	// 由分发中间件解析后写入该上下文键；存在该键时跳过 SmartRouter 等自动路由逻辑。
 	ContextKeyForcedChannelID       ContextKey = "forced_channel_id"

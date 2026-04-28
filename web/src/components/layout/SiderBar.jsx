@@ -50,6 +50,7 @@ const routerMap = {
   deployment: '/console/deployment',
   playground: '/console/playground',
   personal: '/console/personal',
+  routing_policy: '/console/routing-policy',
   supplier: null,
   distributor: '/console/distributor/admin',
   distributor_center: '/console/distributor/center',
@@ -145,6 +146,11 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('个人设置'),
         itemKey: 'personal',
         to: '/personal',
+      },
+      {
+        text: t('路由偏好'),
+        itemKey: 'routing_policy',
+        to: '/console/routing-policy',
       },
       {
         text: t('供应商'),

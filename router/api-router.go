@@ -167,6 +167,19 @@ func SetApiRouter(router *gin.Engine) {
 				// Custom OAuth bindings
 				selfRoute.GET("/oauth/bindings", controller.GetUserOAuthBindings)
 				selfRoute.DELETE("/oauth/bindings/:provider_id", controller.UnbindCustomOAuth)
+
+				// 路由策略管理（用户自定义流量分发策略 + 候选池）
+				// PR2 仅暴露 CRUD + dry-run；PR3 由 distributor 接入 ResolveRoutingPolicy。
+				selfRoute.GET("/routing/channels", controller.ListMyRoutingChannels)
+				selfRoute.GET("/routing/policies", controller.ListMyRoutingPolicies)
+				selfRoute.POST("/routing/policies", controller.CreateMyRoutingPolicy)
+				selfRoute.POST("/routing/policies/dry_run", controller.DryRunRoutingPolicy)
+				selfRoute.GET("/routing/policies/default", controller.GetMyDefaultRoutingPolicy)
+				selfRoute.DELETE("/routing/policies/default", controller.ClearMyDefaultRoutingPolicy)
+				selfRoute.GET("/routing/policies/:id", controller.GetMyRoutingPolicy)
+				selfRoute.PUT("/routing/policies/:id", controller.UpdateMyRoutingPolicy)
+				selfRoute.DELETE("/routing/policies/:id", controller.DeleteMyRoutingPolicy)
+				selfRoute.POST("/routing/policies/:id/default", controller.SetMyDefaultRoutingPolicy)
 			}
 
 			adminRoute := userRoute.Group("/")
@@ -359,6 +372,8 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/stat", middleware.AdminAuth(), controller.GetLogsStat)
 		logRoute.GET("/self/stat", middleware.UserAuth(), controller.GetLogsSelfStat)
 		logRoute.GET("/channel_affinity_usage_cache", middleware.AdminAuth(), controller.GetChannelAffinityUsageCacheStats)
+		logRoute.GET("/routing_policy_metrics", middleware.AdminAuth(), controller.GetRoutingPolicyMetrics)
+		logRoute.POST("/routing_policy_metrics/reset", middleware.AdminAuth(), controller.ResetRoutingPolicyMetrics)
 		logRoute.GET("/search", middleware.AdminAuth(), controller.SearchAllLogs)
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
 		logRoute.GET("/self/search", middleware.UserAuth(), middleware.SearchRateLimit(), controller.SearchUserLogs)
