@@ -22,11 +22,30 @@ import { Tabs } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
 import ModelPricingEditor from './components/ModelPricingEditor';
 import SupplierModelPricingEditor from './components/SupplierModelPricingEditor';
-import { API } from '../../../helpers';
+import { API, isSupplier } from '../../../helpers';
 
 export default function ModelSettingsVisualEditor(props) {
   const { t } = useTranslation();
   const [pricingSuppliers, setPricingSuppliers] = useState([]);
+
+  /**
+   * saveSupplierGlobalPricingOutput 供应商全局定价保存到后端表，不写全局 Option。
+   */
+  const saveSupplierGlobalPricingOutput = async (output) => {
+    const res = await API.put('/api/user/supplier/pricing/global', {
+      ModelPrice: output.ModelPrice || {},
+      ModelRatio: output.ModelRatio || {},
+      CompletionRatio: output.CompletionRatio || {},
+      CacheRatio: output.CacheRatio || {},
+      CreateCacheRatio: output.CreateCacheRatio || {},
+      ImageRatio: output.ImageRatio || {},
+      AudioRatio: output.AudioRatio || {},
+      AudioCompletionRatio: output.AudioCompletionRatio || {},
+    });
+    if (!res?.data?.success) {
+      throw new Error(res?.data?.message || t('保存失败'));
+    }
+  };
 
   useEffect(() => {
     const loadSuppliers = async () => {
@@ -50,13 +69,18 @@ export default function ModelSettingsVisualEditor(props) {
   return (
     <Tabs type='line' defaultActiveKey='global'>
       <Tabs.TabPane tab={t('全局模型定价')} itemKey='global'>
-        <ModelPricingEditor options={props.options} refresh={props.refresh} />
+        <ModelPricingEditor
+          options={props.options}
+          refresh={props.refresh}
+          onSaveOutput={isSupplier() ? saveSupplierGlobalPricingOutput : undefined}
+        />
       </Tabs.TabPane>
       <Tabs.TabPane tab={t('渠道模型定价')} itemKey='supplier'>
         <SupplierModelPricingEditor
           options={extendedOptions}
           refresh={props.refresh}
           candidateModelNames={props.candidateModelNames}
+          useSupplierPricingApi={isSupplier()}
         />
       </Tabs.TabPane>
     </Tabs>

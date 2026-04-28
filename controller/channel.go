@@ -50,6 +50,19 @@ type OpenAIModelsResponse struct {
 	Success bool          `json:"success"`
 }
 
+var channelAllowedSupplierTypes = map[string]struct{}{
+	"公有云":   {},
+	"AIDC":  {},
+	"企业中转站": {},
+	"个人中转站": {},
+}
+
+// isValidChannelSupplierType 校验供应商类型是否属于预定义枚举值。
+func isValidChannelSupplierType(supplierType string) bool {
+	_, ok := channelAllowedSupplierTypes[supplierType]
+	return ok
+}
+
 func parseStatusFilter(statusParam string) int {
 	switch strings.ToLower(statusParam) {
 	case "enabled", "1":
@@ -623,6 +636,19 @@ func validateTwoFactorAuth(twoFA *model.TwoFA, code string) bool {
 
 // validateChannel 通用的渠道校验函数
 func validateChannel(channel *model.Channel, isAdd bool) error {
+	if channel == nil {
+		return fmt.Errorf("channel cannot be empty")
+	}
+
+	channel.CompanyLogoURL = strings.TrimSpace(channel.CompanyLogoURL)
+	channel.SupplierType = strings.TrimSpace(channel.SupplierType)
+	if channel.SupplierType == "" {
+		return fmt.Errorf("供应商类型不能为空")
+	}
+	if !isValidChannelSupplierType(channel.SupplierType) {
+		return fmt.Errorf("供应商类型无效")
+	}
+
 	// 校验 channel settings
 	if err := channel.ValidateSettings(); err != nil {
 		return fmt.Errorf("渠道额外设置[channel setting] 格式错误：%s", err.Error())
@@ -630,7 +656,7 @@ func validateChannel(channel *model.Channel, isAdd bool) error {
 
 	// 如果是添加操作，检查 channel 和 key 是否为空
 	if isAdd {
-		if channel == nil || channel.Key == "" {
+		if channel.Key == "" {
 			return fmt.Errorf("channel cannot be empty")
 		}
 

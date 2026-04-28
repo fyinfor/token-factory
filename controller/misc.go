@@ -13,6 +13,7 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/oauth"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/console_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
@@ -378,4 +379,145 @@ func ResetPassword(c *gin.Context) {
 		"data":    password,
 	})
 	return
+}
+
+// SendPasswordResetSMS 发送“忘记密码”短信验证码（仅已注册手机号可发送）。
+func SendPasswordResetSMS(c *gin.Context) {
+	if !common.SMSVerificationEnabled {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "短信验证码功能未启用",
+		})
+		return
+	}
+	phone := common.NormalizePhone(c.Query("phone"))
+	if !common.ValidateMainlandChinaPhone(phone) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "手机号格式无效，请输入 11 位中国大陆手机号",
+		})
+		return
+	}
+	if !model.IsPhoneAlreadyTaken(phone) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "该手机号未注册",
+		})
+		return
+	}
+	if common.IsSMSPhoneBlacklisted(phone) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "该手机号已被加入短信黑名单",
+		})
+		return
+	}
+	if err := common.CheckSMSCanSend(phone); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+	code := common.GenerateNumericVerificationCode(6)
+	if err := service.SendAliyunSMSCode(phone, code); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+	if err := common.RecordSMSSend(phone); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+	if err := common.StoreSMSVerificationCode(phone, code); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "短信验证码存储失败，请稍后重试",
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+	})
+}
+
+// PasswordResetByPhoneRequest 手机号找回密码请求体。
+type PasswordResetByPhoneRequest struct {
+	Phone           string `json:"phone"`
+	SMSCode         string `json:"sms_verification_code"`
+	NewPassword     string `json:"new_password"`
+	ConfirmPassword string `json:"confirm_password"`
+}
+
+// ResetPasswordByPhone 通过手机号+短信验证码重置密码。
+func ResetPasswordByPhone(c *gin.Context) {
+	var req PasswordResetByPhoneRequest
+	if err := json.NewDecoder(c.Request.Body).Decode(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "无效的参数",
+		})
+		return
+	}
+	req.Phone = common.NormalizePhone(req.Phone)
+	req.SMSCode = strings.TrimSpace(req.SMSCode)
+	req.NewPassword = strings.TrimSpace(req.NewPassword)
+	req.ConfirmPassword = strings.TrimSpace(req.ConfirmPassword)
+
+	if !common.ValidateMainlandChinaPhone(req.Phone) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "手机号格式无效，请输入 11 位中国大陆手机号",
+		})
+		return
+	}
+	if !model.IsPhoneAlreadyTaken(req.Phone) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "该手机号未注册",
+		})
+		return
+	}
+	if len(req.SMSCode) != 6 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "请输入 6 位短信验证码",
+		})
+		return
+	}
+	if !common.VerifyAndConsumeSMSCode(req.Phone, req.SMSCode) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "短信验证码错误或已过期",
+		})
+		return
+	}
+	if len(req.NewPassword) < 8 || len(req.NewPassword) > 20 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "密码长度需为 8-20 位",
+		})
+		return
+	}
+	if req.NewPassword != req.ConfirmPassword {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "两次输入的密码不一致",
+		})
+		return
+	}
+	if err := model.ResetUserPasswordByPhone(req.Phone, req.NewPassword); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+	})
 }

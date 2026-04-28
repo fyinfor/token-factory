@@ -70,6 +70,14 @@ const CHANNEL_PRICING_OPTION_KEYS = [
   'ChannelCacheRatio',
 ];
 
+/** Option 中 Channel* 嵌套字段键名 → 供应商渠道 PUT 请求体字段名 */
+const CHANNEL_EXTRA_OPTION_TO_PAYLOAD = [
+  ['ChannelCreateCacheRatio', 'CreateCacheRatio'],
+  ['ChannelImageRatio', 'ImageRatio'],
+  ['ChannelAudioRatio', 'AudioRatio'],
+  ['ChannelAudioCompletionRatio', 'AudioCompletionRatio'],
+];
+
 const UPSTREAM_NAME_ID_RE = /\((-?\d+)\)\s*$/;
 
 function parseUpstreamListChannelId(upstreamDisplayName) {
@@ -86,6 +94,17 @@ function parseNestedOption(json) {
   } catch {
     return {};
   }
+}
+
+/**
+ * extractNestedChannelModelMap 从 Channel* 类 Option（按渠道 id 再嵌套模型名）中读取某一渠道的模型→数值表。
+ * @param {string} optionJson
+ * @param {string} channelIdStr
+ */
+function extractNestedChannelModelMap(optionJson, channelIdStr) {
+  const root = parseNestedOption(optionJson);
+  const scoped = root[channelIdStr];
+  return scoped && typeof scoped === 'object' && !Array.isArray(scoped) ? scoped : {};
 }
 
 function ratioTypeToPascal(ratioType) {
@@ -201,6 +220,7 @@ function isUpstreamCellSelectable(oldVal, newVal) {
   return !resolutionMatchesUpstream(oldVal, newVal);
 }
 
+/** ConflictConfirmModal 固定价格与倍率计费冲突时的二次确认弹窗 */
 function ConflictConfirmModal({ t, visible, items, onOk, onCancel }) {
   const isMobile = useIsMobile();
   const columns = [
@@ -236,6 +256,13 @@ function ConflictConfirmModal({ t, visible, items, onOk, onCancel }) {
   );
 }
 
+/**
+ * UpstreamRatioSync 上游倍率拉取、差异对比与勾选应用同步。
+ * @param {object} props
+ * @param {object} props.options 与 Ratio 设置相同的 Option 字段（含全局与 Channel* JSON）
+ * @param {function} props.refresh 保存成功后刷新
+ * @param {boolean} [props.useSupplierPricingSave=false] 为 true 时写入供应商定价表 API，不调用 /api/option
+ */
 export default function UpstreamRatioSync(props) {
   const { t } = useTranslation();
   const [modalVisible, setModalVisible] = useState(false);
@@ -681,37 +708,106 @@ export default function UpstreamRatioSync(props) {
       setLoading(true);
       try {
         const updates = [];
-        const globalKeys = [
-          'ModelRatio',
-          'CompletionRatio',
-          'CacheRatio',
-          'ModelPrice',
-        ];
-        globalKeys.forEach((key) => {
-          const before = JSON.stringify(baseline.global[key] || {});
-          const after = JSON.stringify(finalRatios[key] || {});
-          if (before !== after) {
+        if (props.useSupplierPricingSave) {
+          /** 供应商：全局四维与上游对比有差异则整包 PUT 全局表，避免清空白名单外的模型列 */
+          const globalKeysSynced = [
+            'ModelRatio',
+            'CompletionRatio',
+            'CacheRatio',
+            'ModelPrice',
+          ];
+          let globalDirty = false;
+          globalKeysSynced.forEach((key) => {
+            const before = JSON.stringify(baseline.global[key] || {});
+            const after = JSON.stringify(finalRatios[key] || {});
+            if (before !== after) globalDirty = true;
+          });
+          if (globalDirty) {
             updates.push(
-              API.put('/api/option/', {
-                key,
-                value: JSON.stringify(finalRatios[key], null, 2),
+              API.put('/api/user/supplier/pricing/global', {
+                ModelPrice: finalRatios.ModelPrice || {},
+                ModelRatio: finalRatios.ModelRatio || {},
+                CompletionRatio: finalRatios.CompletionRatio || {},
+                CacheRatio: finalRatios.CacheRatio || {},
+                CreateCacheRatio: parseNestedOption(props.options.CreateCacheRatio),
+                ImageRatio: parseNestedOption(props.options.ImageRatio),
+                AudioRatio: parseNestedOption(props.options.AudioRatio),
+                AudioCompletionRatio: parseNestedOption(
+                  props.options.AudioCompletionRatio,
+                ),
               }),
             );
           }
-        });
+          /** 按渠道 id 比较嵌套 map，变更的渠道分别 PUT supplier channel 定价 */
+          const channelIdsToSave = new Set();
+          CHANNEL_PRICING_OPTION_KEYS.forEach((key) => {
+            const beforeMap = baseline.channel[key] || {};
+            const afterMap = finalChannel[key] || {};
+            const ids = new Set([
+              ...Object.keys(beforeMap),
+              ...Object.keys(afterMap),
+            ]);
+            ids.forEach((idStr) => {
+              const b = JSON.stringify(beforeMap[idStr] || {});
+              const a = JSON.stringify(afterMap[idStr] || {});
+              if (b !== a) channelIdsToSave.add(idStr);
+            });
+          });
+          channelIdsToSave.forEach((idStr) => {
+            const channelId = parseInt(idStr, 10);
+            if (!Number.isFinite(channelId) || channelId <= 0) {
+              return;
+            }
+            const body = {
+              ModelPrice: (finalChannel.ChannelModelPrice || {})[idStr] || {},
+              ModelRatio: (finalChannel.ChannelModelRatio || {})[idStr] || {},
+              CompletionRatio:
+                (finalChannel.ChannelCompletionRatio || {})[idStr] || {},
+              CacheRatio: (finalChannel.ChannelCacheRatio || {})[idStr] || {},
+            };
+            CHANNEL_EXTRA_OPTION_TO_PAYLOAD.forEach(([optKey, payloadKey]) => {
+              body[payloadKey] = extractNestedChannelModelMap(
+                props.options[optKey],
+                idStr,
+              );
+            });
+            updates.push(
+              API.put(`/api/user/supplier/pricing/channel/${channelId}`, body),
+            );
+          });
+        } else {
+          const globalKeys = [
+            'ModelRatio',
+            'CompletionRatio',
+            'CacheRatio',
+            'ModelPrice',
+          ];
+          globalKeys.forEach((key) => {
+            const before = JSON.stringify(baseline.global[key] || {});
+            const after = JSON.stringify(finalRatios[key] || {});
+            if (before !== after) {
+              updates.push(
+                API.put('/api/option/', {
+                  key,
+                  value: JSON.stringify(finalRatios[key], null, 2),
+                }),
+              );
+            }
+          });
 
-        CHANNEL_PRICING_OPTION_KEYS.forEach((key) => {
-          const before = JSON.stringify(baseline.channel[key] || {});
-          const after = JSON.stringify(finalChannel[key] || {});
-          if (before !== after) {
-            updates.push(
-              API.put('/api/option/', {
-                key,
-                value: JSON.stringify(finalChannel[key], null, 2),
-              }),
-            );
-          }
-        });
+          CHANNEL_PRICING_OPTION_KEYS.forEach((key) => {
+            const before = JSON.stringify(baseline.channel[key] || {});
+            const after = JSON.stringify(finalChannel[key] || {});
+            if (before !== after) {
+              updates.push(
+                API.put('/api/option/', {
+                  key,
+                  value: JSON.stringify(finalChannel[key], null, 2),
+                }),
+              );
+            }
+          });
+        }
 
         if (updates.length === 0) {
           showWarning(t('没有需要保存的变更'));
@@ -759,7 +855,7 @@ export default function UpstreamRatioSync(props) {
         setLoading(false);
       }
     },
-    [resolutions, differences, props.refresh, t],
+    [resolutions, differences, props.refresh, props.useSupplierPricingSave, props.options, t],
   );
 
   const getCurrentPageData = (dataSource) => {

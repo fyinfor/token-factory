@@ -800,6 +800,20 @@ func ResetUserPasswordByEmail(email string, password string) error {
 	return err
 }
 
+// ResetUserPasswordByPhone 按手机号重置用户密码。
+func ResetUserPasswordByPhone(phone string, password string) error {
+	phone = common.NormalizePhone(phone)
+	if phone == "" || password == "" {
+		return errors.New("手机号或密码为空！")
+	}
+	hashedPassword, err := common.Password2Hash(password)
+	if err != nil {
+		return err
+	}
+	err = DB.Model(&User{}).Where("phone = ?", phone).Update("password", hashedPassword).Error
+	return err
+}
+
 func IsAdmin(userId int) bool {
 	if userId == 0 {
 		return false

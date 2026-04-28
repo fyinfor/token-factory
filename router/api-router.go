@@ -35,6 +35,8 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/sms_verification", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.SendSMSVerification)
 		apiRouter.GET("/reset_password", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.SendPasswordResetEmail)
 		apiRouter.POST("/user/reset", middleware.CriticalRateLimit(), controller.ResetPassword)
+		apiRouter.GET("/reset_password_sms", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.SendPasswordResetSMS)
+		apiRouter.POST("/user/reset_by_phone", middleware.CriticalRateLimit(), controller.ResetPasswordByPhone)
 		// OAuth routes - specific routes must come before :provider wildcard
 		apiRouter.GET("/oauth/state", middleware.CriticalRateLimit(), controller.GenerateOAuthCode)
 		apiRouter.POST("/oauth/email/bind", middleware.CriticalRateLimit(), controller.EmailBind)
@@ -142,6 +144,10 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/supplier/models", controller.CreateMySupplierModel)
 				selfRoute.GET("/supplier/models", controller.ListMySupplierModels)
 				selfRoute.GET("/supplier-dashboard", controller.GetSupplierDashboardData)
+				selfRoute.GET("/supplier/pricing/global", controller.GetSupplierGlobalPricing)
+				selfRoute.PUT("/supplier/pricing/global", controller.PutSupplierGlobalPricing)
+				selfRoute.GET("/supplier/pricing/channel/:channel_id", controller.GetSupplierChannelPricing)
+				selfRoute.PUT("/supplier/pricing/channel/:channel_id", controller.PutSupplierChannelPricing)
 				selfRoute.GET("/messages/self", controller.ListMyMessages)
 				selfRoute.POST("/messages/:id/read", controller.MarkMyMessageRead)
 				selfRoute.POST("/messages/read_all", controller.MarkAllMyMessagesRead)
@@ -259,7 +265,8 @@ func SetApiRouter(router *gin.Engine) {
 		ratioSyncRoute := apiRouter.Group("/ratio_sync")
 		{
 			ratioSyncRoute.GET("/channels", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.GetSyncableChannels)
-			ratioSyncRoute.POST("/fetch", middleware.RootAuth(), controller.FetchUpstreamRatios)
+			// 管理员或已审核供应商可拉取上游差异；供应商侧仅自有模型参与对比（见 controller.FetchUpstreamRatios）
+			ratioSyncRoute.POST("/fetch", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.FetchUpstreamRatios)
 		}
 		channelRoute := apiRouter.Group("/channel")
 		{

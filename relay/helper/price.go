@@ -66,28 +66,20 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		channelID = info.ChannelId
 	}
 	groupRatioInfo := HandleGroupRatio(c, info)
-	modelPrice, usePrice := ratio_setting.GetModelPrice(info.OriginModelName, false)
-	if channelPrice, ok := ratio_setting.GetChannelModelPrice(channelID, info.OriginModelName); ok {
-		modelPrice = channelPrice
-		usePrice = true
-	}
 	supplierID := resolveSupplierIDByChannel(info)
-	if supplierPrice, ok := ratio_setting.GetSupplierModelPrice(supplierID, info.OriginModelName); ok {
-		modelPrice = supplierPrice
-		usePrice = true
-	}
+	modelPrice, usePrice := model.ResolveSupplierScopedFixedModelPrice(channelID, supplierID, info.OriginModelName)
 	if groupPrice, ok := ratio_setting.GetGroupModelPrice(info.UsingGroup, info.OriginModelName); ok {
 		modelPrice = groupPrice
 		usePrice = true
 	}
+	channelVideoRatio, hasChannelVideoRatio := ratio_setting.GetChannelVideoRatio(channelID, info.OriginModelName)
+	channelVideoCompletionRatio, hasChannelVideoCompletionRatio := ratio_setting.GetChannelVideoCompletionRatio(channelID, info.OriginModelName)
 	channelCompletionRatio, hasChannelCompletionRatio := ratio_setting.GetChannelCompletionRatio(channelID, info.OriginModelName)
 	channelCacheRatio, hasChannelCacheRatio := ratio_setting.GetChannelCacheRatio(channelID, info.OriginModelName)
 	channelCreateCacheRatio, hasChannelCreateCacheRatio := ratio_setting.GetChannelCreateCacheRatio(channelID, info.OriginModelName)
 	channelImageRatio, hasChannelImageRatio := ratio_setting.GetChannelImageRatio(channelID, info.OriginModelName)
 	channelAudioRatio, hasChannelAudioRatio := ratio_setting.GetChannelAudioRatio(channelID, info.OriginModelName)
 	channelAudioCompletionRatio, hasChannelAudioCompletionRatio := ratio_setting.GetChannelAudioCompletionRatio(channelID, info.OriginModelName)
-	channelVideoRatio, hasChannelVideoRatio := ratio_setting.GetChannelVideoRatio(channelID, info.OriginModelName)
-	channelVideoCompletionRatio, hasChannelVideoCompletionRatio := ratio_setting.GetChannelVideoCompletionRatio(channelID, info.OriginModelName)
 
 	var preConsumedQuota int
 	var modelRatio float64
@@ -109,15 +101,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		}
 		var success bool
 		var matchName string
-		modelRatio, success, matchName = ratio_setting.GetModelRatio(info.OriginModelName)
-		if channelRatio, ok := ratio_setting.GetChannelModelRatio(channelID, info.OriginModelName); ok {
-			modelRatio = channelRatio
-			success = true
-		}
-		if supplierRatio, ok := ratio_setting.GetSupplierModelRatio(supplierID, info.OriginModelName); ok {
-			modelRatio = supplierRatio
-			success = true
-		}
+		modelRatio, success, matchName = model.ResolveSupplierScopedModelRatio(channelID, supplierID, info.OriginModelName)
 		if groupModelRatio, ok := ratio_setting.GetGroupModelRatio(info.UsingGroup, info.OriginModelName); ok {
 			modelRatio = groupModelRatio
 			success = true
@@ -131,12 +115,12 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 				return types.PriceData{}, fmt.Errorf("模型 %s 倍率或价格未配置，请联系管理员设置或开始自用模式；Model %s ratio or price not set, please set or start self-use mode", matchName, matchName)
 			}
 		}
-		completionRatio = ratio_setting.GetCompletionRatio(info.OriginModelName)
-		cacheRatio, _ = ratio_setting.GetCacheRatio(info.OriginModelName)
-		cacheCreationRatio, _ = ratio_setting.GetCreateCacheRatio(info.OriginModelName)
+		completionRatio = model.ResolveSupplierScopedCompletionRatio(channelID, supplierID, info.OriginModelName)
+		cacheRatio, cacheCreationRatio = model.ResolveSupplierScopedCacheRatios(channelID, supplierID, info.OriginModelName)
 		cacheCreationRatio5m = cacheCreationRatio
 		// 固定1h和5min缓存写入价格的比例
 		cacheCreationRatio1h = cacheCreationRatio * claudeCacheCreation1hMultiplier
+
 		imageRatio, _ = ratio_setting.GetImageRatio(info.OriginModelName)
 		audioRatio = ratio_setting.GetAudioRatio(info.OriginModelName)
 		audioCompletionRatio = ratio_setting.GetAudioCompletionRatio(info.OriginModelName)
@@ -160,6 +144,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		if hasChannelAudioCompletionRatio {
 			audioCompletionRatio = channelAudioCompletionRatio
 		}
+
 		if hasChannelVideoRatio {
 			videoRatio = channelVideoRatio
 		}
@@ -236,16 +221,8 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 	}
 	groupRatioInfo := HandleGroupRatio(c, info)
 
-	modelPrice, success := ratio_setting.GetModelPrice(info.OriginModelName, true)
-	if channelPrice, ok := ratio_setting.GetChannelModelPrice(channelID, info.OriginModelName); ok {
-		modelPrice = channelPrice
-		success = true
-	}
 	supplierID := resolveSupplierIDByChannel(info)
-	if supplierPrice, ok := ratio_setting.GetSupplierModelPrice(supplierID, info.OriginModelName); ok {
-		modelPrice = supplierPrice
-		success = true
-	}
+	modelPrice, success := model.ResolveSupplierScopedFixedModelPrice(channelID, supplierID, info.OriginModelName)
 	if groupPrice, ok := ratio_setting.GetGroupModelPrice(info.UsingGroup, info.OriginModelName); ok {
 		modelPrice = groupPrice
 		success = true
@@ -259,7 +236,7 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 			modelPrice = defaultPrice
 		} else {
 			// 没有配置倍率也不接受没配置,那就返回错误
-			_, ratioSuccess, matchName := ratio_setting.GetModelRatio(info.OriginModelName)
+			_, ratioSuccess, matchName := model.ResolveSupplierScopedModelRatio(channelID, supplierID, info.OriginModelName)
 			acceptUnsetRatio := false
 			if info.UserSetting.AcceptUnsetRatioModel {
 				acceptUnsetRatio = true

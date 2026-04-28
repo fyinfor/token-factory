@@ -48,22 +48,27 @@ type PricingVendor struct {
 
 // PricingSupplierItem 定价 data 中的供应商摘要。
 type PricingSupplierItem struct {
-	SupplierID    int    `json:"supplier_id"`
-	SupplierAlias string `json:"supplier_alias"`
+	SupplierID     int    `json:"supplier_id"`
+	SupplierAlias  string `json:"supplier_alias"`
+	CompanyLogoURL string `json:"company_logo_url"`
+	SupplierType   string `json:"supplier_type"`
 }
 
 // PricingChannelItem 某模型在各渠道上的定价摘要。
 type PricingChannelItem struct {
-	ChannelID              int     `json:"channel_id"`
-	SupplierApplicationID  int     `json:"supplier_application_id"`
-	ChannelNo              string  `json:"channel_no"`
-	SupplierAlias          string  `json:"supplier_alias"`
-	ModelPrice             float64 `json:"model_price"`
-	ModelRatio             float64 `json:"model_ratio"`
-	CompletionRatio        float64 `json:"completion_ratio"`
-	CacheRatio             float64 `json:"cache_ratio"`
-	CreateCacheRatio       float64 `json:"create_cache_ratio"`
-	PriceDiscountPercent   float64 `json:"price_discount_percent"`
+	ChannelID             int     `json:"channel_id"`
+	SupplierApplicationID int     `json:"supplier_application_id"`
+	ChannelNo             string  `json:"channel_no"`
+	SupplierAlias         string  `json:"supplier_alias"`
+	CompanyLogoURL        string  `json:"company_logo_url"`
+	SupplierType          string  `json:"supplier_type"`
+	TestResponseTimeMs    int     `json:"test_response_time_ms"`
+	ModelPrice            float64 `json:"model_price"`
+	ModelRatio            float64 `json:"model_ratio"`
+	CompletionRatio       float64 `json:"completion_ratio"`
+	CacheRatio            float64 `json:"cache_ratio"`
+	CreateCacheRatio      float64 `json:"create_cache_ratio"`
+	PriceDiscountPercent  float64 `json:"price_discount_percent"`
 }
 
 // PricingAPIItem 在 Pricing 基础上扩展渠道维度统计字段（定价接口 data 元素类型）。
@@ -74,46 +79,17 @@ type PricingAPIItem struct {
 }
 
 func resolveChannelPricingTriple(channelID int, supplierApplicationID int, modelName string) (mp, mr, cr float64) {
-	cr = ratio_setting.GetCompletionRatio(modelName)
-	if v, ok := ratio_setting.GetChannelCompletionRatio(channelID, modelName); ok {
-		cr = v
+	cr = ResolveSupplierScopedCompletionRatio(channelID, supplierApplicationID, modelName)
+	// 优先级：供应商渠道表 > 供应商全局表 > Option 渠道 > 平台全局 > 旧 SupplierOption
+	if v, ok := ResolveSupplierScopedFixedModelPrice(channelID, supplierApplicationID, modelName); ok {
+		return v, 0, cr
 	}
-
-	// 渠道自身定价 -> 全局同模型名 -> 供应商兜底（避免供应商覆盖全局）
-	if v, ok := ratio_setting.GetChannelModelPrice(channelID, modelName); ok {
-		mp = v
-	} else if v, ok := ratio_setting.GetModelPrice(modelName, false); ok {
-		mp = v
-	} else if supplierApplicationID > 0 {
-		if v, ok := ratio_setting.GetSupplierModelPrice(supplierApplicationID, modelName); ok {
-			mp = v
-		}
-	}
-
-	if v, ok := ratio_setting.GetChannelModelRatio(channelID, modelName); ok {
-		mr = v
-	} else if v, ok, _ := ratio_setting.GetModelRatio(modelName); ok {
-		mr = v
-	} else if supplierApplicationID > 0 {
-		if v, ok := ratio_setting.GetSupplierModelRatio(supplierApplicationID, modelName); ok {
-			mr = v
-		}
-	}
-	return mp, mr, cr
+	mr, _, _ = ResolveSupplierScopedModelRatio(channelID, supplierApplicationID, modelName)
+	return 0, mr, cr
 }
 
-func resolveChannelCachePair(channelID int, modelName string) (cacheRatio, createCacheRatio float64) {
-	if v, ok := ratio_setting.GetChannelCacheRatio(channelID, modelName); ok {
-		cacheRatio = v
-	} else {
-		cacheRatio, _ = ratio_setting.GetCacheRatio(modelName)
-	}
-	if v, ok := ratio_setting.GetChannelCreateCacheRatio(channelID, modelName); ok {
-		createCacheRatio = v
-	} else {
-		createCacheRatio, _ = ratio_setting.GetCreateCacheRatio(modelName)
-	}
-	return cacheRatio, createCacheRatio
+func resolveChannelCachePair(channelID int, supplierApplicationID int, modelName string) (cacheRatio, createCacheRatio float64) {
+	return ResolveSupplierScopedCacheRatios(channelID, supplierApplicationID, modelName)
 }
 
 func pricingSupplierAliasFromMeta(supplierApplicationID int, alias *string) string {
@@ -140,6 +116,10 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 		common.SysLog(fmt.Sprintf("LoadChannelPricingTestSuccessIndex error: %v", err))
 		testSuccessByChannel = nil
 	}
+	visibleIDs := make([]int, 0, len(visibleChannelIDs))
+	for id := range visibleChannelIDs {
+		visibleIDs = append(visibleIDs, id)
+	}
 
 	out := make([]PricingAPIItem, 0, len(filtered))
 	for _, p := range filtered {
@@ -147,6 +127,28 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 		var chItems []PricingChannelItem
 
 		modelName := p.ModelName
+		// 为当前模型预加载各可见渠道的测试耗时：手动覆盖耗时优先，否则使用最近一次成功测试耗时。
+		testResponseTimeByChannel := make(map[int]int)
+		if len(visibleIDs) > 0 {
+			rows, err := GetModelTestResultsByModelNameAndChannelIDs(modelName, visibleIDs)
+			if err != nil {
+				common.SysLog(fmt.Sprintf("GetModelTestResultsByModelNameAndChannelIDs error: model=%s err=%v", modelName, err))
+			} else {
+				for i := range rows {
+					r := rows[i]
+					if r.ChannelId <= 0 {
+						continue
+					}
+					if r.ManualDisplayResponseTime > 0 {
+						testResponseTimeByChannel[r.ChannelId] = r.ManualDisplayResponseTime
+						continue
+					}
+					if r.LastTestSuccess && r.LastResponseTime > 0 {
+						testResponseTimeByChannel[r.ChannelId] = r.LastResponseTime
+					}
+				}
+			}
+		}
 		for _, row := range metas {
 			if row.ChannelID <= 0 {
 				continue
@@ -157,11 +159,16 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			if !ChannelModelsRawContains(row.Models, modelName) {
 				continue
 			}
-			if testSuccessByChannel != nil && !ChannelPricingRowMatchesLastTestSuccess(testSuccessByChannel, row.ChannelID, modelName) {
-				continue
+			// 单测门禁：仅当该渠道在库中已有「至少一条」成功单测记录时，才要求本模型也有成功记录。
+			// 否则新渠道/供应商从未跑过单测时 names 为空，旧逻辑会对所有模型 continue，导致供应商只见自有渠道时 data 全空。
+			if testSuccessByChannel != nil {
+				namesOK := testSuccessByChannel[row.ChannelID]
+				if len(namesOK) > 0 && !ChannelPricingRowMatchesLastTestSuccess(testSuccessByChannel, row.ChannelID, modelName) {
+					continue
+				}
 			}
 			baseMp, baseMr, cr := resolveChannelPricingTriple(row.ChannelID, row.SupplierApplicationID, modelName)
-			chCache, chCreate := resolveChannelCachePair(row.ChannelID, modelName)
+			chCache, chCreate := resolveChannelCachePair(row.ChannelID, row.SupplierApplicationID, modelName)
 			alias := pricingSupplierAliasFromMeta(row.SupplierApplicationID, row.SupplierAlias)
 			d := 100.0
 			if row.PriceDiscountPercent != nil {
@@ -171,16 +178,19 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			mp := baseMp * mult
 			mr := baseMr * mult
 			chItems = append(chItems, PricingChannelItem{
-				ChannelID:              row.ChannelID,
-				SupplierApplicationID:  row.SupplierApplicationID,
-				ChannelNo:              row.ChannelNo,
-				SupplierAlias:          alias,
-				ModelPrice:             mp,
-				ModelRatio:             mr,
-				CompletionRatio:        cr,
-				CacheRatio:             chCache,
-				CreateCacheRatio:       chCreate,
-				PriceDiscountPercent:   d,
+				ChannelID:             row.ChannelID,
+				SupplierApplicationID: row.SupplierApplicationID,
+				ChannelNo:             row.ChannelNo,
+				SupplierAlias:         alias,
+				CompanyLogoURL:        strings.TrimSpace(row.CompanyLogoURL),
+				SupplierType:          strings.TrimSpace(row.SupplierType),
+				TestResponseTimeMs:    testResponseTimeByChannel[row.ChannelID],
+				ModelPrice:            mp,
+				ModelRatio:            mr,
+				CompletionRatio:       cr,
+				CacheRatio:            chCache,
+				CreateCacheRatio:      chCreate,
+				PriceDiscountPercent:  d,
 			})
 		}
 
@@ -212,8 +222,10 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			}
 			supplierSeen[sid] = struct{}{}
 			suppliers = append(suppliers, PricingSupplierItem{
-				SupplierID:    sid,
-				SupplierAlias: ch.SupplierAlias,
+				SupplierID:     sid,
+				SupplierAlias:  ch.SupplierAlias,
+				CompanyLogoURL: ch.CompanyLogoURL,
+				SupplierType:   ch.SupplierType,
 			})
 		}
 		item.SupplierList = suppliers
