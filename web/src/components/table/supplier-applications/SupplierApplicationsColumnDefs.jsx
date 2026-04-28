@@ -49,13 +49,21 @@ export const getSupplierApplicationsColumns = (t, openReview) => {
       title: t('企业Logo'),
       dataIndex: 'company_logo_url',
       width: 120,
-      render: (text) => text ? (
-        <img
-          src={text}
-          alt={t('企业Logo')}
-          style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover' }}
-        />
-      ) : '-',
+      render: (text) =>
+        text ? (
+          <img
+            src={text}
+            alt={t('企业Logo')}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 6,
+              objectFit: 'cover',
+            }}
+          />
+        ) : (
+          '-'
+        ),
     },
     {
       title: t('统一社会信用代码'),

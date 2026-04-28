@@ -299,10 +299,16 @@ export const useModelsData = (options = {}) => {
         res = await API.delete(`${apiBasePath}/${id}`);
         break;
       case 'enable':
-        res = await API.put(`${apiBasePath}/?status_only=true`, { id, status: 1 });
+        res = await API.put(`${apiBasePath}/?status_only=true`, {
+          id,
+          status: 1,
+        });
         break;
       case 'disable':
-        res = await API.put(`${apiBasePath}/?status_only=true`, { id, status: 0 });
+        res = await API.put(`${apiBasePath}/?status_only=true`, {
+          id,
+          status: 0,
+        });
         break;
       default:
         return;

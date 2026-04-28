@@ -25,7 +25,9 @@ import { useTableCompactMode } from '../common/useTableCompactMode';
 
 export const useSupplierApplicationsData = () => {
   const { t } = useTranslation();
-  const [compactMode, setCompactMode] = useTableCompactMode('supplier-applications');
+  const [compactMode, setCompactMode] = useTableCompactMode(
+    'supplier-applications',
+  );
 
   const [applications, setApplications] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -67,7 +69,7 @@ export const useSupplierApplicationsData = () => {
     if (status !== '' && status !== 'all') {
       url += `&status=${status}`;
     }
-    
+
     try {
       const res = await API.get(url);
       const { success, message, data } = res.data;
@@ -107,7 +109,7 @@ export const useSupplierApplicationsData = () => {
     if (status !== '' && status !== 'all') {
       url += `&status=${status}`;
     }
-    
+
     try {
       const res = await API.get(url);
       const { success, message, data } = res.data;
@@ -127,7 +129,10 @@ export const useSupplierApplicationsData = () => {
 
   const handleReview = async (id, reviewData) => {
     try {
-      const res = await API.post(`/api/user/supplier/application/${id}/review`, reviewData);
+      const res = await API.post(
+        `/api/user/supplier/application/${id}/review`,
+        reviewData,
+      );
       const { success, message } = res.data;
       if (success) {
         showSuccess(t('审批成功'));
@@ -174,13 +179,23 @@ export const useSupplierApplicationsData = () => {
 
   const refresh = async () => {
     const formValues = getFormValues();
-    await searchApplications(activePage, pageSize, formValues.searchKeyword, formValues.status);
+    await searchApplications(
+      activePage,
+      pageSize,
+      formValues.searchKeyword,
+      formValues.status,
+    );
   };
 
   const handlePageChange = (page) => {
     setActivePage(page);
     const formValues = getFormValues();
-    searchApplications(page, pageSize, formValues.searchKeyword, formValues.status);
+    searchApplications(
+      page,
+      pageSize,
+      formValues.searchKeyword,
+      formValues.status,
+    );
   };
 
   const handlePageSizeChange = (size) => {

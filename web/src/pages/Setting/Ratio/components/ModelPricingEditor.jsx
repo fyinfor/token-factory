@@ -32,10 +32,12 @@ import {
   Switch,
   Table,
   Tag,
+  Tooltip,
   Typography,
 } from '@douyinfe/semi-ui';
 import {
   IconDelete,
+  IconHelpCircle,
   IconPlus,
   IconSave,
   IconSearch,
@@ -126,6 +128,7 @@ export default function ModelPricingEditor({
     handleOptionalFieldToggle,
     handleNumericFieldChange,
     handleBillingModeChange,
+    handleVideoBillingModeChange,
     handleSubmit,
     addModel,
     deleteModel,
@@ -261,7 +264,9 @@ export default function ModelPricingEditor({
             style={isMobile ? { width: '100%' } : undefined}
           >
             {t('批量应用当前模型价格')}
-            {selectedModelNames.length > 0 ? ` (${selectedModelNames.length})` : ''}
+            {selectedModelNames.length > 0
+              ? ` (${selectedModelNames.length})`
+              : ''}
           </Button>
           <Input
             prefix={<IconSearch />}
@@ -383,7 +388,9 @@ export default function ModelPricingEditor({
                   <RadioGroup
                     type='button'
                     value={selectedModel.billingMode}
-                    onChange={(event) => handleBillingModeChange(event.target.value)}
+                    onChange={(event) =>
+                      handleBillingModeChange(event.target.value)
+                    }
                   >
                     <Radio value='per-token'>{t('按量计费')}</Radio>
                     <Radio value='per-request'>{t('按次计费')}</Radio>
@@ -418,7 +425,9 @@ export default function ModelPricingEditor({
                     value={selectedModel.fixedPrice}
                     placeholder={t('输入每次调用价格')}
                     suffix={t('$/次')}
-                    onChange={(value) => handleNumericFieldChange('fixedPrice', value)}
+                    onChange={(value) =>
+                      handleNumericFieldChange('fixedPrice', value)
+                    }
                     extraText={t('适合 MJ / 任务类等按次收费模型。')}
                   />
                 ) : (
@@ -435,7 +444,9 @@ export default function ModelPricingEditor({
                         label={t('输入价格')}
                         value={selectedModel.inputPrice}
                         placeholder={t('输入 $/1M tokens')}
-                        onChange={(value) => handleNumericFieldChange('inputPrice', value)}
+                        onChange={(value) =>
+                          handleNumericFieldChange('inputPrice', value)
+                        }
                       />
                       {selectedModel.completionRatioLocked ? (
                         <Banner
@@ -469,12 +480,18 @@ export default function ModelPricingEditor({
                             )}
                             disabled={selectedModel.completionRatioLocked}
                             onChange={(checked) =>
-                              handleOptionalFieldToggle('completionPrice', checked)
+                              handleOptionalFieldToggle(
+                                'completionPrice',
+                                checked,
+                              )
                             }
                           />
                         }
                         hidden={
-                          !isOptionalFieldEnabled(selectedModel, 'completionPrice')
+                          !isOptionalFieldEnabled(
+                            selectedModel,
+                            'completionPrice',
+                          )
                         }
                         disabled={
                           !hasValue(selectedModel.inputPrice) ||
@@ -485,7 +502,8 @@ export default function ModelPricingEditor({
                             ? t(
                                 '后端固定倍率：{{ratio}}。该字段仅展示换算后的价格。',
                                 {
-                                  ratio: selectedModel.lockedCompletionRatio || '-',
+                                  ratio:
+                                    selectedModel.lockedCompletionRatio || '-',
                                 },
                               )
                             : !isOptionalFieldEnabled(
@@ -500,17 +518,24 @@ export default function ModelPricingEditor({
                         label={t('缓存读取价格')}
                         value={selectedModel.cachePrice}
                         placeholder={t('输入 $/1M tokens')}
-                        onChange={(value) => handleNumericFieldChange('cachePrice', value)}
+                        onChange={(value) =>
+                          handleNumericFieldChange('cachePrice', value)
+                        }
                         headerAction={
                           <Switch
                             size='small'
-                            checked={isOptionalFieldEnabled(selectedModel, 'cachePrice')}
+                            checked={isOptionalFieldEnabled(
+                              selectedModel,
+                              'cachePrice',
+                            )}
                             onChange={(checked) =>
                               handleOptionalFieldToggle('cachePrice', checked)
                             }
                           />
                         }
-                        hidden={!isOptionalFieldEnabled(selectedModel, 'cachePrice')}
+                        hidden={
+                          !isOptionalFieldEnabled(selectedModel, 'cachePrice')
+                        }
                         disabled={!hasValue(selectedModel.inputPrice)}
                         extraText={
                           !isOptionalFieldEnabled(selectedModel, 'cachePrice')
@@ -533,12 +558,18 @@ export default function ModelPricingEditor({
                               'createCachePrice',
                             )}
                             onChange={(checked) =>
-                              handleOptionalFieldToggle('createCachePrice', checked)
+                              handleOptionalFieldToggle(
+                                'createCachePrice',
+                                checked,
+                              )
                             }
                           />
                         }
                         hidden={
-                          !isOptionalFieldEnabled(selectedModel, 'createCachePrice')
+                          !isOptionalFieldEnabled(
+                            selectedModel,
+                            'createCachePrice',
+                          )
                         }
                         disabled={!hasValue(selectedModel.inputPrice)}
                         extraText={
@@ -569,17 +600,24 @@ export default function ModelPricingEditor({
                         label={t('图片输入价格')}
                         value={selectedModel.imagePrice}
                         placeholder={t('输入 $/1M tokens')}
-                        onChange={(value) => handleNumericFieldChange('imagePrice', value)}
+                        onChange={(value) =>
+                          handleNumericFieldChange('imagePrice', value)
+                        }
                         headerAction={
                           <Switch
                             size='small'
-                            checked={isOptionalFieldEnabled(selectedModel, 'imagePrice')}
+                            checked={isOptionalFieldEnabled(
+                              selectedModel,
+                              'imagePrice',
+                            )}
                             onChange={(checked) =>
                               handleOptionalFieldToggle('imagePrice', checked)
                             }
                           />
                         }
-                        hidden={!isOptionalFieldEnabled(selectedModel, 'imagePrice')}
+                        hidden={
+                          !isOptionalFieldEnabled(selectedModel, 'imagePrice')
+                        }
                         disabled={!hasValue(selectedModel.inputPrice)}
                         extraText={
                           !isOptionalFieldEnabled(selectedModel, 'imagePrice')
@@ -602,11 +640,19 @@ export default function ModelPricingEditor({
                               'audioInputPrice',
                             )}
                             onChange={(checked) =>
-                              handleOptionalFieldToggle('audioInputPrice', checked)
+                              handleOptionalFieldToggle(
+                                'audioInputPrice',
+                                checked,
+                              )
                             }
                           />
                         }
-                        hidden={!isOptionalFieldEnabled(selectedModel, 'audioInputPrice')}
+                        hidden={
+                          !isOptionalFieldEnabled(
+                            selectedModel,
+                            'audioInputPrice',
+                          )
+                        }
                         disabled={!hasValue(selectedModel.inputPrice)}
                         extraText={
                           !isOptionalFieldEnabled(
@@ -631,17 +677,25 @@ export default function ModelPricingEditor({
                               selectedModel,
                               'audioOutputPrice',
                             )}
-                            disabled={!isOptionalFieldEnabled(
-                              selectedModel,
-                              'audioInputPrice',
-                            )}
+                            disabled={
+                              !isOptionalFieldEnabled(
+                                selectedModel,
+                                'audioInputPrice',
+                              )
+                            }
                             onChange={(checked) =>
-                              handleOptionalFieldToggle('audioOutputPrice', checked)
+                              handleOptionalFieldToggle(
+                                'audioOutputPrice',
+                                checked,
+                              )
                             }
                           />
                         }
                         hidden={
-                          !isOptionalFieldEnabled(selectedModel, 'audioOutputPrice')
+                          !isOptionalFieldEnabled(
+                            selectedModel,
+                            'audioOutputPrice',
+                          )
                         }
                         disabled={!hasValue(selectedModel.audioInputPrice)}
                         extraText={
@@ -658,6 +712,137 @@ export default function ModelPricingEditor({
                               : ''
                         }
                       />
+                      <div style={{ marginTop: 8 }}>
+                        <div className='mb-1 font-medium text-gray-700 flex items-center justify-between gap-3'>
+                          <span className='flex items-center gap-1'>
+                            {t('视频价格')}
+                            <Tooltip
+                              position='top'
+                              content={
+                                <div style={{ maxWidth: 320 }}>
+                                  <div className='font-medium mb-1'>
+                                    {t('视频 token 估算公式')}
+                                  </div>
+                                  <div>
+                                    {t(
+                                      '(输入视频时长 + 输出视频时长) × 输出视频宽 × 输出视频高 × 输出帧率 / 1024',
+                                    )}
+                                  </div>
+                                  <div className='mt-2 text-xs'>
+                                    {t(
+                                      '上述 token 用量均为估算值；如供应商按视频条数计费，可切换到“按视频”模式。',
+                                    )}
+                                  </div>
+                                </div>
+                              }
+                            >
+                              <IconHelpCircle
+                                style={{
+                                  cursor: 'help',
+                                  color: 'var(--semi-color-text-2)',
+                                }}
+                              />
+                            </Tooltip>
+                          </span>
+                          <Switch
+                            size='small'
+                            checked={isOptionalFieldEnabled(
+                              selectedModel,
+                              'video',
+                            )}
+                            onChange={(checked) =>
+                              handleOptionalFieldToggle('video', checked)
+                            }
+                          />
+                        </div>
+                        {!isOptionalFieldEnabled(selectedModel, 'video') ? (
+                          <div className='mt-1 text-xs text-gray-500'>
+                            {t('当前未启用，需要时再打开即可。')}
+                          </div>
+                        ) : (
+                          <div
+                            style={{
+                              marginTop: 8,
+                              padding: 12,
+                              background: 'var(--semi-color-fill-1)',
+                              borderRadius: 6,
+                            }}
+                          >
+                            <div className='mb-2 text-xs text-gray-600'>
+                              {t('计费模式')}
+                            </div>
+                            <RadioGroup
+                              type='button'
+                              value={selectedModel.videoBillingMode}
+                              onChange={(event) =>
+                                handleVideoBillingModeChange(event.target.value)
+                              }
+                              style={{ marginBottom: 12 }}
+                            >
+                              <Radio value='per-token'>
+                                {t('按 token 计费')}
+                              </Radio>
+                              <Radio value='per-video'>{t('按视频计费')}</Radio>
+                            </RadioGroup>
+                            {selectedModel.videoBillingMode === 'per-token' ? (
+                              <>
+                                <PriceInput
+                                  label={t('视频输入价格')}
+                                  value={selectedModel.videoInputPrice}
+                                  placeholder={t('输入 $/1M tokens')}
+                                  onChange={(value) =>
+                                    handleNumericFieldChange(
+                                      'videoInputPrice',
+                                      value,
+                                    )
+                                  }
+                                  disabled={!hasValue(selectedModel.inputPrice)}
+                                  extraText={
+                                    !hasValue(selectedModel.inputPrice)
+                                      ? t('请先填写基础输入价格。')
+                                      : ''
+                                  }
+                                />
+                                <PriceInput
+                                  label={t('视频输出价格')}
+                                  value={selectedModel.videoOutputPrice}
+                                  placeholder={t('输入 $/1M tokens')}
+                                  onChange={(value) =>
+                                    handleNumericFieldChange(
+                                      'videoOutputPrice',
+                                      value,
+                                    )
+                                  }
+                                  disabled={
+                                    !hasValue(selectedModel.videoInputPrice)
+                                  }
+                                  extraText={
+                                    !hasValue(selectedModel.videoInputPrice)
+                                      ? t('请先填写视频输入价格。')
+                                      : ''
+                                  }
+                                />
+                              </>
+                            ) : (
+                              <PriceInput
+                                label={t('单视频固定价格')}
+                                value={selectedModel.videoFixedPrice}
+                                placeholder={t('输入每个视频价格')}
+                                suffix={t('$/视频')}
+                                onChange={(value) =>
+                                  handleNumericFieldChange(
+                                    'videoFixedPrice',
+                                    value,
+                                  )
+                                }
+                                extraText={t(
+                                  '适用于供应商按视频条数计费的场景，例如部分视频生成模型。',
+                                )}
+                              />
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </Card>
                   </>
                 )}

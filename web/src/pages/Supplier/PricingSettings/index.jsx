@@ -19,7 +19,10 @@ For commercial licensing, please contact support@quantumnous.com
 
 import React, { useEffect, useState } from 'react';
 import { Button, Card, Empty, Spin, Tabs } from '@douyinfe/semi-ui';
-import { IllustrationNoAccess, IllustrationNoAccessDark } from '@douyinfe/semi-illustrations';
+import {
+  IllustrationNoAccess,
+  IllustrationNoAccessDark,
+} from '@douyinfe/semi-illustrations';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
@@ -46,6 +49,9 @@ const SupplierPricingSettingsContent = () => {
     ImageRatio: '',
     AudioRatio: '',
     AudioCompletionRatio: '',
+    VideoRatio: '',
+    VideoCompletionRatio: '',
+    VideoPrice: '',
     AutoGroups: '',
     DefaultUseAutoGroup: false,
     ExposeRatioEnabled: false,
@@ -68,10 +74,11 @@ const SupplierPricingSettingsContent = () => {
           if (item.value.startsWith('{') || item.value.startsWith('[')) {
             try {
               item.value = JSON.stringify(JSON.parse(item.value), null, 2);
-            } catch (e) {
-            }
+            } catch (e) {}
           }
-          if (['DefaultUseAutoGroup', 'ExposeRatioEnabled'].includes(item.key)) {
+          if (
+            ['DefaultUseAutoGroup', 'ExposeRatioEnabled'].includes(item.key)
+          ) {
             newInputs[item.key] = toBoolean(item.value);
           } else {
             newInputs[item.key] = item.value;
@@ -139,10 +146,15 @@ const PricingSettingsPage = () => {
   if (!isSupplier()) {
     return (
       <div className='mt-[60px] px-2'>
-        <div className='flex items-center justify-center' style={{ minHeight: 'calc(100vh - 360px)' }}>
+        <div
+          className='flex items-center justify-center'
+          style={{ minHeight: 'calc(100vh - 360px)' }}
+        >
           <Empty
             image={<IllustrationNoAccess style={{ width: 200, height: 200 }} />}
-            darkModeImage={<IllustrationNoAccessDark style={{ width: 200, height: 200 }} />}
+            darkModeImage={
+              <IllustrationNoAccessDark style={{ width: 200, height: 200 }} />
+            }
             layout='horizontal'
             title={t('需要供应商权限')}
             description={t('您需要先成为供应商才能访问此页面。')}

@@ -131,7 +131,9 @@ function formatCellNumber(v) {
   if (Number.isNaN(n)) return String(v);
   const r = Math.round(n * 1e6) / 1e6;
   if (Math.abs(r - Math.round(r)) < 1e-9) return String(Math.round(r));
-  return String(r).replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.$/, '');
+  return String(r)
+    .replace(/(\.\d*?[1-9])0+$/, '$1')
+    .replace(/\.$/, '');
 }
 
 const RATIO_TO_PRICE_FACTOR = 2;
@@ -172,7 +174,9 @@ function formatPriceNumber(v) {
   const n = roundToPlaces(v, PRICE_DECIMAL_PLACES);
   if (n === null) return String(v);
   if (Math.abs(n - Math.round(n)) < 1e-9) return String(Math.round(n));
-  return String(n).replace(/(\.\d*?[1-9])0+$/, '$1').replace(/\.$/, '');
+  return String(n)
+    .replace(/(\.\d*?[1-9])0+$/, '$1')
+    .replace(/\.$/, '');
 }
 
 function formatOldNewPair(oldVal, newVal) {
@@ -562,9 +566,8 @@ export default function UpstreamRatioSync(props) {
 
       const getCurrentEffectiveModelRatio = (model, cid) => {
         if (cid != null && cid > 0) {
-          const channelRatio = baseline.channel.ChannelModelRatio?.[String(cid)]?.[
-            model
-          ];
+          const channelRatio =
+            baseline.channel.ChannelModelRatio?.[String(cid)]?.[model];
           const channelRatioNum = toFiniteNumber(channelRatio);
           if (channelRatioNum !== null) {
             return channelRatioNum;
@@ -637,13 +640,15 @@ export default function UpstreamRatioSync(props) {
           if (cid != null && cid > 0) {
             const idStr = String(cid);
             if (hasPrice) {
-              ['ChannelModelRatio', 'ChannelCompletionRatio', 'ChannelCacheRatio'].forEach(
-                (rk) => {
-                  if (finalChannel[rk][idStr]) {
-                    delete finalChannel[rk][idStr][model];
-                  }
-                },
-              );
+              [
+                'ChannelModelRatio',
+                'ChannelCompletionRatio',
+                'ChannelCacheRatio',
+              ].forEach((rk) => {
+                if (finalChannel[rk][idStr]) {
+                  delete finalChannel[rk][idStr][model];
+                }
+              });
             }
             if (hasRatio && finalChannel.ChannelModelPrice[idStr]) {
               delete finalChannel.ChannelModelPrice[idStr][model];
@@ -734,7 +739,7 @@ export default function UpstreamRatioSync(props) {
                 const num = parseFloat(value);
                 const synced = Number.isNaN(num)
                   ? value
-                  : normalizeStoredNumber(num) ?? num;
+                  : (normalizeStoredNumber(num) ?? num);
                 if (!diff.upstream_old) diff.upstream_old = {};
                 diff.upstream_old[srcName] = synced;
                 diff.upstreams[srcName] = synced;
@@ -872,7 +877,11 @@ export default function UpstreamRatioSync(props) {
 
       if (record.ratioType === 'completion_ratio') {
         const completionRatio = toFiniteNumber(record.current);
-        const inputRatio = getModelRatioForDisplay(record.model, null, 'current');
+        const inputRatio = getModelRatioForDisplay(
+          record.model,
+          null,
+          'current',
+        );
         if (completionRatio === null || inputRatio === null) return t('未设置');
         const outputPrice = ratioToDisplayPrice(inputRatio * completionRatio);
         return outputPrice === null
@@ -882,7 +891,11 @@ export default function UpstreamRatioSync(props) {
 
       if (record.ratioType === 'cache_ratio') {
         const cacheRatio = toFiniteNumber(record.current);
-        const inputRatio = getModelRatioForDisplay(record.model, null, 'current');
+        const inputRatio = getModelRatioForDisplay(
+          record.model,
+          null,
+          'current',
+        );
         if (cacheRatio === null || inputRatio === null) return t('未设置');
         const cachePrice = ratioToDisplayPrice(inputRatio * cacheRatio);
         return cachePrice === null

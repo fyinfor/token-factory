@@ -18,6 +18,10 @@ const EMPTY_MODEL = {
   imagePrice: '',
   audioInputPrice: '',
   audioOutputPrice: '',
+  videoBillingMode: 'per-token',
+  videoInputPrice: '',
+  videoOutputPrice: '',
+  videoFixedPrice: '',
   rawRatios: {
     modelRatio: '',
     completionRatio: '',
@@ -26,6 +30,9 @@ const EMPTY_MODEL = {
     imageRatio: '',
     audioRatio: '',
     audioCompletionRatio: '',
+    videoRatio: '',
+    videoCompletionRatio: '',
+    videoPrice: '',
   },
   hasConflict: false,
 };
@@ -119,12 +126,25 @@ const buildModelState = (name, sourceMaps) => {
   const audioCompletionRatio = toNumericString(
     sourceMaps.AudioCompletionRatio[name],
   );
+  const videoRatio = toNumericString(sourceMaps.VideoRatio[name]);
+  const videoCompletionRatio = toNumericString(
+    sourceMaps.VideoCompletionRatio[name],
+  );
+  const videoPrice = toNumericString(sourceMaps.VideoPrice[name]);
   const fixedPrice = toNumericString(sourceMaps.ModelPrice[name]);
   const inputPrice = ratioToBasePrice(modelRatio);
   const inputPriceNumber = toNumberOrNull(inputPrice);
   const audioInputPrice =
     inputPriceNumber !== null && hasValue(audioRatio)
       ? formatNumber(inputPriceNumber * Number(audioRatio))
+      : '';
+  const videoInputPrice =
+    inputPriceNumber !== null && hasValue(videoRatio)
+      ? formatNumber(inputPriceNumber * Number(videoRatio))
+      : '';
+  const videoOutputPrice =
+    toNumberOrNull(videoInputPrice) !== null && hasValue(videoCompletionRatio)
+      ? formatNumber(Number(videoInputPrice) * Number(videoCompletionRatio))
       : '';
 
   return {
@@ -168,6 +188,10 @@ const buildModelState = (name, sourceMaps) => {
       toNumberOrNull(audioInputPrice) !== null && hasValue(audioCompletionRatio)
         ? formatNumber(Number(audioInputPrice) * Number(audioCompletionRatio))
         : '',
+    videoBillingMode: hasValue(videoPrice) ? 'per-video' : 'per-token',
+    videoInputPrice,
+    videoOutputPrice,
+    videoFixedPrice: videoPrice,
     rawRatios: {
       modelRatio,
       completionRatio,
@@ -176,6 +200,9 @@ const buildModelState = (name, sourceMaps) => {
       imageRatio,
       audioRatio,
       audioCompletionRatio,
+      videoRatio,
+      videoCompletionRatio,
+      videoPrice,
     },
     hasConflict:
       hasValue(fixedPrice) &&
@@ -187,6 +214,9 @@ const buildModelState = (name, sourceMaps) => {
         imageRatio,
         audioRatio,
         audioCompletionRatio,
+        videoRatio,
+        videoCompletionRatio,
+        videoPrice,
       ].some(hasValue),
   };
 };
@@ -207,6 +237,8 @@ export const getModelWarnings = (model, t) => {
     model.imagePrice,
     model.audioInputPrice,
     model.audioOutputPrice,
+    model.videoInputPrice,
+    model.videoOutputPrice,
   ].some(hasValue);
 
   if (model.hasConflict) {
@@ -224,6 +256,8 @@ export const getModelWarnings = (model, t) => {
       model.rawRatios.imageRatio,
       model.rawRatios.audioRatio,
       model.rawRatios.audioCompletionRatio,
+      model.rawRatios.videoRatio,
+      model.rawRatios.videoCompletionRatio,
     ].some(hasValue)
   ) {
     warnings.push(
@@ -247,6 +281,15 @@ export const getModelWarnings = (model, t) => {
     !hasValue(model.audioInputPrice)
   ) {
     warnings.push(t('填写音频输出价格前，需要先填写音频输入价格。'));
+  }
+
+  if (
+    model.billingMode === 'per-token' &&
+    model.videoBillingMode === 'per-token' &&
+    hasValue(model.videoOutputPrice) &&
+    !hasValue(model.videoInputPrice)
+  ) {
+    warnings.push(t('填写视频输出价格前，需要先填写视频输入价格。'));
   }
 
   return warnings;
@@ -276,6 +319,10 @@ export const buildOptionalFieldToggles = (model) => ({
   imagePrice: hasValue(model.imagePrice),
   audioInputPrice: hasValue(model.audioInputPrice),
   audioOutputPrice: hasValue(model.audioOutputPrice),
+  video:
+    hasValue(model.videoInputPrice) ||
+    hasValue(model.videoOutputPrice) ||
+    hasValue(model.videoFixedPrice),
 });
 
 const serializeModel = (model, t) => {
@@ -288,6 +335,9 @@ const serializeModel = (model, t) => {
     ImageRatio: null,
     AudioRatio: null,
     AudioCompletionRatio: null,
+    VideoRatio: null,
+    VideoCompletionRatio: null,
+    VideoPrice: null,
   };
 
   if (model.billingMode === 'per-request') {
@@ -304,6 +354,11 @@ const serializeModel = (model, t) => {
   const imagePrice = toNumberOrNull(model.imagePrice);
   const audioInputPrice = toNumberOrNull(model.audioInputPrice);
   const audioOutputPrice = toNumberOrNull(model.audioOutputPrice);
+  const videoInputPrice = toNumberOrNull(model.videoInputPrice);
+  const videoOutputPrice = toNumberOrNull(model.videoOutputPrice);
+  const videoFixedPrice = toNumberOrNull(model.videoFixedPrice);
+  const videoPerToken = model.videoBillingMode === 'per-token';
+  const videoPerVideo = model.videoBillingMode === 'per-video';
 
   const hasDependentPrice = [
     completionPrice,
@@ -312,6 +367,8 @@ const serializeModel = (model, t) => {
     imagePrice,
     audioInputPrice,
     audioOutputPrice,
+    videoPerToken ? videoInputPrice : null,
+    videoPerToken ? videoOutputPrice : null,
   ].some((value) => value !== null);
 
   if (inputPrice === null) {
@@ -353,6 +410,18 @@ const serializeModel = (model, t) => {
         model.rawRatios.audioCompletionRatio,
       );
     }
+    if (videoPerToken) {
+      if (hasValue(model.rawRatios.videoRatio)) {
+        result.VideoRatio = toNormalizedNumber(model.rawRatios.videoRatio);
+      }
+      if (hasValue(model.rawRatios.videoCompletionRatio)) {
+        result.VideoCompletionRatio = toNormalizedNumber(
+          model.rawRatios.videoCompletionRatio,
+        );
+      }
+    } else if (videoPerVideo && videoFixedPrice !== null) {
+      result.VideoPrice = toNormalizedNumber(videoFixedPrice);
+    }
     return result;
   }
 
@@ -393,6 +462,26 @@ const serializeModel = (model, t) => {
     );
   }
 
+  if (videoPerToken) {
+    if (videoInputPrice !== null) {
+      result.VideoRatio = toNormalizedNumber(videoInputPrice / inputPrice);
+    }
+    if (videoOutputPrice !== null) {
+      if (videoInputPrice === null || videoInputPrice === 0) {
+        throw new Error(
+          t('模型 {{name}} 缺少视频输入价格，无法计算视频输出倍率', {
+            name: model.name,
+          }),
+        );
+      }
+      result.VideoCompletionRatio = toNormalizedNumber(
+        videoOutputPrice / videoInputPrice,
+      );
+    }
+  } else if (videoPerVideo && videoFixedPrice !== null) {
+    result.VideoPrice = toNormalizedNumber(videoFixedPrice);
+  }
+
   return result;
 };
 
@@ -410,6 +499,8 @@ export const buildPreviewRows = (model, t) => {
   }
 
   const inputPrice = toNumberOrNull(model.inputPrice);
+  const videoPerToken = model.videoBillingMode === 'per-token';
+  const videoPerVideo = model.videoBillingMode === 'per-video';
   if (inputPrice === null) {
     return [
       {
@@ -461,6 +552,30 @@ export const buildPreviewRows = (model, t) => {
           ? model.rawRatios.audioCompletionRatio
           : t('空'),
       },
+      {
+        key: 'VideoRatio',
+        label: 'VideoRatio',
+        value:
+          videoPerToken && hasValue(model.rawRatios.videoRatio)
+            ? model.rawRatios.videoRatio
+            : t('空'),
+      },
+      {
+        key: 'VideoCompletionRatio',
+        label: 'VideoCompletionRatio',
+        value:
+          videoPerToken && hasValue(model.rawRatios.videoCompletionRatio)
+            ? model.rawRatios.videoCompletionRatio
+            : t('空'),
+      },
+      {
+        key: 'VideoPrice',
+        label: 'VideoPrice',
+        value:
+          videoPerVideo && hasValue(model.videoFixedPrice)
+            ? model.videoFixedPrice
+            : t('空'),
+      },
     ];
   }
 
@@ -470,6 +585,9 @@ export const buildPreviewRows = (model, t) => {
   const imagePrice = toNumberOrNull(model.imagePrice);
   const audioInputPrice = toNumberOrNull(model.audioInputPrice);
   const audioOutputPrice = toNumberOrNull(model.audioOutputPrice);
+  const videoInputPrice = toNumberOrNull(model.videoInputPrice);
+  const videoOutputPrice = toNumberOrNull(model.videoOutputPrice);
+  const videoFixedPrice = toNumberOrNull(model.videoFixedPrice);
 
   return [
     {
@@ -524,6 +642,33 @@ export const buildPreviewRows = (model, t) => {
           ? formatNumber(audioOutputPrice / audioInputPrice)
           : t('空'),
     },
+    {
+      key: 'VideoRatio',
+      label: 'VideoRatio',
+      value:
+        videoPerToken && videoInputPrice !== null
+          ? formatNumber(videoInputPrice / inputPrice)
+          : t('空'),
+    },
+    {
+      key: 'VideoCompletionRatio',
+      label: 'VideoCompletionRatio',
+      value:
+        videoPerToken &&
+        videoOutputPrice !== null &&
+        videoInputPrice !== null &&
+        videoInputPrice !== 0
+          ? formatNumber(videoOutputPrice / videoInputPrice)
+          : t('空'),
+    },
+    {
+      key: 'VideoPrice',
+      label: 'VideoPrice',
+      value:
+        videoPerVideo && videoFixedPrice !== null
+          ? formatNumber(videoFixedPrice)
+          : t('空'),
+    },
   ];
 };
 
@@ -559,6 +704,10 @@ export function useModelPricingEditorState({
       AudioRatio: optionKeys?.AudioRatio || 'AudioRatio',
       AudioCompletionRatio:
         optionKeys?.AudioCompletionRatio || 'AudioCompletionRatio',
+      VideoRatio: optionKeys?.VideoRatio || 'VideoRatio',
+      VideoCompletionRatio:
+        optionKeys?.VideoCompletionRatio || 'VideoCompletionRatio',
+      VideoPrice: optionKeys?.VideoPrice || 'VideoPrice',
     }),
     [optionKeys],
   );
@@ -582,6 +731,11 @@ export function useModelPricingEditorState({
       AudioCompletionRatio: parseOptionJSON(
         options[resolvedOptionKeys.AudioCompletionRatio],
       ),
+      VideoRatio: parseOptionJSON(options[resolvedOptionKeys.VideoRatio]),
+      VideoCompletionRatio: parseOptionJSON(
+        options[resolvedOptionKeys.VideoCompletionRatio],
+      ),
+      VideoPrice: parseOptionJSON(options[resolvedOptionKeys.VideoPrice]),
     };
 
     // strictCandidateModelNames=true 时，模型列表严格限制为外部传入候选模型（用于按渠道筛模型）。
@@ -598,6 +752,9 @@ export function useModelPricingEditorState({
           ...Object.keys(sourceMaps.ImageRatio),
           ...Object.keys(sourceMaps.AudioRatio),
           ...Object.keys(sourceMaps.AudioCompletionRatio),
+          ...Object.keys(sourceMaps.VideoRatio),
+          ...Object.keys(sourceMaps.VideoCompletionRatio),
+          ...Object.keys(sourceMaps.VideoPrice),
         ]);
 
     const nextModels = Array.from(names)
@@ -748,8 +905,22 @@ export function useModelPricingEditorState({
         }));
       }
 
+      if (field === 'video') {
+        nextModel.videoInputPrice = '';
+        nextModel.videoOutputPrice = '';
+        nextModel.videoFixedPrice = '';
+      }
+
       return nextModel;
     });
+  };
+
+  const handleVideoBillingModeChange = (value) => {
+    if (!selectedModel) return;
+    upsertModel(selectedModel.name, (model) => ({
+      ...model,
+      videoBillingMode: value,
+    }));
   };
 
   const fillDerivedPricesFromBase = (model, nextInputPrice) => {
@@ -794,6 +965,20 @@ export function useModelPricingEditorState({
                 Number(model.rawRatios.audioCompletionRatio),
             )
           : model.audioOutputPrice,
+      videoInputPrice:
+        !hasValue(model.videoInputPrice) && hasValue(model.rawRatios.videoRatio)
+          ? formatNumber(baseNumber * Number(model.rawRatios.videoRatio))
+          : model.videoInputPrice,
+      videoOutputPrice:
+        !hasValue(model.videoOutputPrice) &&
+        hasValue(model.rawRatios.videoRatio) &&
+        hasValue(model.rawRatios.videoCompletionRatio)
+          ? formatNumber(
+              baseNumber *
+                Number(model.rawRatios.videoRatio) *
+                Number(model.rawRatios.videoCompletionRatio),
+            )
+          : model.videoOutputPrice,
     };
   };
 
@@ -893,6 +1078,10 @@ export function useModelPricingEditorState({
           imagePrice: selectedModel.imagePrice,
           audioInputPrice: selectedModel.audioInputPrice,
           audioOutputPrice: selectedModel.audioOutputPrice,
+          videoBillingMode: selectedModel.videoBillingMode,
+          videoInputPrice: selectedModel.videoInputPrice,
+          videoOutputPrice: selectedModel.videoOutputPrice,
+          videoFixedPrice: selectedModel.videoFixedPrice,
         };
 
         if (
@@ -926,6 +1115,7 @@ export function useModelPricingEditorState({
           audioOutputPrice:
             Boolean(sourceToggles.audioInputPrice) &&
             Boolean(sourceToggles.audioOutputPrice),
+          video: Boolean(sourceToggles.video),
         };
       });
       return next;
@@ -952,6 +1142,9 @@ export function useModelPricingEditorState({
         ImageRatio: {},
         AudioRatio: {},
         AudioCompletionRatio: {},
+        VideoRatio: {},
+        VideoCompletionRatio: {},
+        VideoPrice: {},
       };
 
       for (const model of models) {
@@ -968,7 +1161,7 @@ export function useModelPricingEditorState({
       } else {
         const requestQueue = Object.entries(output).map(([key, value]) =>
           API.put('/api/option/', {
-            key,
+            key: resolvedOptionKeys[key] || key,
             value: JSON.stringify(value, null, 2),
           }),
         );
@@ -1013,6 +1206,7 @@ export function useModelPricingEditorState({
     handleOptionalFieldToggle,
     handleNumericFieldChange,
     handleBillingModeChange,
+    handleVideoBillingModeChange,
     handleSubmit,
     addModel,
     deleteModel,

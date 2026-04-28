@@ -43,7 +43,8 @@ const Navigation = ({
     const baseClasses =
       'flex-shrink-0 flex items-center text-sm font-medium transition-all duration-200 ease-in-out rounded-md';
     const spacingClasses = isMobile ? 'px-2 py-1' : 'px-3 py-2';
-    const hoverClasses = 'hover:!bg-semi-color-fill-1 dark:hover:!bg-gray-700/50 hover:!text-semi-color-text-0 dark:hover:!text-white';
+    const hoverClasses =
+      'hover:!bg-semi-color-fill-1 dark:hover:!bg-gray-700/50 hover:!text-semi-color-text-0 dark:hover:!text-white';
 
     return mainNavLinks.map((link) => {
       const linkContent = <span>{link.text}</span>;

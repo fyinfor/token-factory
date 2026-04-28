@@ -42,7 +42,7 @@ const renderRole = (role, record, t) => {
     record.is_distributor === 1 ||
     record.is_distributor === true ||
     legacyDistributorRole;
-  const isSupplier = !!record.supplier_id && record.supplier_id !== 0
+  const isSupplier = !!record.supplier_id && record.supplier_id !== 0;
   const baseRole = legacyDistributorRole ? USER_ROLES.USER : role;
   let baseTag;
   switch (baseRole) {
@@ -78,12 +78,16 @@ const renderRole = (role, record, t) => {
   return (
     <Space spacing={4}>
       {baseTag}
-      {isDistributor && <Tag color='green' shape='circle'>
-        {t('代理')}
-      </Tag>}
-      {isSupplier && <Tag color='purple' shape='circle'>
-        {t('供应商')}
-      </Tag>}
+      {isDistributor && (
+        <Tag color='green' shape='circle'>
+          {t('代理')}
+        </Tag>
+      )}
+      {isSupplier && (
+        <Tag color='purple' shape='circle'>
+          {t('供应商')}
+        </Tag>
+      )}
     </Space>
   );
 };
@@ -420,9 +424,7 @@ export const getUsersColumns = ({
       title: t('角色'),
       dataIndex: 'role',
       render: (text, record, index) => {
-        return (
-          <div>{renderRole(text, record, t)}</div>
-        );
+        return <div>{renderRole(text, record, t)}</div>;
       },
     },
     {
@@ -435,26 +437,40 @@ export const getUsersColumns = ({
       dataIndex: 'created_by',
       width: 120,
       render: (v) => (
-        <span className='text-xs whitespace-nowrap'>{renderCreatedBy(v, t)}</span>
+        <span className='text-xs whitespace-nowrap'>
+          {renderCreatedBy(v, t)}
+        </span>
       ),
     },
     {
       title: t('注册时间'),
       dataIndex: 'created_at',
       width: 152,
-      render: (v) => <span className='text-xs whitespace-nowrap'>{renderUserDateTime(v)}</span>,
+      render: (v) => (
+        <span className='text-xs whitespace-nowrap'>
+          {renderUserDateTime(v)}
+        </span>
+      ),
     },
     {
       title: t('修改时间'),
       dataIndex: 'updated_at',
       width: 152,
-      render: (v) => <span className='text-xs whitespace-nowrap'>{renderUserDateTime(v)}</span>,
+      render: (v) => (
+        <span className='text-xs whitespace-nowrap'>
+          {renderUserDateTime(v)}
+        </span>
+      ),
     },
     {
       title: t('上次登录'),
       dataIndex: 'last_login_at',
       width: 152,
-      render: (v) => <span className='text-xs whitespace-nowrap'>{renderUserDateTime(v)}</span>,
+      render: (v) => (
+        <span className='text-xs whitespace-nowrap'>
+          {renderUserDateTime(v)}
+        </span>
+      ),
     },
     {
       title: '',

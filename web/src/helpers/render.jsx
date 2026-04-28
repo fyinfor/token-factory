@@ -2019,7 +2019,9 @@ export function renderModelPrice(
 
   if (modelPrice !== -1) {
     const displayPrice = parseFloat((modelPrice * rate).toFixed(2));
-    const displayTotal = parseFloat((modelPrice * groupRatio * rate).toFixed(2));
+    const displayTotal = parseFloat(
+      (modelPrice * groupRatio * rate).toFixed(2),
+    );
     return i18next.t(
       '按次：{{symbol}}{{price}} * {{ratioType}}：{{ratio}} = {{symbol}}{{total}}',
       {
@@ -2270,9 +2272,13 @@ export function renderLogContent(
       i18next.t('输出价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
         price: parseFloat(
-          (modelRatio * 2.0 * completionRatio * displayMultiplier * rate).toFixed(
-            2,
-          ),
+          (
+            modelRatio *
+            2.0 *
+            completionRatio *
+            displayMultiplier *
+            rate
+          ).toFixed(2),
         ),
       }),
     ];
@@ -3154,9 +3160,13 @@ export function renderClaudeLogContent(
       i18next.t('输出价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
         price: parseFloat(
-          (modelRatio * 2.0 * completionRatio * displayMultiplier * rate).toFixed(
-            2,
-          ),
+          (
+            modelRatio *
+            2.0 *
+            completionRatio *
+            displayMultiplier *
+            rate
+          ).toFixed(2),
         ),
       }),
       i18next.t('缓存读取价格 {{symbol}}{{price}} / 1M tokens', {
@@ -3175,9 +3185,13 @@ export function renderClaudeLogContent(
       {
         symbol,
         price: parseFloat(
-          (modelRatio * 2.0 * cacheCreationRatio5m * displayMultiplier * rate).toFixed(
-            2,
-          ),
+          (
+            modelRatio *
+            2.0 *
+            cacheCreationRatio5m *
+            displayMultiplier *
+            rate
+          ).toFixed(2),
         ),
       },
     );
@@ -3188,9 +3202,13 @@ export function renderClaudeLogContent(
       {
         symbol,
         price: parseFloat(
-          (modelRatio * 2.0 * cacheCreationRatio1h * displayMultiplier * rate).toFixed(
-            2,
-          ),
+          (
+            modelRatio *
+            2.0 *
+            cacheCreationRatio1h *
+            displayMultiplier *
+            rate
+          ).toFixed(2),
         ),
       },
     );
@@ -3201,9 +3219,13 @@ export function renderClaudeLogContent(
       {
         symbol,
         price: parseFloat(
-          (modelRatio * 2.0 * cacheCreationRatio * displayMultiplier * rate).toFixed(
-            2,
-          ),
+          (
+            modelRatio *
+            2.0 *
+            cacheCreationRatio *
+            displayMultiplier *
+            rate
+          ).toFixed(2),
         ),
       },
     );

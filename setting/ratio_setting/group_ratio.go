@@ -35,6 +35,9 @@ var channelCreateCacheRatioMap = types.NewRWMap[string, map[string]float64]()
 var channelImageRatioMap = types.NewRWMap[string, map[string]float64]()
 var channelAudioRatioMap = types.NewRWMap[string, map[string]float64]()
 var channelAudioCompletionRatioMap = types.NewRWMap[string, map[string]float64]()
+var channelVideoRatioMap = types.NewRWMap[string, map[string]float64]()
+var channelVideoCompletionRatioMap = types.NewRWMap[string, map[string]float64]()
+var channelVideoPriceMap = types.NewRWMap[string, map[string]float64]()
 var supplierModelPriceMap = types.NewRWMap[string, map[string]float64]()
 var supplierModelRatioMap = types.NewRWMap[string, map[string]float64]()
 
@@ -327,6 +330,45 @@ func UpdateChannelAudioCompletionRatioByJSONString(jsonStr string) error {
 }
 func GetChannelAudioCompletionRatioCopy() map[string]map[string]float64 {
 	return channelAudioCompletionRatioMap.ReadAll()
+}
+
+func GetChannelVideoRatio(channelID int, model string) (float64, bool) {
+	return getChannelScopedValue(channelID, model, channelVideoRatioMap)
+}
+func ChannelVideoRatio2JSONString() string {
+	return channelVideoRatioMap.MarshalJSONString()
+}
+func UpdateChannelVideoRatioByJSONString(jsonStr string) error {
+	return types.LoadFromJsonString(channelVideoRatioMap, jsonStr)
+}
+func GetChannelVideoRatioCopy() map[string]map[string]float64 {
+	return channelVideoRatioMap.ReadAll()
+}
+
+func GetChannelVideoCompletionRatio(channelID int, model string) (float64, bool) {
+	return getChannelScopedValue(channelID, model, channelVideoCompletionRatioMap)
+}
+func ChannelVideoCompletionRatio2JSONString() string {
+	return channelVideoCompletionRatioMap.MarshalJSONString()
+}
+func UpdateChannelVideoCompletionRatioByJSONString(jsonStr string) error {
+	return types.LoadFromJsonString(channelVideoCompletionRatioMap, jsonStr)
+}
+func GetChannelVideoCompletionRatioCopy() map[string]map[string]float64 {
+	return channelVideoCompletionRatioMap.ReadAll()
+}
+
+func GetChannelVideoPrice(channelID int, model string) (float64, bool) {
+	return getChannelScopedValue(channelID, model, channelVideoPriceMap)
+}
+func ChannelVideoPrice2JSONString() string {
+	return channelVideoPriceMap.MarshalJSONString()
+}
+func UpdateChannelVideoPriceByJSONString(jsonStr string) error {
+	return types.LoadFromJsonString(channelVideoPriceMap, jsonStr)
+}
+func GetChannelVideoPriceCopy() map[string]map[string]float64 {
+	return channelVideoPriceMap.ReadAll()
 }
 
 func normalizeSupplierID(supplierID int) string {
