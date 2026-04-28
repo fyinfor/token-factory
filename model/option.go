@@ -139,6 +139,7 @@ func InitOptionMap() {
 	common.OptionMap["QuotaForNewUser"] = strconv.Itoa(common.QuotaForNewUser)
 	common.OptionMap["QuotaForInviter"] = strconv.Itoa(common.QuotaForInviter)
 	common.OptionMap["QuotaForInvitee"] = strconv.Itoa(common.QuotaForInvitee)
+	common.OptionMap["StudentApprovalRewardQuota"] = strconv.Itoa(common.StudentApprovalRewardQuota)
 	common.OptionMap["AffiliateDefaultCommissionBps"] = strconv.Itoa(common.AffiliateDefaultCommissionBps)
 	common.OptionMap["DistributorApplyCsImageUrl"] = ""
 	common.OptionMap["DistributorWithdrawCsImageUrl"] = ""
@@ -546,6 +547,8 @@ func updateOptionMap(key string, value string) (err error) {
 	case "QuotaForInvitee":
 		// 同上：被邀请人注册奖励写入 quota，存库为换算后的额度整数
 		common.QuotaForInvitee, _ = strconv.Atoi(value)
+	case "StudentApprovalRewardQuota":
+		common.StudentApprovalRewardQuota, _ = strconv.Atoi(value)
 	case "AffiliateDefaultCommissionBps":
 		if n, err := strconv.Atoi(value); err == nil && n >= 0 && n <= 10000 {
 			if n == 0 {

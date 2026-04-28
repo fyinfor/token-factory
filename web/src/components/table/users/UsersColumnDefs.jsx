@@ -248,6 +248,35 @@ const renderInviteInfo = (text, record, t) => {
   );
 };
 
+const renderStudentStatus = (record, t) => {
+  if (record.is_student === 1 || record.is_student === true) {
+    return (
+      <Tag color='green' shape='circle' className='!text-xs'>
+        {t('学员')}
+      </Tag>
+    );
+  }
+  if (record.student_status === 1) {
+    return (
+      <Tag color='orange' shape='circle' className='!text-xs'>
+        {t('待审批')}
+      </Tag>
+    );
+  }
+  if (record.student_status === 3) {
+    return (
+      <Tag color='grey' shape='circle' className='!text-xs'>
+        {t('已拒绝')}
+      </Tag>
+    );
+  }
+  return (
+    <Tag color='white' shape='circle' className='!text-xs'>
+      {t('非学员')}
+    </Tag>
+  );
+};
+
 /**
  * Render operations column
  */
@@ -265,11 +294,34 @@ const renderOperations = (
     showResetTwoFAModal,
     showUserSubscriptionsModal,
     manageUser,
+    studentView,
     t,
   },
 ) => {
   if (record.DeletedAt !== null) {
     return <></>;
+  }
+
+  if (studentView === 'pending') {
+    return (
+      <Space>
+        <Button
+          type='primary'
+          size='small'
+          onClick={() => manageUser(record.id, 'approve_student', record)}
+        >
+          {t('同意')}
+        </Button>
+        <Button
+          type='danger'
+          theme='light'
+          size='small'
+          onClick={() => manageUser(record.id, 'reject_student', record)}
+        >
+          {t('拒绝')}
+        </Button>
+      </Space>
+    );
   }
 
   const moreMenu = [
@@ -294,6 +346,53 @@ const renderOperations = (
     {
       node: 'divider',
     },
+    ...(record.student_status === 1
+      ? [
+          {
+            node: 'item',
+            name: t('通过学员'),
+            onClick: () => manageUser(record.id, 'approve_student', record),
+          },
+          {
+            node: 'item',
+            name: t('拒绝学员'),
+            type: 'danger',
+            onClick: () => manageUser(record.id, 'reject_student', record),
+          },
+          {
+            node: 'divider',
+          },
+        ]
+      : []),
+    ...((record.is_student === 1 || record.is_student === true) &&
+    record.role < USER_ROLES.ADMIN
+      ? [
+          {
+            node: 'item',
+            name: t('撤销学员'),
+            type: 'danger',
+            onClick: () => manageUser(record.id, 'unset_student', record),
+          },
+          {
+            node: 'divider',
+          },
+        ]
+      : []),
+    ...(record.role === USER_ROLES.USER &&
+    record.status === 1 &&
+    record.student_status !== 1 &&
+    !(record.is_student === 1 || record.is_student === true)
+      ? [
+          {
+            node: 'item',
+            name: t('设为学员'),
+            onClick: () => manageUser(record.id, 'set_student', record),
+          },
+          {
+            node: 'divider',
+          },
+        ]
+      : []),
     {
       node: 'item',
       name: t('注销'),
@@ -391,6 +490,7 @@ export const getUsersColumns = ({
   showResetTwoFAModal,
   showUserSubscriptionsModal,
   manageUser,
+  studentView,
 }) => {
   return [
     {
@@ -401,6 +501,11 @@ export const getUsersColumns = ({
       title: t('用户名'),
       dataIndex: 'username',
       render: (text, record) => renderUsername(text, record),
+    },
+    {
+      title: t('手机号'),
+      dataIndex: 'phone',
+      render: (v) => <span>{v || '—'}</span>,
     },
     {
       title: t('状态'),
@@ -426,6 +531,11 @@ export const getUsersColumns = ({
       render: (text, record, index) => {
         return <div>{renderRole(text, record, t)}</div>;
       },
+    },
+    {
+      title: t('学员状态'),
+      dataIndex: 'student_status',
+      render: (text, record) => renderStudentStatus(record, t),
     },
     {
       title: t('邀请信息'),
@@ -489,6 +599,7 @@ export const getUsersColumns = ({
           showResetTwoFAModal,
           showUserSubscriptionsModal,
           manageUser,
+          studentView,
           t,
         }),
     },
