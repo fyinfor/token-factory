@@ -106,6 +106,9 @@ func GetPricing(c *gin.Context) {
 	channelImageRatio := map[string]map[string]float64{}
 	channelAudioRatio := map[string]map[string]float64{}
 	channelAudioCompletionRatio := map[string]map[string]float64{}
+	channelVideoRatio := map[string]map[string]float64{}
+	channelVideoCompletionRatio := map[string]map[string]float64{}
+	channelVideoPrice := map[string]map[string]float64{}
 	supplierModelPrice := map[string]map[string]float64{}
 	supplierModelRatio := map[string]map[string]float64{}
 	for s, f := range ratio_setting.GetGroupRatioCopy() {
@@ -166,6 +169,15 @@ func GetPricing(c *gin.Context) {
 	for channelID, modelRatio := range ratio_setting.GetChannelAudioCompletionRatioCopy() {
 		channelAudioCompletionRatio[channelID] = modelRatio
 	}
+	for channelID, modelRatio := range ratio_setting.GetChannelVideoRatioCopy() {
+		channelVideoRatio[channelID] = modelRatio
+	}
+	for channelID, modelRatio := range ratio_setting.GetChannelVideoCompletionRatioCopy() {
+		channelVideoCompletionRatio[channelID] = modelRatio
+	}
+	for channelID, modelPrice := range ratio_setting.GetChannelVideoPriceCopy() {
+		channelVideoPrice[channelID] = modelPrice
+	}
 	channelModelPrice = filterChannelPricingMapByVisibleChannels(channelModelPrice, visibleChannelIDs)
 	channelModelRatio = filterChannelPricingMapByVisibleChannels(channelModelRatio, visibleChannelIDs)
 	channelCompletionRatio = filterChannelPricingMapByVisibleChannels(channelCompletionRatio, visibleChannelIDs)
@@ -174,6 +186,9 @@ func GetPricing(c *gin.Context) {
 	channelImageRatio = filterChannelPricingMapByVisibleChannels(channelImageRatio, visibleChannelIDs)
 	channelAudioRatio = filterChannelPricingMapByVisibleChannels(channelAudioRatio, visibleChannelIDs)
 	channelAudioCompletionRatio = filterChannelPricingMapByVisibleChannels(channelAudioCompletionRatio, visibleChannelIDs)
+	channelVideoRatio = filterChannelPricingMapByVisibleChannels(channelVideoRatio, visibleChannelIDs)
+	channelVideoCompletionRatio = filterChannelPricingMapByVisibleChannels(channelVideoCompletionRatio, visibleChannelIDs)
+	channelVideoPrice = filterChannelPricingMapByVisibleChannels(channelVideoPrice, visibleChannelIDs)
 	for supplierID, modelPrice := range ratio_setting.GetSupplierModelPriceCopy() {
 		supplierModelPrice[supplierID] = modelPrice
 	}
@@ -203,6 +218,9 @@ func GetPricing(c *gin.Context) {
 		"channel_image_ratio":            channelImageRatio,
 		"channel_audio_ratio":            channelAudioRatio,
 		"channel_audio_completion_ratio": channelAudioCompletionRatio,
+		"channel_video_ratio":            channelVideoRatio,
+		"channel_video_completion_ratio": channelVideoCompletionRatio,
+		"channel_video_price":            channelVideoPrice,
 		"supplier_model_price":           supplierModelPrice,
 		"supplier_model_ratio":           supplierModelRatio,
 		"usable_group":                   usableGroup,

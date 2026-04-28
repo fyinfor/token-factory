@@ -487,7 +487,12 @@ const OtherSetting = () => {
                 field={'Logo'}
                 onChange={handleInputChange}
               />
-              <Space vertical align='start' spacing='tight' style={{ marginBottom: 12 }}>
+              <Space
+                vertical
+                align='start'
+                spacing='tight'
+                style={{ marginBottom: 12 }}
+              >
                 <Space align='center' spacing='tight' wrap>
                   <Upload
                     action=''
@@ -495,14 +500,18 @@ const OtherSetting = () => {
                     showUploadList={false}
                     customRequest={uploadLogo}
                   >
-                    <Button loading={loadingInput['Logo']}>{t('上传 Logo 图片')}</Button>
+                    <Button loading={loadingInput['Logo']}>
+                      {t('上传 Logo 图片')}
+                    </Button>
                   </Upload>
                   <Button onClick={submitLogo} loading={loadingInput['Logo']}>
                     {t('设置 Logo')}
                   </Button>
                 </Space>
                 <Text type='tertiary' size='small'>
-                  {t('可直接上传图片自动填写地址，或手动输入 URL；上传需先配置并启用 OSS')}
+                  {t(
+                    '可直接上传图片自动填写地址，或手动输入 URL；上传需先配置并启用 OSS',
+                  )}
                 </Text>
               </Space>
               <Form.TextArea

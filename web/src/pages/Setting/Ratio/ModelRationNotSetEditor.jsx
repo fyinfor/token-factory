@@ -62,7 +62,7 @@ export default function ModelRatioNotSetEditor(props) {
     getAllEnabledModels();
     getPricingSuppliers();
   }, []);
-  
+
   const extendedOptions = {
     ...props.options,
     __pricingChannels: pricingChannels,
@@ -72,10 +72,15 @@ export default function ModelRatioNotSetEditor(props) {
   if (!isSupplier() && !isAdmin()) {
     return (
       <div className='py-4'>
-        <div className='flex items-center justify-center' style={{ minHeight: 320 }}>
+        <div
+          className='flex items-center justify-center'
+          style={{ minHeight: 320 }}
+        >
           <Empty
             image={<IllustrationNoAccess style={{ width: 180, height: 180 }} />}
-            darkModeImage={<IllustrationNoAccessDark style={{ width: 180, height: 180 }} />}
+            darkModeImage={
+              <IllustrationNoAccessDark style={{ width: 180, height: 180 }} />
+            }
             layout='horizontal'
             title={t('需要供应商权限')}
             description={t('您需要先成为供应商才能访问此页面。')}

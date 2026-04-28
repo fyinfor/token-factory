@@ -63,7 +63,8 @@ const StatusRow = ({ label, ok, count, total }) => (
         </Tag>
       ) : (
         <Tag color='red' size='small' shape='circle'>
-          ✗ {count ?? '—'}{total != null ? `/${total}` : ''}
+          ✗ {count ?? '—'}
+          {total != null ? `/${total}` : ''}
         </Tag>
       )}
     </Space>
@@ -81,27 +82,43 @@ const StatusRow = ({ label, ok, count, total }) => (
 const SOURCE_LABEL = {
   official: { color: 'green', label: '官方预设' },
   inferred: { color: 'blue', label: '名称推断' },
-  exists:   { color: 'grey', label: '已存在' },
+  exists: { color: 'grey', label: '已存在' },
 };
 
 const AutoMetaResult = ({ items, t }) => {
   const created = items.filter((i) => i.source !== 'exists' && !i.err);
   const skipped = items.filter((i) => i.source === 'exists');
-  const failed  = items.filter((i) => i.err);
+  const failed = items.filter((i) => i.err);
 
   return (
-    <div className='mt-3 p-3 rounded-xl' style={{ background: 'var(--semi-color-fill-0)' }}>
+    <div
+      className='mt-3 p-3 rounded-xl'
+      style={{ background: 'var(--semi-color-fill-0)' }}
+    >
       <div className='flex gap-3 mb-2 text-sm'>
-        <Text type='success' size='small'>✓ {t('已创建')} {created.length}</Text>
-        <Text type='tertiary' size='small'>— {t('已跳过')} {skipped.length}</Text>
-        {failed.length > 0 && <Text type='danger' size='small'>✗ {t('失败')} {failed.length}</Text>}
+        <Text type='success' size='small'>
+          ✓ {t('已创建')} {created.length}
+        </Text>
+        <Text type='tertiary' size='small'>
+          — {t('已跳过')} {skipped.length}
+        </Text>
+        {failed.length > 0 && (
+          <Text type='danger' size='small'>
+            ✗ {t('失败')} {failed.length}
+          </Text>
+        )}
       </div>
       {created.length > 0 && (
         <div className='flex flex-wrap gap-1 max-h-28 overflow-y-auto'>
           {created.map((item) => {
             const src = SOURCE_LABEL[item.source] ?? SOURCE_LABEL.inferred;
             return (
-              <Tag key={item.model_name} size='small' color={src.color} shape='circle'>
+              <Tag
+                key={item.model_name}
+                size='small'
+                color={src.color}
+                shape='circle'
+              >
                 {item.model_name}
                 <span className='opacity-60 ml-1 text-xs'>({src.label})</span>
               </Tag>
@@ -112,7 +129,12 @@ const AutoMetaResult = ({ items, t }) => {
       {failed.length > 0 && (
         <div className='mt-1'>
           {failed.map((item) => (
-            <Text key={item.model_name} type='danger' size='small' className='block'>
+            <Text
+              key={item.model_name}
+              type='danger'
+              size='small'
+              className='block'
+            >
               {item.model_name}: {item.err}
             </Text>
           ))}
@@ -166,9 +188,12 @@ const StepImport = ({ channel, onboardData, reloadOnboard, t }) => {
     setAutoMetaLoading(true);
     setAutoMetaItems(null);
     try {
-      const res = await API.post(`/api/channel/${channel.id}/onboard/auto_meta`, {
-        models: metaMissing,
-      });
+      const res = await API.post(
+        `/api/channel/${channel.id}/onboard/auto_meta`,
+        {
+          models: metaMissing,
+        },
+      );
       if (res?.data?.success) {
         const { items, created } = res.data.data;
         setAutoMetaItems(items ?? []);
@@ -195,15 +220,22 @@ const StepImport = ({ channel, onboardData, reloadOnboard, t }) => {
   return (
     <div className='space-y-4'>
       {/* 当前已导入模型汇总 */}
-      <Card className='!rounded-xl shadow-sm border-0' bodyStyle={{ padding: '12px 16px' }}>
+      <Card
+        className='!rounded-xl shadow-sm border-0'
+        bodyStyle={{ padding: '12px 16px' }}
+      >
         <div className='flex items-center gap-2 mb-2'>
           <Avatar size='extra-small' color='blue' shape='square'>
             <span className='text-xs'>✓</span>
           </Avatar>
-          <Text strong>{t('已导入模型')}（{imported.length}）</Text>
+          <Text strong>
+            {t('已导入模型')}（{imported.length}）
+          </Text>
         </div>
         {imported.length === 0 ? (
-          <Text type='tertiary' size='small'>{t('当前渠道尚未配置模型')}</Text>
+          <Text type='tertiary' size='small'>
+            {t('当前渠道尚未配置模型')}
+          </Text>
         ) : (
           <div className='flex flex-wrap gap-1 mt-1 max-h-32 overflow-y-auto'>
             {imported.map((m) => (
@@ -221,19 +253,33 @@ const StepImport = ({ channel, onboardData, reloadOnboard, t }) => {
 
         {/* 元数据缺失：自动推断入口 */}
         {metaMissing.length > 0 && (
-          <div className='mt-3 p-3 rounded-lg' style={{ background: 'var(--semi-color-warning-light-default)', border: '1px solid var(--semi-color-warning-light-active)' }}>
+          <div
+            className='mt-3 p-3 rounded-lg'
+            style={{
+              background: 'var(--semi-color-warning-light-default)',
+              border: '1px solid var(--semi-color-warning-light-active)',
+            }}
+          >
             <div className='flex items-start justify-between gap-2'>
               <div className='flex-1'>
-                <Text size='small' strong>{t('{{n}} 个模型缺少元数据配置', { n: metaMissing.length })}</Text>
+                <Text size='small' strong>
+                  {t('{{n}} 个模型缺少元数据配置', { n: metaMissing.length })}
+                </Text>
                 <Text type='tertiary' size='small' className='block mt-0.5'>
-                  {t('可一键自动推断（优先匹配官方预设，未收录则按名称规则推断），如需精确配置请前往模型管理手动修改')}
+                  {t(
+                    '可一键自动推断（优先匹配官方预设，未收录则按名称规则推断），如需精确配置请前往模型管理手动修改',
+                  )}
                 </Text>
                 <div className='flex flex-wrap gap-1 mt-1 max-h-16 overflow-y-auto'>
                   {metaMissing.slice(0, 10).map((m) => (
-                    <Tag key={m} size='small' color='orange' shape='circle'>{m}</Tag>
+                    <Tag key={m} size='small' color='orange' shape='circle'>
+                      {m}
+                    </Tag>
                   ))}
                   {metaMissing.length > 10 && (
-                    <Tag size='small' color='orange' shape='circle'>…+{metaMissing.length - 10}</Tag>
+                    <Tag size='small' color='orange' shape='circle'>
+                      …+{metaMissing.length - 10}
+                    </Tag>
                   )}
                 </div>
               </div>
@@ -253,28 +299,38 @@ const StepImport = ({ channel, onboardData, reloadOnboard, t }) => {
                   rel='noreferrer'
                   className='text-center'
                 >
-                  <Button size='small' theme='borderless' icon={<IconExternalOpen size='small' />}>
+                  <Button
+                    size='small'
+                    theme='borderless'
+                    icon={<IconExternalOpen size='small' />}
+                  >
                     {t('手动配置')}
                   </Button>
                 </a>
               </div>
             </div>
-            {autoMetaItems && (
-              <AutoMetaResult items={autoMetaItems} t={t} />
-            )}
+            {autoMetaItems && <AutoMetaResult items={autoMetaItems} t={t} />}
           </div>
         )}
         {metaMissing.length === 0 && imported.length > 0 && (
-          <div className='flex items-center gap-1 mt-2 text-sm' style={{ color: 'var(--semi-color-success)' }}>
+          <div
+            className='flex items-center gap-1 mt-2 text-sm'
+            style={{ color: 'var(--semi-color-success)' }}
+          >
             <IconTickCircle />
-            <Text type='success' size='small'>{t('所有已导入模型均已配置元数据')}</Text>
+            <Text type='success' size='small'>
+              {t('所有已导入模型均已配置元数据')}
+            </Text>
           </div>
         )}
       </Card>
 
       {/* 上游可导入模型 */}
       {canFetch && (
-        <Card className='!rounded-xl shadow-sm border-0' bodyStyle={{ padding: '12px 16px' }}>
+        <Card
+          className='!rounded-xl shadow-sm border-0'
+          bodyStyle={{ padding: '12px 16px' }}
+        >
           <div className='flex items-center justify-between mb-2'>
             <div className='flex items-center gap-2'>
               <Avatar size='extra-small' color='purple' shape='square'>
@@ -302,16 +358,23 @@ const StepImport = ({ channel, onboardData, reloadOnboard, t }) => {
               className='!rounded-lg mb-3'
               description={
                 <Text size='small'>
-                  {t('为加快打开速度，未请求上游模型列表。点击「从上游拉取列表」可加载可导入模型。')}
+                  {t(
+                    '为加快打开速度，未请求上游模型列表。点击「从上游拉取列表」可加载可导入模型。',
+                  )}
                 </Text>
               }
             />
           )}
 
           {notYetImported != null && notYetImported.length === 0 ? (
-            <div className='flex items-center gap-2 text-sm' style={{ color: 'var(--semi-color-success)' }}>
+            <div
+              className='flex items-center gap-2 text-sm'
+              style={{ color: 'var(--semi-color-success)' }}
+            >
               <IconTickCircle />
-              <Text type='success' size='small'>{t('所有上游模型已全部导入')}</Text>
+              <Text type='success' size='small'>
+                {t('所有上游模型已全部导入')}
+              </Text>
             </div>
           ) : notYetImported != null ? (
             <>
@@ -361,7 +424,9 @@ const StepImport = ({ channel, onboardData, reloadOnboard, t }) => {
           type='info'
           closeIcon={null}
           className='!rounded-xl'
-          description={t('该渠道类型不支持自动拉取上游模型，请手动编辑渠道添加模型。')}
+          description={t(
+            '该渠道类型不支持自动拉取上游模型，请手动编辑渠道添加模型。',
+          )}
         />
       )}
     </div>
@@ -383,9 +448,16 @@ const StepPricing = ({ channel, onboardData, reloadOnboard, t }) => {
   return (
     <div className='space-y-4'>
       {/* 状态总览 */}
-      <Card className='!rounded-xl shadow-sm border-0' bodyStyle={{ padding: '12px 16px' }}>
+      <Card
+        className='!rounded-xl shadow-sm border-0'
+        bodyStyle={{ padding: '12px 16px' }}
+      >
         <div className='flex items-center gap-2 mb-3'>
-          <Avatar size='extra-small' color={allOk ? 'green' : 'yellow'} shape='square'>
+          <Avatar
+            size='extra-small'
+            color={allOk ? 'green' : 'yellow'}
+            shape='square'
+          >
             <span className='text-xs'>$</span>
           </Avatar>
           <Text strong>{t('定价配置状态')}</Text>
@@ -404,18 +476,27 @@ const StepPricing = ({ channel, onboardData, reloadOnboard, t }) => {
         />
 
         {allOk && (
-          <div className='flex items-center gap-2 mt-2 text-sm' style={{ color: 'var(--semi-color-success)' }}>
+          <div
+            className='flex items-center gap-2 mt-2 text-sm'
+            style={{ color: 'var(--semi-color-success)' }}
+          >
             <IconTickCircle />
-            <Text type='success' size='small'>{t('所有模型均已配置定价')}</Text>
+            <Text type='success' size='small'>
+              {t('所有模型均已配置定价')}
+            </Text>
           </div>
         )}
 
         {ratioMissing.length > 0 && (
           <div className='mt-2'>
-            <Text type='tertiary' size='small'>{t('缺少定价的模型：')}</Text>
+            <Text type='tertiary' size='small'>
+              {t('缺少定价的模型：')}
+            </Text>
             <div className='flex flex-wrap gap-1 mt-1 max-h-24 overflow-y-auto'>
               {ratioMissing.map((m) => (
-                <Tag key={m} size='small' color='red' shape='circle'>{m}</Tag>
+                <Tag key={m} size='small' color='red' shape='circle'>
+                  {m}
+                </Tag>
               ))}
             </div>
           </div>
@@ -423,7 +504,10 @@ const StepPricing = ({ channel, onboardData, reloadOnboard, t }) => {
       </Card>
 
       {/* 操作指引 */}
-      <Card className='!rounded-xl shadow-sm border-0' bodyStyle={{ padding: '12px 16px' }}>
+      <Card
+        className='!rounded-xl shadow-sm border-0'
+        bodyStyle={{ padding: '12px 16px' }}
+      >
         <div className='flex items-center gap-2 mb-2'>
           <Avatar size='extra-small' color='cyan' shape='square'>
             <span className='text-xs'>⚡</span>
@@ -443,7 +527,8 @@ const StepPricing = ({ channel, onboardData, reloadOnboard, t }) => {
               >
                 {t('倍率设置')} <IconExternalOpen size='small' />
               </a>
-              &nbsp;→&nbsp;{t('上游倍率同步')}，{t('选择此渠道或官方预设一键拉取定价')}
+              &nbsp;→&nbsp;{t('上游倍率同步')}，
+              {t('选择此渠道或官方预设一键拉取定价')}
             </span>
           </div>
           {canSyncRatio && (
@@ -455,7 +540,9 @@ const StepPricing = ({ channel, onboardData, reloadOnboard, t }) => {
             </div>
           )}
           <div className='flex items-start gap-2'>
-            <span className='mt-0.5 text-purple-500 font-bold'>{canSyncRatio ? '3' : '2'}.</span>
+            <span className='mt-0.5 text-purple-500 font-bold'>
+              {canSyncRatio ? '3' : '2'}.
+            </span>
             <Text type='tertiary' size='small'>
               {t('配置完成后，点击"刷新状态"更新此页面的诊断结果')}
             </Text>
@@ -542,7 +629,9 @@ const StepTest = ({ channel, onboardData, t }) => {
       }
     };
     loadHistory();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [channel?.id]);
 
   // 将批测 API 返回的 item 数组合并进 results state
@@ -561,7 +650,13 @@ const StepTest = ({ channel, onboardData, t }) => {
       // 未收到结果的目标模型（极少数情况）→ 标记失败
       (targetModels ?? []).forEach((m) => {
         if (next[m]?.testing) {
-          next[m] = { success: false, time: 0, message: t('未收到测试结果'), testing: false, fromHistory: false };
+          next[m] = {
+            success: false,
+            time: 0,
+            message: t('未收到测试结果'),
+            testing: false,
+            fromHistory: false,
+          };
         }
       });
       return next;
@@ -572,12 +667,20 @@ const StepTest = ({ channel, onboardData, t }) => {
   const runOne = async (modelName) => {
     setResults((prev) => ({ ...prev, [modelName]: { testing: true } }));
     try {
-      const res = await API.post(`/api/channel/${channel.id}/onboard/test`, { models: [modelName] });
+      const res = await API.post(`/api/channel/${channel.id}/onboard/test`, {
+        models: [modelName],
+      });
       applyBulkItems(res?.data?.data ?? [], [modelName]);
     } catch (e) {
       setResults((prev) => ({
         ...prev,
-        [modelName]: { success: false, time: 0, message: String(e), testing: false, fromHistory: false },
+        [modelName]: {
+          success: false,
+          time: 0,
+          message: String(e),
+          testing: false,
+          fromHistory: false,
+        },
       }));
     }
   };
@@ -589,19 +692,34 @@ const StepTest = ({ channel, onboardData, t }) => {
     stopRef.current = false;
     setResults(Object.fromEntries(imported.map((m) => [m, { testing: true }])));
     try {
-      const res = await API.post(`/api/channel/${channel.id}/onboard/test`, { models: imported });
+      const res = await API.post(`/api/channel/${channel.id}/onboard/test`, {
+        models: imported,
+      });
       applyBulkItems(res?.data?.data ?? [], imported);
     } catch (e) {
-      setResults(Object.fromEntries(
-        imported.map((m) => [m, { success: false, time: 0, message: String(e), testing: false, fromHistory: false }]),
-      ));
+      setResults(
+        Object.fromEntries(
+          imported.map((m) => [
+            m,
+            {
+              success: false,
+              time: 0,
+              message: String(e),
+              testing: false,
+              fromHistory: false,
+            },
+          ]),
+        ),
+      );
     } finally {
       setBatchRunning(false);
     }
   };
 
   // 批测为单次后端请求，无法中途停止；保留接口兼容
-  const stopBatch = () => { stopRef.current = true; };
+  const stopBatch = () => {
+    stopRef.current = true;
+  };
 
   // 统计
   const tested = Object.entries(results).filter(([, v]) => !v.testing);
@@ -615,7 +733,9 @@ const StepTest = ({ channel, onboardData, t }) => {
           type='warning'
           closeIcon={null}
           className='!rounded-xl'
-          description={t('部分模型尚未配置定价，测试中 token 费用将使用默认值，结果仅供连通性参考。')}
+          description={t(
+            '部分模型尚未配置定价，测试中 token 费用将使用默认值，结果仅供连通性参考。',
+          )}
         />
       )}
       {imported.length === 0 && (
@@ -628,7 +748,10 @@ const StepTest = ({ channel, onboardData, t }) => {
       )}
 
       {imported.length > 0 && (
-        <Card className='!rounded-xl shadow-sm border-0' bodyStyle={{ padding: '12px 16px' }}>
+        <Card
+          className='!rounded-xl shadow-sm border-0'
+          bodyStyle={{ padding: '12px 16px' }}
+        >
           {/* 操作栏 */}
           <div className='flex items-center justify-between mb-3'>
             <div className='flex items-center gap-2'>
@@ -636,11 +759,18 @@ const StepTest = ({ channel, onboardData, t }) => {
                 <span className='text-xs'>⚡</span>
               </Avatar>
               <Text strong>{t('连通性测试')}</Text>
-              <Text type='tertiary' size='small'>（{imported.length} {t('个模型')}）</Text>
+              <Text type='tertiary' size='small'>
+                （{imported.length} {t('个模型')}）
+              </Text>
             </div>
             <Space>
               {batchRunning ? (
-                <Button size='small' type='danger' theme='light' onClick={stopBatch}>
+                <Button
+                  size='small'
+                  type='danger'
+                  theme='light'
+                  onClick={stopBatch}
+                >
                   {t('停止')}
                 </Button>
               ) : (
@@ -660,17 +790,27 @@ const StepTest = ({ channel, onboardData, t }) => {
           {tested.length > 0 && (
             <div className='flex items-center gap-3 mb-2 pb-2 border-b border-gray-100'>
               <Text size='small' type='tertiary'>
-                {historyLoading ? t('加载历史结果…') : `${t('已测试')} ${tested.length}/${imported.length}`}
+                {historyLoading
+                  ? t('加载历史结果…')
+                  : `${t('已测试')} ${tested.length}/${imported.length}`}
               </Text>
               {passCount > 0 && (
-                <Tag size='small' color='green' shape='circle'>✓ {passCount} {t('通过')}</Tag>
+                <Tag size='small' color='green' shape='circle'>
+                  ✓ {passCount} {t('通过')}
+                </Tag>
               )}
               {failCount > 0 && (
-                <Tag size='small' color='red' shape='circle'>✗ {failCount} {t('失败')}</Tag>
+                <Tag size='small' color='red' shape='circle'>
+                  ✗ {failCount} {t('失败')}
+                </Tag>
               )}
               {/* 说明历史数据来源 */}
               {tested.some(([, v]) => v.fromHistory) && !batchRunning && (
-                <Text size='small' type='tertiary' style={{ fontStyle: 'italic' }}>
+                <Text
+                  size='small'
+                  type='tertiary'
+                  style={{ fontStyle: 'italic' }}
+                >
                   {t('（含上次测试结果）')}
                 </Text>
               )}
@@ -686,9 +826,10 @@ const StepTest = ({ channel, onboardData, t }) => {
               const isHistory = isDone && r.fromHistory;
 
               // 历史时间格式化：秒级时间戳 → 本地日期时间
-              const historyLabel = isHistory && r.testedAt
-                ? new Date(r.testedAt * 1000).toLocaleString()
-                : null;
+              const historyLabel =
+                isHistory && r.testedAt
+                  ? new Date(r.testedAt * 1000).toLocaleString()
+                  : null;
 
               return (
                 <div
@@ -713,7 +854,11 @@ const StepTest = ({ channel, onboardData, t }) => {
                         size='small'
                         color={LATENCY_COLOR(r.time)}
                         shape='circle'
-                        title={historyLabel ? `${t('上次测试')}: ${historyLabel}` : undefined}
+                        title={
+                          historyLabel
+                            ? `${t('上次测试')}: ${historyLabel}`
+                            : undefined
+                        }
                       >
                         {isHistory ? '◷' : '✓'} {r.time.toFixed(2)}s
                       </Tag>
@@ -723,7 +868,12 @@ const StepTest = ({ channel, onboardData, t }) => {
                         size='small'
                         color={isHistory ? 'orange' : 'red'}
                         shape='circle'
-                        title={r.message + (historyLabel ? `\n${t('上次测试')}: ${historyLabel}` : '')}
+                        title={
+                          r.message +
+                          (historyLabel
+                            ? `\n${t('上次测试')}: ${historyLabel}`
+                            : '')
+                        }
                       >
                         {isHistory ? '◷' : '✗'} {t('失败')}
                       </Tag>
@@ -749,7 +899,9 @@ const StepTest = ({ channel, onboardData, t }) => {
           {/* 失败详情展开 */}
           {tested.some(([, v]) => !v.success) && (
             <div className='mt-2 pt-2 border-t border-gray-100'>
-              <Text type='tertiary' size='small' strong>{t('失败详情：')}</Text>
+              <Text type='tertiary' size='small' strong>
+                {t('失败详情：')}
+              </Text>
               {tested
                 .filter(([, v]) => !v.success)
                 .slice(0, 5)
@@ -780,23 +932,26 @@ const ChannelOnboardModal = ({ visible, channel, onClose, onRefresh }) => {
   const [loading, setLoading] = useState(false);
   const [onboardData, setOnboardData] = useState(null);
 
-  const loadOnboard = useCallback(async (opts) => {
-    if (!channel?.id) return;
-    setLoading(true);
-    try {
-      const q = opts?.fetchUpstream ? '?fetch_upstream=1' : '';
-      const res = await API.get(`/api/channel/${channel.id}/onboard${q}`);
-      if (res?.data?.success) {
-        setOnboardData(res.data.data);
-      } else {
-        showError(res?.data?.message || t('获取上架状态失败'));
+  const loadOnboard = useCallback(
+    async (opts) => {
+      if (!channel?.id) return;
+      setLoading(true);
+      try {
+        const q = opts?.fetchUpstream ? '?fetch_upstream=1' : '';
+        const res = await API.get(`/api/channel/${channel.id}/onboard${q}`);
+        if (res?.data?.success) {
+          setOnboardData(res.data.data);
+        } else {
+          showError(res?.data?.message || t('获取上架状态失败'));
+        }
+      } catch (e) {
+        showError(String(e));
+      } finally {
+        setLoading(false);
       }
-    } catch (e) {
-      showError(String(e));
-    } finally {
-      setLoading(false);
-    }
-  }, [channel?.id, t]);
+    },
+    [channel?.id, t],
+  );
 
   useEffect(() => {
     if (visible && channel?.id) {
@@ -876,7 +1031,12 @@ const ChannelOnboardModal = ({ visible, channel, onClose, onRefresh }) => {
       closeIcon={<IconClose />}
     >
       {/* Steps header */}
-      <Steps current={currentStep} className='mb-4' onChange={setCurrentStep} size='small'>
+      <Steps
+        current={currentStep}
+        className='mb-4'
+        onChange={setCurrentStep}
+        size='small'
+      >
         <Step
           title={t('导入模型')}
           description={
@@ -928,11 +1088,7 @@ const ChannelOnboardModal = ({ visible, channel, onClose, onRefresh }) => {
                 />
               )}
               {currentStep === 2 && (
-                <StepTest
-                  channel={channel}
-                  onboardData={onboardData}
-                  t={t}
-                />
+                <StepTest channel={channel} onboardData={onboardData} t={t} />
               )}
             </>
           )}

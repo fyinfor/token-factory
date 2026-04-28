@@ -31,6 +31,9 @@ type Pricing struct {
 	ImageRatio             *float64                `json:"image_ratio,omitempty"`
 	AudioRatio             *float64                `json:"audio_ratio,omitempty"`
 	AudioCompletionRatio   *float64                `json:"audio_completion_ratio,omitempty"`
+	VideoRatio             *float64                `json:"video_ratio,omitempty"`
+	VideoCompletionRatio   *float64                `json:"video_completion_ratio,omitempty"`
+	VideoPrice             *float64                `json:"video_price,omitempty"`
 	EnableGroup            []string                `json:"enable_groups"`
 	SupportedEndpointTypes []constant.EndpointType `json:"supported_endpoint_types"`
 	PricingVersion         string                  `json:"pricing_version,omitempty"`
@@ -495,6 +498,18 @@ func updatePricing() {
 		if ratio_setting.ContainsAudioCompletionRatio(model) {
 			audioCompletionRatio := ratio_setting.GetAudioCompletionRatio(model)
 			pricing.AudioCompletionRatio = &audioCompletionRatio
+		}
+		if ratio_setting.ContainsVideoRatio(model) {
+			videoRatio := ratio_setting.GetVideoRatio(model)
+			pricing.VideoRatio = &videoRatio
+		}
+		if ratio_setting.ContainsVideoCompletionRatio(model) {
+			videoCompletionRatio := ratio_setting.GetVideoCompletionRatio(model)
+			pricing.VideoCompletionRatio = &videoCompletionRatio
+		}
+		if ratio_setting.ContainsVideoPrice(model) {
+			videoPrice, _ := ratio_setting.GetVideoPrice(model)
+			pricing.VideoPrice = &videoPrice
 		}
 		pricingMap = append(pricingMap, pricing)
 	}

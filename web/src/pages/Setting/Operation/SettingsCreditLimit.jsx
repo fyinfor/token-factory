@@ -120,7 +120,10 @@ export default function SettingsCreditLimit(props) {
     const quotaPerUnit = parseQuotaPerUnit(props.options?.QuotaPerUnit);
     const currentInputs = {};
     for (const key of CREDIT_LIMIT_FORM_KEYS) {
-      if (props.options && Object.prototype.hasOwnProperty.call(props.options, key)) {
+      if (
+        props.options &&
+        Object.prototype.hasOwnProperty.call(props.options, key)
+      ) {
         currentInputs[key] = props.options[key];
       }
     }

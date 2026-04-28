@@ -167,10 +167,7 @@ export default function DistributorApply() {
   if (isDist) {
     return (
       <div className='mt-16 px-4 max-w-3xl mx-auto'>
-        <Banner
-          type='success'
-          description={t('您已是代理，无需再次申请')}
-        />
+        <Banner type='success' description={t('您已是代理，无需再次申请')} />
       </div>
     );
   }
@@ -214,7 +211,9 @@ export default function DistributorApply() {
                   type='tertiary'
                   className='distributor-apply-hero-desc !block !text-[15px] !leading-relaxed'
                 >
-                  {t('请如实填写以下信息，审核通过后即可获得代理资格与邀请分成。')}
+                  {t(
+                    '请如实填写以下信息，审核通过后即可获得代理资格与邀请分成。',
+                  )}
                 </Text>
               </div>
             </div>
@@ -262,10 +261,7 @@ export default function DistributorApply() {
                   )}
                 />
               ) : null}
-              <Form
-                getFormApi={(f) => (formApi.current = f)}
-                layout='vertical'
-              >
+              <Form getFormApi={(f) => (formApi.current = f)} layout='vertical'>
                 <Form.Input
                   field='real_name'
                   label={t('姓名')}
@@ -310,18 +306,14 @@ export default function DistributorApply() {
                         showSuccess(t('已上传'));
                       } catch (e) {
                         onError(e);
-                        showError(
-                          e?.response?.data?.message || t('上传失败'),
-                        );
+                        showError(e?.response?.data?.message || t('上传失败'));
                       }
                     }}
                     limit={5}
                     multiple
                     disabled={urls.length >= 5}
                   >
-                    <Button disabled={urls.length >= 5}>
-                      {t('上传文件')}
-                    </Button>
+                    <Button disabled={urls.length >= 5}>{t('上传文件')}</Button>
                   </Upload>
                   <Text type='tertiary' size='small' className='block mt-1'>
                     {t('支持图片或 PDF，最多 5 个；点击图片可大图预览')}
@@ -403,9 +395,7 @@ export default function DistributorApply() {
                   loading={submitting}
                   onClick={onSubmit}
                 >
-                  {showReapplyAfterRevoked
-                    ? t('重新提交审核')
-                    : t('提交申请')}
+                  {showReapplyAfterRevoked ? t('重新提交审核') : t('提交申请')}
                 </Button>
               </Form>
             </Spin>
@@ -437,7 +427,10 @@ export default function DistributorApply() {
         visible={Boolean(previewUrl)}
         onCancel={() => setPreviewUrl(null)}
         footer={null}
-        width={Math.min(960, typeof window !== 'undefined' ? window.innerWidth - 48 : 960)}
+        width={Math.min(
+          960,
+          typeof window !== 'undefined' ? window.innerWidth - 48 : 960,
+        )}
       >
         {previewUrl &&
           (isPdfUrl(previewUrl) ? (

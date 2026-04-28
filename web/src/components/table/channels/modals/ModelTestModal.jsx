@@ -128,7 +128,9 @@ const ModelTestModal = ({
         ? row.manual_display_response_time
         : 0,
     );
-    setOverrideGrade(row?.manual_stability_grade > 0 ? row.manual_stability_grade : 0);
+    setOverrideGrade(
+      row?.manual_stability_grade > 0 ? row.manual_stability_grade : 0,
+    );
     setOverrideVisible(true);
   };
 
@@ -141,7 +143,8 @@ const ModelTestModal = ({
       const res = await API.put('/api/channel/model-test-result-display', {
         channel_id: currentTestChannel.id,
         model_name: overrideModel,
-        manual_display_response_time: overrideMs > 0 ? Math.round(overrideMs) : 0,
+        manual_display_response_time:
+          overrideMs > 0 ? Math.round(overrideMs) : 0,
         manual_stability_grade: overrideGrade,
       });
       if (res.data?.success) {
@@ -164,6 +167,8 @@ const ModelTestModal = ({
     'image-generation',
     'jina-rerank',
     'openai-response-compact',
+    'openai-video',
+    'hidream-video',
   ].includes(selectedEndpointType);
 
   React.useEffect(() => {
@@ -199,6 +204,14 @@ const ModelTestModal = ({
       label: t('图像生成') + ' (/v1/images/generations)',
     },
     { value: 'embeddings', label: 'Embeddings (/v1/embeddings)' },
+    {
+      value: 'openai-video',
+      label: t('视频生成') + ' (OpenAI Sora /v1/videos)',
+    },
+    {
+      value: 'hidream-video',
+      label: t('视频生成') + ' (/v1/videos/generations)',
+    },
   ];
 
   const handleCopySelected = () => {
@@ -489,7 +502,10 @@ const ModelTestModal = ({
             maskClosable={!overrideSubmitting}
             footer={
               <div className='flex justify-end gap-2'>
-                <Button onClick={() => setOverrideVisible(false)} disabled={overrideSubmitting}>
+                <Button
+                  onClick={() => setOverrideVisible(false)}
+                  disabled={overrideSubmitting}
+                >
                   {t('取消')}
                 </Button>
                 <Button
@@ -502,12 +518,15 @@ const ModelTestModal = ({
                     }
                     setOverrideSubmitting(true);
                     try {
-                      const res = await API.put('/api/channel/model-test-result-display', {
-                        channel_id: currentTestChannel.id,
-                        model_name: overrideModel,
-                        manual_display_response_time: 0,
-                        manual_stability_grade: 0,
-                      });
+                      const res = await API.put(
+                        '/api/channel/model-test-result-display',
+                        {
+                          channel_id: currentTestChannel.id,
+                          model_name: overrideModel,
+                          manual_display_response_time: 0,
+                          manual_stability_grade: 0,
+                        },
+                      );
                       if (res.data?.success) {
                         showSuccess(t('已清除运营展示覆盖'));
                         setOverrideVisible(false);
@@ -525,16 +544,30 @@ const ModelTestModal = ({
                 >
                   {t('清除覆盖')}
                 </Button>
-                <Button type='primary' loading={overrideSubmitting} onClick={submitOverride}>
+                <Button
+                  type='primary'
+                  loading={overrideSubmitting}
+                  onClick={submitOverride}
+                >
                   {t('保存')}
                 </Button>
               </div>
             }
           >
             <div className='flex flex-col gap-3'>
-              <Banner type='info' fullWidth closeIcon={null} className='!rounded-lg' description={t('用于模型广场等处的展示；填 0 或「不覆盖」表示使用实测/默认。')} />
+              <Banner
+                type='info'
+                fullWidth
+                closeIcon={null}
+                className='!rounded-lg'
+                description={t(
+                  '用于模型广场等处的展示；填 0 或「不覆盖」表示使用实测/默认。',
+                )}
+              />
               <div>
-                <Typography.Text strong>{t('展示耗时（毫秒）')}</Typography.Text>
+                <Typography.Text strong>
+                  {t('展示耗时（毫秒）')}
+                </Typography.Text>
                 <InputNumber
                   value={overrideMs}
                   onChange={(v) =>

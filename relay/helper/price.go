@@ -86,6 +86,8 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	channelImageRatio, hasChannelImageRatio := ratio_setting.GetChannelImageRatio(channelID, info.OriginModelName)
 	channelAudioRatio, hasChannelAudioRatio := ratio_setting.GetChannelAudioRatio(channelID, info.OriginModelName)
 	channelAudioCompletionRatio, hasChannelAudioCompletionRatio := ratio_setting.GetChannelAudioCompletionRatio(channelID, info.OriginModelName)
+	channelVideoRatio, hasChannelVideoRatio := ratio_setting.GetChannelVideoRatio(channelID, info.OriginModelName)
+	channelVideoCompletionRatio, hasChannelVideoCompletionRatio := ratio_setting.GetChannelVideoCompletionRatio(channelID, info.OriginModelName)
 
 	var preConsumedQuota int
 	var modelRatio float64
@@ -97,6 +99,8 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	var cacheCreationRatio1h float64
 	var audioRatio float64
 	var audioCompletionRatio float64
+	var videoRatio float64
+	var videoCompletionRatio float64
 	var freeModel bool
 	if !usePrice {
 		preConsumedTokens := common.Max(promptTokens, common.PreConsumedQuota)
@@ -136,6 +140,8 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		imageRatio, _ = ratio_setting.GetImageRatio(info.OriginModelName)
 		audioRatio = ratio_setting.GetAudioRatio(info.OriginModelName)
 		audioCompletionRatio = ratio_setting.GetAudioCompletionRatio(info.OriginModelName)
+		videoRatio = ratio_setting.GetVideoRatio(info.OriginModelName)
+		videoCompletionRatio = ratio_setting.GetVideoCompletionRatio(info.OriginModelName)
 		if hasChannelCompletionRatio {
 			completionRatio = channelCompletionRatio
 		}
@@ -153,6 +159,12 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		}
 		if hasChannelAudioCompletionRatio {
 			audioCompletionRatio = channelAudioCompletionRatio
+		}
+		if hasChannelVideoRatio {
+			videoRatio = channelVideoRatio
+		}
+		if hasChannelVideoCompletionRatio {
+			videoCompletionRatio = channelVideoCompletionRatio
 		}
 		ratio := modelRatio * groupRatioInfo.GroupRatio
 		preConsumedQuota = int(float64(preConsumedTokens) * ratio)
@@ -197,6 +209,8 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		ImageRatio:           imageRatio,
 		AudioRatio:           audioRatio,
 		AudioCompletionRatio: audioCompletionRatio,
+		VideoRatio:           videoRatio,
+		VideoCompletionRatio: videoCompletionRatio,
 		CacheCreationRatio:   cacheCreationRatio,
 		CacheCreation5mRatio: cacheCreationRatio5m,
 		CacheCreation1hRatio: cacheCreationRatio1h,

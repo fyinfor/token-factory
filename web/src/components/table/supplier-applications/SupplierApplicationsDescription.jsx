@@ -24,7 +24,11 @@ import CompactModeToggle from '../../common/ui/CompactModeToggle';
 
 const { Text } = Typography;
 
-const SupplierApplicationsDescription = ({ compactMode, setCompactMode, t }) => {
+const SupplierApplicationsDescription = ({
+  compactMode,
+  setCompactMode,
+  t,
+}) => {
   return (
     <div className='flex flex-col md:flex-row justify-between items-start md:items-center gap-2 w-full'>
       <div className='flex items-center text-blue-500'>

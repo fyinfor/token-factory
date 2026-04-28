@@ -17,8 +17,26 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Modal, Form, Row, Col, Button, Typography, Upload, Divider, Input, Progress, Steps } from '@douyinfe/semi-ui';
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+} from 'react';
+import {
+  Modal,
+  Form,
+  Row,
+  Col,
+  Button,
+  Typography,
+  Upload,
+  Divider,
+  Input,
+  Progress,
+  Steps,
+} from '@douyinfe/semi-ui';
 import { IconUpload } from '@douyinfe/semi-icons';
 import { debounce } from 'lodash-es';
 import { API, showError, showSuccess, isAdmin } from '../../../../helpers';
@@ -164,7 +182,7 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
       const res = await API.get('/api/user/?p=1&page_size=20');
       const { success, data, message } = res.data;
       if (success) {
-        const options = (data.items || []).map(user => ({
+        const options = (data.items || []).map((user) => ({
           value: user.id,
           label: `${user.username}${user.display_name ? ` (${user.display_name})` : ''} - ID: ${user.id}`,
           username: user.username,
@@ -191,10 +209,12 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
 
     setLoadingUsers(true);
     try {
-      const res = await API.get(`/api/user/search?keyword=${encodeURIComponent(keyword)}&page_size=20`);
+      const res = await API.get(
+        `/api/user/search?keyword=${encodeURIComponent(keyword)}&page_size=20`,
+      );
       const { success, data, message } = res.data;
       if (success) {
-        const options = (data.items || []).map(user => ({
+        const options = (data.items || []).map((user) => ({
           value: user.id,
           label: `${user.username}${user.display_name ? ` (${user.display_name})` : ''} - ID: ${user.id}`,
           username: user.username,
@@ -210,10 +230,7 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
     setLoadingUsers(false);
   };
 
-  const searchUsers = useMemo(
-    () => debounce(handleSearch, 500),
-    []
-  );
+  const searchUsers = useMemo(() => debounce(handleSearch, 500), []);
 
   useEffect(() => {
     return () => {
@@ -221,24 +238,27 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
     };
   }, [searchUsers]);
 
-  const fetchSupplierData = useCallback(async (supplierId) => {
-    setFetchingData(true);
-    try {
-      const apiPath = isAdmin()
-        ? `/api/user/supplier/${supplierId}`
-        : '/api/user/supplier/application/self';
-      const res = await API.get(apiPath, { skipErrorHandler: true });
-      const { success, data, message } = res.data;
-      if (success) {
-        setSupplierData(data);
-      } else {
-        showError(t(message));
+  const fetchSupplierData = useCallback(
+    async (supplierId) => {
+      setFetchingData(true);
+      try {
+        const apiPath = isAdmin()
+          ? `/api/user/supplier/${supplierId}`
+          : '/api/user/supplier/application/self';
+        const res = await API.get(apiPath, { skipErrorHandler: true });
+        const { success, data, message } = res.data;
+        if (success) {
+          setSupplierData(data);
+        } else {
+          showError(t(message));
+        }
+      } catch (error) {
+        showError(error.response?.data?.message || t('加载供应商数据失败'));
       }
-    } catch (error) {
-      showError(error.response?.data?.message || t('加载供应商数据失败'));
-    }
-    setFetchingData(false);
-  }, [t]);
+      setFetchingData(false);
+    },
+    [t],
+  );
 
   useEffect(() => {
     if (visible && supplier && supplier.id) {
@@ -284,30 +304,56 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
         contact_name: supplierData.contact_name || '',
         contact_mobile: supplierData.contact_mobile || '',
         contact_wechat: supplierData.contact_wechat || '',
-        core_service_types: supplierData.supplier_capability?.core_service_types || [],
-        supported_models: supplierData.supplier_capability?.supported_models || [],
-        supported_model_notes: supplierData.supplier_capability?.supported_model_notes || '',
-        supported_api_endpoints: supplierData.supplier_capability?.supported_api_endpoints || [],
-        supported_api_endpoint_extra: supplierData.supplier_capability?.supported_api_endpoint_extra || '',
-        supported_params: supplierData.supplier_capability?.supported_params || [],
-        supported_params_extra: supplierData.supplier_capability?.supported_params_extra || '',
-        streaming_supported: supplierData.supplier_capability?.streaming_supported ? 'yes' : 'no',
-        streaming_notes: supplierData.supplier_capability?.streaming_notes || '',
-        structured_output_supported: supplierData.supplier_capability?.structured_output_supported ? 'yes' : 'no',
-        structured_output_notes: supplierData.supplier_capability?.structured_output_notes || '',
-        multimodal_types: supplierData.supplier_capability?.multimodal_types || [],
-        multimodal_extra: supplierData.supplier_capability?.multimodal_extra || '',
+        core_service_types:
+          supplierData.supplier_capability?.core_service_types || [],
+        supported_models:
+          supplierData.supplier_capability?.supported_models || [],
+        supported_model_notes:
+          supplierData.supplier_capability?.supported_model_notes || '',
+        supported_api_endpoints:
+          supplierData.supplier_capability?.supported_api_endpoints || [],
+        supported_api_endpoint_extra:
+          supplierData.supplier_capability?.supported_api_endpoint_extra || '',
+        supported_params:
+          supplierData.supplier_capability?.supported_params || [],
+        supported_params_extra:
+          supplierData.supplier_capability?.supported_params_extra || '',
+        streaming_supported: supplierData.supplier_capability
+          ?.streaming_supported
+          ? 'yes'
+          : 'no',
+        streaming_notes:
+          supplierData.supplier_capability?.streaming_notes || '',
+        structured_output_supported: supplierData.supplier_capability
+          ?.structured_output_supported
+          ? 'yes'
+          : 'no',
+        structured_output_notes:
+          supplierData.supplier_capability?.structured_output_notes || '',
+        multimodal_types:
+          supplierData.supplier_capability?.multimodal_types || [],
+        multimodal_extra:
+          supplierData.supplier_capability?.multimodal_extra || '',
         pricing_modes: supplierData.supplier_capability?.pricing_modes || [],
-        reference_input_price: supplierData.supplier_capability?.reference_input_price || '',
-        reference_output_price: supplierData.supplier_capability?.reference_output_price || '',
-        failure_billing_mode: supplierData.supplier_capability?.failure_billing_mode || 'no_bill',
-        failure_billing_notes: supplierData.supplier_capability?.failure_billing_notes || '',
+        reference_input_price:
+          supplierData.supplier_capability?.reference_input_price || '',
+        reference_output_price:
+          supplierData.supplier_capability?.reference_output_price || '',
+        failure_billing_mode:
+          supplierData.supplier_capability?.failure_billing_mode || 'no_bill',
+        failure_billing_notes:
+          supplierData.supplier_capability?.failure_billing_notes || '',
         api_base_urls: supplierData.supplier_capability?.api_base_urls || [],
-        openai_compatible: supplierData.supplier_capability?.openai_compatible ? 'yes' : 'no',
-        truth_commitment_confirmed: supplierData.supplier_capability?.truth_commitment_confirmed || false,
+        openai_compatible: supplierData.supplier_capability?.openai_compatible
+          ? 'yes'
+          : 'no',
+        truth_commitment_confirmed:
+          supplierData.supplier_capability?.truth_commitment_confirmed || false,
       });
-      setCommitmentChecked(!!supplierData.supplier_capability?.truth_commitment_confirmed);
-      
+      setCommitmentChecked(
+        !!supplierData.supplier_capability?.truth_commitment_confirmed,
+      );
+
       if (supplierData.business_license_url) {
         setBusinessLicenseUrl(supplierData.business_license_url);
       }
@@ -330,23 +376,29 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
         } catch (e) {
           console.error('Failed to parse business_license_file:', e);
           if (supplierData.business_license_url) {
-            setFileList([{
-              uid: 'existing',
-              name: t('已上传的营业执照'),
-              status: 'success',
-              url: supplierData.business_license_url,
-            }]);
+            setFileList([
+              {
+                uid: 'existing',
+                name: t('已上传的营业执照'),
+                status: 'success',
+                url: supplierData.business_license_url,
+              },
+            ]);
           }
         }
       }
 
       if (supplierData.user_id) {
-        setUserOptions([{
-          value: supplierData.user_id,
-          label: supplierData.applicant_username || `用户 ${supplierData.user_id}`,
-          username: supplierData.applicant_username || `用户${supplierData.user_id}`,
-          display_name: supplierData.display_name,
-        }]);
+        setUserOptions([
+          {
+            value: supplierData.user_id,
+            label:
+              supplierData.applicant_username || `用户 ${supplierData.user_id}`,
+            username:
+              supplierData.applicant_username || `用户${supplierData.user_id}`,
+            display_name: supplierData.display_name,
+          },
+        ]);
       }
     }
   }, [supplierData, t]);
@@ -397,7 +449,11 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
     }
     if (currentStep === 1) {
       try {
-        await api.validate(['company_name', 'credit_code', 'legal_representative']);
+        await api.validate([
+          'company_name',
+          'credit_code',
+          'legal_representative',
+        ]);
       } catch {
         return;
       }
@@ -414,7 +470,11 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
     }
     if (currentStep === 2) {
       try {
-        await api.validate(['contact_name', 'contact_mobile', 'contact_wechat']);
+        await api.validate([
+          'contact_name',
+          'contact_mobile',
+          'contact_wechat',
+        ]);
       } catch {
         return;
       }
@@ -436,7 +496,9 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
    * @param {object} values 表单值
    */
   const submit = async (values) => {
-    const mergedValues = isCreateWizard ? { ...wizardDraftValues, ...(values || {}) } : values;
+    const mergedValues = isCreateWizard
+      ? { ...wizardDraftValues, ...(values || {}) }
+      : values;
     if (!businessLicenseUrl) {
       showError(t('请上传营业执照'));
       return;
@@ -461,13 +523,15 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
     setLoading(true);
     try {
       const fileInfo = fileList.length > 0 ? fileList[0] : null;
-      const businessLicenseFile = fileInfo ? JSON.stringify({
-        uid: fileInfo.uid,
-        name: fileInfo.name,
-        status: fileInfo.status,
-        size: fileInfo.size,
-        url: businessLicenseUrl,
-      }) : '';
+      const businessLicenseFile = fileInfo
+        ? JSON.stringify({
+            uid: fileInfo.uid,
+            name: fileInfo.name,
+            status: fileInfo.status,
+            size: fileInfo.size,
+            url: businessLicenseUrl,
+          })
+        : '';
 
       const basePayload = {
         business_license_url: businessLicenseUrl,
@@ -510,9 +574,11 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
           ...basePayload,
           applicant_user_id: uid,
         };
-        res = await API.post('/api/user/supplier/application', createPayload, { skipErrorHandler: true });
+        res = await API.post('/api/user/supplier/application', createPayload, {
+          skipErrorHandler: true,
+        });
       }
-      
+
       const { success, message, data } = res.data;
       if (success) {
         const capabilityPayload = buildCapabilityPayload(mergedValues);
@@ -522,7 +588,11 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
           setLoading(false);
           return;
         }
-        const capabilityRes = await API.put(`/api/user/supplier/application/${appId}/capability`, capabilityPayload, { skipErrorHandler: true });
+        const capabilityRes = await API.put(
+          `/api/user/supplier/application/${appId}/capability`,
+          capabilityPayload,
+          { skipErrorHandler: true },
+        );
         if (!capabilityRes.data.success) {
           showError(t(capabilityRes.data.message || '技术能力信息保存失败'));
           setLoading(false);
@@ -561,7 +631,8 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
    */
   const customRequest = async ({ file, onSuccess, onError }) => {
     const fileInstance = file.fileInstance;
-    const isImage = fileInstance.type === 'image/jpeg' || fileInstance.type === 'image/png';
+    const isImage =
+      fileInstance.type === 'image/jpeg' || fileInstance.type === 'image/png';
     const isLt5M = fileInstance.size / 1024 / 1024 < 5;
 
     if (!isImage) {
@@ -576,12 +647,14 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
       return;
     }
 
-    setFileList([{
-      uid: fileInstance.uid,
-      name: fileInstance.name,
-      status: 'uploading',
-      size: fileInstance.size,
-    }]);
+    setFileList([
+      {
+        uid: fileInstance.uid,
+        name: fileInstance.name,
+        status: 'uploading',
+        size: fileInstance.size,
+      },
+    ]);
 
     try {
       const formData = new FormData();
@@ -596,13 +669,15 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
       const { success, data, message } = res.data;
       if (success && data?.url) {
         setBusinessLicenseUrl(data.url);
-        setFileList([{
-          uid: fileInstance.uid,
-          name: fileInstance.name,
-          status: 'success',
-          size: fileInstance.size,
-          url: data.url,
-        }]);
+        setFileList([
+          {
+            uid: fileInstance.uid,
+            name: fileInstance.name,
+            status: 'success',
+            size: fileInstance.size,
+            url: data.url,
+          },
+        ]);
         onSuccess();
       } else {
         showError(message || t('上传失败'));
@@ -621,7 +696,8 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
    */
   const customLogoRequest = async ({ file, onSuccess, onError }) => {
     const fileInstance = file.fileInstance;
-    const isImage = fileInstance.type === 'image/jpeg' || fileInstance.type === 'image/png';
+    const isImage =
+      fileInstance.type === 'image/jpeg' || fileInstance.type === 'image/png';
     const isLt5M = fileInstance.size / 1024 / 1024 < 5;
 
     if (!isImage) {
@@ -636,12 +712,14 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
       return;
     }
 
-    setLogoFileList([{
-      uid: fileInstance.uid,
-      name: fileInstance.name,
-      status: 'uploading',
-      size: fileInstance.size,
-    }]);
+    setLogoFileList([
+      {
+        uid: fileInstance.uid,
+        name: fileInstance.name,
+        status: 'uploading',
+        size: fileInstance.size,
+      },
+    ]);
 
     try {
       const formData = new FormData();
@@ -656,13 +734,15 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
       const { success, data, message } = res.data;
       if (success && data?.url) {
         setCompanyLogoUrl(data.url);
-        setLogoFileList([{
-          uid: fileInstance.uid,
-          name: fileInstance.name,
-          status: 'success',
-          size: fileInstance.size,
-          url: data.url,
-        }]);
+        setLogoFileList([
+          {
+            uid: fileInstance.uid,
+            name: fileInstance.name,
+            status: 'success',
+            size: fileInstance.size,
+            url: data.url,
+          },
+        ]);
         onSuccess();
       } else {
         showError(message || t('上传失败'));
@@ -727,10 +807,10 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
             placeholder={t('填写营业执照上的 18 位代码')}
             rules={[
               { required: true, message: t('请输入统一社会信用代码') },
-              { 
+              {
                 pattern: /^[0-9A-HJ-NPQRTUWXY]{2}\d{6}[0-9A-HJ-NPQRTUWXY]{10}$/,
-                message: t('请输入有效的 18 位统一社会信用代码')
-              }
+                message: t('请输入有效的 18 位统一社会信用代码'),
+              },
             ]}
             showClear
             extraText={t('入驻后不可修改，务必核对准确')}
@@ -739,7 +819,12 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
         <Col span={24}>
           <Form.Upload
             field='license_file'
-            label={<Text strong>{t('营业执照')}<Text type='danger'>*</Text></Text>}
+            label={
+              <Text strong>
+                {t('营业执照')}
+                <Text type='danger'>*</Text>
+              </Text>
+            }
             action=''
             accept='.jpg,.jpeg,.png'
             limit={1}
@@ -752,7 +837,7 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
             }}
             extraText={t('支持 jpg/png，大小≤5M，信息完整无遮挡')}
           >
-            <Button icon={<IconUpload />} theme="light">
+            <Button icon={<IconUpload />} theme='light'>
               {t('上传文件')}
             </Button>
           </Form.Upload>
@@ -760,7 +845,12 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
         <Col span={24}>
           <Form.Upload
             field='company_logo_file'
-            label={<Text strong>{t('企业Logo')}<Text type='danger'>*</Text></Text>}
+            label={
+              <Text strong>
+                {t('企业Logo')}
+                <Text type='danger'>*</Text>
+              </Text>
+            }
             action=''
             accept='.jpg,.jpeg,.png'
             limit={1}
@@ -773,7 +863,7 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
             }}
             extraText={t('建议上传清晰方形Logo，支持 jpg/png，大小≤5M')}
           >
-            <Button icon={<IconUpload />} theme="light">
+            <Button icon={<IconUpload />} theme='light'>
               {t('上传文件')}
             </Button>
           </Form.Upload>
@@ -835,10 +925,10 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
             placeholder={t('填写实名手机号')}
             rules={[
               { required: true, message: t('请输入对接人手机号') },
-              { 
+              {
                 pattern: /^1[3-9]\d{9}$/,
-                message: t('请输入有效的手机号')
-              }
+                message: t('请输入有效的手机号'),
+              },
             ]}
             showClear
             extraText={t('用于紧急联系')}
@@ -849,7 +939,9 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
             field='contact_wechat'
             label={<Text strong>{t('对接人微信/企业微信')}</Text>}
             placeholder={t('填写微信号/企业微信 ID')}
-            rules={[{ required: true, message: t('请输入对接人微信/企业微信') }]}
+            rules={[
+              { required: true, message: t('请输入对接人微信/企业微信') },
+            ]}
             showClear
             extraText={t('用于拉取服务商专属沟通群')}
           />
@@ -869,13 +961,18 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
       style={{ maxWidth: isMobile ? '100%' : '800px' }}
       footer={
         isCreateWizard ? (
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 8,
+            }}
+          >
             <Button onClick={handleCancel}>{t('取消')}</Button>
             <div style={{ display: 'flex', gap: 8 }}>
               {currentStep > 0 && (
-                <Button onClick={handleWizardPrev}>
-                  {t('上一步')}
-                </Button>
+                <Button onClick={handleWizardPrev}>{t('上一步')}</Button>
               )}
               {currentStep < 3 ? (
                 <Button type='primary' theme='solid' onClick={handleWizardNext}>
@@ -899,7 +996,11 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
     >
       {isCreateWizard && (
         <div style={{ marginBottom: 16 }}>
-          <Progress percent={Math.round(((currentStep + 1) / 4) * 100)} showInfo={false} stroke={'var(--semi-color-primary)'} />
+          <Progress
+            percent={Math.round(((currentStep + 1) / 4) * 100)}
+            showInfo={false}
+            stroke={'var(--semi-color-primary)'}
+          />
           <div style={{ marginTop: 8 }}>
             <Steps type='basic' current={currentStep} size='small'>
               <Steps.Step title={t('关联用户与别名')} />
@@ -922,7 +1023,12 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
                 style={{ width: '100%' }}
                 filter
                 field='user_id'
-                label={<Text strong>{t('选择用户')}<Text type='danger'>*</Text></Text>}
+                label={
+                  <Text strong>
+                    {t('选择用户')}
+                    <Text type='danger'>*</Text>
+                  </Text>
+                }
                 placeholder={t('输入用户名或ID搜索')}
                 remote
                 onSearch={searchUsers}
@@ -957,7 +1063,9 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
           </Row>
         )}
 
-        {isCreateWizard && currentStep === 1 && renderEnterpriseSection({ showAdminAlias: false })}
+        {isCreateWizard &&
+          currentStep === 1 &&
+          renderEnterpriseSection({ showAdminAlias: false })}
 
         {isCreateWizard && currentStep === 2 && renderContactSection()}
 
@@ -975,11 +1083,18 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
                 <Text strong>{t('关联用户')}</Text>
               </div>
               <Input
-                value={supplierData.applicant_username || `用户 ${supplierData.user_id}`}
+                value={
+                  supplierData.applicant_username ||
+                  `用户 ${supplierData.user_id}`
+                }
                 disabled
                 style={{ width: '100%' }}
               />
-              <Text type="tertiary" size="small" style={{ marginTop: '4px', display: 'block' }}>
+              <Text
+                type='tertiary'
+                size='small'
+                style={{ marginTop: '4px', display: 'block' }}
+              >
                 {t('修改时不能更改用户')}
               </Text>
             </div>

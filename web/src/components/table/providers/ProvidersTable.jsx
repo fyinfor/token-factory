@@ -64,9 +64,7 @@ const ProvidersTable = ({
         dataIndex: 'name',
         key: 'name',
         width: 180,
-        render: (text) => (
-          <span className='font-medium'>{text}</span>
-        ),
+        render: (text) => <span className='font-medium'>{text}</span>,
       },
       {
         title: t('描述'),

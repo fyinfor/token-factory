@@ -18,7 +18,10 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import React, { useState, useEffect } from 'react';
 import { Button, Empty, Spin, Tag } from '@douyinfe/semi-ui';
-import { IllustrationNoAccess, IllustrationNoAccessDark } from '@douyinfe/semi-illustrations';
+import {
+  IllustrationNoAccess,
+  IllustrationNoAccessDark,
+} from '@douyinfe/semi-illustrations';
 import { useTranslation } from 'react-i18next';
 import { API, isSupplier } from '../../../helpers';
 import SupplierApplicationModal from '../../../components/supplier/SupplierApplicationModal';
@@ -95,7 +98,11 @@ const SupplierApplyPage = () => {
     }
   };
 
-  const canApplyOrModify = !applicationData || applicationData.status === 0 || applicationData.status === 2 || applicationData.status === 3;
+  const canApplyOrModify =
+    !applicationData ||
+    applicationData.status === 0 ||
+    applicationData.status === 2 ||
+    applicationData.status === 3;
 
   const handleModalClose = () => {
     setShowApplicationModal(false);
@@ -104,7 +111,10 @@ const SupplierApplyPage = () => {
 
   if (loading) {
     return (
-      <div className='mt-[60px] px-2 flex items-center justify-center' style={{ minHeight: 'calc(100vh - 360px)' }}>
+      <div
+        className='mt-[60px] px-2 flex items-center justify-center'
+        style={{ minHeight: 'calc(100vh - 360px)' }}
+      >
         <Spin size='large' />
       </div>
     );
@@ -121,11 +131,16 @@ const SupplierApplyPage = () => {
         handleClose={() => setShowDetailModal(false)}
       />
       {!isSupplier() ? (
-        <div className='flex items-center justify-center' style={{ minHeight: 'calc(100vh - 360px)' }}>
+        <div
+          className='flex items-center justify-center'
+          style={{ minHeight: 'calc(100vh - 360px)' }}
+        >
           <Empty
             image={<IllustrationNoAccess style={{ width: 200, height: 200 }} />}
-            darkModeImage={<IllustrationNoAccessDark style={{ width: 200, height: 200 }} />}
-            layout="horizontal"
+            darkModeImage={
+              <IllustrationNoAccessDark style={{ width: 200, height: 200 }} />
+            }
+            layout='horizontal'
             title={
               <div className='flex items-center gap-2'>
                 {t('成为供应商')}
@@ -133,31 +148,33 @@ const SupplierApplyPage = () => {
               </div>
             }
             description={
-              applicationData && applicationData.status === 0
-                ? t('您的申请正在审核中，请耐心等待。')
-                : applicationData && applicationData.status === 2
-                ? (
-                  <div>
-                    <div>{t('您的申请已被驳回，可以修改后重新提交。')}</div>
-                    {applicationData.review_reason && (
-                      <div className='mt-2 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700'>
-                        <strong>{t('驳回原因：')}</strong>{applicationData.review_reason}
-                      </div>
-                    )}
-                  </div>
+              applicationData && applicationData.status === 0 ? (
+                t('您的申请正在审核中，请耐心等待。')
+              ) : applicationData && applicationData.status === 2 ? (
+                <div>
+                  <div>{t('您的申请已被驳回，可以修改后重新提交。')}</div>
+                  {applicationData.review_reason && (
+                    <div className='mt-2 p-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700'>
+                      <strong>{t('驳回原因：')}</strong>
+                      {applicationData.review_reason}
+                    </div>
+                  )}
+                </div>
+              ) : applicationData && applicationData.status === 3 ? (
+                <div>
+                  <div>{t('您的供应商资格已被注销，可以重新申请。')}</div>
+                  {applicationData.review_reason && (
+                    <div className='mt-2 p-3 bg-gray-50 border border-gray-200 rounded-md text-sm text-gray-700'>
+                      <strong>{t('注销原因：')}</strong>
+                      {applicationData.review_reason}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                t(
+                  '您当前还不是供应商，申请成为供应商后即可管理您的供应商信息。',
                 )
-                : applicationData && applicationData.status === 3
-                ? (
-                  <div>
-                    <div>{t('您的供应商资格已被注销，可以重新申请。')}</div>
-                    {applicationData.review_reason && (
-                      <div className='mt-2 p-3 bg-gray-50 border border-gray-200 rounded-md text-sm text-gray-700'>
-                        <strong>{t('注销原因：')}</strong>{applicationData.review_reason}
-                      </div>
-                    )}
-                  </div>
-                )
-                : t('您当前还不是供应商，申请成为供应商后即可管理您的供应商信息。')
+              )
             }
           >
             {canApplyOrModify && (
@@ -175,13 +192,20 @@ const SupplierApplyPage = () => {
           </Empty>
         </div>
       ) : (
-        <div className='flex items-center justify-center' style={{ minHeight: 'calc(100vh - 360px)' }}>
+        <div
+          className='flex items-center justify-center'
+          style={{ minHeight: 'calc(100vh - 360px)' }}
+        >
           <Empty
             image={<IllustrationNoAccess style={{ width: 200, height: 200 }} />}
-            darkModeImage={<IllustrationNoAccessDark style={{ width: 200, height: 200 }} />}
-            layout="horizontal"
+            darkModeImage={
+              <IllustrationNoAccessDark style={{ width: 200, height: 200 }} />
+            }
+            layout='horizontal'
             title={t('已是供应商')}
-            description={t('您已经是供应商，可以在渠道管理和模型管理中管理您的供应商信息。')}
+            description={t(
+              '您已经是供应商，可以在渠道管理和模型管理中管理您的供应商信息。',
+            )}
           >
             <Button
               theme='solid'

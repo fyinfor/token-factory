@@ -57,7 +57,11 @@ const ModelDetailSideSheet = ({
   const [channelMtrMap, setChannelMtrMap] = useState({});
 
   useEffect(() => {
-    if (!visible || !modelData?.model_name || !modelData?.channel_list?.length) {
+    if (
+      !visible ||
+      !modelData?.model_name ||
+      !modelData?.channel_list?.length
+    ) {
       setChannelMtrMap({});
       return;
     }

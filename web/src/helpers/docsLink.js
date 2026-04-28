@@ -54,8 +54,7 @@ export function mapWebLanguageToDocsLocale(webLanguage) {
  */
 export function resolveDocsNav(serverDocsLink, webLanguage) {
   const trimmed = (serverDocsLink || '').trim();
-  const origin =
-    typeof window !== 'undefined' ? window.location.origin : '';
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
   const docsLocale = mapWebLanguageToDocsLocale(webLanguage);
   const path = `/${docsLocale}/docs`;
 

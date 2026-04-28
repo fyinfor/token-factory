@@ -17,7 +17,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { Modal, Form, Row, Col, Button, Typography, Upload, Divider, Progress, Steps } from '@douyinfe/semi-ui';
+import {
+  Modal,
+  Form,
+  Row,
+  Col,
+  Button,
+  Typography,
+  Upload,
+  Divider,
+  Progress,
+  Steps,
+} from '@douyinfe/semi-ui';
 import { IconUpload } from '@douyinfe/semi-icons';
 import { API, showError, showSuccess } from '../../helpers';
 import { useTranslation } from 'react-i18next';
@@ -80,7 +91,9 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
   const fetchApplicationData = async () => {
     setFetchingData(true);
     try {
-      const res = await API.get('/api/user/supplier/application/self', { skipErrorHandler: true });
+      const res = await API.get('/api/user/supplier/application/self', {
+        skipErrorHandler: true,
+      });
       if (res.data.success && res.data.data) {
         const data = res.data.data;
         setHasExistingApplication(true);
@@ -88,7 +101,10 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
         // 接口 /self 已附带 supplier_capability；单独拉取失败时仍可用于回显。
         let fetchedCapabilityData = data.supplier_capability || null;
         try {
-          const capabilityRes = await API.get(`/api/user/supplier/application/${data.id}/capability`, { skipErrorHandler: true });
+          const capabilityRes = await API.get(
+            `/api/user/supplier/application/${data.id}/capability`,
+            { skipErrorHandler: true },
+          );
           if (capabilityRes.data.success && capabilityRes.data.data) {
             fetchedCapabilityData = capabilityRes.data.data;
           }
@@ -106,25 +122,40 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
           contact_wechat: data.contact_wechat || '',
           core_service_types: fetchedCapabilityData?.core_service_types || [],
           supported_models: fetchedCapabilityData?.supported_models || [],
-          supported_model_notes: fetchedCapabilityData?.supported_model_notes || '',
-          supported_api_endpoints: fetchedCapabilityData?.supported_api_endpoints || [],
-          supported_api_endpoint_extra: fetchedCapabilityData?.supported_api_endpoint_extra || '',
+          supported_model_notes:
+            fetchedCapabilityData?.supported_model_notes || '',
+          supported_api_endpoints:
+            fetchedCapabilityData?.supported_api_endpoints || [],
+          supported_api_endpoint_extra:
+            fetchedCapabilityData?.supported_api_endpoint_extra || '',
           supported_params: fetchedCapabilityData?.supported_params || [],
-          supported_params_extra: fetchedCapabilityData?.supported_params_extra || '',
-          streaming_supported: fetchedCapabilityData?.streaming_supported ? 'yes' : 'no',
+          supported_params_extra:
+            fetchedCapabilityData?.supported_params_extra || '',
+          streaming_supported: fetchedCapabilityData?.streaming_supported
+            ? 'yes'
+            : 'no',
           streaming_notes: fetchedCapabilityData?.streaming_notes || '',
-          structured_output_supported: fetchedCapabilityData?.structured_output_supported ? 'yes' : 'no',
-          structured_output_notes: fetchedCapabilityData?.structured_output_notes || '',
+          structured_output_supported:
+            fetchedCapabilityData?.structured_output_supported ? 'yes' : 'no',
+          structured_output_notes:
+            fetchedCapabilityData?.structured_output_notes || '',
           multimodal_types: fetchedCapabilityData?.multimodal_types || [],
           multimodal_extra: fetchedCapabilityData?.multimodal_extra || '',
           pricing_modes: fetchedCapabilityData?.pricing_modes || [],
-          reference_input_price: fetchedCapabilityData?.reference_input_price || '',
-          reference_output_price: fetchedCapabilityData?.reference_output_price || '',
-          failure_billing_mode: fetchedCapabilityData?.failure_billing_mode || 'no_bill',
-          failure_billing_notes: fetchedCapabilityData?.failure_billing_notes || '',
+          reference_input_price:
+            fetchedCapabilityData?.reference_input_price || '',
+          reference_output_price:
+            fetchedCapabilityData?.reference_output_price || '',
+          failure_billing_mode:
+            fetchedCapabilityData?.failure_billing_mode || 'no_bill',
+          failure_billing_notes:
+            fetchedCapabilityData?.failure_billing_notes || '',
           api_base_urls: fetchedCapabilityData?.api_base_urls || [],
-          openai_compatible: fetchedCapabilityData?.openai_compatible ? 'yes' : 'no',
-          truth_commitment_confirmed: fetchedCapabilityData?.truth_commitment_confirmed || false,
+          openai_compatible: fetchedCapabilityData?.openai_compatible
+            ? 'yes'
+            : 'no',
+          truth_commitment_confirmed:
+            fetchedCapabilityData?.truth_commitment_confirmed || false,
         });
         setWizardDraftValues({
           company_name: data.company_name || '',
@@ -136,27 +167,44 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
           contact_wechat: data.contact_wechat || '',
           core_service_types: fetchedCapabilityData?.core_service_types || [],
           supported_models: fetchedCapabilityData?.supported_models || [],
-          supported_model_notes: fetchedCapabilityData?.supported_model_notes || '',
-          supported_api_endpoints: fetchedCapabilityData?.supported_api_endpoints || [],
-          supported_api_endpoint_extra: fetchedCapabilityData?.supported_api_endpoint_extra || '',
+          supported_model_notes:
+            fetchedCapabilityData?.supported_model_notes || '',
+          supported_api_endpoints:
+            fetchedCapabilityData?.supported_api_endpoints || [],
+          supported_api_endpoint_extra:
+            fetchedCapabilityData?.supported_api_endpoint_extra || '',
           supported_params: fetchedCapabilityData?.supported_params || [],
-          supported_params_extra: fetchedCapabilityData?.supported_params_extra || '',
-          streaming_supported: fetchedCapabilityData?.streaming_supported ? 'yes' : 'no',
+          supported_params_extra:
+            fetchedCapabilityData?.supported_params_extra || '',
+          streaming_supported: fetchedCapabilityData?.streaming_supported
+            ? 'yes'
+            : 'no',
           streaming_notes: fetchedCapabilityData?.streaming_notes || '',
-          structured_output_supported: fetchedCapabilityData?.structured_output_supported ? 'yes' : 'no',
-          structured_output_notes: fetchedCapabilityData?.structured_output_notes || '',
+          structured_output_supported:
+            fetchedCapabilityData?.structured_output_supported ? 'yes' : 'no',
+          structured_output_notes:
+            fetchedCapabilityData?.structured_output_notes || '',
           multimodal_types: fetchedCapabilityData?.multimodal_types || [],
           multimodal_extra: fetchedCapabilityData?.multimodal_extra || '',
           pricing_modes: fetchedCapabilityData?.pricing_modes || [],
-          reference_input_price: fetchedCapabilityData?.reference_input_price || '',
-          reference_output_price: fetchedCapabilityData?.reference_output_price || '',
-          failure_billing_mode: fetchedCapabilityData?.failure_billing_mode || 'no_bill',
-          failure_billing_notes: fetchedCapabilityData?.failure_billing_notes || '',
+          reference_input_price:
+            fetchedCapabilityData?.reference_input_price || '',
+          reference_output_price:
+            fetchedCapabilityData?.reference_output_price || '',
+          failure_billing_mode:
+            fetchedCapabilityData?.failure_billing_mode || 'no_bill',
+          failure_billing_notes:
+            fetchedCapabilityData?.failure_billing_notes || '',
           api_base_urls: fetchedCapabilityData?.api_base_urls || [],
-          openai_compatible: fetchedCapabilityData?.openai_compatible ? 'yes' : 'no',
-          truth_commitment_confirmed: fetchedCapabilityData?.truth_commitment_confirmed || false,
+          openai_compatible: fetchedCapabilityData?.openai_compatible
+            ? 'yes'
+            : 'no',
+          truth_commitment_confirmed:
+            fetchedCapabilityData?.truth_commitment_confirmed || false,
         });
-        setCommitmentChecked(!!fetchedCapabilityData?.truth_commitment_confirmed);
+        setCommitmentChecked(
+          !!fetchedCapabilityData?.truth_commitment_confirmed,
+        );
 
         // 等 Form 挂载完成后再写一次，避免 ref 未就绪时 setValues 被跳过。
         requestAnimationFrame(() => {
@@ -170,25 +218,40 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
             contact_wechat: data.contact_wechat || '',
             core_service_types: fetchedCapabilityData?.core_service_types || [],
             supported_models: fetchedCapabilityData?.supported_models || [],
-            supported_model_notes: fetchedCapabilityData?.supported_model_notes || '',
-            supported_api_endpoints: fetchedCapabilityData?.supported_api_endpoints || [],
-            supported_api_endpoint_extra: fetchedCapabilityData?.supported_api_endpoint_extra || '',
+            supported_model_notes:
+              fetchedCapabilityData?.supported_model_notes || '',
+            supported_api_endpoints:
+              fetchedCapabilityData?.supported_api_endpoints || [],
+            supported_api_endpoint_extra:
+              fetchedCapabilityData?.supported_api_endpoint_extra || '',
             supported_params: fetchedCapabilityData?.supported_params || [],
-            supported_params_extra: fetchedCapabilityData?.supported_params_extra || '',
-            streaming_supported: fetchedCapabilityData?.streaming_supported ? 'yes' : 'no',
+            supported_params_extra:
+              fetchedCapabilityData?.supported_params_extra || '',
+            streaming_supported: fetchedCapabilityData?.streaming_supported
+              ? 'yes'
+              : 'no',
             streaming_notes: fetchedCapabilityData?.streaming_notes || '',
-            structured_output_supported: fetchedCapabilityData?.structured_output_supported ? 'yes' : 'no',
-            structured_output_notes: fetchedCapabilityData?.structured_output_notes || '',
+            structured_output_supported:
+              fetchedCapabilityData?.structured_output_supported ? 'yes' : 'no',
+            structured_output_notes:
+              fetchedCapabilityData?.structured_output_notes || '',
             multimodal_types: fetchedCapabilityData?.multimodal_types || [],
             multimodal_extra: fetchedCapabilityData?.multimodal_extra || '',
             pricing_modes: fetchedCapabilityData?.pricing_modes || [],
-            reference_input_price: fetchedCapabilityData?.reference_input_price || '',
-            reference_output_price: fetchedCapabilityData?.reference_output_price || '',
-            failure_billing_mode: fetchedCapabilityData?.failure_billing_mode || 'no_bill',
-            failure_billing_notes: fetchedCapabilityData?.failure_billing_notes || '',
+            reference_input_price:
+              fetchedCapabilityData?.reference_input_price || '',
+            reference_output_price:
+              fetchedCapabilityData?.reference_output_price || '',
+            failure_billing_mode:
+              fetchedCapabilityData?.failure_billing_mode || 'no_bill',
+            failure_billing_notes:
+              fetchedCapabilityData?.failure_billing_notes || '',
             api_base_urls: fetchedCapabilityData?.api_base_urls || [],
-            openai_compatible: fetchedCapabilityData?.openai_compatible ? 'yes' : 'no',
-            truth_commitment_confirmed: fetchedCapabilityData?.truth_commitment_confirmed || false,
+            openai_compatible: fetchedCapabilityData?.openai_compatible
+              ? 'yes'
+              : 'no',
+            truth_commitment_confirmed:
+              fetchedCapabilityData?.truth_commitment_confirmed || false,
           });
         });
 
@@ -212,16 +275,17 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
             const fileInfo = JSON.parse(data.business_license_file);
             console.log('fileInfo', fileInfo);
             setFileList([fileInfo]);
-            
           } catch (e) {
             console.error('Failed to parse business_license_file:', e);
             if (data.business_license_url) {
-              setFileList([{
-                uid: 'existing',
-                name: t('已上传的营业执照'),
-                status: 'success',
-                url: data.business_license_url,
-              }]);
+              setFileList([
+                {
+                  uid: 'existing',
+                  name: t('已上传的营业执照'),
+                  status: 'success',
+                  url: data.business_license_url,
+                },
+              ]);
             }
           }
         }
@@ -276,7 +340,7 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
       openai_compatible: 'yes',
       truth_commitment_confirmed: false,
     }),
-    []
+    [],
   );
 
   const handleCancel = () => {
@@ -306,7 +370,11 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
     setWizardDraftValues((prev) => ({ ...prev, ...currentValues }));
     if (currentStep === 0) {
       try {
-        await api.validate(['company_name', 'credit_code', 'legal_representative']);
+        await api.validate([
+          'company_name',
+          'credit_code',
+          'legal_representative',
+        ]);
       } catch {
         return;
       }
@@ -323,7 +391,11 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
     }
     if (currentStep === 1) {
       try {
-        await api.validate(['contact_name', 'contact_mobile', 'contact_wechat']);
+        await api.validate([
+          'contact_name',
+          'contact_mobile',
+          'contact_wechat',
+        ]);
       } catch {
         return;
       }
@@ -358,13 +430,15 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
     setLoading(true);
     try {
       const fileInfo = fileList.length > 0 ? fileList[0] : null;
-      const businessLicenseFile = fileInfo ? JSON.stringify({
-        uid: fileInfo.uid,
-        name: fileInfo.name,
-        status: fileInfo.status,
-        size: fileInfo.size,
-        url: businessLicenseUrl,
-      }) : '';
+      const businessLicenseFile = fileInfo
+        ? JSON.stringify({
+            uid: fileInfo.uid,
+            name: fileInfo.name,
+            status: fileInfo.status,
+            size: fileInfo.size,
+            url: businessLicenseUrl,
+          })
+        : '';
 
       const payload = {
         business_license_url: businessLicenseUrl,
@@ -383,24 +457,32 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
         payload.id = applicationId;
       }
 
-      const res = hasExistingApplication 
-        ? await API.put('/api/user/supplier/application/self', payload, { skipErrorHandler: true })
-        : await API.post('/api/user/supplier/application', payload, { skipErrorHandler: true });
-      
+      const res = hasExistingApplication
+        ? await API.put('/api/user/supplier/application/self', payload, {
+            skipErrorHandler: true,
+          })
+        : await API.post('/api/user/supplier/application', payload, {
+            skipErrorHandler: true,
+          });
+
       const { success, message, data } = res.data;
       if (success) {
-        const targetApplicationID = hasExistingApplication ? applicationId : data?.id;
+        const targetApplicationID = hasExistingApplication
+          ? applicationId
+          : data?.id;
         const capabilityPayload = {
           core_service_types: mergedValues.core_service_types || [],
           supported_models: mergedValues.supported_models || [],
           supported_model_notes: mergedValues.supported_model_notes || '',
           supported_api_endpoints: mergedValues.supported_api_endpoints || [],
-          supported_api_endpoint_extra: mergedValues.supported_api_endpoint_extra || '',
+          supported_api_endpoint_extra:
+            mergedValues.supported_api_endpoint_extra || '',
           supported_params: mergedValues.supported_params || [],
           supported_params_extra: mergedValues.supported_params_extra || '',
           streaming_supported: mergedValues.streaming_supported === 'yes',
           streaming_notes: mergedValues.streaming_notes || '',
-          structured_output_supported: mergedValues.structured_output_supported === 'yes',
+          structured_output_supported:
+            mergedValues.structured_output_supported === 'yes',
           structured_output_notes: mergedValues.structured_output_notes || '',
           multimodal_types: mergedValues.multimodal_types || [],
           multimodal_extra: mergedValues.multimodal_extra || '',
@@ -418,7 +500,11 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
           setLoading(false);
           return;
         }
-        const capabilityRes = await API.put(`/api/user/supplier/application/${targetApplicationID}/capability`, capabilityPayload, { skipErrorHandler: true });
+        const capabilityRes = await API.put(
+          `/api/user/supplier/application/${targetApplicationID}/capability`,
+          capabilityPayload,
+          { skipErrorHandler: true },
+        );
         if (!capabilityRes.data.success) {
           showError(t(capabilityRes.data.message || '技术能力信息保存失败'));
           setLoading(false);
@@ -451,7 +537,8 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
 
   const customRequest = async ({ file, onSuccess, onError }) => {
     const fileInstance = file.fileInstance;
-    const isImage = fileInstance.type === 'image/jpeg' || fileInstance.type === 'image/png';
+    const isImage =
+      fileInstance.type === 'image/jpeg' || fileInstance.type === 'image/png';
     const isLt5M = fileInstance.size / 1024 / 1024 < 5;
 
     if (!isImage) {
@@ -466,12 +553,14 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
       return;
     }
 
-    setFileList([{
-      uid: fileInstance.uid,
-      name: fileInstance.name,
-      status: 'uploading',
-      size: fileInstance.size,
-    }]);
+    setFileList([
+      {
+        uid: fileInstance.uid,
+        name: fileInstance.name,
+        status: 'uploading',
+        size: fileInstance.size,
+      },
+    ]);
 
     try {
       const formData = new FormData();
@@ -486,13 +575,15 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
       const { success, data, message } = res.data;
       if (success && data?.url) {
         setBusinessLicenseUrl(data.url);
-        setFileList([{
-          uid: fileInstance.uid,
-          name: fileInstance.name,
-          status: 'success',
-          size: fileInstance.size,
-          url: data.url,
-        }]);
+        setFileList([
+          {
+            uid: fileInstance.uid,
+            name: fileInstance.name,
+            status: 'success',
+            size: fileInstance.size,
+            url: data.url,
+          },
+        ]);
         onSuccess();
       } else {
         showError(message || t('上传失败'));
@@ -511,7 +602,8 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
    */
   const customLogoRequest = async ({ file, onSuccess, onError }) => {
     const fileInstance = file.fileInstance;
-    const isImage = fileInstance.type === 'image/jpeg' || fileInstance.type === 'image/png';
+    const isImage =
+      fileInstance.type === 'image/jpeg' || fileInstance.type === 'image/png';
     const isLt5M = fileInstance.size / 1024 / 1024 < 5;
 
     if (!isImage) {
@@ -526,12 +618,14 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
       return;
     }
 
-    setLogoFileList([{
-      uid: fileInstance.uid,
-      name: fileInstance.name,
-      status: 'uploading',
-      size: fileInstance.size,
-    }]);
+    setLogoFileList([
+      {
+        uid: fileInstance.uid,
+        name: fileInstance.name,
+        status: 'uploading',
+        size: fileInstance.size,
+      },
+    ]);
 
     try {
       const formData = new FormData();
@@ -546,13 +640,15 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
       const { success, data, message } = res.data;
       if (success && data?.url) {
         setCompanyLogoUrl(data.url);
-        setLogoFileList([{
-          uid: fileInstance.uid,
-          name: fileInstance.name,
-          status: 'success',
-          size: fileInstance.size,
-          url: data.url,
-        }]);
+        setLogoFileList([
+          {
+            uid: fileInstance.uid,
+            name: fileInstance.name,
+            status: 'success',
+            size: fileInstance.size,
+            url: data.url,
+          },
+        ]);
         onSuccess();
       } else {
         showError(message || t('上传失败'));
@@ -576,13 +672,18 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
       size={isMobile ? 'full-width' : 'large'}
       style={{ maxWidth: isMobile ? '100%' : '800px' }}
       footer={
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
           <Button onClick={handleCancel}>{t('取消')}</Button>
           <div style={{ display: 'flex', gap: 8 }}>
             {currentStep > 0 && (
-              <Button onClick={handleStepPrev}>
-                {t('上一步')}
-              </Button>
+              <Button onClick={handleStepPrev}>{t('上一步')}</Button>
             )}
             {currentStep < 2 ? (
               <Button type='primary' theme='solid' onClick={handleStepNext}>
@@ -604,7 +705,11 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
       }
     >
       <div style={{ marginBottom: 16 }}>
-        <Progress percent={Math.round(((currentStep + 1) / 3) * 100)} showInfo={false} stroke={'var(--semi-color-primary)'} />
+        <Progress
+          percent={Math.round(((currentStep + 1) / 3) * 100)}
+          showInfo={false}
+          stroke={'var(--semi-color-primary)'}
+        />
         <div style={{ marginTop: 8 }}>
           <Steps type='basic' current={currentStep} size='small'>
             <Steps.Step title={t('企业主体')} />
@@ -623,154 +728,169 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
           若按 currentStep 条件卸载，未挂载字段无法接收 setValues，编辑申请时对接人/技术能力不回显。
         */}
         <div style={{ display: currentStep === 0 ? 'block' : 'none' }}>
-            <Divider margin='12px'>
-              <Text strong style={{ fontSize: '16px' }}>
-                {t('企业主体信息')}
-              </Text>
-            </Divider>
+          <Divider margin='12px'>
+            <Text strong style={{ fontSize: '16px' }}>
+              {t('企业主体信息')}
+            </Text>
+          </Divider>
 
-            <Row gutter={12}>
-              <Col span={24}>
-                <Form.Input
-                  field='company_name'
-                  label={<Text strong>{t('企业/主体名称')}</Text>}
-                  placeholder={t('填写与营业执照完全一致的全称')}
-                  rules={[{ required: true, message: t('请输入企业/主体名称') }]}
-                  showClear
-                  extraText={t('需与上传执照 100% 匹配')}
-                />
-              </Col>
-              <Col span={24}>
-                <Form.Input
-                  field='credit_code'
-                  label={<Text strong>{t('统一社会信用代码')}</Text>}
-                  placeholder={t('填写营业执照上的 18 位代码')}
-                  rules={[
-                    { required: true, message: t('请输入统一社会信用代码') },
-                    {
-                      pattern: /^[0-9A-HJ-NPQRTUWXY]{2}\d{6}[0-9A-HJ-NPQRTUWXY]{10}$/,
-                      message: t('请输入有效的 18 位统一社会信用代码')
-                    }
-                  ]}
-                  showClear
-                  extraText={t('入驻后不可修改，务必核对准确')}
-                />
-              </Col>
-              <Col span={24}>
-                <Form.Upload
-                  field='license_file'
-                  label={<Text strong>{t('营业执照')}<Text type='danger'>*</Text></Text>}
-                  action=''
-                  accept='.jpg,.jpeg,.png'
-                  limit={1}
-                  fileList={fileList}
-                  onChange={({ fileList }) => setFileList(fileList)}
-                  customRequest={customRequest}
-                  onRemove={() => {
-                    setFileList([]);
-                    setBusinessLicenseUrl('');
-                  }}
-                  extraText={t('支持 jpg/png，大小≤5M，信息完整无遮挡')}
-                >
-                  <Button icon={<IconUpload />} theme="light">
-                    {t('上传文件')}
-                  </Button>
-                </Form.Upload>
-              </Col>
-              <Col span={24}>
-                <Form.Upload
-                  field='company_logo_file'
-                  label={<Text strong>{t('企业Logo')}<Text type='danger'>*</Text></Text>}
-                  action=''
-                  accept='.jpg,.jpeg,.png'
-                  limit={1}
-                  fileList={logoFileList}
-                  onChange={({ fileList }) => setLogoFileList(fileList)}
-                  customRequest={customLogoRequest}
-                  onRemove={() => {
-                    setLogoFileList([]);
-                    setCompanyLogoUrl('');
-                  }}
-                  extraText={t('建议上传清晰方形Logo，支持 jpg/png，大小≤5M')}
-                >
-                  <Button icon={<IconUpload />} theme="light">
-                    {t('上传文件')}
-                  </Button>
-                </Form.Upload>
-              </Col>
-              <Col span={24}>
-                <Form.Input
-                  field='legal_representative'
-                  label={<Text strong>{t('法人/经营者姓名')}</Text>}
-                  placeholder={t('填写营业执照上的法定代表人/经营者姓名')}
-                  rules={[{ required: true, message: t('请输入法人/经营者姓名') }]}
-                  showClear
-                  extraText={t('与执照信息一致')}
-                />
-              </Col>
-              <Col span={24}>
-                <Form.Select
-                  field='company_size'
-                  label={<Text strong>{t('企业规模')}</Text>}
-                  placeholder={t('请选择企业规模')}
-                  optionList={[
-                    { label: t('10人以下'), value: '10人以下' },
-                    { label: t('10-50人'), value: '10-50人' },
-                    { label: t('50-200人'), value: '50-200人' },
-                    { label: t('200人以上'), value: '200人以上' },
-                  ]}
-                  showClear
-                  size='large'
-                />
-              </Col>
-            </Row>
+          <Row gutter={12}>
+            <Col span={24}>
+              <Form.Input
+                field='company_name'
+                label={<Text strong>{t('企业/主体名称')}</Text>}
+                placeholder={t('填写与营业执照完全一致的全称')}
+                rules={[{ required: true, message: t('请输入企业/主体名称') }]}
+                showClear
+                extraText={t('需与上传执照 100% 匹配')}
+              />
+            </Col>
+            <Col span={24}>
+              <Form.Input
+                field='credit_code'
+                label={<Text strong>{t('统一社会信用代码')}</Text>}
+                placeholder={t('填写营业执照上的 18 位代码')}
+                rules={[
+                  { required: true, message: t('请输入统一社会信用代码') },
+                  {
+                    pattern:
+                      /^[0-9A-HJ-NPQRTUWXY]{2}\d{6}[0-9A-HJ-NPQRTUWXY]{10}$/,
+                    message: t('请输入有效的 18 位统一社会信用代码'),
+                  },
+                ]}
+                showClear
+                extraText={t('入驻后不可修改，务必核对准确')}
+              />
+            </Col>
+            <Col span={24}>
+              <Form.Upload
+                field='license_file'
+                label={
+                  <Text strong>
+                    {t('营业执照')}
+                    <Text type='danger'>*</Text>
+                  </Text>
+                }
+                action=''
+                accept='.jpg,.jpeg,.png'
+                limit={1}
+                fileList={fileList}
+                onChange={({ fileList }) => setFileList(fileList)}
+                customRequest={customRequest}
+                onRemove={() => {
+                  setFileList([]);
+                  setBusinessLicenseUrl('');
+                }}
+                extraText={t('支持 jpg/png，大小≤5M，信息完整无遮挡')}
+              >
+                <Button icon={<IconUpload />} theme='light'>
+                  {t('上传文件')}
+                </Button>
+              </Form.Upload>
+            </Col>
+            <Col span={24}>
+              <Form.Upload
+                field='company_logo_file'
+                label={
+                  <Text strong>
+                    {t('企业Logo')}
+                    <Text type='danger'>*</Text>
+                  </Text>
+                }
+                action=''
+                accept='.jpg,.jpeg,.png'
+                limit={1}
+                fileList={logoFileList}
+                onChange={({ fileList }) => setLogoFileList(fileList)}
+                customRequest={customLogoRequest}
+                onRemove={() => {
+                  setLogoFileList([]);
+                  setCompanyLogoUrl('');
+                }}
+                extraText={t('建议上传清晰方形Logo，支持 jpg/png，大小≤5M')}
+              >
+                <Button icon={<IconUpload />} theme='light'>
+                  {t('上传文件')}
+                </Button>
+              </Form.Upload>
+            </Col>
+            <Col span={24}>
+              <Form.Input
+                field='legal_representative'
+                label={<Text strong>{t('法人/经营者姓名')}</Text>}
+                placeholder={t('填写营业执照上的法定代表人/经营者姓名')}
+                rules={[
+                  { required: true, message: t('请输入法人/经营者姓名') },
+                ]}
+                showClear
+                extraText={t('与执照信息一致')}
+              />
+            </Col>
+            <Col span={24}>
+              <Form.Select
+                field='company_size'
+                label={<Text strong>{t('企业规模')}</Text>}
+                placeholder={t('请选择企业规模')}
+                optionList={[
+                  { label: t('10人以下'), value: '10人以下' },
+                  { label: t('10-50人'), value: '10-50人' },
+                  { label: t('50-200人'), value: '50-200人' },
+                  { label: t('200人以上'), value: '200人以上' },
+                ]}
+                showClear
+                size='large'
+              />
+            </Col>
+          </Row>
         </div>
 
         <div style={{ display: currentStep === 1 ? 'block' : 'none' }}>
-            <Divider margin='20px 12px'>
-              <Text strong style={{ fontSize: '16px' }}>
-                {t('对接人信息')}
-              </Text>
-            </Divider>
+          <Divider margin='20px 12px'>
+            <Text strong style={{ fontSize: '16px' }}>
+              {t('对接人信息')}
+            </Text>
+          </Divider>
 
-            <Row gutter={12}>
-              <Col span={24}>
-                <Form.Input
-                  field='contact_name'
-                  label={<Text strong>{t('对接人姓名')}</Text>}
-                  placeholder={t('填写实际对接的负责人姓名')}
-                  rules={[{ required: true, message: t('请输入对接人姓名') }]}
-                  showClear
-                  extraText={t('平台日常沟通、问题对接')}
-                />
-              </Col>
-              <Col span={24}>
-                <Form.Input
-                  field='contact_mobile'
-                  label={<Text strong>{t('对接人手机号')}</Text>}
-                  placeholder={t('填写实名手机号')}
-                  rules={[
-                    { required: true, message: t('请输入对接人手机号') },
-                    {
-                      pattern: /^1[3-9]\d{9}$/,
-                      message: t('请输入有效的手机号')
-                    }
-                  ]}
-                  showClear
-                  extraText={t('用于紧急联系')}
-                />
-              </Col>
-              <Col span={24}>
-                <Form.Input
-                  field='contact_wechat'
-                  label={<Text strong>{t('对接人微信/企业微信')}</Text>}
-                  placeholder={t('填写微信号/企业微信 ID')}
-                  rules={[{ required: true, message: t('请输入对接人微信/企业微信') }]}
-                  showClear
-                  extraText={t('用于拉取服务商专属沟通群')}
-                />
-              </Col>
-            </Row>
+          <Row gutter={12}>
+            <Col span={24}>
+              <Form.Input
+                field='contact_name'
+                label={<Text strong>{t('对接人姓名')}</Text>}
+                placeholder={t('填写实际对接的负责人姓名')}
+                rules={[{ required: true, message: t('请输入对接人姓名') }]}
+                showClear
+                extraText={t('平台日常沟通、问题对接')}
+              />
+            </Col>
+            <Col span={24}>
+              <Form.Input
+                field='contact_mobile'
+                label={<Text strong>{t('对接人手机号')}</Text>}
+                placeholder={t('填写实名手机号')}
+                rules={[
+                  { required: true, message: t('请输入对接人手机号') },
+                  {
+                    pattern: /^1[3-9]\d{9}$/,
+                    message: t('请输入有效的手机号'),
+                  },
+                ]}
+                showClear
+                extraText={t('用于紧急联系')}
+              />
+            </Col>
+            <Col span={24}>
+              <Form.Input
+                field='contact_wechat'
+                label={<Text strong>{t('对接人微信/企业微信')}</Text>}
+                placeholder={t('填写微信号/企业微信 ID')}
+                rules={[
+                  { required: true, message: t('请输入对接人微信/企业微信') },
+                ]}
+                showClear
+                extraText={t('用于拉取服务商专属沟通群')}
+              />
+            </Col>
+          </Row>
         </div>
 
         <div style={{ display: currentStep === 2 ? 'block' : 'none' }}>

@@ -19,7 +19,12 @@ For commercial licensing, please contact support@quantumnous.com
 
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { API, processModelsData, processGroupsData, showError } from '../../helpers';
+import {
+  API,
+  processModelsData,
+  processGroupsData,
+  showError,
+} from '../../helpers';
 import { API_ENDPOINTS } from '../../constants/playground.constants';
 
 /**
@@ -47,7 +52,11 @@ const normalizeTypeId = (v) => {
  * @param {Array<{ label: string, value: string|number }>} typeOptions
  * @returns {typeof listForPlayground}
  */
-const filterPlaygroundModelsByType = (listForPlayground, effectiveType, typeOptions) => {
+const filterPlaygroundModelsByType = (
+  listForPlayground,
+  effectiveType,
+  typeOptions,
+) => {
   if (effectiveType === '' || isTypeSelectionEmpty(effectiveType)) {
     return listForPlayground;
   }
@@ -101,7 +110,9 @@ export const useDataLoader = (
    */
   const loadModels = useCallback(async () => {
     try {
-      const res = await API.get(`${API_ENDPOINTS.USER_MODELS}?scene=playground`);
+      const res = await API.get(
+        `${API_ENDPOINTS.USER_MODELS}?scene=playground`,
+      );
       const { success, message, data } = res.data;
 
       if (success) {
@@ -162,9 +173,9 @@ export const useDataLoader = (
         rawTypeOptions.sort((a, b) =>
           String(a.label).localeCompare(String(b.label), 'zh-Hans-CN'),
         );
-        const modelTypeOptions = [
-          { label: t('全部类型'), value: '' },
-        ].concat(rawTypeOptions);
+        const modelTypeOptions = [{ label: t('全部类型'), value: '' }].concat(
+          rawTypeOptions,
+        );
         setModelTypes(modelTypeOptions);
       } else {
         showError(t(message));
@@ -197,7 +208,8 @@ export const useDataLoader = (
     const selectedType = normalizeTypeId(inputs.model_type);
     const hasSelectedType = typeOptions.some((option) => {
       if (option.value === '' && selectedType === '') return true;
-      if (option.value === '' || isTypeSelectionEmpty(selectedType)) return false;
+      if (option.value === '' || isTypeSelectionEmpty(selectedType))
+        return false;
       return Number(option.value) === selectedType;
     });
     if (!hasSelectedType && !isTypeSelectionEmpty(selectedType)) {
@@ -248,10 +260,17 @@ export const useDataLoader = (
     setSupplierOptions(supplierOptions);
     const selectedSupplierID = inputs.specific_channel_id;
     const hasSelectedSupplier = supplierOptions.some((option) => {
-      if (option.value === '' && (selectedSupplierID === '' || selectedSupplierID == null)) {
+      if (
+        option.value === '' &&
+        (selectedSupplierID === '' || selectedSupplierID == null)
+      ) {
         return true;
       }
-      if (option.value === '' || selectedSupplierID === '' || selectedSupplierID == null) {
+      if (
+        option.value === '' ||
+        selectedSupplierID === '' ||
+        selectedSupplierID == null
+      ) {
         return false;
       }
       return Number(option.value) === Number(selectedSupplierID);

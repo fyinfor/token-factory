@@ -30,22 +30,10 @@ import {
   Table,
   // InputNumber, // 暂时禁用分销比例编辑功能
 } from '@douyinfe/semi-ui';
-import {
-  Copy,
-  Users,
-  BarChart2,
-  TrendingUp,
-  Gift,
-  Zap,
-} from 'lucide-react';
+import { Copy, Users, BarChart2, TrendingUp, Gift, Zap } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import dayjs from 'dayjs';
-import {
-  API,
-  showError,
-  showSuccess,
-  isDistributor,
-} from '../../helpers';
+import { API, showError, showSuccess, isDistributor } from '../../helpers';
 import AffInviteeCommissionDetailModal from '../distributor/AffInviteeCommissionDetailModal';
 
 const { Text } = Typography;
@@ -190,7 +178,9 @@ const InvitationCard = ({
             setDetailInviteeId(record.invitee_id);
             setDetailInviteeLabel(
               String(
-                record.display_name || record.username || `#${record.invitee_id}`,
+                record.display_name ||
+                  record.username ||
+                  `#${record.invitee_id}`,
               ).trim(),
             );
             setDetailOpen(true);

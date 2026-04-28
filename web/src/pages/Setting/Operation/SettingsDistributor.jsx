@@ -110,39 +110,40 @@ export default function SettingsDistributor(props) {
   );
 
   const handleDistributorImageUpload = useCallback(
-    (optionKey) => async ({ file, onSuccess, onError }) => {
-      const inst = file.fileInstance || file;
-      if (!inst) {
-        onError(new Error('no file'));
-        return;
-      }
-      setUploadingKey(optionKey);
-      const fd = new FormData();
-      fd.append('file', inst);
-      try {
-        const res = await API.post('/api/oss/upload', fd, {
-          skipErrorHandler: true,
-        });
-        const { success, message, data } = res.data || {};
-        const url = data?.url;
-        if (!success || !url) {
-          showError(message || t('上传失败'));
-          onError(new Error(message));
+    (optionKey) =>
+      async ({ file, onSuccess, onError }) => {
+        const inst = file.fileInstance || file;
+        if (!inst) {
+          onError(new Error('no file'));
           return;
         }
-        await persistOptionValue(optionKey, url);
-        onSuccess(data);
-      } catch (e) {
-        const msg =
-          e?.response?.data?.message ||
-          e?.message ||
-          t('上传失败，请确认已启用 OSS 并完成配置');
-        showError(msg);
-        onError(e);
-      } finally {
-        setUploadingKey(null);
-      }
-    },
+        setUploadingKey(optionKey);
+        const fd = new FormData();
+        fd.append('file', inst);
+        try {
+          const res = await API.post('/api/oss/upload', fd, {
+            skipErrorHandler: true,
+          });
+          const { success, message, data } = res.data || {};
+          const url = data?.url;
+          if (!success || !url) {
+            showError(message || t('上传失败'));
+            onError(new Error(message));
+            return;
+          }
+          await persistOptionValue(optionKey, url);
+          onSuccess(data);
+        } catch (e) {
+          const msg =
+            e?.response?.data?.message ||
+            e?.message ||
+            t('上传失败，请确认已启用 OSS 并完成配置');
+          showError(msg);
+          onError(e);
+        } finally {
+          setUploadingKey(null);
+        }
+      },
     [persistOptionValue, t],
   );
 
@@ -265,11 +266,7 @@ export default function SettingsDistributor(props) {
                       style={{ width: '100%' }}
                       placeholder={t('留空为默认')}
                     />
-                    <Text
-                      type='tertiary'
-                      size='small'
-                      className='block mt-2'
-                    >
+                    <Text type='tertiary' size='small' className='block mt-2'>
                       {t(
                         '与「待使用收益」同一套标价。有填写则单次提现不得低于对应余额；留空则不在此单独设限，仅按系统默认最低提现（与单价对应额度换算）执行。',
                       )}
@@ -304,10 +301,12 @@ export default function SettingsDistributor(props) {
               <Col xs={24} sm={12} md={8}>
                 <div className='mb-4'>
                   <Text strong className='block mb-2'>
-                  {t('默认代理比例')}
+                    {t('默认代理比例')}
                   </Text>
                   <InputNumber
-                    value={Number(inputs.AffiliateDefaultCommissionBps || 0) / 100}
+                    value={
+                      Number(inputs.AffiliateDefaultCommissionBps || 0) / 100
+                    }
                     onNumberChange={(n) =>
                       setInputs({
                         ...inputs,
@@ -448,9 +447,7 @@ export default function SettingsDistributor(props) {
                     )}
                   >
                     <Button
-                      loading={
-                        uploadingKey === 'DistributorWithdrawCsImageUrl'
-                      }
+                      loading={uploadingKey === 'DistributorWithdrawCsImageUrl'}
                     >
                       {t('上传图片')}
                     </Button>

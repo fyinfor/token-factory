@@ -1,5 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, Card, Empty, Spin, Table, Typography } from '@douyinfe/semi-ui';
+import {
+  Button,
+  Card,
+  Empty,
+  Spin,
+  Table,
+  Typography,
+} from '@douyinfe/semi-ui';
 import {
   IllustrationNoAccess,
   IllustrationNoAccessDark,
@@ -100,7 +107,10 @@ export default function SupplierDashboardPage() {
         lines: [
           {
             label: t('供应商提供模型数'),
-            value: data?.model_data_analysis?.provided_model_count ?? data?.model_data_analysis?.model_count ?? 0,
+            value:
+              data?.model_data_analysis?.provided_model_count ??
+              data?.model_data_analysis?.model_count ??
+              0,
             icon: <Cpu size={14} />,
             iconColor: ICON_BG_COLORS.indigo,
           },
@@ -160,7 +170,9 @@ export default function SupplierDashboardPage() {
         lines: [
           {
             label: t('有数据模型数'),
-            value: data?.model_data_analysis?.active_model_count ?? (data?.model_usage_stats || []).length,
+            value:
+              data?.model_data_analysis?.active_model_count ??
+              (data?.model_usage_stats || []).length,
             icon: <Cpu size={14} />,
             iconColor: ICON_BG_COLORS.amber,
           },
@@ -180,10 +192,15 @@ export default function SupplierDashboardPage() {
   if (!canAccess) {
     return (
       <div className='mt-[60px] px-2'>
-        <div className='flex items-center justify-center' style={{ minHeight: 'calc(100vh - 360px)' }}>
+        <div
+          className='flex items-center justify-center'
+          style={{ minHeight: 'calc(100vh - 360px)' }}
+        >
           <Empty
             image={<IllustrationNoAccess style={{ width: 200, height: 200 }} />}
-            darkModeImage={<IllustrationNoAccessDark style={{ width: 200, height: 200 }} />}
+            darkModeImage={
+              <IllustrationNoAccessDark style={{ width: 200, height: 200 }} />
+            }
             layout='horizontal'
             title={t('需要供应商权限')}
             description={t('您需要先成为供应商才能访问此页面。')}
@@ -252,7 +269,10 @@ export default function SupplierDashboardPage() {
             >
               <div className='space-y-2'>
                 {item.lines.map((line, idx) => (
-                  <div key={`${item.key}-${idx}`} className='flex items-center gap-2'>
+                  <div
+                    key={`${item.key}-${idx}`}
+                    className='flex items-center gap-2'
+                  >
                     <span
                       className='w-5 h-5 rounded-full text-white flex items-center justify-center'
                       style={{ backgroundColor: line.iconColor }}
