@@ -36,11 +36,17 @@ const HomeLandingHeroCopy = ({ className = '' }) => {
       </h1>
       <p className='text-sm md:text-base text-semi-color-text-2 mb-8'>
         {t('源头')}
-        <span className='font-semibold text-semi-color-text-0'>{t('安全')}</span>
+        <span className='font-semibold text-semi-color-text-0'>
+          {t('安全')}
+        </span>
         {t('可控，')}
-        <span className='font-semibold text-semi-color-text-0'>{t('价格')}</span>
+        <span className='font-semibold text-semi-color-text-0'>
+          {t('价格')}
+        </span>
         {t('更具优势，')}
-        <span className='font-semibold text-semi-color-text-0'>{t('稳定')}</span>
+        <span className='font-semibold text-semi-color-text-0'>
+          {t('稳定')}
+        </span>
         {t('可靠。')}
       </p>
     </div>

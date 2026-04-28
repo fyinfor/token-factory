@@ -77,7 +77,8 @@ export default function SettingsOss(props) {
     setLoading(true);
     Promise.all(requestQueue)
       .then((res) => {
-        if (res.includes(undefined)) return showError(t('部分保存失败，请重试'));
+        if (res.includes(undefined))
+          return showError(t('部分保存失败，请重试'));
         showSuccess(t('保存成功'));
         props.refresh();
       })
@@ -192,7 +193,9 @@ export default function SettingsOss(props) {
                 }
               />
               <Text type='tertiary' size='small'>
-                {t('不含 https://，与阿里云控制台 Bucket 概览中的外网 Endpoint 一致')}
+                {t(
+                  '不含 https://，与阿里云控制台 Bucket 概览中的外网 Endpoint 一致',
+                )}
               </Text>
             </Col>
             <Col xs={24} sm={12}>
@@ -233,7 +236,9 @@ export default function SettingsOss(props) {
                 }
               />
               <Text type='tertiary' size='small' style={{ display: 'block' }}>
-                {t('留空则使用 https://{bucket}.{endpoint}/ 形式；绑定 CDN 时填 CDN 根地址')}
+                {t(
+                  '留空则使用 https://{bucket}.{endpoint}/ 形式；绑定 CDN 时填 CDN 根地址',
+                )}
               </Text>
             </Col>
             <Col xs={24} sm={12}>
@@ -271,7 +276,12 @@ export default function SettingsOss(props) {
                 '使用当前已保存到服务端的 OSS 配置；选择文件后将自动上传并显示访问地址（未保存的修改不会参与上传）。',
               )}
             </Text>
-            <Row type='flex' align='middle' gutter={12} style={{ flexWrap: 'wrap' }}>
+            <Row
+              type='flex'
+              align='middle'
+              gutter={12}
+              style={{ flexWrap: 'wrap' }}
+            >
               <Col>
                 <input
                   ref={fileInputRef}

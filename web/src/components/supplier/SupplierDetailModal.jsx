@@ -17,7 +17,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import React, { useState, useEffect } from 'react';
-import { Modal, Spin, Image, Typography, Tag, Divider, Row, Col } from '@douyinfe/semi-ui';
+import {
+  Modal,
+  Spin,
+  Image,
+  Typography,
+  Tag,
+  Divider,
+  Row,
+  Col,
+} from '@douyinfe/semi-ui';
 import { API, showError } from '../../helpers';
 import { useTranslation } from 'react-i18next';
 import { useIsMobile } from '../../hooks/common/useIsMobile';
@@ -86,14 +95,19 @@ const SupplierDetailModal = ({ visible, handleClose }) => {
   const InfoItem = ({ label, value }) => (
     <Col span={24}>
       <div className='mb-4'>
-        <Text strong style={{ fontSize: '14px', display: 'block', marginBottom: '8px' }}>
+        <Text
+          strong
+          style={{ fontSize: '14px', display: 'block', marginBottom: '8px' }}
+        >
           {label}
         </Text>
-        <div style={{ 
-          padding: '8px 12px',
-          backgroundColor: isDark ? '#2d2e33' : '#f8f8f8',
-          borderRadius: '4px',
-        }}>
+        <div
+          style={{
+            padding: '8px 12px',
+            backgroundColor: isDark ? '#2d2e33' : '#f8f8f8',
+            borderRadius: '4px',
+          }}
+        >
           {value}
         </div>
       </div>
@@ -128,21 +142,34 @@ const SupplierDetailModal = ({ visible, handleClose }) => {
           </Divider>
 
           <Row gutter={12}>
-            <InfoItem 
-              label={t('审核状态')} 
-              value={supplierData?.status !== undefined ? getStatusTag(supplierData.status) : '-'}
+            <InfoItem
+              label={t('审核状态')}
+              value={
+                supplierData?.status !== undefined
+                  ? getStatusTag(supplierData.status)
+                  : '-'
+              }
             />
             {supplierData?.created_at && (
               <Col span={24}>
                 <div className='mb-4'>
-                  <Text strong style={{ fontSize: '14px', display: 'block', marginBottom: '8px' }}>
+                  <Text
+                    strong
+                    style={{
+                      fontSize: '14px',
+                      display: 'block',
+                      marginBottom: '8px',
+                    }}
+                  >
                     {t('申请时间')}
                   </Text>
-                  <div style={{ 
-                    padding: '8px 12px', 
-                    backgroundColor: isDark ? '#2d2e33' : '#f8f8f8', 
-                    borderRadius: '4px',
-                  }}>
+                  <div
+                    style={{
+                      padding: '8px 12px',
+                      backgroundColor: isDark ? '#2d2e33' : '#f8f8f8',
+                      borderRadius: '4px',
+                    }}
+                  >
                     {new Date(supplierData.created_at * 1000).toLocaleString()}
                   </div>
                 </div>
@@ -151,16 +178,25 @@ const SupplierDetailModal = ({ visible, handleClose }) => {
             {supplierData?.review_reason && (
               <Col span={24}>
                 <div className='mb-4'>
-                  <Text strong style={{ fontSize: '14px', display: 'block', marginBottom: '8px' }}>
+                  <Text
+                    strong
+                    style={{
+                      fontSize: '14px',
+                      display: 'block',
+                      marginBottom: '8px',
+                    }}
+                  >
                     {t('审核备注')}
                   </Text>
-                  <div style={{ 
-                    padding: '12px', 
-                    backgroundColor: isDark ? '#2d2e33' : '#fff7e6', 
-                    borderRadius: '4px',
-                    border: '1px solid #ffd591',
-                    color: '#ad6800'
-                  }}>
+                  <div
+                    style={{
+                      padding: '12px',
+                      backgroundColor: isDark ? '#2d2e33' : '#fff7e6',
+                      borderRadius: '4px',
+                      border: '1px solid #ffd591',
+                      color: '#ad6800',
+                    }}
+                  >
                     {supplierData.review_reason}
                   </div>
                 </div>
@@ -175,18 +211,30 @@ const SupplierDetailModal = ({ visible, handleClose }) => {
           </Divider>
 
           <Row gutter={12}>
-            <InfoItem label={t('企业/主体名称')} value={supplierData?.company_name || '-'} />
+            <InfoItem
+              label={t('企业/主体名称')}
+              value={supplierData?.company_name || '-'}
+            />
             {supplierData?.company_logo_url && (
               <Col span={24}>
                 <div className='mb-4'>
-                  <Text strong style={{ fontSize: '14px', display: 'block', marginBottom: '8px' }}>
+                  <Text
+                    strong
+                    style={{
+                      fontSize: '14px',
+                      display: 'block',
+                      marginBottom: '8px',
+                    }}
+                  >
                     {t('企业Logo')}
                   </Text>
-                  <div style={{
-                    padding: '12px',
-                    backgroundColor: isDark ? '#2d2e33' : '#f8f8f8',
-                    borderRadius: '4px',
-                  }}>
+                  <div
+                    style={{
+                      padding: '12px',
+                      backgroundColor: isDark ? '#2d2e33' : '#f8f8f8',
+                      borderRadius: '4px',
+                    }}
+                  >
                     <Image
                       src={supplierData.company_logo_url}
                       width={120}
@@ -200,20 +248,38 @@ const SupplierDetailModal = ({ visible, handleClose }) => {
                 </div>
               </Col>
             )}
-            <InfoItem label={t('统一社会信用代码')} value={supplierData?.credit_code || '-'} />
-            <InfoItem label={t('法人/经营者姓名')} value={supplierData?.legal_representative || '-'} />
-            <InfoItem label={t('企业规模')} value={supplierData?.company_size || '-'} />
+            <InfoItem
+              label={t('统一社会信用代码')}
+              value={supplierData?.credit_code || '-'}
+            />
+            <InfoItem
+              label={t('法人/经营者姓名')}
+              value={supplierData?.legal_representative || '-'}
+            />
+            <InfoItem
+              label={t('企业规模')}
+              value={supplierData?.company_size || '-'}
+            />
             {supplierData?.business_license_url && (
               <Col span={24}>
                 <div className='mb-4'>
-                  <Text strong style={{ fontSize: '14px', display: 'block', marginBottom: '8px' }}>
+                  <Text
+                    strong
+                    style={{
+                      fontSize: '14px',
+                      display: 'block',
+                      marginBottom: '8px',
+                    }}
+                  >
                     {t('营业执照')}
                   </Text>
-                  <div style={{ 
-                    padding: '12px', 
-                    backgroundColor: isDark ? '#2d2e33' : '#f8f8f8', 
-                    borderRadius: '4px',
-                  }}>
+                  <div
+                    style={{
+                      padding: '12px',
+                      backgroundColor: isDark ? '#2d2e33' : '#f8f8f8',
+                      borderRadius: '4px',
+                    }}
+                  >
                     <Image
                       src={supplierData.business_license_url}
                       width={200}
@@ -235,9 +301,18 @@ const SupplierDetailModal = ({ visible, handleClose }) => {
           </Divider>
 
           <Row gutter={12}>
-            <InfoItem label={t('对接人姓名')} value={supplierData?.contact_name || '-'} />
-            <InfoItem label={t('对接人手机号')} value={supplierData?.contact_mobile || '-'} />
-            <InfoItem label={t('对接人微信/企业微信')} value={supplierData?.contact_wechat || '-'} />
+            <InfoItem
+              label={t('对接人姓名')}
+              value={supplierData?.contact_name || '-'}
+            />
+            <InfoItem
+              label={t('对接人手机号')}
+              value={supplierData?.contact_mobile || '-'}
+            />
+            <InfoItem
+              label={t('对接人微信/企业微信')}
+              value={supplierData?.contact_wechat || '-'}
+            />
           </Row>
 
           <Divider margin='20px 12px'>
@@ -249,12 +324,42 @@ const SupplierDetailModal = ({ visible, handleClose }) => {
             <Paragraph type='secondary'>{t('暂未提交技术能力信息')}</Paragraph>
           ) : (
             <Row gutter={12}>
-              <InfoItem label={t('核心服务类型')} value={renderListValue(supplierData.supplier_capability.core_service_types)} />
-              <InfoItem label={t('支持的模型')} value={renderListValue(supplierData.supplier_capability.supported_models)} />
-              <InfoItem label={t('支持的API接口')} value={renderListValue(supplierData.supplier_capability.supported_api_endpoints)} />
-              <InfoItem label={t('支持的参数配置')} value={renderListValue(supplierData.supplier_capability.supported_params)} />
-              <InfoItem label={t('定价模式')} value={renderListValue(supplierData.supplier_capability.pricing_modes)} />
-              <InfoItem label={t('API接口地址')} value={renderListValue(supplierData.supplier_capability.api_base_urls)} />
+              <InfoItem
+                label={t('核心服务类型')}
+                value={renderListValue(
+                  supplierData.supplier_capability.core_service_types,
+                )}
+              />
+              <InfoItem
+                label={t('支持的模型')}
+                value={renderListValue(
+                  supplierData.supplier_capability.supported_models,
+                )}
+              />
+              <InfoItem
+                label={t('支持的API接口')}
+                value={renderListValue(
+                  supplierData.supplier_capability.supported_api_endpoints,
+                )}
+              />
+              <InfoItem
+                label={t('支持的参数配置')}
+                value={renderListValue(
+                  supplierData.supplier_capability.supported_params,
+                )}
+              />
+              <InfoItem
+                label={t('定价模式')}
+                value={renderListValue(
+                  supplierData.supplier_capability.pricing_modes,
+                )}
+              />
+              <InfoItem
+                label={t('API接口地址')}
+                value={renderListValue(
+                  supplierData.supplier_capability.api_base_urls,
+                )}
+              />
             </Row>
           )}
         </div>

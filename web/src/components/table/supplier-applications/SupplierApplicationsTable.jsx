@@ -48,7 +48,9 @@ const SupplierApplicationsTable = ({
             <div className='space-y-2'>
               <div className='flex justify-between items-center'>
                 <Text strong>ID: {app.id}</Text>
-                {statusColumn?.render ? statusColumn.render(app.status, app) : null}
+                {statusColumn?.render
+                  ? statusColumn.render(app.status, app)
+                  : null}
               </div>
               <div>
                 <Text type='secondary'>{t('企业/主体名称')}:</Text>
@@ -72,7 +74,11 @@ const SupplierApplicationsTable = ({
               </div>
               <div>
                 <Text type='secondary'>{t('申请时间')}:</Text>
-                <div>{createdAtColumn?.render ? createdAtColumn.render(app.created_at) : '-'}</div>
+                <div>
+                  {createdAtColumn?.render
+                    ? createdAtColumn.render(app.created_at)
+                    : '-'}
+                </div>
               </div>
               <div className='mt-2'>
                 {operateColumn?.render ? operateColumn.render(null, app) : null}

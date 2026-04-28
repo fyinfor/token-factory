@@ -49,7 +49,9 @@ const SuppliersTable = ({
             <div className='space-y-2'>
               <div className='flex justify-between items-center'>
                 <Text strong>ID: {supplier.id}</Text>
-                {statusColumn?.render ? statusColumn.render(supplier.status) : null}
+                {statusColumn?.render
+                  ? statusColumn.render(supplier.status)
+                  : null}
               </div>
               <div>
                 <Text type='secondary'>{t('用户名')}:</Text>
@@ -77,10 +79,16 @@ const SuppliersTable = ({
               </div>
               <div>
                 <Text type='secondary'>{t('创建时间')}:</Text>
-                <div>{createdAtColumn?.render ? createdAtColumn.render(supplier.created_at) : '-'}</div>
+                <div>
+                  {createdAtColumn?.render
+                    ? createdAtColumn.render(supplier.created_at)
+                    : '-'}
+                </div>
               </div>
               <div className='mt-2'>
-                {operateColumn?.render ? operateColumn.render(null, supplier) : null}
+                {operateColumn?.render
+                  ? operateColumn.render(null, supplier)
+                  : null}
               </div>
             </div>
           </div>

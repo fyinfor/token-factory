@@ -159,7 +159,9 @@ export const useLogsData = () => {
   };
 
   // Column visibility state
-  const [visibleColumns, setVisibleColumns] = useState(getInitialVisibleColumns);
+  const [visibleColumns, setVisibleColumns] = useState(
+    getInitialVisibleColumns,
+  );
   const [showColumnSelector, setShowColumnSelector] = useState(false);
   const [billingDisplayMode, setBillingDisplayMode] = useState(
     getInitialBillingDisplayMode,
@@ -401,7 +403,10 @@ export const useLogsData = () => {
       let other = getLogOther(logs[i].other);
       let expandDataLocal = [];
 
-      if (isAdminUser && (logs[i].type === 0 || logs[i].type === 2 || logs[i].type === 6)) {
+      if (
+        isAdminUser &&
+        (logs[i].type === 0 || logs[i].type === 2 || logs[i].type === 6)
+      ) {
         expandDataLocal.push({
           key: t('渠道信息'),
           value: `${logs[i].channel} - ${logs[i].channel_name || '[未知]'}`,
@@ -469,38 +474,42 @@ export const useLogsData = () => {
           value: other?.claude
             ? renderClaudeLogContent(
                 other?.model_ratio,
-                other.completion_ratio,
-                other.model_price,
-                other.group_ratio,
+                other?.completion_ratio,
+                other?.model_price,
+                other?.group_ratio,
                 other?.user_group_ratio,
-                other.cache_ratio || 1.0,
-                other.cache_creation_ratio || 1.0,
-                other.cache_creation_tokens_5m || 0,
-                other.cache_creation_ratio_5m ||
-                  other.cache_creation_ratio ||
+                other?.cache_ratio || 1.0,
+                other?.cache_creation_ratio || 1.0,
+                other?.cache_creation_tokens_5m || 0,
+                other?.cache_creation_ratio_5m ||
+                  other?.cache_creation_ratio ||
                   1.0,
-                other.cache_creation_tokens_1h || 0,
-                other.cache_creation_ratio_1h ||
-                  other.cache_creation_ratio ||
+                other?.cache_creation_tokens_1h || 0,
+                other?.cache_creation_ratio_1h ||
+                  other?.cache_creation_ratio ||
                   1.0,
                 billingDisplayMode,
                 true,
               )
             : renderLogContent(
                 other?.model_ratio,
-                other.completion_ratio,
-                other.model_price,
-                other.group_ratio,
+                other?.completion_ratio,
+                other?.model_price,
+                other?.group_ratio,
                 other?.user_group_ratio,
-                other.cache_ratio || 1.0,
+                other?.cache_ratio || 1.0,
                 false,
                 1.0,
-                other.web_search || false,
-                other.web_search_call_count || 0,
-                other.file_search || false,
-                other.file_search_call_count || 0,
+                other?.web_search || false,
+                other?.web_search_call_count || 0,
+                other?.file_search || false,
+                other?.file_search_call_count || 0,
                 billingDisplayMode,
                 true,
+                other?.video_ratio || 0,
+                other?.video_completion_ratio || 1.0,
+                other?.video_output_tokens || 0,
+                other?.video_input_text_tokens || 0,
               ),
         });
         if (logs[i]?.content) {
@@ -543,19 +552,19 @@ export const useLogsData = () => {
           content = other?.claude
             ? renderClaudeLogContent(
                 other?.model_ratio,
-                other.completion_ratio,
-                other.model_price,
-                other.group_ratio,
+                other?.completion_ratio,
+                other?.model_price,
+                other?.group_ratio,
                 other?.user_group_ratio,
-                other.cache_ratio || 1.0,
-                other.cache_creation_ratio || 1.0,
-                other.cache_creation_tokens_5m || 0,
-                other.cache_creation_ratio_5m ||
-                  other.cache_creation_ratio ||
+                other?.cache_ratio || 1.0,
+                other?.cache_creation_ratio || 1.0,
+                other?.cache_creation_tokens_5m || 0,
+                other?.cache_creation_ratio_5m ||
+                  other?.cache_creation_ratio ||
                   1.0,
-                other.cache_creation_tokens_1h || 0,
-                other.cache_creation_ratio_1h ||
-                  other.cache_creation_ratio ||
+                other?.cache_creation_tokens_1h || 0,
+                other?.cache_creation_ratio_1h ||
+                  other?.cache_creation_ratio ||
                   1.0,
                 billingDisplayMode,
                 true,
@@ -575,6 +584,10 @@ export const useLogsData = () => {
                 other?.file_search_call_count || 0,
                 billingDisplayMode,
                 true,
+                other?.video_ratio || 0,
+                other?.video_completion_ratio || 1.0,
+                other?.video_output_tokens || 0,
+                other?.video_input_text_tokens || 0,
               );
           expandDataLocal.push({
             key: t('计费过程'),
@@ -599,7 +612,14 @@ export const useLogsData = () => {
           expandDataLocal.push({
             key: t('失败原因'),
             value: (
-              <div style={{ maxWidth: 600, whiteSpace: 'normal', wordBreak: 'break-word', lineHeight: 1.6 }}>
+              <div
+                style={{
+                  maxWidth: 600,
+                  whiteSpace: 'normal',
+                  wordBreak: 'break-word',
+                  lineHeight: 1.6,
+                }}
+              >
                 {other.reason}
               </div>
             ),
@@ -616,7 +636,8 @@ export const useLogsData = () => {
         const ss = other.stream_status;
         const isOk = ss.status === 'ok';
         const statusLabel = isOk ? '✓ ' + t('正常') : '✗ ' + t('异常');
-        let streamValue = statusLabel + ' (' + (ss.end_reason || 'unknown') + ')';
+        let streamValue =
+          statusLabel + ' (' + (ss.end_reason || 'unknown') + ')';
         if (ss.error_count > 0) {
           streamValue += ` [${t('软错误')}: ${ss.error_count}]`;
         }
@@ -631,7 +652,14 @@ export const useLogsData = () => {
           expandDataLocal.push({
             key: t('流错误详情'),
             value: (
-              <div style={{ maxWidth: 600, whiteSpace: 'pre-line', wordBreak: 'break-word', lineHeight: 1.6 }}>
+              <div
+                style={{
+                  maxWidth: 600,
+                  whiteSpace: 'pre-line',
+                  wordBreak: 'break-word',
+                  lineHeight: 1.6,
+                }}
+              >
                 {ss.errors.join('\n')}
               </div>
             ),
@@ -710,7 +738,11 @@ export const useLogsData = () => {
       }
       if (isAdminUser && logs[i].type !== 6) {
         let localCountMode = '';
-        if (other?.admin_info?.local_count_tokens) {
+        if (other?.billing_mode === 'video_token') {
+          // Video task channels billed via duration*W*H*fps/1024 token estimate;
+          // fully computed locally from the request body, never reads upstream usage.
+          localCountMode = t('视频本地按 token 计费');
+        } else if (other?.admin_info?.local_count_tokens) {
           localCountMode = t('本地计费');
         } else {
           localCountMode = t('上游返回');

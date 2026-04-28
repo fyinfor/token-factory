@@ -24,7 +24,12 @@ import { useTranslation } from 'react-i18next';
 
 const { Text } = Typography;
 
-const DeactivateSupplierModal = ({ visible, supplier, handleClose, onSuccess }) => {
+const DeactivateSupplierModal = ({
+  visible,
+  supplier,
+  handleClose,
+  onSuccess,
+}) => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const formApiRef = useRef(null);
@@ -52,7 +57,7 @@ const DeactivateSupplierModal = ({ visible, supplier, handleClose, onSuccess }) 
         supplier_id: supplier.id,
         reason: values.reason,
       });
-      
+
       const { success, message } = res.data;
       if (success) {
         showSuccess(t('注销成功'));
@@ -79,19 +84,22 @@ const DeactivateSupplierModal = ({ visible, supplier, handleClose, onSuccess }) 
       confirmLoading={loading}
       okButtonProps={{ type: 'danger' }}
     >
-      <Form
-        getFormApi={(api) => (formApiRef.current = api)}
-        onSubmit={submit}
-      >
+      <Form getFormApi={(api) => (formApiRef.current = api)} onSubmit={submit}>
         <div className='mb-4'>
           <Text type='tertiary'>
-            {t('确定要注销供应商')}: <Text strong>{supplier?.company_name}</Text> ?
+            {t('确定要注销供应商')}:{' '}
+            <Text strong>{supplier?.company_name}</Text> ?
           </Text>
         </div>
 
         <Form.TextArea
           field='reason'
-          label={<Text strong>{t('注销原因')}<Text type='danger'>*</Text></Text>}
+          label={
+            <Text strong>
+              {t('注销原因')}
+              <Text type='danger'>*</Text>
+            </Text>
+          }
           placeholder={t('请填写注销原因，如：不再合作、违规操作等')}
           rules={[{ required: true, message: t('请填写注销原因') }]}
           rows={4}

@@ -108,6 +108,48 @@ const PricingCardView = ({
     return uniqueAliases.length > 0 ? uniqueAliases : [t('官方')];
   };
 
+  // 根据 supplier_type 返回对应的 Tag 颜色
+  const getSupplierTypeColor = (supplierType) => {
+    switch (supplierType) {
+      case '公有云':
+        return 'yellow';
+      case 'AIDC':
+        return 'green';
+      case '企业中转站':
+        return 'blue';
+      case '个人中转站':
+        return 'purple';
+      default:
+        return stringToColor(supplierType);
+    }
+  };
+
+  // 根据模型的 channel_list 推导可展示的供应商项
+  // company_logo_url / supplier_type / supplier_alias 直接从每个 channel 上取，
+  // 按 (logo + supplier_type + alias) 组合键去重。
+  const getSupplierLogos = (model) => {
+    if (!model?.channel_list || model.channel_list.length === 0) return [];
+    const seen = new Set();
+    const items = [];
+    model.channel_list.forEach((ch, idx) => {
+      const logo = (ch?.company_logo_url && String(ch.company_logo_url).trim()) || '';
+      const supplierType = (ch?.supplier_type && String(ch.supplier_type).trim()) || '';
+      const alias = (ch?.supplier_alias && String(ch.supplier_alias).trim()) || '';
+      const name = ch?.channel_name || '';
+      const dedupKey = `${logo}|${supplierType}|${alias}`;
+      if (seen.has(dedupKey)) return;
+      seen.add(dedupKey);
+      items.push({
+        key: ch?.channel_id ?? `${dedupKey}-${idx}`,
+        logo,
+        supplierType,
+        alias,
+        name,
+      });
+    });
+    return items;
+  };
+
   // 从 channel_list 计算价格信息（用于按量计费模型）
   const calculateChannelPrices = (model) => {
     if (!model.channel_list || model.channel_list.length === 0 || model.quota_type !== 0) {
@@ -285,25 +327,25 @@ const PricingCardView = ({
       });
     }
 
-    if (cache) {
-      items.push({
-        key: 'cache',
-        label: t('缓存读取价格'),
-        value: cache.single || `${cache.symbol}${cache.min} ~ ${cache.symbol}${cache.max}`,
-        suffix: unitSuffix,
-        original: original?.cache,
-      });
-    }
+    // if (cache) {
+    //   items.push({
+    //     key: 'cache',
+    //     label: t('缓存读取价格'),
+    //     value: cache.single || `${cache.symbol}${cache.min} ~ ${cache.symbol}${cache.max}`,
+    //     suffix: unitSuffix,
+    //     original: original?.cache,
+    //   });
+    // }
 
-    if (createCache) {
-      items.push({
-        key: 'create-cache',
-        label: t('缓存创建价格'),
-        value: createCache.single || `${createCache.symbol}${createCache.min} ~ ${createCache.symbol}${createCache.max}`,
-        suffix: unitSuffix,
-        original: original?.createCache,
-      });
-    }
+    // if (createCache) {
+    //   items.push({
+    //     key: 'create-cache',
+    //     label: t('缓存创建价格'),
+    //     value: createCache.single || `${createCache.symbol}${createCache.min} ~ ${createCache.symbol}${createCache.max}`,
+    //     suffix: unitSuffix,
+    //     original: original?.createCache,
+    //   });
+    // }
 
     return items;
   };
@@ -466,6 +508,7 @@ const PricingCardView = ({
           });
 
           const supplierIds = getSupplierIds(model);
+          const supplierLogos = getSupplierLogos(model);
 
           return (
             <Card
@@ -504,7 +547,49 @@ const PricingCardView = ({
                         ))}
                         <div className='flex items-center'>
                           <span className='w-20 flex-shrink-0'>{t('供应商')}</span>
-                          <span className='flex-1 font-bold text-black'>{supplierIds.join(', ')}</span>
+                          <div className='flex-1 flex items-center flex-wrap gap-1'>
+                            {supplierLogos.length === 0 ? (
+                              <span className='font-bold text-black'>{supplierIds.join(', ')}</span>
+                            ) : (
+                              supplierLogos.map((s) => (
+                                <div
+                                  key={s.key}
+                                  className='h-7 rounded-md flex items-center gap-1 overflow-hidden'
+                                  style={{
+                                    backgroundColor:
+                                      'var(--semi-color-fill-0)',
+                                    paddingRight: s.supplierType ? 4 : 0,
+                                  }}
+                                >
+                                  {s.logo ? (
+                                    <img
+                                      src={s.logo}
+                                      alt={s.alias || s.name || ''}
+                                      className='w-7 h-7 object-contain rounded-md'
+                                    />
+                                  ) : (
+                                    <span
+                                      className='h-6 px-2 flex items-center text-xs font-medium'
+                                      style={{
+                                        color: 'var(--semi-color-text-1)',
+                                      }}
+                                    >
+                                      {s.alias || s.name || t('官方')}
+                                    </span>
+                                  )}
+                                  {s.supplierType && (
+                                    <Tag
+                                      size='small'
+                                      shape='circle'
+                                      color={getSupplierTypeColor(s.supplierType)}
+                                    >
+                                      {s.supplierType}
+                                    </Tag>
+                                  )}
+                                </div>
+                              ))
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Empty, Select } from '@douyinfe/semi-ui';
 import { API, showError } from '../../../../helpers';
 import { useTranslation } from 'react-i18next';
@@ -20,53 +20,82 @@ export default function SupplierModelPricingEditor({
   candidateModelNames = [],
   filterMode = 'all',
   listDescription = '',
+  /** 为 true 时使用表存储接口，不写全局 ChannelModel* Option */
+  useSupplierPricingApi = false,
 }) {
   const { t } = useTranslation();
   const [channelId, setChannelId] = useState('all');
   const [channelModelNamesMap, setChannelModelNamesMap] = useState({});
+  /** 供应商渠道定价 GET /api/user/supplier/pricing/channel/:id 返回的 maps */
+  const [supplierChannelMaps, setSupplierChannelMaps] = useState(null);
 
   const channels = useMemo(() => {
     const raw = options.__pricingChannels || [];
     if (!Array.isArray(raw)) return [];
-    return raw.filter((s) => s?.channel_id).map((s) => {
-      const alias = (s.supplier_alias && String(s.supplier_alias).trim()) || 'P0';
-      const no = (s.channel_no != null && String(s.channel_no).trim() !== '')
-        ? String(s.channel_no).trim()
-        : '-';
-      const name = s.channel_name || `#${s.channel_id}`;
-      return {
-        label: `${alias} - ${no} - ${name}`,
-        value: String(s.channel_id),
-      };
-    });
+    return raw
+      .filter((s) => s?.channel_id)
+      .map((s) => {
+        const alias =
+          (s.supplier_alias && String(s.supplier_alias).trim()) || 'P0';
+        const no =
+          s.channel_no != null && String(s.channel_no).trim() !== ''
+            ? String(s.channel_no).trim()
+            : '-';
+        const name = s.channel_name || `#${s.channel_id}`;
+        return {
+          label: `${alias} - ${no} - ${name}`,
+          value: String(s.channel_id),
+        };
+      });
   }, [options.__pricingChannels]);
 
-  const channelModelPrice = useMemo(() => parseJSON(options.ChannelModelPrice), [
-    options.ChannelModelPrice,
-  ]);
-  const channelModelRatio = useMemo(() => parseJSON(options.ChannelModelRatio), [
-    options.ChannelModelRatio,
-  ]);
+  const channelModelPrice = useMemo(
+    () => parseJSON(options.ChannelModelPrice),
+    [options.ChannelModelPrice],
+  );
+  const channelModelRatio = useMemo(
+    () => parseJSON(options.ChannelModelRatio),
+    [options.ChannelModelRatio],
+  );
   const channelCompletionRatio = useMemo(
     () => parseJSON(options.ChannelCompletionRatio),
     [options.ChannelCompletionRatio],
   );
-  const channelCacheRatio = useMemo(() => parseJSON(options.ChannelCacheRatio), [
-    options.ChannelCacheRatio,
-  ]);
+  const channelCacheRatio = useMemo(
+    () => parseJSON(options.ChannelCacheRatio),
+    [options.ChannelCacheRatio],
+  );
   const channelCreateCacheRatio = useMemo(
     () => parseJSON(options.ChannelCreateCacheRatio),
     [options.ChannelCreateCacheRatio],
   );
-  const channelImageRatio = useMemo(() => parseJSON(options.ChannelImageRatio), [
-    options.ChannelImageRatio,
-  ]);
-  const channelAudioRatio = useMemo(() => parseJSON(options.ChannelAudioRatio), [
-    options.ChannelAudioRatio,
-  ]);
+  const channelImageRatio = useMemo(
+    () => parseJSON(options.ChannelImageRatio),
+    [options.ChannelImageRatio],
+  );
+  const channelAudioRatio = useMemo(
+    () => parseJSON(options.ChannelAudioRatio),
+    [options.ChannelAudioRatio],
+  );
   const channelAudioCompletionRatio = useMemo(
     () => parseJSON(options.ChannelAudioCompletionRatio),
     [options.ChannelAudioCompletionRatio],
+  );
+  const channelVideoRatio = useMemo(
+    () => parseJSON(options.ChannelVideoRatio),
+    [options.ChannelVideoRatio],
+  );
+  const channelVideoCompletionRatio = useMemo(
+    () => parseJSON(options.ChannelVideoCompletionRatio),
+    [options.ChannelVideoCompletionRatio],
+  );
+  const channelVideoPrice = useMemo(
+    () => parseJSON(options.ChannelVideoPrice),
+    [options.ChannelVideoPrice],
+  );
+  const channelVideoPricingRules = useMemo(
+    () => parseJSON(options.ChannelVideoPricingRules),
+    [options.ChannelVideoPricingRules],
   );
 
   const activeChannelId = channelId === 'all' ? '' : channelId;
@@ -107,10 +136,36 @@ export default function SupplierModelPricingEditor({
     }
   };
 
+  // loadSupplierChannelPricingMaps 加载供应商渠道维度定价（表存储）。
+  const loadSupplierChannelPricingMaps = useCallback(async (targetChannelId) => {
+    try {
+      const res = await API.get(`/api/user/supplier/pricing/channel/${targetChannelId}`, {
+        skipErrorHandler: true,
+      });
+      if (!res?.data?.success) {
+        showError(res?.data?.message || t('获取渠道定价失败'));
+        setSupplierChannelMaps({});
+        return;
+      }
+      setSupplierChannelMaps(res.data.data || {});
+    } catch (error) {
+      showError(error?.message || t('获取渠道定价失败'));
+      setSupplierChannelMaps({});
+    }
+  }, [t]);
+
   useEffect(() => {
     if (!activeChannelId) return;
     loadChannelModelNames(activeChannelId);
   }, [activeChannelId]);
+
+  useEffect(() => {
+    if (!activeChannelId || !useSupplierPricingApi) {
+      setSupplierChannelMaps(null);
+      return;
+    }
+    loadSupplierChannelPricingMaps(activeChannelId);
+  }, [activeChannelId, useSupplierPricingApi, loadSupplierChannelPricingMaps]);
 
   const channelScopedCandidateModelNames = useMemo(() => {
     if (!activeChannelId) return candidateModelNames;
@@ -119,25 +174,79 @@ export default function SupplierModelPricingEditor({
 
   const scopedOptions = useMemo(() => {
     if (!activeChannelId) return options;
+    if (useSupplierPricingApi) {
+      const m = supplierChannelMaps || {};
+      return {
+        ...options,
+        ModelPrice: JSON.stringify(m.ModelPrice || {}, null, 2),
+        ModelRatio: JSON.stringify(m.ModelRatio || {}, null, 2),
+        CompletionRatio: JSON.stringify(m.CompletionRatio || {}, null, 2),
+        CacheRatio: JSON.stringify(m.CacheRatio || {}, null, 2),
+        CreateCacheRatio: JSON.stringify(m.CreateCacheRatio || {}, null, 2),
+        ImageRatio: JSON.stringify(m.ImageRatio || {}, null, 2),
+        AudioRatio: JSON.stringify(m.AudioRatio || {}, null, 2),
+        AudioCompletionRatio: JSON.stringify(m.AudioCompletionRatio || {}, null, 2),
+      };
+    }
     return {
       ...options,
-      ModelPrice: JSON.stringify(channelModelPrice[activeChannelId] || {}, null, 2),
-      ModelRatio: JSON.stringify(channelModelRatio[activeChannelId] || {}, null, 2),
+      ModelPrice: JSON.stringify(
+        channelModelPrice[activeChannelId] || {},
+        null,
+        2,
+      ),
+      ModelRatio: JSON.stringify(
+        channelModelRatio[activeChannelId] || {},
+        null,
+        2,
+      ),
       CompletionRatio: JSON.stringify(
         channelCompletionRatio[activeChannelId] || {},
         null,
         2,
       ),
-      CacheRatio: JSON.stringify(channelCacheRatio[activeChannelId] || {}, null, 2),
+      CacheRatio: JSON.stringify(
+        channelCacheRatio[activeChannelId] || {},
+        null,
+        2,
+      ),
       CreateCacheRatio: JSON.stringify(
         channelCreateCacheRatio[activeChannelId] || {},
         null,
         2,
       ),
-      ImageRatio: JSON.stringify(channelImageRatio[activeChannelId] || {}, null, 2),
-      AudioRatio: JSON.stringify(channelAudioRatio[activeChannelId] || {}, null, 2),
+      ImageRatio: JSON.stringify(
+        channelImageRatio[activeChannelId] || {},
+        null,
+        2,
+      ),
+      AudioRatio: JSON.stringify(
+        channelAudioRatio[activeChannelId] || {},
+        null,
+        2,
+      ),
       AudioCompletionRatio: JSON.stringify(
         channelAudioCompletionRatio[activeChannelId] || {},
+        null,
+        2,
+      ),
+      VideoRatio: JSON.stringify(
+        channelVideoRatio[activeChannelId] || {},
+        null,
+        2,
+      ),
+      VideoCompletionRatio: JSON.stringify(
+        channelVideoCompletionRatio[activeChannelId] || {},
+        null,
+        2,
+      ),
+      VideoPrice: JSON.stringify(
+        channelVideoPrice[activeChannelId] || {},
+        null,
+        2,
+      ),
+      VideoPricingRules: JSON.stringify(
+        channelVideoPricingRules[activeChannelId] || {},
         null,
         2,
       ),
@@ -152,34 +261,95 @@ export default function SupplierModelPricingEditor({
     channelImageRatio,
     channelModelPrice,
     channelModelRatio,
+    channelVideoCompletionRatio,
+    channelVideoPrice,
+    channelVideoPricingRules,
+    channelVideoRatio,
     options,
+    supplierChannelMaps,
+    useSupplierPricingApi,
   ]);
 
   const handleSaveOutput = async (output) => {
     if (!activeChannelId) {
       throw new Error(t('请先选择渠道'));
     }
+    if (useSupplierPricingApi) {
+      const res = await API.put(`/api/user/supplier/pricing/channel/${activeChannelId}`, {
+        ModelPrice: output.ModelPrice || {},
+        ModelRatio: output.ModelRatio || {},
+        CompletionRatio: output.CompletionRatio || {},
+        CacheRatio: output.CacheRatio || {},
+        CreateCacheRatio: output.CreateCacheRatio || {},
+        ImageRatio: output.ImageRatio || {},
+        AudioRatio: output.AudioRatio || {},
+        AudioCompletionRatio: output.AudioCompletionRatio || {},
+      });
+      if (!res?.data?.success) {
+        throw new Error(res?.data?.message || t('保存失败'));
+      }
+      await loadSupplierChannelPricingMaps(activeChannelId);
+      await refresh();
+      return;
+    }
     const mergeChannelData = (fullMap, partialMap) => ({
       ...fullMap,
       [activeChannelId]: partialMap || {},
     });
     const requestQueue = [
-      ['ChannelModelPrice', mergeChannelData(channelModelPrice, output.ModelPrice)],
-      ['ChannelModelRatio', mergeChannelData(channelModelRatio, output.ModelRatio)],
+      [
+        'ChannelModelPrice',
+        mergeChannelData(channelModelPrice, output.ModelPrice),
+      ],
+      [
+        'ChannelModelRatio',
+        mergeChannelData(channelModelRatio, output.ModelRatio),
+      ],
       [
         'ChannelCompletionRatio',
         mergeChannelData(channelCompletionRatio, output.CompletionRatio),
       ],
-      ['ChannelCacheRatio', mergeChannelData(channelCacheRatio, output.CacheRatio)],
+      [
+        'ChannelCacheRatio',
+        mergeChannelData(channelCacheRatio, output.CacheRatio),
+      ],
       [
         'ChannelCreateCacheRatio',
         mergeChannelData(channelCreateCacheRatio, output.CreateCacheRatio),
       ],
-      ['ChannelImageRatio', mergeChannelData(channelImageRatio, output.ImageRatio)],
-      ['ChannelAudioRatio', mergeChannelData(channelAudioRatio, output.AudioRatio)],
+      [
+        'ChannelImageRatio',
+        mergeChannelData(channelImageRatio, output.ImageRatio),
+      ],
+      [
+        'ChannelAudioRatio',
+        mergeChannelData(channelAudioRatio, output.AudioRatio),
+      ],
       [
         'ChannelAudioCompletionRatio',
-        mergeChannelData(channelAudioCompletionRatio, output.AudioCompletionRatio),
+        mergeChannelData(
+          channelAudioCompletionRatio,
+          output.AudioCompletionRatio,
+        ),
+      ],
+      [
+        'ChannelVideoRatio',
+        mergeChannelData(channelVideoRatio, output.VideoRatio),
+      ],
+      [
+        'ChannelVideoCompletionRatio',
+        mergeChannelData(
+          channelVideoCompletionRatio,
+          output.VideoCompletionRatio,
+        ),
+      ],
+      [
+        'ChannelVideoPrice',
+        mergeChannelData(channelVideoPrice, output.VideoPrice),
+      ],
+      [
+        'ChannelVideoPricingRules',
+        mergeChannelData(channelVideoPricingRules, output.VideoPricingRules),
       ],
     ].map(([key, value]) =>
       API.put('/api/option/', { key, value: JSON.stringify(value, null, 2) }),
@@ -206,7 +376,9 @@ export default function SupplierModelPricingEditor({
           </div>
 
           <div style={{ marginBottom: 16 }}>
-            <div className='mb-1 font-medium text-gray-700'>{t('当前渠道')}</div>
+            <div className='mb-1 font-medium text-gray-700'>
+              {t('当前渠道')}
+            </div>
             <Select
               style={{ width: '100%', maxWidth: 420 }}
               value={channelId}

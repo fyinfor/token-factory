@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
+import { Tabs } from '@douyinfe/semi-ui';
 import CardPro from '../../common/ui/CardPro';
 import UsersTable from './UsersTable';
 import UsersActions from './UsersActions';
@@ -57,6 +58,13 @@ const UsersPage = () => {
     // Description state
     compactMode,
     setCompactMode,
+    studentView,
+    setStudentView,
+    studentRewardAmount,
+    studentRewardLoading,
+    setStudentRewardAmount,
+    saveStudentRewardAmount,
+    assignStudent,
 
     // Translation
     t,
@@ -64,6 +72,17 @@ const UsersPage = () => {
 
   return (
     <>
+      <div className='mb-2'>
+        <Tabs
+          type='line'
+          activeKey={studentView}
+          onChange={(key) => setStudentView(key)}
+        >
+          <Tabs.TabPane itemKey='all' tab={t('全部用户')} />
+          <Tabs.TabPane itemKey='pending' tab={t('学员待审批')} />
+          <Tabs.TabPane itemKey='students' tab={t('学员管理')} />
+        </Tabs>
+      </div>
       <AddUserModal
         refresh={refresh}
         visible={showAddUser}
@@ -88,7 +107,17 @@ const UsersPage = () => {
         }
         actionsArea={
           <div className='flex flex-col md:flex-row justify-between items-center gap-2 w-full'>
-            <UsersActions setShowAddUser={setShowAddUser} t={t} />
+            <UsersActions
+              setShowAddUser={setShowAddUser}
+              t={t}
+              users={usersData.users}
+              studentView={studentView}
+              studentRewardAmount={studentRewardAmount}
+              studentRewardLoading={studentRewardLoading}
+              setStudentRewardAmount={setStudentRewardAmount}
+              saveStudentRewardAmount={saveStudentRewardAmount}
+              assignStudent={assignStudent}
+            />
 
             <UsersFilters
               formInitValues={formInitValues}

@@ -301,7 +301,9 @@ export default function SettingsPaymentGateway(props) {
       const options = [
         {
           key: 'OnlinePayProvider',
-          value: normalizeOnlinePayProvider(inputs.OnlinePayProvider || 'yipay'),
+          value: normalizeOnlinePayProvider(
+            inputs.OnlinePayProvider || 'yipay',
+          ),
         },
       ];
 
@@ -336,10 +338,16 @@ export default function SettingsPaymentGateway(props) {
         options.push({ key: 'YipayAppId', value: inputs.YipayAppId.trim() });
       }
       if (currentProvider === 'yipay' && inputs.YipayNotifyUrl !== '') {
-        options.push({ key: 'YipayNotifyUrl', value: inputs.YipayNotifyUrl.trim() });
+        options.push({
+          key: 'YipayNotifyUrl',
+          value: inputs.YipayNotifyUrl.trim(),
+        });
       }
       if (currentProvider === 'yipay' && inputs.YipayReturnUrl !== '') {
-        options.push({ key: 'YipayReturnUrl', value: inputs.YipayReturnUrl.trim() });
+        options.push({
+          key: 'YipayReturnUrl',
+          value: inputs.YipayReturnUrl.trim(),
+        });
       }
       if (
         currentProvider === 'yipay' &&
@@ -347,7 +355,10 @@ export default function SettingsPaymentGateway(props) {
         inputs.YipayAppSecret.trim() !== '' &&
         inputs.YipayAppSecret !== originInputs.YipayAppSecret
       ) {
-        options.push({ key: 'YipayAppSecret', value: inputs.YipayAppSecret.trim() });
+        options.push({
+          key: 'YipayAppSecret',
+          value: inputs.YipayAppSecret.trim(),
+        });
       }
       if (inputs.Price !== '') {
         options.push({ key: 'Price', value: inputs.Price.toString() });
@@ -461,7 +472,9 @@ export default function SettingsPaymentGateway(props) {
               <Form.Input
                 field='YipayRequestURL'
                 label={t('支付地址')}
-                placeholder={t('例如：https://pay.xxx.com（与易支付网关根地址相同）')}
+                placeholder={t(
+                  '例如：https://pay.xxx.com（与易支付网关根地址相同）',
+                )}
                 extraText={t(
                   '对应配置项 YipayRequestURL；保存时会同步写入 PayAddress，供服务端与易支付字段兼容。',
                 )}
@@ -571,7 +584,9 @@ export default function SettingsPaymentGateway(props) {
               <Form.Input
                 field='YipayNotifyUrl'
                 label={t('Yipay 异步通知地址')}
-                placeholder={t('可留空，留空则使用下方「回调地址」或服务器地址拼接默认路径')}
+                placeholder={t(
+                  '可留空，留空则使用下方「回调地址」或服务器地址拼接默认路径',
+                )}
                 extraText={(() => {
                   const hint = getDefaultYipayNotifyHint(
                     props.options.ServerAddress,

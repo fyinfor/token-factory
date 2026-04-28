@@ -36,6 +36,7 @@ const CREDIT_LIMIT_FORM_KEYS = [
   'PreConsumedQuota',
   'QuotaForInviter',
   'QuotaForInvitee',
+  'StudentApprovalRewardQuota',
   'quota_setting.enable_free_model_pre_consume',
 ];
 
@@ -44,6 +45,7 @@ const USD_QUOTA_OPTION_KEYS = [
   'QuotaForNewUser',
   'QuotaForInviter',
   'QuotaForInvitee',
+  'StudentApprovalRewardQuota',
 ];
 
 function parseQuotaPerUnit(raw) {
@@ -73,6 +75,7 @@ export default function SettingsCreditLimit(props) {
     PreConsumedQuota: '',
     QuotaForInviter: '',
     QuotaForInvitee: '',
+    StudentApprovalRewardQuota: '',
     'quota_setting.enable_free_model_pre_consume': true,
   });
   const refForm = useRef();
@@ -120,7 +123,10 @@ export default function SettingsCreditLimit(props) {
     const quotaPerUnit = parseQuotaPerUnit(props.options?.QuotaPerUnit);
     const currentInputs = {};
     for (const key of CREDIT_LIMIT_FORM_KEYS) {
-      if (props.options && Object.prototype.hasOwnProperty.call(props.options, key)) {
+      if (
+        props.options &&
+        Object.prototype.hasOwnProperty.call(props.options, key)
+      ) {
         currentInputs[key] = props.options[key];
       }
     }
@@ -218,6 +224,24 @@ export default function SettingsCreditLimit(props) {
                     setInputs({
                       ...inputs,
                       QuotaForInvitee: value,
+                    })
+                  }
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={6}>
+                <Form.InputNumber
+                  label={t('学员审批赠送额度')}
+                  field={'StudentApprovalRewardQuota'}
+                  step={0.01}
+                  min={0}
+                  precision={6}
+                  suffix={'USD'}
+                  extraText={usdQuotaExtraText}
+                  placeholder={t('例如：50')}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      StudentApprovalRewardQuota: value,
                     })
                   }
                 />

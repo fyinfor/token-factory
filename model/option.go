@@ -139,6 +139,7 @@ func InitOptionMap() {
 	common.OptionMap["QuotaForNewUser"] = strconv.Itoa(common.QuotaForNewUser)
 	common.OptionMap["QuotaForInviter"] = strconv.Itoa(common.QuotaForInviter)
 	common.OptionMap["QuotaForInvitee"] = strconv.Itoa(common.QuotaForInvitee)
+	common.OptionMap["StudentApprovalRewardQuota"] = strconv.Itoa(common.StudentApprovalRewardQuota)
 	common.OptionMap["AffiliateDefaultCommissionBps"] = strconv.Itoa(common.AffiliateDefaultCommissionBps)
 	common.OptionMap["DistributorApplyCsImageUrl"] = ""
 	common.OptionMap["DistributorWithdrawCsImageUrl"] = ""
@@ -168,6 +169,10 @@ func InitOptionMap() {
 	common.OptionMap["ChannelImageRatio"] = ratio_setting.ChannelImageRatio2JSONString()
 	common.OptionMap["ChannelAudioRatio"] = ratio_setting.ChannelAudioRatio2JSONString()
 	common.OptionMap["ChannelAudioCompletionRatio"] = ratio_setting.ChannelAudioCompletionRatio2JSONString()
+	common.OptionMap["ChannelVideoRatio"] = ratio_setting.ChannelVideoRatio2JSONString()
+	common.OptionMap["ChannelVideoCompletionRatio"] = ratio_setting.ChannelVideoCompletionRatio2JSONString()
+	common.OptionMap["ChannelVideoPrice"] = ratio_setting.ChannelVideoPrice2JSONString()
+	common.OptionMap["ChannelVideoPricingRules"] = ratio_setting.ChannelVideoPricingRules2JSONString()
 	common.OptionMap["SupplierModelPrice"] = ratio_setting.SupplierModelPrice2JSONString()
 	common.OptionMap["SupplierModelRatio"] = ratio_setting.SupplierModelRatio2JSONString()
 	common.OptionMap["UserUsableGroups"] = setting.UserUsableGroups2JSONString()
@@ -175,6 +180,10 @@ func InitOptionMap() {
 	common.OptionMap["ImageRatio"] = ratio_setting.ImageRatio2JSONString()
 	common.OptionMap["AudioRatio"] = ratio_setting.AudioRatio2JSONString()
 	common.OptionMap["AudioCompletionRatio"] = ratio_setting.AudioCompletionRatio2JSONString()
+	common.OptionMap["VideoRatio"] = ratio_setting.VideoRatio2JSONString()
+	common.OptionMap["VideoCompletionRatio"] = ratio_setting.VideoCompletionRatio2JSONString()
+	common.OptionMap["VideoPrice"] = ratio_setting.VideoPrice2JSONString()
+	common.OptionMap["VideoPricingRules"] = ratio_setting.VideoPricingRules2JSONString()
 	common.OptionMap["TopUpLink"] = common.TopUpLink
 	//common.OptionMap["ChatLink"] = common.ChatLink
 	//common.OptionMap["ChatLink2"] = common.ChatLink2
@@ -540,6 +549,8 @@ func updateOptionMap(key string, value string) (err error) {
 	case "QuotaForInvitee":
 		// 同上：被邀请人注册奖励写入 quota，存库为换算后的额度整数
 		common.QuotaForInvitee, _ = strconv.Atoi(value)
+	case "StudentApprovalRewardQuota":
+		common.StudentApprovalRewardQuota, _ = strconv.Atoi(value)
 	case "AffiliateDefaultCommissionBps":
 		if n, err := strconv.Atoi(value); err == nil && n >= 0 && n <= 10000 {
 			if n == 0 {
@@ -593,6 +604,14 @@ func updateOptionMap(key string, value string) (err error) {
 		err = ratio_setting.UpdateChannelAudioRatioByJSONString(value)
 	case "ChannelAudioCompletionRatio":
 		err = ratio_setting.UpdateChannelAudioCompletionRatioByJSONString(value)
+	case "ChannelVideoRatio":
+		err = ratio_setting.UpdateChannelVideoRatioByJSONString(value)
+	case "ChannelVideoCompletionRatio":
+		err = ratio_setting.UpdateChannelVideoCompletionRatioByJSONString(value)
+	case "ChannelVideoPrice":
+		err = ratio_setting.UpdateChannelVideoPriceByJSONString(value)
+	case "ChannelVideoPricingRules":
+		err = ratio_setting.UpdateChannelVideoPricingRulesByJSONString(value)
 	case "SupplierModelPrice":
 		err = ratio_setting.UpdateSupplierModelPriceByJSONString(value)
 	case "SupplierModelRatio":
@@ -613,6 +632,14 @@ func updateOptionMap(key string, value string) (err error) {
 		err = ratio_setting.UpdateAudioRatioByJSONString(value)
 	case "AudioCompletionRatio":
 		err = ratio_setting.UpdateAudioCompletionRatioByJSONString(value)
+	case "VideoRatio":
+		err = ratio_setting.UpdateVideoRatioByJSONString(value)
+	case "VideoCompletionRatio":
+		err = ratio_setting.UpdateVideoCompletionRatioByJSONString(value)
+	case "VideoPrice":
+		err = ratio_setting.UpdateVideoPriceByJSONString(value)
+	case "VideoPricingRules":
+		err = ratio_setting.UpdateVideoPricingRulesByJSONString(value)
 	case "TopUpLink":
 		common.TopUpLink = value
 	//case "ChatLink":

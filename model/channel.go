@@ -23,6 +23,8 @@ import (
 type Channel struct {
 	Id                 int     `json:"id"`
 	Type               int     `json:"type" gorm:"default:0"`
+	CompanyLogoURL     string  `json:"company_logo_url" gorm:"type:varchar(1024);not null;default:'';comment:企业Logo图片URL"`
+	SupplierType       string  `json:"supplier_type" gorm:"type:varchar(64);not null;default:'';comment:供应商类型"`
 	Key                string  `json:"key" gorm:"not null"`
 	OpenAIOrganization *string `json:"openai_organization"`
 	TestModel          *string `json:"test_model"`
@@ -340,12 +342,14 @@ type ChannelSimplePricingItem struct {
 
 // ChannelPricingMeta 定价接口计算渠道维度价格所需的渠道行（含供应商别名）。
 type ChannelPricingMeta struct {
-	ChannelID              int      `gorm:"column:channel_id"`
-	SupplierApplicationID  int      `gorm:"column:supplier_application_id"`
-	ChannelNo              string   `gorm:"column:channel_no"`
-	Models                 string   `gorm:"column:models"`
-	SupplierAlias          *string  `gorm:"column:supplier_alias"`
-	PriceDiscountPercent   *float64 `gorm:"column:price_discount_percent"`
+	ChannelID             int      `gorm:"column:channel_id"`
+	SupplierApplicationID int      `gorm:"column:supplier_application_id"`
+	ChannelNo             string   `gorm:"column:channel_no"`
+	Models                string   `gorm:"column:models"`
+	SupplierAlias         *string  `gorm:"column:supplier_alias"`
+	CompanyLogoURL        string   `gorm:"column:company_logo_url"`
+	SupplierType          string   `gorm:"column:supplier_type"`
+	PriceDiscountPercent  *float64 `gorm:"column:price_discount_percent"`
 }
 
 // ListChannelsForPricing 查询定价页使用的渠道列表。
@@ -367,7 +371,7 @@ func ListChannelsForPricing() ([]ChannelSimplePricingItem, error) {
 func ListChannelPricingMeta() ([]ChannelPricingMeta, error) {
 	items := make([]ChannelPricingMeta, 0)
 	err := DB.Model(&Channel{}).
-		Select("channels.id AS channel_id, channels.supplier_application_id, channels.channel_no, channels.models, channels.price_discount_percent, supplier_applications.supplier_alias").
+		Select("channels.id AS channel_id, channels.supplier_application_id, channels.channel_no, channels.models, channels.price_discount_percent, supplier_applications.supplier_alias, COALESCE(NULLIF(supplier_applications.company_logo_url, ''), channels.company_logo_url, '') AS company_logo_url, COALESCE(NULLIF(supplier_applications.supplier_type, ''), channels.supplier_type, '') AS supplier_type").
 		Joins("LEFT JOIN supplier_applications ON supplier_applications.id = channels.supplier_application_id").
 		Where("channels.status = ?", common.ChannelStatusEnabled).
 		Order("channels.id ASC").

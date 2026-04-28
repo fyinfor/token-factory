@@ -99,7 +99,10 @@ const SelectableButtonGroup = ({
 
   const { columns: perRow, showTags: shouldShowTags } = getResponsiveConfig();
   const maxVisibleRows = Math.max(1, Math.floor(collapseHeight / 32)); // Approx row height 32
-  const needCollapse = layout === 'vertical' && collapsible && items.length > perRow * maxVisibleRows;
+  const needCollapse =
+    layout === 'vertical' &&
+    collapsible &&
+    items.length > perRow * maxVisibleRows;
   const showSkeleton = useMinimumLoadingTime(loading);
   const isInlineLayout = layout === 'inline';
 
@@ -141,33 +144,37 @@ const SelectableButtonGroup = ({
   const renderSkeletonButtons = () => {
     if (isInlineLayout) {
       return (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', ...style }}>
-          {Array.from({ length: Math.min(skeletonCount, 6) }).map((_, index) => (
-            <div
-              key={index}
-              style={{
-                height: '32px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-start',
-                border: '1px solid var(--semi-color-border)',
-                borderRadius: 'var(--semi-border-radius-medium)',
-                padding: '0 12px',
-                gap: '6px',
-              }}
-            >
-              {withCheckbox && (
-                <Skeleton.Title active style={{ width: 14, height: 14 }} />
-              )}
-              <Skeleton.Title
-                active
+        <div
+          style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', ...style }}
+        >
+          {Array.from({ length: Math.min(skeletonCount, 6) }).map(
+            (_, index) => (
+              <div
+                key={index}
                 style={{
-                  width: `${60 + (index % 3) * 20}px`,
-                  height: 14,
+                  height: '32px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'flex-start',
+                  border: '1px solid var(--semi-color-border)',
+                  borderRadius: 'var(--semi-border-radius-medium)',
+                  padding: '0 12px',
+                  gap: '6px',
                 }}
-              />
-            </div>
-          ))}
+              >
+                {withCheckbox && (
+                  <Skeleton.Title active style={{ width: 14, height: 14 }} />
+                )}
+                <Skeleton.Title
+                  active
+                  style={{
+                    width: `${60 + (index % 3) * 20}px`,
+                    height: 14,
+                  }}
+                />
+              </div>
+            ),
+          )}
         </div>
       );
     }
@@ -240,7 +247,9 @@ const SelectableButtonGroup = ({
                 {item.icon && <span className='sbg-icon'>{item.icon}</span>}
                 <span style={{ whiteSpace: 'nowrap' }}>{item.label}</span>
                 {item.tagCount !== undefined && (
-                  <span className={`sbg-badge ${isActive ? 'sbg-badge-active' : ''}`}>
+                  <span
+                    className={`sbg-badge ${isActive ? 'sbg-badge-active' : ''}`}
+                  >
                     {item.tagCount}
                   </span>
                 )}
@@ -261,7 +270,9 @@ const SelectableButtonGroup = ({
               {item.icon && <span className='sbg-icon'>{item.icon}</span>}
               <span style={{ whiteSpace: 'nowrap' }}>{item.label}</span>
               {item.tagCount !== undefined && item.tagCount !== '' && (
-                <span className={`sbg-badge ${isActive ? 'sbg-badge-active' : ''}`}>
+                <span
+                  className={`sbg-badge ${isActive ? 'sbg-badge-active' : ''}`}
+                >
                   {item.tagCount}
                 </span>
               )}
@@ -306,7 +317,9 @@ const SelectableButtonGroup = ({
                   {item.icon && <span className='sbg-icon'>{item.icon}</span>}
                   <ConditionalTooltipText text={item.label} />
                   {item.tagCount !== undefined && shouldShowTags && (
-                    <span className={`sbg-badge ${isActive ? 'sbg-badge-active' : ''}`}>
+                    <span
+                      className={`sbg-badge ${isActive ? 'sbg-badge-active' : ''}`}
+                    >
                       {item.tagCount}
                     </span>
                   )}
@@ -328,11 +341,15 @@ const SelectableButtonGroup = ({
               <div className='sbg-content'>
                 {item.icon && <span className='sbg-icon'>{item.icon}</span>}
                 <ConditionalTooltipText text={item.label} />
-                {item.tagCount !== undefined && shouldShowTags && item.tagCount !== '' && (
-                  <span className={`sbg-badge ${isActive ? 'sbg-badge-active' : ''}`}>
-                    {item.tagCount}
-                  </span>
-                )}
+                {item.tagCount !== undefined &&
+                  shouldShowTags &&
+                  item.tagCount !== '' && (
+                    <span
+                      className={`sbg-badge ${isActive ? 'sbg-badge-active' : ''}`}
+                    >
+                      {item.tagCount}
+                    </span>
+                  )}
               </div>
             </Button>
           </Col>
@@ -347,9 +364,23 @@ const SelectableButtonGroup = ({
         className={`mb-3${variant ? ` sbg-variant-${variant}` : ''}`}
         ref={containerRef}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            flexWrap: 'wrap',
+          }}
+        >
           {title && (
-            <div style={{ fontWeight: 500, fontSize: '14px', color: 'var(--semi-color-text-0)', whiteSpace: 'nowrap' }}>
+            <div
+              style={{
+                fontWeight: 500,
+                fontSize: '14px',
+                color: 'var(--semi-color-text-0)',
+                whiteSpace: 'nowrap',
+              }}
+            >
               {showSkeleton ? (
                 <Skeleton.Title active style={{ width: 80, height: 14 }} />
               ) : (

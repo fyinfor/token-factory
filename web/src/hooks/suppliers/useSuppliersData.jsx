@@ -59,7 +59,12 @@ export const useSuppliersData = () => {
     setSuppliers(suppliers);
   };
 
-  const loadSuppliers = async (startIdx, pageSize, companyName = '', status = '') => {
+  const loadSuppliers = async (
+    startIdx,
+    pageSize,
+    companyName = '',
+    status = '',
+  ) => {
     setLoading(true);
     let url = `/api/user/supplier/list?p=${startIdx}&page_size=${pageSize}`;
     if (companyName !== '') {
@@ -68,7 +73,7 @@ export const useSuppliersData = () => {
     if (status !== '') {
       url += `&status=${status}`;
     }
-    
+
     try {
       const res = await API.get(url);
       const { success, message, data } = res.data;
@@ -94,7 +99,8 @@ export const useSuppliersData = () => {
   ) => {
     if (companyName === null || status === null) {
       const formValues = getFormValues();
-      companyName = companyName === null ? formValues.company_name : companyName;
+      companyName =
+        companyName === null ? formValues.company_name : companyName;
       status = status === null ? formValues.status : status;
     }
 
@@ -120,7 +126,12 @@ export const useSuppliersData = () => {
 
   const refresh = async () => {
     const formValues = getFormValues();
-    await searchSuppliers(activePage, pageSize, formValues.company_name, formValues.status);
+    await searchSuppliers(
+      activePage,
+      pageSize,
+      formValues.company_name,
+      formValues.status,
+    );
   };
 
   const handlePageChange = (page) => {

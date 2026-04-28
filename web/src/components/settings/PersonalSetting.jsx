@@ -32,7 +32,7 @@ import {
   setUserData,
 } from '../../helpers';
 import { UserContext } from '../../context/User';
-import { Modal } from '@douyinfe/semi-ui';
+import { Modal, Card, Button, Typography } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
 
 // 导入子组件
@@ -76,6 +76,7 @@ const PersonalSetting = () => {
   const [passkeyRegisterLoading, setPasskeyRegisterLoading] = useState(false);
   const [passkeyDeleteLoading, setPasskeyDeleteLoading] = useState(false);
   const [passkeySupported, setPasskeySupported] = useState(false);
+  const [studentApplying, setStudentApplying] = useState(false);
   const [notificationSettings, setNotificationSettings] = useState({
     warningType: 'email',
     warningThreshold: 100000,
@@ -448,12 +449,63 @@ const PersonalSetting = () => {
     }
   };
 
+  const handleApplyStudent = async () => {
+    setStudentApplying(true);
+    try {
+      const res = await API.post('/api/user/student/apply');
+      const { success, message } = res.data;
+      if (success) {
+        showSuccess(message || t('学员申请已提交'));
+        await getUserData();
+      } else {
+        showError(message || t('提交申请失败'));
+      }
+    } catch (error) {
+      showError(t('提交申请失败'));
+    } finally {
+      setStudentApplying(false);
+    }
+  };
+
   return (
     <div className='mt-[60px]'>
       <div className='flex justify-center'>
         <div className='w-full max-w-7xl mx-auto px-2'>
           {/* 顶部用户信息区域 */}
           <UserInfoHeader t={t} userState={userState} />
+          <div className='mt-4 md:mt-6'>
+            <Card>
+              <div className='flex flex-col md:flex-row md:items-center md:justify-between gap-3'>
+                <div>
+                  <Typography.Text strong>
+                    {t('学员身份申请')}
+                  </Typography.Text>
+                  <Typography.Text
+                    type='tertiary'
+                    size='small'
+                    className='block mt-1'
+                  >
+                    {userState?.user?.is_student
+                      ? t('当前已是学员身份')
+                      : userState?.user?.student_status === 1
+                        ? t('申请已提交，等待管理员审批')
+                        : t('提交申请后由管理员审批，审批通过将发放学员奖励')}
+                  </Typography.Text>
+                </div>
+                <Button
+                  type='primary'
+                  loading={studentApplying}
+                  disabled={
+                    userState?.user?.is_student ||
+                    userState?.user?.student_status === 1
+                  }
+                  onClick={handleApplyStudent}
+                >
+                  {t('申请学员身份')}
+                </Button>
+              </div>
+            </Card>
+          </div>
 
           {/* 签到日历 - 仅在启用时显示 */}
           {status?.checkin_enabled && (

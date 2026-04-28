@@ -1452,6 +1452,11 @@ function renderPriceSimpleCore({
   isSystemPromptOverride = false,
   displayMode = 'price',
   outputMode = 'text',
+  // Video token-billing extras; see renderLogContent for full semantics.
+  videoRatio = 0,
+  videoCompletionRatio = 1.0,
+  videoOutputTokens = 0,
+  videoInputTextTokens = 0,
 }) {
   const { ratio: effectiveGroupRatio, label: ratioLabel } = getEffectiveRatio(
     groupRatio,
@@ -1472,6 +1477,15 @@ function renderPriceSimpleCore({
   const shouldShowCacheCreation1h =
     hasSplitCacheCreation && cacheCreationTokens1h > 0;
 
+  // Video token-billing detection: backend stamps video task logs with
+  // video_output_tokens + video_ratio when the call is billed via the
+  // duration*W*H*fps/1024 token formula. modelPrice is exactly 0 (not -1)
+  // in this path, which would otherwise render misleadingly as "模型价格 $0".
+  const isVideoTokenBilling =
+    videoOutputTokens > 0 &&
+    videoRatio > 0 &&
+    (modelPrice === 0 || modelPrice === -1);
+
   if (outputMode === 'segments') {
     // 使用日志表「详情」等紧凑多行：不展示单独一行「分组/专属倍率」；各单价 = 原单价×有效分组倍率（与日志详情的折叠展示一致）。
     const groupMult =
@@ -1480,7 +1494,40 @@ function renderPriceSimpleCore({
         : 1;
     const segments = [];
 
-    if (modelPrice !== -1) {
+    if (isVideoTokenBilling) {
+      // Per the video token formula:
+      //   quota = (inputTextTokens
+      //            + outputVideoTokens * videoRatio * videoCompletionRatio
+      //           ) * modelRatio * groupRatio
+      // Effective $/1M-token unit prices (already folded with groupMult):
+      const videoUnitPrice =
+        (modelRatio || 0) *
+        2.0 *
+        (videoRatio || 1) *
+        (videoCompletionRatio || 1) *
+        groupMult;
+      segments.push({
+        tone: 'secondary',
+        text: i18next.t('视频输出 {{price}} / 1M tokens', {
+          price: formatCompactDisplayPrice(videoUnitPrice),
+        }),
+      });
+      segments.push({
+        tone: 'secondary',
+        text: i18next.t('估算 tokens：{{count}}', {
+          count: videoOutputTokens,
+        }),
+      });
+      if (isSystemPromptOverride) {
+        segments.push({ tone: 'primary', text: i18next.t('系统提示覆盖') });
+      }
+      return segments;
+    }
+
+    // Treat `modelPrice === 0` as "no per-call price configured" rather than
+    // "explicitly $0 per call" — see the matching guard in renderLogContent
+    // for the full rationale (legacy task logs may stamp literal 0).
+    if (modelPrice !== -1 && modelPrice !== 0) {
       segments.push({
         tone: 'secondary',
         text: isPriceDisplayMode(displayMode, modelPrice)
@@ -1622,7 +1669,29 @@ function renderPriceSimpleCore({
     return segments;
   }
 
-  if (modelPrice !== -1) {
+  // Video token-billing branch for the non-segments (text) output mode —
+  // mirrors the segments-mode branch above so callers reading the textual
+  // summary (e.g. tooltips, copy-to-clipboard) get the correct video pricing.
+  if (isVideoTokenBilling) {
+    const videoUnitPrice =
+      (modelRatio || 0) *
+      2.0 *
+      (videoRatio || 1) *
+      (videoCompletionRatio || 1) *
+      rate;
+    return joinBillingSummary([
+      i18next.t('视频输出 {{symbol}}{{price}} / 1M tokens', {
+        symbol,
+        price: parseFloat(videoUnitPrice.toFixed(2)),
+      }),
+      i18next.t('估算视频 tokens：{{count}}', { count: videoOutputTokens }),
+      getGroupRatioText(groupRatio, user_group_ratio),
+    ]);
+  }
+
+  // Treat modelPrice === 0 as "unset" rather than "$0/per-call" — same
+  // rationale as in renderLogContent.
+  if (modelPrice !== -1 && modelPrice !== 0) {
     if (isPriceDisplayMode(displayMode, modelPrice)) {
       return joinBillingSummary([
         i18next.t('模型价格：{{symbol}}{{price}}', {
@@ -1643,7 +1712,7 @@ function renderPriceSimpleCore({
 
   if (isPriceDisplayMode(displayMode, modelPrice)) {
     const parts = [];
-    if (modelPrice !== -1) {
+    if (modelPrice !== -1 && modelPrice !== 0) {
       parts.push(
         i18next.t('模型价格 {{price}}', {
           price: formatCompactDisplayPrice(modelPrice),
@@ -2019,7 +2088,9 @@ export function renderModelPrice(
 
   if (modelPrice !== -1) {
     const displayPrice = parseFloat((modelPrice * rate).toFixed(2));
-    const displayTotal = parseFloat((modelPrice * groupRatio * rate).toFixed(2));
+    const displayTotal = parseFloat(
+      (modelPrice * groupRatio * rate).toFixed(2),
+    );
     return i18next.t(
       '按次：{{symbol}}{{price}} * {{ratioType}}：{{ratio}} = {{symbol}}{{total}}',
       {
@@ -2235,6 +2306,15 @@ export function renderLogContent(
   fileSearchCallCount = 0,
   displayMode = 'price',
   hideGroupRatioInDetail = false,
+  // Video token-billing extras (from log.other for video task channels):
+  // - videoRatio / videoCompletionRatio: per-token video multipliers.
+  // - videoOutputTokens: estimated tokens for the generated video
+  //   (duration*W*H*fps/1024); 0 means this log is not a video token-billed call.
+  // - videoInputTextTokens: rough prompt token count.
+  videoRatio = 0,
+  videoCompletionRatio = 1.0,
+  videoOutputTokens = 0,
+  videoInputTextTokens = 0,
 ) {
   const {
     ratio,
@@ -2245,9 +2325,67 @@ export function renderLogContent(
   // 获取货币配置
   const { symbol, rate } = getCurrencyConfig();
 
+  // Video token-billing branch: shown when the backend stamped the log with
+  // video_ratio + video_output_tokens metadata. Has priority over the generic
+  // per-token / per-call paths because modelPrice for these calls is 0 (not -1)
+  // and would otherwise render as the misleading "模型价格 $0 / 次".
+  const isVideoTokenBilling =
+    videoOutputTokens > 0 && videoRatio > 0 && (modelPrice === 0 || modelPrice === -1);
+  if (isVideoTokenBilling) {
+    const displayMultiplier = hideGroupRatioInDetail ? ratio || 1 : 1;
+    // Per the video token formula:
+    //   quota = (inputTextTokens
+    //            + outputVideoTokens * videoRatio * videoCompletionRatio
+    //           ) * modelRatio * groupRatio
+    // Effective $/1M-token unit prices are therefore:
+    //   inputUnit  = modelRatio * 2          (text token price, same as chat)
+    //   videoOut   = modelRatio * 2 * videoRatio * videoCompletionRatio
+    const inputUnitPrice =
+      (modelRatio || 0) * 2.0 * displayMultiplier * rate;
+    const videoUnitPrice =
+      (modelRatio || 0) *
+      2.0 *
+      (videoRatio || 1) *
+      (videoCompletionRatio || 1) *
+      displayMultiplier *
+      rate;
+    const parts = [
+      i18next.t('视频输出价格 {{symbol}}{{price}} / 1M tokens', {
+        symbol,
+        price: parseFloat(videoUnitPrice.toFixed(2)),
+      }),
+      i18next.t('估算视频 tokens：{{count}}', {
+        count: videoOutputTokens,
+      }),
+    ];
+    if (videoInputTextTokens > 0) {
+      parts.push(
+        i18next.t('文本输入价格 {{symbol}}{{price}} / 1M tokens', {
+          symbol,
+          price: parseFloat(inputUnitPrice.toFixed(2)),
+        }),
+      );
+    }
+    if (!hideGroupRatioInDetail) {
+      parts.push(getGroupRatioText(groupRatio, user_group_ratio));
+    }
+    return joinBillingSummary(parts);
+  }
+
   if (isPriceDisplayMode(displayMode, modelPrice)) {
     const displayMultiplier = hideGroupRatioInDetail ? ratio || 1 : 1;
-    if (modelPrice !== -1) {
+    // Treat `modelPrice === 0` as "no per-call price configured" rather than
+    // "explicitly $0 per call". Rationale:
+    // - The default sentinel in this codebase is -1 (meaning "unset"), but
+    //   legacy task logs (notably pre-video-token-billing video task logs)
+    //   were stamped with literal 0 in `other.model_price`.
+    // - Those logs are actually billed by ratio (and quota is non-zero), so
+    //   showing "模型价格 $0 / 次" is misleading.
+    // - When modelPrice is exactly 0, we either have a free model (handled
+    //   by the ratio branch via modelRatio == 0) or a ratio-billed call we
+    //   should render as such. Either way, falling through to the ratio
+    //   rendering path is safer than rendering the misleading "$0 / 次".
+    if (modelPrice !== -1 && modelPrice !== 0) {
       const parts = [
         i18next.t('模型价格 {{symbol}}{{price}} / 次', {
           symbol,
@@ -2270,9 +2408,13 @@ export function renderLogContent(
       i18next.t('输出价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
         price: parseFloat(
-          (modelRatio * 2.0 * completionRatio * displayMultiplier * rate).toFixed(
-            2,
-          ),
+          (
+            modelRatio *
+            2.0 *
+            completionRatio *
+            displayMultiplier *
+            rate
+          ).toFixed(2),
         ),
       }),
     ];
@@ -2386,6 +2528,11 @@ export function renderModelPriceSimple(
   provider = 'openai',
   displayMode = 'price',
   outputMode = 'text',
+  // Video token-billing extras pulled from log.other for video task channels.
+  videoRatio = 0,
+  videoCompletionRatio = 1.0,
+  videoOutputTokens = 0,
+  videoInputTextTokens = 0,
 ) {
   return renderPriceSimpleCore({
     modelRatio,
@@ -2405,6 +2552,10 @@ export function renderModelPriceSimple(
     isSystemPromptOverride,
     displayMode,
     outputMode,
+    videoRatio,
+    videoCompletionRatio,
+    videoOutputTokens,
+    videoInputTextTokens,
   });
 }
 
@@ -3154,9 +3305,13 @@ export function renderClaudeLogContent(
       i18next.t('输出价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
         price: parseFloat(
-          (modelRatio * 2.0 * completionRatio * displayMultiplier * rate).toFixed(
-            2,
-          ),
+          (
+            modelRatio *
+            2.0 *
+            completionRatio *
+            displayMultiplier *
+            rate
+          ).toFixed(2),
         ),
       }),
       i18next.t('缓存读取价格 {{symbol}}{{price}} / 1M tokens', {
@@ -3175,9 +3330,13 @@ export function renderClaudeLogContent(
       {
         symbol,
         price: parseFloat(
-          (modelRatio * 2.0 * cacheCreationRatio5m * displayMultiplier * rate).toFixed(
-            2,
-          ),
+          (
+            modelRatio *
+            2.0 *
+            cacheCreationRatio5m *
+            displayMultiplier *
+            rate
+          ).toFixed(2),
         ),
       },
     );
@@ -3188,9 +3347,13 @@ export function renderClaudeLogContent(
       {
         symbol,
         price: parseFloat(
-          (modelRatio * 2.0 * cacheCreationRatio1h * displayMultiplier * rate).toFixed(
-            2,
-          ),
+          (
+            modelRatio *
+            2.0 *
+            cacheCreationRatio1h *
+            displayMultiplier *
+            rate
+          ).toFixed(2),
         ),
       },
     );
@@ -3201,9 +3364,13 @@ export function renderClaudeLogContent(
       {
         symbol,
         price: parseFloat(
-          (modelRatio * 2.0 * cacheCreationRatio * displayMultiplier * rate).toFixed(
-            2,
-          ),
+          (
+            modelRatio *
+            2.0 *
+            cacheCreationRatio *
+            displayMultiplier *
+            rate
+          ).toFixed(2),
         ),
       },
     );

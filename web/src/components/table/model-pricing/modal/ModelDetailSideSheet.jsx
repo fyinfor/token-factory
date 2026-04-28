@@ -57,7 +57,11 @@ const ModelDetailSideSheet = ({
   const [channelMtrMap, setChannelMtrMap] = useState({});
 
   useEffect(() => {
-    if (!visible || !modelData?.model_name || !modelData?.channel_list?.length) {
+    if (
+      !visible ||
+      !modelData?.model_name ||
+      !modelData?.channel_list?.length
+    ) {
       setChannelMtrMap({});
       return;
     }
@@ -152,7 +156,7 @@ const ModelDetailSideSheet = ({
               selectedGroup={selectedGroup}
               groupRatio={groupRatio}
             />
-            <ModelPricingTable
+            {/* <ModelPricingTable
               modelData={modelData}
               groupRatio={groupRatio}
               groupModelPrice={groupModelPrice}
@@ -165,7 +169,7 @@ const ModelDetailSideSheet = ({
               usableGroup={usableGroup}
               autoGroups={autoGroups}
               t={t}
-            />
+            /> */}
           </>
         )}
       </div>

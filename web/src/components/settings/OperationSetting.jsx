@@ -37,6 +37,7 @@ const OperationSetting = () => {
     PreConsumedQuota: 0,
     QuotaForInviter: 0,
     QuotaForInvitee: 0,
+    StudentApprovalRewardQuota: 0,
     AffiliateDefaultCommissionBps: '1000',
     DistributorApplyCsImageUrl: '',
     DistributorWithdrawCsImageUrl: '',

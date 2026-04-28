@@ -142,6 +142,7 @@ const UsersTable = (usersData) => {
       showResetTwoFAModal: showResetTwoFAUserModal,
       showUserSubscriptionsModal: showUserSubscriptionsUserModal,
       manageUser,
+      studentView: usersData.studentView,
     });
   }, [
     t,
@@ -155,6 +156,7 @@ const UsersTable = (usersData) => {
     showResetTwoFAUserModal,
     showUserSubscriptionsUserModal,
     manageUser,
+    usersData.studentView,
   ]);
 
   // Handle compact mode by removing fixed positioning

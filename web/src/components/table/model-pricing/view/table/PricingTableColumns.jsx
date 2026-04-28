@@ -220,7 +220,7 @@ export const getPricingTableColumns = ({
           <div className='text-gray-700'>
             {t('模型倍率')}：
             {record.quota_type === 0
-              ? priceData?.inputRatio ?? text
+              ? (priceData?.inputRatio ?? text)
               : t('无')}
           </div>
           <div className='text-gray-700'>

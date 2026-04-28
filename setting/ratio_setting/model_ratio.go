@@ -325,6 +325,14 @@ var defaultAudioCompletionRatio = map[string]float64{
 	"tts-1-hd-1106":        0,
 }
 
+// 视频相关倍率默认值；按 token 计费时 token 数 = (输入视频时长+输出视频时长) × 宽 × 高 × 帧率 / 1024。
+var defaultVideoRatio = map[string]float64{}
+
+var defaultVideoCompletionRatio = map[string]float64{}
+
+// 视频按次价格默认值（每生成一个视频固定收费多少美元）。
+var defaultVideoPrice = map[string]float64{}
+
 var modelPriceMap = types.NewRWMap[string, float64]()
 var modelRatioMap = types.NewRWMap[string, float64]()
 var completionRatioMap = types.NewRWMap[string, float64]()
@@ -346,6 +354,9 @@ func InitRatioSettings() {
 	imageRatioMap.AddAll(defaultImageRatio)
 	audioRatioMap.AddAll(defaultAudioRatio)
 	audioCompletionRatioMap.AddAll(defaultAudioCompletionRatio)
+	videoRatioMap.AddAll(defaultVideoRatio)
+	videoCompletionRatioMap.AddAll(defaultVideoCompletionRatio)
+	videoPriceMap.AddAll(defaultVideoPrice)
 }
 
 func GetModelPriceMap() map[string]float64 {
@@ -676,6 +687,36 @@ func ContainsAudioCompletionRatio(name string) bool {
 	return ok
 }
 
+// GetVideoRatio 返回模型的视频输入倍率（相对 ModelRatio 的乘数），未配置返回 1。
+func GetVideoRatio(name string) float64 {
+	name = FormatMatchingModelName(name)
+	if ratio, ok := videoRatioMap.Get(name); ok {
+		return ratio
+	}
+	return 1
+}
+
+// GetVideoCompletionRatio 返回模型的视频输出倍率（相对视频输入价格的乘数），未配置返回 1。
+func GetVideoCompletionRatio(name string) float64 {
+	name = FormatMatchingModelName(name)
+	if ratio, ok := videoCompletionRatioMap.Get(name); ok {
+		return ratio
+	}
+	return 1
+}
+
+func ContainsVideoRatio(name string) bool {
+	name = FormatMatchingModelName(name)
+	_, ok := videoRatioMap.Get(name)
+	return ok
+}
+
+func ContainsVideoCompletionRatio(name string) bool {
+	name = FormatMatchingModelName(name)
+	_, ok := videoCompletionRatioMap.Get(name)
+	return ok
+}
+
 func ModelRatio2JSONString() string {
 	return modelRatioMap.MarshalJSONString()
 }
@@ -686,6 +727,9 @@ var defaultImageRatio = map[string]float64{
 var imageRatioMap = types.NewRWMap[string, float64]()
 var audioRatioMap = types.NewRWMap[string, float64]()
 var audioCompletionRatioMap = types.NewRWMap[string, float64]()
+var videoRatioMap = types.NewRWMap[string, float64]()
+var videoCompletionRatioMap = types.NewRWMap[string, float64]()
+var videoPriceMap = types.NewRWMap[string, float64]()
 
 func ImageRatio2JSONString() string {
 	return imageRatioMap.MarshalJSONString()
@@ -717,6 +761,49 @@ func AudioCompletionRatio2JSONString() string {
 
 func UpdateAudioCompletionRatioByJSONString(jsonStr string) error {
 	return types.LoadFloat64MapFromJSONStringFlexibleWithCallback(audioCompletionRatioMap, jsonStr, InvalidateExposedDataCache)
+}
+
+func VideoRatio2JSONString() string {
+	return videoRatioMap.MarshalJSONString()
+}
+
+func UpdateVideoRatioByJSONString(jsonStr string) error {
+	return types.LoadFloat64MapFromJSONStringFlexibleWithCallback(videoRatioMap, jsonStr, InvalidateExposedDataCache)
+}
+
+func VideoCompletionRatio2JSONString() string {
+	return videoCompletionRatioMap.MarshalJSONString()
+}
+
+func UpdateVideoCompletionRatioByJSONString(jsonStr string) error {
+	return types.LoadFloat64MapFromJSONStringFlexibleWithCallback(videoCompletionRatioMap, jsonStr, InvalidateExposedDataCache)
+}
+
+func VideoPrice2JSONString() string {
+	return videoPriceMap.MarshalJSONString()
+}
+
+func UpdateVideoPriceByJSONString(jsonStr string) error {
+	return types.LoadFloat64MapFromJSONStringFlexibleWithCallback(videoPriceMap, jsonStr, InvalidateExposedDataCache)
+}
+
+// GetVideoPrice 返回模型的按次视频价格（每生成一个视频的固定金额，美元），未配置返回 -1, false。
+func GetVideoPrice(name string) (float64, bool) {
+	name = FormatMatchingModelName(name)
+	if price, ok := videoPriceMap.Get(name); ok {
+		return price, true
+	}
+	return -1, false
+}
+
+func ContainsVideoPrice(name string) bool {
+	name = FormatMatchingModelName(name)
+	_, ok := videoPriceMap.Get(name)
+	return ok
+}
+
+func GetVideoPriceCopy() map[string]float64 {
+	return videoPriceMap.ReadAll()
 }
 
 func GetModelRatioCopy() map[string]float64 {

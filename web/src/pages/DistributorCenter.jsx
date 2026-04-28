@@ -40,13 +40,7 @@ import {
   Spin,
 } from '@douyinfe/semi-ui';
 import { QRCodeSVG } from 'qrcode.react';
-import {
-  TrendingUp,
-  BarChart2,
-  Users,
-  Zap,
-  Copy,
-} from 'lucide-react';
+import { TrendingUp, BarChart2, Users, Zap, Copy } from 'lucide-react';
 import dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
 import {
@@ -122,9 +116,7 @@ export default function DistributorCenter() {
   const [detailInviteeId, setDetailInviteeId] = useState(null);
   const [detailInviteeLabel, setDetailInviteeLabel] = useState('');
   const [openTransfer, setOpenTransfer] = useState(false);
-  const [transferAmount, setTransferAmount] = useState(() =>
-    getQuotaPerUnit(),
-  );
+  const [transferAmount, setTransferAmount] = useState(() => getQuotaPerUnit());
 
   const withdrawImg = (
     statusState?.status?.distributor_withdraw_cs_image_url || ''
@@ -342,8 +334,7 @@ export default function DistributorCenter() {
         showError(t('请填写与上方待使用收益一致的提现金额'));
         return;
       }
-      const fiatRounded =
-        Math.round(Number(wdFiatAmount) * 100) / 100;
+      const fiatRounded = Math.round(Number(wdFiatAmount) * 100) / 100;
       q = displayInputAmountToQuota(fiatRounded);
       if (q <= 0) {
         showError(t('提现金额过小或无效'));
@@ -353,9 +344,7 @@ export default function DistributorCenter() {
 
     if (maxQ >= minQ) {
       if (q < minQ) {
-        showError(
-          t('提现额度不能低于') + ' ' + renderQuota(minQ),
-        );
+        showError(t('提现额度不能低于') + ' ' + renderQuota(minQ));
         return;
       }
     } else {
@@ -366,10 +355,7 @@ export default function DistributorCenter() {
     }
     if (q > maxQ) {
       showError(
-        t('提现额度不能大于当前可提现额度') +
-          '（' +
-          renderQuota(maxQ) +
-          '）',
+        t('提现额度不能大于当前可提现额度') + '（' + renderQuota(maxQ) + '）',
       );
       return;
     }
@@ -494,9 +480,7 @@ export default function DistributorCenter() {
 
   const handleTransfer = async () => {
     if (transferAmount < getQuotaPerUnit()) {
-      showError(
-        t('划转金额最低为') + ' ' + renderQuota(getQuotaPerUnit()),
-      );
+      showError(t('划转金额最低为') + ' ' + renderQuota(getQuotaPerUnit()));
       return;
     }
     const res = await API.post('/api/user/aff_transfer', {
@@ -516,8 +500,7 @@ export default function DistributorCenter() {
   const handleTransferCancel = () => setOpenTransfer(false);
 
   const shortLink =
-    center?.aff_code &&
-    `${window.location.origin}/r/${center.aff_code}`;
+    center?.aff_code && `${window.location.origin}/r/${center.aff_code}`;
 
   const openDetail = (r) => {
     setDetailInviteeId(r.invitee_id);
@@ -645,9 +628,7 @@ export default function DistributorCenter() {
                         type='primary'
                         theme='solid'
                         size='small'
-                        disabled={
-                          !center?.aff_quota || center.aff_quota <= 0
-                        }
+                        disabled={!center?.aff_quota || center.aff_quota <= 0}
                         onClick={() => openTransferModal()}
                         className='!rounded-lg'
                       >
@@ -808,7 +789,6 @@ export default function DistributorCenter() {
               )}
             </div>
           </Card>
-
         </aside>
 
         <div className='flex-1 min-w-0 w-full order-2 xl:order-1 mt-2 sm:mt-4 xl:mt-0'>
@@ -891,9 +871,7 @@ export default function DistributorCenter() {
         <div className='flex flex-col lg:flex-row gap-6 items-start'>
           <div className='flex-1 min-w-0 w-full space-y-5'>
             <div className='space-y-0'>
-              <WithdrawFieldLabel required>
-                {t('真实姓名')}
-              </WithdrawFieldLabel>
+              <WithdrawFieldLabel required>{t('真实姓名')}</WithdrawFieldLabel>
               <Input
                 value={wdRealName}
                 onChange={(v) => setWdRealName(String(v ?? ''))}
@@ -901,9 +879,7 @@ export default function DistributorCenter() {
               />
             </div>
             <div className='space-y-0'>
-              <WithdrawFieldLabel required>
-                {t('开户行')}
-              </WithdrawFieldLabel>
+              <WithdrawFieldLabel required>{t('开户行')}</WithdrawFieldLabel>
               <Input
                 value={wdBankName}
                 onChange={(v) => setWdBankName(String(v ?? ''))}
@@ -911,9 +887,7 @@ export default function DistributorCenter() {
               />
             </div>
             <div className='space-y-0'>
-              <WithdrawFieldLabel required>
-                {t('银行卡号')}
-              </WithdrawFieldLabel>
+              <WithdrawFieldLabel required>{t('银行卡号')}</WithdrawFieldLabel>
               <Input
                 value={wdBankAccount}
                 onChange={(v) => setWdBankAccount(String(v ?? ''))}
@@ -921,9 +895,7 @@ export default function DistributorCenter() {
               />
             </div>
             <div className='space-y-0'>
-              <WithdrawFieldLabel required>
-                {t('提现余额')}
-              </WithdrawFieldLabel>
+              <WithdrawFieldLabel required>{t('提现余额')}</WithdrawFieldLabel>
               {isQuotaTokensMode ? (
                 <>
                   <Text type='tertiary' size='small' className='block mb-2'>
@@ -955,8 +927,7 @@ export default function DistributorCenter() {
                 {affQuotaFloor >= minQInternal ? (
                   <>
                     {t('单笔最低')}: {renderQuota(minQInternal)} ·{' '}
-                    {t('当前待使用余额')}:{' '}
-                    {renderQuota(center?.aff_quota || 0)}
+                    {t('当前待使用余额')}: {renderQuota(center?.aff_quota || 0)}
                   </>
                 ) : (
                   <>
@@ -967,16 +938,13 @@ export default function DistributorCenter() {
                         {renderQuota(1)}～{renderQuota(affQuotaFloor)} ·{' '}
                       </>
                     ) : null}
-                    {t('当前待使用余额')}:{' '}
-                    {renderQuota(center?.aff_quota || 0)}
+                    {t('当前待使用余额')}: {renderQuota(center?.aff_quota || 0)}
                   </>
                 )}
               </Text>
             </div>
             <div className='space-y-0'>
-              <WithdrawFieldLabel required>
-                {t('票据')}
-              </WithdrawFieldLabel>
+              <WithdrawFieldLabel required>{t('票据')}</WithdrawFieldLabel>
               <div>
                 <Upload
                   accept='image/*,.pdf'
@@ -1110,9 +1078,7 @@ export default function DistributorCenter() {
         visible={withdrawLogOpen}
         onCancel={() => setWithdrawLogOpen(false)}
         footer={
-          <Button onClick={() => setWithdrawLogOpen(false)}>
-            {t('关闭')}
-          </Button>
+          <Button onClick={() => setWithdrawLogOpen(false)}>{t('关闭')}</Button>
         }
         width={960}
       >
@@ -1144,9 +1110,7 @@ export default function DistributorCenter() {
               dataIndex: 'created_at',
               width: 158,
               render: (ts) =>
-                ts
-                  ? dayjs.unix(Number(ts)).format('YYYY-MM-DD HH:mm')
-                  : '—',
+                ts ? dayjs.unix(Number(ts)).format('YYYY-MM-DD HH:mm') : '—',
             },
             {
               title: t('反馈原因'),
@@ -1155,7 +1119,10 @@ export default function DistributorCenter() {
                 const reason = String(r.reject_reason || '').trim();
                 if (reason) {
                   return (
-                    <Text size='small' className='break-all text-[var(--semi-color-text-0)]'>
+                    <Text
+                      size='small'
+                      className='break-all text-[var(--semi-color-text-0)]'
+                    >
                       {reason}
                     </Text>
                   );
@@ -1183,7 +1150,12 @@ export default function DistributorCenter() {
                     title={t('确认取消该笔提现？额度将退回')}
                     onConfirm={() => cancelWithdraw(r.id)}
                   >
-                    <Tag color='red' type='light' size='small' className='cursor-pointer'>
+                    <Tag
+                      color='red'
+                      type='light'
+                      size='small'
+                      className='cursor-pointer'
+                    >
                       {t('取消')}
                     </Tag>
                   </Popconfirm>

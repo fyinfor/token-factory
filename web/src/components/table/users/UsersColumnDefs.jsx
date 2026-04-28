@@ -42,7 +42,7 @@ const renderRole = (role, record, t) => {
     record.is_distributor === 1 ||
     record.is_distributor === true ||
     legacyDistributorRole;
-  const isSupplier = !!record.supplier_id && record.supplier_id !== 0
+  const isSupplier = !!record.supplier_id && record.supplier_id !== 0;
   const baseRole = legacyDistributorRole ? USER_ROLES.USER : role;
   let baseTag;
   switch (baseRole) {
@@ -78,12 +78,16 @@ const renderRole = (role, record, t) => {
   return (
     <Space spacing={4}>
       {baseTag}
-      {isDistributor && <Tag color='green' shape='circle'>
-        {t('代理')}
-      </Tag>}
-      {isSupplier && <Tag color='purple' shape='circle'>
-        {t('供应商')}
-      </Tag>}
+      {isDistributor && (
+        <Tag color='green' shape='circle'>
+          {t('代理')}
+        </Tag>
+      )}
+      {isSupplier && (
+        <Tag color='purple' shape='circle'>
+          {t('供应商')}
+        </Tag>
+      )}
     </Space>
   );
 };
@@ -244,6 +248,35 @@ const renderInviteInfo = (text, record, t) => {
   );
 };
 
+const renderStudentStatus = (record, t) => {
+  if (record.is_student === 1 || record.is_student === true) {
+    return (
+      <Tag color='green' shape='circle' className='!text-xs'>
+        {t('学员')}
+      </Tag>
+    );
+  }
+  if (record.student_status === 1) {
+    return (
+      <Tag color='orange' shape='circle' className='!text-xs'>
+        {t('待审批')}
+      </Tag>
+    );
+  }
+  if (record.student_status === 3) {
+    return (
+      <Tag color='grey' shape='circle' className='!text-xs'>
+        {t('已拒绝')}
+      </Tag>
+    );
+  }
+  return (
+    <Tag color='white' shape='circle' className='!text-xs'>
+      {t('非学员')}
+    </Tag>
+  );
+};
+
 /**
  * Render operations column
  */
@@ -261,11 +294,34 @@ const renderOperations = (
     showResetTwoFAModal,
     showUserSubscriptionsModal,
     manageUser,
+    studentView,
     t,
   },
 ) => {
   if (record.DeletedAt !== null) {
     return <></>;
+  }
+
+  if (studentView === 'pending') {
+    return (
+      <Space>
+        <Button
+          type='primary'
+          size='small'
+          onClick={() => manageUser(record.id, 'approve_student', record)}
+        >
+          {t('同意')}
+        </Button>
+        <Button
+          type='danger'
+          theme='light'
+          size='small'
+          onClick={() => manageUser(record.id, 'reject_student', record)}
+        >
+          {t('拒绝')}
+        </Button>
+      </Space>
+    );
   }
 
   const moreMenu = [
@@ -290,6 +346,53 @@ const renderOperations = (
     {
       node: 'divider',
     },
+    ...(record.student_status === 1
+      ? [
+          {
+            node: 'item',
+            name: t('通过学员'),
+            onClick: () => manageUser(record.id, 'approve_student', record),
+          },
+          {
+            node: 'item',
+            name: t('拒绝学员'),
+            type: 'danger',
+            onClick: () => manageUser(record.id, 'reject_student', record),
+          },
+          {
+            node: 'divider',
+          },
+        ]
+      : []),
+    ...((record.is_student === 1 || record.is_student === true) &&
+    record.role < USER_ROLES.ADMIN
+      ? [
+          {
+            node: 'item',
+            name: t('撤销学员'),
+            type: 'danger',
+            onClick: () => manageUser(record.id, 'unset_student', record),
+          },
+          {
+            node: 'divider',
+          },
+        ]
+      : []),
+    ...(record.role === USER_ROLES.USER &&
+    record.status === 1 &&
+    record.student_status !== 1 &&
+    !(record.is_student === 1 || record.is_student === true)
+      ? [
+          {
+            node: 'item',
+            name: t('设为学员'),
+            onClick: () => manageUser(record.id, 'set_student', record),
+          },
+          {
+            node: 'divider',
+          },
+        ]
+      : []),
     {
       node: 'item',
       name: t('注销'),
@@ -387,6 +490,7 @@ export const getUsersColumns = ({
   showResetTwoFAModal,
   showUserSubscriptionsModal,
   manageUser,
+  studentView,
 }) => {
   return [
     {
@@ -397,6 +501,11 @@ export const getUsersColumns = ({
       title: t('用户名'),
       dataIndex: 'username',
       render: (text, record) => renderUsername(text, record),
+    },
+    {
+      title: t('手机号'),
+      dataIndex: 'phone',
+      render: (v) => <span>{v || '—'}</span>,
     },
     {
       title: t('状态'),
@@ -420,10 +529,13 @@ export const getUsersColumns = ({
       title: t('角色'),
       dataIndex: 'role',
       render: (text, record, index) => {
-        return (
-          <div>{renderRole(text, record, t)}</div>
-        );
+        return <div>{renderRole(text, record, t)}</div>;
       },
+    },
+    {
+      title: t('学员状态'),
+      dataIndex: 'student_status',
+      render: (text, record) => renderStudentStatus(record, t),
     },
     {
       title: t('邀请信息'),
@@ -435,26 +547,40 @@ export const getUsersColumns = ({
       dataIndex: 'created_by',
       width: 120,
       render: (v) => (
-        <span className='text-xs whitespace-nowrap'>{renderCreatedBy(v, t)}</span>
+        <span className='text-xs whitespace-nowrap'>
+          {renderCreatedBy(v, t)}
+        </span>
       ),
     },
     {
       title: t('注册时间'),
       dataIndex: 'created_at',
       width: 152,
-      render: (v) => <span className='text-xs whitespace-nowrap'>{renderUserDateTime(v)}</span>,
+      render: (v) => (
+        <span className='text-xs whitespace-nowrap'>
+          {renderUserDateTime(v)}
+        </span>
+      ),
     },
     {
       title: t('修改时间'),
       dataIndex: 'updated_at',
       width: 152,
-      render: (v) => <span className='text-xs whitespace-nowrap'>{renderUserDateTime(v)}</span>,
+      render: (v) => (
+        <span className='text-xs whitespace-nowrap'>
+          {renderUserDateTime(v)}
+        </span>
+      ),
     },
     {
       title: t('上次登录'),
       dataIndex: 'last_login_at',
       width: 152,
-      render: (v) => <span className='text-xs whitespace-nowrap'>{renderUserDateTime(v)}</span>,
+      render: (v) => (
+        <span className='text-xs whitespace-nowrap'>
+          {renderUserDateTime(v)}
+        </span>
+      ),
     },
     {
       title: '',
@@ -473,6 +599,7 @@ export const getUsersColumns = ({
           showResetTwoFAModal,
           showUserSubscriptionsModal,
           manageUser,
+          studentView,
           t,
         }),
     },

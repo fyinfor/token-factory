@@ -454,14 +454,12 @@ export default function SettingsChannelAffinity(props) {
       const templates = [
         CHANNEL_AFFINITY_RULE_TEMPLATES.codexCli,
         CHANNEL_AFFINITY_RULE_TEMPLATES.claudeCli,
-      ].map(
-        (tpl) => {
-          const baseTemplate = cloneChannelAffinityTemplate(tpl);
-          const name = makeUniqueName(existingNames, tpl.name);
-          existingNames.add(name);
-          return { ...baseTemplate, name };
-        },
-      );
+      ].map((tpl) => {
+        const baseTemplate = cloneChannelAffinityTemplate(tpl);
+        const name = makeUniqueName(existingNames, tpl.name);
+        existingNames.add(name);
+        return { ...baseTemplate, name };
+      });
 
       const next = [...(rules || []), ...templates].map((r, idx) => ({
         ...(r || {}),

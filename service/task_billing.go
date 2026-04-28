@@ -19,10 +19,30 @@ import (
 func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 	tokenName := c.GetString("token_name")
 	logContent := fmt.Sprintf("操作 %s", info.Action)
-	// 支持任务仅按次计费
-	if common.StringsContains(constant.TaskPricePatches, info.OriginModelName) {
+
+	// 视频按 token 计费分支：PriceData.UsePrice=true、ModelPrice=0、且 VideoOutputTokens>0。
+	// 该分支下 quota 已由 outputVideoTokens × ratios × group 直接算出，
+	// OtherRatios 的 seconds/size 不参与计费（已在 relay_task.go 步骤 5/6 跳过），
+	// 因此 logContent 应展示真实公式而非 "计算参数：seconds, size"。
+	isVideoTokenBilling := info.PriceData.UsePrice &&
+		info.PriceData.ModelPrice == 0 &&
+		info.PriceData.VideoOutputTokens > 0
+
+	switch {
+	case common.StringsContains(constant.TaskPricePatches, info.OriginModelName):
 		logContent = fmt.Sprintf("%s，按次计费", logContent)
-	} else {
+	case isVideoTokenBilling:
+		// 例：操作 generate, 视频 tokens：86400 (输入文本 13), 模型倍率 15.00, 视频倍率 1.00 × 1.00
+		logContent = fmt.Sprintf(
+			"%s, 视频 tokens：%d (输入文本 %d), 模型倍率 %.2f, 视频倍率 %.2f × %.2f",
+			logContent,
+			info.PriceData.VideoOutputTokens,
+			info.PriceData.VideoInputTextTokens,
+			info.PriceData.ModelRatio,
+			info.PriceData.VideoRatio,
+			info.PriceData.VideoCompletionRatio,
+		)
+	default:
 		if len(info.PriceData.OtherRatios) > 0 {
 			var contents []string
 			for key, ra := range info.PriceData.OtherRatios {
@@ -35,6 +55,7 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 			}
 		}
 	}
+
 	other := make(map[string]interface{})
 	other["request_path"] = c.Request.URL.Path
 	other["model_price"] = info.PriceData.ModelPrice
@@ -45,6 +66,15 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 	if info.IsModelMapped {
 		other["is_model_mapped"] = true
 		other["upstream_model_name"] = info.UpstreamModelName
+	}
+	// 视频按 token 计费：写入完整计费元数据，供前端日志详情按 token 公式展示。
+	if isVideoTokenBilling {
+		other["billing_mode"] = "video_token"
+		other["model_ratio"] = info.PriceData.ModelRatio
+		other["video_ratio"] = info.PriceData.VideoRatio
+		other["video_completion_ratio"] = info.PriceData.VideoCompletionRatio
+		other["video_output_tokens"] = info.PriceData.VideoOutputTokens
+		other["video_input_text_tokens"] = info.PriceData.VideoInputTextTokens
 	}
 	model.RecordConsumeLog(c, info.UserId, model.RecordConsumeLogParams{
 		ChannelId: info.ChannelId,

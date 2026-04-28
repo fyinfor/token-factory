@@ -23,6 +23,22 @@ import { API, showError, showSuccess } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
 
+const DEFAULT_QUOTA_PER_UNIT = 500 * 1000;
+const getQuotaPerUnit = () => {
+  const n = parseFloat(localStorage.getItem('quota_per_unit') || '');
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_QUOTA_PER_UNIT;
+};
+const quotaToUsd = (quota) => {
+  const q = Number(quota);
+  if (!Number.isFinite(q) || q <= 0) return 0;
+  return q / getQuotaPerUnit();
+};
+const usdToQuota = (usd) => {
+  const u = Number(usd);
+  if (!Number.isFinite(u) || u <= 0) return 0;
+  return Math.round(u * getQuotaPerUnit());
+};
+
 export const useUsersData = () => {
   const { t } = useTranslation();
   const [compactMode, setCompactMode] = useTableCompactMode('users');
@@ -33,6 +49,9 @@ export const useUsersData = () => {
   const [activePage, setActivePage] = useState(1);
   const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
   const [searching, setSearching] = useState(false);
+  const [studentView, setStudentView] = useState('all');
+  const [studentRewardAmount, setStudentRewardAmount] = useState(0);
+  const [studentRewardLoading, setStudentRewardLoading] = useState(false);
   const [groupOptions, setGroupOptions] = useState([]);
   const [userCount, setUserCount] = useState(0);
 
@@ -72,7 +91,13 @@ export const useUsersData = () => {
   // Load users data
   const loadUsers = async (startIdx, pageSize) => {
     setLoading(true);
-    const res = await API.get(`/api/user/?p=${startIdx}&page_size=${pageSize}`);
+    const viewQuery =
+      studentView && studentView !== 'all'
+        ? `&student_view=${encodeURIComponent(studentView)}`
+        : '';
+    const res = await API.get(
+      `/api/user/?p=${startIdx}&page_size=${pageSize}${viewQuery}`,
+    );
     const { success, message, data } = res.data;
     if (success) {
       const newPageData = data.items;
@@ -106,7 +131,7 @@ export const useUsersData = () => {
     }
     setSearching(true);
     const res = await API.get(
-      `/api/user/search?keyword=${searchKeyword}&group=${searchGroup}&p=${startIdx}&page_size=${pageSize}`,
+      `/api/user/search?keyword=${searchKeyword}&group=${searchGroup}&student_view=${encodeURIComponent(studentView)}&p=${startIdx}&page_size=${pageSize}`,
     );
     const { success, message, data } = res.data;
     if (success) {
@@ -146,6 +171,8 @@ export const useUsersData = () => {
             status: user.status,
             role: user.role,
             is_distributor: user.is_distributor,
+            is_student: user.is_student,
+            student_status: user.student_status,
           };
         }
         return u;
@@ -157,6 +184,100 @@ export const useUsersData = () => {
     }
 
     setLoading(false);
+  };
+
+  const assignStudent = async (userId, rewardAmount) => {
+    const uid = parseInt(String(userId), 10);
+    if (!Number.isFinite(uid) || uid <= 0) {
+      showError(t('请输入正确的用户ID'));
+      return false;
+    }
+    const finalRewardAmount =
+      rewardAmount === undefined || rewardAmount === null || rewardAmount === ''
+        ? studentRewardAmount
+        : Number(rewardAmount) || 0;
+    const rewardQuota = Math.max(0, usdToQuota(finalRewardAmount));
+    setLoading(true);
+    try {
+      const res = await API.post('/api/user/manage', {
+        id: uid,
+        action: 'set_student',
+        reward_quota: rewardQuota,
+      });
+      const { success, message } = res.data;
+      if (!success) {
+        showError(message || t('操作失败，请重试'));
+        return false;
+      }
+      showSuccess(t('已指定用户为学员'));
+      await refresh(1);
+      return true;
+    } catch (error) {
+      showError(t('操作失败，请重试'));
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadStudentRewardAmount = async () => {
+    setStudentRewardLoading(true);
+    try {
+      const res = await API.get('/api/option/');
+      const { success, data, message } = res.data;
+      if (!success) {
+        showError(message || t('加载赠送额度失败'));
+        return;
+      }
+      const option = (data || []).find(
+        (item) => item.key === 'StudentApprovalRewardQuota',
+      );
+      const quotaVal = parseInt(String(option?.value ?? '0'), 10);
+      if (Number.isFinite(quotaVal) && quotaVal >= 0) {
+        setStudentRewardAmount(quotaToUsd(quotaVal));
+      } else {
+        setStudentRewardAmount(0);
+      }
+    } catch (error) {
+      showError(t('加载赠送额度失败'));
+    } finally {
+      setStudentRewardLoading(false);
+    }
+  };
+
+  const saveStudentRewardAmount = async (rewardAmount) => {
+    const rewardQuota = Math.max(0, usdToQuota(Number(rewardAmount) || 0));
+    setStudentRewardLoading(true);
+    try {
+      const res = await API.put('/api/option/', {
+        key: 'StudentApprovalRewardQuota',
+        value: String(rewardQuota),
+      });
+      const { success, message } = res.data;
+      if (!success) {
+        showError(message || t('保存赠送额度失败'));
+        return false;
+      }
+      setStudentRewardAmount(Number(rewardAmount) || 0);
+      showSuccess(t('赠送额度已保存'));
+      return true;
+    } catch (error) {
+      showError(t('保存赠送额度失败'));
+      return false;
+    } finally {
+      setStudentRewardLoading(false);
+    }
+  };
+
+  const handleStudentViewChange = (nextView) => {
+    setStudentView(nextView);
+    setActivePage(1);
+    const { searchKeyword, searchGroup } = getFormValues();
+    if (searchKeyword === '' && searchGroup === '') {
+      loadUsers(0, pageSize).then();
+    } else {
+      searchUsers(0, pageSize, searchKeyword, searchGroup).then();
+    }
   };
 
   const resetUserPasskey = async (user) => {
@@ -277,7 +398,13 @@ export const useUsersData = () => {
         showError(reason);
       });
     fetchGroups().then();
-  }, []);
+  }, [studentView]);
+
+  useEffect(() => {
+    if (studentView === 'students') {
+      loadStudentRewardAmount().then();
+    }
+  }, [studentView]);
 
   return {
     // Data state
@@ -287,6 +414,9 @@ export const useUsersData = () => {
     pageSize,
     userCount,
     searching,
+    studentView,
+    studentRewardAmount,
+    studentRewardLoading,
     groupOptions,
 
     // Modal state
@@ -305,11 +435,15 @@ export const useUsersData = () => {
     // UI state
     compactMode,
     setCompactMode,
+    setStudentView: handleStudentViewChange,
 
     // Actions
     loadUsers,
     searchUsers,
     manageUser,
+    assignStudent,
+    setStudentRewardAmount,
+    saveStudentRewardAmount,
     resetUserPasskey,
     resetUserTwoFA,
     handlePageChange,

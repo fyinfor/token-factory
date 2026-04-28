@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import { Input, ImagePreview, Button, Collapsible } from '@douyinfe/semi-ui';
+import { Input, ImagePreview, Button, Collapsible, Select } from '@douyinfe/semi-ui';
 import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { IconSearch } from '@douyinfe/semi-icons';
 import PricingVendors from '../table/model-pricing/filter/PricingVendors';
@@ -54,8 +54,16 @@ const HomeModelList = () => {
     pricingData.setFilterQuotaType('all');
     pricingData.setFilterTag('all');
     pricingData.setFilterEndpointType('all');
+    pricingData.setSortKey && pricingData.setSortKey('default');
     pricingData.setCurrentPage(1);
   };
+
+  const sortOptions = [
+    { value: 'default', label: pricingData.t('默认') },
+    { value: 'price', label: pricingData.t('价格') },
+    { value: 'supplier_grade', label: pricingData.t('供应商等级') },
+    { value: 'latency', label: pricingData.t('时延') },
+  ];
 
   return (
     <div className='w-full home-model-list'>
@@ -179,16 +187,26 @@ const HomeModelList = () => {
       <div className='home-model-layout'>
         {/* 移动端搜索框 */}
         <div className='home-search-wrapper-mobile'>
-          <Input
-            prefix={<IconSearch />}
-            placeholder={pricingData.t('模糊搜索模型名称')}
-            value={pricingData.searchValue}
-            onCompositionStart={pricingData.handleCompositionStart}
-            onCompositionEnd={pricingData.handleCompositionEnd}
-            onChange={pricingData.handleChange}
-            showClear
-            size='large'
-          />
+          <div className='flex flex-col gap-2 w-full'>
+            <Input
+              prefix={<IconSearch />}
+              placeholder={pricingData.t('模糊搜索模型名称')}
+              value={pricingData.searchValue}
+              onCompositionStart={pricingData.handleCompositionStart}
+              onCompositionEnd={pricingData.handleCompositionEnd}
+              onChange={pricingData.handleChange}
+              showClear
+              size='large'
+            />
+            <Select
+              size='large'
+              style={{ width: '100%' }}
+              value={pricingData.sortKey || 'default'}
+              onChange={(v) => pricingData.setSortKey && pricingData.setSortKey(v)}
+              optionList={sortOptions}
+              prefix={pricingData.t('排序')}
+            />
+          </div>
         </div>
 
         <div className='home-model-sidebar'>
@@ -218,13 +236,13 @@ const HomeModelList = () => {
             t={pricingData.t}
           />
 
-          <PricingQuotaTypes
+          {/* <PricingQuotaTypes
             filterQuotaType={pricingData.filterQuotaType}
             setFilterQuotaType={pricingData.setFilterQuotaType}
             models={quotaTypeModels}
             loading={pricingData.loading}
             t={pricingData.t}
-          />
+          /> */}
 
           <PricingTags
             filterTag={pricingData.filterTag}
@@ -235,29 +253,40 @@ const HomeModelList = () => {
             t={pricingData.t}
           />
 
-          <PricingEndpointTypes
+          {/* <PricingEndpointTypes
             filterEndpointType={pricingData.filterEndpointType}
             setFilterEndpointType={pricingData.setFilterEndpointType}
             models={endpointTypeModels}
             allModels={pricingData.models}
             loading={pricingData.loading}
             t={pricingData.t}
-          />
+          /> */}
           </div>
         </div>
 
         <div className='home-model-content px-4'>
           <div className={`home-search-wrapper ${isMobile ? 'w-full mb-4' : 'w-full sticky top-[75px] z-index-[10] my-4 bg-[var(--semi-color-bg-0)] rounded-xl'}`}>
-            <Input
-              prefix={<IconSearch />}
-              placeholder={pricingData.t('模糊搜索模型名称')}
-              value={pricingData.searchValue}
-              onCompositionStart={pricingData.handleCompositionStart}
-              onCompositionEnd={pricingData.handleCompositionEnd}
-              onChange={pricingData.handleChange}
-              showClear
-              size='large'
-            />
+            <div className='flex items-center gap-2 w-full'>
+              <Input
+                prefix={<IconSearch />}
+                placeholder={pricingData.t('模糊搜索模型名称')}
+                value={pricingData.searchValue}
+                onCompositionStart={pricingData.handleCompositionStart}
+                onCompositionEnd={pricingData.handleCompositionEnd}
+                onChange={pricingData.handleChange}
+                showClear
+                size='large'
+                className='flex-1'
+              />
+              <Select
+                size='large'
+                style={{ width: 180 }}
+                value={pricingData.sortKey || 'default'}
+                onChange={(v) => pricingData.setSortKey && pricingData.setSortKey(v)}
+                optionList={sortOptions}
+                prefix={pricingData.t('排序')}
+              />
+            </div>
           </div>
 
           <div className='home-model-card-wrapper'>

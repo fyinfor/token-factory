@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
@@ -39,6 +40,41 @@ type RegisterRequest struct {
 	AffCode          string `json:"aff_code"`
 	Phone            string `json:"phone"`
 	SMSCode          string `json:"sms_verification_code"`
+}
+
+func ApplyStudent(c *gin.Context) {
+	id := c.GetInt("id")
+	user, err := model.GetUserById(id, true)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if user.Role >= common.RoleAdminUser {
+		common.ApiErrorMsg(c, "管理员账号无需申请学员身份")
+		return
+	}
+	if user.IsStudent == 1 && user.StudentStatus == common.StudentStatusApproved {
+		common.ApiErrorMsg(c, "你已经是学员")
+		return
+	}
+	if user.StudentStatus == common.StudentStatusPending {
+		common.ApiErrorMsg(c, "学员申请正在审批中")
+		return
+	}
+	now := time.Now()
+	user.IsStudent = 0
+	user.StudentStatus = common.StudentStatusPending
+	user.StudentApplied = &now
+	user.StudentApprovedAt = nil
+	user.StudentApprovedBy = 0
+	if err := user.Update(false); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "学员申请已提交，请等待管理员审批",
+	})
 }
 
 func Login(c *gin.Context) {
@@ -272,7 +308,8 @@ func Register(c *gin.Context) {
 
 func GetAllUsers(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
-	users, total, err := model.GetAllUsers(pageInfo)
+	studentView := strings.TrimSpace(c.Query("student_view"))
+	users, total, err := model.GetAllUsers(pageInfo, studentView)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -288,8 +325,9 @@ func GetAllUsers(c *gin.Context) {
 func SearchUsers(c *gin.Context) {
 	keyword := c.Query("keyword")
 	group := c.Query("group")
+	studentView := strings.TrimSpace(c.Query("student_view"))
 	pageInfo := common.GetPageQuery(c)
-	users, total, err := model.SearchUsers(keyword, group, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	users, total, err := model.SearchUsers(keyword, group, studentView, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -471,6 +509,11 @@ func GetSelf(c *gin.Context) {
 		"stripe_customer":            user.StripeCustomer,
 		"supplier_id":                user.SupplierID,
 		"is_distributor":             user.IsDistributor,
+		"is_student":                 user.IsStudent,
+		"student_status":             user.StudentStatus,
+		"student_applied_at":         user.StudentApplied,
+		"student_approved_at":        user.StudentApprovedAt,
+		"student_approved_by":        user.StudentApprovedBy,
 		"sidebar_modules":            userSetting.SidebarModules, // 正确提取sidebar_modules字段
 		"permissions":                permissions,                // 新增权限字段
 	}
@@ -1129,8 +1172,9 @@ func CreateUser(c *gin.Context) {
 }
 
 type ManageRequest struct {
-	Id     int    `json:"id"`
-	Action string `json:"action"`
+	Id          int    `json:"id"`
+	Action      string `json:"action"`
+	RewardQuota int    `json:"reward_quota,omitempty"`
 }
 
 // ManageUser 管理员对用户启用/禁用、删除、提升/降级身份；分销商资格使用 is_distributor 与 set_distributor / unset_distributor。
@@ -1252,6 +1296,80 @@ func ManageUser(c *gin.Context) {
 			return
 		}
 		user.IsDistributor = common.DistributorFlagNo
+	case "approve_student":
+		if myRole != common.RoleAdminUser && myRole != common.RoleRootUser {
+			common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
+			return
+		}
+		if user.Role >= common.RoleAdminUser {
+			common.ApiErrorMsg(c, "管理员账号不支持学员审批")
+			return
+		}
+		if user.IsStudent == 1 && user.StudentStatus == common.StudentStatusApproved {
+			common.ApiErrorMsg(c, "该用户已经是学员")
+			return
+		}
+		now := time.Now()
+		user.IsStudent = 1
+		user.StudentStatus = common.StudentStatusApproved
+		user.StudentApprovedAt = &now
+		user.StudentApprovedBy = c.GetInt("id")
+		if user.StudentApplied == nil {
+			user.StudentApplied = &now
+		}
+	case "reject_student":
+		if myRole != common.RoleAdminUser && myRole != common.RoleRootUser {
+			common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
+			return
+		}
+		if user.Role >= common.RoleAdminUser {
+			common.ApiErrorMsg(c, "管理员账号不支持学员审批")
+			return
+		}
+		if user.StudentStatus != common.StudentStatusPending {
+			common.ApiErrorMsg(c, "该用户当前不在待审批状态")
+			return
+		}
+		user.IsStudent = 0
+		user.StudentStatus = common.StudentStatusRejected
+		user.StudentApprovedAt = nil
+		user.StudentApprovedBy = 0
+	case "unset_student":
+		if myRole != common.RoleAdminUser && myRole != common.RoleRootUser {
+			common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
+			return
+		}
+		if user.Role >= common.RoleAdminUser {
+			common.ApiErrorMsg(c, "管理员账号不支持学员身份操作")
+			return
+		}
+		if user.IsStudent != 1 || user.StudentStatus != common.StudentStatusApproved {
+			common.ApiErrorMsg(c, "该用户不是学员")
+			return
+		}
+		user.IsStudent = 0
+		user.StudentStatus = common.StudentStatusNone
+	case "set_student":
+		if myRole != common.RoleAdminUser && myRole != common.RoleRootUser {
+			common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
+			return
+		}
+		if user.Role >= common.RoleAdminUser {
+			common.ApiErrorMsg(c, "管理员账号不支持学员身份操作")
+			return
+		}
+		if user.IsStudent == 1 && user.StudentStatus == common.StudentStatusApproved {
+			common.ApiErrorMsg(c, "该用户已经是学员")
+			return
+		}
+		now := time.Now()
+		user.IsStudent = 1
+		user.StudentStatus = common.StudentStatusApproved
+		user.StudentApprovedAt = &now
+		user.StudentApprovedBy = c.GetInt("id")
+		if user.StudentApplied == nil {
+			user.StudentApplied = &now
+		}
 	default:
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
@@ -1260,6 +1378,23 @@ func ManageUser(c *gin.Context) {
 	if err := user.Update(false); err != nil {
 		common.ApiError(c, err)
 		return
+	}
+	if req.Action == "approve_student" || req.Action == "set_student" {
+		rewardQuota := common.StudentApprovalRewardQuota
+		if req.RewardQuota > 0 {
+			rewardQuota = req.RewardQuota
+		}
+		if rewardQuota > 0 {
+			if err := model.IncreaseUserQuota(user.Id, rewardQuota, true); err != nil {
+				common.ApiError(c, err)
+				return
+			}
+			actionLabel := "管理员审批学员申请"
+			if req.Action == "set_student" {
+				actionLabel = "管理员指定学员身份"
+			}
+			model.RecordLog(user.Id, model.LogTypeManage, fmt.Sprintf("%s，赠送 %s", actionLabel, logger.LogQuota(rewardQuota)))
+		}
 	}
 	switch req.Action {
 	case "set_distributor":
@@ -1278,6 +1413,8 @@ func ManageUser(c *gin.Context) {
 			"role":           user.Role,
 			"status":         user.Status,
 			"is_distributor": user.IsDistributor,
+			"is_student":     user.IsStudent,
+			"student_status": user.StudentStatus,
 		},
 	})
 	return
