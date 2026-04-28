@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -19,8 +20,21 @@ import (
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 )
+
+// isVideoTaskChannel reports whether the given channel type is a task-style
+// video generation channel (OpenAI Sora, OpenAI-compatible video gateway,
+// etc.). These channels are eligible for the optional video token-based
+// pricing path implemented by ModelPriceHelperVideo.
+func isVideoTaskChannel(channelType int) bool {
+	switch channelType {
+	case constant.ChannelTypeSora, constant.ChannelTypeOpenAIVideo:
+		return true
+	}
+	return false
+}
 
 type TaskSubmitResult struct {
 	UpstreamTaskID string
@@ -178,23 +192,49 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 
 	// 4. 价格计算：基础模型价格
 	info.OriginModelName = modelName
-	priceData, err := helper.ModelPriceHelperPerCall(c, info)
+	// 视频类任务渠道（OpenAI 视频网关 / Sora）走 ModelPriceHelperVideo：它在底层
+	// 包装了 PerCall 行为，并额外支持「按 token 计费」（VideoRatio +
+	// VideoCompletionRatio）。当模型只配置了 VideoRatio/ModelRatio 而没有按次价时
+	// 会按 outputVideoTokens = duration * W * H * fps / 1024 来扣费，
+	// 并将 PriceData.UsePrice 置 true 以告知步骤 6 跳过 OtherRatios 重复乘法。
+	var (
+		priceData types.PriceData
+		err       error
+	)
+	if isVideoTaskChannel(info.ChannelType) {
+		priceData, err = helper.ModelPriceHelperVideo(c, info)
+	} else {
+		priceData, err = helper.ModelPriceHelperPerCall(c, info)
+	}
 	if err != nil {
 		return nil, service.TaskErrorWrapper(err, "model_price_error", http.StatusBadRequest)
 	}
 	info.PriceData = priceData
 
 	// 5. 计费估算：让适配器根据用户请求提供 OtherRatios（时长、分辨率等）
-	//    必须在 ModelPriceHelperPerCall 之后调用（它会重建 PriceData）。
+	//    必须在价格计算之后调用（PriceHelper 会重建 PriceData）。
 	//    ResolveOriginTask 可能已在 remix 路径中预设了 OtherRatios，此处合并。
-	if estimatedRatios := adaptor.EstimateBilling(c, info); len(estimatedRatios) > 0 {
-		for k, v := range estimatedRatios {
-			info.PriceData.AddOtherRatio(k, v)
+	//
+	//    跳过：视频按 token 计费分支（PriceData.UsePrice=true 且渠道是视频任务且 ModelPrice==0）。
+	//    outputVideoTokens 的公式已经隐含了 duration × W × H × fps，
+	//    若再合并 EstimateBilling 返回的 seconds/size 系数会被日志 content
+	//    误展示为 "计算参数：seconds: 4.00, size: 2.25"，与实际计费不符。
+	isVideoTokenBranch := isVideoTaskChannel(info.ChannelType) &&
+		info.PriceData.UsePrice && info.PriceData.ModelPrice == 0
+	if !isVideoTokenBranch {
+		if estimatedRatios := adaptor.EstimateBilling(c, info); len(estimatedRatios) > 0 {
+			for k, v := range estimatedRatios {
+				info.PriceData.AddOtherRatio(k, v)
+			}
 		}
 	}
 
 	// 6. 将 OtherRatios 应用到基础额度
-	if !common.StringsContains(constant.TaskPricePatches, modelName) {
+	//    跳过两种情况：
+	//    a) modelName 命中 TaskPricePatches（历史行为）。
+	//    b) 视频按 token 计费分支：参见步骤 5 的注释。
+	skipOtherRatios := common.StringsContains(constant.TaskPricePatches, modelName) || isVideoTokenBranch
+	if !skipOtherRatios {
 		for _, ra := range info.PriceData.OtherRatios {
 			if ra != 1.0 {
 				info.PriceData.Quota = int(float64(info.PriceData.Quota) * ra)
@@ -460,6 +500,27 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	// 将上游最新状态更新到 task
 	if ti.Status != "" {
 		task.Status = model.TaskStatus(ti.Status)
+	}
+	now := time.Now().Unix()
+	switch task.Status {
+	case model.TaskStatusInProgress:
+		if task.StartTime == 0 {
+			task.StartTime = now
+		}
+	case model.TaskStatusSuccess:
+		if task.FinishTime == 0 {
+			task.FinishTime = now
+		}
+		if task.Progress == "" {
+			task.Progress = taskcommon.ProgressComplete
+		}
+	case model.TaskStatusFailure:
+		if task.FinishTime == 0 {
+			task.FinishTime = now
+		}
+		if task.Progress == "" {
+			task.Progress = taskcommon.ProgressComplete
+		}
 	}
 	if ti.Progress != "" {
 		task.Progress = ti.Progress

@@ -51,6 +51,7 @@ export default function ModelRatioSettings(props) {
     VideoRatio: '',
     VideoCompletionRatio: '',
     VideoPrice: '',
+    VideoPricingRules: '',
     ExposeRatioEnabled: false,
   });
   const refForm = useRef();
@@ -385,6 +386,32 @@ export default function ModelRatioSettings(props) {
                 },
               ]}
               onChange={(value) => setInputs({ ...inputs, VideoPrice: value })}
+            />
+          </Col>
+        </Row>
+        <Row gutter={16}>
+          <Col xs={24} sm={16}>
+            <Form.TextArea
+              label={t('视频分辨率规则（按 token 计费）')}
+              extraText={t(
+                '支持按文生视频/图生视频/视频生视频分别配置 token 价格与像素压缩系数。图生视频按 宽×高/压缩系数；其余按 宽×高×帧率×时长/压缩系数。',
+              )}
+              placeholder={t(
+                'JSON 示例：{"sora-2":{"text_to_video":[{"resolution":"1280x720","token_price":1.8,"pixel_compression":1024}],"image_to_video":{"token_price":1.2,"pixel_compression":900},"video_to_video":[{"resolution":"1920x1080","token_price":2.1,"pixel_compression":1200}],"similarity_threshold":0.35}}',
+              )}
+              field={'VideoPricingRules'}
+              autosize={{ minRows: 6, maxRows: 14 }}
+              trigger='blur'
+              stopValidateWithError
+              rules={[
+                {
+                  validator: (rule, value) => verifyJSON(value),
+                  message: '不是合法的 JSON 字符串',
+                },
+              ]}
+              onChange={(value) =>
+                setInputs({ ...inputs, VideoPricingRules: value })
+              }
             />
           </Col>
         </Row>
