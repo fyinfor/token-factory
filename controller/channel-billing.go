@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -362,7 +363,51 @@ func updateChannelMoonshotBalance(channel *model.Channel) (float64, error) {
 	return availableBalanceUsd, nil
 }
 
+type upstreamChannelBalanceResponse struct {
+	Success bool    `json:"success"`
+	Message string  `json:"message"`
+	Balance float64 `json:"balance"`
+}
+
+func tryUpdateTFOpenMirroredChannelBalance(channel *model.Channel) (float64, bool, error) {
+	otherInfo := channel.GetOtherInfo()
+	if strings.TrimSpace(common.Interface2String(otherInfo["source"])) != "tokenfactory_open" {
+		return 0, false, nil
+	}
+	upstreamID := common.String2Int(common.Interface2String(otherInfo["upstream_channel_id"]))
+	if upstreamID <= 0 {
+		return 0, true, errors.New("同步渠道缺少 upstream_channel_id")
+	}
+	baseURL := strings.TrimRight(strings.TrimSpace(channel.GetBaseURL()), "/")
+	if baseURL == "" {
+		return 0, true, errors.New("同步渠道缺少上游平台地址")
+	}
+	url := fmt.Sprintf("%s/api/channel/update_balance/%d", baseURL, upstreamID)
+	headers := GetAuthHeader(channel.Key)
+	headers.Set("X-TokenFactory-Open-Sync-Secret", strings.TrimSpace(channel.Key))
+	body, err := GetResponseBody("GET", url, channel, headers)
+	if err != nil {
+		return 0, true, err
+	}
+	resp := upstreamChannelBalanceResponse{}
+	if err := json.Unmarshal(body, &resp); err != nil {
+		return 0, true, err
+	}
+	if !resp.Success {
+		msg := strings.TrimSpace(resp.Message)
+		if msg == "" {
+			msg = "上游余额接口返回失败"
+		}
+		return 0, true, errors.New(msg)
+	}
+	channel.UpdateBalance(resp.Balance)
+	return resp.Balance, true, nil
+}
+
 func updateChannelBalance(channel *model.Channel) (float64, error) {
+	if balance, handled, err := tryUpdateTFOpenMirroredChannelBalance(channel); handled {
+		return balance, err
+	}
 	baseURL := constant.ChannelBaseURLs[channel.Type]
 	if channel.GetBaseURL() == "" {
 		channel.BaseURL = &baseURL

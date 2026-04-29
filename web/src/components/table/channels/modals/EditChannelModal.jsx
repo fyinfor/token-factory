@@ -628,6 +628,7 @@ const EditChannelModal = (props) => {
     setInputs((inputs) => ({ ...inputs, [name]: value }));
     if (name === 'type') {
       let localModels = [];
+      let forceResetModels = false;
       switch (value) {
         case 2:
           localModels = [
@@ -674,16 +675,21 @@ const EditChannelModal = (props) => {
           break;
         case 59:
           localModels = [];
-          setInputs((prevInputs) => ({
-            ...prevInputs,
-            models: [],
-          }));
+          forceResetModels = true;
           break;
         default:
           localModels = getChannelModels(value);
           break;
       }
-      if (inputs.models.length === 0) {
+      if (forceResetModels) {
+        if (formApiRef.current) {
+          formApiRef.current.setValue('models', []);
+        }
+        setInputs((prevInputs) => ({
+          ...prevInputs,
+          models: [],
+        }));
+      } else if (inputs.models.length === 0) {
         setInputs((inputs) => ({ ...inputs, models: localModels }));
       }
       setBasicModels(localModels);
@@ -3908,7 +3914,11 @@ const EditChannelModal = (props) => {
                         field='models'
                         label={t('模型')}
                         placeholder={t('请选择该渠道所支持的模型')}
-                        rules={[{ required: true, message: t('请选择模型') }]}
+                        rules={
+                          inputs.type === 59
+                            ? []
+                            : [{ required: true, message: t('请选择模型') }]
+                        }
                         multiple
                         filter={selectFilter}
                         allowCreate

@@ -1057,16 +1057,7 @@ func fetchTokenFactoryUpstreamChannels(baseURL string, key string) ([]upstreamCh
 }
 
 func tfOpenLocalChannelNo(up upstreamChannelSyncItem) string {
-	upNo := strings.TrimSpace(up.ChannelNo)
-	if upNo != "" {
-		if len(upNo) <= 32 {
-			return upNo
-		}
-		return upNo[:32]
-	}
-	if up.ID > 0 {
-		return "c" + strconv.Itoa(up.ID)
-	}
+	// 留空让本地按既有逻辑分配 cN（按 supplier_application_id 递增）。
 	return ""
 }
 
@@ -1101,9 +1092,19 @@ func buildTokenFactorySyncedChannels(base *model.Channel) ([]model.Channel, []mo
 		} else {
 			clone.Type = constant.ChannelTypeTokenFactoryOpen
 		}
-		clone.Name = strings.TrimSpace(upstream.Name)
-		if strings.TrimSpace(clone.Name) == "" {
-			clone.Name = fmt.Sprintf("upstream-%d", upstream.ID)
+		baseName := strings.TrimSpace(base.Name)
+		upstreamNo := strings.TrimSpace(upstream.ChannelNo)
+		if baseName != "" && upstreamNo != "" {
+			clone.Name = fmt.Sprintf("%s-%s", baseName, upstreamNo)
+		} else if upstreamNo != "" {
+			clone.Name = upstreamNo
+		} else if baseName != "" {
+			clone.Name = baseName
+		} else {
+			clone.Name = strings.TrimSpace(upstream.Name)
+			if strings.TrimSpace(clone.Name) == "" {
+				clone.Name = fmt.Sprintf("upstream-%d", upstream.ID)
+			}
 		}
 		clone.Models = strings.TrimSpace(upstream.Models)
 		if strings.TrimSpace(upstream.Group) != "" {
