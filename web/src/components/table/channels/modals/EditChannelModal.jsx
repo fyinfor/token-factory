@@ -167,6 +167,8 @@ function type2secretPrompt(type) {
     case 57:
       return '请输入 JSON 格式的 OAuth 凭据（必须包含 access_token 和 account_id）';
     case 59:
+      return '请输入上游 OpenAI 视频网关的访问密钥（API Key）';
+    case 60:
       return '请输入上游 TokenFactoryOpen 平台的访问密钥（Bearer Token）';
     default:
       return '请输入渠道对应的鉴权密钥';
@@ -673,7 +675,7 @@ const EditChannelModal = (props) => {
             base_url: 'https://ark.cn-beijing.volces.com',
           }));
           break;
-        case 59:
+        case 60:
           localModels = [];
           forceResetModels = true;
           break;
@@ -1342,7 +1344,7 @@ const EditChannelModal = (props) => {
         formApiRef.current.setValues(originInputs);
       }
       let localModels = getChannelModels(inputs.type);
-      if (inputs.type === 59) {
+      if (inputs.type === 60) {
         localModels = [];
       }
       setBasicModels(localModels);
@@ -1781,7 +1783,7 @@ const EditChannelModal = (props) => {
       return;
     }
     if (
-      localInputs.type !== 59 &&
+      localInputs.type !== 60 &&
       (!Array.isArray(localInputs.models) || localInputs.models.length === 0)
     ) {
       showInfo(t('请至少选择一个模型！'));
@@ -1795,7 +1797,7 @@ const EditChannelModal = (props) => {
       return;
     }
     if (
-      localInputs.type === 59 &&
+      localInputs.type === 60 &&
       (!localInputs.base_url || localInputs.base_url.trim() === '')
     ) {
       showInfo(t('TokenFactoryOpen 渠道必须填写平台地址！'));
@@ -3915,7 +3917,7 @@ const EditChannelModal = (props) => {
                         label={t('模型')}
                         placeholder={t('请选择该渠道所支持的模型')}
                         rules={
-                          inputs.type === 59
+                          inputs.type === 60
                             ? []
                             : [{ required: true, message: t('请选择模型') }]
                         }
