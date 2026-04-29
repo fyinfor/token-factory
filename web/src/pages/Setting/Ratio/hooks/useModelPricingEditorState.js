@@ -108,6 +108,11 @@ const normalizeVideoRuleRow = (row) => ({
     pixelCompression: toNumericString(row?.pixel_compression),
 });
 
+const normalizePerVideoRuleRow = (row) => ({
+    resolution: row?.resolution || '',
+    videoPrice: toNumericString(row?.video_price),
+});
+
 const parseVideoPricingRules = (rawRules) => {
     if (!rawRules || typeof rawRules !== 'object' || Array.isArray(rawRules)) {
         return {
@@ -115,6 +120,10 @@ const parseVideoPricingRules = (rawRules) => {
             imageToVideo: [],
             videoUpload: [],
             videoGenerate: [],
+            textToVideoPerVideo: [],
+            imageToVideoPerVideo: [],
+            videoUploadPerVideo: [],
+            videoGeneratePerVideo: [],
             similarityThreshold: '',
         };
     }
@@ -132,6 +141,22 @@ const parseVideoPricingRules = (rawRules) => {
         : [];
     const videoToVideoOutput = Array.isArray(rawRules.video_to_video_output)
         ? rawRules.video_to_video_output.map(normalizeVideoRuleRow)
+        : [];
+    const textToVideoPerVideo = Array.isArray(rawRules.text_to_video_per_video)
+        ? rawRules.text_to_video_per_video.map(normalizePerVideoRuleRow)
+        : [];
+    const imageToVideoPerVideo = Array.isArray(rawRules.image_to_video_per_video)
+        ? rawRules.image_to_video_per_video.map(normalizePerVideoRuleRow)
+        : [];
+    const videoToVideoInputPerVideo = Array.isArray(
+        rawRules.video_to_video_input_per_video,
+    )
+        ? rawRules.video_to_video_input_per_video.map(normalizePerVideoRuleRow)
+        : [];
+    const videoToVideoOutputPerVideo = Array.isArray(
+        rawRules.video_to_video_output_per_video,
+    )
+        ? rawRules.video_to_video_output_per_video.map(normalizePerVideoRuleRow)
         : [];
     const imageRule = rawRules.image_to_video || null;
     return {
@@ -153,6 +178,10 @@ const parseVideoPricingRules = (rawRules) => {
         videoUpload: videoToVideoInput,
         videoGenerate:
             videoToVideoOutput.length > 0 ? videoToVideoOutput : videoToVideo,
+        textToVideoPerVideo,
+        imageToVideoPerVideo,
+        videoUploadPerVideo: videoToVideoInputPerVideo,
+        videoGeneratePerVideo: videoToVideoOutputPerVideo,
         similarityThreshold: toNumericString(rawRules.similarity_threshold),
     };
 };
@@ -198,6 +227,11 @@ const buildModelState = (name, sourceMaps) => {
     const videoPricingRules = parseVideoPricingRules(
         sourceMaps.VideoPricingRules?.[name],
     );
+    const hasPerVideoTable =
+        videoPricingRules.textToVideoPerVideo.length > 0 ||
+        videoPricingRules.imageToVideoPerVideo.length > 0 ||
+        videoPricingRules.videoUploadPerVideo.length > 0 ||
+        videoPricingRules.videoGeneratePerVideo.length > 0;
     const fixedPrice = toNumericString(sourceMaps.ModelPrice[name]);
     const inputPrice = ratioToBasePrice(modelRatio);
     const inputPriceNumber = toNumberOrNull(inputPrice);
@@ -214,6 +248,7 @@ const buildModelState = (name, sourceMaps) => {
             ? formatNumber(Number(videoInputPrice) * Number(videoCompletionRatio))
             : '';
     const useLegacyRulesFallback =
+        !hasPerVideoTable &&
         videoPricingRules.textToVideo.length === 0 &&
         videoPricingRules.videoGenerate.length === 0 &&
         videoPricingRules.videoUpload.length === 0 &&
@@ -261,44 +296,56 @@ const buildModelState = (name, sourceMaps) => {
             toNumberOrNull(audioInputPrice) !== null && hasValue(audioCompletionRatio)
                 ? formatNumber(Number(audioInputPrice) * Number(audioCompletionRatio))
                 : '',
-        videoBillingMode: hasValue(videoPrice) ? 'per-video' : 'per-token',
-        videoFixedPrice: videoPrice,
-        videoTextToVideoRules: useLegacyRulesFallback
-            ? [
-                {
-                    resolution: '1280x720',
-                    tokenPrice: videoInputPrice,
-                    pixelCompression: DEFAULT_TEXT_VIDEO_PIXEL_COMPRESSION,
-                },
-            ]
-            : videoPricingRules.textToVideo,
-        videoImageToVideoRules: useLegacyRulesFallback
-            ? [
-                {
-                    resolution: '1280x720',
-                    tokenPrice: videoInputPrice,
-                    pixelCompression: DEFAULT_IMAGE_VIDEO_PIXEL_COMPRESSION,
-                },
-            ]
-            : videoPricingRules.imageToVideo,
-        videoUploadRules: useLegacyRulesFallback
-            ? [
-                {
-                    resolution: '1280x720',
-                    tokenPrice: videoInputPrice,
-                    pixelCompression: DEFAULT_VIDEO_VIDEO_PIXEL_COMPRESSION,
-                },
-            ]
-            : videoPricingRules.videoUpload,
-        videoGenerateRules: useLegacyRulesFallback
-            ? [
-                {
-                    resolution: '1280x720',
-                    tokenPrice: videoOutputPrice || videoInputPrice,
-                    pixelCompression: DEFAULT_VIDEO_VIDEO_PIXEL_COMPRESSION,
-                },
-            ]
-            : videoPricingRules.videoGenerate,
+        videoBillingMode: hasPerVideoTable
+            ? 'per-video'
+            : hasValue(videoPrice)
+                ? 'per-video'
+                : 'per-token',
+        videoFixedPrice: hasPerVideoTable ? '' : videoPrice,
+        videoTextToVideoRules: hasPerVideoTable
+            ? videoPricingRules.textToVideoPerVideo
+            : useLegacyRulesFallback
+                ? [
+                    {
+                        resolution: '1280x720',
+                        tokenPrice: videoInputPrice,
+                        pixelCompression: DEFAULT_TEXT_VIDEO_PIXEL_COMPRESSION,
+                    },
+                ]
+                : videoPricingRules.textToVideo,
+        videoImageToVideoRules: hasPerVideoTable
+            ? videoPricingRules.imageToVideoPerVideo
+            : useLegacyRulesFallback
+                ? [
+                    {
+                        resolution: '1280x720',
+                        tokenPrice: videoInputPrice,
+                        pixelCompression: DEFAULT_IMAGE_VIDEO_PIXEL_COMPRESSION,
+                    },
+                ]
+                : videoPricingRules.imageToVideo,
+        videoUploadRules: hasPerVideoTable
+            ? videoPricingRules.videoUploadPerVideo
+            : useLegacyRulesFallback
+                ? [
+                    {
+                        resolution: '1280x720',
+                        tokenPrice: videoInputPrice,
+                        pixelCompression: DEFAULT_VIDEO_VIDEO_PIXEL_COMPRESSION,
+                    },
+                ]
+                : videoPricingRules.videoUpload,
+        videoGenerateRules: hasPerVideoTable
+            ? videoPricingRules.videoGeneratePerVideo
+            : useLegacyRulesFallback
+                ? [
+                    {
+                        resolution: '1280x720',
+                        tokenPrice: videoOutputPrice || videoInputPrice,
+                        pixelCompression: DEFAULT_VIDEO_VIDEO_PIXEL_COMPRESSION,
+                    },
+                ]
+                : videoPricingRules.videoGenerate,
         videoSimilarityThreshold: videoPricingRules.similarityThreshold,
         rawRatios: {
             modelRatio,
@@ -336,6 +383,19 @@ const buildModelState = (name, sourceMaps) => {
 
 export const isBasePricingUnset = (model) =>
     !hasValue(model.fixedPrice) && !hasValue(model.inputPrice);
+
+const hasDuplicateResolution = (rows) => {
+    const seen = new Set();
+    for (const row of rows || []) {
+        const key = String(row?.resolution || '')
+            .replace(/\s+/g, '')
+            .toLowerCase();
+        if (!key) continue;
+        if (seen.has(key)) return true;
+        seen.add(key);
+    }
+    return false;
+};
 
 export const getModelWarnings = (model, t) => {
     if (!model) {
@@ -399,18 +459,6 @@ export const getModelWarnings = (model, t) => {
     }
 
     if (model.billingMode === 'per-token' && model.videoBillingMode === 'per-token') {
-        const hasDuplicateResolution = (rows) => {
-            const seen = new Set();
-            for (const row of rows || []) {
-                const key = String(row?.resolution || '')
-                    .replace(/\s+/g, '')
-                    .toLowerCase();
-                if (!key) continue;
-                if (seen.has(key)) return true;
-                seen.add(key);
-            }
-            return false;
-        };
         const hasInvalidTextRule = (model.videoTextToVideoRules || []).some(
             (row) =>
                 (hasValue(row.resolution) &&
@@ -439,6 +487,37 @@ export const getModelWarnings = (model, t) => {
             warnings.push(
                 t(
                     '视频分辨率行中存在非法格式，请使用如 1280x720 的分辨率，并同时填写 token 价格与像素压缩系数。',
+                ),
+            );
+        }
+        if (
+            hasDuplicateResolution(model.videoTextToVideoRules) ||
+            hasDuplicateResolution(model.videoGenerateRules) ||
+            hasDuplicateResolution(model.videoUploadRules) ||
+            hasDuplicateResolution(model.videoImageToVideoRules)
+        ) {
+            warnings.push(t('同一规则组内分辨率不能重复，请删除重复项。'));
+        }
+    }
+
+    if (model.billingMode === 'per-token' && model.videoBillingMode === 'per-video') {
+        const hasInvalidPerVideoRow = (rows) =>
+            (rows || []).some(
+                (row) =>
+                    (hasValue(row.resolution) &&
+                        !VIDEO_RESOLUTION_REGEX.test(row.resolution)) ||
+                    (hasValue(row.videoPrice) &&
+                        toNumberOrNull(row.videoPrice) === null),
+            );
+        if (
+            hasInvalidPerVideoRow(model.videoTextToVideoRules) ||
+            hasInvalidPerVideoRow(model.videoImageToVideoRules) ||
+            hasInvalidPerVideoRow(model.videoUploadRules) ||
+            hasInvalidPerVideoRow(model.videoGenerateRules)
+        ) {
+            warnings.push(
+                t(
+                    '按视频计费的分辨率行请使用如 1280x720 的格式，并填写大于 0 的每条成片价格（与站点额度展示币种一致）。',
                 ),
             );
         }
@@ -484,8 +563,37 @@ export const buildOptionalFieldToggles = (model) => ({
         (model.videoImageToVideoRules || []).length > 0 ||
         (model.videoUploadRules || []).length > 0 ||
         (model.videoGenerateRules || []).length > 0 ||
-        hasValue(model.videoFixedPrice),
+        hasValue(model.videoFixedPrice) ||
+        (model.videoTextToVideoRules || []).some((r) => hasValue(r?.videoPrice)) ||
+        (model.videoImageToVideoRules || []).some((r) => hasValue(r?.videoPrice)) ||
+        (model.videoUploadRules || []).some((r) => hasValue(r?.videoPrice)) ||
+        (model.videoGenerateRules || []).some((r) => hasValue(r?.videoPrice)),
 });
+
+const normalizePerVideoPricingRows = (rows) =>
+    (rows || [])
+        .filter(
+            (row) =>
+                hasValue(row?.resolution) &&
+                hasValue(row?.videoPrice) &&
+                VIDEO_RESOLUTION_REGEX.test(row.resolution),
+        )
+        .map((row) => {
+            const videoPrice = toNumberOrNull(row.videoPrice);
+            if (videoPrice === null || videoPrice <= 0) {
+                return null;
+            }
+            return {
+                resolution: row.resolution.replace(/\s+/g, ''),
+                video_price: videoPrice,
+            };
+        })
+        .filter(Boolean)
+        .filter(
+            (row, index, arr) =>
+                arr.findIndex((item) => item.resolution === row.resolution) ===
+                index,
+        );
 
 const serializeModel = (model, t) => {
     const result = {
@@ -532,6 +640,25 @@ const serializeModel = (model, t) => {
         videoPerToken && (model.videoImageToVideoRules || []).length > 0 ? 1 : null,
         videoPerToken && (model.videoUploadRules || []).length > 0 ? 1 : null,
         videoPerToken && (model.videoGenerateRules || []).length > 0 ? 1 : null,
+        videoPerVideo &&
+            ((model.videoTextToVideoRules || []).some(
+                (row) =>
+                    hasValue(row?.resolution) && hasValue(row?.videoPrice),
+            ) ||
+                (model.videoImageToVideoRules || []).some(
+                    (row) =>
+                        hasValue(row?.resolution) && hasValue(row?.videoPrice),
+                ) ||
+                (model.videoUploadRules || []).some(
+                    (row) =>
+                        hasValue(row?.resolution) && hasValue(row?.videoPrice),
+                ) ||
+                (model.videoGenerateRules || []).some(
+                    (row) =>
+                        hasValue(row?.resolution) && hasValue(row?.videoPrice),
+                ))
+            ? 1
+            : null,
     ].some((value) => value !== null);
 
     if (inputPrice === null) {
@@ -588,8 +715,38 @@ const serializeModel = (model, t) => {
             ) {
                 result.VideoPricingRules = model.rawRatios.videoPricingRules;
             }
-        } else if (videoPerVideo && videoFixedPrice !== null) {
-            result.VideoPrice = toNormalizedNumber(videoFixedPrice);
+        } else if (videoPerVideo) {
+            const textPV = normalizePerVideoPricingRows(
+                model.videoTextToVideoRules,
+            );
+            const imagePV = normalizePerVideoPricingRows(
+                model.videoImageToVideoRules,
+            );
+            const uploadPV = normalizePerVideoPricingRows(model.videoUploadRules);
+            const genPV = normalizePerVideoPricingRows(model.videoGenerateRules);
+            if (
+                textPV.length > 0 ||
+                imagePV.length > 0 ||
+                uploadPV.length > 0 ||
+                genPV.length > 0
+            ) {
+                const pricingRules = {};
+                if (textPV.length > 0) {
+                    pricingRules.text_to_video_per_video = textPV;
+                }
+                if (imagePV.length > 0) {
+                    pricingRules.image_to_video_per_video = imagePV;
+                }
+                if (uploadPV.length > 0) {
+                    pricingRules.video_to_video_input_per_video = uploadPV;
+                }
+                if (genPV.length > 0) {
+                    pricingRules.video_to_video_output_per_video = genPV;
+                }
+                result.VideoPricingRules = pricingRules;
+            } else if (videoFixedPrice !== null) {
+                result.VideoPrice = toNormalizedNumber(videoFixedPrice);
+            }
         }
         return result;
     }
@@ -689,8 +846,36 @@ const serializeModel = (model, t) => {
             }
             result.VideoPricingRules = pricingRules;
         }
-    } else if (videoPerVideo && videoFixedPrice !== null) {
-        result.VideoPrice = toNormalizedNumber(videoFixedPrice);
+    } else if (videoPerVideo) {
+        const textPV = normalizePerVideoPricingRows(model.videoTextToVideoRules);
+        const imagePV = normalizePerVideoPricingRows(
+            model.videoImageToVideoRules,
+        );
+        const uploadPV = normalizePerVideoPricingRows(model.videoUploadRules);
+        const genPV = normalizePerVideoPricingRows(model.videoGenerateRules);
+        if (
+            textPV.length > 0 ||
+            imagePV.length > 0 ||
+            uploadPV.length > 0 ||
+            genPV.length > 0
+        ) {
+            const pricingRules = {};
+            if (textPV.length > 0) {
+                pricingRules.text_to_video_per_video = textPV;
+            }
+            if (imagePV.length > 0) {
+                pricingRules.image_to_video_per_video = imagePV;
+            }
+            if (uploadPV.length > 0) {
+                pricingRules.video_to_video_input_per_video = uploadPV;
+            }
+            if (genPV.length > 0) {
+                pricingRules.video_to_video_output_per_video = genPV;
+            }
+            result.VideoPricingRules = pricingRules;
+        } else if (videoFixedPrice !== null) {
+            result.VideoPrice = toNormalizedNumber(videoFixedPrice);
+        }
     }
 
     return result;
@@ -712,6 +897,20 @@ export const buildPreviewRows = (model, t) => {
     const inputPrice = toNumberOrNull(model.inputPrice);
     const videoPerToken = model.videoBillingMode === 'per-token';
     const videoPerVideo = model.videoBillingMode === 'per-video';
+    const hasPerVideoPricingRuleRows =
+        videoPerVideo &&
+        ((model.videoTextToVideoRules || []).some(
+            (r) => hasValue(r?.resolution) && hasValue(r?.videoPrice),
+        ) ||
+            (model.videoImageToVideoRules || []).some(
+                (r) => hasValue(r?.resolution) && hasValue(r?.videoPrice),
+            ) ||
+            (model.videoUploadRules || []).some(
+                (r) => hasValue(r?.resolution) && hasValue(r?.videoPrice),
+            ) ||
+            (model.videoGenerateRules || []).some(
+                (r) => hasValue(r?.resolution) && hasValue(r?.videoPrice),
+            ));
     if (inputPrice === null) {
         return [
             {
@@ -767,9 +966,10 @@ export const buildPreviewRows = (model, t) => {
                 key: 'VideoPricingRules',
                 label: 'VideoPricingRules',
                 value:
-                    videoPerToken &&
+                    (videoPerToken &&
                         model.rawRatios.videoPricingRules &&
-                        typeof model.rawRatios.videoPricingRules === 'object'
+                        typeof model.rawRatios.videoPricingRules === 'object') ||
+                    hasPerVideoPricingRuleRows
                         ? t('已配置')
                         : t('空'),
             },
@@ -777,9 +977,13 @@ export const buildPreviewRows = (model, t) => {
                 key: 'VideoPrice',
                 label: 'VideoPrice',
                 value:
-                    videoPerVideo && hasValue(model.videoFixedPrice)
+                    videoPerVideo &&
+                        hasValue(model.videoFixedPrice) &&
+                        !hasPerVideoPricingRuleRows
                         ? model.videoFixedPrice
-                        : t('空'),
+                        : videoPerVideo && hasPerVideoPricingRuleRows
+                            ? t('按分辨率见 VideoPricingRules')
+                            : t('空'),
             },
         ];
     }
@@ -849,11 +1053,12 @@ export const buildPreviewRows = (model, t) => {
             key: 'VideoPricingRules',
             label: 'VideoPricingRules',
             value:
-                videoPerToken &&
+                (videoPerToken &&
                     ((model.videoTextToVideoRules || []).length > 0 ||
                         (model.videoImageToVideoRules || []).length > 0 ||
                         (model.videoUploadRules || []).length > 0 ||
-                        (model.videoGenerateRules || []).length > 0)
+                        (model.videoGenerateRules || []).length > 0)) ||
+                hasPerVideoPricingRuleRows
                     ? t('已配置')
                     : t('空'),
         },
@@ -861,9 +1066,13 @@ export const buildPreviewRows = (model, t) => {
             key: 'VideoPrice',
             label: 'VideoPrice',
             value:
-                videoPerVideo && videoFixedPrice !== null
+                videoPerVideo &&
+                    videoFixedPrice !== null &&
+                    !hasPerVideoPricingRuleRows
                     ? formatNumber(videoFixedPrice)
-                    : t('空'),
+                    : videoPerVideo && hasPerVideoPricingRuleRows
+                        ? t('按分辨率见 VideoPricingRules')
+                        : t('空'),
         },
     ];
 };
@@ -1130,6 +1339,12 @@ export function useModelPricingEditorState({
 
     const updateVideoRuleRow = (section, index, key, value) => {
         if (!selectedModel) return;
+        const numericKeys = new Set([
+            'tokenPrice',
+            'pixelCompression',
+            'videoPrice',
+        ]);
+        if (key !== 'resolution' && !numericKeys.has(key)) return;
         if (key !== 'resolution' && !NUMERIC_INPUT_REGEX.test(value)) return;
         upsertModel(selectedModel.name, (model) => {
             const target = {
@@ -1156,21 +1371,22 @@ export function useModelPricingEditorState({
                 videoGenerate: 'videoGenerateRules',
             }[section];
             if (!target) return model;
+            const isPerVideo = model.videoBillingMode === 'per-video';
+            const newRow = isPerVideo
+                ? { resolution: '', videoPrice: '' }
+                : {
+                    resolution: '',
+                    tokenPrice: '',
+                    pixelCompression:
+                        section === 'image'
+                            ? DEFAULT_IMAGE_VIDEO_PIXEL_COMPRESSION
+                            : section === 'text'
+                            ? DEFAULT_TEXT_VIDEO_PIXEL_COMPRESSION
+                            : DEFAULT_VIDEO_VIDEO_PIXEL_COMPRESSION,
+                };
             return {
                 ...model,
-                [target]: [
-                    ...(model[target] || []),
-                    {
-                        resolution: '',
-                        tokenPrice: '',
-                        pixelCompression:
-                            section === 'image'
-                                ? DEFAULT_IMAGE_VIDEO_PIXEL_COMPRESSION
-                                : section === 'text'
-                                ? DEFAULT_TEXT_VIDEO_PIXEL_COMPRESSION
-                                : DEFAULT_VIDEO_VIDEO_PIXEL_COMPRESSION,
-                    },
-                ],
+                [target]: [...(model[target] || []), newRow],
             };
         });
     };

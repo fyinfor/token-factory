@@ -116,6 +116,7 @@ func init() {
 	// 任务式渠道（如 OpenAI 视频网关）不走 ChannelType2APIType，需要手动登记默认
 	// 模型列表，否则前端「获取模型列表」按钮拿不到内置模型。
 	channelId2Models[constant.ChannelTypeOpenAIVideo] = taskopenaivideo.ModelList
+	channelId2Models[constant.ChannelTypeVideoGenerator] = taskopenaivideo.ModelList
 	openAIModels = lo.UniqBy(openAIModels, func(m dto.OpenAIModels) string {
 		return m.Id
 	})

@@ -495,6 +495,7 @@ function getUsageLogDetailSummary(record, text, billingDisplayMode, t) {
           other?.video_completion_ratio || 1.0,
           other?.video_output_tokens || 0,
           other?.video_input_text_tokens || 0,
+          other?.billing_mode || '',
         ),
   };
 }

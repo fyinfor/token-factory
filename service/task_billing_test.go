@@ -4,14 +4,18 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/types"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/glebarez/sqlite"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
@@ -680,6 +684,53 @@ func TestSettle_PerCallBilling_SkipsTotalTokens(t *testing.T) {
 	assert.Equal(t, tokenRemain, getTokenRemainQuota(t, tokenID))
 	assert.Equal(t, preConsumed, task.Quota)
 	assert.Equal(t, int64(0), countLogs(t))
+}
+
+func TestLogTaskConsumption_VideoPerVideoFlatBilling(t *testing.T) {
+	truncate(t)
+	seedUser(t, 1, 100000)
+	seedChannel(t, 1)
+
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
+
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelType: constant.ChannelTypeOpenAIVideo,
+			ChannelId:   1,
+		},
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{
+			Action: constant.TaskActionGenerate,
+		},
+		UserId:          1,
+		TokenId:         0,
+		UsingGroup:      "default",
+		OriginModelName: "happyhorse",
+		PriceData: types.PriceData{
+			UsePrice:   true,
+			ModelPrice: 0,
+			ModelRatio: 0,
+			Quota:      123,
+			OtherRatios: map[string]float64{
+				"seconds": 5.0,
+			},
+			GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1.0},
+		},
+	}
+
+	LogTaskConsumption(c, info)
+
+	log := getLastLog(t)
+	require.NotNil(t, log)
+	assert.Contains(t, log.Content, "视频按分辨率/条计费")
+	assert.NotContains(t, log.Content, "计算参数")
+
+	var other map[string]interface{}
+	require.NoError(t, common.Unmarshal([]byte(log.Other), &other))
+	assert.Equal(t, "video_per_video", other["billing_mode"])
+	assert.Equal(t, "/v1/videos", other["request_path"])
 }
 
 func TestSettle_NonPerCall_AdaptorAdjustWorks(t *testing.T) {

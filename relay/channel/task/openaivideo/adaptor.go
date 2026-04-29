@@ -2,6 +2,7 @@ package openaivideo
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -62,8 +63,9 @@ import (
 // ============================================================================
 
 const (
-	ProtocolMaaS = "maas"
-	ProtocolArk  = "ark"
+	ProtocolMaaS    = "maas"
+	ProtocolArk     = "ark"
+	ProtocolSophnet = "sophnet"
 
 	// Submit path is shared by both protocols. The "/api/maas/gw" prefix (if
 	// any) lives on the user-configured base URL, not in this constant.
@@ -73,7 +75,9 @@ const (
 	maasResultPath = "/v1/videos/generations/results"
 
 	// ARK result endpoint: <submitPath>/{id}, task_id baked into the path.
-	arkResultFmt = "/v1/videos/generations/%s"
+	arkResultFmt      = "/v1/videos/generations/%s"
+	sophnetSubmitPath = "/videogenerator/generate"
+	sophnetResultFmt  = "/videogenerator/generate/%s"
 
 	defaultRatio      = "adaptive"
 	defaultResolution = "480p"
@@ -85,6 +89,9 @@ const (
 // is treated as MaaS; everything else falls back to ARK.
 func DetectProtocol(baseURL string) string {
 	base := strings.ToLower(strings.TrimSpace(baseURL))
+	if strings.Contains(base, "/videogenerator") || strings.Contains(base, "sophnet.com/api/open-apis/projects/easyllms") {
+		return ProtocolSophnet
+	}
 	if strings.Contains(base, "maas.hidreamai.com") || strings.Contains(base, "/api/maas") {
 		return ProtocolMaaS
 	}
@@ -153,6 +160,26 @@ type maasResultResponse struct {
 	} `json:"result"`
 }
 
+type sophnetSubmitResponse struct {
+	Status  int    `json:"status"`
+	Message string `json:"message,omitempty"`
+	Result  struct {
+		TaskID string `json:"task_id"`
+	} `json:"result"`
+}
+
+type sophnetResultResponse struct {
+	Status  int    `json:"status"`
+	Message string `json:"message,omitempty"`
+	Result  struct {
+		ID      string          `json:"id"`
+		Model   string          `json:"model,omitempty"`
+		Status  string          `json:"status,omitempty"`
+		Content *arkTaskContent `json:"content,omitempty"`
+		Error   *apiError       `json:"error,omitempty"`
+	} `json:"result"`
+}
+
 // ============================================================================
 // TaskAdaptor implementation
 // ============================================================================
@@ -198,6 +225,9 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 }
 
 func (a *TaskAdaptor) BuildRequestURL(_ *relaycommon.RelayInfo) (string, error) {
+	if a.protocol == ProtocolSophnet {
+		return fmt.Sprintf("%s%s", strings.TrimRight(a.baseURL, "/"), sophnetSubmitPath), nil
+	}
 	return fmt.Sprintf("%s%s", strings.TrimRight(a.baseURL, "/"), SubmitPath), nil
 }
 
@@ -263,6 +293,16 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 			return "", nil, service.TaskErrorWrapper(errors.New(msg), "video_submit_failed", http.StatusBadRequest)
 		}
 		taskID = strings.TrimSpace(sub.Result.TaskID)
+	} else if a.protocol == ProtocolSophnet {
+		var sub sophnetSubmitResponse
+		if err := common.Unmarshal(respBody, &sub); err != nil {
+			return "", nil, service.TaskErrorWrapper(errors.Wrapf(err, "body: %s", respBody), "unmarshal_response_body_failed", http.StatusInternalServerError)
+		}
+		if sub.Status != 0 {
+			msg := firstNonEmpty(sub.Message, fmt.Sprintf("video upstream returned status=%d", sub.Status))
+			return "", nil, service.TaskErrorWrapper(errors.New(msg), "video_submit_failed", http.StatusBadRequest)
+		}
+		taskID = strings.TrimSpace(sub.Result.TaskID)
 	} else {
 		var sub arkSubmitResponse
 		if err := common.Unmarshal(respBody, &sub); err != nil {
@@ -301,6 +341,8 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	var uri string
 	if protocol == ProtocolMaaS {
 		uri = fmt.Sprintf("%s%s?task_id=%s", strings.TrimRight(baseUrl, "/"), maasResultPath, taskID)
+	} else if protocol == ProtocolSophnet {
+		uri = fmt.Sprintf("%s%s", strings.TrimRight(baseUrl, "/"), fmt.Sprintf(sophnetResultFmt, taskID))
 	} else {
 		uri = fmt.Sprintf("%s%s", strings.TrimRight(baseUrl, "/"), fmt.Sprintf(arkResultFmt, taskID))
 	}
@@ -325,6 +367,8 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	switch detectResponseProtocol(respBody) {
 	case ProtocolMaaS:
 		return parseMaasResult(respBody)
+	case ProtocolSophnet:
+		return parseSophnetResult(respBody)
 	default:
 		return parseArkResult(respBody)
 	}
@@ -336,6 +380,14 @@ func detectResponseProtocol(respBody []byte) string {
 	var probe map[string]any
 	if err := common.Unmarshal(respBody, &probe); err != nil {
 		return ProtocolArk
+	}
+	if status, hasStatus := probe["status"]; hasStatus {
+		if _, hasResult := probe["result"]; hasResult {
+			switch status.(type) {
+			case float64, int, int32, int64, json.Number:
+				return ProtocolSophnet
+			}
+		}
 	}
 	if _, hasResult := probe["result"]; hasResult {
 		return ProtocolMaaS
@@ -390,6 +442,34 @@ func parseArkResult(respBody []byte) (*relaycommon.TaskInfo, error) {
 	}
 
 	return taskResult, nil
+}
+
+func parseSophnetResult(respBody []byte) (*relaycommon.TaskInfo, error) {
+	var resp sophnetResultResponse
+	if err := common.Unmarshal(respBody, &resp); err != nil {
+		return nil, errors.Wrap(err, "unmarshal sophnet task result failed")
+	}
+
+	taskResult := &relaycommon.TaskInfo{Code: 0}
+	if resp.Status != 0 {
+		taskResult.Status = model.TaskStatusFailure
+		taskResult.Progress = "100%"
+		taskResult.Reason = firstNonEmpty(resp.Message, fmt.Sprintf("status=%d", resp.Status))
+		return taskResult, nil
+	}
+
+	arkView := arkResultResponse{
+		ID:      resp.Result.ID,
+		Model:   resp.Result.Model,
+		Status:  resp.Result.Status,
+		Content: resp.Result.Content,
+		Error:   resp.Result.Error,
+	}
+	normalized, err := common.Marshal(arkView)
+	if err != nil {
+		return nil, err
+	}
+	return parseArkResult(normalized)
 }
 
 func parseMaasResult(respBody []byte) (*relaycommon.TaskInfo, error) {
@@ -499,6 +579,25 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 			ov.Error = &dto.OpenAIVideoError{
 				Message: firstErr,
 				Code:    "video_subtask_failed",
+			}
+		}
+	case ProtocolSophnet:
+		var resp sophnetResultResponse
+		if err := common.Unmarshal(originTask.Data, &resp); err != nil {
+			return nil, errors.Wrap(err, "unmarshal video task data (sophnet) failed")
+		}
+		if resp.Result.Content != nil && strings.TrimSpace(resp.Result.Content.VideoURL) != "" {
+			ov.SetMetadata("url", resp.Result.Content.VideoURL)
+		}
+		if resp.Status != 0 {
+			ov.Error = &dto.OpenAIVideoError{
+				Message: firstNonEmpty(resp.Message, fmt.Sprintf("status=%d", resp.Status)),
+				Code:    "video_task_failed",
+			}
+		} else if resp.Result.Error != nil && (resp.Result.Error.Message != "" || resp.Result.Error.Code != "") {
+			ov.Error = &dto.OpenAIVideoError{
+				Message: firstNonEmpty(resp.Result.Error.Message, resp.Result.Error.Code),
+				Code:    firstNonEmpty(resp.Result.Error.Code, "video_task_failed"),
 			}
 		}
 	default:

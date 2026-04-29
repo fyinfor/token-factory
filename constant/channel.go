@@ -56,7 +56,8 @@ const (
 	ChannelTypeReplicate        = 56
 	ChannelTypeCodex            = 57
 	ChannelTypeOpenAIVideo      = 58 // OpenAI-compatible video gateway (currently Hidream/Seedance upstream)
-	ChannelTypeTokenFactoryOpen = 59
+	ChannelTypeVideoGenerator   = 59 // OpenAI-compatible video gateway for /videogenerator/generate
+	ChannelTypeTokenFactoryOpen = 60
 	ChannelTypeDummy            // this one is only for count, do not add any channel after this
 
 )
@@ -121,7 +122,9 @@ var ChannelBaseURLs = []string{
 	"https://api.replicate.com",                 //56
 	"https://chatgpt.com",                       //57
 	"https://maas.hidreamai.com",                //58
+	"https://www.sophnet.com/api/open-apis/projects/easyllms", //59
 	"",                                          //59
+	"",                                          //60
 }
 
 var ChannelTypeNames = map[int]string{
@@ -180,6 +183,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeReplicate:        "Replicate",
 	ChannelTypeCodex:            "Codex",
 	ChannelTypeOpenAIVideo:      "OpenAIVideo",
+	ChannelTypeVideoGenerator:   "VideoGenerator",
 	ChannelTypeTokenFactoryOpen: "TokenFactoryOpen",
 }
 
@@ -188,6 +192,17 @@ func GetChannelTypeName(channelType int) string {
 		return name
 	}
 	return "Unknown"
+}
+
+// IsVideoTaskChannel reports whether the channel uses task-style video relay
+// paths (/v1/videos, etc.) with optional token-based or per-video pricing.
+func IsVideoTaskChannel(channelType int) bool {
+	switch channelType {
+	case ChannelTypeSora, ChannelTypeOpenAIVideo, ChannelTypeVideoGenerator:
+		return true
+	default:
+		return false
+	}
 }
 
 type ChannelSpecialBase struct {
