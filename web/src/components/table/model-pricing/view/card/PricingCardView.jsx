@@ -112,13 +112,13 @@ const PricingCardView = ({
   const getSupplierTypeColor = (supplierType) => {
     switch (supplierType) {
       case '公有云':
-        return 'yellow';
-      case 'AIDC':
         return 'green';
+      case 'AIDC':
+        return 'light-green';
       case '企业中转站':
-        return 'blue';
+        return 'lime';
       case '个人中转站':
-        return 'purple';
+        return 'yellow';
       default:
         return stringToColor(supplierType);
     }
