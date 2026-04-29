@@ -16,6 +16,8 @@ type GeneralSetting struct {
 	PingIntervalSeconds int    `json:"ping_interval_seconds"`
 	// 当前站点额度展示类型：USD / CNY / TOKENS
 	QuotaDisplayType string `json:"quota_display_type"`
+	// 充值页金额展示币种：USD / CNY（仅用于钱包充值“实付金额”文案展示，不影响内部计价）
+	RechargeDisplayCurrency string `json:"recharge_display_currency"`
 	// 自定义货币符号，用于 CUSTOM 展示类型
 	CustomCurrencySymbol string `json:"custom_currency_symbol"`
 	// 自定义货币与美元汇率（1 USD = X Custom）
@@ -28,6 +30,7 @@ var generalSetting = GeneralSetting{
 	PingIntervalEnabled:        false,
 	PingIntervalSeconds:        60,
 	QuotaDisplayType:           QuotaDisplayTypeUSD,
+	RechargeDisplayCurrency:    QuotaDisplayTypeUSD,
 	CustomCurrencySymbol:       "¤",
 	CustomCurrencyExchangeRate: 1.0,
 }

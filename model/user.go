@@ -65,6 +65,8 @@ type User struct {
 	Remark            string         `json:"remark,omitempty" gorm:"type:varchar(255)" validate:"max=255"`
 	StripeCustomer    string         `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
 	SupplierID        int            `json:"supplier_id" gorm:"type:int;column:supplier_id;index;default:0;comment:供应商申请ID 0表示非供应商"`
+	// AdminInitialSetupCompleted 管理员代建账号首次登录前须为 false；自助注册等为 true。注意：GORM Create 会省略 bool 的 false，代建分支须在 Insert 内显式 UPDATE 落库为 0。
+	AdminInitialSetupCompleted bool `json:"admin_initial_setup_completed" gorm:"column:admin_initial_setup_completed;type:boolean;not null;default:true"`
 }
 
 func (user *User) ToBaseUser() *UserBase {
@@ -481,10 +483,21 @@ func (user *User) Insert(inviterId int) error {
 	if user.CreatedBy == "" {
 		user.CreatedBy = common.UserCreatedByRegistration
 	}
+	// 非管理员代建账号默认可正常使用；管理员代建由 controller 显式置为 false
+	if user.CreatedBy != common.UserCreatedByAdmin {
+		user.AdminInitialSetupCompleted = true
+	}
 
 	result := DB.Create(user)
 	if result.Error != nil {
 		return result.Error
+	}
+	// 管理员代建：Create 不会写入 false，MySQL 会落在列默认值 1；必须显式更新为 0，首次登录才会要求改密/补手机。
+	if user.CreatedBy == common.UserCreatedByAdmin && user.Id > 0 {
+		if err := DB.Model(&User{}).Where("id = ?", user.Id).UpdateColumn("admin_initial_setup_completed", false).Error; err != nil {
+			return err
+		}
+		user.AdminInitialSetupCompleted = false
 	}
 
 	// 用户创建成功后，根据角色初始化边栏配置
@@ -541,10 +554,19 @@ func (user *User) InsertWithTx(tx *gorm.DB, inviterId int) error {
 	if user.CreatedBy == "" {
 		user.CreatedBy = common.UserCreatedByRegistration
 	}
+	if user.CreatedBy != common.UserCreatedByAdmin {
+		user.AdminInitialSetupCompleted = true
+	}
 
 	result := tx.Create(user)
 	if result.Error != nil {
 		return result.Error
+	}
+	if user.CreatedBy == common.UserCreatedByAdmin && user.Id > 0 {
+		if err := tx.Model(&User{}).Where("id = ?", user.Id).UpdateColumn("admin_initial_setup_completed", false).Error; err != nil {
+			return err
+		}
+		user.AdminInitialSetupCompleted = false
 	}
 
 	return nil
@@ -616,12 +638,17 @@ func (user *User) Edit(updatePassword bool) error {
 	}
 
 	newUser := *user
+	normalizedPhone, err := NormalizeAndValidateAdminUserPhone(newUser.Phone, newUser.Id)
+	if err != nil {
+		return err
+	}
 	updates := map[string]interface{}{
 		"username":     newUser.Username,
 		"display_name": newUser.DisplayName,
 		"group":        newUser.Group,
 		"quota":        newUser.Quota,
 		"remark":       newUser.Remark,
+		"phone":        normalizedPhone,
 		"updated_at":   time.Now(),
 	}
 	if updatePassword {
@@ -785,6 +812,39 @@ func IsPhoneAlreadyTaken(phone string) bool {
 		return false
 	}
 	return DB.Unscoped().Where("phone = ?", phone).Find(&User{}).RowsAffected > 0
+}
+
+// IsPhoneTakenByOtherUser 判断手机号是否已被除 excludeUserId 以外的用户占用（包含软删除记录）。
+func IsPhoneTakenByOtherUser(phone string, excludeUserId int) bool {
+	phone = common.NormalizePhone(phone)
+	if phone == "" {
+		return false
+	}
+	return DB.Unscoped().Where("phone = ? AND id <> ?", phone, excludeUserId).Find(&User{}).RowsAffected > 0
+}
+
+// NormalizeAndValidateAdminUserPhone 管理员创建/编辑用户时的手机号：规范化；空字符串表示不绑定；非空则校验格式、黑名单与占用（excludeUserId=0 表示新建用户）。
+func NormalizeAndValidateAdminUserPhone(phone string, excludeUserId int) (string, error) {
+	n := common.NormalizePhone(phone)
+	if n == "" {
+		return "", nil
+	}
+	if !common.ValidateMainlandChinaPhone(n) {
+		return "", fmt.Errorf("手机号格式无效，请输入 11 位中国大陆手机号")
+	}
+	if common.IsSMSPhoneBlacklisted(n) {
+		return "", fmt.Errorf("该手机号已被加入短信黑名单")
+	}
+	if excludeUserId == 0 {
+		if IsPhoneAlreadyTaken(n) {
+			return "", fmt.Errorf("手机号已被占用")
+		}
+	} else {
+		if IsPhoneTakenByOtherUser(n, excludeUserId) {
+			return "", fmt.Errorf("手机号已被占用")
+		}
+	}
+	return n, nil
 }
 
 func IsWeChatIdAlreadyTaken(wechatId string) bool {

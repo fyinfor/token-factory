@@ -65,6 +65,7 @@ const TopUp = () => {
     statusState?.status?.enable_stripe_topup || false,
   );
   const [statusLoading, setStatusLoading] = useState(true);
+  const [rechargeDisplayCurrency, setRechargeDisplayCurrency] = useState('USD');
 
   // Creem 相关状态
   const [creemProducts, setCreemProducts] = useState([]);
@@ -617,17 +618,34 @@ const TopUp = () => {
       // setTopUpCount(minTopUpValue);
       setTopUpLink(statusState.status.top_up_link || '');
       setPriceRatio(statusState.status.price || 1);
+      setRechargeDisplayCurrency(
+        localStorage.getItem('recharge_display_currency') ||
+          statusState.status.recharge_display_currency ||
+          'USD',
+      );
 
       setStatusLoading(false);
     }
   }, [statusState?.status]);
+
+  /** getRechargeCurrencyMeta 获取充值金额展示币种元信息（仅 UI 文案展示）。 */
+  const getRechargeCurrencyMeta = () => {
+    if (rechargeDisplayCurrency === 'CNY') {
+      return { symbol: '¥', code: 'CNY' };
+    }
+    return { symbol: '$', code: 'USD' };
+  };
 
   const renderAmount = () => {
     const numericAmount = Number(amount);
     const formattedAmount = Number.isFinite(numericAmount)
       ? numericAmount.toFixed(2)
       : '0.00';
-    return `$${formattedAmount} USD`;
+    const { symbol, code } = getRechargeCurrencyMeta();
+    if (code === 'USD') {
+      return `${symbol}${formattedAmount} ${code}`;
+    }
+    return `${symbol}${formattedAmount}`;
   };
 
   // 充值数量统一按美元展示，避免在支付宝/微信场景被全局货币配置影响。
@@ -811,6 +829,7 @@ const TopUp = () => {
         payMethods={payMethods}
         amountNumber={amount}
         discountRate={topupInfo?.discount?.[topUpCount] || 1.0}
+        rechargeDisplayCurrency={rechargeDisplayCurrency}
       />
 
       {/* 充值账单模态框 */}

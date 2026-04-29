@@ -71,18 +71,15 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	groupRatioInfo := HandleGroupRatio(c, info)
 	supplierID := resolveSupplierIDByChannel(info)
 	modelPrice, usePrice := model.ResolveSupplierScopedFixedModelPrice(channelID, supplierID, info.OriginModelName)
-	if groupPrice, ok := ratio_setting.GetGroupModelPrice(info.UsingGroup, info.OriginModelName); ok {
-		modelPrice = groupPrice
-		usePrice = true
+	// 归属供应商的渠道：固定价以 supplier_* 独立表优先于用户分组价；非供应商渠道保留分组覆盖。
+	if supplierID <= 0 {
+		if groupPrice, ok := ratio_setting.GetGroupModelPrice(info.UsingGroup, info.OriginModelName); ok {
+			modelPrice = groupPrice
+			usePrice = true
+		}
 	}
 	channelVideoRatio, hasChannelVideoRatio := ratio_setting.GetChannelVideoRatio(channelID, info.OriginModelName)
 	channelVideoCompletionRatio, hasChannelVideoCompletionRatio := ratio_setting.GetChannelVideoCompletionRatio(channelID, info.OriginModelName)
-	channelCompletionRatio, hasChannelCompletionRatio := ratio_setting.GetChannelCompletionRatio(channelID, info.OriginModelName)
-	channelCacheRatio, hasChannelCacheRatio := ratio_setting.GetChannelCacheRatio(channelID, info.OriginModelName)
-	channelCreateCacheRatio, hasChannelCreateCacheRatio := ratio_setting.GetChannelCreateCacheRatio(channelID, info.OriginModelName)
-	channelImageRatio, hasChannelImageRatio := ratio_setting.GetChannelImageRatio(channelID, info.OriginModelName)
-	channelAudioRatio, hasChannelAudioRatio := ratio_setting.GetChannelAudioRatio(channelID, info.OriginModelName)
-	channelAudioCompletionRatio, hasChannelAudioCompletionRatio := ratio_setting.GetChannelAudioCompletionRatio(channelID, info.OriginModelName)
 
 	var preConsumedQuota int
 	var modelRatio float64
@@ -105,9 +102,12 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		var success bool
 		var matchName string
 		modelRatio, success, matchName = model.ResolveSupplierScopedModelRatio(channelID, supplierID, info.OriginModelName)
-		if groupModelRatio, ok := ratio_setting.GetGroupModelRatio(info.UsingGroup, info.OriginModelName); ok {
-			modelRatio = groupModelRatio
-			success = true
+		// 供应商自有渠道：输入倍率以独立表（及 Resolve 内平台渠道 Option 回退）为准，不被用户分组倍率覆盖。
+		if supplierID <= 0 {
+			if groupModelRatio, ok := ratio_setting.GetGroupModelRatio(info.UsingGroup, info.OriginModelName); ok {
+				modelRatio = groupModelRatio
+				success = true
+			}
 		}
 		if !success {
 			acceptUnsetRatio := false
@@ -118,36 +118,20 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 				return types.PriceData{}, fmt.Errorf("模型 %s 倍率或价格未配置，请联系管理员设置或开始自用模式；Model %s ratio or price not set, please set or start self-use mode", matchName, matchName)
 			}
 		}
+		// 输出/缓存/图音倍率：ResolveSupplierScoped* 内已为「供应商渠道表 > 供应商全局表 > 平台渠道 Option > 全局」；
+		// 此处禁止再次用 channel_* Option 覆盖，否则会同模型下压过供应商独立表。
 		completionRatio = model.ResolveSupplierScopedCompletionRatio(channelID, supplierID, info.OriginModelName)
 		cacheRatio, cacheCreationRatio = model.ResolveSupplierScopedCacheRatios(channelID, supplierID, info.OriginModelName)
 		cacheCreationRatio5m = cacheCreationRatio
 		// 固定1h和5min缓存写入价格的比例
 		cacheCreationRatio1h = cacheCreationRatio * claudeCacheCreation1hMultiplier
 
-		imageRatio, _ = ratio_setting.GetImageRatio(info.OriginModelName)
-		audioRatio = ratio_setting.GetAudioRatio(info.OriginModelName)
-		audioCompletionRatio = ratio_setting.GetAudioCompletionRatio(info.OriginModelName)
+		imageRatio, _ = model.ResolveSupplierScopedImageRatio(channelID, supplierID, info.OriginModelName)
+		audioRatio = model.ResolveSupplierScopedAudioRatio(channelID, supplierID, info.OriginModelName)
+		audioCompletionRatio = model.ResolveSupplierScopedAudioCompletionRatio(channelID, supplierID, info.OriginModelName)
+		// 供应商表暂无 Video 字段：仍采用全局 + 平台渠道 Option（与旧逻辑一致）。
 		videoRatio = ratio_setting.GetVideoRatio(info.OriginModelName)
 		videoCompletionRatio = ratio_setting.GetVideoCompletionRatio(info.OriginModelName)
-		if hasChannelCompletionRatio {
-			completionRatio = channelCompletionRatio
-		}
-		if hasChannelCacheRatio {
-			cacheRatio = channelCacheRatio
-		}
-		if hasChannelCreateCacheRatio {
-			cacheCreationRatio = channelCreateCacheRatio
-		}
-		if hasChannelImageRatio {
-			imageRatio = channelImageRatio
-		}
-		if hasChannelAudioRatio {
-			audioRatio = channelAudioRatio
-		}
-		if hasChannelAudioCompletionRatio {
-			audioCompletionRatio = channelAudioCompletionRatio
-		}
-
 		if hasChannelVideoRatio {
 			videoRatio = channelVideoRatio
 		}
@@ -226,9 +210,11 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 
 	supplierID := resolveSupplierIDByChannel(info)
 	modelPrice, success := model.ResolveSupplierScopedFixedModelPrice(channelID, supplierID, info.OriginModelName)
-	if groupPrice, ok := ratio_setting.GetGroupModelPrice(info.UsingGroup, info.OriginModelName); ok {
-		modelPrice = groupPrice
-		success = true
+	if supplierID <= 0 {
+		if groupPrice, ok := ratio_setting.GetGroupModelPrice(info.UsingGroup, info.OriginModelName); ok {
+			modelPrice = groupPrice
+			success = true
+		}
 	}
 	// 如果没有配置价格，检查模型倍率配置
 	if !success {
@@ -378,22 +364,17 @@ func ModelPriceHelperVideo(c *gin.Context, info *relaycommon.RelayInfo) (types.P
 }
 
 // hasAnyPerCallVideoPrice reports whether any per-call price tier is set for
-// this model. Mirrors the lookup priority used by ModelPriceHelperPerCall.
+// this model。与 ModelPriceHelperPerCall 对齐：优先 supplier_* 独立表再回退 Option。
 func hasAnyPerCallVideoPrice(channelID, supplierID int, group, modelName string) bool {
-	if _, ok := ratio_setting.GetModelPrice(modelName, false); ok {
+	if _, ok := model.ResolveSupplierScopedFixedModelPrice(channelID, supplierID, modelName); ok {
 		return true
 	}
-	if _, ok := ratio_setting.GetChannelModelPrice(channelID, modelName); ok {
-		return true
+	if supplierID <= 0 {
+		if _, ok := ratio_setting.GetGroupModelPrice(group, modelName); ok {
+			return true
+		}
 	}
-	if _, ok := ratio_setting.GetSupplierModelPrice(supplierID, modelName); ok {
-		return true
-	}
-	if _, ok := ratio_setting.GetGroupModelPrice(group, modelName); ok {
-		return true
-	}
-	// VideoPrice is the dedicated per-video price field (distinct from the
-	// generic ModelPrice). Currently only configurable at the global scope.
+	// VideoPrice：专用按次价（与通用 ModelPrice 字段不同）。
 	if _, ok := ratio_setting.GetVideoPrice(modelName); ok {
 		return true
 	}
@@ -415,20 +396,13 @@ func tryVideoTokenPriceData(c *gin.Context, info *relaycommon.RelayInfo) (types.
 	supplierID := resolveSupplierIDByChannel(info)
 	modelName := info.OriginModelName
 
-	// Resolve modelRatio with the same precedence as ModelPriceHelper:
-	// channel > supplier > group > global.
-	modelRatio, modelRatioOK, _ := ratio_setting.GetModelRatio(modelName)
-	if r, ok := ratio_setting.GetChannelModelRatio(channelID, modelName); ok {
-		modelRatio = r
-		modelRatioOK = true
-	}
-	if r, ok := ratio_setting.GetSupplierModelRatio(supplierID, modelName); ok {
-		modelRatio = r
-		modelRatioOK = true
-	}
-	if r, ok := ratio_setting.GetGroupModelRatio(info.UsingGroup, modelName); ok {
-		modelRatio = r
-		modelRatioOK = true
+	// 输入倍率：与 ModelPriceHelper 一致，供应商渠道走 ResolveSupplierScoped（独立表优先于渠道 Option）。
+	modelRatio, modelRatioOK, _ := model.ResolveSupplierScopedModelRatio(channelID, supplierID, modelName)
+	if supplierID <= 0 {
+		if r, ok := ratio_setting.GetGroupModelRatio(info.UsingGroup, modelName); ok {
+			modelRatio = r
+			modelRatioOK = true
+		}
 	}
 
 	// Resolve videoRatio: channel > global. Required for token mode.

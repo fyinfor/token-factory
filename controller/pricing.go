@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -26,58 +25,17 @@ func filterChannelPricingMapByVisibleChannels(source map[string]map[string]float
 }
 
 // getPricingVisibleChannelsForUser 返回定价/模型广场可见的渠道列表及 channel_* Option 过滤用的 ID 集合。
-// 未登录与管理员：全部渠道；已审核供应商：仅自己名下的渠道；其余已登录用户：全部渠道。
+// 当前策略：所有角色（包含已审核供应商）均可见全部渠道，与普通用户保持一致。
 func getPricingVisibleChannelsForUser(c *gin.Context) ([]model.ChannelSimplePricingItem, map[int]struct{}, error) {
 	channels, err := model.ListChannelsForPricing()
 	if err != nil {
 		return nil, nil, err
 	}
-	userID, exists := c.Get("id")
-	if !exists {
-		visibleChannelIDs := make(map[int]struct{}, len(channels))
-		for _, item := range channels {
-			visibleChannelIDs[item.ChannelID] = struct{}{}
-		}
-		return channels, visibleChannelIDs, nil
-	}
-	user, err := model.GetUserById(userID.(int), false)
-	if err == nil && user.Role >= common.RoleAdminUser {
-		visibleChannelIDs := make(map[int]struct{}, len(channels))
-		for _, item := range channels {
-			visibleChannelIDs[item.ChannelID] = struct{}{}
-		}
-		return channels, visibleChannelIDs, nil
-	}
-	if _, err := model.GetApprovedSupplierApplicationByApplicant(userID.(int)); err != nil {
-		visibleChannelIDs := make(map[int]struct{}, len(channels))
-		for _, item := range channels {
-			visibleChannelIDs[item.ChannelID] = struct{}{}
-		}
-		return channels, visibleChannelIDs, nil
-	}
-	ownerUserID := userID.(int)
-	ownedChannels, _, err := model.SearchSupplierChannels(&ownerUserID, 0, 100000, model.SupplierChannelSearchFilter{})
-	if err != nil {
-		return nil, nil, err
-	}
-	ownedIDSet := make(map[int]struct{}, len(ownedChannels))
-	for _, ch := range ownedChannels {
-		ownedIDSet[ch.Id] = struct{}{}
-	}
-	allChannels, err := model.ListChannelsForPricing()
-	if err != nil {
-		return nil, nil, err
-	}
-	visibleChannelIDs := make(map[int]struct{}, len(ownedChannels))
-	visibleChannels := make([]model.ChannelSimplePricingItem, 0, len(ownedChannels))
-	for _, item := range allChannels {
-		if _, ok := ownedIDSet[item.ChannelID]; !ok {
-			continue
-		}
+	visibleChannelIDs := make(map[int]struct{}, len(channels))
+	for _, item := range channels {
 		visibleChannelIDs[item.ChannelID] = struct{}{}
-		visibleChannels = append(visibleChannels, item)
 	}
-	return visibleChannels, visibleChannelIDs, nil
+	return channels, visibleChannelIDs, nil
 }
 
 // GetPricing 返回前端定价展示数据。
