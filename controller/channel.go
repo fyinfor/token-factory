@@ -834,14 +834,11 @@ func isTokenFactoryOpenBaseURL(raw string) bool {
 	if err != nil {
 		return false
 	}
-	host := strings.ToLower(parsed.Hostname())
-	if host == "" {
+	scheme := strings.ToLower(strings.TrimSpace(parsed.Scheme))
+	if scheme != "http" && scheme != "https" {
 		return false
 	}
-	if host == "localhost" || host == "127.0.0.1" {
-		return true
-	}
-	return strings.Contains(host, "tokenfactory")
+	return strings.TrimSpace(parsed.Hostname()) != ""
 }
 
 func isLikelyTokenFactoryStatusData(data map[string]any, systemName string) bool {
