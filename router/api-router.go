@@ -181,6 +181,7 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.GET("/search", controller.SearchUsers)
 				adminRoute.GET("/supplier/application", controller.AdminListSupplierApplications)
 				adminRoute.PUT("/supplier/application/:id", controller.AdminUpdateSupplierApplication)
+				adminRoute.POST("/supplier/application/activate", controller.ActivateSupplierApplication)
 				adminRoute.GET("/supplier/list", controller.AdminListSuppliers)
 				adminRoute.GET("/supplier/:id", controller.AdminGetSupplierDetail)
 				adminRoute.POST("/supplier/application/:id/review", controller.AdminReviewSupplierApplication)

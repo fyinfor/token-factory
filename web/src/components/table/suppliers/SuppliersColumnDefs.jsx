@@ -21,7 +21,42 @@ import React from 'react';
 import { Button, Space, Tag } from '@douyinfe/semi-ui';
 import { timestamp2string } from '../../../helpers';
 
-export const getSuppliersColumns = (t, openEdit, handleDeactivate) => {
+/**
+ * 下载远程文件：通过 fetch 转 blob 后触发浏览器下载。
+ * @param {string} url 文件 URL
+ * @param {string} fallbackName 下载兜底文件名
+ */
+const downloadFileFromUrl = async (url, fallbackName) => {
+  if (!url) {
+    return;
+  }
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    const blob = await resp.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = objectUrl;
+    link.download = fallbackName || 'logo';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(objectUrl);
+  } catch (e) {
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
+};
+
+export const getSuppliersColumns = (
+  t,
+  openEdit,
+  handleDeactivate,
+  handleActivate,
+  openDashboard,
+) => {
   return [
     {
       title: 'ID',
@@ -54,19 +89,34 @@ export const getSuppliersColumns = (t, openEdit, handleDeactivate) => {
     {
       title: t('企业Logo'),
       dataIndex: 'company_logo_url',
-      width: 120,
-      render: (text) =>
+      width: 220,
+      render: (text, record) =>
         text ? (
-          <img
-            src={text}
-            alt={t('企业Logo')}
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 6,
-              objectFit: 'cover',
-            }}
-          />
+          <Space>
+            <img
+              src={text}
+              alt={t('企业Logo')}
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 6,
+                objectFit: 'cover',
+              }}
+            />
+            <Button
+              theme='light'
+              type='primary'
+              size='small'
+              onClick={() =>
+                downloadFileFromUrl(
+                  text,
+                  `${record?.supplier_alias || record?.company_name || 'company'}-logo`,
+                )
+              }
+            >
+              {t('下载')}
+            </Button>
+          </Space>
         ) : (
           '-'
         ),
@@ -116,7 +166,7 @@ export const getSuppliersColumns = (t, openEdit, handleDeactivate) => {
     {
       title: t('操作'),
       dataIndex: 'operate',
-      width: 150,
+      width: 260,
       fixed: 'right',
       render: (text, record) => {
         const isDeactivated = record.status === 3;
@@ -133,12 +183,23 @@ export const getSuppliersColumns = (t, openEdit, handleDeactivate) => {
             </Button>
             <Button
               theme='light'
-              type='danger'
+              type={isDeactivated ? 'primary' : 'danger'}
               size='small'
-              disabled={isDeactivated}
-              onClick={() => handleDeactivate(record)}
+              onClick={() =>
+                isDeactivated
+                  ? handleActivate(record)
+                  : handleDeactivate(record)
+              }
             >
-              {t('注销')}
+              {isDeactivated ? t('启用') : t('注销')}
+            </Button>
+            <Button
+              theme='light'
+              type='secondary'
+              size='small'
+              onClick={() => openDashboard(record)}
+            >
+              {t('数据看板')}
             </Button>
           </Space>
         );

@@ -20,21 +20,26 @@ For commercial licensing, please contact support@quantumnous.com
 import React, { useState } from 'react';
 import { Button } from '@douyinfe/semi-ui';
 import { IconPlus } from '@douyinfe/semi-icons';
+import { useNavigate } from 'react-router-dom';
 import CardPro from '../../common/ui/CardPro';
 import SuppliersTable from './SuppliersTable';
 import SuppliersFilters from './SuppliersFilters';
 import SuppliersDescription from './SuppliersDescription';
 import SupplierEditModal from './modals/SupplierEditModal';
 import DeactivateSupplierModal from './modals/DeactivateSupplierModal';
+import ActivateSupplierModal from './modals/ActivateSupplierModal';
 import { useSuppliersData } from '../../../hooks/suppliers/useSuppliersData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import { createCardProPagination } from '../../../helpers/utils';
 
 const SuppliersPage = () => {
   const suppliersData = useSuppliersData();
+  const navigate = useNavigate();
   const isMobile = useIsMobile();
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [deactivatingSupplier, setDeactivatingSupplier] = useState(null);
+  const [showActivateModal, setShowActivateModal] = useState(false);
+  const [activatingSupplier, setActivatingSupplier] = useState(null);
 
   const {
     showEditModal,
@@ -65,6 +70,23 @@ const SuppliersPage = () => {
     setDeactivatingSupplier(null);
   };
 
+  const handleActivate = (supplier) => {
+    setActivatingSupplier(supplier);
+    setShowActivateModal(true);
+  };
+
+  const closeActivate = () => {
+    setShowActivateModal(false);
+    setActivatingSupplier(null);
+  };
+
+  /**
+   * 打开指定供应商的数据看板（复用供应商数据看板页面）。
+   */
+  const openSupplierDashboard = (supplier) => {
+    navigate(`/console/supplier/dashboard?supplier_id=${supplier.id}`);
+  };
+
   return (
     <>
       <SupplierEditModal
@@ -78,6 +100,12 @@ const SuppliersPage = () => {
         visible={showDeactivateModal}
         supplier={deactivatingSupplier}
         handleClose={closeDeactivate}
+        onSuccess={refresh}
+      />
+      <ActivateSupplierModal
+        visible={showActivateModal}
+        supplier={activatingSupplier}
+        handleClose={closeActivate}
         onSuccess={refresh}
       />
 
@@ -129,6 +157,8 @@ const SuppliersPage = () => {
           t={suppliersData.t}
           openEdit={openEdit}
           handleDeactivate={handleDeactivate}
+          handleActivate={handleActivate}
+          openDashboard={openSupplierDashboard}
           compactMode={compactMode}
         />
       </CardPro>
