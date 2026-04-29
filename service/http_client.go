@@ -17,6 +17,8 @@ import (
 
 var (
 	httpClient      *http.Client
+	ossHTTPClient   *http.Client
+	ossHTTPOnce     sync.Once
 	proxyClientLock sync.Mutex
 	proxyClients    = make(map[string]*http.Client)
 )
@@ -60,6 +62,38 @@ func InitHttpClient() {
 
 func GetHttpClient() *http.Client {
 	return httpClient
+}
+
+// InitOssHttpClient 初始化 OSS 上传专用 HTTP 客户端（与 Relay 连接池隔离，降低复用到已被对端关闭的连接的概率）。幂等。
+func InitOssHttpClient() {
+	ossHTTPOnce.Do(func() {
+		transport := &http.Transport{
+			MaxIdleConns:        16,
+			MaxIdleConnsPerHost: 8,
+			IdleConnTimeout:     45 * time.Second,
+			ForceAttemptHTTP2:   false,
+			Proxy:               http.ProxyFromEnvironment,
+			TLSHandshakeTimeout: 15 * time.Second,
+		}
+		if common.TLSInsecureSkipVerify {
+			transport.TLSClientConfig = common.InsecureTLSConfig
+		}
+		timeout := 120 * time.Second
+		if common.RelayTimeout > 0 {
+			timeout = time.Duration(common.RelayTimeout) * time.Second
+		}
+		ossHTTPClient = &http.Client{
+			Transport:     transport,
+			CheckRedirect: checkRedirect,
+			Timeout:       timeout,
+		}
+	})
+}
+
+// GetOssHttpClient 返回 OSS 专用客户端；若尚未初始化则懒执行 InitOssHttpClient。
+func GetOssHttpClient() *http.Client {
+	InitOssHttpClient()
+	return ossHTTPClient
 }
 
 // GetHttpClientWithProxy returns the default client or a proxy-enabled one when proxyURL is provided.
