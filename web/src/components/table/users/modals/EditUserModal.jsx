@@ -56,6 +56,7 @@ import {
   IconPlus,
 } from '@douyinfe/semi-icons';
 import UserBindingManagementModal from './UserBindingManagementModal';
+import { buildAdminUserPhoneFieldRules } from './userPhoneFormRules';
 
 const { Text, Title } = Typography;
 
@@ -73,9 +74,11 @@ const EditUserModal = (props) => {
 
   const isEdit = Boolean(userId);
 
+  /** 编辑用户表单初始字段（加载后与接口返回数据合并）。 */
   const getInitValues = () => ({
     username: '',
     display_name: '',
+    phone: '',
     password: '',
     github_id: '',
     oidc_id: '',
@@ -255,6 +258,20 @@ const EditUserModal = (props) => {
                         label={t('显示名称')}
                         placeholder={t('请输入新的显示名称')}
                         showClear
+                      />
+                    </Col>
+
+                    {/* 手机号：编辑时由 GET 回显；格式 + 异步占用校验（排除当前用户） */}
+                    <Col span={24}>
+                      <Form.Input
+                        field='phone'
+                        label={t('手机号')}
+                        placeholder={t('请输入手机号')}
+                        showClear
+                        rules={buildAdminUserPhoneFieldRules(t, {
+                          excludeUserId: () =>
+                            userId || formApiRef.current?.getValue('id'),
+                        })}
                       />
                     </Col>
 
