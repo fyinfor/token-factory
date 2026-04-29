@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"io"
 	"math"
 	"net/http"
 	"strconv"
@@ -24,6 +25,7 @@ type createDistributorWithdrawalRequest struct {
 }
 
 type submitDistributorApplicationRequest struct {
+	ApplyType         int      `json:"apply_type"`
 	RealName          string   `json:"real_name"`
 	IdCardNo          string   `json:"id_card_no"`
 	QualificationUrls []string `json:"qualification_urls"`
@@ -38,16 +40,15 @@ func PostDistributorApplication(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的请求"})
 		return
 	}
-	if len(req.QualificationUrls) == 0 {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "请上传资格证书"})
-		return
+	if req.ApplyType == 0 {
+		req.ApplyType = model.DistributorApplyTypePersonal
 	}
 	urlsJSON, err := common.Marshal(req.QualificationUrls)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "资料序列化失败"})
 		return
 	}
-	err = model.UpsertDistributorApplication(userId, req.RealName, req.IdCardNo, string(urlsJSON), req.Contact)
+	err = model.UpsertDistributorApplication(userId, req.ApplyType, req.RealName, req.IdCardNo, string(urlsJSON), req.Contact)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
@@ -141,12 +142,14 @@ type rejectApplicationRequest struct {
 func ListDistributorApplicationsAdmin(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	status, _ := strconv.Atoi(c.Query("status"))
+	applyType, _ := strconv.Atoi(c.Query("apply_type"))
 	q := model.DistributorApplicationListQuery{
-		Keyword:  c.Query("keyword"),
-		Status:   status,
-		DateFrom: parseInt64Query(c.Query("date_from")),
-		DateTo:   parseInt64Query(c.Query("date_to")),
-		PageInfo: pageInfo,
+		Keyword:   c.Query("keyword"),
+		Status:    status,
+		ApplyType: applyType,
+		DateFrom:  parseInt64Query(c.Query("date_from")),
+		DateTo:    parseInt64Query(c.Query("date_to")),
+		PageInfo:  pageInfo,
 	}
 	rows, usernames, total, err := model.ListDistributorApplicationsAdmin(q)
 	if err != nil {
@@ -159,6 +162,7 @@ func ListDistributorApplicationsAdmin(c *gin.Context) {
 			"id":                 rows[i].Id,
 			"user_id":            rows[i].UserId,
 			"username":           usernames[i],
+			"apply_type":         rows[i].ApplyType,
 			"real_name":          rows[i].RealName,
 			"contact":            rows[i].Contact,
 			"status":             rows[i].Status,
@@ -209,6 +213,7 @@ func GetDistributorApplicationAdmin(c *gin.Context) {
 			"id":                 app.Id,
 			"user_id":            app.UserId,
 			"username":           username,
+			"apply_type":         app.ApplyType,
 			"real_name":          app.RealName,
 			"id_card_no":         app.IdCardNo,
 			"qualification_urls": app.QualificationUrls,
@@ -223,15 +228,31 @@ func GetDistributorApplicationAdmin(c *gin.Context) {
 	})
 }
 
-// ApproveDistributorApplicationAdmin 通过申请
+type approveDistributorApplicationRequest struct {
+	DistributorCommissionBps *int `json:"distributor_commission_bps"`
+}
+
+// ApproveDistributorApplicationAdmin 通过申请（可选 body：distributor_commission_bps 万分之一，0=跟随系统）
 func ApproveDistributorApplicationAdmin(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil || id <= 0 {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "invalid id"})
 		return
 	}
+	var req approveDistributorApplicationRequest
+	body, readErr := io.ReadAll(c.Request.Body)
+	if readErr != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "读取请求失败"})
+		return
+	}
+	if len(strings.TrimSpace(string(body))) > 0 {
+		if err := common.Unmarshal(body, &req); err != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的请求"})
+			return
+		}
+	}
 	reviewerId := c.GetInt("id")
-	if err := model.ApproveDistributorApplication(id, reviewerId); err != nil {
+	if err := model.ApproveDistributorApplication(id, reviewerId, req.DistributorCommissionBps); err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
@@ -269,7 +290,12 @@ func RejectDistributorApplicationAdmin(c *gin.Context) {
 func ListDistributorsAdmin(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	keyword := c.Query("keyword")
-	rows, total, err := model.ListDistributorsAdmin(keyword, pageInfo)
+	applyType, _ := strconv.Atoi(c.Query("apply_type"))
+	rows, total, err := model.ListDistributorsAdmin(model.DistributorListAdminQuery{
+		Keyword:   keyword,
+		ApplyType: applyType,
+		PageInfo:  pageInfo,
+	})
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
@@ -286,6 +312,7 @@ func ListDistributorsAdmin(c *gin.Context) {
 			"username":                   u.Username,
 			"display_name":               u.DisplayName,
 			"application_real_name":      it.ApplicationRealName,
+			"application_apply_type":       it.ApplicationApplyType,
 			"needs_supplement":           it.NeedsSupplement,
 			"aff_code":                   u.AffCode,
 			"aff_count":                  u.AffCount,
@@ -516,6 +543,7 @@ func PostDistributorSettleAdmin(c *gin.Context) {
 }
 
 type adminUpsertDistributorApplicationRequest struct {
+	ApplyType         int      `json:"apply_type"`
 	RealName          string   `json:"real_name"`
 	IdCardNo          string   `json:"id_card_no"`
 	QualificationUrls []string `json:"qualification_urls"`
@@ -566,17 +594,17 @@ func PutDistributorApplicationByUserAdmin(c *gin.Context) {
 			urls = append(urls, u)
 		}
 	}
-	if len(urls) == 0 {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "请填写资格证书链接"})
-		return
-	}
 	urlsJSON, err := common.Marshal(urls)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "资料序列化失败"})
 		return
 	}
+	applyType := req.ApplyType
+	if applyType == 0 {
+		applyType = model.DistributorApplyTypePersonal
+	}
 	reviewerId := c.GetInt("id")
-	if err := model.AdminUpsertDistributorApplicationByUser(userId, reviewerId, req.RealName, req.IdCardNo, string(urlsJSON), req.Contact); err != nil {
+	if err := model.AdminUpsertDistributorApplicationByUser(userId, reviewerId, applyType, req.RealName, req.IdCardNo, string(urlsJSON), req.Contact); err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}

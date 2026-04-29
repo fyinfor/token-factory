@@ -30,6 +30,8 @@ import {
   Select,
   Empty,
   Upload,
+  Progress,
+  Tag,
 } from '@douyinfe/semi-ui';
 import {
   IllustrationNoResult,
@@ -133,12 +135,66 @@ function QualificationThumbnails({ urls, onImagePreview, compact }) {
   );
 }
 
-const appStatus = (s) => {
-  if (s === 1) return '待审核';
-  if (s === 2) return '已通过';
-  if (s === 3) return '已驳回';
+/** 表格「状态」列：待审核 / 已通过 / 已驳回 Tag */
+function appStatusTag(t, s) {
+  const n = Number(s);
+  if (n === 1) {
+    return (
+      <Tag color='light-blue' size='small'>
+        {t('待审核')}
+      </Tag>
+    );
+  }
+  if (n === 2) {
+    return (
+      <Tag color='green' size='small'>
+        {t('已通过')}
+      </Tag>
+    );
+  }
+  if (n === 3) {
+    return (
+      <Tag color='red' size='small'>
+        {t('已驳回')}
+      </Tag>
+    );
+  }
+  return (
+    <Text type='tertiary' size='small'>
+      —
+    </Text>
+  );
+}
+
+function applyTypeLabel(t, v) {
+  if (v === 2) return t('企业');
+  if (v === 1) return t('个人');
   return '—';
-};
+}
+
+/** 表格「类型」列：个人 / 企业 Tag 区分配色 */
+function applyTypeTag(t, v) {
+  const n = Number(v);
+  if (n === 2) {
+    return (
+      <Tag color='orange' size='small'>
+        {t('企业')}
+      </Tag>
+    );
+  }
+  if (n === 1) {
+    return (
+      <Tag color='blue' size='small'>
+        {t('个人')}
+      </Tag>
+    );
+  }
+  return (
+    <Text type='tertiary' size='small'>
+      —
+    </Text>
+  );
+}
 
 export default function DistributorAdmin() {
   const { t } = useTranslation();
@@ -152,6 +208,7 @@ export default function DistributorAdmin() {
   const [appPageSize, setAppPageSize] = useState(10);
   const [appKeyword, setAppKeyword] = useState('');
   const [appStatusFilter, setAppStatusFilter] = useState(0);
+  const [appApplyTypeFilter, setAppApplyTypeFilter] = useState(0);
 
   const [detailOpen, setDetailOpen] = useState(false);
   const [detail, setDetail] = useState(null);
@@ -161,12 +218,19 @@ export default function DistributorAdmin() {
   const [rejectId, setRejectId] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
 
+  /** 审核通过：二次确认并设置默认分成比例（万分之一由后端存储） */
+  const [approveOpen, setApproveOpen] = useState(false);
+  const [approveAppId, setApproveAppId] = useState(null);
+  const [approvePercentInput, setApprovePercentInput] = useState('0');
+  const [approveSystemDefaultBps, setApproveSystemDefaultBps] = useState(1000);
+
   const [distLoading, setDistLoading] = useState(false);
   const [distRows, setDistRows] = useState([]);
   const [distTotal, setDistTotal] = useState(0);
   const [distPage, setDistPage] = useState(1);
   const [distPageSize, setDistPageSize] = useState(10);
   const [distKeyword, setDistKeyword] = useState('');
+  const [distApplyTypeFilter, setDistApplyTypeFilter] = useState(0);
 
   const [bpsOpen, setBpsOpen] = useState(false);
   const [bpsUser, setBpsUser] = useState(null);
@@ -192,6 +256,8 @@ export default function DistributorAdmin() {
   const [profileContact, setProfileContact] = useState('');
   /** 资格证书文件 URL 列表（上传 OSS 或历史数据解析） */
   const [profileQualUrls, setProfileQualUrls] = useState([]);
+  const [profileApplyType, setProfileApplyType] = useState(1);
+  const [profileUploadPct, setProfileUploadPct] = useState(null);
 
   const [wdLoading, setWdLoading] = useState(false);
   const [wdRows, setWdRows] = useState([]);
@@ -213,6 +279,8 @@ export default function DistributorAdmin() {
       });
       if (appKeyword.trim()) q.set('keyword', appKeyword.trim());
       if (appStatusFilter) q.set('status', String(appStatusFilter));
+      if (appApplyTypeFilter)
+        q.set('apply_type', String(appApplyTypeFilter));
       const res = await API.get(`/api/distributor/admin/applications?${q}`);
       const { success, message, data } = res.data;
       if (!success) {
@@ -226,7 +294,14 @@ export default function DistributorAdmin() {
     } finally {
       setAppLoading(false);
     }
-  }, [appPage, appPageSize, appKeyword, appStatusFilter, t]);
+  }, [
+    appPage,
+    appPageSize,
+    appKeyword,
+    appStatusFilter,
+    appApplyTypeFilter,
+    t,
+  ]);
 
   const loadDists = useCallback(async () => {
     setDistLoading(true);
@@ -236,6 +311,8 @@ export default function DistributorAdmin() {
         page_size: String(distPageSize),
       });
       if (distKeyword.trim()) q.set('keyword', distKeyword.trim());
+      if (distApplyTypeFilter)
+        q.set('apply_type', String(distApplyTypeFilter));
       const res = await API.get(`/api/distributor/admin/distributors?${q}`);
       const { success, message, data } = res.data;
       if (!success) {
@@ -249,7 +326,13 @@ export default function DistributorAdmin() {
     } finally {
       setDistLoading(false);
     }
-  }, [distPage, distPageSize, distKeyword, t]);
+  }, [
+    distPage,
+    distPageSize,
+    distKeyword,
+    distApplyTypeFilter,
+    t,
+  ]);
 
   useEffect(() => {
     if (tab === 'app') loadApps();
@@ -298,6 +381,7 @@ export default function DistributorAdmin() {
     setProfileIdCard('');
     setProfileContact('');
     setProfileQualUrls([]);
+    setProfileApplyType(1);
     try {
       const res = await API.get(
         `/api/distributor/admin/distributors/${row.id}/application`,
@@ -315,6 +399,7 @@ export default function DistributorAdmin() {
         setProfileIdCard(app.id_card_no || '');
         setProfileContact(app.contact || '');
         setProfileQualUrls(parseQualificationUrls(app.qualification_urls));
+        setProfileApplyType(Number(app.apply_type) === 2 ? 2 : 1);
       }
     } catch {
       showError(t('加载失败'));
@@ -327,11 +412,11 @@ export default function DistributorAdmin() {
     if (!profileUserId) return;
     const urls = profileQualUrls.filter(Boolean);
     if (!profileRealName.trim()) {
-      showError(t('请填写真实姓名'));
+      showError(t('请填写姓名或企业名称'));
       return;
     }
     if (!profileIdCard.trim()) {
-      showError(t('请填写身份证号码'));
+      showError(t('请填写证件号码'));
       return;
     }
     if (!profileContact.trim()) {
@@ -347,6 +432,7 @@ export default function DistributorAdmin() {
       const res = await API.put(
         `/api/distributor/admin/distributors/${profileUserId}/application`,
         {
+          apply_type: profileApplyType,
           real_name: profileRealName.trim(),
           id_card_no: profileIdCard.trim(),
           contact: profileContact.trim(),
@@ -371,6 +457,7 @@ export default function DistributorAdmin() {
               setProfileQualUrls(
                 parseQualificationUrls(app.qualification_urls),
               );
+              setProfileApplyType(Number(app.apply_type) === 2 ? 2 : 1);
             }
           }
         } catch {
@@ -401,13 +488,42 @@ export default function DistributorAdmin() {
     }
   };
 
-  const approve = async (id) => {
+  const openApproveApplication = async (id) => {
+    setApproveAppId(id);
+    let defBps = 1000;
+    try {
+      const res = await API.get('/api/status');
+      const { success, data } = res.data || {};
+      if (success && data?.affiliate_default_commission_bps != null) {
+        const n = Number(data.affiliate_default_commission_bps);
+        if (Number.isFinite(n) && n >= 0) {
+          defBps = n;
+        }
+      }
+    } catch {
+      /* 使用 fallback */
+    }
+    setApproveSystemDefaultBps(defBps);
+    setApprovePercentInput(commissionBpsToPercentInputString(defBps));
+    setApproveOpen(true);
+  };
+
+  const submitApproveApplication = async () => {
+    if (!approveAppId) return;
+    const bps = parseCommissionPercentStringToBps(approvePercentInput);
+    if (Number.isNaN(bps)) {
+      showError(t('请输入 0～100 之间的百分比'));
+      return;
+    }
     try {
       const res = await API.post(
-        `/api/distributor/admin/applications/${id}/approve`,
+        `/api/distributor/admin/applications/${approveAppId}/approve`,
+        { distributor_commission_bps: bps },
       );
       if (res.data.success) {
         showSuccess(t('已通过'));
+        setApproveOpen(false);
+        setApproveAppId(null);
         loadApps();
       } else {
         showError(res.data.message);
@@ -556,10 +672,25 @@ export default function DistributorAdmin() {
   };
 
   const appColumns = [
-    { title: 'ID', dataIndex: 'id', width: 70 },
-    { title: t('用户名'), dataIndex: 'username' },
-    { title: t('姓名'), dataIndex: 'real_name' },
-    { title: t('联系方式'), dataIndex: 'contact' },
+    { title: t('用户名'), dataIndex: 'username', width: 120 },
+    {
+      title: t('类型'),
+      dataIndex: 'apply_type',
+      width: 96,
+      render: (v) => applyTypeTag(t, v),
+    },
+    {
+      title: t('姓名/企业名称'),
+      dataIndex: 'real_name',
+      ellipsis: true,
+    },
+    {
+      title: t('身份证/统一社会信用代码'),
+      dataIndex: 'id_card_no_mask',
+      width: 168,
+      ellipsis: true,
+    },
+    { title: t('联系方式'), dataIndex: 'contact', ellipsis: true },
     {
       title: t('资格证书'),
       dataIndex: 'qualification_urls',
@@ -575,7 +706,8 @@ export default function DistributorAdmin() {
     {
       title: t('状态'),
       dataIndex: 'status',
-      render: (s) => appStatus(s),
+      width: 100,
+      render: (s) => appStatusTag(t, s),
     },
     {
       title: t('提交时间'),
@@ -592,7 +724,11 @@ export default function DistributorAdmin() {
           </Button>
           {r.status === 1 && (
             <>
-              <Button size='small' type='primary' onClick={() => approve(r.id)}>
+              <Button
+                size='small'
+                type='primary'
+                onClick={() => openApproveApplication(r.id)}
+              >
                 {t('通过')}
               </Button>
               <Button
@@ -614,10 +750,15 @@ export default function DistributorAdmin() {
   ];
 
   const distColumns = [
-    { title: 'ID', dataIndex: 'id', width: 80 },
     { title: t('用户名'), dataIndex: 'username' },
     {
-      title: t('申请真实姓名'),
+      title: t('类型'),
+      dataIndex: 'application_apply_type',
+      width: 96,
+      render: (v) => applyTypeTag(t, v),
+    },
+    {
+      title: t('姓名/企业名称'),
       dataIndex: 'application_real_name',
       render: (name) => {
         const s = name != null ? String(name).trim() : '';
@@ -672,7 +813,6 @@ export default function DistributorAdmin() {
   ];
 
   const wdColumns = [
-    { title: 'ID', dataIndex: 'id', width: 70 },
     { title: t('用户名'), dataIndex: 'username', width: 120 },
     { title: t('姓名'), dataIndex: 'real_name', width: 90 },
     {
@@ -806,13 +946,27 @@ export default function DistributorAdmin() {
                       showClear
                       pure
                       size='small'
-                      placeholder={t('搜索姓名、用户名、联系方式')}
+                      placeholder={t(
+                        '搜索姓名/企业、用户名、联系方式、证件号',
+                      )}
                       onChange={(v) =>
                         setAppKeyword(
                           String(v ?? '').slice(0, ADMIN_KEYWORD_MAX_LEN),
                         )
                       }
                     />
+                  </div>
+                  <div className='w-full md:w-36'>
+                    <Select
+                      value={appApplyTypeFilter}
+                      className='w-full'
+                      size='small'
+                      onChange={(v) => setAppApplyTypeFilter(Number(v))}
+                    >
+                      <Select.Option value={0}>{t('全部类型')}</Select.Option>
+                      <Select.Option value={1}>{t('个人')}</Select.Option>
+                      <Select.Option value={2}>{t('企业')}</Select.Option>
+                    </Select>
                   </div>
                   <div className='w-full md:w-48'>
                     <Select
@@ -844,6 +998,7 @@ export default function DistributorAdmin() {
                       onClick={() => {
                         setAppKeyword('');
                         setAppStatusFilter(0);
+                        setAppApplyTypeFilter(0);
                         setAppPage(1);
                       }}
                     >
@@ -986,7 +1141,7 @@ export default function DistributorAdmin() {
                       pure
                       size='small'
                       placeholder={t(
-                        '搜索用户名、显示名、申请真实姓名、联系方式、身份证',
+                        '搜索用户名、显示名、姓名/企业、联系方式、证件号',
                       )}
                       onChange={(v) =>
                         setDistKeyword(
@@ -994,6 +1149,18 @@ export default function DistributorAdmin() {
                         )
                       }
                     />
+                  </div>
+                  <div className='w-full md:w-36'>
+                    <Select
+                      value={distApplyTypeFilter}
+                      className='w-full'
+                      size='small'
+                      onChange={(v) => setDistApplyTypeFilter(Number(v))}
+                    >
+                      <Select.Option value={0}>{t('全部类型')}</Select.Option>
+                      <Select.Option value={1}>{t('个人')}</Select.Option>
+                      <Select.Option value={2}>{t('企业')}</Select.Option>
+                    </Select>
                   </div>
                   <div className='flex gap-2 w-full md:w-auto'>
                     <Button
@@ -1011,6 +1178,7 @@ export default function DistributorAdmin() {
                       className='flex-1 md:flex-initial'
                       onClick={() => {
                         setDistKeyword('');
+                        setDistApplyTypeFilter(0);
                         setDistPage(1);
                       }}
                     >
@@ -1061,16 +1229,28 @@ export default function DistributorAdmin() {
         {detail && (
           <div className='space-y-3 text-sm'>
             <div>
-              <Text strong>ID</Text>：{detail.id}
-            </div>
-            <div>
               <Text strong>{t('用户名')}</Text>：{detail.username}
             </div>
-            <div>
-              <Text strong>{t('姓名')}</Text>：{detail.real_name}
+            <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
+              <Text strong>{t('类型')}</Text>
+              <span>：</span>
+              {applyTypeTag(t, detail.apply_type)}
             </div>
             <div>
-              <Text strong>{t('身份证')}</Text>：{detail.id_card_no}
+              <Text strong>
+                {Number(detail.apply_type) === 2
+                  ? t('企业名称')
+                  : t('姓名')}
+              </Text>
+              ：{detail.real_name}
+            </div>
+            <div>
+              <Text strong>
+                {Number(detail.apply_type) === 2
+                  ? t('统一社会信用代码')
+                  : t('身份证')}
+              </Text>
+              ：{detail.id_card_no}
             </div>
             <div>
               <Text strong>{t('联系方式')}</Text>：{detail.contact}
@@ -1113,15 +1293,13 @@ export default function DistributorAdmin() {
         ) : (
           <div className='space-y-3 text-sm'>
             <div>
-              <Text strong>ID</Text>：{profileUserId}
-            </div>
-            <div>
               <Text strong>{t('用户名')}</Text>：{profileUsername}
             </div>
             {profileAppStatus != null ? (
-              <div>
-                <Text strong>{t('申请状态')}</Text>：
-                {appStatus(profileAppStatus)}
+              <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
+                <Text strong>{t('申请状态')}</Text>
+                <span>：</span>
+                {appStatusTag(t, profileAppStatus)}
               </div>
             ) : null}
             {profileNeedsManual ? (
@@ -1136,22 +1314,47 @@ export default function DistributorAdmin() {
             ) : null}
             <div>
               <div className='mb-1'>
-                <Text strong>{t('姓名')}</Text>
+                <Text strong>{t('类型')}</Text>
+              </div>
+              <Select
+                value={profileApplyType}
+                className='w-full max-w-md'
+                onChange={(v) => setProfileApplyType(Number(v))}
+              >
+                <Select.Option value={1}>{t('个人')}</Select.Option>
+                <Select.Option value={2}>{t('企业')}</Select.Option>
+              </Select>
+            </div>
+            <div>
+              <div className='mb-1'>
+                <Text strong>
+                  {profileApplyType === 2 ? t('企业名称') : t('姓名')}
+                </Text>
               </div>
               <Input
                 value={profileRealName}
                 onChange={(v) => setProfileRealName(String(v ?? ''))}
-                placeholder={t('真实姓名')}
+                placeholder={
+                  profileApplyType === 2 ? t('企业名称') : t('真实姓名')
+                }
               />
             </div>
             <div>
               <div className='mb-1'>
-                <Text strong>{t('身份证号码')}</Text>
+                <Text strong>
+                  {profileApplyType === 2
+                    ? t('统一社会信用代码')
+                    : t('身份证号码')}
+                </Text>
               </div>
               <Input
                 value={profileIdCard}
                 onChange={(v) => setProfileIdCard(String(v ?? ''))}
-                placeholder={t('身份证号码')}
+                placeholder={
+                  profileApplyType === 2
+                    ? t('统一社会信用代码')
+                    : t('身份证号码')
+                }
               />
             </div>
             <div>
@@ -1172,13 +1375,30 @@ export default function DistributorAdmin() {
                 action=''
                 accept='image/*,.pdf'
                 showUploadList={false}
-                customRequest={async ({ file, onSuccess, onError }) => {
+                customRequest={async ({
+                  file,
+                  onSuccess,
+                  onError,
+                  onProgress,
+                }) => {
                   const fd = new FormData();
                   const inst = file.fileInstance || file;
                   fd.append('file', inst);
+                  setProfileUploadPct(0);
                   try {
                     const res = await API.post('/api/oss/upload', fd, {
                       skipErrorHandler: true,
+                      onUploadProgress: (ev) => {
+                        const tot = ev.total || ev.loaded || 1;
+                        const pct = Math.min(
+                          100,
+                          Math.round((ev.loaded * 100) / tot),
+                        );
+                        setProfileUploadPct(pct);
+                        if (typeof onProgress === 'function') {
+                          onProgress({ total: tot, loaded: ev.loaded });
+                        }
+                      },
                     });
                     const { success, message, data } = res.data || {};
                     if (!success || !data?.url) {
@@ -1196,6 +1416,8 @@ export default function DistributorAdmin() {
                   } catch (e) {
                     onError(e);
                     showError(e?.response?.data?.message || t('上传失败'));
+                  } finally {
+                    setProfileUploadPct(null);
                   }
                 }}
                 limit={PROFILE_QUAL_MAX_FILES}
@@ -1208,6 +1430,13 @@ export default function DistributorAdmin() {
                   {t('上传文件')}
                 </Button>
               </Upload>
+              {profileUploadPct != null ? (
+                <Progress
+                  percent={profileUploadPct}
+                  showInfo
+                  className='mt-2'
+                />
+              ) : null}
               <Text type='tertiary' size='small' className='block mt-1'>
                 {t('支持图片或 PDF，最多 5 个；点击图片可大图预览')}
               </Text>
@@ -1318,6 +1547,47 @@ export default function DistributorAdmin() {
           onChange={setRejectReason}
           placeholder={t('请填写驳回原因')}
           rows={3}
+        />
+      </Modal>
+
+      <Modal
+        title={t('审核通过')}
+        visible={approveOpen}
+        onOk={submitApproveApplication}
+        onCancel={() => {
+          setApproveOpen(false);
+          setApproveAppId(null);
+        }}
+      >
+        <Text type='tertiary' size='small' className='mb-2 block'>
+          {t('请确认该代理的默认分成比例；默认已填入当前系统全局配置，可直接提交或修改。')}
+        </Text>
+        <div className='mb-2 flex flex-wrap items-center gap-2'>
+          <Text type='tertiary' size='small'>
+            {t('当前系统默认分成')}：{formatCommissionRatioPercent(approveSystemDefaultBps)}
+          </Text>
+          <Button
+            size='small'
+            type='tertiary'
+            onClick={() =>
+              setApprovePercentInput(
+                commissionBpsToPercentInputString(approveSystemDefaultBps),
+              )
+            }
+          >
+            {t('使用系统默认')}
+          </Button>
+        </div>
+        <Text type='tertiary' size='small' className='mb-2 block'>
+          {t(
+            '填写 0～100 之间的百分比，例如 10 表示 10%，10.5 表示 10.5%。填 0 表示跟随系统默认。',
+          )}
+        </Text>
+        <Input
+          value={approvePercentInput}
+          onChange={(v) => setApprovePercentInput(String(v ?? ''))}
+          suffix='%'
+          placeholder={t('如 10 或 10.5')}
         />
       </Modal>
 
