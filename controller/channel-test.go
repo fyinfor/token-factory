@@ -39,10 +39,10 @@ import (
 
 // testResult 渠道测试一次调用的结果；recordedModelName 为与模型元数据/操练场 model_name 对齐的用户侧名称（非上游 UpstreamModelName），仅成功路径会填充。
 type testResult struct {
-	context            *gin.Context
-	localErr           error
-	tokenFactoryError  *types.TokenFactoryError
-	recordedModelName  string
+	context           *gin.Context
+	localErr          error
+	tokenFactoryError *types.TokenFactoryError
+	recordedModelName string
 }
 
 func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointType string) string {
@@ -58,6 +58,9 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 	}
 	if channel != nil && channel.Type == constant.ChannelTypeOpenAIVideo {
 		return string(constant.EndpointTypeOpenAIVideoGW)
+	}
+	if channel != nil && channel.Type == constant.ChannelTypeVideoGenerator {
+		return string(constant.EndpointTypeVideoGenerator)
 	}
 	return normalized
 }
@@ -176,7 +179,9 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 	// 视频生成端点走任务式异步上游协议（Sora /v1/videos、OpenAI 视频网关 /v1/videos/generations 等），
 	// 与同步 chat/embeddings/image 走的 relay.GetAdaptor 流程不兼容，因此在这里直接旁路：
 	// 仅校验上游能正确接收任务创建请求并返回 task_id，不做轮询。
-	if endpointType == string(constant.EndpointTypeOpenAIVideo) || endpointType == string(constant.EndpointTypeOpenAIVideoGW) {
+	if endpointType == string(constant.EndpointTypeOpenAIVideo) ||
+		endpointType == string(constant.EndpointTypeOpenAIVideoGW) ||
+		endpointType == string(constant.EndpointTypeVideoGenerator) {
 		return testChannelVideo(c, channel, testModel, endpointType, tik)
 	}
 
@@ -611,6 +616,19 @@ func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, 
 				{"type": "text", "text": "a cute cat dancing in a sunny garden  --duration 5"},
 			},
 		}
+	case constant.EndpointTypeVideoGenerator:
+		bodyMap = map[string]any{
+			"model": upstreamModel,
+			"content": []map[string]any{
+				{"type": "text", "text": "a cute cat dancing in a sunny garden"},
+			},
+			"parameters": map[string]any{
+				"duration":   5,
+				"resolution": "720P",
+				"ratio":      "16:9",
+				"watermark":  false,
+			},
+		}
 	default:
 		err := fmt.Errorf("unsupported video endpoint type: %s", endpointType)
 		return testResult{
@@ -754,6 +772,28 @@ func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, 
 		if taskID == "" {
 			taskID = strings.TrimSpace(gjson.GetBytes(respBody, "result.task_id").String())
 		}
+		if taskID == "" {
+			taskID = strings.TrimSpace(gjson.GetBytes(respBody, "task_id").String())
+		}
+	case constant.EndpointTypeVideoGenerator:
+		if codeRes := gjson.GetBytes(respBody, "status"); codeRes.Exists() && codeRes.Int() != 0 {
+			errMsg := strings.TrimSpace(gjson.GetBytes(respBody, "message").String())
+			if errMsg == "" {
+				errMsg = fmt.Sprintf("upstream returned status=%d", codeRes.Int())
+			}
+			bodyErr := fmt.Errorf(
+				"upstream error: %s | request: %s | response: %s",
+				errMsg,
+				truncateForError(string(bodyBytes)),
+				truncateForError(string(respBody)),
+			)
+			return testResult{
+				context:           c,
+				localErr:          bodyErr,
+				tokenFactoryError: types.NewOpenAIError(bodyErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError),
+			}
+		}
+		taskID = strings.TrimSpace(gjson.GetBytes(respBody, "result.task_id").String())
 		if taskID == "" {
 			taskID = strings.TrimSpace(gjson.GetBytes(respBody, "task_id").String())
 		}
@@ -1070,7 +1110,9 @@ func TestChannel(c *gin.Context) {
 	}
 	if result.localErr != nil {
 		go channel.UpdateTestResult(false, milliseconds, result.localErr.Error(), modelForRecord)
-		go func() { _ = model.UpsertModelTestResult(channel.Id, modelForRecord, false, milliseconds, result.localErr.Error()) }()
+		go func() {
+			_ = model.UpsertModelTestResult(channel.Id, modelForRecord, false, milliseconds, result.localErr.Error())
+		}()
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": result.localErr.Error(),
@@ -1080,7 +1122,9 @@ func TestChannel(c *gin.Context) {
 	}
 	if result.tokenFactoryError != nil {
 		go channel.UpdateTestResult(false, milliseconds, result.tokenFactoryError.Error(), modelForRecord)
-		go func() { _ = model.UpsertModelTestResult(channel.Id, modelForRecord, false, milliseconds, result.tokenFactoryError.Error()) }()
+		go func() {
+			_ = model.UpsertModelTestResult(channel.Id, modelForRecord, false, milliseconds, result.tokenFactoryError.Error())
+		}()
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": result.tokenFactoryError.Error(),

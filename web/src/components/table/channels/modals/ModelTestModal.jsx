@@ -212,6 +212,10 @@ const ModelTestModal = ({
       value: 'hidream-video',
       label: t('视频生成') + ' (/v1/videos/generations)',
     },
+    {
+      value: 'videogenerator',
+      label: t('视频生成') + ' (/videogenerator/generate)',
+    },
   ];
 
   const handleCopySelected = () => {

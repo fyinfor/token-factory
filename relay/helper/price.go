@@ -275,29 +275,20 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 // can configure the per-second/per-resolution cost via ratios instead of a
 // flat per-video price.
 //
-// Selection rules (highest priority first):
+// Selection rules (highest priority first), aligned with the ratio UI
+// 「按 token 计费 / 按视频计费」:
 //
-//  1. Per-call price configured for this (channel, supplier, group, model)
-//     -> identical to ModelPriceHelperPerCall: quota = price * QuotaPerUnit *
-//     groupRatio * channelDiscount, then later multiplied by adaptor
-//     OtherRatios (seconds, size).
+//  1. Token-based pricing when tryVideoTokenPriceData succeeds (VideoRatio /
+//     resolution token_price rules + ModelRatio). Takes precedence over
+//     per-call ModelPrice / VideoPrice so admins who choose per-token in the
+//     console are not overridden by legacy fixed prices.
 //
-//  2. Token-based ratios configured (VideoRatio for the model AND a
-//     ModelRatio resolvable for the model)
-//     -> quota = (inputTextTokens
-//     + outputVideoTokens * videoRatio * videoCompletionRatio
-//     ) * modelRatio * groupRatio
-//     outputVideoTokens are estimated from the request:
-//     duration * width * height * fps / 1024
-//     OtherRatios are intentionally NOT applied on top, because
-//     outputVideoTokens already accounts for duration and resolution; we
-//     signal this by setting PriceData.UsePrice = true (treated by
-//     relay_task as "quota is final, do not multiply OtherRatios again").
+//  2. Per-resolution flat price per video (*_per_video tables), then
 //
-//  3. Neither configured
-//     -> defer to ModelPriceHelperPerCall, which produces either the
-//     canonical "ratio or price not set" error or the default-price
-//     fallback, preserving existing behaviour for legacy users.
+//  3. Any other per-call tier (supplier ModelPrice, group ModelPrice, VideoPrice,
+//     ChannelVideoPrice) -> ModelPriceHelperPerCall (OtherRatios from adaptor).
+//
+//  4. Nothing matched -> ModelPriceHelperPerCall fallback (error or default).
 const (
 	// defaultVideoFPS is used when the request body does not pin an explicit
 	// fps; 24 matches Seedance / Doubao / most consumer video generators.
@@ -345,21 +336,27 @@ func ModelPriceHelperVideo(c *gin.Context, info *relaycommon.RelayInfo) (types.P
 	supplierID := resolveSupplierIDByChannel(info)
 	modelName := info.OriginModelName
 
-	// Branch 1: any per-call price configured -> keep PerCall behaviour exactly.
-	if hasAnyPerCallVideoPrice(channelID, supplierID, info.UsingGroup, modelName) {
-		return ModelPriceHelperPerCall(c, info)
-	}
-
-	// Branch 2: try the token-based path. Requires both a usable ModelRatio AND
-	// a VideoRatio configured for the model; otherwise we cannot meaningfully
-	// price video tokens and have to fall through.
+	// 1) Token-based path first (ratio UI「按 token 计费」): when configured,
+	//    must win over generic per-call ModelPrice / VideoPrice.
 	if priceData, ok, err := tryVideoTokenPriceData(c, info); err != nil {
 		return types.PriceData{}, err
 	} else if ok {
 		return priceData, nil
 	}
 
-	// Branch 3: nothing applicable -> defer to PerCall (error or default fallback).
+	// 2) Per-resolution flat price per video (*_per_video, ratio UI「按视频」多档).
+	if priceData, ok, err := tryVideoPerVideoRulesPriceData(c, info); err != nil {
+		return types.PriceData{}, err
+	} else if ok {
+		return priceData, nil
+	}
+
+	// 3) Other per-call tiers (supplier/group ModelPrice, VideoPrice, ChannelVideoPrice).
+	if hasAnyPerCallVideoPrice(channelID, supplierID, info.UsingGroup, modelName) {
+		return ModelPriceHelperPerCall(c, info)
+	}
+
+	// 4) Fallback (error or default-price behaviour).
 	return ModelPriceHelperPerCall(c, info)
 }
 
@@ -405,16 +402,22 @@ func tryVideoTokenPriceData(c *gin.Context, info *relaycommon.RelayInfo) (types.
 		}
 	}
 
-	// Resolve videoRatio: channel > global. Required for token mode.
+	// Resolve videoRatio: channel > global. For legacy pricing without resolution
+	// rules, an explicit map entry is required. When VideoPricingRules exist
+	// (per-resolution token_price from the UI), that alone is enough signal even
+	// if VideoRatio / ChannelVideoRatio were never set.
 	videoRatio := ratio_setting.GetVideoRatio(modelName)
 	hasVideoRatio := ratio_setting.ContainsVideoRatio(modelName)
 	if r, ok := ratio_setting.GetChannelVideoRatio(channelID, modelName); ok {
 		videoRatio = r
 		hasVideoRatio = true
 	}
+	if !hasVideoRatio {
+		if _, ok := resolveVideoPricingRules(channelID, modelName); ok {
+			hasVideoRatio = true
+		}
+	}
 
-	// Without a VideoRatio (input multiplier) the token formula has no signal
-	// distinguishing "video" from "text"; refuse and let the caller fall back.
 	if !hasVideoRatio {
 		return types.PriceData{}, false, nil
 	}
@@ -518,6 +521,133 @@ func resolveVideoPricingRules(channelID int, modelName string) (ratio_setting.Vi
 		}
 	}
 	return ratio_setting.VideoPricingRules{}, false
+}
+
+func resolveVideoPerVideoPricingRules(channelID int, modelName string) (ratio_setting.VideoPricingRules, bool) {
+	if rules, ok := ratio_setting.GetChannelVideoPricingRules(channelID, modelName); ok {
+		if ratio_setting.HasUsableVideoPerVideoRules(rules) {
+			return rules, true
+		}
+	}
+	if rules, ok := ratio_setting.GetVideoPricingRules(modelName); ok {
+		if ratio_setting.HasUsableVideoPerVideoRules(rules) {
+			return rules, true
+		}
+	}
+	return ratio_setting.VideoPricingRules{}, false
+}
+
+// matchPerVideoRulesByPixels picks the resolution row whose WxH is closest to
+// the request (same relative pixel error heuristic as token resolution rules).
+func matchPerVideoRulesByPixels(ctx videoEstimateContext, rules []ratio_setting.VideoResolutionPerVideoRule) (float64, bool) {
+	if len(rules) == 0 || ctx.Width <= 0 || ctx.Height <= 0 {
+		return 0, false
+	}
+	bestIdx := -1
+	targetPixels := ctx.Width * ctx.Height
+	minDiffRatio := math.MaxFloat64
+	for i, rule := range rules {
+		if rule.VideoPrice <= 0 {
+			continue
+		}
+		ruleW, ruleH, ok := parseResolution(rule.Resolution)
+		if !ok {
+			continue
+		}
+		rulePixels := ruleW * ruleH
+		if rulePixels <= 0 {
+			continue
+		}
+		diffRatio := math.Abs(float64(targetPixels-rulePixels)) / float64(rulePixels)
+		if diffRatio < minDiffRatio {
+			minDiffRatio = diffRatio
+			bestIdx = i
+		}
+	}
+	if bestIdx < 0 {
+		return 0, false
+	}
+	return rules[bestIdx].VideoPrice, true
+}
+
+func matchFlatPerVideoUSDRules(ctx videoEstimateContext, rules ratio_setting.VideoPricingRules) (float64, bool) {
+	switch ctx.Mode {
+	case videoBillingModeImageToVideo:
+		return matchPerVideoRulesByPixels(ctx, rules.ImageToVideoPerVideo)
+	case videoBillingModeVideoToVideo:
+		var sum float64
+		n := 0
+		if u, ok := matchPerVideoRulesByPixels(ctx, rules.VideoToVideoInputPerVideo); ok {
+			sum += u
+			n++
+		}
+		if u, ok := matchPerVideoRulesByPixels(ctx, rules.VideoToVideoOutputPerVideo); ok {
+			sum += u
+			n++
+		}
+		if n > 0 {
+			return sum, true
+		}
+		return 0, false
+	default:
+		return matchPerVideoRulesByPixels(ctx, rules.TextToVideoPerVideo)
+	}
+}
+
+func tryVideoPerVideoRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo) (types.PriceData, bool, error) {
+	channelID := 0
+	if info.ChannelMeta != nil {
+		channelID = info.ChannelId
+	}
+	modelName := info.OriginModelName
+
+	rules, ok := resolveVideoPerVideoPricingRules(channelID, modelName)
+	if !ok {
+		return types.PriceData{}, false, nil
+	}
+
+	estimateCtx := estimateVideoRequestContext(c)
+	usd, okPrice := matchFlatPerVideoUSDRules(estimateCtx, rules)
+	if !okPrice || usd <= 0 {
+		return types.PriceData{}, false, nil
+	}
+
+	groupRatioInfo := HandleGroupRatio(c, info)
+	rawQuota := usd * common.QuotaPerUnit * groupRatioInfo.GroupRatio
+
+	freeModel := false
+	if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
+		if groupRatioInfo.GroupRatio == 0 {
+			rawQuota = 0
+			freeModel = true
+		}
+	}
+
+	chDisc := model.ResolveChannelPriceDiscountPercent(channelID)
+	chDiscCopy := chDisc
+	quota := model.ApplyChannelPriceDiscountToQuota(int(math.Round(rawQuota)), chDisc)
+
+	if !freeModel && quota <= 0 && rawQuota > 0 && groupRatioInfo.GroupRatio > 0 {
+		quota = 1
+	}
+
+	priceData := types.PriceData{
+		FreeModel:            freeModel,
+		ModelPrice:           0,
+		ModelRatio:           0,
+		GroupRatioInfo:       groupRatioInfo,
+		UsePrice:             true,
+		Quota:                quota,
+		QuotaToPreConsume:    quota,
+		ChannelPriceDiscount: &chDiscCopy,
+	}
+	if common.DebugEnabled {
+		logger.LogDebug(c, fmt.Sprintf(
+			"[video][per-video-rules] model=%s mode=%s w=%d h=%d usd=%.6f groupRatio=%.4f -> quota=%d",
+			modelName, estimateCtx.Mode, estimateCtx.Width, estimateCtx.Height, usd, groupRatioInfo.GroupRatio, quota,
+		))
+	}
+	return priceData, true, nil
 }
 
 func hasUsableVideoPricingRules(rules ratio_setting.VideoPricingRules) bool {

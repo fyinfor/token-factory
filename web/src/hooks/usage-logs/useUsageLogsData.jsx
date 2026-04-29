@@ -510,6 +510,7 @@ export const useLogsData = () => {
                 other?.video_completion_ratio || 1.0,
                 other?.video_output_tokens || 0,
                 other?.video_input_text_tokens || 0,
+                other?.billing_mode || '',
               ),
         });
         if (logs[i]?.content) {
@@ -588,6 +589,7 @@ export const useLogsData = () => {
                 other?.video_completion_ratio || 1.0,
                 other?.video_output_tokens || 0,
                 other?.video_input_text_tokens || 0,
+                other?.billing_mode || '',
               );
           expandDataLocal.push({
             key: t('计费过程'),
@@ -742,6 +744,8 @@ export const useLogsData = () => {
           // Video task channels billed via duration*W*H*fps/1024 token estimate;
           // fully computed locally from the request body, never reads upstream usage.
           localCountMode = t('视频本地按 token 计费');
+        } else if (other?.billing_mode === 'video_per_video') {
+          localCountMode = t('视频本地按条/分辨率计价');
         } else if (other?.admin_info?.local_count_tokens) {
           localCountMode = t('本地计费');
         } else {
