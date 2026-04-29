@@ -694,7 +694,22 @@ func BackfillSupplierChannelNo() error {
 	return nil
 }
 
+// TFOpenUpstreamPricing 与 BatchInsertChannelsWithTfOpenUpstreamPricing 中 channels 顺序一一对应。
+type TFOpenUpstreamPricing struct {
+	ModelPrice map[string]float64
+	ModelRatio map[string]float64
+}
+
 func BatchInsertChannels(channels []Channel) error {
+	return batchInsertChannelsWithOptionalTfOpenPricing(channels, nil)
+}
+
+// BatchInsertChannelsWithTfOpenUpstreamPricing 批量插入渠道并在落库后合并上游渠道级定价/倍率（用于 TokenFactoryOpen 同步）。
+func BatchInsertChannelsWithTfOpenUpstreamPricing(channels []Channel, pricing []TFOpenUpstreamPricing) error {
+	return batchInsertChannelsWithOptionalTfOpenPricing(channels, pricing)
+}
+
+func batchInsertChannelsWithOptionalTfOpenPricing(channels []Channel, tfOpenPricing []TFOpenUpstreamPricing) error {
 	if len(channels) == 0 {
 		return nil
 	}
@@ -732,7 +747,75 @@ func BatchInsertChannels(channels []Channel) error {
 	// Best effort: initialize channel-level model pricing entries so newly imported
 	// channels are visible in channel pricing editor without blank mappings.
 	ensureChannelModelPricingDefaults(createdChannels)
+	if len(tfOpenPricing) > 0 {
+		mergeTFOpenUpstreamPricingAfterInsert(createdChannels, tfOpenPricing)
+	}
 	return nil
+}
+
+func mergeTFOpenUpstreamPricingAfterInsert(created []Channel, pricing []TFOpenUpstreamPricing) {
+	if len(created) == 0 || len(pricing) == 0 {
+		return
+	}
+	n := len(created)
+	if len(pricing) < n {
+		n = len(pricing)
+	}
+	priceCopy := ratio_setting.GetChannelModelPriceCopy()
+	ratioCopy := ratio_setting.GetChannelModelRatioCopy()
+	changed := false
+	for i := 0; i < n; i++ {
+		ch := created[i]
+		if ch.Id <= 0 {
+			continue
+		}
+		p := pricing[i]
+		if len(p.ModelPrice) == 0 && len(p.ModelRatio) == 0 {
+			continue
+		}
+		cid := strconv.Itoa(ch.Id)
+		if _, ok := priceCopy[cid]; !ok {
+			priceCopy[cid] = make(map[string]float64)
+		}
+		if _, ok := ratioCopy[cid]; !ok {
+			ratioCopy[cid] = make(map[string]float64)
+		}
+		for k, v := range p.ModelPrice {
+			mk := ratio_setting.FormatMatchingModelName(k)
+			if mk == "" {
+				continue
+			}
+			priceCopy[cid][mk] = v
+			changed = true
+		}
+		for k, v := range p.ModelRatio {
+			mk := ratio_setting.FormatMatchingModelName(k)
+			if mk == "" {
+				continue
+			}
+			ratioCopy[cid][mk] = v
+			changed = true
+		}
+	}
+	if !changed {
+		return
+	}
+	priceJSONBytes, err := common.Marshal(priceCopy)
+	if err != nil {
+		common.SysLog(fmt.Sprintf("mergeTFOpen upstream price marshal: %v", err))
+		return
+	}
+	ratioJSONBytes, err := common.Marshal(ratioCopy)
+	if err != nil {
+		common.SysLog(fmt.Sprintf("mergeTFOpen upstream ratio marshal: %v", err))
+		return
+	}
+	if err := UpdateOption("ChannelModelPrice", string(priceJSONBytes)); err != nil {
+		common.SysLog(fmt.Sprintf("mergeTFOpen update ChannelModelPrice: %v", err))
+	}
+	if err := UpdateOption("ChannelModelRatio", string(ratioJSONBytes)); err != nil {
+		common.SysLog(fmt.Sprintf("mergeTFOpen update ChannelModelRatio: %v", err))
+	}
 }
 
 func ensureChannelModelPricingDefaults(channels []Channel) {

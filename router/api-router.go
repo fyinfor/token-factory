@@ -181,6 +181,7 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.GET("/search", controller.SearchUsers)
 				adminRoute.GET("/supplier/application", controller.AdminListSupplierApplications)
 				adminRoute.PUT("/supplier/application/:id", controller.AdminUpdateSupplierApplication)
+				adminRoute.POST("/supplier/application/activate", controller.ActivateSupplierApplication)
 				adminRoute.GET("/supplier/list", controller.AdminListSuppliers)
 				adminRoute.GET("/supplier/:id", controller.AdminGetSupplierDetail)
 				adminRoute.POST("/supplier/application/:id/review", controller.AdminReviewSupplierApplication)
@@ -271,6 +272,11 @@ func SetApiRouter(router *gin.Engine) {
 			ratioSyncRoute.GET("/channels", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.GetSyncableChannels)
 			// 管理员或已审核供应商可拉取上游差异；供应商侧仅自有模型参与对比（见 controller.FetchUpstreamRatios）
 			ratioSyncRoute.POST("/fetch", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.FetchUpstreamRatios)
+		}
+		tfOpenSyncRoute := apiRouter.Group("/tf_open_sync")
+		{
+			// 子站 TokenFactoryOpen 拉全站渠道（脱敏+定价）；鉴权见 controller.authorizeTFOpenSyncExport
+			tfOpenSyncRoute.GET("/channels", middleware.CriticalRateLimit(), controller.TFOpenSyncExportChannels)
 		}
 		channelRoute := apiRouter.Group("/channel")
 		{

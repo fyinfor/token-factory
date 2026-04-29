@@ -51,9 +51,14 @@ func GetSupplierDashboardData(c *gin.Context) {
 		err           error
 	)
 
-	// 管理员查看全部供应商模型；供应商仅查看自己名下模型。
+	// 管理员默认查看全部供应商模型；当传 supplier_id 时查看指定供应商。
 	if c.GetInt("role") >= common.RoleAdminUser {
-		modelNamesMap, err = collectAllSupplierOwnedModelNames()
+		supplierID, _ := strconv.Atoi(c.Query("supplier_id"))
+		if supplierID > 0 {
+			modelNamesMap, err = collectSupplierOwnedModelNamesBySupplierID(supplierID)
+		} else {
+			modelNamesMap, err = collectAllSupplierOwnedModelNames()
+		}
 	} else {
 		modelNamesMap, err = collectSupplierOwnedModelNames(c.GetInt("id"))
 	}
