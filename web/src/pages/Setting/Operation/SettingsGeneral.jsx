@@ -40,25 +40,28 @@ import { useTranslation } from 'react-i18next';
 
 const { Text } = Typography;
 
+const FORM_INPUT_DEFAULTS = {
+  TopUpLink: '',
+  'general_setting.docs_link': '',
+  'general_setting.quota_display_type': 'USD',
+  'general_setting.recharge_display_currency': 'USD',
+  'general_setting.custom_currency_symbol': '¤',
+  'general_setting.custom_currency_exchange_rate': '',
+  QuotaPerUnit: '',
+  RetryTimes: '',
+  USDExchangeRate: '',
+  DisplayTokenStatEnabled: false,
+  DefaultCollapseSidebar: false,
+  DemoSiteEnabled: false,
+  SelfUseModeEnabled: false,
+  'token_setting.max_user_tokens': 1000,
+};
+
 export default function GeneralSettings(props) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [showQuotaWarning, setShowQuotaWarning] = useState(false);
-  const [inputs, setInputs] = useState({
-    TopUpLink: '',
-    'general_setting.docs_link': '',
-    'general_setting.quota_display_type': 'USD',
-    'general_setting.custom_currency_symbol': '¤',
-    'general_setting.custom_currency_exchange_rate': '',
-    QuotaPerUnit: '',
-    RetryTimes: '',
-    USDExchangeRate: '',
-    DisplayTokenStatEnabled: false,
-    DefaultCollapseSidebar: false,
-    DemoSiteEnabled: false,
-    SelfUseModeEnabled: false,
-    'token_setting.max_user_tokens': 1000,
-  });
+  const [inputs, setInputs] = useState(FORM_INPUT_DEFAULTS);
   const refForm = useRef();
   const [inputsRow, setInputsRow] = useState(inputs);
 
@@ -93,6 +96,11 @@ export default function GeneralSettings(props) {
             return showError(t('部分保存失败，请重试'));
         }
         showSuccess(t('保存成功'));
+        // 充值展示币种需要在当前会话立即生效，避免切页后仍显示旧币种。
+        localStorage.setItem(
+          'recharge_display_currency',
+          inputs['general_setting.recharge_display_currency'] || 'USD',
+        );
         props.refresh();
       })
       .catch(() => {
@@ -200,9 +208,9 @@ export default function GeneralSettings(props) {
   }, [quotaDisplayType, combinedRate, inputs, t]);
 
   useEffect(() => {
-    const currentInputs = {};
+    const currentInputs = { ...FORM_INPUT_DEFAULTS };
     for (let key in props.options) {
-      if (Object.keys(inputs).includes(key)) {
+      if (Object.keys(FORM_INPUT_DEFAULTS).includes(key)) {
         currentInputs[key] = props.options[key];
       }
     }
@@ -293,6 +301,21 @@ export default function GeneralSettings(props) {
                   <Form.Select.Option value='CUSTOM'>
                     {t('自定义货币')}
                   </Form.Select.Option>
+                </Form.Select>
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Select
+                  field='general_setting.recharge_display_currency'
+                  label={t('充值展示币种')}
+                  extraText={t(
+                    '仅影响钱包管理“实付金额”文案展示，不影响后端实际计费与换算',
+                  )}
+                  onChange={handleFieldChange(
+                    'general_setting.recharge_display_currency',
+                  )}
+                >
+                  <Form.Select.Option value='USD'>USD ($)</Form.Select.Option>
+                  <Form.Select.Option value='CNY'>CNY (¥)</Form.Select.Option>
                 </Form.Select>
               </Col>
               {quotaDisplayType !== 'USD' && (

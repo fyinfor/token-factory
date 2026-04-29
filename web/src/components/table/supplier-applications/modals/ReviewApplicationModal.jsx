@@ -27,6 +27,8 @@ import {
   Typography,
   Divider,
   Image,
+  Input,
+  TextArea,
 } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
@@ -126,6 +128,25 @@ const ReviewApplicationModal = ({
     }
     return value.join('、');
   };
+  /** renderReadonlyField 以只读输入框样式展示申请信息，提升可读性与一致性。 */
+  const renderReadonlyField = (label, value, multiline = false) => {
+    const displayValue =
+      value === null || value === undefined || String(value).trim() === ''
+        ? t('未填写')
+        : String(value);
+    return (
+      <div style={{ marginBottom: '16px' }}>
+        <Text strong>{label}</Text>
+        <div style={{ marginTop: '6px' }}>
+          {multiline ? (
+            <TextArea value={displayValue} rows={3} readOnly autosize />
+          ) : (
+            <Input value={displayValue} readOnly />
+          )}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <Modal
@@ -176,24 +197,14 @@ const ReviewApplicationModal = ({
 
             <Row gutter={12}>
               <Col span={24}>
-                <div style={{ marginBottom: '16px' }}>
-                  <Text type='secondary'>{t('企业/主体名称')}</Text>
-                  <div style={{ marginTop: '4px' }}>
-                    <Text strong>{application.company_name}</Text>
-                  </div>
-                </div>
+                {renderReadonlyField(t('企业/主体名称'), application.company_name)}
+              </Col>
+              <Col span={24}>
+                {renderReadonlyField(t('统一社会信用代码'), application.credit_code)}
               </Col>
               <Col span={24}>
                 <div style={{ marginBottom: '16px' }}>
-                  <Text type='secondary'>{t('统一社会信用代码')}</Text>
-                  <div style={{ marginTop: '4px' }}>
-                    <Text strong>{application.credit_code}</Text>
-                  </div>
-                </div>
-              </Col>
-              <Col span={24}>
-                <div style={{ marginBottom: '16px' }}>
-                  <Text type='secondary'>{t('企业Logo')}</Text>
+                  <Text strong>{t('企业Logo')}</Text>
                   <div style={{ marginTop: '4px' }}>
                     {application.company_logo_url ? (
                       <Image
@@ -214,7 +225,7 @@ const ReviewApplicationModal = ({
               </Col>
               <Col span={24}>
                 <div style={{ marginBottom: '16px' }}>
-                  <Text type='secondary'>{t('营业执照')}</Text>
+                  <Text strong>{t('营业执照')}</Text>
                   <div style={{ marginTop: '4px' }}>
                     {application.business_license_url ? (
                       <Image
@@ -233,20 +244,13 @@ const ReviewApplicationModal = ({
                 </div>
               </Col>
               <Col span={24}>
-                <div style={{ marginBottom: '16px' }}>
-                  <Text type='secondary'>{t('法人/经营者姓名')}</Text>
-                  <div style={{ marginTop: '4px' }}>
-                    <Text strong>{application.legal_representative}</Text>
-                  </div>
-                </div>
+                {renderReadonlyField(
+                  t('法人/经营者姓名'),
+                  application.legal_representative,
+                )}
               </Col>
               <Col span={24}>
-                <div style={{ marginBottom: '16px' }}>
-                  <Text type='secondary'>{t('企业规模')}</Text>
-                  <div style={{ marginTop: '4px' }}>
-                    <Text>{application.company_size || t('未填写')}</Text>
-                  </div>
-                </div>
+                {renderReadonlyField(t('企业规模'), application.company_size)}
               </Col>
             </Row>
 
@@ -258,28 +262,16 @@ const ReviewApplicationModal = ({
 
             <Row gutter={12}>
               <Col span={24}>
-                <div style={{ marginBottom: '16px' }}>
-                  <Text type='secondary'>{t('对接人姓名')}</Text>
-                  <div style={{ marginTop: '4px' }}>
-                    <Text strong>{application.contact_name}</Text>
-                  </div>
-                </div>
+                {renderReadonlyField(t('对接人姓名'), application.contact_name)}
               </Col>
               <Col span={24}>
-                <div style={{ marginBottom: '16px' }}>
-                  <Text type='secondary'>{t('对接人手机号')}</Text>
-                  <div style={{ marginTop: '4px' }}>
-                    <Text strong>{application.contact_mobile}</Text>
-                  </div>
-                </div>
+                {renderReadonlyField(t('对接人手机号'), application.contact_mobile)}
               </Col>
               <Col span={24}>
-                <div style={{ marginBottom: '16px' }}>
-                  <Text type='secondary'>{t('对接人微信/企业微信')}</Text>
-                  <div style={{ marginTop: '4px' }}>
-                    <Text>{application.contact_wechat}</Text>
-                  </div>
-                </div>
+                {renderReadonlyField(
+                  t('对接人微信/企业微信'),
+                  application.contact_wechat,
+                )}
               </Col>
             </Row>
 
@@ -291,39 +283,25 @@ const ReviewApplicationModal = ({
 
             <Row gutter={12}>
               <Col span={24}>
-                <div style={{ marginBottom: '16px' }}>
-                  <Text type='secondary'>{t('申请状态')}</Text>
-                  <div style={{ marginTop: '4px' }}>
-                    <Text>{getStatusText(application.status)}</Text>
-                  </div>
-                </div>
+                {renderReadonlyField(t('申请状态'), getStatusText(application.status))}
               </Col>
               <Col span={24}>
-                <div style={{ marginBottom: '16px' }}>
-                  <Text type='secondary'>{t('申请时间')}</Text>
-                  <div style={{ marginTop: '4px' }}>
-                    <Text>{timestamp2string(application.created_at)}</Text>
-                  </div>
-                </div>
+                {renderReadonlyField(
+                  t('申请时间'),
+                  timestamp2string(application.created_at),
+                )}
               </Col>
               {application.reviewed_at > 0 && (
                 <Col span={24}>
-                  <div style={{ marginBottom: '16px' }}>
-                    <Text type='secondary'>{t('审批时间')}</Text>
-                    <div style={{ marginTop: '4px' }}>
-                      <Text>{timestamp2string(application.reviewed_at)}</Text>
-                    </div>
-                  </div>
+                  {renderReadonlyField(
+                    t('审批时间'),
+                    timestamp2string(application.reviewed_at),
+                  )}
                 </Col>
               )}
               {application.review_reason ? (
                 <Col span={24}>
-                  <div style={{ marginBottom: '16px' }}>
-                    <Text type='secondary'>{t('审批意见')}</Text>
-                    <div style={{ marginTop: '4px' }}>
-                      <Text>{application.review_reason}</Text>
-                    </div>
-                  </div>
+                  {renderReadonlyField(t('审批意见'), application.review_reason, true)}
                 </Col>
               ) : null}
             </Row>
@@ -338,44 +316,41 @@ const ReviewApplicationModal = ({
             ) : (
               <Row gutter={12}>
                 <Col span={24}>
-                  <Text type='secondary'>{t('核心服务类型')}</Text>
-                  <div style={{ marginTop: '4px' }}>
-                    <Text>
-                      {renderListValue(capability.core_service_types)}
-                    </Text>
-                  </div>
+                  {renderReadonlyField(
+                    t('核心服务类型'),
+                    renderListValue(capability.core_service_types),
+                  )}
                 </Col>
                 <Col span={24}>
-                  <Text type='secondary'>{t('支持的模型')}</Text>
-                  <div style={{ marginTop: '4px' }}>
-                    <Text>{renderListValue(capability.supported_models)}</Text>
-                  </div>
+                  {renderReadonlyField(
+                    t('支持的模型'),
+                    renderListValue(capability.supported_models),
+                  )}
                 </Col>
                 <Col span={24}>
-                  <Text type='secondary'>{t('支持的API接口')}</Text>
-                  <div style={{ marginTop: '4px' }}>
-                    <Text>
-                      {renderListValue(capability.supported_api_endpoints)}
-                    </Text>
-                  </div>
+                  {renderReadonlyField(
+                    t('支持的API接口'),
+                    renderListValue(capability.supported_api_endpoints),
+                  )}
                 </Col>
                 <Col span={24}>
-                  <Text type='secondary'>{t('支持的参数配置')}</Text>
-                  <div style={{ marginTop: '4px' }}>
-                    <Text>{renderListValue(capability.supported_params)}</Text>
-                  </div>
+                  {renderReadonlyField(
+                    t('支持的参数配置'),
+                    renderListValue(capability.supported_params),
+                  )}
                 </Col>
                 <Col span={24}>
-                  <Text type='secondary'>{t('定价模式')}</Text>
-                  <div style={{ marginTop: '4px' }}>
-                    <Text>{renderListValue(capability.pricing_modes)}</Text>
-                  </div>
+                  {renderReadonlyField(
+                    t('定价模式'),
+                    renderListValue(capability.pricing_modes),
+                  )}
                 </Col>
                 <Col span={24}>
-                  <Text type='secondary'>{t('API接口地址')}</Text>
-                  <div style={{ marginTop: '4px' }}>
-                    <Text>{renderListValue(capability.api_base_urls)}</Text>
-                  </div>
+                  {renderReadonlyField(
+                    t('API接口地址'),
+                    renderListValue(capability.api_base_urls),
+                    true,
+                  )}
                 </Col>
               </Row>
             )}

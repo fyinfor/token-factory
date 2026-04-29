@@ -39,7 +39,16 @@ const PaymentConfirmModal = ({
   // 新增：用于显示折扣明细
   amountNumber,
   discountRate,
+  rechargeDisplayCurrency = 'USD',
 }) => {
+  /** getRechargeCurrencyMeta 计算充值金额展示币种（仅 UI 文案）。 */
+  const getRechargeCurrencyMeta = () => {
+    if (rechargeDisplayCurrency === 'CNY') {
+      return { symbol: '¥', code: 'CNY' };
+    }
+    return { symbol: '$', code: 'USD' };
+  };
+  const { symbol, code } = getRechargeCurrencyMeta();
   const hasDiscount =
     discountRate && discountRate > 0 && discountRate < 1 && amountNumber > 0;
   const originalAmount = hasDiscount ? amountNumber / discountRate : 0;
@@ -97,7 +106,9 @@ const PaymentConfirmModal = ({
                     {t('原价')}：
                   </Text>
                   <Text delete className='text-slate-500 dark:text-slate-400'>
-                    {`$${originalAmount.toFixed(2)} USD`}
+                    {code === 'USD'
+                      ? `${symbol}${originalAmount.toFixed(2)} ${code}`
+                      : `${symbol}${originalAmount.toFixed(2)}`}
                   </Text>
                 </div>
                 <div className='flex justify-between items-center'>
@@ -105,7 +116,9 @@ const PaymentConfirmModal = ({
                     {t('优惠')}：
                   </Text>
                   <Text className='text-emerald-600 dark:text-emerald-400'>
-                    {`- $${discountAmount.toFixed(2)} USD`}
+                    {code === 'USD'
+                      ? `- ${symbol}${discountAmount.toFixed(2)} ${code}`
+                      : `- ${symbol}${discountAmount.toFixed(2)}`}
                   </Text>
                 </div>
               </>
