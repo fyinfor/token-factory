@@ -12,7 +12,7 @@ import {
   IllustrationNoAccessDark,
 } from '@douyinfe/semi-illustrations';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Activity,
   BarChart3,
@@ -54,6 +54,8 @@ const getDefaultRange = () => {
 export default function SupplierDashboardPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const selectedSupplierId = searchParams.get('supplier_id');
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [timeRange] = useState(getDefaultRange());
@@ -64,8 +66,11 @@ export default function SupplierDashboardPage() {
   const loadDashboardData = async () => {
     setLoading(true);
     try {
+      const supplierQuery = selectedSupplierId
+        ? `&supplier_id=${encodeURIComponent(selectedSupplierId)}`
+        : '';
       const res = await API.get(
-        `/api/user/supplier-dashboard?start_timestamp=${timeRange.startTimestamp}&end_timestamp=${timeRange.endTimestamp}`,
+        `/api/user/supplier-dashboard?start_timestamp=${timeRange.startTimestamp}&end_timestamp=${timeRange.endTimestamp}${supplierQuery}`,
       );
       if (res?.data?.success) {
         setData(res.data.data || null);
@@ -82,7 +87,7 @@ export default function SupplierDashboardPage() {
   useEffect(() => {
     loadDashboardData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [selectedSupplierId]);
 
   const usageColumns = useMemo(
     () => [
@@ -237,7 +242,9 @@ export default function SupplierDashboardPage() {
               </Title>
               <Text type='tertiary'>
                 {isAdmin()
-                  ? t('当前展示全部供应商提供模型的统计数据')
+                  ? selectedSupplierId
+                    ? t('当前展示指定供应商的数据看板')
+                    : t('当前展示全部供应商提供模型的统计数据')
                   : t('当前展示您提供模型的统计数据')}
               </Text>
             </div>

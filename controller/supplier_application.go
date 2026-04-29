@@ -1153,6 +1153,57 @@ func DeactivateMySupplierApplication(c *gin.Context) {
 	})
 }
 
+// ActivateSupplierApplication godoc
+// @Summary 管理员启用已注销供应商
+// @Description 仅已注销状态可启用；启用后回填用户表 supplier_id 并将申请状态置为审核通过
+// @Tags SupplierAdmin
+// @Accept json
+// @Produce json
+// @Security CookieAuth
+// @Security ApiUserID
+// @Param request body SupplierDeactivateRequest false "启用说明"
+// @Success 200 {object} map[string]interface{} "success + data{id,status}"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Router /user/supplier/application/activate [post]
+func ActivateSupplierApplication(c *gin.Context) {
+	var req SupplierDeactivateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的参数"})
+		return
+	}
+	if req.SupplierID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "启用供应商时必须提供有效的supplier_id"})
+		return
+	}
+	reason := strings.TrimSpace(req.Reason)
+	app, err := model.ActivateSupplierApplication(c.GetInt("id"), c.GetInt("role"), req.SupplierID, reason)
+	if err != nil {
+		if errors.Is(err, model.ErrSupplierApplicationStatusNotDeactivated) {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "当前供应商状态不支持启用"})
+			return
+		}
+		if model.IsSupplierApplicationNotFound(err) {
+			c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "未找到可启用的供应商申请"})
+			return
+		}
+		common.ApiError(c, err)
+		return
+	}
+	_ = service.PublishUserMessage(&model.UserMessage{
+		ReceiverUserID:  app.ApplicantUserID,
+		ReceiverMinRole: 0,
+		Type:            model.UserMessageTypeSupplierApproved,
+		Title:           "供应商已启用",
+		Content:         fmt.Sprintf("你的供应商“%s”已重新启用。", app.CompanyName),
+		BizType:         model.UserMessageBizTypeSupplierApplication,
+		BizID:           app.ID,
+	})
+	common.ApiSuccess(c, gin.H{
+		"id":     app.ID,
+		"status": app.Status,
+	})
+}
+
 // CreateMySupplierChannel godoc
 // @Summary 当前供应商新增渠道
 // @Description 仅审核通过的供应商可新增，自动写入 owner_user_id 与 supplier_application_id

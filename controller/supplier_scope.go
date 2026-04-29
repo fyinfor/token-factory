@@ -88,6 +88,15 @@ func collectAllSupplierOwnedModelNames() (map[string]struct{}, error) {
 	return ownedModels, nil
 }
 
+// collectSupplierOwnedModelNamesBySupplierID 收集指定供应商申请（supplier_application_id）名下模型集合。
+func collectSupplierOwnedModelNamesBySupplierID(supplierID int) (map[string]struct{}, error) {
+	app, err := model.GetSupplierByID(supplierID)
+	if err != nil {
+		return nil, err
+	}
+	return collectSupplierOwnedModelNames(app.ApplicantUserID)
+}
+
 // filterModelJSONByOwnedModels 仅保留属于供应商自有模型的 JSON 键值。
 func filterModelJSONByOwnedModels(raw string, ownedModels map[string]struct{}) (string, error) {
 	raw = strings.TrimSpace(raw)
