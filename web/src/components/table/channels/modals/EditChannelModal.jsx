@@ -672,6 +672,13 @@ const EditChannelModal = (props) => {
             base_url: 'https://ark.cn-beijing.volces.com',
           }));
           break;
+        case 59:
+          localModels = [];
+          setInputs((prevInputs) => ({
+            ...prevInputs,
+            models: [],
+          }));
+          break;
         default:
           localModels = getChannelModels(value);
           break;
@@ -1329,6 +1336,9 @@ const EditChannelModal = (props) => {
         formApiRef.current.setValues(originInputs);
       }
       let localModels = getChannelModels(inputs.type);
+      if (inputs.type === 59) {
+        localModels = [];
+      }
       setBasicModels(localModels);
       setInputs((inputs) => ({ ...inputs, models: localModels }));
     }

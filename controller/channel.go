@@ -1057,20 +1057,17 @@ func fetchTokenFactoryUpstreamChannels(baseURL string, key string) ([]upstreamCh
 }
 
 func tfOpenLocalChannelNo(up upstreamChannelSyncItem) string {
-	sid := up.SupplierApplication
 	upNo := strings.TrimSpace(up.ChannelNo)
-	prefix := "p0"
-	if sid > 0 {
-		prefix = "u" + strconv.Itoa(sid)
-	}
 	if upNo != "" {
-		s := prefix + "-" + upNo
-		if len(s) <= 32 {
-			return s
+		if len(upNo) <= 32 {
+			return upNo
 		}
-		return s[:32]
+		return upNo[:32]
 	}
-	return prefix + "-id" + strconv.Itoa(up.ID)
+	if up.ID > 0 {
+		return "c" + strconv.Itoa(up.ID)
+	}
+	return ""
 }
 
 func buildTokenFactorySyncedChannels(base *model.Channel) ([]model.Channel, []model.TFOpenUpstreamPricing, error) {
@@ -1104,16 +1101,7 @@ func buildTokenFactorySyncedChannels(base *model.Channel) ([]model.Channel, []mo
 		} else {
 			clone.Type = constant.ChannelTypeTokenFactoryOpen
 		}
-		displayName := strings.TrimSpace(upstream.Name)
-		sa := strings.TrimSpace(upstream.SupplierAlias)
-		if sa != "" {
-			if displayName != "" {
-				displayName = "[" + sa + "] " + displayName
-			} else {
-				displayName = sa
-			}
-		}
-		clone.Name = displayName
+		clone.Name = strings.TrimSpace(upstream.Name)
 		if strings.TrimSpace(clone.Name) == "" {
 			clone.Name = fmt.Sprintf("upstream-%d", upstream.ID)
 		}
