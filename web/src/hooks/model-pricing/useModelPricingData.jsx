@@ -39,7 +39,7 @@ export const useModelPricingData = () => {
   const [filterEndpointType, setFilterEndpointType] = useState('all'); // 端点类型筛选: 'all' | string
   const [filterVendor, setFilterVendor] = useState('all'); // 供应商筛选: 'all' | 'unknown' | string
   const [filterTag, setFilterTag] = useState('all'); // 模型标签筛选: 'all' | string
-  // 排序键: 'default' | 'price' | 'supplier_grade' | 'latency'
+  // 排序键: 'default' | 'price' | 'supplier_grade' | 'latency' | 'discount'
   const [sortKey, setSortKey] = useState('default');
   const [pageSize, setPageSize] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
@@ -210,6 +210,21 @@ export const useModelPricingData = () => {
         return best;
       };
 
+      // 折扣率：1 - 渠道最低价 / 根价格；无折扣或数据缺失返回 0
+      const modelDiscountRatio = (m) => {
+        const list = Array.isArray(m.channel_list) ? m.channel_list : [];
+        const pickField = m.quota_type === 1 ? 'model_price' : 'model_ratio';
+        const rootVal = Number(m[pickField]);
+        if (!Number.isFinite(rootVal) || rootVal <= 0) return 0;
+        let minChannel = Number.POSITIVE_INFINITY;
+        for (const ch of list) {
+          const v = Number(ch?.[pickField]);
+          if (Number.isFinite(v) && v < minChannel) minChannel = v;
+        }
+        if (!Number.isFinite(minChannel) || minChannel >= rootVal) return 0;
+        return 1 - minChannel / rootVal;
+      };
+
       const tieBreak = (a, b) => {
         if (a.quota_type !== b.quota_type) return a.quota_type - b.quota_type;
         return String(a.model_name).localeCompare(String(b.model_name));
@@ -218,6 +233,11 @@ export const useModelPricingData = () => {
       const cmpAsc = (av, bv, a, b) => {
         if (av === bv) return tieBreak(a, b);
         return av < bv ? -1 : 1;
+      };
+
+      const cmpDesc = (av, bv, a, b) => {
+        if (av === bv) return tieBreak(a, b);
+        return av > bv ? -1 : 1;
       };
 
       result = [...result].sort((a, b) => {
@@ -233,6 +253,8 @@ export const useModelPricingData = () => {
             );
           case 'latency':
             return cmpAsc(modelMinLatency(a), modelMinLatency(b), a, b);
+          case 'discount':
+            return cmpDesc(modelDiscountRatio(a), modelDiscountRatio(b), a, b);
           default:
             return tieBreak(a, b);
         }
