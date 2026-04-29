@@ -25,6 +25,7 @@ type tfOpenSyncExportRow struct {
 	ChannelNo             string             `json:"channel_no"`
 	SupplierApplicationID int                `json:"supplier_application_id"`
 	SupplierAlias         string             `json:"supplier_alias,omitempty"`
+	ModelMapping          string             `json:"model_mapping,omitempty"`
 	ModelPrice            map[string]float64 `json:"model_price,omitempty"`
 	ModelRatio            map[string]float64 `json:"model_ratio,omitempty"`
 }
@@ -161,6 +162,7 @@ func TFOpenSyncExportChannels(c *gin.Context) {
 			ChannelNo:             strings.TrimSpace(ch.ChannelNo),
 			SupplierApplicationID: ch.SupplierApplicationID,
 			SupplierAlias:         aliasByAppID[ch.SupplierApplicationID],
+			ModelMapping:          strings.TrimSpace(ch.GetModelMapping()),
 			ModelPrice:            mp,
 			ModelRatio:            mr,
 		})

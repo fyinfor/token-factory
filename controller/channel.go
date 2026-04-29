@@ -825,8 +825,32 @@ type upstreamChannelSyncItem struct {
 	ChannelNo           string             `json:"channel_no"`
 	SupplierApplication int                `json:"supplier_application_id"`
 	SupplierAlias       string             `json:"supplier_alias"`
+	ModelMapping        string             `json:"model_mapping"`
 	ModelPrice          map[string]float64 `json:"model_price"`
 	ModelRatio          map[string]float64 `json:"model_ratio"`
+}
+
+func decodeUpstreamModelMapping(m map[string]any) string {
+	raw, ok := m["model_mapping"]
+	if !ok || raw == nil {
+		return ""
+	}
+	switch x := raw.(type) {
+	case string:
+		return strings.TrimSpace(x)
+	case map[string]any:
+		b, err := json.Marshal(x)
+		if err != nil {
+			return ""
+		}
+		return strings.TrimSpace(string(b))
+	default:
+		b, err := json.Marshal(raw)
+		if err != nil {
+			return strings.TrimSpace(common.Interface2String(raw))
+		}
+		return strings.TrimSpace(string(b))
+	}
 }
 
 func isTokenFactoryOpenBaseURL(raw string) bool {
@@ -959,6 +983,7 @@ func decodeUpstreamChannelPayload(payload map[string]any, itemsKey string) ([]up
 		if mr, ok := m["model_ratio"].(map[string]any); ok && len(mr) > 0 {
 			item.ModelRatio = jsonAnyMapToFloatMap(mr)
 		}
+		item.ModelMapping = decodeUpstreamModelMapping(m)
 		items = append(items, item)
 	}
 	return items, nil
@@ -1112,6 +1137,12 @@ func buildTokenFactorySyncedChannels(base *model.Channel) ([]model.Channel, []mo
 		}
 		if upstream.Status > 0 {
 			clone.Status = upstream.Status
+		}
+		mm := strings.TrimSpace(upstream.ModelMapping)
+		if mm != "" {
+			clone.ModelMapping = &mm
+		} else {
+			clone.ModelMapping = nil
 		}
 		clone.ChannelNo = tfOpenLocalChannelNo(upstream)
 		syncMeta := map[string]any{

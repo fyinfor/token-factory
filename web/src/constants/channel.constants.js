@@ -202,7 +202,7 @@ export const CHANNEL_OPTIONS = [
     {
         value: 60,
         color: 'green',
-        label: 'TokenFactoryOpen（同步上游渠道）',
+        label: 'TokenFactoryOpen',
     },
 ];
 
