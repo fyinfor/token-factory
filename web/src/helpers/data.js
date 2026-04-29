@@ -26,6 +26,10 @@ export function setStatusData(data) {
   // 兼容：保留旧字段，同时写入新的额度展示类型
   localStorage.setItem('display_in_currency', data.display_in_currency);
   localStorage.setItem('quota_display_type', data.quota_display_type || 'USD');
+  localStorage.setItem(
+    'recharge_display_currency',
+    data.recharge_display_currency || 'USD',
+  );
   localStorage.setItem('enable_drawing', data.enable_drawing);
   localStorage.setItem('enable_task', data.enable_task);
   localStorage.setItem('enable_data_export', data.enable_data_export);
