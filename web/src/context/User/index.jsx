@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next';
 import { reducer, initialState } from './reducer';
 import { normalizeLanguage } from '../../i18n/language';
 import { API, mergeSelfResponseIntoLocalUser } from '../../helpers';
+import AdminInitialSetupModal from '../../components/auth/AdminInitialSetupModal';
 
 export const UserContext = React.createContext({
   state: initialState,
@@ -71,6 +72,7 @@ export const UserProvider = ({ children }) => {
   return (
     <UserContext.Provider value={[state, dispatch]}>
       {children}
+      <AdminInitialSetupModal />
     </UserContext.Provider>
   );
 };

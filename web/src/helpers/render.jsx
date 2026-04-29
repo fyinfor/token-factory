@@ -423,6 +423,8 @@ export function getChannelIcon(channelType) {
       return <Doubao.Color size={iconSize} />;
     case 56: // Replicate
       return <Replicate size={iconSize} />;
+    case 59: // TokenFactoryOpen
+      return <Server size={iconSize} strokeWidth={2} />;
     case 8: // 自定义渠道
     case 22: // 知识库：FastGPT
       return <FastGPT.Color size={iconSize} />;
@@ -1457,6 +1459,8 @@ function renderPriceSimpleCore({
   videoCompletionRatio = 1.0,
   videoOutputTokens = 0,
   videoInputTextTokens = 0,
+  // From log.other.billing_mode when backend stamps video_per_video / video_token.
+  billingMode = '',
 }) {
   const { ratio: effectiveGroupRatio, label: ratioLabel } = getEffectiveRatio(
     groupRatio,
@@ -1486,6 +1490,10 @@ function renderPriceSimpleCore({
     videoRatio > 0 &&
     (modelPrice === 0 || modelPrice === -1);
 
+  const isVideoPerVideoFlatBilling =
+    billingMode === 'video_per_video' &&
+    (modelPrice === 0 || modelPrice === -1);
+
   if (outputMode === 'segments') {
     // 使用日志表「详情」等紧凑多行：不展示单独一行「分组/专属倍率」；各单价 = 原单价×有效分组倍率（与日志详情的折叠展示一致）。
     const groupMult =
@@ -1493,6 +1501,17 @@ function renderPriceSimpleCore({
         ? Number(finalGroupRatio)
         : 1;
     const segments = [];
+
+    if (isVideoPerVideoFlatBilling) {
+      segments.push({
+        tone: 'secondary',
+        text: i18next.t('视频按条/分辨率计价（已含换算与分组倍率）'),
+      });
+      if (isSystemPromptOverride) {
+        segments.push({ tone: 'primary', text: i18next.t('系统提示覆盖') });
+      }
+      return segments;
+    }
 
     if (isVideoTokenBilling) {
       // Per the video token formula:
@@ -1667,6 +1686,13 @@ function renderPriceSimpleCore({
     }
 
     return segments;
+  }
+
+  if (isVideoPerVideoFlatBilling) {
+    return joinBillingSummary([
+      i18next.t('视频按条/分辨率固定价（预扣已合并 QuotaPerUnit）'),
+      getGroupRatioText(groupRatio, user_group_ratio),
+    ]);
   }
 
   // Video token-billing branch for the non-segments (text) output mode —
@@ -2315,6 +2341,7 @@ export function renderLogContent(
   videoCompletionRatio = 1.0,
   videoOutputTokens = 0,
   videoInputTextTokens = 0,
+  billingMode = '',
 ) {
   const {
     ratio,
@@ -2324,6 +2351,19 @@ export function renderLogContent(
 
   // 获取货币配置
   const { symbol, rate } = getCurrencyConfig();
+
+  const isVideoPerVideoFlatBilling =
+    billingMode === 'video_per_video' &&
+    (modelPrice === 0 || modelPrice === -1);
+  if (isVideoPerVideoFlatBilling) {
+    const parts = [
+      i18next.t('视频按条/分辨率固定价（预扣已合并 QuotaPerUnit）'),
+    ];
+    if (!hideGroupRatioInDetail) {
+      parts.push(getGroupRatioText(groupRatio, user_group_ratio));
+    }
+    return joinBillingSummary(parts);
+  }
 
   // Video token-billing branch: shown when the backend stamped the log with
   // video_ratio + video_output_tokens metadata. Has priority over the generic
@@ -2533,6 +2573,7 @@ export function renderModelPriceSimple(
   videoCompletionRatio = 1.0,
   videoOutputTokens = 0,
   videoInputTextTokens = 0,
+  billingMode = '',
 ) {
   return renderPriceSimpleCore({
     modelRatio,
@@ -2556,6 +2597,7 @@ export function renderModelPriceSimple(
     videoCompletionRatio,
     videoOutputTokens,
     videoInputTextTokens,
+    billingMode,
   });
 }
 

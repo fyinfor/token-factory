@@ -32,31 +32,31 @@ func notifyDistributorUser(userId int, notifyType string, title string, content 
 	}
 }
 
-// NotifyDistributorApplicationApproved 资料审核通过，已成为分销商。
+// NotifyDistributorApplicationApproved 资料审核通过，已成为代理。
 func NotifyDistributorApplicationApproved(userId int) {
-	notifyDistributorUser(userId, dto.NotifyTypeDistributorApplicationApproved, "分销商认证已通过",
-		"您的分销商资料审核已通过，已开通分销中心相关功能。您可在个人中心查看邀请与收益。")
+	notifyDistributorUser(userId, dto.NotifyTypeDistributorApplicationApproved, "代理认证已通过",
+		"您的代理资料审核已通过，已开通代理中心相关功能。您可在个人中心查看邀请与收益。")
 }
 
 // NotifyDistributorApplicationRejected 资料审核被驳回。
 func NotifyDistributorApplicationRejected(userId int, reason string) {
-	content := "您的分销商入驻申请未通过审核。"
+	content := "您的代理入驻申请未通过审核。"
 	if reason != "" {
 		content += "原因：" + reason
 	}
-	notifyDistributorUser(userId, dto.NotifyTypeDistributorApplicationRejected, "分销商认证未通过", content)
+	notifyDistributorUser(userId, dto.NotifyTypeDistributorApplicationRejected, "代理认证未通过", content)
 }
 
-// NotifyDistributorRoleGranted 管理员将账号设为分销商。
+// NotifyDistributorRoleGranted 管理员将账号设为代理。
 func NotifyDistributorRoleGranted(userId int) {
-	notifyDistributorUser(userId, dto.NotifyTypeDistributorRoleGranted, "已设为分销商",
-		"管理员已为您的账号开通分销商资格，可使用分销中心邀请与收益功能。")
+	notifyDistributorUser(userId, dto.NotifyTypeDistributorRoleGranted, "已设为代理",
+		"管理员已为您的账号开通代理资格，可使用代理中心邀请与收益功能。")
 }
 
-// NotifyDistributorRoleRevoked 管理员取消分销商资格。
+// NotifyDistributorRoleRevoked 管理员取消代理资格。
 func NotifyDistributorRoleRevoked(userId int) {
-	notifyDistributorUser(userId, dto.NotifyTypeDistributorRoleRevoked, "已取消分销商资格",
-		"管理员已取消您的分销商资格，分销中心相关功能将不可用。")
+	notifyDistributorUser(userId, dto.NotifyTypeDistributorRoleRevoked, "已取消代理资格",
+		"管理员已取消您的代理资格，代理中心相关功能将不可用。")
 }
 
 // NotifyDistributorWithdrawalSubmitted 用户提交线下提现申请。

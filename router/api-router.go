@@ -109,10 +109,12 @@ func SetApiRouter(router *gin.Engine) {
 			selfRoute.Use(middleware.UserAuth())
 			{
 				selfRoute.GET("/self/groups", controller.GetUserGroups)
+				selfRoute.GET("/self/phone_available", controller.UserSelfCheckPhoneAvailable)
 				selfRoute.GET("/self", controller.GetSelf)
 				selfRoute.POST("/student/apply", controller.ApplyStudent)
 				selfRoute.GET("/models", controller.GetUserModels)
 				selfRoute.PUT("/self", controller.UpdateSelf)
+				selfRoute.POST("/self/admin_initial_setup", controller.CompleteAdminInitialSetup)
 				selfRoute.DELETE("/self", controller.DeleteSelf)
 				selfRoute.GET("/token", controller.GenerateAccessToken)
 				selfRoute.GET("/passkey", controller.PasskeyStatus)
@@ -179,6 +181,7 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.GET("/search", controller.SearchUsers)
 				adminRoute.GET("/supplier/application", controller.AdminListSupplierApplications)
 				adminRoute.PUT("/supplier/application/:id", controller.AdminUpdateSupplierApplication)
+				adminRoute.POST("/supplier/application/activate", controller.ActivateSupplierApplication)
 				adminRoute.GET("/supplier/list", controller.AdminListSuppliers)
 				adminRoute.GET("/supplier/:id", controller.AdminGetSupplierDetail)
 				adminRoute.POST("/supplier/application/:id/review", controller.AdminReviewSupplierApplication)
@@ -186,6 +189,7 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.GET("/:id/oauth/bindings", controller.GetUserOAuthBindingsByAdmin)
 				adminRoute.DELETE("/:id/oauth/bindings/:provider_id", controller.UnbindCustomOAuthByAdmin)
 				adminRoute.DELETE("/:id/bindings/:binding_type", controller.AdminClearUserBinding)
+				adminRoute.GET("/check_phone", controller.AdminCheckPhoneAvailable)
 				adminRoute.GET("/:id", controller.GetUser)
 				adminRoute.POST("/", controller.CreateUser)
 				adminRoute.POST("/manage", controller.ManageUser)
@@ -268,6 +272,11 @@ func SetApiRouter(router *gin.Engine) {
 			ratioSyncRoute.GET("/channels", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.GetSyncableChannels)
 			// 管理员或已审核供应商可拉取上游差异；供应商侧仅自有模型参与对比（见 controller.FetchUpstreamRatios）
 			ratioSyncRoute.POST("/fetch", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.FetchUpstreamRatios)
+		}
+		tfOpenSyncRoute := apiRouter.Group("/tf_open_sync")
+		{
+			// 子站 TokenFactoryOpen 拉全站渠道（脱敏+定价）；鉴权见 controller.authorizeTFOpenSyncExport
+			tfOpenSyncRoute.GET("/channels", middleware.CriticalRateLimit(), controller.TFOpenSyncExportChannels)
 		}
 		channelRoute := apiRouter.Group("/channel")
 		{

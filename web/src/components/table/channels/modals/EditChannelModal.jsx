@@ -166,6 +166,10 @@ function type2secretPrompt(type) {
       return '按照如下格式输入: AccessKey|SecretAccessKey';
     case 57:
       return '请输入 JSON 格式的 OAuth 凭据（必须包含 access_token 和 account_id）';
+    case 59:
+      return '请输入上游 OpenAI 视频网关的访问密钥（API Key）';
+    case 60:
+      return '请输入上游 TokenFactoryOpen 平台的访问密钥（Bearer Token）';
     default:
       return '请输入渠道对应的鉴权密钥';
   }
@@ -626,6 +630,7 @@ const EditChannelModal = (props) => {
     setInputs((inputs) => ({ ...inputs, [name]: value }));
     if (name === 'type') {
       let localModels = [];
+      let forceResetModels = false;
       switch (value) {
         case 2:
           localModels = [
@@ -670,11 +675,23 @@ const EditChannelModal = (props) => {
             base_url: 'https://ark.cn-beijing.volces.com',
           }));
           break;
+        case 60:
+          localModels = [];
+          forceResetModels = true;
+          break;
         default:
           localModels = getChannelModels(value);
           break;
       }
-      if (inputs.models.length === 0) {
+      if (forceResetModels) {
+        if (formApiRef.current) {
+          formApiRef.current.setValue('models', []);
+        }
+        setInputs((prevInputs) => ({
+          ...prevInputs,
+          models: [],
+        }));
+      } else if (inputs.models.length === 0) {
         setInputs((inputs) => ({ ...inputs, models: localModels }));
       }
       setBasicModels(localModels);
@@ -1327,6 +1344,9 @@ const EditChannelModal = (props) => {
         formApiRef.current.setValues(originInputs);
       }
       let localModels = getChannelModels(inputs.type);
+      if (inputs.type === 60) {
+        localModels = [];
+      }
       setBasicModels(localModels);
       setInputs((inputs) => ({ ...inputs, models: localModels }));
     }
@@ -1762,7 +1782,10 @@ const EditChannelModal = (props) => {
       showInfo(t('请填写渠道名称和渠道密钥！'));
       return;
     }
-    if (!Array.isArray(localInputs.models) || localInputs.models.length === 0) {
+    if (
+      localInputs.type !== 60 &&
+      (!Array.isArray(localInputs.models) || localInputs.models.length === 0)
+    ) {
       showInfo(t('请至少选择一个模型！'));
       return;
     }
@@ -1771,6 +1794,13 @@ const EditChannelModal = (props) => {
       (!localInputs.base_url || localInputs.base_url.trim() === '')
     ) {
       showInfo(t('请输入API地址！'));
+      return;
+    }
+    if (
+      localInputs.type === 60 &&
+      (!localInputs.base_url || localInputs.base_url.trim() === '')
+    ) {
+      showInfo(t('TokenFactoryOpen 渠道必须填写平台地址！'));
       return;
     }
     const hasModelMapping =
@@ -3886,7 +3916,11 @@ const EditChannelModal = (props) => {
                         field='models'
                         label={t('模型')}
                         placeholder={t('请选择该渠道所支持的模型')}
-                        rules={[{ required: true, message: t('请选择模型') }]}
+                        rules={
+                          inputs.type === 60
+                            ? []
+                            : [{ required: true, message: t('请选择模型') }]
+                        }
                         multiple
                         filter={selectFilter}
                         allowCreate

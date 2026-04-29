@@ -20,13 +20,22 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 	tokenName := c.GetString("token_name")
 	logContent := fmt.Sprintf("操作 %s", info.Action)
 
-	// 视频按 token 计费分支：PriceData.UsePrice=true、ModelPrice=0、且 VideoOutputTokens>0。
+	// 视频按 token 计费分支：任务型视频渠道 + UsePrice + ModelPrice=0 + VideoOutputTokens>0。
 	// 该分支下 quota 已由 outputVideoTokens × ratios × group 直接算出，
 	// OtherRatios 的 seconds/size 不参与计费（已在 relay_task.go 步骤 5/6 跳过），
 	// 因此 logContent 应展示真实公式而非 "计算参数：seconds, size"。
-	isVideoTokenBilling := info.PriceData.UsePrice &&
+	isVideoTokenBilling := constant.IsVideoTaskChannel(info.ChannelType) &&
+		info.PriceData.UsePrice &&
 		info.PriceData.ModelPrice == 0 &&
 		info.PriceData.VideoOutputTokens > 0
+
+	// 视频按分辨率/条一口价（*_per_video）：ModelPriceHelperVideo 将 ModelRatio 置 0、
+	// VideoOutputTokens 为 0，预扣已在 relay 中按条合并，不应再展示为「按次 $0」或 seconds 倍率文案。
+	isVideoPerVideoFlatBilling := constant.IsVideoTaskChannel(info.ChannelType) &&
+		info.PriceData.UsePrice &&
+		info.PriceData.ModelPrice == 0 &&
+		info.PriceData.VideoOutputTokens == 0 &&
+		info.PriceData.ModelRatio == 0
 
 	switch {
 	case common.StringsContains(constant.TaskPricePatches, info.OriginModelName):
@@ -41,6 +50,11 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 			info.PriceData.ModelRatio,
 			info.PriceData.VideoRatio,
 			info.PriceData.VideoCompletionRatio,
+		)
+	case isVideoPerVideoFlatBilling:
+		logContent = fmt.Sprintf(
+			"%s，视频按分辨率/条计费（每条 USD 价 × QuotaPerUnit × 分组倍率等；seconds 等仅记录不参与倍率）",
+			logContent,
 		)
 	default:
 		if len(info.PriceData.OtherRatios) > 0 {
@@ -75,6 +89,10 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		other["video_completion_ratio"] = info.PriceData.VideoCompletionRatio
 		other["video_output_tokens"] = info.PriceData.VideoOutputTokens
 		other["video_input_text_tokens"] = info.PriceData.VideoInputTextTokens
+	}
+	if isVideoPerVideoFlatBilling {
+		other["billing_mode"] = "video_per_video"
+		other["model_ratio"] = info.PriceData.ModelRatio
 	}
 	model.RecordConsumeLog(c, info.UserId, model.RecordConsumeLogParams{
 		ChannelId: info.ChannelId,

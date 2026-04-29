@@ -17,6 +17,9 @@ const (
 	// "hidream-video" is kept as-is for backward compatibility with existing
 	// channel/endpoint configurations stored in the database.
 	EndpointTypeOpenAIVideoGW EndpointType = "hidream-video"
+	// EndpointTypeVideoGenerator points to providers exposing
+	// /videogenerator/generate style APIs.
+	EndpointTypeVideoGenerator EndpointType = "videogenerator"
 	//EndpointTypeMidjourney     EndpointType = "midjourney-proxy"
 	//EndpointTypeSuno           EndpointType = "suno-proxy"
 	//EndpointTypeKling          EndpointType = "kling"

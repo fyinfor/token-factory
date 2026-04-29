@@ -238,6 +238,39 @@ export default function ModelPricingEditor({
     onSaveOutput,
   });
 
+  const videoPerVideoBillingHint = useMemo(() => {
+    const { type } = getCurrencyConfig();
+    if (type === 'CNY') {
+      return t('视频按条价计费说明（人民币展示）');
+    }
+    if (type === 'TOKENS') {
+      return t('视频按条价计费说明（Token模式）');
+    }
+    if (type === 'CUSTOM') {
+      return t('视频按条价计费说明（自定义货币）');
+    }
+    return t('视频按条价计费说明（美元等）');
+  }, [t]);
+
+  const perVideoPriceSuffix = useMemo(() => {
+    const { type, symbol } = getCurrencyConfig();
+    if (type === 'TOKENS') {
+      return t('标价（每条约）');
+    }
+    if (type === 'USD') {
+      return t('$/条');
+    }
+    return `${symbol}${t('按条后缀')}`;
+  }, [t]);
+
+  const flatPerVideoPriceSuffix = useMemo(() => {
+    const { type, symbol } = getCurrencyConfig();
+    if (type === 'TOKENS' || type === 'USD') {
+      return t('$/视频');
+    }
+    return `${symbol}${t('每视频')}`;
+  }, [t]);
+
   const columns = useMemo(
     () => [
       {
@@ -1448,21 +1481,121 @@ export default function ModelPricingEditor({
                                 </Card>
                               </>
                             ) : (
-                              <PriceInput
-                                label={t('单视频固定价格')}
-                                value={selectedModel.videoFixedPrice}
-                                placeholder={t('输入每个视频价格')}
-                                suffix={t('$/视频')}
-                                onChange={(value) =>
-                                  handleNumericFieldChange(
-                                    'videoFixedPrice',
-                                    value,
-                                  )
-                                }
-                                extraText={t(
-                                  '适用于供应商按视频条数计费的场景，例如部分视频生成模型。',
-                                )}
-                              />
+                              <>
+                                <div className='mb-2 text-xs text-gray-600'>
+                                  {videoPerVideoBillingHint}
+                                </div>
+                                {[
+                                  [
+                                      'text',
+                                      t('文生视频（多分辨率规则）'),
+                                      'videoTextToVideoRules',
+                                      t('新增文生视频规则'),
+                                  ],
+                                  [
+                                      'image',
+                                      t('图生视频价格'),
+                                      'videoImageToVideoRules',
+                                      t('新增图生视频规则'),
+                                  ],
+                                  [
+                                      'videoUpload',
+                                      t('视频生视频-上传'),
+                                      'videoUploadRules',
+                                      t('新增上传视频规则'),
+                                  ],
+                                  [
+                                      'videoGenerate',
+                                      t('视频生视频-生成'),
+                                      'videoGenerateRules',
+                                      t('新增生成视频规则'),
+                                  ],
+                                ].map(([section, title, prop, addLabel]) => (
+                                  <React.Fragment key={`pv-${section}`}>
+                                    <div className='mb-3 font-medium text-gray-700'>
+                                      {title}
+                                    </div>
+                                    {(
+                                      selectedModel[prop] || []
+                                    ).map((row, index) => (
+                                      <div
+                                        key={`${section}-pv-row-${index}`}
+                                        style={{
+                                          display: 'grid',
+                                          gridTemplateColumns:
+                                            'minmax(120px,1fr) minmax(160px,1fr) auto',
+                                          gap: 8,
+                                          marginBottom: 8,
+                                        }}
+                                      >
+                                        <Select
+                                          value={row.resolution}
+                                          placeholder={t('选择分辨率')}
+                                          filter
+                                          optionList={getSelectableResolutionOptions(
+                                            selectedModel[prop] || [],
+                                            index,
+                                          )}
+                                          onChange={(value) =>
+                                            updateVideoRuleRow(
+                                              section,
+                                              index,
+                                              'resolution',
+                                              String(value || ''),
+                                            )
+                                          }
+                                        />
+                                        <Input
+                                          value={row.videoPrice}
+                                          placeholder={t('每条成片价格')}
+                                          suffix={perVideoPriceSuffix}
+                                          style={{ maxWidth: 180 }}
+                                          onChange={(value) =>
+                                            updateVideoRuleRow(
+                                              section,
+                                              index,
+                                              'videoPrice',
+                                              value,
+                                            )
+                                          }
+                                        />
+                                        <Button
+                                          type='danger'
+                                          icon={<IconDelete />}
+                                          onClick={() =>
+                                            removeVideoRuleRow(section, index)
+                                          }
+                                        />
+                                      </div>
+                                    ))}
+                                    <Button
+                                      theme='borderless'
+                                      icon={<IconPlus />}
+                                      onClick={() => addVideoRuleRow(section)}
+                                      style={{ marginBottom: 12 }}
+                                    >
+                                      {addLabel}
+                                    </Button>
+                                  </React.Fragment>
+                                ))}
+                                <div style={{ marginTop: 8 }}>
+                                  <PriceInput
+                                    label={t('无分辨率表时的单视频价')}
+                                    value={selectedModel.videoFixedPrice}
+                                    placeholder={t('输入每个视频价格')}
+                                    suffix={flatPerVideoPriceSuffix}
+                                    onChange={(value) =>
+                                      handleNumericFieldChange(
+                                        'videoFixedPrice',
+                                        value,
+                                      )
+                                    }
+                                    extraText={t(
+                                      '适用于供应商按视频条数计费的场景，例如部分视频生成模型。',
+                                    )}
+                                  />
+                                </div>
+                              </>
                             )}
                           </div>
                         )}

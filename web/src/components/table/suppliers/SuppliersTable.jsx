@@ -30,10 +30,18 @@ const SuppliersTable = ({
   t,
   openEdit,
   handleDeactivate,
+  handleActivate,
+  openDashboard,
   compactMode,
 }) => {
   const isMobile = useIsMobile();
-  const columns = getSuppliersColumns(t, openEdit, handleDeactivate);
+  const columns = getSuppliersColumns(
+    t,
+    openEdit,
+    handleDeactivate,
+    handleActivate,
+    openDashboard,
+  );
   const statusColumn = columns.find((col) => col.dataIndex === 'status');
   const createdAtColumn = columns.find((col) => col.dataIndex === 'created_at');
   const operateColumn = columns.find((col) => col.dataIndex === 'operate');

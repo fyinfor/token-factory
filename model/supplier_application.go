@@ -31,6 +31,8 @@ const (
 	SupplierApplicationAuditActionReject = 2
 	// SupplierApplicationAuditActionDeactivate 表示供应商注销。
 	SupplierApplicationAuditActionDeactivate = 3
+	// SupplierApplicationAuditActionActivate 表示供应商重新启用。
+	SupplierApplicationAuditActionActivate = 4
 )
 
 const (
@@ -51,6 +53,8 @@ var (
 	ErrSupplierApplicationStatusNotEditable = errors.New("supplier application status is not editable")
 	// ErrSupplierApplicationStatusNotApproved 表示申请当前不处于审核通过状态，不能执行供应商注销。
 	ErrSupplierApplicationStatusNotApproved = errors.New("supplier application status is not approved")
+	// ErrSupplierApplicationStatusNotDeactivated 表示申请当前不处于已注销状态，不能执行供应商启用。
+	ErrSupplierApplicationStatusNotDeactivated = errors.New("supplier application status is not deactivated")
 )
 
 // SupplierApplication 供应商入驻申请主表。
@@ -657,6 +661,72 @@ func DeactivateSupplierApplication(operatorUserID int, operatorRole int, supplie
 	}
 	app.Status = SupplierApplicationStatusDeactivated
 	app.ReviewReason = strings.TrimSpace(reason)
+	app.UpdatedAt = now
+	if err := tx.Commit().Error; err != nil {
+		return nil, err
+	}
+	return &app, nil
+}
+
+// ActivateSupplierApplication 重新启用已注销供应商（仅允许已注销状态）。
+// 管理员（role>=RoleAdminUser）可按ID启用任意供应商；普通用户仅可启用自己提交的供应商。
+// 启用后会将 supplier_applications.status 置为审核通过，并回填申请人用户表 supplier_id。
+func ActivateSupplierApplication(operatorUserID int, operatorRole int, supplierID int, reason string) (*SupplierApplication, error) {
+	tx := DB.Begin()
+	if tx.Error != nil {
+		return nil, tx.Error
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+	var app SupplierApplication
+	query := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", supplierID)
+	if operatorRole < common.RoleAdminUser {
+		query = query.Where("applicant_user_id = ?", operatorUserID)
+	}
+	if err := query.First(&app).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	if app.Status != SupplierApplicationStatusDeactivated {
+		tx.Rollback()
+		return nil, ErrSupplierApplicationStatusNotDeactivated
+	}
+	now := time.Now().Unix()
+	trimmedReason := strings.TrimSpace(reason)
+	if err := tx.Model(&SupplierApplication{}).
+		Where("id = ?", app.ID).
+		Updates(map[string]any{
+			"status":        SupplierApplicationStatusApproved,
+			"review_reason": trimmedReason,
+			"updated_at":    now,
+		}).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	if err := tx.Model(&User{}).Where("id = ?", app.ApplicantUserID).
+		Updates(map[string]any{
+			"supplier_id": app.ID,
+		}).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	if err := tx.Create(&SupplierApplicationAudit{
+		ApplicationID:  app.ID,
+		OperatorUserID: operatorUserID,
+		Action:         SupplierApplicationAuditActionActivate,
+		FromStatus:     SupplierApplicationStatusDeactivated,
+		ToStatus:       SupplierApplicationStatusApproved,
+		Reason:         trimmedReason,
+		CreatedAt:      now,
+	}).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	app.Status = SupplierApplicationStatusApproved
+	app.ReviewReason = trimmedReason
 	app.UpdatedAt = now
 	if err := tx.Commit().Error; err != nil {
 		return nil, err

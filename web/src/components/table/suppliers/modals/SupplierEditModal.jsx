@@ -262,6 +262,11 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
 
   useEffect(() => {
     if (visible && supplier && supplier.id) {
+      setSupplierData(null);
+      setFileList([]);
+      setBusinessLicenseUrl('');
+      setLogoFileList([]);
+      setCompanyLogoUrl('');
       fetchSupplierData(supplier.id);
     } else if (visible && !supplier) {
       setSupplierData(null);
@@ -354,38 +359,62 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
         !!supplierData.supplier_capability?.truth_commitment_confirmed,
       );
 
-      if (supplierData.business_license_url) {
-        setBusinessLicenseUrl(supplierData.business_license_url);
-      }
-      if (supplierData.company_logo_url) {
-        setCompanyLogoUrl(supplierData.company_logo_url);
+      const existingBusinessLicenseUrl = supplierData.business_license_url || '';
+      const existingCompanyLogoUrl = supplierData.company_logo_url || '';
+      setBusinessLicenseUrl(existingBusinessLicenseUrl);
+      setCompanyLogoUrl(existingCompanyLogoUrl);
+
+      if (existingCompanyLogoUrl) {
         setLogoFileList([
           {
-            uid: 'existing-logo',
+            uid: `existing-logo-${supplierData.id || 'self'}`,
             name: t('已上传的企业Logo'),
             status: 'success',
-            url: supplierData.company_logo_url,
+            url: existingCompanyLogoUrl,
           },
         ]);
+      } else {
+        setLogoFileList([]);
       }
 
       if (supplierData.business_license_file) {
         try {
           const fileInfo = JSON.parse(supplierData.business_license_file);
-          setFileList([fileInfo]);
+          setFileList([
+            {
+              ...fileInfo,
+                uid: fileInfo.uid || `existing-license-${supplierData.id || 'self'}`,
+              url: fileInfo.url || existingBusinessLicenseUrl,
+              status: fileInfo.status || 'success',
+              name: fileInfo.name || t('已上传的营业执照'),
+            },
+          ]);
         } catch (e) {
           console.error('Failed to parse business_license_file:', e);
-          if (supplierData.business_license_url) {
+          if (existingBusinessLicenseUrl) {
             setFileList([
               {
-                uid: 'existing',
+                uid: `existing-license-${supplierData.id || 'self'}`,
                 name: t('已上传的营业执照'),
                 status: 'success',
-                url: supplierData.business_license_url,
+                url: existingBusinessLicenseUrl,
               },
             ]);
+          } else {
+            setFileList([]);
           }
         }
+      } else if (existingBusinessLicenseUrl) {
+        setFileList([
+          {
+            uid: `existing-license-${supplierData.id || 'self'}`,
+            name: t('已上传的营业执照'),
+            status: 'success',
+            url: existingBusinessLicenseUrl,
+          },
+        ]);
+      } else {
+        setFileList([]);
       }
 
       if (supplierData.user_id) {
@@ -820,10 +849,36 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
           <Form.Upload
             field='license_file'
             label={
-              <Text strong>
-                {t('营业执照')}
-                <Text type='danger'>*</Text>
-              </Text>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  width: '100%',
+                }}
+              >
+                <Text strong>
+                  {t('营业执照')}
+                  <Text type='danger'>*</Text>
+                </Text>
+                {businessLicenseUrl ? (
+                  <Button
+                    theme='light'
+                    type='primary'
+                    size='small'
+                    onClick={(e) => {
+                      e.preventDefault();
+                      window.open(
+                        businessLicenseUrl,
+                        '_blank',
+                        'noopener,noreferrer',
+                      );
+                    }}
+                  >
+                    {t('下载')}
+                  </Button>
+                ) : null}
+              </div>
             }
             action=''
             accept='.jpg,.jpeg,.png'
@@ -837,6 +892,25 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
             }}
             extraText={t('支持 jpg/png，大小≤5M，信息完整无遮挡')}
           >
+            {businessLicenseUrl ? (
+              <div
+                style={{
+                  marginBottom: 8,
+                }}
+              >
+                <img
+                  src={businessLicenseUrl}
+                  alt={t('营业执照')}
+                  style={{
+                    width: 120,
+                    height: 120,
+                    borderRadius: 8,
+                    objectFit: 'cover',
+                    border: '1px solid var(--semi-color-border)',
+                  }}
+                />
+              </div>
+            ) : null}
             <Button icon={<IconUpload />} theme='light'>
               {t('上传文件')}
             </Button>
@@ -846,10 +920,32 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
           <Form.Upload
             field='company_logo_file'
             label={
-              <Text strong>
-                {t('企业Logo')}
-                <Text type='danger'>*</Text>
-              </Text>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  width: '100%',
+                }}
+              >
+                <Text strong>
+                  {t('企业Logo')}
+                  <Text type='danger'>*</Text>
+                </Text>
+                {companyLogoUrl ? (
+                  <Button
+                    theme='light'
+                    type='primary'
+                    size='small'
+                    onClick={(e) => {
+                      e.preventDefault();
+                      window.open(companyLogoUrl, '_blank', 'noopener,noreferrer');
+                    }}
+                  >
+                    {t('下载')}
+                  </Button>
+                ) : null}
+              </div>
             }
             action=''
             accept='.jpg,.jpeg,.png'
@@ -863,6 +959,21 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
             }}
             extraText={t('建议上传清晰方形Logo，支持 jpg/png，大小≤5M')}
           >
+            {companyLogoUrl ? (
+              <div style={{ marginBottom: 8 }}>
+                <img
+                  src={companyLogoUrl}
+                  alt={t('企业Logo')}
+                  style={{
+                    width: 64,
+                    height: 64,
+                    borderRadius: 8,
+                    objectFit: 'cover',
+                    border: '1px solid var(--semi-color-border)',
+                  }}
+                />
+              </div>
+            ) : null}
             <Button icon={<IconUpload />} theme='light'>
               {t('上传文件')}
             </Button>
@@ -1105,6 +1216,25 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
               t={t}
               onCommitmentChange={(checked) => setCommitmentChecked(checked)}
             />
+            <div
+              style={{
+                marginTop: 12,
+                marginBottom: 8,
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: 8,
+              }}
+            >
+              <Button onClick={handleCancel}>{t('取消')}</Button>
+              <Button
+                type='primary'
+                theme='solid'
+                loading={loading || fetchingData}
+                onClick={() => formApiRef.current?.submitForm()}
+              >
+                {t('保存')}
+              </Button>
+            </div>
           </>
         )}
       </Form>

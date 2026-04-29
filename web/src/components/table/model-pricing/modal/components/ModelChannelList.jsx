@@ -18,11 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { Card, Avatar, Typography, Collapse, Tag, Button, Toast } from '@douyinfe/semi-ui';
-import { IconListView, IconCopy } from '@douyinfe/semi-icons';
+import { Card, Avatar, Typography, Collapse, Tag, Button, Toast, Tooltip } from '@douyinfe/semi-ui';
+import { IconListView, IconCopy, IconCode } from '@douyinfe/semi-icons';
 import { getUsedGroupContext } from '../../../../../helpers/utils';
 
 import { renderModelTestResultSummary } from '../../../../../helpers/modelStability';
+import ApiDocsSidePanel from './ApiDocsSidePanel';
 
 const { Text } = Typography;
 
@@ -81,6 +82,15 @@ const ModelChannelList = ({
 
   // 管理展开状态
   const [activeKey, setActiveKey] = useState(allKeys);
+
+  // API 文档抽屉状态
+  const [apiDocsVisible, setApiDocsVisible] = useState(false);
+  const [apiDocsModelName, setApiDocsModelName] = useState('');
+
+  const openApiDocs = (modelName) => {
+    setApiDocsModelName(modelName || '');
+    setApiDocsVisible(true);
+  };
 
   // 当 allKeys 实际变化时（基于字符串比较），更新 activeKey
   useEffect(() => {
@@ -156,24 +166,24 @@ const ModelChannelList = ({
     }
 
     // 缓存读取
-    // if (hasRatioValue(channel.model_ratio) && hasRatioValue(channel.cache_ratio)) {
-    //   const chC = Number(channel.model_ratio) * Number(channel.cache_ratio);
-    //   const rootC =
-    //     hasRatioValue(modelData?.model_ratio) && hasRatioValue(modelData?.cache_ratio)
-    //       ? Number(modelData.model_ratio) * Number(modelData.cache_ratio)
-    //       : null;
-    //   items.push(makeItem(t('缓存读取价格'), chC, rootC));
-    // }
+    if (hasRatioValue(channel.model_ratio) && hasRatioValue(channel.cache_ratio)) {
+      const chC = Number(channel.model_ratio) * Number(channel.cache_ratio);
+      const rootC =
+        hasRatioValue(modelData?.model_ratio) && hasRatioValue(modelData?.cache_ratio)
+          ? Number(modelData.model_ratio) * Number(modelData.cache_ratio)
+          : null;
+      items.push(makeItem(t('缓存读取价格'), chC, rootC));
+    }
 
     // 缓存创建
-    // if (hasRatioValue(channel.model_ratio) && hasRatioValue(channel.create_cache_ratio)) {
-    //   const chCC = Number(channel.model_ratio) * Number(channel.create_cache_ratio);
-    //   const rootCC =
-    //     hasRatioValue(modelData?.model_ratio) && hasRatioValue(modelData?.create_cache_ratio)
-    //       ? Number(modelData.model_ratio) * Number(modelData.create_cache_ratio)
-    //       : null;
-    //   items.push(makeItem(t('缓存创建价格'), chCC, rootCC));
-    // }
+    if (hasRatioValue(channel.model_ratio) && hasRatioValue(channel.create_cache_ratio)) {
+      const chCC = Number(channel.model_ratio) * Number(channel.create_cache_ratio);
+      const rootCC =
+        hasRatioValue(modelData?.model_ratio) && hasRatioValue(modelData?.create_cache_ratio)
+          ? Number(modelData.model_ratio) * Number(modelData.create_cache_ratio)
+          : null;
+      items.push(makeItem(t('缓存创建价格'), chCC, rootCC));
+    }
     return items.filter(Boolean);
   };
 
@@ -191,6 +201,13 @@ const ModelChannelList = ({
         </div>
       </div>
       
+      <ApiDocsSidePanel
+        visible={apiDocsVisible}
+        onClose={() => setApiDocsVisible(false)}
+        modelName={apiDocsModelName}
+        t={t}
+      />
+
       <Collapse activeKey={activeKey} onChange={setActiveKey}>
         {groupedChannels.map((group) => (
           <Collapse.Panel
@@ -198,10 +215,25 @@ const ModelChannelList = ({
             itemKey={`group-${group.supplierId}`}
             header={
               <div className='flex items-center justify-between w-full pr-4'>
-                <span className='font-medium'>
+                <span className='font-medium flex items-center'>
                   <Tag color='blue' size='small' className='ml-2'>
                     {group.supplierAlias}
                   </Tag>
+                  <Button
+                    icon={<IconCopy />}
+                    size='small'
+                    type='tertiary'
+                    className='ml-2'
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      const text = `${group.supplierAlias}/${modelData.model_name}`;
+                      navigator.clipboard.writeText(text).then(() => {
+                        Toast.success({ content: t('已复制') });
+                      }).catch(() => {
+                        Toast.error({ content: t('复制失败') });
+                      });
+                    }}
+                  />
                 </span>
                 <span className='text-sm text-gray-500'>
                   {group.channels.length} {t('个通道')}
@@ -264,13 +296,25 @@ const ModelChannelList = ({
                             )}
                           </div>
                         </div>
-                        <Button
-                          icon={<IconCopy />}
-                          size='small'
-                          type='tertiary'
-                          onClick={handleCopy}
-                          title={channelPath}
-                        />
+                        <div className='flex flex-col gap-1'>
+                          <Tooltip content={t('复制通道路径')}>
+                            <Button
+                              icon={<IconCopy />}
+                              size='small'
+                              type='tertiary'
+                              onClick={handleCopy}
+                              title={channelPath}
+                            />
+                          </Tooltip>
+                          <Tooltip content={t('查看 API 文档')}>
+                            <Button
+                              icon={<IconCode />}
+                              size='small'
+                              type='tertiary'
+                              onClick={() => openApiDocs(channelPath)}
+                            />
+                          </Tooltip>
+                        </div>
                       </div>
                     </Card>
                   </div>
