@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -812,6 +814,213 @@ func getVertexArrayKeys(keys string) ([]string, error) {
 	return cleanKeys, nil
 }
 
+type upstreamChannelSyncItem struct {
+	ID                  int    `json:"id"`
+	Name                string `json:"name"`
+	Models              string `json:"models"`
+	Group               string `json:"group"`
+	Status              int    `json:"status"`
+	ChannelNo           string `json:"channel_no"`
+	SupplierApplication int    `json:"supplier_application_id"`
+}
+
+func isTokenFactoryOpenBaseURL(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host == "" {
+		return false
+	}
+	if host == "localhost" || host == "127.0.0.1" {
+		return true
+	}
+	return strings.Contains(host, "tokenfactory")
+}
+
+func isLikelyTokenFactoryStatusData(data map[string]any, systemName string) bool {
+	name := strings.ToLower(strings.TrimSpace(systemName))
+	if strings.Contains(name, "tokenfactory") ||
+		strings.Contains(name, "词元工厂") ||
+		strings.Contains(name, "开放词元工厂") {
+		return true
+	}
+
+	score := 0
+
+	if strings.TrimSpace(common.Interface2String(data["version"])) != "" {
+		score++
+	}
+	if startTimeRaw := strings.TrimSpace(common.Interface2String(data["start_time"])); startTimeRaw != "" {
+		if startTime, err := strconv.ParseInt(startTimeRaw, 10, 64); err == nil && startTime > 0 {
+			score++
+		}
+	}
+	if strings.TrimSpace(common.Interface2String(data["quota_display_type"])) != "" ||
+		strings.TrimSpace(common.Interface2String(data["quota_per_unit"])) != "" {
+		score++
+	}
+	if _, ok := data["enable_drawing"]; ok {
+		score++
+	}
+	if _, ok := data["enable_task"]; ok {
+		score++
+	}
+	if _, ok := data["system_name"]; ok {
+		score++
+	}
+
+	// 命中特征达到阈值即视为 TokenFactory 平台实例，避免只依赖 system_name 英文名。
+	return score >= 4
+}
+
+func fetchTokenFactoryStatus(baseURL string, key string) error {
+	client := &http.Client{Timeout: 10 * time.Second}
+	u := strings.TrimRight(strings.TrimSpace(baseURL), "/") + "/api/status"
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(key))
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("status code %d", resp.StatusCode)
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return err
+	}
+	if success, ok := payload["success"].(bool); ok && !success {
+		return fmt.Errorf("status 接口返回失败")
+	}
+	var systemName string
+	var statusData map[string]any
+	if parsedData, ok := payload["data"].(map[string]any); ok {
+		statusData = parsedData
+		systemName = strings.TrimSpace(common.Interface2String(statusData["system_name"]))
+	}
+	if statusData == nil {
+		return fmt.Errorf("status 返回结构缺少 data")
+	}
+	if !isLikelyTokenFactoryStatusData(statusData, systemName) {
+		return fmt.Errorf("status 特征不匹配 TokenFactory 平台（system_name=%s）", systemName)
+	}
+	return nil
+}
+
+func fetchTokenFactoryUpstreamChannels(baseURL string, key string) ([]upstreamChannelSyncItem, error) {
+	client := &http.Client{Timeout: 15 * time.Second}
+	u := strings.TrimRight(strings.TrimSpace(baseURL), "/") + "/api/channel/?p=1&page_size=100000&id_sort=true"
+	req, err := http.NewRequest("GET", u, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(key))
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		return nil, fmt.Errorf("upstream status code %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	var payload map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return nil, err
+	}
+	successRaw, exists := payload["success"]
+	if !exists {
+		return nil, fmt.Errorf("上游响应缺少 success 字段")
+	}
+	success, ok := successRaw.(bool)
+	if !ok {
+		return nil, fmt.Errorf("上游 success 字段类型异常: %T", successRaw)
+	}
+	if !success {
+		upstreamMessage := strings.TrimSpace(common.Interface2String(payload["message"]))
+		if upstreamMessage == "" {
+			upstreamMessage = "上游返回失败（message 为空）"
+		}
+		return nil, fmt.Errorf("%s", upstreamMessage)
+	}
+	data, _ := payload["data"].(map[string]any)
+	rawItems, _ := data["items"].([]any)
+	items := make([]upstreamChannelSyncItem, 0, len(rawItems))
+	for _, raw := range rawItems {
+		m, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		item := upstreamChannelSyncItem{
+			ID:                  common.String2Int(common.Interface2String(m["id"])),
+			Name:                strings.TrimSpace(common.Interface2String(m["name"])),
+			Models:              strings.TrimSpace(common.Interface2String(m["models"])),
+			Group:               strings.TrimSpace(common.Interface2String(m["group"])),
+			Status:              common.String2Int(common.Interface2String(m["status"])),
+			ChannelNo:           strings.TrimSpace(common.Interface2String(m["channel_no"])),
+			SupplierApplication: common.String2Int(common.Interface2String(m["supplier_application_id"])),
+		}
+		items = append(items, item)
+	}
+	return items, nil
+}
+
+func buildTokenFactorySyncedChannels(base *model.Channel) ([]model.Channel, error) {
+	baseURL := base.GetBaseURL()
+	if !isTokenFactoryOpenBaseURL(baseURL) {
+		return nil, fmt.Errorf("TokenFactoryOpen 渠道的 API 地址必须指向 TokenFactory 平台")
+	}
+	key := strings.TrimSpace(base.Key)
+	if key == "" {
+		return nil, fmt.Errorf("TokenFactoryOpen 渠道密钥不能为空")
+	}
+	if err := fetchTokenFactoryStatus(baseURL, key); err != nil {
+		return nil, fmt.Errorf("TokenFactoryOpen 平台识别失败: %w", err)
+	}
+	upstreamChannels, err := fetchTokenFactoryUpstreamChannels(baseURL, key)
+	if err != nil {
+		return nil, fmt.Errorf("拉取上游渠道失败: %w", err)
+	}
+	if len(upstreamChannels) == 0 {
+		return nil, fmt.Errorf("上游未返回可同步渠道")
+	}
+	now := common.GetTimestamp()
+	result := make([]model.Channel, 0, len(upstreamChannels))
+	for _, upstream := range upstreamChannels {
+		clone := *base
+		clone.Id = 0
+		clone.CreatedTime = now
+		clone.Name = strings.TrimSpace(upstream.Name)
+		if clone.Name == "" {
+			clone.Name = fmt.Sprintf("upstream-%d", upstream.ID)
+		}
+		clone.Models = strings.TrimSpace(upstream.Models)
+		if strings.TrimSpace(upstream.Group) != "" {
+			clone.Group = strings.TrimSpace(upstream.Group)
+		}
+		if upstream.Status > 0 {
+			clone.Status = upstream.Status
+		}
+		syncMeta := map[string]any{
+			"source":                   "tokenfactory_open",
+			"upstream_channel_id":      upstream.ID,
+			"upstream_channel_no":      upstream.ChannelNo,
+			"upstream_supplier_app_id": upstream.SupplierApplication,
+			"synced_at":                now,
+		}
+		metaJSON, _ := common.Marshal(syncMeta)
+		clone.OtherInfo = string(metaJSON)
+		result = append(result, clone)
+	}
+	return result, nil
+}
+
 func AddChannel(c *gin.Context) {
 	addChannelRequest := AddChannelRequest{}
 	err := c.ShouldBindJSON(&addChannelRequest)
@@ -921,6 +1130,17 @@ func AddChannel(c *gin.Context) {
 			localChannel.Name = fmt.Sprintf("%s %s", localChannel.Name, keyPrefix)
 		}
 		channels = append(channels, *localChannel)
+	}
+	if addChannelRequest.Channel.Type == constant.ChannelTypeTokenFactoryOpen {
+		syncedChannels, err := buildTokenFactorySyncedChannels(addChannelRequest.Channel)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			return
+		}
+		channels = syncedChannels
 	}
 	err = model.BatchInsertChannels(channels)
 	if err != nil {

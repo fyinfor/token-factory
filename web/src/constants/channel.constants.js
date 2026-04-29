@@ -194,6 +194,11 @@ export const CHANNEL_OPTIONS = [
     color: 'purple',
     label: 'OpenAI 视频 (Hidream/Seedance)',
   },
+  {
+    value: 59,
+    color: 'green',
+    label: 'TokenFactoryOpen（同步上游渠道）',
+  },
 ];
 
 // Channel types that support upstream model list fetching in UI.

@@ -166,6 +166,8 @@ function type2secretPrompt(type) {
       return '按照如下格式输入: AccessKey|SecretAccessKey';
     case 57:
       return '请输入 JSON 格式的 OAuth 凭据（必须包含 access_token 和 account_id）';
+    case 59:
+      return '请输入上游 TokenFactoryOpen 平台的访问密钥（Bearer Token）';
     default:
       return '请输入渠道对应的鉴权密钥';
   }
@@ -1762,7 +1764,10 @@ const EditChannelModal = (props) => {
       showInfo(t('请填写渠道名称和渠道密钥！'));
       return;
     }
-    if (!Array.isArray(localInputs.models) || localInputs.models.length === 0) {
+    if (
+      localInputs.type !== 59 &&
+      (!Array.isArray(localInputs.models) || localInputs.models.length === 0)
+    ) {
       showInfo(t('请至少选择一个模型！'));
       return;
     }
@@ -1771,6 +1776,13 @@ const EditChannelModal = (props) => {
       (!localInputs.base_url || localInputs.base_url.trim() === '')
     ) {
       showInfo(t('请输入API地址！'));
+      return;
+    }
+    if (
+      localInputs.type === 59 &&
+      (!localInputs.base_url || localInputs.base_url.trim() === '')
+    ) {
+      showInfo(t('TokenFactoryOpen 渠道必须填写平台地址！'));
       return;
     }
     const hasModelMapping =
