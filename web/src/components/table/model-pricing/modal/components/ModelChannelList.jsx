@@ -18,11 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { Card, Avatar, Typography, Collapse, Tag, Button, Toast } from '@douyinfe/semi-ui';
-import { IconListView, IconCopy } from '@douyinfe/semi-icons';
+import { Card, Avatar, Typography, Collapse, Tag, Button, Toast, Tooltip } from '@douyinfe/semi-ui';
+import { IconListView, IconCopy, IconCode } from '@douyinfe/semi-icons';
 import { getUsedGroupContext } from '../../../../../helpers/utils';
 
 import { renderModelTestResultSummary } from '../../../../../helpers/modelStability';
+import ApiDocsSidePanel from './ApiDocsSidePanel';
 
 const { Text } = Typography;
 
@@ -81,6 +82,15 @@ const ModelChannelList = ({
 
   // 管理展开状态
   const [activeKey, setActiveKey] = useState(allKeys);
+
+  // API 文档抽屉状态
+  const [apiDocsVisible, setApiDocsVisible] = useState(false);
+  const [apiDocsModelName, setApiDocsModelName] = useState('');
+
+  const openApiDocs = (modelName) => {
+    setApiDocsModelName(modelName || '');
+    setApiDocsVisible(true);
+  };
 
   // 当 allKeys 实际变化时（基于字符串比较），更新 activeKey
   useEffect(() => {
@@ -191,6 +201,13 @@ const ModelChannelList = ({
         </div>
       </div>
       
+      <ApiDocsSidePanel
+        visible={apiDocsVisible}
+        onClose={() => setApiDocsVisible(false)}
+        modelName={apiDocsModelName}
+        t={t}
+      />
+
       <Collapse activeKey={activeKey} onChange={setActiveKey}>
         {groupedChannels.map((group) => (
           <Collapse.Panel
@@ -279,13 +296,25 @@ const ModelChannelList = ({
                             )}
                           </div>
                         </div>
-                        <Button
-                          icon={<IconCopy />}
-                          size='small'
-                          type='tertiary'
-                          onClick={handleCopy}
-                          title={channelPath}
-                        />
+                        <div className='flex flex-col gap-1'>
+                          <Tooltip content={t('复制通道路径')}>
+                            <Button
+                              icon={<IconCopy />}
+                              size='small'
+                              type='tertiary'
+                              onClick={handleCopy}
+                              title={channelPath}
+                            />
+                          </Tooltip>
+                          <Tooltip content={t('查看 API 文档')}>
+                            <Button
+                              icon={<IconCode />}
+                              size='small'
+                              type='tertiary'
+                              onClick={() => openApiDocs(channelPath)}
+                            />
+                          </Tooltip>
+                        </div>
                       </div>
                     </Card>
                   </div>
