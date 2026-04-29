@@ -35,6 +35,7 @@ import {
 } from '@douyinfe/semi-ui';
 import { IconSave, IconClose, IconUserAdd } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
+import { buildAdminUserPhoneFieldRules } from './userPhoneFormRules';
 
 const { Text, Title } = Typography;
 
@@ -44,9 +45,11 @@ const AddUserModal = (props) => {
   const [loading, setLoading] = useState(false);
   const isMobile = useIsMobile();
 
+  /** 新建用户表单的初始值。 */
   const getInitValues = () => ({
     username: '',
     display_name: '',
+    phone: '',
     password: '',
     remark: '',
   });
@@ -153,6 +156,16 @@ const AddUserModal = (props) => {
                       label={t('显示名称')}
                       placeholder={t('请输入显示名称')}
                       showClear
+                    />
+                  </Col>
+                  {/* 手机号（可选）：格式 + 异步占用校验 */}
+                  <Col span={24}>
+                    <Form.Input
+                      field='phone'
+                      label={t('手机号')}
+                      placeholder={t('请输入手机号')}
+                      showClear
+                      rules={buildAdminUserPhoneFieldRules(t)}
                     />
                   </Col>
                   <Col span={24}>

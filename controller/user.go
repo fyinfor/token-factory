@@ -146,17 +146,21 @@ func setupLogin(user *model.User, c *gin.Context) {
 		return
 	}
 	model.TouchUserLastLogin(user.Id)
+	requireAdminInitialSetup := user.CreatedBy == common.UserCreatedByAdmin && !user.AdminInitialSetupCompleted
+	adminSetupPhoneRequired := requireAdminInitialSetup && strings.TrimSpace(user.Phone) == ""
 	c.JSON(http.StatusOK, gin.H{
 		"message": "",
 		"success": true,
 		"data": map[string]any{
-			"id":             user.Id,
-			"username":       user.Username,
-			"display_name":   user.DisplayName,
-			"role":           user.Role,
-			"status":         user.Status,
-			"group":          user.Group,
-			"is_distributor": user.IsDistributor,
+			"id":                           user.Id,
+			"username":                     user.Username,
+			"display_name":                 user.DisplayName,
+			"role":                         user.Role,
+			"status":                       user.Status,
+			"group":                        user.Group,
+			"is_distributor":               user.IsDistributor,
+			"require_admin_initial_setup":  requireAdminInitialSetup,
+			"admin_setup_phone_required":   adminSetupPhoneRequired,
 		},
 	})
 }
@@ -363,6 +367,70 @@ func GetUser(c *gin.Context) {
 	return
 }
 
+// AdminCheckPhoneAvailable 管理端校验手机号是否未被他人占用：新建时不传 exclude_id；编辑用户时传 exclude_id 为当前用户 ID。
+func AdminCheckPhoneAvailable(c *gin.Context) {
+	phone := c.Query("phone")
+	excludeStr := strings.TrimSpace(c.Query("exclude_id"))
+	excludeID := 0
+	if excludeStr != "" {
+		var convErr error
+		excludeID, convErr = strconv.Atoi(excludeStr)
+		if convErr != nil || excludeID < 0 {
+			common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+			return
+		}
+	}
+	normalized := common.NormalizePhone(phone)
+	if normalized == "" {
+		common.ApiSuccess(c, gin.H{"available": true})
+		return
+	}
+	if !common.ValidateMainlandChinaPhone(normalized) {
+		common.ApiSuccess(c, gin.H{"available": true})
+		return
+	}
+	var taken bool
+	if excludeID == 0 {
+		taken = model.IsPhoneAlreadyTaken(normalized)
+	} else {
+		taken = model.IsPhoneTakenByOtherUser(normalized, excludeID)
+	}
+	common.ApiSuccess(c, gin.H{"available": !taken})
+}
+
+// UserSelfCheckPhoneAvailable 当前登录用户校验欲使用的手机号是否与他人冲突（exclude 固定为本人，不可伪造）。
+func UserSelfCheckPhoneAvailable(c *gin.Context) {
+	id := c.GetInt("id")
+	if id <= 0 {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	phone := c.Query("phone")
+	normalized := common.NormalizePhone(phone)
+	if normalized == "" {
+		common.ApiSuccess(c, gin.H{"available": true})
+		return
+	}
+	if !common.ValidateMainlandChinaPhone(normalized) {
+		common.ApiSuccess(c, gin.H{"available": true})
+		return
+	}
+	taken := model.IsPhoneTakenByOtherUser(normalized, id)
+	common.ApiSuccess(c, gin.H{"available": !taken})
+}
+
+// isPhoneUniqueConstraintError 判断数据库错误是否为手机号唯一约束冲突。
+func isPhoneUniqueConstraintError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	if !strings.Contains(msg, "duplicate") && !strings.Contains(msg, "unique constraint") {
+		return false
+	}
+	return strings.Contains(msg, "phone")
+}
+
 // GenerateAccessToken godoc
 // @Summary 生成当前用户 AccessToken
 // @Description 生成并返回当前登录用户的 access_token，用于在 Authorization 请求头中进行接口鉴权
@@ -481,6 +549,9 @@ func GetSelf(c *gin.Context) {
 	// 获取用户设置并提取sidebar_modules
 	userSetting := user.GetSetting()
 
+	requireAdminInitialSetup := user.CreatedBy == common.UserCreatedByAdmin && !user.AdminInitialSetupCompleted
+	adminSetupPhoneRequired := requireAdminInitialSetup && strings.TrimSpace(user.Phone) == ""
+
 	// 构建响应数据，包含用户信息和权限
 	responseData := map[string]interface{}{
 		"id":                         user.Id,
@@ -489,6 +560,7 @@ func GetSelf(c *gin.Context) {
 		"role":                       user.Role,
 		"status":                     user.Status,
 		"email":                      user.Email,
+		"phone":                      user.Phone,
 		"github_id":                  user.GitHubId,
 		"discord_id":                 user.DiscordId,
 		"oidc_id":                    user.OidcId,
@@ -514,8 +586,10 @@ func GetSelf(c *gin.Context) {
 		"student_applied_at":         user.StudentApplied,
 		"student_approved_at":        user.StudentApprovedAt,
 		"student_approved_by":        user.StudentApprovedBy,
-		"sidebar_modules":            userSetting.SidebarModules, // 正确提取sidebar_modules字段
-		"permissions":                permissions,                // 新增权限字段
+		"sidebar_modules":             userSetting.SidebarModules, // 正确提取sidebar_modules字段
+		"permissions":                 permissions,                // 新增权限字段
+		"require_admin_initial_setup": requireAdminInitialSetup,
+		"admin_setup_phone_required":  adminSetupPhoneRequired,
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -524,6 +598,65 @@ func GetSelf(c *gin.Context) {
 		"data":    responseData,
 	})
 	return
+}
+
+// AdminInitialSetupRequest 管理员代建用户首次登录补全信息（改密；未预留手机时须绑定手机号）。
+type AdminInitialSetupRequest struct {
+	NewPassword     string `json:"new_password"`
+	ConfirmPassword string `json:"confirm_password"`
+	Phone           string `json:"phone"`
+}
+
+// CompleteAdminInitialSetup 管理员创建的账号首次登录后提交：修改密码；若创建时未填手机号则必须绑定且不可与他人重复。
+func CompleteAdminInitialSetup(c *gin.Context) {
+	id := c.GetInt("id")
+	var req AdminInitialSetupRequest
+	if err := json.NewDecoder(c.Request.Body).Decode(&req); err != nil {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	req.NewPassword = strings.TrimSpace(req.NewPassword)
+	req.ConfirmPassword = strings.TrimSpace(req.ConfirmPassword)
+	if len(req.NewPassword) < 8 || len(req.NewPassword) > 20 {
+		common.ApiErrorMsg(c, "新密码长度须在 8～20 位之间")
+		return
+	}
+	if req.NewPassword != req.ConfirmPassword {
+		common.ApiErrorMsg(c, "两次输入的密码不一致")
+		return
+	}
+	user, err := model.GetUserById(id, true)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if user.CreatedBy != common.UserCreatedByAdmin || user.AdminInitialSetupCompleted {
+		common.ApiErrorMsg(c, "当前账号无需执行此操作")
+		return
+	}
+	var phoneNorm string
+	if strings.TrimSpace(user.Phone) == "" {
+		var valErr error
+		phoneNorm, valErr = model.NormalizeAndValidateAdminUserPhone(req.Phone, user.Id)
+		if valErr != nil {
+			common.ApiError(c, valErr)
+			return
+		}
+	}
+	user.Password = req.NewPassword
+	user.AdminInitialSetupCompleted = true
+	if phoneNorm != "" {
+		user.Phone = phoneNorm
+	}
+	if err := user.Update(true); err != nil {
+		if isPhoneUniqueConstraintError(err) {
+			common.ApiErrorMsg(c, "手机号已被占用")
+			return
+		}
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccessI18n(c, i18n.MsgUpdateSuccess, nil)
 }
 
 // 计算用户权限的辅助函数
@@ -896,6 +1029,10 @@ func UpdateUser(c *gin.Context) {
 	}
 	updatePassword := updatedUser.Password != ""
 	if err := updatedUser.Edit(updatePassword); err != nil {
+		if isPhoneUniqueConstraintError(err) {
+			common.ApiErrorMsg(c, "手机号已被占用")
+			return
+		}
 		common.ApiError(c, err)
 		return
 	}
@@ -1150,16 +1287,28 @@ func CreateUser(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserCannotCreateHigherLevel)
 		return
 	}
+	normalizedPhone, err := model.NormalizeAndValidateAdminUserPhone(user.Phone, 0)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	// Even for admin users, we cannot fully trust them!
 	cleanUser := model.User{
-		Username:      user.Username,
-		Password:      user.Password,
-		DisplayName:   user.DisplayName,
-		Role:          user.Role,
-		IsDistributor: user.IsDistributor,
-		CreatedBy:     common.UserCreatedByAdmin,
+		Username:                   user.Username,
+		Password:                   user.Password,
+		DisplayName:                user.DisplayName,
+		Role:                       user.Role,
+		IsDistributor:              user.IsDistributor,
+		CreatedBy:                  common.UserCreatedByAdmin,
+		Phone:                      normalizedPhone,
+		Remark:                     user.Remark,
+		AdminInitialSetupCompleted: false,
 	}
 	if err := cleanUser.Insert(0); err != nil {
+		if isPhoneUniqueConstraintError(err) {
+			common.ApiErrorMsg(c, "手机号已被占用")
+			return
+		}
 		common.ApiError(c, err)
 		return
 	}
