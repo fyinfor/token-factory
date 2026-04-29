@@ -27,6 +27,8 @@ import {
   Upload,
   Modal,
   Popover,
+  Progress,
+  Radio,
 } from '@douyinfe/semi-ui';
 import {
   IconFile,
@@ -150,6 +152,8 @@ export default function DistributorApply() {
   const [app, setApp] = useState(null);
   const [urls, setUrls] = useState([]);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [applyType, setApplyType] = useState(1);
+  const [uploadPct, setUploadPct] = useState(null);
   const formApi = React.useRef(null);
 
   const csImage = (
@@ -216,6 +220,8 @@ export default function DistributorApply() {
           id_card_no: app.id_card_no || '',
           contact: app.contact || '',
         });
+        const at = Number(app.apply_type);
+        setApplyType(at === 2 ? 2 : 1);
         const raw = app.qualification_urls;
         if (raw) {
           const j = typeof raw === 'string' ? JSON.parse(raw) : raw;
@@ -244,6 +250,7 @@ export default function DistributorApply() {
     setSubmitting(true);
     try {
       const res = await API.post('/api/distributor/application', {
+        apply_type: applyType,
         real_name: values.real_name,
         id_card_no: values.id_card_no,
         contact: values.contact,
@@ -301,7 +308,7 @@ export default function DistributorApply() {
     ) : showApprovedForActiveDistributor ? (
       <div className='flex min-h-0 flex-1 flex-col items-center justify-center py-8 text-center'>
         <Text className='!text-lg md:!text-xl !leading-relaxed !font-medium text-[var(--semi-color-text-0)]'>
-          {t('申请已通过，请从侧栏进入「分销中心」。')}
+          {t('申请已通过，请从侧栏进入「代理中心」。')}
         </Text>
       </div>
     ) : (
@@ -334,14 +341,43 @@ export default function DistributorApply() {
           </ApplyStatusNotice>
         ) : null}
         <Form getFormApi={(f) => (formApi.current = f)} layout='vertical'>
+          <div className='mb-4'>
+            <Text strong className='mb-2 block'>
+              {t('申请类型')}
+            </Text>
+            <Radio.Group
+              type='button'
+              value={applyType}
+              onChange={(val) => {
+                const v =
+                  val && typeof val === 'object' && 'target' in val
+                    ? val.target.value
+                    : val;
+                setApplyType(Number(v));
+              }}
+            >
+              <Radio value={1}>{t('个人申请')}</Radio>
+              <Radio value={2}>{t('企业申请')}</Radio>
+            </Radio.Group>
+          </div>
           <Form.Input
             field='real_name'
-            label={<ApplyRequiredLabel>{t('姓名')}</ApplyRequiredLabel>}
+            label={
+              <ApplyRequiredLabel>
+                {applyType === 2 ? t('企业名称') : t('姓名')}
+              </ApplyRequiredLabel>
+            }
             rules={[applyTrimmedRequiredRule(t)]}
           />
           <Form.Input
             field='id_card_no'
-            label={<ApplyRequiredLabel>{t('身份证')}</ApplyRequiredLabel>}
+            label={
+              <ApplyRequiredLabel>
+                {applyType === 2
+                  ? t('统一社会信用代码')
+                  : t('身份证')}
+              </ApplyRequiredLabel>
+            }
             rules={[applyTrimmedRequiredRule(t)]}
           />
           <Form.Input
@@ -357,13 +393,25 @@ export default function DistributorApply() {
               action=''
               accept='image/*,.pdf'
               showUploadList={false}
-              customRequest={async ({ file, onSuccess, onError }) => {
+              customRequest={async ({ file, onSuccess, onError, onProgress }) => {
                 const fd = new FormData();
                 const inst = file.fileInstance || file;
                 fd.append('file', inst);
+                setUploadPct(0);
                 try {
                   const res = await API.post('/api/oss/upload', fd, {
                     skipErrorHandler: true,
+                    onUploadProgress: (ev) => {
+                      const total = ev.total || ev.loaded || 1;
+                      const pct = Math.min(
+                        100,
+                        Math.round((ev.loaded * 100) / total),
+                      );
+                      setUploadPct(pct);
+                      if (typeof onProgress === 'function') {
+                        onProgress({ total, loaded: ev.loaded });
+                      }
+                    },
                   });
                   const { success, message, data } = res.data || {};
                   if (!success || !data?.url) {
@@ -379,6 +427,8 @@ export default function DistributorApply() {
                 } catch (e) {
                   onError(e);
                   showError(e?.response?.data?.message || t('上传失败'));
+                } finally {
+                  setUploadPct(null);
                 }
               }}
               limit={5}
@@ -387,6 +437,9 @@ export default function DistributorApply() {
             >
               <Button disabled={urls.length >= 5}>{t('上传文件')}</Button>
             </Upload>
+            {uploadPct != null ? (
+              <Progress percent={uploadPct} showInfo className='mt-2' />
+            ) : null}
             <Text type='tertiary' size='small' className='block mt-1'>
               {t('支持图片或 PDF，最多 5 个；点击图片可大图预览')}
             </Text>
@@ -500,7 +553,7 @@ export default function DistributorApply() {
                           heading={3}
                           className='distributor-apply-hero-title !mb-0 !mt-0 min-w-0 !font-semibold !tracking-tight !leading-snug sm:!leading-tight'
                         >
-                          {t('分销伙伴招募')}
+                          {t('代理伙伴招募')}
                         </Typography.Title>
                       </div>
                       {showCsColumn ? (

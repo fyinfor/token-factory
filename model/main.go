@@ -321,6 +321,9 @@ func migrateDB() error {
 	if err != nil {
 		return err
 	}
+	if err := migrateDropDistributorApplicationIsStudentColumn(); err != nil {
+		return err
+	}
 	if err := migrateLegacyDistributorRole(); err != nil {
 		return err
 	}
@@ -415,6 +418,9 @@ func migrateDBFast() error {
 		if err != nil {
 			return err
 		}
+	}
+	if err := migrateDropDistributorApplicationIsStudentColumn(); err != nil {
+		return err
 	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
