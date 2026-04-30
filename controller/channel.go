@@ -60,6 +60,9 @@ var channelAllowedSupplierTypes = map[string]struct{}{
 	"个人中转站": {},
 }
 
+// defaultChannelSupplierType 当渠道行与关联供应商申请均未提供 supplier_type 时的兜底值（须为 channelAllowedSupplierTypes 之一）。
+const defaultChannelSupplierType = "公有云"
+
 // isValidChannelSupplierType 校验供应商类型是否属于预定义枚举值。
 func isValidChannelSupplierType(supplierType string) bool {
 	_, ok := channelAllowedSupplierTypes[supplierType]
@@ -1494,15 +1497,14 @@ func UpdateChannel(c *gin.Context) {
 		return
 	}
 	channel.ChannelNo = strings.TrimSpace(channel.ChannelNo)
-
-	// 使用统一的校验函数
-	if err := validateChannel(&channel.Channel, false); err != nil {
+	if channel.Id <= 0 {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": err.Error(),
+			"message": "渠道ID无效",
 		})
 		return
 	}
+
 	// Preserve existing ChannelInfo to ensure multi-key channels keep correct state even if the client does not send ChannelInfo in the request.
 	originChannel, err := model.GetChannelById(channel.Id, true)
 	if err != nil {
@@ -1516,6 +1518,28 @@ func UpdateChannel(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{
 			"success": false,
 			"message": "无权修改其他供应商渠道",
+		})
+		return
+	}
+	// 部分更新（如仅改状态/优先级/权重）：请求未带供应商类型时沿用库中值，否则 validateChannel 会因零值失败。
+	if strings.TrimSpace(channel.SupplierType) == "" {
+		channel.SupplierType = strings.TrimSpace(originChannel.SupplierType)
+	}
+	if strings.TrimSpace(channel.SupplierType) == "" && originChannel.SupplierApplicationID > 0 {
+		var app model.SupplierApplication
+		if err := model.DB.Select("supplier_type").Where("id = ?", originChannel.SupplierApplicationID).First(&app).Error; err == nil {
+			channel.SupplierType = strings.TrimSpace(app.SupplierType)
+		}
+	}
+	if strings.TrimSpace(channel.SupplierType) == "" {
+		channel.SupplierType = defaultChannelSupplierType
+	}
+
+	// 使用统一的校验函数
+	if err := validateChannel(&channel.Channel, false); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
 		})
 		return
 	}

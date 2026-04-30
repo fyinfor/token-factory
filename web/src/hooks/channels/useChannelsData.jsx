@@ -482,6 +482,10 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
   // Channel management
   const manageChannel = async (id, action, record, value) => {
     let data = { id };
+    const st = record?.supplier_type != null ? String(record.supplier_type).trim() : '';
+    if (st) {
+      data.supplier_type = st;
+    }
     let res;
     switch (action) {
       case 'delete':
