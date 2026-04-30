@@ -62,7 +62,8 @@ type PricingChannelItem struct {
 	SupplierAlias         string  `json:"supplier_alias"`
 	CompanyLogoURL        string  `json:"company_logo_url"`
 	SupplierType          string  `json:"supplier_type"`
-	TestResponseTimeMs    int     `json:"test_response_time_ms"`
+	// TestResponseTimeMs 渠道最近可展示的单测耗时（毫秒）；0 代表未测试或测试失败，接口将省略该字段。
+	TestResponseTimeMs    int     `json:"test_response_time_ms,omitempty"`
 	ModelPrice            float64 `json:"model_price"`
 	ModelRatio            float64 `json:"model_ratio"`
 	CompletionRatio       float64 `json:"completion_ratio"`
@@ -121,9 +122,10 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 		visibleIDs = append(visibleIDs, id)
 	}
 
+	// 按“模型 × 渠道”打平返回：每条 data 仅包含 1 个 channel_list 与 1 个 supplier_list。
+	// 这样在前端可直接按渠道维度渲染，不再需要先展开聚合模型行。
 	out := make([]PricingAPIItem, 0, len(filtered))
 	for _, p := range filtered {
-		item := PricingAPIItem{Pricing: p}
 		var chItems []PricingChannelItem
 
 		modelName := p.ModelName
@@ -167,6 +169,11 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 					continue
 				}
 			}
+			testMs := testResponseTimeByChannel[row.ChannelID]
+			// 打平后按渠道逐条返回：若该渠道无有效单测耗时（0=未测/失败），整条模型-渠道数据不展示。
+			if testMs <= 0 {
+				continue
+			}
 			baseMp, baseMr, cr := resolveChannelPricingTriple(row.ChannelID, row.SupplierApplicationID, modelName)
 			chCache, chCreate := resolveChannelCachePair(row.ChannelID, row.SupplierApplicationID, modelName)
 			alias := pricingSupplierAliasFromMeta(row.SupplierApplicationID, row.SupplierAlias)
@@ -184,7 +191,7 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 				SupplierAlias:         alias,
 				CompanyLogoURL:        strings.TrimSpace(row.CompanyLogoURL),
 				SupplierType:          strings.TrimSpace(row.SupplierType),
-				TestResponseTimeMs:    testResponseTimeByChannel[row.ChannelID],
+				TestResponseTimeMs:    testMs,
 				ModelPrice:            mp,
 				ModelRatio:            mr,
 				CompletionRatio:       cr,
@@ -211,25 +218,19 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			return chItems[i].ChannelID < chItems[j].ChannelID
 		})
 
-		item.ChannelList = chItems
-
-		supplierSeen := make(map[int]struct{})
-		suppliers := make([]PricingSupplierItem, 0)
 		for _, ch := range chItems {
-			sid := ch.SupplierApplicationID
-			if _, ok := supplierSeen[sid]; ok {
-				continue
+			item := PricingAPIItem{Pricing: p}
+			item.ChannelList = []PricingChannelItem{ch}
+			item.SupplierList = []PricingSupplierItem{
+				{
+					SupplierID:     ch.SupplierApplicationID,
+					SupplierAlias:  ch.SupplierAlias,
+					CompanyLogoURL: ch.CompanyLogoURL,
+					SupplierType:   ch.SupplierType,
+				},
 			}
-			supplierSeen[sid] = struct{}{}
-			suppliers = append(suppliers, PricingSupplierItem{
-				SupplierID:     sid,
-				SupplierAlias:  ch.SupplierAlias,
-				CompanyLogoURL: ch.CompanyLogoURL,
-				SupplierType:   ch.SupplierType,
-			})
+			out = append(out, item)
 		}
-		item.SupplierList = suppliers
-		out = append(out, item)
 	}
 	return out
 }
