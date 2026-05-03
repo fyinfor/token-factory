@@ -41,8 +41,9 @@ func Distribute() func(c *gin.Context) {
 		}
 
 		// 解析特殊模型名形式，按优先级识别：
-		//   1) {supplier_alias}/{model}/{channel_no} —— 指定渠道直连；
-		//   2) {supplier_alias}/{model}             —— 指定供应商下任意渠道。
+		//   1) {supplier_alias}/{model}/{channel_no} —— 旧格式：指定渠道直连（向后兼容）；
+		//   2) {model}/{index}                       —— 新格式：base-62 索引直连指定渠道；
+		//   3) {supplier_alias}/{model}              —— 旧格式：指定供应商下任意渠道。
 		// 命中后把真实模型名回写到 modelRequest.Model 与请求体，后续路由/日志使用真实模型名。
 		if shouldSelectChannel && modelRequest != nil && strings.Contains(modelRequest.Model, "/") {
 			route, matched, routeErr := service.ParseForcedChannelModelName(modelRequest.Model)
@@ -58,19 +59,30 @@ func Distribute() func(c *gin.Context) {
 				}
 				modelRequest.Model = route.ModelName
 			} else {
-				// 未命中三段形式时再尝试两段形式（{alias}/{model}）。
-				supplierRoute, supplierMatched, supplierErr := service.ParseForcedSupplierModelName(modelRequest.Model)
-				if supplierMatched && supplierErr != nil {
-					abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": supplierErr.Error()}))
-					return
-				}
-				if supplierRoute != nil {
+				// 尝试新 {model}/{index} 路由格式（base-62 索引，不依赖供应商别名）。
+				indexRoute, _, _ := service.ParseModelRouteIndex(modelRequest.Model)
+				if indexRoute != nil {
 					originalModelKey := modelRequest.Model
-					if err := service.ApplyForcedSupplierOnRequestBody(c, supplierRoute, originalModelKey); err != nil {
+					if err := service.ApplyModelRouteOnRequestBody(c, indexRoute, originalModelKey); err != nil {
 						abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
 						return
 					}
-					modelRequest.Model = supplierRoute.ModelName
+					modelRequest.Model = indexRoute.ModelName
+				} else {
+					// 未命中以上两种格式时再尝试两段形式（{alias}/{model}）。
+					supplierRoute, supplierMatched, supplierErr := service.ParseForcedSupplierModelName(modelRequest.Model)
+					if supplierMatched && supplierErr != nil {
+						abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": supplierErr.Error()}))
+						return
+					}
+					if supplierRoute != nil {
+						originalModelKey := modelRequest.Model
+						if err := service.ApplyForcedSupplierOnRequestBody(c, supplierRoute, originalModelKey); err != nil {
+							abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
+							return
+						}
+						modelRequest.Model = supplierRoute.ModelName
+					}
 				}
 			}
 		}
@@ -507,6 +519,18 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	case constant.ChannelTypeCoze:
 		c.Set("bot_id", channel.Other)
 	}
+
+	// 若本地渠道来自 TokenFactoryOpen 同步且上游有有效的 supplier_alias 与 channel_no，
+	// 将路由提示写入上下文供 relay 层改写发往上游的模型名（精准对齐上游渠道）。
+	otherInfo := channel.GetOtherInfo()
+	if source, _ := otherInfo["source"].(string); source == "tokenfactory_open" {
+		alias := strings.TrimSpace(common.Interface2String(otherInfo["upstream_supplier_alias"]))
+		channelNo := strings.TrimSpace(common.Interface2String(otherInfo["upstream_channel_no"]))
+		if alias != "" && channelNo != "" {
+			common.SetContextKey(c, constant.ContextKeyTFOpenUpstreamChannelRoute, alias+"|"+channelNo)
+		}
+	}
+
 	return nil
 }
 
