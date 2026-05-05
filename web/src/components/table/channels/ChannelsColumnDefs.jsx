@@ -470,69 +470,24 @@ export const getChannelsColumns = ({
       },
     },
     {
-      key: COLUMN_KEYS.GROUP,
-      title: t('分组'),
-      dataIndex: 'group',
-      render: (text, record, index) => (
-        <div>
-          <Space spacing={2}>
-            {text
-              ?.split(',')
-              .sort((a, b) => {
-                if (a === 'default') return -1;
-                if (b === 'default') return 1;
-                return a.localeCompare(b);
-              })
-              .map((item, index) => renderGroup(item))}
-          </Space>
-        </div>
-      ),
-    },
-    {
-      key: COLUMN_KEYS.TYPE,
-      title: t('类型'),
-      dataIndex: 'type',
-      render: (text, record, index) => {
-        if (record.children === undefined) {
-          return <>{renderType(text, record, t)}</>;
-        } else {
-          return <>{renderTagType(t)}</>;
+      key: COLUMN_KEYS.PRICE_DISCOUNT,
+      title: t('折扣率'),
+      dataIndex: 'price_discount_percent',
+      render: (text, record) => {
+        if (record.children !== undefined) {
+          return '-';
         }
-      },
-    },
-    {
-      key: COLUMN_KEYS.STATUS,
-      title: t('状态'),
-      dataIndex: 'status',
-      render: (text, record, index) => {
-        if (text === 3) {
-          if (record.other_info === '') {
-            record.other_info = '{}';
-          }
-          let otherInfo = JSON.parse(record.other_info);
-          let reason = otherInfo['status_reason'];
-          let time = otherInfo['status_time'];
-          return (
-            <div>
-              <Tooltip
-                content={
-                  t('原因：') + reason + t('，时间：') + timestamp2string(time)
-                }
-              >
-                {renderStatus(text, record.channel_info, t)}
-              </Tooltip>
-            </div>
-          );
-        } else {
-          return renderStatus(text, record.channel_info, t);
+        const raw = text;
+        if (raw === null || raw === undefined || raw === '') {
+          return '100%';
         }
+        const n = Number(raw);
+        if (Number.isNaN(n)) {
+          return '-';
+        }
+        const s = n % 1 === 0 ? String(Math.trunc(n)) : n.toFixed(2);
+        return `${s}%`;
       },
-    },
-    {
-      key: COLUMN_KEYS.RESPONSE_TIME,
-      title: t('响应时间'),
-      dataIndex: 'response_time',
-      render: (text, record, index) => <div>{renderResponseTime(text, t)}</div>,
     },
     {
       key: COLUMN_KEYS.BALANCE,
@@ -582,6 +537,54 @@ export const getChannelsColumns = ({
             </Tooltip>
           );
         }
+      },
+    },
+    {
+      key: COLUMN_KEYS.STATUS,
+      title: t('状态'),
+      dataIndex: 'status',
+      render: (text, record, index) => {
+        if (text === 3) {
+          if (record.other_info === '') {
+            record.other_info = '{}';
+          }
+          let otherInfo = JSON.parse(record.other_info);
+          let reason = otherInfo['status_reason'];
+          let time = otherInfo['status_time'];
+          return (
+            <div>
+              <Tooltip
+                content={
+                  t('原因：') + reason + t('，时间：') + timestamp2string(time)
+                }
+              >
+                {renderStatus(text, record.channel_info, t)}
+              </Tooltip>
+            </div>
+          );
+        } else {
+          return renderStatus(text, record.channel_info, t);
+        }
+      },
+    },
+    {
+      key: COLUMN_KEYS.RESPONSE_TIME,
+      title: t('响应时间'),
+      dataIndex: 'response_time',
+      render: (text, record, index) => <div>{renderResponseTime(text, t)}</div>,
+    },
+    {
+      key: COLUMN_KEYS.SUPPLIER,
+      title: t('供应商'),
+      dataIndex: 'supplier_name',
+      render: (text, record) => {
+        if (record.children !== undefined) {
+          return '-';
+        }
+        if (!text || text.trim() === '') {
+          return '-';
+        }
+        return text;
       },
     },
     {
@@ -695,38 +698,35 @@ export const getChannelsColumns = ({
       },
     },
     {
-      key: COLUMN_KEYS.PRICE_DISCOUNT,
-      title: t('价格折扣'),
-      dataIndex: 'price_discount_percent',
-      render: (text, record) => {
-        if (record.children !== undefined) {
-          return '-';
+      key: COLUMN_KEYS.TYPE,
+      title: t('类型'),
+      dataIndex: 'type',
+      render: (text, record, index) => {
+        if (record.children === undefined) {
+          return <>{renderType(text, record, t)}</>;
+        } else {
+          return <>{renderTagType(t)}</>;
         }
-        const raw = text;
-        if (raw === null || raw === undefined || raw === '') {
-          return '100%';
-        }
-        const n = Number(raw);
-        if (Number.isNaN(n)) {
-          return '-';
-        }
-        const s = n % 1 === 0 ? String(Math.trunc(n)) : n.toFixed(2);
-        return `${s}%`;
       },
     },
     {
-      key: COLUMN_KEYS.SUPPLIER,
-      title: t('供应商'),
-      dataIndex: 'supplier_name',
-      render: (text, record) => {
-        if (record.children !== undefined) {
-          return '-';
-        }
-        if (!text || text.trim() === '') {
-          return '-';
-        }
-        return text;
-      },
+      key: COLUMN_KEYS.GROUP,
+      title: t('分组'),
+      dataIndex: 'group',
+      render: (text, record, index) => (
+        <div>
+          <Space spacing={2}>
+            {text
+              ?.split(',')
+              .sort((a, b) => {
+                if (a === 'default') return -1;
+                if (b === 'default') return 1;
+                return a.localeCompare(b);
+              })
+              .map((item, index) => renderGroup(item))}
+          </Space>
+        </div>
+      ),
     },
     {
       key: COLUMN_KEYS.OPERATE,
