@@ -316,6 +316,32 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 	if info.ChannelMeta == nil {
 		info.InitChannelMeta(c)
 	}
+	// 首轮优先复用分发中间件已经选中的渠道，避免重复选路覆盖 specific_channel_id 语义。
+	if retryParam.GetRetry() == 0 {
+		if selectedID := common.GetContextKeyInt(c, constant.ContextKeyChannelId); selectedID > 0 {
+			if ch, chErr := model.CacheGetChannel(selectedID); chErr == nil && ch != nil && ch.Status == common.ChannelStatusEnabled {
+				return ch, nil
+			}
+		}
+	}
+	// playground specific_channel_id / 强制渠道路由：仅允许首轮命中已选渠道，
+	// 禁止在重试阶段切换到 smart-route 或随机候选池。
+	if retryParam.GetRetry() > 0 {
+		if _, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId); ok {
+			return nil, types.NewError(
+				fmt.Errorf("已指定渠道，禁用重试切换渠道"),
+				types.ErrorCodeGetChannelFailed,
+				types.ErrOptionWithSkipRetry(),
+			)
+		}
+		if _, ok := common.GetContextKey(c, constant.ContextKeyForcedChannelID); ok {
+			return nil, types.NewError(
+				fmt.Errorf("已指定渠道，禁用重试切换渠道"),
+				types.ErrorCodeGetChannelFailed,
+				types.ErrOptionWithSkipRetry(),
+			)
+		}
+	}
 	if orderAny, ok := common.GetContextKey(c, constant.ContextKeySmartRouteChannelOrder); ok {
 		if order, ok := orderAny.([]int); ok && len(order) > 0 {
 			idx := retryParam.GetRetry()
@@ -361,6 +387,16 @@ func shouldRetry(c *gin.Context, openaiErr *types.TokenFactoryError, retryTimes 
 	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
 		return false
 	}
+	// 明确指定渠道（playground specific_channel_id / 强制路由）时，不允许重试切换渠道。
+	if _, ok := c.Get("specific_channel_id"); ok {
+		return false
+	}
+	if _, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId); ok {
+		return false
+	}
+	if _, ok := common.GetContextKey(c, constant.ContextKeyForcedChannelID); ok {
+		return false
+	}
 	if types.IsChannelError(openaiErr) {
 		return true
 	}
@@ -368,9 +404,6 @@ func shouldRetry(c *gin.Context, openaiErr *types.TokenFactoryError, retryTimes 
 		return false
 	}
 	if retryTimes <= 0 {
-		return false
-	}
-	if _, ok := c.Get("specific_channel_id"); ok {
 		return false
 	}
 	code := openaiErr.StatusCode
@@ -654,6 +687,9 @@ func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError,
 		return false
 	}
 	if _, ok := c.Get("specific_channel_id"); ok {
+		return false
+	}
+	if _, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId); ok {
 		return false
 	}
 	if taskErr.StatusCode == http.StatusTooManyRequests {

@@ -224,8 +224,10 @@ const ModelChannelList = ({
                     size='small'
                     type='tertiary'
                     className='ml-2'
+                    title={`${group.supplierAlias}/${modelData.model_name}`}
                     onClick={(e) => {
                       e.stopPropagation();
+                      // 复制供应商级别路由（旧格式，供需要限定供应商时使用）
                       const text = `${group.supplierAlias}/${modelData.model_name}`;
                       navigator.clipboard.writeText(text).then(() => {
                         Toast.success({ content: t('已复制') });
@@ -244,7 +246,11 @@ const ModelChannelList = ({
             <div className='space-y-3'>
               {group.channels.map((channel, idx) => {
                 const channelItems = formatChannelInfo(channel);
-                const channelPath = `${channel.supplier_alias}/${modelData.model_name}/${channel.channel_no}`;
+                // 优先使用新 {model}/{index} 格式；没有 route_index 时回退到旧格式
+                const channelPath = channel.route_index
+                  ? `${modelData.model_name}/${channel.route_index}`
+                  : `${channel.supplier_alias}/${modelData.model_name}/${channel.channel_no}`;
+                const channelBadge = channel.route_index || channel.channel_no || String(idx);
                 
                 const handleCopy = () => {
                   navigator.clipboard.writeText(channelPath).then(() => {
@@ -257,7 +263,7 @@ const ModelChannelList = ({
                 return (
                   <div key={`${channel.channel_id}-${idx}`} className='flex gap-3 items-start'>
                     <div className='flex items-center justify-center min-w-[24px] h-[24px] rounded-full bg-blue-100 text-blue-600 text-xs font-semibold mt-3'>
-                      {channel.channel_no}
+                      {channelBadge}
                     </div>
                     <Card
                       className='!rounded-lg shadow-sm !mb-2 flex-1'

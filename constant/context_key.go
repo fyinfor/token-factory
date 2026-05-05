@@ -54,6 +54,16 @@ const (
 	ContextKeyForcedChannelID       ContextKey = "forced_channel_id"
 	ContextKeyForcedChannelModelKey ContextKey = "forced_channel_model_key"
 
+	// ContextKeyTFOpenUpstreamChannelRoute 当本地渠道由 TokenFactoryOpen 同步生成、且上游记录了
+	// 有效的 supplier_alias 与 channel_no 时，由 SetupContextForSelectedChannel 写入，
+	// 格式为 "{alias}|{channel_no}"（竖线分隔）。relay 层读取后将发往上游的模型名改写为
+	// "{alias}/{model}/{channel_no}"，使上游按同一渠道路由，实现精准流量对齐。
+	ContextKeyTFOpenUpstreamChannelRoute ContextKey = "tf_open_upstream_channel_route"
+	// ContextKeyTFOpenUpstreamChannelNoOverride 允许 playground 在已指定本地渠道时，
+	// 通过模型名后缀 "{model}/{n}" 显式覆盖上游 channel_no（写入为 "c<n>"）。
+	// 仅对 source=tokenfactory_open 的渠道生效。
+	ContextKeyTFOpenUpstreamChannelNoOverride ContextKey = "tf_open_upstream_channel_no_override"
+
 	// ContextKeyForcedSupplierApplicationID 当用户通过 {alias}/{model} 形式指定「某供应商下任意渠道」时，
 	// 由分发中间件解析后写入该上下文键（值为 supplier_applications.id，P0 时为 0），
 	// 用于将 SmartRouter / 随机回退的候选渠道限制在该供应商内。

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -74,6 +75,20 @@ func ModelMappedHelper(c *gin.Context, info *common.RelayInfo, request dto.Reque
 		info.UpstreamModelName = finalUpstreamModelName
 		info.OriginModelName = ratio_setting.WithCompactModelSuffix(finalUpstreamModelName)
 	}
+	// TFOpen 上游渠道精准路由：若本地渠道来自 TokenFactoryOpen 同步且存在有效的
+	// upstream_supplier_alias 与 upstream_channel_no，将 UpstreamModelName 改写为
+	// "{alias}/{model}/{channel_no}" 格式，上游平台的 Distribute 中间件会将其解析为
+	// ParseForcedChannelModelName 指定渠道路由，从而保证子站流量与上游同一渠道对齐。
+	if tfRoute := c.GetString(string(constant.ContextKeyTFOpenUpstreamChannelRoute)); tfRoute != "" {
+		if idx := strings.IndexByte(tfRoute, '|'); idx > 0 {
+			alias := tfRoute[:idx]
+			channelNo := tfRoute[idx+1:]
+			if alias != "" && channelNo != "" {
+				info.UpstreamModelName = alias + "/" + info.UpstreamModelName + "/" + channelNo
+			}
+		}
+	}
+
 	if request != nil {
 		request.SetModelName(info.UpstreamModelName)
 	}

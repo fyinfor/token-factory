@@ -750,6 +750,14 @@ func batchInsertChannelsWithOptionalTfOpenPricing(channels []Channel, tfOpenPric
 	if len(tfOpenPricing) > 0 {
 		mergeTFOpenUpstreamPricingAfterInsert(createdChannels, tfOpenPricing)
 	}
+	// 为批量创建的渠道异步分配路由索引（best-effort，不阻塞接口响应）
+	go func(chs []Channel) {
+		for _, ch := range chs {
+			if ch.Id > 0 {
+				AssignChannelModelRouteIndices(ch.Id, ch.GetModels())
+			}
+		}
+	}(createdChannels)
 	return nil
 }
 
@@ -901,6 +909,9 @@ func BatchDeleteChannels(ids []int) error {
 	if len(ids) == 0 {
 		return nil
 	}
+	// 清理路由索引（best-effort，不影响主事务）
+	RemoveAllChannelModelRouteIndicesBatch(ids)
+
 	// 使用事务 分批删除channel表和abilities表
 	tx := DB.Begin()
 	if tx.Error != nil {
@@ -959,7 +970,7 @@ func (channel *Channel) GetStatusCodeMapping() string {
 }
 
 func (channel *Channel) Insert() error {
-	return DB.Transaction(func(tx *gorm.DB) error {
+	err := DB.Transaction(func(tx *gorm.DB) error {
 		batch := []Channel{*channel}
 		if err := allocateSupplierChannelNosInBatch(tx, batch); err != nil {
 			return err
@@ -970,6 +981,12 @@ func (channel *Channel) Insert() error {
 		}
 		return channel.AddAbilities(tx)
 	})
+	if err != nil {
+		return err
+	}
+	// 为单条插入的渠道分配路由索引（best-effort，不阻塞主流程）
+	go AssignChannelModelRouteIndices(channel.Id, channel.GetModels())
+	return nil
 }
 
 func (channel *Channel) Update() error {
@@ -1011,6 +1028,15 @@ func (channel *Channel) Update() error {
 			}
 		}
 	}
+	// 若本次更新包含模型列表，提前读取旧值用于路由索引增量同步
+	var oldModelsCSV string
+	if channel.Models != "" {
+		var snapshot Channel
+		if e := DB.Select("models").Where("id = ?", channel.Id).First(&snapshot).Error; e == nil {
+			oldModelsCSV = snapshot.Models
+		}
+	}
+
 	var err error
 	err = DB.Model(channel).Updates(channel).Error
 	if err != nil {
@@ -1018,6 +1044,11 @@ func (channel *Channel) Update() error {
 	}
 	DB.Model(channel).First(channel, "id = ?", channel.Id)
 	err = channel.UpdateAbilities(nil)
+
+	// 同步路由索引：新增模型分配索引，移除模型清理索引
+	if channel.Models != "" && channel.Models != oldModelsCSV {
+		go SyncChannelModelRouteIndices(channel.Id, oldModelsCSV, channel.Models)
+	}
 	return err
 }
 
@@ -1069,6 +1100,7 @@ func (channel *Channel) UpdateBalance(balance float64) {
 }
 
 func (channel *Channel) Delete() error {
+	RemoveAllChannelModelRouteIndices(channel.Id)
 	var err error
 	err = DB.Delete(channel).Error
 	if err != nil {
