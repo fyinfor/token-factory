@@ -484,6 +484,15 @@ func UpdateOption(c *gin.Context) {
 			})
 			return
 		}
+	case "RateLimitUserWhitelist":
+		err = setting.CheckRateLimitUserWhitelistJSON(option.Value.(string))
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			return
+		}
 	case "AutomaticDisableStatusCodes":
 		_, err = operation_setting.ParseHTTPStatusCodeRanges(option.Value.(string))
 		if err != nil {

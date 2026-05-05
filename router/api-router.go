@@ -242,6 +242,8 @@ func SetApiRouter(router *gin.Engine) {
 			optionRoute.PUT("/", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.UpdateOption)
 			optionRoute.GET("/channel_affinity_cache", middleware.RootAuth(), controller.GetChannelAffinityCacheStats)
 			optionRoute.DELETE("/channel_affinity_cache", middleware.RootAuth(), controller.ClearChannelAffinityCache)
+			optionRoute.GET("/rate_limit_blacklist_users", middleware.RootAuth(), controller.GetRateLimitBlacklistUsers)
+			optionRoute.DELETE("/rate_limit_blacklist_users", middleware.RootAuth(), controller.DeleteRateLimitBlacklistUser)
 			optionRoute.POST("/rest_model_ratio", middleware.RootAuth(), controller.ResetModelRatio)
 			optionRoute.POST("/migrate_console_setting", middleware.RootAuth(), controller.MigrateConsoleSetting) // 用于迁移检测的旧键，下个版本会删除
 		}
