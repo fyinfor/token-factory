@@ -316,6 +316,14 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 	if info.ChannelMeta == nil {
 		info.InitChannelMeta(c)
 	}
+	// 首轮优先复用分发中间件已经选中的渠道，避免重复选路覆盖 specific_channel_id 语义。
+	if retryParam.GetRetry() == 0 {
+		if selectedID := common.GetContextKeyInt(c, constant.ContextKeyChannelId); selectedID > 0 {
+			if ch, chErr := model.CacheGetChannel(selectedID); chErr == nil && ch != nil && ch.Status == common.ChannelStatusEnabled {
+				return ch, nil
+			}
+		}
+	}
 	// playground specific_channel_id / 强制渠道路由：仅允许首轮命中已选渠道，
 	// 禁止在重试阶段切换到 smart-route 或随机候选池。
 	if retryParam.GetRetry() > 0 {
