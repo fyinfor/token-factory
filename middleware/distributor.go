@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -13,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/i18n"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/service"
@@ -33,12 +36,12 @@ type ModelRequest struct {
 func Distribute() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		var channel *model.Channel
-		channelId, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId)
 		modelRequest, shouldSelectChannel, err := getModelRequest(c)
 		if err != nil {
 			abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
 			return
 		}
+		channelId, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId)
 
 		// 解析特殊模型名形式，按优先级识别：
 		//   1) {supplier_alias}/{model}/{channel_no} —— 旧格式：指定渠道直连（向后兼容）；
@@ -101,6 +104,20 @@ func Distribute() func(c *gin.Context) {
 				abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorChannelDisabled))
 				return
 			}
+			// playground 已指定本地渠道时，支持 "{model}/{n}" 语义：
+			// 若该渠道来自 TokenFactoryOpen 同步，则将 n 解释为上游 channel_no（c<n>）强制路由。
+			if strings.HasPrefix(c.Request.URL.Path, "/pg/chat/completions") {
+				if _, hasForced := common.GetContextKey(c, constant.ContextKeyForcedChannelID); !hasForced {
+					otherInfo := channel.GetOtherInfo()
+					if source, _ := otherInfo["source"].(string); source == "tokenfactory_open" {
+						if parsedModel, upstreamChannelNo, ok := parsePlaygroundTFOpenUpstreamRoute(modelRequest.Model); ok {
+							modelRequest.Model = parsedModel
+							common.SetContextKey(c, constant.ContextKeyTFOpenUpstreamChannelNoOverride, upstreamChannelNo)
+							_ = rewriteRequestModelField(c, parsedModel)
+						}
+					}
+				}
+			}
 		} else {
 			// Select a channel for the user
 			// check token model mapping
@@ -146,6 +163,7 @@ func Distribute() func(c *gin.Context) {
 						common.SetContextKey(c, constant.ContextKeyTokenSpecificChannelId, strconv.Itoa(forcedID))
 						channel = forcedChannel
 						common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
+						logSelectedUpstream(c, channel, modelRequest.Model)
 						SetupContextForSelectedChannel(c, channel, modelRequest.Model)
 						c.Next()
 						if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
@@ -190,6 +208,7 @@ func Distribute() func(c *gin.Context) {
 					channel = ch
 					selectGroup = sg
 					common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
+					logSelectedUpstream(c, channel, modelRequest.Model)
 					SetupContextForSelectedChannel(c, channel, modelRequest.Model)
 					c.Next()
 					if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
@@ -265,12 +284,89 @@ func Distribute() func(c *gin.Context) {
 			}
 		}
 		common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
+		logSelectedUpstream(c, channel, modelRequest.Model)
 		SetupContextForSelectedChannel(c, channel, modelRequest.Model)
 		c.Next()
 		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
 			service.RecordChannelAffinity(c, channel.Id)
 		}
 	}
+}
+
+func parsePlaygroundTFOpenUpstreamRoute(rawModel string) (string, string, bool) {
+	modelName := strings.TrimSpace(rawModel)
+	if modelName == "" || !strings.Contains(modelName, "/") {
+		return "", "", false
+	}
+	lastSlash := strings.LastIndex(modelName, "/")
+	if lastSlash <= 0 || lastSlash >= len(modelName)-1 {
+		return "", "", false
+	}
+	baseModel := strings.TrimSpace(modelName[:lastSlash])
+	suffix := strings.TrimSpace(modelName[lastSlash+1:])
+	if baseModel == "" || !isAllDigits(suffix) {
+		return "", "", false
+	}
+	return baseModel, "c" + suffix, true
+}
+
+func isAllDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func rewriteRequestModelField(c *gin.Context, modelName string) error {
+	contentType := c.Request.Header.Get("Content-Type")
+	if !strings.HasPrefix(contentType, "application/json") {
+		return nil
+	}
+
+	storage, err := common.GetBodyStorage(c)
+	if err != nil {
+		return err
+	}
+	body, err := storage.Bytes()
+	if err != nil {
+		return err
+	}
+	if len(bytes.TrimSpace(body)) == 0 {
+		return nil
+	}
+
+	var obj map[string]json.RawMessage
+	if err := common.Unmarshal(body, &obj); err != nil {
+		return nil
+	}
+	if _, ok := obj["model"]; !ok {
+		return nil
+	}
+	newModel, err := json.Marshal(modelName)
+	if err != nil {
+		return err
+	}
+	obj["model"] = newModel
+	newBody, err := json.Marshal(obj)
+	if err != nil {
+		return err
+	}
+	return common.ReplaceRequestBody(c, newBody)
+}
+
+func logSelectedUpstream(c *gin.Context, channel *model.Channel, modelName string) {
+	if c == nil || channel == nil {
+		return
+	}
+	upstreamName := channel.Name
+	upstreamBaseURL := channel.GetBaseURL()
+	msg := fmt.Sprintf("upstream selected: channel=%s(id=%d) base_url=%s model=%s", upstreamName, channel.Id, upstreamBaseURL, modelName)
+	logger.LogInfo(c, msg)
 }
 
 // getModelFromRequest 从请求中读取模型信息
@@ -526,6 +622,9 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	if source, _ := otherInfo["source"].(string); source == "tokenfactory_open" {
 		alias := strings.TrimSpace(common.Interface2String(otherInfo["upstream_supplier_alias"]))
 		channelNo := strings.TrimSpace(common.Interface2String(otherInfo["upstream_channel_no"]))
+		if override := strings.TrimSpace(common.GetContextKeyString(c, constant.ContextKeyTFOpenUpstreamChannelNoOverride)); override != "" {
+			channelNo = override
+		}
 		if alias != "" && channelNo != "" {
 			common.SetContextKey(c, constant.ContextKeyTFOpenUpstreamChannelRoute, alias+"|"+channelNo)
 		}

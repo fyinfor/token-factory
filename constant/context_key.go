@@ -59,6 +59,10 @@ const (
 	// 格式为 "{alias}|{channel_no}"（竖线分隔）。relay 层读取后将发往上游的模型名改写为
 	// "{alias}/{model}/{channel_no}"，使上游按同一渠道路由，实现精准流量对齐。
 	ContextKeyTFOpenUpstreamChannelRoute ContextKey = "tf_open_upstream_channel_route"
+	// ContextKeyTFOpenUpstreamChannelNoOverride 允许 playground 在已指定本地渠道时，
+	// 通过模型名后缀 "{model}/{n}" 显式覆盖上游 channel_no（写入为 "c<n>"）。
+	// 仅对 source=tokenfactory_open 的渠道生效。
+	ContextKeyTFOpenUpstreamChannelNoOverride ContextKey = "tf_open_upstream_channel_no_override"
 
 	// ContextKeyForcedSupplierApplicationID 当用户通过 {alias}/{model} 形式指定「某供应商下任意渠道」时，
 	// 由分发中间件解析后写入该上下文键（值为 supplier_applications.id，P0 时为 0），
