@@ -621,12 +621,18 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 	otherInfo := channel.GetOtherInfo()
 	if source, _ := otherInfo["source"].(string); source == "tokenfactory_open" {
 		alias := strings.TrimSpace(common.Interface2String(otherInfo["upstream_supplier_alias"]))
+		if alias == "" {
+			if strings.TrimSpace(common.Interface2String(otherInfo["upstream_supplier_app_id"])) == "0" {
+				alias = "P0"
+			}
+		}
 		channelNo := strings.TrimSpace(common.Interface2String(otherInfo["upstream_channel_no"]))
 		if override := strings.TrimSpace(common.GetContextKeyString(c, constant.ContextKeyTFOpenUpstreamChannelNoOverride)); override != "" {
 			channelNo = override
 		}
 		if alias != "" && channelNo != "" {
 			common.SetContextKey(c, constant.ContextKeyTFOpenUpstreamChannelRoute, alias+"|"+channelNo)
+			logger.LogInfo(c, fmt.Sprintf("tfopen route selected: route=%s|%s channel=%s(id=%d) model=%s", alias, channelNo, channel.Name, channel.Id, modelName))
 		}
 	}
 
