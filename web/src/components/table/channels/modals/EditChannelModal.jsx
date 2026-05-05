@@ -186,7 +186,6 @@ const EditChannelModal = (props) => {
   };
   const originInputs = {
     name: '',
-    channel_no: '',
     company_logo_url: '',
     supplier_type: '',
     type: 1,
@@ -1770,14 +1769,6 @@ const EditChannelModal = (props) => {
     }
     delete localInputs.vertex_files;
 
-    if (isEdit && localInputs.channel_no !== undefined) {
-      localInputs.channel_no = String(localInputs.channel_no || '').trim();
-      if (localInputs.channel_no.length > 32) {
-        showInfo(t('渠道编号长度不能超过 32 个字符'));
-        return;
-      }
-    }
-
     if (!isEdit && (!localInputs.name || !localInputs.key)) {
       showInfo(t('请填写渠道名称和渠道密钥！'));
       return;
@@ -3086,20 +3077,6 @@ const EditChannelModal = (props) => {
                         onChange={(value) => handleInputChange('name', value)}
                         autoComplete='new-password'
                       />
-
-                      {isEdit && (
-                        <Form.Input
-                          field='channel_no'
-                          label={t('渠道编号')}
-                          placeholder={t('例如 c1、c2')}
-                          maxLength={32}
-                          showClear
-                          extraText={t('渠道编号编辑说明')}
-                          onChange={(value) =>
-                            handleInputChange('channel_no', value)
-                          }
-                        />
-                      )}
 
                       {inputs.type === 33 && (
                         <>
