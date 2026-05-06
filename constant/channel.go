@@ -57,8 +57,10 @@ const (
 	ChannelTypeCodex            = 57
 	ChannelTypeOpenAIVideo      = 58 // OpenAI-compatible video gateway (currently Hidream/Seedance upstream)
 	ChannelTypeVideoGenerator   = 59 // OpenAI-compatible video gateway for /videogenerator/generate
-	ChannelTypeTokenFactoryOpen = 60
-	ChannelTypeDummy            // this one is only for count, do not add any channel after this
+	ChannelTypeTokenFactoryOpen      = 60
+	ChannelTypeTencentCloudVideo     = 61 // Tencent Cloud VOD CreateAigcVideoTask / DescribeTaskDetail
+	ChannelTypeTencentCloudImage     = 62 // Tencent Cloud VOD CreateAigcImageTask / DescribeTaskDetail
+	ChannelTypeDummy                 // this one is only for count, do not add any channel after this
 
 )
 
@@ -122,9 +124,11 @@ var ChannelBaseURLs = []string{
 	"https://api.replicate.com",                 //56
 	"https://chatgpt.com",                       //57
 	"https://maas.hidreamai.com",                //58
-	"https://www.sophnet.com/api/open-apis/projects/easyllms", //59
-	"",                                          //59
-	"",                                          //60
+	"https://www.sophnet.com/api/open-apis/projects/easyllms", //59 VideoGenerator
+	"",                               //60 TokenFactoryOpen
+	"https://vod.tencentcloudapi.com", //61 TencentCloudVideo
+	"https://vod.tencentcloudapi.com", //62 TencentCloudImage
+	"",                               //63 Dummy
 }
 
 var ChannelTypeNames = map[int]string{
@@ -184,7 +188,9 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeCodex:            "Codex",
 	ChannelTypeOpenAIVideo:      "OpenAIVideo",
 	ChannelTypeVideoGenerator:   "VideoGenerator",
-	ChannelTypeTokenFactoryOpen: "TokenFactoryOpen",
+	ChannelTypeTokenFactoryOpen:      "TokenFactoryOpen",
+	ChannelTypeTencentCloudVideo:     "TencentCloudVideo",
+	ChannelTypeTencentCloudImage:     "TencentCloudImage",
 }
 
 func GetChannelTypeName(channelType int) string {
@@ -198,7 +204,7 @@ func GetChannelTypeName(channelType int) string {
 // paths (/v1/videos, etc.) with optional token-based or per-video pricing.
 func IsVideoTaskChannel(channelType int) bool {
 	switch channelType {
-	case ChannelTypeSora, ChannelTypeOpenAIVideo, ChannelTypeVideoGenerator:
+	case ChannelTypeSora, ChannelTypeOpenAIVideo, ChannelTypeVideoGenerator, ChannelTypeTencentCloudVideo:
 		return true
 	default:
 		return false
