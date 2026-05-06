@@ -4,9 +4,14 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting"
+	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
 )
 
@@ -19,9 +24,16 @@ var defNext = func(c *gin.Context) {
 }
 
 func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark string) {
+	if !shouldApplyGeneralRateLimit(c) {
+		return
+	}
+	if shouldBypassRateLimit(c) {
+		return
+	}
 	ctx := context.Background()
 	rdb := common.RDB
-	key := "rateLimit:" + mark + c.ClientIP()
+	userID := getRateLimitUserID(c)
+	key := "rateLimit:" + mark + ":" + buildRateLimitSubject(c)
 	listLength, err := rdb.LLen(ctx, key).Result()
 	if err != nil {
 		fmt.Println(err.Error())
@@ -53,6 +65,9 @@ func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark st
 		// See: https://stackoverflow.com/questions/50970900/why-is-time-since-returning-negative-durations-on-windows
 		if int64(nowTime.Sub(oldTime).Seconds()) < duration {
 			rdb.Expire(ctx, key, common.RateLimitKeyExpirationDuration)
+			if userID > 0 {
+				_ = service.AddUserRateLimitBlacklist(userID, duration, "api-rate-limit:"+mark)
+			}
 			c.Status(http.StatusTooManyRequests)
 			c.Abort()
 			return
@@ -65,12 +80,74 @@ func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark st
 }
 
 func memoryRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark string) {
-	key := mark + c.ClientIP()
+	if !shouldApplyGeneralRateLimit(c) {
+		return
+	}
+	if shouldBypassRateLimit(c) {
+		return
+	}
+	userID := getRateLimitUserID(c)
+	key := mark + ":" + buildRateLimitSubject(c)
 	if !inMemoryRateLimiter.Request(key, maxRequestNum, duration) {
+		if userID > 0 {
+			_ = service.AddUserRateLimitBlacklist(userID, duration, "api-rate-limit:"+mark)
+		}
 		c.Status(http.StatusTooManyRequests)
 		c.Abort()
 		return
 	}
+}
+
+// buildRateLimitSubject returns a stable per-user identifier when available.
+// Priority: authenticated context id -> session id -> New-Api-User header -> client IP.
+func buildRateLimitSubject(c *gin.Context) string {
+	if userID := getRateLimitUserID(c); userID > 0 {
+		return fmt.Sprintf("user:%d", userID)
+	}
+	return "ip:" + c.ClientIP()
+}
+
+func getRateLimitUserID(c *gin.Context) int {
+	if userID := c.GetInt("id"); userID > 0 {
+		return userID
+	}
+	session := sessions.Default(c)
+	if sessionID := session.Get("id"); sessionID != nil {
+		if id, ok := sessionID.(int); ok && id > 0 {
+			return id
+		}
+		if id, ok := sessionID.(int64); ok && id > 0 {
+			return int(id)
+		}
+		if id, ok := sessionID.(float64); ok && id > 0 {
+			return int(id)
+		}
+		if idStr, ok := sessionID.(string); ok {
+			if parsed, err := strconv.Atoi(idStr); err == nil && parsed > 0 {
+				return parsed
+			}
+		}
+	}
+	if apiUserIDStr := c.GetHeader("New-Api-User"); apiUserIDStr != "" {
+		if id, err := strconv.Atoi(apiUserIDStr); err == nil && id > 0 {
+			return id
+		}
+	}
+	return 0
+}
+
+func shouldBypassRateLimit(c *gin.Context) bool {
+	userID := getRateLimitUserID(c)
+	if userID <= 0 {
+		return false
+	}
+	return model.IsAdmin(userID) || setting.IsUserInRateLimitWhitelist(userID)
+}
+
+// shouldApplyGeneralRateLimit ensures GA/GW/CT only apply to identified users.
+// Public unauthenticated routes (e.g. homepage) are excluded.
+func shouldApplyGeneralRateLimit(c *gin.Context) bool {
+	return getRateLimitUserID(c) > 0
 }
 
 func rateLimitFactory(maxRequestNum int, duration int64, mark string) func(c *gin.Context) {
@@ -88,24 +165,29 @@ func rateLimitFactory(maxRequestNum int, duration int64, mark string) func(c *gi
 }
 
 func GlobalWebRateLimit() func(c *gin.Context) {
-	if common.GlobalWebRateLimitEnable {
-		return rateLimitFactory(common.GlobalWebRateLimitNum, common.GlobalWebRateLimitDuration, "GW")
-	}
+	// Web-side global limiter is intentionally disabled.
+	// Use GlobalAPIRateLimit + CriticalRateLimit for authenticated API traffic.
 	return defNext
 }
 
 func GlobalAPIRateLimit() func(c *gin.Context) {
-	if common.GlobalApiRateLimitEnable {
-		return rateLimitFactory(common.GlobalApiRateLimitNum, common.GlobalApiRateLimitDuration, "GA")
+	return func(c *gin.Context) {
+		if !common.GlobalApiRateLimitEnable {
+			c.Next()
+			return
+		}
+		rateLimitFactory(common.GlobalApiRateLimitNum, common.GlobalApiRateLimitDuration, "GA")(c)
 	}
-	return defNext
 }
 
 func CriticalRateLimit() func(c *gin.Context) {
-	if common.CriticalRateLimitEnable {
-		return rateLimitFactory(common.CriticalRateLimitNum, common.CriticalRateLimitDuration, "CT")
+	return func(c *gin.Context) {
+		if !common.CriticalRateLimitEnable {
+			c.Next()
+			return
+		}
+		rateLimitFactory(common.CriticalRateLimitNum, common.CriticalRateLimitDuration, "CT")(c)
 	}
-	return defNext
 }
 
 func DownloadRateLimit() func(c *gin.Context) {
@@ -128,6 +210,16 @@ func userRateLimitFactory(maxRequestNum int, duration int64, mark string) func(c
 				c.Abort()
 				return
 			}
+			// Admin users are always whitelisted by default.
+			if model.IsAdmin(userId) || setting.IsUserInRateLimitWhitelist(userId) {
+				return
+			}
+			blacklisted, err := service.IsUserRateLimitBlacklisted(userId)
+			if err == nil && blacklisted {
+				c.Status(http.StatusTooManyRequests)
+				c.Abort()
+				return
+			}
 			key := fmt.Sprintf("rateLimit:%s:user:%d", mark, userId)
 			userRedisRateLimiter(c, maxRequestNum, duration, key)
 		}
@@ -139,6 +231,9 @@ func userRateLimitFactory(maxRequestNum int, duration int64, mark string) func(c
 		if userId == 0 {
 			c.Status(http.StatusUnauthorized)
 			c.Abort()
+			return
+		}
+		if model.IsAdmin(userId) || setting.IsUserInRateLimitWhitelist(userId) {
 			return
 		}
 		key := fmt.Sprintf("%s:user:%d", mark, userId)
@@ -184,6 +279,7 @@ func userRedisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, key
 		}
 		if int64(nowTime.Sub(oldTime).Seconds()) < duration {
 			rdb.Expire(ctx, key, common.RateLimitKeyExpirationDuration)
+			_ = service.AddUserRateLimitBlacklist(c.GetInt("id"), duration, "user-rate-limit")
 			c.Status(http.StatusTooManyRequests)
 			c.Abort()
 			return

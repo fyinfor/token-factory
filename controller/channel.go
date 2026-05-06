@@ -710,11 +710,6 @@ func validateChannel(channel *model.Channel, isAdd bool) error {
 		}
 	}
 
-	no := strings.TrimSpace(channel.ChannelNo)
-	if no != "" && len(no) > 32 {
-		return fmt.Errorf("渠道编号长度不能超过 32 个字符")
-	}
-
 	if channel != nil && channel.PriceDiscountPercent != nil {
 		v := *channel.PriceDiscountPercent
 		if v < 0 || v > 1000 {
@@ -1111,7 +1106,7 @@ func buildTokenFactorySyncedChannels(base *model.Channel) ([]model.Channel, []mo
 	now := common.GetTimestamp()
 	result := make([]model.Channel, 0, len(upstreamChannels))
 	pricing := make([]model.TFOpenUpstreamPricing, 0, len(upstreamChannels))
-	for _, upstream := range upstreamChannels {
+	for i, upstream := range upstreamChannels {
 		clone := *base
 		clone.Id = 0
 		clone.CreatedTime = now
@@ -1120,19 +1115,17 @@ func buildTokenFactorySyncedChannels(base *model.Channel) ([]model.Channel, []mo
 		} else {
 			clone.Type = constant.ChannelTypeTokenFactoryOpen
 		}
+		// 用 base-62 序号（0, 1 … 9, A … Z, a … z）拼接渠道名，使子站名称唯一且可读。
+		// 格式：{baseName}-{base62Index}；baseName 优先取管理员填入的名称，其次取上游渠道名。
+		seqIdx := model.EncodeBase62(int64(i))
 		baseName := strings.TrimSpace(base.Name)
-		upstreamNo := strings.TrimSpace(upstream.ChannelNo)
-		if baseName != "" && upstreamNo != "" {
-			clone.Name = fmt.Sprintf("%s-%s", baseName, upstreamNo)
-		} else if upstreamNo != "" {
-			clone.Name = upstreamNo
-		} else if baseName != "" {
-			clone.Name = baseName
+		upstreamName := strings.TrimSpace(upstream.Name)
+		if baseName != "" {
+			clone.Name = fmt.Sprintf("%s-%s", baseName, seqIdx)
+		} else if upstreamName != "" {
+			clone.Name = fmt.Sprintf("%s-%s", upstreamName, seqIdx)
 		} else {
-			clone.Name = strings.TrimSpace(upstream.Name)
-			if strings.TrimSpace(clone.Name) == "" {
-				clone.Name = fmt.Sprintf("upstream-%d", upstream.ID)
-			}
+			clone.Name = fmt.Sprintf("upstream-%s", seqIdx)
 		}
 		clone.Models = strings.TrimSpace(upstream.Models)
 		if strings.TrimSpace(upstream.Group) != "" {
@@ -1156,6 +1149,7 @@ func buildTokenFactorySyncedChannels(base *model.Channel) ([]model.Channel, []mo
 			"upstream_supplier_alias":  strings.TrimSpace(upstream.SupplierAlias),
 			"upstream_channel_type":    upstream.Type,
 			"local_channel_no":         clone.ChannelNo,
+			"sync_seq_index":           seqIdx, // 本次同步批次内的 base-62 顺序编号
 			"synced_at":                now,
 		}
 		metaJSON, _ := common.Marshal(syncMeta)
@@ -1176,10 +1170,6 @@ func AddChannel(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	if addChannelRequest.Channel != nil {
-		addChannelRequest.Channel.ChannelNo = strings.TrimSpace(addChannelRequest.Channel.ChannelNo)
-	}
-
 	// 使用统一的校验函数
 	if err := validateChannel(addChannelRequest.Channel, true); err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -1199,16 +1189,6 @@ func AddChannel(c *gin.Context) {
 		})
 		return
 	}
-	if addChannelRequest.Channel.ChannelNo != "" {
-		if err := model.ValidateSupplierChannelNoUnique(0, addChannelRequest.Channel.SupplierApplicationID, addChannelRequest.Channel.ChannelNo); err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-	}
-
 	addChannelRequest.Channel.CreatedTime = common.GetTimestamp()
 	keys := make([]string, 0)
 	switch addChannelRequest.Mode {
@@ -1496,7 +1476,6 @@ func UpdateChannel(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	channel.ChannelNo = strings.TrimSpace(channel.ChannelNo)
 	if channel.Id <= 0 {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -1542,15 +1521,6 @@ func UpdateChannel(c *gin.Context) {
 			"message": err.Error(),
 		})
 		return
-	}
-	if channel.ChannelNo != "" {
-		if err := model.ValidateSupplierChannelNoUnique(channel.Id, originChannel.SupplierApplicationID, channel.ChannelNo); err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
 	}
 	// 供应商更新时强制保持归属信息不变，防止通过请求体篡改 owner/supplier 关联。
 	if c.GetInt("role") < common.RoleAdminUser {

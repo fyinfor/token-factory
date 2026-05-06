@@ -628,69 +628,17 @@ func maxChannelNoNumericSuffixForSupplier(tx *gorm.DB, supplierApplicationID int
 	return maxN, nil
 }
 
-// allocateSupplierChannelNosInBatch 为同一事务批次内待插入的渠道分配 channel_no（同一 supplier_application_id 下 c1,c2… 连续不重复，含 P0 即 id=0）。
+// allocateSupplierChannelNosInBatch 保留为空实现：
+// 兼容历史调用链，但不再为新渠道自动生成 channel_no。
 func allocateSupplierChannelNosInBatch(tx *gorm.DB, batch []Channel) error {
-	maxCache := make(map[int]int)
-	assigned := make(map[int]int)
-	for i := range batch {
-		sid := batch[i].SupplierApplicationID
-		if strings.TrimSpace(batch[i].ChannelNo) != "" {
-			continue
-		}
-		m, ok := maxCache[sid]
-		if !ok {
-			var err error
-			m, err = maxChannelNoNumericSuffixForSupplier(tx, sid)
-			if err != nil {
-				return err
-			}
-			maxCache[sid] = m
-		}
-		assigned[sid]++
-		batch[i].ChannelNo = "c" + strconv.Itoa(m+assigned[sid])
-	}
+	_ = tx
+	_ = batch
 	return nil
 }
 
-// BackfillSupplierChannelNo 为历史数据补全 channel_no：按 supplier_application_id 分组（含 P0）、渠道 id 升序，已有非空编号的不覆盖，空编号接续已有最大 cN。
+// BackfillSupplierChannelNo 保留为空实现：
+// 兼容启动流程，不再为历史数据补全 channel_no。
 func BackfillSupplierChannelNo() error {
-	type row struct {
-		ID                    int
-		SupplierApplicationID int
-		ChannelNo             string
-	}
-	var rows []row
-	if err := DB.Model(&Channel{}).
-		Select("id", "supplier_application_id", "channel_no").
-		Order("supplier_application_id asc, id asc").
-		Scan(&rows).Error; err != nil {
-		return err
-	}
-	bySupplier := make(map[int][]row)
-	for _, r := range rows {
-		bySupplier[r.SupplierApplicationID] = append(bySupplier[r.SupplierApplicationID], r)
-	}
-	for _, list := range bySupplier {
-		maxN := 0
-		for _, r := range list {
-			no := strings.TrimSpace(r.ChannelNo)
-			if len(no) >= 2 && no[0] == 'c' {
-				if n, err := strconv.Atoi(no[1:]); err == nil && n > maxN {
-					maxN = n
-				}
-			}
-		}
-		for _, r := range list {
-			if strings.TrimSpace(r.ChannelNo) != "" {
-				continue
-			}
-			maxN++
-			no := "c" + strconv.Itoa(maxN)
-			if err := DB.Model(&Channel{}).Where("id = ?", r.ID).Update("channel_no", no).Error; err != nil {
-				return err
-			}
-		}
-	}
 	return nil
 }
 
@@ -750,6 +698,14 @@ func batchInsertChannelsWithOptionalTfOpenPricing(channels []Channel, tfOpenPric
 	if len(tfOpenPricing) > 0 {
 		mergeTFOpenUpstreamPricingAfterInsert(createdChannels, tfOpenPricing)
 	}
+	// 为批量创建的渠道异步分配路由索引（best-effort，不阻塞接口响应）
+	go func(chs []Channel) {
+		for _, ch := range chs {
+			if ch.Id > 0 {
+				AssignChannelModelRouteIndices(ch.Id, ch.GetModels())
+			}
+		}
+	}(createdChannels)
 	return nil
 }
 
@@ -901,6 +857,9 @@ func BatchDeleteChannels(ids []int) error {
 	if len(ids) == 0 {
 		return nil
 	}
+	// 清理路由索引（best-effort，不影响主事务）
+	RemoveAllChannelModelRouteIndicesBatch(ids)
+
 	// 使用事务 分批删除channel表和abilities表
 	tx := DB.Begin()
 	if tx.Error != nil {
@@ -959,7 +918,7 @@ func (channel *Channel) GetStatusCodeMapping() string {
 }
 
 func (channel *Channel) Insert() error {
-	return DB.Transaction(func(tx *gorm.DB) error {
+	err := DB.Transaction(func(tx *gorm.DB) error {
 		batch := []Channel{*channel}
 		if err := allocateSupplierChannelNosInBatch(tx, batch); err != nil {
 			return err
@@ -970,6 +929,12 @@ func (channel *Channel) Insert() error {
 		}
 		return channel.AddAbilities(tx)
 	})
+	if err != nil {
+		return err
+	}
+	// 为单条插入的渠道分配路由索引（best-effort，不阻塞主流程）
+	go AssignChannelModelRouteIndices(channel.Id, channel.GetModels())
+	return nil
 }
 
 func (channel *Channel) Update() error {
@@ -1011,6 +976,15 @@ func (channel *Channel) Update() error {
 			}
 		}
 	}
+	// 若本次更新包含模型列表，提前读取旧值用于路由索引增量同步
+	var oldModelsCSV string
+	if channel.Models != "" {
+		var snapshot Channel
+		if e := DB.Select("models").Where("id = ?", channel.Id).First(&snapshot).Error; e == nil {
+			oldModelsCSV = snapshot.Models
+		}
+	}
+
 	var err error
 	err = DB.Model(channel).Updates(channel).Error
 	if err != nil {
@@ -1018,6 +992,11 @@ func (channel *Channel) Update() error {
 	}
 	DB.Model(channel).First(channel, "id = ?", channel.Id)
 	err = channel.UpdateAbilities(nil)
+
+	// 同步路由索引：新增模型分配索引，移除模型清理索引
+	if channel.Models != "" && channel.Models != oldModelsCSV {
+		go SyncChannelModelRouteIndices(channel.Id, oldModelsCSV, channel.Models)
+	}
 	return err
 }
 
@@ -1069,6 +1048,7 @@ func (channel *Channel) UpdateBalance(balance float64) {
 }
 
 func (channel *Channel) Delete() error {
+	RemoveAllChannelModelRouteIndices(channel.Id)
 	var err error
 	err = DB.Delete(channel).Error
 	if err != nil {

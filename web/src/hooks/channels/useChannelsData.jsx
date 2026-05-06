@@ -147,7 +147,6 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
   // Column keys
   const COLUMN_KEYS = {
     ID: 'id',
-    CHANNEL_NO: 'channel_no',
     NAME: 'name',
     GROUP: 'group',
     TYPE: 'type',
@@ -190,7 +189,6 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
   const getDefaultColumnVisibility = () => {
     return {
       [COLUMN_KEYS.ID]: true,
-      [COLUMN_KEYS.CHANNEL_NO]: true,
       [COLUMN_KEYS.NAME]: true,
       [COLUMN_KEYS.GROUP]: true,
       [COLUMN_KEYS.TYPE]: true,

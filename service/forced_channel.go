@@ -181,6 +181,60 @@ func rewriteRequestModelField(c *gin.Context, modelName string) error {
 	return common.ReplaceRequestBody(c, newBody)
 }
 
+// ModelRouteResult 表示一次「模型路由索引」（{model}/{index}）解析结果。
+type ModelRouteResult struct {
+	ModelName  string // 去掉路由索引后缀的真实模型名
+	RouteIndex string // 路由索引，如 "0"、"A"
+	ChannelID  int    // 解析得到的渠道 ID
+}
+
+// ParseModelRouteIndex 尝试把 {model}/{index} 形式的模型名解析为 ModelRouteResult。
+//
+// 解析规则：
+//   - 字符串中至少包含一个 "/"；
+//   - 最后一段必须为纯 base-62 字符（0-9 A-Z a-z），不含连字符、点号等，以此与真实
+//     模型名（如 "gpt-4o"、"claude-3.5-sonnet"）区分；
+//   - 将去掉最后一段后的部分作为模型名，到 channel_model_route_indices 查找渠道；
+//   - 若索引存在但渠道已禁用，返回 nil, false, nil（不报错，交由后续正常路由处理）；
+//     这样可避免与真实模型名冲突时产生误导性错误。
+//
+// 不符合格式或索引在 DB 中查不到时返回 nil, false, nil；
+// 格式匹配且渠道查到但被禁用时也返回 nil, false, nil（优雅降级）。
+func ParseModelRouteIndex(raw string) (*ModelRouteResult, bool, error) {
+	name := strings.TrimSpace(raw)
+	if name == "" || !strings.Contains(name, "/") {
+		return nil, false, nil
+	}
+	lastSlash := strings.LastIndex(name, "/")
+	potentialIndex := name[lastSlash+1:]
+	potentialModel := name[:lastSlash]
+	if potentialIndex == "" || potentialModel == "" {
+		return nil, false, nil
+	}
+	if !model.IsValidRouteIndex(potentialIndex) {
+		return nil, false, nil
+	}
+
+	channelID, err := model.FindChannelIDByModelAndRouteIndex(potentialModel, potentialIndex)
+	if err != nil {
+		// 索引不存在或渠道禁用：不视为匹配，降级至正常路由
+		return nil, false, nil
+	}
+	return &ModelRouteResult{
+		ModelName:  potentialModel,
+		RouteIndex: potentialIndex,
+		ChannelID:  channelID,
+	}, true, nil
+}
+
+// ApplyModelRouteOnRequestBody 写入强制渠道 ID 上下文并把真实模型名写回请求体。
+// 语义同 ApplyForcedChannelOnRequestBody，用于新 {model}/{index} 路由格式。
+func ApplyModelRouteOnRequestBody(c *gin.Context, result *ModelRouteResult, originalModel string) error {
+	common.SetContextKey(c, constant.ContextKeyForcedChannelID, result.ChannelID)
+	common.SetContextKey(c, constant.ContextKeyForcedChannelModelKey, originalModel)
+	return rewriteRequestModelField(c, result.ModelName)
+}
+
 // ForcedSupplierFromContext 返回当前请求是否绑定了「强制供应商」路由，以及对应的
 // supplier_applications.id（P0 时为 0）。
 func ForcedSupplierFromContext(c *gin.Context) (int, bool) {

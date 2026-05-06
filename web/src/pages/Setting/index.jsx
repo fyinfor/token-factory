@@ -34,6 +34,7 @@ import {
   CreditCard,
   Server,
   Activity,
+  Shield,
 } from 'lucide-react';
 
 import SystemSetting from '../../components/settings/SystemSetting';
@@ -49,6 +50,7 @@ import DrawingSetting from '../../components/settings/DrawingSetting';
 import PaymentSetting from '../../components/settings/PaymentSetting';
 import ModelDeploymentSetting from '../../components/settings/ModelDeploymentSetting';
 import PerformanceSetting from '../../components/settings/PerformanceSetting';
+import ApiRateLimitSetting from '../../components/settings/ApiRateLimitSetting';
 
 const Setting = () => {
   const { t } = useTranslation();
@@ -157,6 +159,16 @@ const Setting = () => {
       ),
       content: <PerformanceSetting />,
       itemKey: 'performance',
+    });
+    panes.push({
+      tab: (
+        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+          <Shield size={18} />
+          {t('接口限流设置')}
+        </span>
+      ),
+      content: <ApiRateLimitSetting />,
+      itemKey: 'api-rate-limit',
     });
     panes.push({
       tab: (
