@@ -1282,6 +1282,115 @@ func updateChannelUsedQuota(id int, quota int) {
 	err := DB.Model(&Channel{}).Where("id = ?", id).Update("used_quota", gorm.Expr("used_quota + ?", quota)).Error
 	if err != nil {
 		common.SysLog(fmt.Sprintf("failed to update channel used quota: channel_id=%d, delta_quota=%d, error=%v", id, quota, err))
+		return
+	}
+	notifyChannelBalanceAlertOnUsageDelta(id, quota)
+}
+
+const (
+	channelBalanceAlertLevelNone = "none"
+	channelBalanceAlertLevelSoft = "soft"
+	channelBalanceAlertLevelRisk = "risk"
+)
+
+func getChannelBalanceAlertConfigForUsedQuota() (bool, float64, float64) {
+	enabled := false
+	softThreshold := 50.0
+	riskThreshold := 20.0
+
+	common.OptionMapRWMutex.RLock()
+	enabled = common.OptionMap["ChannelBalanceAlertEnabled"] == "true"
+	if raw, ok := common.OptionMap["ChannelBalanceSoftAlertThreshold"]; ok {
+		if val, err := strconv.ParseFloat(strings.TrimSpace(raw), 64); err == nil && val >= 0 {
+			softThreshold = val
+		}
+	}
+	if raw, ok := common.OptionMap["ChannelBalanceRiskAlertThreshold"]; ok {
+		if val, err := strconv.ParseFloat(strings.TrimSpace(raw), 64); err == nil && val >= 0 {
+			riskThreshold = val
+		}
+	}
+	common.OptionMapRWMutex.RUnlock()
+
+	if riskThreshold > softThreshold {
+		riskThreshold = softThreshold
+	}
+	return enabled, softThreshold, riskThreshold
+}
+
+func getChannelRemainingBalanceForAlert(balance float64, usedQuota int64) float64 {
+	if common.QuotaPerUnit <= 0 {
+		return balance
+	}
+	return balance - float64(usedQuota)/common.QuotaPerUnit
+}
+
+func getChannelBalanceAlertLevelForUsedQuota(balance float64, usedQuota int64, softThreshold float64, riskThreshold float64) string {
+	remaining := getChannelRemainingBalanceForAlert(balance, usedQuota)
+	if remaining <= riskThreshold {
+		return channelBalanceAlertLevelRisk
+	}
+	if remaining <= softThreshold {
+		return channelBalanceAlertLevelSoft
+	}
+	return channelBalanceAlertLevelNone
+}
+
+func notifyChannelBalanceAlertOnUsageDelta(channelID int, usedQuotaDelta int) {
+	enabled, softThreshold, riskThreshold := getChannelBalanceAlertConfigForUsedQuota()
+	if !enabled || channelID <= 0 || usedQuotaDelta == 0 {
+		return
+	}
+
+	var channel Channel
+	if err := DB.Select("id", "name", "balance", "used_quota", "other_info").First(&channel, "id = ?", channelID).Error; err != nil {
+		common.SysLog(fmt.Sprintf("failed to load channel for used_quota alert: channel_id=%d, err=%v", channelID, err))
+		return
+	}
+
+	newUsedQuota := channel.UsedQuota
+	oldUsedQuota := newUsedQuota - int64(usedQuotaDelta)
+	newLevel := getChannelBalanceAlertLevelForUsedQuota(channel.Balance, newUsedQuota, softThreshold, riskThreshold)
+	oldLevel := getChannelBalanceAlertLevelForUsedQuota(channel.Balance, oldUsedQuota, softThreshold, riskThreshold)
+
+	otherInfo := channel.GetOtherInfo()
+	if persistedLevel := strings.TrimSpace(common.Interface2String(otherInfo["balance_alert_level"])); persistedLevel != "" {
+		oldLevel = persistedLevel
+	}
+	otherInfo["balance_alert_level"] = newLevel
+	otherInfo["balance_alert_at"] = common.GetTimestamp()
+	channel.SetOtherInfo(otherInfo)
+	if err := DB.Model(&Channel{}).Where("id = ?", channel.Id).Update("other_info", channel.OtherInfo).Error; err != nil {
+		common.SysLog(fmt.Sprintf("failed to persist used_quota alert level: channel_id=%d, err=%v", channel.Id, err))
+	}
+	if newLevel == channelBalanceAlertLevelNone || newLevel == oldLevel {
+		return
+	}
+
+	levelText := "柔和提示"
+	threshold := softThreshold
+	if newLevel == channelBalanceAlertLevelRisk {
+		levelText = "风险警告"
+		threshold = riskThreshold
+	}
+	usedAmount := 0.0
+	if common.QuotaPerUnit > 0 {
+		usedAmount = float64(newUsedQuota) / common.QuotaPerUnit
+	}
+	remaining := getChannelRemainingBalanceForAlert(channel.Balance, newUsedQuota)
+	err := CreateUserMessage(&UserMessage{
+		ReceiverMinRole: common.RoleAdminUser,
+		Type:            "channel_balance_alert",
+		Title:           fmt.Sprintf("渠道余额%s（%s）", levelText, channel.Name),
+		Content: fmt.Sprintf(
+			"渠道“%s”（ID:%d）当前额度 %.2f，已用 %.2f，剩余 %.2f，已低于阈值 %.2f，请及时处理。",
+			channel.Name, channel.Id, channel.Balance, usedAmount, remaining, threshold,
+		),
+		BizType: "channel_balance_alert",
+		BizID:   channel.Id,
+	})
+	if err != nil {
+		common.SysLog(fmt.Sprintf("failed to publish used_quota alert message: channel_id=%d, err=%v", channel.Id, err))
 	}
 }
 

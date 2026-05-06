@@ -57,6 +57,9 @@ const OperationSetting = () => {
     DefaultCollapseSidebar: false,
     DemoSiteEnabled: false,
     SelfUseModeEnabled: false,
+    ChannelBalanceAlertEnabled: false,
+    ChannelBalanceSoftAlertThreshold: 50,
+    ChannelBalanceRiskAlertThreshold: 20,
 
     /* 顶栏模块管理 */
     HeaderNavModules: '',
