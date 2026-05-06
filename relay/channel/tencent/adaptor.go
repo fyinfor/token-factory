@@ -43,13 +43,20 @@ func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInf
 }
 
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.ImageRequest) (any, error) {
-	//TODO implement me
-	return nil, errors.New("not implemented")
+	if info.ChannelType != constant.ChannelTypeTencentCloudImage {
+		return nil, errors.New("image relay is only supported for tencentcloud image channel")
+	}
+	return buildTencentVODImageRequest(c, info, request)
 }
 
 func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
-	a.Action = "ChatCompletions"
-	a.Version = "2023-09-01"
+	if info.ChannelType == constant.ChannelTypeTencentCloudImage {
+		a.Action = "CreateAigcImageTask"
+		a.Version = "2018-07-17"
+	} else {
+		a.Action = "ChatCompletions"
+		a.Version = "2023-09-01"
+	}
 	a.Timestamp = common.GetTimestamp()
 }
 
@@ -98,10 +105,16 @@ func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommo
 }
 
 func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, requestBody io.Reader) (any, error) {
+	if info.ChannelType == constant.ChannelTypeTencentCloudImage {
+		return doTencentVODImageRequest(info, requestBody)
+	}
 	return channel.DoApiRequest(a, c, info, requestBody)
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (usage any, err *types.TokenFactoryError) {
+	if info.ChannelType == constant.ChannelTypeTencentCloudImage {
+		return handleTencentVODImageResponse(c, resp, info)
+	}
 	if info.IsStream {
 		usage, err = tencentStreamHandler(c, info, resp)
 	} else {
@@ -111,6 +124,9 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 }
 
 func (a *Adaptor) GetModelList() []string {
+	if a.Action == "CreateAigcImageTask" {
+		return VODImageModelList
+	}
 	return ModelList
 }
 

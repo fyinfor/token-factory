@@ -7,4 +7,10 @@ var ModelList = []string{
 	"hunyuan-pro",
 }
 
+var VODImageModelList = []string{
+	"GG-3.1",
+	"Hunyuan-3.0",
+	"Kling-3.0",
+}
+
 var ChannelName = "tencent"

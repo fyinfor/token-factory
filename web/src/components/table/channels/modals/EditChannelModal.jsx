@@ -133,6 +133,33 @@ const PARAM_OVERRIDE_OPERATIONS_TEMPLATE = {
 };
 
 const DEPRECATED_DOUBAO_CODING_PLAN_BASE_URL = 'doubao-coding-plan';
+
+/** 将渠道中存储的 key 解析为腾讯云点播三段密钥（与后端 ParseCredentials 格式一致） */
+function parseTencentVodKeyString(key) {
+  if (!key || typeof key !== 'string') {
+    return { subApp: '', secretId: '', secretKey: '', region: '' };
+  }
+  const s = key.trim().replace(/^\s*Bearer\s+/i, '');
+  let parts = [];
+  if (s.includes('|')) {
+    parts = s
+      .split('|')
+      .map((p) => String(p).trim())
+      .filter(Boolean);
+  } else {
+    parts = s
+      .split(/\r?\n/)
+      .map((p) => String(p).trim())
+      .filter(Boolean);
+  }
+  return {
+    subApp: parts[0] || '',
+    secretId: parts[1] || '',
+    secretKey: parts[2] || '',
+    region: parts[3] || '',
+  };
+}
+
 const CHANNEL_SUPPLIER_TYPE_OPTIONS = [
   { label: '公有云', value: '公有云' },
   { label: 'AIDC', value: 'AIDC' },
@@ -170,6 +197,11 @@ function type2secretPrompt(type) {
       return '请输入上游 OpenAI 视频网关的访问密钥（API Key）';
     case 60:
       return '请输入上游 TokenFactoryOpen 平台的访问密钥（Bearer Token）';
+    case 61:
+    case 62:
+      return t(
+        '批量模式下每行一条：SubAppId|SecretId|SecretKey，可选第四段 Region',
+      );
     default:
       return '请输入渠道对应的鉴权密钥';
   }
@@ -232,6 +264,11 @@ const EditChannelModal = (props) => {
     upstream_model_update_last_check_time: 0,
     upstream_model_update_last_detected_models: [],
     upstream_model_update_ignored_models: '',
+    // 仅腾讯云-视频/图片 (61/62)：表单拆分项，提交时合并写入 key
+    tencent_vod_sub_app_id: '',
+    tencent_vod_secret_id: '',
+    tencent_vod_secret_key: '',
+    tencent_vod_region: '',
   };
   const [batch, setBatch] = useState(false);
   const [multiToSingle, setMultiToSingle] = useState(false);
@@ -678,6 +715,18 @@ const EditChannelModal = (props) => {
           localModels = [];
           forceResetModels = true;
           break;
+        case 61:
+        case 62:
+          localModels = getChannelModels(value);
+          setInputs((prevInputs) => ({
+            ...prevInputs,
+            base_url: 'https://vod.tencentcloudapi.com',
+            key: '',
+          }));
+          if (formApiRef.current) {
+            formApiRef.current.setValue('key', '');
+          }
+          break;
         default:
           localModels = getChannelModels(value);
           break;
@@ -708,6 +757,22 @@ const EditChannelModal = (props) => {
           formApiRef.current.setValue('vertex_files', []);
         }
         setInputs((prev) => ({ ...prev, vertex_files: [] }));
+      }
+
+      if (value !== 61 && value !== 62) {
+        if (formApiRef.current) {
+          formApiRef.current.setValue('tencent_vod_sub_app_id', '');
+          formApiRef.current.setValue('tencent_vod_secret_id', '');
+          formApiRef.current.setValue('tencent_vod_secret_key', '');
+          formApiRef.current.setValue('tencent_vod_region', '');
+        }
+        setInputs((prev) => ({
+          ...prev,
+          tencent_vod_sub_app_id: '',
+          tencent_vod_secret_id: '',
+          tencent_vod_secret_key: '',
+          tencent_vod_region: '',
+        }));
       }
     }
     //setAutoBan
@@ -1003,6 +1068,19 @@ const EditChannelModal = (props) => {
       } else {
         setLogoFileList([]);
       }
+
+      data.tencent_vod_sub_app_id = '';
+      data.tencent_vod_secret_id = '';
+      data.tencent_vod_secret_key = '';
+      data.tencent_vod_region = '';
+      if ((data.type === 61 || data.type === 62) && data.key) {
+        const tv = parseTencentVodKeyString(data.key);
+        data.tencent_vod_sub_app_id = tv.subApp;
+        data.tencent_vod_secret_id = tv.secretId;
+        data.tencent_vod_secret_key = tv.secretKey;
+        data.tencent_vod_region = tv.region;
+      }
+
       setInputs(data);
       if (formApiRef.current) {
         formApiRef.current.setValues(data);
@@ -1763,6 +1841,25 @@ const EditChannelModal = (props) => {
       }
     }
 
+    if ((localInputs.type === 61 || localInputs.type === 62) && !batch) {
+      delete localInputs.key;
+      const a = String(localInputs.tencent_vod_sub_app_id || '').trim();
+      const b = String(localInputs.tencent_vod_secret_id || '').trim();
+      const c = String(localInputs.tencent_vod_secret_key || '').trim();
+      const r = String(localInputs.tencent_vod_region || '').trim();
+      if ((a || b || c) && !(a && b && c)) {
+        showInfo(t('更新密钥时请完整填写 SubAppId、SecretId 与 SecretKey'));
+        return;
+      }
+      if (a && b && c) {
+        localInputs.key = r ? `${a}|${b}|${c}|${r}` : `${a}|${b}|${c}`;
+      }
+      if (!isEdit && !(a && b && c)) {
+        showInfo(t('请填写点播 SubAppId、SecretId 与 SecretKey'));
+        return;
+      }
+    }
+
     // 如果是编辑模式且 key 为空字符串，避免提交空值覆盖旧密钥
     if (isEdit && (!localInputs.key || localInputs.key.trim() === '')) {
       delete localInputs.key;
@@ -1973,6 +2070,10 @@ const EditChannelModal = (props) => {
     delete localInputs.vertex_key_type;
     // 顶层的 aws_key_type 不应发送给后端
     delete localInputs.aws_key_type;
+    delete localInputs.tencent_vod_sub_app_id;
+    delete localInputs.tencent_vod_secret_id;
+    delete localInputs.tencent_vod_secret_key;
+    delete localInputs.tencent_vod_region;
     // 清理字段透传控制的临时字段
     delete localInputs.allow_service_tier;
     delete localInputs.disable_store;
@@ -3474,6 +3575,113 @@ const EditChannelModal = (props) => {
                                   extraText={batchExtra}
                                 />
                               )}
+                            </>
+                          ) : (inputs.type === 61 || inputs.type === 62) &&
+                            !batch ? (
+                            <>
+                              <Form.Input
+                                field='tencent_vod_sub_app_id'
+                                label={t('点播子应用 ID（SubAppId）')}
+                                placeholder={t('例如：251007502')}
+                                rules={
+                                  isEdit
+                                    ? []
+                                    : [
+                                        {
+                                          required: true,
+                                          message: t('请填写 SubAppId'),
+                                        },
+                                      ]
+                                }
+                                autoComplete='off'
+                                onChange={(v) =>
+                                  handleInputChange('tencent_vod_sub_app_id', v)
+                                }
+                                showClear
+                              />
+                              <Form.Input
+                                field='tencent_vod_secret_id'
+                                label={t('SecretId（对应 TENCENTCLOUD_SECRET_ID）')}
+                                placeholder={t('在 CAM 密钥页复制 SecretId')}
+                                rules={
+                                  isEdit
+                                    ? []
+                                    : [
+                                        {
+                                          required: true,
+                                          message: t('请填写 SecretId'),
+                                        },
+                                      ]
+                                }
+                                autoComplete='new-password'
+                                onChange={(v) =>
+                                  handleInputChange('tencent_vod_secret_id', v)
+                                }
+                                showClear
+                              />
+                              <Form.Input
+                                field='tencent_vod_secret_key'
+                                label={t('SecretKey（对应 TENCENTCLOUD_SECRET_KEY）')}
+                                placeholder={t('在 CAM 密钥页复制 SecretKey')}
+                                rules={
+                                  isEdit
+                                    ? []
+                                    : [
+                                        {
+                                          required: true,
+                                          message: t('请填写 SecretKey'),
+                                        },
+                                      ]
+                                }
+                                mode='password'
+                                autoComplete='new-password'
+                                onChange={(v) =>
+                                  handleInputChange(
+                                    'tencent_vod_secret_key',
+                                    v,
+                                  )
+                                }
+                                showClear
+                              />
+                              <Form.Input
+                                field='tencent_vod_region'
+                                label={t('地域 Region（可选）')}
+                                placeholder={t('默认 ap-guangzhou，可改为 ap-beijing 等')}
+                                autoComplete='off'
+                                onChange={(v) =>
+                                  handleInputChange('tencent_vod_region', v)
+                                }
+                                extraText={
+                                  <Text type='tertiary' size='small'>
+                                    {t(
+                                      '密钥请到 https://console.cloud.tencent.com/cam/capi 获取。编辑时若三项均留空则不修改已保存的密钥；修改请三项一并填写。',
+                                    )}
+                                  </Text>
+                                }
+                                showClear
+                              />
+                              <div className='flex items-center gap-2 flex-wrap'>
+                                {isEdit &&
+                                  isMultiKeyChannel &&
+                                  keyMode === 'append' && (
+                                    <Text type='warning' size='small'>
+                                      {t(
+                                        '追加模式：新密钥将添加到现有密钥列表的末尾',
+                                      )}
+                                    </Text>
+                                  )}
+                                {isEdit && (
+                                  <Button
+                                    size='small'
+                                    type='primary'
+                                    theme='outline'
+                                    onClick={handleShow2FAModal}
+                                  >
+                                    {t('查看密钥')}
+                                  </Button>
+                                )}
+                                {batchExtra}
+                              </div>
                             </>
                           ) : (
                             <Form.Input

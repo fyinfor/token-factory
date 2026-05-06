@@ -77,6 +77,8 @@ func ChannelType2APIType(channelType int) (int, bool) {
 		apiType = constant.APITypeCodex
 	case constant.ChannelTypeTokenFactoryOpen:
 		apiType = constant.APITypeOpenAI
+	case constant.ChannelTypeTencentCloudImage:
+		apiType = constant.APITypeTencent
 	}
 	if apiType == -1 {
 		return constant.APITypeOpenAI, false

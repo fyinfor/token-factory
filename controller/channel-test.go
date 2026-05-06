@@ -62,6 +62,12 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 	if channel != nil && channel.Type == constant.ChannelTypeVideoGenerator {
 		return string(constant.EndpointTypeVideoGenerator)
 	}
+	if channel != nil && channel.Type == constant.ChannelTypeTencentCloudVideo {
+		return string(constant.EndpointTypeTencentCloudVODVideo)
+	}
+	if channel != nil && channel.Type == constant.ChannelTypeTencentCloudImage {
+		return string(constant.EndpointTypeTencentCloudVODImage)
+	}
 	return normalized
 }
 
@@ -181,7 +187,8 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 	// 仅校验上游能正确接收任务创建请求并返回 task_id，不做轮询。
 	if endpointType == string(constant.EndpointTypeOpenAIVideo) ||
 		endpointType == string(constant.EndpointTypeOpenAIVideoGW) ||
-		endpointType == string(constant.EndpointTypeVideoGenerator) {
+		endpointType == string(constant.EndpointTypeVideoGenerator) ||
+		endpointType == string(constant.EndpointTypeTencentCloudVODVideo) {
 		return testChannelVideo(c, channel, testModel, endpointType, tik)
 	}
 
@@ -203,6 +210,8 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 		case constant.EndpointTypeJinaRerank:
 			relayFormat = types.RelayFormatRerank
 		case constant.EndpointTypeImageGeneration:
+			relayFormat = types.RelayFormatOpenAIImage
+		case constant.EndpointTypeTencentCloudVODImage:
 			relayFormat = types.RelayFormatOpenAIImage
 		case constant.EndpointTypeEmbeddings:
 			relayFormat = types.RelayFormatEmbedding
@@ -452,6 +461,56 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 			}
 		}
 	}
+
+	// 腾讯云图片模型测试：只校验是否成功提交任务（返回 TaskId），不等待任务完成与 URL 回填。
+	// 这样可避免 DescribeTaskDetail/DescribeMediaInfos 带来的 30~40 秒测试时延。
+	if endpointType == string(constant.EndpointTypeTencentCloudVODImage) {
+		if httpResp == nil || httpResp.Body == nil {
+			err := errors.New("empty upstream response")
+			return testResult{
+				context:           c,
+				localErr:          err,
+				tokenFactoryError: types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError),
+			}
+		}
+		raw, readErr := io.ReadAll(httpResp.Body)
+		_ = httpResp.Body.Close()
+		if readErr != nil {
+			return testResult{
+				context:           c,
+				localErr:          readErr,
+				tokenFactoryError: types.NewOpenAIError(readErr, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError),
+			}
+		}
+		taskID := strings.TrimSpace(gjson.GetBytes(raw, "Response.TaskId").String())
+		if taskID == "" {
+			errMsg := strings.TrimSpace(gjson.GetBytes(raw, "Response.Error.Message").String())
+			if errMsg == "" {
+				errMsg = strings.TrimSpace(gjson.GetBytes(raw, "Response.Error.Code").String())
+			}
+			if errMsg == "" {
+				errMsg = fmt.Sprintf("submit succeeded but missing TaskId, body=%s", truncateForError(string(raw)))
+			}
+			err := errors.New(errMsg)
+			return testResult{
+				context:           c,
+				localErr:          err,
+				tokenFactoryError: types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError),
+			}
+		}
+		common.SysLog(fmt.Sprintf("tencent image test channel #%d accepted, task_id=%s", channel.Id, taskID))
+		recordedName := strings.TrimSpace(info.OriginModelName)
+		if recordedName == "" {
+			recordedName = strings.TrimSpace(common.GetContextKeyString(c, constant.ContextKeyOriginalModel))
+		}
+		return testResult{
+			context:           c,
+			localErr:          nil,
+			tokenFactoryError: nil,
+			recordedModelName: recordedName,
+		}
+	}
+
 	usageA, respErr := adaptor.DoResponse(c, httpResp, info)
 	if respErr != nil {
 		return testResult{
@@ -594,6 +653,14 @@ func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, 
 	switch constant.EndpointType(endpointType) {
 	case constant.EndpointTypeOpenAIVideo:
 		// OpenAI Sora 风格：POST /v1/videos，body 字段参考 https://platform.openai.com/docs/api-reference/videos/create
+		bodyMap = map[string]any{
+			"model":   upstreamModel,
+			"prompt":  "a cute cat dancing in a sunny garden",
+			"size":    "720x1280",
+			"seconds": "4",
+		}
+	case constant.EndpointTypeTencentCloudVODVideo:
+		// 腾讯云 VOD 视频：同样接收 OpenAI /v1/videos 风格字段，后端适配器负责映射到腾讯云参数。
 		bodyMap = map[string]any{
 			"model":   upstreamModel,
 			"prompt":  "a cute cat dancing in a sunny garden",
@@ -938,7 +1005,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 				Model: model,
 				Input: []any{"hello world"},
 			}
-		case constant.EndpointTypeImageGeneration:
+		case constant.EndpointTypeImageGeneration, constant.EndpointTypeTencentCloudVODImage:
 			// 返回 ImageRequest
 			return &dto.ImageRequest{
 				Model:  model,
