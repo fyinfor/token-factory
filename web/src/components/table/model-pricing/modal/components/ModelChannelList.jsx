@@ -246,11 +246,12 @@ const ModelChannelList = ({
             <div className='space-y-3'>
               {group.channels.map((channel, idx) => {
                 const channelItems = formatChannelInfo(channel);
-                // 优先使用新 {model}/{index} 格式；没有 route_index 时回退到旧格式
-                const channelPath = channel.route_index
-                  ? `${modelData.model_name}/${channel.route_index}`
+                // 优先 {model}/{route_slug}（全局渠道路由）；否则旧 {alias}/{model}/{channel_no}
+                const channelPath = channel.route_slug
+                  ? `${modelData.model_name}/${channel.route_slug}`
                   : `${channel.supplier_alias}/${modelData.model_name}/${channel.channel_no}`;
-                const channelBadge = channel.route_index || channel.channel_no || String(idx);
+                const channelBadge =
+                  channel.route_slug || channel.channel_no || String(idx);
                 
                 const handleCopy = () => {
                   navigator.clipboard.writeText(channelPath).then(() => {

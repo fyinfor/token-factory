@@ -156,6 +156,7 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
     PRIORITY: 'priority',
     WEIGHT: 'weight',
     PRICE_DISCOUNT: 'price_discount',
+    ROUTE_SLUG: 'route_slug',
     SUPPLIER: 'supplier',
     OPERATE: 'operate',
   };
@@ -198,6 +199,7 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
       [COLUMN_KEYS.PRIORITY]: true,
       [COLUMN_KEYS.WEIGHT]: true,
       [COLUMN_KEYS.PRICE_DISCOUNT]: true,
+      [COLUMN_KEYS.ROUTE_SLUG]: true,
       [COLUMN_KEYS.SUPPLIER]: true,
       [COLUMN_KEYS.OPERATE]: true,
     };
