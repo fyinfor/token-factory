@@ -717,6 +717,10 @@ func validateChannel(channel *model.Channel, isAdd bool) error {
 		}
 	}
 
+	if rs := strings.TrimSpace(channel.RouteSlug); rs != "" && !model.IsValidRouteSlug(rs) {
+		return fmt.Errorf("route_slug 格式无效（2～32 位字母数字，且不能为 c 加纯数字）")
+	}
+
 	return nil
 }
 
@@ -1141,6 +1145,7 @@ func buildTokenFactorySyncedChannels(base *model.Channel) ([]model.Channel, []mo
 			clone.ModelMapping = nil
 		}
 		clone.ChannelNo = tfOpenLocalChannelNo(upstream)
+		clone.RouteSlug = ""
 		syncMeta := map[string]any{
 			"source":                   "tokenfactory_open",
 			"upstream_channel_id":      upstream.ID,
@@ -1275,6 +1280,11 @@ func AddChannel(c *gin.Context) {
 		}
 		channels = syncedChannels
 		tfOpenPricing = pricing
+	}
+	if len(channels) > 1 {
+		for i := range channels {
+			channels[i].RouteSlug = ""
+		}
 	}
 	if addChannelRequest.Channel.Type == constant.ChannelTypeTokenFactoryOpen {
 		err = model.BatchInsertChannelsWithTfOpenUpstreamPricing(channels, tfOpenPricing)
@@ -1512,6 +1522,34 @@ func UpdateChannel(c *gin.Context) {
 	}
 	if strings.TrimSpace(channel.SupplierType) == "" {
 		channel.SupplierType = defaultChannelSupplierType
+	}
+
+	// route_slug：空则沿用库中值；非空变更时校验格式与全局唯一。
+	if strings.TrimSpace(channel.RouteSlug) == "" {
+		channel.RouteSlug = originChannel.RouteSlug
+	} else {
+		channel.RouteSlug = strings.TrimSpace(channel.RouteSlug)
+		if channel.RouteSlug != originChannel.RouteSlug {
+			if !model.IsValidRouteSlug(channel.RouteSlug) {
+				c.JSON(http.StatusOK, gin.H{
+					"success": false,
+					"message": "route_slug 格式无效（2～32 位字母数字，且不能为 c 加纯数字）",
+				})
+				return
+			}
+			var cnt int64
+			if err := model.DB.Model(&model.Channel{}).Where("route_slug = ? AND id <> ?", channel.RouteSlug, channel.Id).Count(&cnt).Error; err != nil {
+				common.ApiError(c, err)
+				return
+			}
+			if cnt > 0 {
+				c.JSON(http.StatusOK, gin.H{
+					"success": false,
+					"message": "route_slug 已被其他渠道占用",
+				})
+				return
+			}
+		}
 	}
 
 	// 使用统一的校验函数
@@ -1859,6 +1897,7 @@ func CopyChannel(c *gin.Context) {
 		clone.UsedQuota = 0
 	}
 	clone.ChannelNo = ""
+	clone.RouteSlug = ""
 
 	// insert
 	if err := model.BatchInsertChannels([]model.Channel{clone}); err != nil {

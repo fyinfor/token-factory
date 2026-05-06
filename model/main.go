@@ -317,7 +317,6 @@ func migrateDB() error {
 		&DistributorWithdrawal{},
 		&SupplierModelPricing{},
 		&SupplierChannelModelPricing{},
-		&ChannelModelRouteIndex{},
 	)
 	if err != nil {
 		return err
@@ -338,8 +337,8 @@ func migrateDB() error {
 	if err := BackfillSupplierChannelNo(); err != nil {
 		return fmt.Errorf("backfill channel_no: %w", err)
 	}
-	if err := BackfillChannelModelRouteIndices(); err != nil {
-		common.SysError("backfill channel_model_route_indices: " + err.Error())
+	if err := MigrateChannelRouteSlugAndDropLegacy(); err != nil {
+		return fmt.Errorf("migrate channel route_slug: %w", err)
 	}
 	if err := BackfillAffInviteRelationsIfNeeded(); err != nil {
 		common.SysError("aff_invite_relations backfill: " + err.Error())

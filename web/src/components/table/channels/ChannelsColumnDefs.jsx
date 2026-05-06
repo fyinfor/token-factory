@@ -479,6 +479,41 @@ export const getChannelsColumns = ({
       },
     },
     {
+      key: COLUMN_KEYS.ROUTE_SLUG,
+      title: t('路由后缀'),
+      dataIndex: 'route_slug',
+      render: (_text, record) => {
+        if (record.children !== undefined) {
+          return '-';
+        }
+        const slug = String(record?.route_slug ?? '').trim();
+        if (!slug) {
+          return (
+            <Tooltip content={t('路由后缀空说明')}>
+              <Typography.Text type='tertiary'>—</Typography.Text>
+            </Tooltip>
+          );
+        }
+        return (
+          <Tooltip
+            content={
+              <div className='max-w-sm text-xs'>
+                <div>{t('路由后缀说明')}</div>
+                <div className='mt-2 font-mono'>
+                  {'{model}/'}
+                  {slug}
+                </div>
+              </div>
+            }
+          >
+            <Tag color='blue' type='light' size='small' className='font-mono'>
+              {slug}
+            </Tag>
+          </Tooltip>
+        );
+      },
+    },
+    {
       key: COLUMN_KEYS.BALANCE,
       title: t('已用/剩余'),
       dataIndex: 'expired_time',

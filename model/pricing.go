@@ -62,8 +62,8 @@ type PricingChannelItem struct {
 	SupplierAlias         string  `json:"supplier_alias"`
 	CompanyLogoURL        string  `json:"company_logo_url"`
 	SupplierType          string  `json:"supplier_type"`
-	// RouteIndex 模型路由索引（base-62，如 "0"、"A"）；与模型名组合为 {model}/{index} 即可强制路由至该渠道。
-	RouteIndex string `json:"route_index,omitempty"`
+	// RouteSlug 渠道全局路由后缀，与模型名组合为 {model}/{route_slug} 强制路由至该渠道（整渠道下各模型共用）。
+	RouteSlug string `json:"route_slug,omitempty"`
 	// TestResponseTimeMs 渠道最近可展示的单测耗时（毫秒）；0 代表未测试或测试失败，接口将省略该字段。
 	TestResponseTimeMs    int     `json:"test_response_time_ms,omitempty"`
 	ModelPrice            float64 `json:"model_price"`
@@ -124,8 +124,8 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 		visibleIDs = append(visibleIDs, id)
 	}
 
-	// 一次性批量加载所有可见渠道的路由索引，避免 N+1 查询
-	channelRouteMap := GetRouteIndicesByChannels(visibleIDs)
+	// 一次性批量加载可见渠道的 route_slug，避免 N+1 查询
+	channelSlugMap := GetRouteSlugsByChannelIDs(visibleIDs)
 
 	// 按“模型 × 渠道”打平返回：每条 data 仅包含 1 个 channel_list 与 1 个 supplier_list。
 	// 这样在前端可直接按渠道维度渲染，不再需要先展开聚合模型行。
@@ -189,11 +189,9 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			mult := ChannelPriceDiscountMultiplierForPricing(d)
 			mp := baseMp * mult
 			mr := baseMr * mult
-			routeIndex := ""
-			if channelRouteMap != nil {
-				if chRoutes, ok := channelRouteMap[row.ChannelID]; ok {
-					routeIndex = chRoutes[modelName]
-				}
+			routeSlug := ""
+			if channelSlugMap != nil {
+				routeSlug = channelSlugMap[row.ChannelID]
 			}
 			chItems = append(chItems, PricingChannelItem{
 				ChannelID:             row.ChannelID,
@@ -202,7 +200,7 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 				SupplierAlias:         alias,
 				CompanyLogoURL:        strings.TrimSpace(row.CompanyLogoURL),
 				SupplierType:          strings.TrimSpace(row.SupplierType),
-				RouteIndex:            routeIndex,
+				RouteSlug:             routeSlug,
 				TestResponseTimeMs:    testMs,
 				ModelPrice:            mp,
 				ModelRatio:            mr,
