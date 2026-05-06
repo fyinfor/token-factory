@@ -10,6 +10,8 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/common/limiter"
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
 
 	"github.com/gin-gonic/gin"
@@ -90,6 +92,7 @@ func redisRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) g
 			return
 		}
 		if !allowed {
+			_ = service.AddUserRateLimitBlacklist(c.GetInt("id"), duration, "model-success-rate-limit")
 			abortWithOpenAiMessage(c, http.StatusTooManyRequests, fmt.Sprintf("您已达到请求数限制：%d分钟内最多请求%d次", setting.ModelRequestRateLimitDurationMinutes, successMaxCount))
 			return
 		}
@@ -114,7 +117,9 @@ func redisRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) g
 			}
 
 			if !allowed {
+				_ = service.AddUserRateLimitBlacklist(c.GetInt("id"), duration, "model-total-rate-limit")
 				abortWithOpenAiMessage(c, http.StatusTooManyRequests, fmt.Sprintf("您已达到总请求数限制：%d分钟内最多请求%d次，包括失败次数，请检查您的请求是否正确", setting.ModelRequestRateLimitDurationMinutes, totalMaxCount))
+				return
 			}
 		}
 
@@ -134,11 +139,18 @@ func memoryRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) 
 
 	return func(c *gin.Context) {
 		userId := strconv.Itoa(c.GetInt("id"))
+		blacklisted, err := service.IsUserRateLimitBlacklisted(c.GetInt("id"))
+		if err == nil && blacklisted {
+			c.Status(http.StatusTooManyRequests)
+			c.Abort()
+			return
+		}
 		totalKey := ModelRequestRateLimitCountMark + userId
 		successKey := ModelRequestRateLimitSuccessCountMark + userId
 
 		// 1. 检查总请求数限制（当totalMaxCount为0时跳过）
 		if totalMaxCount > 0 && !inMemoryRateLimiter.Request(totalKey, totalMaxCount, duration) {
+			_ = service.AddUserRateLimitBlacklist(c.GetInt("id"), duration, "model-total-rate-limit")
 			c.Status(http.StatusTooManyRequests)
 			c.Abort()
 			return
@@ -148,6 +160,7 @@ func memoryRateLimitHandler(duration int64, totalMaxCount, successMaxCount int) 
 		// 使用一个临时key来检查限制，这样可以避免实际记录
 		checkKey := successKey + "_check"
 		if !inMemoryRateLimiter.Request(checkKey, successMaxCount, duration) {
+			_ = service.AddUserRateLimitBlacklist(c.GetInt("id"), duration, "model-success-rate-limit")
 			c.Status(http.StatusTooManyRequests)
 			c.Abort()
 			return
@@ -169,6 +182,16 @@ func ModelRequestRateLimit() func(c *gin.Context) {
 		// 在每个请求时检查是否启用限流
 		if !setting.ModelRequestRateLimitEnabled {
 			c.Next()
+			return
+		}
+		userID := c.GetInt("id")
+		if model.IsAdmin(userID) || setting.IsUserInRateLimitWhitelist(userID) {
+			c.Next()
+			return
+		}
+		blacklisted, err := service.IsUserRateLimitBlacklisted(userID)
+		if err == nil && blacklisted {
+			abortWithOpenAiMessage(c, http.StatusTooManyRequests, "您已被临时限流，请稍后重试")
 			return
 		}
 

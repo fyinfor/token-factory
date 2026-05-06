@@ -710,11 +710,6 @@ func validateChannel(channel *model.Channel, isAdd bool) error {
 		}
 	}
 
-	no := strings.TrimSpace(channel.ChannelNo)
-	if no != "" && len(no) > 32 {
-		return fmt.Errorf("渠道编号长度不能超过 32 个字符")
-	}
-
 	if channel != nil && channel.PriceDiscountPercent != nil {
 		v := *channel.PriceDiscountPercent
 		if v < 0 || v > 1000 {
@@ -1175,10 +1170,6 @@ func AddChannel(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	if addChannelRequest.Channel != nil {
-		addChannelRequest.Channel.ChannelNo = strings.TrimSpace(addChannelRequest.Channel.ChannelNo)
-	}
-
 	// 使用统一的校验函数
 	if err := validateChannel(addChannelRequest.Channel, true); err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -1198,16 +1189,6 @@ func AddChannel(c *gin.Context) {
 		})
 		return
 	}
-	if addChannelRequest.Channel.ChannelNo != "" {
-		if err := model.ValidateSupplierChannelNoUnique(0, addChannelRequest.Channel.SupplierApplicationID, addChannelRequest.Channel.ChannelNo); err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
-	}
-
 	addChannelRequest.Channel.CreatedTime = common.GetTimestamp()
 	keys := make([]string, 0)
 	switch addChannelRequest.Mode {
@@ -1495,7 +1476,6 @@ func UpdateChannel(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	channel.ChannelNo = strings.TrimSpace(channel.ChannelNo)
 	if channel.Id <= 0 {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -1541,15 +1521,6 @@ func UpdateChannel(c *gin.Context) {
 			"message": err.Error(),
 		})
 		return
-	}
-	if channel.ChannelNo != "" {
-		if err := model.ValidateSupplierChannelNoUnique(channel.Id, originChannel.SupplierApplicationID, channel.ChannelNo); err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
-			return
-		}
 	}
 	// 供应商更新时强制保持归属信息不变，防止通过请求体篡改 owner/supplier 关联。
 	if c.GetInt("role") < common.RoleAdminUser {
