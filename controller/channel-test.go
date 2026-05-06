@@ -22,6 +22,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay"
 	taskopenaivideo "github.com/QuantumNous/new-api/relay/channel/task/openaivideo"
+	tasktencentvod "github.com/QuantumNous/new-api/relay/channel/task/tencentvod"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -660,12 +661,86 @@ func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, 
 			"seconds": "4",
 		}
 	case constant.EndpointTypeTencentCloudVODVideo:
-		// 腾讯云 VOD 视频：同样接收 OpenAI /v1/videos 风格字段，后端适配器负责映射到腾讯云参数。
-		bodyMap = map[string]any{
-			"model":   upstreamModel,
-			"prompt":  "a cute cat dancing in a sunny garden",
-			"size":    "720x1280",
-			"seconds": "4",
+		// 腾讯云官方 VOD 视频接口必须使用 TC3 签名和 X-TC-* 公共头，不能直接 Bearer 调上游。
+		cred, credErr := tasktencentvod.ParseCredentials(apiKey)
+		if credErr != nil {
+			return testResult{
+				context:           c,
+				localErr:          credErr,
+				tokenFactoryError: types.NewError(credErr, types.ErrorCodeChannelInvalidKey),
+			}
+		}
+		modelName, modelVersion := tasktencentvod.SplitCombinedModel(upstreamModel)
+		if strings.TrimSpace(modelName) == "" || strings.TrimSpace(modelVersion) == "" {
+			invalidModelErr := fmt.Errorf("invalid tencent vod model %q, expected ModelName-ModelVersion", upstreamModel)
+			return testResult{
+				context:           c,
+				localErr:          invalidModelErr,
+				tokenFactoryError: types.NewError(invalidModelErr, types.ErrorCodeBadRequestBody),
+			}
+		}
+		signedBody := map[string]any{
+			"SubAppId":     cred.SubAppID,
+			"ModelName":    modelName,
+			"ModelVersion": modelVersion,
+			"Prompt":       "a cute cat dancing in a sunny garden",
+		}
+		signedPayload, marshalErr := common.Marshal(signedBody)
+		if marshalErr != nil {
+			return testResult{
+				context:           c,
+				localErr:          marshalErr,
+				tokenFactoryError: types.NewError(marshalErr, types.ErrorCodeJsonMarshalFailed),
+			}
+		}
+		signedResp, reqErr := tasktencentvod.SignedPOSTJSON(strings.TrimSpace(channel.GetSetting().Proxy), baseURL, cred.Region, cred, "CreateAigcVideoTask", signedPayload)
+		if reqErr != nil {
+			return testResult{
+				context:           c,
+				localErr:          reqErr,
+				tokenFactoryError: types.NewOpenAIError(reqErr, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError),
+			}
+		}
+		defer func() { _ = signedResp.Body.Close() }()
+		respBody, readErr := io.ReadAll(signedResp.Body)
+		if readErr != nil {
+			return testResult{
+				context:           c,
+				localErr:          readErr,
+				tokenFactoryError: types.NewOpenAIError(readErr, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError),
+			}
+		}
+		common.SysLog(fmt.Sprintf("video test channel #%d response: status=%d, body=%s", channel.Id, signedResp.StatusCode, string(respBody)))
+		if signedResp.StatusCode != http.StatusOK {
+			msg := detectErrorMessageFromJSONBytes(respBody)
+			if msg == "" {
+				msg = strings.TrimSpace(string(respBody))
+			}
+			if msg == "" {
+				msg = fmt.Sprintf("upstream returned status %d", signedResp.StatusCode)
+			}
+			bodyErr := fmt.Errorf("status=%d, body=%s", signedResp.StatusCode, msg)
+			return testResult{
+				context:           c,
+				localErr:          bodyErr,
+				tokenFactoryError: types.NewOpenAIError(bodyErr, types.ErrorCodeBadResponse, http.StatusInternalServerError),
+			}
+		}
+		taskID := strings.TrimSpace(gjson.GetBytes(respBody, "Response.TaskId").String())
+		if taskID == "" {
+			bodyErr := fmt.Errorf("upstream did not return task_id, body: %s", string(respBody))
+			return testResult{
+				context:           c,
+				localErr:          bodyErr,
+				tokenFactoryError: types.NewOpenAIError(bodyErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError),
+			}
+		}
+		common.SysLog(fmt.Sprintf("video test channel #%d ok, task_id=%s", channel.Id, taskID))
+		return testResult{
+			context:           c,
+			localErr:          nil,
+			tokenFactoryError: nil,
+			recordedModelName: originModel,
 		}
 	case constant.EndpointTypeOpenAIVideoGW:
 		// OpenAI 视频网关：根据 base URL 自动选 MaaS（Hidream 官方）或 ARK（ByteDance 兼容代理）。
