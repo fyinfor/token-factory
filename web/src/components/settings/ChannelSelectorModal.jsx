@@ -56,6 +56,7 @@ const ChannelSelectorModal = forwardRef(
       setSelectedChannelIds,
       channelEndpoints,
       updateChannelEndpoint,
+      modalTitle,
       t,
     },
     ref,
@@ -281,7 +282,9 @@ const ChannelSelectorModal = forwardRef(
         onCancel={onCancel}
         onOk={onOk}
         title={
-          <span className='text-lg font-semibold'>{t('选择同步渠道')}</span>
+          <span className='text-lg font-semibold'>
+            {modalTitle || t('选择同步渠道')}
+          </span>
         }
         size={isMobile ? 'full-width' : 'large'}
         keepDOM
