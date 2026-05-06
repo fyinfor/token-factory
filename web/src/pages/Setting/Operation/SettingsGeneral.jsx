@@ -54,6 +54,9 @@ const FORM_INPUT_DEFAULTS = {
   DefaultCollapseSidebar: false,
   DemoSiteEnabled: false,
   SelfUseModeEnabled: false,
+  ChannelBalanceAlertEnabled: false,
+  ChannelBalanceSoftAlertThreshold: 50,
+  ChannelBalanceRiskAlertThreshold: 20,
   'token_setting.max_user_tokens': 1000,
 };
 
@@ -72,6 +75,17 @@ export default function GeneralSettings(props) {
   }
 
   function onSubmit() {
+    const softThreshold = Number(inputs.ChannelBalanceSoftAlertThreshold);
+    const riskThreshold = Number(inputs.ChannelBalanceRiskAlertThreshold);
+    if (!Number.isFinite(softThreshold) || softThreshold < 0) {
+      return showWarning(t('请填写有效的柔和提示阈值（>= 0）'));
+    }
+    if (!Number.isFinite(riskThreshold) || riskThreshold < 0) {
+      return showWarning(t('请填写有效的风险警告阈值（>= 0）'));
+    }
+    if (riskThreshold > softThreshold) {
+      return showWarning(t('风险警告阈值不能高于柔和提示阈值'));
+    }
     const updateArray = compareObjects(inputs, inputsRow);
     if (!updateArray.length) return showWarning(t('你似乎并没有修改什么'));
     const requestQueue = updateArray.map((item) => {
@@ -408,6 +422,41 @@ export default function GeneralSettings(props) {
                   checkedText='｜'
                   uncheckedText='〇'
                   onChange={handleFieldChange('SelfUseModeEnabled')}
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Switch
+                  field={'ChannelBalanceAlertEnabled'}
+                  label={t('渠道预警开关')}
+                  extraText={t(
+                    '开启后，/console/channel 将按阈值触发“柔和提示 / 风险警告”',
+                  )}
+                  size='default'
+                  checkedText='｜'
+                  uncheckedText='〇'
+                  onChange={handleFieldChange('ChannelBalanceAlertEnabled')}
+                />
+              </Col>
+            </Row>
+            <Row gutter={16}>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.InputNumber
+                  field={'ChannelBalanceSoftAlertThreshold'}
+                  label={t('渠道余额柔和提示阈值')}
+                  min={0}
+                  step={1}
+                  extraText={t('剩余余额低于该值时触发柔和提示（建议高于风险阈值）')}
+                  onChange={handleFieldChange('ChannelBalanceSoftAlertThreshold')}
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.InputNumber
+                  field={'ChannelBalanceRiskAlertThreshold'}
+                  label={t('渠道余额风险警告阈值')}
+                  min={0}
+                  step={1}
+                  extraText={t('剩余余额低于该值时触发风险警告（优先级高于柔和提示）')}
+                  onChange={handleFieldChange('ChannelBalanceRiskAlertThreshold')}
                 />
               </Col>
             </Row>

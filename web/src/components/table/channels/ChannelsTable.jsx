@@ -45,6 +45,7 @@ const ChannelsTable = (channelsData) => {
     COLUMN_KEYS,
     // Column functions and data
     updateChannelBalance,
+    setChannelBalanceManually,
     manageChannel,
     manageTag,
     submitTagEdit,
@@ -64,6 +65,8 @@ const ChannelsTable = (channelsData) => {
     openUpstreamUpdateModal,
     detectChannelUpstreamUpdates,
     openOnboardModal,
+    isAdminChannelPage,
+    channelBalanceAlertConfig,
   } = channelsData;
 
   // Get all columns
@@ -72,6 +75,7 @@ const ChannelsTable = (channelsData) => {
       t,
       COLUMN_KEYS,
       updateChannelBalance,
+      setChannelBalanceManually,
       manageChannel,
       manageTag,
       submitTagEdit,
@@ -92,11 +96,14 @@ const ChannelsTable = (channelsData) => {
       openUpstreamUpdateModal,
       detectChannelUpstreamUpdates,
       openOnboardModal,
+      isAdminChannelPage,
+      channelBalanceAlertConfig,
     });
   }, [
     t,
     COLUMN_KEYS,
     updateChannelBalance,
+    setChannelBalanceManually,
     manageChannel,
     manageTag,
     submitTagEdit,
@@ -117,6 +124,8 @@ const ChannelsTable = (channelsData) => {
     openUpstreamUpdateModal,
     detectChannelUpstreamUpdates,
     openOnboardModal,
+    isAdminChannelPage,
+    channelBalanceAlertConfig,
   ]);
 
   // Filter columns based on visibility settings

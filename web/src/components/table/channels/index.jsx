@@ -40,6 +40,13 @@ import { createCardProPagination } from '../../../helpers/utils';
 const ChannelsPage = () => {
   const channelsData = useChannelsData();
   const isMobile = useIsMobile();
+  const { channelBalanceAlertConfig, channelBalanceAlerts } = channelsData;
+
+  const renderAlertNames = (items = []) =>
+    items
+      .slice(0, 6)
+      .map((item) => item.name)
+      .join('、');
 
   return (
     <>
@@ -95,6 +102,48 @@ const ChannelsPage = () => {
           description={channelsData.t(
             '已开启全局请求透传：参数覆写、模型重定向、渠道适配等 NewAPI 内置功能将失效，非最佳实践；如因此产生问题，请勿提交 issue 反馈。',
           )}
+          style={{ marginBottom: 12 }}
+        />
+      ) : null}
+      {channelBalanceAlertConfig.enabled &&
+      channelBalanceAlerts.softChannels.length > 0 ? (
+        <Banner
+          type='info'
+          closeIcon={null}
+          description={channelsData
+            .t(
+              '渠道柔和提示：${count} 个渠道余额低于 ${threshold}，包括：${names}',
+            )
+            .replace('${count}', channelBalanceAlerts.softChannels.length)
+            .replace(
+              '${threshold}',
+              String(channelBalanceAlertConfig.softThreshold),
+            )
+            .replace('${names}', renderAlertNames(channelBalanceAlerts.softChannels))}
+          style={{ marginBottom: 12 }}
+        />
+      ) : null}
+      {channelBalanceAlertConfig.enabled &&
+      channelBalanceAlerts.riskChannels.length > 0 ? (
+        <Banner
+          type='warning'
+          closeIcon={null}
+          icon={
+            <IconAlertTriangle
+              size='large'
+              style={{ color: 'var(--semi-color-warning)' }}
+            />
+          }
+          description={channelsData
+            .t(
+              '渠道风险警告：${count} 个渠道余额低于 ${threshold}，包括：${names}',
+            )
+            .replace('${count}', channelBalanceAlerts.riskChannels.length)
+            .replace(
+              '${threshold}',
+              String(channelBalanceAlertConfig.riskThreshold),
+            )
+            .replace('${names}', renderAlertNames(channelBalanceAlerts.riskChannels))}
           style={{ marginBottom: 12 }}
         />
       ) : null}

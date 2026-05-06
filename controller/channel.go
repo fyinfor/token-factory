@@ -1510,6 +1510,7 @@ func UpdateChannel(c *gin.Context) {
 		})
 		return
 	}
+	oldBalance := originChannel.Balance
 	// 部分更新（如仅改状态/优先级/权重）：请求未带供应商类型时沿用库中值，否则 validateChannel 会因零值失败。
 	if strings.TrimSpace(channel.SupplierType) == "" {
 		channel.SupplierType = strings.TrimSpace(originChannel.SupplierType)
@@ -1659,6 +1660,7 @@ func UpdateChannel(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	notifyChannelBalanceAlertIfNeeded(originChannel, oldBalance, channel.Balance)
 	model.InitChannelCache()
 	service.ResetProxyClientCache()
 	channel.Key = ""
