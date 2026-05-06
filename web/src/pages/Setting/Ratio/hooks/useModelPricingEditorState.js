@@ -1,5 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { API, showError, showSuccess } from '../../../../helpers';
+import {
+    hasTierRule,
+    normalizeTierRule,
+    serializeTierRule,
+    summarizeTierRule,
+    validateTierRule,
+} from '../utils/requestTierPricing';
 
 export const PAGE_SIZE = 10;
 export const PRICE_SUFFIX = '$/1M';
@@ -37,7 +44,9 @@ const EMPTY_MODEL = {
         videoCompletionRatio: '',
         videoPrice: '',
         videoPricingRules: null,
+        requestTierPricing: null,
     },
+    requestTierRule: null,
     hasConflict: false,
 };
 
@@ -227,6 +236,9 @@ const buildModelState = (name, sourceMaps) => {
     const videoPricingRules = parseVideoPricingRules(
         sourceMaps.VideoPricingRules?.[name],
     );
+    const requestTierRule = sourceMaps.RequestTierPricing?.[name]
+        ? normalizeTierRule(sourceMaps.RequestTierPricing[name])
+        : null;
     const hasPerVideoTable =
         videoPricingRules.textToVideoPerVideo.length > 0 ||
         videoPricingRules.imageToVideoPerVideo.length > 0 ||
@@ -363,7 +375,9 @@ const buildModelState = (name, sourceMaps) => {
                     typeof sourceMaps.VideoPricingRules[name] === 'object'
                     ? sourceMaps.VideoPricingRules[name]
                     : null,
+            requestTierPricing: requestTierRule,
         },
+        requestTierRule,
         hasConflict:
             hasValue(fixedPrice) &&
             [
@@ -377,6 +391,7 @@ const buildModelState = (name, sourceMaps) => {
                 videoRatio,
                 videoCompletionRatio,
                 videoPrice,
+                requestTierRule && hasTierRule(requestTierRule) ? 'request_tier' : '',
             ].some(hasValue),
     };
 };
@@ -420,6 +435,9 @@ export const getModelWarnings = (model, t) => {
         warnings.push(
             t('当前模型同时存在按次价格和倍率配置，保存时会按当前计费方式覆盖。'),
         );
+    }
+    if (model.billingMode === 'per-request' && hasTierRule(model.requestTierRule)) {
+        warnings.push(t('当前模型为固定价格计费，阶梯计费规则会被保留但不会生效。'));
     }
 
     if (
@@ -609,13 +627,25 @@ const serializeModel = (model, t) => {
         VideoCompletionRatio: null,
         VideoPrice: null,
         VideoPricingRules: null,
+        RequestTierPricing: null,
     };
 
     if (model.billingMode === 'per-request') {
         if (hasValue(model.fixedPrice)) {
             result.ModelPrice = toNormalizedNumber(model.fixedPrice);
         }
+        if (hasTierRule(model.requestTierRule)) {
+            result.RequestTierPricing = serializeTierRule(model.requestTierRule);
+        }
         return result;
+    }
+
+    if (hasTierRule(model.requestTierRule)) {
+        const tierError = validateTierRule(model.requestTierRule, t);
+        if (tierError) {
+            throw new Error(`${model.name}: ${tierError}`);
+        }
+        result.RequestTierPricing = serializeTierRule(model.requestTierRule);
     }
 
     const inputPrice = toNumberOrNull(model.inputPrice);
@@ -1074,6 +1104,13 @@ export const buildPreviewRows = (model, t) => {
                         ? t('按分辨率见 VideoPricingRules')
                         : t('空'),
         },
+        {
+            key: 'RequestTierPricing',
+            label: 'RequestTierPricing',
+            value: hasTierRule(model.requestTierRule)
+                ? summarizeTierRule(model.requestTierRule, t)
+                : t('空'),
+        },
     ];
 };
 
@@ -1115,6 +1152,8 @@ export function useModelPricingEditorState({
             VideoPrice: optionKeys?.VideoPrice || 'VideoPrice',
             VideoPricingRules:
                 optionKeys?.VideoPricingRules || 'VideoPricingRules',
+            RequestTierPricing:
+                optionKeys?.RequestTierPricing || 'RequestTierPricing',
         }),
         [optionKeys],
     );
@@ -1146,6 +1185,9 @@ export function useModelPricingEditorState({
             VideoPricingRules: parseOptionJSON(
                 options[resolvedOptionKeys.VideoPricingRules],
             ),
+            RequestTierPricing: parseOptionJSON(
+                options[resolvedOptionKeys.RequestTierPricing],
+            ),
         };
 
         // strictCandidateModelNames=true 时，模型列表严格限制为外部传入候选模型（用于按渠道筛模型）。
@@ -1166,6 +1208,7 @@ export function useModelPricingEditorState({
                 ...Object.keys(sourceMaps.VideoCompletionRatio),
                 ...Object.keys(sourceMaps.VideoPrice),
                 ...Object.keys(sourceMaps.VideoPricingRules),
+                ...Object.keys(sourceMaps.RequestTierPricing),
             ]);
 
         const nextModels = Array.from(names)
@@ -1492,6 +1535,7 @@ export function useModelPricingEditorState({
             ...EMPTY_MODEL,
             name: trimmedName,
             rawRatios: { ...EMPTY_MODEL.rawRatios },
+            requestTierRule: null,
         };
 
         setModels((previous) => [nextModel, ...previous]);
@@ -1556,6 +1600,9 @@ export function useModelPricingEditorState({
                     videoUploadRules: selectedModel.videoUploadRules,
                     videoGenerateRules: selectedModel.videoGenerateRules,
                     videoSimilarityThreshold: selectedModel.videoSimilarityThreshold,
+                    requestTierRule: selectedModel.requestTierRule
+                        ? normalizeTierRule(selectedModel.requestTierRule)
+                        : null,
                 };
 
                 if (
@@ -1620,6 +1667,7 @@ export function useModelPricingEditorState({
                 VideoCompletionRatio: {},
                 VideoPrice: {},
                 VideoPricingRules: {},
+                RequestTierPricing: {},
             };
 
             for (const model of models) {
@@ -1659,6 +1707,22 @@ export function useModelPricingEditorState({
         }
     };
 
+    const updateRequestTierRule = (rule) => {
+        if (!selectedModel) return;
+        upsertModel(selectedModel.name, (model) => ({
+            ...model,
+            requestTierRule: rule ? normalizeTierRule(rule) : null,
+        }));
+    };
+
+    const applyRequestTierTemplate = (template) => {
+        if (!selectedModel || !template) return;
+        upsertModel(selectedModel.name, (model) => ({
+            ...model,
+            requestTierRule: normalizeTierRule(template),
+        }));
+    };
+
     return {
         models,
         selectedModel,
@@ -1685,6 +1749,8 @@ export function useModelPricingEditorState({
         updateVideoRuleRow,
         addVideoRuleRow,
         removeVideoRuleRow,
+        updateRequestTierRule,
+        applyRequestTierTemplate,
         handleSubmit,
         addModel,
         deleteModel,

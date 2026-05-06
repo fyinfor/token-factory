@@ -68,6 +68,7 @@ const CHANNEL_PRICING_OPTION_KEYS = [
   'ChannelModelRatio',
   'ChannelCompletionRatio',
   'ChannelCacheRatio',
+  'ChannelRequestTierPricing',
 ];
 
 /** Option 中 Channel* 嵌套字段键名 → 供应商渠道 PUT 请求体字段名 */
@@ -602,6 +603,7 @@ export default function UpstreamRatioSync(props) {
       CompletionRatio: parseNestedOption(props.options.CompletionRatio),
       CacheRatio: parseNestedOption(props.options.CacheRatio),
       ModelPrice: parseNestedOption(props.options.ModelPrice),
+      RequestTierPricing: parseNestedOption(props.options.RequestTierPricing),
     };
     const channel = {};
     CHANNEL_PRICING_OPTION_KEYS.forEach((k) => {
@@ -720,6 +722,7 @@ export default function UpstreamRatioSync(props) {
         CompletionRatio: { ...baseline.global.CompletionRatio },
         CacheRatio: { ...baseline.global.CacheRatio },
         ModelPrice: { ...baseline.global.ModelPrice },
+        RequestTierPricing: { ...baseline.global.RequestTierPricing },
       };
 
       const finalChannel = {};
@@ -802,7 +805,9 @@ export default function UpstreamRatioSync(props) {
           const normalizedRatios = normalizeRatioSelection(model, cid, r);
           const selectedTypes = Object.keys(normalizedRatios);
           const hasPrice = selectedTypes.includes('model_price');
-          const hasRatio = selectedTypes.some((rt) => rt !== 'model_price');
+          const hasRatio = selectedTypes.some(
+            (rt) => rt !== 'model_price' && rt !== 'request_tier_pricing',
+          );
 
           if (cid != null && cid > 0) {
             const idStr = String(cid);
@@ -839,6 +844,7 @@ export default function UpstreamRatioSync(props) {
 
             Object.entries(normalizedRatios).forEach(([ratioType, value]) => {
               const gk = ratioTypeToPascal(ratioType);
+              if (!finalRatios[gk]) finalRatios[gk] = {};
               finalRatios[gk][model] = normalizeStoredNumber(value) ?? value;
             });
           }
@@ -855,6 +861,7 @@ export default function UpstreamRatioSync(props) {
             'CompletionRatio',
             'CacheRatio',
             'ModelPrice',
+            'RequestTierPricing',
           ];
           let globalDirty = false;
           globalKeysSynced.forEach((key) => {
@@ -923,6 +930,7 @@ export default function UpstreamRatioSync(props) {
             'CompletionRatio',
             'CacheRatio',
             'ModelPrice',
+            'RequestTierPricing',
           ];
           globalKeys.forEach((key) => {
             const before = JSON.stringify(baseline.global[key] || {});
@@ -1089,6 +1097,9 @@ export default function UpstreamRatioSync(props) {
               </Select.Option>
               <Select.Option value='cache_ratio'>{t('缓存倍率')}</Select.Option>
               <Select.Option value='model_price'>{t('固定价格')}</Select.Option>
+              <Select.Option value='request_tier_pricing'>
+                {t('阶梯计费规则')}
+              </Select.Option>
             </Select>
           </div>
         </div>
@@ -1415,6 +1426,7 @@ export default function UpstreamRatioSync(props) {
             completion_ratio: t('输出价格（由倍率换算）'),
             cache_ratio: t('缓存价格（由倍率换算）'),
             model_price: t('固定价格'),
+            request_tier_pricing: t('阶梯计费规则'),
           };
           const baseTag = (
             <Tag color={stringToColor(text)} shape='circle'>

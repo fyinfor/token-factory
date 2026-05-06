@@ -51,6 +51,16 @@ import {
   hasValue,
   useModelPricingEditorState,
 } from '../hooks/useModelPricingEditorState';
+import {
+  TIER_CATEGORIES,
+  buildTierPriceDetails,
+  ensureFinalInfinityTierRows,
+  hasTierRule,
+  normalizeTierRule,
+  parseJSONMap,
+  summarizeTierRule,
+  validateTierRule,
+} from '../utils/requestTierPricing';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import { getCurrencyConfig } from '../../../../helpers';
 
@@ -177,6 +187,95 @@ const PriceInput = ({
   </div>
 );
 
+const TierRowsEditor = ({ t, value, onChange }) => {
+  const rule = normalizeTierRule(value);
+  const updateRows = (key, rows) => onChange({ ...rule, [key]: ensureFinalInfinityTierRows(rows) });
+  const insertTopRow = (key, rows) => {
+    const firstFinite = rows.find((row) => Number(row.up_to) > 0);
+    const upTo = firstFinite ? Math.max(1, Math.floor(Number(firstFinite.up_to) / 2)) : 128000;
+    const next = rows.length ? [{ up_to: upTo, ratio: 1 }, ...rows] : [{ up_to: 0, ratio: 1 }];
+    updateRows(key, next);
+  };
+  return (
+    <Space vertical align='start' style={{ width: '100%' }}>
+      {TIER_CATEGORIES.map(({ key, label }) => {
+        const rows = ensureFinalInfinityTierRows(rule[key] || []);
+        return (
+          <Card key={key} title={t(label)} bodyStyle={{ padding: 12 }} style={{ width: '100%' }}>
+            <Table
+              size='small'
+              pagination={false}
+              dataSource={rows.map((row, index) => ({ ...row, _idx: index }))}
+              rowKey='_idx'
+              columns={[
+                {
+                  title: t('区间 token'),
+                  render: (_, row) => {
+                    const previous = row._idx === 0 ? 0 : rows[row._idx - 1]?.up_to || 0;
+                    const current = row.up_to || '∞';
+                    return `${previous}～${current}`;
+                  },
+                },
+                {
+                  title: t('上限 token'),
+                  dataIndex: 'up_to',
+                  render: (_, row) => (
+                    <Input
+                      value={row._idx === rows.length - 1 ? '∞' : String(row.up_to ?? '')}
+                      placeholder={t('最后一档固定无限')}
+                      disabled={row._idx === rows.length - 1}
+                      onChange={(v) => {
+                        const next = [...rows];
+                        next[row._idx] = { ...next[row._idx], up_to: v };
+                        updateRows(key, next);
+                      }}
+                    />
+                  ),
+                },
+                {
+                  title: t('阶梯倍率'),
+                  dataIndex: 'ratio',
+                  render: (_, row) => (
+                    <Input
+                      value={String(row.ratio ?? '')}
+                      placeholder='1'
+                      onChange={(v) => {
+                        const next = [...rows];
+                        next[row._idx] = { ...next[row._idx], ratio: v };
+                        updateRows(key, next);
+                      }}
+                    />
+                  ),
+                },
+                {
+                  title: t('操作'),
+                  render: (_, row) => (
+                    <Button
+                      type='danger'
+                      size='small'
+                      icon={<IconDelete />}
+                      disabled={row._idx === rows.length - 1}
+                      onClick={() => updateRows(key, rows.filter((_, idx) => idx !== row._idx))}
+                    />
+                  ),
+                },
+              ]}
+            />
+            <Button
+              className='mt-2'
+              size='small'
+              icon={<IconPlus />}
+              onClick={() => insertTopRow(key, rows)}
+            >
+              {t('添加档位')}
+            </Button>
+          </Card>
+        );
+      })}
+    </Space>
+  );
+};
+
 export default function ModelPricingEditor({
   options,
   refresh,
@@ -196,7 +295,13 @@ export default function ModelPricingEditor({
   const isMobile = useIsMobile();
   const [addVisible, setAddVisible] = useState(false);
   const [batchVisible, setBatchVisible] = useState(false);
+  const [tierVisible, setTierVisible] = useState(false);
+  const [tierDraft, setTierDraft] = useState('');
   const [newModelName, setNewModelName] = useState('');
+  const tierTemplates = useMemo(
+    () => parseJSONMap(options.RequestTierPricingTemplates),
+    [options.RequestTierPricingTemplates],
+  );
 
   const {
     selectedModel,
@@ -223,6 +328,8 @@ export default function ModelPricingEditor({
     updateVideoRuleRow,
     addVideoRuleRow,
     removeVideoRuleRow,
+    updateRequestTierRule,
+    applyRequestTierTemplate,
     handleSubmit,
     addModel,
     deleteModel,
@@ -237,6 +344,28 @@ export default function ModelPricingEditor({
     optionKeys,
     onSaveOutput,
   });
+
+  const tierPriceDetails = useMemo(
+    () =>
+      buildTierPriceDetails(
+        selectedModel?.requestTierRule,
+        {
+          input: selectedModel?.inputPrice,
+          output: selectedModel?.completionPrice,
+          cache_read: selectedModel?.cachePrice,
+          cache_write: selectedModel?.createCachePrice,
+        },
+        t,
+      ),
+    [
+      selectedModel?.requestTierRule,
+      selectedModel?.inputPrice,
+      selectedModel?.completionPrice,
+      selectedModel?.cachePrice,
+      selectedModel?.createCachePrice,
+      t,
+    ],
+  );
 
   const videoPerVideoBillingHint = useMemo(() => {
     const { type } = getCurrencyConfig();
@@ -322,7 +451,16 @@ export default function ModelPricingEditor({
         title: t('价格摘要'),
         dataIndex: 'summary',
         key: 'summary',
-        render: (_, record) => buildSummaryText(record, t),
+        render: (_, record) => (
+          <Space vertical align='start' spacing={2}>
+            <span>{buildSummaryText(record, t)}</span>
+            {hasTierRule(record.requestTierRule) ? (
+              <Tag color='cyan' size='small'>
+                {summarizeTierRule(record.requestTierRule, t)}
+              </Tag>
+            ) : null}
+          </Space>
+        ),
       },
       {
         title: t('操作'),
@@ -356,6 +494,35 @@ export default function ModelPricingEditor({
       setNewModelName('');
       setAddVisible(false);
     }
+  };
+
+  const openTierEditor = () => {
+    if (!selectedModel) return;
+    setTierDraft(
+      hasTierRule(selectedModel.requestTierRule)
+        ? normalizeTierRule(selectedModel.requestTierRule)
+        : {
+            mode: 'progressive',
+            input: [],
+            output: [],
+            cache_read: [],
+            cache_write: [],
+          },
+    );
+    setTierVisible(true);
+  };
+
+  const saveTierDraft = () => {
+    const parsed = hasTierRule(tierDraft) ? tierDraft : null;
+    if (parsed) {
+      const error = validateTierRule(parsed, t);
+      if (error) {
+        Modal.error({ title: t('阶梯计费规则错误'), content: error });
+        return;
+      }
+    }
+    updateRequestTierRule(parsed);
+    setTierVisible(false);
   };
 
   const rowSelection = {
@@ -545,6 +712,74 @@ export default function ModelPricingEditor({
                     ))}
                   </Card>
                 ) : null}
+
+                <Card bodyStyle={{ padding: 12 }} style={{ marginBottom: 16 }}>
+                  <Space vertical align='start' style={{ width: '100%' }}>
+                    <Space wrap>
+                      <Button onClick={openTierEditor}>
+                        {hasTierRule(selectedModel.requestTierRule)
+                          ? t('编辑阶梯计费')
+                          : t('添加阶梯计费')}
+                      </Button>
+                      {Object.keys(tierTemplates).length > 0 ? (
+                        <Select
+                          size='small'
+                          placeholder={t('套用模板')}
+                          style={{ minWidth: 180 }}
+                          value={undefined}
+                          onChange={(id) => {
+                            const template = tierTemplates[id];
+                            if (template) {
+                              applyRequestTierTemplate(template);
+                            }
+                          }}
+                        >
+                          {Object.entries(tierTemplates).map(([id, template]) => (
+                            <Select.Option key={id} value={id}>
+                              {template.name || id}
+                            </Select.Option>
+                          ))}
+                        </Select>
+                      ) : null}
+                      {hasTierRule(selectedModel.requestTierRule) ? (
+                        <Button
+                          size='small'
+                          type='danger'
+                          onClick={() => updateRequestTierRule(null)}
+                        >
+                          {t('清除阶梯计费')}
+                        </Button>
+                      ) : null}
+                    </Space>
+                    {hasTierRule(selectedModel.requestTierRule) ? (
+                      <div className='w-full rounded-md bg-[var(--semi-color-fill-0)] p-3 text-xs'>
+                        <div className='mb-2 font-medium text-[var(--semi-color-text-0)]'>
+                          {t('阶梯计费价格明细')}
+                        </div>
+                        <div className='grid grid-cols-1 gap-y-2'>
+                          {tierPriceDetails.map((item) => (
+                            <div key={item.key} className='flex items-start'>
+                              <span className='w-20 flex-shrink-0 text-[var(--semi-color-text-1)]'>
+                                {item.label}
+                              </span>
+                              <span className='flex-1 font-medium text-[var(--semi-color-text-0)] flex flex-col gap-1'>
+                                {item.segments.map((segment) => (
+                                  <span key={`${segment.range}-${segment.price}`}>
+                                    {segment.range}：{segment.price} / 1M tokens
+                                  </span>
+                                ))}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <Text type='secondary'>
+                        {t('未配置阶梯计费，按原价格/倍率逻辑计费。')}
+                      </Text>
+                    )}
+                  </Space>
+                </Card>
 
                 {selectedModel.billingMode === 'per-request' ? (
                   <PriceInput
@@ -1681,6 +1916,27 @@ export default function ModelPricingEditor({
             )}
           </div>
         ) : null}
+      </Modal>
+
+      <Modal
+        title={t('阶梯计费规则')}
+        visible={tierVisible}
+        onCancel={() => setTierVisible(false)}
+        onOk={saveTierDraft}
+        size='large'
+      >
+        <Space vertical align='start' style={{ width: '100%' }}>
+          <Text type='secondary'>
+            {t(
+              '阶梯区间从 0 开始；最后一档固定为无限且不能删除，保存时会写入后端需要的 up_to: 0。',
+            )}
+          </Text>
+          <TierRowsEditor
+            t={t}
+            value={tierDraft}
+            onChange={(value) => setTierDraft(value)}
+          />
+        </Space>
       </Modal>
     </>
   );
