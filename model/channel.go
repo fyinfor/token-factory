@@ -59,6 +59,8 @@ type Channel struct {
 	OwnerUserID           int    `json:"owner_user_id" gorm:"type:int;index;default:0"`           // 渠道归属用户ID（供应商场景）
 	SupplierApplicationID int    `json:"supplier_application_id" gorm:"type:int;index;default:0"` // 关联 supplier_applications.id
 	ChannelNo             string `json:"channel_no" gorm:"type:varchar(32);default:'';index;comment:供应商渠道编号 c1,c2 递增"`
+	// RouteSlug 全局唯一渠道路由后缀；调用格式 {model}/{route_slug} 强制该渠道（该渠道下所有模型共用此后缀）。
+	RouteSlug             string `json:"route_slug" gorm:"type:varchar(32);not null;default:'';index"`
 	SupplierName          string `json:"supplier_name,omitempty" gorm:"-"` // 供应商用户名（由控制器回填，不落库）
 
 	// 渠道计费折扣（百分数，100=原价无折扣，60=六折/按原价×0.6 计费）。nil=数据库默认/未设，按 100 处理。使用指针以便 GORM Updates 时可将 0% 写回。
@@ -681,6 +683,17 @@ func batchInsertChannelsWithOptionalTfOpenPricing(channels []Channel, tfOpenPric
 			tx.Rollback()
 			return err
 		}
+		for i := range chunk {
+			if chunk[i].Id <= 0 {
+				continue
+			}
+			assigned, err := assignRouteSlugInTx(tx, chunk[i].Id, chunk[i].RouteSlug)
+			if err != nil {
+				tx.Rollback()
+				return err
+			}
+			chunk[i].RouteSlug = assigned
+		}
 		createdChannels = append(createdChannels, chunk...)
 		for _, channel_ := range chunk {
 			if err := channel_.AddAbilities(tx); err != nil {
@@ -698,14 +711,6 @@ func batchInsertChannelsWithOptionalTfOpenPricing(channels []Channel, tfOpenPric
 	if len(tfOpenPricing) > 0 {
 		mergeTFOpenUpstreamPricingAfterInsert(createdChannels, tfOpenPricing)
 	}
-	// 为批量创建的渠道异步分配路由索引（best-effort，不阻塞接口响应）
-	go func(chs []Channel) {
-		for _, ch := range chs {
-			if ch.Id > 0 {
-				AssignChannelModelRouteIndices(ch.Id, ch.GetModels())
-			}
-		}
-	}(createdChannels)
 	return nil
 }
 
@@ -857,9 +862,6 @@ func BatchDeleteChannels(ids []int) error {
 	if len(ids) == 0 {
 		return nil
 	}
-	// 清理路由索引（best-effort，不影响主事务）
-	RemoveAllChannelModelRouteIndicesBatch(ids)
-
 	// 使用事务 分批删除channel表和abilities表
 	tx := DB.Begin()
 	if tx.Error != nil {
@@ -918,6 +920,7 @@ func (channel *Channel) GetStatusCodeMapping() string {
 }
 
 func (channel *Channel) Insert() error {
+	var assigned string
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		batch := []Channel{*channel}
 		if err := allocateSupplierChannelNosInBatch(tx, batch); err != nil {
@@ -927,13 +930,17 @@ func (channel *Channel) Insert() error {
 		if err := tx.Create(channel).Error; err != nil {
 			return err
 		}
+		var err2 error
+		assigned, err2 = assignRouteSlugInTx(tx, channel.Id, channel.RouteSlug)
+		if err2 != nil {
+			return err2
+		}
 		return channel.AddAbilities(tx)
 	})
 	if err != nil {
 		return err
 	}
-	// 为单条插入的渠道分配路由索引（best-effort，不阻塞主流程）
-	go AssignChannelModelRouteIndices(channel.Id, channel.GetModels())
+	channel.RouteSlug = assigned
 	return nil
 }
 
@@ -976,15 +983,6 @@ func (channel *Channel) Update() error {
 			}
 		}
 	}
-	// 若本次更新包含模型列表，提前读取旧值用于路由索引增量同步
-	var oldModelsCSV string
-	if channel.Models != "" {
-		var snapshot Channel
-		if e := DB.Select("models").Where("id = ?", channel.Id).First(&snapshot).Error; e == nil {
-			oldModelsCSV = snapshot.Models
-		}
-	}
-
 	var err error
 	err = DB.Model(channel).Updates(channel).Error
 	if err != nil {
@@ -993,10 +991,6 @@ func (channel *Channel) Update() error {
 	DB.Model(channel).First(channel, "id = ?", channel.Id)
 	err = channel.UpdateAbilities(nil)
 
-	// 同步路由索引：新增模型分配索引，移除模型清理索引
-	if channel.Models != "" && channel.Models != oldModelsCSV {
-		go SyncChannelModelRouteIndices(channel.Id, oldModelsCSV, channel.Models)
-	}
 	return err
 }
 
@@ -1048,7 +1042,6 @@ func (channel *Channel) UpdateBalance(balance float64) {
 }
 
 func (channel *Channel) Delete() error {
-	RemoveAllChannelModelRouteIndices(channel.Id)
 	var err error
 	err = DB.Delete(channel).Error
 	if err != nil {

@@ -181,54 +181,48 @@ func rewriteRequestModelField(c *gin.Context, modelName string) error {
 	return common.ReplaceRequestBody(c, newBody)
 }
 
-// ModelRouteResult 表示一次「模型路由索引」（{model}/{index}）解析结果。
+// ModelRouteResult 表示一次「模型 + 全局 route_slug」解析结果（{model}/{route_slug}）。
 type ModelRouteResult struct {
-	ModelName  string // 去掉路由索引后缀的真实模型名
-	RouteIndex string // 路由索引，如 "0"、"A"
-	ChannelID  int    // 解析得到的渠道 ID
+	ModelName string // 去掉后缀后的真实模型名
+	RouteSlug string // 渠道全局路由后缀（channels.route_slug）
+	ChannelID int    // 解析得到的渠道 ID
 }
 
-// ParseModelRouteIndex 尝试把 {model}/{index} 形式的模型名解析为 ModelRouteResult。
+// ParseModelRouteIndex 尝试把 {model}/{route_slug} 形式的模型名解析为 ModelRouteResult。
 //
 // 解析规则：
 //   - 字符串中至少包含一个 "/"；
-//   - 最后一段必须为纯 base-62 字符（0-9 A-Z a-z），不含连字符、点号等，以此与真实
-//     模型名（如 "gpt-4o"、"claude-3.5-sonnet"）区分；
-//   - 将去掉最后一段后的部分作为模型名，到 channel_model_route_indices 查找渠道；
-//   - 若索引存在但渠道已禁用，返回 nil, false, nil（不报错，交由后续正常路由处理）；
-//     这样可避免与真实模型名冲突时产生误导性错误。
-//
-// 不符合格式或索引在 DB 中查不到时返回 nil, false, nil；
-// 格式匹配且渠道查到但被禁用时也返回 nil, false, nil（优雅降级）。
+//   - 最后一段须为合法 route_slug（见 model.IsValidRouteSlug），且不能为旧 channel_no 形态 c\d+；
+//   - 去掉最后一段后的部分作为模型名，按 route_slug 查启用渠道并校验 models 列表包含该模型；
+//   - 未命中或渠道禁用或模型不在列表：返回 nil, false, nil（静默降级为普通路由）。
 func ParseModelRouteIndex(raw string) (*ModelRouteResult, bool, error) {
 	name := strings.TrimSpace(raw)
 	if name == "" || !strings.Contains(name, "/") {
 		return nil, false, nil
 	}
 	lastSlash := strings.LastIndex(name, "/")
-	potentialIndex := name[lastSlash+1:]
+	potentialSlug := name[lastSlash+1:]
 	potentialModel := name[:lastSlash]
-	if potentialIndex == "" || potentialModel == "" {
+	if potentialSlug == "" || potentialModel == "" {
 		return nil, false, nil
 	}
-	if !model.IsValidRouteIndex(potentialIndex) {
+	if !model.IsValidRouteSlug(potentialSlug) {
 		return nil, false, nil
 	}
 
-	channelID, err := model.FindChannelIDByModelAndRouteIndex(potentialModel, potentialIndex)
-	if err != nil {
-		// 索引不存在或渠道禁用：不视为匹配，降级至正常路由
+	channelID := model.ResolveChannelIDByRouteSlugAndModel(potentialSlug, potentialModel)
+	if channelID <= 0 {
 		return nil, false, nil
 	}
 	return &ModelRouteResult{
 		ModelName:  potentialModel,
-		RouteIndex: potentialIndex,
+		RouteSlug:  potentialSlug,
 		ChannelID:  channelID,
 	}, true, nil
 }
 
 // ApplyModelRouteOnRequestBody 写入强制渠道 ID 上下文并把真实模型名写回请求体。
-// 语义同 ApplyForcedChannelOnRequestBody，用于新 {model}/{index} 路由格式。
+// 语义同 ApplyForcedChannelOnRequestBody，用于 {model}/{route_slug} 路由格式。
 func ApplyModelRouteOnRequestBody(c *gin.Context, result *ModelRouteResult, originalModel string) error {
 	common.SetContextKey(c, constant.ContextKeyForcedChannelID, result.ChannelID)
 	common.SetContextKey(c, constant.ContextKeyForcedChannelModelKey, originalModel)

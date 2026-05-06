@@ -45,7 +45,7 @@ func Distribute() func(c *gin.Context) {
 
 		// 解析特殊模型名形式，按优先级识别：
 		//   1) {supplier_alias}/{model}/{channel_no} —— 旧格式：指定渠道直连（向后兼容）；
-		//   2) {model}/{index}                       —— 新格式：base-62 索引直连指定渠道；
+		//   2) {model}/{route_slug}                  —— 全局渠道路由后缀（channels.route_slug，整渠道唯一）；
 		//   3) {supplier_alias}/{model}              —— 旧格式：指定供应商下任意渠道。
 		// 命中后把真实模型名回写到 modelRequest.Model 与请求体，后续路由/日志使用真实模型名。
 		if shouldSelectChannel && modelRequest != nil && strings.Contains(modelRequest.Model, "/") {
@@ -62,7 +62,7 @@ func Distribute() func(c *gin.Context) {
 				}
 				modelRequest.Model = route.ModelName
 			} else {
-				// 尝试新 {model}/{index} 路由格式（base-62 索引，不依赖供应商别名）。
+				// 尝试 {model}/{route_slug}（全局渠道路由后缀）。
 				indexRoute, _, _ := service.ParseModelRouteIndex(modelRequest.Model)
 				if indexRoute != nil {
 					originalModelKey := modelRequest.Model
