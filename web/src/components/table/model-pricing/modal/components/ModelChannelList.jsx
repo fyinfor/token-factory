@@ -18,8 +18,18 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
-import { Card, Avatar, Typography, Collapse, Tag, Button, Toast, Tooltip } from '@douyinfe/semi-ui';
-import { IconListView, IconCopy, IconCode } from '@douyinfe/semi-icons';
+import {
+  Card,
+  Avatar,
+  Typography,
+  Collapse,
+  Tag,
+  Button,
+  Toast,
+  Tooltip,
+} from '@douyinfe/semi-ui';
+import { IconListView } from '@douyinfe/semi-icons';
+import { stringToColor } from '../../../../../helpers';
 import { getUsedGroupContext } from '../../../../../helpers/utils';
 
 import { renderModelTestResultSummary } from '../../../../../helpers/modelStability';
@@ -32,6 +42,21 @@ const hasRatioValue = (value) =>
   value !== null &&
   value !== '' &&
   Number.isFinite(Number(value));
+
+const getSupplierTypeColor = (supplierType) => {
+  switch (supplierType) {
+    case '公有云':
+      return 'green';
+    case 'AIDC':
+      return 'light-green';
+    case '企业中转站':
+      return 'lime';
+    case '个人中转站':
+      return 'yellow';
+    default:
+      return stringToColor(supplierType);
+  }
+};
 
 const ModelChannelList = ({
   modelData,
@@ -63,6 +88,13 @@ const ModelChannelList = ({
         groups[supplierId] = {
           supplierId,
           supplierAlias: channel.supplier_alias || t('未知供应商'),
+          companyLogoUrl:
+            (channel?.company_logo_url &&
+              String(channel.company_logo_url).trim()) ||
+            '',
+          supplierType:
+            (channel?.supplier_type && String(channel.supplier_type).trim()) ||
+            '',
           channels: [],
         };
       }
@@ -72,9 +104,10 @@ const ModelChannelList = ({
   }, [modelData.channel_list, t]);
 
   // 生成所有面板的 keys，默认全部展开
-  const allKeys = useMemo(() =>
-    groupedChannels.map(group => `group-${group.supplierId}`)
-  , [groupedChannels]);
+  const allKeys = useMemo(
+    () => groupedChannels.map((group) => `group-${group.supplierId}`),
+    [groupedChannels],
+  );
 
   // 使用字符串形式来稳定比较
   const allKeysStr = allKeys.join(',');
@@ -107,7 +140,8 @@ const ModelChannelList = ({
       const priceUSD = nominalRatio * 2 * usedGroupRatio;
       const rawDisplayPrice = displayPrice(priceUSD);
       const unitDivisor = tokenUnit === 'K' ? 1000 : 1;
-      const numericPrice = parseFloat(rawDisplayPrice.replace(/[^0-9.]/g, '')) / unitDivisor;
+      const numericPrice =
+        parseFloat(rawDisplayPrice.replace(/[^0-9.]/g, '')) / unitDivisor;
 
       let symbol = '$';
       if (currency === 'CNY') {
@@ -138,7 +172,10 @@ const ModelChannelList = ({
       const current = calculatePrice(Number(channelRatio));
       let original = null;
       let discount = 0;
-      if (hasRatioValue(rootRatio) && Number(rootRatio) > Number(channelRatio)) {
+      if (
+        hasRatioValue(rootRatio) &&
+        Number(rootRatio) > Number(channelRatio)
+      ) {
         const root = calculatePrice(Number(rootRatio));
         if (root.value > current.value && root.value > 0) {
           discount = Math.round((1 - current.value / root.value) * 100);
@@ -156,30 +193,44 @@ const ModelChannelList = ({
     );
 
     // 输出
-    if (hasRatioValue(channel.model_ratio) && hasRatioValue(channel.completion_ratio)) {
-      const chOut = Number(channel.model_ratio) * Number(channel.completion_ratio);
+    if (
+      hasRatioValue(channel.model_ratio) &&
+      hasRatioValue(channel.completion_ratio)
+    ) {
+      const chOut =
+        Number(channel.model_ratio) * Number(channel.completion_ratio);
       const rootOut =
-        hasRatioValue(modelData?.model_ratio) && hasRatioValue(modelData?.completion_ratio)
+        hasRatioValue(modelData?.model_ratio) &&
+        hasRatioValue(modelData?.completion_ratio)
           ? Number(modelData.model_ratio) * Number(modelData.completion_ratio)
           : null;
       items.push(makeItem(t('输出价格'), chOut, rootOut));
     }
 
     // 缓存读取
-    if (hasRatioValue(channel.model_ratio) && hasRatioValue(channel.cache_ratio)) {
+    if (
+      hasRatioValue(channel.model_ratio) &&
+      hasRatioValue(channel.cache_ratio)
+    ) {
       const chC = Number(channel.model_ratio) * Number(channel.cache_ratio);
       const rootC =
-        hasRatioValue(modelData?.model_ratio) && hasRatioValue(modelData?.cache_ratio)
+        hasRatioValue(modelData?.model_ratio) &&
+        hasRatioValue(modelData?.cache_ratio)
           ? Number(modelData.model_ratio) * Number(modelData.cache_ratio)
           : null;
       items.push(makeItem(t('缓存读取价格'), chC, rootC));
     }
 
     // 缓存创建
-    if (hasRatioValue(channel.model_ratio) && hasRatioValue(channel.create_cache_ratio)) {
-      const chCC = Number(channel.model_ratio) * Number(channel.create_cache_ratio);
+    if (
+      hasRatioValue(channel.model_ratio) &&
+      hasRatioValue(channel.create_cache_ratio)
+    ) {
+      const chCC =
+        Number(channel.model_ratio) * Number(channel.create_cache_ratio);
       const rootCC =
-        hasRatioValue(modelData?.model_ratio) && hasRatioValue(modelData?.create_cache_ratio)
+        hasRatioValue(modelData?.model_ratio) &&
+        hasRatioValue(modelData?.create_cache_ratio)
           ? Number(modelData.model_ratio) * Number(modelData.create_cache_ratio)
           : null;
       items.push(makeItem(t('缓存创建价格'), chCC, rootCC));
@@ -200,7 +251,7 @@ const ModelChannelList = ({
           </div>
         </div>
       </div>
-      
+
       <ApiDocsSidePanel
         visible={apiDocsVisible}
         onClose={() => setApiDocsVisible(false)}
@@ -215,27 +266,38 @@ const ModelChannelList = ({
             itemKey={`group-${group.supplierId}`}
             header={
               <div className='flex items-center justify-between w-full pr-4'>
-                <span className='font-medium flex items-center'>
-                  <Tag color='blue' size='small' className='ml-2'>
-                    {group.supplierAlias}
-                  </Tag>
-                  <Button
-                    icon={<IconCopy />}
-                    size='small'
-                    type='tertiary'
-                    className='ml-2'
-                    title={`${group.supplierAlias}/${modelData.model_name}`}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      // 复制供应商级别路由（旧格式，供需要限定供应商时使用）
-                      const text = `${group.supplierAlias}/${modelData.model_name}`;
-                      navigator.clipboard.writeText(text).then(() => {
-                        Toast.success({ content: t('已复制') });
-                      }).catch(() => {
-                        Toast.error({ content: t('复制失败') });
-                      });
-                    }}
-                  />
+                <span
+                  className='h-7 rounded-md flex items-center gap-1 overflow-hidden ml-2'
+                  style={{
+                    backgroundColor: 'var(--semi-color-fill-0)',
+                    paddingRight: group.supplierType ? 4 : 0,
+                  }}
+                >
+                  {group.companyLogoUrl ? (
+                    <img
+                      src={group.companyLogoUrl}
+                      alt={group.supplierAlias || ''}
+                      className='w-7 h-7 object-contain rounded-md'
+                    />
+                  ) : (
+                    <span
+                      className='h-6 px-2 flex items-center text-xs font-medium'
+                      style={{
+                        color: 'var(--semi-color-text-1)',
+                      }}
+                    >
+                      {group.supplierAlias || t('官方')}
+                    </span>
+                  )}
+                  {group.supplierType && (
+                    <Tag
+                      size='small'
+                      shape='circle'
+                      color={getSupplierTypeColor(group.supplierType)}
+                    >
+                      {group.supplierType}
+                    </Tag>
+                  )}
                 </span>
                 <span className='text-sm text-gray-500'>
                   {group.channels.length} {t('个通道')}
@@ -252,17 +314,23 @@ const ModelChannelList = ({
                   : `${channel.supplier_alias}/${modelData.model_name}/${channel.channel_no}`;
                 const channelBadge =
                   channel.route_slug || channel.channel_no || String(idx);
-                
+
                 const handleCopy = () => {
-                  navigator.clipboard.writeText(channelPath).then(() => {
-                    Toast.success({ content: t('已复制通道') });
-                  }).catch(() => {
-                    Toast.error({ content: t('复制失败') });
-                  });
+                  navigator.clipboard
+                    .writeText(channelPath)
+                    .then(() => {
+                      Toast.success({ content: t('已复制通道') });
+                    })
+                    .catch(() => {
+                      Toast.error({ content: t('复制失败') });
+                    });
                 };
-                
+
                 return (
-                  <div key={`${channel.channel_id}-${idx}`} className='flex gap-3 items-start'>
+                  <div
+                    key={`${channel.channel_id}-${idx}`}
+                    className='flex gap-3 items-start'
+                  >
                     <div className='flex items-center justify-center min-w-[24px] h-[24px] rounded-full bg-blue-100 text-blue-600 text-xs font-semibold mt-3'>
                       {channelBadge}
                     </div>
@@ -277,7 +345,9 @@ const ModelChannelList = ({
                               key={item.label}
                               className='flex items-center gap-2 flex-wrap'
                             >
-                              <span className='text-gray-600'>{item.label}:</span>
+                              <span className='text-gray-600'>
+                                {item.label}:
+                              </span>
                               {item.original && (
                                 <>
                                   <span className='text-gray-400 line-through text-xs'>
@@ -306,20 +376,22 @@ const ModelChannelList = ({
                         <div className='flex flex-col gap-1'>
                           <Tooltip content={t('复制通道路径')}>
                             <Button
-                              icon={<IconCopy />}
                               size='small'
                               type='tertiary'
                               onClick={handleCopy}
                               title={channelPath}
-                            />
+                            >
+                              {t('复制')}
+                            </Button>
                           </Tooltip>
                           <Tooltip content={t('查看 API 文档')}>
                             <Button
-                              icon={<IconCode />}
                               size='small'
                               type='tertiary'
                               onClick={() => openApiDocs(channelPath)}
-                            />
+                            >
+                              {t('文档')}
+                            </Button>
                           </Tooltip>
                         </div>
                       </div>
