@@ -88,6 +88,7 @@ const BatchSetTagsModal = ({
         </div>
         <Form.RadioGroup
           field='mode'
+          label={t('设置方式')}
           type='button'
           options={[
             { label: t('在原标签基础上添加（去重）'), value: 'add' },

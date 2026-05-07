@@ -782,26 +782,82 @@ func GetUserModels(c *gin.Context) {
 			ModelName      string                    `json:"model_name"`
 			VendorID       int                       `json:"vendor_id"`
 			Vendor         string                    `json:"vendor"`
+			Tags           string                    `json:"tags"`
 			TestedSuccess  bool                      `json:"tested_success"`
 			ChannelOptions []playgroundChannelOption `json:"channel_options,omitempty"`
 		}
 		modelRows := make([]struct {
 			ModelName string `gorm:"column:model_name"`
 			VendorID  int    `gorm:"column:vendor_id"`
+			Tags      string `gorm:"column:tags"`
+			NameRule  int    `gorm:"column:name_rule"`
 		}, 0)
 		modelVendorIDByName := make(map[string]int, len(models))
+		modelTagsByName := make(map[string]string, len(models))
 		if len(models) > 0 {
-			// 与“模型广场”一致：按模型元数据(model_meta)中的模型类型(vendor_id)做归属映射（仅对 status=1 的元数据行建映射）
+			// 与“模型广场”一致：按模型元数据(model_meta)中的规则（精确/前缀/后缀/包含）做归属映射
 			if err := model.DB.Model(&model.Model{}).
-				Select("model_name", "vendor_id").
-				Where("model_name IN ?", models).
+				Select("model_name", "vendor_id", "tags", "name_rule").
 				Where("status = ?", 1).
 				Find(&modelRows).Error; err != nil {
 				common.ApiError(c, err)
 				return
 			}
-			for i := range modelRows {
-				modelVendorIDByName[modelRows[i].ModelName] = modelRows[i].VendorID
+			rulePriority := func(rule int) int {
+				switch rule {
+				case model.NameRuleExact:
+					return 0
+				case model.NameRulePrefix:
+					return 1
+				case model.NameRuleSuffix:
+					return 2
+				case model.NameRuleContains:
+					return 3
+				default:
+					return 9
+				}
+			}
+			matchRule := func(pattern, target string, rule int) bool {
+				switch rule {
+				case model.NameRuleExact:
+					return target == pattern
+				case model.NameRulePrefix:
+					return strings.HasPrefix(target, pattern)
+				case model.NameRuleSuffix:
+					return strings.HasSuffix(target, pattern)
+				case model.NameRuleContains:
+					return strings.Contains(target, pattern)
+				default:
+					return false
+				}
+			}
+			for _, targetModelName := range models {
+				bestIdx := -1
+				for i := range modelRows {
+					row := modelRows[i]
+					if !matchRule(row.ModelName, targetModelName, row.NameRule) {
+						continue
+					}
+					if bestIdx < 0 {
+						bestIdx = i
+						continue
+					}
+					cur := modelRows[bestIdx]
+					curPriority := rulePriority(cur.NameRule)
+					newPriority := rulePriority(row.NameRule)
+					if newPriority < curPriority {
+						bestIdx = i
+						continue
+					}
+					if newPriority == curPriority && len(row.ModelName) > len(cur.ModelName) {
+						bestIdx = i
+					}
+				}
+				if bestIdx >= 0 {
+					row := modelRows[bestIdx]
+					modelVendorIDByName[targetModelName] = row.VendorID
+					modelTagsByName[targetModelName] = strings.TrimSpace(row.Tags)
+				}
 			}
 		}
 		// 与无 scene 的 /user/models 一致：先列出分组内每个已启用模型名 + 元数据 vendor；再按 model_test_results 最近一次单测成功过滤，只返回「单测通过」的模型，并仅据此推导「模型类型」
@@ -930,6 +986,7 @@ func GetUserModels(c *gin.Context) {
 				ModelName:      modelName,
 				VendorID:       vendorID,
 				Vendor:         vendorName,
+				Tags:           modelTagsByName[modelName],
 				TestedSuccess:  true,
 				ChannelOptions: channelOptions,
 			})

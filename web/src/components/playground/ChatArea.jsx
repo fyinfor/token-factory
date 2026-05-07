@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 import React from 'react';
 import { Card, Chat, Typography, Button } from '@douyinfe/semi-ui';
-import { MessageSquare, Eye, EyeOff } from 'lucide-react';
+import { MessageSquare, Eye, EyeOff, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import CustomInputRender from './CustomInputRender';
 
@@ -41,6 +41,25 @@ const ChatArea = ({
   renderChatBoxAction,
 }) => {
   const { t } = useTranslation();
+  const safeChats = React.useMemo(() => {
+    const list = Array.isArray(message) ? message : [];
+    const seen = new Set();
+    return list.map((item, index) => {
+      const baseId =
+        item?.id !== undefined && item?.id !== null && String(item.id) !== ''
+          ? String(item.id)
+          : `chat-${index}`;
+      let nextId = baseId;
+      if (seen.has(nextId)) {
+        nextId = `${baseId}-${index}`;
+      }
+      seen.add(nextId);
+      return {
+        ...item,
+        id: nextId,
+      };
+    });
+  }, [message]);
 
   const renderInputArea = React.useCallback((props) => {
     return <CustomInputRender {...props} />;
@@ -79,6 +98,16 @@ const ChatArea = ({
             </div>
             <div className='flex items-center gap-2'>
               <Button
+                icon={<Trash2 size={14} />}
+                onClick={onClearMessages}
+                theme='borderless'
+                type='danger'
+                size='small'
+                className='!rounded-lg !text-white/80 hover:!text-white hover:!bg-white/10'
+              >
+                {t('删除对话')}
+              </Button>
+              <Button
                 icon={showDebugPanel ? <EyeOff size={14} /> : <Eye size={14} />}
                 onClick={onToggleDebugPanel}
                 theme='borderless'
@@ -109,7 +138,7 @@ const ChatArea = ({
             maxWidth: '100%',
             overflow: 'hidden',
           }}
-          chats={message}
+          chats={safeChats}
           onMessageSend={onMessageSend}
           onMessageCopy={onMessageCopy}
           onMessageReset={onMessageReset}

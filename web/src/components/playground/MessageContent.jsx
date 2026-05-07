@@ -17,8 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useRef, useEffect } from 'react';
-import { Typography, TextArea, Button } from '@douyinfe/semi-ui';
+import React, { useRef, useEffect, useState } from 'react';
+import { Typography, TextArea, Button, Progress, Modal } from '@douyinfe/semi-ui';
 import MarkdownRenderer from '../common/markdown/MarkdownRenderer';
 import ThinkingContent from './ThinkingContent';
 import { Loader2, Check, X } from 'lucide-react';
@@ -38,9 +38,25 @@ const MessageContent = ({
   const { t } = useTranslation();
   const previousContentLengthRef = useRef(0);
   const lastContentRef = useRef('');
+  const [previewImageUrl, setPreviewImageUrl] = useState('');
 
   const isThinkingStatus =
     message.status === 'loading' || message.status === 'incomplete';
+  const isVideoGeneratingHint =
+    message.role === 'assistant' &&
+    typeof message.content === 'string' &&
+    message.content.trim() === '视频生成中，请稍后…';
+
+  const videoTaskStatus = String(message?.videoTask?.status || '').toLowerCase();
+  const videoTaskProgress = Number(message?.videoTask?.progress || 0);
+  const shouldShowVideoTaskProgress =
+    message.role === 'assistant' &&
+    !!message.videoTask &&
+    !['completed', 'succeeded', 'success', 'failed', 'error', 'cancelled'].includes(
+      videoTaskStatus,
+    ) &&
+    // queued 且 0% 时不展示进度条，避免“假进度”误导
+    !(videoTaskStatus === 'queued' && videoTaskProgress <= 0);
 
   useEffect(() => {
     if (!isThinkingStatus) {
@@ -187,6 +203,7 @@ const MessageContent = ({
   }
 
   return (
+    <>
     <div className={className}>
       {message.role === 'system' && (
         <div className='mb-2 sm:mb-4'>
@@ -214,6 +231,33 @@ const MessageContent = ({
           styleState={styleState}
           onToggleReasoningExpansion={onToggleReasoningExpansion}
         />
+      )}
+
+      {shouldShowVideoTaskProgress && (
+          <div className='mb-3 p-3 rounded-lg bg-slate-50 border border-slate-200'>
+            <div className='flex items-center justify-between mb-2'>
+              <Typography.Text strong>{t('视频生成进度')}</Typography.Text>
+              <Typography.Text type='tertiary'>
+                {videoTaskStatus || 'queued'}
+              </Typography.Text>
+            </div>
+            <Progress
+              percent={Math.max(0, Math.min(100, videoTaskProgress))}
+              showInfo
+              size='small'
+            />
+          </div>
+        )}
+
+      {message.role === 'assistant' && message?.videoTask?.playableUrl && (
+        <div className='mb-3'>
+          <video
+            controls
+            src={message.videoTask.playableUrl}
+            className='w-full rounded-lg border'
+            style={{ maxWidth: '100%' }}
+          />
+        </div>
       )}
 
       {isEditing ? (
@@ -256,6 +300,24 @@ const MessageContent = ({
         </div>
       ) : (
         (() => {
+          if (isVideoGeneratingHint) {
+            return (
+              <div className='mb-1 p-3 rounded-lg bg-sky-50 border border-sky-200'>
+                <div className='flex items-center gap-2'>
+                  <Loader2 size={16} className='text-sky-600 animate-spin' />
+                  <Typography.Text className='text-sky-700 font-medium'>
+                    {t('视频生成中，请稍后')}
+                  </Typography.Text>
+                  <span className='inline-flex items-center gap-1 ml-1'>
+                    <span className='w-1.5 h-1.5 rounded-full bg-sky-500 animate-bounce [animation-delay:0ms]' />
+                    <span className='w-1.5 h-1.5 rounded-full bg-sky-500 animate-bounce [animation-delay:150ms]' />
+                    <span className='w-1.5 h-1.5 rounded-full bg-sky-500 animate-bounce [animation-delay:300ms]' />
+                  </span>
+                </div>
+              </div>
+            );
+          }
+
           if (Array.isArray(message.content)) {
             const textContent = message.content.find(
               (item) => item.type === 'text',
@@ -273,8 +335,9 @@ const MessageContent = ({
                         <img
                           src={imgItem.image_url.url}
                           alt={`用户上传的图片 ${index + 1}`}
-                          className='rounded-lg max-w-full h-auto shadow-sm border'
+                          className='rounded-lg max-w-full h-auto shadow-sm border cursor-zoom-in'
                           style={{ maxHeight: '300px' }}
+                          onClick={() => setPreviewImageUrl(imgItem.image_url.url)}
                           onError={(e) => {
                             e.target.style.display = 'none';
                             e.target.nextSibling.style.display = 'block';
@@ -337,7 +400,20 @@ const MessageContent = ({
                 }
 
                 return (
-                  <div className='prose prose-xs sm:prose-sm prose-gray max-w-none overflow-x-auto text-xs sm:text-sm'>
+                  <div
+                    className='prose prose-xs sm:prose-sm prose-gray max-w-none overflow-x-auto text-xs sm:text-sm'
+                    onClick={(e) => {
+                      const target = e.target;
+                      if (
+                        target &&
+                        target.tagName === 'IMG' &&
+                        typeof target.src === 'string' &&
+                        target.src
+                      ) {
+                        setPreviewImageUrl(target.src);
+                      }
+                    }}
+                  >
                     <MarkdownRenderer
                       content={finalDisplayableFinalContent}
                       className=''
@@ -367,6 +443,25 @@ const MessageContent = ({
         })()
       )}
     </div>
+    <Modal
+      title={t('图片预览')}
+      visible={!!previewImageUrl}
+      footer={null}
+      onCancel={() => setPreviewImageUrl('')}
+      width={880}
+      centered
+      bodyStyle={{ padding: 12 }}
+    >
+      {previewImageUrl ? (
+        <img
+          src={previewImageUrl}
+          alt={t('图片预览')}
+          className='w-full h-auto rounded-lg'
+          style={{ maxHeight: '75vh', objectFit: 'contain' }}
+        />
+      ) : null}
+    </Modal>
+    </>
   );
 };
 

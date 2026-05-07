@@ -92,6 +92,16 @@ func SetApiRouter(router *gin.Engine) {
 		// 阿里云 OSS 通用上传（需在运营设置中启用 OSS）
 		apiRouter.POST("/oss/upload", middleware.UserAuth(), middleware.UploadRateLimit(), controller.OssUpload)
 
+		playgroundRoute := apiRouter.Group("/playground")
+		playgroundRoute.Use(middleware.UserAuth(), middleware.Distribute())
+		{
+			playgroundRoute.POST("/chat/completions", controller.Playground)
+			playgroundRoute.POST("/images/generations", controller.PlaygroundImage)
+			playgroundRoute.GET("/images/generations/:task_id", controller.PlaygroundImageFetch)
+			playgroundRoute.POST("/videos", controller.PlaygroundVideo)
+			playgroundRoute.GET("/videos/:task_id", controller.PlaygroundVideoFetch)
+		}
+
 		userRoute := apiRouter.Group("/user")
 		{
 			userRoute.POST("/register", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.Register)

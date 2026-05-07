@@ -28,6 +28,7 @@ const ImageUrlInput = ({
   imageEnabled,
   onImageUrlsChange,
   onImageEnabledChange,
+  allowToggle = true,
   disabled = false,
 }) => {
   const { t } = useTranslation();
@@ -74,7 +75,7 @@ const ImageUrlInput = ({
             uncheckedText={t('停用')}
             size='small'
             className='flex-shrink-0'
-            disabled={disabled}
+            disabled={disabled || !allowToggle}
           />
           <Button
             icon={<Plus size={14} />}

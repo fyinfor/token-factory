@@ -107,7 +107,8 @@ export const useMessageEdit = (
                   ...prevMsg,
                   createLoadingAssistantMessage(),
                 ]);
-                sendRequest(payload, inputs.stream);
+                const isChatEndpoint = payload?.__endpoint === 'chat';
+                sendRequest(payload, isChatEndpoint ? inputs.stream : false);
               }, 100);
             },
             onCancel: () => {
