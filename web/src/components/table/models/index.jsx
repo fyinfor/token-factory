@@ -114,6 +114,8 @@ const ModelsPage = ({ apiBasePath } = {}) => {
         editingModel={editingModel}
         visiable={showEdit}
         handleClose={closeEdit}
+        tagOptions={modelsData.modelTags}
+        loadTagOptions={modelsData.loadModelTags}
       />
 
       <EditVendorModal
@@ -168,6 +170,8 @@ const ModelsPage = ({ apiBasePath } = {}) => {
               setEditingModel={setEditingModel}
               setShowEdit={setShowEdit}
               batchDeleteModels={batchDeleteModels}
+              batchSetModelTags={modelsData.batchSetModelTags}
+              modelTags={modelsData.modelTags}
               syncing={modelsData.syncing}
               syncUpstream={modelsData.syncUpstream}
               previewing={modelsData.previewing}

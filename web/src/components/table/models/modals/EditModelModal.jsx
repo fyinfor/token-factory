@@ -59,6 +59,22 @@ const nameRuleOptions = [
   { label: '后缀名称匹配', value: 3 },
 ];
 
+const DEFAULT_MODEL_TAGS = ['文本', '视频', '图片'];
+
+const normalizeTags = (tags) => {
+  if (!Array.isArray(tags)) return [];
+  return [
+    ...new Set(
+      tags.flatMap((tag) =>
+        String(tag || '')
+          .split(',')
+          .map((t) => t.trim())
+          .filter(Boolean),
+      ),
+    ),
+  ];
+};
+
 const EditModelModal = (props) => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
@@ -73,6 +89,12 @@ const EditModelModal = (props) => {
   // 预填组（标签、端点）
   const [tagGroups, setTagGroups] = useState([]);
   const [endpointGroups, setEndpointGroups] = useState([]);
+  const providedTagOptions = Array.isArray(props.tagOptions) ? props.tagOptions : [];
+  const tagOptionList = useMemo(() => {
+    const base = [...DEFAULT_MODEL_TAGS, ...providedTagOptions];
+    const values = normalizeTags(base);
+    return values.map((tag) => ({ label: tag, value: tag }));
+  }, [providedTagOptions]);
 
   // 获取模型类型列表
   const fetchVendors = async () => {
@@ -109,6 +131,7 @@ const EditModelModal = (props) => {
     if (props.visiable) {
       fetchVendors();
       fetchPrefillGroups();
+      props.loadTagOptions?.();
     }
   }, [props.visiable]);
 
@@ -366,28 +389,18 @@ const EditModelModal = (props) => {
                     />
                   </Col>
                   <Col span={24}>
-                    <Form.TagInput
+                    <Form.Select
                       field='tags'
                       label={t('标签')}
-                      placeholder={t('输入标签或使用","分隔多个标签')}
-                      addOnBlur
+                      placeholder={t('请选择或输入标签')}
+                      multiple
+                      allowCreate
+                      filter
+                      optionList={tagOptionList}
                       showClear
                       onChange={(newTags) => {
                         if (!formApiRef.current) return;
-                        const normalize = (tags) => {
-                          if (!Array.isArray(tags)) return [];
-                          return [
-                            ...new Set(
-                              tags.flatMap((tag) =>
-                                tag
-                                  .split(',')
-                                  .map((t) => t.trim())
-                                  .filter(Boolean),
-                              ),
-                            ),
-                          ];
-                        };
-                        const normalized = normalize(newTags);
+                        const normalized = normalizeTags(newTags);
                         formApiRef.current.setValue('tags', normalized);
                       }}
                       style={{ width: '100%' }}
