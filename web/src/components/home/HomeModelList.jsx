@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React from 'react';
+import React, { useContext, useMemo } from 'react';
 import {
   Input,
   ImagePreview,
@@ -35,10 +35,29 @@ import PricingCardView from '../table/model-pricing/view/card/PricingCardView';
 import ModelDetailSideSheet from '../table/model-pricing/modal/ModelDetailSideSheet';
 import { useModelPricingData } from '../../hooks/model-pricing/useModelPricingData';
 import { usePricingFilterCounts } from '../../hooks/model-pricing/usePricingFilterCounts';
+import { StatusContext } from '../../context/Status';
+import { UserContext } from '../../context/User';
 
 const HomeModelList = () => {
   const isMobile = useIsMobile();
   const pricingData = useModelPricingData();
+  const [statusState] = useContext(StatusContext);
+  const [userState] = useContext(UserContext);
+
+  const blurPricing = useMemo(() => {
+    if (userState?.user) return false;
+    try {
+      const config = statusState?.status?.HeaderNavModules;
+      if (!config) return false;
+      const modules = JSON.parse(config);
+      const home = modules?.home;
+      if (typeof home === 'object' && home !== null) {
+        return !!home.blurPricing;
+      }
+    } catch {}
+    return false;
+  }, [statusState?.status?.HeaderNavModules, userState?.user]);
+
   const { quotaTypeModels, endpointTypeModels, vendorModels, tagModels } =
     usePricingFilterCounts({
       models: pricingData.models,
@@ -330,6 +349,7 @@ const HomeModelList = () => {
               setSelectedRowKeys={() => {}}
               openModelDetail={pricingData.openModelDetail}
               showSizeChanger={false}
+              blurPricing={blurPricing}
             />
           </div>
         </div>

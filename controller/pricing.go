@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
@@ -36,6 +37,64 @@ func getPricingVisibleChannelsForUser(c *gin.Context) ([]model.ChannelSimplePric
 		visibleChannelIDs[item.ChannelID] = struct{}{}
 	}
 	return channels, visibleChannelIDs, nil
+}
+
+// shouldBlurPricing 检查 HeaderNavModules 配置中是否有任一模块开启了 blurPricing。
+func shouldBlurPricing() bool {
+	common.OptionMapRWMutex.RLock()
+	raw := common.OptionMap["HeaderNavModules"]
+	common.OptionMapRWMutex.RUnlock()
+	if raw == "" {
+		return false
+	}
+	var modules map[string]any
+	if err := common.Unmarshal([]byte(raw), &modules); err != nil {
+		return false
+	}
+	for _, key := range []string{"home", "pricing"} {
+		switch v := modules[key].(type) {
+		case map[string]any:
+			if bp, ok := v["blurPricing"]; ok {
+				if b, ok := bp.(bool); ok && b {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// sanitizePricingData 将定价数据中的价格和供应商信息置零/清空。
+func sanitizePricingData(data []model.PricingAPIItem) {
+	for i := range data {
+		data[i].ModelRatio = 0
+		data[i].ModelPrice = 0
+		data[i].CompletionRatio = 0
+		data[i].CacheRatio = nil
+		data[i].CreateCacheRatio = nil
+		data[i].ImageRatio = nil
+		data[i].AudioRatio = nil
+		data[i].AudioCompletionRatio = nil
+		data[i].VideoRatio = nil
+		data[i].VideoCompletionRatio = nil
+		data[i].VideoPrice = nil
+		for j := range data[i].ChannelList {
+			data[i].ChannelList[j].ModelPrice = 0
+			data[i].ChannelList[j].ModelRatio = 0
+			data[i].ChannelList[j].CompletionRatio = 0
+			data[i].ChannelList[j].CacheRatio = 0
+			data[i].ChannelList[j].CreateCacheRatio = 0
+			data[i].ChannelList[j].PriceDiscountPercent = 0
+			data[i].ChannelList[j].SupplierAlias = ""
+			data[i].ChannelList[j].CompanyLogoURL = ""
+			data[i].ChannelList[j].SupplierType = ""
+		}
+		for j := range data[i].SupplierList {
+			data[i].SupplierList[j].SupplierAlias = ""
+			data[i].SupplierList[j].CompanyLogoURL = ""
+			data[i].SupplierList[j].SupplierType = ""
+		}
+	}
 }
 
 // GetPricing 返回前端定价展示数据。
@@ -161,9 +220,32 @@ func GetPricing(c *gin.Context) {
 	}
 	pricingData := model.BuildPricingAPIItems(filtered, visibleChannelIDs, channelPricingMeta)
 
+	blurPricing := false
+	if !exists && shouldBlurPricing() {
+		blurPricing = true
+		sanitizePricingData(pricingData)
+		groupRatio = map[string]float64{}
+		groupModelPrice = map[string]map[string]float64{}
+		groupModelRatio = map[string]map[string]float64{}
+		channelModelPrice = map[string]map[string]float64{}
+		channelModelRatio = map[string]map[string]float64{}
+		channelCompletionRatio = map[string]map[string]float64{}
+		channelCacheRatio = map[string]map[string]float64{}
+		channelCreateCacheRatio = map[string]map[string]float64{}
+		channelImageRatio = map[string]map[string]float64{}
+		channelAudioRatio = map[string]map[string]float64{}
+		channelAudioCompletionRatio = map[string]map[string]float64{}
+		channelVideoRatio = map[string]map[string]float64{}
+		channelVideoCompletionRatio = map[string]map[string]float64{}
+		channelVideoPrice = map[string]map[string]float64{}
+		supplierModelPrice = map[string]map[string]float64{}
+		supplierModelRatio = map[string]map[string]float64{}
+	}
+
 	c.JSON(200, gin.H{
 		"success":                        true,
 		"data":                           pricingData,
+		"blur_pricing":                   blurPricing,
 		"vendors":                        model.GetVendors(),
 		"channels":                       channels,
 		"group_ratio":                    groupRatio,

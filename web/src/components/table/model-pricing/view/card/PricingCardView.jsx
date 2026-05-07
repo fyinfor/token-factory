@@ -79,6 +79,7 @@ const PricingCardView = ({
   setSelectedRowKeys,
   openModelDetail,
   showSizeChanger = true,
+  blurPricing = false,
 }) => {
   const showSkeleton = useMinimumLoadingTime(loading);
   const startIndex = (currentPage - 1) * pageSize;
@@ -596,9 +597,9 @@ const PricingCardView = ({
           return (
             <Card
               key={modelKey || index}
-              className={`flex-1 min-w-[350px] max-w-[600px] !rounded-2xl transition-all duration-200 hover:shadow-lg border cursor-pointer ${isSelected ? CARD_STYLES.selected : CARD_STYLES.default}`}
+              className={`flex-1 min-w-[350px] max-w-[600px] !rounded-2xl transition-all duration-200 hover:shadow-lg border ${blurPricing ? '' : 'cursor-pointer'} ${isSelected ? CARD_STYLES.selected : CARD_STYLES.default}`}
               bodyStyle={{ height: '100%' }}
-              onClick={() => openModelDetail && openModelDetail(model)}
+              onClick={() => !blurPricing && openModelDetail && openModelDetail(model)}
             >
               <div className='flex flex-col h-full'>
                 {/* 头部：图标 + 模型名称 + 操作按钮 */}
@@ -609,7 +610,7 @@ const PricingCardView = ({
                       <h3 className='text-lg font-bold text-gray-900 truncate'>
                         {model.model_name}
                       </h3>
-                      <div className='flex flex-col gap-1 text-xs mt-1'>
+                      <div className='flex flex-col gap-1 text-xs mt-1' style={blurPricing ? { filter: 'blur(6px)', userSelect: 'none', pointerEvents: 'none' } : undefined}>
                         {getModelPriceItemsForCard(model, priceData).map(
                           (item) => (
                             <div key={item.key} className='flex items-center'>
@@ -721,7 +722,7 @@ const PricingCardView = ({
                 </div>
 
                 {/* 模型描述 - 占据剩余空间 */}
-                <div className='flex-1 mb-4'>
+                <div className='flex-1 mb-4' style={blurPricing ? { filter: 'blur(6px)', userSelect: 'none', pointerEvents: 'none' } : undefined}>
                   <p
                     className='text-xs line-clamp-2 leading-relaxed'
                     style={{ color: 'var(--semi-color-text-2)' }}
@@ -731,7 +732,7 @@ const PricingCardView = ({
                 </div>
 
                 {/* 底部区域 */}
-                <div className='mt-auto'>
+                <div className='mt-auto' style={blurPricing ? { filter: 'blur(6px)', userSelect: 'none', pointerEvents: 'none' } : undefined}>
                   {/* 标签区域 */}
                   {renderTags(model)}
 

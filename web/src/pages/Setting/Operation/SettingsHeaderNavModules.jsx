@@ -40,11 +40,15 @@ export default function SettingsHeaderNavModules(props) {
 
   // 顶栏模块管理状态
   const [headerNavModules, setHeaderNavModules] = useState({
-    home: true,
+    home: {
+      enabled: true,
+      blurPricing: false,
+    },
     console: true,
     pricing: {
       enabled: true,
-      requireAuth: false, // 默认不需要登录鉴权
+      requireAuth: false,
+      blurPricing: false,
     },
     docs: true,
     about: true,
@@ -54,8 +58,7 @@ export default function SettingsHeaderNavModules(props) {
   function handleHeaderNavModuleChange(moduleKey) {
     return (checked) => {
       const newModules = { ...headerNavModules };
-      if (moduleKey === 'pricing') {
-        // 对于pricing模块，只更新enabled属性
+      if (moduleKey === 'pricing' || moduleKey === 'home') {
         newModules[moduleKey] = {
           ...newModules[moduleKey],
           enabled: checked,
@@ -77,14 +80,58 @@ export default function SettingsHeaderNavModules(props) {
     setHeaderNavModules(newModules);
   }
 
+  // 处理模糊价格开关变更（即时保存）
+  function handleBlurPricingChange(moduleKey) {
+    return async (checked) => {
+      const newModules = { ...headerNavModules };
+      newModules[moduleKey] = {
+        ...newModules[moduleKey],
+        blurPricing: checked,
+      };
+      setHeaderNavModules(newModules);
+      try {
+        const res = await API.put('/api/option/', {
+          key: 'HeaderNavModules',
+          value: JSON.stringify(newModules),
+        });
+        const { success, message } = res.data;
+        if (success) {
+          showSuccess(t('保存成功'));
+          statusDispatch({
+            type: 'set',
+            payload: {
+              ...statusState.status,
+              HeaderNavModules: JSON.stringify(newModules),
+            },
+          });
+          if (props.refresh) {
+            await props.refresh();
+          }
+        } else {
+          showError(message);
+          newModules[moduleKey] = { ...newModules[moduleKey], blurPricing: !checked };
+          setHeaderNavModules(newModules);
+        }
+      } catch {
+        showError(t('保存失败，请重试'));
+        newModules[moduleKey] = { ...newModules[moduleKey], blurPricing: !checked };
+        setHeaderNavModules(newModules);
+      }
+    };
+  }
+
   // 重置顶栏模块为默认配置
   function resetHeaderNavModules() {
     const defaultModules = {
-      home: true,
+      home: {
+        enabled: true,
+        blurPricing: false,
+      },
       console: true,
       pricing: {
         enabled: true,
         requireAuth: false,
+        blurPricing: false,
       },
       docs: true,
       about: true,
@@ -134,23 +181,44 @@ export default function SettingsHeaderNavModules(props) {
       try {
         const modules = JSON.parse(props.options.HeaderNavModules);
 
+        // 处理向后兼容性：如果home是boolean，转换为对象格式
+        if (typeof modules.home === 'boolean') {
+          modules.home = {
+            enabled: modules.home,
+            blurPricing: false,
+          };
+        }
+
         // 处理向后兼容性：如果pricing是boolean，转换为对象格式
         if (typeof modules.pricing === 'boolean') {
           modules.pricing = {
             enabled: modules.pricing,
-            requireAuth: false, // 默认不需要登录鉴权
+            requireAuth: false,
+            blurPricing: false,
           };
+        }
+
+        // 确保 blurPricing 字段存在
+        if (typeof modules.home === 'object' && modules.home.blurPricing === undefined) {
+          modules.home.blurPricing = false;
+        }
+        if (typeof modules.pricing === 'object' && modules.pricing.blurPricing === undefined) {
+          modules.pricing.blurPricing = false;
         }
 
         setHeaderNavModules(modules);
       } catch (error) {
         // 使用默认配置
         const defaultModules = {
-          home: true,
+          home: {
+            enabled: true,
+            blurPricing: false,
+          },
           console: true,
           pricing: {
             enabled: true,
             requireAuth: false,
+            blurPricing: false,
           },
           docs: true,
           about: true,
@@ -160,12 +228,22 @@ export default function SettingsHeaderNavModules(props) {
     }
   }, [props.options]);
 
+  // 获取模块是否启用
+  function getModuleEnabled(moduleKey) {
+    const val = headerNavModules[moduleKey];
+    if (typeof val === 'object' && val !== null) {
+      return val.enabled;
+    }
+    return !!val;
+  }
+
   // 模块配置数据
   const moduleConfigs = [
     {
       key: 'home',
       title: t('首页'),
       description: t('用户主页，展示系统信息'),
+      hasBlurPricing: true,
     },
     {
       key: 'console',
@@ -176,7 +254,8 @@ export default function SettingsHeaderNavModules(props) {
       key: 'pricing',
       title: t('模型广场'),
       description: t('模型定价，需要登录访问'),
-      hasSubConfig: true, // 标识该模块有子配置
+      hasSubConfig: true,
+      hasBlurPricing: true,
     },
     {
       key: 'docs',
@@ -244,11 +323,7 @@ export default function SettingsHeaderNavModules(props) {
                   </div>
                   <div style={{ marginLeft: '16px' }}>
                     <Switch
-                      checked={
-                        module.key === 'pricing'
-                          ? headerNavModules[module.key]?.enabled
-                          : headerNavModules[module.key]
-                      }
+                      checked={getModuleEnabled(module.key)}
                       onChange={handleHeaderNavModuleChange(module.key)}
                       size='default'
                     />
@@ -256,10 +331,7 @@ export default function SettingsHeaderNavModules(props) {
                 </div>
 
                 {/* 为模型广场添加权限控制子开关 */}
-                {module.key === 'pricing' &&
-                  (module.key === 'pricing'
-                    ? headerNavModules[module.key]?.enabled
-                    : headerNavModules[module.key]) && (
+                {module.key === 'pricing' && getModuleEnabled(module.key) && (
                     <div
                       style={{
                         borderTop: '1px solid var(--semi-color-border)',
@@ -304,6 +376,59 @@ export default function SettingsHeaderNavModules(props) {
                               headerNavModules.pricing?.requireAuth || false
                             }
                             onChange={handlePricingAuthChange}
+                            size='default'
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                {/* 未登录模糊价格子开关 */}
+                {module.hasBlurPricing && getModuleEnabled(module.key) && (
+                    <div
+                      style={{
+                        borderTop: '1px solid var(--semi-color-border)',
+                        marginTop: '12px',
+                        paddingTop: '12px',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <div style={{ flex: 1, textAlign: 'left' }}>
+                          <div
+                            style={{
+                              fontWeight: '500',
+                              fontSize: '12px',
+                              color: 'var(--semi-color-text-1)',
+                              marginBottom: '2px',
+                            }}
+                          >
+                            {t('未登录模糊价格')}
+                          </div>
+                          <Text
+                            type='secondary'
+                            size='small'
+                            style={{
+                              fontSize: '11px',
+                              color: 'var(--semi-color-text-2)',
+                              lineHeight: '1.4',
+                              display: 'block',
+                            }}
+                          >
+                            {t('开启后未登录用户看到的价格和供应商信息将模糊处理')}
+                          </Text>
+                        </div>
+                        <div style={{ marginLeft: '16px' }}>
+                          <Switch
+                            checked={
+                              headerNavModules[module.key]?.blurPricing || false
+                            }
+                            onChange={handleBlurPricingChange(module.key)}
                             size='default'
                           />
                         </div>
