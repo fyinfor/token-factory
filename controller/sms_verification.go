@@ -11,6 +11,13 @@ import (
 
 // SendSMSVerification 发送注册短信验证码。
 func SendSMSVerification(c *gin.Context) {
+	if !common.RegisterEnabled {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "新用户注册已关闭",
+		})
+		return
+	}
 	if !common.SMSVerificationEnabled {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
