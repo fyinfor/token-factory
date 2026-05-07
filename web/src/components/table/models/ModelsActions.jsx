@@ -27,6 +27,7 @@ import CompactModeToggle from '../../common/ui/CompactModeToggle';
 import SelectionNotification from './components/SelectionNotification';
 import UpstreamConflictModal from './modals/UpstreamConflictModal';
 import SyncWizardModal from './modals/SyncWizardModal';
+import BatchSetTagsModal from './modals/BatchSetTagsModal';
 
 const ModelsActions = ({
   selectedKeys,
@@ -34,6 +35,8 @@ const ModelsActions = ({
   setEditingModel,
   setShowEdit,
   batchDeleteModels,
+  batchSetModelTags,
+  modelTags,
   syncing,
   previewing,
   syncUpstream,
@@ -53,6 +56,7 @@ const ModelsActions = ({
   const [conflicts, setConflicts] = useState([]);
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [syncLocale, setSyncLocale] = useState('zh');
+  const [showBatchTags, setShowBatchTags] = useState(false);
 
   const handleSyncUpstream = async (locale) => {
     // 先预览
@@ -100,6 +104,34 @@ const ModelsActions = ({
     const items = selectedKeys.map((m) => m.model_name);
     setPrefillInit({ id: undefined, type: 'model', items });
     setShowAddPrefill(true);
+  };
+
+  const handleBatchSetTags = async ({ tags, mode }) => {
+    if (!selectedKeys.length) {
+      showError(t('请至少选择一个模型'));
+      return false;
+    }
+    if (mode === 'replace') {
+      const confirmed = await new Promise((resolve) => {
+        Modal.confirm({
+          title: t('确认直接替换标签'),
+          content: t(
+            '替换后将覆盖所选模型原有标签，且不可自动恢复。确定继续吗？',
+          ),
+          okText: t('确认替换'),
+          cancelText: t('取消'),
+          okButtonProps: { type: 'danger' },
+          onOk: () => resolve(true),
+          onCancel: () => resolve(false),
+        });
+      });
+      if (!confirmed) return false;
+    }
+    return await batchSetModelTags?.({
+      ids: selectedKeys.map((item) => item.id),
+      tags,
+      mode,
+    });
   };
 
   return (
@@ -170,6 +202,16 @@ const ModelsActions = ({
           onClick={() => setShowGroupManagement(true)}
         >
           {t('预填组管理')}
+        </Button>
+
+        <Button
+          type='secondary'
+          className='flex-1 md:flex-initial'
+          size='small'
+          disabled={selectedKeys.length === 0}
+          onClick={() => setShowBatchTags(true)}
+        >
+          {t('批量设置标签')}
         </Button>
 
         <CompactModeToggle
@@ -251,6 +293,15 @@ const ModelsActions = ({
         }}
         t={t}
         loading={syncing}
+      />
+
+      <BatchSetTagsModal
+        visible={showBatchTags}
+        onClose={() => setShowBatchTags(false)}
+        onSubmit={handleBatchSetTags}
+        selectedCount={selectedKeys.length}
+        tagOptions={modelTags}
+        t={t}
       />
     </>
   );

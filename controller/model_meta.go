@@ -13,6 +13,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var defaultModelTags = []string{"文本", "视频", "图片"}
+
 // GetAllModelsMeta 获取模型列表（分页）
 func GetAllModelsMeta(c *gin.Context) {
 
@@ -60,6 +62,137 @@ func GetAllModelsMeta(c *gin.Context) {
 	})
 }
 
+func normalizeModelTags(tags []string) []string {
+	result := make([]string, 0, len(tags))
+	seen := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		name := strings.TrimSpace(tag)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		result = append(result, name)
+	}
+	return result
+}
+
+func splitModelTagsCSV(csv string) []string {
+	if strings.TrimSpace(csv) == "" {
+		return nil
+	}
+	return normalizeModelTags(strings.Split(csv, ","))
+}
+
+func GetModelTags(c *gin.Context) {
+	merged := make([]string, 0, 32)
+	seen := make(map[string]struct{}, 32)
+	appendTag := func(name string) {
+		tag := strings.TrimSpace(name)
+		if tag == "" {
+			return
+		}
+		if _, ok := seen[tag]; ok {
+			return
+		}
+		seen[tag] = struct{}{}
+		merged = append(merged, tag)
+	}
+
+	for _, tag := range defaultModelTags {
+		appendTag(tag)
+	}
+
+	dbTags, err := model.GetAllModelTagNames()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	for _, tag := range dbTags {
+		appendTag(tag)
+	}
+
+	var allTagCSVs []string
+	if err := model.DB.Model(&model.Model{}).Where("tags <> ?", "").Pluck("tags", &allTagCSVs).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	for _, csv := range allTagCSVs {
+		for _, tag := range splitModelTagsCSV(csv) {
+			appendTag(tag)
+		}
+	}
+
+	if err := model.UpsertModelTags(merged); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, merged)
+}
+
+type BatchSetModelTagsRequest struct {
+	IDs  []int    `json:"ids"`
+	Tags []string `json:"tags"`
+	Mode string   `json:"mode"` // add | replace
+}
+
+func BatchSetModelTags(c *gin.Context) {
+	var req BatchSetModelTagsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if len(req.IDs) == 0 {
+		common.ApiErrorMsg(c, "请选择至少一个模型")
+		return
+	}
+	normalizedTags := normalizeModelTags(req.Tags)
+	if len(normalizedTags) == 0 {
+		common.ApiErrorMsg(c, "请至少填写一个标签")
+		return
+	}
+	if req.Mode != "add" && req.Mode != "replace" {
+		common.ApiErrorMsg(c, "标签设置模式无效")
+		return
+	}
+
+	var modelsMeta []*model.Model
+	if err := model.DB.Where("id IN ?", req.IDs).Find(&modelsMeta).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if len(modelsMeta) == 0 {
+		common.ApiErrorMsg(c, "未找到可更新的模型")
+		return
+	}
+
+	updated := 0
+	for _, item := range modelsMeta {
+		newTags := normalizedTags
+		if req.Mode == "add" {
+			existing := splitModelTagsCSV(item.Tags)
+			newTags = normalizeModelTags(append(existing, normalizedTags...))
+		}
+		csv := strings.Join(newTags, ",")
+		if err := model.DB.Model(&model.Model{}).Where("id = ?", item.Id).Update("tags", csv).Error; err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		updated++
+	}
+
+	if err := model.UpsertModelTags(normalizedTags); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	model.RefreshPricing()
+	common.ApiSuccess(c, gin.H{
+		"updated": updated,
+	})
+}
+
 // SearchModelsMeta 搜索模型列表
 func SearchModelsMeta(c *gin.Context) {
 
@@ -92,6 +225,10 @@ func SearchModelsMeta(c *gin.Context) {
 // GetModelMeta 根据 ID 获取单条模型信息
 func GetModelMeta(c *gin.Context) {
 	idStr := c.Param("id")
+	if idStr == "tags" {
+		GetModelTags(c)
+		return
+	}
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
 		common.ApiError(c, err)
