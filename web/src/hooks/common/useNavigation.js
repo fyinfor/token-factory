@@ -72,13 +72,11 @@ export const useNavigation = (t, docsNav, headerNavModules) => {
       if (link.itemKey === 'docs') {
         return docsNav?.href && modules.docs;
       }
-      if (link.itemKey === 'pricing') {
-        // 支持新的pricing配置格式
-        return typeof modules.pricing === 'object'
-          ? modules.pricing.enabled
-          : modules.pricing;
+      const moduleConfig = modules[link.itemKey];
+      if (typeof moduleConfig === 'object' && moduleConfig !== null) {
+        return moduleConfig.enabled;
       }
-      return modules[link.itemKey] === true;
+      return !!moduleConfig;
     });
   }, [t, docsNav, headerNavModules]);
 

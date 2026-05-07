@@ -197,10 +197,16 @@ const ReviewApplicationModal = ({
 
             <Row gutter={12}>
               <Col span={24}>
-                {renderReadonlyField(t('企业/主体名称'), application.company_name)}
+                {renderReadonlyField(
+                  t('企业/主体名称'),
+                  application.company_name,
+                )}
               </Col>
               <Col span={24}>
-                {renderReadonlyField(t('统一社会信用代码'), application.credit_code)}
+                {renderReadonlyField(
+                  t('统一社会信用代码'),
+                  application.credit_code,
+                )}
               </Col>
               <Col span={24}>
                 <div style={{ marginBottom: '16px' }}>
@@ -265,7 +271,10 @@ const ReviewApplicationModal = ({
                 {renderReadonlyField(t('对接人姓名'), application.contact_name)}
               </Col>
               <Col span={24}>
-                {renderReadonlyField(t('对接人手机号'), application.contact_mobile)}
+                {renderReadonlyField(
+                  t('对接人手机号'),
+                  application.contact_mobile,
+                )}
               </Col>
               <Col span={24}>
                 {renderReadonlyField(
@@ -283,7 +292,10 @@ const ReviewApplicationModal = ({
 
             <Row gutter={12}>
               <Col span={24}>
-                {renderReadonlyField(t('申请状态'), getStatusText(application.status))}
+                {renderReadonlyField(
+                  t('申请状态'),
+                  getStatusText(application.status),
+                )}
               </Col>
               <Col span={24}>
                 {renderReadonlyField(
@@ -301,7 +313,11 @@ const ReviewApplicationModal = ({
               )}
               {application.review_reason ? (
                 <Col span={24}>
-                  {renderReadonlyField(t('审批意见'), application.review_reason, true)}
+                  {renderReadonlyField(
+                    t('审批意见'),
+                    application.review_reason,
+                    true,
+                  )}
                 </Col>
               ) : null}
             </Row>

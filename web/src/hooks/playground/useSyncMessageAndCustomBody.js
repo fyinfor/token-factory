@@ -115,7 +115,9 @@ export const useSyncMessageAndCustomBody = (
 
       if (customPayload.messages && Array.isArray(customPayload.messages)) {
         const newMessages = customPayload.messages.map((msg, index) => ({
-          id: msg.id || (index + 1).toString(),
+          id:
+            msg.id ||
+            `custom-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 8)}`,
           role: msg.role || MESSAGE_ROLES.USER,
           content: msg.content || '',
           createAt: Date.now(),

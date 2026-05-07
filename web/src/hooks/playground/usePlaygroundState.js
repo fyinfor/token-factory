@@ -68,6 +68,23 @@ const normalizePersistedPlaygroundMessages = (messages) => {
   ];
 };
 
+const ensureUniqueMessageIds = (messages) => {
+  if (!Array.isArray(messages)) return [];
+  const seen = new Set();
+  return messages.map((msg, index) => {
+    const baseId =
+      msg?.id !== undefined && msg?.id !== null && String(msg.id) !== ''
+        ? String(msg.id)
+        : `msg-${Date.now()}-${index}`;
+    let nextId = baseId;
+    if (seen.has(nextId)) {
+      nextId = `${baseId}-${Date.now()}-${index}`;
+    }
+    seen.add(nextId);
+    return { ...msg, id: nextId };
+  });
+};
+
 export const usePlaygroundState = (userId) => {
   const { t } = useTranslation();
 
@@ -127,9 +144,15 @@ export const usePlaygroundState = (userId) => {
   const [status, setStatus] = useState({});
 
   // 消息相关状态 - 使用加载的消息或默认消息初始化
-  const [message, setMessage] = useState(
-    () => initialMessages || getDefaultMessages(t),
+  const [message, rawSetMessage] = useState(() =>
+    ensureUniqueMessageIds(initialMessages || getDefaultMessages(t)),
   );
+  const setMessage = useCallback((updater) => {
+    rawSetMessage((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      return ensureUniqueMessageIds(next);
+    });
+  }, []);
 
   // 当语言改变时，如果是默认消息则更新
   useEffect(() => {
@@ -190,7 +213,7 @@ export const usePlaygroundState = (userId) => {
   const saveMessagesImmediately = useCallback(
     (messagesToSave) => {
       // 如果提供了参数，使用参数；否则使用当前状态
-      saveMessages(messagesToSave || message, userId);
+      saveMessages(ensureUniqueMessageIds(messagesToSave || message), userId);
     },
     [message, userId],
   );
@@ -241,7 +264,7 @@ export const usePlaygroundState = (userId) => {
     }
     // 如果导入的配置包含消息，也恢复消息
     if (importedConfig.messages && Array.isArray(importedConfig.messages)) {
-      setMessage(importedConfig.messages);
+      setMessage(ensureUniqueMessageIds(importedConfig.messages));
     }
   }, []);
 

@@ -25,6 +25,7 @@ import {
   Form,
   Row,
   Spin,
+  Switch,
   Modal,
   Input,
   Typography,
@@ -50,6 +51,7 @@ const FORM_INPUT_DEFAULTS = {
   QuotaPerUnit: '',
   RetryTimes: '',
   USDExchangeRate: '',
+  RegisterEnabled: true,
   DisplayTokenStatEnabled: false,
   DefaultCollapseSidebar: false,
   DemoSiteEnabled: false,
@@ -264,6 +266,47 @@ export default function GeneralSettings(props) {
           style={{ marginBottom: 15 }}
         >
           <Form.Section text={t('通用设置')}>
+            <Banner
+              type={!inputs['RegisterEnabled'] ? 'danger' : 'info'}
+              style={{ marginBottom: 16 }}
+              icon={null}
+              closeIcon={null}
+              fullMode={false}
+              description={
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div>
+                    <Text strong style={{ fontSize: 14 }}>
+                      {t('禁止新用户注册')}
+                    </Text>
+                    <Text type='tertiary' size='small' style={{ marginLeft: 8 }}>
+                      {!inputs['RegisterEnabled']
+                        ? t('当前已禁止所有新用户注册')
+                        : t('当前允许新用户注册')}
+                    </Text>
+                  </div>
+                  <Switch
+                    checked={!inputs['RegisterEnabled']}
+                    checkedText='｜'
+                    uncheckedText='〇'
+                    onChange={async (checked) => {
+                      const newVal = !checked;
+                      handleFieldChange('RegisterEnabled')(newVal);
+                      try {
+                        await API.put('/api/option/', {
+                          key: 'RegisterEnabled',
+                          value: String(newVal),
+                        });
+                        showSuccess(t('保存成功'));
+                        props.refresh();
+                      } catch {
+                        showError(t('保存失败，请重试'));
+                        handleFieldChange('RegisterEnabled')(!newVal);
+                      }
+                    }}
+                  />
+                </div>
+              }
+            />
             <Row gutter={16}>
               <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                 <Form.Input
@@ -445,8 +488,12 @@ export default function GeneralSettings(props) {
                   label={t('渠道余额柔和提示阈值')}
                   min={0}
                   step={1}
-                  extraText={t('剩余余额低于该值时触发柔和提示（建议高于风险阈值）')}
-                  onChange={handleFieldChange('ChannelBalanceSoftAlertThreshold')}
+                  extraText={t(
+                    '剩余余额低于该值时触发柔和提示（建议高于风险阈值）',
+                  )}
+                  onChange={handleFieldChange(
+                    'ChannelBalanceSoftAlertThreshold',
+                  )}
                 />
               </Col>
               <Col xs={24} sm={12} md={8} lg={8} xl={8}>
@@ -455,8 +502,12 @@ export default function GeneralSettings(props) {
                   label={t('渠道余额风险警告阈值')}
                   min={0}
                   step={1}
-                  extraText={t('剩余余额低于该值时触发风险警告（优先级高于柔和提示）')}
-                  onChange={handleFieldChange('ChannelBalanceRiskAlertThreshold')}
+                  extraText={t(
+                    '剩余余额低于该值时触发风险警告（优先级高于柔和提示）',
+                  )}
+                  onChange={handleFieldChange(
+                    'ChannelBalanceRiskAlertThreshold',
+                  )}
                 />
               </Col>
             </Row>

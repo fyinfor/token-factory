@@ -409,7 +409,10 @@ export function compareObjects(oldObject, newObject) {
 
 // 生成唯一ID
 let messageId = 4;
-export const generateMessageId = () => `${messageId++}`;
+export const generateMessageId = () => {
+  messageId += 1;
+  return `${Date.now()}-${messageId}-${Math.random().toString(36).slice(2, 8)}`;
+};
 
 // 提取消息中的文本内容
 export const getTextContent = (message) => {

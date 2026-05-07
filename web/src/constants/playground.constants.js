@@ -75,7 +75,10 @@ export const DEBUG_TABS = {
 
 // ========== API 相关常量 ==========
 export const API_ENDPOINTS = {
-  CHAT_COMPLETIONS: '/pg/chat/completions',
+  CHAT_COMPLETIONS: '/api/playground/chat/completions',
+  IMAGE_GENERATIONS: '/api/playground/images/generations',
+  IMAGE_GENERATIONS_FETCH_PREFIX: '/api/playground/images/generations',
+  VIDEO_GENERATIONS: '/api/playground/videos',
   USER_MODELS: '/api/user/models',
   USER_GROUPS: '/api/user/self/groups',
 };
@@ -83,6 +86,7 @@ export const API_ENDPOINTS = {
 // ========== 配置默认值 ==========
 export const DEFAULT_CONFIG = {
   inputs: {
+    display_mode: 'text',
     model: 'gpt-4o',
     model_type: '',
     specific_channel_id: '',
@@ -96,6 +100,19 @@ export const DEFAULT_CONFIG = {
     stream: true,
     imageEnabled: false,
     imageUrls: [''],
+    selected_model_tags: [],
+    image_size: '1024x1024',
+    image_n: 1,
+    image_quality: 'standard',
+    image_response_format: 'url',
+    image_style: 'vivid',
+    video_duration: 5,
+    video_resolution_preset: '1280x720',
+    video_width: 1280,
+    video_height: 720,
+    video_fps: 24,
+    video_motion: 0.4,
+    video_n: 1,
   },
   parameterEnabled: {
     temperature: true,

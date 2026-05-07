@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -56,10 +57,43 @@ func valuesEqual(a, b interface{}) bool {
 	if aok && bok {
 		return nearlyEqual(af, bf)
 	}
-	return a == b
+	return reflect.DeepEqual(a, b)
 }
 
-var ratioTypes = []string{"model_ratio", "completion_ratio", "cache_ratio", "model_price"}
+var ratioTypes = []string{"model_ratio", "completion_ratio", "cache_ratio", "model_price", "request_tier_pricing"}
+
+func mapValueByModel(src any, modelName string) (any, bool) {
+	switch m := src.(type) {
+	case map[string]float64:
+		v, ok := m[modelName]
+		return v, ok
+	case map[string]any:
+		v, ok := m[modelName]
+		return v, ok
+	case map[string]ratio_setting.RequestTierPricingRule:
+		v, ok := m[modelName]
+		return v, ok
+	default:
+		return nil, false
+	}
+}
+
+func mapModelNames(src any, allModels map[string]struct{}) {
+	switch m := src.(type) {
+	case map[string]float64:
+		for modelName := range m {
+			allModels[modelName] = struct{}{}
+		}
+	case map[string]any:
+		for modelName := range m {
+			allModels[modelName] = struct{}{}
+		}
+	case map[string]ratio_setting.RequestTierPricingRule:
+		for modelName := range m {
+			allModels[modelName] = struct{}{}
+		}
+	}
+}
 
 type upstreamResult struct {
 	Name      string         `json:"name"`
@@ -461,13 +495,15 @@ func oldEffectiveForUpstream(channelID int, ratioType string, modelName string, 
 			if v, ok := ratio_setting.GetChannelModelPrice(channelID, modelName); ok {
 				return v
 			}
+		case "request_tier_pricing":
+			if v, ok := ratio_setting.GetChannelRequestTierPricing(channelID, modelName); ok {
+				return v
+			}
 		}
 	}
 	if localRatioAny, ok := localData[ratioType]; ok {
-		if localRatio, ok := localRatioAny.(map[string]float64); ok {
-			if val, exists := localRatio[modelName]; exists {
-				return val
-			}
+		if val, exists := mapValueByModel(localRatioAny, modelName); exists {
+			return val
 		}
 	}
 	return nil
@@ -502,10 +538,11 @@ func buildSupplierRatioSyncLocalMaps(supplierApplicationID int, ownedNorm map[st
 		cache[mn] = c0
 	}
 	return gin.H{
-		"model_ratio":      mr,
-		"completion_ratio": cr,
-		"cache_ratio":      cache,
-		"model_price":      mp,
+		"model_ratio":          mr,
+		"completion_ratio":     cr,
+		"cache_ratio":          cache,
+		"model_price":          mp,
+		"request_tier_pricing": map[string]ratio_setting.RequestTierPricingRule{},
 	}
 }
 
@@ -544,13 +581,11 @@ func oldEffectiveForUpstreamSupplier(supplierApplicationID int, channelID int, r
 		}
 	}
 	if localRatioAny, ok := localData[ratioType]; ok {
-		if localRatio, ok := localRatioAny.(map[string]float64); ok {
-			if val, exists := localRatio[mn]; exists {
-				return val
-			}
-			if val, exists := localRatio[modelName]; exists {
-				return val
-			}
+		if val, exists := mapValueByModel(localRatioAny, mn); exists {
+			return val
+		}
+		if val, exists := mapValueByModel(localRatioAny, modelName); exists {
+			return val
 		}
 	}
 	return nil
@@ -568,11 +603,7 @@ func buildDifferences(localData map[string]any, successfulChannels []upstreamSyn
 
 	for _, ratioType := range ratioTypes {
 		if localRatioAny, ok := localData[ratioType]; ok {
-			if localRatio, ok := localRatioAny.(map[string]float64); ok {
-				for modelName := range localRatio {
-					allModels[modelName] = struct{}{}
-				}
-			}
+			mapModelNames(localRatioAny, allModels)
 		}
 	}
 
@@ -637,10 +668,8 @@ func buildDifferences(localData map[string]any, successfulChannels []upstreamSyn
 		for _, ratioType := range ratioTypes {
 			var localValue interface{} = nil
 			if localRatioAny, ok := localData[ratioType]; ok {
-				if localRatio, ok := localRatioAny.(map[string]float64); ok {
-					if val, exists := localRatio[modelName]; exists {
-						localValue = val
-					}
+				if val, exists := mapValueByModel(localRatioAny, modelName); exists {
+					localValue = val
 				}
 			}
 

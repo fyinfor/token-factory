@@ -487,6 +487,10 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 		info.IsPlayground = true
 		info.RequestURLPath = strings.TrimPrefix(info.RequestURLPath, "/pg")
 		info.RequestURLPath = "/v1" + info.RequestURLPath
+	} else if strings.HasPrefix(c.Request.URL.Path, "/api/playground") {
+		info.IsPlayground = true
+		info.RequestURLPath = strings.TrimPrefix(info.RequestURLPath, "/api/playground")
+		info.RequestURLPath = "/v1" + info.RequestURLPath
 	}
 
 	userSetting, ok := common.GetContextKeyType[dto.UserSetting](c, constant.ContextKeyUserSetting)
@@ -671,9 +675,14 @@ type TaskSubmitReq struct {
 	Mode           string                 `json:"mode,omitempty"`
 	Image          string                 `json:"image,omitempty"`
 	Images         []string               `json:"images,omitempty"`
+	N              *int                   `json:"n,omitempty"`
 	Size           string                 `json:"size,omitempty"`
+	FPS            *int                   `json:"fps,omitempty"`
+	Motion         *float64               `json:"motion,omitempty"`
 	Duration       int                    `json:"duration,omitempty"`
 	Seconds        string                 `json:"seconds,omitempty"`
+	NegativePrompt string                 `json:"negative_prompt,omitempty"`
+	Seed           *int64                 `json:"seed,omitempty"`
 	InputReference string                 `json:"input_reference,omitempty"`
 	Metadata       map[string]interface{} `json:"metadata,omitempty"`
 }

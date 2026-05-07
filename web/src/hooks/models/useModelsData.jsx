@@ -98,6 +98,7 @@ export const useModelsData = (options = {}) => {
   const [editingVendor, setEditingVendor] = useState({ id: undefined });
   const [syncing, setSyncing] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [modelTags, setModelTags] = useState([]);
 
   const vendorMap = useMemo(() => {
     const map = {};
@@ -164,6 +165,42 @@ export const useModelsData = (options = {}) => {
   // Refresh data
   const refresh = async (page = activePage) => {
     await loadModels(page, pageSize);
+  };
+
+  const loadModelTags = async () => {
+    try {
+      const res = await API.get('/api/models/tags');
+      const { success, message, data } = res.data || {};
+      if (success) {
+        setModelTags(Array.isArray(data) ? data : []);
+      } else {
+        showError(message || t('加载模型标签失败'));
+      }
+    } catch (error) {
+      showError(t('加载模型标签失败'));
+    }
+  };
+
+  const batchSetModelTags = async ({ ids, tags, mode }) => {
+    try {
+      const res = await API.post('/api/models/batch_tags', { ids, tags, mode });
+      const { success, message, data } = res.data || {};
+      if (!success) {
+        showError(message || t('批量设置标签失败'));
+        return false;
+      }
+      const updated = data?.updated || 0;
+      showSuccess(
+        t('已更新 {{count}} 个模型标签', {
+          count: updated,
+        }),
+      );
+      await Promise.all([refresh(), loadModelTags()]);
+      return true;
+    } catch (error) {
+      showError(t('批量设置标签失败'));
+      return false;
+    }
   };
 
   // Sync upstream models/vendors for missing models only
@@ -429,7 +466,7 @@ export const useModelsData = (options = {}) => {
   // Initial load
   useEffect(() => {
     (async () => {
-      await loadVendors();
+      await Promise.all([loadVendors(), loadModelTags()]);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -500,5 +537,8 @@ export const useModelsData = (options = {}) => {
     syncUpstream,
     previewUpstreamDiff,
     applyUpstreamOverwrite,
+    modelTags,
+    loadModelTags,
+    batchSetModelTags,
   };
 };

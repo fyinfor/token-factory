@@ -148,11 +148,66 @@ export const buildApiPayload = (
     });
   }
 
+  const mode = inputs.display_mode || 'text';
+  const isVideoMode = mode === 'video';
+  const isImageMode = mode === 'image';
+  const isMediaURL = (url) =>
+    /\.(mp4|mov|avi|mkv|webm)(\?.*)?$/i.test(String(url || '').trim());
+  const validMediaUrls = (inputs.imageUrls || [])
+    .map((url) => String(url || '').trim())
+    .filter(Boolean);
+  const imageMediaUrls = validMediaUrls.filter((url) => !isMediaURL(url));
+  const videoMediaUrls = validMediaUrls.filter((url) => isMediaURL(url));
+  const getLastUserPrompt = () => {
+    for (let i = processedMessages.length - 1; i >= 0; i--) {
+      const msg = processedMessages[i];
+      if (msg?.role !== MESSAGE_ROLES.USER) continue;
+      if (typeof msg.content === 'string') return msg.content;
+      if (Array.isArray(msg.content)) {
+        const textPart = msg.content.find((item) => item?.type === 'text');
+        return textPart?.text || '';
+      }
+    }
+    return '';
+  };
+  if (isVideoMode) {
+    const width = Number(inputs.video_width) || 1280;
+    const height = Number(inputs.video_height) || 720;
+    const motionValue = Number(inputs.video_motion);
+    const motion = Number.isFinite(motionValue) ? motionValue : 0.4;
+    const payload = {
+      model: inputs.model,
+      prompt: getLastUserPrompt(),
+      n: Math.max(1, Math.min(3, Number(inputs.video_n) || 1)),
+      size: `${width}x${height}`,
+      fps: Number(inputs.video_fps) || 24,
+      duration: Number(inputs.video_duration) || 5,
+      motion,
+      negative_prompt: '',
+      seed: null,
+      images: imageMediaUrls,
+      __endpoint: 'video',
+    };
+    return payload;
+  }
+  if (isImageMode) {
+    const payload = {
+      model: inputs.model,
+      prompt: getLastUserPrompt(),
+      size: inputs.image_size || '1024x1024',
+      n: Number(inputs.image_n) || 1,
+      quality: inputs.image_quality || 'standard',
+      response_format: inputs.image_response_format || 'url',
+      style: inputs.image_style || 'vivid',
+      __endpoint: 'image',
+    };
+    return payload;
+  }
   const payload = {
     model: inputs.model,
-    group: inputs.group,
     messages: processedMessages,
     stream: inputs.stream,
+    __endpoint: 'chat',
   };
   if (
     inputs.specific_channel_id !== '' &&

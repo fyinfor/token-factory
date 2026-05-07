@@ -173,6 +173,9 @@ func InitOptionMap() {
 	common.OptionMap["ChannelVideoCompletionRatio"] = ratio_setting.ChannelVideoCompletionRatio2JSONString()
 	common.OptionMap["ChannelVideoPrice"] = ratio_setting.ChannelVideoPrice2JSONString()
 	common.OptionMap["ChannelVideoPricingRules"] = ratio_setting.ChannelVideoPricingRules2JSONString()
+	common.OptionMap["RequestTierPricing"] = ratio_setting.RequestTierPricing2JSONString()
+	common.OptionMap["ChannelRequestTierPricing"] = ratio_setting.ChannelRequestTierPricing2JSONString()
+	common.OptionMap["RequestTierPricingTemplates"] = ratio_setting.RequestTierPricingTemplates2JSONString()
 	common.OptionMap["SupplierModelPrice"] = ratio_setting.SupplierModelPrice2JSONString()
 	common.OptionMap["SupplierModelRatio"] = ratio_setting.SupplierModelRatio2JSONString()
 	common.OptionMap["UserUsableGroups"] = setting.UserUsableGroups2JSONString()
@@ -625,6 +628,12 @@ func updateOptionMap(key string, value string) (err error) {
 		err = ratio_setting.UpdateChannelVideoPriceByJSONString(value)
 	case "ChannelVideoPricingRules":
 		err = ratio_setting.UpdateChannelVideoPricingRulesByJSONString(value)
+	case "RequestTierPricing":
+		err = ratio_setting.UpdateRequestTierPricingByJSONString(value)
+	case "ChannelRequestTierPricing":
+		err = ratio_setting.UpdateChannelRequestTierPricingByJSONString(value)
+	case "RequestTierPricingTemplates":
+		err = ratio_setting.UpdateRequestTierPricingTemplatesByJSONString(value)
 	case "SupplierModelPrice":
 		err = ratio_setting.UpdateSupplierModelPriceByJSONString(value)
 	case "SupplierModelRatio":

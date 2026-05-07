@@ -394,6 +394,7 @@ export const useModelPricingData = () => {
   const handleChange = (value) => {
     const newSearchValue = value ? value : '';
     setSearchValue(newSearchValue);
+    compositionRef.current.isComposition = false;
   };
 
   const handleCompositionStart = () => {

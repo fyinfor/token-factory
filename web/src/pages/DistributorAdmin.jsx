@@ -279,8 +279,7 @@ export default function DistributorAdmin() {
       });
       if (appKeyword.trim()) q.set('keyword', appKeyword.trim());
       if (appStatusFilter) q.set('status', String(appStatusFilter));
-      if (appApplyTypeFilter)
-        q.set('apply_type', String(appApplyTypeFilter));
+      if (appApplyTypeFilter) q.set('apply_type', String(appApplyTypeFilter));
       const res = await API.get(`/api/distributor/admin/applications?${q}`);
       const { success, message, data } = res.data;
       if (!success) {
@@ -311,8 +310,7 @@ export default function DistributorAdmin() {
         page_size: String(distPageSize),
       });
       if (distKeyword.trim()) q.set('keyword', distKeyword.trim());
-      if (distApplyTypeFilter)
-        q.set('apply_type', String(distApplyTypeFilter));
+      if (distApplyTypeFilter) q.set('apply_type', String(distApplyTypeFilter));
       const res = await API.get(`/api/distributor/admin/distributors?${q}`);
       const { success, message, data } = res.data;
       if (!success) {
@@ -326,13 +324,7 @@ export default function DistributorAdmin() {
     } finally {
       setDistLoading(false);
     }
-  }, [
-    distPage,
-    distPageSize,
-    distKeyword,
-    distApplyTypeFilter,
-    t,
-  ]);
+  }, [distPage, distPageSize, distKeyword, distApplyTypeFilter, t]);
 
   useEffect(() => {
     if (tab === 'app') loadApps();
@@ -946,9 +938,7 @@ export default function DistributorAdmin() {
                       showClear
                       pure
                       size='small'
-                      placeholder={t(
-                        '搜索姓名/企业、用户名、联系方式、证件号',
-                      )}
+                      placeholder={t('搜索姓名/企业、用户名、联系方式、证件号')}
                       onChange={(v) =>
                         setAppKeyword(
                           String(v ?? '').slice(0, ADMIN_KEYWORD_MAX_LEN),
@@ -1238,9 +1228,7 @@ export default function DistributorAdmin() {
             </div>
             <div>
               <Text strong>
-                {Number(detail.apply_type) === 2
-                  ? t('企业名称')
-                  : t('姓名')}
+                {Number(detail.apply_type) === 2 ? t('企业名称') : t('姓名')}
               </Text>
               ：{detail.real_name}
             </div>
@@ -1560,11 +1548,14 @@ export default function DistributorAdmin() {
         }}
       >
         <Text type='tertiary' size='small' className='mb-2 block'>
-          {t('请确认该代理的默认分成比例；默认已填入当前系统全局配置，可直接提交或修改。')}
+          {t(
+            '请确认该代理的默认分成比例；默认已填入当前系统全局配置，可直接提交或修改。',
+          )}
         </Text>
         <div className='mb-2 flex flex-wrap items-center gap-2'>
           <Text type='tertiary' size='small'>
-            {t('当前系统默认分成')}：{formatCommissionRatioPercent(approveSystemDefaultBps)}
+            {t('当前系统默认分成')}：
+            {formatCommissionRatioPercent(approveSystemDefaultBps)}
           </Text>
           <Button
             size='small'

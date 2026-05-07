@@ -17,7 +17,12 @@ const { Text } = Typography;
 /**
  * ActivateSupplierModal 管理员启用已注销供应商。
  */
-const ActivateSupplierModal = ({ visible, supplier, handleClose, onSuccess }) => {
+const ActivateSupplierModal = ({
+  visible,
+  supplier,
+  handleClose,
+  onSuccess,
+}) => {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const formApiRef = useRef(null);
@@ -61,7 +66,8 @@ const ActivateSupplierModal = ({ visible, supplier, handleClose, onSuccess }) =>
       <Form getFormApi={(api) => (formApiRef.current = api)} onSubmit={submit}>
         <div className='mb-4'>
           <Text type='tertiary'>
-            {t('确定要启用供应商')}：<Text strong>{supplier?.company_name}</Text> ?
+            {t('确定要启用供应商')}：
+            <Text strong>{supplier?.company_name}</Text> ?
           </Text>
         </div>
         <Form.TextArea
@@ -78,4 +84,3 @@ const ActivateSupplierModal = ({ visible, supplier, handleClose, onSuccess }) =>
 };
 
 export default ActivateSupplierModal;
-

@@ -140,14 +140,14 @@ const PricingSidebar = ({
         t={t}
       />
 
-      <PricingEndpointTypes
+      {/* <PricingEndpointTypes
         filterEndpointType={filterEndpointType}
         setFilterEndpointType={setFilterEndpointType}
         models={endpointTypeModels}
         allModels={categoryProps.models}
         loading={loading}
         t={t}
-      />
+      /> */}
     </div>
   );
 };

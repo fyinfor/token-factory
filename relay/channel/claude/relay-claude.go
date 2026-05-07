@@ -114,8 +114,14 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 			if params["type"] != nil {
 				claudeTool.InputSchema["type"] = params["type"].(string)
 			}
-			claudeTool.InputSchema["properties"] = params["properties"]
-			claudeTool.InputSchema["required"] = params["required"]
+			if params["properties"] != nil {
+				claudeTool.InputSchema["properties"] = params["properties"]
+			}
+			// Only include "required" when it is explicitly set and non-nil; setting it to
+			// null produces invalid JSON Schema and can break tool-parameter validation.
+			if params["required"] != nil {
+				claudeTool.InputSchema["required"] = params["required"]
+			}
 			for s, a := range params {
 				if s == "type" || s == "properties" || s == "required" {
 					continue

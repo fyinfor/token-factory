@@ -17,8 +17,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React from 'react';
-import { Input, ImagePreview, Button, Collapsible, Select } from '@douyinfe/semi-ui';
+import React, { useContext, useMemo } from 'react';
+import {
+  Input,
+  ImagePreview,
+  Button,
+  Collapsible,
+  Select,
+} from '@douyinfe/semi-ui';
 import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { IconSearch } from '@douyinfe/semi-icons';
 import PricingVendors from '../table/model-pricing/filter/PricingVendors';
@@ -29,10 +35,29 @@ import PricingCardView from '../table/model-pricing/view/card/PricingCardView';
 import ModelDetailSideSheet from '../table/model-pricing/modal/ModelDetailSideSheet';
 import { useModelPricingData } from '../../hooks/model-pricing/useModelPricingData';
 import { usePricingFilterCounts } from '../../hooks/model-pricing/usePricingFilterCounts';
+import { StatusContext } from '../../context/Status';
+import { UserContext } from '../../context/User';
 
 const HomeModelList = () => {
   const isMobile = useIsMobile();
   const pricingData = useModelPricingData();
+  const [statusState] = useContext(StatusContext);
+  const [userState] = useContext(UserContext);
+
+  const blurPricing = useMemo(() => {
+    if (userState?.user) return false;
+    try {
+      const config = statusState?.status?.HeaderNavModules;
+      if (!config) return false;
+      const modules = JSON.parse(config);
+      const home = modules?.home;
+      if (typeof home === 'object' && home !== null) {
+        return !!home.blurPricing;
+      }
+    } catch {}
+    return false;
+  }, [statusState?.status?.HeaderNavModules, userState?.user]);
+
   const { quotaTypeModels, endpointTypeModels, vendorModels, tagModels } =
     usePricingFilterCounts({
       models: pricingData.models,
@@ -203,7 +228,9 @@ const HomeModelList = () => {
               size='large'
               style={{ width: '100%' }}
               value={pricingData.sortKey || 'default'}
-              onChange={(v) => pricingData.setSortKey && pricingData.setSortKey(v)}
+              onChange={(v) =>
+                pricingData.setSortKey && pricingData.setSortKey(v)
+              }
               optionList={sortOptions}
               prefix={pricingData.t('排序')}
             />
@@ -226,18 +253,18 @@ const HomeModelList = () => {
               </Button>
             </div>
           </div>
-          
+
           <div className='home-sidebar-filters'>
             <PricingVendors
-            filterVendor={pricingData.filterVendor}
-            setFilterVendor={pricingData.setFilterVendor}
-            models={vendorModels}
-            allModels={pricingData.models}
-            loading={pricingData.loading}
-            t={pricingData.t}
-          />
+              filterVendor={pricingData.filterVendor}
+              setFilterVendor={pricingData.setFilterVendor}
+              models={vendorModels}
+              allModels={pricingData.models}
+              loading={pricingData.loading}
+              t={pricingData.t}
+            />
 
-          {/* <PricingQuotaTypes
+            {/* <PricingQuotaTypes
             filterQuotaType={pricingData.filterQuotaType}
             setFilterQuotaType={pricingData.setFilterQuotaType}
             models={quotaTypeModels}
@@ -245,16 +272,16 @@ const HomeModelList = () => {
             t={pricingData.t}
           /> */}
 
-          <PricingTags
-            filterTag={pricingData.filterTag}
-            setFilterTag={pricingData.setFilterTag}
-            models={tagModels}
-            allModels={pricingData.models}
-            loading={pricingData.loading}
-            t={pricingData.t}
-          />
+            <PricingTags
+              filterTag={pricingData.filterTag}
+              setFilterTag={pricingData.setFilterTag}
+              models={tagModels}
+              allModels={pricingData.models}
+              loading={pricingData.loading}
+              t={pricingData.t}
+            />
 
-          {/* <PricingEndpointTypes
+            {/* <PricingEndpointTypes
             filterEndpointType={pricingData.filterEndpointType}
             setFilterEndpointType={pricingData.setFilterEndpointType}
             models={endpointTypeModels}
@@ -266,7 +293,10 @@ const HomeModelList = () => {
         </div>
 
         <div className='home-model-content px-4'>
-          <div className={`home-search-wrapper ${isMobile ? 'w-full mb-4' : 'w-full sticky top-[75px] z-index-[10] my-4 bg-[var(--semi-color-bg-0)] rounded-xl'}`}>
+          <div
+            className={`home-search-wrapper ${isMobile ? 'w-full mb-4' : 'w-full sticky top-[75px] my-4 rounded-xl'}`}
+            style={{ zIndex: 100, backgroundColor: 'transparent' }}
+          >
             <div className='flex items-center gap-2 w-full'>
               <Input
                 prefix={<IconSearch />}
@@ -278,12 +308,15 @@ const HomeModelList = () => {
                 showClear
                 size='large'
                 className='flex-1'
+                style={{ backgroundColor: 'var(--semi-color-bg-1)', opacity: 1, boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)' }}
               />
               <Select
                 size='large'
-                style={{ width: 180 }}
+                style={{ width: 180, backgroundColor: 'var(--semi-color-bg-1)', opacity: 1, boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)' }}
                 value={pricingData.sortKey || 'default'}
-                onChange={(v) => pricingData.setSortKey && pricingData.setSortKey(v)}
+                onChange={(v) =>
+                  pricingData.setSortKey && pricingData.setSortKey(v)
+                }
                 optionList={sortOptions}
                 prefix={pricingData.t('排序')}
               />
@@ -316,6 +349,7 @@ const HomeModelList = () => {
               setSelectedRowKeys={() => {}}
               openModelDetail={pricingData.openModelDetail}
               showSizeChanger={false}
+              blurPricing={blurPricing}
             />
           </div>
         </div>

@@ -43,7 +43,8 @@ const PasswordResetForm = () => {
     new_password: '',
     confirm_password: '',
   });
-  const { phone, sms_verification_code, new_password, confirm_password } = inputs;
+  const { phone, sms_verification_code, new_password, confirm_password } =
+    inputs;
 
   const [loading, setLoading] = useState(false);
   const [smsLoading, setSmsLoading] = useState(false);
@@ -108,7 +109,9 @@ const PasswordResetForm = () => {
         showError(message);
       }
     } catch (error) {
-      showError(error?.response?.data?.message || t('发送短信验证码失败，请重试'));
+      showError(
+        error?.response?.data?.message || t('发送短信验证码失败，请重试'),
+      );
     } finally {
       setSmsLoading(false);
     }
@@ -239,7 +242,9 @@ const PasswordResetForm = () => {
                     name='confirm_password'
                     value={confirm_password}
                     mode='password'
-                    onChange={(value) => handleChange('confirm_password', value)}
+                    onChange={(value) =>
+                      handleChange('confirm_password', value)
+                    }
                     prefix={<IconLock />}
                   />
 

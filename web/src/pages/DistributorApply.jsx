@@ -373,9 +373,7 @@ export default function DistributorApply() {
             field='id_card_no'
             label={
               <ApplyRequiredLabel>
-                {applyType === 2
-                  ? t('统一社会信用代码')
-                  : t('身份证')}
+                {applyType === 2 ? t('统一社会信用代码') : t('身份证')}
               </ApplyRequiredLabel>
             }
             rules={[applyTrimmedRequiredRule(t)]}
@@ -393,7 +391,12 @@ export default function DistributorApply() {
               action=''
               accept='image/*,.pdf'
               showUploadList={false}
-              customRequest={async ({ file, onSuccess, onError, onProgress }) => {
+              customRequest={async ({
+                file,
+                onSuccess,
+                onError,
+                onProgress,
+              }) => {
                 const fd = new FormData();
                 const inst = file.fileInstance || file;
                 fd.append('file', inst);

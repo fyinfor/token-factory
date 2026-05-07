@@ -77,6 +77,22 @@ const filterPlaygroundModelsByType = (
   });
 };
 
+const normalizeTagList = (csv) => {
+  if (!csv || typeof csv !== 'string') return [];
+  return [
+    ...new Set(
+      csv
+        .replaceAll('，', ',')
+        .replaceAll('、', ',')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ];
+};
+
+const hasTag = (csv, tag) => normalizeTagList(csv).includes(tag);
+
 /**
  * 操练场数据加载：拉取用户模型与类型（与模型广场同源元数据）、按「全部/类型」在客户端筛模型（同模型广场逻辑），分组单独加载。
  * @param {{ user?: object }} userState 已登录用户状态
@@ -98,6 +114,7 @@ export const useDataLoader = (
   setModelTypes,
   setSupplierOptions,
   setGroups,
+  setStatus,
 ) => {
   const { t } = useTranslation();
   /**
@@ -221,8 +238,21 @@ export const useDataLoader = (
       effectiveType,
       typeOptions,
     );
+    const displayMode = inputs.display_mode || 'text';
+    const modeFilteredItems = filteredItems.filter((item) => {
+      const tags = item?.tags || '';
+      if (displayMode === 'video') {
+        return hasTag(tags, '视频');
+      }
+      if (displayMode === 'image') {
+        return hasTag(tags, '图片');
+      }
+      // 文本模式：无标签按文本处理；有标签则要求包含文本
+      if (!tags || !tags.trim()) return true;
+      return hasTag(tags, '文本');
+    });
     const { modelOptions, selectedModel } = processModelsData(
-      filteredItems.map((item) => item.model_name),
+      modeFilteredItems.map((item) => item.model_name),
       inputs.model,
     );
     setModels(modelOptions);
@@ -233,9 +263,15 @@ export const useDataLoader = (
       selectedModel !== undefined && selectedModel !== null
         ? selectedModel
         : inputs.model;
-    const selectedModelRow = filteredItems.find(
+    const selectedModelRow = modeFilteredItems.find(
       (item) => item?.model_name === selectedModelName,
     );
+    const selectedModelTags = normalizeTagList(selectedModelRow?.tags || '');
+    setStatus((prev) => ({
+      ...prev,
+      selectedModelTags,
+    }));
+    handleInputChange('selected_model_tags', selectedModelTags);
     const supplierOptionsRaw = Array.isArray(selectedModelRow?.channel_options)
       ? selectedModelRow.channel_options
       : [];
@@ -284,10 +320,12 @@ export const useDataLoader = (
     modelTypes,
     inputs.model_type,
     inputs.model,
+    inputs.display_mode,
     inputs.specific_channel_id,
     t,
     setModels,
     setSupplierOptions,
+    setStatus,
     handleInputChange,
   ]);
 
@@ -329,6 +367,12 @@ export const useDataLoader = (
       loadGroups();
     }
   }, [userState?.user, loadModels, loadGroups]);
+
+  // 切换展示模式时主动刷新模型数据，确保网络请求与筛选状态同步更新
+  useEffect(() => {
+    if (!userState?.user) return;
+    loadModels();
+  }, [inputs.display_mode, userState?.user, loadModels]);
 
   return {
     loadModels,
