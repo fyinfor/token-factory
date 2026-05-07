@@ -55,6 +55,7 @@ const OperationSetting = () => {
     'general_setting.quota_display_type': 'USD',
     DisplayTokenStatEnabled: false,
     DefaultCollapseSidebar: false,
+    RegisterEnabled: true,
     DemoSiteEnabled: false,
     SelfUseModeEnabled: false,
     ChannelBalanceAlertEnabled: false,
