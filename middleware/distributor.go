@@ -426,6 +426,31 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		}
 		c.Set("platform", string(constant.TaskPlatformSuno))
 		c.Set("relay_mode", relayMode)
+	} else if strings.HasPrefix(c.Request.URL.Path, "/api/playground/videos/") && c.Request.Method == http.MethodGet {
+		// 操练场视频任务查询：GET 无请求体，避免走通用 JSON 解析导致 EOF
+		relayMode := relayconstant.RelayModeVideoFetchByID
+		c.Set("relay_mode", relayMode)
+		shouldSelectChannel = false
+	} else if strings.HasPrefix(c.Request.URL.Path, "/api/playground/images/generations/") && c.Request.Method == http.MethodGet {
+		// 操练场图片任务查询：GET 无请求体，避免走通用 JSON 解析导致 EOF
+		relayMode := relayconstant.RelayModeVideoFetchByID
+		c.Set("relay_mode", relayMode)
+		shouldSelectChannel = false
+	} else if strings.HasPrefix(c.Request.URL.Path, "/api/playground/images/generations") {
+		// 操练场图片生成：按 OpenAI Image relay 路径处理
+		relayMode := relayconstant.RelayModeImagesGenerations
+		c.Set("relay_mode", relayMode)
+		if c.Request.Method == http.MethodPost {
+			req, err := getModelFromRequest(c)
+			if err != nil {
+				return nil, false, err
+			}
+			if req != nil {
+				modelRequest.Model = req.Model
+			}
+		} else {
+			shouldSelectChannel = false
+		}
 	} else if strings.Contains(c.Request.URL.Path, "/v1/videos/") && strings.HasSuffix(c.Request.URL.Path, "/remix") {
 		relayMode := relayconstant.RelayModeVideoSubmit
 		c.Set("relay_mode", relayMode)

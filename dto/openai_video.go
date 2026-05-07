@@ -21,12 +21,13 @@ type OpenAIVideo struct {
 	Status             string            `json:"status"` // Should use VideoStatus constants: VideoStatusQueued, VideoStatusInProgress, VideoStatusCompleted, VideoStatusFailed
 	Progress           int               `json:"progress"`
 	CreatedAt          int64             `json:"created_at"`
-	CompletedAt        int64             `json:"completed_at,omitempty"`
+	CompletedAt        int64             `json:"completed_at"`
 	ExpiresAt          int64             `json:"expires_at,omitempty"`
 	Seconds            string            `json:"seconds,omitempty"`
 	Size               string            `json:"size,omitempty"`
 	RemixedFromVideoID string            `json:"remixed_from_video_id,omitempty"`
-	Error              *OpenAIVideoError `json:"error,omitempty"`
+	Error              *OpenAIVideoError `json:"error"`
+	VideoURL           string            `json:"video_url"`
 	Metadata           map[string]any    `json:"metadata,omitempty"`
 }
 
@@ -35,6 +36,11 @@ func (m *OpenAIVideo) SetProgressStr(progress string) {
 	m.Progress, _ = strconv.Atoi(progress)
 }
 func (m *OpenAIVideo) SetMetadata(k string, v any) {
+	if k == "url" || k == "video_url" {
+		if s, ok := v.(string); ok {
+			m.VideoURL = s
+		}
+	}
 	if m.Metadata == nil {
 		m.Metadata = make(map[string]any)
 	}

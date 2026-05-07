@@ -217,6 +217,26 @@ func ValidateBasicTaskRequest(c *gin.Context, info *RelayInfo, action string) *d
 		req.Images = []string{req.Image}
 	}
 
+	// 将标准 OpenAI 视频字段统一落到 metadata，供各渠道 adaptor 与计费逻辑消费。
+	if req.Metadata == nil {
+		req.Metadata = make(map[string]interface{})
+	}
+	if req.N != nil && *req.N > 0 {
+		req.Metadata["n"] = *req.N
+	}
+	if req.FPS != nil && *req.FPS > 0 {
+		req.Metadata["fps"] = *req.FPS
+	}
+	if req.Motion != nil {
+		req.Metadata["motion"] = *req.Motion
+	}
+	if strings.TrimSpace(req.NegativePrompt) != "" {
+		req.Metadata["negative_prompt"] = req.NegativePrompt
+	}
+	if req.Seed != nil {
+		req.Metadata["seed"] = *req.Seed
+	}
+
 	storeTaskRequest(c, info, action, req)
 	return nil
 }

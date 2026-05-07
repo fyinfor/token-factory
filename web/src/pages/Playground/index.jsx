@@ -83,6 +83,18 @@ const Playground = () => {
   const isMobile = useIsMobile();
   const styleState = { isMobile };
   const [searchParams] = useSearchParams();
+  const modeMessagesRef = useRef({
+    text: [],
+    image: [],
+    video: [],
+  });
+  const previousModeRef = useRef('text');
+  const currentMessagesRef = useRef([]);
+  const modeStoreInitializedRef = useRef(false);
+  const getModeStorageKey = useCallback(
+    () => `playground_mode_messages_${userState?.user?.id || 'guest'}`,
+    [userState?.user?.id],
+  );
 
   const state = usePlaygroundState(userState?.user?.id);
   const {
@@ -124,6 +136,10 @@ const Playground = () => {
     setCustomRequestBody,
   } = state;
 
+  useEffect(() => {
+    currentMessagesRef.current = Array.isArray(message) ? message : [];
+  }, [message]);
+
   // API 请求相关
   const { sendRequest, onStopGenerator } = useApiRequest(
     setMessage,
@@ -143,7 +159,64 @@ const Playground = () => {
     setModelTypes,
     setSupplierOptions,
     setGroups,
+    setStatus,
   );
+
+  useEffect(() => {
+    const displayMode = inputs.display_mode || 'text';
+    if ((displayMode === 'image' || displayMode === 'video') && inputs.stream) {
+      handleInputChange('stream', false);
+    }
+  }, [inputs.display_mode, inputs.stream, handleInputChange]);
+
+  useEffect(() => {
+    if (modeStoreInitializedRef.current) return;
+    const currentMode = inputs.display_mode || 'text';
+    modeMessagesRef.current[currentMode] = Array.isArray(message) ? message : [];
+    previousModeRef.current = currentMode;
+    modeStoreInitializedRef.current = true;
+  }, [inputs.display_mode, message]);
+
+  // 恢复分模式消息（文本/图片/视频）持久化快照
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(getModeStorageKey());
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object') return;
+      const restored = {
+        text: Array.isArray(parsed.text) ? parsed.text : [],
+        image: Array.isArray(parsed.image) ? parsed.image : [],
+        video: Array.isArray(parsed.video) ? parsed.video : [],
+      };
+      modeMessagesRef.current = restored;
+      const currentMode = inputs.display_mode || 'text';
+      const currentModeMessages = restored[currentMode] || [];
+      if (Array.isArray(currentModeMessages)) {
+        setMessage(currentModeMessages);
+      }
+      previousModeRef.current = currentMode;
+      modeStoreInitializedRef.current = true;
+    } catch (err) {
+      console.warn('恢复分模式消息失败:', err);
+    }
+  }, [getModeStorageKey, inputs.display_mode, setMessage]);
+
+  useEffect(() => {
+    const currentMode = inputs.display_mode || 'text';
+    modeMessagesRef.current[currentMode] = Array.isArray(message) ? message : [];
+  }, [inputs.display_mode, message]);
+
+  useEffect(() => {
+    if (!modeStoreInitializedRef.current) return;
+    const nextMode = inputs.display_mode || 'text';
+    const prevMode = previousModeRef.current || nextMode;
+    if (nextMode === prevMode) return;
+    modeMessagesRef.current[prevMode] = currentMessagesRef.current || [];
+    const nextMessages = modeMessagesRef.current[nextMode];
+    setMessage(Array.isArray(nextMessages) ? nextMessages : []);
+    previousModeRef.current = nextMode;
+  }, [inputs.display_mode, setMessage]);
 
   // 消息编辑
   const {
@@ -222,7 +295,9 @@ const Playground = () => {
         // 处理最后一个用户消息的图片
         for (let i = messages.length - 1; i >= 0; i--) {
           if (messages[i].role === MESSAGE_ROLES.USER) {
-            if (inputs.imageEnabled && inputs.imageUrls) {
+            const mode = inputs.display_mode || 'text';
+            const allowMedia = mode === 'image' || mode === 'video';
+            if (allowMedia && inputs.imageUrls) {
               const validImageUrls = inputs.imageUrls.filter(
                 (url) => url.trim() !== '',
               );
@@ -281,11 +356,15 @@ const Playground = () => {
     }
 
     // 默认模式
-    const validImageUrls = inputs.imageUrls.filter((url) => url.trim() !== '');
+    const mode = inputs.display_mode || 'text';
+    const allowMedia = mode === 'image' || mode === 'video';
+    const validImageUrls = allowMedia
+      ? inputs.imageUrls.filter((url) => url.trim() !== '')
+      : [];
     const messageContent = buildMessageContent(
       content,
       validImageUrls,
-      inputs.imageEnabled,
+      allowMedia,
     );
     const userMessageWithImages = createMessage(
       MESSAGE_ROLES.USER,
@@ -301,14 +380,8 @@ const Playground = () => {
         inputs,
         parameterEnabled,
       );
-      sendRequest(payload, inputs.stream);
-
-      // 禁用图片模式
-      if (inputs.imageEnabled) {
-        setTimeout(() => {
-          handleInputChange('imageEnabled', false);
-        }, 100);
-      }
+      const isChatEndpoint = payload?.__endpoint === 'chat';
+      sendRequest(payload, isChatEndpoint ? inputs.stream : false);
 
       // 发送消息后保存，传入新消息列表（包含用户消息和加载消息）
       const messagesWithLoading = [...newMessages, loadingMessage];
@@ -443,31 +516,69 @@ const Playground = () => {
     debouncedSaveConfig,
   ]);
 
+  // 兜底持久化：任何消息变更（含视频轮询进度与完成态）都同步落盘，
+  // 避免刷新后丢失 videoTask.playableUrl 导致播放器消失。
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      saveMessagesImmediately(message);
+      try {
+        localStorage.setItem(
+          getModeStorageKey(),
+          JSON.stringify(modeMessagesRef.current),
+        );
+      } catch (err) {
+        console.warn('保存分模式消息失败:', err);
+      }
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [message, saveMessagesImmediately, getModeStorageKey]);
+
   // 清空对话的处理函数
   const handleClearMessages = useCallback(() => {
-    setMessage([]);
-    // 清空对话后保存，传入空数组
-    setTimeout(() => saveMessagesImmediately([]), 0);
-  }, [setMessage, saveMessagesImmediately]);
+    Modal.confirm({
+      title: t('确认清空当前对话？'),
+      content: t('此操作将清空当前展示模式下的全部消息，且不可撤销。'),
+      okText: t('确认清空'),
+      cancelText: t('取消'),
+      okButtonProps: { type: 'danger' },
+      onOk: () => {
+        const currentMode = inputs.display_mode || 'text';
+        modeMessagesRef.current[currentMode] = [];
+        currentMessagesRef.current = [];
+        try {
+          localStorage.setItem(
+            getModeStorageKey(),
+            JSON.stringify(modeMessagesRef.current),
+          );
+        } catch (err) {
+          console.warn('保存分模式消息失败:', err);
+        }
+        setMessage([]);
+        // 清空对话后保存，传入空数组
+        setTimeout(() => saveMessagesImmediately([]), 0);
+      },
+    });
+  }, [inputs.display_mode, saveMessagesImmediately, setMessage, t, getModeStorageKey]);
 
   // 处理粘贴图片
   const handlePasteImage = useCallback(
     (base64Data) => {
-      if (!inputs.imageEnabled) {
+      const mode = inputs.display_mode || 'text';
+      if (mode !== 'image' && mode !== 'video') {
         return;
       }
       // 添加图片到 imageUrls 数组
       const newUrls = [...(inputs.imageUrls || []), base64Data];
       handleInputChange('imageUrls', newUrls);
     },
-    [inputs.imageEnabled, inputs.imageUrls, handleInputChange],
+    [inputs.display_mode, inputs.imageUrls, handleInputChange],
   );
 
   // Playground Context 值
   const playgroundContextValue = {
     onPasteImage: handlePasteImage,
     imageUrls: inputs.imageUrls || [],
-    imageEnabled: inputs.imageEnabled || false,
+    imageEnabled: ['image', 'video'].includes(inputs.display_mode || 'text'),
   };
 
   return (
@@ -493,6 +604,7 @@ const Playground = () => {
                 modelTypes={modelTypes}
                 supplierOptions={supplierOptions}
                 groups={groups}
+                status={status}
                 styleState={styleState}
                 showSettings={showSettings}
                 showDebugPanel={showDebugPanel}
