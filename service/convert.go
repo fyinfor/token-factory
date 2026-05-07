@@ -72,10 +72,20 @@ func ClaudeToOpenAIRequest(claudeRequest dto.ClaudeRequest, info *relaycommon.Re
 		openAIRequest.Stop = claudeRequest.StopSequences
 	}
 
-	// Convert tools
+	// Convert tools.
+	// Anthropic typed tools (Type != "" and InputSchema == nil, e.g. "bash_20250124",
+	// "computer_20241022") have no portable OAI equivalent – skip them so downstream
+	// models are not handed a schema-less function stub that produces wrong parameters.
+	// Standard custom tools always carry an explicit InputSchema and are converted normally.
 	tools, _ := common.Any2Type[[]dto.Tool](claudeRequest.Tools)
 	openAITools := make([]dto.ToolCallRequest, 0)
 	for _, claudeTool := range tools {
+		if claudeTool.Type != "" && claudeTool.InputSchema == nil {
+			// Built-in typed tool without an explicit schema – not representable as an
+			// OAI function tool; omit to avoid the model generating wrong parameters.
+			common.SysLog(fmt.Sprintf("ClaudeToOpenAIRequest: skipping typed tool %q (type=%s, no input_schema)", claudeTool.Name, claudeTool.Type))
+			continue
+		}
 		openAITool := dto.ToolCallRequest{
 			Type: "function",
 			Function: dto.FunctionRequest{
@@ -320,28 +330,35 @@ func StreamResponseOpenAI2Claude(openAIResponse *dto.ChatCompletionsStreamRespon
 					toolCall = dto.ToolCallResponse{}
 				}
 			}
-			resp := &dto.ClaudeResponse{
-				Type: "content_block_start",
-				ContentBlock: &dto.ClaudeMediaMessage{
-					Id:    toolCall.ID,
-					Type:  "tool_use",
-					Name:  toolCall.Function.Name,
-					Input: map[string]interface{}{},
-				},
-			}
-			resp.SetIndex(0)
-			claudeResponses = append(claudeResponses, resp)
-			// 首块包含工具 delta，则追加 input_json_delta
-			if toolCall.Function.Arguments != "" {
-				idx := 0
-				claudeResponses = append(claudeResponses, &dto.ClaudeResponse{
-					Index: &idx,
-					Type:  "content_block_delta",
-					Delta: &dto.ClaudeMediaMessage{
-						Type:        "input_json_delta",
-						PartialJson: &toolCall.Function.Arguments,
+			// Only emit content_block_start when the tool name is known. Some
+			// OAI-compatible providers stream the tool name and arguments in separate
+			// chunks; emitting a block with an empty name causes Claude Code CLI to
+			// fail tool-parameter validation for every call. The per-chunk path below
+			// will emit content_block_start as soon as a name-bearing chunk arrives.
+			if toolCall.Function.Name != "" {
+				resp := &dto.ClaudeResponse{
+					Type: "content_block_start",
+					ContentBlock: &dto.ClaudeMediaMessage{
+						Id:    toolCall.ID,
+						Type:  "tool_use",
+						Name:  toolCall.Function.Name,
+						Input: map[string]interface{}{},
 					},
-				})
+				}
+				resp.SetIndex(0)
+				claudeResponses = append(claudeResponses, resp)
+				// 首块包含工具 delta，则追加 input_json_delta
+				if toolCall.Function.Arguments != "" {
+					idx := 0
+					claudeResponses = append(claudeResponses, &dto.ClaudeResponse{
+						Index: &idx,
+						Type:  "content_block_delta",
+						Delta: &dto.ClaudeMediaMessage{
+							Type:        "input_json_delta",
+							PartialJson: &toolCall.Function.Arguments,
+						},
+					})
+				}
 			}
 		} else {
 
