@@ -308,6 +308,7 @@ export const getChannelsColumns = ({
   t,
   COLUMN_KEYS,
   updateChannelBalance,
+  setChannelBalanceManually,
   manageChannel,
   manageTag,
   submitTagEdit,
@@ -328,7 +329,51 @@ export const getChannelsColumns = ({
   openUpstreamUpdateModal,
   detectChannelUpstreamUpdates,
   openOnboardModal,
+  isAdminChannelPage,
+  channelBalanceAlertConfig,
 }) => {
+  const parseQuotaPerUnit = () => {
+    const value = Number(localStorage.getItem('quota_per_unit'));
+    if (!Number.isFinite(value) || value <= 0) {
+      return 500000;
+    }
+    return value;
+  };
+
+  const renderUsedRemaining = (record) => {
+    const quotaPerUnit = parseQuotaPerUnit();
+    const usedQuota = Number(record.used_quota);
+    const totalAmount = Number(record.balance);
+    if (!Number.isFinite(usedQuota) || !Number.isFinite(totalAmount)) {
+      return '-';
+    }
+    const usedAmount = usedQuota / quotaPerUnit;
+    const remainingAmount = totalAmount - usedAmount;
+    const softThreshold = Number(channelBalanceAlertConfig?.softThreshold ?? 50);
+    const riskThreshold = Number(channelBalanceAlertConfig?.riskThreshold ?? 20);
+
+    let remainingColor = 'green';
+    if (remainingAmount <= riskThreshold) {
+      remainingColor = 'red';
+    } else if (remainingAmount <= softThreshold) {
+      remainingColor = 'orange';
+    }
+    return (
+      <Space spacing={4}>
+        <Tooltip content={t('已用额度（按当前系统换算规则）')}>
+          <Tag color='white' type='ghost' shape='circle'>
+            {renderQuotaWithAmount(Math.max(usedAmount, 0))}
+          </Tag>
+        </Tooltip>
+        <Tooltip content={t('剩余额度（前端计算：额度 - 已用）')}>
+          <Tag color={remainingColor} type='light' shape='circle'>
+            {renderQuotaWithAmount(remainingAmount)}
+          </Tag>
+        </Tooltip>
+      </Space>
+    );
+  };
+
   return [
     {
       key: COLUMN_KEYS.ID,
@@ -515,9 +560,56 @@ export const getChannelsColumns = ({
     },
     {
       key: COLUMN_KEYS.BALANCE,
-      title: t('已用/剩余'),
+      title: isAdminChannelPage ? t('额度') : t('已用/剩余'),
       dataIndex: 'expired_time',
       render: (text, record, index) => {
+        if (isAdminChannelPage && record.children === undefined) {
+          return (
+            <Space spacing={4}>
+              <Tooltip
+                content={t('上游余额：') + renderQuotaWithAmount(record.balance)}
+              >
+                <Tag
+                  color='light-blue'
+                  type='light'
+                  shape='circle'
+                  className='cursor-pointer'
+                  onClick={() => updateChannelBalance(record)}
+                >
+                  {renderQuotaWithAmount(record.balance)}
+                </Tag>
+              </Tooltip>
+              <Tag
+                color='white'
+                type='ghost'
+                shape='circle'
+                className='cursor-pointer'
+                onClick={() => {
+                  let manualBalance = Number(record.balance || 0);
+                  Modal.confirm({
+                    title: t('手动设置额度'),
+                    content: (
+                      <InputNumber
+                        min={0}
+                        step={0.01}
+                        precision={2}
+                        defaultValue={manualBalance}
+                        onChange={(value) => {
+                          manualBalance = Number(value);
+                        }}
+                      />
+                    ),
+                    onOk: async () => {
+                      await setChannelBalanceManually(record, manualBalance);
+                    },
+                  });
+                }}
+              >
+                {t('手动设值')}
+              </Tag>
+            </Space>
+          );
+        }
         if (record.children === undefined) {
           return (
             <div>
@@ -563,6 +655,21 @@ export const getChannelsColumns = ({
         }
       },
     },
+    ...(isAdminChannelPage
+      ? [
+          {
+            key: COLUMN_KEYS.USED_REMAINING,
+            title: t('已用/剩余'),
+            dataIndex: 'used_remaining',
+            render: (_text, record) => {
+              if (record.children !== undefined) {
+                return '-';
+              }
+              return renderUsedRemaining(record);
+            },
+          },
+        ]
+      : []),
     {
       key: COLUMN_KEYS.STATUS,
       title: t('状态'),

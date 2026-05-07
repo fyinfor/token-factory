@@ -9,31 +9,13 @@ import (
 	"gorm.io/gorm"
 )
 
-const base62Chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-
 // channelNoRoutePattern 与旧版三段式里 channel_no（c1、c2…）同形；route_slug 禁止使用该形态以免解析歧义。
 var channelNoRoutePattern = regexp.MustCompile(`^c\d+$`)
-
-// EncodeBase62 将非负整数编码为 base-62（供渠道名后缀、默认 route_slug 等使用）。
-func EncodeBase62(n int64) string { return encodeBase62(n) }
-
-func encodeBase62(n int64) string {
-	if n == 0 {
-		return "0"
-	}
-	base := int64(len(base62Chars))
-	var buf []byte
-	for n > 0 {
-		buf = append([]byte{base62Chars[n%base]}, buf...)
-		n /= base
-	}
-	return string(buf)
-}
 
 // DefaultRouteSlugFromChannelID 返回渠道默认全局路由后缀（与 channels.id 一一对应）。
 // 前缀 "u" 避免与旧 channel_no 段 c\d+ 混淆。
 func DefaultRouteSlugFromChannelID(id int64) string {
-	return "u" + encodeBase62(id)
+	return "u" + EncodeBase62(id)
 }
 
 // IsValidRouteSlug 判断字符串是否可作为全局 route_slug：2～32 位 base62，且不能为 c+数字（旧 channel_no 形态）。

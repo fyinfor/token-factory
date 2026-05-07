@@ -43,6 +43,7 @@ const ModelSelectModal = ({
   models = [],
   selected = [],
   redirectModels = [],
+  showNewModelsTab = true,
   onConfirm,
   onCancel,
 }) => {
@@ -103,7 +104,16 @@ const ModelSelectModal = ({
     return set;
   }, [normalizedRedirectModels, normalizedSelectedSet]);
 
-  const filteredModels = models.filter((m) =>
+  const displayModels = useMemo(() => {
+    if (showNewModelsTab || (models || []).length > 0) {
+      return models || [];
+    }
+    return Array.from(
+      new Set([...normalizedSelected, ...normalizedRedirectModels]),
+    );
+  }, [showNewModelsTab, models, normalizedSelected, normalizedRedirectModels]);
+
+  const filteredModels = displayModels.filter((m) =>
     String(m || '')
       .toLowerCase()
       .includes(keyword.toLowerCase()),
@@ -128,10 +138,10 @@ const ModelSelectModal = ({
   useEffect(() => {
     if (visible) {
       // 默认显示新获取模型tab，如果没有新模型则显示已有模型
-      const hasNewModels = newModels.length > 0;
+      const hasNewModels = showNewModelsTab && newModels.length > 0;
       setActiveTab(hasNewModels ? 'new' : 'existing');
     }
-  }, [visible, newModels.length, selected]);
+  }, [visible, showNewModelsTab, newModels.length, selected]);
 
   const handleOk = () => {
     onConfirm && onConfirm(checkedList);
@@ -181,7 +191,7 @@ const ModelSelectModal = ({
 
   // Tab列表配置
   const tabList = [
-    ...(newModels.length > 0
+    ...(showNewModelsTab && newModels.length > 0
       ? [
           {
             tab: `${t('新获取的模型')} (${newModels.length})`,
@@ -343,7 +353,7 @@ const ModelSelectModal = ({
         showClear
       />
 
-      <Spin spinning={!models || models.length === 0}>
+      <Spin spinning={!displayModels || displayModels.length === 0}>
         <div style={{ maxHeight: 400, overflowY: 'auto', paddingRight: 8 }}>
           {filteredModels.length === 0 ? (
             <Empty

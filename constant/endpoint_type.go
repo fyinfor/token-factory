@@ -20,6 +20,11 @@ const (
 	// EndpointTypeVideoGenerator points to providers exposing
 	// /videogenerator/generate style APIs.
 	EndpointTypeVideoGenerator EndpointType = "videogenerator"
+	// EndpointTypeTencentCloudVODVideo is Tencent Cloud VOD AIGC video (TC3 API).
+	// Client body matches OpenAI-videogenerator-style gateway fields; upstream uses JSON API 3.0.
+	EndpointTypeTencentCloudVODVideo EndpointType = "tencentcloud-vod-video"
+	// EndpointTypeTencentCloudVODImage is Tencent Cloud VOD AIGC image (TC3 API).
+	EndpointTypeTencentCloudVODImage EndpointType = "tencentcloud-vod-image"
 	//EndpointTypeMidjourney     EndpointType = "midjourney-proxy"
 	//EndpointTypeSuno           EndpointType = "suno-proxy"
 	//EndpointTypeKling          EndpointType = "kling"

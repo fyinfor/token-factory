@@ -22,6 +22,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay"
 	taskopenaivideo "github.com/QuantumNous/new-api/relay/channel/task/openaivideo"
+	tasktencentvod "github.com/QuantumNous/new-api/relay/channel/task/tencentvod"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -61,6 +62,12 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 	}
 	if channel != nil && channel.Type == constant.ChannelTypeVideoGenerator {
 		return string(constant.EndpointTypeVideoGenerator)
+	}
+	if channel != nil && channel.Type == constant.ChannelTypeTencentCloudVideo {
+		return string(constant.EndpointTypeTencentCloudVODVideo)
+	}
+	if channel != nil && channel.Type == constant.ChannelTypeTencentCloudImage {
+		return string(constant.EndpointTypeTencentCloudVODImage)
 	}
 	return normalized
 }
@@ -181,7 +188,8 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 	// 仅校验上游能正确接收任务创建请求并返回 task_id，不做轮询。
 	if endpointType == string(constant.EndpointTypeOpenAIVideo) ||
 		endpointType == string(constant.EndpointTypeOpenAIVideoGW) ||
-		endpointType == string(constant.EndpointTypeVideoGenerator) {
+		endpointType == string(constant.EndpointTypeVideoGenerator) ||
+		endpointType == string(constant.EndpointTypeTencentCloudVODVideo) {
 		return testChannelVideo(c, channel, testModel, endpointType, tik)
 	}
 
@@ -203,6 +211,8 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 		case constant.EndpointTypeJinaRerank:
 			relayFormat = types.RelayFormatRerank
 		case constant.EndpointTypeImageGeneration:
+			relayFormat = types.RelayFormatOpenAIImage
+		case constant.EndpointTypeTencentCloudVODImage:
 			relayFormat = types.RelayFormatOpenAIImage
 		case constant.EndpointTypeEmbeddings:
 			relayFormat = types.RelayFormatEmbedding
@@ -452,6 +462,56 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 			}
 		}
 	}
+
+	// 腾讯云图片模型测试：只校验是否成功提交任务（返回 TaskId），不等待任务完成与 URL 回填。
+	// 这样可避免 DescribeTaskDetail/DescribeMediaInfos 带来的 30~40 秒测试时延。
+	if endpointType == string(constant.EndpointTypeTencentCloudVODImage) {
+		if httpResp == nil || httpResp.Body == nil {
+			err := errors.New("empty upstream response")
+			return testResult{
+				context:           c,
+				localErr:          err,
+				tokenFactoryError: types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError),
+			}
+		}
+		raw, readErr := io.ReadAll(httpResp.Body)
+		_ = httpResp.Body.Close()
+		if readErr != nil {
+			return testResult{
+				context:           c,
+				localErr:          readErr,
+				tokenFactoryError: types.NewOpenAIError(readErr, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError),
+			}
+		}
+		taskID := strings.TrimSpace(gjson.GetBytes(raw, "Response.TaskId").String())
+		if taskID == "" {
+			errMsg := strings.TrimSpace(gjson.GetBytes(raw, "Response.Error.Message").String())
+			if errMsg == "" {
+				errMsg = strings.TrimSpace(gjson.GetBytes(raw, "Response.Error.Code").String())
+			}
+			if errMsg == "" {
+				errMsg = fmt.Sprintf("submit succeeded but missing TaskId, body=%s", truncateForError(string(raw)))
+			}
+			err := errors.New(errMsg)
+			return testResult{
+				context:           c,
+				localErr:          err,
+				tokenFactoryError: types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError),
+			}
+		}
+		common.SysLog(fmt.Sprintf("tencent image test channel #%d accepted, task_id=%s", channel.Id, taskID))
+		recordedName := strings.TrimSpace(info.OriginModelName)
+		if recordedName == "" {
+			recordedName = strings.TrimSpace(common.GetContextKeyString(c, constant.ContextKeyOriginalModel))
+		}
+		return testResult{
+			context:           c,
+			localErr:          nil,
+			tokenFactoryError: nil,
+			recordedModelName: recordedName,
+		}
+	}
+
 	usageA, respErr := adaptor.DoResponse(c, httpResp, info)
 	if respErr != nil {
 		return testResult{
@@ -599,6 +659,88 @@ func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, 
 			"prompt":  "a cute cat dancing in a sunny garden",
 			"size":    "720x1280",
 			"seconds": "4",
+		}
+	case constant.EndpointTypeTencentCloudVODVideo:
+		// 腾讯云官方 VOD 视频接口必须使用 TC3 签名和 X-TC-* 公共头，不能直接 Bearer 调上游。
+		cred, credErr := tasktencentvod.ParseCredentials(apiKey)
+		if credErr != nil {
+			return testResult{
+				context:           c,
+				localErr:          credErr,
+				tokenFactoryError: types.NewError(credErr, types.ErrorCodeChannelInvalidKey),
+			}
+		}
+		modelName, modelVersion := tasktencentvod.SplitCombinedModel(upstreamModel)
+		if strings.TrimSpace(modelName) == "" || strings.TrimSpace(modelVersion) == "" {
+			invalidModelErr := fmt.Errorf("invalid tencent vod model %q, expected ModelName-ModelVersion", upstreamModel)
+			return testResult{
+				context:           c,
+				localErr:          invalidModelErr,
+				tokenFactoryError: types.NewError(invalidModelErr, types.ErrorCodeBadRequestBody),
+			}
+		}
+		signedBody := map[string]any{
+			"SubAppId":     cred.SubAppID,
+			"ModelName":    modelName,
+			"ModelVersion": modelVersion,
+			"Prompt":       "a cute cat dancing in a sunny garden",
+		}
+		signedPayload, marshalErr := common.Marshal(signedBody)
+		if marshalErr != nil {
+			return testResult{
+				context:           c,
+				localErr:          marshalErr,
+				tokenFactoryError: types.NewError(marshalErr, types.ErrorCodeJsonMarshalFailed),
+			}
+		}
+		signedResp, reqErr := tasktencentvod.SignedPOSTJSON(strings.TrimSpace(channel.GetSetting().Proxy), baseURL, cred.Region, cred, "CreateAigcVideoTask", signedPayload)
+		if reqErr != nil {
+			return testResult{
+				context:           c,
+				localErr:          reqErr,
+				tokenFactoryError: types.NewOpenAIError(reqErr, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError),
+			}
+		}
+		defer func() { _ = signedResp.Body.Close() }()
+		respBody, readErr := io.ReadAll(signedResp.Body)
+		if readErr != nil {
+			return testResult{
+				context:           c,
+				localErr:          readErr,
+				tokenFactoryError: types.NewOpenAIError(readErr, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError),
+			}
+		}
+		common.SysLog(fmt.Sprintf("video test channel #%d response: status=%d, body=%s", channel.Id, signedResp.StatusCode, string(respBody)))
+		if signedResp.StatusCode != http.StatusOK {
+			msg := detectErrorMessageFromJSONBytes(respBody)
+			if msg == "" {
+				msg = strings.TrimSpace(string(respBody))
+			}
+			if msg == "" {
+				msg = fmt.Sprintf("upstream returned status %d", signedResp.StatusCode)
+			}
+			bodyErr := fmt.Errorf("status=%d, body=%s", signedResp.StatusCode, msg)
+			return testResult{
+				context:           c,
+				localErr:          bodyErr,
+				tokenFactoryError: types.NewOpenAIError(bodyErr, types.ErrorCodeBadResponse, http.StatusInternalServerError),
+			}
+		}
+		taskID := strings.TrimSpace(gjson.GetBytes(respBody, "Response.TaskId").String())
+		if taskID == "" {
+			bodyErr := fmt.Errorf("upstream did not return task_id, body: %s", string(respBody))
+			return testResult{
+				context:           c,
+				localErr:          bodyErr,
+				tokenFactoryError: types.NewOpenAIError(bodyErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError),
+			}
+		}
+		common.SysLog(fmt.Sprintf("video test channel #%d ok, task_id=%s", channel.Id, taskID))
+		return testResult{
+			context:           c,
+			localErr:          nil,
+			tokenFactoryError: nil,
+			recordedModelName: originModel,
 		}
 	case constant.EndpointTypeOpenAIVideoGW:
 		// OpenAI 视频网关：根据 base URL 自动选 MaaS（Hidream 官方）或 ARK（ByteDance 兼容代理）。
@@ -938,7 +1080,7 @@ func buildTestRequest(model string, endpointType string, channel *model.Channel,
 				Model: model,
 				Input: []any{"hello world"},
 			}
-		case constant.EndpointTypeImageGeneration:
+		case constant.EndpointTypeImageGeneration, constant.EndpointTypeTencentCloudVODImage:
 			// 返回 ImageRequest
 			return &dto.ImageRequest{
 				Model:  model,

@@ -24,6 +24,7 @@ import {
   showError,
   showInfo,
   showSuccess,
+  showWarning,
   loadChannelModels,
   copy,
   toBoolean,
@@ -43,6 +44,8 @@ import { openCodexUsageModal } from '../../components/table/channels/modals/Code
 export const useChannelsData = (apiBasePath = '/api/channel') => {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
+  const isAdminChannelPage = apiBasePath === '/api/channel';
+  const columnStorageKey = 'channels-table-columns';
 
   // Basic states
   const [channels, setChannels] = useState([]);
@@ -92,6 +95,13 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
   const [isStreamTest, setIsStreamTest] = useState(false);
   const [globalPassThroughEnabled, setGlobalPassThroughEnabled] =
     useState(false);
+  const [channelBalanceAlertConfig, setChannelBalanceAlertConfig] = useState({
+    enabled: false,
+    softThreshold: 50,
+    riskThreshold: 20,
+  });
+  const [channelBalanceAlertConfigLoaded, setChannelBalanceAlertConfigLoaded] =
+    useState(false);
 
   const fetchGlobalPassThroughEnabled = async () => {
     try {
@@ -106,8 +116,38 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
       if (option) {
         setGlobalPassThroughEnabled(toBoolean(option.value));
       }
+      const alertEnabledOption = data.find(
+        (item) => item?.key === 'ChannelBalanceAlertEnabled',
+      );
+      const softThresholdOption = data.find(
+        (item) => item?.key === 'ChannelBalanceSoftAlertThreshold',
+      );
+      const riskThresholdOption = data.find(
+        (item) => item?.key === 'ChannelBalanceRiskAlertThreshold',
+      );
+
+      const softThreshold = Number(softThresholdOption?.value);
+      const riskThreshold = Number(riskThresholdOption?.value);
+      setChannelBalanceAlertConfig({
+        enabled: toBoolean(alertEnabledOption?.value),
+        softThreshold:
+          Number.isFinite(softThreshold) && softThreshold >= 0
+            ? softThreshold
+            : 50,
+        riskThreshold:
+          Number.isFinite(riskThreshold) && riskThreshold >= 0
+            ? riskThreshold
+            : 20,
+      });
     } catch (error) {
       setGlobalPassThroughEnabled(false);
+      setChannelBalanceAlertConfig({
+        enabled: false,
+        softThreshold: 50,
+        riskThreshold: 20,
+      });
+    } finally {
+      setChannelBalanceAlertConfigLoaded(true);
     }
   };
 
@@ -158,6 +198,7 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
     PRICE_DISCOUNT: 'price_discount',
     ROUTE_SLUG: 'route_slug',
     SUPPLIER: 'supplier',
+    USED_REMAINING: 'used_remaining',
     OPERATE: 'operate',
   };
 
@@ -166,8 +207,7 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
     const localIdSort = localStorage.getItem('id-sort') === 'true';
     const localPageSize =
       parseInt(localStorage.getItem('page-size')) || ITEMS_PER_PAGE;
-    const localEnableTagMode =
-      localStorage.getItem('enable-tag-mode') === 'true';
+    const localEnableTagMode = localStorage.getItem('enable-tag-mode') === 'true';
     const localEnableBatchDelete =
       localStorage.getItem('enable-batch-delete') === 'true';
 
@@ -201,6 +241,7 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
       [COLUMN_KEYS.PRICE_DISCOUNT]: true,
       [COLUMN_KEYS.ROUTE_SLUG]: true,
       [COLUMN_KEYS.SUPPLIER]: true,
+      [COLUMN_KEYS.USED_REMAINING]: true,
       [COLUMN_KEYS.OPERATE]: true,
     };
   };
@@ -212,7 +253,7 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
 
   // Load saved column preferences
   useEffect(() => {
-    const savedColumns = localStorage.getItem('channels-table-columns');
+    const savedColumns = localStorage.getItem(columnStorageKey);
     if (savedColumns) {
       try {
         const parsed = JSON.parse(savedColumns);
@@ -232,7 +273,7 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
   useEffect(() => {
     if (Object.keys(visibleColumns).length > 0) {
       localStorage.setItem(
-        'channels-table-columns',
+        columnStorageKey,
         JSON.stringify(visibleColumns),
       );
     }
@@ -823,7 +864,8 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
       return;
     }
 
-    const res = await API.get(`/api/channel/update_balance/${record.id}/`);
+    const updateBalancePath = `/api/channel/update_balance/${record.id}/`;
+    const res = await API.get(updateBalancePath);
     const { success, message, balance } = res.data;
     if (success) {
       updateChannelProperty(record.id, (channel) => {
@@ -836,6 +878,28 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
     } else {
       showError(message);
     }
+  };
+
+  const setChannelBalanceManually = async (record, balance) => {
+    const numericBalance = Number(balance);
+    if (!Number.isFinite(numericBalance)) {
+      showError(t('请输入有效额度'));
+      return false;
+    }
+    const path = '/api/channel/';
+    const payload = { id: record.id, balance: numericBalance };
+    const res = await API.put(path, payload);
+    const { success, message } = res.data;
+    if (!success) {
+      showError(message || t('额度设置失败'));
+      return false;
+    }
+    updateChannelProperty(record.id, (channel) => {
+      channel.balance = numericBalance;
+      channel.balance_updated_time = Date.now() / 1000;
+    });
+    showSuccess(t('额度设置成功'));
+    return true;
   };
 
   const fixChannelsAbilities = async () => {
@@ -1187,6 +1251,112 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
     return keys;
   }, [channelTypeCounts]);
 
+  const channelBalanceAlerts = useMemo(() => {
+    if (!channelBalanceAlertConfig.enabled) {
+      return { riskChannels: [], softChannels: [] };
+    }
+
+    const flattenedChannels = [];
+    channels.forEach((channel) => {
+      if (channel?.children !== undefined) {
+        channel.children.forEach((child) => flattenedChannels.push(child));
+      } else {
+        flattenedChannels.push(channel);
+      }
+    });
+
+    const validChannels = flattenedChannels.filter((channel) => {
+      const balance = Number(channel?.balance);
+      return channel?.id !== undefined && Number.isFinite(balance);
+    });
+
+    const riskChannels = validChannels.filter(
+      (channel) =>
+        Number(channel.balance) <= channelBalanceAlertConfig.riskThreshold,
+    );
+    const softChannels = validChannels.filter((channel) => {
+      const balance = Number(channel.balance);
+      return (
+        balance <= channelBalanceAlertConfig.softThreshold &&
+        balance > channelBalanceAlertConfig.riskThreshold
+      );
+    });
+
+    return { riskChannels, softChannels };
+  }, [channels, channelBalanceAlertConfig]);
+
+  const balanceAlertNotifiedRef = useRef({ riskKey: '', softKey: '' });
+  useEffect(() => {
+    if (!channelBalanceAlertConfigLoaded) {
+      return;
+    }
+    if (!channelBalanceAlertConfig.enabled) {
+      balanceAlertNotifiedRef.current = { riskKey: '', softKey: '' };
+      return;
+    }
+
+    const riskKey = channelBalanceAlerts.riskChannels
+      .map((item) => item.id)
+      .sort((a, b) => Number(a) - Number(b))
+      .join(',');
+    const softKey = channelBalanceAlerts.softChannels
+      .map((item) => item.id)
+      .sort((a, b) => Number(a) - Number(b))
+      .join(',');
+
+    if (
+      riskKey &&
+      riskKey !== balanceAlertNotifiedRef.current.riskKey &&
+      channelBalanceAlerts.riskChannels.length > 0
+    ) {
+      const names = channelBalanceAlerts.riskChannels
+        .slice(0, 5)
+        .map((item) => item.name)
+        .join('、');
+      const suffix =
+        channelBalanceAlerts.riskChannels.length > 5
+          ? t(' 等 ${count} 个渠道').replace(
+              '${count}',
+              channelBalanceAlerts.riskChannels.length,
+            )
+          : '';
+      showWarning(
+        t('渠道风险警告：${names}${suffix} 余额已低于风险阈值')
+          .replace('${names}', names)
+          .replace('${suffix}', suffix),
+      );
+    }
+
+    if (
+      softKey &&
+      softKey !== balanceAlertNotifiedRef.current.softKey &&
+      channelBalanceAlerts.softChannels.length > 0
+    ) {
+      const names = channelBalanceAlerts.softChannels
+        .slice(0, 5)
+        .map((item) => item.name)
+        .join('、');
+      const suffix =
+        channelBalanceAlerts.softChannels.length > 5
+          ? t(' 等 ${count} 个渠道').replace(
+              '${count}',
+              channelBalanceAlerts.softChannels.length,
+            )
+          : '';
+      showInfo(
+        t('渠道柔和提示：${names}${suffix} 余额已低于提醒阈值')
+          .replace('${names}', names)
+          .replace('${suffix}', suffix),
+      );
+    }
+    balanceAlertNotifiedRef.current = { riskKey, softKey };
+  }, [
+    channelBalanceAlerts,
+    channelBalanceAlertConfig.enabled,
+    channelBalanceAlertConfigLoaded,
+    t,
+  ]);
+
   return {
     // Basic states
     channels,
@@ -1202,6 +1372,9 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
     statusFilter,
     compactMode,
     globalPassThroughEnabled,
+    channelBalanceAlertConfig,
+    channelBalanceAlerts,
+    isAdminChannelPage,
 
     // UI states
     showEdit,
@@ -1294,6 +1467,7 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
     deleteAllDisabledChannels,
     updateAllChannelsBalance,
     updateChannelBalance,
+    setChannelBalanceManually,
     fixChannelsAbilities,
     checkOllamaVersion,
     testChannel,
