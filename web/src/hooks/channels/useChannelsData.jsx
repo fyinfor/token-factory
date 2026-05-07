@@ -207,7 +207,8 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
     const localIdSort = localStorage.getItem('id-sort') === 'true';
     const localPageSize =
       parseInt(localStorage.getItem('page-size')) || ITEMS_PER_PAGE;
-    const localEnableTagMode = localStorage.getItem('enable-tag-mode') === 'true';
+    const localEnableTagMode =
+      localStorage.getItem('enable-tag-mode') === 'true';
     const localEnableBatchDelete =
       localStorage.getItem('enable-batch-delete') === 'true';
 
@@ -272,10 +273,7 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
   // Save column preferences
   useEffect(() => {
     if (Object.keys(visibleColumns).length > 0) {
-      localStorage.setItem(
-        columnStorageKey,
-        JSON.stringify(visibleColumns),
-      );
+      localStorage.setItem(columnStorageKey, JSON.stringify(visibleColumns));
     }
   }, [visibleColumns]);
 
@@ -523,7 +521,8 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
   // Channel management
   const manageChannel = async (id, action, record, value) => {
     let data = { id };
-    const st = record?.supplier_type != null ? String(record.supplier_type).trim() : '';
+    const st =
+      record?.supplier_type != null ? String(record.supplier_type).trim() : '';
     if (st) {
       data.supplier_type = st;
     }

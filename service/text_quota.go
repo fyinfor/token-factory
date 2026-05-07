@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
@@ -51,6 +52,8 @@ type textQuotaSummary struct {
 	FileSearchCallCount      int
 	AudioInputPrice          float64
 	ImageGenerationCallPrice float64
+	RequestTierPricing       bool
+	RequestTierBreakdown     ratio_setting.RequestTierPricingBreakdown
 }
 
 func cacheWriteTokensTotal(summary textQuotaSummary) int {
@@ -78,7 +81,7 @@ func resolveTextQuotaChannelDiscountPercent(relayInfo *relaycommon.RelayInfo) fl
 	return model.ResolveChannelPriceDiscountPercent(chID)
 }
 
-func isLegacyClaudeDerivedOpenAIUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) bool {
+func shouldRecordInputTokensTotal(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) bool {
 	if relayInfo == nil || usage == nil {
 		return false
 	}
@@ -89,6 +92,30 @@ func isLegacyClaudeDerivedOpenAIUsage(relayInfo *relaycommon.RelayInfo, usage *d
 		return false
 	}
 	return usage.ClaudeCacheCreation5mTokens > 0 || usage.ClaudeCacheCreation1hTokens > 0
+}
+
+func isLegacyClaudeDerivedOpenAIUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) bool {
+	if relayInfo == nil || usage == nil {
+		return false
+	}
+	if relayInfo.GetFinalRequestRelayFormat() == types.RelayFormatClaude {
+		return false
+	}
+	return !summaryUsageSemanticIsClaude(usage) &&
+		(strings.Contains(strings.ToLower(relayInfo.OriginModelName), "claude") ||
+			usage.ClaudeCacheCreation5mTokens > 0 ||
+			usage.ClaudeCacheCreation1hTokens > 0)
+}
+
+func summaryUsageSemanticIsClaude(usage *dto.Usage) bool {
+	return usage != nil && strings.EqualFold(usage.UsageSemantic, "anthropic")
+}
+
+func relayChannelID(relayInfo *relaycommon.RelayInfo) int {
+	if relayInfo == nil || relayInfo.ChannelMeta == nil {
+		return 0
+	}
+	return relayInfo.ChannelId
 }
 
 func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage) textQuotaSummary {
@@ -252,9 +279,17 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 			}
 		}
 
-		promptQuota := baseTokens.Add(cachedTokensWithRatio).Add(imageTokensWithRatio).Add(cachedCreationTokensWithRatio)
-		completionQuota := dCompletionTokens.Mul(dCompletionRatio)
-		quotaCalculateDecimal := promptQuota.Add(completionQuota).Mul(ratio)
+		inputQuota := baseTokens
+		outputQuota := dCompletionTokens.Mul(dCompletionRatio)
+		cacheReadQuota := cachedTokensWithRatio
+		cacheWriteQuota := cachedCreationTokensWithRatio
+		if rule, ok := ratio_setting.ResolveRequestTierPricing(relayChannelID(relayInfo), summary.ModelName); ok {
+			inputQuota, outputQuota, cacheReadQuota, cacheWriteQuota, summary.RequestTierBreakdown =
+				ratio_setting.ApplyRequestTierPricingDecimal(rule, inputQuota, outputQuota, cacheReadQuota, cacheWriteQuota)
+			summary.RequestTierPricing = true
+		}
+		promptQuota := inputQuota.Add(cacheReadQuota).Add(imageTokensWithRatio).Add(cacheWriteQuota)
+		quotaCalculateDecimal := promptQuota.Add(outputQuota).Mul(ratio)
 		quotaCalculateDecimal = quotaCalculateDecimal.Add(dWebSearchQuota)
 		quotaCalculateDecimal = quotaCalculateDecimal.Add(dClaudeWebSearchQuota)
 		quotaCalculateDecimal = quotaCalculateDecimal.Add(dFileSearchQuota)
@@ -420,6 +455,10 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		// If split 5m/1h values are present, this is their sum; otherwise it falls back
 		// to cache_creation_tokens.
 		other["cache_write_tokens"] = cacheWriteTokens
+	}
+	if summary.RequestTierPricing {
+		other["request_tier_pricing"] = true
+		other["request_tier_breakdown"] = summary.RequestTierBreakdown
 	}
 	if relayInfo.GetFinalRequestRelayFormat() != types.RelayFormatClaude && usage != nil && usage.UsageSource != "" && usage.InputTokens > 0 {
 		// input_tokens_total: explicit normalized total input used by the usage log UI.

@@ -477,9 +477,7 @@ const PersonalSetting = () => {
             <Card>
               <div className='flex flex-col md:flex-row md:items-center md:justify-between gap-3'>
                 <div>
-                  <Typography.Text strong>
-                    {t('学员身份申请')}
-                  </Typography.Text>
+                  <Typography.Text strong>{t('学员身份申请')}</Typography.Text>
                   <Typography.Text
                     type='tertiary'
                     size='small'

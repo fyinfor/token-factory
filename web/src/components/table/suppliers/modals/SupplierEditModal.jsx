@@ -359,7 +359,8 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
         !!supplierData.supplier_capability?.truth_commitment_confirmed,
       );
 
-      const existingBusinessLicenseUrl = supplierData.business_license_url || '';
+      const existingBusinessLicenseUrl =
+        supplierData.business_license_url || '';
       const existingCompanyLogoUrl = supplierData.company_logo_url || '';
       setBusinessLicenseUrl(existingBusinessLicenseUrl);
       setCompanyLogoUrl(existingCompanyLogoUrl);
@@ -383,7 +384,8 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
           setFileList([
             {
               ...fileInfo,
-                uid: fileInfo.uid || `existing-license-${supplierData.id || 'self'}`,
+              uid:
+                fileInfo.uid || `existing-license-${supplierData.id || 'self'}`,
               url: fileInfo.url || existingBusinessLicenseUrl,
               status: fileInfo.status || 'success',
               name: fileInfo.name || t('已上传的营业执照'),
@@ -939,7 +941,11 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
                     size='small'
                     onClick={(e) => {
                       e.preventDefault();
-                      window.open(companyLogoUrl, '_blank', 'noopener,noreferrer');
+                      window.open(
+                        companyLogoUrl,
+                        '_blank',
+                        'noopener,noreferrer',
+                      );
                     }}
                   >
                     {t('下载')}

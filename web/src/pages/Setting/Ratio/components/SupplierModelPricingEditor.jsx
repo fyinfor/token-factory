@@ -149,22 +149,28 @@ export default function SupplierModelPricingEditor({
   };
 
   // loadSupplierChannelPricingMaps 加载供应商渠道维度定价（表存储）。
-  const loadSupplierChannelPricingMaps = useCallback(async (targetChannelId) => {
-    try {
-      const res = await API.get(`/api/user/supplier/pricing/channel/${targetChannelId}`, {
-        skipErrorHandler: true,
-      });
-      if (!res?.data?.success) {
-        showError(res?.data?.message || t('获取渠道定价失败'));
+  const loadSupplierChannelPricingMaps = useCallback(
+    async (targetChannelId) => {
+      try {
+        const res = await API.get(
+          `/api/user/supplier/pricing/channel/${targetChannelId}`,
+          {
+            skipErrorHandler: true,
+          },
+        );
+        if (!res?.data?.success) {
+          showError(res?.data?.message || t('获取渠道定价失败'));
+          setSupplierChannelMaps({});
+          return;
+        }
+        setSupplierChannelMaps(res.data.data || {});
+      } catch (error) {
+        showError(error?.message || t('获取渠道定价失败'));
         setSupplierChannelMaps({});
-        return;
       }
-      setSupplierChannelMaps(res.data.data || {});
-    } catch (error) {
-      showError(error?.message || t('获取渠道定价失败'));
-      setSupplierChannelMaps({});
-    }
-  }, [t]);
+    },
+    [t],
+  );
 
   useEffect(() => {
     if (!activeChannelId) return;
@@ -197,7 +203,11 @@ export default function SupplierModelPricingEditor({
         CreateCacheRatio: JSON.stringify(m.CreateCacheRatio || {}, null, 2),
         ImageRatio: JSON.stringify(m.ImageRatio || {}, null, 2),
         AudioRatio: JSON.stringify(m.AudioRatio || {}, null, 2),
-        AudioCompletionRatio: JSON.stringify(m.AudioCompletionRatio || {}, null, 2),
+        AudioCompletionRatio: JSON.stringify(
+          m.AudioCompletionRatio || {},
+          null,
+          2,
+        ),
       };
     }
     return {
@@ -287,16 +297,19 @@ export default function SupplierModelPricingEditor({
       throw new Error(t('请先选择渠道'));
     }
     if (useSupplierPricingApi) {
-      const res = await API.put(`/api/user/supplier/pricing/channel/${activeChannelId}`, {
-        ModelPrice: output.ModelPrice || {},
-        ModelRatio: output.ModelRatio || {},
-        CompletionRatio: output.CompletionRatio || {},
-        CacheRatio: output.CacheRatio || {},
-        CreateCacheRatio: output.CreateCacheRatio || {},
-        ImageRatio: output.ImageRatio || {},
-        AudioRatio: output.AudioRatio || {},
-        AudioCompletionRatio: output.AudioCompletionRatio || {},
-      });
+      const res = await API.put(
+        `/api/user/supplier/pricing/channel/${activeChannelId}`,
+        {
+          ModelPrice: output.ModelPrice || {},
+          ModelRatio: output.ModelRatio || {},
+          CompletionRatio: output.CompletionRatio || {},
+          CacheRatio: output.CacheRatio || {},
+          CreateCacheRatio: output.CreateCacheRatio || {},
+          ImageRatio: output.ImageRatio || {},
+          AudioRatio: output.AudioRatio || {},
+          AudioCompletionRatio: output.AudioCompletionRatio || {},
+        },
+      );
       if (!res?.data?.success) {
         throw new Error(res?.data?.message || t('保存失败'));
       }

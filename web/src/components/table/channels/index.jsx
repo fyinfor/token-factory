@@ -119,7 +119,10 @@ const ChannelsPage = () => {
               '${threshold}',
               String(channelBalanceAlertConfig.softThreshold),
             )
-            .replace('${names}', renderAlertNames(channelBalanceAlerts.softChannels))}
+            .replace(
+              '${names}',
+              renderAlertNames(channelBalanceAlerts.softChannels),
+            )}
           style={{ marginBottom: 12 }}
         />
       ) : null}
@@ -143,7 +146,10 @@ const ChannelsPage = () => {
               '${threshold}',
               String(channelBalanceAlertConfig.riskThreshold),
             )
-            .replace('${names}', renderAlertNames(channelBalanceAlerts.riskChannels))}
+            .replace(
+              '${names}',
+              renderAlertNames(channelBalanceAlerts.riskChannels),
+            )}
           style={{ marginBottom: 12 }}
         />
       ) : null}

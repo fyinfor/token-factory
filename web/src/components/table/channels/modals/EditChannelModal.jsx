@@ -1972,7 +1972,9 @@ const EditChannelModal = (props) => {
     if (localInputs.type === 18 && localInputs.other === '') {
       localInputs.other = 'v2.1';
     }
-    localInputs.company_logo_url = String(localInputs.company_logo_url || '').trim();
+    localInputs.company_logo_url = String(
+      localInputs.company_logo_url || '',
+    ).trim();
     localInputs.supplier_type = String(localInputs.supplier_type || '').trim();
     if (!localInputs.supplier_type) {
       showError(t('请选择供应商类型'));
@@ -3192,48 +3194,54 @@ const EditChannelModal = (props) => {
                           initValue={inputs.is_enterprise_account}
                         />
                       )}
-                    <Form.Upload
-                      field='company_logo_file'
-                      label={t('企业Logo')}
-                      action=''
-                      accept='.jpg,.jpeg,.png'
-                      limit={1}
-                      fileList={logoFileList}
-                      onChange={handleChannelLogoFileListChange}
-                      customRequest={handleChannelLogoUpload}
-                      onRemove={() => {
-                        setLogoFileList([]);
-                        handleInputChange('company_logo_url', '');
-                      }}
-                      extraText={t('建议上传清晰方形 Logo，支持 jpg/png，大小<=5MB')}
-                    >
-                      <Button icon={<IconUpload />} theme='light'>
-                        {t('上传文件')}
-                      </Button>
-                    </Form.Upload>
-                    {inputs.company_logo_url ? (
-                      <div className='mb-2'>
-                        <Text type='tertiary' size='small'>
-                          {t('当前Logo预览')}
-                        </Text>
-                        <div className='mt-2'>
-                          <Image
-                            src={inputs.company_logo_url}
-                            width={96}
-                            height={96}
-                            alt={t('企业Logo')}
-                          />
+                      <Form.Upload
+                        field='company_logo_file'
+                        label={t('企业Logo')}
+                        action=''
+                        accept='.jpg,.jpeg,.png'
+                        limit={1}
+                        fileList={logoFileList}
+                        onChange={handleChannelLogoFileListChange}
+                        customRequest={handleChannelLogoUpload}
+                        onRemove={() => {
+                          setLogoFileList([]);
+                          handleInputChange('company_logo_url', '');
+                        }}
+                        extraText={t(
+                          '建议上传清晰方形 Logo，支持 jpg/png，大小<=5MB',
+                        )}
+                      >
+                        <Button icon={<IconUpload />} theme='light'>
+                          {t('上传文件')}
+                        </Button>
+                      </Form.Upload>
+                      {inputs.company_logo_url ? (
+                        <div className='mb-2'>
+                          <Text type='tertiary' size='small'>
+                            {t('当前Logo预览')}
+                          </Text>
+                          <div className='mt-2'>
+                            <Image
+                              src={inputs.company_logo_url}
+                              width={96}
+                              height={96}
+                              alt={t('企业Logo')}
+                            />
+                          </div>
                         </div>
-                      </div>
-                    ) : null}
-                    <Form.Select
-                      field='supplier_type'
-                      label={t('供应商类型')}
-                      placeholder={t('请选择供应商类型')}
-                      optionList={CHANNEL_SUPPLIER_TYPE_OPTIONS}
-                      rules={[{ required: true, message: t('请选择供应商类型') }]}
-                      onChange={(value) => handleInputChange('supplier_type', value)}
-                    />
+                      ) : null}
+                      <Form.Select
+                        field='supplier_type'
+                        label={t('供应商类型')}
+                        placeholder={t('请选择供应商类型')}
+                        optionList={CHANNEL_SUPPLIER_TYPE_OPTIONS}
+                        rules={[
+                          { required: true, message: t('请选择供应商类型') },
+                        ]}
+                        onChange={(value) =>
+                          handleInputChange('supplier_type', value)
+                        }
+                      />
 
                       <Form.Input
                         field='name'
@@ -3667,7 +3675,9 @@ const EditChannelModal = (props) => {
                               />
                               <Form.Input
                                 field='tencent_vod_secret_id'
-                                label={t('SecretId（对应 TENCENTCLOUD_SECRET_ID）')}
+                                label={t(
+                                  'SecretId（对应 TENCENTCLOUD_SECRET_ID）',
+                                )}
                                 placeholder={t('在 CAM 密钥页复制 SecretId')}
                                 rules={
                                   isEdit
@@ -3687,7 +3697,9 @@ const EditChannelModal = (props) => {
                               />
                               <Form.Input
                                 field='tencent_vod_secret_key'
-                                label={t('SecretKey（对应 TENCENTCLOUD_SECRET_KEY）')}
+                                label={t(
+                                  'SecretKey（对应 TENCENTCLOUD_SECRET_KEY）',
+                                )}
                                 placeholder={t('在 CAM 密钥页复制 SecretKey')}
                                 rules={
                                   isEdit
@@ -3702,17 +3714,16 @@ const EditChannelModal = (props) => {
                                 mode='password'
                                 autoComplete='new-password'
                                 onChange={(v) =>
-                                  handleInputChange(
-                                    'tencent_vod_secret_key',
-                                    v,
-                                  )
+                                  handleInputChange('tencent_vod_secret_key', v)
                                 }
                                 showClear
                               />
                               <Form.Input
                                 field='tencent_vod_region'
                                 label={t('地域 Region（可选）')}
-                                placeholder={t('默认 ap-guangzhou，可改为 ap-beijing 等')}
+                                placeholder={t(
+                                  '默认 ap-guangzhou，可改为 ap-beijing 等',
+                                )}
                                 autoComplete='off'
                                 onChange={(v) =>
                                   handleInputChange('tencent_vod_region', v)

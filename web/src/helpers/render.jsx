@@ -2370,7 +2370,9 @@ export function renderLogContent(
   // per-token / per-call paths because modelPrice for these calls is 0 (not -1)
   // and would otherwise render as the misleading "模型价格 $0 / 次".
   const isVideoTokenBilling =
-    videoOutputTokens > 0 && videoRatio > 0 && (modelPrice === 0 || modelPrice === -1);
+    videoOutputTokens > 0 &&
+    videoRatio > 0 &&
+    (modelPrice === 0 || modelPrice === -1);
   if (isVideoTokenBilling) {
     const displayMultiplier = hideGroupRatioInDetail ? ratio || 1 : 1;
     // Per the video token formula:
@@ -2380,8 +2382,7 @@ export function renderLogContent(
     // Effective $/1M-token unit prices are therefore:
     //   inputUnit  = modelRatio * 2          (text token price, same as chat)
     //   videoOut   = modelRatio * 2 * videoRatio * videoCompletionRatio
-    const inputUnitPrice =
-      (modelRatio || 0) * 2.0 * displayMultiplier * rate;
+    const inputUnitPrice = (modelRatio || 0) * 2.0 * displayMultiplier * rate;
     const videoUnitPrice =
       (modelRatio || 0) *
       2.0 *

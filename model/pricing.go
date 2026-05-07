@@ -56,22 +56,23 @@ type PricingSupplierItem struct {
 
 // PricingChannelItem 某模型在各渠道上的定价摘要。
 type PricingChannelItem struct {
-	ChannelID             int     `json:"channel_id"`
-	SupplierApplicationID int     `json:"supplier_application_id"`
-	ChannelNo             string  `json:"channel_no"`
-	SupplierAlias         string  `json:"supplier_alias"`
-	CompanyLogoURL        string  `json:"company_logo_url"`
-	SupplierType          string  `json:"supplier_type"`
+	ChannelID             int    `json:"channel_id"`
+	SupplierApplicationID int    `json:"supplier_application_id"`
+	ChannelNo             string `json:"channel_no"`
+	SupplierAlias         string `json:"supplier_alias"`
+	CompanyLogoURL        string `json:"company_logo_url"`
+	SupplierType          string `json:"supplier_type"`
 	// RouteSlug 渠道全局路由后缀，与模型名组合为 {model}/{route_slug} 强制路由至该渠道（整渠道下各模型共用）。
 	RouteSlug string `json:"route_slug,omitempty"`
 	// TestResponseTimeMs 渠道最近可展示的单测耗时（毫秒）；0 代表未测试或测试失败，接口将省略该字段。
-	TestResponseTimeMs    int     `json:"test_response_time_ms,omitempty"`
-	ModelPrice            float64 `json:"model_price"`
-	ModelRatio            float64 `json:"model_ratio"`
-	CompletionRatio       float64 `json:"completion_ratio"`
-	CacheRatio            float64 `json:"cache_ratio"`
-	CreateCacheRatio      float64 `json:"create_cache_ratio"`
-	PriceDiscountPercent  float64 `json:"price_discount_percent"`
+	TestResponseTimeMs   int     `json:"test_response_time_ms,omitempty"`
+	ModelPrice           float64 `json:"model_price"`
+	ModelRatio           float64 `json:"model_ratio"`
+	CompletionRatio      float64 `json:"completion_ratio"`
+	CacheRatio           float64 `json:"cache_ratio"`
+	CreateCacheRatio     float64 `json:"create_cache_ratio"`
+	PriceDiscountPercent float64 `json:"price_discount_percent"`
+	QuotaType            int     `json:"quota_type"`
 }
 
 // PricingAPIItem 在 Pricing 基础上扩展渠道维度统计字段（定价接口 data 元素类型）。
@@ -208,6 +209,13 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 				CacheRatio:            chCache,
 				CreateCacheRatio:      chCreate,
 				PriceDiscountPercent:  d,
+				QuotaType: func() int {
+					if baseMp > 0 {
+						return 1
+					} else {
+						return 0
+					}
+				}(),
 			})
 		}
 

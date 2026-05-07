@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shopspring/decimal"
 )
 
 // https://docs.claude.com/en/docs/build-with-claude/prompt-caching#1-hour-cache-duration
@@ -139,7 +140,11 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 			videoCompletionRatio = channelVideoCompletionRatio
 		}
 		ratio := modelRatio * groupRatioInfo.GroupRatio
-		preConsumedQuota = int(float64(preConsumedTokens) * ratio)
+		dPreConsumedTokens := decimal.NewFromInt(int64(preConsumedTokens))
+		if rule, ok := ratio_setting.ResolveRequestTierPricing(channelID, info.OriginModelName); ok {
+			dPreConsumedTokens, _, _, _, _ = ratio_setting.ApplyRequestTierPricingDecimal(rule, dPreConsumedTokens, decimal.Zero, decimal.Zero, decimal.Zero)
+		}
+		preConsumedQuota = int(dPreConsumedTokens.Mul(decimal.NewFromFloat(ratio)).Round(0).IntPart())
 	} else {
 		if meta.ImagePriceRatio != 0 {
 			modelPrice = modelPrice * meta.ImagePriceRatio
