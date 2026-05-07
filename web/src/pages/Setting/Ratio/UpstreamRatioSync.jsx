@@ -79,6 +79,21 @@ const CHANNEL_EXTRA_OPTION_TO_PAYLOAD = [
 ];
 
 const UPSTREAM_NAME_ID_RE = /\((-?\d+)\)\s*$/;
+const CHANNEL_SELECTION_KEY_SEPARATOR = '@@';
+
+function isOfficialChannelRecord(record) {
+  const id = record?.key ?? record?.value;
+  const base = record?._originalData?.base_url || '';
+  const name = record?.label || '';
+  return (
+    id === OFFICIAL_RATIO_PRESET_ID ||
+    id === MODELS_DEV_PRESET_ID ||
+    base === OFFICIAL_RATIO_PRESET_BASE_URL ||
+    base === MODELS_DEV_PRESET_BASE_URL ||
+    name === OFFICIAL_RATIO_PRESET_NAME ||
+    name === MODELS_DEV_PRESET_NAME
+  );
+}
 
 function parseUpstreamListChannelId(upstreamDisplayName) {
   const m = String(upstreamDisplayName).match(UPSTREAM_NAME_ID_RE);
@@ -104,7 +119,9 @@ function parseNestedOption(json) {
 function extractNestedChannelModelMap(optionJson, channelIdStr) {
   const root = parseNestedOption(optionJson);
   const scoped = root[channelIdStr];
-  return scoped && typeof scoped === 'object' && !Array.isArray(scoped) ? scoped : {};
+  return scoped && typeof scoped === 'object' && !Array.isArray(scoped)
+    ? scoped
+    : {};
 }
 
 function ratioTypeToPascal(ratioType) {
@@ -116,6 +133,23 @@ function ratioTypeToPascal(ratioType) {
 
 function channelOptionKeyForRatioType(ratioType) {
   return `Channel${ratioTypeToPascal(ratioType)}`;
+}
+
+function buildResolutionKey(ratioType, srcName, syncMode) {
+  return syncMode === 'channel' && srcName
+    ? `${ratioType}${CHANNEL_SELECTION_KEY_SEPARATOR}${srcName}`
+    : ratioType;
+}
+
+function parseResolutionKey(key) {
+  const idx = key.indexOf(CHANNEL_SELECTION_KEY_SEPARATOR);
+  if (idx === -1) {
+    return { ratioType: key, srcNameFromKey: null };
+  }
+  return {
+    ratioType: key.slice(0, idx),
+    srcNameFromKey: key.slice(idx + CHANNEL_SELECTION_KEY_SEPARATOR.length),
+  };
 }
 
 function cloneDeep(obj) {
@@ -265,21 +299,41 @@ function ConflictConfirmModal({ t, visible, items, onOk, onCancel }) {
  */
 export default function UpstreamRatioSync(props) {
   const { t } = useTranslation();
-  const [modalVisible, setModalVisible] = useState(false);
+  const [officialModalVisible, setOfficialModalVisible] = useState(false);
+  const [channelModalVisible, setChannelModalVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [syncLoading, setSyncLoading] = useState(false);
+  const [syncMode, setSyncMode] = useState(null);
   const isMobile = useIsMobile();
 
   // 渠道选择相关
   const [allChannels, setAllChannels] = useState([]);
-  const [selectedChannelIds, setSelectedChannelIds] = useState([]);
+  const [selectedOfficialChannelIds, setSelectedOfficialChannelIds] = useState(
+    [],
+  );
+  const [selectedChannelChannelIds, setSelectedChannelChannelIds] = useState(
+    [],
+  );
 
   // 渠道端点配置
   const [channelEndpoints, setChannelEndpoints] = useState({}); // { channelId: endpoint }
+  const [channelModelNamesMap, setChannelModelNamesMap] = useState({});
+
+  const officialChannels = useMemo(
+    () => allChannels.filter(isOfficialChannelRecord),
+    [allChannels],
+  );
+  const nonOfficialChannels = useMemo(
+    () => allChannels.filter((ch) => !isOfficialChannelRecord(ch)),
+    [allChannels],
+  );
 
   // 差异数据和测试结果
   const [differences, setDifferences] = useState({});
   const [resolutions, setResolutions] = useState({});
+
+  // 模型管理中已启用的模型名称列表（用于过滤同步结果）
+  const [enabledModels, setEnabledModels] = useState([]);
 
   // 是否已经执行过同步
   const [hasSynced, setHasSynced] = useState(false);
@@ -298,7 +352,18 @@ export default function UpstreamRatioSync(props) {
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [conflictItems, setConflictItems] = useState([]); // {channel, model, current, newVal, ratioType}
 
+  const officialSelectorRef = React.useRef(null);
   const channelSelectorRef = React.useRef(null);
+
+  useEffect(() => {
+    API.get('/api/channel/models_enabled')
+      .then((res) => {
+        if (res?.data?.success) {
+          setEnabledModels(res.data.data || []);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -363,9 +428,9 @@ export default function UpstreamRatioSync(props) {
     }
   };
 
-  const confirmChannelSelection = () => {
-    const selected = allChannels
-      .filter((ch) => selectedChannelIds.includes(ch.value))
+  const confirmOfficialSelection = () => {
+    const selected = officialChannels
+      .filter((ch) => selectedOfficialChannelIds.includes(ch.value))
       .map((ch) => ch._originalData);
 
     if (selected.length === 0) {
@@ -373,12 +438,30 @@ export default function UpstreamRatioSync(props) {
       return;
     }
 
-    setModalVisible(false);
-    fetchRatiosFromChannels(selected);
+    setOfficialModalVisible(false);
+    fetchRatiosFromChannels(selected, 'official');
   };
 
-  const fetchRatiosFromChannels = async (channelList) => {
+  const confirmChannelSelection = () => {
+    const selected = nonOfficialChannels
+      .filter((ch) => selectedChannelChannelIds.includes(ch.value))
+      .map((ch) => ch._originalData);
+
+    if (selected.length === 0) {
+      showWarning(t('请至少选择一个渠道'));
+      return;
+    }
+
+    setChannelModalVisible(false);
+    fetchRatiosFromChannels(selected, 'channel');
+  };
+
+  const fetchRatiosFromChannels = async (channelList, mode) => {
     setSyncLoading(true);
+
+    if (mode === 'channel') {
+      await loadChannelModelNamesForChannels(channelList);
+    }
 
     const upstreams = channelList.map((ch) => ({
       id: ch.id,
@@ -415,6 +498,7 @@ export default function UpstreamRatioSync(props) {
 
       setDifferences(differences);
       setResolutions({});
+      setSyncMode(mode);
       setHasSynced(true);
 
       if (Object.keys(differences).length === 0) {
@@ -427,24 +511,81 @@ export default function UpstreamRatioSync(props) {
     }
   };
 
+  const parseChannelModelNamesFromChannelData = (channelData) => {
+    const raw = String(channelData?.models || '').trim();
+    if (!raw) return [];
+    return Array.from(
+      new Set(
+        raw
+          .split(',')
+          .map((name) => name.trim())
+          .filter(Boolean),
+      ),
+    );
+  };
+
+  const loadChannelModelNamesForChannels = async (channelList) => {
+    const missingChannels = channelList.filter(
+      (ch) => !channelModelNamesMap[String(ch.id)],
+    );
+    if (missingChannels.length === 0) return;
+
+    const results = await Promise.all(
+      missingChannels.map(async (ch) => {
+        try {
+          const res = await API.get(`/api/channel/${ch.id}`, {
+            skipErrorHandler: true,
+          });
+          if (!res?.data?.success) {
+            showError(res?.data?.message || t('获取渠道模型列表失败'));
+            return [String(ch.id), []];
+          }
+          return [
+            String(ch.id),
+            parseChannelModelNamesFromChannelData(res.data.data),
+          ];
+        } catch (error) {
+          showError(error?.message || t('获取渠道模型列表失败'));
+          return [String(ch.id), []];
+        }
+      }),
+    );
+
+    setChannelModelNamesMap((prev) => ({
+      ...prev,
+      ...Object.fromEntries(results),
+    }));
+  };
+
   function getBillingCategory(ratioType) {
     return ratioType === 'model_price' ? 'price' : 'ratio';
   }
 
   const selectValue = useCallback(
-    (model, ratioType, value) => {
+    (model, ratioType, value, srcName) => {
       const category = getBillingCategory(ratioType);
+      const resolutionKey = buildResolutionKey(ratioType, srcName, syncMode);
 
       setResolutions((prev) => {
         const newModelRes = { ...(prev[model] || {}) };
 
         Object.keys(newModelRes).forEach((rt) => {
-          if (getBillingCategory(rt) !== category) {
+          const parsed = parseResolutionKey(rt);
+          if (getBillingCategory(parsed.ratioType) !== category) {
             delete newModelRes[rt];
           }
         });
 
-        newModelRes[ratioType] = value;
+        if (syncMode === 'official') {
+          Object.keys(newModelRes).forEach((rt) => {
+            const parsed = parseResolutionKey(rt);
+            if (parsed.ratioType === ratioType) {
+              delete newModelRes[rt];
+            }
+          });
+        }
+
+        newModelRes[resolutionKey] = { value, srcName, ratioType };
 
         return {
           ...prev,
@@ -452,7 +593,7 @@ export default function UpstreamRatioSync(props) {
         };
       });
     },
-    [setResolutions],
+    [setResolutions, syncMode],
   );
 
   const buildPricingBaseline = useCallback(() => {
@@ -473,11 +614,6 @@ export default function UpstreamRatioSync(props) {
     const baseline = buildPricingBaseline();
 
     const conflicts = [];
-
-    const findSourceChannel = (model, ratioType, value) => {
-      const upMap = differences[model]?.[ratioType]?.upstreams;
-      return findUpstreamColumnName(upMap, value) || t('未知');
-    };
 
     const billingCategoryForChannel = (model, channelIdStr, chMaps) => {
       const priceMap = chMaps.ChannelModelPrice[channelIdStr];
@@ -507,17 +643,22 @@ export default function UpstreamRatioSync(props) {
 
     Object.entries(resolutions).forEach(([model, ratios]) => {
       const groups = new Map();
-      Object.entries(ratios).forEach(([ratioType, value]) => {
-        const src = findSourceChannel(model, ratioType, value);
-        const cid = parseUpstreamListChannelId(src);
-        const tkey = cid !== null && cid > 0 ? `c:${cid}` : 'global';
+      Object.entries(ratios).forEach(([resKey, res]) => {
+        const parsed = parseResolutionKey(resKey);
+        const ratioType = res.ratioType || parsed.ratioType;
+        const src = res.srcName || parsed.srcNameFromKey;
+        const value = res.value;
+        const cid =
+          syncMode === 'channel' ? parseUpstreamListChannelId(src) : null;
+        const tkey = cid != null && cid > 0 ? `channel:${cid}` : 'global';
         if (!groups.has(tkey)) {
-          groups.set(tkey, { cid: cid > 0 ? cid : null, ratios: {} });
+          groups.set(tkey, { cid, ratios: {}, srcNames: {} });
         }
         groups.get(tkey).ratios[ratioType] = value;
+        groups.get(tkey).srcNames[ratioType] = src;
       });
 
-      groups.forEach(({ cid, ratios: r }) => {
+      groups.forEach(({ cid, ratios: r, srcNames }) => {
         const newCat = 'model_price' in r ? 'price' : 'ratio';
         const localCat =
           cid != null && cid > 0
@@ -548,8 +689,8 @@ export default function UpstreamRatioSync(props) {
             newDesc = `${t('模型倍率')} : ${newModelRatio}\n${t('输出倍率')} : ${newCompRatio}`;
           }
 
-          const channels = Object.entries(r)
-            .map(([rt, val]) => findSourceChannel(model, rt, val))
+          const channels = Object.keys(r)
+            .map((rt) => srcNames[rt])
             .filter((v, idx, arr) => arr.indexOf(v) === idx)
             .join(', ');
 
@@ -574,11 +715,6 @@ export default function UpstreamRatioSync(props) {
 
   const performSync = useCallback(
     async (baseline) => {
-      const findSourceChannel = (model, ratioType, value) => {
-        const upMap = differences[model]?.[ratioType]?.upstreams;
-        return findUpstreamColumnName(upMap, value) || t('未知');
-      };
-
       const finalRatios = {
         ModelRatio: { ...baseline.global.ModelRatio },
         CompletionRatio: { ...baseline.global.CompletionRatio },
@@ -648,12 +784,16 @@ export default function UpstreamRatioSync(props) {
 
       Object.entries(resolutions).forEach(([model, ratios]) => {
         const groups = new Map();
-        Object.entries(ratios).forEach(([ratioType, value]) => {
-          const src = findSourceChannel(model, ratioType, value);
-          const cid = parseUpstreamListChannelId(src);
-          const tkey = cid !== null && cid > 0 ? `c:${cid}` : 'global';
+        Object.entries(ratios).forEach(([resKey, res]) => {
+          const parsed = parseResolutionKey(resKey);
+          const ratioType = res.ratioType || parsed.ratioType;
+          const src = res.srcName || parsed.srcNameFromKey;
+          const value = res.value;
+          const cid =
+            syncMode === 'channel' ? parseUpstreamListChannelId(src) : null;
+          const tkey = cid != null && cid > 0 ? `channel:${cid}` : 'global';
           if (!groups.has(tkey)) {
-            groups.set(tkey, { cid: cid > 0 ? cid : null, ratios: {} });
+            groups.set(tkey, { cid, ratios: {} });
           }
           groups.get(tkey).ratios[ratioType] = value;
         });
@@ -729,7 +869,9 @@ export default function UpstreamRatioSync(props) {
                 ModelRatio: finalRatios.ModelRatio || {},
                 CompletionRatio: finalRatios.CompletionRatio || {},
                 CacheRatio: finalRatios.CacheRatio || {},
-                CreateCacheRatio: parseNestedOption(props.options.CreateCacheRatio),
+                CreateCacheRatio: parseNestedOption(
+                  props.options.CreateCacheRatio,
+                ),
                 ImageRatio: parseNestedOption(props.options.ImageRatio),
                 AudioRatio: parseNestedOption(props.options.AudioRatio),
                 AudioCompletionRatio: parseNestedOption(
@@ -825,20 +967,26 @@ export default function UpstreamRatioSync(props) {
             const next = cloneDeep(prevDifferences);
 
             Object.entries(resolutions).forEach(([model, ratios]) => {
-              Object.entries(ratios).forEach(([ratioType, value]) => {
+              Object.entries(ratios).forEach(([resKey, res]) => {
+                const parsed = parseResolutionKey(resKey);
+                const ratioType = res.ratioType || parsed.ratioType;
                 const diff = next[model]?.[ratioType];
                 if (!diff || typeof diff.upstreams !== 'object') return;
 
-                const srcName = findUpstreamColumnName(diff.upstreams, value);
-                if (!srcName) return;
+                const srcName = res.srcName;
+                if (!srcName || !(srcName in diff.upstreams)) return;
 
-                const num = parseFloat(value);
+                const num = parseFloat(res.value);
                 const synced = Number.isNaN(num)
-                  ? value
+                  ? res.value
                   : (normalizeStoredNumber(num) ?? num);
                 if (!diff.upstream_old) diff.upstream_old = {};
                 diff.upstream_old[srcName] = synced;
                 diff.upstreams[srcName] = synced;
+
+                if (syncMode !== 'channel') {
+                  diff.current = synced;
+                }
               });
             });
 
@@ -855,7 +1003,15 @@ export default function UpstreamRatioSync(props) {
         setLoading(false);
       }
     },
-    [resolutions, differences, props.refresh, props.useSupplierPricingSave, props.options, t],
+    [
+      resolutions,
+      differences,
+      props.refresh,
+      props.useSupplierPricingSave,
+      props.options,
+      t,
+      syncMode,
+    ],
   );
 
   const getCurrentPageData = (dataSource) => {
@@ -872,13 +1028,25 @@ export default function UpstreamRatioSync(props) {
             icon={<RefreshCcw size={14} />}
             className='w-full md:w-auto mt-2'
             onClick={() => {
-              setModalVisible(true);
+              setOfficialModalVisible(true);
               if (allChannels.length === 0) {
                 fetchAllChannels();
               }
             }}
           >
-            {t('选择同步渠道')}
+            {t('官方价格同步')}
+          </Button>
+          <Button
+            icon={<RefreshCcw size={14} />}
+            className='w-full md:w-auto mt-2'
+            onClick={() => {
+              setChannelModalVisible(true);
+              if (allChannels.length === 0) {
+                fetchAllChannels();
+              }
+            }}
+          >
+            {t('渠道价格同步')}
           </Button>
 
           {(() => {
@@ -926,9 +1094,7 @@ export default function UpstreamRatioSync(props) {
         </div>
       </div>
       <div className='mt-2 text-xs text-[var(--semi-color-text-2)]'>
-        {t(
-          '提示：官方渠道预设（如 官方倍率预设、models.dev 价格预设）应用同步后会保存到全局模型定价。',
-        )}
+        {t('提示：应用同步后，所选倍率将保存到全局模型定价。')}
       </div>
     </div>
   );
@@ -1002,9 +1168,59 @@ export default function UpstreamRatioSync(props) {
       return String(record.current);
     };
 
-    const formatUpstreamPairDisplay = (record, upstreamName) => {
-      const oldVal = record.upstream_old?.[upstreamName];
+    const formatUpstreamSingleDisplay = (record, upstreamName) => {
       const newVal = record.upstreams?.[upstreamName];
+
+      if (record.ratioType === 'model_ratio') {
+        const newPrice = ratioToDisplayPrice(newVal);
+        return newPrice === null ? '—' : `$${formatPriceNumber(newPrice)}`;
+      }
+
+      if (record.ratioType === 'completion_ratio') {
+        const newCompletion = toFiniteNumber(newVal);
+        const newInputRatio = getModelRatioForDisplay(
+          record.model,
+          upstreamName,
+          'new',
+        );
+        const newOutputPrice =
+          newCompletion !== null && newInputRatio !== null
+            ? ratioToDisplayPrice(newCompletion * newInputRatio)
+            : null;
+        return newOutputPrice === null
+          ? '—'
+          : `$${formatPriceNumber(newOutputPrice)}`;
+      }
+
+      if (record.ratioType === 'cache_ratio') {
+        const newCacheRatio = toFiniteNumber(newVal);
+        const newInputRatio = getModelRatioForDisplay(
+          record.model,
+          upstreamName,
+          'new',
+        );
+        const newCachePrice =
+          newCacheRatio !== null && newInputRatio !== null
+            ? ratioToDisplayPrice(newCacheRatio * newInputRatio)
+            : null;
+        return newCachePrice === null
+          ? '—'
+          : `$${formatPriceNumber(newCachePrice)}`;
+      }
+
+      return formatCellNumber(newVal);
+    };
+
+    const formatUpstreamPairDisplay = (record, upstreamName) => {
+      const oldVal =
+        syncMode === 'channel'
+          ? record.upstream_old?.[upstreamName]
+          : record.current;
+      const newVal = record.upstreams?.[upstreamName];
+
+      if (syncMode === 'official') {
+        return formatUpstreamSingleDisplay(record, upstreamName);
+      }
 
       if (record.ratioType === 'model_ratio') {
         return formatPriceOldNewPair(
@@ -1014,9 +1230,9 @@ export default function UpstreamRatioSync(props) {
       }
 
       if (record.ratioType === 'completion_ratio') {
-        const oldCompletion = toFiniteNumber(oldVal);
+        const currentCompletion = toFiniteNumber(oldVal);
         const newCompletion = toFiniteNumber(newVal);
-        const oldInputRatio = getModelRatioForDisplay(
+        const currentInputRatio = getModelRatioForDisplay(
           record.model,
           upstreamName,
           'old',
@@ -1026,21 +1242,21 @@ export default function UpstreamRatioSync(props) {
           upstreamName,
           'new',
         );
-        const oldOutputPrice =
-          oldCompletion !== null && oldInputRatio !== null
-            ? ratioToDisplayPrice(oldCompletion * oldInputRatio)
+        const currentOutputPrice =
+          currentCompletion !== null && currentInputRatio !== null
+            ? ratioToDisplayPrice(currentCompletion * currentInputRatio)
             : null;
         const newOutputPrice =
           newCompletion !== null && newInputRatio !== null
             ? ratioToDisplayPrice(newCompletion * newInputRatio)
             : null;
-        return formatPriceOldNewPair(oldOutputPrice, newOutputPrice);
+        return formatPriceOldNewPair(currentOutputPrice, newOutputPrice);
       }
 
       if (record.ratioType === 'cache_ratio') {
-        const oldCacheRatio = toFiniteNumber(oldVal);
+        const currentCacheRatio = toFiniteNumber(oldVal);
         const newCacheRatio = toFiniteNumber(newVal);
-        const oldInputRatio = getModelRatioForDisplay(
+        const currentInputRatio = getModelRatioForDisplay(
           record.model,
           upstreamName,
           'old',
@@ -1050,15 +1266,15 @@ export default function UpstreamRatioSync(props) {
           upstreamName,
           'new',
         );
-        const oldCachePrice =
-          oldCacheRatio !== null && oldInputRatio !== null
-            ? ratioToDisplayPrice(oldCacheRatio * oldInputRatio)
+        const currentCachePrice =
+          currentCacheRatio !== null && currentInputRatio !== null
+            ? ratioToDisplayPrice(currentCacheRatio * currentInputRatio)
             : null;
         const newCachePrice =
           newCacheRatio !== null && newInputRatio !== null
             ? ratioToDisplayPrice(newCacheRatio * newInputRatio)
             : null;
-        return formatPriceOldNewPair(oldCachePrice, newCachePrice);
+        return formatPriceOldNewPair(currentCachePrice, newCachePrice);
       }
 
       return formatOldNewPair(oldVal, newVal);
@@ -1067,7 +1283,36 @@ export default function UpstreamRatioSync(props) {
     const dataSource = useMemo(() => {
       const tmp = [];
 
+      const canonicalMap = new Map(
+        enabledModels.map((m) => [m.toLowerCase(), m]),
+      );
+      const filterEnabled = enabledModels.length > 0;
+      const channelModelSetMap = Object.fromEntries(
+        Object.entries(channelModelNamesMap).map(([channelId, names]) => [
+          channelId,
+          new Set((names || []).map((name) => name.toLowerCase())),
+        ]),
+      );
+
+      const filterChannelOwnedUpstreamMap = (modelName, sourceMap) => {
+        if (syncMode !== 'channel') return sourceMap;
+        const filtered = {};
+        Object.entries(sourceMap || {}).forEach(([upName, value]) => {
+          const channelId = parseUpstreamListChannelId(upName);
+          if (channelId == null) return;
+          const modelSet = channelModelSetMap[String(channelId)];
+          if (!modelSet || !modelSet.has(modelName.toLowerCase())) return;
+          filtered[upName] = value;
+        });
+        return filtered;
+      };
+
       Object.entries(differences).forEach(([model, ratioTypes]) => {
+        const canonical = filterEnabled
+          ? (canonicalMap.get(model.toLowerCase()) ?? null)
+          : model;
+        if (canonical === null) return;
+
         const hasPrice = 'model_price' in ratioTypes;
         const hasOtherRatio = [
           'model_ratio',
@@ -1077,21 +1322,37 @@ export default function UpstreamRatioSync(props) {
         const billingConflict = hasPrice && hasOtherRatio;
 
         Object.entries(ratioTypes).forEach(([ratioType, diff]) => {
+          const upstreams = filterChannelOwnedUpstreamMap(
+            canonical,
+            diff.upstreams,
+          );
+          if (syncMode === 'channel' && Object.keys(upstreams).length === 0) {
+            return;
+          }
+          const upstreamOld = filterChannelOwnedUpstreamMap(
+            canonical,
+            diff.upstream_old || {},
+          );
+          const confidence = filterChannelOwnedUpstreamMap(
+            canonical,
+            diff.confidence || {},
+          );
+
           tmp.push({
-            key: `${model}_${ratioType}`,
-            model,
+            key: `${canonical}_${ratioType}`,
+            model: canonical,
             ratioType,
             current: diff.current,
-            upstream_old: diff.upstream_old || {},
-            upstreams: diff.upstreams,
-            confidence: diff.confidence || {},
+            upstream_old: upstreamOld,
+            upstreams,
+            confidence,
             billingConflict,
           });
         });
       });
 
       return tmp;
-    }, [differences]);
+    }, [channelModelNamesMap, differences, enabledModels, syncMode]);
 
     const filteredDataSource = useMemo(() => {
       if (!searchKeyword.trim() && !ratioTypeFilter) {
@@ -1223,7 +1484,7 @@ export default function UpstreamRatioSync(props) {
         },
       },
       {
-        title: t('当前值（系统默认）'),
+        title: t('官方价格'),
         dataIndex: 'current',
         render: (_, record) => (
           <Tag
@@ -1239,19 +1500,28 @@ export default function UpstreamRatioSync(props) {
         ),
       },
       ...upstreamNames.map((upName) => {
+        const getSelectableOldValue = (row) =>
+          syncMode === 'channel' ? row.upstream_old?.[upName] : row.current;
+
         const channelStats = (() => {
           let selectableCount = 0;
           let selectedCount = 0;
 
           filteredDataSource.forEach((row) => {
             const upstreamVal = row.upstreams?.[upName];
-            const oldVal = row.upstream_old?.[upName];
-            if (isUpstreamCellSelectable(oldVal, upstreamVal)) {
+            if (
+              isUpstreamCellSelectable(getSelectableOldValue(row), upstreamVal)
+            ) {
               selectableCount++;
-              const isSelected = resolutionMatchesUpstream(
-                resolutions[row.model]?.[row.ratioType],
-                upstreamVal,
+              const resolutionKey = buildResolutionKey(
+                row.ratioType,
+                upName,
+                syncMode,
               );
+              const rowRes = resolutions[row.model]?.[resolutionKey];
+              const isSelected =
+                rowRes?.srcName === upName &&
+                resolutionMatchesUpstream(rowRes?.value, upstreamVal);
               if (isSelected) {
                 selectedCount++;
               }
@@ -1273,17 +1543,29 @@ export default function UpstreamRatioSync(props) {
           if (checked) {
             filteredDataSource.forEach((row) => {
               const upstreamVal = row.upstreams?.[upName];
-              const oldVal = row.upstream_old?.[upName];
-              if (isUpstreamCellSelectable(oldVal, upstreamVal)) {
-                selectValue(row.model, row.ratioType, upstreamVal);
+              if (
+                isUpstreamCellSelectable(
+                  getSelectableOldValue(row),
+                  upstreamVal,
+                )
+              ) {
+                selectValue(row.model, row.ratioType, upstreamVal, upName);
               }
             });
           } else {
             setResolutions((prev) => {
               const newRes = { ...prev };
               filteredDataSource.forEach((row) => {
-                if (newRes[row.model]) {
-                  delete newRes[row.model][row.ratioType];
+                const resolutionKey = buildResolutionKey(
+                  row.ratioType,
+                  upName,
+                  syncMode,
+                );
+                if (
+                  newRes[row.model] &&
+                  newRes[row.model][resolutionKey]?.srcName === upName
+                ) {
+                  delete newRes[row.model][resolutionKey];
                   if (Object.keys(newRes[row.model]).length === 0) {
                     delete newRes[row.model];
                   }
@@ -1309,7 +1591,6 @@ export default function UpstreamRatioSync(props) {
           dataIndex: upName,
           render: (_, record) => {
             const upstreamVal = record.upstreams?.[upName];
-            const oldVal = record.upstream_old?.[upName];
             const isConfident = record.confidence?.[upName] !== false;
             const pairText = formatUpstreamPairDisplay(record, upName);
 
@@ -1321,11 +1602,19 @@ export default function UpstreamRatioSync(props) {
               );
             }
 
-            const selectable = isUpstreamCellSelectable(oldVal, upstreamVal);
-            const isSelected = resolutionMatchesUpstream(
-              resolutions[record.model]?.[record.ratioType],
+            const selectable = isUpstreamCellSelectable(
+              getSelectableOldValue(record),
               upstreamVal,
             );
+            const resolutionKey = buildResolutionKey(
+              record.ratioType,
+              upName,
+              syncMode,
+            );
+            const cellRes = resolutions[record.model]?.[resolutionKey];
+            const isSelected =
+              cellRes?.srcName === upName &&
+              resolutionMatchesUpstream(cellRes?.value, upstreamVal);
 
             const pairEl = (
               <Tooltip content={t('旧价新价对照说明')}>
@@ -1361,12 +1650,21 @@ export default function UpstreamRatioSync(props) {
                   onChange={(e) => {
                     const isChecked = e.target.checked;
                     if (isChecked) {
-                      selectValue(record.model, record.ratioType, upstreamVal);
+                      selectValue(
+                        record.model,
+                        record.ratioType,
+                        upstreamVal,
+                        upName,
+                      );
                     } else {
                       setResolutions((prev) => {
                         const newRes = { ...prev };
-                        if (newRes[record.model]) {
-                          delete newRes[record.model][record.ratioType];
+                        if (
+                          newRes[record.model] &&
+                          newRes[record.model][resolutionKey]?.srcName ===
+                            upName
+                        ) {
+                          delete newRes[record.model][resolutionKey];
                           if (Object.keys(newRes[record.model]).length === 0) {
                             delete newRes[record.model];
                           }
@@ -1424,8 +1722,15 @@ export default function UpstreamRatioSync(props) {
     setChannelEndpoints((prev) => ({ ...prev, [channelId]: endpoint }));
   }, []);
 
-  const handleModalClose = () => {
-    setModalVisible(false);
+  const handleOfficialModalClose = () => {
+    setOfficialModalVisible(false);
+    if (officialSelectorRef.current) {
+      officialSelectorRef.current.resetPagination();
+    }
+  };
+
+  const handleChannelModalClose = () => {
+    setChannelModalVisible(false);
     if (channelSelectorRef.current) {
       channelSelectorRef.current.resetPagination();
     }
@@ -1438,16 +1743,30 @@ export default function UpstreamRatioSync(props) {
       </Form.Section>
 
       <ChannelSelectorModal
-        ref={channelSelectorRef}
+        ref={officialSelectorRef}
         t={t}
-        visible={modalVisible}
-        onCancel={handleModalClose}
-        onOk={confirmChannelSelection}
-        allChannels={allChannels}
-        selectedChannelIds={selectedChannelIds}
-        setSelectedChannelIds={setSelectedChannelIds}
+        visible={officialModalVisible}
+        onCancel={handleOfficialModalClose}
+        onOk={confirmOfficialSelection}
+        allChannels={officialChannels}
+        selectedChannelIds={selectedOfficialChannelIds}
+        setSelectedChannelIds={setSelectedOfficialChannelIds}
         channelEndpoints={channelEndpoints}
         updateChannelEndpoint={updateChannelEndpoint}
+        modalTitle={t('官方价格同步')}
+      />
+      <ChannelSelectorModal
+        ref={channelSelectorRef}
+        t={t}
+        visible={channelModalVisible}
+        onCancel={handleChannelModalClose}
+        onOk={confirmChannelSelection}
+        allChannels={nonOfficialChannels}
+        selectedChannelIds={selectedChannelChannelIds}
+        setSelectedChannelIds={setSelectedChannelChannelIds}
+        channelEndpoints={channelEndpoints}
+        updateChannelEndpoint={updateChannelEndpoint}
+        modalTitle={t('渠道价格同步')}
       />
 
       <ConflictConfirmModal

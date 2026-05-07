@@ -287,6 +287,7 @@ const EditChannelModal = (props) => {
   const [isModalOpenurl, setIsModalOpenurl] = useState(false);
   const [modelModalVisible, setModelModalVisible] = useState(false);
   const [fetchedModels, setFetchedModels] = useState([]);
+  const [modelFetchSucceeded, setModelFetchSucceeded] = useState(true);
   const [modelMappingValueModalVisible, setModelMappingValueModalVisible] =
     useState(false);
   const [modelMappingValueModalModels, setModelMappingValueModalModels] =
@@ -1202,19 +1203,20 @@ const EditChannelModal = (props) => {
       }
     }
 
+    const uniqueModels = err ? [] : Array.from(new Set(models));
+    setFetchedModels(uniqueModels);
+    setModelFetchSucceeded(!err);
+    if (!silent) {
+      setModelModalVisible(true);
+    }
     if (!err) {
-      const uniqueModels = Array.from(new Set(models));
-      setFetchedModels(uniqueModels);
-      if (!silent) {
-        setModelModalVisible(true);
-      }
       setLoading(false);
       return uniqueModels;
     } else {
       showError(t('获取模型列表失败'));
     }
     setLoading(false);
-    return null;
+    return uniqueModels;
   };
 
   const openModelMappingValueModal = async ({ pairKey, value }) => {
@@ -2208,6 +2210,70 @@ const EditChannelModal = (props) => {
       );
     } else {
       showInfo(t('未发现新增模型'));
+    }
+  };
+
+  const parseModelListText = (text) => {
+    const raw = String(text ?? '').trim();
+    if (!raw) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((model) =>
+            typeof model === 'string' ? model : model?.id || model?.model_name,
+          )
+          .map((model) => String(model ?? '').trim())
+          .filter(Boolean);
+      }
+    } catch {}
+
+    return raw
+      .split(/[\n\r,，;；\t]+/)
+      .map((model) => model.trim())
+      .filter(Boolean);
+  };
+
+  const pasteModelsFromClipboard = async () => {
+    if (!navigator?.clipboard?.readText) {
+      showError(t('无法读取剪贴板'));
+      return;
+    }
+
+    try {
+      const text = await navigator.clipboard.readText();
+      const pastedModels = parseModelListText(text);
+      if (pastedModels.length === 0) {
+        showInfo(t('剪贴板中未检测到模型'));
+        return;
+      }
+
+      const currentModels = Array.from(
+        new Set(
+          (formApiRef.current?.getValue('models') || inputs.models || [])
+            .map((model) => String(model ?? '').trim())
+            .filter(Boolean),
+        ),
+      );
+      const mergedModels = Array.from(
+        new Set(
+          [...currentModels, ...pastedModels]
+            .map((model) => String(model ?? '').trim())
+            .filter(Boolean),
+        ),
+      );
+      const addedCount = mergedModels.length - currentModels.length;
+      handleInputChange('models', mergedModels);
+      if (addedCount > 0) {
+        showSuccess(t('已粘贴新增 {{count}} 个模型', { count: addedCount }));
+      } else {
+        showInfo(t('未发现新增模型'));
+      }
+    } catch {
+      showError(t('无法读取剪贴板'));
     }
   };
 
@@ -4210,6 +4276,11 @@ const EditChannelModal = (props) => {
                                 },
                                 {
                                   node: 'item',
+                                  name: t('粘贴模型'),
+                                  onClick: pasteModelsFromClipboard,
+                                },
+                                {
+                                  node: 'item',
                                   name: t('清除所有模型'),
                                   type: 'danger',
                                   onClick: () =>
@@ -4591,6 +4662,7 @@ const EditChannelModal = (props) => {
         models={fetchedModels}
         selected={inputs.models}
         redirectModels={redirectModelList}
+        showNewModelsTab={modelFetchSucceeded}
         onConfirm={(selectedModels) => {
           handleInputChange('models', selectedModels);
           showSuccess(t('模型列表已更新'));
