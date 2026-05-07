@@ -59,7 +59,10 @@ import {
   normalizeTierRule,
   parseJSONMap,
   summarizeTierRule,
+  priceToRatio,
+  ratioToPrice,
 } from '../utils/requestTierPricing';
+import TierRowsEditor from './TierRowsEditor';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import { getCurrencyConfig } from '../../../../helpers';
 
@@ -208,115 +211,6 @@ const PriceInput = ({
   </div>
 );
 
-const TierRowsEditor = ({ t, value, onChange }) => {
-  const rule = normalizeTierRule(value);
-  const updateRows = (key, rows) =>
-    onChange({ ...rule, [key]: ensureFinalInfinityTierRows(rows) });
-  const insertTopRow = (key, rows) => {
-    const firstFinite = rows.find((row) => Number(row.up_to) > 0);
-    const upTo = firstFinite
-      ? Math.max(1, Math.floor(Number(firstFinite.up_to) / 2))
-      : 128000;
-    const next = rows.length
-      ? [{ up_to: upTo, ratio: 1 }, ...rows]
-      : [{ up_to: 0, ratio: 1 }];
-    updateRows(key, next);
-  };
-  return (
-    <Space vertical align='start' style={{ width: '100%' }}>
-      {TIER_CATEGORIES.map(({ key, label }) => {
-        const rows = ensureFinalInfinityTierRows(rule[key] || []);
-        return (
-          <Card
-            key={key}
-            title={t(label)}
-            bodyStyle={{ padding: 12 }}
-            style={{ width: '100%' }}
-          >
-            <Table
-              size='small'
-              pagination={false}
-              dataSource={rows.map((row, index) => ({ ...row, _idx: index }))}
-              rowKey='_idx'
-              columns={[
-                {
-                  title: t('区间 token'),
-                  render: (_, row) => {
-                    const previous =
-                      row._idx === 0 ? 0 : rows[row._idx - 1]?.up_to || 0;
-                    const current = row.up_to || '∞';
-                    return `${previous}～${current}`;
-                  },
-                },
-                {
-                  title: t('上限 token'),
-                  dataIndex: 'up_to',
-                  render: (_, row) => (
-                    <Input
-                      value={
-                        row._idx === rows.length - 1
-                          ? '∞'
-                          : String(row.up_to ?? '')
-                      }
-                      placeholder={t('最后一档固定无限')}
-                      disabled={row._idx === rows.length - 1}
-                      onChange={(v) => {
-                        const next = [...rows];
-                        next[row._idx] = { ...next[row._idx], up_to: v };
-                        updateRows(key, next);
-                      }}
-                    />
-                  ),
-                },
-                {
-                  title: t('阶梯倍率'),
-                  dataIndex: 'ratio',
-                  render: (_, row) => (
-                    <Input
-                      value={String(row.ratio ?? '')}
-                      placeholder='1'
-                      onChange={(v) => {
-                        const next = [...rows];
-                        next[row._idx] = { ...next[row._idx], ratio: v };
-                        updateRows(key, next);
-                      }}
-                    />
-                  ),
-                },
-                {
-                  title: t('操作'),
-                  render: (_, row) => (
-                    <Button
-                      type='danger'
-                      size='small'
-                      icon={<IconDelete />}
-                      disabled={row._idx === rows.length - 1}
-                      onClick={() =>
-                        updateRows(
-                          key,
-                          rows.filter((_, idx) => idx !== row._idx),
-                        )
-                      }
-                    />
-                  ),
-                },
-              ]}
-            />
-            <Button
-              className='mt-2'
-              size='small'
-              icon={<IconPlus />}
-              onClick={() => insertTopRow(key, rows)}
-            >
-              {t('添加档位')}
-            </Button>
-          </Card>
-        );
-      })}
-    </Space>
-  );
-};
-
 export default function ModelPricingEditor({
   options,
   refresh,
@@ -337,6 +231,15 @@ export default function ModelPricingEditor({
   const [addVisible, setAddVisible] = useState(false);
   const [batchVisible, setBatchVisible] = useState(false);
   const [newModelName, setNewModelName] = useState('');
+  const [visibleCategories, setVisibleCategories] = useState({
+    output: false,
+    cache_read: false,
+    cache_write: false,
+  });
+
+  // 获取汇率
+  const exchangeRate = options?.usd_exchange_rate || 1;
+
   const tierTemplates = useMemo(
     () => parseJSONMap(options.RequestTierPricingTemplates),
     [options.RequestTierPricingTemplates],
@@ -382,6 +285,7 @@ export default function ModelPricingEditor({
     filterMode,
     optionKeys,
     onSaveOutput,
+    visibleCategories,
   });
 
   const tierPriceDetails = useMemo(
@@ -392,17 +296,19 @@ export default function ModelPricingEditor({
           input: selectedModel?.inputPrice,
           output: selectedModel?.completionPrice,
           cache_read: selectedModel?.cachePrice,
-          cache_write: selectedModel?.createCachePrice,
+          cache_write: selectedModel?.cacheWritePrice,
         },
         t,
+        visibleCategories,
       ),
     [
       selectedModel?.requestTierRule,
       selectedModel?.inputPrice,
       selectedModel?.completionPrice,
       selectedModel?.cachePrice,
-      selectedModel?.createCachePrice,
+      selectedModel?.cacheWritePrice,
       t,
+      visibleCategories,
     ],
   );
 
@@ -488,7 +394,7 @@ export default function ModelPricingEditor({
         dataIndex: 'summary',
         key: 'summary',
         render: (_, record) => (
-          <span>{buildSummaryText(record, t)}</span>
+          <span>{buildSummaryText(record, t, visibleCategories)}</span>
         ),
       },
       {
@@ -1806,14 +1712,6 @@ export default function ModelPricingEditor({
 
                 {selectedModel.billingMode === 'tiered' ? (
                   <>
-                    <PriceInput
-                      label={t('输入价格')}
-                      value={selectedModel.inputPrice}
-                      placeholder={t('输入 $/1M')}
-                      onChange={(value) =>
-                        handleNumericFieldChange('inputPrice', value)
-                      }
-                    />
                     <Space wrap>
                       {Object.keys(tierTemplates).length > 0 ? (
                         <Select
@@ -1824,7 +1722,20 @@ export default function ModelPricingEditor({
                           onChange={(id) => {
                             const template = tierTemplates[id];
                             if (template) {
-                              applyRequestTierTemplate(template);
+                              const result = applyRequestTierTemplate(template);
+                              if (result) {
+                                const { categoriesToOpen, categoriesToClose } = result;
+                                setVisibleCategories((prev) => {
+                                  const updated = { ...prev };
+                                  categoriesToOpen.forEach((cat) => {
+                                    updated[cat] = true;
+                                  });
+                                  categoriesToClose.forEach((cat) => {
+                                    updated[cat] = false;
+                                  });
+                                  return updated;
+                                });
+                              }
                             }
                           }}
                         >
@@ -1885,6 +1796,9 @@ export default function ModelPricingEditor({
                       t={t}
                       value={selectedModel.requestTierRule || DEFAULT_TIER_RULE}
                       onChange={(value) => updateRequestTierRule(value)}
+                      exchangeRate={exchangeRate}
+                      visibleCategories={visibleCategories}
+                      onVisibleCategoriesChange={setVisibleCategories}
                     />
                   </>
                 ) : null}

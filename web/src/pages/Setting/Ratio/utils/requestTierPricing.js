@@ -18,10 +18,10 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 export const TIER_CATEGORIES = [
-  { key: 'input', label: '输入' },
-  { key: 'output', label: '输出' },
-  { key: 'cache_read', label: '缓存读取' },
-  { key: 'cache_write', label: '缓存写入' },
+  { key: 'input', label: '输入价格' },
+  { key: 'output', label: '输出价格' },
+  { key: 'cache_read', label: '缓存读取价格' },
+  { key: 'cache_write', label: '缓存写入价格' },
 ];
 
 export const emptyTierRule = () => ({
@@ -75,10 +75,18 @@ export const hasTierRule = (rule) => {
   return TIER_CATEGORIES.some(({ key }) => normalized[key].length > 0);
 };
 
-export const summarizeTierRule = (rule, t = (v) => v) => {
+export const summarizeTierRule = (rule, t = (v) => v, visibleCategories = null) => {
   if (!hasTierRule(rule)) return t('未配置');
   const normalized = normalizeTierRule(rule);
-  return TIER_CATEGORIES.filter(({ key }) => normalized[key].length > 0)
+  return TIER_CATEGORIES.filter(({ key }) => {
+    // 如果提供了 visibleCategories，只显示开关打开的类别（或 input）
+    if (visibleCategories !== null) {
+      return key === 'input' || visibleCategories[key];
+    }
+    // 否则显示所有有数据的类别
+    return normalized[key].length > 0;
+  })
+    .filter(({ key }) => normalized[key].length > 0)
     .map(({ key, label }) => `${t(label)} ${normalized[key].length}${t('档')}`)
     .join(' / ');
 };
@@ -96,26 +104,36 @@ const formatTierPrice = (value) => {
   return `$${fixed}`;
 };
 
-export const buildTierPriceDetails = (rule, basePrices = {}, t = (v) => v) => {
+export const buildTierPriceDetails = (rule, basePrices = {}, t = (v) => v, visibleCategories = null) => {
   if (!hasTierRule(rule)) return [];
   const normalized = normalizeTierRule(rule);
-  const priceByCategory = {
-    input: Number(basePrices.input),
-    output: Number(basePrices.output),
-    cache_read: Number(basePrices.cache_read),
-    cache_write: Number(basePrices.cache_write),
-  };
-  return TIER_CATEGORIES.filter(({ key }) => normalized[key].length > 0).map(
-    ({ key, label }) => {
+  return TIER_CATEGORIES.filter(({ key }) => {
+    // 如果提供了 visibleCategories，只显示开关打开的类别（或 input）
+    if (visibleCategories !== null) {
+      return key === 'input' || visibleCategories[key];
+    }
+    // 否则显示所有有数据的类别
+    return normalized[key].length > 0;
+  })
+    .filter(({ key }) => normalized[key].length > 0)
+    .map(({ key, label }) => {
       let previous = 0;
       const rows = ensureFinalInfinityTierRows(normalized[key]);
       const segments = rows.map((row) => {
         const from = previous;
         const to = row.up_to;
         previous = row.up_to || previous;
+        // 最后一行（up_to === 0）使用上一档的 token 数量
+        const tokenCount = row.up_to === 0
+          ? (row === rows[0] ? 1 : rows[rows.indexOf(row) - 1]?.up_to || 1)
+          : row.up_to - from;
+        // 直接从 ratio 转换为价格，不使用 basePrices
+        const price = formatTierPrice(
+          row.ratio ? ratioToPrice(row.ratio, tokenCount, 1) : 0,
+        );
         return {
           range: `${formatTierStartBound(from)}～${formatTierEndBound(to)}`,
-          price: formatTierPrice(priceByCategory[key] * row.ratio),
+          price,
           ratio: row.ratio,
         };
       });
@@ -125,8 +143,7 @@ export const buildTierPriceDetails = (rule, basePrices = {}, t = (v) => v) => {
         label: t(label),
         segments,
       };
-    },
-  );
+    });
 };
 
 export const validateTierRule = (rule, t = (v) => v) => {
@@ -160,4 +177,17 @@ export const serializeTierRule = (rule) => {
     if (normalized[key].length > 0) out[key] = normalized[key];
   });
   return out;
+};
+
+// 价格转倍率：倍率 = 价格(USD) / (token数 × 汇率)
+export const priceToRatio = (priceUSD, tokenCount, exchangeRate = 1) => {
+  if (!priceUSD || !tokenCount || tokenCount <= 0) return 1;
+  const ratio = priceUSD / (tokenCount * exchangeRate);
+  return Math.max(0, ratio);
+};
+
+// 倍率转价格：价格 = token数 × 倍率 × 汇率
+export const ratioToPrice = (ratio, tokenCount, exchangeRate = 1) => {
+  if (!ratio || !tokenCount || tokenCount <= 0) return 0;
+  return tokenCount * ratio * exchangeRate;
 };

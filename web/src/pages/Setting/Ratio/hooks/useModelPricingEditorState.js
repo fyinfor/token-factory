@@ -590,12 +590,12 @@ export const getModelWarnings = (model, t) => {
   return warnings;
 };
 
-export const buildSummaryText = (model, t) => {
+export const buildSummaryText = (model, t, visibleCategories = null) => {
   if (model.billingMode === 'per-request' && hasValue(model.fixedPrice)) {
     return `${t('按次')} $${model.fixedPrice} / ${t('次')}`;
   }
   if (model.billingMode === 'tiered' && hasTierRule(model.requestTierRule)) {
-    return `${t('阶梯计费')}｜${summarizeTierRule(model.requestTierRule, t)}`;
+    return `${t('阶梯计费')}｜${summarizeTierRule(model.requestTierRule, t, visibleCategories)}`;
   }
 
   if (hasValue(model.inputPrice)) {
@@ -941,7 +941,7 @@ const serializeModel = (model, t) => {
   return result;
 };
 
-export const buildPreviewRows = (model, t) => {
+export const buildPreviewRows = (model, t, visibleCategories = null) => {
   if (!model) return [];
 
   if (model.billingMode === 'per-request') {
@@ -972,26 +972,20 @@ export const buildPreviewRows = (model, t) => {
       (model.videoGenerateRules || []).some(
         (r) => hasValue(r?.resolution) && hasValue(r?.videoPrice),
       ));
-  const buildTierPreviewRows = (modelRatioValue) => [
-    {
-      key: 'ModelRatio',
-      label: 'ModelRatio',
-      value: modelRatioValue,
-    },
+  const buildTierPreviewRows = (visibleCategories = null) => [
     {
       key: 'RequestTierPricing',
       label: 'RequestTierPricing',
       value: hasTierRule(model.requestTierRule)
-        ? summarizeTierRule(model.requestTierRule, t)
+        ? summarizeTierRule(model.requestTierRule, t, visibleCategories)
         : t('空'),
     },
   ];
 
   if (inputPrice === null) {
     if (tieredBillingMode) {
-      return buildTierPreviewRows(
-        hasValue(model.rawRatios.modelRatio) ? model.rawRatios.modelRatio : t('空'),
-      );
+      // 阶梯计费模式下不显示 ModelRatio
+      return buildTierPreviewRows(visibleCategories);
     }
     const rows = [
       {
@@ -1071,7 +1065,7 @@ export const buildPreviewRows = (model, t) => {
   }
 
   if (tieredBillingMode) {
-    return buildTierPreviewRows(formatNumber(inputPrice / 2));
+    return buildTierPreviewRows(visibleCategories);
   }
 
   const completionPrice = toNumberOrNull(model.completionPrice);
@@ -1164,7 +1158,7 @@ export const buildPreviewRows = (model, t) => {
       key: 'RequestTierPricing',
       label: 'RequestTierPricing',
       value: hasTierRule(model.requestTierRule)
-        ? summarizeTierRule(model.requestTierRule, t)
+        ? summarizeTierRule(model.requestTierRule, t, visibleCategories)
         : t('空'),
     });
   }
@@ -1180,6 +1174,7 @@ export function useModelPricingEditorState({
   filterMode = 'all',
   optionKeys,
   onSaveOutput,
+  visibleCategories = null,
 }) {
   const [models, setModels] = useState([]);
   const [initialVisibleModelNames, setInitialVisibleModelNames] = useState([]);
@@ -1337,8 +1332,8 @@ export function useModelPricingEditorState({
   );
 
   const previewRows = useMemo(
-    () => buildPreviewRows(selectedModel, t),
-    [selectedModel, t],
+    () => buildPreviewRows(selectedModel, t, visibleCategories),
+    [selectedModel, t, visibleCategories],
   );
 
   useEffect(() => {
@@ -1772,11 +1767,23 @@ export function useModelPricingEditorState({
   };
 
   const applyRequestTierTemplate = (template) => {
-    if (!selectedModel || !template) return;
+    if (!selectedModel || !template) return null;
+    const rule = normalizeTierRule(template);
     upsertModel(selectedModel.name, (model) => ({
       ...model,
-      requestTierRule: normalizeTierRule(template),
+      requestTierRule: rule,
     }));
+    // 返回需要打开和关闭的类别
+    const categoriesToOpen = [];
+    if (template.output && template.output.length > 0) categoriesToOpen.push('output');
+    if (template.cache_read && template.cache_read.length > 0) categoriesToOpen.push('cache_read');
+    if (template.cache_write && template.cache_write.length > 0) categoriesToOpen.push('cache_write');
+    // 需要关闭的类别：在模版中不存在但可能被打开的类别
+    const categoriesToClose = [];
+    if (!categoriesToOpen.includes('output')) categoriesToClose.push('output');
+    if (!categoriesToOpen.includes('cache_read')) categoriesToClose.push('cache_read');
+    if (!categoriesToOpen.includes('cache_write')) categoriesToClose.push('cache_write');
+    return { categoriesToOpen, categoriesToClose };
   };
 
   return {

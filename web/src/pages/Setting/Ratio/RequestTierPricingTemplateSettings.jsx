@@ -25,22 +25,26 @@ import {
   Input,
   Modal,
   Space,
+  Switch,
   Table,
   Typography,
 } from '@douyinfe/semi-ui';
-import { IconDelete, IconEdit, IconPlus, IconSave } from '@douyinfe/semi-icons';
+import { IconDelete, IconEdit, IconPlus, IconSave, IconSetting } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
 import { API, showError, showSuccess } from '../../../helpers';
 import {
-  TIER_CATEGORIES,
-  ensureFinalInfinityTierRows,
   emptyTierRule,
+  ensureFinalInfinityTierRows,
+  hasTierRule,
   normalizeTierRule,
   parseJSONMap,
+  priceToRatio,
+  ratioToPrice,
   serializeTierRule,
   summarizeTierRule,
   validateTierRule,
 } from './utils/requestTierPricing';
+import TierRowsEditor from './components/TierRowsEditor';
 
 const { Text } = Typography;
 
@@ -48,115 +52,6 @@ const createEmptyTemplate = () => ({
   name: '',
   ...emptyTierRule(),
 });
-
-function TierRowsEditor({ t, value, onChange }) {
-  const rule = normalizeTierRule(value);
-  const updateRows = (key, rows) =>
-    onChange({ ...rule, [key]: ensureFinalInfinityTierRows(rows) });
-  const insertTopRow = (key, rows) => {
-    const firstFinite = rows.find((row) => Number(row.up_to) > 0);
-    const upTo = firstFinite
-      ? Math.max(1, Math.floor(Number(firstFinite.up_to) / 2))
-      : 128000;
-    const next = rows.length
-      ? [{ up_to: upTo, ratio: 1 }, ...rows]
-      : [{ up_to: 0, ratio: 1 }];
-    updateRows(key, next);
-  };
-  return (
-    <Space vertical align='start' style={{ width: '100%' }}>
-      {TIER_CATEGORIES.map(({ key, label }) => {
-        const rows = ensureFinalInfinityTierRows(rule[key] || []);
-        return (
-          <Card
-            key={key}
-            title={t(label)}
-            bodyStyle={{ padding: 12 }}
-            style={{ width: '100%' }}
-          >
-            <Table
-              size='small'
-              pagination={false}
-              dataSource={rows.map((row, index) => ({ ...row, _idx: index }))}
-              rowKey='_idx'
-              columns={[
-                {
-                  title: t('区间 token'),
-                  render: (_, row) => {
-                    const previous =
-                      row._idx === 0 ? 0 : rows[row._idx - 1]?.up_to || 0;
-                    const current = row.up_to || '∞';
-                    return `${previous}～${current}`;
-                  },
-                },
-                {
-                  title: t('上限 token'),
-                  dataIndex: 'up_to',
-                  render: (_, row) => (
-                    <Input
-                      value={
-                        row._idx === rows.length - 1
-                          ? '∞'
-                          : String(row.up_to ?? '')
-                      }
-                      placeholder={t('最后一档固定无限')}
-                      disabled={row._idx === rows.length - 1}
-                      onChange={(v) => {
-                        const next = [...rows];
-                        next[row._idx] = { ...next[row._idx], up_to: v };
-                        updateRows(key, next);
-                      }}
-                    />
-                  ),
-                },
-                {
-                  title: t('阶梯倍率'),
-                  dataIndex: 'ratio',
-                  render: (_, row) => (
-                    <Input
-                      value={String(row.ratio ?? '')}
-                      placeholder='1'
-                      onChange={(v) => {
-                        const next = [...rows];
-                        next[row._idx] = { ...next[row._idx], ratio: v };
-                        updateRows(key, next);
-                      }}
-                    />
-                  ),
-                },
-                {
-                  title: t('操作'),
-                  render: (_, row) => (
-                    <Button
-                      type='danger'
-                      size='small'
-                      icon={<IconDelete />}
-                      disabled={row._idx === rows.length - 1}
-                      onClick={() =>
-                        updateRows(
-                          key,
-                          rows.filter((_, idx) => idx !== row._idx),
-                        )
-                      }
-                    />
-                  ),
-                },
-              ]}
-            />
-            <Button
-              className='mt-2'
-              size='small'
-              icon={<IconPlus />}
-              onClick={() => insertTopRow(key, rows)}
-            >
-              {t('添加档位')}
-            </Button>
-          </Card>
-        );
-      })}
-    </Space>
-  );
-}
 
 export default function RequestTierPricingTemplateSettings({
   options,
@@ -166,6 +61,14 @@ export default function RequestTierPricingTemplateSettings({
   const [templates, setTemplates] = useState({});
   const [editing, setEditing] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [visibleCategories, setVisibleCategories] = useState({
+    output: false,
+    cache_read: false,
+    cache_write: false,
+  });
+
+  // 获取汇率
+  const exchangeRate = options?.usd_exchange_rate || 1;
 
   useEffect(() => {
     setTemplates(parseJSONMap(options.RequestTierPricingTemplates));
@@ -196,7 +99,12 @@ export default function RequestTierPricingTemplateSettings({
 
   const handleSubmit = async () => {
     const id = String(editing?.id || '').trim();
-    const rule = serializeTierRule(editing);
+    // 过滤掉开关未打开的类别（除了 input，input 始终保留）
+    const filteredEditing = { ...editing };
+    if (!visibleCategories.output) delete filteredEditing.output;
+    if (!visibleCategories.cache_read) delete filteredEditing.cache_read;
+    if (!visibleCategories.cache_write) delete filteredEditing.cache_write;
+    const rule = serializeTierRule(filteredEditing);
     const error = validateTierRule(rule, t);
     if (error) {
       showError(error);
@@ -258,7 +166,7 @@ export default function RequestTierPricingTemplateSettings({
             { title: t('模板名称'), dataIndex: 'name' },
             {
               title: t('规则摘要'),
-              render: (_, row) => summarizeTierRule(row, t),
+              render: (_, row) => summarizeTierRule(row, t, visibleCategories),
             },
             {
               title: t('操作'),
@@ -300,6 +208,9 @@ export default function RequestTierPricingTemplateSettings({
               t={t}
               value={editing}
               onChange={(v) => setEditing({ ...editing, ...v })}
+              exchangeRate={exchangeRate}
+              visibleCategories={visibleCategories}
+              onVisibleCategoriesChange={setVisibleCategories}
             />
           </Form>
         ) : null}
