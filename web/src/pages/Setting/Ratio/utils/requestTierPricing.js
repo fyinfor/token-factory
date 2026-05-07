@@ -78,8 +78,7 @@ export const hasTierRule = (rule) => {
 export const summarizeTierRule = (rule, t = (v) => v) => {
   if (!hasTierRule(rule)) return t('未配置');
   const normalized = normalizeTierRule(rule);
-  return TIER_CATEGORIES
-    .filter(({ key }) => normalized[key].length > 0)
+  return TIER_CATEGORIES.filter(({ key }) => normalized[key].length > 0)
     .map(({ key, label }) => `${t(label)} ${normalized[key].length}${t('档')}`)
     .join(' / ');
 };
@@ -97,11 +96,7 @@ const formatTierPrice = (value) => {
   return `$${fixed}`;
 };
 
-export const buildTierPriceDetails = (
-  rule,
-  basePrices = {},
-  t = (v) => v,
-) => {
+export const buildTierPriceDetails = (rule, basePrices = {}, t = (v) => v) => {
   if (!hasTierRule(rule)) return [];
   const normalized = normalizeTierRule(rule);
   const priceByCategory = {
@@ -110,9 +105,8 @@ export const buildTierPriceDetails = (
     cache_read: Number(basePrices.cache_read),
     cache_write: Number(basePrices.cache_write),
   };
-  return TIER_CATEGORIES
-    .filter(({ key }) => normalized[key].length > 0)
-    .map(({ key, label }) => {
+  return TIER_CATEGORIES.filter(({ key }) => normalized[key].length > 0).map(
+    ({ key, label }) => {
       let previous = 0;
       const rows = ensureFinalInfinityTierRows(normalized[key]);
       const segments = rows.map((row) => {
@@ -131,7 +125,8 @@ export const buildTierPriceDetails = (
         label: t(label),
         segments,
       };
-    });
+    },
+  );
 };
 
 export const validateTierRule = (rule, t = (v) => v) => {

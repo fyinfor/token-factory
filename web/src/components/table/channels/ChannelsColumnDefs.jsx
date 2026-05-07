@@ -349,8 +349,12 @@ export const getChannelsColumns = ({
     }
     const usedAmount = usedQuota / quotaPerUnit;
     const remainingAmount = totalAmount - usedAmount;
-    const softThreshold = Number(channelBalanceAlertConfig?.softThreshold ?? 50);
-    const riskThreshold = Number(channelBalanceAlertConfig?.riskThreshold ?? 20);
+    const softThreshold = Number(
+      channelBalanceAlertConfig?.softThreshold ?? 50,
+    );
+    const riskThreshold = Number(
+      channelBalanceAlertConfig?.riskThreshold ?? 20,
+    );
 
     let remainingColor = 'green';
     if (remainingAmount <= riskThreshold) {
@@ -567,7 +571,9 @@ export const getChannelsColumns = ({
           return (
             <Space spacing={4}>
               <Tooltip
-                content={t('上游余额：') + renderQuotaWithAmount(record.balance)}
+                content={
+                  t('上游余额：') + renderQuotaWithAmount(record.balance)
+                }
               >
                 <Tag
                   color='light-blue'

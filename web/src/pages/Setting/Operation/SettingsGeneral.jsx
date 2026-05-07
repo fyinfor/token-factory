@@ -445,8 +445,12 @@ export default function GeneralSettings(props) {
                   label={t('渠道余额柔和提示阈值')}
                   min={0}
                   step={1}
-                  extraText={t('剩余余额低于该值时触发柔和提示（建议高于风险阈值）')}
-                  onChange={handleFieldChange('ChannelBalanceSoftAlertThreshold')}
+                  extraText={t(
+                    '剩余余额低于该值时触发柔和提示（建议高于风险阈值）',
+                  )}
+                  onChange={handleFieldChange(
+                    'ChannelBalanceSoftAlertThreshold',
+                  )}
                 />
               </Col>
               <Col xs={24} sm={12} md={8} lg={8} xl={8}>
@@ -455,8 +459,12 @@ export default function GeneralSettings(props) {
                   label={t('渠道余额风险警告阈值')}
                   min={0}
                   step={1}
-                  extraText={t('剩余余额低于该值时触发风险警告（优先级高于柔和提示）')}
-                  onChange={handleFieldChange('ChannelBalanceRiskAlertThreshold')}
+                  extraText={t(
+                    '剩余余额低于该值时触发风险警告（优先级高于柔和提示）',
+                  )}
+                  onChange={handleFieldChange(
+                    'ChannelBalanceRiskAlertThreshold',
+                  )}
                 />
               </Col>
             </Row>

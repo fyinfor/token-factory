@@ -72,7 +72,9 @@ export default function ModelSettingsVisualEditor(props) {
         <ModelPricingEditor
           options={props.options}
           refresh={props.refresh}
-          onSaveOutput={isSupplier() ? saveSupplierGlobalPricingOutput : undefined}
+          onSaveOutput={
+            isSupplier() ? saveSupplierGlobalPricingOutput : undefined
+          }
         />
       </Tabs.TabPane>
       <Tabs.TabPane tab={t('渠道模型定价')} itemKey='supplier'>

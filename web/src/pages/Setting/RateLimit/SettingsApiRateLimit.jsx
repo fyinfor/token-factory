@@ -235,7 +235,13 @@ export default function SettingsApiRateLimit(props) {
               <Form.Switch
                 field={'GlobalApiRateLimitEnable'}
                 label={
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
                     {t('启用 API 全局限流')}
                     <Tooltip
                       content={t(
@@ -296,7 +302,13 @@ export default function SettingsApiRateLimit(props) {
               <Form.Switch
                 field={'CriticalRateLimitEnable'}
                 label={
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
+                  >
                     {t('启用关键接口限流')}
                     <Tooltip
                       content={t(

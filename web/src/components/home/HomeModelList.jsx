@@ -18,7 +18,13 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import { Input, ImagePreview, Button, Collapsible, Select } from '@douyinfe/semi-ui';
+import {
+  Input,
+  ImagePreview,
+  Button,
+  Collapsible,
+  Select,
+} from '@douyinfe/semi-ui';
 import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { IconSearch } from '@douyinfe/semi-icons';
 import PricingVendors from '../table/model-pricing/filter/PricingVendors';
@@ -203,7 +209,9 @@ const HomeModelList = () => {
               size='large'
               style={{ width: '100%' }}
               value={pricingData.sortKey || 'default'}
-              onChange={(v) => pricingData.setSortKey && pricingData.setSortKey(v)}
+              onChange={(v) =>
+                pricingData.setSortKey && pricingData.setSortKey(v)
+              }
               optionList={sortOptions}
               prefix={pricingData.t('排序')}
             />
@@ -226,18 +234,18 @@ const HomeModelList = () => {
               </Button>
             </div>
           </div>
-          
+
           <div className='home-sidebar-filters'>
             <PricingVendors
-            filterVendor={pricingData.filterVendor}
-            setFilterVendor={pricingData.setFilterVendor}
-            models={vendorModels}
-            allModels={pricingData.models}
-            loading={pricingData.loading}
-            t={pricingData.t}
-          />
+              filterVendor={pricingData.filterVendor}
+              setFilterVendor={pricingData.setFilterVendor}
+              models={vendorModels}
+              allModels={pricingData.models}
+              loading={pricingData.loading}
+              t={pricingData.t}
+            />
 
-          {/* <PricingQuotaTypes
+            {/* <PricingQuotaTypes
             filterQuotaType={pricingData.filterQuotaType}
             setFilterQuotaType={pricingData.setFilterQuotaType}
             models={quotaTypeModels}
@@ -245,16 +253,16 @@ const HomeModelList = () => {
             t={pricingData.t}
           /> */}
 
-          <PricingTags
-            filterTag={pricingData.filterTag}
-            setFilterTag={pricingData.setFilterTag}
-            models={tagModels}
-            allModels={pricingData.models}
-            loading={pricingData.loading}
-            t={pricingData.t}
-          />
+            <PricingTags
+              filterTag={pricingData.filterTag}
+              setFilterTag={pricingData.setFilterTag}
+              models={tagModels}
+              allModels={pricingData.models}
+              loading={pricingData.loading}
+              t={pricingData.t}
+            />
 
-          {/* <PricingEndpointTypes
+            {/* <PricingEndpointTypes
             filterEndpointType={pricingData.filterEndpointType}
             setFilterEndpointType={pricingData.setFilterEndpointType}
             models={endpointTypeModels}
@@ -266,7 +274,9 @@ const HomeModelList = () => {
         </div>
 
         <div className='home-model-content px-4'>
-          <div className={`home-search-wrapper ${isMobile ? 'w-full mb-4' : 'w-full sticky top-[75px] z-index-[10] my-4 bg-[var(--semi-color-bg-0)] rounded-xl'}`}>
+          <div
+            className={`home-search-wrapper ${isMobile ? 'w-full mb-4' : 'w-full sticky top-[75px] z-index-[10] my-4 bg-[var(--semi-color-bg-0)] rounded-xl'}`}
+          >
             <div className='flex items-center gap-2 w-full'>
               <Input
                 prefix={<IconSearch />}
@@ -283,7 +293,9 @@ const HomeModelList = () => {
                 size='large'
                 style={{ width: 180 }}
                 value={pricingData.sortKey || 'default'}
-                onChange={(v) => pricingData.setSortKey && pricingData.setSortKey(v)}
+                onChange={(v) =>
+                  pricingData.setSortKey && pricingData.setSortKey(v)
+                }
                 optionList={sortOptions}
                 prefix={pricingData.t('排序')}
               />

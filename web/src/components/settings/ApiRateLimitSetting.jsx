@@ -51,7 +51,11 @@ const ApiRateLimitSetting = () => {
         nextInputs[item.key] = toBoolean(item.value);
       } else if (item.key === 'RateLimitUserWhitelist') {
         try {
-          nextInputs[item.key] = JSON.stringify(JSON.parse(item.value || '[]'), null, 2);
+          nextInputs[item.key] = JSON.stringify(
+            JSON.parse(item.value || '[]'),
+            null,
+            2,
+          );
         } catch {
           nextInputs[item.key] = '[]';
         }

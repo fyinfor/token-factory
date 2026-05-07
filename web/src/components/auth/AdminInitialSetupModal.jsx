@@ -85,8 +85,7 @@ const AdminInitialSetupModal = () => {
           mergeSelfResponseIntoLocalUser(selfRes.data.data, dispatch);
         }
       } catch (e) {
-        const msg =
-          e?.response?.data?.message || e.message || t('操作失败');
+        const msg = e?.response?.data?.message || e.message || t('操作失败');
         showError(msg);
       } finally {
         setSubmitting(false);

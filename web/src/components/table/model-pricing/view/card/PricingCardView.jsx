@@ -104,7 +104,11 @@ const PricingCardView = ({
     if (!model.channel_list || model.channel_list.length === 0) {
       return [t('官方')];
     }
-    const uniqueAliases = [...new Set(model.channel_list.map(ch => ch.supplier_alias).filter(Boolean))];
+    const uniqueAliases = [
+      ...new Set(
+        model.channel_list.map((ch) => ch.supplier_alias).filter(Boolean),
+      ),
+    ];
     return uniqueAliases.length > 0 ? uniqueAliases : [t('官方')];
   };
 
@@ -132,9 +136,12 @@ const PricingCardView = ({
     const seen = new Set();
     const items = [];
     model.channel_list.forEach((ch, idx) => {
-      const logo = (ch?.company_logo_url && String(ch.company_logo_url).trim()) || '';
-      const supplierType = (ch?.supplier_type && String(ch.supplier_type).trim()) || '';
-      const alias = (ch?.supplier_alias && String(ch.supplier_alias).trim()) || '';
+      const logo =
+        (ch?.company_logo_url && String(ch.company_logo_url).trim()) || '';
+      const supplierType =
+        (ch?.supplier_type && String(ch.supplier_type).trim()) || '';
+      const alias =
+        (ch?.supplier_alias && String(ch.supplier_alias).trim()) || '';
       const name = ch?.channel_name || '';
       const dedupKey = `${logo}|${supplierType}|${alias}`;
       if (seen.has(dedupKey)) return;
@@ -152,7 +159,11 @@ const PricingCardView = ({
 
   // 从 channel_list 计算价格信息（用于按量计费模型）
   const calculateChannelPrices = (model) => {
-    if (!model.channel_list || model.channel_list.length === 0 || model.quota_type !== 0) {
+    if (
+      !model.channel_list ||
+      model.channel_list.length === 0 ||
+      model.quota_type !== 0
+    ) {
       return null;
     }
 
@@ -166,8 +177,9 @@ const PricingCardView = ({
     const formatPrice = (priceUSD) => {
       const rawDisplayPrice = displayPrice(priceUSD);
       const unitDivisor = tokenUnit === 'K' ? 1000 : 1;
-      const numericPrice = parseFloat(rawDisplayPrice.replace(/[^0-9.]/g, '')) / unitDivisor;
-      
+      const numericPrice =
+        parseFloat(rawDisplayPrice.replace(/[^0-9.]/g, '')) / unitDivisor;
+
       let symbol = '$';
       if (currency === 'CNY') {
         symbol = '¥';
@@ -182,7 +194,7 @@ const PricingCardView = ({
           symbol = '¤';
         }
       }
-      
+
       return { value: parseFloat(numericPrice.toFixed(2)), symbol };
     };
 
@@ -194,7 +206,7 @@ const PricingCardView = ({
       createCache: [],
     };
 
-    model.channel_list.forEach(ch => {
+    model.channel_list.forEach((ch) => {
       if (ch.model_ratio !== undefined && ch.model_ratio !== null) {
         const inputPriceUSD = ch.model_ratio * 2 * usedGroupRatio;
         prices.input.push(formatPrice(inputPriceUSD));
@@ -211,7 +223,10 @@ const PricingCardView = ({
           prices.cache.push(formatPrice(cachePriceUSD));
         }
 
-        if (ch.create_cache_ratio !== undefined && ch.create_cache_ratio !== null) {
+        if (
+          ch.create_cache_ratio !== undefined &&
+          ch.create_cache_ratio !== null
+        ) {
           const createCachePriceUSD =
             ch.model_ratio * ch.create_cache_ratio * 2 * usedGroupRatio;
           prices.createCache.push(formatPrice(createCachePriceUSD));
@@ -223,7 +238,10 @@ const PricingCardView = ({
     const rootPrices = {};
     if (model.model_ratio !== undefined && model.model_ratio !== null) {
       rootPrices.input = formatPrice(model.model_ratio * 2 * usedGroupRatio);
-      if (model.completion_ratio !== undefined && model.completion_ratio !== null) {
+      if (
+        model.completion_ratio !== undefined &&
+        model.completion_ratio !== null
+      ) {
         rootPrices.output = formatPrice(
           model.model_ratio * model.completion_ratio * 2 * usedGroupRatio,
         );
@@ -233,7 +251,10 @@ const PricingCardView = ({
           model.model_ratio * model.cache_ratio * 2 * usedGroupRatio,
         );
       }
-      if (model.create_cache_ratio !== undefined && model.create_cache_ratio !== null) {
+      if (
+        model.create_cache_ratio !== undefined &&
+        model.create_cache_ratio !== null
+      ) {
         rootPrices.createCache = formatPrice(
           model.model_ratio * model.create_cache_ratio * 2 * usedGroupRatio,
         );
@@ -242,7 +263,8 @@ const PricingCardView = ({
 
     // 若根价格高于任意一个 channel 的对应价格，则返回划线原价与折扣
     const getOriginal = (rootPrice, channelPriceArray) => {
-      if (!rootPrice || !channelPriceArray || channelPriceArray.length === 0) return null;
+      if (!rootPrice || !channelPriceArray || channelPriceArray.length === 0)
+        return null;
       const minChannel = Math.min(...channelPriceArray.map((p) => p.value));
       if (rootPrice.value > minChannel && rootPrice.value > 0) {
         const discount = Math.round((1 - minChannel / rootPrice.value) * 100);
@@ -259,15 +281,25 @@ const PricingCardView = ({
       if (priceArray.length === 0) return null;
       if (priceArray.length === 1) {
         const p = priceArray[0];
-        return { single: `${p.symbol}${p.value}`, min: null, max: null, symbol: p.symbol };
+        return {
+          single: `${p.symbol}${p.value}`,
+          min: null,
+          max: null,
+          symbol: p.symbol,
+        };
       }
 
-      const values = priceArray.map(p => p.value);
+      const values = priceArray.map((p) => p.value);
       const uniqueValues = [...new Set(values)];
-      
+
       if (uniqueValues.length === 1) {
         const p = priceArray[0];
-        return { single: `${p.symbol}${p.value}`, min: null, max: null, symbol: p.symbol };
+        return {
+          single: `${p.symbol}${p.value}`,
+          min: null,
+          max: null,
+          symbol: p.symbol,
+        };
       }
 
       const min = Math.min(...values);
@@ -297,7 +329,7 @@ const PricingCardView = ({
   // 获取模型的价格项（优先使用 channel 价格）
   const getModelPriceItemsForCard = (model, priceData) => {
     const channelPrices = calculateChannelPrices(model);
-    
+
     // 如果没有 channel 价格，使用原有逻辑
     if (!channelPrices) {
       return getModelPriceItems(priceData, t, siteDisplayType);
@@ -305,13 +337,16 @@ const PricingCardView = ({
 
     // 使用 channel 价格构建价格项
     const items = [];
-    const { input, output, cache, createCache, original, unitSuffix } = channelPrices;
+    const { input, output, cache, createCache, original, unitSuffix } =
+      channelPrices;
 
     if (input) {
       items.push({
         key: 'input',
         label: t('输入价格'),
-        value: input.single || `${input.symbol}${input.min} ~ ${input.symbol}${input.max}`,
+        value:
+          input.single ||
+          `${input.symbol}${input.min} ~ ${input.symbol}${input.max}`,
         suffix: unitSuffix,
         original: original?.input,
       });
@@ -321,7 +356,9 @@ const PricingCardView = ({
       items.push({
         key: 'output',
         label: t('输出价格'),
-        value: output.single || `${output.symbol}${output.min} ~ ${output.symbol}${output.max}`,
+        value:
+          output.single ||
+          `${output.symbol}${output.min} ~ ${output.symbol}${output.max}`,
         suffix: unitSuffix,
         original: original?.output,
       });
@@ -527,37 +564,51 @@ const PricingCardView = ({
                         {model.model_name}
                       </h3>
                       <div className='flex flex-col gap-1 text-xs mt-1'>
-                        {getModelPriceItemsForCard(model, priceData).map((item) => (
-                          <div key={item.key} className='flex items-center'>
-                            <span className='w-20 flex-shrink-0'>{item.label}</span>
-                            <span className='flex-1 font-bold text-black inline-flex items-center flex-wrap gap-1'>
-                              {item.original && (
-                                <>
-                                  <span className='line-through text-gray-400 font-normal text-[10px]'>
-                                    {item.original.text}
-                                  </span>
-                                  <Tag color='red' size='small' shape='circle'>
-                                    -{item.original.discount}%
-                                  </Tag>
-                                </>
-                              )}
-                              <span>{item.value}{item.suffix}</span>
-                            </span>
-                          </div>
-                        ))}
+                        {getModelPriceItemsForCard(model, priceData).map(
+                          (item) => (
+                            <div key={item.key} className='flex items-center'>
+                              <span className='w-20 flex-shrink-0'>
+                                {item.label}
+                              </span>
+                              <span className='flex-1 font-bold text-black inline-flex items-center flex-wrap gap-1'>
+                                {item.original && (
+                                  <>
+                                    <span className='line-through text-gray-400 font-normal text-[10px]'>
+                                      {item.original.text}
+                                    </span>
+                                    <Tag
+                                      color='red'
+                                      size='small'
+                                      shape='circle'
+                                    >
+                                      -{item.original.discount}%
+                                    </Tag>
+                                  </>
+                                )}
+                                <span>
+                                  {item.value}
+                                  {item.suffix}
+                                </span>
+                              </span>
+                            </div>
+                          ),
+                        )}
                         <div className='flex items-center'>
-                          <span className='w-20 flex-shrink-0'>{t('供应商')}</span>
+                          <span className='w-20 flex-shrink-0'>
+                            {t('供应商')}
+                          </span>
                           <div className='flex-1 flex items-center flex-wrap gap-1'>
                             {supplierLogos.length === 0 ? (
-                              <span className='font-bold text-black'>{supplierIds.join(', ')}</span>
+                              <span className='font-bold text-black'>
+                                {supplierIds.join(', ')}
+                              </span>
                             ) : (
                               supplierLogos.map((s) => (
                                 <div
                                   key={s.key}
                                   className='h-7 rounded-md flex items-center gap-1 overflow-hidden'
                                   style={{
-                                    backgroundColor:
-                                      'var(--semi-color-fill-0)',
+                                    backgroundColor: 'var(--semi-color-fill-0)',
                                     paddingRight: s.supplierType ? 4 : 0,
                                   }}
                                 >
@@ -581,7 +632,9 @@ const PricingCardView = ({
                                     <Tag
                                       size='small'
                                       shape='circle'
-                                      color={getSupplierTypeColor(s.supplierType)}
+                                      color={getSupplierTypeColor(
+                                        s.supplierType,
+                                      )}
                                     >
                                       {s.supplierType}
                                     </Tag>
@@ -661,7 +714,7 @@ const PricingCardView = ({
                         <div>
                           {t('模型')}:{' '}
                           {model.quota_type === 0
-                            ? priceData?.inputRatio ?? model.model_ratio
+                            ? (priceData?.inputRatio ?? model.model_ratio)
                             : t('无')}
                         </div>
                         <div>

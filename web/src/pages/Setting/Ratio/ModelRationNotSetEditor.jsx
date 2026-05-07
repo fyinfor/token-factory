@@ -147,7 +147,9 @@ export default function ModelRatioNotSetEditor(props) {
           )}
           emptyTitle={t('没有未设置定价的模型')}
           emptyDescription={t('当前没有未设置定价的模型')}
-          onSaveOutput={isSupplier() ? saveSupplierGlobalUnsetPricingOutput : undefined}
+          onSaveOutput={
+            isSupplier() ? saveSupplierGlobalUnsetPricingOutput : undefined
+          }
         />
       </Tabs.TabPane>
       <Tabs.TabPane tab={t('渠道未设置模型')} itemKey='supplier_unset'>
