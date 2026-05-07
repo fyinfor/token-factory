@@ -275,7 +275,8 @@ const HomeModelList = () => {
 
         <div className='home-model-content px-4'>
           <div
-            className={`home-search-wrapper ${isMobile ? 'w-full mb-4' : 'w-full sticky top-[75px] z-index-[10] my-4 bg-[var(--semi-color-bg-0)] rounded-xl'}`}
+            className={`home-search-wrapper ${isMobile ? 'w-full mb-4' : 'w-full sticky top-[75px] my-4 rounded-xl'}`}
+            style={{ zIndex: 100, backgroundColor: 'transparent' }}
           >
             <div className='flex items-center gap-2 w-full'>
               <Input
@@ -288,10 +289,11 @@ const HomeModelList = () => {
                 showClear
                 size='large'
                 className='flex-1'
+                style={{ backgroundColor: 'var(--semi-color-bg-1)', opacity: 1, boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)' }}
               />
               <Select
                 size='large'
-                style={{ width: 180 }}
+                style={{ width: 180, backgroundColor: 'var(--semi-color-bg-1)', opacity: 1, boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)' }}
                 value={pricingData.sortKey || 'default'}
                 onChange={(v) =>
                   pricingData.setSortKey && pricingData.setSortKey(v)

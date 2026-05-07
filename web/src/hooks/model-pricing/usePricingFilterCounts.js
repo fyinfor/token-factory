@@ -85,16 +85,17 @@ export const usePricingFilterCounts = ({
     }
 
     // 搜索
-    if (!ignore.includes('search') && searchValue) {
+    if (!ignore.includes('search') && searchValue.length > 0) {
       const term = searchValue.toLowerCase();
-      const tags = model.tags ? model.tags.toLowerCase() : '';
       if (
         !(
-          model.model_name.toLowerCase().includes(term) ||
+          (model.model_name &&
+            model.model_name.toLowerCase().includes(term)) ||
           (model.description &&
             model.description.toLowerCase().includes(term)) ||
-          tags.includes(term) ||
-          (model.vendor_name && model.vendor_name.toLowerCase().includes(term))
+          (model.tags && model.tags.toLowerCase().includes(term)) ||
+          (model.vendor_name &&
+            model.vendor_name.toLowerCase().includes(term))
         )
       )
         return false;
