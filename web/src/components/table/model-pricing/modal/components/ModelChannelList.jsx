@@ -135,9 +135,20 @@ const ModelChannelList = ({
 
   // 格式化通道信息（与 calculateModelPrice 一致：含分组倍率）
   const formatChannelInfo = (channel) => {
+    // 判断计费类型：优先使用 channel.quota_type，否则使用 modelData.quota_type
+    const quotaType = channel.quota_type !== undefined ? channel.quota_type : modelData?.quota_type;
+    const isPerToken = quotaType === 0; // 0=按量计费, 1=按次计费
+
     // 计算价格，返回 { display, value }
-    const calculatePrice = (nominalRatio) => {
-      const priceUSD = nominalRatio * 2 * usedGroupRatio;
+    const calculatePrice = (nominalRatio, isFixedPrice = false) => {
+      let priceUSD;
+      if (isFixedPrice) {
+        // 按次计费：直接使用价格
+        priceUSD = nominalRatio * usedGroupRatio;
+      } else {
+        // 按量计费：倍率 × 2 × 分组倍率
+        priceUSD = nominalRatio * 2 * usedGroupRatio;
+      }
       const rawDisplayPrice = displayPrice(priceUSD);
       const unitDivisor = tokenUnit === 'K' ? 1000 : 1;
       const numericPrice =
@@ -158,25 +169,32 @@ const ModelChannelList = ({
         }
       }
 
-      const unitLabel = tokenUnit === 'K' ? 'K' : 'M';
       const value = parseFloat(numericPrice.toFixed(2));
-      return {
-        display: `${symbol}${value} / 1${unitLabel} Tokens`,
-        value,
-      };
+      if (isFixedPrice) {
+        return {
+          display: `${symbol}${value} / ${t('次')}`,
+          value,
+        };
+      } else {
+        const unitLabel = tokenUnit === 'K' ? 'K' : 'M';
+        return {
+          display: `${symbol}${value} / 1${unitLabel} Tokens`,
+          value,
+        };
+      }
     };
 
-    // 构造单条价格项，若根倍率高于通道倍率则附带原价与折扣
-    const makeItem = (label, channelRatio, rootRatio) => {
-      if (!hasRatioValue(channelRatio)) return null;
-      const current = calculatePrice(Number(channelRatio));
+    // 构造单条价格项，若根价格高于通道价格则附带原价与折扣
+    const makeItem = (label, channelValue, rootValue, isFixedPrice = false) => {
+      if (!hasRatioValue(channelValue)) return null;
+      const current = calculatePrice(Number(channelValue), isFixedPrice);
       let original = null;
       let discount = 0;
       if (
-        hasRatioValue(rootRatio) &&
-        Number(rootRatio) > Number(channelRatio)
+        hasRatioValue(rootValue) &&
+        Number(rootValue) > Number(channelValue)
       ) {
-        const root = calculatePrice(Number(rootRatio));
+        const root = calculatePrice(Number(rootValue), isFixedPrice);
         if (root.value > current.value && root.value > 0) {
           discount = Math.round((1 - current.value / root.value) * 100);
           original = root.display;
@@ -187,53 +205,62 @@ const ModelChannelList = ({
 
     const items = [];
 
-    // 输入
-    items.push(
-      makeItem(t('输入价格'), channel.model_ratio, modelData?.model_ratio),
-    );
-
-    // 输出
-    if (
-      hasRatioValue(channel.model_ratio) &&
-      hasRatioValue(channel.completion_ratio)
-    ) {
-      const chOut =
-        Number(channel.model_ratio) * Number(channel.completion_ratio);
-      const rootOut =
-        hasRatioValue(modelData?.model_ratio) &&
-        hasRatioValue(modelData?.completion_ratio)
-          ? Number(modelData.model_ratio) * Number(modelData.completion_ratio)
-          : null;
-      items.push(makeItem(t('输出价格'), chOut, rootOut));
+    // 按次计费
+    if (isPerToken === false) {
+      items.push(
+        makeItem(t('模型价格'), channel.model_price, modelData?.model_price, true),
+      );
     }
+    // 按量计费
+    else {
+      // 输入
+      items.push(
+        makeItem(t('输入价格'), channel.model_ratio, modelData?.model_ratio, false),
+      );
 
-    // 缓存读取
-    if (
-      hasRatioValue(channel.model_ratio) &&
-      hasRatioValue(channel.cache_ratio)
-    ) {
-      const chC = Number(channel.model_ratio) * Number(channel.cache_ratio);
-      const rootC =
-        hasRatioValue(modelData?.model_ratio) &&
-        hasRatioValue(modelData?.cache_ratio)
-          ? Number(modelData.model_ratio) * Number(modelData.cache_ratio)
-          : null;
-      items.push(makeItem(t('缓存读取价格'), chC, rootC));
-    }
+      // 输出
+      if (
+        hasRatioValue(channel.model_ratio) &&
+        hasRatioValue(channel.completion_ratio)
+      ) {
+        const chOut =
+          Number(channel.model_ratio) * Number(channel.completion_ratio);
+        const rootOut =
+          hasRatioValue(modelData?.model_ratio) &&
+          hasRatioValue(modelData?.completion_ratio)
+            ? Number(modelData.model_ratio) * Number(modelData.completion_ratio)
+            : null;
+        items.push(makeItem(t('输出价格'), chOut, rootOut, false));
+      }
 
-    // 缓存创建
-    if (
-      hasRatioValue(channel.model_ratio) &&
-      hasRatioValue(channel.create_cache_ratio)
-    ) {
-      const chCC =
-        Number(channel.model_ratio) * Number(channel.create_cache_ratio);
-      const rootCC =
-        hasRatioValue(modelData?.model_ratio) &&
-        hasRatioValue(modelData?.create_cache_ratio)
-          ? Number(modelData.model_ratio) * Number(modelData.create_cache_ratio)
-          : null;
-      items.push(makeItem(t('缓存创建价格'), chCC, rootCC));
+      // 缓存读取
+      if (
+        hasRatioValue(channel.model_ratio) &&
+        hasRatioValue(channel.cache_ratio)
+      ) {
+        const chC = Number(channel.model_ratio) * Number(channel.cache_ratio);
+        const rootC =
+          hasRatioValue(modelData?.model_ratio) &&
+          hasRatioValue(modelData?.cache_ratio)
+            ? Number(modelData.model_ratio) * Number(modelData.cache_ratio)
+            : null;
+        items.push(makeItem(t('缓存读取价格'), chC, rootC, false));
+      }
+
+      // 缓存创建
+      if (
+        hasRatioValue(channel.model_ratio) &&
+        hasRatioValue(channel.create_cache_ratio)
+      ) {
+        const chCC =
+          Number(channel.model_ratio) * Number(channel.create_cache_ratio);
+        const rootCC =
+          hasRatioValue(modelData?.model_ratio) &&
+          hasRatioValue(modelData?.create_cache_ratio)
+            ? Number(modelData.model_ratio) * Number(modelData.create_cache_ratio)
+            : null;
+        items.push(makeItem(t('缓存创建价格'), chCC, rootCC, false));
+      }
     }
     return items.filter(Boolean);
   };
