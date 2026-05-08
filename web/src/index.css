@@ -285,6 +285,16 @@ code {
   overflow-wrap: break-word !important;
 }
 
+/* playground 聊天气泡宽度限制，避免媒体内容把外层容器撑满 */
+.semi-chat .semi-chat-chatBox-content {
+  max-width: min(100%, 780px) !important;
+}
+
+.semi-chat .semi-chat-chatBox-content-bubble {
+  max-width: min(100%, 780px) !important;
+  overflow-wrap: anywhere;
+}
+
 .semi-chat-content {
   max-width: 100% !important;
   overflow: hidden !important;

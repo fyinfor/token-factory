@@ -46,7 +46,7 @@ export const useApiRequest = (
       obj.data &&
       typeof obj.data === 'object' &&
       !Array.isArray(obj.data) &&
-      (obj.data.task_id || obj.data.status || obj.data.url)
+      (obj.data.task_id || obj.data.id || obj.data.status || obj.data.url)
     ) {
       return obj.data;
     }
@@ -930,9 +930,17 @@ export const useApiRequest = (
     [handleSSE, handleNonStreamRequest],
   );
 
+  const startVideoTaskPolling = useCallback(
+    (taskId, updateMessage) => {
+      pollVideoTaskUntilReady(taskId, updateMessage);
+    },
+    [pollVideoTaskUntilReady],
+  );
+
   return {
     sendRequest,
     onStopGenerator,
+    startVideoTaskPolling,
     streamMessageUpdate,
     completeMessage,
   };

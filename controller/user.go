@@ -31,11 +31,11 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
-// RegisterRequest 用户注册请求体；开启短信注册时手机号与短信验证码必填（见 Register 内校验）。
+// RegisterRequest 用户注册请求体：邮箱必填；开启邮箱验证时需验证码；开启短信时需手机号与短信验证码。
 type RegisterRequest struct {
 	Username         string `json:"username" validate:"required,max=20"`
 	Password         string `json:"password" validate:"required,min=8,max=20"`
-	Email            string `json:"email" validate:"max=50"`
+	Email            string `json:"email" validate:"required,email,max=50"`
 	VerificationCode string `json:"verification_code"`
 	AffCode          string `json:"aff_code"`
 	Phone            string `json:"phone"`
@@ -231,7 +231,7 @@ func Register(c *gin.Context) {
 		req.SMSCode = ""
 	}
 	if common.EmailVerificationEnabled {
-		if req.Email == "" || req.VerificationCode == "" {
+		if req.VerificationCode == "" {
 			common.ApiErrorI18n(c, i18n.MsgUserEmailVerificationRequired)
 			return
 		}
@@ -240,14 +240,24 @@ func Register(c *gin.Context) {
 			return
 		}
 	}
-	exist, err := model.CheckUserExistOrDeleted(req.Username, req.Email)
+	nameTaken, err := model.IsUsernameTakenUnscoped(req.Username)
 	if err != nil {
 		common.ApiErrorI18n(c, i18n.MsgDatabaseError)
-		common.SysLog(fmt.Sprintf("CheckUserExistOrDeleted error: %v", err))
+		common.SysLog(fmt.Sprintf("IsUsernameTakenUnscoped error: %v", err))
 		return
 	}
-	if exist {
-		common.ApiErrorI18n(c, i18n.MsgUserExists)
+	if nameTaken {
+		common.ApiErrorI18n(c, i18n.MsgUserUsernameTaken)
+		return
+	}
+	emailTaken, err := model.IsEmailTakenUnscoped(req.Email)
+	if err != nil {
+		common.ApiErrorI18n(c, i18n.MsgDatabaseError)
+		common.SysLog(fmt.Sprintf("IsEmailTakenUnscoped error: %v", err))
+		return
+	}
+	if emailTaken {
+		common.ApiErrorI18n(c, i18n.MsgUserEmailTaken)
 		return
 	}
 	affCode := req.AffCode // this code is the inviter's code, not the user's own code
@@ -259,9 +269,7 @@ func Register(c *gin.Context) {
 		InviterId:   inviterId,
 		Role:        common.RoleCommonUser, // 明确设置角色为普通用户
 		Phone:       req.Phone,
-	}
-	if common.EmailVerificationEnabled {
-		cleanUser.Email = req.Email
+		Email:       req.Email,
 	}
 	if err := cleanUser.Insert(inviterId); err != nil {
 		common.ApiError(c, err)
@@ -1324,6 +1332,7 @@ func CreateUser(c *gin.Context) {
 	var user model.User
 	err := json.NewDecoder(c.Request.Body).Decode(&user)
 	user.Username = strings.TrimSpace(user.Username)
+	user.Email = strings.TrimSpace(user.Email)
 	if err != nil || user.Username == "" || user.Password == "" {
 		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
@@ -1349,6 +1358,11 @@ func CreateUser(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	normalizedEmail, err := model.NormalizeAndValidateAdminUserEmail(user.Email, 0)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	// Even for admin users, we cannot fully trust them!
 	cleanUser := model.User{
 		Username:                   user.Username,
@@ -1358,6 +1372,7 @@ func CreateUser(c *gin.Context) {
 		IsDistributor:              user.IsDistributor,
 		CreatedBy:                  common.UserCreatedByAdmin,
 		Phone:                      normalizedPhone,
+		Email:                      normalizedEmail,
 		Remark:                     user.Remark,
 		AdminInitialSetupCompleted: false,
 	}

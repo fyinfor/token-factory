@@ -259,6 +259,21 @@ const RegisterForm = () => {
       showInfo('两次输入的密码不一致');
       return;
     }
+    const emailTrim = (inputs.email || '').trim();
+    if (!emailTrim) {
+      showInfo(t('请输入邮箱'));
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
+      showInfo(t('请输入有效的邮箱地址'));
+      return;
+    }
+    if (showEmailVerification) {
+      if (!/^\d{6}$/.test((inputs.verification_code || '').trim())) {
+        showInfo(t('请输入邮箱验证码'));
+        return;
+      }
+    }
     if (smsVerificationEnabled) {
       if (!/^1[3-9]\d{9}$/.test((inputs.phone || '').trim())) {
         showInfo('请输入有效的 11 位手机号');
@@ -300,7 +315,10 @@ const RegisterForm = () => {
   }
 
   const sendVerificationCode = async () => {
-    if (inputs.email === '') return;
+    if ((inputs.email || '').trim() === '') {
+      showInfo(t('请先填写邮箱'));
+      return;
+    }
     if (turnstileEnabled && turnstileToken === '') {
       showInfo('请稍后几秒重试，Turnstile 正在检查用户环境！');
       return;
@@ -678,6 +696,51 @@ const RegisterForm = () => {
                   prefix={<IconLock />}
                 />
 
+                {showEmailVerification ? (
+                  <>
+                    <Form.Input
+                      field='email'
+                      label={t('邮箱')}
+                      placeholder={t('输入邮箱地址')}
+                      name='email'
+                      type='email'
+                      onChange={(value) => handleChange('email', value)}
+                      prefix={<IconMail />}
+                      suffix={
+                        <Button
+                          onClick={sendVerificationCode}
+                          loading={verificationCodeLoading}
+                          disabled={disableButton || verificationCodeLoading}
+                        >
+                          {disableButton
+                            ? `${t('重新发送')} (${countdown})`
+                            : t('获取验证码')}
+                        </Button>
+                      }
+                    />
+                    <Form.Input
+                      field='verification_code'
+                      label={t('验证码')}
+                      placeholder={t('输入验证码')}
+                      name='verification_code'
+                      onChange={(value) =>
+                        handleChange('verification_code', value)
+                      }
+                      prefix={<IconKey />}
+                    />
+                  </>
+                ) : (
+                  <Form.Input
+                    field='email'
+                    label={t('邮箱')}
+                    placeholder={t('输入邮箱地址（用作找回密码等）')}
+                    name='email'
+                    type='email'
+                    onChange={(value) => handleChange('email', value)}
+                    prefix={<IconMail />}
+                  />
+                )}
+
                 {smsVerificationEnabled && (
                   <>
                     <Form.Input
@@ -711,41 +774,6 @@ const RegisterForm = () => {
                             : t('获取验证码')}
                         </Button>
                       }
-                    />
-                  </>
-                )}
-
-                {showEmailVerification && (
-                  <>
-                    <Form.Input
-                      field='email'
-                      label={t('邮箱')}
-                      placeholder={t('输入邮箱地址')}
-                      name='email'
-                      type='email'
-                      onChange={(value) => handleChange('email', value)}
-                      prefix={<IconMail />}
-                      suffix={
-                        <Button
-                          onClick={sendVerificationCode}
-                          loading={verificationCodeLoading}
-                          disabled={disableButton || verificationCodeLoading}
-                        >
-                          {disableButton
-                            ? `${t('重新发送')} (${countdown})`
-                            : t('获取验证码')}
-                        </Button>
-                      }
-                    />
-                    <Form.Input
-                      field='verification_code'
-                      label={t('验证码')}
-                      placeholder={t('输入验证码')}
-                      name='verification_code'
-                      onChange={(value) =>
-                        handleChange('verification_code', value)
-                      }
-                      prefix={<IconKey />}
                     />
                   </>
                 )}

@@ -36,6 +36,9 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		info.PriceData.ModelPrice == 0 &&
 		info.PriceData.VideoOutputTokens == 0 &&
 		info.PriceData.ModelRatio == 0
+	isVideoPerSecondBilling := isVideoPerVideoFlatBilling &&
+		info.PriceData.OtherRatios != nil &&
+		info.PriceData.OtherRatios["seconds"] > 0
 
 	switch {
 	case common.StringsContains(constant.TaskPricePatches, info.OriginModelName):
@@ -50,6 +53,11 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 			info.PriceData.ModelRatio,
 			info.PriceData.VideoRatio,
 			info.PriceData.VideoCompletionRatio,
+		)
+	case isVideoPerSecondBilling:
+		logContent = fmt.Sprintf(
+			"%s，视频按秒计费（按最终成片时长向上取整 × 对应分辨率/音轨单价）",
+			logContent,
 		)
 	case isVideoPerVideoFlatBilling:
 		logContent = fmt.Sprintf(
@@ -72,6 +80,9 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 
 	other := make(map[string]interface{})
 	other["request_path"] = c.Request.URL.Path
+	if strings.TrimSpace(info.PublicTaskID) != "" {
+		other["task_id"] = strings.TrimSpace(info.PublicTaskID)
+	}
 	other["model_price"] = info.PriceData.ModelPrice
 	other["group_ratio"] = info.PriceData.GroupRatioInfo.GroupRatio
 	if info.PriceData.GroupRatioInfo.HasSpecialRatio {
@@ -90,7 +101,10 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		other["video_output_tokens"] = info.PriceData.VideoOutputTokens
 		other["video_input_text_tokens"] = info.PriceData.VideoInputTextTokens
 	}
-	if isVideoPerVideoFlatBilling {
+	if isVideoPerSecondBilling {
+		other["billing_mode"] = "video_per_second"
+		other["model_ratio"] = info.PriceData.ModelRatio
+	} else if isVideoPerVideoFlatBilling {
 		other["billing_mode"] = "video_per_video"
 		other["model_ratio"] = info.PriceData.ModelRatio
 	}
@@ -165,10 +179,17 @@ func taskBillingOther(task *model.Task) map[string]interface{} {
 	other := make(map[string]interface{})
 	if bc := task.PrivateData.BillingContext; bc != nil {
 		other["model_price"] = bc.ModelPrice
+		other["model_ratio"] = bc.ModelRatio
 		other["group_ratio"] = bc.GroupRatio
 		if len(bc.OtherRatios) > 0 {
 			for k, v := range bc.OtherRatios {
 				other[k] = v
+			}
+		}
+		// 任务差额日志补全视频计费模式，避免前端误判为“上游返回”并渲染 NaN。
+		if bc.ModelPrice == 0 && bc.ModelRatio == 0 {
+			if secs, ok := bc.OtherRatios["seconds"]; ok && secs > 0 {
+				other["billing_mode"] = "video_per_second"
 			}
 		}
 	}
@@ -215,6 +236,7 @@ func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) {
 		Content:   "",
 		ChannelId: task.ChannelId,
 		ModelName: taskModelName(task),
+		TokenName: task.PrivateData.TokenName,
 		Quota:     quota,
 		TokenId:   task.PrivateData.TokenId,
 		Group:     task.Group,
@@ -279,6 +301,7 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 		Content:   reason,
 		ChannelId: task.ChannelId,
 		ModelName: taskModelName(task),
+		TokenName: task.PrivateData.TokenName,
 		Quota:     logQuota,
 		TokenId:   task.PrivateData.TokenId,
 		Group:     task.Group,
@@ -289,9 +312,9 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 // RecalculateTaskQuotaByTokens 根据实际 token 消耗重新计费（异步差额结算）。
 // 当任务成功且返回了 totalTokens 时，根据模型倍率和分组倍率重新计算实际扣费额度，
 // 与预扣费的差额进行补扣或退还。支持钱包和订阅计费来源。
-func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTokens int) {
+func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTokens int) bool {
 	if totalTokens <= 0 {
-		return
+		return false
 	}
 
 	modelName := taskModelName(task)
@@ -300,7 +323,7 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 	modelRatio, hasRatioSetting, _ := ratio_setting.GetModelRatio(modelName)
 	// 只有配置了倍率(非固定价格)时才按 token 重新计费
 	if !hasRatioSetting || modelRatio <= 0 {
-		return
+		return false
 	}
 
 	// 获取用户和组的倍率信息
@@ -312,7 +335,7 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 		}
 	}
 	if group == "" {
-		return
+		return false
 	}
 
 	groupRatio := ratio_setting.GetGroupRatio(group)
@@ -331,4 +354,5 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 
 	reason := fmt.Sprintf("token重算：tokens=%d, modelRatio=%.2f, groupRatio=%.2f, channelId=%d", totalTokens, modelRatio, finalGroupRatio, task.ChannelId)
 	RecalculateTaskQuota(ctx, task, actualQuota, reason)
+	return true
 }

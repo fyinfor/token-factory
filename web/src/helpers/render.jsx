@@ -1493,6 +1493,9 @@ function renderPriceSimpleCore({
   const isVideoPerVideoFlatBilling =
     billingMode === 'video_per_video' &&
     (modelPrice === 0 || modelPrice === -1);
+  const isVideoPerSecondFlatBilling =
+    billingMode === 'video_per_second' &&
+    (modelPrice === 0 || modelPrice === -1);
 
   if (outputMode === 'segments') {
     // 使用日志表「详情」等紧凑多行：不展示单独一行「分组/专属倍率」；各单价 = 原单价×有效分组倍率（与日志详情的折叠展示一致）。
@@ -1501,6 +1504,17 @@ function renderPriceSimpleCore({
         ? Number(finalGroupRatio)
         : 1;
     const segments = [];
+
+    if (isVideoPerSecondFlatBilling) {
+      segments.push({
+        tone: 'secondary',
+        text: i18next.t('视频按秒/分辨率计价（按实际结算）'),
+      });
+      if (isSystemPromptOverride) {
+        segments.push({ tone: 'primary', text: i18next.t('系统提示覆盖') });
+      }
+      return segments;
+    }
 
     if (isVideoPerVideoFlatBilling) {
       segments.push({
@@ -1690,7 +1704,7 @@ function renderPriceSimpleCore({
 
   if (isVideoPerVideoFlatBilling) {
     return joinBillingSummary([
-      i18next.t('视频按条/分辨率固定价（预扣已合并 QuotaPerUnit）'),
+      i18next.t('视频按条/分辨率固定价（按实际结算）'),
       getGroupRatioText(groupRatio, user_group_ratio),
     ]);
   }
@@ -2342,6 +2356,7 @@ export function renderLogContent(
   videoOutputTokens = 0,
   videoInputTextTokens = 0,
   billingMode = '',
+  billedQuota = 0,
 ) {
   const {
     ratio,
@@ -2355,10 +2370,34 @@ export function renderLogContent(
   const isVideoPerVideoFlatBilling =
     billingMode === 'video_per_video' &&
     (modelPrice === 0 || modelPrice === -1);
+  const isVideoPerSecondFlatBilling =
+    billingMode === 'video_per_second' &&
+    (modelPrice === 0 || modelPrice === -1);
+  if (isVideoPerSecondFlatBilling) {
+    const estimatedTokens =
+      Number.isFinite(Number(billedQuota)) && Number(billedQuota) > 0
+        ? Math.round(Number(billedQuota))
+        : 0;
+    const parts = [i18next.t('视频按秒/分辨率计价（按实际结算）')];
+    if (estimatedTokens > 0) {
+      parts.push(i18next.t('本次实际结算 tokens：{{count}}', { count: estimatedTokens }));
+    }
+    if (!hideGroupRatioInDetail) {
+      parts.push(getGroupRatioText(groupRatio, user_group_ratio));
+    }
+    return joinBillingSummary(parts);
+  }
   if (isVideoPerVideoFlatBilling) {
+    const estimatedTokens =
+      Number.isFinite(Number(billedQuota)) && Number(billedQuota) > 0
+        ? Math.round(Number(billedQuota))
+        : 0;
     const parts = [
-      i18next.t('视频按条/分辨率固定价（预扣已合并 QuotaPerUnit）'),
+      i18next.t('视频按条/分辨率固定价（按实际结算）'),
     ];
+    if (estimatedTokens > 0) {
+      parts.push(i18next.t('本次实际结算 tokens：{{count}}', { count: estimatedTokens }));
+    }
     if (!hideGroupRatioInDetail) {
       parts.push(getGroupRatioText(groupRatio, user_group_ratio));
     }

@@ -24,6 +24,8 @@ import ThinkingContent from './ThinkingContent';
 import { Loader2, Check, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
+const PLAYGROUND_MEDIA_MAX_WIDTH = 'min(100%, 780px)';
+
 const MessageContent = ({
   message,
   className,
@@ -255,7 +257,7 @@ const MessageContent = ({
             controls
             src={message.videoTask.playableUrl}
             className='w-full rounded-lg border'
-            style={{ maxWidth: '100%' }}
+            style={{ maxWidth: PLAYGROUND_MEDIA_MAX_WIDTH }}
           />
         </div>
       )}
@@ -331,11 +333,15 @@ const MessageContent = ({
                 {imageContents.length > 0 && (
                   <div className='mb-3 space-y-2'>
                     {imageContents.map((imgItem, index) => (
-                      <div key={index} className='max-w-sm'>
+                      <div
+                        key={index}
+                        className='w-full'
+                        style={{ maxWidth: PLAYGROUND_MEDIA_MAX_WIDTH }}
+                      >
                         <img
                           src={imgItem.image_url.url}
                           alt={`用户上传的图片 ${index + 1}`}
-                          className='rounded-lg max-w-full h-auto shadow-sm border cursor-zoom-in'
+                          className='rounded-lg w-full h-auto shadow-sm border cursor-zoom-in'
                           style={{ maxHeight: '300px' }}
                           onClick={() => setPreviewImageUrl(imgItem.image_url.url)}
                           onError={(e) => {
@@ -359,7 +365,7 @@ const MessageContent = ({
                   typeof textContent.text === 'string' &&
                   textContent.text.trim() !== '' && (
                     <div
-                      className={`prose prose-xs sm:prose-sm prose-gray max-w-none overflow-x-auto text-xs sm:text-sm ${message.role === 'user' ? 'user-message' : ''}`}
+                      className={`prose prose-xs sm:prose-sm prose-gray max-w-none overflow-x-auto text-xs sm:text-sm [&_img]:w-full [&_img]:h-auto [&_img]:rounded-lg [&_img]:mx-auto [&_img]:cursor-zoom-in [&_img]:max-w-[min(100%,780px)] [&_video]:w-full [&_video]:h-auto [&_video]:rounded-lg [&_video]:mx-auto [&_video]:max-w-[min(100%,780px)] ${message.role === 'user' ? 'user-message' : ''}`}
                     >
                       <MarkdownRenderer
                         content={textContent.text}
@@ -401,7 +407,7 @@ const MessageContent = ({
 
                 return (
                   <div
-                    className='prose prose-xs sm:prose-sm prose-gray max-w-none overflow-x-auto text-xs sm:text-sm'
+                    className='prose prose-xs sm:prose-sm prose-gray max-w-none overflow-x-auto text-xs sm:text-sm [&_img]:w-full [&_img]:h-auto [&_img]:rounded-lg [&_img]:mx-auto [&_img]:cursor-zoom-in [&_img]:max-w-[min(100%,780px)] [&_video]:w-full [&_video]:h-auto [&_video]:rounded-lg [&_video]:mx-auto [&_video]:max-w-[min(100%,780px)]'
                     onClick={(e) => {
                       const target = e.target;
                       if (
@@ -426,7 +432,7 @@ const MessageContent = ({
             } else {
               return (
                 <div
-                  className={`prose prose-xs sm:prose-sm prose-gray max-w-none overflow-x-auto text-xs sm:text-sm ${message.role === 'user' ? 'user-message' : ''}`}
+                  className={`prose prose-xs sm:prose-sm prose-gray max-w-none overflow-x-auto text-xs sm:text-sm [&_img]:w-full [&_img]:h-auto [&_img]:rounded-lg [&_img]:mx-auto [&_img]:cursor-zoom-in [&_img]:max-w-[min(100%,780px)] [&_video]:w-full [&_video]:h-auto [&_video]:rounded-lg [&_video]:mx-auto [&_video]:max-w-[min(100%,780px)] ${message.role === 'user' ? 'user-message' : ''}`}
                 >
                   <MarkdownRenderer
                     content={message.content}

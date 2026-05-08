@@ -348,21 +348,29 @@ const SettingsPanel = ({
             <Typography.Text className='text-xs text-gray-500 mb-2 block'>
               {t('用于文生图/图生图的核心参数')}
             </Typography.Text>
+            <Typography.Text className='text-xs text-orange-600 mb-2 block'>
+              {t('计费以实际图片质量为准')}
+            </Typography.Text>
             <div className='space-y-3'>
+              <Typography.Text strong className='text-sm block'>
+                {t('分辨率')}
+              </Typography.Text>
               <Select
                 placeholder={t('图片尺寸')}
                 optionList={[
-                  { label: '512x512', value: '512x512' },
-                  { label: '768x768', value: '768x768' },
-                  { label: '1024x1024', value: '1024x1024' },
-                  { label: '1536x1024', value: '1536x1024' },
-                  { label: '1024x1536', value: '1024x1536' },
+                  { label: '480p (854x480)', value: '854x480' },
+                  { label: '720p (1280x720)', value: '1280x720' },
+                  { label: '1080p (1920x1080)', value: '1920x1080' },
+                  { label: '2K (2560x1440)', value: '2560x1440' },
                 ]}
                 value={inputs.image_size}
                 onChange={(value) => onInputChange('image_size', value)}
                 disabled={customRequestMode}
                 style={{ width: '100%' }}
               />
+              <Typography.Text strong className='text-sm block'>
+                {t('生成图片数量')}
+              </Typography.Text>
               <Input
                 type='number'
                 min={1}
@@ -373,43 +381,6 @@ const SettingsPanel = ({
                   onInputChange('image_n', Math.max(1, Math.min(4, Number(value) || 1)))
                 }
                 disabled={customRequestMode}
-              />
-              <Select
-                placeholder={t('质量 quality')}
-                optionList={[
-                  { label: 'standard', value: 'standard' },
-                  { label: 'hd', value: 'hd' },
-                ]}
-                value={inputs.image_quality || 'standard'}
-                onChange={(value) =>
-                  onInputChange('image_quality', value || 'standard')
-                }
-                disabled={customRequestMode}
-                style={{ width: '100%' }}
-              />
-              <Select
-                placeholder={t('返回格式 response_format')}
-                optionList={[
-                  { label: 'url', value: 'url' },
-                  { label: 'b64_json', value: 'b64_json' },
-                ]}
-                value={inputs.image_response_format || 'url'}
-                onChange={(value) =>
-                  onInputChange('image_response_format', value || 'url')
-                }
-                disabled={customRequestMode}
-                style={{ width: '100%' }}
-              />
-              <Select
-                placeholder={t('风格 style')}
-                optionList={[
-                  { label: 'vivid', value: 'vivid' },
-                  { label: 'natural', value: 'natural' },
-                ]}
-                value={inputs.image_style || 'vivid'}
-                onChange={(value) => onInputChange('image_style', value || 'vivid')}
-                disabled={customRequestMode}
-                style={{ width: '100%' }}
               />
             </div>
           </div>
@@ -422,6 +393,9 @@ const SettingsPanel = ({
             </Typography.Text>
             <Typography.Text className='text-xs text-gray-500 mb-2 block'>
               {t('用于视频生成的核心参数（时长、分辨率、帧率）')}
+            </Typography.Text>
+            <Typography.Text className='text-xs text-orange-600 mb-2 block'>
+              {t('计费以实际视频质量为准')}
             </Typography.Text>
             <div className='space-y-3'>
               <Typography.Text strong className='text-sm block'>

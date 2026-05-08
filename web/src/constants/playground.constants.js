@@ -101,7 +101,7 @@ export const DEFAULT_CONFIG = {
     imageEnabled: false,
     imageUrls: [''],
     selected_model_tags: [],
-    image_size: '1024x1024',
+    image_size: '1280x720',
     image_n: 1,
     image_quality: 'standard',
     image_response_format: 'url',

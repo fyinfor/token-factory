@@ -208,6 +208,27 @@ export default function SupplierModelPricingEditor({
           null,
           2,
         ),
+        // 供应商表存储当前尚未承载视频维度价格，视频配置继续走渠道 Option 映射。
+        VideoRatio: JSON.stringify(
+          channelVideoRatio[activeChannelId] || {},
+          null,
+          2,
+        ),
+        VideoCompletionRatio: JSON.stringify(
+          channelVideoCompletionRatio[activeChannelId] || {},
+          null,
+          2,
+        ),
+        VideoPrice: JSON.stringify(
+          channelVideoPrice[activeChannelId] || {},
+          null,
+          2,
+        ),
+        VideoPricingRules: JSON.stringify(
+          channelVideoPricingRules[activeChannelId] || {},
+          null,
+          2,
+        ),
       };
     }
     return {
@@ -313,14 +334,72 @@ export default function SupplierModelPricingEditor({
       if (!res?.data?.success) {
         throw new Error(res?.data?.message || t('保存失败'));
       }
+      // 视频维度价格暂走渠道 Option：确保“视频价格开关/按条或按秒规则”可保存并回显。
+      const mergeChannelData = (fullMap, partialMap) => {
+        const currentChannelMap =
+          (fullMap &&
+            typeof fullMap === 'object' &&
+            fullMap[activeChannelId] &&
+            typeof fullMap[activeChannelId] === 'object')
+            ? fullMap[activeChannelId]
+            : {};
+        return {
+          ...fullMap,
+          [activeChannelId]: {
+            ...currentChannelMap,
+            ...(partialMap || {}),
+          },
+        };
+      };
+      const videoOptionRequests = [
+        [
+          'ChannelVideoRatio',
+          mergeChannelData(channelVideoRatio, output.VideoRatio),
+        ],
+        [
+          'ChannelVideoCompletionRatio',
+          mergeChannelData(
+            channelVideoCompletionRatio,
+            output.VideoCompletionRatio,
+          ),
+        ],
+        [
+          'ChannelVideoPrice',
+          mergeChannelData(channelVideoPrice, output.VideoPrice),
+        ],
+        [
+          'ChannelVideoPricingRules',
+          mergeChannelData(channelVideoPricingRules, output.VideoPricingRules),
+        ],
+      ].map(([key, value]) =>
+        API.put('/api/option/', { key, value: JSON.stringify(value, null, 2) }),
+      );
+      const videoResults = await Promise.all(videoOptionRequests);
+      for (const item of videoResults) {
+        if (!item?.data?.success) {
+          throw new Error(item?.data?.message || t('保存失败'));
+        }
+      }
       await loadSupplierChannelPricingMaps(activeChannelId);
       await refresh();
       return;
     }
-    const mergeChannelData = (fullMap, partialMap) => ({
-      ...fullMap,
-      [activeChannelId]: partialMap || {},
-    });
+    const mergeChannelData = (fullMap, partialMap) => {
+      const currentChannelMap =
+        (fullMap &&
+          typeof fullMap === 'object' &&
+          fullMap[activeChannelId] &&
+          typeof fullMap[activeChannelId] === 'object')
+          ? fullMap[activeChannelId]
+          : {};
+      return {
+        ...fullMap,
+        [activeChannelId]: {
+          ...currentChannelMap,
+          ...(partialMap || {}),
+        },
+      };
+    };
     const requestQueue = [
       [
         'ChannelModelPrice',

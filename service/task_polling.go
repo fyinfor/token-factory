@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,6 +19,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/samber/lo"
 )
@@ -546,15 +549,287 @@ func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor
 		logger.LogInfo(ctx, fmt.Sprintf("任务 %s 按次计费，跳过差额结算", task.TaskID))
 		return
 	}
-	// 1. 优先让 adaptor 决定最终额度
+	// 0.5 上游返回 total_tokens 时优先按上游 token 结算。
+	if taskResult.TotalTokens > 0 {
+		if settled := RecalculateTaskQuotaByTokens(ctx, task, taskResult.TotalTokens); settled {
+			return
+		}
+	}
+
+	// 1. 无 token 时，视频按秒规则优先按真实成片重算。
+	if actualQuota := recalcVideoPerSecondQuotaOnComplete(task, taskResult); actualQuota > 0 {
+		RecalculateTaskQuota(ctx, task, actualQuota, "视频按秒重算")
+		return
+	}
+
+	// 2. 让 adaptor 决定最终额度
 	if actualQuota := adaptor.AdjustBillingOnComplete(task, taskResult); actualQuota > 0 {
 		RecalculateTaskQuota(ctx, task, actualQuota, "adaptor计费调整")
 		return
 	}
-	// 2. 回退到 token 重算
-	if taskResult.TotalTokens > 0 {
-		RecalculateTaskQuotaByTokens(ctx, task, taskResult.TotalTokens)
+	// 3. 无调整，保持预扣额度（估算值）
+}
+
+// SettleTaskBillingOnFetch 用于 /v1/videos/{task_id} 查询链路下的成功结算。
+// 该路径不会走后台轮询适配器，因此在状态首次进入 SUCCESS 时主动触发与轮询一致的结算优先级：
+// 1) 上游 total_tokens
+// 2) 视频真实元数据重算
+// 3) 保持预扣（估算值）
+func SettleTaskBillingOnFetch(ctx context.Context, task *model.Task, taskResult *relaycommon.TaskInfo) {
+	if task == nil || taskResult == nil {
 		return
 	}
-	// 3. 无调整，保持预扣额度
+	// 按次模型不做差额结算
+	if bc := task.PrivateData.BillingContext; bc != nil && bc.PerCallBilling {
+		return
+	}
+	if taskResult.TotalTokens > 0 {
+		if settled := RecalculateTaskQuotaByTokens(ctx, task, taskResult.TotalTokens); settled {
+			return
+		}
+	}
+	if actualQuota := recalcVideoPerSecondQuotaOnComplete(task, taskResult); actualQuota > 0 {
+		RecalculateTaskQuota(ctx, task, actualQuota, "视频按秒重算(fetch)")
+	}
+}
+
+func recalcVideoPerSecondQuotaOnComplete(task *model.Task, taskResult *relaycommon.TaskInfo) int {
+	if task == nil || taskResult == nil || task.Status != model.TaskStatusSuccess {
+		return 0
+	}
+	modelName := taskModelName(task)
+	if strings.TrimSpace(modelName) == "" {
+		return 0
+	}
+	channelRules, ok := ratio_setting.GetChannelVideoPricingRules(task.ChannelId, modelName)
+	if !ok || !ratio_setting.HasUsableVideoPerSecondRules(channelRules) {
+		var globalOK bool
+		channelRules, globalOK = ratio_setting.GetVideoPricingRules(modelName)
+		if !globalOK || !ratio_setting.HasUsableVideoPerSecondRules(channelRules) {
+			return 0
+		}
+	}
+	videoURL := strings.TrimSpace(taskResult.Url)
+	if videoURL == "" {
+		videoURL = strings.TrimSpace(task.GetResultURL())
+	}
+	// 优先使用上游真实回包中的成片元数据；仅在缺失时回退 URL 探测。
+	meta, ok := extractVideoMetadataFromTaskData(task)
+	if !ok {
+		var err error
+		meta, err = ProbeVideoMetadataFromURL(videoURL)
+		if err != nil {
+			return 0
+		}
+	}
+	mode := detectTaskVideoBillingMode(task)
+	pricePerSec, ok := matchPerSecondPrice(channelRules, mode, meta.Width, meta.Height, meta.HasAudio)
+	if !ok || pricePerSec <= 0 {
+		return 0
+	}
+	groupRatio := 1.0
+	if task.PrivateData.BillingContext != nil && task.PrivateData.BillingContext.GroupRatio > 0 {
+		groupRatio = task.PrivateData.BillingContext.GroupRatio
+	}
+	seconds := int(math.Ceil(meta.DurationSec))
+	if seconds <= 0 {
+		return 0
+	}
+	rawQuota := float64(seconds) * pricePerSec * common.QuotaPerUnit * groupRatio
+	return int(math.Round(rawQuota))
+}
+
+func extractVideoMetadataFromTaskData(task *model.Task) (*VideoMetadata, bool) {
+	if task == nil || len(task.Data) == 0 {
+		return nil, false
+	}
+	var payload map[string]any
+	if err := common.Unmarshal(task.Data, &payload); err != nil {
+		return nil, false
+	}
+	response, _ := payload["Response"].(map[string]any)
+	if response == nil {
+		return nil, false
+	}
+	aigcVideoTask, _ := response["AigcVideoTask"].(map[string]any)
+	if aigcVideoTask == nil {
+		return nil, false
+	}
+	output, _ := aigcVideoTask["Output"].(map[string]any)
+	if output == nil {
+		return nil, false
+	}
+	fileInfos, _ := output["FileInfos"].([]any)
+	if len(fileInfos) == 0 {
+		return nil, false
+	}
+	firstFile, _ := fileInfos[0].(map[string]any)
+	if firstFile == nil {
+		return nil, false
+	}
+	metaMap, _ := firstFile["MetaData"].(map[string]any)
+	if metaMap == nil {
+		return nil, false
+	}
+
+	duration := toFloat64(metaMap["Duration"])
+	if duration <= 0 {
+		duration = toFloat64(metaMap["VideoDuration"])
+	}
+	width := toInt(metaMap["Width"])
+	height := toInt(metaMap["Height"])
+	audioDuration := toFloat64(metaMap["AudioDuration"])
+
+	hasAudio := audioDuration > 0
+	if !hasAudio {
+		if audioStreams, ok := metaMap["AudioStreamSet"].([]any); ok && len(audioStreams) > 0 {
+			hasAudio = true
+		}
+	}
+	if duration <= 0 || width <= 0 || height <= 0 {
+		return nil, false
+	}
+	return &VideoMetadata{
+		DurationSec: duration,
+		Width:       width,
+		Height:      height,
+		HasAudio:    hasAudio,
+	}, true
+}
+
+func toFloat64(v any) float64 {
+	switch x := v.(type) {
+	case float64:
+		return x
+	case float32:
+		return float64(x)
+	case int:
+		return float64(x)
+	case int64:
+		return float64(x)
+	case int32:
+		return float64(x)
+	case uint:
+		return float64(x)
+	case uint64:
+		return float64(x)
+	case uint32:
+		return float64(x)
+	case string:
+		f, err := strconv.ParseFloat(strings.TrimSpace(x), 64)
+		if err == nil {
+			return f
+		}
+	}
+	return 0
+}
+
+func toInt(v any) int {
+	switch x := v.(type) {
+	case int:
+		return x
+	case int64:
+		return int(x)
+	case int32:
+		return int(x)
+	case uint:
+		return int(x)
+	case uint64:
+		return int(x)
+	case uint32:
+		return int(x)
+	case float64:
+		return int(x)
+	case float32:
+		return int(x)
+	case string:
+		i, err := strconv.Atoi(strings.TrimSpace(x))
+		if err == nil {
+			return i
+		}
+	}
+	return 0
+}
+
+func detectTaskVideoBillingMode(task *model.Task) string {
+	var req relaycommon.TaskSubmitReq
+	if err := common.UnmarshalJsonStr(task.Properties.Input, &req); err != nil {
+		return "text_to_video"
+	}
+	if strings.TrimSpace(req.InputReference) != "" {
+		return "video_to_video"
+	}
+	if strings.TrimSpace(req.Image) != "" || len(req.Images) > 0 {
+		return "image_to_video"
+	}
+	return "text_to_video"
+}
+
+func matchPerSecondPrice(r ratio_setting.VideoPricingRules, mode string, width, height int, hasAudio bool) (float64, bool) {
+	var rows []ratio_setting.VideoResolutionAudioPriceRule
+	switch mode {
+	case "image_to_video":
+		rows = r.ImageToVideoPerSecond
+	case "video_to_video":
+		rows = r.VideoToVideoPerSecond
+	default:
+		rows = r.TextToVideoPerSecond
+	}
+	if len(rows) == 0 {
+		return 0, false
+	}
+	targetPixels := width * height
+	best := -1
+	minDiff := math.MaxFloat64
+	for i := range rows {
+		row := rows[i]
+		if row.Price <= 0 || row.HasAudio != hasAudio {
+			continue
+		}
+		rw, rh, ok := parseVideoResolutionFlexible(row.Resolution)
+		if !ok {
+			continue
+		}
+		p := rw * rh
+		if p <= 0 {
+			continue
+		}
+		diff := math.Abs(float64(targetPixels-p)) / float64(p)
+		if diff < minDiff {
+			minDiff = diff
+			best = i
+		}
+	}
+	if best < 0 {
+		return 0, false
+	}
+	return rows[best].Price, true
+}
+
+func parseVideoResolutionFlexible(v string) (int, int, bool) {
+	s := strings.ToLower(strings.TrimSpace(v))
+	parts := strings.Split(s, "x")
+	if len(parts) == 2 {
+		w, ew := strconv.Atoi(strings.TrimSpace(parts[0]))
+		h, eh := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if ew == nil && eh == nil && w > 0 && h > 0 {
+			return w, h, true
+		}
+	}
+	switch s {
+	case "480p":
+		return 854, 480, true
+	case "540p":
+		return 960, 540, true
+	case "720p":
+		return 1280, 720, true
+	case "1080p":
+		return 1920, 1080, true
+	case "2k":
+		return 2560, 1440, true
+	case "4k":
+		return 3840, 2160, true
+	default:
+		return 0, 0, false
+	}
 }

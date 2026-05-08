@@ -16,8 +16,9 @@ type verificationValue struct {
 }
 
 const (
-	EmailVerificationPurpose = "v"
-	PasswordResetPurpose     = "r"
+	EmailVerificationPurpose      = "v"
+	PasswordResetPurpose          = "r"
+	PasswordResetEmailCodePurpose = "rec" // 忘记密码：邮箱 6 位数字验证码（与链接重置 token 区分）
 )
 
 var verificationMutex sync.Mutex

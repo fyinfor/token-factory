@@ -106,9 +106,8 @@ func GetPricing(c *gin.Context) {
 			filtered = append(filtered, p)
 		}
 	}
-	channels, visibleChannelIDs, err := getPricingVisibleChannelsForUser(c)
+	_, visibleChannelIDs, err := getPricingVisibleChannelsForUser(c)
 	if err != nil {
-		channels = []model.ChannelSimplePricingItem{}
 		visibleChannelIDs = map[int]struct{}{}
 	}
 	userId, exists := c.Get("id")
@@ -243,11 +242,11 @@ func GetPricing(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{
-		"success":                        true,
-		"data":                           pricingData,
-		"blur_pricing":                   blurPricing,
-		"vendors":                        model.GetVendors(),
-		"channels":                       channels,
+		"success":      true,
+		"data":         pricingData,
+		"blur_pricing": blurPricing,
+		"vendors":      model.GetVendors(),
+		// "channels":                       channels,
 		"group_ratio":                    groupRatio,
 		"group_model_price":              groupModelPrice,
 		"group_model_ratio":              groupModelRatio,
