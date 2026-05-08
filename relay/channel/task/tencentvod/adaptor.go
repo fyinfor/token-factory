@@ -200,9 +200,6 @@ func (a *TaskAdaptor) GetChannelName() string { return ChannelName }
 func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error) {
 	ov := originTask.ToOpenAIVideo()
 	ov.TaskID = originTask.TaskID
-	if originTask.FinishTime > 0 {
-		ov.CompletedAt = originTask.FinishTime
-	}
 	var env struct {
 		Response *struct {
 			Error *struct {

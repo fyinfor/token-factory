@@ -553,7 +553,10 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 	ov.Status = originTask.Status.ToVideoStatus()
 	ov.SetProgressStr(originTask.Progress)
 	ov.CreatedAt = originTask.CreatedAt
-	ov.CompletedAt = originTask.UpdatedAt
+	ov.CompletedAt = 0
+	if originTask.FinishTime > 0 {
+		ov.CompletedAt = originTask.FinishTime
+	}
 	ov.Model = originTask.Properties.OriginModelName
 
 	// Pick the parser via response shape detection, then surface URL/error.

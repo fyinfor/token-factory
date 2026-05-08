@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"encoding/json"
 	"strconv"
 	"strings"
 )
@@ -29,6 +30,21 @@ type OpenAIVideo struct {
 	Error              *OpenAIVideoError `json:"error"`
 	VideoURL           string            `json:"video_url"`
 	Metadata           map[string]any    `json:"metadata,omitempty"`
+}
+
+func (m OpenAIVideo) MarshalJSON() ([]byte, error) {
+	type openAIVideoAlias OpenAIVideo
+	payload := struct {
+		openAIVideoAlias
+		CompletedAt *int64 `json:"completed_at"`
+	}{
+		openAIVideoAlias: openAIVideoAlias(m),
+	}
+	if m.CompletedAt > 0 {
+		v := m.CompletedAt
+		payload.CompletedAt = &v
+	}
+	return json.Marshal(payload)
 }
 
 func (m *OpenAIVideo) SetProgressStr(progress string) {
