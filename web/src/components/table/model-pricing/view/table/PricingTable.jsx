@@ -105,6 +105,7 @@ const PricingTable = ({
         <Table
           columns={processedColumns}
           dataSource={filteredModels}
+          rowKey='key'
           loading={loading}
           rowSelection={rowSelection}
           scroll={compactMode ? undefined : { x: 'max-content' }}

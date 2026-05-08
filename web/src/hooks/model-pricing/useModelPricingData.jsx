@@ -297,10 +297,25 @@ export const useModelPricingData = () => {
     return `$${parseFloat(priceInUSD.toFixed(2))}`;
   };
 
+  const getModelRowKey = (model, index) => {
+    const parts = [
+      model.model_name,
+      model.quota_type,
+      model.vendor_id,
+      Array.isArray(model.supported_endpoint_types)
+        ? model.supported_endpoint_types.join(',')
+        : '',
+      index,
+    ];
+    return parts
+      .map((part) => (part === undefined || part === null ? '' : String(part)))
+      .join('::');
+  };
+
   const setModelsFormat = (models, groupRatio, vendorMap) => {
     for (let i = 0; i < models.length; i++) {
       const m = models[i];
-      m.key = m.model_name;
+      m.key = getModelRowKey(m, i);
       m.group_ratio = groupRatio[m.model_name];
 
       if (m.vendor_id && vendorMap[m.vendor_id]) {
@@ -384,10 +399,21 @@ export const useModelPricingData = () => {
   };
 
   const copyText = async (text) => {
-    if (await copy(text)) {
-      showSuccess(t('已复制：') + text);
+    const copyValue = Array.isArray(text)
+      ? text
+          .map(
+            (key) =>
+              models.find((model) => model.key === key)?.model_name ?? key,
+          )
+          .join('\n')
+      : text;
+    if (await copy(copyValue)) {
+      showSuccess(t('已复制：') + copyValue);
     } else {
-      Modal.error({ title: t('无法复制到剪贴板，请手动复制'), content: text });
+      Modal.error({
+        title: t('无法复制到剪贴板，请手动复制'),
+        content: copyValue,
+      });
     }
   };
 
