@@ -57,6 +57,7 @@ import {
 } from '@douyinfe/semi-icons';
 import UserBindingManagementModal from './UserBindingManagementModal';
 import { buildAdminUserPhoneFieldRules } from './userPhoneFormRules';
+import { buildAdminUserEmailFieldRules } from './userEmailFormRules';
 
 const { Text, Title } = Typography;
 
@@ -258,6 +259,16 @@ const EditUserModal = (props) => {
                         label={t('显示名称')}
                         placeholder={t('请输入新的显示名称')}
                         showClear
+                      />
+                    </Col>
+
+                    <Col span={24}>
+                      <Form.Input
+                        field='email'
+                        label={t('邮箱')}
+                        placeholder={t('请输入邮箱地址')}
+                        showClear
+                        rules={buildAdminUserEmailFieldRules(t)}
                       />
                     </Col>
 

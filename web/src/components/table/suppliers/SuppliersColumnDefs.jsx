@@ -18,8 +18,10 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import { Button, Space, Tag } from '@douyinfe/semi-ui';
-import { timestamp2string } from '../../../helpers';
+import { Button, Space, Tag, Typography } from '@douyinfe/semi-ui';
+import { timestamp2string, renderQuota, renderQuotaWithPrompt } from '../../../helpers';
+
+const { Text } = Typography;
 
 /**
  * 下载远程文件：通过 fetch 转 blob 后触发浏览器下载。
@@ -80,6 +82,34 @@ export const getSuppliersColumns = (
       title: t('用户名'),
       dataIndex: 'applicant_username',
       width: 100,
+    },
+    // 对接人账户剩余额度（内部点数 + 与使用日志一致的花费换算）
+    {
+      title: t('剩余额度'),
+      dataIndex: 'applicant_quota',
+      width: 140,
+      render: (v) => (
+        <div>
+          <div>{v ?? 0}</div>
+          <Text type='tertiary' size='small'>
+            {renderQuota(v ?? 0)}
+          </Text>
+        </div>
+      ),
+    },
+    // 对接人历史累计已用额度（内部点数 + 等价花费提示）
+    {
+      title: t('历史消耗'),
+      dataIndex: 'applicant_used_quota',
+      width: 160,
+      render: (v) => (
+        <div>
+          <div>{v ?? 0}</div>
+          <Text type='tertiary' size='small'>
+            {renderQuotaWithPrompt(v ?? 0)}
+          </Text>
+        </div>
+      ),
     },
     {
       title: t('企业/主体名称'),

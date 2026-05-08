@@ -36,6 +36,7 @@ import {
 import { IconSave, IconClose, IconUserAdd } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
 import { buildAdminUserPhoneFieldRules } from './userPhoneFormRules';
+import { buildAdminUserEmailFieldRules } from './userEmailFormRules';
 
 const { Text, Title } = Typography;
 
@@ -49,6 +50,7 @@ const AddUserModal = (props) => {
   const getInitValues = () => ({
     username: '',
     display_name: '',
+    email: '',
     phone: '',
     password: '',
     remark: '',
@@ -156,6 +158,15 @@ const AddUserModal = (props) => {
                       label={t('显示名称')}
                       placeholder={t('请输入显示名称')}
                       showClear
+                    />
+                  </Col>
+                  <Col span={24}>
+                    <Form.Input
+                      field='email'
+                      label={t('邮箱')}
+                      placeholder={t('请输入邮箱地址')}
+                      showClear
+                      rules={buildAdminUserEmailFieldRules(t)}
                     />
                   </Col>
                   {/* 手机号（可选）：格式 + 异步占用校验 */}

@@ -62,6 +62,8 @@ type SupplierApplication struct {
 	ID                  int                 `json:"id" gorm:"primaryKey;comment:主键ID"`
 	ApplicantUserID     int                 `json:"applicant_user_id" gorm:"index;not null;comment:申请人用户ID"`
 	ApplicantUsername   string              `json:"applicant_username" gorm:"column:applicant_username;->;comment:申请人用户名（关联 users.username）"`
+	ApplicantQuota      int                 `json:"applicant_quota" gorm:"column:applicant_quota;->;comment:申请人账户剩余额度（列表联表回填）"`
+	ApplicantUsedQuota  int                 `json:"applicant_used_quota" gorm:"column:applicant_used_quota;->;comment:申请人历史累计已用额度（列表联表回填）"`
 	CompanyName         string              `json:"company_name" gorm:"type:varchar(255);not null;comment:企业或主体名称"`
 	CreditCode          string              `json:"credit_code" gorm:"type:varchar(32);not null;uniqueIndex;comment:统一社会信用代码"`
 	BusinessLicenseURL  string              `json:"business_license_url" gorm:"type:varchar(1024);not null;comment:营业执照文件URL"`
@@ -289,7 +291,7 @@ func ListSuppliersByCompanyName(companyName string, statuses []int, pageInfo *co
 		return nil, 0, err
 	}
 	if err := query.
-		Select("supplier_applications.*, users.username AS applicant_username").
+		Select("supplier_applications.*, users.username AS applicant_username, COALESCE(users.quota,0) AS applicant_quota, COALESCE(users.used_quota,0) AS applicant_used_quota").
 		Order("supplier_applications.id desc").
 		Limit(pageInfo.GetPageSize()).
 		Offset(pageInfo.GetStartIdx()).
@@ -303,7 +305,7 @@ func ListSuppliersByCompanyName(companyName string, statuses []int, pageInfo *co
 func GetSupplierByID(supplierID int) (*SupplierApplication, error) {
 	var item SupplierApplication
 	err := DB.Model(&SupplierApplication{}).
-		Select("supplier_applications.*, users.username AS applicant_username").
+		Select("supplier_applications.*, users.username AS applicant_username, COALESCE(users.quota,0) AS applicant_quota, COALESCE(users.used_quota,0) AS applicant_used_quota").
 		Joins("LEFT JOIN users ON users.id = supplier_applications.applicant_user_id").
 		Where("supplier_applications.id = ?", supplierID).
 		First(&item).Error
