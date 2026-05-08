@@ -350,6 +350,7 @@ const HomeModelList = () => {
               openModelDetail={pricingData.openModelDetail}
               showSizeChanger={false}
               blurPricing={blurPricing}
+              searchValue={pricingData.searchValue}
             />
           </div>
         </div>

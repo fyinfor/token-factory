@@ -54,6 +54,8 @@ const CARD_STYLES = {
   default: 'border-gray-200 hover:border-gray-300',
 };
 
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const PricingCardView = ({
   filteredModels,
   loading,
@@ -80,6 +82,7 @@ const PricingCardView = ({
   openModelDetail,
   showSizeChanger = true,
   blurPricing = false,
+  searchValue = '',
 }) => {
   const showSkeleton = useMinimumLoadingTime(loading);
   const startIndex = (currentPage - 1) * pageSize;
@@ -89,6 +92,30 @@ const PricingCardView = ({
   );
   const getModelKey = (model) => model.key ?? model.model_name ?? model.id;
   const isMobile = useIsMobile();
+  const normalizedSearchValue = String(searchValue || '').trim();
+
+  const renderHighlightedText = (value) => {
+    const text = value == null ? '' : String(value);
+    if (!normalizedSearchValue) return text;
+    const regex = new RegExp(`(${escapeRegExp(normalizedSearchValue)})`, 'ig');
+    return text.split(regex).map((part, idx) =>
+      part.toLowerCase() === normalizedSearchValue.toLowerCase() ? (
+        <span
+          key={idx}
+          style={{
+            color: '#ef4444',
+            fontWeight: 700,
+            backgroundColor: 'rgba(239, 68, 68, 0.12)',
+            borderRadius: 4,
+          }}
+        >
+          {part}
+        </span>
+      ) : (
+        part
+      ),
+    );
+  };
 
   const handleCheckboxChange = (model, checked) => {
     if (!setSelectedRowKeys) return;
@@ -545,7 +572,7 @@ const PricingCardView = ({
             color={stringToColor(tg)}
             size='small'
           >
-            {tg}
+            {renderHighlightedText(tg)}
           </Tag>,
         );
       });
@@ -629,7 +656,7 @@ const PricingCardView = ({
                     {getModelIcon(model)}
                     <div className='flex-1 min-w-0'>
                       <h3 className='text-lg font-bold text-gray-900 truncate'>
-                        {model.model_name}
+                        {renderHighlightedText(model.model_name)}
                       </h3>
                       <div className='flex flex-col gap-1 text-xs mt-1' style={blurPricing ? { filter: 'blur(6px)', userSelect: 'none', pointerEvents: 'none' } : undefined}>
                         {getModelPriceItemsForCard(model, priceData).map(
@@ -668,7 +695,7 @@ const PricingCardView = ({
                           <div className='flex-1 flex items-center flex-wrap gap-1'>
                             {supplierLogos.length === 0 ? (
                               <span className='font-bold text-black'>
-                                {supplierIds.join(', ')}
+                                {renderHighlightedText(supplierIds.join(', '))}
                               </span>
                             ) : (
                               supplierLogos.map((s) => (
@@ -693,7 +720,9 @@ const PricingCardView = ({
                                         color: 'var(--semi-color-text-1)',
                                       }}
                                     >
-                                      {s.alias || s.name || t('官方')}
+                                      {renderHighlightedText(
+                                        s.alias || s.name || t('官方'),
+                                      )}
                                     </span>
                                   )}
                                   {s.supplierType && (
@@ -748,7 +777,7 @@ const PricingCardView = ({
                     className='text-xs line-clamp-2 leading-relaxed'
                     style={{ color: 'var(--semi-color-text-2)' }}
                   >
-                    {getModelDescription(model)}
+                    {renderHighlightedText(getModelDescription(model))}
                   </p>
                 </div>
 
