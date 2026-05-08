@@ -387,6 +387,23 @@ func sunoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *dt
 	return
 }
 
+// requestPathForVideoFetch returns the HTTP path used for routing/format detection.
+// Prefer URL.Path — it remains populated behind reverse proxies; RequestURI may be empty (Go/http.Server notes).
+func requestPathForVideoFetch(c *gin.Context) string {
+	if c == nil || c.Request == nil {
+		return ""
+	}
+	p := strings.TrimSpace(c.Request.URL.Path)
+	if p != "" {
+		return p
+	}
+	raw := strings.TrimSpace(c.Request.RequestURI)
+	if i := strings.IndexByte(raw, '?'); i >= 0 {
+		raw = raw[:i]
+	}
+	return raw
+}
+
 func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *dto.TaskError) {
 	taskId := c.Param("task_id")
 	if taskId == "" {
@@ -404,8 +421,10 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 		return
 	}
 
-	isOpenAIVideoAPI := strings.HasPrefix(c.Request.RequestURI, "/v1/videos/") ||
-		strings.HasPrefix(c.Request.RequestURI, "/api/playground/videos/")
+	path := requestPathForVideoFetch(c)
+	isOpenAIVideoAPI := strings.HasPrefix(path, "/v1/videos/") ||
+		strings.HasPrefix(path, "/v1/video/generations/") ||
+		strings.HasPrefix(path, "/api/playground/videos/")
 
 	// Gemini/Vertex 支持实时查询：用户 fetch 时直接从上游拉取最新状态
 	if realtimeResp := tryRealtimeFetch(originTask, isOpenAIVideoAPI); len(realtimeResp) > 0 {
@@ -468,7 +487,12 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 		return nil
 	}
 
-	resp, err := adaptor.FetchTask(baseURL, channelModel.Key, map[string]any{
+	upstreamKey := channelModel.Key
+	if k := strings.TrimSpace(task.PrivateData.Key); k != "" {
+		upstreamKey = k
+	}
+
+	resp, err := adaptor.FetchTask(baseURL, upstreamKey, map[string]any{
 		"task_id": task.GetUpstreamTaskID(),
 		"action":  task.Action,
 	}, proxy)
