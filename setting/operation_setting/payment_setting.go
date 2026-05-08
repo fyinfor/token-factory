@@ -20,6 +20,8 @@ var YipayWayCode = ""
 var YipayNotifyUrl = ""
 var YipayReturnUrl = ""
 var YipayRequestURL = ""
+// YipayChannelExtra 为 Jeepay 统一下单的 channelExtra（JSON 字符串）；可与服务端按 wayCode 自动默认值合并。
+var YipayChannelExtra = ""
 
 // PayMethods 为在线充值方式配置。
 var PayMethods = []map[string]string{

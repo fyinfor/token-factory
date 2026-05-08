@@ -17,6 +17,9 @@ type TaskStatus string
 func (t TaskStatus) ToVideoStatus() string {
 	var status string
 	switch t {
+	case TaskStatusNotStart:
+		// 与 POST /v1/videos 提交后立即返回的 queued 对齐；库内落库可能仍为 NOT_START
+		status = dto.VideoStatusQueued
 	case TaskStatusQueued, TaskStatusSubmitted:
 		status = dto.VideoStatusQueued
 	case TaskStatusInProgress:
@@ -502,7 +505,13 @@ func (t *Task) ToOpenAIVideo() *dto.OpenAIVideo {
 	openAIVideo.Model = t.Properties.OriginModelName
 	openAIVideo.SetProgressStr(t.Progress)
 	openAIVideo.CreatedAt = t.CreatedAt
-	openAIVideo.CompletedAt = t.UpdatedAt
-	openAIVideo.SetMetadata("url", t.GetResultURL())
+	// 仅终态写完成时间；勿用 UpdatedAt（轮询每次更新会导致 completed_at 误增）
+	openAIVideo.CompletedAt = 0
+	if t.FinishTime > 0 {
+		openAIVideo.CompletedAt = t.FinishTime
+	}
+	if u := t.GetResultURL(); u != "" {
+		openAIVideo.SetMetadata("url", u)
+	}
 	return openAIVideo
 }

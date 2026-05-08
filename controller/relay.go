@@ -644,6 +644,10 @@ func RelayTask(c *gin.Context) {
 
 		task := model.InitTask(result.Platform, relayInfo)
 		task.PrivateData.UpstreamTaskID = result.UpstreamTaskID
+		if k := strings.TrimSpace(relayInfo.ApiKey); k != "" {
+			// 轮询上游（如腾讯云 DescribeTaskDetail）时使用与提交相同的密钥，避免多 Key 渠道错钥
+			task.PrivateData.Key = k
+		}
 		task.PrivateData.BillingSource = relayInfo.BillingSource
 		task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
 		task.PrivateData.TokenId = relayInfo.TokenId
