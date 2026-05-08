@@ -84,6 +84,7 @@ func InitOptionMap() {
 	common.OptionMap["YipayNotifyUrl"] = operation_setting.YipayNotifyUrl
 	common.OptionMap["YipayReturnUrl"] = operation_setting.YipayReturnUrl
 	common.OptionMap["YipayRequestURL"] = operation_setting.YipayRequestURL
+	common.OptionMap["YipayChannelExtra"] = operation_setting.YipayChannelExtra
 	common.OptionMap["Price"] = strconv.FormatFloat(operation_setting.Price, 'f', -1, 64)
 	common.OptionMap["USDExchangeRate"] = strconv.FormatFloat(operation_setting.USDExchangeRate, 'f', -1, 64)
 	common.OptionMap["MinTopUp"] = strconv.Itoa(operation_setting.MinTopUp)
@@ -434,6 +435,9 @@ func updateOptionMap(key string, value string) (err error) {
 	case "YipayRequestURL":
 		operation_setting.YipayRequestURL = strings.TrimSpace(value)
 		common.OptionMap[key] = operation_setting.YipayRequestURL
+	case "YipayChannelExtra":
+		operation_setting.YipayChannelExtra = strings.TrimSpace(value)
+		common.OptionMap[key] = operation_setting.YipayChannelExtra
 	case "Price":
 		operation_setting.Price, _ = strconv.ParseFloat(value, 64)
 	case "USDExchangeRate":

@@ -94,6 +94,7 @@ function buildFormModelFromOptions(opts) {
     YipayAppId: opts.YipayAppId || '',
     YipayNotifyUrl: opts.YipayNotifyUrl || '',
     YipayReturnUrl: opts.YipayReturnUrl || '',
+    YipayChannelExtra: String(opts.YipayChannelExtra ?? ''),
     YipayRequestURL: yipayReq,
     Price: opts.Price !== undefined ? parseFloat(String(opts.Price)) : 7.3,
     MinTopUp:
@@ -146,6 +147,7 @@ export default function SettingsPaymentGateway(props) {
     YipayAppId: '',
     YipayNotifyUrl: '',
     YipayReturnUrl: '',
+    YipayChannelExtra: '',
     YipayRequestURL: '',
     Price: 7.3,
     MinTopUp: 1,
@@ -294,6 +296,11 @@ export default function SettingsPaymentGateway(props) {
         showError(t('Yipay 模式下必须填写支付地址（网关根 URL）'));
         return;
       }
+      const chExtra = (inputs.YipayChannelExtra || '').trim();
+      if (chExtra && !verifyJSON(chExtra)) {
+        showError(t('Yipay 渠道扩展参数须为合法 JSON（Jeepay channelExtra）'));
+        return;
+      }
     }
 
     setLoading(true);
@@ -347,6 +354,16 @@ export default function SettingsPaymentGateway(props) {
         options.push({
           key: 'YipayReturnUrl',
           value: inputs.YipayReturnUrl.trim(),
+        });
+      }
+      if (
+        currentProvider === 'yipay' &&
+        (inputs.YipayChannelExtra ?? '').trim() !==
+          (originInputs.YipayChannelExtra ?? '').trim()
+      ) {
+        options.push({
+          key: 'YipayChannelExtra',
+          value: (inputs.YipayChannelExtra ?? '').trim(),
         });
       }
       if (
@@ -611,6 +628,25 @@ export default function SettingsPaymentGateway(props) {
                     ? `默认：${hint}（留空时使用）`
                     : '请先配置「服务器地址」以预览默认同步跳转 URL';
                 })()}
+              />
+            </Col>
+          </Row>
+          <Row
+            gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
+            style={{
+              marginTop: 8,
+              display: currentProvider === 'yipay' ? 'flex' : 'none',
+            }}
+          >
+            <Col span={24}>
+              <Form.TextArea
+                field='YipayChannelExtra'
+                label={t('Yipay 渠道扩展参数（channelExtra）')}
+                placeholder={'{"payDataType":"payUrl"}'}
+                autosize
+                extraText={t(
+                  '可选。Jeepay channelExtra（JSON）。留空时：一般 _PC 会附带 payDataType=payUrl；PP_PC 会附带 payDataType 与 cancelUrl（与 returnUrl 同源，见 yiPay PPPcOrderRQ）。可在此覆盖 cancelUrl 等。',
+                )}
               />
             </Col>
           </Row>
