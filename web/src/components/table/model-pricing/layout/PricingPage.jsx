@@ -17,13 +17,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React from 'react';
+import React, { useContext, useMemo } from 'react';
 import { Layout, ImagePreview } from '@douyinfe/semi-ui';
 import PricingSidebar from './PricingSidebar';
 import PricingContent from './content/PricingContent';
 import ModelDetailSideSheet from '../modal/ModelDetailSideSheet';
 import { useModelPricingData } from '../../../../hooks/model-pricing/useModelPricingData';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
+import { StatusContext } from '../../../../context/Status';
+import { UserContext } from '../../../../context/User';
 
 const PricingPage = () => {
   const pricingData = useModelPricingData();
@@ -31,12 +33,30 @@ const PricingPage = () => {
   const isMobile = useIsMobile();
   const [showRatio, setShowRatio] = React.useState(false);
   const [viewMode, setViewMode] = React.useState('card');
+  const [statusState] = useContext(StatusContext);
+  const [userState] = useContext(UserContext);
+
+  const blurPricing = useMemo(() => {
+    if (userState?.user) return false;
+    try {
+      const config = statusState?.status?.HeaderNavModules;
+      if (!config) return false;
+      const modules = JSON.parse(config);
+      const pricing = modules?.pricing;
+      if (typeof pricing === 'object' && pricing !== null) {
+        return !!pricing.blurPricing;
+      }
+    } catch {}
+    return false;
+  }, [statusState?.status?.HeaderNavModules, userState?.user]);
+
   const allProps = {
     ...pricingData,
     showRatio,
     setShowRatio,
     viewMode,
     setViewMode,
+    blurPricing,
   };
 
   return (

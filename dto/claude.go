@@ -157,9 +157,13 @@ func (c *ClaudeMessage) ParseContent() ([]ClaudeMediaMessage, error) {
 }
 
 type Tool struct {
+	// Type is used for Anthropic built-in typed tools (e.g. "bash_20250124", "computer_20241022").
+	// It must be preserved through relay conversions so that typed tools are not silently downgraded
+	// to generic function tools with no schema.
+	Type        string                 `json:"type,omitempty"`
 	Name        string                 `json:"name"`
 	Description string                 `json:"description,omitempty"`
-	InputSchema map[string]interface{} `json:"input_schema"`
+	InputSchema map[string]interface{} `json:"input_schema,omitempty"`
 }
 
 type InputSchema struct {

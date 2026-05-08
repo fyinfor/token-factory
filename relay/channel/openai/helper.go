@@ -216,6 +216,14 @@ func HandleFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, lastStream
 
 		info.ClaudeConvertInfo.Usage = usage
 
+		// Ensure SendResponseCount >= 1 so that StreamResponseOpenAI2Claude emits
+		// message_start. This matters when the upstream returns only a single SSE chunk
+		// (all content + finish_reason together) which bypasses HandleStreamFormat and
+		// therefore never increments SendResponseCount.
+		if info.SendResponseCount == 0 {
+			info.SendResponseCount = 1
+		}
+
 		claudeResponses := service.StreamResponseOpenAI2Claude(&streamResponse, info)
 		for _, resp := range claudeResponses {
 			_ = helper.ClaudeData(c, *resp)
