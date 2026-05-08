@@ -33,9 +33,19 @@ import { stringToColor } from '../../../../../helpers';
 import { getUsedGroupContext } from '../../../../../helpers/utils';
 
 import { renderModelTestResultSummary } from '../../../../../helpers/modelStability';
-import ApiDocsSidePanel from './ApiDocsSidePanel';
 
 const { Text } = Typography;
+
+const DOCS_PATH_BY_ENDPOINT_PATH = {
+  '/v1/messages': '/api/ai-model/chat/createmessage',
+  '/v1/videos/generations': '/api/ai-model/videos/createvideogeneration',
+  '/v1/images/generations':
+    '/api/ai-model/images/openai/post-v1-images-generations',
+  '/v1/chat/completions': '/api/ai-model/chat/openai/createchatcompletion',
+  '/v1/videos': '/api/ai-model/videos/sora/createvideo',
+};
+
+const DEFAULT_DOCS_ENDPOINT_PATH = '/v1/chat/completions';
 
 const hasRatioValue = (value) =>
   value !== undefined &&
@@ -61,6 +71,7 @@ const getSupplierTypeColor = (supplierType) => {
 const ModelChannelList = ({
   modelData,
   channelMtrMap = {},
+  endpointMap = {},
   displayPrice,
   currency,
   siteDisplayType,
@@ -116,13 +127,30 @@ const ModelChannelList = ({
   // 管理展开状态
   const [activeKey, setActiveKey] = useState(allKeys);
 
-  // API 文档抽屉状态
-  const [apiDocsVisible, setApiDocsVisible] = useState(false);
-  const [apiDocsModelName, setApiDocsModelName] = useState('');
+  const apiDocsLink = useMemo(() => {
+    const endpointType = Array.isArray(modelData?.supported_endpoint_types)
+      ? modelData.supported_endpoint_types[0]
+      : '';
+    const endpointPath = endpointMap?.[endpointType]?.path || '';
+    const docsPath =
+      DOCS_PATH_BY_ENDPOINT_PATH[endpointPath] ||
+      DOCS_PATH_BY_ENDPOINT_PATH[DEFAULT_DOCS_ENDPOINT_PATH];
+    const docsLink =
+      typeof window !== 'undefined'
+        ? (localStorage.getItem('docs_link') || '').trim()
+        : '';
+    if (!docsLink || !docsPath) {
+      return '';
+    }
+    return `${docsLink.replace(/\/+$/, '')}${docsPath}`;
+  }, [modelData?.supported_endpoint_types, endpointMap]);
 
-  const openApiDocs = (modelName) => {
-    setApiDocsModelName(modelName || '');
-    setApiDocsVisible(true);
+  const openApiDocs = () => {
+    if (!apiDocsLink) {
+      Toast.warning({ content: t('暂无可用文档') });
+      return;
+    }
+    window.open(apiDocsLink, '_blank', 'noopener,noreferrer');
   };
 
   // 当 allKeys 实际变化时（基于字符串比较），更新 activeKey
@@ -136,11 +164,18 @@ const ModelChannelList = ({
   // 格式化通道信息（与 calculateModelPrice 一致：含分组倍率）
   const formatChannelInfo = (channel) => {
     // 判断计费类型：优先使用 channel.quota_type，否则使用 modelData.quota_type
-    const quotaType = channel.quota_type !== undefined ? channel.quota_type : modelData?.quota_type;
+    const quotaType =
+      channel.quota_type !== undefined
+        ? channel.quota_type
+        : modelData?.quota_type;
     const isPerToken = quotaType === 0; // 0=按量计费, 1=按次计费
 
     // 计算价格，返回 { display, value }
-    const calculatePrice = (nominalRatio, isFixedPrice = false, applyGroupRatio = true) => {
+    const calculatePrice = (
+      nominalRatio,
+      isFixedPrice = false,
+      applyGroupRatio = true,
+    ) => {
       let priceUSD;
       const ratio = applyGroupRatio ? usedGroupRatio : 1;
       if (isFixedPrice) {
@@ -196,7 +231,11 @@ const ModelChannelList = ({
         Number(rootValue) > Number(channelValue)
       ) {
         const root = calculatePrice(Number(rootValue), isFixedPrice, false);
-        const channelOriginal = calculatePrice(Number(channelValue), isFixedPrice, false);
+        const channelOriginal = calculatePrice(
+          Number(channelValue),
+          isFixedPrice,
+          false,
+        );
         if (root.value > channelOriginal.value && root.value > 0) {
           discount = Math.round((1 - channelOriginal.value / root.value) * 100);
           original = root.display;
@@ -210,14 +249,24 @@ const ModelChannelList = ({
     // 按次计费
     if (isPerToken === false) {
       items.push(
-        makeItem(t('模型价格'), channel.model_price, modelData?.model_price, true),
+        makeItem(
+          t('模型价格'),
+          channel.model_price,
+          modelData?.model_price,
+          true,
+        ),
       );
     }
     // 按量计费
     else {
       // 输入
       items.push(
-        makeItem(t('输入价格'), channel.model_ratio, modelData?.model_ratio, false),
+        makeItem(
+          t('输入价格'),
+          channel.model_ratio,
+          modelData?.model_ratio,
+          false,
+        ),
       );
 
       // 输出
@@ -259,7 +308,8 @@ const ModelChannelList = ({
         const rootCC =
           hasRatioValue(modelData?.model_ratio) &&
           hasRatioValue(modelData?.create_cache_ratio)
-            ? Number(modelData.model_ratio) * Number(modelData.create_cache_ratio)
+            ? Number(modelData.model_ratio) *
+              Number(modelData.create_cache_ratio)
             : null;
         items.push(makeItem(t('缓存创建价格'), chCC, rootCC, false));
       }
@@ -280,13 +330,6 @@ const ModelChannelList = ({
           </div>
         </div>
       </div>
-
-      <ApiDocsSidePanel
-        visible={apiDocsVisible}
-        onClose={() => setApiDocsVisible(false)}
-        modelName={apiDocsModelName}
-        t={t}
-      />
 
       <Collapse activeKey={activeKey} onChange={setActiveKey}>
         {groupedChannels.map((group) => (
@@ -417,7 +460,8 @@ const ModelChannelList = ({
                             <Button
                               size='small'
                               type='tertiary'
-                              onClick={() => openApiDocs(channelPath)}
+                              onClick={openApiDocs}
+                              disabled={!apiDocsLink}
                             >
                               {t('文档')}
                             </Button>
