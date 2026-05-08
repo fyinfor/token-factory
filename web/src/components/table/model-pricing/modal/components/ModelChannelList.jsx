@@ -140,14 +140,15 @@ const ModelChannelList = ({
     const isPerToken = quotaType === 0; // 0=按量计费, 1=按次计费
 
     // 计算价格，返回 { display, value }
-    const calculatePrice = (nominalRatio, isFixedPrice = false) => {
+    const calculatePrice = (nominalRatio, isFixedPrice = false, applyGroupRatio = true) => {
       let priceUSD;
+      const ratio = applyGroupRatio ? usedGroupRatio : 1;
       if (isFixedPrice) {
         // 按次计费：直接使用价格
-        priceUSD = nominalRatio * usedGroupRatio;
+        priceUSD = nominalRatio * ratio;
       } else {
         // 按量计费：倍率 × 2 × 分组倍率
-        priceUSD = nominalRatio * 2 * usedGroupRatio;
+        priceUSD = nominalRatio * 2 * ratio;
       }
       const rawDisplayPrice = displayPrice(priceUSD);
       const unitDivisor = tokenUnit === 'K' ? 1000 : 1;
@@ -194,9 +195,10 @@ const ModelChannelList = ({
         hasRatioValue(rootValue) &&
         Number(rootValue) > Number(channelValue)
       ) {
-        const root = calculatePrice(Number(rootValue), isFixedPrice);
-        if (root.value > current.value && root.value > 0) {
-          discount = Math.round((1 - current.value / root.value) * 100);
+        const root = calculatePrice(Number(rootValue), isFixedPrice, false);
+        const channelOriginal = calculatePrice(Number(channelValue), isFixedPrice, false);
+        if (root.value > channelOriginal.value && root.value > 0) {
+          discount = Math.round((1 - channelOriginal.value / root.value) * 100);
           original = root.display;
         }
       }

@@ -202,6 +202,13 @@ const PricingCardView = ({
       createCache: [],
       fixed: [],
     };
+    const originalPrices = {
+      input: [],
+      output: [],
+      cache: [],
+      createCache: [],
+      fixed: [],
+    };
 
     model.channel_list.forEach((ch) => {
       // 按量计费
@@ -209,17 +216,24 @@ const PricingCardView = ({
         if (ch.model_ratio !== undefined && ch.model_ratio !== null) {
           const inputPriceUSD = ch.model_ratio * 2 * usedGroupRatio;
           prices.input.push(formatPrice(inputPriceUSD));
+          originalPrices.input.push(formatPrice(ch.model_ratio * 2));
 
           if (ch.completion_ratio !== undefined && ch.completion_ratio !== null) {
             const outputPriceUSD =
               ch.model_ratio * ch.completion_ratio * 2 * usedGroupRatio;
             prices.output.push(formatPrice(outputPriceUSD));
+            originalPrices.output.push(
+              formatPrice(ch.model_ratio * ch.completion_ratio * 2),
+            );
           }
 
           if (ch.cache_ratio !== undefined && ch.cache_ratio !== null) {
             const cachePriceUSD =
               ch.model_ratio * ch.cache_ratio * 2 * usedGroupRatio;
             prices.cache.push(formatPrice(cachePriceUSD));
+            originalPrices.cache.push(
+              formatPrice(ch.model_ratio * ch.cache_ratio * 2),
+            );
           }
 
           if (
@@ -229,6 +243,9 @@ const PricingCardView = ({
             const createCachePriceUSD =
               ch.model_ratio * ch.create_cache_ratio * 2 * usedGroupRatio;
             prices.createCache.push(formatPrice(createCachePriceUSD));
+            originalPrices.createCache.push(
+              formatPrice(ch.model_ratio * ch.create_cache_ratio * 2),
+            );
           }
         }
       }
@@ -237,6 +254,7 @@ const PricingCardView = ({
         if (ch.model_price !== undefined && ch.model_price !== null) {
           const fixedPriceUSD = ch.model_price * usedGroupRatio;
           prices.fixed.push(formatPrice(fixedPriceUSD));
+          originalPrices.fixed.push(formatPrice(ch.model_price));
         }
       }
     });
@@ -245,18 +263,18 @@ const PricingCardView = ({
     const rootPrices = {};
     if (model.quota_type === 0) {
       if (model.model_ratio !== undefined && model.model_ratio !== null) {
-        rootPrices.input = formatPrice(model.model_ratio * 2 * usedGroupRatio);
+        rootPrices.input = formatPrice(model.model_ratio * 2);
         if (
           model.completion_ratio !== undefined &&
           model.completion_ratio !== null
         ) {
           rootPrices.output = formatPrice(
-            model.model_ratio * model.completion_ratio * 2 * usedGroupRatio,
+            model.model_ratio * model.completion_ratio * 2,
           );
         }
         if (model.cache_ratio !== undefined && model.cache_ratio !== null) {
           rootPrices.cache = formatPrice(
-            model.model_ratio * model.cache_ratio * 2 * usedGroupRatio,
+            model.model_ratio * model.cache_ratio * 2,
           );
         }
         if (
@@ -264,13 +282,13 @@ const PricingCardView = ({
           model.create_cache_ratio !== null
         ) {
           rootPrices.createCache = formatPrice(
-            model.model_ratio * model.create_cache_ratio * 2 * usedGroupRatio,
+            model.model_ratio * model.create_cache_ratio * 2,
           );
         }
       }
     } else if (model.quota_type === 1) {
       if (model.model_price !== undefined && model.model_price !== null) {
-        rootPrices.fixed = formatPrice(model.model_price * usedGroupRatio);
+        rootPrices.fixed = formatPrice(model.model_price);
       }
     }
 
@@ -332,11 +350,14 @@ const PricingCardView = ({
       createCache: calculateRange(prices.createCache),
       fixed: calculateRange(prices.fixed),
       original: {
-        input: getOriginal(rootPrices.input, prices.input),
-        output: getOriginal(rootPrices.output, prices.output),
-        cache: getOriginal(rootPrices.cache, prices.cache),
-        createCache: getOriginal(rootPrices.createCache, prices.createCache),
-        fixed: getOriginal(rootPrices.fixed, prices.fixed),
+        input: getOriginal(rootPrices.input, originalPrices.input),
+        output: getOriginal(rootPrices.output, originalPrices.output),
+        cache: getOriginal(rootPrices.cache, originalPrices.cache),
+        createCache: getOriginal(
+          rootPrices.createCache,
+          originalPrices.createCache,
+        ),
+        fixed: getOriginal(rootPrices.fixed, originalPrices.fixed),
       },
       unitSuffix,
       fixedSuffix,
