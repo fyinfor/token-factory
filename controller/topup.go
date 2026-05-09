@@ -974,21 +974,40 @@ func RequestAmount(c *gin.Context) {
 	c.JSON(200, gin.H{"message": "success", "data": strconv.FormatFloat(payMoney, 'f', 2, 64)})
 }
 
+// parseTopUpListStatusFilter 解析充值列表的 status 查询参数，仅允许预定义状态；非法或 all 视为不按状态筛选。
+func parseTopUpListStatusFilter(c *gin.Context) string {
+	s := strings.TrimSpace(strings.ToLower(c.Query("status")))
+	if s == "" || s == "all" {
+		return ""
+	}
+	switch s {
+	case common.TopUpStatusPending, common.TopUpStatusSuccess, common.TopUpStatusFailed, common.TopUpStatusExpired:
+		return s
+	default:
+		return ""
+	}
+}
+
+// parseTopUpTradeNoKeyword 解析订单号筛选：优先 trade_no，其次兼容旧参数 keyword。
+func parseTopUpTradeNoKeyword(c *gin.Context) string {
+	if v := strings.TrimSpace(c.Query("trade_no")); v != "" {
+		return v
+	}
+	return strings.TrimSpace(c.Query("keyword"))
+}
+
 func GetUserTopUps(c *gin.Context) {
 	userId := c.GetInt("id")
 	pageInfo := common.GetPageQuery(c)
-	keyword := c.Query("keyword")
+	tradeNoKeyword := parseTopUpTradeNoKeyword(c)
+	statusFilter := parseTopUpListStatusFilter(c)
 
 	var (
 		topups []*model.TopUp
 		total  int64
 		err    error
 	)
-	if keyword != "" {
-		topups, total, err = model.SearchUserTopUps(userId, keyword, pageInfo)
-	} else {
-		topups, total, err = model.GetUserTopUps(userId, pageInfo)
-	}
+	topups, total, err = model.GetUserTopUps(userId, pageInfo, statusFilter, tradeNoKeyword)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -1002,18 +1021,16 @@ func GetUserTopUps(c *gin.Context) {
 // GetAllTopUps 管理员获取全平台充值记录
 func GetAllTopUps(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
-	keyword := c.Query("keyword")
+	tradeNoKeyword := parseTopUpTradeNoKeyword(c)
+	usernameKeyword := strings.TrimSpace(c.Query("username"))
+	statusFilter := parseTopUpListStatusFilter(c)
 
 	var (
 		topups []*model.TopUp
 		total  int64
 		err    error
 	)
-	if keyword != "" {
-		topups, total, err = model.SearchAllTopUps(keyword, pageInfo)
-	} else {
-		topups, total, err = model.GetAllTopUps(pageInfo)
-	}
+	topups, total, err = model.GetAllTopUps(pageInfo, statusFilter, tradeNoKeyword, usernameKeyword)
 	if err != nil {
 		common.ApiError(c, err)
 		return

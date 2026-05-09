@@ -216,7 +216,42 @@ func RechargeStripe(referenceId string, customerId string, paidMoney float64, cu
 	return nil
 }
 
-func GetUserTopUps(userId int, pageInfo *common.PageInfo) (topups []*TopUp, total int64, err error) {
+// topUpStatusFilterQuery 为充值列表查询追加 status 条件；空字符串或非法值不追加。
+func topUpStatusFilterQuery(db *gorm.DB, status string) *gorm.DB {
+	s := strings.TrimSpace(strings.ToLower(status))
+	if s == "" {
+		return db
+	}
+	switch s {
+	case common.TopUpStatusPending, common.TopUpStatusSuccess, common.TopUpStatusFailed, common.TopUpStatusExpired:
+		return db.Where("status = ?", s)
+	default:
+		return db
+	}
+}
+
+// applyTopUpTradeNoLike 按订单号关键字模糊筛选 trade_no；keyword 为空时不追加条件。
+func applyTopUpTradeNoLike(db *gorm.DB, keyword string) *gorm.DB {
+	kw := strings.TrimSpace(keyword)
+	if kw == "" {
+		return db
+	}
+	like := "%%" + kw + "%%"
+	return db.Where("trade_no LIKE ?", like)
+}
+
+// applyTopUpUsernameJoin 管理员全平台列表按用户名模糊筛选：INNER JOIN users（避免 IN 子查询在部分驱动下的兼容问题）。
+func applyTopUpUsernameJoin(db *gorm.DB, usernameKeyword string) *gorm.DB {
+	u := strings.TrimSpace(usernameKeyword)
+	if u == "" {
+		return db
+	}
+	like := "%%" + u + "%%"
+	return db.Joins("INNER JOIN users ON users.id = top_ups.user_id AND users.username LIKE ?", like)
+}
+
+// GetUserTopUps 分页返回指定用户的充值订单；statusFilter、tradeNoKeyword 为空时不对对应维度筛选。
+func GetUserTopUps(userId int, pageInfo *common.PageInfo, statusFilter, tradeNoKeyword string) (topups []*TopUp, total int64, err error) {
 	// Start transaction
 	tx := DB.Begin()
 	if tx.Error != nil {
@@ -228,15 +263,22 @@ func GetUserTopUps(userId int, pageInfo *common.PageInfo) (topups []*TopUp, tota
 		}
 	}()
 
+	userScope := func(db *gorm.DB) *gorm.DB {
+		q := db.Where("user_id = ?", userId)
+		q = topUpStatusFilterQuery(q, statusFilter)
+		q = applyTopUpTradeNoLike(q, tradeNoKeyword)
+		return q
+	}
+
 	// Get total count within transaction
-	err = tx.Model(&TopUp{}).Where("user_id = ?", userId).Count(&total).Error
+	err = tx.Model(&TopUp{}).Scopes(userScope).Count(&total).Error
 	if err != nil {
 		tx.Rollback()
 		return nil, 0, err
 	}
 
 	// Get paginated topups within same transaction
-	err = tx.Where("user_id = ?", userId).Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&topups).Error
+	err = tx.Model(&TopUp{}).Scopes(userScope).Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&topups).Error
 	if err != nil {
 		tx.Rollback()
 		return nil, 0, err
@@ -254,8 +296,8 @@ func GetUserTopUps(userId int, pageInfo *common.PageInfo) (topups []*TopUp, tota
 	return topups, total, nil
 }
 
-// GetAllTopUps 获取全平台的充值记录（管理员使用）
-func GetAllTopUps(pageInfo *common.PageInfo) (topups []*TopUp, total int64, err error) {
+// GetAllTopUps 获取全平台的充值记录（管理员使用）；各筛选为空时不追加对应条件。
+func GetAllTopUps(pageInfo *common.PageInfo, statusFilter, tradeNoKeyword, usernameKeyword string) (topups []*TopUp, total int64, err error) {
 	tx := DB.Begin()
 	if tx.Error != nil {
 		return nil, 0, tx.Error
@@ -266,12 +308,19 @@ func GetAllTopUps(pageInfo *common.PageInfo) (topups []*TopUp, total int64, err 
 		}
 	}()
 
-	if err = tx.Model(&TopUp{}).Count(&total).Error; err != nil {
+	allScope := func(db *gorm.DB) *gorm.DB {
+		q := topUpStatusFilterQuery(db, statusFilter)
+		q = applyTopUpTradeNoLike(q, tradeNoKeyword)
+		q = applyTopUpUsernameJoin(q, usernameKeyword)
+		return q
+	}
+
+	if err = tx.Model(&TopUp{}).Scopes(allScope).Count(&total).Error; err != nil {
 		tx.Rollback()
 		return nil, 0, err
 	}
 
-	if err = tx.Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&topups).Error; err != nil {
+	if err = tx.Model(&TopUp{}).Scopes(allScope).Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&topups).Error; err != nil {
 		tx.Rollback()
 		return nil, 0, err
 	}
@@ -284,82 +333,6 @@ func GetAllTopUps(pageInfo *common.PageInfo) (topups []*TopUp, total int64, err 
 		return nil, 0, err
 	}
 
-	return topups, total, nil
-}
-
-// SearchUserTopUps 按订单号搜索某用户的充值记录
-func SearchUserTopUps(userId int, keyword string, pageInfo *common.PageInfo) (topups []*TopUp, total int64, err error) {
-	tx := DB.Begin()
-	if tx.Error != nil {
-		return nil, 0, tx.Error
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
-	query := tx.Model(&TopUp{}).Where("user_id = ?", userId)
-	if keyword != "" {
-		like := "%%" + keyword + "%%"
-		query = query.Where("trade_no LIKE ?", like)
-	}
-
-	if err = query.Count(&total).Error; err != nil {
-		tx.Rollback()
-		return nil, 0, err
-	}
-
-	if err = query.Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&topups).Error; err != nil {
-		tx.Rollback()
-		return nil, 0, err
-	}
-	if err = fillTopUpUsernamesWithDB(tx, topups); err != nil {
-		tx.Rollback()
-		return nil, 0, err
-	}
-
-	if err = tx.Commit().Error; err != nil {
-		return nil, 0, err
-	}
-	return topups, total, nil
-}
-
-// SearchAllTopUps 按订单号搜索全平台充值记录（管理员使用）
-func SearchAllTopUps(keyword string, pageInfo *common.PageInfo) (topups []*TopUp, total int64, err error) {
-	tx := DB.Begin()
-	if tx.Error != nil {
-		return nil, 0, tx.Error
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
-		}
-	}()
-
-	query := tx.Model(&TopUp{})
-	if keyword != "" {
-		like := "%%" + keyword + "%%"
-		query = query.Where("trade_no LIKE ?", like)
-	}
-
-	if err = query.Count(&total).Error; err != nil {
-		tx.Rollback()
-		return nil, 0, err
-	}
-
-	if err = query.Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&topups).Error; err != nil {
-		tx.Rollback()
-		return nil, 0, err
-	}
-	if err = fillTopUpUsernamesWithDB(tx, topups); err != nil {
-		tx.Rollback()
-		return nil, 0, err
-	}
-
-	if err = tx.Commit().Error; err != nil {
-		return nil, 0, err
-	}
 	return topups, total, nil
 }
 

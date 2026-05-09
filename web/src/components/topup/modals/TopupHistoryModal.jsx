@@ -27,6 +27,7 @@ import {
   Button,
   Input,
   Tag,
+  Select,
 } from '@douyinfe/semi-ui';
 import {
   IllustrationNoResult,
@@ -58,24 +59,83 @@ const PAYMENT_METHOD_MAP = {
   WX_NATIVE: '微信',
 };
 
+/** 支付状态筛选项「不限」占位值（Semi Select 对 value="" 不稳定，勿用空串） */
+const TOPUP_STATUS_ALL = '__all__';
+
+/**
+ * 从 Semi Input onChange 首参解析字符串（兼容部分环境下传入合成事件的情况）。
+ * @param {unknown} valOrEvt onChange 第一个参数
+ * @returns {string}
+ */
+function semiInputString(valOrEvt) {
+  if (typeof valOrEvt === 'string') return valOrEvt;
+  if (
+    valOrEvt &&
+    typeof valOrEvt === 'object' &&
+    'target' in valOrEvt &&
+    valOrEvt.target &&
+    typeof valOrEvt.target.value === 'string'
+  ) {
+    return valOrEvt.target.value;
+  }
+  return '';
+}
+
+/**
+ * 钱包管理「充值账单」弹窗：分页列表；支持用户名（管理员）、订单号、支付状态筛选。
+ * @param {{ visible: boolean, onCancel: () => void, t: (key: string) => string }} props 弹窗显隐与文案函数
+ */
 const TopupHistoryModal = ({ visible, onCancel, t }) => {
   const [loading, setLoading] = useState(false);
   const [topups, setTopups] = useState([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  const [keyword, setKeyword] = useState('');
+  /** 订单号模糊筛选（trade_no） */
+  const [tradeNoFilter, setTradeNoFilter] = useState('');
+  /** 管理员按用户名模糊筛选 */
+  const [usernameFilter, setUsernameFilter] = useState('');
+  /** 支付状态：TOPUP_STATUS_ALL 表示不限；其它与后端 TopUp.status 一致 */
+  const [statusFilter, setStatusFilter] = useState(TOPUP_STATUS_ALL);
   const isMobile = useIsMobile();
 
+  /** 每次渲染读取管理员身份（避免 useMemo 空依赖导致角色变更后仍走 self 接口） */
+  const userIsAdmin = isAdmin();
+
+  /** 支付状态下拉选项（与后端 TopUp.status / STATUS_CONFIG 一致） */
+  const statusFilterOptions = useMemo(
+    () => [
+      { value: TOPUP_STATUS_ALL, label: t('全部') },
+      { value: 'success', label: t('成功') },
+      { value: 'pending', label: t('待支付') },
+      { value: 'failed', label: t('失败') },
+      { value: 'expired', label: t('已过期') },
+    ],
+    [t],
+  );
+
+  /** 请求充值账单分页数据 */
   const loadTopups = async (currentPage, currentPageSize) => {
     setLoading(true);
     try {
-      const base = isAdmin() ? '/api/user/topup' : '/api/user/topup/self';
-      const qs =
-        `p=${currentPage}&page_size=${currentPageSize}` +
-        (keyword ? `&keyword=${encodeURIComponent(keyword)}` : '');
-      const endpoint = `${base}?${qs}`;
-      const res = await API.get(endpoint);
+      const adminNow = isAdmin();
+      const base = adminNow ? '/api/user/topup' : '/api/user/topup/self';
+      const tn = tradeNoFilter.trim();
+      const un = usernameFilter.trim();
+      /** @type {Record<string, string | number>} */
+      const params = {
+        p: currentPage,
+        page_size: currentPageSize,
+      };
+      if (tn) params.trade_no = tn;
+      if (adminNow && un) params.username = un;
+      if (statusFilter && statusFilter !== TOPUP_STATUS_ALL) {
+        params.status = statusFilter;
+      }
+      const res = await API.get(base, {
+        params,
+        disableDuplicate: true,
+      });
       const { success, message, data } = res.data;
       if (success) {
         setTopups(data.items || []);
@@ -94,7 +154,7 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
     if (visible) {
       loadTopups(page, pageSize);
     }
-  }, [visible, page, pageSize, keyword]);
+  }, [visible, page, pageSize, tradeNoFilter, usernameFilter, statusFilter]);
 
   const handlePageChange = (currentPage) => {
     setPage(currentPage);
@@ -105,8 +165,22 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
     setPage(1);
   };
 
-  const handleKeywordChange = (value) => {
-    setKeyword(value);
+  /** 订单号输入变更 */
+  const handleTradeNoChange = (value) => {
+    setTradeNoFilter(semiInputString(value));
+    setPage(1);
+  };
+
+  /** 用户名筛选变更（管理员） */
+  const handleUsernameChange = (value) => {
+    setUsernameFilter(semiInputString(value));
+    setPage(1);
+  };
+
+  /** 支付状态变更（含清空回到「全部」） */
+  const handleStatusFilterChange = (value) => {
+    const v = value == null || value === '' ? TOPUP_STATUS_ALL : value;
+    setStatusFilter(v);
     setPage(1);
   };
 
@@ -158,9 +232,6 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
     return Number(record?.amount || 0) === 0 && tradeNo.startsWith('sub');
   };
 
-  // 检查是否为管理员
-  const userIsAdmin = useMemo(() => isAdmin(), []);
-
   const columns = useMemo(() => {
     const baseColumns = [
       {
@@ -209,7 +280,7 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
         render: (money) => <Text type='danger'>¥{money.toFixed(2)}</Text>,
       },
       {
-        title: t('状态'),
+        title: t('支付状态'),
         dataIndex: 'status',
         key: 'status',
         render: renderStatusBadge,
@@ -259,14 +330,36 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
       footer={null}
       size={isMobile ? 'full-width' : 'large'}
     >
-      <div className='mb-3'>
+      {/* 筛选条件单行排列；宽度不足时横向滚动，避免折成两行 */}
+      <div className='mb-3 flex w-full flex-row flex-nowrap items-center gap-2 overflow-x-auto'>
+        {userIsAdmin ? (
+          <Input
+            className='min-w-[104px] flex-1'
+            prefix={<IconSearch />}
+            placeholder={t('用户名')}
+            value={usernameFilter}
+            onChange={handleUsernameChange}
+            showClear
+          />
+        ) : null}
         <Input
+          className='min-w-[104px] flex-1'
           prefix={<IconSearch />}
           placeholder={t('订单号')}
-          value={keyword}
-          onChange={handleKeywordChange}
+          value={tradeNoFilter}
+          onChange={handleTradeNoChange}
           showClear
         />
+        <div className='shrink-0'>
+          <Select
+            value={statusFilter}
+            onChange={handleStatusFilterChange}
+            optionList={statusFilterOptions}
+            placeholder={t('支付状态')}
+            allowClear
+            style={{ width: isMobile ? 132 : 158 }}
+          />
+        </div>
       </div>
       <Table
         columns={columns}
