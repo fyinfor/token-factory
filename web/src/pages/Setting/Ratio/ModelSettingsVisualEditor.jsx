@@ -72,9 +72,15 @@ export default function ModelSettingsVisualEditor(props) {
           } while (channels.length < total);
           setPricingSuppliers(channels);
         } else {
-          const res = await API.get('/api/pricing');
+          const res = await API.get('/api/channel/');
           if (res?.data?.success) {
-            setPricingSuppliers(res.data.channels || []);
+            setPricingSuppliers(
+              (res.data.data?.items || []).map((item) => ({
+                channel_id: item.id,
+                channel_name: item.name,
+                channel_no: item.channel_no,
+              })) || [],
+            );
           }
         }
       } catch (error) {

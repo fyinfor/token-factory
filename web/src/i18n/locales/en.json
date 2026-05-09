@@ -907,6 +907,7 @@
     "名称+密钥": "Name + key",
     "名称不能为空": "Name cannot be empty",
     "名称匹配类型": "Name matching type",
+    "价格不能为空": "Price cannot be empty",
     "后端请求失败": "Backend request failed",
     "后缀": "Suffix",
     "否": "No",
