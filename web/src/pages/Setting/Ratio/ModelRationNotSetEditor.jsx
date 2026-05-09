@@ -82,9 +82,15 @@ export default function ModelRatioNotSetEditor(props) {
         } while (channels.length < total);
         setPricingChannels(channels);
       } else {
-        const res = await API.get('/api/pricing');
+        const res = await API.get('/api/channel/');
         if (res?.data?.success) {
-          setPricingChannels(res.data.channels || []);
+          setPricingChannels(
+            (res.data.data?.items || []).map((item) => ({
+              channel_id: item.id,
+              channel_name: item.name,
+              channel_no: item.channel_no,
+            })) || [],
+          );
         }
       }
     } catch (error) {
