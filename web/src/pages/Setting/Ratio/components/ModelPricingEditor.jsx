@@ -70,10 +70,10 @@ const { Text } = Typography;
 const EMPTY_CANDIDATE_MODEL_NAMES = [];
 const DEFAULT_TIER_RULE = {
   mode: 'progressive',
-  input: [{ up_to: 0, ratio: 1 }],
-  output: [{ up_to: 0, ratio: 1 }],
-  cache_read: [{ up_to: 0, ratio: 1 }],
-  cache_write: [{ up_to: 0, ratio: 1 }],
+  input: [{ up_to: 0, ratio: 0 }],
+  output: [{ up_to: 0, ratio: 0 }],
+  cache_read: [{ up_to: 0, ratio: 0 }],
+  cache_write: [{ up_to: 0, ratio: 0 }],
 };
 const VIDEO_RESOLUTION_OPTIONS = [
   { label: '480p (854x480)', value: '854x480' },

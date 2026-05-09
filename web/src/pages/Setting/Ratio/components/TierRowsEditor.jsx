@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button, Card, Input, Space, Switch, Table, Typography } from '@douyinfe/semi-ui';
 import { IconDelete, IconPlus } from '@douyinfe/semi-icons';
 import {
@@ -32,6 +32,14 @@ const { Text } = Typography;
 
 const TierRowsEditor = ({ t, value, onChange, exchangeRate = 1, visibleCategories, onVisibleCategoriesChange }) => {
   const rule = normalizeTierRule(value);
+  const [editingValue, setEditingValue] = useState(null);
+  const [editingKey, setEditingKey] = useState(null);
+
+  // 当 value 变化时，清除编辑状态
+  useEffect(() => {
+    setEditingValue(null);
+    setEditingKey(null);
+  }, [value]);
 
   const updateRows = (key, rows) => {
     const updated = { ...rule, [key]: ensureFinalInfinityTierRows(rows) };
@@ -47,9 +55,10 @@ const TierRowsEditor = ({ t, value, onChange, exchangeRate = 1, visibleCategorie
     const upTo = firstFinite
       ? Math.max(1, Math.floor(Number(firstFinite.up_to) / 2))
       : 128000;
+    // 添加新档位时不自动设置价格，保持为空（ratio = 0）
     const next = rows.length
-      ? [{ up_to: upTo, ratio: 1 }, ...rows]
-      : [{ up_to: 0, ratio: 1 }];
+      ? [{ up_to: upTo, ratio: 0 }, ...rows]
+      : [{ up_to: 0, ratio: 0 }];
     updateRows(key, next);
   };
 
@@ -142,23 +151,40 @@ const TierRowsEditor = ({ t, value, onChange, exchangeRate = 1, visibleCategorie
                           : row.up_to - previous;
 
                         // 价格模式：显示价格，保存时转换为倍率
+                        const currentInputKey = `${key}_${row._idx}`;
                         const priceValue = row.ratio
                           ? ratioToPrice(row.ratio, tokenCount, exchangeRate)
                           : '';
+                        const displayValue = editingKey === currentInputKey ? editingValue : String(priceValue);
                         return (
                           <Input
-                            value={String(priceValue)}
+                            value={displayValue}
                             placeholder='0.001'
+                            onFocus={() => {
+                              setEditingKey(currentInputKey);
+                              setEditingValue(String(priceValue));
+                            }}
                             onChange={(v) => {
-                              const next = [...rows];
+                              setEditingValue(v);
+                            }}
+                            onBlur={(e) => {
+                              const v = e.target.value;
+                              if (!v) {
+                                setEditingKey(null);
+                                setEditingValue(null);
+                                return;
+                              }
                               const priceUSD = parseFloat(v);
                               const newRatio = priceToRatio(
                                 priceUSD,
                                 tokenCount,
                                 exchangeRate,
                               );
+                              const next = [...rows];
                               next[row._idx] = { ...next[row._idx], ratio: newRatio };
                               updateRows(key, next);
+                              setEditingKey(null);
+                              setEditingValue(null);
                             }}
                           />
                         );

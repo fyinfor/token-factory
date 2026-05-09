@@ -36,6 +36,11 @@ export const parseJSONMap = (raw) => {
   if (!raw || String(raw).trim() === '') return {};
   try {
     const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return Object.fromEntries(
+        parsed.map((item, index) => [`tpl_${index + 1}`, item]),
+      );
+    }
     return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
       ? parsed
       : {};
@@ -48,7 +53,7 @@ export const normalizeTierRows = (rows) =>
   (Array.isArray(rows) ? rows : [])
     .map((row) => ({
       up_to: Number(row?.up_to || 0),
-      ratio: Number(row?.ratio ?? 1),
+      ratio: Number(row?.ratio ?? 0),
     }))
     .filter((row) => Number.isFinite(row.up_to) && Number.isFinite(row.ratio));
 
@@ -67,7 +72,7 @@ export const ensureFinalInfinityTierRows = (rows) => {
   const normalized = normalizeTierRows(rows);
   if (!normalized.length) return normalized;
   if (normalized[normalized.length - 1].up_to === 0) return normalized;
-  return [...normalized, { up_to: 0, ratio: 1 }];
+  return [...normalized, { up_to: 0, ratio: 0 }];
 };
 
 export const hasTierRule = (rule) => {
@@ -156,6 +161,7 @@ export const validateTierRule = (rule, t = (v) => v) => {
     const rows = normalized[key];
     for (let i = 0; i < rows.length; i += 1) {
       const row = rows[i];
+      if (row.ratio === 0 || row.ratio === null || row.ratio === undefined) return `${t(label)} ${t('价格不能为空')}`;
       if (row.ratio < 0) return `${t(label)} ${t('倍率不能小于 0')}`;
       if (row.up_to < 0) return `${t(label)} up_to ${t('不能小于 0')}`;
       if (row.up_to === 0 && i !== rows.length - 1) {
@@ -181,7 +187,7 @@ export const serializeTierRule = (rule) => {
 
 // 价格转倍率：倍率 = 价格(USD) / (token数 × 汇率)
 export const priceToRatio = (priceUSD, tokenCount, exchangeRate = 1) => {
-  if (!priceUSD || !tokenCount || tokenCount <= 0) return 1;
+  if (!priceUSD || !tokenCount || tokenCount <= 0) return 0;
   const ratio = priceUSD / (tokenCount * exchangeRate);
   return Math.max(0, ratio);
 };
