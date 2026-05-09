@@ -330,54 +330,7 @@ export const getChannelsColumns = ({
   detectChannelUpstreamUpdates,
   openOnboardModal,
   isAdminChannelPage,
-  channelBalanceAlertConfig,
 }) => {
-  const parseQuotaPerUnit = () => {
-    const value = Number(localStorage.getItem('quota_per_unit'));
-    if (!Number.isFinite(value) || value <= 0) {
-      return 500000;
-    }
-    return value;
-  };
-
-  const renderUsedRemaining = (record) => {
-    const quotaPerUnit = parseQuotaPerUnit();
-    const usedQuota = Number(record.used_quota);
-    const totalAmount = Number(record.balance);
-    if (!Number.isFinite(usedQuota) || !Number.isFinite(totalAmount)) {
-      return '-';
-    }
-    const usedAmount = usedQuota / quotaPerUnit;
-    const remainingAmount = totalAmount - usedAmount;
-    const softThreshold = Number(
-      channelBalanceAlertConfig?.softThreshold ?? 50,
-    );
-    const riskThreshold = Number(
-      channelBalanceAlertConfig?.riskThreshold ?? 20,
-    );
-
-    let remainingColor = 'green';
-    if (remainingAmount <= riskThreshold) {
-      remainingColor = 'red';
-    } else if (remainingAmount <= softThreshold) {
-      remainingColor = 'orange';
-    }
-    return (
-      <Space spacing={4}>
-        <Tooltip content={t('已用额度（按当前系统换算规则）')}>
-          <Tag color='white' type='ghost' shape='circle'>
-            {renderQuotaWithAmount(Math.max(usedAmount, 0))}
-          </Tag>
-        </Tooltip>
-        <Tooltip content={t('剩余额度（前端计算：额度 - 已用）')}>
-          <Tag color={remainingColor} type='light' shape='circle'>
-            {renderQuotaWithAmount(remainingAmount)}
-          </Tag>
-        </Tooltip>
-      </Space>
-    );
-  };
-
   return [
     {
       key: COLUMN_KEYS.ID,
@@ -564,7 +517,7 @@ export const getChannelsColumns = ({
     },
     {
       key: COLUMN_KEYS.BALANCE,
-      title: isAdminChannelPage ? t('额度') : t('已用/剩余'),
+      title: isAdminChannelPage ? t('额度') : t('已用'),
       dataIndex: 'expired_time',
       render: (text, record, index) => {
         if (isAdminChannelPage && record.children === undefined) {
@@ -618,37 +571,11 @@ export const getChannelsColumns = ({
         }
         if (record.children === undefined) {
           return (
-            <div>
-              <Space spacing={1}>
-                <Tooltip content={t('已用额度')}>
-                  <Tag color='white' type='ghost' shape='circle'>
-                    {renderQuota(record.used_quota)}
-                  </Tag>
-                </Tooltip>
-                <Tooltip
-                  content={
-                    record.type === 57
-                      ? t('查看 Codex 帐号信息与用量')
-                      : t('剩余额度') +
-                        ': ' +
-                        renderQuotaWithAmount(record.balance) +
-                        t('，点击更新')
-                  }
-                >
-                  <Tag
-                    color={record.type === 57 ? 'light-blue' : 'white'}
-                    type={record.type === 57 ? 'light' : 'ghost'}
-                    shape='circle'
-                    className={record.type === 57 ? 'cursor-pointer' : ''}
-                    onClick={() => updateChannelBalance(record)}
-                  >
-                    {record.type === 57
-                      ? t('帐号信息')
-                      : renderQuotaWithAmount(record.balance)}
-                  </Tag>
-                </Tooltip>
-              </Space>
-            </div>
+            <Tooltip content={t('已用额度')}>
+              <Tag color='white' type='ghost' shape='circle'>
+                {renderQuota(record.used_quota)}
+              </Tag>
+            </Tooltip>
           );
         } else {
           return (
@@ -665,13 +592,19 @@ export const getChannelsColumns = ({
       ? [
           {
             key: COLUMN_KEYS.USED_REMAINING,
-            title: t('已用/剩余'),
+            title: t('已用'),
             dataIndex: 'used_remaining',
             render: (_text, record) => {
               if (record.children !== undefined) {
                 return '-';
               }
-              return renderUsedRemaining(record);
+              return (
+                <Tooltip content={t('已用额度')}>
+                  <Tag color='white' type='ghost' shape='circle'>
+                    {renderQuota(record.used_quota)}
+                  </Tag>
+                </Tooltip>
+              );
             },
           },
         ]

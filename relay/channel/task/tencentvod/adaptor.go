@@ -168,8 +168,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	}
 	ov := dto.NewOpenAIVideo()
 	ov.ID = info.PublicTaskID
-	ov.TaskID = info.PublicTaskID
-	ov.CreatedAt = time.Now().Unix()
+	ov.CreatedAt = dto.FormatTimeUnixRFC3339(time.Now().Unix())
 	ov.Model = info.OriginModelName
 	c.JSON(http.StatusOK, ov)
 	return taskID, respBody, nil
@@ -239,7 +238,6 @@ func (a *TaskAdaptor) GetChannelName() string { return ChannelName }
 
 func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error) {
 	ov := originTask.ToOpenAIVideo()
-	ov.TaskID = originTask.TaskID
 	var env struct {
 		Response *struct {
 			Error *struct {

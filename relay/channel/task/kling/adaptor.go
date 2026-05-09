@@ -207,8 +207,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	}
 	ov := dto.NewOpenAIVideo()
 	ov.ID = info.PublicTaskID
-	ov.TaskID = info.PublicTaskID
-	ov.CreatedAt = time.Now().Unix()
+	ov.CreatedAt = dto.FormatTimeUnixRFC3339(time.Now().Unix())
 	ov.Model = info.OriginModelName
 	c.JSON(http.StatusOK, ov)
 	return kResp.Data.TaskId, responseBody, nil
@@ -384,10 +383,11 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 
 	openAIVideo := dto.NewOpenAIVideo()
 	openAIVideo.ID = originTask.TaskID
+	openAIVideo.Model = originTask.Properties.OriginModelName
 	openAIVideo.Status = originTask.Status.ToVideoStatus()
 	openAIVideo.SetProgressStr(originTask.Progress)
-	openAIVideo.CreatedAt = klingResp.Data.CreatedAt
-	openAIVideo.CompletedAt = klingResp.Data.UpdatedAt
+	openAIVideo.CreatedAt = dto.FormatTimeUnixRFC3339(klingResp.Data.CreatedAt)
+	openAIVideo.CompletedAt = dto.FormatTimeUnixRFC3339(klingResp.Data.UpdatedAt)
 
 	if len(klingResp.Data.TaskResult.Videos) > 0 {
 		video := klingResp.Data.TaskResult.Videos[0]

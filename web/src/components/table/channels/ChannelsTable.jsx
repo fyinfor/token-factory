@@ -66,7 +66,6 @@ const ChannelsTable = (channelsData) => {
     detectChannelUpstreamUpdates,
     openOnboardModal,
     isAdminChannelPage,
-    channelBalanceAlertConfig,
   } = channelsData;
 
   // Get all columns
@@ -97,7 +96,6 @@ const ChannelsTable = (channelsData) => {
       detectChannelUpstreamUpdates,
       openOnboardModal,
       isAdminChannelPage,
-      channelBalanceAlertConfig,
     });
   }, [
     t,
@@ -125,7 +123,6 @@ const ChannelsTable = (channelsData) => {
     detectChannelUpstreamUpdates,
     openOnboardModal,
     isAdminChannelPage,
-    channelBalanceAlertConfig,
   ]);
 
   // Filter columns based on visibility settings

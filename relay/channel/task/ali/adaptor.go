@@ -404,13 +404,12 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	// 转换为 OpenAI 格式响应
 	openAIResp := dto.NewOpenAIVideo()
 	openAIResp.ID = info.PublicTaskID
-	openAIResp.TaskID = info.PublicTaskID
 	openAIResp.Model = c.GetString("model")
 	if openAIResp.Model == "" && info != nil {
 		openAIResp.Model = info.OriginModelName
 	}
 	openAIResp.Status = convertAliStatus(aliResp.Output.TaskStatus)
-	openAIResp.CreatedAt = common.GetTimestamp()
+	openAIResp.CreatedAt = dto.FormatTimeUnixRFC3339(common.GetTimestamp())
 
 	// 返回 OpenAI 格式
 	c.JSON(http.StatusOK, openAIResp)
@@ -497,8 +496,10 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
 	openAIResp.Status = convertAliStatus(aliResp.Output.TaskStatus)
 	openAIResp.Model = task.Properties.OriginModelName
 	openAIResp.SetProgressStr(task.Progress)
-	openAIResp.CreatedAt = task.CreatedAt
-	openAIResp.CompletedAt = task.UpdatedAt
+	openAIResp.CreatedAt = dto.FormatTimeUnixRFC3339(task.CreatedAt)
+	if task.FinishTime > 0 {
+		openAIResp.CompletedAt = dto.FormatTimeUnixRFC3339(task.FinishTime)
+	}
 
 	// 设置视频URL（核心字段）
 	openAIResp.SetMetadata("url", aliResp.Output.VideoURL)

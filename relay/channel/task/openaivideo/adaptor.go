@@ -122,11 +122,16 @@ type arkTaskContent struct {
 	VideoURL string `json:"video_url,omitempty"`
 }
 
+type arkVideoOutput struct {
+	VideoURL string `json:"video_url,omitempty"`
+}
+
 type arkResultResponse struct {
 	ID          string          `json:"id"`
 	Model       string          `json:"model,omitempty"`
 	Status      string          `json:"status,omitempty"`
 	Content     *arkTaskContent `json:"content,omitempty"`
+	Output      *arkVideoOutput `json:"output,omitempty"`
 	CreatedAt   int64           `json:"created_at,omitempty"`
 	UpdatedAt   int64           `json:"updated_at,omitempty"`
 	CompletedAt int64           `json:"completed_at,omitempty"`
@@ -172,11 +177,12 @@ type sophnetResultResponse struct {
 	Status  int    `json:"status"`
 	Message string `json:"message,omitempty"`
 	Result  struct {
-		ID      string          `json:"id"`
-		Model   string          `json:"model,omitempty"`
-		Status  string          `json:"status,omitempty"`
-		Content *arkTaskContent `json:"content,omitempty"`
-		Error   *apiError       `json:"error,omitempty"`
+		ID      string           `json:"id"`
+		Model   string           `json:"model,omitempty"`
+		Status  string           `json:"status,omitempty"`
+		Content *arkTaskContent  `json:"content,omitempty"`
+		Output  *arkVideoOutput  `json:"output,omitempty"`
+		Error   *apiError        `json:"error,omitempty"`
 	} `json:"result"`
 }
 
@@ -321,8 +327,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 
 	ov := dto.NewOpenAIVideo()
 	ov.ID = info.PublicTaskID
-	ov.TaskID = info.PublicTaskID
-	ov.CreatedAt = time.Now().Unix()
+	ov.CreatedAt = dto.FormatTimeUnixRFC3339(time.Now().Unix())
 	ov.Model = info.OriginModelName
 	c.JSON(http.StatusOK, ov)
 
@@ -362,16 +367,46 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 }
 
 func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, error) {
+	normalized := normalizeOpenAIVideoPollJSON(respBody)
 	// Pick the parser via shape detection: MaaS responses carry top-level
 	// "code"/"result"; ARK responses carry top-level "id"/"status".
-	switch detectResponseProtocol(respBody) {
+	switch detectResponseProtocol(normalized) {
 	case ProtocolMaaS:
-		return parseMaasResult(respBody)
+		return parseMaasResult(normalized)
 	case ProtocolSophnet:
-		return parseSophnetResult(respBody)
+		return parseSophnetResult(normalized)
 	default:
-		return parseArkResult(respBody)
+		return parseArkResult(normalized)
 	}
+}
+
+// normalizeOpenAIVideoPollJSON unwraps common reseller / Volc-style envelopes so that
+// Ark-shaped bodies are visible to detectResponseProtocol / parseArkResult.
+// Example: {"code":0,"data":{"id":"...","status":"succeeded","content":{...}}}
+func normalizeOpenAIVideoPollJSON(respBody []byte) []byte {
+	var probe map[string]any
+	if err := common.Unmarshal(respBody, &probe); err != nil {
+		return respBody
+	}
+	data, ok := probe["data"].(map[string]any)
+	if !ok {
+		return respBody
+	}
+	if _, ok := data["status"]; !ok {
+		return respBody
+	}
+	// Ark task object: has id, or has content/output typical of video poll
+	_, hasID := data["id"]
+	_, hasContent := data["content"]
+	_, hasOutput := data["output"]
+	if !hasID && !hasContent && !hasOutput {
+		return respBody
+	}
+	nested, err := common.Marshal(data)
+	if err != nil {
+		return respBody
+	}
+	return nested
 }
 
 // detectResponseProtocol probes characteristic top-level fields to figure out
@@ -392,10 +427,27 @@ func detectResponseProtocol(respBody []byte) string {
 	if _, hasResult := probe["result"]; hasResult {
 		return ProtocolMaaS
 	}
+	// Many gateways wrap Ark in {"code":0,"data":{...}} — that must NOT be treated as MaaS
+	// just because of top-level "code". Only treat as MaaS when it looks like a MaaS / business
+	// error envelope (numeric code, no Ark "id" at top level, and data is absent or not an Ark task).
 	if _, hasCode := probe["code"]; hasCode {
-		// Top-level "code" is a MaaS marker. ARK wraps errors in {"error":{...}}
-		// and never exposes a top-level "code".
-		return ProtocolMaaS
+		switch probe["code"].(type) {
+		case float64, int, int32, int64, json.Number:
+			if _, hasArkID := probe["id"]; hasArkID {
+				return ProtocolArk
+			}
+			if dm, ok := probe["data"].(map[string]any); ok {
+				if _, ok := dm["id"]; ok {
+					return ProtocolArk
+				}
+				if _, ok := dm["status"]; ok && (dm["content"] != nil || dm["output"] != nil) {
+					return ProtocolArk
+				}
+			}
+			return ProtocolMaaS
+		default:
+			// non-numeric code — fall through to Ark
+		}
 	}
 	return ProtocolArk
 }
@@ -416,11 +468,13 @@ func parseArkResult(respBody []byte) (*relaycommon.TaskInfo, error) {
 	case "running", "in_progress", "processing":
 		taskResult.Status = model.TaskStatusInProgress
 		taskResult.Progress = taskcommon.ProgressInProgress
-	case "succeeded", "completed", "success":
+	case "succeeded", "completed", "success", "done":
 		taskResult.Status = model.TaskStatusSuccess
 		taskResult.Progress = "100%"
-		if resp.Content != nil {
+		if resp.Content != nil && strings.TrimSpace(resp.Content.VideoURL) != "" {
 			taskResult.Url = resp.Content.VideoURL
+		} else if resp.Output != nil && strings.TrimSpace(resp.Output.VideoURL) != "" {
+			taskResult.Url = resp.Output.VideoURL
 		}
 	case "failed", "expired", "cancelled", "canceled":
 		taskResult.Status = model.TaskStatusFailure
@@ -463,6 +517,7 @@ func parseSophnetResult(respBody []byte) (*relaycommon.TaskInfo, error) {
 		Model:   resp.Result.Model,
 		Status:  resp.Result.Status,
 		Content: resp.Result.Content,
+		Output:  resp.Result.Output,
 		Error:   resp.Result.Error,
 	}
 	normalized, err := common.Marshal(arkView)
@@ -549,21 +604,20 @@ func (a *TaskAdaptor) GetChannelName() string {
 func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error) {
 	ov := dto.NewOpenAIVideo()
 	ov.ID = originTask.TaskID
-	ov.TaskID = originTask.TaskID
 	ov.Status = originTask.Status.ToVideoStatus()
 	ov.SetProgressStr(originTask.Progress)
-	ov.CreatedAt = originTask.CreatedAt
-	ov.CompletedAt = 0
+	ov.CreatedAt = dto.FormatTimeUnixRFC3339(originTask.CreatedAt)
 	if originTask.FinishTime > 0 {
-		ov.CompletedAt = originTask.FinishTime
+		ov.CompletedAt = dto.FormatTimeUnixRFC3339(originTask.FinishTime)
 	}
 	ov.Model = originTask.Properties.OriginModelName
 
+	normalizedData := normalizeOpenAIVideoPollJSON(originTask.Data)
 	// Pick the parser via response shape detection, then surface URL/error.
-	switch detectResponseProtocol(originTask.Data) {
+	switch detectResponseProtocol(normalizedData) {
 	case ProtocolMaaS:
 		var resp maasResultResponse
-		if err := common.Unmarshal(originTask.Data, &resp); err != nil {
+		if err := common.Unmarshal(normalizedData, &resp); err != nil {
 			return nil, errors.Wrap(err, "unmarshal video task data (maas) failed")
 		}
 		var firstURL, firstErr string
@@ -586,7 +640,7 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 		}
 	case ProtocolSophnet:
 		var resp sophnetResultResponse
-		if err := common.Unmarshal(originTask.Data, &resp); err != nil {
+		if err := common.Unmarshal(normalizedData, &resp); err != nil {
 			return nil, errors.Wrap(err, "unmarshal video task data (sophnet) failed")
 		}
 		if resp.Result.Content != nil && strings.TrimSpace(resp.Result.Content.VideoURL) != "" {
@@ -605,11 +659,13 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 		}
 	default:
 		var resp arkResultResponse
-		if err := common.Unmarshal(originTask.Data, &resp); err != nil {
+		if err := common.Unmarshal(normalizedData, &resp); err != nil {
 			return nil, errors.Wrap(err, "unmarshal video task data (ark) failed")
 		}
 		if resp.Content != nil && strings.TrimSpace(resp.Content.VideoURL) != "" {
 			ov.SetMetadata("url", resp.Content.VideoURL)
+		} else if resp.Output != nil && strings.TrimSpace(resp.Output.VideoURL) != "" {
+			ov.SetMetadata("url", resp.Output.VideoURL)
 		}
 		if resp.Error != nil && (resp.Error.Message != "" || resp.Error.Code != "") {
 			ov.Error = &dto.OpenAIVideoError{
