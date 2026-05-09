@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import { Button, Form, Row, Col, Typography, Spin } from '@douyinfe/semi-ui';
+import { Button, Form, Row, Col, Typography, Spin, TextArea } from '@douyinfe/semi-ui';
 const { Text } = Typography;
 import {
   API,
@@ -170,18 +170,24 @@ export default function SettingsPaymentGateway(props) {
   );
 
   /**
-   * 将 props.options 写入 React state 与 Semi Form（供 options 更新或 Form 刚挂载时调用）。
+   * 将服务端 options 同步到本地 state，并写入 Semi Form。
+   * YipayChannelExtra 由独立 TextArea 绑定 inputs，不写入 Form（避免放在 display:none 的 Form Field 内导致无法编辑）。
    * @param {Record<string, unknown>} opts
    */
   const flushOptionsIntoForm = useCallback((opts) => {
-    if (!opts || !formApiRef.current) {
+    if (!opts) {
       return;
     }
     const currentInputs = buildFormModelFromOptions(opts);
     setInputs(currentInputs);
     setOriginInputs({ ...currentInputs });
     const api = formApiRef.current;
-    api.setValues(currentInputs, { isOverride: true });
+    if (!api) {
+      return;
+    }
+    const { YipayChannelExtra: _channelExtraOmit, ...formRest } = currentInputs;
+    void _channelExtraOmit;
+    api.setValues(formRest, { isOverride: true });
     api.setValue('YipayAppSecret', currentInputs.YipayAppSecret);
   }, []);
 
@@ -200,6 +206,14 @@ export default function SettingsPaymentGateway(props) {
     },
     [props.options, flushOptionsIntoForm],
   );
+
+  /**
+   * 同步 Yipay channelExtra 到本地状态（独立于 Semi Form）。
+   * @param {string} val 文本框当前值
+   */
+  const handleYipayChannelExtraChange = (val) => {
+    setInputs((prev) => ({ ...prev, YipayChannelExtra: val }));
+  };
 
   /**
    * 表单变更时合并状态（仅合入非 undefined 字段，避免 Semi 在卸载表单项时用 undefined 冲掉内存中的值）。
@@ -639,15 +653,30 @@ export default function SettingsPaymentGateway(props) {
             }}
           >
             <Col span={24}>
-              <Form.TextArea
-                field='YipayChannelExtra'
-                label={t('Yipay 渠道扩展参数（channelExtra）')}
+              <div style={{ marginBottom: 8 }}>
+                <Text strong>{t('Yipay 渠道扩展参数（channelExtra）')}</Text>
+              </div>
+              <TextArea
+                value={inputs.YipayChannelExtra}
+                onChange={handleYipayChannelExtraChange}
                 placeholder={'{"payDataType":"payUrl"}'}
-                autosize
-                extraText={t(
+                rows={1}
+                autoComplete='off'
+                style={{
+                  width: '100%',
+                  fontFamily: 'monospace',
+                  fontSize: 12,
+                }}
+              />
+              <Text
+                type='tertiary'
+                size='small'
+                style={{ marginTop: 8, display: 'block' }}
+              >
+                {t(
                   '可选。Jeepay channelExtra（JSON）。留空时：一般 _PC 会附带 payDataType=payUrl；PP_PC 会附带 payDataType 与 cancelUrl（与 returnUrl 同源，见 yiPay PPPcOrderRQ）。可在此覆盖 cancelUrl 等。',
                 )}
-              />
+              </Text>
             </Col>
           </Row>
           <Form.TextArea
