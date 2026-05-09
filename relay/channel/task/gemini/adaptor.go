@@ -137,8 +137,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	taskID = taskcommon.EncodeLocalTaskID(s.Name)
 	ov := dto.NewOpenAIVideo()
 	ov.ID = info.PublicTaskID
-	ov.TaskID = info.PublicTaskID
-	ov.CreatedAt = time.Now().Unix()
+	ov.CreatedAt = dto.FormatTimeUnixRFC3339(time.Now().Unix())
 	ov.Model = info.OriginModelName
 	c.JSON(http.StatusOK, ov)
 	return taskID, responseBody, nil
@@ -259,11 +258,11 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
 	video.Model = modelName
 	video.Status = task.Status.ToVideoStatus()
 	video.SetProgressStr(task.Progress)
-	video.CreatedAt = task.CreatedAt
+	video.CreatedAt = dto.FormatTimeUnixRFC3339(task.CreatedAt)
 	if task.FinishTime > 0 {
-		video.CompletedAt = task.FinishTime
+		video.CompletedAt = dto.FormatTimeUnixRFC3339(task.FinishTime)
 	} else if task.UpdatedAt > 0 {
-		video.CompletedAt = task.UpdatedAt
+		video.CompletedAt = dto.FormatTimeUnixRFC3339(task.UpdatedAt)
 	}
 
 	return common.Marshal(video)

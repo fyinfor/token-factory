@@ -55,6 +55,15 @@ export const useApiRequest = (
 
   const extractVideoPlayableURL = useCallback((obj) => {
     if (!obj || typeof obj !== 'object') return '';
+    if (obj.output && typeof obj.output === 'object') {
+      const ou =
+        typeof obj.output.video_url === 'string'
+          ? obj.output.video_url
+          : typeof obj.output.videoUrl === 'string'
+            ? obj.output.videoUrl
+            : '';
+      if (ou.trim()) return ou.trim();
+    }
     const directKeys = ['url', 'video_url', 'content_url', 'output_url'];
     for (const key of directKeys) {
       const value = obj[key];

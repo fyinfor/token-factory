@@ -399,19 +399,12 @@ func getChannelBalanceAlertConfig() (enabled bool, softThreshold float64, riskTh
 	return enabled, softThreshold, riskThreshold
 }
 
-func getChannelRemainingBalance(balance float64, usedQuota int64) float64 {
-	if common.QuotaPerUnit <= 0 {
-		return balance
-	}
-	return balance - float64(usedQuota)/common.QuotaPerUnit
-}
-
-func getChannelBalanceAlertLevel(balance float64, usedQuota int64, softThreshold float64, riskThreshold float64) string {
-	remainingBalance := getChannelRemainingBalance(balance, usedQuota)
-	if remainingBalance <= riskThreshold {
+// getChannelBalanceAlertLevel 按「剩余额度」比较阈值；渠道 balance 字段即剩余（计费会同步扣减）。
+func getChannelBalanceAlertLevel(remaining float64, softThreshold float64, riskThreshold float64) string {
+	if remaining <= riskThreshold {
 		return channelBalanceAlertLevelRisk
 	}
-	if remainingBalance <= softThreshold {
+	if remaining <= softThreshold {
 		return channelBalanceAlertLevelSoft
 	}
 	return channelBalanceAlertLevelNone
@@ -441,12 +434,11 @@ func notifyChannelBalanceAlertIfNeeded(channel *model.Channel, oldBalance float6
 		return
 	}
 
-	newRemaining := getChannelRemainingBalance(newBalance, channel.UsedQuota)
-	newLevel := getChannelBalanceAlertLevel(newBalance, channel.UsedQuota, softThreshold, riskThreshold)
+	newLevel := getChannelBalanceAlertLevel(newBalance, softThreshold, riskThreshold)
 	otherInfo := channel.GetOtherInfo()
 	oldLevel := strings.TrimSpace(common.Interface2String(otherInfo["balance_alert_level"]))
 	if oldLevel == "" {
-		oldLevel = getChannelBalanceAlertLevel(oldBalance, channel.UsedQuota, softThreshold, riskThreshold)
+		oldLevel = getChannelBalanceAlertLevel(oldBalance, softThreshold, riskThreshold)
 	}
 	persistChannelBalanceAlertLevel(channel, newLevel)
 
@@ -461,18 +453,12 @@ func notifyChannelBalanceAlertIfNeeded(channel *model.Channel, oldBalance float6
 		threshold = riskThreshold
 	}
 
-	usedAmount := 0.0
-	if common.QuotaPerUnit > 0 {
-		usedAmount = float64(channel.UsedQuota) / common.QuotaPerUnit
-	}
 	title := fmt.Sprintf("渠道余额%s（%s）", levelText, channel.Name)
 	content := fmt.Sprintf(
-		"渠道“%s”（ID:%d）当前额度 %.2f，已用 %.2f，剩余 %.2f，已低于阈值 %.2f，请及时处理。",
+		"渠道“%s”（ID:%d）剩余额度 %.2f，已低于阈值 %.2f，请及时处理。",
 		channel.Name,
 		channel.Id,
 		newBalance,
-		usedAmount,
-		newRemaining,
 		threshold,
 	)
 	err := service.PublishUserMessage(&model.UserMessage{

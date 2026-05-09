@@ -505,14 +505,12 @@ func (t *Task) ToOpenAIVideo() *dto.OpenAIVideo {
 	openAIVideo.Status = t.Status.ToVideoStatus()
 	openAIVideo.Model = t.Properties.OriginModelName
 	openAIVideo.SetProgressStr(t.Progress)
-	openAIVideo.CreatedAt = t.CreatedAt
-	// 仅终态写完成时间；勿用 UpdatedAt（轮询每次更新会导致 completed_at 误增）
-	openAIVideo.CompletedAt = 0
+	openAIVideo.CreatedAt = dto.FormatTimeUnixRFC3339(t.CreatedAt)
 	if t.FinishTime > 0 {
-		openAIVideo.CompletedAt = t.FinishTime
+		openAIVideo.CompletedAt = dto.FormatTimeUnixRFC3339(t.FinishTime)
 	}
 	if u := t.GetResultURL(); u != "" {
-		openAIVideo.SetMetadata("url", u)
+		openAIVideo.SetOutputVideoURL(u)
 	}
 	return openAIVideo
 }

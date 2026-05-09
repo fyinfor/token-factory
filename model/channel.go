@@ -36,7 +36,7 @@ type Channel struct {
 	ResponseTime       int     `json:"response_time"`           // 最近一次渠道测试响应耗时（毫秒）
 	BaseURL            *string `json:"base_url" gorm:"column:base_url;default:''"`
 	Other              string  `json:"other"`
-	Balance            float64 `json:"balance"` // in USD
+	Balance            float64 `json:"balance"` // 剩余额度（美元计价展示）；同步/手动写入；计费扣减与 used_quota 同步累加
 	BalanceUpdatedTime int64   `json:"balance_updated_time" gorm:"bigint"`
 	Models             string  `json:"models"`
 	Group              string  `json:"group" gorm:"type:varchar(64);default:'default'"`
@@ -1279,12 +1279,37 @@ func UpdateChannelUsedQuota(id int, quota int) {
 }
 
 func updateChannelUsedQuota(id int, quota int) {
-	err := DB.Model(&Channel{}).Where("id = ?", id).Update("used_quota", gorm.Expr("used_quota + ?", quota)).Error
-	if err != nil {
+	if quota == 0 {
+		return
+	}
+	var before Channel
+	if err := DB.Select("id", "balance", "used_quota", "name", "other_info").Where("id = ?", id).First(&before).Error; err != nil {
+		common.SysLog(fmt.Sprintf("failed to load channel before used quota update: channel_id=%d, err=%v", id, err))
+		return
+	}
+	oldRemaining := before.Balance
+
+	deltaUSD := 0.0
+	if common.QuotaPerUnit > 0 {
+		deltaUSD = float64(quota) / common.QuotaPerUnit
+	}
+	updates := map[string]interface{}{
+		"used_quota": gorm.Expr("used_quota + ?", quota),
+	}
+	if deltaUSD != 0 {
+		updates["balance"] = gorm.Expr("CASE WHEN (balance - ?) < 0 THEN 0 ELSE (balance - ?) END", deltaUSD, deltaUSD)
+	}
+	if err := DB.Model(&Channel{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 		common.SysLog(fmt.Sprintf("failed to update channel used quota: channel_id=%d, delta_quota=%d, error=%v", id, quota, err))
 		return
 	}
-	notifyChannelBalanceAlertOnUsageDelta(id, quota)
+
+	var after Channel
+	if err := DB.Select("id", "balance", "used_quota", "name", "other_info").Where("id = ?", id).First(&after).Error; err != nil {
+		common.SysLog(fmt.Sprintf("failed to load channel after used quota update: channel_id=%d, err=%v", id, err))
+		return
+	}
+	notifyChannelBalanceAlertOnUsageDelta(&after, oldRemaining, quota)
 }
 
 const (
@@ -1318,15 +1343,7 @@ func getChannelBalanceAlertConfigForUsedQuota() (bool, float64, float64) {
 	return enabled, softThreshold, riskThreshold
 }
 
-func getChannelRemainingBalanceForAlert(balance float64, usedQuota int64) float64 {
-	if common.QuotaPerUnit <= 0 {
-		return balance
-	}
-	return balance - float64(usedQuota)/common.QuotaPerUnit
-}
-
-func getChannelBalanceAlertLevelForUsedQuota(balance float64, usedQuota int64, softThreshold float64, riskThreshold float64) string {
-	remaining := getChannelRemainingBalanceForAlert(balance, usedQuota)
+func getChannelBalanceAlertLevelByRemaining(remaining float64, softThreshold float64, riskThreshold float64) string {
 	if remaining <= riskThreshold {
 		return channelBalanceAlertLevelRisk
 	}
@@ -1336,22 +1353,14 @@ func getChannelBalanceAlertLevelForUsedQuota(balance float64, usedQuota int64, s
 	return channelBalanceAlertLevelNone
 }
 
-func notifyChannelBalanceAlertOnUsageDelta(channelID int, usedQuotaDelta int) {
+func notifyChannelBalanceAlertOnUsageDelta(channel *Channel, oldRemaining float64, usedQuotaDelta int) {
 	enabled, softThreshold, riskThreshold := getChannelBalanceAlertConfigForUsedQuota()
-	if !enabled || channelID <= 0 || usedQuotaDelta == 0 {
+	if !enabled || channel == nil || channel.Id <= 0 || usedQuotaDelta == 0 {
 		return
 	}
 
-	var channel Channel
-	if err := DB.Select("id", "name", "balance", "used_quota", "other_info").First(&channel, "id = ?", channelID).Error; err != nil {
-		common.SysLog(fmt.Sprintf("failed to load channel for used_quota alert: channel_id=%d, err=%v", channelID, err))
-		return
-	}
-
-	newUsedQuota := channel.UsedQuota
-	oldUsedQuota := newUsedQuota - int64(usedQuotaDelta)
-	newLevel := getChannelBalanceAlertLevelForUsedQuota(channel.Balance, newUsedQuota, softThreshold, riskThreshold)
-	oldLevel := getChannelBalanceAlertLevelForUsedQuota(channel.Balance, oldUsedQuota, softThreshold, riskThreshold)
+	newLevel := getChannelBalanceAlertLevelByRemaining(channel.Balance, softThreshold, riskThreshold)
+	oldLevel := getChannelBalanceAlertLevelByRemaining(oldRemaining, softThreshold, riskThreshold)
 
 	otherInfo := channel.GetOtherInfo()
 	if persistedLevel := strings.TrimSpace(common.Interface2String(otherInfo["balance_alert_level"])); persistedLevel != "" {
@@ -1373,18 +1382,13 @@ func notifyChannelBalanceAlertOnUsageDelta(channelID int, usedQuotaDelta int) {
 		levelText = "风险警告"
 		threshold = riskThreshold
 	}
-	usedAmount := 0.0
-	if common.QuotaPerUnit > 0 {
-		usedAmount = float64(newUsedQuota) / common.QuotaPerUnit
-	}
-	remaining := getChannelRemainingBalanceForAlert(channel.Balance, newUsedQuota)
 	err := CreateUserMessage(&UserMessage{
 		ReceiverMinRole: common.RoleAdminUser,
 		Type:            "channel_balance_alert",
 		Title:           fmt.Sprintf("渠道余额%s（%s）", levelText, channel.Name),
 		Content: fmt.Sprintf(
-			"渠道“%s”（ID:%d）当前额度 %.2f，已用 %.2f，剩余 %.2f，已低于阈值 %.2f，请及时处理。",
-			channel.Name, channel.Id, channel.Balance, usedAmount, remaining, threshold,
+			"渠道“%s”（ID:%d）剩余额度 %.2f，已低于阈值 %.2f，请及时处理。",
+			channel.Name, channel.Id, channel.Balance, threshold,
 		),
 		BizType: "channel_balance_alert",
 		BizID:   channel.Id,
