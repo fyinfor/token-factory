@@ -18,7 +18,15 @@ type VideoResolutionPriceRule struct {
 // tier (same monetary unit as VideoPrice / ModelPrice: dollars per job).
 type VideoResolutionPerVideoRule struct {
 	Resolution string  `json:"resolution"`
-	VideoPrice   float64 `json:"video_price"`
+	VideoPrice float64 `json:"video_price"`
+}
+
+// VideoResolutionAudioPriceRule represents price by resolution + audio flag.
+// Price semantics are USD-based internal unit (same as ModelPrice/VideoPrice).
+type VideoResolutionAudioPriceRule struct {
+	Resolution string  `json:"resolution"`
+	HasAudio   bool    `json:"has_audio"`
+	Price      float64 `json:"price"`
 }
 
 type VideoImagePriceRule struct {
@@ -39,6 +47,15 @@ type VideoPricingRules struct {
 	ImageToVideoPerVideo       []VideoResolutionPerVideoRule `json:"image_to_video_per_video,omitempty"`
 	VideoToVideoInputPerVideo  []VideoResolutionPerVideoRule `json:"video_to_video_input_per_video,omitempty"`
 	VideoToVideoOutputPerVideo []VideoResolutionPerVideoRule `json:"video_to_video_output_per_video,omitempty"`
+	// New billing tables:
+	// - *_per_second: by ceil(seconds) × unit price
+	// - *_per_item: by generated video count
+	TextToVideoPerSecond  []VideoResolutionAudioPriceRule `json:"text_to_video_per_second,omitempty"`
+	ImageToVideoPerSecond []VideoResolutionAudioPriceRule `json:"image_to_video_per_second,omitempty"`
+	VideoToVideoPerSecond []VideoResolutionAudioPriceRule `json:"video_to_video_per_second,omitempty"`
+	TextToVideoPerItem    []VideoResolutionAudioPriceRule `json:"text_to_video_per_item,omitempty"`
+	ImageToVideoPerItem   []VideoResolutionAudioPriceRule `json:"image_to_video_per_item,omitempty"`
+	VideoToVideoPerItem   []VideoResolutionAudioPriceRule `json:"video_to_video_per_item,omitempty"`
 }
 
 var videoPricingRulesMap = types.NewRWMap[string, VideoPricingRules]()
@@ -88,12 +105,45 @@ func normalizeVideoRules(v VideoPricingRules) VideoPricingRules {
 	for i := range v.VideoToVideoOutputPerVideo {
 		v.VideoToVideoOutputPerVideo[i].Resolution = strings.TrimSpace(v.VideoToVideoOutputPerVideo[i].Resolution)
 	}
+	for i := range v.TextToVideoPerSecond {
+		v.TextToVideoPerSecond[i].Resolution = strings.TrimSpace(v.TextToVideoPerSecond[i].Resolution)
+	}
+	for i := range v.ImageToVideoPerSecond {
+		v.ImageToVideoPerSecond[i].Resolution = strings.TrimSpace(v.ImageToVideoPerSecond[i].Resolution)
+	}
+	for i := range v.VideoToVideoPerSecond {
+		v.VideoToVideoPerSecond[i].Resolution = strings.TrimSpace(v.VideoToVideoPerSecond[i].Resolution)
+	}
+	for i := range v.TextToVideoPerItem {
+		v.TextToVideoPerItem[i].Resolution = strings.TrimSpace(v.TextToVideoPerItem[i].Resolution)
+	}
+	for i := range v.ImageToVideoPerItem {
+		v.ImageToVideoPerItem[i].Resolution = strings.TrimSpace(v.ImageToVideoPerItem[i].Resolution)
+	}
+	for i := range v.VideoToVideoPerItem {
+		v.VideoToVideoPerItem[i].Resolution = strings.TrimSpace(v.VideoToVideoPerItem[i].Resolution)
+	}
 	return v
 }
 
 // HasUsableVideoPerVideoRules reports whether any per-resolution flat video price tier exists
 // with a positive video_price (USD per completed video, same unit as VideoPrice).
 func HasUsableVideoPerVideoRules(v VideoPricingRules) bool {
+	for _, r := range v.TextToVideoPerItem {
+		if r.Price > 0 {
+			return true
+		}
+	}
+	for _, r := range v.ImageToVideoPerItem {
+		if r.Price > 0 {
+			return true
+		}
+	}
+	for _, r := range v.VideoToVideoPerItem {
+		if r.Price > 0 {
+			return true
+		}
+	}
 	for _, r := range v.TextToVideoPerVideo {
 		if r.VideoPrice > 0 {
 			return true
@@ -111,6 +161,25 @@ func HasUsableVideoPerVideoRules(v VideoPricingRules) bool {
 	}
 	for _, r := range v.VideoToVideoOutputPerVideo {
 		if r.VideoPrice > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func HasUsableVideoPerSecondRules(v VideoPricingRules) bool {
+	for _, r := range v.TextToVideoPerSecond {
+		if r.Price > 0 {
+			return true
+		}
+	}
+	for _, r := range v.ImageToVideoPerSecond {
+		if r.Price > 0 {
+			return true
+		}
+	}
+	for _, r := range v.VideoToVideoPerSecond {
+		if r.Price > 0 {
 			return true
 		}
 	}

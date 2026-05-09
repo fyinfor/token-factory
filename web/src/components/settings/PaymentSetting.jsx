@@ -41,6 +41,7 @@ const PaymentSetting = () => {
     YipayAppId: '',
     YipayNotifyUrl: '',
     YipayReturnUrl: '',
+    YipayChannelExtra: '',
     YipayRequestURL: '',
     Price: 7.3,
     MinTopUp: 1,

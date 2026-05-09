@@ -91,6 +91,7 @@ const Playground = () => {
   const previousModeRef = useRef('text');
   const currentMessagesRef = useRef([]);
   const modeStoreInitializedRef = useRef(false);
+  const activeVideoPollTaskIdsRef = useRef(new Set());
   const getModeStorageKey = useCallback(
     () => `playground_mode_messages_${userState?.user?.id || 'guest'}`,
     [userState?.user?.id],
@@ -141,13 +142,74 @@ const Playground = () => {
   }, [message]);
 
   // API 请求相关
-  const { sendRequest, onStopGenerator } = useApiRequest(
+  const { sendRequest, onStopGenerator, startVideoTaskPolling } = useApiRequest(
     setMessage,
     setDebugData,
     setActiveDebugTab,
     sseSourceRef,
     saveMessagesImmediately,
   );
+
+  useEffect(() => {
+    const terminalStatuses = new Set([
+      'completed',
+      'succeeded',
+      'success',
+      'failed',
+      'error',
+      'cancelled',
+      'timeout',
+    ]);
+    const shouldResumeStatuses = new Set([
+      'queued',
+      'processing',
+      'in_progress',
+      'running',
+      'pending',
+      'submitted',
+      '',
+    ]);
+    const candidates = (Array.isArray(message) ? message : []).filter((msg) => {
+      if (msg?.role !== MESSAGE_ROLES.ASSISTANT) return false;
+      const taskId = msg?.videoTask?.taskId;
+      if (!taskId) return false;
+      if (msg?.videoTask?.playableUrl) return false;
+      const taskStatus = String(msg?.videoTask?.status || '').toLowerCase();
+      if (terminalStatuses.has(taskStatus)) return false;
+      return shouldResumeStatuses.has(taskStatus);
+    });
+    candidates.forEach((msg) => {
+      const taskId = msg?.videoTask?.taskId;
+      if (!taskId || activeVideoPollTaskIdsRef.current.has(taskId)) return;
+      activeVideoPollTaskIdsRef.current.add(taskId);
+      startVideoTaskPolling(taskId, (patch) => {
+        const nextTaskStatus = String(patch?.videoTask?.status || '').toLowerCase();
+        const nextMessageStatus = String(patch?.status || '').toLowerCase();
+        const isTerminal =
+          terminalStatuses.has(nextTaskStatus) ||
+          nextMessageStatus === 'complete' ||
+          nextMessageStatus === 'error';
+        if (isTerminal) {
+          activeVideoPollTaskIdsRef.current.delete(taskId);
+        }
+        setMessage((prevMessages) => {
+          const updated = prevMessages.map((item) => {
+            if (item?.id !== msg.id) return item;
+            return {
+              ...item,
+              ...(patch.content !== undefined ? { content: patch.content } : {}),
+              ...(patch.status ? { status: patch.status } : {}),
+              ...(patch.videoTask !== undefined
+                ? { videoTask: patch.videoTask }
+                : {}),
+            };
+          });
+          setTimeout(() => saveMessagesImmediately(updated), 0);
+          return updated;
+        });
+      });
+    });
+  }, [message, setMessage, saveMessagesImmediately, startVideoTaskPolling]);
 
   // 数据加载（modelTypes 参与按类型筛选，与模型广场一致在客户端过滤）
   useDataLoader(

@@ -1235,21 +1235,7 @@ func TestChannel(c *gin.Context) {
 	result := testChannel(channel, testModel, endpointType, isStream)
 	milliseconds := time.Since(tik).Milliseconds()
 	consumedTime := float64(milliseconds) / 1000.0
-	// 优先用 relay 解析后的用户侧名（与 models.model_name 一致）；否则与 testChannel 入参/渠道默认试测模型保持同一套兜底
-	modelForRecord := strings.TrimSpace(result.recordedModelName)
-	if modelForRecord == "" {
-		modelForRecord = strings.TrimSpace(testModel)
-		if modelForRecord == "" {
-			if channel.TestModel != nil && strings.TrimSpace(*channel.TestModel) != "" {
-				modelForRecord = strings.TrimSpace(*channel.TestModel)
-			} else {
-				models := channel.GetModels()
-				if len(models) > 0 {
-					modelForRecord = strings.TrimSpace(models[0])
-				}
-			}
-		}
-	}
+	modelForRecord := modelNameForChannelTestRecord(channel, testModel, result)
 	if result.localErr != nil {
 		go channel.UpdateTestResult(false, milliseconds, result.localErr.Error(), modelForRecord)
 		go func() {
@@ -1281,6 +1267,48 @@ func TestChannel(c *gin.Context) {
 		"message": "",
 		"time":    consumedTime,
 	})
+}
+
+// collectModelsForScheduledChannelTest 返回定时全量测试要对渠道串行探测的模型名列表（与非空 models 的批量上架测试一致）；无任何绑定时返回单元素空串以走 testChannel 内置默认模型。
+func collectModelsForScheduledChannelTest(channel *model.Channel) []string {
+	raw := channel.GetModels()
+	out := make([]string, 0, len(raw))
+	for _, m := range raw {
+		m = strings.TrimSpace(m)
+		if m != "" {
+			out = append(out, m)
+		}
+	}
+	if len(out) == 0 && channel.TestModel != nil {
+		tm := strings.TrimSpace(*channel.TestModel)
+		if tm != "" {
+			out = append(out, tm)
+		}
+	}
+	if len(out) == 0 {
+		return []string{""}
+	}
+	return out
+}
+
+// modelNameForChannelTestRecord 与 TestChannel HTTP 接口写入逻辑一致：优先 relay 解析名，其次本次请求模型名，再兜底渠道配置。
+func modelNameForChannelTestRecord(channel *model.Channel, requestedModel string, result testResult) string {
+	modelForRecord := strings.TrimSpace(result.recordedModelName)
+	if modelForRecord != "" {
+		return modelForRecord
+	}
+	modelForRecord = strings.TrimSpace(requestedModel)
+	if modelForRecord != "" {
+		return modelForRecord
+	}
+	if channel.TestModel != nil && strings.TrimSpace(*channel.TestModel) != "" {
+		return strings.TrimSpace(*channel.TestModel)
+	}
+	models := channel.GetModels()
+	if len(models) > 0 {
+		return strings.TrimSpace(models[0])
+	}
+	return ""
 }
 
 var testAllChannelsLock sync.Mutex
@@ -1315,57 +1343,76 @@ func testAllChannels(notify bool) error {
 			if channel.Status == common.ChannelStatusManuallyDisabled {
 				continue
 			}
-			isChannelEnabled := channel.Status == common.ChannelStatusEnabled
-			tik := time.Now()
-			result := testChannel(channel, "", "", false)
-			tok := time.Now()
-			milliseconds := tok.Sub(tik).Milliseconds()
-			testMessage := ""
-			if result.localErr != nil {
-				testMessage = result.localErr.Error()
-			} else if result.tokenFactoryError != nil {
-				testMessage = result.tokenFactoryError.Error()
+			statusAtStart := channel.Status
+			isInitiallyEnabled := statusAtStart == common.ChannelStatusEnabled
+			isInitiallyAutoDisabled := statusAtStart == common.ChannelStatusAutoDisabled
+
+			modelsToRun := collectModelsForScheduledChannelTest(channel)
+
+			var firstBanCtx *gin.Context
+			var firstBanTfErr *types.TokenFactoryError
+			var enableCtx *gin.Context
+			shouldEnableAfterTests := false
+
+			for _, modelName := range modelsToRun {
+				tik := time.Now()
+				result := testChannel(channel, modelName, "", false)
+				ms := time.Since(tik).Milliseconds()
+
+				testMessage := ""
+				if result.localErr != nil {
+					testMessage = result.localErr.Error()
+				} else if result.tokenFactoryError != nil {
+					testMessage = result.tokenFactoryError.Error()
+				}
+				testSuccess := result.localErr == nil && result.tokenFactoryError == nil
+
+				modelForRecord := modelNameForChannelTestRecord(channel, modelName, result)
+				channel.UpdateTestResult(testSuccess, ms, testMessage, modelForRecord)
+				_ = model.UpsertModelTestResult(channel.Id, modelForRecord, testSuccess, ms, testMessage)
+
+				tfErr := result.tokenFactoryError
+				shouldBanThis := false
+				var banTfErr *types.TokenFactoryError
+				if tfErr != nil {
+					shouldBanThis = service.ShouldDisableChannel(channel.Type, tfErr)
+					banTfErr = tfErr
+				}
+				if common.AutomaticDisableChannelEnabled && !shouldBanThis {
+					if ms > disableThreshold {
+						errSlow := fmt.Errorf("响应时间 %.2fs 超过阈值 %.2fs", float64(ms)/1000.0, float64(disableThreshold)/1000.0)
+						banTfErr = types.NewOpenAIError(errSlow, types.ErrorCodeChannelResponseTimeExceeded, http.StatusRequestTimeout)
+						shouldBanThis = true
+					}
+				}
+				if shouldBanThis && firstBanTfErr == nil && banTfErr != nil {
+					firstBanCtx = result.context
+					firstBanTfErr = banTfErr
+				}
+				if testSuccess && isInitiallyAutoDisabled {
+					shouldEnableAfterTests = true
+					if enableCtx == nil && result.context != nil {
+						enableCtx = result.context
+					}
+				}
+
+				time.Sleep(common.RequestInterval)
 			}
-			testSuccess := result.localErr == nil && result.tokenFactoryError == nil
-			channel.UpdateTestResult(testSuccess, milliseconds, testMessage, "")
-			modelForRecord := ""
-			if channel.TestModel != nil && strings.TrimSpace(*channel.TestModel) != "" {
-				modelForRecord = strings.TrimSpace(*channel.TestModel)
-			} else {
-				models := channel.GetModels()
-				if len(models) > 0 {
-					modelForRecord = strings.TrimSpace(models[0])
+
+			if isInitiallyEnabled && firstBanTfErr != nil && channel.GetAutoBan() {
+				if firstBanCtx != nil {
+					processChannelError(firstBanCtx, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(firstBanCtx, constant.ContextKeyChannelKey), channel.GetAutoBan()), firstBanTfErr)
+				} else {
+					common.SysError(fmt.Sprintf("scheduled channel test: ban signaled but context nil for channel id=%d", channel.Id))
 				}
 			}
-			_ = model.UpsertModelTestResult(channel.Id, modelForRecord, testSuccess, milliseconds, testMessage)
-
-			shouldBanChannel := false
-			tokenFactoryError := result.tokenFactoryError
-			// request error disables the channel
-			if tokenFactoryError != nil {
-				shouldBanChannel = service.ShouldDisableChannel(channel.Type, result.tokenFactoryError)
-			}
-
-			// 当错误检查通过，才检查响应时间
-			if common.AutomaticDisableChannelEnabled && !shouldBanChannel {
-				if milliseconds > disableThreshold {
-					err := fmt.Errorf("响应时间 %.2fs 超过阈值 %.2fs", float64(milliseconds)/1000.0, float64(disableThreshold)/1000.0)
-					tokenFactoryError = types.NewOpenAIError(err, types.ErrorCodeChannelResponseTimeExceeded, http.StatusRequestTimeout)
-					shouldBanChannel = true
+			if isInitiallyAutoDisabled && shouldEnableAfterTests && service.ShouldEnableChannel(nil, common.ChannelStatusAutoDisabled) {
+				usingKey := ""
+				if enableCtx != nil {
+					usingKey = common.GetContextKeyString(enableCtx, constant.ContextKeyChannelKey)
 				}
+				service.EnableChannel(channel.Id, usingKey, channel.Name)
 			}
-
-			// disable channel
-			if isChannelEnabled && shouldBanChannel && channel.GetAutoBan() {
-				processChannelError(result.context, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(result.context, constant.ContextKeyChannelKey), channel.GetAutoBan()), tokenFactoryError)
-			}
-
-			// enable channel
-			if !isChannelEnabled && service.ShouldEnableChannel(tokenFactoryError, channel.Status) {
-				service.EnableChannel(channel.Id, common.GetContextKeyString(result.context, constant.ContextKeyChannelKey), channel.Name)
-			}
-
-			time.Sleep(common.RequestInterval)
 		}
 
 		if notify {

@@ -196,9 +196,6 @@ export const buildApiPayload = (
       prompt: getLastUserPrompt(),
       size: inputs.image_size || '1024x1024',
       n: Number(inputs.image_n) || 1,
-      quality: inputs.image_quality || 'standard',
-      response_format: inputs.image_response_format || 'url',
-      style: inputs.image_style || 'vivid',
       __endpoint: 'image',
     };
     return payload;

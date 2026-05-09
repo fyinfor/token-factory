@@ -1,8 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Button,
   Card,
+  DatePicker,
   Empty,
+  Space,
   Spin,
   Table,
   Typography,
@@ -22,9 +24,21 @@ import {
   RefreshCw,
   TrendingUp,
 } from 'lucide-react';
-import { API, isAdmin, isSupplier, showError } from '../../../helpers';
+import {
+  API,
+  isAdmin,
+  isSupplier,
+  showError,
+  renderQuota,
+  renderQuotaWithPrompt,
+} from '../../../helpers';
+import dayjs from 'dayjs';
+import { DATE_RANGE_PRESETS } from '../../../constants/console.constants';
 
 const { Title, Text } = Typography;
+
+/** 允许的最大统计区间（秒），防止单次查询过大。 */
+const SUPPLIER_DASHBOARD_MAX_RANGE_SEC = 366 * 24 * 3600;
 const ICON_BG_COLORS = {
   blue: '#3b82f6',
   emerald: '#10b981',
@@ -49,6 +63,23 @@ const getDefaultRange = () => {
 };
 
 /**
+ * buildSupplierDashboardPresets 构造日期范围快捷选项（含默认近 24 小时与控制台通用预设）。
+ * @param {function} t i18n t
+ */
+const buildSupplierDashboardPresets = (t) => {
+  const last24h = {
+    text: t('supplier_dashboard_preset_last_24h'),
+    start: () => dayjs().subtract(24, 'hour').toDate(),
+    end: () => dayjs().toDate(),
+  };
+  return [last24h, ...DATE_RANGE_PRESETS].map((preset) => ({
+    text: preset.text,
+    start: preset.start(),
+    end: preset.end(),
+  }));
+};
+
+/**
  * SupplierDashboardPage 供应商数据看板页。
  */
 export default function SupplierDashboardPage() {
@@ -58,12 +89,21 @@ export default function SupplierDashboardPage() {
   const selectedSupplierId = searchParams.get('supplier_id');
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
-  const [timeRange] = useState(getDefaultRange());
+  const [timeRange, setTimeRange] = useState(() => getDefaultRange());
+
+  /** DatePicker 受控展示用的起止时间（由 timeRange 派生）。 */
+  const rangePickerValue = useMemo(
+    () => [
+      new Date(timeRange.startTimestamp * 1000),
+      new Date(timeRange.endTimestamp * 1000),
+    ],
+    [timeRange.startTimestamp, timeRange.endTimestamp],
+  );
 
   /**
    * loadDashboardData 加载供应商看板数据（供应商=自己模型，管理员=全部供应商模型）。
    */
-  const loadDashboardData = async () => {
+  const loadDashboardData = useCallback(async () => {
     setLoading(true);
     try {
       const supplierQuery = selectedSupplierId
@@ -82,12 +122,43 @@ export default function SupplierDashboardPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    selectedSupplierId,
+    timeRange.startTimestamp,
+    timeRange.endTimestamp,
+    t,
+  ]);
 
   useEffect(() => {
     loadDashboardData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSupplierId]);
+  }, [loadDashboardData]);
+
+  /**
+   * handleStatsRangeChange 用户在选择器中变更统计时间范围后更新状态并触发重新拉数。
+   * @param {Date[]|null|undefined} dates Semi DatePicker 返回的起止日期
+   */
+  const handleStatsRangeChange = (dates) => {
+    if (!dates || !dates[0] || !dates[1]) {
+      setTimeRange(getDefaultRange());
+      return;
+    }
+    const startTimestamp = Math.floor(dates[0].getTime() / 1000);
+    const endTimestamp = Math.floor(dates[1].getTime() / 1000);
+    if (startTimestamp >= endTimestamp) {
+      showError(t('supplier_dashboard_invalid_range'));
+      return;
+    }
+    if (endTimestamp - startTimestamp > SUPPLIER_DASHBOARD_MAX_RANGE_SEC) {
+      showError(t('supplier_dashboard_range_too_long'));
+      return;
+    }
+    setTimeRange({ startTimestamp, endTimestamp });
+  };
+
+  /** resetStatsRangeToLast24h 将统计区间重置为最近 24 小时（与默认一致）。 */
+  const resetStatsRangeToLast24h = () => {
+    setTimeRange(getDefaultRange());
+  };
 
   const usageColumns = useMemo(
     () => [
@@ -95,6 +166,11 @@ export default function SupplierDashboardPage() {
       { title: t('请求次数'), dataIndex: 'requests' },
       { title: t('Token 消耗'), dataIndex: 'tokens' },
       { title: t('额度消耗'), dataIndex: 'quota' },
+      {
+        title: t('花费'),
+        dataIndex: 'quota',
+        render: (q) => renderQuota(q ?? 0),
+      },
     ],
     [t],
   );
@@ -145,6 +221,12 @@ export default function SupplierDashboardPage() {
             icon: <Coins size={14} />,
             iconColor: ICON_BG_COLORS.lime,
           },
+          {
+            label: t('花费'),
+            value: renderQuota(data?.resource_consumption?.total_quota || 0),
+            icon: <Coins size={14} />,
+            iconColor: ICON_BG_COLORS.orange,
+          },
         ],
       },
       {
@@ -182,8 +264,8 @@ export default function SupplierDashboardPage() {
             iconColor: ICON_BG_COLORS.amber,
           },
           {
-            label: t('时间粒度'),
-            value: t('小时'),
+            label: t('明细聚合'),
+            value: t('按小时桶'),
             icon: <BarChart3 size={14} />,
             iconColor: ICON_BG_COLORS.orange,
           },
@@ -194,6 +276,10 @@ export default function SupplierDashboardPage() {
   );
 
   const canAccess = isSupplier() || isAdmin();
+  /** 管理员查看「全部供应商汇总」时不展示单账户；指定 supplier_id 或与供应商本人一致时再展示。 */
+  const showAccountSection =
+    !isAdmin() || Boolean(selectedSupplierId && String(selectedSupplierId).trim());
+
   if (!canAccess) {
     return (
       <div className='mt-[60px] px-2'>
@@ -228,15 +314,15 @@ export default function SupplierDashboardPage() {
   return (
     <div className='mt-[60px] w-full max-w-[1600px] mx-auto px-3 sm:px-4 lg:px-6 pb-6'>
       <Spin spinning={loading} size='large'>
-        <div className='flex items-center justify-between mb-3'>
-          <div className='flex items-center gap-2'>
+        <div className='flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between mb-3'>
+          <div className='flex items-center gap-2 min-w-0'>
             <div
-              className='w-9 h-9 rounded-full text-white flex items-center justify-center'
+              className='w-9 h-9 rounded-full text-white flex items-center justify-center shrink-0'
               style={{ backgroundColor: ICON_BG_COLORS.indigo }}
             >
               <Activity size={18} />
             </div>
-            <div>
+            <div className='min-w-0'>
               <Title heading={4} style={{ marginBottom: 0 }}>
                 {t('供应商模型数据看板')}
               </Title>
@@ -249,14 +335,72 @@ export default function SupplierDashboardPage() {
               </Text>
             </div>
           </div>
-          <Button
-            type='tertiary'
-            icon={<RefreshCw size={16} />}
-            className='bg-blue-500 hover:bg-blue-600 text-white !rounded-full'
-            onClick={loadDashboardData}
-            loading={loading}
-          />
+          <Space
+            wrap
+            className='w-full lg:w-auto lg:justify-end'
+            align='end'
+          >
+            <div className='flex flex-col gap-1 min-w-[280px] flex-1 lg:flex-initial'>
+              <Text type='tertiary' size='small'>
+                {t('supplier_dashboard_time_range')}
+              </Text>
+              <DatePicker
+                type='dateTimeRange'
+                value={rangePickerValue}
+                onChange={(dates) => handleStatsRangeChange(dates)}
+                presets={buildSupplierDashboardPresets(t)}
+                placeholder={[t('开始时间'), t('结束时间')]}
+                showClear
+                size='small'
+                className='w-full'
+              />
+            </div>
+            <Button type='tertiary' onClick={resetStatsRangeToLast24h}>
+              {t('supplier_dashboard_reset_24h')}
+            </Button>
+            <Button
+              type='tertiary'
+              icon={<RefreshCw size={16} />}
+              className='bg-blue-500 hover:bg-blue-600 text-white !rounded-full'
+              onClick={loadDashboardData}
+              loading={loading}
+            >
+              {t('刷新')}
+            </Button>
+          </Space>
         </div>
+
+        {showAccountSection ? (
+          <Card title={t('supplier_dashboard_account_title')} className='mt-3'>
+            <div className='grid grid-cols-1 md:grid-cols-2 gap-4'>
+              <div>
+                <Text type='secondary'>{t('剩余额度')}</Text>
+                <div className='text-lg font-semibold'>
+                  {data?.account?.quota ?? 0}
+                </div>
+                <Text type='tertiary' size='small'>
+                  {renderQuotaWithPrompt(data?.account?.quota ?? 0)}
+                </Text>
+              </div>
+              <div>
+                <Text type='secondary'>{t('历史消耗')}</Text>
+                <div className='text-lg font-semibold'>
+                  {data?.account?.used_quota ?? 0}
+                </div>
+                <Text type='tertiary' size='small'>
+                  {renderQuotaWithPrompt(data?.account?.used_quota ?? 0)}
+                </Text>
+              </div>
+            </div>
+          </Card>
+        ) : (
+          isAdmin() &&
+          !selectedSupplierId && (
+            <Text type='tertiary' className='block mt-2'>
+              {t('supplier_dashboard_admin_account_hint')}
+            </Text>
+          )
+        )}
 
         <div className='grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mt-3'>
           {summaryCards.map((item) => (

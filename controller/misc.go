@@ -345,6 +345,113 @@ func SendPasswordResetEmail(c *gin.Context) {
 	})
 }
 
+// validatePublicEmailConstraints 校验公开流程中的邮箱格式、域名白名单与别名限制（与注册/验证邮件一致）。
+func validatePublicEmailConstraints(email string) *gin.H {
+	if err := common.Validate.Var(email, "required,email"); err != nil {
+		return &gin.H{"success": false, "message": "无效的参数"}
+	}
+	parts := strings.Split(email, "@")
+	if len(parts) != 2 {
+		return &gin.H{"success": false, "message": "无效的邮箱地址"}
+	}
+	localPart := parts[0]
+	domainPart := parts[1]
+	if common.EmailDomainRestrictionEnabled {
+		allowed := false
+		for _, domain := range common.EmailDomainWhitelist {
+			if domainPart == domain {
+				allowed = true
+				break
+			}
+		}
+		if !allowed {
+			return &gin.H{
+				"success": false,
+				"message": "The administrator has enabled the email domain name whitelist, and your email address is not allowed due to special symbols or it's not in the whitelist.",
+			}
+		}
+	}
+	if common.EmailAliasRestrictionEnabled {
+		if strings.Contains(localPart, "+") || strings.Contains(localPart, ".") {
+			return &gin.H{"success": false, "message": "管理员已启用邮箱地址别名限制，您的邮箱地址由于包含特殊符号而被拒绝。"}
+		}
+	}
+	return nil
+}
+
+// SendPasswordResetEmailCode 发送忘记密码用的邮箱数字验证码（仅已绑定该邮箱的用户实际收到邮件；未注册亦返回成功以保护隐私）。
+func SendPasswordResetEmailCode(c *gin.Context) {
+	email := strings.TrimSpace(c.Query("email"))
+	if bad := validatePublicEmailConstraints(email); bad != nil {
+		c.JSON(http.StatusOK, *bad)
+		return
+	}
+	if model.IsEmailAlreadyTaken(email) {
+		code := common.GenerateNumericVerificationCode(6)
+		common.RegisterVerificationCodeWithKey(email, code, common.PasswordResetEmailCodePurpose)
+		subject := fmt.Sprintf("%s密码重置验证码", common.SystemName)
+		content := fmt.Sprintf("<p>您好，您正在进行%s密码重置。</p>"+
+			"<p>您的验证码为: <strong>%s</strong></p>"+
+			"<p>验证码 %d 分钟内有效，如非本人操作请忽略。</p>", common.SystemName, code, common.VerificationValidMinutes)
+		if err := common.SendEmail(subject, email, content); err != nil {
+			logger.LogError(c.Request.Context(), fmt.Sprintf("failed to send password reset email code to %s: %s", email, err.Error()))
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+}
+
+// PasswordResetByEmailCodeRequest 通过邮箱验证码重置密码的请求体。
+type PasswordResetByEmailCodeRequest struct {
+	Email            string `json:"email"`
+	VerificationCode string `json:"verification_code"`
+	NewPassword      string `json:"new_password"`
+	ConfirmPassword  string `json:"confirm_password"`
+}
+
+// ResetPasswordByEmailCode 校验邮箱验证码后将密码更新为用户指定的新密码。
+func ResetPasswordByEmailCode(c *gin.Context) {
+	var req PasswordResetByEmailCodeRequest
+	if err := json.NewDecoder(c.Request.Body).Decode(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的参数"})
+		return
+	}
+	req.Email = strings.TrimSpace(req.Email)
+	req.VerificationCode = strings.TrimSpace(req.VerificationCode)
+	req.NewPassword = strings.TrimSpace(req.NewPassword)
+	req.ConfirmPassword = strings.TrimSpace(req.ConfirmPassword)
+
+	if bad := validatePublicEmailConstraints(req.Email); bad != nil {
+		c.JSON(http.StatusOK, *bad)
+		return
+	}
+	if len(req.VerificationCode) != 6 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "请输入 6 位邮箱验证码"})
+		return
+	}
+	if !common.VerifyCodeWithKey(req.Email, req.VerificationCode, common.PasswordResetEmailCodePurpose) {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "验证码错误或已过期"})
+		return
+	}
+	if len(req.NewPassword) < 8 || len(req.NewPassword) > 20 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "密码长度需为 8-20 位"})
+		return
+	}
+	if req.NewPassword != req.ConfirmPassword {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "两次输入的密码不一致"})
+		return
+	}
+	if !model.IsEmailAlreadyTaken(req.Email) {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "该邮箱未注册"})
+		return
+	}
+	if err := model.ResetUserPasswordByEmail(req.Email, req.NewPassword); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.DeleteKey(req.Email, common.PasswordResetEmailCodePurpose)
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+}
+
 type PasswordResetRequest struct {
 	Email string `json:"email"`
 	Token string `json:"token"`

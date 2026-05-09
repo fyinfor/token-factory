@@ -148,6 +148,7 @@ const ModelDetailSideSheet = ({
             <ModelChannelList
               modelData={modelData}
               channelMtrMap={channelMtrMap}
+              endpointMap={endpointMap}
               displayPrice={displayPrice}
               currency={currency}
               siteDisplayType={siteDisplayType}

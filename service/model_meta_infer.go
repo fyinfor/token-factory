@@ -229,6 +229,64 @@ func inferTags(name string) string {
 	return strings.Join(tags, ",")
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// 标签过滤：移除不适合用户分类使用的标签
+// ────────────────────────────────────────────────────────────────────────────
+
+// validTagSet 定义允许作为模型分类标签的合法标签集合（小写）。
+// 不在此集合中的标签将被过滤掉（如上下文窗口大小 "262.1K"、"128K" 等数值型标签）。
+var validTagSet = map[string]bool{
+	// 能力分类
+	"reasoning":  true,
+	"tools":      true,
+	"files":      true,
+	"vision":     true,
+	"coding":     true,
+	"code":       true,
+	"embedding":  true,
+	"rerank":     true,
+	"image":      true,
+	"audio":      true,
+	"video":      true,
+	"budget":     true,
+	// 模型属性
+	"open weights": true,
+	"open source":  true,
+	"proprietary":  true,
+	"local":        true,
+	"cloud":        true,
+	"multilingual": true,
+	// 通用分类
+	"chat":       true,
+	"completion": true,
+	"instruct":   true,
+	"base":       true,
+	"fine-tuned": true,
+	"lora":       true,
+}
+
+// filterTags 过滤逗号分隔的标签字符串，只保留合法的分类标签。
+// 用于清理官方预设中可能包含的上下文窗口大小（如 "262.1K"、"128K"）等
+// 不适合作为用户筛选分类的数值型标签。
+func filterTags(tagsStr string) string {
+	if tagsStr == "" {
+		return ""
+	}
+	parts := strings.Split(tagsStr, ",")
+	var filtered []string
+	for _, p := range parts {
+		tag := strings.TrimSpace(p)
+		if tag == "" {
+			continue
+		}
+		// 精确匹配合法标签（不区分大小写）
+		if validTagSet[strings.ToLower(tag)] {
+			filtered = append(filtered, tag)
+		}
+	}
+	return strings.Join(filtered, ",")
+}
+
 // matchesPattern 检查 lower 是否包含 patterns 中的任意一个。
 func matchesPattern(lower string, patterns []string) bool {
 	for _, p := range patterns {
@@ -393,7 +451,7 @@ func AutoCreateMissingModelMeta(ctx context.Context, modelNames []string) []Auto
 			} else {
 				item.Endpoints = inferEndpoints(name)
 			}
-			item.Tags = entry.Tags
+			item.Tags = filterTags(entry.Tags)
 			if item.Tags == "" {
 				item.Tags = inferTags(name)
 			}

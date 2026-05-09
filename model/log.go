@@ -226,6 +226,7 @@ type RecordTaskBillingLogParams struct {
 	Content   string
 	ChannelId int
 	ModelName string
+	TokenName string
 	Quota     int
 	TokenId   int
 	Group     string
@@ -237,11 +238,14 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 		return
 	}
 	username, _ := GetUsernameById(params.UserId, false)
-	tokenName := ""
+	tokenName := params.TokenName
 	if params.TokenId > 0 {
 		if token, err := GetTokenById(params.TokenId); err == nil {
 			tokenName = token.Name
 		}
+	} else if tokenName == "" {
+		// playground/default token：避免任务结算日志中令牌名为空，导致前端不展示。
+		tokenName = "playground-default"
 	}
 	log := &Log{
 		UserId:    params.UserId,

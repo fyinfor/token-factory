@@ -68,6 +68,46 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	if prompt := strings.TrimSpace(req.GetPrompt()); prompt != "" {
 		body["Prompt"] = prompt
 	}
+	fileInfos := make([]map[string]any, 0, 2)
+	appendImageURL := func(url string) {
+		u := strings.TrimSpace(url)
+		if u == "" {
+			return
+		}
+		fileInfos = append(fileInfos, map[string]any{
+			"Type":     "Url",
+			"Category": "Image",
+			"Url":      u,
+			// 参考图生视频：显式标记为参考帧，避免被当作默认首帧。
+			"Usage": "Reference",
+		})
+	}
+	appendVideoURL := func(url string) {
+		u := strings.TrimSpace(url)
+		if u == "" {
+			return
+		}
+		fileInfos = append(fileInfos, map[string]any{
+			"Type":          "Url",
+			"Category":      "Video",
+			"Url":           u,
+			"ReferenceType": "base",
+		})
+	}
+	// 图生视频：兼容 image 和 images[] 两种入参。
+	if img := strings.TrimSpace(req.Image); img != "" {
+		appendImageURL(img)
+	}
+	for _, img := range req.Images {
+		appendImageURL(img)
+	}
+	// 视频生视频：兼容 input_reference 入参。
+	if ref := strings.TrimSpace(req.InputReference); ref != "" {
+		appendVideoURL(ref)
+	}
+	if len(fileInfos) > 0 {
+		body["FileInfos"] = fileInfos
+	}
 	data, err := common.Marshal(body)
 	if err != nil {
 		return nil, err
@@ -128,8 +168,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	}
 	ov := dto.NewOpenAIVideo()
 	ov.ID = info.PublicTaskID
-	ov.TaskID = info.PublicTaskID
-	ov.CreatedAt = time.Now().Unix()
+	ov.CreatedAt = dto.FormatTimeUnixRFC3339(time.Now().Unix())
 	ov.Model = info.OriginModelName
 	c.JSON(http.StatusOK, ov)
 	return taskID, respBody, nil
@@ -199,10 +238,6 @@ func (a *TaskAdaptor) GetChannelName() string { return ChannelName }
 
 func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error) {
 	ov := originTask.ToOpenAIVideo()
-	ov.TaskID = originTask.TaskID
-	if originTask.FinishTime > 0 {
-		ov.CompletedAt = originTask.FinishTime
-	}
 	var env struct {
 		Response *struct {
 			Error *struct {

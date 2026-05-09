@@ -76,18 +76,38 @@ const DEFAULT_TIER_RULE = {
   cache_write: [{ up_to: 0, ratio: 1 }],
 };
 const VIDEO_RESOLUTION_OPTIONS = [
-  { label: '480p (854x480)', value: '854x480' },
-  { label: '540p (960x540)', value: '960x540' },
-  { label: '720p (1280x720)', value: '1280x720' },
-  { label: '1080p (1920x1080)', value: '1920x1080' },
-  { label: '2K (2560x1440)', value: '2560x1440' },
-  { label: '4K (3840x2160)', value: '3840x2160' },
+  { label: '480p', value: '854x480' },
+  { label: '540p', value: '960x540' },
+  { label: '720p', value: '1280x720' },
+  { label: '1080p', value: '1920x1080' },
+  { label: '2K', value: '2560x1440' },
+  { label: '4K', value: '3840x2160' },
 ];
 const VIDEO_RESOLUTION_LABEL_MAP = VIDEO_RESOLUTION_OPTIONS.reduce(
   (acc, item) => ({ ...acc, [item.value]: item.label }),
   {},
 );
 const DEFAULT_VIDEO_FPS = 24;
+const VIDEO_RULE_CARD_STYLE = {
+  padding: '10px 12px',
+  marginBottom: 8,
+  borderRadius: 8,
+  border: '1px solid var(--semi-color-border)',
+  background: 'var(--semi-color-fill-0)',
+};
+const VIDEO_RULE_HEADER_ROW_STYLE = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: 8,
+  flexWrap: 'wrap',
+};
+const VIDEO_RULE_INPUT_ROW_STYLE = {
+  marginTop: 10,
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: 8,
+};
 
 const getSelectableResolutionOptions = (rows, currentIndex) => {
   const used = new Set(
@@ -129,6 +149,22 @@ const formatSystemCurrencyPrice = (usdAmount, suffix = '/次') => {
   const { symbol, rate } = getCurrencyConfig();
   const converted = usdAmount * (Number.isFinite(rate) && rate > 0 ? rate : 1);
   return `${symbol}${converted.toFixed(6)}${suffix}`;
+};
+
+const formatPriceByUnit = (amount, unit, customSymbol = '¤', suffix = '') => {
+  if (!Number.isFinite(amount) || amount <= 0) return '-';
+  switch (unit) {
+    case 'USD':
+      return `$${amount.toFixed(6)}${suffix}`;
+    case 'CNY':
+      return `¥${amount.toFixed(6)}${suffix}`;
+    case 'CUSTOM':
+      return `${customSymbol}${amount.toFixed(6)}${suffix}`;
+    case 'TOKENS':
+      return `${amount.toFixed(6)} Token${suffix}`;
+    default:
+      return `${amount.toFixed(6)}${suffix}`;
+  }
 };
 
 const pickDemoResolution = (selectedModel) => {
@@ -267,6 +303,7 @@ export default function ModelPricingEditor({
     handleNumericFieldChange,
     handleBillingModeChange,
     handleVideoBillingModeChange,
+    handleVideoPriceUnitChange,
     updateVideoRuleRow,
     addVideoRuleRow,
     removeVideoRuleRow,
@@ -327,23 +364,24 @@ export default function ModelPricingEditor({
   }, [t]);
 
   const perVideoPriceSuffix = useMemo(() => {
-    const { type, symbol } = getCurrencyConfig();
-    if (type === 'TOKENS') {
-      return t('标价（每条约）');
-    }
-    if (type === 'USD') {
-      return t('$/条');
-    }
-    return `${symbol}${t('按条后缀')}`;
-  }, [t]);
+    const unit = ['USD', 'CNY', 'CUSTOM'].includes(selectedModel?.videoPriceUnit)
+      ? selectedModel.videoPriceUnit
+      : getCurrencyConfig().type;
+    if (unit === 'USD') return '$';
+    if (unit === 'CNY') return '¥';
+    if (unit === 'CUSTOM') return getCurrencyConfig().symbol || '¤';
+    return getCurrencyConfig().symbol || '$';
+  }, [selectedModel?.videoPriceUnit, t]);
 
   const flatPerVideoPriceSuffix = useMemo(() => {
-    const { type, symbol } = getCurrencyConfig();
-    if (type === 'TOKENS' || type === 'USD') {
-      return t('$/视频');
-    }
-    return `${symbol}${t('每视频')}`;
-  }, [t]);
+    const unit = ['USD', 'CNY', 'CUSTOM'].includes(selectedModel?.videoPriceUnit)
+      ? selectedModel.videoPriceUnit
+      : getCurrencyConfig().type;
+    if (unit === 'USD') return '$/视频';
+    if (unit === 'CNY') return '¥/视频';
+    if (unit === 'CUSTOM') return `${getCurrencyConfig().symbol || '¤'}/视频`;
+    return '$/视频';
+  }, [selectedModel?.videoPriceUnit, t]);
 
   const columns = useMemo(
     () => [
@@ -960,283 +998,374 @@ export default function ModelPricingEditor({
                             <div className='mb-2 text-xs text-gray-600'>
                               {t('计费模式')}
                             </div>
-                            <RadioGroup
-                              type='button'
-                              value={selectedModel.videoBillingMode}
-                              onChange={(event) =>
-                                handleVideoBillingModeChange(event.target.value)
-                              }
-                              style={{ marginBottom: 12 }}
+                            <div
+                              style={{
+                                marginBottom: 12,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'space-between',
+                                gap: 8,
+                              }}
                             >
-                              <Radio value='per-token'>
-                                {t('按 token 计费')}
-                              </Radio>
-                              <Radio value='per-video'>{t('按视频计费')}</Radio>
-                            </RadioGroup>
-                            {selectedModel.videoBillingMode === 'per-token' ? (
+                              <RadioGroup
+                                type='button'
+                                value={selectedModel.videoBillingMode}
+                                onChange={(event) =>
+                                  handleVideoBillingModeChange(
+                                    event.target.value,
+                                  )
+                                }
+                              >
+                                <Radio value='per-second'>
+                                  {t('按视频秒收费')}
+                                </Radio>
+                                <Radio value='per-item'>
+                                  {t('按视频条数收费')}
+                                </Radio>
+                              </RadioGroup>
+                              <Select
+                                value={selectedModel.videoPriceUnit || 'USD'}
+                                style={{ width: 170 }}
+                                onChange={(value) =>
+                                  handleVideoPriceUnitChange(String(value))
+                                }
+                                optionList={[
+                                  { label: 'USD ($)', value: 'USD' },
+                                  { label: 'CNY (¥)', value: 'CNY' },
+                                  {
+                                    label: `${t('自定义')} (${getCurrencyConfig().symbol || '¤'})`,
+                                    value: 'CUSTOM',
+                                  },
+                                ]}
+                              />
+                            </div>
+                            {selectedModel.videoBillingMode === 'per-second' ? (
                               <>
                                 <div className='mb-2 text-xs text-gray-600'>
                                   {t(
-                                    '文生视频：宽×高×帧率×时长秒/压缩系数；图生视频：宽×高/压缩系数；视频生视频同文生视频。',
+                                    '按真实秒数向上取整计费；可按文生/图生/视频生 + 分辨率配置每秒价格。',
                                   )}
                                 </div>
 
-                                <div className='mb-3 font-medium text-gray-700'>
-                                  {t('文生视频（多分辨率规则）')}
+                                <div className='mb-2 font-medium text-gray-700'>
+                                  {t('文生视频')}
                                 </div>
                                 {(
                                   selectedModel.videoTextToVideoRules || []
-                                ).map((row, index) => (
+                                ).map((row, index, arr) => (
                                   <div
                                     key={`text-rule-${index}`}
                                     style={{
-                                      display: 'grid',
-                                      gridTemplateColumns:
-                                        'minmax(120px,1fr) minmax(120px,1fr) minmax(120px,1fr) auto',
+                                      ...VIDEO_RULE_CARD_STYLE,
+                                      marginBottom:
+                                        index < arr.length - 1 ? 10 : 0,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      flexWrap: 'wrap',
                                       gap: 8,
-                                      marginBottom: 8,
                                     }}
                                   >
-                                    <Select
-                                      value={row.resolution}
-                                      placeholder={t('选择分辨率')}
-                                      filter
-                                      optionList={getSelectableResolutionOptions(
-                                        selectedModel.videoTextToVideoRules,
-                                        index,
-                                      )}
-                                      onChange={(value) =>
-                                        updateVideoRuleRow(
-                                          'text',
-                                          index,
-                                          'resolution',
-                                          String(value || ''),
-                                        )
-                                      }
-                                    />
-                                    <Input
-                                      value={row.tokenPrice}
-                                      placeholder={t('token价格')}
-                                      suffix={t('$/1M')}
-                                      style={{ maxWidth: 150 }}
-                                      onChange={(value) =>
-                                        updateVideoRuleRow(
-                                          'text',
-                                          index,
-                                          'tokenPrice',
-                                          value,
-                                        )
-                                      }
-                                    />
-                                    <Input
-                                      value={row.pixelCompression}
-                                      placeholder={t('压缩系数')}
-                                      style={{ maxWidth: 120 }}
-                                      onChange={(value) =>
-                                        updateVideoRuleRow(
-                                          'text',
-                                          index,
-                                          'pixelCompression',
-                                          value,
-                                        )
-                                      }
-                                    />
-                                    <Button
-                                      type='danger'
-                                      icon={<IconDelete />}
-                                      onClick={() =>
-                                        removeVideoRuleRow('text', index)
-                                      }
-                                    />
-                                  </div>
-                                ))}
-                                <Button
-                                  theme='borderless'
-                                  icon={<IconPlus />}
-                                  onClick={() => addVideoRuleRow('text')}
-                                  style={{ marginBottom: 12 }}
-                                >
-                                  {t('新增文生视频规则')}
-                                </Button>
-
-                                <div className='mb-3 font-medium text-gray-700'>
-                                  {t('图生视频价格')}
-                                </div>
-                                {(
-                                  selectedModel.videoImageToVideoRules || []
-                                ).map((row, index) => (
-                                  <div
-                                    key={`image-rule-${index}`}
-                                    style={{
-                                      display: 'grid',
-                                      gridTemplateColumns:
-                                        'minmax(120px,1fr) minmax(120px,1fr) minmax(120px,1fr) auto',
-                                      gap: 8,
-                                      marginBottom: 8,
-                                    }}
-                                  >
-                                    <Select
-                                      value={row.resolution}
-                                      placeholder={t('选择分辨率')}
-                                      filter
-                                      optionList={getSelectableResolutionOptions(
-                                        selectedModel.videoImageToVideoRules,
-                                        index,
-                                      )}
-                                      onChange={(value) =>
-                                        updateVideoRuleRow(
-                                          'image',
-                                          index,
-                                          'resolution',
-                                          String(value || ''),
-                                        )
-                                      }
-                                    />
-                                    <Input
-                                      value={row.tokenPrice}
-                                      placeholder={t('token价格')}
-                                      suffix={t('$/1M')}
-                                      style={{ maxWidth: 150 }}
-                                      onChange={(value) =>
-                                        updateVideoRuleRow(
-                                          'image',
-                                          index,
-                                          'tokenPrice',
-                                          value,
-                                        )
-                                      }
-                                    />
-                                    <Input
-                                      value={row.pixelCompression}
-                                      placeholder={t('压缩系数')}
-                                      style={{ maxWidth: 120 }}
-                                      onChange={(value) =>
-                                        updateVideoRuleRow(
-                                          'image',
-                                          index,
-                                          'pixelCompression',
-                                          value,
-                                        )
-                                      }
-                                    />
-                                    <Button
-                                      type='danger'
-                                      icon={<IconDelete />}
-                                      onClick={() =>
-                                        removeVideoRuleRow('image', index)
-                                      }
-                                    />
-                                  </div>
-                                ))}
-                                <Button
-                                  theme='borderless'
-                                  icon={<IconPlus />}
-                                  onClick={() => addVideoRuleRow('image')}
-                                  style={{ marginBottom: 12 }}
-                                >
-                                  {t('新增图生视频规则')}
-                                </Button>
-
-                                <div className='mb-3 font-medium text-gray-700'>
-                                  {t('视频生视频价格 - 上传视频价格')}
-                                </div>
-                                {(selectedModel.videoUploadRules || []).map(
-                                  (row, index) => (
                                     <div
-                                      key={`video-upload-rule-${index}`}
                                       style={{
-                                        display: 'grid',
-                                        gridTemplateColumns:
-                                          'minmax(120px,1fr) minmax(120px,1fr) minmax(120px,1fr) auto',
-                                        gap: 8,
-                                        marginBottom: 8,
+                                        ...VIDEO_RULE_HEADER_ROW_STYLE,
+                                        flex: '0 1 auto',
+                                        justifyContent: 'flex-start',
                                       }}
                                     >
                                       <Select
                                         value={row.resolution}
                                         placeholder={t('选择分辨率')}
                                         filter
+                                        style={{ width: 140 }}
                                         optionList={getSelectableResolutionOptions(
-                                          selectedModel.videoUploadRules,
+                                          selectedModel.videoTextToVideoRules,
                                           index,
                                         )}
                                         onChange={(value) =>
                                           updateVideoRuleRow(
-                                            'videoUpload',
+                                            'text',
                                             index,
                                             'resolution',
                                             String(value || ''),
                                           )
                                         }
                                       />
-                                      <Input
-                                        value={row.tokenPrice}
-                                        placeholder={t('价格')}
-                                        suffix={t('$/1M')}
-                                        style={{ maxWidth: 150 }}
-                                        onChange={(value) =>
-                                          updateVideoRuleRow(
-                                            'videoUpload',
-                                            index,
-                                            'tokenPrice',
-                                            value,
-                                          )
+                                      <div className='flex items-center gap-2'>
+                                        <Switch
+                                          size='small'
+                                          checked={Boolean(row.audioPricingEnabled)}
+                                          checkedText={t('开')}
+                                          uncheckedText={t('关')}
+                                          onChange={(checked) =>
+                                            updateVideoRuleRow(
+                                              'text',
+                                              index,
+                                              'audioPricingEnabled',
+                                              checked,
+                                            )
+                                          }
+                                        />
+                                      <Tag
+                                        size='small'
+                                        color={
+                                          row.audioPricingEnabled
+                                            ? 'blue'
+                                            : 'grey'
                                         }
-                                      />
-                                      <Input
-                                        value={row.pixelCompression}
-                                        placeholder={t('压缩系数')}
-                                        style={{ maxWidth: 120 }}
-                                        onChange={(value) =>
-                                          updateVideoRuleRow(
-                                            'videoUpload',
-                                            index,
-                                            'pixelCompression',
-                                            value,
-                                          )
-                                        }
-                                      />
+                                      >
+                                        {row.audioPricingEnabled
+                                          ? t('音轨计费')
+                                          : t('统一计费')}
+                                      </Tag>
+                                      </div>
                                       <Button
                                         type='danger'
                                         icon={<IconDelete />}
                                         onClick={() =>
-                                          removeVideoRuleRow(
-                                            'videoUpload',
-                                            index,
-                                          )
+                                          removeVideoRuleRow('text', index)
                                         }
                                       />
                                     </div>
-                                  ),
-                                )}
+                                    <div
+                                      style={{
+                                        ...VIDEO_RULE_INPUT_ROW_STYLE,
+                                        marginTop: 0,
+                                        flex: '0 1 auto',
+                                      }}
+                                    >
+                                      {row.audioPricingEnabled ? (
+                                        <>
+                                          <Input
+                                            value={row.noAudioPrice}
+                                            placeholder={t('无音轨价格')}
+                                            suffix={perVideoPriceSuffix}
+                                            style={{ width: 180 }}
+                                            onChange={(value) =>
+                                              updateVideoRuleRow(
+                                                'text',
+                                                index,
+                                                'noAudioPrice',
+                                                value,
+                                              )
+                                            }
+                                          />
+                                          <Input
+                                            value={row.withAudioPrice}
+                                            placeholder={t('有音轨价格')}
+                                            suffix={perVideoPriceSuffix}
+                                            style={{ width: 180 }}
+                                            onChange={(value) =>
+                                              updateVideoRuleRow(
+                                                'text',
+                                                index,
+                                                'withAudioPrice',
+                                                value,
+                                              )
+                                            }
+                                          />
+                                        </>
+                                      ) : (
+                                        <Input
+                                          value={row.tokenPrice}
+                                          placeholder={t('统一价格')}
+                                          suffix={perVideoPriceSuffix}
+                                          style={{ width: 180 }}
+                                          onChange={(value) =>
+                                            updateVideoRuleRow(
+                                              'text',
+                                              index,
+                                              'tokenPrice',
+                                              value,
+                                            )
+                                          }
+                                        />
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
                                 <Button
                                   theme='borderless'
                                   icon={<IconPlus />}
-                                  onClick={() => addVideoRuleRow('videoUpload')}
-                                  style={{ marginBottom: 12 }}
+                                  onClick={() => addVideoRuleRow('text')}
+                                  style={{ marginBottom: 8 }}
                                 >
-                                  {t('新增上传视频规则')}
+                                  {t('新增文生视频规则')}
                                 </Button>
 
-                                <div className='mb-3 font-medium text-gray-700'>
-                                  {t('视频生视频价格 - 生成视频价格')}
+                                <div className='mb-2 font-medium text-gray-700'>
+                                  {t('图生视频价格')}
                                 </div>
-                                {(selectedModel.videoGenerateRules || []).map(
-                                  (row, index) => (
+                                {(
+                                  selectedModel.videoImageToVideoRules || []
+                                ).map((row, index, arr) => (
+                                  <div
+                                    key={`image-rule-${index}`}
+                                    style={{
+                                      ...VIDEO_RULE_CARD_STYLE,
+                                      marginBottom:
+                                        index < arr.length - 1 ? 10 : 0,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      flexWrap: 'wrap',
+                                      gap: 8,
+                                    }}
+                                  >
                                     <div
-                                      key={`video-generate-rule-${index}`}
                                       style={{
-                                        display: 'grid',
-                                        gridTemplateColumns:
-                                          'minmax(120px,1fr) minmax(120px,1fr) minmax(120px,1fr) auto',
-                                        gap: 8,
-                                        marginBottom: 8,
+                                        ...VIDEO_RULE_HEADER_ROW_STYLE,
+                                        flex: '0 1 auto',
+                                        justifyContent: 'flex-start',
                                       }}
                                     >
                                       <Select
                                         value={row.resolution}
                                         placeholder={t('选择分辨率')}
                                         filter
+                                        style={{ width: 140 }}
+                                        optionList={getSelectableResolutionOptions(
+                                          selectedModel.videoImageToVideoRules,
+                                          index,
+                                        )}
+                                        onChange={(value) =>
+                                          updateVideoRuleRow(
+                                            'image',
+                                            index,
+                                            'resolution',
+                                            String(value || ''),
+                                          )
+                                        }
+                                      />
+                                      <div className='flex items-center gap-2'>
+                                        <Switch
+                                          size='small'
+                                          checked={Boolean(row.audioPricingEnabled)}
+                                          checkedText={t('开')}
+                                          uncheckedText={t('关')}
+                                          onChange={(checked) =>
+                                            updateVideoRuleRow(
+                                              'image',
+                                              index,
+                                              'audioPricingEnabled',
+                                              checked,
+                                            )
+                                          }
+                                        />
+                                      <Tag
+                                        size='small'
+                                        color={
+                                          row.audioPricingEnabled
+                                            ? 'blue'
+                                            : 'grey'
+                                        }
+                                      >
+                                        {row.audioPricingEnabled
+                                          ? t('音轨计费')
+                                          : t('统一计费')}
+                                      </Tag>
+                                      </div>
+                                      <Button
+                                        type='danger'
+                                        icon={<IconDelete />}
+                                        onClick={() =>
+                                          removeVideoRuleRow('image', index)
+                                        }
+                                      />
+                                    </div>
+                                    <div
+                                      style={{
+                                        ...VIDEO_RULE_INPUT_ROW_STYLE,
+                                        marginTop: 0,
+                                        flex: '0 1 auto',
+                                      }}
+                                    >
+                                      {row.audioPricingEnabled ? (
+                                        <>
+                                          <Input
+                                            value={row.noAudioPrice}
+                                            placeholder={t('无音轨价格')}
+                                            suffix={perVideoPriceSuffix}
+                                            style={{ width: 180 }}
+                                            onChange={(value) =>
+                                              updateVideoRuleRow(
+                                                'image',
+                                                index,
+                                                'noAudioPrice',
+                                                value,
+                                              )
+                                            }
+                                          />
+                                          <Input
+                                            value={row.withAudioPrice}
+                                            placeholder={t('有音轨价格')}
+                                            suffix={perVideoPriceSuffix}
+                                            style={{ width: 180 }}
+                                            onChange={(value) =>
+                                              updateVideoRuleRow(
+                                                'image',
+                                                index,
+                                                'withAudioPrice',
+                                                value,
+                                              )
+                                            }
+                                          />
+                                        </>
+                                      ) : (
+                                        <Input
+                                          value={row.tokenPrice}
+                                          placeholder={t('统一价格')}
+                                          suffix={perVideoPriceSuffix}
+                                          style={{ width: 180 }}
+                                          onChange={(value) =>
+                                            updateVideoRuleRow(
+                                              'image',
+                                              index,
+                                              'tokenPrice',
+                                              value,
+                                            )
+                                          }
+                                        />
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                                <Button
+                                  theme='borderless'
+                                  icon={<IconPlus />}
+                                  onClick={() => addVideoRuleRow('image')}
+                                  style={{ marginBottom: 8 }}
+                                >
+                                  {t('新增图生视频规则')}
+                                </Button>
+
+                                <div className='mb-2 font-medium text-gray-700'>
+                                  {t('视频生成视频价格')}
+                                </div>
+                                {(selectedModel.videoGenerateRules || []).map(
+                                  (row, index, arr) => (
+                                    <div
+                                      key={`video-generate-rule-${index}`}
+                                      style={{
+                                        ...VIDEO_RULE_CARD_STYLE,
+                                        marginBottom:
+                                          index < arr.length - 1 ? 10 : 0,
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      flexWrap: 'wrap',
+                                      gap: 8,
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          ...VIDEO_RULE_HEADER_ROW_STYLE,
+                                          flex: '0 1 auto',
+                                          justifyContent: 'flex-start',
+                                        }}
+                                      >
+                                      <Select
+                                        value={row.resolution}
+                                        placeholder={t('选择分辨率')}
+                                        filter
+                                        style={{ width: 140 }}
                                         optionList={getSelectableResolutionOptions(
                                           selectedModel.videoGenerateRules,
                                           index,
@@ -1250,33 +1379,34 @@ export default function ModelPricingEditor({
                                           )
                                         }
                                       />
-                                      <Input
-                                        value={row.tokenPrice}
-                                        placeholder={t('价格')}
-                                        suffix={t('$/1M')}
-                                        style={{ maxWidth: 150 }}
-                                        onChange={(value) =>
-                                          updateVideoRuleRow(
-                                            'videoGenerate',
-                                            index,
-                                            'tokenPrice',
-                                            value,
-                                          )
-                                        }
-                                      />
-                                      <Input
-                                        value={row.pixelCompression}
-                                        placeholder={t('压缩系数')}
-                                        style={{ maxWidth: 120 }}
-                                        onChange={(value) =>
-                                          updateVideoRuleRow(
-                                            'videoGenerate',
-                                            index,
-                                            'pixelCompression',
-                                            value,
-                                          )
-                                        }
-                                      />
+                                      <div className='flex items-center gap-2'>
+                                        <Switch
+                                          size='small'
+                                          checked={Boolean(row.audioPricingEnabled)}
+                                          checkedText={t('开')}
+                                          uncheckedText={t('关')}
+                                          onChange={(checked) =>
+                                            updateVideoRuleRow(
+                                              'videoGenerate',
+                                              index,
+                                              'audioPricingEnabled',
+                                              checked,
+                                            )
+                                          }
+                                        />
+                                        <Tag
+                                          size='small'
+                                          color={
+                                            row.audioPricingEnabled
+                                              ? 'blue'
+                                              : 'grey'
+                                          }
+                                        >
+                                          {row.audioPricingEnabled
+                                            ? t('音轨计费')
+                                            : t('统一计费')}
+                                        </Tag>
+                                      </div>
                                       <Button
                                         type='danger'
                                         icon={<IconDelete />}
@@ -1287,6 +1417,62 @@ export default function ModelPricingEditor({
                                           )
                                         }
                                       />
+                                      </div>
+                                      <div
+                                        style={{
+                                          ...VIDEO_RULE_INPUT_ROW_STYLE,
+                                          marginTop: 0,
+                                          flex: '0 1 auto',
+                                        }}
+                                      >
+                                        {row.audioPricingEnabled ? (
+                                          <>
+                                            <Input
+                                              value={row.noAudioPrice}
+                                              placeholder={t('无音轨价格')}
+                                              suffix={perVideoPriceSuffix}
+                                              style={{ width: 180 }}
+                                              onChange={(value) =>
+                                                updateVideoRuleRow(
+                                                  'videoGenerate',
+                                                  index,
+                                                  'noAudioPrice',
+                                                  value,
+                                                )
+                                              }
+                                            />
+                                            <Input
+                                              value={row.withAudioPrice}
+                                              placeholder={t('有音轨价格')}
+                                              suffix={perVideoPriceSuffix}
+                                              style={{ width: 180 }}
+                                              onChange={(value) =>
+                                                updateVideoRuleRow(
+                                                  'videoGenerate',
+                                                  index,
+                                                  'withAudioPrice',
+                                                  value,
+                                                )
+                                              }
+                                            />
+                                          </>
+                                        ) : (
+                                          <Input
+                                            value={row.tokenPrice}
+                                            placeholder={t('统一价格')}
+                                            suffix={perVideoPriceSuffix}
+                                            style={{ width: 180 }}
+                                            onChange={(value) =>
+                                              updateVideoRuleRow(
+                                                'videoGenerate',
+                                                index,
+                                                'tokenPrice',
+                                                value,
+                                              )
+                                            }
+                                          />
+                                        )}
+                                      </div>
                                     </div>
                                   ),
                                 )}
@@ -1296,7 +1482,7 @@ export default function ModelPricingEditor({
                                   onClick={() =>
                                     addVideoRuleRow('videoGenerate')
                                   }
-                                  style={{ marginBottom: 12 }}
+                                  style={{ marginBottom: 8 }}
                                 >
                                   {t('新增生成视频规则')}
                                 </Button>
@@ -1316,276 +1502,7 @@ export default function ModelPricingEditor({
                                     '上传视频与预设分辨率差异在阈值内按相似规则处理，差异过大按实际分辨率处理。',
                                   )}
                                 />
-                                <Card
-                                  bodyStyle={{ padding: 12 }}
-                                  style={{
-                                    marginTop: 8,
-                                    background: 'var(--semi-color-fill-0)',
-                                  }}
-                                >
-                                  {(() => {
-                                    const rulesFromAllSections = [
-                                      ...(selectedModel.videoTextToVideoRules ||
-                                        []),
-                                      ...(selectedModel.videoImageToVideoRules ||
-                                        []),
-                                      ...(selectedModel.videoUploadRules || []),
-                                      ...(selectedModel.videoGenerateRules ||
-                                        []),
-                                    ];
-                                    const configuredResolutions = Array.from(
-                                      new Set(
-                                        rulesFromAllSections
-                                          .map((row) => row?.resolution)
-                                          .filter(Boolean),
-                                      ),
-                                    );
-                                    const optionOrder =
-                                      VIDEO_RESOLUTION_OPTIONS.map(
-                                        (item) => item.value,
-                                      );
-                                    const demoResolutions =
-                                      configuredResolutions.length > 0
-                                        ? [...configuredResolutions].sort(
-                                            (a, b) =>
-                                              (optionOrder.indexOf(a) === -1
-                                                ? Number.MAX_SAFE_INTEGER
-                                                : optionOrder.indexOf(a)) -
-                                              (optionOrder.indexOf(b) === -1
-                                                ? Number.MAX_SAFE_INTEGER
-                                                : optionOrder.indexOf(b)),
-                                          )
-                                        : [pickDemoResolution(selectedModel)];
-                                    const calcPerSecondSummary = (
-                                      rule,
-                                      width,
-                                      height,
-                                    ) => {
-                                      if (
-                                        !rule?.tokenPrice ||
-                                        !rule?.pixelCompression
-                                      ) {
-                                        return { tokens: '-', price: '-' };
-                                      }
-                                      const tokenPrice = Number(
-                                        rule.tokenPrice,
-                                      );
-                                      const compression = Number(
-                                        rule.pixelCompression,
-                                      );
-                                      if (
-                                        !Number.isFinite(tokenPrice) ||
-                                        !Number.isFinite(compression) ||
-                                        tokenPrice <= 0 ||
-                                        compression <= 0
-                                      ) {
-                                        return { tokens: '-', price: '-' };
-                                      }
-                                      const tokensPerSecond =
-                                        (width * height * DEFAULT_VIDEO_FPS) /
-                                        compression;
-                                      const pricePerSecond =
-                                        (tokensPerSecond * tokenPrice) /
-                                        1000000;
-                                      return {
-                                        tokens:
-                                          formatTokenNumber(tokensPerSecond),
-                                        price:
-                                          formatSystemCurrencyPrice(
-                                            pricePerSecond,
-                                          ),
-                                      };
-                                    };
-                                    const calcImageSummary = (
-                                      rule,
-                                      width,
-                                      height,
-                                    ) => {
-                                      const tokenPrice = Number(
-                                        rule?.tokenPrice,
-                                      );
-                                      const compression = Number(
-                                        rule?.pixelCompression,
-                                      );
-                                      if (
-                                        !Number.isFinite(tokenPrice) ||
-                                        !Number.isFinite(compression) ||
-                                        tokenPrice <= 0 ||
-                                        compression <= 0
-                                      ) {
-                                        return { tokens: '-', price: '-' };
-                                      }
-                                      const tokens =
-                                        (width * height) / compression;
-                                      const price =
-                                        (tokens * tokenPrice) / 1000000;
-                                      return {
-                                        tokens: formatTokenNumber(tokens),
-                                        price: formatSystemCurrencyPrice(price),
-                                      };
-                                    };
-                                    const renderPriceRow = (
-                                      title,
-                                      tokenLabel,
-                                      tokenValue,
-                                      priceLabel,
-                                      priceValue,
-                                    ) => (
-                                      <div
-                                        style={{
-                                          marginTop: 8,
-                                          padding: '8px 10px',
-                                          borderRadius: 6,
-                                          border:
-                                            '1px solid var(--semi-color-border)',
-                                          background:
-                                            'var(--semi-color-fill-1)',
-                                        }}
-                                      >
-                                        <div
-                                          style={{
-                                            fontWeight: 600,
-                                            marginBottom: 6,
-                                          }}
-                                        >
-                                          {title}
-                                        </div>
-                                        <div
-                                          style={{
-                                            display: 'flex',
-                                            flexWrap: 'wrap',
-                                            gap: 6,
-                                          }}
-                                        >
-                                          <Tag color='blue' size='small'>
-                                            {tokenLabel} {tokenValue}
-                                          </Tag>
-                                          <Tag color='green' size='small'>
-                                            {priceLabel} {priceValue}
-                                          </Tag>
-                                        </div>
-                                      </div>
-                                    );
-                                    return (
-                                      <div className='text-xs text-gray-600'>
-                                        {demoResolutions.map((resolution) => {
-                                          const [w, h] = resolution
-                                            .split('x')
-                                            .map((v) => Number(v));
-                                          const textRule = getRuleByResolution(
-                                            selectedModel.videoTextToVideoRules,
-                                            resolution,
-                                          );
-                                          const rawVideoUploadRule =
-                                            getRuleByResolution(
-                                              selectedModel.videoUploadRules,
-                                              resolution,
-                                            );
-                                          const rawVideoGenerateRule =
-                                            getRuleByResolution(
-                                              selectedModel.videoGenerateRules,
-                                              resolution,
-                                            );
-                                          const rawImageRule =
-                                            getRuleByResolution(
-                                              selectedModel.videoImageToVideoRules,
-                                              resolution,
-                                            );
-                                          const videoUploadRule =
-                                            rawVideoUploadRule || textRule;
-                                          const videoGenerateRule =
-                                            rawVideoGenerateRule || textRule;
-                                          const imageRule =
-                                            rawImageRule || textRule;
-                                          const textPricingSummary =
-                                            calcPerSecondSummary(
-                                              textRule,
-                                              w,
-                                              h,
-                                            );
-                                          const videoUploadPricingSummary =
-                                            calcPerSecondSummary(
-                                              videoUploadRule,
-                                              w,
-                                              h,
-                                            );
-                                          const videoGeneratePricingSummary =
-                                            calcPerSecondSummary(
-                                              videoGenerateRule,
-                                              w,
-                                              h,
-                                            );
-                                          const imagePricingSummary =
-                                            calcImageSummary(imageRule, w, h);
-                                          const finalImagePricingSummary =
-                                            rawImageRule || !textRule
-                                              ? imagePricingSummary
-                                              : calcPerSecondSummary(
-                                                  textRule,
-                                                  w,
-                                                  h,
-                                                );
-                                          return (
-                                            <div
-                                              key={`pricing-demo-${resolution}`}
-                                              style={{ marginBottom: 10 }}
-                                            >
-                                              <div className='font-medium mb-1'>
-                                                {t(
-                                                  '{{resolution}} 价格示例（按当前分辨率价格表，约值）',
-                                                  {
-                                                    resolution:
-                                                      VIDEO_RESOLUTION_LABEL_MAP[
-                                                        resolution
-                                                      ] || resolution,
-                                                  },
-                                                )}
-                                              </div>
-                                              {renderPriceRow(
-                                                `${t('文生视频')} (${VIDEO_RESOLUTION_LABEL_MAP[resolution] || resolution})`,
-                                                t('token 数'),
-                                                textPricingSummary.tokens,
-                                                t('价格'),
-                                                textPricingSummary.price,
-                                              )}
-                                              {renderPriceRow(
-                                                `${t('视频生视频-上传')} (${VIDEO_RESOLUTION_LABEL_MAP[resolution] || resolution})`,
-                                                t('token 数'),
-                                                videoUploadPricingSummary.tokens,
-                                                t('价格'),
-                                                videoUploadPricingSummary.price,
-                                              )}
-                                              {renderPriceRow(
-                                                `${t('视频生视频-生成')} (${VIDEO_RESOLUTION_LABEL_MAP[resolution] || resolution})`,
-                                                t('token 数'),
-                                                videoGeneratePricingSummary.tokens,
-                                                t('价格'),
-                                                videoGeneratePricingSummary.price,
-                                              )}
-                                              {renderPriceRow(
-                                                `${t('图生视频')} (${VIDEO_RESOLUTION_LABEL_MAP[resolution] || resolution})`,
-                                                t('token 数'),
-                                                finalImagePricingSummary.tokens,
-                                                t('价格'),
-                                                finalImagePricingSummary.price,
-                                              )}
-                                            </div>
-                                          );
-                                        })}
-                                        <div style={{ marginTop: 4 }}>
-                                          {t(
-                                            '文/视频生视频示例按 24fps 与 1 秒计算：宽×高×帧率×时长/压缩系数。',
-                                          )}
-                                        </div>
-                                        <div>
-                                          {t(
-                                            '图生视频示例按单张图片计算：宽×高/压缩系数 得到 token 数量，再按图片 token 价格换算。',
-                                          )}
-                                        </div>
-                                      </div>
-                                    );
-                                  })()}
-                                </Card>
+                                
                               </>
                             ) : (
                               <>
@@ -1606,38 +1523,42 @@ export default function ModelPricingEditor({
                                     t('新增图生视频规则'),
                                   ],
                                   [
-                                    'videoUpload',
-                                    t('视频生视频-上传'),
-                                    'videoUploadRules',
-                                    t('新增上传视频规则'),
-                                  ],
-                                  [
                                     'videoGenerate',
-                                    t('视频生视频-生成'),
+                                    t('视频生成视频价格'),
                                     'videoGenerateRules',
                                     t('新增生成视频规则'),
                                   ],
                                 ].map(([section, title, prop, addLabel]) => (
                                   <React.Fragment key={`pv-${section}`}>
-                                    <div className='mb-3 font-medium text-gray-700'>
+                                    <div className='mb-2 font-medium text-gray-700'>
                                       {title}
                                     </div>
                                     {(selectedModel[prop] || []).map(
-                                      (row, index) => (
+                                      (row, index, arr) => (
                                         <div
                                           key={`${section}-pv-row-${index}`}
                                           style={{
-                                            display: 'grid',
-                                            gridTemplateColumns:
-                                              'minmax(120px,1fr) minmax(160px,1fr) auto',
+                                            ...VIDEO_RULE_CARD_STYLE,
+                                            marginBottom:
+                                              index < arr.length - 1 ? 10 : 0,
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            flexWrap: 'wrap',
                                             gap: 8,
-                                            marginBottom: 8,
                                           }}
                                         >
+                                          <div
+                                            style={{
+                                              ...VIDEO_RULE_HEADER_ROW_STYLE,
+                                              flex: '0 1 auto',
+                                              justifyContent: 'flex-start',
+                                            }}
+                                          >
                                           <Select
                                             value={row.resolution}
                                             placeholder={t('选择分辨率')}
                                             filter
+                                            style={{ width: 140 }}
                                             optionList={getSelectableResolutionOptions(
                                               selectedModel[prop] || [],
                                               index,
@@ -1651,20 +1572,34 @@ export default function ModelPricingEditor({
                                               )
                                             }
                                           />
-                                          <Input
-                                            value={row.videoPrice}
-                                            placeholder={t('每条成片价格')}
-                                            suffix={perVideoPriceSuffix}
-                                            style={{ maxWidth: 180 }}
-                                            onChange={(value) =>
-                                              updateVideoRuleRow(
-                                                section,
-                                                index,
-                                                'videoPrice',
-                                                value,
-                                              )
-                                            }
-                                          />
+                                          <div className='flex items-center gap-2'>
+                                            <Switch
+                                              size='small'
+                                              checked={Boolean(row.audioPricingEnabled)}
+                                              checkedText={t('开')}
+                                              uncheckedText={t('关')}
+                                              onChange={(checked) =>
+                                                updateVideoRuleRow(
+                                                  section,
+                                                  index,
+                                                  'audioPricingEnabled',
+                                                  checked,
+                                                )
+                                              }
+                                            />
+                                            <Tag
+                                              size='small'
+                                              color={
+                                                row.audioPricingEnabled
+                                                  ? 'blue'
+                                                  : 'grey'
+                                              }
+                                            >
+                                              {row.audioPricingEnabled
+                                                ? t('音轨计费')
+                                                : t('统一计费')}
+                                            </Tag>
+                                          </div>
                                           <Button
                                             type='danger'
                                             icon={<IconDelete />}
@@ -1672,6 +1607,62 @@ export default function ModelPricingEditor({
                                               removeVideoRuleRow(section, index)
                                             }
                                           />
+                                          </div>
+                                          <div
+                                            style={{
+                                              ...VIDEO_RULE_INPUT_ROW_STYLE,
+                                              marginTop: 0,
+                                              flex: '0 1 auto',
+                                            }}
+                                          >
+                                            {row.audioPricingEnabled ? (
+                                              <>
+                                                <Input
+                                                  value={row.noAudioPrice}
+                                                  placeholder={t('无音轨价格')}
+                                                  suffix={perVideoPriceSuffix}
+                                                  style={{ width: 180 }}
+                                                  onChange={(value) =>
+                                                    updateVideoRuleRow(
+                                                      section,
+                                                      index,
+                                                      'noAudioPrice',
+                                                      value,
+                                                    )
+                                                  }
+                                                />
+                                                <Input
+                                                  value={row.withAudioPrice}
+                                                  placeholder={t('有音轨价格')}
+                                                  suffix={perVideoPriceSuffix}
+                                                  style={{ width: 180 }}
+                                                  onChange={(value) =>
+                                                    updateVideoRuleRow(
+                                                      section,
+                                                      index,
+                                                      'withAudioPrice',
+                                                      value,
+                                                    )
+                                                  }
+                                                />
+                                              </>
+                                            ) : (
+                                              <Input
+                                                value={row.videoPrice}
+                                                placeholder={t('统一价格')}
+                                                suffix={perVideoPriceSuffix}
+                                                style={{ width: 180 }}
+                                                onChange={(value) =>
+                                                  updateVideoRuleRow(
+                                                    section,
+                                                    index,
+                                                    'videoPrice',
+                                                    value,
+                                                  )
+                                                }
+                                              />
+                                            )}
+                                          </div>
                                         </div>
                                       ),
                                     )}
@@ -1679,7 +1670,7 @@ export default function ModelPricingEditor({
                                       theme='borderless'
                                       icon={<IconPlus />}
                                       onClick={() => addVideoRuleRow(section)}
-                                      style={{ marginBottom: 12 }}
+                                      style={{ marginBottom: 8 }}
                                     >
                                       {addLabel}
                                     </Button>

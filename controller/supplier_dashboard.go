@@ -19,7 +19,30 @@ type SupplierModelUsageItem struct {
 	Quota     int    `json:"quota"`
 }
 
-// parseSupplierDashboardTimeRange 解析供应商看板时间范围（默认最近24小时）。
+// loadSupplierDashboardAccount 加载供应商对接人（申请人）在平台上的剩余额度与历史累计已用额度，与使用日志中的额度/花费字段同源。
+func loadSupplierDashboardAccount(c *gin.Context, adminSupplierID int) (quota int, usedQuota int) {
+	if c.GetInt("role") >= common.RoleAdminUser {
+		if adminSupplierID <= 0 {
+			return 0, 0
+		}
+		app, err := model.GetSupplierByID(adminSupplierID)
+		if err != nil || app == nil || app.ApplicantUserID <= 0 {
+			return 0, 0
+		}
+		u, err := model.GetUserById(app.ApplicantUserID, false)
+		if err != nil {
+			return 0, 0
+		}
+		return u.Quota, u.UsedQuota
+	}
+	u, err := model.GetUserById(c.GetInt("id"), false)
+	if err != nil {
+		return 0, 0
+	}
+	return u.Quota, u.UsedQuota
+}
+
+// parseSupplierDashboardTimeRange 解析供应商看板时间范围：请求参数 start_timestamp、end_timestamp 为 Unix 秒；未传或非法时默认最近 24 小时。
 func parseSupplierDashboardTimeRange(c *gin.Context) (int64, int64) {
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
@@ -45,6 +68,8 @@ func toSortedModelSlice(modelsMap map[string]struct{}) []string {
 // GetSupplierDashboardData 返回供应商数据看板（供应商看自己，管理员看全部供应商模型）。
 func GetSupplierDashboardData(c *gin.Context) {
 	startTimestamp, endTimestamp := parseSupplierDashboardTimeRange(c)
+	adminSupplierID, _ := strconv.Atoi(c.Query("supplier_id"))
+	accountQuota, accountUsedQuota := loadSupplierDashboardAccount(c, adminSupplierID)
 
 	var (
 		modelNamesMap map[string]struct{}
@@ -53,7 +78,7 @@ func GetSupplierDashboardData(c *gin.Context) {
 
 	// 管理员默认查看全部供应商模型；当传 supplier_id 时查看指定供应商。
 	if c.GetInt("role") >= common.RoleAdminUser {
-		supplierID, _ := strconv.Atoi(c.Query("supplier_id"))
+		supplierID := adminSupplierID
 		if supplierID > 0 {
 			modelNamesMap, err = collectSupplierOwnedModelNamesBySupplierID(supplierID)
 		} else {
@@ -118,6 +143,15 @@ func GetSupplierDashboardData(c *gin.Context) {
 		"data": gin.H{
 			"start_timestamp":   startTimestamp,
 			"end_timestamp":     endTimestamp,
+			"usage_time_range": gin.H{
+				"start_timestamp": startTimestamp,
+				"end_timestamp":   endTimestamp,
+				"bucket":          "hour",
+			},
+			"account": gin.H{
+				"quota":      accountQuota,
+				"used_quota": accountUsedQuota,
+			},
 			"model_names":       modelNames,
 			"quota_data":        quotaData,
 			"model_usage_stats": modelUsageStats,

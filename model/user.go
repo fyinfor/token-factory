@@ -175,7 +175,8 @@ func generateDefaultSidebarConfigForRole(userRole int) string {
 	return string(configBytes)
 }
 
-// CheckUserExistOrDeleted check if user exist or deleted, if not exist, return false, nil, if deleted or exist, return true, nil
+// CheckUserExistOrDeleted 判断是否已有用户使用相同用户名，或与传入的非空邮箱冲突（含软删除）。
+// 注册接口已改用 IsUsernameTakenUnscoped / IsEmailTakenUnscoped 分别提示用户名与邮箱冲突。
 func CheckUserExistOrDeleted(username string, email string) (bool, error) {
 	var user User
 
@@ -197,6 +198,74 @@ func CheckUserExistOrDeleted(username string, email string) (bool, error) {
 	}
 	// exist, return true, nil
 	return true, nil
+}
+
+// IsUsernameTakenUnscoped 判断用户名是否已被占用（含软删除），用于注册等场景的精确提示。
+func IsUsernameTakenUnscoped(username string) (bool, error) {
+	username = strings.TrimSpace(username)
+	if username == "" {
+		return false, nil
+	}
+	var user User
+	err := DB.Unscoped().Where("username = ?", username).First(&user).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// IsEmailTakenUnscoped 判断邮箱是否已被占用（含软删除）；邮箱为空时不视为占用。
+func IsEmailTakenUnscoped(email string) (bool, error) {
+	email = strings.TrimSpace(email)
+	if email == "" {
+		return false, nil
+	}
+	var user User
+	err := DB.Unscoped().Where("email = ?", email).First(&user).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// IsEmailTakenByOtherUser 判断邮箱是否已被除 excludeUserId 以外的用户占用（包含软删除记录）。
+func IsEmailTakenByOtherUser(email string, excludeUserId int) bool {
+	email = strings.TrimSpace(email)
+	if email == "" {
+		return false
+	}
+	return DB.Unscoped().Where("email = ? AND id <> ?", email, excludeUserId).Find(&User{}).RowsAffected > 0
+}
+
+// NormalizeAndValidateAdminUserEmail 管理员创建/编辑用户时的邮箱：去首尾空格；空表示不绑定；非空则校验格式、长度与占用（excludeUserId=0 表示新建）。
+func NormalizeAndValidateAdminUserEmail(email string, excludeUserId int) (string, error) {
+	n := strings.TrimSpace(email)
+	if n == "" {
+		return "", nil
+	}
+	if err := common.Validate.Var(n, "email,max=50"); err != nil {
+		return "", fmt.Errorf("邮箱格式无效")
+	}
+	if excludeUserId == 0 {
+		taken, err := IsEmailTakenUnscoped(n)
+		if err != nil {
+			return "", err
+		}
+		if taken {
+			return "", fmt.Errorf("邮箱已被占用")
+		}
+	} else {
+		if IsEmailTakenByOtherUser(n, excludeUserId) {
+			return "", fmt.Errorf("邮箱已被占用")
+		}
+	}
+	return n, nil
 }
 
 func GetMaxUserId() int {
@@ -642,6 +711,10 @@ func (user *User) Edit(updatePassword bool) error {
 	if err != nil {
 		return err
 	}
+	normalizedEmail, err := NormalizeAndValidateAdminUserEmail(newUser.Email, newUser.Id)
+	if err != nil {
+		return err
+	}
 	updates := map[string]interface{}{
 		"username":     newUser.Username,
 		"display_name": newUser.DisplayName,
@@ -649,6 +722,7 @@ func (user *User) Edit(updatePassword bool) error {
 		"quota":        newUser.Quota,
 		"remark":       newUser.Remark,
 		"phone":        normalizedPhone,
+		"email":        normalizedEmail,
 		"updated_at":   time.Now(),
 	}
 	if updatePassword {

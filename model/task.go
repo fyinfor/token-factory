@@ -17,6 +17,9 @@ type TaskStatus string
 func (t TaskStatus) ToVideoStatus() string {
 	var status string
 	switch t {
+	case TaskStatusNotStart:
+		// 与 POST /v1/videos 提交后立即返回的 queued 对齐；库内落库可能仍为 NOT_START
+		status = dto.VideoStatusQueued
 	case TaskStatusQueued, TaskStatusSubmitted:
 		status = dto.VideoStatusQueued
 	case TaskStatusInProgress:
@@ -100,6 +103,7 @@ type TaskPrivateData struct {
 	Key            string `json:"key,omitempty"`
 	UpstreamTaskID string `json:"upstream_task_id,omitempty"` // 上游真实 task ID
 	ResultURL      string `json:"result_url,omitempty"`       // 任务成功后的结果 URL（视频地址等）
+	TokenName      string `json:"token_name,omitempty"`       // 令牌名称（用于差额日志展示）
 	// 计费上下文：用于异步退款/差额结算（轮询阶段读取）
 	BillingSource  string              `json:"billing_source,omitempty"`  // "wallet" 或 "subscription"
 	SubscriptionId int                 `json:"subscription_id,omitempty"` // 订阅 ID，用于订阅退款
@@ -501,8 +505,12 @@ func (t *Task) ToOpenAIVideo() *dto.OpenAIVideo {
 	openAIVideo.Status = t.Status.ToVideoStatus()
 	openAIVideo.Model = t.Properties.OriginModelName
 	openAIVideo.SetProgressStr(t.Progress)
-	openAIVideo.CreatedAt = t.CreatedAt
-	openAIVideo.CompletedAt = t.UpdatedAt
-	openAIVideo.SetMetadata("url", t.GetResultURL())
+	openAIVideo.CreatedAt = dto.FormatTimeUnixRFC3339(t.CreatedAt)
+	if t.FinishTime > 0 {
+		openAIVideo.CompletedAt = dto.FormatTimeUnixRFC3339(t.FinishTime)
+	}
+	if u := t.GetResultURL(); u != "" {
+		openAIVideo.SetOutputVideoURL(u)
+	}
 	return openAIVideo
 }

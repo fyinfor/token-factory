@@ -20,6 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 import React from 'react';
 import { Table, Typography } from '@douyinfe/semi-ui';
 import { getSuppliersColumns } from './SuppliersColumnDefs';
+import { renderQuota, renderQuotaWithPrompt } from '../../../helpers';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 
 const { Text } = Typography;
@@ -64,6 +65,20 @@ const SuppliersTable = ({
               <div>
                 <Text type='secondary'>{t('用户名')}:</Text>
                 <div>{supplier.applicant_username}</div>
+              </div>
+              <div>
+                <Text type='secondary'>{t('剩余额度')}:</Text>
+                <div>{supplier.applicant_quota ?? 0}</div>
+                <Text type='tertiary' size='small'>
+                  {renderQuota(supplier.applicant_quota ?? 0)}
+                </Text>
+              </div>
+              <div>
+                <Text type='secondary'>{t('历史消耗')}:</Text>
+                <div>{supplier.applicant_used_quota ?? 0}</div>
+                <Text type='tertiary' size='small'>
+                  {renderQuotaWithPrompt(supplier.applicant_used_quota ?? 0)}
+                </Text>
               </div>
               <div>
                 <Text type='secondary'>{t('企业/主体名称')}:</Text>
@@ -112,7 +127,7 @@ const SuppliersTable = ({
       loading={loading}
       pagination={false}
       size={compactMode ? 'small' : 'default'}
-      scroll={{ x: 1400 }}
+      scroll={{ x: 1680 }}
     />
   );
 };

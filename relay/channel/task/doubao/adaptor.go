@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -183,8 +184,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 
 	ov := dto.NewOpenAIVideo()
 	ov.ID = info.PublicTaskID
-	ov.TaskID = info.PublicTaskID
-	ov.CreatedAt = time.Now().Unix()
+	ov.CreatedAt = dto.FormatTimeUnixRFC3339(time.Now().Unix())
 	ov.Model = info.OriginModelName
 
 	c.JSON(http.StatusOK, ov)
@@ -270,22 +270,25 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		Code: 0,
 	}
 
+	// 上游（含 Seedance 2.x）可能返回大小写混合的状态枚举，例如 SUCCESS / Succeeded
+	statusNorm := strings.ToLower(strings.TrimSpace(resTask.Status))
+
 	// Map Doubao status to internal status
-	switch resTask.Status {
-	case "pending", "queued":
+	switch statusNorm {
+	case "pending", "queued", "submitted":
 		taskResult.Status = model.TaskStatusQueued
 		taskResult.Progress = "10%"
-	case "processing", "running":
+	case "processing", "running", "in_progress":
 		taskResult.Status = model.TaskStatusInProgress
 		taskResult.Progress = "50%"
-	case "succeeded":
+	case "succeeded", "success", "completed":
 		taskResult.Status = model.TaskStatusSuccess
 		taskResult.Progress = "100%"
 		taskResult.Url = resTask.Content.VideoURL
 		// 解析 usage 信息用于按倍率计费
 		taskResult.CompletionTokens = resTask.Usage.CompletionTokens
 		taskResult.TotalTokens = resTask.Usage.TotalTokens
-	case "failed":
+	case "failed", "error", "cancelled", "canceled":
 		taskResult.Status = model.TaskStatusFailure
 		taskResult.Progress = "100%"
 		taskResult.Reason = resTask.Error.Message
@@ -306,15 +309,17 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 
 	openAIVideo := dto.NewOpenAIVideo()
 	openAIVideo.ID = originTask.TaskID
-	openAIVideo.TaskID = originTask.TaskID
 	openAIVideo.Status = originTask.Status.ToVideoStatus()
 	openAIVideo.SetProgressStr(originTask.Progress)
 	openAIVideo.SetMetadata("url", dResp.Content.VideoURL)
-	openAIVideo.CreatedAt = originTask.CreatedAt
-	openAIVideo.CompletedAt = originTask.UpdatedAt
+	openAIVideo.CreatedAt = dto.FormatTimeUnixRFC3339(originTask.CreatedAt)
+	if originTask.FinishTime > 0 {
+		openAIVideo.CompletedAt = dto.FormatTimeUnixRFC3339(originTask.FinishTime)
+	}
 	openAIVideo.Model = originTask.Properties.OriginModelName
 
-	if dResp.Status == "failed" {
+	st := strings.ToLower(strings.TrimSpace(dResp.Status))
+	if st == "failed" || st == "error" || st == "cancelled" || st == "canceled" {
 		openAIVideo.Error = &dto.OpenAIVideoError{
 			Message: dResp.Error.Message,
 			Code:    dResp.Error.Code,
