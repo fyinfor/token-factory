@@ -2,6 +2,7 @@ package relay
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -555,6 +556,10 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 
 	if !snap.Equal(task.Snapshot()) {
 		_, _ = task.UpdateWithStatus(snap.Status)
+	}
+	// /v1/videos 查询链路：任务首次进入 SUCCESS 时补做一次实际结算（与后台轮询保持一致）。
+	if task.Status == model.TaskStatusSuccess && snap.Status != model.TaskStatusSuccess {
+		service.SettleTaskBillingOnFetch(context.TODO(), task, ti)
 	}
 
 	// OpenAI Video API 由调用者的 ConvertToOpenAIVideo 分支处理

@@ -396,11 +396,30 @@ export const useLogsData = () => {
       return `${chain.join(' -> ')}`;
     };
 
+    const taskFinalQuotaMap = {};
+    for (let i = 0; i < logs.length; i++) {
+      const other = getLogOther(logs[i].other);
+      const taskId = other?.task_id;
+      const actualQuota = Number(other?.actual_quota);
+      if (
+        taskId &&
+        Number.isFinite(actualQuota) &&
+        actualQuota > 0 &&
+        (!taskFinalQuotaMap[taskId] || actualQuota > taskFinalQuotaMap[taskId])
+      ) {
+        taskFinalQuotaMap[taskId] = actualQuota;
+      }
+    }
+
     let expandDatesLocal = {};
     for (let i = 0; i < logs.length; i++) {
       logs[i].timestamp2string = timestamp2string(logs[i].created_at);
       logs[i].key = logs[i].id;
       let other = getLogOther(logs[i].other);
+      const aggregatedQuota =
+        other?.task_id && taskFinalQuotaMap[other.task_id]
+          ? taskFinalQuotaMap[other.task_id]
+          : logs[i]?.quota || 0;
       let expandDataLocal = [];
 
       if (
@@ -511,6 +530,7 @@ export const useLogsData = () => {
                 other?.video_output_tokens || 0,
                 other?.video_input_text_tokens || 0,
                 other?.billing_mode || '',
+                aggregatedQuota,
               ),
         });
         if (logs[i]?.content) {
@@ -590,6 +610,7 @@ export const useLogsData = () => {
                 other?.video_output_tokens || 0,
                 other?.video_input_text_tokens || 0,
                 other?.billing_mode || '',
+                aggregatedQuota,
               );
           expandDataLocal.push({
             key: t('计费过程'),
@@ -744,6 +765,8 @@ export const useLogsData = () => {
           // Video task channels billed via duration*W*H*fps/1024 token estimate;
           // fully computed locally from the request body, never reads upstream usage.
           localCountMode = t('视频本地按 token 计费');
+        } else if (other?.billing_mode === 'video_per_second') {
+          localCountMode = t('视频本地按秒/分辨率计价');
         } else if (other?.billing_mode === 'video_per_video') {
           localCountMode = t('视频本地按条/分辨率计价');
         } else if (other?.admin_info?.local_count_tokens) {

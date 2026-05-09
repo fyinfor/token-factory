@@ -72,7 +72,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 	var (
 		tokenFactoryError *types.TokenFactoryError
-		ws          *websocket.Conn
+		ws                *websocket.Conn
 	)
 
 	if relayFormat == types.RelayFormatOpenAIRealtime {
@@ -637,12 +637,20 @@ func RelayTask(c *gin.Context) {
 
 	// ── 成功：结算 + 日志 + 插入任务 ──
 	if taskErr == nil {
-		if settleErr := service.SettleBilling(c, relayInfo, result.Quota); settleErr != nil {
+		actualQuota := service.ResolveActualTaskQuotaOnSubmit(c, relayInfo, result.TaskData, result.Quota)
+		result.Quota = actualQuota
+		relayInfo.PriceData.Quota = actualQuota
+		if settleErr := service.SettleBilling(c, relayInfo, actualQuota); settleErr != nil {
 			common.SysError("settle task billing error: " + settleErr.Error())
 		}
 		service.LogTaskConsumption(c, relayInfo)
 
 		task := model.InitTask(result.Platform, relayInfo)
+		if req, err := relaycommon.GetTaskRequest(c); err == nil {
+			if reqBytes, mErr := common.Marshal(req); mErr == nil {
+				task.Properties.Input = string(reqBytes)
+			}
+		}
 		task.PrivateData.UpstreamTaskID = result.UpstreamTaskID
 		if k := strings.TrimSpace(relayInfo.ApiKey); k != "" {
 			// 轮询上游（如腾讯云 DescribeTaskDetail）时使用与提交相同的密钥，避免多 Key 渠道错钥
@@ -651,6 +659,7 @@ func RelayTask(c *gin.Context) {
 		task.PrivateData.BillingSource = relayInfo.BillingSource
 		task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
 		task.PrivateData.TokenId = relayInfo.TokenId
+		task.PrivateData.TokenName = c.GetString("token_name")
 		task.PrivateData.BillingContext = &model.TaskBillingContext{
 			ModelPrice:      relayInfo.PriceData.ModelPrice,
 			GroupRatio:      relayInfo.PriceData.GroupRatioInfo.GroupRatio,
@@ -659,7 +668,7 @@ func RelayTask(c *gin.Context) {
 			OriginModelName: relayInfo.OriginModelName,
 			PerCallBilling:  common.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName),
 		}
-		task.Quota = result.Quota
+		task.Quota = actualQuota
 		task.Data = result.TaskData
 		task.Action = relayInfo.Action
 		if insertErr := task.Insert(); insertErr != nil {
