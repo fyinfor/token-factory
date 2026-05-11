@@ -741,8 +741,8 @@ func (user *User) Update(updatePassword bool) error {
 		return err
 	}
 
-	// Update cache
-	return updateUserCache(*user)
+	// 缓存必须与落库的 newUser 一致；*user 仅为 First 后的快照，密码等可能已过时。
+	return updateUserCache(newUser)
 }
 
 func (user *User) Edit(updatePassword bool) error {
