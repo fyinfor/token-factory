@@ -17,14 +17,23 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import HomeBannerIllustration from './HomeBannerIllustration';
 import './model-ad-banner.css';
 
-/** 自动轮播间隔（秒）— 与仪表盘说明一致可改为 4 */
+/** 自动轮播间隔 */
 const INTERVAL_MS = 4000;
+/** 手动切换后暂停自动轮播的时长 */
+const MANUAL_PAUSE_MS = 30000;
 
 const DEFAULT_BANNER_IMAGE = '/assets/banner-model.png';
 
@@ -138,14 +147,21 @@ const HomeBannerCarousel = ({ rawSlides }) => {
   const navigate = useNavigate();
   const slides = useMemo(() => parseSlides(rawSlides), [rawSlides]);
   const [index, setIndex] = useState(0);
+  const autoPauseUntilRef = useRef(0);
+
+  const pauseAutoAfterManual = useCallback(() => {
+    autoPauseUntilRef.current = Date.now() + MANUAL_PAUSE_MS;
+  }, []);
 
   useEffect(() => {
     setIndex(0);
+    autoPauseUntilRef.current = 0;
   }, [slides.length]);
 
   useEffect(() => {
     if (slides.length <= 1) return undefined;
     const id = window.setInterval(() => {
+      if (Date.now() < autoPauseUntilRef.current) return;
       setIndex((i) => (i + 1) % slides.length);
     }, INTERVAL_MS);
     return () => window.clearInterval(id);
@@ -165,8 +181,12 @@ const HomeBannerCarousel = ({ rawSlides }) => {
 
   if (!slides.length) return null;
 
+  const multi = slides.length > 1;
+
   return (
-    <div className='model-ad-banner-root'>
+    <div
+      className={`model-ad-banner-root${multi ? ' model-ad-banner-root--with-nav' : ''}`}
+    >
       {slides.map((slide, i) => (
         <SlideBanner
           key={i}
@@ -177,7 +197,34 @@ const HomeBannerCarousel = ({ rawSlides }) => {
         />
       ))}
 
-      {slides.length > 1 ? (
+      {multi ? (
+        <>
+          <button
+            type='button'
+            className='ad-nav ad-nav--prev'
+            aria-label={t('首页广告上一张')}
+            onClick={() => {
+              pauseAutoAfterManual();
+              setIndex((i) => (i - 1 + slides.length) % slides.length);
+            }}
+          >
+            <ChevronLeft size={18} strokeWidth={2.25} aria-hidden />
+          </button>
+          <button
+            type='button'
+            className='ad-nav ad-nav--next'
+            aria-label={t('首页广告下一张')}
+            onClick={() => {
+              pauseAutoAfterManual();
+              setIndex((i) => (i + 1) % slides.length);
+            }}
+          >
+            <ChevronRight size={18} strokeWidth={2.25} aria-hidden />
+          </button>
+        </>
+      ) : null}
+
+      {multi ? (
         <div className='ad-dots' role='tablist' aria-label={t('首页广告轮播说明')}>
           {slides.map((_, i) => (
             <button
@@ -188,6 +235,7 @@ const HomeBannerCarousel = ({ rawSlides }) => {
               aria-current={i === index ? 'true' : undefined}
               onClick={(e) => {
                 e.stopPropagation();
+                pauseAutoAfterManual();
                 setIndex(i);
               }}
             />

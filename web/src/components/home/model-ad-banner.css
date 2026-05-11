@@ -8,7 +8,13 @@
   height: 112px;
   margin-left: 0;
   margin-right: 0;
-  margin-bottom: 2rem;
+  margin-bottom: 0.75rem;
+}
+
+/* 多图时左右箭头占位，避免文案与按钮压住图标 */
+.model-ad-banner-root--with-nav .model-ad-banner {
+  padding-left: 42px;
+  padding-right: 42px;
 }
 
 .model-ad-banner {
@@ -75,13 +81,15 @@
   );
 }
 
-/* 文案区 + 按钮：左对齐整组，按钮紧跟标题区右侧，不占满屏宽居中 */
+/* 文案区 + 按钮：整体略右移；按钮紧跟标题区右侧 */
 .ad-content {
   display: flex;
   flex-direction: row;
   align-items: center;
   justify-content: flex-start;
-  gap: 16px 20px;
+  /* row-gap | column-gap：文案区与「立即体验」水平间距 */
+  gap: 16px 32px;
+  margin-left: clamp(1rem, 4vw, 2.75rem);
   z-index: 2;
   position: relative;
   width: 100%;
@@ -101,7 +109,8 @@
   display: grid;
   align-items: start;
   column-gap: 8px;
-  row-gap: 2px;
+  /* 标题与副标题之间的垂直间距 */
+  row-gap: 10px;
   min-width: 0;
 }
 
@@ -201,8 +210,27 @@
     padding: 0 16px;
   }
 
+  .model-ad-banner-root--with-nav .model-ad-banner {
+    padding-left: 36px;
+    padding-right: 36px;
+  }
+
+  .ad-nav {
+    width: 28px;
+    height: 28px;
+  }
+
+  .ad-nav--prev {
+    left: 6px;
+  }
+
+  .ad-nav--next {
+    right: 6px;
+  }
+
   .ad-content {
-    gap: 10px 12px;
+    gap: 12px 20px;
+    margin-left: clamp(0.35rem, 2vw, 1.25rem);
   }
 
   .ad-copy {
@@ -244,6 +272,53 @@
 .ad-button:focus-visible {
   outline: 2px solid #6366f1;
   outline-offset: 2px;
+}
+
+/* 左右切换（仅多图时渲染） */
+.ad-nav {
+  position: absolute;
+  top: 50%;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(79, 70, 229, 0.2);
+  border-radius: 999px;
+  color: #4f46e5;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.ad-nav:hover {
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.15);
+}
+
+.ad-nav:active {
+  transform: translateY(-50%) scale(0.96);
+}
+
+.ad-nav:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+.ad-nav--prev {
+  left: 10px;
+}
+
+.ad-nav--next {
+  right: 10px;
 }
 
 .ad-dots {
@@ -306,4 +381,14 @@ html.dark .ad-dots .ad-dot {
 
 html.dark .ad-dots .ad-dot.active {
   background: #818cf8;
+}
+
+html.dark .ad-nav {
+  color: #a5b4fc;
+  border-color: rgba(129, 140, 248, 0.35);
+  background: rgba(30, 27, 46, 0.82);
+}
+
+html.dark .ad-nav:hover {
+  background: rgba(40, 36, 58, 0.95);
 }
