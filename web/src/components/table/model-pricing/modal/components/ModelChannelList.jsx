@@ -420,19 +420,23 @@ const ModelChannelList = ({
                               <span className='text-gray-600'>
                                 {item.label}:
                               </span>
-                              {item.original && (
+                              {item.original ? (
                                 <>
                                   <span className='text-gray-400 line-through text-xs'>
-                                    {item.original}
+                                    <span style={{ color: 'var(--semi-color-primary)' }}>官方</span> {item.original}
                                   </span>
                                   <Tag color='red' size='small' shape='circle'>
                                     -{item.discount}%
                                   </Tag>
+                                  <span className='font-medium text-gray-900'>
+                                    <span style={{ color: 'var(--semi-color-warning)' }}>我们</span> {item.value}
+                                  </span>
                                 </>
+                              ) : (
+                                <span className='font-medium text-gray-900'>
+                                  {item.value}
+                                </span>
                               )}
-                              <span className='font-medium text-gray-900'>
-                                {item.value}
-                              </span>
                             </div>
                           ))}
                           <div className='flex flex-wrap gap-2 items-center pt-1 border-t border-gray-100 mt-1'>
