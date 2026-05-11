@@ -96,7 +96,7 @@ const hasTag = (csv, tag) => normalizeTagList(csv).includes(tag);
 /**
  * 操练场数据加载：拉取用户模型与类型（与模型广场同源元数据）、按「全部/类型」在客户端筛模型（同模型广场逻辑），分组单独加载。
  * @param {{ user?: object }} userState 已登录用户状态
- * @param {{ model?: string, model_type?: string|number, group?: string, specific_channel_id?: string|number }} inputs 当前表单/配置
+ * @param {{ model?: string, model_type?: string|number, group?: string, selected_route_slug?: string }} inputs 当前表单/配置
  * @param {Array<{ label: string, value: string|number }>} modelTypes 类型下拉项（与接口同步后的状态，用于按类型重算模型列表）
  * @param {function(string, unknown): void} handleInputChange 更新单项输入
  * @param {import('react').Dispatch<import('react').SetStateAction<any[]>>} setModels 设置模型下拉选项
@@ -283,36 +283,40 @@ export const useDataLoader = (
           if (!Number.isFinite(id) || id <= 0) {
             return null;
           }
-          const name = String(option?.name || '').trim() || `渠道#${id}`;
-          const channelNo = String(option?.channel_no || '').trim();
-          const label = channelNo ? `${name} (${channelNo})` : name;
+          const routeSlug = String(option?.route_slug || '').trim();
+          const supplierType = String(option?.supplier_type || '').trim();
+          const parts = [routeSlug, supplierType].filter(Boolean);
+          const label = parts.length > 0 ? parts.join('-') : `渠道#${id}`;
+          if (!routeSlug) {
+            return null;
+          }
           return {
             label,
-            value: id,
+            value: routeSlug,
           };
         })
         .filter(Boolean),
     ];
     setSupplierOptions(supplierOptions);
-    const selectedSupplierID = inputs.specific_channel_id;
+    const selectedRouteSlug = inputs.selected_route_slug;
     const hasSelectedSupplier = supplierOptions.some((option) => {
       if (
         option.value === '' &&
-        (selectedSupplierID === '' || selectedSupplierID == null)
+        (selectedRouteSlug === '' || selectedRouteSlug == null)
       ) {
         return true;
       }
       if (
         option.value === '' ||
-        selectedSupplierID === '' ||
-        selectedSupplierID == null
+        selectedRouteSlug === '' ||
+        selectedRouteSlug == null
       ) {
         return false;
       }
-      return Number(option.value) === Number(selectedSupplierID);
+      return option.value === selectedRouteSlug;
     });
     if (!hasSelectedSupplier) {
-      handleInputChange('specific_channel_id', '');
+      handleInputChange('selected_route_slug', '');
     }
   }, [
     userState?.user,
@@ -321,7 +325,7 @@ export const useDataLoader = (
     inputs.model_type,
     inputs.model,
     inputs.display_mode,
-    inputs.specific_channel_id,
+    inputs.selected_route_slug,
     t,
     setModels,
     setSupplierOptions,

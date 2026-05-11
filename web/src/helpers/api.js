@@ -170,13 +170,20 @@ export const buildApiPayload = (
     }
     return '';
   };
+  const routeSlug =
+    inputs.selected_route_slug &&
+    String(inputs.selected_route_slug).trim() !== ''
+      ? String(inputs.selected_route_slug).trim()
+      : '';
+  const modelWithRoute = routeSlug ? `${inputs.model}/${routeSlug}` : inputs.model;
+
   if (isVideoMode) {
     const width = Number(inputs.video_width) || 1280;
     const height = Number(inputs.video_height) || 720;
     const motionValue = Number(inputs.video_motion);
     const motion = Number.isFinite(motionValue) ? motionValue : 0.4;
     const payload = {
-      model: inputs.model,
+      model: modelWithRoute,
       prompt: getLastUserPrompt(),
       n: Math.max(1, Math.min(3, Number(inputs.video_n) || 1)),
       size: `${width}x${height}`,
@@ -192,7 +199,7 @@ export const buildApiPayload = (
   }
   if (isImageMode) {
     const payload = {
-      model: inputs.model,
+      model: modelWithRoute,
       prompt: getLastUserPrompt(),
       size: inputs.image_size || '1024x1024',
       n: Number(inputs.image_n) || 1,
@@ -201,21 +208,11 @@ export const buildApiPayload = (
     return payload;
   }
   const payload = {
-    model: inputs.model,
+    model: modelWithRoute,
     messages: processedMessages,
     stream: inputs.stream,
     __endpoint: 'chat',
   };
-  if (
-    inputs.specific_channel_id !== '' &&
-    inputs.specific_channel_id !== null &&
-    inputs.specific_channel_id !== undefined
-  ) {
-    const channelID = Number(inputs.specific_channel_id);
-    if (!Number.isNaN(channelID) && channelID > 0) {
-      payload.specific_channel_id = channelID;
-    }
-  }
 
   // 添加启用的参数
   const parameterMappings = {

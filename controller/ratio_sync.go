@@ -60,7 +60,14 @@ func valuesEqual(a, b interface{}) bool {
 	return reflect.DeepEqual(a, b)
 }
 
-var ratioTypes = []string{"model_ratio", "completion_ratio", "cache_ratio", "model_price", "request_tier_pricing"}
+var ratioTypes = []string{"model_ratio", "completion_ratio", "cache_ratio", "create_cache_ratio", "model_price", "request_tier_pricing"}
+
+func oldChannelValueOrNil(v float64) interface{} {
+	if nearlyEqual(v, 0) {
+		return nil
+	}
+	return v
+}
 
 func mapValueByModel(src any, modelName string) (any, bool) {
 	switch m := src.(type) {
@@ -100,6 +107,126 @@ type upstreamResult struct {
 	ChannelID int            `json:"channel_id"`
 	Data      map[string]any `json:"data,omitempty"`
 	Err       string         `json:"err,omitempty"`
+}
+
+type pricingChannelItem struct {
+	ChannelID        int     `json:"channel_id"`
+	QuotaType        int     `json:"quota_type"`
+	ModelRatio       float64 `json:"model_ratio"`
+	ModelPrice       float64 `json:"model_price"`
+	CompletionRatio  float64 `json:"completion_ratio"`
+	CacheRatio       float64 `json:"cache_ratio"`
+	CreateCacheRatio float64 `json:"create_cache_ratio"`
+}
+
+type pricingItem struct {
+	ModelName        string               `json:"model_name"`
+	QuotaType        int                  `json:"quota_type"`
+	ModelRatio       float64              `json:"model_ratio"`
+	ModelPrice       float64              `json:"model_price"`
+	CompletionRatio  float64              `json:"completion_ratio"`
+	CacheRatio       float64              `json:"cache_ratio"`
+	CreateCacheRatio float64              `json:"create_cache_ratio"`
+	ChannelList      []pricingChannelItem `json:"channel_list"`
+}
+
+func upstreamChannelIDForLocalChannel(channelID int) int {
+	if channelID <= 0 {
+		return 0
+	}
+	ch, err := model.GetChannelById(channelID, false)
+	if err != nil || ch == nil {
+		return 0
+	}
+	otherInfo := ch.GetOtherInfo()
+	return common.String2Int(common.Interface2String(otherInfo["upstream_channel_id"]))
+}
+
+func shouldPutPricingValue(values map[string]any, modelName string, value float64) bool {
+	if _, ok := values[modelName]; !ok {
+		return true
+	}
+	return !nearlyEqual(value, 0)
+}
+
+func putPricingValue(values map[string]any, modelName string, value float64) {
+	if shouldPutPricingValue(values, modelName, value) {
+		values[modelName] = value
+	}
+}
+
+func putPricingValues(modelName string, modelRatio, completionRatio, cacheRatio, createCacheRatio, modelPrice float64, modelRatioMap, completionRatioMap, cacheRatioMap, createCacheRatioMap, modelPriceMap map[string]any) {
+	putPricingValue(modelRatioMap, modelName, modelRatio)
+	putPricingValue(completionRatioMap, modelName, completionRatio)
+	putPricingValue(cacheRatioMap, modelName, cacheRatio)
+	putPricingValue(createCacheRatioMap, modelName, createCacheRatio)
+	putPricingValue(modelPriceMap, modelName, modelPrice)
+}
+
+func convertOfficialPricingItemsToRatioData(pricingItems []pricingItem) map[string]any {
+	modelRatioMap := make(map[string]any)
+	completionRatioMap := make(map[string]any)
+	cacheRatioMap := make(map[string]any)
+	createCacheRatioMap := make(map[string]any)
+	modelPriceMap := make(map[string]any)
+
+	for _, item := range pricingItems {
+		modelName := strings.TrimSpace(item.ModelName)
+		if modelName == "" {
+			continue
+		}
+		putPricingValues(modelName, item.ModelRatio, item.CompletionRatio, item.CacheRatio, item.CreateCacheRatio, item.ModelPrice, modelRatioMap, completionRatioMap, cacheRatioMap, createCacheRatioMap, modelPriceMap)
+	}
+
+	return buildConvertedPricingData(modelRatioMap, completionRatioMap, cacheRatioMap, createCacheRatioMap, modelPriceMap)
+}
+
+func convertChannelPricingItemsToRatioData(pricingItems []pricingItem, upstreamChannelID int) map[string]any {
+	if upstreamChannelID <= 0 {
+		return map[string]any{}
+	}
+
+	modelRatioMap := make(map[string]any)
+	completionRatioMap := make(map[string]any)
+	cacheRatioMap := make(map[string]any)
+	createCacheRatioMap := make(map[string]any)
+	modelPriceMap := make(map[string]any)
+
+	for _, item := range pricingItems {
+		modelName := strings.TrimSpace(item.ModelName)
+		if modelName == "" {
+			continue
+		}
+		for _, channelItem := range item.ChannelList {
+			if channelItem.ChannelID != upstreamChannelID {
+				continue
+			}
+			putPricingValues(modelName, channelItem.ModelRatio, channelItem.CompletionRatio, channelItem.CacheRatio, channelItem.CreateCacheRatio, channelItem.ModelPrice, modelRatioMap, completionRatioMap, cacheRatioMap, createCacheRatioMap, modelPriceMap)
+			break
+		}
+	}
+
+	return buildConvertedPricingData(modelRatioMap, completionRatioMap, cacheRatioMap, createCacheRatioMap, modelPriceMap)
+}
+
+func buildConvertedPricingData(modelRatioMap, completionRatioMap, cacheRatioMap, createCacheRatioMap, modelPriceMap map[string]any) map[string]any {
+	converted := make(map[string]any)
+	if len(modelRatioMap) > 0 {
+		converted["model_ratio"] = modelRatioMap
+	}
+	if len(completionRatioMap) > 0 {
+		converted["completion_ratio"] = completionRatioMap
+	}
+	if len(cacheRatioMap) > 0 {
+		converted["cache_ratio"] = cacheRatioMap
+	}
+	if len(createCacheRatioMap) > 0 {
+		converted["create_cache_ratio"] = createCacheRatioMap
+	}
+	if len(modelPriceMap) > 0 {
+		converted["model_price"] = modelPriceMap
+	}
+	return converted
 }
 
 func FetchUpstreamRatios(c *gin.Context) {
@@ -189,11 +316,14 @@ func FetchUpstreamRatios(c *gin.Context) {
 			defer func() { <-sem }()
 
 			isOpenRouter := chItem.Endpoint == "openrouter"
+			isTokenFactoryOpen := chItem.Endpoint == "tokenfactoryopen"
 
 			endpoint := chItem.Endpoint
 			var fullURL string
 			if isOpenRouter {
 				fullURL = chItem.BaseURL + "/v1/models"
+			} else if isTokenFactoryOpen {
+				fullURL = chItem.BaseURL + "/api/price_sync"
 			} else if strings.HasPrefix(endpoint, "http://") || strings.HasPrefix(endpoint, "https://") {
 				fullURL = endpoint
 			} else {
@@ -215,6 +345,7 @@ func FetchUpstreamRatios(c *gin.Context) {
 			defer cancel()
 
 			var openRouterAuthHeader string
+			var tokenFactoryOpenBody []byte
 			// OpenRouter requires Bearer token auth
 			if isOpenRouter && chItem.ID != 0 {
 				dbCh, err := model.GetChannelById(chItem.ID, true)
@@ -235,13 +366,44 @@ func FetchUpstreamRatios(c *gin.Context) {
 			} else if isOpenRouter {
 				ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: "OpenRouter requires a valid channel with API key"}
 				return
+			} else if isTokenFactoryOpen {
+				if chItem.ID == 0 {
+					ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: "TokenFactoryOpen requires a valid channel with API key"}
+					return
+				}
+				dbCh, err := model.GetChannelById(chItem.ID, true)
+				if err != nil {
+					ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: "failed to get channel key: " + err.Error()}
+					return
+				}
+				key, _, apiErr := dbCh.GetNextEnabledKey()
+				if apiErr != nil {
+					ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: "failed to get enabled channel key: " + apiErr.Error()}
+					return
+				}
+				key = strings.TrimSpace(key)
+				if key == "" {
+					ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: "no API key configured for this channel"}
+					return
+				}
+				tokenFactoryOpenBody, err = common.Marshal(map[string]string{"token": key})
+				if err != nil {
+					ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: err.Error()}
+					return
+				}
 			}
 
 			// 简单重试：最多 3 次，指数退避
 			var resp *http.Response
 			var lastErr error
 			for attempt := 0; attempt < 3; attempt++ {
-				httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
+				method := http.MethodGet
+				var reqBody io.Reader
+				if isTokenFactoryOpen {
+					method = http.MethodPost
+					reqBody = bytes.NewReader(tokenFactoryOpenBody)
+				}
+				httpReq, err := http.NewRequestWithContext(ctx, method, fullURL, reqBody)
 				if err != nil {
 					logger.LogWarn(c.Request.Context(), "build request failed: "+err.Error())
 					ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: err.Error()}
@@ -249,6 +411,9 @@ func FetchUpstreamRatios(c *gin.Context) {
 				}
 				if openRouterAuthHeader != "" {
 					httpReq.Header.Set("Authorization", openRouterAuthHeader)
+				}
+				if isTokenFactoryOpen {
+					httpReq.Header.Set("Content-Type", "application/json")
 				}
 				if isModelsDev {
 					// models.dev occasionally hits TLS record corruption on keep-alive reuse.
@@ -353,57 +518,18 @@ func FetchUpstreamRatios(c *gin.Context) {
 			}
 
 			// 如果不是 type1，则尝试按 type2 (/api/pricing) 解析
-			var pricingItems []struct {
-				ModelName       string  `json:"model_name"`
-				QuotaType       int     `json:"quota_type"`
-				ModelRatio      float64 `json:"model_ratio"`
-				ModelPrice      float64 `json:"model_price"`
-				CompletionRatio float64 `json:"completion_ratio"`
-			}
+			var pricingItems []pricingItem
 			if err := common.Unmarshal(body.Data, &pricingItems); err != nil {
 				logger.LogWarn(c.Request.Context(), "unrecognized data format from "+chItem.Name+": "+err.Error())
 				ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Err: "无法解析上游返回数据"}
 				return
 			}
 
-			modelRatioMap := make(map[string]float64)
-			completionRatioMap := make(map[string]float64)
-			modelPriceMap := make(map[string]float64)
-
-			for _, item := range pricingItems {
-				if item.QuotaType == 1 {
-					modelPriceMap[item.ModelName] = item.ModelPrice
-				} else {
-					modelRatioMap[item.ModelName] = item.ModelRatio
-					// completionRatio 可能为 0，此时也直接赋值，保持与上游一致
-					completionRatioMap[item.ModelName] = item.CompletionRatio
-				}
-			}
-
-			converted := make(map[string]any)
-
-			if len(modelRatioMap) > 0 {
-				ratioAny := make(map[string]any, len(modelRatioMap))
-				for k, v := range modelRatioMap {
-					ratioAny[k] = v
-				}
-				converted["model_ratio"] = ratioAny
-			}
-
-			if len(completionRatioMap) > 0 {
-				compAny := make(map[string]any, len(completionRatioMap))
-				for k, v := range completionRatioMap {
-					compAny[k] = v
-				}
-				converted["completion_ratio"] = compAny
-			}
-
-			if len(modelPriceMap) > 0 {
-				priceAny := make(map[string]any, len(modelPriceMap))
-				for k, v := range modelPriceMap {
-					priceAny[k] = v
-				}
-				converted["model_price"] = priceAny
+			var converted map[string]any
+			if req.SyncMode == "channel" {
+				converted = convertChannelPricingItemsToRatioData(pricingItems, upstreamChannelIDForLocalChannel(chItem.ID))
+			} else {
+				converted = convertOfficialPricingItemsToRatioData(pricingItems)
 			}
 
 			ch <- upstreamResult{Name: uniqueName, ChannelID: chItem.ID, Data: converted}
@@ -475,31 +601,36 @@ type upstreamSyncSource struct {
 	data      map[string]any
 }
 
-// oldEffectiveForUpstream 返回该渠道列在同步前的生效价：正渠道 ID 时优先渠道覆盖，否则回落全局。
+// oldEffectiveForUpstream 返回该渠道列在同步前的生效价：正渠道 ID 只读取渠道覆盖，否则读取全局。
 func oldEffectiveForUpstream(channelID int, ratioType string, modelName string, localData map[string]any) interface{} {
 	if channelID > 0 {
 		switch ratioType {
 		case "model_ratio":
 			if v, ok := ratio_setting.GetChannelModelRatio(channelID, modelName); ok {
-				return v
+				return oldChannelValueOrNil(v)
 			}
 		case "completion_ratio":
 			if v, ok := ratio_setting.GetChannelCompletionRatio(channelID, modelName); ok {
-				return v
+				return oldChannelValueOrNil(v)
 			}
 		case "cache_ratio":
 			if v, ok := ratio_setting.GetChannelCacheRatio(channelID, modelName); ok {
-				return v
+				return oldChannelValueOrNil(v)
+			}
+		case "create_cache_ratio":
+			if v, ok := ratio_setting.GetChannelCreateCacheRatio(channelID, modelName); ok {
+				return oldChannelValueOrNil(v)
 			}
 		case "model_price":
 			if v, ok := ratio_setting.GetChannelModelPrice(channelID, modelName); ok {
-				return v
+				return oldChannelValueOrNil(v)
 			}
 		case "request_tier_pricing":
 			if v, ok := ratio_setting.GetChannelRequestTierPricing(channelID, modelName); ok {
 				return v
 			}
 		}
+		return nil
 	}
 	if localRatioAny, ok := localData[ratioType]; ok {
 		if val, exists := mapValueByModel(localRatioAny, modelName); exists {
@@ -560,25 +691,52 @@ func modelNameOwnedForSupplierSync(modelName string, ownedNorm map[string]struct
 	return false
 }
 
-// oldEffectiveForUpstreamSupplier 供应商视角下，某上游列对应的「同步前」生效价（渠道/全局与 Resolve 链一致）。
+// oldEffectiveForUpstreamSupplier 供应商视角下，某上游列对应的「同步前」生效价。
 func oldEffectiveForUpstreamSupplier(supplierApplicationID int, channelID int, ratioType string, modelName string, localData map[string]any) interface{} {
 	mn := ratio_setting.FormatMatchingModelName(modelName)
 	if channelID > 0 {
+		var chRow *model.SupplierChannelModelPricing
+		if supplierApplicationID > 0 {
+			chRow, _ = model.GetSupplierChannelModelPricingRow(supplierApplicationID, channelID, mn)
+		}
 		switch ratioType {
 		case "model_ratio":
-			if v, ok, _ := model.ResolveSupplierScopedModelRatio(channelID, supplierApplicationID, mn); ok {
-				return v
+			if chRow != nil && chRow.ModelRatio != nil {
+				return oldChannelValueOrNil(*chRow.ModelRatio)
+			}
+			if v, ok := ratio_setting.GetChannelModelRatio(channelID, mn); ok {
+				return oldChannelValueOrNil(v)
 			}
 		case "completion_ratio":
-			return model.ResolveSupplierScopedCompletionRatio(channelID, supplierApplicationID, mn)
+			if chRow != nil && chRow.CompletionRatio != nil {
+				return oldChannelValueOrNil(*chRow.CompletionRatio)
+			}
+			if v, ok := ratio_setting.GetChannelCompletionRatio(channelID, mn); ok {
+				return oldChannelValueOrNil(v)
+			}
 		case "cache_ratio":
-			c, _ := model.ResolveSupplierScopedCacheRatios(channelID, supplierApplicationID, mn)
-			return c
+			if chRow != nil && chRow.CacheRatio != nil {
+				return oldChannelValueOrNil(*chRow.CacheRatio)
+			}
+			if v, ok := ratio_setting.GetChannelCacheRatio(channelID, mn); ok {
+				return oldChannelValueOrNil(v)
+			}
+		case "create_cache_ratio":
+			if chRow != nil && chRow.CreateCacheRatio != nil {
+				return oldChannelValueOrNil(*chRow.CreateCacheRatio)
+			}
+			if v, ok := ratio_setting.GetChannelCreateCacheRatio(channelID, mn); ok {
+				return oldChannelValueOrNil(v)
+			}
 		case "model_price":
-			if v, ok := model.ResolveSupplierScopedFixedModelPrice(channelID, supplierApplicationID, mn); ok {
-				return v
+			if chRow != nil && chRow.ModelPrice != nil {
+				return oldChannelValueOrNil(*chRow.ModelPrice)
+			}
+			if v, ok := ratio_setting.GetChannelModelPrice(channelID, mn); ok {
+				return oldChannelValueOrNil(v)
 			}
 		}
+		return nil
 	}
 	if localRatioAny, ok := localData[ratioType]; ok {
 		if val, exists := mapValueByModel(localRatioAny, mn); exists {

@@ -100,7 +100,7 @@ const getAvatarBackgroundColor = (isAllVendors) =>
 const getAvatarText = (vendorName) =>
   vendorName === CONFIG.UNKNOWN_VENDOR
     ? '?'
-    : vendorName.charAt(0).toUpperCase();
+    : (vendorName || '').charAt(0).toUpperCase() || '?';
 
 const createAvatarContent = (vendor, isAllVendors) => {
   if (vendor.icon) {

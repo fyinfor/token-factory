@@ -134,6 +134,7 @@ func GetStatus(c *gin.Context) {
 		"distributor_apply_intro_html":      common.OptionMap["DistributorApplyIntroHtml"],
 		"distributor_min_withdraw_quota":    distributorMinWithdrawQuota,
 		"affiliate_default_commission_bps":  common.AffiliateDefaultCommissionBps,
+		"home_banner_slides": strings.TrimSpace(common.Interface2String(common.OptionMap["HomeBannerSlides"])),
 	}
 
 	// 根据启用状态注入可选内容

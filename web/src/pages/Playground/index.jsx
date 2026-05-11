@@ -73,7 +73,7 @@ const generateAvatarDataUrl = (username) => {
   if (!username) {
     return 'https://lf3-static.bytednsdoc.com/obj/eden-cn/ptlz_zlp/ljhwZthlaukjlkulzlp/docs-icon.png';
   }
-  const firstLetter = username[0].toUpperCase();
+  const firstLetter = (username[0] || '').toUpperCase();
   const bgColor = stringToColor(username);
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
