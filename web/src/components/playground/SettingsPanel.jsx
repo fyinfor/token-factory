@@ -32,6 +32,13 @@ import { Sparkles, Users, ToggleLeft, X, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { renderGroupOption, selectFilter } from '../../helpers';
 import ParameterControl from './ParameterControl';
+
+/**
+ * 操练场分组下拉：与全局 renderGroupOption 一致，但不展示倍率角标。
+ * @param {Record<string, unknown>} item Semi Select 传入的选项渲染参数
+ */
+const renderPlaygroundGroupOption = (item) =>
+  renderGroupOption({ ...item, ratio: undefined });
 import ImageUrlInput from './ImageUrlInput';
 import ConfigManager from './ConfigManager';
 import CustomRequestEditor from './CustomRequestEditor';
@@ -194,7 +201,7 @@ const SettingsPanel = ({
             value={inputs.group}
             autoComplete='new-password'
             optionList={groups}
-            renderOptionItem={renderGroupOption}
+            renderOptionItem={renderPlaygroundGroupOption}
             style={{ width: '100%' }}
             dropdownStyle={{ width: '100%', maxWidth: '100%' }}
             className='!rounded-lg'
