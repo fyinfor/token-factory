@@ -1,6 +1,10 @@
 package controller
 
 import (
+	"errors"
+	"net/http"
+	"strings"
+
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
@@ -95,6 +99,64 @@ func sanitizePricingData(data []model.PricingAPIItem) {
 			data[i].SupplierList[j].SupplierType = ""
 		}
 	}
+}
+
+func buildPricingAPIData() []model.PricingAPIItem {
+	pricing := model.GetPricing()
+	filtered := make([]model.Pricing, 0, len(pricing))
+	for _, p := range pricing {
+		if ratio_setting.ModelHasConfiguredPricing(p.ModelName) {
+			filtered = append(filtered, p)
+		}
+	}
+	channels, err := model.ListChannelsForPricing()
+	if err != nil {
+		channels = nil
+	}
+	visibleChannelIDs := make(map[int]struct{}, len(channels))
+	for _, item := range channels {
+		visibleChannelIDs[item.ChannelID] = struct{}{}
+	}
+	channelPricingMeta, err := model.ListChannelPricingMeta()
+	if err != nil {
+		channelPricingMeta = nil
+	}
+	return model.BuildPricingAPIItems(filtered, visibleChannelIDs, channelPricingMeta)
+}
+
+func validateAdminIssuedToken(rawToken string) error {
+	tokenKey := strings.TrimSpace(rawToken)
+	if strings.HasPrefix(strings.ToLower(tokenKey), "bearer ") {
+		tokenKey = strings.TrimSpace(tokenKey[7:])
+	}
+	tokenKey = strings.TrimPrefix(tokenKey, "sk-")
+	token, err := model.ValidateUserToken(tokenKey)
+	if err != nil {
+		return err
+	}
+	if token == nil || !model.IsAdmin(token.UserId) {
+		return errors.New("令牌不是管理员签发")
+	}
+	return nil
+}
+
+func PriceSync(c *gin.Context) {
+	var req struct {
+		Token string `json:"token"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "请求参数格式错误"})
+		return
+	}
+	if err := validateAdminIssuedToken(req.Token); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "token 验证失败"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    buildPricingAPIData(),
+	})
 }
 
 // GetPricing 返回前端定价展示数据。
