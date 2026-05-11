@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 import React from 'react';
 import { Card, Chat, Typography, Button } from '@douyinfe/semi-ui';
-import { MessageSquare, Eye, EyeOff, Trash2 } from 'lucide-react';
+import { MessageSquare, Eye, EyeOff, MessageSquarePlus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import CustomInputRender from './CustomInputRender';
 
@@ -98,14 +98,13 @@ const ChatArea = ({
             </div>
             <div className='flex items-center gap-2'>
               <Button
-                icon={<Trash2 size={14} />}
+                icon={<MessageSquarePlus size={14} className='text-white' />}
                 onClick={onClearMessages}
-                theme='borderless'
-                type='danger'
+                theme='solid'
                 size='small'
-                className='!rounded-lg !text-white/80 hover:!text-white hover:!bg-white/10'
+                className='!rounded-lg !border !border-blue-800 !bg-blue-600 !text-white !min-w-0 !font-medium !px-3 !shadow-none dark:!shadow-[0_0_18px_rgba(59,130,246,0.65),inset_0_1px_0_rgba(255,255,255,0.14)] hover:!bg-blue-500 hover:!border-blue-600 hover:!shadow-none dark:hover:!shadow-[0_0_24px_rgba(96,165,250,0.85)] active:!bg-blue-700 transition-[box-shadow,background-color,border-color] duration-200 [&_.semi-button-content]:!text-white [&_.semi-icon]:!text-white'
               >
-                {t('删除对话')}
+                {t('新对话')}
               </Button>
               <Button
                 icon={showDebugPanel ? <EyeOff size={14} /> : <Eye size={14} />}
