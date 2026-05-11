@@ -14,6 +14,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// coalesceStr 返回第一个非空字符串，若均为空则返回空串。
+func coalesceStr(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
+}
+
 // tfOpenSyncExportRow 仅用于跨站同步导出，不包含渠道密钥。
 type tfOpenSyncExportRow struct {
 	ID                    int                `json:"id"`
@@ -89,18 +99,24 @@ func TFOpenSyncExportChannels(c *gin.Context) {
 		}
 	}
 	aliasByAppID := make(map[int]string, len(appIDs))
+	logoByAppID := make(map[int]string, len(appIDs))
+	supplierTypeByAppID := make(map[int]string, len(appIDs))
 	if len(appIDs) > 0 {
 		type appRow struct {
-			ID    int    `gorm:"column:id"`
-			Alias string `gorm:"column:supplier_alias"`
+			ID           int    `gorm:"column:id"`
+			Alias        string `gorm:"column:supplier_alias"`
+			LogoURL      string `gorm:"column:company_logo_url"`
+			SupplierType string `gorm:"column:supplier_type"`
 		}
 		var apps []appRow
 		if err := model.DB.Table("supplier_applications").
-			Select("id, supplier_alias").
+			Select("id, supplier_alias, company_logo_url, supplier_type").
 			Where("id IN ?", appIDs).
 			Scan(&apps).Error; err == nil {
 			for _, a := range apps {
 				aliasByAppID[a.ID] = strings.TrimSpace(a.Alias)
+				logoByAppID[a.ID] = strings.TrimSpace(a.LogoURL)
+				supplierTypeByAppID[a.ID] = strings.TrimSpace(a.SupplierType)
 			}
 		}
 	}
@@ -164,8 +180,8 @@ func TFOpenSyncExportChannels(c *gin.Context) {
 			ChannelNo:             strings.TrimSpace(ch.ChannelNo),
 			SupplierApplicationID: ch.SupplierApplicationID,
 			SupplierAlias:         aliasByAppID[ch.SupplierApplicationID],
-			SupplierType:          strings.TrimSpace(ch.SupplierType),
-			CompanyLogoURL:        strings.TrimSpace(ch.CompanyLogoURL),
+			SupplierType:          coalesceStr(supplierTypeByAppID[ch.SupplierApplicationID], strings.TrimSpace(ch.SupplierType)),
+			CompanyLogoURL:        coalesceStr(logoByAppID[ch.SupplierApplicationID], strings.TrimSpace(ch.CompanyLogoURL)),
 			ModelMapping:          strings.TrimSpace(ch.GetModelMapping()),
 			ModelPrice:            mp,
 			ModelRatio:            mr,
