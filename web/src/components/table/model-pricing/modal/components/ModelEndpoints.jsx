@@ -18,12 +18,45 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import { Card, Avatar, Typography, Badge } from '@douyinfe/semi-ui';
-import { IconLink } from '@douyinfe/semi-icons';
+import {
+  Card,
+  Avatar,
+  Typography,
+  Badge,
+  Button,
+  Tooltip,
+  Toast,
+} from '@douyinfe/semi-ui';
+import { IconCopy, IconLink } from '@douyinfe/semi-icons';
+import { copy } from '../../../../../helpers';
+import { getServerAddress } from '../../../../../helpers/token';
 
 const { Text } = Typography;
 
+const normalizeApiBaseUrl = (baseUrl) =>
+  String(baseUrl || '').replace(
+    /^https:\/\/demo\.tokenfactoryopen\.com/i,
+    'https://tokenfactoryopen.com',
+  );
+
 const ModelEndpoints = ({ modelData, endpointMap = {}, t }) => {
+  const getApiEndpointLink = (path) => {
+    try {
+      return `${normalizeApiBaseUrl(getServerAddress()).replace(/\/+$/, '')}${path}`;
+    } catch (e) {
+      return path;
+    }
+  };
+
+  const copyEndpoint = async (path) => {
+    const endpoint = getApiEndpointLink(path);
+    if (await copy(endpoint)) {
+      Toast.success({ content: t('已复制API端点') });
+    } else {
+      Toast.error({ content: t('复制失败') });
+    }
+  };
+
   const renderAPIEndpoints = () => {
     if (!modelData) return null;
 
@@ -45,12 +78,24 @@ const ModelEndpoints = ({ modelData, endpointMap = {}, t }) => {
           className='flex justify-between border-b border-dashed last:border-0 py-2 last:pb-0'
           style={{ borderColor: 'var(--semi-color-border)' }}
         >
-          <span className='flex items-center pr-5'>
+          <span className='flex items-center pr-5 min-w-0 flex-1'>
             <Badge dot type='success' className='mr-2' />
             {type}
             {path && '：'}
             {path && (
               <span className='text-gray-500 md:ml-1 break-all'>{path}</span>
+            )}
+            {path && (
+              <Tooltip content={getApiEndpointLink(path)}>
+                <Button
+                  size='small'
+                  type='tertiary'
+                  className='ml-2'
+                  onClick={() => copyEndpoint(path)}
+                >
+                  {t('复制')}
+                </Button>
+              </Tooltip>
             )}
           </span>
           {path && (
