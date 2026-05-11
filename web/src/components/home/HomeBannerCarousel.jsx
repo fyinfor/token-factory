@@ -18,12 +18,15 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button } from '@douyinfe/semi-ui';
-import { ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import HomeBannerIllustration from './HomeBannerIllustration';
+import './model-ad-banner.css';
 
-const INTERVAL_MS = 10000;
+/** 自动轮播间隔（秒）— 与仪表盘说明一致可改为 4 */
+const INTERVAL_MS = 4000;
+
+const DEFAULT_BANNER_IMAGE = '/assets/banner-model.png';
 
 function parseSlides(raw) {
   if (!raw || typeof raw !== 'string') return [];
@@ -33,6 +36,101 @@ function parseSlides(raw) {
   } catch {
     return [];
   }
+}
+
+function oneLineTitle(raw) {
+  if (!raw || typeof raw !== 'string') return '';
+  return raw
+    .split(/\n/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(' ');
+}
+
+function renderTitleNodes(line, highlight) {
+  const hl = (highlight || '').trim();
+  if (!hl || !line.includes(hl)) {
+    return line;
+  }
+  const parts = line.split(hl);
+  return parts.map((part, i) => (
+    <React.Fragment key={i}>
+      {part}
+      {i < parts.length - 1 ? (
+        <span className='ad-title-highlight'>{hl}</span>
+      ) : null}
+    </React.Fragment>
+  ));
+}
+
+function SlideBanner({ slide, t, active, go }) {
+  const titleLine = oneLineTitle(slide.title || t('首页广告默认标题'));
+  const highlight = (slide.title_highlight || '').trim();
+  const subtitle = (slide.subtitle || '').trim();
+  const badge = (slide.badge ?? '').trim();
+  const btnText = (slide.button_text || t('立即体验')).trim();
+  const customImg = (slide.image_url || '').trim();
+  const imgSrc = customImg || DEFAULT_BANNER_IMAGE;
+  const [imgBroken, setImgBroken] = useState(false);
+
+  useEffect(() => {
+    setImgBroken(false);
+  }, [imgSrc]);
+
+  return (
+    <section
+      className='model-ad-banner model-ad-banner-slide'
+      style={{
+        opacity: active ? 1 : 0,
+        pointerEvents: active ? 'auto' : 'none',
+        zIndex: active ? 3 : 0,
+      }}
+      aria-hidden={!active}
+      aria-label={`${titleLine}${subtitle ? `, ${subtitle}` : ''}`}
+    >
+      <div className='ad-banner-bg' aria-hidden>
+        {!imgBroken ? (
+          <img
+            className='ad-banner-bg__img'
+            src={imgSrc}
+            alt=''
+            onError={() => setImgBroken(true)}
+            decoding='async'
+          />
+        ) : (
+          <div className='ad-banner-bg-fallback'>
+            <HomeBannerIllustration className='h-full max-h-[100px] w-[min(100%,220px)]' />
+          </div>
+        )}
+      </div>
+      <div className='ad-banner-scrim' aria-hidden />
+
+      <div className='ad-content'>
+        <div className='ad-copy'>
+          <div
+            className={`ad-head${badge ? ' ad-head--has-badge' : ' ad-head--no-badge'}`}
+          >
+            {badge ? <span className='ad-badge'>{badge}</span> : null}
+            <h2 className='ad-title'>
+              {renderTitleNodes(titleLine, highlight)}
+            </h2>
+            {subtitle ? (
+              <p className='ad-subtitle'>{subtitle}</p>
+            ) : null}
+          </div>
+        </div>
+
+        <button
+          className='ad-button'
+          type='button'
+          onClick={() => go(slide)}
+        >
+          {btnText}
+          {' →'}
+        </button>
+      </div>
+    </section>
+  );
 }
 
 const HomeBannerCarousel = ({ rawSlides }) => {
@@ -67,106 +165,31 @@ const HomeBannerCarousel = ({ rawSlides }) => {
 
   if (!slides.length) return null;
 
-  const slide = slides[Math.min(index, slides.length - 1)] || {};
-  const hasImage = Boolean(slide.image_url && String(slide.image_url).trim());
-
   return (
-    <div className='w-full max-w-5xl mx-auto mb-8 px-0'>
-      <div
-        role='button'
-        tabIndex={0}
-        onClick={() => go(slide)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            go(slide);
-          }
-        }}
-        className='group relative w-full overflow-hidden rounded-2xl border border-semi-color-border shadow-md cursor-pointer transition-shadow hover:shadow-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-semi-color-primary'
-        style={{ minHeight: hasImage ? undefined : '160px' }}
-      >
-        {hasImage ? (
-          <img
-            src={slide.image_url}
-            alt=''
-            className='absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]'
-            decoding='async'
-          />
-        ) : (
-          <div
-            className='absolute inset-0'
-            style={{
-              background:
-                'linear-gradient(120deg, #ede9fe 0%, #e0e7ff 38%, #fce7f3 100%)',
-            }}
-          />
-        )}
-
-        <div
-          className={`relative flex flex-col gap-3 p-5 md:flex-row md:items-center md:justify-between md:p-8 ${hasImage ? 'bg-gradient-to-r from-black/55 via-black/35 to-transparent md:min-h-[200px]' : ''}`}
-        >
-          <div className='max-w-xl text-left'>
-            {slide.badge ? (
-              <span
-                className={`mb-2 inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                  hasImage
-                    ? 'bg-blue-500 text-white'
-                    : 'bg-indigo-600 text-white'
-                }`}
-              >
-                {slide.badge}
-              </span>
-            ) : null}
-            <h2
-              className={`text-lg font-bold leading-snug md:text-2xl ${
-                hasImage ? 'text-white drop-shadow' : 'text-semi-color-text-0'
-              }`}
-            >
-              {slide.title || t('首页广告默认标题')}
-            </h2>
-            {slide.subtitle ? (
-              <p
-                className={`mt-2 text-sm md:text-base ${
-                  hasImage
-                    ? 'text-white/90 drop-shadow'
-                    : 'text-semi-color-text-2'
-                }`}
-              >
-                {slide.subtitle}
-              </p>
-            ) : null}
-          </div>
-          <div className='flex shrink-0 items-center gap-3 md:flex-col md:items-end'>
-            <Button
-              type='primary'
-              theme='solid'
-              icon={<ChevronRight size={16} />}
-              iconPosition='right'
-              className={hasImage ? '!bg-violet-600 hover:!bg-violet-500' : ''}
-              onClick={(e) => {
-                e.stopPropagation();
-                go(slide);
-              }}
-            >
-              {slide.button_text || t('立即体验')}
-            </Button>
-          </div>
-        </div>
-      </div>
+    <div className='model-ad-banner-root'>
+      {slides.map((slide, i) => (
+        <SlideBanner
+          key={i}
+          slide={slide}
+          t={t}
+          active={i === index}
+          go={go}
+        />
+      ))}
 
       {slides.length > 1 ? (
-        <div className='mt-3 flex justify-center gap-2'>
+        <div className='ad-dots' role='tablist' aria-label={t('首页广告轮播说明')}>
           {slides.map((_, i) => (
             <button
-              type='button'
               key={i}
-              className={`h-2 w-2 rounded-full transition-all ${
-                i === index
-                  ? 'w-6 bg-semi-color-primary'
-                  : 'bg-semi-color-fill-2 hover:bg-semi-color-fill-1'
-              }`}
-              aria-label={`${i + 1}`}
-              onClick={() => setIndex(i)}
+              type='button'
+              className={`ad-dot${i === index ? ' active' : ''}`}
+              aria-label={`${i + 1} / ${slides.length}`}
+              aria-current={i === index ? 'true' : undefined}
+              onClick={(e) => {
+                e.stopPropagation();
+                setIndex(i);
+              }}
             />
           ))}
         </div>

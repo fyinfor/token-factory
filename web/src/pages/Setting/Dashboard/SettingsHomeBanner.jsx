@@ -39,6 +39,7 @@ const emptySlide = () => ({
   image_url: '',
   badge: 'NEW',
   title: '',
+  title_highlight: '',
   subtitle: '',
   button_text: '',
   target_model: '',
@@ -315,10 +316,28 @@ const SettingsHomeBanner = ({ options, refresh }) => {
             <Text strong className='!block !mb-1'>
               {t('广告标题列')}
             </Text>
-            <Input
+            <TextArea
               value={form.title}
               onChange={(v) => setForm((f) => ({ ...f, title: v }))}
+              rows={3}
+              placeholder={t('广告标题换行占位')}
             />
+            <Text type='tertiary' size='small' className='!mt-1 !block'>
+              {t('广告标题换行说明')}
+            </Text>
+          </div>
+          <div>
+            <Text strong className='!block !mb-1'>
+              {t('广告标题高亮词')}
+            </Text>
+            <Input
+              value={form.title_highlight}
+              onChange={(v) => setForm((f) => ({ ...f, title_highlight: v }))}
+              placeholder={t('广告标题高亮词占位')}
+            />
+            <Text type='tertiary' size='small' className='!mt-1 !block'>
+              {t('广告标题高亮词说明')}
+            </Text>
           </div>
           <div>
             <Text strong className='!block !mb-1'>
