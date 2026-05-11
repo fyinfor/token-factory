@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useRef } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { Avatar, Button, Dropdown, Typography } from '@douyinfe/semi-ui';
 import { ChevronDown } from 'lucide-react';
@@ -39,7 +39,6 @@ const UserArea = ({
   navigate,
   t,
 }) => {
-  const dropdownRef = useRef(null);
   if (isLoading) {
     return (
       <SkeletonWrapper
@@ -53,10 +52,11 @@ const UserArea = ({
 
   if (userState.user) {
     return (
-      <div className='relative' ref={dropdownRef}>
+      <div className='relative'>
         <Dropdown
           position='bottomRight'
-          getPopupContainer={() => dropdownRef.current}
+          /* 挂到 body + 高层级，避免被模型页「排序」等 Semi 浮层（约 1030–1070）遮挡 */
+          zIndex={2000}
           render={
             <Dropdown.Menu className='!bg-semi-color-bg-overlay !border-semi-color-border !shadow-lg !rounded-lg dark:!bg-gray-700 dark:!border-gray-600'>
               <Dropdown.Item
