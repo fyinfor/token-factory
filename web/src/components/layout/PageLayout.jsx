@@ -65,6 +65,7 @@ const PageLayout = () => {
     '/console/supplier/models',
     '/console/supplier-application',
     '/console/suppliers',
+    '/console/playground',
     '/pricing',
   ];
 

@@ -428,7 +428,7 @@ export const useLogsData = () => {
       ) {
         expandDataLocal.push({
           key: t('渠道信息'),
-          value: `${logs[i].channel} - ${logs[i].channel_name || '[未知]'}`,
+          value: String(logs[i].channel ?? ''),
         });
       }
       if (logs[i].request_id) {
