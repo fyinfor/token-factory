@@ -1,0 +1,394 @@
+/* 首页模型广告横幅 — 结构与视觉与产品稿对齐 */
+
+/* 与首页 HomeModelList / 定价页主内容同宽：不单独限制 max-width，由外层 px 与布局决定 */
+.model-ad-banner-root {
+  position: relative;
+  width: 100%;
+  max-width: none;
+  height: 112px;
+  margin-left: 0;
+  margin-right: 0;
+  margin-bottom: 0.75rem;
+}
+
+/* 多图时左右箭头占位，避免文案与按钮压住图标 */
+.model-ad-banner-root--with-nav .model-ad-banner {
+  padding-left: 42px;
+  padding-right: 42px;
+}
+
+.model-ad-banner {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  height: 112px;
+  padding: 0 32px;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  overflow: hidden;
+  /* 底色由背景图 + 蒙层叠加；无图时由 .ad-banner-bg-fallback 占位 */
+  background: #ede9fe;
+}
+
+.model-ad-banner.model-ad-banner-slide {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  margin: 0;
+  transition: opacity 0.45s ease;
+}
+
+/* 背景图与广告条同宽，高度随条固定，多出的部分裁切 */
+.ad-banner-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.ad-banner-bg__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+}
+
+.ad-banner-bg-fallback {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 1.5rem;
+  background: linear-gradient(90deg, #f5f7ff 0%, #f2ecff 45%, #f8f0ff 100%);
+}
+
+/* 轻蒙层：保证文案叠在照片上也清晰 */
+.ad-banner-scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    rgba(245, 247, 255, 0.88) 0%,
+    rgba(242, 236, 255, 0.72) 42%,
+    rgba(248, 240, 255, 0.55) 100%
+  );
+}
+
+/* 文案区 + 按钮：整体略右移；按钮紧跟标题区右侧 */
+.ad-content {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  /* row-gap | column-gap：文案区与「立即体验」水平间距 */
+  gap: 16px 32px;
+  margin-left: clamp(1rem, 4vw, 2.75rem);
+  z-index: 2;
+  position: relative;
+  width: 100%;
+  min-width: 0;
+  flex: 1;
+}
+
+/* 标题块：可收缩，右侧留白给背景图 */
+.ad-copy {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: min(100% - 140px, 58%);
+}
+
+/* 角标与标题同一行左上角对齐，副标题仅在标题列下方 */
+.ad-head {
+  display: grid;
+  align-items: start;
+  column-gap: 8px;
+  /* 标题与副标题之间的垂直间距 */
+  row-gap: 10px;
+  min-width: 0;
+}
+
+.ad-head--has-badge {
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+}
+
+.ad-head--has-badge .ad-badge {
+  grid-row: 1;
+  grid-column: 1;
+  align-self: start;
+  margin-top: 3px;
+}
+
+.ad-head--has-badge .ad-title {
+  grid-row: 1;
+  grid-column: 2;
+}
+
+.ad-head--has-badge .ad-subtitle {
+  grid-row: 2;
+  grid-column: 2;
+}
+
+.ad-head--no-badge {
+  grid-template-columns: 1fr;
+  grid-template-rows: auto auto;
+}
+
+.ad-head--no-badge .ad-title {
+  grid-row: 1;
+  grid-column: 1;
+}
+
+.ad-head--no-badge .ad-subtitle {
+  grid-row: 2;
+  grid-column: 1;
+}
+
+.ad-badge {
+  flex-shrink: 0;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.04em;
+  background: linear-gradient(135deg, #4169ff, #7c5cff);
+}
+
+.ad-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: #4f46e5;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.ad-title .ad-title-highlight {
+  color: #4338ca;
+}
+
+.ad-subtitle {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.35;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+.ad-button {
+  flex-shrink: 0;
+  align-self: center;
+  height: 40px;
+  padding: 0 20px;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  background: linear-gradient(135deg, #6257ff, #7c5cff);
+  box-shadow: 0 8px 20px rgba(98, 87, 255, 0.24);
+}
+
+@media (max-width: 640px) {
+  .model-ad-banner {
+    padding: 0 16px;
+  }
+
+  .model-ad-banner-root--with-nav .model-ad-banner {
+    padding-left: 36px;
+    padding-right: 36px;
+  }
+
+  .ad-nav {
+    width: 28px;
+    height: 28px;
+  }
+
+  .ad-nav--prev {
+    left: 6px;
+  }
+
+  .ad-nav--next {
+    right: 6px;
+  }
+
+  .ad-content {
+    gap: 12px 20px;
+    margin-left: clamp(0.35rem, 2vw, 1.25rem);
+  }
+
+  .ad-copy {
+    max-width: min(100% - 120px, 65%);
+  }
+
+  .ad-head--has-badge {
+    column-gap: 6px;
+  }
+
+  .ad-badge {
+    padding: 1px 6px;
+    font-size: 9px;
+    margin-top: 2px;
+  }
+
+  .ad-title {
+    font-size: 18px;
+  }
+
+  .ad-subtitle {
+    font-size: 13px;
+  }
+
+  .ad-button {
+    padding: 0 14px;
+    font-size: 14px;
+  }
+}
+
+.ad-button:hover {
+  filter: brightness(1.05);
+}
+
+.ad-button:active {
+  transform: translateY(1px);
+}
+
+.ad-button:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+/* 左右切换（仅多图时渲染） */
+.ad-nav {
+  position: absolute;
+  top: 50%;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin: 0;
+  padding: 0;
+  border: 1px solid rgba(79, 70, 229, 0.2);
+  border-radius: 999px;
+  color: #4f46e5;
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+  cursor: pointer;
+  transform: translateY(-50%);
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.ad-nav:hover {
+  background: #fff;
+  box-shadow: 0 2px 8px rgba(79, 70, 229, 0.15);
+}
+
+.ad-nav:active {
+  transform: translateY(-50%) scale(0.96);
+}
+
+.ad-nav:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: 2px;
+}
+
+.ad-nav--prev {
+  left: 10px;
+}
+
+.ad-nav--next {
+  right: 10px;
+}
+
+.ad-dots {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  display: flex;
+  gap: 10px;
+  transform: translateX(-50%);
+  z-index: 5;
+}
+
+.ad-dots .ad-dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: #d1d5db;
+  cursor: pointer;
+}
+
+.ad-dots .ad-dot:hover {
+  background: #9ca3af;
+}
+
+.ad-dots .ad-dot.active {
+  background: #4f46e5;
+}
+
+html.dark .model-ad-banner {
+  border-color: rgba(255, 255, 255, 0.1);
+  background: #1a1625;
+}
+
+html.dark .ad-banner-bg-fallback {
+  background: linear-gradient(90deg, #1e1b2e 0%, #252038 45%, #1f1a28 100%);
+}
+
+html.dark .ad-banner-scrim {
+  background: linear-gradient(
+    90deg,
+    rgba(30, 27, 46, 0.9) 0%,
+    rgba(37, 32, 56, 0.78) 42%,
+    rgba(31, 26, 40, 0.62) 100%
+  );
+}
+
+html.dark .ad-title {
+  color: #a5b4fc;
+}
+
+html.dark .ad-subtitle {
+  color: #94a3b8;
+}
+
+html.dark .ad-dots .ad-dot {
+  background: #4b5563;
+}
+
+html.dark .ad-dots .ad-dot.active {
+  background: #818cf8;
+}
+
+html.dark .ad-nav {
+  color: #a5b4fc;
+  border-color: rgba(129, 140, 248, 0.35);
+  background: rgba(30, 27, 46, 0.82);
+}
+
+html.dark .ad-nav:hover {
+  background: rgba(40, 36, 58, 0.95);
+}

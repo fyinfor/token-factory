@@ -283,21 +283,21 @@ const SettingsPanel = ({
           </div>
           <Select
             placeholder={t('请选择渠道商')}
-            name='specific_channel_id'
+            name='selected_route_slug'
             selection
             filter={selectFilter}
             autoClearSearchValue={false}
             onChange={(value) =>
               onInputChange(
-                'specific_channel_id',
+                'selected_route_slug',
                 value === undefined || value === null ? '' : value,
               )
             }
             value={
-              inputs.specific_channel_id === undefined ||
-              inputs.specific_channel_id === null
+              inputs.selected_route_slug === undefined ||
+              inputs.selected_route_slug === null
                 ? ''
-                : inputs.specific_channel_id
+                : inputs.selected_route_slug
             }
             autoComplete='new-password'
             optionList={supplierOptions}

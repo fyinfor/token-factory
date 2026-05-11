@@ -62,6 +62,19 @@ export const useModelPricingData = () => {
   const [statusState] = useContext(StatusContext);
   const [userState] = useContext(UserContext);
 
+  // 支持 /pricing?model=xxx 从首页广告等入口预填搜索
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const m = sp.get('model');
+      if (m) {
+        setSearchValue(decodeURIComponent(m));
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   // 充值汇率（price）与美元兑人民币汇率（usd_exchange_rate）
   const priceRate = useMemo(
     () => statusState?.status?.price ?? 1,

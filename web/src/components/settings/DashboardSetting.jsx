@@ -18,15 +18,19 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { Card, Spin, Button, Modal } from '@douyinfe/semi-ui';
+import { Card, Spin, Button, Modal, Tabs, TabPane } from '@douyinfe/semi-ui';
+import { LayoutTemplate, ImageIcon } from 'lucide-react';
 import { API, showError, showSuccess, toBoolean } from '../../helpers';
 import SettingsAPIInfo from '../../pages/Setting/Dashboard/SettingsAPIInfo';
 import SettingsAnnouncements from '../../pages/Setting/Dashboard/SettingsAnnouncements';
 import SettingsFAQ from '../../pages/Setting/Dashboard/SettingsFAQ';
 import SettingsUptimeKuma from '../../pages/Setting/Dashboard/SettingsUptimeKuma';
 import SettingsDataDashboard from '../../pages/Setting/Dashboard/SettingsDataDashboard';
+import SettingsHomeBanner from '../../pages/Setting/Dashboard/SettingsHomeBanner';
+import { useTranslation } from 'react-i18next';
 
 const DashboardSetting = () => {
+  const { t } = useTranslation();
   let [inputs, setInputs] = useState({
     'console_setting.api_info': '',
     'console_setting.announcements': '',
@@ -48,10 +52,13 @@ const DashboardSetting = () => {
     DataExportEnabled: false,
     DataExportDefaultTime: 'hour',
     DataExportInterval: 5,
+
+    HomeBannerSlides: '[]',
   });
 
   let [loading, setLoading] = useState(false);
   const [showMigrateModal, setShowMigrateModal] = useState(false); // 下个版本会删除
+  const [dashTab, setDashTab] = useState('panels');
 
   const getOptions = async () => {
     const res = await API.get('/api/option/');
@@ -141,30 +148,60 @@ const DashboardSetting = () => {
           </p>
         </Modal>
 
-        {/* 数据看板设置 */}
-        <Card style={{ marginTop: '10px' }}>
-          <SettingsDataDashboard options={inputs} refresh={onRefresh} />
-        </Card>
+        <Tabs
+          type='line'
+          activeKey={dashTab}
+          onChange={setDashTab}
+          style={{ marginTop: 8 }}
+        >
+          <TabPane
+            tab={
+              <span className='inline-flex items-center gap-1.5'>
+                <LayoutTemplate size={16} />
+                {t('仪表盘内容配置')}
+              </span>
+            }
+            itemKey='panels'
+          >
+            {/* 数据看板设置 */}
+            <Card style={{ marginTop: '10px' }}>
+              <SettingsDataDashboard options={inputs} refresh={onRefresh} />
+            </Card>
 
-        {/* 系统公告管理 */}
-        <Card style={{ marginTop: '10px' }}>
-          <SettingsAnnouncements options={inputs} refresh={onRefresh} />
-        </Card>
+            {/* 系统公告管理 */}
+            <Card style={{ marginTop: '10px' }}>
+              <SettingsAnnouncements options={inputs} refresh={onRefresh} />
+            </Card>
 
-        {/* API信息管理 */}
-        <Card style={{ marginTop: '10px' }}>
-          <SettingsAPIInfo options={inputs} refresh={onRefresh} />
-        </Card>
+            {/* API信息管理 */}
+            <Card style={{ marginTop: '10px' }}>
+              <SettingsAPIInfo options={inputs} refresh={onRefresh} />
+            </Card>
 
-        {/* 常见问答管理 */}
-        <Card style={{ marginTop: '10px' }}>
-          <SettingsFAQ options={inputs} refresh={onRefresh} />
-        </Card>
+            {/* 常见问答管理 */}
+            <Card style={{ marginTop: '10px' }}>
+              <SettingsFAQ options={inputs} refresh={onRefresh} />
+            </Card>
 
-        {/* Uptime Kuma 监控设置 */}
-        <Card style={{ marginTop: '10px' }}>
-          <SettingsUptimeKuma options={inputs} refresh={onRefresh} />
-        </Card>
+            {/* Uptime Kuma 监控设置 */}
+            <Card style={{ marginTop: '10px' }}>
+              <SettingsUptimeKuma options={inputs} refresh={onRefresh} />
+            </Card>
+          </TabPane>
+          <TabPane
+            tab={
+              <span className='inline-flex items-center gap-1.5'>
+                <ImageIcon size={16} />
+                {t('首页广告设置')}
+              </span>
+            }
+            itemKey='banner'
+          >
+            <Card style={{ marginTop: '10px' }}>
+              <SettingsHomeBanner options={inputs} refresh={onRefresh} />
+            </Card>
+          </TabPane>
+        </Tabs>
       </Spin>
     </>
   );
