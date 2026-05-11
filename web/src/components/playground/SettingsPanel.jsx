@@ -78,12 +78,6 @@ const SettingsPanel = ({
   const isImageMode = displayMode === 'image';
   const isVideoMode = displayMode === 'video';
   const mediaModeEnabled = isImageMode || isVideoMode;
-  const selectedModelTags = status?.selectedModelTags || [];
-  const isFixed24FPS =
-    isVideoMode &&
-    selectedModelTags.some((tag) =>
-      ['固定24帧', '24fps固定', '24帧固定'].includes(String(tag || '').trim()),
-    );
   const applyVideoResolutionPreset = (preset) => {
     const [w, h] = String(preset || '1280x720')
       .split('x')
@@ -399,7 +393,7 @@ const SettingsPanel = ({
               {t('视频参数')}
             </Typography.Text>
             <Typography.Text className='text-xs text-gray-500 mb-2 block'>
-              {t('用于视频生成的核心参数（时长、分辨率、帧率）')}
+              {t('用于视频生成的核心参数（时长、分辨率）')}
             </Typography.Text>
             <Typography.Text className='text-xs text-orange-600 mb-2 block'>
               {t('计费以实际视频质量为准')}
@@ -458,25 +452,6 @@ const SettingsPanel = ({
                   disabled={customRequestMode}
                 />
               </div>
-              <Typography.Text strong className='text-sm block'>
-                {t('帧率')}
-              </Typography.Text>
-              <Select
-                placeholder={t('帧率 fps')}
-                optionList={
-                  isFixed24FPS
-                    ? [{ label: '24 fps (固定)', value: 24 }]
-                    : [
-                        { label: '12 fps', value: 12 },
-                        { label: '24 fps', value: 24 },
-                        { label: '30 fps', value: 30 },
-                      ]
-                }
-                value={isFixed24FPS ? 24 : inputs.video_fps}
-                onChange={(value) => onInputChange('video_fps', Number(value) || 24)}
-                disabled={customRequestMode || isFixed24FPS}
-                style={{ width: '100%' }}
-              />
               <Typography.Text strong className='text-sm block'>
                 {t('运动强度 motion')}
               </Typography.Text>

@@ -35,6 +35,12 @@ import { getServerAddress } from '../../../../../helpers/token';
 
 const { Text, Title } = Typography;
 
+const normalizeApiBaseUrl = (baseUrl) =>
+  String(baseUrl || '').replace(
+    /^https:\/\/demo\.tokenfactoryopen\.com/i,
+    'https://tokenfactoryopen.com',
+  );
+
 const CodeBlock = ({ content, language = 'json', t }) => {
   const handleCopy = () => {
     navigator.clipboard
@@ -84,36 +90,139 @@ const Section = ({ title, description, children }) => (
   </Card>
 );
 
-const ApiDocsSidePanel = ({ visible, onClose, modelName, t }) => {
-  const isMobile = useIsMobile();
-
-  const serverAddress = useMemo(() => {
-    try {
-      return (getServerAddress() || '').replace(/\/$/, '');
-    } catch (e) {
-      return '';
-    }
-  }, [visible]);
-
-  const endpoint = `${serverAddress}/v1/chat/completions`;
-
-  const headersJson = useMemo(
-    () =>
-      JSON.stringify(
-        {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer apikey',
+const getEndpointDocConfig = (endpointPath, modelName, t) => {
+  switch (endpointPath) {
+    case '/v1/messages':
+      return {
+        title: t('Messages 接口请求示例'),
+        description: t('Claude 兼容的 Messages 接口'),
+        body: {
+          model: modelName || '',
+          max_tokens: 1024,
+          messages: [
+            {
+              role: 'user',
+              content: 'Hello!',
+            },
+          ],
         },
-        null,
-        2,
-      ),
-    [],
-  );
-
-  const requestBodyJson = useMemo(
-    () =>
-      JSON.stringify(
-        {
+        nonStreamResponse: {
+          id: 'msg_xxxx',
+          type: 'message',
+          role: 'assistant',
+          model: modelName || '',
+          content: [
+            {
+              type: 'text',
+              text: 'Hello! How can I assist you today?',
+            },
+          ],
+          stop_reason: 'end_turn',
+        },
+        params: [
+          {
+            key: 'model',
+            name: 'model',
+            type: 'string',
+            required: true,
+            desc: t('要使用的模型 ID，需为当前通道支持的模型名称。'),
+          },
+          {
+            key: 'max_tokens',
+            name: 'max_tokens',
+            type: 'integer',
+            required: true,
+            desc: t('生成内容的最大 token 数。'),
+          },
+          {
+            key: 'messages',
+            name: 'messages',
+            type: 'array',
+            required: true,
+            desc: t('对话消息列表，每条消息包含 role 和 content 字段。'),
+          },
+        ],
+      };
+    case '/v1/images/generations':
+      return {
+        title: t('Images Generations 接口请求示例'),
+        description: t('OpenAI 兼容的图片生成接口'),
+        body: {
+          model: modelName || '',
+          prompt: 'A cute cat in watercolor style',
+          size: '1024x1024',
+          n: 1,
+        },
+        nonStreamResponse: {
+          created: 1741569952,
+          data: [
+            {
+              url: 'https://example.com/image.png',
+            },
+          ],
+        },
+        params: [
+          {
+            key: 'model',
+            name: 'model',
+            type: 'string',
+            required: true,
+            desc: t('要使用的模型 ID，需为当前通道支持的模型名称。'),
+          },
+          {
+            key: 'prompt',
+            name: 'prompt',
+            type: 'string',
+            required: true,
+            desc: t('用于生成图片的文本描述。'),
+          },
+          {
+            key: 'size',
+            name: 'size',
+            type: 'string',
+            required: false,
+            desc: t('生成图片尺寸，例如 1024x1024。'),
+          },
+        ],
+      };
+    case '/v1/videos/generations':
+    case '/v1/videos':
+      return {
+        title: t('Videos 接口请求示例'),
+        description: t('视频生成接口'),
+        body: {
+          model: modelName || '',
+          prompt: 'A cinematic shot of a futuristic city',
+        },
+        nonStreamResponse: {
+          id: 'video_xxxx',
+          object: 'video.generation',
+          status: 'queued',
+          model: modelName || '',
+        },
+        params: [
+          {
+            key: 'model',
+            name: 'model',
+            type: 'string',
+            required: true,
+            desc: t('要使用的模型 ID，需为当前通道支持的模型名称。'),
+          },
+          {
+            key: 'prompt',
+            name: 'prompt',
+            type: 'string',
+            required: true,
+            desc: t('用于生成视频的文本描述。'),
+          },
+        ],
+      };
+    case '/v1/chat/completions':
+    default:
+      return {
+        title: t('Chat Completions 接口请求示例'),
+        description: t('OpenAI 兼容的 Chat Completions 接口'),
+        body: {
           model: modelName || '',
           stream: true,
           messages: [
@@ -127,16 +236,7 @@ const ApiDocsSidePanel = ({ visible, onClose, modelName, t }) => {
             },
           ],
         },
-        null,
-        2,
-      ),
-    [modelName],
-  );
-
-  const nonStreamResponseJson = useMemo(
-    () =>
-      JSON.stringify(
-        {
+        nonStreamResponse: {
           id: 'xxxx',
           object: 'chat.completion',
           created: 1741569952,
@@ -154,16 +254,7 @@ const ApiDocsSidePanel = ({ visible, onClose, modelName, t }) => {
             },
           ],
         },
-        null,
-        2,
-      ),
-    [modelName],
-  );
-
-  const streamResponseJson = useMemo(
-    () =>
-      JSON.stringify(
-        {
+        streamResponse: {
           id: 'xxxx',
           object: 'chat.completion',
           created: 1741569952,
@@ -181,10 +272,91 @@ const ApiDocsSidePanel = ({ visible, onClose, modelName, t }) => {
             },
           ],
         },
+        params: [
+          {
+            key: 'model',
+            name: 'model',
+            type: 'string',
+            required: true,
+            desc: t('要使用的模型 ID，需为当前通道支持的模型名称。'),
+          },
+          {
+            key: 'stream',
+            name: 'stream',
+            type: 'boolean',
+            required: false,
+            desc: t(
+              '是否启用流式响应。为 true 时通过 SSE 持续返回增量内容；为 false 时一次性返回完整结果。',
+            ),
+          },
+          {
+            key: 'messages',
+            name: 'messages',
+            type: 'array',
+            required: true,
+            desc: t(
+              '对话消息列表，每条消息包含 role（system/user/assistant）和 content 字段。',
+            ),
+          },
+        ],
+      };
+  }
+};
+
+const ApiDocsSidePanel = ({
+  visible,
+  onClose,
+  modelName,
+  endpointPath = '/v1/chat/completions',
+  t,
+}) => {
+  const isMobile = useIsMobile();
+  const docConfig = useMemo(
+    () => getEndpointDocConfig(endpointPath, modelName, t),
+    [endpointPath, modelName, t],
+  );
+
+  const serverAddress = useMemo(() => {
+    try {
+      return normalizeApiBaseUrl(getServerAddress()).replace(/\/$/, '');
+    } catch (e) {
+      return '';
+    }
+  }, [visible]);
+
+  const endpoint = `${serverAddress}${endpointPath}`;
+
+  const headersJson = useMemo(
+    () =>
+      JSON.stringify(
+        {
+          'Content-Type': 'application/json',
+          Authorization: 'Bearer apikey',
+        },
         null,
         2,
       ),
-    [modelName],
+    [],
+  );
+
+  const requestBodyJson = useMemo(
+    () => JSON.stringify(docConfig.body, null, 2),
+    [docConfig.body],
+  );
+
+  const nonStreamResponseJson = useMemo(
+    () => JSON.stringify(docConfig.nonStreamResponse, null, 2),
+    [docConfig.nonStreamResponse],
+  );
+
+  const streamResponseJson = useMemo(
+    () =>
+      JSON.stringify(
+        docConfig.streamResponse || docConfig.nonStreamResponse,
+        null,
+        2,
+      ),
+    [docConfig.streamResponse, docConfig.nonStreamResponse],
   );
 
   const paramColumns = [
@@ -230,33 +402,7 @@ const ApiDocsSidePanel = ({ visible, onClose, modelName, t }) => {
     },
   ];
 
-  const paramData = [
-    {
-      key: 'model',
-      name: 'model',
-      type: 'string',
-      required: true,
-      desc: t('要使用的模型 ID，需为当前通道支持的模型名称。'),
-    },
-    {
-      key: 'stream',
-      name: 'stream',
-      type: 'boolean',
-      required: false,
-      desc: t(
-        '是否启用流式响应。为 true 时通过 SSE 持续返回增量内容；为 false 时一次性返回完整结果。',
-      ),
-    },
-    {
-      key: 'messages',
-      name: 'messages',
-      type: 'array',
-      required: true,
-      desc: t(
-        '对话消息列表，每条消息包含 role（system/user/assistant）和 content 字段。',
-      ),
-    },
-  ];
+  const paramData = docConfig.params;
 
   const curlExample = useMemo(
     () =>
@@ -279,7 +425,7 @@ const ApiDocsSidePanel = ({ visible, onClose, modelName, t }) => {
           <div className='flex-1'>
             <Text className='text-lg font-medium'>{t('在线 API 文档')}</Text>
             <div className='text-xs text-gray-600'>
-              {t('Chat Completions 接口请求示例')}
+              {docConfig.title}
               {modelName && (
                 <>
                   <span className='mx-1'>·</span>
@@ -293,10 +439,7 @@ const ApiDocsSidePanel = ({ visible, onClose, modelName, t }) => {
         </div>
       </Card>
 
-      <Section
-        title={t('接口地址')}
-        description={t('OpenAI 兼容的 Chat Completions 接口')}
-      >
+      <Section title={t('接口地址')} description={docConfig.description}>
         <Space className='mb-2'>
           <Tag color='green' size='small' shape='circle'>
             POST
@@ -336,14 +479,16 @@ const ApiDocsSidePanel = ({ visible, onClose, modelName, t }) => {
         <CodeBlock content={nonStreamResponseJson} language='json' t={t} />
       </Section>
 
-      <Section
-        title={t('流式响应 (JSON)')}
-        description={t(
-          '当 stream=true 时，通过 SSE 持续返回多个 data: 事件，每个 chunk 结构如下',
-        )}
-      >
-        <CodeBlock content={streamResponseJson} language='json' t={t} />
-      </Section>
+      {docConfig.streamResponse && (
+        <Section
+          title={t('流式响应 (JSON)')}
+          description={t(
+            '当 stream=true 时，通过 SSE 持续返回多个 data: 事件，每个 chunk 结构如下',
+          )}
+        >
+          <CodeBlock content={streamResponseJson} language='json' t={t} />
+        </Section>
+      )}
     </div>
   );
 

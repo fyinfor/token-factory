@@ -17,7 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useContext, useEffect, useCallback, useRef } from 'react';
+import React, {
+  useContext,
+  useEffect,
+  useCallback,
+  useRef,
+  useLayoutEffect,
+} from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Layout, Toast, Modal } from '@douyinfe/semi-ui';
@@ -58,6 +64,7 @@ import {
   OptimizedMessageActions,
 } from '../../components/playground/OptimizedComponents';
 import ChatArea from '../../components/playground/ChatArea';
+import LazyVisibleMessage from '../../components/playground/LazyVisibleMessage';
 import FloatingButtons from '../../components/playground/FloatingButtons';
 import { PlaygroundProvider } from '../../contexts/PlaygroundContext';
 
@@ -66,7 +73,7 @@ const generateAvatarDataUrl = (username) => {
   if (!username) {
     return 'https://lf3-static.bytednsdoc.com/obj/eden-cn/ptlz_zlp/ljhwZthlaukjlkulzlp/docs-icon.png';
   }
-  const firstLetter = username[0].toUpperCase();
+  const firstLetter = (username[0] || '').toUpperCase();
   const bgColor = stringToColor(username);
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
@@ -92,6 +99,7 @@ const Playground = () => {
   const currentMessagesRef = useRef([]);
   const modeStoreInitializedRef = useRef(false);
   const activeVideoPollTaskIdsRef = useRef(new Set());
+  const pendingPlaygroundChatScrollRef = useRef(false);
   const getModeStorageKey = useCallback(
     () => `playground_mode_messages_${userState?.user?.id || 'guest'}`,
     [userState?.user?.id],
@@ -109,7 +117,6 @@ const Playground = () => {
     modelTypes,
     supplierOptions,
     groups,
-    status,
     message,
     debugData,
     activeDebugTab,
@@ -136,6 +143,21 @@ const Playground = () => {
     setCustomRequestMode,
     setCustomRequestBody,
   } = state;
+
+  useLayoutEffect(() => {
+    if (!pendingPlaygroundChatScrollRef.current) return;
+    pendingPlaygroundChatScrollRef.current = false;
+    const scrollNow = () => {
+      try {
+        chatRef.current?.scrollToBottom?.(false);
+      } catch (_) {
+        // Semi Chat ref 在极少数情况下可能尚未就绪
+      }
+    };
+    scrollNow();
+    const timers = [80, 200, 450].map((ms) => setTimeout(scrollNow, ms));
+    return () => timers.forEach(clearTimeout);
+  }, [message]);
 
   useEffect(() => {
     currentMessagesRef.current = Array.isArray(message) ? message : [];
@@ -255,6 +277,7 @@ const Playground = () => {
       const currentMode = inputs.display_mode || 'text';
       const currentModeMessages = restored[currentMode] || [];
       if (Array.isArray(currentModeMessages)) {
+        pendingPlaygroundChatScrollRef.current = true;
         setMessage(currentModeMessages);
       }
       previousModeRef.current = currentMode;
@@ -276,6 +299,7 @@ const Playground = () => {
     if (nextMode === prevMode) return;
     modeMessagesRef.current[prevMode] = currentMessagesRef.current || [];
     const nextMessages = modeMessagesRef.current[nextMode];
+    pendingPlaygroundChatScrollRef.current = true;
     setMessage(Array.isArray(nextMessages) ? nextMessages : []);
     previousModeRef.current = nextMode;
   }, [inputs.display_mode, setMessage]);
@@ -469,13 +493,24 @@ const Playground = () => {
 
   // 渲染函数
   const renderCustomChatContent = useCallback(
-    ({ message, className }) => {
-      const isCurrentlyEditing = editingMessageId === message.id;
+    ({ message: msg, className }) => {
+      const isCurrentlyEditing = editingMessageId === msg.id;
+      const displayMode = inputs.display_mode || 'text';
+      const isMediaMode = displayMode === 'image' || displayMode === 'video';
+      const isLastInThread =
+        Array.isArray(message) &&
+        message.length > 0 &&
+        msg?.id === message[message.length - 1]?.id;
+      const skipLazy =
+        msg?.status === 'loading' ||
+        msg?.status === 'incomplete' ||
+        msg?.status === 'error' ||
+        (!isMediaMode && isLastInThread);
 
-      return (
+      const body = (
         <OptimizedMessageContent
-          message={message}
-          className={className}
+          message={msg}
+          className={skipLazy ? className : undefined}
           styleState={styleState}
           onToggleReasoningExpansion={toggleReasoningExpansion}
           isEditing={isCurrentlyEditing}
@@ -484,6 +519,20 @@ const Playground = () => {
           editValue={editValue}
           onEditValueChange={setEditValue}
         />
+      );
+
+      if (skipLazy) {
+        return body;
+      }
+
+      return (
+        <LazyVisibleMessage
+          messageId={msg.id}
+          className={className}
+          variant={isMediaMode ? 'media' : 'default'}
+        >
+          {body}
+        </LazyVisibleMessage>
       );
     },
     [
@@ -494,6 +543,8 @@ const Playground = () => {
       handleEditCancel,
       setEditValue,
       toggleReasoningExpansion,
+      message,
+      inputs.display_mode,
     ],
   );
 
@@ -666,7 +717,6 @@ const Playground = () => {
                 modelTypes={modelTypes}
                 supplierOptions={supplierOptions}
                 groups={groups}
-                status={status}
                 styleState={styleState}
                 showSettings={showSettings}
                 showDebugPanel={showDebugPanel}

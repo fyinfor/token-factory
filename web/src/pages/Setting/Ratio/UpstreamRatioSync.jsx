@@ -68,12 +68,12 @@ const CHANNEL_PRICING_OPTION_KEYS = [
   'ChannelModelRatio',
   'ChannelCompletionRatio',
   'ChannelCacheRatio',
+  'ChannelCreateCacheRatio',
   'ChannelRequestTierPricing',
 ];
 
 /** Option 中 Channel* 嵌套字段键名 → 供应商渠道 PUT 请求体字段名 */
 const CHANNEL_EXTRA_OPTION_TO_PAYLOAD = [
-  ['ChannelCreateCacheRatio', 'CreateCacheRatio'],
   ['ChannelImageRatio', 'ImageRatio'],
   ['ChannelAudioRatio', 'AudioRatio'],
   ['ChannelAudioCompletionRatio', 'AudioCompletionRatio'],
@@ -245,6 +245,27 @@ function formatPriceOldNewPair(oldVal, newVal) {
   return `${formatPriceWithSymbol(oldVal)}/${formatPriceWithSymbol(newVal)}`;
 }
 
+function isUnsetOldValue(value) {
+  const n = toFiniteNumber(value);
+  return value === null || value === undefined || n === 0;
+}
+
+function formatChannelOldValue(oldVal, formatter) {
+  return isUnsetOldValue(oldVal) ? '未设置' : formatter(oldVal);
+}
+
+function formatChannelOldNewPair(oldVal, newVal) {
+  return `${formatChannelOldValue(oldVal, formatCellNumber)}/${formatCellNumber(newVal)}`;
+}
+
+function formatChannelPriceOldNewPair(oldVal, newVal) {
+  const formatPriceWithSymbol = (value) => {
+    const formatted = formatPriceNumber(value);
+    return formatted === '—' ? '—' : `$${formatted}`;
+  };
+  return `${formatChannelOldValue(oldVal, formatPriceWithSymbol)}/${formatPriceWithSymbol(newVal)}`;
+}
+
 /** 是否可勾选同步：存在上游新价且与当前生效价不同 */
 function isUpstreamCellSelectable(oldVal, newVal) {
   if (newVal === null || newVal === undefined || newVal === 'same')
@@ -393,23 +414,22 @@ export default function UpstreamRatioSync(props) {
           const merged = { ...prev };
           transferData.forEach((channel) => {
             const id = channel.key;
-            const base = channel._originalData?.base_url || '';
-            const name = channel.label || '';
             const channelType = channel._originalData?.type;
-            const isOfficialRatioPreset =
-              id === OFFICIAL_RATIO_PRESET_ID ||
-              base === OFFICIAL_RATIO_PRESET_BASE_URL ||
-              name === OFFICIAL_RATIO_PRESET_NAME;
             const isModelsDevPreset =
-              id === MODELS_DEV_PRESET_ID ||
-              base === MODELS_DEV_PRESET_BASE_URL ||
-              name === MODELS_DEV_PRESET_NAME;
+              channel.id === MODELS_DEV_PRESET_ID ||
+              channel.base_url === MODELS_DEV_PRESET_BASE_URL;
+            const isOfficialRatioPreset =
+              channel.id === OFFICIAL_RATIO_PRESET_ID ||
+              channel.base_url === OFFICIAL_RATIO_PRESET_BASE_URL;
             const isOpenRouter = channelType === 20;
+            const isTokenFactoryOpen = channelType === 60;
             if (!merged[id]) {
               if (isModelsDevPreset) {
                 merged[id] = MODELS_DEV_PRESET_ENDPOINT;
               } else if (isOfficialRatioPreset) {
                 merged[id] = OFFICIAL_RATIO_PRESET_ENDPOINT;
+              } else if (isTokenFactoryOpen) {
+                merged[id] = 'tokenfactoryopen';
               } else if (isOpenRouter) {
                 merged[id] = 'openrouter';
               } else {
@@ -474,6 +494,7 @@ export default function UpstreamRatioSync(props) {
     const payload = {
       upstreams: upstreams,
       timeout: 10,
+      sync_mode: mode,
       // 应用同步后再次拉取时仍返回已与上游一致的模型行，避免 differences 被清空
       include_aligned: true,
     };
@@ -602,6 +623,7 @@ export default function UpstreamRatioSync(props) {
       ModelRatio: parseNestedOption(props.options.ModelRatio),
       CompletionRatio: parseNestedOption(props.options.CompletionRatio),
       CacheRatio: parseNestedOption(props.options.CacheRatio),
+      CreateCacheRatio: parseNestedOption(props.options.CreateCacheRatio),
       ModelPrice: parseNestedOption(props.options.ModelPrice),
       RequestTierPricing: parseNestedOption(props.options.RequestTierPricing),
     };
@@ -721,6 +743,7 @@ export default function UpstreamRatioSync(props) {
         ModelRatio: { ...baseline.global.ModelRatio },
         CompletionRatio: { ...baseline.global.CompletionRatio },
         CacheRatio: { ...baseline.global.CacheRatio },
+        CreateCacheRatio: { ...baseline.global.CreateCacheRatio },
         ModelPrice: { ...baseline.global.ModelPrice },
         RequestTierPricing: { ...baseline.global.RequestTierPricing },
       };
@@ -816,6 +839,7 @@ export default function UpstreamRatioSync(props) {
                 'ChannelModelRatio',
                 'ChannelCompletionRatio',
                 'ChannelCacheRatio',
+                'ChannelCreateCacheRatio',
               ].forEach((rk) => {
                 if (finalChannel[rk][idStr]) {
                   delete finalChannel[rk][idStr][model];
@@ -860,6 +884,7 @@ export default function UpstreamRatioSync(props) {
             'ModelRatio',
             'CompletionRatio',
             'CacheRatio',
+            'CreateCacheRatio',
             'ModelPrice',
             'RequestTierPricing',
           ];
@@ -876,9 +901,7 @@ export default function UpstreamRatioSync(props) {
                 ModelRatio: finalRatios.ModelRatio || {},
                 CompletionRatio: finalRatios.CompletionRatio || {},
                 CacheRatio: finalRatios.CacheRatio || {},
-                CreateCacheRatio: parseNestedOption(
-                  props.options.CreateCacheRatio,
-                ),
+                CreateCacheRatio: finalRatios.CreateCacheRatio || {},
                 ImageRatio: parseNestedOption(props.options.ImageRatio),
                 AudioRatio: parseNestedOption(props.options.AudioRatio),
                 AudioCompletionRatio: parseNestedOption(
@@ -913,6 +936,8 @@ export default function UpstreamRatioSync(props) {
               CompletionRatio:
                 (finalChannel.ChannelCompletionRatio || {})[idStr] || {},
               CacheRatio: (finalChannel.ChannelCacheRatio || {})[idStr] || {},
+              CreateCacheRatio:
+                (finalChannel.ChannelCreateCacheRatio || {})[idStr] || {},
             };
             CHANNEL_EXTRA_OPTION_TO_PAYLOAD.forEach(([optKey, payloadKey]) => {
               body[payloadKey] = extractNestedChannelModelMap(
@@ -929,6 +954,7 @@ export default function UpstreamRatioSync(props) {
             'ModelRatio',
             'CompletionRatio',
             'CacheRatio',
+            'CreateCacheRatio',
             'ModelPrice',
             'RequestTierPricing',
           ];
@@ -1096,6 +1122,9 @@ export default function UpstreamRatioSync(props) {
                 {t('输出倍率')}
               </Select.Option>
               <Select.Option value='cache_ratio'>{t('缓存倍率')}</Select.Option>
+              <Select.Option value='create_cache_ratio'>
+                {t('缓存写入倍率')}
+              </Select.Option>
               <Select.Option value='model_price'>{t('固定价格')}</Select.Option>
               <Select.Option value='request_tier_pricing'>
                 {t('阶梯计费规则')}
@@ -1162,7 +1191,10 @@ export default function UpstreamRatioSync(props) {
           : `$${formatPriceNumber(outputPrice)}`;
       }
 
-      if (record.ratioType === 'cache_ratio') {
+      if (
+        record.ratioType === 'cache_ratio' ||
+        record.ratioType === 'create_cache_ratio'
+      ) {
         const cacheRatio = toFiniteNumber(record.current);
         const inputRatio = getModelRatioForDisplay(
           record.model,
@@ -1203,7 +1235,10 @@ export default function UpstreamRatioSync(props) {
           : `$${formatPriceNumber(newOutputPrice)}`;
       }
 
-      if (record.ratioType === 'cache_ratio') {
+      if (
+        record.ratioType === 'cache_ratio' ||
+        record.ratioType === 'create_cache_ratio'
+      ) {
         const newCacheRatio = toFiniteNumber(newVal);
         const newInputRatio = getModelRatioForDisplay(
           record.model,
@@ -1234,7 +1269,7 @@ export default function UpstreamRatioSync(props) {
       }
 
       if (record.ratioType === 'model_ratio') {
-        return formatPriceOldNewPair(
+        return formatChannelPriceOldNewPair(
           ratioToDisplayPrice(oldVal),
           ratioToDisplayPrice(newVal),
         );
@@ -1261,10 +1296,13 @@ export default function UpstreamRatioSync(props) {
           newCompletion !== null && newInputRatio !== null
             ? ratioToDisplayPrice(newCompletion * newInputRatio)
             : null;
-        return formatPriceOldNewPair(currentOutputPrice, newOutputPrice);
+        return formatChannelPriceOldNewPair(currentOutputPrice, newOutputPrice);
       }
 
-      if (record.ratioType === 'cache_ratio') {
+      if (
+        record.ratioType === 'cache_ratio' ||
+        record.ratioType === 'create_cache_ratio'
+      ) {
         const currentCacheRatio = toFiniteNumber(oldVal);
         const newCacheRatio = toFiniteNumber(newVal);
         const currentInputRatio = getModelRatioForDisplay(
@@ -1285,10 +1323,10 @@ export default function UpstreamRatioSync(props) {
           newCacheRatio !== null && newInputRatio !== null
             ? ratioToDisplayPrice(newCacheRatio * newInputRatio)
             : null;
-        return formatPriceOldNewPair(currentCachePrice, newCachePrice);
+        return formatChannelPriceOldNewPair(currentCachePrice, newCachePrice);
       }
 
-      return formatOldNewPair(oldVal, newVal);
+      return formatChannelOldNewPair(oldVal, newVal);
     };
 
     const dataSource = useMemo(() => {
@@ -1329,6 +1367,7 @@ export default function UpstreamRatioSync(props) {
           'model_ratio',
           'completion_ratio',
           'cache_ratio',
+          'create_cache_ratio',
         ].some((rt) => rt in ratioTypes);
         const billingConflict = hasPrice && hasOtherRatio;
 
@@ -1424,7 +1463,8 @@ export default function UpstreamRatioSync(props) {
           const typeMap = {
             model_ratio: t('输入价格（由倍率换算）'),
             completion_ratio: t('输出价格（由倍率换算）'),
-            cache_ratio: t('缓存价格（由倍率换算）'),
+            cache_ratio: t('缓存读取价格（由倍率换算）'),
+            create_cache_ratio: t('缓存写入价格（由倍率换算）'),
             model_price: t('固定价格'),
             request_tier_pricing: t('阶梯计费规则'),
           };

@@ -509,7 +509,7 @@ const PricingCardView = ({
 
     // 如果没有供应商图标，使用模型名称生成头像
 
-    const avatarText = model.model_name.slice(0, 2).toUpperCase();
+    const avatarText = (model.model_name || '').slice(0, 2).toUpperCase() || 'AI';
     return (
       <div className={CARD_STYLES.container}>
         <Avatar
@@ -666,10 +666,10 @@ const PricingCardView = ({
                                 {item.label}
                               </span>
                               <span className='flex-1 font-bold text-black inline-flex items-center flex-wrap gap-1'>
-                                {item.original && (
+                                {item.original ? (
                                   <>
                                     <span className='line-through text-gray-400 font-normal text-[10px]'>
-                                      {item.original.text}
+                                      <span style={{ color: 'var(--semi-color-primary)' }}>官方</span> {item.original.text}
                                     </span>
                                     <Tag
                                       color='red'
@@ -678,12 +678,17 @@ const PricingCardView = ({
                                     >
                                       -{item.original.discount}%
                                     </Tag>
+                                    <span>
+                                      <span style={{ color: 'var(--semi-color-warning)' }}>我们</span> {item.value}
+                                      {item.suffix}
+                                    </span>
                                   </>
+                                ) : (
+                                  <span>
+                                    {item.value}
+                                    {item.suffix}
+                                  </span>
                                 )}
-                                <span>
-                                  {item.value}
-                                  {item.suffix}
-                                </span>
                               </span>
                             </div>
                           ),
