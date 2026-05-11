@@ -829,6 +829,7 @@ type upstreamChannelSyncItem struct {
 	SupplierApplication int                `json:"supplier_application_id"`
 	SupplierAlias       string             `json:"supplier_alias"`
 	SupplierType        string             `json:"supplier_type"`
+	CompanyLogoURL      string             `json:"company_logo_url"`
 	ModelMapping        string             `json:"model_mapping"`
 	ModelPrice          map[string]float64 `json:"model_price"`
 	ModelRatio          map[string]float64 `json:"model_ratio"`
@@ -981,6 +982,7 @@ func decodeUpstreamChannelPayload(payload map[string]any, itemsKey string) ([]up
 			SupplierApplication: common.String2Int(common.Interface2String(m["supplier_application_id"])),
 			SupplierAlias:       strings.TrimSpace(common.Interface2String(m["supplier_alias"])),
 			SupplierType:        strings.TrimSpace(common.Interface2String(m["supplier_type"])),
+			CompanyLogoURL:      strings.TrimSpace(common.Interface2String(m["company_logo_url"])),
 		}
 		if mp, ok := m["model_price"].(map[string]any); ok && len(mp) > 0 {
 			item.ModelPrice = jsonAnyMapToFloatMap(mp)
@@ -1146,6 +1148,10 @@ func buildTokenFactorySyncedChannels(base *model.Channel) ([]model.Channel, []mo
 			clone.SupplierType = upstreamSupplierType
 		} else if strings.TrimSpace(clone.SupplierType) == "" || !isValidChannelSupplierType(strings.TrimSpace(clone.SupplierType)) {
 			clone.SupplierType = defaultChannelSupplierType
+		}
+		upstreamLogoURL := strings.TrimSpace(upstream.CompanyLogoURL)
+		if upstreamLogoURL != "" {
+			clone.CompanyLogoURL = upstreamLogoURL
 		}
 		mm := strings.TrimSpace(upstream.ModelMapping)
 		if mm != "" {
