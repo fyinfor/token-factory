@@ -23,7 +23,6 @@ import { useTranslation } from 'react-i18next';
 import {
   Hash,
   Thermometer,
-  Target,
   Repeat,
   Ban,
   Shuffle,
@@ -83,46 +82,6 @@ const ParameterControl = ({
           onChange={(value) => onInputChange('temperature', value)}
           className='mt-2'
           disabled={!parameterEnabled.temperature || disabled}
-        />
-      </div>
-
-      {/* Top P */}
-      <div
-        className={`transition-opacity duration-200 mb-4 ${!parameterEnabled.top_p || disabled ? 'opacity-50' : ''}`}
-      >
-        <div className='flex items-center justify-between mb-2'>
-          <div className='flex items-center gap-2'>
-            <Target size={16} className='text-gray-500' />
-            <Typography.Text strong className='text-sm'>
-              Top P
-            </Typography.Text>
-            <Tag size='small' shape='circle'>
-              {inputs.top_p}
-            </Tag>
-          </div>
-          <Button
-            theme={parameterEnabled.top_p ? 'solid' : 'borderless'}
-            type={parameterEnabled.top_p ? 'primary' : 'tertiary'}
-            size='small'
-            icon={
-              parameterEnabled.top_p ? <Check size={10} /> : <X size={10} />
-            }
-            onClick={() => onParameterToggle('top_p')}
-            className='!rounded-full !w-4 !h-4 !p-0 !min-w-0'
-            disabled={disabled}
-          />
-        </div>
-        <Typography.Text className='text-xs text-gray-500 mb-2'>
-          {t('核采样，控制词汇选择的多样性')}
-        </Typography.Text>
-        <Slider
-          step={0.1}
-          min={0.1}
-          max={1}
-          value={inputs.top_p}
-          onChange={(value) => onInputChange('top_p', value)}
-          className='mt-2'
-          disabled={!parameterEnabled.top_p || disabled}
         />
       </div>
 
