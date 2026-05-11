@@ -89,7 +89,7 @@ export const DEFAULT_CONFIG = {
     display_mode: 'text',
     model: 'gpt-4o',
     model_type: '',
-    specific_channel_id: '',
+    selected_route_slug: '',
     group: '',
     temperature: 0.7,
     top_p: 1,

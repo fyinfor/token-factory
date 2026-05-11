@@ -49,6 +49,7 @@ import { Link } from 'react-router-dom';
 import NoticeModal from '../../components/layout/NoticeModal';
 import HomeModelList from '../../components/home/HomeModelList';
 import HomeLandingHeroCopy from '../../components/home/HomeLandingHeroCopy';
+import HomeBannerCarousel from '../../components/home/HomeBannerCarousel';
 import {
   Moonshot,
   OpenAI,
@@ -214,9 +215,13 @@ const Home = () => {
             {/* Banner 部分 */}
             <div className='home-banner-bg w-full min-h-[400px] md:min-h-[500px]'>
               <div className='h-full px-4 pt-16 md:pt-20'>
-                {/* 居中内容区 */}
-                <div className='my-16'>
+                {/* 居中内容区：上留白保持，下留白缩小以拉近广告与模型列表 */}
+                <div className='mt-16 mb-5'>
                   <HomeLandingHeroCopy />
+
+                  <HomeBannerCarousel
+                    rawSlides={statusState?.status?.home_banner_slides}
+                  />
 
                   {/* 操作按钮 */}
                   {/* <div className='flex flex-row gap-3 justify-center items-center mb-8'>
