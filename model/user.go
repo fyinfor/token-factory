@@ -423,6 +423,52 @@ func GetUserIdByAffCode(affCode string) (int, error) {
 	return user.Id, err
 }
 
+// EnsureAffCode generates a unique aff_code for the user if it is empty,
+// retrying on rare collisions. This prevents duplicate-key errors on
+// the idx_users_aff_code unique index when multiple users have aff_code = ''.
+func (user *User) EnsureAffCode() {
+	if user.AffCode != "" {
+		return
+	}
+	const maxRetries = 5
+	for i := 0; i < maxRetries; i++ {
+		code := common.GetRandomString(6) // 6 chars ≈ 2.2B combos (alphanumeric), negligible collision
+		var count int64
+		DB.Model(&User{}).Where("aff_code = ? AND id != ?", code, user.Id).Count(&count)
+		if count == 0 {
+			user.AffCode = code
+			return
+		}
+	}
+	// Fallback: append user id to guarantee uniqueness
+	user.AffCode = common.GetRandomString(4) + fmt.Sprintf("%d", user.Id)
+}
+
+// BackfillEmptyAffCodes finds all users whose aff_code is empty and assigns
+// each a unique aff_code. This is needed because aff_code has a uniqueIndex,
+// and multiple rows with aff_code = '' violate that constraint on update.
+func BackfillEmptyAffCodes() error {
+	var users []User
+	if err := DB.Unscoped().Select("id").Where("aff_code = ''").Find(&users).Error; err != nil {
+		return err
+	}
+	if len(users) == 0 {
+		return nil
+	}
+	common.SysLog(fmt.Sprintf("backfill empty aff_code: %d user(s) need assignment", len(users)))
+	for i := range users {
+		users[i].EnsureAffCode()
+		if users[i].AffCode == "" {
+			common.SysError(fmt.Sprintf("backfill empty aff_code: failed to generate code for user %d", users[i].Id))
+			continue
+		}
+		if err := DB.Model(&User{}).Where("id = ?", users[i].Id).UpdateColumn("aff_code", users[i].AffCode).Error; err != nil {
+			common.SysError(fmt.Sprintf("backfill empty aff_code: user %d: %s", users[i].Id, err.Error()))
+		}
+	}
+	return nil
+}
+
 func DeleteUserById(id int) (err error) {
 	if id == 0 {
 		return errors.New("id 为空！")
@@ -541,7 +587,7 @@ func (user *User) Insert(inviterId int) error {
 	}
 	user.Quota = common.QuotaForNewUser
 	//user.SetAccessToken(common.GetUUID())
-	user.AffCode = common.GetRandomString(4)
+	user.EnsureAffCode()
 
 	// 初始化用户设置，包括默认的边栏配置
 	if user.Setting == "" {
@@ -613,7 +659,7 @@ func (user *User) InsertWithTx(tx *gorm.DB, inviterId int) error {
 		}
 	}
 	user.Quota = common.QuotaForNewUser
-	user.AffCode = common.GetRandomString(4)
+	user.EnsureAffCode()
 
 	// 初始化用户设置
 	if user.Setting == "" {
@@ -688,6 +734,8 @@ func (user *User) Update(updatePassword bool) error {
 	newUser.LastLoginAt = user.LastLoginAt
 	newUser.CreatedBy = user.CreatedBy
 	newUser.UpdatedAt = time.Now()
+	// 确保 aff_code 不为空，避免唯一索引冲突（多个空字符串行无法共存）
+	newUser.EnsureAffCode()
 	// Select("*") 否则 Updates(struct) 会忽略零值字段（如 is_distributor=0、quota=0），导致无法取消分销商等操作失效
 	if err = DB.Model(user).Select("*").Updates(newUser).Error; err != nil {
 		return err

@@ -449,6 +449,9 @@ func migrateDBFast() error {
 	if err := BackfillAffInviteRelationsIfNeeded(); err != nil {
 		common.SysError("aff_invite_relations backfill: " + err.Error())
 	}
+	if err := BackfillEmptyAffCodes(); err != nil {
+		common.SysError("backfill empty aff_code: " + err.Error())
+	}
 	common.SysLog("database migrated")
 	return nil
 }
