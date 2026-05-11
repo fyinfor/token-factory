@@ -65,6 +65,8 @@ func InitOptionMap() {
 	common.OptionMap["Notice"] = ""
 	common.OptionMap["About"] = ""
 	common.OptionMap["HomePageContent"] = ""
+	// 首页轮播广告 JSON 数组，见 web SettingsHomeBanner / HomeBannerCarousel
+	common.OptionMap["HomeBannerSlides"] = "[]"
 	common.OptionMap["Footer"] = common.Footer
 	common.OptionMap["SystemName"] = common.SystemName
 	common.OptionMap["Logo"] = common.Logo

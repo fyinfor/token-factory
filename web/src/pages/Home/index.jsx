@@ -49,6 +49,7 @@ import { Link } from 'react-router-dom';
 import NoticeModal from '../../components/layout/NoticeModal';
 import HomeModelList from '../../components/home/HomeModelList';
 import HomeLandingHeroCopy from '../../components/home/HomeLandingHeroCopy';
+import HomeBannerCarousel from '../../components/home/HomeBannerCarousel';
 import {
   Moonshot,
   OpenAI,
@@ -217,6 +218,10 @@ const Home = () => {
                 {/* 居中内容区 */}
                 <div className='my-16'>
                   <HomeLandingHeroCopy />
+
+                  <HomeBannerCarousel
+                    rawSlides={statusState?.status?.home_banner_slides}
+                  />
 
                   {/* 操作按钮 */}
                   {/* <div className='flex flex-row gap-3 justify-center items-center mb-8'>
