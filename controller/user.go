@@ -782,9 +782,11 @@ func GetUserModels(c *gin.Context) {
 	// - tested_success 在返回项中恒为 true（因已按单测成功过滤）
 	if c.Query("scene") == "playground" {
 		type playgroundChannelOption struct {
-			ID        int    `json:"id"`
-			Name      string `json:"name"`
-			ChannelNo string `json:"channel_no,omitempty"`
+			ID           int    `json:"id"`
+			Name         string `json:"name"`
+			ChannelNo    string `json:"channel_no,omitempty"`
+			RouteSlug    string `json:"route_slug,omitempty"`
+			SupplierType string `json:"supplier_type,omitempty"`
 		}
 		type playgroundModelItem struct {
 			ModelName      string                    `json:"model_name"`
@@ -963,9 +965,11 @@ func GetUserModels(c *gin.Context) {
 					continue
 				}
 				channelMeta[channelID] = playgroundChannelOption{
-					ID:        ch.Id,
-					Name:      strings.TrimSpace(ch.Name),
-					ChannelNo: strings.TrimSpace(ch.ChannelNo),
+					ID:           ch.Id,
+					Name:         strings.TrimSpace(ch.Name),
+					ChannelNo:    strings.TrimSpace(ch.ChannelNo),
+					RouteSlug:    strings.TrimSpace(ch.RouteSlug),
+					SupplierType: strings.TrimSpace(ch.SupplierType),
 				}
 			}
 		}

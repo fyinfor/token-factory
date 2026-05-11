@@ -37,6 +37,7 @@ type tfOpenSyncExportRow struct {
 	SupplierAlias         string             `json:"supplier_alias,omitempty"`
 	SupplierType          string             `json:"supplier_type,omitempty"`
 	CompanyLogoURL        string             `json:"company_logo_url,omitempty"`
+	PriceDiscountPercent  *float64           `json:"price_discount_percent,omitempty"`
 	ModelMapping          string             `json:"model_mapping,omitempty"`
 	ModelPrice            map[string]float64 `json:"model_price,omitempty"`
 	ModelRatio            map[string]float64 `json:"model_ratio,omitempty"`
@@ -182,6 +183,7 @@ func TFOpenSyncExportChannels(c *gin.Context) {
 			SupplierAlias:         aliasByAppID[ch.SupplierApplicationID],
 			SupplierType:          coalesceStr(supplierTypeByAppID[ch.SupplierApplicationID], strings.TrimSpace(ch.SupplierType)),
 			CompanyLogoURL:        coalesceStr(logoByAppID[ch.SupplierApplicationID], strings.TrimSpace(ch.CompanyLogoURL)),
+			PriceDiscountPercent:  ch.PriceDiscountPercent,
 			ModelMapping:          strings.TrimSpace(ch.GetModelMapping()),
 			ModelPrice:            mp,
 			ModelRatio:            mr,
