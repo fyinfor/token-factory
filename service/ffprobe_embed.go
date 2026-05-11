@@ -1,3 +1,5 @@
+//go:build embed_ffprobe
+
 package service
 
 import _ "embed"
@@ -13,6 +15,7 @@ var (
 	ffprobeLinuxArm64 []byte
 )
 
+// getEmbeddedFFprobe 返回 embed_ffprobe 构建下打进二进制内的 ffprobe 字节（按 GOOS/GOARCH）。
 func getEmbeddedFFprobe(goos, goarch string) ([]byte, string, bool) {
 	switch goos + "-" + goarch {
 	case "windows-amd64":

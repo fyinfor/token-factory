@@ -53,6 +53,17 @@ const createEmptyTemplate = () => ({
   ...emptyTierRule(),
 });
 
+const createTemplateId = (templates) => {
+  const base = `tpl_${Date.now()}`;
+  let id = base;
+  let suffix = 1;
+  while (Object.prototype.hasOwnProperty.call(templates, id)) {
+    suffix += 1;
+    id = `${base}_${suffix}`;
+  }
+  return id;
+};
+
 export default function RequestTierPricingTemplateSettings({
   options,
   refresh,
@@ -124,7 +135,12 @@ export default function RequestTierPricingTemplateSettings({
       await save(next);
       return;
     }
-    await save([...Object.values(templates), template]);
+    const next = {
+      ...templates,
+      [createTemplateId(templates)]: template,
+    };
+    setTemplates(next);
+    await save(next);
   };
 
   const removeTemplate = async (id) => {
