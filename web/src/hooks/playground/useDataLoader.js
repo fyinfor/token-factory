@@ -283,9 +283,10 @@ export const useDataLoader = (
           if (!Number.isFinite(id) || id <= 0) {
             return null;
           }
-          const name = String(option?.name || '').trim() || `渠道#${id}`;
-          const channelNo = String(option?.channel_no || '').trim();
-          const label = channelNo ? `${name} (${channelNo})` : name;
+          const routeSlug = String(option?.route_slug || '').trim();
+          const supplierType = String(option?.supplier_type || '').trim();
+          const parts = [routeSlug, supplierType].filter(Boolean);
+          const label = parts.length > 0 ? parts.join('-') : `渠道#${id}`;
           return {
             label,
             value: id,

@@ -830,6 +830,7 @@ type upstreamChannelSyncItem struct {
 	SupplierAlias       string             `json:"supplier_alias"`
 	SupplierType        string             `json:"supplier_type"`
 	CompanyLogoURL      string             `json:"company_logo_url"`
+	PriceDiscountPercent float64           `json:"price_discount_percent"`
 	ModelMapping        string             `json:"model_mapping"`
 	ModelPrice          map[string]float64 `json:"model_price"`
 	ModelRatio          map[string]float64 `json:"model_ratio"`
@@ -983,6 +984,20 @@ func decodeUpstreamChannelPayload(payload map[string]any, itemsKey string) ([]up
 			SupplierAlias:       strings.TrimSpace(common.Interface2String(m["supplier_alias"])),
 			SupplierType:        strings.TrimSpace(common.Interface2String(m["supplier_type"])),
 			CompanyLogoURL:      strings.TrimSpace(common.Interface2String(m["company_logo_url"])),
+		}
+		if v, ok := m["price_discount_percent"]; ok && v != nil {
+			switch x := v.(type) {
+			case float64:
+				item.PriceDiscountPercent = x
+			case json.Number:
+				if f, err := x.Float64(); err == nil {
+					item.PriceDiscountPercent = f
+				}
+			default:
+				if f, err := strconv.ParseFloat(strings.TrimSpace(common.Interface2String(v)), 64); err == nil {
+					item.PriceDiscountPercent = f
+				}
+			}
 		}
 		if mp, ok := m["model_price"].(map[string]any); ok && len(mp) > 0 {
 			item.ModelPrice = jsonAnyMapToFloatMap(mp)
@@ -1152,6 +1167,9 @@ func buildTokenFactorySyncedChannels(base *model.Channel) ([]model.Channel, []mo
 		upstreamLogoURL := strings.TrimSpace(upstream.CompanyLogoURL)
 		if upstreamLogoURL != "" {
 			clone.CompanyLogoURL = upstreamLogoURL
+		}
+		if upstream.PriceDiscountPercent > 0 {
+			clone.PriceDiscountPercent = &upstream.PriceDiscountPercent
 		}
 		mm := strings.TrimSpace(upstream.ModelMapping)
 		if mm != "" {
