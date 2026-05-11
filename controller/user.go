@@ -1238,22 +1238,39 @@ func UpdateSelf(c *gin.Context) {
 		return
 	}
 
-	cleanUser := model.User{
-		Id:          c.GetInt("id"),
-		Username:    user.Username,
-		Password:    user.Password,
-		DisplayName: user.DisplayName,
-	}
 	if user.Password == "$I_LOVE_U" {
 		user.Password = "" // rollback to what it should be
-		cleanUser.Password = ""
 	}
-	updatePassword, err := checkUpdatePassword(user.OriginalPassword, user.Password, cleanUser.Id)
+
+	// 必须以数据库完整行为基础再合并请求字段；仅用 JSON 解出的局部 User 会含大量零值，
+	// 若直接传入 Update() 会用 Select("*") 把角色/状态/用户名等全部覆盖掉。
+	userId := c.GetInt("id")
+	current, err := model.GetUserById(userId, true)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	if err := cleanUser.Update(updatePassword); err != nil {
+	merged := *current
+	if _, ok := requestData["username"]; ok {
+		if s, ok := requestData["username"].(string); ok {
+			merged.Username = strings.TrimSpace(s)
+		}
+	}
+	if _, ok := requestData["display_name"]; ok {
+		if s, ok := requestData["display_name"].(string); ok {
+			merged.DisplayName = strings.TrimSpace(s)
+		}
+	}
+
+	updatePassword, err := checkUpdatePassword(user.OriginalPassword, user.Password, userId)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if updatePassword {
+		merged.Password = user.Password
+	}
+	if err := merged.Update(updatePassword); err != nil {
 		common.ApiError(c, err)
 		return
 	}

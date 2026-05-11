@@ -425,7 +425,7 @@ func GetUserIdByAffCode(affCode string) (int, error) {
 
 // EnsureAffCode generates a unique aff_code for the user if it is empty,
 // retrying on rare collisions. This prevents duplicate-key errors on
-// the idx_users_aff_code unique index when multiple users have aff_code = ''.
+// the idx_users_aff_code unique index when multiple users have aff_code = ”.
 func (user *User) EnsureAffCode() {
 	if user.AffCode != "" {
 		return
@@ -446,7 +446,7 @@ func (user *User) EnsureAffCode() {
 
 // BackfillEmptyAffCodes finds all users whose aff_code is empty and assigns
 // each a unique aff_code. This is needed because aff_code has a uniqueIndex,
-// and multiple rows with aff_code = '' violate that constraint on update.
+// and multiple rows with aff_code = ” violate that constraint on update.
 func BackfillEmptyAffCodes() error {
 	var users []User
 	if err := DB.Unscoped().Select("id").Where("aff_code = ''").Find(&users).Error; err != nil {
@@ -729,6 +729,7 @@ func (user *User) Update(updatePassword bool) error {
 	}
 	newUser := *user
 	DB.First(&user, user.Id)
+
 	// 避免请求体/部分结构体中的零值覆盖注册时间、上次登录；并刷新修改时间
 	newUser.CreatedAt = user.CreatedAt
 	newUser.LastLoginAt = user.LastLoginAt
@@ -740,9 +741,8 @@ func (user *User) Update(updatePassword bool) error {
 	if err = DB.Model(user).Select("*").Updates(newUser).Error; err != nil {
 		return err
 	}
-
-	// Update cache
-	return updateUserCache(*user)
+	// 缓存必须与落库的 newUser 一致；*user 仅为 First 后的快照，密码等可能已过时。
+	return updateUserCache(newUser)
 }
 
 func (user *User) Edit(updatePassword bool) error {
