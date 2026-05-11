@@ -715,6 +715,14 @@ const EditChannelModal = (props) => {
         case 60:
           localModels = [];
           forceResetModels = true;
+          // TokenFactoryOpen 渠道的 supplier_type 从上游同步继承，清除本地选择
+          setInputs((prevInputs) => ({
+            ...prevInputs,
+            supplier_type: '',
+          }));
+          if (formApiRef.current) {
+            formApiRef.current.setValue('supplier_type', '');
+          }
           break;
         case 61:
         case 62:
@@ -1976,7 +1984,7 @@ const EditChannelModal = (props) => {
       localInputs.company_logo_url || '',
     ).trim();
     localInputs.supplier_type = String(localInputs.supplier_type || '').trim();
-    if (!localInputs.supplier_type) {
+    if (!localInputs.supplier_type && localInputs.type !== 60) {
       showError(t('请选择供应商类型'));
       return;
     }
@@ -3230,18 +3238,20 @@ const EditChannelModal = (props) => {
                           </div>
                         </div>
                       ) : null}
-                      <Form.Select
-                        field='supplier_type'
-                        label={t('供应商类型')}
-                        placeholder={t('请选择供应商类型')}
-                        optionList={CHANNEL_SUPPLIER_TYPE_OPTIONS}
-                        rules={[
-                          { required: true, message: t('请选择供应商类型') },
-                        ]}
-                        onChange={(value) =>
-                          handleInputChange('supplier_type', value)
-                        }
-                      />
+                      {inputs.type !== 60 && (
+                        <Form.Select
+                          field='supplier_type'
+                          label={t('供应商类型')}
+                          placeholder={t('请选择供应商类型')}
+                          optionList={CHANNEL_SUPPLIER_TYPE_OPTIONS}
+                          rules={[
+                            { required: true, message: t('请选择供应商类型') },
+                          ]}
+                          onChange={(value) =>
+                            handleInputChange('supplier_type', value)
+                          }
+                        />
+                      )}
 
                       <Form.Input
                         field='name'

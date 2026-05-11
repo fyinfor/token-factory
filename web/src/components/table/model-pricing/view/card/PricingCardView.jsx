@@ -509,7 +509,7 @@ const PricingCardView = ({
 
     // 如果没有供应商图标，使用模型名称生成头像
 
-    const avatarText = model.model_name.slice(0, 2).toUpperCase();
+    const avatarText = (model.model_name || '').slice(0, 2).toUpperCase() || 'AI';
     return (
       <div className={CARD_STYLES.container}>
         <Avatar

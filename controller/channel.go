@@ -648,10 +648,11 @@ func validateChannel(channel *model.Channel, isAdd bool) error {
 
 	channel.CompanyLogoURL = strings.TrimSpace(channel.CompanyLogoURL)
 	channel.SupplierType = strings.TrimSpace(channel.SupplierType)
-	if channel.SupplierType == "" {
+	// TokenFactoryOpen (type=60) 渠道的 supplier_type 由上游同步继承，创建时允许为空
+	if channel.SupplierType == "" && channel.Type != constant.ChannelTypeTokenFactoryOpen {
 		return fmt.Errorf("供应商类型不能为空")
 	}
-	if !isValidChannelSupplierType(channel.SupplierType) {
+	if channel.SupplierType != "" && !isValidChannelSupplierType(channel.SupplierType) {
 		return fmt.Errorf("供应商类型无效")
 	}
 
@@ -827,6 +828,7 @@ type upstreamChannelSyncItem struct {
 	ChannelNo           string             `json:"channel_no"`
 	SupplierApplication int                `json:"supplier_application_id"`
 	SupplierAlias       string             `json:"supplier_alias"`
+	SupplierType        string             `json:"supplier_type"`
 	ModelMapping        string             `json:"model_mapping"`
 	ModelPrice          map[string]float64 `json:"model_price"`
 	ModelRatio          map[string]float64 `json:"model_ratio"`
@@ -978,6 +980,7 @@ func decodeUpstreamChannelPayload(payload map[string]any, itemsKey string) ([]up
 			ChannelNo:           strings.TrimSpace(common.Interface2String(m["channel_no"])),
 			SupplierApplication: common.String2Int(common.Interface2String(m["supplier_application_id"])),
 			SupplierAlias:       strings.TrimSpace(common.Interface2String(m["supplier_alias"])),
+			SupplierType:        strings.TrimSpace(common.Interface2String(m["supplier_type"])),
 		}
 		if mp, ok := m["model_price"].(map[string]any); ok && len(mp) > 0 {
 			item.ModelPrice = jsonAnyMapToFloatMap(mp)
@@ -1137,6 +1140,12 @@ func buildTokenFactorySyncedChannels(base *model.Channel) ([]model.Channel, []mo
 		}
 		if upstream.Status > 0 {
 			clone.Status = upstream.Status
+		}
+		upstreamSupplierType := strings.TrimSpace(upstream.SupplierType)
+		if upstreamSupplierType != "" && isValidChannelSupplierType(upstreamSupplierType) {
+			clone.SupplierType = upstreamSupplierType
+		} else if strings.TrimSpace(clone.SupplierType) == "" || !isValidChannelSupplierType(strings.TrimSpace(clone.SupplierType)) {
+			clone.SupplierType = defaultChannelSupplierType
 		}
 		mm := strings.TrimSpace(upstream.ModelMapping)
 		if mm != "" {
