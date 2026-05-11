@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect, useRef, useContext } from 'react';
 import {
   Card,
   Avatar,
@@ -29,23 +29,32 @@ import {
   Tooltip,
 } from '@douyinfe/semi-ui';
 import { IconListView } from '@douyinfe/semi-icons';
-import { stringToColor } from '../../../../../helpers';
+import { copy, stringToColor } from '../../../../../helpers';
 import { getUsedGroupContext } from '../../../../../helpers/utils';
+import { UserContext } from '../../../../../context/User';
+import ApiDocsSidePanel from './ApiDocsSidePanel';
+import ModelTokenList from './ModelTokenList';
 
 import { renderModelTestResultSummary } from '../../../../../helpers/modelStability';
 
 const { Text } = Typography;
 
-const DOCS_PATH_BY_ENDPOINT_PATH = {
-  '/v1/messages': '/api/ai-model/chat/createmessage',
-  '/v1/videos/generations': '/api/ai-model/videos/createvideogeneration',
-  '/v1/images/generations':
-    '/api/ai-model/images/openai/post-v1-images-generations',
-  '/v1/chat/completions': '/api/ai-model/chat/openai/createchatcompletion',
-  '/v1/videos': '/api/ai-model/videos/sora/createvideo',
+const DEFAULT_DOCS_ENDPOINT_PATH = '/v1/chat/completions';
+
+const getEndpointPath = (modelData, endpointMap) => {
+  const endpointType = Array.isArray(modelData?.supported_endpoint_types)
+    ? modelData.supported_endpoint_types[0]
+    : '';
+  return endpointMap?.[endpointType]?.path || DEFAULT_DOCS_ENDPOINT_PATH;
 };
 
-const DEFAULT_DOCS_ENDPOINT_PATH = '/v1/chat/completions';
+const copyText = async (text, t, successText = '已复制') => {
+  if (await copy(text)) {
+    Toast.success({ content: t(successText) });
+  } else {
+    Toast.error({ content: t('复制失败') });
+  }
+};
 
 const hasRatioValue = (value) =>
   value !== undefined &&
@@ -80,9 +89,10 @@ const ModelChannelList = ({
   selectedGroup,
   groupRatio,
 }) => {
-  if (!modelData?.channel_list || modelData.channel_list.length === 0) {
-    return null;
-  }
+  const [userState] = useContext(UserContext);
+  const [docsVisible, setDocsVisible] = useState(false);
+  const channelList = modelData?.channel_list || [];
+  const isLoggedIn = Boolean(userState?.user);
 
   const { usedGroupRatio } = useMemo(
     () =>
@@ -93,7 +103,7 @@ const ModelChannelList = ({
   // 按 supplier_application_id 分组通道
   const groupedChannels = useMemo(() => {
     const groups = {};
-    modelData.channel_list.forEach((channel) => {
+    channelList.forEach((channel) => {
       const supplierId = channel.supplier_application_id;
       if (!groups[supplierId]) {
         groups[supplierId] = {
@@ -112,7 +122,7 @@ const ModelChannelList = ({
       groups[supplierId].channels.push(channel);
     });
     return Object.values(groups);
-  }, [modelData.channel_list, t]);
+  }, [channelList, t]);
 
   // 生成所有面板的 keys，默认全部展开
   const allKeys = useMemo(
@@ -127,30 +137,13 @@ const ModelChannelList = ({
   // 管理展开状态
   const [activeKey, setActiveKey] = useState(allKeys);
 
-  const apiDocsLink = useMemo(() => {
-    const endpointType = Array.isArray(modelData?.supported_endpoint_types)
-      ? modelData.supported_endpoint_types[0]
-      : '';
-    const endpointPath = endpointMap?.[endpointType]?.path || '';
-    const docsPath =
-      DOCS_PATH_BY_ENDPOINT_PATH[endpointPath] ||
-      DOCS_PATH_BY_ENDPOINT_PATH[DEFAULT_DOCS_ENDPOINT_PATH];
-    const docsLink =
-      typeof window !== 'undefined'
-        ? (localStorage.getItem('docs_link') || '').trim()
-        : '';
-    if (!docsLink || !docsPath) {
-      return '';
-    }
-    return `${docsLink.replace(/\/+$/, '')}${docsPath}`;
-  }, [modelData?.supported_endpoint_types, endpointMap]);
+  const endpointPath = useMemo(
+    () => getEndpointPath(modelData, endpointMap),
+    [modelData?.supported_endpoint_types, endpointMap],
+  );
 
   const openApiDocs = () => {
-    if (!apiDocsLink) {
-      Toast.warning({ content: t('暂无可用文档') });
-      return;
-    }
-    window.open(apiDocsLink, '_blank', 'noopener,noreferrer');
+    setDocsVisible(true);
   };
 
   // 当 allKeys 实际变化时（基于字符串比较），更新 activeKey
@@ -317,170 +310,195 @@ const ModelChannelList = ({
     return items.filter(Boolean);
   };
 
+  if (channelList.length === 0) {
+    return null;
+  }
+
   return (
-    <Card className='!rounded-2xl shadow-sm border-0 mb-6'>
-      <div className='flex items-center mb-4'>
-        <Avatar size='small' color='purple' className='mr-2 shadow-md'>
-          <IconListView size={16} />
-        </Avatar>
-        <div>
-          <Text className='text-lg font-medium'>{t('通道列表')}</Text>
-          <div className='text-xs text-gray-600'>
-            {t('模型在各个通道的配置信息')}
+    <>
+      <Card className='!rounded-2xl shadow-sm border-0 mb-3'>
+        <div className='flex items-center mb-4'>
+          <div className='flex items-center min-w-0'>
+            <Avatar size='small' color='purple' className='mr-2 shadow-md'>
+              <IconListView size={16} />
+            </Avatar>
+            <div>
+              <Text className='text-lg font-medium'>{t('通道列表')}</Text>
+              <div className='text-xs text-gray-600'>
+                {t('模型在各个通道的配置信息')}
+              </div>
+            </div>
           </div>
         </div>
-      </div>
 
-      <Collapse activeKey={activeKey} onChange={setActiveKey}>
-        {groupedChannels.map((group) => (
-          <Collapse.Panel
-            key={`group-${group.supplierId}`}
-            itemKey={`group-${group.supplierId}`}
-            header={
-              <div className='flex items-center justify-between w-full pr-4'>
-                <span
-                  className='h-7 rounded-md flex items-center gap-1 overflow-hidden ml-2'
-                  style={{
-                    backgroundColor: 'var(--semi-color-fill-0)',
-                    paddingRight: group.supplierType ? 4 : 0,
-                  }}
-                >
-                  {group.companyLogoUrl ? (
-                    <img
-                      src={group.companyLogoUrl}
-                      alt={group.supplierAlias || ''}
-                      className='w-7 h-7 object-contain rounded-md'
-                    />
-                  ) : (
-                    <span
-                      className='h-6 px-2 flex items-center text-xs font-medium'
-                      style={{
-                        color: 'var(--semi-color-text-1)',
-                      }}
-                    >
-                      {group.supplierAlias || t('官方')}
-                    </span>
-                  )}
-                  {group.supplierType && (
-                    <Tag
-                      size='small'
-                      shape='circle'
-                      color={getSupplierTypeColor(group.supplierType)}
-                    >
-                      {group.supplierType}
-                    </Tag>
-                  )}
-                </span>
-                <span className='text-sm text-gray-500'>
-                  {group.channels.length} {t('个通道')}
-                </span>
-              </div>
-            }
-          >
-            <div className='space-y-3'>
-              {group.channels.map((channel, idx) => {
-                const channelItems = formatChannelInfo(channel);
-                // 优先 {model}/{route_slug}（全局渠道路由）；否则旧 {alias}/{model}/{channel_no}
-                const channelPath = channel.route_slug
-                  ? `${modelData.model_name}/${channel.route_slug}`
-                  : `${channel.supplier_alias}/${modelData.model_name}/${channel.channel_no}`;
-                const channelBadge =
-                  channel.route_slug || channel.channel_no || String(idx);
-
-                const handleCopy = () => {
-                  navigator.clipboard
-                    .writeText(channelPath)
-                    .then(() => {
-                      Toast.success({ content: t('已复制通道') });
-                    })
-                    .catch(() => {
-                      Toast.error({ content: t('复制失败') });
-                    });
-                };
-
-                return (
-                  <div
-                    key={`${channel.channel_id}-${idx}`}
-                    className='flex gap-3 items-start'
+        <Collapse activeKey={activeKey} onChange={setActiveKey}>
+          {groupedChannels.map((group) => (
+            <Collapse.Panel
+              key={`group-${group.supplierId}`}
+              itemKey={`group-${group.supplierId}`}
+              header={
+                <div className='flex items-center justify-between w-full pr-4'>
+                  <span
+                    className='h-7 rounded-md flex items-center gap-1 overflow-hidden ml-2'
+                    style={{
+                      backgroundColor: 'var(--semi-color-fill-0)',
+                      paddingRight: group.supplierType ? 4 : 0,
+                    }}
                   >
-                    <div className='flex items-center justify-center min-w-[24px] h-[24px] rounded-full bg-blue-100 text-blue-600 text-xs font-semibold mt-3'>
-                      {channelBadge}
-                    </div>
-                    <Card
-                      className='!rounded-lg shadow-sm !mb-2 flex-1'
-                      bodyStyle={{ padding: '12px' }}
+                    {group.companyLogoUrl ? (
+                      <img
+                        src={group.companyLogoUrl}
+                        alt={group.supplierAlias || ''}
+                        className='w-7 h-7 object-contain rounded-md'
+                      />
+                    ) : (
+                      <span
+                        className='h-6 px-2 flex items-center text-xs font-medium'
+                        style={{
+                          color: 'var(--semi-color-text-1)',
+                        }}
+                      >
+                        {group.supplierAlias || t('官方')}
+                      </span>
+                    )}
+                    {group.supplierType && (
+                      <Tag
+                        size='small'
+                        shape='circle'
+                        color={getSupplierTypeColor(group.supplierType)}
+                      >
+                        {group.supplierType}
+                      </Tag>
+                    )}
+                  </span>
+                  <span className='text-sm text-gray-500'>
+                    {group.channels.length} {t('个通道')}
+                  </span>
+                </div>
+              }
+            >
+              <div className='space-y-3'>
+                {group.channels.map((channel, idx) => {
+                  const channelItems = formatChannelInfo(channel);
+                  const channelPath = channel.route_slug
+                    ? `${modelData.model_name}/${channel.route_slug}`
+                    : `${channel.supplier_alias}/${modelData.model_name}/${channel.channel_no}`;
+                  const channelBadge =
+                    channel.route_slug || channel.channel_no || String(idx);
+
+                  const handleCopy = () => {
+                    copyText(channelPath, t, '已复制通道');
+                  };
+
+                  return (
+                    <div
+                      key={`${channel.channel_id}-${idx}`}
+                      className='flex gap-3 items-start'
                     >
-                      <div className='flex items-center justify-between gap-4'>
-                        <div className='flex flex-col gap-1.5 text-sm flex-1'>
-                          {channelItems.map((item) => (
-                            <div
-                              key={item.label}
-                              className='flex items-center gap-2 flex-wrap'
-                            >
-                              <span className='text-gray-600'>
-                                {item.label}:
-                              </span>
-                              {item.original ? (
-                                <>
-                                  <span className='text-gray-400 line-through text-xs'>
-                                    <span style={{ color: 'var(--semi-color-primary)' }}>官方</span> {item.original}
-                                  </span>
-                                  <Tag color='red' size='small' shape='circle'>
-                                    -{item.discount}%
-                                  </Tag>
-                                  <span className='font-medium text-gray-900'>
-                                    <span style={{ color: 'var(--semi-color-warning)' }}>我们</span> {item.value}
-                                  </span>
-                                </>
-                              ) : (
-                                <span className='font-medium text-gray-900'>
-                                  {item.value}
+                      <div className='flex items-center justify-center min-w-[24px] h-[24px] rounded-full bg-blue-100 text-blue-600 text-xs font-semibold mt-3'>
+                        {channelBadge}
+                      </div>
+                      <Card
+                        className='!rounded-lg shadow-sm !mb-2 flex-1'
+                        bodyStyle={{ padding: '12px' }}
+                      >
+                        <div className='flex items-center justify-between gap-4'>
+                          <div className='flex flex-col gap-1.5 text-sm flex-1'>
+                            {channelItems.map((item) => (
+                              <div
+                                key={item.label}
+                                className='flex items-center gap-2 flex-wrap'
+                              >
+                                <span className='text-gray-600'>
+                                  {item.label}:
                                 </span>
+                                {item.original ? (
+                                  <>
+                                    <span className='text-gray-400 line-through text-xs'>
+                                      <span
+                                        style={{
+                                          color: 'var(--semi-color-primary)',
+                                        }}
+                                      >
+                                        官方
+                                      </span>{' '}
+                                      {item.original}
+                                    </span>
+                                    <Tag
+                                      color='red'
+                                      size='small'
+                                      shape='circle'
+                                    >
+                                      -{item.discount}%
+                                    </Tag>
+                                    <span className='font-medium text-gray-900'>
+                                      <span
+                                        style={{
+                                          color: 'var(--semi-color-warning)',
+                                        }}
+                                      >
+                                        我们
+                                      </span>{' '}
+                                      {item.value}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span className='font-medium text-gray-900'>
+                                    {item.value}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                            <div className='flex flex-wrap gap-2 items-center pt-1 border-t border-gray-100 mt-1'>
+                              <Text type='tertiary' size='small'>
+                                {t('单测/稳定性')}
+                              </Text>
+                              {renderModelTestResultSummary(
+                                channelMtrMap[String(channel.channel_id)],
+                                t,
                               )}
                             </div>
-                          ))}
-                          <div className='flex flex-wrap gap-2 items-center pt-1 border-t border-gray-100 mt-1'>
-                            <Text type='tertiary' size='small'>
-                              {t('单测/稳定性')}
-                            </Text>
-                            {renderModelTestResultSummary(
-                              channelMtrMap[String(channel.channel_id)],
-                              t,
-                            )}
+                          </div>
+                          <div className='flex flex-col gap-1'>
+                            <Tooltip content={t('复制通道路径')}>
+                              <Button
+                                size='small'
+                                type='tertiary'
+                                onClick={handleCopy}
+                                title={channelPath}
+                              >
+                                {t('复制')}
+                              </Button>
+                            </Tooltip>
+                            <Tooltip content={t('查看 API 文档')}>
+                              <Button
+                                size='small'
+                                type='tertiary'
+                                onClick={openApiDocs}
+                              >
+                                {t('文档')}
+                              </Button>
+                            </Tooltip>
                           </div>
                         </div>
-                        <div className='flex flex-col gap-1'>
-                          <Tooltip content={t('复制通道路径')}>
-                            <Button
-                              size='small'
-                              type='tertiary'
-                              onClick={handleCopy}
-                              title={channelPath}
-                            >
-                              {t('复制')}
-                            </Button>
-                          </Tooltip>
-                          <Tooltip content={t('查看 API 文档')}>
-                            <Button
-                              size='small'
-                              type='tertiary'
-                              onClick={openApiDocs}
-                              disabled={!apiDocsLink}
-                            >
-                              {t('文档')}
-                            </Button>
-                          </Tooltip>
-                        </div>
-                      </div>
-                    </Card>
-                  </div>
-                );
-              })}
-            </div>
-          </Collapse.Panel>
-        ))}
-      </Collapse>
-    </Card>
+                      </Card>
+                    </div>
+                  );
+                })}
+              </div>
+            </Collapse.Panel>
+          ))}
+        </Collapse>
+      </Card>
+      <ModelTokenList visible={isLoggedIn} t={t} />
+      <ApiDocsSidePanel
+        visible={docsVisible}
+        onClose={() => setDocsVisible(false)}
+        modelName={modelData?.model_name}
+        endpointPath={endpointPath}
+        t={t}
+      />
+    </>
   );
 };
 

@@ -108,7 +108,7 @@ const renderGroupColumn = (text, record, t) => {
 };
 
 // Render token key column with show/hide and copy functionality
-const renderTokenKey = (
+export const renderTokenKey = (
   text,
   record,
   showKeys,
@@ -285,7 +285,7 @@ const renderAllowIps = (text, t) => {
 };
 
 // Render separate quota usage column
-const renderQuotaUsage = (text, record, t) => {
+export const renderQuotaUsage = (text, record, t) => {
   const { Paragraph } = Typography;
   const used = parseInt(record.used_quota) || 0;
   const remain = parseInt(record.remain_quota) || 0;
