@@ -84,24 +84,36 @@ func ModelMappedHelper(c *gin.Context, info *relaycommon.RelayInfo, request dto.
 		info.UpstreamModelName = finalUpstreamModelName
 		info.OriginModelName = ratio_setting.WithCompactModelSuffix(finalUpstreamModelName)
 	}
-	// TFOpen 上游渠道精准路由：若本地渠道来自 TokenFactoryOpen 同步且存在有效的
-	// upstream_supplier_alias 与 upstream_channel_no，将 UpstreamModelName 改写为
-	// "{alias}/{model}/{channel_no}" 格式，上游平台的 Distribute 中间件会将其解析为
-	// ParseForcedChannelModelName 指定渠道路由，从而保证子站流量与上游同一渠道对齐。
-	// 当上游也是 TokenFactory 平台时，应使用原始模型名（上游可识别的本地模型名）而非
-	// model_mapping 映射后的名称（如 HuggingFace 格式），避免上游 distributor 误解析含 "/" 的模型名。
+	// TFOpen 上游渠道精准路由：
+	// 新版：route_slug 格式（优先），将 UpstreamModelName 改写为 "{model}/{route_slug}"，
+	// 上游的 ParseModelRouteIndex 解析此格式精准路由到对应渠道。
+	// 旧版（兼容）：alias|channelNo 三段式路由，格式为 "legacy|{alias}|{channelNo}"，
+	// 将 UpstreamModelName 改写为 "{alias}/{model}/{channelNo}"。
+	// 当上游也是 TokenFactory 平台时，使用原始模型名（上游可识别的本地模型名）而非
+	// model_mapping 映射后的名称（如 HuggingFace 格式），避免上游 distributor 误解析。
 	if tfRoute := c.GetString(string(constant.ContextKeyTFOpenUpstreamChannelRoute)); tfRoute != "" {
-		if idx := strings.IndexByte(tfRoute, '|'); idx > 0 {
-			alias := tfRoute[:idx]
-			channelNo := tfRoute[idx+1:]
-			if alias != "" && channelNo != "" {
-				// 使用原始模型名（而非映射后的名称）拼接路由，
-				// 因为上游 TF 平台理解本地原始模型名，model_mapping 仅为非 TF 上游设计。
-				modelForUpstream := info.OriginModelName
-				if isResponsesCompact && strings.HasSuffix(modelForUpstream, ratio_setting.CompactModelSuffix) {
-					modelForUpstream = strings.TrimSuffix(modelForUpstream, ratio_setting.CompactModelSuffix)
+		// 使用原始模型名（而非映射后的名称），因为上游 TF 平台理解本地原始模型名
+		modelForUpstream := info.OriginModelName
+		if isResponsesCompact && strings.HasSuffix(modelForUpstream, ratio_setting.CompactModelSuffix) {
+			modelForUpstream = strings.TrimSuffix(modelForUpstream, ratio_setting.CompactModelSuffix)
+		}
+
+		if strings.HasPrefix(tfRoute, "legacy|") {
+			// 旧版三段式路由兼容：legacy|alias|channelNo → alias/model/channelNo
+			parts := strings.SplitN(tfRoute, "|", 3)
+			if len(parts) == 3 {
+				alias := parts[1]
+				channelNo := parts[2]
+				if alias != "" && channelNo != "" {
+					info.UpstreamModelName = alias + "/" + modelForUpstream + "/" + channelNo
+					info.IsModelMapped = false
 				}
-				info.UpstreamModelName = alias + "/" + modelForUpstream + "/" + channelNo
+			}
+		} else {
+			// 新版二段式路由：route_slug → model/route_slug
+			routeSlug := strings.TrimSpace(tfRoute)
+			if routeSlug != "" {
+				info.UpstreamModelName = modelForUpstream + "/" + routeSlug
 				info.IsModelMapped = false
 			}
 		}
