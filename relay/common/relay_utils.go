@@ -216,6 +216,20 @@ func ValidateBasicTaskRequest(c *gin.Context, info *RelayInfo, action string) *d
 		// 兼容单图上传
 		req.Images = []string{req.Image}
 	}
+	if len(req.Images) == 0 && strings.TrimSpace(req.InputReference) != "" {
+		// 与 ValidateMultipartDirect 一致：Sora 等 JSON 路径的参考图视为图生输入
+		req.Images = []string{req.InputReference}
+	}
+	// 去掉仅空白/空串的占位项，避免 images: [""] 被误判为图生
+	if len(req.Images) > 0 {
+		compact := make([]string, 0, len(req.Images))
+		for _, u := range req.Images {
+			if s := strings.TrimSpace(u); s != "" {
+				compact = append(compact, s)
+			}
+		}
+		req.Images = compact
+	}
 
 	// 将标准 OpenAI 视频字段统一落到 metadata，供各渠道 adaptor 与计费逻辑消费。
 	if req.Metadata == nil {
@@ -237,6 +251,14 @@ func ValidateBasicTaskRequest(c *gin.Context, info *RelayInfo, action string) *d
 		req.Metadata["seed"] = *req.Seed
 	}
 
-	storeTaskRequest(c, info, action, req)
+	// 多个视频 adaptor 误把默认 action 传成 TaskActionGenerate，导致无图请求在任务日志里
+	// 仍显示为「图生视频」。仅在请求侧确实无图时降为文生；remix 等已由 ResolveOriginTask 预设的 action 不得覆盖。
+	actionToStore := action
+	if info.Action == constant.TaskActionRemix {
+		actionToStore = constant.TaskActionRemix
+	} else if action == constant.TaskActionGenerate && !req.HasImage() {
+		actionToStore = constant.TaskActionTextGenerate
+	}
+	storeTaskRequest(c, info, actionToStore, req)
 	return nil
 }

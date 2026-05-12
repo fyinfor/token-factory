@@ -28,6 +28,14 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/user-agreement", controller.GetUserAgreement)
 		apiRouter.GET("/privacy-policy", controller.GetPrivacyPolicy)
 		apiRouter.GET("/about", controller.GetAbout)
+		docsRoute := apiRouter.Group("/docs")
+		docsRoute.Use(middleware.CORS())
+		{
+			docsRoute.GET("/config", controller.GetDocsConfig)
+			docsRoute.OPTIONS("/config", func(c *gin.Context) {
+				c.Status(204)
+			})
+		}
 		//apiRouter.GET("/midjourney", controller.GetMidjourney)
 		apiRouter.GET("/home_page_content", controller.GetHomePageContent)
 		apiRouter.GET("/pricing", middleware.TryUserAuth(), controller.GetPricing)
