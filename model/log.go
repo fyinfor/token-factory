@@ -33,11 +33,13 @@ type Log struct {
 	ChannelId        int    `json:"channel" gorm:"index"`
 	// 不在 API 中暴露渠道展示名称（控制台日志仅展示渠道编号）。
 	ChannelName string `json:"-" gorm:"->"`
-	TokenId          int    `json:"token_id" gorm:"default:0;index"`
-	Group            string `json:"group" gorm:"index"`
-	Ip               string `json:"ip" gorm:"index;default:''"`
-	RequestId        string `json:"request_id,omitempty" gorm:"type:varchar(64);index:idx_logs_request_id;default:''"`
-	Other            string `json:"other"`
+	// ChannelDisplay is a read-only API display value, e.g. route_slug_supplier_type.
+	ChannelDisplay string `json:"channel_display,omitempty" gorm:"-"`
+	TokenId        int    `json:"token_id" gorm:"default:0;index"`
+	Group          string `json:"group" gorm:"index"`
+	Ip             string `json:"ip" gorm:"index;default:''"`
+	RequestId      string `json:"request_id,omitempty" gorm:"type:varchar(64);index:idx_logs_request_id;default:''"`
+	Other          string `json:"other"`
 }
 
 // don't use iota, avoid change log type value
@@ -54,6 +56,7 @@ const (
 func formatUserLogs(logs []*Log, startIdx int) {
 	for i := range logs {
 		logs[i].ChannelName = ""
+		logs[i].ChannelDisplay = ""
 		var otherMap map[string]interface{}
 		otherMap, _ = common.StrToMap(logs[i].Other)
 		if otherMap != nil {
@@ -64,6 +67,69 @@ func formatUserLogs(logs []*Log, startIdx int) {
 		}
 		logs[i].Other = common.MapToJsonStr(otherMap)
 		logs[i].Id = startIdx + i + 1
+	}
+}
+
+func formatChannelDisplay(routeSlug string, supplierType string, channelID int) string {
+	routeSlug = strings.TrimSpace(routeSlug)
+	supplierType = strings.TrimSpace(supplierType)
+	if routeSlug == "" && channelID > 0 {
+		routeSlug = DefaultRouteSlugFromChannelID(int64(channelID))
+	}
+	if routeSlug == "" {
+		return ""
+	}
+	if supplierType == "" {
+		return routeSlug
+	}
+	return routeSlug + "_" + supplierType
+}
+
+func attachLogChannelDisplays(logs []*Log) {
+	if len(logs) == 0 {
+		return
+	}
+	channelIDs := make([]int, 0, len(logs))
+	seen := make(map[int]struct{}, len(logs))
+	for _, log := range logs {
+		if log == nil || log.ChannelId <= 0 {
+			continue
+		}
+		if _, ok := seen[log.ChannelId]; ok {
+			continue
+		}
+		seen[log.ChannelId] = struct{}{}
+		channelIDs = append(channelIDs, log.ChannelId)
+	}
+	if len(channelIDs) == 0 {
+		return
+	}
+
+	type channelDisplayRow struct {
+		Id           int
+		RouteSlug    string
+		SupplierType string
+	}
+	var rows []channelDisplayRow
+	if err := DB.Model(&Channel{}).
+		Select("id", "route_slug", "supplier_type").
+		Where("id IN ?", channelIDs).
+		Find(&rows).Error; err != nil {
+		common.SysError("failed to attach log channel display: " + err.Error())
+		return
+	}
+
+	displayMap := make(map[int]string, len(rows))
+	for _, row := range rows {
+		display := formatChannelDisplay(row.RouteSlug, row.SupplierType, row.Id)
+		if display != "" {
+			displayMap[row.Id] = display
+		}
+	}
+	for i := range logs {
+		if display, ok := displayMap[logs[i].ChannelId]; ok {
+			logs[i].ChannelDisplay = display
+		}
 	}
 }
 
@@ -307,6 +373,7 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 	if err != nil {
 		return nil, 0, err
 	}
+	attachLogChannelDisplays(logs)
 
 	for i := range logs {
 		if logs[i].Other == "" {

@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/gin-gonic/gin"
@@ -157,7 +158,89 @@ func TestDetectProtocol_SophnetMarkers(t *testing.T) {
 	assert.Equal(t, ProtocolSophnet, DetectProtocol("https://www.sophnet.com/api/open-apis/projects/easyllms/foo"))
 	assert.Equal(t, ProtocolSophnet, DetectProtocol("http://127.0.0.1:9999/videogenerator/api"))
 	assert.Equal(t, ProtocolMaaS, DetectProtocol("https://maas.hidreamai.com/api/maas/gw"))
+	assert.Equal(t, ProtocolMaaS, DetectProtocol("https://hiharness.hidreamai.com"))
 	assert.Equal(t, ProtocolArk, DetectProtocol("https://reseller.example.com/v1"))
+}
+
+func TestNormalizeMaaSBaseURL_HiHarness(t *testing.T) {
+	assert.Equal(t, "https://hiharness.hidreamai.com/api/maas/gw", normalizeMaaSBaseURL("https://hiharness.hidreamai.com"))
+	assert.Equal(t, "https://hiharness.hidreamai.com/api/maas/gw", normalizeMaaSBaseURL("https://hiharness.hidreamai.com/api/maas/gw"))
+	assert.Equal(t, "https://maas.hidreamai.com", normalizeMaaSBaseURL("https://maas.hidreamai.com"))
+}
+
+func TestBuildMaasPayloadMap_AutoConvertsPlaygroundVideoFields(t *testing.T) {
+	a := &TaskAdaptor{}
+	req := &relaycommon.TaskSubmitReq{
+		Model:    "Seedance2.0",
+		Prompt:   "跳舞的小女孩",
+		Images:   []string{"https://example.com/ref.png"},
+		Size:     "1280x720",
+		Duration: 5,
+		Metadata: map[string]any{
+			"generate_audio": true,
+			"video_urls":     []any{"https://example.com/ref.mp4?token=abc"},
+			"audio_urls":     []string{"https://example.com/ref.mp3"},
+		},
+	}
+
+	body, err := a.buildMaasPayloadMap(req)
+	require.NoError(t, err)
+
+	assert.Equal(t, "Seedance2.0", body["model_id"])
+	assert.Equal(t, 5, body["duration"])
+	assert.Equal(t, "720p", body["resolution"])
+	assert.Equal(t, "16:9", body["ratio"])
+	assert.Equal(t, true, body["generate_audio"])
+	assert.NotContains(t, body, "video_urls")
+	assert.NotContains(t, body, "audio_urls")
+
+	content, ok := body["content"].([]map[string]any)
+	require.True(t, ok)
+	require.Len(t, content, 4)
+	assert.Equal(t, "text", content[0]["type"])
+	assert.Equal(t, "image_url", content[1]["type"])
+	assert.Equal(t, "video_url", content[2]["type"])
+	assert.Equal(t, "audio_url", content[3]["type"])
+}
+
+func TestConvertToOpenAIVideo_MaaSCompletedShape(t *testing.T) {
+	a := &TaskAdaptor{}
+	task := &model.Task{
+		TaskID:     "task_wjlMGb4cfEgrqq7oubXjWPdXPmSjfRfe",
+		Status:     model.TaskStatusSuccess,
+		Progress:   "100%",
+		CreatedAt:  1778293580,
+		FinishTime: 1778293807,
+		Properties: model.Properties{OriginModelName: "Seedance2.0"},
+		Data: []byte(`{
+			"code": 0,
+			"message": "Success",
+			"result": {
+				"status": 1,
+				"sub_task_results": [
+					{
+						"url": "https://media.hidreamai.com/03fbb389-91ad-4f59-b5ce-c57c41770209.mp4",
+						"task_status": 1
+					}
+				]
+			}
+		}`),
+	}
+
+	body, err := a.ConvertToOpenAIVideo(task)
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, common.Unmarshal(body, &got))
+	assert.Equal(t, "task_wjlMGb4cfEgrqq7oubXjWPdXPmSjfRfe", got["id"])
+	assert.Equal(t, "video.generation", got["object"])
+	assert.Equal(t, "Seedance2.0", got["model"])
+	assert.Equal(t, "completed", got["status"])
+	assert.Equal(t, float64(100), got["progress"])
+	assert.Nil(t, got["error"])
+	output, ok := got["output"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "https://media.hidreamai.com/03fbb389-91ad-4f59-b5ce-c57c41770209.mp4", output["video_url"])
 }
 
 func TestDetectResponseProtocol_SophnetNumericStatusWithResult(t *testing.T) {

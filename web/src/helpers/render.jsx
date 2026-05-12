@@ -1551,7 +1551,7 @@ function renderPriceSimpleCore({
     if (isVideoPerSecondFlatBilling) {
       segments.push({
         tone: 'secondary',
-        text: i18next.t('视频按秒/分辨率计价（按实际结算）'),
+        text: i18next.t('分辨率阶梯计费'),
       });
       if (isSystemPromptOverride) {
         segments.push({ tone: 'primary', text: i18next.t('系统提示覆盖') });
@@ -1562,7 +1562,7 @@ function renderPriceSimpleCore({
     if (isVideoPerVideoFlatBilling) {
       segments.push({
         tone: 'secondary',
-        text: i18next.t('视频按条/分辨率计价（已含换算与分组倍率）'),
+        text: i18next.t('按视频数量计费'),
       });
       if (isSystemPromptOverride) {
         segments.push({ tone: 'primary', text: i18next.t('系统提示覆盖') });
@@ -1747,7 +1747,7 @@ function renderPriceSimpleCore({
 
   if (isVideoPerVideoFlatBilling) {
     return joinBillingSummary([
-      i18next.t('视频按条/分辨率固定价（按实际结算）'),
+      i18next.t('按视频数量计费'),
       getGroupRatioText(groupRatio, user_group_ratio),
     ]);
   }
@@ -2469,6 +2469,7 @@ export function renderLogContent(
   billedQuota = 0,
   /** 渠道价格折扣百分数（100=无折扣），与消费日志 other.channel_price_discount_percent 一致 */
   channelPriceDiscountPercent = 100,
+  videoBillingDetail = {},
 ) {
   const {
     ratio,
@@ -2496,9 +2497,58 @@ export function renderLogContent(
       Number.isFinite(Number(billedQuota)) && Number(billedQuota) > 0
         ? Math.round(Number(billedQuota))
         : 0;
-    const parts = [i18next.t('视频按秒/分辨率计价（按实际结算）')];
+    const seconds = Number(videoBillingDetail?.video_seconds || 0);
+    const pricePerSecond = Number(
+      videoBillingDetail?.video_price_per_second || 0,
+    );
+    const quotaPerUnit = Number(videoBillingDetail?.video_quota_per_unit || 0);
+    const groupRatioForVideo = Number(videoBillingDetail?.group_ratio || 1);
+    const channelDiscount = Number(
+      videoBillingDetail?.channel_price_discount || 100,
+    );
+    const resolution = videoBillingDetail?.video_resolution || '';
+    const ruleWidth = Number(videoBillingDetail?.video_rule_width || 0);
+    const ruleHeight = Number(videoBillingDetail?.video_rule_height || 0);
+    const width = Number(videoBillingDetail?.video_width || 0);
+    const height = Number(videoBillingDetail?.video_height || 0);
+    const hasAudio = videoBillingDetail?.video_has_audio === true;
+    const unifiedAudio = videoBillingDetail?.video_unified_audio_price === true;
+    const priceLabel = unifiedAudio
+      ? i18next.t('每秒价')
+      : hasAudio
+        ? i18next.t('有音轨价')
+        : i18next.t('无音轨价');
+    const audioLabel = hasAudio ? i18next.t('有音轨') : i18next.t('无音轨');
+    const hasDetail =
+      seconds > 0 &&
+      pricePerSecond > 0 &&
+      quotaPerUnit > 0 &&
+      (resolution || (ruleWidth > 0 && ruleHeight > 0));
+    const parts = [
+      hasDetail
+        ? i18next.t(
+            '分辨率阶梯计费：{{seconds}}秒 × {{resolution}}({{ruleWidth}}×{{ruleHeight}}，实际 {{width}}×{{height}}，{{audio}}) {{priceLabel}} ${{price}}/秒 × QuotaPerUnit {{quotaPerUnit}} × 分组倍率 {{groupRatio}} × 渠道折扣 {{channelDiscount}}%',
+            {
+              seconds,
+              resolution: resolution || `${ruleWidth}x${ruleHeight}`,
+              ruleWidth,
+              ruleHeight,
+              width,
+              height,
+              audio: audioLabel,
+              priceLabel,
+              price: pricePerSecond,
+              quotaPerUnit,
+              groupRatio: groupRatioForVideo || 1,
+              channelDiscount,
+            },
+          )
+        : i18next.t('分辨率阶梯计费'),
+    ];
     if (estimatedTokens > 0) {
-      parts.push(i18next.t('本次实际结算 tokens：{{count}}', { count: estimatedTokens }));
+      parts.push(
+        i18next.t('本次实际结算 tokens：{{count}}', { count: estimatedTokens }),
+      );
     }
     if (!hideGroupRatioInDetail) {
       parts.push(getGroupRatioText(groupRatio, user_group_ratio));
@@ -2510,11 +2560,11 @@ export function renderLogContent(
       Number.isFinite(Number(billedQuota)) && Number(billedQuota) > 0
         ? Math.round(Number(billedQuota))
         : 0;
-    const parts = [
-      i18next.t('视频按条/分辨率固定价（按实际结算）'),
-    ];
+    const parts = [i18next.t('按视频数量计费')];
     if (estimatedTokens > 0) {
-      parts.push(i18next.t('本次实际结算 tokens：{{count}}', { count: estimatedTokens }));
+      parts.push(
+        i18next.t('本次实际结算 tokens：{{count}}', { count: estimatedTokens }),
+      );
     }
     if (!hideGroupRatioInDetail) {
       parts.push(getGroupRatioText(groupRatio, user_group_ratio));
@@ -3831,6 +3881,7 @@ export function renderConsumeBillingProcess({
           bm || '',
           agg,
           chPct,
+          other,
         );
   }
 
