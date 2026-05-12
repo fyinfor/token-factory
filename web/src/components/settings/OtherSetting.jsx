@@ -29,7 +29,13 @@ import {
   Card,
   Upload,
 } from '@douyinfe/semi-ui';
-import { API, showError, showSuccess, timestamp2string } from '../../helpers';
+import {
+  API,
+  showError,
+  showInfo,
+  showSuccess,
+  timestamp2string,
+} from '../../helpers';
 import { marked } from 'marked';
 import { useTranslation } from 'react-i18next';
 import { StatusContext } from '../../context/Status';
@@ -37,6 +43,42 @@ import Text from '@douyinfe/semi-ui/lib/es/typography/text';
 
 const LEGAL_USER_AGREEMENT_KEY = 'legal.user_agreement';
 const LEGAL_PRIVACY_POLICY_KEY = 'legal.privacy_policy';
+const DOCS_CONFIG_KEYS = [
+  'DocsBrandName',
+  'DocsSiteNameEn',
+  'DocsSiteNameZh',
+  'DocsSiteNameJa',
+  'DocsLogoUrl',
+  'DocsHomeUrl',
+  'DocsGithubUrl',
+  'DocsMetaKeywords',
+  'DocsBusinessPhone',
+  'DocsBusinessPhoneHref',
+  'DocsBusinessWorkTimeZh',
+  'DocsBusinessWorkTimeEn',
+  'DocsBusinessWorkTimeJa',
+  'DocsBusinessWechatQrUrl',
+];
+
+const docsImagePreviewStyle = {
+  width: 96,
+  height: 96,
+  border: '1px solid var(--semi-color-border)',
+  borderRadius: 8,
+  objectFit: 'contain',
+  background: 'var(--semi-color-fill-0)',
+  cursor: 'zoom-in',
+};
+
+const docsImageEmptyStyle = {
+  ...docsImagePreviewStyle,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  color: 'var(--semi-color-text-2)',
+  fontSize: 12,
+  cursor: 'default',
+};
 
 const OtherSetting = () => {
   const { t } = useTranslation();
@@ -46,6 +88,20 @@ const OtherSetting = () => {
     [LEGAL_PRIVACY_POLICY_KEY]: '',
     SystemName: '',
     Logo: '',
+    DocsBrandName: '',
+    DocsSiteNameEn: '',
+    DocsSiteNameZh: '',
+    DocsSiteNameJa: '',
+    DocsLogoUrl: '',
+    DocsHomeUrl: '',
+    DocsGithubUrl: '',
+    DocsMetaKeywords: '',
+    DocsBusinessPhone: '',
+    DocsBusinessPhoneHref: '',
+    DocsBusinessWorkTimeZh: '',
+    DocsBusinessWorkTimeEn: '',
+    DocsBusinessWorkTimeJa: '',
+    DocsBusinessWechatQrUrl: '',
     Footer: '',
     About: '',
     HomePageContent: '',
@@ -56,6 +112,11 @@ const OtherSetting = () => {
   const [updateData, setUpdateData] = useState({
     tag_name: '',
     content: '',
+  });
+  const [docsImagePreview, setDocsImagePreview] = useState({
+    visible: false,
+    url: '',
+    title: '',
   });
 
   const updateOption = async (key, value) => {
@@ -79,6 +140,9 @@ const OtherSetting = () => {
     [LEGAL_PRIVACY_POLICY_KEY]: false,
     SystemName: false,
     Logo: false,
+    DocsConfig: false,
+    DocsLogoUrl: false,
+    DocsBusinessWechatQrUrl: false,
     HomePageContent: false,
     About: false,
     Footer: false,
@@ -150,6 +214,7 @@ const OtherSetting = () => {
   };
   // 个性化设置
   const formAPIPersonalization = useRef();
+  const formAPIDocsConfig = useRef();
   //  个性化设置 - SystemName
   const submitSystemName = async () => {
     try {
@@ -246,6 +311,78 @@ const OtherSetting = () => {
       }));
     }
   };
+  const submitDocsConfig = async () => {
+    try {
+      setLoadingInput((loadingInput) => ({
+        ...loadingInput,
+        DocsConfig: true,
+      }));
+      const results = await Promise.all(
+        DOCS_CONFIG_KEYS.map((key) =>
+          API.put('/api/option/', {
+            key,
+            value: inputs[key] || '',
+          }),
+        ),
+      );
+      const failed = results.find((res) => !res.data?.success);
+      if (failed) {
+        throw new Error(failed.data?.message || t('文档配置更新失败'));
+      }
+      showSuccess(t('文档配置已更新'));
+    } catch (error) {
+      console.error(t('文档配置更新失败'), error);
+      showError(t('文档配置更新失败'));
+    } finally {
+      setLoadingInput((loadingInput) => ({
+        ...loadingInput,
+        DocsConfig: false,
+      }));
+    }
+  };
+  const uploadDocsImage =
+    (field, label) =>
+    async ({ file, onSuccess, onError }) => {
+      const inst = file?.fileInstance || file;
+      if (!inst) {
+        onError(new Error('no file'));
+        return;
+      }
+      try {
+        setLoadingInput((loadingInput) => ({ ...loadingInput, [field]: true }));
+        const fd = new FormData();
+        fd.append('file', inst);
+        const res = await API.post('/api/oss/upload', fd, {
+          skipErrorHandler: true,
+        });
+        const { success, message, data } = res.data || {};
+        const url = data?.url;
+        if (!success || !url) {
+          const err = new Error(message || t('上传失败'));
+          onError(err);
+          showError(err.message);
+          return;
+        }
+        setInputs((prev) => ({ ...prev, [field]: url }));
+        formAPIDocsConfig.current?.setValue(field, url);
+        onSuccess(data);
+        showSuccess(
+          t('{{label}}上传成功，请点击「保存文档配置」保存', { label }),
+        );
+      } catch (error) {
+        onError(error);
+        showError(
+          error?.response?.data?.message ||
+            error?.message ||
+            t('上传失败，请确认已启用 OSS 并完成配置'),
+        );
+      } finally {
+        setLoadingInput((loadingInput) => ({
+          ...loadingInput,
+          [field]: false,
+        }));
+      }
+    };
   // 个性化设置 - 关于
   const submitAbout = async () => {
     try {
@@ -335,8 +472,9 @@ const OtherSetting = () => {
         }
       });
       setInputs(newInputs);
-      formAPISettingGeneral.current.setValues(newInputs);
-      formAPIPersonalization.current.setValues(newInputs);
+      formAPISettingGeneral.current?.setValues(newInputs);
+      formAPIPersonalization.current?.setValues(newInputs);
+      formAPIDocsConfig.current?.setValues(newInputs);
     } else {
       showError(message);
     }
@@ -567,6 +705,239 @@ const OtherSetting = () => {
             </Form.Section>
           </Card>
         </Form>
+        {/* 文档配置 */}
+        <Form
+          values={inputs}
+          getFormApi={(formAPI) => (formAPIDocsConfig.current = formAPI)}
+        >
+          <Card>
+            <Form.Section text={t('文档配置')}>
+              <Card title={t('基础信息')} style={{ marginBottom: 12 }}>
+                <Form.Input
+                  label={t('文档品牌名称')}
+                  placeholder='TokenFactory'
+                  field='DocsBrandName'
+                  onChange={handleInputChange}
+                  helpText={t('用于替换文档站标题、SEO 和页面中的品牌关键词')}
+                />
+                <Row gutter={16}>
+                  <Col span={8}>
+                    <Form.Input
+                      label={t('英文站点名称')}
+                      placeholder='TokenFactory'
+                      field='DocsSiteNameEn'
+                      onChange={handleInputChange}
+                    />
+                  </Col>
+                  <Col span={8}>
+                    <Form.Input
+                      label={t('中文站点名称')}
+                      placeholder='开放词元工厂'
+                      field='DocsSiteNameZh'
+                      onChange={handleInputChange}
+                    />
+                  </Col>
+                  <Col span={8}>
+                    <Form.Input
+                      label={t('日文站点名称')}
+                      placeholder='TokenFactory'
+                      field='DocsSiteNameJa'
+                      onChange={handleInputChange}
+                    />
+                  </Col>
+                </Row>
+                <Row gutter={16}>
+                  <Col span={12}>
+                    <Form.Input
+                      label={t('文档首页地址')}
+                      placeholder='https://tokenfactoryopen.com/'
+                      field='DocsHomeUrl'
+                      onChange={handleInputChange}
+                    />
+                  </Col>
+                  <Col span={12}>
+                    <Form.Input
+                      label={t('GitHub 链接')}
+                      placeholder='https://github.com/fyinfor/token-factory'
+                      field='DocsGithubUrl'
+                      onChange={handleInputChange}
+                    />
+                  </Col>
+                </Row>
+                <Form.TextArea
+                  label={t('SEO 关键字')}
+                  placeholder={t('多个关键字用英文逗号分隔')}
+                  field='DocsMetaKeywords'
+                  onChange={handleInputChange}
+                  autosize={{ minRows: 2, maxRows: 6 }}
+                />
+              </Card>
+
+              <Card title={t('图片资源')} style={{ marginBottom: 12 }}>
+                <Row gutter={16}>
+                  <Col span={18}>
+                    <Form.Input
+                      label={t('文档 Logo 地址')}
+                      placeholder='/assets/logo.png'
+                      field='DocsLogoUrl'
+                      onChange={handleInputChange}
+                    />
+                    <Upload
+                      action=''
+                      accept='image/*'
+                      showUploadList={false}
+                      customRequest={uploadDocsImage(
+                        'DocsLogoUrl',
+                        t('文档 Logo'),
+                      )}
+                    >
+                      <Button loading={loadingInput['DocsLogoUrl']}>
+                        {t('上传文档 Logo')}
+                      </Button>
+                    </Upload>
+                    <div style={{ marginTop: 6 }}>
+                      <Text type='tertiary' size='small'>
+                        {t(
+                          '支持绝对 URL，或直接上传图片自动填写地址；上传需先配置并启用 OSS',
+                        )}
+                      </Text>
+                    </div>
+                  </Col>
+                  <Col span={6}>
+                    <Text type='tertiary' size='small'>
+                      {t('预览')}
+                    </Text>
+                    <div style={{ marginTop: 8 }}>
+                      {inputs.DocsLogoUrl ? (
+                        <img
+                          src={inputs.DocsLogoUrl}
+                          alt={t('文档 Logo 预览')}
+                          style={docsImagePreviewStyle}
+                          onClick={() =>
+                            setDocsImagePreview({
+                              visible: true,
+                              url: inputs.DocsLogoUrl,
+                              title: t('文档 Logo 预览'),
+                            })
+                          }
+                        />
+                      ) : (
+                        <div style={docsImageEmptyStyle}>{t('暂无图片')}</div>
+                      )}
+                    </div>
+                  </Col>
+                </Row>
+                <Row gutter={16}>
+                  <Col span={18}>
+                    <Form.Input
+                      label={t('企业微信二维码地址')}
+                      placeholder='/assets/wechat.png'
+                      field='DocsBusinessWechatQrUrl'
+                      onChange={handleInputChange}
+                    />
+                    <Upload
+                      action=''
+                      accept='image/*'
+                      showUploadList={false}
+                      customRequest={uploadDocsImage(
+                        'DocsBusinessWechatQrUrl',
+                        t('企业微信二维码'),
+                      )}
+                    >
+                      <Button loading={loadingInput['DocsBusinessWechatQrUrl']}>
+                        {t('上传企业微信二维码')}
+                      </Button>
+                    </Upload>
+                    <div style={{ marginTop: 6 }}>
+                      <Text type='tertiary' size='small'>
+                        {t(
+                          '支持绝对 URL，或直接上传图片自动填写地址；上传需先配置并启用 OSS',
+                        )}
+                      </Text>
+                    </div>
+                  </Col>
+                  <Col span={6}>
+                    <Text type='tertiary' size='small'>
+                      {t('预览')}
+                    </Text>
+                    <div style={{ marginTop: 8 }}>
+                      {inputs.DocsBusinessWechatQrUrl ? (
+                        <img
+                          src={inputs.DocsBusinessWechatQrUrl}
+                          alt={t('企业微信二维码预览')}
+                          style={docsImagePreviewStyle}
+                          onClick={() =>
+                            setDocsImagePreview({
+                              visible: true,
+                              url: inputs.DocsBusinessWechatQrUrl,
+                              title: t('企业微信二维码预览'),
+                            })
+                          }
+                        />
+                      ) : (
+                        <div style={docsImageEmptyStyle}>{t('暂无图片')}</div>
+                      )}
+                    </div>
+                  </Col>
+                </Row>
+              </Card>
+
+              <Card title={t('商务信息')} style={{ marginBottom: 12 }}>
+                <Row gutter={16}>
+                  <Col span={12}>
+                    <Form.Input
+                      label={t('商务联系电话')}
+                      placeholder='156 2568 9773'
+                      field='DocsBusinessPhone'
+                      onChange={handleInputChange}
+                    />
+                  </Col>
+                  <Col span={12}>
+                    <Form.Input
+                      label={t('商务电话拨号号码')}
+                      placeholder='15625689773'
+                      field='DocsBusinessPhoneHref'
+                      onChange={handleInputChange}
+                      helpText={t('用于 tel 链接，建议只填写数字和区号')}
+                    />
+                  </Col>
+                </Row>
+                <Row gutter={16}>
+                  <Col span={8}>
+                    <Form.Input
+                      label={t('工作时间说明（中文）')}
+                      placeholder='工作日 9:30 - 12:00 13:30 - 19:00'
+                      field='DocsBusinessWorkTimeZh'
+                      onChange={handleInputChange}
+                    />
+                  </Col>
+                  <Col span={8}>
+                    <Form.Input
+                      label={t('工作时间说明（英文）')}
+                      placeholder='Weekdays 9:30 - 12:00, 13:30 - 19:00'
+                      field='DocsBusinessWorkTimeEn'
+                      onChange={handleInputChange}
+                    />
+                  </Col>
+                  <Col span={8}>
+                    <Form.Input
+                      label={t('工作时间说明（日文）')}
+                      placeholder='平日 9:30 - 12:00、13:30 - 19:00'
+                      field='DocsBusinessWorkTimeJa'
+                      onChange={handleInputChange}
+                    />
+                  </Col>
+                </Row>
+              </Card>
+              <Button
+                onClick={submitDocsConfig}
+                loading={loadingInput['DocsConfig']}
+              >
+                {t('保存文档配置')}
+              </Button>
+            </Form.Section>
+          </Card>
+        </Form>
       </Col>
       <Modal
         title={t('新版本') + '：' + updateData.tag_name}
@@ -586,6 +957,29 @@ const OtherSetting = () => {
         ]}
       >
         <div dangerouslySetInnerHTML={{ __html: updateData.content }}></div>
+      </Modal>
+      <Modal
+        title={docsImagePreview.title}
+        visible={docsImagePreview.visible}
+        onCancel={() =>
+          setDocsImagePreview({ visible: false, url: '', title: '' })
+        }
+        footer={null}
+        style={{ maxWidth: '80vw' }}
+      >
+        {docsImagePreview.url && (
+          <div style={{ textAlign: 'center', padding: '12px 0 20px' }}>
+            <img
+              src={docsImagePreview.url}
+              alt={docsImagePreview.title}
+              style={{
+                maxWidth: '100%',
+                maxHeight: '64vh',
+                objectFit: 'contain',
+              }}
+            />
+          </div>
+        )}
       </Modal>
     </Row>
   );

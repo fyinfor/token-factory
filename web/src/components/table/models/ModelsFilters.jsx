@@ -17,9 +17,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useRef } from 'react';
+import React, { useRef, useCallback, useEffect } from 'react';
 import { Form, Button } from '@douyinfe/semi-ui';
 import { IconSearch } from '@douyinfe/semi-icons';
+
+const SEARCH_DEBOUNCE_MS = 400;
 
 const ModelsFilters = ({
   formInitValues,
@@ -29,10 +31,28 @@ const ModelsFilters = ({
   searching,
   t,
 }) => {
-  // Handle form reset and immediate search
   const formApiRef = useRef(null);
+  const searchDebounceRef = useRef(null);
+
+  const clearSearchDebounce = useCallback(() => {
+    if (searchDebounceRef.current != null) {
+      clearTimeout(searchDebounceRef.current);
+      searchDebounceRef.current = null;
+    }
+  }, []);
+
+  const scheduleAutoSearch = useCallback(() => {
+    clearSearchDebounce();
+    searchDebounceRef.current = setTimeout(() => {
+      searchDebounceRef.current = null;
+      searchModels();
+    }, SEARCH_DEBOUNCE_MS);
+  }, [clearSearchDebounce, searchModels]);
+
+  useEffect(() => () => clearSearchDebounce(), [clearSearchDebounce]);
 
   const handleReset = () => {
+    clearSearchDebounce();
     if (!formApiRef.current) return;
     formApiRef.current.reset();
     setTimeout(() => {
@@ -64,6 +84,7 @@ const ModelsFilters = ({
             showClear
             pure
             size='small'
+            onChange={() => scheduleAutoSearch()}
           />
         </div>
 
@@ -75,6 +96,7 @@ const ModelsFilters = ({
             showClear
             pure
             size='small'
+            onChange={() => scheduleAutoSearch()}
           />
         </div>
 

@@ -121,7 +121,7 @@ export const useModelsData = (options = {}) => {
     }
   };
 
-  // Load models data
+  // Load models data（含表头「搜索模型名称 / 类型」条件；编辑后 refresh 与此一致）
   const loadModels = async (
     page = 1,
     size = pageSize,
@@ -129,10 +129,24 @@ export const useModelsData = (options = {}) => {
   ) => {
     setLoading(true);
     try {
-      let url = `${apiBasePath}/?p=${page}&page_size=${size}`;
-      if (vendorKey && vendorKey !== 'all') {
-        // Filter by vendor ID
-        url = `${apiBasePath}/search?vendor=${vendorKey}&p=${page}&page_size=${size}`;
+      const { searchKeyword = '', searchVendor = '' } = getFormValues();
+      const kw = String(searchKeyword ?? '').trim();
+      const sv = String(searchVendor ?? '').trim();
+
+      let url;
+      if (kw !== '' || sv !== '') {
+        const params = new URLSearchParams();
+        params.set('keyword', kw);
+        params.set('vendor', sv);
+        params.set('p', String(page));
+        params.set('page_size', String(size));
+        url = `${apiBasePath}/search?${params.toString()}`;
+      } else if (vendorKey && vendorKey !== 'all') {
+        url = `${apiBasePath}/search?vendor=${encodeURIComponent(
+          String(vendorKey),
+        )}&p=${page}&page_size=${size}`;
+      } else {
+        url = `${apiBasePath}/?p=${page}&page_size=${size}`;
       }
 
       const res = await API.get(url);
@@ -288,44 +302,14 @@ export const useModelsData = (options = {}) => {
     }
   };
 
-  // Search models with keyword and vendor
+  // Search models with keyword and vendor（与 loadModels 共用请求逻辑）
   const searchModels = async () => {
-    const { searchKeyword = '', searchVendor = '' } = getFormValues();
-
-    if (searchKeyword === '' && searchVendor === '') {
-      // If keyword is blank, load models instead
-      await loadModels(1, pageSize);
-      return;
-    }
-
     setSearching(true);
     try {
-      const res = await API.get(
-        `${apiBasePath}/search?keyword=${searchKeyword}&vendor=${searchVendor}&p=1&page_size=${pageSize}`,
-      );
-      const { success, message, data } = res.data;
-      if (success) {
-        const newPageData = extractItems(data);
-        setActivePage(data.page || 1);
-        setModelCount(data.total || newPageData.length);
-        setModelFormat(newPageData);
-        if (data.vendor_counts) {
-          const sumAll = Object.values(data.vendor_counts).reduce(
-            (acc, v) => acc + v,
-            0,
-          );
-          setVendorCounts({ ...data.vendor_counts, all: sumAll });
-        }
-      } else {
-        showError(message);
-        setModels([]);
-      }
-    } catch (error) {
-      console.error(error);
-      showError(t('搜索模型失败'));
-      setModels([]);
+      await loadModels(1, pageSize);
+    } finally {
+      setSearching(false);
     }
-    setSearching(false);
   };
 
   // Manage model (enable/disable/delete)
