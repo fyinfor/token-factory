@@ -6,11 +6,35 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
 )
+
+// resolveConsumeLogChannelDiscountPercent 返回与实扣额度一致的渠道价格折扣百分数（100=无折扣）。
+func resolveConsumeLogChannelDiscountPercent(relayInfo *relaycommon.RelayInfo) float64 {
+	if relayInfo == nil {
+		return 100
+	}
+	if relayInfo.PriceData.ChannelPriceDiscount != nil {
+		return *relayInfo.PriceData.ChannelPriceDiscount
+	}
+	chID := 0
+	if relayInfo.ChannelMeta != nil {
+		chID = relayInfo.ChannelId
+	}
+	return model.ResolveChannelPriceDiscountPercent(chID)
+}
+
+// appendChannelPriceDiscountToConsumeOther 写入 channel_price_discount_percent，供前端展示与实扣对齐。
+func appendChannelPriceDiscountToConsumeOther(relayInfo *relaycommon.RelayInfo, other map[string]interface{}) {
+	if other == nil {
+		return
+	}
+	other["channel_price_discount_percent"] = resolveConsumeLogChannelDiscountPercent(relayInfo)
+}
 
 func appendRequestPath(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, other map[string]interface{}) {
 	if other == nil {
@@ -77,6 +101,7 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	appendBillingInfo(relayInfo, other)
 	appendParamOverrideInfo(relayInfo, other)
 	appendStreamStatus(relayInfo, other)
+	appendChannelPriceDiscountToConsumeOther(relayInfo, other)
 	return other
 }
 
@@ -259,6 +284,11 @@ func GenerateMjOtherInfo(relayInfo *relaycommon.RelayInfo, priceData types.Price
 	if priceData.GroupRatioInfo.HasSpecialRatio {
 		other["user_group_ratio"] = priceData.GroupRatioInfo.GroupSpecialRatio
 	}
+	pct := resolveConsumeLogChannelDiscountPercent(relayInfo)
+	if priceData.ChannelPriceDiscount != nil {
+		pct = *priceData.ChannelPriceDiscount
+	}
+	other["channel_price_discount_percent"] = pct
 	appendRequestPath(nil, relayInfo, other)
 	return other
 }

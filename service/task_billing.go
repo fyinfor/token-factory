@@ -101,13 +101,17 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		other["video_output_tokens"] = info.PriceData.VideoOutputTokens
 		other["video_input_text_tokens"] = info.PriceData.VideoInputTextTokens
 	}
-	if isVideoPerSecondBilling {
-		other["billing_mode"] = "video_per_second"
-		other["model_ratio"] = info.PriceData.ModelRatio
-	} else if isVideoPerVideoFlatBilling {
+	if isVideoPerVideoFlatBilling {
 		other["billing_mode"] = "video_per_video"
 		other["model_ratio"] = info.PriceData.ModelRatio
 	}
+	discPct := float64(100)
+	if info.PriceData.ChannelPriceDiscount != nil {
+		discPct = *info.PriceData.ChannelPriceDiscount
+	} else {
+		discPct = model.ResolveChannelPriceDiscountPercent(info.ChannelId)
+	}
+	other["channel_price_discount_percent"] = discPct
 	model.RecordConsumeLog(c, info.UserId, model.RecordConsumeLogParams{
 		ChannelId: info.ChannelId,
 		ModelName: info.OriginModelName,
@@ -198,6 +202,17 @@ func taskBillingOther(task *model.Task) map[string]interface{} {
 		other["is_model_mapped"] = true
 		other["upstream_model_name"] = props.UpstreamModelName
 	}
+	discPct := float64(0)
+	if bc := task.PrivateData.BillingContext; bc != nil && bc.ChannelPriceDiscountPercent > 0 {
+		discPct = bc.ChannelPriceDiscountPercent
+	}
+	if discPct <= 0 && task.ChannelId > 0 {
+		discPct = model.ResolveChannelPriceDiscountPercent(task.ChannelId)
+	}
+	if discPct <= 0 {
+		discPct = 100
+	}
+	other["channel_price_discount_percent"] = discPct
 	return other
 }
 

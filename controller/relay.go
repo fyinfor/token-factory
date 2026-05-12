@@ -660,13 +660,18 @@ func RelayTask(c *gin.Context) {
 		task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
 		task.PrivateData.TokenId = relayInfo.TokenId
 		task.PrivateData.TokenName = c.GetString("token_name")
+		chDiscPct := model.ResolveChannelPriceDiscountPercent(relayInfo.ChannelId)
+		if relayInfo.PriceData.ChannelPriceDiscount != nil {
+			chDiscPct = *relayInfo.PriceData.ChannelPriceDiscount
+		}
 		task.PrivateData.BillingContext = &model.TaskBillingContext{
-			ModelPrice:      relayInfo.PriceData.ModelPrice,
-			GroupRatio:      relayInfo.PriceData.GroupRatioInfo.GroupRatio,
-			ModelRatio:      relayInfo.PriceData.ModelRatio,
-			OtherRatios:     relayInfo.PriceData.OtherRatios,
-			OriginModelName: relayInfo.OriginModelName,
-			PerCallBilling:  common.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName),
+			ModelPrice:                  relayInfo.PriceData.ModelPrice,
+			GroupRatio:                  relayInfo.PriceData.GroupRatioInfo.GroupRatio,
+			ModelRatio:                  relayInfo.PriceData.ModelRatio,
+			OtherRatios:                 relayInfo.PriceData.OtherRatios,
+			OriginModelName:             relayInfo.OriginModelName,
+			PerCallBilling:              common.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName),
+			ChannelPriceDiscountPercent: chDiscPct,
 		}
 		task.Quota = actualQuota
 		task.Data = result.TaskData

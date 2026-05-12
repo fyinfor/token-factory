@@ -33,6 +33,7 @@ import {
   copy,
   renderClaudeLogContent,
   renderLogContent,
+  renderConsumeBillingProcess,
 } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
@@ -420,6 +421,8 @@ export const useLogsData = () => {
         other?.task_id && taskFinalQuotaMap[other.task_id]
           ? taskFinalQuotaMap[other.task_id]
           : logs[i]?.quota || 0;
+      const channelPriceDiscountLogPct =
+        other?.channel_price_discount_percent ?? 100;
       let expandDataLocal = [];
 
       if (
@@ -509,6 +512,7 @@ export const useLogsData = () => {
                   1.0,
                 billingDisplayMode,
                 true,
+                channelPriceDiscountLogPct,
               )
             : renderLogContent(
                 other?.model_ratio,
@@ -531,6 +535,7 @@ export const useLogsData = () => {
                 other?.video_input_text_tokens || 0,
                 other?.billing_mode || '',
                 aggregatedQuota,
+                channelPriceDiscountLogPct,
               ),
         });
         if (logs[i]?.content) {
@@ -569,49 +574,13 @@ export const useLogsData = () => {
 
         let content = '';
         if (!isViolationFeeLog) {
-          // 计费过程改为展示“已折叠分组倍率后的最终单价/单位价”，不再单独展示分组倍率或 *倍率 公式
-          content = other?.claude
-            ? renderClaudeLogContent(
-                other?.model_ratio,
-                other?.completion_ratio,
-                other?.model_price,
-                other?.group_ratio,
-                other?.user_group_ratio,
-                other?.cache_ratio || 1.0,
-                other?.cache_creation_ratio || 1.0,
-                other?.cache_creation_tokens_5m || 0,
-                other?.cache_creation_ratio_5m ||
-                  other?.cache_creation_ratio ||
-                  1.0,
-                other?.cache_creation_tokens_1h || 0,
-                other?.cache_creation_ratio_1h ||
-                  other?.cache_creation_ratio ||
-                  1.0,
-                billingDisplayMode,
-                true,
-              )
-            : renderLogContent(
-                other?.model_ratio,
-                other?.completion_ratio,
-                other?.model_price,
-                other?.group_ratio,
-                other?.user_group_ratio,
-                other?.cache_ratio || 1.0,
-                other?.image || false,
-                other?.image_ratio || 0,
-                other?.web_search || false,
-                other?.web_search_call_count || 0,
-                other?.file_search || false,
-                other?.file_search_call_count || 0,
-                billingDisplayMode,
-                true,
-                other?.video_ratio || 0,
-                other?.video_completion_ratio || 1.0,
-                other?.video_output_tokens || 0,
-                other?.video_input_text_tokens || 0,
-                other?.billing_mode || '',
-                aggregatedQuota,
-              );
+          content = renderConsumeBillingProcess({
+            record: logs[i],
+            other,
+            billingDisplayMode,
+            channelPriceDiscountPercent: channelPriceDiscountLogPct,
+            t,
+          });
           expandDataLocal.push({
             key: t('计费过程'),
             value: content,

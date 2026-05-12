@@ -713,8 +713,9 @@ func TestLogTaskConsumption_VideoPerVideoFlatBilling(t *testing.T) {
 			ModelPrice: 0,
 			ModelRatio: 0,
 			Quota:      123,
+			// 不含 seconds，避免命中 isVideoPerSecondBilling，从而验证按条/分辨率一口价文案与 billing_mode
 			OtherRatios: map[string]float64{
-				"seconds": 5.0,
+				"width": 1280.0,
 			},
 			GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1.0},
 		},

@@ -460,6 +460,8 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		other["request_tier_pricing"] = true
 		other["request_tier_breakdown"] = summary.RequestTierBreakdown
 	}
+	// use_price：与 PriceData.UsePrice 一致，供前端区分按量（token 单价）与按次等计费形态（旧日志无此字段时前端自行推断）
+	other["use_price"] = relayInfo.PriceData.UsePrice
 	if relayInfo.GetFinalRequestRelayFormat() != types.RelayFormatClaude && usage != nil && usage.UsageSource != "" && usage.InputTokens > 0 {
 		// input_tokens_total: explicit normalized total input used by the usage log UI.
 		// Only write this field when upstream/current conversion has already provided a
