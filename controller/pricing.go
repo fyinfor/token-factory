@@ -124,6 +124,43 @@ func buildPricingAPIData() []model.PricingAPIItem {
 	return model.BuildPricingAPIItems(filtered, visibleChannelIDs, channelPricingMeta, true)
 }
 
+// CollectPricingShowableModelNames 返回 /pricing 接口前端可展示的模型名集合（与 GetPricing 同源条件）。
+// 判定条件与 /pricing 完全一致：
+//  1. 模型已配置定价（ratio_setting.ModelHasConfiguredPricing）。
+//  2. 至少存在一个 (model, 可见渠道) 满足 model.BuildPricingAPIItems 的单测门禁
+//     （ManualDisplayResponseTime>0 或 LastTestSuccess && LastResponseTime>0；该渠道若已有任何成功单测，则本模型也需通过模糊匹配）。
+//
+// 用于操练场等需要"配好定价 + 测试连通性通过"判定与定价页保持一致的位置，避免两端各自实现的判定门槛漂移导致少展示。
+func CollectPricingShowableModelNames() map[string]bool {
+	pricing := model.GetPricing()
+	filtered := make([]model.Pricing, 0, len(pricing))
+	for _, p := range pricing {
+		if ratio_setting.ModelHasConfiguredPricing(p.ModelName) {
+			filtered = append(filtered, p)
+		}
+	}
+	visibleChannelIDs := make(map[int]struct{})
+	if channels, err := model.ListChannelsForPricing(); err == nil {
+		for _, item := range channels {
+			visibleChannelIDs[item.ChannelID] = struct{}{}
+		}
+	}
+	metas, err := model.ListChannelPricingMeta()
+	if err != nil {
+		metas = nil
+	}
+	items := model.BuildPricingAPIItems(filtered, visibleChannelIDs, metas, false)
+	out := make(map[string]bool, len(items))
+	for i := range items {
+		name := strings.TrimSpace(items[i].ModelName)
+		if name == "" {
+			continue
+		}
+		out[name] = true
+	}
+	return out
+}
+
 func validateAdminIssuedToken(rawToken string) error {
 	tokenKey := strings.TrimSpace(rawToken)
 	if strings.HasPrefix(strings.ToLower(tokenKey), "bearer ") {
