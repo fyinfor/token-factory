@@ -190,8 +190,15 @@ func InitOptionMap() {
 	common.OptionMap["ChannelVideoCompletionRatio"] = ratio_setting.ChannelVideoCompletionRatio2JSONString()
 	common.OptionMap["ChannelVideoPrice"] = ratio_setting.ChannelVideoPrice2JSONString()
 	common.OptionMap["ChannelVideoPricingRules"] = ratio_setting.ChannelVideoPricingRules2JSONString()
-	common.OptionMap["RequestTierPricing"] = ratio_setting.RequestTierPricing2JSONString()
-	common.OptionMap["ChannelRequestTierPricing"] = ratio_setting.ChannelRequestTierPricing2JSONString()
+	// 新的四个独立阶梯倍率 Option
+	common.OptionMap["ModelTierRatio"] = ratio_setting.ModelTierRatio2JSONString()
+	common.OptionMap["CompletionTierRatio"] = ratio_setting.CompletionTierRatio2JSONString()
+	common.OptionMap["CacheTierRatio"] = ratio_setting.CacheTierRatio2JSONString()
+	common.OptionMap["CreateCacheTierRatio"] = ratio_setting.CreateCacheTierRatio2JSONString()
+	common.OptionMap["ChannelModelTierRatio"] = ratio_setting.ChannelModelTierRatio2JSONString()
+	common.OptionMap["ChannelCompletionTierRatio"] = ratio_setting.ChannelCompletionTierRatio2JSONString()
+	common.OptionMap["ChannelCacheTierRatio"] = ratio_setting.ChannelCacheTierRatio2JSONString()
+	common.OptionMap["ChannelCreateCacheTierRatio"] = ratio_setting.ChannelCreateCacheTierRatio2JSONString()
 	common.OptionMap["RequestTierPricingTemplates"] = ratio_setting.RequestTierPricingTemplates2JSONString()
 	common.OptionMap["SupplierModelPrice"] = ratio_setting.SupplierModelPrice2JSONString()
 	common.OptionMap["SupplierModelRatio"] = ratio_setting.SupplierModelRatio2JSONString()
@@ -648,10 +655,23 @@ func updateOptionMap(key string, value string) (err error) {
 		err = ratio_setting.UpdateChannelVideoPriceByJSONString(value)
 	case "ChannelVideoPricingRules":
 		err = ratio_setting.UpdateChannelVideoPricingRulesByJSONString(value)
-	case "RequestTierPricing":
-		err = ratio_setting.UpdateRequestTierPricingByJSONString(value)
-	case "ChannelRequestTierPricing":
-		err = ratio_setting.UpdateChannelRequestTierPricingByJSONString(value)
+	// 新的四个独立阶梯倍率 Option
+	case "ModelTierRatio":
+		err = ratio_setting.UpdateModelTierRatioByJSONString(value)
+	case "CompletionTierRatio":
+		err = ratio_setting.UpdateCompletionTierRatioByJSONString(value)
+	case "CacheTierRatio":
+		err = ratio_setting.UpdateCacheTierRatioByJSONString(value)
+	case "CreateCacheTierRatio":
+		err = ratio_setting.UpdateCreateCacheTierRatioByJSONString(value)
+	case "ChannelModelTierRatio":
+		err = ratio_setting.UpdateChannelModelTierRatioByJSONString(value)
+	case "ChannelCompletionTierRatio":
+		err = ratio_setting.UpdateChannelCompletionTierRatioByJSONString(value)
+	case "ChannelCacheTierRatio":
+		err = ratio_setting.UpdateChannelCacheTierRatioByJSONString(value)
+	case "ChannelCreateCacheTierRatio":
+		err = ratio_setting.UpdateChannelCreateCacheTierRatioByJSONString(value)
 	case "RequestTierPricingTemplates":
 		err = ratio_setting.UpdateRequestTierPricingTemplatesByJSONString(value)
 	case "SupplierModelPrice":

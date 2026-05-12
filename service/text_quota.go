@@ -283,11 +283,26 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		outputQuota := dCompletionTokens.Mul(dCompletionRatio)
 		cacheReadQuota := cachedTokensWithRatio
 		cacheWriteQuota := cachedCreationTokensWithRatio
-		if rule, ok := ratio_setting.ResolveRequestTierPricing(relayChannelID(relayInfo), summary.ModelName); ok {
-			inputQuota, outputQuota, cacheReadQuota, cacheWriteQuota, summary.RequestTierBreakdown =
-				ratio_setting.ApplyRequestTierPricingDecimal(rule, inputQuota, outputQuota, cacheReadQuota, cacheWriteQuota)
+
+		// 使用新的四个独立阶梯倍率
+		channelID := relayChannelID(relayInfo)
+		if modelTier, ok := ratio_setting.ResolveModelTierRatio(channelID, summary.ModelName); ok {
+			inputQuota = ratio_setting.ApplyTierSegmentsForType(inputQuota, modelTier)
 			summary.RequestTierPricing = true
 		}
+		if completionTier, ok := ratio_setting.ResolveCompletionTierRatio(channelID, summary.ModelName); ok {
+			outputQuota = ratio_setting.ApplyTierSegmentsForType(outputQuota, completionTier)
+			summary.RequestTierPricing = true
+		}
+		if cacheTier, ok := ratio_setting.ResolveCacheTierRatio(channelID, summary.ModelName); ok {
+			cacheReadQuota = ratio_setting.ApplyTierSegmentsForType(cacheReadQuota, cacheTier)
+			summary.RequestTierPricing = true
+		}
+		if createCacheTier, ok := ratio_setting.ResolveCreateCacheTierRatio(channelID, summary.ModelName); ok {
+			cacheWriteQuota = ratio_setting.ApplyTierSegmentsForType(cacheWriteQuota, createCacheTier)
+			summary.RequestTierPricing = true
+		}
+
 		promptQuota := inputQuota.Add(cacheReadQuota).Add(imageTokensWithRatio).Add(cacheWriteQuota)
 		quotaCalculateDecimal := promptQuota.Add(outputQuota).Mul(ratio)
 		quotaCalculateDecimal = quotaCalculateDecimal.Add(dWebSearchQuota)

@@ -77,9 +77,6 @@ func mapValueByModel(src any, modelName string) (any, bool) {
 	case map[string]any:
 		v, ok := m[modelName]
 		return v, ok
-	case map[string]ratio_setting.RequestTierPricingRule:
-		v, ok := m[modelName]
-		return v, ok
 	default:
 		return nil, false
 	}
@@ -92,10 +89,6 @@ func mapModelNames(src any, allModels map[string]struct{}) {
 			allModels[modelName] = struct{}{}
 		}
 	case map[string]any:
-		for modelName := range m {
-			allModels[modelName] = struct{}{}
-		}
-	case map[string]ratio_setting.RequestTierPricingRule:
 		for modelName := range m {
 			allModels[modelName] = struct{}{}
 		}
@@ -625,10 +618,6 @@ func oldEffectiveForUpstream(channelID int, ratioType string, modelName string, 
 			if v, ok := ratio_setting.GetChannelModelPrice(channelID, modelName); ok {
 				return oldChannelValueOrNil(v)
 			}
-		case "request_tier_pricing":
-			if v, ok := ratio_setting.GetChannelRequestTierPricing(channelID, modelName); ok {
-				return v
-			}
 		}
 		return nil
 	}
@@ -669,11 +658,14 @@ func buildSupplierRatioSyncLocalMaps(supplierApplicationID int, ownedNorm map[st
 		cache[mn] = c0
 	}
 	return gin.H{
-		"model_ratio":          mr,
-		"completion_ratio":     cr,
-		"cache_ratio":          cache,
-		"model_price":          mp,
-		"request_tier_pricing": map[string]ratio_setting.RequestTierPricingRule{},
+		"model_ratio":             mr,
+		"completion_ratio":        cr,
+		"cache_ratio":             cache,
+		"model_price":             mp,
+		"model_tier_ratio":        map[string]ratio_setting.TierSegments{},
+		"completion_tier_ratio":   map[string]ratio_setting.TierSegments{},
+		"cache_tier_ratio":        map[string]ratio_setting.TierSegments{},
+		"create_cache_tier_ratio": map[string]ratio_setting.TierSegments{},
 	}
 }
 

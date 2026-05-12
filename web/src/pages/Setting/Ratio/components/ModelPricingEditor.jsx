@@ -52,13 +52,8 @@ import {
   useModelPricingEditorState,
 } from '../hooks/useModelPricingEditorState';
 import {
-  TIER_CATEGORIES,
-  buildTierPriceDetails,
-  ensureFinalInfinityTierRows,
-  hasTierRule,
-  normalizeTierRule,
+  ensureFinalInfinityTierSegments,
   parseJSONMap,
-  summarizeTierRule,
   priceToRatio,
   ratioToPrice,
 } from '../utils/requestTierPricing';
@@ -68,12 +63,13 @@ import { getCurrencyConfig } from '../../../../helpers';
 
 const { Text } = Typography;
 const EMPTY_CANDIDATE_MODEL_NAMES = [];
-const DEFAULT_TIER_RULE = {
-  mode: 'progressive',
-  input: [{ up_to: 0, ratio: 0 }],
-  output: [{ up_to: 0, ratio: 0 }],
-  cache_read: [{ up_to: 0, ratio: 0 }],
-  cache_write: [{ up_to: 0, ratio: 0 }],
+const DEFAULT_TIER_SEGMENTS = {
+  segments: [{ up_to: 0, ratio: 0 }],
+};
+const formatTierDetailPrice = (ratio) => {
+  if (!ratio) return '-';
+  const value = Number(Number(ratio * 2).toFixed(6));
+  return `$${value}`;
 };
 const VIDEO_RESOLUTION_OPTIONS = [
   { label: '480p', value: '854x480' },
@@ -266,19 +262,19 @@ export default function ModelPricingEditor({
   const isMobile = useIsMobile();
   const [addVisible, setAddVisible] = useState(false);
   const [batchVisible, setBatchVisible] = useState(false);
-  const [newModelName, setNewModelName] = useState('');
   const [visibleCategories, setVisibleCategories] = useState({
     output: false,
     cache_read: false,
     cache_write: false,
   });
+  const [newModelName, setNewModelName] = useState('');
 
   // 获取汇率
   const exchangeRate = options?.usd_exchange_rate || 1;
 
   const tierTemplates = useMemo(
-    () => parseJSONMap(options.RequestTierPricingTemplates),
-    [options.RequestTierPricingTemplates],
+    () => parseJSONMap(options?.RequestTierPricingTemplates),
+    [options?.RequestTierPricingTemplates],
   );
 
   const {
@@ -307,8 +303,12 @@ export default function ModelPricingEditor({
     updateVideoRuleRow,
     addVideoRuleRow,
     removeVideoRuleRow,
-    updateRequestTierRule,
-    applyRequestTierTemplate,
+    updateModelTierRatio,
+    updateCompletionTierRatio,
+    updateCacheTierRatio,
+    updateCreateCacheTierRatio,
+    clearAllTierRatios,
+    applyTierTemplate,
     handleSubmit,
     addModel,
     deleteModel,
@@ -326,26 +326,69 @@ export default function ModelPricingEditor({
   });
 
   const tierPriceDetails = useMemo(
-    () =>
-      buildTierPriceDetails(
-        selectedModel?.requestTierRule,
-        {
-          input: selectedModel?.inputPrice,
-          output: selectedModel?.completionPrice,
-          cache_read: selectedModel?.cachePrice,
-          cache_write: selectedModel?.cacheWritePrice,
-        },
-        t,
-        visibleCategories,
-      ),
+    () => {
+      const details = [];
+      if (selectedModel?.modelTierRatio?.segments?.length > 0) {
+        const segments = ensureFinalInfinityTierSegments(selectedModel.modelTierRatio.segments);
+        details.push({
+          key: 'model',
+          category: 'model',
+          label: t('输入价格'),
+          segments: segments.map((row, idx) => ({
+            range: `${idx === 0 ? 0 : segments[idx - 1]?.up_to || 0}～${row.up_to || '∞'}`,
+            price: formatTierDetailPrice(row.ratio),
+            ratio: row.ratio,
+          })),
+        });
+      }
+      if (visibleCategories.output && selectedModel?.completionTierRatio?.segments?.length > 0) {
+        const segments = ensureFinalInfinityTierSegments(selectedModel.completionTierRatio.segments);
+        details.push({
+          key: 'completion',
+          category: 'completion',
+          label: t('输出价格'),
+          segments: segments.map((row, idx) => ({
+            range: `${idx === 0 ? 0 : segments[idx - 1]?.up_to || 0}～${row.up_to || '∞'}`,
+            price: formatTierDetailPrice(row.ratio),
+            ratio: row.ratio,
+          })),
+        });
+      }
+      if (visibleCategories.cache_read && selectedModel?.cacheTierRatio?.segments?.length > 0) {
+        const segments = ensureFinalInfinityTierSegments(selectedModel.cacheTierRatio.segments);
+        details.push({
+          key: 'cache',
+          category: 'cache',
+          label: t('缓存读取价格'),
+          segments: segments.map((row, idx) => ({
+            range: `${idx === 0 ? 0 : segments[idx - 1]?.up_to || 0}～${row.up_to || '∞'}`,
+            price: formatTierDetailPrice(row.ratio),
+            ratio: row.ratio,
+          })),
+        });
+      }
+      if (visibleCategories.cache_write && selectedModel?.createCacheTierRatio?.segments?.length > 0) {
+        const segments = ensureFinalInfinityTierSegments(selectedModel.createCacheTierRatio.segments);
+        details.push({
+          key: 'createCache',
+          category: 'createCache',
+          label: t('缓存写入价格'),
+          segments: segments.map((row, idx) => ({
+            range: `${idx === 0 ? 0 : segments[idx - 1]?.up_to || 0}～${row.up_to || '∞'}`,
+            price: formatTierDetailPrice(row.ratio),
+            ratio: row.ratio,
+          })),
+        });
+      }
+      return details;
+    },
     [
-      selectedModel?.requestTierRule,
-      selectedModel?.inputPrice,
-      selectedModel?.completionPrice,
-      selectedModel?.cachePrice,
-      selectedModel?.cacheWritePrice,
-      t,
+      selectedModel?.modelTierRatio,
+      selectedModel?.completionTierRatio,
+      selectedModel?.cacheTierRatio,
+      selectedModel?.createCacheTierRatio,
       visibleCategories,
+      t,
     ],
   );
 
@@ -405,7 +448,7 @@ export default function ModelPricingEditor({
             >
               {text}
             </Button>
-            {selectedModelNames.includes(record.name) ? (
+            {Array.isArray(selectedModelNames) && record?.name && selectedModelNames.includes(record.name) ? (
               <Tag color='green' shape='circle'>
                 {t('已勾选')}
               </Tag>
@@ -432,7 +475,7 @@ export default function ModelPricingEditor({
         dataIndex: 'summary',
         key: 'summary',
         render: (_, record) => (
-          <span>{buildSummaryText(record, t, visibleCategories)}</span>
+          <span>{buildSummaryText(record, t)}</span>
         ),
       },
       {
@@ -1713,7 +1756,7 @@ export default function ModelPricingEditor({
                           onChange={(id) => {
                             const template = tierTemplates[id];
                             if (template) {
-                              const result = applyRequestTierTemplate(template);
+                              const result = applyTierTemplate(template);
                               if (result) {
                                 const { categoriesToOpen, categoriesToClose } = result;
                                 setVisibleCategories((prev) => {
@@ -1739,11 +1782,14 @@ export default function ModelPricingEditor({
                           )}
                         </Select>
                       ) : null}
-                      {hasTierRule(selectedModel.requestTierRule) ? (
+                      {(selectedModel.modelTierRatio?.segments?.length > 0 ||
+                        selectedModel.completionTierRatio?.segments?.length > 0 ||
+                        selectedModel.cacheTierRatio?.segments?.length > 0 ||
+                        selectedModel.createCacheTierRatio?.segments?.length > 0) ? (
                         <Button
                           size='small'
                           type='danger'
-                          onClick={() => updateRequestTierRule(null)}
+                          onClick={() => clearAllTierRatios()}
                         >
                           {t('清除阶梯计费')}
                         </Button>
@@ -1753,18 +1799,16 @@ export default function ModelPricingEditor({
                       <div className='mb-2 font-medium text-[var(--semi-color-text-0)]'>
                         {t('阶梯计费价格明细')}
                       </div>
-                      {hasTierRule(selectedModel.requestTierRule) ? (
+                      {tierPriceDetails.length > 0 ? (
                         <div className='grid grid-cols-1 gap-y-2'>
-                          {tierPriceDetails.map((item) => (
-                            <div key={item.key} className='flex items-start'>
+                          {tierPriceDetails.map((detail) => (
+                            <div key={detail.key} className='flex items-start'>
                               <span className='w-20 flex-shrink-0 text-[var(--semi-color-text-1)]'>
-                                {item.label}
+                                {detail.label}
                               </span>
                               <span className='flex-1 font-medium text-[var(--semi-color-text-0)] flex flex-col gap-1'>
-                                {item.segments.map((segment) => (
-                                  <span
-                                    key={`${segment.range}-${segment.price}`}
-                                  >
+                                {detail.segments.map((segment) => (
+                                  <span key={`${segment.range}-${segment.price}`}>
                                     {segment.range}：{segment.price} / 1M tokens
                                   </span>
                                 ))}
@@ -1783,14 +1827,101 @@ export default function ModelPricingEditor({
                         '阶梯区间从 0 开始；最后一档固定为无限且不能删除，保存时会写入后端需要的 up_to: 0。',
                       )}
                     </div>
-                    <TierRowsEditor
-                      t={t}
-                      value={selectedModel.requestTierRule || DEFAULT_TIER_RULE}
-                      onChange={(value) => updateRequestTierRule(value)}
-                      exchangeRate={exchangeRate}
-                      visibleCategories={visibleCategories}
-                      onVisibleCategoriesChange={setVisibleCategories}
-                    />
+                    <Card
+                      title={<span>{t('输入价格')}</span>}
+                      style={{ width: '100%', marginBottom: 8, background: 'var(--semi-color-fill-0)' }}>
+                      <TierRowsEditor
+                        t={t}
+                        value={selectedModel.modelTierRatio || DEFAULT_TIER_SEGMENTS}
+                        onChange={(value) => updateModelTierRatio(value)}
+                        exchangeRate={exchangeRate}
+                        tierType='model'
+                      />
+                    </Card>
+                    <Card
+                      title={
+                        <div className="flex justify-between items-center">
+                          <span>{t('输出价格')}</span>
+                          <Switch
+                            size='small'
+                            checked={visibleCategories.output}
+                            onChange={(checked) =>
+                              setVisibleCategories((prev) => ({
+                                ...prev,
+                                output: checked,
+                              }))
+                            }
+                          />
+                        </div>
+                      }
+                      style={{ width: '100%', marginBottom: 8, background: 'var(--semi-color-fill-0)' }}
+                    >
+                      {visibleCategories.output ? (
+                      <TierRowsEditor
+                        t={t}
+                        value={selectedModel.completionTierRatio || DEFAULT_TIER_SEGMENTS}
+                        onChange={(value) => updateCompletionTierRatio(value)}
+                        exchangeRate={exchangeRate}
+                        tierType='completion'
+                      />
+                      ) : null}
+                    </Card>
+                    <Card
+                      title={
+                        <div className="flex justify-between items-center">
+                          <span>{t('缓存读取价格')}</span>
+                          <Switch
+                            size='small'
+                            checked={visibleCategories.cache_read}
+                            onChange={(checked) =>
+                              setVisibleCategories((prev) => ({
+                                ...prev,
+                                cache_read: checked,
+                              }))
+                            }
+                          />
+                        </div>
+                      }
+                      style={{ width: '100%', marginBottom: 8, background: 'var(--semi-color-fill-0)' }}
+                    >
+                      {visibleCategories.cache_read ? (
+                      <TierRowsEditor
+                        t={t}
+                        value={selectedModel.cacheTierRatio || DEFAULT_TIER_SEGMENTS}
+                        onChange={(value) => updateCacheTierRatio(value)}
+                        exchangeRate={exchangeRate}
+                        tierType='cache'
+                      />
+                      ) : null}
+                    </Card>
+                    <Card
+                      title={
+                        <div className="flex justify-between items-center">
+                          <span>{t('缓存写入价格')}</span>
+                          <Switch
+                            size='small'
+                            checked={visibleCategories.cache_write}
+                            onChange={(checked) =>
+                              setVisibleCategories((prev) => ({
+                                ...prev,
+                                cache_write: checked,
+                              }))
+                            }
+                          />
+                        </div>
+                      }
+                      style={{ width: '100%', marginBottom: 8, background: 'var(--semi-color-fill-0)' }}
+                    >
+                      {visibleCategories.cache_write ? (
+                      <TierRowsEditor
+                        t={t}
+                        value={selectedModel.createCacheTierRatio || DEFAULT_TIER_SEGMENTS}
+                        onChange={(value) => updateCreateCacheTierRatio(value)}
+                        exchangeRate={exchangeRate}
+                        tierType='createCache'
+                      />
+                      ) : null}
+                    </Card>
                   </>
                 ) : null}
 
@@ -1885,6 +2016,7 @@ export default function ModelPricingEditor({
           </div>
         ) : null}
       </Modal>
+
     </>
   );
 }

@@ -24,6 +24,14 @@ export const TIER_CATEGORIES = [
   { key: 'cache_write', label: '缓存写入价格' },
 ];
 
+// 新的四个独立阶梯倍率类型
+export const TIER_RATIO_TYPES = [
+  { key: 'model', label: '输入' },
+  { key: 'completion', label: '输出' },
+  { key: 'cache', label: '缓存读取' },
+  { key: 'createCache', label: '缓存写入' },
+];
+
 export const emptyTierRule = () => ({
   mode: 'progressive',
   input: [],
@@ -31,6 +39,38 @@ export const emptyTierRule = () => ({
   cache_read: [],
   cache_write: [],
 });
+
+// 新的空阶梯倍率（单个类型）
+export const emptyTierSegments = () => ({
+  segments: [],
+});
+
+// 规范化单个类型的阶梯倍率
+export const normalizeTierSegments = (tier) => {
+  const src = tier && typeof tier === 'object' ? tier : {};
+  return {
+    segments: (Array.isArray(src.segments) ? src.segments : [])
+      .map((row) => ({
+        up_to: Number(row?.up_to || 0),
+        ratio: Number(row?.ratio ?? 0),
+      }))
+      .filter((row) => Number.isFinite(row.up_to) && Number.isFinite(row.ratio)),
+  };
+};
+
+// 确保最后一个档位是无限
+export const ensureFinalInfinityTierSegments = (segments) => {
+  const normalized = Array.isArray(segments) ? segments : [];
+  if (!normalized.length) return normalized;
+  if (normalized[normalized.length - 1].up_to === 0) return normalized;
+  return [...normalized, { up_to: 0, ratio: 0 }];
+};
+
+// 检查是否有阶梯倍率
+export const hasTierSegments = (tier) => {
+  const normalized = normalizeTierSegments(tier);
+  return normalized.segments.length > 0;
+};
 
 export const parseJSONMap = (raw) => {
   if (!raw || String(raw).trim() === '') return {};
@@ -128,13 +168,11 @@ export const buildTierPriceDetails = (rule, basePrices = {}, t = (v) => v, visib
         const from = previous;
         const to = row.up_to;
         previous = row.up_to || previous;
-        // 最后一行（up_to === 0）使用上一档的 token 数量
-        const tokenCount = row.up_to === 0
-          ? (row === rows[0] ? 1 : rows[rows.indexOf(row) - 1]?.up_to || 1)
-          : row.up_to - from;
+        // 使用固定的 1M token 数量计算价格，不随档位变化
+        const fixedTokenCount = 1000000;
         // 直接从 ratio 转换为价格，不使用 basePrices
         const price = formatTierPrice(
-          row.ratio ? ratioToPrice(row.ratio, tokenCount, 1) : 0,
+          row.ratio ? ratioToPrice(row.ratio, fixedTokenCount, 1) : 0,
         );
         return {
           range: `${formatTierStartBound(from)}～${formatTierEndBound(to)}`,
@@ -185,15 +223,17 @@ export const serializeTierRule = (rule) => {
   return out;
 };
 
-// 价格转倍率：倍率 = 价格(USD) / (token数 × 汇率)
+// 价格转倍率：倍率 = 价格(USD/1M token) × 1M / token数（阶梯计费参考按量计费）
 export const priceToRatio = (priceUSD, tokenCount, exchangeRate = 1) => {
   if (!priceUSD || !tokenCount || tokenCount <= 0) return 0;
-  const ratio = priceUSD / (tokenCount * exchangeRate);
+  // 价格单位是 $/1M token，所以需要乘以 1M 再除以 token 数
+  const ratio = (priceUSD * 1000000) / tokenCount;
   return Math.max(0, ratio);
 };
 
-// 倍率转价格：价格 = token数 × 倍率 × 汇率
+// 倍率转价格：价格 = 倍率 × token数 / 1M（阶梯计费参考按量计费）
 export const ratioToPrice = (ratio, tokenCount, exchangeRate = 1) => {
   if (!ratio || !tokenCount || tokenCount <= 0) return 0;
-  return tokenCount * ratio * exchangeRate;
+  // 价格单位是 $/1M token，所以倍率 × token 数再除以 1M
+  return (ratio * tokenCount) / 1000000;
 };

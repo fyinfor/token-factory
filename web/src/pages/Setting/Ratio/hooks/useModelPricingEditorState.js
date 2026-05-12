@@ -20,7 +20,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { API, showError, showSuccess } from '../../../../helpers';
 import {
     hasTierRule,
+    hasTierSegments,
     normalizeTierRule,
+    normalizeTierSegments,
     serializeTierRule,
     summarizeTierRule,
     validateTierRule,
@@ -63,9 +65,11 @@ const EMPTY_MODEL = {
         videoCompletionRatio: '',
         videoPrice: '',
         videoPricingRules: null,
-        requestTierPricing: null,
     },
-    requestTierRule: null,
+    modelTierRatio: null,
+    completionTierRatio: null,
+    cacheTierRatio: null,
+    createCacheTierRatio: null,
     hasConflict: false,
 };
 
@@ -401,8 +405,18 @@ const buildModelState = (name, sourceMaps) => {
     const videoPricingRules = parseVideoPricingRules(
         sourceMaps.VideoPricingRules?.[name],
     );
-    const requestTierRule = sourceMaps.RequestTierPricing?.[name]
-        ? normalizeTierRule(sourceMaps.RequestTierPricing[name])
+    // 新的四个独立阶梯倍率
+    const modelTierRatio = sourceMaps.ModelTierRatio?.[name]
+        ? normalizeTierSegments(sourceMaps.ModelTierRatio[name])
+        : null;
+    const completionTierRatio = sourceMaps.CompletionTierRatio?.[name]
+        ? normalizeTierSegments(sourceMaps.CompletionTierRatio[name])
+        : null;
+    const cacheTierRatio = sourceMaps.CacheTierRatio?.[name]
+        ? normalizeTierSegments(sourceMaps.CacheTierRatio[name])
+        : null;
+    const createCacheTierRatio = sourceMaps.CreateCacheTierRatio?.[name]
+        ? normalizeTierSegments(sourceMaps.CreateCacheTierRatio[name])
         : null;
     const hasPerSecondTable =
         videoPricingRules.textToVideoPerSecond.length > 0 ||
@@ -487,7 +501,10 @@ const buildModelState = (name, sourceMaps) => {
         name,
         billingMode: hasValue(fixedPrice)
             ? 'per-request'
-            : hasTierRule(requestTierRule)
+            : hasTierSegments(modelTierRatio) ||
+              hasTierSegments(completionTierRatio) ||
+              hasTierSegments(cacheTierRatio) ||
+              hasTierSegments(createCacheTierRatio)
                 ? 'tiered'
                 : 'per-token',
         fixedPrice,
@@ -603,12 +620,14 @@ const buildModelState = (name, sourceMaps) => {
             videoPrice,
             videoPricingRules:
                 sourceMaps.VideoPricingRules?.[name] &&
-                    typeof sourceMaps.VideoPricingRules[name] === 'object'
+                typeof sourceMaps.VideoPricingRules[name] === 'object'
                     ? sourceMaps.VideoPricingRules[name]
                     : null,
-            requestTierPricing: requestTierRule,
         },
-        requestTierRule,
+        modelTierRatio,
+        completionTierRatio,
+        cacheTierRatio,
+        createCacheTierRatio,
         hasConflict:
             hasValue(fixedPrice) &&
             [
@@ -622,7 +641,10 @@ const buildModelState = (name, sourceMaps) => {
                 videoRatio,
                 videoCompletionRatio,
                 videoPrice,
-                requestTierRule && hasTierRule(requestTierRule) ? 'request_tier' : '',
+                hasTierSegments(modelTierRatio) ? 'model_tier' : '',
+                hasTierSegments(completionTierRatio) ? 'completion_tier' : '',
+                hasTierSegments(cacheTierRatio) ? 'cache_tier' : '',
+                hasTierSegments(createCacheTierRatio) ? 'create_cache_tier' : '',
             ].some(hasValue),
     };
 };
@@ -669,7 +691,10 @@ export const getModelWarnings = (model, t) => {
     }
     if (
         model.billingMode === 'per-request' &&
-        hasTierRule(model.requestTierRule)
+        (hasTierSegments(model.modelTierRatio) ||
+         hasTierSegments(model.completionTierRatio) ||
+         hasTierSegments(model.cacheTierRatio) ||
+         hasTierSegments(model.createCacheTierRatio))
     ) {
         warnings.push(
             t('当前模型为固定价格计费，阶梯计费规则会被保留但不会生效。'),
@@ -795,20 +820,29 @@ export const getModelWarnings = (model, t) => {
 };
 
 export const buildSummaryText = (model, t, visibleCategories = null) => {
-    if (model.billingMode === 'per-request' && hasValue(model.fixedPrice)) {
-        return `${t('按次')} $${model.fixedPrice} / ${t('次')}`;
-    }
-    if (model.billingMode === 'tiered' && hasTierRule(model.requestTierRule)) {
-        return `${t('阶梯计费')}｜${summarizeTierRule(model.requestTierRule, t, visibleCategories)}`;
-    }
+  if (model.billingMode === 'per-request' && hasValue(model.fixedPrice)) {
+    return `${t('按次')} $${model.fixedPrice} / ${t('次')}`;
+  }
+  if (model.billingMode === 'tiered' && 
+      (hasTierSegments(model.modelTierRatio) ||
+       hasTierSegments(model.completionTierRatio) ||
+       hasTierSegments(model.cacheTierRatio) ||
+       hasTierSegments(model.createCacheTierRatio))) {
+    const parts = [];
+    if (hasTierSegments(model.modelTierRatio)) parts.push(t('输入'));
+    if (hasTierSegments(model.completionTierRatio)) parts.push(t('输出'));
+    if (hasTierSegments(model.cacheTierRatio)) parts.push(t('缓存读取'));
+    if (hasTierSegments(model.createCacheTierRatio)) parts.push(t('缓存写入'));
+    return `${t('阶梯计费')}｜${parts.join(' / ')}`;
+  }
 
-    if (hasValue(model.inputPrice)) {
-        const inputLabel = `$${model.inputPrice}`;
-        const outputLabel = hasValue(model.completionPrice)
-            ? `$${model.completionPrice}`
-            : '-';
-        return `${t('输入')}：${inputLabel}｜${t('输出')}：${outputLabel}`;
-    }
+  if (hasValue(model.inputPrice)) {
+    const inputLabel = `$${model.inputPrice}`;
+    const outputLabel = hasValue(model.completionPrice)
+      ? `$${model.completionPrice}`
+      : '-';
+    return `${t('输入')}：${inputLabel}｜${t('输出')}：${outputLabel}`;
+  }
 
     return t('未设置价格');
 };
@@ -874,7 +908,7 @@ const normalizePerVideoPricingRows = (rows) =>
                 ) === index,
         );
 
-const serializeModel = (model, t, currencyRates) => {
+const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
   const fromUnit = ['USD', 'CNY', 'CUSTOM'].includes(model.videoPriceUnit)
     ? model.videoPriceUnit
     : 'USD';
@@ -894,7 +928,10 @@ const serializeModel = (model, t, currencyRates) => {
         VideoCompletionRatio: null,
         VideoPrice: null,
         VideoPricingRules: null,
-        RequestTierPricing: null,
+        ModelTierRatio: null,
+        CompletionTierRatio: null,
+        CacheTierRatio: null,
+        CreateCacheTierRatio: null,
     };
 
     if (model.billingMode === 'per-request') {
@@ -904,12 +941,41 @@ const serializeModel = (model, t, currencyRates) => {
         return result;
     }
 
-    if (model.billingMode === 'tiered' && hasTierRule(model.requestTierRule)) {
-        const tierError = validateTierRule(model.requestTierRule, t);
-        if (tierError) {
-            throw new Error(`${model.name}: ${tierError}`);
+    if (model.billingMode === 'tiered' && 
+        (hasTierSegments(model.modelTierRatio) ||
+         hasTierSegments(model.completionTierRatio) ||
+         hasTierSegments(model.cacheTierRatio) ||
+         hasTierSegments(model.createCacheTierRatio))) {
+        // 新的四个独立阶梯倍率
+        if (hasTierSegments(model.modelTierRatio)) {
+            result.ModelTierRatio = {
+                segments: model.modelTierRatio.segments,
+            };
         }
-        result.RequestTierPricing = serializeTierRule(model.requestTierRule);
+        if (
+            (visibleCategories === null || visibleCategories.output) &&
+            hasTierSegments(model.completionTierRatio)
+        ) {
+            result.CompletionTierRatio = {
+                segments: model.completionTierRatio.segments,
+            };
+        }
+        if (
+            (visibleCategories === null || visibleCategories.cache_read) &&
+            hasTierSegments(model.cacheTierRatio)
+        ) {
+            result.CacheTierRatio = {
+                segments: model.cacheTierRatio.segments,
+            };
+        }
+        if (
+            (visibleCategories === null || visibleCategories.cache_write) &&
+            hasTierSegments(model.createCacheTierRatio)
+        ) {
+            result.CreateCacheTierRatio = {
+                segments: model.createCacheTierRatio.segments,
+            };
+        }
     }
 
     const inputPrice = toNumberOrNull(model.inputPrice);
@@ -1273,15 +1339,43 @@ export const buildPreviewRows = (model, t, visibleCategories = null) => {
             (model.videoGenerateRules || []).some(
                 (r) => hasValue(r?.resolution) && hasValue(r?.videoPrice),
             ));
-    const buildTierPreviewRows = (visibleCategories = null) => [
-        {
-            key: 'RequestTierPricing',
-            label: 'RequestTierPricing',
-            value: hasTierRule(model.requestTierRule)
-                ? summarizeTierRule(model.requestTierRule, t, visibleCategories)
+    const buildTierPreviewRows = (visibleCategories = null) => {
+        const rows = [{
+            key: 'ModelTierRatio',
+            label: 'ModelTierRatio',
+            value: hasTierSegments(model.modelTierRatio)
+                ? `${model.modelTierRatio.segments.length}${t('档')}`
                 : t('空'),
-        },
-    ];
+        }];
+        if (visibleCategories === null || visibleCategories.output) {
+            rows.push({
+                key: 'CompletionTierRatio',
+                label: 'CompletionTierRatio',
+                value: hasTierSegments(model.completionTierRatio)
+                    ? `${model.completionTierRatio.segments.length}${t('档')}`
+                    : t('空'),
+            });
+        }
+        if (visibleCategories === null || visibleCategories.cache_read) {
+            rows.push({
+                key: 'CacheTierRatio',
+                label: 'CacheTierRatio',
+                value: hasTierSegments(model.cacheTierRatio)
+                    ? `${model.cacheTierRatio.segments.length}${t('档')}`
+                    : t('空'),
+            });
+        }
+        if (visibleCategories === null || visibleCategories.cache_write) {
+            rows.push({
+                key: 'CreateCacheTierRatio',
+                label: 'CreateCacheTierRatio',
+                value: hasTierSegments(model.createCacheTierRatio)
+                    ? `${model.createCacheTierRatio.segments.length}${t('档')}`
+                    : t('空'),
+            });
+        }
+        return rows;
+    };
 
     if (inputPrice === null) {
         if (tieredBillingMode) {
@@ -1456,10 +1550,31 @@ export const buildPreviewRows = (model, t, visibleCategories = null) => {
     ];
     if (tieredBillingMode) {
         rows.push({
-            key: 'RequestTierPricing',
-            label: 'RequestTierPricing',
-            value: hasTierRule(model.requestTierRule)
-                ? summarizeTierRule(model.requestTierRule, t, visibleCategories)
+            key: 'ModelTierRatio',
+            label: t('输入阶梯倍率'),
+            value: hasTierSegments(model.modelTierRatio)
+                ? `${model.modelTierRatio.segments.length}${t('档')}`
+                : t('空'),
+        });
+        rows.push({
+            key: 'CompletionTierRatio',
+            label: t('输出阶梯倍率'),
+            value: hasTierSegments(model.completionTierRatio)
+                ? `${model.completionTierRatio.segments.length}${t('档')}`
+                : t('空'),
+        });
+        rows.push({
+            key: 'CacheTierRatio',
+            label: t('缓存读取阶梯倍率'),
+            value: hasTierSegments(model.cacheTierRatio)
+                ? `${model.cacheTierRatio.segments.length}${t('档')}`
+                : t('空'),
+        });
+        rows.push({
+            key: 'CreateCacheTierRatio',
+            label: t('缓存写入阶梯倍率'),
+            value: hasTierSegments(model.createCacheTierRatio)
+                ? `${model.createCacheTierRatio.segments.length}${t('档')}`
                 : t('空'),
         });
     }
@@ -1528,8 +1643,14 @@ export function useModelPricingEditorState({
                 optionKeys?.VideoCompletionRatio || 'VideoCompletionRatio',
             VideoPrice: optionKeys?.VideoPrice || 'VideoPrice',
             VideoPricingRules: optionKeys?.VideoPricingRules || 'VideoPricingRules',
-            RequestTierPricing:
-                optionKeys?.RequestTierPricing || 'RequestTierPricing',
+            ModelTierRatio:
+                optionKeys?.ModelTierRatio || 'ModelTierRatio',
+            CompletionTierRatio:
+                optionKeys?.CompletionTierRatio || 'CompletionTierRatio',
+            CacheTierRatio:
+                optionKeys?.CacheTierRatio || 'CacheTierRatio',
+            CreateCacheTierRatio:
+                optionKeys?.CreateCacheTierRatio || 'CreateCacheTierRatio',
         }),
         [optionKeys],
     );
@@ -1561,8 +1682,17 @@ export function useModelPricingEditorState({
             VideoPricingRules: parseOptionJSON(
                 options[resolvedOptionKeys.VideoPricingRules],
             ),
-            RequestTierPricing: parseOptionJSON(
-                options[resolvedOptionKeys.RequestTierPricing],
+            ModelTierRatio: parseOptionJSON(
+                options[resolvedOptionKeys.ModelTierRatio],
+            ),
+            CompletionTierRatio: parseOptionJSON(
+                options[resolvedOptionKeys.CompletionTierRatio],
+            ),
+            CacheTierRatio: parseOptionJSON(
+                options[resolvedOptionKeys.CacheTierRatio],
+            ),
+            CreateCacheTierRatio: parseOptionJSON(
+                options[resolvedOptionKeys.CreateCacheTierRatio],
             ),
       VideoCurrencyRates: videoCurrencyRates,
       VideoPriceUnit: defaultVideoPriceUnit,
@@ -1586,7 +1716,10 @@ export function useModelPricingEditorState({
                 ...Object.keys(sourceMaps.VideoCompletionRatio),
                 ...Object.keys(sourceMaps.VideoPrice),
                 ...Object.keys(sourceMaps.VideoPricingRules),
-                ...Object.keys(sourceMaps.RequestTierPricing),
+                ...Object.keys(sourceMaps.ModelTierRatio),
+                ...Object.keys(sourceMaps.CompletionTierRatio),
+                ...Object.keys(sourceMaps.CacheTierRatio),
+                ...Object.keys(sourceMaps.CreateCacheTierRatio),
             ]);
 
         const nextModels = Array.from(names)
@@ -1987,7 +2120,10 @@ export function useModelPricingEditorState({
             ...EMPTY_MODEL,
             name: trimmedName,
             rawRatios: { ...EMPTY_MODEL.rawRatios },
-            requestTierRule: null,
+            modelTierRatio: null,
+            completionTierRatio: null,
+            cacheTierRatio: null,
+            createCacheTierRatio: null,
         };
 
         setModels((previous) => [nextModel, ...previous]);
@@ -2053,8 +2189,17 @@ export function useModelPricingEditorState({
                     videoUploadRules: selectedModel.videoUploadRules,
                     videoGenerateRules: selectedModel.videoGenerateRules,
                     videoSimilarityThreshold: selectedModel.videoSimilarityThreshold,
-                    requestTierRule: selectedModel.requestTierRule
-                        ? normalizeTierRule(selectedModel.requestTierRule)
+                    modelTierRatio: selectedModel.modelTierRatio
+                        ? normalizeTierSegments(selectedModel.modelTierRatio)
+                        : null,
+                    completionTierRatio: selectedModel.completionTierRatio
+                        ? normalizeTierSegments(selectedModel.completionTierRatio)
+                        : null,
+                    cacheTierRatio: selectedModel.cacheTierRatio
+                        ? normalizeTierSegments(selectedModel.cacheTierRatio)
+                        : null,
+                    createCacheTierRatio: selectedModel.createCacheTierRatio
+                        ? normalizeTierSegments(selectedModel.createCacheTierRatio)
                         : null,
                 };
 
@@ -2120,11 +2265,14 @@ export function useModelPricingEditorState({
                 VideoCompletionRatio: {},
                 VideoPrice: {},
                 VideoPricingRules: {},
-                RequestTierPricing: {},
+                ModelTierRatio: {},
+                CompletionTierRatio: {},
+                CacheTierRatio: {},
+                CreateCacheTierRatio: {},
             };
 
             for (const model of models) {
-        const serialized = serializeModel(model, t, videoCurrencyRates);
+        const serialized = serializeModel(model, t, videoCurrencyRates, visibleCategories);
                 Object.entries(serialized).forEach(([key, value]) => {
                     if (value !== null) {
                         output[key][model.name] = value;
@@ -2160,31 +2308,90 @@ export function useModelPricingEditorState({
         }
     };
 
-    const updateRequestTierRule = (rule) => {
+    const updateModelTierRatio = (tier) => {
         if (!selectedModel) return;
         upsertModel(selectedModel.name, (model) => ({
             ...model,
-            requestTierRule: rule ? normalizeTierRule(rule) : null,
+            modelTierRatio: tier ? normalizeTierSegments(tier) : null,
         }));
     };
 
-    const applyRequestTierTemplate = (template) => {
-        if (!selectedModel || !template) return null;
-        const rule = normalizeTierRule(template);
+    const updateCompletionTierRatio = (tier) => {
+        if (!selectedModel) return;
         upsertModel(selectedModel.name, (model) => ({
             ...model,
-            requestTierRule: rule,
+            completionTierRatio: tier ? normalizeTierSegments(tier) : null,
         }));
-        // 返回需要打开和关闭的类别
+    };
+
+    const updateCacheTierRatio = (tier) => {
+        if (!selectedModel) return;
+        upsertModel(selectedModel.name, (model) => ({
+            ...model,
+            cacheTierRatio: tier ? normalizeTierSegments(tier) : null,
+        }));
+    };
+
+    const updateCreateCacheTierRatio = (tier) => {
+        if (!selectedModel) return;
+        upsertModel(selectedModel.name, (model) => ({
+            ...model,
+            createCacheTierRatio: tier ? normalizeTierSegments(tier) : null,
+        }));
+    };
+
+    const clearAllTierRatios = () => {
+        if (!selectedModel) return;
+        upsertModel(selectedModel.name, (model) => ({
+            ...model,
+            modelTierRatio: null,
+            completionTierRatio: null,
+            cacheTierRatio: null,
+            createCacheTierRatio: null,
+        }));
+    };
+
+    const applyTierTemplate = (template) => {
+        if (!selectedModel || !template) return;
+
+        const rule = normalizeTierRule(template.RequestTierPricingRule || template);
         const categoriesToOpen = [];
-        if (template.output && template.output.length > 0) categoriesToOpen.push('output');
-        if (template.cache_read && template.cache_read.length > 0) categoriesToOpen.push('cache_read');
-        if (template.cache_write && template.cache_write.length > 0) categoriesToOpen.push('cache_write');
-        // 需要关闭的类别：在模版中不存在但可能被打开的类别
         const categoriesToClose = [];
-        if (!categoriesToOpen.includes('output')) categoriesToClose.push('output');
-        if (!categoriesToOpen.includes('cache_read')) categoriesToClose.push('cache_read');
-        if (!categoriesToOpen.includes('cache_write')) categoriesToClose.push('cache_write');
+        upsertModel(selectedModel.name, (model) => {
+            const nextModel = { ...model };
+
+            if (rule.input.length > 0) {
+                nextModel.modelTierRatio = { segments: rule.input };
+            }
+            if (rule.output.length > 0) {
+                nextModel.completionTierRatio = { segments: rule.output };
+                categoriesToOpen.push('output');
+            } else {
+                nextModel.completionTierRatio = null;
+                categoriesToClose.push('output');
+            }
+            if (rule.cache_read.length > 0) {
+                nextModel.cacheTierRatio = { segments: rule.cache_read };
+                categoriesToOpen.push('cache_read');
+            } else {
+                nextModel.cacheTierRatio = null;
+                categoriesToClose.push('cache_read');
+            }
+            if (rule.cache_write.length > 0) {
+                nextModel.createCacheTierRatio = { segments: rule.cache_write };
+                categoriesToOpen.push('cache_write');
+            } else {
+                nextModel.createCacheTierRatio = null;
+                categoriesToClose.push('cache_write');
+            }
+
+            if (nextModel.modelTierRatio || nextModel.completionTierRatio ||
+                nextModel.cacheTierRatio || nextModel.createCacheTierRatio) {
+                nextModel.billingMode = 'tiered';
+            }
+
+            return nextModel;
+        });
         return { categoriesToOpen, categoriesToClose };
     };
 
@@ -2211,12 +2418,16 @@ export function useModelPricingEditorState({
         handleNumericFieldChange,
         handleBillingModeChange,
         handleVideoBillingModeChange,
-    handleVideoPriceUnitChange,
+        handleVideoPriceUnitChange,
         updateVideoRuleRow,
         addVideoRuleRow,
         removeVideoRuleRow,
-        updateRequestTierRule,
-        applyRequestTierTemplate,
+        updateModelTierRatio,
+        updateCompletionTierRatio,
+        updateCacheTierRatio,
+        updateCreateCacheTierRatio,
+        clearAllTierRatios,
+        applyTierTemplate,
         handleSubmit,
         addModel,
         deleteModel,

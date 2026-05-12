@@ -141,8 +141,8 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		}
 		ratio := modelRatio * groupRatioInfo.GroupRatio
 		dPreConsumedTokens := decimal.NewFromInt(int64(preConsumedTokens))
-		if rule, ok := ratio_setting.ResolveRequestTierPricing(channelID, info.OriginModelName); ok {
-			dPreConsumedTokens, _, _, _, _ = ratio_setting.ApplyRequestTierPricingDecimal(rule, dPreConsumedTokens, decimal.Zero, decimal.Zero, decimal.Zero)
+		if tier, ok := ratio_setting.ResolveModelTierRatio(channelID, info.OriginModelName); ok {
+			dPreConsumedTokens = ratio_setting.ApplyTierSegmentsForType(dPreConsumedTokens, tier)
 		}
 		preConsumedQuota = int(dPreConsumedTokens.Mul(decimal.NewFromFloat(ratio)).Round(0).IntPart())
 	} else {
