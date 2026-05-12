@@ -82,6 +82,113 @@ function WithdrawFieldLabel({ required, children }) {
 
 const { Text, Title } = Typography;
 
+const QR_CODE_SIZE = 168;
+const QR_DOWNLOAD_PADDING = 20;
+const QR_DOWNLOAD_BORDER_WIDTH = 2;
+const QR_DOWNLOAD_BORDER_RADIUS = 14;
+
+function drawRoundedRect(ctx, x, y, width, height, radius) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadQrSvgAsPng(svg, filename) {
+  return new Promise((resolve, reject) => {
+    const svgText = new XMLSerializer().serializeToString(svg);
+    const svgBlob = new Blob([svgText], {
+      type: 'image/svg+xml;charset=utf-8',
+    });
+    const svgUrl = URL.createObjectURL(svgBlob);
+    const image = new Image();
+
+    image.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        const totalSize = QR_CODE_SIZE + QR_DOWNLOAD_PADDING * 2;
+        const dpr = Math.max(window.devicePixelRatio || 1, 1);
+        canvas.width = totalSize * dpr;
+        canvas.height = totalSize * dpr;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('canvas context unavailable'));
+          return;
+        }
+
+        ctx.scale(dpr, dpr);
+        ctx.fillStyle = '#ffffff';
+        drawRoundedRect(
+          ctx,
+          0,
+          0,
+          totalSize,
+          totalSize,
+          QR_DOWNLOAD_BORDER_RADIUS,
+        );
+        ctx.fill();
+
+        ctx.strokeStyle = '#d9d9d9';
+        ctx.lineWidth = QR_DOWNLOAD_BORDER_WIDTH;
+        drawRoundedRect(
+          ctx,
+          QR_DOWNLOAD_BORDER_WIDTH / 2,
+          QR_DOWNLOAD_BORDER_WIDTH / 2,
+          totalSize - QR_DOWNLOAD_BORDER_WIDTH,
+          totalSize - QR_DOWNLOAD_BORDER_WIDTH,
+          QR_DOWNLOAD_BORDER_RADIUS,
+        );
+        ctx.stroke();
+
+        ctx.drawImage(
+          image,
+          QR_DOWNLOAD_PADDING,
+          QR_DOWNLOAD_PADDING,
+          QR_CODE_SIZE,
+          QR_CODE_SIZE,
+        );
+
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            reject(new Error('png export failed'));
+            return;
+          }
+          downloadBlob(blob, filename);
+          resolve();
+        }, 'image/png');
+      } catch (e) {
+        reject(e);
+      } finally {
+        URL.revokeObjectURL(svgUrl);
+      }
+    };
+
+    image.onerror = () => {
+      URL.revokeObjectURL(svgUrl);
+      reject(new Error('qr image load failed'));
+    };
+    image.src = svgUrl;
+  });
+}
+
 export default function DistributorCenter() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -502,6 +609,20 @@ export default function DistributorCenter() {
   const shortLink =
     center?.aff_code && `${window.location.origin}/r/${center.aff_code}`;
 
+  const downloadRegistrationQrCode = useCallback(async () => {
+    const svg = document.getElementById('dist-qr-wrap')?.querySelector('svg');
+    if (!svg) return;
+
+    try {
+      await downloadQrSvgAsPng(
+        svg,
+        `invite-${center?.aff_code || 'qrcode'}.png`,
+      );
+    } catch {
+      showError(t('下载失败'));
+    }
+  }, [center?.aff_code, t]);
+
   const openDetail = (r) => {
     setDetailInviteeId(r.invitee_id);
     setDetailInviteeLabel(
@@ -755,7 +876,7 @@ export default function DistributorCenter() {
                     >
                       <QRCodeSVG
                         value={shortLink}
-                        size={168}
+                        size={QR_CODE_SIZE}
                         level='M'
                         bgColor='#ffffff'
                         fgColor='#000000'
@@ -765,21 +886,7 @@ export default function DistributorCenter() {
                   <Button
                     className='mt-2'
                     size='small'
-                    onClick={() => {
-                      const svg = document
-                        .getElementById('dist-qr-wrap')
-                        ?.querySelector('svg');
-                      if (!svg) return;
-                      const blob = new Blob([svg.outerHTML], {
-                        type: 'image/svg+xml;charset=utf-8',
-                      });
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement('a');
-                      a.href = url;
-                      a.download = `invite-${center?.aff_code}.svg`;
-                      a.click();
-                      URL.revokeObjectURL(url);
-                    }}
+                    onClick={downloadRegistrationQrCode}
                   >
                     {t('下载二维码')}
                   </Button>

@@ -554,15 +554,18 @@ func pickAudioPriceByResolution(ctx videoEstimateContext, hasAudio bool, rows []
 	if len(rows) == 0 {
 		return 0, false
 	}
-	targetPixels := ctx.Width * ctx.Height
+	targetLong, targetShort := normalizeResolutionSides(ctx.Width, ctx.Height)
+	targetRatio := targetResolutionRatio(ctx.Width, ctx.Height)
 	bestIdx := -1
-	minDiffRatio := math.MaxFloat64
+	bestPixels := int(^uint(0) >> 1)
+	fallbackIdx := -1
+	fallbackPixels := 0
 	for i := range rows {
 		r := rows[i]
 		if r.Price <= 0 || r.HasAudio != hasAudio {
 			continue
 		}
-		ruleW, ruleH, ok := parseResolutionFlexible(r.Resolution)
+		ruleW, ruleH, ok := parseResolutionFlexibleForRatio(r.Resolution, targetRatio)
 		if !ok {
 			continue
 		}
@@ -570,16 +573,85 @@ func pickAudioPriceByResolution(ctx videoEstimateContext, hasAudio bool, rows []
 		if rulePixels <= 0 {
 			continue
 		}
-		diffRatio := math.Abs(float64(targetPixels-rulePixels)) / float64(rulePixels)
-		if diffRatio < minDiffRatio {
-			minDiffRatio = diffRatio
-			bestIdx = i
+		ruleLong, ruleShort := normalizeResolutionSides(ruleW, ruleH)
+		if ruleLong >= targetLong && ruleShort >= targetShort {
+			if rulePixels < bestPixels {
+				bestPixels = rulePixels
+				bestIdx = i
+			}
+			continue
 		}
+		if rulePixels > fallbackPixels {
+			fallbackPixels = rulePixels
+			fallbackIdx = i
+		}
+	}
+	if bestIdx < 0 {
+		bestIdx = fallbackIdx
 	}
 	if bestIdx < 0 {
 		return 0, false
 	}
 	return rows[bestIdx].Price, true
+}
+
+func normalizeResolutionSides(width, height int) (longSide, shortSide int) {
+	if width >= height {
+		return width, height
+	}
+	return height, width
+}
+
+func targetResolutionRatio(width, height int) float64 {
+	longSide, shortSide := normalizeResolutionSides(width, height)
+	if longSide <= 0 || shortSide <= 0 {
+		return 16.0 / 9.0
+	}
+	ratio := float64(longSide) / float64(shortSide)
+	candidates := []float64{
+		1.0,
+		4.0 / 3.0,
+		16.0 / 9.0,
+		21.0 / 9.0,
+	}
+	best := candidates[0]
+	bestDiff := math.Abs(ratio - best)
+	for _, candidate := range candidates[1:] {
+		if diff := math.Abs(ratio - candidate); diff < bestDiff {
+			best = candidate
+			bestDiff = diff
+		}
+	}
+	return best
+}
+
+func parseResolutionFlexibleForRatio(s string, ratio float64) (int, int, bool) {
+	raw := strings.ToLower(strings.TrimSpace(s))
+	if raw == "" {
+		return 0, 0, false
+	}
+	if w, h, ok := parseResolution(raw); ok {
+		return w, h, true
+	}
+	shortSide := 0
+	switch raw {
+	case "480p":
+		shortSide = 480
+	case "540p":
+		shortSide = 540
+	case "720p":
+		shortSide = 720
+	case "1080p":
+		shortSide = 1080
+	case "2k":
+		shortSide = 1440
+	case "4k":
+		shortSide = 2160
+	default:
+		return 0, 0, false
+	}
+	longSide := int(math.Ceil(float64(shortSide) * ratio))
+	return longSide, shortSide, true
 }
 
 func parseResolutionFlexible(s string) (int, int, bool) {

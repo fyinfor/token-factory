@@ -557,8 +557,14 @@ func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor
 	}
 
 	// 1. 无 token 时，视频按秒规则优先按真实成片重算。
-	if actualQuota := recalcVideoPerSecondQuotaOnComplete(task, taskResult); actualQuota > 0 {
-		RecalculateTaskQuota(ctx, task, actualQuota, "视频按秒重算")
+	if actualQuota, detail := recalcVideoPerSecondQuotaDetailOnComplete(task, taskResult); actualQuota > 0 {
+		RecalculateTaskQuota(
+			ctx,
+			task,
+			actualQuota,
+			formatVideoPerSecondBillingDetail("视频按秒重算", detail, actualQuota),
+			videoPerSecondBillingDetailOther(detail, actualQuota),
+		)
 		return
 	}
 
@@ -588,25 +594,36 @@ func SettleTaskBillingOnFetch(ctx context.Context, task *model.Task, taskResult 
 			return
 		}
 	}
-	if actualQuota := recalcVideoPerSecondQuotaOnComplete(task, taskResult); actualQuota > 0 {
-		RecalculateTaskQuota(ctx, task, actualQuota, "视频按秒重算(fetch)")
+	if actualQuota, detail := recalcVideoPerSecondQuotaDetailOnComplete(task, taskResult); actualQuota > 0 {
+		RecalculateTaskQuota(
+			ctx,
+			task,
+			actualQuota,
+			formatVideoPerSecondBillingDetail("视频按秒重算(fetch)", detail, actualQuota),
+			videoPerSecondBillingDetailOther(detail, actualQuota),
+		)
 	}
 }
 
 func recalcVideoPerSecondQuotaOnComplete(task *model.Task, taskResult *relaycommon.TaskInfo) int {
+	quota, _ := recalcVideoPerSecondQuotaDetailOnComplete(task, taskResult)
+	return quota
+}
+
+func recalcVideoPerSecondQuotaDetailOnComplete(task *model.Task, taskResult *relaycommon.TaskInfo) (int, *videoPerSecondBillingDetail) {
 	if task == nil || taskResult == nil || task.Status != model.TaskStatusSuccess {
-		return 0
+		return 0, nil
 	}
 	modelName := taskModelName(task)
 	if strings.TrimSpace(modelName) == "" {
-		return 0
+		return 0, nil
 	}
 	channelRules, ok := ratio_setting.GetChannelVideoPricingRules(task.ChannelId, modelName)
 	if !ok || !ratio_setting.HasUsableVideoPerSecondRules(channelRules) {
 		var globalOK bool
 		channelRules, globalOK = ratio_setting.GetVideoPricingRules(modelName)
 		if !globalOK || !ratio_setting.HasUsableVideoPerSecondRules(channelRules) {
-			return 0
+			return 0, nil
 		}
 	}
 	videoURL := strings.TrimSpace(taskResult.Url)
@@ -619,13 +636,13 @@ func recalcVideoPerSecondQuotaOnComplete(task *model.Task, taskResult *relaycomm
 		var err error
 		meta, err = ProbeVideoMetadataFromURL(videoURL)
 		if err != nil {
-			return 0
+			return 0, nil
 		}
 	}
 	mode := detectTaskVideoBillingMode(task)
-	pricePerSec, ok := matchPerSecondPrice(channelRules, mode, meta.Width, meta.Height, meta.HasAudio)
-	if !ok || pricePerSec <= 0 {
-		return 0
+	match, ok := matchPerSecondPriceDetail(channelRules, mode, meta.Width, meta.Height, meta.HasAudio)
+	if !ok || match.PricePerSecond <= 0 {
+		return 0, nil
 	}
 	groupRatio := 1.0
 	if task.PrivateData.BillingContext != nil && task.PrivateData.BillingContext.GroupRatio > 0 {
@@ -633,10 +650,27 @@ func recalcVideoPerSecondQuotaOnComplete(task *model.Task, taskResult *relaycomm
 	}
 	seconds := int(math.Ceil(meta.DurationSec))
 	if seconds <= 0 {
-		return 0
+		return 0, nil
 	}
-	rawQuota := float64(seconds) * pricePerSec * common.QuotaPerUnit * groupRatio
-	return int(math.Round(rawQuota))
+	channelDiscountPercent := model.ResolveChannelPriceDiscountPercent(task.ChannelId)
+	rawQuota := float64(seconds) * match.PricePerSecond * common.QuotaPerUnit * groupRatio
+	quota := model.ApplyChannelPriceDiscountToQuota(int(math.Round(rawQuota)), channelDiscountPercent)
+	detail := &videoPerSecondBillingDetail{
+		Mode:                   mode,
+		Seconds:                seconds,
+		Width:                  meta.Width,
+		Height:                 meta.Height,
+		HasAudio:               meta.HasAudio,
+		Resolution:             match.Resolution,
+		RuleWidth:              match.RuleWidth,
+		RuleHeight:             match.RuleHeight,
+		PricePerSecond:         match.PricePerSecond,
+		GroupRatio:             groupRatio,
+		QuotaPerUnit:           common.QuotaPerUnit,
+		ChannelDiscountPercent: channelDiscountPercent,
+		UnifiedAudio:           match.UnifiedAudio,
+	}
+	return quota, detail
 }
 
 func extractVideoMetadataFromTaskData(task *model.Task) (*VideoMetadata, bool) {
@@ -765,7 +799,39 @@ func detectTaskVideoBillingMode(task *model.Task) string {
 	return "text_to_video"
 }
 
+type videoPerSecondPriceMatch struct {
+	Resolution     string
+	RuleWidth      int
+	RuleHeight     int
+	PricePerSecond float64
+	UnifiedAudio   bool
+}
+
+type videoPerSecondBillingDetail struct {
+	Mode                   string
+	Seconds                int
+	Width                  int
+	Height                 int
+	HasAudio               bool
+	Resolution             string
+	RuleWidth              int
+	RuleHeight             int
+	PricePerSecond         float64
+	GroupRatio             float64
+	QuotaPerUnit           float64
+	ChannelDiscountPercent float64
+	UnifiedAudio           bool
+}
+
 func matchPerSecondPrice(r ratio_setting.VideoPricingRules, mode string, width, height int, hasAudio bool) (float64, bool) {
+	match, ok := matchPerSecondPriceDetail(r, mode, width, height, hasAudio)
+	if !ok {
+		return 0, false
+	}
+	return match.PricePerSecond, true
+}
+
+func matchPerSecondPriceDetail(r ratio_setting.VideoPricingRules, mode string, width, height int, hasAudio bool) (*videoPerSecondPriceMatch, bool) {
 	var rows []ratio_setting.VideoResolutionAudioPriceRule
 	switch mode {
 	case "image_to_video":
@@ -776,17 +842,20 @@ func matchPerSecondPrice(r ratio_setting.VideoPricingRules, mode string, width, 
 		rows = r.TextToVideoPerSecond
 	}
 	if len(rows) == 0 {
-		return 0, false
+		return nil, false
 	}
-	targetPixels := width * height
+	targetLong, targetShort := normalizeVideoResolutionSides(width, height)
+	targetRatio := targetVideoResolutionRatio(width, height)
 	best := -1
-	minDiff := math.MaxFloat64
+	bestPixels := int(^uint(0) >> 1)
+	fallback := -1
+	fallbackPixels := 0
 	for i := range rows {
 		row := rows[i]
 		if row.Price <= 0 || row.HasAudio != hasAudio {
 			continue
 		}
-		rw, rh, ok := parseVideoResolutionFlexible(row.Resolution)
+		rw, rh, ok := parseVideoResolutionFlexibleForRatio(row.Resolution, targetRatio)
 		if !ok {
 			continue
 		}
@@ -794,16 +863,106 @@ func matchPerSecondPrice(r ratio_setting.VideoPricingRules, mode string, width, 
 		if p <= 0 {
 			continue
 		}
-		diff := math.Abs(float64(targetPixels-p)) / float64(p)
-		if diff < minDiff {
-			minDiff = diff
-			best = i
+		ruleLong, ruleShort := normalizeVideoResolutionSides(rw, rh)
+		if ruleLong >= targetLong && ruleShort >= targetShort {
+			if p < bestPixels {
+				bestPixels = p
+				best = i
+			}
+			continue
+		}
+		if p > fallbackPixels {
+			fallbackPixels = p
+			fallback = i
 		}
 	}
 	if best < 0 {
-		return 0, false
+		best = fallback
 	}
-	return rows[best].Price, true
+	if best < 0 {
+		return nil, false
+	}
+	row := rows[best]
+	rw, rh, _ := parseVideoResolutionFlexibleForRatio(row.Resolution, targetRatio)
+	return &videoPerSecondPriceMatch{
+		Resolution:     row.Resolution,
+		RuleWidth:      rw,
+		RuleHeight:     rh,
+		PricePerSecond: row.Price,
+		UnifiedAudio:   hasSamePerSecondPriceForAudio(rows, row),
+	}, true
+}
+
+func hasSamePerSecondPriceForAudio(rows []ratio_setting.VideoResolutionAudioPriceRule, row ratio_setting.VideoResolutionAudioPriceRule) bool {
+	for _, other := range rows {
+		if other.Resolution == row.Resolution &&
+			other.HasAudio != row.HasAudio &&
+			other.Price == row.Price {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeVideoResolutionSides(width, height int) (longSide, shortSide int) {
+	if width >= height {
+		return width, height
+	}
+	return height, width
+}
+
+func targetVideoResolutionRatio(width, height int) float64 {
+	longSide, shortSide := normalizeVideoResolutionSides(width, height)
+	if longSide <= 0 || shortSide <= 0 {
+		return 16.0 / 9.0
+	}
+	ratio := float64(longSide) / float64(shortSide)
+	candidates := []float64{
+		1.0,
+		4.0 / 3.0,
+		16.0 / 9.0,
+		21.0 / 9.0,
+	}
+	best := candidates[0]
+	bestDiff := math.Abs(ratio - best)
+	for _, candidate := range candidates[1:] {
+		if diff := math.Abs(ratio - candidate); diff < bestDiff {
+			best = candidate
+			bestDiff = diff
+		}
+	}
+	return best
+}
+
+func parseVideoResolutionFlexibleForRatio(v string, ratio float64) (int, int, bool) {
+	s := strings.ToLower(strings.TrimSpace(v))
+	parts := strings.Split(s, "x")
+	if len(parts) == 2 {
+		w, ew := strconv.Atoi(strings.TrimSpace(parts[0]))
+		h, eh := strconv.Atoi(strings.TrimSpace(parts[1]))
+		if ew == nil && eh == nil && w > 0 && h > 0 {
+			return w, h, true
+		}
+	}
+	shortSide := 0
+	switch s {
+	case "480p":
+		shortSide = 480
+	case "540p":
+		shortSide = 540
+	case "720p":
+		shortSide = 720
+	case "1080p":
+		shortSide = 1080
+	case "2k":
+		shortSide = 1440
+	case "4k":
+		shortSide = 2160
+	default:
+		return 0, 0, false
+	}
+	longSide := int(math.Ceil(float64(shortSide) * ratio))
+	return longSide, shortSide, true
 }
 
 func parseVideoResolutionFlexible(v string) (int, int, bool) {

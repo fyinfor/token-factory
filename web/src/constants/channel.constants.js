@@ -192,7 +192,7 @@ export const CHANNEL_OPTIONS = [
   {
     value: 58,
     color: 'purple',
-    label: 'OpenAI 视频 (/v1/videos/generations)',
+    label: '智象未来-视频 (/v1/videos/generations)',
   },
   {
     value: 59,

@@ -464,8 +464,8 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 	return
 }
 
-// tryRealtimeFetch 尝试从上游实时拉取 Gemini/Vertex 任务状态。
-// 仅当渠道类型为 Gemini 或 Vertex 时触发；其他渠道或出错时返回 nil。
+// tryRealtimeFetch 尝试从上游实时拉取任务状态。
+// 对操练场视频轮询尤其重要：OpenAI-style 视频渠道在后台轮询落库前，也能实时返回完成态。
 // 当非 OpenAI Video API 时，还会构建自定义格式的响应体。
 func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	channelModel, err := model.GetChannelById(task.ChannelId, true)
@@ -474,6 +474,8 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	}
 	if channelModel.Type != constant.ChannelTypeVertexAi &&
 		channelModel.Type != constant.ChannelTypeGemini &&
+		channelModel.Type != constant.ChannelTypeOpenAIVideo &&
+		channelModel.Type != constant.ChannelTypeVideoGenerator &&
 		channelModel.Type != constant.ChannelTypeTencentCloudVideo {
 		return nil
 	}
@@ -511,7 +513,9 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 		return nil
 	}
 
-	if channelModel.Type == constant.ChannelTypeTencentCloudVideo {
+	if channelModel.Type == constant.ChannelTypeOpenAIVideo ||
+		channelModel.Type == constant.ChannelTypeVideoGenerator ||
+		channelModel.Type == constant.ChannelTypeTencentCloudVideo {
 		task.Data = body
 	}
 

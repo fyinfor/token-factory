@@ -92,10 +92,21 @@ func DetectProtocol(baseURL string) string {
 	if strings.Contains(base, "/videogenerator") || strings.Contains(base, "sophnet.com/api/open-apis/projects/easyllms") {
 		return ProtocolSophnet
 	}
-	if strings.Contains(base, "maas.hidreamai.com") || strings.Contains(base, "/api/maas") {
+	if strings.Contains(base, "maas.hidreamai.com") ||
+		strings.Contains(base, "hiharness.hidreamai.com") ||
+		strings.Contains(base, "/api/maas") {
 		return ProtocolMaaS
 	}
 	return ProtocolArk
+}
+
+func normalizeMaaSBaseURL(baseURL string) string {
+	base := strings.TrimRight(strings.TrimSpace(baseURL), "/")
+	lower := strings.ToLower(base)
+	if strings.Contains(lower, "hiharness.hidreamai.com") && !strings.Contains(lower, "/api/maas") {
+		return base + "/api/maas/gw"
+	}
+	return base
 }
 
 // ============================================================================
@@ -177,12 +188,12 @@ type sophnetResultResponse struct {
 	Status  int    `json:"status"`
 	Message string `json:"message,omitempty"`
 	Result  struct {
-		ID      string           `json:"id"`
-		Model   string           `json:"model,omitempty"`
-		Status  string           `json:"status,omitempty"`
-		Content *arkTaskContent  `json:"content,omitempty"`
-		Output  *arkVideoOutput  `json:"output,omitempty"`
-		Error   *apiError        `json:"error,omitempty"`
+		ID      string          `json:"id"`
+		Model   string          `json:"model,omitempty"`
+		Status  string          `json:"status,omitempty"`
+		Content *arkTaskContent `json:"content,omitempty"`
+		Output  *arkVideoOutput `json:"output,omitempty"`
+		Error   *apiError       `json:"error,omitempty"`
 	} `json:"result"`
 }
 
@@ -234,7 +245,11 @@ func (a *TaskAdaptor) BuildRequestURL(_ *relaycommon.RelayInfo) (string, error) 
 	if a.protocol == ProtocolSophnet {
 		return fmt.Sprintf("%s%s", strings.TrimRight(a.baseURL, "/"), sophnetSubmitPath), nil
 	}
-	return fmt.Sprintf("%s%s", strings.TrimRight(a.baseURL, "/"), SubmitPath), nil
+	baseURL := strings.TrimRight(a.baseURL, "/")
+	if a.protocol == ProtocolMaaS {
+		baseURL = normalizeMaaSBaseURL(a.baseURL)
+	}
+	return fmt.Sprintf("%s%s", baseURL, SubmitPath), nil
 }
 
 func (a *TaskAdaptor) BuildRequestHeader(_ *gin.Context, req *http.Request, _ *relaycommon.RelayInfo) error {
@@ -345,7 +360,7 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	protocol := DetectProtocol(baseUrl)
 	var uri string
 	if protocol == ProtocolMaaS {
-		uri = fmt.Sprintf("%s%s?task_id=%s", strings.TrimRight(baseUrl, "/"), maasResultPath, taskID)
+		uri = fmt.Sprintf("%s%s?task_id=%s", normalizeMaaSBaseURL(baseUrl), maasResultPath, taskID)
 	} else if protocol == ProtocolSophnet {
 		uri = fmt.Sprintf("%s%s", strings.TrimRight(baseUrl, "/"), fmt.Sprintf(sophnetResultFmt, taskID))
 	} else {
@@ -602,15 +617,7 @@ func (a *TaskAdaptor) GetChannelName() string {
 }
 
 func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, error) {
-	ov := dto.NewOpenAIVideo()
-	ov.ID = originTask.TaskID
-	ov.Status = originTask.Status.ToVideoStatus()
-	ov.SetProgressStr(originTask.Progress)
-	ov.CreatedAt = dto.FormatTimeUnixRFC3339(originTask.CreatedAt)
-	if originTask.FinishTime > 0 {
-		ov.CompletedAt = dto.FormatTimeUnixRFC3339(originTask.FinishTime)
-	}
-	ov.Model = originTask.Properties.OriginModelName
+	ov := originTask.ToOpenAIVideo()
 
 	normalizedData := normalizeOpenAIVideoPollJSON(originTask.Data)
 	// Pick the parser via response shape detection, then surface URL/error.
@@ -618,7 +625,7 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 	case ProtocolMaaS:
 		var resp maasResultResponse
 		if err := common.Unmarshal(normalizedData, &resp); err != nil {
-			return nil, errors.Wrap(err, "unmarshal video task data (maas) failed")
+			return common.Marshal(ov)
 		}
 		var firstURL, firstErr string
 		for _, sub := range resp.Result.SubTaskResults {
@@ -641,10 +648,12 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 	case ProtocolSophnet:
 		var resp sophnetResultResponse
 		if err := common.Unmarshal(normalizedData, &resp); err != nil {
-			return nil, errors.Wrap(err, "unmarshal video task data (sophnet) failed")
+			return common.Marshal(ov)
 		}
 		if resp.Result.Content != nil && strings.TrimSpace(resp.Result.Content.VideoURL) != "" {
 			ov.SetMetadata("url", resp.Result.Content.VideoURL)
+		} else if resp.Result.Output != nil && strings.TrimSpace(resp.Result.Output.VideoURL) != "" {
+			ov.SetMetadata("url", resp.Result.Output.VideoURL)
 		}
 		if resp.Status != 0 {
 			ov.Error = &dto.OpenAIVideoError{
@@ -660,7 +669,7 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 	default:
 		var resp arkResultResponse
 		if err := common.Unmarshal(normalizedData, &resp); err != nil {
-			return nil, errors.Wrap(err, "unmarshal video task data (ark) failed")
+			return common.Marshal(ov)
 		}
 		if resp.Content != nil && strings.TrimSpace(resp.Content.VideoURL) != "" {
 			ov.SetMetadata("url", resp.Content.VideoURL)
@@ -801,15 +810,16 @@ func (a *TaskAdaptor) buildMaasPayloadMap(req *relaycommon.TaskSubmitReq) (map[s
 			if url == "" {
 				continue
 			}
-			content = append(content, map[string]any{
-				"type":      "image_url",
-				"image_url": map[string]any{"url": url},
-			})
+			content = append(content, maasMediaContentPart(url))
 		}
+		appendMaasMetadataMediaContent(&content, req.Metadata, "video_urls", "video_url")
+		appendMaasMetadataMediaContent(&content, req.Metadata, "audio_urls", "audio_url")
 		if len(content) > 0 {
 			body["content"] = content
 		}
 	}
+
+	applyMaasDefaultVideoFields(body, req)
 
 	// Forward metadata; never overwrite model_id. Other keys (including
 	// "content" and the flat fields) may legitimately be supplied/overridden
@@ -821,9 +831,81 @@ func (a *TaskAdaptor) buildMaasPayloadMap(req *relaycommon.TaskSubmitReq) (map[s
 		if k == "model_id" {
 			continue
 		}
+		if k == "video_urls" || k == "audio_urls" {
+			continue
+		}
 		body[k] = v
 	}
 	return body, nil
+}
+
+func applyMaasDefaultVideoFields(body map[string]any, req *relaycommon.TaskSubmitReq) {
+	duration, resolution := extractDurationAndResolution(*req)
+	if duration > 0 {
+		body["duration"] = duration
+	}
+	if strings.TrimSpace(resolution) != "" {
+		body["resolution"] = resolution
+	}
+	body["ratio"] = sizeToRatio(req.Size)
+	body["generate_audio"] = false
+}
+
+func appendMaasMetadataMediaContent(content *[]map[string]any, metadata map[string]any, key string, contentType string) {
+	if len(metadata) == 0 {
+		return
+	}
+	appendURL := func(url string) {
+		url = strings.TrimSpace(url)
+		if url == "" {
+			return
+		}
+		*content = append(*content, map[string]any{
+			"type":      contentType,
+			contentType: map[string]any{"url": url},
+		})
+	}
+	switch v := metadata[key].(type) {
+	case string:
+		appendURL(v)
+	case []string:
+		for _, url := range v {
+			appendURL(url)
+		}
+	case []any:
+		for _, item := range v {
+			if url, ok := item.(string); ok {
+				appendURL(url)
+			}
+		}
+	}
+}
+
+func maasMediaContentPart(url string) map[string]any {
+	contentType := "image_url"
+	lower := strings.ToLower(strings.TrimSpace(url))
+	if i := strings.IndexAny(lower, "?#"); i >= 0 {
+		lower = lower[:i]
+	}
+	switch {
+	case strings.HasSuffix(lower, ".mp4") ||
+		strings.HasSuffix(lower, ".mov") ||
+		strings.HasSuffix(lower, ".avi") ||
+		strings.HasSuffix(lower, ".mkv") ||
+		strings.HasSuffix(lower, ".webm"):
+		contentType = "video_url"
+	case strings.HasSuffix(lower, ".mp3") ||
+		strings.HasSuffix(lower, ".wav") ||
+		strings.HasSuffix(lower, ".m4a") ||
+		strings.HasSuffix(lower, ".aac") ||
+		strings.HasSuffix(lower, ".ogg") ||
+		strings.HasSuffix(lower, ".flac"):
+		contentType = "audio_url"
+	}
+	return map[string]any{
+		"type":      contentType,
+		contentType: map[string]any{"url": url},
+	}
 }
 
 func sizeToResolution(size string) string {
@@ -850,6 +932,36 @@ func sizeToResolution(size string) string {
 	default:
 		return "480p"
 	}
+}
+
+func sizeToRatio(size string) string {
+	parts := strings.Split(strings.ToLower(strings.TrimSpace(size)), "x")
+	if len(parts) != 2 {
+		return defaultRatio
+	}
+	w, errW := strconv.Atoi(strings.TrimSpace(parts[0]))
+	h, errH := strconv.Atoi(strings.TrimSpace(parts[1]))
+	if errW != nil || errH != nil || w <= 0 || h <= 0 {
+		return defaultRatio
+	}
+	ratio := float64(w) / float64(h)
+	candidates := []struct {
+		value string
+		ratio float64
+	}{
+		{"16:9", 16.0 / 9.0},
+		{"9:16", 9.0 / 16.0},
+		{"1:1", 1.0},
+		{"4:3", 4.0 / 3.0},
+		{"3:4", 3.0 / 4.0},
+		{"21:9", 21.0 / 9.0},
+	}
+	for _, candidate := range candidates {
+		if diff := ratio - candidate.ratio; diff > -0.03 && diff < 0.03 {
+			return candidate.value
+		}
+	}
+	return defaultRatio
 }
 
 // resolutionToSizeRatio maps a resolution token to a default size ratio used
