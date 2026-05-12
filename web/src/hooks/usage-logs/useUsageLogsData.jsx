@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Modal } from '@douyinfe/semi-ui';
+import { Modal, Tag } from '@douyinfe/semi-ui';
 import {
   API,
   getTodayStartTimestamp,
@@ -29,10 +29,12 @@ import {
   timestamp2string,
   renderQuota,
   renderNumber,
+  getQuotaPerUnit,
   getLogOther,
   copy,
   renderClaudeLogContent,
   renderLogContent,
+  renderConsumeBillingProcess,
 } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
@@ -79,6 +81,300 @@ export const useLogsData = () => {
   const BILLING_DISPLAY_MODE_STORAGE_KEY = isAdminUser
     ? 'logs-billing-display-mode-admin'
     : 'logs-billing-display-mode-user';
+
+  const hasVideoPerSecondDetail = (other) =>
+    other?.billing_mode === 'video_per_second' &&
+    Number(other?.video_seconds || 0) > 0 &&
+    Number(other?.video_price_per_second || 0) > 0 &&
+    Number(other?.video_quota_per_unit || 0) > 0;
+
+  const hasVideoPerVideoDetail = (other) =>
+    other?.billing_mode === 'video_per_video';
+
+  const renderVideoPerSecondBillingDetail = (log, other, quota) => {
+    const seconds = Number(other?.video_seconds || 0);
+    const pricePerSecond = Number(other?.video_price_per_second || 0);
+    const groupRatio = Number(other?.group_ratio || 1);
+    const channelDiscount = Number(other?.channel_price_discount || 100);
+    const billedQuota = Number(other?.video_billed_quota || quota || 0);
+    const width = Number(other?.video_width || 0);
+    const height = Number(other?.video_height || 0);
+    const ruleWidth = Number(other?.video_rule_width || 0);
+    const ruleHeight = Number(other?.video_rule_height || 0);
+    const hasAudio = other?.video_has_audio === true;
+    const unifiedAudio = other?.video_unified_audio_price === true;
+    const audioText = hasAudio ? t('有音频') : t('无音频');
+    const priceLabel = unifiedAudio
+      ? t('每秒价')
+      : hasAudio
+        ? t('有音轨价')
+        : t('无音轨价');
+    const modelName = log?.model_name || '-';
+    const upstreamModelName = other?.upstream_model_name || '';
+    const specWidth = ruleWidth || width;
+    const specHeight = ruleHeight || height;
+    const calculatedPricePerSecond =
+      pricePerSecond * groupRatio * (channelDiscount / 100);
+    const calculatedTotalPrice = seconds * calculatedPricePerSecond;
+    const formatMoney = (value) => {
+      const numberValue = Number(value || 0);
+      if (!Number.isFinite(numberValue)) {
+        return '$0';
+      }
+      return `$${numberValue.toFixed(6).replace(/\.?0+$/, '')}`;
+    };
+    const tagValue = (value, color = 'blue', key = String(value)) => (
+      <Tag key={key} color={color} size='small'>
+        {value}
+      </Tag>
+    );
+    const inlineTags = (...nodes) => (
+      <span className='flex flex-wrap items-center gap-1'>{nodes}</span>
+    );
+    const modelValue = inlineTags(
+      tagValue(modelName, 'blue', 'model'),
+      isAdminUser && upstreamModelName
+        ? tagValue(
+            t('实际运行：{{upstreamModel}}', {
+              upstreamModel: upstreamModelName,
+            }),
+            'purple',
+            'upstream-model',
+          )
+        : null,
+    );
+    const specValue = inlineTags(
+      tagValue(`${specWidth}×${specHeight}`, 'cyan', 'spec-resolution'),
+      tagValue(audioText, hasAudio ? 'green' : 'grey', 'spec-audio'),
+      tagValue(t('{{seconds}} 秒', { seconds }), 'orange', 'spec-seconds'),
+    );
+    const calculatedPriceValue = inlineTags(
+      tagValue(
+        `${formatMoney(calculatedPricePerSecond)} / ${t('秒')}`,
+        'green',
+        'calculated-price',
+      ),
+      tagValue(priceLabel, 'grey', 'price-label'),
+    );
+    const calculationValue = inlineTags(
+      tagValue(t('{{seconds}} 秒', { seconds }), 'orange', 'calc-seconds'),
+      <span key='multiply-1' className='mx-1 text-gray-400'>
+        ×
+      </span>,
+      tagValue(
+        `${formatMoney(calculatedPricePerSecond)} / ${t('秒')}`,
+        'green',
+        'calc-price',
+      ),
+      <span key='equals' className='mx-1 text-gray-400'>
+        =
+      </span>,
+      tagValue(formatMoney(calculatedTotalPrice), 'red', 'calc-total'),
+    );
+    const modeValue = inlineTags(
+      tagValue(t('分辨率阶梯计费'), 'blue', 'billing-mode'),
+    );
+    const actualVideoValue = inlineTags(
+      tagValue(`${width}×${height}`, 'cyan', 'actual-resolution'),
+      tagValue(audioText, hasAudio ? 'green' : 'grey', 'actual-audio'),
+    );
+    const items = [
+      [t('模型'), modelValue],
+      [t('规格'), specValue],
+      [t('计费单价'), calculatedPriceValue],
+      [t('结算计算'), calculationValue],
+      [
+        t('折算 Tokens'),
+        inlineTags(
+          tagValue(`${renderNumber(billedQuota)} Tokens`, 'red', 'tokens'),
+        ),
+      ],
+      [t('计费模式'), modeValue],
+    ];
+    if (
+      width > 0 &&
+      height > 0 &&
+      (width !== specWidth || height !== specHeight)
+    ) {
+      items.splice(2, 0, [t('实际视频'), actualVideoValue]);
+    }
+
+    return (
+      <div className='max-w-[720px] space-y-1.5 text-sm leading-6'>
+        {items.map(([label, value]) => (
+          <div
+            key={label}
+            className='grid grid-cols-[88px_minmax(0,1fr)] gap-3'
+          >
+            <span className='text-gray-500'>{label}</span>
+            <span className='break-words text-gray-900'>{value}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderVideoPerSecondBillingBrief = (other, quota) => {
+    const billedQuota = Number(other?.video_billed_quota || quota || 0);
+    const seconds = Number(other?.video_seconds || 0);
+    const resolution = other?.video_resolution || '-';
+
+    return (
+      <div className='flex flex-wrap items-center gap-2'>
+        <span className='rounded-full bg-blue-600 px-2 py-0.5 text-xs font-medium text-white'>
+          {t('分辨率阶梯计费')}
+        </span>
+        <span className='text-sm text-gray-700'>
+          {t('{{seconds}}秒 · {{resolution}} · 实际结算 {{tokens}} Tokens', {
+            seconds,
+            resolution,
+            tokens: renderNumber(billedQuota),
+          })}
+        </span>
+      </div>
+    );
+  };
+
+  const renderVideoPerVideoBillingDetail = (log, other, quota) => {
+    const count = Number(other?.video_count || 1);
+    const billedQuota = Number(other?.video_billed_quota || quota || 0);
+    const quotaPerUnit = Number(
+      other?.video_quota_per_unit || getQuotaPerUnit() || 500000,
+    );
+    const pricePerVideo =
+      Number(other?.video_price_per_video || 0) ||
+      (quotaPerUnit > 0 && count > 0 ? billedQuota / quotaPerUnit / count : 0);
+    const width = Number(other?.video_width || 0);
+    const height = Number(other?.video_height || 0);
+    const ruleWidth = Number(other?.video_rule_width || 0);
+    const ruleHeight = Number(other?.video_rule_height || 0);
+    const resolution = other?.video_resolution || '';
+    const hasAudio = other?.video_has_audio === true;
+    const seconds = Number(other?.video_seconds || 0);
+    const modelName = log?.model_name || '-';
+    const upstreamModelName = other?.upstream_model_name || '';
+    const audioText = hasAudio ? t('有音频') : t('无音频');
+    const priceLabel = hasAudio ? t('有音轨价') : t('无音轨价');
+    const totalPrice = count * pricePerVideo;
+    const formatMoney = (value) => {
+      const numberValue = Number(value || 0);
+      if (!Number.isFinite(numberValue)) {
+        return '$0';
+      }
+      return `$${numberValue.toFixed(6).replace(/\.?0+$/, '')}`;
+    };
+    const tagValue = (value, color = 'blue', key = String(value)) => (
+      <Tag key={key} color={color} size='small'>
+        {value}
+      </Tag>
+    );
+    const inlineTags = (...nodes) => (
+      <span className='flex flex-wrap items-center gap-1'>{nodes}</span>
+    );
+    const modelValue = inlineTags(
+      tagValue(modelName, 'blue', 'model'),
+      isAdminUser && upstreamModelName
+        ? tagValue(
+            t('实际运行：{{upstreamModel}}', {
+              upstreamModel: upstreamModelName,
+            }),
+            'purple',
+            'upstream-model',
+          )
+        : null,
+    );
+    const specTags = [];
+    if (resolution || (ruleWidth > 0 && ruleHeight > 0)) {
+      specTags.push(
+        tagValue(
+          ruleWidth > 0 && ruleHeight > 0
+            ? `${ruleWidth}×${ruleHeight}`
+            : resolution,
+          'cyan',
+          'matched-resolution',
+        ),
+      );
+    }
+    if (seconds > 0) {
+      specTags.push(
+        tagValue(t('{{seconds}} 秒', { seconds }), 'orange', 'seconds'),
+      );
+    }
+    specTags.push(tagValue(audioText, hasAudio ? 'green' : 'grey', 'audio'));
+    const specificationValue = inlineTags(...specTags);
+    const countValue = inlineTags(
+      tagValue(t('{{count}} 条', { count }), 'orange', 'count'),
+    );
+    const priceValue = inlineTags(
+      tagValue(`${formatMoney(pricePerVideo)} / ${t('条')}`, 'green', 'price'),
+      tagValue(priceLabel, 'grey', 'price-label'),
+    );
+    const calculationValue = inlineTags(
+      tagValue(t('{{count}} 条', { count }), 'orange', 'calc-count'),
+      <span key='multiply' className='mx-1 text-gray-400'>
+        ×
+      </span>,
+      tagValue(
+        `${formatMoney(pricePerVideo)} / ${t('条')}`,
+        'green',
+        'calc-price',
+      ),
+      <span key='equals' className='mx-1 text-gray-400'>
+        =
+      </span>,
+      tagValue(formatMoney(totalPrice), 'red', 'calc-total'),
+    );
+    const items = [
+      [t('模型'), modelValue],
+      [t('规格'), specificationValue],
+      [t('视频数量'), countValue],
+      [t('计费单价'), priceValue],
+      [t('结算计算'), calculationValue],
+      [
+        t('折算 Tokens'),
+        inlineTags(
+          tagValue(`${renderNumber(billedQuota)} Tokens`, 'red', 'tokens'),
+        ),
+      ],
+      [
+        t('计费模式'),
+        inlineTags(tagValue(t('按视频数量计费'), 'blue', 'billing-mode')),
+      ],
+    ];
+
+    return (
+      <div className='max-w-[720px] space-y-1.5 text-sm leading-6'>
+        {items.map(([label, value]) => (
+          <div
+            key={label}
+            className='grid grid-cols-[88px_minmax(0,1fr)] gap-3'
+          >
+            <span className='text-gray-500'>{label}</span>
+            <span className='break-words text-gray-900'>{value}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderVideoPerVideoBillingBrief = (other, quota) => {
+    const billedQuota = Number(other?.video_billed_quota || quota || 0);
+    const count = Number(other?.video_count || 1);
+
+    return (
+      <div className='flex flex-wrap items-center gap-2'>
+        <span className='rounded-full bg-blue-600 px-2 py-0.5 text-xs font-medium text-white'>
+          {t('按视频数量计费')}
+        </span>
+        <span className='text-sm text-gray-700'>
+          {t('{{count}}条 · 实际结算 {{tokens}} Tokens', {
+            count,
+            tokens: renderNumber(billedQuota),
+          })}
+        </span>
+      </div>
+    );
+  };
 
   // Statistics state
   const [stat, setStat] = useState({
@@ -420,6 +716,16 @@ export const useLogsData = () => {
         other?.task_id && taskFinalQuotaMap[other.task_id]
           ? taskFinalQuotaMap[other.task_id]
           : logs[i]?.quota || 0;
+      const channelPriceDiscountLogPct =
+        other?.channel_price_discount_percent ?? 100;
+      const videoPerSecondBillingDetail = hasVideoPerSecondDetail(other)
+        ? renderVideoPerSecondBillingDetail(logs[i], other, aggregatedQuota)
+        : null;
+      const videoPerVideoBillingDetail = hasVideoPerVideoDetail(other)
+        ? renderVideoPerVideoBillingDetail(logs[i], other, aggregatedQuota)
+        : null;
+      const videoBillingDetail =
+        videoPerSecondBillingDetail || videoPerVideoBillingDetail;
       let expandDataLocal = [];
 
       if (
@@ -428,7 +734,7 @@ export const useLogsData = () => {
       ) {
         expandDataLocal.push({
           key: t('渠道信息'),
-          value: String(logs[i].channel ?? ''),
+          value: logs[i].channel_display || String(logs[i].channel ?? ''),
         });
       }
       if (logs[i].request_id) {
@@ -490,50 +796,61 @@ export const useLogsData = () => {
       if (logs[i].type === 2) {
         expandDataLocal.push({
           key: t('日志详情'),
-          value: other?.claude
-            ? renderClaudeLogContent(
-                other?.model_ratio,
-                other?.completion_ratio,
-                other?.model_price,
-                other?.group_ratio,
-                other?.user_group_ratio,
-                other?.cache_ratio || 1.0,
-                other?.cache_creation_ratio || 1.0,
-                other?.cache_creation_tokens_5m || 0,
-                other?.cache_creation_ratio_5m ||
-                  other?.cache_creation_ratio ||
-                  1.0,
-                other?.cache_creation_tokens_1h || 0,
-                other?.cache_creation_ratio_1h ||
-                  other?.cache_creation_ratio ||
-                  1.0,
-                billingDisplayMode,
-                true,
-              )
-            : renderLogContent(
-                other?.model_ratio,
-                other?.completion_ratio,
-                other?.model_price,
-                other?.group_ratio,
-                other?.user_group_ratio,
-                other?.cache_ratio || 1.0,
-                false,
-                1.0,
-                other?.web_search || false,
-                other?.web_search_call_count || 0,
-                other?.file_search || false,
-                other?.file_search_call_count || 0,
-                billingDisplayMode,
-                true,
-                other?.video_ratio || 0,
-                other?.video_completion_ratio || 1.0,
-                other?.video_output_tokens || 0,
-                other?.video_input_text_tokens || 0,
-                other?.billing_mode || '',
-                aggregatedQuota,
-              ),
+          value: videoPerSecondBillingDetail
+            ? renderVideoPerSecondBillingBrief(other, aggregatedQuota)
+            : videoPerVideoBillingDetail
+              ? renderVideoPerVideoBillingBrief(other, aggregatedQuota)
+              : other?.claude
+                ? renderClaudeLogContent(
+                    other?.model_ratio,
+                    other?.completion_ratio,
+                    other?.model_price,
+                    other?.group_ratio,
+                    other?.user_group_ratio,
+                    other?.cache_ratio || 1.0,
+                    other?.cache_creation_ratio || 1.0,
+                    other?.cache_creation_tokens_5m || 0,
+                    other?.cache_creation_ratio_5m ||
+                      other?.cache_creation_ratio ||
+                      1.0,
+                    other?.cache_creation_tokens_1h || 0,
+                    other?.cache_creation_ratio_1h ||
+                      other?.cache_creation_ratio ||
+                      1.0,
+                    billingDisplayMode,
+                    true,
+                    channelPriceDiscountLogPct,
+                  )
+                : renderLogContent(
+                    other?.model_ratio,
+                    other?.completion_ratio,
+                    other?.model_price,
+                    other?.group_ratio,
+                    other?.user_group_ratio,
+                    other?.cache_ratio || 1.0,
+                    false,
+                    1.0,
+                    other?.web_search || false,
+                    other?.web_search_call_count || 0,
+                    other?.file_search || false,
+                    other?.file_search_call_count || 0,
+                    billingDisplayMode,
+                    true,
+                    other?.video_ratio || 0,
+                    other?.video_completion_ratio || 1.0,
+                    other?.video_output_tokens || 0,
+                    other?.video_input_text_tokens || 0,
+                    other?.billing_mode || '',
+                    aggregatedQuota,
+                    channelPriceDiscountLogPct,
+                    other,
+                  ),
         });
-        if (logs[i]?.content) {
+        if (
+          logs[i]?.content &&
+          !videoBillingDetail &&
+          other?.billing_mode !== 'video_per_video'
+        ) {
           expandDataLocal.push({
             key: t('其他详情'),
             value: logs[i].content,
@@ -551,15 +868,17 @@ export const useLogsData = () => {
           other?.is_model_mapped &&
           other?.upstream_model_name &&
           other?.upstream_model_name !== '';
-        if (modelMapped) {
+        if (modelMapped && !videoBillingDetail) {
           expandDataLocal.push({
             key: t('请求并计费模型'),
             value: logs[i].model_name,
           });
-          expandDataLocal.push({
-            key: t('实际模型'),
-            value: other.upstream_model_name,
-          });
+          if (isAdminUser) {
+            expandDataLocal.push({
+              key: t('实际模型'),
+              value: other.upstream_model_name,
+            });
+          }
         }
 
         const isViolationFeeLog =
@@ -569,49 +888,15 @@ export const useLogsData = () => {
 
         let content = '';
         if (!isViolationFeeLog) {
-          // 计费过程改为展示“已折叠分组倍率后的最终单价/单位价”，不再单独展示分组倍率或 *倍率 公式
-          content = other?.claude
-            ? renderClaudeLogContent(
-                other?.model_ratio,
-                other?.completion_ratio,
-                other?.model_price,
-                other?.group_ratio,
-                other?.user_group_ratio,
-                other?.cache_ratio || 1.0,
-                other?.cache_creation_ratio || 1.0,
-                other?.cache_creation_tokens_5m || 0,
-                other?.cache_creation_ratio_5m ||
-                  other?.cache_creation_ratio ||
-                  1.0,
-                other?.cache_creation_tokens_1h || 0,
-                other?.cache_creation_ratio_1h ||
-                  other?.cache_creation_ratio ||
-                  1.0,
+          content = videoBillingDetail
+            ? videoBillingDetail
+            : renderConsumeBillingProcess({
+                record: logs[i],
+                other,
                 billingDisplayMode,
-                true,
-              )
-            : renderLogContent(
-                other?.model_ratio,
-                other?.completion_ratio,
-                other?.model_price,
-                other?.group_ratio,
-                other?.user_group_ratio,
-                other?.cache_ratio || 1.0,
-                other?.image || false,
-                other?.image_ratio || 0,
-                other?.web_search || false,
-                other?.web_search_call_count || 0,
-                other?.file_search || false,
-                other?.file_search_call_count || 0,
-                billingDisplayMode,
-                true,
-                other?.video_ratio || 0,
-                other?.video_completion_ratio || 1.0,
-                other?.video_output_tokens || 0,
-                other?.video_input_text_tokens || 0,
-                other?.billing_mode || '',
-                aggregatedQuota,
-              );
+                channelPriceDiscountPercent: channelPriceDiscountLogPct,
+                t,
+              });
           expandDataLocal.push({
             key: t('计费过程'),
             value: content,
@@ -766,9 +1051,9 @@ export const useLogsData = () => {
           // fully computed locally from the request body, never reads upstream usage.
           localCountMode = t('视频本地按 token 计费');
         } else if (other?.billing_mode === 'video_per_second') {
-          localCountMode = t('视频本地按秒/分辨率计价');
+          localCountMode = t('分辨率阶梯计费');
         } else if (other?.billing_mode === 'video_per_video') {
-          localCountMode = t('视频本地按条/分辨率计价');
+          localCountMode = t('按视频数量计费');
         } else if (other?.admin_info?.local_count_tokens) {
           localCountMode = t('本地计费');
         } else {

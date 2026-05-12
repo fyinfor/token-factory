@@ -21,17 +21,16 @@ import React, { useState, useEffect } from 'react';
 import { Button, Card, Input, Space, Switch, Table, Typography } from '@douyinfe/semi-ui';
 import { IconDelete, IconPlus } from '@douyinfe/semi-icons';
 import {
-  TIER_CATEGORIES,
-  ensureFinalInfinityTierRows,
-  normalizeTierRule,
+  ensureFinalInfinityTierSegments,
+  normalizeTierSegments,
   priceToRatio,
   ratioToPrice,
 } from '../utils/requestTierPricing';
 
 const { Text } = Typography;
 
-const TierRowsEditor = ({ t, value, onChange, exchangeRate = 1, visibleCategories, onVisibleCategoriesChange }) => {
-  const rule = normalizeTierRule(value);
+const TierRowsEditor = ({ t, value, onChange, exchangeRate = 1, tierType = 'input' }) => {
+  const tier = normalizeTierSegments(value);
   const [editingValue, setEditingValue] = useState(null);
   const [editingKey, setEditingKey] = useState(null);
 
@@ -41,25 +40,33 @@ const TierRowsEditor = ({ t, value, onChange, exchangeRate = 1, visibleCategorie
     setEditingKey(null);
   }, [value]);
 
-  const updateRows = (key, rows) => {
-    const updated = { ...rule, [key]: ensureFinalInfinityTierRows(rows) };
-    // 过滤掉开关未打开的类别（除了 input，input 始终保留）
-    const filtered = { ...updated };
-    if (!visibleCategories.output) delete filtered.output;
-    if (!visibleCategories.cache_read) delete filtered.cache_read;
-    if (!visibleCategories.cache_write) delete filtered.cache_write;
-    onChange(filtered);
+  const updateSegments = (segments) => {
+    const updated = ensureFinalInfinityTierSegments(segments);
+    onChange({ segments: updated });
   };
-  const insertTopRow = (key, rows) => {
-    const firstFinite = rows.find((row) => Number(row.up_to) > 0);
+
+  const insertTopRow = (segments) => {
+    const firstFinite = segments.find((row) => Number(row.up_to) > 0);
     const upTo = firstFinite
       ? Math.max(1, Math.floor(Number(firstFinite.up_to) / 2))
       : 128000;
     // 添加新档位时不自动设置价格，保持为空（ratio = 0）
-    const next = rows.length
-      ? [{ up_to: upTo, ratio: 0 }, ...rows]
+    const next = segments.length
+      ? [{ up_to: upTo, ratio: 0 }, ...segments]
       : [{ up_to: 0, ratio: 0 }];
-    updateRows(key, next);
+    updateSegments(next);
+  };
+
+  // 验证价格递增：每一档价格不能大于下一档
+  const validatePriceIncrease = (segments) => {
+    for (let i = 0; i < segments.length - 1; i++) {
+      const current = segments[i];
+      const next = segments[i + 1];
+      if (current.ratio > 0 && next.ratio > 0 && current.ratio > next.ratio) {
+        return false;
+      }
+    }
+    return true;
   };
 
   return (
@@ -70,158 +77,125 @@ const TierRowsEditor = ({ t, value, onChange, exchangeRate = 1, visibleCategorie
           background-color: var(--semi-color-fill-0) !important;
         }
       `}</style>
-      <div className='flex items-center justify-between w-full mb-2'>
-        <Text type='tertiary' size='small'>
-          {t('当前汇率')}: {exchangeRate.toFixed(2)}
-        </Text>
-      </div>
-      {TIER_CATEGORIES.map(({ key, label }) => {
-        const rows = ensureFinalInfinityTierRows(rule[key] || []);
-        // 输入始终显示内容，其他通过开关控制内容显示
-        const isContentVisible = key === 'input' || visibleCategories[key];
-        return (
-          <Card
-            key={key}
-            title={
-              key === 'input' ? (
-                <span>{t(label)}</span>
-              ) : (
-                <div className='flex items-center justify-between w-full'>
-                  <span>{t(label)}</span>
-                  <Switch
-                    size='small'
-                    checked={visibleCategories[key]}
-                    onChange={(checked) =>
-                      onVisibleCategoriesChange({ ...visibleCategories, [key]: checked })
-                    }
-                  />
-                </div>
-              )
-            }
-            bodyStyle={isContentVisible ? {} : { padding: '0 !important' }}
-            style={{ width: '100%', background: 'var(--semi-color-fill-0)' }}
-          >
-            {isContentVisible ? (
-              <>
-                <Table
-                  size='small'
-                  pagination={false}
-                  dataSource={rows.map((row, index) => ({ ...row, _idx: index }))}
-                  rowKey='_idx'
-                  className='tier-table'
-                  columns={[
-                    {
-                      title: t('区间 token'),
-                      render: (_, row) => {
-                        const previous =
-                          row._idx === 0 ? 0 : rows[row._idx - 1]?.up_to || 0;
-                        const current = row.up_to || '∞';
-                        return `${previous}～${current}`;
-                      },
-                    },
-                    {
-                      title: t('上限 token'),
-                      dataIndex: 'up_to',
-                      render: (_, row) => (
-                        <Input
-                          value={
-                            row._idx === rows.length - 1
-                              ? '∞'
-                              : String(row.up_to ?? '')
-                          }
-                          placeholder={t('最后一档固定无限')}
-                          disabled={row._idx === rows.length - 1}
-                          onChange={(v) => {
-                            const next = [...rows];
-                            next[row._idx] = { ...next[row._idx], up_to: v };
-                            updateRows(key, next);
-                          }}
-                        />
-                      ),
-                    },
-                    {
-                      title: t('价格 (USD)'),
-                      dataIndex: 'ratio',
-                      render: (_, row) => {
-                        const previous =
-                          row._idx === 0 ? 0 : rows[row._idx - 1]?.up_to || 0;
-                        // 最后一行（up_to === 0）使用上一档的 token 数量
-                        const tokenCount = row.up_to === 0
-                          ? (row._idx === 0 ? 1 : previous)
-                          : row.up_to - previous;
+      <Table
+        size='small'
+        pagination={false}
+        dataSource={tier.segments.map((row, index) => ({ ...row, _idx: index }))}
+        rowKey='_idx'
+        className='tier-table'
+        columns={[
+          {
+            title: t('区间 token'),
+            render: (_, row) => {
+              const previous =
+                row._idx === 0 ? 0 : tier.segments[row._idx - 1]?.up_to || 0;
+              const current = row.up_to || '∞';
+              return `${previous}～${current}`;
+            },
+          },
+          {
+            title: t('上限 token'),
+            dataIndex: 'up_to',
+            render: (_, row) => (
+              <Input
+                value={
+                  row._idx === tier.segments.length - 1
+                    ? '∞'
+                    : String(row.up_to ?? '')
+                }
+                placeholder={t('最后一档固定无限')}
+                disabled={row._idx === tier.segments.length - 1}
+                onChange={(v) => {
+                  const next = [...tier.segments];
+                  next[row._idx] = { ...next[row._idx], up_to: v };
+                  updateSegments(next);
+                }}
+              />
+            ),
+          },
+          {
+            title: t('价格 (USD/1M token)'),
+            dataIndex: 'ratio',
+            render: (_, row) => {
+              const previous =
+                row._idx === 0 ? 0 : tier.segments[row._idx - 1]?.up_to || 0;
+              // 价格显示基于固定的 1M token 数量，不随档位变化
+              const fixedTokenCount = 1000000;
 
-                        // 价格模式：显示价格，保存时转换为倍率
-                        const currentInputKey = `${key}_${row._idx}`;
-                        const priceValue = row.ratio
-                          ? ratioToPrice(row.ratio, tokenCount, exchangeRate)
-                          : '';
-                        const displayValue = editingKey === currentInputKey ? editingValue : String(priceValue);
-                        return (
-                          <Input
-                            value={displayValue}
-                            placeholder='0.001'
-                            onFocus={() => {
-                              setEditingKey(currentInputKey);
-                              setEditingValue(String(priceValue));
-                            }}
-                            onChange={(v) => {
-                              setEditingValue(v);
-                            }}
-                            onBlur={(e) => {
-                              const v = e.target.value;
-                              if (!v) {
-                                setEditingKey(null);
-                                setEditingValue(null);
-                                return;
-                              }
-                              const priceUSD = parseFloat(v);
-                              const newRatio = priceToRatio(
-                                priceUSD,
-                                tokenCount,
-                                exchangeRate,
-                              );
-                              const next = [...rows];
-                              next[row._idx] = { ...next[row._idx], ratio: newRatio };
-                              updateRows(key, next);
-                              setEditingKey(null);
-                              setEditingValue(null);
-                            }}
-                          />
-                        );
-                      },
-                    },
-                    {
-                      title: t('操作'),
-                      render: (_, row) => (
-                        <Button
-                          type='danger'
-                          size='small'
-                          icon={<IconDelete />}
-                          disabled={row._idx === rows.length - 1}
-                          onClick={() =>
-                            updateRows(
-                              key,
-                              rows.filter((_, idx) => idx !== row._idx),
-                            )
-                          }
-                        />
-                      ),
-                    },
-                  ]}
+              // 价格模式：显示价格，保存时转换为倍率
+              const currentInputKey = `${tierType}_${row._idx}`;
+              const priceValue = row.ratio
+                ? ratioToPrice(row.ratio * 2, fixedTokenCount, exchangeRate)
+                : '';
+              const displayValue = editingKey === currentInputKey ? editingValue : String(priceValue);
+              return (
+                <Input
+                  value={displayValue}
+                  onFocus={() => {
+                    setEditingKey(currentInputKey);
+                    setEditingValue(String(priceValue));
+                  }}
+                  onChange={(v) => {
+                    setEditingValue(v);
+                  }}
+                  onBlur={(e) => {
+                    const v = e.target.value;
+                    if (!v) {
+                      setEditingKey(null);
+                      setEditingValue(null);
+                      return;
+                    }
+                    const priceUSD = parseFloat(v);
+                    const newRatio = priceToRatio(
+                      priceUSD,
+                      fixedTokenCount,
+                      exchangeRate,
+                    ) / 2;
+                    const next = [...tier.segments];
+                    next[row._idx] = { ...next[row._idx], ratio: newRatio };
+
+                    // 验证价格递增
+                    if (!validatePriceIncrease(next)) {
+                      // 如果价格不递增，不保存并提示用户
+                      setEditingKey(null);
+                      setEditingValue(null);
+                      return;
+                    }
+
+                    updateSegments(next);
+                    setEditingKey(null);
+                    setEditingValue(null);
+                  }}
                 />
-                <Button
-                  className='mt-2'
-                  size='small'
-                  icon={<IconPlus />}
-                  onClick={() => insertTopRow(key, rows)}
-                >
-                  {t('添加档位')}
-                </Button>
-              </>
-            ) : null}
-          </Card>
-        );
-      })}
+              );
+            },
+          },
+          {
+            title: t('操作'),
+            render: (_, row) => (
+              <Button
+                type='danger'
+                size='small'
+                icon={<IconDelete />}
+                disabled={row._idx === tier.segments.length - 1}
+                onClick={() =>
+                  updateSegments(
+                    tier.segments.filter((_, idx) => idx !== row._idx),
+                  )
+                }
+              />
+            ),
+          },
+        ]}
+      />
+      <Button
+        className='mt-2'
+        size='small'
+        icon={<IconPlus />}
+        onClick={() => insertTopRow(tier.segments)}
+      >
+        {t('添加档位')}
+      </Button>
     </Space>
   );
 };

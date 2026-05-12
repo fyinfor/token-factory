@@ -34,12 +34,9 @@ import { useTranslation } from 'react-i18next';
 import { API, showError, showSuccess } from '../../../helpers';
 import {
   emptyTierRule,
-  ensureFinalInfinityTierRows,
   hasTierRule,
   normalizeTierRule,
   parseJSONMap,
-  priceToRatio,
-  ratioToPrice,
   serializeTierRule,
   summarizeTierRule,
   validateTierRule,
@@ -47,6 +44,9 @@ import {
 import TierRowsEditor from './components/TierRowsEditor';
 
 const { Text } = Typography;
+const DEFAULT_TIER_SEGMENTS = {
+  segments: [{ up_to: 0, ratio: 0 }],
+};
 
 const createEmptyTemplate = () => ({
   name: '',
@@ -150,13 +150,42 @@ export default function RequestTierPricingTemplateSettings({
     await save(next);
   };
 
+  const beginCreate = () => {
+    setVisibleCategories({
+      output: false,
+      cache_read: false,
+      cache_write: false,
+    });
+    setEditing(createEmptyTemplate());
+  };
+
+  const beginEdit = (row) => {
+    const rule = normalizeTierRule(row);
+    setVisibleCategories({
+      output: rule.output.length > 0,
+      cache_read: rule.cache_read.length > 0,
+      cache_write: rule.cache_write.length > 0,
+    });
+    setEditing({
+      ...row,
+      ...rule,
+    });
+  };
+
+  const updateEditingTier = (key, value) => {
+    setEditing((previous) => ({
+      ...previous,
+      [key]: value?.segments || [],
+    }));
+  };
+
   return (
     <Card>
       <Space vertical align='start' style={{ width: '100%' }}>
         <Space>
           <Button
             icon={<IconPlus />}
-            onClick={() => setEditing(createEmptyTemplate())}
+            onClick={beginCreate}
           >
             {t('添加模板')}
           </Button>
@@ -182,7 +211,7 @@ export default function RequestTierPricingTemplateSettings({
             { title: t('模板名称'), dataIndex: 'name' },
             {
               title: t('规则摘要'),
-              render: (_, row) => summarizeTierRule(row, t, visibleCategories),
+              render: (_, row) => summarizeTierRule(row, t),
             },
             {
               title: t('操作'),
@@ -191,7 +220,7 @@ export default function RequestTierPricingTemplateSettings({
                   <Button
                     size='small'
                     icon={<IconEdit />}
-                    onClick={() => setEditing(row)}
+                    onClick={() => beginEdit(row)}
                   />
                   <Button
                     size='small'
@@ -220,14 +249,102 @@ export default function RequestTierPricingTemplateSettings({
               initValue={editing.name}
               onChange={(v) => setEditing({ ...editing, name: v })}
             />
-            <TierRowsEditor
-              t={t}
-              value={editing}
-              onChange={(v) => setEditing({ ...editing, ...v })}
-              exchangeRate={exchangeRate}
-              visibleCategories={visibleCategories}
-              onVisibleCategoriesChange={setVisibleCategories}
-            />
+            <Card
+              title={<span>{t('输入价格')}</span>}
+              style={{ width: '100%', marginBottom: 8, background: 'var(--semi-color-fill-0)' }}
+            >
+              <TierRowsEditor
+                t={t}
+                value={{ segments: editing.input || DEFAULT_TIER_SEGMENTS.segments }}
+                onChange={(value) => updateEditingTier('input', value)}
+                exchangeRate={exchangeRate}
+                tierType='model'
+              />
+            </Card>
+            <Card
+              title={
+                <div className='flex justify-between items-center'>
+                  <span>{t('输出价格')}</span>
+                  <Switch
+                    size='small'
+                    checked={visibleCategories.output}
+                    onChange={(checked) =>
+                      setVisibleCategories((previous) => ({
+                        ...previous,
+                        output: checked,
+                      }))
+                    }
+                  />
+                </div>
+              }
+              style={{ width: '100%', marginBottom: 8, background: 'var(--semi-color-fill-0)' }}
+            >
+              {visibleCategories.output ? (
+                <TierRowsEditor
+                  t={t}
+                  value={{ segments: editing.output || DEFAULT_TIER_SEGMENTS.segments }}
+                  onChange={(value) => updateEditingTier('output', value)}
+                  exchangeRate={exchangeRate}
+                  tierType='completion'
+                />
+              ) : null}
+            </Card>
+            <Card
+              title={
+                <div className='flex justify-between items-center'>
+                  <span>{t('缓存读取价格')}</span>
+                  <Switch
+                    size='small'
+                    checked={visibleCategories.cache_read}
+                    onChange={(checked) =>
+                      setVisibleCategories((previous) => ({
+                        ...previous,
+                        cache_read: checked,
+                      }))
+                    }
+                  />
+                </div>
+              }
+              style={{ width: '100%', marginBottom: 8, background: 'var(--semi-color-fill-0)' }}
+            >
+              {visibleCategories.cache_read ? (
+                <TierRowsEditor
+                  t={t}
+                  value={{ segments: editing.cache_read || DEFAULT_TIER_SEGMENTS.segments }}
+                  onChange={(value) => updateEditingTier('cache_read', value)}
+                  exchangeRate={exchangeRate}
+                  tierType='cache'
+                />
+              ) : null}
+            </Card>
+            <Card
+              title={
+                <div className='flex justify-between items-center'>
+                  <span>{t('缓存写入价格')}</span>
+                  <Switch
+                    size='small'
+                    checked={visibleCategories.cache_write}
+                    onChange={(checked) =>
+                      setVisibleCategories((previous) => ({
+                        ...previous,
+                        cache_write: checked,
+                      }))
+                    }
+                  />
+                </div>
+              }
+              style={{ width: '100%', marginBottom: 8, background: 'var(--semi-color-fill-0)' }}
+            >
+              {visibleCategories.cache_write ? (
+                <TierRowsEditor
+                  t={t}
+                  value={{ segments: editing.cache_write || DEFAULT_TIER_SEGMENTS.segments }}
+                  onChange={(value) => updateEditingTier('cache_write', value)}
+                  exchangeRate={exchangeRate}
+                  tierType='createCache'
+                />
+              ) : null}
+            </Card>
           </Form>
         ) : null}
       </Modal>

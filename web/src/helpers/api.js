@@ -151,13 +151,18 @@ export const buildApiPayload = (
   const mode = inputs.display_mode || 'text';
   const isVideoMode = mode === 'video';
   const isImageMode = mode === 'image';
-  const isMediaURL = (url) =>
+  const isVideoURL = (url) =>
     /\.(mp4|mov|avi|mkv|webm)(\?.*)?$/i.test(String(url || '').trim());
+  const isAudioURL = (url) =>
+    /\.(mp3|wav|m4a|aac|ogg|flac)(\?.*)?$/i.test(String(url || '').trim());
   const validMediaUrls = (inputs.imageUrls || [])
     .map((url) => String(url || '').trim())
     .filter(Boolean);
-  const imageMediaUrls = validMediaUrls.filter((url) => !isMediaURL(url));
-  const videoMediaUrls = validMediaUrls.filter((url) => isMediaURL(url));
+  const imageMediaUrls = validMediaUrls.filter(
+    (url) => !isVideoURL(url) && !isAudioURL(url),
+  );
+  const videoMediaUrls = validMediaUrls.filter((url) => isVideoURL(url));
+  const audioMediaUrls = validMediaUrls.filter((url) => isAudioURL(url));
   const getLastUserPrompt = () => {
     for (let i = processedMessages.length - 1; i >= 0; i--) {
       const msg = processedMessages[i];
@@ -182,17 +187,41 @@ export const buildApiPayload = (
     const height = Number(inputs.video_height) || 720;
     const motionValue = Number(inputs.video_motion);
     const motion = Number.isFinite(motionValue) ? motionValue : 0.4;
+    const videoDuration = Number(inputs.video_duration) || 5;
+    const shortSide = Math.min(width, height);
+    const resolution =
+      shortSide >= 1080 ? '1080p' : shortSide >= 720 ? '720p' : '480p';
+    const ratioValue = width / height;
+    const ratioOptions = [
+      { value: '16:9', ratio: 16 / 9 },
+      { value: '9:16', ratio: 9 / 16 },
+      { value: '1:1', ratio: 1 },
+      { value: '4:3', ratio: 4 / 3 },
+      { value: '3:4', ratio: 3 / 4 },
+      { value: '21:9', ratio: 21 / 9 },
+    ];
+    const matchedRatio = ratioOptions.find(
+      (item) => Math.abs(ratioValue - item.ratio) < 0.03,
+    );
     const payload = {
       model: modelWithRoute,
       prompt: getLastUserPrompt(),
       n: Math.max(1, Math.min(3, Number(inputs.video_n) || 1)),
       size: `${width}x${height}`,
       fps: Number(inputs.video_fps) || 24,
-      duration: Number(inputs.video_duration) || 5,
+      duration: videoDuration,
       motion,
       negative_prompt: '',
       seed: null,
       images: imageMediaUrls,
+      metadata: {
+        duration: videoDuration,
+        resolution,
+        ratio: matchedRatio?.value || 'adaptive',
+        generate_audio: false,
+        ...(videoMediaUrls.length > 0 ? { video_urls: videoMediaUrls } : {}),
+        ...(audioMediaUrls.length > 0 ? { audio_urls: audioMediaUrls } : {}),
+      },
       __endpoint: 'video',
     };
     return payload;

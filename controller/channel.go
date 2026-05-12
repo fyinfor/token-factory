@@ -826,6 +826,7 @@ type upstreamChannelSyncItem struct {
 	Status              int                `json:"status"`
 	Type                int                `json:"type"`
 	ChannelNo           string             `json:"channel_no"`
+	RouteSlug           string             `json:"route_slug"`
 	SupplierApplication int                `json:"supplier_application_id"`
 	SupplierAlias       string             `json:"supplier_alias"`
 	SupplierType        string             `json:"supplier_type"`
@@ -980,6 +981,7 @@ func decodeUpstreamChannelPayload(payload map[string]any, itemsKey string) ([]up
 			Status:              common.String2Int(common.Interface2String(m["status"])),
 			Type:                common.String2Int(common.Interface2String(m["type"])),
 			ChannelNo:           strings.TrimSpace(common.Interface2String(m["channel_no"])),
+			RouteSlug:           strings.TrimSpace(common.Interface2String(m["route_slug"])),
 			SupplierApplication: common.String2Int(common.Interface2String(m["supplier_application_id"])),
 			SupplierAlias:       strings.TrimSpace(common.Interface2String(m["supplier_alias"])),
 			SupplierType:        strings.TrimSpace(common.Interface2String(m["supplier_type"])),
@@ -1135,7 +1137,7 @@ func buildTokenFactorySyncedChannels(base *model.Channel) ([]model.Channel, []mo
 		clone.Id = 0
 		clone.CreatedTime = now
 		if upstream.Type > 0 {
-			clone.Type = upstream.Type
+			clone.Type = constant.ChannelTypeTokenFactoryOpen
 		} else {
 			clone.Type = constant.ChannelTypeTokenFactoryOpen
 		}
@@ -1183,6 +1185,7 @@ func buildTokenFactorySyncedChannels(base *model.Channel) ([]model.Channel, []mo
 			"source":                   "tokenfactory_open",
 			"upstream_channel_id":      upstream.ID,
 			"upstream_channel_no":      strings.TrimSpace(upstream.ChannelNo),
+			"upstream_route_slug":      strings.TrimSpace(upstream.RouteSlug),
 			"upstream_supplier_app_id": upstream.SupplierApplication,
 			"upstream_supplier_alias":  strings.TrimSpace(upstream.SupplierAlias),
 			"upstream_channel_type":    upstream.Type,

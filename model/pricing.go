@@ -114,7 +114,10 @@ func pricingSupplierAliasFromMeta(supplierApplicationID int, alias *string) stri
 
 // BuildPricingAPIItems 为定价接口组装带渠道统计的 data 列表。
 // 渠道项价格为：基础定价（resolveChannelPricingTriple）× 渠道专属折扣；用户/分组倍率由前端用 group_ratio 再乘（与 calculateModelPrice 一致）。
-func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}, metas []ChannelPricingMeta) []PricingAPIItem {
+//
+// includeUntestedChannelPricingRows 为 false 时保持原行为：要求有有效单测耗时，且在渠道已有成功单测时要求本模型单测可匹配。
+// 为 true 时不过滤上述单测门禁，供 /api/price_sync 等需完整渠道定价（含未单测模型×渠道）的场景。
+func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}, metas []ChannelPricingMeta, includeUntestedChannelPricingRows bool) []PricingAPIItem {
 	testSuccessByChannel, err := LoadChannelPricingTestSuccessIndex()
 	if err != nil {
 		common.SysLog(fmt.Sprintf("LoadChannelPricingTestSuccessIndex error: %v", err))
@@ -169,15 +172,15 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			}
 			// 单测门禁：仅当该渠道在库中已有「至少一条」成功单测记录时，才要求本模型也有成功记录。
 			// 否则新渠道/供应商从未跑过单测时 names 为空，旧逻辑会对所有模型 continue，导致供应商只见自有渠道时 data 全空。
-			if testSuccessByChannel != nil {
+			if !includeUntestedChannelPricingRows && testSuccessByChannel != nil {
 				namesOK := testSuccessByChannel[row.ChannelID]
 				if len(namesOK) > 0 && !ChannelPricingRowMatchesLastTestSuccess(testSuccessByChannel, row.ChannelID, modelName) {
 					continue
 				}
 			}
 			testMs := testResponseTimeByChannel[row.ChannelID]
-			// 打平后按渠道逐条返回：若该渠道无有效单测耗时（0=未测/失败），整条模型-渠道数据不展示。
-			if testMs <= 0 {
+			// 打平后按渠道逐条返回：若该渠道无有效单测耗时（0=未测/失败），整条模型-渠道数据不展示（定价页）；price_sync 等场景传入 includeUntestedChannelPricingRows 以保留。
+			if !includeUntestedChannelPricingRows && testMs <= 0 {
 				continue
 			}
 			baseMp, baseMr, cr := resolveChannelPricingTriple(row.ChannelID, row.SupplierApplicationID, modelName)

@@ -69,7 +69,10 @@ const CHANNEL_PRICING_OPTION_KEYS = [
   'ChannelCompletionRatio',
   'ChannelCacheRatio',
   'ChannelCreateCacheRatio',
-  'ChannelRequestTierPricing',
+  'ChannelModelTierRatio',
+  'ChannelCompletionTierRatio',
+  'ChannelCacheTierRatio',
+  'ChannelCreateCacheTierRatio',
 ];
 
 /** Option 中 Channel* 嵌套字段键名 → 供应商渠道 PUT 请求体字段名 */
@@ -625,7 +628,10 @@ export default function UpstreamRatioSync(props) {
       CacheRatio: parseNestedOption(props.options.CacheRatio),
       CreateCacheRatio: parseNestedOption(props.options.CreateCacheRatio),
       ModelPrice: parseNestedOption(props.options.ModelPrice),
-      RequestTierPricing: parseNestedOption(props.options.RequestTierPricing),
+      ModelTierRatio: parseNestedOption(props.options.ModelTierRatio),
+      CompletionTierRatio: parseNestedOption(props.options.CompletionTierRatio),
+      CacheTierRatio: parseNestedOption(props.options.CacheTierRatio),
+      CreateCacheTierRatio: parseNestedOption(props.options.CreateCacheTierRatio),
     };
     const channel = {};
     CHANNEL_PRICING_OPTION_KEYS.forEach((k) => {
@@ -745,7 +751,10 @@ export default function UpstreamRatioSync(props) {
         CacheRatio: { ...baseline.global.CacheRatio },
         CreateCacheRatio: { ...baseline.global.CreateCacheRatio },
         ModelPrice: { ...baseline.global.ModelPrice },
-        RequestTierPricing: { ...baseline.global.RequestTierPricing },
+        ModelTierRatio: { ...baseline.global.ModelTierRatio },
+        CompletionTierRatio: { ...baseline.global.CompletionTierRatio },
+        CacheTierRatio: { ...baseline.global.CacheTierRatio },
+        CreateCacheTierRatio: { ...baseline.global.CreateCacheTierRatio },
       };
 
       const finalChannel = {};
@@ -829,7 +838,11 @@ export default function UpstreamRatioSync(props) {
           const selectedTypes = Object.keys(normalizedRatios);
           const hasPrice = selectedTypes.includes('model_price');
           const hasRatio = selectedTypes.some(
-            (rt) => rt !== 'model_price' && rt !== 'request_tier_pricing',
+            (rt) => rt !== 'model_price' && 
+                   rt !== 'model_tier_ratio' &&
+                   rt !== 'completion_tier_ratio' &&
+                   rt !== 'cache_tier_ratio' &&
+                   rt !== 'create_cache_tier_ratio',
           );
 
           if (cid != null && cid > 0) {
@@ -886,7 +899,10 @@ export default function UpstreamRatioSync(props) {
             'CacheRatio',
             'CreateCacheRatio',
             'ModelPrice',
-            'RequestTierPricing',
+            'ModelTierRatio',
+            'CompletionTierRatio',
+            'CacheTierRatio',
+            'CreateCacheTierRatio',
           ];
           let globalDirty = false;
           globalKeysSynced.forEach((key) => {
@@ -956,7 +972,10 @@ export default function UpstreamRatioSync(props) {
             'CacheRatio',
             'CreateCacheRatio',
             'ModelPrice',
-            'RequestTierPricing',
+            'ModelTierRatio',
+            'CompletionTierRatio',
+            'CacheTierRatio',
+            'CreateCacheTierRatio',
           ];
           globalKeys.forEach((key) => {
             const before = JSON.stringify(baseline.global[key] || {});
@@ -1350,7 +1369,12 @@ export default function UpstreamRatioSync(props) {
           const channelId = parseUpstreamListChannelId(upName);
           if (channelId == null) return;
           const modelSet = channelModelSetMap[String(channelId)];
-          if (!modelSet || !modelSet.has(modelName.toLowerCase())) return;
+          // 未拉到该渠道的 models 列表（或列表为空）时不按模型名过滤，避免把整表滤空、误判为「无差异」
+          if (!modelSet || modelSet.size === 0) {
+            filtered[upName] = value;
+            return;
+          }
+          if (!modelSet.has(modelName.toLowerCase())) return;
           filtered[upName] = value;
         });
         return filtered;

@@ -283,11 +283,26 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		outputQuota := dCompletionTokens.Mul(dCompletionRatio)
 		cacheReadQuota := cachedTokensWithRatio
 		cacheWriteQuota := cachedCreationTokensWithRatio
-		if rule, ok := ratio_setting.ResolveRequestTierPricing(relayChannelID(relayInfo), summary.ModelName); ok {
-			inputQuota, outputQuota, cacheReadQuota, cacheWriteQuota, summary.RequestTierBreakdown =
-				ratio_setting.ApplyRequestTierPricingDecimal(rule, inputQuota, outputQuota, cacheReadQuota, cacheWriteQuota)
+
+		// 使用新的四个独立阶梯倍率
+		channelID := relayChannelID(relayInfo)
+		if modelTier, ok := ratio_setting.ResolveModelTierRatio(channelID, summary.ModelName); ok {
+			inputQuota = ratio_setting.ApplyTierSegmentsForType(inputQuota, modelTier)
 			summary.RequestTierPricing = true
 		}
+		if completionTier, ok := ratio_setting.ResolveCompletionTierRatio(channelID, summary.ModelName); ok {
+			outputQuota = ratio_setting.ApplyTierSegmentsForType(outputQuota, completionTier)
+			summary.RequestTierPricing = true
+		}
+		if cacheTier, ok := ratio_setting.ResolveCacheTierRatio(channelID, summary.ModelName); ok {
+			cacheReadQuota = ratio_setting.ApplyTierSegmentsForType(cacheReadQuota, cacheTier)
+			summary.RequestTierPricing = true
+		}
+		if createCacheTier, ok := ratio_setting.ResolveCreateCacheTierRatio(channelID, summary.ModelName); ok {
+			cacheWriteQuota = ratio_setting.ApplyTierSegmentsForType(cacheWriteQuota, createCacheTier)
+			summary.RequestTierPricing = true
+		}
+
 		promptQuota := inputQuota.Add(cacheReadQuota).Add(imageTokensWithRatio).Add(cacheWriteQuota)
 		quotaCalculateDecimal := promptQuota.Add(outputQuota).Mul(ratio)
 		quotaCalculateDecimal = quotaCalculateDecimal.Add(dWebSearchQuota)
@@ -460,6 +475,8 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		other["request_tier_pricing"] = true
 		other["request_tier_breakdown"] = summary.RequestTierBreakdown
 	}
+	// use_price：与 PriceData.UsePrice 一致，供前端区分按量（token 单价）与按次等计费形态（旧日志无此字段时前端自行推断）
+	other["use_price"] = relayInfo.PriceData.UsePrice
 	if relayInfo.GetFinalRequestRelayFormat() != types.RelayFormatClaude && usage != nil && usage.UsageSource != "" && usage.InputTokens > 0 {
 		// input_tokens_total: explicit normalized total input used by the usage log UI.
 		// Only write this field when upstream/current conversion has already provided a

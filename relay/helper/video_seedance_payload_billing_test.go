@@ -81,3 +81,35 @@ func TestSeedancePlaygroundJSON_PerSecondQuota(t *testing.T) {
 	t.Logf("preconsume quota=%d (QuotaPerUnit=%.0f groupRatio=%.4f)",
 		pd.Quota, common.QuotaPerUnit, pd.GroupRatioInfo.GroupRatio)
 }
+
+func TestPickAudioPriceByResolution_RoundsUpPseudo540p(t *testing.T) {
+	rows := []ratio_setting.VideoResolutionAudioPriceRule{
+		{Resolution: "480p", HasAudio: false, Price: 9},
+		{Resolution: "540p", HasAudio: false, Price: 8},
+		{Resolution: "720p", HasAudio: false, Price: 10},
+	}
+
+	price, ok := pickAudioPriceByResolution(videoEstimateContext{
+		Width:  864,
+		Height: 496,
+	}, false, rows)
+
+	require.True(t, ok)
+	require.Equal(t, 8.0, price, "864x496 exceeds 480p bounds, so it should round up to 540p")
+}
+
+func TestPickAudioPriceByResolution_UsesTargetAspectRatio(t *testing.T) {
+	rows := []ratio_setting.VideoResolutionAudioPriceRule{
+		{Resolution: "480p", HasAudio: false, Price: 9},
+		{Resolution: "540p", HasAudio: false, Price: 8},
+		{Resolution: "720p", HasAudio: false, Price: 10},
+	}
+
+	price, ok := pickAudioPriceByResolution(videoEstimateContext{
+		Width:  1120,
+		Height: 480,
+	}, false, rows)
+
+	require.True(t, ok)
+	require.Equal(t, 9.0, price, "21:9 1120x480 should fit the 480p tier for that aspect ratio")
+}

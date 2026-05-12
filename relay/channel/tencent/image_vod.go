@@ -96,9 +96,12 @@ func handleTencentVODImageResponse(c *gin.Context, resp *http.Response, info *re
 		return nil, types.NewError(errors.New("missing task id in create image response"), types.ErrorCodeBadResponseBody)
 	}
 
-	urls := pollTencentImageURLs(info, taskID, 40, 2*time.Second)
+	urls, pollErr := pollTencentImageURLs(info, taskID, 120, 3*time.Second)
+	if pollErr != nil {
+		return nil, pollErr
+	}
 	if len(urls) == 0 {
-		return nil, types.NewError(errors.New("tencent image task completed but no image url returned"), types.ErrorCodeBadResponseBody)
+		return nil, types.NewError(errors.New("tencent image task timed out after polling"), types.ErrorCodeBadResponseBody)
 	}
 
 	out := dto.ImageResponse{Created: common.GetTimestamp(), Data: make([]dto.ImageData, 0, len(urls))}
@@ -115,10 +118,10 @@ func handleTencentVODImageResponse(c *gin.Context, resp *http.Response, info *re
 	return &dto.Usage{}, nil
 }
 
-func pollTencentImageURLs(info *relaycommon.RelayInfo, taskID string, maxRetry int, interval time.Duration) []string {
+func pollTencentImageURLs(info *relaycommon.RelayInfo, taskID string, maxRetry int, interval time.Duration) ([]string, *types.TokenFactoryError) {
 	cred, err := tasktencentvod.ParseCredentials(info.ApiKey)
 	if err != nil {
-		return nil
+		return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
 	}
 	payload, _ := common.Marshal(map[string]any{"TaskId": taskID, "SubAppId": cred.SubAppID})
 	endpoint := normalizeVodEndpoint(info.ChannelBaseUrl)
@@ -134,7 +137,10 @@ func pollTencentImageURLs(info *relaycommon.RelayInfo, taskID string, maxRetry i
 			Response *struct {
 				Status        *string `json:"Status,omitempty"`
 				AigcImageTask *struct {
-					Output *struct {
+					ErrCode    int     `json:"ErrCode"`
+					ErrCodeExt string  `json:"ErrCodeExt"`
+					Message    *string `json:"Message,omitempty"`
+					Output     *struct {
 						FileInfos []struct {
 							FileUrl *string `json:"FileUrl,omitempty"`
 						} `json:"FileInfos,omitempty"`
@@ -146,6 +152,17 @@ func pollTencentImageURLs(info *relaycommon.RelayInfo, taskID string, maxRetry i
 			time.Sleep(interval)
 			continue
 		}
+
+		// Check for task-level error first
+		if describe.Response.AigcImageTask != nil && describe.Response.AigcImageTask.ErrCode != 0 {
+			errMsg := fmt.Sprintf("tencent image task failed (ErrCode=%d, ErrCodeExt=%s)", describe.Response.AigcImageTask.ErrCode, describe.Response.AigcImageTask.ErrCodeExt)
+			if describe.Response.AigcImageTask.Message != nil && strings.TrimSpace(*describe.Response.AigcImageTask.Message) != "" {
+				errMsg = fmt.Sprintf("tencent image task failed: %s (ErrCode=%d, ErrCodeExt=%s)", strings.TrimSpace(*describe.Response.AigcImageTask.Message), describe.Response.AigcImageTask.ErrCode, describe.Response.AigcImageTask.ErrCodeExt)
+			}
+			return nil, types.NewError(errors.New(errMsg), types.ErrorCodeBadResponseBody)
+		}
+
+		// Check for completed image URLs
 		if describe.Response.AigcImageTask != nil && describe.Response.AigcImageTask.Output != nil {
 			urls := make([]string, 0)
 			for _, fi := range describe.Response.AigcImageTask.Output.FileInfos {
@@ -155,15 +172,24 @@ func pollTencentImageURLs(info *relaycommon.RelayInfo, taskID string, maxRetry i
 				}
 			}
 			if len(urls) > 0 {
-				return urls
+				return urls, nil
 			}
 		}
-		if describe.Response.Status != nil && strings.ToUpper(strings.TrimSpace(*describe.Response.Status)) == "ABORTED" {
-			return nil
+
+		// Check terminal statuses
+		if describe.Response.Status != nil {
+			upperStatus := strings.ToUpper(strings.TrimSpace(*describe.Response.Status))
+			if upperStatus == "ABORTED" {
+				return nil, types.NewError(errors.New("tencent image task was aborted"), types.ErrorCodeBadResponseBody)
+			}
+			if upperStatus == "FINISH" {
+				return nil, types.NewError(errors.New("tencent image task finished but no image url returned"), types.ErrorCodeBadResponseBody)
+			}
 		}
+
 		time.Sleep(interval)
 	}
-	return nil
+	return nil, nil
 }
 
 func ptrString(v *string) string {
@@ -183,4 +209,3 @@ func normalizeVodEndpoint(raw string) string {
 	}
 	return u
 }
-

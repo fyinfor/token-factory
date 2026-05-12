@@ -20,12 +20,18 @@ type RequestTierSegment struct {
 	Ratio float64 `json:"ratio"`
 }
 
+// RequestTierPricingRule 用于模板系统，保留用于兼容性
 type RequestTierPricingRule struct {
 	Mode       string               `json:"mode,omitempty"`
 	Input      []RequestTierSegment `json:"input,omitempty"`
 	Output     []RequestTierSegment `json:"output,omitempty"`
 	CacheRead  []RequestTierSegment `json:"cache_read,omitempty"`
 	CacheWrite []RequestTierSegment `json:"cache_write,omitempty"`
+}
+
+// 新的独立阶梯倍率结构
+type TierSegments struct {
+	Segments []RequestTierSegment `json:"segments,omitempty"`
 }
 
 type RequestTierPricingTemplate struct {
@@ -53,9 +59,19 @@ type RequestTierPricingBreakdown struct {
 	Details          map[string][]RequestTierPricingBreakdownItem `json:"details,omitempty"`
 }
 
-var requestTierPricingMap = types.NewRWMap[string, RequestTierPricingRule]()
-var channelRequestTierPricingMap = types.NewRWMap[string, map[string]RequestTierPricingRule]()
 var requestTierPricingTemplatesMap = types.NewRWMap[string, RequestTierPricingTemplate]()
+
+// 新的四个独立阶梯倍率 Map
+var modelTierRatioMap = types.NewRWMap[string, TierSegments]()
+var completionTierRatioMap = types.NewRWMap[string, TierSegments]()
+var cacheTierRatioMap = types.NewRWMap[string, TierSegments]()
+var createCacheTierRatioMap = types.NewRWMap[string, TierSegments]()
+
+// 渠道级别的四个独立阶梯倍率 Map
+var channelModelTierRatioMap = types.NewRWMap[string, map[string]TierSegments]()
+var channelCompletionTierRatioMap = types.NewRWMap[string, map[string]TierSegments]()
+var channelCacheTierRatioMap = types.NewRWMap[string, map[string]TierSegments]()
+var channelCreateCacheTierRatioMap = types.NewRWMap[string, map[string]TierSegments]()
 
 func normalizeRequestTierSegments(segments []RequestTierSegment) []RequestTierSegment {
 	out := make([]RequestTierSegment, 0, len(segments))
@@ -150,55 +166,75 @@ func normalizeRequestTierRuleMap(src map[string]RequestTierPricingRule) (map[str
 	return dst, nil
 }
 
-func RequestTierPricing2JSONString() string {
-	return requestTierPricingMap.MarshalJSONString()
+// ========== 新的四个独立阶梯倍率处理函数 ==========
+
+func normalizeTierSegmentsMap(src map[string]TierSegments) (map[string]TierSegments, error) {
+	dst := make(map[string]TierSegments, len(src))
+	for modelName, tier := range src {
+		name := FormatMatchingModelName(strings.TrimSpace(modelName))
+		if name == "" {
+			continue
+		}
+		tier.Segments = normalizeRequestTierSegments(tier.Segments)
+		if err := validateRequestTierSegments("segments", tier.Segments); err != nil {
+			return nil, fmt.Errorf("%s: %w", name, err)
+		}
+		dst[name] = tier
+	}
+	return dst, nil
 }
 
-func UpdateRequestTierPricingByJSONString(jsonStr string) error {
+// ModelTierRatio
+func ModelTierRatio2JSONString() string {
+	return modelTierRatioMap.MarshalJSONString()
+}
+
+func UpdateModelTierRatioByJSONString(jsonStr string) error {
 	trimmed := strings.TrimSpace(jsonStr)
 	if trimmed == "" {
-		requestTierPricingMap.Clear()
+		modelTierRatioMap.Clear()
 		InvalidateExposedDataCache()
 		return nil
 	}
-	var parsed map[string]RequestTierPricingRule
+	var parsed map[string]TierSegments
 	if err := common.UnmarshalJsonStr(trimmed, &parsed); err != nil {
 		return err
 	}
-	normalized, err := normalizeRequestTierRuleMap(parsed)
+	normalized, err := normalizeTierSegmentsMap(parsed)
 	if err != nil {
 		return err
 	}
-	requestTierPricingMap.Clear()
-	requestTierPricingMap.AddAll(normalized)
+	modelTierRatioMap.Clear()
+	modelTierRatioMap.AddAll(normalized)
 	InvalidateExposedDataCache()
 	return nil
 }
 
-func GetRequestTierPricing(model string) (RequestTierPricingRule, bool) {
-	return requestTierPricingMap.Get(FormatMatchingModelName(model))
+func GetModelTierRatio(model string) (TierSegments, bool) {
+	return modelTierRatioMap.Get(FormatMatchingModelName(model))
 }
 
-func GetRequestTierPricingCopy() map[string]RequestTierPricingRule {
-	return requestTierPricingMap.ReadAll()
+func GetModelTierRatioCopy() map[string]TierSegments {
+	return modelTierRatioMap.ReadAll()
 }
 
-func ChannelRequestTierPricing2JSONString() string {
-	return channelRequestTierPricingMap.MarshalJSONString()
+// ChannelModelTierRatio
+func ChannelModelTierRatio2JSONString() string {
+	return channelModelTierRatioMap.MarshalJSONString()
 }
 
-func UpdateChannelRequestTierPricingByJSONString(jsonStr string) error {
+func UpdateChannelModelTierRatioByJSONString(jsonStr string) error {
 	trimmed := strings.TrimSpace(jsonStr)
 	if trimmed == "" {
-		channelRequestTierPricingMap.Clear()
+		channelModelTierRatioMap.Clear()
 		InvalidateExposedDataCache()
 		return nil
 	}
-	var parsed map[string]map[string]RequestTierPricingRule
+	var parsed map[string]map[string]TierSegments
 	if err := common.UnmarshalJsonStr(trimmed, &parsed); err != nil {
 		return err
 	}
-	normalized := make(map[string]map[string]RequestTierPricingRule, len(parsed))
+	normalized := make(map[string]map[string]TierSegments, len(parsed))
 	for channelID, rules := range parsed {
 		id, convErr := strconv.Atoi(strings.TrimSpace(channelID))
 		if convErr != nil {
@@ -208,33 +244,300 @@ func UpdateChannelRequestTierPricingByJSONString(jsonStr string) error {
 		if key == "" {
 			continue
 		}
-		normalizedRules, err := normalizeRequestTierRuleMap(rules)
+		normalizedRules, err := normalizeTierSegmentsMap(rules)
 		if err != nil {
 			return err
 		}
 		normalized[key] = normalizedRules
 	}
-	channelRequestTierPricingMap.Clear()
-	channelRequestTierPricingMap.AddAll(normalized)
+	channelModelTierRatioMap.Clear()
+	channelModelTierRatioMap.AddAll(normalized)
 	InvalidateExposedDataCache()
 	return nil
 }
 
-func GetChannelRequestTierPricing(channelID int, model string) (RequestTierPricingRule, bool) {
+func GetChannelModelTierRatio(channelID int, model string) (TierSegments, bool) {
 	key := normalizeChannelID(channelID)
 	if key == "" {
-		return RequestTierPricingRule{}, false
+		return TierSegments{}, false
 	}
-	channelRules, ok := channelRequestTierPricingMap.Get(key)
+	channelRules, ok := channelModelTierRatioMap.Get(key)
 	if !ok {
-		return RequestTierPricingRule{}, false
+		return TierSegments{}, false
 	}
 	rule, ok := channelRules[FormatMatchingModelName(model)]
 	return rule, ok
 }
 
-func GetChannelRequestTierPricingCopy() map[string]map[string]RequestTierPricingRule {
-	return channelRequestTierPricingMap.ReadAll()
+func GetChannelModelTierRatioCopy() map[string]map[string]TierSegments {
+	return channelModelTierRatioMap.ReadAll()
+}
+
+// CompletionTierRatio
+func CompletionTierRatio2JSONString() string {
+	return completionTierRatioMap.MarshalJSONString()
+}
+
+func UpdateCompletionTierRatioByJSONString(jsonStr string) error {
+	trimmed := strings.TrimSpace(jsonStr)
+	if trimmed == "" {
+		completionTierRatioMap.Clear()
+		InvalidateExposedDataCache()
+		return nil
+	}
+	var parsed map[string]TierSegments
+	if err := common.UnmarshalJsonStr(trimmed, &parsed); err != nil {
+		return err
+	}
+	normalized, err := normalizeTierSegmentsMap(parsed)
+	if err != nil {
+		return err
+	}
+	completionTierRatioMap.Clear()
+	completionTierRatioMap.AddAll(normalized)
+	InvalidateExposedDataCache()
+	return nil
+}
+
+func GetCompletionTierRatio(model string) (TierSegments, bool) {
+	return completionTierRatioMap.Get(FormatMatchingModelName(model))
+}
+
+func GetCompletionTierRatioCopy() map[string]TierSegments {
+	return completionTierRatioMap.ReadAll()
+}
+
+// ChannelCompletionTierRatio
+func ChannelCompletionTierRatio2JSONString() string {
+	return channelCompletionTierRatioMap.MarshalJSONString()
+}
+
+func UpdateChannelCompletionTierRatioByJSONString(jsonStr string) error {
+	trimmed := strings.TrimSpace(jsonStr)
+	if trimmed == "" {
+		channelCompletionTierRatioMap.Clear()
+		InvalidateExposedDataCache()
+		return nil
+	}
+	var parsed map[string]map[string]TierSegments
+	if err := common.UnmarshalJsonStr(trimmed, &parsed); err != nil {
+		return err
+	}
+	normalized := make(map[string]map[string]TierSegments, len(parsed))
+	for channelID, rules := range parsed {
+		id, convErr := strconv.Atoi(strings.TrimSpace(channelID))
+		if convErr != nil {
+			continue
+		}
+		key := normalizeChannelID(id)
+		if key == "" {
+			continue
+		}
+		normalizedRules, err := normalizeTierSegmentsMap(rules)
+		if err != nil {
+			return err
+		}
+		normalized[key] = normalizedRules
+	}
+	channelCompletionTierRatioMap.Clear()
+	channelCompletionTierRatioMap.AddAll(normalized)
+	InvalidateExposedDataCache()
+	return nil
+}
+
+func GetChannelCompletionTierRatio(channelID int, model string) (TierSegments, bool) {
+	key := normalizeChannelID(channelID)
+	if key == "" {
+		return TierSegments{}, false
+	}
+	channelRules, ok := channelCompletionTierRatioMap.Get(key)
+	if !ok {
+		return TierSegments{}, false
+	}
+	rule, ok := channelRules[FormatMatchingModelName(model)]
+	return rule, ok
+}
+
+func GetChannelCompletionTierRatioCopy() map[string]map[string]TierSegments {
+	return channelCompletionTierRatioMap.ReadAll()
+}
+
+// CacheTierRatio
+func CacheTierRatio2JSONString() string {
+	return cacheTierRatioMap.MarshalJSONString()
+}
+
+func UpdateCacheTierRatioByJSONString(jsonStr string) error {
+	trimmed := strings.TrimSpace(jsonStr)
+	if trimmed == "" {
+		cacheTierRatioMap.Clear()
+		InvalidateExposedDataCache()
+		return nil
+	}
+	var parsed map[string]TierSegments
+	if err := common.UnmarshalJsonStr(trimmed, &parsed); err != nil {
+		return err
+	}
+	normalized, err := normalizeTierSegmentsMap(parsed)
+	if err != nil {
+		return err
+	}
+	cacheTierRatioMap.Clear()
+	cacheTierRatioMap.AddAll(normalized)
+	InvalidateExposedDataCache()
+	return nil
+}
+
+func GetCacheTierRatio(model string) (TierSegments, bool) {
+	return cacheTierRatioMap.Get(FormatMatchingModelName(model))
+}
+
+func GetCacheTierRatioCopy() map[string]TierSegments {
+	return cacheTierRatioMap.ReadAll()
+}
+
+// ChannelCacheTierRatio
+func ChannelCacheTierRatio2JSONString() string {
+	return channelCacheTierRatioMap.MarshalJSONString()
+}
+
+func UpdateChannelCacheTierRatioByJSONString(jsonStr string) error {
+	trimmed := strings.TrimSpace(jsonStr)
+	if trimmed == "" {
+		channelCacheTierRatioMap.Clear()
+		InvalidateExposedDataCache()
+		return nil
+	}
+	var parsed map[string]map[string]TierSegments
+	if err := common.UnmarshalJsonStr(trimmed, &parsed); err != nil {
+		return err
+	}
+	normalized := make(map[string]map[string]TierSegments, len(parsed))
+	for channelID, rules := range parsed {
+		id, convErr := strconv.Atoi(strings.TrimSpace(channelID))
+		if convErr != nil {
+			continue
+		}
+		key := normalizeChannelID(id)
+		if key == "" {
+			continue
+		}
+		normalizedRules, err := normalizeTierSegmentsMap(rules)
+		if err != nil {
+			return err
+		}
+		normalized[key] = normalizedRules
+	}
+	channelCacheTierRatioMap.Clear()
+	channelCacheTierRatioMap.AddAll(normalized)
+	InvalidateExposedDataCache()
+	return nil
+}
+
+func GetChannelCacheTierRatio(channelID int, model string) (TierSegments, bool) {
+	key := normalizeChannelID(channelID)
+	if key == "" {
+		return TierSegments{}, false
+	}
+	channelRules, ok := channelCacheTierRatioMap.Get(key)
+	if !ok {
+		return TierSegments{}, false
+	}
+	rule, ok := channelRules[FormatMatchingModelName(model)]
+	return rule, ok
+}
+
+func GetChannelCacheTierRatioCopy() map[string]map[string]TierSegments {
+	return channelCacheTierRatioMap.ReadAll()
+}
+
+// CreateCacheTierRatio
+func CreateCacheTierRatio2JSONString() string {
+	return createCacheTierRatioMap.MarshalJSONString()
+}
+
+func UpdateCreateCacheTierRatioByJSONString(jsonStr string) error {
+	trimmed := strings.TrimSpace(jsonStr)
+	if trimmed == "" {
+		createCacheTierRatioMap.Clear()
+		InvalidateExposedDataCache()
+		return nil
+	}
+	var parsed map[string]TierSegments
+	if err := common.UnmarshalJsonStr(trimmed, &parsed); err != nil {
+		return err
+	}
+	normalized, err := normalizeTierSegmentsMap(parsed)
+	if err != nil {
+		return err
+	}
+	createCacheTierRatioMap.Clear()
+	createCacheTierRatioMap.AddAll(normalized)
+	InvalidateExposedDataCache()
+	return nil
+}
+
+func GetCreateCacheTierRatio(model string) (TierSegments, bool) {
+	return createCacheTierRatioMap.Get(FormatMatchingModelName(model))
+}
+
+func GetCreateCacheTierRatioCopy() map[string]TierSegments {
+	return createCacheTierRatioMap.ReadAll()
+}
+
+// ChannelCreateCacheTierRatio
+func ChannelCreateCacheTierRatio2JSONString() string {
+	return channelCreateCacheTierRatioMap.MarshalJSONString()
+}
+
+func UpdateChannelCreateCacheTierRatioByJSONString(jsonStr string) error {
+	trimmed := strings.TrimSpace(jsonStr)
+	if trimmed == "" {
+		channelCreateCacheTierRatioMap.Clear()
+		InvalidateExposedDataCache()
+		return nil
+	}
+	var parsed map[string]map[string]TierSegments
+	if err := common.UnmarshalJsonStr(trimmed, &parsed); err != nil {
+		return err
+	}
+	normalized := make(map[string]map[string]TierSegments, len(parsed))
+	for channelID, rules := range parsed {
+		id, convErr := strconv.Atoi(strings.TrimSpace(channelID))
+		if convErr != nil {
+			continue
+		}
+		key := normalizeChannelID(id)
+		if key == "" {
+			continue
+		}
+		normalizedRules, err := normalizeTierSegmentsMap(rules)
+		if err != nil {
+			return err
+		}
+		normalized[key] = normalizedRules
+	}
+	channelCreateCacheTierRatioMap.Clear()
+	channelCreateCacheTierRatioMap.AddAll(normalized)
+	InvalidateExposedDataCache()
+	return nil
+}
+
+func GetChannelCreateCacheTierRatio(channelID int, model string) (TierSegments, bool) {
+	key := normalizeChannelID(channelID)
+	if key == "" {
+		return TierSegments{}, false
+	}
+	channelRules, ok := channelCreateCacheTierRatioMap.Get(key)
+	if !ok {
+		return TierSegments{}, false
+	}
+	rule, ok := channelRules[FormatMatchingModelName(model)]
+	return rule, ok
+}
+
+func GetChannelCreateCacheTierRatioCopy() map[string]map[string]TierSegments {
+	return channelCreateCacheTierRatioMap.ReadAll()
 }
 
 func RequestTierPricingTemplates2JSONString() string {
@@ -354,6 +657,104 @@ func applyTierSegments(tokens decimal.Decimal, segments []RequestTierSegment) (d
 	return result, items
 }
 
+// ApplyTierSegmentsForType 应用阶梯倍率到单个类型
+func ApplyTierSegmentsForType(tokens decimal.Decimal, tier TierSegments) decimal.Decimal {
+	if tokens.LessThanOrEqual(decimal.Zero) || len(tier.Segments) == 0 {
+		return tokens
+	}
+	remaining := tokens
+	previous := decimal.Zero
+	result := decimal.Zero
+	for _, segment := range tier.Segments {
+		if remaining.LessThanOrEqual(decimal.Zero) {
+			break
+		}
+		var size decimal.Decimal
+		if segment.UpTo == 0 {
+			size = remaining
+		} else {
+			upper := decimal.NewFromInt(segment.UpTo)
+			if upper.LessThanOrEqual(previous) {
+				continue
+			}
+			capacity := upper.Sub(previous)
+			if remaining.GreaterThan(capacity) {
+				size = capacity
+			} else {
+				size = remaining
+			}
+		}
+		segResult := size.Mul(decimal.NewFromFloat(segment.Ratio))
+		result = result.Add(segResult)
+		remaining = remaining.Sub(size)
+		if segment.UpTo == 0 {
+			previous = previous.Add(size)
+		} else {
+			previous = decimal.NewFromInt(segment.UpTo)
+		}
+	}
+	if remaining.GreaterThan(decimal.Zero) {
+		result = result.Add(remaining)
+	}
+	return result
+}
+
+// ResolveModelTierRatio 解析模型阶梯倍率（优先使用渠道配置）
+func ResolveModelTierRatio(channelID int, model string) (TierSegments, bool) {
+	if modelTierRatioMap == nil || channelModelTierRatioMap == nil {
+		return TierSegments{}, false
+	}
+	if modelTierRatioMap.Len() == 0 && channelModelTierRatioMap.Len() == 0 {
+		return TierSegments{}, false
+	}
+	if rule, ok := GetChannelModelTierRatio(channelID, model); ok {
+		return rule, true
+	}
+	return GetModelTierRatio(model)
+}
+
+// ResolveCompletionTierRatio 解析完成阶梯倍率（优先使用渠道配置）
+func ResolveCompletionTierRatio(channelID int, model string) (TierSegments, bool) {
+	if completionTierRatioMap == nil || channelCompletionTierRatioMap == nil {
+		return TierSegments{}, false
+	}
+	if completionTierRatioMap.Len() == 0 && channelCompletionTierRatioMap.Len() == 0 {
+		return TierSegments{}, false
+	}
+	if rule, ok := GetChannelCompletionTierRatio(channelID, model); ok {
+		return rule, true
+	}
+	return GetCompletionTierRatio(model)
+}
+
+// ResolveCacheTierRatio 解析缓存读取阶梯倍率（优先使用渠道配置）
+func ResolveCacheTierRatio(channelID int, model string) (TierSegments, bool) {
+	if cacheTierRatioMap == nil || channelCacheTierRatioMap == nil {
+		return TierSegments{}, false
+	}
+	if cacheTierRatioMap.Len() == 0 && channelCacheTierRatioMap.Len() == 0 {
+		return TierSegments{}, false
+	}
+	if rule, ok := GetChannelCacheTierRatio(channelID, model); ok {
+		return rule, true
+	}
+	return GetCacheTierRatio(model)
+}
+
+// ResolveCreateCacheTierRatio 解析缓存写入阶梯倍率（优先使用渠道配置）
+func ResolveCreateCacheTierRatio(channelID int, model string) (TierSegments, bool) {
+	if createCacheTierRatioMap == nil || channelCreateCacheTierRatioMap == nil {
+		return TierSegments{}, false
+	}
+	if createCacheTierRatioMap.Len() == 0 && channelCreateCacheTierRatioMap.Len() == 0 {
+		return TierSegments{}, false
+	}
+	if rule, ok := GetChannelCreateCacheTierRatio(channelID, model); ok {
+		return rule, true
+	}
+	return GetCreateCacheTierRatio(model)
+}
+
 func ApplyRequestTierPricingDecimal(rule RequestTierPricingRule, input, output, cacheRead, cacheWrite decimal.Decimal) (decimal.Decimal, decimal.Decimal, decimal.Decimal, decimal.Decimal, RequestTierPricingBreakdown) {
 	rule = normalizeRequestTierRule(rule)
 	inAfter, inItems := applyTierSegments(input, rule.Input)
@@ -387,17 +788,4 @@ func ApplyRequestTierPricingDecimal(rule RequestTierPricingRule, input, output, 
 		breakdown.Details = nil
 	}
 	return inAfter, outAfter, cacheReadAfter, cacheWriteAfter, breakdown
-}
-
-func ResolveRequestTierPricing(channelID int, model string) (RequestTierPricingRule, bool) {
-	if requestTierPricingMap == nil || channelRequestTierPricingMap == nil {
-		return RequestTierPricingRule{}, false
-	}
-	if requestTierPricingMap.Len() == 0 && channelRequestTierPricingMap.Len() == 0 {
-		return RequestTierPricingRule{}, false
-	}
-	if rule, ok := GetChannelRequestTierPricing(channelID, model); ok {
-		return rule, true
-	}
-	return GetRequestTierPricing(model)
 }
