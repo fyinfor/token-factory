@@ -121,7 +121,7 @@ func buildPricingAPIData() []model.PricingAPIItem {
 	if err != nil {
 		channelPricingMeta = nil
 	}
-	return model.BuildPricingAPIItems(filtered, visibleChannelIDs, channelPricingMeta)
+	return model.BuildPricingAPIItems(filtered, visibleChannelIDs, channelPricingMeta, true)
 }
 
 func validateAdminIssuedToken(rawToken string) error {
@@ -279,7 +279,7 @@ func GetPricing(c *gin.Context) {
 	if err != nil {
 		channelPricingMeta = nil
 	}
-	pricingData := model.BuildPricingAPIItems(filtered, visibleChannelIDs, channelPricingMeta)
+	pricingData := model.BuildPricingAPIItems(filtered, visibleChannelIDs, channelPricingMeta, false)
 
 	blurPricing := false
 	if !exists && shouldBlurPricing() {

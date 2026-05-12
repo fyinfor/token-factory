@@ -1369,7 +1369,12 @@ export default function UpstreamRatioSync(props) {
           const channelId = parseUpstreamListChannelId(upName);
           if (channelId == null) return;
           const modelSet = channelModelSetMap[String(channelId)];
-          if (!modelSet || !modelSet.has(modelName.toLowerCase())) return;
+          // 未拉到该渠道的 models 列表（或列表为空）时不按模型名过滤，避免把整表滤空、误判为「无差异」
+          if (!modelSet || modelSet.size === 0) {
+            filtered[upName] = value;
+            return;
+          }
+          if (!modelSet.has(modelName.toLowerCase())) return;
           filtered[upName] = value;
         });
         return filtered;
