@@ -60,6 +60,21 @@ export function setStatusData(data) {
   }
 }
 
+/**
+ * 解析 /api/status 中 `sms_verification_enabled` 的原始值，兼容字符串与数字，避免 `"false" !== false` 导致误判为开启。
+ * @param {unknown} raw 原始字段值
+ * @returns {boolean|undefined} 显式开/关；未提供或无法识别时为 undefined
+ */
+export function normalizeSmsVerificationEnabled(raw) {
+  if (raw === true || raw === 'true' || raw === 1 || raw === '1') {
+    return true;
+  }
+  if (raw === false || raw === 'false' || raw === 0 || raw === '0') {
+    return false;
+  }
+  return undefined;
+}
+
 export function setUserData(data) {
   localStorage.setItem('user', JSON.stringify(data));
 }

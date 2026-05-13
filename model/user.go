@@ -176,7 +176,7 @@ func generateDefaultSidebarConfigForRole(userRole int) string {
 }
 
 // CheckUserExistOrDeleted 判断是否已有用户使用相同用户名，或与传入的非空邮箱冲突（含软删除）。
-// 注册接口已改用 IsUsernameTakenUnscoped / IsEmailTakenUnscoped 分别提示用户名与邮箱冲突。
+// 注册接口已改用 IsUsernameTakenUnscoped（含已注销用户名）与 IsEmailTakenByActiveUser（不含已注销邮箱）分别提示冲突。
 func CheckUserExistOrDeleted(username string, email string) (bool, error) {
 	var user User
 
@@ -217,7 +217,7 @@ func IsUsernameTakenUnscoped(username string) (bool, error) {
 	return true, nil
 }
 
-// IsEmailTakenUnscoped 判断邮箱是否已被占用（含软删除）；邮箱为空时不视为占用。
+// IsEmailTakenUnscoped 判断邮箱是否曾被占用（含已软删用户）；邮箱为空时不视为占用。注册/绑定冲突请用 IsEmailTakenByActiveUser。
 func IsEmailTakenUnscoped(email string) (bool, error) {
 	email = strings.TrimSpace(email)
 	if email == "" {
@@ -234,13 +234,30 @@ func IsEmailTakenUnscoped(email string) (bool, error) {
 	return true, nil
 }
 
-// IsEmailTakenByOtherUser 判断邮箱是否已被除 excludeUserId 以外的用户占用（包含软删除记录）。
+// IsEmailTakenByActiveUser 判断邮箱是否已被未注销（未软删）用户占用；已注销账号不占坑，邮箱可再次用于注册。
+func IsEmailTakenByActiveUser(email string) (bool, error) {
+	email = strings.TrimSpace(email)
+	if email == "" {
+		return false, nil
+	}
+	var user User
+	err := DB.Where("email = ?", email).First(&user).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// IsEmailTakenByOtherUser 判断邮箱是否已被除 excludeUserId 以外的未注销用户占用。
 func IsEmailTakenByOtherUser(email string, excludeUserId int) bool {
 	email = strings.TrimSpace(email)
 	if email == "" {
 		return false
 	}
-	return DB.Unscoped().Where("email = ? AND id <> ?", email, excludeUserId).Find(&User{}).RowsAffected > 0
+	return DB.Where("email = ? AND id <> ?", email, excludeUserId).Find(&User{}).RowsAffected > 0
 }
 
 // NormalizeAndValidateAdminUserEmail 管理员创建/编辑用户时的邮箱：去首尾空格；空表示不绑定；非空则校验格式、长度与占用（excludeUserId=0 表示新建）。
@@ -253,7 +270,7 @@ func NormalizeAndValidateAdminUserEmail(email string, excludeUserId int) (string
 		return "", fmt.Errorf("邮箱格式无效")
 	}
 	if excludeUserId == 0 {
-		taken, err := IsEmailTakenUnscoped(n)
+		taken, err := IsEmailTakenByActiveUser(n)
 		if err != nil {
 			return "", err
 		}
@@ -924,25 +941,34 @@ func (user *User) FillUserByTelegramId() error {
 }
 
 func IsEmailAlreadyTaken(email string) bool {
-	return DB.Unscoped().Where("email = ?", email).Find(&User{}).RowsAffected == 1
+	email = strings.TrimSpace(email)
+	if email == "" {
+		return false
+	}
+	return DB.Where("email = ?", email).Find(&User{}).RowsAffected > 0
 }
 
-// IsPhoneAlreadyTaken 判断手机号是否已被占用（包含软删除记录）。
-func IsPhoneAlreadyTaken(phone string) bool {
+// IsPhoneTakenByActiveUser 判断手机号是否已被未注销用户占用；已注销账号不占坑，手机号可再次用于注册。
+func IsPhoneTakenByActiveUser(phone string) bool {
 	phone = common.NormalizePhone(phone)
 	if phone == "" {
 		return false
 	}
-	return DB.Unscoped().Where("phone = ?", phone).Find(&User{}).RowsAffected > 0
+	return DB.Where("phone = ?", phone).Find(&User{}).RowsAffected > 0
 }
 
-// IsPhoneTakenByOtherUser 判断手机号是否已被除 excludeUserId 以外的用户占用（包含软删除记录）。
+// IsPhoneAlreadyTaken 判断手机号是否已被未注销用户占用（与 IsPhoneTakenByActiveUser 等价）。
+func IsPhoneAlreadyTaken(phone string) bool {
+	return IsPhoneTakenByActiveUser(phone)
+}
+
+// IsPhoneTakenByOtherUser 判断手机号是否已被除 excludeUserId 以外的未注销用户占用。
 func IsPhoneTakenByOtherUser(phone string, excludeUserId int) bool {
 	phone = common.NormalizePhone(phone)
 	if phone == "" {
 		return false
 	}
-	return DB.Unscoped().Where("phone = ? AND id <> ?", phone, excludeUserId).Find(&User{}).RowsAffected > 0
+	return DB.Where("phone = ? AND id <> ?", phone, excludeUserId).Find(&User{}).RowsAffected > 0
 }
 
 // NormalizeAndValidateAdminUserPhone 管理员创建/编辑用户时的手机号：规范化；空字符串表示不绑定；非空则校验格式、黑名单与占用（excludeUserId=0 表示新建用户）。

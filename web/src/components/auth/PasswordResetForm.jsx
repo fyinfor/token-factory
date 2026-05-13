@@ -25,6 +25,8 @@ import {
   showInfo,
   showSuccess,
   getSystemName,
+  setStatusData,
+  normalizeSmsVerificationEnabled,
 } from '../../helpers';
 import Turnstile from 'react-turnstile';
 import { Button, Card, Form, Tabs, Typography } from '@douyinfe/semi-ui';
@@ -39,7 +41,7 @@ const { Text, Title } = Typography;
 const PasswordResetForm = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [statusState] = useContext(StatusContext);
+  const [statusState, statusDispatch] = useContext(StatusContext);
 
   const [inputs, setInputs] = useState({
     email: '',
@@ -75,8 +77,32 @@ const PasswordResetForm = () => {
     }
   }, [statusState?.status]);
 
-  /** 与注册页一致：字段缺失时视为开启短信，兼容旧缓存。 */
-  const smsVerificationEnabled = status?.sms_verification_enabled !== false;
+  /** 与注册页一致：仅服务端显式 false 为关；未返回字段时视为开；进入页时拉取 /api/status 刷新缓存。 */
+  const smsVerificationEnabled =
+    normalizeSmsVerificationEnabled(status?.sms_verification_enabled) !==
+    false;
+
+  /**
+   * 同步最新公开状态，避免 localStorage 中过期的 sms_verification_enabled 导致短信 Tab 不显示。
+   */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await API.get('/api/status');
+        const { success, data } = res.data;
+        if (!cancelled && success && data && typeof data === 'object') {
+          statusDispatch({ type: 'set', payload: data });
+          setStatusData(data);
+        }
+      } catch {
+        // 忽略网络错误，沿用缓存
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [statusDispatch]);
 
   useEffect(() => {
     if (status?.turnstile_check) {

@@ -29,6 +29,8 @@ import {
   getSystemName,
   getOAuthProviderIcon,
   setUserData,
+  setStatusData,
+  normalizeSmsVerificationEnabled,
   onDiscordOAuthClicked,
   onCustomOAuthClicked,
 } from '../../helpers';
@@ -65,6 +67,10 @@ import { StatusContext } from '../../context/Status';
 import { useTranslation } from 'react-i18next';
 import { SiDiscord } from 'react-icons/si';
 
+/**
+ * 注册页表单：支持 OAuth 与用户名密码注册。关闭短信注册时邮箱必填且不展示手机相关字段；开启短信注册时邮箱与手机号二选一，填写其一即可（填手机须短信验证；填邮箱可不填手机）。
+ * @returns {JSX.Element}
+ */
 const RegisterForm = () => {
   let navigate = useNavigate();
   const { t } = useTranslation();
@@ -85,7 +91,7 @@ const RegisterForm = () => {
   });
   const { username, password, password2 } = inputs;
   const [userState, userDispatch] = useContext(UserContext);
-  const [statusState] = useContext(StatusContext);
+  const [statusState, statusDispatch] = useContext(StatusContext);
   const [turnstileEnabled, setTurnstileEnabled] = useState(false);
   const [turnstileSiteKey, setTurnstileSiteKey] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
@@ -138,10 +144,12 @@ const RegisterForm = () => {
   const hasCustomOAuthProviders =
     (status.custom_oauth_providers || []).length > 0;
   /**
-   * 与系统设置「短信注册」开关一致：未开启则不展示手机号/短信验证码（/api/status.sms_verification_enabled）。
-   * 字段缺失时视为开启，兼容旧版缓存的 status。
+   * 是否展示手机号与短信验证码：以服务端显式 false 为关；字段缺失时沿用历史默认（视为开），兼容旧缓存。
+   * 依赖注册页挂载时主动拉取 /api/status，避免仅读到 localStorage 中过期的 sms_verification_enabled。
    */
-  const smsVerificationEnabled = status?.sms_verification_enabled !== false;
+  const smsVerificationEnabled =
+    normalizeSmsVerificationEnabled(status?.sms_verification_enabled) !==
+    false;
   const hasOAuthRegisterOptions = Boolean(
     status.github_oauth ||
     status.discord_oauth ||
@@ -176,6 +184,28 @@ const RegisterForm = () => {
       { skipErrorHandler: true },
     ).catch(() => {});
   }, []);
+
+  /**
+   * 进入注册页时同步最新公开状态，修正 localStorage 中仍保留「短信关闭」的旧缓存，确保与系统设置「启用短信验证码注册」一致。
+   */
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await API.get('/api/status');
+        const { success, data } = res.data;
+        if (!cancelled && success && data && typeof data === 'object') {
+          statusDispatch({ type: 'set', payload: data });
+          setStatusData(data);
+        }
+      } catch {
+        // 请求失败时继续使用 Context / localStorage 回退
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [statusDispatch]);
 
   useEffect(() => {
     let countdownInterval = null;
@@ -246,10 +276,18 @@ const RegisterForm = () => {
     }
   };
 
+  /**
+   * 更新受控输入字段。
+   * @param {string} name 字段名
+   * @param {string} value 新值
+   */
   function handleChange(name, value) {
     setInputs((inputs) => ({ ...inputs, [name]: value }));
   }
 
+  /**
+   * 提交用户名密码注册：关闭短信时邮箱必填；开启短信时邮箱与手机至少填一项；邮箱验证码仅在使用邮箱注册且系统开启邮箱验证时校验；短信仅填写手机号时校验。
+   */
   async function handleSubmit(e) {
     if (password.length < 8) {
       showInfo('密码长度不得小于 8 位！');
@@ -260,30 +298,47 @@ const RegisterForm = () => {
       return;
     }
     const emailTrim = (inputs.email || '').trim();
-    if (!emailTrim) {
-      showInfo(t('请输入邮箱'));
-      return;
+    const phoneTrim = (inputs.phone || '').trim();
+
+    if (smsVerificationEnabled) {
+      if (!emailTrim && !phoneTrim) {
+        showInfo(t('请至少填写邮箱或手机号其中一项'));
+        return;
+      }
+      if (emailTrim) {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
+          showInfo(t('请输入有效的邮箱地址'));
+          return;
+        }
+      }
+      if (phoneTrim) {
+        if (!/^1[3-9]\d{9}$/.test(phoneTrim)) {
+          showInfo(t('请输入有效的手机号'));
+          return;
+        }
+        if (!/^\d{6}$/.test((inputs.sms_verification_code || '').trim())) {
+          showInfo(t('请输入 6 位短信验证码'));
+          return;
+        }
+      }
+    } else {
+      if (!emailTrim) {
+        showInfo(t('请输入邮箱'));
+        return;
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
+        showInfo(t('请输入有效的邮箱地址'));
+        return;
+      }
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailTrim)) {
-      showInfo(t('请输入有效的邮箱地址'));
-      return;
-    }
-    if (showEmailVerification) {
+
+    if (showEmailVerification && emailTrim) {
       if (!/^\d{6}$/.test((inputs.verification_code || '').trim())) {
         showInfo(t('请输入邮箱验证码'));
         return;
       }
     }
-    if (smsVerificationEnabled) {
-      if (!/^1[3-9]\d{9}$/.test((inputs.phone || '').trim())) {
-        showInfo('请输入有效的 11 位手机号');
-        return;
-      }
-      if (!/^\d{6}$/.test((inputs.sms_verification_code || '').trim())) {
-        showInfo('请输入 6 位短信验证码');
-        return;
-      }
-    }
+
     if (username && password) {
       if (turnstileEnabled && turnstileToken === '') {
         showInfo('请稍后几秒重试，Turnstile 正在检查用户环境！');
@@ -294,10 +349,23 @@ const RegisterForm = () => {
         if (!affCode) {
           affCode = localStorage.getItem('aff');
         }
-        inputs.aff_code = affCode;
+        const registerBody = { ...inputs, aff_code: affCode };
+        if (smsVerificationEnabled) {
+          if (!emailTrim) {
+            registerBody.email = '';
+            registerBody.verification_code = '';
+          }
+          if (!phoneTrim) {
+            registerBody.phone = '';
+            registerBody.sms_verification_code = '';
+          }
+        } else {
+          registerBody.phone = '';
+          registerBody.sms_verification_code = '';
+        }
         const res = await API.post(
           `/api/user/register?turnstile=${turnstileToken}`,
-          inputs,
+          registerBody,
         );
         const { success, message } = res.data;
         if (success) {
@@ -347,7 +415,7 @@ const RegisterForm = () => {
    */
   const sendSMSVerificationCode = async () => {
     if (!/^1[3-9]\d{9}$/.test((inputs.phone || '').trim())) {
-      showInfo('请输入有效的 11 位手机号');
+      showInfo(t('请输入有效的手机号'));
       return;
     }
     if (turnstileEnabled && turnstileToken === '') {
@@ -700,7 +768,11 @@ const RegisterForm = () => {
                   <>
                     <Form.Input
                       field='email'
-                      label={t('邮箱')}
+                      label={
+                        smsVerificationEnabled
+                          ? t('邮箱（选填）')
+                          : t('邮箱（必填）')
+                      }
                       placeholder={t('输入邮箱地址')}
                       name='email'
                       type='email'
@@ -718,6 +790,15 @@ const RegisterForm = () => {
                         </Button>
                       }
                     />
+                    {smsVerificationEnabled && (
+                      <Text
+                        size='small'
+                        type='tertiary'
+                        className='block !text-gray-500 -mt-2 mb-1'
+                      >
+                        {t('仅在使用邮箱注册时需完成下方邮箱验证')}
+                      </Text>
+                    )}
                     <Form.Input
                       field='verification_code'
                       label={t('验证码')}
@@ -732,7 +813,11 @@ const RegisterForm = () => {
                 ) : (
                   <Form.Input
                     field='email'
-                    label={t('邮箱')}
+                    label={
+                      smsVerificationEnabled
+                        ? t('邮箱（选填）')
+                        : t('邮箱（必填）')
+                    }
                     placeholder={t('输入邮箱地址（用作找回密码等）')}
                     name='email'
                     type='email'
@@ -743,9 +828,18 @@ const RegisterForm = () => {
 
                 {smsVerificationEnabled && (
                   <>
+                    <Text
+                      size='small'
+                      type='tertiary'
+                      className='block !text-gray-500 -mb-1'
+                    >
+                      {t(
+                        '开启短信注册时，邮箱与手机号至少填一项；填写邮箱可不填手机号；仅用手机号注册可不填邮箱。',
+                      )}
+                    </Text>
                     <Form.Input
                       field='phone'
-                      label={t('手机号')}
+                      label={t('手机号（选填）')}
                       placeholder={t('输入 11 位手机号')}
                       name='phone'
                       onChange={(value) => handleChange('phone', value)}

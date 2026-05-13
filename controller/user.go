@@ -31,11 +31,11 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
-// RegisterRequest 用户注册请求体：邮箱必填；开启邮箱验证时需验证码；开启短信时需手机号与短信验证码。
+// RegisterRequest 用户注册请求体：关闭短信注册时邮箱必填；开启短信注册时邮箱与手机号二选一（至少填其一）；开启邮箱验证且填写了邮箱时需验证码；开启短信且填写了手机号时需短信验证码。邮箱/手机号占用仅与未注销用户冲突。
 type RegisterRequest struct {
 	Username         string `json:"username" validate:"required,max=20"`
 	Password         string `json:"password" validate:"required,min=8,max=20"`
-	Email            string `json:"email" validate:"required,email,max=50"`
+	Email            string `json:"email" validate:"omitempty,email,max=50"`
 	VerificationCode string `json:"verification_code"`
 	AffCode          string `json:"aff_code"`
 	Phone            string `json:"phone"`
@@ -182,6 +182,7 @@ func Logout(c *gin.Context) {
 	})
 }
 
+// Register 处理用户名密码注册：未开启短信时邮箱必填；开启短信时邮箱与手机至少填其一；短信与邮箱验证码仅在对应字段填写时校验；邮箱与手机号是否与已占用冲突仅检查未软删用户。
 func Register(c *gin.Context) {
 	if !common.RegisterEnabled {
 		common.ApiErrorI18n(c, i18n.MsgUserRegisterDisabled)
@@ -201,36 +202,49 @@ func Register(c *gin.Context) {
 	req.Email = strings.TrimSpace(req.Email)
 	req.Phone = common.NormalizePhone(req.Phone)
 	req.SMSCode = strings.TrimSpace(req.SMSCode)
+	if !common.SMSVerificationEnabled && req.Email == "" {
+		common.ApiErrorI18n(c, i18n.MsgUserEmailEmpty)
+		return
+	}
 	if err := common.Validate.Struct(&req); err != nil {
 		common.ApiErrorI18n(c, i18n.MsgUserInputInvalid, map[string]any{"Error": err.Error()})
 		return
 	}
 	if common.SMSVerificationEnabled {
-		if !common.ValidateMainlandChinaPhone(req.Phone) {
-			common.ApiError(c, fmt.Errorf("手机号格式无效，请输入 11 位中国大陆手机号"))
+		if req.Email == "" && req.Phone == "" {
+			common.ApiErrorI18n(c, i18n.MsgUserRegisterEmailOrPhoneRequired)
 			return
 		}
-		if common.IsSMSPhoneBlacklisted(req.Phone) {
-			common.ApiError(c, fmt.Errorf("该手机号已被加入短信黑名单"))
-			return
-		}
-		if len(strings.TrimSpace(req.SMSCode)) != 6 {
-			common.ApiError(c, fmt.Errorf("请输入 6 位短信验证码"))
-			return
-		}
-		if !common.VerifyAndConsumeSMSCode(req.Phone, req.SMSCode) {
-			common.ApiError(c, fmt.Errorf("短信验证码错误或已过期"))
-			return
-		}
-		if model.IsPhoneAlreadyTaken(req.Phone) {
-			common.ApiError(c, fmt.Errorf("手机号已被占用"))
-			return
+		if req.Phone != "" {
+			if !common.ValidateMainlandChinaPhone(req.Phone) {
+				common.ApiError(c, fmt.Errorf("手机号格式无效，请输入 11 位中国大陆手机号"))
+				return
+			}
+			if common.IsSMSPhoneBlacklisted(req.Phone) {
+				common.ApiError(c, fmt.Errorf("该手机号已被加入短信黑名单"))
+				return
+			}
+			if len(strings.TrimSpace(req.SMSCode)) != 6 {
+				common.ApiError(c, fmt.Errorf("请输入 6 位短信验证码"))
+				return
+			}
+			if !common.VerifyAndConsumeSMSCode(req.Phone, req.SMSCode) {
+				common.ApiError(c, fmt.Errorf("短信验证码错误或已过期"))
+				return
+			}
+			if model.IsPhoneAlreadyTaken(req.Phone) {
+				common.ApiError(c, fmt.Errorf("手机号已被占用"))
+				return
+			}
+		} else {
+			req.Phone = ""
+			req.SMSCode = ""
 		}
 	} else {
 		req.Phone = ""
 		req.SMSCode = ""
 	}
-	if common.EmailVerificationEnabled {
+	if common.EmailVerificationEnabled && req.Email != "" {
 		if req.VerificationCode == "" {
 			common.ApiErrorI18n(c, i18n.MsgUserEmailVerificationRequired)
 			return
@@ -250,15 +264,17 @@ func Register(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserUsernameTaken)
 		return
 	}
-	emailTaken, err := model.IsEmailTakenUnscoped(req.Email)
-	if err != nil {
-		common.ApiErrorI18n(c, i18n.MsgDatabaseError)
-		common.SysLog(fmt.Sprintf("IsEmailTakenUnscoped error: %v", err))
-		return
-	}
-	if emailTaken {
-		common.ApiErrorI18n(c, i18n.MsgUserEmailTaken)
-		return
+	if req.Email != "" {
+		emailTaken, err := model.IsEmailTakenByActiveUser(req.Email)
+		if err != nil {
+			common.ApiErrorI18n(c, i18n.MsgDatabaseError)
+			common.SysLog(fmt.Sprintf("IsEmailTakenByActiveUser error: %v", err))
+			return
+		}
+		if emailTaken {
+			common.ApiErrorI18n(c, i18n.MsgUserEmailTaken)
+			return
+		}
 	}
 	affCode := req.AffCode // this code is the inviter's code, not the user's own code
 	inviterId, _ := model.GetUserIdByAffCode(affCode)
