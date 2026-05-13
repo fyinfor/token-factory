@@ -95,6 +95,21 @@ const PageLayout = () => {
     }
   };
 
+  /** 与 localStorage 中的 status 派生字段一致（须在 setStatusData 之后调用） */
+  const syncDocumentBrandingFromStorage = () => {
+    const systemName = getSystemName();
+    if (systemName) {
+      document.title = systemName;
+    }
+    const logo = getLogo();
+    if (logo) {
+      const linkElement = document.querySelector("link[rel~='icon']");
+      if (linkElement) {
+        linkElement.href = logo;
+      }
+    }
+  };
+
   const loadStatus = async () => {
     try {
       const res = await API.get('/api/status');
@@ -102,6 +117,9 @@ const PageLayout = () => {
       if (success) {
         statusDispatch({ type: 'set', payload: data });
         setStatusData(data);
+        // 首次 mount 时上面 useEffect 会先读旧的 localStorage 写 title；
+        // /api/status 返回后才写入 system_name，这里再同步一次页面标题与 favicon。
+        syncDocumentBrandingFromStorage();
       } else {
         showError('Unable to connect to server');
       }
@@ -113,17 +131,7 @@ const PageLayout = () => {
   useEffect(() => {
     loadUser();
     loadStatus().catch(console.error);
-    let systemName = getSystemName();
-    if (systemName) {
-      document.title = systemName;
-    }
-    let logo = getLogo();
-    if (logo) {
-      let linkElement = document.querySelector("link[rel~='icon']");
-      if (linkElement) {
-        linkElement.href = logo;
-      }
-    }
+    syncDocumentBrandingFromStorage();
   }, []);
 
   useEffect(() => {
