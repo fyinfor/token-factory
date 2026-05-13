@@ -224,8 +224,9 @@ const normalizeAudioPricedRows = (rows, valueKey) => {
                 noAudioNum !== null &&
                 withAudioNum !== null &&
                 Math.abs(noAudioNum - withAudioNum) < 1e-6;
-            // 若存储中 has_audio=true/false 两条价格完全一致，视为“统一计费”。
-            const audioPricingEnabled = !samePrice && (hasNoAudio || hasWithAudio);
+            // 仅一侧有价（旧版每分辨率单条、无 has_audio 等）应识别为统一计费；
+            // 两侧同价亦为统一计费；仅两侧有价且不同才是音轨计费。
+            const audioPricingEnabled = bothPresent && !samePrice;
             const unifiedPrice = hasNoAudio
                 ? item.noAudioPrice
                 : hasWithAudio
