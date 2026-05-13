@@ -60,39 +60,26 @@ export default function ModelRatioNotSetEditor(props) {
    */
   const getPricingSuppliers = async () => {
     try {
-      if (isSupplier()) {
-        const channels = [];
-        let page = 1;
-        let total = 0;
-        do {
-          const res = await API.get(
-            `/api/user/supplier/channels?p=${page}&page_size=1000`,
-          );
-          if (!res?.data?.success) break;
-          const items = res.data.data?.items || [];
-          total = res.data.data?.total || items.length;
-          channels.push(
-            ...items.map((item) => ({
-              channel_id: item.id,
-              channel_name: item.name,
-              channel_no: item.channel_no,
-            })),
-          );
-          page += 1;
-        } while (channels.length < total);
-        setPricingChannels(channels);
-      } else {
-        const res = await API.get('/api/channel/');
-        if (res?.data?.success) {
-          setPricingChannels(
-            (res.data.data?.items || []).map((item) => ({
-              channel_id: item.id,
-              channel_name: item.name,
-              channel_no: item.channel_no,
-            })) || [],
-          );
-        }
-      }
+      const channels = [];
+      let page = 1;
+      let total = 0;
+      do {
+        const res = await API.get(
+          `${isSupplier() ? '/api/user/supplier/channels' : '/api/channel/'}?p=${page}&page_size=100`,
+        );
+        if (!res?.data?.success) break;
+        const items = res.data.data?.items || [];
+        total = res.data.data?.total || items.length;
+        channels.push(
+          ...items.map((item) => ({
+            channel_id: item.id,
+            channel_name: item.name,
+            channel_no: item.channel_no,
+          })),
+        );
+        page += 1;
+      } while (channels.length < total);
+      setPricingChannels(channels);
     } catch (error) {
       console.error(t('获取渠道商列表失败:'), error);
     }

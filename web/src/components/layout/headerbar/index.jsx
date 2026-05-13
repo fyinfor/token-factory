@@ -24,6 +24,7 @@ import { useUserMessageUnreadCount } from '../../../hooks/common/useUserMessageU
 import UserMessageModal from './UserMessageModal';
 import MobileMenuButton from './MobileMenuButton';
 import HeaderLogo from './HeaderLogo';
+import MobileSiteNavDropdown from './MobileSiteNavDropdown';
 import Navigation from './Navigation';
 import ActionButtons from './ActionButtons';
 
@@ -79,8 +80,8 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
       />
 
       <div className='w-full px-4 md:px-6'>
-        <div className='flex items-center justify-between h-14'>
-          <div className='flex items-center gap-3 md:gap-4 flex-shrink-0'>
+        <div className='flex items-center justify-between h-14 gap-2'>
+          <div className='flex items-center gap-2 md:gap-4 flex-1 min-w-0 md:flex-initial'>
             <MobileMenuButton
               isConsoleRoute={isConsoleRoute}
               isMobile={isMobile}
@@ -103,10 +104,20 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
               t={t}
             />
 
+            <div className='min-w-0 flex-1 overflow-hidden md:hidden'>
+              <MobileSiteNavDropdown
+                mainNavLinks={mainNavLinks}
+                pricingRequireAuth={pricingRequireAuth}
+                userState={userState}
+                isLoading={isLoading}
+                t={t}
+              />
+            </div>
+
             {/* {!isMobile && <SearchDropdown isMobile={isMobile} />} */}
           </div>
 
-          <div className='flex items-center gap-4 md:gap-6'>
+          <div className='flex flex-shrink-0 items-center gap-2 md:gap-6'>
             <Navigation
               mainNavLinks={mainNavLinks}
               isMobile={isMobile}

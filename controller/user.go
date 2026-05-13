@@ -31,11 +31,11 @@ type LoginRequest struct {
 	Password string `json:"password"`
 }
 
-// RegisterRequest 用户注册请求体：邮箱必填；开启邮箱验证时需验证码；开启短信时需手机号与短信验证码。
+// RegisterRequest 用户注册请求体：关闭短信注册时邮箱必填；开启短信注册时邮箱与手机号二选一（至少填其一）；开启邮箱验证且填写了邮箱时需验证码；开启短信且填写了手机号时需短信验证码。邮箱/手机号占用仅与未注销用户冲突。
 type RegisterRequest struct {
 	Username         string `json:"username" validate:"required,max=20"`
 	Password         string `json:"password" validate:"required,min=8,max=20"`
-	Email            string `json:"email" validate:"required,email,max=50"`
+	Email            string `json:"email" validate:"omitempty,email,max=50"`
 	VerificationCode string `json:"verification_code"`
 	AffCode          string `json:"aff_code"`
 	Phone            string `json:"phone"`
@@ -182,6 +182,7 @@ func Logout(c *gin.Context) {
 	})
 }
 
+// Register 处理用户名密码注册：未开启短信时邮箱必填；开启短信时邮箱与手机至少填其一；短信与邮箱验证码仅在对应字段填写时校验；邮箱与手机号是否与已占用冲突仅检查未软删用户。
 func Register(c *gin.Context) {
 	if !common.RegisterEnabled {
 		common.ApiErrorI18n(c, i18n.MsgUserRegisterDisabled)
@@ -201,36 +202,49 @@ func Register(c *gin.Context) {
 	req.Email = strings.TrimSpace(req.Email)
 	req.Phone = common.NormalizePhone(req.Phone)
 	req.SMSCode = strings.TrimSpace(req.SMSCode)
+	if !common.SMSVerificationEnabled && req.Email == "" {
+		common.ApiErrorI18n(c, i18n.MsgUserEmailEmpty)
+		return
+	}
 	if err := common.Validate.Struct(&req); err != nil {
 		common.ApiErrorI18n(c, i18n.MsgUserInputInvalid, map[string]any{"Error": err.Error()})
 		return
 	}
 	if common.SMSVerificationEnabled {
-		if !common.ValidateMainlandChinaPhone(req.Phone) {
-			common.ApiError(c, fmt.Errorf("手机号格式无效，请输入 11 位中国大陆手机号"))
+		if req.Email == "" && req.Phone == "" {
+			common.ApiErrorI18n(c, i18n.MsgUserRegisterEmailOrPhoneRequired)
 			return
 		}
-		if common.IsSMSPhoneBlacklisted(req.Phone) {
-			common.ApiError(c, fmt.Errorf("该手机号已被加入短信黑名单"))
-			return
-		}
-		if len(strings.TrimSpace(req.SMSCode)) != 6 {
-			common.ApiError(c, fmt.Errorf("请输入 6 位短信验证码"))
-			return
-		}
-		if !common.VerifyAndConsumeSMSCode(req.Phone, req.SMSCode) {
-			common.ApiError(c, fmt.Errorf("短信验证码错误或已过期"))
-			return
-		}
-		if model.IsPhoneAlreadyTaken(req.Phone) {
-			common.ApiError(c, fmt.Errorf("手机号已被占用"))
-			return
+		if req.Phone != "" {
+			if !common.ValidateMainlandChinaPhone(req.Phone) {
+				common.ApiError(c, fmt.Errorf("手机号格式无效，请输入 11 位中国大陆手机号"))
+				return
+			}
+			if common.IsSMSPhoneBlacklisted(req.Phone) {
+				common.ApiError(c, fmt.Errorf("该手机号已被加入短信黑名单"))
+				return
+			}
+			if len(strings.TrimSpace(req.SMSCode)) != 6 {
+				common.ApiError(c, fmt.Errorf("请输入 6 位短信验证码"))
+				return
+			}
+			if !common.VerifyAndConsumeSMSCode(req.Phone, req.SMSCode) {
+				common.ApiError(c, fmt.Errorf("短信验证码错误或已过期"))
+				return
+			}
+			if model.IsPhoneAlreadyTaken(req.Phone) {
+				common.ApiError(c, fmt.Errorf("手机号已被占用"))
+				return
+			}
+		} else {
+			req.Phone = ""
+			req.SMSCode = ""
 		}
 	} else {
 		req.Phone = ""
 		req.SMSCode = ""
 	}
-	if common.EmailVerificationEnabled {
+	if common.EmailVerificationEnabled && req.Email != "" {
 		if req.VerificationCode == "" {
 			common.ApiErrorI18n(c, i18n.MsgUserEmailVerificationRequired)
 			return
@@ -250,15 +264,17 @@ func Register(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserUsernameTaken)
 		return
 	}
-	emailTaken, err := model.IsEmailTakenUnscoped(req.Email)
-	if err != nil {
-		common.ApiErrorI18n(c, i18n.MsgDatabaseError)
-		common.SysLog(fmt.Sprintf("IsEmailTakenUnscoped error: %v", err))
-		return
-	}
-	if emailTaken {
-		common.ApiErrorI18n(c, i18n.MsgUserEmailTaken)
-		return
+	if req.Email != "" {
+		emailTaken, err := model.IsEmailTakenByActiveUser(req.Email)
+		if err != nil {
+			common.ApiErrorI18n(c, i18n.MsgDatabaseError)
+			common.SysLog(fmt.Sprintf("IsEmailTakenByActiveUser error: %v", err))
+			return
+		}
+		if emailTaken {
+			common.ApiErrorI18n(c, i18n.MsgUserEmailTaken)
+			return
+		}
 	}
 	affCode := req.AffCode // this code is the inviter's code, not the user's own code
 	inviterId, _ := model.GetUserIdByAffCode(affCode)
@@ -777,9 +793,14 @@ func GetUserModels(c *gin.Context) {
 		}
 	}
 	// scene=playground 时返回结构化模型列表：
-	// - 仅包含有 model_test_results 可匹配行且 last_test_success 为成功（1）的模型；无通过单测的模型时 items 可为空
-	// - vendor: 模型类型；类型选项仅由「通过单测后的」items 中出现的 vendor_id 推导
-	// - tested_success 在返回项中恒为 true（因已按单测成功过滤）
+	// - 展示口径与 /pricing 完全一致：模型必须已配置定价（ratio_setting.ModelHasConfiguredPricing），
+	//   且至少存在一个 (模型, 可见渠道) 在 model_test_results 中满足
+	//   ManualDisplayResponseTime>0 或 (LastTestSuccess && LastResponseTime>0)；
+	//   不再使用 model_test_results 全表 last_test_success=1 的模糊名字匹配（口径偏宽且与定价页不一致）。
+	// - 在此基础上再叠加「该模型在用户可用分组下的 abilities 已 enabled」的用户视角过滤；
+	//   也即同时通过 GetGroupEnabledModels 与 CollectPricingShowableModelNames 两层门禁。
+	// - vendor: 模型类型；类型选项仅由「通过判定后的」items 中出现的 vendor_id 推导。
+	// - tested_success 在返回项中恒为 true（因已按 pricing 同源条件过滤）。
 	if c.Query("scene") == "playground" {
 		type playgroundChannelOption struct {
 			ID           int    `json:"id"`
@@ -870,7 +891,7 @@ func GetUserModels(c *gin.Context) {
 				}
 			}
 		}
-		// 与无 scene 的 /user/models 一致：先列出分组内每个已启用模型名 + 元数据 vendor；再按 model_test_results 最近一次单测成功过滤，只返回「单测通过」的模型，并仅据此推导「模型类型」
+		// 先列出分组内每个已启用模型名 + 元数据 vendor；再用 CollectPricingShowableModelNames 与 /pricing 同口径过滤，只返回与定价页一致的可展示模型，并据此推导「模型类型」选项
 		playgroundNameRows := make([]struct {
 			ModelName string
 			VendorID  int
@@ -885,22 +906,17 @@ func GetUserModels(c *gin.Context) {
 				VendorID  int
 			}{ModelName: name, VendorID: vid})
 		}
-		candidateNames := make([]string, len(playgroundNameRows))
-		for i := range playgroundNameRows {
-			candidateNames[i] = playgroundNameRows[i].ModelName
-		}
-		testedByName, err := model.GetPlaygroundTestSuccessByModelNames(candidateNames)
-		if err != nil {
-			common.ApiError(c, err)
-			return
-		}
-		// 仅保留 model_test_results 中可匹配到「最近一次成功」的模型（与 GetPlaygroundTestSuccess 规则一致：last_test_success=1/ true）
+		// 与 /pricing 完全一致地过滤：仅保留定价页当前可展示的模型集合中的项。
+		// 之前操练场是按 model_test_results 全表 last_test_success=1 的模糊名字匹配做判定，
+		// 与 /pricing 的「(模型,可见渠道) 严格匹配 + testMs>0 + ManualDisplayResponseTime 兜底 + ModelHasConfiguredPricing」口径不一致，
+		// 导致诸如「最近一次单测失败但运营手动覆盖了展示耗时」「定价未配但偶然有过成功单测」等场景两端展示差异。
+		pricingShowable := CollectPricingShowableModelNames()
 		filteredNameRows := make([]struct {
 			ModelName string
 			VendorID  int
 		}, 0, len(playgroundNameRows))
 		for i := range playgroundNameRows {
-			if !testedByName[playgroundNameRows[i].ModelName] {
+			if !pricingShowable[playgroundNameRows[i].ModelName] {
 				continue
 			}
 			filteredNameRows = append(filteredNameRows, playgroundNameRows[i])

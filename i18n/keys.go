@@ -93,6 +93,8 @@ const (
 	MsgUserTransferFailed            = "user.transfer_failed"
 	MsgUserTopUpProcessing           = "user.topup_processing"
 	MsgUserRegisterFailed            = "user.register_failed"
+	// MsgUserRegisterEmailOrPhoneRequired 开启短信注册时，邮箱与手机号须至少填写其一。
+	MsgUserRegisterEmailOrPhoneRequired = "user.register_email_or_phone_required"
 	MsgUserDefaultTokenFailed        = "user.default_token_failed"
 	MsgUserAffCodeEmpty              = "user.aff_code_empty"
 	MsgUserEmailEmpty                = "user.email_empty"
