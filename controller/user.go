@@ -777,9 +777,14 @@ func GetUserModels(c *gin.Context) {
 		}
 	}
 	// scene=playground 时返回结构化模型列表：
-	// - 仅包含有 model_test_results 可匹配行且 last_test_success 为成功（1）的模型；无通过单测的模型时 items 可为空
-	// - vendor: 模型类型；类型选项仅由「通过单测后的」items 中出现的 vendor_id 推导
-	// - tested_success 在返回项中恒为 true（因已按单测成功过滤）
+	// - 展示口径与 /pricing 完全一致：模型必须已配置定价（ratio_setting.ModelHasConfiguredPricing），
+	//   且至少存在一个 (模型, 可见渠道) 在 model_test_results 中满足
+	//   ManualDisplayResponseTime>0 或 (LastTestSuccess && LastResponseTime>0)；
+	//   不再使用 model_test_results 全表 last_test_success=1 的模糊名字匹配（口径偏宽且与定价页不一致）。
+	// - 在此基础上再叠加「该模型在用户可用分组下的 abilities 已 enabled」的用户视角过滤；
+	//   也即同时通过 GetGroupEnabledModels 与 CollectPricingShowableModelNames 两层门禁。
+	// - vendor: 模型类型；类型选项仅由「通过判定后的」items 中出现的 vendor_id 推导。
+	// - tested_success 在返回项中恒为 true（因已按 pricing 同源条件过滤）。
 	if c.Query("scene") == "playground" {
 		type playgroundChannelOption struct {
 			ID           int    `json:"id"`
@@ -870,7 +875,7 @@ func GetUserModels(c *gin.Context) {
 				}
 			}
 		}
-		// 与无 scene 的 /user/models 一致：先列出分组内每个已启用模型名 + 元数据 vendor；再按 model_test_results 最近一次单测成功过滤，只返回「单测通过」的模型，并仅据此推导「模型类型」
+		// 先列出分组内每个已启用模型名 + 元数据 vendor；再用 CollectPricingShowableModelNames 与 /pricing 同口径过滤，只返回与定价页一致的可展示模型，并据此推导「模型类型」选项
 		playgroundNameRows := make([]struct {
 			ModelName string
 			VendorID  int
@@ -885,22 +890,17 @@ func GetUserModels(c *gin.Context) {
 				VendorID  int
 			}{ModelName: name, VendorID: vid})
 		}
-		candidateNames := make([]string, len(playgroundNameRows))
-		for i := range playgroundNameRows {
-			candidateNames[i] = playgroundNameRows[i].ModelName
-		}
-		testedByName, err := model.GetPlaygroundTestSuccessByModelNames(candidateNames)
-		if err != nil {
-			common.ApiError(c, err)
-			return
-		}
-		// 仅保留 model_test_results 中可匹配到「最近一次成功」的模型（与 GetPlaygroundTestSuccess 规则一致：last_test_success=1/ true）
+		// 与 /pricing 完全一致地过滤：仅保留定价页当前可展示的模型集合中的项。
+		// 之前操练场是按 model_test_results 全表 last_test_success=1 的模糊名字匹配做判定，
+		// 与 /pricing 的「(模型,可见渠道) 严格匹配 + testMs>0 + ManualDisplayResponseTime 兜底 + ModelHasConfiguredPricing」口径不一致，
+		// 导致诸如「最近一次单测失败但运营手动覆盖了展示耗时」「定价未配但偶然有过成功单测」等场景两端展示差异。
+		pricingShowable := CollectPricingShowableModelNames()
 		filteredNameRows := make([]struct {
 			ModelName string
 			VendorID  int
 		}, 0, len(playgroundNameRows))
 		for i := range playgroundNameRows {
-			if !testedByName[playgroundNameRows[i].ModelName] {
+			if !pricingShowable[playgroundNameRows[i].ModelName] {
 				continue
 			}
 			filteredNameRows = append(filteredNameRows, playgroundNameRows[i])

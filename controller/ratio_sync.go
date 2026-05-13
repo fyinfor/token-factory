@@ -548,15 +548,20 @@ func FetchUpstreamRatios(c *gin.Context) {
 				Status: "success",
 			})
 			successfulChannels = append(successfulChannels, upstreamSyncSource{
-				name:      r.Name,
-				channelID: r.ChannelID,
-				data:      r.Data,
+				name:        r.Name,
+				channelID:   r.ChannelID,
+				data:        r.Data,
+				localModels: collectLocalChannelModels(r.ChannelID),
 			})
 		}
 	}
 
 	userID := c.GetInt("id")
 	role := c.GetInt("role")
+	includeAligned := true
+	if req.IncludeAligned != nil {
+		includeAligned = *req.IncludeAligned
+	}
 	var localData gin.H
 	var differences map[string]map[string]dto.DifferenceItem
 	// 非管理员：按已审核供应商身份，仅自有渠道模型参与与上游的差异对比
@@ -573,10 +578,10 @@ func FetchUpstreamRatios(c *gin.Context) {
 		}
 		ownedNorm := model.NormalizeOwnedModelsForPricing(ownedRaw)
 		localData = buildSupplierRatioSyncLocalMaps(app.ID, ownedNorm)
-		differences = buildDifferences(localData, successfulChannels, req.IncludeAligned, app.ID, ownedNorm)
+		differences = buildDifferences(localData, successfulChannels, includeAligned, app.ID, ownedNorm)
 	} else {
 		localData = ratio_setting.GetExposedData()
-		differences = buildDifferences(localData, successfulChannels, req.IncludeAligned, 0, nil)
+		differences = buildDifferences(localData, successfulChannels, includeAligned, 0, nil)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -592,6 +597,37 @@ type upstreamSyncSource struct {
 	name      string
 	channelID int
 	data      map[string]any
+	// localModels 为本地渠道 channels.models 字段拆分并规范化后的模型集合（key 已 FormatMatchingModelName）。
+	// 渠道同步时即使上游对某模型无定价，只要该模型属于本地渠道 models，也会被纳入对照（值为 nil）。
+	localModels map[string]struct{}
+}
+
+// collectLocalChannelModels 读取本地渠道 channels.models 并拆分为规范化模型名集合。
+// 渠道 ID 非正、模型为空或读取失败时返回 nil（让调用方按「未提供本地模型集合」处理）。
+func collectLocalChannelModels(channelID int) map[string]struct{} {
+	if channelID <= 0 {
+		return nil
+	}
+	ch, err := model.GetChannelById(channelID, false)
+	if err != nil || ch == nil {
+		return nil
+	}
+	names := ch.GetModels()
+	if len(names) == 0 {
+		return nil
+	}
+	out := make(map[string]struct{}, len(names))
+	for _, raw := range names {
+		mn := strings.TrimSpace(raw)
+		if mn == "" {
+			continue
+		}
+		out[ratio_setting.FormatMatchingModelName(mn)] = struct{}{}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // oldEffectiveForUpstream 返回该渠道列在同步前的生效价：正渠道 ID 只读取渠道覆盖，否则读取全局。
@@ -765,6 +801,10 @@ func buildDifferences(localData map[string]any, successfulChannels []upstreamSyn
 				}
 			}
 		}
+		// 本地渠道 models 字段中的模型也并入：用于「即使上游缺值也展示本地渠道全部模型」的对照视图。
+		for modelName := range channel.localModels {
+			allModels[modelName] = struct{}{}
+		}
 	}
 
 	if supplierAppID > 0 {
@@ -836,10 +876,21 @@ func buildDifferences(localData map[string]any, successfulChannels []upstreamSyn
 					oldEff = oldEffectiveForUpstream(channel.channelID, ratioType, modelName, localData)
 				}
 
+				gotUpstream := false
 				if upstreamRatio, ok := channel.data[ratioType].(map[string]any); ok {
 					if val, exists := upstreamRatio[modelName]; exists {
 						hasUpstreamValue = true
 						upstreamValues[channel.name] = val
+						upstreamOldVals[channel.name] = oldEff
+						gotUpstream = true
+					}
+				}
+				// 上游对该模型无该 ratioType 值，但模型属于本地渠道 models：保留该列为 nil，并标记
+				// hasUpstreamValue=true，使「本地渠道全部模型」也能进入对照视图（与上游一致或上游缺失皆展示）。
+				if !gotUpstream {
+					if _, ok := channel.localModels[modelName]; ok {
+						hasUpstreamValue = true
+						upstreamValues[channel.name] = nil
 						upstreamOldVals[channel.name] = oldEff
 					}
 				}

@@ -12,9 +12,9 @@ type UpstreamRequest struct {
 	Upstreams  []UpstreamDTO `json:"upstreams"`
 	Timeout    int           `json:"timeout"`
 	SyncMode   string        `json:"sync_mode"`
-	// IncludeAligned 为 true 时，即使本地已生效价与上游一致，仍在 differences 中返回该行
-	//（便于应用同步后再次拉取仍能对照上游模型列表；默认 false 保持旧行为）
-	IncludeAligned bool `json:"include_aligned"`
+	// IncludeAligned 为 true 时，即使本地已生效价与上游一致，仍在 differences 中返回该行。
+	// 指针：省略或未传时按 true 处理（与控制台「展示对照」一致）；显式 false 可关闭以减小 payload。
+	IncludeAligned *bool `json:"include_aligned,omitempty"`
 }
 
 // TestResult 上游测试连通性结果
