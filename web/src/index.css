@@ -48,6 +48,25 @@ body {
   height: calc(100dvh - 64px);
 }
 
+/*
+ * 操练场 /console/playground：iOS Safari 点击后地址栏收起会使 100vh 变大，底部区域被「顶高」。
+ * 使用 svh（小视口）为主高度，避免随 UI 变化跳变；无 svh 的浏览器回退 100vh。
+ */
+.playground-shell-h {
+  height: calc(100vh - 66px);
+  height: calc(100svh - 66px);
+}
+
+/* iOS：输入框字号小于 16px 时聚焦会强制缩放页面 */
+@media (max-width: 767px) {
+  .playground-shell-h textarea,
+  .playground-shell-h input:not([type='checkbox']):not([type='radio']):not(
+      [type='hidden']
+    ) {
+    font-size: 16px !important;
+  }
+}
+
 code {
   font-family:
     source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;

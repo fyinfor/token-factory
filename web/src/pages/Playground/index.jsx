@@ -705,7 +705,7 @@ const Playground = () => {
               ${
                 isMobile
                   ? 'fixed top-0 left-0 right-0 bottom-0 z-[1000] w-full h-auto bg-white shadow-lg'
-                  : 'relative z-[1] w-80 h-[calc(100vh-66px)]'
+                  : 'relative z-[1] w-80 playground-shell-h'
               }
             `}
               width={isMobile ? '100%' : 320}
@@ -737,8 +737,8 @@ const Playground = () => {
           )}
 
           <Layout.Content className='relative flex-1 overflow-hidden'>
-            <div className='overflow-hidden flex flex-col lg:flex-row h-[calc(100vh-66px)] mt-[60px]'>
-              <div className='flex-1 flex flex-col'>
+            <div className='playground-shell-h mt-[60px] flex min-h-0 flex-col overflow-hidden lg:flex-row'>
+              <div className='flex min-h-0 flex-1 flex-col'>
                 <ChatArea
                   chatRef={chatRef}
                   message={message}
