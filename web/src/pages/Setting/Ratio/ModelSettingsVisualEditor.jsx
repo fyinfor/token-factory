@@ -50,39 +50,26 @@ export default function ModelSettingsVisualEditor(props) {
   useEffect(() => {
     const loadSuppliers = async () => {
       try {
-        if (isSupplier()) {
-          const channels = [];
-          let page = 1;
-          let total = 0;
-          do {
-            const res = await API.get(
-              `/api/user/supplier/channels?p=${page}&page_size=1000`,
-            );
-            if (!res?.data?.success) break;
-            const items = res.data.data?.items || [];
-            total = res.data.data?.total || items.length;
-            channels.push(
-              ...items.map((item) => ({
-                channel_id: item.id,
-                channel_name: item.name,
-                channel_no: item.channel_no,
-              })),
-            );
-            page += 1;
-          } while (channels.length < total);
-          setPricingSuppliers(channels);
-        } else {
-          const res = await API.get('/api/channel/');
-          if (res?.data?.success) {
-            setPricingSuppliers(
-              (res.data.data?.items || []).map((item) => ({
-                channel_id: item.id,
-                channel_name: item.name,
-                channel_no: item.channel_no,
-              })) || [],
-            );
-          }
-        }
+        const channels = [];
+        let page = 1;
+        let total = 0;
+        do {
+          const res = await API.get(
+            `${isSupplier() ? '/api/user/supplier/channels' : '/api/channel/'}?p=${page}&page_size=100`,
+          );
+          if (!res?.data?.success) break;
+          const items = res.data.data?.items || [];
+          total = res.data.data?.total || items.length;
+          channels.push(
+            ...items.map((item) => ({
+              channel_id: item.id,
+              channel_name: item.name,
+              channel_no: item.channel_no,
+            })),
+          );
+          page += 1;
+        } while (channels.length < total);
+        setPricingSuppliers(channels);
       } catch (error) {
         console.error('failed to load suppliers:', error);
       }
