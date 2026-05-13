@@ -30,7 +30,7 @@ import {
   Select,
   Modal,
 } from '@douyinfe/semi-ui';
-import { IconSearch } from '@douyinfe/semi-icons';
+import { IconHelpCircle, IconSearch } from '@douyinfe/semi-icons';
 import {
   RefreshCcw,
   CheckSquare,
@@ -184,6 +184,12 @@ function resolutionMatchesUpstream(selected, upstreamVal) {
 
 function formatCellNumber(v) {
   if (v === null || v === undefined || v === 'same') return '—';
+  if (v && typeof v === 'object') {
+    if (Array.isArray(v.segments)) {
+      return `${v.segments.length}档`;
+    }
+    return JSON.stringify(v);
+  }
   const n = Number(v);
   if (Number.isNaN(n)) return String(v);
   const r = Math.round(n * 1e6) / 1e6;
@@ -236,6 +242,71 @@ function formatPriceNumber(v) {
     .replace(/\.$/, '');
 }
 
+function isTierValue(value) {
+  return value && typeof value === 'object' && Array.isArray(value.segments);
+}
+
+function buildTierSegmentDetails(value) {
+  if (!isTierValue(value)) return [];
+  return value.segments.map((row, idx) => {
+    const price = ratioToDisplayPrice(row?.ratio);
+    return {
+      range: `${idx === 0 ? 0 : value.segments[idx - 1]?.up_to || 0}～${row?.up_to || '∞'}`,
+      price: price === null ? '-' : `$${formatPriceNumber(price)}`,
+    };
+  });
+}
+
+function renderTierValue(value, t, fallback = '—') {
+  const segments = buildTierSegmentDetails(value);
+  if (segments.length === 0) return fallback;
+
+  return (
+    <span className='inline-flex items-center gap-1'>
+      <span>
+        {segments.length}
+        {t('档')}
+      </span>
+      <Tooltip
+        position='top'
+        content={
+          <div style={{ maxWidth: 280 }}>
+            {segments.map((segment) => (
+              <div key={`${segment.range}-${segment.price}`}>
+                {segment.range}：{segment.price} / 1M tokens
+              </div>
+            ))}
+          </div>
+        }
+      >
+        <IconHelpCircle
+          size='small'
+          style={{ color: 'var(--semi-color-text-2)', cursor: 'help' }}
+        />
+      </Tooltip>
+    </span>
+  );
+}
+
+function renderCellValue(value, t) {
+  return isTierValue(value) ? renderTierValue(value, t) : formatCellNumber(value);
+}
+
+function renderChannelOldNewPair(oldVal, newVal, t) {
+  const oldNode = isUnsetOldValue(oldVal)
+    ? t('未设置')
+    : renderCellValue(oldVal, t);
+  const newNode = renderCellValue(newVal, t);
+
+  return (
+    <span className='inline-flex items-center gap-1'>
+      {oldNode}
+      <span>/</span>
+      {newNode}
+    </span>
+  );
+}
+
 function formatOldNewPair(oldVal, newVal) {
   return `${formatCellNumber(oldVal)}/${formatCellNumber(newVal)}`;
 }
@@ -261,6 +332,15 @@ function formatChannelOldNewPair(oldVal, newVal) {
   return `${formatChannelOldValue(oldVal, formatCellNumber)}/${formatCellNumber(newVal)}`;
 }
 
+function isTierRatioType(ratioType) {
+  return [
+    'model_tier_ratio',
+    'completion_tier_ratio',
+    'cache_tier_ratio',
+    'create_cache_tier_ratio',
+  ].includes(ratioType);
+}
+
 function formatChannelPriceOldNewPair(oldVal, newVal) {
   const formatPriceWithSymbol = (value) => {
     const formatted = formatPriceNumber(value);
@@ -273,6 +353,9 @@ function formatChannelPriceOldNewPair(oldVal, newVal) {
 function isUpstreamCellSelectable(oldVal, newVal) {
   if (newVal === null || newVal === undefined || newVal === 'same')
     return false;
+  if (newVal && typeof newVal === 'object') {
+    return !resolutionMatchesUpstream(oldVal, newVal);
+  }
   const nu = Number(newVal);
   if (Number.isNaN(nu)) return false;
   if (oldVal === null || oldVal === undefined) return true;
@@ -866,8 +949,9 @@ export default function UpstreamRatioSync(props) {
             Object.entries(normalizedRatios).forEach(([ratioType, value]) => {
               const ck = channelOptionKeyForRatioType(ratioType);
               if (!finalChannel[ck][idStr]) finalChannel[ck][idStr] = {};
-              finalChannel[ck][idStr][model] =
-                normalizeStoredNumber(value) ?? value;
+              finalChannel[ck][idStr][model] = isTierRatioType(ratioType)
+                ? value
+                : (normalizeStoredNumber(value) ?? value);
             });
           } else {
             if (hasPrice) {
@@ -882,7 +966,9 @@ export default function UpstreamRatioSync(props) {
             Object.entries(normalizedRatios).forEach(([ratioType, value]) => {
               const gk = ratioTypeToPascal(ratioType);
               if (!finalRatios[gk]) finalRatios[gk] = {};
-              finalRatios[gk][model] = normalizeStoredNumber(value) ?? value;
+              finalRatios[gk][model] = isTierRatioType(ratioType)
+                ? value
+                : (normalizeStoredNumber(value) ?? value);
             });
           }
         });
@@ -918,6 +1004,10 @@ export default function UpstreamRatioSync(props) {
                 CompletionRatio: finalRatios.CompletionRatio || {},
                 CacheRatio: finalRatios.CacheRatio || {},
                 CreateCacheRatio: finalRatios.CreateCacheRatio || {},
+                ModelTierRatio: finalRatios.ModelTierRatio || {},
+                CompletionTierRatio: finalRatios.CompletionTierRatio || {},
+                CacheTierRatio: finalRatios.CacheTierRatio || {},
+                CreateCacheTierRatio: finalRatios.CreateCacheTierRatio || {},
                 ImageRatio: parseNestedOption(props.options.ImageRatio),
                 AudioRatio: parseNestedOption(props.options.AudioRatio),
                 AudioCompletionRatio: parseNestedOption(
@@ -954,6 +1044,14 @@ export default function UpstreamRatioSync(props) {
               CacheRatio: (finalChannel.ChannelCacheRatio || {})[idStr] || {},
               CreateCacheRatio:
                 (finalChannel.ChannelCreateCacheRatio || {})[idStr] || {},
+              ModelTierRatio:
+                (finalChannel.ChannelModelTierRatio || {})[idStr] || {},
+              CompletionTierRatio:
+                (finalChannel.ChannelCompletionTierRatio || {})[idStr] || {},
+              CacheTierRatio:
+                (finalChannel.ChannelCacheTierRatio || {})[idStr] || {},
+              CreateCacheTierRatio:
+                (finalChannel.ChannelCreateCacheTierRatio || {})[idStr] || {},
             };
             CHANNEL_EXTRA_OPTION_TO_PAYLOAD.forEach(([optKey, payloadKey]) => {
               body[payloadKey] = extractNestedChannelModelMap(
@@ -1145,8 +1243,17 @@ export default function UpstreamRatioSync(props) {
                 {t('缓存写入倍率')}
               </Select.Option>
               <Select.Option value='model_price'>{t('固定价格')}</Select.Option>
-              <Select.Option value='request_tier_pricing'>
-                {t('阶梯计费规则')}
+              <Select.Option value='model_tier_ratio'>
+                {t('输入阶梯倍率')}
+              </Select.Option>
+              <Select.Option value='completion_tier_ratio'>
+                {t('输出阶梯倍率')}
+              </Select.Option>
+              <Select.Option value='cache_tier_ratio'>
+                {t('缓存读取阶梯倍率')}
+              </Select.Option>
+              <Select.Option value='create_cache_tier_ratio'>
+                {t('缓存写入阶梯倍率')}
               </Select.Option>
             </Select>
           </div>
@@ -1227,7 +1334,7 @@ export default function UpstreamRatioSync(props) {
           : `$${formatPriceNumber(cachePrice)}`;
       }
 
-      return String(record.current);
+      return renderCellValue(record.current, t);
     };
 
     const formatUpstreamSingleDisplay = (record, upstreamName) => {
@@ -1273,7 +1380,7 @@ export default function UpstreamRatioSync(props) {
           : `$${formatPriceNumber(newCachePrice)}`;
       }
 
-      return formatCellNumber(newVal);
+      return renderCellValue(newVal, t);
     };
 
     const formatUpstreamPairDisplay = (record, upstreamName) => {
@@ -1345,7 +1452,7 @@ export default function UpstreamRatioSync(props) {
         return formatChannelPriceOldNewPair(currentCachePrice, newCachePrice);
       }
 
-      return formatChannelOldNewPair(oldVal, newVal);
+      return renderChannelOldNewPair(oldVal, newVal, t);
     };
 
     const dataSource = useMemo(() => {
@@ -1490,7 +1597,10 @@ export default function UpstreamRatioSync(props) {
             cache_ratio: t('缓存读取价格（由倍率换算）'),
             create_cache_ratio: t('缓存写入价格（由倍率换算）'),
             model_price: t('固定价格'),
-            request_tier_pricing: t('阶梯计费规则'),
+            model_tier_ratio: t('输入阶梯价格（由倍率换算）'),
+            completion_tier_ratio: t('输出阶梯价格（由倍率换算）'),
+            cache_tier_ratio: t('缓存读取阶梯价格（由倍率换算）'),
+            create_cache_tier_ratio: t('缓存写入阶梯价格（由倍率换算）'),
           };
           const baseTag = (
             <Tag color={stringToColor(text)} shape='circle'>
@@ -1692,14 +1802,22 @@ export default function UpstreamRatioSync(props) {
               cellRes?.srcName === upName &&
               resolutionMatchesUpstream(cellRes?.value, upstreamVal);
 
-            const pairEl = (
+            const hasTierDisplay =
+              isTierValue(upstreamVal) ||
+              isTierValue(getSelectableOldValue(record));
+            const pairContent = (
+              <span
+                className='font-mono text-sm tabular-nums'
+                style={{ letterSpacing: '0.02em' }}
+              >
+                {pairText}
+              </span>
+            );
+            const pairEl = hasTierDisplay ? (
+              pairContent
+            ) : (
               <Tooltip content={t('旧价新价对照说明')}>
-                <span
-                  className='font-mono text-sm tabular-nums'
-                  style={{ letterSpacing: '0.02em' }}
-                >
-                  {pairText}
-                </span>
+                {pairContent}
               </Tooltip>
             );
 

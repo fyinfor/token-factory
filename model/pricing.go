@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-
 	"sync"
 	"time"
 
@@ -71,6 +70,10 @@ type PricingChannelItem struct {
 	CompletionRatio      float64 `json:"completion_ratio"`
 	CacheRatio           float64 `json:"cache_ratio"`
 	CreateCacheRatio     float64 `json:"create_cache_ratio"`
+	ModelTierRatio       any     `json:"model_tier_ratio,omitempty"`
+	CompletionTierRatio  any     `json:"completion_tier_ratio,omitempty"`
+	CacheTierRatio       any     `json:"cache_tier_ratio,omitempty"`
+	CreateCacheTierRatio any     `json:"create_cache_tier_ratio,omitempty"`
 	PriceDiscountPercent float64 `json:"price_discount_percent"`
 	QuotaType            int     `json:"quota_type"`
 }
@@ -185,6 +188,10 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			}
 			baseMp, baseMr, cr := resolveChannelPricingTriple(row.ChannelID, row.SupplierApplicationID, modelName)
 			chCache, chCreate := resolveChannelCachePair(row.ChannelID, row.SupplierApplicationID, modelName)
+			modelTierRatio, hasModelTierRatio := ratio_setting.ResolveModelTierRatio(row.ChannelID, modelName)
+			completionTierRatio, hasCompletionTierRatio := ratio_setting.ResolveCompletionTierRatio(row.ChannelID, modelName)
+			cacheTierRatio, hasCacheTierRatio := ratio_setting.ResolveCacheTierRatio(row.ChannelID, modelName)
+			createCacheTierRatio, hasCreateCacheTierRatio := ratio_setting.ResolveCreateCacheTierRatio(row.ChannelID, modelName)
 			alias := pricingSupplierAliasFromMeta(row.SupplierApplicationID, row.SupplierAlias)
 			d := 100.0
 			if row.PriceDiscountPercent != nil {
@@ -197,7 +204,7 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			if channelSlugMap != nil {
 				routeSlug = channelSlugMap[row.ChannelID]
 			}
-			chItems = append(chItems, PricingChannelItem{
+			chItem := PricingChannelItem{
 				ChannelID:             row.ChannelID,
 				SupplierApplicationID: row.SupplierApplicationID,
 				ChannelNo:             row.ChannelNo,
@@ -219,7 +226,20 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 						return 0
 					}
 				}(),
-			})
+			}
+			if hasModelTierRatio {
+				chItem.ModelTierRatio = modelTierRatio
+			}
+			if hasCompletionTierRatio {
+				chItem.CompletionTierRatio = completionTierRatio
+			}
+			if hasCacheTierRatio {
+				chItem.CacheTierRatio = cacheTierRatio
+			}
+			if hasCreateCacheTierRatio {
+				chItem.CreateCacheTierRatio = createCacheTierRatio
+			}
+			chItems = append(chItems, chItem)
 		}
 
 		if len(chItems) == 0 {

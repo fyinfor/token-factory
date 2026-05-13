@@ -17,12 +17,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Banner,
   Button,
   Card,
-  Checkbox,
   Empty,
   Input,
   Modal,
@@ -48,6 +47,7 @@ import {
   PAGE_SIZE,
   PRICE_SUFFIX,
   buildSummaryText,
+  getEffectiveBillingMode,
   hasValue,
   useModelPricingEditorState,
 } from '../hooks/useModelPricingEditorState';
@@ -70,6 +70,77 @@ const formatTierDetailPrice = (ratio) => {
   if (!ratio) return '-';
   const value = Number(Number(ratio * 2).toFixed(6));
   return `$${value}`;
+};
+const hasTierSegments = (tier) =>
+  Array.isArray(tier?.segments) && tier.segments.length > 0;
+
+const buildTierSegmentDetails = (tier) => {
+  if (!hasTierSegments(tier)) return [];
+  const segments = ensureFinalInfinityTierSegments(tier.segments);
+  return segments.map((row, idx) => ({
+    range: `${idx === 0 ? 0 : segments[idx - 1]?.up_to || 0}～${row.up_to || '∞'}`,
+    price: formatTierDetailPrice(row.ratio),
+  }));
+};
+
+const renderTierSummaryItem = (label, tier, t) => {
+  const segments = buildTierSegmentDetails(tier);
+  if (segments.length === 0) return null;
+  return (
+    <span className='inline-flex items-center gap-1'>
+      <span>
+        {label} {segments.length}
+        {t('档')}
+      </span>
+      <Tooltip
+        position='top'
+        content={
+          <div style={{ maxWidth: 280 }}>
+            <div className='font-medium mb-1'>{label}</div>
+            {segments.map((segment) => (
+              <div key={`${segment.range}-${segment.price}`}>
+                {segment.range}：{segment.price} / 1M tokens
+              </div>
+            ))}
+          </div>
+        }
+      >
+        <IconHelpCircle
+          size='small'
+          style={{ color: 'var(--semi-color-text-2)', cursor: 'help' }}
+        />
+      </Tooltip>
+    </span>
+  );
+};
+
+const renderSummary = (record, t) => {
+  if (getEffectiveBillingMode(record) !== 'tiered') {
+    return <span>{buildSummaryText(record, t)}</span>;
+  }
+
+  const items = [
+    renderTierSummaryItem(t('输入'), record.modelTierRatio, t),
+    renderTierSummaryItem(t('输出'), record.completionTierRatio, t),
+    renderTierSummaryItem(t('缓存读取'), record.cacheTierRatio, t),
+    renderTierSummaryItem(t('缓存写入'), record.createCacheTierRatio, t),
+  ].filter(Boolean);
+
+  if (items.length === 0) {
+    return <span>{buildSummaryText(record, t)}</span>;
+  }
+
+  return (
+    <span className='inline-flex flex-wrap items-center gap-x-2 gap-y-1'>
+      <span>{t('阶梯计费')}｜</span>
+      {items.map((item, index) => (
+        <React.Fragment key={index}>
+          {index > 0 ? <span>/</span> : null}
+          {item}
+        </React.Fragment>
+      ))}
+    </span>
+  );
 };
 const VIDEO_RESOLUTION_OPTIONS = [
   { label: '480p', value: '854x480' },
@@ -253,7 +324,6 @@ export default function ModelPricingEditor({
   onSaveOutput,
   allowAddModel = true,
   allowDeleteModel = true,
-  showConflictFilter = true,
   listDescription = '',
   emptyTitle = '',
   emptyDescription = '',
@@ -288,8 +358,6 @@ export default function ModelPricingEditor({
     currentPage,
     setCurrentPage,
     loading,
-    conflictOnly,
-    setConflictOnly,
     filteredModels,
     pagedData,
     selectedWarnings,
@@ -325,72 +393,105 @@ export default function ModelPricingEditor({
     visibleCategories,
   });
 
-  const tierPriceDetails = useMemo(
-    () => {
-      const details = [];
-      if (selectedModel?.modelTierRatio?.segments?.length > 0) {
-        const segments = ensureFinalInfinityTierSegments(selectedModel.modelTierRatio.segments);
-        details.push({
-          key: 'model',
-          category: 'model',
-          label: t('输入价格'),
-          segments: segments.map((row, idx) => ({
-            range: `${idx === 0 ? 0 : segments[idx - 1]?.up_to || 0}～${row.up_to || '∞'}`,
-            price: formatTierDetailPrice(row.ratio),
-            ratio: row.ratio,
-          })),
-        });
-      }
-      if (visibleCategories.output && selectedModel?.completionTierRatio?.segments?.length > 0) {
-        const segments = ensureFinalInfinityTierSegments(selectedModel.completionTierRatio.segments);
-        details.push({
-          key: 'completion',
-          category: 'completion',
-          label: t('输出价格'),
-          segments: segments.map((row, idx) => ({
-            range: `${idx === 0 ? 0 : segments[idx - 1]?.up_to || 0}～${row.up_to || '∞'}`,
-            price: formatTierDetailPrice(row.ratio),
-            ratio: row.ratio,
-          })),
-        });
-      }
-      if (visibleCategories.cache_read && selectedModel?.cacheTierRatio?.segments?.length > 0) {
-        const segments = ensureFinalInfinityTierSegments(selectedModel.cacheTierRatio.segments);
-        details.push({
-          key: 'cache',
-          category: 'cache',
-          label: t('缓存读取价格'),
-          segments: segments.map((row, idx) => ({
-            range: `${idx === 0 ? 0 : segments[idx - 1]?.up_to || 0}～${row.up_to || '∞'}`,
-            price: formatTierDetailPrice(row.ratio),
-            ratio: row.ratio,
-          })),
-        });
-      }
-      if (visibleCategories.cache_write && selectedModel?.createCacheTierRatio?.segments?.length > 0) {
-        const segments = ensureFinalInfinityTierSegments(selectedModel.createCacheTierRatio.segments);
-        details.push({
-          key: 'createCache',
-          category: 'createCache',
-          label: t('缓存写入价格'),
-          segments: segments.map((row, idx) => ({
-            range: `${idx === 0 ? 0 : segments[idx - 1]?.up_to || 0}～${row.up_to || '∞'}`,
-            price: formatTierDetailPrice(row.ratio),
-            ratio: row.ratio,
-          })),
-        });
-      }
-      return details;
-    },
-    [
-      selectedModel?.modelTierRatio,
-      selectedModel?.completionTierRatio,
-      selectedModel?.cacheTierRatio,
-      selectedModel?.createCacheTierRatio,
-      visibleCategories,
-      t,
-    ],
-  );
+  useEffect(() => {
+    if (!selectedModel) return;
+    setVisibleCategories((prev) => ({
+      output: hasTierSegments(selectedModel.completionTierRatio)
+        ? true
+        : prev.output,
+      cache_read: hasTierSegments(selectedModel.cacheTierRatio)
+        ? true
+        : prev.cache_read,
+      cache_write: hasTierSegments(selectedModel.createCacheTierRatio)
+        ? true
+        : prev.cache_write,
+    }));
+  }, [
+    selectedModel?.completionTierRatio,
+    selectedModel?.cacheTierRatio,
+    selectedModel?.createCacheTierRatio,
+  ]);
+
+  const tierPriceDetails = useMemo(() => {
+    const details = [];
+    if (selectedModel?.modelTierRatio?.segments?.length > 0) {
+      const segments = ensureFinalInfinityTierSegments(
+        selectedModel.modelTierRatio.segments,
+      );
+      details.push({
+        key: 'model',
+        category: 'model',
+        label: t('输入价格'),
+        segments: segments.map((row, idx) => ({
+          range: `${idx === 0 ? 0 : segments[idx - 1]?.up_to || 0}～${row.up_to || '∞'}`,
+          price: formatTierDetailPrice(row.ratio),
+          ratio: row.ratio,
+        })),
+      });
+    }
+    if (
+      visibleCategories.output &&
+      selectedModel?.completionTierRatio?.segments?.length > 0
+    ) {
+      const segments = ensureFinalInfinityTierSegments(
+        selectedModel.completionTierRatio.segments,
+      );
+      details.push({
+        key: 'completion',
+        category: 'completion',
+        label: t('输出价格'),
+        segments: segments.map((row, idx) => ({
+          range: `${idx === 0 ? 0 : segments[idx - 1]?.up_to || 0}～${row.up_to || '∞'}`,
+          price: formatTierDetailPrice(row.ratio),
+          ratio: row.ratio,
+        })),
+      });
+    }
+    if (
+      visibleCategories.cache_read &&
+      selectedModel?.cacheTierRatio?.segments?.length > 0
+    ) {
+      const segments = ensureFinalInfinityTierSegments(
+        selectedModel.cacheTierRatio.segments,
+      );
+      details.push({
+        key: 'cache',
+        category: 'cache',
+        label: t('缓存读取价格'),
+        segments: segments.map((row, idx) => ({
+          range: `${idx === 0 ? 0 : segments[idx - 1]?.up_to || 0}～${row.up_to || '∞'}`,
+          price: formatTierDetailPrice(row.ratio),
+          ratio: row.ratio,
+        })),
+      });
+    }
+    if (
+      visibleCategories.cache_write &&
+      selectedModel?.createCacheTierRatio?.segments?.length > 0
+    ) {
+      const segments = ensureFinalInfinityTierSegments(
+        selectedModel.createCacheTierRatio.segments,
+      );
+      details.push({
+        key: 'createCache',
+        category: 'createCache',
+        label: t('缓存写入价格'),
+        segments: segments.map((row, idx) => ({
+          range: `${idx === 0 ? 0 : segments[idx - 1]?.up_to || 0}～${row.up_to || '∞'}`,
+          price: formatTierDetailPrice(row.ratio),
+          ratio: row.ratio,
+        })),
+      });
+    }
+    return details;
+  }, [
+    selectedModel?.modelTierRatio,
+    selectedModel?.completionTierRatio,
+    selectedModel?.cacheTierRatio,
+    selectedModel?.createCacheTierRatio,
+    visibleCategories,
+    t,
+  ]);
 
   const videoPerVideoBillingHint = useMemo(() => {
     const { type } = getCurrencyConfig();
@@ -407,7 +508,9 @@ export default function ModelPricingEditor({
   }, [t]);
 
   const perVideoPriceSuffix = useMemo(() => {
-    const unit = ['USD', 'CNY', 'CUSTOM'].includes(selectedModel?.videoPriceUnit)
+    const unit = ['USD', 'CNY', 'CUSTOM'].includes(
+      selectedModel?.videoPriceUnit,
+    )
       ? selectedModel.videoPriceUnit
       : getCurrencyConfig().type;
     if (unit === 'USD') return '$';
@@ -417,7 +520,9 @@ export default function ModelPricingEditor({
   }, [selectedModel?.videoPriceUnit, t]);
 
   const flatPerVideoPriceSuffix = useMemo(() => {
-    const unit = ['USD', 'CNY', 'CUSTOM'].includes(selectedModel?.videoPriceUnit)
+    const unit = ['USD', 'CNY', 'CUSTOM'].includes(
+      selectedModel?.videoPriceUnit,
+    )
       ? selectedModel.videoPriceUnit
       : getCurrencyConfig().type;
     if (unit === 'USD') return '$/视频';
@@ -448,14 +553,11 @@ export default function ModelPricingEditor({
             >
               {text}
             </Button>
-            {Array.isArray(selectedModelNames) && record?.name && selectedModelNames.includes(record.name) ? (
+            {Array.isArray(selectedModelNames) &&
+            record?.name &&
+            selectedModelNames.includes(record.name) ? (
               <Tag color='green' shape='circle'>
                 {t('已勾选')}
-              </Tag>
-            ) : null}
-            {record.hasConflict ? (
-              <Tag color='red' shape='circle'>
-                {t('矛盾')}
               </Tag>
             ) : null}
           </Space>
@@ -466,7 +568,7 @@ export default function ModelPricingEditor({
         dataIndex: 'billingMode',
         key: 'billingMode',
         render: (_, record) => {
-          const meta = getBillingModeMeta(record.billingMode, t);
+          const meta = getBillingModeMeta(getEffectiveBillingMode(record), t);
           return <Tag color={meta.color}>{meta.label}</Tag>;
         },
       },
@@ -474,9 +576,7 @@ export default function ModelPricingEditor({
         title: t('价格摘要'),
         dataIndex: 'summary',
         key: 'summary',
-        render: (_, record) => (
-          <span>{buildSummaryText(record, t)}</span>
-        ),
+        render: (_, record) => renderSummary(record, t),
       },
       {
         title: t('操作'),
@@ -520,53 +620,46 @@ export default function ModelPricingEditor({
   return (
     <>
       <Space vertical align='start' style={{ width: '100%' }}>
-        <Space wrap className='mt-2'>
-          {allowAddModel ? (
+        <Card bodyStyle={{ padding: 12 }} style={{ width: '100%' }}>
+          <Space wrap>
+            {allowAddModel ? (
+              <Button
+                icon={<IconPlus />}
+                onClick={() => setAddVisible(true)}
+                style={isMobile ? { width: '100%' } : undefined}
+              >
+                {t('添加模型')}
+              </Button>
+            ) : null}
             <Button
-              icon={<IconPlus />}
-              onClick={() => setAddVisible(true)}
+              type='primary'
+              icon={<IconSave />}
+              loading={loading}
+              onClick={handleSubmit}
               style={isMobile ? { width: '100%' } : undefined}
             >
-              {t('添加模型')}
+              {t('应用更改')}
             </Button>
-          ) : null}
-          <Button
-            type='primary'
-            icon={<IconSave />}
-            loading={loading}
-            onClick={handleSubmit}
-            style={isMobile ? { width: '100%' } : undefined}
-          >
-            {t('应用更改')}
-          </Button>
-          <Button
-            disabled={!selectedModel || selectedModelNames.length === 0}
-            onClick={() => setBatchVisible(true)}
-            style={isMobile ? { width: '100%' } : undefined}
-          >
-            {t('批量应用当前模型价格')}
-            {selectedModelNames.length > 0
-              ? ` (${selectedModelNames.length})`
-              : ''}
-          </Button>
-          <Input
-            prefix={<IconSearch />}
-            placeholder={t('搜索模型名称')}
-            value={searchText}
-            onChange={(value) => setSearchText(value)}
-            style={{ width: isMobile ? '100%' : 220 }}
-            showClear
-          />
-          {showConflictFilter ? (
-            <Checkbox
-              checked={conflictOnly}
-              onChange={(event) => setConflictOnly(event.target.checked)}
+            <Button
+              disabled={!selectedModel || selectedModelNames.length === 0}
+              onClick={() => setBatchVisible(true)}
+              style={isMobile ? { width: '100%' } : undefined}
             >
-              {t('仅显示矛盾倍率')}
-            </Checkbox>
-          ) : null}
-        </Space>
-
+              {t('批量应用当前模型价格')}
+              {selectedModelNames.length > 0
+                ? ` (${selectedModelNames.length})`
+                : ''}
+            </Button>
+            <Input
+              prefix={<IconSearch />}
+              placeholder={t('搜索模型名称')}
+              value={searchText}
+              onChange={(value) => setSearchText(value)}
+              style={{ width: isMobile ? '100%' : 220 }}
+              showClear
+            />
+          </Space>
+        </Card>
         {listDescription ? (
           <div className='text-sm text-gray-500'>{listDescription}</div>
         ) : null}
@@ -644,12 +737,15 @@ export default function ModelPricingEditor({
             style={isMobile ? { order: 1 } : undefined}
             title={selectedModel ? selectedModel.name : t('模型计费编辑器')}
             headerExtraContent={
-              selectedModel ? (
-                (() => {
-                  const meta = getBillingModeMeta(selectedModel.billingMode, t);
-                  return <Tag color={meta.color}>{meta.label}</Tag>;
-                })()
-              ) : null
+              selectedModel
+                ? (() => {
+                    const meta = getBillingModeMeta(
+                      getEffectiveBillingMode(selectedModel),
+                      t,
+                    );
+                    return <Tag color={meta.color}>{meta.label}</Tag>;
+                  })()
+                : null
             }
           >
             {!selectedModel ? (
@@ -662,8 +758,35 @@ export default function ModelPricingEditor({
             ) : (
               <div>
                 <div className='mb-4'>
-                  <div className='mb-2 font-medium text-gray-700'>
+                  <div className='mb-2 font-medium text-gray-700 flex items-center gap-1'>
                     {t('计费方式')}
+                    <Tooltip
+                      position='top'
+                      content={
+                        <div style={{ maxWidth: 320 }}>
+                          <div className='font-medium mb-1'>
+                            {t('计费方式生效优先级')}
+                          </div>
+                          <div>
+                            {t(
+                              '系统按“按次计费 > 阶梯计费 > 按量计费”的优先级选择实际生效的计费方式。',
+                            )}
+                          </div>
+                          <div className='mt-2 text-xs'>
+                            {t(
+                              '如需使用低优先级计费方式，请先清空更高优先级中已填写的价格；已配置的其它价格会保留保存，但不会生效。',
+                            )}
+                          </div>
+                        </div>
+                      }
+                    >
+                      <IconHelpCircle
+                        style={{
+                          cursor: 'help',
+                          color: 'var(--semi-color-text-2)',
+                        }}
+                      />
+                    </Tooltip>
                   </div>
                   <RadioGroup
                     type='button'
@@ -700,7 +823,7 @@ export default function ModelPricingEditor({
                   </Card>
                 ) : null}
 
-                {selectedModel.billingMode === 'per-token' ?
+                {selectedModel.billingMode === 'per-token' ? (
                   <>
                     <Card
                       bodyStyle={{ padding: 16 }}
@@ -1136,7 +1259,9 @@ export default function ModelPricingEditor({
                                       <div className='flex items-center gap-2'>
                                         <Switch
                                           size='small'
-                                          checked={Boolean(row.audioPricingEnabled)}
+                                          checked={Boolean(
+                                            row.audioPricingEnabled,
+                                          )}
                                           checkedText={t('开')}
                                           uncheckedText={t('关')}
                                           onChange={(checked) =>
@@ -1148,18 +1273,18 @@ export default function ModelPricingEditor({
                                             )
                                           }
                                         />
-                                      <Tag
-                                        size='small'
-                                        color={
-                                          row.audioPricingEnabled
-                                            ? 'blue'
-                                            : 'grey'
-                                        }
-                                      >
-                                        {row.audioPricingEnabled
-                                          ? t('音轨计费')
-                                          : t('统一计费')}
-                                      </Tag>
+                                        <Tag
+                                          size='small'
+                                          color={
+                                            row.audioPricingEnabled
+                                              ? 'blue'
+                                              : 'grey'
+                                          }
+                                        >
+                                          {row.audioPricingEnabled
+                                            ? t('音轨计费')
+                                            : t('统一计费')}
+                                        </Tag>
                                       </div>
                                       <Button
                                         type='danger'
@@ -1281,7 +1406,9 @@ export default function ModelPricingEditor({
                                       <div className='flex items-center gap-2'>
                                         <Switch
                                           size='small'
-                                          checked={Boolean(row.audioPricingEnabled)}
+                                          checked={Boolean(
+                                            row.audioPricingEnabled,
+                                          )}
                                           checkedText={t('开')}
                                           uncheckedText={t('关')}
                                           onChange={(checked) =>
@@ -1293,18 +1420,18 @@ export default function ModelPricingEditor({
                                             )
                                           }
                                         />
-                                      <Tag
-                                        size='small'
-                                        color={
-                                          row.audioPricingEnabled
-                                            ? 'blue'
-                                            : 'grey'
-                                        }
-                                      >
-                                        {row.audioPricingEnabled
-                                          ? t('音轨计费')
-                                          : t('统一计费')}
-                                      </Tag>
+                                        <Tag
+                                          size='small'
+                                          color={
+                                            row.audioPricingEnabled
+                                              ? 'blue'
+                                              : 'grey'
+                                          }
+                                        >
+                                          {row.audioPricingEnabled
+                                            ? t('音轨计费')
+                                            : t('统一计费')}
+                                        </Tag>
                                       </div>
                                       <Button
                                         type='danger'
@@ -1391,10 +1518,10 @@ export default function ModelPricingEditor({
                                         ...VIDEO_RULE_CARD_STYLE,
                                         marginBottom:
                                           index < arr.length - 1 ? 10 : 0,
-                                      display: 'flex',
-                                      alignItems: 'center',
-                                      flexWrap: 'wrap',
-                                      gap: 8,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        flexWrap: 'wrap',
+                                        gap: 8,
                                       }}
                                     >
                                       <div
@@ -1404,62 +1531,64 @@ export default function ModelPricingEditor({
                                           justifyContent: 'flex-start',
                                         }}
                                       >
-                                      <Select
-                                        value={row.resolution}
-                                        placeholder={t('选择分辨率')}
-                                        filter
-                                        style={{ width: 140 }}
-                                        optionList={getSelectableResolutionOptions(
-                                          selectedModel.videoGenerateRules,
-                                          index,
-                                        )}
-                                        onChange={(value) =>
-                                          updateVideoRuleRow(
-                                            'videoGenerate',
+                                        <Select
+                                          value={row.resolution}
+                                          placeholder={t('选择分辨率')}
+                                          filter
+                                          style={{ width: 140 }}
+                                          optionList={getSelectableResolutionOptions(
+                                            selectedModel.videoGenerateRules,
                                             index,
-                                            'resolution',
-                                            String(value || ''),
-                                          )
-                                        }
-                                      />
-                                      <div className='flex items-center gap-2'>
-                                        <Switch
-                                          size='small'
-                                          checked={Boolean(row.audioPricingEnabled)}
-                                          checkedText={t('开')}
-                                          uncheckedText={t('关')}
-                                          onChange={(checked) =>
+                                          )}
+                                          onChange={(value) =>
                                             updateVideoRuleRow(
                                               'videoGenerate',
                                               index,
-                                              'audioPricingEnabled',
-                                              checked,
+                                              'resolution',
+                                              String(value || ''),
                                             )
                                           }
                                         />
-                                        <Tag
-                                          size='small'
-                                          color={
-                                            row.audioPricingEnabled
-                                              ? 'blue'
-                                              : 'grey'
+                                        <div className='flex items-center gap-2'>
+                                          <Switch
+                                            size='small'
+                                            checked={Boolean(
+                                              row.audioPricingEnabled,
+                                            )}
+                                            checkedText={t('开')}
+                                            uncheckedText={t('关')}
+                                            onChange={(checked) =>
+                                              updateVideoRuleRow(
+                                                'videoGenerate',
+                                                index,
+                                                'audioPricingEnabled',
+                                                checked,
+                                              )
+                                            }
+                                          />
+                                          <Tag
+                                            size='small'
+                                            color={
+                                              row.audioPricingEnabled
+                                                ? 'blue'
+                                                : 'grey'
+                                            }
+                                          >
+                                            {row.audioPricingEnabled
+                                              ? t('音轨计费')
+                                              : t('统一计费')}
+                                          </Tag>
+                                        </div>
+                                        <Button
+                                          type='danger'
+                                          icon={<IconDelete />}
+                                          onClick={() =>
+                                            removeVideoRuleRow(
+                                              'videoGenerate',
+                                              index,
+                                            )
                                           }
-                                        >
-                                          {row.audioPricingEnabled
-                                            ? t('音轨计费')
-                                            : t('统一计费')}
-                                        </Tag>
-                                      </div>
-                                      <Button
-                                        type='danger'
-                                        icon={<IconDelete />}
-                                        onClick={() =>
-                                          removeVideoRuleRow(
-                                            'videoGenerate',
-                                            index,
-                                          )
-                                        }
-                                      />
+                                        />
                                       </div>
                                       <div
                                         style={{
@@ -1545,7 +1674,6 @@ export default function ModelPricingEditor({
                                     '上传视频与预设分辨率差异在阈值内按相似规则处理，差异过大按实际分辨率处理。',
                                   )}
                                 />
-                                
                               </>
                             ) : (
                               <>
@@ -1597,59 +1725,64 @@ export default function ModelPricingEditor({
                                               justifyContent: 'flex-start',
                                             }}
                                           >
-                                          <Select
-                                            value={row.resolution}
-                                            placeholder={t('选择分辨率')}
-                                            filter
-                                            style={{ width: 140 }}
-                                            optionList={getSelectableResolutionOptions(
-                                              selectedModel[prop] || [],
-                                              index,
-                                            )}
-                                            onChange={(value) =>
-                                              updateVideoRuleRow(
-                                                section,
+                                            <Select
+                                              value={row.resolution}
+                                              placeholder={t('选择分辨率')}
+                                              filter
+                                              style={{ width: 140 }}
+                                              optionList={getSelectableResolutionOptions(
+                                                selectedModel[prop] || [],
                                                 index,
-                                                'resolution',
-                                                String(value || ''),
-                                              )
-                                            }
-                                          />
-                                          <div className='flex items-center gap-2'>
-                                            <Switch
-                                              size='small'
-                                              checked={Boolean(row.audioPricingEnabled)}
-                                              checkedText={t('开')}
-                                              uncheckedText={t('关')}
-                                              onChange={(checked) =>
+                                              )}
+                                              onChange={(value) =>
                                                 updateVideoRuleRow(
                                                   section,
                                                   index,
-                                                  'audioPricingEnabled',
-                                                  checked,
+                                                  'resolution',
+                                                  String(value || ''),
                                                 )
                                               }
                                             />
-                                            <Tag
-                                              size='small'
-                                              color={
-                                                row.audioPricingEnabled
-                                                  ? 'blue'
-                                                  : 'grey'
+                                            <div className='flex items-center gap-2'>
+                                              <Switch
+                                                size='small'
+                                                checked={Boolean(
+                                                  row.audioPricingEnabled,
+                                                )}
+                                                checkedText={t('开')}
+                                                uncheckedText={t('关')}
+                                                onChange={(checked) =>
+                                                  updateVideoRuleRow(
+                                                    section,
+                                                    index,
+                                                    'audioPricingEnabled',
+                                                    checked,
+                                                  )
+                                                }
+                                              />
+                                              <Tag
+                                                size='small'
+                                                color={
+                                                  row.audioPricingEnabled
+                                                    ? 'blue'
+                                                    : 'grey'
+                                                }
+                                              >
+                                                {row.audioPricingEnabled
+                                                  ? t('音轨计费')
+                                                  : t('统一计费')}
+                                              </Tag>
+                                            </div>
+                                            <Button
+                                              type='danger'
+                                              icon={<IconDelete />}
+                                              onClick={() =>
+                                                removeVideoRuleRow(
+                                                  section,
+                                                  index,
+                                                )
                                               }
-                                            >
-                                              {row.audioPricingEnabled
-                                                ? t('音轨计费')
-                                                : t('统一计费')}
-                                            </Tag>
-                                          </div>
-                                          <Button
-                                            type='danger'
-                                            icon={<IconDelete />}
-                                            onClick={() =>
-                                              removeVideoRuleRow(section, index)
-                                            }
-                                          />
+                                            />
                                           </div>
                                           <div
                                             style={{
@@ -1742,7 +1875,8 @@ export default function ModelPricingEditor({
                         )}
                       </div>
                     </Card>
-                  </> : null}
+                  </>
+                ) : null}
 
                 {selectedModel.billingMode === 'tiered' ? (
                   <>
@@ -1758,7 +1892,8 @@ export default function ModelPricingEditor({
                             if (template) {
                               const result = applyTierTemplate(template);
                               if (result) {
-                                const { categoriesToOpen, categoriesToClose } = result;
+                                const { categoriesToOpen, categoriesToClose } =
+                                  result;
                                 setVisibleCategories((prev) => {
                                   const updated = { ...prev };
                                   categoriesToOpen.forEach((cat) => {
@@ -1782,10 +1917,11 @@ export default function ModelPricingEditor({
                           )}
                         </Select>
                       ) : null}
-                      {(selectedModel.modelTierRatio?.segments?.length > 0 ||
-                        selectedModel.completionTierRatio?.segments?.length > 0 ||
-                        selectedModel.cacheTierRatio?.segments?.length > 0 ||
-                        selectedModel.createCacheTierRatio?.segments?.length > 0) ? (
+                      {selectedModel.modelTierRatio?.segments?.length > 0 ||
+                      selectedModel.completionTierRatio?.segments?.length > 0 ||
+                      selectedModel.cacheTierRatio?.segments?.length > 0 ||
+                      selectedModel.createCacheTierRatio?.segments?.length >
+                        0 ? (
                         <Button
                           size='small'
                           type='danger'
@@ -1808,7 +1944,9 @@ export default function ModelPricingEditor({
                               </span>
                               <span className='flex-1 font-medium text-[var(--semi-color-text-0)] flex flex-col gap-1'>
                                 {detail.segments.map((segment) => (
-                                  <span key={`${segment.range}-${segment.price}`}>
+                                  <span
+                                    key={`${segment.range}-${segment.price}`}
+                                  >
                                     {segment.range}：{segment.price} / 1M tokens
                                   </span>
                                 ))}
@@ -1829,10 +1967,17 @@ export default function ModelPricingEditor({
                     </div>
                     <Card
                       title={<span>{t('输入价格')}</span>}
-                      style={{ width: '100%', marginBottom: 8, background: 'var(--semi-color-fill-0)' }}>
+                      style={{
+                        width: '100%',
+                        marginBottom: 8,
+                        background: 'var(--semi-color-fill-0)',
+                      }}
+                    >
                       <TierRowsEditor
                         t={t}
-                        value={selectedModel.modelTierRatio || DEFAULT_TIER_SEGMENTS}
+                        value={
+                          selectedModel.modelTierRatio || DEFAULT_TIER_SEGMENTS
+                        }
                         onChange={(value) => updateModelTierRatio(value)}
                         exchangeRate={exchangeRate}
                         tierType='model'
@@ -1840,7 +1985,7 @@ export default function ModelPricingEditor({
                     </Card>
                     <Card
                       title={
-                        <div className="flex justify-between items-center">
+                        <div className='flex justify-between items-center'>
                           <span>{t('输出价格')}</span>
                           <Switch
                             size='small'
@@ -1854,21 +1999,28 @@ export default function ModelPricingEditor({
                           />
                         </div>
                       }
-                      style={{ width: '100%', marginBottom: 8, background: 'var(--semi-color-fill-0)' }}
+                      style={{
+                        width: '100%',
+                        marginBottom: 8,
+                        background: 'var(--semi-color-fill-0)',
+                      }}
                     >
                       {visibleCategories.output ? (
-                      <TierRowsEditor
-                        t={t}
-                        value={selectedModel.completionTierRatio || DEFAULT_TIER_SEGMENTS}
-                        onChange={(value) => updateCompletionTierRatio(value)}
-                        exchangeRate={exchangeRate}
-                        tierType='completion'
-                      />
+                        <TierRowsEditor
+                          t={t}
+                          value={
+                            selectedModel.completionTierRatio ||
+                            DEFAULT_TIER_SEGMENTS
+                          }
+                          onChange={(value) => updateCompletionTierRatio(value)}
+                          exchangeRate={exchangeRate}
+                          tierType='completion'
+                        />
                       ) : null}
                     </Card>
                     <Card
                       title={
-                        <div className="flex justify-between items-center">
+                        <div className='flex justify-between items-center'>
                           <span>{t('缓存读取价格')}</span>
                           <Switch
                             size='small'
@@ -1882,21 +2034,28 @@ export default function ModelPricingEditor({
                           />
                         </div>
                       }
-                      style={{ width: '100%', marginBottom: 8, background: 'var(--semi-color-fill-0)' }}
+                      style={{
+                        width: '100%',
+                        marginBottom: 8,
+                        background: 'var(--semi-color-fill-0)',
+                      }}
                     >
                       {visibleCategories.cache_read ? (
-                      <TierRowsEditor
-                        t={t}
-                        value={selectedModel.cacheTierRatio || DEFAULT_TIER_SEGMENTS}
-                        onChange={(value) => updateCacheTierRatio(value)}
-                        exchangeRate={exchangeRate}
-                        tierType='cache'
-                      />
+                        <TierRowsEditor
+                          t={t}
+                          value={
+                            selectedModel.cacheTierRatio ||
+                            DEFAULT_TIER_SEGMENTS
+                          }
+                          onChange={(value) => updateCacheTierRatio(value)}
+                          exchangeRate={exchangeRate}
+                          tierType='cache'
+                        />
                       ) : null}
                     </Card>
                     <Card
                       title={
-                        <div className="flex justify-between items-center">
+                        <div className='flex justify-between items-center'>
                           <span>{t('缓存写入价格')}</span>
                           <Switch
                             size='small'
@@ -1910,16 +2069,25 @@ export default function ModelPricingEditor({
                           />
                         </div>
                       }
-                      style={{ width: '100%', marginBottom: 8, background: 'var(--semi-color-fill-0)' }}
+                      style={{
+                        width: '100%',
+                        marginBottom: 8,
+                        background: 'var(--semi-color-fill-0)',
+                      }}
                     >
                       {visibleCategories.cache_write ? (
-                      <TierRowsEditor
-                        t={t}
-                        value={selectedModel.createCacheTierRatio || DEFAULT_TIER_SEGMENTS}
-                        onChange={(value) => updateCreateCacheTierRatio(value)}
-                        exchangeRate={exchangeRate}
-                        tierType='createCache'
-                      />
+                        <TierRowsEditor
+                          t={t}
+                          value={
+                            selectedModel.createCacheTierRatio ||
+                            DEFAULT_TIER_SEGMENTS
+                          }
+                          onChange={(value) =>
+                            updateCreateCacheTierRatio(value)
+                          }
+                          exchangeRate={exchangeRate}
+                          tierType='createCache'
+                        />
                       ) : null}
                     </Card>
                   </>
@@ -1948,20 +2116,32 @@ export default function ModelPricingEditor({
                       '下面展示这个模型保存后会写入哪些后端字段，便于和原始 JSON 编辑框保持一致。',
                     )}
                   </div>
-                  <div
-                    style={{
-                      display: 'grid',
-                      gridTemplateColumns: 'minmax(140px, 180px) 1fr',
-                      gap: 8,
-                    }}
-                  >
-                    {previewRows.map((row) => (
-                      <React.Fragment key={row.key}>
-                        <Text strong>{row.label}</Text>
-                        <Text>{row.value}</Text>
-                      </React.Fragment>
+                  <Space vertical align='start' style={{ width: '100%' }}>
+                    {previewRows.map((group) => (
+                      <div key={group.key} style={{ width: '100%' }}>
+                        <div className='font-medium'>{group.title}</div>
+                        {group.description ? (
+                          <div className='text-xs text-gray-500 mb-2'>
+                            {group.description}
+                          </div>
+                        ) : null}
+                        <div
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'minmax(140px, 180px) 1fr',
+                            gap: 8,
+                          }}
+                        >
+                          {group.rows.map((row) => (
+                            <React.Fragment key={`${group.key}-${row.key}`}>
+                              <Text strong>{row.label}</Text>
+                              <Text>{row.value}</Text>
+                            </React.Fragment>
+                          ))}
+                        </div>
+                      </div>
                     ))}
-                  </div>
+                  </Space>
                 </Card>
               </div>
             )}
@@ -2016,7 +2196,6 @@ export default function ModelPricingEditor({
           </div>
         ) : null}
       </Modal>
-
     </>
   );
 }
