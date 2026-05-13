@@ -81,6 +81,10 @@ import {
   UserPlus,
   ClipboardList,
   DollarSign,
+  Home,
+  BookOpen,
+  Info,
+  LayoutGrid,
 } from 'lucide-react';
 import {
   SiAtlassian,
@@ -121,6 +125,14 @@ export function getLucideIcon(key, selected = false) {
 
   // 根据不同的key返回不同的图标
   switch (key) {
+    case 'home':
+      return <Home {...commonProps} color={iconColor} />;
+    case 'pricing':
+      return <LayoutGrid {...commonProps} color={iconColor} />;
+    case 'docs':
+      return <BookOpen {...commonProps} color={iconColor} />;
+    case 'about':
+      return <Info {...commonProps} color={iconColor} />;
     case 'detail':
       return <LayoutDashboard {...commonProps} color={iconColor} />;
     case 'playground':

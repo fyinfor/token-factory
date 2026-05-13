@@ -71,7 +71,7 @@ const ChatArea = ({
       bordered={false}
       bodyStyle={{
         padding: 0,
-        height: 'calc(100vh - 66px)',
+        height: '100%',
         display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
