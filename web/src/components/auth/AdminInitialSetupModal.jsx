@@ -94,6 +94,7 @@ const AdminInitialSetupModal = () => {
     [dispatch, phoneRequired, t],
   );
 
+  /** 弹窗内容区加大底部内边距，避免「完成并继续」与弹窗下沿贴死。 */
   return (
     <Modal
       title={
@@ -111,6 +112,7 @@ const AdminInitialSetupModal = () => {
       width={480}
       centered
       zIndex={1100}
+      bodyStyle={{ paddingBottom: 40 }}
     >
       <Text type='secondary' className='block mb-4'>
         {t('管理员为您创建了账号，请修改密码后再继续使用。')}
