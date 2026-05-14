@@ -101,6 +101,7 @@ const PricingPage = () => {
         autoGroups={pricingData.autoGroups}
         t={pricingData.t}
         selectedGroup={pricingData.selectedGroup}
+        blurPricing={blurPricing}
       />
     </div>
   );

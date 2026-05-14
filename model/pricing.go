@@ -78,8 +78,9 @@ type PricingChannelItem struct {
 // PricingAPIItem 在 Pricing 基础上扩展渠道维度统计字段（定价接口 data 元素类型）。
 type PricingAPIItem struct {
 	Pricing
-	SupplierList []PricingSupplierItem `json:"supplier_list"`
-	ChannelList  []PricingChannelItem  `json:"channel_list"`
+	SupplierList      []PricingSupplierItem     `json:"supplier_list"`
+	ChannelList       []PricingChannelItem      `json:"channel_list"`
+	VideoFlatClipHint *VideoFlatClipPricingHint `json:"video_flat_clip_hint,omitempty"`
 }
 
 func resolveChannelPricingTriple(channelID int, supplierApplicationID int, modelName string) (mp, mr, cr float64) {
@@ -250,6 +251,8 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 					SupplierType:   ch.SupplierType,
 				},
 			}
+			discountMult := ChannelPriceDiscountMultiplierForPricing(ch.PriceDiscountPercent)
+			item.VideoFlatClipHint = BuildVideoFlatClipHint(ch.ChannelID, modelName, discountMult)
 			out = append(out, item)
 		}
 	}

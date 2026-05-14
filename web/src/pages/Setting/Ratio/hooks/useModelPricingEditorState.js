@@ -1186,13 +1186,21 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
                       return out;
                     }
                     if (tokenPrice === null || tokenPrice <= 0) return [];
-                    return {
-                        resolution,
-                        token_price: tokenPrice,
-                        has_audio: false,
-                        pixel_compression:
-                            compression,
-                    };
+                    // 与按条成片一致：统一价（不区分音轨）写入两条同价规则，便于上游匹配与定价卡片展示为「统一」。
+                    return [
+                        {
+                            resolution,
+                            token_price: tokenPrice,
+                            has_audio: false,
+                            pixel_compression: compression,
+                        },
+                        {
+                            resolution,
+                            token_price: tokenPrice,
+                            has_audio: true,
+                            pixel_compression: compression,
+                        },
+                    ];
                 })
                 .filter(Boolean)
                 .filter(

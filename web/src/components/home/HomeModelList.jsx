@@ -343,6 +343,9 @@ const HomeModelList = () => {
               siteDisplayType={pricingData.siteDisplayType}
               tokenUnit={pricingData.tokenUnit}
               displayPrice={pricingData.displayPrice}
+              channelVideoRatio={pricingData.channelVideoRatio}
+              channelVideoCompletionRatio={pricingData.channelVideoCompletionRatio}
+              channelVideoPrice={pricingData.channelVideoPrice}
               showRatio={false}
               t={pricingData.t}
               selectedRowKeys={[]}
@@ -380,6 +383,7 @@ const HomeModelList = () => {
         autoGroups={pricingData.autoGroups}
         t={pricingData.t}
         selectedGroup={pricingData.selectedGroup}
+        blurPricing={blurPricing}
       />
     </div>
   );

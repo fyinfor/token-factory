@@ -688,6 +688,17 @@ export const selectFilter = (input, option) => {
 // 模型定价计算工具函数
 
 /** 与定价行相同的分组与分组倍率解析（all 时取模型可用分组中倍率最小者） */
+/** 读取定价接口返回的渠道维度映射：channel_id（字符串）→ model_name → float */
+export function pickChannelScopedModelFloat(channelMap, channelId, modelName) {
+  if (!channelMap || modelName == null || modelName === undefined) {
+    return null;
+  }
+  const byChannel = channelMap[String(channelId)];
+  if (!byChannel || typeof byChannel !== 'object') return null;
+  const v = byChannel[modelName];
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
 export function getUsedGroupContext(record, selectedGroup, groupRatio) {
   let usedGroup = selectedGroup;
   let usedGroupRatio = groupRatio[selectedGroup];
