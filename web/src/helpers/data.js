@@ -43,6 +43,10 @@ export function setStatusData(data) {
     data.default_collapse_sidebar,
   );
   localStorage.setItem('mj_notify_enabled', data.mj_notify_enabled);
+  localStorage.setItem(
+    'model_default_docs_enabled',
+    data.model_default_docs_enabled,
+  );
   if (data.chat_link) {
     // localStorage.setItem('chat_link', data.chat_link);
   } else {

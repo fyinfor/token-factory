@@ -59,6 +59,7 @@ const OperationSetting = () => {
     DemoSiteEnabled: false,
     SelfUseModeEnabled: false,
     ChannelBalanceAlertEnabled: false,
+    ModelDefaultDocsEnabled: true,
     ChannelBalanceSoftAlertThreshold: 50,
     ChannelBalanceRiskAlertThreshold: 20,
 

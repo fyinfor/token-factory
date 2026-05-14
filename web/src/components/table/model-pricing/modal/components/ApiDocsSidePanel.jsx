@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Avatar,
   Button,
@@ -40,6 +40,7 @@ import {
   IconHelpCircle,
 } from '@douyinfe/semi-icons';
 import { API } from '../../../../../helpers';
+import { StatusContext } from '../../../../../context/Status';
 import { fetchTokenKey, getServerAddress } from '../../../../../helpers/token';
 import { useIsMobile } from '../../../../../hooks/common/useIsMobile';
 import MarkdownRenderer from '../../../../common/markdown/MarkdownRenderer';
@@ -61,6 +62,187 @@ const parseApiDocs = (value) => {
     return [];
   }
 };
+
+const getDefaultApiDocs = () => [
+  {
+    id: 'default-chat-completions',
+    description: 'Chat Completions API',
+    path: '/v1/chat/completions',
+    method: 'POST',
+    detail: '',
+    body_params: [
+      {
+        id: 'default-model',
+        name: 'model',
+        type: 'string',
+        required: true,
+        example: '<model_name>',
+        description: '要调用的模型名称。',
+      },
+      {
+        id: 'default-messages',
+        name: 'messages',
+        type: 'array',
+        required: true,
+        example: '',
+        description:
+          '组成对话的消息列表。每条消息通常包含 role 和 content 字段。',
+        children: [
+          {
+            id: 'default-messages-item',
+            name: '',
+            type: 'object',
+            required: true,
+            example: '',
+            description: '单条对话消息。',
+            children: [
+              {
+                id: 'default-message-role',
+                name: 'role',
+                type: 'string',
+                required: true,
+                example: 'user',
+                description: '消息角色，例如 system、user 或 assistant。',
+              },
+              {
+                id: 'default-message-content',
+                name: 'content',
+                type: 'string',
+                required: true,
+                example: 'Hello!',
+                description: '消息内容。',
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'default-stream',
+        name: 'stream',
+        type: 'boolean',
+        required: false,
+        example: 'false',
+        description: '是否使用流式响应。',
+      },
+    ],
+    path_params: [],
+    response_params: [
+      {
+        id: 'default-response-id',
+        name: 'id',
+        type: 'string',
+        example: 'chatcmpl-123',
+        description: '响应 ID。',
+      },
+      {
+        id: 'default-response-object',
+        name: 'object',
+        type: 'string',
+        example: 'chat.completion',
+        description: '对象类型。',
+      },
+      {
+        id: 'default-response-created',
+        name: 'created',
+        type: 'integer',
+        example: '1677652288',
+        description: '响应创建时间戳。',
+      },
+      {
+        id: 'default-response-model',
+        name: 'model',
+        type: 'string',
+        example: '<model_name>',
+        description: '本次响应使用的模型名称。',
+      },
+      {
+        id: 'default-response-choices',
+        name: 'choices',
+        type: 'array',
+        example: '',
+        description: '模型生成结果列表。',
+        children: [
+          {
+            id: 'default-response-choice-item',
+            name: '',
+            type: 'object',
+            example: '',
+            description: '单个生成结果。',
+            children: [
+              {
+                id: 'default-response-choice-index',
+                name: 'index',
+                type: 'integer',
+                example: '0',
+                description: '结果索引。',
+              },
+              {
+                id: 'default-response-choice-message',
+                name: 'message',
+                type: 'object',
+                example: '',
+                description: '模型返回的消息。',
+                children: [
+                  {
+                    id: 'default-response-message-role',
+                    name: 'role',
+                    type: 'string',
+                    example: 'assistant',
+                    description: '消息角色。',
+                  },
+                  {
+                    id: 'default-response-message-content',
+                    name: 'content',
+                    type: 'string',
+                    example: 'Hello! How can I help you today?',
+                    description: '消息内容。',
+                  },
+                ],
+              },
+              {
+                id: 'default-response-choice-finish',
+                name: 'finish_reason',
+                type: 'string',
+                example: 'stop',
+                description: '生成结束原因。',
+              },
+            ],
+          },
+        ],
+      },
+      {
+        id: 'default-response-usage',
+        name: 'usage',
+        type: 'object',
+        example: '',
+        description: 'Token 使用量统计。',
+        children: [
+          {
+            id: 'default-response-prompt-tokens',
+            name: 'prompt_tokens',
+            type: 'integer',
+            example: '9',
+            description: '输入 Token 数。',
+          },
+          {
+            id: 'default-response-completion-tokens',
+            name: 'completion_tokens',
+            type: 'integer',
+            example: '12',
+            description: '输出 Token 数。',
+          },
+          {
+            id: 'default-response-total-tokens',
+            name: 'total_tokens',
+            type: 'integer',
+            example: '21',
+            description: '总 Token 数。',
+          },
+        ],
+      },
+    ],
+  },
+];
 
 const replaceModelName = (value, modelName) =>
   typeof value === 'string'
@@ -291,11 +473,27 @@ const ApiDocsSidePanel = ({
   t,
 }) => {
   const isMobile = useIsMobile();
+  const [statusState] = useContext(StatusContext);
   const [tokens, setTokens] = useState([]);
   const [selectedTokenId, setSelectedTokenId] = useState();
   const [resolvedTokenKeys, setResolvedTokenKeys] = useState({});
   const tokenRequestsRef = useRef({});
-  const docs = useMemo(() => parseApiDocs(apiDocs), [apiDocs]);
+  const configuredDocs = useMemo(() => parseApiDocs(apiDocs), [apiDocs]);
+  const localModelDefaultDocsEnabled = useMemo(() => {
+    const value = localStorage.getItem('model_default_docs_enabled');
+    if (value === null || value === undefined) return undefined;
+    return value !== 'false';
+  }, [visible]);
+  const modelDefaultDocsEnabled =
+    localModelDefaultDocsEnabled ??
+    (statusState?.status?.model_default_docs_enabled !== false &&
+      statusState?.status?.model_default_docs_enabled !== 'false');
+  const docs = useMemo(() => {
+    const hasCustomDocs =
+      String(docIntroduction || '').trim() || configuredDocs.length > 0;
+    if (!hasCustomDocs && modelDefaultDocsEnabled) return getDefaultApiDocs();
+    return configuredDocs;
+  }, [configuredDocs, docIntroduction, modelDefaultDocsEnabled]);
 
   const serverAddress = useMemo(() => {
     try {

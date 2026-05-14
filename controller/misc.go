@@ -98,6 +98,7 @@ func GetStatus(c *gin.Context) {
 		"chats":                         setting.Chats,
 		"demo_site_enabled":             operation_setting.DemoSiteEnabled,
 		"self_use_mode_enabled":         operation_setting.SelfUseModeEnabled,
+		"model_default_docs_enabled":    common.OptionMap["ModelDefaultDocsEnabled"] != "false",
 		"default_use_auto_group":        setting.DefaultUseAutoGroup,
 
 		"usd_exchange_rate": operation_setting.USDExchangeRate,
@@ -134,7 +135,7 @@ func GetStatus(c *gin.Context) {
 		"distributor_apply_intro_html":      common.OptionMap["DistributorApplyIntroHtml"],
 		"distributor_min_withdraw_quota":    distributorMinWithdrawQuota,
 		"affiliate_default_commission_bps":  common.AffiliateDefaultCommissionBps,
-		"home_banner_slides": strings.TrimSpace(common.Interface2String(common.OptionMap["HomeBannerSlides"])),
+		"home_banner_slides":                strings.TrimSpace(common.Interface2String(common.OptionMap["HomeBannerSlides"])),
 	}
 
 	// 根据启用状态注入可选内容

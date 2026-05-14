@@ -57,6 +57,7 @@ const FORM_INPUT_DEFAULTS = {
   DemoSiteEnabled: false,
   SelfUseModeEnabled: false,
   ChannelBalanceAlertEnabled: false,
+  ModelDefaultDocsEnabled: true,
   ChannelBalanceSoftAlertThreshold: 50,
   ChannelBalanceRiskAlertThreshold: 20,
   'token_setting.max_user_tokens': 1000,
@@ -116,6 +117,10 @@ export default function GeneralSettings(props) {
         localStorage.setItem(
           'recharge_display_currency',
           inputs['general_setting.recharge_display_currency'] || 'USD',
+        );
+        localStorage.setItem(
+          'model_default_docs_enabled',
+          inputs.ModelDefaultDocsEnabled,
         );
         props.refresh();
       })
@@ -273,12 +278,22 @@ export default function GeneralSettings(props) {
               closeIcon={null}
               fullMode={false}
               description={
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
                   <div>
                     <Text strong style={{ fontSize: 14 }}>
                       {t('禁止新用户注册')}
                     </Text>
-                    <Text type='tertiary' size='small' style={{ marginLeft: 8 }}>
+                    <Text
+                      type='tertiary'
+                      size='small'
+                      style={{ marginLeft: 8 }}
+                    >
                       {!inputs['RegisterEnabled']
                         ? t('当前已禁止所有新用户注册')
                         : t('当前允许新用户注册')}
@@ -478,6 +493,17 @@ export default function GeneralSettings(props) {
                   checkedText='｜'
                   uncheckedText='〇'
                   onChange={handleFieldChange('ChannelBalanceAlertEnabled')}
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                <Form.Switch
+                  field={'ModelDefaultDocsEnabled'}
+                  label={t('模型默认文档')}
+                  extraText={t('开启后，未配置文档的模型将展示默认 API 文档')}
+                  size='default'
+                  checkedText='｜'
+                  uncheckedText='〇'
+                  onChange={handleFieldChange('ModelDefaultDocsEnabled')}
                 />
               </Col>
             </Row>
