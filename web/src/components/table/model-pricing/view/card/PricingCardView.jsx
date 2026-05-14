@@ -40,11 +40,14 @@ import {
   getModelPriceItems,
   getLobeHubIcon,
   getUsedGroupContext,
+  pickChannelScopedModelFloat,
+  formatVideoResolutionDisplayLabel,
 } from '../../../../../helpers';
 import PricingCardSkeleton from './PricingCardSkeleton';
 import { useMinimumLoadingTime } from '../../../../../hooks/common/useMinimumLoadingTime';
 import { renderLimitedItems } from '../../../../common/ui/RenderUtils';
 import { useIsMobile } from '../../../../../hooks/common/useIsMobile';
+import { VIDEO_FLAT_LANE_I18N_KEY } from '../../constants/videoFlatClipLaneI18n';
 
 const CARD_STYLES = {
   container:
@@ -83,6 +86,9 @@ const PricingCardView = ({
   showSizeChanger = true,
   blurPricing = false,
   searchValue = '',
+  channelVideoRatio = {},
+  channelVideoCompletionRatio = {},
+  channelVideoPrice = {},
 }) => {
   const showSkeleton = useMinimumLoadingTime(loading);
   const startIndex = (currentPage - 1) * pageSize;
@@ -185,7 +191,8 @@ const PricingCardView = ({
     return items;
   };
 
-  const calculateChannelPrices = (model) => {
+  const calculateChannelPrices = (model, opts = {}) => {
+    const { skipSimpleVideoFlat = false } = opts;
     if (!model.channel_list || model.channel_list.length === 0) {
       return null;
     }
@@ -221,13 +228,28 @@ const PricingCardView = ({
       return { value: parseFloat(numericPrice.toFixed(2)), symbol };
     };
 
-    // 提取所有通道的价格
+    const modelHasVideoRatio =
+      model.video_ratio != null &&
+      model.video_ratio !== undefined &&
+      Number.isFinite(Number(model.video_ratio));
+    const modelHasVideoCompletion =
+      model.video_completion_ratio != null &&
+      model.video_completion_ratio !== undefined &&
+      Number.isFinite(Number(model.video_completion_ratio));
+    const modelHasVideoFlatPrice =
+      model.video_price != null &&
+      model.video_price !== undefined &&
+      Number.isFinite(Number(model.video_price));
+
+    // 提取所有通道的价格（与 relay 一致：ch.model_ratio 已含渠道折扣；再乘分组倍率）
     const prices = {
       input: [],
       output: [],
       cache: [],
       createCache: [],
       fixed: [],
+      videoToken: [],
+      videoFlat: [],
     };
     const originalPrices = {
       input: [],
@@ -235,9 +257,27 @@ const PricingCardView = ({
       cache: [],
       createCache: [],
       fixed: [],
+      videoToken: [],
+      videoFlat: [],
     };
 
     model.channel_list.forEach((ch) => {
+      const cid = ch.channel_id;
+      const mname = model.model_name;
+
+      const channelVideoFlatUsd =
+        pickChannelScopedModelFloat(channelVideoPrice, cid, mname);
+      const flatUsd =
+        channelVideoFlatUsd != null
+          ? channelVideoFlatUsd
+          : modelHasVideoFlatPrice
+            ? Number(model.video_price)
+            : null;
+      if (!skipSimpleVideoFlat && flatUsd != null && flatUsd > 0) {
+        prices.videoFlat.push(formatPrice(flatUsd * usedGroupRatio));
+        originalPrices.videoFlat.push(formatPrice(flatUsd));
+      }
+
       // 按量计费
       if (model.quota_type === 0) {
         if (ch.model_ratio !== undefined && ch.model_ratio !== null) {
@@ -272,6 +312,36 @@ const PricingCardView = ({
             prices.createCache.push(formatPrice(createCachePriceUSD));
             originalPrices.createCache.push(
               formatPrice(ch.model_ratio * ch.create_cache_ratio * 2),
+            );
+          }
+
+          const vrCh = pickChannelScopedModelFloat(channelVideoRatio, cid, mname);
+          const vcrCh = pickChannelScopedModelFloat(
+            channelVideoCompletionRatio,
+            cid,
+            mname,
+          );
+          const effVr =
+            vrCh != null ? vrCh : modelHasVideoRatio ? Number(model.video_ratio) : 1;
+          const effVcr =
+            vcrCh != null
+              ? vcrCh
+              : modelHasVideoCompletion
+                ? Number(model.video_completion_ratio)
+                : 1;
+
+          const showVideoToken =
+            modelHasVideoRatio ||
+            modelHasVideoCompletion ||
+            vrCh != null ||
+            vcrCh != null;
+
+          if (showVideoToken) {
+            const videoTokUsd =
+              ch.model_ratio * effVr * effVcr * 2 * usedGroupRatio;
+            prices.videoToken.push(formatPrice(videoTokUsd));
+            originalPrices.videoToken.push(
+              formatPrice(ch.model_ratio * effVr * effVcr * 2),
             );
           }
         }
@@ -317,6 +387,22 @@ const PricingCardView = ({
       if (model.model_price !== undefined && model.model_price !== null) {
         rootPrices.fixed = formatPrice(model.model_price);
       }
+    }
+    if (model.quota_type === 0) {
+      if (model.model_ratio !== undefined && model.model_ratio !== null) {
+        const rootVr = modelHasVideoRatio ? Number(model.video_ratio) : 1;
+        const rootVcr = modelHasVideoCompletion
+          ? Number(model.video_completion_ratio)
+          : 1;
+        if (modelHasVideoRatio || modelHasVideoCompletion) {
+          rootPrices.videoToken = formatPrice(
+            model.model_ratio * rootVr * rootVcr * 2,
+          );
+        }
+      }
+    }
+    if (modelHasVideoFlatPrice && !skipSimpleVideoFlat) {
+      rootPrices.videoFlat = formatPrice(Number(model.video_price));
     }
 
     // 若根价格高于任意一个 channel 的对应价格，则返回划线原价与折扣
@@ -385,16 +471,35 @@ const PricingCardView = ({
           originalPrices.createCache,
         ),
         fixed: getOriginal(rootPrices.fixed, originalPrices.fixed),
+        videoToken: getOriginal(
+          rootPrices.videoToken,
+          originalPrices.videoToken,
+        ),
+        videoFlat: getOriginal(
+          rootPrices.videoFlat,
+          originalPrices.videoFlat,
+        ),
       },
+      videoToken: calculateRange(prices.videoToken),
+      videoFlat: calculateRange(prices.videoFlat),
       unitSuffix,
       fixedSuffix,
+      videoFlatSuffix: ` / ${t('条')}`,
       quotaType: model.quota_type,
     };
   };
 
   // 获取模型的价格项（优先使用 channel 价格）
   const getModelPriceItemsForCard = (model, priceData) => {
-    const channelPrices = calculateChannelPrices(model);
+    const hint = model.video_flat_clip_hint;
+    const useTieredVideoFlat =
+      hint &&
+      Number(hint.tier_count) > 0 &&
+      Number(hint.min_usd_after_channel_discount) > 0;
+
+    const channelPrices = calculateChannelPrices(model, {
+      skipSimpleVideoFlat: useTieredVideoFlat,
+    });
 
     // 如果没有 channel 价格，使用原有逻辑
     if (!channelPrices) {
@@ -412,6 +517,9 @@ const PricingCardView = ({
       original,
       unitSuffix,
       fixedSuffix,
+      videoToken,
+      videoFlat,
+      videoFlatSuffix,
       quotaType,
     } = channelPrices;
 
@@ -453,6 +561,18 @@ const PricingCardView = ({
         });
       }
 
+      if (videoToken) {
+        items.push({
+          key: 'video-token',
+          label: t('视频（倍率计价）'),
+          value:
+            videoToken.single ||
+            `${videoToken.symbol}${videoToken.min} ~ ${videoToken.symbol}${videoToken.max}`,
+          suffix: unitSuffix,
+          original: original?.videoToken,
+        });
+      }
+
       // if (cache) {
       //   items.push({
       //     key: 'cache',
@@ -472,6 +592,60 @@ const PricingCardView = ({
       //     original: original?.createCache,
       //   });
       // }
+    }
+
+    if (videoFlat) {
+      items.push({
+        key: 'video-flat',
+        label: t('视频按条（固定价）'),
+        value:
+          videoFlat.single ||
+          `${videoFlat.symbol}${videoFlat.min} ~ ${videoFlat.symbol}${videoFlat.max}`,
+        suffix: videoFlatSuffix || ` / ${t('条')}`,
+        original: original?.videoFlat,
+      });
+    }
+
+    if (useTieredVideoFlat) {
+      const { usedGroupRatio } = getUsedGroupContext(
+        model,
+        selectedGroup,
+        groupRatio,
+      );
+      const usd =
+        Number(hint.min_usd_after_channel_discount) * usedGroupRatio;
+      const priceStr = displayPrice(usd);
+      const specParts = [];
+      if (hint.resolution) {
+        specParts.push(
+          formatVideoResolutionDisplayLabel(String(hint.resolution).trim()),
+        );
+      }
+      if (hint.has_audio === true) specParts.push(t('有音轨'));
+      if (hint.has_audio === false) specParts.push(t('无音轨'));
+      const laneKey = VIDEO_FLAT_LANE_I18N_KEY[hint.lane];
+      if (laneKey) specParts.push(t(laneKey));
+      const spec = specParts.filter(Boolean).join('·');
+      const perSecond = hint.billing_mode === 'per_second';
+      items.push({
+        key: 'video-flat-tiered',
+        label: t('按分辨率'),
+        valueNode: (
+          <span className='inline-flex flex-col gap-0.5 min-w-0'>
+            <span className='font-bold text-black'>
+              {t('最低价')}
+              {priceStr}
+              {perSecond ? t('/秒起') : t('/条起')}
+              {spec ? (
+                <span className='font-normal text-gray-600'>
+                  {' '}
+                  / {spec}
+                </span>
+              ) : null}
+            </span>
+          </span>
+        ),
+      });
     }
 
     return items;
@@ -599,29 +773,34 @@ const PricingCardView = ({
   // 显示骨架屏
   if (showSkeleton) {
     return (
-      <PricingCardSkeleton
-        rowSelection={!!rowSelection}
-        showRatio={showRatio}
-      />
+      <>
+        <PricingCardSkeleton
+          rowSelection={!!rowSelection}
+          showRatio={showRatio}
+        />
+      </>
     );
   }
 
   if (!filteredModels || filteredModels.length === 0) {
     return (
-      <div className='flex justify-center items-center py-20'>
-        <Empty
-          image={<IllustrationNoResult style={{ width: 150, height: 150 }} />}
-          darkModeImage={
-            <IllustrationNoResultDark style={{ width: 150, height: 150 }} />
-          }
-          description={t('搜索无结果')}
-        />
-      </div>
+      <>
+        <div className='flex justify-center items-center py-20'>
+          <Empty
+            image={<IllustrationNoResult style={{ width: 150, height: 150 }} />}
+            darkModeImage={
+              <IllustrationNoResultDark style={{ width: 150, height: 150 }} />
+            }
+            description={t('搜索无结果')}
+          />
+        </div>
+      </>
     );
   }
 
   return (
-    <div className='px-2 pt-2'>
+    <>
+      <div className='px-2 pt-2'>
       <div className='flex flex-wrap gap-4'>
         {paginatedModels.map((model, index) => {
           const modelKey = getModelKey(model);
@@ -666,7 +845,9 @@ const PricingCardView = ({
                                 {item.label}
                               </span>
                               <span className='flex-1 font-bold text-black inline-flex items-center flex-wrap gap-1'>
-                                {item.original ? (
+                                {item.valueNode ? (
+                                  item.valueNode
+                                ) : item.original ? (
                                   <>
                                     <span className='line-through text-gray-400 font-normal text-[10px]'>
                                       <span style={{ color: 'var(--semi-color-primary)' }}>官方</span> {item.original.text}
@@ -858,6 +1039,7 @@ const PricingCardView = ({
         </div>
       )}
     </div>
+    </>
   );
 };
 

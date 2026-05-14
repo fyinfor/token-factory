@@ -34,6 +34,11 @@ import { getUsedGroupContext } from '../../../../../helpers/utils';
 import { UserContext } from '../../../../../context/User';
 import ApiDocsSidePanel from './ApiDocsSidePanel';
 import ModelTokenList from './ModelTokenList';
+import VideoFlatClipHintTable from '../../components/VideoFlatClipHintTable';
+import {
+  pickVideoFlatClipHintForChannel,
+  hasVideoFlatClipTierTable,
+} from '../../constants/videoFlatClipLaneI18n';
 
 import { renderModelTestResultSummary } from '../../../../../helpers/modelStability';
 
@@ -78,6 +83,7 @@ const ModelChannelList = ({
   t,
   selectedGroup,
   groupRatio,
+  blurPricing = false,
 }) => {
   const [userState] = useContext(UserContext);
   const [docsVisible, setDocsVisible] = useState(false);
@@ -367,6 +373,11 @@ const ModelChannelList = ({
               <div className='space-y-3'>
                 {group.channels.map((channel, idx) => {
                   const channelItems = formatChannelInfo(channel);
+                  const vHint = pickVideoFlatClipHintForChannel(
+                    modelData,
+                    channel,
+                  );
+                  const showVideoFlatTable = hasVideoFlatClipTierTable(vHint);
                   const channelPath = channel.route_slug
                     ? `${modelData.model_name}/${channel.route_slug}`
                     : `${channel.supplier_alias}/${modelData.model_name}/${channel.channel_no}`;
@@ -382,61 +393,16 @@ const ModelChannelList = ({
                       key={`${channel.channel_id}-${idx}`}
                       className='flex gap-3 items-start'
                     >
-                      <div className='flex items-center justify-center min-w-[24px] h-[24px] rounded-full bg-blue-100 text-blue-600 text-xs font-semibold mt-3'>
+                      <div className='flex items-center justify-center min-w-[24px] h-[24px] rounded-full bg-blue-100 text-blue-600 text-xs font-semibold mt-1 shrink-0'>
                         {channelBadge}
                       </div>
                       <Card
                         className='!rounded-lg shadow-sm !mb-2 flex-1'
-                        bodyStyle={{ padding: '12px' }}
+                        bodyStyle={{ padding: '10px' }}
                       >
-                        <div className='flex items-center justify-between gap-4'>
-                          <div className='flex flex-col gap-1.5 text-sm flex-1'>
-                            {channelItems.map((item) => (
-                              <div
-                                key={item.label}
-                                className='flex items-center gap-2 flex-wrap'
-                              >
-                                <span className='text-gray-600'>
-                                  {item.label}:
-                                </span>
-                                {item.original ? (
-                                  <>
-                                    <span className='text-gray-400 line-through text-xs'>
-                                      <span
-                                        style={{
-                                          color: 'var(--semi-color-primary)',
-                                        }}
-                                      >
-                                        官方
-                                      </span>{' '}
-                                      {item.original}
-                                    </span>
-                                    <Tag
-                                      color='red'
-                                      size='small'
-                                      shape='circle'
-                                    >
-                                      -{item.discount}%
-                                    </Tag>
-                                    <span className='font-medium text-gray-900'>
-                                      <span
-                                        style={{
-                                          color: 'var(--semi-color-warning)',
-                                        }}
-                                      >
-                                        我们
-                                      </span>{' '}
-                                      {item.value}
-                                    </span>
-                                  </>
-                                ) : (
-                                  <span className='font-medium text-gray-900'>
-                                    {item.value}
-                                  </span>
-                                )}
-                              </div>
-                            ))}
-                            <div className='flex flex-wrap gap-2 items-center pt-1 border-t border-gray-100 mt-1'>
+                        <div className='flex flex-col gap-1 text-sm'>
+                          <div className='flex items-start justify-between gap-2'>
+                            <div className='flex flex-wrap gap-2 items-center min-w-0 flex-1'>
                               <Text type='tertiary' size='small'>
                                 {t('单测/稳定性')}
                               </Text>
@@ -445,28 +411,81 @@ const ModelChannelList = ({
                                 t,
                               )}
                             </div>
+                            <div className='flex flex-wrap gap-2 items-center shrink-0 ml-1'>
+                              <Tooltip content={t('复制通道路径')}>
+                                <Button
+                                  theme='solid'
+                                  type='primary'
+                                  size='small'
+                                  onClick={handleCopy}
+                                  title={channelPath}
+                                >
+                                  {t('复制')}
+                                </Button>
+                              </Tooltip>
+                              <Tooltip content={t('查看 API 文档')}>
+                                <Button
+                                  theme='light'
+                                  type='warning'
+                                  size='small'
+                                  onClick={() => openApiDocs(channelPath)}
+                                >
+                                  {t('文档')}
+                                </Button>
+                              </Tooltip>
+                            </div>
                           </div>
-                          <div className='flex flex-col gap-1'>
-                            <Tooltip content={t('复制通道路径')}>
-                              <Button
-                                size='small'
-                                type='tertiary'
-                                onClick={handleCopy}
-                                title={channelPath}
-                              >
-                                {t('复制')}
-                              </Button>
-                            </Tooltip>
-                            <Tooltip content={t('查看 API 文档')}>
-                              <Button
-                                size='small'
-                                type='tertiary'
-                                onClick={() => openApiDocs(channelPath)}
-                              >
-                                {t('文档')}
-                              </Button>
-                            </Tooltip>
-                          </div>
+                          <div className='h-px bg-gray-100' />
+                          {channelItems.map((item) => (
+                            <div
+                              key={item.label}
+                              className='flex items-center gap-2 flex-wrap'
+                            >
+                              <span className='text-gray-600'>
+                                {item.label}:
+                              </span>
+                              {item.original ? (
+                                <>
+                                  <span className='text-gray-400 line-through text-xs'>
+                                    <span
+                                      style={{
+                                        color: 'var(--semi-color-primary)',
+                                      }}
+                                    >
+                                      官方
+                                    </span>{' '}
+                                    {item.original}
+                                  </span>
+                                  <Tag color='red' size='small' shape='circle'>
+                                    -{item.discount}%
+                                  </Tag>
+                                  <span className='font-medium text-gray-900'>
+                                    <span
+                                      style={{
+                                        color: 'var(--semi-color-warning)',
+                                      }}
+                                    >
+                                      我们
+                                    </span>{' '}
+                                    {item.value}
+                                  </span>
+                                </>
+                              ) : (
+                                <span className='font-medium text-gray-900'>
+                                  {item.value}
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                          {showVideoFlatTable ? (
+                            <VideoFlatClipHintTable
+                              hint={vHint}
+                              usedGroupRatio={usedGroupRatio}
+                              displayPrice={displayPrice}
+                              t={t}
+                              blurPricing={blurPricing}
+                            />
+                          ) : null}
                         </div>
                       </Card>
                     </div>

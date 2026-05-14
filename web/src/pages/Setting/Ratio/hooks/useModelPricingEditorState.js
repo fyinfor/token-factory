@@ -1192,12 +1192,20 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
             return out;
           }
           if (tokenPrice === null || tokenPrice <= 0) return [];
-          return {
-            resolution,
-            token_price: tokenPrice,
-            has_audio: false,
-            pixel_compression: compression,
-          };
+          return [
+            {
+              resolution,
+              token_price: tokenPrice,
+              has_audio: false,
+              pixel_compression: compression,
+            },
+            {
+              resolution,
+              token_price: tokenPrice,
+              has_audio: true,
+              pixel_compression: compression,
+            },
+          ];
         })
         .filter(Boolean)
         .filter(

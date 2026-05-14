@@ -54,6 +54,10 @@ export const useModelPricingData = () => {
   const [groupModelRatio, setGroupModelRatio] = useState({});
   const [channelModelPrice, setChannelModelPrice] = useState({});
   const [channelModelRatio, setChannelModelRatio] = useState({});
+  const [channelVideoRatio, setChannelVideoRatio] = useState({});
+  const [channelVideoCompletionRatio, setChannelVideoCompletionRatio] =
+    useState({});
+  const [channelVideoPrice, setChannelVideoPrice] = useState({});
   const [pricingChannels, setPricingChannels] = useState([]);
   const [usableGroup, setUsableGroup] = useState({});
   const [endpointMap, setEndpointMap] = useState({});
@@ -376,6 +380,9 @@ export const useModelPricingData = () => {
       group_model_ratio,
       channel_model_price,
       channel_model_ratio,
+      channel_video_ratio,
+      channel_video_completion_ratio,
+      channel_video_price,
       channels,
       usable_group,
       supported_endpoint,
@@ -387,6 +394,9 @@ export const useModelPricingData = () => {
       setGroupModelRatio(group_model_ratio || {});
       setChannelModelPrice(channel_model_price || {});
       setChannelModelRatio(channel_model_ratio || {});
+      setChannelVideoRatio(channel_video_ratio || {});
+      setChannelVideoCompletionRatio(channel_video_completion_ratio || {});
+      setChannelVideoPrice(channel_video_price || {});
       setPricingChannels(channels || []);
       setUsableGroup(usable_group);
       setSelectedGroup('all');
@@ -537,6 +547,9 @@ export const useModelPricingData = () => {
     groupModelRatio,
     channelModelPrice,
     channelModelRatio,
+    channelVideoRatio,
+    channelVideoCompletionRatio,
+    channelVideoPrice,
     pricingChannels,
     usableGroup,
     endpointMap,

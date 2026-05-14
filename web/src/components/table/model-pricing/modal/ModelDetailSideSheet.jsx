@@ -49,6 +49,7 @@ const ModelDetailSideSheet = ({
   autoGroups,
   t,
   selectedGroup,
+  blurPricing = false,
 }) => {
   const isMobile = useIsMobile();
   /**
@@ -157,6 +158,7 @@ const ModelDetailSideSheet = ({
               t={t}
               selectedGroup={selectedGroup}
               groupRatio={groupRatio}
+              blurPricing={blurPricing}
             />
             {/* <ModelPricingTable
               modelData={modelData}
