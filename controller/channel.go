@@ -1141,15 +1141,11 @@ func buildTokenFactorySyncedChannels(base *model.Channel) ([]model.Channel, []mo
 		} else {
 			clone.Type = constant.ChannelTypeTokenFactoryOpen
 		}
-		// 用 base-62 序号（0, 1 … 9, A … Z, a … z）拼接渠道名，使子站名称唯一且可读。
-		// 格式：{baseName}-{base62Index}；baseName 优先取管理员填入的名称，其次取上游渠道名。
-		seqIdx := model.EncodeBase62(int64(i))
-		baseName := strings.TrimSpace(base.Name)
+		// 直接使用上游渠道名称，不再拼接序号后缀
 		upstreamName := strings.TrimSpace(upstream.Name)
-		if baseName != "" {
-			clone.Name = fmt.Sprintf("%s-%s", baseName, seqIdx)
-		} else if upstreamName != "" {
-			clone.Name = fmt.Sprintf("%s-%s", upstreamName, seqIdx)
+		seqIdx := model.EncodeBase62(int64(i))
+		if upstreamName != "" {
+			clone.Name = upstreamName
 		} else {
 			clone.Name = fmt.Sprintf("upstream-%s", seqIdx)
 		}

@@ -736,7 +736,21 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 	}
 }
 
+// Update 写入用户行；为防止调用方传入“部分构造的 User”导致 username/password/email 等关键字段被
+// 零值覆盖（历史上 Select("*").Updates 引发的批量擦库事故），这里先用 DB 中的完整行作为基底，
+// 再将调用方显式赋值的字段合并写入：
+//   - 字符串/字符标识字段（username、email、phone、各 OAuth ID、display_name、group、setting、
+//     remark、stripe_customer、aff_code 等）一律遵循「调用方传空串则保留旧值」；如需清空请走
+//     ClearBinding 或对应的列级接口，禁止通过本函数清空。
+//   - 数值/布尔字段（role、status、quota、is_distributor、is_student、student_status 等）尊重
+//     调用方入参（允许显式置 0/false，保留先前可取消分销商等业务语义）。
+//   - 注册时间、上次登录、创建来源、软删除标记等系统字段始终保留 DB 现有值，不可被调用方覆盖。
+//   - 仅当 updatePassword=true 时才更新密码；否则统一回填旧密码哈希，杜绝走只读 select(omit password)
+//     的路径误把密码改为空串。
 func (user *User) Update(updatePassword bool) error {
+	if user.Id == 0 {
+		return errors.New("user id is empty")
+	}
 	var err error
 	if updatePassword {
 		user.Password, err = common.Password2Hash(user.Password)
@@ -744,22 +758,56 @@ func (user *User) Update(updatePassword bool) error {
 			return err
 		}
 	}
-	newUser := *user
-	DB.First(&user, user.Id)
 
-	// 避免请求体/部分结构体中的零值覆盖注册时间、上次登录；并刷新修改时间
-	newUser.CreatedAt = user.CreatedAt
-	newUser.LastLoginAt = user.LastLoginAt
-	newUser.CreatedBy = user.CreatedBy
-	newUser.UpdatedAt = time.Now()
-	// 确保 aff_code 不为空，避免唯一索引冲突（多个空字符串行无法共存）
-	newUser.EnsureAffCode()
-	// Select("*") 否则 Updates(struct) 会忽略零值字段（如 is_distributor=0、quota=0），导致无法取消分销商等操作失效
-	if err = DB.Model(user).Select("*").Updates(newUser).Error; err != nil {
+	var existing User
+	if err = DB.First(&existing, user.Id).Error; err != nil {
 		return err
 	}
-	// 缓存必须与落库的 newUser 一致；*user 仅为 First 后的快照，密码等可能已过时。
-	return updateUserCache(newUser)
+
+	restoreIfEmpty := func(field, fallback *string) {
+		if *field == "" {
+			*field = *fallback
+		}
+	}
+	restoreIfEmpty(&user.Username, &existing.Username)
+	restoreIfEmpty(&user.DisplayName, &existing.DisplayName)
+	restoreIfEmpty(&user.Email, &existing.Email)
+	restoreIfEmpty(&user.Phone, &existing.Phone)
+	restoreIfEmpty(&user.GitHubId, &existing.GitHubId)
+	restoreIfEmpty(&user.DiscordId, &existing.DiscordId)
+	restoreIfEmpty(&user.OidcId, &existing.OidcId)
+	restoreIfEmpty(&user.WeChatId, &existing.WeChatId)
+	restoreIfEmpty(&user.TelegramId, &existing.TelegramId)
+	restoreIfEmpty(&user.LinuxDOId, &existing.LinuxDOId)
+	restoreIfEmpty(&user.Group, &existing.Group)
+	restoreIfEmpty(&user.Setting, &existing.Setting)
+	restoreIfEmpty(&user.Remark, &existing.Remark)
+	restoreIfEmpty(&user.StripeCustomer, &existing.StripeCustomer)
+	restoreIfEmpty(&user.AffCode, &existing.AffCode)
+
+	if !updatePassword {
+		user.Password = existing.Password
+	} else if user.Password == "" {
+		// 极端兜底：标记要改密但传了空串，仍保留旧哈希，避免擦光
+		user.Password = existing.Password
+	}
+	if user.AccessToken == nil {
+		user.AccessToken = existing.AccessToken
+	}
+
+	user.CreatedAt = existing.CreatedAt
+	user.CreatedBy = existing.CreatedBy
+	user.LastLoginAt = existing.LastLoginAt
+	user.DeletedAt = existing.DeletedAt
+	user.UpdatedAt = time.Now()
+
+	// 双保险：避免 aff_code 在 existing/入参均为空时违反唯一索引
+	user.EnsureAffCode()
+
+	if err = DB.Save(user).Error; err != nil {
+		return err
+	}
+	return updateUserCache(*user)
 }
 
 func (user *User) Edit(updatePassword bool) error {
@@ -873,28 +921,28 @@ func (user *User) ValidateAndFill() (err error) {
 	return nil
 }
 
+// FillUserById 按主键加载用户；历史实现吞掉 First 的 error，导致 ErrRecordNotFound / 瞬时连接错误
+// 都会让调用方拿到只剩 {Id:X} 的 User，再叠加 Update() 的全行覆盖会把 username 等字段清空。
+// 现统一对外返回 error，调用方需自行处理 ErrRecordNotFound。
 func (user *User) FillUserById() error {
 	if user.Id == 0 {
 		return errors.New("id 为空！")
 	}
-	DB.Where(User{Id: user.Id}).First(user)
-	return nil
+	return DB.Where(User{Id: user.Id}).First(user).Error
 }
 
 func (user *User) FillUserByEmail() error {
 	if user.Email == "" {
 		return errors.New("email 为空！")
 	}
-	DB.Where(User{Email: user.Email}).First(user)
-	return nil
+	return DB.Where(User{Email: user.Email}).First(user).Error
 }
 
 func (user *User) FillUserByGitHubId() error {
 	if user.GitHubId == "" {
 		return errors.New("GitHub id 为空！")
 	}
-	DB.Where(User{GitHubId: user.GitHubId}).First(user)
-	return nil
+	return DB.Where(User{GitHubId: user.GitHubId}).First(user).Error
 }
 
 // UpdateGitHubId updates the user's GitHub ID (used for migration from login to numeric ID)
@@ -909,24 +957,21 @@ func (user *User) FillUserByDiscordId() error {
 	if user.DiscordId == "" {
 		return errors.New("discord id 为空！")
 	}
-	DB.Where(User{DiscordId: user.DiscordId}).First(user)
-	return nil
+	return DB.Where(User{DiscordId: user.DiscordId}).First(user).Error
 }
 
 func (user *User) FillUserByOidcId() error {
 	if user.OidcId == "" {
 		return errors.New("oidc id 为空！")
 	}
-	DB.Where(User{OidcId: user.OidcId}).First(user)
-	return nil
+	return DB.Where(User{OidcId: user.OidcId}).First(user).Error
 }
 
 func (user *User) FillUserByWeChatId() error {
 	if user.WeChatId == "" {
 		return errors.New("WeChat id 为空！")
 	}
-	DB.Where(User{WeChatId: user.WeChatId}).First(user)
-	return nil
+	return DB.Where(User{WeChatId: user.WeChatId}).First(user).Error
 }
 
 func (user *User) FillUserByTelegramId() error {
@@ -937,7 +982,7 @@ func (user *User) FillUserByTelegramId() error {
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return errors.New("该 Telegram 账户未绑定")
 	}
-	return nil
+	return err
 }
 
 func IsEmailAlreadyTaken(email string) bool {
