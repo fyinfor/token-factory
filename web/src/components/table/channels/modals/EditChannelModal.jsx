@@ -715,13 +715,15 @@ const EditChannelModal = (props) => {
         case 60:
           localModels = [];
           forceResetModels = true;
-          // TokenFactoryOpen 渠道的 supplier_type 和 company_logo_url 从上游同步继承，清除本地选择
+          // TokenFactoryOpen 渠道的 name、supplier_type 和 company_logo_url 从上游同步继承，清除本地填写
           setInputs((prevInputs) => ({
             ...prevInputs,
+            name: '',
             supplier_type: '',
             company_logo_url: '',
           }));
           if (formApiRef.current) {
+            formApiRef.current.setValue('name', '');
             formApiRef.current.setValue('supplier_type', '');
             formApiRef.current.setValue('company_logo_url', '');
           }
@@ -1879,8 +1881,12 @@ const EditChannelModal = (props) => {
     }
     delete localInputs.vertex_files;
 
-    if (!isEdit && (!localInputs.name || !localInputs.key)) {
+    if (!isEdit && localInputs.type !== 60 && (!localInputs.name || !localInputs.key)) {
       showInfo(t('请填写渠道名称和渠道密钥！'));
+      return;
+    }
+    if (!isEdit && localInputs.type === 60 && !localInputs.key) {
+      showInfo(t('请填写渠道密钥！'));
       return;
     }
     if (
@@ -3260,15 +3266,17 @@ const EditChannelModal = (props) => {
                         />
                       )}
 
-                      <Form.Input
-                        field='name'
-                        label={t('名称')}
-                        placeholder={t('请为渠道命名')}
-                        rules={[{ required: true, message: t('请为渠道命名') }]}
-                        showClear
-                        onChange={(value) => handleInputChange('name', value)}
-                        autoComplete='new-password'
-                      />
+                      {inputs.type !== 60 && (
+                        <Form.Input
+                          field='name'
+                          label={t('名称')}
+                          placeholder={t('请为渠道命名')}
+                          rules={[{ required: true, message: t('请为渠道命名') }]}
+                          showClear
+                          onChange={(value) => handleInputChange('name', value)}
+                          autoComplete='new-password'
+                        />
+                      )}
 
                       {inputs.type === 33 && (
                         <>

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-
 	"sync"
 	"time"
 
@@ -18,6 +17,8 @@ import (
 type Pricing struct {
 	ModelName              string                  `json:"model_name"`
 	Description            string                  `json:"description,omitempty"`
+	DocIntroduction        string                  `json:"doc_introduction,omitempty"`
+	ApiDocs                string                  `json:"api_docs,omitempty"`
 	Icon                   string                  `json:"icon,omitempty"`
 	Tags                   string                  `json:"tags,omitempty"`
 	VendorID               int                     `json:"vendor_id,omitempty"`
@@ -71,6 +72,10 @@ type PricingChannelItem struct {
 	CompletionRatio      float64 `json:"completion_ratio"`
 	CacheRatio           float64 `json:"cache_ratio"`
 	CreateCacheRatio     float64 `json:"create_cache_ratio"`
+	ModelTierRatio       any     `json:"model_tier_ratio,omitempty"`
+	CompletionTierRatio  any     `json:"completion_tier_ratio,omitempty"`
+	CacheTierRatio       any     `json:"cache_tier_ratio,omitempty"`
+	CreateCacheTierRatio any     `json:"create_cache_tier_ratio,omitempty"`
 	PriceDiscountPercent float64 `json:"price_discount_percent"`
 	QuotaType            int     `json:"quota_type"`
 }
@@ -78,8 +83,9 @@ type PricingChannelItem struct {
 // PricingAPIItem 在 Pricing 基础上扩展渠道维度统计字段（定价接口 data 元素类型）。
 type PricingAPIItem struct {
 	Pricing
-	SupplierList []PricingSupplierItem `json:"supplier_list"`
-	ChannelList  []PricingChannelItem  `json:"channel_list"`
+	SupplierList      []PricingSupplierItem     `json:"supplier_list"`
+	ChannelList       []PricingChannelItem      `json:"channel_list"`
+	VideoFlatClipHint *VideoFlatClipPricingHint `json:"video_flat_clip_hint,omitempty"`
 }
 
 func resolveChannelPricingTriple(channelID int, supplierApplicationID int, modelName string) (mp, mr, cr float64) {
@@ -185,6 +191,10 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			}
 			baseMp, baseMr, cr := resolveChannelPricingTriple(row.ChannelID, row.SupplierApplicationID, modelName)
 			chCache, chCreate := resolveChannelCachePair(row.ChannelID, row.SupplierApplicationID, modelName)
+			modelTierRatio, hasModelTierRatio := ratio_setting.ResolveModelTierRatio(row.ChannelID, modelName)
+			completionTierRatio, hasCompletionTierRatio := ratio_setting.ResolveCompletionTierRatio(row.ChannelID, modelName)
+			cacheTierRatio, hasCacheTierRatio := ratio_setting.ResolveCacheTierRatio(row.ChannelID, modelName)
+			createCacheTierRatio, hasCreateCacheTierRatio := ratio_setting.ResolveCreateCacheTierRatio(row.ChannelID, modelName)
 			alias := pricingSupplierAliasFromMeta(row.SupplierApplicationID, row.SupplierAlias)
 			d := 100.0
 			if row.PriceDiscountPercent != nil {
@@ -197,7 +207,7 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			if channelSlugMap != nil {
 				routeSlug = channelSlugMap[row.ChannelID]
 			}
-			chItems = append(chItems, PricingChannelItem{
+			chItem := PricingChannelItem{
 				ChannelID:             row.ChannelID,
 				SupplierApplicationID: row.SupplierApplicationID,
 				ChannelNo:             row.ChannelNo,
@@ -219,7 +229,20 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 						return 0
 					}
 				}(),
-			})
+			}
+			if hasModelTierRatio {
+				chItem.ModelTierRatio = modelTierRatio
+			}
+			if hasCompletionTierRatio {
+				chItem.CompletionTierRatio = completionTierRatio
+			}
+			if hasCacheTierRatio {
+				chItem.CacheTierRatio = cacheTierRatio
+			}
+			if hasCreateCacheTierRatio {
+				chItem.CreateCacheTierRatio = createCacheTierRatio
+			}
+			chItems = append(chItems, chItem)
 		}
 
 		if len(chItems) == 0 {
@@ -250,6 +273,8 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 					SupplierType:   ch.SupplierType,
 				},
 			}
+			discountMult := ChannelPriceDiscountMultiplierForPricing(ch.PriceDiscountPercent)
+			item.VideoFlatClipHint = BuildVideoFlatClipHint(ch.ChannelID, modelName, discountMult)
 			out = append(out, item)
 		}
 	}
@@ -502,6 +527,8 @@ func updatePricing() {
 				continue
 			}
 			pricing.Description = meta.Description
+			pricing.DocIntroduction = meta.DocIntroduction
+			pricing.ApiDocs = meta.ApiDocs
 			pricing.Icon = meta.Icon
 			pricing.Tags = meta.Tags
 			pricing.VendorID = meta.VendorID

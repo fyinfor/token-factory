@@ -1178,6 +1178,9 @@ func UpdateSelf(c *gin.Context) {
 	}
 
 	// 检查是否是用户设置更新请求 (sidebar_modules 或 language)
+	// 注意：这两类请求只改 setting 这一列。历史实现走 user.Update() 会触及全行（且 GetUserById(_, false)
+	// 不带 password 列，叠加旧版 Select("*") 时直接把密码哈希擦成空串）。改成单列 Update 后既避免误擦其他
+	// 字段，也减少不必要的索引/缓存写入。
 	if sidebarModules, sidebarExists := requestData["sidebar_modules"]; sidebarExists {
 		userId := c.GetInt("id")
 		user, err := model.GetUserById(userId, false)
@@ -1186,26 +1189,21 @@ func UpdateSelf(c *gin.Context) {
 			return
 		}
 
-		// 获取当前用户设置
 		currentSetting := user.GetSetting()
-
-		// 更新sidebar_modules字段
 		if sidebarModulesStr, ok := sidebarModules.(string); ok {
 			currentSetting.SidebarModules = sidebarModulesStr
 		}
-
-		// 保存更新后的设置
 		user.SetSetting(currentSetting)
-		if err := user.Update(false); err != nil {
+		if err := model.DB.Model(&model.User{}).Where("id = ?", userId).Update("setting", user.Setting).Error; err != nil {
 			common.ApiErrorI18n(c, i18n.MsgUpdateFailed)
 			return
 		}
+		_ = model.InvalidateUserCache(userId)
 
 		common.ApiSuccessI18n(c, i18n.MsgUpdateSuccess, nil)
 		return
 	}
 
-	// 检查是否是语言偏好更新请求
 	if language, langExists := requestData["language"]; langExists {
 		userId := c.GetInt("id")
 		user, err := model.GetUserById(userId, false)
@@ -1214,20 +1212,16 @@ func UpdateSelf(c *gin.Context) {
 			return
 		}
 
-		// 获取当前用户设置
 		currentSetting := user.GetSetting()
-
-		// 更新language字段
 		if langStr, ok := language.(string); ok {
 			currentSetting.Language = langStr
 		}
-
-		// 保存更新后的设置
 		user.SetSetting(currentSetting)
-		if err := user.Update(false); err != nil {
+		if err := model.DB.Model(&model.User{}).Where("id = ?", userId).Update("setting", user.Setting).Error; err != nil {
 			common.ApiErrorI18n(c, i18n.MsgUpdateFailed)
 			return
 		}
+		_ = model.InvalidateUserCache(userId)
 
 		common.ApiSuccessI18n(c, i18n.MsgUpdateSuccess, nil)
 		return

@@ -274,6 +274,7 @@ func CreateModelMeta(c *gin.Context) {
 // UpdateModelMeta 更新模型
 func UpdateModelMeta(c *gin.Context) {
 	statusOnly := c.Query("status_only") == "true"
+	docsOnly := c.Query("docs_only") == "true"
 
 	var m model.Model
 	if err := c.ShouldBindJSON(&m); err != nil {
@@ -285,7 +286,15 @@ func UpdateModelMeta(c *gin.Context) {
 		return
 	}
 
-	if statusOnly {
+	if docsOnly {
+		if err := model.DB.Model(&model.Model{}).Where("id = ?", m.Id).Updates(map[string]interface{}{
+			"doc_introduction": m.DocIntroduction,
+			"api_docs":         m.ApiDocs,
+		}).Error; err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	} else if statusOnly {
 		// 只更新状态，防止误清空其他字段
 		if err := model.DB.Model(&model.Model{}).Where("id = ?", m.Id).Update("status", m.Status).Error; err != nil {
 			common.ApiError(c, err)

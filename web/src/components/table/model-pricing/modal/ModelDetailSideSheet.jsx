@@ -49,6 +49,7 @@ const ModelDetailSideSheet = ({
   autoGroups,
   t,
   selectedGroup,
+  blurPricing = false,
 }) => {
   const isMobile = useIsMobile();
   /**
@@ -120,7 +121,8 @@ const ModelDetailSideSheet = ({
       closeIcon={
         <Button
           className='semi-button-tertiary semi-button-size-small semi-button-borderless'
-          type='button'
+          type='tertiary'
+          theme='borderless'
           icon={<IconClose />}
           onClick={onClose}
         />
@@ -156,6 +158,7 @@ const ModelDetailSideSheet = ({
               t={t}
               selectedGroup={selectedGroup}
               groupRatio={groupRatio}
+              blurPricing={blurPricing}
             />
             {/* <ModelPricingTable
               modelData={modelData}

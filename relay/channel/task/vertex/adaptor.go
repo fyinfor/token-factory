@@ -86,7 +86,7 @@ func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, erro
 	if err := common.Unmarshal([]byte(a.apiKey), adc); err != nil {
 		return "", fmt.Errorf("failed to decode credentials: %w", err)
 	}
-	modelName := info.UpstreamModelName
+	modelName := taskcommon.RelayTaskUpstreamModel(info, info.OriginModelName)
 	if modelName == "" {
 		modelName = "veo-3.0-generate-001"
 	}
@@ -144,7 +144,7 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 
 	seconds := geminitask.ResolveVeoDuration(req.Metadata, req.Duration, req.Seconds)
 	resolution := geminitask.ResolveVeoResolution(req.Metadata, req.Size)
-	resRatio := geminitask.VeoResolutionRatio(info.UpstreamModelName, resolution)
+	resRatio := geminitask.VeoResolutionRatio(taskcommon.RelayTaskUpstreamModel(info, req.Model), resolution)
 
 	return map[string]float64{
 		"seconds":    float64(seconds),

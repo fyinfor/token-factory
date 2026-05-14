@@ -476,7 +476,8 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 		channelModel.Type != constant.ChannelTypeGemini &&
 		channelModel.Type != constant.ChannelTypeOpenAIVideo &&
 		channelModel.Type != constant.ChannelTypeVideoGenerator &&
-		channelModel.Type != constant.ChannelTypeTencentCloudVideo {
+		channelModel.Type != constant.ChannelTypeTencentCloudVideo &&
+		channelModel.Type != constant.ChannelTypeTokenFactoryOpen {
 		return nil
 	}
 
@@ -496,8 +497,10 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	}
 
 	resp, err := adaptor.FetchTask(baseURL, upstreamKey, map[string]any{
-		"task_id": task.GetUpstreamTaskID(),
-		"action":  task.Action,
+		"task_id":                      task.GetUpstreamTaskID(),
+		"action":                       task.Action,
+		"channel_type":                 channelModel.Type,
+		"tf_open_video_upstream_style": task.PrivateData.TfOpenVideoUpstreamStyle,
 	}, proxy)
 	if err != nil || resp == nil {
 		return nil
@@ -515,7 +518,8 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 
 	if channelModel.Type == constant.ChannelTypeOpenAIVideo ||
 		channelModel.Type == constant.ChannelTypeVideoGenerator ||
-		channelModel.Type == constant.ChannelTypeTencentCloudVideo {
+		channelModel.Type == constant.ChannelTypeTencentCloudVideo ||
+		channelModel.Type == constant.ChannelTypeTokenFactoryOpen {
 		task.Data = body
 	}
 

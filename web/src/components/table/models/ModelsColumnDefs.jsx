@@ -180,6 +180,8 @@ const renderOperations = (
   record,
   setEditingModel,
   setShowEdit,
+  setDocsEditingModel,
+  setShowDocsEdit,
   manageModel,
   refresh,
   t,
@@ -212,6 +214,17 @@ const renderOperations = (
         }}
       >
         {t('编辑')}
+      </Button>
+
+      <Button
+        type='tertiary'
+        size='small'
+        onClick={() => {
+          setDocsEditingModel(record);
+          setShowDocsEdit(true);
+        }}
+      >
+        {t('文档')}
       </Button>
 
       <Button
@@ -278,6 +291,8 @@ export const getModelsColumns = ({
   manageModel,
   setEditingModel,
   setShowEdit,
+  setDocsEditingModel,
+  setShowDocsEdit,
   refresh,
   vendorMap,
 }) => {
@@ -371,6 +386,8 @@ export const getModelsColumns = ({
           record,
           setEditingModel,
           setShowEdit,
+          setDocsEditingModel,
+          setShowDocsEdit,
           manageModel,
           refresh,
           t,

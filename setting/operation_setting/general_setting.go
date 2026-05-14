@@ -1,6 +1,29 @@
 package operation_setting
 
-import "github.com/QuantumNous/new-api/setting/config"
+import (
+	"strings"
+
+	"github.com/QuantumNous/new-api/setting/config"
+)
+
+// 与前端 supportedLanguages 一致
+var siteInterfaceLanguages = []string{
+	"zh-CN", "zh-TW", "en", "fr", "ru", "ja", "vi", "id", "ms", "th", "sw",
+}
+
+// NormalizeDefaultSiteLanguage 将后台配置的默认界面语言规范为受支持的代码，非法则回退 zh-CN
+func NormalizeDefaultSiteLanguage(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return "zh-CN"
+	}
+	for _, a := range siteInterfaceLanguages {
+		if strings.EqualFold(s, a) {
+			return a
+		}
+	}
+	return "zh-CN"
+}
 
 // 额度展示类型
 const (
@@ -12,6 +35,8 @@ const (
 
 type GeneralSetting struct {
 	DocsLink            string `json:"docs_link"`
+	// DefaultSiteLanguage 未登录访客首次进入站点时使用的界面语言（BCP 47，如 zh-CN、en）
+	DefaultSiteLanguage string `json:"default_site_language"`
 	PingIntervalEnabled bool   `json:"ping_interval_enabled"`
 	PingIntervalSeconds int    `json:"ping_interval_seconds"`
 	// 当前站点额度展示类型：USD / CNY / TOKENS
@@ -27,6 +52,7 @@ type GeneralSetting struct {
 // 默认配置
 var generalSetting = GeneralSetting{
 	DocsLink:                   "https://docs.newapi.pro",
+	DefaultSiteLanguage:        "zh-CN",
 	PingIntervalEnabled:        false,
 	PingIntervalSeconds:        60,
 	QuotaDisplayType:           QuotaDisplayTypeUSD,
@@ -42,6 +68,11 @@ func init() {
 
 func GetGeneralSetting() *GeneralSetting {
 	return &generalSetting
+}
+
+// GetDefaultSiteLanguage 返回对外使用的默认界面语言（已校验）
+func GetDefaultSiteLanguage() string {
+	return NormalizeDefaultSiteLanguage(generalSetting.DefaultSiteLanguage)
 }
 
 // IsCurrencyDisplay 是否以货币形式展示（美元或人民币）

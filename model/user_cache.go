@@ -57,6 +57,12 @@ func invalidateUserCache(userId int) error {
 	return common.RedisDelKey(getUserCacheKey(userId))
 }
 
+// InvalidateUserCache 删除指定用户在 Redis 中的缓存条目，下次访问会从 DB 重新加载。
+// 供 controller 在直接走单列写（绕过 User.Update）后同步失效缓存使用。
+func InvalidateUserCache(userId int) error {
+	return invalidateUserCache(userId)
+}
+
 // updateUserCache updates all user cache fields using hash
 func updateUserCache(user User) error {
 	if !common.RedisEnabled {

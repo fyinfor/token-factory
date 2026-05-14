@@ -142,7 +142,8 @@ func (a *TaskAdaptor) GetChannelName() string {
 }
 
 func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo) (*VideoRequest, error) {
-	modelConfig := GetModelConfig(info.UpstreamModelName)
+	modelStr := taskcommon.RelayTaskUpstreamModel(info, req.Model)
+	modelConfig := GetModelConfig(modelStr)
 	duration := DefaultDuration
 	if req.Duration > 0 {
 		duration = req.Duration
@@ -153,7 +154,7 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, in
 	}
 
 	videoRequest := &VideoRequest{
-		Model:      info.UpstreamModelName,
+		Model:      modelStr,
 		Prompt:     req.Prompt,
 		Duration:   &duration,
 		Resolution: resolution,

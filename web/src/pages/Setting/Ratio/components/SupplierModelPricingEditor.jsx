@@ -1,21 +1,3 @@
-/*
-Copyright (C) 2025 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
-*/
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Empty, Select } from '@douyinfe/semi-ui';
 import { API, showError } from '../../../../helpers';
@@ -108,6 +90,22 @@ export default function SupplierModelPricingEditor({
   const channelVideoPricingRules = useMemo(
     () => parseJSON(options.ChannelVideoPricingRules),
     [options.ChannelVideoPricingRules],
+  );
+  const channelModelTierRatio = useMemo(
+    () => parseJSON(options.ChannelModelTierRatio),
+    [options.ChannelModelTierRatio],
+  );
+  const channelCompletionTierRatio = useMemo(
+    () => parseJSON(options.ChannelCompletionTierRatio),
+    [options.ChannelCompletionTierRatio],
+  );
+  const channelCacheTierRatio = useMemo(
+    () => parseJSON(options.ChannelCacheTierRatio),
+    [options.ChannelCacheTierRatio],
+  );
+  const channelCreateCacheTierRatio = useMemo(
+    () => parseJSON(options.ChannelCreateCacheTierRatio),
+    [options.ChannelCreateCacheTierRatio],
   );
 
   const activeChannelId = channelId === 'all' ? '' : channelId;
@@ -229,6 +227,26 @@ export default function SupplierModelPricingEditor({
           null,
           2,
         ),
+        ModelTierRatio: JSON.stringify(
+          channelModelTierRatio[activeChannelId] || {},
+          null,
+          2,
+        ),
+        CompletionTierRatio: JSON.stringify(
+          channelCompletionTierRatio[activeChannelId] || {},
+          null,
+          2,
+        ),
+        CacheTierRatio: JSON.stringify(
+          channelCacheTierRatio[activeChannelId] || {},
+          null,
+          2,
+        ),
+        CreateCacheTierRatio: JSON.stringify(
+          channelCreateCacheTierRatio[activeChannelId] || {},
+          null,
+          2,
+        ),
       };
     }
     return {
@@ -293,6 +311,26 @@ export default function SupplierModelPricingEditor({
         null,
         2,
       ),
+      ModelTierRatio: JSON.stringify(
+        channelModelTierRatio[activeChannelId] || {},
+        null,
+        2,
+      ),
+      CompletionTierRatio: JSON.stringify(
+        channelCompletionTierRatio[activeChannelId] || {},
+        null,
+        2,
+      ),
+      CacheTierRatio: JSON.stringify(
+        channelCacheTierRatio[activeChannelId] || {},
+        null,
+        2,
+      ),
+      CreateCacheTierRatio: JSON.stringify(
+        channelCreateCacheTierRatio[activeChannelId] || {},
+        null,
+        2,
+      ),
     };
   }, [
     activeChannelId,
@@ -300,10 +338,14 @@ export default function SupplierModelPricingEditor({
     channelAudioRatio,
     channelCacheRatio,
     channelCompletionRatio,
+    channelCompletionTierRatio,
+    channelCreateCacheTierRatio,
     channelCreateCacheRatio,
+    channelCacheTierRatio,
     channelImageRatio,
     channelModelPrice,
     channelModelRatio,
+    channelModelTierRatio,
     channelVideoCompletionRatio,
     channelVideoPrice,
     channelVideoPricingRules,
@@ -337,21 +379,25 @@ export default function SupplierModelPricingEditor({
       // 视频维度价格暂走渠道 Option：确保“视频价格开关/按条或按秒规则”可保存并回显。
       const mergeChannelData = (fullMap, partialMap) => {
         const currentChannelMap =
-          (fullMap &&
-            typeof fullMap === 'object' &&
-            fullMap[activeChannelId] &&
-            typeof fullMap[activeChannelId] === 'object')
+          fullMap &&
+          typeof fullMap === 'object' &&
+          fullMap[activeChannelId] &&
+          typeof fullMap[activeChannelId] === 'object'
             ? fullMap[activeChannelId]
             : {};
+        const nextChannelMap = { ...currentChannelMap };
+        channelScopedCandidateModelNames.forEach((modelName) => {
+          delete nextChannelMap[modelName];
+        });
         return {
           ...fullMap,
           [activeChannelId]: {
-            ...currentChannelMap,
+            ...nextChannelMap,
             ...(partialMap || {}),
           },
         };
       };
-      const videoOptionRequests = [
+      const optionRequests = [
         [
           'ChannelVideoRatio',
           mergeChannelData(channelVideoRatio, output.VideoRatio),
@@ -371,11 +417,33 @@ export default function SupplierModelPricingEditor({
           'ChannelVideoPricingRules',
           mergeChannelData(channelVideoPricingRules, output.VideoPricingRules),
         ],
+        [
+          'ChannelModelTierRatio',
+          mergeChannelData(channelModelTierRatio, output.ModelTierRatio),
+        ],
+        [
+          'ChannelCompletionTierRatio',
+          mergeChannelData(
+            channelCompletionTierRatio,
+            output.CompletionTierRatio,
+          ),
+        ],
+        [
+          'ChannelCacheTierRatio',
+          mergeChannelData(channelCacheTierRatio, output.CacheTierRatio),
+        ],
+        [
+          'ChannelCreateCacheTierRatio',
+          mergeChannelData(
+            channelCreateCacheTierRatio,
+            output.CreateCacheTierRatio,
+          ),
+        ],
       ].map(([key, value]) =>
         API.put('/api/option/', { key, value: JSON.stringify(value, null, 2) }),
       );
-      const videoResults = await Promise.all(videoOptionRequests);
-      for (const item of videoResults) {
+      const optionResults = await Promise.all(optionRequests);
+      for (const item of optionResults) {
         if (!item?.data?.success) {
           throw new Error(item?.data?.message || t('保存失败'));
         }
@@ -386,16 +454,20 @@ export default function SupplierModelPricingEditor({
     }
     const mergeChannelData = (fullMap, partialMap) => {
       const currentChannelMap =
-        (fullMap &&
-          typeof fullMap === 'object' &&
-          fullMap[activeChannelId] &&
-          typeof fullMap[activeChannelId] === 'object')
+        fullMap &&
+        typeof fullMap === 'object' &&
+        fullMap[activeChannelId] &&
+        typeof fullMap[activeChannelId] === 'object'
           ? fullMap[activeChannelId]
           : {};
+      const nextChannelMap = { ...currentChannelMap };
+      channelScopedCandidateModelNames.forEach((modelName) => {
+        delete nextChannelMap[modelName];
+      });
       return {
         ...fullMap,
         [activeChannelId]: {
-          ...currentChannelMap,
+          ...nextChannelMap,
           ...(partialMap || {}),
         },
       };
@@ -454,6 +526,28 @@ export default function SupplierModelPricingEditor({
       [
         'ChannelVideoPricingRules',
         mergeChannelData(channelVideoPricingRules, output.VideoPricingRules),
+      ],
+      [
+        'ChannelModelTierRatio',
+        mergeChannelData(channelModelTierRatio, output.ModelTierRatio),
+      ],
+      [
+        'ChannelCompletionTierRatio',
+        mergeChannelData(
+          channelCompletionTierRatio,
+          output.CompletionTierRatio,
+        ),
+      ],
+      [
+        'ChannelCacheTierRatio',
+        mergeChannelData(channelCacheTierRatio, output.CacheTierRatio),
+      ],
+      [
+        'ChannelCreateCacheTierRatio',
+        mergeChannelData(
+          channelCreateCacheTierRatio,
+          output.CreateCacheTierRatio,
+        ),
       ],
     ].map(([key, value]) =>
       API.put('/api/option/', { key, value: JSON.stringify(value, null, 2) }),

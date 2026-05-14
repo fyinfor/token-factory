@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -203,9 +204,13 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 	if provider.IsUserIDTaken(oauthUser.ProviderUserID) {
 		err := provider.FillUserByProviderID(user, oauthUser.ProviderUserID)
 		if err != nil {
+			// 历史上 FillUserBy* 在记录不存在时静默返回 nil，再用 user.Id==0 判断「用户已注销」。
+			// 现在 Fill 已正确返回 ErrRecordNotFound（多由软删除导致），保持原有 UX。
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, &OAuthUserDeletedError{}
+			}
 			return nil, err
 		}
-		// Check if user has been deleted
 		if user.Id == 0 {
 			return nil, &OAuthUserDeletedError{}
 		}
@@ -217,7 +222,12 @@ func findOrCreateOAuthUser(c *gin.Context, provider oauth.Provider, oauthUser *o
 		if provider.IsUserIDTaken(legacyID) {
 			err := provider.FillUserByProviderID(user, legacyID)
 			if err != nil {
-				return nil, err
+				// legacy_id 命中但记录已被软删，按原逻辑视为不存在，继续走「未存在则新建」分支。
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					user = &model.User{}
+				} else {
+					return nil, err
+				}
 			}
 			if user.Id != 0 {
 				// Found user with legacy ID, migrate to new ID

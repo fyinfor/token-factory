@@ -174,7 +174,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         ],
       },
       {
-        text: t('分销中心'),
+        text: t('代理分销'),
         itemKey: 'distributor_center',
         to: '/console/distributor/center',
         className: isDistributor() ? '' : 'tableHiddle',

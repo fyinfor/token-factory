@@ -46,7 +46,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 
 // BuildRequestURL constructs the Gemini API predictLongRunning endpoint for Veo.
 func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
-	modelName := info.UpstreamModelName
+	modelName := taskcommon.RelayTaskUpstreamModel(info, info.OriginModelName)
 	version := model_setting.GetGeminiVersionSetting(modelName)
 
 	return fmt.Sprintf(
@@ -169,7 +169,7 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 
 	seconds := ResolveVeoDuration(req.Metadata, req.Duration, req.Seconds)
 	resolution := ResolveVeoResolution(req.Metadata, req.Size)
-	resRatio := VeoResolutionRatio(info.UpstreamModelName, resolution)
+	resRatio := VeoResolutionRatio(taskcommon.RelayTaskUpstreamModel(info, req.Model), resolution)
 
 	return map[string]float64{
 		"seconds":    float64(seconds),

@@ -228,6 +228,7 @@ func InitOptionMap() {
 	common.OptionMap["DemoSiteEnabled"] = strconv.FormatBool(operation_setting.DemoSiteEnabled)
 	common.OptionMap["SelfUseModeEnabled"] = strconv.FormatBool(operation_setting.SelfUseModeEnabled)
 	common.OptionMap["ChannelBalanceAlertEnabled"] = strconv.FormatBool(false)
+	common.OptionMap["ModelDefaultDocsEnabled"] = strconv.FormatBool(true)
 	common.OptionMap["ChannelBalanceSoftAlertThreshold"] = strconv.FormatFloat(50, 'f', -1, 64)
 	common.OptionMap["ChannelBalanceRiskAlertThreshold"] = strconv.FormatFloat(20, 'f', -1, 64)
 	common.OptionMap["ModelRequestRateLimitEnabled"] = strconv.FormatBool(setting.ModelRequestRateLimitEnabled)

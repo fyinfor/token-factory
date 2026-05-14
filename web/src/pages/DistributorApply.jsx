@@ -153,8 +153,62 @@ export default function DistributorApply() {
   const [urls, setUrls] = useState([]);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [applyType, setApplyType] = useState(1);
+  /** 上传真实进度（axios），未确认 url 前不超过 99 */
   const [uploadPct, setUploadPct] = useState(null);
+  /** 展示用平滑进度，避免单次回调 0→99 无过渡感 */
+  const [uploadDisplayPct, setUploadDisplayPct] = useState(null);
+  const uploadTargetRef = React.useRef(null);
+  const uploadDisplayRef = React.useRef(0);
+  const uploadSmoothRafRef = React.useRef(null);
   const formApi = React.useRef(null);
+
+  uploadTargetRef.current = uploadPct;
+
+  useEffect(() => {
+    if (uploadPct == null) {
+      if (uploadSmoothRafRef.current != null) {
+        cancelAnimationFrame(uploadSmoothRafRef.current);
+        uploadSmoothRafRef.current = null;
+      }
+      uploadDisplayRef.current = 0;
+      setUploadDisplayPct(null);
+      return;
+    }
+
+    let cancelled = false;
+    const tick = () => {
+      if (cancelled) return;
+      const target = uploadTargetRef.current;
+      if (target == null) return;
+      const cur = uploadDisplayRef.current;
+      if (cur < target - 0.01) {
+        const next = Math.min(
+          target,
+          cur + Math.max(0.55, (target - cur) * 0.2),
+        );
+        uploadDisplayRef.current = next;
+        setUploadDisplayPct(Math.round(next));
+        uploadSmoothRafRef.current = requestAnimationFrame(tick);
+      } else if (cur > target + 0.01) {
+        uploadDisplayRef.current = target;
+        setUploadDisplayPct(Math.round(target));
+        uploadSmoothRafRef.current = requestAnimationFrame(tick);
+      } else {
+        uploadDisplayRef.current = target;
+        setUploadDisplayPct(Math.round(target));
+        uploadSmoothRafRef.current = null;
+      }
+    };
+
+    uploadSmoothRafRef.current = requestAnimationFrame(tick);
+    return () => {
+      cancelled = true;
+      if (uploadSmoothRafRef.current != null) {
+        cancelAnimationFrame(uploadSmoothRafRef.current);
+        uploadSmoothRafRef.current = null;
+      }
+    };
+  }, [uploadPct]);
 
   const csImage = (
     statusState?.status?.distributor_apply_cs_image_url || ''
@@ -203,7 +257,7 @@ export default function DistributorApply() {
     return false;
   }, [userState?.user]);
 
-  /** 申请记录为已通过，且当前账号仍是代理：显示「去分销中心」 */
+  /** 申请记录为已通过，且当前账号仍是代理：显示「去代理分销」 */
   const showApprovedForActiveDistributor = app?.status === 2 && isDist;
 
   /** 记录曾为已通过，但账号已非代理（如被降级）：应允许重新提交 */
@@ -308,7 +362,7 @@ export default function DistributorApply() {
     ) : showApprovedForActiveDistributor ? (
       <div className='flex min-h-0 flex-1 flex-col items-center justify-center py-8 text-center'>
         <Text className='!text-lg md:!text-xl !leading-relaxed !font-medium text-[var(--semi-color-text-0)]'>
-          {t('申请已通过，请从侧栏进入「代理中心」。')}
+          {t('申请已通过，请从侧栏进入「代理分销」。')}
         </Text>
       </div>
     ) : (
@@ -406,10 +460,9 @@ export default function DistributorApply() {
                     skipErrorHandler: true,
                     onUploadProgress: (ev) => {
                       const total = ev.total || ev.loaded || 1;
-                      const pct = Math.min(
-                        100,
-                        Math.round((ev.loaded * 100) / total),
-                      );
+                      const raw = Math.round((ev.loaded * 100) / total);
+                      // 字节传完不等于业务成功：未返回 url 前不显示 100%，避免误导
+                      const pct = Math.min(99, raw);
                       setUploadPct(pct);
                       if (typeof onProgress === 'function') {
                         onProgress({ total, loaded: ev.loaded });
@@ -422,6 +475,7 @@ export default function DistributorApply() {
                     showError(message || t('上传失败'));
                     return;
                   }
+                  setUploadPct(100);
                   setUrls((prev) =>
                     prev.length >= 5 ? prev : [...prev, data.url],
                   );
@@ -441,7 +495,11 @@ export default function DistributorApply() {
               <Button disabled={urls.length >= 5}>{t('上传文件')}</Button>
             </Upload>
             {uploadPct != null ? (
-              <Progress percent={uploadPct} showInfo className='mt-2' />
+              <Progress
+                percent={uploadDisplayPct ?? uploadPct}
+                showInfo
+                className='mt-2'
+              />
             ) : null}
             <Text type='tertiary' size='small' className='block mt-1'>
               {t('支持图片或 PDF，最多 5 个；点击图片可大图预览')}

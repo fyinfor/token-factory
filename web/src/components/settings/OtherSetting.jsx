@@ -38,6 +38,7 @@ import {
 } from '../../helpers';
 import { marked } from 'marked';
 import { useTranslation } from 'react-i18next';
+import { languageSelectOptions } from '../../i18n/language';
 import { StatusContext } from '../../context/Status';
 import Text from '@douyinfe/semi-ui/lib/es/typography/text';
 
@@ -84,6 +85,7 @@ const OtherSetting = () => {
   const { t } = useTranslation();
   let [inputs, setInputs] = useState({
     Notice: '',
+    'general_setting.default_site_language': 'zh-CN',
     [LEGAL_USER_AGREEMENT_KEY]: '',
     [LEGAL_PRIVACY_POLICY_KEY]: '',
     SystemName: '',
@@ -108,7 +110,7 @@ const OtherSetting = () => {
   });
   let [loading, setLoading] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const [statusState, statusDispatch] = useContext(StatusContext);
+  const [statusState] = useContext(StatusContext);
   const [updateData, setUpdateData] = useState({
     tag_name: '',
     content: '',
@@ -147,6 +149,7 @@ const OtherSetting = () => {
     About: false,
     Footer: false,
     CheckUpdate: false,
+    DefaultSiteLanguage: false,
   });
   const handleInputChange = async (value, e) => {
     const name = e.target.id;
@@ -166,6 +169,21 @@ const OtherSetting = () => {
       showError(t('公告更新失败'));
     } finally {
       setLoadingInput((loadingInput) => ({ ...loadingInput, Notice: false }));
+    }
+  };
+  const submitDefaultSiteLanguage = async () => {
+    try {
+      setLoadingInput((s) => ({ ...s, DefaultSiteLanguage: true }));
+      await updateOption(
+        'general_setting.default_site_language',
+        inputs['general_setting.default_site_language'] || 'zh-CN',
+      );
+      showSuccess(t('默认界面语言已保存'));
+    } catch (error) {
+      console.error(error);
+      showError(t('设置保存失败'));
+    } finally {
+      setLoadingInput((s) => ({ ...s, DefaultSiteLanguage: false }));
     }
   };
   // 通用设置 - UserAgreement
@@ -223,6 +241,11 @@ const OtherSetting = () => {
         SystemName: true,
       }));
       await updateOption('SystemName', inputs.SystemName);
+      const name = String(inputs.SystemName ?? '').trim();
+      localStorage.setItem('system_name', name);
+      if (name) {
+        document.title = name;
+      }
       showSuccess(t('系统名称已更新'));
     } catch (error) {
       console.error(t('系统名称更新失败'), error);
@@ -558,6 +581,25 @@ const OtherSetting = () => {
               />
               <Button onClick={submitNotice} loading={loadingInput['Notice']}>
                 {t('设置公告')}
+              </Button>
+              <Form.Select
+                label={t('站点默认界面语言')}
+                field='general_setting.default_site_language'
+                optionList={languageSelectOptions}
+                helpText={t('站点默认界面语言说明')}
+                onChange={(v) =>
+                  setInputs((prev) => ({
+                    ...prev,
+                    'general_setting.default_site_language': v,
+                  }))
+                }
+                style={{ maxWidth: 400 }}
+              />
+              <Button
+                onClick={submitDefaultSiteLanguage}
+                loading={loadingInput.DefaultSiteLanguage}
+              >
+                {t('保存默认界面语言')}
               </Button>
               <Form.TextArea
                 label={t('用户协议')}

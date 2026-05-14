@@ -58,7 +58,6 @@ const ActionButtons = ({
       <LanguageSelector
         currentLang={currentLang}
         onLanguageChange={onLanguageChange}
-        t={t}
       />
 
       <UserArea

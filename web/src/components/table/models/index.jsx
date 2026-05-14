@@ -26,6 +26,7 @@ import ModelsActions from './ModelsActions';
 import ModelsFilters from './ModelsFilters';
 import ModelsTabs from './ModelsTabs';
 import EditModelModal from './modals/EditModelModal';
+import EditModelDocsModal from './modals/EditModelDocsModal';
 import EditVendorModal from './modals/EditVendorModal';
 import { useModelsData } from '../../../hooks/models/useModelsData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
@@ -86,6 +87,8 @@ const ModelsPage = ({ apiBasePath } = {}) => {
         return true;
       }
     });
+  const [showDocsEdit, setShowDocsEdit] = useState(false);
+  const [docsEditingModel, setDocsEditingModel] = useState({ id: undefined });
 
   const confirmCloseMarketplaceDisplayNotice = () => {
     Modal.confirm({
@@ -130,6 +133,17 @@ const ModelsPage = ({ apiBasePath } = {}) => {
           loadVendors();
           refresh();
         }}
+      />
+
+      <EditModelDocsModal
+        visible={showDocsEdit}
+        editingModel={docsEditingModel}
+        onClose={() => {
+          setShowDocsEdit(false);
+          setDocsEditingModel({ id: undefined });
+        }}
+        refresh={refresh}
+        t={t}
       />
 
       {showMarketplaceDisplayNotice ? (
@@ -205,7 +219,11 @@ const ModelsPage = ({ apiBasePath } = {}) => {
         })}
         t={modelsData.t}
       >
-        <ModelsTable {...modelsData} />
+        <ModelsTable
+          {...modelsData}
+          setDocsEditingModel={setDocsEditingModel}
+          setShowDocsEdit={setShowDocsEdit}
+        />
       </CardPro>
     </>
   );
