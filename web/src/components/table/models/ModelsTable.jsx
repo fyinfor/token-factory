@@ -41,6 +41,8 @@ const ModelsTable = (modelsData) => {
     manageModel,
     setEditingModel,
     setShowEdit,
+    setDocsEditingModel,
+    setShowDocsEdit,
     refresh,
     vendorMap,
     t,
@@ -53,10 +55,21 @@ const ModelsTable = (modelsData) => {
       manageModel,
       setEditingModel,
       setShowEdit,
+      setDocsEditingModel,
+      setShowDocsEdit,
       refresh,
       vendorMap,
     });
-  }, [t, manageModel, setEditingModel, setShowEdit, refresh, vendorMap]);
+  }, [
+    t,
+    manageModel,
+    setEditingModel,
+    setShowEdit,
+    setDocsEditingModel,
+    setShowDocsEdit,
+    refresh,
+    vendorMap,
+  ]);
 
   // Handle compact mode by removing fixed positioning
   const tableColumns = useMemo(() => {

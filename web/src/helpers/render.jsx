@@ -520,7 +520,10 @@ export function getLobeHubIcon(iconName, size = 14) {
     if (!seg) continue;
     const eqIdx = seg.indexOf('=');
     if (eqIdx === -1) {
-      props[seg.trim()] = true;
+      const key = seg.trim();
+      // Avoid leaking unresolved subcomponent names like "Color" to DOM props.
+      if (/^[A-Z]/.test(key)) continue;
+      props[key] = true;
       continue;
     }
     const key = seg.slice(0, eqIdx).trim();
@@ -1518,7 +1521,9 @@ function renderPriceSimpleCore({
   const finalGroupRatio = effectiveGroupRatio;
 
   const { symbol, rate } = getCurrencyConfig();
-  const chMult = normalizeChannelDiscountMultiplier(channelPriceDiscountPercent);
+  const chMult = normalizeChannelDiscountMultiplier(
+    channelPriceDiscountPercent,
+  );
   const mr = (Number(modelRatio) || 0) * chMult;
   const mp =
     modelPrice === -1 || modelPrice === undefined || modelPrice === null
@@ -1636,9 +1641,7 @@ function renderPriceSimpleCore({
         segments.push({
           tone: 'secondary',
           text: i18next.t('缓存读 {{price}} / 1M tokens', {
-            price: formatCompactDisplayPrice(
-              mr * 2.0 * cacheRatio * groupMult,
-            ),
+            price: formatCompactDisplayPrice(mr * 2.0 * cacheRatio * groupMult),
           }),
         });
       }
@@ -1678,9 +1681,7 @@ function renderPriceSimpleCore({
         segments.push({
           tone: 'secondary',
           text: i18next.t('图片输入 {{price}} / 1M tokens', {
-            price: formatCompactDisplayPrice(
-              mr * 2.0 * imageRatio * groupMult,
-            ),
+            price: formatCompactDisplayPrice(mr * 2.0 * imageRatio * groupMult),
           }),
         });
       }
@@ -1769,11 +1770,7 @@ function renderPriceSimpleCore({
   // summary (e.g. tooltips, copy-to-clipboard) get the correct video pricing.
   if (isVideoTokenBilling) {
     const videoUnitPrice =
-      (mr || 0) *
-      2.0 *
-      (videoRatio || 1) *
-      (videoCompletionRatio || 1) *
-      rate;
+      (mr || 0) * 2.0 * (videoRatio || 1) * (videoCompletionRatio || 1) * rate;
     return joinBillingSummary([
       i18next.t('视频输出 {{symbol}}{{price}} / 1M tokens', {
         symbol,
@@ -1834,27 +1831,21 @@ function renderPriceSimpleCore({
     if (hasSplitCacheCreation && shouldShowCacheCreation5m) {
       parts.push(
         i18next.t('5m缓存创建 {{price}} / 1M tokens', {
-          price: formatCompactDisplayPrice(
-            mr * 2.0 * cacheCreationRatio5m,
-          ),
+          price: formatCompactDisplayPrice(mr * 2.0 * cacheCreationRatio5m),
         }),
       );
     }
     if (hasSplitCacheCreation && shouldShowCacheCreation1h) {
       parts.push(
         i18next.t('1h缓存创建 {{price}} / 1M tokens', {
-          price: formatCompactDisplayPrice(
-            mr * 2.0 * cacheCreationRatio1h,
-          ),
+          price: formatCompactDisplayPrice(mr * 2.0 * cacheCreationRatio1h),
         }),
       );
     }
     if (!hasSplitCacheCreation && shouldShowLegacyCacheCreation) {
       parts.push(
         i18next.t('缓存创建 {{price}} / 1M tokens', {
-          price: formatCompactDisplayPrice(
-            mr * 2.0 * cacheCreationRatio,
-          ),
+          price: formatCompactDisplayPrice(mr * 2.0 * cacheCreationRatio),
         }),
       );
     }
@@ -1977,7 +1968,9 @@ export function renderModelPrice(
   const gDisp = consumeFoldGroup ? Number(groupRatio) : 1;
 
   const { symbol, rate } = getCurrencyConfig();
-  const chMult = normalizeChannelDiscountMultiplier(channelPriceDiscountPercent);
+  const chMult = normalizeChannelDiscountMultiplier(
+    channelPriceDiscountPercent,
+  );
   const mr = (Number(modelRatio) || 0) * chMult;
   const mp =
     modelPrice === -1 || modelPrice === undefined || modelPrice === null
@@ -1989,7 +1982,8 @@ export function renderModelPrice(
   const igp = Number(imageGenerationCallPrice || 0) * chMult;
 
   const useRatioOnlySummary =
-    shouldUseRatioBillingProcess(modelPrice) && !forcePriceVolumeParametricDetail;
+    shouldUseRatioBillingProcess(modelPrice) &&
+    !forcePriceVolumeParametricDetail;
 
   if (!useRatioOnlySummary) {
     if (isExplicitPerCallModelPrice(modelPrice)) {
@@ -2300,14 +2294,11 @@ export function renderModelPrice(
     inputRatioPrice *
     imageRatioValue *
     groupRatio;
-  const audioInputAmount =
-    (audioInputTokens / 1000000) * aip * groupRatio;
+  const audioInputAmount = (audioInputTokens / 1000000) * aip * groupRatio;
   const completionAmount =
     (completionTokens / 1000000) * completionRatioPrice * groupRatio;
-  const webSearchAmount =
-    (webSearchCallCount / 1000) * wsp * groupRatio;
-  const fileSearchAmount =
-    (fileSearchCallCount / 1000) * fsp * groupRatio;
+  const webSearchAmount = (webSearchCallCount / 1000) * wsp * groupRatio;
+  const fileSearchAmount = (fileSearchCallCount / 1000) * fsp * groupRatio;
   const imageGenerationAmount = igp * groupRatio;
 
   const totalAmount =
@@ -2491,7 +2482,9 @@ export function renderLogContent(
 
   // 获取货币配置
   const { symbol, rate } = getCurrencyConfig();
-  const chMult = normalizeChannelDiscountMultiplier(channelPriceDiscountPercent);
+  const chMult = normalizeChannelDiscountMultiplier(
+    channelPriceDiscountPercent,
+  );
   const mr = (Number(modelRatio) || 0) * chMult;
   const mp =
     modelPrice === -1 || modelPrice === undefined || modelPrice === null
@@ -2661,20 +2654,12 @@ export function renderLogContent(
     const parts = [
       i18next.t('输入价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
-        price: parseFloat(
-          (mr * 2.0 * displayMultiplier * rate).toFixed(2),
-        ),
+        price: parseFloat((mr * 2.0 * displayMultiplier * rate).toFixed(2)),
       }),
       i18next.t('输出价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
         price: parseFloat(
-          (
-            mr *
-            2.0 *
-            completionRatio *
-            displayMultiplier *
-            rate
-          ).toFixed(2),
+          (mr * 2.0 * completionRatio * displayMultiplier * rate).toFixed(2),
         ),
       }),
     ];
@@ -3148,7 +3133,9 @@ export function renderClaudeModelPrice(
 
   // 获取货币配置
   const { symbol, rate } = getCurrencyConfig();
-  const chMult = normalizeChannelDiscountMultiplier(channelPriceDiscountPercent);
+  const chMult = normalizeChannelDiscountMultiplier(
+    channelPriceDiscountPercent,
+  );
   const mr = (Number(modelRatio) || 0) * chMult;
   const mp =
     modelPrice === -1 || modelPrice === undefined || modelPrice === null
@@ -3156,7 +3143,8 @@ export function renderClaudeModelPrice(
       : Number(modelPrice) * chMult;
 
   const useRatioOnlySummary =
-    shouldUseRatioBillingProcess(modelPrice) && !forcePriceVolumeParametricDetail;
+    shouldUseRatioBillingProcess(modelPrice) &&
+    !forcePriceVolumeParametricDetail;
 
   if (!useRatioOnlySummary) {
     if (isExplicitPerCallModelPrice(modelPrice)) {
@@ -3569,7 +3557,9 @@ export function renderClaudeLogContent(
 
   // 获取货币配置
   const { symbol, rate } = getCurrencyConfig();
-  const chMult = normalizeChannelDiscountMultiplier(channelPriceDiscountPercent);
+  const chMult = normalizeChannelDiscountMultiplier(
+    channelPriceDiscountPercent,
+  );
   const mr = (Number(modelRatio) || 0) * chMult;
   const mp =
     modelPrice === -1 || modelPrice === undefined || modelPrice === null
@@ -3596,20 +3586,12 @@ export function renderClaudeLogContent(
     const parts = [
       i18next.t('输入价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
-        price: parseFloat(
-          (mr * 2.0 * displayMultiplier * rate).toFixed(2),
-        ),
+        price: parseFloat((mr * 2.0 * displayMultiplier * rate).toFixed(2)),
       }),
       i18next.t('输出价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
         price: parseFloat(
-          (
-            mr *
-            2.0 *
-            completionRatio *
-            displayMultiplier *
-            rate
-          ).toFixed(2),
+          (mr * 2.0 * completionRatio * displayMultiplier * rate).toFixed(2),
         ),
       }),
       i18next.t('缓存读取价格 {{symbol}}{{price}} / 1M tokens', {
@@ -3628,13 +3610,9 @@ export function renderClaudeLogContent(
       {
         symbol,
         price: parseFloat(
-          (
-            mr *
-            2.0 *
-            cacheCreationRatio5m *
-            displayMultiplier *
-            rate
-          ).toFixed(2),
+          (mr * 2.0 * cacheCreationRatio5m * displayMultiplier * rate).toFixed(
+            2,
+          ),
         ),
       },
     );
@@ -3645,13 +3623,9 @@ export function renderClaudeLogContent(
       {
         symbol,
         price: parseFloat(
-          (
-            mr *
-            2.0 *
-            cacheCreationRatio1h *
-            displayMultiplier *
-            rate
-          ).toFixed(2),
+          (mr * 2.0 * cacheCreationRatio1h * displayMultiplier * rate).toFixed(
+            2,
+          ),
         ),
       },
     );
@@ -3662,13 +3636,7 @@ export function renderClaudeLogContent(
       {
         symbol,
         price: parseFloat(
-          (
-            mr *
-            2.0 *
-            cacheCreationRatio *
-            displayMultiplier *
-            rate
-          ).toFixed(2),
+          (mr * 2.0 * cacheCreationRatio * displayMultiplier * rate).toFixed(2),
         ),
       },
     );
@@ -3775,9 +3743,7 @@ function renderRequestTierConsumeArticle(
   if (Number.isFinite(pct) && pct > 0 && pct < 100) {
     lines.push(`${tr('渠道价格折扣(%)')} ${pct}%`);
   }
-  lines.push(
-    `${tr('说明')}：${tr('阶梯计费价格明细')}`,
-  );
+  lines.push(`${tr('说明')}：${tr('阶梯计费价格明细')}`);
   /**
    * 追加「阶梯前原始值 → 阶梯折算后加权值」一行（字段来自后端 RequestTierPricingBreakdown）。
    * @param {string} label 行标题
@@ -3794,8 +3760,16 @@ function renderRequestTierConsumeArticle(
   };
   pushBeforeAfter(`${tr('输入')} tokens`, 'input_before', 'input_after');
   pushBeforeAfter(`${tr('输出')} tokens`, 'output_before', 'output_after');
-  pushBeforeAfter(`${tr('缓存读取价格')} (tokens)`, 'cache_read_before', 'cache_read_after');
-  pushBeforeAfter(`${tr('缓存创建')} (tokens)`, 'cache_write_before', 'cache_write_after');
+  pushBeforeAfter(
+    `${tr('缓存读取价格')} (tokens)`,
+    'cache_read_before',
+    'cache_read_after',
+  );
+  pushBeforeAfter(
+    `${tr('缓存创建')} (tokens)`,
+    'cache_write_before',
+    'cache_write_after',
+  );
 
   const catLabels = {
     input: tr('输入'),
@@ -3848,7 +3822,11 @@ export function renderConsumeBillingProcess({
     other?.channel_price_discount_percent ?? channelPriceDiscountPercent ?? 100,
   );
   const bm = other?.billing_mode;
-  if (bm === 'video_token' || bm === 'video_per_second' || bm === 'video_per_video') {
+  if (
+    bm === 'video_token' ||
+    bm === 'video_per_second' ||
+    bm === 'video_per_video'
+  ) {
     const agg = Number(record?.quota) || 0;
     return other?.claude
       ? renderClaudeLogContent(
@@ -3860,13 +3838,9 @@ export function renderConsumeBillingProcess({
           other?.cache_ratio || 1.0,
           other?.cache_creation_ratio || 1.0,
           other?.cache_creation_tokens_5m || 0,
-          other?.cache_creation_ratio_5m ||
-            other?.cache_creation_ratio ||
-            1.0,
+          other?.cache_creation_ratio_5m || other?.cache_creation_ratio || 1.0,
           other?.cache_creation_tokens_1h || 0,
-          other?.cache_creation_ratio_1h ||
-            other?.cache_creation_ratio ||
-            1.0,
+          other?.cache_creation_ratio_1h || other?.cache_creation_ratio || 1.0,
           billingDisplayMode,
           true,
           chPct,

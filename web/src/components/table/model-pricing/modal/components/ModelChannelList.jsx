@@ -39,15 +39,6 @@ import { renderModelTestResultSummary } from '../../../../../helpers/modelStabil
 
 const { Text } = Typography;
 
-const DEFAULT_DOCS_ENDPOINT_PATH = '/v1/chat/completions';
-
-const getEndpointPath = (modelData, endpointMap) => {
-  const endpointType = Array.isArray(modelData?.supported_endpoint_types)
-    ? modelData.supported_endpoint_types[0]
-    : '';
-  return endpointMap?.[endpointType]?.path || DEFAULT_DOCS_ENDPOINT_PATH;
-};
-
 const copyText = async (text, t, successText = '已复制') => {
   if (await copy(text)) {
     Toast.success({ content: t(successText) });
@@ -80,7 +71,6 @@ const getSupplierTypeColor = (supplierType) => {
 const ModelChannelList = ({
   modelData,
   channelMtrMap = {},
-  endpointMap = {},
   displayPrice,
   currency,
   siteDisplayType,
@@ -91,6 +81,7 @@ const ModelChannelList = ({
 }) => {
   const [userState] = useContext(UserContext);
   const [docsVisible, setDocsVisible] = useState(false);
+  const [docsModelName, setDocsModelName] = useState('');
   const channelList = modelData?.channel_list || [];
   const isLoggedIn = Boolean(userState?.user);
 
@@ -137,12 +128,8 @@ const ModelChannelList = ({
   // 管理展开状态
   const [activeKey, setActiveKey] = useState(allKeys);
 
-  const endpointPath = useMemo(
-    () => getEndpointPath(modelData, endpointMap),
-    [modelData?.supported_endpoint_types, endpointMap],
-  );
-
-  const openApiDocs = () => {
+  const openApiDocs = (channelModelName) => {
+    setDocsModelName(channelModelName || modelData?.model_name || '');
     setDocsVisible(true);
   };
 
@@ -474,7 +461,7 @@ const ModelChannelList = ({
                               <Button
                                 size='small'
                                 type='tertiary'
-                                onClick={openApiDocs}
+                                onClick={() => openApiDocs(channelPath)}
                               >
                                 {t('文档')}
                               </Button>
@@ -493,9 +480,13 @@ const ModelChannelList = ({
       <ModelTokenList visible={isLoggedIn} t={t} />
       <ApiDocsSidePanel
         visible={docsVisible}
-        onClose={() => setDocsVisible(false)}
-        modelName={modelData?.model_name}
-        endpointPath={endpointPath}
+        onClose={() => {
+          setDocsVisible(false);
+          setDocsModelName('');
+        }}
+        modelName={docsModelName || modelData?.model_name}
+        docIntroduction={modelData?.doc_introduction}
+        apiDocs={modelData?.api_docs}
         t={t}
       />
     </>
