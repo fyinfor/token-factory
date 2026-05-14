@@ -911,7 +911,7 @@ const TopUp = () => {
         )}
       </Modal>
 
-      {/* 主布局区域（邀请奖励已迁至分销中心） */}
+      {/* 主布局区域（邀请奖励已迁至代理分销） */}
       <div className='grid grid-cols-1 gap-6'>
         <RechargeCard
           t={t}

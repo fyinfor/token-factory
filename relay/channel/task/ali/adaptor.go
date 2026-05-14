@@ -254,7 +254,7 @@ func ProcessAliOtherRatios(aliReq *AliVideoRequest) (map[string]float64, error) 
 
 func (a *TaskAdaptor) convertToAliRequest(info *relaycommon.RelayInfo, req relaycommon.TaskSubmitReq) (*AliVideoRequest, error) {
 	upstreamModel := req.Model
-	if info.IsModelMapped {
+	if info.UseRelayTaskUpstreamModel() {
 		upstreamModel = info.UpstreamModelName
 	}
 	aliReq := &AliVideoRequest{

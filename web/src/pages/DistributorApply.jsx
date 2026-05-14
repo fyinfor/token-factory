@@ -257,7 +257,7 @@ export default function DistributorApply() {
     return false;
   }, [userState?.user]);
 
-  /** 申请记录为已通过，且当前账号仍是代理：显示「去分销中心」 */
+  /** 申请记录为已通过，且当前账号仍是代理：显示「去代理分销」 */
   const showApprovedForActiveDistributor = app?.status === 2 && isDist;
 
   /** 记录曾为已通过，但账号已非代理（如被降级）：应允许重新提交 */
@@ -362,7 +362,7 @@ export default function DistributorApply() {
     ) : showApprovedForActiveDistributor ? (
       <div className='flex min-h-0 flex-1 flex-col items-center justify-center py-8 text-center'>
         <Text className='!text-lg md:!text-xl !leading-relaxed !font-medium text-[var(--semi-color-text-0)]'>
-          {t('申请已通过，请从侧栏进入「代理中心」。')}
+          {t('申请已通过，请从侧栏进入「代理分销」。')}
         </Text>
       </div>
     ) : (

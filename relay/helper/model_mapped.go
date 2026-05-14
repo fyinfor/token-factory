@@ -16,6 +16,9 @@ import (
 )
 
 func ModelMappedHelper(c *gin.Context, info *relaycommon.RelayInfo, request dto.Request) error {
+	if info != nil {
+		info.TFOpenUpstreamRouteApplied = false
+	}
 	if info.ChannelMeta == nil {
 		info.ChannelMeta = &relaycommon.ChannelMeta{}
 	}
@@ -107,6 +110,7 @@ func ModelMappedHelper(c *gin.Context, info *relaycommon.RelayInfo, request dto.
 				if alias != "" && channelNo != "" {
 					info.UpstreamModelName = alias + "/" + modelForUpstream + "/" + channelNo
 					info.IsModelMapped = false
+					info.TFOpenUpstreamRouteApplied = true
 				}
 			}
 		} else {
@@ -115,6 +119,7 @@ func ModelMappedHelper(c *gin.Context, info *relaycommon.RelayInfo, request dto.
 			if routeSlug != "" {
 				info.UpstreamModelName = modelForUpstream + "/" + routeSlug
 				info.IsModelMapped = false
+				info.TFOpenUpstreamRouteApplied = true
 			}
 		}
 	}

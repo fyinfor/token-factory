@@ -65,7 +65,7 @@ export default function SettingsDistributor(props) {
   const [uploadingKey, setUploadingKey] = useState(null);
   const [showManualUrl, setShowManualUrl] = useState(false);
 
-  /** 与代理中心、余额展示一致：TOKENS 用整数点；否则用标价金额 */
+  /** 与代理分销、余额展示一致：TOKENS 用整数点；否则用标价金额 */
   const isQuotaTokensMode = useMemo(() => {
     const fromOpt = props.options?.['general_setting.quota_display_type'];
     if (typeof fromOpt === 'string' && fromOpt) {
@@ -326,7 +326,7 @@ export default function SettingsDistributor(props) {
                   />
                   <Text type='tertiary' size='small' className='block mt-2'>
                     {t(
-                      '填写 0～100 之间的百分比，例如 10 表示 10%；被邀请用户充值时按此比例给邀请人分成',
+                      '填写 0～100 之间的百分比，例如 10 表示 10%，10.5 表示 10.5%。填 0 表示跟随系统默认。',
                     )}
                   </Text>
                 </div>
@@ -394,7 +394,7 @@ export default function SettingsDistributor(props) {
               </Col>
               <Col xs={24} md={12}>
                 <Text strong className='block mb-2'>
-                  {t('分销中心提现联系客服图片')}
+                  {t('代理分销提现联系客服图片')}
                 </Text>
                 <Text type='tertiary' size='small' className='block mb-3'>
                   {t('上传后自动保存；需先在系统设置中配置并启用阿里云 OSS')}
@@ -459,7 +459,7 @@ export default function SettingsDistributor(props) {
               <Col span={24}>
                 <Form.TextArea
                   field='DistributorWithdrawNotice'
-                  label={t('分销中心线下提现说明（用户可见）')}
+                  label={t('代理分销线下提现说明（用户可见）')}
                   extraText={t(
                     '展示在代理提现弹窗内；留空则不显示。可换行，建议填写到账周期、手续费或所需材料等。',
                   )}
@@ -507,7 +507,7 @@ export default function SettingsDistributor(props) {
                 </Col>
                 <Col xs={24} md={12}>
                   <Form.Input
-                    label={t('分销中心提现联系客服图片 URL')}
+                    label={t('代理分销提现联系客服图片 URL')}
                     field='DistributorWithdrawCsImageUrl'
                     placeholder='https://'
                     onChange={(value) =>

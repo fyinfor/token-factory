@@ -5,7 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -66,6 +69,13 @@ const (
 	ProtocolMaaS    = "maas"
 	ProtocolArk     = "ark"
 	ProtocolSophnet = "sophnet"
+	// ProtocolTokenFactory 本仓库网关统一任务视频入口（router/video-router.go）：
+	// POST/GET /v1/video/generations，与第三方 Ark 网关使用的 /v1/videos/generations 不同。
+	ProtocolTokenFactory = "tokenfactory"
+
+	tfStyleVideoGenerations = "video_generations"
+	tfStyleOpenAIVideos     = "openai_videos"
+	tfStyleOpenAIRemix     = "openai_remix"
 
 	// Submit path is shared by both protocols. The "/api/maas/gw" prefix (if
 	// any) lives on the user-configured base URL, not in this constant.
@@ -109,6 +119,28 @@ func normalizeMaaSBaseURL(baseURL string) string {
 	return base
 }
 
+// classifyTfOpenVideoClientPath maps the downstream HTTP path (after playground normalization)
+// to an upstream TokenFactory route family.
+func classifyTfOpenVideoClientPath(requestURLPath string) string {
+	path := strings.TrimSpace(requestURLPath)
+	if path == "" {
+		return tfStyleVideoGenerations
+	}
+	if u, err := url.Parse(path); err == nil && strings.TrimSpace(u.Path) != "" {
+		path = u.Path
+	} else {
+		path = strings.Split(path, "?")[0]
+	}
+	path = strings.TrimRight(path, "/")
+	if strings.Contains(path, "/v1/videos/") && strings.HasSuffix(path, "/remix") {
+		return tfStyleOpenAIRemix
+	}
+	if strings.HasSuffix(path, "/v1/videos") {
+		return tfStyleOpenAIVideos
+	}
+	return tfStyleVideoGenerations
+}
+
 // ============================================================================
 // Response structs
 // ============================================================================
@@ -122,11 +154,11 @@ type apiError struct {
 }
 
 type arkSubmitResponse struct {
-	ID        string    `json:"id"`
-	Model     string    `json:"model,omitempty"`
-	Status    string    `json:"status,omitempty"`
-	CreatedAt int64     `json:"created_at,omitempty"`
-	Error     *apiError `json:"error,omitempty"`
+	ID        string          `json:"id"`
+	Model     string          `json:"model,omitempty"`
+	Status    string          `json:"status,omitempty"`
+	CreatedAt json.RawMessage `json:"created_at,omitempty"` // upstream may send unix (number) or RFC3339 (string)
+	Error     *apiError       `json:"error,omitempty"`
 }
 
 type arkTaskContent struct {
@@ -143,9 +175,9 @@ type arkResultResponse struct {
 	Status      string          `json:"status,omitempty"`
 	Content     *arkTaskContent `json:"content,omitempty"`
 	Output      *arkVideoOutput `json:"output,omitempty"`
-	CreatedAt   int64           `json:"created_at,omitempty"`
-	UpdatedAt   int64           `json:"updated_at,omitempty"`
-	CompletedAt int64           `json:"completed_at,omitempty"`
+	CreatedAt   json.RawMessage `json:"created_at,omitempty"`
+	UpdatedAt   json.RawMessage `json:"updated_at,omitempty"`
+	CompletedAt json.RawMessage `json:"completed_at,omitempty"`
 	Error       *apiError       `json:"error,omitempty"`
 }
 
@@ -213,7 +245,12 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 	a.ChannelType = info.ChannelType
 	a.baseURL = info.ChannelBaseUrl
 	a.apiKey = info.ApiKey
-	a.protocol = DetectProtocol(info.ChannelBaseUrl)
+	if info.ChannelType == constant.ChannelTypeTokenFactoryOpen {
+		a.protocol = ProtocolTokenFactory
+		info.TfOpenVideoUpstreamStyle = classifyTfOpenVideoClientPath(info.RequestURLPath)
+	} else {
+		a.protocol = DetectProtocol(info.ChannelBaseUrl)
+	}
 }
 
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
@@ -241,21 +278,154 @@ func (a *TaskAdaptor) EstimateBilling(c *gin.Context, info *relaycommon.RelayInf
 	return ratios
 }
 
-func (a *TaskAdaptor) BuildRequestURL(_ *relaycommon.RelayInfo) (string, error) {
+func asStringAny(v any) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return strings.TrimSpace(s)
+	}
+	return strings.TrimSpace(fmt.Sprint(v))
+}
+
+// parseTfUpstreamSubmitTaskID extracts upstream task/video id from TokenFactory OpenAI-style or generic JSON bodies.
+func parseTfUpstreamSubmitTaskID(respBody []byte) (string, *dto.TaskError) {
+	var probe map[string]any
+	if err := common.Unmarshal(respBody, &probe); err != nil {
+		return "", service.TaskErrorWrapper(errors.Wrapf(err, "body: %s", respBody), "unmarshal_response_body_failed", http.StatusInternalServerError)
+	}
+	if errObj, ok := probe["error"]; ok && errObj != nil {
+		if em, ok := errObj.(map[string]any); ok {
+			msg := firstNonEmpty(asStringAny(em["message"]), asStringAny(em["code"]), "video upstream returned error")
+			return "", service.TaskErrorWrapper(errors.New(msg), "video_submit_failed", http.StatusBadRequest)
+		}
+	}
+	if id := asStringAny(probe["id"]); id != "" {
+		return id, nil
+	}
+	if data, ok := probe["data"].(map[string]any); ok {
+		if id := asStringAny(data["id"]); id != "" {
+			return id, nil
+		}
+	}
+	return "", service.TaskErrorWrapper(fmt.Errorf("task id is empty, body: %s", string(respBody)), "invalid_response", http.StatusInternalServerError)
+}
+
+func buildTokenFactoryOpenAIVideoPassthroughBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
+	storage, err := common.GetBodyStorage(c)
+	if err != nil {
+		return nil, errors.Wrap(err, "get_request_body_failed")
+	}
+	cachedBody, err := storage.Bytes()
+	if err != nil {
+		return nil, errors.Wrap(err, "read_request_body_failed")
+	}
+	contentType := c.Request.Header.Get("Content-Type")
+
+	if strings.HasPrefix(contentType, "application/json") {
+		var bodyMap map[string]any
+		if err := common.Unmarshal(cachedBody, &bodyMap); err == nil {
+			if um := strings.TrimSpace(info.UpstreamModelName); um != "" {
+				bodyMap["model"] = um
+			}
+			if newBody, err := common.Marshal(bodyMap); err == nil {
+				return bytes.NewReader(newBody), nil
+			}
+		}
+		return bytes.NewReader(cachedBody), nil
+	}
+
+	if strings.Contains(contentType, "multipart/form-data") {
+		formData, err := common.ParseMultipartFormReusable(c)
+		if err != nil {
+			return bytes.NewReader(cachedBody), nil
+		}
+		var buf bytes.Buffer
+		writer := multipart.NewWriter(&buf)
+		writer.WriteField("model", strings.TrimSpace(info.UpstreamModelName))
+		for key, values := range formData.Value {
+			if key == "model" {
+				continue
+			}
+			for _, v := range values {
+				writer.WriteField(key, v)
+			}
+		}
+		for fieldName, fileHeaders := range formData.File {
+			for _, fh := range fileHeaders {
+				f, err := fh.Open()
+				if err != nil {
+					continue
+				}
+				fileCT := fh.Header.Get("Content-Type")
+				if fileCT == "" || fileCT == "application/octet-stream" {
+					buf512 := make([]byte, 512)
+					n, _ := io.ReadFull(f, buf512)
+					fileCT = http.DetectContentType(buf512[:n])
+					f.Close()
+					f, err = fh.Open()
+					if err != nil {
+						continue
+					}
+				}
+				h := make(textproto.MIMEHeader)
+				h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, fieldName, fh.Filename))
+				h.Set("Content-Type", fileCT)
+				part, err := writer.CreatePart(h)
+				if err != nil {
+					f.Close()
+					continue
+				}
+				_, _ = io.Copy(part, f)
+				f.Close()
+			}
+		}
+		if err := writer.Close(); err != nil {
+			return nil, err
+		}
+		c.Request.Header.Set("Content-Type", writer.FormDataContentType())
+		return &buf, nil
+	}
+
+	return bytes.NewReader(cachedBody), nil
+}
+
+func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.RelayInfo) (string, error) {
 	if a.protocol == ProtocolSophnet {
 		return fmt.Sprintf("%s%s", strings.TrimRight(a.baseURL, "/"), sophnetSubmitPath), nil
 	}
 	baseURL := strings.TrimRight(a.baseURL, "/")
 	if a.protocol == ProtocolMaaS {
 		baseURL = normalizeMaaSBaseURL(a.baseURL)
+		return fmt.Sprintf("%s%s", baseURL, SubmitPath), nil
+	}
+	if a.protocol == ProtocolTokenFactory {
+		if info != nil && info.Action == constant.TaskActionRemix {
+			vid := strings.TrimSpace(info.OriginTaskID)
+			if vid == "" {
+				return "", fmt.Errorf("remix requires origin video id")
+			}
+			return fmt.Sprintf("%s/v1/videos/%s/remix", baseURL, vid), nil
+		}
+		if info != nil && info.TfOpenVideoUpstreamStyle == tfStyleOpenAIVideos {
+			return fmt.Sprintf("%s/v1/videos", baseURL), nil
+		}
+		return fmt.Sprintf("%s/v1/video/generations", baseURL), nil
 	}
 	return fmt.Sprintf("%s%s", baseURL, SubmitPath), nil
 }
 
-func (a *TaskAdaptor) BuildRequestHeader(_ *gin.Context, req *http.Request, _ *relaycommon.RelayInfo) error {
-	req.Header.Set("Content-Type", "application/json")
+func (a *TaskAdaptor) BuildRequestHeader(c *gin.Context, req *http.Request, info *relaycommon.RelayInfo) error {
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("Authorization", "Bearer "+a.apiKey)
+	if a.protocol == ProtocolTokenFactory && info != nil &&
+		(info.TfOpenVideoUpstreamStyle == tfStyleOpenAIVideos || info.TfOpenVideoUpstreamStyle == tfStyleOpenAIRemix) {
+		if ct := c.Request.Header.Get("Content-Type"); ct != "" {
+			req.Header.Set("Content-Type", ct)
+		}
+		return nil
+	}
+	req.Header.Set("Content-Type", "application/json")
 	return nil
 }
 
@@ -263,6 +433,32 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	req, err := relaycommon.GetTaskRequest(c)
 	if err != nil {
 		return nil, err
+	}
+
+	if a.protocol == ProtocolTokenFactory {
+		if info != nil && (info.TfOpenVideoUpstreamStyle == tfStyleOpenAIVideos || info.TfOpenVideoUpstreamStyle == tfStyleOpenAIRemix) {
+			return buildTokenFactoryOpenAIVideoPassthroughBody(c, info)
+		}
+		raw, mErr := common.Marshal(req)
+		if mErr != nil {
+			return nil, mErr
+		}
+		var bodyMap map[string]any
+		if err := common.Unmarshal(raw, &bodyMap); err != nil {
+			return nil, err
+		}
+		um := strings.TrimSpace(info.UpstreamModelName)
+		if um == "" {
+			um = strings.TrimSpace(req.Model)
+		}
+		if um != "" {
+			bodyMap["model"] = um
+		}
+		data, mErr := common.Marshal(bodyMap)
+		if mErr != nil {
+			return nil, mErr
+		}
+		return bytes.NewReader(data), nil
 	}
 
 	var bodyMap map[string]any
@@ -280,7 +476,7 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 	if a.protocol == ProtocolMaaS {
 		modelKey = "model_id"
 	}
-	if info.IsModelMapped {
+	if info.UseRelayTaskUpstreamModel() {
 		bodyMap[modelKey] = info.UpstreamModelName
 	} else if v, ok := bodyMap[modelKey].(string); ok {
 		info.UpstreamModelName = v
@@ -324,6 +520,13 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 			return "", nil, service.TaskErrorWrapper(errors.New(msg), "video_submit_failed", http.StatusBadRequest)
 		}
 		taskID = strings.TrimSpace(sub.Result.TaskID)
+	} else if a.protocol == ProtocolTokenFactory && info != nil &&
+		(info.TfOpenVideoUpstreamStyle == tfStyleOpenAIVideos || info.TfOpenVideoUpstreamStyle == tfStyleOpenAIRemix) {
+		var terr *dto.TaskError
+		taskID, terr = parseTfUpstreamSubmitTaskID(respBody)
+		if terr != nil {
+			return "", nil, terr
+		}
 	} else {
 		var sub arkSubmitResponse
 		if err := common.Unmarshal(respBody, &sub); err != nil {
@@ -349,6 +552,36 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	return taskID, respBody, nil
 }
 
+func channelTypeFromFetchBody(body map[string]any) int {
+	if body == nil {
+		return 0
+	}
+	switch v := body["channel_type"].(type) {
+	case int:
+		return v
+	case int32:
+		return int(v)
+	case int64:
+		return int(v)
+	case float32:
+		return int(v)
+	case float64:
+		return int(v)
+	default:
+		return 0
+	}
+}
+
+func tfOpenVideoUpstreamStyleFromBody(body map[string]any) string {
+	if body == nil {
+		return ""
+	}
+	if s, ok := body["tf_open_video_upstream_style"].(string); ok {
+		return strings.TrimSpace(s)
+	}
+	return ""
+}
+
 func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy string) (*http.Response, error) {
 	taskID, ok := body["task_id"].(string)
 	if !ok || strings.TrimSpace(taskID) == "" {
@@ -358,11 +591,22 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 	// FetchTask is invoked by the framework outside of Init, so we have to
 	// re-detect the protocol from baseUrl every time.
 	protocol := DetectProtocol(baseUrl)
+	if channelTypeFromFetchBody(body) == constant.ChannelTypeTokenFactoryOpen {
+		protocol = ProtocolTokenFactory
+	}
 	var uri string
 	if protocol == ProtocolMaaS {
 		uri = fmt.Sprintf("%s%s?task_id=%s", normalizeMaaSBaseURL(baseUrl), maasResultPath, taskID)
 	} else if protocol == ProtocolSophnet {
 		uri = fmt.Sprintf("%s%s", strings.TrimRight(baseUrl, "/"), fmt.Sprintf(sophnetResultFmt, taskID))
+	} else if protocol == ProtocolTokenFactory {
+		base := strings.TrimRight(baseUrl, "/")
+		switch tfOpenVideoUpstreamStyleFromBody(body) {
+		case tfStyleOpenAIVideos, tfStyleOpenAIRemix:
+			uri = fmt.Sprintf("%s/v1/videos/%s", base, taskID)
+		default:
+			uri = fmt.Sprintf("%s/v1/video/generations/%s", base, taskID)
+		}
 	} else {
 		uri = fmt.Sprintf("%s%s", strings.TrimRight(baseUrl, "/"), fmt.Sprintf(arkResultFmt, taskID))
 	}

@@ -225,7 +225,7 @@ func (a *TaskAdaptor) GetChannelName() string {
 
 func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo) (*requestPayload, error) {
 	r := requestPayload{
-		Model:             taskcommon.DefaultString(info.UpstreamModelName, "viduq1"),
+		Model:             taskcommon.DefaultString(taskcommon.RelayTaskUpstreamModel(info, req.Model), "viduq1"),
 		Images:            req.Images,
 		Prompt:            req.Prompt,
 		Duration:          taskcommon.DefaultInt(req.Duration, 5),

@@ -151,6 +151,15 @@ type RelayInfo struct {
 	UseRuntimeHeadersOverride             bool
 	ParamOverrideAudit                    []string
 
+	// TFOpenUpstreamRouteApplied is set by relay/helper.ModelMappedHelper when TokenFactoryOpen
+	// upstream routing rewrites UpstreamModelName (e.g. model/route_slug). Task adaptors should
+	// treat it like IsModelMapped for choosing the upstream model field.
+	TFOpenUpstreamRouteApplied bool
+
+	// TfOpenVideoUpstreamStyle classifies downstream entry path for TokenFactoryOpen (60) video relay:
+	// "" / "video_generations" => POST/GET .../v1/video/generations; "openai_videos" / "openai_remix" => OpenAI-style /v1/videos.
+	TfOpenVideoUpstreamStyle string
+
 	PriceData types.PriceData
 
 	Request dto.Request
@@ -224,6 +233,15 @@ func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
 	if info.Request != nil {
 		info.Request.SetModelName(info.OriginModelName)
 	}
+}
+
+// UseRelayTaskUpstreamModel reports whether task adaptors must take the upstream model string
+// from UpstreamModelName after ModelMappedHelper (channel mapping and/or TokenFactoryOpen route).
+func (info *RelayInfo) UseRelayTaskUpstreamModel() bool {
+	if info == nil {
+		return false
+	}
+	return info.IsModelMapped || info.TFOpenUpstreamRouteApplied
 }
 
 func (info *RelayInfo) ToString() string {

@@ -37,9 +37,9 @@ import (
 	taskjimeng "github.com/QuantumNous/new-api/relay/channel/task/jimeng"
 	"github.com/QuantumNous/new-api/relay/channel/task/kling"
 	taskopenaivideo "github.com/QuantumNous/new-api/relay/channel/task/openaivideo"
-	tasktencentvod "github.com/QuantumNous/new-api/relay/channel/task/tencentvod"
 	tasksora "github.com/QuantumNous/new-api/relay/channel/task/sora"
 	"github.com/QuantumNous/new-api/relay/channel/task/suno"
+	tasktencentvod "github.com/QuantumNous/new-api/relay/channel/task/tencentvod"
 	taskvertex "github.com/QuantumNous/new-api/relay/channel/task/vertex"
 	taskVidu "github.com/QuantumNous/new-api/relay/channel/task/vidu"
 	"github.com/QuantumNous/new-api/relay/channel/tencent"
@@ -161,7 +161,8 @@ func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
 			return &taskGemini.TaskAdaptor{}
 		case constant.ChannelTypeMiniMax:
 			return &hailuo.TaskAdaptor{}
-		case constant.ChannelTypeOpenAIVideo, constant.ChannelTypeVideoGenerator:
+		// TokenFactoryOpen 子站走与 OpenAI 视频相同的请求体/URL，上游为 TokenFactory 时再分发到真实视频渠道。
+		case constant.ChannelTypeOpenAIVideo, constant.ChannelTypeVideoGenerator, constant.ChannelTypeTokenFactoryOpen:
 			return &taskopenaivideo.TaskAdaptor{}
 		case constant.ChannelTypeTencentCloudVideo:
 			return &tasktencentvod.TaskAdaptor{}

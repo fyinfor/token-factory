@@ -652,6 +652,7 @@ func RelayTask(c *gin.Context) {
 			}
 		}
 		task.PrivateData.UpstreamTaskID = result.UpstreamTaskID
+		task.PrivateData.TfOpenVideoUpstreamStyle = relayInfo.TfOpenVideoUpstreamStyle
 		if k := strings.TrimSpace(relayInfo.ApiKey); k != "" {
 			// 轮询上游（如腾讯云 DescribeTaskDetail）时使用与提交相同的密钥，避免多 Key 渠道错钥
 			task.PrivateData.Key = k

@@ -667,7 +667,7 @@ export default function DistributorCenter() {
   return (
     <div className='mt-14 px-4 pb-16 max-w-7xl mx-auto'>
       <Title heading={3} className='mb-8'>
-        {t('分销中心')}
+        {t('代理分销')}
       </Title>
 
       <Banner
