@@ -1566,6 +1566,39 @@ export const buildPreviewRows = (model, t) => {
   ];
 };
 
+/** 汇总各定价 map 中出现过的模型名（用于渠道「已配置」列表，与渠道 models 候选求交）。 */
+const collectModelNamesFromPricingSourceMaps = (sourceMaps) => {
+    const s = new Set();
+    if (!sourceMaps || typeof sourceMaps !== 'object') {
+        return s;
+    }
+    [
+        'ModelPrice',
+        'ModelRatio',
+        'CompletionRatio',
+        'CompletionRatioMeta',
+        'CacheRatio',
+        'CreateCacheRatio',
+        'ImageRatio',
+        'AudioRatio',
+        'AudioCompletionRatio',
+        'VideoRatio',
+        'VideoCompletionRatio',
+        'VideoPrice',
+        'VideoPricingRules',
+        'ModelTierRatio',
+        'CompletionTierRatio',
+        'CacheTierRatio',
+        'CreateCacheTierRatio',
+    ].forEach((key) => {
+        const obj = sourceMaps[key];
+        if (obj && typeof obj === 'object') {
+            Object.keys(obj).forEach((name) => s.add(name));
+        }
+    });
+    return s;
+};
+
 export function useModelPricingEditorState({
   options,
   refresh,
@@ -1680,9 +1713,15 @@ export function useModelPricingEditorState({
       VideoPriceUnit: defaultVideoPriceUnit,
     };
 
-    // strictCandidateModelNames=true 时，模型列表严格限制为外部传入候选模型（用于按渠道筛模型）。
+    // strictCandidateModelNames=true：渠道场景候选来自渠道 models；「全部」页只应展示已在任一定价 map 中有配置的模型，
+    // 删除定价并保存后应从本表消失，仅在「未设置」页出现。「unset」页仍用全候选 + isBasePricingUnset 筛选。
+    const pricedModelNames = collectModelNamesFromPricingSourceMaps(sourceMaps);
     const names = strictCandidateModelNames
-      ? new Set(candidateModelNames)
+      ? filterMode === 'unset'
+        ? new Set(candidateModelNames)
+        : new Set(
+            candidateModelNames.filter((n) => pricedModelNames.has(n)),
+          )
       : new Set([
           ...candidateModelNames,
           ...Object.keys(sourceMaps.ModelPrice),
@@ -2245,62 +2284,95 @@ export function useModelPricingEditorState({
     return true;
   };
 
+  const buildPricingOutputFromModels = (modelList) => {
+    const output = {
+      ModelPrice: {},
+      ModelRatio: {},
+      CompletionRatio: {},
+      CacheRatio: {},
+      CreateCacheRatio: {},
+      ImageRatio: {},
+      AudioRatio: {},
+      AudioCompletionRatio: {},
+      VideoRatio: {},
+      VideoCompletionRatio: {},
+      VideoPrice: {},
+      VideoPricingRules: {},
+      ModelTierRatio: {},
+      CompletionTierRatio: {},
+      CacheTierRatio: {},
+      CreateCacheTierRatio: {},
+    };
+    for (const model of modelList) {
+      const serialized = serializeModel(
+        model,
+        t,
+        videoCurrencyRates,
+        visibleCategories,
+      );
+      Object.entries(serialized).forEach(([key, value]) => {
+        if (value !== null) {
+          output[key][model.name] = value;
+        }
+      });
+    }
+    return output;
+  };
+
+  const persistPricingOutput = async (output) => {
+    if (onSaveOutput) {
+      await onSaveOutput(output);
+    } else {
+      const requestQueue = Object.entries(output).map(([key, value]) =>
+        API.put('/api/option/', {
+          key: resolvedOptionKeys[key] || key,
+          value: JSON.stringify(value, null, 2),
+        }),
+      );
+      const results = await Promise.all(requestQueue);
+      for (const res of results) {
+        if (!res?.data?.success) {
+          throw new Error(res?.data?.message || t('保存失败，请重试'));
+        }
+      }
+    }
+    await refresh();
+  };
+
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      const output = {
-        ModelPrice: {},
-        ModelRatio: {},
-        CompletionRatio: {},
-        CacheRatio: {},
-        CreateCacheRatio: {},
-        ImageRatio: {},
-        AudioRatio: {},
-        AudioCompletionRatio: {},
-        VideoRatio: {},
-        VideoCompletionRatio: {},
-        VideoPrice: {},
-        VideoPricingRules: {},
-        ModelTierRatio: {},
-        CompletionTierRatio: {},
-        CacheTierRatio: {},
-        CreateCacheTierRatio: {},
-      };
-
-      for (const model of models) {
-        const serialized = serializeModel(
-          model,
-          t,
-          videoCurrencyRates,
-          visibleCategories,
-        );
-        Object.entries(serialized).forEach(([key, value]) => {
-          if (value !== null) {
-            output[key][model.name] = value;
-          }
-        });
-      }
-
-      if (onSaveOutput) {
-        await onSaveOutput(output);
-      } else {
-        const requestQueue = Object.entries(output).map(([key, value]) =>
-          API.put('/api/option/', {
-            key: resolvedOptionKeys[key] || key,
-            value: JSON.stringify(value, null, 2),
-          }),
-        );
-
-        const results = await Promise.all(requestQueue);
-        for (const res of results) {
-          if (!res?.data?.success) {
-            throw new Error(res?.data?.message || t('保存失败，请重试'));
-          }
-        }
-      }
-
+      const output = buildPricingOutputFromModels(models);
+      await persistPricingOutput(output);
       showSuccess(t('保存成功'));
-      await refresh();
+    } catch (error) {
+      console.error('保存失败:', error);
+      showError(error.message || t('保存失败，请重试'));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /** 删除单行并立即执行与「应用更改」相同的持久化逻辑；失败时保持本地状态不变。 */
+  const deleteModelAndSave = async (name) => {
+    const nextModels = models.filter((model) => model.name !== name);
+    setLoading(true);
+    try {
+      const output = buildPricingOutputFromModels(nextModels);
+      await persistPricingOutput(output);
+      setModels(nextModels);
+      setOptionalFieldToggles((prev) => {
+        const next = { ...prev };
+        delete next[name];
+        return next;
+      });
+      setSelectedModelNames((previous) =>
+        previous.filter((item) => item !== name),
+      );
+      if (selectedModelName === name) {
+        setSelectedModelName(nextModels[0]?.name || '');
+      }
+      showSuccess(t('保存成功'));
     } catch (error) {
       console.error('保存失败:', error);
       showError(error.message || t('保存失败，请重试'));
@@ -2440,6 +2512,7 @@ export function useModelPricingEditorState({
     handleSubmit,
     addModel,
     deleteModel,
+    deleteModelAndSave,
     applySelectedModelPricing,
   };
 }

@@ -380,6 +380,7 @@ export default function ModelPricingEditor({
     handleSubmit,
     addModel,
     deleteModel,
+    deleteModelAndSave,
     applySelectedModelPricing,
   } = useModelPricingEditorState({
     options,
@@ -588,7 +589,18 @@ export default function ModelPricingEditor({
                 size='small'
                 type='danger'
                 icon={<IconDelete />}
-                onClick={() => deleteModel(record.name)}
+                onClick={() => {
+                  Modal.confirm({
+                    title: t('确认删除模型'),
+                    content: t(
+                      '确定从当前列表中移除该模型吗？确认后将立即保存到服务器，与「应用更改」相同。',
+                    ),
+                    okType: 'danger',
+                    okText: t('确定'),
+                    cancelText: t('取消'),
+                    onOk: () => deleteModelAndSave(record.name),
+                  });
+                }}
               />
             ) : null}
           </Space>
@@ -597,7 +609,7 @@ export default function ModelPricingEditor({
     ],
     [
       allowDeleteModel,
-      deleteModel,
+      deleteModelAndSave,
       selectedModelName,
       selectedModelNames,
       setSelectedModelName,
@@ -1112,19 +1124,15 @@ export default function ModelPricingEditor({
                             <Tooltip
                               position='top'
                               content={
-                                <div style={{ maxWidth: 320 }}>
+                                <div style={{ maxWidth: 360 }}>
                                   <div className='font-medium mb-1'>
-                                    {t('视频 token 估算公式')}
+                                    {t('视频计费说明')}
                                   </div>
-                                  <div>
-                                    {t(
-                                      '(输入视频时长 + 输出视频时长) × 输出视频宽 × 输出视频高 × 输出帧率 / 1024',
-                                    )}
+                                  <div className='text-sm'>
+                                    {t('视频预扣逻辑说明')}
                                   </div>
-                                  <div className='mt-2 text-xs'>
-                                    {t(
-                                      '上述 token 用量均为估算值；如供应商按视频条数计费，可切换到“按视频”模式。',
-                                    )}
+                                  <div className='mt-2 text-xs opacity-90'>
+                                    {t('视频完成后结算说明')}
                                   </div>
                                 </div>
                               }

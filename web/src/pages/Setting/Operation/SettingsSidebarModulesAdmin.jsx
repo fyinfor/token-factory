@@ -280,7 +280,7 @@ export default function SettingsSidebarModulesAdmin(props) {
         },
         {
           key: 'distributor_center',
-          title: t('分销中心'),
+          title: t('代理分销'),
           description: t('代理邀请与收益'),
         },
       ],

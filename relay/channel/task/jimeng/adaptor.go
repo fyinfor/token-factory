@@ -379,7 +379,7 @@ func hmacSHA256(key []byte, data []byte) []byte {
 
 func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq, info *relaycommon.RelayInfo) (*requestPayload, error) {
 	r := requestPayload{
-		ReqKey: info.UpstreamModelName,
+		ReqKey: taskcommon.RelayTaskUpstreamModel(info, req.Model),
 		Prompt: req.Prompt,
 	}
 

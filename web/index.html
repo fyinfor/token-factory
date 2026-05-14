@@ -16,17 +16,8 @@
       content="A unified AI model hub for aggregation & distribution. It supports cross-converting various LLMs into OpenAI-compatible, Claude-compatible, or Gemini-compatible formats. A centralized gateway for personal and enterprise model management."
     />
     <meta name="generator" content="toekn-factory" />
-    <!-- 与 getSystemName() 无缓存时一致；有缓存时由内联脚本在模块加载前写入 -->
+    <!-- 标题由 /api/status 写入 localStorage 后由前端同步；不在此处读 localStorage，以免旧缓存（如改名前默认值）抢先显示 -->
     <title></title>
-
-    <script>
-      (function () {
-        try {
-          var n = localStorage.getItem('system_name');
-          if (n) document.title = n;
-        } catch (e) {}
-      })();
-    </script>
     <!--umami-->
     <!--Google Analytics-->
   </head>

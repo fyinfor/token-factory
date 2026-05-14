@@ -109,6 +109,9 @@ type TaskPrivateData struct {
 	SubscriptionId int                 `json:"subscription_id,omitempty"` // 订阅 ID，用于订阅退款
 	TokenId        int                 `json:"token_id,omitempty"`        // 令牌 ID，用于令牌额度退款
 	BillingContext *TaskBillingContext `json:"billing_context,omitempty"` // 计费参数快照（用于轮询阶段重新计算）
+	// TfOpenVideoUpstreamStyle：TokenFactoryOpen(60) 视频上游路径风格，供轮询与提交一致。
+	// 空或 "video_generations" => GET {base}/v1/video/generations/{id}；"openai_videos" => GET {base}/v1/videos/{id}。
+	TfOpenVideoUpstreamStyle string `json:"tf_open_video_upstream_style,omitempty"`
 }
 
 // TaskBillingContext 记录任务提交时的计费参数，以便轮询阶段可以重新计算额度。

@@ -62,6 +62,11 @@ export function setStatusData(data) {
   } else {
     localStorage.removeItem('docs_link');
   }
+  if (data.default_site_language) {
+    localStorage.setItem('default_site_language', data.default_site_language);
+  } else {
+    localStorage.removeItem('default_site_language');
+  }
 }
 
 /**
