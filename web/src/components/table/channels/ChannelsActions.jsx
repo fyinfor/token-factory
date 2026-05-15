@@ -17,16 +17,21 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Button,
   Dropdown,
   Modal,
   Switch,
+  Tooltip,
   Typography,
   Select,
 } from '@douyinfe/semi-ui';
+import { IconDownload } from '@douyinfe/semi-icons';
 import CompactModeToggle from '../../common/ui/CompactModeToggle';
+import ChannelExportModal from './modals/ChannelExportModal';
+import ChannelImportModal from './modals/ChannelImportModal';
+import { isAdmin } from '../../../helpers';
 
 const ChannelsActions = ({
   enableBatchDelete,
@@ -56,9 +61,23 @@ const ChannelsActions = ({
   activePage,
   pageSize,
   setActivePage,
+  selectedChannels,
+  refresh,
   t,
 }) => {
+  const [showExportModal, setShowExportModal] = useState(false);
+  const adminUser = isAdmin();
   return (
+    <>
+      {/* 导出字段选择弹窗 */}
+      {adminUser && (
+        <ChannelExportModal
+          visible={showExportModal}
+          onCancel={() => setShowExportModal(false)}
+          selectedChannels={selectedChannels || []}
+        />
+      )}
+
     <div className='flex flex-col gap-2'>
       {/* 第一行：批量操作按钮 + 设置开关 */}
       <div className='flex flex-col md:flex-row justify-between gap-2'>
@@ -79,6 +98,34 @@ const ChannelsActions = ({
           >
             {t('删除所选通道')}
           </Button>
+
+          {/* 仅管理员显示：导入 / 导出 */}
+          {adminUser && (
+            <>
+              <ChannelImportModal refresh={refresh} />
+              <Tooltip
+                content={
+                  !enableBatchDelete || (selectedChannels || []).length === 0
+                    ? t('请先开启批量操作并勾选需要导出的渠道')
+                    : ''
+                }
+              >
+                <Button
+                  size='small'
+                  icon={<IconDownload />}
+                  theme='light'
+                  disabled={!enableBatchDelete || (selectedChannels || []).length === 0}
+                  onClick={() => setShowExportModal(true)}
+                  className='w-full md:w-auto'
+                >
+                  {t('导出')}
+                  {enableBatchDelete && (selectedChannels || []).length > 0
+                    ? `（${selectedChannels.length}）`
+                    : ''}
+                </Button>
+              </Tooltip>
+            </>
+          )}
 
           <Button
             size='small'
@@ -323,6 +370,7 @@ const ChannelsActions = ({
         </div>
       </div>
     </div>
+    </>
   );
 };
 

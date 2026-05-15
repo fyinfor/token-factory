@@ -1636,3 +1636,63 @@ func CountChannelsGroupByType() (map[int64]int64, error) {
 	}
 	return counts, nil
 }
+
+// GetChannelIdNameMap 返回全量 channel_id(string) → channel_name 的映射，用于价格导出时将 ID 转换为名称。
+func GetChannelIdNameMap() (map[string]string, error) {
+	type row struct {
+		Id   int    `gorm:"column:id"`
+		Name string `gorm:"column:name"`
+	}
+	var rows []row
+	if err := DB.Model(&Channel{}).Select("id, name").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(rows))
+	for _, r := range rows {
+		out[fmt.Sprintf("%d", r.Id)] = r.Name
+	}
+	return out, nil
+}
+
+// GetChannelIDsByName 根据渠道名称精确匹配，返回所有同名渠道的 ID 列表（用于价格导入时按名称定位渠道）。
+func GetChannelIDsByName(name string) ([]int, error) {
+	var ids []int
+	if err := DB.Model(&Channel{}).Where("name = ?", name).Pluck("id", &ids).Error; err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+// GetChannelsByIDs 根据 ID 列表批量获取渠道（含密钥），用于导出场景。
+func GetChannelsByIDs(ids []int) ([]*Channel, error) {
+	if len(ids) == 0 {
+		return []*Channel{}, nil
+	}
+	var channels []*Channel
+	if err := DB.Where("id IN ?", ids).Find(&channels).Error; err != nil {
+		return nil, err
+	}
+	return channels, nil
+}
+
+// GetChannelByName 根据渠道名称精确匹配，返回第一个同名渠道（含密钥）。找不到返回 (nil, nil)。
+func GetChannelByName(name string) (*Channel, error) {
+	var channel Channel
+	err := DB.Where("name = ?", name).First(&channel).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &channel, nil
+}
+
+// PartialUpdateChannelFields 按字段名列表精确更新渠道指定列，不影响其他列。
+// 使用 GORM Select + struct Updates，GORM 会按模型定义正确处理保留字（group/key）的方言转义。
+func PartialUpdateChannelFields(id int, cols []string, updates *Channel) error {
+	if len(cols) == 0 {
+		return nil
+	}
+	return DB.Model(&Channel{}).Where("id = ?", id).Select(cols).Updates(updates).Error
+}
