@@ -32,6 +32,15 @@ func checkRedirect(req *http.Request, via []*http.Request) error {
 	if len(via) >= 10 {
 		return fmt.Errorf("stopped after 10 redirects")
 	}
+	// Go 的 http.Client 在跨域重定向时会自动剥离 Authorization 等敏感头，
+	// 导致上游 TokenFactory 平台收到无认证的请求而返回 401。
+	// 此处恢复原始请求的 Authorization 头，确保重定向后仍能正常认证。
+	if len(via) > 0 && req.Header.Get("Authorization") == "" {
+		origAuth := via[0].Header.Get("Authorization")
+		if origAuth != "" {
+			req.Header.Set("Authorization", origAuth)
+		}
+	}
 	return nil
 }
 
