@@ -275,7 +275,15 @@ func buildSiteBuilderExportItem(c *gin.Context, ch *model.Channel, fields map[st
 		item["__export_failed__"] = true
 		return item
 	}
-	common.SysLog(fmt.Sprintf("建站用户导出: 已为渠道 %s 创建令牌 sk-%s（模型范围: %s, 分组: %s）", ch.Name, key[:8]+"...", modelLimits, ch.Group))
+	// 验证令牌已成功写入数据库
+	insertedToken, verifyErr := model.GetTokenByKey(key, true)
+	if verifyErr != nil {
+		common.SysError(fmt.Sprintf("建站用户导出: 令牌写入后验证失败 (渠道 %s, key前缀: sk-%s...): %v", ch.Name, key[:min(8, len(key))], verifyErr))
+	} else if insertedToken.Status != common.TokenStatusEnabled {
+		common.SysError(fmt.Sprintf("建站用户导出: 令牌状态异常 (渠道 %s, key前缀: sk-%s..., status=%d, expected=%d)", ch.Name, key[:min(8, len(key))], insertedToken.Status, common.TokenStatusEnabled))
+	} else {
+		common.SysLog(fmt.Sprintf("建站用户导出: 令牌创建成功并已验证 (渠道 %s, 令牌ID=%d, key前缀: sk-%s..., 模型: %s, 分组: %s, ServerAddress: %s)", ch.Name, insertedToken.Id, key[:min(8, len(key))], modelLimits, ch.Group, serverAddr))
+	}
 
 	// 覆盖 apiKey 为新令牌的 key（带 sk- 前缀，与 TokenFactoryOpen 导入格式一致）
 	item[chFieldApiKey] = "sk-" + key
