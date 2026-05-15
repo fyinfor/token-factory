@@ -348,6 +348,9 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.GET("/tag/models", middleware.AdminAuth(), controller.GetTagModels)
 			channelRoute.POST("/copy/:id", middleware.AdminAuth(), controller.CopyChannel)
 			channelRoute.POST("/multi_key/manage", middleware.AdminAuth(), controller.ManageMultiKeys)
+		// 渠道导出/导入（仅管理员）
+		channelRoute.POST("/export", middleware.AdminAuth(), controller.ExportChannels)
+		channelRoute.POST("/import", middleware.AdminAuth(), controller.ImportChannels)
 			channelRoute.POST("/upstream_updates/apply", middleware.AdminAuth(), controller.ApplyChannelUpstreamModelUpdates)
 			channelRoute.POST("/upstream_updates/apply_all", middleware.AdminAuth(), controller.ApplyAllChannelUpstreamModelUpdates)
 			channelRoute.POST("/upstream_updates/detect", middleware.AdminAuth(), controller.DetectChannelUpstreamModelUpdates)
