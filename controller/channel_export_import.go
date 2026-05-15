@@ -261,6 +261,7 @@ func buildSiteBuilderExportItem(c *gin.Context, ch *model.Channel, fields map[st
 		UserId:             userId,
 		Name:               tokenName,
 		Key:                key,
+		Status:             common.TokenStatusEnabled,
 		CreatedTime:        common.GetTimestamp(),
 		AccessedTime:       common.GetTimestamp(),
 		ExpiredTime:        -1,
@@ -274,6 +275,7 @@ func buildSiteBuilderExportItem(c *gin.Context, ch *model.Channel, fields map[st
 		item["__export_failed__"] = true
 		return item
 	}
+	common.SysLog(fmt.Sprintf("建站用户导出: 已为渠道 %s 创建令牌 sk-%s（模型范围: %s, 分组: %s）", ch.Name, key[:8]+"...", modelLimits, ch.Group))
 
 	// 覆盖 apiKey 为新令牌的 key（带 sk- 前缀，与 TokenFactoryOpen 导入格式一致）
 	item[chFieldApiKey] = "sk-" + key
