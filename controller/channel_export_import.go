@@ -31,6 +31,7 @@ const (
 	chFieldModels        = "models"
 	chFieldGroups        = "groups"
 	chFieldModelRedirect = "modelRedirect"
+	chFieldOtherInfo     = "otherInfo"
 )
 
 // chAllowedExportFields 允许导出的合法字段集合，防止非法字段注入。
@@ -40,6 +41,7 @@ var chAllowedExportFields = map[string]bool{
 	chFieldSupplierName: true, chFieldType: true, chFieldLogo: true,
 	chFieldProviderType: true, chFieldApiKey: true, chFieldApiBaseUrl: true,
 	chFieldModels: true, chFieldGroups: true, chFieldModelRedirect: true,
+	chFieldOtherInfo: true,
 }
 
 // ─── DTO 定义 ──────────────────────────────────────────────────────────────────
@@ -210,6 +212,12 @@ func buildChannelExportItem(ch *model.Channel, fields map[string]bool) map[strin
 		}
 		item[chFieldModelRedirect] = redirect
 	}
+	if fields[chFieldOtherInfo] {
+		otherInfo := ch.GetOtherInfo()
+		if len(otherInfo) > 0 {
+			item[chFieldOtherInfo] = otherInfo
+		}
+	}
 
 	return item
 }
@@ -289,6 +297,24 @@ func buildSiteBuilderExportItem(c *gin.Context, ch *model.Channel, fields map[st
 	item[chFieldApiKey] = "sk-" + key
 	// 确保字段集合中包含 apiKey
 	fields[chFieldApiKey] = true
+
+	// 对于建站导出，在 otherInfo 中标记来源为 tokenfactory_open，
+	// 并保留上游路由信息（route_slug 等），以便导入方可正确路由请求到上游渠道。
+	otherInfo := ch.GetOtherInfo()
+	if otherInfo == nil {
+		otherInfo = make(map[string]interface{})
+	}
+	otherInfo["source"] = "tokenfactory_open"
+	// 保留原渠道的 route_slug 作为 upstream_route_slug
+	if ch.RouteSlug != "" {
+		otherInfo["upstream_route_slug"] = ch.RouteSlug
+	}
+	// 保留原渠道的 supplier 信息
+	if ch.SupplierName != "" {
+		otherInfo["upstream_supplier_alias"] = ch.SupplierName
+	}
+	item[chFieldOtherInfo] = otherInfo
+	fields[chFieldOtherInfo] = true
 
 	return item
 }
@@ -419,6 +445,11 @@ func chValidateItem(item map[string]interface{}) error {
 			return fmt.Errorf("modelRedirect 字段必须为对象")
 		}
 	}
+	if v, ok := item["otherInfo"]; ok && v != nil {
+		if _, ok := v.(map[string]interface{}); !ok {
+			return fmt.Errorf("otherInfo 字段必须为对象")
+		}
+	}
 	return nil
 }
 
@@ -522,6 +553,17 @@ func chApplyToExisting(ch *model.Channel, item map[string]interface{}) error {
 			cols = append(cols, "route_slug")
 		}
 	}
+	if v, ok := item["otherInfo"]; ok {
+		if m, ok := v.(map[string]interface{}); ok {
+			b, err := common.Marshal(m)
+			if err != nil {
+				return fmt.Errorf("序列化 otherInfo 失败: %w", err)
+			}
+			s := string(b)
+			updates.OtherInfo = s
+			cols = append(cols, "other_info")
+		}
+	}
 
 	if len(cols) == 0 {
 		// 没有可更新的字段，直接跳过（不报错）
@@ -621,6 +663,15 @@ func chApplyToNew(ch *model.Channel, item map[string]interface{}) error {
 			}
 			s := string(b)
 			ch.ModelMapping = &s
+		}
+	}
+	if v, ok := item["otherInfo"]; ok {
+		if m, ok := v.(map[string]interface{}); ok {
+			b, err := common.Marshal(m)
+			if err != nil {
+				return fmt.Errorf("序列化 otherInfo 失败: %w", err)
+			}
+			ch.OtherInfo = string(b)
 		}
 	}
 
