@@ -296,6 +296,13 @@ func SetApiRouter(router *gin.Engine) {
 			// 管理员或已审核供应商可拉取上游差异；供应商侧仅自有模型参与对比（见 controller.FetchUpstreamRatios）
 			ratioSyncRoute.POST("/fetch", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.FetchUpstreamRatios)
 		}
+		// 价格导出/导入（仅管理员）
+		priceRoute := apiRouter.Group("/admin/price")
+		priceRoute.Use(middleware.AdminAuth())
+		{
+			priceRoute.GET("/export", controller.ExportPrices)
+			priceRoute.POST("/import", controller.ImportPrices)
+		}
 		tfOpenSyncRoute := apiRouter.Group("/tf_open_sync")
 		{
 			// 子站 TokenFactoryOpen 拉全站渠道（脱敏+定价）；鉴权见 controller.authorizeTFOpenSyncExport
@@ -341,6 +348,9 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.GET("/tag/models", middleware.AdminAuth(), controller.GetTagModels)
 			channelRoute.POST("/copy/:id", middleware.AdminAuth(), controller.CopyChannel)
 			channelRoute.POST("/multi_key/manage", middleware.AdminAuth(), controller.ManageMultiKeys)
+		// 渠道导出/导入（仅管理员）
+		channelRoute.POST("/export", middleware.AdminAuth(), controller.ExportChannels)
+		channelRoute.POST("/import", middleware.AdminAuth(), controller.ImportChannels)
 			channelRoute.POST("/upstream_updates/apply", middleware.AdminAuth(), controller.ApplyChannelUpstreamModelUpdates)
 			channelRoute.POST("/upstream_updates/apply_all", middleware.AdminAuth(), controller.ApplyAllChannelUpstreamModelUpdates)
 			channelRoute.POST("/upstream_updates/detect", middleware.AdminAuth(), controller.DetectChannelUpstreamModelUpdates)
