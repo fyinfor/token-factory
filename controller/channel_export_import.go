@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 )
 
@@ -46,6 +48,7 @@ var chAllowedExportFields = map[string]bool{
 type ChannelExportRequest struct {
 	ChannelIDs []int    `json:"channel_ids"` // 需要导出的渠道 ID 列表
 	Fields     []string `json:"fields"`      // 用户选择的字段列表
+	Mode       string   `json:"mode"`        // 导出模式: "standard"(默认) | "site_builder"(建站用户导出)
 }
 
 // ChannelExportPayload 导出响应的数据结构（可直接用于后续导入）。
@@ -80,6 +83,9 @@ type ChannelImportFailure struct {
 
 // ExportChannels 按渠道 ID 列表导出指定字段。
 // POST /api/channel/export
+// mode=standard (默认): 原样导出渠道数据
+// mode=site_builder: 建站用户导出，type 强制为 60，apiKey 为新生成的令牌 key，
+// apiBaseUrl 为本平台 ServerAddress，每个渠道创建独立令牌并绑定渠道模型范围。
 func ExportChannels(c *gin.Context) {
 	var req ChannelExportRequest
 	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
@@ -111,9 +117,30 @@ func ExportChannels(c *gin.Context) {
 		return
 	}
 
+	isSiteBuilder := req.Mode == "site_builder"
+
 	items := make([]map[string]interface{}, 0, len(channels))
 	for _, ch := range channels {
-		items = append(items, buildChannelExportItem(ch, fieldSet))
+		if isSiteBuilder {
+			items = append(items, buildSiteBuilderExportItem(c, ch, fieldSet))
+		} else {
+			items = append(items, buildChannelExportItem(ch, fieldSet))
+		}
+	}
+
+	// 建站用户导出时过滤掉令牌创建失败的条目
+	if isSiteBuilder {
+		filtered := make([]map[string]interface{}, 0, len(items))
+		for _, item := range items {
+			if _, failed := item["__export_failed__"]; !failed {
+				filtered = append(filtered, item)
+			}
+		}
+		// 清理内部标记
+		for _, item := range filtered {
+			delete(item, "__export_failed__")
+		}
+		items = filtered
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -187,7 +214,76 @@ func buildChannelExportItem(ch *model.Channel, fields map[string]bool) map[strin
 	return item
 }
 
-// ─── 导入接口 ─────────────────────────────────────────────────────────────────
+// buildSiteBuilderExportItem 构建建站用户导出项。
+// 核心差异：type 固定为 60 (TokenFactoryOpen)，apiKey 为新生成的令牌 key（sk-前缀），
+// apiBaseUrl 为本平台 ServerAddress，同时为每个渠道创建独立令牌并限定模型范围。
+func buildSiteBuilderExportItem(c *gin.Context, ch *model.Channel, fields map[string]bool) map[string]interface{} {
+	item := buildChannelExportItem(ch, fields)
+
+	// 强制覆盖 type = 60 (TokenFactoryOpen)
+	if fields[chFieldType] {
+		item[chFieldType] = constant.ChannelTypeTokenFactoryOpen
+	}
+
+	// 强制覆盖 apiBaseUrl 为本平台 ServerAddress
+	serverAddr := strings.TrimRight(system_setting.ServerAddress, "/")
+	if serverAddr == "" {
+		// fallback: 从请求中推导
+		scheme := "http"
+		if c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https" {
+			scheme = "https"
+		}
+		serverAddr = fmt.Sprintf("%s://%s", scheme, c.Request.Host)
+	}
+	item[chFieldApiBaseUrl] = serverAddr
+	// 确保字段集合中包含 apiBaseUrl，即使原先未勾选
+	fields[chFieldApiBaseUrl] = true
+
+	// 为该渠道生成独立令牌，限定模型范围
+	channelModels := ch.GetModels()
+	modelLimits := strings.Join(channelModels, ",")
+	tokenName := fmt.Sprintf("建站导出-%s", ch.Name)
+
+	key, err := common.GenerateKey()
+	if err != nil {
+		common.SysError("建站用户导出: 生成令牌密钥失败: " + err.Error())
+		item["__export_failed__"] = true
+		return item
+	}
+
+	userId := c.GetInt("id")
+	if userId == 0 {
+		// 管理员接口应该有用户 ID，兜底使用 1
+		userId = 1
+	}
+
+	newToken := &model.Token{
+		UserId:             userId,
+		Name:               tokenName,
+		Key:                key,
+		CreatedTime:        common.GetTimestamp(),
+		AccessedTime:       common.GetTimestamp(),
+		ExpiredTime:        -1,
+		UnlimitedQuota:     true,
+		ModelLimitsEnabled: len(channelModels) > 0,
+		ModelLimits:        modelLimits,
+		Group:              ch.Group,
+	}
+	if err := newToken.Insert(); err != nil {
+		common.SysError(fmt.Sprintf("建站用户导出: 创建令牌失败 (渠道 %s): %v", ch.Name, err))
+		item["__export_failed__"] = true
+		return item
+	}
+
+	// 覆盖 apiKey 为新令牌的 key（带 sk- 前缀，与 TokenFactoryOpen 导入格式一致）
+	item[chFieldApiKey] = "sk-" + key
+	// 确保字段集合中包含 apiKey
+	fields[chFieldApiKey] = true
+
+	return item
+}
+
+// ─── 导入接口 ──────────────────────────────────────────────────────────────
 
 // ImportChannels 按名称匹配导入渠道配置。
 // 核心规则：仅通过 name 匹配；同名则更新（仅更新 JSON 中存在的字段）；不存在则新增；
