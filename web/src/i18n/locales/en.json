@@ -991,6 +991,8 @@
     "共 {{count}} 个密钥_many": "Total {{count}} keys",
     "共 {{count}} 个密钥_one": "{{count}} key",
     "共 {{count}} 个密钥_other": "{{count}} keys",
+    "共 {{count}} 个令牌": "{{count}} tokens",
+    "共 {{count}} 个令牌_other": "{{count}} tokens",
     "共 {{count}} 个模型": "{{count}} models",
     "共 {{count}} 个模型_many": "Total {{count}} models",
     "共 {{count}} 个模型_one": "{{count}} model",
