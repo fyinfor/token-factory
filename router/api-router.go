@@ -296,6 +296,13 @@ func SetApiRouter(router *gin.Engine) {
 			// 管理员或已审核供应商可拉取上游差异；供应商侧仅自有模型参与对比（见 controller.FetchUpstreamRatios）
 			ratioSyncRoute.POST("/fetch", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.FetchUpstreamRatios)
 		}
+		// 价格导出/导入（仅管理员）
+		priceRoute := apiRouter.Group("/admin/price")
+		priceRoute.Use(middleware.AdminAuth())
+		{
+			priceRoute.GET("/export", controller.ExportPrices)
+			priceRoute.POST("/import", controller.ImportPrices)
+		}
 		tfOpenSyncRoute := apiRouter.Group("/tf_open_sync")
 		{
 			// 子站 TokenFactoryOpen 拉全站渠道（脱敏+定价）；鉴权见 controller.authorizeTFOpenSyncExport

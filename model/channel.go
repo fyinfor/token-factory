@@ -1636,3 +1636,29 @@ func CountChannelsGroupByType() (map[int64]int64, error) {
 	}
 	return counts, nil
 }
+
+// GetChannelIdNameMap 返回全量 channel_id(string) → channel_name 的映射，用于价格导出时将 ID 转换为名称。
+func GetChannelIdNameMap() (map[string]string, error) {
+	type row struct {
+		Id   int    `gorm:"column:id"`
+		Name string `gorm:"column:name"`
+	}
+	var rows []row
+	if err := DB.Model(&Channel{}).Select("id, name").Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(rows))
+	for _, r := range rows {
+		out[fmt.Sprintf("%d", r.Id)] = r.Name
+	}
+	return out, nil
+}
+
+// GetChannelIDsByName 根据渠道名称精确匹配，返回所有同名渠道的 ID 列表（用于价格导入时按名称定位渠道）。
+func GetChannelIDsByName(name string) ([]int, error) {
+	var ids []int
+	if err := DB.Model(&Channel{}).Where("name = ?", name).Pluck("id", &ids).Error; err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
