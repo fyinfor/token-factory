@@ -62,9 +62,10 @@ type ChannelExportPayload struct {
 
 // ChannelImportRequest 导入请求结构（与导出结构兼容）。
 type ChannelImportRequest struct {
-	Version    string                   `json:"version"`
-	ExportTime string                   `json:"exportTime"`
-	Channels   []map[string]interface{} `json:"channels"`
+	Version           string                   `json:"version"`
+	ExportTime        string                   `json:"exportTime"`
+	Channels          []map[string]interface{} `json:"channels"`
+	SiteBuilderApiKey string                   `json:"site_builder_api_key,omitempty"` // 建站模式统一密钥，导入 type=60 渠道时若 apiKey 为空则原样写入渠道 Key
 }
 
 // ChannelImportResult 导入操作的结果统计。
@@ -86,8 +87,8 @@ type ChannelImportFailure struct {
 // ExportChannels 按渠道 ID 列表导出指定字段。
 // POST /api/channel/export
 // mode=standard (默认): 原样导出渠道数据
-// mode=site_builder: 建站用户导出，type 强制为 60，apiKey 为新生成的令牌 key，
-// apiBaseUrl 为本平台 ServerAddress，每个渠道创建独立令牌并绑定渠道模型范围。
+// mode=site_builder: 建站用户导出，type 强制为 60，apiKey 置空（由导入方指定建站密钥），
+// apiBaseUrl 为本平台 ServerAddress，otherInfo 中标记来源与路由信息。
 func ExportChannels(c *gin.Context) {
 	var req ChannelExportRequest
 	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
@@ -128,21 +129,6 @@ func ExportChannels(c *gin.Context) {
 		} else {
 			items = append(items, buildChannelExportItem(ch, fieldSet))
 		}
-	}
-
-	// 建站用户导出时过滤掉令牌创建失败的条目
-	if isSiteBuilder {
-		filtered := make([]map[string]interface{}, 0, len(items))
-		for _, item := range items {
-			if _, failed := item["__export_failed__"]; !failed {
-				filtered = append(filtered, item)
-			}
-		}
-		// 清理内部标记
-		for _, item := range filtered {
-			delete(item, "__export_failed__")
-		}
-		items = filtered
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -223,8 +209,8 @@ func buildChannelExportItem(ch *model.Channel, fields map[string]bool) map[strin
 }
 
 // buildSiteBuilderExportItem 构建建站用户导出项。
-// 核心差异：type 固定为 60 (TokenFactoryOpen)，apiKey 为新生成的令牌 key（sk-前缀），
-// apiBaseUrl 为本平台 ServerAddress，同时为每个渠道创建独立令牌并限定模型范围。
+// 核心差异：type 固定为 60 (TokenFactoryOpen)，apiKey 置空（由导入方在导入时指定建站密钥），
+// apiBaseUrl 为本平台 ServerAddress，otherInfo 中标记来源和路由信息。
 func buildSiteBuilderExportItem(c *gin.Context, ch *model.Channel, fields map[string]bool) map[string]interface{} {
 	item := buildChannelExportItem(ch, fields)
 
@@ -247,54 +233,9 @@ func buildSiteBuilderExportItem(c *gin.Context, ch *model.Channel, fields map[st
 	// 确保字段集合中包含 apiBaseUrl，即使原先未勾选
 	fields[chFieldApiBaseUrl] = true
 
-	// 为该渠道生成独立令牌，限定模型范围
-	channelModels := ch.GetModels()
-	modelLimits := strings.Join(channelModels, ",")
-	tokenName := fmt.Sprintf("建站导出-%s", ch.Name)
-
-	key, err := common.GenerateKey()
-	if err != nil {
-		common.SysError("建站用户导出: 生成令牌密钥失败: " + err.Error())
-		item["__export_failed__"] = true
-		return item
-	}
-
-	userId := c.GetInt("id")
-	if userId == 0 {
-		// 管理员接口应该有用户 ID，兜底使用 1
-		userId = 1
-	}
-
-	newToken := &model.Token{
-		UserId:             userId,
-		Name:               tokenName,
-		Key:                key,
-		Status:             common.TokenStatusEnabled,
-		CreatedTime:        common.GetTimestamp(),
-		AccessedTime:       common.GetTimestamp(),
-		ExpiredTime:        -1,
-		UnlimitedQuota:     true,
-		ModelLimitsEnabled: len(channelModels) > 0,
-		ModelLimits:        modelLimits,
-		Group:              ch.Group,
-	}
-	if err := newToken.Insert(); err != nil {
-		common.SysError(fmt.Sprintf("建站用户导出: 创建令牌失败 (渠道 %s): %v", ch.Name, err))
-		item["__export_failed__"] = true
-		return item
-	}
-	// 验证令牌已成功写入数据库
-	insertedToken, verifyErr := model.GetTokenByKey(key, true)
-	if verifyErr != nil {
-		common.SysError(fmt.Sprintf("建站用户导出: 令牌写入后验证失败 (渠道 %s, key前缀: sk-%s...): %v", ch.Name, key[:min(8, len(key))], verifyErr))
-	} else if insertedToken.Status != common.TokenStatusEnabled {
-		common.SysError(fmt.Sprintf("建站用户导出: 令牌状态异常 (渠道 %s, key前缀: sk-%s..., status=%d, expected=%d)", ch.Name, key[:min(8, len(key))], insertedToken.Status, common.TokenStatusEnabled))
-	} else {
-		common.SysLog(fmt.Sprintf("建站用户导出: 令牌创建成功并已验证 (渠道 %s, 令牌ID=%d, key前缀: sk-%s..., 模型: %s, 分组: %s, ServerAddress: %s)", ch.Name, insertedToken.Id, key[:min(8, len(key))], modelLimits, ch.Group, serverAddr))
-	}
-
-	// 覆盖 apiKey 为新令牌的 key（带 sk- 前缀，与 TokenFactoryOpen 导入格式一致）
-	item[chFieldApiKey] = "sk-" + key
+	// 建站模式下 apiKey 置空，由导入方通过 site_builder_api_key 参数统一指定密钥。
+	// 导入时：若渠道 type=60 且 apiKey 为空，则使用导入请求中的 site_builder_api_key。
+	item[chFieldApiKey] = ""
 	// 确保字段集合中包含 apiKey
 	fields[chFieldApiKey] = true
 
@@ -365,7 +306,7 @@ func ImportChannels(c *gin.Context) {
 
 		if existing != nil {
 			// 同名渠道已存在：仅更新 JSON 中存在的字段，不清空其他字段
-			if err := chApplyToExisting(existing, item); err != nil {
+			if err := chApplyToExisting(existing, item, req.SiteBuilderApiKey); err != nil {
 				result.Failed++
 				result.Failures = append(result.Failures, ChannelImportFailure{Name: name, Reason: "更新失败: " + err.Error()})
 				continue
@@ -374,7 +315,7 @@ func ImportChannels(c *gin.Context) {
 		} else {
 			// 不存在同名渠道：新增
 			newCh := &model.Channel{}
-			if err := chApplyToNew(newCh, item); err != nil {
+			if err := chApplyToNew(newCh, item, req.SiteBuilderApiKey); err != nil {
 				result.Failed++
 				result.Failures = append(result.Failures, ChannelImportFailure{Name: name, Reason: "构建新增数据失败: " + err.Error()})
 				continue
@@ -455,7 +396,8 @@ func chValidateItem(item map[string]interface{}) error {
 
 // chApplyToExisting 将导入数据应用到已存在的渠道（精确更新，仅更新 JSON 中存在的字段）。
 // 通过 GORM Select+Updates 确保只写入指定列，不影响其他列。
-func chApplyToExisting(ch *model.Channel, item map[string]interface{}) error {
+// siteBuilderApiKey: 建站模式统一密钥，当渠道 type=60 且 apiKey 为空时使用此值。
+func chApplyToExisting(ch *model.Channel, item map[string]interface{}, siteBuilderApiKey string) error {
 	cols := make([]string, 0, len(item))
 	updates := &model.Channel{}
 
@@ -492,6 +434,18 @@ func chApplyToExisting(ch *model.Channel, item map[string]interface{}) error {
 	}
 	if v, ok := item["apiKey"]; ok {
 		if s, ok := v.(string); ok {
+			// 建站模式：当 apiKey 为空且渠道 type=60 时，使用导入请求中的统一密钥
+			if strings.TrimSpace(s) == "" && siteBuilderApiKey != "" {
+				channelType := 0
+				if t, ok := item["type"]; ok {
+					channelType = int(chToFloat64(t))
+				} else {
+					channelType = ch.Type
+				}
+				if channelType == constant.ChannelTypeTokenFactoryOpen {
+					s = strings.TrimSpace(siteBuilderApiKey)
+				}
+			}
 			updates.Key = s
 			cols = append(cols, "key")
 		}
@@ -575,7 +529,8 @@ func chApplyToExisting(ch *model.Channel, item map[string]interface{}) error {
 }
 
 // chApplyToNew 将导入数据写入新渠道对象，用于新增场景。
-func chApplyToNew(ch *model.Channel, item map[string]interface{}) error {
+// siteBuilderApiKey: 建站模式统一密钥，当渠道 type=60 且 apiKey 为空时使用此值。
+func chApplyToNew(ch *model.Channel, item map[string]interface{}, siteBuilderApiKey string) error {
 	name, ok := chGetStr(item, "name")
 	if !ok || strings.TrimSpace(name) == "" {
 		return fmt.Errorf("name 字段缺失")
@@ -617,6 +572,12 @@ func chApplyToNew(ch *model.Channel, item map[string]interface{}) error {
 	}
 	if v, ok := item["apiKey"]; ok {
 		if s, ok := v.(string); ok {
+			// 建站模式：当 apiKey 为空且渠道 type=60 时，使用导入请求中的统一密钥
+			if strings.TrimSpace(s) == "" && siteBuilderApiKey != "" {
+				if ch.Type == constant.ChannelTypeTokenFactoryOpen {
+					s = strings.TrimSpace(siteBuilderApiKey)
+				}
+			}
 			ch.Key = s
 		}
 	}
