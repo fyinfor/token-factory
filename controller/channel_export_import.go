@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 )
 
@@ -29,6 +31,7 @@ const (
 	chFieldModels        = "models"
 	chFieldGroups        = "groups"
 	chFieldModelRedirect = "modelRedirect"
+	chFieldOtherInfo     = "otherInfo"
 )
 
 // chAllowedExportFields 允许导出的合法字段集合，防止非法字段注入。
@@ -38,6 +41,7 @@ var chAllowedExportFields = map[string]bool{
 	chFieldSupplierName: true, chFieldType: true, chFieldLogo: true,
 	chFieldProviderType: true, chFieldApiKey: true, chFieldApiBaseUrl: true,
 	chFieldModels: true, chFieldGroups: true, chFieldModelRedirect: true,
+	chFieldOtherInfo: true,
 }
 
 // ─── DTO 定义 ──────────────────────────────────────────────────────────────────
@@ -46,6 +50,7 @@ var chAllowedExportFields = map[string]bool{
 type ChannelExportRequest struct {
 	ChannelIDs []int    `json:"channel_ids"` // 需要导出的渠道 ID 列表
 	Fields     []string `json:"fields"`      // 用户选择的字段列表
+	Mode       string   `json:"mode"`        // 导出模式: "standard"(默认) | "site_builder"(建站用户导出)
 }
 
 // ChannelExportPayload 导出响应的数据结构（可直接用于后续导入）。
@@ -57,9 +62,10 @@ type ChannelExportPayload struct {
 
 // ChannelImportRequest 导入请求结构（与导出结构兼容）。
 type ChannelImportRequest struct {
-	Version    string                   `json:"version"`
-	ExportTime string                   `json:"exportTime"`
-	Channels   []map[string]interface{} `json:"channels"`
+	Version           string                   `json:"version"`
+	ExportTime        string                   `json:"exportTime"`
+	Channels          []map[string]interface{} `json:"channels"`
+	SiteBuilderApiKey string                   `json:"site_builder_api_key,omitempty"` // 建站模式统一密钥，导入 type=60 渠道时若 apiKey 为空则原样写入渠道 Key
 }
 
 // ChannelImportResult 导入操作的结果统计。
@@ -80,6 +86,9 @@ type ChannelImportFailure struct {
 
 // ExportChannels 按渠道 ID 列表导出指定字段。
 // POST /api/channel/export
+// mode=standard (默认): 原样导出渠道数据
+// mode=site_builder: 建站用户导出，type 强制为 60，apiKey 置空（由导入方指定建站密钥），
+// apiBaseUrl 为本平台 ServerAddress，otherInfo 中标记来源与路由信息。
 func ExportChannels(c *gin.Context) {
 	var req ChannelExportRequest
 	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
@@ -111,9 +120,15 @@ func ExportChannels(c *gin.Context) {
 		return
 	}
 
+	isSiteBuilder := req.Mode == "site_builder"
+
 	items := make([]map[string]interface{}, 0, len(channels))
 	for _, ch := range channels {
-		items = append(items, buildChannelExportItem(ch, fieldSet))
+		if isSiteBuilder {
+			items = append(items, buildSiteBuilderExportItem(c, ch, fieldSet))
+		} else {
+			items = append(items, buildChannelExportItem(ch, fieldSet))
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -183,11 +198,69 @@ func buildChannelExportItem(ch *model.Channel, fields map[string]bool) map[strin
 		}
 		item[chFieldModelRedirect] = redirect
 	}
+	if fields[chFieldOtherInfo] {
+		otherInfo := ch.GetOtherInfo()
+		if len(otherInfo) > 0 {
+			item[chFieldOtherInfo] = otherInfo
+		}
+	}
 
 	return item
 }
 
-// ─── 导入接口 ─────────────────────────────────────────────────────────────────
+// buildSiteBuilderExportItem 构建建站用户导出项。
+// 核心差异：type 固定为 60 (TokenFactoryOpen)，apiKey 置空（由导入方在导入时指定建站密钥），
+// apiBaseUrl 为本平台 ServerAddress，otherInfo 中标记来源和路由信息。
+func buildSiteBuilderExportItem(c *gin.Context, ch *model.Channel, fields map[string]bool) map[string]interface{} {
+	item := buildChannelExportItem(ch, fields)
+
+	// 强制覆盖 type = 60 (TokenFactoryOpen)
+	if fields[chFieldType] {
+		item[chFieldType] = constant.ChannelTypeTokenFactoryOpen
+	}
+
+	// 强制覆盖 apiBaseUrl 为本平台 ServerAddress
+	serverAddr := strings.TrimRight(system_setting.ServerAddress, "/")
+	if serverAddr == "" {
+		// fallback: 从请求中推导
+		scheme := "http"
+		if c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https" {
+			scheme = "https"
+		}
+		serverAddr = fmt.Sprintf("%s://%s", scheme, c.Request.Host)
+	}
+	item[chFieldApiBaseUrl] = serverAddr
+	// 确保字段集合中包含 apiBaseUrl，即使原先未勾选
+	fields[chFieldApiBaseUrl] = true
+
+	// 建站模式下 apiKey 置空，由导入方通过 site_builder_api_key 参数统一指定密钥。
+	// 导入时：若渠道 type=60 且 apiKey 为空，则使用导入请求中的 site_builder_api_key。
+	item[chFieldApiKey] = ""
+	// 确保字段集合中包含 apiKey
+	fields[chFieldApiKey] = true
+
+	// 对于建站导出，在 otherInfo 中标记来源为 tokenfactory_open，
+	// 并保留上游路由信息（route_slug 等），以便导入方可正确路由请求到上游渠道。
+	otherInfo := ch.GetOtherInfo()
+	if otherInfo == nil {
+		otherInfo = make(map[string]interface{})
+	}
+	otherInfo["source"] = "tokenfactory_open"
+	// 保留原渠道的 route_slug 作为 upstream_route_slug
+	if ch.RouteSlug != "" {
+		otherInfo["upstream_route_slug"] = ch.RouteSlug
+	}
+	// 保留原渠道的 supplier 信息
+	if ch.SupplierName != "" {
+		otherInfo["upstream_supplier_alias"] = ch.SupplierName
+	}
+	item[chFieldOtherInfo] = otherInfo
+	fields[chFieldOtherInfo] = true
+
+	return item
+}
+
+// ─── 导入接口 ──────────────────────────────────────────────────────────────
 
 // ImportChannels 按名称匹配导入渠道配置。
 // 核心规则：仅通过 name 匹配；同名则更新（仅更新 JSON 中存在的字段）；不存在则新增；
@@ -233,7 +306,7 @@ func ImportChannels(c *gin.Context) {
 
 		if existing != nil {
 			// 同名渠道已存在：仅更新 JSON 中存在的字段，不清空其他字段
-			if err := chApplyToExisting(existing, item); err != nil {
+			if err := chApplyToExisting(existing, item, req.SiteBuilderApiKey); err != nil {
 				result.Failed++
 				result.Failures = append(result.Failures, ChannelImportFailure{Name: name, Reason: "更新失败: " + err.Error()})
 				continue
@@ -242,7 +315,7 @@ func ImportChannels(c *gin.Context) {
 		} else {
 			// 不存在同名渠道：新增
 			newCh := &model.Channel{}
-			if err := chApplyToNew(newCh, item); err != nil {
+			if err := chApplyToNew(newCh, item, req.SiteBuilderApiKey); err != nil {
 				result.Failed++
 				result.Failures = append(result.Failures, ChannelImportFailure{Name: name, Reason: "构建新增数据失败: " + err.Error()})
 				continue
@@ -313,12 +386,18 @@ func chValidateItem(item map[string]interface{}) error {
 			return fmt.Errorf("modelRedirect 字段必须为对象")
 		}
 	}
+	if v, ok := item["otherInfo"]; ok && v != nil {
+		if _, ok := v.(map[string]interface{}); !ok {
+			return fmt.Errorf("otherInfo 字段必须为对象")
+		}
+	}
 	return nil
 }
 
 // chApplyToExisting 将导入数据应用到已存在的渠道（精确更新，仅更新 JSON 中存在的字段）。
 // 通过 GORM Select+Updates 确保只写入指定列，不影响其他列。
-func chApplyToExisting(ch *model.Channel, item map[string]interface{}) error {
+// siteBuilderApiKey: 建站模式统一密钥，当渠道 type=60 且 apiKey 为空时使用此值。
+func chApplyToExisting(ch *model.Channel, item map[string]interface{}, siteBuilderApiKey string) error {
 	cols := make([]string, 0, len(item))
 	updates := &model.Channel{}
 
@@ -355,6 +434,18 @@ func chApplyToExisting(ch *model.Channel, item map[string]interface{}) error {
 	}
 	if v, ok := item["apiKey"]; ok {
 		if s, ok := v.(string); ok {
+			// 建站模式：当 apiKey 为空且渠道 type=60 时，使用导入请求中的统一密钥
+			if strings.TrimSpace(s) == "" && siteBuilderApiKey != "" {
+				channelType := 0
+				if t, ok := item["type"]; ok {
+					channelType = int(chToFloat64(t))
+				} else {
+					channelType = ch.Type
+				}
+				if channelType == constant.ChannelTypeTokenFactoryOpen {
+					s = strings.TrimSpace(siteBuilderApiKey)
+				}
+			}
 			updates.Key = s
 			cols = append(cols, "key")
 		}
@@ -416,6 +507,17 @@ func chApplyToExisting(ch *model.Channel, item map[string]interface{}) error {
 			cols = append(cols, "route_slug")
 		}
 	}
+	if v, ok := item["otherInfo"]; ok {
+		if m, ok := v.(map[string]interface{}); ok {
+			b, err := common.Marshal(m)
+			if err != nil {
+				return fmt.Errorf("序列化 otherInfo 失败: %w", err)
+			}
+			s := string(b)
+			updates.OtherInfo = s
+			cols = append(cols, "other_info")
+		}
+	}
 
 	if len(cols) == 0 {
 		// 没有可更新的字段，直接跳过（不报错）
@@ -427,7 +529,8 @@ func chApplyToExisting(ch *model.Channel, item map[string]interface{}) error {
 }
 
 // chApplyToNew 将导入数据写入新渠道对象，用于新增场景。
-func chApplyToNew(ch *model.Channel, item map[string]interface{}) error {
+// siteBuilderApiKey: 建站模式统一密钥，当渠道 type=60 且 apiKey 为空时使用此值。
+func chApplyToNew(ch *model.Channel, item map[string]interface{}, siteBuilderApiKey string) error {
 	name, ok := chGetStr(item, "name")
 	if !ok || strings.TrimSpace(name) == "" {
 		return fmt.Errorf("name 字段缺失")
@@ -469,6 +572,12 @@ func chApplyToNew(ch *model.Channel, item map[string]interface{}) error {
 	}
 	if v, ok := item["apiKey"]; ok {
 		if s, ok := v.(string); ok {
+			// 建站模式：当 apiKey 为空且渠道 type=60 时，使用导入请求中的统一密钥
+			if strings.TrimSpace(s) == "" && siteBuilderApiKey != "" {
+				if ch.Type == constant.ChannelTypeTokenFactoryOpen {
+					s = strings.TrimSpace(siteBuilderApiKey)
+				}
+			}
 			ch.Key = s
 		}
 	}
@@ -515,6 +624,15 @@ func chApplyToNew(ch *model.Channel, item map[string]interface{}) error {
 			}
 			s := string(b)
 			ch.ModelMapping = &s
+		}
+	}
+	if v, ok := item["otherInfo"]; ok {
+		if m, ok := v.(map[string]interface{}); ok {
+			b, err := common.Marshal(m)
+			if err != nil {
+				return fmt.Errorf("序列化 otherInfo 失败: %w", err)
+			}
+			ch.OtherInfo = string(b)
 		}
 	}
 

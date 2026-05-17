@@ -39,6 +39,7 @@ import {
   IconDelete,
   IconHelpCircle,
   IconPlus,
+  IconRefresh,
   IconSave,
   IconSearch,
 } from '@douyinfe/semi-icons';
@@ -358,6 +359,7 @@ export default function ModelPricingEditor({
     currentPage,
     setCurrentPage,
     loading,
+    pendingDeleteModelNames,
     filteredModels,
     pagedData,
     selectedWarnings,
@@ -379,8 +381,8 @@ export default function ModelPricingEditor({
     applyTierTemplate,
     handleSubmit,
     addModel,
-    deleteModel,
-    deleteModelAndSave,
+    markModelForDelete,
+    restorePendingDelete,
     applySelectedModelPricing,
   } = useModelPricingEditorState({
     options,
@@ -554,6 +556,11 @@ export default function ModelPricingEditor({
             >
               {text}
             </Button>
+            {pendingDeleteModelNames.includes(record.name) ? (
+              <Tag color='red' shape='circle'>
+                {t('待删除')}
+              </Tag>
+            ) : null}
             {Array.isArray(selectedModelNames) &&
             record?.name &&
             selectedModelNames.includes(record.name) ? (
@@ -585,23 +592,28 @@ export default function ModelPricingEditor({
         render: (_, record) => (
           <Space>
             {allowDeleteModel ? (
-              <Button
-                size='small'
-                type='danger'
-                icon={<IconDelete />}
-                onClick={() => {
-                  Modal.confirm({
-                    title: t('确认删除模型'),
-                    content: t(
-                      '确定从当前列表中移除该模型吗？确认后将立即保存到服务器，与「应用更改」相同。',
-                    ),
-                    okType: 'danger',
-                    okText: t('确定'),
-                    cancelText: t('取消'),
-                    onOk: () => deleteModelAndSave(record.name),
-                  });
-                }}
-              />
+              pendingDeleteModelNames.includes(record.name) ? (
+                <Button
+                  size='small'
+                  icon={<IconRefresh />}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    restorePendingDelete(record.name);
+                  }}
+                >
+                  {t('恢复')}
+                </Button>
+              ) : (
+                <Button
+                  size='small'
+                  type='danger'
+                  icon={<IconDelete />}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    markModelForDelete(record.name);
+                  }}
+                />
+              )
             ) : null}
           </Space>
         ),
@@ -609,7 +621,9 @@ export default function ModelPricingEditor({
     ],
     [
       allowDeleteModel,
-      deleteModelAndSave,
+      markModelForDelete,
+      pendingDeleteModelNames,
+      restorePendingDelete,
       selectedModelName,
       selectedModelNames,
       setSelectedModelName,
@@ -724,22 +738,33 @@ export default function ModelPricingEditor({
                     {emptyTitle || t('暂无模型')}
                   </div>
                 }
-                onRow={(record) => ({
-                  style: {
-                    background: selectedModelNames.includes(record.name)
-                      ? 'var(--semi-color-success-light-default)'
-                      : record.name === selectedModelName
-                        ? 'var(--semi-color-primary-light-default)'
-                        : undefined,
-                    boxShadow: selectedModelNames.includes(record.name)
-                      ? 'inset 4px 0 0 var(--semi-color-success)'
-                      : record.name === selectedModelName
-                        ? 'inset 4px 0 0 var(--semi-color-primary)'
-                        : undefined,
-                    transition: 'background 0.2s ease, box-shadow 0.2s ease',
-                  },
-                  onClick: () => setSelectedModelName(record.name),
-                })}
+                onRow={(record) => {
+                  const isPendingDelete = pendingDeleteModelNames.includes(
+                    record.name,
+                  );
+                  return {
+                    style: {
+                      background: isPendingDelete
+                        ? 'var(--semi-color-danger-light-default)'
+                        : selectedModelNames.includes(record.name)
+                          ? 'var(--semi-color-success-light-default)'
+                          : record.name === selectedModelName
+                            ? 'var(--semi-color-primary-light-default)'
+                            : undefined,
+                      boxShadow: isPendingDelete
+                        ? 'inset 4px 0 0 var(--semi-color-danger)'
+                        : selectedModelNames.includes(record.name)
+                          ? 'inset 4px 0 0 var(--semi-color-success)'
+                          : record.name === selectedModelName
+                            ? 'inset 4px 0 0 var(--semi-color-primary)'
+                            : undefined,
+                      opacity: isPendingDelete ? 0.72 : undefined,
+                      transition:
+                        'background 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease',
+                    },
+                    onClick: () => setSelectedModelName(record.name),
+                  };
+                }}
                 scroll={isMobile ? { x: 720 } : undefined}
               />
             </div>

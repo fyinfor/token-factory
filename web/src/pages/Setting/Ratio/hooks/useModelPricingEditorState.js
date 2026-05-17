@@ -1641,6 +1641,8 @@ export function useModelPricingEditorState({
     const [searchText, setSearchText] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [loading, setLoading] = useState(false);
+    /** 待删除模型名；应用更改前仅标色展示，可恢复 */
+    const [pendingDeleteModelNames, setPendingDeleteModelNames] = useState([]);
     const [optionalFieldToggles, setOptionalFieldToggles] = useState({});
     const resolvedOptionKeys = useMemo(
         () => ({
@@ -1727,7 +1729,6 @@ export function useModelPricingEditorState({
                 ...Object.keys(sourceMaps.ModelPrice),
                 ...Object.keys(sourceMaps.ModelRatio),
                 ...Object.keys(sourceMaps.CompletionRatio),
-                ...Object.keys(sourceMaps.CompletionRatioMeta),
                 ...Object.keys(sourceMaps.CacheRatio),
                 ...Object.keys(sourceMaps.CreateCacheRatio),
                 ...Object.keys(sourceMaps.ImageRatio),
@@ -1771,6 +1772,7 @@ export function useModelPricingEditorState({
                     : nextModels;
             return nextVisibleModels[0]?.name || '';
         });
+        setPendingDeleteModelNames([]);
     }, [
         candidateModelNames,
         defaultVideoPriceUnit,
@@ -2171,20 +2173,46 @@ export function useModelPricingEditorState({
         return true;
     };
 
-    const deleteModel = (name) => {
-        const nextModels = models.filter((model) => model.name !== name);
-        setModels(nextModels);
-        setOptionalFieldToggles((prev) => {
-            const next = { ...prev };
-            delete next[name];
-            return next;
-        });
+    const markModelForDelete = (name) => {
+        setPendingDeleteModelNames((previous) =>
+            previous.includes(name) ? previous : [...previous, name],
+        );
         setSelectedModelNames((previous) =>
             previous.filter((item) => item !== name),
         );
-        if (selectedModelName === name) {
-            setSelectedModelName(nextModels[0]?.name || '');
+    };
+
+    const restorePendingDelete = (name) => {
+        setPendingDeleteModelNames((previous) =>
+            previous.filter((item) => item !== name),
+        );
+    };
+
+    const removeDeletedModelsFromState = (names) => {
+        if (!names?.length) {
+            return;
         }
+        const nameSet = new Set(names);
+        setModels((previous) => {
+            const next = previous.filter((model) => !nameSet.has(model.name));
+            setSelectedModelName((selected) => {
+                if (!nameSet.has(selected)) {
+                    return selected;
+                }
+                return next[0]?.name || '';
+            });
+            return next;
+        });
+        setOptionalFieldToggles((prev) => {
+            const next = { ...prev };
+            names.forEach((modelName) => {
+                delete next[modelName];
+            });
+            return next;
+        });
+        setSelectedModelNames((previous) =>
+            previous.filter((item) => !nameSet.has(item)),
+        );
     };
 
     const applySelectedModelPricing = () => {
@@ -2342,36 +2370,16 @@ export function useModelPricingEditorState({
     const handleSubmit = async () => {
         setLoading(true);
         try {
-            const output = buildPricingOutputFromModels(models);
-            await persistPricingOutput(output);
-            showSuccess(t('保存成功'));
-        } catch (error) {
-            console.error('保存失败:', error);
-            showError(error.message || t('保存失败，请重试'));
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    /** 删除单行并立即执行与「应用更改」相同的持久化逻辑；失败时保持本地状态不变。 */
-    const deleteModelAndSave = async (name) => {
-        const nextModels = models.filter((model) => model.name !== name);
-        setLoading(true);
-        try {
-            const output = buildPricingOutputFromModels(nextModels);
-            await persistPricingOutput(output);
-            setModels(nextModels);
-            setOptionalFieldToggles((prev) => {
-                const next = { ...prev };
-                delete next[name];
-                return next;
-            });
-            setSelectedModelNames((previous) =>
-                previous.filter((item) => item !== name),
+            const deletedNames = [...pendingDeleteModelNames];
+            const modelsToSave = models.filter(
+                (model) => !deletedNames.includes(model.name),
             );
-            if (selectedModelName === name) {
-                setSelectedModelName(nextModels[0]?.name || '');
+            const output = buildPricingOutputFromModels(modelsToSave);
+            await persistPricingOutput(output);
+            if (deletedNames.length > 0) {
+                removeDeletedModelsFromState(deletedNames);
             }
+            setPendingDeleteModelNames([]);
             showSuccess(t('保存成功'));
         } catch (error) {
             console.error('保存失败:', error);
@@ -2490,6 +2498,7 @@ export function useModelPricingEditorState({
         currentPage,
         setCurrentPage,
         loading,
+        pendingDeleteModelNames,
         filteredModels,
         pagedData,
         selectedWarnings,
@@ -2511,8 +2520,8 @@ export function useModelPricingEditorState({
         applyTierTemplate,
         handleSubmit,
         addModel,
-        deleteModel,
-        deleteModelAndSave,
+        markModelForDelete,
+        restorePendingDelete,
         applySelectedModelPricing,
     };
 }

@@ -12,14 +12,13 @@ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 GNU Affero General Public License for more details.
 
 You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
+along with this program. If not, see <https://www.gnu.org/licenses/gpl-3.0.html>.
 */
 
 import React, { useRef, useState } from 'react';
 import {
   Button,
+  Input,
   Modal,
   Space,
   Spin,
@@ -32,8 +31,13 @@ import { API, showError, showSuccess } from '../../../../helpers';
 
 const { Text, Title } = Typography;
 
+/** TokenFactoryOpen (type=60) 渠道类型常量 */
+const CHANNEL_TYPE_TOKEN_FACTORY_OPEN = 60;
+
 /**
  * ChannelImportModal 渠道导入入口 + 结果展示。
+ * 支持建站模式：当导入数据中包含 type=60 且 apiKey 为空的渠道时，
+ * 需要用户填写关联密钥（作为渠道 apiKey）。
  * @param {{ refresh: () => void }} props
  */
 export default function ChannelImportModal({ refresh }) {
@@ -43,6 +47,22 @@ export default function ChannelImportModal({ refresh }) {
   const [importing, setImporting] = useState(false);
   const [resultVisible, setResultVisible] = useState(false);
   const [importResult, setImportResult] = useState(null);
+
+  // 建站模式相关状态
+  const [parsedData, setParsedData] = useState(null);
+  const [siteBuilderApiKey, setSiteBuilderApiKey] = useState('');
+  const [needsSiteBuilderKey, setNeedsSiteBuilderKey] = useState(false);
+  const [confirmVisible, setConfirmVisible] = useState(false);
+
+  /** 检测导入数据是否包含需要建站密钥的渠道（type=60 且 apiKey 为空） */
+  const checkNeedsSiteBuilderKey = (data) => {
+    if (!Array.isArray(data?.channels)) return false;
+    return data.channels.some(
+      (ch) =>
+        ch.type === CHANNEL_TYPE_TOKEN_FACTORY_OPEN &&
+        (!ch.apiKey || String(ch.apiKey).trim() === '')
+    );
+  };
 
   /** 触发文件选择器 */
   const handleImportClick = () => {
@@ -86,9 +106,27 @@ export default function ChannelImportModal({ refresh }) {
       return;
     }
 
+    // 检测是否包含建站渠道（type=60 且 apiKey 为空）
+    if (checkNeedsSiteBuilderKey(parsed)) {
+      setParsedData(parsed);
+      setNeedsSiteBuilderKey(true);
+      setConfirmVisible(true);
+      return;
+    }
+
+    // 普通导入：直接提交
+    await doImport(parsed);
+  };
+
+  /** 执行导入请求 */
+  const doImport = async (data, siteBuilderKey = '') => {
     setImporting(true);
     try {
-      const res = await API.post('/api/channel/import', parsed);
+      const payload = { ...data };
+      if (siteBuilderKey && siteBuilderKey.trim()) {
+        payload.site_builder_api_key = siteBuilderKey.trim();
+      }
+      const res = await API.post('/api/channel/import', payload);
       if (!res?.data?.success) {
         showError(res?.data?.message || t('导入失败'));
         return;
@@ -104,7 +142,30 @@ export default function ChannelImportModal({ refresh }) {
       showError(err?.message || t('导入失败'));
     } finally {
       setImporting(false);
+      // 清理建站相关状态
+      setParsedData(null);
+      setNeedsSiteBuilderKey(false);
+      setConfirmVisible(false);
+      setSiteBuilderApiKey('');
     }
+  };
+
+  /** 确认导入（建站模式，用户已填写密钥） */
+  const handleConfirmImport = () => {
+    if (needsSiteBuilderKey && !siteBuilderApiKey.trim()) {
+      showError(t('请输入关联密钥'));
+      return;
+    }
+    setConfirmVisible(false);
+    doImport(parsedData, siteBuilderApiKey);
+  };
+
+  /** 取消建站模式确认 */
+  const handleCancelConfirm = () => {
+    setConfirmVisible(false);
+    setParsedData(null);
+    setNeedsSiteBuilderKey(false);
+    setSiteBuilderApiKey('');
   };
 
   /** 渲染导入结果弹窗内容 */
@@ -174,6 +235,13 @@ export default function ChannelImportModal({ refresh }) {
     );
   };
 
+  /** 计算建站渠道数量（type=60 且 apiKey 为空） */
+  const siteBuilderChannelCount = parsedData?.channels?.filter(
+    (ch) =>
+      ch.type === CHANNEL_TYPE_TOKEN_FACTORY_OPEN &&
+      (!ch.apiKey || String(ch.apiKey).trim() === '')
+  ).length || 0;
+
   return (
     <>
       <Spin spinning={importing}>
@@ -196,6 +264,43 @@ export default function ChannelImportModal({ refresh }) {
         style={{ display: 'none' }}
         onChange={handleFileChange}
       />
+
+      {/* 建站密钥输入弹窗 */}
+      <Modal
+        title={t('建站渠道导入 - 设置密钥')}
+        visible={confirmVisible}
+        onOk={handleConfirmImport}
+        onCancel={handleCancelConfirm}
+        okText={t('确认导入')}
+        cancelText={t('取消')}
+        width={520}
+        okButtonProps={{
+          disabled: needsSiteBuilderKey && !siteBuilderApiKey.trim(),
+        }}
+      >
+        <div style={{ lineHeight: 1.8 }}>
+          <Text>
+            {t('检测到导入数据中包含 {{count}} 个建站渠道（TokenFactoryOpen 类型），请填写关联密钥后导入。', {
+              count: siteBuilderChannelCount,
+            })}
+          </Text>
+          <div style={{ marginTop: 16, marginBottom: 8 }}>
+            <Text strong>{t('关联密钥')}</Text>
+          </div>
+          <Input
+            value={siteBuilderApiKey}
+            onChange={setSiteBuilderApiKey}
+            placeholder={t('请输入渠道密钥')}
+            showClear
+            style={{ width: '100%' }}
+          />
+          <div style={{ marginTop: 8 }}>
+            <Text type='quaternary' size='small'>
+              {t('此密钥将作为所有建站渠道的 API Key，用于访问上游平台。请在目标平台的令牌管理页面创建获取。')}
+            </Text>
+          </div>
+        </div>
+      </Modal>
 
       {/* 导入结果弹窗 */}
       <Modal
