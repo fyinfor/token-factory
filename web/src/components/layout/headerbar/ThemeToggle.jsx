@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useMemo } from 'react';
-import { Button, Dropdown } from '@douyinfe/semi-ui';
+import { Dropdown } from '@douyinfe/semi-ui';
 import { Sun, Moon, Monitor } from 'lucide-react';
 import { useActualTheme } from '../../../context/Theme';
 
@@ -65,6 +65,8 @@ const ThemeToggle = ({ theme, onThemeToggle, t }) => {
   return (
     <Dropdown
       position='bottomRight'
+      trigger='click'
+      clickToHide
       render={
         <Dropdown.Menu>
           {themeOptions.map((option) => (
@@ -95,13 +97,20 @@ const ThemeToggle = ({ theme, onThemeToggle, t }) => {
         </Dropdown.Menu>
       }
     >
-      <Button
-        icon={currentButtonIcon}
+      <span
+        role='button'
+        tabIndex={0}
         aria-label={t('切换主题')}
-        theme='borderless'
-        type='tertiary'
-        className='!p-1.5 !text-current focus:!bg-semi-color-fill-1 !rounded-full !bg-semi-color-fill-0 hover:!bg-semi-color-fill-1'
-      />
+        className='inline-flex items-center justify-center p-1.5 rounded-full cursor-pointer text-current bg-semi-color-fill-0 hover:bg-semi-color-fill-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-semi-color-primary'
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            e.currentTarget.click();
+          }
+        }}
+      >
+        {currentButtonIcon}
+      </span>
     </Dropdown>
   );
 };

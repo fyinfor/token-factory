@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
@@ -19,6 +21,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+type imageResponseCaptureWriter struct {
+	gin.ResponseWriter
+	buf *bytes.Buffer
+}
+
+func (w *imageResponseCaptureWriter) Write(data []byte) (int, error) {
+	if w.buf != nil {
+		_, _ = w.buf.Write(data)
+	}
+	return w.ResponseWriter.Write(data)
+}
 
 func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (tokenFactoryError *types.TokenFactoryError) {
 	info.InitChannelMeta(c)
@@ -85,6 +99,13 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (tokenFactoryError
 
 	statusCodeMappingStr := c.GetString("status_code_mapping")
 
+	captureImageResponse := shouldCaptureImageResponse(info)
+	var responseCapture *bytes.Buffer
+	if captureImageResponse {
+		responseCapture = &bytes.Buffer{}
+		c.Writer = &imageResponseCaptureWriter{ResponseWriter: c.Writer, buf: responseCapture}
+	}
+
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
 		return types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
@@ -117,12 +138,12 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (tokenFactoryError
 	if request.N != nil {
 		imageN = *request.N
 	}
-
-	// n is handled via OtherRatio so it is applied exactly once in quota
-	// calculation (both price-based and ratio-based paths).
-	// Adaptors may have already set a more accurate count from the
-	// upstream response; only set the default when they haven't.
-	if _, hasN := info.PriceData.OtherRatios["n"]; !hasN {
+	if captureImageResponse && responseCapture != nil {
+		helper.FinalizeImagePerImageBilling(c, info, request, responseCapture.Bytes())
+		if n, ok := info.PriceData.OtherRatios["n"]; ok && n > 0 {
+			imageN = uint(n)
+		}
+	} else if _, hasN := info.PriceData.OtherRatios["n"]; !hasN {
 		info.PriceData.AddOtherRatio("n", float64(imageN))
 	}
 
@@ -152,4 +173,12 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (tokenFactoryError
 
 	service.PostTextConsumeQuota(c, info, usage.(*dto.Usage), logContent)
 	return nil
+}
+
+func shouldCaptureImageResponse(info *relaycommon.RelayInfo) bool {
+	if info == nil || info.ImageBilling == nil || !info.PriceData.UsePrice {
+		return false
+	}
+	return info.RelayMode == relayconstant.RelayModeImagesGenerations ||
+		info.RelayMode == relayconstant.RelayModeImagesEdits
 }

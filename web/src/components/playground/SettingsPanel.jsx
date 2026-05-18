@@ -30,7 +30,8 @@ import {
 } from '@douyinfe/semi-ui';
 import { Sparkles, Users, ToggleLeft, X, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { renderGroupOption, selectFilter } from '../../helpers';
+import { formatVideoResolutionDisplayLabel, renderGroupOption, selectFilter } from '../../helpers';
+import { PLAYGROUND_IMAGE_SIZE_OPTIONS } from '../../constants/playground.constants';
 import ParameterControl from './ParameterControl';
 
 /**
@@ -358,16 +359,18 @@ const SettingsPanel = ({
               </Typography.Text>
               <Select
                 placeholder={t('图片尺寸')}
-                optionList={[
-                  { label: '480p (854x480)', value: '854x480' },
-                  { label: '720p (1280x720)', value: '1280x720' },
-                  { label: '1080p (1920x1080)', value: '1920x1080' },
-                  { label: '2K (2560x1440)', value: '2560x1440' },
-                ]}
+                optionList={PLAYGROUND_IMAGE_SIZE_OPTIONS}
                 value={inputs.image_size}
                 onChange={(value) => onInputChange('image_size', value)}
                 disabled={customRequestMode}
                 style={{ width: '100%' }}
+                renderSelectedItem={(option) => (
+                  <span>
+                    {option?.label ??
+                      formatVideoResolutionDisplayLabel(inputs.image_size) ??
+                      inputs.image_size}
+                  </span>
+                )}
               />
               <Typography.Text strong className='text-sm block'>
                 {t('生成图片数量')}

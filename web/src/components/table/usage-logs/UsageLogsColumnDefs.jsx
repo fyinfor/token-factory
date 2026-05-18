@@ -477,6 +477,7 @@ function getUsageLogDetailSummary(record, text, billingDisplayMode, t) {
           0,
           '',
           other?.channel_price_discount_percent ?? 100,
+          other,
         )
       : renderModelPriceSimple(
           other.model_ratio,
@@ -503,6 +504,7 @@ function getUsageLogDetailSummary(record, text, billingDisplayMode, t) {
           other?.video_input_text_tokens || 0,
           other?.billing_mode || '',
           other?.channel_price_discount_percent ?? 100,
+          other,
         ),
   };
 }

@@ -333,6 +333,9 @@ var defaultVideoCompletionRatio = map[string]float64{}
 // 视频按次价格默认值（每生成一个视频固定收费多少美元）。
 var defaultVideoPrice = map[string]float64{}
 
+// 图片生成按次价格默认值（每生成一张图片固定收费多少美元）。
+var defaultImagePrice = map[string]float64{}
+
 var modelPriceMap = types.NewRWMap[string, float64]()
 var modelRatioMap = types.NewRWMap[string, float64]()
 var completionRatioMap = types.NewRWMap[string, float64]()
@@ -357,6 +360,7 @@ func InitRatioSettings() {
 	videoRatioMap.AddAll(defaultVideoRatio)
 	videoCompletionRatioMap.AddAll(defaultVideoCompletionRatio)
 	videoPriceMap.AddAll(defaultVideoPrice)
+	imagePriceMap.AddAll(defaultImagePrice)
 }
 
 func GetModelPriceMap() map[string]float64 {
@@ -804,6 +808,35 @@ func ContainsVideoPrice(name string) bool {
 
 func GetVideoPriceCopy() map[string]float64 {
 	return videoPriceMap.ReadAll()
+}
+
+var imagePriceMap = types.NewRWMap[string, float64]()
+
+func ImagePrice2JSONString() string {
+	return imagePriceMap.MarshalJSONString()
+}
+
+func UpdateImagePriceByJSONString(jsonStr string) error {
+	return types.LoadFloat64MapFromJSONStringFlexibleWithCallback(imagePriceMap, jsonStr, InvalidateExposedDataCache)
+}
+
+// GetImagePrice 返回模型的按张图片生成价格（每生成一张图片的固定金额，美元），未配置返回 -1, false。
+func GetImagePrice(name string) (float64, bool) {
+	name = FormatMatchingModelName(name)
+	if price, ok := imagePriceMap.Get(name); ok {
+		return price, true
+	}
+	return -1, false
+}
+
+func ContainsImagePrice(name string) bool {
+	name = FormatMatchingModelName(name)
+	_, ok := imagePriceMap.Get(name)
+	return ok
+}
+
+func GetImagePriceCopy() map[string]float64 {
+	return imagePriceMap.ReadAll()
 }
 
 func GetModelRatioCopy() map[string]float64 {

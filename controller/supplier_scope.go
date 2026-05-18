@@ -21,6 +21,8 @@ var supplierEditableModelOptionKeys = map[string]struct{}{
 	"VideoCompletionRatio": {},
 	"VideoPrice":           {},
 	"VideoPricingRules":    {},
+	"ImagePrice":           {},
+	"ImagePricingRules":    {},
 }
 
 // collectSupplierOwnedModelNames 收集供应商名下渠道与模型中的模型名集合。

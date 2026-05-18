@@ -143,6 +143,14 @@ export const ERROR_MESSAGES = {
   NETWORK_ERROR: '网络连接失败或服务器无响应',
 };
 
+// 操练场图片分辨率：value 为上游 size，label 仅展示 480p / 720p 等
+export const PLAYGROUND_IMAGE_SIZE_OPTIONS = [
+  { label: '480p', value: '854x480' },
+  { label: '720p', value: '1280x720' },
+  { label: '1080p', value: '1920x1080' },
+  { label: '2K', value: '2560x1440' },
+];
+
 // ========== 存储键名 ==========
 export const STORAGE_KEYS = {
   CONFIG: 'playground_config',
