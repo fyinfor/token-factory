@@ -1054,6 +1054,14 @@ export const useLogsData = () => {
           localCountMode = t('分辨率阶梯计费');
         } else if (other?.billing_mode === 'video_per_video') {
           localCountMode = t('按视频数量计费');
+        } else if (other?.billing_mode === 'image_per_image') {
+          localCountMode = t('按张计费');
+        } else if (
+          other?.image_usd_per_image > 0 ||
+          (other?.use_price &&
+            String(other?.request_path || '').includes('/images/'))
+        ) {
+          localCountMode = t('按张计费');
         } else if (other?.admin_info?.local_count_tokens) {
           localCountMode = t('本地计费');
         } else {

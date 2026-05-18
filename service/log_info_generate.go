@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -99,6 +100,7 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	appendRequestConversionChain(relayInfo, other)
 	appendFinalRequestFormat(relayInfo, other)
 	appendBillingInfo(relayInfo, other)
+	appendImagePerImageBillingInfo(relayInfo, other)
 	appendParamOverrideInfo(relayInfo, other)
 	appendStreamStatus(relayInfo, other)
 	appendChannelPriceDiscountToConsumeOther(relayInfo, other)
@@ -190,6 +192,26 @@ func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interf
 		}
 		// Wallet quota is not deducted when billed from subscription.
 		other["wallet_quota_deducted"] = 0
+	}
+}
+
+func appendImagePerImageBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interface{}) {
+	if relayInfo == nil || other == nil || relayInfo.ImageBilling == nil || !relayInfo.PriceData.UsePrice {
+		return
+	}
+	b := relayInfo.ImageBilling
+	other["billing_mode"] = "image_per_image"
+	other["image_usd_per_image"] = b.UsdPerImage
+	if b.Count > 0 {
+		other["image_count"] = b.Count
+	} else if n, ok := relayInfo.PriceData.OtherRatios["n"]; ok && n > 0 {
+		other["image_count"] = int(n)
+	}
+	if b.Width > 0 && b.Height > 0 {
+		other["image_resolution"] = fmt.Sprintf("%dx%d", b.Width, b.Height)
+	}
+	if b.Mode != "" {
+		other["image_billing_mode"] = b.Mode
 	}
 }
 

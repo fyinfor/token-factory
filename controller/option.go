@@ -30,6 +30,9 @@ var completionRatioMetaOptionKeys = []string{
 	"VideoPrice",
 	"VideoPricingRules",
 	"ChannelVideoPricingRules",
+	"ImagePrice",
+	"ImagePricingRules",
+	"ChannelImagePricingRules",
 }
 
 func collectModelNamesFromOptionValue(raw string, modelNames map[string]struct{}) {
@@ -463,6 +466,33 @@ func UpdateOption(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
 				"message": "渠道视频规则价格设置失败: " + err.Error(),
+			})
+			return
+		}
+	case "ImagePrice":
+		err = ratio_setting.UpdateImagePriceByJSONString(option.Value.(string))
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "图片按张价格设置失败: " + err.Error(),
+			})
+			return
+		}
+	case "ImagePricingRules":
+		err = ratio_setting.UpdateImagePricingRulesByJSONString(option.Value.(string))
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "图片规则价格设置失败: " + err.Error(),
+			})
+			return
+		}
+	case "ChannelImagePricingRules":
+		err = ratio_setting.UpdateChannelImagePricingRulesByJSONString(option.Value.(string))
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "渠道图片规则价格设置失败: " + err.Error(),
 			})
 			return
 		}

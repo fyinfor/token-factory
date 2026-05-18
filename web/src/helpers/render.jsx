@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import i18next from 'i18next';
+import { formatVideoResolutionDisplayLabel } from './videoResolutionLabel';
 import { Modal, Tag, Typography, Avatar } from '@douyinfe/semi-ui';
 import { copy, showSuccess } from './utils';
 import { MOBILE_BREAKPOINT } from '../hooks/common/useIsMobile';
@@ -1485,6 +1486,210 @@ function renderBillingArticle(lines, { showReferenceNote = true } = {}) {
   );
 }
 
+function resolveImagePerImageBillingMeta(billingMeta, modelPrice, channelDiscountMult) {
+  const meta =
+    billingMeta && typeof billingMeta === 'object' ? billingMeta : {};
+  let usdPerImage = Number(meta?.image_usd_per_image);
+  if (!Number.isFinite(usdPerImage) || usdPerImage <= 0) {
+    const mp = Number(modelPrice);
+    const chMult = Number(channelDiscountMult) || 1;
+    if (Number.isFinite(mp) && mp > 0) {
+      usdPerImage = mp / chMult;
+    } else {
+      usdPerImage = 0;
+    }
+  }
+  return {
+    count: Math.max(1, Number(meta?.image_count) || 1),
+    usdPerImage,
+    resolution: String(meta?.image_resolution || '').trim(),
+  };
+}
+
+/** 每张展示价 = 基础每张价 × 有效分组/专属倍率 × 渠道折扣（与实扣一致） */
+function effectiveImagePerImageUsd(
+  usdPerImage,
+  groupRatio,
+  user_group_ratio,
+  channelPriceDiscountPercent = 100,
+) {
+  const base = Number(usdPerImage);
+  if (!Number.isFinite(base) || base <= 0) {
+    return 0;
+  }
+  const { ratio: effectiveGroupRatio } = getEffectiveRatio(
+    groupRatio,
+    user_group_ratio,
+  );
+  const chMult = normalizeChannelDiscountMultiplier(channelPriceDiscountPercent);
+  return base * (Number(effectiveGroupRatio) || 1) * chMult;
+}
+
+function resolveImagePerImageBillingDisplay(
+  billingMeta,
+  {
+    modelPrice = -1,
+    groupRatio,
+    user_group_ratio,
+    channelPriceDiscountPercent = 100,
+  } = {},
+) {
+  const { symbol, rate } = getCurrencyConfig();
+  const chMult = normalizeChannelDiscountMultiplier(channelPriceDiscountPercent);
+  const imageMeta = resolveImagePerImageBillingMeta(
+    billingMeta,
+    modelPrice,
+    chMult,
+  );
+  const perImageUsd = effectiveImagePerImageUsd(
+    imageMeta.usdPerImage,
+    groupRatio,
+    user_group_ratio,
+    channelPriceDiscountPercent,
+  );
+  const resolutionLabel =
+    formatVideoResolutionDisplayLabel(imageMeta.resolution) ||
+    imageMeta.resolution;
+  return {
+    symbol,
+    rate,
+    imageMeta,
+    perImageUsd,
+    resolutionLabel,
+    displayPrice: formatBillingDisplayPrice(perImageUsd, rate),
+    totalDisplayPrice: formatBillingDisplayPrice(
+      perImageUsd * imageMeta.count,
+      rate,
+    ),
+  };
+}
+
+function formatImagePerImageBillingBrief(
+  billingMeta,
+  {
+    modelPrice = -1,
+    groupRatio,
+    user_group_ratio,
+    channelPriceDiscountPercent = 100,
+    includeResolution = true,
+    t = i18next.t.bind(i18next),
+  } = {},
+) {
+  const tr = typeof t === 'function' ? t : i18next.t.bind(i18next);
+  const { symbol, imageMeta, displayPrice, resolutionLabel } =
+    resolveImagePerImageBillingDisplay(billingMeta, {
+      modelPrice,
+      groupRatio,
+      user_group_ratio,
+      channelPriceDiscountPercent,
+    });
+  let text = tr('每张 {{symbol}}{{price}}，数量{{count}}', {
+    symbol,
+    price: displayPrice,
+    count: imageMeta.count,
+  });
+  if (includeResolution && resolutionLabel) {
+    text = `${text}，${resolutionLabel}`;
+  }
+  return text;
+}
+
+function buildImagePerImageBillingTagItems(
+  billingMeta,
+  {
+    modelPrice = -1,
+    groupRatio,
+    user_group_ratio,
+    channelPriceDiscountPercent = 100,
+    showTotal = false,
+    t = i18next.t.bind(i18next),
+  } = {},
+) {
+  const tr = typeof t === 'function' ? t : i18next.t.bind(i18next);
+  const { symbol, imageMeta, displayPrice, totalDisplayPrice, resolutionLabel } =
+    resolveImagePerImageBillingDisplay(billingMeta, {
+      modelPrice,
+      groupRatio,
+      user_group_ratio,
+      channelPriceDiscountPercent,
+    });
+  const items = [
+    {
+      key: 'brief',
+      color: 'green',
+      label: tr('每张 {{symbol}}{{price}}，数量{{count}}', {
+        symbol,
+        price: displayPrice,
+        count: imageMeta.count,
+      }),
+    },
+  ];
+  if (resolutionLabel) {
+    items.push({
+      key: 'resolution',
+      color: 'cyan',
+      label: resolutionLabel,
+    });
+  }
+  if (showTotal) {
+    items.push({
+      key: 'total',
+      color: 'red',
+      label: buildBillingText('合计 {{symbol}}{{price}}', {
+        symbol,
+        price: totalDisplayPrice,
+      }),
+    });
+  }
+  return items;
+}
+
+function renderImagePerImageBillingTags(
+  billingMeta,
+  options = {},
+  { showTotal = false, showReferenceNote = false } = {},
+) {
+  const items = buildImagePerImageBillingTagItems(billingMeta, {
+    ...options,
+    showTotal,
+  });
+  return (
+    <div>
+      <div className='flex flex-wrap items-center' style={{ gap: 4 }}>
+        {items.map((item) => (
+          <Tag key={item.key} color={item.color} size='small'>
+            {item.label}
+          </Tag>
+        ))}
+      </div>
+      {showReferenceNote ? (
+        <Typography.Text
+          type='tertiary'
+          size='small'
+          style={{ display: 'block', marginTop: 8 }}
+        >
+          {i18next.t('仅供参考，以实际扣费为准')}
+        </Typography.Text>
+      ) : null}
+    </div>
+  );
+}
+
+function buildImagePerImageLogSummarySegments(
+  billingMeta,
+  options = {},
+) {
+  return [
+    {
+      tone: 'secondary',
+      text: formatImagePerImageBillingBrief(billingMeta, {
+        ...options,
+        includeResolution: false,
+      }),
+    },
+  ];
+}
+
 // Shared core for simple price rendering (used by OpenAI-like and Claude-like variants)
 function renderPriceSimpleCore({
   modelRatio,
@@ -1513,6 +1718,8 @@ function renderPriceSimpleCore({
   billingMode = '',
   /** 渠道价格折扣百分数（100=无折扣） */
   channelPriceDiscountPercent = 100,
+  /** 消费日志 other（按张计费等扩展字段） */
+  billingMeta = null,
 }) {
   const { ratio: effectiveGroupRatio, label: ratioLabel } = getEffectiveRatio(
     groupRatio,
@@ -1580,6 +1787,19 @@ function renderPriceSimpleCore({
       segments.push({
         tone: 'secondary',
         text: i18next.t('按视频数量计费'),
+      });
+      if (isSystemPromptOverride) {
+        segments.push({ tone: 'primary', text: i18next.t('系统提示覆盖') });
+      }
+      return segments;
+    }
+
+    if (billingMode === 'image_per_image') {
+      const segments = buildImagePerImageLogSummarySegments(billingMeta, {
+        modelPrice,
+        groupRatio,
+        user_group_ratio,
+        channelPriceDiscountPercent,
       });
       if (isSystemPromptOverride) {
         segments.push({ tone: 'primary', text: i18next.t('系统提示覆盖') });
@@ -2577,6 +2797,15 @@ export function renderLogContent(
     return joinBillingSummary(parts);
   }
 
+  if (billingMode === 'image_per_image') {
+    return renderImagePerImageBillingTags(videoBillingDetail, {
+      modelPrice,
+      groupRatio,
+      user_group_ratio,
+      channelPriceDiscountPercent,
+    });
+  }
+
   // Video token-billing branch: shown when the backend stamped the log with
   // video_ratio + video_output_tokens metadata. Has priority over the generic
   // per-token / per-call paths because modelPrice for these calls is 0 (not -1)
@@ -2781,6 +3010,7 @@ export function renderModelPriceSimple(
   billingMode = '',
   /** 渠道价格折扣百分数（100=无折扣） */
   channelPriceDiscountPercent = 100,
+  billingMeta = null,
 ) {
   return renderPriceSimpleCore({
     modelRatio,
@@ -2806,6 +3036,7 @@ export function renderModelPriceSimple(
     videoInputTextTokens,
     billingMode,
     channelPriceDiscountPercent,
+    billingMeta,
   });
 }
 
@@ -3822,6 +4053,19 @@ export function renderConsumeBillingProcess({
     other?.channel_price_discount_percent ?? channelPriceDiscountPercent ?? 100,
   );
   const bm = other?.billing_mode;
+  if (bm === 'image_per_image') {
+    return renderImagePerImageBillingTags(
+      other,
+      {
+        modelPrice: other?.model_price,
+        groupRatio: other?.group_ratio,
+        user_group_ratio: other?.user_group_ratio,
+        channelPriceDiscountPercent: chPct,
+        t: tr,
+      },
+      { showTotal: true, showReferenceNote: true },
+    );
+  }
   if (
     bm === 'video_token' ||
     bm === 'video_per_second' ||

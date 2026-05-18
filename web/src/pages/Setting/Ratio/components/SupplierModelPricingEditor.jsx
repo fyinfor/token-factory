@@ -109,6 +109,14 @@ export default function SupplierModelPricingEditor({
     () => parseJSON(options.ChannelVideoPricingRules),
     [options.ChannelVideoPricingRules],
   );
+  const channelImagePrice = useMemo(
+    () => parseJSON(options.ChannelImagePrice),
+    [options.ChannelImagePrice],
+  );
+  const channelImagePricingRules = useMemo(
+    () => parseJSON(options.ChannelImagePricingRules),
+    [options.ChannelImagePricingRules],
+  );
   const channelModelTierRatio = useMemo(
     () => parseJSON(options.ChannelModelTierRatio),
     [options.ChannelModelTierRatio],
@@ -245,6 +253,16 @@ export default function SupplierModelPricingEditor({
           null,
           2,
         ),
+        ImagePrice: JSON.stringify(
+          channelImagePrice[activeChannelId] || {},
+          null,
+          2,
+        ),
+        ImagePricingRules: JSON.stringify(
+          channelImagePricingRules[activeChannelId] || {},
+          null,
+          2,
+        ),
         ModelTierRatio: JSON.stringify(
           channelModelTierRatio[activeChannelId] || {},
           null,
@@ -329,6 +347,16 @@ export default function SupplierModelPricingEditor({
         null,
         2,
       ),
+      ImagePrice: JSON.stringify(
+        channelImagePrice[activeChannelId] || {},
+        null,
+        2,
+      ),
+      ImagePricingRules: JSON.stringify(
+        channelImagePricingRules[activeChannelId] || {},
+        null,
+        2,
+      ),
       ModelTierRatio: JSON.stringify(
         channelModelTierRatio[activeChannelId] || {},
         null,
@@ -367,6 +395,8 @@ export default function SupplierModelPricingEditor({
     channelVideoCompletionRatio,
     channelVideoPrice,
     channelVideoPricingRules,
+    channelImagePrice,
+    channelImagePricingRules,
     channelVideoRatio,
     options,
     supplierChannelMaps,
@@ -434,6 +464,14 @@ export default function SupplierModelPricingEditor({
         [
           'ChannelVideoPricingRules',
           mergeChannelData(channelVideoPricingRules, output.VideoPricingRules),
+        ],
+        [
+          'ChannelImagePrice',
+          mergeChannelData(channelImagePrice, output.ImagePrice),
+        ],
+        [
+          'ChannelImagePricingRules',
+          mergeChannelData(channelImagePricingRules, output.ImagePricingRules),
         ],
         [
           'ChannelModelTierRatio',
@@ -544,6 +582,14 @@ export default function SupplierModelPricingEditor({
       [
         'ChannelVideoPricingRules',
         mergeChannelData(channelVideoPricingRules, output.VideoPricingRules),
+      ],
+      [
+        'ChannelImagePrice',
+        mergeChannelData(channelImagePrice, output.ImagePrice),
+      ],
+      [
+        'ChannelImagePricingRules',
+        mergeChannelData(channelImagePricingRules, output.ImagePricingRules),
       ],
       [
         'ChannelModelTierRatio',
