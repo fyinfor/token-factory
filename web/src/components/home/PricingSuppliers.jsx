@@ -112,7 +112,7 @@ const PricingSuppliers = ({
       const icon = buildSupplierIcon(logo, supplierType);
       result.push({
         value: alias,
-        label: icon ? '' : alias,
+        label: logo ? '' : alias,
         icon,
         tagCount: getCount(alias),
       });
