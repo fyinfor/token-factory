@@ -202,6 +202,11 @@ export const useModelPricingData = () => {
       };
 
       const modelUnitPrice = (m) => {
+        const imageHint = m.image_per_image_hint;
+        const imageMin = Number(imageHint?.min_usd_after_channel_discount);
+        if (Number.isFinite(imageMin) && imageMin > 0) {
+          return imageMin;
+        }
         const list = Array.isArray(m.channel_list) ? m.channel_list : [];
         const pickField = m.quota_type === 1 ? 'model_price' : 'model_ratio';
         let best = Number.POSITIVE_INFINITY;

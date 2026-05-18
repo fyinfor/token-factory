@@ -85,7 +85,8 @@ type PricingAPIItem struct {
 	Pricing
 	SupplierList      []PricingSupplierItem     `json:"supplier_list"`
 	ChannelList       []PricingChannelItem      `json:"channel_list"`
-	VideoFlatClipHint *VideoFlatClipPricingHint `json:"video_flat_clip_hint,omitempty"`
+	VideoFlatClipHint   *VideoFlatClipPricingHint   `json:"video_flat_clip_hint,omitempty"`
+	ImagePerImageHint   *ImagePerImagePricingHint   `json:"image_per_image_hint,omitempty"`
 }
 
 func resolveChannelPricingTriple(channelID int, supplierApplicationID int, modelName string) (mp, mr, cr float64) {
@@ -275,6 +276,7 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			}
 			discountMult := ChannelPriceDiscountMultiplierForPricing(ch.PriceDiscountPercent)
 			item.VideoFlatClipHint = BuildVideoFlatClipHint(ch.ChannelID, modelName, discountMult)
+			item.ImagePerImageHint = BuildImagePerImageHint(ch.ChannelID, modelName, discountMult)
 			out = append(out, item)
 		}
 	}

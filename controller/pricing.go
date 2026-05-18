@@ -98,6 +98,7 @@ func sanitizePricingData(data []model.PricingAPIItem) {
 		data[i].VideoCompletionRatio = nil
 		data[i].VideoPrice = nil
 		data[i].VideoFlatClipHint = nil
+		data[i].ImagePerImageHint = nil
 		for j := range data[i].ChannelList {
 			data[i].ChannelList[j].ModelPrice = 0
 			data[i].ChannelList[j].ModelRatio = 0
