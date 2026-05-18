@@ -21,6 +21,11 @@ import React, { useRef, useEffect, useState } from 'react';
 import { Typography, TextArea, Button, Progress, Modal } from '@douyinfe/semi-ui';
 import MarkdownRenderer from '../common/markdown/MarkdownRenderer';
 import ThinkingContent from './ThinkingContent';
+import PlaygroundGeneratedImageGallery from './PlaygroundGeneratedImageGallery';
+import {
+  resolveMessageGeneratedImages,
+  stripGeneratedImageMarkdown,
+} from '../../helpers/playgroundImageUtils';
 import { Loader2, Check, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 
@@ -181,7 +186,11 @@ const MessageContent = ({
   }
 
   const finalExtractedThinkingContent = currentExtractedThinkingContent;
-  const finalDisplayableFinalContent = currentDisplayableFinalContent;
+  const generatedImages = resolveMessageGeneratedImages(message);
+  const finalDisplayableFinalContent =
+    generatedImages.length > 0
+      ? stripGeneratedImageMarkdown(currentDisplayableFinalContent)
+      : currentDisplayableFinalContent;
 
   if (
     message.role === 'assistant' &&
@@ -260,6 +269,14 @@ const MessageContent = ({
             style={{ maxWidth: PLAYGROUND_MEDIA_MAX_WIDTH }}
           />
         </div>
+      )}
+
+      {message.role === 'assistant' && generatedImages.length > 0 && (
+        <PlaygroundGeneratedImageGallery
+          images={generatedImages}
+          onPreview={setPreviewImageUrl}
+          maxWidth={PLAYGROUND_MEDIA_MAX_WIDTH}
+        />
       )}
 
       {isEditing ? (
@@ -383,6 +400,13 @@ const MessageContent = ({
 
           if (typeof message.content === 'string') {
             if (message.role === 'assistant') {
+              if (
+                generatedImages.length > 0 &&
+                (!finalDisplayableFinalContent ||
+                  finalDisplayableFinalContent.trim() === '')
+              ) {
+                return null;
+              }
               if (
                 finalDisplayableFinalContent &&
                 finalDisplayableFinalContent.trim() !== ''

@@ -373,6 +373,10 @@ export default function ModelPricingEditor({
     updateVideoRuleRow,
     addVideoRuleRow,
     removeVideoRuleRow,
+    handleImageGenPriceUnitChange,
+    updateImageRuleRow,
+    addImageRuleRow,
+    removeImageRuleRow,
     updateModelTierRatio,
     updateCompletionTierRatio,
     updateCacheTierRatio,
@@ -521,6 +525,34 @@ export default function ModelPricingEditor({
     if (unit === 'CUSTOM') return getCurrencyConfig().symbol || '¤';
     return getCurrencyConfig().symbol || '$';
   }, [selectedModel?.videoPriceUnit, t]);
+
+  const imagePerImageBillingHint = useMemo(() => {
+    const { type } = getCurrencyConfig();
+    if (type === 'CNY') {
+      return t('图片按张价计费说明（人民币展示）');
+    }
+    if (type === 'TOKENS') {
+      return t('图片按张价计费说明（Token模式）');
+    }
+    if (type === 'CUSTOM') {
+      return t('图片按张价计费说明（自定义货币）');
+    }
+    return t('图片按张价计费说明（美元等）');
+  }, [t]);
+
+  const perImagePriceSuffix = useMemo(() => {
+    const unit = ['USD', 'CNY', 'CUSTOM'].includes(
+      selectedModel?.imageGenPriceUnit,
+    )
+      ? selectedModel.imageGenPriceUnit
+      : getCurrencyConfig().type;
+    if (unit === 'USD') return `${t('每张')}$`;
+    if (unit === 'CNY') return `${t('每张')}¥`;
+    if (unit === 'CUSTOM') {
+      return `${t('每张')}${getCurrencyConfig().symbol || '¤'}`;
+    }
+    return `${t('每张')}${getCurrencyConfig().symbol || '$'}`;
+  }, [selectedModel?.imageGenPriceUnit, t]);
 
   const flatPerVideoPriceSuffix = useMemo(() => {
     const unit = ['USD', 'CNY', 'CUSTOM'].includes(
@@ -1055,6 +1087,239 @@ export default function ModelPricingEditor({
                             : ''
                         }
                       />
+                      <div style={{ marginTop: 8 }}>
+                        <div className='mb-1 font-medium text-gray-700 flex items-center justify-between gap-3'>
+                          <span>{t('图片生成计费')}</span>
+                          <Switch
+                            size='small'
+                            checked={isOptionalFieldEnabled(
+                              selectedModel,
+                              'imageGeneration',
+                            )}
+                            onChange={(checked) =>
+                              handleOptionalFieldToggle(
+                                'imageGeneration',
+                                checked,
+                              )
+                            }
+                          />
+                        </div>
+                        {!isOptionalFieldEnabled(
+                          selectedModel,
+                          'imageGeneration',
+                        ) ? (
+                          <div className='mt-1 text-xs text-gray-500'>
+                            {t('当前未启用，需要时再打开即可。')}
+                          </div>
+                        ) : (
+                          <div
+                            style={{
+                              marginTop: 8,
+                              padding: 12,
+                              background: 'var(--semi-color-fill-1)',
+                              borderRadius: 6,
+                            }}
+                          >
+                            <div className='mb-2 text-xs text-gray-600'>
+                              {imagePerImageBillingHint}
+                            </div>
+                            <div
+                              style={{
+                                marginBottom: 12,
+                                display: 'flex',
+                                justifyContent: 'flex-end',
+                              }}
+                            >
+                              <Select
+                                value={
+                                  selectedModel.imageGenPriceUnit || 'USD'
+                                }
+                                style={{ width: 170 }}
+                                onChange={(value) =>
+                                  handleImageGenPriceUnitChange(String(value))
+                                }
+                                optionList={[
+                                  { label: 'USD ($)', value: 'USD' },
+                                  { label: 'CNY (¥)', value: 'CNY' },
+                                  {
+                                    label: `${t('自定义')} (${getCurrencyConfig().symbol || '¤'})`,
+                                    value: 'CUSTOM',
+                                  },
+                                ]}
+                              />
+                            </div>
+
+                            <div className='mb-2 font-medium text-gray-700'>
+                              {t('文生图价格')}
+                            </div>
+                            {(selectedModel.imageTextToImageRules || []).map(
+                              (row, index, arr) => (
+                                <div
+                                  key={`text-image-rule-${index}`}
+                                  style={{
+                                    ...VIDEO_RULE_CARD_STYLE,
+                                    marginBottom:
+                                      index < arr.length - 1 ? 10 : 0,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    flexWrap: 'wrap',
+                                    gap: 8,
+                                  }}
+                                >
+                                  <Select
+                                    value={row.resolution}
+                                    placeholder={t('选择分辨率')}
+                                    filter
+                                    style={{ width: 140 }}
+                                    optionList={getSelectableResolutionOptions(
+                                      selectedModel.imageTextToImageRules,
+                                      index,
+                                    )}
+                                    onChange={(value) =>
+                                      updateImageRuleRow(
+                                        'text',
+                                        index,
+                                        'resolution',
+                                        String(value || ''),
+                                      )
+                                    }
+                                  />
+                                  <Input
+                                    value={row.imagePrice}
+                                    placeholder={t('每张价格')}
+                                    suffix={perImagePriceSuffix}
+                                    style={{ width: 200 }}
+                                    onChange={(value) =>
+                                      updateImageRuleRow(
+                                        'text',
+                                        index,
+                                        'imagePrice',
+                                        value,
+                                      )
+                                    }
+                                  />
+                                  <Button
+                                    type='danger'
+                                    icon={<IconDelete />}
+                                    onClick={() =>
+                                      removeImageRuleRow('text', index)
+                                    }
+                                  />
+                                </div>
+                              ),
+                            )}
+                            <Button
+                              theme='borderless'
+                              icon={<IconPlus />}
+                              onClick={() => addImageRuleRow('text')}
+                              style={{ marginBottom: 12 }}
+                            >
+                              {t('新增文生图规则')}
+                            </Button>
+
+                            <div className='mb-2 font-medium text-gray-700'>
+                              {t('图生图价格')}
+                            </div>
+                            {(selectedModel.imageImageToImageRules || []).map(
+                              (row, index, arr) => (
+                                <div
+                                  key={`image-to-image-rule-${index}`}
+                                  style={{
+                                    ...VIDEO_RULE_CARD_STYLE,
+                                    marginBottom:
+                                      index < arr.length - 1 ? 10 : 0,
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    flexWrap: 'wrap',
+                                    gap: 8,
+                                  }}
+                                >
+                                  <Select
+                                    value={row.resolution}
+                                    placeholder={t('选择分辨率')}
+                                    filter
+                                    style={{ width: 140 }}
+                                    optionList={getSelectableResolutionOptions(
+                                      selectedModel.imageImageToImageRules,
+                                      index,
+                                    )}
+                                    onChange={(value) =>
+                                      updateImageRuleRow(
+                                        'imageToImage',
+                                        index,
+                                        'resolution',
+                                        String(value || ''),
+                                      )
+                                    }
+                                  />
+                                  <Input
+                                    value={row.imagePrice}
+                                    placeholder={t('每张价格')}
+                                    suffix={perImagePriceSuffix}
+                                    style={{ width: 200 }}
+                                    onChange={(value) =>
+                                      updateImageRuleRow(
+                                        'imageToImage',
+                                        index,
+                                        'imagePrice',
+                                        value,
+                                      )
+                                    }
+                                  />
+                                  <Button
+                                    type='danger'
+                                    icon={<IconDelete />}
+                                    onClick={() =>
+                                      removeImageRuleRow('imageToImage', index)
+                                    }
+                                  />
+                                </div>
+                              ),
+                            )}
+                            <Button
+                              theme='borderless'
+                              icon={<IconPlus />}
+                              onClick={() => addImageRuleRow('imageToImage')}
+                              style={{ marginBottom: 8 }}
+                            >
+                              {t('新增图生图规则')}
+                            </Button>
+
+                            <PriceInput
+                              label={t('相似分辨率阈值')}
+                              value={selectedModel.imageSimilarityThreshold}
+                              placeholder={t('默认 0.35')}
+                              onChange={(value) =>
+                                handleNumericFieldChange(
+                                  'imageSimilarityThreshold',
+                                  value,
+                                )
+                              }
+                              suffix={t('比例')}
+                              extraText={t(
+                                '请求分辨率与预设差异在阈值内按最近档位计费；差异过大或无分辨率时使用下方兜底每张价格。',
+                              )}
+                            />
+                            <div style={{ marginTop: 8 }}>
+                              <PriceInput
+                                label={t('无分辨率或差异过大时的每张价格')}
+                                value={selectedModel.imageGenFixedPrice}
+                                placeholder={t('输入每张图片价格')}
+                                suffix={perImagePriceSuffix}
+                                onChange={(value) =>
+                                  handleNumericFieldChange(
+                                    'imageGenFixedPrice',
+                                    value,
+                                  )
+                                }
+                                extraText={t(
+                                  '当请求未带分辨率，或与已配置档位像素差距超过阈值时，按此固定每张价格计费。',
+                                )}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
                       <PriceInput
                         label={t('音频输入价格')}
                         value={selectedModel.audioInputPrice}

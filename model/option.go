@@ -190,6 +190,8 @@ func InitOptionMap() {
 	common.OptionMap["ChannelVideoCompletionRatio"] = ratio_setting.ChannelVideoCompletionRatio2JSONString()
 	common.OptionMap["ChannelVideoPrice"] = ratio_setting.ChannelVideoPrice2JSONString()
 	common.OptionMap["ChannelVideoPricingRules"] = ratio_setting.ChannelVideoPricingRules2JSONString()
+	common.OptionMap["ChannelImagePrice"] = ratio_setting.ChannelImagePrice2JSONString()
+	common.OptionMap["ChannelImagePricingRules"] = ratio_setting.ChannelImagePricingRules2JSONString()
 	// 新的四个独立阶梯倍率 Option
 	common.OptionMap["ModelTierRatio"] = ratio_setting.ModelTierRatio2JSONString()
 	common.OptionMap["CompletionTierRatio"] = ratio_setting.CompletionTierRatio2JSONString()
@@ -211,6 +213,8 @@ func InitOptionMap() {
 	common.OptionMap["VideoCompletionRatio"] = ratio_setting.VideoCompletionRatio2JSONString()
 	common.OptionMap["VideoPrice"] = ratio_setting.VideoPrice2JSONString()
 	common.OptionMap["VideoPricingRules"] = ratio_setting.VideoPricingRules2JSONString()
+	common.OptionMap["ImagePrice"] = ratio_setting.ImagePrice2JSONString()
+	common.OptionMap["ImagePricingRules"] = ratio_setting.ImagePricingRules2JSONString()
 	common.OptionMap["TopUpLink"] = common.TopUpLink
 	//common.OptionMap["ChatLink"] = common.ChatLink
 	//common.OptionMap["ChatLink2"] = common.ChatLink2
@@ -656,6 +660,10 @@ func updateOptionMap(key string, value string) (err error) {
 		err = ratio_setting.UpdateChannelVideoPriceByJSONString(value)
 	case "ChannelVideoPricingRules":
 		err = ratio_setting.UpdateChannelVideoPricingRulesByJSONString(value)
+	case "ChannelImagePrice":
+		err = ratio_setting.UpdateChannelImagePriceByJSONString(value)
+	case "ChannelImagePricingRules":
+		err = ratio_setting.UpdateChannelImagePricingRulesByJSONString(value)
 	// 新的四个独立阶梯倍率 Option
 	case "ModelTierRatio":
 		err = ratio_setting.UpdateModelTierRatioByJSONString(value)
@@ -703,6 +711,10 @@ func updateOptionMap(key string, value string) (err error) {
 		err = ratio_setting.UpdateVideoPriceByJSONString(value)
 	case "VideoPricingRules":
 		err = ratio_setting.UpdateVideoPricingRulesByJSONString(value)
+	case "ImagePrice":
+		err = ratio_setting.UpdateImagePriceByJSONString(value)
+	case "ImagePricingRules":
+		err = ratio_setting.UpdateImagePricingRulesByJSONString(value)
 	case "TopUpLink":
 		common.TopUpLink = value
 	//case "ChatLink":

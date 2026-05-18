@@ -180,6 +180,18 @@ type RelayInfo struct {
 	*ResponsesUsageInfo
 	*ChannelMeta
 	*TaskRelayInfo
+
+	// ImageBilling holds per-image generation billing state (unit USD price, etc.).
+	ImageBilling *ImageBillingSnapshot
+}
+
+// ImageBillingSnapshot tracks per-image generation pricing for pre-consume and settlement.
+type ImageBillingSnapshot struct {
+	UsdPerImage float64
+	Width       int
+	Height      int
+	Count       int
+	Mode        string
 }
 
 func (info *RelayInfo) InitChannelMeta(c *gin.Context) {

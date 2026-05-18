@@ -30,6 +30,8 @@ import {
 
 export const PAGE_SIZE = 10;
 export const PRICE_SUFFIX = '$/1M';
+/** 序列化时写入该值表示从对应 Option map 中删除该模型键 */
+export const REMOVE_OPTION_KEY = '__remove_option_key__';
 const EMPTY_CANDIDATE_MODEL_NAMES = [];
 
 const EMPTY_MODEL = {
@@ -53,6 +55,11 @@ const EMPTY_MODEL = {
     videoUploadRules: [],
     videoGenerateRules: [],
     videoSimilarityThreshold: '',
+    imageGenPriceUnit: 'USD',
+    imageGenFixedPrice: '',
+    imageTextToImageRules: [],
+    imageImageToImageRules: [],
+    imageSimilarityThreshold: '',
     rawRatios: {
         modelRatio: '',
         completionRatio: '',
@@ -65,6 +72,8 @@ const EMPTY_MODEL = {
         videoCompletionRatio: '',
         videoPrice: '',
         videoPricingRules: null,
+        imagePrice: '',
+        imagePricingRules: null,
     },
     modelTierRatio: null,
     completionTierRatio: null,
@@ -148,6 +157,12 @@ const mapVideoRuleRowsToDisplayUnit = (rows, unit, currencyRates) =>
         withAudioPrice: fromUSDToDisplay(row?.withAudioPrice, unit, currencyRates),
     }));
 
+const mapImageRuleRowsToDisplayUnit = (rows, unit, currencyRates) =>
+    (rows || []).map((row) => ({
+        ...row,
+        imagePrice: fromUSDToDisplay(row?.imagePrice, unit, currencyRates),
+    }));
+
 const parseOptionJSON = (rawValue) => {
     if (!rawValue || rawValue.trim() === '') {
         return {};
@@ -196,6 +211,36 @@ const normalizePerVideoRuleRow = (row) => ({
     audioPricingEnabled: Boolean(row?.has_audio),
     hasAudio: Boolean(row?.has_audio),
 });
+
+const normalizePerImageRuleRow = (row) => ({
+    resolution: row?.resolution || '',
+    imagePrice: toNumericString(row?.image_price),
+});
+
+const parseImagePricingRules = (rawRules) => {
+    if (!rawRules || typeof rawRules !== 'object' || Array.isArray(rawRules)) {
+        return {
+            textToImage: [],
+            imageToImage: [],
+            similarityThreshold: '',
+            priceUnit: '',
+        };
+    }
+    const textToImage = Array.isArray(rawRules.text_to_image_per_image)
+        ? rawRules.text_to_image_per_image.map(normalizePerImageRuleRow)
+        : [];
+    const imageToImage = Array.isArray(rawRules.image_to_image_per_image)
+        ? rawRules.image_to_image_per_image.map(normalizePerImageRuleRow)
+        : [];
+    return {
+        textToImage,
+        imageToImage,
+        similarityThreshold: toNumericString(rawRules.similarity_threshold),
+        priceUnit: String(rawRules.price_unit || '')
+            .trim()
+            .toUpperCase(),
+    };
+};
 
 const normalizeAudioPricedRows = (rows, valueKey) => {
     if (!Array.isArray(rows) || rows.length === 0) return [];
@@ -426,6 +471,13 @@ const buildModelState = (name, sourceMaps) => {
     const videoPricingRules = parseVideoPricingRules(
         sourceMaps.VideoPricingRules?.[name],
     );
+    const imagePrice = toNumericString(sourceMaps.ImagePrice[name]);
+    const imagePricingRules = parseImagePricingRules(
+        sourceMaps.ImagePricingRules?.[name],
+    );
+    const hasPerImageTable =
+        imagePricingRules.textToImage.length > 0 ||
+        imagePricingRules.imageToImage.length > 0;
     // 新的四个独立阶梯倍率
     const modelTierRatio = sourceMaps.ModelTierRatio?.[name]
         ? normalizeTierSegments(sourceMaps.ModelTierRatio[name])
@@ -514,6 +566,26 @@ const buildModelState = (name, sourceMaps) => {
     const generatePerItemDisplay = mapVideoRuleRowsToDisplayUnit(
         videoPricingRules.videoGeneratePerVideo,
         resolvedVideoPriceUnit,
+        sourceMaps.VideoCurrencyRates,
+    );
+    const resolvedImagePriceUnit = ['USD', 'CNY', 'CUSTOM'].includes(
+        imagePricingRules.priceUnit,
+    )
+        ? imagePricingRules.priceUnit
+        : sourceMaps.ImagePriceUnit || sourceMaps.VideoPriceUnit || 'USD';
+    const displayImageFixedPrice = fromUSDToDisplay(
+        imagePrice,
+        resolvedImagePriceUnit,
+        sourceMaps.VideoCurrencyRates,
+    );
+    const textImageDisplay = mapImageRuleRowsToDisplayUnit(
+        imagePricingRules.textToImage,
+        resolvedImagePriceUnit,
+        sourceMaps.VideoCurrencyRates,
+    );
+    const imageToImageDisplay = mapImageRuleRowsToDisplayUnit(
+        imagePricingRules.imageToImage,
+        resolvedImagePriceUnit,
         sourceMaps.VideoCurrencyRates,
     );
 
@@ -627,6 +699,15 @@ const buildModelState = (name, sourceMaps) => {
                     ]
                     : videoPricingRules.videoGenerate,
         videoSimilarityThreshold: videoPricingRules.similarityThreshold,
+        imageGenPriceUnit: resolvedImagePriceUnit,
+        imageGenFixedPrice: displayImageFixedPrice,
+        imageTextToImageRules: hasPerImageTable
+            ? textImageDisplay
+            : imagePricingRules.textToImage,
+        imageImageToImageRules: hasPerImageTable
+            ? imageToImageDisplay
+            : imagePricingRules.imageToImage,
+        imageSimilarityThreshold: imagePricingRules.similarityThreshold,
         rawRatios: {
             modelRatio,
             completionRatio,
@@ -642,6 +723,12 @@ const buildModelState = (name, sourceMaps) => {
                 sourceMaps.VideoPricingRules?.[name] &&
                     typeof sourceMaps.VideoPricingRules[name] === 'object'
                     ? sourceMaps.VideoPricingRules[name]
+                    : null,
+            imagePrice,
+            imagePricingRules:
+                sourceMaps.ImagePricingRules?.[name] &&
+                    typeof sourceMaps.ImagePricingRules[name] === 'object'
+                    ? sourceMaps.ImagePricingRules[name]
                     : null,
         },
         modelTierRatio,
@@ -834,6 +921,30 @@ export const getModelWarnings = (model, t) => {
         }
     }
 
+    const hasInvalidPerImageRow = (rows) =>
+        (rows || []).some(
+            (row) =>
+                (hasValue(row.resolution) &&
+                    !isValidVideoResolution(row.resolution)) ||
+                (hasValue(row.imagePrice) && toNumberOrNull(row.imagePrice) === null),
+        );
+    if (
+        hasInvalidPerImageRow(model.imageTextToImageRules) ||
+        hasInvalidPerImageRow(model.imageImageToImageRules)
+    ) {
+        warnings.push(
+            t(
+                '按图片计费的分辨率行请使用如 1280x720、480p 或 2K 的格式，并填写大于 0 的每张价格（与站点额度展示币种一致）。',
+            ),
+        );
+    }
+    if (
+        hasDuplicateResolution(model.imageTextToImageRules) ||
+        hasDuplicateResolution(model.imageImageToImageRules)
+    ) {
+        warnings.push(t('同一规则组内分辨率不能重复，请删除重复项。'));
+    }
+
     return warnings;
 };
 
@@ -880,7 +991,27 @@ export const buildOptionalFieldToggles = (model) => ({
         (model.videoImageToVideoRules || []).some((r) => hasValue(r?.videoPrice)) ||
         (model.videoUploadRules || []).some((r) => hasValue(r?.videoPrice)) ||
         (model.videoGenerateRules || []).some((r) => hasValue(r?.videoPrice)),
+    imageGeneration:
+        (model.imageTextToImageRules || []).length > 0 ||
+        (model.imageImageToImageRules || []).length > 0 ||
+        hasValue(model.imageGenFixedPrice) ||
+        (model.imageTextToImageRules || []).some((r) => hasValue(r?.imagePrice)) ||
+        (model.imageImageToImageRules || []).some((r) => hasValue(r?.imagePrice)),
 });
+
+const normalizePerImagePricingRows = (rows) =>
+    (rows || [])
+        .filter(
+            (row) =>
+                hasValue(row?.resolution) &&
+                hasValue(row?.imagePrice) &&
+                isValidVideoResolution(row.resolution),
+        )
+        .map((row) => ({
+            resolution: row.resolution.replace(/\s+/g, ''),
+            image_price: toNumberOrNull(row.imagePrice),
+        }))
+        .filter((row) => row.image_price !== null && row.image_price > 0);
 
 const normalizePerVideoPricingRows = (rows) =>
     (rows || [])
@@ -943,6 +1074,8 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
         VideoCompletionRatio: null,
         VideoPrice: null,
         VideoPricingRules: null,
+        ImagePrice: null,
+        ImagePricingRules: null,
         ModelTierRatio: null,
         CompletionTierRatio: null,
         CacheTierRatio: null,
@@ -1318,6 +1451,44 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
         }
     }
 
+    const imageFromUnit = ['USD', 'CNY', 'CUSTOM'].includes(model.imageGenPriceUnit)
+        ? model.imageGenPriceUnit
+        : 'USD';
+    const imageFromRate =
+        currencyRates && currencyRates[imageFromUnit] > 0
+            ? currencyRates[imageFromUnit]
+            : 1;
+    const imageToUSD = (value) => value / imageFromRate;
+    const imageGenFixedPrice = toNumberOrNull(model.imageGenFixedPrice);
+    const textPI = normalizePerImagePricingRows(model.imageTextToImageRules);
+    const imagePI = normalizePerImagePricingRows(model.imageImageToImageRules);
+    if (imageGenFixedPrice !== null) {
+        result.ImagePrice = toNormalizedNumber(imageToUSD(imageGenFixedPrice));
+    }
+    if (textPI.length > 0 || imagePI.length > 0 || imageGenFixedPrice !== null) {
+        const pricingRules = {};
+        if (textPI.length > 0) {
+            pricingRules.text_to_image_per_image = textPI;
+        }
+        if (imagePI.length > 0) {
+            pricingRules.image_to_image_per_image = imagePI;
+        }
+        const similarityThreshold = toNumberOrNull(model.imageSimilarityThreshold);
+        if (similarityThreshold !== null && similarityThreshold > 0) {
+            pricingRules.similarity_threshold = similarityThreshold;
+        }
+        pricingRules.price_unit = imageFromUnit;
+        result.ImagePricingRules = pricingRules;
+        // 按张分辨率计费与「按次 ModelPrice」互斥；保留旧 ModelPrice 会导致图片请求误走 $N/次。
+        if (textPI.length > 0 || imagePI.length > 0) {
+            result.ModelPrice = REMOVE_OPTION_KEY;
+        }
+    } else if (hasValue(model.rawRatios.imagePricingRules)) {
+        result.ImagePricingRules = model.rawRatios.imagePricingRules;
+    } else if (hasValue(model.rawRatios.imagePrice)) {
+        result.ImagePrice = toNormalizedNumber(model.rawRatios.imagePrice);
+    }
+
     return result;
 };
 
@@ -1348,6 +1519,14 @@ export const buildPreviewRows = (model, t) => {
             (model.videoGenerateRules || []).some(
                 (r) => hasValue(r?.resolution) && hasValue(r?.videoPrice),
             ));
+    const imageGenFixedPrice = toNumberOrNull(model.imageGenFixedPrice);
+    const hasPerImagePricingRuleRows =
+        (model.imageTextToImageRules || []).some(
+            (r) => hasValue(r?.resolution) && hasValue(r?.imagePrice),
+        ) ||
+        (model.imageImageToImageRules || []).some(
+            (r) => hasValue(r?.resolution) && hasValue(r?.imagePrice),
+        );
 
     const perRequestRows = [
         {
@@ -1543,6 +1722,26 @@ export const buildPreviewRows = (model, t) => {
                         ? t('按分辨率见 VideoPricingRules')
                         : t('空'),
         },
+        {
+            key: 'ImagePricingRules',
+            label: 'ImagePricingRules',
+            value:
+                hasPerImagePricingRuleRows ||
+                (model.rawRatios.imagePricingRules &&
+                    typeof model.rawRatios.imagePricingRules === 'object')
+                    ? t('已配置')
+                    : t('空'),
+        },
+        {
+            key: 'ImagePrice',
+            label: 'ImagePrice',
+            value:
+                imageGenFixedPrice !== null && !hasPerImagePricingRuleRows
+                    ? formatNumber(imageGenFixedPrice)
+                    : hasPerImagePricingRuleRows
+                        ? t('按分辨率见 ImagePricingRules')
+                        : t('空'),
+        },
     );
 
     return [
@@ -1586,6 +1785,8 @@ const collectModelNamesFromPricingSourceMaps = (sourceMaps) => {
         'VideoCompletionRatio',
         'VideoPrice',
         'VideoPricingRules',
+        'ImagePrice',
+        'ImagePricingRules',
         'ModelTierRatio',
         'CompletionTierRatio',
         'CacheTierRatio',
@@ -1662,6 +1863,8 @@ export function useModelPricingEditorState({
                 optionKeys?.VideoCompletionRatio || 'VideoCompletionRatio',
             VideoPrice: optionKeys?.VideoPrice || 'VideoPrice',
             VideoPricingRules: optionKeys?.VideoPricingRules || 'VideoPricingRules',
+            ImagePrice: optionKeys?.ImagePrice || 'ImagePrice',
+            ImagePricingRules: optionKeys?.ImagePricingRules || 'ImagePricingRules',
             ModelTierRatio: optionKeys?.ModelTierRatio || 'ModelTierRatio',
             CompletionTierRatio:
                 optionKeys?.CompletionTierRatio || 'CompletionTierRatio',
@@ -1698,6 +1901,10 @@ export function useModelPricingEditorState({
             VideoPrice: parseOptionJSON(options[resolvedOptionKeys.VideoPrice]),
             VideoPricingRules: parseOptionJSON(
                 options[resolvedOptionKeys.VideoPricingRules],
+            ),
+            ImagePrice: parseOptionJSON(options[resolvedOptionKeys.ImagePrice]),
+            ImagePricingRules: parseOptionJSON(
+                options[resolvedOptionKeys.ImagePricingRules],
             ),
             ModelTierRatio: parseOptionJSON(
                 options[resolvedOptionKeys.ModelTierRatio],
@@ -1738,6 +1945,8 @@ export function useModelPricingEditorState({
                 ...Object.keys(sourceMaps.VideoCompletionRatio),
                 ...Object.keys(sourceMaps.VideoPrice),
                 ...Object.keys(sourceMaps.VideoPricingRules),
+                ...Object.keys(sourceMaps.ImagePrice),
+                ...Object.keys(sourceMaps.ImagePricingRules),
                 ...Object.keys(sourceMaps.ModelTierRatio),
                 ...Object.keys(sourceMaps.CompletionTierRatio),
                 ...Object.keys(sourceMaps.CacheTierRatio),
@@ -1900,6 +2109,13 @@ export function useModelPricingEditorState({
                 nextModel.videoUploadRules = [];
                 nextModel.videoGenerateRules = [];
                 nextModel.videoSimilarityThreshold = '';
+            }
+
+            if (field === 'imageGeneration') {
+                nextModel.imageGenFixedPrice = '';
+                nextModel.imageTextToImageRules = [];
+                nextModel.imageImageToImageRules = [];
+                nextModel.imageSimilarityThreshold = '';
             }
 
             return nextModel;
@@ -2066,6 +2282,83 @@ export function useModelPricingEditorState({
                 videoGenerate: 'videoGenerateRules',
             }[section];
             if (!target) return model;
+            return {
+                ...model,
+                [target]: (model[target] || []).filter((_, i) => i !== index),
+            };
+        });
+    };
+
+    const handleImageGenPriceUnitChange = (nextUnit) => {
+        if (
+            !selectedModel ||
+            !nextUnit ||
+            nextUnit === selectedModel.imageGenPriceUnit
+        ) {
+            return;
+        }
+        const fromRate = videoCurrencyRates[selectedModel.imageGenPriceUnit] || 1;
+        const toRate = videoCurrencyRates[nextUnit] || 1;
+        const convert = (value) => {
+            const num = toNumberOrNull(value);
+            if (num === null) return value;
+            const usd = num / fromRate;
+            return formatNumber(usd * toRate);
+        };
+        const convertRows = (rows) =>
+            (rows || []).map((row) => ({
+                ...row,
+                imagePrice: convert(row?.imagePrice),
+            }));
+        upsertModel(selectedModel.name, (model) => ({
+            ...model,
+            imageGenPriceUnit: nextUnit,
+            imageGenFixedPrice: convert(model.imageGenFixedPrice),
+            imageTextToImageRules: convertRows(model.imageTextToImageRules),
+            imageImageToImageRules: convertRows(model.imageImageToImageRules),
+        }));
+    };
+
+    const updateImageRuleRow = (section, index, key, value) => {
+        if (!selectedModel) return;
+        if (key !== 'resolution' && key !== 'imagePrice') return;
+        if (key !== 'resolution' && !NUMERIC_INPUT_REGEX.test(value)) return;
+        upsertModel(selectedModel.name, (model) => {
+            const target =
+                section === 'imageToImage'
+                    ? 'imageImageToImageRules'
+                    : 'imageTextToImageRules';
+            const rows = [...(model[target] || [])];
+            if (!rows[index]) return model;
+            rows[index] = { ...rows[index], [key]: value };
+            return { ...model, [target]: rows };
+        });
+    };
+
+    const addImageRuleRow = (section) => {
+        if (!selectedModel) return;
+        upsertModel(selectedModel.name, (model) => {
+            const target =
+                section === 'imageToImage'
+                    ? 'imageImageToImageRules'
+                    : 'imageTextToImageRules';
+            return {
+                ...model,
+                [target]: [
+                    ...(model[target] || []),
+                    { resolution: '', imagePrice: '' },
+                ],
+            };
+        });
+    };
+
+    const removeImageRuleRow = (section, index) => {
+        if (!selectedModel) return;
+        upsertModel(selectedModel.name, (model) => {
+            const target =
+                section === 'imageToImage'
+                    ? 'imageImageToImageRules'
+                    : 'imageTextToImageRules';
             return {
                 ...model,
                 [target]: (model[target] || []).filter((_, i) => i !== index),
@@ -2252,6 +2545,11 @@ export function useModelPricingEditorState({
                     videoUploadRules: selectedModel.videoUploadRules,
                     videoGenerateRules: selectedModel.videoGenerateRules,
                     videoSimilarityThreshold: selectedModel.videoSimilarityThreshold,
+                    imageGenPriceUnit: selectedModel.imageGenPriceUnit,
+                    imageGenFixedPrice: selectedModel.imageGenFixedPrice,
+                    imageTextToImageRules: selectedModel.imageTextToImageRules,
+                    imageImageToImageRules: selectedModel.imageImageToImageRules,
+                    imageSimilarityThreshold: selectedModel.imageSimilarityThreshold,
                     modelTierRatio: selectedModel.modelTierRatio
                         ? normalizeTierSegments(selectedModel.modelTierRatio)
                         : null,
@@ -2298,6 +2596,7 @@ export function useModelPricingEditorState({
                         Boolean(sourceToggles.audioInputPrice) &&
                         Boolean(sourceToggles.audioOutputPrice),
                     video: Boolean(sourceToggles.video),
+                    imageGeneration: Boolean(sourceToggles.imageGeneration),
                 };
             });
             return next;
@@ -2326,6 +2625,8 @@ export function useModelPricingEditorState({
             VideoCompletionRatio: {},
             VideoPrice: {},
             VideoPricingRules: {},
+            ImagePrice: {},
+            ImagePricingRules: {},
             ModelTierRatio: {},
             CompletionTierRatio: {},
             CacheTierRatio: {},
@@ -2339,6 +2640,12 @@ export function useModelPricingEditorState({
                 visibleCategories,
             );
             Object.entries(serialized).forEach(([key, value]) => {
+                if (value === REMOVE_OPTION_KEY) {
+                    if (output[key]) {
+                        delete output[key][model.name];
+                    }
+                    return;
+                }
                 if (value !== null) {
                     output[key][model.name] = value;
                 }
@@ -2512,6 +2819,10 @@ export function useModelPricingEditorState({
         updateVideoRuleRow,
         addVideoRuleRow,
         removeVideoRuleRow,
+        handleImageGenPriceUnitChange,
+        updateImageRuleRow,
+        addImageRuleRow,
+        removeImageRuleRow,
         updateModelTierRatio,
         updateCompletionTierRatio,
         updateCacheTierRatio,
