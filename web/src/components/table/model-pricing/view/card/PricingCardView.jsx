@@ -41,14 +41,11 @@ import {
   getLobeHubIcon,
   getUsedGroupContext,
   pickChannelScopedModelFloat,
-  formatVideoResolutionDisplayLabel,
 } from '../../../../../helpers';
 import PricingCardSkeleton from './PricingCardSkeleton';
 import { useMinimumLoadingTime } from '../../../../../hooks/common/useMinimumLoadingTime';
 import { renderLimitedItems } from '../../../../common/ui/RenderUtils';
 import { useIsMobile } from '../../../../../hooks/common/useIsMobile';
-import { VIDEO_FLAT_LANE_I18N_KEY } from '../../constants/videoFlatClipLaneI18n';
-
 const CARD_STYLES = {
   container:
     'w-12 h-12 rounded-2xl flex items-center justify-center relative shadow-md',
@@ -192,7 +189,7 @@ const PricingCardView = ({
   };
 
   const calculateChannelPrices = (model, opts = {}) => {
-    const { skipSimpleVideoFlat = false } = opts;
+    const { skipSimpleVideoFlat = false, skipSimpleFixed = false } = opts;
     if (!model.channel_list || model.channel_list.length === 0) {
       return null;
     }
@@ -348,7 +345,11 @@ const PricingCardView = ({
       }
       // 按次计费
       else if (model.quota_type === 1 || ch.quota_type === 1) {
-        if (ch.model_price !== undefined && ch.model_price !== null) {
+        if (
+          !skipSimpleFixed &&
+          ch.model_price !== undefined &&
+          ch.model_price !== null
+        ) {
           const fixedPriceUSD = ch.model_price * usedGroupRatio;
           prices.fixed.push(formatPrice(fixedPriceUSD));
           originalPrices.fixed.push(formatPrice(ch.model_price));
@@ -384,7 +385,11 @@ const PricingCardView = ({
         }
       }
     } else if (model.quota_type === 1) {
-      if (model.model_price !== undefined && model.model_price !== null) {
+      if (
+        !skipSimpleFixed &&
+        model.model_price !== undefined &&
+        model.model_price !== null
+      ) {
         rootPrices.fixed = formatPrice(model.model_price);
       }
     }
@@ -496,9 +501,15 @@ const PricingCardView = ({
       hint &&
       Number(hint.tier_count) > 0 &&
       Number(hint.min_usd_after_channel_discount) > 0;
+    const imageHint = model.image_per_image_hint;
+    const useTieredImagePerImage =
+      imageHint &&
+      Number(imageHint.tier_count) > 0 &&
+      Number(imageHint.min_usd_after_channel_discount) > 0;
 
     const channelPrices = calculateChannelPrices(model, {
       skipSimpleVideoFlat: useTieredVideoFlat,
+      skipSimpleFixed: useTieredImagePerImage,
     });
 
     // 如果没有 channel 价格，使用原有逻辑
@@ -614,35 +625,36 @@ const PricingCardView = ({
       );
       const usd =
         Number(hint.min_usd_after_channel_discount) * usedGroupRatio;
-      const priceStr = displayPrice(usd);
-      const specParts = [];
-      if (hint.resolution) {
-        specParts.push(
-          formatVideoResolutionDisplayLabel(String(hint.resolution).trim()),
-        );
-      }
-      if (hint.has_audio === true) specParts.push(t('有音轨'));
-      if (hint.has_audio === false) specParts.push(t('无音轨'));
-      const laneKey = VIDEO_FLAT_LANE_I18N_KEY[hint.lane];
-      if (laneKey) specParts.push(t(laneKey));
-      const spec = specParts.filter(Boolean).join('·');
       const perSecond = hint.billing_mode === 'per_second';
       items.push({
         key: 'video-flat-tiered',
-        label: t('按分辨率'),
+        label: perSecond ? t('按秒') : t('按条'),
         valueNode: (
-          <span className='inline-flex flex-col gap-0.5 min-w-0'>
-            <span className='font-bold text-black'>
-              {t('最低价')}
-              {priceStr}
-              {perSecond ? t('/秒起') : t('/条起')}
-              {spec ? (
-                <span className='font-normal text-gray-600'>
-                  {' '}
-                  / {spec}
-                </span>
-              ) : null}
-            </span>
+          <span className='font-bold text-black'>
+            {t('最低价')}
+            {displayPrice(usd)}
+            {perSecond ? t('/秒起') : t('/条起')}
+          </span>
+        ),
+      });
+    }
+
+    if (useTieredImagePerImage) {
+      const { usedGroupRatio } = getUsedGroupContext(
+        model,
+        selectedGroup,
+        groupRatio,
+      );
+      const usd =
+        Number(imageHint.min_usd_after_channel_discount) * usedGroupRatio;
+      items.push({
+        key: 'image-per-image-tiered',
+        label: t('按张'),
+        valueNode: (
+          <span className='font-bold text-black'>
+            {t('最低价')}
+            {displayPrice(usd)}
+            {t('/张起')}
           </span>
         ),
       });
