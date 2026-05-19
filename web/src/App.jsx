@@ -43,6 +43,7 @@ import Pricing from './pages/Pricing';
 import Task from './pages/Task';
 import ModelPage from './pages/Model';
 import ModelDeploymentPage from './pages/ModelDeployment';
+import ModelHeatPage from './pages/ModelHeat';
 import Playground from './pages/Playground';
 import Subscription from './pages/Subscription';
 import OAuth2Callback from './components/auth/OAuth2Callback';
@@ -130,6 +131,14 @@ function App() {
           element={
             <AdminRoute>
               <ModelDeploymentPage />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path='/console/model-heat'
+          element={
+            <AdminRoute>
+              <ModelHeatPage />
             </AdminRoute>
           }
         />

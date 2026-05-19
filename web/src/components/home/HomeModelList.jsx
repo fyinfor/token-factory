@@ -122,6 +122,7 @@ const HomeModelList = () => {
 
   const sortOptions = [
     { value: 'default', label: pricingData.t('默认') },
+    { value: 'hot', label: pricingData.t('热门') },
     { value: 'price', label: pricingData.t('价格') },
     { value: 'discount', label: pricingData.t('折扣率') },
     { value: 'supplier_grade', label: pricingData.t('供应商等级') },

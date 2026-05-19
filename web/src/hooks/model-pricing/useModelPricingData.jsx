@@ -273,8 +273,22 @@ export const useModelPricingData = () => {
         return av > bv ? -1 : 1;
       };
 
+      // 模型热度分计算（用于热门排序）
+      // 根据 channel_list[0] 的 ChannelHeatScore 排序
+      const modelHeatScore = (m) => {
+        const channelList = m.channel_list ?? m.ChannelList ?? [];
+        if (channelList.length > 0) {
+          const firstChannel = channelList[0];
+          return firstChannel.channel_heat_score ?? firstChannel.ChannelHeatScore ?? 0;
+        }
+        return 0;
+      };
+
       result = [...result].sort((a, b) => {
         switch (sortKey) {
+          case 'hot':
+            // 按热度分降序，热度相同按模型名
+            return cmpDesc(modelHeatScore(a), modelHeatScore(b), a, b);
           case 'price':
             return cmpAsc(modelUnitPrice(a), modelUnitPrice(b), a, b);
           case 'supplier_grade':

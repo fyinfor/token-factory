@@ -16,10 +16,25 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import ModelsTable from '../../components/table/models';
 
 const ModelPage = () => {
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get('id');
+  const modelName = searchParams.get('name');
+
+  useEffect(() => {
+    // 如果 URL 中有 id 参数，自动打开编辑抽屉
+    if (editId) {
+      const timer = setTimeout(() => {
+        window.dispatchEvent(new CustomEvent('openModelEdit', { detail: { id: parseInt(editId), name: modelName } }));
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [editId, modelName]);
+
   return (
     <div className='mt-[60px] px-2'>
       <ModelsTable />

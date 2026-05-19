@@ -39,7 +39,7 @@ import {
   IconDelete,
 } from '@douyinfe/semi-icons';
 import { SiTelegram, SiWechat, SiLinux, SiDiscord } from 'react-icons/si';
-import { UserPlus, ShieldCheck } from 'lucide-react';
+import { UserPlus, ShieldCheck, Phone } from 'lucide-react';
 import TelegramLoginButton from 'react-telegram-login';
 import {
   API,
@@ -60,6 +60,8 @@ const AccountManagement = ({
   status,
   systemToken,
   setShowEmailBindModal,
+  setShowPhoneBindModal,
+  smsVerificationEnabled,
   setShowWeChatBindModal,
   generateAccessToken,
   handleSystemTokenClick,
@@ -240,6 +242,46 @@ const AccountManagement = ({
                       {isBound(userState.user?.email)
                         ? t('修改绑定')
                         : t('绑定')}
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+
+              {/* 手机号绑定 */}
+              <Card className='!rounded-xl'>
+                <div className='flex items-center justify-between gap-3'>
+                  <div className='flex items-center flex-1 min-w-0'>
+                    <div className='w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center mr-3 flex-shrink-0'>
+                      <Phone
+                        size={20}
+                        className='text-slate-600 dark:text-slate-300'
+                      />
+                    </div>
+                    <div className='flex-1 min-w-0'>
+                      <div className='font-medium text-gray-900'>
+                        {t('手机号')}
+                      </div>
+                      <div className='text-sm text-gray-500 truncate'>
+                        {renderAccountInfo(
+                          userState.user?.phone,
+                          t('手机号'),
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className='flex-shrink-0'>
+                    <Button
+                      type='primary'
+                      theme='outline'
+                      size='small'
+                      disabled={!smsVerificationEnabled}
+                      onClick={() => setShowPhoneBindModal(true)}
+                    >
+                      {smsVerificationEnabled
+                        ? isBound(userState.user?.phone)
+                          ? t('修改绑定')
+                          : t('绑定')
+                        : t('未启用')}
                     </Button>
                   </div>
                 </div>

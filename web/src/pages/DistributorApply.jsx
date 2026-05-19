@@ -24,14 +24,11 @@ import {
   Form,
   Typography,
   Spin,
-  Upload,
   Modal,
   Popover,
-  Progress,
   Radio,
 } from '@douyinfe/semi-ui';
 import {
-  IconFile,
   IconUserGroup,
   IconAlertTriangle,
   IconInfoCircle,
@@ -42,6 +39,7 @@ import { API, showError, showSuccess, userIsDistributorUser } from '../helpers';
 import { StatusContext } from '../context/Status';
 import { UserContext } from '../context/User';
 import DOMPurify from 'dompurify';
+import DistributorApplyFileUpload from '../components/distributor/DistributorApplyFileUpload';
 
 const { Text } = Typography;
 
@@ -153,63 +151,6 @@ export default function DistributorApply() {
   const [urls, setUrls] = useState([]);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [applyType, setApplyType] = useState(1);
-  /** 上传真实进度（axios），未确认 url 前不超过 99 */
-  const [uploadPct, setUploadPct] = useState(null);
-  /** 展示用平滑进度，避免单次回调 0→99 无过渡感 */
-  const [uploadDisplayPct, setUploadDisplayPct] = useState(null);
-  const uploadTargetRef = React.useRef(null);
-  const uploadDisplayRef = React.useRef(0);
-  const uploadSmoothRafRef = React.useRef(null);
-  const formApi = React.useRef(null);
-
-  uploadTargetRef.current = uploadPct;
-
-  useEffect(() => {
-    if (uploadPct == null) {
-      if (uploadSmoothRafRef.current != null) {
-        cancelAnimationFrame(uploadSmoothRafRef.current);
-        uploadSmoothRafRef.current = null;
-      }
-      uploadDisplayRef.current = 0;
-      setUploadDisplayPct(null);
-      return;
-    }
-
-    let cancelled = false;
-    const tick = () => {
-      if (cancelled) return;
-      const target = uploadTargetRef.current;
-      if (target == null) return;
-      const cur = uploadDisplayRef.current;
-      if (cur < target - 0.01) {
-        const next = Math.min(
-          target,
-          cur + Math.max(0.55, (target - cur) * 0.2),
-        );
-        uploadDisplayRef.current = next;
-        setUploadDisplayPct(Math.round(next));
-        uploadSmoothRafRef.current = requestAnimationFrame(tick);
-      } else if (cur > target + 0.01) {
-        uploadDisplayRef.current = target;
-        setUploadDisplayPct(Math.round(target));
-        uploadSmoothRafRef.current = requestAnimationFrame(tick);
-      } else {
-        uploadDisplayRef.current = target;
-        setUploadDisplayPct(Math.round(target));
-        uploadSmoothRafRef.current = null;
-      }
-    };
-
-    uploadSmoothRafRef.current = requestAnimationFrame(tick);
-    return () => {
-      cancelled = true;
-      if (uploadSmoothRafRef.current != null) {
-        cancelAnimationFrame(uploadSmoothRafRef.current);
-        uploadSmoothRafRef.current = null;
-      }
-    };
-  }, [uploadPct]);
-
   const csImage = (
     statusState?.status?.distributor_apply_cs_image_url || ''
   ).trim();
@@ -437,140 +378,16 @@ export default function DistributorApply() {
             label={<ApplyRequiredLabel>{t('联系方式')}</ApplyRequiredLabel>}
             rules={[applyTrimmedRequiredRule(t)]}
           />
-          <div className='mb-4'>
-            <ApplyRequiredLabel className='block mb-2'>
-              {t('资格证书')}
-            </ApplyRequiredLabel>
-            <Upload
-              action=''
-              accept='image/*,.pdf'
-              showUploadList={false}
-              customRequest={async ({
-                file,
-                onSuccess,
-                onError,
-                onProgress,
-              }) => {
-                const fd = new FormData();
-                const inst = file.fileInstance || file;
-                fd.append('file', inst);
-                setUploadPct(0);
-                try {
-                  const res = await API.post('/api/oss/upload', fd, {
-                    skipErrorHandler: true,
-                    onUploadProgress: (ev) => {
-                      const total = ev.total || ev.loaded || 1;
-                      const raw = Math.round((ev.loaded * 100) / total);
-                      // 字节传完不等于业务成功：未返回 url 前不显示 100%，避免误导
-                      const pct = Math.min(99, raw);
-                      setUploadPct(pct);
-                      if (typeof onProgress === 'function') {
-                        onProgress({ total, loaded: ev.loaded });
-                      }
-                    },
-                  });
-                  const { success, message, data } = res.data || {};
-                  if (!success || !data?.url) {
-                    onError(new Error(message || 'upload'));
-                    showError(message || t('上传失败'));
-                    return;
-                  }
-                  setUploadPct(100);
-                  setUrls((prev) =>
-                    prev.length >= 5 ? prev : [...prev, data.url],
-                  );
-                  onSuccess(data);
-                  showSuccess(t('已上传'));
-                } catch (e) {
-                  onError(e);
-                  showError(e?.response?.data?.message || t('上传失败'));
-                } finally {
-                  setUploadPct(null);
-                }
-              }}
-              limit={5}
-              multiple
-              disabled={urls.length >= 5}
-            >
-              <Button disabled={urls.length >= 5}>{t('上传文件')}</Button>
-            </Upload>
-            {uploadPct != null ? (
-              <Progress
-                percent={uploadDisplayPct ?? uploadPct}
-                showInfo
-                className='mt-2'
-              />
-            ) : null}
-            <Text type='tertiary' size='small' className='block mt-1'>
-              {t('支持图片或 PDF，最多 5 个；点击图片可大图预览')}
-            </Text>
-            {urls.length > 0 && (
-              <div className='mt-3 flex flex-wrap gap-3'>
-                {urls.map((u, idx) =>
-                  isPdfUrl(u) ? (
-                    <div
-                      key={`${u}-${idx}`}
-                      className='relative flex h-24 w-24 flex-col items-center justify-center rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)]'
-                    >
-                      <IconFile size='large' />
-                      <span className='mt-1 text-xs text-[var(--semi-color-text-2)]'>
-                        PDF
-                      </span>
-                      <button
-                        type='button'
-                        className='absolute inset-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary'
-                        title={t('在新窗口打开')}
-                        onClick={() =>
-                          window.open(u, '_blank', 'noopener,noreferrer')
-                        }
-                      />
-                      <Button
-                        size='small'
-                        type='danger'
-                        theme='borderless'
-                        className='!absolute -right-1 -top-1 !min-w-0 z-10'
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setUrls((prev) => prev.filter((_, i) => i !== idx));
-                        }}
-                      >
-                        ×
-                      </Button>
-                    </div>
-                  ) : (
-                    <div
-                      key={`${u}-${idx}`}
-                      className='relative h-24 w-24 overflow-hidden rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)]'
-                    >
-                      <button
-                        type='button'
-                        className='block h-full w-full cursor-zoom-in p-0 border-0 bg-transparent'
-                        onClick={() => setPreviewUrl(u)}
-                      >
-                        <img
-                          src={u}
-                          alt=''
-                          className='h-full w-full object-cover'
-                        />
-                      </button>
-                      <Button
-                        size='small'
-                        type='danger'
-                        theme='borderless'
-                        className='!absolute -right-1 -top-1 !min-w-0'
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setUrls((prev) => prev.filter((_, i) => i !== idx));
-                        }}
-                      >
-                        ×
-                      </Button>
-                    </div>
-                  ),
-                )}
-              </div>
-            )}
-          </div>
+          <DistributorApplyFileUpload
+            label={t('资格证书')}
+            required
+            urls={urls}
+            onUrlsChange={setUrls}
+            maxCount={5}
+            multiple
+            onPreview={setPreviewUrl}
+            hint={t('支持图片或 PDF，最多 5 个；点击图片可大图预览')}
+          />
           <div className='flex justify-center pt-1'>
             <Button
               theme='solid'

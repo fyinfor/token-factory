@@ -48,6 +48,7 @@ const routerMap = {
   task: '/console/task',
   models: '/console/models',
   deployment: '/console/deployment',
+  'model-heat': '/console/model-heat',
   playground: '/console/playground',
   personal: '/console/personal',
   supplier: null,
@@ -215,6 +216,12 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('模型部署'),
         itemKey: 'deployment',
         to: '/deployment',
+        className: isAdmin() ? '' : 'tableHiddle',
+      },
+      {
+        text: t('热度配置'),
+        itemKey: 'model-heat',
+        to: '/console/model-heat',
         className: isAdmin() ? '' : 'tableHiddle',
       },
       {
