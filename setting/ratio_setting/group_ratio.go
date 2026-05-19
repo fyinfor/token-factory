@@ -38,6 +38,7 @@ var channelAudioCompletionRatioMap = types.NewRWMap[string, map[string]float64](
 var channelVideoRatioMap = types.NewRWMap[string, map[string]float64]()
 var channelVideoCompletionRatioMap = types.NewRWMap[string, map[string]float64]()
 var channelVideoPriceMap = types.NewRWMap[string, map[string]float64]()
+var channelImagePriceMap = types.NewRWMap[string, map[string]float64]()
 var supplierModelPriceMap = types.NewRWMap[string, map[string]float64]()
 var supplierModelRatioMap = types.NewRWMap[string, map[string]float64]()
 
@@ -369,6 +370,19 @@ func UpdateChannelVideoPriceByJSONString(jsonStr string) error {
 }
 func GetChannelVideoPriceCopy() map[string]map[string]float64 {
 	return channelVideoPriceMap.ReadAll()
+}
+
+func GetChannelImagePrice(channelID int, model string) (float64, bool) {
+	return getChannelScopedValue(channelID, model, channelImagePriceMap)
+}
+func ChannelImagePrice2JSONString() string {
+	return channelImagePriceMap.MarshalJSONString()
+}
+func UpdateChannelImagePriceByJSONString(jsonStr string) error {
+	return types.LoadFromJsonString(channelImagePriceMap, jsonStr)
+}
+func GetChannelImagePriceCopy() map[string]map[string]float64 {
+	return channelImagePriceMap.ReadAll()
 }
 
 func normalizeSupplierID(supplierID int) string {

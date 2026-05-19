@@ -37,6 +37,10 @@ export const OptimizedMessageContent = React.memo(
         nextProps.message.reasoningContent &&
       prevProps.message.isReasoningExpanded ===
         nextProps.message.isReasoningExpanded &&
+      JSON.stringify(prevProps.message.generatedImages || []) ===
+        JSON.stringify(nextProps.message.generatedImages || []) &&
+      prevProps.message.videoTask?.playableUrl ===
+        nextProps.message.videoTask?.playableUrl &&
       prevProps.isEditing === nextProps.isEditing &&
       prevProps.editValue === nextProps.editValue &&
       prevProps.styleState.isMobile === nextProps.styleState.isMobile

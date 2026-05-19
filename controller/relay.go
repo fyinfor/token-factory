@@ -31,6 +31,33 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+func resolveRelayPriceData(c *gin.Context, relayInfo *relaycommon.RelayInfo, tokens int, meta *types.TokenCountMeta) (types.PriceData, error) {
+	if relayInfo != nil &&
+		(relayInfo.RelayMode == relayconstant.RelayModeImagesGenerations ||
+			relayInfo.RelayMode == relayconstant.RelayModeImagesEdits) {
+		channelID := 0
+		if relayInfo.ChannelMeta != nil {
+			channelID = relayInfo.ChannelId
+		}
+		hasImageTable := helper.HasImagePerImageTablePricing(channelID, relayInfo.OriginModelName) ||
+			helper.HasImagePerImageTablePricingForInfo(channelID, relayInfo)
+		if priceData, ok, err := helper.TryModelPriceHelperImage(c, relayInfo); err != nil {
+			return types.PriceData{}, err
+		} else if ok {
+			return priceData, nil
+		}
+		if hasImageTable {
+			matchName := relayInfo.OriginModelName
+			return types.PriceData{}, fmt.Errorf(
+				"图片模型 %s 已配置按张分辨率价格，但未能匹配有效价格，请检查文生图/图生图规则或兜底每张价；Image model %s per-image pricing configured but no price matched",
+				matchName, matchName,
+			)
+		}
+		return helper.ModelPriceHelperForImageFallback(c, relayInfo, tokens, meta)
+	}
+	return helper.ModelPriceHelper(c, relayInfo, tokens, meta)
+}
+
 func relayHandler(c *gin.Context, info *relaycommon.RelayInfo) *types.TokenFactoryError {
 	var err *types.TokenFactoryError
 	switch info.RelayMode {
@@ -169,7 +196,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		relayInfo.InitChannelMeta(c)
 	}
 
-	priceData, err := helper.ModelPriceHelper(c, relayInfo, tokens, meta)
+	priceData, err := resolveRelayPriceData(c, relayInfo, tokens, meta)
 	if err != nil {
 		tokenFactoryError = types.NewError(err, types.ErrorCodeModelPriceError)
 		return
@@ -214,7 +241,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		if relayInfo.ChannelMeta == nil {
 			relayInfo.InitChannelMeta(c)
 		}
-		if _, priceErr := helper.ModelPriceHelper(c, relayInfo, tokens, meta); priceErr != nil {
+		if _, priceErr := resolveRelayPriceData(c, relayInfo, tokens, meta); priceErr != nil {
 			tokenFactoryError = types.NewError(priceErr, types.ErrorCodeModelPriceError)
 			relayInfo.LastError = tokenFactoryError
 			processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), tokenFactoryError)

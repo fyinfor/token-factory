@@ -31,6 +31,10 @@ import {
   processThinkTags,
   processIncompleteThinkTags,
 } from '../../helpers';
+import {
+  buildImageMessageContentPatch,
+  extractImageSources,
+} from '../../helpers/playgroundImageUtils';
 
 export const useApiRequest = (
   setMessage,
@@ -92,36 +96,14 @@ export const useApiRequest = (
     return '';
   }, []);
 
-  const extractImageURLs = useCallback((obj) => {
-    if (!obj || typeof obj !== 'object') return [];
-    const raw = Array.isArray(obj?.data) ? obj.data : [];
-    return raw
-      .map((item) => {
-        if (!item || typeof item !== 'object') return '';
-        if (typeof item.url === 'string') return item.url.trim();
-        return '';
-      })
-      .filter(Boolean);
-  }, []);
-
-  const extractImageResultURL = useCallback((obj) => {
-    if (!obj || typeof obj !== 'object') return '';
-    const direct = ['url', 'image_url', 'output_url', 'result_url'];
-    for (const key of direct) {
-      const v = obj[key];
-      if (typeof v === 'string' && v.trim()) return v.trim();
-    }
-    if (Array.isArray(obj.data)) {
-      for (const item of obj.data) {
-        const url = extractImageResultURL(item);
-        if (url) return url;
-      }
-    }
-    if (obj.data && typeof obj.data === 'object') {
-      const url = extractImageResultURL(obj.data);
-      if (url) return url;
-    }
-    return '';
+  const applyImageMessagePatch = useCallback((patch, updateMessage) => {
+    if (!patch) return false;
+    updateMessage({
+      generatedImages: patch.generatedImages,
+      content: patch.content,
+      status: MESSAGE_STATUS.COMPLETE,
+    });
+    return true;
   }, []);
 
   const pollImageTaskUntilReady = useCallback(
@@ -154,12 +136,9 @@ export const useApiRequest = (
         const taskData = data?.data && typeof data.data === 'object' ? data.data : data;
         const status = String(taskData?.status || '').toLowerCase();
         const progress = Number(taskData?.progress || 0);
-        const url = extractImageResultURL(data);
-        if (url) {
-          updateMessage({
-            content: `![generated-image-1](${url})`,
-            status: MESSAGE_STATUS.COMPLETE,
-          });
+        const imagePatch = buildImageMessageContentPatch(extractImageSources(data));
+        if (imagePatch) {
+          applyImageMessagePatch(imagePatch, updateMessage);
           return;
         }
         if (['completed', 'succeeded', 'success'].includes(status)) {
@@ -181,7 +160,7 @@ export const useApiRequest = (
         });
       }
     },
-    [extractImageResultURL],
+    [applyImageMessagePatch],
   );
 
   const pollVideoTaskUntilReady = useCallback(
@@ -577,7 +556,7 @@ export const useApiRequest = (
             return newMessages;
           });
         } else if (payload?.__endpoint === 'image') {
-          const imageUrls = extractImageURLs(data);
+          const imagePatch = buildImageMessageContentPatch(extractImageSources(data));
           const taskData = data?.data && typeof data.data === 'object' ? data.data : data;
           const imageTaskId =
             taskData?.task_id || taskData?.id || data?.task_id || data?.id;
@@ -589,16 +568,16 @@ export const useApiRequest = (
             const lastMessage = newMessages[newMessages.length - 1];
             if (lastMessage?.status === MESSAGE_STATUS.LOADING) {
               const autoCollapseState = applyAutoCollapseLogic(lastMessage, true);
-              const imageMarkdown = imageUrls
-                .map((url, index) => `![generated-image-${index + 1}](${url})`)
-                .join('\n\n');
               newMessages[newMessages.length - 1] = {
                 ...lastMessage,
                 content:
-                  imageMarkdown ||
+                  imagePatch?.content ||
                   (shouldPollImage
                     ? '图片生成中，请稍后…'
                     : `图片生成完成。\n\n${JSON.stringify(data, null, 2)}`),
+                ...(imagePatch?.generatedImages
+                  ? { generatedImages: imagePatch.generatedImages }
+                  : {}),
                 status: MESSAGE_STATUS.COMPLETE,
                 ...autoCollapseState,
               };
@@ -614,6 +593,9 @@ export const useApiRequest = (
                 newMessages[newMessages.length - 1] = {
                   ...lastMessage,
                   ...(patch.content !== undefined ? { content: patch.content } : {}),
+                  ...(patch.generatedImages !== undefined
+                    ? { generatedImages: patch.generatedImages }
+                    : {}),
                   ...(patch.status ? { status: patch.status } : {}),
                 };
                 return newMessages;
@@ -709,7 +691,6 @@ export const useApiRequest = (
       stripLocalFields,
       pollVideoTaskUntilReady,
       getVideoTaskPayload,
-      extractImageURLs,
       pollImageTaskUntilReady,
     ],
   );

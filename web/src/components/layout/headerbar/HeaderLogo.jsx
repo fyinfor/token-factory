@@ -21,12 +21,7 @@ import React, { useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Typography, Tag } from '@douyinfe/semi-ui';
 import SkeletonWrapper from '../components/SkeletonWrapper';
-import {
-  userIsDistributorUser,
-  userIsSupplierUser,
-  showInfo,
-  isAdmin,
-} from '../../../helpers';
+import { userIsSupplierUser, showInfo, isAdmin } from '../../../helpers';
 
 /**
  * 顶栏申请入口：浅色用 #409EFF 系。
@@ -73,28 +68,16 @@ const HeaderLogo = ({
     return null;
   }
 
-  const distributorApplyPath = '/console/distributor/apply';
   const supplierApplyPath = '/console/supplier/apply';
 
-  /** 管理员不展示；已登录代理仅隐藏「成为代理」（「提供算力」仍看是否已有供应商身份） */
+  /** 管理员不展示；已是供应商则隐藏「提供算力」 */
   const hideApplyLinks = isAdmin();
-  const hideDistributorApplyAsLoggedInDistributor = Boolean(
-    user && userIsDistributorUser(user),
-  );
-
-  const showDistributorApply =
-    !hideApplyLinks && !hideDistributorApplyAsLoggedInDistributor;
   const showSupplierApply = !hideApplyLinks && !userIsSupplierUser(user);
-  const showApplyLinks = showDistributorApply || showSupplierApply;
 
-  const distributorTo = user
-    ? distributorApplyPath
-    : `/login?redirect=${encodeURIComponent(distributorApplyPath)}`;
   const supplierTo = user
     ? supplierApplyPath
     : `/login?redirect=${encodeURIComponent(supplierApplyPath)}`;
 
-  const distributorActive = location.pathname.startsWith(distributorApplyPath);
   const supplierActive = location.pathname.startsWith(supplierApplyPath);
 
   return (
@@ -136,26 +119,15 @@ const HeaderLogo = ({
           </div>
         </div>
       </Link>
-      {showApplyLinks && (
+      {showSupplierApply && (
         <div className='hidden sm:flex items-center gap-2 flex-shrink-0'>
-          {showDistributorApply && (
-            <Link
-              to={distributorTo}
-              onClick={handleApplyEntryClick(distributorApplyPath)}
-              className={`${APPLY_BTN_BASE} ${distributorActive ? APPLY_BTN_ACTIVE : APPLY_BTN_IDLE}`}
-            >
-              {t('成为代理')}
-            </Link>
-          )}
-          {showSupplierApply && (
-            <Link
-              to={supplierTo}
-              onClick={handleApplyEntryClick(supplierApplyPath)}
-              className={`${APPLY_BTN_BASE} ${supplierActive ? APPLY_BTN_ACTIVE : APPLY_BTN_IDLE}`}
-            >
-              {t('提供算力')}
-            </Link>
-          )}
+          <Link
+            to={supplierTo}
+            onClick={handleApplyEntryClick(supplierApplyPath)}
+            className={`${APPLY_BTN_BASE} ${supplierActive ? APPLY_BTN_ACTIVE : APPLY_BTN_IDLE}`}
+          >
+            {t('提供算力')}
+          </Link>
         </div>
       )}
     </div>

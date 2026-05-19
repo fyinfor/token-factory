@@ -35,10 +35,15 @@ import { UserContext } from '../../../../../context/User';
 import ApiDocsSidePanel from './ApiDocsSidePanel';
 import ModelTokenList from './ModelTokenList';
 import VideoFlatClipHintTable from '../../components/VideoFlatClipHintTable';
+import ImagePerImageHintTable from '../../components/ImagePerImageHintTable';
 import {
   pickVideoFlatClipHintForChannel,
   hasVideoFlatClipTierTable,
 } from '../../constants/videoFlatClipLaneI18n';
+import {
+  pickImagePerImageHintForChannel,
+  hasImagePerImageTierTable,
+} from '../../constants/imagePerImageHintI18n';
 
 import { renderModelTestResultSummary } from '../../../../../helpers/modelStability';
 
@@ -378,6 +383,11 @@ const ModelChannelList = ({
                     channel,
                   );
                   const showVideoFlatTable = hasVideoFlatClipTierTable(vHint);
+                  const iHint = pickImagePerImageHintForChannel(
+                    modelData,
+                    channel,
+                  );
+                  const showImagePerImageTable = hasImagePerImageTierTable(iHint);
                   const channelPath = channel.route_slug
                     ? `${modelData.model_name}/${channel.route_slug}`
                     : `${channel.supplier_alias}/${modelData.model_name}/${channel.channel_no}`;
@@ -480,6 +490,15 @@ const ModelChannelList = ({
                           {showVideoFlatTable ? (
                             <VideoFlatClipHintTable
                               hint={vHint}
+                              usedGroupRatio={usedGroupRatio}
+                              displayPrice={displayPrice}
+                              t={t}
+                              blurPricing={blurPricing}
+                            />
+                          ) : null}
+                          {showImagePerImageTable ? (
+                            <ImagePerImageHintTable
+                              hint={iHint}
                               usedGroupRatio={usedGroupRatio}
                               displayPrice={displayPrice}
                               t={t}
