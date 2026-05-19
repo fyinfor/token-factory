@@ -22,11 +22,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Button, Dropdown } from '@douyinfe/semi-ui';
 import { ChevronDown } from 'lucide-react';
 import SkeletonWrapper from '../components/SkeletonWrapper';
-import {
-  isAdmin,
-  userIsDistributorUser,
-  userIsSupplierUser,
-} from '../../../helpers';
+import { isAdmin, userIsSupplierUser } from '../../../helpers';
 
 /** 主站入口顺序（与桌面顶栏一致） */
 const PRIMARY_NAV_KEYS = ['home', 'pricing', 'docs', 'about'];
@@ -34,7 +30,6 @@ const PRIMARY_NAV_KEYS = ['home', 'pricing', 'docs', 'about'];
 const menuClass =
   '!bg-semi-color-bg-overlay !border-semi-color-border !shadow-lg !rounded-lg dark:!bg-gray-700 dark:!border-gray-600';
 
-const distributorApplyPath = '/console/distributor/apply';
 const supplierApplyPath = '/console/supplier/apply';
 
 const MobileSiteNavDropdown = ({
@@ -64,29 +59,16 @@ const MobileSiteNavDropdown = ({
 
   const applyEntries = useMemo(() => {
     const hideApplyLinks = isAdmin();
-    const hideDistributorApplyAsLoggedInDistributor = Boolean(
-      user && userIsDistributorUser(user),
-    );
-    const showDistributorApply =
-      !hideApplyLinks && !hideDistributorApplyAsLoggedInDistributor;
     const showSupplierApply = !hideApplyLinks && !userIsSupplierUser(user);
 
-    const entries = [];
-    if (showDistributorApply) {
-      entries.push({
-        itemKey: 'distributor-apply',
-        text: t('成为代理'),
-        redirectPath: distributorApplyPath,
-      });
-    }
-    if (showSupplierApply) {
-      entries.push({
+    if (!showSupplierApply) return [];
+    return [
+      {
         itemKey: 'supplier-apply',
         text: t('提供算力'),
         redirectPath: supplierApplyPath,
-      });
-    }
-    return entries;
+      },
+    ];
   }, [user, t]);
 
   const currentPageLabel = useMemo(() => {
@@ -97,7 +79,6 @@ const MobileSiteNavDropdown = ({
     if (/\/[a-z]{2}\/docs\b/i.test(p) || p.includes('/docs')) {
       return t('文档');
     }
-    if (p.startsWith(distributorApplyPath)) return t('成为代理');
     if (p.startsWith(supplierApplyPath)) return t('提供算力');
     if (p.startsWith('/console')) return t('控制台');
     if (p === '/login') return t('登录');
