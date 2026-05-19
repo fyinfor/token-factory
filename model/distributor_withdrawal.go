@@ -88,42 +88,237 @@ func distWithdrawRefundAffQuota(tx *gorm.DB, userId int, quota int) error {
 	return nil
 }
 
+func distWithdrawTrim(s string) string {
+	return strings.TrimSpace(s)
+}
+
+func distWithdrawRequireNonEmpty(label, val string) error {
+	if distWithdrawTrim(val) == "" {
+		return fmt.Errorf("请填写%s", label)
+	}
+	return nil
+}
+
+func distWithdrawRequireURL(label, val string) error {
+	if distWithdrawTrim(val) == "" {
+		return fmt.Errorf("请上传%s", label)
+	}
+	return nil
+}
+
+func distWithdrawURLsJSON(urls []string) (string, error) {
+	out := make([]string, 0, len(urls))
+	for _, u := range urls {
+		u = distWithdrawTrim(u)
+		if u != "" {
+			out = append(out, u)
+		}
+	}
+	if len(out) == 0 {
+		return "", errors.New("请上传所需附件")
+	}
+	b, err := common.Marshal(out)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+func normalizeDistributorWithdrawPersonalDetail(d *DistributorWithdrawPersonalDetail) {
+	if d == nil {
+		return
+	}
+	d.RealName = distWithdrawTrim(d.RealName)
+	d.IdCardNo = distWithdrawTrim(d.IdCardNo)
+	d.IdCardExpiry = distWithdrawTrim(d.IdCardExpiry)
+	d.Mobile = distWithdrawTrim(d.Mobile)
+	d.BankAccount = distWithdrawTrim(d.BankAccount)
+	d.BankName = distWithdrawTrim(d.BankName)
+	d.BankReservedMobile = distWithdrawTrim(d.BankReservedMobile)
+	d.Email = distWithdrawTrim(d.Email)
+	d.IdCardFrontUrl = distWithdrawTrim(d.IdCardFrontUrl)
+	d.IdCardBackUrl = distWithdrawTrim(d.IdCardBackUrl)
+}
+
+func normalizeDistributorWithdrawEnterpriseDetail(d *DistributorWithdrawEnterpriseDetail) {
+	if d == nil {
+		return
+	}
+	d.CompanyName = distWithdrawTrim(d.CompanyName)
+	d.CreditCode = distWithdrawTrim(d.CreditCode)
+	d.RegisteredAddress = distWithdrawTrim(d.RegisteredAddress)
+	d.LegalName = distWithdrawTrim(d.LegalName)
+	d.LegalIdCard = distWithdrawTrim(d.LegalIdCard)
+	d.LegalMobile = distWithdrawTrim(d.LegalMobile)
+	d.BankAccount = distWithdrawTrim(d.BankAccount)
+	d.BankName = distWithdrawTrim(d.BankName)
+	d.BankBranchCode = distWithdrawTrim(d.BankBranchCode)
+	d.ContactName = distWithdrawTrim(d.ContactName)
+	d.BusinessLicenseUrl = distWithdrawTrim(d.BusinessLicenseUrl)
+	d.LegalIdCardUrl = distWithdrawTrim(d.LegalIdCardUrl)
+	d.CorporateAccountProofUrl = distWithdrawTrim(d.CorporateAccountProofUrl)
+	d.InvoiceUrl = distWithdrawTrim(d.InvoiceUrl)
+}
+
+func validateDistributorWithdrawPersonalDetail(d *DistributorWithdrawPersonalDetail) (realName, bankName, bankAccount string, docUrls []string, detailJSON string, err error) {
+	if d == nil {
+		return "", "", "", nil, "", errors.New("请填写个人提现资料")
+	}
+	normalizeDistributorWithdrawPersonalDetail(d)
+	checks := []struct {
+		label string
+		val   string
+	}{
+		{"姓名", d.RealName},
+		{"身份证号", d.IdCardNo},
+		{"身份证有效期", d.IdCardExpiry},
+		{"手机号", d.Mobile},
+		{"银行卡号", d.BankAccount},
+		{"开户行", d.BankName},
+		{"银行预留手机号", d.BankReservedMobile},
+		{"邮箱", d.Email},
+	}
+	for _, c := range checks {
+		if e := distWithdrawRequireNonEmpty(c.label, c.val); e != nil {
+			return "", "", "", nil, "", e
+		}
+	}
+	for _, c := range []struct {
+		label string
+		val   string
+	}{
+		{"身份证正面", d.IdCardFrontUrl},
+		{"身份证反面", d.IdCardBackUrl},
+	} {
+		if e := distWithdrawRequireURL(c.label, c.val); e != nil {
+			return "", "", "", nil, "", e
+		}
+	}
+	docUrls = []string{d.IdCardFrontUrl, d.IdCardBackUrl}
+	b, err := common.Marshal(d)
+	if err != nil {
+		return "", "", "", nil, "", err
+	}
+	return d.RealName, d.BankName, d.BankAccount, docUrls, string(b), nil
+}
+
+func validateDistributorWithdrawEnterpriseDetail(d *DistributorWithdrawEnterpriseDetail) (realName, bankName, bankAccount string, docUrls []string, detailJSON string, err error) {
+	if d == nil {
+		return "", "", "", nil, "", errors.New("请填写企业提现资料")
+	}
+	normalizeDistributorWithdrawEnterpriseDetail(d)
+	checks := []struct {
+		label string
+		val   string
+	}{
+		{"企业名称", d.CompanyName},
+		{"统一社会信用代码", d.CreditCode},
+		{"注册地址", d.RegisteredAddress},
+		{"法人姓名", d.LegalName},
+		{"法人身份证", d.LegalIdCard},
+		{"法人手机号", d.LegalMobile},
+		{"对公卡号", d.BankAccount},
+		{"开户行", d.BankName},
+		{"联行号", d.BankBranchCode},
+		{"联系人", d.ContactName},
+	}
+	for _, c := range checks {
+		if e := distWithdrawRequireNonEmpty(c.label, c.val); e != nil {
+			return "", "", "", nil, "", e
+		}
+	}
+	for _, c := range []struct {
+		label string
+		val   string
+	}{
+		{"营业执照", d.BusinessLicenseUrl},
+		{"法人身份证", d.LegalIdCardUrl},
+		{"对公账户证明", d.CorporateAccountProofUrl},
+		{"发票", d.InvoiceUrl},
+	} {
+		if e := distWithdrawRequireURL(c.label, c.val); e != nil {
+			return "", "", "", nil, "", e
+		}
+	}
+	docUrls = []string{d.BusinessLicenseUrl, d.LegalIdCardUrl, d.CorporateAccountProofUrl, d.InvoiceUrl}
+	b, err := common.Marshal(d)
+	if err != nil {
+		return "", "", "", nil, "", err
+	}
+	return d.CompanyName, d.BankName, d.BankAccount, docUrls, string(b), nil
+}
+
+// ResolveDistributorWithdrawTypeForUser 根据入驻申请确定提现类型，无申请记录时默认个人
+func ResolveDistributorWithdrawTypeForUser(userId int) int {
+	app, err := GetDistributorApplicationByUserId(userId)
+	if err != nil || app == nil {
+		return DistributorWithdrawTypePersonal
+	}
+	if app.ApplyType == DistributorApplyTypeEnterprise {
+		return DistributorWithdrawTypeEnterprise
+	}
+	return DistributorWithdrawTypePersonal
+}
+
+// ParseDistributorWithdrawalDetail 解析 detail_json 为 map（供 API 返回）
+func ParseDistributorWithdrawalDetail(w *DistributorWithdrawal) map[string]interface{} {
+	out := map[string]interface{}{}
+	if w == nil {
+		return out
+	}
+	raw := strings.TrimSpace(w.DetailJson)
+	if raw == "" {
+		return out
+	}
+	var m map[string]interface{}
+	if common.UnmarshalJsonStr(raw, &m) == nil && m != nil {
+		return m
+	}
+	return out
+}
+
 // CreateDistributorWithdrawal 提交提现：校验最低额度与余额，暂扣 aff_quota
-func CreateDistributorWithdrawal(userId int, realName, bankName, bankAccount, voucherUrlsJSON, withdrawMonth string, quotaAmount int) error {
-	realName = strings.TrimSpace(realName)
-	bankName = strings.TrimSpace(bankName)
-	bankAccount = strings.TrimSpace(bankAccount)
-	withdrawMonth = strings.TrimSpace(withdrawMonth)
-	voucherUrlsJSON = strings.TrimSpace(voucherUrlsJSON)
-	if realName == "" {
-		return errors.New("请填写真实姓名")
-	}
-	if bankName == "" {
-		return errors.New("请填写开户行")
-	}
-	if bankAccount == "" {
-		return errors.New("请填写银行卡号")
-	}
-	if voucherUrlsJSON == "" {
-		return errors.New("请上传票据")
-	}
+func CreateDistributorWithdrawal(userId int, in CreateDistributorWithdrawalInput) error {
+	withdrawMonth := distWithdrawTrim(in.WithdrawMonth)
 	if withdrawMonth == "" {
 		withdrawMonth = time.Now().Format("2006-01")
 	} else if !distWithdrawMonthRe.MatchString(withdrawMonth) {
 		return errors.New("提现月份格式应为 YYYY-MM")
 	}
-	var vurls []string
-	if err := common.UnmarshalJsonStr(voucherUrlsJSON, &vurls); err != nil || len(vurls) == 0 {
-		return errors.New("请上传票据")
-	}
-	for _, u := range vurls {
-		if strings.TrimSpace(u) == "" {
-			return errors.New("票据地址无效")
-		}
-	}
+	quotaAmount := in.QuotaAmount
 	if quotaAmount <= 0 {
 		return errors.New("提现额度无效")
 	}
+
+	withdrawType := in.WithdrawType
+	if withdrawType != DistributorWithdrawTypePersonal && withdrawType != DistributorWithdrawTypeEnterprise {
+		withdrawType = ResolveDistributorWithdrawTypeForUser(userId)
+	}
+	expectedType := ResolveDistributorWithdrawTypeForUser(userId)
+	if withdrawType != expectedType {
+		if expectedType == DistributorWithdrawTypeEnterprise {
+			return errors.New("当前为企业代理，请使用企业提现表单")
+		}
+		return errors.New("当前为个人代理，请使用个人提现表单")
+	}
+
+	var realName, bankName, bankAccount, detailJSON, voucherUrlsJSON string
+	var docUrls []string
+	var err error
+	switch withdrawType {
+	case DistributorWithdrawTypeEnterprise:
+		realName, bankName, bankAccount, docUrls, detailJSON, err = validateDistributorWithdrawEnterpriseDetail(in.Enterprise)
+	default:
+		realName, bankName, bankAccount, docUrls, detailJSON, err = validateDistributorWithdrawPersonalDetail(in.Personal)
+	}
+	if err != nil {
+		return err
+	}
+	voucherUrlsJSON, err = distWithdrawURLsJSON(docUrls)
+	if err != nil {
+		return err
+	}
+
 	u, err := GetUserById(userId, false)
 	if err != nil {
 		return err
@@ -135,7 +330,6 @@ func CreateDistributorWithdrawal(userId int, realName, bankName, bankAccount, vo
 		return errors.New("待使用收益不足")
 	}
 	minQ := GetDistributorMinWithdrawQuota()
-	// 余额达到系统最低提现额度时，不得低于该门槛；余额不足该门槛时，允许在 1～当前余额之间提现
 	if u.AffQuota >= minQ {
 		if quotaAmount < minQ {
 			return fmt.Errorf("提现额度不能低于系统下限")
@@ -158,9 +352,11 @@ func CreateDistributorWithdrawal(userId int, realName, bankName, bankAccount, vo
 		}
 		w := DistributorWithdrawal{
 			UserId:        userId,
+			WithdrawType:  withdrawType,
 			RealName:      realName,
 			BankName:      bankName,
 			BankAccount:   bankAccount,
+			DetailJson:    detailJSON,
 			VoucherUrls:   voucherUrlsJSON,
 			WithdrawMonth: withdrawMonth,
 			QuotaAmount:   quotaAmount,
@@ -225,10 +421,13 @@ type DistributorWithdrawalAdminRow struct {
 }
 
 // ListDistributorWithdrawalsAdmin 管理端列表
-func ListDistributorWithdrawalsAdmin(status int, keyword string, pageInfo *common.PageInfo) ([]DistributorWithdrawalAdminRow, int64, error) {
+func ListDistributorWithdrawalsAdmin(status, withdrawType int, keyword string, pageInfo *common.PageInfo) ([]DistributorWithdrawalAdminRow, int64, error) {
 	base := DB.Model(&DistributorWithdrawal{})
 	if status > 0 {
 		base = base.Where("status = ?", status)
+	}
+	if withdrawType == DistributorWithdrawTypePersonal || withdrawType == DistributorWithdrawTypeEnterprise {
+		base = base.Where("withdraw_type = ?", withdrawType)
 	}
 	if kw := strings.TrimSpace(keyword); kw != "" {
 		like := "%" + kw + "%"

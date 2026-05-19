@@ -784,7 +784,9 @@ const ApiDocsSidePanel = ({
           className='!rounded-2xl shadow-sm border-0 api-docs-list-card'
           title={t('API 列表')}
         >
-          <Collapse>{docs.map(renderApiPanel)}</Collapse>
+          <Collapse defaultActiveKey={docs.length > 0 ? (docs[0]?.id || 0) : undefined}>
+            {docs.map(renderApiPanel)}
+          </Collapse>
         </Card>
       ) : (
         <Card
