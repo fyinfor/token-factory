@@ -335,6 +335,41 @@ func DeleteModelMeta(c *gin.Context) {
 	common.ApiSuccess(c, nil)
 }
 
+// BatchUpdateModelWeightRequest 批量更新模型权重请求
+type BatchUpdateModelWeightRequest struct {
+	IDs                []int   `json:"ids"`
+	SortWeight         float64 `json:"sort_weight"`
+	ManualBaseReqCount int64   `json:"manual_base_req_count"`
+}
+
+// BatchUpdateModelWeight 批量更新模型权重和手动调用次数
+func BatchUpdateModelWeight(c *gin.Context) {
+	var req BatchUpdateModelWeightRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if len(req.IDs) == 0 {
+		common.ApiErrorMsg(c, "请选择至少一个模型")
+		return
+	}
+
+	updates := map[string]interface{}{
+		"sort_weight":           req.SortWeight,
+		"manual_base_req_count": req.ManualBaseReqCount,
+	}
+
+	if err := model.DB.Model(&model.Model{}).Where("id IN ?", req.IDs).Updates(updates).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	model.RefreshPricing()
+	common.ApiSuccess(c, gin.H{
+		"updated": len(req.IDs),
+	})
+}
+
 // enrichModels 批量填充附加信息：端点、渠道、分组、计费类型，避免 N+1 查询
 func enrichModels(models []*model.Model) {
 	if len(models) == 0 {

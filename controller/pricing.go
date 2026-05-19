@@ -2,6 +2,7 @@ package controller
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -359,6 +360,95 @@ func GetPricing(c *gin.Context) {
 	}
 	pricingData := model.BuildPricingAPIItems(filtered, visibleChannelIDs, channelPricingMeta, false)
 
+	// 读取热度统计周期配置
+	common.OptionMapRWMutex.RLock()
+	heatStatPeriod := common.OptionMap["HeatStatPeriod"]
+	common.OptionMapRWMutex.RUnlock()
+	if heatStatPeriod == "" {
+		heatStatPeriod = model.HeatStatPeriod7d
+	}
+
+	// 查询模型和渠道的请求统计数据
+	modelStats, _ := model.GetModelRequestStatsByPeriod(heatStatPeriod)
+
+	// 将 visibleChannelIDs (map) 转换为 slice
+	visibleIDSlice := make([]int, 0, len(visibleChannelIDs))
+	for id := range visibleChannelIDs {
+		visibleIDSlice = append(visibleIDSlice, id)
+	}
+	channelStats, _ := model.GetChannelModelRequestStatsByPeriod(visibleIDSlice, heatStatPeriod)
+
+	// 构建查询映射
+	modelStatsMap := make(map[string]model.ModelRequestStats)
+	for _, s := range modelStats {
+		modelStatsMap[s.ModelName] = s
+	}
+
+	channelStatsMap := make(map[string]model.ChannelModelRequestStats)
+	for _, s := range channelStats {
+		key := fmt.Sprintf("%d:%s", s.ChannelID, s.ModelName)
+		channelStatsMap[key] = s
+	}
+
+	// 预加载所有模型的权重配置
+	modelConfigs := make(map[string]model.Model)
+	var allModels []model.Model
+	model.DB.Find(&allModels)
+	for _, m := range allModels {
+		modelConfigs[m.ModelName] = m
+	}
+
+	// 预加载所有渠道-模型热力配置
+	channelModelHeats, _ := model.GetAllChannelModelHeats()
+	channelHeatMap := make(map[string]model.ChannelModelHeat)
+	for _, heat := range channelModelHeats {
+		key := fmt.Sprintf("%d:%s", heat.ChannelID, heat.ModelName)
+		channelHeatMap[key] = heat
+	}
+
+	// 整合统计数据到 pricingData
+	for i := range pricingData {
+		item := &pricingData[i]
+		modelName := item.ModelName
+
+		// 整合渠道数据
+		for j := range item.ChannelList {
+			ch := &item.ChannelList[j]
+			key := fmt.Sprintf("%d:%s", ch.ChannelID, modelName)
+
+			var modelWeight float64 = 1
+			// 获取渠道-模型热力配置（新表）
+			if heat, ok := channelHeatMap[key]; ok {
+				ch.SortWeight = heat.ChannelSortWeight
+				ch.ManualBaseReqCount = heat.ManualBaseReqCount
+				modelWeight = heat.ModelSortWeight
+				if modelWeight <= 0 {
+					modelWeight = 1
+				}
+			} else {
+				// 默认配置
+				ch.SortWeight = 1
+				ch.ManualBaseReqCount = 0
+			}
+
+			// 获取渠道-模型自动统计数据
+			if cs, ok := channelStatsMap[key]; ok {
+				ch.AutoReqCount = cs.RequestCount7d
+			} else {
+				ch.AutoReqCount = 0
+			}
+
+			// 计算渠道最终调用次数和热度得分
+			ch.FinalReqCount = ch.ManualBaseReqCount + ch.AutoReqCount
+			// 热度分 = 最终调用次数 × 渠道权重 × 模型权重
+			// 防止权重为0导致热度分为0
+			if ch.SortWeight <= 0 {
+				ch.SortWeight = 1
+			}
+			ch.ChannelHeatScore = float64(ch.FinalReqCount) * ch.SortWeight * modelWeight
+		}
+	}
+
 	blurPricing := false
 	if !exists && shouldBlurPricing() {
 		blurPricing = true
@@ -386,10 +476,11 @@ func GetPricing(c *gin.Context) {
 	}
 
 	c.JSON(200, gin.H{
-		"success":      true,
-		"data":         pricingData,
-		"blur_pricing": blurPricing,
-		"vendors":      model.GetVendors(),
+		"success":          true,
+		"data":             pricingData,
+		"blur_pricing":     blurPricing,
+		"heat_stat_period": heatStatPeriod,
+		"vendors":          model.GetVendors(),
 		// "channels":                       channels,
 		"group_ratio":                     groupRatio,
 		"group_model_price":               groupModelPrice,
@@ -439,5 +530,13 @@ func ResetModelRatio(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"success": true,
 		"message": "重置模型倍率成功",
+	})
+}
+
+func GetVendors(c *gin.Context) {
+	vendors := model.GetVendors()
+	c.JSON(200, gin.H{
+		"success": true,
+		"data":    vendors,
 	})
 }
