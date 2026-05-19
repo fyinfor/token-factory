@@ -15,13 +15,98 @@ import (
 )
 
 type createDistributorWithdrawalRequest struct {
-	RealName      string   `json:"real_name"`
-	BankName      string   `json:"bank_name"`
-	BankAccount   string   `json:"bank_account"`
-	VoucherUrls   []string `json:"voucher_urls"`
-	WithdrawMonth string   `json:"withdraw_month"`
+	AccountType   int    `json:"account_type"`
+	RealName      string `json:"real_name"`
+	BankName      string `json:"bank_name"`
+	BankAccount   string `json:"bank_account"`
+	WithdrawMonth string `json:"withdraw_month"`
 	// 使用 float64 兼容前端 JSON 中的小数（如 InputNumber），再取整
 	QuotaAmount float64 `json:"quota_amount"`
+	// 个人扩展
+	IdCardNo          string `json:"id_card_no"`
+	IdCardExpiry      string `json:"id_card_expiry"`
+	Mobile            string `json:"mobile"`
+	BankReservedPhone string `json:"bank_reserved_phone"`
+	IdCardFrontUrl    string `json:"id_card_front_url"`
+	IdCardBackUrl     string `json:"id_card_back_url"`
+	BankCardPhotoUrl  string `json:"bank_card_photo_url"`
+	// 企业扩展
+	CreditCode               string `json:"credit_code"`
+	LegalPersonName          string `json:"legal_person_name"`
+	LegalPersonPhone         string `json:"legal_person_phone"`
+	BankBranchCode           string `json:"bank_branch_code"`
+	ContactPerson            string `json:"contact_person"`
+	BusinessLicenseUrl       string `json:"business_license_url"`
+	CorporateAccountProofUrl string `json:"corporate_account_proof_url"`
+	InvoiceUrl               string `json:"invoice_url"`
+}
+
+func distributorWithdrawalToJSON(w model.DistributorWithdrawal, username string) gin.H {
+	profile := model.ParseDistributorWithdrawalProfile(w.ProfileData)
+	return gin.H{
+		"id":                         w.Id,
+		"user_id":                    w.UserId,
+		"username":                   username,
+		"account_type":               w.AccountType,
+		"real_name":                  w.RealName,
+		"bank_name":                  w.BankName,
+		"bank_account":               w.BankAccount,
+		"profile_data":               profile,
+		"voucher_urls":               w.VoucherUrls,
+		"withdraw_month":             w.WithdrawMonth,
+		"quota_amount":               w.QuotaAmount,
+		"status":                     w.Status,
+		"reject_reason":              w.RejectReason,
+		"reviewer_id":                w.ReviewerId,
+		"reviewed_at":                w.ReviewedAt,
+		"cancelled_at":               w.CancelledAt,
+		"created_at":                 w.CreatedAt,
+		"updated_at":                 w.UpdatedAt,
+		"id_card_no":                 profile.IdCardNo,
+		"id_card_expiry":             profile.IdCardExpiry,
+		"mobile":                     profile.Mobile,
+		"bank_reserved_phone":        profile.BankReservedPhone,
+		"id_card_front_url":          profile.IdCardFrontUrl,
+		"id_card_back_url":           profile.IdCardBackUrl,
+		"bank_card_photo_url":        profile.BankCardPhotoUrl,
+		"credit_code":                profile.CreditCode,
+		"legal_person_name":          profile.LegalPersonName,
+		"legal_person_phone":         profile.LegalPersonPhone,
+		"bank_branch_code":           profile.BankBranchCode,
+		"contact_person":             profile.ContactPerson,
+		"business_license_url":       profile.BusinessLicenseUrl,
+		"corporate_account_proof_url": profile.CorporateAccountProofUrl,
+		"invoice_url":                profile.InvoiceUrl,
+	}
+}
+
+func buildWithdrawalProfileJSON(req createDistributorWithdrawalRequest) (string, error) {
+	accountType := req.AccountType
+	if accountType == 0 {
+		accountType = model.DistributorApplyTypePersonal
+	}
+	p := model.DistributorWithdrawalProfile{
+		IdCardNo:                 strings.TrimSpace(req.IdCardNo),
+		IdCardExpiry:             strings.TrimSpace(req.IdCardExpiry),
+		Mobile:                   strings.TrimSpace(req.Mobile),
+		BankReservedPhone:        strings.TrimSpace(req.BankReservedPhone),
+		IdCardFrontUrl:           strings.TrimSpace(req.IdCardFrontUrl),
+		IdCardBackUrl:            strings.TrimSpace(req.IdCardBackUrl),
+		BankCardPhotoUrl:         strings.TrimSpace(req.BankCardPhotoUrl),
+		CreditCode:               strings.TrimSpace(req.CreditCode),
+		LegalPersonName:          strings.TrimSpace(req.LegalPersonName),
+		LegalPersonPhone:         strings.TrimSpace(req.LegalPersonPhone),
+		BankBranchCode:           strings.TrimSpace(req.BankBranchCode),
+		ContactPerson:            strings.TrimSpace(req.ContactPerson),
+		BusinessLicenseUrl:       strings.TrimSpace(req.BusinessLicenseUrl),
+		CorporateAccountProofUrl: strings.TrimSpace(req.CorporateAccountProofUrl),
+		InvoiceUrl:               strings.TrimSpace(req.InvoiceUrl),
+	}
+	b, err := common.Marshal(p)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }
 
 type submitDistributorApplicationRequest struct {
@@ -90,6 +175,11 @@ func GetDistributorCenterInfo(c *gin.Context) {
 	if bps <= 0 {
 		bps = common.AffiliateDefaultCommissionBps
 	}
+	applyType, applicationRealName, err := model.GetDistributorWithdrawAccountType(userId)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -101,6 +191,8 @@ func GetDistributorCenterInfo(c *gin.Context) {
 			"distributor_commission_bps": user.DistributorCommissionBps,
 			"effective_commission_bps":   bps,
 			"default_commission_bps":     common.AffiliateDefaultCommissionBps,
+			"apply_type":                 applyType,
+			"application_real_name":      applicationRealName,
 		},
 	})
 }
@@ -385,24 +477,28 @@ func PostDistributorWithdrawal(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的请求"})
 		return
 	}
-	urls := make([]string, 0, len(req.VoucherUrls))
-	for _, u := range req.VoucherUrls {
-		u = strings.TrimSpace(u)
-		if u != "" {
-			urls = append(urls, u)
-		}
-	}
-	if len(urls) == 0 {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "请上传票据"})
+	accountType, _, err := model.GetDistributorWithdrawAccountType(userId)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
-	urlsJSON, err := common.Marshal(urls)
+	profileJSON, err := buildWithdrawalProfileJSON(req)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "票据序列化失败"})
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
 	quotaAmt := int(math.Round(req.QuotaAmount))
-	if err := model.CreateDistributorWithdrawal(userId, strings.TrimSpace(req.RealName), strings.TrimSpace(req.BankName), strings.TrimSpace(req.BankAccount), string(urlsJSON), strings.TrimSpace(req.WithdrawMonth), quotaAmt); err != nil {
+	if err := model.CreateDistributorWithdrawal(
+		userId,
+		accountType,
+		strings.TrimSpace(req.RealName),
+		strings.TrimSpace(req.BankName),
+		strings.TrimSpace(req.BankAccount),
+		profileJSON,
+		"[]",
+		strings.TrimSpace(req.WithdrawMonth),
+		quotaAmt,
+	); err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
@@ -414,10 +510,14 @@ func PostDistributorWithdrawal(c *gin.Context) {
 func GetDistributorWithdrawals(c *gin.Context) {
 	userId := c.GetInt("id")
 	pageInfo := common.GetPageQuery(c)
-	items, total, err := model.ListDistributorWithdrawals(userId, pageInfo)
+	rows, total, err := model.ListDistributorWithdrawals(userId, pageInfo)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
+	}
+	items := make([]gin.H, 0, len(rows))
+	for i := range rows {
+		items = append(items, distributorWithdrawalToJSON(rows[i], ""))
 	}
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(items)
@@ -443,32 +543,16 @@ func PostDistributorWithdrawalCancel(c *gin.Context) {
 func ListDistributorWithdrawalsAdmin(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	status, _ := strconv.Atoi(c.Query("status"))
+	accountType, _ := strconv.Atoi(c.Query("account_type"))
 	keyword := c.Query("keyword")
-	rows, total, err := model.ListDistributorWithdrawalsAdmin(status, keyword, pageInfo)
+	rows, total, err := model.ListDistributorWithdrawalsAdmin(status, accountType, keyword, pageInfo)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
 	items := make([]gin.H, 0, len(rows))
 	for i := range rows {
-		items = append(items, gin.H{
-			"id":              rows[i].Id,
-			"user_id":         rows[i].UserId,
-			"username":        rows[i].Username,
-			"real_name":       rows[i].RealName,
-			"bank_name":       rows[i].BankName,
-			"bank_account":    rows[i].BankAccount,
-			"voucher_urls":    rows[i].VoucherUrls,
-			"withdraw_month":  rows[i].WithdrawMonth,
-			"quota_amount":    rows[i].QuotaAmount,
-			"status":          rows[i].Status,
-			"reject_reason":   rows[i].RejectReason,
-			"reviewer_id":     rows[i].ReviewerId,
-			"reviewed_at":     rows[i].ReviewedAt,
-			"cancelled_at":    rows[i].CancelledAt,
-			"created_at":      rows[i].CreatedAt,
-			"updated_at":      rows[i].UpdatedAt,
-		})
+		items = append(items, distributorWithdrawalToJSON(rows[i].DistributorWithdrawal, rows[i].Username))
 	}
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(items)

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/QuantumNous/new-api/common"
@@ -11,13 +12,17 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func ossUploadFail(c *gin.Context, message string) {
+	c.JSON(http.StatusOK, gin.H{
+		"success": false,
+		"message": message,
+	})
+}
+
 // OssUpload 通用 OSS 上传（需登录；需在运营设置中启用并填写 OSS 参数）。
 func OssUpload(c *gin.Context) {
 	if !operation_setting.IsOssUploadReady() {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "未启用阿里云 OSS 或配置不完整",
-		})
+		ossUploadFail(c, service.ErrOssNotConfigured.Error())
 		return
 	}
 	id := c.GetInt("id")
@@ -37,28 +42,23 @@ func OssUpload(c *gin.Context) {
 		return
 	}
 	if user.Role < common.FileUploadPermission {
-		c.JSON(http.StatusForbidden, gin.H{
-			"success": false,
-			"message": "无上传权限",
-		})
+		ossUploadFail(c, "无上传权限")
 		return
 	}
 
 	file, err := c.FormFile("file")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": "请选择文件字段 file",
-		})
+		ossUploadFail(c, "请选择文件字段 file")
 		return
 	}
 
 	publicURL, err := service.OssUploadMultipartFile(file, id)
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		if errors.Is(err, service.ErrOssNotConfigured) {
+			ossUploadFail(c, err.Error())
+			return
+		}
+		ossUploadFail(c, err.Error())
 		return
 	}
 
