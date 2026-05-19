@@ -166,6 +166,22 @@ func UpsertDistributorApplication(userId, applyType int, realName, idCardNo, qua
 	return DB.Save(&app).Error
 }
 
+// GetDistributorWithdrawAccountType 提现账户类型与主体名称（来自入驻申请，无申请时默认个人）
+func GetDistributorWithdrawAccountType(userId int) (accountType int, subjectName string, err error) {
+	accountType = DistributorApplyTypePersonal
+	app, err := GetDistributorApplicationByUserId(userId)
+	if err != nil {
+		return 0, "", err
+	}
+	if app == nil {
+		return accountType, "", nil
+	}
+	if app.ApplyType == DistributorApplyTypeEnterprise {
+		accountType = DistributorApplyTypeEnterprise
+	}
+	return accountType, strings.TrimSpace(app.RealName), nil
+}
+
 // GetDistributorApplicationByUserId 当前用户申请记录
 func GetDistributorApplicationByUserId(userId int) (*DistributorApplication, error) {
 	if userId <= 0 {
