@@ -133,6 +133,8 @@ func SetApiRouter(router *gin.Engine) {
 			{
 				selfRoute.GET("/self/groups", controller.GetUserGroups)
 				selfRoute.GET("/self/phone_available", controller.UserSelfCheckPhoneAvailable)
+				selfRoute.GET("/self/sms_bind_verification", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.SendSMSBindVerification)
+				selfRoute.POST("/self/phone/bind", middleware.CriticalRateLimit(), controller.PhoneBind)
 				selfRoute.GET("/self", controller.GetSelf)
 				selfRoute.POST("/student/apply", controller.ApplyStudent)
 				selfRoute.GET("/models", controller.GetUserModels)

@@ -1677,6 +1677,64 @@ type emailBindRequest struct {
 	Code  string `json:"code"`
 }
 
+// phoneBindRequest 用户自助绑定/修改手机号请求体。
+type phoneBindRequest struct {
+	Phone   string `json:"phone"`
+	SMSCode string `json:"sms_verification_code"`
+}
+
+// PhoneBind 已登录用户通过短信验证码绑定或修改手机号。
+func PhoneBind(c *gin.Context) {
+	var req phoneBindRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	if !common.SMSVerificationEnabled {
+		common.ApiErrorMsg(c, "短信验证码功能未启用")
+		return
+	}
+	userID := c.GetInt("id")
+	if userID <= 0 {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	req.Phone = strings.TrimSpace(req.Phone)
+	req.SMSCode = strings.TrimSpace(req.SMSCode)
+	phoneNorm, valErr := model.NormalizeAndValidateAdminUserPhone(req.Phone, userID)
+	if valErr != nil {
+		common.ApiError(c, valErr)
+		return
+	}
+	if phoneNorm == "" {
+		common.ApiErrorMsg(c, "请输入手机号")
+		return
+	}
+	if len(req.SMSCode) != 6 {
+		common.ApiErrorMsg(c, "请输入 6 位短信验证码")
+		return
+	}
+	if !common.VerifyAndConsumeSMSCode(phoneNorm, req.SMSCode) {
+		common.ApiErrorI18n(c, i18n.MsgUserVerificationCodeError)
+		return
+	}
+	user, err := model.GetUserById(userID, false)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	user.Phone = phoneNorm
+	if err := user.Update(false); err != nil {
+		if isPhoneUniqueConstraintError(err) {
+			common.ApiErrorMsg(c, "手机号已被占用")
+			return
+		}
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, nil)
+}
+
 func EmailBind(c *gin.Context) {
 	var req emailBindRequest
 	if err := common.DecodeJson(c.Request.Body, &req); err != nil {

@@ -25,11 +25,14 @@ const (
 	ossPutBackoffBase = 80 * time.Millisecond
 )
 
+// ErrOssNotConfigured OSS 未启用或必填项未配置完整。
+var ErrOssNotConfigured = errors.New("未配置阿里云 OSS，请先在运营设置中启用并填写 Endpoint、Bucket、AccessKey 等参数")
+
 // OssUploadMultipartFile 将表单文件上传到已配置的阿里云 OSS（REST PutObject + 签名版本 1），返回对外访问 URL。
 // 需 Bucket/对象可读（公共读、CDN 或已授权访问）。
 func OssUploadMultipartFile(file *multipart.FileHeader, userID int) (string, error) {
 	if !operation_setting.IsOssUploadReady() {
-		return "", fmt.Errorf("OSS 未启用或未配置完整")
+		return "", ErrOssNotConfigured
 	}
 	cfg := operation_setting.GetOssSetting()
 	maxBytes := int64(cfg.MaxFileSizeMB) * 1024 * 1024
