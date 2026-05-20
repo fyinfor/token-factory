@@ -88,7 +88,7 @@ func sanitizePricingData(data []model.PricingAPIItem) {
 	for i := range data {
 		data[i].ModelRatio = 0
 		data[i].ModelPrice = 0
-		data[i].CompletionRatio = 0
+		data[i].CompletionRatio = nil
 		data[i].CacheRatio = nil
 		data[i].CreateCacheRatio = nil
 		data[i].ImageRatio = nil

@@ -26,7 +26,7 @@ type Pricing struct {
 	ModelRatio             float64                 `json:"model_ratio"`
 	ModelPrice             float64                 `json:"model_price"`
 	OwnerBy                string                  `json:"owner_by"`
-	CompletionRatio        float64                 `json:"completion_ratio"`
+	CompletionRatio        *float64                `json:"completion_ratio,omitempty"`
 	CacheRatio             *float64                `json:"cache_ratio,omitempty"`
 	CreateCacheRatio       *float64                `json:"create_cache_ratio,omitempty"`
 	ImageRatio             *float64                `json:"image_ratio,omitempty"`
@@ -76,7 +76,8 @@ type PricingChannelItem struct {
 	CompletionTierRatio  any     `json:"completion_tier_ratio,omitempty"`
 	CacheTierRatio       any     `json:"cache_tier_ratio,omitempty"`
 	CreateCacheTierRatio any     `json:"create_cache_tier_ratio,omitempty"`
-	PriceDiscountPercent float64 `json:"price_discount_percent"`
+	PriceDiscountPercent float64 `json:"price_discount_percent"` // 成本折扣率（百分数，100=不打折）
+	MarkupDiscountRate   float64 `json:"markup_discount_rate"`   // 加价折扣率（百分数，0=不加价）
 	QuotaType            int     `json:"quota_type"`
 }
 
@@ -200,9 +201,12 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			if row.PriceDiscountPercent != nil {
 				d = *row.PriceDiscountPercent
 			}
-			mult := ChannelPriceDiscountMultiplierForPricing(d)
-			mp := baseMp * mult
-			mr := baseMr * mult
+			markupRate := 0.0
+			if row.MarkupDiscountRate != nil {
+				markupRate = *row.MarkupDiscountRate
+			}
+			// 新公式：前端接收原始倍率（baseMp/baseMr），由前端按公式显式乘以成本折扣率；
+			// price_discount_percent 和 markup_discount_rate 一并下发供前端计算。
 			routeSlug := ""
 			if channelSlugMap != nil {
 				routeSlug = channelSlugMap[row.ChannelID]
@@ -216,12 +220,13 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 				SupplierType:          strings.TrimSpace(row.SupplierType),
 				RouteSlug:             routeSlug,
 				TestResponseTimeMs:    testMs,
-				ModelPrice:            mp,
-				ModelRatio:            mr,
+				ModelPrice:            baseMp,
+				ModelRatio:            baseMr,
 				CompletionRatio:       cr,
 				CacheRatio:            chCache,
 				CreateCacheRatio:      chCreate,
 				PriceDiscountPercent:  d,
+				MarkupDiscountRate:    markupRate,
 				QuotaType: func() int {
 					if baseMp > 0 {
 						return 1
@@ -540,7 +545,11 @@ func updatePricing() {
 		} else {
 			modelRatio, _, _ := ratio_setting.GetModelRatio(model)
 			pricing.ModelRatio = modelRatio
-			pricing.CompletionRatio = ratio_setting.GetCompletionRatio(model)
+			// 仅当模型有显式配置的输出倍率时才返回，否则前端不展示输出价格
+			if ratio_setting.ContainsCompletionRatio(model) {
+				cr := ratio_setting.GetCompletionRatio(model)
+				pricing.CompletionRatio = &cr
+			}
 			pricing.QuotaType = 0
 		}
 		if cacheRatio, ok := ratio_setting.GetCacheRatio(model); ok {

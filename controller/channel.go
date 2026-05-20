@@ -832,6 +832,7 @@ type upstreamChannelSyncItem struct {
 	SupplierType        string             `json:"supplier_type"`
 	CompanyLogoURL      string             `json:"company_logo_url"`
 	PriceDiscountPercent float64           `json:"price_discount_percent"`
+	MarkupDiscountRate  float64           `json:"markup_discount_rate"`
 	ModelMapping        string             `json:"model_mapping"`
 	ModelPrice          map[string]float64 `json:"model_price"`
 	ModelRatio          map[string]float64 `json:"model_ratio"`
@@ -998,6 +999,20 @@ func decodeUpstreamChannelPayload(payload map[string]any, itemsKey string) ([]up
 			default:
 				if f, err := strconv.ParseFloat(strings.TrimSpace(common.Interface2String(v)), 64); err == nil {
 					item.PriceDiscountPercent = f
+				}
+			}
+		}
+		if v, ok := m["markup_discount_rate"]; ok && v != nil {
+			switch x := v.(type) {
+			case float64:
+				item.MarkupDiscountRate = x
+			case json.Number:
+				if f, err := x.Float64(); err == nil {
+					item.MarkupDiscountRate = f
+				}
+			default:
+				if f, err := strconv.ParseFloat(strings.TrimSpace(common.Interface2String(v)), 64); err == nil {
+					item.MarkupDiscountRate = f
 				}
 			}
 		}
