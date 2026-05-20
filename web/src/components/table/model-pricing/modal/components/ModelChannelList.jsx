@@ -155,7 +155,7 @@ const ModelChannelList = ({
     }
   }, [allKeysStr, allKeys]);
 
-  // 格式化通道信息（与 calculateModelPrice 一致：含分组倍率）
+  // 格式化通道信息（新计费公式：含分组倍率、成本折扣、加价折扣）
   const formatChannelInfo = (channel) => {
     // 判断计费类型：优先使用 channel.quota_type，否则使用 modelData.quota_type
     const quotaType =
@@ -163,6 +163,29 @@ const ModelChannelList = ({
         ? channel.quota_type
         : modelData?.quota_type;
     const isPerToken = quotaType === 0; // 0=按量计费, 1=按次计费
+
+    // ============================================================
+    // 新计费公式参数：ch.model_ratio / ch.model_price 为原始渠道倍率（后端不再预乘成本折扣）
+    //   成本折扣率 = price_discount_percent / 100
+    //   加价倍率   = markup_discount_rate / 100
+    //
+    //   输入   = (ch.model_ratio × costDisc + globalMr × markupRate) × 2 × groupRatio
+    //   输出   = (ch.model_ratio × cr × costDisc + globalMr × globalCR × markupRate) × 2 × groupRatio
+    //   缓存读 = (ch.model_ratio × cacheRatio × costDisc + globalMr × globalCacheR × markupRate) × 2 × groupRatio
+    //   缓存写 = (ch.model_ratio × createCacheRatio × costDisc + globalMr × globalCreateCacheR × markupRate) × 2 × groupRatio
+    //   固定价 = (ch.model_price × costDisc + globalMp × markupRate) × groupRatio
+    // ============================================================
+    const costDisc = (channel.price_discount_percent != null ? channel.price_discount_percent : 100) / 100;
+    const markupRate = (channel.markup_discount_rate || 0) / 100;
+    const globalMr = modelData?.model_ratio || 0;
+    const globalMp = modelData?.model_price || 0;
+    const globalCR = modelData?.completion_ratio || 0;
+    const globalCacheR =
+      modelData?.cache_ratio != null ? Number(modelData.cache_ratio) : 0;
+    const globalCreateCacheR =
+      modelData?.create_cache_ratio != null
+        ? Number(modelData.create_cache_ratio)
+        : 0;
 
     // 计算价格，返回 { display, value }
     const calculatePrice = (
@@ -176,7 +199,7 @@ const ModelChannelList = ({
         // 按次计费：直接使用价格
         priceUSD = nominalRatio * ratio;
       } else {
-        // 按量计费：倍率 × 2 × 分组倍率
+        // 按量计费：有效倍率 × 2 × 分组倍率
         priceUSD = nominalRatio * 2 * ratio;
       }
       const rawDisplayPrice = displayPrice(priceUSD);
@@ -214,7 +237,7 @@ const ModelChannelList = ({
       }
     };
 
-    // 构造单条价格项，若根价格高于通道价格则附带原价与折扣
+    // 构造单条价格项，若全局价格高于有效通道价格则附带原价与折扣
     const makeItem = (label, channelValue, rootValue, isFixedPrice = false) => {
       if (!hasRatioValue(channelValue)) return null;
       const current = calculatePrice(Number(channelValue), isFixedPrice);
@@ -242,70 +265,63 @@ const ModelChannelList = ({
 
     // 按次计费
     if (isPerToken === false) {
-      items.push(
-        makeItem(
-          t('模型价格'),
-          channel.model_price,
-          modelData?.model_price,
-          true,
-        ),
-      );
+      // 固定价：ch.model_price × costDisc + globalMp × markupRate
+      const effModelPrice = hasRatioValue(channel.model_price)
+        ? Number(channel.model_price) * costDisc + globalMp * markupRate
+        : null;
+      items.push(makeItem(t('模型价格'), effModelPrice, modelData?.model_price, true));
     }
     // 按量计费
     else {
-      // 输入
-      items.push(
-        makeItem(
-          t('输入价格'),
-          channel.model_ratio,
-          modelData?.model_ratio,
-          false,
-        ),
-      );
+      // 输入：ch.model_ratio × costDisc + globalMr × markupRate
+      const effInputRate = hasRatioValue(channel.model_ratio)
+        ? Number(channel.model_ratio) * costDisc + globalMr * markupRate
+        : null;
+      items.push(makeItem(t('输入价格'), effInputRate, modelData?.model_ratio, false));
 
-      // 输出
+      // 输出价格：仅当全局模型配置了 completion_ratio 时才展示
       if (
         hasRatioValue(channel.model_ratio) &&
-        hasRatioValue(channel.completion_ratio)
+        hasRatioValue(channel.completion_ratio) &&
+        hasRatioValue(modelData?.completion_ratio)
       ) {
-        const chOut =
-          Number(channel.model_ratio) * Number(channel.completion_ratio);
-        const rootOut =
-          hasRatioValue(modelData?.model_ratio) &&
-          hasRatioValue(modelData?.completion_ratio)
-            ? Number(modelData.model_ratio) * Number(modelData.completion_ratio)
-            : null;
-        items.push(makeItem(t('输出价格'), chOut, rootOut, false));
+        const effOut =
+          Number(channel.model_ratio) * Number(channel.completion_ratio) * costDisc +
+          globalMr * globalCR * markupRate;
+        const rootOut = hasRatioValue(modelData?.model_ratio)
+          ? Number(modelData.model_ratio) * Number(modelData.completion_ratio)
+          : null;
+        items.push(makeItem(t('输出价格'), effOut, rootOut, false));
       }
 
-      // 缓存读取
+      // 缓存读取价格：仅当全局模型配置了 cache_ratio 时才展示
       if (
         hasRatioValue(channel.model_ratio) &&
-        hasRatioValue(channel.cache_ratio)
+        hasRatioValue(channel.cache_ratio) &&
+        hasRatioValue(modelData?.cache_ratio)
       ) {
-        const chC = Number(channel.model_ratio) * Number(channel.cache_ratio);
-        const rootC =
-          hasRatioValue(modelData?.model_ratio) &&
-          hasRatioValue(modelData?.cache_ratio)
-            ? Number(modelData.model_ratio) * Number(modelData.cache_ratio)
-            : null;
-        items.push(makeItem(t('缓存读取价格'), chC, rootC, false));
+        const effCacheRate =
+          Number(channel.model_ratio) * Number(channel.cache_ratio) * costDisc +
+          globalMr * globalCacheR * markupRate;
+        const rootC = hasRatioValue(modelData?.model_ratio)
+          ? Number(modelData.model_ratio) * Number(modelData.cache_ratio)
+          : null;
+        items.push(makeItem(t('缓存读取价格'), effCacheRate, rootC, false));
       }
 
-      // 缓存创建
+      // 缓存创建价格：仅当全局模型配置了 create_cache_ratio 时才展示
       if (
         hasRatioValue(channel.model_ratio) &&
-        hasRatioValue(channel.create_cache_ratio)
+        hasRatioValue(channel.create_cache_ratio) &&
+        hasRatioValue(modelData?.create_cache_ratio)
       ) {
-        const chCC =
-          Number(channel.model_ratio) * Number(channel.create_cache_ratio);
-        const rootCC =
-          hasRatioValue(modelData?.model_ratio) &&
-          hasRatioValue(modelData?.create_cache_ratio)
-            ? Number(modelData.model_ratio) *
-              Number(modelData.create_cache_ratio)
-            : null;
-        items.push(makeItem(t('缓存创建价格'), chCC, rootCC, false));
+        const effCreateCacheRate =
+          Number(channel.model_ratio) * Number(channel.create_cache_ratio) * costDisc +
+          globalMr * globalCreateCacheR * markupRate;
+        const rootCC = hasRatioValue(modelData?.model_ratio)
+          ? Number(modelData.model_ratio) * Number(modelData.create_cache_ratio)
+          : null;
+        items.push(makeItem(t('缓存创建价格'), effCreateCacheRate, rootCC, false));
       }
     }
     return items.filter(Boolean);

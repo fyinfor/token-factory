@@ -250,11 +250,25 @@ const PricingCardView = ({
       const cid = ch.channel_id;
       const mname = model.model_name;
 
-      const channelVideoFlatUsd = pickChannelScopedModelFloat(
-        channelVideoPrice,
-        cid,
-        mname,
-      );
+      // ============================================================
+      // 新计费公式参数：
+      //   ch.model_ratio / ch.model_price 为原始渠道倍率（后端不再预乘成本折扣）
+      //   成本折扣率 = price_discount_percent / 100
+      //   加价倍率   = markup_discount_rate / 100
+      //
+      //   输入   = (ch.model_ratio × costDisc + globalMr × markupRate) × 2 × groupRatio
+      //   输出   = (ch.model_ratio × cr × costDisc + globalMr × globalCR × markupRate) × 2 × groupRatio
+      //   缓存读 = (ch.model_ratio × cacheRatio × costDisc + globalMr × globalCacheR × markupRate) × 2 × groupRatio
+      //   缓存写 = (ch.model_ratio × createCacheRatio × costDisc + globalMr × globalCreateCacheR × markupRate) × 2 × groupRatio
+      //   固定价 = (ch.model_price × costDisc + globalMp × markupRate) × groupRatio
+      // ============================================================
+      const costDisc = (ch.price_discount_percent != null ? ch.price_discount_percent : 100) / 100;
+      const markupRate = (ch.markup_discount_rate || 0) / 100;
+      const globalMr = model.model_ratio || 0;
+      const globalMp = model.model_price || 0;
+
+      const channelVideoFlatUsd =
+        pickChannelScopedModelFloat(channelVideoPrice, cid, mname);
       const flatUsd =
         channelVideoFlatUsd != null
           ? channelVideoFlatUsd
@@ -266,43 +280,74 @@ const PricingCardView = ({
         originalPrices.videoFlat.push(formatPrice(flatUsd));
       }
 
+      // 全局子倍率（用于加价侧）
+      const globalCR = model.completion_ratio || 0;
+      const globalCacheR =
+        model.cache_ratio != null ? Number(model.cache_ratio) : 0;
+      const globalCreateCacheR =
+        model.create_cache_ratio != null
+          ? Number(model.create_cache_ratio)
+          : 0;
+
       // 按量计费
       if (model.quota_type === 0) {
         if (ch.model_ratio !== undefined && ch.model_ratio !== null) {
-          const inputPriceUSD = ch.model_ratio * 2 * usedGroupRatio;
-          prices.input.push(formatPrice(inputPriceUSD));
-          originalPrices.input.push(formatPrice(ch.model_ratio * 2));
+          // ============================================================
+          // 新计费公式（按量）：ch.model_ratio 为原始渠道倍率
+          //   输入   = (ch.model_ratio × costDisc + globalMr × markupRate) × 2 × groupRatio
+          //   输出   = (ch.model_ratio × cr × costDisc + globalMr × globalCR × markupRate) × 2 × groupRatio
+          //   缓存读 = (ch.model_ratio × cacheRatio × costDisc + globalMr × globalCacheR × markupRate) × 2 × groupRatio
+          //   缓存写 = (ch.model_ratio × createCacheRatio × costDisc + globalMr × globalCreateCacheR × markupRate) × 2 × groupRatio
+          // ============================================================
 
+          // 输入
+          const effInputRate = ch.model_ratio * costDisc + globalMr * markupRate;
+          prices.input.push(formatPrice(effInputRate * 2 * usedGroupRatio));
+          originalPrices.input.push(formatPrice(effInputRate * 2));
+
+          // 输出价格：仅当全局模型配置了 completion_ratio 时才展示
           if (
             ch.completion_ratio !== undefined &&
-            ch.completion_ratio !== null
+            ch.completion_ratio !== null &&
+            model.completion_ratio != null
           ) {
-            const outputPriceUSD =
-              ch.model_ratio * ch.completion_ratio * 2 * usedGroupRatio;
-            prices.output.push(formatPrice(outputPriceUSD));
-            originalPrices.output.push(
-              formatPrice(ch.model_ratio * ch.completion_ratio * 2),
-            );
+            // 输出：ch.model_ratio × cr × costDisc + globalMr × globalCR × markupRate
+            const effOutputRate =
+              ch.model_ratio * ch.completion_ratio * costDisc +
+              globalMr * globalCR * markupRate;
+            prices.output.push(formatPrice(effOutputRate * 2 * usedGroupRatio));
+            originalPrices.output.push(formatPrice(effOutputRate * 2));
           }
 
-          if (ch.cache_ratio !== undefined && ch.cache_ratio !== null) {
-            const cachePriceUSD =
-              ch.model_ratio * ch.cache_ratio * 2 * usedGroupRatio;
-            prices.cache.push(formatPrice(cachePriceUSD));
-            originalPrices.cache.push(
-              formatPrice(ch.model_ratio * ch.cache_ratio * 2),
-            );
+          // 缓存读取价格：仅当全局模型配置了 cache_ratio 时才展示
+          if (
+            ch.cache_ratio !== undefined &&
+            ch.cache_ratio !== null &&
+            model.cache_ratio != null
+          ) {
+            // 缓存读取：ch.model_ratio × cacheRatio × costDisc + globalMr × globalCacheR × markupRate
+            const effCacheRate =
+              ch.model_ratio * ch.cache_ratio * costDisc +
+              globalMr * globalCacheR * markupRate;
+            prices.cache.push(formatPrice(effCacheRate * 2 * usedGroupRatio));
+            originalPrices.cache.push(formatPrice(effCacheRate * 2));
           }
 
+          // 缓存创建价格：仅当全局模型配置了 create_cache_ratio 时才展示
           if (
             ch.create_cache_ratio !== undefined &&
-            ch.create_cache_ratio !== null
+            ch.create_cache_ratio !== null &&
+            model.create_cache_ratio != null
           ) {
-            const createCachePriceUSD =
-              ch.model_ratio * ch.create_cache_ratio * 2 * usedGroupRatio;
-            prices.createCache.push(formatPrice(createCachePriceUSD));
+            // 缓存创建：ch.model_ratio × createCacheRatio × costDisc + globalMr × globalCreateCacheR × markupRate
+            const effCreateCacheRate =
+              ch.model_ratio * ch.create_cache_ratio * costDisc +
+              globalMr * globalCreateCacheR * markupRate;
+            prices.createCache.push(
+              formatPrice(effCreateCacheRate * 2 * usedGroupRatio),
+            );
             originalPrices.createCache.push(
-              formatPrice(ch.model_ratio * ch.create_cache_ratio * 2),
+              formatPrice(effCreateCacheRate * 2),
             );
           }
 
@@ -336,25 +381,23 @@ const PricingCardView = ({
             vcrCh != null;
 
           if (showVideoToken) {
-            const videoTokUsd =
-              ch.model_ratio * effVr * effVcr * 2 * usedGroupRatio;
+            // 视频 token：同输入公式，再乘视频倍率
+            const videoTokUsd = effInputRate * effVr * effVcr * 2 * usedGroupRatio;
             prices.videoToken.push(formatPrice(videoTokUsd));
             originalPrices.videoToken.push(
-              formatPrice(ch.model_ratio * effVr * effVcr * 2),
+              formatPrice(effInputRate * effVr * effVcr * 2),
             );
           }
         }
       }
       // 按次计费
       else if (model.quota_type === 1 || ch.quota_type === 1) {
-        if (
-          !skipSimpleFixed &&
-          ch.model_price !== undefined &&
-          ch.model_price !== null
-        ) {
-          const fixedPriceUSD = ch.model_price * usedGroupRatio;
-          prices.fixed.push(formatPrice(fixedPriceUSD));
-          originalPrices.fixed.push(formatPrice(ch.model_price));
+        if (!skipSimpleFixed && ch.model_price !== undefined && ch.model_price !== null) {
+          // 固定价：ch.model_price × costDisc + globalMp × markupRate
+
+          const effModelPrice = ch.model_price * costDisc + globalMp * markupRate;
+          prices.fixed.push(formatPrice(effModelPrice * usedGroupRatio));
+          originalPrices.fixed.push(formatPrice(effModelPrice));
         }
       }
     });

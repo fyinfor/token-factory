@@ -17,8 +17,9 @@ import (
 // ─── 导出字段键常量 ────────────────────────────────────────────────────────────
 
 const (
-	chFieldName          = "name"
-	chFieldDiscountRate  = "discountRate"
+	chFieldName             = "name"
+	chFieldDiscountRate     = "discountRate"
+	chFieldMarkupDiscount   = "markupDiscountRate"
 	chFieldRouteSlug     = "routeSlug"
 	chFieldQuota         = "quota"
 	chFieldDisabled      = "disabled"
@@ -150,6 +151,9 @@ func buildChannelExportItem(ch *model.Channel, fields map[string]bool) map[strin
 	}
 	if fields[chFieldDiscountRate] {
 		item[chFieldDiscountRate] = ch.PriceDiscountPercent
+	}
+	if fields[chFieldMarkupDiscount] {
+		item[chFieldMarkupDiscount] = ch.MarkupDiscountRate
 	}
 	if fields[chFieldRouteSlug] {
 		item[chFieldRouteSlug] = ch.RouteSlug
@@ -406,6 +410,11 @@ func chApplyToExisting(ch *model.Channel, item map[string]interface{}, siteBuild
 		updates.PriceDiscountPercent = &f
 		cols = append(cols, "price_discount_percent")
 	}
+	if v, ok := item["markupDiscountRate"]; ok {
+		f := chToFloat64(v)
+		updates.MarkupDiscountRate = &f
+		cols = append(cols, "markup_discount_rate")
+	}
 	if v, ok := item["disabled"]; ok {
 		if b, isBool := v.(bool); isBool {
 			if b {
@@ -548,6 +557,10 @@ func chApplyToNew(ch *model.Channel, item map[string]interface{}, siteBuilderApi
 	if v, ok := item["discountRate"]; ok {
 		f := chToFloat64(v)
 		ch.PriceDiscountPercent = &f
+	}
+	if v, ok := item["markupDiscountRate"]; ok {
+		f := chToFloat64(v)
+		ch.MarkupDiscountRate = &f
 	}
 	if v, ok := item["routeSlug"]; ok {
 		if s, ok := v.(string); ok {

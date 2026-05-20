@@ -264,21 +264,32 @@ func TryModelPriceHelperImage(c *gin.Context, info *relaycommon.RelayInfo) (type
 		}
 	}
 
-	chDisc := model.ResolveChannelPriceDiscountPercent(channelID)
-	chDiscCopy := chDisc
-	quota := model.ApplyChannelPriceDiscountToQuota(int(math.Round(rawQuota)), chDisc)
+	// 新公式：图片计费 = (渠道图片价 * 成本折扣率% + 全局图片价 * 加价折扣率%) * count * groupRatio * QuotaPerUnit
+	chDiscImg := model.ResolveChannelPriceDiscountPercent(channelID)
+	markupDiscImg := model.ResolveChannelMarkupDiscountRate(channelID)
+	globalPriceImg, _ := resolveImageFlatUSD(0, modelName) // 全局图片价（无渠道维度）
+	if globalPriceImg <= 0 {
+		globalPriceImg, _ = resolveImageFlatUSDForInfo(0, info)
+	}
+	effUsdPerImage := model.EffectiveModelPrice(usdPerImage, globalPriceImg, chDiscImg, markupDiscImg)
+	rawQuota = effUsdPerImage * float64(count) * common.QuotaPerUnit * groupRatioInfo.GroupRatio
+	chDiscCopyImg := chDiscImg
+	quota := int(math.Round(rawQuota))
 	if !freeModel && quota <= 0 && rawQuota > 0 && groupRatioInfo.GroupRatio > 0 {
 		quota = 1
 	}
 
 	priceData := types.PriceData{
-		FreeModel:            freeModel,
-		ModelPrice:           usdPerImage,
-		GroupRatioInfo:       groupRatioInfo,
-		UsePrice:             true,
-		Quota:                quota,
-		QuotaToPreConsume:    quota,
-		ChannelPriceDiscount: &chDiscCopy,
+		FreeModel:             freeModel,
+		ModelPrice:            usdPerImage,
+		GroupRatioInfo:        groupRatioInfo,
+		UsePrice:              true,
+		Quota:                 quota,
+		QuotaToPreConsume:     quota,
+		ChannelPriceDiscount:  &chDiscCopyImg,
+		CostDiscountPercent:   chDiscImg,
+		MarkupDiscountPercent: markupDiscImg,
+		GlobalModelPrice:      globalPriceImg,
 	}
 	priceData.AddOtherRatio("n", float64(count))
 	info.ImageBilling = &relaycommon.ImageBillingSnapshot{

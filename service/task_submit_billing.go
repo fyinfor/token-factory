@@ -46,8 +46,15 @@ func calcQuotaByUpstreamTokens(info *relaycommon.RelayInfo, totalTokens int) int
 	if groupRatio <= 0 {
 		groupRatio = 1
 	}
-	rawQuota := int(math.Round(float64(totalTokens) * modelRatio * groupRatio))
-	return model.ApplyChannelPriceDiscountToQuota(rawQuota, model.ResolveChannelPriceDiscountPercent(info.ChannelId))
+	// 新公式：有效输入倍率 = 渠道倍率 * 成本折扣率% + 全局倍率 * 加价折扣率%
+	costDisc := info.PriceData.CostDiscountPercent
+	if costDisc == 0 {
+		costDisc = model.ResolveChannelPriceDiscountPercent(info.ChannelId)
+	}
+	markupDisc := info.PriceData.MarkupDiscountPercent
+	globalRatio := info.PriceData.GlobalModelRatio
+	effRate := model.EffectiveInputRate(modelRatio, globalRatio, costDisc, markupDisc)
+	return int(math.Round(float64(totalTokens) * effRate * groupRatio))
 }
 
 func calcVideoPerSecondQuotaByTaskData(c *gin.Context, info *relaycommon.RelayInfo, taskData []byte) int {
@@ -83,8 +90,16 @@ func calcVideoPerSecondQuotaByTaskData(c *gin.Context, info *relaycommon.RelayIn
 	if groupRatio <= 0 {
 		groupRatio = 1
 	}
-	rawQuota := float64(seconds) * pricePerSec * common.QuotaPerUnit * groupRatio
-	quota := model.ApplyChannelPriceDiscountToQuota(int(math.Round(rawQuota)), model.ResolveChannelPriceDiscountPercent(info.ChannelId))
+	// 新公式：视频按秒计费 = (渠道价 * 成本折扣率% + 全局价 * 加价折扣率%) * seconds * groupRatio * QuotaPerUnit
+	costDiscVPS := info.PriceData.CostDiscountPercent
+	if costDiscVPS == 0 {
+		costDiscVPS = model.ResolveChannelPriceDiscountPercent(info.ChannelId)
+	}
+	markupDiscVPS := info.PriceData.MarkupDiscountPercent
+	globalPriceVPS, _ := ratio_setting.GetModelPrice(info.OriginModelName, false)
+	effPricePerSec := model.EffectiveModelPrice(pricePerSec, globalPriceVPS, costDiscVPS, markupDiscVPS)
+	rawQuota := float64(seconds) * effPricePerSec * common.QuotaPerUnit * groupRatio
+	quota := int(math.Round(rawQuota))
 	if quota <= 0 && rawQuota > 0 {
 		return 1
 	}
