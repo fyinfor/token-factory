@@ -982,6 +982,7 @@ export const useLogsData = () => {
                     billingDisplayMode,
                     true,
                     channelPriceDiscountLogPct,
+                    other,
                   )
                 : renderLogContent(
                     other?.model_ratio,

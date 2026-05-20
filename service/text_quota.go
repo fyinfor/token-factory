@@ -317,7 +317,7 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 
 		// ============================================================
 		// 新计费公式（token-based）：各类型使用独立有效倍率
-		//   输入     = (ch.model_ratio × costDisc% + globalMr × markupDisc%) × groupRatio
+		//   输入     = (ch.model_ratio × costDisc% + globalMr × markupDisc%) × groupRatio（扣费：tokens×有效倍率×groupRatio）
 		//   输出     = (ch.model_ratio × completionRatio × costDisc% + globalMr × globalCR × markupDisc%) × groupRatio
 		//   缓存读取  = (ch.model_ratio × cacheRatio × costDisc% + globalMr × globalCacheR × markupDisc%) × groupRatio
 		//   缓存创建  = (ch.model_ratio × createCacheRatio × costDisc% + globalMr × globalCreateCacheR × markupDisc%) × groupRatio

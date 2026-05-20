@@ -98,11 +98,11 @@ func ResolveChannelMarkupDiscountRate(channelId int) float64 {
 // 新计费公式辅助函数
 // ============================================================================
 // 新公式（各类型独立有效倍率，所有百分比字段按 % 计算，如 90 代表 90%）：
-//   输入       = (ch.model_ratio × costDisc% + globalMr × markupRate%) × groupRatio
-//   输出       = (ch.model_ratio × completionRatio × costDisc% + globalMr × 全局输出倍率 × markupRate%) × groupRatio
-//   缓存读取   = (ch.model_ratio × ch.cache_ratio × costDisc% + globalMr × 全局读取缓存倍率 × markupRate%) × groupRatio
-//   缓存创建   = (ch.model_ratio × ch.create_cache_ratio × costDisc% + globalMr × 全局创建缓存倍率 × markupRate%) × groupRatio
-//   固定价格   = ch.model_price × costDisc% + 全局固定价 × markupRate%
+//   输入       = (ch.model_ratio × costDisc% + globalMr × markupRate%) × 2 × groupRatio（展示价；扣费为 tokens×有效倍率×groupRatio）
+//   输出       = (ch.model_ratio × completionRatio × costDisc% + globalMr × 全局输出倍率 × markupRate%) × 2 × groupRatio
+//   缓存读取   = (ch.model_ratio × ch.cache_ratio × costDisc% + globalMr × 全局读取缓存倍率 × markupRate%) × 2 × groupRatio
+//   缓存创建   = (ch.model_ratio × ch.create_cache_ratio × costDisc% + globalMr × 全局创建缓存倍率 × markupRate%) × 2 × groupRatio
+//   固定价格   = (ch.model_price × costDisc% + 全局固定价 × markupRate%) × groupRatio
 // ============================================================================
 
 // EffectiveInputRate 计算有效输入倍率（不含分组倍率）。
