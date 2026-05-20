@@ -54,6 +54,14 @@ type textQuotaSummary struct {
 	ImageGenerationCallPrice float64
 	RequestTierPricing       bool
 	RequestTierBreakdown     ratio_setting.RequestTierPricingBreakdown
+	// 新计费公式字段
+	CostDiscountPercent    float64 // 成本折扣率%（price_discount_percent），默认 100
+	MarkupDiscountPercent  float64 // 加价折扣率%（markup_discount_rate），默认 0
+	GlobalModelRatio       float64 // 全局模型输入倍率
+	GlobalModelPrice       float64 // 全局模型固定价格
+	GlobalCompletionRatio  float64 // 全局模型输出倍率（用于输出侧加价计算）
+	GlobalCacheRatio       float64 // 全局缓存读取倍率（用于缓存读取侧加价计算）
+	GlobalCreateCacheRatio float64 // 全局缓存创建倍率（用于缓存写入侧加价计算）
 }
 
 func cacheWriteTokensTotal(summary textQuotaSummary) int {
@@ -119,20 +127,34 @@ func relayChannelID(relayInfo *relaycommon.RelayInfo) int {
 }
 
 func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage) textQuotaSummary {
+	// 从 PriceData 中读取成本折扣率和加价折扣率（默认值：100% 成本折扣，0% 加价）
+	costDisc := relayInfo.PriceData.CostDiscountPercent
+	if costDisc == 0 {
+		costDisc = 100 // 兼容老数据，未设置时默认无折扣
+	}
+	markupDisc := relayInfo.PriceData.MarkupDiscountPercent
+
 	summary := textQuotaSummary{
-		ModelName:            relayInfo.OriginModelName,
-		TokenName:            ctx.GetString("token_name"),
-		UseTimeSeconds:       time.Now().Unix() - relayInfo.StartTime.Unix(),
-		CompletionRatio:      relayInfo.PriceData.CompletionRatio,
-		CacheRatio:           relayInfo.PriceData.CacheRatio,
-		ImageRatio:           relayInfo.PriceData.ImageRatio,
-		ModelRatio:           relayInfo.PriceData.ModelRatio,
-		GroupRatio:           relayInfo.PriceData.GroupRatioInfo.GroupRatio,
-		ModelPrice:           relayInfo.PriceData.ModelPrice,
-		CacheCreationRatio:   relayInfo.PriceData.CacheCreationRatio,
-		CacheCreationRatio5m: relayInfo.PriceData.CacheCreation5mRatio,
-		CacheCreationRatio1h: relayInfo.PriceData.CacheCreation1hRatio,
-		UsageSemantic:        usageSemanticFromUsage(relayInfo, usage),
+		ModelName:             relayInfo.OriginModelName,
+		TokenName:             ctx.GetString("token_name"),
+		UseTimeSeconds:        time.Now().Unix() - relayInfo.StartTime.Unix(),
+		CompletionRatio:       relayInfo.PriceData.CompletionRatio,
+		CacheRatio:            relayInfo.PriceData.CacheRatio,
+		ImageRatio:            relayInfo.PriceData.ImageRatio,
+		ModelRatio:            relayInfo.PriceData.ModelRatio,
+		GroupRatio:            relayInfo.PriceData.GroupRatioInfo.GroupRatio,
+		ModelPrice:            relayInfo.PriceData.ModelPrice,
+		CacheCreationRatio:    relayInfo.PriceData.CacheCreationRatio,
+		CacheCreationRatio5m:  relayInfo.PriceData.CacheCreation5mRatio,
+		CacheCreationRatio1h:  relayInfo.PriceData.CacheCreation1hRatio,
+		UsageSemantic:         usageSemanticFromUsage(relayInfo, usage),
+		CostDiscountPercent:    costDisc,
+		MarkupDiscountPercent:  markupDisc,
+		GlobalModelRatio:       relayInfo.PriceData.GlobalModelRatio,
+		GlobalModelPrice:       relayInfo.PriceData.GlobalModelPrice,
+		GlobalCompletionRatio:  relayInfo.PriceData.GlobalCompletionRatio,
+		GlobalCacheRatio:       relayInfo.PriceData.GlobalCacheRatio,
+		GlobalCreateCacheRatio: relayInfo.PriceData.GlobalCreateCacheRatio,
 	}
 	summary.IsClaudeUsageSemantic = summary.UsageSemantic == "anthropic"
 
@@ -176,18 +198,9 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 	dAudioTokens := decimal.NewFromInt(int64(summary.AudioTokens))
 	dCompletionTokens := decimal.NewFromInt(int64(summary.CompletionTokens))
 	dCachedCreationTokens := decimal.NewFromInt(int64(summary.CacheCreationTokens))
-	dCompletionRatio := decimal.NewFromFloat(summary.CompletionRatio)
-	dCacheRatio := decimal.NewFromFloat(summary.CacheRatio)
 	dImageRatio := decimal.NewFromFloat(summary.ImageRatio)
-	dModelRatio := decimal.NewFromFloat(summary.ModelRatio)
 	dGroupRatio := decimal.NewFromFloat(summary.GroupRatio)
-	dModelPrice := decimal.NewFromFloat(summary.ModelPrice)
-	dCacheCreationRatio := decimal.NewFromFloat(summary.CacheCreationRatio)
-	dCacheCreationRatio5m := decimal.NewFromFloat(summary.CacheCreationRatio5m)
-	dCacheCreationRatio1h := decimal.NewFromFloat(summary.CacheCreationRatio1h)
 	dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
-
-	ratio := dModelRatio.Mul(dGroupRatio)
 
 	var dWebSearchQuota decimal.Decimal
 	if relayInfo.ResponsesUsageInfo != nil {
@@ -239,28 +252,19 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 	if !relayInfo.PriceData.UsePrice {
 		baseTokens := dPromptTokens
 
-		var cachedTokensWithRatio decimal.Decimal
+		// 对于非 Claude 语义计费：各类 token 从 baseTokens 中剔除，单独按各自有效倍率计费。
+		// 对于 Claude 语义计费：upstream 已将缓存 token 排除在 PromptTokens 之外，
+		// 故 baseTokens 不再减去缓存 token；缓存创建 token 仍需剔除以避免重复计费。
 		if !dCacheTokens.IsZero() {
 			if !summary.IsClaudeUsageSemantic && !legacyClaudeDerived {
 				baseTokens = baseTokens.Sub(dCacheTokens)
 			}
-			cachedTokensWithRatio = dCacheTokens.Mul(dCacheRatio)
 		}
 
-		var cachedCreationTokensWithRatio decimal.Decimal
 		hasSplitCacheCreationTokens := summary.CacheCreationTokens5m > 0 || summary.CacheCreationTokens1h > 0
 		if !dCachedCreationTokens.IsZero() || hasSplitCacheCreationTokens {
 			if !summary.IsClaudeUsageSemantic && !legacyClaudeDerived {
 				baseTokens = baseTokens.Sub(dCachedCreationTokens)
-				cachedCreationTokensWithRatio = dCachedCreationTokens.Mul(dCacheCreationRatio)
-			} else {
-				remaining := summary.CacheCreationTokens - summary.CacheCreationTokens5m - summary.CacheCreationTokens1h
-				if remaining < 0 {
-					remaining = 0
-				}
-				cachedCreationTokensWithRatio = decimal.NewFromInt(int64(remaining)).Mul(dCacheCreationRatio)
-				cachedCreationTokensWithRatio = cachedCreationTokensWithRatio.Add(decimal.NewFromInt(int64(summary.CacheCreationTokens5m)).Mul(dCacheCreationRatio5m))
-				cachedCreationTokensWithRatio = cachedCreationTokensWithRatio.Add(decimal.NewFromInt(int64(summary.CacheCreationTokens1h)).Mul(dCacheCreationRatio1h))
 			}
 		}
 
@@ -279,32 +283,105 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 			}
 		}
 
-		inputQuota := baseTokens
-		outputQuota := dCompletionTokens.Mul(dCompletionRatio)
-		cacheReadQuota := cachedTokensWithRatio
-		cacheWriteQuota := cachedCreationTokensWithRatio
-
-		// 使用新的四个独立阶梯倍率
+		// 阶梯倍率应用于 token 数量层
 		channelID := relayChannelID(relayInfo)
+		inputQuota := baseTokens
 		if modelTier, ok := ratio_setting.ResolveModelTierRatio(channelID, summary.ModelName); ok {
 			inputQuota = ratio_setting.ApplyTierSegmentsForType(inputQuota, modelTier)
 			summary.RequestTierPricing = true
 		}
+
+		completionTokensAdj := dCompletionTokens
 		if completionTier, ok := ratio_setting.ResolveCompletionTierRatio(channelID, summary.ModelName); ok {
-			outputQuota = ratio_setting.ApplyTierSegmentsForType(outputQuota, completionTier)
-			summary.RequestTierPricing = true
-		}
-		if cacheTier, ok := ratio_setting.ResolveCacheTierRatio(channelID, summary.ModelName); ok {
-			cacheReadQuota = ratio_setting.ApplyTierSegmentsForType(cacheReadQuota, cacheTier)
-			summary.RequestTierPricing = true
-		}
-		if createCacheTier, ok := ratio_setting.ResolveCreateCacheTierRatio(channelID, summary.ModelName); ok {
-			cacheWriteQuota = ratio_setting.ApplyTierSegmentsForType(cacheWriteQuota, createCacheTier)
+			completionTokensAdj = ratio_setting.ApplyTierSegmentsForType(completionTokensAdj, completionTier)
 			summary.RequestTierPricing = true
 		}
 
-		promptQuota := inputQuota.Add(cacheReadQuota).Add(imageTokensWithRatio).Add(cacheWriteQuota)
-		quotaCalculateDecimal := promptQuota.Add(outputQuota).Mul(ratio)
+		// 缓存读取 token（含阶梯）
+		cacheReadTokensAdj := dCacheTokens
+		if !dCacheTokens.IsZero() {
+			if cacheTier, ok := ratio_setting.ResolveCacheTierRatio(channelID, summary.ModelName); ok {
+				cacheReadTokensAdj = ratio_setting.ApplyTierSegmentsForType(cacheReadTokensAdj, cacheTier)
+				summary.RequestTierPricing = true
+			}
+		}
+
+		// 缓存创建 token（非拆分，含阶梯）
+		cacheWriteTokensAdj := dCachedCreationTokens
+		if !dCachedCreationTokens.IsZero() && !hasSplitCacheCreationTokens {
+			if createCacheTier, ok := ratio_setting.ResolveCreateCacheTierRatio(channelID, summary.ModelName); ok {
+				cacheWriteTokensAdj = ratio_setting.ApplyTierSegmentsForType(cacheWriteTokensAdj, createCacheTier)
+				summary.RequestTierPricing = true
+			}
+		}
+
+		// ============================================================
+		// 新计费公式（token-based）：各类型使用独立有效倍率
+		//   输入     = (ch.model_ratio × costDisc% + globalMr × markupDisc%) × groupRatio（扣费：tokens×有效倍率×groupRatio）
+		//   输出     = (ch.model_ratio × completionRatio × costDisc% + globalMr × globalCR × markupDisc%) × groupRatio
+		//   缓存读取  = (ch.model_ratio × cacheRatio × costDisc% + globalMr × globalCacheR × markupDisc%) × groupRatio
+		//   缓存创建  = (ch.model_ratio × createCacheRatio × costDisc% + globalMr × globalCreateCacheR × markupDisc%) × groupRatio
+		// ============================================================
+		effInputRate := model.EffectiveInputRate(summary.ModelRatio, summary.GlobalModelRatio, summary.CostDiscountPercent, summary.MarkupDiscountPercent)
+		effOutputRate := model.EffectiveOutputRate(summary.ModelRatio, summary.CompletionRatio, summary.GlobalModelRatio, summary.GlobalCompletionRatio, summary.CostDiscountPercent, summary.MarkupDiscountPercent)
+		effCacheReadRate := model.EffectiveCacheReadRate(summary.ModelRatio, summary.CacheRatio, summary.GlobalModelRatio, summary.GlobalCacheRatio, summary.CostDiscountPercent, summary.MarkupDiscountPercent)
+		effCacheCreate5mRate := model.EffectiveCacheCreationRate(summary.ModelRatio, summary.CacheCreationRatio5m, summary.GlobalModelRatio, summary.GlobalCreateCacheRatio, summary.CostDiscountPercent, summary.MarkupDiscountPercent)
+		// 1h 缓存写入全局倍率 = 5m 全局倍率 × claudeCacheCreation1hMultiplier
+		const claudeCacheCreate1hMult = 6.0 / 3.75
+		effCacheCreate1hRate := model.EffectiveCacheCreationRate(summary.ModelRatio, summary.CacheCreationRatio1h, summary.GlobalModelRatio, summary.GlobalCreateCacheRatio*claudeCacheCreate1hMult, summary.CostDiscountPercent, summary.MarkupDiscountPercent)
+
+		dEffInputRate := decimal.NewFromFloat(effInputRate)
+		dEffOutputRate := decimal.NewFromFloat(effOutputRate)
+		dEffCacheReadRate := decimal.NewFromFloat(effCacheReadRate)
+		dEffCacheCreate5mRate := decimal.NewFromFloat(effCacheCreate5mRate)
+		dEffCacheCreate1hRate := decimal.NewFromFloat(effCacheCreate1hRate)
+
+		// 输入侧：纯输入 token + 图片 token（图片已乘 imageRatio，再乘有效输入倍率）
+		inputSideTotal := inputQuota.Add(imageTokensWithRatio).Mul(dEffInputRate).Mul(dGroupRatio)
+
+		// 缓存读取侧：独立有效缓存读取倍率
+		var cacheReadSideTotal decimal.Decimal
+		if !dCacheTokens.IsZero() {
+			cacheReadSideTotal = cacheReadTokensAdj.Mul(dEffCacheReadRate).Mul(dGroupRatio)
+		}
+
+		// 缓存创建侧：区分 Claude 5m/1h 拆分和非拆分场景
+		var cacheWriteSideTotal decimal.Decimal
+		if hasSplitCacheCreationTokens {
+			// Claude 语义拆分计费（5m/1h）
+			remaining := summary.CacheCreationTokens - summary.CacheCreationTokens5m - summary.CacheCreationTokens1h
+			if remaining < 0 {
+				remaining = 0
+			}
+			if summary.IsClaudeUsageSemantic || legacyClaudeDerived {
+				// Claude 语义：缓存创建 token 已计入 baseTokens（按输入倍率计费），
+				// 此处仅补充与输入倍率的差价（premium）。
+				premiumRate5m := effCacheCreate5mRate - effInputRate
+				premiumRate1h := effCacheCreate1hRate - effInputRate
+				cacheWriteSideTotal = decimal.NewFromInt(int64(remaining)).Mul(decimal.NewFromFloat(premiumRate5m)).
+					Add(decimal.NewFromInt(int64(summary.CacheCreationTokens5m)).Mul(decimal.NewFromFloat(premiumRate5m))).
+					Add(decimal.NewFromInt(int64(summary.CacheCreationTokens1h)).Mul(decimal.NewFromFloat(premiumRate1h))).
+					Mul(dGroupRatio)
+			} else {
+				// 非 Claude 语义：缓存创建 token 已从 baseTokens 中剔除，按完整有效倍率计费。
+				cacheWriteSideTotal = decimal.NewFromInt(int64(remaining)).Mul(dEffCacheCreate5mRate).
+					Add(decimal.NewFromInt(int64(summary.CacheCreationTokens5m)).Mul(dEffCacheCreate5mRate)).
+					Add(decimal.NewFromInt(int64(summary.CacheCreationTokens1h)).Mul(dEffCacheCreate1hRate)).
+					Mul(dGroupRatio)
+			}
+		} else if !dCachedCreationTokens.IsZero() {
+			if summary.IsClaudeUsageSemantic || legacyClaudeDerived {
+				premiumRate5m := effCacheCreate5mRate - effInputRate
+				cacheWriteSideTotal = cacheWriteTokensAdj.Mul(decimal.NewFromFloat(premiumRate5m)).Mul(dGroupRatio)
+			} else {
+				cacheWriteSideTotal = cacheWriteTokensAdj.Mul(dEffCacheCreate5mRate).Mul(dGroupRatio)
+			}
+		}
+
+		// 输出侧
+		outputSideTotal := completionTokensAdj.Mul(dEffOutputRate).Mul(dGroupRatio)
+
+		quotaCalculateDecimal := inputSideTotal.Add(cacheReadSideTotal).Add(cacheWriteSideTotal).Add(outputSideTotal)
 		quotaCalculateDecimal = quotaCalculateDecimal.Add(dWebSearchQuota)
 		quotaCalculateDecimal = quotaCalculateDecimal.Add(dClaudeWebSearchQuota)
 		quotaCalculateDecimal = quotaCalculateDecimal.Add(dFileSearchQuota)
@@ -317,12 +394,17 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 			}
 		}
 
-		if !ratio.IsZero() && quotaCalculateDecimal.LessThanOrEqual(decimal.Zero) {
+		if effInputRate > 0 && quotaCalculateDecimal.LessThanOrEqual(decimal.Zero) {
 			quotaCalculateDecimal = decimal.NewFromInt(1)
 		}
 		summary.Quota = int(quotaCalculateDecimal.Round(0).IntPart())
 	} else {
-		quotaCalculateDecimal := dModelPrice.Mul(dQuotaPerUnit).Mul(dGroupRatio)
+		// ============================================================
+		// 新计费公式（固定价格）：
+		//   模型固定价格 = 渠道固定价 * 成本折扣率% + 全局固定价 * 加价折扣率%
+		// ============================================================
+		effModelPrice := model.EffectiveModelPrice(summary.ModelPrice, summary.GlobalModelPrice, summary.CostDiscountPercent, summary.MarkupDiscountPercent)
+		quotaCalculateDecimal := decimal.NewFromFloat(effModelPrice).Mul(dQuotaPerUnit).Mul(dGroupRatio)
 		quotaCalculateDecimal = quotaCalculateDecimal.Add(dWebSearchQuota)
 		quotaCalculateDecimal = quotaCalculateDecimal.Add(dClaudeWebSearchQuota)
 		quotaCalculateDecimal = quotaCalculateDecimal.Add(dFileSearchQuota)
@@ -336,11 +418,10 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		summary.Quota = int(quotaCalculateDecimal.Round(0).IntPart())
 	}
 
-	summary.Quota = model.ApplyChannelPriceDiscountToQuota(summary.Quota, resolveTextQuotaChannelDiscountPercent(relayInfo))
-
+	// 新公式中折扣已内嵌，不再单独调用 ApplyChannelPriceDiscountToQuota
 	if summary.TotalTokens == 0 {
 		summary.Quota = 0
-	} else if !ratio.IsZero() && summary.Quota == 0 {
+	} else if summary.Quota == 0 && (summary.ModelRatio > 0 || summary.ModelPrice > 0) {
 		summary.Quota = 1
 	}
 

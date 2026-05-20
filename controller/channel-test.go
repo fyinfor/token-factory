@@ -46,6 +46,55 @@ type testResult struct {
 	recordedModelName string
 }
 
+// tokenFactoryOpenVideoTestHeuristic 在「端点类型留空」时，判断 TokenFactoryOpen(60) 是否应按视频任务入口测试。
+// 与真实客户端一致：视频走 POST /v1/video/generations，而非 chat 或外部 Hidream 的 /v1/videos/generations。
+func tokenFactoryOpenVideoTestHeuristic(modelName string) bool {
+	s := strings.ToLower(strings.TrimSpace(modelName))
+	if s == "" {
+		return false
+	}
+	if strings.Contains(s, "seedance") || strings.Contains(s, "sora") ||
+		strings.Contains(s, "kling") || strings.Contains(s, "wan") ||
+		strings.Contains(s, "vidu") || strings.Contains(s, "veo") ||
+		strings.Contains(s, "doubao") || strings.Contains(s, "jimeng") ||
+		strings.Contains(s, "hailuo") || strings.Contains(s, "minimax") ||
+		strings.Contains(s, "text2video") || strings.Contains(s, "image2video") {
+		return true
+	}
+	if strings.HasPrefix(strings.TrimSpace(modelName), "Video-") {
+		return true
+	}
+	return false
+}
+
+// tfOpenUpstreamModelForChannelTest 对齐 relay/helper.ModelMappedHelper 中 TokenFactoryOpen 路由改写：
+// 将发往上游的模型名设为 {model}/{route_slug} 或旧版 alias/model/channelNo。
+func tfOpenUpstreamModelForChannelTest(c *gin.Context, originModel string, upstreamAfterMapping string) string {
+	tfRoute := strings.TrimSpace(common.GetContextKeyString(c, constant.ContextKeyTFOpenUpstreamChannelRoute))
+	if tfRoute == "" {
+		return upstreamAfterMapping
+	}
+	modelForUpstream := strings.TrimSpace(originModel)
+	if strings.HasSuffix(modelForUpstream, ratio_setting.CompactModelSuffix) {
+		modelForUpstream = strings.TrimSuffix(modelForUpstream, ratio_setting.CompactModelSuffix)
+	}
+	if strings.HasPrefix(tfRoute, "legacy|") {
+		parts := strings.SplitN(tfRoute, "|", 3)
+		if len(parts) == 3 {
+			alias := parts[1]
+			channelNo := parts[2]
+			if alias != "" && channelNo != "" {
+				return alias + "/" + modelForUpstream + "/" + channelNo
+			}
+		}
+		return upstreamAfterMapping
+	}
+	if slug := strings.TrimSpace(tfRoute); slug != "" {
+		return modelForUpstream + "/" + slug
+	}
+	return upstreamAfterMapping
+}
+
 func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointType string) string {
 	normalized := strings.TrimSpace(endpointType)
 	if normalized != "" {
@@ -59,6 +108,9 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 	}
 	if channel != nil && channel.Type == constant.ChannelTypeOpenAIVideo {
 		return string(constant.EndpointTypeOpenAIVideoGW)
+	}
+	if channel != nil && channel.Type == constant.ChannelTypeTokenFactoryOpen && tokenFactoryOpenVideoTestHeuristic(modelName) {
+		return string(constant.EndpointTypeTokenFactoryVideo)
 	}
 	if channel != nil && channel.Type == constant.ChannelTypeVideoGenerator {
 		return string(constant.EndpointTypeVideoGenerator)
@@ -188,6 +240,7 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 	// 仅校验上游能正确接收任务创建请求并返回 task_id，不做轮询。
 	if endpointType == string(constant.EndpointTypeOpenAIVideo) ||
 		endpointType == string(constant.EndpointTypeOpenAIVideoGW) ||
+		endpointType == string(constant.EndpointTypeTokenFactoryVideo) ||
 		endpointType == string(constant.EndpointTypeVideoGenerator) ||
 		endpointType == string(constant.EndpointTypeTencentCloudVODVideo) {
 		return testChannelVideo(c, channel, testModel, endpointType, tik)
@@ -598,10 +651,17 @@ func truncateForError(s string) string {
 	return s[:maxLen] + "...(truncated)"
 }
 
-// testChannelVideo 处理视频生成类端点（OpenAI Sora /v1/videos、OpenAI 视频网关 /v1/videos/generations）的渠道测试。
+// testChannelVideo 处理视频生成类端点（OpenAI Sora /v1/videos、外部视频网关 /v1/videos/generations、
+// TokenFactory 统一入口 /v1/video/generations 等）的渠道测试。
 // 视频生成是任务式异步接口，这里只验证上游能否正确创建任务（返回 task_id），不做轮询，
 // 避免长时间阻塞和测试期间产生真实视频生成费用。
 func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, endpointType string, tik time.Time) testResult {
+	// TokenFactoryOpen(60) 指向上游 TokenFactory 时，真实路由是 /v1/video/generations，不是外部 Hidream 的 /v1/videos/generations。
+	if channel != nil && channel.Type == constant.ChannelTypeTokenFactoryOpen &&
+		endpointType == string(constant.EndpointTypeOpenAIVideoGW) {
+		endpointType = string(constant.EndpointTypeTokenFactoryVideo)
+	}
+
 	endpoint, ok := common.GetDefaultEndpointInfo(constant.EndpointType(endpointType))
 	if !ok {
 		err := fmt.Errorf("unsupported video endpoint type: %s", endpointType)
@@ -612,28 +672,31 @@ func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, 
 		}
 	}
 
-	// 模型映射：保持与同步路径一致，使用渠道维度的 model_mapping 配置；支持链式映射，循环时退出。
+	// 模型映射：与正式 relay 对齐；TokenFactoryOpen(60) 指向上游 TF 时跳过 model_mapping（见 relay/helper/model_mapped.go）。
 	originModel := strings.TrimSpace(testModel)
 	upstreamModel := originModel
-	if mapping := strings.TrimSpace(c.GetString("model_mapping")); mapping != "" && mapping != "{}" {
-		modelMap := make(map[string]string)
-		if err := common.UnmarshalJsonStr(mapping, &modelMap); err == nil {
-			current := upstreamModel
-			visited := map[string]bool{current: true}
-			for {
-				next, exists := modelMap[current]
-				if !exists || next == "" || next == current {
-					break
+	if channel == nil || channel.Type != constant.ChannelTypeTokenFactoryOpen {
+		if mapping := strings.TrimSpace(c.GetString("model_mapping")); mapping != "" && mapping != "{}" {
+			modelMap := make(map[string]string)
+			if err := common.UnmarshalJsonStr(mapping, &modelMap); err == nil {
+				current := upstreamModel
+				visited := map[string]bool{current: true}
+				for {
+					next, exists := modelMap[current]
+					if !exists || next == "" || next == current {
+						break
+					}
+					if visited[next] {
+						break
+					}
+					visited[next] = true
+					current = next
 				}
-				if visited[next] {
-					break
-				}
-				visited[next] = true
-				current = next
+				upstreamModel = current
 			}
-			upstreamModel = current
 		}
 	}
+	upstreamModel = tfOpenUpstreamModelForChannelTest(c, originModel, upstreamModel)
 
 	apiKey := common.GetContextKeyString(c, constant.ContextKeyChannelKey)
 	if apiKey == "" {
@@ -758,6 +821,17 @@ func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, 
 				{"type": "text", "text": "a cute cat dancing in a sunny garden  --duration 5"},
 			},
 		}
+	case constant.EndpointTypeTokenFactoryVideo:
+		// 与 RelayTask 解析一致：TaskSubmitReq JSON（relay/common/relay_utils.go ValidateBasicTaskRequest）。
+		// 勿附带 n/fps/motion 等可选字段：ValidateBasicTaskRequest 会把它们写入 metadata，
+		// openaivideo adaptor 会将 metadata 逐项并入上游 body，Hidream/MaaS 可能因未知顶层字段返回 Invalid input params。
+		// prompt 内附带 --duration 与 OpenAI 视频网关测试一致，兼容部分上游对文生参数的校验。
+		bodyMap = map[string]any{
+			"model":    upstreamModel,
+			"prompt":   "a cute cat dancing in a sunny garden  --duration 5",
+			"duration": 5,
+			"size":     "960x540",
+		}
 	case constant.EndpointTypeVideoGenerator:
 		bodyMap = map[string]any{
 			"model": upstreamModel,
@@ -867,7 +941,7 @@ func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, 
 				tokenFactoryError: types.NewOpenAIError(bodyErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError),
 			}
 		}
-	case constant.EndpointTypeOpenAIVideoGW:
+	case constant.EndpointTypeOpenAIVideoGW, constant.EndpointTypeTokenFactoryVideo:
 		// OpenAI 视频网关：两种响应格式根据顶层字段自动判断。
 		//   MaaS：{"code":0,"message":"","result":{"task_id":"..."}}
 		//         失败时 code != 0，错误消息在 message/messasge 里。
@@ -916,6 +990,9 @@ func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, 
 		}
 		if taskID == "" {
 			taskID = strings.TrimSpace(gjson.GetBytes(respBody, "task_id").String())
+		}
+		if taskID == "" {
+			taskID = strings.TrimSpace(gjson.GetBytes(respBody, "data.id").String())
 		}
 	case constant.EndpointTypeVideoGenerator:
 		if codeRes := gjson.GetBytes(respBody, "status"); codeRes.Exists() && codeRes.Int() != 0 {

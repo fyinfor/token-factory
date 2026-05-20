@@ -236,6 +236,7 @@ const EditChannelModal = (props) => {
     priority: 0,
     weight: 0,
     price_discount_percent: 100,
+    markup_discount_rate: 0,
     tag: '',
     multi_key_mode: 'random',
     // 渠道额外设置的默认值
@@ -1068,6 +1069,12 @@ const EditChannelModal = (props) => {
         data.price_discount_percent === undefined
       ) {
         data.price_discount_percent = 100;
+      }
+      if (
+        data.markup_discount_rate == null ||
+        data.markup_discount_rate === undefined
+      ) {
+        data.markup_discount_rate = 0;
       }
       if (data.company_logo_url) {
         setLogoFileList([
@@ -2851,9 +2858,9 @@ const EditChannelModal = (props) => {
 
                   <Form.InputNumber
                     field='price_discount_percent'
-                    label={t('价格折扣(%)')}
+                    label={t('成本折扣率(%)')}
                     placeholder={t(
-                      '100 表示无折扣，60 表示按原价 60% 计费（六折）',
+                      '100 表示无折扣，60 表示按渠道原价 60% 计费（六折）',
                     )}
                     min={0}
                     max={1000}
@@ -2862,7 +2869,25 @@ const EditChannelModal = (props) => {
                       handleInputChange('price_discount_percent', value)
                     }
                     extraText={t(
-                      '本渠道上所有模型计费 = 系统原价算出的额度 × 该百分比 ÷ 100。0% 为全免。默认 100%。',
+                      '用于「渠道模型输入价 × 成本折扣率%」部分计费。100=无折扣，0=全免。默认 100%。',
+                    )}
+                    style={{ width: '100%' }}
+                  />
+
+                  <Form.InputNumber
+                    field='markup_discount_rate'
+                    label={t('加价折扣率(%)')}
+                    placeholder={t(
+                      '0 表示不加价；如 5 表示在全局价格基础上附加 5% 作为收益',
+                    )}
+                    min={0}
+                    max={1000}
+                    precision={2}
+                    onNumberChange={(value) =>
+                      handleInputChange('markup_discount_rate', value)
+                    }
+                    extraText={t(
+                      '用于「全局模型输入价 × 加价折扣率%」部分计费。默认 0%（不加价）。',
                     )}
                     style={{ width: '100%' }}
                   />

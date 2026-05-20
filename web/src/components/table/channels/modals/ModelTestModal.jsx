@@ -169,6 +169,7 @@ const ModelTestModal = ({
     'openai-response-compact',
     'openai-video',
     'hidream-video',
+    'tokenfactory-video',
   ].includes(selectedEndpointType);
 
   React.useEffect(() => {
@@ -210,7 +211,11 @@ const ModelTestModal = ({
     },
     {
       value: 'hidream-video',
-      label: t('视频生成') + ' (/v1/videos/generations)',
+      label: 'ZX-Videos (/v1/videos/generations)',
+    },
+    {
+      value: 'tokenfactory-video',
+      label: t('视频生成') + ' (TokenFactory /v1/video/generations)',
     },
     {
       value: 'videogenerator',
