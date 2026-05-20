@@ -31,7 +31,6 @@ import {
   // InputNumber, // 暂时禁用分销比例编辑功能
 } from '@douyinfe/semi-ui';
 import { Copy, Users, BarChart2, TrendingUp, Gift, Zap } from 'lucide-react';
-import { Link } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { API, showError, showSuccess, isDistributor } from '../../helpers';
 import AffInviteeCommissionDetailModal from '../distributor/AffInviteeCommissionDetailModal';
@@ -419,14 +418,9 @@ const InvitationCard = ({
 
         {!isDistributor() && (
           <Card className='!rounded-xl w-full'>
-            <Text type='tertiary' className='block mb-3'>
+            <Text type='tertiary' className='block'>
               {t('成为代理后可获得邀请链接与充值分成，请先提交资料审核。')}
             </Text>
-            <Link to='/console/distributor/apply'>
-              <Button theme='solid' type='primary' className='!rounded-lg'>
-                {t('申请成为代理')}
-              </Button>
-            </Link>
           </Card>
         )}
 
