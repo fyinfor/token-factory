@@ -39,6 +39,7 @@ export const useModelPricingData = () => {
   const [filterEndpointType, setFilterEndpointType] = useState('all'); // 端点类型筛选: 'all' | string
   const [filterVendor, setFilterVendor] = useState('all'); // 供应商筛选: 'all' | 'unknown' | string
   const [filterTag, setFilterTag] = useState('all'); // 模型标签筛选: 'all' | string
+  const [filterSupplierType, setFilterSupplierType] = useState('all'); // 供应商类型筛选: 'all' | string
   const [filterSupplier, setFilterSupplier] = useState('all'); // 供应商渠道筛选: 'all' | string (supplier_alias)
   // 排序键: 'default' | 'price' | 'supplier_grade' | 'latency' | 'discount'
   const [sortKey, setSortKey] = useState('default');
@@ -156,9 +157,21 @@ export const useModelPricingData = () => {
     // 渠道供应商筛选（channel_list supplier_alias）
     if (filterSupplier !== 'all') {
       result = result.filter((model) => {
-        if (!model.channel_list || model.channel_list.length === 0) return false;
+        if (!model.channel_list || model.channel_list.length === 0)
+          return false;
         return model.channel_list.some(
           (ch) => (ch?.supplier_alias || '') === filterSupplier,
+        );
+      });
+    }
+
+    // 供应商类型筛选（channel_list supplier_type）
+    if (filterSupplierType !== 'all') {
+      result = result.filter((model) => {
+        if (!model.channel_list || model.channel_list.length === 0)
+          return false;
+        return model.channel_list.some(
+          (ch) => (ch?.supplier_type || '') === filterSupplierType,
         );
       });
     }
@@ -279,7 +292,11 @@ export const useModelPricingData = () => {
         const channelList = m.channel_list ?? m.ChannelList ?? [];
         if (channelList.length > 0) {
           const firstChannel = channelList[0];
-          return firstChannel.channel_heat_score ?? firstChannel.ChannelHeatScore ?? 0;
+          return (
+            firstChannel.channel_heat_score ??
+            firstChannel.ChannelHeatScore ??
+            0
+          );
         }
         return 0;
       };
@@ -318,6 +335,7 @@ export const useModelPricingData = () => {
     filterVendor,
     filterTag,
     filterSupplier,
+    filterSupplierType,
     sortKey,
   ]);
 
@@ -529,6 +547,7 @@ export const useModelPricingData = () => {
     filterVendor,
     filterTag,
     filterSupplier,
+    filterSupplierType,
     searchValue,
     sortKey,
   ]);
@@ -559,6 +578,8 @@ export const useModelPricingData = () => {
     setFilterVendor,
     filterTag,
     setFilterTag,
+    filterSupplierType,
+    setFilterSupplierType,
     filterSupplier,
     setFilterSupplier,
     sortKey,

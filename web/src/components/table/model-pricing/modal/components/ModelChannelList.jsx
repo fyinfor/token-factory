@@ -110,7 +110,10 @@ const ModelChannelList = ({
       if (!groups[supplierId]) {
         groups[supplierId] = {
           supplierId,
-          supplierAlias: channel.supplier_alias || t('未知供应商'),
+          supplierAlias:
+            (channel?.supplier_alias &&
+              String(channel.supplier_alias).trim()) ||
+            '',
           companyLogoUrl:
             (channel?.company_logo_url &&
               String(channel.company_logo_url).trim()) ||
@@ -335,40 +338,31 @@ const ModelChannelList = ({
               key={`group-${group.supplierId}`}
               itemKey={`group-${group.supplierId}`}
               header={
-                <div className='flex items-center justify-between w-full pr-4'>
-                  <span
-                    className='h-7 rounded-md flex items-center gap-1 overflow-hidden ml-2'
-                    style={{
-                      backgroundColor: 'var(--semi-color-fill-0)',
-                      paddingRight: group.supplierType ? 4 : 0,
-                    }}
-                  >
-                    {group.companyLogoUrl ? (
-                      <img
-                        src={group.companyLogoUrl}
-                        alt={group.supplierAlias || ''}
-                        className='w-7 h-7 object-contain rounded-md'
-                      />
-                    ) : (
-                      <span
-                        className='h-6 px-2 flex items-center text-xs font-medium'
-                        style={{
-                          color: 'var(--semi-color-text-1)',
-                        }}
-                      >
-                        {group.supplierAlias || t('官方')}
-                      </span>
-                    )}
-                    {group.supplierType && (
-                      <Tag
-                        size='small'
-                        shape='circle'
-                        color={getSupplierTypeColor(group.supplierType)}
-                      >
-                        {group.supplierType}
-                      </Tag>
-                    )}
-                  </span>
+                <div className='flex items-center justify-between w-full'>
+                  {group.companyLogoUrl || group.supplierType ? (
+                    <span
+                      className='h-7 rounded-md flex items-center overflow-hidden ml-2'
+                      style={{backgroundColor: 'var(--semi-color-fill-0)'}}
+                    >
+                      {group.companyLogoUrl ? (
+                        <img
+                          src={group.companyLogoUrl}
+                          alt={group.supplierAlias || ''}
+                          className='w-7 h-7 object-contain rounded-md'
+                        />
+                      ) : null}
+                      {group.supplierType && (
+                        <Tag
+                          size='small'
+                          shape='circle'
+                          color={getSupplierTypeColor(group.supplierType)}
+                          className='mx-1'
+                        >
+                          {group.supplierType}
+                        </Tag>
+                      )}
+                    </span>
+                  ) : null}
                   <span className='text-sm text-gray-500'>
                     {group.channels.length} {t('个通道')}
                   </span>
@@ -387,7 +381,8 @@ const ModelChannelList = ({
                     modelData,
                     channel,
                   );
-                  const showImagePerImageTable = hasImagePerImageTierTable(iHint);
+                  const showImagePerImageTable =
+                    hasImagePerImageTierTable(iHint);
                   const channelPath = channel.route_slug
                     ? `${modelData.model_name}/${channel.route_slug}`
                     : `${channel.supplier_alias}/${modelData.model_name}/${channel.channel_no}`;

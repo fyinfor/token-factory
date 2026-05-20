@@ -28,7 +28,7 @@ import {
 import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { IconSearch } from '@douyinfe/semi-icons';
 import PricingVendors from '../table/model-pricing/filter/PricingVendors';
-import PricingSuppliers from './PricingSuppliers';
+import PricingProviderType from '../table/model-pricing/filter/PricingProviderType';
 import PricingQuotaTypes from '../table/model-pricing/filter/PricingQuotaTypes';
 import PricingTags from '../table/model-pricing/filter/PricingTags';
 import PricingEndpointTypes from '../table/model-pricing/filter/PricingEndpointTypes';
@@ -59,51 +59,22 @@ const HomeModelList = () => {
     return false;
   }, [statusState?.status?.HeaderNavModules, userState?.user]);
 
-  const { quotaTypeModels, endpointTypeModels, vendorModels, tagModels } =
-    usePricingFilterCounts({
-      models: pricingData.models,
-      filterGroup: pricingData.filterGroup,
-      filterQuotaType: pricingData.filterQuotaType,
-      filterEndpointType: pricingData.filterEndpointType,
-      filterVendor: pricingData.filterVendor,
-      filterTag: pricingData.filterTag,
-      searchValue: pricingData.searchValue,
-    });
-
-  // 计算供应商渠道筛选的可用模型数（排除 filterSupplier 维度，保留其他筛选）
-  const supplierCountModels = React.useMemo(() => {
-    let result = pricingData.models;
-    if (pricingData.filterVendor !== 'all') {
-      if (pricingData.filterVendor === 'unknown') {
-        result = result.filter((m) => !m.vendor_name);
-      } else {
-        result = result.filter((m) => m.vendor_name === pricingData.filterVendor);
-      }
-    }
-    if (pricingData.filterTag !== 'all') {
-      const tagLower = pricingData.filterTag.toLowerCase();
-      result = result.filter((m) => {
-        if (!m.tags) return false;
-        return m.tags.toLowerCase().split(/[,;|]+/).map((t) => t.trim()).includes(tagLower);
-      });
-    }
-    if (pricingData.searchValue.length > 0) {
-      const term = pricingData.searchValue.toLowerCase();
-      result = result.filter(
-        (m) =>
-          (m.model_name && m.model_name.toLowerCase().includes(term)) ||
-          (m.description && m.description.toLowerCase().includes(term)) ||
-          (m.tags && m.tags.toLowerCase().includes(term)) ||
-          (m.vendor_name && m.vendor_name.toLowerCase().includes(term)),
-      );
-    }
-    return result;
-  }, [
-    pricingData.models,
-    pricingData.filterVendor,
-    pricingData.filterTag,
-    pricingData.searchValue,
-  ]);
+  const {
+    quotaTypeModels,
+    endpointTypeModels,
+    vendorModels,
+    tagModels,
+    supplierTypeModels,
+  } = usePricingFilterCounts({
+    models: pricingData.models,
+    filterGroup: pricingData.filterGroup,
+    filterQuotaType: pricingData.filterQuotaType,
+    filterEndpointType: pricingData.filterEndpointType,
+    filterVendor: pricingData.filterVendor,
+    filterTag: pricingData.filterTag,
+    filterSupplierType: pricingData.filterSupplierType,
+    searchValue: pricingData.searchValue,
+  });
 
   React.useEffect(() => {
     pricingData.setPageSize(40);
@@ -115,6 +86,7 @@ const HomeModelList = () => {
     pricingData.setFilterQuotaType('all');
     pricingData.setFilterTag('all');
     pricingData.setFilterEndpointType('all');
+    pricingData.setFilterSupplierType?.('all');
     pricingData.setFilterSupplier && pricingData.setFilterSupplier('all');
     pricingData.setSortKey && pricingData.setSortKey('default');
     pricingData.setCurrentPage(1);
@@ -319,11 +291,11 @@ const HomeModelList = () => {
               t={pricingData.t}
             />
 
-            <PricingSuppliers
-              filterSupplier={pricingData.filterSupplier}
-              setFilterSupplier={pricingData.setFilterSupplier}
+            <PricingProviderType
+              filterProviderType={pricingData.filterSupplierType}
+              setFilterProviderType={pricingData.setFilterSupplierType}
               models={pricingData.models}
-              countModels={supplierCountModels}
+              countModels={supplierTypeModels}
               loading={pricingData.loading}
               t={pricingData.t}
             />
@@ -355,11 +327,20 @@ const HomeModelList = () => {
                 showClear
                 size='large'
                 className='flex-1'
-                style={{ backgroundColor: 'var(--semi-color-bg-1)', opacity: 1, boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)' }}
+                style={{
+                  backgroundColor: 'var(--semi-color-bg-1)',
+                  opacity: 1,
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+                }}
               />
               <Select
                 size='large'
-                style={{ width: 180, backgroundColor: 'var(--semi-color-bg-1)', opacity: 1, boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)' }}
+                style={{
+                  width: 180,
+                  backgroundColor: 'var(--semi-color-bg-1)',
+                  opacity: 1,
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+                }}
                 value={pricingData.sortKey || 'default'}
                 onChange={(v) =>
                   pricingData.setSortKey && pricingData.setSortKey(v)
@@ -391,7 +372,9 @@ const HomeModelList = () => {
               tokenUnit={pricingData.tokenUnit}
               displayPrice={pricingData.displayPrice}
               channelVideoRatio={pricingData.channelVideoRatio}
-              channelVideoCompletionRatio={pricingData.channelVideoCompletionRatio}
+              channelVideoCompletionRatio={
+                pricingData.channelVideoCompletionRatio
+              }
               channelVideoPrice={pricingData.channelVideoPrice}
               showRatio={false}
               t={pricingData.t}
