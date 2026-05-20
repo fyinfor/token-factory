@@ -74,6 +74,27 @@ const TaskLogsFilters = ({
             size='small'
           />
 
+          <Form.Input
+            field='model_name'
+            prefix={<IconSearch />}
+            placeholder={t('模型名称')}
+            showClear
+            pure
+            size='small'
+          />
+
+          <Form.Select
+            field='task_filter'
+            placeholder={t('任务筛选')}
+            showClear
+            pure
+            size='small'
+            optionList={[
+              { value: '', label: t('全部任务') },
+              { value: 'video_failure', label: t('视频生成失败') },
+            ]}
+          />
+
           {/* 渠道 ID - 仅管理员可见 */}
           {isAdminUser && (
             <Form.Input

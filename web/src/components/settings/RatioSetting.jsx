@@ -27,7 +27,6 @@ import ModelSettingsVisualEditor from '../../pages/Setting/Ratio/ModelSettingsVi
 import ModelRatioNotSetEditor from '../../pages/Setting/Ratio/ModelRationNotSetEditor';
 import UpstreamRatioSync from '../../pages/Setting/Ratio/UpstreamRatioSync';
 import RequestTierPricingTemplateSettings from '../../pages/Setting/Ratio/RequestTierPricingTemplateSettings';
-import PriceImportExport from '../../pages/Setting/Ratio/PriceImportExport';
 
 import { API, showError, toBoolean } from '../../helpers';
 
@@ -111,12 +110,7 @@ const RatioSetting = () => {
 
   return (
     <Spin spinning={loading} size='large'>
-      {/* 价格导入/导出操作区 */}
-      <div style={{ marginTop: '10px', marginBottom: '8px', display: 'flex', justifyContent: 'flex-end' }}>
-        <PriceImportExport refresh={onRefresh} />
-      </div>
-      {/* 模型倍率设置以及价格编辑器 */}
-      <Card style={{ marginTop: '4px' }}>
+      <Card style={{ marginTop: '10px' }}>
         <Tabs type='card' defaultActiveKey='visual'>
           <Tabs.TabPane tab={t('模型倍率设置')} itemKey='model'>
             <ModelRatioSettings options={inputs} refresh={onRefresh} />
