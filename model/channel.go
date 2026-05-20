@@ -60,8 +60,8 @@ type Channel struct {
 	SupplierApplicationID int    `json:"supplier_application_id" gorm:"type:int;index;default:0"` // 关联 supplier_applications.id
 	ChannelNo             string `json:"channel_no" gorm:"type:varchar(32);default:'';index;comment:供应商渠道编号 c1,c2 递增"`
 	// RouteSlug 全局唯一渠道路由后缀；调用格式 {model}/{route_slug} 强制该渠道（该渠道下所有模型共用此后缀）。
-	RouteSlug             string `json:"route_slug" gorm:"type:varchar(32);not null;default:'';index"`
-	SupplierName          string `json:"supplier_name,omitempty" gorm:"-"` // 供应商用户名（由控制器回填，不落库）
+	RouteSlug    string `json:"route_slug" gorm:"type:varchar(32);not null;default:'';index"`
+	SupplierName string `json:"supplier_name,omitempty" gorm:"-"` // 供应商用户名（由控制器回填，不落库）
 
 	// 渠道计费折扣（百分数，100=原价无折扣，60=六折/按原价×0.6 计费）。nil=数据库默认/未设，按 100 处理。使用指针以便 GORM Updates 时可将 0% 写回。
 	PriceDiscountPercent *float64 `json:"price_discount_percent" gorm:"type:double precision;default:100"`

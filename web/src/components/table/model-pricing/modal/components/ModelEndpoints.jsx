@@ -57,6 +57,15 @@ const ModelEndpoints = ({ modelData, endpointMap = {}, t }) => {
     }
   };
 
+  const copyBaseUrl = async () => {
+    const baseUrl = normalizeApiBaseUrl(getServerAddress());
+    if (await copy(baseUrl)) {
+      Toast.success({ content: t('已复制BaseURL') });
+    } else {
+      Toast.error({ content: t('复制失败') });
+    }
+  };
+
   const renderAPIEndpoints = () => {
     if (!modelData) return null;
 
@@ -107,20 +116,49 @@ const ModelEndpoints = ({ modelData, endpointMap = {}, t }) => {
   };
 
   return (
-    <Card className='!rounded-2xl shadow-sm border-0 mb-6'>
-      <div className='flex items-center mb-4'>
-        <Avatar size='small' color='purple' className='mr-2 shadow-md'>
-          <IconLink size={16} />
-        </Avatar>
-        <div>
-          <Text className='text-lg font-medium'>{t('API端点')}</Text>
-          <div className='text-xs text-gray-600'>
-            {t('模型支持的接口端点信息')}
+    <>
+      <Card className='!rounded-2xl shadow-sm border-0 mb-6'>
+        <div className='flex items-center mb-4'>
+          <Avatar size='small' color='blue' className='mr-2 shadow-md'>
+            <IconLink size={16} />
+          </Avatar>
+          <div>
+            <Text className='text-lg font-medium'>{t('BaseURL')}</Text>
+            <div className='text-xs text-gray-600'>
+              {t('API基础地址')}
+            </div>
           </div>
         </div>
-      </div>
-      {renderAPIEndpoints()}
-    </Card>
+        <div className='flex items-center gap-2 p-3 bg-gray-50 rounded-lg'>
+          <Text className='text-sm text-gray-700 break-all font-mono'>
+            {normalizeApiBaseUrl(getServerAddress())}
+          </Text>
+          <Tooltip content={normalizeApiBaseUrl(getServerAddress())}>
+            <Button
+              size='small'
+              type='tertiary'
+              onClick={copyBaseUrl}
+            >
+              {t('复制')}
+            </Button>
+          </Tooltip>
+        </div>
+      </Card>
+      <Card className='!rounded-2xl shadow-sm border-0 mb-6'>
+        <div className='flex items-center mb-4'>
+          <Avatar size='small' color='purple' className='mr-2 shadow-md'>
+            <IconLink size={16} />
+          </Avatar>
+          <div>
+            <Text className='text-lg font-medium'>{t('API端点')}</Text>
+            <div className='text-xs text-gray-600'>
+              {t('模型支持的接口端点信息')}
+            </div>
+          </div>
+        </div>
+        {renderAPIEndpoints()}
+      </Card>
+    </>
   );
 };
 

@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useContext, useEffect, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Button,
   Card,
@@ -143,6 +143,7 @@ function ApplyStatusNotice({
 
 export default function DistributorApply() {
   const { t } = useTranslation();
+  const formApi = useRef(null);
   const [statusState] = useContext(StatusContext);
   const [userState] = useContext(UserContext);
   const [loading, setLoading] = useState(true);

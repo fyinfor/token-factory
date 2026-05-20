@@ -205,7 +205,14 @@ func InitDB() (err error) {
 		}
 		common.SysLog("database migration started")
 		err = migrateDB()
-		return err
+		if err != nil {
+			return err
+		}
+		// 确保 channel_model_heats 表存在（新增表）
+		if err := DB.AutoMigrate(&ChannelModelHeat{}); err != nil {
+			return err
+		}
+		return nil
 	} else {
 		common.FatalLog(err)
 	}
@@ -400,6 +407,7 @@ func migrateDBFast() error {
 		{&AffFunnelDaily{}, "AffFunnelDaily"},
 		{&DistributorApplication{}, "DistributorApplication"},
 		{&DistributorWithdrawal{}, "DistributorWithdrawal"},
+		{&ChannelModelHeat{}, "ChannelModelHeat"},
 	}
 	// 动态计算migration数量，确保errChan缓冲区足够大
 	errChan := make(chan error, len(migrations))
