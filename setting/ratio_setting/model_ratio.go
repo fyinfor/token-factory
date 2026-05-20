@@ -494,6 +494,22 @@ func GetCompletionRatio(name string) float64 {
 	return hardCodedRatio
 }
 
+// ContainsCompletionRatio 返回模型是否有显式配置的输出倍率（硬编码表或用户配置表中存在）。
+func ContainsCompletionRatio(name string) bool {
+	name = FormatMatchingModelName(name)
+	if strings.Contains(name, "/") {
+		if _, ok := completionRatioMap.Get(name); ok {
+			return true
+		}
+	}
+	_, contain := getHardcodedCompletionModelRatio(name)
+	if contain {
+		return true
+	}
+	_, ok := completionRatioMap.Get(name)
+	return ok
+}
+
 type CompletionRatioInfo struct {
 	Ratio  float64 `json:"ratio"`
 	Locked bool    `json:"locked"`

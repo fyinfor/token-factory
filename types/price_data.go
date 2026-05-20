@@ -31,11 +31,30 @@ type PriceData struct {
 	VideoInputTextTokens int
 	OtherRatios          map[string]float64
 	UsePrice             bool
-	// ChannelPriceDiscount 非 nil 时，表示渠道折扣（百分数，100=不乘），用于与实际扣费、预扣费对齐
+	// ChannelPriceDiscount 非 nil 时，表示渠道成本折扣（百分数，100=不乘），用于日志展示
 	ChannelPriceDiscount *float64
 	Quota                int // 按次计费的最终额度（MJ / Task）
 	QuotaToPreConsume    int // 按量计费的预消耗额度
 	GroupRatioInfo       GroupRatioInfo
+
+	// 新计费公式所需字段
+	// CostDiscountPercent 成本折扣率百分数（price_discount_percent），如 90 表示 90%，默认 100
+	CostDiscountPercent float64
+	// MarkupDiscountPercent 加价折扣率百分数（markup_discount_rate），如 5 表示 5%，默认 0
+	MarkupDiscountPercent float64
+	// GlobalModelRatio 全局模型输入倍率（不含渠道/分组覆盖），用于新计费公式加价部分
+	GlobalModelRatio float64
+	// GlobalModelPrice 全局模型固定价格（USD，不含渠道/分组覆盖），用于固定价新计费公式
+	GlobalModelPrice float64
+	// GlobalCompletionRatio 全局模型输出倍率，用于输出侧加价计算
+	// 新公式输出加价部分 = globalMr × GlobalCompletionRatio × markupRate%
+	GlobalCompletionRatio float64
+	// GlobalCacheRatio 全局缓存读取倍率，用于缓存读取侧加价计算
+	// 新公式缓存读取加价部分 = globalMr × GlobalCacheRatio × markupRate%
+	GlobalCacheRatio float64
+	// GlobalCreateCacheRatio 全局缓存创建倍率，用于缓存写入侧加价计算
+	// 新公式缓存创建加价部分 = globalMr × GlobalCreateCacheRatio × markupRate%
+	GlobalCreateCacheRatio float64
 }
 
 func (p *PriceData) AddOtherRatio(key string, ratio float64) {

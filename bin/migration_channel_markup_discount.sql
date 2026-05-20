@@ -1,0 +1,11 @@
+-- 新增渠道加价折扣率字段（markup_discount_rate）
+-- 百分比格式，如 5 表示 5%；0 表示无加价；NULL 按 0 处理
+-- 兼容 MySQL、PostgreSQL、SQLite
+--
+-- MySQL / SQLite（执行此行）:
+ALTER TABLE channels ADD COLUMN markup_discount_rate DOUBLE PRECISION DEFAULT 0 COMMENT '加价折扣率（百分比%），0=无加价';
+--
+-- PostgreSQL（若使用 PostgreSQL 请改用下面这行，注释上面那行）:
+-- ALTER TABLE channels ADD COLUMN markup_discount_rate DOUBLE PRECISION NOT NULL DEFAULT 0;
+--
+-- 说明：GORM AutoMigrate 也会自动添加此列，手动执行本脚本仅用于存量数据库升级。

@@ -37,6 +37,11 @@ type QuotaInfo struct {
 	ModelPrice    float64
 	ModelRatio    float64
 	GroupRatio    float64
+	// 新计费公式字段
+	CostDiscountPercent   float64 // 成本折扣率%，默认 100
+	MarkupDiscountPercent float64 // 加价折扣率%，默认 0
+	GlobalModelRatio      float64 // 全局模型输入倍率
+	GlobalModelPrice      float64 // 全局模型固定价格
 }
 
 func hasCustomModelRatio(modelName string, currentRatio float64) bool {
@@ -48,12 +53,19 @@ func hasCustomModelRatio(modelName string, currentRatio float64) bool {
 }
 
 func calculateAudioQuota(info QuotaInfo) int {
+	// 兼容旧调用路径：CostDiscountPercent 为 0 时默认 100（无折扣）
+	costDisc := info.CostDiscountPercent
+	if costDisc == 0 {
+		costDisc = 100
+	}
+	markupDisc := info.MarkupDiscountPercent
+
 	if info.UsePrice {
-		modelPrice := decimal.NewFromFloat(info.ModelPrice)
 		quotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
 		groupRatio := decimal.NewFromFloat(info.GroupRatio)
-
-		quota := modelPrice.Mul(quotaPerUnit).Mul(groupRatio)
+		// 新公式：固定价格 = 渠道固定价 * 成本折扣率% + 全局固定价 * 加价折扣率%
+		effModelPrice := model.EffectiveModelPrice(info.ModelPrice, info.GlobalModelPrice, costDisc, markupDisc)
+		quota := decimal.NewFromFloat(effModelPrice).Mul(quotaPerUnit).Mul(groupRatio)
 		return int(quota.IntPart())
 	}
 
@@ -62,24 +74,30 @@ func calculateAudioQuota(info QuotaInfo) int {
 	audioCompletionRatio := decimal.NewFromFloat(ratio_setting.GetAudioCompletionRatio(info.ModelName))
 
 	groupRatio := decimal.NewFromFloat(info.GroupRatio)
-	modelRatio := decimal.NewFromFloat(info.ModelRatio)
-	ratio := groupRatio.Mul(modelRatio)
+
+	// 新公式：有效输入/输出倍率
+	// 音频场景全局输出倍率与渠道输出倍率相同（均取 GetCompletionRatio），
+	// 故 globalCompletionRatio = completionRatio（语义一致，不影响加价侧金额）
+	globalCompletionRatioForAudio := completionRatio.InexactFloat64()
+	effInputRate := model.EffectiveInputRate(info.ModelRatio, info.GlobalModelRatio, costDisc, markupDisc)
+	effOutputRate := model.EffectiveOutputRate(info.ModelRatio, completionRatio.InexactFloat64(), info.GlobalModelRatio, globalCompletionRatioForAudio, costDisc, markupDisc)
+	dEffInputRate := decimal.NewFromFloat(effInputRate)
+	dEffOutputRate := decimal.NewFromFloat(effOutputRate)
 
 	inputTextTokens := decimal.NewFromInt(int64(info.InputDetails.TextTokens))
 	outputTextTokens := decimal.NewFromInt(int64(info.OutputDetails.TextTokens))
 	inputAudioTokens := decimal.NewFromInt(int64(info.InputDetails.AudioTokens))
 	outputAudioTokens := decimal.NewFromInt(int64(info.OutputDetails.AudioTokens))
 
+	// 音频倍率沿用原有逻辑，仅文本侧使用新有效倍率
 	quota := decimal.Zero
-	quota = quota.Add(inputTextTokens)
-	quota = quota.Add(outputTextTokens.Mul(completionRatio))
-	quota = quota.Add(inputAudioTokens.Mul(audioRatio))
-	quota = quota.Add(outputAudioTokens.Mul(audioRatio).Mul(audioCompletionRatio))
+	quota = quota.Add(inputTextTokens.Mul(dEffInputRate))
+	quota = quota.Add(outputTextTokens.Mul(dEffOutputRate))
+	quota = quota.Add(inputAudioTokens.Mul(audioRatio).Mul(dEffInputRate))
+	quota = quota.Add(outputAudioTokens.Mul(audioRatio).Mul(audioCompletionRatio).Mul(dEffInputRate))
+	quota = quota.Mul(groupRatio)
 
-	quota = quota.Mul(ratio)
-
-	// If ratio is not zero and quota is less than or equal to zero, set quota to 1
-	if !ratio.IsZero() && quota.LessThanOrEqual(decimal.Zero) {
+	if effInputRate > 0 && quota.LessThanOrEqual(decimal.Zero) {
 		quota = decimal.NewFromInt(1)
 	}
 
@@ -121,6 +139,11 @@ func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usag
 		actualGroupRatio = userGroupRatio
 	}
 
+	wssChID := 0
+	if relayInfo.ChannelMeta != nil {
+		wssChID = relayInfo.ChannelId
+	}
+	wssGlobalRatio, _, _ := ratio_setting.GetModelRatio(modelName)
 	quotaInfo := QuotaInfo{
 		InputDetails: TokenDetails{
 			TextTokens:  textInputTokens,
@@ -130,18 +153,16 @@ func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usag
 			TextTokens:  textOutTokens,
 			AudioTokens: audioOutTokens,
 		},
-		ModelName:  modelName,
-		UsePrice:   relayInfo.UsePrice,
-		ModelRatio: modelRatio,
-		GroupRatio: actualGroupRatio,
+		ModelName:             modelName,
+		UsePrice:              relayInfo.UsePrice,
+		ModelRatio:            modelRatio,
+		GroupRatio:            actualGroupRatio,
+		CostDiscountPercent:   model.ResolveChannelPriceDiscountPercent(wssChID),
+		MarkupDiscountPercent: model.ResolveChannelMarkupDiscountRate(wssChID),
+		GlobalModelRatio:      wssGlobalRatio,
 	}
 
 	quota := calculateAudioQuota(quotaInfo)
-	wssChID := 0
-	if relayInfo.ChannelMeta != nil {
-		wssChID = relayInfo.ChannelId
-	}
-	quota = model.ApplyChannelPriceDiscountToQuota(quota, model.ResolveChannelPriceDiscountPercent(wssChID))
 
 	if userQuota < quota {
 		return fmt.Errorf("user quota is not enough, user quota: %s, need quota: %s", logger.FormatQuota(userQuota), logger.FormatQuota(quota))
@@ -179,6 +200,17 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	modelPrice := relayInfo.PriceData.ModelPrice
 	usePrice := relayInfo.PriceData.UsePrice
 
+	audioWssChID := 0
+	if relayInfo.ChannelMeta != nil {
+		audioWssChID = relayInfo.ChannelId
+	}
+	wssPostCostDisc := relayInfo.PriceData.CostDiscountPercent
+	wssPostMarkupDisc := relayInfo.PriceData.MarkupDiscountPercent
+	if wssPostCostDisc == 0 {
+		wssPostCostDisc = model.ResolveChannelPriceDiscountPercent(audioWssChID)
+	}
+	wssPostGlobalRatio, _, _ := ratio_setting.GetModelRatio(modelName)
+	wssPostGlobalPrice, _ := ratio_setting.GetModelPrice(modelName, false)
 	quotaInfo := QuotaInfo{
 		InputDetails: TokenDetails{
 			TextTokens:  textInputTokens,
@@ -188,22 +220,18 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 			TextTokens:  textOutTokens,
 			AudioTokens: audioOutTokens,
 		},
-		ModelName:  modelName,
-		UsePrice:   usePrice,
-		ModelRatio: modelRatio,
-		GroupRatio: groupRatio,
+		ModelName:             modelName,
+		UsePrice:              usePrice,
+		ModelRatio:            modelRatio,
+		ModelPrice:            modelPrice,
+		GroupRatio:            groupRatio,
+		CostDiscountPercent:   wssPostCostDisc,
+		MarkupDiscountPercent: wssPostMarkupDisc,
+		GlobalModelRatio:      wssPostGlobalRatio,
+		GlobalModelPrice:      wssPostGlobalPrice,
 	}
 
 	quota := calculateAudioQuota(quotaInfo)
-	audioWssChID := 0
-	if relayInfo.ChannelMeta != nil {
-		audioWssChID = relayInfo.ChannelId
-	}
-	disc := model.ResolveChannelPriceDiscountPercent(audioWssChID)
-	if relayInfo.PriceData.ChannelPriceDiscount != nil {
-		disc = *relayInfo.PriceData.ChannelPriceDiscount
-	}
-	quota = model.ApplyChannelPriceDiscountToQuota(quota, disc)
 
 	totalTokens := usage.TotalTokens
 	var logContent string
@@ -289,6 +317,17 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	modelPrice := relayInfo.PriceData.ModelPrice
 	usePrice := relayInfo.PriceData.UsePrice
 
+	audioChID := 0
+	if relayInfo.ChannelMeta != nil {
+		audioChID = relayInfo.ChannelId
+	}
+	audioCostDisc := relayInfo.PriceData.CostDiscountPercent
+	audioMarkupDisc := relayInfo.PriceData.MarkupDiscountPercent
+	if audioCostDisc == 0 {
+		audioCostDisc = model.ResolveChannelPriceDiscountPercent(audioChID)
+	}
+	audioGlobalRatio, _, _ := ratio_setting.GetModelRatio(relayInfo.OriginModelName)
+	audioGlobalPrice, _ := ratio_setting.GetModelPrice(relayInfo.OriginModelName, false)
 	quotaInfo := QuotaInfo{
 		InputDetails: TokenDetails{
 			TextTokens:  textInputTokens,
@@ -298,22 +337,18 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 			TextTokens:  textOutTokens,
 			AudioTokens: audioOutTokens,
 		},
-		ModelName:  relayInfo.OriginModelName,
-		UsePrice:   usePrice,
-		ModelRatio: modelRatio,
-		GroupRatio: groupRatio,
+		ModelName:             relayInfo.OriginModelName,
+		UsePrice:              usePrice,
+		ModelRatio:            modelRatio,
+		ModelPrice:            modelPrice,
+		GroupRatio:            groupRatio,
+		CostDiscountPercent:   audioCostDisc,
+		MarkupDiscountPercent: audioMarkupDisc,
+		GlobalModelRatio:      audioGlobalRatio,
+		GlobalModelPrice:      audioGlobalPrice,
 	}
 
 	quota := calculateAudioQuota(quotaInfo)
-	audioChID := 0
-	if relayInfo.ChannelMeta != nil {
-		audioChID = relayInfo.ChannelId
-	}
-	disc := model.ResolveChannelPriceDiscountPercent(audioChID)
-	if relayInfo.PriceData.ChannelPriceDiscount != nil {
-		disc = *relayInfo.PriceData.ChannelPriceDiscount
-	}
-	quota = model.ApplyChannelPriceDiscountToQuota(quota, disc)
 
 	totalTokens := usage.TotalTokens
 	var logContent string
