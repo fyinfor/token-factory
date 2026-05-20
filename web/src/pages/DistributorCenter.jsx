@@ -23,6 +23,7 @@ import React, {
   useState,
   useCallback,
   useMemo,
+  useRef,
 } from 'react';
 import {
   Button,
@@ -34,7 +35,6 @@ import {
   Modal,
   Input,
   InputNumber,
-  Upload,
   Popconfirm,
   Tag,
   Spin,
@@ -59,25 +59,20 @@ import { StatusContext } from '../context/Status';
 import { UserContext } from '../context/User';
 import { useNavigate } from 'react-router-dom';
 import AffInviteeCommissionDetailModal from '../components/distributor/AffInviteeCommissionDetailModal';
+import DistributorWithdrawFormFields from '../components/distributor/DistributorWithdrawFormFields';
+import {
+  WD_ACCOUNT_PERSONAL,
+  WD_ACCOUNT_ENTERPRISE,
+  EMPTY_WD_FORM,
+  validateWithdrawForm,
+  buildWithdrawSubmitBody,
+  wdAccountTypeLabel,
+  parseWithdrawRow,
+} from '../components/distributor/withdrawProfileUtils';
 import TransferModal from '../components/topup/modals/TransferModal';
-import { IconFile } from '@douyinfe/semi-icons';
 
 function isPdfUrl(u) {
   return /\.pdf(\?|$)/i.test(u || '');
-}
-
-/** 提现表单：标题与输入区分行；必填项前置红色 * */
-function WithdrawFieldLabel({ required, children }) {
-  return (
-    <Text size='small' className='block mb-1.5 text-[var(--semi-color-text-0)]'>
-      {required ? (
-        <span className='text-[var(--semi-color-danger)] mr-1' aria-hidden>
-          *
-        </span>
-      ) : null}
-      {children}
-    </Text>
-  );
 }
 
 const { Text, Title } = Typography;
@@ -204,15 +199,13 @@ export default function DistributorCenter() {
   const [withdrawNoticeLoading, setWithdrawNoticeLoading] = useState(false);
   const [withdrawNoticeContent, setWithdrawNoticeContent] = useState('');
   const [withdrawLogOpen, setWithdrawLogOpen] = useState(false);
-  const [wdRealName, setWdRealName] = useState('');
-  const [wdBankName, setWdBankName] = useState('');
-  const [wdBankAccount, setWdBankAccount] = useState('');
+  const [wdAccountType, setWdAccountType] = useState(WD_ACCOUNT_PERSONAL);
+  const [wdForm, setWdForm] = useState({ ...EMPTY_WD_FORM });
   /** TOKENS：内部点数字符串；法币展示模式：与划转弹窗一致，为展示数值 */
   const [wdQuotaInput, setWdQuotaInput] = useState('');
   const [wdFiatAmount, setWdFiatAmount] = useState(undefined);
-  const [wdVoucherUrls, setWdVoucherUrls] = useState([]);
-  const [wdUploading, setWdUploading] = useState(false);
   const [wdSubmitting, setWdSubmitting] = useState(false);
+  const wdFiatCommitRef = useRef(null);
   const [wdLogLoading, setWdLogLoading] = useState(false);
   const [wdLogRows, setWdLogRows] = useState([]);
   const [wdLogTotal, setWdLogTotal] = useState(0);
@@ -360,56 +353,28 @@ export default function DistributorCenter() {
     setTransferAmount(getQuotaPerUnit());
   }, []);
 
-  const handleWdVoucherUpload = async ({ file, onSuccess, onError }) => {
-    const inst = file.fileInstance || file;
-    if (!inst) {
-      onError(new Error('no file'));
-      return;
-    }
-    setWdUploading(true);
-    const fd = new FormData();
-    fd.append('file', inst);
-    try {
-      const res = await API.post('/api/oss/upload', fd, {
-        skipErrorHandler: true,
-      });
-      const body = res.data || {};
-      const { success, message, data } = body;
-      const payload = data ?? body;
-      const url =
-        (payload && typeof payload === 'object'
-          ? payload.url || payload.URL || payload.link
-          : null) || (typeof payload === 'string' ? payload : '');
-      if (!url || success === false) {
-        showError(message || t('上传失败'));
-        onError(new Error(message || 'upload'));
-        return;
-      }
-      setWdVoucherUrls((prev) => [...prev, String(url).trim()]);
-      onSuccess({ url: String(url).trim() });
-      showSuccess(t('已上传'));
-    } catch (e) {
-      const msg =
-        e?.response?.data?.message ||
-        e?.message ||
-        t('上传失败，请确认已启用 OSS 并完成配置');
-      showError(msg);
-      onError(e);
-    } finally {
-      setWdUploading(false);
-    }
+  const setWdField = (key, val) => {
+    setWdForm((prev) => ({ ...prev, [key]: val }));
+  };
+
+  const distributorApplyType = useMemo(() => {
+    return Number(center?.apply_type) === WD_ACCOUNT_ENTERPRISE
+      ? WD_ACCOUNT_ENTERPRISE
+      : WD_ACCOUNT_PERSONAL;
+  }, [center?.apply_type]);
+
+  const resetWdForm = () => {
+    setWdAccountType(distributorApplyType);
+    setWdForm({
+      ...EMPTY_WD_FORM,
+      real_name: String(center?.application_real_name || '').trim(),
+    });
   };
 
   const submitWithdraw = async () => {
-    if (!wdRealName.trim() || !wdBankName.trim() || !wdBankAccount.trim()) {
-      showError(t('请填写真实姓名、开户行与银行卡号'));
-      return;
-    }
-    const voucherList = wdVoucherUrls
-      .map((u) => String(u || '').trim())
-      .filter(Boolean);
-    if (!voucherList.length) {
-      showError(t('请上传票据'));
+    const formErr = validateWithdrawForm(t, distributorApplyType, wdForm);
+    if (formErr) {
+      showError(formErr);
       return;
     }
 
@@ -433,15 +398,20 @@ export default function DistributorCenter() {
         return;
       }
     } else {
+      const committedFiat = wdFiatCommitRef.current?.commit?.();
+      const fiatVal =
+        committedFiat != null && !Number.isNaN(Number(committedFiat))
+          ? committedFiat
+          : wdFiatAmount;
       if (
-        wdFiatAmount == null ||
-        Number.isNaN(Number(wdFiatAmount)) ||
-        Number(wdFiatAmount) <= 0
+        fiatVal == null ||
+        Number.isNaN(Number(fiatVal)) ||
+        Number(fiatVal) <= 0
       ) {
         showError(t('请填写与上方待使用收益一致的提现金额'));
         return;
       }
-      const fiatRounded = Math.round(Number(wdFiatAmount) * 100) / 100;
+      const fiatRounded = Math.round(Number(fiatVal) * 100) / 100;
       q = displayInputAmountToQuota(fiatRounded);
       if (q <= 0) {
         showError(t('提现金额过小或无效'));
@@ -468,17 +438,12 @@ export default function DistributorCenter() {
     }
     setWdSubmitting(true);
     try {
-      const res = await API.post('/api/distributor/withdrawal', {
-        real_name: wdRealName.trim(),
-        bank_name: wdBankName.trim(),
-        bank_account: wdBankAccount.trim(),
-        voucher_urls: voucherList,
-        quota_amount: Math.round(Number(q)),
-      });
+      const body = buildWithdrawSubmitBody(distributorApplyType, wdForm, q);
+      const res = await API.post('/api/distributor/withdrawal', body);
       if (res.data.success) {
         showSuccess(t('已提交，请等待审核'));
         setWithdrawOpen(false);
-        setWdVoucherUrls([]);
+        resetWdForm();
         setWdQuotaInput('');
         setWdFiatAmount(undefined);
         await loadCenter();
@@ -720,10 +685,7 @@ export default function DistributorCenter() {
                         theme='solid'
                         size='small'
                         onClick={() => {
-                          setWdRealName('');
-                          setWdBankName('');
-                          setWdBankAccount('');
-                          setWdVoucherUrls([]);
+                          resetWdForm();
                           setWdQuotaInput('');
                           setWdFiatAmount(undefined);
                           setWdVoucherPreview(null);
@@ -977,165 +939,24 @@ export default function DistributorCenter() {
         </div>
         <div className='flex flex-col lg:flex-row gap-6 items-start'>
           <div className='flex-1 min-w-0 w-full space-y-5'>
-            <div className='space-y-0'>
-              <WithdrawFieldLabel required>{t('真实姓名')}</WithdrawFieldLabel>
-              <Input
-                value={wdRealName}
-                onChange={(v) => setWdRealName(String(v ?? ''))}
-                placeholder={t('真实姓名（必填）')}
-              />
-            </div>
-            <div className='space-y-0'>
-              <WithdrawFieldLabel required>{t('开户行')}</WithdrawFieldLabel>
-              <Input
-                value={wdBankName}
-                onChange={(v) => setWdBankName(String(v ?? ''))}
-                placeholder={t('开户行（必填）')}
-              />
-            </div>
-            <div className='space-y-0'>
-              <WithdrawFieldLabel required>{t('银行卡号')}</WithdrawFieldLabel>
-              <Input
-                value={wdBankAccount}
-                onChange={(v) => setWdBankAccount(String(v ?? ''))}
-                placeholder={t('银行卡号（必填）')}
-              />
-            </div>
-            <div className='space-y-0'>
-              <WithdrawFieldLabel required>{t('提现余额')}</WithdrawFieldLabel>
-              {isQuotaTokensMode ? (
-                <>
-                  <Text type='tertiary' size='small' className='block mb-2'>
-                    {t(
-                      'TOKENS 模式：与上方「待使用收益」数字一致，填写系统内部点数（正整数）',
-                    )}
-                  </Text>
-                  <Input
-                    value={wdQuotaInput}
-                    onChange={(v) =>
-                      setWdQuotaInput(v == null ? '' : String(v))
-                    }
-                    placeholder={t('请输入内部点数')}
-                  />
-                </>
-              ) : (
-                <InputNumber
-                  style={{ width: '100%' }}
-                  value={wdFiatAmount}
-                  onChange={(v) => setWdFiatAmount(v)}
-                  min={wdFiatMin}
-                  max={wdFiatMax}
-                  precision={2}
-                  step={0.01}
-                  placeholder={t('填写收益金额')}
-                />
-              )}
-              <Text type='tertiary' size='small' className='block mt-1'>
-                {affQuotaFloor >= minQInternal ? (
-                  <>
-                    {t('单笔最低')}: {renderQuota(minQInternal)} ·{' '}
-                    {t('当前待使用余额')}: {renderQuota(center?.aff_quota || 0)}
-                  </>
-                ) : (
-                  <>
-                    {t('单笔最低')}: {renderQuota(minQInternal)} ·{' '}
-                    {affQuotaFloor > 0 ? (
-                      <>
-                        {t('当前余额低于系统最低门槛时，可提范围')}:{' '}
-                        {renderQuota(1)}～{renderQuota(affQuotaFloor)} ·{' '}
-                      </>
-                    ) : null}
-                    {t('当前待使用余额')}: {renderQuota(center?.aff_quota || 0)}
-                  </>
-                )}
-              </Text>
-            </div>
-            <div className='space-y-0'>
-              <WithdrawFieldLabel required>{t('票据')}</WithdrawFieldLabel>
-              <div>
-                <Upload
-                  accept='image/*,.pdf'
-                  multiple
-                  showUploadList={false}
-                  customRequest={handleWdVoucherUpload}
-                >
-                  <Button loading={wdUploading}>{t('上传票据')}</Button>
-                </Upload>
-                <Text type='tertiary' size='small' className='block mt-1'>
-                  {t('支持图片或 PDF；点击图片可大图预览')}
-                </Text>
-                {wdVoucherUrls.length > 0 ? (
-                  <div className='mt-3 flex flex-wrap gap-3'>
-                    {wdVoucherUrls.map((u, idx) =>
-                      isPdfUrl(u) ? (
-                        <div
-                          key={`wd-v-${u}-${idx}`}
-                          className='relative flex h-24 w-24 flex-col items-center justify-center rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)]'
-                        >
-                          <IconFile size='large' />
-                          <span className='mt-1 text-xs text-[var(--semi-color-text-2)]'>
-                            PDF
-                          </span>
-                          <button
-                            type='button'
-                            className='absolute inset-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary'
-                            title={t('在新窗口打开')}
-                            onClick={() =>
-                              window.open(u, '_blank', 'noopener,noreferrer')
-                            }
-                          />
-                          <Button
-                            size='small'
-                            type='danger'
-                            theme='borderless'
-                            className='!absolute -right-1 -top-1 !min-w-0 z-10'
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setWdVoucherUrls((prev) =>
-                                prev.filter((_, i) => i !== idx),
-                              );
-                            }}
-                          >
-                            ×
-                          </Button>
-                        </div>
-                      ) : (
-                        <div
-                          key={`wd-v-${u}-${idx}`}
-                          className='relative h-24 w-24 overflow-hidden rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)]'
-                        >
-                          <button
-                            type='button'
-                            className='block h-full w-full cursor-zoom-in border-0 bg-transparent p-0'
-                            onClick={() => setWdVoucherPreview(u)}
-                          >
-                            <img
-                              src={u}
-                              alt=''
-                              className='h-full w-full object-cover'
-                            />
-                          </button>
-                          <Button
-                            size='small'
-                            type='danger'
-                            theme='borderless'
-                            className='!absolute -right-1 -top-1 !min-w-0 z-10'
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setWdVoucherUrls((prev) =>
-                                prev.filter((_, i) => i !== idx),
-                              );
-                            }}
-                          >
-                            ×
-                          </Button>
-                        </div>
-                      ),
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            </div>
+            <DistributorWithdrawFormFields
+              accountType={wdAccountType}
+              form={wdForm}
+              onFieldChange={setWdField}
+              onPreview={setWdVoucherPreview}
+              fiatCommitRef={wdFiatCommitRef}
+              isQuotaTokensMode={isQuotaTokensMode}
+              quotaInput={wdQuotaInput}
+              onQuotaInputChange={setWdQuotaInput}
+              fiatAmount={wdFiatAmount}
+              onFiatAmountChange={setWdFiatAmount}
+              fiatMin={wdFiatMin}
+              fiatMax={wdFiatMax}
+              affQuotaFloor={affQuotaFloor}
+              minQInternal={minQInternal}
+              affQuota={center?.aff_quota}
+              renderQuota={renderQuota}
+            />
             <div className='mt-4'>
               <Text size='small' strong className='block mb-2'>
                 {t('提现说明')}
@@ -1193,6 +1014,7 @@ export default function DistributorCenter() {
           loading={wdLogLoading}
           size='small'
           rowKey='id'
+          scroll={{ x: 1100 }}
           columns={[
             {
               title: t('额度'),
@@ -1200,17 +1022,32 @@ export default function DistributorCenter() {
               width: 120,
               render: (q) => renderQuota(q || 0),
             },
+            {
+              title: t('状态'),
+              dataIndex: 'status',
+              width: 112,
+              render: (s) => wdStatusTag(s),
+            },
             { title: t('提现月份'), dataIndex: 'withdraw_month', width: 100 },
             {
+              title: t('类型'),
+              dataIndex: 'account_type',
+              width: 72,
+              render: (v) => wdAccountTypeLabel(t, v),
+            },
+            {
               title: t('收款信息'),
-              render: (_, r) => (
-                <div className='text-xs space-y-0.5'>
-                  <div>{r.real_name}</div>
-                  <div className='text-[var(--semi-color-text-2)]'>
-                    {r.bank_name} {r.bank_account}
+              render: (_, r) => {
+                const f = parseWithdrawRow(r);
+                return (
+                  <div className='text-xs space-y-0.5'>
+                    <div>{f.real_name}</div>
+                    <div className='text-[var(--semi-color-text-2)]'>
+                      {f.bank_name} {f.bank_account}
+                    </div>
                   </div>
-                </div>
-              ),
+                );
+              },
             },
             {
               title: t('时间'),
@@ -1242,14 +1079,9 @@ export default function DistributorCenter() {
               },
             },
             {
-              title: t('状态'),
-              dataIndex: 'status',
-              width: 112,
-              render: (s) => wdStatusTag(s),
-            },
-            {
               title: t('操作'),
               width: 100,
+              fixed: 'right',
               align: 'center',
               render: (_, r) =>
                 r.status === 1 ? (

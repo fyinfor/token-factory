@@ -31,6 +31,7 @@ import {
   isPasskeySupported,
   setUserData,
 } from '../../helpers';
+import { normalizeSmsVerificationEnabled } from '../../helpers/data';
 import { UserContext } from '../../context/User';
 import { Modal, Card, Button, Typography } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
@@ -42,6 +43,7 @@ import NotificationSettings from './personal/cards/NotificationSettings';
 import PreferencesSettings from './personal/cards/PreferencesSettings';
 import CheckinCalendar from './personal/cards/CheckinCalendar';
 import EmailBindModal from './personal/modals/EmailBindModal';
+import PhoneBindModal from './personal/modals/PhoneBindModal';
 import WeChatBindModal from './personal/modals/WeChatBindModal';
 import AccountDeleteModal from './personal/modals/AccountDeleteModal';
 import ChangePasswordModal from './personal/modals/ChangePasswordModal';
@@ -55,6 +57,8 @@ const PersonalSetting = () => {
     wechat_verification_code: '',
     email_verification_code: '',
     email: '',
+    phone: '',
+    sms_verification_code: '',
     self_account_deletion_confirmation: '',
     original_password: '',
     set_new_password: '',
@@ -64,6 +68,7 @@ const PersonalSetting = () => {
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [showWeChatBindModal, setShowWeChatBindModal] = useState(false);
   const [showEmailBindModal, setShowEmailBindModal] = useState(false);
+  const [showPhoneBindModal, setShowPhoneBindModal] = useState(false);
   const [showAccountDeleteModal, setShowAccountDeleteModal] = useState(false);
   const [turnstileEnabled, setTurnstileEnabled] = useState(false);
   const [turnstileSiteKey, setTurnstileSiteKey] = useState('');
@@ -71,6 +76,9 @@ const PersonalSetting = () => {
   const [loading, setLoading] = useState(false);
   const [disableButton, setDisableButton] = useState(false);
   const [countdown, setCountdown] = useState(30);
+  const [phoneLoading, setPhoneLoading] = useState(false);
+  const [disablePhoneButton, setDisablePhoneButton] = useState(false);
+  const [phoneCountdown, setPhoneCountdown] = useState(30);
   const [systemToken, setSystemToken] = useState('');
   const [passkeyStatus, setPasskeyStatus] = useState({ enabled: false });
   const [passkeyRegisterLoading, setPasskeyRegisterLoading] = useState(false);
@@ -145,6 +153,19 @@ const PersonalSetting = () => {
     }
     return () => clearInterval(countdownInterval); // Clean up on unmount
   }, [disableButton, countdown]);
+
+  useEffect(() => {
+    let countdownInterval = null;
+    if (disablePhoneButton && phoneCountdown > 0) {
+      countdownInterval = setInterval(() => {
+        setPhoneCountdown(phoneCountdown - 1);
+      }, 1000);
+    } else if (phoneCountdown === 0) {
+      setDisablePhoneButton(false);
+      setPhoneCountdown(30);
+    }
+    return () => clearInterval(countdownInterval);
+  }, [disablePhoneButton, phoneCountdown]);
 
   useEffect(() => {
     if (userState?.user?.setting) {
@@ -394,6 +415,90 @@ const PersonalSetting = () => {
     setLoading(false);
   };
 
+  /** 发送绑定/修改手机号短信验证码。 */
+  const sendPhoneVerificationCode = async () => {
+    const phone = (inputs.phone || '').trim();
+    if (!/^1[3-9]\d{9}$/.test(phone)) {
+      showError(t('请输入有效的手机号'));
+      return;
+    }
+    if (turnstileEnabled && turnstileToken === '') {
+      showInfo(t('请稍后几秒重试，Turnstile 正在检查用户环境！'));
+      return;
+    }
+    setDisablePhoneButton(true);
+    setPhoneLoading(true);
+    try {
+      const res = await API.get(
+        `/api/user/self/sms_bind_verification?phone=${encodeURIComponent(phone)}&turnstile=${turnstileToken}`,
+      );
+      const { success, message } = res.data;
+      if (success) {
+        showSuccess(t('短信验证码发送成功，请注意查收！'));
+      } else {
+        showError(message);
+        setDisablePhoneButton(false);
+      }
+    } catch (error) {
+      showError(
+        error.response?.data?.message ||
+          error.message ||
+          t('发送短信验证码失败，请重试'),
+      );
+      setDisablePhoneButton(false);
+    } finally {
+      setPhoneLoading(false);
+    }
+  };
+
+  /** 提交手机号绑定或修改。 */
+  const bindPhone = async () => {
+    const phone = (inputs.phone || '').trim();
+    if (!/^1[3-9]\d{9}$/.test(phone)) {
+      showError(t('请输入有效的手机号'));
+      return;
+    }
+    if (!/^\d{6}$/.test((inputs.sms_verification_code || '').trim())) {
+      showError(t('请输入 6 位短信验证码'));
+      return;
+    }
+    setPhoneLoading(true);
+    try {
+      const res = await API.post('/api/user/self/phone/bind', {
+        phone,
+        sms_verification_code: inputs.sms_verification_code.trim(),
+      });
+      const { success, message } = res.data;
+      if (success) {
+        showSuccess(t('绑定成功'));
+        setShowPhoneBindModal(false);
+        setInputs((prev) => ({ ...prev, sms_verification_code: '' }));
+        await getUserData();
+      } else {
+        showError(message);
+      }
+    } catch (error) {
+      showError(
+        error.response?.data?.message || error.message || t('操作失败'),
+      );
+    } finally {
+      setPhoneLoading(false);
+    }
+  };
+
+  const smsVerificationEnabled =
+    normalizeSmsVerificationEnabled(status?.sms_verification_enabled) === true;
+
+  /** 打开手机号绑定弹窗并预填当前号码。 */
+  const openPhoneBindModal = () => {
+    setInputs((prev) => ({
+      ...prev,
+      phone: userState.user?.phone || '',
+      sms_verification_code: '',
+    }));
+    setShowPhoneBindModal(true);
+  };
+
   const copyText = async (text) => {
     if (await copy(text)) {
       showSuccess(t('已复制：') + text);
@@ -527,6 +632,8 @@ const PersonalSetting = () => {
                 status={status}
                 systemToken={systemToken}
                 setShowEmailBindModal={setShowEmailBindModal}
+                setShowPhoneBindModal={openPhoneBindModal}
+                smsVerificationEnabled={smsVerificationEnabled}
                 setShowWeChatBindModal={setShowWeChatBindModal}
                 generateAccessToken={generateAccessToken}
                 handleSystemTokenClick={handleSystemTokenClick}
@@ -567,6 +674,22 @@ const PersonalSetting = () => {
         disableButton={disableButton}
         loading={loading}
         countdown={countdown}
+        turnstileEnabled={turnstileEnabled}
+        turnstileSiteKey={turnstileSiteKey}
+        setTurnstileToken={setTurnstileToken}
+      />
+
+      <PhoneBindModal
+        t={t}
+        showPhoneBindModal={showPhoneBindModal}
+        setShowPhoneBindModal={setShowPhoneBindModal}
+        inputs={inputs}
+        handleInputChange={handleInputChange}
+        sendPhoneVerificationCode={sendPhoneVerificationCode}
+        bindPhone={bindPhone}
+        disablePhoneButton={disablePhoneButton}
+        phoneLoading={phoneLoading}
+        phoneCountdown={phoneCountdown}
         turnstileEnabled={turnstileEnabled}
         turnstileSiteKey={turnstileSiteKey}
         setTurnstileToken={setTurnstileToken}

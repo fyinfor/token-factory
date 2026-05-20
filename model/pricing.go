@@ -79,6 +79,13 @@ type PricingChannelItem struct {
 	PriceDiscountPercent float64 `json:"price_discount_percent"` // 成本折扣率（百分数，100=不打折）
 	MarkupDiscountRate   float64 `json:"markup_discount_rate"`   // 加价折扣率（百分数，0=不加价）
 	QuotaType            int     `json:"quota_type"`
+
+	// 热门排序相关字段
+	SortWeight         float64 `json:"sort_weight"`           // 渠道权重
+	ManualBaseReqCount int64   `json:"manual_base_req_count"` // 手动设置调用基数
+	AutoReqCount       int64   `json:"auto_req_count"`        // 自动统计调用次数
+	FinalReqCount      int64   `json:"final_req_count"`       // 最终调用次数 (= manual + auto)
+	ChannelHeatScore   float64 `json:"channel_heat_score"`    // 渠道热度得分 (= final * weight)
 }
 
 // PricingAPIItem 在 Pricing 基础上扩展渠道维度统计字段（定价接口 data 元素类型）。
@@ -87,6 +94,7 @@ type PricingAPIItem struct {
 	SupplierList      []PricingSupplierItem     `json:"supplier_list"`
 	ChannelList       []PricingChannelItem      `json:"channel_list"`
 	VideoFlatClipHint *VideoFlatClipPricingHint `json:"video_flat_clip_hint,omitempty"`
+	ImagePerImageHint *ImagePerImagePricingHint `json:"image_per_image_hint,omitempty"`
 }
 
 func resolveChannelPricingTriple(channelID int, supplierApplicationID int, modelName string) (mp, mr, cr float64) {
@@ -280,6 +288,7 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			}
 			discountMult := ChannelPriceDiscountMultiplierForPricing(ch.PriceDiscountPercent)
 			item.VideoFlatClipHint = BuildVideoFlatClipHint(ch.ChannelID, modelName, discountMult)
+			item.ImagePerImageHint = BuildImagePerImageHint(ch.ChannelID, modelName, discountMult)
 			out = append(out, item)
 		}
 	}
@@ -605,4 +614,124 @@ func updatePricing() {
 // GetSupportedEndpointMap 返回全局端点到路径的映射
 func GetSupportedEndpointMap() map[string]common.EndpointInfo {
 	return supportedEndpointMap
+}
+
+// ModelRequestStats 模型请求统计数据
+type ModelRequestStats struct {
+	ModelName       string `gorm:"column:model_name"`
+	RequestCount7d  int64  `gorm:"column:req_count_7d"`
+	RequestCount30d int64  `gorm:"column:req_count_30d"`
+}
+
+// ChannelModelRequestStats 渠道-模型组合的请求统计数据
+type ChannelModelRequestStats struct {
+	ChannelID       int    `gorm:"column:channel_id"`
+	ModelName       string `gorm:"column:model_name"`
+	RequestCount7d  int64  `gorm:"column:req_count_7d"`
+	RequestCount30d int64  `gorm:"column:req_count_30d"`
+}
+
+// HeatStatPeriod 热度统计周期，可选值: "7d" | "30d" | "all"
+const (
+	HeatStatPeriod7d  = "7d"
+	HeatStatPeriod30d = "30d"
+	HeatStatPeriodAll = "all"
+)
+
+// GetModelRequestStatsByPeriod 查询各模型的请求统计数据，period 为 "7d"/"30d"/"all"
+func GetModelRequestStatsByPeriod(period string) ([]ModelRequestStats, error) {
+	now := time.Now()
+	var startTime int64
+	switch period {
+	case HeatStatPeriod30d:
+		startTime = now.AddDate(0, 0, -30).Unix()
+	case HeatStatPeriodAll:
+		startTime = 0
+	default: // "7d"
+		startTime = now.AddDate(0, 0, -7).Unix()
+	}
+
+	var stats []ModelRequestStats
+	var err error
+	if startTime == 0 {
+		err = DB.Raw(`
+			SELECT model_name,
+			       COUNT(*) as req_count_7d,
+			       COUNT(*) as req_count_30d
+			FROM logs
+			WHERE type = ?
+			  AND model_name != ''
+			GROUP BY model_name
+		`, LogTypeConsume).Scan(&stats).Error
+	} else {
+		err = DB.Raw(`
+			SELECT model_name,
+			       COUNT(*) as req_count_7d,
+			       COUNT(*) as req_count_30d
+			FROM logs
+			WHERE type = ?
+			  AND model_name != ''
+			  AND created_at >= ?
+			GROUP BY model_name
+		`, LogTypeConsume, startTime).Scan(&stats).Error
+	}
+	return stats, err
+}
+
+// GetModelRequestStats 查询各模型的请求统计数据（7天和30天）
+func GetModelRequestStats() ([]ModelRequestStats, error) {
+	return GetModelRequestStatsByPeriod(HeatStatPeriod7d)
+}
+
+// GetChannelModelRequestStatsByPeriod 查询各渠道-模型组合的请求统计数据，period 为 "7d"/"30d"/"all"
+func GetChannelModelRequestStatsByPeriod(channelIDs []int, period string) ([]ChannelModelRequestStats, error) {
+	if len(channelIDs) == 0 {
+		return []ChannelModelRequestStats{}, nil
+	}
+
+	now := time.Now()
+	var startTime int64
+	switch period {
+	case HeatStatPeriod30d:
+		startTime = now.AddDate(0, 0, -30).Unix()
+	case HeatStatPeriodAll:
+		startTime = 0
+	default: // "7d"
+		startTime = now.AddDate(0, 0, -7).Unix()
+	}
+
+	var stats []ChannelModelRequestStats
+	var err error
+	if startTime == 0 {
+		err = DB.Raw(`
+			SELECT channel_id,
+			       model_name,
+			       COUNT(*) as req_count_7d,
+			       COUNT(*) as req_count_30d
+			FROM logs
+			WHERE type = ?
+			  AND model_name != ''
+			  AND channel_id IN ?
+			GROUP BY channel_id, model_name
+		`, LogTypeConsume, channelIDs).Scan(&stats).Error
+	} else {
+		err = DB.Raw(`
+			SELECT channel_id,
+			       model_name,
+			       COUNT(*) as req_count_7d,
+			       COUNT(*) as req_count_30d
+			FROM logs
+			WHERE type = ?
+			  AND model_name != ''
+			  AND channel_id IN ?
+			  AND created_at >= ?
+			GROUP BY channel_id, model_name
+		`, LogTypeConsume, channelIDs, startTime).Scan(&stats).Error
+	}
+	return stats, err
+}
+
+// GetChannelModelRequestStats 查询各渠道-模型组合的请求统计数据
+func GetChannelModelRequestStats(channelIDs []int) ([]ChannelModelRequestStats, error) {
+	return GetChannelModelRequestStatsByPeriod(channelIDs, HeatStatPeriod7d)
 }

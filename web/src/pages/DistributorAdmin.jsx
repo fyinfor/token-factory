@@ -54,6 +54,7 @@ import CardPro from '../components/common/ui/CardPro';
 import CardTable from '../components/common/ui/CardTable';
 import { IconFile, IconSearch } from '@douyinfe/semi-icons';
 import DistributorAnalyticsBoard from '../components/distributor/DistributorAnalyticsBoard';
+import DistributorWithdrawProfileDetail from '../components/distributor/DistributorWithdrawProfileDetail';
 
 const { Text } = Typography;
 
@@ -266,6 +267,9 @@ export default function DistributorAdmin() {
   const [wdPs, setWdPs] = useState(10);
   const [wdKeyword, setWdKeyword] = useState('');
   const [wdStatusFilter, setWdStatusFilter] = useState(0);
+  const [wdAccountTypeFilter, setWdAccountTypeFilter] = useState(0);
+  const [wdDetailOpen, setWdDetailOpen] = useState(false);
+  const [wdDetailRow, setWdDetailRow] = useState(null);
   const [wdRejectOpen, setWdRejectOpen] = useState(false);
   const [wdRejectId, setWdRejectId] = useState(null);
   const [wdRejectReason, setWdRejectReason] = useState('');
@@ -343,6 +347,7 @@ export default function DistributorAdmin() {
       });
       if (wdKeyword.trim()) q.set('keyword', wdKeyword.trim());
       if (wdStatusFilter) q.set('status', String(wdStatusFilter));
+      if (wdAccountTypeFilter) q.set('account_type', String(wdAccountTypeFilter));
       const res = await API.get(`/api/distributor/admin/withdrawals?${q}`);
       const { success, message, data } = res.data;
       if (!success) {
@@ -356,7 +361,7 @@ export default function DistributorAdmin() {
     } finally {
       setWdLoading(false);
     }
-  }, [wdPage, wdPs, wdKeyword, wdStatusFilter, t]);
+  }, [wdPage, wdPs, wdKeyword, wdStatusFilter, wdAccountTypeFilter, t]);
 
   useEffect(() => {
     if (tab === 'wd') loadWdWithdrawals();
@@ -805,29 +810,26 @@ export default function DistributorAdmin() {
   ];
 
   const wdColumns = [
-    { title: t('用户名'), dataIndex: 'username', width: 120 },
-    { title: t('姓名'), dataIndex: 'real_name', width: 90 },
+    { title: t('用户名'), dataIndex: 'username', width: 110 },
     {
-      title: t('收款账户'),
+      title: t('类型'),
+      dataIndex: 'account_type',
+      width: 72,
+      render: (v) => applyTypeTag(t, v || 1),
+    },
+    {
+      title: t('主体/账户'),
+      width: 140,
       render: (_, r) => (
         <div className='text-xs space-y-0.5 max-w-[200px]'>
-          <div>{r.bank_name}</div>
+          <div className='font-medium'>{r.real_name}</div>
           <div className='text-[var(--semi-color-text-2)]'>
+            {r.bank_name}
+          </div>
+          <div className='text-[var(--semi-color-text-2)] break-all'>
             {r.bank_account}
           </div>
         </div>
-      ),
-    },
-    {
-      title: t('票据'),
-      dataIndex: 'voucher_urls',
-      width: 200,
-      render: (raw) => (
-        <QualificationThumbnails
-          urls={parseQualificationUrls(raw)}
-          compact
-          onImagePreview={(u) => setQualImagePreview(u)}
-        />
       ),
     },
     {
@@ -855,9 +857,19 @@ export default function DistributorAdmin() {
     },
     {
       title: t('操作'),
-      width: 160,
+      width: 200,
       render: (_, r) => (
         <div className='flex flex-wrap gap-1'>
+          <Button
+            size='small'
+            type='tertiary'
+            onClick={() => {
+              setWdDetailRow(r);
+              setWdDetailOpen(true);
+            }}
+          >
+            {t('查看资料')}
+          </Button>
           {r.status === 1 && (
             <>
               <Button
@@ -1040,13 +1052,25 @@ export default function DistributorAdmin() {
                       showClear
                       pure
                       size='small'
-                      placeholder={t('搜索姓名、卡号、用户名')}
+                      placeholder={t('搜索姓名/企业、卡号、证件号、用户名')}
                       onChange={(v) =>
                         setWdKeyword(
                           String(v ?? '').slice(0, ADMIN_KEYWORD_MAX_LEN),
                         )
                       }
                     />
+                  </div>
+                  <div className='w-full md:w-36'>
+                    <Select
+                      value={wdAccountTypeFilter}
+                      className='w-full'
+                      size='small'
+                      onChange={(v) => setWdAccountTypeFilter(Number(v))}
+                    >
+                      <Select.Option value={0}>{t('全部类型')}</Select.Option>
+                      <Select.Option value={1}>{t('个人')}</Select.Option>
+                      <Select.Option value={2}>{t('企业')}</Select.Option>
+                    </Select>
                   </div>
                   <div className='w-full md:w-48'>
                     <Select
@@ -1079,6 +1103,7 @@ export default function DistributorAdmin() {
                       onClick={() => {
                         setWdKeyword('');
                         setWdStatusFilter(0);
+                        setWdAccountTypeFilter(0);
                         setWdPage(1);
                       }}
                     >
@@ -1501,6 +1526,43 @@ export default function DistributorAdmin() {
             </div>
           </div>
         )}
+      </Modal>
+
+      <Modal
+        title={t('提现资料')}
+        visible={wdDetailOpen}
+        onCancel={() => {
+          setWdDetailOpen(false);
+          setWdDetailRow(null);
+        }}
+        footer={
+          <Button
+            onClick={() => {
+              setWdDetailOpen(false);
+              setWdDetailRow(null);
+            }}
+          >
+            {t('关闭')}
+          </Button>
+        }
+        width={Math.min(
+          960,
+          typeof window !== 'undefined' ? window.innerWidth - 48 : 960,
+        )}
+        bodyStyle={{ maxHeight: 'calc(100vh - 200px)', overflowY: 'auto' }}
+      >
+        {wdDetailRow ? (
+          <div className='space-y-3 min-w-0'>
+            <Text type='tertiary' size='small'>
+              {t('用户')}：{wdDetailRow.username} · {t('额度')}：
+              {renderQuota(wdDetailRow.quota_amount || 0)}
+            </Text>
+            <DistributorWithdrawProfileDetail
+              row={wdDetailRow}
+              onImagePreview={setQualImagePreview}
+            />
+          </div>
+        ) : null}
       </Modal>
 
       <Modal

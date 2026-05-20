@@ -868,6 +868,15 @@ export const getLogsColumns = ({
             </Tooltip>
           );
         }
+        const phaseLabel = record?.video_billing_phase_label;
+        if (phaseLabel) {
+          return (
+            <span>
+              <span className='text-gray-500'>{phaseLabel} </span>
+              {renderQuota(text)}
+            </span>
+          );
+        }
         return <>{renderQuota(text)}</>;
       },
     },

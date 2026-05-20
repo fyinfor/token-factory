@@ -28,6 +28,7 @@ import {
 import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { IconSearch } from '@douyinfe/semi-icons';
 import PricingVendors from '../table/model-pricing/filter/PricingVendors';
+import PricingSuppliers from './PricingSuppliers';
 import PricingQuotaTypes from '../table/model-pricing/filter/PricingQuotaTypes';
 import PricingTags from '../table/model-pricing/filter/PricingTags';
 import PricingEndpointTypes from '../table/model-pricing/filter/PricingEndpointTypes';
@@ -69,6 +70,41 @@ const HomeModelList = () => {
       searchValue: pricingData.searchValue,
     });
 
+  // 计算供应商渠道筛选的可用模型数（排除 filterSupplier 维度，保留其他筛选）
+  const supplierCountModels = React.useMemo(() => {
+    let result = pricingData.models;
+    if (pricingData.filterVendor !== 'all') {
+      if (pricingData.filterVendor === 'unknown') {
+        result = result.filter((m) => !m.vendor_name);
+      } else {
+        result = result.filter((m) => m.vendor_name === pricingData.filterVendor);
+      }
+    }
+    if (pricingData.filterTag !== 'all') {
+      const tagLower = pricingData.filterTag.toLowerCase();
+      result = result.filter((m) => {
+        if (!m.tags) return false;
+        return m.tags.toLowerCase().split(/[,;|]+/).map((t) => t.trim()).includes(tagLower);
+      });
+    }
+    if (pricingData.searchValue.length > 0) {
+      const term = pricingData.searchValue.toLowerCase();
+      result = result.filter(
+        (m) =>
+          (m.model_name && m.model_name.toLowerCase().includes(term)) ||
+          (m.description && m.description.toLowerCase().includes(term)) ||
+          (m.tags && m.tags.toLowerCase().includes(term)) ||
+          (m.vendor_name && m.vendor_name.toLowerCase().includes(term)),
+      );
+    }
+    return result;
+  }, [
+    pricingData.models,
+    pricingData.filterVendor,
+    pricingData.filterTag,
+    pricingData.searchValue,
+  ]);
+
   React.useEffect(() => {
     pricingData.setPageSize(40);
   }, []);
@@ -79,12 +115,14 @@ const HomeModelList = () => {
     pricingData.setFilterQuotaType('all');
     pricingData.setFilterTag('all');
     pricingData.setFilterEndpointType('all');
+    pricingData.setFilterSupplier && pricingData.setFilterSupplier('all');
     pricingData.setSortKey && pricingData.setSortKey('default');
     pricingData.setCurrentPage(1);
   };
 
   const sortOptions = [
     { value: 'default', label: pricingData.t('默认') },
+    { value: 'hot', label: pricingData.t('热门') },
     { value: 'price', label: pricingData.t('价格') },
     { value: 'discount', label: pricingData.t('折扣率') },
     { value: 'supplier_grade', label: pricingData.t('供应商等级') },
@@ -277,6 +315,15 @@ const HomeModelList = () => {
               setFilterTag={pricingData.setFilterTag}
               models={tagModels}
               allModels={pricingData.models}
+              loading={pricingData.loading}
+              t={pricingData.t}
+            />
+
+            <PricingSuppliers
+              filterSupplier={pricingData.filterSupplier}
+              setFilterSupplier={pricingData.setFilterSupplier}
+              models={pricingData.models}
+              countModels={supplierCountModels}
               loading={pricingData.loading}
               t={pricingData.t}
             />

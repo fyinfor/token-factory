@@ -2,6 +2,7 @@ package service
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
@@ -59,21 +60,26 @@ func NotifyDistributorRoleRevoked(userId int) {
 		"管理员已取消您的代理资格，代理中心相关功能将不可用。")
 }
 
-// NotifyDistributorWithdrawalSubmitted 用户提交线下提现申请。
+// withdrawalNotifyAmount 站内通知用金额文案（去掉「额度」后缀，并精简小数）
+func withdrawalNotifyAmount(quotaAmount int) string {
+	return strings.TrimSuffix(logger.LogQuotaConcise(quotaAmount), " 额度")
+}
+
+// NotifyDistributorWithdrawalSubmitted 用户提交提现申请。
 func NotifyDistributorWithdrawalSubmitted(userId int, quotaAmount int) {
 	notifyDistributorUser(userId, dto.NotifyTypeDistributorWithdrawalSubmitted, "提现申请已提交",
-		fmt.Sprintf("您已提交一笔线下提现申请，申请额度：%s，请等待审核。", logger.LogQuota(quotaAmount)))
+		fmt.Sprintf("您已经发起了一笔提现申请，金额为%s，请等待审核。", withdrawalNotifyAmount(quotaAmount)))
 }
 
 // NotifyDistributorWithdrawalApproved 提现审核通过。
 func NotifyDistributorWithdrawalApproved(userId int) {
 	notifyDistributorUser(userId, dto.NotifyTypeDistributorWithdrawalApproved, "提现审核已通过",
-		"您提交的线下提现申请已通过审核。")
+		"您发起了一笔提现申请，已通过审核。")
 }
 
 // NotifyDistributorWithdrawalRejected 提现被驳回。
 func NotifyDistributorWithdrawalRejected(userId int, reason string) {
-	content := "您提交的线下提现申请未通过审核。"
+	content := "您发起了一笔提现申请，未通过审核。"
 	if reason != "" {
 		content += "原因：" + reason
 	}

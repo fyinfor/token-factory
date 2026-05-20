@@ -45,6 +45,10 @@ type Model struct {
 
 	MatchedModels []string `json:"matched_models,omitempty" gorm:"-"`
 	MatchedCount  int      `json:"matched_count,omitempty" gorm:"-"`
+
+	// 排序权重和手动调用次数（用于热门排序干预）
+	SortWeight         float64 `json:"sort_weight" gorm:"default:1"`
+	ManualBaseReqCount int64   `json:"manual_base_req_count" gorm:"default:0"` // 手动设置调用基数
 }
 
 func (mi *Model) Insert() error {

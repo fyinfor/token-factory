@@ -39,6 +39,7 @@ export const useModelPricingData = () => {
   const [filterEndpointType, setFilterEndpointType] = useState('all'); // 端点类型筛选: 'all' | string
   const [filterVendor, setFilterVendor] = useState('all'); // 供应商筛选: 'all' | 'unknown' | string
   const [filterTag, setFilterTag] = useState('all'); // 模型标签筛选: 'all' | string
+  const [filterSupplier, setFilterSupplier] = useState('all'); // 供应商渠道筛选: 'all' | string (supplier_alias)
   // 排序键: 'default' | 'price' | 'supplier_grade' | 'latency' | 'discount'
   const [sortKey, setSortKey] = useState('default');
   const [pageSize, setPageSize] = useState(20);
@@ -152,6 +153,16 @@ export const useModelPricingData = () => {
       }
     }
 
+    // 渠道供应商筛选（channel_list supplier_alias）
+    if (filterSupplier !== 'all') {
+      result = result.filter((model) => {
+        if (!model.channel_list || model.channel_list.length === 0) return false;
+        return model.channel_list.some(
+          (ch) => (ch?.supplier_alias || '') === filterSupplier,
+        );
+      });
+    }
+
     // 标签筛选
     if (filterTag !== 'all') {
       const tagLower = filterTag.toLowerCase();
@@ -191,6 +202,11 @@ export const useModelPricingData = () => {
       };
 
       const modelUnitPrice = (m) => {
+        const imageHint = m.image_per_image_hint;
+        const imageMin = Number(imageHint?.min_usd_after_channel_discount);
+        if (Number.isFinite(imageMin) && imageMin > 0) {
+          return imageMin;
+        }
         const list = Array.isArray(m.channel_list) ? m.channel_list : [];
         const pickField = m.quota_type === 1 ? 'model_price' : 'model_ratio';
         let best = Number.POSITIVE_INFINITY;
@@ -257,8 +273,22 @@ export const useModelPricingData = () => {
         return av > bv ? -1 : 1;
       };
 
+      // 模型热度分计算（用于热门排序）
+      // 根据 channel_list[0] 的 ChannelHeatScore 排序
+      const modelHeatScore = (m) => {
+        const channelList = m.channel_list ?? m.ChannelList ?? [];
+        if (channelList.length > 0) {
+          const firstChannel = channelList[0];
+          return firstChannel.channel_heat_score ?? firstChannel.ChannelHeatScore ?? 0;
+        }
+        return 0;
+      };
+
       result = [...result].sort((a, b) => {
         switch (sortKey) {
+          case 'hot':
+            // 按热度分降序，热度相同按模型名
+            return cmpDesc(modelHeatScore(a), modelHeatScore(b), a, b);
           case 'price':
             return cmpAsc(modelUnitPrice(a), modelUnitPrice(b), a, b);
           case 'supplier_grade':
@@ -287,6 +317,7 @@ export const useModelPricingData = () => {
     filterEndpointType,
     filterVendor,
     filterTag,
+    filterSupplier,
     sortKey,
   ]);
 
@@ -497,6 +528,7 @@ export const useModelPricingData = () => {
     filterEndpointType,
     filterVendor,
     filterTag,
+    filterSupplier,
     searchValue,
     sortKey,
   ]);
@@ -527,6 +559,8 @@ export const useModelPricingData = () => {
     setFilterVendor,
     filterTag,
     setFilterTag,
+    filterSupplier,
+    setFilterSupplier,
     sortKey,
     setSortKey,
     pageSize,

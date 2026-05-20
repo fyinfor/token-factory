@@ -70,6 +70,7 @@ const PageLayout = () => {
     '/console/suppliers',
     '/console/playground',
     '/pricing',
+    '/console/model-heat'
   ];
 
   const shouldHideFooter = cardProPages.includes(location.pathname);

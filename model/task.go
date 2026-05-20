@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"database/sql/driver"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	commonRelay "github.com/QuantumNous/new-api/relay/common"
+	"gorm.io/gorm"
 )
 
 type TaskStatus string
@@ -169,12 +171,49 @@ type SyncTaskQueryParams struct {
 	Platform       constant.TaskPlatform
 	ChannelID      string
 	TaskID         string
+	ModelName      string
 	UserID         string
 	Action         string
 	Status         string
-	StartTimestamp int64
-	EndTimestamp   int64
-	UserIDs        []int
+	StartTimestamp  int64
+	EndTimestamp    int64
+	UserIDs         []int
+	VideoFailedOnly bool
+}
+
+var videoGenerateTaskActions = []string{
+	constant.TaskActionGenerate,
+	constant.TaskActionTextGenerate,
+	constant.TaskActionFirstTailGenerate,
+	constant.TaskActionReferenceGenerate,
+	constant.TaskActionRemix,
+}
+
+func applyVideoFailedOnlyFilter(query *gorm.DB, videoFailedOnly bool) *gorm.DB {
+	if !videoFailedOnly {
+		return query
+	}
+	return query.Where("status = ?", TaskStatusFailure).
+		Where("action IN ?", videoGenerateTaskActions)
+}
+
+// taskModelNameFilterClause 按 properties 内 origin/upstream 模型名筛选（兼容 SQLite / MySQL / PostgreSQL）。
+func taskModelNameFilterClause(modelName string) (string, []interface{}) {
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" {
+		return "", nil
+	}
+	pat := "%" + modelName + "%"
+	if common.UsingMySQL {
+		return "JSON_UNQUOTE(JSON_EXTRACT(properties, '$.origin_model_name')) LIKE ? OR JSON_UNQUOTE(JSON_EXTRACT(properties, '$.upstream_model_name')) LIKE ?",
+			[]interface{}{pat, pat}
+	}
+	if common.UsingPostgreSQL {
+		return "(properties::json->>'origin_model_name') LIKE ? OR (properties::json->>'upstream_model_name') LIKE ?",
+			[]interface{}{pat, pat}
+	}
+	return "json_extract(properties, '$.origin_model_name') LIKE ? OR json_extract(properties, '$.upstream_model_name') LIKE ?",
+		[]interface{}{pat, pat}
 }
 
 func InitTask(platform constant.TaskPlatform, relayInfo *commonRelay.RelayInfo) *Task {
@@ -242,6 +281,10 @@ func TaskGetAllUserTask(userId int, startIdx int, num int, queryParams SyncTaskQ
 	if queryParams.EndTimestamp != 0 {
 		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
 	}
+	if clause, args := taskModelNameFilterClause(queryParams.ModelName); clause != "" {
+		query = query.Where(clause, args...)
+	}
+	query = applyVideoFailedOnlyFilter(query, queryParams.VideoFailedOnly)
 
 	// 获取数据
 	err = query.Omit("channel_id").Order("id desc").Limit(num).Offset(startIdx).Find(&tasks).Error
@@ -287,6 +330,10 @@ func TaskGetAllTasks(startIdx int, num int, queryParams SyncTaskQueryParams) []*
 	if queryParams.EndTimestamp != 0 {
 		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
 	}
+	if clause, args := taskModelNameFilterClause(queryParams.ModelName); clause != "" {
+		query = query.Where(clause, args...)
+	}
+	query = applyVideoFailedOnlyFilter(query, queryParams.VideoFailedOnly)
 
 	// 获取数据
 	err = query.Order("id desc").Limit(num).Offset(startIdx).Find(&tasks).Error
@@ -474,6 +521,10 @@ func TaskCountAllTasks(queryParams SyncTaskQueryParams) int64 {
 	if queryParams.EndTimestamp != 0 {
 		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
 	}
+	if clause, args := taskModelNameFilterClause(queryParams.ModelName); clause != "" {
+		query = query.Where(clause, args...)
+	}
+	query = applyVideoFailedOnlyFilter(query, queryParams.VideoFailedOnly)
 	_ = query.Count(&total).Error
 	return total
 }
@@ -500,6 +551,10 @@ func TaskCountAllUserTask(userId int, queryParams SyncTaskQueryParams) int64 {
 	if queryParams.EndTimestamp != 0 {
 		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
 	}
+	if clause, args := taskModelNameFilterClause(queryParams.ModelName); clause != "" {
+		query = query.Where(clause, args...)
+	}
+	query = applyVideoFailedOnlyFilter(query, queryParams.VideoFailedOnly)
 	_ = query.Count(&total).Error
 	return total
 }

@@ -23,14 +23,37 @@ const (
 	DistWithdrawStatusCancelled = 4 // 已取消
 )
 
+// DistributorWithdrawalProfile 提现扩展资料（存 profile_data JSON）
+type DistributorWithdrawalProfile struct {
+	// 个人
+	IdCardNo          string `json:"id_card_no,omitempty"`
+	IdCardExpiry      string `json:"id_card_expiry,omitempty"`
+	Mobile            string `json:"mobile,omitempty"`
+	BankReservedPhone string `json:"bank_reserved_phone,omitempty"`
+	IdCardFrontUrl    string `json:"id_card_front_url,omitempty"`
+	IdCardBackUrl     string `json:"id_card_back_url,omitempty"`
+	BankCardPhotoUrl  string `json:"bank_card_photo_url,omitempty"`
+	// 企业
+	CreditCode               string `json:"credit_code,omitempty"`
+	LegalPersonName          string `json:"legal_person_name,omitempty"`
+	LegalPersonPhone         string `json:"legal_person_phone,omitempty"`
+	BankBranchCode           string `json:"bank_branch_code,omitempty"`
+	ContactPerson            string `json:"contact_person,omitempty"`
+	BusinessLicenseUrl       string `json:"business_license_url,omitempty"`
+	CorporateAccountProofUrl string `json:"corporate_account_proof_url,omitempty"`
+	InvoiceUrl               string `json:"invoice_url,omitempty"`
+}
+
 // DistributorWithdrawal 分销商线下提现申请（提交后暂扣 aff_quota，驳回/取消退回）
 type DistributorWithdrawal struct {
 	Id            int    `json:"id" gorm:"primaryKey;autoIncrement"`
 	UserId        int    `json:"user_id" gorm:"not null;index:idx_dist_wd_user"`
+	AccountType   int    `json:"account_type" gorm:"type:int;not null;default:1;column:account_type"` // 1=个人 2=企业
 	RealName      string `json:"real_name" gorm:"type:varchar(64);not null;column:real_name"`
 	BankName      string `json:"bank_name" gorm:"type:varchar(128);not null;column:bank_name"`
 	BankAccount   string `json:"bank_account" gorm:"type:varchar(64);not null;column:bank_account"`
-	VoucherUrls   string `json:"voucher_urls" gorm:"type:text;not null;column:voucher_urls"` // JSON 数组 URL
+	ProfileData   string `json:"profile_data" gorm:"type:text;column:profile_data"`
+	VoucherUrls   string `json:"voucher_urls" gorm:"type:text;column:voucher_urls"`                     // 历史票据 JSON，新单可为 []
 	WithdrawMonth string `json:"withdraw_month" gorm:"type:varchar(16);not null;column:withdraw_month"` // YYYY-MM
 	QuotaAmount   int    `json:"quota_amount" gorm:"not null;column:quota_amount"`
 	Status        int    `json:"status" gorm:"not null;default:1;index:idx_dist_wd_status"`
@@ -88,38 +111,156 @@ func distWithdrawRefundAffQuota(tx *gorm.DB, userId int, quota int) error {
 	return nil
 }
 
+func distWithdrawRequireURL(label, u string) error {
+	if strings.TrimSpace(u) == "" {
+		return fmt.Errorf("请上传%s", label)
+	}
+	return nil
+}
+
+func normalizeDistributorWithdrawalProfile(accountType int, p *DistributorWithdrawalProfile) (string, error) {
+	if p == nil {
+		return "", errors.New("资料无效")
+	}
+	trim := func(s *string) {
+		*s = strings.TrimSpace(*s)
+	}
+	switch accountType {
+	case DistributorApplyTypePersonal:
+		trim(&p.IdCardNo)
+		trim(&p.IdCardExpiry)
+		trim(&p.Mobile)
+		trim(&p.BankReservedPhone)
+		trim(&p.IdCardFrontUrl)
+		trim(&p.IdCardBackUrl)
+		trim(&p.BankCardPhotoUrl)
+		trim(&p.InvoiceUrl)
+		if p.IdCardNo == "" {
+			return "", errors.New("请填写身份证号")
+		}
+		if p.IdCardExpiry == "" {
+			return "", errors.New("请填写身份证有效期")
+		}
+		if p.Mobile == "" {
+			return "", errors.New("请填写手机号")
+		}
+		if p.BankReservedPhone == "" {
+			return "", errors.New("请填写银行预留手机号")
+		}
+		for _, pair := range []struct {
+			label string
+			u     string
+		}{
+			{"身份证正面", p.IdCardFrontUrl},
+			{"身份证反面", p.IdCardBackUrl},
+			{"银行卡照", p.BankCardPhotoUrl},
+			{"发票", p.InvoiceUrl},
+		} {
+			if err := distWithdrawRequireURL(pair.label, pair.u); err != nil {
+				return "", err
+			}
+		}
+	case DistributorApplyTypeEnterprise:
+		trim(&p.CreditCode)
+		trim(&p.LegalPersonName)
+		trim(&p.LegalPersonPhone)
+		trim(&p.BankBranchCode)
+		trim(&p.ContactPerson)
+		trim(&p.BusinessLicenseUrl)
+		trim(&p.CorporateAccountProofUrl)
+		trim(&p.InvoiceUrl)
+		if p.CreditCode == "" {
+			return "", errors.New("请填写统一社会信用代码")
+		}
+		if p.LegalPersonName == "" {
+			return "", errors.New("请填写法人姓名")
+		}
+		if p.LegalPersonPhone == "" {
+			return "", errors.New("请填写法人手机号")
+		}
+		if p.BankBranchCode == "" {
+			return "", errors.New("请填写联行号")
+		}
+		if p.ContactPerson == "" {
+			return "", errors.New("请填写联系人")
+		}
+		for _, pair := range []struct {
+			label string
+			u     string
+		}{
+			{"营业执照", p.BusinessLicenseUrl},
+			{"对公账户证明", p.CorporateAccountProofUrl},
+			{"发票", p.InvoiceUrl},
+		} {
+			if err := distWithdrawRequireURL(pair.label, pair.u); err != nil {
+				return "", err
+			}
+		}
+	default:
+		return "", errors.New("账户类型无效")
+	}
+	b, err := common.Marshal(p)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
+// ParseDistributorWithdrawalProfile 解析 profile_data
+func ParseDistributorWithdrawalProfile(raw string) DistributorWithdrawalProfile {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return DistributorWithdrawalProfile{}
+	}
+	var p DistributorWithdrawalProfile
+	_ = common.UnmarshalJsonStr(raw, &p)
+	return p
+}
+
 // CreateDistributorWithdrawal 提交提现：校验最低额度与余额，暂扣 aff_quota
-func CreateDistributorWithdrawal(userId int, realName, bankName, bankAccount, voucherUrlsJSON, withdrawMonth string, quotaAmount int) error {
+func CreateDistributorWithdrawal(userId, accountType int, realName, bankName, bankAccount, profileJSON, voucherUrlsJSON, withdrawMonth string, quotaAmount int) error {
+	if accountType != DistributorApplyTypePersonal && accountType != DistributorApplyTypeEnterprise {
+		return errors.New("账户类型无效")
+	}
 	realName = strings.TrimSpace(realName)
 	bankName = strings.TrimSpace(bankName)
 	bankAccount = strings.TrimSpace(bankAccount)
 	withdrawMonth = strings.TrimSpace(withdrawMonth)
+	profileJSON = strings.TrimSpace(profileJSON)
 	voucherUrlsJSON = strings.TrimSpace(voucherUrlsJSON)
 	if realName == "" {
-		return errors.New("请填写真实姓名")
+		if accountType == DistributorApplyTypeEnterprise {
+			return errors.New("请填写企业名称")
+		}
+		return errors.New("请填写姓名")
 	}
 	if bankName == "" {
 		return errors.New("请填写开户行")
 	}
 	if bankAccount == "" {
+		if accountType == DistributorApplyTypeEnterprise {
+			return errors.New("请填写对公卡号")
+		}
 		return errors.New("请填写银行卡号")
 	}
+	var profile DistributorWithdrawalProfile
+	if profileJSON != "" {
+		if err := common.UnmarshalJsonStr(profileJSON, &profile); err != nil {
+			return errors.New("资料格式无效")
+		}
+	}
+	normProfile, err := normalizeDistributorWithdrawalProfile(accountType, &profile)
+	if err != nil {
+		return err
+	}
+	profileJSON = normProfile
 	if voucherUrlsJSON == "" {
-		return errors.New("请上传票据")
+		voucherUrlsJSON = "[]"
 	}
 	if withdrawMonth == "" {
 		withdrawMonth = time.Now().Format("2006-01")
 	} else if !distWithdrawMonthRe.MatchString(withdrawMonth) {
 		return errors.New("提现月份格式应为 YYYY-MM")
-	}
-	var vurls []string
-	if err := common.UnmarshalJsonStr(voucherUrlsJSON, &vurls); err != nil || len(vurls) == 0 {
-		return errors.New("请上传票据")
-	}
-	for _, u := range vurls {
-		if strings.TrimSpace(u) == "" {
-			return errors.New("票据地址无效")
-		}
 	}
 	if quotaAmount <= 0 {
 		return errors.New("提现额度无效")
@@ -158,9 +299,11 @@ func CreateDistributorWithdrawal(userId int, realName, bankName, bankAccount, vo
 		}
 		w := DistributorWithdrawal{
 			UserId:        userId,
+			AccountType:   accountType,
 			RealName:      realName,
 			BankName:      bankName,
 			BankAccount:   bankAccount,
+			ProfileData:   profileJSON,
 			VoucherUrls:   voucherUrlsJSON,
 			WithdrawMonth: withdrawMonth,
 			QuotaAmount:   quotaAmount,
@@ -225,16 +368,19 @@ type DistributorWithdrawalAdminRow struct {
 }
 
 // ListDistributorWithdrawalsAdmin 管理端列表
-func ListDistributorWithdrawalsAdmin(status int, keyword string, pageInfo *common.PageInfo) ([]DistributorWithdrawalAdminRow, int64, error) {
+func ListDistributorWithdrawalsAdmin(status, accountType int, keyword string, pageInfo *common.PageInfo) ([]DistributorWithdrawalAdminRow, int64, error) {
 	base := DB.Model(&DistributorWithdrawal{})
 	if status > 0 {
 		base = base.Where("status = ?", status)
 	}
+	if accountType == DistributorApplyTypePersonal || accountType == DistributorApplyTypeEnterprise {
+		base = base.Where("account_type = ?", accountType)
+	}
 	if kw := strings.TrimSpace(keyword); kw != "" {
 		like := "%" + kw + "%"
 		base = base.Where(
-			"real_name LIKE ? OR bank_account LIKE ? OR user_id IN (SELECT id FROM users WHERE username LIKE ?)",
-			like, like, like,
+			"real_name LIKE ? OR bank_account LIKE ? OR profile_data LIKE ? OR user_id IN (SELECT id FROM users WHERE username LIKE ?)",
+			like, like, like, like,
 		)
 	}
 	var total int64

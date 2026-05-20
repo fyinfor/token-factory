@@ -32,12 +32,18 @@ func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark st
 	}
 	ctx := context.Background()
 	rdb := common.RDB
+	if rdb == nil {
+		return
+	}
 	userID := getRateLimitUserID(c)
 	key := "rateLimit:" + mark + ":" + buildRateLimitSubject(c)
 	listLength, err := rdb.LLen(ctx, key).Result()
 	if err != nil {
 		fmt.Println(err.Error())
-		c.Status(http.StatusInternalServerError)
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "服务繁忙，请稍后重试",
+		})
 		c.Abort()
 		return
 	}
@@ -49,7 +55,10 @@ func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark st
 		oldTime, err := time.Parse(timeFormat, oldTimeStr)
 		if err != nil {
 			fmt.Println(err)
-			c.Status(http.StatusInternalServerError)
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "服务繁忙，请稍后重试",
+			})
 			c.Abort()
 			return
 		}
@@ -57,7 +66,10 @@ func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark st
 		nowTime, err := time.Parse(timeFormat, nowTimeStr)
 		if err != nil {
 			fmt.Println(err)
-			c.Status(http.StatusInternalServerError)
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "服务繁忙，请稍后重试",
+			})
 			c.Abort()
 			return
 		}

@@ -22,12 +22,14 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.POST("/setup", controller.PostSetup)
 		apiRouter.GET("/status", controller.GetStatus)
 		apiRouter.GET("/uptime/status", controller.GetUptimeKumaStatus)
+		apiRouter.GET("/api/vendors", controller.GetVendors)
 		apiRouter.GET("/models", middleware.UserAuth(), controller.DashboardListModels)
 		apiRouter.GET("/status/test", middleware.AdminAuth(), controller.TestStatus)
 		apiRouter.GET("/notice", controller.GetNotice)
 		apiRouter.GET("/user-agreement", controller.GetUserAgreement)
 		apiRouter.GET("/privacy-policy", controller.GetPrivacyPolicy)
 		apiRouter.GET("/about", controller.GetAbout)
+		apiRouter.GET("/api/pricing", controller.GetPricing)
 		docsRoute := apiRouter.Group("/docs")
 		docsRoute.Use(middleware.CORS())
 		{
@@ -131,6 +133,8 @@ func SetApiRouter(router *gin.Engine) {
 			{
 				selfRoute.GET("/self/groups", controller.GetUserGroups)
 				selfRoute.GET("/self/phone_available", controller.UserSelfCheckPhoneAvailable)
+				selfRoute.GET("/self/sms_bind_verification", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.SendSMSBindVerification)
+				selfRoute.POST("/self/phone/bind", middleware.CriticalRateLimit(), controller.PhoneBind)
 				selfRoute.GET("/self", controller.GetSelf)
 				selfRoute.POST("/student/apply", controller.ApplyStudent)
 				selfRoute.GET("/models", controller.GetUserModels)
@@ -348,9 +352,9 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.GET("/tag/models", middleware.AdminAuth(), controller.GetTagModels)
 			channelRoute.POST("/copy/:id", middleware.AdminAuth(), controller.CopyChannel)
 			channelRoute.POST("/multi_key/manage", middleware.AdminAuth(), controller.ManageMultiKeys)
-		// 渠道导出/导入（仅管理员）
-		channelRoute.POST("/export", middleware.AdminAuth(), controller.ExportChannels)
-		channelRoute.POST("/import", middleware.AdminAuth(), controller.ImportChannels)
+			// 渠道导出/导入（仅管理员）
+			channelRoute.POST("/export", middleware.AdminAuth(), controller.ExportChannels)
+			channelRoute.POST("/import", middleware.AdminAuth(), controller.ImportChannels)
 			channelRoute.POST("/upstream_updates/apply", middleware.AdminAuth(), controller.ApplyChannelUpstreamModelUpdates)
 			channelRoute.POST("/upstream_updates/apply_all", middleware.AdminAuth(), controller.ApplyAllChannelUpstreamModelUpdates)
 			channelRoute.POST("/upstream_updates/detect", middleware.AdminAuth(), controller.DetectChannelUpstreamModelUpdates)
@@ -361,6 +365,14 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.POST("/:id/onboard/auto_meta", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.AutoMetaChannelModels)
 			channelRoute.POST("/:id/onboard/test", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.BulkTestChannelModels)
 			channelRoute.GET("/:id/test_results", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.GetChannelTestResults)
+			// 渠道-模型热力配置
+			channelRoute.GET("/heats", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.GetChannelModelHeats)
+			channelRoute.GET("/:id/heats", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.GetChannelModelHeatsByChannel)
+			channelRoute.PUT("/heat", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.SaveChannelModelHeat)
+			channelRoute.PUT("/heats/batch", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.BatchSaveChannelModelHeats)
+			channelRoute.DELETE("/:id/heats/:model_name", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.DeleteChannelModelHeat)
+			channelRoute.GET("/heat/period", middleware.AdminAuth(), controller.GetHeatStatPeriod)
+			channelRoute.PUT("/heat/period", middleware.AdminAuth(), controller.SetHeatStatPeriod)
 		}
 		tokenRoute := apiRouter.Group("/token")
 		tokenRoute.Use(middleware.UserAuth())
@@ -461,6 +473,7 @@ func SetApiRouter(router *gin.Engine) {
 			modelsRoute.POST("/batch_tags", middleware.AdminAuth(), controller.BatchSetModelTags)
 			modelsRoute.PUT("/", middleware.AdminAuth(), controller.UpdateModelMeta)
 			modelsRoute.DELETE("/:id", middleware.AdminAuth(), controller.DeleteModelMeta)
+			modelsRoute.POST("/batch_weight", middleware.AdminAuth(), controller.BatchUpdateModelWeight)
 		}
 
 		// Deployments (model deployment management)

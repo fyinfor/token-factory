@@ -101,6 +101,8 @@
     "/console/distributor/apply": "/console/distributor/apply",
     "/条起": " / clip",
     "/秒起": " / sec",
+    "/张起": " / image",
+    "按张": "Per image",
     "0 - 最低": "0 - Lowest",
     "0 表示不限": "0 means unlimited",
     "0.002-1之间的小数": "Decimal between 0.002-1",
