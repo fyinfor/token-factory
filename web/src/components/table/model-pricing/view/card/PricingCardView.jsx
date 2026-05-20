@@ -41,6 +41,7 @@ import {
   getLobeHubIcon,
   getUsedGroupContext,
   pickChannelScopedModelFloat,
+  computeChannelBillingRates,
 } from '../../../../../helpers';
 import PricingCardSkeleton from './PricingCardSkeleton';
 import { useMinimumLoadingTime } from '../../../../../hooks/common/useMinimumLoadingTime';
@@ -262,8 +263,9 @@ const PricingCardView = ({
       //   缓存写 = (ch.model_ratio × createCacheRatio × costDisc + globalMr × globalCreateCacheR × markupRate) × 2 × groupRatio
       //   固定价 = (ch.model_price × costDisc + globalMp × markupRate) × groupRatio
       // ============================================================
-      const costDisc = (ch.price_discount_percent != null ? ch.price_discount_percent : 100) / 100;
-      const markupRate = (ch.markup_discount_rate || 0) / 100;
+      const priceDiscountPercent =
+        ch.price_discount_percent != null ? ch.price_discount_percent : 100;
+      const markupDiscountPercent = ch.markup_discount_rate || 0;
       const globalMr = model.model_ratio || 0;
       const globalMp = model.model_price || 0;
 
@@ -289,21 +291,28 @@ const PricingCardView = ({
           ? Number(model.create_cache_ratio)
           : 0;
 
+      const billingRates = computeChannelBillingRates({
+        channelModelRatio: ch.model_ratio,
+        channelCompletionRatio: ch.completion_ratio,
+        channelCacheRatio: ch.cache_ratio,
+        channelCreateCacheRatio: ch.create_cache_ratio,
+        channelModelPrice: ch.model_price,
+        priceDiscountPercent,
+        markupDiscountPercent,
+        globalModelRatio: globalMr,
+        globalModelPrice: globalMp,
+        globalCompletionRatio: globalCR,
+        globalCacheRatio: globalCacheR,
+        globalCreateCacheRatio: globalCreateCacheR,
+      });
+
       // 按量计费
       if (model.quota_type === 0) {
         if (ch.model_ratio !== undefined && ch.model_ratio !== null) {
-          // ============================================================
-          // 新计费公式（按量）：ch.model_ratio 为原始渠道倍率
-          //   输入   = (ch.model_ratio × costDisc + globalMr × markupRate) × 2 × groupRatio
-          //   输出   = (ch.model_ratio × cr × costDisc + globalMr × globalCR × markupRate) × 2 × groupRatio
-          //   缓存读 = (ch.model_ratio × cacheRatio × costDisc + globalMr × globalCacheR × markupRate) × 2 × groupRatio
-          //   缓存写 = (ch.model_ratio × createCacheRatio × costDisc + globalMr × globalCreateCacheR × markupRate) × 2 × groupRatio
-          // ============================================================
-
-          // 输入
-          const effInputRate = ch.model_ratio * costDisc + globalMr * markupRate;
-          prices.input.push(formatPrice(effInputRate * 2 * usedGroupRatio));
-          originalPrices.input.push(formatPrice(effInputRate * 2));
+          prices.input.push(
+            formatPrice(billingRates.inputRatioPrice * usedGroupRatio),
+          );
+          originalPrices.input.push(formatPrice(billingRates.inputRatioPrice));
 
           // 输出价格：仅当全局模型配置了 completion_ratio 时才展示
           if (
@@ -311,12 +320,12 @@ const PricingCardView = ({
             ch.completion_ratio !== null &&
             model.completion_ratio != null
           ) {
-            // 输出：ch.model_ratio × cr × costDisc + globalMr × globalCR × markupRate
-            const effOutputRate =
-              ch.model_ratio * ch.completion_ratio * costDisc +
-              globalMr * globalCR * markupRate;
-            prices.output.push(formatPrice(effOutputRate * 2 * usedGroupRatio));
-            originalPrices.output.push(formatPrice(effOutputRate * 2));
+            prices.output.push(
+              formatPrice(billingRates.completionRatioPrice * usedGroupRatio),
+            );
+            originalPrices.output.push(
+              formatPrice(billingRates.completionRatioPrice),
+            );
           }
 
           // 缓存读取价格：仅当全局模型配置了 cache_ratio 时才展示
@@ -325,12 +334,10 @@ const PricingCardView = ({
             ch.cache_ratio !== null &&
             model.cache_ratio != null
           ) {
-            // 缓存读取：ch.model_ratio × cacheRatio × costDisc + globalMr × globalCacheR × markupRate
-            const effCacheRate =
-              ch.model_ratio * ch.cache_ratio * costDisc +
-              globalMr * globalCacheR * markupRate;
-            prices.cache.push(formatPrice(effCacheRate * 2 * usedGroupRatio));
-            originalPrices.cache.push(formatPrice(effCacheRate * 2));
+            prices.cache.push(
+              formatPrice(billingRates.cacheRatioPrice * usedGroupRatio),
+            );
+            originalPrices.cache.push(formatPrice(billingRates.cacheRatioPrice));
           }
 
           // 缓存创建价格：仅当全局模型配置了 create_cache_ratio 时才展示
@@ -339,15 +346,13 @@ const PricingCardView = ({
             ch.create_cache_ratio !== null &&
             model.create_cache_ratio != null
           ) {
-            // 缓存创建：ch.model_ratio × createCacheRatio × costDisc + globalMr × globalCreateCacheR × markupRate
-            const effCreateCacheRate =
-              ch.model_ratio * ch.create_cache_ratio * costDisc +
-              globalMr * globalCreateCacheR * markupRate;
             prices.createCache.push(
-              formatPrice(effCreateCacheRate * 2 * usedGroupRatio),
+              formatPrice(
+                billingRates.cacheCreationRatioPrice * usedGroupRatio,
+              ),
             );
             originalPrices.createCache.push(
-              formatPrice(effCreateCacheRate * 2),
+              formatPrice(billingRates.cacheCreationRatioPrice),
             );
           }
 
@@ -381,11 +386,11 @@ const PricingCardView = ({
             vcrCh != null;
 
           if (showVideoToken) {
-            // 视频 token：同输入公式，再乘视频倍率
-            const videoTokUsd = effInputRate * effVr * effVcr * 2 * usedGroupRatio;
+            const videoTokUsd =
+              billingRates.inputRatioPrice * effVr * effVcr * usedGroupRatio;
             prices.videoToken.push(formatPrice(videoTokUsd));
             originalPrices.videoToken.push(
-              formatPrice(effInputRate * effVr * effVcr * 2),
+              formatPrice(billingRates.inputRatioPrice * effVr * effVcr),
             );
           }
         }
@@ -393,11 +398,10 @@ const PricingCardView = ({
       // 按次计费
       else if (model.quota_type === 1 || ch.quota_type === 1) {
         if (!skipSimpleFixed && ch.model_price !== undefined && ch.model_price !== null) {
-          // 固定价：ch.model_price × costDisc + globalMp × markupRate
-
-          const effModelPrice = ch.model_price * costDisc + globalMp * markupRate;
-          prices.fixed.push(formatPrice(effModelPrice * usedGroupRatio));
-          originalPrices.fixed.push(formatPrice(effModelPrice));
+          prices.fixed.push(
+            formatPrice(billingRates.effModelPrice * usedGroupRatio),
+          );
+          originalPrices.fixed.push(formatPrice(billingRates.effModelPrice));
         }
       }
     });
