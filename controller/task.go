@@ -2,6 +2,7 @@ package controller
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -28,11 +29,13 @@ func GetAllTask(c *gin.Context) {
 	queryParams := model.SyncTaskQueryParams{
 		Platform:       constant.TaskPlatform(c.Query("platform")),
 		TaskID:         c.Query("task_id"),
+		ModelName:      c.Query("model_name"),
 		Status:         c.Query("status"),
 		Action:         c.Query("action"),
 		StartTimestamp: startTimestamp,
 		EndTimestamp:   endTimestamp,
-		ChannelID:      c.Query("channel_id"),
+		ChannelID:       c.Query("channel_id"),
+		VideoFailedOnly: parseVideoFailedQuery(c.Query("video_failed")),
 	}
 
 	items := model.TaskGetAllTasks(pageInfo.GetStartIdx(), pageInfo.GetPageSize(), queryParams)
@@ -53,10 +56,12 @@ func GetUserTask(c *gin.Context) {
 	queryParams := model.SyncTaskQueryParams{
 		Platform:       constant.TaskPlatform(c.Query("platform")),
 		TaskID:         c.Query("task_id"),
+		ModelName:      c.Query("model_name"),
 		Status:         c.Query("status"),
 		Action:         c.Query("action"),
 		StartTimestamp: startTimestamp,
-		EndTimestamp:   endTimestamp,
+		EndTimestamp:    endTimestamp,
+		VideoFailedOnly: parseVideoFailedQuery(c.Query("video_failed")),
 	}
 
 	items := model.TaskGetAllUserTask(userId, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), queryParams)
@@ -91,4 +96,9 @@ func tasksToDto(tasks []*model.Task, fillUser bool) []*dto.TaskDto {
 		result[i] = relay.TaskModel2Dto(task)
 	}
 	return result
+}
+
+func parseVideoFailedQuery(raw string) bool {
+	raw = strings.TrimSpace(raw)
+	return raw == "1" || strings.EqualFold(raw, "true") || raw == "yes"
 }

@@ -91,6 +91,60 @@ export const useLogsData = () => {
   const hasVideoPerVideoDetail = (other) =>
     other?.billing_mode === 'video_per_video';
 
+  /**
+   * 异步视频任务当前所处扣费阶段（同一记录只展示其一）：
+   * - 已结算：仅「实际扣费」
+   * - 仅预扣：仅「预扣费」
+   */
+  const getVideoBillingPhase = (other, quota = 0) => {
+    const finalRaw = other?.video_final_quota ?? other?.actual_quota;
+    if (finalRaw !== undefined && finalRaw !== null) {
+      const final = Number(finalRaw);
+      if (Number.isFinite(final) && final > 0) {
+        return { phase: 'actual', label: t('实际扣费'), amount: final };
+      }
+    }
+    const isVideoTask =
+      other?.billing_mode === 'video_per_second' ||
+      other?.billing_mode === 'video_per_video' ||
+      Boolean(other?.task_id) ||
+      String(other?.request_path || '').includes('/videos');
+    if (!isVideoTask) {
+      return null;
+    }
+    const pre = Number(
+      other?.video_billed_quota ?? other?.video_pre_consumed_quota ?? quota ?? 0,
+    );
+    if (Number.isFinite(pre) && pre > 0) {
+      return { phase: 'pre', label: t('预扣费'), amount: pre };
+    }
+    return null;
+  };
+
+  const buildVideoCostDisplayItems = (other, billedQuota, tagValue, inlineTags) => {
+    const phase = getVideoBillingPhase(other, billedQuota);
+    if (!phase) {
+      return [
+        [
+          t('花费'),
+          inlineTags(tagValue(renderQuota(billedQuota), 'red', 'cost')),
+        ],
+      ];
+    }
+    return [
+      [
+        phase.label,
+        inlineTags(
+          tagValue(
+            renderQuota(phase.amount),
+            phase.phase === 'actual' ? 'red' : 'grey',
+            'cost',
+          ),
+        ),
+      ],
+    ];
+  };
+
   const renderVideoPerSecondBillingDetail = (log, other, quota) => {
     const seconds = Number(other?.video_seconds || 0);
     const pricePerSecond = Number(other?.video_price_per_second || 0);
@@ -178,17 +232,19 @@ export const useLogsData = () => {
       tagValue(`${width}×${height}`, 'cyan', 'actual-resolution'),
       tagValue(audioText, hasAudio ? 'green' : 'grey', 'actual-audio'),
     );
+    const costItems = buildVideoCostDisplayItems(
+      other,
+      billedQuota,
+      tagValue,
+      inlineTags,
+    );
+
     const items = [
       [t('模型'), modelValue],
       [t('规格'), specValue],
       [t('计费单价'), calculatedPriceValue],
       [t('结算计算'), calculationValue],
-      [
-        t('折算 Tokens'),
-        inlineTags(
-          tagValue(`${renderNumber(billedQuota)} Tokens`, 'red', 'tokens'),
-        ),
-      ],
+      ...costItems,
       [t('计费模式'), modeValue],
     ];
     if (
@@ -218,6 +274,7 @@ export const useLogsData = () => {
     const billedQuota = Number(other?.video_billed_quota || quota || 0);
     const seconds = Number(other?.video_seconds || 0);
     const resolution = other?.video_resolution || '-';
+    const phase = getVideoBillingPhase(other, quota);
 
     return (
       <div className='flex flex-wrap items-center gap-2'>
@@ -225,11 +282,18 @@ export const useLogsData = () => {
           {t('分辨率阶梯计费')}
         </span>
         <span className='text-sm text-gray-700'>
-          {t('{{seconds}}秒 · {{resolution}} · 实际结算 {{tokens}} Tokens', {
-            seconds,
-            resolution,
-            tokens: renderNumber(billedQuota),
-          })}
+          {phase
+            ? t('{{seconds}}秒 · {{resolution}} · {{label}} {{cost}}', {
+                seconds,
+                resolution,
+                label: phase.label,
+                cost: renderQuota(phase.amount),
+              })
+            : t('{{seconds}}秒 · {{resolution}} · {{cost}}', {
+                seconds,
+                resolution,
+                cost: renderQuota(billedQuota),
+              })}
         </span>
       </div>
     );
@@ -324,18 +388,20 @@ export const useLogsData = () => {
       </span>,
       tagValue(formatMoney(totalPrice), 'red', 'calc-total'),
     );
+    const costItems = buildVideoCostDisplayItems(
+      other,
+      billedQuota,
+      tagValue,
+      inlineTags,
+    );
+
     const items = [
       [t('模型'), modelValue],
       [t('规格'), specificationValue],
       [t('视频数量'), countValue],
       [t('计费单价'), priceValue],
       [t('结算计算'), calculationValue],
-      [
-        t('折算 Tokens'),
-        inlineTags(
-          tagValue(`${renderNumber(billedQuota)} Tokens`, 'red', 'tokens'),
-        ),
-      ],
+      ...costItems,
       [
         t('计费模式'),
         inlineTags(tagValue(t('按视频数量计费'), 'blue', 'billing-mode')),
@@ -360,6 +426,7 @@ export const useLogsData = () => {
   const renderVideoPerVideoBillingBrief = (other, quota) => {
     const billedQuota = Number(other?.video_billed_quota || quota || 0);
     const count = Number(other?.video_count || 1);
+    const phase = getVideoBillingPhase(other, quota);
 
     return (
       <div className='flex flex-wrap items-center gap-2'>
@@ -367,10 +434,16 @@ export const useLogsData = () => {
           {t('按视频数量计费')}
         </span>
         <span className='text-sm text-gray-700'>
-          {t('{{count}}条 · 实际结算 {{tokens}} Tokens', {
-            count,
-            tokens: renderNumber(billedQuota),
-          })}
+          {phase
+            ? t('{{count}}条 · {{label}} {{cost}}', {
+                count,
+                label: phase.label,
+                cost: renderQuota(phase.amount),
+              })
+            : t('{{count}}条 · {{cost}}', {
+                count,
+                cost: renderQuota(billedQuota),
+              })}
         </span>
       </div>
     );
@@ -680,8 +753,85 @@ export const useLogsData = () => {
     setErrorLogDetail({ visible: false, record: null });
   };
 
+  /**
+   * 同一异步视频任务的预扣日志与差额结算日志合并为一条展示。
+   * 预扣在提交时写入；结算在成片完成后写入（other 含 actual_quota / pre_consumed_quota）。
+   */
+  const mergeVideoTaskBillingLogs = (rawLogs) => {
+    const byTaskId = new Map();
+    for (const log of rawLogs) {
+      const other = getLogOther(log.other);
+      const taskId = other?.task_id;
+      if (!taskId) {
+        continue;
+      }
+      const actualQuota = Number(other?.actual_quota);
+      const isSettlement =
+        Number.isFinite(actualQuota) &&
+        actualQuota > 0 &&
+        other?.pre_consumed_quota !== undefined &&
+        other?.pre_consumed_quota !== null;
+      const isPreCharge =
+        !isSettlement &&
+        (other?.billing_mode === 'video_per_second' ||
+          other?.billing_mode === 'video_per_video' ||
+          String(other?.request_path || '').includes('/videos'));
+      if (!isSettlement && !isPreCharge) {
+        continue;
+      }
+      if (!byTaskId.has(taskId)) {
+        byTaskId.set(taskId, { pre: null, settle: null });
+      }
+      const entry = byTaskId.get(taskId);
+      if (isSettlement) {
+        entry.settle = log;
+      } else if (isPreCharge) {
+        entry.pre = log;
+      }
+    }
+
+    const hideIds = new Set();
+    const patches = new Map();
+    for (const { pre, settle } of byTaskId.values()) {
+      if (!pre || !settle) {
+        continue;
+      }
+      hideIds.add(pre.id);
+      const preOther = getLogOther(pre.other);
+      const settleOther = getLogOther(settle.other);
+      const actualQuota = Number(settleOther.actual_quota);
+      const preConsumed = Number(
+        settleOther.pre_consumed_quota ?? pre.quota ?? 0,
+      );
+      const mergedOther = {
+        ...settleOther,
+        request_path: settleOther.request_path || preOther.request_path,
+        video_billed_quota: actualQuota,
+        video_pre_consumed_quota: preConsumed,
+        video_final_quota: actualQuota,
+      };
+      patches.set(settle.id, {
+        quota: actualQuota,
+        request_id: settle.request_id || pre.request_id,
+        other:
+          typeof settle.other === 'string'
+            ? JSON.stringify(mergedOther)
+            : mergedOther,
+      });
+    }
+
+    return rawLogs
+      .filter((log) => !hideIds.has(log.id))
+      .map((log) => {
+        const patch = patches.get(log.id);
+        return patch ? { ...log, ...patch } : log;
+      });
+  };
+
   // Format logs data
-  const setLogsFormat = (logs) => {
+  const setLogsFormat = (rawLogs) => {
+    const logs = mergeVideoTaskBillingLogs(rawLogs);
+
     const requestConversionDisplayValue = (conversionChain) => {
       const chain = Array.isArray(conversionChain)
         ? conversionChain.filter(Boolean)
@@ -712,10 +862,22 @@ export const useLogsData = () => {
       logs[i].timestamp2string = timestamp2string(logs[i].created_at);
       logs[i].key = logs[i].id;
       let other = getLogOther(logs[i].other);
-      const aggregatedQuota =
-        other?.task_id && taskFinalQuotaMap[other.task_id]
-          ? taskFinalQuotaMap[other.task_id]
-          : logs[i]?.quota || 0;
+      const billingPhase = getVideoBillingPhase(other, logs[i]?.quota || 0);
+      const actualQuota = Number(other?.actual_quota);
+      const displayQuota = billingPhase
+        ? billingPhase.amount
+        : Number.isFinite(actualQuota) && actualQuota > 0
+          ? actualQuota
+          : Number(other?.video_billed_quota) > 0
+            ? Number(other.video_billed_quota)
+            : other?.task_id && taskFinalQuotaMap[other.task_id]
+              ? taskFinalQuotaMap[other.task_id]
+              : logs[i]?.quota || 0;
+      logs[i].quota = displayQuota;
+      if (billingPhase) {
+        logs[i].video_billing_phase_label = billingPhase.label;
+      }
+      const aggregatedQuota = displayQuota;
       const channelPriceDiscountLogPct =
         other?.channel_price_discount_percent ?? 100;
       const videoPerSecondBillingDetail = hasVideoPerSecondDetail(other)

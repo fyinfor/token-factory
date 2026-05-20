@@ -22,6 +22,7 @@ import { Tabs } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
 import ModelPricingEditor from './components/ModelPricingEditor';
 import SupplierModelPricingEditor from './components/SupplierModelPricingEditor';
+import PriceImportExport from './PriceImportExport';
 import { API, isSupplier } from '../../../helpers';
 
 export default function ModelSettingsVisualEditor(props) {
@@ -83,7 +84,13 @@ export default function ModelSettingsVisualEditor(props) {
   };
 
   return (
-    <Tabs type='line' defaultActiveKey='global'>
+    <Tabs
+      type='line'
+      defaultActiveKey='global'
+      tabBarExtraContent={
+        !isSupplier() ? <PriceImportExport refresh={props.refresh} /> : null
+      }
+    >
       <Tabs.TabPane tab={t('全局模型定价')} itemKey='global'>
         <ModelPricingEditor
           options={props.options}

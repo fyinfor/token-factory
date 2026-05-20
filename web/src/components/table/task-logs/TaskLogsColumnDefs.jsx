@@ -42,7 +42,7 @@ import {
   TASK_ACTION_REMIX_GENERATE,
 } from '../../../constants/common.constant';
 import { CHANNEL_OPTIONS } from '../../../constants/channel.constants';
-import { stringToColor } from '../../../helpers/render';
+import { renderModelTag, stringToColor } from '../../../helpers/render';
 import { Avatar, Space } from '@douyinfe/semi-ui';
 
 const colors = [
@@ -323,6 +323,22 @@ export const getTaskLogsColumns = ({
       dataIndex: 'action',
       render: (text, record, index) => {
         return <div>{renderType(text, t)}</div>;
+      },
+    },
+    {
+      key: COLUMN_KEYS.MODEL,
+      title: t('模型'),
+      dataIndex: 'model_name',
+      render: (text, record) => {
+        const modelName = String(text || record?.model_name || '').trim();
+        if (!modelName) {
+          return <span className='text-gray-400'>-</span>;
+        }
+        return renderModelTag(modelName, {
+          onClick: () => {
+            copyText(modelName);
+          },
+        });
       },
     },
     {
