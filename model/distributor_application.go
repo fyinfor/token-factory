@@ -21,19 +21,19 @@ const (
 
 // DistributorApplication 分销商入驻申请（每个用户最多一条记录，驳回后可更新重新提交）
 type DistributorApplication struct {
-	Id                 int    `json:"id" gorm:"primaryKey;autoIncrement"`
-	UserId             int    `json:"user_id" gorm:"not null;uniqueIndex:idx_dist_app_user"`
-	ApplyType          int    `json:"apply_type" gorm:"type:int;not null;default:1;column:apply_type"` // 1=个人 2=企业
-	RealName           string `json:"real_name" gorm:"type:varchar(64);not null;column:real_name"`
-	IdCardNo           string `json:"id_card_no" gorm:"type:varchar(32);not null;column:id_card_no"`
-	QualificationUrls  string `json:"qualification_urls" gorm:"type:text;not null;column:qualification_urls"` // JSON 数组 URL 字符串
-	Contact            string `json:"contact" gorm:"type:varchar(128);not null;column:contact"`
-	Status             int    `json:"status" gorm:"type:int;not null;default:1;index:idx_dist_app_status"`
-	RejectReason       string `json:"reject_reason" gorm:"type:varchar(512);column:reject_reason"`
-	ReviewerId         int    `json:"reviewer_id" gorm:"column:reviewer_id"`
-	ReviewedAt         int64  `json:"reviewed_at" gorm:"column:reviewed_at"`
-	CreatedAt          int64  `json:"created_at" gorm:"autoCreateTime;bigint"`
-	UpdatedAt          int64  `json:"updated_at" gorm:"autoUpdateTime;bigint"`
+	Id                int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	UserId            int    `json:"user_id" gorm:"not null;uniqueIndex:idx_dist_app_user"`
+	ApplyType         int    `json:"apply_type" gorm:"type:int;not null;default:1;column:apply_type"` // 1=个人 2=企业
+	RealName          string `json:"real_name" gorm:"type:varchar(64);not null;column:real_name"`
+	IdCardNo          string `json:"id_card_no" gorm:"type:varchar(32);not null;column:id_card_no"`
+	QualificationUrls string `json:"qualification_urls" gorm:"type:text;not null;column:qualification_urls"` // JSON 数组 URL 字符串
+	Contact           string `json:"contact" gorm:"type:varchar(128);not null;column:contact"`
+	Status            int    `json:"status" gorm:"type:int;not null;default:1;index:idx_dist_app_status"`
+	RejectReason      string `json:"reject_reason" gorm:"type:varchar(512);column:reject_reason"`
+	ReviewerId        int    `json:"reviewer_id" gorm:"column:reviewer_id"`
+	ReviewedAt        int64  `json:"reviewed_at" gorm:"column:reviewed_at"`
+	CreatedAt         int64  `json:"created_at" gorm:"autoCreateTime;bigint"`
+	UpdatedAt         int64  `json:"updated_at" gorm:"autoUpdateTime;bigint"`
 }
 
 func (DistributorApplication) TableName() string {
@@ -187,12 +187,14 @@ func GetDistributorApplicationByUserId(userId int) (*DistributorApplication, err
 	if userId <= 0 {
 		return nil, errors.New("invalid user")
 	}
-	var app DistributorApplication
-	err := DB.Where("user_id = ?", userId).First(&app).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
+	var apps []DistributorApplication
+	if err := DB.Where("user_id = ?", userId).Limit(1).Find(&apps).Error; err != nil {
+		return nil, err
+	}
+	if len(apps) == 0 {
 		return nil, nil
 	}
-	return &app, err
+	return &apps[0], nil
 }
 
 // DistributorApplicationListQuery 管理端筛选
