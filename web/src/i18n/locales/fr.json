@@ -4420,6 +4420,7 @@
     "请求后端接口失败：": "Échec de la requête de l'interface backend : ",
     "请求失败": "Échec de la demande",
     "请求失败，请重试": "La demande a échoué, veuillez réessayer",
+    "建议直连本站点发起请求，关闭系统代理或 VPN，避免代理干扰模型连接与请求转发。": "Connectez-vous directement à ce site pour vos requêtes. Désactivez les proxys système ou VPN pour éviter qu'ils n'interfèrent avec les connexions aux modèles et le transfert des requêtes.",
     "请求头": "En-tête de requête",
     "请求头覆盖": "Remplacement des en-têtes de demande",
     "请求并计费模型": "Modèle de demande et de facturation",

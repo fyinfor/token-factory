@@ -4446,6 +4446,7 @@
     "请求后端接口失败：": "Failed to request the backend interface: ",
     "请求失败": "Request failed",
     "请求失败，请重试": "Request failed, please try again",
+    "建议直连本站点发起请求，关闭系统代理或 VPN，避免代理干扰模型连接与请求转发。": "Connect directly to this site when making requests. Disable system proxies or VPNs to avoid proxy interference with model connections and request forwarding.",
     "请求头": "Request header",
     "请求头覆盖": "Request header override",
     "请求并计费模型": "Request and charge model",
