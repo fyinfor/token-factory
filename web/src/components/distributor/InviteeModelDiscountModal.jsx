@@ -28,26 +28,20 @@ import {
   Banner,
   Spin,
   Space,
-  Select,
 } from '@douyinfe/semi-ui';
 import { IconSearch, IconInfoCircle } from '@douyinfe/semi-icons';
 import { API, showError, showSuccess } from '../../helpers';
 
 const { Text } = Typography;
-const { Option } = Select;
 
 const MODEL_TABLE_PAGE_SIZE = 10;
 const getRowKey = (item) => `${item.channel_id || 0}:${item.model_name || ''}`;
 
+const markupRatesEqual = (a, b) =>
+  Math.round(Number(a ?? 0) * 100) === Math.round(Number(b ?? 0) * 100);
+
 /**
- * 被邀请用户模型折扣率编辑弹框
- * 布局参考 ModelTestModal.jsx
- * @param {object} props
- * @param {boolean} props.visible - 弹框显示状态
- * @param {function} props.onCancel - 关闭弹框回调
- * @param {number} props.inviteeId - 被邀请用户ID
- * @param {string} props.inviteeLabel - 被邀请用户显示名称
- * @param {function} props.t - 翻译函数
+ * 被邀请用户模型加价折扣率编辑弹框
  */
 const InviteeModelDiscountModal = ({
   visible,
@@ -60,12 +54,10 @@ const InviteeModelDiscountModal = ({
   const [saving, setSaving] = useState(false);
   const [modelData, setModelData] = useState([]);
   const [searchKeyword, setSearchKeyword] = useState('');
-  const [filterChannelId, setFilterChannelId] = useState(null);
   const [page, setPage] = useState(1);
-  const [modifiedModels, setModifiedModels] = useState(new Set());
+  const [baselineValues, setBaselineValues] = useState({});
   const [discountValues, setDiscountValues] = useState({});
 
-  // 加载模型折扣数据
   const loadData = useCallback(async () => {
     if (!inviteeId || !visible) return;
     setLoading(true);
@@ -80,13 +72,12 @@ const InviteeModelDiscountModal = ({
       const items = res.data?.data?.items || [];
       setModelData(items);
 
-      // 初始化折扣值映射
       const initialValues = {};
       items.forEach((item) => {
         initialValues[getRowKey(item)] = item.current_markup_discount_rate;
       });
+      setBaselineValues(initialValues);
       setDiscountValues(initialValues);
-      setModifiedModels(new Set());
     } catch (e) {
       showError(t('加载失败'));
     } finally {
@@ -98,80 +89,59 @@ const InviteeModelDiscountModal = ({
     if (visible) {
       loadData();
     } else {
-      // 重置状态
       setSearchKeyword('');
-      setFilterChannelId(null);
       setPage(1);
-      setModifiedModels(new Set());
+      setBaselineValues({});
       setDiscountValues({});
     }
   }, [visible, loadData]);
 
-  const channelOptions = useMemo(() => {
-    const byId = new Map();
-    modelData.forEach((item) => {
-      const id = item.channel_id;
-      if (id == null || byId.has(id)) return;
-      const name = String(item.channel_name || '').trim();
-      byId.set(id, {
-        value: id,
-        label: name ? `${name} (${id})` : `#${id}`,
-      });
-    });
-    return Array.from(byId.values()).sort((a, b) =>
-      String(a.label).localeCompare(String(b.label)),
-    );
-  }, [modelData]);
-
   const filteredData = useMemo(() => {
-    let result = modelData;
-    if (filterChannelId != null && filterChannelId !== '') {
-      result = result.filter((item) => item.channel_id === filterChannelId);
-    }
     const keyword = searchKeyword.toLowerCase().trim();
-    if (keyword) {
-      result = result.filter((item) =>
-        `${item.model_name || ''} ${item.channel_name || ''} ${item.channel_id || ''}`
-          .toLowerCase()
-          .includes(keyword),
-      );
+    if (!keyword) {
+      return modelData;
     }
-    return result;
-  }, [modelData, searchKeyword, filterChannelId]);
+    return modelData.filter((item) =>
+      `${item.channel_path || ''} ${item.model_name || ''} ${item.channel_id || ''}`
+        .toLowerCase()
+        .includes(keyword),
+    );
+  }, [modelData, searchKeyword]);
 
-  const hasActiveFilter =
-    (filterChannelId != null && filterChannelId !== '') ||
-    !!searchKeyword.trim();
+  const hasActiveFilter = !!searchKeyword.trim();
+
+  const modifiedCount = useMemo(() => {
+    if (!modelData.length) return 0;
+    return modelData.reduce((count, item) => {
+      const rowKey = getRowKey(item);
+      const base = baselineValues[rowKey];
+      const cur = discountValues[rowKey] ?? base;
+      return markupRatesEqual(cur, base) ? count : count + 1;
+    }, 0);
+  }, [modelData, baselineValues, discountValues]);
 
   useEffect(() => {
     setPage(1);
-  }, [searchKeyword, filterChannelId, modelData.length]);
+  }, [searchKeyword, modelData.length]);
 
-  // 处理折扣值变化
   const handleDiscountChange = (rowKey, value) => {
     const numValue = value === null || value === undefined ? 0 : Number(value);
-    // 限制在 0-100 范围
     const clampedValue = Math.max(0, Math.min(100, numValue));
 
     setDiscountValues((prev) => ({
       ...prev,
       [rowKey]: clampedValue,
     }));
-
-    // 标记为已修改
-    setModifiedModels((prev) => new Set([...prev, rowKey]));
   };
 
-  // 保存修改
   const handleSave = async () => {
-    if (modifiedModels.size === 0) {
+    if (modifiedCount === 0) {
       onCancel();
       return;
     }
 
     setSaving(true);
     try {
-      // 构建请求数据 - 只提交所有模型的当前值（后端会判断与默认值的差异）
       const discounts = modelData.map((item) => ({
         model_name: item.model_name,
         channel_id: item.channel_id,
@@ -199,21 +169,13 @@ const InviteeModelDiscountModal = ({
 
   const columns = [
     {
-      title: t('模型 / 渠道'),
-      dataIndex: 'model_name',
+      title: t('通道路径'),
+      dataIndex: 'channel_path',
       width: 360,
-      render: (text, record) => (
-        <div className='flex flex-col gap-1'>
-          <Typography.Text strong copyable>
-            {text}
-          </Typography.Text>
-          <Typography.Text type='secondary' size='small' copyable>
-            {record.channel_name || '-'}
-          </Typography.Text>
-          {/* <Typography.Text type='tertiary' size='small'>
-            {t('渠道 ID')}：{record.channel_id}
-          </Typography.Text> */}
-        </div>
+      render: (text) => (
+        <Typography.Text strong copyable>
+          {text || '—'}
+        </Typography.Text>
       ),
     },
     {
@@ -232,7 +194,10 @@ const InviteeModelDiscountModal = ({
         const rowKey = getRowKey(record);
         const currentValue =
           discountValues[rowKey] ?? record.current_markup_discount_rate;
-        const isModified = modifiedModels.has(rowKey);
+        const isModified = !markupRatesEqual(
+          currentValue,
+          baselineValues[rowKey] ?? record.current_markup_discount_rate,
+        );
         return (
           <InputNumber
             value={currentValue}
@@ -250,7 +215,6 @@ const InviteeModelDiscountModal = ({
     },
   ];
 
-  // 分页数据
   const pagedData = (() => {
     const start = (page - 1) * MODEL_TABLE_PAGE_SIZE;
     const end = start + MODEL_TABLE_PAGE_SIZE;
@@ -297,32 +261,15 @@ const InviteeModelDiscountModal = ({
             )}
           />
 
-          <div className='flex flex-col sm:flex-row gap-2'>
-            <Input
-              placeholder={t('搜索模型或渠道...')}
-              value={searchKeyword}
-              onChange={setSearchKeyword}
-              className='flex-1 min-w-0'
-              prefix={<IconSearch />}
-              showClear
-            />
-            <Select
-              placeholder={t('搜索渠道')}
-              value={filterChannelId}
-              onChange={setFilterChannelId}
-              showClear
-              filter
-              className='w-full sm:w-[220px] flex-shrink-0'
-            >
-              {channelOptions.map((opt) => (
-                <Option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </Option>
-              ))}
-            </Select>
-          </div>
+          <Input
+            placeholder={t('搜索通道路径...')}
+            value={searchKeyword}
+            onChange={setSearchKeyword}
+            className='!w-full'
+            prefix={<IconSearch />}
+            showClear
+          />
 
-          {/* 统计信息 */}
           <Space className='text-sm'>
             <Text type='tertiary'>
               {hasActiveFilter
@@ -334,17 +281,16 @@ const InviteeModelDiscountModal = ({
                     String(modelData.length),
                   )}
             </Text>
-            {modifiedModels.size > 0 && (
+            {modifiedCount > 0 && (
               <Text type='primary'>
                 {t('已修改 ${count} 个').replace(
                   '${count}',
-                  modifiedModels.size,
+                  String(modifiedCount),
                 )}
               </Text>
             )}
           </Space>
 
-          {/* 表格 */}
           <Table
             columns={columns}
             dataSource={pagedData}
