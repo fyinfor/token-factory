@@ -351,6 +351,9 @@ func migrateDB() error {
 	if err := BackfillAffInviteRelationsIfNeeded(); err != nil {
 		common.SysError("aff_invite_relations backfill: " + err.Error())
 	}
+	if err := migrateAffInviteRelationModelMarkupDiscountRateColumn(); err != nil {
+		return fmt.Errorf("migrate aff_invite_relations model_markup_discount_rate: %w", err)
+	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err
@@ -456,6 +459,9 @@ func migrateDBFast() error {
 	}
 	if err := BackfillAffInviteRelationsIfNeeded(); err != nil {
 		common.SysError("aff_invite_relations backfill: " + err.Error())
+	}
+	if err := migrateAffInviteRelationModelMarkupDiscountRateColumn(); err != nil {
+		return fmt.Errorf("migrate aff_invite_relations model_markup_discount_rate: %w", err)
 	}
 	if err := BackfillEmptyAffCodes(); err != nil {
 		common.SysError("backfill empty aff_code: " + err.Error())

@@ -59,6 +59,7 @@ import { StatusContext } from '../context/Status';
 import { UserContext } from '../context/User';
 import { useNavigate } from 'react-router-dom';
 import AffInviteeCommissionDetailModal from '../components/distributor/AffInviteeCommissionDetailModal';
+import InviteeModelDiscountModal from '../components/distributor/InviteeModelDiscountModal';
 import DistributorWithdrawFormFields from '../components/distributor/DistributorWithdrawFormFields';
 import {
   WD_ACCOUNT_PERSONAL,
@@ -215,6 +216,10 @@ export default function DistributorCenter() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailInviteeId, setDetailInviteeId] = useState(null);
   const [detailInviteeLabel, setDetailInviteeLabel] = useState('');
+  const [discountModalOpen, setDiscountModalOpen] = useState(false);
+  const [discountModalInviteeId, setDiscountModalInviteeId] = useState(null);
+  const [discountModalInviteeLabel, setDiscountModalInviteeLabel] =
+    useState('');
   const [openTransfer, setOpenTransfer] = useState(false);
   const [transferAmount, setTransferAmount] = useState(() => getQuotaPerUnit());
 
@@ -596,6 +601,14 @@ export default function DistributorCenter() {
     setDetailOpen(true);
   };
 
+  const openDiscountModal = (r) => {
+    setDiscountModalInviteeId(r.invitee_id);
+    setDiscountModalInviteeLabel(
+      String(r.display_name || r.username || `#${r.invitee_id}`).trim(),
+    );
+    setDiscountModalOpen(true);
+  };
+
   const columns = [
     {
       title: t('被邀请用户'),
@@ -616,11 +629,20 @@ export default function DistributorCenter() {
     },
     {
       title: t('操作'),
-      width: 100,
+      width: 160,
       render: (_, r) => (
-        <Button size='small' type='tertiary' onClick={() => openDetail(r)}>
-          {t('详情')}
-        </Button>
+        <Space>
+          <Button size='small' type='tertiary' onClick={() => openDetail(r)}>
+            {t('详情')}
+          </Button>
+          <Button
+            size='small'
+            type='tertiary'
+            onClick={() => openDiscountModal(r)}
+          >
+            {t('加价折扣率')}
+          </Button>
+        </Space>
       ),
     },
   ];
@@ -894,6 +916,18 @@ export default function DistributorCenter() {
         }}
         inviteeId={detailInviteeId}
         inviteeLabel={detailInviteeLabel}
+      />
+
+      <InviteeModelDiscountModal
+        visible={discountModalOpen}
+        onCancel={() => {
+          setDiscountModalOpen(false);
+          setDiscountModalInviteeId(null);
+          setDiscountModalInviteeLabel('');
+        }}
+        inviteeId={discountModalInviteeId}
+        inviteeLabel={discountModalInviteeLabel}
+        t={t}
       />
 
       <TransferModal

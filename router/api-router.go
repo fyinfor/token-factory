@@ -72,6 +72,8 @@ func SetApiRouter(router *gin.Engine) {
 			distributorRoute.GET("/center", controller.GetDistributorCenterInfo)
 			distributorRoute.GET("/analytics", controller.GetDistributorAnalytics)
 			distributorRoute.GET("/invitee/:invitee_id/commissions", controller.GetDistributorInviteeCommissionLogs)
+			distributorRoute.GET("/invitee-model-discounts", controller.GetInviteeModelDiscounts)
+			distributorRoute.PUT("/invitee-model-discounts", controller.PutInviteeModelDiscounts)
 			distributorRoute.POST("/withdrawal", controller.PostDistributorWithdrawal)
 			distributorRoute.GET("/withdrawals", controller.GetDistributorWithdrawals)
 			distributorRoute.POST("/withdrawals/:id/cancel", controller.PostDistributorWithdrawalCancel)
