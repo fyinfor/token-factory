@@ -87,6 +87,26 @@ export function isSupplier() {
   }
 }
 
+/**
+ * 是否可查看首页模型详情中的成本价：供应商、代理商、管理员（role≥10）、超级管理员（role≥100）。
+ */
+export function userCanViewHomeCostPrice(userLike) {
+  if (!userLike || typeof userLike !== 'object') {
+    return false;
+  }
+  if (userIsSupplierUser(userLike)) {
+    return true;
+  }
+  if (userIsDistributorUser(userLike)) {
+    return true;
+  }
+  const role = Number(userLike.role);
+  if (!Number.isFinite(role)) {
+    return false;
+  }
+  return role >= 10;
+}
+
 /** 分销比例 commission_ratio_bps：后端万分之一单位（1=0.01%），转为百分比展示如 10%、0.01% */
 export function formatCommissionRatioPercent(bps) {
   if (bps == null || Number.isNaN(Number(bps))) {
@@ -687,16 +707,43 @@ export const selectFilter = (input, option) => {
 // -------------------------------
 // 模型定价计算工具函数
 
-/** 与定价行相同的分组与分组倍率解析（all 时取模型可用分组中倍率最小者） */
+/** 与后端 ratio_setting.FormatMatchingModelName 一致的模型名规范化 */
+export function formatMatchingModelName(name) {
+  if (name == null || name === undefined) {
+    return '';
+  }
+  let n = String(name);
+  if (n.startsWith('gpt-4-gizmo')) {
+    n = 'gpt-4-gizmo-*';
+  } else if (n.startsWith('gpt-4o-gizmo')) {
+    n = 'gpt-4o-gizmo-*';
+  }
+  return n;
+}
+
+/** 从渠道维度映射读取数值，支持规范化模型名与键名遍历 */
+function readChannelScopedModelFloat(byChannel, modelName) {
+  if (!byChannel || typeof byChannel !== 'object' || modelName == null) {
+    return null;
+  }
+  const formatted = formatMatchingModelName(modelName);
+  const candidates = [modelName, formatted];
+  for (const key of candidates) {
+    const v = byChannel[key];
+    if (typeof v === 'number' && Number.isFinite(v)) {
+      return v;
+    }
+  }
+  return null;
+}
+
 /** 读取定价接口返回的渠道维度映射：channel_id（字符串）→ model_name → float */
 export function pickChannelScopedModelFloat(channelMap, channelId, modelName) {
   if (!channelMap || modelName == null || modelName === undefined) {
     return null;
   }
   const byChannel = channelMap[String(channelId)];
-  if (!byChannel || typeof byChannel !== 'object') return null;
-  const v = byChannel[modelName];
-  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+  return readChannelScopedModelFloat(byChannel, modelName);
 }
 
 export function getUsedGroupContext(record, selectedGroup, groupRatio) {

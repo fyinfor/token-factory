@@ -56,6 +56,14 @@ export const useModelPricingData = () => {
   const [groupModelRatio, setGroupModelRatio] = useState({});
   const [channelModelPrice, setChannelModelPrice] = useState({});
   const [channelModelRatio, setChannelModelRatio] = useState({});
+  const [channelCompletionRatio, setChannelCompletionRatio] = useState({});
+  const [channelCacheRatio, setChannelCacheRatio] = useState({});
+  const [channelCreateCacheRatio, setChannelCreateCacheRatio] = useState({});
+  const [channelImageRatio, setChannelImageRatio] = useState({});
+  const [channelImagePrice, setChannelImagePrice] = useState({});
+  const [channelAudioRatio, setChannelAudioRatio] = useState({});
+  const [channelAudioCompletionRatio, setChannelAudioCompletionRatio] =
+    useState({});
   const [channelVideoRatio, setChannelVideoRatio] = useState({});
   const [channelVideoCompletionRatio, setChannelVideoCompletionRatio] =
     useState({});
@@ -429,6 +437,13 @@ export const useModelPricingData = () => {
       group_model_ratio,
       channel_model_price,
       channel_model_ratio,
+      channel_completion_ratio,
+      channel_cache_ratio,
+      channel_create_cache_ratio,
+      channel_image_ratio,
+      channel_image_price,
+      channel_audio_ratio,
+      channel_audio_completion_ratio,
       channel_video_ratio,
       channel_video_completion_ratio,
       channel_video_price,
@@ -443,6 +458,13 @@ export const useModelPricingData = () => {
       setGroupModelRatio(group_model_ratio || {});
       setChannelModelPrice(channel_model_price || {});
       setChannelModelRatio(channel_model_ratio || {});
+      setChannelCompletionRatio(channel_completion_ratio || {});
+      setChannelCacheRatio(channel_cache_ratio || {});
+      setChannelCreateCacheRatio(channel_create_cache_ratio || {});
+      setChannelImageRatio(channel_image_ratio || {});
+      setChannelImagePrice(channel_image_price || {});
+      setChannelAudioRatio(channel_audio_ratio || {});
+      setChannelAudioCompletionRatio(channel_audio_completion_ratio || {});
       setChannelVideoRatio(channel_video_ratio || {});
       setChannelVideoCompletionRatio(channel_video_completion_ratio || {});
       setChannelVideoPrice(channel_video_price || {});
@@ -602,6 +624,13 @@ export const useModelPricingData = () => {
     groupModelRatio,
     channelModelPrice,
     channelModelRatio,
+    channelCompletionRatio,
+    channelCacheRatio,
+    channelCreateCacheRatio,
+    channelImageRatio,
+    channelImagePrice,
+    channelAudioRatio,
+    channelAudioCompletionRatio,
     channelVideoRatio,
     channelVideoCompletionRatio,
     channelVideoPrice,

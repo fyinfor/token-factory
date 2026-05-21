@@ -80,6 +80,20 @@ type PricingChannelItem struct {
 	MarkupDiscountRate   float64 `json:"markup_discount_rate"`   // 加价折扣率（百分数，0=不加价）
 	QuotaType            int     `json:"quota_type"`
 
+	// OptionModelRatio 等：仅 Option「渠道模型定价」显式配置（不做供应商/全局回退），供首页成本价展示。
+	OptionModelRatio       *float64 `json:"option_model_ratio,omitempty"`
+	OptionCompletionRatio  *float64 `json:"option_completion_ratio,omitempty"`
+	OptionCacheRatio       *float64 `json:"option_cache_ratio,omitempty"`
+	OptionCreateCacheRatio *float64 `json:"option_create_cache_ratio,omitempty"`
+	OptionModelPrice       *float64 `json:"option_model_price,omitempty"`
+	OptionImageRatio       *float64 `json:"option_image_ratio,omitempty"`
+	OptionImagePrice       *float64 `json:"option_image_price,omitempty"`
+	OptionAudioRatio       *float64 `json:"option_audio_ratio,omitempty"`
+	OptionAudioCompletionRatio *float64 `json:"option_audio_completion_ratio,omitempty"`
+	OptionVideoRatio           *float64 `json:"option_video_ratio,omitempty"`
+	OptionVideoCompletionRatio *float64 `json:"option_video_completion_ratio,omitempty"`
+	OptionVideoPrice           *float64 `json:"option_video_price,omitempty"`
+
 	// 热门排序相关字段
 	SortWeight         float64 `json:"sort_weight"`           // 渠道权重
 	ManualBaseReqCount int64   `json:"manual_base_req_count"` // 手动设置调用基数
@@ -109,6 +123,58 @@ func resolveChannelPricingTriple(channelID int, supplierApplicationID int, model
 
 func resolveChannelCachePair(channelID int, supplierApplicationID int, modelName string) (cacheRatio, createCacheRatio float64) {
 	return ResolveSupplierScopedCacheRatios(channelID, supplierApplicationID, modelName)
+}
+
+// fillOptionChannelPricingFields 填充仅来自 Option 渠道模型定价的字段（与运营设置-渠道模型定价一致）。
+func fillOptionChannelPricingFields(item *PricingChannelItem, channelID int, modelName string) {
+	if v, ok := ratio_setting.GetChannelModelRatio(channelID, modelName); ok {
+		vv := v
+		item.OptionModelRatio = &vv
+	}
+	if v, ok := ratio_setting.GetChannelCompletionRatio(channelID, modelName); ok {
+		vv := v
+		item.OptionCompletionRatio = &vv
+	}
+	if v, ok := ratio_setting.GetChannelCacheRatio(channelID, modelName); ok {
+		vv := v
+		item.OptionCacheRatio = &vv
+	}
+	if v, ok := ratio_setting.GetChannelCreateCacheRatio(channelID, modelName); ok {
+		vv := v
+		item.OptionCreateCacheRatio = &vv
+	}
+	if v, ok := ratio_setting.GetChannelModelPrice(channelID, modelName); ok {
+		vv := v
+		item.OptionModelPrice = &vv
+	}
+	if v, ok := ratio_setting.GetChannelImageRatio(channelID, modelName); ok {
+		vv := v
+		item.OptionImageRatio = &vv
+	}
+	if v, ok := ratio_setting.GetChannelImagePrice(channelID, modelName); ok {
+		vv := v
+		item.OptionImagePrice = &vv
+	}
+	if v, ok := ratio_setting.GetChannelAudioRatio(channelID, modelName); ok {
+		vv := v
+		item.OptionAudioRatio = &vv
+	}
+	if v, ok := ratio_setting.GetChannelAudioCompletionRatio(channelID, modelName); ok {
+		vv := v
+		item.OptionAudioCompletionRatio = &vv
+	}
+	if v, ok := ratio_setting.GetChannelVideoRatio(channelID, modelName); ok {
+		vv := v
+		item.OptionVideoRatio = &vv
+	}
+	if v, ok := ratio_setting.GetChannelVideoCompletionRatio(channelID, modelName); ok {
+		vv := v
+		item.OptionVideoCompletionRatio = &vv
+	}
+	if v, ok := ratio_setting.GetChannelVideoPrice(channelID, modelName); ok {
+		vv := v
+		item.OptionVideoPrice = &vv
+	}
 }
 
 func pricingSupplierAliasFromMeta(supplierApplicationID int, alias *string) string {
@@ -255,6 +321,7 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			if hasCreateCacheTierRatio {
 				chItem.CreateCacheTierRatio = createCacheTierRatio
 			}
+			fillOptionChannelPricingFields(&chItem, row.ChannelID, modelName)
 			chItems = append(chItems, chItem)
 		}
 
