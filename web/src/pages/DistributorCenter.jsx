@@ -640,7 +640,7 @@ export default function DistributorCenter() {
             type='tertiary'
             onClick={() => openDiscountModal(r)}
           >
-            {t('加价折扣率')}
+            {t('模型折扣率')}
           </Button>
         </Space>
       ),

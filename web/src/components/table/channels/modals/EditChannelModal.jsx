@@ -29,6 +29,7 @@ import {
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import {
   CHANNEL_OPTIONS,
+  CHANNEL_SUPPLIER_TYPE_OPTIONS,
   MODEL_FETCHABLE_CHANNEL_TYPES,
 } from '../../../../constants';
 import {
@@ -159,13 +160,6 @@ function parseTencentVodKeyString(key) {
     region: parts[3] || '',
   };
 }
-
-const CHANNEL_SUPPLIER_TYPE_OPTIONS = [
-  { label: '公有云', value: '公有云' },
-  { label: 'AIDC', value: 'AIDC' },
-  { label: '企业中转站', value: '企业中转站' },
-  { label: '个人中转站', value: '个人中转站' },
-];
 
 // 支持并且已适配通过接口获取模型列表的渠道类型
 const MODEL_FETCHABLE_TYPES = new Set([

@@ -286,7 +286,9 @@ func UpdateAffInviteeCommission(inviterId, inviteeUserId, commissionBps int) err
 type InviteeModelMarkupDiscountRateItem struct {
 	ModelName                 string  `json:"model_name"`
 	ChannelID                 int     `json:"channel_id"`
-	ChannelPath               string  `json:"channel_path"`                 // 与定价页通道列表「复制」一致：model/route_slug 或 alias/model/channel_no
+	ChannelPath               string  `json:"channel_path"` // 与定价页通道列表「复制」一致：model/route_slug 或 alias/model/channel_no
+	SupplierType              string  `json:"supplier_type"`
+	ChannelName               string  `json:"channel_name"`
 	DefaultMarkupDiscountRate float64 `json:"default_markup_discount_rate"` // 渠道默认官方价加价折扣率(%)
 	CurrentMarkupDiscountRate float64 `json:"current_markup_discount_rate"` // 对该被邀请用户生效的加价折扣率(%)
 }
@@ -368,8 +370,12 @@ func listPricingVisibleMarkupDiscountRateItems() ([]InviteeModelMarkupDiscountRa
 		return nil, nil, err
 	}
 	visibleChannelIDs := make(map[int]struct{}, len(pricingChannels))
-	for _, ch := range pricingChannels {
-		visibleChannelIDs[ch.ChannelID] = struct{}{}
+	channelNames := make(map[int]string, len(pricingChannels))
+	channelSupplierTypes := make(map[int]string, len(pricingChannels))
+	for _, pch := range pricingChannels {
+		visibleChannelIDs[pch.ChannelID] = struct{}{}
+		channelNames[pch.ChannelID] = strings.TrimSpace(pch.ChannelName)
+		channelSupplierTypes[pch.ChannelID] = strings.TrimSpace(pch.SupplierType)
 	}
 	metas, err := ListChannelPricingMeta()
 	if err != nil {
@@ -398,6 +404,8 @@ func listPricingVisibleMarkupDiscountRateItems() ([]InviteeModelMarkupDiscountRa
 			ModelName:                 modelName,
 			ChannelID:                 ch.ChannelID,
 			ChannelPath:               inviteePricingChannelPath(modelName, ch),
+			SupplierType:              channelSupplierTypes[ch.ChannelID],
+			ChannelName:               channelNames[ch.ChannelID],
 			DefaultMarkupDiscountRate: defaultRate,
 			CurrentMarkupDiscountRate: defaultRate,
 		})
