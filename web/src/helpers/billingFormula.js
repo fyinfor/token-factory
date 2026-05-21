@@ -17,6 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
+import { pickChannelScopedModelFloat } from './utils';
+
 /** Claude 1h 缓存创建全局倍率相对 5m 的乘数（与 service/text_quota.go 一致） */
 export const CLAUDE_CACHE_CREATE_1H_GLOBAL_MULT = 6 / 3.75;
 
@@ -41,6 +43,354 @@ export function numOrZero(value) {
   }
   const n = Number(value);
   return Number.isFinite(n) ? n : 0;
+}
+
+/** 判断倍率/价格字段是否可用于展示与计算 */
+export function hasBillingRatioValue(value) {
+  return (
+    value !== undefined &&
+    value !== null &&
+    value !== '' &&
+    Number.isFinite(Number(value))
+  );
+}
+
+/**
+ * 解析成本价单项数值：Option 渠道模型定价（channel 字段 / 映射）→ 全局模型定价。
+ * 不使用 channel_list 已合并倍率，避免误用供应商或全局回退价。
+ */
+export function resolveCostOptionChannelScalar(
+  optionChannelValue,
+  channelMap,
+  channelId,
+  modelName,
+  globalValue,
+) {
+  if (hasBillingRatioValue(optionChannelValue)) {
+    return Number(optionChannelValue);
+  }
+  const fromChannelMap = pickChannelScopedModelFloat(
+    channelMap,
+    channelId,
+    modelName,
+  );
+  if (hasBillingRatioValue(fromChannelMap)) {
+    return Number(fromChannelMap);
+  }
+  if (hasBillingRatioValue(globalValue)) {
+    return Number(globalValue);
+  }
+  return null;
+}
+
+/** 将存储倍率转为与定价编辑器一致的 $/1M tokens 展示价（倍率 × 2） */
+export function modelRatioToDisplayUsdPerM(modelRatio) {
+  return Number(modelRatio) * 2;
+}
+
+/**
+ * 计算渠道成本价各项（仅 渠道/全局原价 × 成本折扣率，不含加价与分组倍率）。
+ * 返回按量/按次计费下的展示用有效倍率或固定价（未乘 ×2，由调用方格式化）。
+ */
+export function computeChannelCostRates({
+  channelId,
+  modelName,
+  optionModelRatio,
+  optionCompletionRatio,
+  optionCacheRatio,
+  optionCreateCacheRatio,
+  optionModelPrice,
+  optionImageRatio,
+  optionImagePrice,
+  optionAudioRatio,
+  optionAudioCompletionRatio,
+  optionVideoRatio,
+  optionVideoCompletionRatio,
+  optionVideoPrice,
+  channelModelRatioMap,
+  channelCompletionRatioMap,
+  channelCacheRatioMap,
+  channelCreateCacheRatioMap,
+  channelModelPriceMap,
+  channelImageRatioMap,
+  channelImagePriceMap,
+  channelAudioRatioMap,
+  channelAudioCompletionRatioMap,
+  channelVideoRatioMap,
+  channelVideoCompletionRatioMap,
+  channelVideoPriceMap,
+  priceDiscountPercent = 100,
+  globalModelRatio = 0,
+  globalModelPrice = 0,
+  globalCompletionRatio = 0,
+  globalCacheRatio = 0,
+  globalCreateCacheRatio = 0,
+  globalImageRatio,
+  globalImagePrice = -1,
+  globalAudioRatio,
+  globalAudioCompletionRatio,
+  globalVideoRatio,
+  globalVideoCompletionRatio,
+  globalVideoPrice = -1,
+  skipImageTokenPricing = false,
+  skipImageFlatSimple = false,
+  skipVideoTokenPricing = false,
+  skipVideoFlatSimple = false,
+  quotaType = 0,
+} = {}) {
+  const costDisc = costDiscountMultiplier(priceDiscountPercent);
+  const isPerToken = quotaType === 0;
+  const items = [];
+
+  /** 追加按量计费成本项（$/1M tokens 展示价） */
+  const pushTokenCostItem = (key, labelKey, usdPerM) => {
+    if (
+      usdPerM == null ||
+      !Number.isFinite(usdPerM) ||
+      usdPerM <= 0
+    ) {
+      return;
+    }
+    items.push({
+      key,
+      labelKey,
+      displayUsdPerM: usdPerM,
+      isFixedPrice: false,
+    });
+  };
+
+  /** 追加固定单价成本项（按次/按张等） */
+  const pushFixedCostItem = (key, labelKey, usdAmount, fixedUnitKey = '次') => {
+    if (usdAmount == null || !Number.isFinite(usdAmount) || usdAmount < 0) {
+      return;
+    }
+    items.push({
+      key,
+      labelKey,
+      displayUsdPerM: usdAmount * costDisc,
+      isFixedPrice: true,
+      fixedUnitKey,
+    });
+  };
+
+  if (!isPerToken) {
+    const baseMp = resolveCostOptionChannelScalar(
+      optionModelPrice,
+      channelModelPriceMap,
+      channelId,
+      modelName,
+      globalModelPrice,
+    );
+    if (baseMp != null && baseMp >= 0) {
+      items.push({
+        key: 'model_price',
+        labelKey: '模型价格',
+        displayUsdPerM: baseMp * costDisc,
+        isFixedPrice: true,
+      });
+    }
+    return items;
+  }
+
+  const baseMr = resolveCostOptionChannelScalar(
+    optionModelRatio,
+    channelModelRatioMap,
+    channelId,
+    modelName,
+    globalModelRatio,
+  );
+  if (baseMr == null) {
+    return items;
+  }
+
+  const inputUsdPerM = modelRatioToDisplayUsdPerM(baseMr) * costDisc;
+  items.push({
+    key: 'input',
+    labelKey: '输入价格',
+    displayUsdPerM: inputUsdPerM,
+    isFixedPrice: false,
+  });
+
+  const completionRatio = resolveCostOptionChannelScalar(
+    optionCompletionRatio,
+    channelCompletionRatioMap,
+    channelId,
+    modelName,
+    globalCompletionRatio,
+  );
+  if (
+    completionRatio != null &&
+    hasBillingRatioValue(globalCompletionRatio)
+  ) {
+    items.push({
+      key: 'output',
+      labelKey: '输出价格',
+      displayUsdPerM:
+        modelRatioToDisplayUsdPerM(baseMr) * completionRatio * costDisc,
+      isFixedPrice: false,
+    });
+  }
+
+  const cacheRatio = resolveCostOptionChannelScalar(
+    optionCacheRatio,
+    channelCacheRatioMap,
+    channelId,
+    modelName,
+    globalCacheRatio,
+  );
+  if (cacheRatio != null && hasBillingRatioValue(globalCacheRatio)) {
+    items.push({
+      key: 'cache_read',
+      labelKey: '缓存读取价格',
+      displayUsdPerM:
+        modelRatioToDisplayUsdPerM(baseMr) * cacheRatio * costDisc,
+      isFixedPrice: false,
+    });
+  }
+
+  const createCacheRatio = resolveCostOptionChannelScalar(
+    optionCreateCacheRatio,
+    channelCreateCacheRatioMap,
+    channelId,
+    modelName,
+    globalCreateCacheRatio,
+  );
+  if (
+    createCacheRatio != null &&
+    hasBillingRatioValue(globalCreateCacheRatio)
+  ) {
+    pushTokenCostItem(
+      'cache_create',
+      '缓存创建价格',
+      modelRatioToDisplayUsdPerM(baseMr) * createCacheRatio * costDisc,
+    );
+  }
+
+  const globalImagePriceFallback =
+    hasBillingRatioValue(globalImagePrice) && Number(globalImagePrice) >= 0
+      ? Number(globalImagePrice)
+      : null;
+  const globalVideoPriceFallback =
+    hasBillingRatioValue(globalVideoPrice) && Number(globalVideoPrice) >= 0
+      ? Number(globalVideoPrice)
+      : null;
+
+  if (!skipImageTokenPricing && hasBillingRatioValue(globalImageRatio)) {
+    const imageRatio = resolveCostOptionChannelScalar(
+      optionImageRatio,
+      channelImageRatioMap,
+      channelId,
+      modelName,
+      globalImageRatio,
+    );
+    if (baseMr != null && imageRatio != null) {
+      pushTokenCostItem(
+        'image',
+        '图片输入价格',
+        modelRatioToDisplayUsdPerM(baseMr) * imageRatio * costDisc,
+      );
+    }
+  }
+
+  if (!skipImageFlatSimple) {
+    const imageFlatUsd = resolveCostOptionChannelScalar(
+      optionImagePrice,
+      channelImagePriceMap,
+      channelId,
+      modelName,
+      globalImagePriceFallback,
+    );
+    if (imageFlatUsd != null && imageFlatUsd > 0) {
+      pushFixedCostItem('image_flat', '图片价格', imageFlatUsd, '张');
+    }
+  }
+
+  if (hasBillingRatioValue(globalAudioRatio)) {
+    const audioRatio = resolveCostOptionChannelScalar(
+      optionAudioRatio,
+      channelAudioRatioMap,
+      channelId,
+      modelName,
+      globalAudioRatio,
+    );
+    if (baseMr != null && audioRatio != null) {
+      pushTokenCostItem(
+        'audio_input',
+        '音频输入价格',
+        modelRatioToDisplayUsdPerM(baseMr) * audioRatio * costDisc,
+      );
+      if (hasBillingRatioValue(globalAudioCompletionRatio)) {
+        const audioCompletionRatio = resolveCostOptionChannelScalar(
+          optionAudioCompletionRatio,
+          channelAudioCompletionRatioMap,
+          channelId,
+          modelName,
+          globalAudioCompletionRatio,
+        );
+        if (audioCompletionRatio != null) {
+          pushTokenCostItem(
+            'audio_output',
+            '音频输出价格',
+            modelRatioToDisplayUsdPerM(baseMr) *
+              audioRatio *
+              audioCompletionRatio *
+              costDisc,
+          );
+        }
+      }
+    }
+  }
+
+  if (!skipVideoTokenPricing && hasBillingRatioValue(globalVideoRatio)) {
+    const videoRatio = resolveCostOptionChannelScalar(
+      optionVideoRatio,
+      channelVideoRatioMap,
+      channelId,
+      modelName,
+      globalVideoRatio,
+    );
+    if (baseMr != null && videoRatio != null) {
+      pushTokenCostItem(
+        'video_input',
+        '视频输入价格',
+        modelRatioToDisplayUsdPerM(baseMr) * videoRatio * costDisc,
+      );
+      if (hasBillingRatioValue(globalVideoCompletionRatio)) {
+        const videoCompletionRatio = resolveCostOptionChannelScalar(
+          optionVideoCompletionRatio,
+          channelVideoCompletionRatioMap,
+          channelId,
+          modelName,
+          globalVideoCompletionRatio,
+        );
+        if (videoCompletionRatio != null) {
+          pushTokenCostItem(
+            'video_output',
+            '视频输出价格',
+            modelRatioToDisplayUsdPerM(baseMr) *
+              videoRatio *
+              videoCompletionRatio *
+              costDisc,
+          );
+        }
+      }
+    }
+  }
+
+  if (!skipVideoFlatSimple) {
+    const videoFlatUsd = resolveCostOptionChannelScalar(
+      optionVideoPrice,
+      channelVideoPriceMap,
+      channelId,
+      modelName,
+      globalVideoPriceFallback,
+    );
+    if (videoFlatUsd != null && videoFlatUsd > 0) {
+      pushFixedCostItem('video_flat', '视频价格', videoFlatUsd, '次');
+    }
+  }
+
+  return items;
 }
 
 /**

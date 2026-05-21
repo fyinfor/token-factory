@@ -4420,6 +4420,7 @@
     "请求后端接口失败：": "Yêu cầu giao diện phụ trợ thất bại: ",
     "请求失败": "Yêu cầu thất bại",
     "请求失败，请重试": "Yêu cầu thất bại, vui lòng thử lại",
+    "建议直连本站点发起请求，关闭系统代理或 VPN，避免代理干扰模型连接与请求转发。": "Hãy kết nối trực tiếp đến trang web này khi gửi yêu cầu. Tắt proxy hệ thống hoặc VPN để tránh ảnh hưởng đến kết nối mô hình và chuyển tiếp yêu cầu.",
     "请求头": "Tiêu đề yêu cầu",
     "请求头覆盖": "Ghi đè tiêu đề yêu cầu",
     "请求并计费模型": "Mô hình yêu cầu và tính phí",

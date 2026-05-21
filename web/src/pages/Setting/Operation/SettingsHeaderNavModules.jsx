@@ -43,6 +43,7 @@ export default function SettingsHeaderNavModules(props) {
     home: {
       enabled: true,
       blurPricing: false,
+      showCostPrice: false,
     },
     console: true,
     pricing: {
@@ -78,6 +79,52 @@ export default function SettingsHeaderNavModules(props) {
       requireAuth: checked,
     };
     setHeaderNavModules(newModules);
+  }
+
+  // 处理首页成本价展示开关变更（即时保存）
+  function handleShowCostPriceChange(checked) {
+    const newModules = { ...headerNavModules };
+    newModules.home = {
+      ...newModules.home,
+      showCostPrice: checked,
+    };
+    setHeaderNavModules(newModules);
+    (async () => {
+      try {
+        const res = await API.put('/api/option/', {
+          key: 'HeaderNavModules',
+          value: JSON.stringify(newModules),
+        });
+        const { success, message } = res.data;
+        if (success) {
+          showSuccess(t('保存成功'));
+          statusDispatch({
+            type: 'set',
+            payload: {
+              ...statusState.status,
+              HeaderNavModules: JSON.stringify(newModules),
+            },
+          });
+          if (props.refresh) {
+            await props.refresh();
+          }
+        } else {
+          showError(message);
+          newModules.home = {
+            ...newModules.home,
+            showCostPrice: !checked,
+          };
+          setHeaderNavModules(newModules);
+        }
+      } catch {
+        showError(t('保存失败，请重试'));
+        newModules.home = {
+          ...newModules.home,
+          showCostPrice: !checked,
+        };
+        setHeaderNavModules(newModules);
+      }
+    })();
   }
 
   // 处理模糊价格开关变更（即时保存）
@@ -126,6 +173,7 @@ export default function SettingsHeaderNavModules(props) {
       home: {
         enabled: true,
         blurPricing: false,
+        showCostPrice: false,
       },
       console: true,
       pricing: {
@@ -186,6 +234,7 @@ export default function SettingsHeaderNavModules(props) {
           modules.home = {
             enabled: modules.home,
             blurPricing: false,
+            showCostPrice: false,
           };
         }
 
@@ -202,6 +251,9 @@ export default function SettingsHeaderNavModules(props) {
         if (typeof modules.home === 'object' && modules.home.blurPricing === undefined) {
           modules.home.blurPricing = false;
         }
+        if (typeof modules.home === 'object' && modules.home.showCostPrice === undefined) {
+          modules.home.showCostPrice = false;
+        }
         if (typeof modules.pricing === 'object' && modules.pricing.blurPricing === undefined) {
           modules.pricing.blurPricing = false;
         }
@@ -213,6 +265,7 @@ export default function SettingsHeaderNavModules(props) {
           home: {
             enabled: true,
             blurPricing: false,
+            showCostPrice: false,
           },
           console: true,
           pricing: {
@@ -244,6 +297,7 @@ export default function SettingsHeaderNavModules(props) {
       title: t('首页'),
       description: t('用户主页，展示系统信息'),
       hasBlurPricing: true,
+      hasCostPrice: true,
     },
     {
       key: 'console',
@@ -429,6 +483,61 @@ export default function SettingsHeaderNavModules(props) {
                               headerNavModules[module.key]?.blurPricing || false
                             }
                             onChange={handleBlurPricingChange(module.key)}
+                            size='default'
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                {/* 首页成本价展示子开关 */}
+                {module.hasCostPrice && getModuleEnabled(module.key) && (
+                    <div
+                      style={{
+                        borderTop: '1px solid var(--semi-color-border)',
+                        marginTop: '12px',
+                        paddingTop: '12px',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <div style={{ flex: 1, textAlign: 'left' }}>
+                          <div
+                            style={{
+                              fontWeight: '500',
+                              fontSize: '12px',
+                              color: 'var(--semi-color-text-1)',
+                              marginBottom: '2px',
+                            }}
+                          >
+                            {t('成本价')}
+                          </div>
+                          <Text
+                            type='secondary'
+                            size='small'
+                            style={{
+                              fontSize: '11px',
+                              color: 'var(--semi-color-text-2)',
+                              lineHeight: '1.4',
+                              display: 'block',
+                            }}
+                          >
+                            {t(
+                              '开启后，供应商、代理商、管理员与超级管理员在首页模型详情侧栏「我的令牌」下方可查看各通道成本价',
+                            )}
+                          </Text>
+                        </div>
+                        <div style={{ marginLeft: '16px' }}>
+                          <Switch
+                            checked={
+                              headerNavModules.home?.showCostPrice || false
+                            }
+                            onChange={handleShowCostPriceChange}
                             size='default'
                           />
                         </div>

@@ -45,19 +45,28 @@ const HomeModelList = () => {
   const [statusState] = useContext(StatusContext);
   const [userState] = useContext(UserContext);
 
-  const blurPricing = useMemo(() => {
-    if (userState?.user) return false;
+  const headerNavHomeConfig = useMemo(() => {
     try {
       const config = statusState?.status?.HeaderNavModules;
-      if (!config) return false;
+      if (!config) return null;
       const modules = JSON.parse(config);
       const home = modules?.home;
       if (typeof home === 'object' && home !== null) {
-        return !!home.blurPricing;
+        return home;
       }
     } catch {}
-    return false;
-  }, [statusState?.status?.HeaderNavModules, userState?.user]);
+    return null;
+  }, [statusState?.status?.HeaderNavModules]);
+
+  const blurPricing = useMemo(() => {
+    if (userState?.user) return false;
+    return !!headerNavHomeConfig?.blurPricing;
+  }, [headerNavHomeConfig, userState?.user]);
+
+  const showCostPrice = useMemo(
+    () => !!headerNavHomeConfig?.showCostPrice,
+    [headerNavHomeConfig],
+  );
 
   const {
     quotaTypeModels,
@@ -414,6 +423,19 @@ const HomeModelList = () => {
         t={pricingData.t}
         selectedGroup={pricingData.selectedGroup}
         blurPricing={blurPricing}
+        showCostPrice={showCostPrice}
+        channelModelRatioMap={pricingData.channelModelRatio}
+        channelModelPriceMap={pricingData.channelModelPrice}
+        channelCompletionRatioMap={pricingData.channelCompletionRatio}
+        channelCacheRatioMap={pricingData.channelCacheRatio}
+        channelCreateCacheRatioMap={pricingData.channelCreateCacheRatio}
+        channelImageRatioMap={pricingData.channelImageRatio}
+        channelImagePriceMap={pricingData.channelImagePrice}
+        channelAudioRatioMap={pricingData.channelAudioRatio}
+        channelAudioCompletionRatioMap={pricingData.channelAudioCompletionRatio}
+        channelVideoRatioMap={pricingData.channelVideoRatio}
+        channelVideoCompletionRatioMap={pricingData.channelVideoCompletionRatio}
+        channelVideoPriceMap={pricingData.channelVideoPrice}
       />
     </div>
   );

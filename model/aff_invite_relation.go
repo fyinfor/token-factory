@@ -286,9 +286,18 @@ func UpdateAffInviteeCommission(inviterId, inviteeUserId, commissionBps int) err
 type InviteeModelMarkupDiscountRateItem struct {
 	ModelName                 string  `json:"model_name"`
 	ChannelID                 int     `json:"channel_id"`
-	ChannelName               string  `json:"channel_name"`
+	ChannelPath               string  `json:"channel_path"`                 // 与定价页通道列表「复制」一致：model/route_slug 或 alias/model/channel_no
 	DefaultMarkupDiscountRate float64 `json:"default_markup_discount_rate"` // 渠道默认官方价加价折扣率(%)
 	CurrentMarkupDiscountRate float64 `json:"current_markup_discount_rate"` // 对该被邀请用户生效的加价折扣率(%)
+}
+
+// inviteePricingChannelPath 与前端 ModelChannelList 复制通道路径格式一致。
+func inviteePricingChannelPath(modelName string, ch PricingChannelItem) string {
+	modelName = strings.TrimSpace(modelName)
+	if slug := strings.TrimSpace(ch.RouteSlug); slug != "" && modelName != "" {
+		return modelName + "/" + slug
+	}
+	return strings.TrimSpace(ch.SupplierAlias) + "/" + modelName + "/" + strings.TrimSpace(ch.ChannelNo)
 }
 
 type inviteeModelMarkupDiscountRateEntry struct {
@@ -359,10 +368,8 @@ func listPricingVisibleMarkupDiscountRateItems() ([]InviteeModelMarkupDiscountRa
 		return nil, nil, err
 	}
 	visibleChannelIDs := make(map[int]struct{}, len(pricingChannels))
-	channelNames := make(map[int]string, len(pricingChannels))
 	for _, ch := range pricingChannels {
 		visibleChannelIDs[ch.ChannelID] = struct{}{}
-		channelNames[ch.ChannelID] = strings.TrimSpace(ch.ChannelName)
 	}
 	metas, err := ListChannelPricingMeta()
 	if err != nil {
@@ -390,14 +397,14 @@ func listPricingVisibleMarkupDiscountRateItems() ([]InviteeModelMarkupDiscountRa
 		items = append(items, InviteeModelMarkupDiscountRateItem{
 			ModelName:                 modelName,
 			ChannelID:                 ch.ChannelID,
-			ChannelName:               channelNames[ch.ChannelID],
+			ChannelPath:               inviteePricingChannelPath(modelName, ch),
 			DefaultMarkupDiscountRate: defaultRate,
 			CurrentMarkupDiscountRate: defaultRate,
 		})
 	}
 	sort.Slice(items, func(i, j int) bool {
-		if items[i].ModelName != items[j].ModelName {
-			return items[i].ModelName < items[j].ModelName
+		if items[i].ChannelPath != items[j].ChannelPath {
+			return items[i].ChannelPath < items[j].ChannelPath
 		}
 		return items[i].ChannelID < items[j].ChannelID
 	})
