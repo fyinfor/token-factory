@@ -17,6 +17,10 @@ const (
 	// "hidream-video" is kept as-is for backward compatibility with existing
 	// channel/endpoint configurations stored in the database.
 	EndpointTypeOpenAIVideoGW EndpointType = "hidream-video"
+	// EndpointTypeTokenFactoryVideo is the unified task video entry on TokenFactory
+	// (POST /v1/video/generations). Use this when testing TokenFactoryOpen (60) channels
+	// against an upstream TokenFactory instance — not the external Hidream /v1/videos/generations path.
+	EndpointTypeTokenFactoryVideo EndpointType = "tokenfactory-video"
 	// EndpointTypeVideoGenerator points to providers exposing
 	// /videogenerator/generate style APIs.
 	EndpointTypeVideoGenerator EndpointType = "videogenerator"
