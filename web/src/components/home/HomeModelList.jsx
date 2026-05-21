@@ -101,6 +101,15 @@ const HomeModelList = () => {
     pricingData.setCurrentPage(1);
   };
 
+  const handleFilterVendorChange = (vendor) => {
+    pricingData.setFilterVendor(vendor);
+    if (vendor === 'all') {
+      pricingData.setSortKey?.('default');
+    } else {
+      pricingData.setSortKey?.('discount');
+    }
+  };
+
   const sortOptions = [
     { value: 'default', label: pricingData.t('默认') },
     { value: 'hot', label: pricingData.t('热门') },
@@ -276,7 +285,7 @@ const HomeModelList = () => {
           <div className='home-sidebar-filters'>
             <PricingVendors
               filterVendor={pricingData.filterVendor}
-              setFilterVendor={pricingData.setFilterVendor}
+              setFilterVendor={handleFilterVendorChange}
               models={vendorModels}
               allModels={pricingData.models}
               loading={pricingData.loading}
