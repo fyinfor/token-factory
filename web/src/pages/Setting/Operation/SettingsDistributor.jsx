@@ -29,6 +29,7 @@ import {
   Col,
   Form,
   Row,
+  Select,
   Spin,
   Upload,
   Typography,
@@ -54,6 +55,7 @@ export default function SettingsDistributor(props) {
   const [loading, setLoading] = useState(false);
   const [inputs, setInputs] = useState({
     AffiliateDefaultCommissionBps: '1000',
+    DistributorCommissionMode: 'topup',
     DistributorApplyCsImageUrl: '',
     DistributorWithdrawCsImageUrl: '',
     DistributorWithdrawNotice: '',
@@ -189,9 +191,26 @@ export default function SettingsDistributor(props) {
         currentInputs[key] = props.options[key];
       }
     }
-    setInputs(currentInputs);
-    setInputsRow(structuredClone(currentInputs));
-    refForm.current.setValues(currentInputs);
+    setInputs((prev) => {
+      const next = {
+        ...prev,
+        ...currentInputs,
+        DistributorCommissionMode:
+          currentInputs.DistributorCommissionMode ??
+          prev.DistributorCommissionMode ??
+          'topup',
+      };
+      refForm.current?.setValues?.(next);
+      return next;
+    });
+    setInputsRow((prev) => ({
+      ...prev,
+      ...structuredClone(currentInputs),
+      DistributorCommissionMode:
+        currentInputs.DistributorCommissionMode ??
+        prev.DistributorCommissionMode ??
+        'topup',
+    }));
   }, [props.options]);
 
   return (
@@ -211,6 +230,30 @@ export default function SettingsDistributor(props) {
                 '配置默认代理比例、申请页与提现页客服图、提现说明及最低提现额度等。',
               )}
             </Typography.Text>
+            <Row gutter={16} className='mb-6'>
+              <Col span={24}>
+                <Text strong className='block mb-2'>
+                  {t('代理分成模式')}
+                </Text>
+                <Select
+                  value={inputs.DistributorCommissionMode || 'topup'}
+                  style={{ width: '100%', maxWidth: 420 }}
+                  optionList={[
+                    { value: 'topup', label: t('充值分成') },
+                    { value: 'profit_share', label: t('利润分成') },
+                  ]}
+                  onChange={(v) =>
+                    setInputs({
+                      ...inputs,
+                      DistributorCommissionMode: v || 'topup',
+                    })
+                  }
+                />
+                <Text type='tertiary' size='small' className='block mt-2'>
+                  {t('代理分成模式说明')}
+                </Text>
+              </Col>
+            </Row>
             <Row gutter={16}>
               <Col xs={24} sm={12} md={10}>
                 {isQuotaTokensMode ? (
@@ -299,37 +342,46 @@ export default function SettingsDistributor(props) {
             </Row>
             <Row gutter={16} className='mt-8'>
               <Col xs={24} sm={12} md={8}>
-                <div className='mb-4'>
-                  <Text strong className='block mb-2'>
-                    {t('默认代理比例')}
-                  </Text>
-                  <InputNumber
-                    value={
-                      Number(inputs.AffiliateDefaultCommissionBps || 0) / 100
-                    }
-                    onNumberChange={(n) =>
-                      setInputs({
-                        ...inputs,
-                        AffiliateDefaultCommissionBps:
-                          n === null ||
-                          n === undefined ||
-                          (typeof n === 'number' && Number.isNaN(n))
-                            ? '0'
-                            : String(Math.round(Number(n) * 100)),
-                      })
-                    }
-                    step={0.01}
-                    min={0}
-                    max={100}
-                    suffix='%'
-                    style={{ width: '100%' }}
-                  />
-                  <Text type='tertiary' size='small' className='block mt-2'>
+                {(inputs.DistributorCommissionMode || 'topup') !==
+                'profit_share' ? (
+                  <div className='mb-4'>
+                    <Text strong className='block mb-2'>
+                      {t('默认代理比例')}
+                    </Text>
+                    <InputNumber
+                      value={
+                        Number(inputs.AffiliateDefaultCommissionBps || 0) / 100
+                      }
+                      onNumberChange={(n) =>
+                        setInputs({
+                          ...inputs,
+                          AffiliateDefaultCommissionBps:
+                            n === null ||
+                            n === undefined ||
+                            (typeof n === 'number' && Number.isNaN(n))
+                              ? '0'
+                              : String(Math.round(Number(n) * 100)),
+                        })
+                      }
+                      step={0.01}
+                      min={0}
+                      max={100}
+                      suffix='%'
+                      style={{ width: '100%' }}
+                    />
+                    <Text type='tertiary' size='small' className='block mt-2'>
+                      {t(
+                        '填写 0～100 之间的百分比，例如 10 表示 10%，10.5 表示 10.5%。填 0 表示跟随系统默认。',
+                      )}
+                    </Text>
+                  </div>
+                ) : (
+                  <Text type='tertiary' size='small' className='block mb-4'>
                     {t(
-                      '填写 0～100 之间的百分比，例如 10 表示 10%，10.5 表示 10.5%。填 0 表示跟随系统默认。',
+                      '利润分成模式下不使用充值分销比例；被邀请用户 API 用量中的全局加价切片将计入代理待使用收益。',
                     )}
                   </Text>
-                </div>
+                )}
               </Col>
             </Row>
             <Row gutter={16}>

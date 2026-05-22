@@ -21,6 +21,8 @@ type AffInviteRelation struct {
 	InviteeUserId         int `json:"invitee_user_id" gorm:"not null;uniqueIndex:idx_aff_inv_pair;column:invitee_user_id"`
 	CommissionRatioBps    int `json:"commission_ratio_bps" gorm:"not null;default:0;column:commission_ratio_bps"`
 	CommissionEarnedQuota int `json:"commission_earned_quota" gorm:"not null;default:0;column:commission_earned_quota"` // 该被邀请人为邀请人累计贡献的分销额度（与 aff_quota 增量一致）
+	// ProfitShareEarnedQuota 利润分成模式下，该被邀请人用量加价切片累计为邀请人贡献的收益（与 aff_quota 中对应增量一致；与 commission_earned_quota 分列统计）。
+	ProfitShareEarnedQuota int `json:"profit_share_earned_quota" gorm:"not null;default:0;column:profit_share_earned_quota"`
 	// 被邀请用户模型加价折扣率：JSON 数组 [{model_name, channel_id, markup_discount_rate}]，仅存与渠道默认不同的项。
 	ModelMarkupDiscountRate string `json:"model_markup_discount_rate" gorm:"type:text;default:'[]';column:model_markup_discount_rate;comment:被邀请用户模型加价折扣率(JSON数组)"`
 	// 自动时间戳：创建/更新时 GORM 自动赋值
@@ -36,12 +38,13 @@ const maxAffiliateCommissionBps = 10000
 
 // AffInviteeListItem 邀请人视角下的被邀请人列表项
 type AffInviteeListItem struct {
-	InviteeId             int    `json:"invitee_id"`
-	Username              string `json:"username"`
-	DisplayName           string `json:"display_name"`
-	CommissionRatioBps    int    `json:"commission_ratio_bps"` // 万分之一单位（1=0.01%），前端展示为百分比
-	CommissionEarnedQuota int    `json:"commission_earned_quota"`
-	CreatedAt             int64  `json:"created_at"` // 邀请关系建立时间（aff_invite_relations.created_at）
+	InviteeId              int    `json:"invitee_id"`
+	Username               string `json:"username"`
+	DisplayName            string `json:"display_name"`
+	CommissionRatioBps     int    `json:"commission_ratio_bps"` // 万分之一单位（1=0.01%），前端展示为百分比
+	CommissionEarnedQuota  int    `json:"commission_earned_quota"`
+	ProfitShareEarnedQuota int    `json:"profit_share_earned_quota"`
+	CreatedAt              int64  `json:"created_at"` // 邀请关系建立时间（aff_invite_relations.created_at）
 }
 
 func defaultCommissionBpsForNewInviteRelation(inviterId int) int {
@@ -72,12 +75,13 @@ func EnsureAffInviteRelation(inviterId, inviteeUserId int) error {
 	ts := common.GetTimestamp()
 	bps := defaultCommissionBpsForNewInviteRelation(inviterId)
 	rel := AffInviteRelation{
-		InviterId:             inviterId,
-		InviteeUserId:         inviteeUserId,
-		CommissionRatioBps:    bps,
-		CommissionEarnedQuota: 0,
-		CreatedAt:             ts,
-		UpdatedAt:             ts,
+		InviterId:              inviterId,
+		InviteeUserId:          inviteeUserId,
+		CommissionRatioBps:     bps,
+		CommissionEarnedQuota:  0,
+		ProfitShareEarnedQuota: 0,
+		CreatedAt:              ts,
+		UpdatedAt:              ts,
 	}
 	return DB.Create(&rel).Error
 }
@@ -141,6 +145,9 @@ func effectiveAffiliateCommissionBps(inviter *User, inviteeUserId int) int {
 // ApplyAffiliateTopupReward 被邀请用户获得充值额度 quotaAdded 后，按 effectiveAffiliateCommissionBps 将提成记入邀请人 aff_quota / aff_history（不增加 quota）。
 // 须在支付回调完成入账后调用，与订单事务解耦。
 func ApplyAffiliateTopupReward(inviteeUserId int, quotaAdded int) {
+	if common.IsDistributorProfitShareMode() {
+		return
+	}
 	if inviteeUserId <= 0 || quotaAdded <= 0 {
 		return
 	}
@@ -217,10 +224,12 @@ func ListAffInvitees(inviterId int, pageInfo *common.PageInfo) ([]AffInviteeList
 	_ = DB.Where("inviter_id = ? AND invitee_user_id IN ?", inviterId, ids).Find(&rels).Error
 	bpsMap := make(map[int]int, len(rels))
 	earnedMap := make(map[int]int, len(rels))
+	profitEarnedMap := make(map[int]int, len(rels))
 	relCreatedMap := make(map[int]int64, len(rels))
 	for _, r := range rels {
 		bpsMap[r.InviteeUserId] = r.CommissionRatioBps
 		earnedMap[r.InviteeUserId] = r.CommissionEarnedQuota
+		profitEarnedMap[r.InviteeUserId] = r.ProfitShareEarnedQuota
 		relCreatedMap[r.InviteeUserId] = r.CreatedAt
 	}
 	defaultBps := common.AffiliateDefaultCommissionBps
@@ -233,14 +242,16 @@ func ListAffInvitees(inviterId int, pageInfo *common.PageInfo) ([]AffInviteeList
 			bps = defaultBps
 		}
 		earned := earnedMap[u.Id]
+		profitEarned := profitEarnedMap[u.Id]
 		relAt := relCreatedMap[u.Id]
 		items = append(items, AffInviteeListItem{
-			InviteeId:             u.Id,
-			Username:              u.Username,
-			DisplayName:           u.DisplayName,
-			CommissionRatioBps:    bps,
+			InviteeId:              u.Id,
+			Username:               u.Username,
+			DisplayName:            u.DisplayName,
+			CommissionRatioBps:     bps,
 			CommissionEarnedQuota: earned,
-			CreatedAt:             relAt,
+			ProfitShareEarnedQuota: profitEarned,
+			CreatedAt:              relAt,
 		})
 	}
 	return items, total, nil
@@ -266,11 +277,12 @@ func UpdateAffInviteeCommission(inviterId, inviteeUserId, commissionBps int) err
 	err = DB.Where("inviter_id = ? AND invitee_user_id = ?", inviterId, inviteeUserId).First(&rel).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		rel = AffInviteRelation{
-			InviterId:          inviterId,
-			InviteeUserId:      inviteeUserId,
-			CommissionRatioBps: commissionBps,
-			CreatedAt:          ts,
-			UpdatedAt:          ts,
+			InviterId:              inviterId,
+			InviteeUserId:          inviteeUserId,
+			CommissionRatioBps:     commissionBps,
+			ProfitShareEarnedQuota: 0,
+			CreatedAt:              ts,
+			UpdatedAt:              ts,
 		}
 		return DB.Create(&rel).Error
 	}

@@ -365,6 +365,12 @@ func GetPricing(c *gin.Context) {
 	}
 	pricingData := model.BuildPricingAPIItems(filtered, visibleChannelIDs, channelPricingMeta, false)
 
+	if exists && common.IsDistributorProfitShareMode() {
+		if uid, ok := userId.(int); ok && uid > 0 {
+			model.ApplyInviteeMarkupToPricingAPIForUser(uid, pricingData)
+		}
+	}
+
 	// 读取热度统计周期配置
 	common.OptionMapRWMutex.RLock()
 	heatStatPeriod := common.OptionMap["HeatStatPeriod"]

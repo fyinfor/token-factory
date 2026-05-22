@@ -60,6 +60,8 @@ const CombinedHeatConfig = () => {
   const [heatPeriod, setHeatPeriod] = useState('7d');
   const [periodModalVisible, setPeriodModalVisible] = useState(false);
   const [pendingPeriod, setPendingPeriod] = useState('7d');
+  const [pageSize, setPageSize] = useState(20);
+  const [currentPage, setCurrentPage] = useState(1);
 
   // 加载模型列表
   const loadModels = useCallback(async () => {
@@ -275,15 +277,15 @@ const CombinedHeatConfig = () => {
   };
 
   // 计算热度分
-  const calculateHeatScore = (record) => {
+  const calculateHeatScore = useCallback((record) => {
     const base = record.manual_base_req_count ?? 0;
     const req = record.req_count_7d ?? 0;
     const weight = record.channel_sort_weight ?? 1;
     return (base + req) * weight;
-  };
+  }, []);
 
   // 保存单个记录
-  const handleSave = async (record) => {
+  const handleSave = async (record, { silent = false } = {}) => {
     try {
       if (record.type === 'model') {
         // 保存模型权重 - 使用POST /api/models/batch_weight
@@ -306,8 +308,12 @@ const CombinedHeatConfig = () => {
           manual_base_req_count: record.manual_base_req_count,
         });
       }
-      showSuccess(t('保存成功'));
-      loadData();
+      if (silent) {
+        showSuccess(t('操作成功完成！'));
+      } else {
+        showSuccess(t('保存成功'));
+        loadData();
+      }
     } catch (error) {
       showError(t('保存失败'));
     }
@@ -392,11 +398,30 @@ const CombinedHeatConfig = () => {
       result = result.filter((item) => item.vendor_id === parseInt(searchVendor));
     }
 
-    return result;
-  }, [data, searchModel, searchChannel, searchVendor]);
+    return result.sort(
+      (a, b) => calculateHeatScore(b) - calculateHeatScore(a)
+    );
+  }, [data, searchModel, searchChannel, searchVendor, calculateHeatScore]);
+
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * pageSize;
+    return filteredData.slice(startIndex, startIndex + pageSize);
+  }, [filteredData, currentPage, pageSize]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchModel, searchChannel, searchVendor]);
 
   // 表格列定义
   const columns = [
+    {
+      title: t('序号'),
+      dataIndex: 'index',
+      width: 70,
+      render: (text, record, index) => (
+        <Text type='secondary'>{(currentPage - 1) * pageSize + index + 1}</Text>
+      ),
+    },
     {
       title: t('模型 / 渠道'),
       dataIndex: 'model_name',
@@ -465,7 +490,10 @@ const CombinedHeatConfig = () => {
           step={0.1}
           precision={2}
           onChange={(value) => handleFieldChange(record.key, 'channel_sort_weight', value)}
+          onBlur={() => handleSave(record, { silent: true })}
           style={{ width: 100 }}
+          keepFocus={true}
+          innerButtons
         />
       ),
     },
@@ -485,7 +513,10 @@ const CombinedHeatConfig = () => {
           onChange={(value) =>
             handleFieldChange(record.key, 'manual_base_req_count', value)
           }
+          onBlur={() => handleSave(record, { silent: true })}
           style={{ width: 100 }}
+          keepFocus={true}
+          innerButtons
         />
       ),
     },
@@ -512,17 +543,6 @@ const CombinedHeatConfig = () => {
         else if (score > 100) color = 'yellow';
         return <Tag color={color}>{score.toFixed(2)}</Tag>;
       },
-    },
-    {
-      title: t('操作'),
-      dataIndex: 'operate',
-      fixed: 'right',
-      width: 80,
-      render: (text, record) => (
-        <Button type='primary' size='small' onClick={() => handleSave(record)}>
-          {t('保存')}
-        </Button>
-      ),
     },
   ];
 
@@ -627,13 +647,23 @@ const CombinedHeatConfig = () => {
 
         <Table
           columns={columns}
-          dataSource={filteredData}
+          dataSource={paginatedData}
           loading={loading}
           rowSelection={rowSelection}
           pagination={{
-            pageSize: 20,
+            currentPage,
+            pageSize,
+            total: filteredData.length,
             showSizeChanger: true,
             pageSizeOpts: [20, 50, 100],
+            onChange: (page, size) => {
+              setCurrentPage(page);
+              setPageSize(size);
+            },
+            onShowSizeChange: (current, size) => {
+              setCurrentPage(1);
+              setPageSize(size);
+            },
           }}
           rowKey='key'
         />

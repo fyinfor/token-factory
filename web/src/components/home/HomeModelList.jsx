@@ -41,7 +41,7 @@ import { UserContext } from '../../context/User';
 
 const HomeModelList = () => {
   const isMobile = useIsMobile();
-  const pricingData = useModelPricingData();
+  const pricingData = useModelPricingData({ defaultSortKey: 'hot' });
   const [statusState] = useContext(StatusContext);
   const [userState] = useContext(UserContext);
 
@@ -97,12 +97,26 @@ const HomeModelList = () => {
     pricingData.setFilterEndpointType('all');
     pricingData.setFilterSupplierType?.('all');
     pricingData.setFilterSupplier && pricingData.setFilterSupplier('all');
-    pricingData.setSortKey && pricingData.setSortKey('default');
+    pricingData.setSortKey && pricingData.setSortKey('hot');
     pricingData.setCurrentPage(1);
   };
 
+  const handleFilterVendorChange = (vendor) => {
+    pricingData.setFilterVendor(vendor);
+    if (vendor === 'all') {
+      pricingData.setSortKey?.('hot');
+    } else {
+      pricingData.setSortKey?.('discount');
+    }
+  };
+
+  const sortSelectValue =
+    !pricingData.sortKey || pricingData.sortKey === 'default'
+      ? 'hot'
+      : pricingData.sortKey;
+
   const sortOptions = [
-    { value: 'default', label: pricingData.t('默认') },
+    // { value: 'default', label: pricingData.t('默认') },
     { value: 'hot', label: pricingData.t('热门') },
     { value: 'price', label: pricingData.t('价格') },
     { value: 'discount', label: pricingData.t('折扣率') },
@@ -246,7 +260,7 @@ const HomeModelList = () => {
             <Select
               size='large'
               style={{ width: '100%' }}
-              value={pricingData.sortKey || 'default'}
+              value={sortSelectValue}
               onChange={(v) =>
                 pricingData.setSortKey && pricingData.setSortKey(v)
               }
@@ -276,7 +290,7 @@ const HomeModelList = () => {
           <div className='home-sidebar-filters'>
             <PricingVendors
               filterVendor={pricingData.filterVendor}
-              setFilterVendor={pricingData.setFilterVendor}
+              setFilterVendor={handleFilterVendorChange}
               models={vendorModels}
               allModels={pricingData.models}
               loading={pricingData.loading}
@@ -350,7 +364,7 @@ const HomeModelList = () => {
                   opacity: 1,
                   boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
                 }}
-                value={pricingData.sortKey || 'default'}
+                value={sortSelectValue}
                 onChange={(v) =>
                   pricingData.setSortKey && pricingData.setSortKey(v)
                 }

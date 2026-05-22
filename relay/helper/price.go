@@ -84,7 +84,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 
 	// 提前获取成本折扣率、加价折扣率及全局倍率/固定价（新计费公式所需）
 	chDisc := model.ResolveChannelPriceDiscountPercent(channelID)
-	markupDisc := model.ResolveChannelMarkupDiscountRate(channelID)
+	markupDisc := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
 	globalRatio, _, _ := ratio_setting.GetModelRatio(info.OriginModelName)
 	globalPrice, _ := ratio_setting.GetModelPrice(info.OriginModelName, false)
 	// 全局子倍率（用于各类型加价部分的独立计算）
@@ -273,7 +273,7 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 	}
 	// 新公式：固定价格 = 渠道固定价 * 成本折扣率% + 全局固定价 * 加价折扣率%
 	chDisc := model.ResolveChannelPriceDiscountPercent(channelID)
-	markupDisc := model.ResolveChannelMarkupDiscountRate(channelID)
+	markupDisc := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
 	globalPrice, _ := ratio_setting.GetModelPrice(info.OriginModelName, false)
 	effModelPrice := model.EffectiveModelPrice(modelPrice, globalPrice, chDisc, markupDisc)
 	quota := int(effModelPrice * common.QuotaPerUnit * groupRatioInfo.GroupRatio)
@@ -505,7 +505,7 @@ func tryVideoTokenPriceData(c *gin.Context, info *relaycommon.RelayInfo) (types.
 
 	// 新公式（视频 token 计费）：有效倍率 = 渠道倍率 * 成本折扣率% + 全局倍率 * 加价折扣率%
 	chDisc := model.ResolveChannelPriceDiscountPercent(channelID)
-	markupDisc := model.ResolveChannelMarkupDiscountRate(channelID)
+	markupDisc := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
 	globalRatioVideo, _, _ := ratio_setting.GetModelRatio(modelName)
 	effRateVideo := model.EffectiveInputRate(modelRatio, globalRatioVideo, chDisc, markupDisc)
 	// rawQuota 已按 modelRatio * groupRatio 计算，用 effRateVideo/modelRatio 修正（modelRatio>0 时）
@@ -780,15 +780,10 @@ func tryVideoPerSecondRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo
 		return types.PriceData{}, false, nil
 	}
 	groupRatioInfo := HandleGroupRatio(c, info)
-	// 新公式：视频按秒计费 = pricePerSecond * 成本折扣率% * seconds * groupRatio
-	// 加价部分：全局固定价 * 加价折扣率%（视频按秒无对应全局固定价，加价忽略）
 	chDiscVPS := model.ResolveChannelPriceDiscountPercent(channelID)
-	markupDiscVPS := model.ResolveChannelMarkupDiscountRate(channelID)
-	effPricePerSecond := pricePerSecond * (chDiscVPS / 100.0)
-	if markupDiscVPS > 0 {
-		globalPriceVPS, _ := ratio_setting.GetModelPrice(info.OriginModelName, false)
-		effPricePerSecond += globalPriceVPS * (markupDiscVPS / 100.0) / math.Max(float64(seconds), 1)
-	}
+	markupDiscVPS := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
+	globalPerSec := globalVideoPerSecondUSDForRelay(info.OriginModelName, string(estimateCtx.Mode), estimateCtx.Width, estimateCtx.Height, hasAudio)
+	effPricePerSecond := model.EffectiveRuleUnitPrice(pricePerSecond, globalPerSec, chDiscVPS, markupDiscVPS)
 	rawQuota := float64(seconds) * effPricePerSecond * common.QuotaPerUnit * groupRatioInfo.GroupRatio
 	chDiscCopyVPS := chDiscVPS
 	quota := int(math.Round(rawQuota))
@@ -911,11 +906,10 @@ func tryVideoPerVideoRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo)
 		}
 	}
 
-	// 新公式：视频按条计费 固定价 = 渠道固定价 * 成本折扣率% + 全局固定价 * 加价折扣率%
 	chDiscVPV := model.ResolveChannelPriceDiscountPercent(channelID)
-	markupDiscVPV := model.ResolveChannelMarkupDiscountRate(channelID)
-	globalPriceVPV, _ := ratio_setting.GetModelPrice(modelName, false)
-	effUsd := model.EffectiveModelPrice(usd, globalPriceVPV, chDiscVPV, markupDiscVPV)
+	markupDiscVPV := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
+	globalUsd := globalVideoPerVideoUSDForRelay(modelName, string(estimateCtx.Mode), estimateCtx.Width, estimateCtx.Height, hasAudio)
+	effUsd := model.EffectiveRuleUnitPrice(usd, globalUsd, chDiscVPV, markupDiscVPV)
 	rawQuota = effUsd * common.QuotaPerUnit * groupRatioInfo.GroupRatio
 	chDiscCopyVPV := chDiscVPV
 	quota := int(math.Round(rawQuota))
@@ -935,7 +929,7 @@ func tryVideoPerVideoRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo)
 		ChannelPriceDiscount:  &chDiscCopyVPV,
 		CostDiscountPercent:   chDiscVPV,
 		MarkupDiscountPercent: markupDiscVPV,
-		GlobalModelPrice:      globalPriceVPV,
+		GlobalModelPrice:      globalUsd,
 	}
 	if common.DebugEnabled {
 		logger.LogDebug(c, fmt.Sprintf(

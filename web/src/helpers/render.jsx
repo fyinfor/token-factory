@@ -1273,14 +1273,36 @@ export function convertUSDToCurrency(usdAmount, digits = 2) {
   return symbol + parseFloat(convertedAmount.toFixed(digits));
 }
 
-export function renderQuota(quota, digits = 2) {
+/** 按展示金额选择小数位：常态 minDigits；若舍入为 0 但实际 >0 则增至 maxDigits。 */
+export function pickQuotaDisplayFractionDigits(
+  displayValue,
+  minDigits = 2,
+  maxDigits = 6,
+) {
+  const v = Number(displayValue);
+  if (!Number.isFinite(v) || v === 0) {
+    return minDigits;
+  }
+  if (parseFloat(v.toFixed(minDigits)) !== 0) {
+    return minDigits;
+  }
+  for (let d = minDigits + 1; d <= maxDigits; d++) {
+    if (parseFloat(v.toFixed(d)) !== 0) {
+      return d;
+    }
+  }
+  return maxDigits;
+}
+
+/** 将内部额度转为当前展示货币下的数值与符号（TOKENS 模式返回 null，由调用方走 renderNumber）。 */
+export function quotaToDisplayCurrencyParts(quota) {
   let quotaPerUnit = localStorage.getItem('quota_per_unit');
   const quotaDisplayType = localStorage.getItem('quota_display_type') || 'USD';
   quotaPerUnit = parseFloat(quotaPerUnit);
   if (quotaDisplayType === 'TOKENS') {
-    return renderNumber(quota);
+    return null;
   }
-  const resultUSD = quota / quotaPerUnit;
+  const resultUSD = Number(quota) / quotaPerUnit;
   let symbol = '$';
   let value = resultUSD;
   if (quotaDisplayType === 'CNY') {
@@ -1308,11 +1330,34 @@ export function renderQuota(quota, digits = 2) {
     value = resultUSD * rate;
     symbol = symbolCustom;
   }
+  return { symbol, value };
+}
+
+export function renderQuota(quota, digits = 2) {
+  const parts = quotaToDisplayCurrencyParts(quota);
+  if (parts === null) {
+    return renderNumber(quota);
+  }
+  const { symbol, value } = parts;
   const fixedResult = parseFloat(value.toFixed(digits));
   if (fixedResult === 0 && quota > 0 && value > 0) {
     const minValue = Math.pow(10, -digits);
     return symbol + trimFixedDecimalDisplay(minValue, digits);
   }
+  return symbol + trimFixedDecimalDisplay(fixedResult, digits);
+}
+
+/**
+ * 额度展示：默认保留 minDigits 位小数；极低分成在舍入为 0 时自动增至 maxDigits 位（不伪造最小展示值）。
+ */
+export function renderQuotaFlexible(quota, minDigits = 2, maxDigits = 6) {
+  const parts = quotaToDisplayCurrencyParts(quota);
+  if (parts === null) {
+    return renderNumber(quota);
+  }
+  const { symbol, value } = parts;
+  const digits = pickQuotaDisplayFractionDigits(value, minDigits, maxDigits);
+  const fixedResult = parseFloat(value.toFixed(digits));
   return symbol + trimFixedDecimalDisplay(fixedResult, digits);
 }
 

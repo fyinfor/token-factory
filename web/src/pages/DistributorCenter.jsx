@@ -247,6 +247,13 @@ export default function DistributorCenter() {
 
   const affQuotaFloor = Math.floor(Number(center?.aff_quota) || 0);
   const minQInternal = minWithdrawQuota;
+  const isProfitShareMode = useMemo(
+    () =>
+      String(statusState?.status?.distributor_commission_mode || 'topup') ===
+      'profit_share',
+    [statusState?.status?.distributor_commission_mode],
+  );
+
   /** 法币模式下与划转一致的展示上下界 */
   const wdFiatMin = useMemo(() => {
     if (isQuotaTokensMode || affQuotaFloor <= 0) return undefined;
@@ -609,43 +616,52 @@ export default function DistributorCenter() {
     setDiscountModalOpen(true);
   };
 
-  const columns = [
-    {
-      title: t('被邀请用户'),
-      dataIndex: 'username',
-      render: (_, r) => r.display_name || r.username || r.invitee_id,
-    },
-    {
-      title: t('邀请时间'),
-      dataIndex: 'created_at',
-      width: 180,
-      render: (ts) =>
-        ts ? dayjs.unix(Number(ts)).format('YYYY-MM-DD HH:mm') : '—',
-    },
-    {
-      title: t('累计分成额度'),
-      dataIndex: 'commission_earned_quota',
-      render: (q) => renderQuota(q || 0),
-    },
-    {
-      title: t('操作'),
-      width: 160,
-      render: (_, r) => (
-        <Space>
-          <Button size='small' type='tertiary' onClick={() => openDetail(r)}>
-            {t('详情')}
-          </Button>
-          <Button
-            size='small'
-            type='tertiary'
-            onClick={() => openDiscountModal(r)}
-          >
-            {t('模型折扣率')}
-          </Button>
-        </Space>
-      ),
-    },
-  ];
+  const columns = useMemo(
+    () => [
+      {
+        title: t('被邀请用户'),
+        dataIndex: 'username',
+        render: (_, r) => r.display_name || r.username || r.invitee_id,
+      },
+      {
+        title: t('邀请时间'),
+        dataIndex: 'created_at',
+        width: 180,
+        render: (ts) =>
+          ts ? dayjs.unix(Number(ts)).format('YYYY-MM-DD HH:mm') : '—',
+      },
+      {
+        title: isProfitShareMode
+          ? t('累计利润分成额度')
+          : t('累计分成额度'),
+        dataIndex: isProfitShareMode
+          ? 'profit_share_earned_quota'
+          : 'commission_earned_quota',
+        render: (q) => renderQuota(q || 0),
+      },
+      {
+        title: t('操作'),
+        width: 160,
+        render: (_, r) => (
+          <Space>
+            <Button size='small' type='tertiary' onClick={() => openDetail(r)}>
+              {t('详情')}
+            </Button>
+            {isProfitShareMode ? (
+              <Button
+                size='small'
+                type='tertiary'
+                onClick={() => openDiscountModal(r)}
+              >
+                {t('模型折扣率')}
+              </Button>
+            ) : null}
+          </Space>
+        ),
+      },
+    ],
+    [isProfitShareMode, t],
+  );
 
   if (!isUserDistributor) {
     return null;
@@ -660,9 +676,15 @@ export default function DistributorCenter() {
       <Banner
         type='info'
         className='mt-2 !rounded-xl'
-        description={t(
-          '邀请的用户充值后，您将获得对应比例的分销额度（待使用收益）。分成比例以您账号当前设置为准；可在「详情」中查看每笔充值的入账额度、当时比例与收益。',
-        )}
+        description={
+          isProfitShareMode
+            ? t(
+                '邀请用户用量产生的加价部分将计入您的待使用收益，可在详情中按笔查看。',
+              )
+            : t(
+                '邀请的用户充值后，您将获得对应比例的分销额度（待使用收益）。分成比例以您账号当前设置为准；可在「详情」中查看每笔充值的入账额度、当时比例与收益。',
+              )
+        }
       />
 
       <div className='mt-2 flex flex-col xl:flex-row gap-8 xl:gap-10 items-start'>
@@ -695,10 +717,11 @@ export default function DistributorCenter() {
                           marginTop: 6,
                         }}
                       >
-                        {t('当前默认分销比例')}：
-                        {formatCommissionRatioPercent(
-                          center?.effective_commission_bps ?? 0,
-                        )}
+                        {isProfitShareMode
+                          ? t('利润分成模式下不使用充值分销比例')
+                          : `${t('当前默认分销比例')}：${formatCommissionRatioPercent(
+                              center?.effective_commission_bps ?? 0,
+                            )}`}
                       </Text>
                     </div>
                     <div className='flex flex-wrap items-center justify-end gap-2 flex-shrink-0'>
@@ -916,6 +939,7 @@ export default function DistributorCenter() {
         }}
         inviteeId={detailInviteeId}
         inviteeLabel={detailInviteeLabel}
+        commissionMode={isProfitShareMode ? 'profit_share' : 'topup'}
       />
 
       <InviteeModelDiscountModal
