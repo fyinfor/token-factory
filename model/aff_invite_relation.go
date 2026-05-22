@@ -24,7 +24,7 @@ type AffInviteRelation struct {
 	// ProfitShareEarnedQuota 利润分成模式下，该被邀请人用量加价切片累计为邀请人贡献的收益（与 aff_quota 中对应增量一致；与 commission_earned_quota 分列统计）。
 	ProfitShareEarnedQuota int `json:"profit_share_earned_quota" gorm:"not null;default:0;column:profit_share_earned_quota"`
 	// 被邀请用户模型加价折扣率：JSON 数组 [{model_name, channel_id, markup_discount_rate}]，仅存与渠道默认不同的项。
-	ModelMarkupDiscountRate string `json:"model_markup_discount_rate" gorm:"type:text;default:'[]';column:model_markup_discount_rate;comment:被邀请用户模型加价折扣率(JSON数组)"`
+	ModelMarkupDiscountRate string `json:"model_markup_discount_rate" gorm:"type:text;column:model_markup_discount_rate;comment:被邀请用户模型加价折扣率(JSON数组)"`
 	// 自动时间戳：创建/更新时 GORM 自动赋值
 	CreatedAt int64 `json:"created_at" gorm:"autoCreateTime;bigint;comment:创建时间"`
 	UpdatedAt int64 `json:"updated_at" gorm:"autoUpdateTime;bigint;comment:更新时间"`
@@ -75,13 +75,14 @@ func EnsureAffInviteRelation(inviterId, inviteeUserId int) error {
 	ts := common.GetTimestamp()
 	bps := defaultCommissionBpsForNewInviteRelation(inviterId)
 	rel := AffInviteRelation{
-		InviterId:              inviterId,
-		InviteeUserId:          inviteeUserId,
-		CommissionRatioBps:     bps,
-		CommissionEarnedQuota:  0,
-		ProfitShareEarnedQuota: 0,
-		CreatedAt:              ts,
-		UpdatedAt:              ts,
+		InviterId:               inviterId,
+		InviteeUserId:           inviteeUserId,
+		CommissionRatioBps:      bps,
+		CommissionEarnedQuota:   0,
+		ProfitShareEarnedQuota:  0,
+		ModelMarkupDiscountRate: "[]",
+		CreatedAt:               ts,
+		UpdatedAt:               ts,
 	}
 	return DB.Create(&rel).Error
 }
@@ -249,7 +250,7 @@ func ListAffInvitees(inviterId int, pageInfo *common.PageInfo) ([]AffInviteeList
 			Username:               u.Username,
 			DisplayName:            u.DisplayName,
 			CommissionRatioBps:     bps,
-			CommissionEarnedQuota: earned,
+			CommissionEarnedQuota:  earned,
 			ProfitShareEarnedQuota: profitEarned,
 			CreatedAt:              relAt,
 		})
