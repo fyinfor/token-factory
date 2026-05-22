@@ -9,7 +9,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 )
 
@@ -35,6 +34,10 @@ func ResolveActualTaskQuotaOnSubmit(c *gin.Context, info *relaycommon.RelayInfo,
 }
 
 func calcQuotaByUpstreamTokens(info *relaycommon.RelayInfo, totalTokens int) int {
+	return calcQuotaByUpstreamTokensWithMarkup(info, totalTokens, info.PriceData.MarkupDiscountPercent)
+}
+
+func calcQuotaByUpstreamTokensWithMarkup(info *relaycommon.RelayInfo, totalTokens int, markupDisc float64) int {
 	if info == nil || totalTokens <= 0 {
 		return 0
 	}
@@ -51,7 +54,6 @@ func calcQuotaByUpstreamTokens(info *relaycommon.RelayInfo, totalTokens int) int
 	if costDisc == 0 {
 		costDisc = model.ResolveChannelPriceDiscountPercent(info.ChannelId)
 	}
-	markupDisc := info.PriceData.MarkupDiscountPercent
 	globalRatio := info.PriceData.GlobalModelRatio
 	effRate := model.EffectiveInputRate(modelRatio, globalRatio, costDisc, markupDisc)
 	return int(math.Round(float64(totalTokens) * effRate * groupRatio))
@@ -69,17 +71,9 @@ func calcVideoPerSecondQuotaByTaskData(c *gin.Context, info *relaycommon.RelayIn
 	if modelName == "" {
 		return 0
 	}
-	rules, ok := ratio_setting.GetChannelVideoPricingRules(info.ChannelId, modelName)
-	if !ok || !ratio_setting.HasUsableVideoPerSecondRules(rules) {
-		var globalOK bool
-		rules, globalOK = ratio_setting.GetVideoPricingRules(modelName)
-		if !globalOK || !ratio_setting.HasUsableVideoPerSecondRules(rules) {
-			return 0
-		}
-	}
 	mode := detectVideoBillingModeFromSubmitRequest(c)
-	pricePerSec, ok := matchPerSecondPrice(rules, mode, meta.Width, meta.Height, meta.HasAudio)
-	if !ok || pricePerSec <= 0 {
+	channelPerSec := channelVideoPerSecondUSD(info.ChannelId, modelName, mode, meta.Width, meta.Height, meta.HasAudio)
+	if channelPerSec <= 0 {
 		return 0
 	}
 	seconds := int(math.Ceil(meta.DurationSec))
@@ -90,20 +84,71 @@ func calcVideoPerSecondQuotaByTaskData(c *gin.Context, info *relaycommon.RelayIn
 	if groupRatio <= 0 {
 		groupRatio = 1
 	}
-	// 新公式：视频按秒计费 = (渠道价 * 成本折扣率% + 全局价 * 加价折扣率%) * seconds * groupRatio * QuotaPerUnit
 	costDiscVPS := info.PriceData.CostDiscountPercent
 	if costDiscVPS == 0 {
 		costDiscVPS = model.ResolveChannelPriceDiscountPercent(info.ChannelId)
 	}
 	markupDiscVPS := info.PriceData.MarkupDiscountPercent
-	globalPriceVPS, _ := ratio_setting.GetModelPrice(info.OriginModelName, false)
-	effPricePerSec := model.EffectiveModelPrice(pricePerSec, globalPriceVPS, costDiscVPS, markupDiscVPS)
+	globalPerSec := globalVideoPerSecondUSD(modelName, mode, meta.Width, meta.Height, meta.HasAudio)
+	effPricePerSec := effectiveVideoPerSecondUSD(channelPerSec, globalPerSec, costDiscVPS, markupDiscVPS)
 	rawQuota := float64(seconds) * effPricePerSec * common.QuotaPerUnit * groupRatio
 	quota := int(math.Round(rawQuota))
 	if quota <= 0 && rawQuota > 0 {
 		return 1
 	}
 	return quota
+}
+
+// calcVideoPerSecondQuotaFromTaskReq 与 calcVideoPerSecondQuotaByTaskData 相同公式，入参为已解析的请求体。
+func calcVideoPerSecondQuotaFromTaskReq(info *relaycommon.RelayInfo, req *relaycommon.TaskSubmitReq, markupDisc float64) int {
+	if info == nil || req == nil {
+		return 0
+	}
+	modelName := strings.TrimSpace(info.OriginModelName)
+	if modelName == "" {
+		return 0
+	}
+	mode := detectVideoBillingModeFromTaskReq(req)
+	width, height := videoDimensionsFromTaskRequest(*req)
+	hasAudio := taskRequestHasAudio(*req)
+	channelPerSec := channelVideoPerSecondUSD(info.ChannelId, modelName, mode, width, height, hasAudio)
+	if channelPerSec <= 0 {
+		return 0
+	}
+	seconds := videoDurationFromTaskRequest(*req)
+	if seconds <= 0 {
+		seconds = 5
+	}
+	seconds = int(math.Ceil(float64(seconds)))
+	groupRatio := info.PriceData.GroupRatioInfo.GroupRatio
+	if groupRatio <= 0 {
+		groupRatio = 1
+	}
+	costDiscVPS := info.PriceData.CostDiscountPercent
+	if costDiscVPS == 0 {
+		costDiscVPS = model.ResolveChannelPriceDiscountPercent(info.ChannelId)
+	}
+	globalPerSec := globalVideoPerSecondUSD(modelName, mode, width, height, hasAudio)
+	effPricePerSec := effectiveVideoPerSecondUSD(channelPerSec, globalPerSec, costDiscVPS, markupDisc)
+	rawQuota := float64(seconds) * effPricePerSec * common.QuotaPerUnit * groupRatio
+	quota := int(math.Round(rawQuota))
+	if quota <= 0 && rawQuota > 0 {
+		return 1
+	}
+	return quota
+}
+
+func detectVideoBillingModeFromTaskReq(req *relaycommon.TaskSubmitReq) string {
+	if req == nil {
+		return "text_to_video"
+	}
+	if strings.TrimSpace(req.InputReference) != "" {
+		return "video_to_video"
+	}
+	if strings.TrimSpace(req.Image) != "" || len(req.Images) > 0 {
+		return "image_to_video"
+	}
+	return "text_to_video"
 }
 
 func detectVideoBillingModeFromSubmitRequest(c *gin.Context) string {
@@ -114,13 +159,7 @@ func detectVideoBillingModeFromSubmitRequest(c *gin.Context) string {
 	if err != nil {
 		return "text_to_video"
 	}
-	if strings.TrimSpace(req.InputReference) != "" {
-		return "video_to_video"
-	}
-	if strings.TrimSpace(req.Image) != "" || len(req.Images) > 0 {
-		return "image_to_video"
-	}
-	return "text_to_video"
+	return detectVideoBillingModeFromTaskReq(&req)
 }
 
 func extractTotalTokensFromTaskData(taskData []byte) int {

@@ -192,6 +192,12 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		tokenFactoryError = firstChannelErr
 		return
 	}
+	if relayFormat != types.RelayFormatTask {
+		if tfErr := errVideoTaskChannelOnNonTaskRelay(firstChannel); tfErr != nil {
+			tokenFactoryError = tfErr
+			return
+		}
+	}
 	if relayInfo.ChannelMeta == nil {
 		relayInfo.InitChannelMeta(c)
 	}
@@ -233,6 +239,14 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			if channelErr != nil {
 				logger.LogError(c, channelErr.Error())
 				tokenFactoryError = channelErr
+				break
+			}
+		}
+		if relayFormat != types.RelayFormatTask {
+			if tfErr := errVideoTaskChannelOnNonTaskRelay(channel); tfErr != nil {
+				tokenFactoryError = tfErr
+				relayInfo.LastError = tokenFactoryError
+				processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), tokenFactoryError)
 				break
 			}
 		}
@@ -337,6 +351,24 @@ func fastTokenCountMetaForPricing(request dto.Request) *types.TokenCountMeta {
 		// Best-effort: leave CombineText empty to avoid large allocations.
 	}
 	return meta
+}
+
+// errVideoTaskChannelOnNonTaskRelay 视频任务类渠道（Sora/OpenAI 视频/腾讯云视频等）只能走 RelayTask 与 ModelPriceHelperVideo；
+// 若误命中 /v1/chat/completions 等会按文本 token 计费，导致控制台日志与利润分成错误。
+func errVideoTaskChannelOnNonTaskRelay(ch *model.Channel) *types.TokenFactoryError {
+	if ch == nil || !constant.IsVideoTaskChannel(ch.Type) {
+		return nil
+	}
+	return types.NewErrorWithStatusCode(
+		fmt.Errorf(
+			"当前模型命中渠道「%s」(type=%d) 为视频任务渠道，仅支持视频任务接口（如 POST /v1/videos 或操练场 POST /api/playground/videos），"+
+				"不能使用聊天补全、嵌入、图生等非任务接口，否则会按文本 token 误计费；请改用视频任务 API 或为该模型配置文本类渠道",
+			ch.Name, ch.Type,
+		),
+		types.ErrorCodeInvalidRequest,
+		http.StatusBadRequest,
+		types.ErrOptionWithSkipRetry(),
+	)
 }
 
 func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service.RetryParam) (*model.Channel, *types.TokenFactoryError) {

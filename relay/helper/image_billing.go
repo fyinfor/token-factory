@@ -49,28 +49,22 @@ func FinalizeImagePerImageBilling(c *gin.Context, info *relaycommon.RelayInfo, r
 		estimateCtx.Height = h
 	}
 
-	rules, hasRules := resolveImagePricingRules(channelID, modelName)
-	fallbackUSD, hasFallback := resolveImageFlatUSD(channelID, modelName)
-	if usdPerImage, okPrice := matchFlatPerImageUSDRules(estimateCtx, rules, hasRules, fallbackUSD, hasFallback); okPrice && usdPerImage > 0 {
-		info.ImageBilling.UsdPerImage = usdPerImage
-		info.PriceData.ModelPrice = usdPerImage
-	} else if info.ImageBilling.UsdPerImage > 0 {
-		info.PriceData.ModelPrice = info.ImageBilling.UsdPerImage
+	if !SyncImagePerImagePriceData(c, info, estimateCtx) {
+		info.PriceData.AddOtherRatio("n", float64(actualCount))
+		if info.ImageBilling != nil {
+			info.ImageBilling.Width = estimateCtx.Width
+			info.ImageBilling.Height = estimateCtx.Height
+			info.ImageBilling.Count = actualCount
+			info.ImageBilling.Mode = string(estimateCtx.Mode)
+		}
+		return
 	}
 
-	info.PriceData.AddOtherRatio("n", float64(actualCount))
-	if info.ImageBilling != nil {
-		info.ImageBilling.UsdPerImage = info.PriceData.ModelPrice
-		info.ImageBilling.Width = estimateCtx.Width
-		info.ImageBilling.Height = estimateCtx.Height
-		info.ImageBilling.Count = actualCount
-		info.ImageBilling.Mode = string(estimateCtx.Mode)
-	}
-
-	if common.DebugEnabled {
+	if common.DebugEnabled && info.ImageBilling != nil {
 		logger.LogDebug(c, fmt.Sprintf(
-			"[image][finalize] model=%s mode=%s w=%d h=%d actualCount=%d usdPerImage=%.6f",
-			modelName, estimateCtx.Mode, estimateCtx.Width, estimateCtx.Height, actualCount, info.PriceData.ModelPrice,
+			"[image][finalize] model=%s mode=%s w=%d h=%d actualCount=%d channelUSD=%.6f globalUSD=%.6f effUSD=%.6f quota=%d",
+			modelName, estimateCtx.Mode, estimateCtx.Width, estimateCtx.Height, actualCount,
+			info.PriceData.ModelPrice, info.PriceData.GlobalModelPrice, info.ImageBilling.UsdPerImage, info.PriceData.Quota,
 		))
 	}
 }

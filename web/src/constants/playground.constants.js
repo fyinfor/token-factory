@@ -143,6 +143,15 @@ export const ERROR_MESSAGES = {
   NETWORK_ERROR: '网络连接失败或服务器无响应',
 };
 
+/** 操练场文生视频时长（秒）：3～30，默认 5 */
+export const PLAYGROUND_VIDEO_DURATION_OPTIONS = Array.from(
+  { length: 28 },
+  (_, i) => {
+    const sec = i + 3;
+    return { label: `${sec}s`, value: sec };
+  },
+);
+
 // 操练场图片分辨率：value 为上游 size，label 仅展示 480p / 720p 等
 export const PLAYGROUND_IMAGE_SIZE_OPTIONS = [
   { label: '480p', value: '854x480' },

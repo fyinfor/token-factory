@@ -38,6 +38,10 @@ func GetInviteeModelDiscounts(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "仅分销商可查看"})
 		return
 	}
+	if !common.IsDistributorProfitShareMode() {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "当前站点未启用利润分成模式"})
+		return
+	}
 
 	inviteeId, err := strconv.Atoi(c.Query("invitee_id"))
 	if err != nil || inviteeId <= 0 {
@@ -73,6 +77,10 @@ func PutInviteeModelDiscounts(c *gin.Context) {
 	u, err := model.GetUserById(userId, false)
 	if err != nil || !model.UserIsDistributor(u) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "仅分销商可操作"})
+		return
+	}
+	if !common.IsDistributorProfitShareMode() {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "当前站点未启用利润分成模式"})
 		return
 	}
 

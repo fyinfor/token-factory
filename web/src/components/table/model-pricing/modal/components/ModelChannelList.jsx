@@ -647,12 +647,7 @@ const ModelChannelList = ({
             <Avatar size='small' color='orange' className='mr-2 shadow-md'>
               <span className='font-semibold text-sm leading-none'>$</span>
             </Avatar>
-            <div>
-              <Text className='text-lg font-medium'>{t('成本价')}</Text>
-              <div className='text-xs text-gray-600'>
-                {t('渠道或全局按量计费价格 × 渠道成本折扣率')}
-              </div>
-            </div>
+            <Text className='text-lg font-medium'>{t('成本价')}</Text>
           </div>
           <div className='space-y-3'>
             {channelList.map((channel, idx) => {
@@ -665,21 +660,25 @@ const ModelChannelList = ({
               if (!hasCostContent) {
                 return null;
               }
-              const channelBadge =
-                channel.route_slug || channel.channel_no || String(idx + 1);
               return (
                 <div
                   key={`cost-${channel.channel_id}-${idx}`}
                   className='rounded-lg border border-semi-color-border px-3 py-2'
                 >
-                  <div className='text-xs text-gray-500 mb-2'>
-                    {channel.supplier_alias || t('通道')} · {channelBadge}
-                    {channel.price_discount_percent != null ? (
-                      <span className='ml-2'>
-                        {t('成本折扣')}: {channel.price_discount_percent}%
+                  {channel.price_discount_percent != null ? (
+                    <div className='mb-2'>
+                      <span
+                        className='inline-block text-xs font-medium px-2 py-0.5 rounded-md'
+                        style={{
+                          backgroundColor:
+                            'var(--semi-color-primary-light-active)',
+                          color: 'var(--semi-color-primary)',
+                        }}
+                      >
+                        {t('折扣')}：{channel.price_discount_percent}%
                       </span>
-                    ) : null}
-                  </div>
+                    </div>
+                  ) : null}
                   <div className='flex flex-col gap-1 text-sm'>
                     {costItems.map((item) => (
                       <div

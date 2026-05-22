@@ -187,7 +187,16 @@ export const buildApiPayload = (
     const height = Number(inputs.video_height) || 720;
     const motionValue = Number(inputs.video_motion);
     const motion = Number.isFinite(motionValue) ? motionValue : 0.4;
-    const videoDuration = Number(inputs.video_duration) || 5;
+    const rawVideoDuration = Number(inputs.video_duration);
+    const videoDuration = Math.max(
+      3,
+      Math.min(
+        30,
+        Number.isFinite(rawVideoDuration) && rawVideoDuration > 0
+          ? Math.round(rawVideoDuration)
+          : 5,
+      ),
+    );
     const shortSide = Math.min(width, height);
     const resolution =
       shortSide >= 1080 ? '1080p' : shortSide >= 720 ? '720p' : '480p';
