@@ -41,7 +41,7 @@ import { UserContext } from '../../context/User';
 
 const HomeModelList = () => {
   const isMobile = useIsMobile();
-  const pricingData = useModelPricingData();
+  const pricingData = useModelPricingData({ defaultSortKey: 'hot' });
   const [statusState] = useContext(StatusContext);
   const [userState] = useContext(UserContext);
 
@@ -109,6 +109,11 @@ const HomeModelList = () => {
       pricingData.setSortKey?.('discount');
     }
   };
+
+  const sortSelectValue =
+    !pricingData.sortKey || pricingData.sortKey === 'default'
+      ? 'hot'
+      : pricingData.sortKey;
 
   const sortOptions = [
     // { value: 'default', label: pricingData.t('默认') },
@@ -255,7 +260,7 @@ const HomeModelList = () => {
             <Select
               size='large'
               style={{ width: '100%' }}
-              value={pricingData.sortKey || 'hot'}
+              value={sortSelectValue}
               onChange={(v) =>
                 pricingData.setSortKey && pricingData.setSortKey(v)
               }
@@ -359,7 +364,7 @@ const HomeModelList = () => {
                   opacity: 1,
                   boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
                 }}
-                value={pricingData.sortKey || 'hot'}
+                value={sortSelectValue}
                 onChange={(v) =>
                   pricingData.setSortKey && pricingData.setSortKey(v)
                 }

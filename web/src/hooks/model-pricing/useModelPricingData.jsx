@@ -24,7 +24,8 @@ import { Modal } from '@douyinfe/semi-ui';
 import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
 
-export const useModelPricingData = () => {
+export const useModelPricingData = (options = {}) => {
+  const { defaultSortKey = 'default' } = options;
   const { t } = useTranslation();
   const [searchValue, setSearchValue] = useState('');
   const compositionRef = useRef({ isComposition: false });
@@ -41,8 +42,8 @@ export const useModelPricingData = () => {
   const [filterTag, setFilterTag] = useState('all'); // 模型标签筛选: 'all' | string
   const [filterSupplierType, setFilterSupplierType] = useState('all'); // 供应商类型筛选: 'all' | string
   const [filterSupplier, setFilterSupplier] = useState('all'); // 供应商渠道筛选: 'all' | string (supplier_alias)
-  // 排序键: 'default' | 'price' | 'supplier_grade' | 'latency' | 'discount'
-  const [sortKey, setSortKey] = useState('default');
+  // 排序键: 'default' | 'hot' | 'price' | 'supplier_grade' | 'latency' | 'discount'
+  const [sortKey, setSortKey] = useState(defaultSortKey);
   const [pageSize, setPageSize] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
   const [currency, setCurrency] = useState('USD');
