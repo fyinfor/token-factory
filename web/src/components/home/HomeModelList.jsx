@@ -97,21 +97,21 @@ const HomeModelList = () => {
     pricingData.setFilterEndpointType('all');
     pricingData.setFilterSupplierType?.('all');
     pricingData.setFilterSupplier && pricingData.setFilterSupplier('all');
-    pricingData.setSortKey && pricingData.setSortKey('default');
+    pricingData.setSortKey && pricingData.setSortKey('hot');
     pricingData.setCurrentPage(1);
   };
 
   const handleFilterVendorChange = (vendor) => {
     pricingData.setFilterVendor(vendor);
     if (vendor === 'all') {
-      pricingData.setSortKey?.('default');
+      pricingData.setSortKey?.('hot');
     } else {
       pricingData.setSortKey?.('discount');
     }
   };
 
   const sortOptions = [
-    { value: 'default', label: pricingData.t('默认') },
+    // { value: 'default', label: pricingData.t('默认') },
     { value: 'hot', label: pricingData.t('热门') },
     { value: 'price', label: pricingData.t('价格') },
     { value: 'discount', label: pricingData.t('折扣率') },
@@ -255,7 +255,7 @@ const HomeModelList = () => {
             <Select
               size='large'
               style={{ width: '100%' }}
-              value={pricingData.sortKey || 'default'}
+              value={pricingData.sortKey || 'hot'}
               onChange={(v) =>
                 pricingData.setSortKey && pricingData.setSortKey(v)
               }
@@ -359,7 +359,7 @@ const HomeModelList = () => {
                   opacity: 1,
                   boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
                 }}
-                value={pricingData.sortKey || 'default'}
+                value={pricingData.sortKey || 'hot'}
                 onChange={(v) =>
                   pricingData.setSortKey && pricingData.setSortKey(v)
                 }
