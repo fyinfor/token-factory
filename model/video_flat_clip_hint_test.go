@@ -27,7 +27,7 @@ func TestCollectVideoFlatTiers_MinAcrossLanes(t *testing.T) {
 	if best.RawUSD != 1 || best.Lane != "image_to_video" {
 		t.Fatalf("best=%+v", best)
 	}
-	rows := buildSortedTierRows(tiers, 1)
+	rows := buildSortedTierRows(tiers, ratio_setting.VideoPricingRules{}, 100, 0)
 	if len(rows) != 3 {
 		t.Fatalf("rows len=%d", len(rows))
 	}

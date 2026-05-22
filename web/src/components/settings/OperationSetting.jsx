@@ -39,6 +39,7 @@ const OperationSetting = () => {
     QuotaForInvitee: 0,
     StudentApprovalRewardQuota: 0,
     AffiliateDefaultCommissionBps: '1000',
+    DistributorCommissionMode: 'topup',
     DistributorApplyCsImageUrl: '',
     DistributorWithdrawCsImageUrl: '',
     DistributorWithdrawNotice: '',

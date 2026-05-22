@@ -356,8 +356,12 @@ func formatVideoPerSecondBillingDetail(prefix string, detail *videoPerSecondBill
 	if resolution == "" {
 		resolution = fmt.Sprintf("%dx%d", detail.RuleWidth, detail.RuleHeight)
 	}
+	pricePerSec := detail.PricePerSecond
+	if detail.EffectivePricePerSecond > 0 {
+		pricePerSec = detail.EffectivePricePerSecond
+	}
 	return fmt.Sprintf(
-		"%s：%d秒 × %s(%dx%d，实际 %dx%d，%s) %s $%g/秒 × QuotaPerUnit %.0f × 分组倍率 %.4g × 渠道折扣 %.4g%% = %d tokens",
+		"%s：%d秒 × %s(%dx%d，实际 %dx%d，%s) %s $%g/秒(渠道$%g+全局$%g×加价%.0f%%) × QuotaPerUnit %.0f × 分组倍率 %.4g × 渠道折扣 %.4g%% = %d tokens",
 		prefix,
 		detail.Seconds,
 		resolution,
@@ -367,7 +371,10 @@ func formatVideoPerSecondBillingDetail(prefix string, detail *videoPerSecondBill
 		detail.Height,
 		audioLabel(detail.HasAudio),
 		priceLabel,
+		pricePerSec,
 		detail.PricePerSecond,
+		detail.GlobalPricePerSecond,
+		detail.MarkupDiscountPercent,
 		detail.QuotaPerUnit,
 		detail.GroupRatio,
 		videoChannelDiscountPercent(detail),
@@ -394,6 +401,15 @@ func appendVideoPerSecondBillingDetailOther(other map[string]interface{}, detail
 	other["video_rule_width"] = detail.RuleWidth
 	other["video_rule_height"] = detail.RuleHeight
 	other["video_price_per_second"] = detail.PricePerSecond
+	if detail.GlobalPricePerSecond > 0 {
+		other["global_video_price_per_second"] = detail.GlobalPricePerSecond
+	}
+	if detail.EffectivePricePerSecond > 0 {
+		other["effective_video_price_per_second"] = detail.EffectivePricePerSecond
+	}
+	if detail.MarkupDiscountPercent > 0 {
+		other["markup_discount_rate"] = detail.MarkupDiscountPercent
+	}
 	other["video_quota_per_unit"] = detail.QuotaPerUnit
 	other["channel_price_discount"] = videoChannelDiscountPercent(detail)
 	other["video_billed_quota"] = quota
@@ -732,7 +748,13 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 	other["pre_consumed_quota"] = preConsumedQuota
 	other["actual_quota"] = actualQuota
 	for _, extra := range extraOther {
+		if extra == nil {
+			continue
+		}
 		for k, v := range extra {
+			if k == profitShareExtraTotalTokensKey {
+				continue
+			}
 			other[k] = v
 		}
 	}
@@ -789,11 +811,18 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 		finalGroupRatio = groupRatio
 	}
 
-	// 计算实际应扣费额度: totalTokens * modelRatio * groupRatio * 渠道折扣
-	actualQuota := int(float64(totalTokens) * modelRatio * finalGroupRatio)
-	actualQuota = model.ApplyChannelPriceDiscountToQuota(actualQuota, model.ResolveChannelPriceDiscountPercent(task.ChannelId))
+	costDisc := model.ResolveChannelPriceDiscountPercent(task.ChannelId)
+	markupDisc := model.ResolveEffectiveMarkupDiscountPercentForInviteeBilling(task.UserId, task.ChannelId, modelName)
+	globalMr, globalOK, _ := ratio_setting.GetModelRatio(modelName)
+	if !globalOK {
+		globalMr = 0
+	}
+	effRate := model.EffectiveInputRate(modelRatio, globalMr, costDisc, markupDisc)
+	actualQuota := int(math.Round(float64(totalTokens) * effRate * finalGroupRatio))
 
 	reason := fmt.Sprintf("token重算：tokens=%d, modelRatio=%.2f, groupRatio=%.2f, channelId=%d", totalTokens, modelRatio, finalGroupRatio, task.ChannelId)
-	RecalculateTaskQuota(ctx, task, actualQuota, reason)
+	RecalculateTaskQuota(ctx, task, actualQuota, reason, map[string]interface{}{
+		profitShareExtraTotalTokensKey: totalTokens,
+	})
 	return true
 }

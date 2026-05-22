@@ -353,9 +353,8 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 					SupplierType:   ch.SupplierType,
 				},
 			}
-			discountMult := ChannelPriceDiscountMultiplierForPricing(ch.PriceDiscountPercent)
-			item.VideoFlatClipHint = BuildVideoFlatClipHint(ch.ChannelID, modelName, discountMult)
-			item.ImagePerImageHint = BuildImagePerImageHint(ch.ChannelID, modelName, discountMult)
+			item.VideoFlatClipHint = BuildVideoFlatClipHint(ch.ChannelID, modelName, ch.PriceDiscountPercent, ch.MarkupDiscountRate)
+			item.ImagePerImageHint = BuildImagePerImageHint(ch.ChannelID, modelName, ch.PriceDiscountPercent, ch.MarkupDiscountRate)
 			out = append(out, item)
 		}
 	}

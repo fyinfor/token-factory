@@ -157,3 +157,13 @@ func EffectiveCacheCreationRate(channelRatio, channelCreateCacheRatio, globalRat
 func EffectiveModelPrice(channelPrice, globalPrice, costDiscPercent, markupDiscPercent float64) float64 {
 	return channelPrice*(costDiscPercent/100.0) + globalPrice*(markupDiscPercent/100.0)
 }
+
+// EffectiveRuleUnitPrice 视频/图片等「规则表单价」（美元/秒、美元/张、美元/条）的有效价。
+// 与 EffectiveModelPrice 相同：渠道规则价 × 成本折扣% + 全局规则价 × 加价折扣%。
+// 当全局规则价未配置时，回退为渠道规则价，使渠道 markup_discount_rate 仍可作用于规则计费。
+func EffectiveRuleUnitPrice(channelRuleUSD, globalRuleUSD, costDiscPercent, markupDiscPercent float64) float64 {
+	if globalRuleUSD <= 0 {
+		globalRuleUSD = channelRuleUSD
+	}
+	return EffectiveModelPrice(channelRuleUSD, globalRuleUSD, costDiscPercent, markupDiscPercent)
+}

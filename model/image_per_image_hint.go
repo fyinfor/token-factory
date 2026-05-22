@@ -102,10 +102,11 @@ func imageTierRowLess(a, b ImagePerImageTierRow) bool {
 	return laneOrderImagePerImage(a.Lane) < laneOrderImagePerImage(b.Lane)
 }
 
-func buildSortedImagePerImageTierRows(tiers []imagePerImageTier, discountMult float64) []ImagePerImageTierRow {
+func buildSortedImagePerImageTierRows(tiers []imagePerImageTier, globalRules ratio_setting.ImagePricingRules, costDiscPercent, markupDiscPercent float64) []ImagePerImageTierRow {
 	rows := make([]ImagePerImageTierRow, 0, len(tiers))
 	for _, ti := range tiers {
-		usd := ti.RawUSD * discountMult
+		globalRaw := lookupImageTierRawUSD(globalRules, ti)
+		usd := EffectiveRuleUnitPrice(ti.RawUSD, globalRaw, costDiscPercent, markupDiscPercent)
 		if usd <= 0 {
 			continue
 		}
@@ -125,37 +126,59 @@ func buildSortedImagePerImageTierRows(tiers []imagePerImageTier, discountMult fl
 	return rows
 }
 
-func resolveImageRulesForPricingCardHint(channelID int, modelName string) (ratio_setting.ImagePricingRules, bool) {
+func resolveChannelImageRulesForPricingCardHint(channelID int, modelName string) (ratio_setting.ImagePricingRules, bool) {
 	if channelID > 0 {
 		if rules, ok := ratio_setting.GetChannelImagePricingRules(channelID, modelName); ok && ratio_setting.HasUsableImagePerImageRules(rules) {
 			return rules, true
 		}
 	}
+	return ratio_setting.ImagePricingRules{}, false
+}
+
+func resolveGlobalImageRulesForPricingCardHint(modelName string) (ratio_setting.ImagePricingRules, bool) {
 	if rules, ok := ratio_setting.GetImagePricingRules(modelName); ok && ratio_setting.HasUsableImagePerImageRules(rules) {
 		return rules, true
 	}
 	return ratio_setting.ImagePricingRules{}, false
 }
 
-// BuildImagePerImageHint 汇总当前模型×渠道下图片按张档位，返回最低价档（已乘渠道展示折扣）及全部档位。
-func BuildImagePerImageHint(channelID int, modelName string, discountMult float64) *ImagePerImagePricingHint {
-	rules, ok := resolveImageRulesForPricingCardHint(channelID, modelName)
-	if !ok {
+func lookupImageTierRawUSD(rules ratio_setting.ImagePricingRules, target imagePerImageTier) float64 {
+	for _, c := range collectImagePerImageTiers(rules) {
+		if c.Lane != target.Lane {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(c.Res), strings.TrimSpace(target.Res)) {
+			continue
+		}
+		return c.RawUSD
+	}
+	return 0
+}
+
+// BuildImagePerImageHint 汇总当前模型×渠道下图片按张档位，返回最低价档（含成本折扣与加价折扣）及全部档位。
+func BuildImagePerImageHint(channelID int, modelName string, costDiscPercent, markupDiscPercent float64) *ImagePerImagePricingHint {
+	channelRules, chOK := resolveChannelImageRulesForPricingCardHint(channelID, modelName)
+	globalRules, glOK := resolveGlobalImageRulesForPricingCardHint(modelName)
+	if !chOK && !glOK {
 		return nil
 	}
-	tiers := collectImagePerImageTiers(rules)
+	rulesForTiers := channelRules
+	if !chOK {
+		rulesForTiers = globalRules
+	}
+	tiers := collectImagePerImageTiers(rulesForTiers)
 	if len(tiers) == 0 {
 		return nil
 	}
-	best, ok := pickMinImagePerImageTier(tiers)
-	if !ok || best.RawUSD <= 0 {
+	rows := buildSortedImagePerImageTierRows(tiers, globalRules, costDiscPercent, markupDiscPercent)
+	if len(rows) == 0 {
 		return nil
 	}
-	rows := buildSortedImagePerImageTierRows(tiers, discountMult)
+	bestRow := rows[0]
 	return &ImagePerImagePricingHint{
-		MinUsdAfterChannelDiscount: best.RawUSD * discountMult,
-		Resolution:                 strings.TrimSpace(best.Res),
-		Lane:                       best.Lane,
+		MinUsdAfterChannelDiscount: bestRow.UsdAfterChannelDiscount,
+		Resolution:                 bestRow.Resolution,
+		Lane:                       bestRow.Lane,
 		TierCount:                  len(tiers),
 		Tiers:                      rows,
 	}

@@ -158,6 +158,7 @@ func InitOptionMap() {
 	common.OptionMap["QuotaForInvitee"] = strconv.Itoa(common.QuotaForInvitee)
 	common.OptionMap["StudentApprovalRewardQuota"] = strconv.Itoa(common.StudentApprovalRewardQuota)
 	common.OptionMap["AffiliateDefaultCommissionBps"] = strconv.Itoa(common.AffiliateDefaultCommissionBps)
+	common.OptionMap["DistributorCommissionMode"] = common.DistributorCommissionModeTopup
 	common.OptionMap["DistributorApplyCsImageUrl"] = ""
 	common.OptionMap["DistributorWithdrawCsImageUrl"] = ""
 	common.OptionMap["DistributorWithdrawNotice"] = ""
@@ -607,6 +608,13 @@ func updateOptionMap(key string, value string) (err error) {
 			} else {
 				common.AffiliateDefaultCommissionBps = n
 			}
+		}
+	case "DistributorCommissionMode":
+		v := strings.TrimSpace(strings.ToLower(value))
+		if v == common.DistributorCommissionModeProfitShare {
+			common.DistributorCommissionMode = common.DistributorCommissionModeProfitShare
+		} else {
+			common.DistributorCommissionMode = common.DistributorCommissionModeTopup
 		}
 	case "QuotaRemindThreshold":
 		common.QuotaRemindThreshold, _ = strconv.Atoi(value)
