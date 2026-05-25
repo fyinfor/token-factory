@@ -128,6 +128,15 @@ export default function AffInviteeCommissionDetailModal({
           render: (q) => renderProfitShareQuotaCell(q),
         },
         {
+          title: t('当时分成比例'),
+          dataIndex: 'commission_bps',
+          width: 120,
+          render: (bps) =>
+            typeof bps === 'number' && bps > 0
+              ? formatCommissionRatioPercent(bps)
+              : '—',
+        },
+        {
           title: t('收益额度'),
           dataIndex: 'reward_quota',
           render: (q) => renderProfitShareQuotaCell(q),

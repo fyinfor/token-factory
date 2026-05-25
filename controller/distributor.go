@@ -484,18 +484,55 @@ func GetDistributorInviteesAdmin(c *gin.Context) {
 		return
 	}
 	pageInfo := common.GetPageQuery(c)
-	items, total, err := model.ListAffInvitees(id, pageInfo)
+	keyword := strings.TrimSpace(c.Query("keyword"))
+	if len(keyword) > 120 {
+		keyword = keyword[:120]
+	}
+	items, total, err := model.ListAffInvitees(id, keyword, pageInfo)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(items)
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    pageInfo,
-	})
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": pageInfo})
+}
+
+// GetDistributorInviteeProfitSharesAdmin 管理端查看某分销商下某一被邀请用户的利润分成消费流水（分页）。
+func GetDistributorInviteeProfitSharesAdmin(c *gin.Context) {
+	distributorId, err := strconv.Atoi(c.Param("id"))
+	if err != nil || distributorId <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "invalid distributor id"})
+		return
+	}
+	inviteeId, err := strconv.Atoi(c.Param("invitee_id"))
+	if err != nil || inviteeId <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "invalid invitee id"})
+		return
+	}
+	if !common.IsDistributorProfitShareMode() {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "当前站点未启用利润分成模式"})
+		return
+	}
+	dist, err := model.GetUserById(distributorId, false)
+	if err != nil || !model.UserIsDistributor(dist) {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "用户不是分销商"})
+		return
+	}
+	invitee, err := model.GetUserById(inviteeId, false)
+	if err != nil || invitee == nil || invitee.InviterId != distributorId {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "该用户不是此分销商邀请的下级"})
+		return
+	}
+	pageInfo := common.GetPageQuery(c)
+	items, total, err := model.ListAffInviteProfitShareLogs(distributorId, inviteeId, pageInfo)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(items)
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": pageInfo})
 }
 
 // PostDistributorWithdrawal 提交线下提现申请（暂扣 aff_quota）

@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Banner,
   Button,
@@ -32,6 +32,7 @@ import {
   Upload,
   Progress,
   Tag,
+  Tooltip,
 } from '@douyinfe/semi-ui';
 import {
   IllustrationNoResult,
@@ -47,6 +48,7 @@ import {
   commissionBpsToPercentInputString,
   parseCommissionPercentStringToBps,
   renderQuota,
+  renderQuotaFlexible,
 } from '../helpers';
 import { createCardProPagination } from '../helpers/utils';
 import { useIsMobile } from '../hooks/common/useIsMobile';
@@ -63,6 +65,23 @@ const ADMIN_KEYWORD_MAX_LEN = 120;
 
 /** 资格证书上传数量上限（与申请页一致） */
 const PROFILE_QUAL_MAX_FILES = 5;
+
+/** 利润分成额度列：与 AffInviteeCommissionDetailModal 一致的展示 */
+function renderProfitShareQuotaCell(quota) {
+  const q = Number(quota) || 0;
+  const main = renderQuotaFlexible(q, 2, 6);
+  const exact = renderQuotaFlexible(q, 6, 6);
+  if (main === exact) {
+    return main;
+  }
+  return (
+    <Tooltip content={exact}>
+      <span className='cursor-help border-b border-dotted border-gray-400'>
+        {main}
+      </span>
+    </Tooltip>
+  );
+}
 
 /** 解析后端存库的资格证书 JSON 数组字符串 */
 function parseQualificationUrls(raw) {
@@ -244,6 +263,19 @@ export default function DistributorAdmin() {
   const [invPage, setInvPage] = useState(1);
   const [invPs, setInvPs] = useState(10);
   const [invDistributorId, setInvDistributorId] = useState(null);
+  const [invKeyword, setInvKeyword] = useState('');
+  /** admin 全局：顶部 /api/status，与控制台利润分成开关一致 */
+  const [adminDistCommissionMode, setAdminDistCommissionMode] =
+    useState('topup');
+  /** 利润分成：被邀请人「消费明细」子弹窗 */
+  const [invProfitOpen, setInvProfitOpen] = useState(false);
+  const [invProfitInviteeId, setInvProfitInviteeId] = useState(null);
+  const [invProfitInviteeLabel, setInvProfitInviteeLabel] = useState('');
+  const [invProfitRows, setInvProfitRows] = useState([]);
+  const [invProfitTotal, setInvProfitTotal] = useState(0);
+  const [invProfitPage, setInvProfitPage] = useState(1);
+  const [invProfitPs, setInvProfitPs] = useState(10);
+  const [invProfitLoading, setInvProfitLoading] = useState(false);
 
   const [profileOpen, setProfileOpen] = useState(false);
   const [profileLoading, setProfileLoading] = useState(false);
@@ -329,6 +361,28 @@ export default function DistributorAdmin() {
       setDistLoading(false);
     }
   }, [distPage, distPageSize, distKeyword, distApplyTypeFilter, t]);
+
+  const loadAdminDistCommissionMode = useCallback(async () => {
+    try {
+      const res = await API.get('/api/status');
+      const { success, data } = res.data || {};
+      if (
+        success &&
+        String(data?.distributor_commission_mode || '').toLowerCase() ===
+          'profit_share'
+      ) {
+        setAdminDistCommissionMode('profit_share');
+      } else {
+        setAdminDistCommissionMode('topup');
+      }
+    } catch {
+      setAdminDistCommissionMode('topup');
+    }
+  }, []);
+
+  useEffect(() => {
+    loadAdminDistCommissionMode();
+  }, [loadAdminDistCommissionMode]);
 
   useEffect(() => {
     if (tab === 'app') loadApps();
@@ -553,16 +607,72 @@ export default function DistributorAdmin() {
     }
   };
 
+  const fetchInviteeProfitShares = useCallback(async (distributorId, inviteeId, p, ps) => {
+    if (!distributorId || !inviteeId) return;
+    setInvProfitLoading(true);
+    try {
+      const res = await API.get(
+        `/api/distributor/admin/distributors/${distributorId}/invitees/${inviteeId}/profit-shares?p=${p}&page_size=${ps}`,
+      );
+      const { success, message, data } = res.data;
+      if (!success) {
+        showError(message || t('加载失败'));
+        return;
+      }
+      setInvProfitRows(data?.items || []);
+      setInvProfitTotal(data?.total ?? 0);
+      setInvProfitPage(p);
+      setInvProfitPs(ps);
+    } catch {
+      showError(t('加载失败'));
+    } finally {
+      setInvProfitLoading(false);
+    }
+  }, [t]);
+
+  const openInviteeProfitConsumption = useCallback(
+    async (inviteeRow) => {
+      const uid = inviteeRow?.invitee_id;
+      if (!uid || !invDistributorId) return;
+      setInvProfitInviteeId(uid);
+      setInvProfitInviteeLabel(
+        String(inviteeRow.display_name || inviteeRow.username || `#${uid}`).trim(),
+      );
+      setInvProfitOpen(true);
+      setInvProfitPage(1);
+      setInvProfitPs(10);
+      await fetchInviteeProfitShares(invDistributorId, uid, 1, 10);
+    },
+    [invDistributorId, fetchInviteeProfitShares],
+  );
+
   const openInvitees = async (userId) => {
     setInvDistributorId(userId);
+    setInvKeyword('');
     setInvPage(1);
     setInvOpen(true);
-    await fetchInvitees(userId, 1, invPs);
+    await loadAdminDistCommissionMode();
+    await fetchInvitees(userId, 1, invPs, '');
   };
 
-  const fetchInvitees = async (userId, p, ps) => {
+  const fetchInvitees = async (
+    userId,
+    p,
+    ps,
+    keywordOverride = undefined,
+  ) => {
+    const kw =
+      keywordOverride !== undefined
+        ? keywordOverride
+        : invKeyword;
+    const trimmed = String(kw ?? '').trim().slice(0, ADMIN_KEYWORD_MAX_LEN);
+    const q = new URLSearchParams({
+      p: String(p),
+      page_size: String(ps),
+    });
+    if (trimmed) q.set('keyword', trimmed);
     const res = await API.get(
-      `/api/distributor/admin/distributors/${userId}/invitees?p=${p}&page_size=${ps}`,
+      `/api/distributor/admin/distributors/${userId}/invitees?${q}`,
     );
     const { success, message, data } = res.data;
     if (!success) {
@@ -573,6 +683,13 @@ export default function DistributorAdmin() {
     setInvTotal(data?.total ?? 0);
     setInvPage(p);
     setInvPs(ps);
+  };
+
+  const submitInviteeSearch = () => {
+    if (!invDistributorId) return;
+    const trimmed = invKeyword.trim().slice(0, ADMIN_KEYWORD_MAX_LEN);
+    setInvKeyword(trimmed);
+    fetchInvitees(invDistributorId, 1, invPs, trimmed);
   };
 
   const saveBps = async () => {
@@ -785,7 +902,7 @@ export default function DistributorAdmin() {
             {r.needs_supplement ? t('补充资料') : t('查看资料')}
           </Button>
           <Button size='small' onClick={() => openInvitees(r.id)}>
-            {t('邀请明细')}
+            {t('收益明细')}
           </Button>
           <Button
             size='small'
@@ -897,19 +1014,108 @@ export default function DistributorAdmin() {
     },
   ];
 
-  const invColumns = [
-    { title: t('用户'), dataIndex: 'username' },
-    {
-      title: t('分成'),
-      dataIndex: 'commission_ratio_bps',
-      render: (b) => formatCommissionRatioPercent(b),
-    },
-    {
-      title: t('累计分成额度'),
-      dataIndex: 'commission_earned_quota',
-      render: (q) => renderQuota(q || 0),
-    },
-  ];
+  const isAdminProfitShare = adminDistCommissionMode === 'profit_share';
+
+  const profitConsumptionColumns = useMemo(
+    () => [
+      {
+        title: t('时间'),
+        dataIndex: 'created_at',
+        width: 166,
+        render: (ts) =>
+          ts ? dayjs.unix(Number(ts)).format('YYYY-MM-DD HH:mm:ss') : '—',
+      },
+      {
+        title: t('模型与路由'),
+        width: 220,
+        render: (_, row) => {
+          const model = String(row?.model_name || '').trim();
+          const slug = String(row?.route_slug || '').trim();
+          if (!model && !slug) return '—';
+          if (!slug) return model;
+          return `${model}/${slug}`;
+        },
+      },
+      {
+        title: t('用户消耗额度'),
+        dataIndex: 'user_quota_charged',
+        width: 140,
+        render: (q) => renderProfitShareQuotaCell(q),
+      },
+      {
+        title: t('当时分成比例'),
+        dataIndex: 'commission_bps',
+        width: 110,
+        render: (bps) =>
+          typeof bps === 'number' && bps > 0
+            ? formatCommissionRatioPercent(bps)
+            : '—',
+      },
+      {
+        title: t('收益额度'),
+        dataIndex: 'reward_quota',
+        width: 140,
+        render: (q) => renderProfitShareQuotaCell(q),
+      },
+    ],
+    [t],
+  );
+
+  const invColumns = useMemo(() => {
+    if (isAdminProfitShare) {
+      return [
+        {
+          title: t('用户'),
+          dataIndex: 'username',
+          render: (_, r) => r.display_name || r.username || r.invitee_id,
+        },
+        {
+          title: t('邀请时间'),
+          dataIndex: 'created_at',
+          width: 168,
+          render: (ts) =>
+            ts ? dayjs.unix(Number(ts)).format('YYYY-MM-DD HH:mm') : '—',
+        },
+        {
+          title: t('分润比例'),
+          dataIndex: 'commission_ratio_bps',
+          width: 100,
+          render: (b) => formatCommissionRatioPercent(b),
+        },
+        {
+          title: t('累计利润分成额度'),
+          dataIndex: 'profit_share_earned_quota',
+          render: (q) => renderQuota(q || 0),
+        },
+        {
+          title: t('操作'),
+          width: 120,
+          render: (_, row) => (
+            <Button
+              size='small'
+              type='tertiary'
+              onClick={() => openInviteeProfitConsumption(row)}
+            >
+              {t('消费明细')}
+            </Button>
+          ),
+        },
+      ];
+    }
+    return [
+      { title: t('用户'), dataIndex: 'username' },
+      {
+        title: t('分成'),
+        dataIndex: 'commission_ratio_bps',
+        render: (b) => formatCommissionRatioPercent(b),
+      },
+      {
+        title: t('累计分成额度'),
+        dataIndex: 'commission_earned_quota',
+        render: (q) => renderQuota(q || 0),
+      },
+    ];
+  }, [isAdminProfitShare, t, openInviteeProfitConsumption]);
 
   const tableEmpty = (
     <Empty
@@ -1684,10 +1890,32 @@ export default function DistributorAdmin() {
       <Modal
         title={t('邀请用户明细')}
         visible={invOpen}
-        onCancel={() => setInvOpen(false)}
+        onCancel={() => {
+          setInvOpen(false);
+          setInvProfitOpen(false);
+          setInvKeyword('');
+        }}
         footer={null}
-        width={800}
+        width={isAdminProfitShare ? 960 : 800}
       >
+        <div className='flex items-center gap-2 mb-3'>
+          <Input
+            size='small'
+            className='w-[200px]'
+            prefix={<IconSearch />}
+            showClear
+            placeholder={t('邀请用户搜索占位')}
+            maxLength={ADMIN_KEYWORD_MAX_LEN}
+            value={invKeyword}
+            onChange={(v) =>
+              setInvKeyword(String(v ?? '').slice(0, ADMIN_KEYWORD_MAX_LEN))
+            }
+            onEnterPress={submitInviteeSearch}
+          />
+          <Button type='primary' size='small' onClick={submitInviteeSearch}>
+            {t('搜索')}
+          </Button>
+        </div>
         <Table
           columns={invColumns}
           dataSource={invRows}
@@ -1699,6 +1927,51 @@ export default function DistributorAdmin() {
               invDistributorId && fetchInvitees(invDistributorId, p, invPs),
             onPageSizeChange: (ps) =>
               invDistributorId && fetchInvitees(invDistributorId, 1, ps),
+          }}
+        />
+      </Modal>
+
+      <Modal
+        title={
+          <span>
+            {t('消费明细')}
+            {invProfitInviteeLabel ? (
+              <Text type='tertiary' size='small' className='ml-2 font-normal'>
+                {invProfitInviteeLabel}
+              </Text>
+            ) : null}
+          </span>
+        }
+        visible={invProfitOpen}
+        onCancel={() => setInvProfitOpen(false)}
+        footer={null}
+        width={920}
+      >
+        <Text type='tertiary' size='small' className='block mb-3'>
+          {t('利润分成明细说明')}
+        </Text>
+        <Table
+          loading={invProfitLoading}
+          rowKey='id'
+          columns={profitConsumptionColumns}
+          dataSource={invProfitRows}
+          pagination={{
+            currentPage: invProfitPage,
+            pageSize: invProfitPs,
+            total: invProfitTotal,
+            onPageChange: (p) =>
+              invDistributorId &&
+              invProfitInviteeId &&
+              fetchInviteeProfitShares(
+                invDistributorId,
+                invProfitInviteeId,
+                p,
+                invProfitPs,
+              ),
+            onPageSizeChange: (ps) =>
+              invDistributorId &&
+              invProfitInviteeId &&
+              fetchInviteeProfitShares(invDistributorId, invProfitInviteeId, 1, ps),
           }}
         />
       </Modal>

@@ -66,7 +66,19 @@ func TryPostWalletProfitShareForTaskBilledQuota(ctx context.Context, task *model
 		return
 	}
 	modelName := strings.TrimSpace(taskModelName(task))
-	if err := model.CreditDistributorProfitShare(invitee.InviterId, task.UserId, task.ChannelId, modelName, billedQuota, slice); err != nil {
+	bps := model.EffectiveAffiliateCommissionBps(inviter, task.UserId)
+	if bps <= 0 {
+		return
+	}
+	maxBps := 10000
+	if bps > maxBps {
+		bps = maxBps
+	}
+	reward := int(int64(slice) * int64(bps) / int64(maxBps))
+	if reward <= 0 {
+		return
+	}
+	if err := model.CreditDistributorProfitShare(invitee.InviterId, task.UserId, task.ChannelId, modelName, billedQuota, slice, reward, bps); err != nil {
 		common.SysError("TryPostWalletProfitShareForTaskBilledQuota: " + err.Error())
 	}
 }
