@@ -469,12 +469,24 @@ func tryPostWalletProfitShareCredit(ctx *gin.Context, relayInfo *relaycommon.Rel
 	if slice <= 0 {
 		return
 	}
+	bps := model.EffectiveAffiliateCommissionBps(inviter, relayInfo.UserId)
+	if bps <= 0 {
+		return
+	}
+	const maxAffBps = 10000
+	if bps > maxAffBps {
+		bps = maxAffBps
+	}
+	reward := int(int64(slice) * int64(bps) / int64(maxAffBps))
+	if reward <= 0 {
+		return
+	}
 	chID := 0
 	if relayInfo.ChannelMeta != nil {
 		chID = relayInfo.ChannelId
 	}
 	modelName := strings.TrimSpace(summary.ModelName)
-	if err := model.CreditDistributorProfitShare(invitee.InviterId, relayInfo.UserId, chID, modelName, summary.Quota, slice); err != nil {
+	if err := model.CreditDistributorProfitShare(invitee.InviterId, relayInfo.UserId, chID, modelName, summary.Quota, slice, reward, bps); err != nil {
 		common.SysError("tryPostWalletProfitShareCredit: " + err.Error())
 	}
 }

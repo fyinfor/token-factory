@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -114,9 +115,14 @@ func BackfillAffInviteRelationsFromUsers() error {
 	return nil
 }
 
-// effectiveAffiliateCommissionBps 计算本次充值应采用的分销比例（万分之一）：
-// - 分销商账号若设置了 distributor_commission_bps > 0，始终以当前账号设置为准（管理员调到 50% 后，后续充值均按 50%）；
-// - 否则回退到 aff_invite_relations 行上的比例，再回退系统默认。
+// EffectiveAffiliateCommissionBps 计算邀请人对某一被邀请人生效的分销比例（万分之一）。
+// 与充值分成、利润分成（加价切片分润）共用同一套优先级：分销商账号 distributor_commission_bps > 0 优先，
+// 否则 aff_invite_relations.commission_ratio_bps（>0），否则系统 AffiliateDefaultCommissionBps。
+func EffectiveAffiliateCommissionBps(inviter *User, inviteeUserId int) int {
+	return effectiveAffiliateCommissionBps(inviter, inviteeUserId)
+}
+
+// effectiveAffiliateCommissionBps（内部）：充值与利润分成逻辑一致。
 func effectiveAffiliateCommissionBps(inviter *User, inviteeUserId int) int {
 	if inviter == nil || inviter.Id <= 0 {
 		return common.AffiliateDefaultCommissionBps
@@ -200,17 +206,36 @@ func ApplyAffiliateTopupReward(inviteeUserId int, quotaAdded int) {
 }
 
 // ListAffInvitees 分页返回当前用户邀请注册的用户（含关系表累计分成等；单笔明细见 aff_invite_commission_logs）。
-func ListAffInvitees(inviterId int, pageInfo *common.PageInfo) ([]AffInviteeListItem, int64, error) {
+// keyword 非空时按用户名、显示名模糊匹配；若 keyword 为十进制正整数则同时匹配被邀请用户 id。
+func ListAffInvitees(inviterId int, keyword string, pageInfo *common.PageInfo) ([]AffInviteeListItem, int64, error) {
 	if inviterId <= 0 {
 		return nil, 0, errors.New("invalid inviter")
 	}
+	kw := strings.TrimSpace(keyword)
+	inviteesScope := func(db *gorm.DB) *gorm.DB {
+		db = db.Where("inviter_id = ?", inviterId)
+		if kw != "" {
+			pattern := "%" + kw + "%"
+			if uid, err := strconv.Atoi(kw); err == nil && uid > 0 {
+				db = db.Where("(id = ? OR username LIKE ? OR display_name LIKE ?)", uid, pattern, pattern)
+			} else {
+				db = db.Where("(username LIKE ? OR display_name LIKE ?)", pattern, pattern)
+			}
+		}
+		return db
+	}
+
 	var total int64
-	tx := DB.Model(&User{}).Where("inviter_id = ?", inviterId)
-	if err := tx.Count(&total).Error; err != nil {
+	if err := DB.Model(&User{}).Scopes(inviteesScope).Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
+
 	var users []User
-	err := DB.Where("inviter_id = ?", inviterId).Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&users).Error
+	err := DB.Model(&User{}).Scopes(inviteesScope).
+		Order("id desc").
+		Limit(pageInfo.GetPageSize()).
+		Offset(pageInfo.GetStartIdx()).
+		Find(&users).Error
 	if err != nil {
 		return nil, 0, err
 	}

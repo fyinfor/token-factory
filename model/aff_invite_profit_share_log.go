@@ -21,19 +21,26 @@ type AffInviteProfitShareLog struct {
 	UserQuotaCharged int    `json:"user_quota_charged" gorm:"not null;column:user_quota_charged"`
 	MarkupSliceQuota int    `json:"markup_slice_quota" gorm:"not null;column:markup_slice_quota"`
 	RewardQuota      int    `json:"reward_quota" gorm:"not null;column:reward_quota"`
-	CreatedAt        int64  `json:"created_at" gorm:"bigint;index"`
+	// CommissionBps 本条结算适用的代理分润比例（万分之一，与 AffiliateDefaultCommissionBps / EffectiveAffiliateCommissionBps 同单位）。
+	CommissionBps int   `json:"commission_bps" gorm:"not null;default:0;column:commission_bps"`
+	CreatedAt     int64 `json:"created_at" gorm:"bigint;index"`
 }
 
 func (AffInviteProfitShareLog) TableName() string {
 	return "aff_invite_profit_share_logs"
 }
 
-// CreditDistributorProfitShare 将「加价切片」额度记入邀请人 aff_quota，并累计关系表 profit_share_earned_quota。
-func CreditDistributorProfitShare(inviterId, inviteeUserId, channelId int, modelName string, userQuotaCharged, markupSliceQuota int) error {
-	if inviterId <= 0 || inviteeUserId <= 0 || markupSliceQuota <= 0 {
+// CreditDistributorProfitShare 将利润分成「入账额度」记入邀请人 aff_quota，并累计关系表 profit_share_earned_quota。
+// markupSliceQuota：用户扣费中的加价切片（分润基数）；rewardQuota：基数 × 生效分润比例后的入账额度（rewardQuota <= markupSliceQuota）。
+// commissionBps：本条入账采用的万分之一比例（记入流水供明细展示）。
+func CreditDistributorProfitShare(inviterId, inviteeUserId, channelId int, modelName string, userQuotaCharged, markupSliceQuota, rewardQuota, commissionBps int) error {
+	if inviterId <= 0 || inviteeUserId <= 0 || rewardQuota <= 0 {
 		return nil
 	}
-	reward := markupSliceQuota
+	if markupSliceQuota < 0 {
+		markupSliceQuota = 0
+	}
+	reward := rewardQuota
 	modelName = strings.TrimSpace(modelName)
 	ts := common.GetTimestamp()
 
@@ -54,6 +61,12 @@ func CreditDistributorProfitShare(inviterId, inviteeUserId, channelId int, model
 		if res.Error != nil {
 			return res.Error
 		}
+		if commissionBps < 0 {
+			commissionBps = 0
+		}
+		if commissionBps > maxAffiliateCommissionBps {
+			commissionBps = maxAffiliateCommissionBps
+		}
 		row := AffInviteProfitShareLog{
 			InviterId:        inviterId,
 			InviteeUserId:    inviteeUserId,
@@ -62,6 +75,7 @@ func CreditDistributorProfitShare(inviterId, inviteeUserId, channelId int, model
 			UserQuotaCharged: userQuotaCharged,
 			MarkupSliceQuota: markupSliceQuota,
 			RewardQuota:      reward,
+			CommissionBps:    commissionBps,
 			CreatedAt:        ts,
 		}
 		return tx.Create(&row).Error
