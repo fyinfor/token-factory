@@ -26,25 +26,12 @@ import {
   showError,
   formatCommissionRatioPercent,
   renderQuota,
-  renderQuotaFlexible,
 } from '../../helpers';
-
-/** 利润分成额度列：常态 2 位小数，极低值自动展示至多 6 位；悬停显示完整 6 位精度。 */
-function renderProfitShareQuotaCell(quota) {
-  const q = Number(quota) || 0;
-  const main = renderQuotaFlexible(q, 2, 6);
-  const exact = renderQuotaFlexible(q, 6, 6);
-  if (main === exact) {
-    return main;
-  }
-  return (
-    <Tooltip content={exact}>
-      <span className='cursor-help border-b border-dotted border-gray-400'>
-        {main}
-      </span>
-    </Tooltip>
-  );
-}
+import {
+  ProfitShareRewardColumnTitle,
+  renderProfitShareQuotaCell,
+  renderProfitShareRewardCell,
+} from './profitShareDisplay';
 
 const { Text } = Typography;
 
@@ -125,21 +112,35 @@ export default function AffInviteeCommissionDetailModal({
         {
           title: t('用户消耗额度'),
           dataIndex: 'user_quota_charged',
+          width: 130,
+          render: (q) => renderProfitShareQuotaCell(q),
+        },
+        {
+          title: (
+            <Tooltip content={t('加价切片额度说明')}>
+              <span className='cursor-help border-b border-dotted border-gray-400'>
+                {t('加价切片额度')}
+              </span>
+            </Tooltip>
+          ),
+          dataIndex: 'markup_slice_quota',
+          width: 130,
           render: (q) => renderProfitShareQuotaCell(q),
         },
         {
           title: t('当时分成比例'),
           dataIndex: 'commission_bps',
-          width: 120,
+          width: 110,
           render: (bps) =>
             typeof bps === 'number' && bps > 0
               ? formatCommissionRatioPercent(bps)
               : '—',
         },
         {
-          title: t('收益额度'),
+          title: <ProfitShareRewardColumnTitle t={t} />,
           dataIndex: 'reward_quota',
-          render: (q) => renderProfitShareQuotaCell(q),
+          width: 120,
+          render: (_, row) => renderProfitShareRewardCell(row, t),
         },
       ];
     }
@@ -190,7 +191,8 @@ export default function AffInviteeCommissionDetailModal({
       visible={visible}
       onCancel={onCancel}
       footer={null}
-      width={880}
+      width={isProfitShare ? 1180 : 880}
+      bodyStyle={isProfitShare ? { overflow: 'visible' } : undefined}
     >
       <Text type='tertiary' size='small' className='block mb-3'>
         {hintText}

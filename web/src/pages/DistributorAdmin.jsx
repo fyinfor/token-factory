@@ -48,7 +48,6 @@ import {
   commissionBpsToPercentInputString,
   parseCommissionPercentStringToBps,
   renderQuota,
-  renderQuotaFlexible,
 } from '../helpers';
 import { createCardProPagination } from '../helpers/utils';
 import { useIsMobile } from '../hooks/common/useIsMobile';
@@ -57,6 +56,11 @@ import CardTable from '../components/common/ui/CardTable';
 import { IconFile, IconSearch } from '@douyinfe/semi-icons';
 import DistributorAnalyticsBoard from '../components/distributor/DistributorAnalyticsBoard';
 import DistributorWithdrawProfileDetail from '../components/distributor/DistributorWithdrawProfileDetail';
+import {
+  ProfitShareRewardColumnTitle,
+  renderProfitShareQuotaCell,
+  renderProfitShareRewardCell,
+} from '../components/distributor/profitShareDisplay';
 
 const { Text } = Typography;
 
@@ -65,23 +69,6 @@ const ADMIN_KEYWORD_MAX_LEN = 120;
 
 /** 资格证书上传数量上限（与申请页一致） */
 const PROFILE_QUAL_MAX_FILES = 5;
-
-/** 利润分成额度列：与 AffInviteeCommissionDetailModal 一致的展示 */
-function renderProfitShareQuotaCell(quota) {
-  const q = Number(quota) || 0;
-  const main = renderQuotaFlexible(q, 2, 6);
-  const exact = renderQuotaFlexible(q, 6, 6);
-  if (main === exact) {
-    return main;
-  }
-  return (
-    <Tooltip content={exact}>
-      <span className='cursor-help border-b border-dotted border-gray-400'>
-        {main}
-      </span>
-    </Tooltip>
-  );
-}
 
 /** 解析后端存库的资格证书 JSON 数组字符串 */
 function parseQualificationUrls(raw) {
@@ -1039,23 +1026,35 @@ export default function DistributorAdmin() {
       {
         title: t('用户消耗额度'),
         dataIndex: 'user_quota_charged',
-        width: 140,
+        width: 120,
+        render: (q) => renderProfitShareQuotaCell(q),
+      },
+      {
+        title: (
+          <Tooltip content={t('加价切片额度说明')}>
+            <span className='cursor-help border-b border-dotted border-gray-400'>
+              {t('加价切片额度')}
+            </span>
+          </Tooltip>
+        ),
+        dataIndex: 'markup_slice_quota',
+        width: 120,
         render: (q) => renderProfitShareQuotaCell(q),
       },
       {
         title: t('当时分成比例'),
         dataIndex: 'commission_bps',
-        width: 110,
+        width: 100,
         render: (bps) =>
           typeof bps === 'number' && bps > 0
             ? formatCommissionRatioPercent(bps)
             : '—',
       },
       {
-        title: t('收益额度'),
+        title: <ProfitShareRewardColumnTitle t={t} />,
         dataIndex: 'reward_quota',
-        width: 140,
-        render: (q) => renderProfitShareQuotaCell(q),
+        width: 110,
+        render: (_, row) => renderProfitShareRewardCell(row, t),
       },
     ],
     [t],
@@ -1945,7 +1944,8 @@ export default function DistributorAdmin() {
         visible={invProfitOpen}
         onCancel={() => setInvProfitOpen(false)}
         footer={null}
-        width={920}
+        width={1180}
+        bodyStyle={{ overflow: 'visible' }}
       >
         <Text type='tertiary' size='small' className='block mb-3'>
           {t('利润分成明细说明')}
