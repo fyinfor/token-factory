@@ -717,11 +717,10 @@ export default function DistributorCenter() {
                           marginTop: 6,
                         }}
                       >
-                        {isProfitShareMode
-                          ? t('利润分成模式下不使用充值分销比例')
-                          : `${t('当前默认分销比例')}：${formatCommissionRatioPercent(
-                              center?.effective_commission_bps ?? 0,
-                            )}`}
+                        {t('当前分销比例')}：
+                        {formatCommissionRatioPercent(
+                          center?.effective_commission_bps ?? 0,
+                        )}
                       </Text>
                     </div>
                     <div className='flex flex-wrap items-center justify-end gap-2 flex-shrink-0'>

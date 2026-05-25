@@ -342,46 +342,42 @@ export default function SettingsDistributor(props) {
             </Row>
             <Row gutter={16} className='mt-8'>
               <Col xs={24} sm={12} md={8}>
-                {(inputs.DistributorCommissionMode || 'topup') !==
-                'profit_share' ? (
-                  <div className='mb-4'>
-                    <Text strong className='block mb-2'>
-                      {t('默认代理比例')}
-                    </Text>
-                    <InputNumber
-                      value={
-                        Number(inputs.AffiliateDefaultCommissionBps || 0) / 100
-                      }
-                      onNumberChange={(n) =>
-                        setInputs({
-                          ...inputs,
-                          AffiliateDefaultCommissionBps:
-                            n === null ||
-                            n === undefined ||
-                            (typeof n === 'number' && Number.isNaN(n))
-                              ? '0'
-                              : String(Math.round(Number(n) * 100)),
-                        })
-                      }
-                      step={0.01}
-                      min={0}
-                      max={100}
-                      suffix='%'
-                      style={{ width: '100%' }}
-                    />
-                    <Text type='tertiary' size='small' className='block mt-2'>
-                      {t(
-                        '填写 0～100 之间的百分比，例如 10 表示 10%，10.5 表示 10.5%。填 0 表示跟随系统默认。',
-                      )}
-                    </Text>
-                  </div>
-                ) : (
-                  <Text type='tertiary' size='small' className='block mb-4'>
-                    {t(
-                      '利润分成模式下不使用充值分销比例；被邀请用户 API 用量中的全局加价切片将计入代理待使用收益。',
-                    )}
+                <div className='mb-4'>
+                  <Text strong className='block mb-2'>
+                    {t('默认代理比例')}
                   </Text>
-                )}
+                  <InputNumber
+                    value={
+                      Number(inputs.AffiliateDefaultCommissionBps || 0) / 100
+                    }
+                    onNumberChange={(n) =>
+                      setInputs({
+                        ...inputs,
+                        AffiliateDefaultCommissionBps:
+                          n === null ||
+                          n === undefined ||
+                          (typeof n === 'number' && Number.isNaN(n))
+                            ? '0'
+                            : String(Math.round(Number(n) * 100)),
+                      })
+                    }
+                    step={0.01}
+                    min={0}
+                    max={100}
+                    suffix='%'
+                    style={{ width: '100%' }}
+                  />
+                  <Text type='tertiary' size='small' className='block mt-2'>
+                    {(inputs.DistributorCommissionMode || 'topup') ===
+                    'profit_share'
+                      ? t(
+                          '利润分成模式下本比例作用于加价切片分润；分站/分销商默认分成、单用户覆盖规则与充值分成相同。',
+                        )
+                      : t(
+                          '填写 0～100 之间的百分比，例如 10 表示 10%，10.5 表示 10.5%。填 0 表示跟随系统默认。',
+                        )}
+                  </Text>
+                </div>
               </Col>
             </Row>
             <Row gutter={16}>
