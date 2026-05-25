@@ -92,6 +92,28 @@ const renderRole = (role, record, t) => {
   );
 };
 
+/**
+ * Render user tags
+ */
+const renderUserTags = (tags, t) => {
+  if (!tags || tags === '') {
+    return <span className='text-gray-400'>—</span>;
+  }
+  const tagList = tags.split(',').map(tag => tag.trim()).filter(Boolean);
+  if (tagList.length === 0) {
+    return <span className='text-gray-400'>—</span>;
+  }
+  return (
+    <Space spacing={4} wrap>
+      {tagList.map((tag, index) => (
+        <Tag key={index} color='light-blue' size='small'>
+          {tag}
+        </Tag>
+      ))}
+    </Space>
+  );
+};
+
 /** users.created_by 枚举展示 */
 const renderCreatedBy = (v, t) => {
   if (v == null || v === '') {
@@ -523,6 +545,14 @@ export const getUsersColumns = ({
       dataIndex: 'group',
       render: (text, record, index) => {
         return <div>{renderGroup(text)}</div>;
+      },
+    },
+    {
+      title: t('标签'),
+      dataIndex: 'tags',
+      width: 180,
+      render: (text, record, index) => {
+        return <div>{renderUserTags(text, t)}</div>;
       },
     },
     {

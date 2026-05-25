@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   API,
@@ -64,6 +64,7 @@ const { Text, Title } = Typography;
 const EditUserModal = (props) => {
   const { t } = useTranslation();
   const userId = props.editingUser.id;
+  const tagOptions = props.tagOptions || [];
   const [loading, setLoading] = useState(true);
   const [addQuotaModalOpen, setIsModalOpen] = useState(false);
   const [addQuotaLocal, setAddQuotaLocal] = useState('');
@@ -74,6 +75,18 @@ const EditUserModal = (props) => {
   const formApiRef = useRef(null);
 
   const isEdit = Boolean(userId);
+
+  const mergedTagOptions = useMemo(() => {
+    const seen = new Set();
+    return tagOptions
+      .map(o => o.value || o)
+      .filter(tag => {
+        if (!tag || seen.has(tag)) return false;
+        seen.add(tag);
+        return true;
+      })
+      .map(tag => ({ label: tag, value: tag }));
+  }, [tagOptions]);
 
   /** 编辑用户表单初始字段（加载后与接口返回数据合并）。 */
   const getInitValues = () => ({
@@ -90,6 +103,7 @@ const EditUserModal = (props) => {
     email: '',
     quota: 0,
     group: 'default',
+    tags: [],
     remark: '',
   });
 
@@ -111,6 +125,12 @@ const EditUserModal = (props) => {
     const { success, message, data } = res.data;
     if (success) {
       data.password = '';
+      // Convert tags string to array for TagInput
+      if (data.tags && typeof data.tags === 'string') {
+        data.tags = data.tags.split(',').map(tag => tag.trim()).filter(Boolean);
+      } else if (!data.tags) {
+        data.tags = [];
+      }
       formApiRef.current?.setValues({ ...getInitValues(), ...data });
     } else {
       showError(message);
@@ -140,6 +160,10 @@ const EditUserModal = (props) => {
       payload.quota = parseInt(payload.quota) || 0;
     if (userId) {
       payload.id = parseInt(userId);
+    }
+    // Convert tags array to comma-separated string
+    if (Array.isArray(payload.tags)) {
+      payload.tags = payload.tags.join(',');
     }
     const url = userId ? `/api/user/` : `/api/user/self`;
     const res = await API.put(url, payload);
@@ -283,6 +307,20 @@ const EditUserModal = (props) => {
                           excludeUserId: () =>
                             userId || formApiRef.current?.getValue('id'),
                         })}
+                      />
+                    </Col>
+
+                    <Col span={24}>
+                      <Form.Select
+                        field='tags'
+                        label={t('标签')}
+                        placeholder={t('请选择或输入标签')}
+                        multiple
+                        allowCreate
+                        filter
+                        optionList={mergedTagOptions}
+                        showClear
+                        style={{ width: '100%' }}
                       />
                     </Col>
 

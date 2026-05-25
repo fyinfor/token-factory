@@ -29,6 +29,7 @@ const UsersFilters = ({
   activePage,
   pageSize,
   groupOptions,
+  tagOptions,
   loading,
   searching,
   t,
@@ -39,7 +40,7 @@ const UsersFilters = ({
     if (!formApiRef.current) return;
     formApiRef.current.reset();
     setTimeout(() => {
-      loadUsers(1, pageSize);
+      loadUsers(1, pageSize, '');
     }, 100);
   };
 
@@ -82,6 +83,23 @@ const UsersFilters = ({
                 searchUsers(1, pageSize);
               }, 100);
             }}
+            className='w-full'
+            showClear
+            pure
+            size='small'
+          />
+        </div>
+        <div className='w-full md:w-40'>
+          <Form.Select
+            field='searchTag'
+            placeholder={t('选择或输入标签')}
+            optionList={tagOptions}
+            onChange={(value) => {
+              setTimeout(() => {
+                searchUsers(1, pageSize);
+              }, 100);
+            }}
+            filter
             className='w-full'
             showClear
             pure
