@@ -197,6 +197,48 @@ func HasImagePerImageTablePricingForInfo(channelID int, info *relaycommon.RelayI
 	return ok
 }
 
+func resolveChannelOnlyImagePricingRules(channelID int, names []string) (ratio_setting.ImagePricingRules, bool) {
+	for _, name := range names {
+		if name == "" {
+			continue
+		}
+		if rules, ok := ratio_setting.GetChannelImagePricingRules(channelID, name); ok && ratio_setting.HasUsableImagePerImageRules(rules) {
+			return rules, true
+		}
+	}
+	return ratio_setting.ImagePricingRules{}, false
+}
+
+func resolveGlobalOnlyImagePricingRules(names []string) (ratio_setting.ImagePricingRules, bool) {
+	for _, name := range names {
+		if name == "" {
+			continue
+		}
+		if rules, ok := ratio_setting.GetImagePricingRules(name); ok && ratio_setting.HasUsableImagePerImageRules(rules) {
+			return rules, true
+		}
+	}
+	return ratio_setting.ImagePricingRules{}, false
+}
+
+func resolveChannelImageFlatUSD(channelID int, names []string) (float64, bool) {
+	for _, name := range names {
+		if price, ok := ratio_setting.GetChannelImagePrice(channelID, name); ok && price > 0 {
+			return price, true
+		}
+	}
+	return 0, false
+}
+
+func resolveGlobalImageFlatUSD(names []string) (float64, bool) {
+	for _, name := range names {
+		if price, ok := ratio_setting.GetImagePrice(name); ok && price > 0 {
+			return price, true
+		}
+	}
+	return 0, false
+}
+
 func resolveImageFlatUSDForInfo(channelID int, info *relaycommon.RelayInfo) (float64, bool) {
 	for _, name := range imageModelNameCandidatesFromInfo(info) {
 		if price, ok := ratio_setting.GetChannelImagePrice(channelID, name); ok && price > 0 {
@@ -226,17 +268,18 @@ func TryModelPriceHelperImage(c *gin.Context, info *relaycommon.RelayInfo) (type
 		return types.PriceData{}, false, nil
 	}
 
-	rules, hasRules := resolveImagePricingRulesForInfo(channelID, info)
-	if !hasRules {
-		rules, hasRules = resolveImagePricingRules(channelID, modelName)
+	names := imageModelNameCandidatesFromInfo(info)
+	if len(names) == 0 {
+		names = imageModelNameCandidates(modelName)
 	}
-	fallbackUSD, hasFallback := resolveImageFlatUSDForInfo(channelID, info)
-	if !hasFallback {
-		fallbackUSD, hasFallback = resolveImageFlatUSD(channelID, modelName)
-	}
-
 	estimateCtx := estimateImageRequestContext(c, info)
-	usdPerImage, okPrice := matchFlatPerImageUSDRules(estimateCtx, rules, hasRules, fallbackUSD, hasFallback)
+	channelUSD, globalUSD, chOK, glOK := resolveImagePerImageUnitUSD(channelID, names, estimateCtx)
+	usdPerImage := channelUSD
+	okPrice := chOK
+	if !okPrice || usdPerImage <= 0 {
+		usdPerImage = globalUSD
+		okPrice = glOK
+	}
 	if !okPrice || usdPerImage <= 0 {
 		matchName := ratio_setting.FormatMatchingModelName(modelName)
 		if matchName == "" {
@@ -252,37 +295,106 @@ func TryModelPriceHelperImage(c *gin.Context, info *relaycommon.RelayInfo) (type
 	if count <= 0 {
 		count = 1
 	}
+	estimateCtx.Count = count
+
+	priceData, ok := buildImagePerImagePriceData(c, info, channelID, channelUSD, globalUSD, chOK, glOK, usdPerImage, estimateCtx)
+	if !ok {
+		matchName := ratio_setting.FormatMatchingModelName(modelName)
+		if matchName == "" {
+			matchName = modelName
+		}
+		return types.PriceData{}, false, fmt.Errorf(
+			"图片模型 %s 未设置按张价格，请配置文生图/图生图分辨率价格或兜底每张价格；Image model %s per-image price not set",
+			matchName, matchName,
+		)
+	}
+	info.PriceData = priceData
+	return priceData, true, nil
+}
+
+// resolveImagePerImageUnitUSD 分别解析渠道规则价与全局规则价（不合并规则表）。
+func resolveImagePerImageUnitUSD(channelID int, names []string, estimateCtx imageEstimateContext) (channelUSD, globalUSD float64, chOK, glOK bool) {
+	channelRules, chHasRules := resolveChannelOnlyImagePricingRules(channelID, names)
+	globalRules, glHasRules := resolveGlobalOnlyImagePricingRules(names)
+	chFallback, chHasFallback := resolveChannelImageFlatUSD(channelID, names)
+	glFallback, glHasFallback := resolveGlobalImageFlatUSD(names)
+	channelUSD, chOK = matchFlatPerImageUSDRules(estimateCtx, channelRules, chHasRules, chFallback, chHasFallback)
+	globalUSD, glOK = matchFlatPerImageUSDRules(estimateCtx, globalRules, glHasRules, glFallback, glHasFallback)
+	return channelUSD, globalUSD, chOK, glOK
+}
+
+func buildImagePerImagePriceData(
+	c *gin.Context,
+	info *relaycommon.RelayInfo,
+	channelID int,
+	channelUSD, globalUSD float64,
+	chOK, glOK bool,
+	fallbackUSD float64,
+	estimateCtx imageEstimateContext,
+) (types.PriceData, bool) {
+	if info == nil {
+		return types.PriceData{}, false
+	}
+	usdPerImage := channelUSD
+	okPrice := chOK
+	if !okPrice || usdPerImage <= 0 {
+		usdPerImage = globalUSD
+		okPrice = glOK
+	}
+	if !okPrice || usdPerImage <= 0 {
+		return types.PriceData{}, false
+	}
+
+	count := estimateCtx.Count
+	if count <= 0 {
+		count = 1
+	}
 
 	groupRatioInfo := HandleGroupRatio(c, info)
-	rawQuota := usdPerImage * float64(count) * common.QuotaPerUnit * groupRatioInfo.GroupRatio
-
 	freeModel := false
 	if !operation_setting.GetQuotaSetting().EnableFreeModelPreConsume {
 		if groupRatioInfo.GroupRatio == 0 {
-			rawQuota = 0
 			freeModel = true
 		}
 	}
 
-	chDisc := model.ResolveChannelPriceDiscountPercent(channelID)
-	chDiscCopy := chDisc
-	quota := model.ApplyChannelPriceDiscountToQuota(int(math.Round(rawQuota)), chDisc)
+	chDiscImg := model.ResolveChannelPriceDiscountPercent(channelID)
+	markupDiscImg := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
+	channelRuleUSD := channelUSD
+	if !chOK || channelRuleUSD <= 0 {
+		channelRuleUSD = usdPerImage
+	}
+	globalRuleUSD := globalUSD
+	if !glOK || globalRuleUSD <= 0 {
+		globalRuleUSD = 0
+	}
+	effUsdPerImage := model.EffectiveRuleUnitPrice(channelRuleUSD, globalRuleUSD, chDiscImg, markupDiscImg)
+	rawQuota := effUsdPerImage * float64(count) * common.QuotaPerUnit * groupRatioInfo.GroupRatio
+	chDiscCopyImg := chDiscImg
+	quota := int(math.Round(rawQuota))
 	if !freeModel && quota <= 0 && rawQuota > 0 && groupRatioInfo.GroupRatio > 0 {
 		quota = 1
 	}
+	if freeModel {
+		quota = 0
+		rawQuota = 0
+	}
 
 	priceData := types.PriceData{
-		FreeModel:            freeModel,
-		ModelPrice:           usdPerImage,
-		GroupRatioInfo:       groupRatioInfo,
-		UsePrice:             true,
-		Quota:                quota,
-		QuotaToPreConsume:    quota,
-		ChannelPriceDiscount: &chDiscCopy,
+		FreeModel:             freeModel,
+		ModelPrice:            channelRuleUSD,
+		GroupRatioInfo:        groupRatioInfo,
+		UsePrice:              true,
+		Quota:                 quota,
+		QuotaToPreConsume:     quota,
+		ChannelPriceDiscount:  &chDiscCopyImg,
+		CostDiscountPercent:   chDiscImg,
+		MarkupDiscountPercent: markupDiscImg,
+		GlobalModelPrice:      globalRuleUSD,
 	}
 	priceData.AddOtherRatio("n", float64(count))
 	info.ImageBilling = &relaycommon.ImageBillingSnapshot{
-		UsdPerImage: usdPerImage,
+		UsdPerImage: effUsdPerImage,
 		Width:       estimateCtx.Width,
 		Height:      estimateCtx.Height,
 		Count:       count,
@@ -290,12 +402,43 @@ func TryModelPriceHelperImage(c *gin.Context, info *relaycommon.RelayInfo) (type
 	}
 	if common.DebugEnabled {
 		logger.LogDebug(c, fmt.Sprintf(
-			"[image][per-image] model=%s mode=%s w=%d h=%d count=%d usdPerImage=%.6f quota=%d",
-			modelName, estimateCtx.Mode, estimateCtx.Width, estimateCtx.Height, count, usdPerImage, quota,
+			"[image][per-image] model=%s mode=%s w=%d h=%d count=%d channelUSD=%.6f globalUSD=%.6f effUSD=%.6f quota=%d",
+			info.OriginModelName, estimateCtx.Mode, estimateCtx.Width, estimateCtx.Height, count,
+			channelRuleUSD, globalRuleUSD, effUsdPerImage, quota,
 		))
 	}
-	info.PriceData = priceData
-	return priceData, true, nil
+	return priceData, true
+}
+
+// SyncImagePerImagePriceData 按渠道/全局规则价刷新 PriceData（供 finalize 与结算对齐）。
+func SyncImagePerImagePriceData(c *gin.Context, info *relaycommon.RelayInfo, estimateCtx imageEstimateContext) bool {
+	if info == nil || !info.PriceData.UsePrice {
+		return false
+	}
+	channelID := 0
+	if info.ChannelMeta != nil {
+		channelID = info.ChannelId
+	}
+	names := imageModelNameCandidatesFromInfo(info)
+	if len(names) == 0 {
+		names = imageModelNameCandidates(info.OriginModelName)
+	}
+	channelUSD, globalUSD, chOK, glOK := resolveImagePerImageUnitUSD(channelID, names, estimateCtx)
+	usdPerImage := channelUSD
+	okPrice := chOK
+	if !okPrice || usdPerImage <= 0 {
+		usdPerImage = globalUSD
+		okPrice = glOK
+	}
+	if !okPrice || usdPerImage <= 0 {
+		return false
+	}
+	pd, ok := buildImagePerImagePriceData(c, info, channelID, channelUSD, globalUSD, chOK, glOK, usdPerImage, estimateCtx)
+	if !ok {
+		return false
+	}
+	info.PriceData = pd
+	return true
 }
 
 func estimateImageRequestContext(c *gin.Context, info *relaycommon.RelayInfo) imageEstimateContext {

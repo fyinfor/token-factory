@@ -24,7 +24,7 @@ import PricingQuotaTypes from '../filter/PricingQuotaTypes';
 import PricingEndpointTypes from '../filter/PricingEndpointTypes';
 import PricingVendors from '../filter/PricingVendors';
 import PricingTags from '../filter/PricingTags';
-import PricingSuppliers from '../../../../components/home/PricingSuppliers';
+import PricingProviderType from '../filter/PricingProviderType';
 
 import { resetPricingFilters } from '../../../../helpers/utils';
 import { usePricingFilterCounts } from '../../../../hooks/model-pricing/usePricingFilterCounts';
@@ -51,7 +51,8 @@ const PricingSidebar = ({
   setFilterVendor,
   filterTag,
   setFilterTag,
-  filterSupplier,
+  filterSupplierType,
+  setFilterSupplierType,
   setFilterSupplier,
   currentPage,
   setCurrentPage,
@@ -67,6 +68,7 @@ const PricingSidebar = ({
     vendorModels,
     tagModels,
     groupCountModels,
+    supplierTypeModels,
   } = usePricingFilterCounts({
     models: categoryProps.models,
     filterGroup,
@@ -74,35 +76,9 @@ const PricingSidebar = ({
     filterEndpointType,
     filterVendor,
     filterTag,
+    filterSupplierType,
     searchValue: categoryProps.searchValue,
   });
-
-  const supplierCountModels = React.useMemo(() => {
-    let result = categoryProps.models || [];
-    if (filterVendor !== 'all') {
-      result = filterVendor === 'unknown'
-        ? result.filter((m) => !m.vendor_name)
-        : result.filter((m) => m.vendor_name === filterVendor);
-    }
-    if (filterTag !== 'all') {
-      const tagLower = filterTag.toLowerCase();
-      result = result.filter((m) => {
-        if (!m.tags) return false;
-        return m.tags.toLowerCase().split(/[,;|]+/).map((t) => t.trim()).includes(tagLower);
-      });
-    }
-    if (categoryProps.searchValue?.length > 0) {
-      const term = categoryProps.searchValue.toLowerCase();
-      result = result.filter(
-        (m) =>
-          (m.model_name && m.model_name.toLowerCase().includes(term)) ||
-          (m.description && m.description.toLowerCase().includes(term)) ||
-          (m.tags && m.tags.toLowerCase().includes(term)) ||
-          (m.vendor_name && m.vendor_name.toLowerCase().includes(term)),
-      );
-    }
-    return result;
-  }, [categoryProps.models, filterVendor, filterTag, categoryProps.searchValue]);
 
   const handleResetFilters = () =>
     resetPricingFilters({
@@ -116,6 +92,7 @@ const PricingSidebar = ({
       setFilterEndpointType,
       setFilterVendor,
       setFilterTag,
+      setFilterSupplierType,
       setFilterSupplier,
       setCurrentPage,
       setTokenUnit,
@@ -171,11 +148,11 @@ const PricingSidebar = ({
         t={t}
       />
 
-      <PricingSuppliers
-        filterSupplier={filterSupplier}
-        setFilterSupplier={setFilterSupplier}
+      <PricingProviderType
+        filterProviderType={filterSupplierType}
+        setFilterProviderType={setFilterSupplierType}
         models={categoryProps.models}
-        countModels={supplierCountModels}
+        countModels={supplierTypeModels}
         loading={loading}
         t={t}
       />

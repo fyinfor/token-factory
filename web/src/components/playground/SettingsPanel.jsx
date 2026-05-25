@@ -31,7 +31,10 @@ import {
 import { Sparkles, Users, ToggleLeft, X, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { formatVideoResolutionDisplayLabel, renderGroupOption, selectFilter } from '../../helpers';
-import { PLAYGROUND_IMAGE_SIZE_OPTIONS } from '../../constants/playground.constants';
+import {
+  PLAYGROUND_IMAGE_SIZE_OPTIONS,
+  PLAYGROUND_VIDEO_DURATION_OPTIONS,
+} from '../../constants/playground.constants';
 import ParameterControl from './ParameterControl';
 
 /**
@@ -406,17 +409,14 @@ const SettingsPanel = ({
                 {t('视频时长（秒）')}
               </Typography.Text>
               <Select
-                optionList={[
-                  { label: '5s', value: 5 },
-                  { label: '10s', value: 10 },
-                  { label: '15s', value: 15 },
-                  { label: '20s', value: 20 },
-                  { label: '30s', value: 30 },
-                  { label: '45s', value: 45 },
-                  { label: '60s', value: 60 },
-                ]}
-                value={inputs.video_duration}
-                onChange={(value) => onInputChange('video_duration', Number(value) || 5)}
+                optionList={PLAYGROUND_VIDEO_DURATION_OPTIONS}
+                value={Math.max(
+                  3,
+                  Math.min(30, Number(inputs.video_duration) || 5),
+                )}
+                onChange={(value) =>
+                  onInputChange('video_duration', Number(value) || 5)
+                }
                 disabled={customRequestMode}
                 style={{ width: '100%' }}
               />

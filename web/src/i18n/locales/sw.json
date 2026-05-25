@@ -4420,6 +4420,7 @@
     "请求后端接口失败：": "Imeshindwa kuomba kiolesura cha nyuma: ",
     "请求失败": "Ombi limeshindwa",
     "请求失败，请重试": "Ombi halijafaulu, tafadhali jaribu tena",
+    "建议直连本站点发起请求，关闭系统代理或 VPN，避免代理干扰模型连接与请求转发。": "Wasilisha maombi kwa kuunganisha moja kwa moja kwenye tovuti hii. Zima proksi za mfumo au VPN ili kuepuka usumbufu wa muunganisho wa modeli na uhamishaji wa maombi.",
     "请求头": "Omba kichwa",
     "请求头覆盖": "Andika juu ya kichwa cha ombi",
     "请求并计费模型": "Mfano wa ombi na malipo",

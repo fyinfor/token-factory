@@ -27,6 +27,7 @@ var defaultEndpointInfoMap = map[constant.EndpointType]EndpointInfo{
 	constant.EndpointTypeEmbeddings:            {Path: "/v1/embeddings", Method: "POST"},
 	constant.EndpointTypeOpenAIVideo:           {Path: "/v1/videos", Method: "POST"},
 	constant.EndpointTypeOpenAIVideoGW:         {Path: "/v1/videos/generations", Method: "POST"},
+	constant.EndpointTypeTokenFactoryVideo:    {Path: "/v1/video/generations", Method: "POST"},
 	constant.EndpointTypeVideoGenerator:        {Path: "/videogenerator/generate", Method: "POST"},
 	constant.EndpointTypeTencentCloudVODVideo:  {Path: "/v1/videos", Method: "POST"},
 	constant.EndpointTypeTencentCloudVODImage:  {Path: "/v1/images/generations", Method: "POST"},

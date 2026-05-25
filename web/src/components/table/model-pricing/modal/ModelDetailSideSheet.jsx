@@ -50,6 +50,19 @@ const ModelDetailSideSheet = ({
   t,
   selectedGroup,
   blurPricing = false,
+  showCostPrice = false,
+  channelModelRatioMap = {},
+  channelModelPriceMap = {},
+  channelCompletionRatioMap = {},
+  channelCacheRatioMap = {},
+  channelCreateCacheRatioMap = {},
+  channelImageRatioMap = {},
+  channelImagePriceMap = {},
+  channelAudioRatioMap = {},
+  channelAudioCompletionRatioMap = {},
+  channelVideoRatioMap = {},
+  channelVideoCompletionRatioMap = {},
+  channelVideoPriceMap = {},
 }) => {
   const isMobile = useIsMobile();
   /**
@@ -159,6 +172,19 @@ const ModelDetailSideSheet = ({
               selectedGroup={selectedGroup}
               groupRatio={groupRatio}
               blurPricing={blurPricing}
+              showCostPrice={showCostPrice}
+              channelModelRatioMap={channelModelRatioMap}
+              channelModelPriceMap={channelModelPriceMap}
+              channelCompletionRatioMap={channelCompletionRatioMap}
+              channelCacheRatioMap={channelCacheRatioMap}
+              channelCreateCacheRatioMap={channelCreateCacheRatioMap}
+              channelImageRatioMap={channelImageRatioMap}
+              channelImagePriceMap={channelImagePriceMap}
+              channelAudioRatioMap={channelAudioRatioMap}
+              channelAudioCompletionRatioMap={channelAudioCompletionRatioMap}
+              channelVideoRatioMap={channelVideoRatioMap}
+              channelVideoCompletionRatioMap={channelVideoCompletionRatioMap}
+              channelVideoPriceMap={channelVideoPriceMap}
             />
             {/* <ModelPricingTable
               modelData={modelData}

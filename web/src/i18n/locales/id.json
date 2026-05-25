@@ -4420,6 +4420,7 @@
     "请求后端接口失败：": "Gagal memanggil antarmuka backend: ",
     "请求失败": "Permintaan gagal",
     "请求失败，请重试": "Permintaan gagal, silakan coba lagi",
+    "建议直连本站点发起请求，关闭系统代理或 VPN，避免代理干扰模型连接与请求转发。": "Kirim permintaan dengan terhubung langsung ke situs ini. Nonaktifkan proxy sistem atau VPN agar tidak mengganggu koneksi model dan penerusan permintaan.",
     "请求头": "Judul permintaan",
     "请求头覆盖": "Timpa header permintaan",
     "请求并计费模型": "Model permintaan dan penagihan",

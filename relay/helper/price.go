@@ -82,6 +82,22 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	channelVideoRatio, hasChannelVideoRatio := ratio_setting.GetChannelVideoRatio(channelID, info.OriginModelName)
 	channelVideoCompletionRatio, hasChannelVideoCompletionRatio := ratio_setting.GetChannelVideoCompletionRatio(channelID, info.OriginModelName)
 
+	// 提前获取成本折扣率、加价折扣率及全局倍率/固定价（新计费公式所需）
+	chDisc := model.ResolveChannelPriceDiscountPercent(channelID)
+	markupDisc := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
+	globalRatio, _, _ := ratio_setting.GetModelRatio(info.OriginModelName)
+	globalPrice, _ := ratio_setting.GetModelPrice(info.OriginModelName, false)
+	// 全局子倍率（用于各类型加价部分的独立计算）
+	globalCompletionRatio := ratio_setting.GetCompletionRatio(info.OriginModelName)
+	globalCacheRatio, globalCacheRatioOK := ratio_setting.GetCacheRatio(info.OriginModelName)
+	if !globalCacheRatioOK {
+		globalCacheRatio = 1.0
+	}
+	globalCreateCacheRatio, globalCreateCacheRatioOK := ratio_setting.GetCreateCacheRatio(info.OriginModelName)
+	if !globalCreateCacheRatioOK {
+		globalCreateCacheRatio = 1.25
+	}
+
 	var preConsumedQuota int
 	var modelRatio float64
 	var completionRatio float64
@@ -139,17 +155,24 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		if hasChannelVideoCompletionRatio {
 			videoCompletionRatio = channelVideoCompletionRatio
 		}
-		ratio := modelRatio * groupRatioInfo.GroupRatio
+
+		// 新公式：有效输入倍率 = 渠道倍率 * 成本折扣率% + 全局倍率 * 加价折扣率%
+		effInputRate := model.EffectiveInputRate(modelRatio, globalRatio, chDisc, markupDisc)
+		effInputRateWithGroup := effInputRate * groupRatioInfo.GroupRatio
+
 		dPreConsumedTokens := decimal.NewFromInt(int64(preConsumedTokens))
 		if tier, ok := ratio_setting.ResolveModelTierRatio(channelID, info.OriginModelName); ok {
 			dPreConsumedTokens = ratio_setting.ApplyTierSegmentsForType(dPreConsumedTokens, tier)
 		}
-		preConsumedQuota = int(dPreConsumedTokens.Mul(decimal.NewFromFloat(ratio)).Round(0).IntPart())
+		preConsumedQuota = int(dPreConsumedTokens.Mul(decimal.NewFromFloat(effInputRateWithGroup)).Round(0).IntPart())
 	} else {
+		// 固定价格：渠道固定价 * 成本折扣率% + 全局固定价 * 加价折扣率%
+		effModelPrice := model.EffectiveModelPrice(modelPrice, globalPrice, chDisc, markupDisc)
 		if meta.ImagePriceRatio != 0 {
-			modelPrice = modelPrice * meta.ImagePriceRatio
+			effModelPrice = effModelPrice * meta.ImagePriceRatio
+			modelPrice = modelPrice * meta.ImagePriceRatio // 保持 ModelPrice 字段与 imagePriceRatio 一致（供日志展示）
 		}
-		preConsumedQuota = int(modelPrice * common.QuotaPerUnit * groupRatioInfo.GroupRatio)
+		preConsumedQuota = int(effModelPrice * common.QuotaPerUnit * groupRatioInfo.GroupRatio)
 	}
 
 	// check if free model pre-consume is disabled
@@ -171,28 +194,33 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		}
 	}
 
-	chDisc := model.ResolveChannelPriceDiscountPercent(channelID)
 	chDiscCopy := chDisc
-	preConsumedQuota = model.ApplyChannelPriceDiscountToQuota(preConsumedQuota, chDisc)
-
 	priceData := types.PriceData{
-		FreeModel:            freeModel,
-		ModelPrice:           modelPrice,
-		ModelRatio:           modelRatio,
-		CompletionRatio:      completionRatio,
-		GroupRatioInfo:       groupRatioInfo,
-		UsePrice:             usePrice,
-		CacheRatio:           cacheRatio,
-		ImageRatio:           imageRatio,
-		AudioRatio:           audioRatio,
-		AudioCompletionRatio: audioCompletionRatio,
-		VideoRatio:           videoRatio,
-		VideoCompletionRatio: videoCompletionRatio,
-		CacheCreationRatio:   cacheCreationRatio,
-		CacheCreation5mRatio: cacheCreationRatio5m,
-		CacheCreation1hRatio: cacheCreationRatio1h,
-		ChannelPriceDiscount: &chDiscCopy,
-		QuotaToPreConsume:    preConsumedQuota,
+		FreeModel:             freeModel,
+		ModelPrice:            modelPrice,
+		ModelRatio:            modelRatio,
+		CompletionRatio:       completionRatio,
+		GroupRatioInfo:        groupRatioInfo,
+		UsePrice:              usePrice,
+		CacheRatio:            cacheRatio,
+		ImageRatio:            imageRatio,
+		AudioRatio:            audioRatio,
+		AudioCompletionRatio:  audioCompletionRatio,
+		VideoRatio:            videoRatio,
+		VideoCompletionRatio:  videoCompletionRatio,
+		CacheCreationRatio:    cacheCreationRatio,
+		CacheCreation5mRatio:  cacheCreationRatio5m,
+		CacheCreation1hRatio:  cacheCreationRatio1h,
+		ChannelPriceDiscount:  &chDiscCopy,
+		QuotaToPreConsume:     preConsumedQuota,
+		// 新计费公式字段
+		CostDiscountPercent:    chDisc,
+		MarkupDiscountPercent:  markupDisc,
+		GlobalModelRatio:       globalRatio,
+		GlobalModelPrice:       globalPrice,
+		GlobalCompletionRatio:  globalCompletionRatio,
+		GlobalCacheRatio:       globalCacheRatio,
+		GlobalCreateCacheRatio: globalCreateCacheRatio,
 	}
 
 	if common.DebugEnabled {
@@ -243,7 +271,12 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 		}
 
 	}
-	quota := int(modelPrice * common.QuotaPerUnit * groupRatioInfo.GroupRatio)
+	// 新公式：固定价格 = 渠道固定价 * 成本折扣率% + 全局固定价 * 加价折扣率%
+	chDisc := model.ResolveChannelPriceDiscountPercent(channelID)
+	markupDisc := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
+	globalPrice, _ := ratio_setting.GetModelPrice(info.OriginModelName, false)
+	effModelPrice := model.EffectiveModelPrice(modelPrice, globalPrice, chDisc, markupDisc)
+	quota := int(effModelPrice * common.QuotaPerUnit * groupRatioInfo.GroupRatio)
 
 	// 免费模型检测（与 ModelPriceHelper 对齐）
 	freeModel := false
@@ -253,16 +286,18 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 			freeModel = true
 		}
 	}
-	chDisc := model.ResolveChannelPriceDiscountPercent(channelID)
 	chDiscCopy := chDisc
-	quota = model.ApplyChannelPriceDiscountToQuota(quota, chDisc)
 
 	priceData := types.PriceData{
-		FreeModel:            freeModel,
-		ModelPrice:           modelPrice,
-		Quota:                quota,
-		GroupRatioInfo:       groupRatioInfo,
-		ChannelPriceDiscount: &chDiscCopy,
+		FreeModel:             freeModel,
+		ModelPrice:            modelPrice,
+		Quota:                 quota,
+		GroupRatioInfo:        groupRatioInfo,
+		ChannelPriceDiscount:  &chDiscCopy,
+		CostDiscountPercent:   chDisc,
+		MarkupDiscountPercent: markupDisc,
+		GlobalModelRatio:      0,
+		GlobalModelPrice:      globalPrice,
 	}
 	return priceData, nil
 }
@@ -468,9 +503,17 @@ func tryVideoTokenPriceData(c *gin.Context, info *relaycommon.RelayInfo) (types.
 		}
 	}
 
+	// 新公式（视频 token 计费）：有效倍率 = 渠道倍率 * 成本折扣率% + 全局倍率 * 加价折扣率%
 	chDisc := model.ResolveChannelPriceDiscountPercent(channelID)
+	markupDisc := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
+	globalRatioVideo, _, _ := ratio_setting.GetModelRatio(modelName)
+	effRateVideo := model.EffectiveInputRate(modelRatio, globalRatioVideo, chDisc, markupDisc)
+	// rawQuota 已按 modelRatio * groupRatio 计算，用 effRateVideo/modelRatio 修正（modelRatio>0 时）
+	if modelRatio > 0 {
+		rawQuota = rawQuota * effRateVideo / modelRatio
+	}
 	chDiscCopy := chDisc
-	quota := model.ApplyChannelPriceDiscountToQuota(int(math.Round(rawQuota)), chDisc)
+	quota := int(math.Round(rawQuota))
 
 	// Floor non-zero results at 1 quota unit, matching calculateAudioQuota.
 	if !freeModel && weightedTokens > 0 && quota <= 0 && modelRatio > 0 && groupRatioInfo.GroupRatio > 0 {
@@ -478,16 +521,19 @@ func tryVideoTokenPriceData(c *gin.Context, info *relaycommon.RelayInfo) (types.
 	}
 
 	priceData := types.PriceData{
-		FreeModel:            freeModel,
-		ModelRatio:           modelRatio,
-		VideoRatio:           appliedVideoRatio,
-		VideoCompletionRatio: appliedVideoCompletionRatio,
-		VideoOutputTokens:    outputVideoTokens,
-		VideoInputTextTokens: inputTextTokens,
-		GroupRatioInfo:       groupRatioInfo,
-		Quota:                quota,
-		QuotaToPreConsume:    quota,
-		ChannelPriceDiscount: &chDiscCopy,
+		FreeModel:             freeModel,
+		ModelRatio:            modelRatio,
+		VideoRatio:            appliedVideoRatio,
+		VideoCompletionRatio:  appliedVideoCompletionRatio,
+		VideoOutputTokens:     outputVideoTokens,
+		VideoInputTextTokens:  inputTextTokens,
+		GroupRatioInfo:        groupRatioInfo,
+		Quota:                 quota,
+		QuotaToPreConsume:     quota,
+		ChannelPriceDiscount:  &chDiscCopy,
+		CostDiscountPercent:   chDisc,
+		MarkupDiscountPercent: markupDisc,
+		GlobalModelRatio:      globalRatioVideo,
 		// UsePrice = true tells relay_task to skip the OtherRatios multiplication
 		// loop, since outputVideoTokens already encodes duration and resolution.
 		UsePrice: true,
@@ -734,21 +780,26 @@ func tryVideoPerSecondRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo
 		return types.PriceData{}, false, nil
 	}
 	groupRatioInfo := HandleGroupRatio(c, info)
-	rawQuota := float64(seconds) * pricePerSecond * common.QuotaPerUnit * groupRatioInfo.GroupRatio
-	chDisc := model.ResolveChannelPriceDiscountPercent(channelID)
-	chDiscCopy := chDisc
-	quota := model.ApplyChannelPriceDiscountToQuota(int(math.Round(rawQuota)), chDisc)
+	chDiscVPS := model.ResolveChannelPriceDiscountPercent(channelID)
+	markupDiscVPS := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
+	globalPerSec := globalVideoPerSecondUSDForRelay(info.OriginModelName, string(estimateCtx.Mode), estimateCtx.Width, estimateCtx.Height, hasAudio)
+	effPricePerSecond := model.EffectiveRuleUnitPrice(pricePerSecond, globalPerSec, chDiscVPS, markupDiscVPS)
+	rawQuota := float64(seconds) * effPricePerSecond * common.QuotaPerUnit * groupRatioInfo.GroupRatio
+	chDiscCopyVPS := chDiscVPS
+	quota := int(math.Round(rawQuota))
 	if quota <= 0 && rawQuota > 0 {
 		quota = 1
 	}
 	pd := types.PriceData{
-		ModelPrice:           0,
-		ModelRatio:           0,
-		GroupRatioInfo:       groupRatioInfo,
-		UsePrice:             true,
-		Quota:                quota,
-		QuotaToPreConsume:    quota,
-		ChannelPriceDiscount: &chDiscCopy,
+		ModelPrice:            0,
+		ModelRatio:            0,
+		GroupRatioInfo:        groupRatioInfo,
+		UsePrice:              true,
+		Quota:                 quota,
+		QuotaToPreConsume:     quota,
+		ChannelPriceDiscount:  &chDiscCopyVPS,
+		CostDiscountPercent:   chDiscVPS,
+		MarkupDiscountPercent: markupDiscVPS,
 	}
 	pd.AddOtherRatio("seconds", float64(seconds))
 	if hasAudio {
@@ -855,23 +906,30 @@ func tryVideoPerVideoRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo)
 		}
 	}
 
-	chDisc := model.ResolveChannelPriceDiscountPercent(channelID)
-	chDiscCopy := chDisc
-	quota := model.ApplyChannelPriceDiscountToQuota(int(math.Round(rawQuota)), chDisc)
+	chDiscVPV := model.ResolveChannelPriceDiscountPercent(channelID)
+	markupDiscVPV := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
+	globalUsd := globalVideoPerVideoUSDForRelay(modelName, string(estimateCtx.Mode), estimateCtx.Width, estimateCtx.Height, hasAudio)
+	effUsd := model.EffectiveRuleUnitPrice(usd, globalUsd, chDiscVPV, markupDiscVPV)
+	rawQuota = effUsd * common.QuotaPerUnit * groupRatioInfo.GroupRatio
+	chDiscCopyVPV := chDiscVPV
+	quota := int(math.Round(rawQuota))
 
 	if !freeModel && quota <= 0 && rawQuota > 0 && groupRatioInfo.GroupRatio > 0 {
 		quota = 1
 	}
 
 	priceData := types.PriceData{
-		FreeModel:            freeModel,
-		ModelPrice:           0,
-		ModelRatio:           0,
-		GroupRatioInfo:       groupRatioInfo,
-		UsePrice:             true,
-		Quota:                quota,
-		QuotaToPreConsume:    quota,
-		ChannelPriceDiscount: &chDiscCopy,
+		FreeModel:             freeModel,
+		ModelPrice:            0,
+		ModelRatio:            0,
+		GroupRatioInfo:        groupRatioInfo,
+		UsePrice:              true,
+		Quota:                 quota,
+		QuotaToPreConsume:     quota,
+		ChannelPriceDiscount:  &chDiscCopyVPV,
+		CostDiscountPercent:   chDiscVPV,
+		MarkupDiscountPercent: markupDiscVPV,
+		GlobalModelPrice:      globalUsd,
 	}
 	if common.DebugEnabled {
 		logger.LogDebug(c, fmt.Sprintf(

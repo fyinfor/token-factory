@@ -73,6 +73,7 @@ export const useHeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
           modules.home = {
             enabled: modules.home,
             blurPricing: false,
+            showCostPrice: false,
           };
         }
 

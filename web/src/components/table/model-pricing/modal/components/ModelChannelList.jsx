@@ -30,7 +30,10 @@ import {
 } from '@douyinfe/semi-ui';
 import { IconListView } from '@douyinfe/semi-icons';
 import { copy, stringToColor } from '../../../../../helpers';
-import { getUsedGroupContext } from '../../../../../helpers/utils';
+import {
+  getUsedGroupContext,
+  userCanViewHomeCostPrice,
+} from '../../../../../helpers/utils';
 import { UserContext } from '../../../../../context/User';
 import ApiDocsSidePanel from './ApiDocsSidePanel';
 import ModelTokenList from './ModelTokenList';
@@ -46,6 +49,10 @@ import {
 } from '../../constants/imagePerImageHintI18n';
 
 import { renderModelTestResultSummary } from '../../../../../helpers/modelStability';
+import {
+  computeChannelCostRates,
+  formatBillingUsdDisplay,
+} from '../../../../../helpers/billingFormula';
 
 const { Text } = Typography;
 
@@ -89,12 +96,30 @@ const ModelChannelList = ({
   selectedGroup,
   groupRatio,
   blurPricing = false,
+  showCostPrice = false,
+  channelModelRatioMap = {},
+  channelModelPriceMap = {},
+  channelCompletionRatioMap = {},
+  channelCacheRatioMap = {},
+  channelCreateCacheRatioMap = {},
+  channelImageRatioMap = {},
+  channelImagePriceMap = {},
+  channelAudioRatioMap = {},
+  channelAudioCompletionRatioMap = {},
+  channelVideoRatioMap = {},
+  channelVideoCompletionRatioMap = {},
+  channelVideoPriceMap = {},
 }) => {
   const [userState] = useContext(UserContext);
   const [docsVisible, setDocsVisible] = useState(false);
   const [docsModelName, setDocsModelName] = useState('');
   const channelList = modelData?.channel_list || [];
   const isLoggedIn = Boolean(userState?.user);
+  const canViewCostPrice = useMemo(
+    () => userCanViewHomeCostPrice(userState?.user),
+    [userState?.user],
+  );
+  const showCostPricePanel = showCostPrice && canViewCostPrice;
 
   const { usedGroupRatio } = useMemo(
     () =>
@@ -110,7 +135,10 @@ const ModelChannelList = ({
       if (!groups[supplierId]) {
         groups[supplierId] = {
           supplierId,
-          supplierAlias: channel.supplier_alias || t('未知供应商'),
+          supplierAlias:
+            (channel?.supplier_alias &&
+              String(channel.supplier_alias).trim()) ||
+            '',
           companyLogoUrl:
             (channel?.company_logo_url &&
               String(channel.company_logo_url).trim()) ||
@@ -152,7 +180,7 @@ const ModelChannelList = ({
     }
   }, [allKeysStr, allKeys]);
 
-  // 格式化通道信息（与 calculateModelPrice 一致：含分组倍率）
+  // 格式化通道信息（新计费公式：含分组倍率、成本折扣、加价折扣）
   const formatChannelInfo = (channel) => {
     // 判断计费类型：优先使用 channel.quota_type，否则使用 modelData.quota_type
     const quotaType =
@@ -160,6 +188,29 @@ const ModelChannelList = ({
         ? channel.quota_type
         : modelData?.quota_type;
     const isPerToken = quotaType === 0; // 0=按量计费, 1=按次计费
+
+    // ============================================================
+    // 新计费公式参数：ch.model_ratio / ch.model_price 为原始渠道倍率（后端不再预乘成本折扣）
+    //   成本折扣率 = price_discount_percent / 100
+    //   加价倍率   = markup_discount_rate / 100
+    //
+    //   输入   = (ch.model_ratio × costDisc + globalMr × markupRate) × 2 × groupRatio
+    //   输出   = (ch.model_ratio × cr × costDisc + globalMr × globalCR × markupRate) × 2 × groupRatio
+    //   缓存读 = (ch.model_ratio × cacheRatio × costDisc + globalMr × globalCacheR × markupRate) × 2 × groupRatio
+    //   缓存写 = (ch.model_ratio × createCacheRatio × costDisc + globalMr × globalCreateCacheR × markupRate) × 2 × groupRatio
+    //   固定价 = (ch.model_price × costDisc + globalMp × markupRate) × groupRatio
+    // ============================================================
+    const costDisc = (channel.price_discount_percent != null ? channel.price_discount_percent : 100) / 100;
+    const markupRate = (channel.markup_discount_rate || 0) / 100;
+    const globalMr = modelData?.model_ratio || 0;
+    const globalMp = modelData?.model_price || 0;
+    const globalCR = modelData?.completion_ratio || 0;
+    const globalCacheR =
+      modelData?.cache_ratio != null ? Number(modelData.cache_ratio) : 0;
+    const globalCreateCacheR =
+      modelData?.create_cache_ratio != null
+        ? Number(modelData.create_cache_ratio)
+        : 0;
 
     // 计算价格，返回 { display, value }
     const calculatePrice = (
@@ -173,7 +224,7 @@ const ModelChannelList = ({
         // 按次计费：直接使用价格
         priceUSD = nominalRatio * ratio;
       } else {
-        // 按量计费：倍率 × 2 × 分组倍率
+        // 按量计费：有效倍率 × 2 × 分组倍率
         priceUSD = nominalRatio * 2 * ratio;
       }
       const rawDisplayPrice = displayPrice(priceUSD);
@@ -211,7 +262,7 @@ const ModelChannelList = ({
       }
     };
 
-    // 构造单条价格项，若根价格高于通道价格则附带原价与折扣
+    // 构造单条价格项，若全局价格高于有效通道价格则附带原价与折扣
     const makeItem = (label, channelValue, rootValue, isFixedPrice = false) => {
       if (!hasRatioValue(channelValue)) return null;
       const current = calculatePrice(Number(channelValue), isFixedPrice);
@@ -239,73 +290,155 @@ const ModelChannelList = ({
 
     // 按次计费
     if (isPerToken === false) {
-      items.push(
-        makeItem(
-          t('模型价格'),
-          channel.model_price,
-          modelData?.model_price,
-          true,
-        ),
-      );
+      // 固定价：ch.model_price × costDisc + globalMp × markupRate
+      const effModelPrice = hasRatioValue(channel.model_price)
+        ? Number(channel.model_price) * costDisc + globalMp * markupRate
+        : null;
+      items.push(makeItem(t('模型价格'), effModelPrice, modelData?.model_price, true));
     }
     // 按量计费
     else {
-      // 输入
-      items.push(
-        makeItem(
-          t('输入价格'),
-          channel.model_ratio,
-          modelData?.model_ratio,
-          false,
-        ),
-      );
+      // 输入：ch.model_ratio × costDisc + globalMr × markupRate
+      const effInputRate = hasRatioValue(channel.model_ratio)
+        ? Number(channel.model_ratio) * costDisc + globalMr * markupRate
+        : null;
+      items.push(makeItem(t('输入价格'), effInputRate, modelData?.model_ratio, false));
 
-      // 输出
+      // 输出价格：仅当全局模型配置了 completion_ratio 时才展示
       if (
         hasRatioValue(channel.model_ratio) &&
-        hasRatioValue(channel.completion_ratio)
+        hasRatioValue(channel.completion_ratio) &&
+        hasRatioValue(modelData?.completion_ratio)
       ) {
-        const chOut =
-          Number(channel.model_ratio) * Number(channel.completion_ratio);
-        const rootOut =
-          hasRatioValue(modelData?.model_ratio) &&
-          hasRatioValue(modelData?.completion_ratio)
-            ? Number(modelData.model_ratio) * Number(modelData.completion_ratio)
-            : null;
-        items.push(makeItem(t('输出价格'), chOut, rootOut, false));
+        const effOut =
+          Number(channel.model_ratio) * Number(channel.completion_ratio) * costDisc +
+          globalMr * globalCR * markupRate;
+        const rootOut = hasRatioValue(modelData?.model_ratio)
+          ? Number(modelData.model_ratio) * Number(modelData.completion_ratio)
+          : null;
+        items.push(makeItem(t('输出价格'), effOut, rootOut, false));
       }
 
-      // 缓存读取
+      // 缓存读取价格：仅当全局模型配置了 cache_ratio 时才展示
       if (
         hasRatioValue(channel.model_ratio) &&
-        hasRatioValue(channel.cache_ratio)
+        hasRatioValue(channel.cache_ratio) &&
+        hasRatioValue(modelData?.cache_ratio)
       ) {
-        const chC = Number(channel.model_ratio) * Number(channel.cache_ratio);
-        const rootC =
-          hasRatioValue(modelData?.model_ratio) &&
-          hasRatioValue(modelData?.cache_ratio)
-            ? Number(modelData.model_ratio) * Number(modelData.cache_ratio)
-            : null;
-        items.push(makeItem(t('缓存读取价格'), chC, rootC, false));
+        const effCacheRate =
+          Number(channel.model_ratio) * Number(channel.cache_ratio) * costDisc +
+          globalMr * globalCacheR * markupRate;
+        const rootC = hasRatioValue(modelData?.model_ratio)
+          ? Number(modelData.model_ratio) * Number(modelData.cache_ratio)
+          : null;
+        items.push(makeItem(t('缓存读取价格'), effCacheRate, rootC, false));
       }
 
-      // 缓存创建
+      // 缓存创建价格：仅当全局模型配置了 create_cache_ratio 时才展示
       if (
         hasRatioValue(channel.model_ratio) &&
-        hasRatioValue(channel.create_cache_ratio)
+        hasRatioValue(channel.create_cache_ratio) &&
+        hasRatioValue(modelData?.create_cache_ratio)
       ) {
-        const chCC =
-          Number(channel.model_ratio) * Number(channel.create_cache_ratio);
-        const rootCC =
-          hasRatioValue(modelData?.model_ratio) &&
-          hasRatioValue(modelData?.create_cache_ratio)
-            ? Number(modelData.model_ratio) *
-              Number(modelData.create_cache_ratio)
-            : null;
-        items.push(makeItem(t('缓存创建价格'), chCC, rootCC, false));
+        const effCreateCacheRate =
+          Number(channel.model_ratio) * Number(channel.create_cache_ratio) * costDisc +
+          globalMr * globalCreateCacheR * markupRate;
+        const rootCC = hasRatioValue(modelData?.model_ratio)
+          ? Number(modelData.model_ratio) * Number(modelData.create_cache_ratio)
+          : null;
+        items.push(makeItem(t('缓存创建价格'), effCreateCacheRate, rootCC, false));
       }
     }
     return items.filter(Boolean);
+  };
+
+  /** 格式化单通道成本价（渠道/全局原价 × 成本折扣率，不含加价与分组倍率） */
+  const formatChannelCostInfo = (channel) => {
+    const quotaType =
+      channel.quota_type !== undefined
+        ? channel.quota_type
+        : modelData?.quota_type;
+    const vHint = pickVideoFlatClipHintForChannel(modelData, channel);
+    const showVideoFlatTable = hasVideoFlatClipTierTable(vHint);
+    const iHint = pickImagePerImageHintForChannel(modelData, channel);
+    const showImagePerImageTable = hasImagePerImageTierTable(iHint);
+    const modelHasVideoFlatPrice =
+      modelData?.video_price != null &&
+      modelData?.video_price !== undefined &&
+      Number.isFinite(Number(modelData.video_price)) &&
+      Number(modelData.video_price) > 0;
+
+    const costItems = computeChannelCostRates({
+      channelId: channel.channel_id,
+      modelName: modelData?.model_name,
+      optionModelRatio: channel.option_model_ratio,
+      optionCompletionRatio: channel.option_completion_ratio,
+      optionCacheRatio: channel.option_cache_ratio,
+      optionCreateCacheRatio: channel.option_create_cache_ratio,
+      optionModelPrice: channel.option_model_price,
+      optionImageRatio: channel.option_image_ratio,
+      optionImagePrice: channel.option_image_price,
+      optionAudioRatio: channel.option_audio_ratio,
+      optionAudioCompletionRatio: channel.option_audio_completion_ratio,
+      optionVideoRatio: channel.option_video_ratio,
+      optionVideoCompletionRatio: channel.option_video_completion_ratio,
+      optionVideoPrice: channel.option_video_price,
+      channelModelRatioMap,
+      channelCompletionRatioMap,
+      channelCacheRatioMap,
+      channelCreateCacheRatioMap,
+      channelModelPriceMap,
+      channelImageRatioMap,
+      channelImagePriceMap,
+      channelAudioRatioMap,
+      channelAudioCompletionRatioMap,
+      channelVideoRatioMap,
+      channelVideoCompletionRatioMap,
+      channelVideoPriceMap,
+      priceDiscountPercent:
+        channel.price_discount_percent != null
+          ? channel.price_discount_percent
+          : 100,
+      globalModelRatio: modelData?.model_ratio,
+      globalModelPrice: modelData?.model_price,
+      globalCompletionRatio: modelData?.completion_ratio,
+      globalCacheRatio: modelData?.cache_ratio,
+      globalCreateCacheRatio: modelData?.create_cache_ratio,
+      globalImageRatio: modelData?.image_ratio,
+      globalImagePrice: modelData?.image_price,
+      globalAudioRatio: modelData?.audio_ratio,
+      globalAudioCompletionRatio: modelData?.audio_completion_ratio,
+      globalVideoRatio: modelData?.video_ratio,
+      globalVideoCompletionRatio: modelData?.video_completion_ratio,
+      globalVideoPrice: modelData?.video_price,
+      skipImageTokenPricing: showImagePerImageTable,
+      skipImageFlatSimple: showImagePerImageTable,
+      skipVideoTokenPricing: showVideoFlatTable || modelHasVideoFlatPrice,
+      skipVideoFlatSimple: showVideoFlatTable,
+      quotaType,
+    });
+    const formatCostDisplay = (displayUsdPerM, isFixedPrice, fixedUnitKey) => {
+      const priceUSD = displayUsdPerM;
+      const value = formatBillingUsdDisplay(priceUSD, { tokenUnit });
+      if (isFixedPrice) {
+        const unit = fixedUnitKey === '张' ? t('张') : t('次');
+        return `${value} / ${unit}`;
+      }
+      const unitLabel = tokenUnit === 'K' ? 'K' : 'M';
+      return `${value} / 1${unitLabel} Tokens`;
+    };
+    return {
+      items: costItems.map((item) => ({
+        label: t(item.labelKey),
+        value: formatCostDisplay(
+          item.displayUsdPerM,
+          item.isFixedPrice,
+          item.fixedUnitKey,
+        ),
+      })),
+      videoHint: showVideoFlatTable ? vHint : null,
+      imageHint: showImagePerImageTable ? iHint : null,
+    };
   };
 
   if (channelList.length === 0) {
@@ -335,40 +468,31 @@ const ModelChannelList = ({
               key={`group-${group.supplierId}`}
               itemKey={`group-${group.supplierId}`}
               header={
-                <div className='flex items-center justify-between w-full pr-4'>
-                  <span
-                    className='h-7 rounded-md flex items-center gap-1 overflow-hidden ml-2'
-                    style={{
-                      backgroundColor: 'var(--semi-color-fill-0)',
-                      paddingRight: group.supplierType ? 4 : 0,
-                    }}
-                  >
-                    {group.companyLogoUrl ? (
-                      <img
-                        src={group.companyLogoUrl}
-                        alt={group.supplierAlias || ''}
-                        className='w-7 h-7 object-contain rounded-md'
-                      />
-                    ) : (
-                      <span
-                        className='h-6 px-2 flex items-center text-xs font-medium'
-                        style={{
-                          color: 'var(--semi-color-text-1)',
-                        }}
-                      >
-                        {group.supplierAlias || t('官方')}
-                      </span>
-                    )}
-                    {group.supplierType && (
-                      <Tag
-                        size='small'
-                        shape='circle'
-                        color={getSupplierTypeColor(group.supplierType)}
-                      >
-                        {group.supplierType}
-                      </Tag>
-                    )}
-                  </span>
+                <div className='flex items-center justify-between w-full'>
+                  {group.companyLogoUrl || group.supplierType ? (
+                    <span
+                      className='h-7 rounded-md flex items-center overflow-hidden ml-2'
+                      style={{backgroundColor: 'var(--semi-color-fill-0)'}}
+                    >
+                      {group.companyLogoUrl ? (
+                        <img
+                          src={group.companyLogoUrl}
+                          alt={group.supplierAlias || ''}
+                          className='w-7 h-7 object-contain rounded-md'
+                        />
+                      ) : null}
+                      {group.supplierType && (
+                        <Tag
+                          size='small'
+                          shape='circle'
+                          color={getSupplierTypeColor(group.supplierType)}
+                          className='mx-1'
+                        >
+                          {group.supplierType}
+                        </Tag>
+                      )}
+                    </span>
+                  ) : null}
                   <span className='text-sm text-gray-500'>
                     {group.channels.length} {t('个通道')}
                   </span>
@@ -387,7 +511,8 @@ const ModelChannelList = ({
                     modelData,
                     channel,
                   );
-                  const showImagePerImageTable = hasImagePerImageTierTable(iHint);
+                  const showImagePerImageTable =
+                    hasImagePerImageTierTable(iHint);
                   const channelPath = channel.route_slug
                     ? `${modelData.model_name}/${channel.route_slug}`
                     : `${channel.supplier_alias}/${modelData.model_name}/${channel.channel_no}`;
@@ -516,6 +641,81 @@ const ModelChannelList = ({
         </Collapse>
       </Card>
       <ModelTokenList visible={isLoggedIn} t={t} />
+      {showCostPricePanel ? (
+        <Card className='!rounded-2xl shadow-sm border-0 mb-3'>
+          <div className='flex items-center mb-3'>
+            <Avatar size='small' color='orange' className='mr-2 shadow-md'>
+              <span className='font-semibold text-sm leading-none'>$</span>
+            </Avatar>
+            <Text className='text-lg font-medium'>{t('成本价')}</Text>
+          </div>
+          <div className='space-y-3'>
+            {channelList.map((channel, idx) => {
+              const costInfo = formatChannelCostInfo(channel);
+              const costItems = costInfo.items || [];
+              const hasCostContent =
+                costItems.length > 0 ||
+                costInfo.videoHint ||
+                costInfo.imageHint;
+              if (!hasCostContent) {
+                return null;
+              }
+              return (
+                <div
+                  key={`cost-${channel.channel_id}-${idx}`}
+                  className='rounded-lg border border-semi-color-border px-3 py-2'
+                >
+                  {channel.price_discount_percent != null ? (
+                    <div className='mb-2'>
+                      <span
+                        className='inline-block text-xs font-medium px-2 py-0.5 rounded-md'
+                        style={{
+                          backgroundColor:
+                            'var(--semi-color-primary-light-active)',
+                          color: 'var(--semi-color-primary)',
+                        }}
+                      >
+                        {t('折扣')}：{channel.price_discount_percent}%
+                      </span>
+                    </div>
+                  ) : null}
+                  <div className='flex flex-col gap-1 text-sm'>
+                    {costItems.map((item) => (
+                      <div
+                        key={item.label}
+                        className='flex items-center gap-2 flex-wrap'
+                      >
+                        <span className='text-gray-600'>{item.label}:</span>
+                        <span className='font-medium text-gray-900'>
+                          {item.value}
+                        </span>
+                      </div>
+                    ))}
+                    {costInfo.videoHint ? (
+                      <VideoFlatClipHintTable
+                        hint={costInfo.videoHint}
+                        usedGroupRatio={1}
+                        displayPrice={formatBillingUsdDisplay}
+                        t={t}
+                        blurPricing={blurPricing}
+                      />
+                    ) : null}
+                    {costInfo.imageHint ? (
+                      <ImagePerImageHintTable
+                        hint={costInfo.imageHint}
+                        usedGroupRatio={1}
+                        displayPrice={formatBillingUsdDisplay}
+                        t={t}
+                        blurPricing={blurPricing}
+                      />
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      ) : null}
       <ApiDocsSidePanel
         visible={docsVisible}
         onClose={() => {

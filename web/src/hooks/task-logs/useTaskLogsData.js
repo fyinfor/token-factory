@@ -43,6 +43,7 @@ export const useTaskLogsData = () => {
     USERNAME: 'username',
     PLATFORM: 'platform',
     TYPE: 'type',
+    MODEL: 'model',
     TASK_ID: 'task_id',
     TASK_STATUS: 'task_status',
     PROGRESS: 'progress',
@@ -88,6 +89,8 @@ export const useTaskLogsData = () => {
   const formInitValues = {
     channel_id: '',
     task_id: '',
+    model_name: '',
+    task_filter: '',
     dateRange: [
       timestamp2string(zeroNow.getTime() / 1000),
       timestamp2string(now.getTime() / 1000 + 3600),
@@ -135,6 +138,7 @@ export const useTaskLogsData = () => {
       [COLUMN_KEYS.USERNAME]: isAdminUser,
       [COLUMN_KEYS.PLATFORM]: true,
       [COLUMN_KEYS.TYPE]: true,
+      [COLUMN_KEYS.MODEL]: true,
       [COLUMN_KEYS.TASK_ID]: true,
       [COLUMN_KEYS.TASK_STATUS]: true,
       [COLUMN_KEYS.PROGRESS]: true,
@@ -202,15 +206,33 @@ export const useTaskLogsData = () => {
     return {
       channel_id: formValues.channel_id || '',
       task_id: formValues.task_id || '',
+      model_name: String(formValues.model_name || '').trim(),
+      task_filter: formValues.task_filter || '',
       start_timestamp,
       end_timestamp,
     };
+  };
+
+  const resolveTaskModelName = (log) => {
+    let props = log?.properties;
+    if (typeof props === 'string' && props.trim() !== '') {
+      try {
+        props = JSON.parse(props);
+      } catch {
+        props = null;
+      }
+    }
+    if (!props || typeof props !== 'object') {
+      return '';
+    }
+    return String(props.origin_model_name || props.upstream_model_name || '').trim();
   };
 
   // Enrich logs data
   const enrichLogs = (items) => {
     return items.map((log) => ({
       ...log,
+      model_name: resolveTaskModelName(log),
       timestamp2string: timestamp2string(log.created_at),
       key: '' + log.id,
     }));
@@ -228,13 +250,22 @@ export const useTaskLogsData = () => {
   // Load logs function
   const loadLogs = async (page = 1, size = pageSize) => {
     setLoading(true);
-    const { channel_id, task_id, start_timestamp, end_timestamp } =
-      getFormValues();
+    const {
+      channel_id,
+      task_id,
+      model_name,
+      task_filter,
+      start_timestamp,
+      end_timestamp,
+    } = getFormValues();
     let localStartTimestamp = parseInt(Date.parse(start_timestamp) / 1000);
     let localEndTimestamp = parseInt(Date.parse(end_timestamp) / 1000);
+    const modelQuery = encodeURIComponent(model_name);
+    const videoFailedQuery =
+      task_filter === 'video_failure' ? '&video_failed=1' : '';
     let url = isAdminUser
-      ? `/api/task/?p=${page}&page_size=${size}&channel_id=${channel_id}&task_id=${task_id}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`
-      : `/api/task/self?p=${page}&page_size=${size}&task_id=${task_id}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`;
+      ? `/api/task/?p=${page}&page_size=${size}&channel_id=${channel_id}&task_id=${task_id}&model_name=${modelQuery}${videoFailedQuery}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`
+      : `/api/task/self?p=${page}&page_size=${size}&task_id=${task_id}&model_name=${modelQuery}${videoFailedQuery}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`;
     const res = await API.get(url);
     const { success, message, data } = res.data;
     if (success) {

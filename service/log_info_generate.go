@@ -29,12 +29,20 @@ func resolveConsumeLogChannelDiscountPercent(relayInfo *relaycommon.RelayInfo) f
 	return model.ResolveChannelPriceDiscountPercent(chID)
 }
 
-// appendChannelPriceDiscountToConsumeOther 写入 channel_price_discount_percent，供前端展示与实扣对齐。
+// appendChannelPriceDiscountToConsumeOther 写入 channel_price_discount_percent、markup_discount_rate 及全局倍率/固定价，供前端展示与实扣对齐。
 func appendChannelPriceDiscountToConsumeOther(relayInfo *relaycommon.RelayInfo, other map[string]interface{}) {
 	if other == nil {
 		return
 	}
 	other["channel_price_discount_percent"] = resolveConsumeLogChannelDiscountPercent(relayInfo)
+	if relayInfo != nil {
+		other["markup_discount_rate"] = relayInfo.PriceData.MarkupDiscountPercent
+		other["global_model_ratio"] = relayInfo.PriceData.GlobalModelRatio
+		other["global_model_price"] = relayInfo.PriceData.GlobalModelPrice
+		other["global_completion_ratio"] = relayInfo.PriceData.GlobalCompletionRatio
+		other["global_cache_ratio"] = relayInfo.PriceData.GlobalCacheRatio
+		other["global_create_cache_ratio"] = relayInfo.PriceData.GlobalCreateCacheRatio
+	}
 }
 
 func appendRequestPath(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, other map[string]interface{}) {
@@ -202,6 +210,12 @@ func appendImagePerImageBillingInfo(relayInfo *relaycommon.RelayInfo, other map[
 	b := relayInfo.ImageBilling
 	other["billing_mode"] = "image_per_image"
 	other["image_usd_per_image"] = b.UsdPerImage
+	if relayInfo.PriceData.ModelPrice > 0 {
+		other["image_channel_rule_usd"] = relayInfo.PriceData.ModelPrice
+	}
+	if relayInfo.PriceData.GlobalModelPrice > 0 {
+		other["image_global_rule_usd"] = relayInfo.PriceData.GlobalModelPrice
+	}
 	if b.Count > 0 {
 		other["image_count"] = b.Count
 	} else if n, ok := relayInfo.PriceData.OtherRatios["n"]; ok && n > 0 {
@@ -311,6 +325,12 @@ func GenerateMjOtherInfo(relayInfo *relaycommon.RelayInfo, priceData types.Price
 		pct = *priceData.ChannelPriceDiscount
 	}
 	other["channel_price_discount_percent"] = pct
+	other["markup_discount_rate"] = priceData.MarkupDiscountPercent
+	other["global_model_ratio"] = priceData.GlobalModelRatio
+	other["global_model_price"] = priceData.GlobalModelPrice
+	other["global_completion_ratio"] = priceData.GlobalCompletionRatio
+	other["global_cache_ratio"] = priceData.GlobalCacheRatio
+	other["global_create_cache_ratio"] = priceData.GlobalCreateCacheRatio
 	appendRequestPath(nil, relayInfo, other)
 	return other
 }

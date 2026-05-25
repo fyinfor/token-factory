@@ -1,22 +1,3 @@
-/*
-Copyright (C) 2025 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
-*/
-
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Avatar,
@@ -49,6 +30,7 @@ import { IconGift } from '@douyinfe/semi-icons';
 import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime';
 import { getCurrencyConfig } from '../../helpers/render';
 import SubscriptionPlansCard from './SubscriptionPlansCard';
+import './preset-amount-card.css';
 
 const { Text } = Typography;
 
@@ -62,6 +44,7 @@ const RechargeCard = ({
   presetAmounts,
   selectedPreset,
   selectPresetAmount,
+  onPresetCardClick,
   formatLargeNumber,
   priceRatio,
   topUpCount,
@@ -436,26 +419,25 @@ const RechargeCard = ({
                       }
 
                       return (
-                        <Card
+                        <div
                           key={index}
-                          style={{
-                            cursor: 'pointer',
-                            border:
-                              selectedPreset === preset.value
-                                ? '2px solid var(--semi-color-primary)'
-                                : '1px solid var(--semi-color-border)',
-                            height: '100%',
-                            width: '100%',
-                          }}
-                          bodyStyle={{ padding: '12px' }}
+                          className='preset-amount-card'
                           onClick={() => {
-                            selectPresetAmount(preset);
                             onlineFormApiRef.current?.setValue(
                               'topUpCount',
                               preset.value,
                             );
+                            if (onPresetCardClick) {
+                              onPresetCardClick(preset);
+                            } else {
+                              selectPresetAmount(preset);
+                            }
                           }}
                         >
+                          <Card
+                            className='preset-amount-card__inner'
+                            bodyStyle={{ padding: '12px' }}
+                          >
                           <div style={{ textAlign: 'center' }}>
                             <Typography.Title
                               heading={6}
@@ -483,13 +465,17 @@ const RechargeCard = ({
                               }}
                             >
                               {t('实付')} {symbol}
-                              {displayActualPay.toFixed(2)}，
-                              {hasDiscount
-                                ? `${t('节省')} ${symbol}${displaySave.toFixed(2)}`
-                                : `${t('节省')} ${symbol}0.00`}
+                              {displayActualPay.toFixed(2)}
+                              {hasDiscount && displaySave > 0.005 && (
+                                <>
+                                  ，{t('节省')} {symbol}
+                                  {displaySave.toFixed(2)}
+                                </>
+                              )}
                             </div>
                           </div>
-                        </Card>
+                          </Card>
+                        </div>
                       );
                     })}
                   </div>

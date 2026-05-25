@@ -1,21 +1,3 @@
-/*
-Copyright (C) 2025 QuantumNous
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Affero General Public License as
-published by the Free Software Foundation, either version 3 of the
-License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
-*/
 
 import React, { useEffect, useState, useContext } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -39,6 +21,7 @@ import { SiWechat } from 'react-icons/si';
 import RechargeCard from './RechargeCard';
 import TransferModal from './modals/TransferModal';
 import PaymentConfirmModal from './modals/PaymentConfirmModal';
+import PaymentMethodSelectModal from './modals/PaymentMethodSelectModal';
 import TopupHistoryModal from './modals/TopupHistoryModal';
 
 const TopUp = () => {
@@ -80,6 +63,7 @@ const TopUp = () => {
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [open, setOpen] = useState(false);
+  const [paymentSelectOpen, setPaymentSelectOpen] = useState(false);
   const [payWay, setPayWay] = useState('');
   const [amountLoading, setAmountLoading] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
@@ -786,6 +770,46 @@ const TopUp = () => {
     setAmount(discountedAmount);
   };
 
+  /** 获取当前额度下可用的在线支付方式（不含 waffo）。 */
+  const getEnabledEpayMethods = (count = topUpCount) => {
+    return payMethods.filter((method) => {
+      if (method.type === 'waffo') {
+        return false;
+      }
+      const minTopupVal = Number(method.min_topup) || 0;
+      const isStripe = method.type === 'stripe';
+      const disabled =
+        (!enableOnlineTopUp && !isStripe) ||
+        (!enableStripeTopUp && isStripe) ||
+        minTopupVal > Number(count || 0);
+      return !disabled;
+    });
+  };
+
+  /** 点击额度卡片：选中额度后弹出支付方式，或仅一种方式时直接进入确认弹窗。 */
+  const handlePresetCardClick = async (preset) => {
+    selectPresetAmount(preset);
+    const enabledMethods = getEnabledEpayMethods(preset.value);
+    if (enabledMethods.length === 0) {
+      showError(t('当前额度暂无可用支付方式'));
+      return;
+    }
+    if (enabledMethods.length === 1) {
+      await preTopUp(enabledMethods[0].type);
+      return;
+    }
+    setPaymentSelectOpen(true);
+  };
+
+  const handlePaymentMethodSelect = async (payment) => {
+    setPaymentSelectOpen(false);
+    await preTopUp(payment);
+  };
+
+  const handlePaymentSelectCancel = () => {
+    setPaymentSelectOpen(false);
+  };
+
   // 格式化大数字显示
   const formatLargeNumber = (num) => {
     return num.toString();
@@ -812,6 +836,21 @@ const TopUp = () => {
         getQuotaPerUnit={getQuotaPerUnit}
         transferAmount={transferAmount}
         setTransferAmount={setTransferAmount}
+      />
+
+      {/* 支付方式选择模态框（点击额度卡片后） */}
+      <PaymentMethodSelectModal
+        t={t}
+        visible={paymentSelectOpen}
+        onCancel={handlePaymentSelectCancel}
+        topUpCount={topUpCount}
+        renderTopUpCount={renderTopUpCountInUSD}
+        payMethods={payMethods}
+        enableOnlineTopUp={enableOnlineTopUp}
+        enableStripeTopUp={enableStripeTopUp}
+        onSelect={handlePaymentMethodSelect}
+        paymentLoading={paymentLoading}
+        payWay={payWay}
       />
 
       {/* 充值确认模态框 */}
@@ -926,6 +965,7 @@ const TopUp = () => {
           presetAmounts={presetAmounts}
           selectedPreset={selectedPreset}
           selectPresetAmount={selectPresetAmount}
+          onPresetCardClick={handlePresetCardClick}
           formatLargeNumber={formatLargeNumber}
           priceRatio={priceRatio}
           topUpCount={topUpCount}

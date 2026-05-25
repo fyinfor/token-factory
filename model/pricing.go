@@ -26,7 +26,7 @@ type Pricing struct {
 	ModelRatio             float64                 `json:"model_ratio"`
 	ModelPrice             float64                 `json:"model_price"`
 	OwnerBy                string                  `json:"owner_by"`
-	CompletionRatio        float64                 `json:"completion_ratio"`
+	CompletionRatio        *float64                `json:"completion_ratio,omitempty"`
 	CacheRatio             *float64                `json:"cache_ratio,omitempty"`
 	CreateCacheRatio       *float64                `json:"create_cache_ratio,omitempty"`
 	ImageRatio             *float64                `json:"image_ratio,omitempty"`
@@ -76,8 +76,23 @@ type PricingChannelItem struct {
 	CompletionTierRatio  any     `json:"completion_tier_ratio,omitempty"`
 	CacheTierRatio       any     `json:"cache_tier_ratio,omitempty"`
 	CreateCacheTierRatio any     `json:"create_cache_tier_ratio,omitempty"`
-	PriceDiscountPercent float64 `json:"price_discount_percent"`
+	PriceDiscountPercent float64 `json:"price_discount_percent"` // 成本折扣率（百分数，100=不打折）
+	MarkupDiscountRate   float64 `json:"markup_discount_rate"`   // 加价折扣率（百分数，0=不加价）
 	QuotaType            int     `json:"quota_type"`
+
+	// OptionModelRatio 等：仅 Option「渠道模型定价」显式配置（不做供应商/全局回退），供首页成本价展示。
+	OptionModelRatio       *float64 `json:"option_model_ratio,omitempty"`
+	OptionCompletionRatio  *float64 `json:"option_completion_ratio,omitempty"`
+	OptionCacheRatio       *float64 `json:"option_cache_ratio,omitempty"`
+	OptionCreateCacheRatio *float64 `json:"option_create_cache_ratio,omitempty"`
+	OptionModelPrice       *float64 `json:"option_model_price,omitempty"`
+	OptionImageRatio       *float64 `json:"option_image_ratio,omitempty"`
+	OptionImagePrice       *float64 `json:"option_image_price,omitempty"`
+	OptionAudioRatio       *float64 `json:"option_audio_ratio,omitempty"`
+	OptionAudioCompletionRatio *float64 `json:"option_audio_completion_ratio,omitempty"`
+	OptionVideoRatio           *float64 `json:"option_video_ratio,omitempty"`
+	OptionVideoCompletionRatio *float64 `json:"option_video_completion_ratio,omitempty"`
+	OptionVideoPrice           *float64 `json:"option_video_price,omitempty"`
 
 	// 热门排序相关字段
 	SortWeight         float64 `json:"sort_weight"`           // 渠道权重
@@ -108,6 +123,58 @@ func resolveChannelPricingTriple(channelID int, supplierApplicationID int, model
 
 func resolveChannelCachePair(channelID int, supplierApplicationID int, modelName string) (cacheRatio, createCacheRatio float64) {
 	return ResolveSupplierScopedCacheRatios(channelID, supplierApplicationID, modelName)
+}
+
+// fillOptionChannelPricingFields 填充仅来自 Option 渠道模型定价的字段（与运营设置-渠道模型定价一致）。
+func fillOptionChannelPricingFields(item *PricingChannelItem, channelID int, modelName string) {
+	if v, ok := ratio_setting.GetChannelModelRatio(channelID, modelName); ok {
+		vv := v
+		item.OptionModelRatio = &vv
+	}
+	if v, ok := ratio_setting.GetChannelCompletionRatio(channelID, modelName); ok {
+		vv := v
+		item.OptionCompletionRatio = &vv
+	}
+	if v, ok := ratio_setting.GetChannelCacheRatio(channelID, modelName); ok {
+		vv := v
+		item.OptionCacheRatio = &vv
+	}
+	if v, ok := ratio_setting.GetChannelCreateCacheRatio(channelID, modelName); ok {
+		vv := v
+		item.OptionCreateCacheRatio = &vv
+	}
+	if v, ok := ratio_setting.GetChannelModelPrice(channelID, modelName); ok {
+		vv := v
+		item.OptionModelPrice = &vv
+	}
+	if v, ok := ratio_setting.GetChannelImageRatio(channelID, modelName); ok {
+		vv := v
+		item.OptionImageRatio = &vv
+	}
+	if v, ok := ratio_setting.GetChannelImagePrice(channelID, modelName); ok {
+		vv := v
+		item.OptionImagePrice = &vv
+	}
+	if v, ok := ratio_setting.GetChannelAudioRatio(channelID, modelName); ok {
+		vv := v
+		item.OptionAudioRatio = &vv
+	}
+	if v, ok := ratio_setting.GetChannelAudioCompletionRatio(channelID, modelName); ok {
+		vv := v
+		item.OptionAudioCompletionRatio = &vv
+	}
+	if v, ok := ratio_setting.GetChannelVideoRatio(channelID, modelName); ok {
+		vv := v
+		item.OptionVideoRatio = &vv
+	}
+	if v, ok := ratio_setting.GetChannelVideoCompletionRatio(channelID, modelName); ok {
+		vv := v
+		item.OptionVideoCompletionRatio = &vv
+	}
+	if v, ok := ratio_setting.GetChannelVideoPrice(channelID, modelName); ok {
+		vv := v
+		item.OptionVideoPrice = &vv
+	}
 }
 
 func pricingSupplierAliasFromMeta(supplierApplicationID int, alias *string) string {
@@ -208,9 +275,12 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			if row.PriceDiscountPercent != nil {
 				d = *row.PriceDiscountPercent
 			}
-			mult := ChannelPriceDiscountMultiplierForPricing(d)
-			mp := baseMp * mult
-			mr := baseMr * mult
+			markupRate := 0.0
+			if row.MarkupDiscountRate != nil {
+				markupRate = *row.MarkupDiscountRate
+			}
+			// 新公式：前端接收原始倍率（baseMp/baseMr），由前端按公式显式乘以成本折扣率；
+			// price_discount_percent 和 markup_discount_rate 一并下发供前端计算。
 			routeSlug := ""
 			if channelSlugMap != nil {
 				routeSlug = channelSlugMap[row.ChannelID]
@@ -224,12 +294,13 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 				SupplierType:          strings.TrimSpace(row.SupplierType),
 				RouteSlug:             routeSlug,
 				TestResponseTimeMs:    testMs,
-				ModelPrice:            mp,
-				ModelRatio:            mr,
+				ModelPrice:            baseMp,
+				ModelRatio:            baseMr,
 				CompletionRatio:       cr,
 				CacheRatio:            chCache,
 				CreateCacheRatio:      chCreate,
 				PriceDiscountPercent:  d,
+				MarkupDiscountRate:    markupRate,
 				QuotaType: func() int {
 					if baseMp > 0 {
 						return 1
@@ -250,6 +321,7 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			if hasCreateCacheTierRatio {
 				chItem.CreateCacheTierRatio = createCacheTierRatio
 			}
+			fillOptionChannelPricingFields(&chItem, row.ChannelID, modelName)
 			chItems = append(chItems, chItem)
 		}
 
@@ -281,9 +353,8 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 					SupplierType:   ch.SupplierType,
 				},
 			}
-			discountMult := ChannelPriceDiscountMultiplierForPricing(ch.PriceDiscountPercent)
-			item.VideoFlatClipHint = BuildVideoFlatClipHint(ch.ChannelID, modelName, discountMult)
-			item.ImagePerImageHint = BuildImagePerImageHint(ch.ChannelID, modelName, discountMult)
+			item.VideoFlatClipHint = BuildVideoFlatClipHint(ch.ChannelID, modelName, ch.PriceDiscountPercent, ch.MarkupDiscountRate)
+			item.ImagePerImageHint = BuildImagePerImageHint(ch.ChannelID, modelName, ch.PriceDiscountPercent, ch.MarkupDiscountRate)
 			out = append(out, item)
 		}
 	}
@@ -549,7 +620,11 @@ func updatePricing() {
 		} else {
 			modelRatio, _, _ := ratio_setting.GetModelRatio(model)
 			pricing.ModelRatio = modelRatio
-			pricing.CompletionRatio = ratio_setting.GetCompletionRatio(model)
+			// 仅当模型有显式配置的输出倍率时才返回，否则前端不展示输出价格
+			if ratio_setting.ContainsCompletionRatio(model) {
+				cr := ratio_setting.GetCompletionRatio(model)
+				pricing.CompletionRatio = &cr
+			}
 			pricing.QuotaType = 0
 		}
 		if cacheRatio, ok := ratio_setting.GetCacheRatio(model); ok {

@@ -20,6 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Avatar,
+  Banner,
   Button,
   Card,
   Collapse,
@@ -717,6 +718,14 @@ const ApiDocsSidePanel = ({
           className='!rounded-2xl shadow-sm border-0 mb-3 api-docs-request-examples-card'
           title={t('请求示例')}
         >
+          <Banner
+            type='warning'
+            className='!rounded-lg mt-3'
+            closeIcon={null}
+            description={t(
+              '建议直连本站点发起请求，关闭系统代理或 VPN，避免代理干扰模型连接与请求转发。',
+            )}
+          />
           <Tabs type='line'>
             {[
               ['cURL', 'curl', 'bash'],
