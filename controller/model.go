@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/lingyiwanwu"
 	"github.com/QuantumNous/new-api/relay/channel/minimax"
 	"github.com/QuantumNous/new-api/relay/channel/moonshot"
+	taskalivideo "github.com/QuantumNous/new-api/relay/channel/task/alivideo"
 	taskopenaivideo "github.com/QuantumNous/new-api/relay/channel/task/openaivideo"
 	tasktencentvod "github.com/QuantumNous/new-api/relay/channel/task/tencentvod"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -105,6 +106,14 @@ func init() {
 			OwnedBy: tasktencentvod.ChannelName,
 		})
 	}
+	for _, modelName := range taskalivideo.ModelList {
+		openAIModels = append(openAIModels, dto.OpenAIModels{
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: taskalivideo.ChannelName,
+		})
+	}
 	openAIModelsMap = make(map[string]dto.OpenAIModels)
 	for _, aiModel := range openAIModels {
 		openAIModelsMap[aiModel.Id] = aiModel
@@ -127,6 +136,7 @@ func init() {
 	channelId2Models[constant.ChannelTypeOpenAIVideo] = taskopenaivideo.ModelList
 	channelId2Models[constant.ChannelTypeVideoGenerator] = taskopenaivideo.ModelList
 	channelId2Models[constant.ChannelTypeTencentCloudVideo] = tasktencentvod.ModelList
+	channelId2Models[constant.ChannelTypeAliVideo] = taskalivideo.ModelList
 	openAIModels = lo.UniqBy(openAIModels, func(m dto.OpenAIModels) string {
 		return m.Id
 	})

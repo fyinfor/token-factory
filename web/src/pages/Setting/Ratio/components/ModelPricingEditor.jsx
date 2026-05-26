@@ -59,8 +59,10 @@ import {
   ratioToPrice,
 } from '../utils/requestTierPricing';
 import TierRowsEditor from './TierRowsEditor';
+import JsonCodeEditor from '../../../../components/common/ui/JsonCodeEditor';
+import { VIDEO_PRICING_JSON_PLACEHOLDER } from '../utils/videoPricingJson';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
-import { getCurrencyConfig } from '../../../../helpers';
+import { getCurrencyConfig, showError } from '../../../../helpers';
 
 const { Text } = Typography;
 const EMPTY_CANDIDATE_MODEL_NAMES = [];
@@ -339,6 +341,8 @@ export default function ModelPricingEditor({
     cache_write: false,
   });
   const [newModelName, setNewModelName] = useState('');
+  const [videoEditMode, setVideoEditMode] = useState('visual');
+  const [videoJsonDraft, setVideoJsonDraft] = useState('');
 
   // 获取汇率
   const exchangeRate = options?.usd_exchange_rate || 1;
@@ -373,6 +377,8 @@ export default function ModelPricingEditor({
     updateVideoRuleRow,
     addVideoRuleRow,
     removeVideoRuleRow,
+    applyVideoPricingJson,
+    getVideoPricingJsonText,
     handleImageGenPriceUnitChange,
     updateImageRuleRow,
     addImageRuleRow,
@@ -670,6 +676,47 @@ export default function ModelPricingEditor({
     }
   };
 
+  useEffect(() => {
+    setVideoEditMode('visual');
+    setVideoJsonDraft('');
+  }, [selectedModelName]);
+
+  const syncVideoJsonBeforeSave = () => {
+    if (
+      videoEditMode !== 'json' ||
+      !selectedModel ||
+      !isOptionalFieldEnabled(selectedModel, 'video')
+    ) {
+      return true;
+    }
+    const result = applyVideoPricingJson(videoJsonDraft);
+    if (!result.ok) {
+      showError(
+        result.message === '不是合法的 JSON 字符串'
+          ? t('不是合法的 JSON 字符串')
+          : result.message,
+      );
+      return false;
+    }
+    return true;
+  };
+
+  const switchVideoToJsonMode = () => {
+    if (!selectedModel) return;
+    setVideoJsonDraft(getVideoPricingJsonText());
+    setVideoEditMode('json');
+  };
+
+  const switchVideoToVisualMode = () => {
+    if (!syncVideoJsonBeforeSave()) return;
+    setVideoEditMode('visual');
+  };
+
+  const handleApplyChanges = () => {
+    if (!syncVideoJsonBeforeSave()) return;
+    handleSubmit();
+  };
+
   const rowSelection = {
     selectedRowKeys: selectedModelNames,
     onChange: (selectedRowKeys) => setSelectedModelNames(selectedRowKeys),
@@ -693,7 +740,7 @@ export default function ModelPricingEditor({
               type='primary'
               icon={<IconSave />}
               loading={loading}
-              onClick={handleSubmit}
+              onClick={handleApplyChanges}
               style={isMobile ? { width: '100%' } : undefined}
             >
               {t('应用更改')}
@@ -1408,7 +1455,7 @@ export default function ModelPricingEditor({
                         }
                       />
                       <div style={{ marginTop: 8 }}>
-                        <div className='mb-1 font-medium text-gray-700 flex items-center justify-between gap-3'>
+                        <div className='mb-1 font-medium text-gray-700 flex items-center justify-between gap-3 flex-wrap'>
                           <span className='flex items-center gap-1'>
                             {t('视频价格')}
                             <Tooltip
@@ -1435,16 +1482,44 @@ export default function ModelPricingEditor({
                               />
                             </Tooltip>
                           </span>
-                          <Switch
-                            size='small'
-                            checked={isOptionalFieldEnabled(
-                              selectedModel,
-                              'video',
-                            )}
-                            onChange={(checked) =>
-                              handleOptionalFieldToggle('video', checked)
-                            }
-                          />
+                          <Space>
+                            {isOptionalFieldEnabled(selectedModel, 'video') ? (
+                              <>
+                                <Button
+                                  size='small'
+                                  type={
+                                    videoEditMode === 'visual'
+                                      ? 'primary'
+                                      : 'tertiary'
+                                  }
+                                  onClick={switchVideoToVisualMode}
+                                >
+                                  {t('可视化')}
+                                </Button>
+                                <Button
+                                  size='small'
+                                  type={
+                                    videoEditMode === 'json'
+                                      ? 'primary'
+                                      : 'tertiary'
+                                  }
+                                  onClick={switchVideoToJsonMode}
+                                >
+                                  {t('JSON 模式')}
+                                </Button>
+                              </>
+                            ) : null}
+                            <Switch
+                              size='small'
+                              checked={isOptionalFieldEnabled(
+                                selectedModel,
+                                'video',
+                              )}
+                              onChange={(checked) =>
+                                handleOptionalFieldToggle('video', checked)
+                              }
+                            />
+                          </Space>
                         </div>
                         {!isOptionalFieldEnabled(selectedModel, 'video') ? (
                           <div className='mt-1 text-xs text-gray-500'>
@@ -1459,6 +1534,16 @@ export default function ModelPricingEditor({
                               borderRadius: 6,
                             }}
                           >
+                            {videoEditMode === 'json' ? (
+                              <JsonCodeEditor
+                                value={videoJsonDraft}
+                                onChange={setVideoJsonDraft}
+                                minRows={22}
+                                maxRows={36}
+                                placeholder={VIDEO_PRICING_JSON_PLACEHOLDER}
+                              />
+                            ) : (
+                              <>
                             <div className='mb-2 text-xs text-gray-600'>
                               {t('计费模式')}
                             </div>
@@ -2167,6 +2252,8 @@ export default function ModelPricingEditor({
                                     )}
                                   />
                                 </div>
+                              </>
+                            )}
                               </>
                             )}
                           </div>

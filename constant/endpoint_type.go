@@ -29,6 +29,8 @@ const (
 	EndpointTypeTencentCloudVODVideo EndpointType = "tencentcloud-vod-video"
 	// EndpointTypeTencentCloudVODImage is Tencent Cloud VOD AIGC image (TC3 API).
 	EndpointTypeTencentCloudVODImage EndpointType = "tencentcloud-vod-image"
+	// EndpointTypeAliVideo is Alibaba DashScope video-synthesis (async task API).
+	EndpointTypeAliVideo EndpointType = "ali-video"
 	//EndpointTypeMidjourney     EndpointType = "midjourney-proxy"
 	//EndpointTypeSuno           EndpointType = "suno-proxy"
 	//EndpointTypeKling          EndpointType = "kling"

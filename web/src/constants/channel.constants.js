@@ -222,6 +222,11 @@ export const CHANNEL_OPTIONS = [
         color: 'cyan',
         label: '腾讯云-图片',
     },
+    {
+        value: 63,
+        color: 'orange',
+        label: '阿里云-视频',
+    },
 ];
 
 // Channel types that support upstream model list fetching in UI.

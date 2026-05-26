@@ -170,6 +170,7 @@ const ModelTestModal = ({
     'openai-video',
     'hidream-video',
     'tokenfactory-video',
+    'ali-video',
   ].includes(selectedEndpointType);
 
   React.useEffect(() => {
@@ -220,6 +221,10 @@ const ModelTestModal = ({
     {
       value: 'videogenerator',
       label: t('视频生成') + ' (/videogenerator/generate)',
+    },
+    {
+      value: 'ali-video',
+      label: t('阿里云视频') + ' (DashScope video-synthesis)',
     },
   ];
 
