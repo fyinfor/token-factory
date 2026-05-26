@@ -477,6 +477,7 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 		channelModel.Type != constant.ChannelTypeOpenAIVideo &&
 		channelModel.Type != constant.ChannelTypeVideoGenerator &&
 		channelModel.Type != constant.ChannelTypeTencentCloudVideo &&
+		channelModel.Type != constant.ChannelTypeAliVideo &&
 		channelModel.Type != constant.ChannelTypeTokenFactoryOpen {
 		return nil
 	}
@@ -519,6 +520,7 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	if channelModel.Type == constant.ChannelTypeOpenAIVideo ||
 		channelModel.Type == constant.ChannelTypeVideoGenerator ||
 		channelModel.Type == constant.ChannelTypeTencentCloudVideo ||
+		channelModel.Type == constant.ChannelTypeAliVideo ||
 		channelModel.Type == constant.ChannelTypeTokenFactoryOpen {
 		task.Data = body
 	}

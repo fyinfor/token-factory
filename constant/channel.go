@@ -60,6 +60,7 @@ const (
 	ChannelTypeTokenFactoryOpen      = 60
 	ChannelTypeTencentCloudVideo     = 61 // Tencent Cloud VOD CreateAigcVideoTask / DescribeTaskDetail
 	ChannelTypeTencentCloudImage     = 62 // Tencent Cloud VOD CreateAigcImageTask / DescribeTaskDetail
+	ChannelTypeAliVideo              = 63 // Alibaba DashScope video-synthesis (happyhorse / wan, etc.)
 	ChannelTypeDummy                 // this one is only for count, do not add any channel after this
 
 )
@@ -128,7 +129,8 @@ var ChannelBaseURLs = []string{
 	"",                               //60 TokenFactoryOpen
 	"https://vod.tencentcloudapi.com", //61 TencentCloudVideo
 	"https://vod.tencentcloudapi.com", //62 TencentCloudImage
-	"",                               //63 Dummy
+	"https://dashscope.aliyuncs.com/api", //63 AliVideo (user may override)
+	"",                               //64 Dummy
 }
 
 var ChannelTypeNames = map[int]string{
@@ -191,6 +193,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeTokenFactoryOpen:      "TokenFactoryOpen",
 	ChannelTypeTencentCloudVideo:     "TencentCloudVideo",
 	ChannelTypeTencentCloudImage:     "TencentCloudImage",
+	ChannelTypeAliVideo:              "AliVideo",
 }
 
 func GetChannelTypeName(channelType int) string {
@@ -204,7 +207,7 @@ func GetChannelTypeName(channelType int) string {
 // paths (/v1/videos, etc.) with optional token-based or per-video pricing.
 func IsVideoTaskChannel(channelType int) bool {
 	switch channelType {
-	case ChannelTypeSora, ChannelTypeOpenAIVideo, ChannelTypeVideoGenerator, ChannelTypeTencentCloudVideo:
+	case ChannelTypeSora, ChannelTypeOpenAIVideo, ChannelTypeVideoGenerator, ChannelTypeTencentCloudVideo, ChannelTypeAliVideo:
 		return true
 	default:
 		return false

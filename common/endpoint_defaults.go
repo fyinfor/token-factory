@@ -31,6 +31,7 @@ var defaultEndpointInfoMap = map[constant.EndpointType]EndpointInfo{
 	constant.EndpointTypeVideoGenerator:        {Path: "/videogenerator/generate", Method: "POST"},
 	constant.EndpointTypeTencentCloudVODVideo:  {Path: "/v1/videos", Method: "POST"},
 	constant.EndpointTypeTencentCloudVODImage:  {Path: "/v1/images/generations", Method: "POST"},
+	constant.EndpointTypeAliVideo:              {Path: "/v1/video/generations", Method: "POST"},
 }
 
 // GetDefaultEndpointInfo 返回指定端点类型的默认信息以及是否存在

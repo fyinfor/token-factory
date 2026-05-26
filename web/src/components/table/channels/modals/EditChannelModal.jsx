@@ -737,6 +737,19 @@ const EditChannelModal = (props) => {
             formApiRef.current.setValue('key', '');
           }
           break;
+        case 63:
+          localModels = getChannelModels(value);
+          setInputs((prevInputs) => ({
+            ...prevInputs,
+            base_url: 'https://dashscope.aliyuncs.com/api',
+          }));
+          if (formApiRef.current) {
+            formApiRef.current.setValue(
+              'base_url',
+              'https://dashscope.aliyuncs.com/api',
+            );
+          }
+          break;
         default:
           localModels = getChannelModels(value);
           break;

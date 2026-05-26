@@ -40,6 +40,8 @@ func GetEndpointTypesByChannelType(channelType int, modelName string) []constant
 		endpointTypes = []constant.EndpointType{constant.EndpointTypeTencentCloudVODVideo}
 	case constant.ChannelTypeTencentCloudImage:
 		endpointTypes = []constant.EndpointType{constant.EndpointTypeTencentCloudVODImage}
+	case constant.ChannelTypeAliVideo:
+		endpointTypes = []constant.EndpointType{constant.EndpointTypeAliVideo}
 	default:
 		if IsOpenAIResponseOnlyModel(modelName) {
 			endpointTypes = []constant.EndpointType{constant.EndpointTypeOpenAIResponse}
