@@ -337,7 +337,8 @@ func Register(c *gin.Context) {
 func GetAllUsers(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	studentView := strings.TrimSpace(c.Query("student_view"))
-	users, total, err := model.GetAllUsers(pageInfo, studentView)
+	tag := strings.TrimSpace(c.Query("tag"))
+	users, total, err := model.GetAllUsers(pageInfo, studentView, tag)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -354,8 +355,9 @@ func SearchUsers(c *gin.Context) {
 	keyword := c.Query("keyword")
 	group := c.Query("group")
 	studentView := strings.TrimSpace(c.Query("student_view"))
+	tag := strings.TrimSpace(c.Query("tag"))
 	pageInfo := common.GetPageQuery(c)
-	users, total, err := model.SearchUsers(keyword, group, studentView, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	users, total, err := model.SearchUsers(keyword, group, studentView, tag, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -1120,6 +1122,13 @@ func UpdateUser(c *gin.Context) {
 		}
 		common.ApiError(c, err)
 		return
+	}
+	// Update user tags metadata if tags changed
+	if updatedUser.Tags != "" {
+		tags := model.GetUserTagsList(updatedUser.Tags)
+		if len(tags) > 0 {
+			model.UpsertUserTags(tags)
+		}
 	}
 	if originUser.Quota != updatedUser.Quota {
 		model.RecordLog(originUser.Id, model.LogTypeManage, fmt.Sprintf("管理员将用户额度从 %s修改为 %s", logger.LogQuota(originUser.Quota), logger.LogQuota(updatedUser.Quota)))
@@ -2001,4 +2010,46 @@ func UpdateUserSetting(c *gin.Context) {
 	}
 
 	common.ApiSuccessI18n(c, i18n.MsgSettingSaved, nil)
+}
+
+func GetUserTags(c *gin.Context) {
+	merged := make([]string, 0, 32)
+	seen := make(map[string]struct{}, 32)
+	appendTag := func(name string) {
+		tag := strings.TrimSpace(name)
+		if tag == "" {
+			return
+		}
+		if _, ok := seen[tag]; ok {
+			return
+		}
+		seen[tag] = struct{}{}
+		merged = append(merged, tag)
+	}
+
+	dbTags, err := model.GetAllUserTagNames()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	for _, tag := range dbTags {
+		appendTag(tag)
+	}
+
+	var allTagCSVs []string
+	if err := model.DB.Model(&model.User{}).Where("tags <> ?", "").Pluck("tags", &allTagCSVs).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	for _, csv := range allTagCSVs {
+		for _, tag := range model.GetUserTagsList(csv) {
+			appendTag(tag)
+		}
+	}
+
+	if err := model.UpsertUserTags(merged); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, merged)
 }

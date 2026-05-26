@@ -52,6 +52,7 @@ const UsersPage = () => {
     activePage,
     pageSize,
     groupOptions,
+    tagOptions,
     loading,
     searching,
 
@@ -94,6 +95,7 @@ const UsersPage = () => {
         visible={showEditUser}
         handleClose={closeEditUser}
         editingUser={editingUser}
+        tagOptions={tagOptions}
       />
 
       <CardPro
@@ -127,6 +129,7 @@ const UsersPage = () => {
               activePage={activePage}
               pageSize={pageSize}
               groupOptions={groupOptions}
+              tagOptions={tagOptions}
               loading={loading}
               searching={searching}
               t={t}

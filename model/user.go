@@ -63,6 +63,7 @@ type User struct {
 	LinuxDOId         string         `json:"linux_do_id" gorm:"column:linux_do_id;index"`
 	Setting           string         `json:"setting" gorm:"type:text;column:setting"`
 	Remark            string         `json:"remark,omitempty" gorm:"type:varchar(255)" validate:"max=255"`
+	Tags              string         `json:"tags,omitempty" gorm:"type:varchar(255)"`
 	StripeCustomer    string         `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
 	SupplierID        int            `json:"supplier_id" gorm:"type:int;column:supplier_id;index;default:0;comment:供应商申请ID 0表示非供应商"`
 	// AdminInitialSetupCompleted 管理员代建账号首次登录前须为 false；自助注册等为 true。注意：GORM Create 会省略 bool 的 false，代建分支须在 Insert 内显式 UPDATE 落库为 0。
@@ -313,7 +314,7 @@ func applyStudentViewFilter(query *gorm.DB, studentView string) *gorm.DB {
 	}
 }
 
-func GetAllUsers(pageInfo *common.PageInfo, studentView string) (users []*User, total int64, err error) {
+func GetAllUsers(pageInfo *common.PageInfo, studentView string, tag string) (users []*User, total int64, err error) {
 	// Start transaction
 	tx := DB.Begin()
 	if tx.Error != nil {
@@ -327,6 +328,16 @@ func GetAllUsers(pageInfo *common.PageInfo, studentView string) (users []*User, 
 
 	// Get total count within transaction
 	baseQuery := applyStudentViewFilter(tx.Unscoped().Model(&User{}), studentView)
+
+	// Apply tag filter if specified
+	if tag != "" {
+		if common.UsingPostgreSQL {
+			baseQuery = baseQuery.Where("tags ILIKE ?", "%"+tag+"%")
+		} else {
+			baseQuery = baseQuery.Where("tags LIKE ?", "%"+tag+"%")
+		}
+	}
+
 	err = baseQuery.Count(&total).Error
 	if err != nil {
 		tx.Rollback()
@@ -348,7 +359,7 @@ func GetAllUsers(pageInfo *common.PageInfo, studentView string) (users []*User, 
 	return users, total, nil
 }
 
-func SearchUsers(keyword string, group string, studentView string, startIdx int, num int) ([]*User, int64, error) {
+func SearchUsers(keyword string, group string, studentView string, tag string, startIdx int, num int) ([]*User, int64, error) {
 	var users []*User
 	var total int64
 	var err error
@@ -368,6 +379,15 @@ func SearchUsers(keyword string, group string, studentView string, startIdx int,
 	query := tx.Unscoped().Model(&User{})
 
 	query = applyStudentViewFilter(query, studentView)
+
+	// Apply tag filter if specified
+	if tag != "" {
+		if common.UsingPostgreSQL {
+			query = query.Where("tags ILIKE ?", "%"+tag+"%")
+		} else {
+			query = query.Where("tags LIKE ?", "%"+tag+"%")
+		}
+	}
 
 	// 构建搜索条件
 	likeCondition := "username LIKE ? OR email LIKE ? OR display_name LIKE ? OR phone LIKE ?"
@@ -836,6 +856,7 @@ func (user *User) Edit(updatePassword bool) error {
 		"remark":       newUser.Remark,
 		"phone":        normalizedPhone,
 		"email":        normalizedEmail,
+		"tags":         newUser.Tags,
 		"updated_at":   time.Now(),
 	}
 	if updatePassword {
