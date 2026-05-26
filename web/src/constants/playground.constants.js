@@ -18,114 +18,115 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 export const MESSAGE_STATUS = {
-  LOADING: 'loading',
-  INCOMPLETE: 'incomplete',
-  COMPLETE: 'complete',
-  ERROR: 'error',
+    LOADING: 'loading',
+    INCOMPLETE: 'incomplete',
+    COMPLETE: 'complete',
+    ERROR: 'error',
 };
 
 export const MESSAGE_ROLES = {
-  USER: 'user',
-  ASSISTANT: 'assistant',
-  SYSTEM: 'system',
+    USER: 'user',
+    ASSISTANT: 'assistant',
+    SYSTEM: 'system',
 };
 
 // 默认消息示例 - 使用函数生成以支持 i18n
 export const getDefaultMessages = (t) => [
-  {
-    role: MESSAGE_ROLES.USER,
-    id: '2',
-    createAt: 1715676751919,
-    content: t('默认用户消息'),
-  },
-  {
-    role: MESSAGE_ROLES.ASSISTANT,
-    id: '3',
-    createAt: 1715676751919,
-    content: t('默认助手消息'),
-    reasoningContent: '',
-    isReasoningExpanded: false,
-  },
+    {
+        role: MESSAGE_ROLES.USER,
+        id: '2',
+        createAt: 1715676751919,
+        content: t('默认用户消息'),
+    },
+    {
+        role: MESSAGE_ROLES.ASSISTANT,
+        id: '3',
+        createAt: 1715676751919,
+        content: t('默认助手消息'),
+        reasoningContent: '',
+        isReasoningExpanded: false,
+    },
 ];
 
 // 保留旧的导出以保持向后兼容
 export const DEFAULT_MESSAGES = [
-  {
-    role: MESSAGE_ROLES.USER,
-    id: '2',
-    createAt: 1715676751919,
-    content: 'Hello',
-  },
-  {
-    role: MESSAGE_ROLES.ASSISTANT,
-    id: '3',
-    createAt: 1715676751919,
-    content: 'Hello! How can I help you today?',
-    reasoningContent: '',
-    isReasoningExpanded: false,
-  },
+    {
+        role: MESSAGE_ROLES.USER,
+        id: '2',
+        createAt: 1715676751919,
+        content: 'Hello',
+    },
+    {
+        role: MESSAGE_ROLES.ASSISTANT,
+        id: '3',
+        createAt: 1715676751919,
+        content: 'Hello! How can I help you today?',
+        reasoningContent: '',
+        isReasoningExpanded: false,
+    },
 ];
 
 // ========== UI 相关常量 ==========
 export const DEBUG_TABS = {
-  PREVIEW: 'preview',
-  REQUEST: 'request',
-  RESPONSE: 'response',
+    PREVIEW: 'preview',
+    REQUEST: 'request',
+    RESPONSE: 'response',
 };
 
 // ========== API 相关常量 ==========
 export const API_ENDPOINTS = {
-  CHAT_COMPLETIONS: '/api/playground/chat/completions',
-  IMAGE_GENERATIONS: '/api/playground/images/generations',
-  IMAGE_GENERATIONS_FETCH_PREFIX: '/api/playground/images/generations',
-  VIDEO_GENERATIONS: '/api/playground/videos',
-  USER_MODELS: '/api/user/models',
-  USER_GROUPS: '/api/user/self/groups',
+    CHAT_COMPLETIONS: '/api/playground/chat/completions',
+    IMAGE_GENERATIONS: '/api/playground/images/generations',
+    IMAGE_GENERATIONS_FETCH_PREFIX: '/api/playground/images/generations',
+    VIDEO_GENERATIONS: '/api/playground/videos',
+    USER_MODELS: '/api/user/models',
+    USER_GROUPS: '/api/user/self/groups',
 };
 
 // ========== 配置默认值 ==========
 export const DEFAULT_CONFIG = {
-  inputs: {
-    display_mode: 'text',
-    model: 'gpt-4o',
-    model_type: '',
-    selected_route_slug: '',
-    group: '',
-    temperature: 0.7,
-    top_p: 1,
-    max_tokens: 4096,
-    frequency_penalty: 0,
-    presence_penalty: 0,
-    seed: null,
-    stream: true,
-    imageEnabled: false,
-    imageUrls: [''],
-    selected_model_tags: [],
-    image_size: '1280x720',
-    image_n: 1,
-    image_quality: 'standard',
-    image_response_format: 'url',
-    image_style: 'vivid',
-    video_duration: 5,
-    video_resolution_preset: '1280x720',
-    video_width: 1280,
-    video_height: 720,
-    video_fps: 24,
-    video_motion: 0.4,
-    video_n: 1,
-  },
-  parameterEnabled: {
-    temperature: true,
-    top_p: true,
-    max_tokens: false,
-    frequency_penalty: true,
-    presence_penalty: true,
-    seed: false,
-  },
-  systemPrompt: '',
-  showDebugPanel: false,
-  customRequestMode: false,
-  customRequestBody: '',
+    inputs: {
+        display_mode: 'text',
+        model: 'gpt-4o',
+        model_type: '',
+        selected_route_slug: '',
+        group: '',
+        temperature: 0.7,
+        top_p: 1,
+        max_tokens: 4096,
+        frequency_penalty: 0,
+        presence_penalty: 0,
+        seed: null,
+        stream: true,
+        imageEnabled: false,
+        imageUrls: [''],
+        videoUrls: [''],
+        selected_model_tags: [],
+        image_size: '1280x720',
+        image_n: 1,
+        image_quality: 'standard',
+        image_response_format: 'url',
+        image_style: 'vivid',
+        video_duration: 5,
+        video_resolution_preset: '1280x720',
+        video_width: 1280,
+        video_height: 720,
+        video_fps: 24,
+        video_motion: 0.4,
+        video_n: 1,
+    },
+    parameterEnabled: {
+        temperature: true,
+        top_p: true,
+        max_tokens: false,
+        frequency_penalty: true,
+        presence_penalty: true,
+        seed: false,
+    },
+    systemPrompt: '',
+    showDebugPanel: false,
+    customRequestMode: false,
+    customRequestBody: '',
 };
 
 // ========== 正则表达式 ==========
@@ -133,35 +134,35 @@ export const THINK_TAG_REGEX = /<think>([\s\S]*?)<\/think>/g;
 
 // ========== 错误消息 ==========
 export const ERROR_MESSAGES = {
-  NO_TEXT_CONTENT: '此消息没有可复制的文本内容',
-  INVALID_MESSAGE_TYPE: '无法复制此类型的消息内容',
-  COPY_FAILED: '复制失败，请手动选择文本复制',
-  COPY_HTTPS_REQUIRED: '复制功能需要 HTTPS 环境，请手动复制',
-  BROWSER_NOT_SUPPORTED: '浏览器不支持复制功能，请手动复制',
-  JSON_PARSE_ERROR: '自定义请求体格式错误，请检查JSON格式',
-  API_REQUEST_ERROR: '请求发生错误',
-  NETWORK_ERROR: '网络连接失败或服务器无响应',
+    NO_TEXT_CONTENT: '此消息没有可复制的文本内容',
+    INVALID_MESSAGE_TYPE: '无法复制此类型的消息内容',
+    COPY_FAILED: '复制失败，请手动选择文本复制',
+    COPY_HTTPS_REQUIRED: '复制功能需要 HTTPS 环境，请手动复制',
+    BROWSER_NOT_SUPPORTED: '浏览器不支持复制功能，请手动复制',
+    JSON_PARSE_ERROR: '自定义请求体格式错误，请检查JSON格式',
+    API_REQUEST_ERROR: '请求发生错误',
+    NETWORK_ERROR: '网络连接失败或服务器无响应',
 };
 
 /** 操练场文生视频时长（秒）：3～30，默认 5 */
 export const PLAYGROUND_VIDEO_DURATION_OPTIONS = Array.from(
-  { length: 28 },
-  (_, i) => {
-    const sec = i + 3;
-    return { label: `${sec}s`, value: sec };
-  },
+    { length: 28 },
+    (_, i) => {
+        const sec = i + 3;
+        return { label: `${sec}s`, value: sec };
+    },
 );
 
 // 操练场图片分辨率：value 为上游 size，label 仅展示 480p / 720p 等
 export const PLAYGROUND_IMAGE_SIZE_OPTIONS = [
-  { label: '480p', value: '854x480' },
-  { label: '720p', value: '1280x720' },
-  { label: '1080p', value: '1920x1080' },
-  { label: '2K', value: '2560x1440' },
+    { label: '480p', value: '854x480' },
+    { label: '720p', value: '1280x720' },
+    { label: '1080p', value: '1920x1080' },
+    { label: '2K', value: '2560x1440' },
 ];
 
 // ========== 存储键名 ==========
 export const STORAGE_KEYS = {
-  CONFIG: 'playground_config',
-  MESSAGES: 'playground_messages',
+    CONFIG: 'playground_config',
+    MESSAGES: 'playground_messages',
 };

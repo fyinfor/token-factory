@@ -21,6 +21,7 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay"
+	taskalivideo "github.com/QuantumNous/new-api/relay/channel/task/alivideo"
 	taskopenaivideo "github.com/QuantumNous/new-api/relay/channel/task/openaivideo"
 	tasktencentvod "github.com/QuantumNous/new-api/relay/channel/task/tencentvod"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -154,6 +155,9 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 	if channel != nil && channel.Type == constant.ChannelTypeTencentCloudImage {
 		return string(constant.EndpointTypeTencentCloudVODImage)
 	}
+	if channel != nil && channel.Type == constant.ChannelTypeAliVideo {
+		return string(constant.EndpointTypeAliVideo)
+	}
 	return normalized
 }
 
@@ -275,7 +279,8 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 		endpointType == string(constant.EndpointTypeOpenAIVideoGW) ||
 		endpointType == string(constant.EndpointTypeTokenFactoryVideo) ||
 		endpointType == string(constant.EndpointTypeVideoGenerator) ||
-		endpointType == string(constant.EndpointTypeTencentCloudVODVideo) {
+		endpointType == string(constant.EndpointTypeTencentCloudVODVideo) ||
+		endpointType == string(constant.EndpointTypeAliVideo) {
 		return testChannelVideo(c, channel, testModel, endpointType, tik)
 	}
 
@@ -878,6 +883,19 @@ func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, 
 				"watermark":  false,
 			},
 		}
+	case constant.EndpointTypeAliVideo:
+		fullURL = taskalivideo.SubmitURL(baseURL)
+		bodyMap = map[string]any{
+			"model": upstreamModel,
+			"input": map[string]any{
+				"prompt": "a cute cat dancing in a sunny garden",
+			},
+			"parameters": map[string]any{
+				"resolution": "720P",
+				"ratio":      "16:9",
+				"duration":   5,
+			},
+		}
 	default:
 		err := fmt.Errorf("unsupported video endpoint type: %s", endpointType)
 		return testResult{
@@ -910,6 +928,9 @@ func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, 
 	}
 	httpReq.Header.Set("Authorization", "Bearer "+apiKey)
 	httpReq.Header.Set("Content-Type", "application/json")
+	if constant.EndpointType(endpointType) == constant.EndpointTypeAliVideo {
+		httpReq.Header.Set("X-DashScope-Async", "enable")
+	}
 
 	common.SysLog(fmt.Sprintf(
 		"video test channel #%d (%s) endpoint=%s url=%s model=%s -> upstream=%s, request body: %s",
@@ -1027,6 +1048,20 @@ func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, 
 		if taskID == "" {
 			taskID = strings.TrimSpace(gjson.GetBytes(respBody, "data.id").String())
 		}
+	case constant.EndpointTypeAliVideo:
+		if codeStr := strings.TrimSpace(gjson.GetBytes(respBody, "code").String()); codeStr != "" && codeStr != "0" {
+			errMsg := strings.TrimSpace(gjson.GetBytes(respBody, "message").String())
+			if errMsg == "" {
+				errMsg = fmt.Sprintf("upstream returned code=%s", codeStr)
+			}
+			bodyErr := fmt.Errorf("upstream error: %s, body: %s", errMsg, truncateForError(string(respBody)))
+			return testResult{
+				context:           c,
+				localErr:          bodyErr,
+				tokenFactoryError: types.NewOpenAIError(bodyErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError),
+			}
+		}
+		taskID = strings.TrimSpace(gjson.GetBytes(respBody, "output.task_id").String())
 	case constant.EndpointTypeVideoGenerator:
 		if codeRes := gjson.GetBytes(respBody, "status"); codeRes.Exists() && codeRes.Int() != 0 {
 			errMsg := strings.TrimSpace(gjson.GetBytes(respBody, "message").String())

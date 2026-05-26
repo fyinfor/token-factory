@@ -1,0 +1,111 @@
+.json-code-editor {
+  position: relative;
+  width: 100%;
+  border-radius: 8px;
+  border: 1px solid var(--semi-color-border);
+  background: #1e1e1e;
+  overflow: hidden;
+  resize: vertical;
+}
+
+.json-code-editor__highlight,
+.json-code-editor__input {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0;
+  padding: 12px 14px;
+  font-family: Consolas, 'Courier New', Monaco, 'SF Mono', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  tab-size: 2;
+  white-space: pre;
+  word-wrap: normal;
+  border: none;
+  outline: none;
+  resize: none;
+}
+
+.json-code-editor__highlight {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  color: #d4d4d4;
+  background: #1e1e1e;
+  overflow: hidden;
+}
+
+.json-code-editor__input {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  color: transparent;
+  caret-color: #aeafad;
+  background: transparent;
+  overflow: auto;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(121, 121, 121, 0.45) transparent;
+}
+
+/* 深色代码区滚动条（WebKit） */
+.json-code-editor__input::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.json-code-editor__input::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+
+.json-code-editor__input::-webkit-scrollbar-thumb {
+  background-color: rgba(121, 121, 121, 0.35);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.15s ease;
+}
+
+.json-code-editor__input::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(160, 160, 160, 0.55);
+}
+
+.json-code-editor__input::-webkit-scrollbar-thumb:active {
+  background-color: rgba(190, 190, 190, 0.65);
+}
+
+.json-code-editor__input::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+.json-code-editor__input::placeholder {
+  color: #6a6a6a;
+}
+
+.json-code-editor__input::selection {
+  color: transparent;
+  background: rgba(38, 79, 120, 0.55);
+}
+
+.json-code-editor .json-code-key {
+  color: #9cdcfe;
+}
+
+.json-code-editor .json-code-string {
+  color: #ce9178;
+}
+
+.json-code-editor .json-code-number {
+  color: #b5cea8;
+}
+
+.json-code-editor .json-code-keyword {
+  color: #569cd6;
+}
+
+.json-code-editor .json-code-comment {
+  color: #6a9955;
+}

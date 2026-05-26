@@ -457,15 +457,14 @@ const Playground = () => {
       messageContent,
     );
 
+    const newMessages = [...message, userMessageWithImages];
+    const payload = buildApiPayload(
+      newMessages,
+      null,
+      inputs,
+      parameterEnabled,
+    );
     setMessage((prevMessage) => {
-      const newMessages = [...prevMessage, userMessageWithImages];
-
-      const payload = buildApiPayload(
-        newMessages,
-        null,
-        inputs,
-        parameterEnabled,
-      );
       const isChatEndpoint = payload?.__endpoint === 'chat';
       sendRequest(payload, isChatEndpoint ? inputs.stream : false);
 
