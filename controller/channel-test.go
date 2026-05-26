@@ -46,8 +46,12 @@ type testResult struct {
 	recordedModelName string
 }
 
-// tokenFactoryOpenVideoTestHeuristic 在「端点类型留空」时，判断 TokenFactoryOpen(60) 是否应按视频任务入口测试。
+// tokenFactoryOpenVideoTestHeuristic 在「端点类型留空」且模型元数据未指明端点时，
+// 判断 TokenFactoryOpen(60) 是否应按视频任务入口测试。
 // 与真实客户端一致：视频走 POST /v1/video/generations，而非 chat 或外部 Hidream 的 /v1/videos/generations。
+//
+// 注意：豆包 LLM（doubao-seed-*）与豆包视频（doubao-seedance-*）均含 "doubao"，
+// 仅 seedance 等视频族关键字应命中；勿用裸 "doubao" 匹配，否则建站渠道会把对话模型误测为视频。
 func tokenFactoryOpenVideoTestHeuristic(modelName string) bool {
 	s := strings.ToLower(strings.TrimSpace(modelName))
 	if s == "" {
@@ -56,7 +60,7 @@ func tokenFactoryOpenVideoTestHeuristic(modelName string) bool {
 	if strings.Contains(s, "seedance") || strings.Contains(s, "sora") ||
 		strings.Contains(s, "kling") || strings.Contains(s, "wan") ||
 		strings.Contains(s, "vidu") || strings.Contains(s, "veo") ||
-		strings.Contains(s, "doubao") || strings.Contains(s, "jimeng") ||
+		strings.Contains(s, "jimeng") ||
 		strings.Contains(s, "hailuo") || strings.Contains(s, "minimax") ||
 		strings.Contains(s, "text2video") || strings.Contains(s, "image2video") {
 		return true
@@ -65,6 +69,30 @@ func tokenFactoryOpenVideoTestHeuristic(modelName string) bool {
 		return true
 	}
 	return false
+}
+
+// tokenFactoryOpenTestEndpointFromMeta 若模型元数据/能力表仅声明视频端点，则返回 tokenfactory-video；否则留空走 chat 探测。
+func tokenFactoryOpenTestEndpointFromMeta(modelName string) string {
+	eps := model.GetModelSupportEndpointTypes(modelName)
+	if len(eps) == 0 {
+		return ""
+	}
+	hasNonVideo := false
+	for _, et := range eps {
+		switch et {
+		case constant.EndpointTypeTokenFactoryVideo,
+			constant.EndpointTypeOpenAIVideo,
+			constant.EndpointTypeOpenAIVideoGW,
+			constant.EndpointTypeVideoGenerator,
+			constant.EndpointTypeTencentCloudVODVideo:
+		default:
+			hasNonVideo = true
+		}
+	}
+	if !hasNonVideo {
+		return string(constant.EndpointTypeTokenFactoryVideo)
+	}
+	return ""
 }
 
 // tfOpenUpstreamModelForChannelTest 对齐 relay/helper.ModelMappedHelper 中 TokenFactoryOpen 路由改写：
@@ -109,8 +137,13 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 	if channel != nil && channel.Type == constant.ChannelTypeOpenAIVideo {
 		return string(constant.EndpointTypeOpenAIVideoGW)
 	}
-	if channel != nil && channel.Type == constant.ChannelTypeTokenFactoryOpen && tokenFactoryOpenVideoTestHeuristic(modelName) {
-		return string(constant.EndpointTypeTokenFactoryVideo)
+	if channel != nil && channel.Type == constant.ChannelTypeTokenFactoryOpen {
+		if ep := tokenFactoryOpenTestEndpointFromMeta(modelName); ep != "" {
+			return ep
+		}
+		if tokenFactoryOpenVideoTestHeuristic(modelName) {
+			return string(constant.EndpointTypeTokenFactoryVideo)
+		}
 	}
 	if channel != nil && channel.Type == constant.ChannelTypeVideoGenerator {
 		return string(constant.EndpointTypeVideoGenerator)
