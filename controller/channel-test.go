@@ -51,18 +51,20 @@ type testResult struct {
 // 判断 TokenFactoryOpen(60) 是否应按视频任务入口测试。
 // 与真实客户端一致：视频走 POST /v1/video/generations，而非 chat 或外部 Hidream 的 /v1/videos/generations。
 //
-// 注意：豆包 LLM（doubao-seed-*）与豆包视频（doubao-seedance-*）均含 "doubao"，
-// 仅 seedance 等视频族关键字应命中；勿用裸 "doubao" 匹配，否则建站渠道会把对话模型误测为视频。
+// 注意：
+// - 豆包 LLM（doubao-seed-*）与视频（doubao-seedance-*）均含 "doubao"，勿用裸 "doubao"。
+// - MiniMax 对话（MiniMax-M*）与视频（MiniMax-Hailuo-*）均含 "minimax"，勿用裸 "minimax"，用 hailuo。
+// - 万相视频为 wanx*，勿用裸 "wan" 以免误伤含 wan 子串的模型名。
 func tokenFactoryOpenVideoTestHeuristic(modelName string) bool {
 	s := strings.ToLower(strings.TrimSpace(modelName))
 	if s == "" {
 		return false
 	}
 	if strings.Contains(s, "seedance") || strings.Contains(s, "sora") ||
-		strings.Contains(s, "kling") || strings.Contains(s, "wan") ||
+		strings.Contains(s, "kling") || strings.Contains(s, "wanx") ||
 		strings.Contains(s, "vidu") || strings.Contains(s, "veo") ||
 		strings.Contains(s, "jimeng") ||
-		strings.Contains(s, "hailuo") || strings.Contains(s, "minimax") ||
+		strings.Contains(s, "hailuo") ||
 		strings.Contains(s, "text2video") || strings.Contains(s, "image2video") {
 		return true
 	}
