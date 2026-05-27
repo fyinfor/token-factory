@@ -28,6 +28,8 @@ import SelectionNotification from './components/SelectionNotification';
 import UpstreamConflictModal from './modals/UpstreamConflictModal';
 import SyncWizardModal from './modals/SyncWizardModal';
 import BatchSetTagsModal from './modals/BatchSetTagsModal';
+import ModelImportModal from './modals/ModelImportModal';
+import ModelExportButton from './modals/ModelExportButton';
 
 const ModelsActions = ({
   selectedKeys,
@@ -44,6 +46,7 @@ const ModelsActions = ({
   applyUpstreamOverwrite,
   compactMode,
   setCompactMode,
+  refresh,
   t,
 }) => {
   // Modal states
@@ -213,6 +216,9 @@ const ModelsActions = ({
         >
           {t('批量设置标签')}
         </Button>
+
+        <ModelExportButton />
+        <ModelImportModal refresh={refresh} />
 
         <CompactModeToggle
           compactMode={compactMode}

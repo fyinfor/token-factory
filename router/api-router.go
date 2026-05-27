@@ -471,6 +471,8 @@ func SetApiRouter(router *gin.Engine) {
 			modelsRoute.POST("/sync_upstream", middleware.AdminAuth(), controller.SyncUpstreamModels)
 			modelsRoute.GET("/missing", middleware.AdminAuth(), controller.GetMissingModels)
 			modelsRoute.GET("/tags", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.GetModelTags)
+			modelsRoute.GET("/export", middleware.AdminAuth(), controller.ExportModelsMeta)
+			modelsRoute.POST("/import", middleware.AdminAuth(), controller.ImportModelsMeta)
 			modelsRoute.GET("/", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.GetAllModelsMeta)
 			modelsRoute.GET("/search", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.SearchModelsMeta)
 			modelsRoute.GET("/:id", middleware.AdminAuth(), controller.GetModelMeta)
