@@ -61,6 +61,7 @@ import {
   Jimeng,
   Perplexity,
   Replicate,
+  XiaomiMiMo,
 } from '@lobehub/icons';
 
 import {
@@ -350,6 +351,18 @@ export const getModelCategories = (() => {
         label: t('零一万物'),
         icon: <Yi.Color />,
         filter: (model) => model.model_name.toLowerCase().includes('yi'),
+      },
+      xiaomimimo: {
+        label: 'Xiaomi MiMo',
+        icon: <XiaomiMiMo />,
+        filter: (model) => {
+          const name = model.model_name.toLowerCase();
+          return (
+            name.includes('mimo') ||
+            name.includes('xiaomi') ||
+            /^mimo[-/]/.test(name)
+          );
+        },
       },
     };
 
