@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import { Typography, Toast, Avatar } from '@douyinfe/semi-ui';
+import { Typography, Avatar } from '@douyinfe/semi-ui';
 import { getLobeHubIcon } from '../../../../../helpers';
 
 const { Paragraph } = Typography;
@@ -77,13 +77,7 @@ const ModelHeader = ({ modelData, vendorsMap = {}, t }) => {
     <div className='flex items-center'>
       {getModelIcon()}
       <div className='ml-3 font-normal'>
-        <Paragraph
-          className='!mb-0 !text-lg !font-medium'
-          copyable={{
-            content: modelData?.model_name || '',
-            onCopy: () => Toast.success({ content: t('已复制模型名称') }),
-          }}
-        >
+        <Paragraph className='!mb-0 !text-lg !font-medium'>
           <span className='truncate max-w-60 font-bold'>
             {modelData?.model_name || t('未知模型')}
           </span>

@@ -421,11 +421,13 @@ const CodeBlock = ({ content, language = 'json', t }) => {
         <Button
           icon={<IconCopy />}
           size='small'
-          type='tertiary'
-          theme='borderless'
+          type='primary'
+          theme='light'
           onClick={handleCopy}
           title={t('复制')}
-        />
+        >
+          {t('复制')}
+        </Button>
       </div>
       <pre
         className='m-0 p-3 text-xs overflow-x-auto'
@@ -825,7 +827,9 @@ const ApiDocsSidePanel = ({
           className='!rounded-2xl shadow-sm border-0 api-docs-list-card'
           title={t('API 列表')}
         >
-          <Collapse defaultActiveKey={docs.length > 0 ? (docs[0]?.id || 0) : undefined}>
+          <Collapse
+            defaultActiveKey={docs.length > 0 ? docs[0]?.id || 0 : undefined}
+          >
             {docs.map(renderApiPanel)}
           </Collapse>
         </Card>

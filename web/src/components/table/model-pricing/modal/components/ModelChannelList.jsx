@@ -28,7 +28,7 @@ import {
   Toast,
   Tooltip,
 } from '@douyinfe/semi-ui';
-import { IconListView } from '@douyinfe/semi-icons';
+import { IconCopy, IconListView } from '@douyinfe/semi-icons';
 import { copy, stringToColor } from '../../../../../helpers';
 import {
   getUsedGroupContext,
@@ -55,6 +55,28 @@ import {
 } from '../../../../../helpers/billingFormula';
 
 const { Text } = Typography;
+
+const StepTitle = ({ label, title, desc, icon }) => (
+  <div className='flex items-start gap-3 mb-4'>
+    <div
+      className='flex items-center justify-center gap-1.5 shrink-0 rounded-full font-semibold text-xs px-3'
+      style={{
+        height: 30,
+        width: 84,
+        color: 'var(--semi-color-bg-0)',
+        backgroundColor: 'var(--semi-color-primary)',
+        boxShadow: '0 6px 14px rgba(var(--semi-blue-5), 0.24)',
+      }}
+    >
+      {icon ? <span className='inline-flex items-center'>{icon}</span> : null}
+      {label}
+    </div>
+    <div className='min-w-0'>
+      <Text className='text-lg font-medium'>{title}</Text>
+      <div className='text-xs text-gray-600 mt-0.5'>{desc}</div>
+    </div>
+  </div>
+);
 
 const copyText = async (text, t, successText = '已复制') => {
   if (await copy(text)) {
@@ -83,6 +105,64 @@ const getSupplierTypeColor = (supplierType) => {
     default:
       return stringToColor(supplierType);
   }
+};
+
+const getChannelRouteModelName = (modelData, channel) => {
+  const modelName = modelData?.model_name || '';
+  if (channel?.route_slug) {
+    return `${modelName}/${channel.route_slug}`;
+  }
+  return `${channel?.supplier_alias || ''}/${modelName}/${channel?.channel_no || ''}`;
+};
+
+const copyModelName = (modelName, t) => {
+  copyText(modelName, t, `模型${modelName}复制成功`);
+};
+
+const getStabilityLevel = (row) => {
+  if (!row) return 0;
+  if (row.display_stability_grade > 0) {
+    return Math.max(1, Math.min(5, Number(row.display_stability_grade)));
+  }
+  const latency = Number(row.display_response_time_ms || 0);
+  if (!row.last_test_success) return 1;
+  if (latency > 0 && latency <= 1000) return 5;
+  if (latency > 0 && latency <= 3000) return 4;
+  if (latency > 0 && latency <= 5000) return 3;
+  return latency > 0 ? 2 : 3;
+};
+
+const StabilityBattery = ({ row, t }) => {
+  const level = getStabilityLevel(row);
+  return (
+    <div className='flex items-center gap-2'>
+      <Tooltip content={t('稳定性')}>
+        <div
+          className='flex items-end gap-0.5 rounded-md px-1.5 py-1 border'
+          style={{
+            borderColor: 'rgba(34, 197, 94, 0.35)',
+            backgroundColor: 'rgba(34, 197, 94, 0.08)',
+          }}
+        >
+          {[1, 2, 3, 4, 5].map((idx) => (
+            <span
+              key={idx}
+              className='block rounded-sm transition-all duration-300'
+              style={{
+                width: 4,
+                height: 5 + idx * 2,
+                backgroundColor:
+                  idx <= level ? 'rgb(34, 197, 94)' : 'rgba(34, 197, 94, 0.18)',
+              }}
+            />
+          ))}
+        </div>
+      </Tooltip>
+      <Text type='tertiary' size='small'>
+        {level > 0 ? t('稳定') : t('未测')}
+      </Text>
+    </div>
+  );
 };
 
 const ModelChannelList = ({
@@ -125,6 +205,17 @@ const ModelChannelList = ({
     () =>
       getUsedGroupContext(modelData, selectedGroup ?? 'all', groupRatio || {}),
     [modelData, selectedGroup, groupRatio],
+  );
+
+  const routeChannels = useMemo(
+    () =>
+      channelList.map((channel, idx) => ({
+        channel,
+        idx,
+        routeModelName: getChannelRouteModelName(modelData, channel),
+        badge: channel.route_slug || channel.channel_no || String(idx + 1),
+      })),
+    [channelList, modelData],
   );
 
   // 按 supplier_application_id 分组通道
@@ -200,7 +291,10 @@ const ModelChannelList = ({
     //   缓存写 = (ch.model_ratio × createCacheRatio × costDisc + globalMr × globalCreateCacheR × markupRate) × 2 × groupRatio
     //   固定价 = (ch.model_price × costDisc + globalMp × markupRate) × groupRatio
     // ============================================================
-    const costDisc = (channel.price_discount_percent != null ? channel.price_discount_percent : 100) / 100;
+    const costDisc =
+      (channel.price_discount_percent != null
+        ? channel.price_discount_percent
+        : 100) / 100;
     const markupRate = (channel.markup_discount_rate || 0) / 100;
     const globalMr = modelData?.model_ratio || 0;
     const globalMp = modelData?.model_price || 0;
@@ -294,7 +388,9 @@ const ModelChannelList = ({
       const effModelPrice = hasRatioValue(channel.model_price)
         ? Number(channel.model_price) * costDisc + globalMp * markupRate
         : null;
-      items.push(makeItem(t('模型价格'), effModelPrice, modelData?.model_price, true));
+      items.push(
+        makeItem(t('模型价格'), effModelPrice, modelData?.model_price, true),
+      );
     }
     // 按量计费
     else {
@@ -302,7 +398,9 @@ const ModelChannelList = ({
       const effInputRate = hasRatioValue(channel.model_ratio)
         ? Number(channel.model_ratio) * costDisc + globalMr * markupRate
         : null;
-      items.push(makeItem(t('输入价格'), effInputRate, modelData?.model_ratio, false));
+      items.push(
+        makeItem(t('输入价格'), effInputRate, modelData?.model_ratio, false),
+      );
 
       // 输出价格：仅当全局模型配置了 completion_ratio 时才展示
       if (
@@ -311,7 +409,9 @@ const ModelChannelList = ({
         hasRatioValue(modelData?.completion_ratio)
       ) {
         const effOut =
-          Number(channel.model_ratio) * Number(channel.completion_ratio) * costDisc +
+          Number(channel.model_ratio) *
+            Number(channel.completion_ratio) *
+            costDisc +
           globalMr * globalCR * markupRate;
         const rootOut = hasRatioValue(modelData?.model_ratio)
           ? Number(modelData.model_ratio) * Number(modelData.completion_ratio)
@@ -341,12 +441,16 @@ const ModelChannelList = ({
         hasRatioValue(modelData?.create_cache_ratio)
       ) {
         const effCreateCacheRate =
-          Number(channel.model_ratio) * Number(channel.create_cache_ratio) * costDisc +
+          Number(channel.model_ratio) *
+            Number(channel.create_cache_ratio) *
+            costDisc +
           globalMr * globalCreateCacheR * markupRate;
         const rootCC = hasRatioValue(modelData?.model_ratio)
           ? Number(modelData.model_ratio) * Number(modelData.create_cache_ratio)
           : null;
-        items.push(makeItem(t('缓存创建价格'), effCreateCacheRate, rootCC, false));
+        items.push(
+          makeItem(t('缓存创建价格'), effCreateCacheRate, rootCC, false),
+        );
       }
     }
     return items.filter(Boolean);
@@ -447,19 +551,96 @@ const ModelChannelList = ({
 
   return (
     <>
+      <Card className='!rounded-2xl shadow-sm border-0 mb-6'>
+        <StepTitle
+          label={t('第二步')}
+          title={t('选择通道路由模型名')}
+          desc={t('复制带渠道路由的模型名，可将请求固定到指定渠道')}
+          icon={<IconListView size={16} />}
+        />
+        <div className='space-y-2'>
+          {routeChannels.map(({ channel, idx, routeModelName, badge }) => {
+            const row = channelMtrMap[String(channel.channel_id)];
+            return (
+              <div
+                key={`route-${channel.channel_id}-${idx}`}
+                className='flex items-center gap-2 rounded-lg px-3 py-2 overflow-hidden'
+                style={{
+                  backgroundColor: 'var(--semi-color-fill-0)',
+                }}
+              >
+                <Tag
+                  size='small'
+                  shape='circle'
+                  color='blue'
+                  type='light'
+                  className='shrink-0'
+                >
+                  {badge}
+                </Tag>
+                <div className='min-w-0 flex-1 flex items-center gap-2'>
+                  {channel.supplier_type ? (
+                    <Tag
+                      size='small'
+                      shape='circle'
+                      color={getSupplierTypeColor(channel.supplier_type)}
+                      className='shrink-0'
+                    >
+                      {channel.supplier_type}
+                    </Tag>
+                  ) : null}
+                  <div className='shrink-0'>
+                    <StabilityBattery row={row} t={t} />
+                  </div>
+                  <Text
+                    className='font-mono text-sm min-w-0'
+                    ellipsis={{ showTooltip: true }}
+                  >
+                    {routeModelName}
+                  </Text>
+                </div>
+                <Tooltip content={t('复制模型名字')}>
+                  <Button
+                    type='primary'
+                    theme='light'
+                    size='small'
+                    icon={<IconCopy />}
+                    onClick={() => copyModelName(routeModelName, t)}
+                    aria-label={t('复制模型名字')}
+                  >
+                    {t('复制')}
+                  </Button>
+                </Tooltip>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+
+      <ModelTokenList
+        visible={isLoggedIn}
+        t={t}
+        stepLabel={t('第三步')}
+        title={t('复制API Key')}
+        description={t('复制可用于调用上述 API 端点的 API Key')}
+      />
+
       <Card className='!rounded-2xl shadow-sm border-0 mb-3'>
-        <div className='flex items-center mb-4'>
+        <div className='flex items-center justify-between gap-3 mb-4'>
           <div className='flex items-center min-w-0'>
-            <Avatar size='small' color='purple' className='mr-2 shadow-md'>
+            <Avatar size='small' color='indigo' className='mr-2 shadow-md'>
               <IconListView size={16} />
             </Avatar>
-            <div>
-              <Text className='text-lg font-medium'>{t('通道列表')}</Text>
+            <div className='min-w-0'>
+              <Text className='text-lg font-medium'>{t('渠道信息与价格')}</Text>
               <div className='text-xs text-gray-600'>
-                {t('模型在各个通道的配置信息')}
+                {t('按渠道展示稳定性、路由和当前价格')}
               </div>
             </div>
           </div>
+          <Tag shape='circle' color='blue' type='light'>
+            {channelList.length} {t('个通道')}
+          </Tag>
         </div>
 
         <Collapse activeKey={activeKey} onChange={setActiveKey}>
@@ -472,7 +653,7 @@ const ModelChannelList = ({
                   {group.companyLogoUrl || group.supplierType ? (
                     <span
                       className='h-7 rounded-md flex items-center overflow-hidden ml-2'
-                      style={{backgroundColor: 'var(--semi-color-fill-0)'}}
+                      style={{ backgroundColor: 'var(--semi-color-fill-0)' }}
                     >
                       {group.companyLogoUrl ? (
                         <img
@@ -502,6 +683,7 @@ const ModelChannelList = ({
               <div className='space-y-3'>
                 {group.channels.map((channel, idx) => {
                   const channelItems = formatChannelInfo(channel);
+                  const row = channelMtrMap[String(channel.channel_id)];
                   const vHint = pickVideoFlatClipHintForChannel(
                     modelData,
                     channel,
@@ -513,47 +695,55 @@ const ModelChannelList = ({
                   );
                   const showImagePerImageTable =
                     hasImagePerImageTierTable(iHint);
-                  const channelPath = channel.route_slug
-                    ? `${modelData.model_name}/${channel.route_slug}`
-                    : `${channel.supplier_alias}/${modelData.model_name}/${channel.channel_no}`;
+                  const channelPath = getChannelRouteModelName(
+                    modelData,
+                    channel,
+                  );
                   const channelBadge =
                     channel.route_slug || channel.channel_no || String(idx);
 
                   const handleCopy = () => {
-                    copyText(channelPath, t, '已复制通道');
+                    copyModelName(channelPath, t);
                   };
 
                   return (
-                    <div
-                      key={`${channel.channel_id}-${idx}`}
-                      className='flex gap-3 items-start'
-                    >
-                      <div className='flex items-center justify-center min-w-[24px] h-[24px] rounded-full bg-blue-100 text-blue-600 text-xs font-semibold mt-1 shrink-0'>
-                        {channelBadge}
-                      </div>
+                    <div key={`${channel.channel_id}-${idx}`}>
                       <Card
-                        className='!rounded-lg shadow-sm !mb-2 flex-1'
-                        bodyStyle={{ padding: '10px' }}
+                        className='!rounded-xl shadow-sm !mb-2 flex-1'
+                        bodyStyle={{ padding: '12px' }}
                       >
-                        <div className='flex flex-col gap-1 text-sm'>
+                        <div className='flex flex-col gap-3 text-sm'>
                           <div className='flex items-start justify-between gap-2'>
-                            <div className='flex flex-wrap gap-2 items-center min-w-0 flex-1'>
-                              <Text type='tertiary' size='small'>
-                                {t('单测/稳定性')}
-                              </Text>
-                              {renderModelTestResultSummary(
-                                channelMtrMap[String(channel.channel_id)],
-                                t,
-                              )}
+                            <div className='min-w-0 flex-1'>
+                              <div className='flex items-center gap-2 min-w-0'>
+                                <Tag
+                                  shape='circle'
+                                  color='blue'
+                                  type='light'
+                                  size='small'
+                                  className='shrink-0'
+                                >
+                                  {channelBadge}
+                                </Tag>
+                                <Text strong ellipsis={{ showTooltip: true }}>
+                                  {channelPath}
+                                </Text>
+                              </div>
+                              <div className='flex flex-wrap gap-2 items-center mt-1'>
+                                <StabilityBattery row={row} t={t} />
+                                {renderModelTestResultSummary(row, t)}
+                              </div>
                             </div>
                             <div className='flex flex-wrap gap-2 items-center shrink-0 ml-1'>
-                              <Tooltip content={t('复制通道路径')}>
+                              <Tooltip content={t('复制模型名字')}>
                                 <Button
-                                  theme='solid'
                                   type='primary'
+                                  theme='light'
                                   size='small'
+                                  icon={<IconCopy />}
                                   onClick={handleCopy}
                                   title={channelPath}
+                                  aria-label={t('复制模型名字')}
                                 >
                                   {t('复制')}
                                 </Button>
@@ -570,48 +760,42 @@ const ModelChannelList = ({
                               </Tooltip>
                             </div>
                           </div>
-                          <div className='h-px bg-gray-100' />
-                          {channelItems.map((item) => (
-                            <div
-                              key={item.label}
-                              className='flex items-center gap-2 flex-wrap'
-                            >
-                              <span className='text-gray-600'>
-                                {item.label}:
-                              </span>
-                              {item.original ? (
-                                <>
-                                  <span className='text-gray-400 line-through text-xs'>
-                                    <span
-                                      style={{
-                                        color: 'var(--semi-color-primary)',
-                                      }}
+                          <div className='grid grid-cols-1 sm:grid-cols-2 gap-2'>
+                            {channelItems.map((item) => (
+                              <div
+                                key={item.label}
+                                className='rounded-lg px-3 py-2'
+                                style={{
+                                  backgroundColor: 'var(--semi-color-fill-0)',
+                                }}
+                              >
+                                <div className='text-xs text-gray-500 mb-1'>
+                                  {item.label}
+                                </div>
+                                {item.original ? (
+                                  <div className='flex flex-wrap items-center gap-1.5'>
+                                    <span className='text-gray-400 line-through text-xs'>
+                                      {item.original}
+                                    </span>
+                                    <Tag
+                                      color='red'
+                                      size='small'
+                                      shape='circle'
                                     >
-                                      官方
-                                    </span>{' '}
-                                    {item.original}
-                                  </span>
-                                  <Tag color='red' size='small' shape='circle'>
-                                    -{item.discount}%
-                                  </Tag>
+                                      -{item.discount}%
+                                    </Tag>
+                                    <span className='font-medium text-gray-900'>
+                                      {item.value}
+                                    </span>
+                                  </div>
+                                ) : (
                                   <span className='font-medium text-gray-900'>
-                                    <span
-                                      style={{
-                                        color: 'var(--semi-color-warning)',
-                                      }}
-                                    >
-                                      我们
-                                    </span>{' '}
                                     {item.value}
                                   </span>
-                                </>
-                              ) : (
-                                <span className='font-medium text-gray-900'>
-                                  {item.value}
-                                </span>
-                              )}
-                            </div>
-                          ))}
+                                )}
+                              </div>
+                            ))}
+                          </div>
                           {showVideoFlatTable ? (
                             <VideoFlatClipHintTable
                               hint={vHint}
@@ -640,7 +824,6 @@ const ModelChannelList = ({
           ))}
         </Collapse>
       </Card>
-      <ModelTokenList visible={isLoggedIn} t={t} />
       {showCostPricePanel ? (
         <Card className='!rounded-2xl shadow-sm border-0 mb-3'>
           <div className='flex items-center mb-3'>
