@@ -384,16 +384,28 @@ const flattenLeafParams = (params = [], parentPath = '') => {
   return rows;
 };
 
-const buildQueryUrl = (endpoint, params = [], modelName) => {
-  const url = new URL(endpoint, window.location.origin);
+const replacePathParams = (path, params = [], modelName) => {
+  let nextPath = String(path || '');
   flattenLeafParams(params).forEach((param) => {
-    if (!param.name) return;
-    url.searchParams.set(
-      param.name,
-      String(convertExampleValue(param.example, param.type, modelName)),
-    );
+    const name = String(param.name || '').trim();
+    if (!name) return;
+    const example = replaceModelName(param.example, modelName);
+    if (example === undefined || example === null || example === '') return;
+    nextPath = nextPath.replaceAll(`{${name}}`, String(example));
   });
-  return url.toString();
+  return nextPath;
+};
+
+const buildUrlWithQuery = (endpoint, params = [], modelName) => {
+  const query = flattenLeafParams(params)
+    .filter((param) => param.name)
+    .map((param) => {
+      const value = convertExampleValue(param.example, 'string', modelName);
+      return `${encodeURIComponent(param.name)}=${encodeURIComponent(String(value))}`;
+    })
+    .join('&');
+  if (!query) return endpoint;
+  return `${endpoint}${endpoint.includes('?') ? '&' : '?'}${query}`;
 };
 
 const CodeBlock = ({ content, language = 'json', t }) => {
@@ -561,7 +573,12 @@ const ApiDocsSidePanel = ({
           </Tag>
         ),
       },
-      { title: t('类型'), dataIndex: 'type', width: 60 },
+      {
+        title: t('类型'),
+        dataIndex: 'type',
+        width: 60,
+        render: (val) => val || 'string',
+      },
     ];
     if (showRequired) {
       columns.push({
@@ -627,18 +644,25 @@ const ApiDocsSidePanel = ({
   const renderApiPanel = (api, index) => {
     const method = String(api.method || 'POST').toUpperCase();
     const isPost = method === 'POST';
-    const endpointPath = replaceModelName(api.path || '', modelName);
+    const pathParams = api.path_params || [];
+    const queryParams = api.query_params || [];
+    const displayPath = replaceModelName(api.path || '', modelName);
+    const endpointPath = replacePathParams(
+      displayPath,
+      pathParams,
+      modelName,
+    );
     const endpoint = `${serverAddress}${endpointPath}`;
     const requestParams = isPost
       ? api.body_params || []
-      : api.path_params || [];
+      : pathParams;
     const responseParams = api.response_params || [];
     const requestJson = isPost
       ? JSON.stringify(buildJsonExample(requestParams, modelName), null, 2)
       : '';
     const requestUrl = isPost
       ? endpoint
-      : buildQueryUrl(endpoint, requestParams, modelName);
+      : buildUrlWithQuery(endpoint, queryParams, modelName);
     const headers = isPost
       ? {
           'Content-Type': 'application/json',
@@ -662,10 +686,10 @@ const ApiDocsSidePanel = ({
               {method}
             </Tag>
             <Text strong ellipsis={{ showTooltip: true }}>
-              {api.description || endpointPath || `${t('API')} #${index + 1}`}
+              {api.description || displayPath || `${t('API')} #${index + 1}`}
             </Text>
             <Text type='tertiary' ellipsis={{ showTooltip: true }}>
-              {endpointPath}
+              {displayPath}
             </Text>
           </div>
         }
@@ -684,6 +708,14 @@ const ApiDocsSidePanel = ({
         >
           {renderParamTable(requestParams, true)}
         </Card>
+        {!isPost ? (
+          <Card
+            className='!rounded-2xl shadow-sm border-0 mb-3'
+            title={t('Query 参数说明')}
+          >
+            {renderParamTable(queryParams, true)}
+          </Card>
+        ) : null}
         <Card
           className='!rounded-2xl shadow-sm border-0 mb-3'
           title={t('请求头')}

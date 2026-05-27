@@ -1,7 +1,6 @@
 package model
 
 import (
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -18,7 +17,7 @@ type Pricing struct {
 	ModelName              string                  `json:"model_name"`
 	Description            string                  `json:"description,omitempty"`
 	DocIntroduction        string                  `json:"doc_introduction,omitempty"`
-	ApiDocs                string                  `json:"api_docs,omitempty"`
+	ApiDocs                any                     `json:"api_docs,omitempty"`
 	Icon                   string                  `json:"icon,omitempty"`
 	Tags                   string                  `json:"tags,omitempty"`
 	VendorID               int                     `json:"vendor_id,omitempty"`
@@ -81,14 +80,14 @@ type PricingChannelItem struct {
 	QuotaType            int     `json:"quota_type"`
 
 	// OptionModelRatio 等：仅 Option「渠道模型定价」显式配置（不做供应商/全局回退），供首页成本价展示。
-	OptionModelRatio       *float64 `json:"option_model_ratio,omitempty"`
-	OptionCompletionRatio  *float64 `json:"option_completion_ratio,omitempty"`
-	OptionCacheRatio       *float64 `json:"option_cache_ratio,omitempty"`
-	OptionCreateCacheRatio *float64 `json:"option_create_cache_ratio,omitempty"`
-	OptionModelPrice       *float64 `json:"option_model_price,omitempty"`
-	OptionImageRatio       *float64 `json:"option_image_ratio,omitempty"`
-	OptionImagePrice       *float64 `json:"option_image_price,omitempty"`
-	OptionAudioRatio       *float64 `json:"option_audio_ratio,omitempty"`
+	OptionModelRatio           *float64 `json:"option_model_ratio,omitempty"`
+	OptionCompletionRatio      *float64 `json:"option_completion_ratio,omitempty"`
+	OptionCacheRatio           *float64 `json:"option_cache_ratio,omitempty"`
+	OptionCreateCacheRatio     *float64 `json:"option_create_cache_ratio,omitempty"`
+	OptionModelPrice           *float64 `json:"option_model_price,omitempty"`
+	OptionImageRatio           *float64 `json:"option_image_ratio,omitempty"`
+	OptionImagePrice           *float64 `json:"option_image_price,omitempty"`
+	OptionAudioRatio           *float64 `json:"option_audio_ratio,omitempty"`
 	OptionAudioCompletionRatio *float64 `json:"option_audio_completion_ratio,omitempty"`
 	OptionVideoRatio           *float64 `json:"option_video_ratio,omitempty"`
 	OptionVideoCompletionRatio *float64 `json:"option_video_completion_ratio,omitempty"`
@@ -414,6 +413,18 @@ func GetModelSupportEndpointTypes(model string) []constant.EndpointType {
 	return make([]constant.EndpointType, 0)
 }
 
+func parsePricingApiDocs(raw string) any {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	var parsed any
+	if err := common.Unmarshal([]byte(raw), &parsed); err != nil {
+		common.SysLog(fmt.Sprintf("parse pricing api_docs error: %v", err))
+		return nil
+	}
+	return parsed
+}
+
 func updatePricing() {
 	//modelRatios := common.GetModelRatios()
 	enableAbilities, err := GetAllEnableAbilityWithChannels()
@@ -527,7 +538,7 @@ func updatePricing() {
 			continue
 		}
 		var raw map[string]interface{}
-		if err := json.Unmarshal([]byte(meta.Endpoints), &raw); err == nil {
+		if err := common.Unmarshal([]byte(meta.Endpoints), &raw); err == nil {
 			endpoints := make([]string, 0, len(raw))
 			for k, v := range raw {
 				switch v.(type) {
@@ -571,7 +582,7 @@ func updatePricing() {
 			continue
 		}
 		var raw map[string]interface{}
-		if err := json.Unmarshal([]byte(meta.Endpoints), &raw); err == nil {
+		if err := common.Unmarshal([]byte(meta.Endpoints), &raw); err == nil {
 			for k, v := range raw {
 				switch val := v.(type) {
 				case string:
@@ -608,7 +619,7 @@ func updatePricing() {
 			}
 			pricing.Description = meta.Description
 			pricing.DocIntroduction = meta.DocIntroduction
-			pricing.ApiDocs = meta.ApiDocs
+			pricing.ApiDocs = parsePricingApiDocs(meta.ApiDocs)
 			pricing.Icon = meta.Icon
 			pricing.Tags = meta.Tags
 			pricing.VendorID = meta.VendorID
