@@ -69,6 +69,9 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 	if channel != nil && channel.Type == constant.ChannelTypeTencentCloudImage {
 		return string(constant.EndpointTypeTencentCloudVODImage)
 	}
+	if channel != nil && channel.Type == constant.ChannelTypeOpenAIImage {
+		return string(constant.EndpointTypeImageGeneration)
+	}
 	return normalized
 }
 
@@ -102,7 +105,12 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 				testModel = strings.TrimSpace(models[0])
 			}
 			if testModel == "" {
-				testModel = "gpt-4o-mini"
+				switch channel.Type {
+				case constant.ChannelTypeOpenAIImage:
+					testModel = "dall-e-3"
+				default:
+					testModel = "gpt-4o-mini"
+				}
 			}
 		}
 	}

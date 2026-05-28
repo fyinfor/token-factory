@@ -60,6 +60,7 @@ const (
 	ChannelTypeTokenFactoryOpen      = 60
 	ChannelTypeTencentCloudVideo     = 61 // Tencent Cloud VOD CreateAigcVideoTask / DescribeTaskDetail
 	ChannelTypeTencentCloudImage     = 62 // Tencent Cloud VOD CreateAigcImageTask / DescribeTaskDetail
+	ChannelTypeOpenAIImage           = 63 // OpenAI official /v1/images/generations
 	ChannelTypeDummy                 // this one is only for count, do not add any channel after this
 
 )
@@ -128,7 +129,8 @@ var ChannelBaseURLs = []string{
 	"",                               //60 TokenFactoryOpen
 	"https://vod.tencentcloudapi.com", //61 TencentCloudVideo
 	"https://vod.tencentcloudapi.com", //62 TencentCloudImage
-	"",                               //63 Dummy
+	"https://api.openai.com",          //63 OpenAIImage
+	"",                                //64 Dummy
 }
 
 var ChannelTypeNames = map[int]string{
@@ -191,6 +193,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeTokenFactoryOpen:      "TokenFactoryOpen",
 	ChannelTypeTencentCloudVideo:     "TencentCloudVideo",
 	ChannelTypeTencentCloudImage:     "TencentCloudImage",
+	ChannelTypeOpenAIImage:           "OpenAIImage",
 }
 
 func GetChannelTypeName(channelType int) string {
