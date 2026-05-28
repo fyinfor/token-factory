@@ -10,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
@@ -782,8 +783,19 @@ func tryVideoPerSecondRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo
 	groupRatioInfo := HandleGroupRatio(c, info)
 	chDiscVPS := model.ResolveChannelPriceDiscountPercent(channelID)
 	markupDiscVPS := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
-	globalPerSec := globalVideoPerSecondUSDForRelay(info.OriginModelName, string(estimateCtx.Mode), estimateCtx.Width, estimateCtx.Height, hasAudio)
-	effPricePerSecond := model.EffectiveRuleUnitPrice(pricePerSecond, globalPerSec, chDiscVPS, markupDiscVPS)
+	effPricePerSecond, _, _, effOK := service.EffectiveVideoPerSecondUSDForDimensions(
+		channelID,
+		info.OriginModelName,
+		string(estimateCtx.Mode),
+		estimateCtx.Width,
+		estimateCtx.Height,
+		hasAudio,
+		chDiscVPS,
+		markupDiscVPS,
+	)
+	if !effOK || effPricePerSecond <= 0 {
+		return types.PriceData{}, false, nil
+	}
 	rawQuota := float64(seconds) * effPricePerSecond * common.QuotaPerUnit * groupRatioInfo.GroupRatio
 	chDiscCopyVPS := chDiscVPS
 	quota := int(math.Round(rawQuota))
