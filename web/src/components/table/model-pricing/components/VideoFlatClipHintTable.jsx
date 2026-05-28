@@ -18,32 +18,20 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useMemo } from 'react';
-import { Table, Typography, Tag, Tooltip } from '@douyinfe/semi-ui';
+import { Typography, Tooltip } from '@douyinfe/semi-ui';
 import { IconHelpCircle } from '@douyinfe/semi-icons';
-import { formatVideoResolutionDisplayLabel, compareVideoResolutionAsc } from '../../../../helpers';
+import {
+  formatVideoResolutionDisplayLabel,
+  compareVideoResolutionAsc,
+} from '../../../../helpers';
 import {
   VIDEO_FLAT_LANE_I18N_KEY,
   groupVideoFlatTiersByFamily,
   VIDEO_FLAT_FAMILY_TITLE_KEY,
 } from '../constants/videoFlatClipLaneI18n';
+import TierPriceMatrix from './TierPriceMatrix';
 
 const { Text } = Typography;
-
-function AudioTrackColumnTitle({ t }) {
-  const tip = t('音轨列说明');
-  return (
-    <span className='inline-flex items-center gap-0.5'>
-      <span>{t('音轨')}</span>
-      <Tooltip content={tip}>
-        <IconHelpCircle
-          className='cursor-help text-gray-400 hover:text-gray-600 align-middle'
-          size='small'
-          aria-label={tip}
-        />
-      </Tooltip>
-    </span>
-  );
-}
 
 function sortTierRowsByResolutionAsc(rows) {
   return [...rows].sort((a, b) => {
@@ -57,29 +45,56 @@ function sortTierRowsByResolutionAsc(rows) {
   });
 }
 
-function mapRowsToDataSource(rows, usedGroupRatio, displayPrice, unitLabel, t) {
+function getAudioLabel(row, t) {
+  if (row.has_audio === true) return t('有音轨');
+  if (row.has_audio === false) return t('无音轨');
+  return t('统一');
+}
+
+function formatTierPrice(usd, usedGroupRatio, displayPrice, unitLabel) {
+  const value = Number(usd || 0);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return `${displayPrice(value * usedGroupRatio)} / ${unitLabel}`;
+}
+
+function getDiscountPercent(currentUsd, officialUsd) {
+  const current = Number(currentUsd || 0);
+  const official = Number(officialUsd || 0);
+  if (
+    !Number.isFinite(current) ||
+    !Number.isFinite(official) ||
+    official <= 0
+  ) {
+    return null;
+  }
+  return official > current ? Math.round((1 - current / official) * 100) : 0;
+}
+
+function mapRowsToItems(rows, usedGroupRatio, displayPrice, unitLabel, t) {
   return rows.map((row, idx) => {
-    const usd = Number(row.usd_after_channel_discount || 0) * usedGroupRatio;
     const laneKey = VIDEO_FLAT_LANE_I18N_KEY[row.lane];
-    const audioKind =
-      row.has_audio === true
-        ? 'with'
-        : row.has_audio === false
-          ? 'without'
-          : 'unified';
+    const discount = getDiscountPercent(
+      row.usd_after_channel_discount,
+      row.usd_official,
+    );
     return {
-      key: `v-${idx}-${row.lane}-${row.resolution}`,
-      laneLabel: laneKey ? t(laneKey) : row.lane || '—',
+      key: `v-${idx}-${row.lane}-${row.resolution}-${row.has_audio}`,
+      lane: laneKey ? t(laneKey) : row.lane || '—',
       resolution: formatVideoResolutionDisplayLabel(row.resolution) || '—',
-      audioKind,
-      price: `${displayPrice(usd)} / ${unitLabel}`,
+      audio: getAudioLabel(row, t),
+      price: formatTierPrice(
+        row.usd_after_channel_discount,
+        usedGroupRatio,
+        displayPrice,
+        unitLabel,
+      ),
+      official: formatTierPrice(row.usd_official, 1, displayPrice, unitLabel),
+      discount,
+      hasDiscount: discount > 0,
     };
   });
 }
 
-/**
- * 分档视频（按条/按秒）：按文生/图生/视频生拆成独立小表；不展示总标题「视频按条价格表」。
- */
 function VideoFlatClipHintTable({
   hint,
   usedGroupRatio = 1,
@@ -96,129 +111,71 @@ function VideoFlatClipHintTable({
 
   const perSecond = hint.billing_mode === 'per_second';
   const unitLabel = perSecond ? t('秒') : t('条');
-
-  const baseCols = [
-    { title: t('分辨率'), dataIndex: 'resolution', key: 'resolution' },
-    {
-      title: <AudioTrackColumnTitle t={t} />,
-      dataIndex: 'audioKind',
-      key: 'audio',
-      render: (kind) => {
-        if (kind === 'with') {
-          return (
-            <Tag size='small' color='green' shape='circle'>
-              {t('有音轨')}
-            </Tag>
-          );
-        }
-        if (kind === 'without') {
-          return (
-            <Tag size='small' color='orange' shape='circle'>
-              {t('无音轨')}
-            </Tag>
-          );
-        }
-        return (
-          <Tag size='small' color='grey' shape='circle'>
-            {t('统一')}
-          </Tag>
-        );
-      },
-    },
-    {
-      title: t('价格'),
-      dataIndex: 'price',
-      key: 'price',
-      render: (text) => (
-        <span className='font-semibold text-black'>{text}</span>
-      ),
-    },
+  const columns = [
+    { key: 'resolution', label: t('分辨率') },
+    { key: 'audio', label: t('音轨') },
+    { key: 'price', label: t('平台价'), strong: true },
+    { key: 'official', label: t('官方价') },
+    { key: 'discount', label: t('折扣'), align: 'right' },
   ];
 
   return (
-    <>
-      <style>{`
-        .video-flat-tier-tb.semi-table-wrapper {
-          margin-top: 0 !important;
-          margin-bottom: 0 !important;
-        }
-        .video-flat-tier-tb .semi-table-thead .semi-table-row .semi-table-row-cell {
-          padding-top: 2px !important;
-          padding-bottom: 2px !important;
-          line-height: 1.2 !important;
-        }
-        .video-flat-tier-tb .semi-table-tbody .semi-table-row .semi-table-row-cell {
-          padding-top: 3px !important;
-          padding-bottom: 3px !important;
-        }
-      `}</style>
-      <div className='mt-1 pt-1 border-t border-gray-100 flex flex-col gap-1'>
-        <div
-          style={
-            blurPricing
-              ? {
-                  filter: 'blur(8px)',
-                  userSelect: 'none',
-                  pointerEvents: 'none',
-                }
-              : undefined
+    <div className='mt-1 pt-2 border-t border-semi-color-border flex flex-col gap-2'>
+      <div className='flex items-center justify-between gap-2'>
+        <Text strong size='small'>
+          {t('视频价格')}
+        </Text>
+        <Tooltip
+          position='left'
+          content={
+            <div style={{ maxWidth: 220, whiteSpace: 'normal' }}>
+              {t('音轨列说明')}
+            </div>
           }
-          className='flex flex-col gap-2'
         >
-          {groups.map(({ family, rows }) => {
-            const titleKey = VIDEO_FLAT_FAMILY_TITLE_KEY[family] || '其他';
-            const sortedRows = sortTierRowsByResolutionAsc(rows);
-            const dataSource = mapRowsToDataSource(
-              sortedRows,
-              usedGroupRatio,
-              displayPrice,
-              unitLabel,
-              t,
-            );
-            const laneLabelSet = new Set(
-              sortedRows.map((r) =>
-                VIDEO_FLAT_LANE_I18N_KEY[r.lane]
-                  ? t(VIDEO_FLAT_LANE_I18N_KEY[r.lane])
-                  : String(r.lane || ''),
-              ),
-            );
-            const showLaneCol = laneLabelSet.size > 1;
-            const tableCols = showLaneCol
-              ? [
-                  {
-                    title: t('子类型'),
-                    dataIndex: 'laneLabel',
-                    key: 'laneLabel',
-                  },
-                  ...baseCols,
-                ]
-              : baseCols;
-
-            return (
-              <div
-                key={family}
-                className='rounded-md border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)] px-2 py-1'
-              >
-                <Text
-                  strong
-                  size='small'
-                  className='block text-gray-800 !leading-tight mb-1.5'
-                >
-                  {t(titleKey)}
-                </Text>
-                <Table
-                  className='video-flat-tier-tb'
-                  size='small'
-                  pagination={false}
-                  columns={tableCols}
-                  dataSource={dataSource}
-                />
-              </div>
-            );
-          })}
-        </div>
+          <span className='inline-flex items-center gap-1 text-xs text-gray-500 cursor-help'>
+            <IconHelpCircle size='small' />
+            {t('有无音轨价格')}
+          </span>
+        </Tooltip>
       </div>
-    </>
+      <div
+        style={
+          blurPricing
+            ? {
+                filter: 'blur(8px)',
+                userSelect: 'none',
+                pointerEvents: 'none',
+              }
+            : undefined
+        }
+        className='flex flex-col gap-2'
+      >
+        {groups.map(({ family, rows }) => {
+          const titleKey = VIDEO_FLAT_FAMILY_TITLE_KEY[family] || '其他';
+          const items = mapRowsToItems(
+            sortTierRowsByResolutionAsc(rows),
+            usedGroupRatio,
+            displayPrice,
+            unitLabel,
+            t,
+          );
+
+          return (
+            <TierPriceMatrix
+              key={family}
+              title={t(titleKey)}
+              count={items.length}
+              columns={columns}
+              rows={items}
+              gridType='video'
+              accent={family === 'image_to_video' ? 'amber' : 'blue'}
+              t={t}
+            />
+          );
+        })}
+      </div>
+    </div>
   );
 }
 
