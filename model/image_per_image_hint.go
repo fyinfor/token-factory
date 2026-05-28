@@ -11,16 +11,17 @@ import (
 // ImagePerImageTierRow 单档图片按张标价（已乘渠道展示折扣，未乘用户分组倍率）。
 type ImagePerImageTierRow struct {
 	UsdAfterChannelDiscount float64 `json:"usd_after_channel_discount"`
+	UsdOfficial             float64 `json:"usd_official,omitempty"`
 	Resolution              string  `json:"resolution,omitempty"`
 	Lane                    string  `json:"lane,omitempty"`
 }
 
 // ImagePerImagePricingHint 多档图片分辨率价在定价卡片上的摘要。
 type ImagePerImagePricingHint struct {
-	MinUsdAfterChannelDiscount float64              `json:"min_usd_after_channel_discount"`
-	Resolution                 string               `json:"resolution,omitempty"`
-	Lane                       string               `json:"lane,omitempty"`
-	TierCount                  int                  `json:"tier_count"`
+	MinUsdAfterChannelDiscount float64                `json:"min_usd_after_channel_discount"`
+	Resolution                 string                 `json:"resolution,omitempty"`
+	Lane                       string                 `json:"lane,omitempty"`
+	TierCount                  int                    `json:"tier_count"`
 	Tiers                      []ImagePerImageTierRow `json:"tiers,omitempty"`
 }
 
@@ -112,6 +113,7 @@ func buildSortedImagePerImageTierRows(tiers []imagePerImageTier, globalRules rat
 		}
 		rows = append(rows, ImagePerImageTierRow{
 			UsdAfterChannelDiscount: usd,
+			UsdOfficial:             globalRaw,
 			Resolution:              strings.TrimSpace(ti.Res),
 			Lane:                    ti.Lane,
 		})

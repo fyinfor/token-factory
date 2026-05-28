@@ -12,6 +12,7 @@ import (
 // VideoFlatClipTierRow 单档视频标价（已套用成本折扣+加价折扣的有效展示价，未乘用户分组倍率）。
 type VideoFlatClipTierRow struct {
 	UsdAfterChannelDiscount float64 `json:"usd_after_channel_discount"`
+	UsdOfficial             float64 `json:"usd_official,omitempty"`
 	Resolution              string  `json:"resolution,omitempty"`
 	HasAudio                *bool   `json:"has_audio,omitempty"`
 	Lane                    string  `json:"lane,omitempty"`
@@ -330,6 +331,7 @@ func tierRowLess(a, b VideoFlatClipTierRow) bool {
 func buildSortedTierRows(tiers []videoFlatTier, globalRules ratio_setting.VideoPricingRules, costDiscPercent, markupDiscPercent float64) []VideoFlatClipTierRow {
 	rows := make([]VideoFlatClipTierRow, 0, len(tiers))
 	for _, ti := range tiers {
+		officialUSD := lookupVideoTierRawUSD(globalRules, ti)
 		usd := effectiveVideoTierDisplayUSD(ti, globalRules, costDiscPercent, markupDiscPercent)
 		if usd <= 0 {
 			continue
@@ -341,6 +343,7 @@ func buildSortedTierRows(tiers []videoFlatTier, globalRules ratio_setting.VideoP
 		}
 		rows = append(rows, VideoFlatClipTierRow{
 			UsdAfterChannelDiscount: usd,
+			UsdOfficial:             officialUSD,
 			Resolution:              strings.TrimSpace(ti.Res),
 			HasAudio:                ha,
 			Lane:                    ti.Lane,

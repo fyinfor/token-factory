@@ -187,7 +187,7 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, header *http.Header, info *
 		header.Set("api-key", info.ApiKey)
 		return nil
 	}
-	if info.ChannelType == constant.ChannelTypeOpenAI && "" != info.Organization {
+	if (info.ChannelType == constant.ChannelTypeOpenAI || info.ChannelType == constant.ChannelTypeOpenAIImage) && "" != info.Organization {
 		header.Set("OpenAI-Organization", info.Organization)
 	}
 	// 检查 Header Override 是否已设置 Authorization，如果已设置则跳过默认设置
@@ -645,6 +645,8 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 
 func (a *Adaptor) GetModelList() []string {
 	switch a.ChannelType {
+	case constant.ChannelTypeOpenAIImage:
+		return ImageModelList
 	case constant.ChannelType360:
 		return ai360.ModelList
 	case constant.ChannelTypeLingYiWanWu:
@@ -662,6 +664,8 @@ func (a *Adaptor) GetModelList() []string {
 
 func (a *Adaptor) GetChannelName() string {
 	switch a.ChannelType {
+	case constant.ChannelTypeOpenAIImage:
+		return "openai-image"
 	case constant.ChannelType360:
 		return ai360.ChannelName
 	case constant.ChannelTypeLingYiWanWu:

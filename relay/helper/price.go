@@ -597,6 +597,13 @@ func resolveVideoPerSecondPricingRules(channelID int, modelName string) (ratio_s
 	return ratio_setting.VideoPricingRules{}, false
 }
 
+func hasChannelVideoPerSecondPricingRules(channelID int, modelName string) bool {
+	if rules, ok := ratio_setting.GetChannelVideoPricingRules(channelID, modelName); ok {
+		return ratio_setting.HasUsableVideoPerSecondRules(rules)
+	}
+	return false
+}
+
 func pickAudioPriceByResolution(ctx videoEstimateContext, hasAudio bool, rows []ratio_setting.VideoResolutionAudioPriceRule) (float64, bool) {
 	if len(rows) == 0 {
 		return 0, false
@@ -794,7 +801,13 @@ func tryVideoPerSecondRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo
 		markupDiscVPS,
 	)
 	if !effOK || effPricePerSecond <= 0 {
-		return types.PriceData{}, false, nil
+		// 渠道未配置按秒规则而仅配置全局规则时，按全局匹配单价计费。
+		// service.EffectiveVideoPerSecondUSDForDimensions 需要渠道档位，故这里回退。
+		if !hasChannelVideoPerSecondPricingRules(channelID, info.OriginModelName) {
+			effPricePerSecond = pricePerSecond
+		} else {
+			return types.PriceData{}, false, nil
+		}
 	}
 	rawQuota := float64(seconds) * effPricePerSecond * common.QuotaPerUnit * groupRatioInfo.GroupRatio
 	chDiscCopyVPS := chDiscVPS

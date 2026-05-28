@@ -73,4 +73,13 @@ var ModelList = []string{
 	"sora-2", "sora-2-pro",
 }
 
+var ImageModelList = []string{
+	"dall-e-2",
+	"dall-e-3",
+	"gpt-image-1",
+	"gpt-image-1-mini",
+	"gpt-image-1.5",
+	"chatgpt-image-latest",
+}
+
 var ChannelName = "openai"
