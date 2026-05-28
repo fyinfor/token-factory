@@ -714,13 +714,17 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	switch aliResp.Output.TaskStatus {
 	case "PENDING":
 		taskResult.Status = model.TaskStatusQueued
+		taskResult.Progress = taskcommon.ProgressQueued
 	case "RUNNING":
 		taskResult.Status = model.TaskStatusInProgress
+		taskResult.Progress = taskcommon.ProgressInProgress
 	case "SUCCEEDED":
 		taskResult.Status = model.TaskStatusSuccess
+		taskResult.Progress = taskcommon.ProgressComplete
 		taskResult.Url = aliResp.Output.VideoURL
 	case "FAILED", "CANCELED", "UNKNOWN":
 		taskResult.Status = model.TaskStatusFailure
+		taskResult.Progress = taskcommon.ProgressComplete
 		if aliResp.Message != "" {
 			taskResult.Reason = aliResp.Message
 		} else if aliResp.Output.Message != "" {
@@ -730,6 +734,7 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		}
 	default:
 		taskResult.Status = model.TaskStatusQueued
+		taskResult.Progress = taskcommon.ProgressQueued
 	}
 	return &taskResult, nil
 }

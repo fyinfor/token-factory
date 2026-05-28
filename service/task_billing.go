@@ -258,7 +258,7 @@ func videoPerSecondBillingDetailFromSubmit(c *gin.Context, info *relaycommon.Rel
 	if groupRatio <= 0 {
 		groupRatio = 1
 	}
-	return &videoPerSecondBillingDetail{
+	detail := &videoPerSecondBillingDetail{
 		Mode:                   mode,
 		Seconds:                seconds,
 		Width:                  width,
@@ -273,6 +273,27 @@ func videoPerSecondBillingDetailFromSubmit(c *gin.Context, info *relaycommon.Rel
 		ChannelDiscountPercent: resolveVideoLogChannelDiscountPercent(info),
 		UnifiedAudio:           match.UnifiedAudio,
 	}
+	fillVideoPerSecondEffectiveRates(detail, info.ChannelId, info.UserId, modelName, mode)
+	return detail
+}
+
+// fillVideoPerSecondEffectiveRates 补全日志展示用的全局价、有效单价（含成本折扣与加价切片）。
+func fillVideoPerSecondEffectiveRates(detail *videoPerSecondBillingDetail, channelId, userId int, modelName, mode string) {
+	if detail == nil {
+		return
+	}
+	costDisc := detail.ChannelDiscountPercent
+	if costDisc <= 0 {
+		costDisc = model.ResolveChannelPriceDiscountPercent(channelId)
+		detail.ChannelDiscountPercent = costDisc
+	}
+	markupDisc := model.ResolveEffectiveMarkupDiscountPercentForInviteeBilling(userId, channelId, modelName)
+	globalPerSec := globalVideoPerSecondUSDForChannelTier(
+		modelName, mode, detail.Resolution, detail.RuleWidth, detail.RuleHeight, detail.HasAudio, detail.UnifiedAudio,
+	)
+	detail.GlobalPricePerSecond = globalPerSec
+	detail.MarkupDiscountPercent = markupDisc
+	detail.EffectivePricePerSecond = effectiveVideoPerSecondUSD(detail.PricePerSecond, globalPerSec, costDisc, markupDisc)
 }
 
 func resolveVideoLogChannelDiscountPercent(info *relaycommon.RelayInfo) float64 {
@@ -691,19 +712,79 @@ func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) {
 	})
 }
 
+// recordVideoTaskSettlementMarker 在任务成功且预扣与实扣一致（或无法差额结算）时，
+// 写入带 actual_quota 与视频计费 other 的结算日志；content 留空，由前端按 other 渲染（与预扣日志一致）。
+func recordVideoTaskSettlementMarker(ctx context.Context, task *model.Task, actualQuota int, detail *videoPerSecondBillingDetail) {
+	if task == nil || actualQuota <= 0 || task.Status != model.TaskStatusSuccess {
+		return
+	}
+	if !taskNeedsVideoSettlementMarker(task) {
+		return
+	}
+	preConsumed := task.Quota
+	if preConsumed <= 0 {
+		preConsumed = actualQuota
+	}
+	other := taskBillingOther(task)
+	other["task_id"] = task.TaskID
+	other["actual_quota"] = actualQuota
+	other["pre_consumed_quota"] = preConsumed
+	other["video_final_quota"] = actualQuota
+	other["billing_mode"] = "video_per_second"
+	if detail != nil {
+		appendVideoPerSecondBillingDetailOther(other, detail, actualQuota)
+	}
+	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
+		UserId:    task.UserId,
+		LogType:   model.LogTypeConsume,
+		Content:   "",
+		ChannelId: task.ChannelId,
+		ModelName: taskModelName(task),
+		TokenName: task.PrivateData.TokenName,
+		Quota:     0,
+		TokenId:   task.PrivateData.TokenId,
+		Group:     task.Group,
+		Other:     other,
+	})
+}
+
+func taskNeedsVideoSettlementMarker(task *model.Task) bool {
+	bc := task.PrivateData.BillingContext
+	if bc == nil {
+		return false
+	}
+	if bc.PerCallBilling {
+		return false
+	}
+	if bc.ModelPrice == 0 && bc.ModelRatio == 0 {
+		return true
+	}
+	if bc.OtherRatios != nil {
+		if _, ok := bc.OtherRatios["seconds"]; ok {
+			return true
+		}
+	}
+	return false
+}
+
 // RecalculateTaskQuota 通用的异步差额结算。
 // actualQuota 是任务完成后的实际应扣额度，与预扣额度 (task.Quota) 做差额结算。
-// reason 用于日志记录（例如 "token重算" 或 "adaptor调整"）。
-func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int, reason string, extraOther ...map[string]interface{}) {
+// detail 为视频按秒计费明细（写入 other，供前端展示）；结算日志 content 恒为空。
+func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int, detail *videoPerSecondBillingDetail, extraOther ...map[string]interface{}) {
 	if actualQuota <= 0 {
 		return
 	}
 	preConsumedQuota := task.Quota
 	quotaDelta := actualQuota - preConsumedQuota
+	logReason := "视频按秒结算"
+	if detail != nil {
+		logReason = formatVideoPerSecondBillingDetail("视频按秒重算", detail, actualQuota)
+	}
 
 	if quotaDelta == 0 {
 		logger.LogInfo(ctx, fmt.Sprintf("任务 %s 预扣费准确（%s，%s）",
-			task.TaskID, logger.LogQuota(actualQuota), reason))
+			task.TaskID, logger.LogQuota(actualQuota), logReason))
+		recordVideoTaskSettlementMarker(ctx, task, actualQuota, detail)
 		return
 	}
 
@@ -712,7 +793,7 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 		logger.LogQuota(quotaDelta),
 		logger.LogQuota(actualQuota),
 		logger.LogQuota(preConsumedQuota),
-		reason,
+		logReason,
 	))
 
 	// 调整资金来源
@@ -758,10 +839,14 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 			other[k] = v
 		}
 	}
+	if detail != nil {
+		other["billing_mode"] = "video_per_second"
+		appendVideoPerSecondBillingDetailOther(other, detail, actualQuota)
+	}
 	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
 		UserId:    task.UserId,
 		LogType:   logType,
-		Content:   reason,
+		Content:   "",
 		ChannelId: task.ChannelId,
 		ModelName: taskModelName(task),
 		TokenName: task.PrivateData.TokenName,
@@ -820,8 +905,7 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 	effRate := model.EffectiveInputRate(modelRatio, globalMr, costDisc, markupDisc)
 	actualQuota := int(math.Round(float64(totalTokens) * effRate * finalGroupRatio))
 
-	reason := fmt.Sprintf("token重算：tokens=%d, modelRatio=%.2f, groupRatio=%.2f, channelId=%d", totalTokens, modelRatio, finalGroupRatio, task.ChannelId)
-	RecalculateTaskQuota(ctx, task, actualQuota, reason, map[string]interface{}{
+	RecalculateTaskQuota(ctx, task, actualQuota, nil, map[string]interface{}{
 		profitShareExtraTotalTokensKey: totalTokens,
 	})
 	return true

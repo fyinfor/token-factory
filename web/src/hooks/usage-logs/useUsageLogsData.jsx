@@ -170,8 +170,13 @@ export const useLogsData = () => {
     const upstreamModelName = other?.upstream_model_name || '';
     const specWidth = ruleWidth || width;
     const specHeight = ruleHeight || height;
+    const effectivePerSecond = Number(
+      other?.effective_video_price_per_second || 0,
+    );
     const calculatedPricePerSecond =
-      pricePerSecond * groupRatio * (channelDiscount / 100);
+      effectivePerSecond > 0
+        ? effectivePerSecond * groupRatio
+        : pricePerSecond * groupRatio * (channelDiscount / 100);
     const calculatedTotalPrice = seconds * calculatedPricePerSecond;
     const formatMoney = (value) => {
       const numberValue = Number(value || 0);
