@@ -102,6 +102,18 @@ const PricingPage = () => {
         t={pricingData.t}
         selectedGroup={pricingData.selectedGroup}
         blurPricing={blurPricing}
+        channelModelRatioMap={pricingData.channelModelRatio}
+        channelModelPriceMap={pricingData.channelModelPrice}
+        channelCompletionRatioMap={pricingData.channelCompletionRatio}
+        channelCacheRatioMap={pricingData.channelCacheRatio}
+        channelCreateCacheRatioMap={pricingData.channelCreateCacheRatio}
+        channelImageRatioMap={pricingData.channelImageRatio}
+        channelImagePriceMap={pricingData.channelImagePrice}
+        channelAudioRatioMap={pricingData.channelAudioRatio}
+        channelAudioCompletionRatioMap={pricingData.channelAudioCompletionRatio}
+        channelVideoRatioMap={pricingData.channelVideoRatio}
+        channelVideoCompletionRatioMap={pricingData.channelVideoCompletionRatio}
+        channelVideoPriceMap={pricingData.channelVideoPrice}
       />
     </div>
   );

@@ -572,22 +572,18 @@ func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor
 
 	// 1. 视频按秒规则优先按真实成片重算。
 	if actualQuota, detail := recalcVideoPerSecondQuotaDetailOnComplete(task, taskResult); actualQuota > 0 {
-		RecalculateTaskQuota(
-			ctx,
-			task,
-			actualQuota,
-			formatVideoPerSecondBillingDetail("视频按秒重算", detail, actualQuota),
-			videoPerSecondBillingDetailOther(detail, actualQuota),
-		)
+		RecalculateTaskQuota(ctx, task, actualQuota, detail)
 		return
 	}
 
 	// 2. 让 adaptor 决定最终额度
 	if actualQuota := adaptor.AdjustBillingOnComplete(task, taskResult); actualQuota > 0 {
-		RecalculateTaskQuota(ctx, task, actualQuota, "adaptor计费调整")
+		RecalculateTaskQuota(ctx, task, actualQuota, nil)
 		return
 	}
-	// 3. 无调整，保持预扣额度（估算值）
+	// 3. 无调整，保持预扣额度（估算值）；仍写入结算标记供前端展示「实际扣费」。
+	_, markerDetail := recalcVideoPerSecondQuotaDetailOnComplete(task, taskResult)
+	recordVideoTaskSettlementMarker(ctx, task, task.Quota, markerDetail)
 }
 
 // SettleTaskBillingOnFetch 用于 /v1/videos/{task_id} 查询链路下的成功结算。
@@ -613,14 +609,11 @@ func SettleTaskBillingOnFetch(ctx context.Context, task *model.Task, taskResult 
 		}
 	}
 	if actualQuota, detail := recalcVideoPerSecondQuotaDetailOnComplete(task, taskResult); actualQuota > 0 {
-		RecalculateTaskQuota(
-			ctx,
-			task,
-			actualQuota,
-			formatVideoPerSecondBillingDetail("视频按秒重算(fetch)", detail, actualQuota),
-			videoPerSecondBillingDetailOther(detail, actualQuota),
-		)
+		RecalculateTaskQuota(ctx, task, actualQuota, detail)
+		return
 	}
+	_, markerDetail := recalcVideoPerSecondQuotaDetailOnComplete(task, taskResult)
+	recordVideoTaskSettlementMarker(ctx, task, task.Quota, markerDetail)
 }
 
 func recalcVideoPerSecondQuotaOnComplete(task *model.Task, taskResult *relaycommon.TaskInfo) int {
@@ -644,14 +637,25 @@ func recalcVideoPerSecondQuotaDetailOnComplete(task *model.Task, taskResult *rel
 	if videoURL == "" {
 		videoURL = strings.TrimSpace(task.GetResultURL())
 	}
-	// 优先使用上游真实回包中的成片元数据；仅在缺失时回退 URL 探测。
-	meta, ok := extractVideoMetadataFromTaskData(task)
-	if !ok {
-		var err error
-		meta, err = ProbeVideoMetadataFromURL(videoURL)
-		if err != nil {
-			return 0, nil
+	// 成片时长优先 URL 探测（MP4 真实时长）。DashScope 回包里的 submit_time/end_time 是任务耗时，不能用于计费。
+	var meta *VideoMetadata
+	if videoURL != "" {
+		if probed, err := ProbeVideoMetadataFromURL(videoURL); err == nil {
+			meta = probed
 		}
+	}
+	if meta == nil {
+		if m, ok := extractVideoMetadataFromTaskData(task); ok {
+			meta = m
+		}
+	}
+	if meta == nil {
+		if sec := taskBillingSecondsEstimate(task); sec > 0 {
+			meta, _ = videoMetadataFromBillingEstimate(task, sec)
+		}
+	}
+	if meta == nil || meta.DurationSec <= 0 {
+		return 0, nil
 	}
 	mode := detectTaskVideoBillingMode(task)
 	match, ok := matchPerSecondPriceDetail(channelRules, mode, meta.Width, meta.Height, meta.HasAudio)
@@ -668,7 +672,9 @@ func recalcVideoPerSecondQuotaDetailOnComplete(task *model.Task, taskResult *rel
 	}
 	costDisc := model.ResolveChannelPriceDiscountPercent(task.ChannelId)
 	markupDisc := model.ResolveEffectiveMarkupDiscountPercentForInviteeBilling(task.UserId, task.ChannelId, modelName)
-	globalPerSec := globalVideoPerSecondUSD(modelName, mode, meta.Width, meta.Height, meta.HasAudio)
+	globalPerSec := globalVideoPerSecondUSDForChannelTier(
+		modelName, mode, match.Resolution, match.RuleWidth, match.RuleHeight, meta.HasAudio, match.UnifiedAudio,
+	)
 	effPerSec := effectiveVideoPerSecondUSD(match.PricePerSecond, globalPerSec, costDisc, markupDisc)
 	rawQuota := float64(seconds) * effPerSec * common.QuotaPerUnit * groupRatio
 	quota := int(math.Round(rawQuota))
@@ -697,6 +703,49 @@ func recalcVideoPerSecondQuotaDetailOnComplete(task *model.Task, taskResult *rel
 	return quota, detail
 }
 
+func taskBillingSecondsEstimate(task *model.Task) int {
+	if task == nil {
+		return 0
+	}
+	if bc := task.PrivateData.BillingContext; bc != nil && bc.OtherRatios != nil {
+		if sec := int(math.Ceil(bc.OtherRatios["seconds"])); sec > 0 {
+			return sec
+		}
+	}
+	if input := strings.TrimSpace(task.Properties.Input); input != "" {
+		var req map[string]any
+		if err := common.Unmarshal([]byte(input), &req); err == nil {
+			if params, _ := req["parameters"].(map[string]any); params != nil {
+				if d := metadataToFloat64(params["duration"]); d > 0 {
+					return int(math.Ceil(d))
+				}
+			}
+		}
+	}
+	return 0
+}
+
+func videoMetadataFromBillingEstimate(task *model.Task, seconds int) (*VideoMetadata, bool) {
+	if task == nil || seconds <= 0 {
+		return nil, false
+	}
+	width, height := 1280, 720
+	if m, ok := extractVideoMetadataFromTaskData(task); ok {
+		if m.Width > 0 {
+			width = m.Width
+		}
+		if m.Height > 0 {
+			height = m.Height
+		}
+	}
+	return &VideoMetadata{
+		DurationSec: float64(seconds),
+		Width:       width,
+		Height:      height,
+		HasAudio:    false,
+	}, true
+}
+
 func extractVideoMetadataFromTaskData(task *model.Task) (*VideoMetadata, bool) {
 	if task == nil || len(task.Data) == 0 {
 		return nil, false
@@ -705,54 +754,7 @@ func extractVideoMetadataFromTaskData(task *model.Task) (*VideoMetadata, bool) {
 	if err := common.Unmarshal(task.Data, &payload); err != nil {
 		return nil, false
 	}
-	response, _ := payload["Response"].(map[string]any)
-	if response == nil {
-		return nil, false
-	}
-	aigcVideoTask, _ := response["AigcVideoTask"].(map[string]any)
-	if aigcVideoTask == nil {
-		return nil, false
-	}
-	output, _ := aigcVideoTask["Output"].(map[string]any)
-	if output == nil {
-		return nil, false
-	}
-	fileInfos, _ := output["FileInfos"].([]any)
-	if len(fileInfos) == 0 {
-		return nil, false
-	}
-	firstFile, _ := fileInfos[0].(map[string]any)
-	if firstFile == nil {
-		return nil, false
-	}
-	metaMap, _ := firstFile["MetaData"].(map[string]any)
-	if metaMap == nil {
-		return nil, false
-	}
-
-	duration := toFloat64(metaMap["Duration"])
-	if duration <= 0 {
-		duration = toFloat64(metaMap["VideoDuration"])
-	}
-	width := toInt(metaMap["Width"])
-	height := toInt(metaMap["Height"])
-	audioDuration := toFloat64(metaMap["AudioDuration"])
-
-	hasAudio := audioDuration > 0
-	if !hasAudio {
-		if audioStreams, ok := metaMap["AudioStreamSet"].([]any); ok && len(audioStreams) > 0 {
-			hasAudio = true
-		}
-	}
-	if duration <= 0 || width <= 0 || height <= 0 {
-		return nil, false
-	}
-	return &VideoMetadata{
-		DurationSec: duration,
-		Width:       width,
-		Height:      height,
-		HasAudio:    hasAudio,
-	}, true
+	return extractVideoMetadataFromMap(payload)
 }
 
 func toFloat64(v any) float64 {

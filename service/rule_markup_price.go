@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/QuantumNous/new-api/model"
@@ -66,4 +67,45 @@ func globalVideoPerSecondUSD(modelName, mode string, width, height int, hasAudio
 		return 0
 	}
 	return p
+}
+
+// globalVideoPerSecondUSDForChannelTier 全局价与定价卡片一致：按渠道已匹配档位的分辨率查全局规则，而非按成片像素重匹。
+func globalVideoPerSecondUSDForChannelTier(modelName, mode, resolution string, ruleWidth, ruleHeight int, hasAudio, unifiedAudio bool) float64 {
+	res := strings.TrimSpace(resolution)
+	if res == "" && ruleWidth > 0 && ruleHeight > 0 {
+		res = fmt.Sprintf("%dx%d", ruleWidth, ruleHeight)
+	}
+	if p := model.LookupGlobalVideoPerSecondUSD(modelName, mode, res, hasAudio, unifiedAudio); p > 0 {
+		return p
+	}
+	// 全局无同档时回退按像素匹配（EffectiveRuleUnitPrice 内 global<=0 会用渠道价）
+	return globalVideoPerSecondUSD(modelName, mode, ruleWidth, ruleHeight, hasAudio)
+}
+
+// EffectiveVideoPerSecondUSDForDimensions 按请求像素匹配渠道档位后，用同档全局价计算有效单价（与定价卡片一致）。
+func EffectiveVideoPerSecondUSDForDimensions(
+	channelID int,
+	modelName, mode string,
+	width, height int,
+	hasAudio bool,
+	costDiscPercent, markupDiscPercent float64,
+) (effUSD, channelUSD, globalUSD float64, ok bool) {
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" || channelID <= 0 {
+		return 0, 0, 0, false
+	}
+	channelRules, okRules := ratio_setting.GetChannelVideoPricingRules(channelID, modelName)
+	if !okRules {
+		return 0, 0, 0, false
+	}
+	match, okMatch := matchPerSecondPriceDetail(channelRules, mode, width, height, hasAudio)
+	if !okMatch || match.PricePerSecond <= 0 {
+		return 0, 0, 0, false
+	}
+	channelUSD = match.PricePerSecond
+	globalUSD = globalVideoPerSecondUSDForChannelTier(
+		modelName, mode, match.Resolution, match.RuleWidth, match.RuleHeight, hasAudio, match.UnifiedAudio,
+	)
+	effUSD = effectiveVideoPerSecondUSD(channelUSD, globalUSD, costDiscPercent, markupDiscPercent)
+	return effUSD, channelUSD, globalUSD, true
 }

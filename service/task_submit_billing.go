@@ -72,10 +72,6 @@ func calcVideoPerSecondQuotaByTaskData(c *gin.Context, info *relaycommon.RelayIn
 		return 0
 	}
 	mode := detectVideoBillingModeFromSubmitRequest(c)
-	channelPerSec := channelVideoPerSecondUSD(info.ChannelId, modelName, mode, meta.Width, meta.Height, meta.HasAudio)
-	if channelPerSec <= 0 {
-		return 0
-	}
 	seconds := int(math.Ceil(meta.DurationSec))
 	if seconds <= 0 {
 		return 0
@@ -89,8 +85,12 @@ func calcVideoPerSecondQuotaByTaskData(c *gin.Context, info *relaycommon.RelayIn
 		costDiscVPS = model.ResolveChannelPriceDiscountPercent(info.ChannelId)
 	}
 	markupDiscVPS := info.PriceData.MarkupDiscountPercent
-	globalPerSec := globalVideoPerSecondUSD(modelName, mode, meta.Width, meta.Height, meta.HasAudio)
-	effPricePerSec := effectiveVideoPerSecondUSD(channelPerSec, globalPerSec, costDiscVPS, markupDiscVPS)
+	effPricePerSec, _, _, ok := EffectiveVideoPerSecondUSDForDimensions(
+		info.ChannelId, modelName, mode, meta.Width, meta.Height, meta.HasAudio, costDiscVPS, markupDiscVPS,
+	)
+	if !ok || effPricePerSec <= 0 {
+		return 0
+	}
 	rawQuota := float64(seconds) * effPricePerSec * common.QuotaPerUnit * groupRatio
 	quota := int(math.Round(rawQuota))
 	if quota <= 0 && rawQuota > 0 {
@@ -111,10 +111,6 @@ func calcVideoPerSecondQuotaFromTaskReq(info *relaycommon.RelayInfo, req *relayc
 	mode := detectVideoBillingModeFromTaskReq(req)
 	width, height := videoDimensionsFromTaskRequest(*req)
 	hasAudio := taskRequestHasAudio(*req)
-	channelPerSec := channelVideoPerSecondUSD(info.ChannelId, modelName, mode, width, height, hasAudio)
-	if channelPerSec <= 0 {
-		return 0
-	}
 	seconds := videoDurationFromTaskRequest(*req)
 	if seconds <= 0 {
 		seconds = 5
@@ -128,8 +124,12 @@ func calcVideoPerSecondQuotaFromTaskReq(info *relaycommon.RelayInfo, req *relayc
 	if costDiscVPS == 0 {
 		costDiscVPS = model.ResolveChannelPriceDiscountPercent(info.ChannelId)
 	}
-	globalPerSec := globalVideoPerSecondUSD(modelName, mode, width, height, hasAudio)
-	effPricePerSec := effectiveVideoPerSecondUSD(channelPerSec, globalPerSec, costDiscVPS, markupDisc)
+	effPricePerSec, _, _, ok := EffectiveVideoPerSecondUSDForDimensions(
+		info.ChannelId, modelName, mode, width, height, hasAudio, costDiscVPS, markupDisc,
+	)
+	if !ok || effPricePerSec <= 0 {
+		return 0
+	}
 	rawQuota := float64(seconds) * effPricePerSec * common.QuotaPerUnit * groupRatio
 	quota := int(math.Round(rawQuota))
 	if quota <= 0 && rawQuota > 0 {
@@ -207,53 +207,7 @@ func extractVideoMetadataFromTaskDataBytes(taskData []byte) (*VideoMetadata, boo
 	if err := common.Unmarshal(taskData, &payload); err != nil {
 		return nil, false
 	}
-	response, _ := payload["Response"].(map[string]any)
-	if response == nil {
-		return nil, false
-	}
-	aigcVideoTask, _ := response["AigcVideoTask"].(map[string]any)
-	if aigcVideoTask == nil {
-		return nil, false
-	}
-	output, _ := aigcVideoTask["Output"].(map[string]any)
-	if output == nil {
-		return nil, false
-	}
-	fileInfos, _ := output["FileInfos"].([]any)
-	if len(fileInfos) == 0 {
-		return nil, false
-	}
-	firstFile, _ := fileInfos[0].(map[string]any)
-	if firstFile == nil {
-		return nil, false
-	}
-	metaMap, _ := firstFile["MetaData"].(map[string]any)
-	if metaMap == nil {
-		return nil, false
-	}
-
-	duration := submitToFloat64(metaMap["Duration"])
-	if duration <= 0 {
-		duration = submitToFloat64(metaMap["VideoDuration"])
-	}
-	width := submitToInt(metaMap["Width"])
-	height := submitToInt(metaMap["Height"])
-	audioDuration := submitToFloat64(metaMap["AudioDuration"])
-	hasAudio := audioDuration > 0
-	if !hasAudio {
-		if audioStreams, ok := metaMap["AudioStreamSet"].([]any); ok && len(audioStreams) > 0 {
-			hasAudio = true
-		}
-	}
-	if duration <= 0 || width <= 0 || height <= 0 {
-		return nil, false
-	}
-	return &VideoMetadata{
-		DurationSec: duration,
-		Width:       width,
-		Height:      height,
-		HasAudio:    hasAudio,
-	}, true
+	return extractVideoMetadataFromMap(payload)
 }
 
 func submitToFloat64(v any) float64 {

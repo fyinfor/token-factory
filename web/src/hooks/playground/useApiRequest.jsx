@@ -134,10 +134,13 @@ export const useApiRequest = (
         } catch {
           continue;
         }
-        const taskData = data?.data && typeof data.data === 'object' ? data.data : data;
+        const taskData =
+          data?.data && typeof data.data === 'object' ? data.data : data;
         const status = String(taskData?.status || '').toLowerCase();
         const progress = Number(taskData?.progress || 0);
-        const imagePatch = buildImageMessageContentPatch(extractImageSources(data));
+        const imagePatch = buildImageMessageContentPatch(
+          extractImageSources(data),
+        );
         if (imagePatch) {
           applyImageMessagePatch(imagePatch, updateMessage);
           return;
@@ -187,7 +190,8 @@ export const useApiRequest = (
           if (!response.ok) {
             const errorBody = await response.text();
             updateMessage({
-              content: `视频轮询失败（HTTP ${response.status}），已停止自动轮询。\n\n${errorBody || ''}`.trim(),
+              content:
+                `视频轮询失败（HTTP ${response.status}），已停止自动轮询。\n\n${errorBody || ''}`.trim(),
               status: MESSAGE_STATUS.ERROR,
               videoTask: {
                 taskId,
@@ -202,7 +206,8 @@ export const useApiRequest = (
             data = text ? JSON.parse(text) : {};
           } catch {
             updateMessage({
-              content: `视频轮询失败（返回非 JSON），已停止自动轮询。\n\n${text?.slice?.(0, 300) || ''}`.trim(),
+              content:
+                `视频轮询失败（返回非 JSON），已停止自动轮询。\n\n${text?.slice?.(0, 300) || ''}`.trim(),
               status: MESSAGE_STATUS.ERROR,
               videoTask: {
                 taskId,
@@ -217,7 +222,8 @@ export const useApiRequest = (
           consecutiveNetworkFailures += 1;
           if (consecutiveNetworkFailures >= 3) {
             updateMessage({
-              content: `视频轮询失败（网络异常 ${consecutiveNetworkFailures} 次），已停止自动轮询。\n\n${err?.message || ''}`.trim(),
+              content:
+                `视频轮询失败（网络异常 ${consecutiveNetworkFailures} 次），已停止自动轮询。\n\n${err?.message || ''}`.trim(),
               status: MESSAGE_STATUS.ERROR,
               videoTask: {
                 taskId,
@@ -256,18 +262,16 @@ export const useApiRequest = (
           },
         });
         if (playable) {
-          updateMessage(
-            {
-              content: '视频已生成完成。',
-              status: MESSAGE_STATUS.COMPLETE,
-              videoTask: {
-                taskId,
-                status: 'completed',
-                progress: 100,
-                playableUrl: playable,
-              },
+          updateMessage({
+            content: '视频已生成完成。',
+            status: MESSAGE_STATUS.COMPLETE,
+            videoTask: {
+              taskId,
+              status: 'completed',
+              progress: 100,
+              playableUrl: playable,
             },
-          );
+          });
           return;
         }
         if (['succeeded', 'success', 'completed'].includes(status)) {
@@ -347,7 +351,7 @@ export const useApiRequest = (
 
   // 流式消息更新
   const streamMessageUpdate = useCallback(
-    (textChunk, type) => {
+    (textChunk, type, requestMode) => {
       setMessage((prevMessage) => {
         const lastMessage = prevMessage[prevMessage.length - 1];
         if (!lastMessage) return prevMessage;
@@ -417,14 +421,14 @@ export const useApiRequest = (
         }
 
         return prevMessage;
-      });
+      }, requestMode);
     },
     [setMessage, applyAutoCollapseLogic],
   );
 
   // 完成消息
   const completeMessage = useCallback(
-    (status = MESSAGE_STATUS.COMPLETE) => {
+    (status = MESSAGE_STATUS.COMPLETE, requestMode) => {
       setMessage((prevMessage) => {
         const lastMessage = prevMessage[prevMessage.length - 1];
         if (
@@ -450,18 +454,18 @@ export const useApiRequest = (
           status === MESSAGE_STATUS.COMPLETE ||
           status === MESSAGE_STATUS.ERROR
         ) {
-          setTimeout(() => saveMessages(updatedMessages), 0);
+          setTimeout(() => saveMessages(updatedMessages, requestMode), 0);
         }
 
         return updatedMessages;
-      });
+      }, requestMode);
     },
     [setMessage, applyAutoCollapseLogic, saveMessages],
   );
 
   // 非流式请求
   const handleNonStreamRequest = useCallback(
-    async (payload) => {
+    async (payload, requestMode) => {
       const endpoint = resolveEndpoint(payload);
       const requestBody = stripLocalFields(payload);
       setDebugData((prev) => ({
@@ -556,20 +560,31 @@ export const useApiRequest = (
               };
             }
             return newMessages;
-          });
+          }, requestMode);
         } else if (payload?.__endpoint === 'image') {
-          const imagePatch = buildImageMessageContentPatch(extractImageSources(data));
-          const taskData = data?.data && typeof data.data === 'object' ? data.data : data;
+          const imagePatch = buildImageMessageContentPatch(
+            extractImageSources(data),
+          );
+          const taskData =
+            data?.data && typeof data.data === 'object' ? data.data : data;
           const imageTaskId =
             taskData?.task_id || taskData?.id || data?.task_id || data?.id;
-          const imageStatus = String(taskData?.status || data?.status || '').toLowerCase();
+          const imageStatus = String(
+            taskData?.status || data?.status || '',
+          ).toLowerCase();
           const shouldPollImage =
-            !!imageTaskId && ['queued', 'processing', 'in_progress', 'running'].includes(imageStatus);
+            !!imageTaskId &&
+            ['queued', 'processing', 'in_progress', 'running'].includes(
+              imageStatus,
+            );
           setMessage((prevMessage) => {
             const newMessages = [...prevMessage];
             const lastMessage = newMessages[newMessages.length - 1];
             if (lastMessage?.status === MESSAGE_STATUS.LOADING) {
-              const autoCollapseState = applyAutoCollapseLogic(lastMessage, true);
+              const autoCollapseState = applyAutoCollapseLogic(
+                lastMessage,
+                true,
+              );
               newMessages[newMessages.length - 1] = {
                 ...lastMessage,
                 content:
@@ -585,35 +600,45 @@ export const useApiRequest = (
               };
             }
             return newMessages;
-          });
+          }, requestMode);
           if (shouldPollImage) {
             pollImageTaskUntilReady(imageTaskId, (patch) => {
               setMessage((prevMessage) => {
                 const newMessages = [...prevMessage];
                 const lastMessage = newMessages[newMessages.length - 1];
-                if (!lastMessage || lastMessage.role !== 'assistant') return prevMessage;
+                if (!lastMessage || lastMessage.role !== 'assistant')
+                  return prevMessage;
                 newMessages[newMessages.length - 1] = {
                   ...lastMessage,
-                  ...(patch.content !== undefined ? { content: patch.content } : {}),
+                  ...(patch.content !== undefined
+                    ? { content: patch.content }
+                    : {}),
                   ...(patch.generatedImages !== undefined
                     ? { generatedImages: patch.generatedImages }
                     : {}),
                   ...(patch.status ? { status: patch.status } : {}),
                 };
                 return newMessages;
-              });
+              }, requestMode);
             });
           }
         } else {
           // 图片/视频等非 chat 返回体，统一展示摘要，避免停留在 loading
           const taskPayload = getVideoTaskPayload(data);
-          const taskId = taskPayload?.task_id || taskPayload?.id || data?.task_id || data?.id;
+          const taskId =
+            taskPayload?.task_id ||
+            taskPayload?.id ||
+            data?.task_id ||
+            data?.id;
           const shouldPollVideo = payload?.__endpoint === 'video' && !!taskId;
           setMessage((prevMessage) => {
             const newMessages = [...prevMessage];
             const lastMessage = newMessages[newMessages.length - 1];
             if (lastMessage?.status === MESSAGE_STATUS.LOADING) {
-              const autoCollapseState = applyAutoCollapseLogic(lastMessage, true);
+              const autoCollapseState = applyAutoCollapseLogic(
+                lastMessage,
+                true,
+              );
               newMessages[newMessages.length - 1] = {
                 ...lastMessage,
                 content:
@@ -625,22 +650,27 @@ export const useApiRequest = (
                   payload?.__endpoint === 'video' && taskId
                     ? {
                         taskId,
-                        status: String(taskPayload?.status || data?.status || 'queued').toLowerCase(),
-                        progress: Number(taskPayload?.progress || data?.progress || 0),
+                        status: String(
+                          taskPayload?.status || data?.status || 'queued',
+                        ).toLowerCase(),
+                        progress: Number(
+                          taskPayload?.progress || data?.progress || 0,
+                        ),
                       }
                     : undefined,
                 ...autoCollapseState,
               };
             }
             return newMessages;
-          });
+          }, requestMode);
           if (shouldPollVideo) {
             console.debug('[playground-video] poll start', { taskId });
             pollVideoTaskUntilReady(taskId, (patch) => {
               setMessage((prevMessage) => {
                 const newMessages = [...prevMessage];
                 const lastMessage = newMessages[newMessages.length - 1];
-                if (!lastMessage || lastMessage.role !== 'assistant') return prevMessage;
+                if (!lastMessage || lastMessage.role !== 'assistant')
+                  return prevMessage;
                 newMessages[newMessages.length - 1] = {
                   ...lastMessage,
                   ...(patch.content !== undefined
@@ -652,7 +682,7 @@ export const useApiRequest = (
                     : {}),
                 };
                 return newMessages;
-              });
+              }, requestMode);
             });
           }
         }
@@ -680,7 +710,7 @@ export const useApiRequest = (
             };
           }
           return newMessages;
-        });
+        }, requestMode);
       }
     },
     [
@@ -699,7 +729,7 @@ export const useApiRequest = (
 
   // SSE请求
   const handleSSE = useCallback(
-    (payload) => {
+    (payload, requestMode) => {
       const endpoint = resolveEndpoint(payload);
       const requestBody = stripLocalFields(payload);
       setDebugData((prev) => ({
@@ -738,7 +768,7 @@ export const useApiRequest = (
             sseMessages: [...(prev.sseMessages || []), '[DONE]'], // 添加 DONE 标记
             isStreaming: false,
           }));
-          completeMessage();
+          completeMessage(MESSAGE_STATUS.COMPLETE, requestMode);
           return;
         }
 
@@ -760,13 +790,17 @@ export const useApiRequest = (
           const delta = payload.choices?.[0]?.delta;
           if (delta) {
             if (delta.reasoning_content) {
-              streamMessageUpdate(delta.reasoning_content, 'reasoning');
+              streamMessageUpdate(
+                delta.reasoning_content,
+                'reasoning',
+                requestMode,
+              );
             }
             if (delta.reasoning) {
-              streamMessageUpdate(delta.reasoning, 'reasoning');
+              streamMessageUpdate(delta.reasoning, 'reasoning', requestMode);
             }
             if (delta.content) {
-              streamMessageUpdate(delta.content, 'content');
+              streamMessageUpdate(delta.content, 'content', requestMode);
             }
           }
         } catch (error) {
@@ -781,8 +815,12 @@ export const useApiRequest = (
           }));
           setActiveDebugTab(DEBUG_TABS.RESPONSE);
 
-          streamMessageUpdate(t('解析响应数据时发生错误'), 'content');
-          completeMessage(MESSAGE_STATUS.ERROR);
+          streamMessageUpdate(
+            t('解析响应数据时发生错误'),
+            'content',
+            requestMode,
+          );
+          completeMessage(MESSAGE_STATUS.ERROR, requestMode);
         }
       });
 
@@ -804,8 +842,8 @@ export const useApiRequest = (
           }));
           setActiveDebugTab(DEBUG_TABS.RESPONSE);
 
-          streamMessageUpdate(errorMessage, 'content');
-          completeMessage(MESSAGE_STATUS.ERROR);
+          streamMessageUpdate(errorMessage, 'content', requestMode);
+          completeMessage(MESSAGE_STATUS.ERROR, requestMode);
           sseSourceRef.current = null;
           source.close();
         }
@@ -833,8 +871,8 @@ export const useApiRequest = (
           setActiveDebugTab(DEBUG_TABS.RESPONSE);
 
           source.close();
-          streamMessageUpdate(t('连接已断开'), 'content');
-          completeMessage(MESSAGE_STATUS.ERROR);
+          streamMessageUpdate(t('连接已断开'), 'content', requestMode);
+          completeMessage(MESSAGE_STATUS.ERROR, requestMode);
         }
       });
 
@@ -850,8 +888,8 @@ export const useApiRequest = (
         }));
         setActiveDebugTab(DEBUG_TABS.RESPONSE);
 
-        streamMessageUpdate(t('建立连接时发生错误'), 'content');
-        completeMessage(MESSAGE_STATUS.ERROR);
+        streamMessageUpdate(t('建立连接时发生错误'), 'content', requestMode);
+        completeMessage(MESSAGE_STATUS.ERROR, requestMode);
       }
     },
     [
@@ -912,11 +950,11 @@ export const useApiRequest = (
 
   // 发送请求
   const sendRequest = useCallback(
-    (payload, isStream) => {
+    (payload, isStream, requestMode) => {
       if (isStream) {
-        handleSSE(payload);
+        handleSSE(payload, requestMode);
       } else {
-        handleNonStreamRequest(payload);
+        handleNonStreamRequest(payload, requestMode);
       }
     },
     [handleSSE, handleNonStreamRequest],

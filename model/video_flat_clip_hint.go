@@ -12,6 +12,7 @@ import (
 // VideoFlatClipTierRow 单档视频标价（已套用成本折扣+加价折扣的有效展示价，未乘用户分组倍率）。
 type VideoFlatClipTierRow struct {
 	UsdAfterChannelDiscount float64 `json:"usd_after_channel_discount"`
+	UsdOfficial             float64 `json:"usd_official,omitempty"`
 	Resolution              string  `json:"resolution,omitempty"`
 	HasAudio                *bool   `json:"has_audio,omitempty"`
 	Lane                    string  `json:"lane,omitempty"`
@@ -281,6 +282,40 @@ func effectiveVideoTierDisplayUSD(channelTier videoFlatTier, globalRules ratio_s
 	return EffectiveRuleUnitPrice(channelTier.RawUSD, globalRaw, costDiscPercent, markupDiscPercent)
 }
 
+// VideoBillingModeToPerSecondLane 将计费模式映射为 VideoPricingRules 按秒档位 lane 名。
+func VideoBillingModeToPerSecondLane(mode string) string {
+	switch strings.TrimSpace(mode) {
+	case "image_to_video":
+		return "image_to_video_per_second"
+	case "video_to_video":
+		return "video_to_video_per_second"
+	default:
+		return "text_to_video_per_second"
+	}
+}
+
+// LookupGlobalVideoPerSecondUSD 按与渠道已匹配档位相同的 lane+分辨率+音轨，查全局 VideoPricingRules 原价。
+// 与 BuildVideoFlatClipHint / 定价卡片展示一致；不得用成片实际像素去重匹全局档（否则会错档加价）。
+func LookupGlobalVideoPerSecondUSD(modelName, billingMode, resolution string, hasAudio, unifiedAudio bool) float64 {
+	globalRules, ok := resolveGlobalVideoRulesForPricingCardHint(modelName)
+	if !ok {
+		return 0
+	}
+	lane := VideoBillingModeToPerSecondLane(billingMode)
+	var ha *bool
+	if unifiedAudio {
+		ha = nil
+	} else {
+		v := hasAudio
+		ha = &v
+	}
+	return lookupVideoTierRawUSD(globalRules, videoFlatTier{
+		Res:      strings.TrimSpace(resolution),
+		Lane:     lane,
+		HasAudio: ha,
+	})
+}
+
 func tierRowLess(a, b VideoFlatClipTierRow) bool {
 	ar := strings.TrimSpace(strings.ToLower(a.Resolution))
 	br := strings.TrimSpace(strings.ToLower(b.Resolution))
@@ -296,6 +331,7 @@ func tierRowLess(a, b VideoFlatClipTierRow) bool {
 func buildSortedTierRows(tiers []videoFlatTier, globalRules ratio_setting.VideoPricingRules, costDiscPercent, markupDiscPercent float64) []VideoFlatClipTierRow {
 	rows := make([]VideoFlatClipTierRow, 0, len(tiers))
 	for _, ti := range tiers {
+		officialUSD := lookupVideoTierRawUSD(globalRules, ti)
 		usd := effectiveVideoTierDisplayUSD(ti, globalRules, costDiscPercent, markupDiscPercent)
 		if usd <= 0 {
 			continue
@@ -307,6 +343,7 @@ func buildSortedTierRows(tiers []videoFlatTier, globalRules ratio_setting.VideoP
 		}
 		rows = append(rows, VideoFlatClipTierRow{
 			UsdAfterChannelDiscount: usd,
+			UsdOfficial:             officialUSD,
 			Resolution:              strings.TrimSpace(ti.Res),
 			HasAudio:                ha,
 			Lane:                    ti.Lane,

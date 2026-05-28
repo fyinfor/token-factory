@@ -97,6 +97,7 @@ export const useMessageEdit = (
               setTimeout(() => saveMessages(messagesUntilUser), 0);
 
               setTimeout(() => {
+                const mode = inputs.display_mode || 'text';
                 const payload = buildApiPayload(
                   messagesUntilUser,
                   null,
@@ -108,7 +109,11 @@ export const useMessageEdit = (
                   createLoadingAssistantMessage(),
                 ]);
                 const isChatEndpoint = payload?.__endpoint === 'chat';
-                sendRequest(payload, isChatEndpoint ? inputs.stream : false);
+                sendRequest(
+                  payload,
+                  isChatEndpoint ? inputs.stream : false,
+                  mode,
+                );
               }, 100);
             },
             onCancel: () => {
