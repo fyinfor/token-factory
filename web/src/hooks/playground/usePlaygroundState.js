@@ -35,6 +35,59 @@ import {
 import { processIncompleteThinkTags } from '../../helpers';
 
 /**
+ * 迁移旧格式聊天记录到新格式
+ * 旧格式: playground_messages 或 playground_messages_${userId}
+ * 新格式: playground_mode_messages_${userId} = { text: [], image: [], video: [] }
+ */
+const migrateLegacyMessages = (userId, t) => {
+  try {
+    const modeStorageKey = `playground_mode_messages_${userId || 'guest'}`;
+    // 如果新格式已存在，跳过迁移
+    const existingModeData = localStorage.getItem(modeStorageKey);
+    if (existingModeData) {
+      return;
+    }
+
+    // 尝试读取旧格式数据
+    const legacyKey = userId
+      ? `playground_messages_${userId}`
+      : 'playground_messages';
+    const legacyData = localStorage.getItem(legacyKey);
+
+    if (!legacyData) {
+      // 没有旧数据，不初始化，让 Playground 页面自己处理默认消息
+      return;
+    }
+
+    const parsed = JSON.parse(legacyData);
+    const oldMessages = parsed?.messages;
+    if (!Array.isArray(oldMessages) || oldMessages.length === 0) {
+      localStorage.removeItem(legacyKey);
+      return;
+    }
+
+    // 将旧数据迁移到新格式的 text 模式
+    const newModeData = {
+      text: oldMessages,
+      image: getDefaultMessages(t),
+      video: getDefaultMessages(t),
+    };
+    localStorage.setItem(modeStorageKey, JSON.stringify(newModeData));
+
+    // 删除旧格式数据
+    localStorage.removeItem(legacyKey);
+    console.info(
+      '[playground] 已迁移旧聊天记录到新格式:',
+      legacyKey,
+      '->',
+      modeStorageKey,
+    );
+  } catch (err) {
+    console.warn('[playground] 迁移旧聊天记录失败:', err);
+  }
+};
+
+/**
  * 从 localStorage 恢复的会话若末尾仍为「生成中」状态，刷新后无法继续 SSE，会一直转圈。
  * 在读出持久化数据时收口为已完成，并可选写回存储。
  */
@@ -87,6 +140,11 @@ const ensureUniqueMessageIds = (messages) => {
 
 export const usePlaygroundState = (userId) => {
   const { t } = useTranslation();
+
+  // 迁移旧格式聊天记录到新格式
+  useEffect(() => {
+    migrateLegacyMessages(userId, t);
+  }, [userId, t]);
 
   // 使用惰性初始化，确保只在组件首次挂载时加载配置和消息
   const [savedConfig] = useState(() => loadConfig());
