@@ -745,13 +745,6 @@ const EditChannelModal = (props) => {
           localModels = getChannelModels(value);
           setInputs((prevInputs) => ({
             ...prevInputs,
-            base_url: 'https://api.openai.com',
-          }));
-          break;
-        case 64:
-          localModels = getChannelModels(value);
-          setInputs((prevInputs) => ({
-            ...prevInputs,
             base_url: 'https://dashscope.aliyuncs.com/api',
           }));
           if (formApiRef.current) {
@@ -760,6 +753,13 @@ const EditChannelModal = (props) => {
               'https://dashscope.aliyuncs.com/api',
             );
           }
+          break;
+        case 64:
+          localModels = getChannelModels(value);
+          setInputs((prevInputs) => ({
+            ...prevInputs,
+            base_url: 'https://api.openai.com',
+          }));
           break;
         default:
           localModels = getChannelModels(value);

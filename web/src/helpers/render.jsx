@@ -383,9 +383,9 @@ export function getChannelIcon(channelType) {
     case 1: // OpenAI
     case 3: // Azure OpenAI
     case 57: // Codex
-    case 63: // OpenAI 图片
+    case 64: // OpenAI 图片
       return <OpenAI size={iconSize} />;
-    case 64: // 阿里云-视频
+    case 63: // 阿里云-视频
       return <Qwen.Color size={iconSize} />;
     case 2: // Midjourney Proxy
     case 5: // Midjourney Proxy Plus
