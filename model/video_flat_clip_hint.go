@@ -9,7 +9,7 @@ import (
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 )
 
-// VideoFlatClipTierRow 单档「按条成片」标价（已乘渠道展示折扣，未乘用户分组倍率）。
+// VideoFlatClipTierRow 单档视频标价（已套用成本折扣+加价折扣的有效展示价，未乘用户分组倍率）。
 type VideoFlatClipTierRow struct {
 	UsdAfterChannelDiscount float64 `json:"usd_after_channel_discount"`
 	Resolution              string  `json:"resolution,omitempty"`
@@ -18,7 +18,7 @@ type VideoFlatClipTierRow struct {
 }
 
 // VideoFlatClipPricingHint 多档视频分辨率价在定价卡片上的摘要（按条或按秒，见 BillingMode）：
-// MinUsdAfterChannelDiscount = min(规则标价)×渠道展示折扣系数（与 channel_list 中倍率口径一致），
+// MinUsdAfterChannelDiscount = min(渠道规则价×成本折扣% + 全局规则价×加价折扣%)，与实扣公式一致；
 // 前端再乘用户当前分组倍率后走 displayPrice。
 // Tiers 为全部档位（同口径），供「查看更多价格」表格展示。
 type VideoFlatClipPricingHint struct {
@@ -230,17 +230,89 @@ func videoRulesUsableForPricingHint(rules ratio_setting.VideoPricingRules) bool 
 		ratio_setting.HasUsableVideoPerSecondRules(rules)
 }
 
-// resolveVideoRulesForPricingCardHint 拉取渠道或全局视频计价规则（按条或按秒任一存在即可）。
-func resolveVideoRulesForPricingCardHint(channelID int, modelName string) (ratio_setting.VideoPricingRules, bool) {
+func resolveChannelVideoRulesForPricingCardHint(channelID int, modelName string) (ratio_setting.VideoPricingRules, bool) {
 	if channelID > 0 {
 		if rules, ok := ratio_setting.GetChannelVideoPricingRules(channelID, modelName); ok && videoRulesUsableForPricingHint(rules) {
 			return rules, true
 		}
 	}
+	return ratio_setting.VideoPricingRules{}, false
+}
+
+func resolveGlobalVideoRulesForPricingCardHint(modelName string) (ratio_setting.VideoPricingRules, bool) {
 	if rules, ok := ratio_setting.GetVideoPricingRules(modelName); ok && videoRulesUsableForPricingHint(rules) {
 		return rules, true
 	}
 	return ratio_setting.VideoPricingRules{}, false
+}
+
+func lookupVideoTierRawUSD(rules ratio_setting.VideoPricingRules, target videoFlatTier) float64 {
+	if !videoRulesUsableForPricingHint(rules) {
+		return 0
+	}
+	tiers := collectVideoFlatTiers(rules)
+	if len(tiers) == 0 {
+		tiers = collectVideoPerSecondTiers(rules)
+	}
+	for _, c := range tiers {
+		if c.Lane != target.Lane {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(c.Res), strings.TrimSpace(target.Res)) {
+			continue
+		}
+		if !videoTierAudioMatches(c.HasAudio, target.HasAudio) {
+			continue
+		}
+		return c.RawUSD
+	}
+	return 0
+}
+
+func videoTierAudioMatches(a, b *bool) bool {
+	if a == nil || b == nil {
+		return true
+	}
+	return *a == *b
+}
+
+func effectiveVideoTierDisplayUSD(channelTier videoFlatTier, globalRules ratio_setting.VideoPricingRules, costDiscPercent, markupDiscPercent float64) float64 {
+	globalRaw := lookupVideoTierRawUSD(globalRules, channelTier)
+	return EffectiveRuleUnitPrice(channelTier.RawUSD, globalRaw, costDiscPercent, markupDiscPercent)
+}
+
+// VideoBillingModeToPerSecondLane 将计费模式映射为 VideoPricingRules 按秒档位 lane 名。
+func VideoBillingModeToPerSecondLane(mode string) string {
+	switch strings.TrimSpace(mode) {
+	case "image_to_video":
+		return "image_to_video_per_second"
+	case "video_to_video":
+		return "video_to_video_per_second"
+	default:
+		return "text_to_video_per_second"
+	}
+}
+
+// LookupGlobalVideoPerSecondUSD 按与渠道已匹配档位相同的 lane+分辨率+音轨，查全局 VideoPricingRules 原价。
+// 与 BuildVideoFlatClipHint / 定价卡片展示一致；不得用成片实际像素去重匹全局档（否则会错档加价）。
+func LookupGlobalVideoPerSecondUSD(modelName, billingMode, resolution string, hasAudio, unifiedAudio bool) float64 {
+	globalRules, ok := resolveGlobalVideoRulesForPricingCardHint(modelName)
+	if !ok {
+		return 0
+	}
+	lane := VideoBillingModeToPerSecondLane(billingMode)
+	var ha *bool
+	if unifiedAudio {
+		ha = nil
+	} else {
+		v := hasAudio
+		ha = &v
+	}
+	return lookupVideoTierRawUSD(globalRules, videoFlatTier{
+		Res:      strings.TrimSpace(resolution),
+		Lane:     lane,
+		HasAudio: ha,
+	})
 }
 
 func tierRowLess(a, b VideoFlatClipTierRow) bool {
@@ -255,10 +327,10 @@ func tierRowLess(a, b VideoFlatClipTierRow) bool {
 	return audioPtrRank(a.HasAudio) < audioPtrRank(b.HasAudio)
 }
 
-func buildSortedTierRows(tiers []videoFlatTier, discountMult float64) []VideoFlatClipTierRow {
+func buildSortedTierRows(tiers []videoFlatTier, globalRules ratio_setting.VideoPricingRules, costDiscPercent, markupDiscPercent float64) []VideoFlatClipTierRow {
 	rows := make([]VideoFlatClipTierRow, 0, len(tiers))
 	for _, ti := range tiers {
-		usd := ti.RawUSD * discountMult
+		usd := effectiveVideoTierDisplayUSD(ti, globalRules, costDiscPercent, markupDiscPercent)
 		if usd <= 0 {
 			continue
 		}
@@ -284,16 +356,40 @@ func buildSortedTierRows(tiers []videoFlatTier, discountMult float64) []VideoFla
 	return rows
 }
 
-// BuildVideoFlatClipHint 汇总当前模型×渠道下视频分辨率档位（优先按条，否则按秒），返回最低价档（已乘渠道展示折扣）及总档位数。
-func BuildVideoFlatClipHint(channelID int, modelName string, discountMult float64) *VideoFlatClipPricingHint {
-	rules, ok := resolveVideoRulesForPricingCardHint(channelID, modelName)
-	if !ok {
+func pickMinEffectiveVideoDisplayTier(tiers []videoFlatTier, globalRules ratio_setting.VideoPricingRules, costDiscPercent, markupDiscPercent float64) (videoFlatTier, float64, bool) {
+	if len(tiers) == 0 {
+		return videoFlatTier{}, 0, false
+	}
+	bestIdx := 0
+	bestUsd := effectiveVideoTierDisplayUSD(tiers[0], globalRules, costDiscPercent, markupDiscPercent)
+	for i := 1; i < len(tiers); i++ {
+		u := effectiveVideoTierDisplayUSD(tiers[i], globalRules, costDiscPercent, markupDiscPercent)
+		if u < bestUsd-1e-12 || (math.Abs(u-bestUsd) < 1e-9 && tierLessVideoFlat(tiers[i], tiers[bestIdx])) {
+			bestIdx = i
+			bestUsd = u
+		}
+	}
+	if bestUsd <= 0 {
+		return videoFlatTier{}, 0, false
+	}
+	return tiers[bestIdx], bestUsd, true
+}
+
+// BuildVideoFlatClipHint 汇总当前模型×渠道下视频分辨率档位（优先按条，否则按秒），返回最低价档（含成本折扣与加价折扣）及总档位数。
+func BuildVideoFlatClipHint(channelID int, modelName string, costDiscPercent, markupDiscPercent float64) *VideoFlatClipPricingHint {
+	channelRules, chOK := resolveChannelVideoRulesForPricingCardHint(channelID, modelName)
+	globalRules, glOK := resolveGlobalVideoRulesForPricingCardHint(modelName)
+	if !chOK && !glOK {
 		return nil
 	}
-	tiers := collectVideoFlatTiers(rules)
+	rulesForTiers := channelRules
+	if !chOK {
+		rulesForTiers = globalRules
+	}
+	tiers := collectVideoFlatTiers(rulesForTiers)
 	billingMode := "per_item"
 	if len(tiers) == 0 {
-		tiers = collectVideoPerSecondTiers(rules)
+		tiers = collectVideoPerSecondTiers(rulesForTiers)
 		billingMode = "per_second"
 	}
 	if len(tiers) == 0 {
@@ -301,8 +397,8 @@ func BuildVideoFlatClipHint(channelID int, modelName string, discountMult float6
 	}
 	tiers = collapsePairedUnifiedAudioTiers(tiers)
 	tiers = normalizeLegacyAllFalseToUnifiedHintTiers(tiers)
-	best, ok := pickMinVideoFlatTier(tiers)
-	if !ok || best.RawUSD <= 0 {
+	best, minUsd, ok := pickMinEffectiveVideoDisplayTier(tiers, globalRules, costDiscPercent, markupDiscPercent)
+	if !ok {
 		return nil
 	}
 	var hasAudioPtr *bool
@@ -310,9 +406,9 @@ func BuildVideoFlatClipHint(channelID int, modelName string, discountMult float6
 		v := *best.HasAudio
 		hasAudioPtr = &v
 	}
-	rows := buildSortedTierRows(tiers, discountMult)
+	rows := buildSortedTierRows(tiers, globalRules, costDiscPercent, markupDiscPercent)
 	return &VideoFlatClipPricingHint{
-		MinUsdAfterChannelDiscount: best.RawUSD * discountMult,
+		MinUsdAfterChannelDiscount: minUsd,
 		Resolution:                 strings.TrimSpace(best.Res),
 		HasAudio:                   hasAudioPtr,
 		Lane:                       best.Lane,

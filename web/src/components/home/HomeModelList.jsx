@@ -28,7 +28,7 @@ import {
 import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { IconSearch } from '@douyinfe/semi-icons';
 import PricingVendors from '../table/model-pricing/filter/PricingVendors';
-import PricingSuppliers from './PricingSuppliers';
+import PricingProviderType from '../table/model-pricing/filter/PricingProviderType';
 import PricingQuotaTypes from '../table/model-pricing/filter/PricingQuotaTypes';
 import PricingTags from '../table/model-pricing/filter/PricingTags';
 import PricingEndpointTypes from '../table/model-pricing/filter/PricingEndpointTypes';
@@ -41,69 +41,49 @@ import { UserContext } from '../../context/User';
 
 const HomeModelList = () => {
   const isMobile = useIsMobile();
-  const pricingData = useModelPricingData();
+  const pricingData = useModelPricingData({ defaultSortKey: 'hot' });
   const [statusState] = useContext(StatusContext);
   const [userState] = useContext(UserContext);
 
-  const blurPricing = useMemo(() => {
-    if (userState?.user) return false;
+  const headerNavHomeConfig = useMemo(() => {
     try {
       const config = statusState?.status?.HeaderNavModules;
-      if (!config) return false;
+      if (!config) return null;
       const modules = JSON.parse(config);
       const home = modules?.home;
       if (typeof home === 'object' && home !== null) {
-        return !!home.blurPricing;
+        return home;
       }
     } catch {}
-    return false;
-  }, [statusState?.status?.HeaderNavModules, userState?.user]);
+    return null;
+  }, [statusState?.status?.HeaderNavModules]);
 
-  const { quotaTypeModels, endpointTypeModels, vendorModels, tagModels } =
-    usePricingFilterCounts({
-      models: pricingData.models,
-      filterGroup: pricingData.filterGroup,
-      filterQuotaType: pricingData.filterQuotaType,
-      filterEndpointType: pricingData.filterEndpointType,
-      filterVendor: pricingData.filterVendor,
-      filterTag: pricingData.filterTag,
-      searchValue: pricingData.searchValue,
-    });
+  const blurPricing = useMemo(() => {
+    if (userState?.user) return false;
+    return !!headerNavHomeConfig?.blurPricing;
+  }, [headerNavHomeConfig, userState?.user]);
 
-  // 计算供应商渠道筛选的可用模型数（排除 filterSupplier 维度，保留其他筛选）
-  const supplierCountModels = React.useMemo(() => {
-    let result = pricingData.models;
-    if (pricingData.filterVendor !== 'all') {
-      if (pricingData.filterVendor === 'unknown') {
-        result = result.filter((m) => !m.vendor_name);
-      } else {
-        result = result.filter((m) => m.vendor_name === pricingData.filterVendor);
-      }
-    }
-    if (pricingData.filterTag !== 'all') {
-      const tagLower = pricingData.filterTag.toLowerCase();
-      result = result.filter((m) => {
-        if (!m.tags) return false;
-        return m.tags.toLowerCase().split(/[,;|]+/).map((t) => t.trim()).includes(tagLower);
-      });
-    }
-    if (pricingData.searchValue.length > 0) {
-      const term = pricingData.searchValue.toLowerCase();
-      result = result.filter(
-        (m) =>
-          (m.model_name && m.model_name.toLowerCase().includes(term)) ||
-          (m.description && m.description.toLowerCase().includes(term)) ||
-          (m.tags && m.tags.toLowerCase().includes(term)) ||
-          (m.vendor_name && m.vendor_name.toLowerCase().includes(term)),
-      );
-    }
-    return result;
-  }, [
-    pricingData.models,
-    pricingData.filterVendor,
-    pricingData.filterTag,
-    pricingData.searchValue,
-  ]);
+  const showCostPrice = useMemo(
+    () => !!headerNavHomeConfig?.showCostPrice,
+    [headerNavHomeConfig],
+  );
+
+  const {
+    quotaTypeModels,
+    endpointTypeModels,
+    vendorModels,
+    tagModels,
+    supplierTypeModels,
+  } = usePricingFilterCounts({
+    models: pricingData.models,
+    filterGroup: pricingData.filterGroup,
+    filterQuotaType: pricingData.filterQuotaType,
+    filterEndpointType: pricingData.filterEndpointType,
+    filterVendor: pricingData.filterVendor,
+    filterTag: pricingData.filterTag,
+    filterSupplierType: pricingData.filterSupplierType,
+    searchValue: pricingData.searchValue,
+  });
 
   React.useEffect(() => {
     pricingData.setPageSize(40);
@@ -115,13 +95,28 @@ const HomeModelList = () => {
     pricingData.setFilterQuotaType('all');
     pricingData.setFilterTag('all');
     pricingData.setFilterEndpointType('all');
+    pricingData.setFilterSupplierType?.('all');
     pricingData.setFilterSupplier && pricingData.setFilterSupplier('all');
-    pricingData.setSortKey && pricingData.setSortKey('default');
+    pricingData.setSortKey && pricingData.setSortKey('hot');
     pricingData.setCurrentPage(1);
   };
 
+  const handleFilterVendorChange = (vendor) => {
+    pricingData.setFilterVendor(vendor);
+    if (vendor === 'all') {
+      pricingData.setSortKey?.('hot');
+    } else {
+      pricingData.setSortKey?.('discount');
+    }
+  };
+
+  const sortSelectValue =
+    !pricingData.sortKey || pricingData.sortKey === 'default'
+      ? 'hot'
+      : pricingData.sortKey;
+
   const sortOptions = [
-    { value: 'default', label: pricingData.t('默认') },
+    // { value: 'default', label: pricingData.t('默认') },
     { value: 'hot', label: pricingData.t('热门') },
     { value: 'price', label: pricingData.t('价格') },
     { value: 'discount', label: pricingData.t('折扣率') },
@@ -265,7 +260,7 @@ const HomeModelList = () => {
             <Select
               size='large'
               style={{ width: '100%' }}
-              value={pricingData.sortKey || 'default'}
+              value={sortSelectValue}
               onChange={(v) =>
                 pricingData.setSortKey && pricingData.setSortKey(v)
               }
@@ -295,7 +290,7 @@ const HomeModelList = () => {
           <div className='home-sidebar-filters'>
             <PricingVendors
               filterVendor={pricingData.filterVendor}
-              setFilterVendor={pricingData.setFilterVendor}
+              setFilterVendor={handleFilterVendorChange}
               models={vendorModels}
               allModels={pricingData.models}
               loading={pricingData.loading}
@@ -319,11 +314,11 @@ const HomeModelList = () => {
               t={pricingData.t}
             />
 
-            <PricingSuppliers
-              filterSupplier={pricingData.filterSupplier}
-              setFilterSupplier={pricingData.setFilterSupplier}
+            <PricingProviderType
+              filterProviderType={pricingData.filterSupplierType}
+              setFilterProviderType={pricingData.setFilterSupplierType}
               models={pricingData.models}
-              countModels={supplierCountModels}
+              countModels={supplierTypeModels}
               loading={pricingData.loading}
               t={pricingData.t}
             />
@@ -355,12 +350,21 @@ const HomeModelList = () => {
                 showClear
                 size='large'
                 className='flex-1'
-                style={{ backgroundColor: 'var(--semi-color-bg-1)', opacity: 1, boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)' }}
+                style={{
+                  backgroundColor: 'var(--semi-color-bg-1)',
+                  opacity: 1,
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+                }}
               />
               <Select
                 size='large'
-                style={{ width: 180, backgroundColor: 'var(--semi-color-bg-1)', opacity: 1, boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)' }}
-                value={pricingData.sortKey || 'default'}
+                style={{
+                  width: 180,
+                  backgroundColor: 'var(--semi-color-bg-1)',
+                  opacity: 1,
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+                }}
+                value={sortSelectValue}
                 onChange={(v) =>
                   pricingData.setSortKey && pricingData.setSortKey(v)
                 }
@@ -391,7 +395,9 @@ const HomeModelList = () => {
               tokenUnit={pricingData.tokenUnit}
               displayPrice={pricingData.displayPrice}
               channelVideoRatio={pricingData.channelVideoRatio}
-              channelVideoCompletionRatio={pricingData.channelVideoCompletionRatio}
+              channelVideoCompletionRatio={
+                pricingData.channelVideoCompletionRatio
+              }
               channelVideoPrice={pricingData.channelVideoPrice}
               showRatio={false}
               t={pricingData.t}
@@ -431,6 +437,19 @@ const HomeModelList = () => {
         t={pricingData.t}
         selectedGroup={pricingData.selectedGroup}
         blurPricing={blurPricing}
+        showCostPrice={showCostPrice}
+        channelModelRatioMap={pricingData.channelModelRatio}
+        channelModelPriceMap={pricingData.channelModelPrice}
+        channelCompletionRatioMap={pricingData.channelCompletionRatio}
+        channelCacheRatioMap={pricingData.channelCacheRatio}
+        channelCreateCacheRatioMap={pricingData.channelCreateCacheRatio}
+        channelImageRatioMap={pricingData.channelImageRatio}
+        channelImagePriceMap={pricingData.channelImagePrice}
+        channelAudioRatioMap={pricingData.channelAudioRatio}
+        channelAudioCompletionRatioMap={pricingData.channelAudioCompletionRatio}
+        channelVideoRatioMap={pricingData.channelVideoRatio}
+        channelVideoCompletionRatioMap={pricingData.channelVideoCompletionRatio}
+        channelVideoPriceMap={pricingData.channelVideoPrice}
       />
     </div>
   );

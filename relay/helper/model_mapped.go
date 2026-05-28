@@ -9,8 +9,10 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 )
@@ -47,8 +49,24 @@ func ModelMappedHelper(c *gin.Context, info *relaycommon.RelayInfo, request dto.
 			return fmt.Errorf("unmarshal_model_mapping_failed")
 		}
 
-		// 支持链式模型重定向，最终使用链尾的模型
+		// 若模型名形如「Seedance2.0/route_slug」：优先用已解析的路由得到基础名；
+		// 若路由未命中（子站与上游库不一致、slug 在上游不存在等），仍用「最后一段为合法 route_slug」时的基础名走 model_mapping，
+		// 避免把整串当作上游真实 model_id 送给外部网关（会导致 Invalid input params）。
 		currentModel := mappingModelName
+		if idx, matched, _ := service.ParseModelRouteIndex(mappingModelName); matched && idx != nil {
+			currentModel = idx.ModelName
+		} else if strings.Contains(mappingModelName, "/") {
+			lastSlash := strings.LastIndex(mappingModelName, "/")
+			if lastSlash > 0 && lastSlash < len(mappingModelName)-1 {
+				potentialSlug := strings.TrimSpace(mappingModelName[lastSlash+1:])
+				potentialBase := strings.TrimSpace(mappingModelName[:lastSlash])
+				if potentialBase != "" && model.IsValidRouteSlug(potentialSlug) {
+					currentModel = potentialBase
+				}
+			}
+		}
+
+		// 支持链式模型重定向，最终使用链尾的模型
 		visitedModels := map[string]bool{
 			currentModel: true,
 		}
@@ -120,6 +138,31 @@ func ModelMappedHelper(c *gin.Context, info *relaycommon.RelayInfo, request dto.
 				info.UpstreamModelName = modelForUpstream + "/" + routeSlug
 				info.IsModelMapped = false
 				info.TFOpenUpstreamRouteApplied = true
+			}
+		}
+	}
+
+	// 未命中 model_mapping、且未走 TFOpen 精准路由时：请求里仍可能是「Seedance2.0/route_slug」
+	//（例如子站 other_info 里的 slug 在上游库不存在，Distribute 未能改写 body）。
+	// 此时至少剥掉「最后一段为合法 route_slug」的后缀，避免把整串当作外部视频网关的 model_id
+	//（Hidream/MaaS 会返回 Invalid input params）。
+	if info != nil && !isTFOpenUpstream && !info.TFOpenUpstreamRouteApplied && !info.IsModelMapped {
+		um := strings.TrimSpace(info.UpstreamModelName)
+		if um == "" {
+			um = strings.TrimSpace(mappingModelName)
+		}
+		if um != "" && strings.Contains(um, "/") {
+			if idx, matched, _ := service.ParseModelRouteIndex(um); matched && idx != nil {
+				info.UpstreamModelName = idx.ModelName
+			} else {
+				lastSlash := strings.LastIndex(um, "/")
+				if lastSlash > 0 && lastSlash < len(um)-1 {
+					potentialSlug := strings.TrimSpace(um[lastSlash+1:])
+					potentialBase := strings.TrimSpace(um[:lastSlash])
+					if potentialBase != "" && model.IsValidRouteSlug(potentialSlug) {
+						info.UpstreamModelName = potentialBase
+					}
+				}
 			}
 		}
 	}

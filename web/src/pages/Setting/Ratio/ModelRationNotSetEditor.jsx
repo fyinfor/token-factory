@@ -34,6 +34,7 @@ import SupplierModelPricingEditor from './components/SupplierModelPricingEditor'
  * 管理员仍写 Option；供应商通过 `/api/user/supplier/pricing/*` 独立表存储。
  */
 export default function ModelRatioNotSetEditor(props) {
+  const { hideGlobalTab = false } = props;
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [enabledModels, setEnabledModels] = useState([]);
@@ -144,6 +145,19 @@ export default function ModelRatioNotSetEditor(props) {
           </Empty>
         </div>
       </div>
+    );
+  }
+
+  if (hideGlobalTab) {
+    return (
+      <SupplierModelPricingEditor
+        options={extendedOptions}
+        refresh={props.refresh}
+        candidateModelNames={enabledModels}
+        filterMode='unset'
+        listDescription={t('渠道未设置模型列表说明')}
+        useSupplierPricingApi={isSupplier()}
+      />
     );
   }
 

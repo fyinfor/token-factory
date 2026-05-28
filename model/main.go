@@ -205,14 +205,7 @@ func InitDB() (err error) {
 		}
 		common.SysLog("database migration started")
 		err = migrateDB()
-		if err != nil {
-			return err
-		}
-		// 确保 channel_model_heats 表存在（新增表）
-		if err := DB.AutoMigrate(&ChannelModelHeat{}); err != nil {
-			return err
-		}
-		return nil
+		return err
 	} else {
 		common.FatalLog(err)
 	}
@@ -285,11 +278,15 @@ func migrateDB() error {
 	if err := migratePrefillGroupsPostgresNameUniqueConstraint(); err != nil {
 		return err
 	}
+	if err := migrateAffInviteRelationModelMarkupDiscountRateColumn(); err != nil {
+		return err
+	}
 
 	err := DB.AutoMigrate(
 		&Channel{},
 		&Token{},
 		&User{},
+		&UserTag{},
 		&PasskeyCredential{},
 		&Option{},
 		&Redemption{},
@@ -300,8 +297,6 @@ func migrateDB() error {
 		&QuotaData{},
 		&Task{},
 		&Model{},
-		&ModelTag{},
-		&ModelTestResult{},
 		&Vendor{},
 		&PrefillGroup{},
 		&Setup{},
@@ -320,16 +315,12 @@ func migrateDB() error {
 		&UserMessage{},
 		&UserMessageRead{},
 		&AffInviteCommissionLog{},
+		&AffInviteProfitShareLog{},
 		&AffFunnelDaily{},
 		&DistributorApplication{},
 		&DistributorWithdrawal{},
-		&SupplierModelPricing{},
-		&SupplierChannelModelPricing{},
 	)
 	if err != nil {
-		return err
-	}
-	if err := migrateDropDistributorApplicationIsStudentColumn(); err != nil {
 		return err
 	}
 	if err := migrateLegacyDistributorRole(); err != nil {
@@ -338,15 +329,8 @@ func migrateDB() error {
 	if err := BackfillSupplierApplicationAlias(); err != nil {
 		return fmt.Errorf("backfill supplier_alias: %w", err)
 	}
-	// 兼容旧库 supplier_capabilities 缺少新布尔字段（如 openai_compatible）场景。
-	if err := EnsureSupplierCapabilitySchemaColumns(); err != nil {
-		return fmt.Errorf("ensure supplier_capabilities schema: %w", err)
-	}
 	if err := BackfillSupplierChannelNo(); err != nil {
 		return fmt.Errorf("backfill channel_no: %w", err)
-	}
-	if err := MigrateChannelRouteSlugAndDropLegacy(); err != nil {
-		return fmt.Errorf("migrate channel route_slug: %w", err)
 	}
 	if err := BackfillAffInviteRelationsIfNeeded(); err != nil {
 		common.SysError("aff_invite_relations backfill: " + err.Error())
@@ -374,6 +358,7 @@ func migrateDBFast() error {
 		{&Channel{}, "Channel"},
 		{&Token{}, "Token"},
 		{&User{}, "User"},
+		{&UserTag{}, "UserTag"},
 		{&PasskeyCredential{}, "PasskeyCredential"},
 		{&Option{}, "Option"},
 		{&Redemption{}, "Redemption"},
@@ -384,8 +369,6 @@ func migrateDBFast() error {
 		{&QuotaData{}, "QuotaData"},
 		{&Task{}, "Task"},
 		{&Model{}, "Model"},
-		{&ModelTag{}, "ModelTag"},
-		{&ModelTestResult{}, "ModelTestResult"},
 		{&Vendor{}, "Vendor"},
 		{&PrefillGroup{}, "PrefillGroup"},
 		{&Setup{}, "Setup"},
@@ -404,10 +387,10 @@ func migrateDBFast() error {
 		{&UserMessage{}, "UserMessage"},
 		{&UserMessageRead{}, "UserMessageRead"},
 		{&AffInviteCommissionLog{}, "AffInviteCommissionLog"},
+		{&AffInviteProfitShareLog{}, "AffInviteProfitShareLog"},
 		{&AffFunnelDaily{}, "AffFunnelDaily"},
 		{&DistributorApplication{}, "DistributorApplication"},
 		{&DistributorWithdrawal{}, "DistributorWithdrawal"},
-		{&ChannelModelHeat{}, "ChannelModelHeat"},
 	}
 	// 动态计算migration数量，确保errChan缓冲区足够大
 	errChan := make(chan error, len(migrations))
@@ -432,9 +415,6 @@ func migrateDBFast() error {
 			return err
 		}
 	}
-	if err := migrateDropDistributorApplicationIsStudentColumn(); err != nil {
-		return err
-	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err
@@ -446,10 +426,6 @@ func migrateDBFast() error {
 	}
 	if err := BackfillSupplierApplicationAlias(); err != nil {
 		return fmt.Errorf("backfill supplier_alias: %w", err)
-	}
-	// 兼容旧库 supplier_capabilities 缺少新布尔字段（如 openai_compatible）场景。
-	if err := EnsureSupplierCapabilitySchemaColumns(); err != nil {
-		return fmt.Errorf("ensure supplier_capabilities schema: %w", err)
 	}
 	if err := BackfillSupplierChannelNo(); err != nil {
 		return fmt.Errorf("backfill channel_no: %w", err)

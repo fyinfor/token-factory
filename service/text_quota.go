@@ -428,6 +428,69 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 	return summary
 }
 
+func textQuotaSummaryWithMarkupOverride(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, markupPercent float64) textQuotaSummary {
+	if relayInfo == nil {
+		return textQuotaSummary{}
+	}
+	pd := relayInfo.PriceData
+	pd.MarkupDiscountPercent = markupPercent
+	ri := *relayInfo
+	ri.PriceData = pd
+	return calculateTextQuotaSummary(ctx, &ri, usage)
+}
+
+func tryPostWalletProfitShareCredit(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, summary *textQuotaSummary) {
+	if relayInfo == nil || summary == nil {
+		return
+	}
+	if !common.IsDistributorProfitShareMode() {
+		return
+	}
+	bs := strings.TrimSpace(relayInfo.BillingSource)
+	if bs != "" && bs != BillingSourceWallet {
+		return
+	}
+	if summary.Quota <= 0 {
+		return
+	}
+	if summary.TotalTokens == 0 && !relayInfo.PriceData.UsePrice {
+		return
+	}
+	invitee, err := model.GetUserById(relayInfo.UserId, false)
+	if err != nil || invitee == nil || invitee.InviterId <= 0 {
+		return
+	}
+	inviter, err2 := model.GetUserById(invitee.InviterId, false)
+	if err2 != nil || inviter == nil || !model.UserIsDistributor(inviter) {
+		return
+	}
+	s0 := textQuotaSummaryWithMarkupOverride(ctx, relayInfo, usage, 0)
+	slice := summary.Quota - s0.Quota
+	if slice <= 0 {
+		return
+	}
+	bps := model.EffectiveAffiliateCommissionBps(inviter, relayInfo.UserId)
+	if bps <= 0 {
+		return
+	}
+	const maxAffBps = 10000
+	if bps > maxAffBps {
+		bps = maxAffBps
+	}
+	reward := int(int64(slice) * int64(bps) / int64(maxAffBps))
+	if reward <= 0 {
+		return
+	}
+	chID := 0
+	if relayInfo.ChannelMeta != nil {
+		chID = relayInfo.ChannelId
+	}
+	modelName := strings.TrimSpace(summary.ModelName)
+	if err := model.CreditDistributorProfitShare(invitee.InviterId, relayInfo.UserId, chID, modelName, summary.Quota, slice, reward, bps); err != nil {
+		common.SysError("tryPostWalletProfitShareCredit: " + err.Error())
+	}
+}
+
 func usageSemanticFromUsage(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) string {
 	if usage != nil && usage.UsageSemantic != "" {
 		return usage.UsageSemantic
@@ -476,6 +539,8 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 
 	if err := SettleBilling(ctx, relayInfo, summary.Quota); err != nil {
 		logger.LogError(ctx, "error settling billing: "+err.Error())
+	} else {
+		tryPostWalletProfitShareCredit(ctx, relayInfo, usage, &summary)
 	}
 
 	logModel := summary.ModelName

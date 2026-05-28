@@ -247,6 +247,7 @@ func GetPricing(c *gin.Context) {
 	channelVideoRatio := map[string]map[string]float64{}
 	channelVideoCompletionRatio := map[string]map[string]float64{}
 	channelVideoPrice := map[string]map[string]float64{}
+	channelImagePrice := map[string]map[string]float64{}
 	channelModelTierRatio := map[string]map[string]ratio_setting.TierSegments{}
 	channelCompletionTierRatio := map[string]map[string]ratio_setting.TierSegments{}
 	channelCacheTierRatio := map[string]map[string]ratio_setting.TierSegments{}
@@ -320,6 +321,9 @@ func GetPricing(c *gin.Context) {
 	for channelID, modelPrice := range ratio_setting.GetChannelVideoPriceCopy() {
 		channelVideoPrice[channelID] = modelPrice
 	}
+	for channelID, modelPrice := range ratio_setting.GetChannelImagePriceCopy() {
+		channelImagePrice[channelID] = modelPrice
+	}
 	for channelID, tierRatio := range ratio_setting.GetChannelModelTierRatioCopy() {
 		channelModelTierRatio[channelID] = tierRatio
 	}
@@ -343,6 +347,7 @@ func GetPricing(c *gin.Context) {
 	channelVideoRatio = filterChannelPricingMapByVisibleChannels(channelVideoRatio, visibleChannelIDs)
 	channelVideoCompletionRatio = filterChannelPricingMapByVisibleChannels(channelVideoCompletionRatio, visibleChannelIDs)
 	channelVideoPrice = filterChannelPricingMapByVisibleChannels(channelVideoPrice, visibleChannelIDs)
+	channelImagePrice = filterChannelPricingMapByVisibleChannels(channelImagePrice, visibleChannelIDs)
 	channelModelTierRatio = filterChannelTierPricingMapByVisibleChannels(channelModelTierRatio, visibleChannelIDs)
 	channelCompletionTierRatio = filterChannelTierPricingMapByVisibleChannels(channelCompletionTierRatio, visibleChannelIDs)
 	channelCacheTierRatio = filterChannelTierPricingMapByVisibleChannels(channelCacheTierRatio, visibleChannelIDs)
@@ -359,6 +364,12 @@ func GetPricing(c *gin.Context) {
 		channelPricingMeta = nil
 	}
 	pricingData := model.BuildPricingAPIItems(filtered, visibleChannelIDs, channelPricingMeta, false)
+
+	if exists && common.IsDistributorProfitShareMode() {
+		if uid, ok := userId.(int); ok && uid > 0 {
+			model.ApplyInviteeMarkupToPricingAPIForUser(uid, pricingData)
+		}
+	}
 
 	// 读取热度统计周期配置
 	common.OptionMapRWMutex.RLock()
@@ -467,6 +478,7 @@ func GetPricing(c *gin.Context) {
 		channelVideoRatio = map[string]map[string]float64{}
 		channelVideoCompletionRatio = map[string]map[string]float64{}
 		channelVideoPrice = map[string]map[string]float64{}
+		channelImagePrice = map[string]map[string]float64{}
 		channelModelTierRatio = map[string]map[string]ratio_setting.TierSegments{}
 		channelCompletionTierRatio = map[string]map[string]ratio_setting.TierSegments{}
 		channelCacheTierRatio = map[string]map[string]ratio_setting.TierSegments{}
@@ -491,6 +503,7 @@ func GetPricing(c *gin.Context) {
 		"channel_cache_ratio":             channelCacheRatio,
 		"channel_create_cache_ratio":      channelCreateCacheRatio,
 		"channel_image_ratio":             channelImageRatio,
+		"channel_image_price":             channelImagePrice,
 		"channel_audio_ratio":             channelAudioRatio,
 		"channel_audio_completion_ratio":  channelAudioCompletionRatio,
 		"channel_video_ratio":             channelVideoRatio,

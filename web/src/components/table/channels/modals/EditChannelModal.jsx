@@ -29,6 +29,7 @@ import {
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import {
   CHANNEL_OPTIONS,
+  CHANNEL_SUPPLIER_TYPE_OPTIONS,
   MODEL_FETCHABLE_CHANNEL_TYPES,
 } from '../../../../constants';
 import {
@@ -72,6 +73,7 @@ import StatusCodeRiskGuardModal from './StatusCodeRiskGuardModal';
 import ChannelKeyDisplay from '../../../common/ui/ChannelKeyDisplay';
 import { useSecureVerification } from '../../../../hooks/common/useSecureVerification';
 import { parseChannelConnectionString } from '../../../../helpers/token';
+import { readClipboardTextOrManualPaste } from '../../../../helpers/clipboard';
 import { createApiCalls } from '../../../../services/secureVerification';
 import {
   collectInvalidStatusCodeEntries,
@@ -160,13 +162,6 @@ function parseTencentVodKeyString(key) {
   };
 }
 
-const CHANNEL_SUPPLIER_TYPE_OPTIONS = [
-  { label: '公有云', value: '公有云' },
-  { label: 'AIDC', value: 'AIDC' },
-  { label: '企业中转站', value: '企业中转站' },
-  { label: '个人中转站', value: '个人中转站' },
-];
-
 // 支持并且已适配通过接口获取模型列表的渠道类型
 const MODEL_FETCHABLE_TYPES = new Set([
   1, 4, 14, 34, 17, 26, 27, 24, 47, 25, 20, 23, 31, 40, 42, 48, 43,
@@ -204,6 +199,8 @@ function type2secretPrompt(type) {
       );
     case 63:
       return '请输入 OpenAI API Key（用于调用 /v1/images/generations 接口）';
+    case 64:
+      return '请输入阿里云 DashScope API Key（用于调用 video-synthesis 接口）';
     default:
       return '请输入渠道对应的鉴权密钥';
   }
@@ -622,20 +619,20 @@ const EditChannelModal = (props) => {
   };
 
   const pasteFromClipboard = async () => {
-    if (!navigator?.clipboard?.readText) {
-      showError(t('无法读取剪贴板'));
+    const text = await readClipboardTextOrManualPaste({
+      t,
+      manualTitle: t('手动粘贴连接信息'),
+      manualDescription: t('无法自动读取剪贴板，请在此粘贴内容'),
+      manualPlaceholder: t('请粘贴渠道连接信息 JSON'),
+    });
+    if (text === null) {
       return;
     }
-    try {
-      const text = await navigator.clipboard.readText();
-      const parsed = parseChannelConnectionString(text);
-      if (parsed) {
-        applyClipboardConfig(parsed);
-      } else {
-        showInfo(t('剪贴板中未检测到连接信息'));
-      }
-    } catch {
-      showError(t('无法读取剪贴板'));
+    const parsed = parseChannelConnectionString(text);
+    if (parsed) {
+      applyClipboardConfig(parsed);
+    } else {
+      showInfo(t('剪贴板中未检测到连接信息'));
     }
   };
 
@@ -750,6 +747,19 @@ const EditChannelModal = (props) => {
             ...prevInputs,
             base_url: 'https://api.openai.com',
           }));
+          break;
+        case 64:
+          localModels = getChannelModels(value);
+          setInputs((prevInputs) => ({
+            ...prevInputs,
+            base_url: 'https://dashscope.aliyuncs.com/api',
+          }));
+          if (formApiRef.current) {
+            formApiRef.current.setValue(
+              'base_url',
+              'https://dashscope.aliyuncs.com/api',
+            );
+          }
           break;
         default:
           localModels = getChannelModels(value);
@@ -2272,44 +2282,47 @@ const EditChannelModal = (props) => {
       .filter(Boolean);
   };
 
-  const pasteModelsFromClipboard = async () => {
-    if (!navigator?.clipboard?.readText) {
-      showError(t('无法读取剪贴板'));
+  const applyPastedModels = (text) => {
+    const pastedModels = parseModelListText(text);
+    if (pastedModels.length === 0) {
+      showInfo(t('剪贴板中未检测到模型'));
       return;
     }
 
-    try {
-      const text = await navigator.clipboard.readText();
-      const pastedModels = parseModelListText(text);
-      if (pastedModels.length === 0) {
-        showInfo(t('剪贴板中未检测到模型'));
-        return;
-      }
-
-      const currentModels = Array.from(
-        new Set(
-          (formApiRef.current?.getValue('models') || inputs.models || [])
-            .map((model) => String(model ?? '').trim())
-            .filter(Boolean),
-        ),
-      );
-      const mergedModels = Array.from(
-        new Set(
-          [...currentModels, ...pastedModels]
-            .map((model) => String(model ?? '').trim())
-            .filter(Boolean),
-        ),
-      );
-      const addedCount = mergedModels.length - currentModels.length;
-      handleInputChange('models', mergedModels);
-      if (addedCount > 0) {
-        showSuccess(t('已粘贴新增 {{count}} 个模型', { count: addedCount }));
-      } else {
-        showInfo(t('未发现新增模型'));
-      }
-    } catch {
-      showError(t('无法读取剪贴板'));
+    const currentModels = Array.from(
+      new Set(
+        (formApiRef.current?.getValue('models') || inputs.models || [])
+          .map((model) => String(model ?? '').trim())
+          .filter(Boolean),
+      ),
+    );
+    const mergedModels = Array.from(
+      new Set(
+        [...currentModels, ...pastedModels]
+          .map((model) => String(model ?? '').trim())
+          .filter(Boolean),
+      ),
+    );
+    const addedCount = mergedModels.length - currentModels.length;
+    handleInputChange('models', mergedModels);
+    if (addedCount > 0) {
+      showSuccess(t('已粘贴新增 {{count}} 个模型', { count: addedCount }));
+    } else {
+      showInfo(t('未发现新增模型'));
     }
+  };
+
+  const pasteModelsFromClipboard = async () => {
+    const text = await readClipboardTextOrManualPaste({
+      t,
+      manualTitle: t('手动粘贴模型列表'),
+      manualDescription: t('无法自动读取剪贴板，请在此粘贴内容'),
+      manualPlaceholder: t('每行一个模型，或用逗号分隔'),
+    });
+    if (text === null) {
+      return;
+    }
+    applyPastedModels(text);
   };
 
   const batchAllowed = (!isEdit || isMultiKeyChannel) && inputs.type !== 57;

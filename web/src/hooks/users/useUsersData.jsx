@@ -54,6 +54,8 @@ export const useUsersData = () => {
   const [studentRewardLoading, setStudentRewardLoading] = useState(false);
   const [groupOptions, setGroupOptions] = useState([]);
   const [userCount, setUserCount] = useState(0);
+  const [tagOptions, setTagOptions] = useState([]);
+  const [selectedTag, setSelectedTag] = useState('');
 
   // Modal states
   const [showAddUser, setShowAddUser] = useState(false);
@@ -66,6 +68,7 @@ export const useUsersData = () => {
   const formInitValues = {
     searchKeyword: '',
     searchGroup: '',
+    searchTag: '',
   };
 
   // Form API reference
@@ -77,6 +80,7 @@ export const useUsersData = () => {
     return {
       searchKeyword: formValues.searchKeyword || '',
       searchGroup: formValues.searchGroup || '',
+      searchTag: formValues.searchTag || '',
     };
   };
 
@@ -89,14 +93,16 @@ export const useUsersData = () => {
   };
 
   // Load users data
-  const loadUsers = async (startIdx, pageSize) => {
+  const loadUsers = async (startIdx, pageSize, tag = null) => {
     setLoading(true);
     const viewQuery =
       studentView && studentView !== 'all'
         ? `&student_view=${encodeURIComponent(studentView)}`
         : '';
+    const tagFilter = tag || selectedTag;
+    const tagQuery = tagFilter ? `&tag=${encodeURIComponent(tagFilter)}` : '';
     const res = await API.get(
-      `/api/user/?p=${startIdx}&page_size=${pageSize}${viewQuery}`,
+      `/api/user/?p=${startIdx}&page_size=${pageSize}${viewQuery}${tagQuery}`,
     );
     const { success, message, data } = res.data;
     if (success) {
@@ -116,22 +122,25 @@ export const useUsersData = () => {
     pageSize,
     searchKeyword = null,
     searchGroup = null,
+    searchTag = null,
   ) => {
     // If no parameters passed, get values from form
     if (searchKeyword === null || searchGroup === null) {
       const formValues = getFormValues();
       searchKeyword = formValues.searchKeyword;
       searchGroup = formValues.searchGroup;
+      searchTag = formValues.searchTag;
     }
 
-    if (searchKeyword === '' && searchGroup === '') {
+    if (searchKeyword === '' && searchGroup === '' && !searchTag && !selectedTag) {
       // If keyword is blank, load files instead
       await loadUsers(startIdx, pageSize);
       return;
     }
     setSearching(true);
+    const tagQuery = (searchTag || selectedTag) ? `&tag=${encodeURIComponent(searchTag || selectedTag)}` : '';
     const res = await API.get(
-      `/api/user/search?keyword=${searchKeyword}&group=${searchGroup}&student_view=${encodeURIComponent(studentView)}&p=${startIdx}&page_size=${pageSize}`,
+      `/api/user/search?keyword=${searchKeyword}&group=${searchGroup}&student_view=${encodeURIComponent(studentView)}${tagQuery}&p=${startIdx}&page_size=${pageSize}`,
     );
     const { success, message, data } = res.data;
     if (success) {
@@ -272,11 +281,11 @@ export const useUsersData = () => {
   const handleStudentViewChange = (nextView) => {
     setStudentView(nextView);
     setActivePage(1);
-    const { searchKeyword, searchGroup } = getFormValues();
-    if (searchKeyword === '' && searchGroup === '') {
+    const { searchKeyword, searchGroup, searchTag } = getFormValues();
+    if (searchKeyword === '' && searchGroup === '' && !searchTag && !selectedTag) {
       loadUsers(0, pageSize).then();
     } else {
-      searchUsers(0, pageSize, searchKeyword, searchGroup).then();
+      searchUsers(0, pageSize, searchKeyword, searchGroup, searchTag).then();
     }
   };
 
@@ -317,11 +326,11 @@ export const useUsersData = () => {
   // Handle page change
   const handlePageChange = (page) => {
     setActivePage(page);
-    const { searchKeyword, searchGroup } = getFormValues();
-    if (searchKeyword === '' && searchGroup === '') {
+    const { searchKeyword, searchGroup, searchTag } = getFormValues();
+    if (searchKeyword === '' && searchGroup === '' && !searchTag && !selectedTag) {
       loadUsers(page, pageSize).then();
     } else {
-      searchUsers(page, pageSize, searchKeyword, searchGroup).then();
+      searchUsers(page, pageSize, searchKeyword, searchGroup, searchTag).then();
     }
   };
 
@@ -352,11 +361,11 @@ export const useUsersData = () => {
 
   // Refresh data
   const refresh = async (page = activePage) => {
-    const { searchKeyword, searchGroup } = getFormValues();
-    if (searchKeyword === '' && searchGroup === '') {
+    const { searchKeyword, searchGroup, searchTag } = getFormValues();
+    if (searchKeyword === '' && searchGroup === '' && !searchTag && !selectedTag) {
       await loadUsers(page, pageSize);
     } else {
-      await searchUsers(page, pageSize, searchKeyword, searchGroup);
+      await searchUsers(page, pageSize, searchKeyword, searchGroup, searchTag);
     }
   };
 
@@ -373,6 +382,27 @@ export const useUsersData = () => {
           value: group,
         })),
       );
+    } catch (error) {
+      showError(error.message);
+    }
+  };
+
+  // Fetch user tags
+  const fetchUserTags = async () => {
+    try {
+      let res = await API.get(`/api/user/tags`);
+      if (res === undefined) {
+        return;
+      }
+      const { success, data } = res.data;
+      if (success) {
+        setTagOptions(
+          (data || []).map((tag) => ({
+            label: tag,
+            value: tag,
+          })),
+        );
+      }
     } catch (error) {
       showError(error.message);
     }
@@ -398,6 +428,7 @@ export const useUsersData = () => {
         showError(reason);
       });
     fetchGroups().then();
+    fetchUserTags().then();
   }, [studentView]);
 
   useEffect(() => {
@@ -418,6 +449,10 @@ export const useUsersData = () => {
     studentRewardAmount,
     studentRewardLoading,
     groupOptions,
+    tagOptions,
+    selectedTag,
+    setSelectedTag,
+    fetchUserTags,
 
     // Modal state
     showAddUser,

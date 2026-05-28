@@ -454,7 +454,6 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 			// No URL from adaptor — construct proxy URL using public task ID
 			task.PrivateData.ResultURL = taskcommon.BuildProxyURL(task.TaskID)
 		}
-		shouldSettle = true
 	case model.TaskStatusFailure:
 		logger.LogJson(ctx, fmt.Sprintf("Task %s failed", taskId), task)
 		task.Status = model.TaskStatusFailure
@@ -486,6 +485,9 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 			logger.LogWarn(ctx, fmt.Sprintf("Task %s already transitioned by another process, skip billing", task.TaskID))
 			shouldRefund = false
 			shouldSettle = false
+		} else if task.Status == model.TaskStatusSuccess {
+			// 仅在本轮成功抢到「进入 SUCCESS」的迁移时做完成结算，避免轮询重复 settle/分润
+			shouldSettle = true
 		}
 	} else if !snap.Equal(task.Snapshot()) {
 		if _, err := task.UpdateWithStatus(snap.Status); err != nil {
@@ -546,36 +548,42 @@ func truncateBase64(s string) string {
 //  2. taskResult.TotalTokens > 0 → 按 token 重算
 //  3. 都不满足 → 保持预扣额度不变
 func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor, task *model.Task, taskResult *relaycommon.TaskInfo) {
+	if task == nil {
+		return
+	}
+	hintTokens := 0
+	if taskResult != nil {
+		hintTokens = taskResult.TotalTokens
+	}
+	defer func() {
+		TryPostWalletProfitShareForTaskBilledQuota(ctx, task, task.Quota, hintTokens)
+	}()
 	// 0. 按次计费的任务不做差额结算
 	if bc := task.PrivateData.BillingContext; bc != nil && bc.PerCallBilling {
 		logger.LogInfo(ctx, fmt.Sprintf("任务 %s 按次计费，跳过差额结算", task.TaskID))
 		return
 	}
-	// 0.5 上游返回 total_tokens 时优先按上游 token 结算。
-	if taskResult.TotalTokens > 0 {
+	// 0.5 上游返回 total_tokens 时按 token 结算；视频按秒任务跳过，避免覆盖视频规则价。
+	if taskResult.TotalTokens > 0 && !taskPreferVideoPerSecondSettlement(task) {
 		if settled := RecalculateTaskQuotaByTokens(ctx, task, taskResult.TotalTokens); settled {
 			return
 		}
 	}
 
-	// 1. 无 token 时，视频按秒规则优先按真实成片重算。
+	// 1. 视频按秒规则优先按真实成片重算。
 	if actualQuota, detail := recalcVideoPerSecondQuotaDetailOnComplete(task, taskResult); actualQuota > 0 {
-		RecalculateTaskQuota(
-			ctx,
-			task,
-			actualQuota,
-			formatVideoPerSecondBillingDetail("视频按秒重算", detail, actualQuota),
-			videoPerSecondBillingDetailOther(detail, actualQuota),
-		)
+		RecalculateTaskQuota(ctx, task, actualQuota, detail)
 		return
 	}
 
 	// 2. 让 adaptor 决定最终额度
 	if actualQuota := adaptor.AdjustBillingOnComplete(task, taskResult); actualQuota > 0 {
-		RecalculateTaskQuota(ctx, task, actualQuota, "adaptor计费调整")
+		RecalculateTaskQuota(ctx, task, actualQuota, nil)
 		return
 	}
-	// 3. 无调整，保持预扣额度（估算值）
+	// 3. 无调整，保持预扣额度（估算值）；仍写入结算标记供前端展示「实际扣费」。
+	_, markerDetail := recalcVideoPerSecondQuotaDetailOnComplete(task, taskResult)
+	recordVideoTaskSettlementMarker(ctx, task, task.Quota, markerDetail)
 }
 
 // SettleTaskBillingOnFetch 用于 /v1/videos/{task_id} 查询链路下的成功结算。
@@ -587,24 +595,25 @@ func SettleTaskBillingOnFetch(ctx context.Context, task *model.Task, taskResult 
 	if task == nil || taskResult == nil {
 		return
 	}
+	hintTokens := taskResult.TotalTokens
+	defer func() {
+		TryPostWalletProfitShareForTaskBilledQuota(ctx, task, task.Quota, hintTokens)
+	}()
 	// 按次模型不做差额结算
 	if bc := task.PrivateData.BillingContext; bc != nil && bc.PerCallBilling {
 		return
 	}
-	if taskResult.TotalTokens > 0 {
+	if taskResult.TotalTokens > 0 && !taskPreferVideoPerSecondSettlement(task) {
 		if settled := RecalculateTaskQuotaByTokens(ctx, task, taskResult.TotalTokens); settled {
 			return
 		}
 	}
 	if actualQuota, detail := recalcVideoPerSecondQuotaDetailOnComplete(task, taskResult); actualQuota > 0 {
-		RecalculateTaskQuota(
-			ctx,
-			task,
-			actualQuota,
-			formatVideoPerSecondBillingDetail("视频按秒重算(fetch)", detail, actualQuota),
-			videoPerSecondBillingDetailOther(detail, actualQuota),
-		)
+		RecalculateTaskQuota(ctx, task, actualQuota, detail)
+		return
 	}
+	_, markerDetail := recalcVideoPerSecondQuotaDetailOnComplete(task, taskResult)
+	recordVideoTaskSettlementMarker(ctx, task, task.Quota, markerDetail)
 }
 
 func recalcVideoPerSecondQuotaOnComplete(task *model.Task, taskResult *relaycommon.TaskInfo) int {
@@ -620,26 +629,33 @@ func recalcVideoPerSecondQuotaDetailOnComplete(task *model.Task, taskResult *rel
 	if strings.TrimSpace(modelName) == "" {
 		return 0, nil
 	}
-	channelRules, ok := ratio_setting.GetChannelVideoPricingRules(task.ChannelId, modelName)
-	if !ok || !ratio_setting.HasUsableVideoPerSecondRules(channelRules) {
-		var globalOK bool
-		channelRules, globalOK = ratio_setting.GetVideoPricingRules(modelName)
-		if !globalOK || !ratio_setting.HasUsableVideoPerSecondRules(channelRules) {
-			return 0, nil
-		}
+	channelRules, chRulesOK := ratio_setting.GetChannelVideoPricingRules(task.ChannelId, modelName)
+	if !chRulesOK || !ratio_setting.HasUsableVideoPerSecondRules(channelRules) {
+		return 0, nil
 	}
 	videoURL := strings.TrimSpace(taskResult.Url)
 	if videoURL == "" {
 		videoURL = strings.TrimSpace(task.GetResultURL())
 	}
-	// 优先使用上游真实回包中的成片元数据；仅在缺失时回退 URL 探测。
-	meta, ok := extractVideoMetadataFromTaskData(task)
-	if !ok {
-		var err error
-		meta, err = ProbeVideoMetadataFromURL(videoURL)
-		if err != nil {
-			return 0, nil
+	// 成片时长优先 URL 探测（MP4 真实时长）。DashScope 回包里的 submit_time/end_time 是任务耗时，不能用于计费。
+	var meta *VideoMetadata
+	if videoURL != "" {
+		if probed, err := ProbeVideoMetadataFromURL(videoURL); err == nil {
+			meta = probed
 		}
+	}
+	if meta == nil {
+		if m, ok := extractVideoMetadataFromTaskData(task); ok {
+			meta = m
+		}
+	}
+	if meta == nil {
+		if sec := taskBillingSecondsEstimate(task); sec > 0 {
+			meta, _ = videoMetadataFromBillingEstimate(task, sec)
+		}
+	}
+	if meta == nil || meta.DurationSec <= 0 {
+		return 0, nil
 	}
 	mode := detectTaskVideoBillingMode(task)
 	match, ok := matchPerSecondPriceDetail(channelRules, mode, meta.Width, meta.Height, meta.HasAudio)
@@ -654,25 +670,80 @@ func recalcVideoPerSecondQuotaDetailOnComplete(task *model.Task, taskResult *rel
 	if seconds <= 0 {
 		return 0, nil
 	}
-	channelDiscountPercent := model.ResolveChannelPriceDiscountPercent(task.ChannelId)
-	rawQuota := float64(seconds) * match.PricePerSecond * common.QuotaPerUnit * groupRatio
-	quota := model.ApplyChannelPriceDiscountToQuota(int(math.Round(rawQuota)), channelDiscountPercent)
+	costDisc := model.ResolveChannelPriceDiscountPercent(task.ChannelId)
+	markupDisc := model.ResolveEffectiveMarkupDiscountPercentForInviteeBilling(task.UserId, task.ChannelId, modelName)
+	globalPerSec := globalVideoPerSecondUSDForChannelTier(
+		modelName, mode, match.Resolution, match.RuleWidth, match.RuleHeight, meta.HasAudio, match.UnifiedAudio,
+	)
+	effPerSec := effectiveVideoPerSecondUSD(match.PricePerSecond, globalPerSec, costDisc, markupDisc)
+	rawQuota := float64(seconds) * effPerSec * common.QuotaPerUnit * groupRatio
+	quota := int(math.Round(rawQuota))
+	if quota <= 0 && rawQuota > 0 {
+		quota = 1
+	}
+	channelDiscountPercent := costDisc
 	detail := &videoPerSecondBillingDetail{
-		Mode:                   mode,
-		Seconds:                seconds,
-		Width:                  meta.Width,
-		Height:                 meta.Height,
-		HasAudio:               meta.HasAudio,
-		Resolution:             match.Resolution,
-		RuleWidth:              match.RuleWidth,
-		RuleHeight:             match.RuleHeight,
-		PricePerSecond:         match.PricePerSecond,
-		GroupRatio:             groupRatio,
-		QuotaPerUnit:           common.QuotaPerUnit,
-		ChannelDiscountPercent: channelDiscountPercent,
-		UnifiedAudio:           match.UnifiedAudio,
+		Mode:                    mode,
+		Seconds:                 seconds,
+		Width:                   meta.Width,
+		Height:                  meta.Height,
+		HasAudio:                meta.HasAudio,
+		Resolution:              match.Resolution,
+		RuleWidth:               match.RuleWidth,
+		RuleHeight:              match.RuleHeight,
+		PricePerSecond:          match.PricePerSecond,
+		GlobalPricePerSecond:    globalPerSec,
+		EffectivePricePerSecond: effPerSec,
+		MarkupDiscountPercent:   markupDisc,
+		GroupRatio:              groupRatio,
+		QuotaPerUnit:            common.QuotaPerUnit,
+		ChannelDiscountPercent:  channelDiscountPercent,
+		UnifiedAudio:            match.UnifiedAudio,
 	}
 	return quota, detail
+}
+
+func taskBillingSecondsEstimate(task *model.Task) int {
+	if task == nil {
+		return 0
+	}
+	if bc := task.PrivateData.BillingContext; bc != nil && bc.OtherRatios != nil {
+		if sec := int(math.Ceil(bc.OtherRatios["seconds"])); sec > 0 {
+			return sec
+		}
+	}
+	if input := strings.TrimSpace(task.Properties.Input); input != "" {
+		var req map[string]any
+		if err := common.Unmarshal([]byte(input), &req); err == nil {
+			if params, _ := req["parameters"].(map[string]any); params != nil {
+				if d := metadataToFloat64(params["duration"]); d > 0 {
+					return int(math.Ceil(d))
+				}
+			}
+		}
+	}
+	return 0
+}
+
+func videoMetadataFromBillingEstimate(task *model.Task, seconds int) (*VideoMetadata, bool) {
+	if task == nil || seconds <= 0 {
+		return nil, false
+	}
+	width, height := 1280, 720
+	if m, ok := extractVideoMetadataFromTaskData(task); ok {
+		if m.Width > 0 {
+			width = m.Width
+		}
+		if m.Height > 0 {
+			height = m.Height
+		}
+	}
+	return &VideoMetadata{
+		DurationSec: float64(seconds),
+		Width:       width,
+		Height:      height,
+		HasAudio:    false,
+	}, true
 }
 
 func extractVideoMetadataFromTaskData(task *model.Task) (*VideoMetadata, bool) {
@@ -683,54 +754,7 @@ func extractVideoMetadataFromTaskData(task *model.Task) (*VideoMetadata, bool) {
 	if err := common.Unmarshal(task.Data, &payload); err != nil {
 		return nil, false
 	}
-	response, _ := payload["Response"].(map[string]any)
-	if response == nil {
-		return nil, false
-	}
-	aigcVideoTask, _ := response["AigcVideoTask"].(map[string]any)
-	if aigcVideoTask == nil {
-		return nil, false
-	}
-	output, _ := aigcVideoTask["Output"].(map[string]any)
-	if output == nil {
-		return nil, false
-	}
-	fileInfos, _ := output["FileInfos"].([]any)
-	if len(fileInfos) == 0 {
-		return nil, false
-	}
-	firstFile, _ := fileInfos[0].(map[string]any)
-	if firstFile == nil {
-		return nil, false
-	}
-	metaMap, _ := firstFile["MetaData"].(map[string]any)
-	if metaMap == nil {
-		return nil, false
-	}
-
-	duration := toFloat64(metaMap["Duration"])
-	if duration <= 0 {
-		duration = toFloat64(metaMap["VideoDuration"])
-	}
-	width := toInt(metaMap["Width"])
-	height := toInt(metaMap["Height"])
-	audioDuration := toFloat64(metaMap["AudioDuration"])
-
-	hasAudio := audioDuration > 0
-	if !hasAudio {
-		if audioStreams, ok := metaMap["AudioStreamSet"].([]any); ok && len(audioStreams) > 0 {
-			hasAudio = true
-		}
-	}
-	if duration <= 0 || width <= 0 || height <= 0 {
-		return nil, false
-	}
-	return &VideoMetadata{
-		DurationSec: duration,
-		Width:       width,
-		Height:      height,
-		HasAudio:    hasAudio,
-	}, true
+	return extractVideoMetadataFromMap(payload)
 }
 
 func toFloat64(v any) float64 {
@@ -819,10 +843,31 @@ type videoPerSecondBillingDetail struct {
 	RuleWidth              int
 	RuleHeight             int
 	PricePerSecond         float64
+	GlobalPricePerSecond   float64
+	EffectivePricePerSecond float64
+	MarkupDiscountPercent  float64
 	GroupRatio             float64
 	QuotaPerUnit           float64
 	ChannelDiscountPercent float64
 	UnifiedAudio           bool
+}
+
+// taskPreferVideoPerSecondSettlement 该任务是否应按视频按秒规则结算（避免误走文本 token 重算）。
+func taskPreferVideoPerSecondSettlement(task *model.Task) bool {
+	if task == nil {
+		return false
+	}
+	modelName := strings.TrimSpace(taskModelName(task))
+	if modelName == "" {
+		return false
+	}
+	if rules, ok := ratio_setting.GetChannelVideoPricingRules(task.ChannelId, modelName); ok && ratio_setting.HasUsableVideoPerSecondRules(rules) {
+		return true
+	}
+	if rules, ok := ratio_setting.GetVideoPricingRules(modelName); ok && ratio_setting.HasUsableVideoPerSecondRules(rules) {
+		return true
+	}
+	return false
 }
 
 func matchPerSecondPrice(r ratio_setting.VideoPricingRules, mode string, width, height int, hasAudio bool) (float64, bool) {

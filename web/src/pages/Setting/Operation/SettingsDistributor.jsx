@@ -29,6 +29,7 @@ import {
   Col,
   Form,
   Row,
+  Select,
   Spin,
   Upload,
   Typography,
@@ -54,6 +55,7 @@ export default function SettingsDistributor(props) {
   const [loading, setLoading] = useState(false);
   const [inputs, setInputs] = useState({
     AffiliateDefaultCommissionBps: '1000',
+    DistributorCommissionMode: 'topup',
     DistributorApplyCsImageUrl: '',
     DistributorWithdrawCsImageUrl: '',
     DistributorWithdrawNotice: '',
@@ -189,9 +191,26 @@ export default function SettingsDistributor(props) {
         currentInputs[key] = props.options[key];
       }
     }
-    setInputs(currentInputs);
-    setInputsRow(structuredClone(currentInputs));
-    refForm.current.setValues(currentInputs);
+    setInputs((prev) => {
+      const next = {
+        ...prev,
+        ...currentInputs,
+        DistributorCommissionMode:
+          currentInputs.DistributorCommissionMode ??
+          prev.DistributorCommissionMode ??
+          'topup',
+      };
+      refForm.current?.setValues?.(next);
+      return next;
+    });
+    setInputsRow((prev) => ({
+      ...prev,
+      ...structuredClone(currentInputs),
+      DistributorCommissionMode:
+        currentInputs.DistributorCommissionMode ??
+        prev.DistributorCommissionMode ??
+        'topup',
+    }));
   }, [props.options]);
 
   return (
@@ -211,6 +230,30 @@ export default function SettingsDistributor(props) {
                 '配置默认代理比例、申请页与提现页客服图、提现说明及最低提现额度等。',
               )}
             </Typography.Text>
+            <Row gutter={16} className='mb-6'>
+              <Col span={24}>
+                <Text strong className='block mb-2'>
+                  {t('代理分成模式')}
+                </Text>
+                <Select
+                  value={inputs.DistributorCommissionMode || 'topup'}
+                  style={{ width: '100%', maxWidth: 420 }}
+                  optionList={[
+                    { value: 'topup', label: t('充值分成') },
+                    { value: 'profit_share', label: t('利润分成') },
+                  ]}
+                  onChange={(v) =>
+                    setInputs({
+                      ...inputs,
+                      DistributorCommissionMode: v || 'topup',
+                    })
+                  }
+                />
+                <Text type='tertiary' size='small' className='block mt-2'>
+                  {t('代理分成模式说明')}
+                </Text>
+              </Col>
+            </Row>
             <Row gutter={16}>
               <Col xs={24} sm={12} md={10}>
                 {isQuotaTokensMode ? (
@@ -325,9 +368,14 @@ export default function SettingsDistributor(props) {
                     style={{ width: '100%' }}
                   />
                   <Text type='tertiary' size='small' className='block mt-2'>
-                    {t(
-                      '填写 0～100 之间的百分比，例如 10 表示 10%，10.5 表示 10.5%。填 0 表示跟随系统默认。',
-                    )}
+                    {(inputs.DistributorCommissionMode || 'topup') ===
+                    'profit_share'
+                      ? t(
+                          '利润分成模式下本比例作用于加价切片分润；分站/分销商默认分成、单用户覆盖规则与充值分成相同。',
+                        )
+                      : t(
+                          '填写 0～100 之间的百分比，例如 10 表示 10%，10.5 表示 10.5%。填 0 表示跟随系统默认。',
+                        )}
                   </Text>
                 </div>
               </Col>

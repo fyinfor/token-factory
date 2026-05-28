@@ -18,13 +18,31 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
+import { Tag } from '@douyinfe/semi-ui';
 import SelectableButtonGroup from '../../../common/ui/SelectableButtonGroup';
+import { stringToColor } from '../../../../helpers';
+
+const getSupplierTypeColor = (supplierType) => {
+  switch (supplierType) {
+    case '公有云':
+      return 'green';
+    case 'AIDC':
+      return 'light-green';
+    case '企业中转站':
+      return 'lime';
+    case '个人中转站':
+      return 'yellow';
+    default:
+      return stringToColor(supplierType);
+  }
+};
 
 /**
  * 供应商类型筛选组件
  * @param {string|'all'} filterProviderType 当前值
  * @param {Function} setFilterProviderType setter
- * @param {number} totalCount 总数
+ * @param {Array} models 所有模型（用于提取供应商类型）
+ * @param {Array} countModels 当前过滤后模型（用于计数，排除本维度筛选）
  * @param {boolean} loading 是否加载中
  * @param {Function} t i18n
  * @param {string} layout 布局模式
@@ -32,25 +50,69 @@ import SelectableButtonGroup from '../../../common/ui/SelectableButtonGroup';
 const PricingProviderType = ({
   filterProviderType,
   setFilterProviderType,
-  totalCount = 0,
+  models = [],
+  countModels = [],
   loading = false,
   t,
   layout,
 }) => {
+  const supplierTypes = React.useMemo(() => {
+    const seen = new Set();
+    models.forEach((model) => {
+      if (!model.channel_list) return;
+      model.channel_list.forEach((ch) => {
+        const supplierType =
+          (ch?.supplier_type && String(ch.supplier_type).trim()) || '';
+        if (supplierType) seen.add(supplierType);
+      });
+    });
+    return Array.from(seen).sort();
+  }, [models]);
+
+  const getCount = React.useCallback(
+    (supplierType) => {
+      if (supplierType === 'all') return countModels.length;
+      return countModels.filter(
+        (model) =>
+          model.channel_list &&
+          model.channel_list.some(
+            (ch) => (ch?.supplier_type || '') === supplierType,
+          ),
+      ).length;
+    },
+    [countModels],
+  );
+
   const items = React.useMemo(() => {
-    return [
+    const result = [
       {
         value: 'all',
-        label: t('全部'),
-        tagCount: totalCount,
-      },
-      {
-        value: 'official',
-        label: t('官方'),
-        tagCount: totalCount,
+        label: t('全部类型'),
+        tagCount: getCount('all'),
       },
     ];
-  }, [totalCount, t]);
+
+    supplierTypes.forEach((supplierType) => {
+      result.push({
+        value: supplierType,
+        label: '',
+        icon: (
+          <Tag
+            size='small'
+            shape='circle'
+            color={getSupplierTypeColor(supplierType)}
+          >
+            {supplierType}
+          </Tag>
+        ),
+        tagCount: getCount(supplierType),
+      });
+    });
+
+    return result;
+  }, [supplierTypes, getCount, t]);
+
+  if (supplierTypes.length === 0) return null;
 
   return (
     <SelectableButtonGroup

@@ -37,6 +37,7 @@ export const usePricingFilterCounts = ({
   filterEndpointType = 'all',
   filterVendor = 'all',
   filterTag = 'all',
+  filterSupplierType = 'all',
   searchValue = '',
 }) => {
   // 均使用同一份模型列表，避免创建新引用
@@ -84,18 +85,28 @@ export const usePricingFilterCounts = ({
       if (!tagsArr.includes(filterTag.toLowerCase())) return false;
     }
 
+    // 供应商类型
+    if (!ignore.includes('supplierType') && filterSupplierType !== 'all') {
+      if (
+        !model.channel_list ||
+        !model.channel_list.some(
+          (ch) => (ch?.supplier_type || '') === filterSupplierType,
+        )
+      ) {
+        return false;
+      }
+    }
+
     // 搜索
     if (!ignore.includes('search') && searchValue.length > 0) {
       const term = searchValue.toLowerCase();
       if (
         !(
-          (model.model_name &&
-            model.model_name.toLowerCase().includes(term)) ||
+          (model.model_name && model.model_name.toLowerCase().includes(term)) ||
           (model.description &&
             model.description.toLowerCase().includes(term)) ||
           (model.tags && model.tags.toLowerCase().includes(term)) ||
-          (model.vendor_name &&
-            model.vendor_name.toLowerCase().includes(term))
+          (model.vendor_name && model.vendor_name.toLowerCase().includes(term))
         )
       )
         return false;
@@ -113,6 +124,7 @@ export const usePricingFilterCounts = ({
       filterEndpointType,
       filterVendor,
       filterTag,
+      filterSupplierType,
       searchValue,
     ],
   );
@@ -125,6 +137,7 @@ export const usePricingFilterCounts = ({
       filterQuotaType,
       filterVendor,
       filterTag,
+      filterSupplierType,
       searchValue,
     ],
   );
@@ -137,6 +150,7 @@ export const usePricingFilterCounts = ({
       filterQuotaType,
       filterEndpointType,
       filterTag,
+      filterSupplierType,
       searchValue,
     ],
   );
@@ -149,6 +163,7 @@ export const usePricingFilterCounts = ({
       filterQuotaType,
       filterEndpointType,
       filterVendor,
+      filterSupplierType,
       searchValue,
     ],
   );
@@ -157,6 +172,20 @@ export const usePricingFilterCounts = ({
     () => allModels.filter((m) => matchesFilters(m, ['group'])),
     [
       allModels,
+      filterQuotaType,
+      filterEndpointType,
+      filterVendor,
+      filterTag,
+      filterSupplierType,
+      searchValue,
+    ],
+  );
+
+  const supplierTypeModels = useMemo(
+    () => allModels.filter((m) => matchesFilters(m, ['supplierType'])),
+    [
+      allModels,
+      filterGroup,
       filterQuotaType,
       filterEndpointType,
       filterVendor,
@@ -171,5 +200,6 @@ export const usePricingFilterCounts = ({
     vendorModels,
     groupCountModels,
     tagModels,
+    supplierTypeModels,
   };
 };

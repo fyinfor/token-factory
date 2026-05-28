@@ -361,7 +361,7 @@ type ChannelPricingMeta struct {
 func ListChannelsForPricing() ([]ChannelSimplePricingItem, error) {
 	items := make([]ChannelSimplePricingItem, 0)
 	err := DB.Model(&Channel{}).
-		Select("channels.id AS channel_id, channels.name AS channel_name, channels.channel_no, COALESCE(supplier_applications.supplier_alias, '') AS supplier_alias, COALESCE(supplier_applications.company_logo_url, '') AS company_logo_url, COALESCE(supplier_applications.supplier_type, '') AS supplier_type").
+		Select("channels.id AS channel_id, channels.name AS channel_name, channels.channel_no, COALESCE(supplier_applications.supplier_alias, '') AS supplier_alias, COALESCE(supplier_applications.company_logo_url, '') AS company_logo_url, COALESCE(NULLIF(supplier_applications.supplier_type, ''), channels.supplier_type, '') AS supplier_type").
 		Joins("LEFT JOIN supplier_applications ON supplier_applications.id = channels.supplier_application_id").
 		Where("channels.status = ?", common.ChannelStatusEnabled).
 		Order("channels.id ASC").

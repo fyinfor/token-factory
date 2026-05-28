@@ -24,7 +24,8 @@ import { Modal } from '@douyinfe/semi-ui';
 import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
 
-export const useModelPricingData = () => {
+export const useModelPricingData = (options = {}) => {
+  const { defaultSortKey = 'default' } = options;
   const { t } = useTranslation();
   const [searchValue, setSearchValue] = useState('');
   const compositionRef = useRef({ isComposition: false });
@@ -39,9 +40,10 @@ export const useModelPricingData = () => {
   const [filterEndpointType, setFilterEndpointType] = useState('all'); // 端点类型筛选: 'all' | string
   const [filterVendor, setFilterVendor] = useState('all'); // 供应商筛选: 'all' | 'unknown' | string
   const [filterTag, setFilterTag] = useState('all'); // 模型标签筛选: 'all' | string
+  const [filterSupplierType, setFilterSupplierType] = useState('all'); // 供应商类型筛选: 'all' | string
   const [filterSupplier, setFilterSupplier] = useState('all'); // 供应商渠道筛选: 'all' | string (supplier_alias)
-  // 排序键: 'default' | 'price' | 'supplier_grade' | 'latency' | 'discount'
-  const [sortKey, setSortKey] = useState('default');
+  // 排序键: 'default' | 'hot' | 'price' | 'supplier_grade' | 'latency' | 'discount'
+  const [sortKey, setSortKey] = useState(defaultSortKey);
   const [pageSize, setPageSize] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
   const [currency, setCurrency] = useState('USD');
@@ -55,6 +57,14 @@ export const useModelPricingData = () => {
   const [groupModelRatio, setGroupModelRatio] = useState({});
   const [channelModelPrice, setChannelModelPrice] = useState({});
   const [channelModelRatio, setChannelModelRatio] = useState({});
+  const [channelCompletionRatio, setChannelCompletionRatio] = useState({});
+  const [channelCacheRatio, setChannelCacheRatio] = useState({});
+  const [channelCreateCacheRatio, setChannelCreateCacheRatio] = useState({});
+  const [channelImageRatio, setChannelImageRatio] = useState({});
+  const [channelImagePrice, setChannelImagePrice] = useState({});
+  const [channelAudioRatio, setChannelAudioRatio] = useState({});
+  const [channelAudioCompletionRatio, setChannelAudioCompletionRatio] =
+    useState({});
   const [channelVideoRatio, setChannelVideoRatio] = useState({});
   const [channelVideoCompletionRatio, setChannelVideoCompletionRatio] =
     useState({});
@@ -156,9 +166,21 @@ export const useModelPricingData = () => {
     // 渠道供应商筛选（channel_list supplier_alias）
     if (filterSupplier !== 'all') {
       result = result.filter((model) => {
-        if (!model.channel_list || model.channel_list.length === 0) return false;
+        if (!model.channel_list || model.channel_list.length === 0)
+          return false;
         return model.channel_list.some(
           (ch) => (ch?.supplier_alias || '') === filterSupplier,
+        );
+      });
+    }
+
+    // 供应商类型筛选（channel_list supplier_type）
+    if (filterSupplierType !== 'all') {
+      result = result.filter((model) => {
+        if (!model.channel_list || model.channel_list.length === 0)
+          return false;
+        return model.channel_list.some(
+          (ch) => (ch?.supplier_type || '') === filterSupplierType,
         );
       });
     }
@@ -279,7 +301,11 @@ export const useModelPricingData = () => {
         const channelList = m.channel_list ?? m.ChannelList ?? [];
         if (channelList.length > 0) {
           const firstChannel = channelList[0];
-          return firstChannel.channel_heat_score ?? firstChannel.ChannelHeatScore ?? 0;
+          return (
+            firstChannel.channel_heat_score ??
+            firstChannel.ChannelHeatScore ??
+            0
+          );
         }
         return 0;
       };
@@ -318,6 +344,7 @@ export const useModelPricingData = () => {
     filterVendor,
     filterTag,
     filterSupplier,
+    filterSupplierType,
     sortKey,
   ]);
 
@@ -411,6 +438,13 @@ export const useModelPricingData = () => {
       group_model_ratio,
       channel_model_price,
       channel_model_ratio,
+      channel_completion_ratio,
+      channel_cache_ratio,
+      channel_create_cache_ratio,
+      channel_image_ratio,
+      channel_image_price,
+      channel_audio_ratio,
+      channel_audio_completion_ratio,
       channel_video_ratio,
       channel_video_completion_ratio,
       channel_video_price,
@@ -425,6 +459,13 @@ export const useModelPricingData = () => {
       setGroupModelRatio(group_model_ratio || {});
       setChannelModelPrice(channel_model_price || {});
       setChannelModelRatio(channel_model_ratio || {});
+      setChannelCompletionRatio(channel_completion_ratio || {});
+      setChannelCacheRatio(channel_cache_ratio || {});
+      setChannelCreateCacheRatio(channel_create_cache_ratio || {});
+      setChannelImageRatio(channel_image_ratio || {});
+      setChannelImagePrice(channel_image_price || {});
+      setChannelAudioRatio(channel_audio_ratio || {});
+      setChannelAudioCompletionRatio(channel_audio_completion_ratio || {});
       setChannelVideoRatio(channel_video_ratio || {});
       setChannelVideoCompletionRatio(channel_video_completion_ratio || {});
       setChannelVideoPrice(channel_video_price || {});
@@ -529,6 +570,7 @@ export const useModelPricingData = () => {
     filterVendor,
     filterTag,
     filterSupplier,
+    filterSupplierType,
     searchValue,
     sortKey,
   ]);
@@ -559,6 +601,8 @@ export const useModelPricingData = () => {
     setFilterVendor,
     filterTag,
     setFilterTag,
+    filterSupplierType,
+    setFilterSupplierType,
     filterSupplier,
     setFilterSupplier,
     sortKey,
@@ -581,6 +625,13 @@ export const useModelPricingData = () => {
     groupModelRatio,
     channelModelPrice,
     channelModelRatio,
+    channelCompletionRatio,
+    channelCacheRatio,
+    channelCreateCacheRatio,
+    channelImageRatio,
+    channelImagePrice,
+    channelAudioRatio,
+    channelAudioCompletionRatio,
     channelVideoRatio,
     channelVideoCompletionRatio,
     channelVideoPrice,

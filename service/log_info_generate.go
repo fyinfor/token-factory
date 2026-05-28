@@ -210,6 +210,12 @@ func appendImagePerImageBillingInfo(relayInfo *relaycommon.RelayInfo, other map[
 	b := relayInfo.ImageBilling
 	other["billing_mode"] = "image_per_image"
 	other["image_usd_per_image"] = b.UsdPerImage
+	if relayInfo.PriceData.ModelPrice > 0 {
+		other["image_channel_rule_usd"] = relayInfo.PriceData.ModelPrice
+	}
+	if relayInfo.PriceData.GlobalModelPrice > 0 {
+		other["image_global_rule_usd"] = relayInfo.PriceData.GlobalModelPrice
+	}
 	if b.Count > 0 {
 		other["image_count"] = b.Count
 	} else if n, ok := relayInfo.PriceData.OtherRatios["n"]; ok && n > 0 {

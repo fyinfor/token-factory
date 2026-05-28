@@ -17,6 +17,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
+/** 与渠道编辑弹窗「供应商类型」选项一致（value 与后端存储一致） */
+export const CHANNEL_SUPPLIER_TYPE_OPTIONS = [
+  { label: '公有云', value: '公有云' },
+  { label: 'AIDC', value: 'AIDC' },
+  { label: '企业中转站', value: '企业中转站' },
+  { label: '个人中转站', value: '个人中转站' },
+];
+
 export const CHANNEL_OPTIONS = [
     { value: 1, color: 'green', label: 'OpenAI' },
     {
@@ -218,6 +226,11 @@ export const CHANNEL_OPTIONS = [
         value: 63,
         color: 'green',
         label: 'OpenAI 图片',
+    },
+    {
+        value: 64,
+        color: 'orange',
+        label: '阿里云-视频',
     },
 ];
 

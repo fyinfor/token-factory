@@ -27,6 +27,11 @@ import {
     summarizeTierRule,
     validateTierRule,
 } from '../utils/requestTierPricing';
+import {
+    mergeVideoPricingFromJsonEditor,
+    parseVideoPricingJsonText,
+    stringifyVideoPricingJsonEditor,
+} from '../utils/videoPricingJson';
 
 export const PAGE_SIZE = 10;
 export const PRICE_SUFFIX = '$/1M';
@@ -2273,6 +2278,28 @@ export function useModelPricingEditorState({
         });
     };
 
+    const applyVideoPricingJson = (jsonText) => {
+        if (!selectedModel) {
+            return { ok: false, message: '未选择模型' };
+        }
+        const parseResult = parseVideoPricingJsonText(jsonText);
+        if (!parseResult.ok) {
+            return parseResult;
+        }
+        const merged = mergeVideoPricingFromJsonEditor(
+            selectedModel,
+            parseResult.data,
+        );
+        if (!merged.ok) {
+            return merged;
+        }
+        upsertModel(selectedModel.name, () => merged.model);
+        return { ok: true };
+    };
+
+    const getVideoPricingJsonText = () =>
+        selectedModel ? stringifyVideoPricingJsonEditor(selectedModel) : '{}';
+
     const removeVideoRuleRow = (section, index) => {
         if (!selectedModel) return;
         upsertModel(selectedModel.name, (model) => {
@@ -2819,6 +2846,8 @@ export function useModelPricingEditorState({
         updateVideoRuleRow,
         addVideoRuleRow,
         removeVideoRuleRow,
+        applyVideoPricingJson,
+        getVideoPricingJsonText,
         handleImageGenPriceUnitChange,
         updateImageRuleRow,
         addImageRuleRow,

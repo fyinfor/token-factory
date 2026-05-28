@@ -2,6 +2,7 @@ package controller
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -18,7 +19,11 @@ func GetAffInvitees(c *gin.Context) {
 		return
 	}
 	pageInfo := common.GetPageQuery(c)
-	items, total, err := model.ListAffInvitees(inviterId, pageInfo)
+	keyword := strings.TrimSpace(c.Query("keyword"))
+	if len(keyword) > 120 {
+		keyword = keyword[:120]
+	}
+	items, total, err := model.ListAffInvitees(inviterId, keyword, pageInfo)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,

@@ -49,10 +49,10 @@ import { renderLimitedItems } from '../../../../common/ui/RenderUtils';
 import { useIsMobile } from '../../../../../hooks/common/useIsMobile';
 const CARD_STYLES = {
   container:
-    'w-12 h-12 rounded-2xl flex items-center justify-center relative shadow-md',
+    'w-12 h-12 rounded-xl flex items-center justify-center relative shadow-sm border border-semi-color-border bg-white',
   icon: 'w-8 h-8 flex items-center justify-center',
-  selected: 'border-blue-500 bg-blue-50',
-  default: 'border-gray-200 hover:border-gray-300',
+  selected: 'border-blue-500 bg-blue-50 shadow-md',
+  default: 'border-gray-200 hover:border-blue-200 hover:shadow-md',
 };
 
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -131,19 +131,6 @@ const PricingCardView = ({
     rowSelection?.onChange?.(newKeys, null);
   };
 
-  // 获取供应商列表
-  const getSupplierIds = (model) => {
-    if (!model.channel_list || model.channel_list.length === 0) {
-      return [t('官方')];
-    }
-    const uniqueAliases = [
-      ...new Set(
-        model.channel_list.map((ch) => ch.supplier_alias).filter(Boolean),
-      ),
-    ];
-    return uniqueAliases.length > 0 ? uniqueAliases : [t('官方')];
-  };
-
   // 根据 supplier_type 返回对应的 Tag 颜色
   const getSupplierTypeColor = (supplierType) => {
     switch (supplierType) {
@@ -160,9 +147,8 @@ const PricingCardView = ({
     }
   };
 
-  // 根据模型的 channel_list 推导可展示的供应商项
-  // company_logo_url / supplier_type / supplier_alias 直接从每个 channel 上取，
-  // 按 (logo + supplier_type + alias) 组合键去重。
+  // 根据模型的 channel_list 推导可展示的供应商项。
+  // 无 logo 时不展示 supplier_alias，仅保留供应商类型标签。
   const getSupplierLogos = (model) => {
     if (!model?.channel_list || model.channel_list.length === 0) return [];
     const seen = new Set();
@@ -175,14 +161,16 @@ const PricingCardView = ({
       const alias =
         (ch?.supplier_alias && String(ch.supplier_alias).trim()) || '';
       const name = ch?.channel_name || '';
-      const dedupKey = `${logo}|${supplierType}|${alias}`;
+      if (!logo && !supplierType) return;
+      const displayAlias = logo ? alias : '';
+      const dedupKey = `${logo}|${supplierType}|${displayAlias}`;
       if (seen.has(dedupKey)) return;
       seen.add(dedupKey);
       items.push({
         key: ch?.channel_id ?? `${dedupKey}-${idx}`,
         logo,
         supplierType,
-        alias,
+        alias: displayAlias,
         name,
       });
     });
@@ -368,14 +356,22 @@ const PricingCardView = ({
             );
           }
 
-          const vrCh = pickChannelScopedModelFloat(channelVideoRatio, cid, mname);
+          const vrCh = pickChannelScopedModelFloat(
+            channelVideoRatio,
+            cid,
+            mname,
+          );
           const vcrCh = pickChannelScopedModelFloat(
             channelVideoCompletionRatio,
             cid,
             mname,
           );
           const effVr =
-            vrCh != null ? vrCh : modelHasVideoRatio ? Number(model.video_ratio) : 1;
+            vrCh != null
+              ? vrCh
+              : modelHasVideoRatio
+                ? Number(model.video_ratio)
+                : 1;
           const effVcr =
             vcrCh != null
               ? vcrCh
@@ -533,10 +529,7 @@ const PricingCardView = ({
           rootPrices.videoToken,
           originalPrices.videoToken,
         ),
-        videoFlat: getOriginal(
-          rootPrices.videoFlat,
-          originalPrices.videoFlat,
-        ),
+        videoFlat: getOriginal(rootPrices.videoFlat, originalPrices.videoFlat),
       },
       videoToken: calculateRange(prices.videoToken),
       videoFlat: calculateRange(prices.videoFlat),
@@ -676,8 +669,7 @@ const PricingCardView = ({
         selectedGroup,
         groupRatio,
       );
-      const usd =
-        Number(hint.min_usd_after_channel_discount) * usedGroupRatio;
+      const usd = Number(hint.min_usd_after_channel_discount) * usedGroupRatio;
       const perSecond = hint.billing_mode === 'per_second';
       items.push({
         key: 'video-flat-tiered',
@@ -748,7 +740,8 @@ const PricingCardView = ({
 
     // 如果没有供应商图标，使用模型名称生成头像
 
-    const avatarText = (model.model_name || '').slice(0, 2).toUpperCase() || 'AI';
+    const avatarText =
+      (model.model_name || '').slice(0, 2).toUpperCase() || 'AI';
     return (
       <div className={CARD_STYLES.container}>
         <Avatar
@@ -866,244 +859,284 @@ const PricingCardView = ({
   return (
     <>
       <div className='px-2 pt-2'>
-      <div className='flex flex-wrap gap-4'>
-        {paginatedModels.map((model, index) => {
-          const modelKey = getModelKey(model);
-          const isSelected = selectedRowKeys.includes(modelKey);
+        <div className='flex flex-wrap gap-4'>
+          {paginatedModels.map((model, index) => {
+            const modelKey = getModelKey(model);
+            const isSelected = selectedRowKeys.includes(modelKey);
 
-          const priceData = calculateModelPrice({
-            record: model,
-            selectedGroup,
-            groupRatio,
-            groupModelPrice,
-            groupModelRatio,
-            tokenUnit,
-            displayPrice,
-            currency,
-            quotaDisplayType: siteDisplayType,
-          });
+            const priceData = calculateModelPrice({
+              record: model,
+              selectedGroup,
+              groupRatio,
+              groupModelPrice,
+              groupModelRatio,
+              tokenUnit,
+              displayPrice,
+              currency,
+              quotaDisplayType: siteDisplayType,
+            });
 
-          const supplierIds = getSupplierIds(model);
-          const supplierLogos = getSupplierLogos(model);
+            const supplierLogos = getSupplierLogos(model);
+            const hasChannelList =
+              Array.isArray(model.channel_list) &&
+              model.channel_list.length > 0;
 
-          return (
-            <Card
-              key={modelKey || index}
-              className={`flex-1 min-w-[350px] max-w-[600px] !rounded-2xl transition-all duration-200 hover:shadow-lg border ${blurPricing ? '' : 'cursor-pointer'} ${isSelected ? CARD_STYLES.selected : CARD_STYLES.default}`}
-              bodyStyle={{ height: '100%' }}
-              onClick={() => !blurPricing && openModelDetail && openModelDetail(model)}
-            >
-              <div className='flex flex-col h-full'>
-                {/* 头部：图标 + 模型名称 + 操作按钮 */}
-                <div className='flex items-start justify-between mb-3'>
-                  <div className='flex items-start space-x-3 flex-1 min-w-0'>
-                    {getModelIcon(model)}
-                    <div className='flex-1 min-w-0'>
-                      <h3 className='text-lg font-bold text-gray-900 truncate'>
-                        {renderHighlightedText(model.model_name)}
-                      </h3>
-                      <div className='flex flex-col gap-1 text-xs mt-1' style={blurPricing ? { filter: 'blur(6px)', userSelect: 'none', pointerEvents: 'none' } : undefined}>
-                        {getModelPriceItemsForCard(model, priceData).map(
-                          (item) => (
-                            <div key={item.key} className='flex items-center'>
-                              <span className='w-20 flex-shrink-0'>
-                                {item.label}
-                              </span>
-                              <span className='flex-1 font-bold text-black inline-flex items-center flex-wrap gap-1'>
-                                {item.valueNode ? (
-                                  item.valueNode
-                                ) : item.original ? (
-                                  <>
-                                    <span className='line-through text-gray-400 font-normal text-[10px]'>
-                                      <span style={{ color: 'var(--semi-color-primary)' }}>官方</span> {item.original.text}
-                                    </span>
-                                    <Tag
-                                      color='red'
-                                      size='small'
-                                      shape='circle'
-                                    >
-                                      -{item.original.discount}%
-                                    </Tag>
+            return (
+              <Card
+                key={modelKey || index}
+                className={`flex-1 min-w-[350px] max-w-[600px] !rounded-2xl transition-all duration-200 hover:shadow-lg border ${blurPricing ? '' : 'cursor-pointer'} ${isSelected ? CARD_STYLES.selected : CARD_STYLES.default}`}
+                bodyStyle={{ height: '100%' }}
+                onClick={() =>
+                  !blurPricing && openModelDetail && openModelDetail(model)
+                }
+              >
+                <div className='flex flex-col h-full'>
+                  {/* 头部：图标 + 模型名称 + 操作按钮 */}
+                  <div className='flex items-start justify-between mb-3'>
+                    <div className='flex items-start space-x-3 flex-1 min-w-0'>
+                      {getModelIcon(model)}
+                      <div className='flex-1 min-w-0'>
+                        <h3 className='text-lg font-bold text-gray-900 truncate'>
+                          {renderHighlightedText(model.model_name)}
+                        </h3>
+                        <div
+                          className='flex flex-col gap-1 text-xs mt-1'
+                          style={
+                            blurPricing
+                              ? {
+                                  filter: 'blur(6px)',
+                                  userSelect: 'none',
+                                  pointerEvents: 'none',
+                                }
+                              : undefined
+                          }
+                        >
+                          {getModelPriceItemsForCard(model, priceData).map(
+                            (item) => (
+                              <div key={item.key} className='flex items-center'>
+                                <span className='w-20 flex-shrink-0'>
+                                  {item.label}
+                                </span>
+                                <span className='flex-1 font-bold text-black inline-flex items-center flex-wrap gap-1'>
+                                  {item.valueNode ? (
+                                    item.valueNode
+                                  ) : item.original ? (
+                                    <>
+                                      <span className='line-through text-gray-400 font-normal text-[10px]'>
+                                        <span
+                                          style={{
+                                            color: 'var(--semi-color-primary)',
+                                          }}
+                                        >
+                                          官方
+                                        </span>{' '}
+                                        {item.original.text}
+                                      </span>
+                                      <Tag
+                                        color='red'
+                                        size='small'
+                                        shape='circle'
+                                      >
+                                        -{item.original.discount}%
+                                      </Tag>
+                                      <span>
+                                        <span
+                                          style={{
+                                            color: 'var(--semi-color-warning)',
+                                          }}
+                                        >
+                                          我们
+                                        </span>{' '}
+                                        {item.value}
+                                        {item.suffix}
+                                      </span>
+                                    </>
+                                  ) : (
                                     <span>
-                                      <span style={{ color: 'var(--semi-color-warning)' }}>我们</span> {item.value}
+                                      {item.value}
                                       {item.suffix}
                                     </span>
-                                  </>
-                                ) : (
-                                  <span>
-                                    {item.value}
-                                    {item.suffix}
+                                  )}
+                                </span>
+                              </div>
+                            ),
+                          )}
+                          <div className='flex items-center'>
+                            <span className='w-20 flex-shrink-0'>
+                              {t('供应商')}
+                            </span>
+                            <div className='flex-1 flex items-center flex-wrap gap-1'>
+                              {supplierLogos.length === 0 ? (
+                                hasChannelList ? null : (
+                                  <span className='font-bold text-black'>
+                                    {t('官方')}
                                   </span>
-                                )}
-                              </span>
+                                )
+                              ) : (
+                                supplierLogos.map((s) => (
+                                  <div
+                                    key={s.key}
+                                    className='h-7 rounded-md flex items-center overflow-hidden'
+                                    style={{backgroundColor: 'var(--semi-color-fill-0)'}}
+                                  >
+                                    {s.logo ? (
+                                      <img
+                                        src={s.logo}
+                                        alt={s.alias || s.name || ''}
+                                        className='w-7 h-7 object-contain rounded-md'
+                                      />
+                                    ) : null}
+                                    {s.supplierType && (
+                                      <Tag
+                                        size='small'
+                                        shape='circle'
+                                        color={getSupplierTypeColor(
+                                          s.supplierType,
+                                        )}
+                                        className='mx-1'
+                                      >
+                                        {s.supplierType}
+                                      </Tag>
+                                    )}
+                                  </div>
+                                ))
+                              )}
                             </div>
-                          ),
-                        )}
-                        <div className='flex items-center'>
-                          <span className='w-20 flex-shrink-0'>
-                            {t('供应商')}
-                          </span>
-                          <div className='flex-1 flex items-center flex-wrap gap-1'>
-                            {supplierLogos.length === 0 ? (
-                              <span className='font-bold text-black'>
-                                {renderHighlightedText(supplierIds.join(', '))}
-                              </span>
-                            ) : (
-                              supplierLogos.map((s) => (
-                                <div
-                                  key={s.key}
-                                  className='h-7 rounded-md flex items-center gap-1 overflow-hidden'
-                                  style={{
-                                    backgroundColor: 'var(--semi-color-fill-0)',
-                                    paddingRight: s.supplierType ? 4 : 0,
-                                  }}
-                                >
-                                  {s.logo ? (
-                                    <img
-                                      src={s.logo}
-                                      alt={s.alias || s.name || ''}
-                                      className='w-7 h-7 object-contain rounded-md'
-                                    />
-                                  ) : (
-                                    <span
-                                      className='h-6 px-2 flex items-center text-xs font-medium'
-                                      style={{
-                                        color: 'var(--semi-color-text-1)',
-                                      }}
-                                    >
-                                      {renderHighlightedText(
-                                        s.alias || s.name || t('官方'),
-                                      )}
-                                    </span>
-                                  )}
-                                  {s.supplierType && (
-                                    <Tag
-                                      size='small'
-                                      shape='circle'
-                                      color={getSupplierTypeColor(
-                                        s.supplierType,
-                                      )}
-                                    >
-                                      {s.supplierType}
-                                    </Tag>
-                                  )}
-                                </div>
-                              ))
-                            )}
                           </div>
                         </div>
                       </div>
                     </div>
-                  </div>
 
-                  <div className='flex items-center space-x-2 ml-3'>
-                    {/* 复制按钮 */}
-                    <Button
-                      size='small'
-                      theme='outline'
-                      type='tertiary'
-                      icon={<Copy size={12} />}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        copyText(model.model_name);
-                      }}
-                    />
-
-                    {/* 选择框 */}
-                    {rowSelection && (
-                      <Checkbox
-                        checked={isSelected}
-                        onChange={(e) => {
+                    <div className='flex items-center space-x-2 ml-3'>
+                      {/* 复制按钮 */}
+                      <Button
+                        size='small'
+                        theme='outline'
+                        type='tertiary'
+                        icon={<Copy size={12} />}
+                        onClick={(e) => {
                           e.stopPropagation();
-                          handleCheckboxChange(model, e.target.checked);
+                          copyText(model.model_name);
                         }}
                       />
+
+                      {/* 选择框 */}
+                      {rowSelection && (
+                        <Checkbox
+                          checked={isSelected}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            handleCheckboxChange(model, e.target.checked);
+                          }}
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 模型描述 - 占据剩余空间 */}
+                  <div
+                    className='flex-1 mb-4'
+                    style={
+                      blurPricing
+                        ? {
+                            filter: 'blur(6px)',
+                            userSelect: 'none',
+                            pointerEvents: 'none',
+                          }
+                        : undefined
+                    }
+                  >
+                    <p
+                      className='text-xs line-clamp-2 leading-relaxed'
+                      style={{ color: 'var(--semi-color-text-2)' }}
+                    >
+                      {renderHighlightedText(getModelDescription(model))}
+                    </p>
+                  </div>
+
+                  {/* 底部区域 */}
+                  <div
+                    className='mt-auto'
+                    style={
+                      blurPricing
+                        ? {
+                            filter: 'blur(6px)',
+                            userSelect: 'none',
+                            pointerEvents: 'none',
+                          }
+                        : undefined
+                    }
+                  >
+                    {/* 标签区域 */}
+                    {renderTags(model)}
+
+                    {/* 倍率信息（可选） */}
+                    {showRatio && (
+                      <div className='pt-3'>
+                        <div className='flex items-center space-x-1 mb-2'>
+                          <span className='text-xs font-medium text-gray-700'>
+                            {t('倍率信息')}
+                          </span>
+                          <Tooltip
+                            content={t('倍率是为了方便换算不同价格的模型')}
+                          >
+                            <IconHelpCircle
+                              className='text-blue-500 cursor-pointer'
+                              size='small'
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setModalImageUrl('/ratio.png');
+                                setIsModalOpenurl(true);
+                              }}
+                            />
+                          </Tooltip>
+                        </div>
+                        <div className='grid grid-cols-3 gap-2 text-xs text-gray-600'>
+                          <div>
+                            {t('模型')}:{' '}
+                            {model.quota_type === 0
+                              ? (priceData?.inputRatio ?? model.model_ratio)
+                              : t('无')}
+                          </div>
+                          <div>
+                            {t('输出')}:{' '}
+                            {model.quota_type === 0
+                              ? parseFloat(model.completion_ratio.toFixed(2))
+                              : t('无')}
+                          </div>
+                          <div>
+                            {t('分组')}: {priceData?.usedGroupRatio ?? '-'}
+                          </div>
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>
-
-                {/* 模型描述 - 占据剩余空间 */}
-                <div className='flex-1 mb-4' style={blurPricing ? { filter: 'blur(6px)', userSelect: 'none', pointerEvents: 'none' } : undefined}>
-                  <p
-                    className='text-xs line-clamp-2 leading-relaxed'
-                    style={{ color: 'var(--semi-color-text-2)' }}
-                  >
-                    {renderHighlightedText(getModelDescription(model))}
-                  </p>
-                </div>
-
-                {/* 底部区域 */}
-                <div className='mt-auto' style={blurPricing ? { filter: 'blur(6px)', userSelect: 'none', pointerEvents: 'none' } : undefined}>
-                  {/* 标签区域 */}
-                  {renderTags(model)}
-
-                  {/* 倍率信息（可选） */}
-                  {showRatio && (
-                    <div className='pt-3'>
-                      <div className='flex items-center space-x-1 mb-2'>
-                        <span className='text-xs font-medium text-gray-700'>
-                          {t('倍率信息')}
-                        </span>
-                        <Tooltip
-                          content={t('倍率是为了方便换算不同价格的模型')}
-                        >
-                          <IconHelpCircle
-                            className='text-blue-500 cursor-pointer'
-                            size='small'
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setModalImageUrl('/ratio.png');
-                              setIsModalOpenurl(true);
-                            }}
-                          />
-                        </Tooltip>
-                      </div>
-                      <div className='grid grid-cols-3 gap-2 text-xs text-gray-600'>
-                        <div>
-                          {t('模型')}:{' '}
-                          {model.quota_type === 0
-                            ? (priceData?.inputRatio ?? model.model_ratio)
-                            : t('无')}
-                        </div>
-                        <div>
-                          {t('输出')}:{' '}
-                          {model.quota_type === 0
-                            ? parseFloat(model.completion_ratio.toFixed(2))
-                            : t('无')}
-                        </div>
-                        <div>
-                          {t('分组')}: {priceData?.usedGroupRatio ?? '-'}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </Card>
-          );
-        })}
-      </div>
-
-      {/* 分页 */}
-      {filteredModels.length > 0 && (
-        <div className='flex justify-center mt-6 py-4 border-t pricing-pagination-divider'>
-          <Pagination
-            currentPage={currentPage}
-            pageSize={pageSize}
-            total={filteredModels.length}
-            showSizeChanger={showSizeChanger}
-            pageSizeOptions={[10, 20, 50, 100]}
-            size={isMobile ? 'small' : 'default'}
-            showQuickJumper={isMobile}
-            onPageChange={(page) => setCurrentPage(page)}
-            onPageSizeChange={(size) => {
-              setPageSize(size);
-              setCurrentPage(1);
-            }}
-          />
+              </Card>
+            );
+          })}
         </div>
-      )}
-    </div>
+
+        {/* 分页 */}
+        {filteredModels.length > 0 && (
+          <div className='flex justify-center mt-6 py-4 border-t pricing-pagination-divider'>
+            <Pagination
+              currentPage={currentPage}
+              pageSize={pageSize}
+              total={filteredModels.length}
+              showSizeChanger={showSizeChanger}
+              pageSizeOptions={[10, 20, 50, 100]}
+              size={isMobile ? 'small' : 'default'}
+              showQuickJumper={isMobile}
+              onPageChange={(page) => setCurrentPage(page)}
+              onPageSizeChange={(size) => {
+                setPageSize(size);
+                setCurrentPage(1);
+              }}
+            />
+          </div>
+        )}
+      </div>
     </>
   );
 };

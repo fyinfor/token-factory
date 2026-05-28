@@ -385,6 +385,8 @@ export function getChannelIcon(channelType) {
     case 57: // Codex
     case 63: // OpenAI 图片
       return <OpenAI size={iconSize} />;
+    case 64: // 阿里云-视频
+      return <Qwen.Color size={iconSize} />;
     case 2: // Midjourney Proxy
     case 5: // Midjourney Proxy Plus
       return <Midjourney size={iconSize} />;
@@ -1287,14 +1289,36 @@ export function convertUSDToCurrency(usdAmount, digits = 2) {
   return symbol + parseFloat(convertedAmount.toFixed(digits));
 }
 
-export function renderQuota(quota, digits = 2) {
+/** 按展示金额选择小数位：常态 minDigits；若舍入为 0 但实际 >0 则增至 maxDigits。 */
+export function pickQuotaDisplayFractionDigits(
+  displayValue,
+  minDigits = 2,
+  maxDigits = 6,
+) {
+  const v = Number(displayValue);
+  if (!Number.isFinite(v) || v === 0) {
+    return minDigits;
+  }
+  if (parseFloat(v.toFixed(minDigits)) !== 0) {
+    return minDigits;
+  }
+  for (let d = minDigits + 1; d <= maxDigits; d++) {
+    if (parseFloat(v.toFixed(d)) !== 0) {
+      return d;
+    }
+  }
+  return maxDigits;
+}
+
+/** 将内部额度转为当前展示货币下的数值与符号（TOKENS 模式返回 null，由调用方走 renderNumber）。 */
+export function quotaToDisplayCurrencyParts(quota) {
   let quotaPerUnit = localStorage.getItem('quota_per_unit');
   const quotaDisplayType = localStorage.getItem('quota_display_type') || 'USD';
   quotaPerUnit = parseFloat(quotaPerUnit);
   if (quotaDisplayType === 'TOKENS') {
-    return renderNumber(quota);
+    return null;
   }
-  const resultUSD = quota / quotaPerUnit;
+  const resultUSD = Number(quota) / quotaPerUnit;
   let symbol = '$';
   let value = resultUSD;
   if (quotaDisplayType === 'CNY') {
@@ -1322,11 +1346,70 @@ export function renderQuota(quota, digits = 2) {
     value = resultUSD * rate;
     symbol = symbolCustom;
   }
+  return { symbol, value };
+}
+
+/** 与 renderQuota 单行展示一致的数值（用于多行合计，避免先加总额再舍入与明细不一致）。 */
+function quotaToRoundedDisplayValue(quota, digits = 2) {
+  const q = Number(quota || 0);
+  const parts = quotaToDisplayCurrencyParts(q);
+  if (parts === null) {
+    return q;
+  }
+  const fixedResult = parseFloat(parts.value.toFixed(digits));
+  if (fixedResult === 0 && q > 0 && parts.value > 0) {
+    return Math.pow(10, -digits);
+  }
+  return fixedResult;
+}
+
+export function renderQuota(quota, digits = 2) {
+  const parts = quotaToDisplayCurrencyParts(quota);
+  if (parts === null) {
+    return renderNumber(quota);
+  }
+  const { symbol, value } = parts;
   const fixedResult = parseFloat(value.toFixed(digits));
   if (fixedResult === 0 && quota > 0 && value > 0) {
     const minValue = Math.pow(10, -digits);
     return symbol + trimFixedDecimalDisplay(minValue, digits);
   }
+  return symbol + trimFixedDecimalDisplay(fixedResult, digits);
+}
+
+/**
+ * 多笔额度按与 renderQuota 相同的行级舍入后相加再展示（明细合计与各行花费一致）。
+ */
+export function renderQuotaSum(quotas, digits = 2) {
+  if (!Array.isArray(quotas) || quotas.length === 0) {
+    return renderQuota(0, digits);
+  }
+  const firstParts = quotaToDisplayCurrencyParts(Number(quotas[0] || 0));
+  if (firstParts === null) {
+    const total = quotas.reduce((acc, q) => acc + Number(q || 0), 0);
+    return renderQuota(total, digits);
+  }
+  let sum = 0;
+  for (const quota of quotas) {
+    sum += quotaToRoundedDisplayValue(quota, digits);
+  }
+  const totalFixed = parseFloat(sum.toFixed(digits));
+  return (
+    firstParts.symbol + trimFixedDecimalDisplay(totalFixed, digits)
+  );
+}
+
+/**
+ * 额度展示：默认保留 minDigits 位小数；极低分成在舍入为 0 时自动增至 maxDigits 位（不伪造最小展示值）。
+ */
+export function renderQuotaFlexible(quota, minDigits = 2, maxDigits = 6) {
+  const parts = quotaToDisplayCurrencyParts(quota);
+  if (parts === null) {
+    return renderNumber(quota);
+  }
+  const { symbol, value } = parts;
+  const digits = pickQuotaDisplayFractionDigits(value, minDigits, maxDigits);
+  const fixedResult = parseFloat(value.toFixed(digits));
   return symbol + trimFixedDecimalDisplay(fixedResult, digits);
 }
 

@@ -226,6 +226,35 @@ func GetDistributorInviteeCommissionLogs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": pageInfo})
 }
 
+// GetDistributorInviteeProfitShareLogs 分销商查看某一被邀请用户的利润分成明细（按次结算）。
+func GetDistributorInviteeProfitShareLogs(c *gin.Context) {
+	userId := c.GetInt("id")
+	u, err := model.GetUserById(userId, false)
+	if err != nil || !model.UserIsDistributor(u) {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "仅分销商可查看"})
+		return
+	}
+	inviteeId, err := strconv.Atoi(c.Param("invitee_id"))
+	if err != nil || inviteeId <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "参数错误"})
+		return
+	}
+	invitee, err := model.GetUserById(inviteeId, false)
+	if err != nil || invitee.InviterId != userId {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无权查看或用户不存在"})
+		return
+	}
+	pageInfo := common.GetPageQuery(c)
+	items, total, err := model.ListAffInviteProfitShareLogs(userId, inviteeId, pageInfo)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(items)
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": pageInfo})
+}
+
 type rejectApplicationRequest struct {
 	Reason string `json:"reason"`
 }
@@ -455,18 +484,55 @@ func GetDistributorInviteesAdmin(c *gin.Context) {
 		return
 	}
 	pageInfo := common.GetPageQuery(c)
-	items, total, err := model.ListAffInvitees(id, pageInfo)
+	keyword := strings.TrimSpace(c.Query("keyword"))
+	if len(keyword) > 120 {
+		keyword = keyword[:120]
+	}
+	items, total, err := model.ListAffInvitees(id, keyword, pageInfo)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(items)
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    pageInfo,
-	})
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": pageInfo})
+}
+
+// GetDistributorInviteeProfitSharesAdmin 管理端查看某分销商下某一被邀请用户的利润分成消费流水（分页）。
+func GetDistributorInviteeProfitSharesAdmin(c *gin.Context) {
+	distributorId, err := strconv.Atoi(c.Param("id"))
+	if err != nil || distributorId <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "invalid distributor id"})
+		return
+	}
+	inviteeId, err := strconv.Atoi(c.Param("invitee_id"))
+	if err != nil || inviteeId <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "invalid invitee id"})
+		return
+	}
+	if !common.IsDistributorProfitShareMode() {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "当前站点未启用利润分成模式"})
+		return
+	}
+	dist, err := model.GetUserById(distributorId, false)
+	if err != nil || !model.UserIsDistributor(dist) {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "用户不是分销商"})
+		return
+	}
+	invitee, err := model.GetUserById(inviteeId, false)
+	if err != nil || invitee == nil || invitee.InviterId != distributorId {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "该用户不是此分销商邀请的下级"})
+		return
+	}
+	pageInfo := common.GetPageQuery(c)
+	items, total, err := model.ListAffInviteProfitShareLogs(distributorId, inviteeId, pageInfo)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(items)
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": pageInfo})
 }
 
 // PostDistributorWithdrawal 提交线下提现申请（暂扣 aff_quota）

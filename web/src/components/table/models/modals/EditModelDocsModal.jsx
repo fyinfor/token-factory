@@ -58,6 +58,13 @@ const emptyParam = () => ({
   children: [],
 });
 
+const emptyStringParam = (required = false) => ({
+  ...emptyParam(),
+  type: 'string',
+  required,
+  children: [],
+});
+
 const emptyApi = () => ({
   id: createId(),
   description: '',
@@ -66,6 +73,7 @@ const emptyApi = () => ({
   detail: '',
   body_params: [],
   path_params: [],
+  query_params: [],
   response_params: [],
 });
 
@@ -92,6 +100,7 @@ const ensureApiDocIds = (docs = []) =>
     id: api.id || createId(),
     body_params: ensureParamIds(api.body_params),
     path_params: ensureParamIds(api.path_params),
+    query_params: ensureParamIds(api.query_params),
     response_params: ensureParamIds(api.response_params),
   }));
 
@@ -171,9 +180,14 @@ const ParamRow = ({
   onRemove,
   onAddChild,
   showRequired,
+  fixedString = false,
+  forceRequired = false,
+  hideRequired = false,
+  allowNested = true,
   t,
 }) => {
-  const canNest = param.type === 'object' || param.type === 'array';
+  const canNest =
+    allowNested && (param.type === 'object' || param.type === 'array');
   return (
     <div
       className='rounded-lg border p-3'
@@ -192,31 +206,43 @@ const ParamRow = ({
             onChange={(name) => onPatch(param.id, { name })}
           />
         </Col>
-        <Col span={5}>
-          <Select
-            value={param.type || 'string'}
-            style={{ width: '100%' }}
-            optionList={[
-              'string',
-              'number',
-              'integer',
-              'boolean',
-              'object',
-              'array',
-              'null',
-            ].map((item) => ({ label: item, value: item }))}
-            onChange={(type) =>
-              onPatch(param.id, (current) => ({
-                type,
-                children:
-                  type === 'object' || type === 'array'
-                    ? current.children || []
-                    : [],
-              }))
-            }
-          />
-        </Col>
-        <Col span={showRequired ? 7 : 10}>
+        {fixedString ? null : (
+          <Col span={5}>
+            <Select
+              value={param.type || 'string'}
+              style={{ width: '100%' }}
+              optionList={[
+                'string',
+                'number',
+                'integer',
+                'boolean',
+                'object',
+                'array',
+                'null',
+              ].map((item) => ({ label: item, value: item }))}
+              onChange={(type) =>
+                onPatch(param.id, (current) => ({
+                  type,
+                  children:
+                    type === 'object' || type === 'array'
+                      ? current.children || []
+                      : [],
+                }))
+              }
+            />
+          </Col>
+        )}
+        <Col
+          span={
+            fixedString
+              ? showRequired && !hideRequired
+                ? 12
+                : 15
+              : showRequired && !hideRequired
+                ? 7
+                : 10
+          }
+        >
           <Input
             value={param.example}
             placeholder={canNest ? t('容器本身可留空') : t('示例值')}
@@ -235,7 +261,7 @@ const ParamRow = ({
             onChange={(example) => onPatch(param.id, { example })}
           />
         </Col>
-        {showRequired ? (
+        {showRequired && !hideRequired && !forceRequired ? (
           <Col span={3}>
             <Select
               value={param.required ? 1 : 0}
@@ -248,6 +274,12 @@ const ParamRow = ({
                 onPatch(param.id, { required: required === 1 })
               }
             />
+          </Col>
+        ) : showRequired && !hideRequired ? (
+          <Col span={3}>
+            <Tag color='red' size='large'>
+              {t('必填')}
+            </Tag>
           </Col>
         ) : null}
         <Col span={2}>
@@ -292,6 +324,10 @@ const ParamRow = ({
                 onRemove={onRemove}
                 onAddChild={onAddChild}
                 showRequired={showRequired}
+                fixedString={fixedString}
+                forceRequired={forceRequired}
+                hideRequired={hideRequired}
+                allowNested={allowNested}
                 t={t}
               />
             ))
@@ -316,6 +352,10 @@ const ParamEditor = ({
   value = [],
   onChange,
   showRequired = true,
+  fixedString = false,
+  forceRequired = false,
+  hideRequired = false,
+  allowNested = true,
   t,
 }) => {
   const params = Array.isArray(value) ? value : [];
@@ -340,7 +380,12 @@ const ParamEditor = ({
         <Button
           size='small'
           icon={<IconPlus />}
-          onClick={() => onChange([...params, emptyParam()])}
+          onClick={() =>
+            onChange([
+              ...params,
+              fixedString ? emptyStringParam(forceRequired) : emptyParam(),
+            ])
+          }
         >
           {t('添加参数')}
         </Button>
@@ -362,6 +407,10 @@ const ParamEditor = ({
               onRemove={removeParam}
               onAddChild={addChildParam}
               showRequired={showRequired}
+              fixedString={fixedString}
+              forceRequired={forceRequired}
+              hideRequired={hideRequired}
+              allowNested={allowNested}
               t={t}
             />
           ))}
@@ -473,7 +522,7 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
       const payload = {
         id: modelDetail.id,
         doc_introduction: docIntroduction || '',
-        api_docs: apis.length > 0 ? JSON.stringify(apis, null, 2) : '',
+        api_docs: apis.length > 0 ? JSON.stringify(apis) : '',
       };
       const res = await API.put('/api/models/?docs_only=true', payload);
       const { success, message } = res.data || {};
@@ -603,6 +652,20 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
                       <Input
                         value={api.path}
                         placeholder={t('接口路径，如 /v1/chat/completions')}
+                        suffix={
+                          <Tooltip
+                            content={
+                              <div style={{ whiteSpace: 'pre-wrap' }}>
+                                {t(
+                                  'GET 请求路径可使用 Path 参数占位符，例如：\n/v1/video/generations/{task_id}\n在 Path 参数中添加 task_id 并设置示例值后，首页请求示例会自动替换。',
+                                )}
+                              </div>
+                            }
+                            showArrow
+                          >
+                            <IconHelpCircle className='mr-2' style={{ color: 'var(--semi-color-text-2)' }} />
+                          </Tooltip>
+                        }
                         onChange={(path) => patchApi(api.id, { path })}
                       />
                     </Col>
@@ -637,14 +700,30 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
                           t={t}
                         />
                       ) : (
-                        <ParamEditor
-                          title={t('Path 参数')}
-                          value={api.path_params}
-                          onChange={(path_params) =>
-                            patchApi(api.id, { path_params })
-                          }
-                          t={t}
-                        />
+                        <>
+                          <ParamEditor
+                            title={t('Path 参数')}
+                            value={api.path_params}
+                            onChange={(path_params) =>
+                              patchApi(api.id, { path_params })
+                            }
+                            fixedString
+                            forceRequired
+                            hideRequired
+                            allowNested={false}
+                            t={t}
+                          />
+                          <ParamEditor
+                            title={t('Query 参数')}
+                            value={api.query_params}
+                            onChange={(query_params) =>
+                              patchApi(api.id, { query_params })
+                            }
+                            fixedString
+                            allowNested={false}
+                            t={t}
+                          />
+                        </>
                       )}
                       <ParamEditor
                         title={t('返回数据结构')}

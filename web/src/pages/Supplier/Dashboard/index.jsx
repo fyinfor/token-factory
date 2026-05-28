@@ -4,6 +4,7 @@ import {
   Card,
   DatePicker,
   Empty,
+  Modal,
   Space,
   Spin,
   Table,
@@ -30,6 +31,7 @@ import {
   isSupplier,
   showError,
   renderQuota,
+  renderQuotaSum,
   renderQuotaWithPrompt,
 } from '../../../helpers';
 import dayjs from 'dayjs';
@@ -39,6 +41,42 @@ const { Title, Text } = Typography;
 
 /** 允许的最大统计区间（秒），防止单次查询过大。 */
 const SUPPLIER_DASHBOARD_MAX_RANGE_SEC = 366 * 24 * 3600;
+
+/**
+ * 从模型统计（含 users 明细）收集额度列表，花费展示与详情弹窗按用户行级舍入后合计一致。
+ */
+const collectDisplayQuotasFromModelStats = (modelStats) => {
+  const quotas = [];
+  for (const row of modelStats || []) {
+    if (Array.isArray(row.users) && row.users.length > 0) {
+      for (const user of row.users) {
+        quotas.push(user.quota ?? 0);
+      }
+    } else {
+      quotas.push(row.quota ?? 0);
+    }
+  }
+  return quotas;
+};
+
+/** 模型行花费：有 users 时按用户行舍入合计，否则按模型总额展示。 */
+const renderModelUsageRowQuota = (row) => {
+  if (Array.isArray(row?.users) && row.users.length > 0) {
+    return renderQuotaSum(row.users.map((user) => user.quota ?? 0));
+  }
+  return renderQuota(row?.quota ?? 0);
+};
+
+const summarizeSupplierUserRows = (users) =>
+  (users || []).reduce(
+    (acc, user) => ({
+      total_requests: acc.total_requests + (user.requests || 0),
+      total_tokens:
+        acc.total_tokens + (user.tokens ?? user.token_used ?? 0),
+      total_quota: acc.total_quota + (user.quota || 0),
+    }),
+    { total_requests: 0, total_tokens: 0, total_quota: 0 },
+  );
 const ICON_BG_COLORS = {
   blue: '#3b82f6',
   emerald: '#10b981',
@@ -90,6 +128,11 @@ export default function SupplierDashboardPage() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [timeRange, setTimeRange] = useState(() => getDefaultRange());
+  const [detailVisible, setDetailVisible] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailModelName, setDetailModelName] = useState('');
+  const [detailUsers, setDetailUsers] = useState([]);
+  const [detailSummary, setDetailSummary] = useState(null);
 
   /** DatePicker 受控展示用的起止时间（由 timeRange 派生）。 */
   const rangePickerValue = useMemo(
@@ -160,12 +203,112 @@ export default function SupplierDashboardPage() {
     setTimeRange(getDefaultRange());
   };
 
+  /**
+   * openModelUsageDetail 打开指定模型的按用户消耗明细弹窗。
+   * @param {string} modelName 模型名
+   */
+  const openModelUsageDetail = useCallback(
+    async (modelName) => {
+      if (!modelName) {
+        return;
+      }
+      setDetailModelName(modelName);
+      setDetailVisible(true);
+      setDetailUsers([]);
+      setDetailSummary(null);
+
+      const cachedRow = (data?.model_usage_stats || []).find(
+        (row) => row.model_name === modelName,
+      );
+      if (cachedRow?.users?.length) {
+        setDetailUsers(cachedRow.users);
+        setDetailSummary(summarizeSupplierUserRows(cachedRow.users));
+        return;
+      }
+
+      setDetailLoading(true);
+      try {
+        const supplierQuery = selectedSupplierId
+          ? `&supplier_id=${encodeURIComponent(selectedSupplierId)}`
+          : '';
+        const res = await API.get(
+          `/api/user/supplier-dashboard/model-users?model_name=${encodeURIComponent(modelName)}&start_timestamp=${timeRange.startTimestamp}&end_timestamp=${timeRange.endTimestamp}${supplierQuery}`,
+        );
+        if (res?.data?.success) {
+          const payload = res.data.data || {};
+          setDetailUsers(payload.users || []);
+          setDetailSummary(payload.summary || null);
+        } else {
+          showError(res?.data?.message || t('获取供应商模型用户明细失败'));
+          setDetailVisible(false);
+        }
+      } catch (error) {
+        showError(
+          error?.response?.data?.message || t('获取供应商模型用户明细失败'),
+        );
+        setDetailVisible(false);
+      } finally {
+        setDetailLoading(false);
+      }
+    },
+    [
+      data?.model_usage_stats,
+      selectedSupplierId,
+      timeRange.startTimestamp,
+      timeRange.endTimestamp,
+      t,
+    ],
+  );
+
+  const dashboardDisplayQuotas = useMemo(
+    () => collectDisplayQuotasFromModelStats(data?.model_usage_stats),
+    [data?.model_usage_stats],
+  );
+
+  const dashboardSpendDisplay = useMemo(
+    () => renderQuotaSum(dashboardDisplayQuotas),
+    [dashboardDisplayQuotas],
+  );
+
   const usageColumns = useMemo(
     () => [
       { title: t('模型'), dataIndex: 'model_name' },
       { title: t('请求次数'), dataIndex: 'requests' },
       { title: t('Token 消耗'), dataIndex: 'tokens' },
       { title: t('额度消耗'), dataIndex: 'quota' },
+      {
+        title: t('花费'),
+        dataIndex: 'quota',
+        render: (_, row) => renderModelUsageRowQuota(row),
+      },
+      {
+        title: t('操作'),
+        dataIndex: 'model_name',
+        width: 100,
+        render: (modelName) => (
+          <Button
+            theme='borderless'
+            type='primary'
+            size='small'
+            onClick={() => openModelUsageDetail(modelName)}
+          >
+            {t('查看详情')}
+          </Button>
+        ),
+      },
+    ],
+    [t, openModelUsageDetail],
+  );
+
+  const modelUserDetailColumns = useMemo(
+    () => [
+      {
+        title: t('用户'),
+        dataIndex: 'username',
+        render: (name, row) => name || `#${row.user_id}`,
+      },
+      { title: t('请求次数'), dataIndex: 'requests' },
+      { title: t('Token 消耗'), dataIndex: 'tokens' },
       {
         title: t('花费'),
         dataIndex: 'quota',
@@ -223,7 +366,7 @@ export default function SupplierDashboardPage() {
           },
           {
             label: t('花费'),
-            value: renderQuota(data?.resource_consumption?.total_quota || 0),
+            value: dashboardSpendDisplay,
             icon: <Coins size={14} />,
             iconColor: ICON_BG_COLORS.orange,
           },
@@ -272,7 +415,7 @@ export default function SupplierDashboardPage() {
         ],
       },
     ],
-    [data, t],
+    [data, dashboardSpendDisplay, t],
   );
 
   const canAccess = isSupplier() || isAdmin();
@@ -449,6 +592,44 @@ export default function SupplierDashboardPage() {
             empty={t('暂无统计数据')}
           />
         </Card>
+
+        <Modal
+          title={`${t('模型')}：${detailModelName}`}
+          visible={detailVisible}
+          onCancel={() => setDetailVisible(false)}
+          footer={null}
+          width={720}
+          bodyStyle={{ paddingTop: 8 }}
+        >
+          <Spin spinning={detailLoading}>
+            <Text type='tertiary' className='block mb-3'>
+              {t('供应商模型用户消耗明细说明')}
+            </Text>
+            {detailSummary ? (
+              <div className='flex flex-wrap gap-4 mb-3'>
+                <Text>
+                  {t('请求次数')}: {detailSummary.total_requests ?? 0}
+                </Text>
+                <Text>
+                  {t('Token 消耗')}: {detailSummary.total_tokens ?? 0}
+                </Text>
+                <Text>
+                  {t('花费')}:{' '}
+                  {renderQuotaSum(
+                    (detailUsers || []).map((row) => row.quota ?? 0),
+                  )}
+                </Text>
+              </div>
+            ) : null}
+            <Table
+              rowKey={(row) => `${row.user_id}-${row.username}`}
+              columns={modelUserDetailColumns}
+              dataSource={detailUsers}
+              pagination={{ pageSize: 10 }}
+              empty={t('暂无统计数据')}
+            />
+          </Spin>
+        </Modal>
       </Spin>
     </div>
   );

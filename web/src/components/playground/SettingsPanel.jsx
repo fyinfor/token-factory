@@ -31,7 +31,10 @@ import {
 import { Sparkles, Users, ToggleLeft, X, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { formatVideoResolutionDisplayLabel, renderGroupOption, selectFilter } from '../../helpers';
-import { PLAYGROUND_IMAGE_SIZE_OPTIONS } from '../../constants/playground.constants';
+import {
+  PLAYGROUND_IMAGE_SIZE_OPTIONS,
+  PLAYGROUND_VIDEO_DURATION_OPTIONS,
+} from '../../constants/playground.constants';
 import ParameterControl from './ParameterControl';
 
 /**
@@ -41,6 +44,7 @@ import ParameterControl from './ParameterControl';
 const renderPlaygroundGroupOption = (item) =>
   renderGroupOption({ ...item, ratio: undefined });
 import ImageUrlInput from './ImageUrlInput';
+import VideoUrlInput from './VideoUrlInput';
 import ConfigManager from './ConfigManager';
 import CustomRequestEditor from './CustomRequestEditor';
 
@@ -79,6 +83,12 @@ const SettingsPanel = ({
   const isImageMode = displayMode === 'image';
   const isVideoMode = displayMode === 'video';
   const mediaModeEnabled = isImageMode || isVideoMode;
+  const videoMediaHint = isVideoMode
+    ? t(
+        '操练场视频素材提示',
+        '图片地址：第 1 张为首帧，2 张为首尾帧，更多张时最后一张为尾帧。视频地址：填写则作为源视频参与生成。未填写的字段不会加入请求。',
+      )
+    : '';
   const applyVideoResolutionPreset = (preset) => {
     const [w, h] = String(preset || '1280x720')
       .split('x')
@@ -310,7 +320,7 @@ const SettingsPanel = ({
 
         </div>
 
-        {/* 素材URL输入：图片模式仅图片；视频模式支持图片/视频 */}
+        {/* 素材 URL：视频模式分图片地址 / 视频地址 */}
         {mediaModeEnabled && (
           <div className={customRequestMode ? 'opacity-50' : ''}>
             <ImageUrlInput
@@ -321,9 +331,19 @@ const SettingsPanel = ({
               allowToggle={false}
               disabled={customRequestMode}
             />
-            <Typography.Text className='text-xs text-gray-500 mt-1 block'>
+            {isVideoMode && (
+              <VideoUrlInput
+                videoUrls={inputs.videoUrls || ['']}
+                videoEnabled={true}
+                onVideoUrlsChange={(urls) => onInputChange('videoUrls', urls)}
+                onVideoEnabledChange={() => {}}
+                allowToggle={false}
+                disabled={customRequestMode}
+              />
+            )}
+            <Typography.Text className='text-xs mt-1 block text-gray-500'>
               {isVideoMode
-                ? t('视频模式支持图片或视频 URL 作为素材')
+                ? videoMediaHint
                 : t('图片模式支持图片 URL 作为素材')}
             </Typography.Text>
           </div>
@@ -406,17 +426,14 @@ const SettingsPanel = ({
                 {t('视频时长（秒）')}
               </Typography.Text>
               <Select
-                optionList={[
-                  { label: '5s', value: 5 },
-                  { label: '10s', value: 10 },
-                  { label: '15s', value: 15 },
-                  { label: '20s', value: 20 },
-                  { label: '30s', value: 30 },
-                  { label: '45s', value: 45 },
-                  { label: '60s', value: 60 },
-                ]}
-                value={inputs.video_duration}
-                onChange={(value) => onInputChange('video_duration', Number(value) || 5)}
+                optionList={PLAYGROUND_VIDEO_DURATION_OPTIONS}
+                value={Math.max(
+                  3,
+                  Math.min(30, Number(inputs.video_duration) || 5),
+                )}
+                onChange={(value) =>
+                  onInputChange('video_duration', Number(value) || 5)
+                }
                 disabled={customRequestMode}
                 style={{ width: '100%' }}
               />

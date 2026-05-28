@@ -35,6 +35,7 @@ import {
   buildImageMessageContentPatch,
   extractImageSources,
 } from '../../helpers/playgroundImageUtils';
+import { formatVideoTaskError } from '../../helpers/playgroundVideoUtils';
 
 export const useApiRequest = (
   setMessage,
@@ -282,17 +283,18 @@ export const useApiRequest = (
           return;
         }
         if (['failed', 'error', 'cancelled'].includes(status)) {
-          updateMessage(
-            {
-              content: `视频生成失败（status=${status}）。\n\n${JSON.stringify(data, null, 2)}`,
-              status: MESSAGE_STATUS.ERROR,
-              videoTask: {
-                taskId,
-                status,
-                progress,
-              },
+          const errDetail = formatVideoTaskError(data);
+          updateMessage({
+            content: errDetail
+              ? `视频生成失败：${errDetail}`
+              : `视频生成失败（status=${status}）。\n\n${JSON.stringify(data, null, 2)}`,
+            status: MESSAGE_STATUS.ERROR,
+            videoTask: {
+              taskId,
+              status,
+              progress,
             },
-          );
+          });
           return;
         }
       }

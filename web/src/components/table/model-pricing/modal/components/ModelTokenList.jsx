@@ -25,27 +25,52 @@ import {
   Tag,
   Toast,
   Typography,
+  Input,
 } from '@douyinfe/semi-ui';
-import { IconChevronDown, IconChevronUp, IconKey } from '@douyinfe/semi-icons';
+import {
+  IconChevronDown,
+  IconChevronUp,
+  IconKey,
+  IconCopy,
+  IconEyeClosed,
+  IconEyeOpened,
+} from '@douyinfe/semi-icons';
 import { API, copy } from '../../../../../helpers';
-import {
-  encodeChannelConnectionString,
-  fetchTokenKey as fetchTokenKeyById,
-  getServerAddress,
-} from '../../../../../helpers/token';
-import {
-  renderQuotaUsage,
-  renderTokenKey,
-} from '../../../tokens/TokensColumnDefs';
+import { fetchTokenKey as fetchTokenKeyById } from '../../../../../helpers/token';
+import { renderQuotaUsage } from '../../../tokens/TokensColumnDefs';
 import { useNavigate } from 'react-router-dom';
 
 const { Text } = Typography;
+
+const StepTitle = ({ label, title, desc }) => (
+  <div className='flex items-start gap-3'>
+    <div
+      className='flex items-center justify-center gap-1.5 shrink-0 rounded-full font-semibold text-xs px-3'
+      style={{
+        height: 30,
+        width: 84,
+        color: 'var(--semi-color-bg-0)',
+        backgroundColor: 'var(--semi-color-primary)',
+        boxShadow: '0 6px 14px rgba(var(--semi-blue-5), 0.24)',
+      }}
+    >
+      <IconKey size={14} />
+      {label}
+    </div>
+    <div className='min-w-0'>
+      <div className='flex items-center gap-1'>
+        <Text className='text-lg font-medium'>{title}</Text>
+      </div>
+      <div className='text-xs text-gray-600 mt-0.5'>{desc}</div>
+    </div>
+  </div>
+);
 
 /** 令牌数量达到该阈值时，列表支持折叠 */
 const TOKEN_LIST_COLLAPSE_THRESHOLD = 2;
 
 /** 模型详情侧栏「我的令牌」列表，2 个及以上时可折叠 */
-const ModelTokenList = ({ visible, t }) => {
+const ModelTokenList = ({ visible, t, stepLabel, title, description }) => {
   const [tokens, setTokens] = useState([]);
   const [tokenCount, setTokenCount] = useState(0);
   const [showKeys, setShowKeys] = useState({});
@@ -92,11 +117,7 @@ const ModelTokenList = ({ visible, t }) => {
 
   /** 令牌加载完成后，按数量决定默认展开状态 */
   useEffect(() => {
-    if (tokens.length < TOKEN_LIST_COLLAPSE_THRESHOLD) {
-      setListExpanded(true);
-    } else {
-      setListExpanded(false);
-    }
+    setListExpanded(true);
   }, [tokens.length]);
 
   /** 跳转到令牌管理页 */
@@ -169,16 +190,14 @@ const ModelTokenList = ({ visible, t }) => {
     }
 
     try {
-      const fullKey = await fetchTokenKey(record);
-      if (fullKey) {
-        setShowKeys((prev) => ({ ...prev, [tokenId]: true }));
-      }
+      await fetchTokenKey(record);
+      setShowKeys((prev) => ({ ...prev, [tokenId]: true }));
     } catch (e) {
       Toast.error({ content: e?.message || t('获取令牌密钥失败') });
     }
   };
 
-  /** 复制令牌密钥 */
+  /** 复制 API Key */
   const copyTokenKey = async (record) => {
     try {
       const fullKey = await fetchTokenKey(record);
@@ -188,19 +207,6 @@ const ModelTokenList = ({ visible, t }) => {
     }
   };
 
-  /** 复制令牌连接串 */
-  const copyTokenConnectionString = async (record) => {
-    try {
-      const fullKey = await fetchTokenKey(record);
-      const connStr = encodeChannelConnectionString(
-        `sk-${fullKey}`,
-        getServerAddress(),
-      );
-      await copyText(connStr);
-    } catch (e) {
-      Toast.error({ content: e?.message || t('获取令牌密钥失败') });
-    }
-  };
   /** 渲染令牌数量摘要文案 */
   const renderTokenCountLabel = () => {
     const count = tokenCount > tokens.length ? tokenCount : tokens.length;
@@ -211,45 +217,77 @@ const ModelTokenList = ({ visible, t }) => {
   const renderTokenRows = () => (
     <div className='space-y-2'>
       {tokens.map((token) => (
-            <div
-              key={token.id}
-              className='flex items-center gap-3 rounded-lg px-3 py-2 overflow-hidden'
-              style={{ backgroundColor: 'var(--semi-color-fill-0)' }}
-            >
-              <div className='min-w-[100px] max-w-[140px] truncate'>
-                <Text strong ellipsis={{ showTooltip: true }}>
-                  {token.name || `${t('令牌')} #${token.id}`}
-                </Text>
-              </div>
-              <Tag
-                size='small'
-                color={token.status === 1 ? 'green' : 'grey'}
-                shape='circle'
-                className='shrink-0'
-              >
-                {token.status === 1 ? t('启用') : t('禁用')}
-              </Tag>
-              <div className='shrink-0'>
-                {renderTokenKey(
-                  token.key,
-                  token,
-                  showKeys,
-                  resolvedTokenKeys,
-                  loadingTokenKeys,
-                  toggleTokenVisibility,
-                  copyTokenKey,
-                  copyTokenConnectionString,
-                  t,
-                )}
-              </div>
-              <div className='shrink-0 ml-auto'>
-                {renderQuotaUsage(token.remain_quota, token, t)}
-              </div>
-            </div>
-          ))}
+        <div
+          key={token.id}
+          className='flex items-center gap-3 rounded-lg px-3 py-2 overflow-hidden'
+          style={{ backgroundColor: 'var(--semi-color-fill-0)' }}
+        >
+          {(() => {
+            const tokenId = token.id;
+            const revealed = !!showKeys[tokenId];
+            const fullKey = resolvedTokenKeys[tokenId]
+              ? `sk-${resolvedTokenKeys[tokenId]}`
+              : '';
+            return (
+              <>
+                <div className='min-w-[100px] max-w-[140px] truncate'>
+                  <Text strong ellipsis={{ showTooltip: true }}>
+                    {token.name || `${t('令牌')} #${token.id}`}
+                  </Text>
+                </div>
+                <Tag
+                  size='small'
+                  color={token.status === 1 ? 'green' : 'grey'}
+                  shape='circle'
+                  className='shrink-0'
+                >
+                  {token.status === 1 ? t('启用') : t('禁用')}
+                </Tag>
+                <div className='flex items-center gap-2 min-w-[220px] shrink-0'>
+                  <Input
+                    readOnly
+                    size='small'
+                    value={revealed && fullKey ? fullKey : 'sk-********'}
+                    suffix={
+                      <Button
+                        theme='borderless'
+                        size='small'
+                        type='tertiary'
+                        icon={revealed ? <IconEyeClosed /> : <IconEyeOpened />}
+                        loading={!!loadingTokenKeys[token.id]}
+                        aria-label={t('查看API Key')}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleTokenVisibility(token);
+                        }}
+                      />
+                    }
+                  />
+                  <Button
+                    size='small'
+                    type='primary'
+                    theme='light'
+                    icon={<IconCopy />}
+                    loading={!!loadingTokenKeys[token.id]}
+                    aria-label={t('复制API Key')}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      copyTokenKey(token);
+                    }}
+                  >
+                    {t('复制')}
+                  </Button>
+                </div>
+                <div className='shrink-0 ml-auto'>
+                  {renderQuotaUsage(token.remain_quota, token, t)}
+                </div>
+              </>
+            );
+          })()}
+        </div>
+      ))}
     </div>
   );
-
 
   if (!visible) {
     return null;
@@ -270,12 +308,37 @@ const ModelTokenList = ({ visible, t }) => {
             }
           }}
         >
-          <Avatar size='small' color='teal' className='mr-2 shadow-md'>
-            <IconKey size={16} />
-          </Avatar>
-          <div>
-            <div className='flex items-center gap-1'>
-              <Text className='text-lg font-medium'>{t('我的令牌')}</Text>
+          {stepLabel ? (
+            <StepTitle
+              label={stepLabel}
+              title={title || t('复制API Key')}
+              desc={
+                canCollapse && !listExpanded
+                  ? renderTokenCountLabel()
+                  : description || t('复制可用于调用上述 API 端点的 API Key')
+              }
+            />
+          ) : (
+            <>
+              <Avatar size='small' color='teal' className='mr-2 shadow-md'>
+                <IconKey size={16} />
+              </Avatar>
+              <div>
+                <div className='flex items-center gap-1'>
+                  <Text className='text-lg font-medium'>
+                    {t('复制API Key')}
+                  </Text>
+                </div>
+                <div className='text-xs text-gray-600'>
+                  {canCollapse && !listExpanded
+                    ? renderTokenCountLabel()
+                    : t('复制可用于调用上述 API 端点的 API Key')}
+                </div>
+              </div>
+            </>
+          )}
+          {stepLabel && canCollapse ? (
+            <span className='ml-1'>
               {canCollapse ? (
                 listExpanded ? (
                   <IconChevronUp size='small' className='text-gray-500' />
@@ -283,13 +346,8 @@ const ModelTokenList = ({ visible, t }) => {
                   <IconChevronDown size='small' className='text-gray-500' />
                 )
               ) : null}
-            </div>
-            <div className='text-xs text-gray-600'>
-              {canCollapse && !listExpanded
-                ? renderTokenCountLabel()
-                : t('可用于调用上述 API 端点的令牌')}
-            </div>
-          </div>
+            </span>
+          ) : null}
         </div>
         <Button
           size='small'
