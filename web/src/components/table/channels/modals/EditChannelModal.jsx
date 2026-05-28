@@ -197,6 +197,10 @@ function type2secretPrompt(type) {
       return t(
         '批量模式下每行一条：SubAppId|SecretId|SecretKey，可选第四段 Region',
       );
+    case 63:
+      return '请输入 OpenAI API Key（用于调用 /v1/images/generations 接口）';
+    case 64:
+      return '请输入阿里云 DashScope API Key（用于调用 video-synthesis 接口）';
     default:
       return '请输入渠道对应的鉴权密钥';
   }
@@ -749,6 +753,13 @@ const EditChannelModal = (props) => {
               'https://dashscope.aliyuncs.com/api',
             );
           }
+          break;
+        case 64:
+          localModels = getChannelModels(value);
+          setInputs((prevInputs) => ({
+            ...prevInputs,
+            base_url: 'https://api.openai.com',
+          }));
           break;
         default:
           localModels = getChannelModels(value);
@@ -4007,7 +4018,7 @@ const EditChannelModal = (props) => {
                         />
                       )}
 
-                      {inputs.type === 1 && (
+                      {(inputs.type === 1 || inputs.type === 63) && (
                         <Form.Input
                           field='openai_organization'
                           label={t('组织')}

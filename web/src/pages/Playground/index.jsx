@@ -44,6 +44,7 @@ import { useDataLoader } from '../../hooks/playground/useDataLoader';
 import {
   MESSAGE_ROLES,
   ERROR_MESSAGES,
+  getDefaultMessages,
 } from '../../constants/playground.constants';
 import {
   getLogo,
@@ -126,7 +127,6 @@ const Playground = () => {
     handleInputChange,
     handleParameterToggle,
     debouncedSaveConfig,
-    saveMessagesImmediately,
     handleConfigImport,
     handleConfigReset,
     setShowSettings,
@@ -143,6 +143,52 @@ const Playground = () => {
     setCustomRequestMode,
     setCustomRequestBody,
   } = state;
+
+  const persistModeMessages = useCallback(() => {
+    try {
+      localStorage.setItem(
+        getModeStorageKey(),
+        JSON.stringify(modeMessagesRef.current),
+      );
+    } catch (err) {
+      console.warn('保存分模式消息失败:', err);
+    }
+  }, [getModeStorageKey]);
+
+  const saveMessagesForMode = useCallback(
+    (messagesToSave, mode) => {
+      const targetMode =
+        mode || previousModeRef.current || inputs.display_mode || 'text';
+      modeMessagesRef.current[targetMode] = Array.isArray(messagesToSave)
+        ? messagesToSave
+        : [];
+      persistModeMessages();
+    },
+    [inputs.display_mode, persistModeMessages],
+  );
+
+  const setMessageForMode = useCallback(
+    (updater, mode) => {
+      const targetMode =
+        mode || previousModeRef.current || inputs.display_mode || 'text';
+      const currentMode =
+        previousModeRef.current || inputs.display_mode || 'text';
+      if (targetMode === currentMode) {
+        setMessage(updater);
+        return;
+      }
+      const prevMessages = Array.isArray(modeMessagesRef.current[targetMode])
+        ? modeMessagesRef.current[targetMode]
+        : [];
+      const nextMessages =
+        typeof updater === 'function' ? updater(prevMessages) : updater;
+      modeMessagesRef.current[targetMode] = Array.isArray(nextMessages)
+        ? nextMessages
+        : [];
+      persistModeMessages();
+    },
+    [inputs.display_mode, persistModeMessages, setMessage],
+  );
 
   useLayoutEffect(() => {
     if (!pendingPlaygroundChatScrollRef.current) return;
@@ -165,11 +211,11 @@ const Playground = () => {
 
   // API 请求相关
   const { sendRequest, onStopGenerator, startVideoTaskPolling } = useApiRequest(
-    setMessage,
+    setMessageForMode,
     setDebugData,
     setActiveDebugTab,
     sseSourceRef,
-    saveMessagesImmediately,
+    saveMessagesForMode,
   );
 
   useEffect(() => {
@@ -205,7 +251,9 @@ const Playground = () => {
       if (!taskId || activeVideoPollTaskIdsRef.current.has(taskId)) return;
       activeVideoPollTaskIdsRef.current.add(taskId);
       startVideoTaskPolling(taskId, (patch) => {
-        const nextTaskStatus = String(patch?.videoTask?.status || '').toLowerCase();
+        const nextTaskStatus = String(
+          patch?.videoTask?.status || '',
+        ).toLowerCase();
         const nextMessageStatus = String(patch?.status || '').toLowerCase();
         const isTerminal =
           terminalStatuses.has(nextTaskStatus) ||
@@ -214,24 +262,26 @@ const Playground = () => {
         if (isTerminal) {
           activeVideoPollTaskIdsRef.current.delete(taskId);
         }
-        setMessage((prevMessages) => {
+        setMessageForMode((prevMessages) => {
           const updated = prevMessages.map((item) => {
             if (item?.id !== msg.id) return item;
             return {
               ...item,
-              ...(patch.content !== undefined ? { content: patch.content } : {}),
+              ...(patch.content !== undefined
+                ? { content: patch.content }
+                : {}),
               ...(patch.status ? { status: patch.status } : {}),
               ...(patch.videoTask !== undefined
                 ? { videoTask: patch.videoTask }
                 : {}),
             };
           });
-          setTimeout(() => saveMessagesImmediately(updated), 0);
+          setTimeout(() => saveMessagesForMode(updated, 'video'), 0);
           return updated;
-        });
+        }, 'video');
       });
     });
-  }, [message, setMessage, saveMessagesImmediately, startVideoTaskPolling]);
+  }, [message, setMessageForMode, saveMessagesForMode, startVideoTaskPolling]);
 
   // 数据加载（modelTypes 参与按类型筛选，与模型广场一致在客户端过滤）
   useDataLoader(
@@ -256,7 +306,9 @@ const Playground = () => {
   useEffect(() => {
     if (modeStoreInitializedRef.current) return;
     const currentMode = inputs.display_mode || 'text';
-    modeMessagesRef.current[currentMode] = Array.isArray(message) ? message : [];
+    modeMessagesRef.current[currentMode] = Array.isArray(message)
+      ? message
+      : [];
     previousModeRef.current = currentMode;
     modeStoreInitializedRef.current = true;
   }, [inputs.display_mode, message]);
@@ -265,14 +317,42 @@ const Playground = () => {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(getModeStorageKey());
-      if (!raw) return;
-      const parsed = JSON.parse(raw);
-      if (!parsed || typeof parsed !== 'object') return;
-      const restored = {
-        text: Array.isArray(parsed.text) ? parsed.text : [],
-        image: Array.isArray(parsed.image) ? parsed.image : [],
-        video: Array.isArray(parsed.video) ? parsed.video : [],
-      };
+      const defaultMsgs = getDefaultMessages(t);
+      let restored;
+
+      if (!raw) {
+        // 没有持久化数据，初始化为默认消息
+        restored = {
+          text: defaultMsgs,
+          image: defaultMsgs,
+          video: defaultMsgs,
+        };
+      } else {
+        const parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== 'object') {
+          restored = {
+            text: defaultMsgs,
+            image: defaultMsgs,
+            video: defaultMsgs,
+          };
+        } else {
+          restored = {
+            text:
+              Array.isArray(parsed.text) && parsed.text.length > 0
+                ? parsed.text
+                : defaultMsgs,
+            image:
+              Array.isArray(parsed.image) && parsed.image.length > 0
+                ? parsed.image
+                : defaultMsgs,
+            video:
+              Array.isArray(parsed.video) && parsed.video.length > 0
+                ? parsed.video
+                : defaultMsgs,
+          };
+        }
+      }
+
       modeMessagesRef.current = restored;
       const currentMode = inputs.display_mode || 'text';
       const currentModeMessages = restored[currentMode] || [];
@@ -285,11 +365,14 @@ const Playground = () => {
     } catch (err) {
       console.warn('恢复分模式消息失败:', err);
     }
-  }, [getModeStorageKey, inputs.display_mode, setMessage]);
+  }, [getModeStorageKey, inputs.display_mode, setMessage, t]);
 
   useEffect(() => {
-    const currentMode = inputs.display_mode || 'text';
-    modeMessagesRef.current[currentMode] = Array.isArray(message) ? message : [];
+    const activeMessageMode =
+      previousModeRef.current || inputs.display_mode || 'text';
+    modeMessagesRef.current[activeMessageMode] = Array.isArray(message)
+      ? message
+      : [];
   }, [inputs.display_mode, message]);
 
   useEffect(() => {
@@ -313,11 +396,11 @@ const Playground = () => {
     handleEditSave,
     handleEditCancel,
   } = useMessageEdit(
-    setMessage,
+    setMessageForMode,
     inputs,
     parameterEnabled,
     sendRequest,
-    saveMessagesImmediately,
+    saveMessagesForMode,
   );
 
   // 消息和自定义请求体同步
@@ -353,7 +436,7 @@ const Playground = () => {
     message,
     setMessage,
     onMessageSend,
-    saveMessagesImmediately,
+    saveMessagesForMode,
   );
 
   // 构建预览请求体
@@ -420,16 +503,17 @@ const Playground = () => {
     // 如果是自定义请求体模式
     if (customRequestMode && customRequestBody) {
       try {
+        const mode = inputs.display_mode || 'text';
         const customPayload = JSON.parse(customRequestBody);
 
         setMessage((prevMessage) => {
           const newMessages = [...prevMessage, userMessage, loadingMessage];
 
           // 发送自定义请求体
-          sendRequest(customPayload, customPayload.stream !== false);
+          sendRequest(customPayload, customPayload.stream !== false, mode);
 
           // 发送消息后保存，传入新消息列表
-          setTimeout(() => saveMessagesImmediately(newMessages), 0);
+          setTimeout(() => saveMessagesForMode(newMessages, mode), 0);
 
           return newMessages;
         });
@@ -466,11 +550,11 @@ const Playground = () => {
     );
     setMessage((prevMessage) => {
       const isChatEndpoint = payload?.__endpoint === 'chat';
-      sendRequest(payload, isChatEndpoint ? inputs.stream : false);
+      sendRequest(payload, isChatEndpoint ? inputs.stream : false, mode);
 
       // 发送消息后保存，传入新消息列表（包含用户消息和加载消息）
       const messagesWithLoading = [...newMessages, loadingMessage];
-      setTimeout(() => saveMessagesImmediately(messagesWithLoading), 0);
+      setTimeout(() => saveMessagesForMode(messagesWithLoading, mode), 0);
 
       return messagesWithLoading;
     });
@@ -632,18 +716,10 @@ const Playground = () => {
   // 避免刷新后丢失 videoTask.playableUrl 导致播放器消失。
   useEffect(() => {
     const timer = setTimeout(() => {
-      saveMessagesImmediately(message);
-      try {
-        localStorage.setItem(
-          getModeStorageKey(),
-          JSON.stringify(modeMessagesRef.current),
-        );
-      } catch (err) {
-        console.warn('保存分模式消息失败:', err);
-      }
+      persistModeMessages();
     }, 120);
     return () => clearTimeout(timer);
-  }, [message, saveMessagesImmediately, getModeStorageKey]);
+  }, [message, persistModeMessages]);
 
   // 清空对话的处理函数
   const handleClearMessages = useCallback(() => {
@@ -657,20 +733,19 @@ const Playground = () => {
         const currentMode = inputs.display_mode || 'text';
         modeMessagesRef.current[currentMode] = [];
         currentMessagesRef.current = [];
-        try {
-          localStorage.setItem(
-            getModeStorageKey(),
-            JSON.stringify(modeMessagesRef.current),
-          );
-        } catch (err) {
-          console.warn('保存分模式消息失败:', err);
-        }
+        persistModeMessages();
         setMessage([]);
         // 清空对话后保存，传入空数组
-        setTimeout(() => saveMessagesImmediately([]), 0);
+        setTimeout(() => saveMessagesForMode([], currentMode), 0);
       },
     });
-  }, [inputs.display_mode, saveMessagesImmediately, setMessage, t, getModeStorageKey]);
+  }, [
+    inputs.display_mode,
+    saveMessagesForMode,
+    setMessage,
+    t,
+    persistModeMessages,
+  ]);
 
   // 处理粘贴图片
   const handlePasteImage = useCallback(
