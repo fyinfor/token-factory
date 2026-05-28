@@ -32,6 +32,7 @@ const LogsFilters = ({
   setLogType,
   loading,
   isAdminUser,
+  supplierChannelLogsView,
   t,
 }) => {
   return (
@@ -46,6 +47,13 @@ const LogsFilters = ({
       stopValidateWithError={false}
     >
       <div className='flex flex-col gap-2'>
+        {supplierChannelLogsView ? (
+          <p className='text-sm text-gray-600 dark:text-gray-400'>
+            {t(
+              '供应商渠道日志范围说明：仅展示经您供应商渠道计费的消费记录，统计口径与「数据看板」一致（含所有用户请求，不限于本账号）。',
+            )}
+          </p>
+        ) : null}
         <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2'>
           {/* 时间选择器 */}
           <div className='col-span-1 lg:col-span-2'>
@@ -102,7 +110,7 @@ const LogsFilters = ({
             size='small'
           />
 
-          {isAdminUser && (
+          {(isAdminUser || supplierChannelLogsView) && (
             <>
               <Form.Input
                 field='channel'
@@ -112,14 +120,16 @@ const LogsFilters = ({
                 pure
                 size='small'
               />
-              <Form.Input
-                field='username'
-                prefix={<IconSearch />}
-                placeholder={t('用户名称')}
-                showClear
-                pure
-                size='small'
-              />
+              {isAdminUser ? (
+                <Form.Input
+                  field='username'
+                  prefix={<IconSearch />}
+                  placeholder={t('用户名称')}
+                  showClear
+                  pure
+                  size='small'
+                />
+              ) : null}
             </>
           )}
         </div>

@@ -4112,6 +4112,8 @@
     "获取令牌密钥失败": "Failed to get token key",
     "获取供应商信息失败": "Failed to get supplier information",
     "获取供应商数据看板失败": "Failed to get vendor dashboard",
+    "获取供应商模型用户明细失败": "Failed to load per-user usage for this model",
+    "供应商模型用户消耗明细说明": "Per-user consumption on your supplier channels for this model in the selected time range (same scope as the dashboard).",
     "获取充值配置失败": "Failed to get topup configuration",
     "获取充值配置异常": "Topup configuration error",
     "获取初始化状态失败": "Failed to get initialization status",

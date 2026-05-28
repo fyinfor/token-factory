@@ -61,6 +61,7 @@ import {
   Jimeng,
   Perplexity,
   Replicate,
+  XiaomiMiMo,
 } from '@lobehub/icons';
 
 import {
@@ -350,6 +351,18 @@ export const getModelCategories = (() => {
         label: t('零一万物'),
         icon: <Yi.Color />,
         filter: (model) => model.model_name.toLowerCase().includes('yi'),
+      },
+      xiaomimimo: {
+        label: 'Xiaomi MiMo',
+        icon: <XiaomiMiMo />,
+        filter: (model) => {
+          const name = model.model_name.toLowerCase();
+          return (
+            name.includes('mimo') ||
+            name.includes('xiaomi') ||
+            /^mimo[-/]/.test(name)
+          );
+        },
       },
     };
 
@@ -1333,6 +1346,20 @@ export function quotaToDisplayCurrencyParts(quota) {
   return { symbol, value };
 }
 
+/** 与 renderQuota 单行展示一致的数值（用于多行合计，避免先加总额再舍入与明细不一致）。 */
+function quotaToRoundedDisplayValue(quota, digits = 2) {
+  const q = Number(quota || 0);
+  const parts = quotaToDisplayCurrencyParts(q);
+  if (parts === null) {
+    return q;
+  }
+  const fixedResult = parseFloat(parts.value.toFixed(digits));
+  if (fixedResult === 0 && q > 0 && parts.value > 0) {
+    return Math.pow(10, -digits);
+  }
+  return fixedResult;
+}
+
 export function renderQuota(quota, digits = 2) {
   const parts = quotaToDisplayCurrencyParts(quota);
   if (parts === null) {
@@ -1345,6 +1372,28 @@ export function renderQuota(quota, digits = 2) {
     return symbol + trimFixedDecimalDisplay(minValue, digits);
   }
   return symbol + trimFixedDecimalDisplay(fixedResult, digits);
+}
+
+/**
+ * 多笔额度按与 renderQuota 相同的行级舍入后相加再展示（明细合计与各行花费一致）。
+ */
+export function renderQuotaSum(quotas, digits = 2) {
+  if (!Array.isArray(quotas) || quotas.length === 0) {
+    return renderQuota(0, digits);
+  }
+  const firstParts = quotaToDisplayCurrencyParts(Number(quotas[0] || 0));
+  if (firstParts === null) {
+    const total = quotas.reduce((acc, q) => acc + Number(q || 0), 0);
+    return renderQuota(total, digits);
+  }
+  let sum = 0;
+  for (const quota of quotas) {
+    sum += quotaToRoundedDisplayValue(quota, digits);
+  }
+  const totalFixed = parseFloat(sum.toFixed(digits));
+  return (
+    firstParts.symbol + trimFixedDecimalDisplay(totalFixed, digits)
+  );
 }
 
 /**

@@ -26,6 +26,7 @@ import PriceImportExport from './PriceImportExport';
 import { API, isSupplier } from '../../../helpers';
 
 export default function ModelSettingsVisualEditor(props) {
+  const { hideGlobalTab = false } = props;
   const { t } = useTranslation();
   const [pricingSuppliers, setPricingSuppliers] = useState([]);
 
@@ -82,6 +83,17 @@ export default function ModelSettingsVisualEditor(props) {
     ...props.options,
     __pricingChannels: pricingSuppliers,
   };
+
+  if (hideGlobalTab) {
+    return (
+      <SupplierModelPricingEditor
+        options={extendedOptions}
+        refresh={props.refresh}
+        candidateModelNames={props.candidateModelNames}
+        useSupplierPricingApi={isSupplier()}
+      />
+    );
+  }
 
   return (
     <Tabs

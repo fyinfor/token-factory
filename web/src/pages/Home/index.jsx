@@ -71,6 +71,7 @@ import {
   AzureAI,
   Hunyuan,
   Xinference,
+  XiaomiMiMo,
 } from '@lobehub/icons';
 import FooterBar from '../../components/layout/Footer';
 

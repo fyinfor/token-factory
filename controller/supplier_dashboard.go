@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -13,10 +14,11 @@ import (
 
 // SupplierModelUsageItem 供应商模型使用统计项。
 type SupplierModelUsageItem struct {
-	ModelName string `json:"model_name"`
-	Requests  int    `json:"requests"`
-	Tokens    int    `json:"tokens"`
-	Quota     int    `json:"quota"`
+	ModelName string                    `json:"model_name"`
+	Requests  int                       `json:"requests"`
+	Tokens    int                       `json:"tokens"`
+	Quota     int                       `json:"quota"`
+	Users     []model.SupplierUsageByUser `json:"users,omitempty"`
 }
 
 // loadSupplierDashboardAccount 加载供应商对接人（申请人）在平台上的剩余额度与历史累计已用额度，与使用日志中的额度/花费字段同源。
@@ -65,68 +67,80 @@ func toSortedModelSlice(modelsMap map[string]struct{}) []string {
 	return modelNames
 }
 
-// GetSupplierDashboardData 返回供应商数据看板（供应商看自己，管理员看全部供应商模型）。
+// mergeConfiguredAndActiveModelNames 合并渠道配置模型与日志中实际出现过的模型名。
+func mergeConfiguredAndActiveModelNames(configured map[string]struct{}, usageByModel []model.SupplierUsageByModel) []string {
+	merged := make(map[string]struct{}, len(configured)+len(usageByModel))
+	for name := range configured {
+		merged[name] = struct{}{}
+	}
+	for _, row := range usageByModel {
+		name := row.ModelName
+		if name == "" {
+			continue
+		}
+		merged[name] = struct{}{}
+	}
+	return toSortedModelSlice(merged)
+}
+
+// GetSupplierDashboardData 返回供应商数据看板：仅统计自有渠道上的全部模型消费（与按渠道筛选的使用日志一致）。
 func GetSupplierDashboardData(c *gin.Context) {
 	startTimestamp, endTimestamp := parseSupplierDashboardTimeRange(c)
 	adminSupplierID, _ := strconv.Atoi(c.Query("supplier_id"))
 	accountQuota, accountUsedQuota := loadSupplierDashboardAccount(c, adminSupplierID)
 
 	var (
-		modelNamesMap map[string]struct{}
-		err           error
+		scope supplierDashboardScope
+		err   error
 	)
 
-	// 管理员默认查看全部供应商模型；当传 supplier_id 时查看指定供应商。
 	if c.GetInt("role") >= common.RoleAdminUser {
-		supplierID := adminSupplierID
-		if supplierID > 0 {
-			modelNamesMap, err = collectSupplierOwnedModelNamesBySupplierID(supplierID)
+		if adminSupplierID > 0 {
+			scope, err = collectSupplierDashboardScopeBySupplierID(adminSupplierID)
 		} else {
-			modelNamesMap, err = collectAllSupplierOwnedModelNames()
+			scope, err = collectAllSupplierDashboardScope()
 		}
 	} else {
-		modelNamesMap, err = collectSupplierOwnedModelNames(c.GetInt("id"))
+		scope, err = collectSupplierDashboardScope(c.GetInt("id"))
 	}
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 
-	modelNames := toSortedModelSlice(modelNamesMap)
-	quotaData, err := model.GetQuotaDataByModelNames(startTimestamp, endTimestamp, modelNames)
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	stat, err := model.SumUsedQuotaByModelNames(startTimestamp, endTimestamp, modelNames)
+	quotaData, usageByModel, stat, err := model.AggregateSupplierUsageFromLogs(
+		startTimestamp, endTimestamp, scope.ChannelIDs,
+	)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
 
-	usageMap := make(map[string]*SupplierModelUsageItem)
+	usageByModelUser, err := model.AggregateSupplierUsageAllModelUsers(
+		startTimestamp, endTimestamp, scope.ChannelIDs,
+	)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	usersByModel := model.GroupSupplierUsageByModelUsers(usageByModelUser)
+
+	usageMap := make(map[string]*SupplierModelUsageItem, len(usageByModel))
 	totalRequests := 0
 	totalTokens := 0
 	totalQuota := 0
 
-	for _, item := range quotaData {
-		if item == nil {
-			continue
+	for _, row := range usageByModel {
+		totalRequests += row.Count
+		totalTokens += row.TokenUsed
+		totalQuota += row.Quota
+		usageMap[row.ModelName] = &SupplierModelUsageItem{
+			ModelName: row.ModelName,
+			Requests:  row.Count,
+			Tokens:    row.TokenUsed,
+			Quota:     row.Quota,
+			Users:     usersByModel[row.ModelName],
 		}
-		totalRequests += item.Count
-		totalTokens += item.TokenUsed
-		totalQuota += item.Quota
-
-		usageItem, ok := usageMap[item.ModelName]
-		if !ok {
-			usageItem = &SupplierModelUsageItem{
-				ModelName: item.ModelName,
-			}
-			usageMap[item.ModelName] = usageItem
-		}
-		usageItem.Requests += item.Count
-		usageItem.Tokens += item.TokenUsed
-		usageItem.Quota += item.Quota
 	}
 
 	modelUsageStats := make([]*SupplierModelUsageItem, 0, len(usageMap))
@@ -137,12 +151,15 @@ func GetSupplierDashboardData(c *gin.Context) {
 		return modelUsageStats[i].Quota > modelUsageStats[j].Quota
 	})
 
+	configuredModelNames := toSortedModelSlice(scope.ConfiguredModelNames)
+	modelNames := mergeConfiguredAndActiveModelNames(scope.ConfiguredModelNames, usageByModel)
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
 		"data": gin.H{
-			"start_timestamp":   startTimestamp,
-			"end_timestamp":     endTimestamp,
+			"start_timestamp": startTimestamp,
+			"end_timestamp":   endTimestamp,
 			"usage_time_range": gin.H{
 				"start_timestamp": startTimestamp,
 				"end_timestamp":   endTimestamp,
@@ -152,9 +169,12 @@ func GetSupplierDashboardData(c *gin.Context) {
 				"quota":      accountQuota,
 				"used_quota": accountUsedQuota,
 			},
-			"model_names":       modelNames,
-			"quota_data":        quotaData,
-			"model_usage_stats": modelUsageStats,
+			"model_names":              modelNames,
+			"configured_model_names":   configuredModelNames,
+			"channel_ids":              scope.ChannelIDs,
+			"channel_count":            len(scope.ChannelIDs),
+			"quota_data":               quotaData,
+			"model_usage_stats":        modelUsageStats,
 			"resource_consumption": gin.H{
 				"total_requests": totalRequests,
 				"total_tokens":   totalTokens,
@@ -165,13 +185,59 @@ func GetSupplierDashboardData(c *gin.Context) {
 				"tpm": stat.Tpm,
 			},
 			"model_data_analysis": gin.H{
-				// provided_model_count: 供应商配置过的模型总数（无请求也计入）。
-				"provided_model_count": len(modelNames),
-				// active_model_count: 时间范围内有调用数据的模型数。
-				"active_model_count": len(modelUsageStats),
-				// model_count 保留为兼容字段，语义等同 provided_model_count。
-				"model_count": len(modelNames),
-				"top_models":  modelUsageStats,
+				"provided_model_count": len(scope.ConfiguredModelNames),
+				"active_model_count":   len(modelUsageStats),
+				"model_count":          len(scope.ConfiguredModelNames),
+				"top_models":           modelUsageStats,
+			},
+		},
+	})
+}
+
+// GetSupplierDashboardModelUserUsage 返回指定模型在供应商渠道上的按用户消费明细（与看板时间范围、渠道范围一致）。
+func GetSupplierDashboardModelUserUsage(c *gin.Context) {
+	modelName := strings.TrimSpace(c.Query("model_name"))
+	if modelName == "" {
+		common.ApiErrorMsg(c, "model_name 不能为空")
+		return
+	}
+
+	scope, err := resolveSupplierDashboardScopeForRequest(c)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	startTimestamp, endTimestamp := parseSupplierDashboardTimeRange(c)
+	rows, err := model.AggregateSupplierUsageByModelAndUser(
+		startTimestamp, endTimestamp, scope.ChannelIDs, modelName,
+	)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	totalRequests := 0
+	totalTokens := 0
+	totalQuota := 0
+	for _, row := range rows {
+		totalRequests += row.Requests
+		totalTokens += row.TokenUsed
+		totalQuota += row.Quota
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data": gin.H{
+			"model_name":      modelName,
+			"start_timestamp": startTimestamp,
+			"end_timestamp":   endTimestamp,
+			"users":           rows,
+			"summary": gin.H{
+				"total_requests": totalRequests,
+				"total_tokens":   totalTokens,
+				"total_quota":    totalQuota,
 			},
 		},
 	})
