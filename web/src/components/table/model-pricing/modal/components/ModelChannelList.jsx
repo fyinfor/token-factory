@@ -32,6 +32,7 @@ import { IconCopy, IconListView } from '@douyinfe/semi-icons';
 import { copy, stringToColor } from '../../../../../helpers';
 import {
   getUsedGroupContext,
+  pickChannelScopedModelFloat,
   userCanViewHomeCostPrice,
 } from '../../../../../helpers/utils';
 import { UserContext } from '../../../../../context/User';
@@ -55,6 +56,8 @@ import {
 } from '../../../../../helpers/billingFormula';
 
 const { Text } = Typography;
+
+const ROUTE_PREVIEW_LIMIT = 6;
 
 const StepTitle = ({ label, title, desc, icon }) => (
   <div className='flex items-start gap-3 mb-4'>
@@ -165,6 +168,130 @@ const StabilityBattery = ({ row, t }) => {
   );
 };
 
+const PriceComparisonList = ({ items, t, blurPricing = false }) => {
+  if (!items || items.length === 0) {
+    return null;
+  }
+
+  return (
+    <div
+      className='rounded-2xl overflow-hidden'
+      style={{
+        backgroundColor: 'var(--semi-color-bg-1)',
+        border: '1px solid var(--semi-color-border)',
+        boxShadow: '0 12px 26px rgba(15, 23, 42, 0.06)',
+        backdropFilter: 'saturate(180%) blur(18px)',
+      }}
+    >
+      <div
+        className='grid items-center gap-2 mx-2 mt-2 px-2 py-1.5 text-[11px] font-semibold rounded-full'
+        style={{
+          gridTemplateColumns: '96px minmax(0, 1fr) minmax(0, 1fr) 52px',
+          backgroundColor: 'var(--semi-color-fill-0)',
+          color: 'var(--semi-color-text-2)',
+        }}
+      >
+        <span>{t('价格项')}</span>
+        <span>{t('平台价')}</span>
+        <span>{t('官方价')}</span>
+        <span className='text-right'>{t('折扣')}</span>
+      </div>
+      <div
+        style={
+          blurPricing
+            ? {
+                filter: 'blur(8px)',
+                userSelect: 'none',
+                pointerEvents: 'none',
+              }
+            : undefined
+        }
+      >
+        {items.map((item, idx) => (
+          <div
+            key={item.key || item.label}
+            className='grid items-center gap-2 mx-2 px-2 py-2.5 text-sm'
+            style={{
+              gridTemplateColumns: '96px minmax(0, 1fr) minmax(0, 1fr) 52px',
+              borderTop:
+                idx === 0 ? 'none' : '1px solid var(--semi-color-border)',
+            }}
+          >
+            <div className='min-w-0 flex items-center gap-1.5'>
+              <span
+                className='inline-flex items-center justify-center rounded-full shrink-0'
+                style={{
+                  width: 20,
+                  height: 20,
+                  color: 'rgb(0, 122, 255)',
+                  backgroundColor: 'rgba(0, 122, 255, 0.12)',
+                }}
+              >
+                <span
+                  className='rounded-full'
+                  style={{
+                    width: 7,
+                    height: 7,
+                    backgroundColor: 'rgb(0, 122, 255)',
+                  }}
+                />
+              </span>
+              <span
+                className='font-semibold text-semi-color-text-0 truncate'
+                title={item.label}
+              >
+                {item.label}
+              </span>
+            </div>
+            <div
+              className='min-w-0 font-bold truncate'
+              style={{ color: 'var(--semi-color-primary)' }}
+              title={item.value}
+            >
+              {item.value}
+            </div>
+            <div
+              className={`min-w-0 text-xs truncate ${
+                item.hasDiscount ? 'line-through' : ''
+              }`}
+              style={{
+                color: item.hasDiscount
+                  ? 'var(--semi-color-text-2)'
+                  : 'var(--semi-color-text-1)',
+              }}
+              title={item.official || item.original || undefined}
+            >
+              {item.official || item.original || '—'}
+            </div>
+            <div className='flex justify-end'>
+              {item.discount != null ? (
+                <span
+                  className='inline-flex items-center justify-center text-[11px] font-semibold rounded-full'
+                  style={{
+                    minWidth: 42,
+                    height: 22,
+                    padding: '0 7px',
+                    color: item.hasDiscount
+                      ? '#dc2626'
+                      : 'var(--semi-color-text-2)',
+                    backgroundColor: item.hasDiscount
+                      ? 'rgba(255, 59, 48, 0.11)'
+                      : 'rgba(142, 142, 147, 0.12)',
+                  }}
+                >
+                  {item.hasDiscount ? `-${item.discount}%` : '0%'}
+                </span>
+              ) : (
+                <span className='text-xs text-gray-400'>—</span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const ModelChannelList = ({
   modelData,
   channelMtrMap = {},
@@ -193,6 +320,7 @@ const ModelChannelList = ({
   const [userState] = useContext(UserContext);
   const [docsVisible, setDocsVisible] = useState(false);
   const [docsModelName, setDocsModelName] = useState('');
+  const [routeListExpanded, setRouteListExpanded] = useState(false);
   const channelList = modelData?.channel_list || [];
   const isLoggedIn = Boolean(userState?.user);
   const canViewCostPrice = useMemo(
@@ -245,31 +373,50 @@ const ModelChannelList = ({
     return Object.values(groups);
   }, [channelList, t]);
 
-  // 生成所有面板的 keys，默认全部展开
-  const allKeys = useMemo(
+  const groupKeys = useMemo(
     () => groupedChannels.map((group) => `group-${group.supplierId}`),
     [groupedChannels],
   );
+  const defaultActiveKeys = useMemo(() => groupKeys.slice(0, 1), [groupKeys]);
 
   // 使用字符串形式来稳定比较
-  const allKeysStr = allKeys.join(',');
+  const groupKeysStr = groupKeys.join(',');
   const prevKeysStr = useRef('');
 
   // 管理展开状态
-  const [activeKey, setActiveKey] = useState(allKeys);
+  const [activeKey, setActiveKey] = useState(defaultActiveKeys);
+  const activeKeys = Array.isArray(activeKey)
+    ? activeKey
+    : activeKey
+      ? [activeKey]
+      : [];
+  const activeKeySet = useMemo(() => new Set(activeKeys), [activeKeys]);
+  const displayedRouteChannels = routeListExpanded
+    ? routeChannels
+    : routeChannels.slice(0, ROUTE_PREVIEW_LIMIT);
+  const hiddenRouteCount = Math.max(
+    0,
+    routeChannels.length - ROUTE_PREVIEW_LIMIT,
+  );
+  const hasHiddenRoutes = hiddenRouteCount > 0;
 
   const openApiDocs = (channelModelName) => {
     setDocsModelName(channelModelName || modelData?.model_name || '');
     setDocsVisible(true);
   };
 
-  // 当 allKeys 实际变化时（基于字符串比较），更新 activeKey
+  const handleCollapseChange = (nextKey) => {
+    setActiveKey(Array.isArray(nextKey) ? nextKey : nextKey ? [nextKey] : []);
+  };
+
+  // 当分组实际变化时（基于字符串比较），重置为首组展开，避免一次性渲染全部渠道卡
   useEffect(() => {
-    if (allKeysStr !== prevKeysStr.current) {
-      setActiveKey(allKeys);
-      prevKeysStr.current = allKeysStr;
+    if (groupKeysStr !== prevKeysStr.current) {
+      setActiveKey(defaultActiveKeys);
+      setRouteListExpanded(false);
+      prevKeysStr.current = groupKeysStr;
     }
-  }, [allKeysStr, allKeys]);
+  }, [groupKeysStr, defaultActiveKeys]);
 
   // 格式化通道信息（新计费公式：含分组倍率、成本折扣、加价折扣）
   const formatChannelInfo = (channel) => {
@@ -360,24 +507,27 @@ const ModelChannelList = ({
     const makeItem = (label, channelValue, rootValue, isFixedPrice = false) => {
       if (!hasRatioValue(channelValue)) return null;
       const current = calculatePrice(Number(channelValue), isFixedPrice);
-      let original = null;
-      let discount = 0;
-      if (
-        hasRatioValue(rootValue) &&
-        Number(rootValue) > Number(channelValue)
-      ) {
+      let official = null;
+      let discount = null;
+      if (hasRatioValue(rootValue) && Number(rootValue) > 0) {
         const root = calculatePrice(Number(rootValue), isFixedPrice, false);
+        official = root.display;
         const channelOriginal = calculatePrice(
           Number(channelValue),
           isFixedPrice,
           false,
         );
-        if (root.value > channelOriginal.value && root.value > 0) {
+        if (root.value >= channelOriginal.value && root.value > 0) {
           discount = Math.round((1 - channelOriginal.value / root.value) * 100);
-          original = root.display;
         }
       }
-      return { label, value: current.display, original, discount };
+      return {
+        label,
+        value: current.display,
+        original: official,
+        discount,
+        hasDiscount: discount > 0,
+      };
     };
 
     const items = [];
@@ -452,6 +602,78 @@ const ModelChannelList = ({
           makeItem(t('缓存创建价格'), effCreateCacheRate, rootCC, false),
         );
       }
+
+      const chVideoRatio = pickChannelScopedModelFloat(
+        channelVideoRatioMap,
+        channel.channel_id,
+        modelData?.model_name,
+      );
+      const chVideoCompletionRatio = pickChannelScopedModelFloat(
+        channelVideoCompletionRatioMap,
+        channel.channel_id,
+        modelData?.model_name,
+      );
+      const modelHasVideoRatio = hasRatioValue(modelData?.video_ratio);
+      const modelHasVideoCompletion = hasRatioValue(
+        modelData?.video_completion_ratio,
+      );
+      const showVideoToken =
+        modelHasVideoRatio ||
+        modelHasVideoCompletion ||
+        chVideoRatio != null ||
+        chVideoCompletionRatio != null;
+      if (hasRatioValue(channel.model_ratio) && showVideoToken) {
+        const effInputRate =
+          Number(channel.model_ratio) * costDisc + globalMr * markupRate;
+        const effVideoRatio =
+          chVideoRatio != null
+            ? chVideoRatio
+            : modelHasVideoRatio
+              ? Number(modelData.video_ratio)
+              : 1;
+        const effVideoCompletionRatio =
+          chVideoCompletionRatio != null
+            ? chVideoCompletionRatio
+            : modelHasVideoCompletion
+              ? Number(modelData.video_completion_ratio)
+              : 1;
+        const effVideo = effInputRate * effVideoRatio * effVideoCompletionRatio;
+        const rootVideo = hasRatioValue(modelData?.model_ratio)
+          ? Number(modelData.model_ratio) *
+            (modelHasVideoRatio ? Number(modelData.video_ratio) : 1) *
+            (modelHasVideoCompletion
+              ? Number(modelData.video_completion_ratio)
+              : 1)
+          : null;
+        items.push(makeItem(t('视频（倍率计价）'), effVideo, rootVideo, false));
+      }
+    }
+
+    const chVideoPrice = pickChannelScopedModelFloat(
+      channelVideoPriceMap,
+      channel.channel_id,
+      modelData?.model_name,
+    );
+    const rootVideoPrice = hasRatioValue(modelData?.video_price)
+      ? Number(modelData.video_price)
+      : null;
+    const currentVideoPrice =
+      chVideoPrice != null ? chVideoPrice : rootVideoPrice;
+    const vHint = pickVideoFlatClipHintForChannel(modelData, channel);
+    const showVideoFlatTable = hasVideoFlatClipTierTable(vHint);
+    if (
+      !showVideoFlatTable &&
+      currentVideoPrice != null &&
+      currentVideoPrice > 0
+    ) {
+      items.push(
+        makeItem(
+          t('视频按条（固定价）'),
+          Number(currentVideoPrice),
+          rootVideoPrice,
+          true,
+        ),
+      );
     }
     return items.filter(Boolean);
   };
@@ -559,61 +781,75 @@ const ModelChannelList = ({
           icon={<IconListView size={16} />}
         />
         <div className='space-y-2'>
-          {routeChannels.map(({ channel, idx, routeModelName, badge }) => {
-            const row = channelMtrMap[String(channel.channel_id)];
-            return (
-              <div
-                key={`route-${channel.channel_id}-${idx}`}
-                className='flex items-center gap-2 rounded-lg px-3 py-2 overflow-hidden'
-                style={{
-                  backgroundColor: 'var(--semi-color-fill-0)',
-                }}
-              >
-                <Tag
-                  size='small'
-                  shape='circle'
-                  color='blue'
-                  type='light'
-                  className='shrink-0'
+          {displayedRouteChannels.map(
+            ({ channel, idx, routeModelName, badge }) => {
+              const row = channelMtrMap[String(channel.channel_id)];
+              return (
+                <div
+                  key={`route-${channel.channel_id}-${idx}`}
+                  className='flex items-center gap-2 rounded-lg px-3 py-2 overflow-hidden'
+                  style={{
+                    backgroundColor: 'var(--semi-color-fill-0)',
+                  }}
                 >
-                  {badge}
-                </Tag>
-                <div className='min-w-0 flex-1 flex items-center gap-2'>
-                  {channel.supplier_type ? (
-                    <Tag
-                      size='small'
-                      shape='circle'
-                      color={getSupplierTypeColor(channel.supplier_type)}
-                      className='shrink-0'
-                    >
-                      {channel.supplier_type}
-                    </Tag>
-                  ) : null}
-                  <div className='shrink-0'>
-                    <StabilityBattery row={row} t={t} />
-                  </div>
-                  <Text
-                    className='font-mono text-sm min-w-0'
-                    ellipsis={{ showTooltip: true }}
-                  >
-                    {routeModelName}
-                  </Text>
-                </div>
-                <Tooltip content={t('复制模型名字')}>
-                  <Button
-                    type='primary'
-                    theme='light'
+                  <Tag
                     size='small'
-                    icon={<IconCopy />}
-                    onClick={() => copyModelName(routeModelName, t)}
-                    aria-label={t('复制模型名字')}
+                    shape='circle'
+                    color='blue'
+                    type='light'
+                    className='shrink-0'
                   >
-                    {t('复制')}
-                  </Button>
-                </Tooltip>
-              </div>
-            );
-          })}
+                    {badge}
+                  </Tag>
+                  <div className='min-w-0 flex-1 flex items-center gap-2'>
+                    {channel.supplier_type ? (
+                      <Tag
+                        size='small'
+                        shape='circle'
+                        color={getSupplierTypeColor(channel.supplier_type)}
+                        className='shrink-0'
+                      >
+                        {channel.supplier_type}
+                      </Tag>
+                    ) : null}
+                    <div className='shrink-0'>
+                      <StabilityBattery row={row} t={t} />
+                    </div>
+                    <Text
+                      className='font-mono text-sm min-w-0'
+                      ellipsis={{ showTooltip: true }}
+                    >
+                      {routeModelName}
+                    </Text>
+                  </div>
+                  <Tooltip content={t('复制模型名字')}>
+                    <Button
+                      type='primary'
+                      theme='light'
+                      size='small'
+                      icon={<IconCopy />}
+                      onClick={() => copyModelName(routeModelName, t)}
+                      aria-label={t('复制模型名字')}
+                    >
+                      {t('复制')}
+                    </Button>
+                  </Tooltip>
+                </div>
+              );
+            },
+          )}
+          {hasHiddenRoutes ? (
+            <Button
+              theme='light'
+              type='tertiary'
+              size='small'
+              className='w-full'
+              onClick={() => setRouteListExpanded((v) => !v)}
+            >
+              {routeListExpanded ? t('收起') : t('展开全部')}（
+              {hiddenRouteCount}）
+            </Button>
+          ) : null}
         </div>
       </Card>
 
@@ -643,185 +879,164 @@ const ModelChannelList = ({
           </Tag>
         </div>
 
-        <Collapse activeKey={activeKey} onChange={setActiveKey}>
-          {groupedChannels.map((group) => (
-            <Collapse.Panel
-              key={`group-${group.supplierId}`}
-              itemKey={`group-${group.supplierId}`}
-              header={
-                <div className='flex items-center justify-between w-full'>
-                  {group.companyLogoUrl || group.supplierType ? (
-                    <span
-                      className='h-7 rounded-md flex items-center overflow-hidden ml-2'
-                      style={{ backgroundColor: 'var(--semi-color-fill-0)' }}
-                    >
-                      {group.companyLogoUrl ? (
-                        <img
-                          src={group.companyLogoUrl}
-                          alt={group.supplierAlias || ''}
-                          className='w-7 h-7 object-contain rounded-md'
-                        />
-                      ) : null}
-                      {group.supplierType && (
-                        <Tag
-                          size='small'
-                          shape='circle'
-                          color={getSupplierTypeColor(group.supplierType)}
-                          className='mx-1'
-                        >
-                          {group.supplierType}
-                        </Tag>
-                      )}
-                    </span>
-                  ) : null}
-                  <span className='text-sm text-gray-500'>
-                    {group.channels.length} {t('个通道')}
-                  </span>
-                </div>
-              }
-            >
-              <div className='space-y-3'>
-                {group.channels.map((channel, idx) => {
-                  const channelItems = formatChannelInfo(channel);
-                  const row = channelMtrMap[String(channel.channel_id)];
-                  const vHint = pickVideoFlatClipHintForChannel(
-                    modelData,
-                    channel,
-                  );
-                  const showVideoFlatTable = hasVideoFlatClipTierTable(vHint);
-                  const iHint = pickImagePerImageHintForChannel(
-                    modelData,
-                    channel,
-                  );
-                  const showImagePerImageTable =
-                    hasImagePerImageTierTable(iHint);
-                  const channelPath = getChannelRouteModelName(
-                    modelData,
-                    channel,
-                  );
-                  const channelBadge =
-                    channel.route_slug || channel.channel_no || String(idx);
-
-                  const handleCopy = () => {
-                    copyModelName(channelPath, t);
-                  };
-
-                  return (
-                    <div key={`${channel.channel_id}-${idx}`}>
-                      <Card
-                        className='!rounded-xl shadow-sm !mb-2 flex-1'
-                        bodyStyle={{ padding: '12px' }}
+        <Collapse activeKey={activeKeys} onChange={handleCollapseChange}>
+          {groupedChannels.map((group) => {
+            const panelKey = `group-${group.supplierId}`;
+            const panelActive = activeKeySet.has(panelKey);
+            return (
+              <Collapse.Panel
+                key={panelKey}
+                itemKey={panelKey}
+                header={
+                  <div className='flex items-center justify-between w-full'>
+                    {group.companyLogoUrl || group.supplierType ? (
+                      <span
+                        className='h-7 rounded-md flex items-center overflow-hidden ml-2'
+                        style={{ backgroundColor: 'var(--semi-color-fill-0)' }}
                       >
-                        <div className='flex flex-col gap-3 text-sm'>
-                          <div className='flex items-start justify-between gap-2'>
-                            <div className='min-w-0 flex-1'>
-                              <div className='flex items-center gap-2 min-w-0'>
-                                <Tag
-                                  shape='circle'
-                                  color='blue'
-                                  type='light'
-                                  size='small'
-                                  className='shrink-0'
-                                >
-                                  {channelBadge}
-                                </Tag>
-                                <Text strong ellipsis={{ showTooltip: true }}>
-                                  {channelPath}
-                                </Text>
-                              </div>
-                              <div className='flex flex-wrap gap-2 items-center mt-1'>
-                                <StabilityBattery row={row} t={t} />
-                                {renderModelTestResultSummary(row, t)}
-                              </div>
-                            </div>
-                            <div className='flex flex-wrap gap-2 items-center shrink-0 ml-1'>
-                              <Tooltip content={t('复制模型名字')}>
-                                <Button
-                                  type='primary'
-                                  theme='light'
-                                  size='small'
-                                  icon={<IconCopy />}
-                                  onClick={handleCopy}
-                                  title={channelPath}
-                                  aria-label={t('复制模型名字')}
-                                >
-                                  {t('复制')}
-                                </Button>
-                              </Tooltip>
-                              <Tooltip content={t('查看 API 文档')}>
-                                <Button
-                                  theme='light'
-                                  type='warning'
-                                  size='small'
-                                  onClick={() => openApiDocs(channelPath)}
-                                >
-                                  {t('文档')}
-                                </Button>
-                              </Tooltip>
-                            </div>
-                          </div>
-                          <div className='grid grid-cols-1 sm:grid-cols-2 gap-2'>
-                            {channelItems.map((item) => (
-                              <div
-                                key={item.label}
-                                className='rounded-lg px-3 py-2'
-                                style={{
-                                  backgroundColor: 'var(--semi-color-fill-0)',
-                                }}
-                              >
-                                <div className='text-xs text-gray-500 mb-1'>
-                                  {item.label}
-                                </div>
-                                {item.original ? (
-                                  <div className='flex flex-wrap items-center gap-1.5'>
-                                    <span className='text-gray-400 line-through text-xs'>
-                                      {item.original}
-                                    </span>
+                        {group.companyLogoUrl ? (
+                          <img
+                            src={group.companyLogoUrl}
+                            alt={group.supplierAlias || ''}
+                            className='w-7 h-7 object-contain rounded-md'
+                          />
+                        ) : null}
+                        {group.supplierType && (
+                          <Tag
+                            size='small'
+                            shape='circle'
+                            color={getSupplierTypeColor(group.supplierType)}
+                            className='mx-1'
+                          >
+                            {group.supplierType}
+                          </Tag>
+                        )}
+                      </span>
+                    ) : null}
+                    <span className='text-sm text-gray-500'>
+                      {group.channels.length} {t('个通道')}
+                    </span>
+                  </div>
+                }
+              >
+                {panelActive ? (
+                  <div className='space-y-3'>
+                    {group.channels.map((channel, idx) => {
+                      const channelItems = formatChannelInfo(channel);
+                      const row = channelMtrMap[String(channel.channel_id)];
+                      const vHint = pickVideoFlatClipHintForChannel(
+                        modelData,
+                        channel,
+                      );
+                      const showVideoFlatTable =
+                        hasVideoFlatClipTierTable(vHint);
+                      const iHint = pickImagePerImageHintForChannel(
+                        modelData,
+                        channel,
+                      );
+                      const showImagePerImageTable =
+                        hasImagePerImageTierTable(iHint);
+                      const channelPath = getChannelRouteModelName(
+                        modelData,
+                        channel,
+                      );
+                      const channelBadge =
+                        channel.route_slug || channel.channel_no || String(idx);
+
+                      const handleCopy = () => {
+                        copyModelName(channelPath, t);
+                      };
+
+                      return (
+                        <div key={`${channel.channel_id}-${idx}`}>
+                          <Card
+                            className='!rounded-xl shadow-sm !mb-2 flex-1'
+                            bodyStyle={{ padding: '12px' }}
+                          >
+                            <div className='flex flex-col gap-3 text-sm'>
+                              <div className='flex items-start justify-between gap-2'>
+                                <div className='min-w-0 flex-1'>
+                                  <div className='flex items-center gap-2 min-w-0'>
                                     <Tag
-                                      color='red'
-                                      size='small'
                                       shape='circle'
+                                      color='blue'
+                                      type='light'
+                                      size='small'
+                                      className='shrink-0'
                                     >
-                                      -{item.discount}%
+                                      {channelBadge}
                                     </Tag>
-                                    <span className='font-medium text-gray-900'>
-                                      {item.value}
-                                    </span>
+                                    <Text
+                                      strong
+                                      ellipsis={{ showTooltip: true }}
+                                    >
+                                      {channelPath}
+                                    </Text>
                                   </div>
-                                ) : (
-                                  <span className='font-medium text-gray-900'>
-                                    {item.value}
-                                  </span>
-                                )}
+                                  <div className='flex flex-wrap gap-2 items-center mt-1'>
+                                    <StabilityBattery row={row} t={t} />
+                                    {renderModelTestResultSummary(row, t)}
+                                  </div>
+                                </div>
+                                <div className='flex flex-wrap gap-2 items-center shrink-0 ml-1'>
+                                  <Tooltip content={t('复制模型名字')}>
+                                    <Button
+                                      type='primary'
+                                      theme='light'
+                                      size='small'
+                                      icon={<IconCopy />}
+                                      onClick={handleCopy}
+                                      title={channelPath}
+                                      aria-label={t('复制模型名字')}
+                                    >
+                                      {t('复制')}
+                                    </Button>
+                                  </Tooltip>
+                                  <Tooltip content={t('查看 API 文档')}>
+                                    <Button
+                                      theme='light'
+                                      type='warning'
+                                      size='small'
+                                      onClick={() => openApiDocs(channelPath)}
+                                    >
+                                      {t('文档')}
+                                    </Button>
+                                  </Tooltip>
+                                </div>
                               </div>
-                            ))}
-                          </div>
-                          {showVideoFlatTable ? (
-                            <VideoFlatClipHintTable
-                              hint={vHint}
-                              usedGroupRatio={usedGroupRatio}
-                              displayPrice={displayPrice}
-                              t={t}
-                              blurPricing={blurPricing}
-                            />
-                          ) : null}
-                          {showImagePerImageTable ? (
-                            <ImagePerImageHintTable
-                              hint={iHint}
-                              usedGroupRatio={usedGroupRatio}
-                              displayPrice={displayPrice}
-                              t={t}
-                              blurPricing={blurPricing}
-                            />
-                          ) : null}
+                              <PriceComparisonList
+                                items={channelItems}
+                                t={t}
+                                blurPricing={blurPricing}
+                              />
+                              {showVideoFlatTable ? (
+                                <VideoFlatClipHintTable
+                                  hint={vHint}
+                                  usedGroupRatio={usedGroupRatio}
+                                  displayPrice={displayPrice}
+                                  t={t}
+                                  blurPricing={blurPricing}
+                                />
+                              ) : null}
+                              {showImagePerImageTable ? (
+                                <ImagePerImageHintTable
+                                  hint={iHint}
+                                  usedGroupRatio={usedGroupRatio}
+                                  displayPrice={displayPrice}
+                                  t={t}
+                                  blurPricing={blurPricing}
+                                />
+                              ) : null}
+                            </div>
+                          </Card>
                         </div>
-                      </Card>
-                    </div>
-                  );
-                })}
-              </div>
-            </Collapse.Panel>
-          ))}
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </Collapse.Panel>
+            );
+          })}
         </Collapse>
       </Card>
       {showCostPricePanel ? (
@@ -868,8 +1083,10 @@ const ModelChannelList = ({
                         key={item.label}
                         className='flex items-center gap-2 flex-wrap'
                       >
-                        <span className='text-gray-600'>{item.label}:</span>
-                        <span className='font-medium text-gray-900'>
+                        <span className='text-semi-color-text-1'>
+                          {item.label}:
+                        </span>
+                        <span className='font-medium text-semi-color-text-0'>
                           {item.value}
                         </span>
                       </div>
