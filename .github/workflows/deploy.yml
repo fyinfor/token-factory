@@ -36,7 +36,7 @@ env:
 
 jobs:
   # ═════════════════════════════════════════════════════════════════════════
-  # 服务器 A: 43.132.223.112  (ubuntu / Aa374866@@)
+  # 服务器 A: 43.132.223.112  (SSH Key 认证)
   # ═════════════════════════════════════════════════════════════════════════
   deploy-server-a:
     name: Deploy → 43.132.223.112
@@ -50,7 +50,7 @@ jobs:
           host: ${{ secrets.SERVER_A_HOST }}
           port: ${{ secrets.SERVER_A_PORT || 22 }}
           username: ${{ secrets.SERVER_A_USER }}
-          password: ${{ secrets.SERVER_A_PASSWORD }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_112 }}
           script: |
             set -e
             IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
@@ -103,7 +103,7 @@ jobs:
           host: ${{ secrets.SERVER_A_HOST }}
           port: ${{ secrets.SERVER_A_PORT || 22 }}
           username: ${{ secrets.SERVER_A_USER }}
-          password: ${{ secrets.SERVER_A_PASSWORD }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_112 }}
           script: |
             set -e
             IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
@@ -151,7 +151,7 @@ jobs:
           host: ${{ secrets.SERVER_A_HOST }}
           port: ${{ secrets.SERVER_A_PORT || 22 }}
           username: ${{ secrets.SERVER_A_USER }}
-          password: ${{ secrets.SERVER_A_PASSWORD }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_112 }}
           script: |
             echo ">>> Cleaning up images older than 72h..."
             sudo docker image prune || true
@@ -173,7 +173,7 @@ jobs:
           } >> $GITHUB_STEP_SUMMARY
 
   # ═════════════════════════════════════════════════════════════════════════
-  # 服务器 B: 43.138.142.105  (ubuntu / fuyi@2026)
+  # 服务器 B: 43.138.142.105  (SSH Key 认证)
   # ═════════════════════════════════════════════════════════════════════════
   deploy-server-b:
     name: Deploy → 43.138.142.105
@@ -187,7 +187,7 @@ jobs:
           host: ${{ secrets.SERVER_B_HOST }}
           port: ${{ secrets.SERVER_B_PORT || 22 }}
           username: ${{ secrets.SERVER_B_USER }}
-          password: ${{ secrets.SERVER_B_PASSWORD }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_105 }}
           script: |
             set -e
             IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
@@ -239,7 +239,7 @@ jobs:
           host: ${{ secrets.SERVER_B_HOST }}
           port: ${{ secrets.SERVER_B_PORT || 22 }}
           username: ${{ secrets.SERVER_B_USER }}
-          password: ${{ secrets.SERVER_B_PASSWORD }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_105 }}
           script: |
             set -e
             IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
@@ -287,7 +287,7 @@ jobs:
           host: ${{ secrets.SERVER_B_HOST }}
           port: ${{ secrets.SERVER_B_PORT || 22 }}
           username: ${{ secrets.SERVER_B_USER }}
-          password: ${{ secrets.SERVER_B_PASSWORD }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_105 }}
           script: |
             echo ">>> Cleaning up images older than 72h..."
             sudo docker image prune || true
