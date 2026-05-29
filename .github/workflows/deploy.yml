@@ -51,7 +51,6 @@ jobs:
           port: ${{ secrets.SERVER_A_PORT || 22 }}
           username: ${{ secrets.SERVER_A_USER }}
           password: ${{ secrets.SERVER_A_PASSWORD }}
-          script_stop: false
           script: |
             set -e
             IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
@@ -105,7 +104,6 @@ jobs:
           port: ${{ secrets.SERVER_A_PORT || 22 }}
           username: ${{ secrets.SERVER_A_USER }}
           password: ${{ secrets.SERVER_A_PASSWORD }}
-          script_stop: false
           script: |
             set -e
             IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
@@ -121,9 +119,6 @@ jobs:
 
             echo "[1/3] Pulling image..."
             sudo docker compose pull
-
-            echo "[2/4] Stopping services..."
-            sudo docker compose down
 
             echo "[2/3] Starting services..."
             sudo docker compose up -d
@@ -193,7 +188,6 @@ jobs:
           port: ${{ secrets.SERVER_B_PORT || 22 }}
           username: ${{ secrets.SERVER_B_USER }}
           password: ${{ secrets.SERVER_B_PASSWORD }}
-          script_stop: false
           script: |
             set -e
             IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
@@ -246,7 +240,6 @@ jobs:
           port: ${{ secrets.SERVER_B_PORT || 22 }}
           username: ${{ secrets.SERVER_B_USER }}
           password: ${{ secrets.SERVER_B_PASSWORD }}
-          script_stop: false
           script: |
             set -e
             IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
@@ -262,9 +255,6 @@ jobs:
 
             echo "[1/3] Pulling image..."
             sudo docker compose pull
-
-            echo "[2/4] Stopping services..."
-            sudo docker compose down
 
             echo "[2/3] Starting services..."
             sudo docker compose up -d
