@@ -28,7 +28,7 @@ env:
 
 jobs:
   # ═════════════════════════════════════════════════════════════════════════
-  # Demo 服务器: 43.132.223.112  (ubuntu / Aa374866@@)
+  # Demo 服务器: 43.132.223.112  (SSH Key 认证)
   # ═════════════════════════════════════════════════════════════════════════
   deploy-demo:
     name: Deploy Demo → 43.132.223.112
@@ -42,7 +42,7 @@ jobs:
           host: ${{ secrets.SERVER_A_HOST }}
           port: ${{ secrets.SERVER_A_PORT || 22 }}
           username: ${{ secrets.SERVER_A_USER }}
-          password: ${{ secrets.SERVER_A_PASSWORD }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_112 }}
           script: |
             set -e
             IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
@@ -94,7 +94,7 @@ jobs:
           host: ${{ secrets.SERVER_A_HOST }}
           port: ${{ secrets.SERVER_A_PORT || 22 }}
           username: ${{ secrets.SERVER_A_USER }}
-          password: ${{ secrets.SERVER_A_PASSWORD }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_112 }}
           script: |
             echo ">>> Cleaning up dangling images..."
             sudo docker image prune || true
