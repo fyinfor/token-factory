@@ -32,6 +32,11 @@ import {
   loadMessages,
   saveMessages,
 } from '../../components/playground/configStorage';
+import {
+  getMessageStorageKey,
+  loadModeMessages,
+  saveModeMessages,
+} from '../../components/playground/messageStorage';
 import { processIncompleteThinkTags } from '../../helpers';
 
 /**
@@ -39,11 +44,11 @@ import { processIncompleteThinkTags } from '../../helpers';
  * 旧格式: playground_messages 或 playground_messages_${userId}
  * 新格式: playground_mode_messages_${userId} = { text: [], image: [], video: [] }
  */
-const migrateLegacyMessages = (userId, t) => {
+const migrateLegacyMessages = async (userId, t) => {
   try {
-    const modeStorageKey = `playground_mode_messages_${userId || 'guest'}`;
+    const modeStorageKey = getMessageStorageKey(userId);
     // 如果新格式已存在，跳过迁移
-    const existingModeData = localStorage.getItem(modeStorageKey);
+    const existingModeData = await loadModeMessages(userId);
     if (existingModeData) {
       return;
     }
@@ -72,7 +77,7 @@ const migrateLegacyMessages = (userId, t) => {
       image: getDefaultMessages(t),
       video: getDefaultMessages(t),
     };
-    localStorage.setItem(modeStorageKey, JSON.stringify(newModeData));
+    await saveModeMessages(userId, newModeData);
 
     // 删除旧格式数据
     localStorage.removeItem(legacyKey);
