@@ -171,6 +171,7 @@ jobs:
             IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
             TAR_FILE="/tmp/token-factory-${{ inputs.tag }}.tar"
             TARGET_IP="${{ secrets.SERVER_B_HOST }}"
+            KEY_FILE="/tmp/ssh_key_b_$$"
 
             echo "========================================="
             echo "  中转镜像到 Server B: $TARGET_IP"
@@ -178,17 +179,26 @@ jobs:
             echo "========================================="
 
             echo ""
-            echo "[1/3] Saving image..."
+            echo "[1/4] Setting up SSH key for Server B..."
+            cat > "$KEY_FILE" << 'EOFBKEY'
+            ${{ secrets.SSH_PRIVATE_KEY_105 }}
+            EOFBKEY
+            chmod 600 "$KEY_FILE"
+            echo "✅ Key ready (PID $$)"
+
+            echo ""
+            echo "[2/4] Saving image..."
             sudo docker save -o "$TAR_FILE" "$IMAGE"
             echo "✅ Saved: $(ls -lh "$TAR_FILE" | awk '{print $5}')"
 
             echo ""
-            echo "[2/3] Transferring to $TARGET_IP..."
-            scp "$TAR_FILE" ubuntu@"$TARGET_IP":/home/ubuntu/tokease-token-factory/
+            echo "[3/4] Transferring to $TARGET_IP..."
+            scp -i "$KEY_FILE" -o StrictHostKeyChecking=no "$TAR_FILE" ubuntu@"$TARGET_IP":/home/ubuntu/tokease-token-factory/
             echo "✅ Transferred"
 
             echo ""
-            echo "[3/3] Cleaning up local tar..."
+            echo "[4/4] Cleaning up..."
+            rm -f "$KEY_FILE"
             sudo rm -f "$TAR_FILE"
             echo "✅ Done — Server B can now load the image"
 
