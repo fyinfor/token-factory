@@ -14,7 +14,9 @@ name: Deploy to Servers
 #     ├─ /home/ubuntu/tokease-token-factory
 #     └─ /home/ubuntu/token-factory
 #
-# 每实例操作: sudo docker compose pull → up -d → 健康检查 → 镜像清理
+# Server A: pull → up → 健康检查 → 清理 → docker save → scp → Server B
+# Server B: docker load tar → up → 健康检查 → 清理
+#   (Server B 无法直连 GHCR, 通过 Server A 中转镜像)
 # ============================================================================
 
 on:
@@ -157,6 +159,39 @@ jobs:
             sudo docker image prune || true
             echo "✅ Cleanup done"
 
+      - name: Save image & transfer to Server B (43.138.142.105)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_A_HOST }}
+          port: ${{ secrets.SERVER_A_PORT || 22 }}
+          username: ${{ secrets.SERVER_A_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_112 }}
+          script: |
+            set -e
+            IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
+            TAR_FILE="/tmp/token-factory-${{ inputs.tag }}.tar"
+            TARGET_IP="${{ secrets.SERVER_B_HOST }}"
+
+            echo "========================================="
+            echo "  中转镜像到 Server B: $TARGET_IP"
+            echo "  镜像:  $IMAGE"
+            echo "========================================="
+
+            echo ""
+            echo "[1/3] Saving image..."
+            sudo docker save -o "$TAR_FILE" "$IMAGE"
+            echo "✅ Saved: $(ls -lh "$TAR_FILE" | awk '{print $5}')"
+
+            echo ""
+            echo "[2/3] Transferring to $TARGET_IP..."
+            scp "$TAR_FILE" ubuntu@"$TARGET_IP":/home/ubuntu/tokease-token-factory/
+            echo "✅ Transferred"
+
+            echo ""
+            echo "[3/3] Cleaning up local tar..."
+            sudo rm -f "$TAR_FILE"
+            echo "✅ Done — Server B can now load the image"
+
       - name: Summary (Server A)
         if: always()
         run: |
@@ -179,6 +214,7 @@ jobs:
     name: Deploy → 43.138.142.105
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    needs: deploy-server-a
 
     steps:
       - name: Deploy tokease-token-factory (43.138.142.105)
@@ -191,6 +227,7 @@ jobs:
           script: |
             set -e
             IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
+            TAR_FILE="/home/ubuntu/tokease-token-factory/token-factory-${{ inputs.tag }}.tar"
             DIR="/home/ubuntu/tokease-token-factory"
 
             echo "========================================="
@@ -203,8 +240,9 @@ jobs:
             cd "$DIR" || { echo "❌ 目录不存在: $DIR"; exit 1; }
 
             echo ""
-            echo "[1/3] Pulling image..."
-            sudo docker compose pull
+            echo "[1/3] Loading image from tar..."
+            # 注意: 不删除 tar, token-factory 实例后续也需要加载
+            sudo docker load -i "$TAR_FILE"
 
             echo ""
             echo "[2/3] Starting services..."
@@ -243,6 +281,7 @@ jobs:
           script: |
             set -e
             IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
+            TAR_FILE="/home/ubuntu/tokease-token-factory/token-factory-${{ inputs.tag }}.tar"
             DIR="/home/ubuntu/token-factory"
 
             echo "========================================="
@@ -253,8 +292,10 @@ jobs:
 
             cd "$DIR" || { echo "❌ 目录不存在: $DIR"; exit 1; }
 
-            echo "[1/3] Pulling image..."
-            sudo docker compose pull
+            echo "[1/3] Loading image from tar..."
+            sudo docker load -i "$TAR_FILE"
+            # 清理 tar 文件 (两个实例都已加载完毕)
+            sudo rm -f "$TAR_FILE"
 
             echo "[2/3] Starting services..."
             sudo docker compose up -d
