@@ -34,16 +34,20 @@ import {
 } from '../../helpers/playgroundImageUtils';
 import { Loader2, Check, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import {
+  PLAYGROUND_MEDIA_MAX_WIDTH,
+  PLAYGROUND_MEDIA_MAX_WIDTH_PX,
+  PLAYGROUND_MEDIA_MAX_HEIGHT,
+} from '../../constants/playground.constants';
+import { usePlaygroundMediaMaxHeightPx } from '../../hooks/playground/usePlaygroundMediaMaxHeight';
 
-const PLAYGROUND_MEDIA_MAX_WIDTH = 'min(100%, 780px)';
-const PLAYGROUND_MEDIA_MAX_WIDTH_PX = 780;
-const PLAYGROUND_IMAGE_MAX_HEIGHT = 520;
-const PLAYGROUND_VIDEO_MAX_HEIGHT = 520;
+const PLAYGROUND_MARKDOWN_MEDIA_CLASS =
+  '[&_img]:max-w-[min(100%,780px)] [&_img]:max-h-[60vh] [&_img]:w-auto [&_img]:h-auto [&_img]:object-contain [&_img]:rounded-lg [&_img]:mx-auto [&_img]:cursor-zoom-in [&_video]:max-w-[min(100%,780px)] [&_video]:max-h-[60vh] [&_video]:w-auto [&_video]:h-auto [&_video]:object-contain [&_video]:rounded-lg [&_video]:mx-auto';
 
 const getConstrainedMediaSize = (
   dimensions,
   maxWidth = PLAYGROUND_MEDIA_MAX_WIDTH_PX,
-  maxHeight = PLAYGROUND_IMAGE_MAX_HEIGHT,
+  maxHeight,
 ) => {
   const width = Number(dimensions?.width || 0);
   const height = Number(dimensions?.height || 0);
@@ -162,6 +166,7 @@ const MessageContent = ({
   onRevealProgress,
 }) => {
   const { t } = useTranslation();
+  const mediaMaxHeightPx = usePlaygroundMediaMaxHeightPx();
   const previousContentLengthRef = useRef(0);
   const lastContentRef = useRef('');
   const [previewImageUrl, setPreviewImageUrl] = useState('');
@@ -324,7 +329,7 @@ const MessageContent = ({
   const constrainedVideoSize = getConstrainedMediaSize(
     mergedMediaDimensions[videoPlayableUrl],
     PLAYGROUND_MEDIA_MAX_WIDTH_PX,
-    PLAYGROUND_VIDEO_MAX_HEIGHT,
+    mediaMaxHeightPx,
   );
   const finalDisplayableFinalContent =
     generatedImages.length > 0
@@ -438,7 +443,8 @@ const MessageContent = ({
                   ? `${constrainedVideoSize.height}px`
                   : 'auto',
                 maxWidth: '100%',
-                maxHeight: `${PLAYGROUND_VIDEO_MAX_HEIGHT}px`,
+                maxHeight: PLAYGROUND_MEDIA_MAX_HEIGHT,
+                objectFit: 'contain',
                 opacity: loadedMediaUrls.has(videoPlayableUrl) ? 1 : 0,
                 transition: 'opacity 200ms ease',
                 transitionDelay: loadedMediaUrls.has(videoPlayableUrl)
@@ -485,7 +491,8 @@ const MessageContent = ({
             onRevealProgress={onRevealProgress}
             onPreview={setPreviewImageUrl}
             maxWidth={PLAYGROUND_MEDIA_MAX_WIDTH}
-            maxHeight={PLAYGROUND_IMAGE_MAX_HEIGHT}
+            maxHeight={PLAYGROUND_MEDIA_MAX_HEIGHT}
+            maxHeightPx={mediaMaxHeightPx}
           />
         )}
 
@@ -576,7 +583,7 @@ const MessageContent = ({
                         const constrainedImageSize = getConstrainedMediaSize(
                           mergedMediaDimensions[imageUrl],
                           PLAYGROUND_MEDIA_MAX_WIDTH_PX,
-                          300,
+                          mediaMaxHeightPx,
                         );
                         return (
                           <div
@@ -615,7 +622,8 @@ const MessageContent = ({
                                   ? `${constrainedImageSize.height}px`
                                   : 'auto',
                                 maxWidth: '100%',
-                                maxHeight: '300px',
+                                maxHeight: PLAYGROUND_MEDIA_MAX_HEIGHT,
+                                objectFit: 'contain',
                                 opacity: loadedMediaUrls.has(imageUrl) ? 1 : 0,
                                 transition: 'opacity 200ms ease',
                                 transitionDelay: loadedMediaUrls.has(imageUrl)
@@ -674,7 +682,7 @@ const MessageContent = ({
                         ready
                         fluid
                         onRevealProgress={onRevealProgress}
-                        className={`prose prose-xs sm:prose-sm prose-gray max-w-none overflow-x-auto text-xs sm:text-sm [&_img]:w-full [&_img]:h-auto [&_img]:rounded-lg [&_img]:mx-auto [&_img]:cursor-zoom-in [&_img]:max-w-[min(100%,780px)] [&_video]:w-full [&_video]:h-auto [&_video]:rounded-lg [&_video]:mx-auto [&_video]:max-w-[min(100%,780px)] ${message.role === 'user' ? 'user-message' : ''}`}
+                        className={`prose prose-xs sm:prose-sm prose-gray max-w-none overflow-x-auto text-xs sm:text-sm ${PLAYGROUND_MARKDOWN_MEDIA_CLASS} ${message.role === 'user' ? 'user-message' : ''}`}
                       >
                         <MarkdownRenderer
                           content={textContent.text}
@@ -726,7 +734,7 @@ const MessageContent = ({
                       ready
                       fluid
                       onRevealProgress={onRevealProgress}
-                      className='prose prose-xs sm:prose-sm prose-gray max-w-none overflow-x-auto text-xs sm:text-sm [&_img]:w-full [&_img]:h-auto [&_img]:rounded-lg [&_img]:mx-auto [&_img]:cursor-zoom-in [&_img]:max-w-[min(100%,780px)] [&_video]:w-full [&_video]:h-auto [&_video]:rounded-lg [&_video]:mx-auto [&_video]:max-w-[min(100%,780px)]'
+                      className={`prose prose-xs sm:prose-sm prose-gray max-w-none overflow-x-auto text-xs sm:text-sm ${PLAYGROUND_MARKDOWN_MEDIA_CLASS}`}
                       onClick={(e) => {
                         const target = e.target;
                         if (
@@ -754,7 +762,7 @@ const MessageContent = ({
                     ready
                     fluid
                     onRevealProgress={onRevealProgress}
-                    className={`prose prose-xs sm:prose-sm prose-gray max-w-none overflow-x-auto text-xs sm:text-sm [&_img]:w-full [&_img]:h-auto [&_img]:rounded-lg [&_img]:mx-auto [&_img]:cursor-zoom-in [&_img]:max-w-[min(100%,780px)] [&_video]:w-full [&_video]:h-auto [&_video]:rounded-lg [&_video]:mx-auto [&_video]:max-w-[min(100%,780px)] ${message.role === 'user' ? 'user-message' : ''}`}
+                    className={`prose prose-xs sm:prose-sm prose-gray max-w-none overflow-x-auto text-xs sm:text-sm ${PLAYGROUND_MARKDOWN_MEDIA_CLASS} ${message.role === 'user' ? 'user-message' : ''}`}
                   >
                     <MarkdownRenderer
                       content={message.content}

@@ -153,6 +153,20 @@ export const PLAYGROUND_VIDEO_DURATION_OPTIONS = Array.from(
     },
 );
 
+/** 操练场消息内图片/视频最大宽度 */
+export const PLAYGROUND_MEDIA_MAX_WIDTH = 'min(100%, 780px)';
+export const PLAYGROUND_MEDIA_MAX_WIDTH_PX = 780;
+/** 操练场消息内图片/视频最大高度（保持比例） */
+export const PLAYGROUND_MEDIA_MAX_HEIGHT = '60vh';
+export const PLAYGROUND_MEDIA_MAX_HEIGHT_RATIO = 0.6;
+
+export function getPlaygroundMediaMaxHeightPx() {
+    if (typeof window === 'undefined') {
+        return 640;
+    }
+    return Math.round(window.innerHeight * PLAYGROUND_MEDIA_MAX_HEIGHT_RATIO);
+}
+
 // 操练场图片分辨率：value 为上游 size，label 仅展示 480p / 720p 等
 export const PLAYGROUND_IMAGE_SIZE_OPTIONS = [
     { label: '480p', value: '854x480' },
