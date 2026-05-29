@@ -31,6 +31,9 @@ const (
 	EndpointTypeTencentCloudVODImage EndpointType = "tencentcloud-vod-image"
 	// EndpointTypeAliVideo is Alibaba DashScope video-synthesis (async task API).
 	EndpointTypeAliVideo EndpointType = "ali-video"
+	// EndpointTypeSeedanceVideo is VolcEngine contents generations (Seedance 2.0 async API).
+	// Client entry: POST /v1/video/generations; upstream: POST /api/v3/contents/generations/tasks.
+	EndpointTypeSeedanceVideo EndpointType = "seedance-video"
 	//EndpointTypeMidjourney     EndpointType = "midjourney-proxy"
 	//EndpointTypeSuno           EndpointType = "suno-proxy"
 	//EndpointTypeKling          EndpointType = "kling"

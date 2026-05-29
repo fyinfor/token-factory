@@ -22,6 +22,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay"
 	taskalivideo "github.com/QuantumNous/new-api/relay/channel/task/alivideo"
+	taskdoubao "github.com/QuantumNous/new-api/relay/channel/task/doubao"
 	taskopenaivideo "github.com/QuantumNous/new-api/relay/channel/task/openaivideo"
 	tasktencentvod "github.com/QuantumNous/new-api/relay/channel/task/tencentvod"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -163,6 +164,9 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 	if channel != nil && channel.Type == constant.ChannelTypeAliVideo {
 		return string(constant.EndpointTypeAliVideo)
 	}
+	if channel != nil && (channel.Type == constant.ChannelTypeDoubaoVideo || channel.Type == constant.ChannelTypeSeedance) {
+		return string(constant.EndpointTypeSeedanceVideo)
+	}
 	return normalized
 }
 
@@ -174,7 +178,6 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 		constant.ChannelTypeSunoAPI,
 		constant.ChannelTypeKling,
 		constant.ChannelTypeJimeng,
-		constant.ChannelTypeDoubaoVideo,
 		constant.ChannelTypeVidu,
 	}
 	if lo.Contains(unsupportedTestChannelTypes, channel.Type) {
@@ -290,7 +293,8 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 		endpointType == string(constant.EndpointTypeTokenFactoryVideo) ||
 		endpointType == string(constant.EndpointTypeVideoGenerator) ||
 		endpointType == string(constant.EndpointTypeTencentCloudVODVideo) ||
-		endpointType == string(constant.EndpointTypeAliVideo) {
+		endpointType == string(constant.EndpointTypeAliVideo) ||
+		endpointType == string(constant.EndpointTypeSeedanceVideo) {
 		return testChannelVideo(c, channel, testModel, endpointType, tik)
 	}
 
@@ -906,6 +910,19 @@ func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, 
 				"duration":   5,
 			},
 		}
+	case constant.EndpointTypeSeedanceVideo:
+		// 火山 contents generations（Seedance 2.0 / 词元算力）：上游为原生 content[] 协议。
+		fullURL = taskdoubao.SubmitURL(baseURL)
+		bodyMap = map[string]any{
+			"model": upstreamModel,
+			"content": []map[string]any{
+				{"type": "text", "text": "a cute cat dancing in a sunny garden"},
+			},
+			"resolution": "480p",
+			"ratio":      "16:9",
+			"duration":   5,
+			"watermark":  false,
+		}
 	default:
 		err := fmt.Errorf("unsupported video endpoint type: %s", endpointType)
 		return testResult{
@@ -1005,7 +1022,7 @@ func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, 
 				tokenFactoryError: types.NewOpenAIError(bodyErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError),
 			}
 		}
-	case constant.EndpointTypeOpenAIVideoGW, constant.EndpointTypeTokenFactoryVideo:
+	case constant.EndpointTypeOpenAIVideoGW, constant.EndpointTypeTokenFactoryVideo, constant.EndpointTypeSeedanceVideo:
 		// OpenAI 视频网关：两种响应格式根据顶层字段自动判断。
 		//   MaaS：{"code":0,"message":"","result":{"task_id":"..."}}
 		//         失败时 code != 0，错误消息在 message/messasge 里。

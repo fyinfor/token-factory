@@ -334,12 +334,8 @@ func videoDimensionsFromTaskRequest(req relaycommon.TaskSubmitReq) (int, int) {
 			}
 		}
 	}
-	if req.Metadata != nil {
-		w := toInt(req.Metadata["width"])
-		h := toInt(req.Metadata["height"])
-		if w > 0 && h > 0 {
-			return w, h
-		}
+	if w, h, ok := common.VideoDimensionsFromMetadata(req.Metadata); ok {
+		return w, h
 	}
 	return 720, 1280
 }

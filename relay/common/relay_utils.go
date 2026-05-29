@@ -250,6 +250,7 @@ func ValidateBasicTaskRequest(c *gin.Context, info *RelayInfo, action string) *d
 	if req.Seed != nil {
 		req.Metadata["seed"] = *req.Seed
 	}
+	req.Metadata = common.NormalizeTaskVideoMetadata(req.Metadata, req.Size, nil, nil)
 
 	// 多个视频 adaptor 误把默认 action 传成 TaskActionGenerate，导致无图请求在任务日志里
 	// 仍显示为「图生视频」。仅在请求侧确实无图时降为文生；remix 等已由 ResolveOriginTask 预设的 action 不得覆盖。
