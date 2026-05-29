@@ -169,9 +169,9 @@ jobs:
           script: |
             set -e
             IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
-            TAR_FILE="/tmp/token-factory-${{ inputs.tag }}.tar"
+            TAR_FILE="/home/ubuntu/token-factory-${{ inputs.tag }}.tar"
             TARGET_IP="${{ secrets.SERVER_B_HOST }}"
-            KEY_FILE="/tmp/ssh_key_b_$$"
+            KEY_FILE="/home/ubuntu/.ssh/ssh_key_b_$$"
 
             echo "========================================="
             echo "  中转镜像到 Server B: $TARGET_IP"
@@ -189,6 +189,8 @@ jobs:
             echo ""
             echo "[2/4] Saving image..."
             sudo docker save -o "$TAR_FILE" "$IMAGE"
+            # 让 ubuntu 用户能读取 tar (sudo 生成的文件属主是 root)
+            sudo chmod 644 "$TAR_FILE"
             echo "✅ Saved: $(ls -lh "$TAR_FILE" | awk '{print $5}')"
 
             echo ""
