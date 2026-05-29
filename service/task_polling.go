@@ -120,15 +120,13 @@ func TaskPollingLoop() {
 				taskChannelM[task.ChannelId] = append(taskChannelM[task.ChannelId], upstreamID)
 			}
 			if len(nullTaskIds) > 0 {
-				err := model.TaskBulkUpdateByID(nullTaskIds, map[string]any{
-					"status":   "FAILURE",
-					"progress": "100%",
-				})
-				if err != nil {
-					logger.LogError(ctx, fmt.Sprintf("Fix null task_id task error: %v", err))
-				} else {
-					logger.LogInfo(ctx, fmt.Sprintf("Fix null task_id task success: %v", nullTaskIds))
+				reason := "empty upstream task id"
+				for _, task := range tasks {
+					if task.GetUpstreamTaskID() == "" {
+						failTaskAndRefund(ctx, task, reason)
+					}
 				}
+				logger.LogInfo(ctx, fmt.Sprintf("Fix null task_id task success: %v", nullTaskIds))
 			}
 			if len(taskChannelM) == 0 {
 				continue
@@ -173,20 +171,11 @@ func updateSunoTasks(ctx context.Context, channelId int, taskIds []string, taskM
 	ch, err := model.CacheGetChannel(channelId)
 	if err != nil {
 		common.SysLog(fmt.Sprintf("CacheGetChannel: %v", err))
-		// Collect DB primary key IDs for bulk update (taskIds are upstream IDs, not task_id column values)
-		var failedIDs []int64
+		reason := fmt.Sprintf("channel info unavailable, channel ID: %d", channelId)
 		for _, upstreamID := range taskIds {
 			if t, ok := taskM[upstreamID]; ok {
-				failedIDs = append(failedIDs, t.ID)
+				failTaskAndRefund(ctx, t, reason)
 			}
-		}
-		err = model.TaskBulkUpdateByID(failedIDs, map[string]any{
-			"fail_reason": fmt.Sprintf("获取渠道信息失败，请联系管理员，渠道ID：%d", channelId),
-			"status":      "FAILURE",
-			"progress":    "100%",
-		})
-		if err != nil {
-			common.SysLog(fmt.Sprintf("UpdateSunoTask error: %v", err))
 		}
 		return err
 	}
@@ -300,6 +289,36 @@ func UpdateVideoTasks(ctx context.Context, platform constant.TaskPlatform, taskC
 	return nil
 }
 
+func failTaskAndRefund(ctx context.Context, task *model.Task, reason string) bool {
+	if task == nil {
+		return false
+	}
+	snap := task.Snapshot()
+	if task.Status == model.TaskStatusFailure || task.Status == model.TaskStatusSuccess {
+		return false
+	}
+	now := time.Now().Unix()
+	task.Status = model.TaskStatusFailure
+	task.Progress = taskcommon.ProgressComplete
+	task.FailReason = reason
+	if task.FinishTime == 0 {
+		task.FinishTime = now
+	}
+	won, err := task.UpdateWithStatus(snap.Status)
+	if err != nil {
+		logger.LogError(ctx, fmt.Sprintf("failTaskAndRefund update error for task %s: %v", task.TaskID, err))
+		return false
+	}
+	if !won {
+		logger.LogWarn(ctx, fmt.Sprintf("failTaskAndRefund: task %s already transitioned, skip refund", task.TaskID))
+		return false
+	}
+	if task.Quota != 0 {
+		RefundTaskQuota(ctx, task, reason)
+	}
+	return true
+}
+
 func updateVideoTasks(ctx context.Context, platform constant.TaskPlatform, channelId int, taskIds []string, taskM map[string]*model.Task) error {
 	logger.LogInfo(ctx, fmt.Sprintf("Channel #%d pending video tasks: %d", channelId, len(taskIds)))
 	if len(taskIds) == 0 {
@@ -307,20 +326,11 @@ func updateVideoTasks(ctx context.Context, platform constant.TaskPlatform, chann
 	}
 	cacheGetChannel, err := model.CacheGetChannel(channelId)
 	if err != nil {
-		// Collect DB primary key IDs for bulk update (taskIds are upstream IDs, not task_id column values)
-		var failedIDs []int64
+		reason := fmt.Sprintf("Failed to get channel info, channel ID: %d", channelId)
 		for _, upstreamID := range taskIds {
 			if t, ok := taskM[upstreamID]; ok {
-				failedIDs = append(failedIDs, t.ID)
+				failTaskAndRefund(ctx, t, reason)
 			}
-		}
-		errUpdate := model.TaskBulkUpdateByID(failedIDs, map[string]any{
-			"fail_reason": fmt.Sprintf("Failed to get channel info, channel ID: %d", channelId),
-			"status":      "FAILURE",
-			"progress":    "100%",
-		})
-		if errUpdate != nil {
-			common.SysLog(fmt.Sprintf("UpdateVideoTask error: %v", errUpdate))
 		}
 		return fmt.Errorf("CacheGetChannel failed: %w", err)
 	}
@@ -816,13 +826,7 @@ func detectTaskVideoBillingMode(task *model.Task) string {
 	if err := common.UnmarshalJsonStr(task.Properties.Input, &req); err != nil {
 		return "text_to_video"
 	}
-	if strings.TrimSpace(req.InputReference) != "" {
-		return "video_to_video"
-	}
-	if strings.TrimSpace(req.Image) != "" || len(req.Images) > 0 {
-		return "image_to_video"
-	}
-	return "text_to_video"
+	return relaycommon.DetectVideoBillingMode(&req)
 }
 
 type videoPerSecondPriceMatch struct {
@@ -834,22 +838,22 @@ type videoPerSecondPriceMatch struct {
 }
 
 type videoPerSecondBillingDetail struct {
-	Mode                   string
-	Seconds                int
-	Width                  int
-	Height                 int
-	HasAudio               bool
-	Resolution             string
-	RuleWidth              int
-	RuleHeight             int
-	PricePerSecond         float64
-	GlobalPricePerSecond   float64
+	Mode                    string
+	Seconds                 int
+	Width                   int
+	Height                  int
+	HasAudio                bool
+	Resolution              string
+	RuleWidth               int
+	RuleHeight              int
+	PricePerSecond          float64
+	GlobalPricePerSecond    float64
 	EffectivePricePerSecond float64
-	MarkupDiscountPercent  float64
-	GroupRatio             float64
-	QuotaPerUnit           float64
-	ChannelDiscountPercent float64
-	UnifiedAudio           bool
+	MarkupDiscountPercent   float64
+	GroupRatio              float64
+	QuotaPerUnit            float64
+	ChannelDiscountPercent  float64
+	UnifiedAudio            bool
 }
 
 // taskPreferVideoPerSecondSettlement 该任务是否应按视频按秒规则结算（避免误走文本 token 重算）。

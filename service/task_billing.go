@@ -277,6 +277,80 @@ func videoPerSecondBillingDetailFromSubmit(c *gin.Context, info *relaycommon.Rel
 	return detail
 }
 
+// videoPerSecondBillingDetailFromTask rebuilds log detail from the saved request
+// when the completed video response does not expose probeable metadata.
+func videoPerSecondBillingDetailFromTask(task *model.Task) *videoPerSecondBillingDetail {
+	if task == nil {
+		return nil
+	}
+	var req relaycommon.TaskSubmitReq
+	if err := common.UnmarshalJsonStr(task.Properties.Input, &req); err != nil {
+		return nil
+	}
+	modelName := strings.TrimSpace(taskModelName(task))
+	if modelName == "" {
+		return nil
+	}
+	rules, ok := ratio_setting.GetChannelVideoPricingRules(task.ChannelId, modelName)
+	if !ok || !ratio_setting.HasUsableVideoPerSecondRules(rules) {
+		var globalOK bool
+		rules, globalOK = ratio_setting.GetVideoPricingRules(modelName)
+		if !globalOK || !ratio_setting.HasUsableVideoPerSecondRules(rules) {
+			return nil
+		}
+	}
+	width, height := videoDimensionsFromTaskRequest(req)
+	hasAudio := taskRequestHasAudio(req)
+	if bc := task.PrivateData.BillingContext; bc != nil && bc.OtherRatios != nil {
+		if bc.OtherRatios["has_audio"] > 0 {
+			hasAudio = true
+		}
+	}
+	mode := detectVideoBillingModeFromTaskReq(&req)
+	match, ok := matchPerSecondPriceDetail(rules, mode, width, height, hasAudio)
+	if !ok || match.PricePerSecond <= 0 {
+		return nil
+	}
+	seconds := taskBillingSecondsEstimate(task)
+	if seconds <= 0 {
+		seconds = videoDurationFromTaskRequest(req)
+	}
+	if seconds <= 0 {
+		return nil
+	}
+	groupRatio := 1.0
+	if bc := task.PrivateData.BillingContext; bc != nil && bc.GroupRatio > 0 {
+		groupRatio = bc.GroupRatio
+	}
+	channelDiscount := float64(0)
+	if bc := task.PrivateData.BillingContext; bc != nil && bc.ChannelPriceDiscountPercent > 0 {
+		channelDiscount = bc.ChannelPriceDiscountPercent
+	}
+	if channelDiscount <= 0 {
+		channelDiscount = model.ResolveChannelPriceDiscountPercent(task.ChannelId)
+	}
+	if channelDiscount <= 0 {
+		channelDiscount = 100
+	}
+	detail := &videoPerSecondBillingDetail{
+		Mode:                   mode,
+		Seconds:                seconds,
+		Width:                  width,
+		Height:                 height,
+		HasAudio:               hasAudio,
+		Resolution:             match.Resolution,
+		RuleWidth:              match.RuleWidth,
+		RuleHeight:             match.RuleHeight,
+		PricePerSecond:         match.PricePerSecond,
+		GroupRatio:             groupRatio,
+		QuotaPerUnit:           common.QuotaPerUnit,
+		ChannelDiscountPercent: channelDiscount,
+		UnifiedAudio:           match.UnifiedAudio,
+	}
+	fillVideoPerSecondEffectiveRates(detail, task.ChannelId, task.UserId, modelName, mode)
+	return detail
+}
+
 // fillVideoPerSecondEffectiveRates 补全日志展示用的全局价、有效单价（含成本折扣与加价切片）。
 func fillVideoPerSecondEffectiveRates(detail *videoPerSecondBillingDetail, channelId, userId int, modelName, mode string) {
 	if detail == nil {
@@ -727,6 +801,9 @@ func recordVideoTaskSettlementMarker(ctx context.Context, task *model.Task, actu
 	other["pre_consumed_quota"] = preConsumed
 	other["video_final_quota"] = actualQuota
 	other["billing_mode"] = "video_per_second"
+	if detail == nil {
+		detail = videoPerSecondBillingDetailFromTask(task)
+	}
 	if detail != nil {
 		appendVideoPerSecondBillingDetailOther(other, detail, actualQuota)
 	}
@@ -834,6 +911,9 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 			}
 			other[k] = v
 		}
+	}
+	if detail == nil && taskNeedsVideoSettlementMarker(task) {
+		detail = videoPerSecondBillingDetailFromTask(task)
 	}
 	if detail != nil {
 		other["billing_mode"] = "video_per_second"

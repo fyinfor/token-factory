@@ -137,7 +137,7 @@ func ValidateMultipartDirect(c *gin.Context, info *RelayInfo) *dto.TaskError {
 	if seconds == 0 {
 		seconds = req.Duration
 	}
-	if req.InputReference != "" {
+	if req.InputReference != "" && DetectVideoBillingMode(&req) != VideoBillingModeVideoToVideo {
 		req.Images = []string{req.InputReference}
 	}
 
@@ -216,7 +216,7 @@ func ValidateBasicTaskRequest(c *gin.Context, info *RelayInfo, action string) *d
 		// 兼容单图上传
 		req.Images = []string{req.Image}
 	}
-	if len(req.Images) == 0 && strings.TrimSpace(req.InputReference) != "" {
+	if len(req.Images) == 0 && strings.TrimSpace(req.InputReference) != "" && DetectVideoBillingMode(&req) != VideoBillingModeVideoToVideo {
 		// 与 ValidateMultipartDirect 一致：Sora 等 JSON 路径的参考图视为图生输入
 		req.Images = []string{req.InputReference}
 	}

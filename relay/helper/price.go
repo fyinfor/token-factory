@@ -197,23 +197,23 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 
 	chDiscCopy := chDisc
 	priceData := types.PriceData{
-		FreeModel:             freeModel,
-		ModelPrice:            modelPrice,
-		ModelRatio:            modelRatio,
-		CompletionRatio:       completionRatio,
-		GroupRatioInfo:        groupRatioInfo,
-		UsePrice:              usePrice,
-		CacheRatio:            cacheRatio,
-		ImageRatio:            imageRatio,
-		AudioRatio:            audioRatio,
-		AudioCompletionRatio:  audioCompletionRatio,
-		VideoRatio:            videoRatio,
-		VideoCompletionRatio:  videoCompletionRatio,
-		CacheCreationRatio:    cacheCreationRatio,
-		CacheCreation5mRatio:  cacheCreationRatio5m,
-		CacheCreation1hRatio:  cacheCreationRatio1h,
-		ChannelPriceDiscount:  &chDiscCopy,
-		QuotaToPreConsume:     preConsumedQuota,
+		FreeModel:            freeModel,
+		ModelPrice:           modelPrice,
+		ModelRatio:           modelRatio,
+		CompletionRatio:      completionRatio,
+		GroupRatioInfo:       groupRatioInfo,
+		UsePrice:             usePrice,
+		CacheRatio:           cacheRatio,
+		ImageRatio:           imageRatio,
+		AudioRatio:           audioRatio,
+		AudioCompletionRatio: audioCompletionRatio,
+		VideoRatio:           videoRatio,
+		VideoCompletionRatio: videoCompletionRatio,
+		CacheCreationRatio:   cacheCreationRatio,
+		CacheCreation5mRatio: cacheCreationRatio5m,
+		CacheCreation1hRatio: cacheCreationRatio1h,
+		ChannelPriceDiscount: &chDiscCopy,
+		QuotaToPreConsume:    preConsumedQuota,
 		// 新计费公式字段
 		CostDiscountPercent:    chDisc,
 		MarkupDiscountPercent:  markupDisc,
@@ -1029,21 +1029,14 @@ func estimateVideoOutputTokens(ctx videoEstimateContext) int {
 }
 
 func detectVideoBillingMode(req *relaycommon.TaskSubmitReq) videoBillingMode {
-	if req == nil {
+	switch relaycommon.DetectVideoBillingMode(req) {
+	case relaycommon.VideoBillingModeImageToVideo:
+		return videoBillingModeImageToVideo
+	case relaycommon.VideoBillingModeVideoToVideo:
+		return videoBillingModeVideoToVideo
+	default:
 		return videoBillingModeTextToVideo
 	}
-	if strings.TrimSpace(req.InputReference) != "" {
-		return videoBillingModeVideoToVideo
-	}
-	if strings.TrimSpace(req.Image) != "" {
-		return videoBillingModeImageToVideo
-	}
-	for _, img := range req.Images {
-		if strings.TrimSpace(img) != "" {
-			return videoBillingModeImageToVideo
-		}
-	}
-	return videoBillingModeTextToVideo
 }
 
 func estimateVideoTokensWithRules(ctx videoEstimateContext, rules ratio_setting.VideoPricingRules) (tokens int, tokenPrice float64, ok bool) {
