@@ -201,6 +201,8 @@ function type2secretPrompt(type) {
       return '请输入 OpenAI API Key（用于调用 /v1/images/generations 接口）';
     case 64:
       return '请输入阿里云 DashScope API Key（用于调用 video-synthesis 接口）';
+    case 65:
+      return '请输入火山方舟-Seedance 2.0 上游 API Key（Bearer Token）';
     default:
       return '请输入渠道对应的鉴权密钥';
   }
@@ -760,6 +762,19 @@ const EditChannelModal = (props) => {
             ...prevInputs,
             base_url: 'https://api.openai.com',
           }));
+          break;
+        case 65:
+          localModels = getChannelModels(value);
+          setInputs((prevInputs) => ({
+            ...prevInputs,
+            base_url: 'https://api.tokenspace.net.cn',
+          }));
+          if (formApiRef.current) {
+            formApiRef.current.setValue(
+              'base_url',
+              'https://api.tokenspace.net.cn',
+            );
+          }
           break;
         default:
           localModels = getChannelModels(value);

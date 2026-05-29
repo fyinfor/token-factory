@@ -122,7 +122,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 
 // BuildRequestURL constructs the upstream URL.
 func (a *TaskAdaptor) BuildRequestURL(_ *relaycommon.RelayInfo) (string, error) {
-	return fmt.Sprintf("%s/api/v3/contents/generations/tasks", a.baseURL), nil
+	return SubmitURL(a.baseURL), nil
 }
 
 // BuildRequestHeader sets required headers.
@@ -198,7 +198,7 @@ func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any, proxy 
 		return nil, fmt.Errorf("invalid task_id")
 	}
 
-	uri := fmt.Sprintf("%s/api/v3/contents/generations/tasks/%s", baseUrl, taskID)
+	uri := FetchURL(baseUrl, taskID)
 
 	req, err := http.NewRequest(http.MethodGet, uri, nil)
 	if err != nil {
@@ -224,22 +224,53 @@ func (a *TaskAdaptor) GetChannelName() string {
 	return ChannelName
 }
 
+func collectVideoURLs(req *relaycommon.TaskSubmitReq) []string {
+	seen := make(map[string]struct{})
+	var urls []string
+	add := func(raw string) {
+		u := strings.TrimSpace(raw)
+		if u == "" || !isVideoURL(u) {
+			return
+		}
+		key := strings.ToLower(u)
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		urls = append(urls, u)
+	}
+	if req.Metadata != nil {
+		if raw, ok := req.Metadata["video_urls"]; ok {
+			switch arr := raw.(type) {
+			case []interface{}:
+				for _, it := range arr {
+					if u, ok := it.(string); ok {
+						add(u)
+					}
+				}
+			case []string:
+				for _, u := range arr {
+					add(u)
+				}
+			}
+		}
+		if raw, ok := req.Metadata["video_url"]; ok {
+			if u, ok := raw.(string); ok {
+				add(u)
+			}
+		}
+	}
+	add(req.InputReference)
+	for _, img := range req.Images {
+		add(img)
+	}
+	return urls
+}
+
 func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*requestPayload, error) {
 	r := requestPayload{
 		Model:   req.Model,
 		Content: []ContentItem{},
-	}
-
-	// Add images if present
-	if req.HasImage() {
-		for _, imgURL := range req.Images {
-			r.Content = append(r.Content, ContentItem{
-				Type: "image_url",
-				ImageURL: &MediaURL{
-					URL: imgURL,
-				},
-			})
-		}
 	}
 
 	metadata := req.Metadata
@@ -247,15 +278,48 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 		return nil, errors.Wrap(err, "unmarshal metadata failed")
 	}
 
-	if sec, _ := strconv.Atoi(req.Seconds); sec > 0 {
-		r.Duration = lo.ToPtr(dto.IntValue(sec))
-	}
+	// Rebuild content[]: text -> image_url -> video_url (Seedance 2.0 protocol).
+	r.Content = lo.Reject(r.Content, func(c ContentItem, _ int) bool {
+		switch c.Type {
+		case "text", "image_url", "video_url":
+			return true
+		default:
+			return false
+		}
+	})
 
-	r.Content = lo.Reject(r.Content, func(c ContentItem, _ int) bool { return c.Type == "text" })
 	r.Content = append(r.Content, ContentItem{
 		Type: "text",
 		Text: req.Prompt,
 	})
+
+	if req.HasImage() {
+		for _, imgURL := range req.Images {
+			if isVideoURL(imgURL) {
+				continue
+			}
+			if u := strings.TrimSpace(imgURL); u != "" {
+				r.Content = append(r.Content, ContentItem{
+					Type:     "image_url",
+					ImageURL: &MediaURL{URL: u},
+				})
+			}
+		}
+	}
+
+	for _, videoURL := range collectVideoURLs(req) {
+		r.Content = append(r.Content, ContentItem{
+			Type:     "video_url",
+			VideoURL: &MediaURL{URL: videoURL},
+			Role:     "reference_video",
+		})
+	}
+
+	if sec, _ := strconv.Atoi(req.Seconds); sec > 0 {
+		r.Duration = lo.ToPtr(dto.IntValue(sec))
+	} else if req.Duration > 0 && r.Duration == nil {
+		r.Duration = lo.ToPtr(dto.IntValue(req.Duration))
+	}
 
 	return &r, nil
 }
@@ -288,6 +352,9 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		// 解析 usage 信息用于按倍率计费
 		taskResult.CompletionTokens = resTask.Usage.CompletionTokens
 		taskResult.TotalTokens = resTask.Usage.TotalTokens
+		if taskResult.TotalTokens == 0 && taskResult.CompletionTokens > 0 {
+			taskResult.TotalTokens = taskResult.CompletionTokens
+		}
 	case "failed", "error", "cancelled", "canceled":
 		taskResult.Status = model.TaskStatusFailure
 		taskResult.Progress = "100%"

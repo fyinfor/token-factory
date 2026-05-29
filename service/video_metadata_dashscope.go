@@ -19,6 +19,9 @@ func extractVideoMetadataFromMap(payload map[string]any) (*VideoMetadata, bool) 
 	if meta, ok := extractDashScopeVideoMetadata(payload); ok {
 		return meta, true
 	}
+	if meta, ok := extractVolcEngineVideoMetadata(payload); ok {
+		return meta, true
+	}
 	return nil, false
 }
 

@@ -500,6 +500,7 @@ export function getChannelIcon(channelType) {
     case 53: // SubModel
       return <SubModel.Color size={iconSize} />;
     case 54: // 豆包视频 Doubao Video
+    case 65: // 火山方舟-Seedance 2.0 视频
       return <Doubao.Color size={iconSize} />;
     case 56: // Replicate
       return <Replicate size={iconSize} />;
