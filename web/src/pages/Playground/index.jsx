@@ -64,6 +64,11 @@ import {
   OptimizedMessageContent,
   OptimizedMessageActions,
 } from '../../components/playground/OptimizedComponents';
+import {
+  getMessageStorageKey,
+  loadModeMessages,
+  saveModeMessages,
+} from '../../components/playground/messageStorage';
 import ChatArea from '../../components/playground/ChatArea';
 import LazyVisibleMessage from '../../components/playground/LazyVisibleMessage';
 import FloatingButtons from '../../components/playground/FloatingButtons';
@@ -101,10 +106,6 @@ const Playground = () => {
   const modeStoreInitializedRef = useRef(false);
   const activeVideoPollTaskIdsRef = useRef(new Set());
   const pendingPlaygroundChatScrollRef = useRef(false);
-  const getModeStorageKey = useCallback(
-    () => `playground_mode_messages_${userState?.user?.id || 'guest'}`,
-    [userState?.user?.id],
-  );
 
   const state = usePlaygroundState(userState?.user?.id);
   const {
@@ -145,15 +146,8 @@ const Playground = () => {
   } = state;
 
   const persistModeMessages = useCallback(() => {
-    try {
-      localStorage.setItem(
-        getModeStorageKey(),
-        JSON.stringify(modeMessagesRef.current),
-      );
-    } catch (err) {
-      console.warn('保存分模式消息失败:', err);
-    }
-  }, [getModeStorageKey]);
+    saveModeMessages(userState?.user?.id, modeMessagesRef.current);
+  }, [userState?.user?.id]);
 
   const saveMessagesForMode = useCallback(
     (messagesToSave, mode) => {
@@ -189,6 +183,53 @@ const Playground = () => {
     },
     [inputs.display_mode, persistModeMessages, setMessage],
   );
+
+  const handleMediaDimensionsChange = useCallback(
+    (messageId, url, dimensions) => {
+      const width = Number(dimensions?.width || 0);
+      const height = Number(dimensions?.height || 0);
+      if (!messageId || !url || !width || !height) return;
+      const currentMode =
+        previousModeRef.current || inputs.display_mode || 'text';
+      setMessageForMode((prevMessages) => {
+        let changed = false;
+        const updatedMessages = prevMessages.map((item) => {
+          if (item?.id !== messageId) return item;
+          const prevDimensions = item.mediaDimensions?.[url];
+          if (
+            Number(prevDimensions?.width || 0) === width &&
+            Number(prevDimensions?.height || 0) === height
+          ) {
+            return item;
+          }
+          changed = true;
+          return {
+            ...item,
+            mediaDimensions: {
+              ...(item.mediaDimensions || {}),
+              [url]: { width, height },
+            },
+          };
+        });
+        if (changed) {
+          setTimeout(
+            () => saveMessagesForMode(updatedMessages, currentMode),
+            0,
+          );
+        }
+        return changed ? updatedMessages : prevMessages;
+      }, currentMode);
+    },
+    [inputs.display_mode, saveMessagesForMode, setMessageForMode],
+  );
+
+  const handleRevealProgress = useCallback(() => {
+    try {
+      chatRef.current?.scrollToBottom?.(false);
+    } catch (_) {
+      // Semi Chat ref 在极少数情况下可能尚未就绪
+    }
+  }, []);
 
   useLayoutEffect(() => {
     if (!pendingPlaygroundChatScrollRef.current) return;
@@ -315,21 +356,46 @@ const Playground = () => {
 
   // 恢复分模式消息（文本/图片/视频）持久化快照
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(getModeStorageKey());
+    let cancelled = false;
+    const restoreModeMessages = async () => {
       const defaultMsgs = getDefaultMessages(t);
       let restored;
+      try {
+        const saved = await loadModeMessages(userState?.user?.id);
+        let parsed = saved;
 
-      if (!raw) {
-        // 没有持久化数据，初始化为默认消息
-        restored = {
-          text: defaultMsgs,
-          image: defaultMsgs,
-          video: defaultMsgs,
-        };
-      } else {
-        const parsed = JSON.parse(raw);
-        if (!parsed || typeof parsed !== 'object') {
+        if (!parsed) {
+          const legacyRaw = localStorage.getItem(
+            getMessageStorageKey(userState?.user?.id),
+          );
+          if (legacyRaw) {
+            parsed = JSON.parse(legacyRaw);
+            await saveModeMessages(userState?.user?.id, parsed);
+            localStorage.removeItem(getMessageStorageKey(userState?.user?.id));
+          }
+        }
+
+        if (!parsed) {
+          const legacyMessageKey = userState?.user?.id
+            ? `playground_messages_${userState.user.id}`
+            : 'playground_messages';
+          const legacyMessageRaw = localStorage.getItem(legacyMessageKey);
+          if (legacyMessageRaw) {
+            const legacyMessageData = JSON.parse(legacyMessageRaw);
+            if (Array.isArray(legacyMessageData?.messages)) {
+              parsed = {
+                text: legacyMessageData.messages,
+                image: defaultMsgs,
+                video: defaultMsgs,
+              };
+              await saveModeMessages(userState?.user?.id, parsed);
+              localStorage.removeItem(legacyMessageKey);
+            }
+          }
+        }
+
+        if (!parsed) {
+          // 没有持久化数据，初始化为默认消息
           restored = {
             text: defaultMsgs,
             image: defaultMsgs,
@@ -351,21 +417,26 @@ const Playground = () => {
                 : defaultMsgs,
           };
         }
-      }
+        if (cancelled) return;
 
-      modeMessagesRef.current = restored;
-      const currentMode = inputs.display_mode || 'text';
-      const currentModeMessages = restored[currentMode] || [];
-      if (Array.isArray(currentModeMessages)) {
-        pendingPlaygroundChatScrollRef.current = true;
-        setMessage(currentModeMessages);
+        modeMessagesRef.current = restored;
+        const currentMode = inputs.display_mode || 'text';
+        const currentModeMessages = restored[currentMode] || [];
+        if (Array.isArray(currentModeMessages)) {
+          pendingPlaygroundChatScrollRef.current = true;
+          setMessage(currentModeMessages);
+        }
+        previousModeRef.current = currentMode;
+        modeStoreInitializedRef.current = true;
+      } catch (err) {
+        console.warn('恢复分模式消息失败:', err);
       }
-      previousModeRef.current = currentMode;
-      modeStoreInitializedRef.current = true;
-    } catch (err) {
-      console.warn('恢复分模式消息失败:', err);
-    }
-  }, [getModeStorageKey, inputs.display_mode, setMessage, t]);
+    };
+    restoreModeMessages();
+    return () => {
+      cancelled = true;
+    };
+  }, [inputs.display_mode, setMessage, t, userState?.user?.id]);
 
   useEffect(() => {
     const activeMessageMode =
@@ -588,6 +659,7 @@ const Playground = () => {
         msg?.status === 'loading' ||
         msg?.status === 'incomplete' ||
         msg?.status === 'error' ||
+        isMediaMode ||
         (!isMediaMode && isLastInThread);
 
       const body = (
@@ -601,6 +673,8 @@ const Playground = () => {
           onEditCancel={handleEditCancel}
           editValue={editValue}
           onEditValueChange={setEditValue}
+          onMediaDimensionsChange={handleMediaDimensionsChange}
+          onRevealProgress={handleRevealProgress}
         />
       );
 
@@ -624,6 +698,8 @@ const Playground = () => {
       editValue,
       handleEditSave,
       handleEditCancel,
+      handleMediaDimensionsChange,
+      handleRevealProgress,
       setEditValue,
       toggleReasoningExpansion,
       message,

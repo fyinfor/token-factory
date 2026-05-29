@@ -1224,12 +1224,10 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
             const imagePV = normalizePerVideoPricingRows(
                 model.videoImageToVideoRules,
             );
-            const uploadPV = normalizePerVideoPricingRows(model.videoUploadRules);
             const genPV = normalizePerVideoPricingRows(model.videoGenerateRules);
             if (
                 textPV.length > 0 ||
                 imagePV.length > 0 ||
-                uploadPV.length > 0 ||
                 genPV.length > 0
             ) {
                 const pricingRules = {};
@@ -1238,9 +1236,6 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
                 }
                 if (imagePV.length > 0) {
                     pricingRules.image_to_video_per_video = imagePV;
-                }
-                if (uploadPV.length > 0) {
-                    pricingRules.video_to_video_input_per_video = uploadPV;
                 }
                 if (genPV.length > 0) {
                     pricingRules.video_to_video_output_per_video = genPV;
@@ -1356,13 +1351,11 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
                 );
         const textToVideo = normalizeRows(model.videoTextToVideoRules);
         const imageToVideoRules = normalizeRows(model.videoImageToVideoRules);
-        const videoUploadRules = normalizeRows(model.videoUploadRules);
         const videoGenerateRules = normalizeRows(model.videoGenerateRules);
         const similarityThreshold = toNumberOrNull(model.videoSimilarityThreshold);
         if (
             textToVideo.length > 0 ||
             imageToVideoRules.length > 0 ||
-            videoUploadRules.length > 0 ||
             videoGenerateRules.length > 0
         ) {
             const pricingRules = {};
@@ -1382,10 +1375,9 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
                     }),
                 );
             }
-            if (videoUploadRules.length > 0 || videoGenerateRules.length > 0) {
-                const merged = [...videoUploadRules, ...videoGenerateRules];
+            if (videoGenerateRules.length > 0) {
                 const seen = new Set();
-                pricingRules.video_to_video_per_second = merged
+                pricingRules.video_to_video_per_second = videoGenerateRules
                     .map((row) => ({
                         resolution: row.resolution,
                         has_audio: Boolean(row.has_audio),
@@ -1410,12 +1402,10 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
         }
         const textPV = normalizePerVideoPricingRows(model.videoTextToVideoRules);
         const imagePV = normalizePerVideoPricingRows(model.videoImageToVideoRules);
-        const uploadPV = normalizePerVideoPricingRows(model.videoUploadRules);
         const genPV = normalizePerVideoPricingRows(model.videoGenerateRules);
         if (
             textPV.length > 0 ||
             imagePV.length > 0 ||
-            uploadPV.length > 0 ||
             genPV.length > 0
         ) {
             const pricingRules = {};
@@ -1433,10 +1423,9 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
                     price: toUSD(row.video_price),
                 }));
             }
-            if (uploadPV.length > 0 || genPV.length > 0) {
-                const merged = [...uploadPV, ...genPV];
+            if (genPV.length > 0) {
                 const seen = new Set();
-                pricingRules.video_to_video_per_item = merged
+                pricingRules.video_to_video_per_item = genPV
                     .map((row) => ({
                         resolution: row.resolution,
                         has_audio: Boolean(row.has_audio),
