@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useContext } from 'react';
 import {
   Modal,
   Table,
@@ -38,6 +38,7 @@ import { IconSearch } from '@douyinfe/semi-icons';
 import { API, timestamp2string } from '../../../helpers';
 import { isAdmin } from '../../../helpers/utils';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
+import { StatusContext } from '../../../context/Status';
 const { Text } = Typography;
 
 // 状态映射配置
@@ -63,6 +64,26 @@ const PAYMENT_METHOD_MAP = {
 const TOPUP_STATUS_ALL = '__all__';
 
 /**
+ * 账单「支付金额」展示：易支付等为人民币；Stripe 的 money 为实付美元，按站点汇率换算为人民币展示。
+ * @param {unknown} money 后端 TopUp.money
+ * @param {string | undefined} paymentMethod 支付方式
+ * @param {number} usdExchangeRate 美元兑人民币汇率（与充值页 usd_exchange_rate / price 一致）
+ * @returns {string}
+ */
+function formatTopupPayMoney(money, paymentMethod, usdExchangeRate) {
+  const numericMoney = Number(money);
+  const safeMoney = Number.isFinite(numericMoney) ? numericMoney : 0;
+  const rate =
+    Number.isFinite(usdExchangeRate) && usdExchangeRate > 0
+      ? usdExchangeRate
+      : 7.3;
+  if ((paymentMethod || '').toLowerCase() === 'stripe') {
+    return `¥${(safeMoney * rate).toFixed(2)}`;
+  }
+  return `¥${safeMoney.toFixed(2)}`;
+}
+
+/**
  * 从 Semi Input onChange 首参解析字符串（兼容部分环境下传入合成事件的情况）。
  * @param {unknown} valOrEvt onChange 第一个参数
  * @returns {string}
@@ -86,6 +107,7 @@ function semiInputString(valOrEvt) {
  * @param {{ visible: boolean, onCancel: () => void, t: (key: string) => string }} props 弹窗显隐与文案函数
  */
 const TopupHistoryModal = ({ visible, onCancel, t }) => {
+  const [statusState] = useContext(StatusContext);
   const [loading, setLoading] = useState(false);
   const [topups, setTopups] = useState([]);
   const [total, setTotal] = useState(0);
@@ -101,6 +123,13 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
 
   /** 每次渲染读取管理员身份（避免 useMemo 空依赖导致角色变更后仍走 self 接口） */
   const userIsAdmin = isAdmin();
+
+  /** Stripe 实付美元换算人民币，与充值页 RechargeCard 汇率来源一致 */
+  const usdExchangeRate = useMemo(() => {
+    const s = statusState?.status;
+    const rate = Number(s?.usd_exchange_rate ?? s?.price);
+    return Number.isFinite(rate) && rate > 0 ? rate : 7.3;
+  }, [statusState?.status]);
 
   /** 支付状态下拉选项（与后端 TopUp.status / STATUS_CONFIG 一致） */
   const statusFilterOptions = useMemo(
@@ -277,7 +306,15 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
         title: t('支付金额'),
         dataIndex: 'money',
         key: 'money',
-        render: (money) => <Text type='danger'>¥{money.toFixed(2)}</Text>,
+        render: (money, record) => (
+          <Text type='danger'>
+            {formatTopupPayMoney(
+              money,
+              record?.payment_method,
+              usdExchangeRate,
+            )}
+          </Text>
+        ),
       },
       {
         title: t('支付状态'),
@@ -320,7 +357,7 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
     });
 
     return baseColumns;
-  }, [t, userIsAdmin]);
+  }, [t, userIsAdmin, usdExchangeRate]);
 
   return (
     <Modal
