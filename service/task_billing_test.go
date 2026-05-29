@@ -518,6 +518,32 @@ func TestCASGuardedRefund_Win(t *testing.T) {
 	assert.Equal(t, model.LogTypeRefund, log.Type)
 }
 
+func TestFailTaskAndRefund_Win(t *testing.T) {
+	truncate(t)
+	ctx := context.Background()
+
+	const userID, tokenID, channelID = 120, 120, 120
+	const initQuota, preConsumed = 10000, 3000
+	const tokenRemain = 5000
+
+	seedUser(t, userID, initQuota)
+	seedToken(t, tokenID, userID, "sk-fail-task-refund", tokenRemain)
+	seedChannel(t, channelID)
+
+	task := makeTask(userID, channelID, preConsumed, tokenID, BillingSourceWallet, 0)
+	task.Status = model.TaskStatusInProgress
+	require.NoError(t, model.DB.Create(task).Error)
+
+	require.True(t, failTaskAndRefund(ctx, task, "video policy violation"))
+
+	var reloaded model.Task
+	require.NoError(t, model.DB.First(&reloaded, task.ID).Error)
+	assert.EqualValues(t, model.TaskStatusFailure, reloaded.Status)
+	assert.Equal(t, "video policy violation", reloaded.FailReason)
+	assert.Equal(t, initQuota+preConsumed, getUserQuota(t, userID))
+	assert.Equal(t, tokenRemain+preConsumed, getTokenRemainQuota(t, tokenID))
+}
+
 func TestCASGuardedRefund_Lose(t *testing.T) {
 	truncate(t)
 	ctx := context.Background()
@@ -732,6 +758,81 @@ func TestLogTaskConsumption_VideoPerSecondBilling(t *testing.T) {
 	require.NoError(t, common.Unmarshal([]byte(log.Other), &other))
 	assert.Equal(t, "video_per_second", other["billing_mode"])
 	assert.Equal(t, "/v1/videos", other["request_path"])
+}
+
+func TestRecordVideoTaskSettlementMarker_FillsPerSecondDetailFromTaskInput(t *testing.T) {
+	truncate(t)
+	ctx := context.Background()
+
+	prevChannelRules := ratio_setting.ChannelVideoPricingRules2JSONString()
+	prevGlobalRules := ratio_setting.VideoPricingRules2JSONString()
+	t.Cleanup(func() {
+		_ = ratio_setting.UpdateChannelVideoPricingRulesByJSONString(prevChannelRules)
+		_ = ratio_setting.UpdateVideoPricingRulesByJSONString(prevGlobalRules)
+	})
+	require.NoError(t, ratio_setting.UpdateVideoPricingRulesByJSONString(`{}`))
+	require.NoError(t, ratio_setting.UpdateChannelVideoPricingRulesByJSONString(
+		`{"6":{"happyhorse-1.0-i2v":{"image_to_video_per_second":[{"resolution":"720p","has_audio":false,"price":4}]}}}`,
+	))
+
+	const userID, channelID, preConsumed = 1, 6, 10000000
+	discount := float64(100)
+	seedUser(t, userID, 100000000)
+	ch := &model.Channel{
+		Id:                   channelID,
+		Name:                 "u6_公有云",
+		Key:                  "sk-test",
+		Status:               common.ChannelStatusEnabled,
+		PriceDiscountPercent: &discount,
+	}
+	require.NoError(t, model.DB.Create(ch).Error)
+
+	req := relaycommon.TaskSubmitReq{
+		Prompt:         "test",
+		Model:          "happyhorse-1.0-i2v",
+		Size:           "1280x720",
+		Duration:       5,
+		InputReference: "https://example.com/ref.png",
+	}
+	reqBytes, err := common.Marshal(req)
+	require.NoError(t, err)
+
+	task := makeTask(userID, channelID, preConsumed, 0, BillingSourceWallet, 0)
+	task.TaskID = "task_marker_detail"
+	task.Status = model.TaskStatusSuccess
+	task.Properties = model.Properties{
+		Input:           string(reqBytes),
+		OriginModelName: "happyhorse-1.0-i2v",
+	}
+	task.PrivateData.TokenName = "playground-default"
+	task.PrivateData.BillingContext = &model.TaskBillingContext{
+		ModelPrice:                  0,
+		ModelRatio:                  0,
+		GroupRatio:                  1,
+		OriginModelName:             "happyhorse-1.0-i2v",
+		OtherRatios:                 map[string]float64{"seconds": 5},
+		ChannelPriceDiscountPercent: discount,
+	}
+
+	recordVideoTaskSettlementMarker(ctx, task, preConsumed, nil)
+
+	log := getLastLog(t)
+	require.NotNil(t, log)
+	assert.Equal(t, model.LogTypeConsume, log.Type)
+	assert.Equal(t, 0, log.Quota)
+
+	var other map[string]interface{}
+	require.NoError(t, common.Unmarshal([]byte(log.Other), &other))
+	assert.Equal(t, "video_per_second", other["billing_mode"])
+	assert.Equal(t, float64(5), other["video_seconds"])
+	assert.Equal(t, float64(1280), other["video_width"])
+	assert.Equal(t, float64(720), other["video_height"])
+	assert.Equal(t, "720p", other["video_resolution"])
+	assert.Equal(t, float64(4), other["video_price_per_second"])
+	assert.Equal(t, common.QuotaPerUnit, other["video_quota_per_unit"])
+	assert.Equal(t, float64(preConsumed), other["video_billed_quota"])
+	assert.Equal(t, float64(preConsumed), other["actual_quota"])
+	assert.Equal(t, float64(preConsumed), other["pre_consumed_quota"])
 }
 
 func TestLogTaskConsumption_VideoPerVideoFlatBilling(t *testing.T) {

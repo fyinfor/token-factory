@@ -29,7 +29,11 @@ import {
   Tooltip,
 } from '@douyinfe/semi-ui';
 import { IconCopy, IconListView } from '@douyinfe/semi-icons';
-import { copy, stringToColor } from '../../../../../helpers';
+import {
+  copy,
+  stringToColor,
+  isVideoPricingModel,
+} from '../../../../../helpers';
 import {
   getUsedGroupContext,
   pickChannelScopedModelFloat,
@@ -452,6 +456,7 @@ const ModelChannelList = ({
       modelData?.create_cache_ratio != null
         ? Number(modelData.create_cache_ratio)
         : 0;
+    const hideTextTokenPrices = isVideoPricingModel(modelData);
 
     // 计算价格，返回 { display, value }
     const calculatePrice = (
@@ -544,63 +549,68 @@ const ModelChannelList = ({
     }
     // 按量计费
     else {
-      // 输入：ch.model_ratio × costDisc + globalMr × markupRate
-      const effInputRate = hasRatioValue(channel.model_ratio)
-        ? Number(channel.model_ratio) * costDisc + globalMr * markupRate
-        : null;
-      items.push(
-        makeItem(t('输入价格'), effInputRate, modelData?.model_ratio, false),
-      );
-
-      // 输出价格：仅当全局模型配置了 completion_ratio 时才展示
-      if (
-        hasRatioValue(channel.model_ratio) &&
-        hasRatioValue(channel.completion_ratio) &&
-        hasRatioValue(modelData?.completion_ratio)
-      ) {
-        const effOut =
-          Number(channel.model_ratio) *
-            Number(channel.completion_ratio) *
-            costDisc +
-          globalMr * globalCR * markupRate;
-        const rootOut = hasRatioValue(modelData?.model_ratio)
-          ? Number(modelData.model_ratio) * Number(modelData.completion_ratio)
-          : null;
-        items.push(makeItem(t('输出价格'), effOut, rootOut, false));
-      }
-
-      // 缓存读取价格：仅当全局模型配置了 cache_ratio 时才展示
-      if (
-        hasRatioValue(channel.model_ratio) &&
-        hasRatioValue(channel.cache_ratio) &&
-        hasRatioValue(modelData?.cache_ratio)
-      ) {
-        const effCacheRate =
-          Number(channel.model_ratio) * Number(channel.cache_ratio) * costDisc +
-          globalMr * globalCacheR * markupRate;
-        const rootC = hasRatioValue(modelData?.model_ratio)
-          ? Number(modelData.model_ratio) * Number(modelData.cache_ratio)
-          : null;
-        items.push(makeItem(t('缓存读取价格'), effCacheRate, rootC, false));
-      }
-
-      // 缓存创建价格：仅当全局模型配置了 create_cache_ratio 时才展示
-      if (
-        hasRatioValue(channel.model_ratio) &&
-        hasRatioValue(channel.create_cache_ratio) &&
-        hasRatioValue(modelData?.create_cache_ratio)
-      ) {
-        const effCreateCacheRate =
-          Number(channel.model_ratio) *
-            Number(channel.create_cache_ratio) *
-            costDisc +
-          globalMr * globalCreateCacheR * markupRate;
-        const rootCC = hasRatioValue(modelData?.model_ratio)
-          ? Number(modelData.model_ratio) * Number(modelData.create_cache_ratio)
+      if (!hideTextTokenPrices) {
+        // 输入：ch.model_ratio × costDisc + globalMr × markupRate
+        const effInputRate = hasRatioValue(channel.model_ratio)
+          ? Number(channel.model_ratio) * costDisc + globalMr * markupRate
           : null;
         items.push(
-          makeItem(t('缓存创建价格'), effCreateCacheRate, rootCC, false),
+          makeItem(t('输入价格'), effInputRate, modelData?.model_ratio, false),
         );
+
+        // 输出价格：仅当全局模型配置了 completion_ratio 时才展示
+        if (
+          hasRatioValue(channel.model_ratio) &&
+          hasRatioValue(channel.completion_ratio) &&
+          hasRatioValue(modelData?.completion_ratio)
+        ) {
+          const effOut =
+            Number(channel.model_ratio) *
+              Number(channel.completion_ratio) *
+              costDisc +
+            globalMr * globalCR * markupRate;
+          const rootOut = hasRatioValue(modelData?.model_ratio)
+            ? Number(modelData.model_ratio) * Number(modelData.completion_ratio)
+            : null;
+          items.push(makeItem(t('输出价格'), effOut, rootOut, false));
+        }
+
+        // 缓存读取价格：仅当全局模型配置了 cache_ratio 时才展示
+        if (
+          hasRatioValue(channel.model_ratio) &&
+          hasRatioValue(channel.cache_ratio) &&
+          hasRatioValue(modelData?.cache_ratio)
+        ) {
+          const effCacheRate =
+            Number(channel.model_ratio) *
+              Number(channel.cache_ratio) *
+              costDisc +
+            globalMr * globalCacheR * markupRate;
+          const rootC = hasRatioValue(modelData?.model_ratio)
+            ? Number(modelData.model_ratio) * Number(modelData.cache_ratio)
+            : null;
+          items.push(makeItem(t('缓存读取价格'), effCacheRate, rootC, false));
+        }
+
+        // 缓存创建价格：仅当全局模型配置了 create_cache_ratio 时才展示
+        if (
+          hasRatioValue(channel.model_ratio) &&
+          hasRatioValue(channel.create_cache_ratio) &&
+          hasRatioValue(modelData?.create_cache_ratio)
+        ) {
+          const effCreateCacheRate =
+            Number(channel.model_ratio) *
+              Number(channel.create_cache_ratio) *
+              costDisc +
+            globalMr * globalCreateCacheR * markupRate;
+          const rootCC = hasRatioValue(modelData?.model_ratio)
+            ? Number(modelData.model_ratio) *
+              Number(modelData.create_cache_ratio)
+            : null;
+          items.push(
+            makeItem(t('缓存创建价格'), effCreateCacheRate, rootCC, false),
+          );
+        }
       }
 
       const chVideoRatio = pickChannelScopedModelFloat(
@@ -693,6 +703,7 @@ const ModelChannelList = ({
       modelData?.video_price !== undefined &&
       Number.isFinite(Number(modelData.video_price)) &&
       Number(modelData.video_price) > 0;
+    const hideTextTokenPrices = isVideoPricingModel(modelData);
 
     const costItems = computeChannelCostRates({
       channelId: channel.channel_id,
@@ -742,6 +753,14 @@ const ModelChannelList = ({
       skipVideoTokenPricing: showVideoFlatTable || modelHasVideoFlatPrice,
       skipVideoFlatSimple: showVideoFlatTable,
       quotaType,
+    }).filter((item) => {
+      if (!hideTextTokenPrices) return true;
+      return (
+        item.key === 'video_input' ||
+        item.key === 'video_output' ||
+        item.key === 'video_flat' ||
+        item.key === 'model_price'
+      );
     });
     const formatCostDisplay = (displayUsdPerM, isFixedPrice, fixedUnitKey) => {
       const priceUSD = displayUsdPerM;

@@ -139,16 +139,7 @@ func calcVideoPerSecondQuotaFromTaskReq(info *relaycommon.RelayInfo, req *relayc
 }
 
 func detectVideoBillingModeFromTaskReq(req *relaycommon.TaskSubmitReq) string {
-	if req == nil {
-		return "text_to_video"
-	}
-	if strings.TrimSpace(req.InputReference) != "" {
-		return "video_to_video"
-	}
-	if strings.TrimSpace(req.Image) != "" || len(req.Images) > 0 {
-		return "image_to_video"
-	}
-	return "text_to_video"
+	return relaycommon.DetectVideoBillingMode(req)
 }
 
 func detectVideoBillingModeFromSubmitRequest(c *gin.Context) string {

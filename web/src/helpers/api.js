@@ -237,7 +237,7 @@ export const buildApiPayload = (
             seed: null,
             images: imageMediaUrls,
             ...(imageMediaUrls.length > 0
-                ? { input_reference: imageMediaUrls[0] }
+                ? {}
                 : videoMediaUrls.length > 0
                   ? { input_reference: videoMediaUrls[0] }
                   : {}),

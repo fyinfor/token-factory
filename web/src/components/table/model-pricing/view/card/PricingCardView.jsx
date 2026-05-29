@@ -42,7 +42,12 @@ import {
   getUsedGroupContext,
   pickChannelScopedModelFloat,
   computeChannelBillingRates,
+  formatVideoResolutionDisplayLabel,
+  compareVideoResolutionAsc,
+  isVideoPricingModel,
+  hasNumericValue,
 } from '../../../../../helpers';
+import { VIDEO_FLAT_LANE_I18N_KEY } from '../../constants/videoFlatClipLaneI18n';
 import PricingCardSkeleton from './PricingCardSkeleton';
 import { useMinimumLoadingTime } from '../../../../../hooks/common/useMinimumLoadingTime';
 import { renderLimitedItems } from '../../../../common/ui/RenderUtils';
@@ -56,6 +61,177 @@ const CARD_STYLES = {
 };
 
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const getAudioLabel = (row, t) => {
+  if (row?.has_audio === true) return t('有音轨');
+  if (row?.has_audio === false) return t('无音轨');
+  return t('统一');
+};
+
+const getVideoLaneMeta = (lane, t) => {
+  const normalized = String(lane || '');
+  if (normalized.includes('image_to_video')) {
+    return {
+      label: t('图生视频'),
+      color: 'amber',
+    };
+  }
+  if (
+    normalized.includes('video_to_video') ||
+    normalized.includes('video_to_video_input') ||
+    normalized.includes('video_to_video_output')
+  ) {
+    return {
+      label: t('视频生视频'),
+      color: 'teal',
+    };
+  }
+  return {
+    label: t('文生视频'),
+    color: 'blue',
+  };
+};
+
+const getVideoLaneFamily = (lane) => {
+  const normalized = String(lane || '');
+  if (normalized.includes('image_to_video')) return 'image_to_video';
+  if (
+    normalized.includes('video_to_video') ||
+    normalized.includes('video_to_video_input') ||
+    normalized.includes('video_to_video_output')
+  ) {
+    return 'video_to_video';
+  }
+  return 'text_to_video';
+};
+
+const VIDEO_LANE_FAMILY_ORDER = {
+  text_to_video: 0,
+  image_to_video: 1,
+  video_to_video: 2,
+};
+
+const formatCompactVideoResolution = (resolution, t) => {
+  const label =
+    formatVideoResolutionDisplayLabel(resolution) || resolution || t('默认');
+  return String(label);
+};
+
+const formatVideoTierSpec = (row, t) => {
+  const unit = String(row?.lane || '').includes('per_second')
+    ? t('秒')
+    : t('个');
+  return `${formatCompactVideoResolution(row?.resolution, t)}/${unit}`;
+};
+
+const getVideoTierDiscount = (currentUsd, officialUsd) => {
+  const current = Number(currentUsd || 0);
+  const official = Number(officialUsd || 0);
+  if (
+    !Number.isFinite(current) ||
+    !Number.isFinite(official) ||
+    official <= 0
+  ) {
+    return null;
+  }
+  return official > current ? Math.round((1 - current / official) * 100) : 0;
+};
+
+const buildVideoTierPreviewItems = (hint, usedGroupRatio, displayPrice, t) => {
+  const rows = Array.isArray(hint?.tiers) ? hint.tiers : [];
+  const maxItems = 4;
+  const seen = new Set();
+  const normalizedItems = [];
+  for (const row of rows) {
+    const resolution =
+      formatVideoResolutionDisplayLabel(row?.resolution) ||
+      row?.resolution ||
+      t('默认');
+    const laneKey = VIDEO_FLAT_LANE_I18N_KEY[row?.lane];
+    const lane = laneKey ? t(laneKey) : row?.lane || t('视频');
+    const laneMeta = getVideoLaneMeta(row?.lane, t);
+    const family = getVideoLaneFamily(row?.lane);
+    const currentUsd = Number(row?.usd_after_channel_discount || 0);
+    if (!Number.isFinite(currentUsd) || currentUsd <= 0) continue;
+    const officialUsd = Number(row?.usd_official || 0);
+    const key = `${lane}|${resolution}|${row?.has_audio ?? 'all'}|${currentUsd}|${officialUsd}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    normalizedItems.push({
+      key,
+      family,
+      resolution: row?.resolution,
+      label: laneMeta.label,
+      labelColor: laneMeta.color,
+      spec: formatVideoTierSpec(row, t),
+      platformPrice: displayPrice(currentUsd * usedGroupRatio),
+      officialPrice:
+        Number.isFinite(officialUsd) && officialUsd > 0
+          ? displayPrice(officialUsd)
+          : '-',
+      discount: getVideoTierDiscount(currentUsd, officialUsd),
+      audioLabel: getAudioLabel(row, t),
+      title: lane,
+    });
+  }
+
+  normalizedItems.sort((a, b) => {
+    const familyOrder =
+      (VIDEO_LANE_FAMILY_ORDER[a.family] ?? 99) -
+      (VIDEO_LANE_FAMILY_ORDER[b.family] ?? 99);
+    if (familyOrder !== 0) return familyOrder;
+    return compareVideoResolutionAsc(a.resolution, b.resolution);
+  });
+
+  const items = normalizedItems.slice(0, maxItems);
+  return {
+    items,
+    hiddenCount: Math.max(0, normalizedItems.length - items.length),
+  };
+};
+
+const groupVideoTierPreviewRows = (rows) => {
+  const groups = [];
+  for (const row of rows || []) {
+    const last = groups[groups.length - 1];
+    if (last && last.family === row.family) {
+      last.rows.push(row);
+      continue;
+    }
+    groups.push({
+      family: row.family,
+      label: row.label,
+      rows: [row],
+    });
+  }
+  return groups;
+};
+
+const getVideoTierGroupStyle = (family) => {
+  switch (family) {
+    case 'image_to_video':
+      return {
+        backgroundColor: 'rgba(var(--semi-amber-0), .55)',
+        rowBackgroundColor: 'rgba(var(--semi-amber-0), .22)',
+        color: 'var(--semi-amber-7)',
+        borderColor: 'var(--semi-amber-4)',
+      };
+    case 'video_to_video':
+      return {
+        backgroundColor: 'rgba(var(--semi-teal-0), .55)',
+        rowBackgroundColor: 'rgba(var(--semi-teal-0), .22)',
+        color: 'var(--semi-teal-7)',
+        borderColor: 'var(--semi-teal-4)',
+      };
+    default:
+      return {
+        backgroundColor: 'rgba(var(--semi-blue-0), .55)',
+        rowBackgroundColor: 'rgba(var(--semi-blue-0), .22)',
+        color: 'var(--semi-blue-7)',
+        borderColor: 'var(--semi-blue-4)',
+      };
+  }
+};
 
 const PricingCardView = ({
   filteredModels,
@@ -214,18 +390,12 @@ const PricingCardView = ({
       return { value: parseFloat(numericPrice.toFixed(2)), symbol };
     };
 
-    const modelHasVideoRatio =
-      model.video_ratio != null &&
-      model.video_ratio !== undefined &&
-      Number.isFinite(Number(model.video_ratio));
-    const modelHasVideoCompletion =
-      model.video_completion_ratio != null &&
-      model.video_completion_ratio !== undefined &&
-      Number.isFinite(Number(model.video_completion_ratio));
-    const modelHasVideoFlatPrice =
-      model.video_price != null &&
-      model.video_price !== undefined &&
-      Number.isFinite(Number(model.video_price));
+    const modelHasVideoRatio = hasNumericValue(model.video_ratio);
+    const modelHasVideoCompletion = hasNumericValue(
+      model.video_completion_ratio,
+    );
+    const modelHasVideoFlatPrice = hasNumericValue(model.video_price);
+    const hideTextTokenPrices = isVideoPricingModel(model);
 
     // 提取所有通道的价格（与 relay 一致：ch.model_ratio 已含渠道折扣；再乘分组倍率）
     const prices = {
@@ -269,8 +439,11 @@ const PricingCardView = ({
       const globalMr = model.model_ratio || 0;
       const globalMp = model.model_price || 0;
 
-      const channelVideoFlatUsd =
-        pickChannelScopedModelFloat(channelVideoPrice, cid, mname);
+      const channelVideoFlatUsd = pickChannelScopedModelFloat(
+        channelVideoPrice,
+        cid,
+        mname,
+      );
       const flatUsd =
         channelVideoFlatUsd != null
           ? channelVideoFlatUsd
@@ -287,9 +460,7 @@ const PricingCardView = ({
       const globalCacheR =
         model.cache_ratio != null ? Number(model.cache_ratio) : 0;
       const globalCreateCacheR =
-        model.create_cache_ratio != null
-          ? Number(model.create_cache_ratio)
-          : 0;
+        model.create_cache_ratio != null ? Number(model.create_cache_ratio) : 0;
 
       const billingRates = computeChannelBillingRates({
         channelModelRatio: ch.model_ratio,
@@ -309,13 +480,18 @@ const PricingCardView = ({
       // 按量计费
       if (model.quota_type === 0) {
         if (ch.model_ratio !== undefined && ch.model_ratio !== null) {
-          prices.input.push(
-            formatPrice(billingRates.inputRatioPrice * usedGroupRatio),
-          );
-          originalPrices.input.push(formatPrice(billingRates.inputRatioPrice));
+          if (!hideTextTokenPrices) {
+            prices.input.push(
+              formatPrice(billingRates.inputRatioPrice * usedGroupRatio),
+            );
+            originalPrices.input.push(
+              formatPrice(billingRates.inputRatioPrice),
+            );
+          }
 
           // 输出价格：仅当全局模型配置了 completion_ratio 时才展示
           if (
+            !hideTextTokenPrices &&
             ch.completion_ratio !== undefined &&
             ch.completion_ratio !== null &&
             model.completion_ratio != null
@@ -330,6 +506,7 @@ const PricingCardView = ({
 
           // 缓存读取价格：仅当全局模型配置了 cache_ratio 时才展示
           if (
+            !hideTextTokenPrices &&
             ch.cache_ratio !== undefined &&
             ch.cache_ratio !== null &&
             model.cache_ratio != null
@@ -337,11 +514,14 @@ const PricingCardView = ({
             prices.cache.push(
               formatPrice(billingRates.cacheRatioPrice * usedGroupRatio),
             );
-            originalPrices.cache.push(formatPrice(billingRates.cacheRatioPrice));
+            originalPrices.cache.push(
+              formatPrice(billingRates.cacheRatioPrice),
+            );
           }
 
           // 缓存创建价格：仅当全局模型配置了 create_cache_ratio 时才展示
           if (
+            !hideTextTokenPrices &&
             ch.create_cache_ratio !== undefined &&
             ch.create_cache_ratio !== null &&
             model.create_cache_ratio != null
@@ -397,7 +577,11 @@ const PricingCardView = ({
       }
       // 按次计费
       else if (model.quota_type === 1 || ch.quota_type === 1) {
-        if (!skipSimpleFixed && ch.model_price !== undefined && ch.model_price !== null) {
+        if (
+          !skipSimpleFixed &&
+          ch.model_price !== undefined &&
+          ch.model_price !== null
+        ) {
           prices.fixed.push(
             formatPrice(billingRates.effModelPrice * usedGroupRatio),
           );
@@ -408,7 +592,7 @@ const PricingCardView = ({
 
     // 根数据价格（用同一口径计算，用于与 channel 价格比较）
     const rootPrices = {};
-    if (model.quota_type === 0) {
+    if (model.quota_type === 0 && !hideTextTokenPrices) {
       if (model.model_ratio !== undefined && model.model_ratio !== null) {
         rootPrices.input = formatPrice(model.model_ratio * 2);
         if (
@@ -669,19 +853,19 @@ const PricingCardView = ({
         selectedGroup,
         groupRatio,
       );
-      const usd = Number(hint.min_usd_after_channel_discount) * usedGroupRatio;
-      const perSecond = hint.billing_mode === 'per_second';
-      items.push({
-        key: 'video-flat-tiered',
-        label: perSecond ? t('按秒') : t('按条'),
-        valueNode: (
-          <span className='font-bold text-black'>
-            {t('最低价')}
-            {displayPrice(usd)}
-            {perSecond ? t('/秒起') : t('/条起')}
-          </span>
-        ),
-      });
+      const videoPreview = buildVideoTierPreviewItems(
+        hint,
+        usedGroupRatio,
+        displayPrice,
+        t,
+      );
+      if (videoPreview.items.length > 0) {
+        items.push({
+          key: 'video-tier-table',
+          videoTierRows: videoPreview.items,
+          hiddenCount: videoPreview.hiddenCount,
+        });
+      }
     }
 
     if (useTieredImagePerImage) {
@@ -913,51 +1097,192 @@ const PricingCardView = ({
                         >
                           {getModelPriceItemsForCard(model, priceData).map(
                             (item) => (
-                              <div key={item.key} className='flex items-center'>
-                                <span className='w-20 flex-shrink-0'>
-                                  {item.label}
-                                </span>
-                                <span className='flex-1 font-bold text-black inline-flex items-center flex-wrap gap-1'>
-                                  {item.valueNode ? (
-                                    item.valueNode
-                                  ) : item.original ? (
-                                    <>
-                                      <span className='line-through text-gray-400 font-normal text-[10px]'>
-                                        <span
-                                          style={{
-                                            color: 'var(--semi-color-primary)',
-                                          }}
-                                        >
-                                          官方
-                                        </span>{' '}
-                                        {item.original.text}
+                              <div
+                                key={item.key}
+                                className={
+                                  item.videoTierRows
+                                    ? 'flex flex-col gap-1'
+                                    : 'flex items-center'
+                                }
+                              >
+                                {item.videoTierRows ? (
+                                  <div
+                                    className='w-full min-w-0 overflow-hidden'
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <div className='grid grid-cols-[minmax(54px,1.05fr)_minmax(50px,.95fr)_minmax(50px,.95fr)_minmax(34px,.55fr)] items-center gap-x-1.5 py-0.5 text-center text-[9px] font-medium text-semi-color-text-2'>
+                                      <span />
+                                      <span className='min-w-0 truncate'>
+                                        {t('平台价')}
                                       </span>
-                                      <Tag
-                                        color='red'
-                                        size='small'
-                                        shape='circle'
+                                      <span className='min-w-0 truncate'>
+                                        {t('官方价')}
+                                      </span>
+                                      <span className='min-w-0 truncate'>
+                                        {t('折扣率')}
+                                      </span>
+                                    </div>
+                                    {groupVideoTierPreviewRows(
+                                      item.videoTierRows,
+                                    ).map((group) => (
+                                      <div
+                                        key={group.family}
+                                        className='py-0.5'
                                       >
-                                        -{item.original.discount}%
-                                      </Tag>
-                                      <span>
-                                        <span
-                                          style={{
-                                            color: 'var(--semi-color-warning)',
-                                          }}
+                                        <div
+                                          className='mb-0.5 flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold'
+                                          style={getVideoTierGroupStyle(
+                                            group.family,
+                                          )}
                                         >
-                                          我们
-                                        </span>{' '}
-                                        {item.value}
-                                        {item.suffix}
-                                      </span>
-                                    </>
-                                  ) : (
-                                    <span>
-                                      {item.value}
-                                      {item.suffix}
+                                          <span
+                                            className='h-3 w-0.5 rounded-full'
+                                            style={{
+                                              backgroundColor:
+                                                getVideoTierGroupStyle(
+                                                  group.family,
+                                                ).borderColor,
+                                            }}
+                                          />
+                                          <span>{group.label}</span>
+                                        </div>
+                                        {group.rows.map((row) => (
+                                          <div
+                                            key={row.key}
+                                            className='grid grid-cols-[minmax(54px,1.05fr)_minmax(50px,.95fr)_minmax(50px,.95fr)_minmax(34px,.55fr)] items-center gap-x-1.5 rounded py-0.5 pl-3 pr-1 text-center text-[11px]'
+                                            style={{
+                                              backgroundColor:
+                                                getVideoTierGroupStyle(
+                                                  group.family,
+                                                ).rowBackgroundColor,
+                                            }}
+                                            title={`${row.title} · ${row.audioLabel}`}
+                                          >
+                                            <span
+                                              className='min-w-0 truncate font-semibold'
+                                              style={{
+                                                color: getVideoTierGroupStyle(
+                                                  group.family,
+                                                ).color,
+                                              }}
+                                            >
+                                              {row.spec}
+                                            </span>
+                                            <span className='min-w-0 truncate font-bold text-semi-color-primary'>
+                                              {row.platformPrice}
+                                            </span>
+                                            <span className='min-w-0 truncate font-medium text-semi-color-text-2'>
+                                              {row.officialPrice}
+                                            </span>
+                                            <span className='min-w-0 truncate font-semibold text-semi-color-text-2'>
+                                              {row.discount > 0 ? (
+                                                <span
+                                                  className='inline-flex items-center justify-center rounded-full px-1.5 py-0 text-[10px] leading-4 font-semibold text-red-600'
+                                                  style={{
+                                                    backgroundColor:
+                                                      'rgba(var(--semi-red-0), .65)',
+                                                  }}
+                                                >
+                                                  -{row.discount}%
+                                                </span>
+                                              ) : (
+                                                '-'
+                                              )}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ))}
+                                    {item.hiddenCount > 0 ? (
+                                      <button
+                                        type='button'
+                                        className='w-full py-0.5 text-left text-[11px] font-medium text-semi-color-primary bg-transparent hover:text-semi-color-primary-hover'
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          !blurPricing &&
+                                            openModelDetail &&
+                                            openModelDetail(model);
+                                        }}
+                                      >
+                                        {t('查看更多')} {'>'}
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                ) : (
+                                  <>
+                                    <span className='w-20 flex-shrink-0'>
+                                      {item.labelColor ? (
+                                        <Tag
+                                          color={item.labelColor}
+                                          size='small'
+                                          shape='circle'
+                                          type='light'
+                                          className='max-w-full'
+                                        >
+                                          {item.label}
+                                        </Tag>
+                                      ) : (
+                                        item.label
+                                      )}
                                     </span>
-                                  )}
-                                </span>
+                                  </>
+                                )}
+                                {!item.videoTierRows ? (
+                                  <span className='flex-1 font-bold text-black inline-flex items-center flex-wrap gap-1'>
+                                    {item.valueNode ? (
+                                      item.valueNode
+                                    ) : item.original ? (
+                                      <>
+                                        <span className='line-through text-gray-400 font-normal text-[10px]'>
+                                          <span
+                                            style={{
+                                              color:
+                                                'var(--semi-color-primary)',
+                                            }}
+                                          >
+                                            官方
+                                          </span>{' '}
+                                          {item.original.text}
+                                        </span>
+                                        <Tag
+                                          color='red'
+                                          size='small'
+                                          shape='circle'
+                                        >
+                                          -{item.original.discount}%
+                                        </Tag>
+                                        <span>
+                                          <span
+                                            style={{
+                                              color:
+                                                'var(--semi-color-warning)',
+                                            }}
+                                          >
+                                            我们
+                                          </span>{' '}
+                                          {item.value}
+                                          {item.suffix}
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <span
+                                        className={
+                                          item.labelColor
+                                            ? 'inline-flex min-w-0 flex-wrap items-baseline gap-1'
+                                            : undefined
+                                        }
+                                        title={item.title}
+                                      >
+                                        <span>{item.value}</span>
+                                        {item.suffix ? (
+                                          <span className='font-normal text-[10px] text-semi-color-text-2'>
+                                            {item.suffix}
+                                          </span>
+                                        ) : null}
+                                      </span>
+                                    )}
+                                  </span>
+                                ) : null}
                               </div>
                             ),
                           )}
@@ -977,7 +1302,10 @@ const PricingCardView = ({
                                   <div
                                     key={s.key}
                                     className='h-7 rounded-md flex items-center overflow-hidden'
-                                    style={{backgroundColor: 'var(--semi-color-fill-0)'}}
+                                    style={{
+                                      backgroundColor:
+                                        'var(--semi-color-fill-0)',
+                                    }}
                                   >
                                     {s.logo ? (
                                       <img

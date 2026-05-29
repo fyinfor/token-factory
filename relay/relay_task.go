@@ -571,7 +571,10 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	}
 
 	if !snap.Equal(task.Snapshot()) {
-		_, _ = task.UpdateWithStatus(snap.Status)
+		won, _ := task.UpdateWithStatus(snap.Status)
+		if won && task.Status == model.TaskStatusFailure && snap.Status != model.TaskStatusFailure && task.Quota != 0 {
+			service.RefundTaskQuota(context.TODO(), task, task.FailReason)
+		}
 	}
 	// /v1/videos 查询链路：任务首次进入 SUCCESS 时补做一次实际结算（与后台轮询保持一致）。
 	if task.Status == model.TaskStatusSuccess && snap.Status != model.TaskStatusSuccess {
