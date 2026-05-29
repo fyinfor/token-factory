@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
+import { useState } from 'react';
 import i18next from 'i18next';
 import {
   resolveConsumeLogBillingRates,
@@ -62,6 +63,11 @@ import {
   Perplexity,
   Replicate,
   XiaomiMiMo,
+  Vidu,
+  SubModel,
+  Sora,
+  TencentCloud,
+  AzureAI,
 } from '@lobehub/icons';
 
 import {
@@ -371,6 +377,38 @@ export const getModelCategories = (() => {
   };
 })();
 
+/** 渠道类型使用 public 静态图片时的路径（加载失败则回退为组件图标） */
+const CHANNEL_IMAGE_ICON_SRC = {
+  60: '/logo.png',
+  21: '/icons/aiproxy.png',
+  44: '/icons/mokaai.png',
+};
+
+function ChannelImageIcon({ src, alt, size, fallback }) {
+  const [useFallback, setUseFallback] = useState(false);
+  if (useFallback) {
+    return fallback;
+  }
+  return (
+    <img
+      src={src}
+      alt={alt}
+      width={size}
+      height={size}
+      style={{
+        width: size,
+        height: size,
+        borderRadius: 4,
+        objectFit: 'contain',
+        display: 'inline-block',
+        verticalAlign: 'middle',
+        flexShrink: 0,
+      }}
+      onError={() => setUseFallback(true)}
+    />
+  );
+}
+
 /**
  * 根据渠道类型返回对应的厂商图标
  * @param {number} channelType - 渠道类型值
@@ -381,10 +419,15 @@ export function getChannelIcon(channelType) {
 
   switch (channelType) {
     case 1: // OpenAI
-    case 3: // Azure OpenAI
     case 57: // Codex
+    case 58: // ZX-Videos
+    case 59: // OpenAI 视频 (/videogenerator/generate)
     case 64: // OpenAI 图片
       return <OpenAI size={iconSize} />;
+    case 3: // Azure OpenAI
+      return <AzureAI.Color size={iconSize} />;
+    case 55: // Sora
+      return <Sora.Color size={iconSize} />;
     case 63: // 阿里云-视频
       return <Qwen.Color size={iconSize} />;
     case 2: // Midjourney Proxy
@@ -452,19 +495,49 @@ export function getChannelIcon(channelType) {
       return <Kling.Color size={iconSize} />;
     case 51: // 即梦 Jimeng
       return <Jimeng.Color size={iconSize} />;
+    case 52: // Vidu
+      return <Vidu.Color size={iconSize} />;
+    case 53: // SubModel
+      return <SubModel.Color size={iconSize} />;
     case 54: // 豆包视频 Doubao Video
       return <Doubao.Color size={iconSize} />;
     case 56: // Replicate
       return <Replicate size={iconSize} />;
-    case 59: // TokenFactoryOpen
-      return <Server size={iconSize} strokeWidth={2} />;
-    case 8: // 自定义渠道
+    case 60: // TokenFactoryOpen
+      return (
+        <ChannelImageIcon
+          src={CHANNEL_IMAGE_ICON_SRC[60]}
+          alt='TokenFactoryOpen'
+          size={iconSize}
+          fallback={<Server size={iconSize} strokeWidth={2} />}
+        />
+      );
+    case 61: // 腾讯云-视频
+    case 62: // 腾讯云-图片
+      return <TencentCloud.Color size={iconSize} />;
     case 22: // 知识库：FastGPT
       return <FastGPT.Color size={iconSize} />;
     case 21: // 知识库：AI Proxy
+      return (
+        <ChannelImageIcon
+          src={CHANNEL_IMAGE_ICON_SRC[21]}
+          alt='AI Proxy'
+          size={iconSize}
+          fallback={<Dify.Color size={iconSize} />}
+        />
+      );
     case 44: // 嵌入模型：MokaAI M3E
+      return (
+        <ChannelImageIcon
+          src={CHANNEL_IMAGE_ICON_SRC[44]}
+          alt='MokaAI M3E'
+          size={iconSize}
+          fallback={<Jina size={iconSize} />}
+        />
+      );
+    case 8: // 自定义渠道
     default:
-      return null; // 未知类型或自定义渠道不显示图标
+      return null;
   }
 }
 
