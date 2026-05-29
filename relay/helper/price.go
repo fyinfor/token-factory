@@ -1243,9 +1243,7 @@ func resolveVideoDimensions(req *relaycommon.TaskSubmitReq) (width, height int) 
 		}
 	}
 	if req.Metadata != nil {
-		w := coerceToPositiveInt(req.Metadata["width"])
-		h := coerceToPositiveInt(req.Metadata["height"])
-		if w > 0 && h > 0 {
+		if w, h, ok := common.VideoDimensionsFromMetadata(req.Metadata); ok {
 			return w, h
 		}
 	}

@@ -62,6 +62,7 @@ const (
 	ChannelTypeTencentCloudImage = 62 // Tencent Cloud VOD CreateAigcImageTask / DescribeTaskDetail
 	ChannelTypeAliVideo          = 63 // Alibaba DashScope video-synthesis (happyhorse / wan, etc.)
 	ChannelTypeOpenAIImage       = 64 // OpenAI official /v1/images/generations
+	ChannelTypeSeedance          = 65 // Seedance 2.0 / VolcEngine contents generations (e.g. TokenSpace)
 	ChannelTypeDummy                  // this one is only for count, do not add any channel after this
 
 )
@@ -132,7 +133,8 @@ var ChannelBaseURLs = []string{
 	"https://vod.tencentcloudapi.com",    //62 TencentCloudImage
 	"https://dashscope.aliyuncs.com/api", //63 AliVideo (user may override)
 	"https://api.openai.com",             //64 OpenAIImage
-	"",                                   //65 Dummy
+	"https://api.tokenspace.net.cn",      //65 Seedance (词元算力 / 火山 contents generations)
+	"",                                   //66 Dummy
 }
 
 var ChannelTypeNames = map[int]string{
@@ -197,6 +199,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeTencentCloudImage: "TencentCloudImage",
 	ChannelTypeOpenAIImage:       "OpenAIImage",
 	ChannelTypeAliVideo:          "AliVideo",
+	ChannelTypeSeedance:          "Seedance",
 }
 
 func GetChannelTypeName(channelType int) string {
@@ -210,7 +213,8 @@ func GetChannelTypeName(channelType int) string {
 // paths (/v1/videos, etc.) with optional token-based or per-video pricing.
 func IsVideoTaskChannel(channelType int) bool {
 	switch channelType {
-	case ChannelTypeSora, ChannelTypeOpenAIVideo, ChannelTypeVideoGenerator, ChannelTypeTencentCloudVideo, ChannelTypeAliVideo:
+	case ChannelTypeSora, ChannelTypeOpenAIVideo, ChannelTypeVideoGenerator, ChannelTypeTencentCloudVideo, ChannelTypeAliVideo,
+		ChannelTypeDoubaoVideo, ChannelTypeSeedance:
 		return true
 	default:
 		return false

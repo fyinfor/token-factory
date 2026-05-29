@@ -20,6 +20,11 @@ For commercial licensing, please contact support@quantumnous.com
 import React, { useState } from 'react';
 import { Typography } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
+import {
+  PLAYGROUND_MEDIA_MAX_HEIGHT,
+  PLAYGROUND_MEDIA_MAX_WIDTH_PX,
+} from '../../constants/playground.constants';
+import { usePlaygroundMediaMaxHeightPx } from '../../hooks/playground/usePlaygroundMediaMaxHeight';
 
 const getConstrainedMediaSize = (dimensions, maxWidth, maxHeight) => {
   const width = Number(dimensions?.width || 0);
@@ -39,9 +44,12 @@ const PlaygroundGeneratedImageGallery = ({
   onRevealProgress,
   onPreview,
   maxWidth = 'min(100%, 780px)',
-  maxHeight = 520,
+  maxHeight = PLAYGROUND_MEDIA_MAX_HEIGHT,
+  maxHeightPx,
 }) => {
   const { t } = useTranslation();
+  const resolvedMaxHeightPx = usePlaygroundMediaMaxHeightPx();
+  const mediaMaxHeightPx = maxHeightPx ?? resolvedMaxHeightPx;
   const [loadedUrls, setLoadedUrls] = useState(() => new Set());
   const [loadedDimensions, setLoadedDimensions] = useState({});
   const list = Array.isArray(images) ? images.filter(Boolean) : [];
@@ -76,8 +84,8 @@ const PlaygroundGeneratedImageGallery = ({
         {list.map((src, index) => {
           const constrainedSize = getConstrainedMediaSize(
             loadedDimensions[src] || dimensions[src],
-            780,
-            list.length > 1 ? 360 : maxHeight,
+            PLAYGROUND_MEDIA_MAX_WIDTH_PX,
+            mediaMaxHeightPx,
           );
           return (
             <button
@@ -119,7 +127,8 @@ const PlaygroundGeneratedImageGallery = ({
                     ? `${constrainedSize.height}px`
                     : 'auto',
                   maxWidth: '100%',
-                  maxHeight: list.length > 1 ? '360px' : `${maxHeight}px`,
+                  maxHeight,
+                  objectFit: 'contain',
                   opacity: loadedUrls.has(src) ? 1 : 0,
                   transition: 'opacity 200ms ease',
                   transitionDelay: loadedUrls.has(src) ? '200ms' : '0ms',

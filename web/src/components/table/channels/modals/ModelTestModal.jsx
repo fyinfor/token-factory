@@ -171,6 +171,7 @@ const ModelTestModal = ({
     'hidream-video',
     'tokenfactory-video',
     'ali-video',
+    'seedance-video',
   ].includes(selectedEndpointType);
 
   React.useEffect(() => {
@@ -225,6 +226,10 @@ const ModelTestModal = ({
     {
       value: 'ali-video',
       label: t('阿里云视频') + ' (DashScope video-synthesis)',
+    },
+    {
+      value: 'seedance-video',
+      label: t('火山方舟-Seedance 2.0 视频') + ' (/v1/video/generations)',
     },
   ];
 
