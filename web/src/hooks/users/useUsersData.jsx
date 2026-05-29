@@ -67,6 +67,7 @@ export const useUsersData = () => {
   // Form initial values
   const formInitValues = {
     searchKeyword: '',
+    searchRemark: '',
     searchGroup: '',
     searchTag: '',
   };
@@ -79,6 +80,7 @@ export const useUsersData = () => {
     const formValues = formApi ? formApi.getValues() : {};
     return {
       searchKeyword: formValues.searchKeyword || '',
+      searchRemark: formValues.searchRemark || '',
       searchGroup: formValues.searchGroup || '',
       searchTag: formValues.searchTag || '',
     };
@@ -123,6 +125,7 @@ export const useUsersData = () => {
     searchKeyword = null,
     searchGroup = null,
     searchTag = null,
+    searchRemark = null,
   ) => {
     // If no parameters passed, get values from form
     if (searchKeyword === null || searchGroup === null) {
@@ -130,17 +133,28 @@ export const useUsersData = () => {
       searchKeyword = formValues.searchKeyword;
       searchGroup = formValues.searchGroup;
       searchTag = formValues.searchTag;
+      searchRemark = formValues.searchRemark;
+    }
+    if (searchRemark === null) {
+      searchRemark = getFormValues().searchRemark;
     }
 
-    if (searchKeyword === '' && searchGroup === '' && !searchTag && !selectedTag) {
+    if (
+      searchKeyword === '' &&
+      searchGroup === '' &&
+      !searchTag &&
+      !selectedTag &&
+      searchRemark === ''
+    ) {
       // If keyword is blank, load files instead
       await loadUsers(startIdx, pageSize);
       return;
     }
     setSearching(true);
     const tagQuery = (searchTag || selectedTag) ? `&tag=${encodeURIComponent(searchTag || selectedTag)}` : '';
+    const remarkQuery = searchRemark ? `&remark=${encodeURIComponent(searchRemark)}` : '';
     const res = await API.get(
-      `/api/user/search?keyword=${searchKeyword}&group=${searchGroup}&student_view=${encodeURIComponent(studentView)}${tagQuery}&p=${startIdx}&page_size=${pageSize}`,
+      `/api/user/search?keyword=${encodeURIComponent(searchKeyword || '')}&group=${encodeURIComponent(searchGroup || '')}&student_view=${encodeURIComponent(studentView)}${tagQuery}${remarkQuery}&p=${startIdx}&page_size=${pageSize}`,
     );
     const { success, message, data } = res.data;
     if (success) {
@@ -281,11 +295,11 @@ export const useUsersData = () => {
   const handleStudentViewChange = (nextView) => {
     setStudentView(nextView);
     setActivePage(1);
-    const { searchKeyword, searchGroup, searchTag } = getFormValues();
-    if (searchKeyword === '' && searchGroup === '' && !searchTag && !selectedTag) {
+    const { searchKeyword, searchRemark, searchGroup, searchTag } = getFormValues();
+    if (searchKeyword === '' && searchRemark === '' && searchGroup === '' && !searchTag && !selectedTag) {
       loadUsers(0, pageSize).then();
     } else {
-      searchUsers(0, pageSize, searchKeyword, searchGroup, searchTag).then();
+      searchUsers(0, pageSize, searchKeyword, searchGroup, searchTag, searchRemark).then();
     }
   };
 
@@ -326,11 +340,11 @@ export const useUsersData = () => {
   // Handle page change
   const handlePageChange = (page) => {
     setActivePage(page);
-    const { searchKeyword, searchGroup, searchTag } = getFormValues();
-    if (searchKeyword === '' && searchGroup === '' && !searchTag && !selectedTag) {
+    const { searchKeyword, searchRemark, searchGroup, searchTag } = getFormValues();
+    if (searchKeyword === '' && searchRemark === '' && searchGroup === '' && !searchTag && !selectedTag) {
       loadUsers(page, pageSize).then();
     } else {
-      searchUsers(page, pageSize, searchKeyword, searchGroup, searchTag).then();
+      searchUsers(page, pageSize, searchKeyword, searchGroup, searchTag, searchRemark).then();
     }
   };
 
@@ -361,11 +375,11 @@ export const useUsersData = () => {
 
   // Refresh data
   const refresh = async (page = activePage) => {
-    const { searchKeyword, searchGroup, searchTag } = getFormValues();
-    if (searchKeyword === '' && searchGroup === '' && !searchTag && !selectedTag) {
+    const { searchKeyword, searchRemark, searchGroup, searchTag } = getFormValues();
+    if (searchKeyword === '' && searchRemark === '' && searchGroup === '' && !searchTag && !selectedTag) {
       await loadUsers(page, pageSize);
     } else {
-      await searchUsers(page, pageSize, searchKeyword, searchGroup, searchTag);
+      await searchUsers(page, pageSize, searchKeyword, searchGroup, searchTag, searchRemark);
     }
   };
 

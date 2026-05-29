@@ -359,7 +359,7 @@ func GetAllUsers(pageInfo *common.PageInfo, studentView string, tag string) (use
 	return users, total, nil
 }
 
-func SearchUsers(keyword string, group string, studentView string, tag string, startIdx int, num int) ([]*User, int64, error) {
+func SearchUsers(keyword string, group string, studentView string, tag string, remark string, startIdx int, num int) ([]*User, int64, error) {
 	var users []*User
 	var total int64
 	var err error
@@ -389,30 +389,42 @@ func SearchUsers(keyword string, group string, studentView string, tag string, s
 		}
 	}
 
-	// 构建搜索条件
-	likeCondition := "username LIKE ? OR email LIKE ? OR display_name LIKE ? OR phone LIKE ?"
+	remark = strings.TrimSpace(remark)
+	if remark != "" {
+		if common.UsingPostgreSQL {
+			query = query.Where("remark ILIKE ?", "%"+remark+"%")
+		} else {
+			query = query.Where("remark LIKE ?", "%"+remark+"%")
+		}
+	}
 
-	// 尝试将关键字转换为整数ID
-	keywordInt, err := strconv.Atoi(keyword)
-	if err == nil {
-		// 如果是数字，同时搜索ID和其他字段
-		likeCondition = "id = ? OR " + likeCondition
-		if group != "" {
-			query = query.Where("("+likeCondition+") AND "+commonGroupCol+" = ?",
-				keywordInt, "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", group)
+	// 构建搜索条件
+	keyword = strings.TrimSpace(keyword)
+	if keyword != "" {
+		likeCondition := "username LIKE ? OR email LIKE ? OR display_name LIKE ? OR phone LIKE ? OR remark LIKE ?"
+
+		// 尝试将关键字转换为整数ID
+		keywordInt, convErr := strconv.Atoi(keyword)
+		if convErr == nil {
+			likeCondition = "id = ? OR " + likeCondition
+			if group != "" {
+				query = query.Where("("+likeCondition+") AND "+commonGroupCol+" = ?",
+					keywordInt, "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", group)
+			} else {
+				query = query.Where(likeCondition,
+					keywordInt, "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
+			}
 		} else {
-			query = query.Where(likeCondition,
-				keywordInt, "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
+			if group != "" {
+				query = query.Where("("+likeCondition+") AND "+commonGroupCol+" = ?",
+					"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", group)
+			} else {
+				query = query.Where(likeCondition,
+					"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
+			}
 		}
-	} else {
-		// 非数字关键字，只搜索字符串字段
-		if group != "" {
-			query = query.Where("("+likeCondition+") AND "+commonGroupCol+" = ?",
-				"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", group)
-		} else {
-			query = query.Where(likeCondition,
-				"%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
-		}
+	} else if group != "" {
+		query = query.Where(commonGroupCol+" = ?", group)
 	}
 
 	// 获取总数
