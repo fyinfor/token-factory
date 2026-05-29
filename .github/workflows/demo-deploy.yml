@@ -43,7 +43,6 @@ jobs:
           port: ${{ secrets.SERVER_A_PORT || 22 }}
           username: ${{ secrets.SERVER_A_USER }}
           password: ${{ secrets.SERVER_A_PASSWORD }}
-          script_stop: false
           script: |
             set -e
             IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
