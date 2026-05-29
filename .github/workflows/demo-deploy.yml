@@ -1,0 +1,116 @@
+name: Deploy Demo
+
+# ============================================================================
+# Token Factory — Demo 部署工作流
+#
+# 前提: 先手动运行 "编译 Docker 镜像 (GHCR)" 工作流构建并推送镜像
+#       镜像地址: ghcr.io/fyinfor/token-factory:latest
+#
+# 部署目标:
+#   服务器 A (43.132.223.112):
+#     └─ /home/ubuntu/demo-token-factory
+#
+# 操作: sudo docker compose pull → up -d → 健康检查 → 镜像清理
+# ============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '镜像标签'
+        required: true
+        default: 'latest'
+        type: string
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: fyinfor/token-factory
+
+jobs:
+  # ═════════════════════════════════════════════════════════════════════════
+  # Demo 服务器: 43.132.223.112  (ubuntu / Aa374866@@)
+  # ═════════════════════════════════════════════════════════════════════════
+  deploy-demo:
+    name: Deploy Demo → 43.132.223.112
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Deploy demo-token-factory (43.132.223.112)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_A_HOST }}
+          port: ${{ secrets.SERVER_A_PORT || 22 }}
+          username: ${{ secrets.SERVER_A_USER }}
+          password: ${{ secrets.SERVER_A_PASSWORD }}
+          script_stop: false
+          script: |
+            set -e
+            IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
+            DIR="/home/ubuntu/demo-token-factory"
+
+            echo "========================================="
+            echo "  服务器: ${{ secrets.SERVER_A_HOST }}"
+            echo "  实例:   demo-token-factory"
+            echo "  镜像:   $IMAGE"
+            echo "  时间:   $(date '+%Y-%m-%d %H:%M:%S')"
+            echo "========================================="
+
+            cd "$DIR" || { echo "❌ 目录不存在: $DIR"; exit 1; }
+
+            echo ""
+            echo "[1/3] Pulling image..."
+            sudo docker compose pull
+
+            echo ""
+            echo "[2/3] Starting services..."
+            sudo docker compose up -d
+
+            echo ""
+            echo "[3/3] Health check..."
+            sleep 5
+            HEALTHY=false
+            for i in 1 2 3 4 5; do
+              if sudo docker compose ps --status running 2>/dev/null | grep -qE '(Up|running|healthy)'; then
+                HEALTHY=true
+                echo "✅ demo-token-factory 容器运行中 (第 ${i} 次检查)"
+                break
+              fi
+              echo "⏳ 等待... (${i}/5)"
+              sleep 10
+            done
+
+            if [ "$HEALTHY" = false ]; then
+              echo "⚠️ 健康检查未通过, 当前容器状态:"
+              sudo docker compose ps
+              sudo docker compose logs --tail=30
+              exit 1
+            fi
+
+            sudo docker compose ps
+
+      - name: Cleanup old images
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_A_HOST }}
+          port: ${{ secrets.SERVER_A_PORT || 22 }}
+          username: ${{ secrets.SERVER_A_USER }}
+          password: ${{ secrets.SERVER_A_PASSWORD }}
+          script: |
+            echo ">>> Cleaning up dangling images..."
+            sudo docker image prune || true
+            echo "✅ Cleanup done"
+
+      - name: Summary
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          ICON="$([ "$STATUS" = "success" ] && echo '✅' || echo '❌')"
+          {
+            echo "### ${ICON} Demo (43.132.223.112) — ${STATUS}"
+            echo ""
+            echo "| 项目 | 值 |"
+            echo "|------|-----|"
+            echo "| 镜像 | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}\` |"
+            echo "| 实例 | demo-token-factory |"
+          } >> $GITHUB_STEP_SUMMARY
