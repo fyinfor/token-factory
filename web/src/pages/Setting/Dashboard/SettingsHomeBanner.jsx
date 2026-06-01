@@ -30,7 +30,7 @@ import {
   Typography,
   Upload,
 } from '@douyinfe/semi-ui';
-import { Plus, Trash2, Edit2 } from 'lucide-react';
+import { Plus, Trash2, Edit2, ChevronUp, ChevronDown } from 'lucide-react';
 import { API, showError, showSuccess } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
 
@@ -58,6 +58,16 @@ function parseSlides(raw) {
   } catch {
     return [];
   }
+}
+
+function moveSlideInList(list, from, to) {
+  if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) {
+    return list;
+  }
+  const next = [...list];
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
 }
 
 const { Text } = Typography;
@@ -186,6 +196,15 @@ const SettingsHomeBanner = ({ options, refresh }) => {
     [slides, persist],
   );
 
+  const moveAt = useCallback(
+    async (idx, direction) => {
+      const to = direction === 'up' ? idx - 1 : idx + 1;
+      if (to < 0 || to >= slides.length) return;
+      await persist(moveSlideInList(slides, idx, to));
+    },
+    [slides, persist],
+  );
+
   const handleModalOk = async () => {
     if (!form.title?.trim()) {
       showError(t('首页广告标题必填'));
@@ -241,6 +260,14 @@ const SettingsHomeBanner = ({ options, refresh }) => {
 
   const columns = [
     {
+      title: t('广告播放顺序'),
+      width: 88,
+      align: 'center',
+      render: (_, record) => (
+        <Text strong>{record._idx + 1}</Text>
+      ),
+    },
+    {
       title: t('广告缩略图'),
       width: 110,
       render: (_, record) =>
@@ -258,27 +285,49 @@ const SettingsHomeBanner = ({ options, refresh }) => {
     { title: t('跳转模型'), dataIndex: 'target_model' },
     {
       title: t('操作'),
-      width: 180,
-      render: (_, record) => (
-        <Space>
-          <Button
-            type='tertiary'
-            theme='borderless'
-            icon={<Edit2 size={16} />}
-            onClick={() => openEdit(record._idx)}
-          >
-            {t('编辑')}
-          </Button>
-          <Button
-            type='danger'
-            theme='borderless'
-            icon={<Trash2 size={16} />}
-            onClick={() => removeAt(record._idx)}
-          >
-            {t('删除')}
-          </Button>
-        </Space>
-      ),
+      width: 260,
+      render: (_, record) => {
+        const idx = record._idx;
+        const isFirst = idx === 0;
+        const isLast = idx === slides.length - 1;
+        return (
+          <Space wrap>
+            <Button
+              type='tertiary'
+              theme='borderless'
+              icon={<ChevronUp size={16} />}
+              disabled={isFirst || saving}
+              onClick={() => moveAt(idx, 'up')}
+              aria-label={t('广告幻灯片上移')}
+            />
+            <Button
+              type='tertiary'
+              theme='borderless'
+              icon={<ChevronDown size={16} />}
+              disabled={isLast || saving}
+              onClick={() => moveAt(idx, 'down')}
+              aria-label={t('广告幻灯片下移')}
+            />
+            <Button
+              type='tertiary'
+              theme='borderless'
+              icon={<Edit2 size={16} />}
+              onClick={() => openEdit(idx)}
+            >
+              {t('编辑')}
+            </Button>
+            <Button
+              type='danger'
+              theme='borderless'
+              icon={<Trash2 size={16} />}
+              disabled={saving}
+              onClick={() => removeAt(idx)}
+            >
+              {t('删除')}
+            </Button>
+          </Space>
+        );
+      },
     },
   ];
 
