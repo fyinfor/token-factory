@@ -222,6 +222,7 @@ const Home = () => {
 
                   <HomeBannerCarousel
                     rawSlides={statusState?.status?.home_banner_slides}
+                    intervalSec={statusState?.status?.home_banner_interval_sec}
                   />
 
                   {/* 操作按钮 */}

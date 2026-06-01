@@ -21,6 +21,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   Button,
   Input,
+  InputNumber,
   Modal,
   Select,
   Space,
@@ -34,6 +35,10 @@ import { API, showError, showSuccess } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
 
 const OPTION_KEY = 'HomeBannerSlides';
+const INTERVAL_OPTION_KEY = 'HomeBannerIntervalSec';
+const MIN_INTERVAL_SEC = 2;
+const MAX_INTERVAL_SEC = 60;
+const DEFAULT_INTERVAL_SEC = 4;
 
 const emptySlide = () => ({
   image_url: '',
@@ -68,10 +73,21 @@ const SettingsHomeBanner = ({ options, refresh }) => {
   const [form, setForm] = useState(emptySlide());
 
   const raw = options?.[OPTION_KEY] ?? '';
+  const rawInterval = options?.[INTERVAL_OPTION_KEY] ?? String(DEFAULT_INTERVAL_SEC);
+  const [intervalSec, setIntervalSec] = useState(DEFAULT_INTERVAL_SEC);
 
   useEffect(() => {
     setSlides(parseSlides(raw));
   }, [raw]);
+
+  useEffect(() => {
+    const n = parseInt(String(rawInterval), 10);
+    setIntervalSec(
+      Number.isFinite(n)
+        ? Math.min(MAX_INTERVAL_SEC, Math.max(MIN_INTERVAL_SEC, n))
+        : DEFAULT_INTERVAL_SEC,
+    );
+  }, [rawInterval]);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,6 +110,35 @@ const SettingsHomeBanner = ({ options, refresh }) => {
       cancelled = true;
     };
   }, []);
+
+  const persistInterval = useCallback(
+    async (sec) => {
+      const clamped = Math.min(
+        MAX_INTERVAL_SEC,
+        Math.max(MIN_INTERVAL_SEC, Math.round(Number(sec) || DEFAULT_INTERVAL_SEC)),
+      );
+      setSaving(true);
+      try {
+        const res = await API.put('/api/option/', {
+          key: INTERVAL_OPTION_KEY,
+          value: String(clamped),
+        });
+        const { success, message } = res.data || {};
+        if (!success) {
+          showError(message || t('保存失败'));
+          return;
+        }
+        showSuccess(t('保存成功'));
+        setIntervalSec(clamped);
+        if (refresh) await refresh();
+      } catch (e) {
+        showError(e?.response?.data?.message || t('保存失败'));
+      } finally {
+        setSaving(false);
+      }
+    },
+    [refresh, t],
+  );
 
   const persist = useCallback(
     async (nextSlides) => {
@@ -245,6 +290,31 @@ const SettingsHomeBanner = ({ options, refresh }) => {
       <Text type='tertiary' className='!block !mb-4'>
         {t('首页广告轮播提示')}
       </Text>
+      <div className='flex flex-wrap items-end gap-3 mb-4'>
+        <div>
+          <Text strong className='!block !mb-1'>
+            {t('首页广告轮播间隔')}
+          </Text>
+          <InputNumber
+            min={MIN_INTERVAL_SEC}
+            max={MAX_INTERVAL_SEC}
+            value={intervalSec}
+            onChange={(v) => setIntervalSec(v)}
+            style={{ width: 140 }}
+            disabled={saving}
+          />
+        </div>
+        <Button
+          type='secondary'
+          loading={saving}
+          onClick={() => persistInterval(intervalSec)}
+        >
+          {t('保存轮播间隔')}
+        </Button>
+        <Text type='tertiary' size='small' className='!pb-1'>
+          {t('首页广告轮播间隔说明', { min: MIN_INTERVAL_SEC, max: MAX_INTERVAL_SEC })}
+        </Text>
+      </div>
       <Button icon={<Plus size={16} />} type='primary' onClick={openAdd}>
         {t('添加广告幻灯片')}
       </Button>
@@ -347,7 +417,11 @@ const SettingsHomeBanner = ({ options, refresh }) => {
               value={form.subtitle}
               onChange={(v) => setForm((f) => ({ ...f, subtitle: v }))}
               rows={2}
+              placeholder={t('广告副标题占位')}
             />
+            <Text type='tertiary' size='small' className='!mt-1 !block'>
+              {t('广告副标题强调说明')}
+            </Text>
           </div>
           <div>
             <Text strong className='!block !mb-1'>
@@ -374,6 +448,9 @@ const SettingsHomeBanner = ({ options, refresh }) => {
               placeholder={t('首页广告模型占位')}
               className='w-full'
             />
+            <Text type='tertiary' size='small' className='!mt-1 !block'>
+              {t('首页广告模型跳转说明')}
+            </Text>
           </div>
         </div>
       </Modal>

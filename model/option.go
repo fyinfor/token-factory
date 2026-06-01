@@ -67,6 +67,8 @@ func InitOptionMap() {
 	common.OptionMap["HomePageContent"] = ""
 	// 首页轮播广告 JSON 数组，见 web SettingsHomeBanner / HomeBannerCarousel
 	common.OptionMap["HomeBannerSlides"] = "[]"
+	// 首页轮播自动切换间隔（秒），2–60
+	common.OptionMap["HomeBannerIntervalSec"] = "4"
 	common.OptionMap["Footer"] = common.Footer
 	common.OptionMap["SystemName"] = common.SystemName
 	common.OptionMap["Logo"] = common.Logo
