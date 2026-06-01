@@ -49,6 +49,7 @@ export const DEFAULT_ADMIN_CONFIG = {
     'supplier-apply': true,
     'supplier-channel': true,
     'supplier-pricing-settings': true,
+    'supplier-dashboard': true,
   },
   admin: {
     enabled: true,
@@ -82,6 +83,14 @@ export const mergeAdminConfig = (savedConfig) => {
     }
 
     merged[sectionKey] = { ...merged[sectionKey], ...sectionConfig };
+  }
+
+  // 兼容旧配置：个人中心「供应商管理」曾使用 provider 键
+  if (merged.personal && Object.prototype.hasOwnProperty.call(merged.personal, 'provider')) {
+    if (!Object.prototype.hasOwnProperty.call(merged.personal, 'supplier')) {
+      merged.personal.supplier = merged.personal.provider;
+    }
+    delete merged.personal.provider;
   }
 
   return merged;

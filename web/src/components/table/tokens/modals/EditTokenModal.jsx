@@ -62,6 +62,7 @@ const EditTokenModal = (props) => {
   const formApiRef = useRef(null);
   const [models, setModels] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [activeExpiryOption, setActiveExpiryOption] = useState('never');
   const isEdit = props.editingToken.id !== undefined;
 
   const getInitValues = () => ({
@@ -81,7 +82,7 @@ const EditTokenModal = (props) => {
     props.handleClose();
   };
 
-  const setExpiredTime = (month, day, hour, minute) => {
+  const setExpiredTime = (month, day, hour, minute, optionKey) => {
     let now = new Date();
     let timestamp = now.getTime() / 1000;
     let seconds = month * 30 * 24 * 60 * 60;
@@ -89,6 +90,7 @@ const EditTokenModal = (props) => {
     seconds += hour * 60 * 60;
     seconds += minute * 60;
     if (!formApiRef.current) return;
+    setActiveExpiryOption(optionKey);
     if (seconds !== 0) {
       timestamp += seconds;
       formApiRef.current.setValue('expired_time', timestamp2string(timestamp));
@@ -163,8 +165,9 @@ const EditTokenModal = (props) => {
         data.model_limits = [];
       }
       if (formApiRef.current) {
-        formApiRef.current.setValues({ ...getInitValues(), ...data });
-      }
+formApiRef.current.setValues({ ...getInitValues(), ...data });
+          setActiveExpiryOption(data.expired_time === -1 ? 'never' : null);
+        }
     } else {
       showError(message);
     }
@@ -175,6 +178,7 @@ const EditTokenModal = (props) => {
     if (formApiRef.current) {
       if (!isEdit) {
         formApiRef.current.setValues(getInitValues());
+        setActiveExpiryOption('never');
       }
     }
     loadModels();
@@ -187,9 +191,11 @@ const EditTokenModal = (props) => {
         loadToken();
       } else {
         formApiRef.current?.setValues(getInitValues());
+        setActiveExpiryOption('never');
       }
     } else {
       formApiRef.current?.reset();
+      setActiveExpiryOption('never');
     }
   }, [props.visiable, props.editingToken.id]);
 
@@ -210,6 +216,11 @@ const EditTokenModal = (props) => {
     if (isEdit) {
       let { tokenCount: _tc, ...localInputs } = values;
       localInputs.remain_quota = parseInt(localInputs.remain_quota);
+      if (localInputs.remain_quota < 0) {
+        showError(t('额度必须大于0'));
+        setLoading(false);
+        return;
+      }
       if (localInputs.expired_time !== -1) {
         let time = Date.parse(localInputs.expired_time);
         if (isNaN(time)) {
@@ -246,6 +257,11 @@ const EditTokenModal = (props) => {
           localInputs.name = baseName;
         }
         localInputs.remain_quota = parseInt(localInputs.remain_quota);
+        if (localInputs.remain_quota < 0) {
+          showError(t('额度必须大于0'));
+          setLoading(false);
+          break;
+        }
 
         if (localInputs.expired_time !== -1) {
           let time = Date.parse(localInputs.expired_time);
@@ -428,29 +444,29 @@ const EditTokenModal = (props) => {
                       <Space wrap>
                         <Button
                           theme='light'
-                          type='primary'
-                          onClick={() => setExpiredTime(0, 0, 0, 0)}
+                          type={activeExpiryOption === 'never' ? 'primary' : 'tertiary'}
+                          onClick={() => setExpiredTime(0, 0, 0, 0, 'never')}
                         >
                           {t('永不过期')}
                         </Button>
                         <Button
                           theme='light'
                           type='tertiary'
-                          onClick={() => setExpiredTime(1, 0, 0, 0)}
+                          onClick={() => setExpiredTime(1, 0, 0, 0, 'month')}
                         >
                           {t('一个月')}
                         </Button>
                         <Button
                           theme='light'
                           type='tertiary'
-                          onClick={() => setExpiredTime(0, 1, 0, 0)}
+                          onClick={() => setExpiredTime(0, 1, 0, 0, 'day')}
                         >
                           {t('一天')}
                         </Button>
                         <Button
                           theme='light'
                           type='tertiary'
-                          onClick={() => setExpiredTime(0, 0, 1, 0)}
+                          onClick={() => setExpiredTime(0, 0, 1, 0, 'hour')}
                         >
                           {t('一小时')}
                         </Button>
@@ -494,12 +510,23 @@ const EditTokenModal = (props) => {
                       label={t('额度')}
                       placeholder={t('请输入额度')}
                       type='number'
+                      min={0}
                       disabled={values.unlimited_quota}
                       extraText={renderQuotaWithPrompt(values.remain_quota)}
                       rules={
                         values.unlimited_quota
                           ? []
-                          : [{ required: true, message: t('请输入额度') }]
+                          : [
+                              { required: true, message: t('请输入额度') },
+                              {
+                                validator: (rule, value) => {
+                                  if (value !== undefined && value !== null && value !== '' && Number(value) < 0) {
+                                    return Promise.reject(t('额度必须大于0'));
+                                  }
+                                  return Promise.resolve();
+                                },
+                              },
+                            ]
                       }
                       data={[
                         { value: 500000, label: '1$' },

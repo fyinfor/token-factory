@@ -28,6 +28,7 @@ import {
   showError,
   showSuccess,
   timestamp2string,
+  toUnixTimestamp,
   renderQuota,
   renderNumber,
   getQuotaPerUnit,
@@ -557,7 +558,8 @@ export const useLogsData = () => {
   // Statistics state
   const [stat, setStat] = useState({
     quota: 0,
-    token: 0,
+    rpm: 0,
+    tpm: 0,
   });
 
   // Form state
@@ -708,20 +710,25 @@ export const useLogsData = () => {
     localStorage.setItem(BILLING_DISPLAY_MODE_STORAGE_KEY, billingDisplayMode);
   }, [BILLING_DISPLAY_MODE_STORAGE_KEY, billingDisplayMode]);
 
-  // 获取表单值的辅助函数，确保所有值都是字符串
   const getFormValues = () => {
     const formValues = formApi ? formApi.getValues() : {};
 
-    let start_timestamp = timestamp2string(getTodayStartTimestamp());
-    let end_timestamp = timestamp2string(now.getTime() / 1000 + 3600);
+    let start_timestamp = getTodayStartTimestamp();
+    let end_timestamp = Math.floor(Date.now() / 1000) + 3600;
 
     if (
       formValues.dateRange &&
       Array.isArray(formValues.dateRange) &&
       formValues.dateRange.length === 2
     ) {
-      start_timestamp = formValues.dateRange[0];
-      end_timestamp = formValues.dateRange[1];
+      const startUnix = toUnixTimestamp(formValues.dateRange[0]);
+      const endUnix = toUnixTimestamp(formValues.dateRange[1]);
+      if (startUnix > 0) {
+        start_timestamp = startUnix;
+      }
+      if (endUnix > 0) {
+        end_timestamp = endUnix;
+      }
     }
 
     return {
@@ -748,8 +755,8 @@ export const useLogsData = () => {
       logType: formLogType,
     } = getFormValues();
     const currentLogType = formLogType !== undefined ? formLogType : logType;
-    let localStartTimestamp = Date.parse(start_timestamp) / 1000;
-    let localEndTimestamp = Date.parse(end_timestamp) / 1000;
+    const localStartTimestamp = start_timestamp;
+    const localEndTimestamp = end_timestamp;
     let url;
     if (supplierChannelLogsView) {
       url = `/api/user/supplier-channel-logs/stat?type=${currentLogType}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&group=${group}`;
@@ -778,8 +785,8 @@ export const useLogsData = () => {
       logType: formLogType,
     } = getFormValues();
     const currentLogType = formLogType !== undefined ? formLogType : logType;
-    let localStartTimestamp = Date.parse(start_timestamp) / 1000;
-    let localEndTimestamp = Date.parse(end_timestamp) / 1000;
+    const localStartTimestamp = start_timestamp;
+    const localEndTimestamp = end_timestamp;
     let url = `/api/log/stat?type=${currentLogType}&username=${username}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&channel=${channel}&group=${group}`;
     url = encodeURI(url);
     let res = await API.get(url);
@@ -796,13 +803,19 @@ export const useLogsData = () => {
       return;
     }
     setLoadingStat(true);
-    if (isAdminUser) {
-      await getLogStat();
-    } else {
-      await getLogSelfStat();
+    try {
+      if (isAdminUser) {
+        await getLogStat();
+      } else {
+        await getLogSelfStat();
+      }
+      setShowStat(true);
+    } catch (err) {
+      showError(err?.message || t('请求失败'));
+      setShowStat(true);
+    } finally {
+      setLoadingStat(false);
     }
-    setShowStat(true);
-    setLoadingStat(false);
   };
 
   // User info function
@@ -1386,8 +1399,8 @@ export const useLogsData = () => {
           ? formLogType
           : logType;
 
-    let localStartTimestamp = Date.parse(start_timestamp) / 1000;
-    let localEndTimestamp = Date.parse(end_timestamp) / 1000;
+    const localStartTimestamp = start_timestamp;
+    const localEndTimestamp = end_timestamp;
     if (isAdminUser) {
       url = `/api/log/?p=${startIdx}&page_size=${pageSize}&type=${currentLogType}&username=${username}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&channel=${channel}&group=${group}&request_id=${request_id}`;
     } else if (supplierChannelLogsView) {

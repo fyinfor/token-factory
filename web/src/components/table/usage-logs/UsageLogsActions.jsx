@@ -18,8 +18,8 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import { Tag, Space, Skeleton } from '@douyinfe/semi-ui';
-import { renderQuota } from '../../../helpers';
+import { Tag, Space, Skeleton, Tooltip } from '@douyinfe/semi-ui';
+import { renderLogStatDisplayQuota } from '../../../helpers';
 import CompactModeToggle from '../../common/ui/CompactModeToggle';
 import { useMinimumLoadingTime } from '../../../hooks/common/useMinimumLoadingTime';
 
@@ -46,40 +46,49 @@ const LogsActions = ({
     <div className='flex flex-col md:flex-row justify-between items-start md:items-center gap-2 w-full'>
       <Skeleton loading={needSkeleton} active placeholder={placeholder}>
         <Space>
-          <Tag
-            color='blue'
-            style={{
-              fontWeight: 500,
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-              padding: 13,
-            }}
-            className='!rounded-lg'
-          >
-            {t('消耗额度')}: {renderQuota(stat.quota)}
-          </Tag>
-          <Tag
-            color='pink'
-            style={{
-              fontWeight: 500,
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-              padding: 13,
-            }}
-            className='!rounded-lg'
-          >
-            RPM: {stat.rpm}
-          </Tag>
-          <Tag
-            color='white'
-            style={{
-              border: 'none',
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-              fontWeight: 500,
-              padding: 13,
-            }}
-            className='!rounded-lg'
-          >
-            TPM: {stat.tpm}
-          </Tag>
+          <Tooltip content={t('消耗额度统计说明')}>
+            <Tag
+              color='blue'
+              style={{
+                fontWeight: 500,
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+                padding: 13,
+                cursor: 'help',
+              }}
+              className='!rounded-lg'
+            >
+              {t('消耗额度')}: {renderLogStatDisplayQuota(stat)}
+            </Tag>
+          </Tooltip>
+          <Tooltip content={t('RPM 统计说明')}>
+            <Tag
+              color='pink'
+              style={{
+                fontWeight: 500,
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+                padding: 13,
+                cursor: 'help',
+              }}
+              className='!rounded-lg'
+            >
+              {t('RPM')}: {stat?.rpm ?? 0}
+            </Tag>
+          </Tooltip>
+          <Tooltip content={t('TPM 统计说明')}>
+            <Tag
+              color='white'
+              style={{
+                border: 'none',
+                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+                fontWeight: 500,
+                padding: 13,
+                cursor: 'help',
+              }}
+              className='!rounded-lg'
+            >
+              {t('TPM')}: {stat?.tpm ?? 0}
+            </Tag>
+          </Tooltip>
         </Space>
       </Skeleton>
 
