@@ -41,6 +41,8 @@ import {
   Form,
   Col,
   Row,
+  Tabs,
+  TabPane,
 } from '@douyinfe/semi-ui';
 import {
   IconCreditCard,
@@ -62,6 +64,7 @@ const EditTokenModal = (props) => {
   const formApiRef = useRef(null);
   const [models, setModels] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [expirationMode, setExpirationMode] = useState('never');
   const isEdit = props.editingToken.id !== undefined;
 
   const getInitValues = () => ({
@@ -81,7 +84,7 @@ const EditTokenModal = (props) => {
     props.handleClose();
   };
 
-  const setExpiredTime = (month, day, hour, minute) => {
+  const setExpiredTime = (month, day, hour, minute, labelKey) => {
     let now = new Date();
     let timestamp = now.getTime() / 1000;
     let seconds = month * 30 * 24 * 60 * 60;
@@ -92,9 +95,21 @@ const EditTokenModal = (props) => {
     if (seconds !== 0) {
       timestamp += seconds;
       formApiRef.current.setValue('expired_time', timestamp2string(timestamp));
+      if (labelKey) {
+        showSuccess(t('{{label}} 设置成功', { label: t(labelKey) }));
+      }
     } else {
       formApiRef.current.setValue('expired_time', -1);
     }
+  };
+
+  const handleExpirationModeChange = (mode) => {
+    setExpirationMode(mode);
+    if (!formApiRef.current) return;
+    formApiRef.current.setValue(
+      'expired_time',
+      mode === 'never' ? -1 : undefined,
+    );
   };
 
   const loadModels = async () => {
@@ -154,6 +169,7 @@ const EditTokenModal = (props) => {
     let res = await API.get(`/api/token/${props.editingToken.id}`);
     const { success, message, data } = res.data;
     if (success) {
+      setExpirationMode(data.expired_time === -1 ? 'never' : 'custom');
       if (data.expired_time !== -1) {
         data.expired_time = timestamp2string(data.expired_time);
       }
@@ -174,6 +190,7 @@ const EditTokenModal = (props) => {
   useEffect(() => {
     if (formApiRef.current) {
       if (!isEdit) {
+        setExpirationMode('never');
         formApiRef.current.setValues(getInitValues());
       }
     }
@@ -186,9 +203,11 @@ const EditTokenModal = (props) => {
       if (isEdit) {
         loadToken();
       } else {
+        setExpirationMode('never');
         formApiRef.current?.setValues(getInitValues());
       }
     } else {
+      setExpirationMode('never');
       formApiRef.current?.reset();
     }
   }, [props.visiable, props.editingToken.id]);
@@ -209,7 +228,10 @@ const EditTokenModal = (props) => {
     setLoading(true);
     if (isEdit) {
       let { tokenCount: _tc, ...localInputs } = values;
-      localInputs.remain_quota = parseInt(localInputs.remain_quota);
+      localInputs.remain_quota = Math.max(
+        0,
+        parseInt(localInputs.remain_quota, 10) || 0,
+      );
       if (localInputs.expired_time !== -1) {
         let time = Date.parse(localInputs.expired_time);
         if (isNaN(time)) {
@@ -245,7 +267,10 @@ const EditTokenModal = (props) => {
         } else {
           localInputs.name = baseName;
         }
-        localInputs.remain_quota = parseInt(localInputs.remain_quota);
+        localInputs.remain_quota = Math.max(
+          0,
+          parseInt(localInputs.remain_quota, 10) || 0,
+        );
 
         if (localInputs.expired_time !== -1) {
           let time = Date.parse(localInputs.expired_time);
@@ -334,7 +359,7 @@ const EditTokenModal = (props) => {
           onSubmit={submit}
         >
           {({ values }) => (
-            <div className='p-2'>
+            <div className='p-2 flex flex-col gap-2'>
               {/* 基本信息 */}
               <Card className='!rounded-2xl shadow-sm border-0'>
                 <div className='flex items-center mb-2'>
@@ -393,70 +418,81 @@ const EditTokenModal = (props) => {
                       )}
                     />
                   </Col>
-                  <Col xs={24} sm={24} md={24} lg={10} xl={10}>
-                    <Form.DatePicker
-                      field='expired_time'
-                      label={t('过期时间')}
-                      type='dateTime'
-                      placeholder={t('请选择过期时间')}
-                      rules={[
-                        { required: true, message: t('请选择过期时间') },
-                        {
-                          validator: (rule, value) => {
-                            // 允许 -1 表示永不过期，也允许空值在必填校验时被拦截
-                            if (value === -1 || !value)
-                              return Promise.resolve();
-                            const time = Date.parse(value);
-                            if (isNaN(time)) {
-                              return Promise.reject(t('过期时间格式错误！'));
-                            }
-                            if (time <= Date.now()) {
-                              return Promise.reject(
-                                t('过期时间不能早于当前时间！'),
-                              );
-                            }
-                            return Promise.resolve();
-                          },
-                        },
-                      ]}
-                      showClear
-                      style={{ width: '100%' }}
-                    />
-                  </Col>
-                  <Col xs={24} sm={24} md={24} lg={14} xl={14}>
-                    <Form.Slot label={t('过期时间快捷设置')}>
-                      <Space wrap>
-                        <Button
-                          theme='light'
-                          type='primary'
-                          onClick={() => setExpiredTime(0, 0, 0, 0)}
-                        >
-                          {t('永不过期')}
-                        </Button>
-                        <Button
-                          theme='light'
-                          type='tertiary'
-                          onClick={() => setExpiredTime(1, 0, 0, 0)}
-                        >
-                          {t('一个月')}
-                        </Button>
-                        <Button
-                          theme='light'
-                          type='tertiary'
-                          onClick={() => setExpiredTime(0, 1, 0, 0)}
-                        >
-                          {t('一天')}
-                        </Button>
-                        <Button
-                          theme='light'
-                          type='tertiary'
-                          onClick={() => setExpiredTime(0, 0, 1, 0)}
-                        >
-                          {t('一小时')}
-                        </Button>
-                      </Space>
+                  <Col span={24}>
+                    <Form.Slot label={t('过期方式')}>
+                      <Tabs
+                        type='button'
+                        tabBarClassName='token-expiration-mode-tabs'
+                        activeKey={expirationMode}
+                        onChange={handleExpirationModeChange}
+                      >
+                        <TabPane tab={t('永不过期')} itemKey='never' />
+                        <TabPane tab={t('自定义时间')} itemKey='custom' />
+                      </Tabs>
                     </Form.Slot>
                   </Col>
+                  {expirationMode === 'custom' && (
+                    <>
+                      <Col xs={24} sm={24} md={24} lg={10} xl={10}>
+                        <Form.DatePicker
+                          field='expired_time'
+                          label={t('过期时间')}
+                          type='dateTime'
+                          placeholder={t('请选择过期时间')}
+                          rules={[
+                            { required: true, message: t('请选择过期时间') },
+                            {
+                              validator: (rule, value) => {
+                                if (value === -1 || !value)
+                                  return Promise.resolve();
+                                const time = Date.parse(value);
+                                if (isNaN(time)) {
+                                  return Promise.reject(
+                                    t('过期时间格式错误！'),
+                                  );
+                                }
+                                if (time <= Date.now()) {
+                                  return Promise.reject(
+                                    t('过期时间不能早于当前时间！'),
+                                  );
+                                }
+                                return Promise.resolve();
+                              },
+                            },
+                          ]}
+                          showClear
+                          style={{ width: '100%' }}
+                        />
+                      </Col>
+                      <Col xs={24} sm={24} md={24} lg={14} xl={14}>
+                        <Form.Slot label={t('过期时间快捷设置')}>
+                          <Space wrap>
+                            <Button
+                              theme='light'
+                              type='tertiary'
+                              onClick={() => setExpiredTime(1, 0, 0, 0, '一个月')}
+                            >
+                              {t('一个月')}
+                            </Button>
+                            <Button
+                              theme='light'
+                              type='tertiary'
+                              onClick={() => setExpiredTime(0, 1, 0, 0, '一天')}
+                            >
+                              {t('一天')}
+                            </Button>
+                            <Button
+                              theme='light'
+                              type='tertiary'
+                              onClick={() => setExpiredTime(0, 0, 1, 0, '一小时')}
+                            >
+                              {t('一小时')}
+                            </Button>
+                          </Space>
+                        </Form.Slot>
+                      </Col>
+                    </>
+                  )}
                   {!isEdit && (
                     <Col span={24}>
                       <Form.InputNumber
@@ -495,11 +531,37 @@ const EditTokenModal = (props) => {
                       placeholder={t('请输入额度')}
                       type='number'
                       disabled={values.unlimited_quota}
+                      inputProps={{ min: 0 }}
+                      onChange={(value) => {
+                        if (
+                          value !== '' &&
+                          value !== undefined &&
+                          value !== null &&
+                          !isNaN(Number(value)) &&
+                          Number(value) < 0
+                        ) {
+                          formApiRef.current?.setValue('remain_quota', 0);
+                        }
+                      }}
                       extraText={renderQuotaWithPrompt(values.remain_quota)}
                       rules={
                         values.unlimited_quota
                           ? []
-                          : [{ required: true, message: t('请输入额度') }]
+                          : [
+                              { required: true, message: t('请输入额度') },
+                              {
+                                validator: (rule, v) => {
+                                  if (v === '' || v === undefined || v === null) {
+                                    return Promise.resolve();
+                                  }
+                                  const num = Number(v);
+                                  if (isNaN(num) || num < 0) {
+                                    return Promise.reject(t('不能小于 0'));
+                                  }
+                                  return Promise.resolve();
+                                },
+                              },
+                            ]
                       }
                       data={[
                         { value: 500000, label: '1$' },

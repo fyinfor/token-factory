@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useContext, useMemo } from 'react';
+import { useHomeBannerModelFocus } from './use-home-banner-model-focus';
 import {
   Input,
   ImagePreview,
@@ -89,6 +90,11 @@ const HomeModelList = () => {
     pricingData.setPageSize(40);
   }, []);
 
+  useHomeBannerModelFocus({
+    loading: pricingData.loading,
+    setSearchValue: pricingData.setSearchValue,
+  });
+
   const handleResetFilters = () => {
     pricingData.setSearchValue('');
     pricingData.setFilterVendor('all');
@@ -125,7 +131,7 @@ const HomeModelList = () => {
   ];
 
   return (
-    <div className='w-full home-model-list'>
+    <div id='home-models' className='w-full home-model-list'>
       <style>{`
         .home-model-card-wrapper .grid {
           grid-template-columns: repeat(2, minmax(0, 1fr)) !important;

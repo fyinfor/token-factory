@@ -3,9 +3,9 @@ package model
 import (
 	"errors"
 	"strings"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/logger"
 	"gorm.io/gorm"
 )
 
@@ -17,11 +17,12 @@ const supplierLogTokenSumExpr = "COALESCE(SUM(prompt_tokens), 0) + COALESCE(SUM(
 
 // SupplierChannelLogsStat 供应商渠道使用日志统计（与数据看板 AggregateSupplierUsageFromLogs 同源）。
 type SupplierChannelLogsStat struct {
-	Quota         int `json:"quota"`
-	Rpm           int `json:"rpm"`
-	Tpm           int `json:"tpm"`
-	TotalTokens   int `json:"total_tokens"`
-	TotalRequests int `json:"total_requests"`
+	Quota         int     `json:"quota"`
+	DisplayAmount float64 `json:"display_amount"`
+	Rpm           int     `json:"rpm"`
+	Tpm           int     `json:"tpm"`
+	TotalTokens   int     `json:"total_tokens"`
+	TotalRequests int     `json:"total_requests"`
 }
 
 // SupplierUsageByModel 供应商看板按模型聚合（仅消费日志、限定供应商自有渠道）。
@@ -94,23 +95,25 @@ func AggregateSupplierUsageFromLogs(startTimestamp, endTimestamp int64, channelI
 		return nil, nil, stat, errors.New("查询供应商看板模型统计失败")
 	}
 
-	var quotaRow struct {
+	var quotaRows []struct {
 		Quota int `gorm:"column:quota"`
 	}
-	quotaTx := LOG_DB.Table("logs").Select("coalesce(sum(quota),0) as quota")
+	quotaTx := LOG_DB.Table("logs").Select("quota")
 	quotaTx = applySupplierChannelLogFilters(quotaTx, startTimestamp, endTimestamp, channelIDs)
-	if err = quotaTx.Scan(&quotaRow).Error; err != nil {
+	if err = quotaTx.Find(&quotaRows).Error; err != nil {
 		return nil, nil, stat, errors.New("查询供应商看板额度统计失败")
 	}
-	stat.Quota = quotaRow.Quota
+	for _, row := range quotaRows {
+		stat.Quota += row.Quota
+		stat.DisplayAmount += logger.QuotaToRoundedDisplayAmount(row.Quota, 2)
+	}
 
 	var rpmTpmRow struct {
 		Rpm int `gorm:"column:rpm"`
 		Tpm int `gorm:"column:tpm"`
 	}
 	rpmTpmQuery := LOG_DB.Table("logs").Select("count(*) rpm, coalesce(sum(prompt_tokens),0) + coalesce(sum(completion_tokens),0) as tpm")
-	rpmTpmQuery = applySupplierChannelLogFilters(rpmTpmQuery, 0, 0, channelIDs)
-	rpmTpmQuery = rpmTpmQuery.Where("created_at >= ?", time.Now().Add(-60*time.Second).Unix())
+	rpmTpmQuery = applySupplierChannelLogFilters(rpmTpmQuery, startTimestamp, endTimestamp, channelIDs)
 	if err = rpmTpmQuery.Scan(&rpmTpmRow).Error; err != nil {
 		return nil, nil, stat, errors.New("查询供应商看板 RPM/TPM 失败")
 	}
@@ -207,6 +210,7 @@ func SummarizeSupplierChannelLogs(startTimestamp, endTimestamp int64, channelIDs
 		return out, err
 	}
 	out.Quota = stat.Quota
+	out.DisplayAmount = stat.DisplayAmount
 	out.Rpm = stat.Rpm
 	out.Tpm = stat.Tpm
 	for _, row := range byModel {

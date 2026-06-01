@@ -265,19 +265,67 @@ export const useModelPricingData = (options = {}) => {
         return best;
       };
 
-      // 折扣率：1 - 渠道最低价 / 根价格；无折扣或数据缺失返回 0
-      const modelDiscountRatio = (m) => {
-        const list = Array.isArray(m.channel_list) ? m.channel_list : [];
-        const pickField = m.quota_type === 1 ? 'model_price' : 'model_ratio';
-        const rootVal = Number(m[pickField]);
-        if (!Number.isFinite(rootVal) || rootVal <= 0) return 0;
-        let minChannel = Number.POSITIVE_INFINITY;
-        for (const ch of list) {
-          const v = Number(ch?.[pickField]);
-          if (Number.isFinite(v) && v < minChannel) minChannel = v;
+      const getTierDiscountRatio = (row) => {
+        const current = Number(row?.usd_after_channel_discount || 0);
+        const official = Number(row?.usd_official || 0);
+        if (
+          !Number.isFinite(current) ||
+          !Number.isFinite(official) ||
+          official <= 0 ||
+          current >= official
+        ) {
+          return 0;
         }
-        if (!Number.isFinite(minChannel) || minChannel >= rootVal) return 0;
-        return 1 - minChannel / rootVal;
+        return 1 - current / official;
+      };
+
+      const getMaxTierDiscountRatio = (hint) => {
+        const tiers = Array.isArray(hint?.tiers) ? hint.tiers : [];
+        let best = 0;
+        for (const row of tiers) {
+          const discount = getTierDiscountRatio(row);
+          if (discount > best) best = discount;
+        }
+        return best;
+      };
+
+      // 折扣率：按详情页同口径计算最终渠道价相对根价格的实际折扣
+      const modelDiscountRatio = (m) => {
+        const videoTierDiscount = getMaxTierDiscountRatio(
+          m.video_flat_clip_hint,
+        );
+        if (videoTierDiscount > 0) return videoTierDiscount;
+
+        const imageTierDiscount = getMaxTierDiscountRatio(
+          m.image_per_image_hint,
+        );
+        if (imageTierDiscount > 0) return imageTierDiscount;
+
+        const list = Array.isArray(m.channel_list) ? m.channel_list : [];
+        const channel = list[0];
+        if (!channel) return 0;
+
+        const isFixedPrice = m.quota_type === 1 || channel.quota_type === 1;
+        const channelBase = Number(
+          isFixedPrice ? channel.model_price : channel.model_ratio,
+        );
+        const rootBase = Number(isFixedPrice ? m.model_price : m.model_ratio);
+        if (
+          !Number.isFinite(channelBase) ||
+          !Number.isFinite(rootBase) ||
+          rootBase <= 0
+        ) {
+          return 0;
+        }
+
+        const costDisc =
+          (channel.price_discount_percent != null
+            ? Number(channel.price_discount_percent)
+            : 100) / 100;
+        const markupRate = (Number(channel.markup_discount_rate) || 0) / 100;
+        const effective = channelBase * costDisc + rootBase * markupRate;
+        if (!Number.isFinite(effective) || effective >= rootBase) return 0;
+        return 1 - effective / rootBase;
       };
 
       const tieBreak = (a, b) => {
@@ -310,6 +358,21 @@ export const useModelPricingData = (options = {}) => {
         return 0;
       };
 
+      // 折扣率排序：按实际折扣降序，相同则按 channel_heat_score 降序
+      const cmpDiscount = (a, b) => {
+        const discountA = modelDiscountRatio(a);
+        const discountB = modelDiscountRatio(b);
+        if (discountA !== discountB) {
+          return discountA > discountB ? -1 : 1;
+        }
+        const heatA = modelHeatScore(a);
+        const heatB = modelHeatScore(b);
+        if (heatA !== heatB) {
+          return heatA > heatB ? -1 : 1;
+        }
+        return tieBreak(a, b);
+      };
+
       result = [...result].sort((a, b) => {
         switch (sortKey) {
           case 'hot':
@@ -327,7 +390,7 @@ export const useModelPricingData = (options = {}) => {
           case 'latency':
             return cmpAsc(modelMinLatency(a), modelMinLatency(b), a, b);
           case 'discount':
-            return cmpDesc(modelDiscountRatio(a), modelDiscountRatio(b), a, b);
+            return cmpDiscount(a, b);
           default:
             return tieBreak(a, b);
         }

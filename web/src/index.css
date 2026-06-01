@@ -1418,6 +1418,15 @@ html.dark .with-pastel-balls::before {
   border-radius: 10px !important;
 }
 
+.token-expiration-mode-tabs .semi-tabs-tab-button:not(.semi-tabs-tab-active) {
+  background-color: var(--semi-color-fill-0) !important;
+  color: var(--semi-color-text-1);
+}
+
+.token-expiration-mode-tabs .semi-tabs-tab-button:not(.semi-tabs-tab-active):hover {
+  background-color: var(--semi-color-fill-1) !important;
+}
+
 @keyframes slideInLeft {
   from {
     transform: translateX(-100%);

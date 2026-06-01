@@ -1364,6 +1364,17 @@ export function convertUSDToCurrency(usdAmount, digits = 2) {
 }
 
 /** 按展示金额选择小数位：常态 minDigits；若舍入为 0 但实际 >0 则增至 maxDigits。 */
+/** 向下截断（只舍不入），返回字符串，固定 fractionDigits 位小数。 */
+function toFixedTruncated(num, fractionDigits) {
+  const n = Number(num);
+  if (!Number.isFinite(n)) {
+    return String(num ?? '');
+  }
+  const factor = Math.pow(10, fractionDigits);
+  const truncated = (n >= 0 ? Math.floor : Math.ceil)(n * factor) / factor;
+  return truncated.toFixed(fractionDigits);
+}
+
 export function pickQuotaDisplayFractionDigits(
   displayValue,
   minDigits = 2,
@@ -1373,11 +1384,11 @@ export function pickQuotaDisplayFractionDigits(
   if (!Number.isFinite(v) || v === 0) {
     return minDigits;
   }
-  if (parseFloat(v.toFixed(minDigits)) !== 0) {
+  if (parseFloat(toFixedTruncated(v, minDigits)) !== 0) {
     return minDigits;
   }
   for (let d = minDigits + 1; d <= maxDigits; d++) {
-    if (parseFloat(v.toFixed(d)) !== 0) {
+    if (parseFloat(toFixedTruncated(v, d)) !== 0) {
       return d;
     }
   }
@@ -1430,7 +1441,7 @@ function quotaToRoundedDisplayValue(quota, digits = 2) {
   if (parts === null) {
     return q;
   }
-  const fixedResult = parseFloat(parts.value.toFixed(digits));
+  const fixedResult = parseFloat(toFixedTruncated(parts.value, digits));
   if (fixedResult === 0 && q > 0 && parts.value > 0) {
     return Math.pow(10, -digits);
   }
@@ -1443,7 +1454,7 @@ export function renderQuota(quota, digits = 2) {
     return renderNumber(quota);
   }
   const { symbol, value } = parts;
-  const fixedResult = parseFloat(value.toFixed(digits));
+  const fixedResult = parseFloat(toFixedTruncated(value, digits));
   if (fixedResult === 0 && quota > 0 && value > 0) {
     const minValue = Math.pow(10, -digits);
     return symbol + trimFixedDecimalDisplay(minValue, digits);
@@ -1473,6 +1484,22 @@ export function renderQuotaSum(quotas, digits = 2) {
   );
 }
 
+/** 使用日志顶部「消耗额度」：与列表各行 renderQuota 按行舍入后再合计一致。 */
+export function renderLogStatDisplayQuota(stat, digits = 2) {
+  if (
+    stat != null &&
+    stat.display_amount != null &&
+    Number.isFinite(Number(stat.display_amount))
+  ) {
+    const displayType = localStorage.getItem('quota_display_type') || 'USD';
+    if (displayType === 'TOKENS') {
+      return renderNumber(Math.round(Number(stat.display_amount)));
+    }
+    return renderQuotaWithAmount(Number(stat.display_amount));
+  }
+  return renderQuota(stat?.quota ?? 0, digits);
+}
+
 /**
  * 额度展示：默认保留 minDigits 位小数；极低分成在舍入为 0 时自动增至 maxDigits 位（不伪造最小展示值）。
  */
@@ -1483,7 +1510,7 @@ export function renderQuotaFlexible(quota, minDigits = 2, maxDigits = 6) {
   }
   const { symbol, value } = parts;
   const digits = pickQuotaDisplayFractionDigits(value, minDigits, maxDigits);
-  const fixedResult = parseFloat(value.toFixed(digits));
+  const fixedResult = parseFloat(toFixedTruncated(value, digits));
   return symbol + trimFixedDecimalDisplay(fixedResult, digits);
 }
 
@@ -1579,7 +1606,7 @@ export function trimFixedDecimalDisplay(num, fractionDigits = 2) {
   if (!Number.isFinite(n)) {
     return String(num ?? '');
   }
-  let s = n.toFixed(fractionDigits);
+  let s = toFixedTruncated(n, fractionDigits);
   if (s.includes('.')) {
     s = s.replace(/\.?0+$/, '');
   }
@@ -1622,6 +1649,14 @@ function renderDisplayAmountFromUsd(usdAmount, digits = 2) {
 
 function formatBillingDisplayPrice(usdAmount, rate, digits = 2) {
   return parseFloat((usdAmount * rate).toFixed(digits));
+}
+
+/** 消费日志「计费过程」合计：与列表 renderQuota 同一套舍入与最小展示规则 */
+function resolveBillingProcessTotalDisplay(actualQuota, calculatedUsdAmount, rate, digits = 2) {
+  if (actualQuota != null && Number.isFinite(Number(actualQuota))) {
+    return quotaToRoundedDisplayValue(Number(actualQuota), digits);
+  }
+  return formatBillingDisplayPrice(calculatedUsdAmount, rate, digits);
 }
 
 function buildBillingText(key, vars) {
@@ -2364,6 +2399,8 @@ export function renderModelPrice(
   billingProcessFoldGroupMultiplier = false,
   /** 消费日志 other（含 global_*、markup_discount_rate） */
   billingMeta = null,
+  /** 消费日志实扣额度（与列表 renderQuota 一致，用于计费过程合计展示） */
+  actualQuota = null,
 ) {
   const { ratio: effectiveGroupRatio, label: ratioLabel } = getEffectiveRatio(
     groupRatio,
@@ -2420,7 +2457,11 @@ export function renderModelPrice(
             ratioType: ratioLabel,
             ratio: groupRatio,
             amountKey: 'price',
-            total: formatBillingDisplayPrice(mp * groupRatio, rate),
+            total: resolveBillingProcessTotalDisplay(
+              billingProcessFoldGroupMultiplier ? actualQuota : null,
+              mp * groupRatio,
+              rate,
+            ),
           },
         ),
       ]);
@@ -2650,7 +2691,11 @@ export function renderModelPrice(
           outputDesc,
           extraServices,
           symbol,
-          total: formatBillingDisplayPrice(price, rate),
+          total: resolveBillingProcessTotalDisplay(
+            billingProcessFoldGroupMultiplier ? actualQuota : null,
+            price,
+            rate,
+          ),
         },
       ),
     ];
@@ -3547,6 +3592,8 @@ export function renderClaudeModelPrice(
   billingProcessFoldGroupMultiplier = false,
   /** 消费日志 other（含 global_*、markup_discount_rate） */
   billingMeta = null,
+  /** 消费日志实扣额度（与列表 renderQuota 一致，用于计费过程合计展示） */
+  actualQuota = null,
 ) {
   const { ratio: effectiveGroupRatio, label: ratioLabel } = getEffectiveRatio(
     groupRatio,
@@ -3603,7 +3650,11 @@ export function renderClaudeModelPrice(
             rate,
             ratioType: ratioLabel,
             ratio: groupRatio,
-            total: formatBillingDisplayPrice(mp * groupRatio, rate),
+            total: resolveBillingProcessTotalDisplay(
+              billingProcessFoldGroupMultiplier ? actualQuota : null,
+              mp * groupRatio,
+              rate,
+            ),
           },
         ),
       ]);
@@ -3766,7 +3817,11 @@ export function renderClaudeModelPrice(
         ? buildBillingText('{{breakdown}} = {{symbol}}{{total}}', {
             breakdown: breakdownText,
             symbol,
-            total: formatBillingDisplayPrice(price, rate),
+            total: resolveBillingProcessTotalDisplay(
+              actualQuota,
+              price,
+              rate,
+            ),
           })
         : buildBillingText(
             '{{breakdown}} * {{ratioType}} {{ratio}} = {{symbol}}{{total}}',
@@ -4368,6 +4423,7 @@ export function renderConsumeBillingProcess({
       !isPerCall,
       true,
       other,
+      Number(record?.quota) || 0,
     );
   }
 
@@ -4400,6 +4456,7 @@ export function renderConsumeBillingProcess({
     !isPerCall,
     true,
     other,
+    Number(record?.quota) || 0,
   );
 }
 

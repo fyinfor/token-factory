@@ -60,11 +60,16 @@ const PaymentMethodSelectModal = ({
         <Space vertical spacing='medium' style={{ width: '100%' }}>
           {epayMethods.map((payMethod) => {
             const minTopupVal = Number(payMethod.min_topup) || 0;
+            const maxTopupVal = Number(payMethod.max_topup) || 0;
             const isStripe = payMethod.type === 'stripe';
+            const countVal = Number(topUpCount || 0);
+            const belowMin = minTopupVal > countVal;
+            const aboveMax = maxTopupVal > 0 && maxTopupVal < countVal;
             const disabled =
               (!enableOnlineTopUp && !isStripe) ||
               (!enableStripeTopUp && isStripe) ||
-              minTopupVal > Number(topUpCount || 0);
+              belowMin ||
+              aboveMax;
 
             const buttonEl = (
               <Button
@@ -83,12 +88,14 @@ const PaymentMethodSelectModal = ({
               </Button>
             );
 
-            if (disabled && minTopupVal > Number(topUpCount || 0)) {
+            if (disabled && (belowMin || aboveMax)) {
               return (
                 <Tooltip
                   key={payMethod.type}
                   content={
-                    t('此支付方式最低充值金额为') + ' ' + minTopupVal
+                    belowMin
+                      ? t('此支付方式最低充值金额为') + ' ' + minTopupVal
+                      : t('充值数量不能大于') + maxTopupVal
                   }
                 >
                   <span style={{ display: 'block', width: '100%' }}>

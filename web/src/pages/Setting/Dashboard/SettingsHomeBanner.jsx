@@ -21,6 +21,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   Button,
   Input,
+  InputNumber,
   Modal,
   Select,
   Space,
@@ -29,11 +30,15 @@ import {
   Typography,
   Upload,
 } from '@douyinfe/semi-ui';
-import { Plus, Trash2, Edit2 } from 'lucide-react';
+import { Plus, Trash2, Edit2, ChevronUp, ChevronDown } from 'lucide-react';
 import { API, showError, showSuccess } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
 
 const OPTION_KEY = 'HomeBannerSlides';
+const INTERVAL_OPTION_KEY = 'HomeBannerIntervalSec';
+const MIN_INTERVAL_SEC = 2;
+const MAX_INTERVAL_SEC = 60;
+const DEFAULT_INTERVAL_SEC = 4;
 
 const emptySlide = () => ({
   image_url: '',
@@ -55,6 +60,16 @@ function parseSlides(raw) {
   }
 }
 
+function moveSlideInList(list, from, to) {
+  if (from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) {
+    return list;
+  }
+  const next = [...list];
+  const [item] = next.splice(from, 1);
+  next.splice(to, 0, item);
+  return next;
+}
+
 const { Text } = Typography;
 
 const SettingsHomeBanner = ({ options, refresh }) => {
@@ -68,10 +83,21 @@ const SettingsHomeBanner = ({ options, refresh }) => {
   const [form, setForm] = useState(emptySlide());
 
   const raw = options?.[OPTION_KEY] ?? '';
+  const rawInterval = options?.[INTERVAL_OPTION_KEY] ?? String(DEFAULT_INTERVAL_SEC);
+  const [intervalSec, setIntervalSec] = useState(DEFAULT_INTERVAL_SEC);
 
   useEffect(() => {
     setSlides(parseSlides(raw));
   }, [raw]);
+
+  useEffect(() => {
+    const n = parseInt(String(rawInterval), 10);
+    setIntervalSec(
+      Number.isFinite(n)
+        ? Math.min(MAX_INTERVAL_SEC, Math.max(MIN_INTERVAL_SEC, n))
+        : DEFAULT_INTERVAL_SEC,
+    );
+  }, [rawInterval]);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,6 +120,35 @@ const SettingsHomeBanner = ({ options, refresh }) => {
       cancelled = true;
     };
   }, []);
+
+  const persistInterval = useCallback(
+    async (sec) => {
+      const clamped = Math.min(
+        MAX_INTERVAL_SEC,
+        Math.max(MIN_INTERVAL_SEC, Math.round(Number(sec) || DEFAULT_INTERVAL_SEC)),
+      );
+      setSaving(true);
+      try {
+        const res = await API.put('/api/option/', {
+          key: INTERVAL_OPTION_KEY,
+          value: String(clamped),
+        });
+        const { success, message } = res.data || {};
+        if (!success) {
+          showError(message || t('保存失败'));
+          return;
+        }
+        showSuccess(t('保存成功'));
+        setIntervalSec(clamped);
+        if (refresh) await refresh();
+      } catch (e) {
+        showError(e?.response?.data?.message || t('保存失败'));
+      } finally {
+        setSaving(false);
+      }
+    },
+    [refresh, t],
+  );
 
   const persist = useCallback(
     async (nextSlides) => {
@@ -137,6 +192,15 @@ const SettingsHomeBanner = ({ options, refresh }) => {
     async (idx) => {
       const next = slides.filter((_, i) => i !== idx);
       await persist(next);
+    },
+    [slides, persist],
+  );
+
+  const moveAt = useCallback(
+    async (idx, direction) => {
+      const to = direction === 'up' ? idx - 1 : idx + 1;
+      if (to < 0 || to >= slides.length) return;
+      await persist(moveSlideInList(slides, idx, to));
     },
     [slides, persist],
   );
@@ -196,6 +260,14 @@ const SettingsHomeBanner = ({ options, refresh }) => {
 
   const columns = [
     {
+      title: t('广告播放顺序'),
+      width: 88,
+      align: 'center',
+      render: (_, record) => (
+        <Text strong>{record._idx + 1}</Text>
+      ),
+    },
+    {
       title: t('广告缩略图'),
       width: 110,
       render: (_, record) =>
@@ -213,27 +285,49 @@ const SettingsHomeBanner = ({ options, refresh }) => {
     { title: t('跳转模型'), dataIndex: 'target_model' },
     {
       title: t('操作'),
-      width: 180,
-      render: (_, record) => (
-        <Space>
-          <Button
-            type='tertiary'
-            theme='borderless'
-            icon={<Edit2 size={16} />}
-            onClick={() => openEdit(record._idx)}
-          >
-            {t('编辑')}
-          </Button>
-          <Button
-            type='danger'
-            theme='borderless'
-            icon={<Trash2 size={16} />}
-            onClick={() => removeAt(record._idx)}
-          >
-            {t('删除')}
-          </Button>
-        </Space>
-      ),
+      width: 260,
+      render: (_, record) => {
+        const idx = record._idx;
+        const isFirst = idx === 0;
+        const isLast = idx === slides.length - 1;
+        return (
+          <Space wrap>
+            <Button
+              type='tertiary'
+              theme='borderless'
+              icon={<ChevronUp size={16} />}
+              disabled={isFirst || saving}
+              onClick={() => moveAt(idx, 'up')}
+              aria-label={t('广告幻灯片上移')}
+            />
+            <Button
+              type='tertiary'
+              theme='borderless'
+              icon={<ChevronDown size={16} />}
+              disabled={isLast || saving}
+              onClick={() => moveAt(idx, 'down')}
+              aria-label={t('广告幻灯片下移')}
+            />
+            <Button
+              type='tertiary'
+              theme='borderless'
+              icon={<Edit2 size={16} />}
+              onClick={() => openEdit(idx)}
+            >
+              {t('编辑')}
+            </Button>
+            <Button
+              type='danger'
+              theme='borderless'
+              icon={<Trash2 size={16} />}
+              disabled={saving}
+              onClick={() => removeAt(idx)}
+            >
+              {t('删除')}
+            </Button>
+          </Space>
+        );
+      },
     },
   ];
 
@@ -245,6 +339,31 @@ const SettingsHomeBanner = ({ options, refresh }) => {
       <Text type='tertiary' className='!block !mb-4'>
         {t('首页广告轮播提示')}
       </Text>
+      <div className='flex flex-wrap items-end gap-3 mb-4'>
+        <div>
+          <Text strong className='!block !mb-1'>
+            {t('首页广告轮播间隔')}
+          </Text>
+          <InputNumber
+            min={MIN_INTERVAL_SEC}
+            max={MAX_INTERVAL_SEC}
+            value={intervalSec}
+            onChange={(v) => setIntervalSec(v)}
+            style={{ width: 140 }}
+            disabled={saving}
+          />
+        </div>
+        <Button
+          type='secondary'
+          loading={saving}
+          onClick={() => persistInterval(intervalSec)}
+        >
+          {t('保存轮播间隔')}
+        </Button>
+        <Text type='tertiary' size='small' className='!pb-1'>
+          {t('首页广告轮播间隔说明', { min: MIN_INTERVAL_SEC, max: MAX_INTERVAL_SEC })}
+        </Text>
+      </div>
       <Button icon={<Plus size={16} />} type='primary' onClick={openAdd}>
         {t('添加广告幻灯片')}
       </Button>
@@ -347,7 +466,11 @@ const SettingsHomeBanner = ({ options, refresh }) => {
               value={form.subtitle}
               onChange={(v) => setForm((f) => ({ ...f, subtitle: v }))}
               rows={2}
+              placeholder={t('广告副标题占位')}
             />
+            <Text type='tertiary' size='small' className='!mt-1 !block'>
+              {t('广告副标题强调说明')}
+            </Text>
           </div>
           <div>
             <Text strong className='!block !mb-1'>
@@ -374,6 +497,9 @@ const SettingsHomeBanner = ({ options, refresh }) => {
               placeholder={t('首页广告模型占位')}
               className='w-full'
             />
+            <Text type='tertiary' size='small' className='!mt-1 !block'>
+              {t('首页广告模型跳转说明')}
+            </Text>
           </div>
         </div>
       </Modal>

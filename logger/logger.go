@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -138,6 +139,40 @@ func FormatCommissionRatioAsPercent(ratioTenThousandth int) string {
 	return trimNumericTrailingZeros(s) + "%"
 }
 
+// QuotaToRoundedDisplayAmount 与前端 quotaToRoundedDisplayValue 一致：单行额度对应的展示货币数值。
+func QuotaToRoundedDisplayAmount(quota int, digits int) float64 {
+	if digits <= 0 {
+		digits = 2
+	}
+	displayType := operation_setting.GetQuotaDisplayType()
+	if displayType == operation_setting.QuotaDisplayTypeTokens {
+		return float64(quota)
+	}
+	q := float64(quota)
+	usd := q / common.QuotaPerUnit
+	var value float64
+	switch displayType {
+	case operation_setting.QuotaDisplayTypeCNY:
+		value = usd * operation_setting.USDExchangeRate
+	case operation_setting.QuotaDisplayTypeCustom:
+		gs := operation_setting.GetGeneralSetting()
+		rate := gs.CustomCurrencyExchangeRate
+		if rate <= 0 {
+			rate = 1
+		}
+		value = usd * rate
+	default:
+		value = usd
+	}
+	factor := math.Pow(10, float64(digits))
+	fixedResult := math.Round(value*factor) / factor
+	minVal := 1 / factor
+	if fixedResult == 0 && quota > 0 && value > 0 {
+		return minVal
+	}
+	return fixedResult
+}
+
 // LogQuotaConcise 与 LogQuota 相同展示规则，但金额数字去掉小数点后多余 0，用于日志简洁展示。
 func LogQuotaConcise(quota int) string {
 	q := float64(quota)
@@ -165,6 +200,60 @@ func LogQuotaConcise(quota int) string {
 	default:
 		num := trimNumericTrailingZeros(fmt.Sprintf("%.10f", q/common.QuotaPerUnit))
 		return fmt.Sprintf("＄%s 额度", num)
+	}
+}
+
+// LogQuotaManage 管理类日志额度展示，金额保留 2 位小数。
+func LogQuotaManage(quota int) string {
+	q := float64(quota)
+	switch operation_setting.GetQuotaDisplayType() {
+	case operation_setting.QuotaDisplayTypeCNY:
+		usd := q / common.QuotaPerUnit
+		cny := usd * operation_setting.USDExchangeRate
+		return fmt.Sprintf("¥%.2f 额度", cny)
+	case operation_setting.QuotaDisplayTypeCustom:
+		usd := q / common.QuotaPerUnit
+		rate := operation_setting.GetGeneralSetting().CustomCurrencyExchangeRate
+		symbol := operation_setting.GetGeneralSetting().CustomCurrencySymbol
+		if symbol == "" {
+			symbol = "¤"
+		}
+		if rate <= 0 {
+			rate = 1
+		}
+		v := usd * rate
+		return fmt.Sprintf("%s%.2f 额度", symbol, v)
+	case operation_setting.QuotaDisplayTypeTokens:
+		return fmt.Sprintf("%d 点额度", quota)
+	default: // USD
+		return fmt.Sprintf("＄%.2f 额度", q/common.QuotaPerUnit)
+	}
+}
+
+// FormatQuotaManage 管理类日志额度展示，金额保留 2 位小数且不含"额度"后缀。
+func FormatQuotaManage(quota int) string {
+	q := float64(quota)
+	switch operation_setting.GetQuotaDisplayType() {
+	case operation_setting.QuotaDisplayTypeCNY:
+		usd := q / common.QuotaPerUnit
+		cny := usd * operation_setting.USDExchangeRate
+		return fmt.Sprintf("¥%.2f", cny)
+	case operation_setting.QuotaDisplayTypeCustom:
+		usd := q / common.QuotaPerUnit
+		rate := operation_setting.GetGeneralSetting().CustomCurrencyExchangeRate
+		symbol := operation_setting.GetGeneralSetting().CustomCurrencySymbol
+		if symbol == "" {
+			symbol = "¤"
+		}
+		if rate <= 0 {
+			rate = 1
+		}
+		v := usd * rate
+		return fmt.Sprintf("%s%.2f", symbol, v)
+	case operation_setting.QuotaDisplayTypeTokens:
+		return fmt.Sprintf("%d", quota)
+	default: // USD
+		return fmt.Sprintf("＄%.2f", q/common.QuotaPerUnit)
 	}
 }
 

@@ -87,6 +87,7 @@ function ImagePerImageHintTable({
   displayPrice,
   t,
   blurPricing = false,
+  isCostPrice = false,
 }) {
   const groups = useMemo(
     () => groupImagePerImageTiersByFamily(hint?.tiers),
@@ -100,7 +101,11 @@ function ImagePerImageHintTable({
     { key: 'resolution', label: t('分辨率') },
     { key: 'price', label: t('平台价'), strong: true },
     { key: 'official', label: t('官方价') },
-    { key: 'discount', label: t('折扣'), align: 'right' },
+    {
+      key: 'discount',
+      label: isCostPrice ? t('成本折扣') : t('折扣'),
+      align: 'right',
+    },
   ];
 
   return (
@@ -139,6 +144,7 @@ function ImagePerImageHintTable({
               gridType='image'
               accent={family === 'image_to_image' ? 'green' : 'blue'}
               t={t}
+              zeroDiscountLabel={isCostPrice ? t('0折扣') : '0%'}
             />
           );
         })}

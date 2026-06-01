@@ -368,7 +368,7 @@ const renderOperations = (
       }
     }
   } catch (_) {
-    showError(t('聊天链接配置错误，请联系管理员'));
+    showError(t('工具连接链接配置错误，请联系管理员'));
   }
 
   return (
@@ -382,14 +382,14 @@ const renderOperations = (
           type='tertiary'
           onClick={() => {
             if (chatsArray.length === 0) {
-              showError(t('请联系管理员配置聊天链接'));
+              showError(t('请联系管理员配置工具连接链接'));
             } else {
               const first = chatsArray[0];
               onOpenLink(first.name, first.value, record);
             }
           }}
         >
-          {t('聊天')}
+          {t('工具连接')}
         </Button>
         <Dropdown trigger='click' position='bottomRight' menu={chatsArray}>
           <Button

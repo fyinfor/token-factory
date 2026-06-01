@@ -312,6 +312,37 @@ export function timestamp2string(timestamp) {
   );
 }
 
+/** 将 DatePicker / 字符串 / 秒或毫秒时间戳统一转为 Unix 秒 */
+export function toUnixTimestamp(value) {
+  if (value == null || value === '') {
+    return 0;
+  }
+  if (value instanceof Date) {
+    return Math.floor(value.getTime() / 1000);
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value > 1e12 ? Math.floor(value / 1000) : Math.floor(value);
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return 0;
+    }
+    if (/^\d+$/.test(trimmed)) {
+      const n = Number(trimmed);
+      return n > 1e12 ? Math.floor(n / 1000) : Math.floor(n);
+    }
+    const normalized = trimmed.includes(' ') && !trimmed.includes('T')
+      ? trimmed.replace(' ', 'T')
+      : trimmed;
+    const parsed = Date.parse(normalized);
+    if (Number.isFinite(parsed)) {
+      return Math.floor(parsed / 1000);
+    }
+  }
+  return 0;
+}
+
 export function timestamp2string1(
   timestamp,
   dataExportDefaultTime = 'hour',

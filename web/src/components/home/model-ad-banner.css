@@ -190,6 +190,24 @@
   min-width: 0;
 }
 
+.ad-subtitle .ad-rich-bold {
+  font-weight: 700;
+  color: #334155;
+}
+
+.ad-subtitle .ad-subtitle-highlight {
+  font-weight: 700;
+  color: #4f46e5;
+}
+
+html.dark .ad-subtitle .ad-rich-bold {
+  color: #e2e8f0;
+}
+
+html.dark .ad-subtitle .ad-subtitle-highlight {
+  color: #a5b4fc;
+}
+
 .ad-button {
   flex-shrink: 0;
   align-self: center;
