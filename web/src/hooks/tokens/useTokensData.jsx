@@ -19,13 +19,16 @@ For commercial licensing, please contact support@quantumnous.com
 
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Modal } from '@douyinfe/semi-ui';
+import { Modal, Toast } from '@douyinfe/semi-ui';
 import {
   API,
   copy,
   showError,
   showSuccess,
+  showWarning,
   encodeToBase64,
+  openAppLink,
+  isCustomProtocolUrl,
 } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
@@ -34,6 +37,8 @@ import {
   getServerAddress,
   encodeChannelConnectionString,
 } from '../../helpers/token';
+
+const OPENING_TOAST_ID = 'token-tool-connect-opening';
 
 export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
   const { t } = useTranslation();
@@ -209,53 +214,100 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
     await copyText(connStr);
   };
 
-  // Open link function for chat integrations
+  // Open link function for tool connection integrations
   const onOpenLink = async (type, url, record) => {
-    const fullKey = await fetchTokenKey(record);
-    if (url && url.startsWith('ccswitch')) {
-      openCCSwitchModal(fullKey);
-      return;
-    }
-    if (url && url.startsWith('fluent')) {
-      openFluentNotification(fullKey);
-      return;
-    }
-    let status = localStorage.getItem('status');
-    let serverAddress = '';
-    if (status) {
-      status = JSON.parse(status);
-      serverAddress = status.server_address;
-    }
-    if (serverAddress === '') {
-      serverAddress = window.location.origin;
-    }
-    if (url.includes('{cherryConfig}') === true) {
-      let cherryConfig = {
-        id: 'new-api',
-        baseUrl: serverAddress,
-        apiKey: `sk-${fullKey}`,
-      };
-      let encodedConfig = encodeURIComponent(
-        encodeToBase64(JSON.stringify(cherryConfig)),
-      );
-      url = url.replaceAll('{cherryConfig}', encodedConfig);
-    } else if (url.includes('{aionuiConfig}') === true) {
-      let aionuiConfig = {
-        platform: 'new-api',
-        baseUrl: serverAddress,
-        apiKey: `sk-${fullKey}`,
-      };
-      let encodedConfig = encodeURIComponent(
-        encodeToBase64(JSON.stringify(aionuiConfig)),
-      );
-      url = url.replaceAll('{aionuiConfig}', encodedConfig);
-    } else {
-      let encodedServerAddress = encodeURIComponent(serverAddress);
-      url = url.replaceAll('{address}', encodedServerAddress);
-      url = url.replaceAll('{key}', `sk-${fullKey}`);
+    const useCustomProtocol = isCustomProtocolUrl(url);
+    let openingDismissTimer = null;
+
+    const closeOpeningToast = () => {
+      if (openingDismissTimer != null) {
+        window.clearTimeout(openingDismissTimer);
+        openingDismissTimer = null;
+      }
+      Toast.close(OPENING_TOAST_ID);
+    };
+
+    const showOpeningToast = (label) => {
+      closeOpeningToast();
+      Toast.info({
+        id: OPENING_TOAST_ID,
+        content: t('正在打开 {{app}}…', {
+          app: label || type || t('客户端'),
+        }),
+        duration: 3,
+        showClose: true,
+      });
+      openingDismissTimer = window.setTimeout(closeOpeningToast, 3000);
+    };
+
+    if (useCustomProtocol) {
+      showOpeningToast(type);
     }
 
-    window.open(url, '_blank');
+    try {
+      const fullKey = await fetchTokenKey(record);
+      if (url && url.startsWith('ccswitch')) {
+        closeOpeningToast();
+        openCCSwitchModal(fullKey);
+        return;
+      }
+      if (url && url.startsWith('fluent')) {
+        closeOpeningToast();
+        openFluentNotification(fullKey);
+        return;
+      }
+      let status = localStorage.getItem('status');
+      let serverAddress = '';
+      if (status) {
+        status = JSON.parse(status);
+        serverAddress = status.server_address;
+      }
+      if (serverAddress === '') {
+        serverAddress = window.location.origin;
+      }
+      if (url.includes('{cherryConfig}') === true) {
+        let cherryConfig = {
+          id: 'new-api',
+          baseUrl: serverAddress,
+          apiKey: `sk-${fullKey}`,
+        };
+        let encodedConfig = encodeURIComponent(
+          encodeToBase64(JSON.stringify(cherryConfig)),
+        );
+        url = url.replaceAll('{cherryConfig}', encodedConfig);
+      } else if (url.includes('{aionuiConfig}') === true) {
+        let aionuiConfig = {
+          platform: 'new-api',
+          baseUrl: serverAddress,
+          apiKey: `sk-${fullKey}`,
+        };
+        let encodedConfig = encodeURIComponent(
+          encodeToBase64(JSON.stringify(aionuiConfig)),
+        );
+        url = url.replaceAll('{aionuiConfig}', encodedConfig);
+      } else {
+        let encodedServerAddress = encodeURIComponent(serverAddress);
+        url = url.replaceAll('{address}', encodedServerAddress);
+        url = url.replaceAll('{key}', `sk-${fullKey}`);
+      }
+
+      void openAppLink(url, {
+        onOpened: () => {
+          closeOpeningToast();
+        },
+        onMaybeNotInstalled: (appName) => {
+          closeOpeningToast();
+          showWarning(
+            t('未检测到 {{app}}，请确认已安装并已注册协议处理程序', {
+              app: appName || type || t('对应客户端'),
+            }),
+          );
+        },
+      });
+    } catch (err) {
+      closeOpeningToast();
+      showError(err?.message || t('操作失败'));
+    }
   };
 
   // Manage token function (delete, enable, disable)

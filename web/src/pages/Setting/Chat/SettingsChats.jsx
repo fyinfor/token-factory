@@ -388,7 +388,7 @@ export default function SettingsChats(props) {
   return (
     <Spin spinning={loading}>
       <Space vertical style={{ width: '100%' }}>
-        <Form.Section text={t('聊天设置')}>
+        <Form.Section text={t('工具连接设置')}>
           <Banner
             type='info'
             description={t(

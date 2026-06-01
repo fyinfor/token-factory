@@ -84,7 +84,7 @@ const Setting = () => {
       tab: (
         <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
           <MessageSquare size={18} />
-          {t('聊天设置')}
+          {t('工具连接设置')}
         </span>
       ),
       content: <ChatsSetting />,
