@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
@@ -439,97 +438,122 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 }
 
 type Stat struct {
-	Quota int `json:"quota"`
-	Rpm   int `json:"rpm"`
-	Tpm   int `json:"tpm"`
+	Quota          int     `json:"quota"`
+	DisplayAmount  float64 `json:"display_amount"`
+	Rpm            int     `json:"rpm"`
+	Tpm            int     `json:"tpm"`
 }
 
 func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string) (stat Stat, err error) {
-	tx := LOG_DB.Table("logs").Select("sum(quota) quota")
-
-	// 为rpm和tpm创建单独的查询
-	rpmTpmQuery := LOG_DB.Table("logs").Select("count(*) rpm, sum(prompt_tokens) + sum(completion_tokens) tpm")
+	quotaListQuery := LOG_DB.Table("logs").Select("quota")
+	rpmTpmQuery := LOG_DB.Table("logs").Select("count(*) rpm, COALESCE(sum(prompt_tokens), 0) + COALESCE(sum(completion_tokens), 0) tpm")
 
 	if username != "" {
-		tx = tx.Where("username = ?", username)
+		quotaListQuery = quotaListQuery.Where("username = ?", username)
 		rpmTpmQuery = rpmTpmQuery.Where("username = ?", username)
 	}
 	if tokenName != "" {
-		tx = tx.Where("token_name = ?", tokenName)
+		quotaListQuery = quotaListQuery.Where("token_name = ?", tokenName)
 		rpmTpmQuery = rpmTpmQuery.Where("token_name = ?", tokenName)
 	}
 	if startTimestamp != 0 {
-		tx = tx.Where("created_at >= ?", startTimestamp)
+		quotaListQuery = quotaListQuery.Where("created_at >= ?", startTimestamp)
+		rpmTpmQuery = rpmTpmQuery.Where("created_at >= ?", startTimestamp)
 	}
 	if endTimestamp != 0 {
-		tx = tx.Where("created_at <= ?", endTimestamp)
+		quotaListQuery = quotaListQuery.Where("created_at <= ?", endTimestamp)
+		rpmTpmQuery = rpmTpmQuery.Where("created_at <= ?", endTimestamp)
 	}
 	if modelName != "" {
 		modelNamePattern, err := sanitizeLikePattern(modelName)
 		if err != nil {
 			return stat, err
 		}
-		tx = tx.Where("model_name LIKE ? ESCAPE '!'", modelNamePattern)
+		quotaListQuery = quotaListQuery.Where("model_name LIKE ? ESCAPE '!'", modelNamePattern)
 		rpmTpmQuery = rpmTpmQuery.Where("model_name LIKE ? ESCAPE '!'", modelNamePattern)
 	}
 	if channel != 0 {
-		tx = tx.Where("channel_id = ?", channel)
+		quotaListQuery = quotaListQuery.Where("channel_id = ?", channel)
 		rpmTpmQuery = rpmTpmQuery.Where("channel_id = ?", channel)
 	}
 	if group != "" {
-		tx = tx.Where(logGroupCol+" = ?", group)
+		quotaListQuery = quotaListQuery.Where(logGroupCol+" = ?", group)
 		rpmTpmQuery = rpmTpmQuery.Where(logGroupCol+" = ?", group)
 	}
 
-	tx = tx.Where("type = ?", LogTypeConsume)
+	quotaListQuery = quotaListQuery.Where("type = ?", LogTypeConsume)
 	rpmTpmQuery = rpmTpmQuery.Where("type = ?", LogTypeConsume)
 
-	// 只统计最近60秒的rpm和tpm
-	rpmTpmQuery = rpmTpmQuery.Where("created_at >= ?", time.Now().Add(-60*time.Second).Unix())
-
-	// 执行查询
-	if err := tx.Scan(&stat).Error; err != nil {
+	var quotaRows []struct {
+		Quota int `gorm:"column:quota"`
+	}
+	if err := quotaListQuery.Find(&quotaRows).Error; err != nil {
 		common.SysError("failed to query log stat: " + err.Error())
 		return stat, errors.New("查询统计数据失败")
 	}
-	if err := rpmTpmQuery.Scan(&stat).Error; err != nil {
+	for _, row := range quotaRows {
+		stat.Quota += row.Quota
+		stat.DisplayAmount += logger.QuotaToRoundedDisplayAmount(row.Quota, 2)
+	}
+
+	var rpmTpmRow struct {
+		Rpm int `gorm:"column:rpm"`
+		Tpm int `gorm:"column:tpm"`
+	}
+	if err := rpmTpmQuery.Scan(&rpmTpmRow).Error; err != nil {
 		common.SysError("failed to query rpm/tpm stat: " + err.Error())
 		return stat, errors.New("查询统计数据失败")
 	}
+	stat.Rpm = rpmTpmRow.Rpm
+	stat.Tpm = rpmTpmRow.Tpm
 
 	return stat, nil
 }
 
-// SumUsedQuotaByModelNames 按模型集合统计消耗额度与最近一分钟 rpm/tpm。
+// SumUsedQuotaByModelNames 按模型集合统计消耗额度与筛选时间范围内的 rpm/tpm。
 func SumUsedQuotaByModelNames(startTimestamp int64, endTimestamp int64, modelNames []string) (stat Stat, err error) {
 	if len(modelNames) == 0 {
 		return stat, nil
 	}
-	tx := LOG_DB.Table("logs").Select("sum(quota) quota")
-	rpmTpmQuery := LOG_DB.Table("logs").Select("count(*) rpm, sum(prompt_tokens) + sum(completion_tokens) tpm")
+	quotaListQuery := LOG_DB.Table("logs").Select("quota")
+	rpmTpmQuery := LOG_DB.Table("logs").Select("count(*) rpm, COALESCE(sum(prompt_tokens), 0) + COALESCE(sum(completion_tokens), 0) tpm")
 
 	if startTimestamp != 0 {
-		tx = tx.Where("created_at >= ?", startTimestamp)
+		quotaListQuery = quotaListQuery.Where("created_at >= ?", startTimestamp)
+		rpmTpmQuery = rpmTpmQuery.Where("created_at >= ?", startTimestamp)
 	}
 	if endTimestamp != 0 {
-		tx = tx.Where("created_at <= ?", endTimestamp)
+		quotaListQuery = quotaListQuery.Where("created_at <= ?", endTimestamp)
+		rpmTpmQuery = rpmTpmQuery.Where("created_at <= ?", endTimestamp)
 	}
-	tx = tx.Where("model_name IN ?", modelNames)
-
+	quotaListQuery = quotaListQuery.Where("model_name IN ?", modelNames)
 	rpmTpmQuery = rpmTpmQuery.Where("model_name IN ?", modelNames)
-	rpmTpmQuery = rpmTpmQuery.Where("created_at >= ?", time.Now().Add(-60*time.Second).Unix())
 
-	tx = tx.Where("type = ?", LogTypeConsume)
+	quotaListQuery = quotaListQuery.Where("type = ?", LogTypeConsume)
 	rpmTpmQuery = rpmTpmQuery.Where("type = ?", LogTypeConsume)
 
-	if err := tx.Scan(&stat).Error; err != nil {
+	var quotaRows []struct {
+		Quota int `gorm:"column:quota"`
+	}
+	if err := quotaListQuery.Find(&quotaRows).Error; err != nil {
 		common.SysError("failed to query supplier log stat: " + err.Error())
 		return stat, errors.New("查询统计数据失败")
 	}
-	if err := rpmTpmQuery.Scan(&stat).Error; err != nil {
+	for _, row := range quotaRows {
+		stat.Quota += row.Quota
+		stat.DisplayAmount += logger.QuotaToRoundedDisplayAmount(row.Quota, 2)
+	}
+
+	var rpmTpmRow struct {
+		Rpm int `gorm:"column:rpm"`
+		Tpm int `gorm:"column:tpm"`
+	}
+	if err := rpmTpmQuery.Scan(&rpmTpmRow).Error; err != nil {
 		common.SysError("failed to query supplier rpm/tpm stat: " + err.Error())
 		return stat, errors.New("查询统计数据失败")
 	}
+	stat.Rpm = rpmTpmRow.Rpm
+	stat.Tpm = rpmTpmRow.Tpm
 	return stat, nil
 }
 

@@ -138,6 +138,7 @@ func GetStatus(c *gin.Context) {
 		"affiliate_default_commission_bps":  common.AffiliateDefaultCommissionBps,
 		"distributor_commission_mode":       common.DistributorCommissionMode,
 		"home_banner_slides":                strings.TrimSpace(common.Interface2String(common.OptionMap["HomeBannerSlides"])),
+		"home_banner_interval_sec":          strings.TrimSpace(common.Interface2String(common.OptionMap["HomeBannerIntervalSec"])),
 	}
 
 	// 根据启用状态注入可选内容

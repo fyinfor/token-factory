@@ -24,6 +24,42 @@ import PaymentConfirmModal from './modals/PaymentConfirmModal';
 import PaymentMethodSelectModal from './modals/PaymentMethodSelectModal';
 import TopupHistoryModal from './modals/TopupHistoryModal';
 
+const DEFAULT_EPAY_MAX_TOPUP = 100000;
+
+const isLimitedEpayMethod = (type) => {
+  const lower = (type || '').toLowerCase();
+  return (
+    lower === 'alipay' ||
+    lower === 'wxpay' ||
+    lower === 'paypal' ||
+    String(type || '')
+      .toUpperCase()
+      .startsWith('PP_')
+  );
+};
+
+const normalizePayMethodMaxTopup = (method) => {
+  const normalized = Number(method.max_topup);
+  if (Number.isFinite(normalized) && normalized > 0) {
+    method.max_topup = normalized;
+    return method;
+  }
+  if (isLimitedEpayMethod(method.type)) {
+    method.max_topup = DEFAULT_EPAY_MAX_TOPUP;
+  } else {
+    method.max_topup = 0;
+  }
+  return method;
+};
+
+const getPayMethodMaxTopup = (payMethods, type) => {
+  const method = payMethods.find((m) => m.type === type);
+  const configured = Number(method?.max_topup);
+  if (Number.isFinite(configured) && configured > 0) return configured;
+  if (isLimitedEpayMethod(type)) return DEFAULT_EPAY_MAX_TOPUP;
+  return 0;
+};
+
 const TopUp = () => {
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -167,6 +203,13 @@ const TopUp = () => {
         showError(t('充值数量不能小于') + minTopUp);
         return;
       }
+      if (payment !== 'stripe') {
+        const maxTopUp = getPayMethodMaxTopup(payMethods, payment);
+        if (maxTopUp > 0 && Number(topUpCount) > maxTopUp) {
+          showError(t('充值数量不能大于') + maxTopUp);
+          return;
+        }
+      }
       setOpen(true);
     } catch (error) {
       showError(t('获取金额失败'));
@@ -191,6 +234,13 @@ const TopUp = () => {
     if (topUpCount < minTopUp) {
       showError('充值数量不能小于' + minTopUp);
       return;
+    }
+    if (payWay !== 'stripe') {
+      const maxTopUp = getPayMethodMaxTopup(payMethods, payWay);
+      if (maxTopUp > 0 && Number(topUpCount) > maxTopUp) {
+        showError(t('充值数量不能大于') + maxTopUp);
+        return;
+      }
     }
     setConfirmLoading(true);
     try {
@@ -466,6 +516,7 @@ const TopUp = () => {
               method.min_topup = Number.isFinite(normalizedMinTopup)
                 ? normalizedMinTopup
                 : 0;
+              normalizePayMethodMaxTopup(method);
 
               // Stripe 的最小充值从后端字段回填
               if (
@@ -777,11 +828,13 @@ const TopUp = () => {
         return false;
       }
       const minTopupVal = Number(method.min_topup) || 0;
+      const maxTopupVal = Number(method.max_topup) || 0;
       const isStripe = method.type === 'stripe';
       const disabled =
         (!enableOnlineTopUp && !isStripe) ||
         (!enableStripeTopUp && isStripe) ||
-        minTopupVal > Number(count || 0);
+        minTopupVal > Number(count || 0) ||
+        (maxTopupVal > 0 && maxTopupVal < Number(count || 0));
       return !disabled;
     });
   };

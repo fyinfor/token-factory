@@ -1473,6 +1473,22 @@ export function renderQuotaSum(quotas, digits = 2) {
   );
 }
 
+/** 使用日志顶部「消耗额度」：与列表各行 renderQuota 按行舍入后再合计一致。 */
+export function renderLogStatDisplayQuota(stat, digits = 2) {
+  if (
+    stat != null &&
+    stat.display_amount != null &&
+    Number.isFinite(Number(stat.display_amount))
+  ) {
+    const displayType = localStorage.getItem('quota_display_type') || 'USD';
+    if (displayType === 'TOKENS') {
+      return renderNumber(Math.round(Number(stat.display_amount)));
+    }
+    return renderQuotaWithAmount(Number(stat.display_amount));
+  }
+  return renderQuota(stat?.quota ?? 0, digits);
+}
+
 /**
  * 额度展示：默认保留 minDigits 位小数；极低分成在舍入为 0 时自动增至 maxDigits 位（不伪造最小展示值）。
  */
@@ -1622,6 +1638,14 @@ function renderDisplayAmountFromUsd(usdAmount, digits = 2) {
 
 function formatBillingDisplayPrice(usdAmount, rate, digits = 2) {
   return parseFloat((usdAmount * rate).toFixed(digits));
+}
+
+/** 消费日志「计费过程」合计：与列表 renderQuota 同一套舍入与最小展示规则 */
+function resolveBillingProcessTotalDisplay(actualQuota, calculatedUsdAmount, rate, digits = 2) {
+  if (actualQuota != null && Number.isFinite(Number(actualQuota))) {
+    return quotaToRoundedDisplayValue(Number(actualQuota), digits);
+  }
+  return formatBillingDisplayPrice(calculatedUsdAmount, rate, digits);
 }
 
 function buildBillingText(key, vars) {
@@ -2364,6 +2388,8 @@ export function renderModelPrice(
   billingProcessFoldGroupMultiplier = false,
   /** 消费日志 other（含 global_*、markup_discount_rate） */
   billingMeta = null,
+  /** 消费日志实扣额度（与列表 renderQuota 一致，用于计费过程合计展示） */
+  actualQuota = null,
 ) {
   const { ratio: effectiveGroupRatio, label: ratioLabel } = getEffectiveRatio(
     groupRatio,
@@ -2420,7 +2446,11 @@ export function renderModelPrice(
             ratioType: ratioLabel,
             ratio: groupRatio,
             amountKey: 'price',
-            total: formatBillingDisplayPrice(mp * groupRatio, rate),
+            total: resolveBillingProcessTotalDisplay(
+              billingProcessFoldGroupMultiplier ? actualQuota : null,
+              mp * groupRatio,
+              rate,
+            ),
           },
         ),
       ]);
@@ -2650,7 +2680,11 @@ export function renderModelPrice(
           outputDesc,
           extraServices,
           symbol,
-          total: formatBillingDisplayPrice(price, rate),
+          total: resolveBillingProcessTotalDisplay(
+            billingProcessFoldGroupMultiplier ? actualQuota : null,
+            price,
+            rate,
+          ),
         },
       ),
     ];
@@ -3547,6 +3581,8 @@ export function renderClaudeModelPrice(
   billingProcessFoldGroupMultiplier = false,
   /** 消费日志 other（含 global_*、markup_discount_rate） */
   billingMeta = null,
+  /** 消费日志实扣额度（与列表 renderQuota 一致，用于计费过程合计展示） */
+  actualQuota = null,
 ) {
   const { ratio: effectiveGroupRatio, label: ratioLabel } = getEffectiveRatio(
     groupRatio,
@@ -3603,7 +3639,11 @@ export function renderClaudeModelPrice(
             rate,
             ratioType: ratioLabel,
             ratio: groupRatio,
-            total: formatBillingDisplayPrice(mp * groupRatio, rate),
+            total: resolveBillingProcessTotalDisplay(
+              billingProcessFoldGroupMultiplier ? actualQuota : null,
+              mp * groupRatio,
+              rate,
+            ),
           },
         ),
       ]);
@@ -3766,7 +3806,11 @@ export function renderClaudeModelPrice(
         ? buildBillingText('{{breakdown}} = {{symbol}}{{total}}', {
             breakdown: breakdownText,
             symbol,
-            total: formatBillingDisplayPrice(price, rate),
+            total: resolveBillingProcessTotalDisplay(
+              actualQuota,
+              price,
+              rate,
+            ),
           })
         : buildBillingText(
             '{{breakdown}} * {{ratioType}} {{ratio}} = {{symbol}}{{total}}',
@@ -4368,6 +4412,7 @@ export function renderConsumeBillingProcess({
       !isPerCall,
       true,
       other,
+      Number(record?.quota) || 0,
     );
   }
 
@@ -4400,6 +4445,7 @@ export function renderConsumeBillingProcess({
     !isPerCall,
     true,
     other,
+    Number(record?.quota) || 0,
   );
 }
 

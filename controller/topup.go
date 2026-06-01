@@ -663,6 +663,26 @@ func getMinTopup() int64 {
 	return int64(minTopup)
 }
 
+func getMaxTopup(paymentMethod string) int64 {
+	maxTopup := operation_setting.GetPayMethodMaxTopup(paymentMethod)
+	if maxTopup <= 0 {
+		return 0
+	}
+	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
+		dMaxTopup := decimal.NewFromInt(maxTopup)
+		dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+		maxTopup = dMaxTopup.Mul(dQuotaPerUnit).IntPart()
+	}
+	return maxTopup
+}
+
+func validateEpayTopupAmount(amount int64, paymentMethod string) string {
+	if maxTopup := getMaxTopup(paymentMethod); maxTopup > 0 && amount > maxTopup {
+		return fmt.Sprintf("充值数量不能大于 %d", maxTopup)
+	}
+	return ""
+}
+
 // RequestEpay 创建在线充值订单并拉起支付。
 func RequestEpay(c *gin.Context) {
 	var req EpayRequest
@@ -673,6 +693,12 @@ func RequestEpay(c *gin.Context) {
 	}
 	if req.Amount < getMinTopup() {
 		c.JSON(200, gin.H{"message": "error", "data": fmt.Sprintf("充值数量不能小于 %d", getMinTopup())})
+		return
+	}
+
+	paymentMethod := req.PaymentMethod
+	if msg := validateEpayTopupAmount(req.Amount, paymentMethod); msg != "" {
+		c.JSON(200, gin.H{"message": "error", "data": msg})
 		return
 	}
 
@@ -688,7 +714,6 @@ func RequestEpay(c *gin.Context) {
 		return
 	}
 
-	paymentMethod := req.PaymentMethod
 	if !operation_setting.ContainsPayMethod(paymentMethod) {
 		c.JSON(200, gin.H{"message": "error", "data": "支付方式不存在"})
 		return

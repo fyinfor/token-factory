@@ -25,7 +25,13 @@ import { ChevronLeft } from 'lucide-react';
 import { useSidebarCollapsed } from '../../hooks/common/useSidebarCollapsed';
 import { useSidebar } from '../../hooks/common/useSidebar';
 import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime';
-import { isAdmin, isRoot, showError, isDistributor } from '../../helpers';
+import {
+  isAdmin,
+  isRoot,
+  isSupplier,
+  showError,
+  isDistributor,
+} from '../../helpers';
 import { UserContext } from '../../context/User';
 import SkeletonWrapper from './components/SkeletonWrapper';
 
@@ -150,7 +156,8 @@ const SiderBar = ({ onNavigate = () => {} }) => {
       {
         text: t('供应商'),
         itemKey: 'supplier',
-        className: isAdmin() ? 'tableHiddle' : '',
+        className:
+          isSupplier() || isAdmin() || isRoot() ? '' : 'tableHiddle',
         items: [
           {
             text: t('申请'),
@@ -183,14 +190,32 @@ const SiderBar = ({ onNavigate = () => {} }) => {
     ];
 
     // 根据配置过滤项目
-    const filteredItems = items.filter((item) => {
-      if (item.className === 'tableHiddle') return false;
-      const configVisible = isModuleVisible('personal', item.itemKey);
-      return configVisible;
-    });
+    const filteredItems = items
+      .filter((item) => item.className !== 'tableHiddle')
+      .map((item) => {
+        if (item.items && item.items.length > 0) {
+          const visibleSubItems = item.items.filter((subItem) =>
+            isModuleVisible('personal', subItem.itemKey),
+          );
+          if (visibleSubItems.length === 0) return null;
+          if (!isModuleVisible('personal', item.itemKey)) return null;
+          return { ...item, items: visibleSubItems };
+        }
+        return isModuleVisible('personal', item.itemKey) ? item : null;
+      })
+      .filter((item) => item !== null);
 
     return filteredItems;
-  }, [t, isModuleVisible, userState?.user?.role, isDistributor(), isAdmin()]);
+  }, [
+    t,
+    isModuleVisible,
+    userState?.user?.role,
+    userState?.user?.supplier_id,
+    isDistributor(),
+    isAdmin(),
+    isSupplier(),
+    isRoot(),
+  ]);
 
   const adminItems = useMemo(() => {
     const items = [
