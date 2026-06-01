@@ -170,9 +170,12 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	}
 	_ = resp.Body.Close()
 
+	// Try to decode base64 if response is a JSON string
+	decodedBody := taskcommon.DecodeBase64Response(responseBody)
+
 	// Parse Doubao response
 	var dResp responsePayload
-	if err := common.Unmarshal(responseBody, &dResp); err != nil {
+	if err := common.Unmarshal(decodedBody, &dResp); err != nil {
 		taskErr = service.TaskErrorWrapper(errors.Wrapf(err, "body: %s", responseBody), "unmarshal_response_body_failed", http.StatusInternalServerError)
 		return
 	}
@@ -187,7 +190,8 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	ov.CreatedAt = dto.FormatTimeUnixRFC3339(time.Now().Unix())
 	ov.Model = info.OriginModelName
 
-	c.JSON(http.StatusOK, ov)
+
+	taskcommon.WriteOpenAIVideoResponse(c, ov)
 	return dResp.ID, responseBody, nil
 }
 

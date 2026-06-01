@@ -29,6 +29,7 @@ func SetVideoRouter(router *gin.Engine) {
 	{
 		// 与 OpenAI 视频网关 / 部分上游一致的提交路径（区别于本站的 /v1/video/generations）
 		videoV1Router.POST("/videos/generations", controller.RelayTask)
+		videoV1Router.GET("/videos/generations/:task_id", controller.RelayTaskFetch)
 		videoV1Router.POST("/videos", controller.RelayTask)
 		videoV1Router.GET("/videos/:task_id", controller.RelayTaskFetch)
 	}

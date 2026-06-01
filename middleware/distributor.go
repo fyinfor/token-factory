@@ -177,6 +177,7 @@ func Distribute() func(c *gin.Context) {
 				var selectGroup string
 				usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
 				userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
+				endpointChannelFilter := service.RelayModeChannelFilter(c.GetInt("relay_mode"), modelRequest.Model)
 				// check path is /pg/chat/completions
 				if strings.HasPrefix(c.Request.URL.Path, "/pg/chat/completions") {
 					playgroundRequest := &dto.PlayGroundRequest{}
@@ -226,6 +227,7 @@ func Distribute() func(c *gin.Context) {
 								abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorChannelDisabled))
 								return
 							}
+						} else if endpointChannelFilter != nil && !endpointChannelFilter(preferred) {
 						} else if usingGroup == "auto" {
 							autoGroups := service.GetUserAutoGroup(userGroup)
 							for _, g := range autoGroups {
@@ -248,13 +250,28 @@ func Distribute() func(c *gin.Context) {
 				if channel == nil {
 					var err error
 					providerJSON := common.GetContextKeyString(c, constant.ContextKeyOpenRouterProviderJSON)
-					if ch, sg, ok := service.TrySmartRouteChannel(c, usingGroup, userGroup, modelRequest.Model, providerJSON); ok {
+					if endpointChannelFilter != nil {
+						if usingGroup == "auto" {
+							for _, autoGroup := range service.GetUserAutoGroup(userGroup) {
+								if ch, ok := service.TryGroupRouteChannelWithFilter(autoGroup, modelRequest.Model, endpointChannelFilter); ok {
+									channel = ch
+									selectGroup = autoGroup
+									common.SetContextKey(c, constant.ContextKeyAutoGroup, autoGroup)
+									break
+								}
+							}
+						} else if ch, ok := service.TryGroupRouteChannelWithFilter(usingGroup, modelRequest.Model, endpointChannelFilter); ok {
+							channel = ch
+							selectGroup = usingGroup
+						}
+					} else if ch, sg, ok := service.TrySmartRouteChannel(c, usingGroup, userGroup, modelRequest.Model, providerJSON); ok {
 						channel = ch
 						selectGroup = sg
 						if usingGroup == "auto" {
 							common.SetContextKey(c, constant.ContextKeyAutoGroup, sg)
 						}
-					} else {
+					}
+					if channel == nil && endpointChannelFilter == nil {
 						channel, selectGroup, err = service.CacheGetRandomSatisfiedChannel(&service.RetryParam{
 							Ctx:        c,
 							ModelName:  modelRequest.Model,
