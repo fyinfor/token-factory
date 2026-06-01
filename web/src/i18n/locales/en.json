@@ -2207,6 +2207,8 @@
     "技术能力信息": "Technical Capability Information",
     "折": "% off",
     "折扣率": "Discount Rate",
+    "0折扣": "No discount",
+    "成本折扣": "Cost discount",
     "折算 Tokens": "Convert Tokens",
     "拉取中...": "Pulling...",
     "拉取新模型": "Pull New Model",
