@@ -172,6 +172,19 @@ const StabilityBattery = ({ row, t }) => {
   );
 };
 
+/** 成本折扣展示：100% - 成本折扣率% = 优惠幅度，如 25% 成本折扣显示 成本折扣：-75% */
+const formatCostDiscountDisplay = (priceDiscountPercent, t) => {
+  const costPercent = Number(priceDiscountPercent);
+  if (!Number.isFinite(costPercent)) {
+    return null;
+  }
+  const savingsPercent = Math.round(100 - costPercent);
+  if (savingsPercent <= 0) {
+    return { text: `${t('成本折扣')}：${t('0折扣')}`, hasDiscount: false };
+  }
+  return { text: `${t('成本折扣')}：-${savingsPercent}%`, hasDiscount: true };
+};
+
 const PriceComparisonList = ({ items, t, blurPricing = false }) => {
   if (!items || items.length === 0) {
     return null;
@@ -1082,20 +1095,35 @@ const ModelChannelList = ({
                   key={`cost-${channel.channel_id}-${idx}`}
                   className='rounded-lg border border-semi-color-border px-3 py-2'
                 >
-                  {channel.price_discount_percent != null ? (
-                    <div className='mb-2'>
-                      <span
-                        className='inline-block text-xs font-medium px-2 py-0.5 rounded-md'
-                        style={{
-                          backgroundColor:
-                            'var(--semi-color-primary-light-active)',
-                          color: 'var(--semi-color-primary)',
-                        }}
-                      >
-                        {t('折扣')}：{channel.price_discount_percent}%
-                      </span>
-                    </div>
-                  ) : null}
+                  {channel.price_discount_percent != null ? (() => {
+                    const discountDisplay = formatCostDiscountDisplay(
+                      channel.price_discount_percent,
+                      t,
+                    );
+                    if (!discountDisplay) {
+                      return null;
+                    }
+                    return (
+                      <div className='mb-2'>
+                        <span
+                          className='inline-flex items-center justify-center text-[11px] font-semibold rounded-full'
+                          style={{
+                            minWidth: 42,
+                            height: 22,
+                            padding: '0 7px',
+                            color: discountDisplay.hasDiscount
+                              ? '#dc2626'
+                              : 'var(--semi-color-text-2)',
+                            backgroundColor: discountDisplay.hasDiscount
+                              ? 'rgba(255, 59, 48, 0.11)'
+                              : 'rgba(142, 142, 147, 0.12)',
+                          }}
+                        >
+                          {discountDisplay.text}
+                        </span>
+                      </div>
+                    );
+                  })() : null}
                   <div className='flex flex-col gap-1 text-sm'>
                     {costItems.map((item) => (
                       <div
@@ -1117,6 +1145,7 @@ const ModelChannelList = ({
                         displayPrice={formatBillingUsdDisplay}
                         t={t}
                         blurPricing={blurPricing}
+                        isCostPrice
                       />
                     ) : null}
                     {costInfo.imageHint ? (
@@ -1126,6 +1155,7 @@ const ModelChannelList = ({
                         displayPrice={formatBillingUsdDisplay}
                         t={t}
                         blurPricing={blurPricing}
+                        isCostPrice
                       />
                     ) : null}
                   </div>

@@ -28,12 +28,20 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import HomeBannerIllustration from './HomeBannerIllustration';
+import { renderBannerRichText } from './home-banner-rich-text';
 import './model-ad-banner.css';
 
-/** 自动轮播间隔 */
-const INTERVAL_MS = 4000;
+const DEFAULT_INTERVAL_SEC = 4;
+const MIN_INTERVAL_SEC = 2;
+const MAX_INTERVAL_SEC = 60;
 /** 手动切换后暂停自动轮播的时长 */
 const MANUAL_PAUSE_MS = 30000;
+
+function clampIntervalSec(sec) {
+  const n = Number(sec);
+  if (!Number.isFinite(n)) return DEFAULT_INTERVAL_SEC;
+  return Math.min(MAX_INTERVAL_SEC, Math.max(MIN_INTERVAL_SEC, Math.round(n)));
+}
 
 const DEFAULT_BANNER_IMAGE = '/assets/banner-model.png';
 
@@ -124,7 +132,7 @@ function SlideBanner({ slide, t, active, go }) {
               {renderTitleNodes(titleLine, highlight)}
             </h2>
             {subtitle ? (
-              <p className='ad-subtitle'>{subtitle}</p>
+              <p className='ad-subtitle'>{renderBannerRichText(subtitle)}</p>
             ) : null}
           </div>
         </div>
@@ -142,10 +150,11 @@ function SlideBanner({ slide, t, active, go }) {
   );
 }
 
-const HomeBannerCarousel = ({ rawSlides }) => {
+const HomeBannerCarousel = ({ rawSlides, intervalSec }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const slides = useMemo(() => parseSlides(rawSlides), [rawSlides]);
+  const intervalMs = clampIntervalSec(intervalSec) * 1000;
   const [index, setIndex] = useState(0);
   const autoPauseUntilRef = useRef(0);
 
@@ -163,18 +172,24 @@ const HomeBannerCarousel = ({ rawSlides }) => {
     const id = window.setInterval(() => {
       if (Date.now() < autoPauseUntilRef.current) return;
       setIndex((i) => (i + 1) % slides.length);
-    }, INTERVAL_MS);
+    }, intervalMs);
     return () => window.clearInterval(id);
-  }, [slides.length]);
+  }, [slides.length, intervalMs]);
 
   const go = useCallback(
     (slide) => {
       const model = (slide?.target_model || '').trim();
-      if (model) {
-        navigate(`/pricing?model=${encodeURIComponent(model)}`);
-      } else {
-        navigate('/pricing');
+      if (!model) return;
+
+      if (window.location.pathname === '/') {
+        window.dispatchEvent(
+          new CustomEvent('home-banner-focus-model', {
+            detail: { model },
+          }),
+        );
+        return;
       }
+      navigate(`/?model=${encodeURIComponent(model)}`);
     },
     [navigate],
   );

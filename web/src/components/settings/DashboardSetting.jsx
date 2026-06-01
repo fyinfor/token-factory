@@ -54,6 +54,7 @@ const DashboardSetting = () => {
     DataExportInterval: 5,
 
     HomeBannerSlides: '[]',
+    HomeBannerIntervalSec: '4',
   });
 
   let [loading, setLoading] = useState(false);
