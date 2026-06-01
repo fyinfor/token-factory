@@ -356,8 +356,9 @@ func SearchUsers(c *gin.Context) {
 	group := c.Query("group")
 	studentView := strings.TrimSpace(c.Query("student_view"))
 	tag := strings.TrimSpace(c.Query("tag"))
+	remark := strings.TrimSpace(c.Query("remark"))
 	pageInfo := common.GetPageQuery(c)
-	users, total, err := model.SearchUsers(keyword, group, studentView, tag, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	users, total, err := model.SearchUsers(keyword, group, studentView, tag, remark, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	if err != nil {
 		common.ApiError(c, err)
 		return

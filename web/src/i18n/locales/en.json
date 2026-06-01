@@ -2376,6 +2376,8 @@
     "支持备份": "Supported",
     "支持拉取 Ollama 官方模型库中的所有模型，拉取过程可能需要几分钟时间": "Supports pulling all models from the Ollama official model library, the pulling process may take a few minutes",
     "支持搜索用户的 ID、用户名、显示名称和邮箱地址": "Support searching for user ID, username, display name, and email address",
+    "支持搜索用户的 ID、用户名、显示名称、邮箱和备注": "Search user ID, username, display name, email, or remark",
+    "仅搜索备注": "Search remark only",
     "支持构建高效稳定的 Token 工厂，实现大规模生成能力的标准化与可控化": "Build an efficient, stable Token factory and standardize large-scale generation with full control.",
     "支持的API接口": "Supported API interfaces",
     "支持的参数配置": "Supported parameter configurations",
