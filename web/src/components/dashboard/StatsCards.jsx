@@ -22,6 +22,7 @@ import { Card, Avatar, Skeleton, Tag } from '@douyinfe/semi-ui';
 import { VChart } from '@visactor/react-vchart';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { hasTrendChartData } from '../../helpers/dashboard';
 
 const StatsCards = ({
   groupedStatsData,
@@ -46,7 +47,7 @@ const StatsCards = ({
               {group.items.map((item, itemIdx) => (
                 <div
                   key={itemIdx}
-                  className='flex items-center justify-between cursor-pointer'
+                  className={`flex items-center justify-between${item.onClick ? ' cursor-pointer' : ''}`}
                   onClick={item.onClick}
                 >
                   <div className='flex items-center'>
@@ -93,8 +94,8 @@ const StatsCards = ({
                       {t('充值')}
                     </Tag>
                   ) : (
-                    (loading ||
-                      (item.trendData && item.trendData.length > 0)) && (
+                    !loading &&
+                    hasTrendChartData(item.trendData) && (
                       <div className='w-24 h-10'>
                         <VChart
                           spec={getTrendSpec(item.trendData, item.trendColor)}

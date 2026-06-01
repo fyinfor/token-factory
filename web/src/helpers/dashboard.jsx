@@ -99,6 +99,12 @@ export const updateChartSpec = (
   }));
 };
 
+/** 趋势图是否有可展示数据（非空且至少一个点大于 0） */
+export const hasTrendChartData = (trendData) =>
+  Array.isArray(trendData) &&
+  trendData.length > 0 &&
+  trendData.some((v) => Number(v) > 0);
+
 export const getTrendSpec = (data, color) => ({
   type: 'line',
   data: [{ id: 'trend', values: data.map((val, idx) => ({ x: idx, y: val })) }],
