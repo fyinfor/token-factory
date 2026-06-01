@@ -84,7 +84,7 @@ const EditTokenModal = (props) => {
     props.handleClose();
   };
 
-  const setExpiredTime = (month, day, hour, minute) => {
+  const setExpiredTime = (month, day, hour, minute, labelKey) => {
     let now = new Date();
     let timestamp = now.getTime() / 1000;
     let seconds = month * 30 * 24 * 60 * 60;
@@ -95,6 +95,9 @@ const EditTokenModal = (props) => {
     if (seconds !== 0) {
       timestamp += seconds;
       formApiRef.current.setValue('expired_time', timestamp2string(timestamp));
+      if (labelKey) {
+        showSuccess(t('{{label}} 设置成功', { label: t(labelKey) }));
+      }
     } else {
       formApiRef.current.setValue('expired_time', -1);
     }
@@ -225,7 +228,10 @@ const EditTokenModal = (props) => {
     setLoading(true);
     if (isEdit) {
       let { tokenCount: _tc, ...localInputs } = values;
-      localInputs.remain_quota = parseInt(localInputs.remain_quota);
+      localInputs.remain_quota = Math.max(
+        0,
+        parseInt(localInputs.remain_quota, 10) || 0,
+      );
       if (localInputs.expired_time !== -1) {
         let time = Date.parse(localInputs.expired_time);
         if (isNaN(time)) {
@@ -261,7 +267,10 @@ const EditTokenModal = (props) => {
         } else {
           localInputs.name = baseName;
         }
-        localInputs.remain_quota = parseInt(localInputs.remain_quota);
+        localInputs.remain_quota = Math.max(
+          0,
+          parseInt(localInputs.remain_quota, 10) || 0,
+        );
 
         if (localInputs.expired_time !== -1) {
           let time = Date.parse(localInputs.expired_time);
@@ -461,21 +470,21 @@ const EditTokenModal = (props) => {
                             <Button
                               theme='light'
                               type='tertiary'
-                              onClick={() => setExpiredTime(1, 0, 0, 0)}
+                              onClick={() => setExpiredTime(1, 0, 0, 0, '一个月')}
                             >
                               {t('一个月')}
                             </Button>
                             <Button
                               theme='light'
                               type='tertiary'
-                              onClick={() => setExpiredTime(0, 1, 0, 0)}
+                              onClick={() => setExpiredTime(0, 1, 0, 0, '一天')}
                             >
                               {t('一天')}
                             </Button>
                             <Button
                               theme='light'
                               type='tertiary'
-                              onClick={() => setExpiredTime(0, 0, 1, 0)}
+                              onClick={() => setExpiredTime(0, 0, 1, 0, '一小时')}
                             >
                               {t('一小时')}
                             </Button>
@@ -522,11 +531,37 @@ const EditTokenModal = (props) => {
                       placeholder={t('请输入额度')}
                       type='number'
                       disabled={values.unlimited_quota}
+                      inputProps={{ min: 0 }}
+                      onChange={(value) => {
+                        if (
+                          value !== '' &&
+                          value !== undefined &&
+                          value !== null &&
+                          !isNaN(Number(value)) &&
+                          Number(value) < 0
+                        ) {
+                          formApiRef.current?.setValue('remain_quota', 0);
+                        }
+                      }}
                       extraText={renderQuotaWithPrompt(values.remain_quota)}
                       rules={
                         values.unlimited_quota
                           ? []
-                          : [{ required: true, message: t('请输入额度') }]
+                          : [
+                              { required: true, message: t('请输入额度') },
+                              {
+                                validator: (rule, v) => {
+                                  if (v === '' || v === undefined || v === null) {
+                                    return Promise.resolve();
+                                  }
+                                  const num = Number(v);
+                                  if (isNaN(num) || num < 0) {
+                                    return Promise.reject(t('不能小于 0'));
+                                  }
+                                  return Promise.resolve();
+                                },
+                              },
+                            ]
                       }
                       data={[
                         { value: 500000, label: '1$' },

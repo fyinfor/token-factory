@@ -1364,6 +1364,17 @@ export function convertUSDToCurrency(usdAmount, digits = 2) {
 }
 
 /** 按展示金额选择小数位：常态 minDigits；若舍入为 0 但实际 >0 则增至 maxDigits。 */
+/** 向下截断（只舍不入），返回字符串，固定 fractionDigits 位小数。 */
+function toFixedTruncated(num, fractionDigits) {
+  const n = Number(num);
+  if (!Number.isFinite(n)) {
+    return String(num ?? '');
+  }
+  const factor = Math.pow(10, fractionDigits);
+  const truncated = (n >= 0 ? Math.floor : Math.ceil)(n * factor) / factor;
+  return truncated.toFixed(fractionDigits);
+}
+
 export function pickQuotaDisplayFractionDigits(
   displayValue,
   minDigits = 2,
@@ -1373,11 +1384,11 @@ export function pickQuotaDisplayFractionDigits(
   if (!Number.isFinite(v) || v === 0) {
     return minDigits;
   }
-  if (parseFloat(v.toFixed(minDigits)) !== 0) {
+  if (parseFloat(toFixedTruncated(v, minDigits)) !== 0) {
     return minDigits;
   }
   for (let d = minDigits + 1; d <= maxDigits; d++) {
-    if (parseFloat(v.toFixed(d)) !== 0) {
+    if (parseFloat(toFixedTruncated(v, d)) !== 0) {
       return d;
     }
   }
@@ -1430,7 +1441,7 @@ function quotaToRoundedDisplayValue(quota, digits = 2) {
   if (parts === null) {
     return q;
   }
-  const fixedResult = parseFloat(parts.value.toFixed(digits));
+  const fixedResult = parseFloat(toFixedTruncated(parts.value, digits));
   if (fixedResult === 0 && q > 0 && parts.value > 0) {
     return Math.pow(10, -digits);
   }
@@ -1443,7 +1454,7 @@ export function renderQuota(quota, digits = 2) {
     return renderNumber(quota);
   }
   const { symbol, value } = parts;
-  const fixedResult = parseFloat(value.toFixed(digits));
+  const fixedResult = parseFloat(toFixedTruncated(value, digits));
   if (fixedResult === 0 && quota > 0 && value > 0) {
     const minValue = Math.pow(10, -digits);
     return symbol + trimFixedDecimalDisplay(minValue, digits);
@@ -1499,7 +1510,7 @@ export function renderQuotaFlexible(quota, minDigits = 2, maxDigits = 6) {
   }
   const { symbol, value } = parts;
   const digits = pickQuotaDisplayFractionDigits(value, minDigits, maxDigits);
-  const fixedResult = parseFloat(value.toFixed(digits));
+  const fixedResult = parseFloat(toFixedTruncated(value, digits));
   return symbol + trimFixedDecimalDisplay(fixedResult, digits);
 }
 
@@ -1595,7 +1606,7 @@ export function trimFixedDecimalDisplay(num, fractionDigits = 2) {
   if (!Number.isFinite(n)) {
     return String(num ?? '');
   }
-  let s = n.toFixed(fractionDigits);
+  let s = toFixedTruncated(n, fractionDigits);
   if (s.includes('.')) {
     s = s.replace(/\.?0+$/, '');
   }

@@ -4980,6 +4980,7 @@
     "过期于": "Expires at",
     "过期时间": "Expiration time",
     "过期时间不能早于当前时间！": "Expiration time cannot be earlier than the current time!",
+    "{{label}} 设置成功": "{{label}} set successfully",
     "过期时间快捷设置": "Expiration time quick settings",
     "过期时间格式错误！": "Expiration time format error!",
     "运动强度 motion": "Motion intensity motion",
