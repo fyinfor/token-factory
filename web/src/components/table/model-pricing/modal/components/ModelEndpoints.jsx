@@ -134,7 +134,7 @@ const TOOL_LINKS = {
   'OpenAI SDK': 'https://platform.openai.com/docs/libraries',
   'Cherry Studio': 'https://www.cherry-ai.com/',
   Chatbox: 'https://chatboxai.app/',
-  LobeChat: 'https://www.lobechat.co/',
+  LobeChat: 'https://lobechat.com/',
   Dify: 'https://dify.ai/',
   Hermes: 'https://hermes-agent.ai/',
   Postman: 'https://www.postman.com/',
