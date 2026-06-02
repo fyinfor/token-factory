@@ -1,6 +1,7 @@
 {
   "视频生成": "動画生成",
   "translation": {
+    "使用操练场会产生扣费，请确认模型与参数后再发送。": "プレイグラウンドの使用には料金が発生します。送信前にモデルとパラメータを確認してください。",
     " ": " ",
     " + Web搜索 {{count}}次 / 1K 次 * {{symbol}}{{price}}": " + Web検索 {{count}}回 / 1K 回 * {{symbol}}{{price}}",
     " + Web搜索 {{count}}次 / 1K 次 * {{symbol}}{{price}} * {{ratioType}} {{ratio}}_few": " + Web検索 {{count}}回 / 1K 回 * {{symbol}}{{price}} * {{ratioType}} {{ratio}}",

@@ -1,6 +1,7 @@
 {
   "视频生成": "Tạo video",
   "translation": {
+    "使用操练场会产生扣费，请确认模型与参数后再发送。": "Sử dụng sân thử nghiệm sẽ phát sinh phí. Vui lòng xác nhận mô hình và tham số trước khi gửi.",
     " ": " ",
     " + Web搜索 {{count}}次 / 1K 次 * {{symbol}}{{price}}": " + Web search {{count}} times / 1K times * {{symbol}}{{price}}",
     " + Web搜索 {{count}}次 / 1K 次 * {{symbol}}{{price}} * {{ratioType}} {{ratio}}_few": "+ Tìm kiếm trên web {{count}} lần / 1K lần * {{symbol}}{{price}} * {{ratioType}} {{ratio}}",

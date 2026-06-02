@@ -1,5 +1,6 @@
 {
   "translation": {
+    "使用操练场会产生扣费，请确认模型与参数后再发送。": "使用操練場會產生扣費，請確認模型與參數後再發送。",
     " ": " ",
     " + Web搜索 {{count}}次 / 1K 次 * {{symbol}}{{price}}": " + Web 搜尋 {{count}}次 / 1K 次 * {{symbol}}{{price}}",
     " + Web搜索 {{count}}次 / 1K 次 * {{symbol}}{{price}} * {{ratioType}} {{ratio}}_few": " + Web 搜尋 {{count}}次 / 1K 次 * {{symbol}}{{price}} * {{ratioType}} {{ratio}}",

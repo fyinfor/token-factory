@@ -1,6 +1,7 @@
 {
   "视频生成": "Génération vidéo",
   "translation": {
+    "使用操练场会产生扣费，请确认模型与参数后再发送。": "L’utilisation du terrain d’essai entraînera des frais. Veuillez confirmer le modèle et les paramètres avant l’envoi.",
     " ": " ",
     " + Web搜索 {{count}}次 / 1K 次 * {{symbol}}{{price}}": " + Recherche Web {{count}} fois / 1K fois * {{symbol}}{{price}}",
     " + Web搜索 {{count}}次 / 1K 次 * {{symbol}}{{price}} * {{ratioType}} {{ratio}}_few": "+ Recherche Web {{count}} fois/1K fois * {{symbol}} {{price}} * {{ratioType}} {{ratio}}",
