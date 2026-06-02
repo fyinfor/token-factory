@@ -55,6 +55,7 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
   // ========== 数据状态 ==========
   const [quotaData, setQuotaData] = useState([]);
   const [consumeQuota, setConsumeQuota] = useState(0);
+  const [consumeDisplayQuota, setConsumeDisplayQuota] = useState(0);
   const [consumeTokens, setConsumeTokens] = useState(0);
   const [times, setTimes] = useState(0);
   const [pieData, setPieData] = useState([{ type: 'null', value: '0' }]);
@@ -71,6 +72,7 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
     requestCount: [],
     times: [],
     consumeQuota: [],
+    consumeDisplayQuota: [],
     tokens: [],
     rpm: [],
     tpm: [],
@@ -269,6 +271,8 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
     quotaData,
     consumeQuota,
     setConsumeQuota,
+    consumeDisplayQuota,
+    setConsumeDisplayQuota,
     consumeTokens,
     setConsumeTokens,
     times,
