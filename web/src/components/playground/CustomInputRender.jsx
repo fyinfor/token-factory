@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { Toast } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
 import { usePlayground } from '../../contexts/PlaygroundContext';
@@ -28,6 +28,7 @@ const CustomInputRender = (props) => {
   const { detailProps } = props;
   const { inputNode, sendNode, onClick } = detailProps;
   const containerRef = useRef(null);
+  const [isInputFocused, setIsInputFocused] = useState(false);
 
   const handlePaste = useCallback(
     async (e) => {
@@ -101,6 +102,28 @@ const CustomInputRender = (props) => {
     };
   }, [handlePaste]);
 
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleFocusIn = () => {
+      setIsInputFocused(true);
+    };
+
+    const handleFocusOut = (event) => {
+      if (!container.contains(event.relatedTarget)) {
+        setIsInputFocused(false);
+      }
+    };
+
+    container.addEventListener('focusin', handleFocusIn);
+    container.addEventListener('focusout', handleFocusOut);
+    return () => {
+      container.removeEventListener('focusin', handleFocusIn);
+      container.removeEventListener('focusout', handleFocusOut);
+    };
+  }, []);
+
   // 发送按钮
   const styledSendNode = React.cloneElement(sendNode, {
     className: `!rounded-full !bg-purple-500 hover:!bg-purple-600 flex-shrink-0 transition-all ${sendNode.props.className || ''}`,
@@ -117,9 +140,21 @@ const CustomInputRender = (props) => {
   });
 
   return (
-    <div className='p-2 sm:p-4' ref={containerRef}>
+    <div className='p-2 sm:p-4 relative' ref={containerRef}>
       <div
-        className='flex items-center gap-2 sm:gap-3 p-2 bg-gray-50 rounded-xl sm:rounded-2xl shadow-sm hover:shadow-md transition-shadow'
+        className={`transition-all duration-300 ease-out absolute ${
+          isInputFocused ? 'top-[-30px] opacity-100 mb-2' : 'top-0 opacity-0 mb-0'
+        }`}
+      >
+        <div
+          className='rounded-xl sm:rounded-2xl px-3 py-2 text-xs sm:text-sm text-gray-600 dark:text-gray-300 shadow-md'
+          style={{ border: '1px solid var(--semi-color-border)', backgroundColor: 'var(--semi-color-bg-1)' }}
+        >
+          {t('使用操练场会产生扣费，请确认模型与参数后再发送。')}
+        </div>
+      </div>
+      <div
+        className='flex items-center gap-2 sm:gap-3 p-2 bg-gray-50 dark:bg-gray-800 rounded-xl sm:rounded-2xl shadow-sm hover:shadow-md transition-shadow'
         style={{ border: '1px solid var(--semi-color-border)' }}
         onClick={onClick}
         title={t('支持 Ctrl+V 粘贴图片')}

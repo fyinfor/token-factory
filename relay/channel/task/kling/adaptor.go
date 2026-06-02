@@ -195,8 +195,11 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		return
 	}
 
+	// Try to decode base64 if response is a JSON string
+	decodedBody := taskcommon.DecodeBase64Response(responseBody)
+
 	var kResp responsePayload
-	err = common.Unmarshal(responseBody, &kResp)
+	err = common.Unmarshal(decodedBody, &kResp)
 	if err != nil {
 		taskErr = service.TaskErrorWrapper(err, "unmarshal_response_failed", http.StatusInternalServerError)
 		return
@@ -209,7 +212,9 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	ov.ID = info.PublicTaskID
 	ov.CreatedAt = dto.FormatTimeUnixRFC3339(time.Now().Unix())
 	ov.Model = info.OriginModelName
-	c.JSON(http.StatusOK, ov)
+
+
+	taskcommon.WriteOpenAIVideoResponse(c, ov)
 	return kResp.Data.TaskId, responseBody, nil
 }
 

@@ -23,6 +23,7 @@ import {
   modelColorMap,
   renderNumber,
   renderQuota,
+  renderQuotaWithAmount,
   modelToColor,
   getQuotaWithUnit,
 } from '../../helpers';
@@ -40,6 +41,7 @@ export const useDashboardCharts = (
   dataExportDefaultTime,
   setTrendData,
   setConsumeQuota,
+  setConsumeDisplayQuota,
   setTimes,
   setConsumeTokens,
   setPieData,
@@ -139,7 +141,7 @@ export const useDashboardCharts = (
         content: [
           {
             key: (datum) => datum['Model'],
-            value: (datum) => renderQuota(datum['rawQuota'] || 0),
+            value: (datum) => renderQuotaWithAmount(datum['rawDisplayAmount'] || 0),
           },
         ],
       },
@@ -147,7 +149,7 @@ export const useDashboardCharts = (
         content: [
           {
             key: (datum) => datum['Model'],
-            value: (datum) => datum['rawQuota'] || 0,
+            value: (datum) => datum['rawDisplayAmount'] || 0,
           },
         ],
         updateContent: (array) => {
@@ -164,11 +166,11 @@ export const useDashboardCharts = (
             if (array[i].datum && array[i].datum.TimeSum) {
               sum = array[i].datum.TimeSum;
             }
-            array[i].value = renderQuota(value);
+            array[i].value = renderQuotaWithAmount(value);
           }
           array.unshift({
             key: t('总计'),
-            value: renderQuota(sum),
+            value: renderQuotaWithAmount(sum),
           });
           return array;
         },
@@ -282,11 +284,13 @@ export const useDashboardCharts = (
 
       const {
         totalQuota,
+        totalDisplayQuota,
         totalTimes,
         totalTokens,
         uniqueModels,
         timePoints,
         timeQuotaMap,
+        timeDisplayQuotaMap,
         timeTokensMap,
         timeCountMap,
       } = processedData;
@@ -294,6 +298,7 @@ export const useDashboardCharts = (
       const trendDataResult = calculateTrendData(
         timePoints,
         timeQuotaMap,
+        timeDisplayQuotaMap,
         timeTokensMap,
         timeCountMap,
         dataExportDefaultTime,
@@ -336,14 +341,18 @@ export const useDashboardCharts = (
             Time: time,
             Model: model,
             rawQuota: aggregated?.quota || 0,
-            Usage: aggregated?.quota
-              ? getQuotaWithUnit(aggregated.quota, 4)
+            rawDisplayAmount: aggregated?.displayAmount || 0,
+            Usage: aggregated?.displayAmount
+              ? aggregated.displayAmount.toFixed(4)
               : 0,
           };
         });
 
-        const timeSum = timeData.reduce((sum, item) => sum + item.rawQuota, 0);
-        timeData.sort((a, b) => b.rawQuota - a.rawQuota);
+        const timeSum = timeData.reduce(
+          (sum, item) => sum + item.rawDisplayAmount,
+          0,
+        );
+        timeData.sort((a, b) => b.rawDisplayAmount - a.rawDisplayAmount);
         timeData = timeData.map((item) => ({ ...item, TimeSum: timeSum }));
         newLineData.push(...timeData);
       });
@@ -361,7 +370,7 @@ export const useDashboardCharts = (
       updateChartSpec(
         setSpecLine,
         newLineData,
-        `${t('总计')}：${renderQuota(totalQuota, 2)}`,
+        `${t('总计')}：${renderQuotaWithAmount(totalDisplayQuota)}`,
         newModelColors,
         'barData',
       );
@@ -409,6 +418,7 @@ export const useDashboardCharts = (
       setPieData(newPieData);
       setLineData(newLineData);
       setConsumeQuota(totalQuota);
+      setConsumeDisplayQuota(totalDisplayQuota);
       setTimes(totalTimes);
       setConsumeTokens(totalTokens);
     },
@@ -420,6 +430,7 @@ export const useDashboardCharts = (
       setPieData,
       setLineData,
       setConsumeQuota,
+      setConsumeDisplayQuota,
       setTimes,
       setConsumeTokens,
       t,

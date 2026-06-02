@@ -57,6 +57,7 @@ function TierPriceMatrix({
   gridType = 'image',
   accent = 'blue',
   t,
+  zeroDiscountLabel = '0%',
 }) {
   const gridTemplateColumns =
     typeof gridType === 'string'
@@ -160,7 +161,7 @@ function TierPriceMatrix({
                 <span key={column.key} className='flex justify-end'>
                   {row.discount != null ? (
                     <span style={discountStyle(row.hasDiscount)}>
-                      {row.hasDiscount ? `-${row.discount}%` : '0%'}
+                      {row.hasDiscount ? `-${row.discount}%` : zeroDiscountLabel}
                     </span>
                   ) : (
                     <span className='text-gray-400'>—</span>

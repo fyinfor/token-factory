@@ -147,6 +147,10 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		return "", nil, service.TaskErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
 	}
 	_ = resp.Body.Close()
+
+	// Try to decode base64 if response is a JSON string
+	decodedBody := taskcommon.DecodeBase64Response(respBody)
+
 	var env struct {
 		Response *struct {
 			TaskId *string `json:"TaskId,omitempty"`
@@ -156,7 +160,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 			} `json:"Error,omitempty"`
 		} `json:"Response"`
 	}
-	if err = common.Unmarshal(respBody, &env); err != nil {
+	if err = common.Unmarshal(decodedBody, &env); err != nil {
 		return "", nil, service.TaskErrorWrapper(errors.Wrapf(err, "body: %s", respBody), "unmarshal_response_body_failed", http.StatusInternalServerError)
 	}
 	if env.Response != nil && env.Response.Error != nil && strings.TrimSpace(env.Response.Error.Message) != "" {
@@ -173,7 +177,9 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	ov.ID = info.PublicTaskID
 	ov.CreatedAt = dto.FormatTimeUnixRFC3339(time.Now().Unix())
 	ov.Model = info.OriginModelName
-	c.JSON(http.StatusOK, ov)
+
+
+	taskcommon.WriteOpenAIVideoResponse(c, ov)
 	return taskID, respBody, nil
 }
 

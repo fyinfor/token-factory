@@ -66,6 +66,7 @@ const Dashboard = () => {
     dashboardData.dataExportDefaultTime,
     dashboardData.setTrendData,
     dashboardData.setConsumeQuota,
+    dashboardData.setConsumeDisplayQuota,
     dashboardData.setTimes,
     dashboardData.setConsumeTokens,
     dashboardData.setPieData,
@@ -77,7 +78,7 @@ const Dashboard = () => {
   // ========== 统计数据 ==========
   const { groupedStatsData } = useDashboardStats(
     userState,
-    dashboardData.consumeQuota,
+    dashboardData.consumeDisplayQuota,
     dashboardData.consumeTokens,
     dashboardData.times,
     dashboardData.trendData,

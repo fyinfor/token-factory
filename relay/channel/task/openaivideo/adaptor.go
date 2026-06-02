@@ -75,7 +75,7 @@ const (
 
 	tfStyleVideoGenerations = "video_generations"
 	tfStyleOpenAIVideos     = "openai_videos"
-	tfStyleOpenAIRemix     = "openai_remix"
+	tfStyleOpenAIRemix      = "openai_remix"
 
 	// Submit path is shared by both protocols. The "/api/maas/gw" prefix (if
 	// any) lives on the user-configured base URL, not in this constant.
@@ -499,10 +499,13 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	}
 	_ = resp.Body.Close()
 
+	// Try to decode base64 if response is a JSON string
+	decodedBody := taskcommon.DecodeBase64Response(respBody)
+
 	var taskID string
 	if a.protocol == ProtocolMaaS {
 		var sub maasSubmitResponse
-		if err := common.Unmarshal(respBody, &sub); err != nil {
+		if err := common.Unmarshal(decodedBody, &sub); err != nil {
 			return "", nil, service.TaskErrorWrapper(errors.Wrapf(err, "body: %s", respBody), "unmarshal_response_body_failed", http.StatusInternalServerError)
 		}
 		if sub.Code != 0 {
@@ -512,7 +515,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		taskID = strings.TrimSpace(sub.Result.TaskID)
 	} else if a.protocol == ProtocolSophnet {
 		var sub sophnetSubmitResponse
-		if err := common.Unmarshal(respBody, &sub); err != nil {
+		if err := common.Unmarshal(decodedBody, &sub); err != nil {
 			return "", nil, service.TaskErrorWrapper(errors.Wrapf(err, "body: %s", respBody), "unmarshal_response_body_failed", http.StatusInternalServerError)
 		}
 		if sub.Status != 0 {
@@ -523,13 +526,13 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	} else if a.protocol == ProtocolTokenFactory && info != nil &&
 		(info.TfOpenVideoUpstreamStyle == tfStyleOpenAIVideos || info.TfOpenVideoUpstreamStyle == tfStyleOpenAIRemix) {
 		var terr *dto.TaskError
-		taskID, terr = parseTfUpstreamSubmitTaskID(respBody)
+		taskID, terr = parseTfUpstreamSubmitTaskID(decodedBody)
 		if terr != nil {
 			return "", nil, terr
 		}
 	} else {
 		var sub arkSubmitResponse
-		if err := common.Unmarshal(respBody, &sub); err != nil {
+		if err := common.Unmarshal(decodedBody, &sub); err != nil {
 			return "", nil, service.TaskErrorWrapper(errors.Wrapf(err, "body: %s", respBody), "unmarshal_response_body_failed", http.StatusInternalServerError)
 		}
 		if sub.Error != nil && (sub.Error.Message != "" || sub.Error.Code != "") {
@@ -547,7 +550,9 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	ov.ID = info.PublicTaskID
 	ov.CreatedAt = dto.FormatTimeUnixRFC3339(time.Now().Unix())
 	ov.Model = info.OriginModelName
-	c.JSON(http.StatusOK, ov)
+
+
+	taskcommon.WriteOpenAIVideoResponse(c, ov)
 
 	return taskID, respBody, nil
 }

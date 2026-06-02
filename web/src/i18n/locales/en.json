@@ -1,5 +1,6 @@
 {
   "translation": {
+    "使用操练场会产生扣费，请确认模型与参数后再发送。": "Using the playground will incur charges. Please confirm the model and parameters before sending.",
     " ": " ",
     " + Web搜索 {{count}}次 / 1K 次 * {{symbol}}{{price}}": " + Web search {{count}} times / 1K times * {{symbol}}{{price}}",
     " + Web搜索 {{count}}次 / 1K 次 * {{symbol}}{{price}} * {{ratioType}} {{ratio}}_few": "+ Web search {{count}} times/1K times * {{symbol}} {{price}} * {{ratioType}} {{ratio}}",
@@ -2207,6 +2208,8 @@
     "技术能力信息": "Technical Capability Information",
     "折": "% off",
     "折扣率": "Discount Rate",
+    "0折扣": "No discount",
+    "成本折扣": "Cost discount",
     "折算 Tokens": "Convert Tokens",
     "拉取中...": "Pulling...",
     "拉取新模型": "Pull New Model",
@@ -5431,7 +5434,10 @@
     "首页广告模型占位": "Model to filter in the homepage model list after CTA click",
     "首页广告模型跳转说明": "The CTA stays on the current page and fills the model list search with the selected model name.",
     "首页广告设置": "Home banners",
-    "首页广告轮播提示": "Add multiple slides; set the auto-advance interval below (seconds). The right side shows your image or a built-in illustration. The CTA filters the model list below by the selected model. OSS is required for custom images.",
+    "首页广告轮播提示": "Add multiple slides; use the order column and up/down controls to set playback order (saved immediately). Set the auto-advance interval below (seconds). The CTA filters the model list below by the selected model. OSS is required for custom images.",
+    "广告播放顺序": "Order",
+    "广告幻灯片上移": "Move up",
+    "广告幻灯片下移": "Move down",
     "首页广告轮播间隔": "Auto-advance interval",
     "首页广告轮播间隔说明": "Seconds each slide stays visible ({{min}}–{{max}}). Saved value controls the cross-fade carousel timing.",
     "保存轮播间隔": "Save interval",
