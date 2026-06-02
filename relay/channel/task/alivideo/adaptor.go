@@ -647,8 +647,11 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	}
 	_ = resp.Body.Close()
 
+	// Try to decode base64 if response is a JSON string
+	decodedBody := taskcommon.DecodeBase64Response(responseBody)
+
 	var aliResp AliVideoResponse
-	if err := common.Unmarshal(responseBody, &aliResp); err != nil {
+	if err := common.Unmarshal(decodedBody, &aliResp); err != nil {
 		taskErr = service.TaskErrorWrapper(errors.Wrapf(err, "body: %s", responseBody), "unmarshal_response_body_failed", http.StatusInternalServerError)
 		return
 	}
@@ -671,7 +674,9 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	}
 	openAIResp.Status = convertAliStatus(aliResp.Output.TaskStatus)
 	openAIResp.CreatedAt = dto.FormatTimeUnixRFC3339(common.GetTimestamp())
-	c.JSON(http.StatusOK, openAIResp)
+
+
+	taskcommon.WriteOpenAIVideoResponse(c, openAIResp)
 
 	return aliResp.Output.TaskID, responseBody, nil
 }

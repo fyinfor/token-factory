@@ -19,17 +19,17 @@ For commercial licensing, please contact support@quantumnous.com
 
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import DocumentRenderer from '../../components/common/DocumentRenderer';
+import LegalDocumentPage from '../../components/legal/LegalDocumentPage';
+import userAgreementHtml from '../../content/legal/user-agreement.html?raw';
 
 const UserAgreement = () => {
   const { t } = useTranslation();
 
   return (
-    <DocumentRenderer
-      apiEndpoint='/api/user-agreement'
+    <LegalDocumentPage
       title={t('用户协议')}
-      cacheKey='user_agreement'
-      emptyMessage={t('加载用户协议内容失败...')}
+      html={userAgreementHtml}
+      styleId='token-factory-user-agreement-styles'
     />
   );
 };

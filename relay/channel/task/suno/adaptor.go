@@ -98,8 +98,12 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		taskErr = service.TaskErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
 		return
 	}
+
+	// Try to decode base64 if response is a JSON string
+	decodedBody := taskcommon.DecodeBase64Response(responseBody)
+
 	var sunoResponse dto.TaskResponse[string]
-	err = common.Unmarshal(responseBody, &sunoResponse)
+	err = common.Unmarshal(decodedBody, &sunoResponse)
 	if err != nil {
 		taskErr = service.TaskErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError)
 		return
@@ -115,8 +119,8 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		Message: sunoResponse.Message,
 		Data:    info.PublicTaskID,
 	}
-	c.JSON(http.StatusOK, publicResponse)
 
+	c.JSON(http.StatusOK, publicResponse)
 	return sunoResponse.Data, nil, nil
 }
 

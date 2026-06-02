@@ -1106,10 +1106,7 @@ const PricingCardView = ({
                                 }
                               >
                                 {item.videoTierRows ? (
-                                  <div
-                                    className='w-full min-w-0 overflow-hidden'
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
+                                  <div className='w-full min-w-0 overflow-hidden'>
                                     <div className='grid grid-cols-[minmax(54px,1.05fr)_minmax(50px,.95fr)_minmax(50px,.95fr)_minmax(34px,.55fr)] items-center gap-x-1.5 py-0.5 text-center text-[9px] font-medium text-semi-color-text-2'>
                                       <span />
                                       <span className='min-w-0 truncate'>
@@ -1176,15 +1173,14 @@ const PricingCardView = ({
                                             </span>
                                             <span className='min-w-0 truncate font-semibold text-semi-color-text-2'>
                                               {row.discount > 0 ? (
-                                                <span
-                                                  className='inline-flex items-center justify-center rounded-full px-1.5 py-0 text-[10px] leading-4 font-semibold text-red-600'
-                                                  style={{
-                                                    backgroundColor:
-                                                      'rgba(var(--semi-red-0), .65)',
-                                                  }}
+                                                <Tag
+                                                  color='red'
+                                                  size='small'
+                                                  shape='circle'
+                                                  style={{'zoom': 0.7}}
                                                 >
                                                   -{row.discount}%
-                                                </span>
+                                                </Tag>
                                               ) : (
                                                 '-'
                                               )}

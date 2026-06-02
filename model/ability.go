@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/samber/lo"
 	"gorm.io/gorm"
@@ -43,6 +44,28 @@ func GetGroupEnabledModels(group string) []string {
 	// Find distinct models
 	DB.Table("abilities").Where(commonGroupCol+" = ? and enabled = ?", group, true).Distinct("model").Pluck("model", &models)
 	return models
+}
+
+func GetGroupEnabledChannelIDs(group string, modelName string) []int {
+	if group == "" || modelName == "" {
+		return nil
+	}
+	if common.MemoryCacheEnabled {
+		return ListChannelIDsForGroupModel(group, modelName)
+	}
+	var ids []int
+	DB.Model(&Ability{}).
+		Where(commonGroupCol+" = ? and model = ? and enabled = ?", group, modelName, true).
+		Pluck("channel_id", &ids)
+	if len(ids) == 0 {
+		normalized := ratio_setting.FormatMatchingModelName(modelName)
+		if normalized != "" && normalized != modelName {
+			DB.Model(&Ability{}).
+				Where(commonGroupCol+" = ? and model = ? and enabled = ?", group, normalized, true).
+				Pluck("channel_id", &ids)
+		}
+	}
+	return ids
 }
 
 func GetEnabledModels() []string {

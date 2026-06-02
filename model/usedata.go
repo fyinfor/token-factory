@@ -6,19 +6,21 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/logger"
 	"gorm.io/gorm"
 )
 
 // QuotaData 柱状图数据
 type QuotaData struct {
-	Id        int    `json:"id"`
-	UserID    int    `json:"user_id" gorm:"index"`
-	Username  string `json:"username" gorm:"index:idx_qdt_model_user_name,priority:2;size:64;default:''"`
-	ModelName string `json:"model_name" gorm:"index:idx_qdt_model_user_name,priority:1;size:64;default:''"`
-	CreatedAt int64  `json:"created_at" gorm:"bigint;index:idx_qdt_created_at,priority:2"`
-	TokenUsed int    `json:"token_used" gorm:"default:0"`
-	Count     int    `json:"count" gorm:"default:0"`
-	Quota     int    `json:"quota" gorm:"default:0"`
+	Id            int     `json:"id"`
+	UserID        int     `json:"user_id" gorm:"index"`
+	Username      string  `json:"username" gorm:"index:idx_qdt_model_user_name,priority:2;size:64;default:''"`
+	ModelName     string  `json:"model_name" gorm:"index:idx_qdt_model_user_name,priority:1;size:64;default:''"`
+	CreatedAt     int64   `json:"created_at" gorm:"bigint;index:idx_qdt_created_at,priority:2"`
+	TokenUsed     int     `json:"token_used" gorm:"default:0"`
+	Count         int     `json:"count" gorm:"default:0"`
+	Quota         int     `json:"quota" gorm:"default:0"`
+	DisplayAmount float64 `json:"display_amount,omitempty" gorm:"-"`
 }
 
 func UpdateQuotaData() {
@@ -140,4 +142,67 @@ func GetQuotaDataByModelNames(startTime int64, endTime int64, modelNames []strin
 		Group("model_name, created_at").
 		Find(&quotaDatas).Error
 	return quotaDatas, err
+}
+
+type quotaLogRow struct {
+	UserID           int    `gorm:"column:user_id"`
+	Username         string `gorm:"column:username"`
+	ModelName        string `gorm:"column:model_name"`
+	Quota            int    `gorm:"column:quota"`
+	CreatedAt        int64  `gorm:"column:created_at"`
+	PromptTokens     int    `gorm:"column:prompt_tokens"`
+	CompletionTokens int    `gorm:"column:completion_tokens"`
+}
+
+// AggregateQuotaDataFromLogs 从消费日志按小时+模型聚合看板数据；额度展示与使用日志一致（逐条舍入后再合计）。
+func AggregateQuotaDataFromLogs(startTime int64, endTime int64, userId int, username string) (quotaData []*QuotaData, stat Stat, err error) {
+	tx := LOG_DB.Table("logs").Select("user_id, username, model_name, quota, created_at, prompt_tokens, completion_tokens")
+	tx = tx.Where("type = ?", LogTypeConsume)
+	if userId > 0 {
+		tx = tx.Where("user_id = ?", userId)
+	} else if username != "" {
+		tx = tx.Where("username = ?", username)
+	}
+	if startTime != 0 {
+		tx = tx.Where("created_at >= ?", startTime)
+	}
+	if endTime != 0 {
+		tx = tx.Where("created_at <= ?", endTime)
+	}
+
+	var rows []quotaLogRow
+	if err = tx.Find(&rows).Error; err != nil {
+		return nil, stat, fmt.Errorf("查询看板日志数据失败: %w", err)
+	}
+
+	bucketMap := make(map[string]*QuotaData)
+	for _, row := range rows {
+		bucketTime := row.CreatedAt - (row.CreatedAt % 3600)
+		key := fmt.Sprintf("%d-%s-%d", row.UserID, row.ModelName, bucketTime)
+		item, ok := bucketMap[key]
+		if !ok {
+			item = &QuotaData{
+				UserID:    row.UserID,
+				Username:  row.Username,
+				ModelName: row.ModelName,
+				CreatedAt: bucketTime,
+			}
+			bucketMap[key] = item
+		}
+		item.Count++
+		item.Quota += row.Quota
+		item.TokenUsed += row.PromptTokens + row.CompletionTokens
+		displayAmt := logger.QuotaToRoundedDisplayAmount(row.Quota, 2)
+		item.DisplayAmount += displayAmt
+		stat.Quota += row.Quota
+		stat.DisplayAmount += displayAmt
+		stat.Tpm += row.PromptTokens + row.CompletionTokens
+	}
+	stat.Rpm = len(rows)
+
+	quotaData = make([]*QuotaData, 0, len(bucketMap))
+	for _, item := range bucketMap {
+		quotaData = append(quotaData, item)
+	}
+	return quotaData, stat, nil
 }

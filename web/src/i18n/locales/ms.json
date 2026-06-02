@@ -1,6 +1,7 @@
 {
   "视频生成": "penjanaan video",
   "translation": {
+    "使用操练场会产生扣费，请确认模型与参数后再发送。": "Penggunaan playground akan dikenakan caj. Sila sahkan model dan parameter sebelum menghantar.",
     " ": " ",
     " + Web搜索 {{count}}次 / 1K 次 * {{symbol}}{{price}}": " + Web search {{count}} times / 1K times * {{symbol}}{{price}}",
     " + Web搜索 {{count}}次 / 1K 次 * {{symbol}}{{price}} * {{ratioType}} {{ratio}}_few": "+ Carian web {{count}} kali / 1K kali * {{symbol}}{{price}} * {{ratioType}} {{ratio}}",

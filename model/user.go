@@ -589,6 +589,35 @@ func inviteUser(inviterId int) (err error) {
 	return updateUserCache(*inviter)
 }
 
+func createNewUserRewardMessage(userId int, inviterId int) {
+	if userId <= 0 {
+		return
+	}
+	parts := make([]string, 0, 3)
+	if common.QuotaForNewUser > 0 {
+		parts = append(parts, fmt.Sprintf("新手礼包 %s 已到账", logger.LogQuota(common.QuotaForNewUser)))
+	}
+	if inviterId > 0 && common.QuotaForInvitee > 0 {
+		parts = append(parts, fmt.Sprintf("邀请码彩蛋 %s 已触发", logger.LogQuota(common.QuotaForInvitee)))
+	}
+	if common.QuotaForInviter > 0 {
+		parts = append(parts, fmt.Sprintf("邀请好友还有 %s 赏金", logger.LogQuota(common.QuotaForInviter)))
+	}
+	if len(parts) == 0 {
+		return
+	}
+	if err := CreateUserMessage(&UserMessage{
+		ReceiverUserID: userId,
+		Type:           "new_user_reward",
+		Title:          "欢迎上车，启动资金已就位",
+		Content:        fmt.Sprintf("系统已往你的账户里塞了点启动资金：%s。祝你把额度花得像魔法一样优雅～", strings.Join(parts, "，")),
+		BizType:        "new_user_reward",
+		BizID:          userId,
+	}); err != nil {
+		common.SysLog(fmt.Sprintf("createNewUserRewardMessage user_id=%d error: %v", userId, err))
+	}
+}
+
 func (user *User) TransferAffQuotaToQuota(quota int) error {
 	// 检查quota是否小于最小额度
 	if float64(quota) < common.QuotaPerUnit {
@@ -693,6 +722,7 @@ func (user *User) Insert(inviterId int) error {
 		}
 		_ = inviteUser(inviterId)
 	}
+	createNewUserRewardMessage(user.Id, inviterId)
 	return nil
 }
 
@@ -766,6 +796,7 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 		}
 		_ = inviteUser(inviterId)
 	}
+	createNewUserRewardMessage(user.Id, inviterId)
 }
 
 // Update 写入用户行；为防止调用方传入“部分构造的 User”导致 username/password/email 等关键字段被

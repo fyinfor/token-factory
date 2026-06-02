@@ -41,3 +41,51 @@ func TestOpenAIVideoJSONShape(t *testing.T) {
 		t.Fatalf("completed_at should be omitted when empty, got: %s", s)
 	}
 }
+
+func TestIsOpenAIVideosCompatPath(t *testing.T) {
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{"/v1/videos", true},
+		{"/v1/videos/task_abc", true},
+		{"/v1/videos/vid/remix", true},
+		{"/v1/video/generations", false},
+		{"/v1/video/generations/task_abc", false},
+		{"/v1/videos/generations", false},
+		{"/v1/videos/generations/task_abc", false},
+		{"/api/playground/videos/task_abc", false},
+	}
+	for _, tt := range tests {
+		if got := IsOpenAIVideosCompatPath(tt.path); got != tt.want {
+			t.Fatalf("IsOpenAIVideosCompatPath(%q) = %v, want %v", tt.path, got, tt.want)
+		}
+	}
+}
+
+func TestAdaptOpenAIVideoJSONForPath(t *testing.T) {
+	v := NewOpenAIVideo()
+	v.ID = "task_test"
+	v.CreatedAt = FormatTimeUnixRFC3339(1778292296)
+
+	defaultJSON, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	unchanged, err := AdaptOpenAIVideoJSONForPath("/v1/video/generations/task_abc", defaultJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(unchanged) != string(defaultJSON) {
+		t.Fatalf("expected unchanged JSON for non-compat path")
+	}
+
+	converted, err := AdaptOpenAIVideoJSONForPath("/v1/videos/task_abc", defaultJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(converted), `"created_at":1778292296`) {
+		t.Fatalf("expected int64 created_at for /v1/videos path, got: %s", converted)
+	}
+}

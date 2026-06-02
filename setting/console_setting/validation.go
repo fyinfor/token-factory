@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 var (
@@ -172,7 +173,7 @@ func validateAnnouncements(announcementsStr string) error {
 				}
 			}
 		}
-		if len(content) > 500 {
+		if utf8.RuneCountInString(content) > 500 {
 			return fmt.Errorf("第%d个公告的内容长度不能超过500字符", i+1)
 		}
 		if extra, exists := ann["extra"]; exists {

@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useEffect, useState, useMemo, useContext } from 'react';
+import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Typography } from '@douyinfe/semi-ui';
 import { getFooterHTML, getLogo, getSystemName } from '../../helpers';
@@ -39,6 +40,25 @@ const FooterBar = () => {
   };
 
   const currentYear = new Date().getFullYear();
+
+  const renderLegalLinks = () => (
+    <span className='inline-flex flex-wrap items-center justify-end gap-x-1 gap-y-1 text-sm !text-semi-color-text-1'>
+      <span aria-hidden='true'>·</span>
+      <Link
+        to='/user-agreement'
+        className='hover:text-semi-color-primary transition-colors'
+      >
+        {t('用户协议')}
+      </Link>
+      <span aria-hidden='true'>·</span>
+      <Link
+        to='/privacy-policy'
+        className='hover:text-semi-color-primary transition-colors'
+      >
+        {t('隐私政策')}
+      </Link>
+    </span>
+  );
 
   const customFooter = useMemo(
     () => (
@@ -194,6 +214,7 @@ const FooterBar = () => {
             <Typography.Text className='text-sm !text-semi-color-text-1'>
               © {currentYear} {systemName}. {t('版权所有')}
             </Typography.Text>
+            {renderLegalLinks()}
           </div>
 
           <div className='text-sm flex items-center gap-1'>
@@ -230,10 +251,13 @@ const FooterBar = () => {
       {footer ? (
         <footer className='relative h-auto py-4 px-6 md:px-24 w-full flex items-center justify-center overflow-hidden'>
           <div className='flex flex-col md:flex-row items-center justify-between w-full max-w-[1110px] gap-4'>
-            <div
-              className='custom-footer na-cb6feafeb3990c78 text-sm !text-semi-color-text-1'
-              dangerouslySetInnerHTML={{ __html: footer }}
-            ></div>
+            <div className='flex flex-col sm:flex-row sm:flex-wrap items-center gap-2 sm:gap-3 w-full md:w-auto'>
+              <div
+                className='custom-footer na-cb6feafeb3990c78 text-sm !text-semi-color-text-1'
+                dangerouslySetInnerHTML={{ __html: footer }}
+              ></div>
+              {renderLegalLinks()}
+            </div>
             <div className='text-sm flex-shrink-0'>
               <a
                 href='https://github.com/fyinfor/token-factory'

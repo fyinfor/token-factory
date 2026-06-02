@@ -19,17 +19,17 @@ For commercial licensing, please contact support@quantumnous.com
 
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import DocumentRenderer from '../../components/common/DocumentRenderer';
+import LegalDocumentPage from '../../components/legal/LegalDocumentPage';
+import privacyPolicyHtml from '../../content/legal/privacy-policy.html?raw';
 
 const PrivacyPolicy = () => {
   const { t } = useTranslation();
 
   return (
-    <DocumentRenderer
-      apiEndpoint='/api/privacy-policy'
+    <LegalDocumentPage
       title={t('隐私政策')}
-      cacheKey='privacy_policy'
-      emptyMessage={t('加载隐私政策内容失败...')}
+      html={privacyPolicyHtml}
+      styleId='token-factory-privacy-policy-styles'
     />
   );
 };

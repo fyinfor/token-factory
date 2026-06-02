@@ -1435,7 +1435,7 @@ export function quotaToDisplayCurrencyParts(quota) {
 }
 
 /** 与 renderQuota 单行展示一致的数值（用于多行合计，避免先加总额再舍入与明细不一致）。 */
-function quotaToRoundedDisplayValue(quota, digits = 2) {
+export function quotaToRoundedDisplayValue(quota, digits = 2) {
   const q = Number(quota || 0);
   const parts = quotaToDisplayCurrencyParts(q);
   if (parts === null) {

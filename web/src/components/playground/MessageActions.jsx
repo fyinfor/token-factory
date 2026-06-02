@@ -21,6 +21,7 @@ import React from 'react';
 import { Button, Tooltip } from '@douyinfe/semi-ui';
 import { RefreshCw, Copy, Trash2, UserCheck, Edit } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { MESSAGE_ROLES } from '../../constants/playground.constants';
 
 const MessageActions = ({
   message,
@@ -41,6 +42,7 @@ const MessageActions = ({
   const canToggleRole =
     message.role === 'assistant' || message.role === 'system';
   const canEdit =
+    message.role === MESSAGE_ROLES.USER &&
     !isLoading &&
     message.content &&
     typeof onMessageEdit === 'function' &&

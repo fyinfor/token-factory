@@ -267,6 +267,7 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
         title: t('订单号'),
         dataIndex: 'trade_no',
         key: 'trade_no',
+        width: 90,
         render: (text) => <Text copyable>{text}</Text>,
       },
       // 管理员与普通用户均展示用户名列；普通用户仅能看到自己的订单，接口仍返回 username 便于统一展示
@@ -274,18 +275,21 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
         title: t('用户名'),
         dataIndex: 'username',
         key: 'username',
+        width: 80,
         render: (name) => <Text>{name || '-'}</Text>,
       },
       {
         title: t('支付方式'),
         dataIndex: 'payment_method',
         key: 'payment_method',
+        width: 80,
         render: renderPaymentMethod,
       },
       {
         title: t('充值额度'),
         dataIndex: 'amount',
         key: 'amount',
+        width: 80,
         render: (amount, record) => {
           if (isSubscriptionTopup(record)) {
             return (
@@ -306,6 +310,7 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
         title: t('支付金额'),
         dataIndex: 'money',
         key: 'money',
+        width: 80,
         render: (money, record) => (
           <Text type='danger'>
             {formatTopupPayMoney(
@@ -320,6 +325,7 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
         title: t('支付状态'),
         dataIndex: 'status',
         key: 'status',
+        width: 90,
         render: renderStatusBadge,
       },
     ];
@@ -329,6 +335,7 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
       baseColumns.push({
         title: t('操作'),
         key: 'action',
+        width: 30,
         render: (_, record) => {
           const actions = [];
           if (record.status === 'pending') {
@@ -353,6 +360,7 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
       title: t('创建时间'),
       dataIndex: 'create_time',
       key: 'create_time',
+      width: 140,
       render: (time) => timestamp2string(time),
     });
 
@@ -365,7 +373,9 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
       visible={visible}
       onCancel={onCancel}
       footer={null}
-      size={isMobile ? 'full-width' : 'large'}
+      size={isMobile ? 'full-width' : undefined}
+      width={isMobile ? undefined : '95vw'}
+      style={{ maxWidth: 1250 }}
     >
       {/* 筛选条件单行排列；宽度不足时横向滚动，避免折成两行 */}
       <div className='mb-3 flex w-full flex-row flex-nowrap items-center gap-2 overflow-x-auto'>
@@ -403,6 +413,7 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
         dataSource={topups}
         loading={loading}
         rowKey='id'
+        scroll={{ x: 1200 }}
         pagination={{
           currentPage: page,
           pageSize: pageSize,

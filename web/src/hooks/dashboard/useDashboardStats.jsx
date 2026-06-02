@@ -29,12 +29,12 @@ import {
   IconTypograph,
   IconSend,
 } from '@douyinfe/semi-icons';
-import { renderQuota } from '../../helpers';
+import { renderQuota, renderQuotaWithAmount } from '../../helpers';
 import { createSectionTitle } from '../../helpers/dashboard';
 
 export const useDashboardStats = (
   userState,
-  consumeQuota,
+  consumeDisplayQuota,
   consumeTokens,
   times,
   trendData,
@@ -94,11 +94,12 @@ export const useDashboardStats = (
         items: [
           {
             title: t('统计额度'),
-            value: renderQuota(consumeQuota),
+            value: renderQuotaWithAmount(consumeDisplayQuota),
             icon: <IconCoinMoneyStroked />,
             avatarColor: 'yellow',
-            trendData: trendData.consumeQuota,
+            trendData: trendData.consumeDisplayQuota,
             trendColor: '#f59e0b',
+            onClick: () => navigate('/console/log'),
           },
           {
             title: t('统计Tokens'),
@@ -138,7 +139,7 @@ export const useDashboardStats = (
       userState?.user?.used_quota,
       userState?.user?.request_count,
       times,
-      consumeQuota,
+      consumeDisplayQuota,
       consumeTokens,
       trendData,
       performanceMetrics,
