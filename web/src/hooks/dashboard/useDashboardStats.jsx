@@ -99,6 +99,7 @@ export const useDashboardStats = (
             avatarColor: 'yellow',
             trendData: trendData.consumeDisplayQuota,
             trendColor: '#f59e0b',
+            onClick: () => navigate('/console/log'),
           },
           {
             title: t('统计Tokens'),
