@@ -30,6 +30,7 @@ import {
   copy,
   showSuccess,
 } from './utils';
+import { quotaToRoundedDisplayValue } from './render';
 import {
   STORAGE_KEYS,
   DEFAULT_TIME_INTERVALS,
@@ -249,6 +250,17 @@ export const renderMonitorList = (
 };
 
 // ========== 数据处理函数 ==========
+/** 单条看板数据记录的展示额度（与使用日志 renderQuota 按行舍入一致）。 */
+export const getQuotaDataDisplayAmount = (item, digits = 2) => {
+  if (
+    item?.display_amount != null &&
+    Number.isFinite(Number(item.display_amount))
+  ) {
+    return Number(item.display_amount);
+  }
+  return quotaToRoundedDisplayValue(Number(item?.quota || 0), digits);
+};
+
 export const processRawData = (
   data,
   dataExportDefaultTime,
@@ -257,11 +269,13 @@ export const processRawData = (
 ) => {
   const result = {
     totalQuota: 0,
+    totalDisplayQuota: 0,
     totalTimes: 0,
     totalTokens: 0,
     uniqueModels: new Set(),
     timePoints: [],
     timeQuotaMap: new Map(),
+    timeDisplayQuotaMap: new Map(),
     timeTokensMap: new Map(),
     timeCountMap: new Map(),
   };
@@ -270,9 +284,11 @@ export const processRawData = (
   const showYear = isDataCrossYear(data.map((item) => item.created_at));
 
   data.forEach((item) => {
+    const displayAmount = getQuotaDataDisplayAmount(item);
     result.uniqueModels.add(item.model_name);
     result.totalTokens += item.token_used;
     result.totalQuota += item.quota;
+    result.totalDisplayQuota += displayAmount;
     result.totalTimes += item.count;
 
     const timeKey = timestamp2string1(
@@ -287,10 +303,12 @@ export const processRawData = (
     initializeMaps(
       timeKey,
       result.timeQuotaMap,
+      result.timeDisplayQuotaMap,
       result.timeTokensMap,
       result.timeCountMap,
     );
     updateMapValue(result.timeQuotaMap, timeKey, item.quota);
+    updateMapValue(result.timeDisplayQuotaMap, timeKey, displayAmount);
     updateMapValue(result.timeTokensMap, timeKey, item.token_used);
     updateMapValue(result.timeCountMap, timeKey, item.count);
   });
@@ -302,11 +320,15 @@ export const processRawData = (
 export const calculateTrendData = (
   timePoints,
   timeQuotaMap,
+  timeDisplayQuotaMap,
   timeTokensMap,
   timeCountMap,
   dataExportDefaultTime,
 ) => {
   const quotaTrend = timePoints.map((time) => timeQuotaMap.get(time) || 0);
+  const displayQuotaTrend = timePoints.map(
+    (time) => timeDisplayQuotaMap.get(time) || 0,
+  );
   const tokensTrend = timePoints.map((time) => timeTokensMap.get(time) || 0);
   const countTrend = timePoints.map((time) => timeCountMap.get(time) || 0);
 
@@ -328,6 +350,7 @@ export const calculateTrendData = (
     requestCount: [],
     times: countTrend,
     consumeQuota: quotaTrend,
+    consumeDisplayQuota: displayQuotaTrend,
     tokens: tokensTrend,
     rpm: rpmTrend,
     tpm: tpmTrend,
@@ -348,18 +371,21 @@ export const aggregateDataByTimeAndModel = (data, dataExportDefaultTime) => {
     );
     const modelKey = item.model_name;
     const key = `${timeKey}-${modelKey}`;
+    const displayAmount = getQuotaDataDisplayAmount(item);
 
     if (!aggregatedData.has(key)) {
       aggregatedData.set(key, {
         time: timeKey,
         model: modelKey,
         quota: 0,
+        displayAmount: 0,
         count: 0,
       });
     }
 
     const existing = aggregatedData.get(key);
     existing.quota += item.quota;
+    existing.displayAmount += displayAmount;
     existing.count += item.count;
   });
 
