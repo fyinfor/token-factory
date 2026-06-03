@@ -26,11 +26,13 @@ import {
   Space,
   Typography,
 } from '@douyinfe/semi-ui';
+import { IconDownload, IconUpload } from '@douyinfe/semi-icons';
 import { useState } from 'react';
 import { API, showError } from '../../../helpers';
 
 const UsersActions = ({
   setShowAddUser,
+  setShowImportUsers,
   t,
   studentView,
   studentRewardAmount,
@@ -38,6 +40,7 @@ const UsersActions = ({
   setStudentRewardAmount,
   saveStudentRewardAmount,
   assignStudent,
+  language,
 }) => {
   const [assignVisible, setAssignVisible] = useState(false);
   const [searchingUser, setSearchingUser] = useState(false);
@@ -47,6 +50,26 @@ const UsersActions = ({
   // Add new user
   const handleAddUser = () => {
     setShowAddUser(true);
+  };
+
+  const downloadTemplate = async () => {
+    try {
+      const res = await API.get('/api/user/import/template', {
+        responseType: 'blob',
+        disableDuplicate: true,
+        params: { lang: language },
+      });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'user_import_template.xlsx';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      showError(t('下载模板失败'));
+    }
   };
 
   const openAssignModal = () => {
@@ -124,6 +147,27 @@ const UsersActions = ({
           >
             {t('添加用户')}
           </Button>
+        )}
+
+        {studentView === 'all' && (
+          <>
+            <Button
+              className='w-full md:w-auto'
+              onClick={downloadTemplate}
+              size='small'
+              icon={<IconDownload />}
+            >
+              {t('下载模板')}
+            </Button>
+            <Button
+              className='w-full md:w-auto'
+              onClick={() => setShowImportUsers(true)}
+              size='small'
+              icon={<IconUpload />}
+            >
+              {t('批量导入')}
+            </Button>
+          </>
         )}
 
         {studentView === 'students' && (

@@ -40,7 +40,7 @@ const usdToQuota = (usd) => {
 };
 
 export const useUsersData = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [compactMode, setCompactMode] = useTableCompactMode('users');
 
   // State management
@@ -59,6 +59,7 @@ export const useUsersData = () => {
 
   // Modal states
   const [showAddUser, setShowAddUser] = useState(false);
+  const [showImportUsers, setShowImportUsers] = useState(false);
   const [showEditUser, setShowEditUser] = useState(false);
   const [editingUser, setEditingUser] = useState({
     id: undefined,
@@ -427,6 +428,10 @@ export const useUsersData = () => {
     setShowAddUser(false);
   };
 
+  const closeImportUsers = () => {
+    setShowImportUsers(false);
+  };
+
   const closeEditUser = () => {
     setShowEditUser(false);
     setEditingUser({
@@ -470,9 +475,11 @@ export const useUsersData = () => {
 
     // Modal state
     showAddUser,
+    showImportUsers,
     showEditUser,
     editingUser,
     setShowAddUser,
+    setShowImportUsers,
     setShowEditUser,
     setEditingUser,
 
@@ -500,10 +507,12 @@ export const useUsersData = () => {
     handleRow,
     refresh,
     closeAddUser,
+    closeImportUsers,
     closeEditUser,
     getFormValues,
 
     // Translation
     t,
+    language: i18n.language,
   };
 };

@@ -1404,6 +1404,11 @@ func CreateUser(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	user.Tags = model.JoinUserTags(model.GetUserTagsList(user.Tags))
+	if len([]rune(user.Tags)) > 255 {
+		common.ApiErrorMsg(c, "标签总长度不能超过 255 个字符")
+		return
+	}
 	// Even for admin users, we cannot fully trust them!
 	cleanUser := model.User{
 		Username:                   user.Username,
@@ -1414,6 +1419,7 @@ func CreateUser(c *gin.Context) {
 		CreatedBy:                  common.UserCreatedByAdmin,
 		Phone:                      normalizedPhone,
 		Email:                      normalizedEmail,
+		Tags:                       user.Tags,
 		Remark:                     user.Remark,
 		AdminInitialSetupCompleted: false,
 	}
@@ -1424,6 +1430,12 @@ func CreateUser(c *gin.Context) {
 		}
 		common.ApiError(c, err)
 		return
+	}
+	if cleanUser.Tags != "" {
+		tags := model.GetUserTagsList(cleanUser.Tags)
+		if len(tags) > 0 {
+			model.UpsertUserTags(tags)
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{

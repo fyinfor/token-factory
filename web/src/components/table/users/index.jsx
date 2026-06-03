@@ -26,6 +26,7 @@ import UsersFilters from './UsersFilters';
 import UsersDescription from './UsersDescription';
 import AddUserModal from './modals/AddUserModal';
 import EditUserModal from './modals/EditUserModal';
+import ImportUsersModal from './modals/ImportUsersModal';
 import { useUsersData } from '../../../hooks/users/useUsersData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import { createCardProPagination } from '../../../helpers/utils';
@@ -37,10 +38,13 @@ const UsersPage = () => {
   const {
     // Modal state
     showAddUser,
+    showImportUsers,
     showEditUser,
     editingUser,
     setShowAddUser,
+    setShowImportUsers,
     closeAddUser,
+    closeImportUsers,
     closeEditUser,
     refresh,
 
@@ -69,6 +73,7 @@ const UsersPage = () => {
 
     // Translation
     t,
+    language,
   } = usersData;
 
   return (
@@ -88,6 +93,15 @@ const UsersPage = () => {
         refresh={refresh}
         visible={showAddUser}
         handleClose={closeAddUser}
+        tagOptions={tagOptions}
+      />
+
+      <ImportUsersModal
+        visible={showImportUsers}
+        onCancel={closeImportUsers}
+        refresh={refresh}
+        t={t}
+        language={language}
       />
 
       <EditUserModal
@@ -111,6 +125,7 @@ const UsersPage = () => {
           <div className='flex flex-col md:flex-row justify-between items-center gap-2 w-full'>
             <UsersActions
               setShowAddUser={setShowAddUser}
+              setShowImportUsers={setShowImportUsers}
               t={t}
               users={usersData.users}
               studentView={studentView}
@@ -119,6 +134,7 @@ const UsersPage = () => {
               setStudentRewardAmount={setStudentRewardAmount}
               saveStudentRewardAmount={saveStudentRewardAmount}
               assignStudent={assignStudent}
+              language={language}
             />
 
             <UsersFilters
