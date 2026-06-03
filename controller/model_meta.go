@@ -33,7 +33,7 @@ func GetAllModelsMeta(c *gin.Context) {
 		model.DB.Model(&model.Model{}).Count(&total)
 	} else {
 		ownerUserID := c.GetInt("id")
-		modelsMeta, total, err = model.SearchSupplierModels(&ownerUserID, "", "", pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+		modelsMeta, total, err = model.SearchSupplierModels(&ownerUserID, "", "", "", pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 		if err != nil {
 			common.ApiError(c, err)
 			return
@@ -198,6 +198,7 @@ func SearchModelsMeta(c *gin.Context) {
 
 	keyword := c.Query("keyword")
 	vendor := c.Query("vendor")
+	routeSlug := c.Query("route_slug")
 	pageInfo := common.GetPageQuery(c)
 
 	var (
@@ -206,10 +207,10 @@ func SearchModelsMeta(c *gin.Context) {
 		err        error
 	)
 	if c.GetInt("role") >= common.RoleAdminUser {
-		modelsMeta, total, err = model.SearchModels(keyword, vendor, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+		modelsMeta, total, err = model.SearchModels(keyword, vendor, routeSlug, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	} else {
 		ownerUserID := c.GetInt("id")
-		modelsMeta, total, err = model.SearchSupplierModels(&ownerUserID, keyword, vendor, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+		modelsMeta, total, err = model.SearchSupplierModels(&ownerUserID, keyword, vendor, routeSlug, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	}
 	if err != nil {
 		common.ApiError(c, err)

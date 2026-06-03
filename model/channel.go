@@ -332,6 +332,7 @@ type SupplierChannelSearchFilter struct {
 	BaseURL      string
 	ModelKeyword string
 	Group        string
+	RouteSlug    string
 }
 
 // ChannelSimplePricingItem pricing 页面使用的渠道精简信息。
@@ -444,6 +445,9 @@ func SearchSupplierChannels(ownerUserID *int, startIdx int, num int, filter Supp
 		}
 		query = query.Where(groupCondition, "%,"+filter.Group+",%")
 	}
+	if filter.RouteSlug != "" {
+		query = query.Where("route_slug LIKE ?", "%"+filter.RouteSlug+"%")
+	}
 	if err := query.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
@@ -480,7 +484,7 @@ func GetChannelsByTag(tag string, idSort bool, selectAll bool) ([]*Channel, erro
 	return channels, err
 }
 
-func SearchChannels(keyword string, group string, model string, idSort bool) ([]*Channel, error) {
+func SearchChannels(keyword string, group string, model string, routeSlug string, idSort bool) ([]*Channel, error) {
 	var channels []*Channel
 	modelsCol := "`models`"
 
@@ -519,6 +523,11 @@ func SearchChannels(keyword string, group string, model string, idSort bool) ([]
 	} else {
 		whereClause = "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
 		args = append(args, common.String2Int(keyword), "%"+keyword+"%", keyword, "%"+keyword+"%", "%"+model+"%")
+	}
+
+	if routeSlug != "" {
+		whereClause += " AND route_slug LIKE ?"
+		args = append(args, "%"+routeSlug+"%")
 	}
 
 	// 执行查询
@@ -1417,7 +1426,7 @@ func GetPaginatedTags(offset int, limit int) ([]*string, error) {
 	return tags, err
 }
 
-func SearchTags(keyword string, group string, model string, idSort bool) ([]*string, error) {
+func SearchTags(keyword string, group string, model string, routeSlug string, idSort bool) ([]*string, error) {
 	var tags []*string
 	modelsCol := "`models`"
 
@@ -1456,6 +1465,11 @@ func SearchTags(keyword string, group string, model string, idSort bool) ([]*str
 	} else {
 		whereClause = "(id = ? OR name LIKE ? OR " + commonKeyCol + " = ? OR " + baseURLCol + " LIKE ?) AND " + modelsCol + " LIKE ?"
 		args = append(args, common.String2Int(keyword), "%"+keyword+"%", keyword, "%"+keyword+"%", "%"+model+"%")
+	}
+
+	if routeSlug != "" {
+		whereClause += " AND route_slug LIKE ?"
+		args = append(args, "%"+routeSlug+"%")
 	}
 
 	subQuery := baseQuery.Where(whereClause, args...).

@@ -58,6 +58,7 @@ export const useModelsData = (options = {}) => {
   const formInitValues = {
     searchKeyword: '',
     searchVendor: '',
+    searchRouteSlug: '',
   };
 
   // ---------- helpers ----------
@@ -129,15 +130,27 @@ export const useModelsData = (options = {}) => {
   ) => {
     setLoading(true);
     try {
-      const { searchKeyword = '', searchVendor = '' } = getFormValues();
+      const {
+        searchKeyword = '',
+        searchVendor = '',
+        searchRouteSlug = '',
+      } = getFormValues();
       const kw = String(searchKeyword ?? '').trim();
       const sv = String(searchVendor ?? '').trim();
+      const routeSlug = String(searchRouteSlug ?? '').trim();
 
       let url;
-      if (kw !== '' || sv !== '') {
+      if (kw !== '' || sv !== '' || routeSlug !== '') {
+        const effectiveVendor =
+          sv !== ''
+            ? sv
+            : vendorKey && vendorKey !== 'all'
+              ? String(vendorKey)
+              : '';
         const params = new URLSearchParams();
         params.set('keyword', kw);
-        params.set('vendor', sv);
+        params.set('vendor', effectiveVendor);
+        params.set('route_slug', routeSlug);
         params.set('p', String(page));
         params.set('page_size', String(size));
         url = `${apiBasePath}/search?${params.toString()}`;

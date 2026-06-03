@@ -100,6 +100,18 @@ const ModelsFilters = ({
           />
         </div>
 
+        <div className='relative w-full md:w-44'>
+          <Form.Input
+            field='searchRouteSlug'
+            prefix={<IconSearch />}
+            placeholder={t('路由后缀')}
+            showClear
+            pure
+            size='small'
+            onChange={() => scheduleAutoSearch()}
+          />
+        </div>
+
         <div className='flex gap-2 w-full md:w-auto'>
           <Button
             type='tertiary'
