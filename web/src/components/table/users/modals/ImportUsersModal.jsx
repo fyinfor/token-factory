@@ -55,6 +55,7 @@ const ImportUsersModal = ({ visible, onCancel, refresh, t, language }) => {
       { title: t('手机号'), dataIndex: 'phone', width: 130 },
       { title: t('标签'), dataIndex: 'tags', width: 160 },
       { title: t('是否为学员'), dataIndex: 'is_student', width: 110 },
+      { title: t('学员奖励金额'), dataIndex: 'student_reward_amount', width: 130 },
       { title: t('是否为代理'), dataIndex: 'is_agent', width: 110 },
       { title: t('失败原因'), dataIndex: 'reason', width: 260 },
     ],

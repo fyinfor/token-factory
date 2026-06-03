@@ -12,7 +12,9 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/xuri/excelize/v2"
@@ -247,6 +249,7 @@ type userImportFailure struct {
 	Group       string `json:"group"`
 	Tags        string `json:"tags"`
 	IsStudent   string `json:"is_student"`
+	Reward      string `json:"student_reward_amount"`
 	IsAgent     string `json:"is_agent"`
 	Remark      string `json:"remark"`
 	Reason      string `json:"reason"`
@@ -387,6 +390,13 @@ func ImportUsers(c *gin.Context) {
 			failures = append(failures, item)
 			continue
 		}
+		if rewardQuota, _ := parseUserImportRewardQuota(item.Reward); rewardQuota > 0 {
+			if err := model.IncreaseUserQuota(cleanUser.Id, rewardQuota, true); err != nil {
+				common.SysLog(fmt.Sprintf("failed to grant imported student reward: user_id=%d quota=%d error=%v", cleanUser.Id, rewardQuota, err))
+			} else {
+				model.RecordLog(cleanUser.Id, model.LogTypeManage, fmt.Sprintf("批量导入学员身份，赠送 %s", logger.LogQuota(rewardQuota)))
+			}
+		}
 		created++
 		createdTags = append(createdTags, model.GetUserTagsList(item.Tags)...)
 	}
@@ -450,6 +460,20 @@ func normalizeUserImportHeader(header string) string {
 	normalized = strings.ReplaceAll(normalized, "'", "")
 	normalized = strings.ReplaceAll(normalized, "’", "")
 	normalized = strings.ReplaceAll(normalized, ".", "")
+	normalized = strings.ReplaceAll(normalized, "(", "")
+	normalized = strings.ReplaceAll(normalized, ")", "")
+	normalized = strings.ReplaceAll(normalized, "（", "")
+	normalized = strings.ReplaceAll(normalized, "）", "")
+	if strings.Contains(normalized, "学员奖励金额") ||
+		strings.Contains(normalized, "學員獎勵金額") ||
+		strings.Contains(normalized, "studentreward") ||
+		strings.Contains(normalized, "rewardamount") ||
+		strings.Contains(normalized, "montantrecompenseetudiant") ||
+		strings.Contains(normalized, "вознаграждениестудента") ||
+		strings.Contains(normalized, "学生報酬額") ||
+		strings.Contains(normalized, "thuonghocvien") {
+		return "student_reward_amount"
+	}
 	switch normalized {
 	case "用户名", "用户名称", "使用者名稱", "username", "nomdutilisateur", "имяпользователя", "ユーザー名", "tendangnhap":
 		return "username"
@@ -467,6 +491,8 @@ func normalizeUserImportHeader(header string) string {
 		return "tags"
 	case "是否为学员", "学员", "是否為學員", "isstudent", "student", "estetudiant", "студент", "学生か", "lahocvien":
 		return "is_student"
+	case "学员奖励金额", "學員獎勵金額", "studentrewardamount", "studentreward", "rewardamount", "reward", "montantdelarecompenseetudiant", "récompenseétudiant", "вознаграждениестудента", "学生報酬額", "thuonghocvien":
+		return "student_reward_amount"
 	case "是否为代理", "代理", "是否为分销商", "分销商", "是否為代理", "isagent", "isdistributor", "distributor", "estagent", "агент", "代理か", "ladaily":
 		return "is_agent"
 	case "备注", "備註", "remark", "note", "remarque", "примечание", "備考", "ghichu":
@@ -506,6 +532,7 @@ func parseUserImportRow(row []string, headerMap map[string]int, rowNumber int) u
 		Group:       group,
 		Tags:        tags,
 		IsStudent:   normalizeUserImportBoolText(get("is_student")),
+		Reward:      strings.TrimSpace(get("student_reward_amount")),
 		IsAgent:     normalizeUserImportBoolText(get("is_agent")),
 		Remark:      get("remark"),
 	}
@@ -540,6 +567,7 @@ func validateUserImportItem(item *userImportFailure, seenUsernames map[string]in
 	item.Group = strings.TrimSpace(item.Group)
 	item.Tags = normalizeUserImportTags(item.Tags)
 	item.IsStudent = normalizeUserImportBoolText(item.IsStudent)
+	item.Reward = strings.TrimSpace(item.Reward)
 	item.IsAgent = normalizeUserImportBoolText(item.IsAgent)
 	item.Remark = strings.TrimSpace(item.Remark)
 
@@ -594,11 +622,19 @@ func validateUserImportItem(item *userImportFailure, seenUsernames map[string]in
 	if len([]rune(item.Remark)) > 255 {
 		return "备注长度不能超过 255 个字符"
 	}
-	if _, err := parseUserImportBool(item.IsStudent); err != nil {
+	isStudent, err := parseUserImportBool(item.IsStudent)
+	if err != nil {
 		return "是否为学员仅支持填写 是/否"
 	}
 	if _, err := parseUserImportBool(item.IsAgent); err != nil {
 		return "是否为代理仅支持填写 是/否"
+	}
+	rewardQuota, err := parseUserImportRewardQuota(item.Reward)
+	if err != nil {
+		return err.Error()
+	}
+	if rewardQuota > 0 && !isStudent {
+		return "填写学员奖励金额时，是否为学员必须选择“是”"
 	}
 
 	nameTaken, err := model.IsUsernameTakenUnscoped(item.Username)
@@ -655,6 +691,35 @@ func parseUserImportBool(value string) (bool, error) {
 	}
 }
 
+func parseUserImportRewardQuota(value string) (int, error) {
+	normalized := strings.TrimSpace(value)
+	if normalized == "" {
+		return 0, nil
+	}
+	normalized = strings.ReplaceAll(normalized, ",", "")
+	normalized = strings.ReplaceAll(normalized, "，", "")
+	normalized = strings.ReplaceAll(normalized, "$", "")
+	normalized = strings.ReplaceAll(normalized, "¥", "")
+	normalized = strings.ReplaceAll(normalized, "￥", "")
+	normalized = strings.TrimSpace(normalized)
+	amount, err := strconv.ParseFloat(normalized, 64)
+	if err != nil {
+		return 0, fmt.Errorf("学员奖励金额格式不正确")
+	}
+	if amount < 0 {
+		return 0, fmt.Errorf("学员奖励金额不能为负数")
+	}
+	if amount == 0 {
+		return 0, nil
+	}
+
+	rate := operation_setting.GetUsdToCurrencyRate(operation_setting.USDExchangeRate)
+	if rate <= 0 {
+		rate = 1
+	}
+	return common.QuotaFromUSD(amount / rate), nil
+}
+
 func normalizeUserImportTags(tags string) string {
 	parts := strings.FieldsFunc(tags, func(r rune) bool {
 		return r == ',' || r == '，' || r == ';' || r == '；' || r == '|' || r == '\n' || r == '\r'
@@ -670,9 +735,9 @@ func buildUserImportWorkbook(failures []userImportFailure, locale userImportTemp
 	}
 	groupOptions := getUserImportGroupOptions()
 
-	headers := locale.Headers
+	headers := buildUserImportWorkbookHeaders(locale)
 	if len(failures) > 0 {
-		headers = append([]string{}, locale.Headers...)
+		headers = append([]string{}, headers...)
 		headers = append(headers, locale.FailureReason)
 	}
 	for i, header := range headers {
@@ -702,7 +767,7 @@ func buildUserImportWorkbook(failures []userImportFailure, locale userImportTemp
 	for i := range headers {
 		col, _ := excelize.ColumnNumberToName(i + 1)
 		width := 18.0
-		if i == 6 || i == 9 || i == len(headers)-1 && len(failures) > 0 {
+		if i == 6 || i == 8 || i == 10 || i == len(headers)-1 && len(failures) > 0 {
 			width = 30
 		}
 		_ = f.SetColWidth(locale.SheetName, col, col, width)
@@ -719,6 +784,7 @@ func buildUserImportWorkbook(failures []userImportFailure, locale userImportTemp
 			failure.Group,
 			failure.Tags,
 			localizeUserImportBoolText(failure.IsStudent, locale),
+			failure.Reward,
 			localizeUserImportBoolText(failure.IsAgent, locale),
 			failure.Remark,
 			failure.Reason,
@@ -745,6 +811,7 @@ func buildUserImportWorkbook(failures []userImportFailure, locale userImportTemp
 			"default",
 			"VIP,测试",
 			locale.Yes,
+			"0",
 			locale.No,
 			locale.ExampleRemark,
 		}
@@ -773,12 +840,80 @@ func buildUserImportWorkbook(failures []userImportFailure, locale userImportTemp
 	return buf.Bytes(), nil
 }
 
+func buildUserImportWorkbookHeaders(locale userImportTemplateLocale) []string {
+	headers := append([]string{}, locale.Headers[:8]...)
+	headers = append(headers, userImportRewardHeader(locale))
+	headers = append(headers, locale.Headers[8:]...)
+	return headers
+}
+
+func userImportRewardHeader(locale userImportTemplateLocale) string {
+	switch locale.Lang {
+	case "zh-CN":
+		return fmt.Sprintf("学员奖励金额(%s)", userImportRewardCurrencyCode())
+	case "zh-TW":
+		return fmt.Sprintf("學員獎勵金額(%s)", userImportRewardCurrencyCode())
+	case "fr":
+		return fmt.Sprintf("Montant recompense etudiant(%s)", userImportRewardCurrencyCode())
+	case "ru":
+		return fmt.Sprintf("Вознаграждение студента(%s)", userImportRewardCurrencyCode())
+	case "ja":
+		return fmt.Sprintf("学生報酬額(%s)", userImportRewardCurrencyCode())
+	case "vi":
+		return fmt.Sprintf("Thuong hoc vien(%s)", userImportRewardCurrencyCode())
+	default:
+		return fmt.Sprintf("Student Reward Amount(%s)", userImportRewardCurrencyCode())
+	}
+}
+
+func userImportRewardCurrencyCode() string {
+	switch operation_setting.GetQuotaDisplayType() {
+	case operation_setting.QuotaDisplayTypeCNY:
+		return "CNY"
+	case operation_setting.QuotaDisplayTypeCustom:
+		return "CUSTOM"
+	default:
+		return "USD"
+	}
+}
+
+func userImportRewardNote(locale userImportTemplateLocale) []string {
+	currency := userImportRewardCurrencyCode()
+	switch locale.Lang {
+	case "zh-CN":
+		return []string{userImportRewardHeader(locale), fmt.Sprintf("选填，仅当“是否为学员”为“是”时生效；按当前站点展示币种 %s 填写，留空或 0 不赠送", currency)}
+	case "zh-TW":
+		return []string{userImportRewardHeader(locale), fmt.Sprintf("選填，僅當「是否為學員」為「是」時生效；按目前站點顯示幣種 %s 填寫，留空或 0 不贈送", currency)}
+	case "fr":
+		return []string{userImportRewardHeader(locale), fmt.Sprintf("Facultatif; actif uniquement si l'utilisateur est etudiant. Saisir en devise d'affichage du site %s; vide ou 0 = aucun cadeau", currency)}
+	case "ru":
+		return []string{userImportRewardHeader(locale), fmt.Sprintf("Необязательно; действует только если пользователь студент. Укажите в валюте отображения сайта %s; пусто или 0 = без подарка", currency)}
+	case "ja":
+		return []string{userImportRewardHeader(locale), fmt.Sprintf("任意。学生が「はい」の場合のみ有効。サイト表示通貨 %s で入力。空欄または 0 は付与なし", currency)}
+	case "vi":
+		return []string{userImportRewardHeader(locale), fmt.Sprintf("Tuy chon; chi co hieu luc khi La hoc vien la Co. Nhap theo tien te hien thi cua site %s; de trong hoac 0 thi khong tang", currency)}
+	default:
+		return []string{userImportRewardHeader(locale), fmt.Sprintf("Optional; only applies when Is Student is Yes. Enter in current site display currency %s; blank or 0 grants nothing", currency)}
+	}
+}
+
+func buildUserImportNotes(locale userImportTemplateLocale) [][]string {
+	notes := make([][]string, 0, len(locale.Notes)+1)
+	for idx, note := range locale.Notes {
+		if idx == len(locale.Notes)-1 {
+			notes = append(notes, userImportRewardNote(locale))
+		}
+		notes = append(notes, note)
+	}
+	return notes
+}
+
 func addUserImportInfoSheet(f *excelize.File, headerStyle int, locale userImportTemplateLocale) error {
 	infoSheet := locale.InfoSheetName
 	if _, err := f.NewSheet(infoSheet); err != nil {
 		return err
 	}
-	for r, row := range locale.Notes {
+	for r, row := range buildUserImportNotes(locale) {
 		for cidx, value := range row {
 			cell, _ := excelize.CoordinatesToCellName(cidx+1, r+1)
 			if err := f.SetCellValue(infoSheet, cell, value); err != nil {
@@ -834,6 +969,17 @@ func addUserImportDropdowns(f *excelize.File, sheet string, groupOptions []strin
 		return err
 	}
 
+	rewardDV := excelize.NewDataValidation(true)
+	rewardDV.SetSqref("I2:I1000")
+	if err := rewardDV.SetRange(0, 1000000000, excelize.DataValidationTypeDecimal, excelize.DataValidationOperatorBetween); err != nil {
+		return err
+	}
+	rewardDV.SetInput(userImportRewardHeader(locale), userImportRewardNote(locale)[1])
+	rewardDV.SetError(excelize.DataValidationErrorStyleWarning, userImportRewardHeader(locale), "请输入大于等于 0 的金额")
+	if err := f.AddDataValidation(sheet, rewardDV); err != nil {
+		return err
+	}
+
 	if len(groupOptions) > 0 {
 		optionSheet := locale.OptionsSheetName
 		if _, err := f.NewSheet(optionSheet); err != nil {
@@ -859,7 +1005,7 @@ func addUserImportDropdowns(f *excelize.File, sheet string, groupOptions []strin
 		}
 	}
 
-	for _, cellRange := range []string{"H2:H1000", "I2:I1000"} {
+	for _, cellRange := range []string{"H2:H1000", "J2:J1000"} {
 		dv := excelize.NewDataValidation(true)
 		dv.SetSqref(cellRange)
 		if err := dv.SetDropList([]string{locale.No, locale.Yes}); err != nil {
