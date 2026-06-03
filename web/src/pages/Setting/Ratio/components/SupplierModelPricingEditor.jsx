@@ -65,6 +65,7 @@ export default function SupplierModelPricingEditor({
           value: String(s.channel_id),
           channelName: name,
           channelNo: String(s.channel_no || '').trim(),
+          channelTag: String(s.tag || '').trim(),
           routeSlug: String(s.route_slug || '').trim(),
           status: Number(s.status || 0),
         };
@@ -94,22 +95,57 @@ export default function SupplierModelPricingEditor({
     const routeSlug = channel.routeSlug || t('未设置');
     return (
       <div
-        className='flex items-center justify-between gap-3'
+        className='flex min-w-0 items-center justify-between gap-3'
         style={{ width: '100%', minWidth: 0 }}
       >
         <span
-          className='truncate'
+          className='supplier-channel-pricing-option-name min-w-0 flex-1 truncate'
           title={channel.channelName}
           style={{ minWidth: 0 }}
         >
           {channel.channelName}
         </span>
-        <span className='flex shrink-0 items-center gap-1'>
+        <span className='flex shrink-0 items-center gap-1.5'>
           <Tag color={channel.routeSlug ? 'blue' : 'grey'} size='small'>
             {channel.routeSlug ? `/${routeSlug}` : routeSlug}
           </Tag>
+          {channel.channelTag && (
+            <Tag color='cyan' size='small'>
+              {channel.channelTag}
+            </Tag>
+          )}
           {renderChannelStatusTag(channel.status)}
         </span>
+      </div>
+    );
+  };
+
+  const renderChannelOptionItem = (optionProps) => {
+    const { value, className, style, onMouseEnter, onClick } = optionProps;
+    const channel =
+      String(value || '') === 'all'
+        ? { label: t('请选择渠道'), value: 'all' }
+        : optionProps;
+    return (
+      <div
+        className={`${className || ''} supplier-channel-pricing-option`}
+        style={{ ...style, padding: 0 }}
+        onMouseEnter={onMouseEnter}
+        onClick={onClick}
+        role='option'
+        aria-selected={optionProps.selected ? 'true' : 'false'}
+      >
+        <div
+          className='supplier-channel-pricing-option-content flex items-center'
+          style={{
+            minHeight: 36,
+            padding: '8px 12px',
+            boxSizing: 'border-box',
+            width: '100%',
+          }}
+        >
+          {renderChannelOption(channel)}
+        </div>
       </div>
     );
   };
@@ -128,6 +164,7 @@ export default function SupplierModelPricingEditor({
     return [
       channel.channelName,
       channel.channelNo,
+      channel.channelTag,
       channel.routeSlug,
       channel.value,
     ]
@@ -718,31 +755,24 @@ export default function SupplierModelPricingEditor({
               {t('当前渠道')}
             </div>
             <Select
-              style={{ width: '100%', maxWidth: 460 }}
+              style={{ width: '100%', maxWidth: 380 }}
               value={channelId}
               onChange={setChannelId}
               filter={filterChannelOption}
               searchPosition='dropdown'
-              dropdownStyle={{ minWidth: 460 }}
+              dropdownClassName='supplier-channel-pricing-select-dropdown'
+              dropdownStyle={{ minWidth: 380, maxWidth: 420, maxHeight: 360 }}
+              optionList={[
+                { label: t('请选择渠道'), value: 'all' },
+                ...channels,
+              ]}
+              renderOptionItem={renderChannelOptionItem}
               renderSelectedItem={(optionNode) => {
                 const selected = channelOptionMap[optionNode?.value];
                 if (!selected) return optionNode?.label || '';
                 return renderChannelOption(selected);
               }}
-            >
-              <Select.Option value='all' label={t('请选择渠道')}>
-                {t('请选择渠道')}
-              </Select.Option>
-              {channels.map((channel) => (
-                <Select.Option
-                  key={channel.value}
-                  value={channel.value}
-                  label={channel.channelName}
-                >
-                  {renderChannelOption(channel)}
-                </Select.Option>
-              ))}
-            </Select>
+            />
             <div className='mt-1 text-xs text-gray-500'>
               {t('选择渠道后编辑的定价仅作用于该渠道')}
             </div>

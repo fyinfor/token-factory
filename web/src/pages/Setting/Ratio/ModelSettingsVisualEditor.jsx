@@ -67,6 +67,7 @@ export default function ModelSettingsVisualEditor(props) {
               channel_id: item.id,
               channel_name: item.name,
               channel_no: item.channel_no,
+              tag: item.tag,
               route_slug: item.route_slug,
               status: item.status,
             })),
