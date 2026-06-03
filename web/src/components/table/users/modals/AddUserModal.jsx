@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useState, useRef } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import { API, showError, showSuccess } from '../../../../helpers';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import {
@@ -45,6 +45,18 @@ const AddUserModal = (props) => {
   const formApiRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const isMobile = useIsMobile();
+  const tagOptions = props.tagOptions || [];
+  const mergedTagOptions = useMemo(() => {
+    const seen = new Set();
+    return tagOptions
+      .map((o) => o.value || o)
+      .filter((tag) => {
+        if (!tag || seen.has(tag)) return false;
+        seen.add(tag);
+        return true;
+      })
+      .map((tag) => ({ label: tag, value: tag }));
+  }, [tagOptions]);
 
   /** 新建用户表单的初始值。 */
   const getInitValues = () => ({
@@ -53,12 +65,17 @@ const AddUserModal = (props) => {
     email: '',
     phone: '',
     password: '',
+    tags: [],
     remark: '',
   });
 
   const submit = async (values) => {
     setLoading(true);
-    const res = await API.post(`/api/user/`, values);
+    const payload = { ...values };
+    if (Array.isArray(payload.tags)) {
+      payload.tags = payload.tags.join(',');
+    }
+    const res = await API.post(`/api/user/`, payload);
     const { success, message } = res.data;
     if (success) {
       showSuccess(t('用户账户创建成功！'));
@@ -187,6 +204,19 @@ const AddUserModal = (props) => {
                       placeholder={t('请输入密码')}
                       rules={[{ required: true, message: t('请输入密码') }]}
                       showClear
+                    />
+                  </Col>
+                  <Col span={24}>
+                    <Form.Select
+                      field='tags'
+                      label={t('标签')}
+                      placeholder={t('请选择或输入标签')}
+                      multiple
+                      allowCreate
+                      filter
+                      optionList={mergedTagOptions}
+                      showClear
+                      style={{ width: '100%' }}
                     />
                   </Col>
                   <Col span={24}>
