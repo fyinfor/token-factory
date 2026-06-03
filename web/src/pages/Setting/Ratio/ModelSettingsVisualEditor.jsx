@@ -57,7 +57,7 @@ export default function ModelSettingsVisualEditor(props) {
         let total = 0;
         do {
           const res = await API.get(
-            `${isSupplier() ? '/api/user/supplier/channels' : '/api/channel/'}?p=${page}&page_size=100`,
+            `${isSupplier() ? '/api/user/supplier/channels' : '/api/channel/'}?p=${page}&page_size=100&id_sort=true`,
           );
           if (!res?.data?.success) break;
           const items = res.data.data?.items || [];
@@ -67,6 +67,8 @@ export default function ModelSettingsVisualEditor(props) {
               channel_id: item.id,
               channel_name: item.name,
               channel_no: item.channel_no,
+              route_slug: item.route_slug,
+              status: item.status,
             })),
           );
           page += 1;

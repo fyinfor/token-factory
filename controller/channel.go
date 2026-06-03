@@ -356,6 +356,7 @@ func SearchChannels(c *gin.Context) {
 	supplierKeyword := strings.TrimSpace(c.Query("supplier"))
 	group := c.Query("group")
 	modelKeyword := c.Query("model")
+	routeSlug := c.Query("route_slug")
 	statusParam := c.Query("status")
 	statusFilter := parseStatusFilter(statusParam)
 	idSort, _ := strconv.ParseBool(c.Query("id_sort"))
@@ -369,6 +370,7 @@ func SearchChannels(c *gin.Context) {
 			Supplier:     supplierKeyword,
 			ModelKeyword: modelKeyword,
 			Group:        group,
+			RouteSlug:    routeSlug,
 		}
 		ownerUserID := c.GetInt("id")
 		channelData, total, err := model.SearchSupplierChannels(&ownerUserID, 0, 100000, filter)
@@ -445,7 +447,7 @@ func SearchChannels(c *gin.Context) {
 	}
 	channelData := make([]*model.Channel, 0)
 	if enableTagMode {
-		tags, err := model.SearchTags(keyword, group, modelKeyword, idSort)
+		tags, err := model.SearchTags(keyword, group, modelKeyword, routeSlug, idSort)
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
@@ -462,7 +464,7 @@ func SearchChannels(c *gin.Context) {
 			}
 		}
 	} else {
-		channels, err := model.SearchChannels(keyword, group, modelKeyword, idSort)
+		channels, err := model.SearchChannels(keyword, group, modelKeyword, routeSlug, idSort)
 		if err != nil {
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
@@ -819,23 +821,23 @@ func getVertexArrayKeys(keys string) ([]string, error) {
 }
 
 type upstreamChannelSyncItem struct {
-	ID                  int                `json:"id"`
-	Name                string             `json:"name"`
-	Models              string             `json:"models"`
-	Group               string             `json:"group"`
-	Status              int                `json:"status"`
-	Type                int                `json:"type"`
-	ChannelNo           string             `json:"channel_no"`
-	RouteSlug           string             `json:"route_slug"`
-	SupplierApplication int                `json:"supplier_application_id"`
-	SupplierAlias       string             `json:"supplier_alias"`
-	SupplierType        string             `json:"supplier_type"`
-	CompanyLogoURL      string             `json:"company_logo_url"`
-	PriceDiscountPercent float64           `json:"price_discount_percent"`
-	MarkupDiscountRate  float64           `json:"markup_discount_rate"`
-	ModelMapping        string             `json:"model_mapping"`
-	ModelPrice          map[string]float64 `json:"model_price"`
-	ModelRatio          map[string]float64 `json:"model_ratio"`
+	ID                   int                `json:"id"`
+	Name                 string             `json:"name"`
+	Models               string             `json:"models"`
+	Group                string             `json:"group"`
+	Status               int                `json:"status"`
+	Type                 int                `json:"type"`
+	ChannelNo            string             `json:"channel_no"`
+	RouteSlug            string             `json:"route_slug"`
+	SupplierApplication  int                `json:"supplier_application_id"`
+	SupplierAlias        string             `json:"supplier_alias"`
+	SupplierType         string             `json:"supplier_type"`
+	CompanyLogoURL       string             `json:"company_logo_url"`
+	PriceDiscountPercent float64            `json:"price_discount_percent"`
+	MarkupDiscountRate   float64            `json:"markup_discount_rate"`
+	ModelMapping         string             `json:"model_mapping"`
+	ModelPrice           map[string]float64 `json:"model_price"`
+	ModelRatio           map[string]float64 `json:"model_ratio"`
 }
 
 func decodeUpstreamModelMapping(m map[string]any) string {

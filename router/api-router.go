@@ -142,6 +142,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.GET("/self", controller.GetSelf)
 				selfRoute.POST("/student/apply", controller.ApplyStudent)
 				selfRoute.GET("/models", controller.GetUserModels)
+				selfRoute.GET("/playground/video-pricing-tiers", controller.GetPlaygroundVideoPricingTiers)
 				selfRoute.PUT("/self", controller.UpdateSelf)
 				selfRoute.POST("/self/admin_initial_setup", controller.CompleteAdminInitialSetup)
 				selfRoute.DELETE("/self", controller.DeleteSelf)

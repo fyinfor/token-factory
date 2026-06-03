@@ -30,7 +30,13 @@ import {
 } from '@douyinfe/semi-ui';
 import { Sparkles, Users, ToggleLeft, X, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { formatVideoResolutionDisplayLabel, renderGroupOption, selectFilter } from '../../helpers';
+import {
+  buildPlaygroundVideoResolutionOptions,
+  formatVideoResolutionDisplayLabel,
+  getPlaygroundVideoSizeForTier,
+  renderGroupOption,
+  selectFilter,
+} from '../../helpers';
 import {
   PLAYGROUND_IMAGE_SIZE_OPTIONS,
   PLAYGROUND_VIDEO_DURATION_OPTIONS,
@@ -83,6 +89,18 @@ const SettingsPanel = ({
   const isImageMode = displayMode === 'image';
   const isVideoMode = displayMode === 'video';
   const mediaModeEnabled = isImageMode || isVideoMode;
+  const videoResolutionOptions = buildPlaygroundVideoResolutionOptions(
+    inputs.selected_video_pricing_tiers,
+  );
+  const selectedVideoResolution = videoResolutionOptions.some(
+    (option) => option.value === inputs.video_resolution_preset,
+  )
+    ? inputs.video_resolution_preset
+    : videoResolutionOptions[0]?.value || '720p';
+  const selectedVideoSize = getPlaygroundVideoSizeForTier(
+    selectedVideoResolution,
+    inputs.video_orientation || 'landscape',
+  );
   const videoMediaHint = isVideoMode
     ? t(
         '操练场视频素材提示',
@@ -90,14 +108,7 @@ const SettingsPanel = ({
       )
     : '';
   const applyVideoResolutionPreset = (preset) => {
-    const [w, h] = String(preset || '1280x720')
-      .split('x')
-      .map((n) => Number(n));
     onInputChange('video_resolution_preset', preset);
-    if (Number.isFinite(w) && Number.isFinite(h)) {
-      onInputChange('video_width', w);
-      onInputChange('video_height', h);
-    }
   };
 
   return (
@@ -317,7 +328,6 @@ const SettingsPanel = ({
             className='!rounded-lg'
             disabled={customRequestMode}
           />
-
         </div>
 
         {/* 素材 URL：视频模式分图片地址 / 视频地址 */}
@@ -402,7 +412,10 @@ const SettingsPanel = ({
                 placeholder={t('生成数量 n')}
                 value={inputs.image_n}
                 onChange={(value) =>
-                  onInputChange('image_n', Math.max(1, Math.min(4, Number(value) || 1)))
+                  onInputChange(
+                    'image_n',
+                    Math.max(1, Math.min(4, Number(value) || 1)),
+                  )
                 }
                 disabled={customRequestMode}
               />
@@ -442,24 +455,44 @@ const SettingsPanel = ({
               </Typography.Text>
               <Select
                 placeholder={t('分辨率预设')}
-                optionList={[
-                  { label: '960x540', value: '960x540' },
-                  { label: '1280x720', value: '1280x720' },
-                  { label: '1920x1080', value: '1920x1080' },
-                ]}
-                value={inputs.video_resolution_preset}
+                optionList={videoResolutionOptions}
+                value={selectedVideoResolution}
                 onChange={(value) => applyVideoResolutionPreset(value)}
                 disabled={customRequestMode}
                 style={{ width: '100%' }}
               />
-              <div className='grid grid-cols-2 gap-2'>
+              <Typography.Text strong className='text-sm block'>
+                {t('\u753b\u9762\u65b9\u5411')}
+              </Typography.Text>
+              <RadioGroup
+                type='button'
+                buttonSize='middle'
+                value={inputs.video_orientation || 'landscape'}
+                options={[
+                  { label: t('\u6a2a\u5c4f'), value: 'landscape' },
+                  { label: t('\u7ad6\u5c4f'), value: 'portrait' },
+                ]}
+                onChange={(e) =>
+                  onInputChange(
+                    'video_orientation',
+                    e?.target?.value || 'landscape',
+                  )
+                }
+                disabled={customRequestMode}
+              />
+              <Typography.Text className='text-xs text-gray-500 block'>
+                {selectedVideoSize.size}
+              </Typography.Text>
+              <div className='hidden'>
                 <Input
                   type='number'
                   min={320}
                   max={4096}
                   placeholder={t('宽度 width')}
                   value={inputs.video_width}
-                  onChange={(value) => onInputChange('video_width', Number(value) || 1280)}
+                  onChange={(value) =>
+                    onInputChange('video_width', Number(value) || 1280)
+                  }
                   disabled={customRequestMode}
                 />
                 <Input
@@ -468,7 +501,9 @@ const SettingsPanel = ({
                   max={4096}
                   placeholder={t('高度 height')}
                   value={inputs.video_height}
-                  onChange={(value) => onInputChange('video_height', Number(value) || 720)}
+                  onChange={(value) =>
+                    onInputChange('video_height', Number(value) || 720)
+                  }
                   disabled={customRequestMode}
                 />
               </div>
@@ -504,7 +539,10 @@ const SettingsPanel = ({
                 ]}
                 value={Math.max(1, Math.min(3, Number(inputs.video_n) || 1))}
                 onChange={(value) =>
-                  onInputChange('video_n', Math.max(1, Math.min(3, Number(value) || 1)))
+                  onInputChange(
+                    'video_n',
+                    Math.max(1, Math.min(3, Number(value) || 1)),
+                  )
                 }
                 disabled={customRequestMode}
                 style={{ width: '100%' }}

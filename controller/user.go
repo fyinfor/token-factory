@@ -19,6 +19,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/QuantumNous/new-api/constant"
 
@@ -776,6 +777,133 @@ func generateDefaultSidebarConfig(userRole int) string {
 	return string(configBytes)
 }
 
+type playgroundVideoPricingTier struct {
+	Resolution  string `json:"resolution"`
+	Lane        string `json:"lane,omitempty"`
+	BillingMode string `json:"billing_mode,omitempty"`
+}
+
+func appendPlaygroundVideoPricingTier(out *[]playgroundVideoPricingTier, seen map[string]struct{}, resolution, lane, billingMode string) {
+	resolution = strings.TrimSpace(resolution)
+	if resolution == "" {
+		return
+	}
+	key := strings.ToLower(resolution) + "|" + lane + "|" + billingMode
+	if _, ok := seen[key]; ok {
+		return
+	}
+	seen[key] = struct{}{}
+	*out = append(*out, playgroundVideoPricingTier{
+		Resolution:  resolution,
+		Lane:        lane,
+		BillingMode: billingMode,
+	})
+}
+
+func appendPlaygroundVideoAudioRuleTiers(out *[]playgroundVideoPricingTier, seen map[string]struct{}, rows []ratio_setting.VideoResolutionAudioPriceRule, lane, billingMode string) {
+	for i := range rows {
+		if rows[i].Price <= 0 {
+			continue
+		}
+		appendPlaygroundVideoPricingTier(out, seen, rows[i].Resolution, lane, billingMode)
+	}
+}
+
+func appendPlaygroundVideoPerVideoRuleTiers(out *[]playgroundVideoPricingTier, seen map[string]struct{}, rows []ratio_setting.VideoResolutionPerVideoRule, lane string) {
+	for i := range rows {
+		if rows[i].VideoPrice <= 0 {
+			continue
+		}
+		appendPlaygroundVideoPricingTier(out, seen, rows[i].Resolution, lane, "per_item")
+	}
+}
+
+func appendPlaygroundVideoPricingRuleTiers(out *[]playgroundVideoPricingTier, seen map[string]struct{}, rules ratio_setting.VideoPricingRules) {
+	appendPlaygroundVideoAudioRuleTiers(out, seen, rules.TextToVideoPerSecond, "text_to_video_per_second", "per_second")
+	appendPlaygroundVideoAudioRuleTiers(out, seen, rules.ImageToVideoPerSecond, "image_to_video_per_second", "per_second")
+	appendPlaygroundVideoAudioRuleTiers(out, seen, rules.VideoToVideoPerSecond, "video_to_video_per_second", "per_second")
+	appendPlaygroundVideoAudioRuleTiers(out, seen, rules.TextToVideoPerItem, "text_to_video", "per_item")
+	appendPlaygroundVideoAudioRuleTiers(out, seen, rules.ImageToVideoPerItem, "image_to_video", "per_item")
+	appendPlaygroundVideoAudioRuleTiers(out, seen, rules.VideoToVideoPerItem, "video_to_video", "per_item")
+	appendPlaygroundVideoPerVideoRuleTiers(out, seen, rules.TextToVideoPerVideo, "text_to_video_legacy")
+	appendPlaygroundVideoPerVideoRuleTiers(out, seen, rules.ImageToVideoPerVideo, "image_to_video_legacy")
+	appendPlaygroundVideoPerVideoRuleTiers(out, seen, rules.VideoToVideoInputPerVideo, "video_to_video_input_legacy")
+	appendPlaygroundVideoPerVideoRuleTiers(out, seen, rules.VideoToVideoOutputPerVideo, "video_to_video_output_legacy")
+}
+
+func collectPlaygroundVideoPricingTiers(modelName string, channelIDs map[int]struct{}) []playgroundVideoPricingTier {
+	seen := make(map[string]struct{})
+	out := make([]playgroundVideoPricingTier, 0)
+	if rules, ok := ratio_setting.GetVideoPricingRules(modelName); ok {
+		appendPlaygroundVideoPricingRuleTiers(&out, seen, rules)
+	}
+	for channelID := range channelIDs {
+		ch, err := model.CacheGetChannel(channelID)
+		if err != nil || ch == nil || ch.Status != common.ChannelStatusEnabled {
+			continue
+		}
+		if rules, ok := ratio_setting.GetChannelVideoPricingRules(channelID, modelName); ok {
+			appendPlaygroundVideoPricingRuleTiers(&out, seen, rules)
+		}
+		hint := model.BuildVideoFlatClipHint(
+			channelID,
+			modelName,
+			ch.ResolvedPriceDiscountPercent(),
+			ch.ResolvedMarkupDiscountRate(),
+		)
+		if hint == nil {
+			continue
+		}
+		for _, row := range hint.Tiers {
+			appendPlaygroundVideoPricingTier(&out, seen, row.Resolution, row.Lane, hint.BillingMode)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Resolution == out[j].Resolution {
+			if out[i].Lane == out[j].Lane {
+				return out[i].BillingMode < out[j].BillingMode
+			}
+			return out[i].Lane < out[j].Lane
+		}
+		return out[i].Resolution < out[j].Resolution
+	})
+	return out
+}
+
+func GetPlaygroundVideoPricingTiers(c *gin.Context) {
+	modelName := strings.TrimSpace(c.Query("model"))
+	if modelName == "" {
+		common.ApiErrorMsg(c, "model is required")
+		return
+	}
+	routeSlug := strings.TrimSpace(c.Query("route_slug"))
+	userID := c.GetInt("id")
+	user, err := model.GetUserCache(userID)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	groups := service.GetUserUsableGroups(user.Group)
+	channelIDs := make(map[int]struct{})
+	for group := range groups {
+		for _, channelID := range model.GetGroupEnabledChannelIDs(group, modelName) {
+			ch, chErr := model.CacheGetChannel(channelID)
+			if chErr != nil || ch == nil || ch.Status != common.ChannelStatusEnabled {
+				continue
+			}
+			if routeSlug != "" && strings.TrimSpace(ch.RouteSlug) != routeSlug {
+				continue
+			}
+			channelIDs[channelID] = struct{}{}
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    collectPlaygroundVideoPricingTiers(modelName, channelIDs),
+	})
+}
+
 func GetUserModels(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -806,19 +934,21 @@ func GetUserModels(c *gin.Context) {
 	// - tested_success 在返回项中恒为 true（因已按 pricing 同源条件过滤）。
 	if c.Query("scene") == "playground" {
 		type playgroundChannelOption struct {
-			ID           int    `json:"id"`
-			Name         string `json:"name"`
-			ChannelNo    string `json:"channel_no,omitempty"`
-			RouteSlug    string `json:"route_slug,omitempty"`
-			SupplierType string `json:"supplier_type,omitempty"`
+			ID                int                          `json:"id"`
+			Name              string                       `json:"name"`
+			ChannelNo         string                       `json:"channel_no,omitempty"`
+			RouteSlug         string                       `json:"route_slug,omitempty"`
+			SupplierType      string                       `json:"supplier_type,omitempty"`
+			VideoPricingTiers []playgroundVideoPricingTier `json:"video_pricing_tiers,omitempty"`
 		}
 		type playgroundModelItem struct {
-			ModelName      string                    `json:"model_name"`
-			VendorID       int                       `json:"vendor_id"`
-			Vendor         string                    `json:"vendor"`
-			Tags           string                    `json:"tags"`
-			TestedSuccess  bool                      `json:"tested_success"`
-			ChannelOptions []playgroundChannelOption `json:"channel_options,omitempty"`
+			ModelName         string                       `json:"model_name"`
+			VendorID          int                          `json:"vendor_id"`
+			Vendor            string                       `json:"vendor"`
+			Tags              string                       `json:"tags"`
+			TestedSuccess     bool                         `json:"tested_success"`
+			ChannelOptions    []playgroundChannelOption    `json:"channel_options,omitempty"`
+			VideoPricingTiers []playgroundVideoPricingTier `json:"video_pricing_tiers,omitempty"`
 		}
 		modelRows := make([]struct {
 			ModelName string `gorm:"column:model_name"`
@@ -963,7 +1093,7 @@ func GetUserModels(c *gin.Context) {
 				modelChannelIDSet[modelName] = make(map[int]struct{})
 			}
 			for group := range groups {
-				channelIDs := model.ListChannelIDsForGroupModel(group, modelName)
+				channelIDs := model.GetGroupEnabledChannelIDs(group, modelName)
 				for _, channelID := range channelIDs {
 					ch, chErr := model.CacheGetChannel(channelID)
 					if chErr != nil || ch == nil || ch.Status != common.ChannelStatusEnabled {
@@ -1005,6 +1135,7 @@ func GetUserModels(c *gin.Context) {
 				if !ok {
 					continue
 				}
+				meta.VideoPricingTiers = collectPlaygroundVideoPricingTiers(modelName, map[int]struct{}{channelID: {}})
 				channelOptions = append(channelOptions, meta)
 			}
 			sort.Slice(channelOptions, func(i, j int) bool {
@@ -1014,12 +1145,13 @@ func GetUserModels(c *gin.Context) {
 				return strings.Compare(channelOptions[i].Name, channelOptions[j].Name) < 0
 			})
 			items = append(items, playgroundModelItem{
-				ModelName:      modelName,
-				VendorID:       vendorID,
-				Vendor:         vendorName,
-				Tags:           modelTagsByName[modelName],
-				TestedSuccess:  true,
-				ChannelOptions: channelOptions,
+				ModelName:         modelName,
+				VendorID:          vendorID,
+				Vendor:            vendorName,
+				Tags:              modelTagsByName[modelName],
+				TestedSuccess:     true,
+				ChannelOptions:    channelOptions,
+				VideoPricingTiers: collectPlaygroundVideoPricingTiers(modelName, modelChannelIDSet[modelName]),
 			})
 		}
 
