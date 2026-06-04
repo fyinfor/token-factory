@@ -1123,7 +1123,7 @@ export default function DistributorCenter() {
                   </Text>
                 ) : null}
               </div>
-              <div className='mt-3'>
+              {/* <div className='mt-3'>
                 <Button
                   size='small'
                   type='primary'
@@ -1134,7 +1134,7 @@ export default function DistributorCenter() {
                 >
                   {bindButtonText}
                 </Button>
-              </div>
+              </div> */}
             </div>
           ) : null}
         </Space>
