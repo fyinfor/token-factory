@@ -40,7 +40,14 @@ import {
   Spin,
 } from '@douyinfe/semi-ui';
 import { QRCodeSVG } from 'qrcode.react';
-import { TrendingUp, BarChart2, Users, Zap, Copy } from 'lucide-react';
+import {
+  TrendingUp,
+  BarChart2,
+  Users,
+  Zap,
+  Copy,
+  UserPlus,
+} from 'lucide-react';
 import dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
 import {
@@ -222,6 +229,11 @@ export default function DistributorCenter() {
     useState('');
   const [openTransfer, setOpenTransfer] = useState(false);
   const [transferAmount, setTransferAmount] = useState(() => getQuotaPerUnit());
+  const [bindModalOpen, setBindModalOpen] = useState(false);
+  const [bindKeyword, setBindKeyword] = useState('');
+  const [bindSearchLoading, setBindSearchLoading] = useState(false);
+  const [bindSubmitting, setBindSubmitting] = useState(false);
+  const [bindUser, setBindUser] = useState(null);
 
   const withdrawImg = (
     statusState?.status?.distributor_withdraw_cs_image_url || ''
@@ -343,6 +355,78 @@ export default function DistributorCenter() {
     },
     [pageSize],
   );
+
+  const searchBindableUser = useCallback(async () => {
+    const keyword = bindKeyword.trim();
+    if (!keyword) {
+      showError(t('请输入用户名或手机号'));
+      return;
+    }
+    setBindSearchLoading(true);
+    setBindUser(null);
+    try {
+      const res = await API.get('/api/distributor/bindable_user', {
+        params: { keyword },
+        disableDuplicate: true,
+      });
+      const { success, message, data } = res.data || {};
+      if (!success) {
+        showError(message || t('搜索失败'));
+        return;
+      }
+      if (!data) {
+        showError(t('未找到匹配用户'));
+        return;
+      }
+      setBindUser(data);
+    } catch {
+      showError(t('搜索失败'));
+    } finally {
+      setBindSearchLoading(false);
+    }
+  }, [bindKeyword, t]);
+
+  const submitBindRequest = useCallback(async () => {
+    if (!bindUser?.user_id || bindSubmitting) {
+      return;
+    }
+    setBindSubmitting(true);
+    try {
+      const res = await API.post('/api/distributor/bind_requests', {
+        user_id: bindUser.user_id,
+      });
+      const { success, message, data } = res.data || {};
+      if (!success) {
+        showError(message || t('发送绑定请求失败'));
+        return;
+      }
+      showSuccess(message || t('绑定请求已发送，请等待对方确认'));
+      setBindUser((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: 'pending',
+              request_id: data?.request_id || prev.request_id,
+            }
+          : prev,
+      );
+    } catch {
+      showError(t('发送绑定请求失败'));
+    } finally {
+      setBindSubmitting(false);
+    }
+  }, [bindSubmitting, bindUser, t]);
+
+  const bindButtonText = useMemo(() => {
+    if (!bindUser) return t('绑定');
+    if (bindUser.status === 'bound') return t('已绑定');
+    if (bindUser.status === 'distributor') return t('不允许多级代理');
+    if (bindUser.status === 'pending') return t('已发送绑定请求');
+    if (bindUser.status === 'not_allowed') return t('不可绑定');
+    return t('绑定');
+  }, [bindUser, t]);
+
+  const bindButtonDisabled = !bindUser || bindUser.status !== 'bindable';
 
   useEffect(() => {
     if (!isUserDistributor) {
@@ -631,9 +715,7 @@ export default function DistributorCenter() {
           ts ? dayjs.unix(Number(ts)).format('YYYY-MM-DD HH:mm') : '—',
       },
       {
-        title: isProfitShareMode
-          ? t('累计利润分成额度')
-          : t('累计分成额度'),
+        title: isProfitShareMode ? t('累计利润分成额度') : t('累计分成额度'),
         dataIndex: isProfitShareMode
           ? 'profit_share_earned_quota'
           : 'commission_earned_quota',
@@ -908,6 +990,21 @@ export default function DistributorCenter() {
           <Card
             className='!rounded-2xl'
             title={t('邀请用户列表')}
+            headerExtraContent={
+              <Button
+                size='small'
+                theme='light'
+                type='primary'
+                icon={<UserPlus size={14} />}
+                onClick={() => {
+                  setBindModalOpen(true);
+                  setBindKeyword('');
+                  setBindUser(null);
+                }}
+              >
+                {t('用户绑定')}
+              </Button>
+            }
             loading={loading}
           >
             <Table
@@ -964,6 +1061,84 @@ export default function DistributorCenter() {
         transferAmount={transferAmount}
         setTransferAmount={setTransferAmount}
       />
+
+      <Modal
+        title={t('用户绑定')}
+        visible={bindModalOpen}
+        onCancel={() => setBindModalOpen(false)}
+        footer={
+          <Space>
+            <Button onClick={() => setBindModalOpen(false)}>{t('关闭')}</Button>
+            <Button
+              type='primary'
+              theme='solid'
+              disabled={bindButtonDisabled}
+              loading={bindSubmitting}
+              onClick={submitBindRequest}
+            >
+              {bindButtonText}
+            </Button>
+          </Space>
+        }
+      >
+        <Banner
+          type='info'
+          className='mb-3 !rounded-lg'
+          closeIcon={null}
+          description={t(
+            '请输入普通用户的用户名或手机号搜索并发送绑定请求；对方会在站内消息中选择接受或拒绝，处理后您会收到结果通知。对方接受后，该用户将出现在您的邀请用户列表中。',
+          )}
+        />
+        <Space vertical align='start' style={{ width: '100%' }}>
+          <Input
+            value={bindKeyword}
+            onChange={setBindKeyword}
+            onEnterPress={searchBindableUser}
+            placeholder={t('输入普通用户的用户名或手机号，按回车搜索')}
+            suffix={
+              <Button
+                size='small'
+                type='primary'
+                theme='light'
+                loading={bindSearchLoading}
+                onClick={searchBindableUser}
+              >
+                {t('搜索')}
+              </Button>
+            }
+          />
+          {bindUser ? (
+            <div className='w-full rounded-lg border border-semi-color-border bg-semi-color-fill-0 p-3'>
+              <div className='flex flex-col gap-1'>
+                <Text strong>{bindUser.display_name || bindUser.username}</Text>
+                {/* <Text type='tertiary' size='small'>
+                  {t('用户名')}：{bindUser.username || '—'}
+                </Text>
+                <Text type='tertiary' size='small'>
+                  {t('用户ID')}：{bindUser.user_id}
+                </Text> */}
+                {bindUser.phone ? (
+                  <Text type='tertiary' size='small'>
+                    {t('手机号')}：{bindUser.phone}
+                  </Text>
+                ) : null}
+              </div>
+              <div className='mt-3'>
+                <Button
+                  size='small'
+                  type='primary'
+                  theme='solid'
+                  disabled={bindButtonDisabled}
+                  loading={bindSubmitting}
+                  onClick={submitBindRequest}
+                >
+                  {bindButtonText}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </Space>
+      </Modal>
 
       <Modal
         title={t('提现')}
