@@ -5519,5 +5519,10 @@
     "如 13800000000 或 +85295931349": "",
     "国际手机号请以 + 开头（+国码+号码），如香港 +85295931349": "",
     "如 95931349": ""
-  }
+  },
+  "导出对账单": "Export Statement",
+  "对账单导出成功": "Statement exported successfully",
+  "对账单导出失败": "Failed to export statement",
+  "当前视图不支持导出对账单": "Current view does not support statement export",
+  "供应商视图不支持导出对账单": "Supplier view does not support statement export"
 }

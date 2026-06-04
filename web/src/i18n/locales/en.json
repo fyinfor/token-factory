@@ -2722,7 +2722,6 @@
     "未登录模糊价格": "Ambiguous price not logged in",
     "成本价": "Cost price",
     "折扣": "Discount",
-    "成本折扣": "Cost discount",
     "开启后，供应商、代理商、管理员与超级管理员在首页模型详情侧栏「我的令牌」下方可查看各通道成本价": "When enabled, suppliers, distributors, admins, and super admins can view per-channel cost prices below My Tokens in the home page model detail sidebar",
     "渠道或全局按量计费价格 × 渠道成本折扣率": "Per-token channel or global base price × channel cost discount rate",
     "未知": "unknown",
@@ -5640,5 +5639,10 @@
     "国际包独立签名（可与国内不同）": "Independent signature for international package (can differ from domestic)",
     "国际包 AccessKey ID（留空则复用国内）": "International AccessKey ID (leave blank to reuse domestic)",
     "国际包 AccessKey Secret": "International AccessKey Secret"
-  }
+  },
+  "导出对账单": "Export Statement",
+  "对账单导出成功": "Statement exported successfully",
+  "对账单导出失败": "Failed to export statement",
+  "当前视图不支持导出对账单": "Current view does not support statement export",
+  "供应商视图不支持导出对账单": "Supplier view does not support statement export"
 }

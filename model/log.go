@@ -578,6 +578,88 @@ func SumUsedToken(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	return token
 }
 
+// LogTypeChargeable 返回该类型日志是否参与"对账余额"计算（影响 User.Quota）。
+// 仅 Consume/Topup/Refund 写入的 Quota 是真实发生额；Manage/System 的 Quota=0，
+// 它们的金额已直接落到 User.Quota 上但日志里没存差异值，因此不参与累加。
+func LogTypeChargeable(t int) bool {
+	return t == LogTypeConsume || t == LogTypeTopup || t == LogTypeRefund
+}
+
+// SignedLogDelta 返回一条日志在"对账余额"意义上的带符号变动额。
+// Consume 为负（扣费），Topup/Refund 为正（入账）。Manage/System 返回 0（不参与累加，
+// 因为它们的 quota 字段为 0 且实际金额已直接落到 User.Quota）。
+func SignedLogDelta(quota int, t int) int64 {
+	switch t {
+	case LogTypeConsume:
+		return -int64(quota)
+	case LogTypeTopup, LogTypeRefund:
+		return int64(quota)
+	default:
+		return 0
+	}
+}
+
+// GetChargeableDeltaByUser 在 [fromTs, toTs] 区间内对指定 user_id 累加 signed delta。
+// 供 controller 在导出对账单时反推"期初余额"使用：pre_quota = current - sum(区间内)。
+func GetChargeableDeltaByUser(userId int, fromTs int64, toTs int64) (int64, error) {
+	type row struct {
+		Sum int64 `gorm:"column:sum_delta"`
+	}
+	var r row
+	err := LOG_DB.Table("logs").
+		Select("COALESCE(SUM(CASE WHEN type = ? THEN -quota ELSE quota END), 0) AS sum_delta", LogTypeConsume).
+		Where("user_id = ?", userId).
+		Where("type IN ?", []int{LogTypeConsume, LogTypeTopup, LogTypeRefund}).
+		Where("created_at >= ?", fromTs).
+		Where("created_at <= ?", toTs).
+		Scan(&r).Error
+	if err != nil {
+		return 0, err
+	}
+	return r.Sum, nil
+}
+
+// GetUserLogsForExport 拉取对账单导出所需的日志行（升序），不含 Error 类型。
+// 内部使用 LOOP 形式而非 GORM Stream 保持实现简单；调用方负责后续流式写出。
+// 上限 logExportCountLimit 条；超过则 controller 返回 400。
+const logExportCountLimit = 100000
+
+func GetUserLogsForExport(userId int, fromTs int64, toTs int64, modelName string, tokenName string) ([]*Log, int64, error) {
+	tx := LOG_DB.Where("user_id = ?", userId).
+		Where("type <> ?", LogTypeError)
+
+	if modelName != "" {
+		pattern, err := sanitizeLikePattern(modelName)
+		if err != nil {
+			return nil, 0, err
+		}
+		tx = tx.Where("model_name LIKE ? ESCAPE '!'", pattern)
+	}
+	if tokenName != "" {
+		tx = tx.Where("token_name = ?", tokenName)
+	}
+	if fromTs > 0 {
+		tx = tx.Where("created_at >= ?", fromTs)
+	}
+	if toTs > 0 {
+		tx = tx.Where("created_at <= ?", toTs)
+	}
+
+	var total int64
+	if err := tx.Model(&Log{}).Limit(logExportCountLimit).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if total > logExportCountLimit {
+		return nil, total, fmt.Errorf("导出行数超过 %d 上限", logExportCountLimit)
+	}
+
+	var logs []*Log
+	if err := tx.Order("id ASC").Find(&logs).Error; err != nil {
+		return nil, 0, err
+	}
+	return logs, total, nil
+}
+
 func DeleteOldLog(ctx context.Context, targetTimestamp int64, limit int) (int64, error) {
 	var total int64 = 0
 
