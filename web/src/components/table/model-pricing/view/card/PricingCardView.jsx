@@ -124,8 +124,8 @@ const formatVideoTierSpec = (row, t) => {
   return `${formatCompactVideoResolution(row?.resolution, t)}/${unit}`;
 };
 
-const getVideoTierDiscount = (currentUsd, officialUsd) => {
-  const current = Number(currentUsd || 0);
+const getVideoTierDiscount = (currentDisplayUsd, officialUsd) => {
+  const current = Number(currentDisplayUsd || 0);
   const official = Number(officialUsd || 0);
   if (
     !Number.isFinite(current) ||
@@ -154,6 +154,7 @@ const buildVideoTierPreviewItems = (hint, usedGroupRatio, displayPrice, t) => {
     const currentUsd = Number(row?.usd_after_channel_discount || 0);
     if (!Number.isFinite(currentUsd) || currentUsd <= 0) continue;
     const officialUsd = Number(row?.usd_official || 0);
+    const platformUsd = currentUsd * usedGroupRatio;
     const key = `${lane}|${resolution}|${row?.has_audio ?? 'all'}|${currentUsd}|${officialUsd}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -164,12 +165,12 @@ const buildVideoTierPreviewItems = (hint, usedGroupRatio, displayPrice, t) => {
       label: laneMeta.label,
       labelColor: laneMeta.color,
       spec: formatVideoTierSpec(row, t),
-      platformPrice: displayPrice(currentUsd * usedGroupRatio),
+      platformPrice: displayPrice(platformUsd),
       officialPrice:
         Number.isFinite(officialUsd) && officialUsd > 0
           ? displayPrice(officialUsd)
           : '-',
-      discount: getVideoTierDiscount(currentUsd, officialUsd),
+      discount: getVideoTierDiscount(platformUsd, officialUsd),
       audioLabel: getAudioLabel(row, t),
       title: lane,
     });
@@ -387,7 +388,11 @@ const PricingCardView = ({
         }
       }
 
-      return { value: parseFloat(numericPrice.toFixed(2)), symbol };
+      return {
+        value: parseFloat(numericPrice.toFixed(2)),
+        rawUsd: Number(priceUSD) || 0,
+        symbol,
+      };
     };
 
     const modelHasVideoRatio = hasNumericValue(model.video_ratio);
@@ -647,9 +652,12 @@ const PricingCardView = ({
     const getOriginal = (rootPrice, channelPriceArray) => {
       if (!rootPrice || !channelPriceArray || channelPriceArray.length === 0)
         return null;
-      const minChannel = Math.min(...channelPriceArray.map((p) => p.value));
-      if (rootPrice.value > minChannel && rootPrice.value > 0) {
-        const discount = Math.round((1 - minChannel / rootPrice.value) * 100);
+      const rootValue = rootPrice.rawUsd ?? rootPrice.value;
+      const minChannel = Math.min(
+        ...channelPriceArray.map((p) => p.rawUsd ?? p.value),
+      );
+      if (rootValue > minChannel && rootValue > 0) {
+        const discount = Math.round((1 - minChannel / rootValue) * 100);
         return {
           text: `${rootPrice.symbol}${rootPrice.value}`,
           discount,
@@ -1177,7 +1185,7 @@ const PricingCardView = ({
                                                   color='red'
                                                   size='small'
                                                   shape='circle'
-                                                  style={{'zoom': 0.7}}
+                                                  style={{ zoom: 0.7 }}
                                                 >
                                                   -{row.discount}%
                                                 </Tag>

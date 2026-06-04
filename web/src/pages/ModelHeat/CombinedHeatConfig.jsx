@@ -403,6 +403,33 @@ const CombinedHeatConfig = () => {
     );
   }, [data, searchModel, searchChannel, searchVendor, calculateHeatScore]);
 
+  const vendorSearchTextByValue = useMemo(() => {
+    const map = new Map();
+    vendors.forEach((vendor) => {
+      map.set(
+        vendor.id.toString(),
+        [vendor.id, vendor.name, vendor.description].filter(Boolean).join(' ').toLowerCase(),
+      );
+    });
+    return map;
+  }, [vendors]);
+
+  const filterVendorOption = useCallback(
+    (input, option) => {
+      const keyword = String(input ?? '').trim().toLowerCase();
+      if (!keyword) return true;
+      return (vendorSearchTextByValue.get(String(option?.value ?? '')) || '').includes(keyword);
+    },
+    [vendorSearchTextByValue],
+  );
+
+  const renderVendorOption = (vendor) => (
+    <Space>
+      {getLobeHubIcon(vendor.icon || 'Layers', 16)}
+      {vendor.name}
+    </Space>
+  );
+
   const paginatedData = useMemo(() => {
     const startIndex = (currentPage - 1) * pageSize;
     return filteredData.slice(startIndex, startIndex + pageSize);
@@ -591,16 +618,18 @@ const CombinedHeatConfig = () => {
               value={searchVendor || undefined}
               onChange={(value) => setSearchVendor(value || '')}
               showClear
-              filter
+              filter={filterVendorOption}
               maxTagCount={1}
+              renderSelectedItem={(optionNode) => optionNode?.label || optionNode?.value || ''}
               style={{ width: '100%' }}
             >
               {vendors.map((vendor) => (
-                <Option key={vendor.id} value={vendor.id.toString()}>
-                  <Space>
-                    {getLobeHubIcon(vendor.icon || 'Layers', 16)}
-                    {vendor.name}
-                  </Space>
+                <Option
+                  key={vendor.id}
+                  value={vendor.id.toString()}
+                  label={renderVendorOption(vendor)}
+                >
+                  {renderVendorOption(vendor)}
                 </Option>
               ))}
             </Select>

@@ -717,9 +717,6 @@ func batchInsertChannelsWithOptionalTfOpenPricing(channels []Channel, tfOpenPric
 	if err := tx.Commit().Error; err != nil {
 		return err
 	}
-	// Best effort: initialize channel-level model pricing entries so newly imported
-	// channels are visible in channel pricing editor without blank mappings.
-	ensureChannelModelPricingDefaults(createdChannels)
 	if len(tfOpenPricing) > 0 {
 		mergeTFOpenUpstreamPricingAfterInsert(createdChannels, tfOpenPricing)
 	}
@@ -788,85 +785,6 @@ func mergeTFOpenUpstreamPricingAfterInsert(created []Channel, pricing []TFOpenUp
 	}
 	if err := UpdateOption("ChannelModelRatio", string(ratioJSONBytes)); err != nil {
 		common.SysLog(fmt.Sprintf("mergeTFOpen update ChannelModelRatio: %v", err))
-	}
-}
-
-func ensureChannelModelPricingDefaults(channels []Channel) {
-	if len(channels) == 0 {
-		return
-	}
-	channelModelPrice := ratio_setting.GetChannelModelPriceCopy()
-	channelModelRatio := ratio_setting.GetChannelModelRatioCopy()
-	changed := false
-
-	for _, ch := range channels {
-		if ch.Id <= 0 {
-			continue
-		}
-		channelID := strconv.Itoa(ch.Id)
-		if _, ok := channelModelPrice[channelID]; !ok {
-			channelModelPrice[channelID] = make(map[string]float64)
-		}
-		if _, ok := channelModelRatio[channelID]; !ok {
-			channelModelRatio[channelID] = make(map[string]float64)
-		}
-		seen := make(map[string]struct{})
-		for _, rawModel := range ch.GetModels() {
-			modelName := strings.TrimSpace(rawModel)
-			if modelName == "" {
-				continue
-			}
-			modelKey := ratio_setting.FormatMatchingModelName(modelName)
-			if _, ok := seen[modelKey]; ok {
-				continue
-			}
-			seen[modelKey] = struct{}{}
-
-			needPrice := false
-			if _, exists := channelModelPrice[channelID][modelKey]; !exists {
-				needPrice = true
-			}
-			needRatio := false
-			if _, exists := channelModelRatio[channelID][modelKey]; !exists {
-				needRatio = true
-			}
-			if !needPrice && !needRatio {
-				continue
-			}
-			// 无渠道专属值时用全局同模型名（已 FormatMatching）兜底；与定价解析顺序一致。
-			if needPrice {
-				if modelPrice, ok := ratio_setting.GetModelPrice(modelKey, false); ok {
-					channelModelPrice[channelID][modelKey] = modelPrice
-					changed = true
-				}
-			}
-			if needRatio {
-				if modelRatio, ok, _ := ratio_setting.GetModelRatio(modelKey); ok {
-					channelModelRatio[channelID][modelKey] = modelRatio
-					changed = true
-				}
-			}
-		}
-	}
-
-	if !changed {
-		return
-	}
-	priceJSONBytes, err := common.Marshal(channelModelPrice)
-	if err != nil {
-		common.SysLog(fmt.Sprintf("failed to marshal ChannelModelPrice: %v", err))
-		return
-	}
-	ratioJSONBytes, err := common.Marshal(channelModelRatio)
-	if err != nil {
-		common.SysLog(fmt.Sprintf("failed to marshal ChannelModelRatio: %v", err))
-		return
-	}
-	if err := UpdateOption("ChannelModelPrice", string(priceJSONBytes)); err != nil {
-		common.SysLog(fmt.Sprintf("failed to update ChannelModelPrice option: %v", err))
-	}
-	if err := UpdateOption("ChannelModelRatio", string(ratioJSONBytes)); err != nil {
-		common.SysLog(fmt.Sprintf("failed to update ChannelModelRatio option: %v", err))
 	}
 }
 

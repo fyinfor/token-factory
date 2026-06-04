@@ -116,7 +116,7 @@ func OnboardChannel(c *gin.Context) {
 		}
 	}
 
-	// 5. 检查定价配置（渠道级优先，再查全局）
+	// 5. 检查定价配置（仅渠道级配置；全局定价不代表该渠道已设置价格）
 	for _, m := range diagModels {
 		// 渠道级 price 优先（通过 ratio_sync 配置的渠道专属定价）
 		if _, ok := ratio_setting.GetChannelModelPrice(channel.Id, m); ok {
@@ -125,11 +125,6 @@ func OnboardChannel(c *gin.Context) {
 		}
 		// 渠道级 ratio
 		if _, ok := ratio_setting.GetChannelModelRatio(channel.Id, m); ok {
-			result.RatioConfigured = append(result.RatioConfigured, m)
-			continue
-		}
-		// 全局 model_price / model_ratio 兜底
-		if _, _, exist := ratio_setting.GetModelRatioOrPrice(m); exist {
 			result.RatioConfigured = append(result.RatioConfigured, m)
 			continue
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -332,13 +333,50 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 	}
 }
 
-func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string) (logs []*Log, total int64, err error) {
-	var tx *gorm.DB
-	if logType == LogTypeUnknown {
-		tx = LOG_DB
-	} else {
-		tx = LOG_DB.Where("logs.type = ?", logType)
+// ParseLogTypesQuery 解析 type 查询参数，支持单个值或逗号分隔多值（如 "2" 或 "2,3,5"）。
+// 空、"0" 或仅含 0 时返回 nil，表示不按类型过滤。
+func ParseLogTypesQuery(typeQuery string) []int {
+	typeQuery = strings.TrimSpace(typeQuery)
+	if typeQuery == "" || typeQuery == "0" {
+		return nil
 	}
+	parts := strings.Split(typeQuery, ",")
+	types := make([]int, 0, len(parts))
+	seen := make(map[int]struct{}, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" || part == "0" {
+			continue
+		}
+		v, err := strconv.Atoi(part)
+		if err != nil || v <= 0 {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		types = append(types, v)
+	}
+	if len(types) == 0 {
+		return nil
+	}
+	return types
+}
+
+func applyLogTypesFilter(tx *gorm.DB, logTypes []int) *gorm.DB {
+	if len(logTypes) == 0 {
+		return tx
+	}
+	if len(logTypes) == 1 {
+		return tx.Where("logs.type = ?", logTypes[0])
+	}
+	return tx.Where("logs.type IN ?", logTypes)
+}
+
+func GetAllLogs(logTypes []int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string) (logs []*Log, total int64, err error) {
+	tx := LOG_DB
+	tx = applyLogTypesFilter(tx, logTypes)
 
 	if modelName != "" {
 		tx = tx.Where("logs.model_name like ?", modelName)
@@ -392,13 +430,9 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 
 const logSearchCountLimit = 10000
 
-func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string) (logs []*Log, total int64, err error) {
-	var tx *gorm.DB
-	if logType == LogTypeUnknown {
-		tx = LOG_DB.Where("logs.user_id = ?", userId)
-	} else {
-		tx = LOG_DB.Where("logs.user_id = ? and logs.type = ?", userId, logType)
-	}
+func GetUserLogs(userId int, logTypes []int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string) (logs []*Log, total int64, err error) {
+	tx := LOG_DB.Where("logs.user_id = ?", userId)
+	tx = applyLogTypesFilter(tx, logTypes)
 
 	if modelName != "" {
 		modelNamePattern, err := sanitizeLikePattern(modelName)

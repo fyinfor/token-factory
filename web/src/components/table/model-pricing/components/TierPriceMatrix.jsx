@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 import React from 'react';
 import { Typography } from '@douyinfe/semi-ui';
+import PrecisePriceText from './PrecisePriceText';
 
 const { Text } = Typography;
 
@@ -141,6 +142,9 @@ function TierPriceMatrix({
             className={column.align === 'right' ? 'text-right' : ''}
           >
             {column.label}
+            {column.unitLabel ? (
+              <span className='ml-0.5 font-normal'>/{column.unitLabel}</span>
+            ) : null}
           </span>
         ))}
       </div>
@@ -161,7 +165,9 @@ function TierPriceMatrix({
                 <span key={column.key} className='flex justify-end'>
                   {row.discount != null ? (
                     <span style={discountStyle(row.hasDiscount)}>
-                      {row.hasDiscount ? `-${row.discount}%` : zeroDiscountLabel}
+                      {row.hasDiscount
+                        ? `-${row.discount}%`
+                        : zeroDiscountLabel}
                     </span>
                   ) : (
                     <span className='text-gray-400'>—</span>
@@ -180,7 +186,13 @@ function TierPriceMatrix({
                       : 'var(--semi-color-text-1)',
                   }}
                 >
-                  {value || '—'}
+                  {value ? (
+                    <PrecisePriceText exact={row[`${column.key}Exact`]}>
+                      {value}
+                    </PrecisePriceText>
+                  ) : (
+                    '—'
+                  )}
                 </span>
               );
             }
@@ -191,7 +203,13 @@ function TierPriceMatrix({
                 style={column.strong ? priceTextStyle : undefined}
                 title={typeof value === 'string' ? value : undefined}
               >
-                {value || '—'}
+                {value ? (
+                  <PrecisePriceText exact={row[`${column.key}Exact`]}>
+                    {value}
+                  </PrecisePriceText>
+                ) : (
+                  '—'
+                )}
               </span>
             );
           })}
