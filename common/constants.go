@@ -111,6 +111,21 @@ var SMSCodeCooldownMinutes = 1
 var SMSCodeDailyLimit = 10
 var SMSPhoneBlacklist = []string{}
 
+// 短信登录配置（独立于短信注册，关闭时仅保留密码登录）。
+var SMSLoginEnabled = false
+// SMSLoginInternationalEnabled 是否允许使用海外手机号（E.164）登录；关闭时只允许中国大陆 11 位手机号。
+var SMSLoginInternationalEnabled = false
+// SMSAccessKeyIDIntl / SMSCodeSignNameIntl / SMSCodeTemplateCodeIntl：阿里云国际短信独立配置（同一 AK 在国内/国际两个服务可用）。
+var SMSAccessKeyIDIntl = ""
+var SMSAccessKeySecretIntl = ""
+var SMSCodeSignNameIntl = ""
+var SMSCodeTemplateCodeIntl = ""
+
+// SMSLoginCooldownSeconds 登录短信发送冷却（秒），默认 60；登录场景要求更严，需要高于注册冷却。
+var SMSLoginCooldownSeconds = 60
+// SMSLoginDailyLimit 登录短信单手机号每日上限，默认 5。
+var SMSLoginDailyLimit = 5
+
 var QuotaForNewUser = 0
 var QuotaForInviter = 0
 var QuotaForInvitee = 0

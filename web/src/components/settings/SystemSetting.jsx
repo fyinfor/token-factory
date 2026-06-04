@@ -31,6 +31,7 @@ import {
   Card,
   Radio,
   Select,
+  Divider,
 } from '@douyinfe/semi-ui';
 const { Text } = Typography;
 import {
@@ -90,6 +91,14 @@ const SystemSetting = () => {
     SMSCodeCooldownMinutes: 1,
     SMSCodeDailyLimit: 10,
     SMSPhoneBlacklist: [],
+    SMSLoginEnabled: '',
+    SMSLoginInternationalEnabled: '',
+    SMSAccessKeyIDIntl: '',
+    SMSAccessKeySecretIntl: '',
+    SMSCodeSignNameIntl: '',
+    SMSCodeTemplateCodeIntl: '',
+    SMSLoginCooldownSeconds: 60,
+    SMSLoginDailyLimit: 5,
     RegisterEnabled: '',
     'passkey.enabled': '',
     'passkey.rp_display_name': '',
@@ -193,9 +202,15 @@ const SystemSetting = () => {
           case 'SMSVerificationEnabled':
             item.value = toBoolean(item.value);
             break;
+          case 'SMSLoginEnabled':
+          case 'SMSLoginInternationalEnabled':
+            item.value = toBoolean(item.value);
+            break;
           case 'SMSCodeValidMinutes':
           case 'SMSCodeCooldownMinutes':
-          case 'SMSCodeDailyLimit': {
+          case 'SMSCodeDailyLimit':
+          case 'SMSLoginCooldownSeconds':
+          case 'SMSLoginDailyLimit': {
             const n = parseInt(item.value, 10);
             item.value = Number.isFinite(n) ? n : 0;
             break;
@@ -442,6 +457,40 @@ const SystemSetting = () => {
     options.push({
       key: 'SMSPhoneBlacklist',
       value: blacklist.join(','),
+    });
+    options.push({
+      key: 'SMSLoginEnabled',
+      value: inputs.SMSLoginEnabled ? 'true' : 'false',
+    });
+    options.push({
+      key: 'SMSLoginInternationalEnabled',
+      value: inputs.SMSLoginInternationalEnabled ? 'true' : 'false',
+    });
+    options.push({
+      key: 'SMSCodeSignNameIntl',
+      value: inputs.SMSCodeSignNameIntl || '',
+    });
+    options.push({
+      key: 'SMSCodeTemplateCodeIntl',
+      value: inputs.SMSCodeTemplateCodeIntl || '',
+    });
+    options.push({
+      key: 'SMSAccessKeyIDIntl',
+      value: inputs.SMSAccessKeyIDIntl || '',
+    });
+    if (inputs.SMSAccessKeySecretIntl && inputs.SMSAccessKeySecretIntl !== '') {
+      options.push({
+        key: 'SMSAccessKeySecretIntl',
+        value: inputs.SMSAccessKeySecretIntl,
+      });
+    }
+    options.push({
+      key: 'SMSLoginCooldownSeconds',
+      value: inputs.SMSLoginCooldownSeconds || 60,
+    });
+    options.push({
+      key: 'SMSLoginDailyLimit',
+      value: inputs.SMSLoginDailyLimit || 5,
     });
     await updateOptions(options);
   };
@@ -1318,9 +1367,6 @@ const SystemSetting = () => {
                         />
                       </Col>
                       <Col xs={24} sm={24} md={24} lg={24} xl={24}>
-                        <Text type='secondary'>
-                          {t('短信黑名单（支持多个手机号，回车分隔）')}
-                        </Text>
                         <TagInput
                           value={smsPhoneBlacklist}
                           onChange={(value) => {
@@ -1332,6 +1378,102 @@ const SystemSetting = () => {
                           }}
                           placeholder={t('输入手机号后回车，如 13800000000')}
                           style={{ width: '100%', marginTop: 8 }}
+                        />
+                      </Col>
+                    </Row>
+                    <Divider style={{ margin: '12px 0 20px' }} />
+                    <Row
+                      gutter={{
+                        xs: 8,
+                        sm: 16,
+                        md: 24,
+                        lg: 24,
+                        xl: 24,
+                        xxl: 24,
+                      }}
+                    >
+                      <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+                        <Form.Checkbox
+                          field='SMSLoginEnabled'
+                          noLabel
+                          onChange={(e) =>
+                            handleCheckboxChange('SMSLoginEnabled', e)
+                          }
+                        >
+                          {t('启用短信验证码登录')}
+                        </Form.Checkbox>
+                      </Col>
+                      <Col xs={24} sm={24} md={24} lg={24} xl={24}>
+                        <Form.Checkbox
+                          field='SMSLoginInternationalEnabled'
+                          noLabel
+                          onChange={(e) =>
+                            handleCheckboxChange(
+                              'SMSLoginInternationalEnabled',
+                              e,
+                            )
+                          }
+                        >
+                          {t('允许使用国际手机号登录（E.164，带 + 国码）')}
+                        </Form.Checkbox>
+                      </Col>
+                    </Row>
+                    <Row
+                      gutter={{
+                        xs: 8,
+                        sm: 16,
+                        md: 24,
+                        lg: 24,
+                        xl: 24,
+                        xxl: 24,
+                      }}
+                      style={{ marginTop: 8 }}
+                    >
+                      <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                        <Form.Input
+                          field='SMSCodeSignNameIntl'
+                          label={t('国际短信签名')}
+                          placeholder={t('国际包独立签名（可与国内不同）')}
+                        />
+                      </Col>
+                      <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                        <Form.Input
+                          field='SMSCodeTemplateCodeIntl'
+                          label={t('国际短信模板代码')}
+                          placeholder={t('例如：SMS_987654321')}
+                        />
+                      </Col>
+                      <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                        <Form.Input
+                          field='SMSAccessKeyIDIntl'
+                          label={t('国际短信 API 账号')}
+                          placeholder={t(
+                            '国际包 AccessKey ID（留空则复用国内）',
+                          )}
+                        />
+                      </Col>
+                      <Col xs={24} sm={24} md={12} lg={12} xl={12}>
+                        <Form.Input
+                          field='SMSAccessKeySecretIntl'
+                          mode='password'
+                          label={t('国际短信 API 密钥')}
+                          placeholder={t('国际包 AccessKey Secret')}
+                        />
+                      </Col>
+                      <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+                        <Form.InputNumber
+                          field='SMSLoginCooldownSeconds'
+                          label={t('登录短信发送间隔(秒)')}
+                          min={10}
+                          max={600}
+                        />
+                      </Col>
+                      <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+                        <Form.InputNumber
+                          field='SMSLoginDailyLimit'
+                          label={t('登录短信单手机号每日上限')}
+                          min={1}
+                          max={50}
                         />
                       </Col>
                     </Row>

@@ -1043,7 +1043,7 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
             rules={[
               { required: true, message: t('请输入对接人手机号') },
               {
-                pattern: /^1[3-9]\d{9}$/,
+                pattern: /^(1[3-9]\d{9}|\+[1-9]\d{4,14})$/,
                 message: t('请输入有效的手机号'),
               },
             ]}

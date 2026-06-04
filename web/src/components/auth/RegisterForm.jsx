@@ -148,8 +148,7 @@ const RegisterForm = () => {
    * 依赖注册页挂载时主动拉取 /api/status，避免仅读到 localStorage 中过期的 sms_verification_enabled。
    */
   const smsVerificationEnabled =
-    normalizeSmsVerificationEnabled(status?.sms_verification_enabled) !==
-    false;
+    normalizeSmsVerificationEnabled(status?.sms_verification_enabled) !== false;
   const hasOAuthRegisterOptions = Boolean(
     status.github_oauth ||
     status.discord_oauth ||
@@ -312,7 +311,7 @@ const RegisterForm = () => {
         }
       }
       if (phoneTrim) {
-        if (!/^1[3-9]\d{9}$/.test(phoneTrim)) {
+        if (!/^(1[3-9]\d{9}|\+[1-9]\d{4,14})$/.test(phoneTrim)) {
           showInfo(t('请输入有效的手机号'));
           return;
         }
@@ -414,7 +413,7 @@ const RegisterForm = () => {
    * 发送手机短信验证码。
    */
   const sendSMSVerificationCode = async () => {
-    if (!/^1[3-9]\d{9}$/.test((inputs.phone || '').trim())) {
+    if (!/^(1[3-9]\d{9}|\+[1-9]\d{4,14})$/.test((inputs.phone || '').trim())) {
       showInfo(t('请输入有效的手机号'));
       return;
     }

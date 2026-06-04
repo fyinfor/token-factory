@@ -166,6 +166,155 @@ func setupLogin(user *model.User, c *gin.Context) {
 	})
 }
 
+// SendSMSLoginVerification 发送登录短信验证码。
+func SendSMSLoginVerification(c *gin.Context) {
+	if !common.SMSLoginEnabled {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "短信登录未开启",
+		})
+		return
+	}
+	var req struct {
+		Phone string `json:"phone"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "参数错误",
+		})
+		return
+	}
+	phone := common.NormalizePhone(req.Phone)
+	region := common.ClassifyPhoneRegion(phone)
+	if region == "" {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "请输入有效的手机号",
+		})
+		return
+	}
+	if region == common.SMSRegionInternational && !common.SMSLoginInternationalEnabled {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "暂不支持国际手机号登录",
+		})
+		return
+	}
+	if common.IsSMSPhoneBlacklisted(phone) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "该手机号已被限制",
+		})
+		return
+	}
+	// 登录仅允许已存在且未注销的用户
+	if !model.IsPhoneAlreadyTaken(phone) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "该手机号未注册",
+		})
+		return
+	}
+	if err := common.CheckSMSLoginCanSend(phone); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+	code := common.GenerateSMSCode()
+	if err := service.SendAliyunSMSCodeWithRegion(phone, code, region); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "验证码发送失败：" + err.Error(),
+		})
+		return
+	}
+	if err := common.StoreSMSLoginCode(phone, code); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "验证码保存失败，请稍后重试",
+		})
+		return
+	}
+	if err := common.RecordSMSLoginSend(phone); err != nil {
+		// 记录冷却失败不影响发送成功
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+	})
+}
+
+// SMSLogin 通过手机号 + 短信验证码登录。
+func SMSLogin(c *gin.Context) {
+	if !common.SMSLoginEnabled {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "短信登录未开启",
+		})
+		return
+	}
+	var req struct {
+		Phone string `json:"phone"`
+		Code  string `json:"code"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "参数错误",
+		})
+		return
+	}
+	phone := common.NormalizePhone(req.Phone)
+	region := common.ClassifyPhoneRegion(phone)
+	if region == "" {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "请输入有效的手机号",
+		})
+		return
+	}
+	if region == common.SMSRegionInternational && !common.SMSLoginInternationalEnabled {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "暂不支持国际手机号登录",
+		})
+		return
+	}
+	if strings.TrimSpace(req.Code) == "" {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "请输入验证码",
+		})
+		return
+	}
+	if !common.VerifyAndConsumeSMSLoginCode(phone, req.Code) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "验证码无效或已过期",
+		})
+		return
+	}
+	var user model.User
+	if err := model.DB.Where("phone = ?", phone).First(&user).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "该手机号未注册",
+		})
+		return
+	}
+	if user.Status != common.UserStatusEnabled {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "账号已被禁用",
+		})
+		return
+	}
+	setupLogin(&user, c)
+}
+
 func Logout(c *gin.Context) {
 	session := sessions.Default(c)
 	session.Clear()
@@ -217,8 +366,8 @@ func Register(c *gin.Context) {
 			return
 		}
 		if req.Phone != "" {
-			if !common.ValidateMainlandChinaPhone(req.Phone) {
-				common.ApiError(c, fmt.Errorf("手机号格式无效，请输入 11 位中国大陆手机号"))
+			if !common.IsValidLoginPhone(req.Phone) {
+				common.ApiError(c, fmt.Errorf("手机号格式无效，请输入 11 位中国大陆手机号或 +国码 国际号"))
 				return
 			}
 			if common.IsSMSPhoneBlacklisted(req.Phone) {
@@ -413,7 +562,7 @@ func AdminCheckPhoneAvailable(c *gin.Context) {
 		common.ApiSuccess(c, gin.H{"available": true})
 		return
 	}
-	if !common.ValidateMainlandChinaPhone(normalized) {
+	if !common.IsValidLoginPhone(normalized) {
 		common.ApiSuccess(c, gin.H{"available": true})
 		return
 	}
@@ -439,7 +588,7 @@ func UserSelfCheckPhoneAvailable(c *gin.Context) {
 		common.ApiSuccess(c, gin.H{"available": true})
 		return
 	}
-	if !common.ValidateMainlandChinaPhone(normalized) {
+	if !common.IsValidLoginPhone(normalized) {
 		common.ApiSuccess(c, gin.H{"available": true})
 		return
 	}

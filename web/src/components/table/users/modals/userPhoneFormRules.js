@@ -5,6 +5,16 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as
 published by the Free Software Foundation, either version 3 of the
 License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
 */
 
 import { API } from '../../../../helpers';
@@ -29,12 +39,15 @@ export function buildAdminUserPhoneFieldRules(
     return excludeUserId;
   };
 
+  // 国内 11 位或 E.164 国际号（+国码+4~15 位数字）。
+  const PHONE_REGEX = /^1[3-9]\d{9}$|^\+[1-9]\d{4,14}$/;
+
   return [
     {
       validator: (rule, value) => {
         const v = (value || '').trim();
         if (!v) return true;
-        if (!/^1[3-9]\d{9}$/.test(v)) {
+        if (!PHONE_REGEX.test(v)) {
           return new Error(t('请输入有效的手机号'));
         }
         return true;
@@ -43,7 +56,7 @@ export function buildAdminUserPhoneFieldRules(
     {
       asyncValidator: async (rule, value) => {
         const v = (value || '').trim();
-        if (!v || !/^1[3-9]\d{9}$/.test(v)) return;
+        if (!v || !PHONE_REGEX.test(v)) return;
         const params = { phone: v };
         const selfCheck =
           typeof checkPhoneUrl === 'string' &&
