@@ -20,11 +20,13 @@ For commercial licensing, please contact support@quantumnous.com
 import React, { useState } from 'react';
 import { Tag, Space, Skeleton, Tooltip, Button } from '@douyinfe/semi-ui';
 import { IconDownload } from '@douyinfe/semi-icons';
+import { useTranslation } from 'react-i18next';
 import { renderLogStatDisplayQuota } from '../../../helpers';
 import CompactModeToggle from '../../common/ui/CompactModeToggle';
 import { useMinimumLoadingTime } from '../../../hooks/common/useMinimumLoadingTime';
 import { API, showError, showSuccess } from '../../../helpers';
 import { getTodayStartTimestamp } from '../../../helpers/utils';
+import { normalizeLanguage } from '../../../i18n/language';
 
 const LogsActions = ({
   stat,
@@ -40,6 +42,7 @@ const LogsActions = ({
   const showSkeleton = useMinimumLoadingTime(loadingStat);
   const needSkeleton = !showStat || showSkeleton;
   const [exporting, setExporting] = useState(false);
+  const { i18n } = useTranslation();
 
   const handleExportStatement = async () => {
     if (typeof getFormValues !== 'function') {
@@ -52,11 +55,15 @@ const LogsActions = ({
       const today = getTodayStartTimestamp();
       const startTs = formValues.start_timestamp || today - 90 * 24 * 60 * 60;
       const endTs = formValues.end_timestamp || today + 24 * 60 * 60 - 1;
+      // 把当前界面语言透传给后端，让 CSV 表头/元信息跟随用户语言。
+      // 归一化后只保留 supportedLanguages 内的合法 lang，否则后端兜底 zh-CN。
+      const lang = normalizeLanguage(i18n.language || '');
       const params = new URLSearchParams({
         start_timestamp: String(startTs),
         end_timestamp: String(endTs),
         model_name: formValues.model_name || '',
         token_name: formValues.token_name || '',
+        lang: lang || '',
       });
       let url;
       if (supplierChannelLogsView) {

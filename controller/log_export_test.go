@@ -41,3 +41,49 @@ func TestExtractCacheReadTokens(t *testing.T) {
 		})
 	}
 }
+
+// resolveStatementDict 应当：
+// - 11 种 lang 全部命中、并各自返回正确语言的表头/类型标签；
+// - 未知 lang/空 lang 一律回退到 zh-CN；
+// - 表头列数恒为 14，类型标签 6 项全有。
+func TestResolveStatementDict(t *testing.T) {
+	expectLang := map[string]string{
+		"zh-CN": "序号",
+		"zh-TW": "序號",
+		"en":    "No.",
+		"fr":    "N°",
+		"ru":    "№",
+		"ja":    "No.",
+		"vi":    "STT",
+		"id":    "No.",
+		"ms":    "No.",
+		"th":    "ลำดับ",
+		"sw":    "Nambari",
+	}
+	for lang, wantHeader := range expectLang {
+		d := resolveStatementDict(lang)
+		if len(d.Header) != 14 {
+			t.Errorf("lang=%s header 列数=%d, want 14", lang, len(d.Header))
+		}
+		if d.Header[0] != wantHeader {
+			t.Errorf("lang=%s header[0]=%q, want %q", lang, d.Header[0], wantHeader)
+		}
+		// 6 个 log type 标签都必须有
+		for _, key := range []int{1, 2, 3, 4, 5, 6} {
+			if _, ok := d.LogType[key]; !ok {
+				t.Errorf("lang=%s 缺少 LogType[%d]", lang, key)
+			}
+		}
+		if d.Meta1 == "" || d.Meta2 == "" || d.Meta3 == "" {
+			t.Errorf("lang=%s 缺少 meta 模板", lang)
+		}
+	}
+
+	// 未知 lang / 空 lang 全部回退 zh-CN
+	if d := resolveStatementDict("xx-XX"); d.Header[0] != "序号" {
+		t.Errorf("未知 lang 未回退 zh-CN, got header[0]=%q", d.Header[0])
+	}
+	if d := resolveStatementDict(""); d.Header[0] != "序号" {
+		t.Errorf("空 lang 未回退 zh-CN, got header[0]=%q", d.Header[0])
+	}
+}
