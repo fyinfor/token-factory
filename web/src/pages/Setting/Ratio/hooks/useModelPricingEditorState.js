@@ -100,6 +100,8 @@ const hasAnyTierPricing = (model) =>
     hasTierSegments(model?.cacheTierRatio) ||
     hasTierSegments(model?.createCacheTierRatio);
 
+const hasBaseTierPricing = (model) => hasTierSegments(model?.modelTierRatio);
+
 export const getEffectiveBillingMode = (model) => {
     if (!model) return 'per-token';
     if (hasValue(model.fixedPrice)) return 'per-request';
@@ -746,7 +748,7 @@ const buildModelState = (name, sourceMaps) => {
 export const isBasePricingUnset = (model) =>
     !hasValue(model.fixedPrice) &&
     !hasValue(model.inputPrice) &&
-    !hasAnyTierPricing(model);
+    !hasBaseTierPricing(model);
 
 const hasDuplicateResolution = (rows) => {
     const seen = new Set();
@@ -1759,7 +1761,7 @@ export const buildPreviewRows = (model, t) => {
     ];
 };
 
-/** 汇总各定价 map 中出现过的模型名（用于渠道「已配置」列表，与渠道 models 候选求交）。 */
+/** 汇总基础定价 map 中出现过的模型名（用于渠道「已配置」列表，与渠道 models 候选求交）。 */
 const collectModelNamesFromPricingSourceMaps = (sourceMaps) => {
     const s = new Set();
     if (!sourceMaps || typeof sourceMaps !== 'object') {
@@ -1768,23 +1770,7 @@ const collectModelNamesFromPricingSourceMaps = (sourceMaps) => {
     [
         'ModelPrice',
         'ModelRatio',
-        'CompletionRatio',
-        'CompletionRatioMeta',
-        'CacheRatio',
-        'CreateCacheRatio',
-        'ImageRatio',
-        'AudioRatio',
-        'AudioCompletionRatio',
-        'VideoRatio',
-        'VideoCompletionRatio',
-        'VideoPrice',
-        'VideoPricingRules',
-        'ImagePrice',
-        'ImagePricingRules',
         'ModelTierRatio',
-        'CompletionTierRatio',
-        'CacheTierRatio',
-        'CreateCacheTierRatio',
     ].forEach((key) => {
         const obj = sourceMaps[key];
         if (obj && typeof obj === 'object') {
