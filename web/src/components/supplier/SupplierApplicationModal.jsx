@@ -34,6 +34,7 @@ import { API, showError, showSuccess } from '../../helpers';
 import { useTranslation } from 'react-i18next';
 import { useIsMobile } from '../../hooks/common/useIsMobile';
 import SupplierCapabilityFormFields from './SupplierCapabilityFormFields';
+import CountryPhoneInput from '../common/form/CountryPhoneInput';
 
 const { Text } = Typography;
 
@@ -54,6 +55,32 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [wizardDraftValues, setWizardDraftValues] = useState({});
   const [commitmentChecked, setCommitmentChecked] = useState(false);
+  const [contactMobile, setContactMobile] = useState('');
+  const [contactMobileError, setContactMobileError] = useState('');
+  const [smsIntlEnabled, setSmsIntlEnabled] = useState(false);
+  const PHONE_REGEX = smsIntlEnabled
+    ? /^1[3-9]\d{9}$|^\+[1-9]\d{4,14}$/
+    : /^1[3-9]\d{9}$/;
+
+  // 拉取后端公开状态，判断国际号是否启用
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await API.get('/api/status');
+        if (!cancelled) {
+          setSmsIntlEnabled(
+            Boolean(res.data?.data?.sms_login_international_enabled),
+          );
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (visible) {
@@ -98,6 +125,7 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
         const data = res.data.data;
         setHasExistingApplication(true);
         setApplicationId(data.id);
+        setContactMobile(data.contact_mobile || '');
         // 接口 /self 已附带 supplier_capability；单独拉取失败时仍可用于回显。
         let fetchedCapabilityData = data.supplier_capability || null;
         try {
@@ -446,7 +474,7 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
         company_logo_url: companyLogoUrl,
         company_name: mergedValues.company_name || '',
         company_size: mergedValues.company_size || '',
-        contact_mobile: mergedValues.contact_mobile || '',
+        contact_mobile: contactMobile || '',
         contact_name: mergedValues.contact_name || '',
         contact_wechat: mergedValues.contact_wechat || '',
         credit_code: mergedValues.credit_code || '',
@@ -863,20 +891,30 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
               />
             </Col>
             <Col span={24}>
-              <Form.Input
-                field='contact_mobile'
-                label={<Text strong>{t('对接人手机号')}</Text>}
-                placeholder={t('填写实名手机号')}
-                rules={[
-                  { required: true, message: t('请输入对接人手机号') },
-                  {
-                    pattern: /^(1[3-9]\d{9}|\+[1-9]\d{4,14})$/,
-                    message: t('请输入有效的手机号'),
-                  },
-                ]}
-                showClear
-                extraText={t('用于紧急联系')}
-              />
+              <Form.Slot label={<Text strong>{t('对接人手机号')}</Text>}>
+                <CountryPhoneInput
+                  value={contactMobile}
+                  onChange={(v) => {
+                    setContactMobile(v);
+                    setContactMobileError(
+                      v && !PHONE_REGEX.test(v) ? t('请输入有效的手机号') : '',
+                    );
+                  }}
+                  intlEnabled={smsIntlEnabled}
+                  placeholder={t('填写实名手机号')}
+                />
+                <div
+                  style={{
+                    color: contactMobileError
+                      ? 'var(--semi-color-danger)'
+                      : 'var(--semi-color-text-2)',
+                    fontSize: 12,
+                    marginTop: 4,
+                  }}
+                >
+                  {contactMobileError || t('用于紧急联系')}
+                </div>
+              </Form.Slot>
             </Col>
             <Col span={24}>
               <Form.Input

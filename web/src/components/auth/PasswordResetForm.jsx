@@ -34,6 +34,7 @@ import { IconLock, IconMail } from '@douyinfe/semi-icons';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { StatusContext } from '../../context/Status';
+import CountryPhoneInput from '../common/form/CountryPhoneInput';
 
 const { Text, Title } = Typography;
 
@@ -80,6 +81,7 @@ const PasswordResetForm = () => {
   /** 与注册页一致：仅服务端显式 false 为关；未返回字段时视为开；进入页时拉取 /api/status 刷新缓存。 */
   const smsVerificationEnabled =
     normalizeSmsVerificationEnabled(status?.sms_verification_enabled) !== false;
+  const smsLoginIntlEnabled = Boolean(status?.sms_login_international_enabled);
 
   /**
    * 同步最新公开状态，避免 localStorage 中过期的 sms_verification_enabled 导致短信 Tab 不显示。
@@ -222,7 +224,10 @@ const PasswordResetForm = () => {
   /** sendSMSCode 发送找回密码短信验证码。 */
   async function sendSMSCode() {
     const phone = (inputs.phone || '').trim();
-    if (!/^(1[3-9]\d{9}|\+[1-9]\d{4,14})$/.test(phone)) {
+    const PHONE_REGEX = smsLoginIntlEnabled
+      ? /^1[3-9]\d{9}$|^\+[1-9]\d{4,14}$/
+      : /^1[3-9]\d{9}$/;
+    if (!PHONE_REGEX.test(phone)) {
       showInfo(t('请输入有效的 11 位手机号'));
       return;
     }
@@ -254,7 +259,10 @@ const PasswordResetForm = () => {
   /** submitPhoneReset 手机号验证码重置密码。 */
   async function submitPhoneReset(e) {
     const phone = (inputs.phone || '').trim();
-    if (!/^(1[3-9]\d{9}|\+[1-9]\d{4,14})$/.test(phone)) {
+    const PHONE_REGEX = smsLoginIntlEnabled
+      ? /^1[3-9]\d{9}$|^\+[1-9]\d{4,14}$/
+      : /^1[3-9]\d{9}$/;
+    if (!PHONE_REGEX.test(phone)) {
       showError(t('请输入有效的 11 位手机号'));
       return;
     }
@@ -378,14 +386,14 @@ const PasswordResetForm = () => {
   /** renderPhonePane 手机短信验证码表单。 */
   const renderPhonePane = () => (
     <Form className='space-y-3'>
-      <Form.Input
-        field='phone'
-        label={t('手机号')}
-        placeholder={t('输入 11 位手机号')}
-        name='phone'
-        value={inputs.phone}
-        onChange={(value) => handleChange('phone', value)}
-      />
+      <Form.Slot label={t('手机号')}>
+        <CountryPhoneInput
+          value={inputs.phone || ''}
+          onChange={(v) => handleChange('phone', v)}
+          intlEnabled={smsLoginIntlEnabled}
+          placeholder={t('输入 11 位手机号')}
+        />
+      </Form.Slot>
       <Form.Input
         field='sms_verification_code'
         label={t('短信验证码')}

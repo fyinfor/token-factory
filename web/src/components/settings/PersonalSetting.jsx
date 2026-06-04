@@ -418,7 +418,11 @@ const PersonalSetting = () => {
   /** 发送绑定/修改手机号短信验证码。 */
   const sendPhoneVerificationCode = async () => {
     const phone = (inputs.phone || '').trim();
-    if (!/^(1[3-9]\d{9}|\+[1-9]\d{4,14})$/.test(phone)) {
+    const intlEnabled = Boolean(status?.sms_login_international_enabled);
+    const PHONE_REGEX = intlEnabled
+      ? /^1[3-9]\d{9}$|^\+[1-9]\d{4,14}$/
+      : /^1[3-9]\d{9}$/;
+    if (!PHONE_REGEX.test(phone)) {
       showError(t('请输入有效的手机号'));
       return;
     }
@@ -454,7 +458,11 @@ const PersonalSetting = () => {
   /** 提交手机号绑定或修改。 */
   const bindPhone = async () => {
     const phone = (inputs.phone || '').trim();
-    if (!/^(1[3-9]\d{9}|\+[1-9]\d{4,14})$/.test(phone)) {
+    const intlEnabled = Boolean(status?.sms_login_international_enabled);
+    const PHONE_REGEX = intlEnabled
+      ? /^1[3-9]\d{9}$|^\+[1-9]\d{4,14}$/
+      : /^1[3-9]\d{9}$/;
+    if (!PHONE_REGEX.test(phone)) {
       showError(t('请输入有效的手机号'));
       return;
     }
@@ -693,6 +701,7 @@ const PersonalSetting = () => {
         turnstileEnabled={turnstileEnabled}
         turnstileSiteKey={turnstileSiteKey}
         setTurnstileToken={setTurnstileToken}
+        intlEnabled={Boolean(status?.sms_login_international_enabled)}
       />
 
       <WeChatBindModal

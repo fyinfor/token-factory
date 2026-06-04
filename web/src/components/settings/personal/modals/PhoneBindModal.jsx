@@ -22,9 +22,11 @@ import { Button, Input, Modal } from '@douyinfe/semi-ui';
 import { IconKey } from '@douyinfe/semi-icons';
 import { Phone } from 'lucide-react';
 import Turnstile from 'react-turnstile';
+import CountryPhoneInput from '../../../common/form/CountryPhoneInput';
 
 /**
  * 个人设置：绑定或修改手机号（短信验证码）。
+ * 国际号显示受 status.sms_login_international_enabled 控制。
  */
 const PhoneBindModal = ({
   t,
@@ -40,6 +42,7 @@ const PhoneBindModal = ({
   turnstileEnabled,
   turnstileSiteKey,
   setTurnstileToken,
+  intlEnabled = false,
 }) => {
   return (
     <Modal
@@ -59,15 +62,14 @@ const PhoneBindModal = ({
     >
       <span className='block space-y-4 py-4'>
         <span className='flex gap-3'>
-          <Input
-            placeholder={t('请输入手机号')}
-            onChange={(value) => handleInputChange('phone', value)}
-            name='phone'
-            value={inputs.phone}
-            size='large'
-            className='!rounded-lg flex-1'
-            prefix={<Phone size={16} />}
-          />
+          <span className='flex-1'>
+            <CountryPhoneInput
+              value={inputs.phone}
+              onChange={(v) => handleInputChange('phone', v)}
+              intlEnabled={intlEnabled}
+              placeholder={t('请输入手机号')}
+            />
+          </span>
           <Button
             onClick={sendPhoneVerificationCode}
             disabled={disablePhoneButton || phoneLoading}

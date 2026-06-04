@@ -281,3 +281,26 @@ export const toE164 = (country, localNumber) => {
   const local = String(localNumber || '').replace(/[^\d]/g, '');
   return `+${country.dial}${local}`;
 };
+
+// 把 E.164 (+国码+号码) 拆成 { countryCode, localNumber }，匹配不到时回退 { CN, 原值 }。
+// 主要用于：编辑表单回显「已存的手机号」时，把 E.164 字符串反拆成「国码 select + 本地号 input」。
+export const splitE164Phone = (phone) => {
+  const v = String(phone || '').trim();
+  if (!v) return { countryCode: 'CN', localNumber: '' };
+  if (v.startsWith('+')) {
+    const rest = v.slice(1).replace(/[^\d]/g, '');
+    // 优先匹配长前缀（3 位 → 2 位 → 1 位）
+    for (const len of [3, 2, 1]) {
+      const prefix = rest.slice(0, len);
+      const hit = COUNTRY_DIAL_CODES.find((c) => c.dial === prefix);
+      if (hit) {
+        return {
+          countryCode: hit.code,
+          localNumber: rest.slice(len),
+        };
+      }
+    }
+  }
+  // 国内 11 位默认归到 CN
+  return { countryCode: 'CN', localNumber: v.replace(/[^\d]/g, '') };
+};

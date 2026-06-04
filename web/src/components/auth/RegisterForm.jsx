@@ -66,6 +66,7 @@ import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
 import { useTranslation } from 'react-i18next';
 import { SiDiscord } from 'react-icons/si';
+import CountryPhoneInput from '../common/form/CountryPhoneInput';
 
 /**
  * 注册页表单：支持 OAuth 与用户名密码注册。关闭短信注册时邮箱必填且不展示手机相关字段；开启短信注册时邮箱与手机号二选一，填写其一即可（填手机须短信验证；填邮箱可不填手机）。
@@ -149,6 +150,7 @@ const RegisterForm = () => {
    */
   const smsVerificationEnabled =
     normalizeSmsVerificationEnabled(status?.sms_verification_enabled) !== false;
+  const smsLoginIntlEnabled = Boolean(status?.sms_login_international_enabled);
   const hasOAuthRegisterOptions = Boolean(
     status.github_oauth ||
     status.discord_oauth ||
@@ -311,7 +313,10 @@ const RegisterForm = () => {
         }
       }
       if (phoneTrim) {
-        if (!/^(1[3-9]\d{9}|\+[1-9]\d{4,14})$/.test(phoneTrim)) {
+        const PHONE_REGEX = smsLoginIntlEnabled
+          ? /^1[3-9]\d{9}$|^\+[1-9]\d{4,14}$/
+          : /^1[3-9]\d{9}$/;
+        if (!PHONE_REGEX.test(phoneTrim)) {
           showInfo(t('请输入有效的手机号'));
           return;
         }
@@ -413,7 +418,10 @@ const RegisterForm = () => {
    * 发送手机短信验证码。
    */
   const sendSMSVerificationCode = async () => {
-    if (!/^(1[3-9]\d{9}|\+[1-9]\d{4,14})$/.test((inputs.phone || '').trim())) {
+    const PHONE_REGEX = smsLoginIntlEnabled
+      ? /^1[3-9]\d{9}$|^\+[1-9]\d{4,14}$/
+      : /^1[3-9]\d{9}$/;
+    if (!PHONE_REGEX.test((inputs.phone || '').trim())) {
       showInfo(t('请输入有效的手机号'));
       return;
     }
@@ -836,14 +844,16 @@ const RegisterForm = () => {
                         '开启短信注册时，邮箱与手机号至少填一项；填写邮箱可不填手机号；仅用手机号注册可不填邮箱。',
                       )}
                     </Text>
-                    <Form.Input
-                      field='phone'
+                    <Form.Slot
                       label={t('手机号（选填）')}
-                      placeholder={t('输入 11 位手机号')}
-                      name='phone'
-                      onChange={(value) => handleChange('phone', value)}
-                      prefix={<IconUser />}
-                    />
+                    >
+                      <CountryPhoneInput
+                        value={inputs.phone || ''}
+                        onChange={(v) => handleChange('phone', v)}
+                        intlEnabled={smsLoginIntlEnabled}
+                        placeholder={t('输入 11 位手机号')}
+                      />
+                    </Form.Slot>
 
                     <Form.Input
                       field='sms_verification_code'
