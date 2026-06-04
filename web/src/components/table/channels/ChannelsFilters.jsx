@@ -115,6 +115,16 @@ const ChannelsFilters = ({
               pure
             />
           </div>
+          <div className='w-full md:w-40'>
+            <Form.Input
+              size='small'
+              field='searchRouteSlug'
+              prefix={<IconSearch />}
+              placeholder={t('路由后缀')}
+              showClear
+              pure
+            />
+          </div>
           <div className='w-full md:w-32'>
             <Form.Select
               size='small'

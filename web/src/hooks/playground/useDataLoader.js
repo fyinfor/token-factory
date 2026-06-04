@@ -17,10 +17,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   API,
+  buildPlaygroundVideoResolutionOptions,
   processModelsData,
   processGroupsData,
   showError,
@@ -121,6 +122,18 @@ export const useDataLoader = (
    * 接口返回的带 vendor 信息的原始模型行，供「仅客户端」按类型过滤（与模型广场一致、且避免与请求竞态导致类型与列表不同步）
    */
   const [playgroundRawModels, setPlaygroundRawModels] = useState([]);
+  const latestVideoPricingStateRef = useRef({
+    tiers: inputs.selected_video_pricing_tiers || [],
+    resolution: inputs.video_resolution_preset,
+  });
+  const videoPricingTierCacheRef = useRef(new Map());
+
+  useEffect(() => {
+    latestVideoPricingStateRef.current = {
+      tiers: inputs.selected_video_pricing_tiers || [],
+      resolution: inputs.video_resolution_preset,
+    };
+  }, [inputs.selected_video_pricing_tiers, inputs.video_resolution_preset]);
 
   /**
    * 拉取 scene=playground 模型列表，写入「类型选项」与原始行；不依赖当前 model_type，避免重复请求与请求返回顺序错配。
@@ -275,6 +288,7 @@ export const useDataLoader = (
     const supplierOptionsRaw = Array.isArray(selectedModelRow?.channel_options)
       ? selectedModelRow.channel_options
       : [];
+    const selectedRouteSlug = inputs.selected_route_slug;
     const supplierOptions = [
       { label: `${t('随机')} (${t('默认')})`, value: '' },
       ...supplierOptionsRaw
@@ -298,7 +312,6 @@ export const useDataLoader = (
         .filter(Boolean),
     ];
     setSupplierOptions(supplierOptions);
-    const selectedRouteSlug = inputs.selected_route_slug;
     const hasSelectedSupplier = supplierOptions.some((option) => {
       if (
         option.value === '' &&
@@ -330,6 +343,67 @@ export const useDataLoader = (
     setModels,
     setSupplierOptions,
     setStatus,
+    handleInputChange,
+  ]);
+
+  useEffect(() => {
+    if (!userState?.user || (inputs.display_mode || 'text') !== 'video') {
+      return;
+    }
+    const modelName = String(inputs.model || '').trim();
+    if (!modelName) {
+      return;
+    }
+    const routeSlug = String(inputs.selected_route_slug || '').trim();
+    const cacheKey = `${modelName}\n${routeSlug}`;
+    let cancelled = false;
+    const applyVideoPricingTiers = (tiers) => {
+      const latest = latestVideoPricingStateRef.current;
+      if (JSON.stringify(latest.tiers || []) !== JSON.stringify(tiers)) {
+        handleInputChange('selected_video_pricing_tiers', tiers);
+      }
+      const resolutionOptions = buildPlaygroundVideoResolutionOptions(tiers);
+      if (
+        resolutionOptions.length > 0 &&
+        !resolutionOptions.some((option) => option.value === latest.resolution)
+      ) {
+        handleInputChange('video_resolution_preset', resolutionOptions[0].value);
+      }
+    };
+    if (videoPricingTierCacheRef.current.has(cacheKey)) {
+      applyVideoPricingTiers(videoPricingTierCacheRef.current.get(cacheKey));
+      return;
+    }
+    const loadVideoPricingTiers = async () => {
+      try {
+        const res = await API.get(
+          API_ENDPOINTS.USER_PLAYGROUND_VIDEO_PRICING_TIERS,
+          {
+            params: {
+              model: modelName,
+              route_slug: routeSlug,
+            },
+          },
+        );
+        if (cancelled) return;
+        const { success, data } = res.data || {};
+        if (!success) return;
+        const tiers = Array.isArray(data) ? data : [];
+        videoPricingTierCacheRef.current.set(cacheKey, tiers);
+        applyVideoPricingTiers(tiers);
+      } catch {
+        // 操练场仍可使用默认分辨率，单独查询失败不打断模型加载。
+      }
+    };
+    loadVideoPricingTiers();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    userState?.user,
+    inputs.display_mode,
+    inputs.model,
+    inputs.selected_route_slug,
     handleInputChange,
   ]);
 

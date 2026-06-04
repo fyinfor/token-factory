@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -332,13 +333,50 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 	}
 }
 
-func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string) (logs []*Log, total int64, err error) {
-	var tx *gorm.DB
-	if logType == LogTypeUnknown {
-		tx = LOG_DB
-	} else {
-		tx = LOG_DB.Where("logs.type = ?", logType)
+// ParseLogTypesQuery 解析 type 查询参数，支持单个值或逗号分隔多值（如 "2" 或 "2,3,5"）。
+// 空、"0" 或仅含 0 时返回 nil，表示不按类型过滤。
+func ParseLogTypesQuery(typeQuery string) []int {
+	typeQuery = strings.TrimSpace(typeQuery)
+	if typeQuery == "" || typeQuery == "0" {
+		return nil
 	}
+	parts := strings.Split(typeQuery, ",")
+	types := make([]int, 0, len(parts))
+	seen := make(map[int]struct{}, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" || part == "0" {
+			continue
+		}
+		v, err := strconv.Atoi(part)
+		if err != nil || v <= 0 {
+			continue
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		types = append(types, v)
+	}
+	if len(types) == 0 {
+		return nil
+	}
+	return types
+}
+
+func applyLogTypesFilter(tx *gorm.DB, logTypes []int) *gorm.DB {
+	if len(logTypes) == 0 {
+		return tx
+	}
+	if len(logTypes) == 1 {
+		return tx.Where("logs.type = ?", logTypes[0])
+	}
+	return tx.Where("logs.type IN ?", logTypes)
+}
+
+func GetAllLogs(logTypes []int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string) (logs []*Log, total int64, err error) {
+	tx := LOG_DB
+	tx = applyLogTypesFilter(tx, logTypes)
 
 	if modelName != "" {
 		tx = tx.Where("logs.model_name like ?", modelName)
@@ -392,13 +430,9 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 
 const logSearchCountLimit = 10000
 
-func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string) (logs []*Log, total int64, err error) {
-	var tx *gorm.DB
-	if logType == LogTypeUnknown {
-		tx = LOG_DB.Where("logs.user_id = ?", userId)
-	} else {
-		tx = LOG_DB.Where("logs.user_id = ? and logs.type = ?", userId, logType)
-	}
+func GetUserLogs(userId int, logTypes []int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string) (logs []*Log, total int64, err error) {
+	tx := LOG_DB.Where("logs.user_id = ?", userId)
+	tx = applyLogTypesFilter(tx, logTypes)
 
 	if modelName != "" {
 		modelNamePattern, err := sanitizeLikePattern(modelName)
@@ -576,6 +610,88 @@ func SumUsedToken(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	}
 	tx.Where("type = ?", LogTypeConsume).Scan(&token)
 	return token
+}
+
+// LogTypeChargeable 返回该类型日志是否参与"对账余额"计算（影响 User.Quota）。
+// 仅 Consume/Topup/Refund 写入的 Quota 是真实发生额；Manage/System 的 Quota=0，
+// 它们的金额已直接落到 User.Quota 上但日志里没存差异值，因此不参与累加。
+func LogTypeChargeable(t int) bool {
+	return t == LogTypeConsume || t == LogTypeTopup || t == LogTypeRefund
+}
+
+// SignedLogDelta 返回一条日志在"对账余额"意义上的带符号变动额。
+// Consume 为负（扣费），Topup/Refund 为正（入账）。Manage/System 返回 0（不参与累加，
+// 因为它们的 quota 字段为 0 且实际金额已直接落到 User.Quota）。
+func SignedLogDelta(quota int, t int) int64 {
+	switch t {
+	case LogTypeConsume:
+		return -int64(quota)
+	case LogTypeTopup, LogTypeRefund:
+		return int64(quota)
+	default:
+		return 0
+	}
+}
+
+// GetChargeableDeltaByUser 在 [fromTs, toTs] 区间内对指定 user_id 累加 signed delta。
+// 供 controller 在导出对账单时反推"期初余额"使用：pre_quota = current - sum(区间内)。
+func GetChargeableDeltaByUser(userId int, fromTs int64, toTs int64) (int64, error) {
+	type row struct {
+		Sum int64 `gorm:"column:sum_delta"`
+	}
+	var r row
+	err := LOG_DB.Table("logs").
+		Select("COALESCE(SUM(CASE WHEN type = ? THEN -quota ELSE quota END), 0) AS sum_delta", LogTypeConsume).
+		Where("user_id = ?", userId).
+		Where("type IN ?", []int{LogTypeConsume, LogTypeTopup, LogTypeRefund}).
+		Where("created_at >= ?", fromTs).
+		Where("created_at <= ?", toTs).
+		Scan(&r).Error
+	if err != nil {
+		return 0, err
+	}
+	return r.Sum, nil
+}
+
+// GetUserLogsForExport 拉取对账单导出所需的日志行（升序），不含 Error 类型。
+// 内部使用 LOOP 形式而非 GORM Stream 保持实现简单；调用方负责后续流式写出。
+// 上限 logExportCountLimit 条；超过则 controller 返回 400。
+const logExportCountLimit = 100000
+
+func GetUserLogsForExport(userId int, fromTs int64, toTs int64, modelName string, tokenName string) ([]*Log, int64, error) {
+	tx := LOG_DB.Where("user_id = ?", userId).
+		Where("type <> ?", LogTypeError)
+
+	if modelName != "" {
+		pattern, err := sanitizeLikePattern(modelName)
+		if err != nil {
+			return nil, 0, err
+		}
+		tx = tx.Where("model_name LIKE ? ESCAPE '!'", pattern)
+	}
+	if tokenName != "" {
+		tx = tx.Where("token_name = ?", tokenName)
+	}
+	if fromTs > 0 {
+		tx = tx.Where("created_at >= ?", fromTs)
+	}
+	if toTs > 0 {
+		tx = tx.Where("created_at <= ?", toTs)
+	}
+
+	var total int64
+	if err := tx.Model(&Log{}).Limit(logExportCountLimit).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if total > logExportCountLimit {
+		return nil, total, fmt.Errorf("导出行数超过 %d 上限", logExportCountLimit)
+	}
+
+	var logs []*Log
+	if err := tx.Order("id ASC").Find(&logs).Error; err != nil {
+		return nil, 0, err
+	}
+	return logs, total, nil
 }
 
 func DeleteOldLog(ctx context.Context, targetTimestamp int64, limit int) (int64, error) {

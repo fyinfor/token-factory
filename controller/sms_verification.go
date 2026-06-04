@@ -26,10 +26,10 @@ func SendSMSVerification(c *gin.Context) {
 		return
 	}
 	phone := common.NormalizePhone(c.Query("phone"))
-	if !common.ValidateMainlandChinaPhone(phone) {
+	if !common.IsValidLoginPhone(phone) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": "手机号格式无效，请输入 11 位中国大陆手机号",
+			"message": "手机号格式无效，请输入 11 位中国大陆手机号或 +国码 国际号",
 		})
 		return
 	}
@@ -103,10 +103,10 @@ func SendSMSBindVerification(c *gin.Context) {
 		return
 	}
 	phone := common.NormalizePhone(c.Query("phone"))
-	if !common.ValidateMainlandChinaPhone(phone) {
+	if !common.IsValidLoginPhone(phone) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": "手机号格式无效，请输入 11 位中国大陆手机号",
+			"message": "手机号格式无效，请输入 11 位中国大陆手机号或 +国码 国际号",
 		})
 		return
 	}

@@ -19,6 +19,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/QuantumNous/new-api/constant"
 
@@ -165,6 +166,155 @@ func setupLogin(user *model.User, c *gin.Context) {
 	})
 }
 
+// SendSMSLoginVerification 发送登录短信验证码。
+func SendSMSLoginVerification(c *gin.Context) {
+	if !common.SMSLoginEnabled {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "短信登录未开启",
+		})
+		return
+	}
+	var req struct {
+		Phone string `json:"phone"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "参数错误",
+		})
+		return
+	}
+	phone := common.NormalizePhone(req.Phone)
+	region := common.ClassifyPhoneRegion(phone)
+	if region == "" {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "请输入有效的手机号",
+		})
+		return
+	}
+	if region == common.SMSRegionInternational && !common.SMSLoginInternationalEnabled {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "暂不支持国际手机号登录",
+		})
+		return
+	}
+	if common.IsSMSPhoneBlacklisted(phone) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "该手机号已被限制",
+		})
+		return
+	}
+	// 登录仅允许已存在且未注销的用户
+	if !model.IsPhoneAlreadyTaken(phone) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "该手机号未注册",
+		})
+		return
+	}
+	if err := common.CheckSMSLoginCanSend(phone); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+	code := common.GenerateSMSCode()
+	if err := service.SendAliyunSMSCodeWithRegion(phone, code, region); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "验证码发送失败：" + err.Error(),
+		})
+		return
+	}
+	if err := common.StoreSMSLoginCode(phone, code); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "验证码保存失败，请稍后重试",
+		})
+		return
+	}
+	if err := common.RecordSMSLoginSend(phone); err != nil {
+		// 记录冷却失败不影响发送成功
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+	})
+}
+
+// SMSLogin 通过手机号 + 短信验证码登录。
+func SMSLogin(c *gin.Context) {
+	if !common.SMSLoginEnabled {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "短信登录未开启",
+		})
+		return
+	}
+	var req struct {
+		Phone string `json:"phone"`
+		Code  string `json:"code"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "参数错误",
+		})
+		return
+	}
+	phone := common.NormalizePhone(req.Phone)
+	region := common.ClassifyPhoneRegion(phone)
+	if region == "" {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "请输入有效的手机号",
+		})
+		return
+	}
+	if region == common.SMSRegionInternational && !common.SMSLoginInternationalEnabled {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "暂不支持国际手机号登录",
+		})
+		return
+	}
+	if strings.TrimSpace(req.Code) == "" {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "请输入验证码",
+		})
+		return
+	}
+	if !common.VerifyAndConsumeSMSLoginCode(phone, req.Code) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "验证码无效或已过期",
+		})
+		return
+	}
+	var user model.User
+	if err := model.DB.Where("phone = ?", phone).First(&user).Error; err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "该手机号未注册",
+		})
+		return
+	}
+	if user.Status != common.UserStatusEnabled {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "账号已被禁用",
+		})
+		return
+	}
+	setupLogin(&user, c)
+}
+
 func Logout(c *gin.Context) {
 	session := sessions.Default(c)
 	session.Clear()
@@ -216,8 +366,8 @@ func Register(c *gin.Context) {
 			return
 		}
 		if req.Phone != "" {
-			if !common.ValidateMainlandChinaPhone(req.Phone) {
-				common.ApiError(c, fmt.Errorf("手机号格式无效，请输入 11 位中国大陆手机号"))
+			if !common.IsValidLoginPhone(req.Phone) {
+				common.ApiError(c, fmt.Errorf("手机号格式无效，请输入 11 位中国大陆手机号或 +国码 国际号"))
 				return
 			}
 			if common.IsSMSPhoneBlacklisted(req.Phone) {
@@ -412,7 +562,7 @@ func AdminCheckPhoneAvailable(c *gin.Context) {
 		common.ApiSuccess(c, gin.H{"available": true})
 		return
 	}
-	if !common.ValidateMainlandChinaPhone(normalized) {
+	if !common.IsValidLoginPhone(normalized) {
 		common.ApiSuccess(c, gin.H{"available": true})
 		return
 	}
@@ -438,7 +588,7 @@ func UserSelfCheckPhoneAvailable(c *gin.Context) {
 		common.ApiSuccess(c, gin.H{"available": true})
 		return
 	}
-	if !common.ValidateMainlandChinaPhone(normalized) {
+	if !common.IsValidLoginPhone(normalized) {
 		common.ApiSuccess(c, gin.H{"available": true})
 		return
 	}
@@ -776,6 +926,133 @@ func generateDefaultSidebarConfig(userRole int) string {
 	return string(configBytes)
 }
 
+type playgroundVideoPricingTier struct {
+	Resolution  string `json:"resolution"`
+	Lane        string `json:"lane,omitempty"`
+	BillingMode string `json:"billing_mode,omitempty"`
+}
+
+func appendPlaygroundVideoPricingTier(out *[]playgroundVideoPricingTier, seen map[string]struct{}, resolution, lane, billingMode string) {
+	resolution = strings.TrimSpace(resolution)
+	if resolution == "" {
+		return
+	}
+	key := strings.ToLower(resolution) + "|" + lane + "|" + billingMode
+	if _, ok := seen[key]; ok {
+		return
+	}
+	seen[key] = struct{}{}
+	*out = append(*out, playgroundVideoPricingTier{
+		Resolution:  resolution,
+		Lane:        lane,
+		BillingMode: billingMode,
+	})
+}
+
+func appendPlaygroundVideoAudioRuleTiers(out *[]playgroundVideoPricingTier, seen map[string]struct{}, rows []ratio_setting.VideoResolutionAudioPriceRule, lane, billingMode string) {
+	for i := range rows {
+		if rows[i].Price <= 0 {
+			continue
+		}
+		appendPlaygroundVideoPricingTier(out, seen, rows[i].Resolution, lane, billingMode)
+	}
+}
+
+func appendPlaygroundVideoPerVideoRuleTiers(out *[]playgroundVideoPricingTier, seen map[string]struct{}, rows []ratio_setting.VideoResolutionPerVideoRule, lane string) {
+	for i := range rows {
+		if rows[i].VideoPrice <= 0 {
+			continue
+		}
+		appendPlaygroundVideoPricingTier(out, seen, rows[i].Resolution, lane, "per_item")
+	}
+}
+
+func appendPlaygroundVideoPricingRuleTiers(out *[]playgroundVideoPricingTier, seen map[string]struct{}, rules ratio_setting.VideoPricingRules) {
+	appendPlaygroundVideoAudioRuleTiers(out, seen, rules.TextToVideoPerSecond, "text_to_video_per_second", "per_second")
+	appendPlaygroundVideoAudioRuleTiers(out, seen, rules.ImageToVideoPerSecond, "image_to_video_per_second", "per_second")
+	appendPlaygroundVideoAudioRuleTiers(out, seen, rules.VideoToVideoPerSecond, "video_to_video_per_second", "per_second")
+	appendPlaygroundVideoAudioRuleTiers(out, seen, rules.TextToVideoPerItem, "text_to_video", "per_item")
+	appendPlaygroundVideoAudioRuleTiers(out, seen, rules.ImageToVideoPerItem, "image_to_video", "per_item")
+	appendPlaygroundVideoAudioRuleTiers(out, seen, rules.VideoToVideoPerItem, "video_to_video", "per_item")
+	appendPlaygroundVideoPerVideoRuleTiers(out, seen, rules.TextToVideoPerVideo, "text_to_video_legacy")
+	appendPlaygroundVideoPerVideoRuleTiers(out, seen, rules.ImageToVideoPerVideo, "image_to_video_legacy")
+	appendPlaygroundVideoPerVideoRuleTiers(out, seen, rules.VideoToVideoInputPerVideo, "video_to_video_input_legacy")
+	appendPlaygroundVideoPerVideoRuleTiers(out, seen, rules.VideoToVideoOutputPerVideo, "video_to_video_output_legacy")
+}
+
+func collectPlaygroundVideoPricingTiers(modelName string, channelIDs map[int]struct{}) []playgroundVideoPricingTier {
+	seen := make(map[string]struct{})
+	out := make([]playgroundVideoPricingTier, 0)
+	if rules, ok := ratio_setting.GetVideoPricingRules(modelName); ok {
+		appendPlaygroundVideoPricingRuleTiers(&out, seen, rules)
+	}
+	for channelID := range channelIDs {
+		ch, err := model.CacheGetChannel(channelID)
+		if err != nil || ch == nil || ch.Status != common.ChannelStatusEnabled {
+			continue
+		}
+		if rules, ok := ratio_setting.GetChannelVideoPricingRules(channelID, modelName); ok {
+			appendPlaygroundVideoPricingRuleTiers(&out, seen, rules)
+		}
+		hint := model.BuildVideoFlatClipHint(
+			channelID,
+			modelName,
+			ch.ResolvedPriceDiscountPercent(),
+			ch.ResolvedMarkupDiscountRate(),
+		)
+		if hint == nil {
+			continue
+		}
+		for _, row := range hint.Tiers {
+			appendPlaygroundVideoPricingTier(&out, seen, row.Resolution, row.Lane, hint.BillingMode)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Resolution == out[j].Resolution {
+			if out[i].Lane == out[j].Lane {
+				return out[i].BillingMode < out[j].BillingMode
+			}
+			return out[i].Lane < out[j].Lane
+		}
+		return out[i].Resolution < out[j].Resolution
+	})
+	return out
+}
+
+func GetPlaygroundVideoPricingTiers(c *gin.Context) {
+	modelName := strings.TrimSpace(c.Query("model"))
+	if modelName == "" {
+		common.ApiErrorMsg(c, "model is required")
+		return
+	}
+	routeSlug := strings.TrimSpace(c.Query("route_slug"))
+	userID := c.GetInt("id")
+	user, err := model.GetUserCache(userID)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	groups := service.GetUserUsableGroups(user.Group)
+	channelIDs := make(map[int]struct{})
+	for group := range groups {
+		for _, channelID := range model.GetGroupEnabledChannelIDs(group, modelName) {
+			ch, chErr := model.CacheGetChannel(channelID)
+			if chErr != nil || ch == nil || ch.Status != common.ChannelStatusEnabled {
+				continue
+			}
+			if routeSlug != "" && strings.TrimSpace(ch.RouteSlug) != routeSlug {
+				continue
+			}
+			channelIDs[channelID] = struct{}{}
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    collectPlaygroundVideoPricingTiers(modelName, channelIDs),
+	})
+}
+
 func GetUserModels(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
 	if err != nil {
@@ -806,19 +1083,21 @@ func GetUserModels(c *gin.Context) {
 	// - tested_success 在返回项中恒为 true（因已按 pricing 同源条件过滤）。
 	if c.Query("scene") == "playground" {
 		type playgroundChannelOption struct {
-			ID           int    `json:"id"`
-			Name         string `json:"name"`
-			ChannelNo    string `json:"channel_no,omitempty"`
-			RouteSlug    string `json:"route_slug,omitempty"`
-			SupplierType string `json:"supplier_type,omitempty"`
+			ID                int                          `json:"id"`
+			Name              string                       `json:"name"`
+			ChannelNo         string                       `json:"channel_no,omitempty"`
+			RouteSlug         string                       `json:"route_slug,omitempty"`
+			SupplierType      string                       `json:"supplier_type,omitempty"`
+			VideoPricingTiers []playgroundVideoPricingTier `json:"video_pricing_tiers,omitempty"`
 		}
 		type playgroundModelItem struct {
-			ModelName      string                    `json:"model_name"`
-			VendorID       int                       `json:"vendor_id"`
-			Vendor         string                    `json:"vendor"`
-			Tags           string                    `json:"tags"`
-			TestedSuccess  bool                      `json:"tested_success"`
-			ChannelOptions []playgroundChannelOption `json:"channel_options,omitempty"`
+			ModelName         string                       `json:"model_name"`
+			VendorID          int                          `json:"vendor_id"`
+			Vendor            string                       `json:"vendor"`
+			Tags              string                       `json:"tags"`
+			TestedSuccess     bool                         `json:"tested_success"`
+			ChannelOptions    []playgroundChannelOption    `json:"channel_options,omitempty"`
+			VideoPricingTiers []playgroundVideoPricingTier `json:"video_pricing_tiers,omitempty"`
 		}
 		modelRows := make([]struct {
 			ModelName string `gorm:"column:model_name"`
@@ -963,7 +1242,7 @@ func GetUserModels(c *gin.Context) {
 				modelChannelIDSet[modelName] = make(map[int]struct{})
 			}
 			for group := range groups {
-				channelIDs := model.ListChannelIDsForGroupModel(group, modelName)
+				channelIDs := model.GetGroupEnabledChannelIDs(group, modelName)
 				for _, channelID := range channelIDs {
 					ch, chErr := model.CacheGetChannel(channelID)
 					if chErr != nil || ch == nil || ch.Status != common.ChannelStatusEnabled {
@@ -1005,6 +1284,7 @@ func GetUserModels(c *gin.Context) {
 				if !ok {
 					continue
 				}
+				meta.VideoPricingTiers = collectPlaygroundVideoPricingTiers(modelName, map[int]struct{}{channelID: {}})
 				channelOptions = append(channelOptions, meta)
 			}
 			sort.Slice(channelOptions, func(i, j int) bool {
@@ -1014,12 +1294,13 @@ func GetUserModels(c *gin.Context) {
 				return strings.Compare(channelOptions[i].Name, channelOptions[j].Name) < 0
 			})
 			items = append(items, playgroundModelItem{
-				ModelName:      modelName,
-				VendorID:       vendorID,
-				Vendor:         vendorName,
-				Tags:           modelTagsByName[modelName],
-				TestedSuccess:  true,
-				ChannelOptions: channelOptions,
+				ModelName:         modelName,
+				VendorID:          vendorID,
+				Vendor:            vendorName,
+				Tags:              modelTagsByName[modelName],
+				TestedSuccess:     true,
+				ChannelOptions:    channelOptions,
+				VideoPricingTiers: collectPlaygroundVideoPricingTiers(modelName, modelChannelIDSet[modelName]),
 			})
 		}
 
@@ -1404,6 +1685,11 @@ func CreateUser(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	user.Tags = model.JoinUserTags(model.GetUserTagsList(user.Tags))
+	if len([]rune(user.Tags)) > 255 {
+		common.ApiErrorMsg(c, "标签总长度不能超过 255 个字符")
+		return
+	}
 	// Even for admin users, we cannot fully trust them!
 	cleanUser := model.User{
 		Username:                   user.Username,
@@ -1414,6 +1700,7 @@ func CreateUser(c *gin.Context) {
 		CreatedBy:                  common.UserCreatedByAdmin,
 		Phone:                      normalizedPhone,
 		Email:                      normalizedEmail,
+		Tags:                       user.Tags,
 		Remark:                     user.Remark,
 		AdminInitialSetupCompleted: false,
 	}
@@ -1424,6 +1711,12 @@ func CreateUser(c *gin.Context) {
 		}
 		common.ApiError(c, err)
 		return
+	}
+	if cleanUser.Tags != "" {
+		tags := model.GetUserTagsList(cleanUser.Tags)
+		if len(tags) > 0 {
+			model.UpsertUserTags(tags)
+		}
 	}
 
 	c.JSON(http.StatusOK, gin.H{

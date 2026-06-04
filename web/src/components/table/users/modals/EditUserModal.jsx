@@ -58,6 +58,7 @@ import {
 import UserBindingManagementModal from './UserBindingManagementModal';
 import { buildAdminUserPhoneFieldRules } from './userPhoneFormRules';
 import { buildAdminUserEmailFieldRules } from './userEmailFormRules';
+import CountryPhoneInput from '../../../common/form/CountryPhoneInput';
 
 const { Text, Title } = Typography;
 
@@ -65,6 +66,7 @@ const EditUserModal = (props) => {
   const { t } = useTranslation();
   const userId = props.editingUser.id;
   const tagOptions = props.tagOptions || [];
+  const intlEnabled = Boolean(props.intlEnabled);
   const [loading, setLoading] = useState(true);
   const [addQuotaModalOpen, setIsModalOpen] = useState(false);
   const [addQuotaLocal, setAddQuotaLocal] = useState('');
@@ -73,6 +75,7 @@ const EditUserModal = (props) => {
   const [groupOptions, setGroupOptions] = useState([]);
   const [bindingModalVisible, setBindingModalVisible] = useState(false);
   const formApiRef = useRef(null);
+  const phoneValidateRef = useRef(null);
 
   const isEdit = Boolean(userId);
 
@@ -154,6 +157,16 @@ const EditUserModal = (props) => {
 
   /* ----------------------- submit ----------------------- */
   const submit = async (values) => {
+    // 手动跑 phone 字段完整校验
+    if (phoneValidateRef.current) {
+      const err = await phoneValidateRef.current.runFullValidate(
+        values.phone || '',
+      );
+      if (err) {
+        showError(err);
+        return;
+      }
+    }
     setLoading(true);
     let payload = { ...values };
     if (typeof payload.quota === 'string')
@@ -234,7 +247,7 @@ const EditUserModal = (props) => {
             getFormApi={(api) => (formApiRef.current = api)}
             onSubmit={submit}
           >
-            {({ values }) => (
+            {({ values, formApi }) => (
               <div className='p-2 space-y-3'>
                 {/* 基本信息 */}
                 <Card className='!rounded-2xl shadow-sm border-0'>
@@ -296,17 +309,28 @@ const EditUserModal = (props) => {
                       />
                     </Col>
 
-                    {/* 手机号：编辑时由 GET 回显；格式 + 异步占用校验（排除当前用户） */}
+                    {/* 手机号：编辑时由 GET 回显；格式 + 异步占用校验。完全脱离 Form.Slot/Form.Input 占位。 */}
                     <Col span={24}>
-                      <Form.Input
-                        field='phone'
-                        label={t('手机号')}
+                      <div
+                        style={{
+                          marginBottom: 4,
+                          fontSize: 14,
+                          color: 'var(--semi-color-text-1)',
+                        }}
+                      >
+                        {t('手机号')}
+                      </div>
+                      <CountryPhoneInput
+                        value={values.phone || ''}
+                        onChange={(v) => formApi.setValue('phone', v)}
+                        intlEnabled={intlEnabled}
                         placeholder={t('请输入手机号')}
-                        showClear
                         rules={buildAdminUserPhoneFieldRules(t, {
+                          intlEnabled,
                           excludeUserId: () =>
                             userId || formApiRef.current?.getValue('id'),
                         })}
+                        validateRef={phoneValidateRef}
                       />
                     </Col>
 

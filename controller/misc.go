@@ -62,6 +62,8 @@ func GetStatus(c *gin.Context) {
 		"start_time":                  common.StartTime,
 		"email_verification":          common.EmailVerificationEnabled,
 		"sms_verification_enabled":    common.SMSVerificationEnabled,
+		"sms_login_enabled":           common.SMSLoginEnabled,
+		"sms_login_international_enabled": common.SMSLoginInternationalEnabled,
 		"github_oauth":                common.GitHubOAuthEnabled,
 		"github_client_id":            common.GitHubClientId,
 		"discord_oauth":               system_setting.GetDiscordSettings().Enabled,
@@ -504,10 +506,10 @@ func SendPasswordResetSMS(c *gin.Context) {
 		return
 	}
 	phone := common.NormalizePhone(c.Query("phone"))
-	if !common.ValidateMainlandChinaPhone(phone) {
+	if !common.IsValidLoginPhone(phone) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": "手机号格式无效，请输入 11 位中国大陆手机号",
+			"message": "手机号格式无效，请输入 11 位中国大陆手机号或 +国码 国际号",
 		})
 		return
 	}
@@ -583,10 +585,10 @@ func ResetPasswordByPhone(c *gin.Context) {
 	req.NewPassword = strings.TrimSpace(req.NewPassword)
 	req.ConfirmPassword = strings.TrimSpace(req.ConfirmPassword)
 
-	if !common.ValidateMainlandChinaPhone(req.Phone) {
+	if !common.IsValidLoginPhone(req.Phone) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": "手机号格式无效，请输入 11 位中国大陆手机号",
+			"message": "手机号格式无效，请输入 11 位中国大陆手机号或 +国码 国际号",
 		})
 		return
 	}

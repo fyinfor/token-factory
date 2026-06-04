@@ -51,6 +51,10 @@ import {
   Form,
   Icon,
   Modal,
+  Tabs,
+  InputNumber,
+  Select,
+  Input,
 } from '@douyinfe/semi-ui';
 import Title from '@douyinfe/semi-ui/lib/es/typography/title';
 import Text from '@douyinfe/semi-ui/lib/es/typography/text';
@@ -61,6 +65,7 @@ import {
   IconMail,
   IconLock,
   IconKey,
+  IconPhone,
 } from '@douyinfe/semi-icons';
 import OIDCIcon from '../common/logo/OIDCIcon';
 import WeChatIcon from '../common/logo/WeChatIcon';
@@ -68,6 +73,11 @@ import LinuxDoIcon from '../common/logo/LinuxDoIcon';
 import TwoFAVerification from './TwoFAVerification';
 import { useTranslation } from 'react-i18next';
 import { SiDiscord } from 'react-icons/si';
+import {
+  COUNTRY_DIAL_CODES,
+  findCountryByCode,
+  toE164,
+} from '../../constants/countryDialCodes';
 
 const LoginForm = () => {
   let navigate = useNavigate();
@@ -82,6 +92,25 @@ const LoginForm = () => {
     password: '',
     wechat_verification_code: '',
   });
+  const [smsInputs, setSmsInputs] = useState({
+    countryCode: 'CN',
+    localNumber: '',
+    code: '',
+  });
+  const [smsCountdown, setSmsCountdown] = useState(0);
+  const [smsSending, setSmsSending] = useState(false);
+  const [smsLoginLoading, setSmsLoginLoading] = useState(false);
+  const [activeLoginTab, setActiveLoginTab] = useState('password');
+
+  // 拼装当前真实发送/校验的手机号：国内走 11 位，国际走 +{dial}{local}。
+  const buildE164Phone = (state) => {
+    const country = findCountryByCode(state.countryCode);
+    if (!country) return '';
+    if (country.code === 'CN') {
+      return String(state.localNumber || '').replace(/[^\d]/g, '');
+    }
+    return toE164(country, state.localNumber);
+  };
   const { username, password } = inputs;
   const [searchParams, setSearchParams] = useSearchParams();
   const postLoginRedirect = useMemo(
@@ -424,6 +453,83 @@ const LoginForm = () => {
     setEmailLoginLoading(false);
   };
 
+  // 短信验证码登录
+  const handleSMSLoginSendCode = async () => {
+    if ((hasUserAgreement || hasPrivacyPolicy) && !agreedToTerms) {
+      showInfo(t('请先阅读并同意用户协议和隐私政策'));
+      return;
+    }
+    const phone = buildE164Phone(smsInputs);
+    if (!phone) {
+      showError(t('请输入手机号'));
+      return;
+    }
+    setSmsSending(true);
+    try {
+      const res = await API.post('/api/user/login/sms/send', { phone });
+      const { success, message } = res.data || {};
+      if (success) {
+        showSuccess(t('验证码已发送，请注意查收'));
+        setSmsCountdown(60);
+        const timer = setInterval(() => {
+          setSmsCountdown((prev) => {
+            if (prev <= 1) {
+              clearInterval(timer);
+              return 0;
+            }
+            return prev - 1;
+          });
+        }, 1000);
+      } else {
+        showError(message || t('发送失败'));
+      }
+    } catch (err) {
+      showError(err?.response?.data?.message || t('发送失败，请稍后重试'));
+    } finally {
+      setSmsSending(false);
+    }
+  };
+
+  const handleSMSLoginSubmit = async () => {
+    if ((hasUserAgreement || hasPrivacyPolicy) && !agreedToTerms) {
+      showInfo(t('请先阅读并同意用户协议和隐私政策'));
+      return;
+    }
+    const phone = buildE164Phone(smsInputs);
+    const code = (smsInputs.code || '').trim();
+    if (!phone) {
+      showError(t('请输入手机号'));
+      return;
+    }
+    if (!code) {
+      showError(t('请输入验证码'));
+      return;
+    }
+    setSmsLoginLoading(true);
+    try {
+      const res = await API.post('/api/user/login/sms', { phone, code });
+      const { success, message, data } = res.data || {};
+      if (success) {
+        if (data && data.require_2fa) {
+          setShowTwoFA(true);
+          setSmsLoginLoading(false);
+          return;
+        }
+        userDispatch({ type: 'login', payload: data });
+        setUserData(data);
+        updateAPI();
+        showSuccess(t('登录成功！'));
+        navigateAfterLogin('/console', data);
+      } else {
+        showError(message || t('登录失败'));
+      }
+    } catch (err) {
+      showError(err?.response?.data?.message || t('登录失败，请重试'));
+    } finally {
+      setSmsLoginLoading(false);
+    }
+  };
+
   const handlePasskeyLogin = async () => {
     if ((hasUserAgreement || hasPrivacyPolicy) && !agreedToTerms) {
       showInfo(t('请先阅读并同意用户协议和隐私政策'));
@@ -730,6 +836,339 @@ const LoginForm = () => {
   };
 
   const renderEmailLoginForm = () => {
+    const smsLoginEnabled = Boolean(status.sms_login_enabled);
+    const smsLoginIntlEnabled = Boolean(status.sms_login_international_enabled);
+    const showSMSTab = smsLoginEnabled;
+    const showPasswordTab = status.password_login_enabled !== false;
+    const renderPasswordForm = () => (
+      <Form className='space-y-3'>
+        <Form.Input
+          field='username'
+          label={t('用户名或邮箱')}
+          placeholder={t('请输入您的用户名或邮箱地址')}
+          name='username'
+          onChange={(value) => handleChange('username', value)}
+          prefix={<IconMail />}
+        />
+
+        <Form.Input
+          field='password'
+          label={t('密码')}
+          placeholder={t('请输入您的密码')}
+          name='password'
+          mode='password'
+          onChange={(value) => handleChange('password', value)}
+          prefix={<IconLock />}
+        />
+
+        {(hasUserAgreement || hasPrivacyPolicy) && (
+          <div className='pt-4'>
+            <Checkbox
+              checked={agreedToTerms}
+              onChange={(e) => setAgreedToTerms(e.target.checked)}
+            >
+              <Text size='small' className='text-gray-600'>
+                {t('我已阅读并同意')}
+                {hasUserAgreement && (
+                  <>
+                    <a
+                      href='/user-agreement'
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      className='text-blue-600 hover:text-blue-800 mx-1'
+                    >
+                      {t('用户协议')}
+                    </a>
+                  </>
+                )}
+                {hasUserAgreement && hasPrivacyPolicy && t('和')}
+                {hasPrivacyPolicy && (
+                  <>
+                    <a
+                      href='/privacy-policy'
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      className='text-blue-600 hover:text-blue-800 mx-1'
+                    >
+                      {t('隐私政策')}
+                    </a>
+                  </>
+                )}
+              </Text>
+            </Checkbox>
+          </div>
+        )}
+
+        <div className='space-y-2 pt-2'>
+          <Button
+            theme='solid'
+            className='w-full !rounded-full'
+            type='primary'
+            htmlType='submit'
+            onClick={handleSubmit}
+            loading={loginLoading}
+            disabled={(hasUserAgreement || hasPrivacyPolicy) && !agreedToTerms}
+          >
+            {t('继续')}
+          </Button>
+
+          <Button
+            theme='borderless'
+            type='tertiary'
+            className='w-full !rounded-full'
+            onClick={handleResetPasswordClick}
+            loading={resetPasswordLoading}
+          >
+            {t('忘记密码？')}
+          </Button>
+        </div>
+      </Form>
+    );
+
+    const renderSMSForm = () => {
+      const renderCountryOption = (c) => (
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            minWidth: 0,
+          }}
+        >
+          <span
+            style={{
+              fontFamily:
+                '"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji","Twemoji Mozilla",sans-serif',
+              fontSize: 16,
+              lineHeight: 1,
+            }}
+          >
+            {c.flag}
+          </span>
+          <span style={{ flexShrink: 0, fontSize: 12 }}>+{c.dial}</span>
+        </span>
+      );
+      const renderSelectedCountry = (c) => (
+        <span
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            lineHeight: 1,
+          }}
+        >
+          <span
+            style={{
+              fontFamily:
+                '"Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji","Twemoji Mozilla",sans-serif',
+              fontSize: 16,
+              lineHeight: 1,
+            }}
+          >
+            {c.flag}
+          </span>
+          <span style={{ fontSize: 12 }}>+{c.dial}</span>
+        </span>
+      );
+      const fieldLabelStyle = {
+        marginBottom: 4,
+        color: 'var(--semi-color-text-1)',
+        fontSize: 14,
+      };
+      // 国内分支：可选项里只放 CN（其它地区走 SendMessageToGlobe，必须走国际通道）
+      const domesticCountryList = COUNTRY_DIAL_CODES.filter(
+        (c) => c.code === 'CN',
+      );
+      const showCountryPicker = smsLoginIntlEnabled;
+      return (
+        <div className='space-y-3'>
+          <Form className='space-y-3'>
+            <div>
+              <div style={fieldLabelStyle}>{t('手机号')}</div>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 8,
+                  alignItems: 'stretch',
+                  width: '100%',
+                }}
+              >
+                {showCountryPicker && (
+                  <div style={{ width: 100, flexShrink: 0 }}>
+                    <Select
+                      value={smsInputs.countryCode}
+                      onChange={(val) =>
+                        setSmsInputs((prev) => ({
+                          ...prev,
+                          countryCode: val,
+                        }))
+                      }
+                      filter
+                      searchPosition='dropdown'
+                      renderSelectedItem={(option) => {
+                        const c =
+                          findCountryByCode(option.value) ||
+                          COUNTRY_DIAL_CODES[0];
+                        return renderSelectedCountry(c);
+                      }}
+                      optionList={COUNTRY_DIAL_CODES.map((c) => ({
+                        value: c.code,
+                        label: renderCountryOption(c),
+                        text: `${c.name} +${c.dial} ${c.code}`,
+                      }))}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                )}
+                {!showCountryPicker && (
+                  <div style={{ width: 100, flexShrink: 0 }}>
+                    <Select
+                      value='CN'
+                      disabled
+                      renderSelectedItem={() => renderSelectedCountry(COUNTRY_DIAL_CODES[0])}
+                      optionList={domesticCountryList.map((c) => ({
+                        value: c.code,
+                        label: renderCountryOption(c),
+                        text: `${c.name} +${c.dial} ${c.code}`,
+                      }))}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Input
+                    placeholder={t('如 13800000000')}
+                    value={smsInputs.localNumber}
+                    onChange={(value) =>
+                      setSmsInputs((prev) => ({
+                        ...prev,
+                        localNumber: value,
+                      }))
+                    }
+                    prefix={<IconPhone />}
+                  />
+                </div>
+              </div>
+            </div>
+            <div>
+              <div style={fieldLabelStyle}>{t('验证码')}</div>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: 8,
+                  alignItems: 'stretch',
+                  width: '100%',
+                }}
+              >
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <Input
+                    placeholder={t('请输入短信验证码')}
+                    value={smsInputs.code}
+                    onChange={(value) =>
+                      setSmsInputs((prev) => ({ ...prev, code: value }))
+                    }
+                  />
+                </div>
+                <Button
+                  type='tertiary'
+                  onClick={handleSMSLoginSendCode}
+                  disabled={smsCountdown > 0 || smsSending}
+                  loading={smsSending}
+                  style={{ height: 32, flexShrink: 0 }}
+                >
+                  {smsCountdown > 0
+                    ? t('{{s}} 秒后重试', { s: smsCountdown })
+                    : t('发送验证码')}
+                </Button>
+              </div>
+            </div>
+            {(hasUserAgreement || hasPrivacyPolicy) && (
+              <div className='pt-2'>
+                <Checkbox
+                  checked={agreedToTerms}
+                  onChange={(e) => setAgreedToTerms(e.target.checked)}
+                >
+                  <Text size='small' className='text-gray-600'>
+                    {t('我已阅读并同意')}
+                    {hasUserAgreement && (
+                      <a
+                        href='/user-agreement'
+                        target='_blank'
+                        rel='noopener noreferrer'
+                        className='text-blue-600 hover:text-blue-800 mx-1'
+                      >
+                        {t('用户协议')}
+                      </a>
+                    )}
+                    {hasUserAgreement && hasPrivacyPolicy && t('和')}
+                    {hasPrivacyPolicy && (
+                      <a
+                        href='/privacy-policy'
+                        target='_blank'
+                        rel='noopener noreferrer'
+                        className='text-blue-600 hover:text-blue-800 mx-1'
+                      >
+                        {t('隐私政策')}
+                      </a>
+                    )}
+                  </Text>
+                </Checkbox>
+              </div>
+            )}
+            <Button
+              theme='solid'
+              type='primary'
+              className='w-full !rounded-full'
+              onClick={handleSMSLoginSubmit}
+              loading={smsLoginLoading}
+              disabled={
+                (hasUserAgreement || hasPrivacyPolicy) && !agreedToTerms
+              }
+            >
+              {t('登录')}
+            </Button>
+          </Form>
+        </div>
+      );
+    };
+
+    const renderLoginTabs = () => {
+      if (!showSMSTab) {
+        return renderPasswordForm();
+      }
+      if (!showPasswordTab) {
+        return renderSMSForm();
+      }
+      return (
+        <Tabs
+          activeKey={activeLoginTab}
+          onChange={(key) => setActiveLoginTab(key)}
+          type='line'
+        >
+          <Tabs.TabPane
+            tab={
+              <span className='flex items-center gap-1'>
+                <IconLock /> {t('密码登录')}
+              </span>
+            }
+            itemKey='password'
+          >
+            {renderPasswordForm()}
+          </Tabs.TabPane>
+          <Tabs.TabPane
+            tab={
+              <span className='flex items-center gap-1'>
+                <IconPhone /> {t('手机验证码登录')}
+              </span>
+            }
+            itemKey='sms'
+          >
+            {renderSMSForm()}
+          </Tabs.TabPane>
+        </Tabs>
+      );
+    };
+
     return (
       <div className='flex flex-col items-center'>
         <div className='w-full max-w-md'>
@@ -757,90 +1196,7 @@ const LoginForm = () => {
                   <span className='ml-3'>{t('使用 Passkey 登录')}</span>
                 </Button>
               )}
-              <Form className='space-y-3'>
-                <Form.Input
-                  field='username'
-                  label={t('用户名或邮箱')}
-                  placeholder={t('请输入您的用户名或邮箱地址')}
-                  name='username'
-                  onChange={(value) => handleChange('username', value)}
-                  prefix={<IconMail />}
-                />
-
-                <Form.Input
-                  field='password'
-                  label={t('密码')}
-                  placeholder={t('请输入您的密码')}
-                  name='password'
-                  mode='password'
-                  onChange={(value) => handleChange('password', value)}
-                  prefix={<IconLock />}
-                />
-
-                {(hasUserAgreement || hasPrivacyPolicy) && (
-                  <div className='pt-4'>
-                    <Checkbox
-                      checked={agreedToTerms}
-                      onChange={(e) => setAgreedToTerms(e.target.checked)}
-                    >
-                      <Text size='small' className='text-gray-600'>
-                        {t('我已阅读并同意')}
-                        {hasUserAgreement && (
-                          <>
-                            <a
-                              href='/user-agreement'
-                              target='_blank'
-                              rel='noopener noreferrer'
-                              className='text-blue-600 hover:text-blue-800 mx-1'
-                            >
-                              {t('用户协议')}
-                            </a>
-                          </>
-                        )}
-                        {hasUserAgreement && hasPrivacyPolicy && t('和')}
-                        {hasPrivacyPolicy && (
-                          <>
-                            <a
-                              href='/privacy-policy'
-                              target='_blank'
-                              rel='noopener noreferrer'
-                              className='text-blue-600 hover:text-blue-800 mx-1'
-                            >
-                              {t('隐私政策')}
-                            </a>
-                          </>
-                        )}
-                      </Text>
-                    </Checkbox>
-                  </div>
-                )}
-
-                <div className='space-y-2 pt-2'>
-                  <Button
-                    theme='solid'
-                    className='w-full !rounded-full'
-                    type='primary'
-                    htmlType='submit'
-                    onClick={handleSubmit}
-                    loading={loginLoading}
-                    disabled={
-                      (hasUserAgreement || hasPrivacyPolicy) && !agreedToTerms
-                    }
-                  >
-                    {t('继续')}
-                  </Button>
-
-                  <Button
-                    theme='borderless'
-                    type='tertiary'
-                    className='w-full !rounded-full'
-                    onClick={handleResetPasswordClick}
-                    loading={resetPasswordLoading}
-                  >
-                    {t('忘记密码？')}
-                  </Button>
-                </div>
-              </Form>
+              {renderLoginTabs()}
 
               {hasOAuthLoginOptions && (
                 <>

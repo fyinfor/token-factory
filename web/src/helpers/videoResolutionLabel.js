@@ -98,3 +98,96 @@ export function formatVideoResolutionDisplayLabel(raw) {
   if (short >= 240) return '240p';
   return `${short}p`;
 }
+
+const VIDEO_RESOLUTION_DIMENSIONS = {
+  '480p': { width: 854, height: 480 },
+  '540p': { width: 960, height: 540 },
+  '720p': { width: 1280, height: 720 },
+  '1080p': { width: 1920, height: 1080 },
+  '2K': { width: 2560, height: 1440 },
+  '4K': { width: 3840, height: 2160 },
+  '8K': { width: 7680, height: 4320 },
+};
+
+function parseResolutionDimensions(raw) {
+  if (raw == null) return null;
+  const compact = String(raw).trim().replace(/\s+/g, '');
+  if (!compact) return null;
+  const wxh = compact.toLowerCase().match(/^(\d+)\s*[x×]\s*(\d+)$/i);
+  if (wxh) {
+    const width = parseInt(wxh[1], 10);
+    const height = parseInt(wxh[2], 10);
+    if (
+      Number.isFinite(width) &&
+      Number.isFinite(height) &&
+      width > 0 &&
+      height > 0
+    ) {
+      return { width, height };
+    }
+  }
+  const label = formatVideoResolutionDisplayLabel(compact);
+  if (VIDEO_RESOLUTION_DIMENSIONS[label]) {
+    return VIDEO_RESOLUTION_DIMENSIONS[label];
+  }
+  const p = compact.match(/^(\d+)p$/i);
+  if (p) {
+    const short = parseInt(p[1], 10);
+    if (Number.isFinite(short) && short > 0) {
+      return {
+        width: Math.max(2, Math.round((short * 16) / 9 / 2) * 2),
+        height: short,
+      };
+    }
+  }
+  return null;
+}
+
+export function getPlaygroundVideoSizeForTier(
+  resolution,
+  orientation = 'landscape',
+) {
+  const dims =
+    parseResolutionDimensions(resolution) ||
+    VIDEO_RESOLUTION_DIMENSIONS['720p'];
+  const short = Math.min(dims.width, dims.height);
+  const long = Math.max(dims.width, dims.height);
+  if (orientation === 'portrait') {
+    return { width: short, height: long, size: `${short}x${long}` };
+  }
+  return { width: long, height: short, size: `${long}x${short}` };
+}
+
+export function buildPlaygroundVideoResolutionOptions(tiers) {
+  const rawResolutions = (Array.isArray(tiers) ? tiers : [])
+    .map((tier) => (typeof tier === 'string' ? tier : tier?.resolution))
+    .map((resolution) => String(resolution || '').trim())
+    .filter(Boolean);
+
+  const seen = new Set();
+  const options = [];
+  for (const resolution of rawResolutions) {
+    const label = formatVideoResolutionDisplayLabel(resolution) || resolution;
+    const value = label;
+    const sortDims = parseResolutionDimsForSort(resolution);
+    if (!sortDims || seen.has(value)) continue;
+    seen.add(value);
+    options.push({
+      label,
+      value,
+      rawResolution: resolution,
+    });
+  }
+
+  if (options.length === 0) {
+    return [
+      { label: '540p', value: '540p', rawResolution: '540p' },
+      { label: '720p', value: '720p', rawResolution: '720p' },
+      { label: '1080p', value: '1080p', rawResolution: '1080p' },
+    ];
+  }
+
+  return options.sort((a, b) =>
+    compareVideoResolutionAsc(a.rawResolution, b.rawResolution),
+  );
+}

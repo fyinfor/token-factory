@@ -1080,14 +1080,14 @@ func IsPhoneTakenByOtherUser(phone string, excludeUserId int) bool {
 	return DB.Where("phone = ? AND id <> ?", phone, excludeUserId).Find(&User{}).RowsAffected > 0
 }
 
-// NormalizeAndValidateAdminUserPhone 管理员创建/编辑用户时的手机号：规范化；空字符串表示不绑定；非空则校验格式、黑名单与占用（excludeUserId=0 表示新建用户）。
+// NormalizeAndValidateAdminUserPhone 管理员创建/编辑用户时的手机号：规范化；空字符串表示不绑定；非空则校验格式（国内 11 位 或 国际 E.164）、黑名单与占用（excludeUserId=0 表示新建用户）。
 func NormalizeAndValidateAdminUserPhone(phone string, excludeUserId int) (string, error) {
 	n := common.NormalizePhone(phone)
 	if n == "" {
 		return "", nil
 	}
-	if !common.ValidateMainlandChinaPhone(n) {
-		return "", fmt.Errorf("手机号格式无效，请输入 11 位中国大陆手机号")
+	if !common.ValidateMainlandChinaPhone(n) && !common.IsInternationalPhone(n) {
+		return "", fmt.Errorf("手机号格式无效，请输入 11 位中国大陆手机号或 E.164 国际号（+国码+号码）")
 	}
 	if common.IsSMSPhoneBlacklisted(n) {
 		return "", fmt.Errorf("该手机号已被加入短信黑名单")

@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Empty, Select } from '@douyinfe/semi-ui';
+import { Empty, Select, Tag } from '@douyinfe/semi-ui';
 import { API, showError } from '../../../../helpers';
 import { useTranslation } from 'react-i18next';
 import ModelPricingEditor from './ModelPricingEditor';
@@ -30,6 +30,11 @@ const parseJSON = (text) => {
   } catch {
     return {};
   }
+};
+
+const getChannelSortId = (channel) => {
+  const id = Number(channel?.channel_id);
+  return Number.isFinite(id) ? id : 0;
 };
 
 export default function SupplierModelPricingEditor({
@@ -50,16 +55,124 @@ export default function SupplierModelPricingEditor({
   const channels = useMemo(() => {
     const raw = options.__pricingChannels || [];
     if (!Array.isArray(raw)) return [];
-    return raw
+    return [...raw]
       .filter((s) => s?.channel_id)
+      .sort((a, b) => getChannelSortId(b) - getChannelSortId(a))
       .map((s) => {
         const name = s.channel_name || `#${s.channel_id}`;
         return {
           label: name,
           value: String(s.channel_id),
+          channelName: name,
+          channelNo: String(s.channel_no || '').trim(),
+          channelTag: String(s.tag || '').trim(),
+          routeSlug: String(s.route_slug || '').trim(),
+          status: Number(s.status || 0),
         };
       });
   }, [options.__pricingChannels]);
+
+  const channelOptionMap = useMemo(() => {
+    return channels.reduce((acc, channel) => {
+      acc[channel.value] = channel;
+      return acc;
+    }, {});
+  }, [channels]);
+
+  const renderChannelStatusTag = (status) => {
+    const enabled = Number(status) === 1;
+    return (
+      <Tag color={enabled ? 'green' : 'red'} size='small' shape='circle'>
+        {enabled ? t('启用') : t('禁用')}
+      </Tag>
+    );
+  };
+
+  const renderChannelOption = (channel) => {
+    if (!channel || channel.value === 'all') {
+      return channel?.label || '';
+    }
+    const routeSlug = channel.routeSlug || t('未设置');
+    return (
+      <div
+        className='flex min-w-0 items-center justify-between gap-3'
+        style={{ width: '100%', minWidth: 0 }}
+      >
+        <span
+          className='supplier-channel-pricing-option-name min-w-0 flex-1 truncate'
+          title={channel.channelName}
+          style={{ minWidth: 0 }}
+        >
+          {channel.channelName}
+        </span>
+        <span className='flex shrink-0 items-center gap-1.5'>
+          <Tag color={channel.routeSlug ? 'blue' : 'grey'} size='small'>
+            {channel.routeSlug ? `/${routeSlug}` : routeSlug}
+          </Tag>
+          {channel.channelTag && (
+            <Tag color='cyan' size='small'>
+              {channel.channelTag}
+            </Tag>
+          )}
+          {renderChannelStatusTag(channel.status)}
+        </span>
+      </div>
+    );
+  };
+
+  const renderChannelOptionItem = (optionProps) => {
+    const { value, className, style, onMouseEnter, onClick } = optionProps;
+    const channel =
+      String(value || '') === 'all'
+        ? { label: t('请选择渠道'), value: 'all' }
+        : optionProps;
+    return (
+      <div
+        className={`${className || ''} supplier-channel-pricing-option`}
+        style={{ ...style, padding: 0 }}
+        onMouseEnter={onMouseEnter}
+        onClick={onClick}
+        role='option'
+        aria-selected={optionProps.selected ? 'true' : 'false'}
+      >
+        <div
+          className='supplier-channel-pricing-option-content flex items-center'
+          style={{
+            minHeight: 36,
+            padding: '8px 12px',
+            boxSizing: 'border-box',
+            width: '100%',
+          }}
+        >
+          {renderChannelOption(channel)}
+        </div>
+      </div>
+    );
+  };
+
+  const filterChannelOption = (inputValue, option) => {
+    const keyword = String(inputValue || '')
+      .trim()
+      .toLowerCase();
+    if (!keyword) return true;
+    const value = String(option?.value || '');
+    if (value === 'all') {
+      return t('请选择渠道').toLowerCase().includes(keyword);
+    }
+    const channel = channelOptionMap[value];
+    if (!channel) return false;
+    return [
+      channel.channelName,
+      channel.channelNo,
+      channel.channelTag,
+      channel.routeSlug,
+      channel.value,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+      .includes(keyword);
+  };
 
   const channelModelPrice = useMemo(
     () => parseJSON(options.ChannelModelPrice),
@@ -642,13 +755,23 @@ export default function SupplierModelPricingEditor({
               {t('当前渠道')}
             </div>
             <Select
-              style={{ width: '100%', maxWidth: 420 }}
+              style={{ width: '100%', maxWidth: 380 }}
               value={channelId}
               onChange={setChannelId}
+              filter={filterChannelOption}
+              searchPosition='dropdown'
+              dropdownClassName='supplier-channel-pricing-select-dropdown'
+              dropdownStyle={{ minWidth: 380, maxWidth: 420, maxHeight: 360 }}
               optionList={[
                 { label: t('请选择渠道'), value: 'all' },
                 ...channels,
               ]}
+              renderOptionItem={renderChannelOptionItem}
+              renderSelectedItem={(optionNode) => {
+                const selected = channelOptionMap[optionNode?.value];
+                if (!selected) return optionNode?.label || '';
+                return renderChannelOption(selected);
+              }}
             />
             <div className='mt-1 text-xs text-gray-500'>
               {t('选择渠道后编辑的定价仅作用于该渠道')}

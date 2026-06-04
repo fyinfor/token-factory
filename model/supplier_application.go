@@ -99,17 +99,18 @@ type SupplierApplicationAudit struct {
 
 // UserMessage 通用站内消息表（支持按用户与按角色广播）。
 type UserMessage struct {
-	ID              int    `json:"id" gorm:"primaryKey;comment:主键ID"`
-	ReceiverUserID  int    `json:"receiver_user_id" gorm:"type:int;index;default:0;comment:接收用户ID 0表示广播"`
-	ReceiverMinRole int    `json:"receiver_min_role" gorm:"type:int;index;default:0;comment:广播最小角色门槛"`
-	Type            string `json:"type" gorm:"type:varchar(64);index;comment:消息类型"`
-	Title           string `json:"title" gorm:"type:varchar(255);not null;comment:消息标题"`
-	Content         string `json:"content" gorm:"type:text;not null;comment:消息内容"`
-	BizType         string `json:"biz_type" gorm:"type:varchar(64);index;comment:业务类型"`
-	BizID           int    `json:"biz_id" gorm:"type:int;index;default:0;comment:业务ID"`
-	IsRead          bool   `json:"is_read" gorm:"type:boolean;index;default:false;comment:是否已读"`
-	ReadAt          int64  `json:"read_at" gorm:"type:bigint;default:0;comment:已读时间戳"`
-	CreatedAt       int64  `json:"created_at" gorm:"type:bigint;index;comment:创建时间戳"`
+	ID                int    `json:"id" gorm:"primaryKey;comment:主键ID"`
+	ReceiverUserID    int    `json:"receiver_user_id" gorm:"type:int;index;default:0;comment:接收用户ID 0表示广播"`
+	ReceiverMinRole   int    `json:"receiver_min_role" gorm:"type:int;index;default:0;comment:广播最小角色门槛"`
+	Type              string `json:"type" gorm:"type:varchar(64);index;comment:消息类型"`
+	Title             string `json:"title" gorm:"type:varchar(255);not null;comment:消息标题"`
+	Content           string `json:"content" gorm:"type:text;not null;comment:消息内容"`
+	BizType           string `json:"biz_type" gorm:"type:varchar(64);index;comment:业务类型"`
+	BizID             int    `json:"biz_id" gorm:"type:int;index;default:0;comment:业务ID"`
+	IsRead            bool   `json:"is_read" gorm:"type:boolean;index;default:false;comment:是否已读"`
+	ReadAt            int64  `json:"read_at" gorm:"type:bigint;default:0;comment:已读时间戳"`
+	CreatedAt         int64  `json:"created_at" gorm:"type:bigint;index;comment:创建时间戳"`
+	BindRequestStatus int    `json:"bind_request_status,omitempty" gorm:"-"`
 }
 
 // UserMessageRead 站内广播消息的用户已读记录。
@@ -788,6 +789,27 @@ func ListUserMessagesForUser(userID int, role int, pageInfo *common.PageInfo, ti
 		for _, item := range items {
 			if item.ReceiverUserID == 0 {
 				item.IsRead = readMap[item.ID]
+			}
+		}
+	}
+	bindRequestIDs := make([]int, 0)
+	for _, item := range items {
+		if item.BizType == UserMessageBizTypeDistributorBindRequest && item.BizID > 0 {
+			bindRequestIDs = append(bindRequestIDs, item.BizID)
+		}
+	}
+	if len(bindRequestIDs) > 0 {
+		var requests []DistributorBindRequest
+		if err := DB.Model(&DistributorBindRequest{}).Select("id", "status").Where("id IN ?", bindRequestIDs).Find(&requests).Error; err != nil {
+			return nil, 0, err
+		}
+		statusMap := make(map[int]int, len(requests))
+		for _, req := range requests {
+			statusMap[req.ID] = req.Status
+		}
+		for _, item := range items {
+			if item.BizType == UserMessageBizTypeDistributorBindRequest && item.BizID > 0 {
+				item.BindRequestStatus = statusMap[item.BizID]
 			}
 		}
 	}

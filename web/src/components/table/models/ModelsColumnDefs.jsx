@@ -166,11 +166,19 @@ const renderBoundChannels = (channels) => {
   if (!channels || channels.length === 0) return '-';
   return renderLimitedItems({
     items: channels,
-    renderItem: (c, idx) => (
-      <Tag key={idx} color='white' size='small' shape='circle'>
-        {c.name}({c.type})
-      </Tag>
-    ),
+    renderItem: (c, idx) => {
+      const routeSlug = String(c?.route_slug || '').trim();
+      const label = routeSlug
+        ? `${c.name}(${c.type}) / ${routeSlug}`
+        : `${c.name}(${c.type})`;
+      return (
+        <Tooltip key={idx} content={label} showArrow>
+          <Tag color='white' size='small' shape='circle'>
+            {label}
+          </Tag>
+        </Tooltip>
+      );
+    },
   });
 };
 

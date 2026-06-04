@@ -223,7 +223,7 @@ func SummarizeSupplierChannelLogs(startTimestamp, endTimestamp int64, channelIDs
 // GetSupplierChannelLogs 分页查询供应商自有渠道上的消费日志（不限 user_id，与数据看板统计范围一致）。
 func GetSupplierChannelLogs(
 	channelIDs []int,
-	logType int,
+	logTypes []int,
 	startTimestamp, endTimestamp int64,
 	modelName, tokenName, group, requestID string,
 	channelFilter int,
@@ -247,9 +247,7 @@ func GetSupplierChannelLogs(
 
 	tx := LOG_DB.Table("logs")
 	tx = applySupplierChannelScope(tx, startTimestamp, endTimestamp, channelIDs)
-	if logType != LogTypeUnknown {
-		tx = tx.Where("logs.type = ?", logType)
-	}
+	tx = applyLogTypesFilter(tx, logTypes)
 	if modelName != "" {
 		modelNamePattern, patErr := sanitizeLikePattern(modelName)
 		if patErr != nil {

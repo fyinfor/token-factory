@@ -27,7 +27,7 @@ var supplierEditableModelOptionKeys = map[string]struct{}{
 
 // supplierDashboardScope 供应商看板范围：统计这些渠道上的全部模型消费（不按模型名录截断）。
 type supplierDashboardScope struct {
-	ChannelIDs         []int
+	ChannelIDs           []int
 	ConfiguredModelNames map[string]struct{}
 }
 
@@ -118,7 +118,7 @@ func collectSupplierDashboardScope(userID int) (supplierDashboardScope, error) {
 		}
 	}
 
-	models, _, err := model.SearchSupplierModels(&userID, "", "", 0, 100000)
+	models, _, err := model.SearchSupplierModels(&userID, "", "", "", 0, 100000)
 	if err != nil {
 		return scope, err
 	}
@@ -137,7 +137,7 @@ func collectAllSupplierDashboardScope() (supplierDashboardScope, error) {
 	}
 	mergeChannelModelsIntoScope(&scope, channels)
 
-	models, _, err := model.SearchSupplierModels(nil, "", "", 0, 100000)
+	models, _, err := model.SearchSupplierModels(nil, "", "", "", 0, 100000)
 	if err != nil {
 		return scope, err
 	}

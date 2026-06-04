@@ -29,7 +29,7 @@ const LogsFilters = ({
   refresh,
   setShowColumnSelector,
   formApi,
-  setLogType,
+  setLogTypes,
   loading,
   isAdminUser,
   supplierChannelLogsView,
@@ -141,9 +141,11 @@ const LogsFilters = ({
             <Form.Select
               field='logType'
               placeholder={t('日志类型')}
-              className='w-full sm:w-auto min-w-[120px]'
+              className='w-full sm:w-auto min-w-[160px]'
               showClear
               pure
+              multiple
+              maxTagCount={2}
               onChange={() => {
                 // 延迟执行搜索，让表单值先更新
                 setTimeout(() => {
@@ -152,7 +154,6 @@ const LogsFilters = ({
               }}
               size='small'
             >
-              <Form.Select.Option value='0'>{t('全部')}</Form.Select.Option>
               <Form.Select.Option value='1'>{t('充值')}</Form.Select.Option>
               <Form.Select.Option value='2'>{t('消费')}</Form.Select.Option>
               <Form.Select.Option value='3'>{t('管理')}</Form.Select.Option>
@@ -176,7 +177,7 @@ const LogsFilters = ({
               onClick={() => {
                 if (formApi) {
                   formApi.reset();
-                  setLogType(0);
+                  setLogTypes([]);
                   setTimeout(() => {
                     refresh();
                   }, 100);

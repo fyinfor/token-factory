@@ -2,6 +2,7 @@ package model
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 
@@ -16,8 +17,9 @@ const (
 )
 
 type BoundChannel struct {
-	Name string `json:"name"`
-	Type int    `json:"type"`
+	Name      string `json:"name"`
+	Type      int    `json:"type"`
+	RouteSlug string `json:"route_slug,omitempty"`
 }
 
 type Model struct {
@@ -134,7 +136,7 @@ func ListModelsByOwnerUser(ownerUserID int, offset int, limit int) ([]*Model, in
 }
 
 // SearchSupplierModels 搜索供应商模型（供应商查自己，管理员查全部供应商）。
-func SearchSupplierModels(ownerUserID *int, keyword string, vendor string, offset int, limit int) ([]*Model, int64, error) {
+func SearchSupplierModels(ownerUserID *int, keyword string, vendor string, routeSlug string, offset int, limit int) ([]*Model, int64, error) {
 	var (
 		models []*Model
 		total  int64
@@ -156,6 +158,7 @@ func SearchSupplierModels(ownerUserID *int, keyword string, vendor string, offse
 			db = db.Joins("JOIN vendors ON vendors.id = models.vendor_id").Where("vendors.name LIKE ?", "%"+vendor+"%")
 		}
 	}
+	db = applyModelRouteSlugFilter(db, routeSlug, ownerUserID)
 	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
@@ -171,13 +174,14 @@ func GetBoundChannelsByModelsMap(modelNames []string) (map[string][]BoundChannel
 		return result, nil
 	}
 	type row struct {
-		Model string
-		Name  string
-		Type  int
+		Model     string
+		Name      string
+		Type      int
+		RouteSlug string
 	}
 	var rows []row
 	err := DB.Table("channels").
-		Select("abilities.model as model, channels.name as name, channels.type as type").
+		Select("abilities.model as model, channels.name as name, channels.type as type, channels.route_slug as route_slug").
 		Joins("JOIN abilities ON abilities.channel_id = channels.id").
 		Where("abilities.model IN ? AND abilities.enabled = ?", modelNames, true).
 		Distinct().
@@ -186,12 +190,12 @@ func GetBoundChannelsByModelsMap(modelNames []string) (map[string][]BoundChannel
 		return nil, err
 	}
 	for _, r := range rows {
-		result[r.Model] = append(result[r.Model], BoundChannel{Name: r.Name, Type: r.Type})
+		result[r.Model] = append(result[r.Model], BoundChannel{Name: r.Name, Type: r.Type, RouteSlug: r.RouteSlug})
 	}
 	return result, nil
 }
 
-func SearchModels(keyword string, vendor string, offset int, limit int) ([]*Model, int64, error) {
+func SearchModels(keyword string, vendor string, routeSlug string, offset int, limit int) ([]*Model, int64, error) {
 	var models []*Model
 	db := DB.Model(&Model{})
 	if keyword != "" {
@@ -205,6 +209,7 @@ func SearchModels(keyword string, vendor string, offset int, limit int) ([]*Mode
 			db = db.Joins("JOIN vendors ON vendors.id = models.vendor_id").Where("vendors.name LIKE ?", "%"+vendor+"%")
 		}
 	}
+	db = applyModelRouteSlugFilter(db, routeSlug, nil)
 	var total int64
 	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -213,6 +218,43 @@ func SearchModels(keyword string, vendor string, offset int, limit int) ([]*Mode
 		return nil, 0, err
 	}
 	return models, total, nil
+}
+
+func applyModelRouteSlugFilter(db *gorm.DB, routeSlug string, ownerUserID *int) *gorm.DB {
+	routeSlug = strings.TrimSpace(routeSlug)
+	if routeSlug == "" {
+		return db
+	}
+
+	prefixLike := "abilities.model LIKE (models.model_name || '%')"
+	containsLike := "abilities.model LIKE ('%' || models.model_name || '%')"
+	suffixLike := "abilities.model LIKE ('%' || models.model_name)"
+	if common.UsingMySQL {
+		prefixLike = "abilities.model LIKE CONCAT(models.model_name, '%')"
+		containsLike = "abilities.model LIKE CONCAT('%', models.model_name, '%')"
+		suffixLike = "abilities.model LIKE CONCAT('%', models.model_name)"
+	}
+
+	where := `EXISTS (
+		SELECT 1
+		FROM abilities
+		JOIN channels ON channels.id = abilities.channel_id
+		WHERE abilities.enabled = ?
+		  AND channels.route_slug LIKE ?`
+	args := []interface{}{true, "%" + routeSlug + "%"}
+	if ownerUserID != nil {
+		where += " AND channels.owner_user_id = ?"
+		args = append(args, *ownerUserID)
+	}
+	where += ` AND (
+			(models.name_rule = ? AND abilities.model = models.model_name)
+			OR (models.name_rule = ? AND ` + prefixLike + `)
+			OR (models.name_rule = ? AND ` + containsLike + `)
+			OR (models.name_rule = ? AND ` + suffixLike + `)
+		  )
+	)`
+	args = append(args, NameRuleExact, NameRulePrefix, NameRuleContains, NameRuleSuffix)
+	return db.Where(where, args...)
 }
 
 // GetExistingModelNames 从给定名称列表中返回已在 model_meta 表中存在记录的模型名。

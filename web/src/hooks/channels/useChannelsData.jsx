@@ -182,6 +182,7 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
     searchGroup: '',
     searchModel: '',
     searchSupplier: '',
+    searchRouteSlug: '',
   };
 
   // Column keys
@@ -376,6 +377,7 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
       searchGroup: formValues.searchGroup || '',
       searchModel: formValues.searchModel || '',
       searchSupplier: formValues.searchSupplier || '',
+      searchRouteSlug: formValues.searchRouteSlug || '',
     };
   };
 
@@ -390,13 +392,19 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
   ) => {
     if (statusF === undefined) statusF = statusFilter;
 
-    const { searchKeyword, searchGroup, searchModel, searchSupplier } =
-      getFormValues();
+    const {
+      searchKeyword,
+      searchGroup,
+      searchModel,
+      searchSupplier,
+      searchRouteSlug,
+    } = getFormValues();
     if (
       searchKeyword !== '' ||
       searchGroup !== '' ||
       searchModel !== '' ||
-      searchSupplier !== ''
+      searchSupplier !== '' ||
+      searchRouteSlug !== ''
     ) {
       setLoading(true);
       await searchChannels(
@@ -450,15 +458,21 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
     pageSz = pageSize,
     sortFlag = idSort,
   ) => {
-    const { searchKeyword, searchGroup, searchModel, searchSupplier } =
-      getFormValues();
+    const {
+      searchKeyword,
+      searchGroup,
+      searchModel,
+      searchSupplier,
+      searchRouteSlug,
+    } = getFormValues();
     setSearching(true);
     try {
       if (
         searchKeyword === '' &&
         searchGroup === '' &&
         searchModel === '' &&
-        searchSupplier === ''
+        searchSupplier === '' &&
+        searchRouteSlug === ''
       ) {
         await loadChannels(
           page,
@@ -471,11 +485,24 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
         return;
       }
 
-      const typeParam = typeKey !== 'all' ? `&type=${typeKey}` : '';
-      const statusParam = statusF !== 'all' ? `&status=${statusF}` : '';
-      const res = await API.get(
-        `/api/channel/search?keyword=${searchKeyword}&group=${searchGroup}&model=${searchModel}&supplier=${encodeURIComponent(searchSupplier)}&id_sort=${sortFlag}&tag_mode=${enableTagMode}&p=${page}&page_size=${pageSz}${typeParam}${statusParam}`,
-      );
+      const params = new URLSearchParams({
+        keyword: searchKeyword,
+        group: searchGroup,
+        model: searchModel,
+        supplier: searchSupplier,
+        route_slug: searchRouteSlug,
+        id_sort: String(sortFlag),
+        tag_mode: String(enableTagMode),
+        p: String(page),
+        page_size: String(pageSz),
+      });
+      if (typeKey !== 'all') {
+        params.set('type', typeKey);
+      }
+      if (statusF !== 'all') {
+        params.set('status', statusF);
+      }
+      const res = await API.get(`/api/channel/search?${params.toString()}`);
       const { success, message, data } = res.data;
       if (success) {
         const { items = [], total = 0, type_counts = {} } = data;
@@ -497,13 +524,19 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
 
   // Refresh
   const refresh = async (page = activePage) => {
-    const { searchKeyword, searchGroup, searchModel, searchSupplier } =
-      getFormValues();
+    const {
+      searchKeyword,
+      searchGroup,
+      searchModel,
+      searchSupplier,
+      searchRouteSlug,
+    } = getFormValues();
     if (
       searchKeyword === '' &&
       searchGroup === '' &&
       searchModel === '' &&
-      searchSupplier === ''
+      searchSupplier === '' &&
+      searchRouteSlug === ''
     ) {
       await loadChannels(page, pageSize, idSort, enableTagMode);
     } else {
@@ -604,14 +637,20 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
 
   // Page handlers
   const handlePageChange = (page) => {
-    const { searchKeyword, searchGroup, searchModel, searchSupplier } =
-      getFormValues();
+    const {
+      searchKeyword,
+      searchGroup,
+      searchModel,
+      searchSupplier,
+      searchRouteSlug,
+    } = getFormValues();
     setActivePage(page);
     if (
       searchKeyword === '' &&
       searchGroup === '' &&
       searchModel === '' &&
-      searchSupplier === ''
+      searchSupplier === '' &&
+      searchRouteSlug === ''
     ) {
       loadChannels(page, pageSize, idSort, enableTagMode).then(() => {});
     } else {
@@ -630,13 +669,19 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
     localStorage.setItem('page-size', size + '');
     setPageSize(size);
     setActivePage(1);
-    const { searchKeyword, searchGroup, searchModel, searchSupplier } =
-      getFormValues();
+    const {
+      searchKeyword,
+      searchGroup,
+      searchModel,
+      searchSupplier,
+      searchRouteSlug,
+    } = getFormValues();
     if (
       searchKeyword === '' &&
       searchGroup === '' &&
       searchModel === '' &&
-      searchSupplier === ''
+      searchSupplier === '' &&
+      searchRouteSlug === ''
     ) {
       loadChannels(1, size, idSort, enableTagMode)
         .then()

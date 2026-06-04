@@ -60,9 +60,8 @@ body {
 /* iOS：输入框字号小于 16px 时聚焦会强制缩放页面 */
 @media (max-width: 767px) {
   .playground-shell-h textarea,
-  .playground-shell-h input:not([type='checkbox']):not([type='radio']):not(
-      [type='hidden']
-    ) {
+  .playground-shell-h
+    input:not([type='checkbox']):not([type='radio']):not([type='hidden']) {
     font-size: 16px !important;
   }
 }
@@ -1367,6 +1366,94 @@ html.dark .with-pastel-balls::before {
   min-height: 0;
 }
 
+.supplier-channel-pricing-select-dropdown {
+  border-radius: 10px !important;
+  overflow: hidden;
+}
+
+.supplier-channel-pricing-select-dropdown .semi-select-option-list-wrapper,
+.supplier-channel-pricing-select-dropdown .semi-select-option-list {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(var(--semi-grey-5), 0.55) transparent;
+}
+
+.supplier-channel-pricing-select-dropdown
+  .semi-select-option-list-wrapper::-webkit-scrollbar,
+.supplier-channel-pricing-select-dropdown
+  .semi-select-option-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.supplier-channel-pricing-select-dropdown
+  .semi-select-option-list-wrapper::-webkit-scrollbar-track,
+.supplier-channel-pricing-select-dropdown
+  .semi-select-option-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.supplier-channel-pricing-select-dropdown
+  .semi-select-option-list-wrapper::-webkit-scrollbar-thumb,
+.supplier-channel-pricing-select-dropdown
+  .semi-select-option-list::-webkit-scrollbar-thumb {
+  background: rgba(var(--semi-grey-5), 0.45);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+.supplier-channel-pricing-select-dropdown
+  .semi-select-option-list-wrapper::-webkit-scrollbar-thumb:hover,
+.supplier-channel-pricing-select-dropdown
+  .semi-select-option-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--semi-grey-6), 0.72);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.supplier-channel-pricing-select-dropdown .supplier-channel-pricing-option,
+.supplier-channel-pricing-select-dropdown .semi-select-option {
+  position: relative;
+  margin: 2px 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    background-color 120ms ease,
+    color 120ms ease;
+}
+
+.supplier-channel-pricing-select-dropdown
+  .supplier-channel-pricing-option:hover,
+.supplier-channel-pricing-select-dropdown
+  .supplier-channel-pricing-option.semi-select-option-focused,
+.supplier-channel-pricing-select-dropdown
+  .supplier-channel-pricing-option.semi-select-option-custom-focused,
+.supplier-channel-pricing-select-dropdown .semi-select-option:hover,
+.supplier-channel-pricing-select-dropdown .semi-select-option-focused,
+.supplier-channel-pricing-select-dropdown .semi-select-option-custom:hover,
+.supplier-channel-pricing-select-dropdown .semi-select-option-custom-focused {
+  background: var(--semi-color-fill-1) !important;
+}
+
+.supplier-channel-pricing-select-dropdown
+  .supplier-channel-pricing-option.semi-select-option-selected,
+.supplier-channel-pricing-select-dropdown
+  .supplier-channel-pricing-option.semi-select-option-custom-selected,
+.supplier-channel-pricing-select-dropdown .semi-select-option-selected {
+  background: var(--semi-color-primary-light-default) !important;
+}
+
+.supplier-channel-pricing-select-dropdown
+  .supplier-channel-pricing-option-content {
+  border-radius: 8px;
+}
+
+.supplier-channel-pricing-select-dropdown
+  .supplier-channel-pricing-option-name {
+  color: var(--semi-color-text-0);
+  font-weight: 500;
+}
+
 /* ==================== semi-ui 组件自定义样式 ==================== */
 .semi-card-header,
 .semi-card-body {
@@ -1423,7 +1510,8 @@ html.dark .with-pastel-balls::before {
   color: var(--semi-color-text-1);
 }
 
-.token-expiration-mode-tabs .semi-tabs-tab-button:not(.semi-tabs-tab-active):hover {
+.token-expiration-mode-tabs
+  .semi-tabs-tab-button:not(.semi-tabs-tab-active):hover {
   background-color: var(--semi-color-fill-1) !important;
 }
 

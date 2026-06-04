@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React from 'react';
+import React, { useContext } from 'react';
 import { Tabs } from '@douyinfe/semi-ui';
 import CardPro from '../../common/ui/CardPro';
 import UsersTable from './UsersTable';
@@ -26,9 +26,11 @@ import UsersFilters from './UsersFilters';
 import UsersDescription from './UsersDescription';
 import AddUserModal from './modals/AddUserModal';
 import EditUserModal from './modals/EditUserModal';
+import ImportUsersModal from './modals/ImportUsersModal';
 import { useUsersData } from '../../../hooks/users/useUsersData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import { createCardProPagination } from '../../../helpers/utils';
+import { StatusContext } from '../../../context/Status';
 
 const UsersPage = () => {
   const usersData = useUsersData();
@@ -37,10 +39,13 @@ const UsersPage = () => {
   const {
     // Modal state
     showAddUser,
+    showImportUsers,
     showEditUser,
     editingUser,
     setShowAddUser,
+    setShowImportUsers,
     closeAddUser,
+    closeImportUsers,
     closeEditUser,
     refresh,
 
@@ -69,7 +74,10 @@ const UsersPage = () => {
 
     // Translation
     t,
+    language,
   } = usersData;
+  const [statusState] = useContext(StatusContext);
+  const intlEnabled = Boolean(statusState?.status?.sms_login_international_enabled);
 
   return (
     <>
@@ -88,6 +96,16 @@ const UsersPage = () => {
         refresh={refresh}
         visible={showAddUser}
         handleClose={closeAddUser}
+        tagOptions={tagOptions}
+        intlEnabled={intlEnabled}
+      />
+
+      <ImportUsersModal
+        visible={showImportUsers}
+        onCancel={closeImportUsers}
+        refresh={refresh}
+        t={t}
+        language={language}
       />
 
       <EditUserModal
@@ -96,6 +114,7 @@ const UsersPage = () => {
         handleClose={closeEditUser}
         editingUser={editingUser}
         tagOptions={tagOptions}
+        intlEnabled={intlEnabled}
       />
 
       <CardPro
@@ -111,6 +130,7 @@ const UsersPage = () => {
           <div className='flex flex-col md:flex-row justify-between items-center gap-2 w-full'>
             <UsersActions
               setShowAddUser={setShowAddUser}
+              setShowImportUsers={setShowImportUsers}
               t={t}
               users={usersData.users}
               studentView={studentView}
@@ -119,6 +139,7 @@ const UsersPage = () => {
               setStudentRewardAmount={setStudentRewardAmount}
               saveStudentRewardAmount={saveStudentRewardAmount}
               assignStudent={assignStudent}
+              language={language}
             />
 
             <UsersFilters

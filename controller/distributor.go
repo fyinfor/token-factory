@@ -44,39 +44,39 @@ type createDistributorWithdrawalRequest struct {
 func distributorWithdrawalToJSON(w model.DistributorWithdrawal, username string) gin.H {
 	profile := model.ParseDistributorWithdrawalProfile(w.ProfileData)
 	return gin.H{
-		"id":                         w.Id,
-		"user_id":                    w.UserId,
-		"username":                   username,
-		"account_type":               w.AccountType,
-		"real_name":                  w.RealName,
-		"bank_name":                  w.BankName,
-		"bank_account":               w.BankAccount,
-		"profile_data":               profile,
-		"voucher_urls":               w.VoucherUrls,
-		"withdraw_month":             w.WithdrawMonth,
-		"quota_amount":               w.QuotaAmount,
-		"status":                     w.Status,
-		"reject_reason":              w.RejectReason,
-		"reviewer_id":                w.ReviewerId,
-		"reviewed_at":                w.ReviewedAt,
-		"cancelled_at":               w.CancelledAt,
-		"created_at":                 w.CreatedAt,
-		"updated_at":                 w.UpdatedAt,
-		"id_card_no":                 profile.IdCardNo,
-		"id_card_expiry":             profile.IdCardExpiry,
-		"mobile":                     profile.Mobile,
-		"bank_reserved_phone":        profile.BankReservedPhone,
-		"id_card_front_url":          profile.IdCardFrontUrl,
-		"id_card_back_url":           profile.IdCardBackUrl,
-		"bank_card_photo_url":        profile.BankCardPhotoUrl,
-		"credit_code":                profile.CreditCode,
-		"legal_person_name":          profile.LegalPersonName,
-		"legal_person_phone":         profile.LegalPersonPhone,
-		"bank_branch_code":           profile.BankBranchCode,
-		"contact_person":             profile.ContactPerson,
-		"business_license_url":       profile.BusinessLicenseUrl,
+		"id":                          w.Id,
+		"user_id":                     w.UserId,
+		"username":                    username,
+		"account_type":                w.AccountType,
+		"real_name":                   w.RealName,
+		"bank_name":                   w.BankName,
+		"bank_account":                w.BankAccount,
+		"profile_data":                profile,
+		"voucher_urls":                w.VoucherUrls,
+		"withdraw_month":              w.WithdrawMonth,
+		"quota_amount":                w.QuotaAmount,
+		"status":                      w.Status,
+		"reject_reason":               w.RejectReason,
+		"reviewer_id":                 w.ReviewerId,
+		"reviewed_at":                 w.ReviewedAt,
+		"cancelled_at":                w.CancelledAt,
+		"created_at":                  w.CreatedAt,
+		"updated_at":                  w.UpdatedAt,
+		"id_card_no":                  profile.IdCardNo,
+		"id_card_expiry":              profile.IdCardExpiry,
+		"mobile":                      profile.Mobile,
+		"bank_reserved_phone":         profile.BankReservedPhone,
+		"id_card_front_url":           profile.IdCardFrontUrl,
+		"id_card_back_url":            profile.IdCardBackUrl,
+		"bank_card_photo_url":         profile.BankCardPhotoUrl,
+		"credit_code":                 profile.CreditCode,
+		"legal_person_name":           profile.LegalPersonName,
+		"legal_person_phone":          profile.LegalPersonPhone,
+		"bank_branch_code":            profile.BankBranchCode,
+		"contact_person":              profile.ContactPerson,
+		"business_license_url":        profile.BusinessLicenseUrl,
 		"corporate_account_proof_url": profile.CorporateAccountProofUrl,
-		"invoice_url":                profile.InvoiceUrl,
+		"invoice_url":                 profile.InvoiceUrl,
 	}
 }
 
@@ -115,6 +115,72 @@ type submitDistributorApplicationRequest struct {
 	IdCardNo          string   `json:"id_card_no"`
 	QualificationUrls []string `json:"qualification_urls"`
 	Contact           string   `json:"contact"`
+}
+
+type createDistributorBindRequestBody struct {
+	UserID int `json:"user_id"`
+}
+
+func GetDistributorBindableUser(c *gin.Context) {
+	userId := c.GetInt("id")
+	u, err := model.GetUserById(userId, false)
+	if err != nil || !model.UserIsDistributor(u) {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "仅代理用户可发起绑定"})
+		return
+	}
+	keyword := strings.TrimSpace(c.Query("keyword"))
+	if len(keyword) > 120 {
+		keyword = keyword[:120]
+	}
+	item, err := model.SearchDistributorBindableUser(userId, keyword)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": item})
+}
+
+func PostDistributorBindRequest(c *gin.Context) {
+	userId := c.GetInt("id")
+	var req createDistributorBindRequestBody
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的请求"})
+		return
+	}
+	bindReq, err := model.CreateDistributorBindRequest(userId, req.UserID)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "绑定请求已发送，请等待对方确认", "data": gin.H{"request_id": bindReq.ID}})
+}
+
+func AcceptDistributorBindRequest(c *gin.Context) {
+	requestId, err := strconv.Atoi(c.Param("id"))
+	if err != nil || requestId <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的请求ID"})
+		return
+	}
+	req, err := model.RespondDistributorBindRequest(requestId, c.GetInt("id"), true)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "已接受绑定请求", "data": gin.H{"status": req.Status}})
+}
+
+func RejectDistributorBindRequest(c *gin.Context) {
+	requestId, err := strconv.Atoi(c.Param("id"))
+	if err != nil || requestId <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的请求ID"})
+		return
+	}
+	req, err := model.RespondDistributorBindRequest(requestId, c.GetInt("id"), false)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "已拒绝绑定请求", "data": gin.H{"status": req.Status}})
 }
 
 // PostDistributorApplication 提交/重新提交分销商申请
@@ -433,7 +499,7 @@ func ListDistributorsAdmin(c *gin.Context) {
 			"username":                   u.Username,
 			"display_name":               u.DisplayName,
 			"application_real_name":      it.ApplicationRealName,
-			"application_apply_type":       it.ApplicationApplyType,
+			"application_apply_type":     it.ApplicationApplyType,
 			"needs_supplement":           it.NeedsSupplement,
 			"aff_code":                   u.AffCode,
 			"aff_count":                  u.AffCount,

@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useState, useRef } from 'react';
+import React, { useMemo, useState, useRef } from 'react';
 import { API, showError, showSuccess } from '../../../../helpers';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import {
@@ -37,14 +37,29 @@ import { IconSave, IconClose, IconUserAdd } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
 import { buildAdminUserPhoneFieldRules } from './userPhoneFormRules';
 import { buildAdminUserEmailFieldRules } from './userEmailFormRules';
+import CountryPhoneInput from '../../../common/form/CountryPhoneInput';
 
 const { Text, Title } = Typography;
 
 const AddUserModal = (props) => {
   const { t } = useTranslation();
   const formApiRef = useRef(null);
+  const phoneValidateRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const isMobile = useIsMobile();
+  const tagOptions = props.tagOptions || [];
+  const intlEnabled = Boolean(props.intlEnabled);
+  const mergedTagOptions = useMemo(() => {
+    const seen = new Set();
+    return tagOptions
+      .map((o) => o.value || o)
+      .filter((tag) => {
+        if (!tag || seen.has(tag)) return false;
+        seen.add(tag);
+        return true;
+      })
+      .map((tag) => ({ label: tag, value: tag }));
+  }, [tagOptions]);
 
   /** 新建用户表单的初始值。 */
   const getInitValues = () => ({
@@ -53,12 +68,27 @@ const AddUserModal = (props) => {
     email: '',
     phone: '',
     password: '',
+    tags: [],
     remark: '',
   });
 
   const submit = async (values) => {
+    // 手动跑 phone 字段的完整校验（含 async 占用检测）
+    if (phoneValidateRef.current) {
+      const err = await phoneValidateRef.current.runFullValidate(
+        values.phone || '',
+      );
+      if (err) {
+        showError(err);
+        return;
+      }
+    }
     setLoading(true);
-    const res = await API.post(`/api/user/`, values);
+    const payload = { ...values };
+    if (Array.isArray(payload.tags)) {
+      payload.tags = payload.tags.join(',');
+    }
+    const res = await API.post(`/api/user/`, payload);
     const { success, message } = res.data;
     if (success) {
       showSuccess(t('用户账户创建成功！'));
@@ -128,7 +158,8 @@ const AddUserModal = (props) => {
               formApiRef.current?.scrollToError();
             }}
           >
-            <div className='p-2'>
+            {({ values, formApi }) => (
+              <div className='p-2'>
               <Card className='!rounded-2xl shadow-sm border-0'>
                 <div className='flex items-center mb-2'>
                   <Avatar size='small' color='blue' className='mr-2 shadow-md'>
@@ -169,16 +200,20 @@ const AddUserModal = (props) => {
                       rules={buildAdminUserEmailFieldRules(t)}
                     />
                   </Col>
-                  {/* 手机号（可选）：格式 + 异步占用校验 */}
-                  <Col span={24}>
-                    <Form.Input
-                      field='phone'
-                      label={t('手机号')}
-                      placeholder={t('请输入手机号')}
-                      showClear
-                      rules={buildAdminUserPhoneFieldRules(t)}
-                    />
-                  </Col>
+                {/* 手机号：完全脱离 Form.Slot / Form.Input 占位；同步 + 异步校验都接给 CountryPhoneInput */}
+                <Col span={24}>
+                  <div style={{ marginBottom: 4, fontSize: 14, color: 'var(--semi-color-text-1)' }}>
+                    {t('手机号')}
+                  </div>
+                  <CountryPhoneInput
+                    value={values.phone || ''}
+                    onChange={(v) => formApi.setValue('phone', v)}
+                    intlEnabled={intlEnabled}
+                    placeholder={t('请输入手机号')}
+                    rules={buildAdminUserPhoneFieldRules(t, { intlEnabled })}
+                    validateRef={phoneValidateRef}
+                  />
+                </Col>
                   <Col span={24}>
                     <Form.Input
                       field='password'
@@ -187,6 +222,19 @@ const AddUserModal = (props) => {
                       placeholder={t('请输入密码')}
                       rules={[{ required: true, message: t('请输入密码') }]}
                       showClear
+                    />
+                  </Col>
+                  <Col span={24}>
+                    <Form.Select
+                      field='tags'
+                      label={t('标签')}
+                      placeholder={t('请选择或输入标签')}
+                      multiple
+                      allowCreate
+                      filter
+                      optionList={mergedTagOptions}
+                      showClear
+                      style={{ width: '100%' }}
                     />
                   </Col>
                   <Col span={24}>
@@ -199,7 +247,8 @@ const AddUserModal = (props) => {
                   </Col>
                 </Row>
               </Card>
-            </div>
+              </div>
+            )}
           </Form>
         </Spin>
       </SideSheet>
