@@ -24,6 +24,7 @@ import {
   formatVideoResolutionDisplayLabel,
   compareVideoResolutionAsc,
 } from '../../../../helpers';
+import { formatPreciseUsdPrice } from './PrecisePriceText';
 import {
   VIDEO_FLAT_LANE_I18N_KEY,
   groupVideoFlatTiersByFamily,
@@ -51,10 +52,10 @@ function getAudioLabel(row, t) {
   return t('统一');
 }
 
-function formatTierPrice(usd, usedGroupRatio, displayPrice, unitLabel) {
+function formatTierPrice(usd, usedGroupRatio, displayPrice) {
   const value = Number(usd || 0);
   if (!Number.isFinite(value) || value <= 0) return null;
-  return `${displayPrice(value * usedGroupRatio)} / ${unitLabel}`;
+  return displayPrice(value * usedGroupRatio);
 }
 
 function getDiscountPercent(currentUsd, officialUsd) {
@@ -73,22 +74,21 @@ function getDiscountPercent(currentUsd, officialUsd) {
 function mapRowsToItems(rows, usedGroupRatio, displayPrice, unitLabel, t) {
   return rows.map((row, idx) => {
     const laneKey = VIDEO_FLAT_LANE_I18N_KEY[row.lane];
-    const discount = getDiscountPercent(
-      row.usd_after_channel_discount,
-      row.usd_official,
-    );
+    const currentUsd = Number(row.usd_after_channel_discount || 0);
+    const platformUsd = currentUsd * usedGroupRatio;
+    const discount = getDiscountPercent(platformUsd, row.usd_official);
     return {
       key: `v-${idx}-${row.lane}-${row.resolution}-${row.has_audio}`,
       lane: laneKey ? t(laneKey) : row.lane || '—',
       resolution: formatVideoResolutionDisplayLabel(row.resolution) || '—',
       audio: getAudioLabel(row, t),
-      price: formatTierPrice(
-        row.usd_after_channel_discount,
-        usedGroupRatio,
-        displayPrice,
-        unitLabel,
-      ),
-      official: formatTierPrice(row.usd_official, 1, displayPrice, unitLabel),
+      price: formatTierPrice(currentUsd, usedGroupRatio, displayPrice),
+      priceExact: currentUsd > 0 ? formatPreciseUsdPrice(platformUsd) : null,
+      official: formatTierPrice(row.usd_official, 1, displayPrice),
+      officialExact:
+        Number(row.usd_official) > 0
+          ? formatPreciseUsdPrice(row.usd_official)
+          : null,
       discount,
       hasDiscount: discount > 0,
     };
@@ -115,8 +115,8 @@ function VideoFlatClipHintTable({
   const columns = [
     { key: 'resolution', label: t('分辨率') },
     { key: 'audio', label: t('音轨') },
-    { key: 'price', label: t('平台价'), strong: true },
-    { key: 'official', label: t('官方价') },
+    { key: 'price', label: t('平台价'), unitLabel, strong: true },
+    { key: 'official', label: t('官方价'), unitLabel },
     {
       key: 'discount',
       label: isCostPrice ? t('成本折扣') : t('折扣'),

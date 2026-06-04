@@ -44,6 +44,27 @@ import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
 import ParamOverrideEntry from '../../components/table/usage-logs/components/ParamOverrideEntry';
 
+/** 将表单 logType 规范为有效类型 id 数组（空数组表示全部类型）。 */
+const normalizeLogTypes = (logType) => {
+  if (logType == null || logType === '' || logType === '0') {
+    return [];
+  }
+  const raw = Array.isArray(logType) ? logType : [logType];
+  const types = raw
+    .map((v) => parseInt(String(v), 10))
+    .filter((n) => !Number.isNaN(n) && n > 0);
+  return [...new Set(types)];
+};
+
+/** 构建 API type 查询参数（空为 0，多选为逗号分隔）。 */
+const buildLogTypeQueryParam = (logType) => {
+  const types = normalizeLogTypes(logType);
+  if (!types.length) {
+    return '0';
+  }
+  return types.join(',');
+};
+
 export const useLogsData = () => {
   const { t } = useTranslation();
 
@@ -74,7 +95,7 @@ export const useLogsData = () => {
   const [activePage, setActivePage] = useState(1);
   const [logCount, setLogCount] = useState(0);
   const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
-  const [logType, setLogType] = useState(0);
+  const [logTypes, setLogTypes] = useState([]);
 
   // User and admin
   const isAdminUser = isAdmin();
@@ -576,7 +597,7 @@ export const useLogsData = () => {
       timestamp2string(getTodayStartTimestamp()),
       timestamp2string(getTodayEndTimestamp()),
     ],
-    logType: '0',
+    logType: [],
   };
 
   // Get default column visibility based on user role
@@ -740,7 +761,7 @@ export const useLogsData = () => {
       channel: formValues.channel || '',
       group: formValues.group || '',
       request_id: formValues.request_id || '',
-      logType: formValues.logType ? parseInt(formValues.logType) : 0,
+      logType: normalizeLogTypes(formValues.logType),
     };
   };
 
@@ -754,14 +775,16 @@ export const useLogsData = () => {
       group,
       logType: formLogType,
     } = getFormValues();
-    const currentLogType = formLogType !== undefined ? formLogType : logType;
+    const currentLogTypeParam = buildLogTypeQueryParam(
+      formLogType !== undefined ? formLogType : logTypes,
+    );
     const localStartTimestamp = start_timestamp;
     const localEndTimestamp = end_timestamp;
     let url;
     if (supplierChannelLogsView) {
-      url = `/api/user/supplier-channel-logs/stat?type=${currentLogType}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&group=${group}`;
+      url = `/api/user/supplier-channel-logs/stat?type=${currentLogTypeParam}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&group=${group}`;
     } else {
-      url = `/api/log/self/stat?type=${currentLogType}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&group=${group}`;
+      url = `/api/log/self/stat?type=${currentLogTypeParam}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&group=${group}`;
     }
     url = encodeURI(url);
     let res = await API.get(url);
@@ -784,10 +807,12 @@ export const useLogsData = () => {
       group,
       logType: formLogType,
     } = getFormValues();
-    const currentLogType = formLogType !== undefined ? formLogType : logType;
+    const currentLogTypeParam = buildLogTypeQueryParam(
+      formLogType !== undefined ? formLogType : logTypes,
+    );
     const localStartTimestamp = start_timestamp;
     const localEndTimestamp = end_timestamp;
-    let url = `/api/log/stat?type=${currentLogType}&username=${username}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&channel=${channel}&group=${group}`;
+    let url = `/api/log/stat?type=${currentLogTypeParam}&username=${username}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&channel=${channel}&group=${group}`;
     url = encodeURI(url);
     let res = await API.get(url);
     const { success, message, data } = res.data;
@@ -1376,7 +1401,7 @@ export const useLogsData = () => {
   };
 
   // Load logs function
-  const loadLogs = async (startIdx, pageSize, customLogType = null) => {
+  const loadLogs = async (startIdx, pageSize, customLogTypes = null) => {
     setLoading(true);
 
     let url = '';
@@ -1392,21 +1417,22 @@ export const useLogsData = () => {
       logType: formLogType,
     } = getFormValues();
 
-    const currentLogType =
-      customLogType !== null
-        ? customLogType
+    const currentLogTypeParam = buildLogTypeQueryParam(
+      customLogTypes !== null
+        ? customLogTypes
         : formLogType !== undefined
           ? formLogType
-          : logType;
+          : logTypes,
+    );
 
     const localStartTimestamp = start_timestamp;
     const localEndTimestamp = end_timestamp;
     if (isAdminUser) {
-      url = `/api/log/?p=${startIdx}&page_size=${pageSize}&type=${currentLogType}&username=${username}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&channel=${channel}&group=${group}&request_id=${request_id}`;
+      url = `/api/log/?p=${startIdx}&page_size=${pageSize}&type=${currentLogTypeParam}&username=${username}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&channel=${channel}&group=${group}&request_id=${request_id}`;
     } else if (supplierChannelLogsView) {
-      url = `/api/user/supplier-channel-logs?p=${startIdx}&page_size=${pageSize}&type=${currentLogType}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&group=${group}&request_id=${request_id}`;
+      url = `/api/user/supplier-channel-logs?p=${startIdx}&page_size=${pageSize}&type=${currentLogTypeParam}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&group=${group}&request_id=${request_id}`;
     } else {
-      url = `/api/log/self/?p=${startIdx}&page_size=${pageSize}&type=${currentLogType}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&group=${group}&request_id=${request_id}`;
+      url = `/api/log/self/?p=${startIdx}&page_size=${pageSize}&type=${currentLogTypeParam}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&group=${group}&request_id=${request_id}`;
     }
     url = encodeURI(url);
     const res = await API.get(url);
@@ -1494,7 +1520,7 @@ export const useLogsData = () => {
     activePage,
     logCount,
     pageSize,
-    logType,
+    logTypes,
     stat,
     isAdminUser,
     supplierChannelLogsView,
@@ -1547,7 +1573,7 @@ export const useLogsData = () => {
     handleEyeClick,
     setLogsFormat,
     hasExpandableRows,
-    setLogType,
+    setLogTypes,
     openParamOverrideModal,
 
     // Translation

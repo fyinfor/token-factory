@@ -29,13 +29,13 @@ func GetSupplierChannelLogs(c *gin.Context) {
 		return
 	}
 	pageInfo := common.GetPageQuery(c)
-	logType, _ := strconv.Atoi(c.Query("type"))
+	logTypes := model.ParseLogTypesQuery(c.Query("type"))
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	channelFilter, _ := strconv.Atoi(c.Query("channel"))
 	logs, total, err := model.GetSupplierChannelLogs(
 		scope.ChannelIDs,
-		logType,
+		logTypes,
 		startTimestamp,
 		endTimestamp,
 		c.Query("model_name"),

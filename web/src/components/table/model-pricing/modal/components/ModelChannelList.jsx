@@ -44,6 +44,11 @@ import ApiDocsSidePanel from './ApiDocsSidePanel';
 import ModelTokenList from './ModelTokenList';
 import VideoFlatClipHintTable from '../../components/VideoFlatClipHintTable';
 import ImagePerImageHintTable from '../../components/ImagePerImageHintTable';
+import PrecisePriceText, {
+  formatCurrencyAmount,
+  formatPreciseCurrencyValue,
+  toDisplayCurrencyValue,
+} from '../../components/PrecisePriceText';
 import {
   pickVideoFlatClipHintForChannel,
   hasVideoFlatClipTierTable,
@@ -190,6 +195,24 @@ const PriceComparisonList = ({ items, t, blurPricing = false }) => {
     return null;
   }
 
+  const rowUnitLabels = [
+    ...new Set(items.map((item) => item.priceUnitLabel).filter(Boolean)),
+  ];
+  const sharedTokenUnitLabel =
+    rowUnitLabels.length === 1 &&
+    items.every((item) => item.priceUnitLabel === rowUnitLabels[0]);
+  const priceHeaderUnit = sharedTokenUnitLabel ? ` /${rowUnitLabels[0]}` : '';
+  const renderPriceValue = (value, item, exactKey = 'valueExact') => (
+    <>
+      <PrecisePriceText exact={item?.[exactKey]}>{value}</PrecisePriceText>
+      {!sharedTokenUnitLabel && item.priceUnitLabel ? (
+        <span className='ml-1 font-normal text-[10px] text-semi-color-text-2'>
+          /{item.priceUnitLabel}
+        </span>
+      ) : null}
+    </>
+  );
+
   return (
     <div
       className='rounded-2xl overflow-hidden'
@@ -209,8 +232,14 @@ const PriceComparisonList = ({ items, t, blurPricing = false }) => {
         }}
       >
         <span>{t('价格项')}</span>
-        <span>{t('平台价')}</span>
-        <span>{t('官方价')}</span>
+        <span>
+          {t('平台价')}
+          {priceHeaderUnit}
+        </span>
+        <span>
+          {t('官方价')}
+          {priceHeaderUnit}
+        </span>
         <span className='text-right'>{t('折扣')}</span>
       </div>
       <div
@@ -263,9 +292,9 @@ const PriceComparisonList = ({ items, t, blurPricing = false }) => {
             <div
               className='min-w-0 font-bold truncate'
               style={{ color: 'var(--semi-color-primary)' }}
-              title={item.value}
+              title={item.valueTitle || item.value}
             >
-              {item.value}
+              {renderPriceValue(item.value, item)}
             </div>
             <div
               className={`min-w-0 text-xs truncate ${
@@ -276,9 +305,20 @@ const PriceComparisonList = ({ items, t, blurPricing = false }) => {
                   ? 'var(--semi-color-text-2)'
                   : 'var(--semi-color-text-1)',
               }}
-              title={item.official || item.original || undefined}
+              title={
+                item.officialTitle ||
+                item.official ||
+                item.original ||
+                undefined
+              }
             >
-              {item.official || item.original || '—'}
+              {item.official || item.original
+                ? renderPriceValue(
+                    item.official || item.original,
+                    item,
+                    item.official ? 'officialExact' : 'originalExact',
+                  )
+                : '—'}
             </div>
             <div className='flex justify-end'>
               {item.discount != null ? (
@@ -486,37 +526,27 @@ const ModelChannelList = ({
         // 按量计费：有效倍率 × 2 × 分组倍率
         priceUSD = nominalRatio * 2 * ratio;
       }
-      const rawDisplayPrice = displayPrice(priceUSD);
-      const unitDivisor = tokenUnit === 'K' ? 1000 : 1;
-      const numericPrice =
-        parseFloat(rawDisplayPrice.replace(/[^0-9.]/g, '')) / unitDivisor;
-
-      let symbol = '$';
-      if (currency === 'CNY') {
-        symbol = '¥';
-      } else if (currency === 'CUSTOM') {
-        try {
-          const statusStr = localStorage.getItem('status');
-          if (statusStr) {
-            const s = JSON.parse(statusStr);
-            symbol = s?.custom_currency_symbol || '¤';
-          }
-        } catch (e) {
-          symbol = '¤';
-        }
-      }
-
-      const value = parseFloat(numericPrice.toFixed(2));
+      const value = toDisplayCurrencyValue(priceUSD, { tokenUnit });
+      const display = formatCurrencyAmount(value);
+      const exactDisplay = formatPreciseCurrencyValue(value);
       if (isFixedPrice) {
         return {
-          display: `${symbol}${value} / ${t('次')}`,
+          display: `${display} / ${t('次')}`,
+          fullDisplay: `${exactDisplay} / ${t('次')}`,
+          exactDisplay,
+          unitLabel: null,
           value,
+          rawUsd: priceUSD,
         };
       } else {
         const unitLabel = tokenUnit === 'K' ? 'K' : 'M';
         return {
-          display: `${symbol}${value} / 1${unitLabel} Tokens`,
+          display,
+          fullDisplay: `${exactDisplay} / 1${unitLabel} Tokens`,
+          exactDisplay,
+          unitLabel,
           value,
+          rawUsd: priceUSD,
         };
       }
     };
@@ -535,14 +565,34 @@ const ModelChannelList = ({
           isFixedPrice,
           false,
         );
-        if (root.value >= channelOriginal.value && root.value > 0) {
-          discount = Math.round((1 - channelOriginal.value / root.value) * 100);
+        if (root.rawUsd >= channelOriginal.rawUsd && root.rawUsd > 0) {
+          discount = Math.round(
+            (1 - channelOriginal.rawUsd / root.rawUsd) * 100,
+          );
         }
       }
       return {
         label,
         value: current.display,
+        valueTitle: current.exactDisplay,
+        valueExact: current.exactDisplay,
         original: official,
+        originalExact:
+          official && hasRatioValue(rootValue)
+            ? calculatePrice(Number(rootValue), isFixedPrice, false)
+                .exactDisplay
+            : undefined,
+        officialTitle:
+          official && hasRatioValue(rootValue)
+            ? calculatePrice(Number(rootValue), isFixedPrice, false)
+                .exactDisplay
+            : undefined,
+        officialExact:
+          official && hasRatioValue(rootValue)
+            ? calculatePrice(Number(rootValue), isFixedPrice, false)
+                .exactDisplay
+            : undefined,
+        priceUnitLabel: current.unitLabel,
         discount,
         hasDiscount: discount > 0,
       };
@@ -778,22 +828,35 @@ const ModelChannelList = ({
     const formatCostDisplay = (displayUsdPerM, isFixedPrice, fixedUnitKey) => {
       const priceUSD = displayUsdPerM;
       const value = formatBillingUsdDisplay(priceUSD, { tokenUnit });
+      const preciseValue = formatPreciseCurrencyValue(
+        toDisplayCurrencyValue(priceUSD, { tokenUnit }),
+      );
       if (isFixedPrice) {
         const unit = fixedUnitKey === '张' ? t('张') : t('次');
-        return `${value} / ${unit}`;
+        return {
+          value: `${value} / ${unit}`,
+          exact: preciseValue,
+        };
       }
       const unitLabel = tokenUnit === 'K' ? 'K' : 'M';
-      return `${value} / 1${unitLabel} Tokens`;
+      return {
+        value: `${value} / 1${unitLabel} Tokens`,
+        exact: preciseValue,
+      };
     };
     return {
-      items: costItems.map((item) => ({
-        label: t(item.labelKey),
-        value: formatCostDisplay(
+      items: costItems.map((item) => {
+        const price = formatCostDisplay(
           item.displayUsdPerM,
           item.isFixedPrice,
           item.fixedUnitKey,
-        ),
-      })),
+        );
+        return {
+          label: t(item.labelKey),
+          value: price.value,
+          exact: price.exact,
+        };
+      }),
       videoHint: showVideoFlatTable ? vHint : null,
       imageHint: showImagePerImageTable ? iHint : null,
     };
@@ -1095,35 +1158,37 @@ const ModelChannelList = ({
                   key={`cost-${channel.channel_id}-${idx}`}
                   className='rounded-lg border border-semi-color-border px-3 py-2'
                 >
-                  {channel.price_discount_percent != null ? (() => {
-                    const discountDisplay = formatCostDiscountDisplay(
-                      channel.price_discount_percent,
-                      t,
-                    );
-                    if (!discountDisplay) {
-                      return null;
-                    }
-                    return (
-                      <div className='mb-2'>
-                        <span
-                          className='inline-flex items-center justify-center text-[11px] font-semibold rounded-full'
-                          style={{
-                            minWidth: 42,
-                            height: 22,
-                            padding: '0 7px',
-                            color: discountDisplay.hasDiscount
-                              ? '#dc2626'
-                              : 'var(--semi-color-text-2)',
-                            backgroundColor: discountDisplay.hasDiscount
-                              ? 'rgba(255, 59, 48, 0.11)'
-                              : 'rgba(142, 142, 147, 0.12)',
-                          }}
-                        >
-                          {discountDisplay.text}
-                        </span>
-                      </div>
-                    );
-                  })() : null}
+                  {channel.price_discount_percent != null
+                    ? (() => {
+                        const discountDisplay = formatCostDiscountDisplay(
+                          channel.price_discount_percent,
+                          t,
+                        );
+                        if (!discountDisplay) {
+                          return null;
+                        }
+                        return (
+                          <div className='mb-2'>
+                            <span
+                              className='inline-flex items-center justify-center text-[11px] font-semibold rounded-full'
+                              style={{
+                                minWidth: 42,
+                                height: 22,
+                                padding: '0 7px',
+                                color: discountDisplay.hasDiscount
+                                  ? '#dc2626'
+                                  : 'var(--semi-color-text-2)',
+                                backgroundColor: discountDisplay.hasDiscount
+                                  ? 'rgba(255, 59, 48, 0.11)'
+                                  : 'rgba(142, 142, 147, 0.12)',
+                              }}
+                            >
+                              {discountDisplay.text}
+                            </span>
+                          </div>
+                        );
+                      })()
+                    : null}
                   <div className='flex flex-col gap-1 text-sm'>
                     {costItems.map((item) => (
                       <div
@@ -1134,7 +1199,9 @@ const ModelChannelList = ({
                           {item.label}:
                         </span>
                         <span className='font-medium text-semi-color-text-0'>
-                          {item.value}
+                          <PrecisePriceText exact={item.exact}>
+                            {item.value}
+                          </PrecisePriceText>
                         </span>
                       </div>
                     ))}
