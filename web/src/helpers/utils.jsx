@@ -284,6 +284,12 @@ export function getTodayStartTimestamp() {
   return Math.floor(now.getTime() / 1000);
 }
 
+export function getTodayEndTimestamp() {
+  var now = new Date();
+  now.setHours(23, 59, 59, 0);
+  return Math.floor(now.getTime() / 1000);
+}
+
 export function timestamp2string(timestamp) {
   let date = new Date(timestamp * 1000);
   let year = date.getFullYear().toString();
