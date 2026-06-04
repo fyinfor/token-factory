@@ -1837,6 +1837,8 @@
     "启用成功": "启用成功",
     "启用失败": "启用失败",
     "当前展示指定供应商的数据看板": "当前展示指定供应商的数据看板",
+    "当前展示指定供应商「{{name}}」的数据看板": "当前展示指定供应商「{{name}}」的数据看板",
+    "{{name}} 模型数据看板": "{{name}} 模型数据看板",
     "supplier_dashboard_account_title": "账户数据（平台对接人）",
     "supplier_dashboard_admin_account_hint": "当前为全部供应商模型汇总，单账户数据请在供应商列表中点击「数据看板」进入指定供应商后查看。",
     "supplier_dashboard_preset_last_24h": "近 24 小时",

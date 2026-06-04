@@ -2032,6 +2032,8 @@
     "当前展示全部供应商提供模型的统计数据": "Stats that currently show all vendor-provided models",
     "当前展示您提供模型的统计数据": "Stats that currently show the model you provide",
     "当前展示指定供应商的数据看板": "Showing dashboard for selected provider",
+    "当前展示指定供应商「{{name}}」的数据看板": "Showing dashboard for selected provider “{{name}}”",
+    "{{name}} 模型数据看板": "{{name}} Model Dashboard",
     "当前已是学员身份": "You are currently a learner",
     "当前已禁止所有新用户注册": "All new user registrations are currently blocked",
     "当前待使用余额": "Current Outstanding Balance",
