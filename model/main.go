@@ -289,6 +289,7 @@ func migrateDB() error {
 		&UserTag{},
 		&PasskeyCredential{},
 		&Option{},
+		&Changelog{},
 		&Redemption{},
 		&Ability{},
 		&Log{},
@@ -323,6 +324,9 @@ func migrateDB() error {
 	)
 	if err != nil {
 		return err
+	}
+	if err := MigrateLegacyChangelogOption(); err != nil {
+		return fmt.Errorf("migrate legacy changelog option: %w", err)
 	}
 	if err := migrateLegacyDistributorRole(); err != nil {
 		return err
@@ -362,6 +366,7 @@ func migrateDBFast() error {
 		{&UserTag{}, "UserTag"},
 		{&PasskeyCredential{}, "PasskeyCredential"},
 		{&Option{}, "Option"},
+		{&Changelog{}, "Changelog"},
 		{&Redemption{}, "Redemption"},
 		{&Ability{}, "Ability"},
 		{&Log{}, "Log"},
@@ -416,6 +421,9 @@ func migrateDBFast() error {
 		if err != nil {
 			return err
 		}
+	}
+	if err := MigrateLegacyChangelogOption(); err != nil {
+		return fmt.Errorf("migrate legacy changelog option: %w", err)
 	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
