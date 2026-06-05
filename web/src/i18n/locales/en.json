@@ -2721,6 +2721,7 @@
     "未测试": "Not tested",
     "未添加附加条件时，仅使用上方 type 进行清理。": "When no additional conditions are added, only the above type is used for pruning.",
     "未登录或登录已过期，请重新登录": "Not logged in or login has expired, please log in again",
+    "注册已关闭": "Registration is disabled",
     "未登录模糊价格": "Ambiguous price not logged in",
     "成本价": "Cost price",
     "折扣": "Discount",
@@ -5641,6 +5642,7 @@
     "对账单导出成功": "Statement exported successfully",
     "对账单导出失败": "Failed to export statement",
     "当前视图不支持导出对账单": "Current view does not support statement export",
-    "供应商视图不支持导出对账单": "Supplier view does not support statement export"
+    "供应商视图不支持导出对账单": "Supplier view does not support statement export",
+    "13800000000": "13800000000"
   }
 }

@@ -815,7 +815,7 @@ const LoginForm = () => {
                 </div>
               )}
 
-              {!status.self_use_mode_enabled && (
+              {!status.self_use_mode_enabled && status.register_enabled && (
                 <div className='mt-6 text-center text-sm'>
                   <Text>
                     {t('没有账户？')}{' '}
@@ -1037,7 +1037,7 @@ const LoginForm = () => {
                 )}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <Input
-                    placeholder={t('如 13800000000')}
+                    placeholder={t('13800000000')}
                     value={smsInputs.localNumber}
                     onChange={(value) =>
                       setSmsInputs((prev) => ({
@@ -1218,7 +1218,7 @@ const LoginForm = () => {
                 </>
               )}
 
-              {!status.self_use_mode_enabled && (
+              {!status.self_use_mode_enabled && status.register_enabled && (
                 <div className='mt-6 text-center text-sm'>
                   <Text>
                     {t('没有账户？')}{' '}

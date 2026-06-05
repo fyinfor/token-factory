@@ -61,6 +61,8 @@ func GetStatus(c *gin.Context) {
 		"version":                     common.Version,
 		"start_time":                  common.StartTime,
 		"email_verification":          common.EmailVerificationEnabled,
+		"register_enabled":            common.RegisterEnabled,
+		"password_register_enabled":   common.PasswordRegisterEnabled,
 		"sms_verification_enabled":    common.SMSVerificationEnabled,
 		"sms_login_enabled":           common.SMSLoginEnabled,
 		"sms_login_international_enabled": common.SMSLoginInternationalEnabled,
