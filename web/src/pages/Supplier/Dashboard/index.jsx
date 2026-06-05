@@ -125,6 +125,7 @@ export default function SupplierDashboardPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const selectedSupplierId = searchParams.get('supplier_id');
+  const selectedSupplierName = (searchParams.get('supplier_name') || '').trim();
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [timeRange, setTimeRange] = useState(() => getDefaultRange());
@@ -467,12 +468,16 @@ export default function SupplierDashboardPage() {
             </div>
             <div className='min-w-0'>
               <Title heading={4} style={{ marginBottom: 0 }}>
-                {t('供应商模型数据看板')}
+                {selectedSupplierName
+                  ? t('{{name}} 模型数据看板', { name: selectedSupplierName })
+                  : t('供应商模型数据看板')}
               </Title>
               <Text type='tertiary'>
                 {isAdmin()
                   ? selectedSupplierId
-                    ? t('当前展示指定供应商的数据看板')
+                    ? selectedSupplierName
+                      ? t('当前展示指定供应商「{{name}}」的数据看板', { name: selectedSupplierName })
+                      : t('当前展示指定供应商的数据看板')
                     : t('当前展示全部供应商提供模型的统计数据')
                   : t('当前展示您提供模型的统计数据')}
               </Text>

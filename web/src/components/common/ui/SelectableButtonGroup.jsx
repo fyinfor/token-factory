@@ -21,7 +21,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useMinimumLoadingTime } from '../../../hooks/common/useMinimumLoadingTime';
 import { useContainerWidth } from '../../../hooks/common/useContainerWidth';
 import {
-  Divider,
   Button,
   Row,
   Col,
@@ -31,6 +30,24 @@ import {
   Tooltip,
 } from '@douyinfe/semi-ui';
 import { IconChevronDown, IconChevronUp } from '@douyinfe/semi-icons';
+
+// 自定义分隔线：避免 Semi UI Divider 把内部 active 等属性透传到原生 div
+// 触发 React "Received `true` for a non-boolean attribute" warning。
+const TitleDivider = ({ children }) => (
+  <div
+    style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      margin: '12px 0',
+      color: 'var(--semi-color-text-1)',
+      fontSize: 14,
+      fontWeight: 500,
+    }}
+  >
+    {children}
+  </div>
+);
 
 /**
  * 通用可选择按钮组组件
@@ -400,13 +417,13 @@ const SelectableButtonGroup = ({
       ref={containerRef}
     >
       {title && (
-        <Divider margin='12px' align='left'>
+        <TitleDivider>
           {showSkeleton ? (
             <Skeleton.Title active style={{ width: 80, height: 14 }} />
           ) : (
             title
           )}
-        </Divider>
+        </TitleDivider>
       )}
       {needCollapse && !showSkeleton ? (
         <div style={{ position: 'relative' }}>

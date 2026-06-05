@@ -155,6 +155,14 @@ func InitOptionMap() {
 	common.OptionMap["SMSCodeCooldownMinutes"] = strconv.Itoa(common.SMSCodeCooldownMinutes)
 	common.OptionMap["SMSCodeDailyLimit"] = strconv.Itoa(common.SMSCodeDailyLimit)
 	common.OptionMap["SMSPhoneBlacklist"] = strings.Join(common.SMSPhoneBlacklist, ",")
+	common.OptionMap["SMSLoginEnabled"] = strconv.FormatBool(common.SMSLoginEnabled)
+	common.OptionMap["SMSLoginInternationalEnabled"] = strconv.FormatBool(common.SMSLoginInternationalEnabled)
+	common.OptionMap["SMSAccessKeyIDIntl"] = common.SMSAccessKeyIDIntl
+	common.OptionMap["SMSAccessKeySecretIntl"] = common.SMSAccessKeySecretIntl
+	common.OptionMap["SMSCodeSignNameIntl"] = common.SMSCodeSignNameIntl
+	common.OptionMap["SMSCodeTemplateCodeIntl"] = common.SMSCodeTemplateCodeIntl
+	common.OptionMap["SMSLoginCooldownSeconds"] = strconv.Itoa(common.SMSLoginCooldownSeconds)
+	common.OptionMap["SMSLoginDailyLimit"] = strconv.Itoa(common.SMSLoginDailyLimit)
 	common.OptionMap["QuotaForNewUser"] = strconv.Itoa(common.QuotaForNewUser)
 	common.OptionMap["QuotaForInviter"] = strconv.Itoa(common.QuotaForInviter)
 	common.OptionMap["QuotaForInvitee"] = strconv.Itoa(common.QuotaForInvitee)
@@ -349,6 +357,10 @@ func updateOptionMap(key string, value string) (err error) {
 			common.SMSVerificationEnabled = boolValue
 		case "RegisterEnabled":
 			common.RegisterEnabled = boolValue
+		case "SMSLoginEnabled":
+			common.SMSLoginEnabled = boolValue
+		case "SMSLoginInternationalEnabled":
+			common.SMSLoginInternationalEnabled = boolValue
 		case "EmailDomainRestrictionEnabled":
 			common.EmailDomainRestrictionEnabled = boolValue
 		case "EmailAliasRestrictionEnabled":
@@ -565,6 +577,22 @@ func updateOptionMap(key string, value string) (err error) {
 		common.SMSCodeSignName = strings.TrimSpace(value)
 	case "SMSCodeTemplateCode":
 		common.SMSCodeTemplateCode = strings.TrimSpace(value)
+	case "SMSAccessKeyIDIntl":
+		common.SMSAccessKeyIDIntl = strings.TrimSpace(value)
+	case "SMSAccessKeySecretIntl":
+		common.SMSAccessKeySecretIntl = strings.TrimSpace(value)
+	case "SMSCodeSignNameIntl":
+		common.SMSCodeSignNameIntl = strings.TrimSpace(value)
+	case "SMSCodeTemplateCodeIntl":
+		common.SMSCodeTemplateCodeIntl = strings.TrimSpace(value)
+	case "SMSLoginCooldownSeconds":
+		if n, parseErr := strconv.Atoi(value); parseErr == nil && n > 0 {
+			common.SMSLoginCooldownSeconds = n
+		}
+	case "SMSLoginDailyLimit":
+		if n, parseErr := strconv.Atoi(value); parseErr == nil && n > 0 {
+			common.SMSLoginDailyLimit = n
+		}
 	case "SMSCodeValidMinutes":
 		if n, parseErr := strconv.Atoi(value); parseErr == nil && n > 0 {
 			common.SMSCodeValidMinutes = n

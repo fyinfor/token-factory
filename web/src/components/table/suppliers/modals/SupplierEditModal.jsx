@@ -36,6 +36,7 @@ import {
   Input,
   Progress,
   Steps,
+  useFormState,
 } from '@douyinfe/semi-ui';
 import { IconUpload } from '@douyinfe/semi-icons';
 import { debounce } from 'lodash-es';
@@ -43,6 +44,7 @@ import { API, showError, showSuccess, isAdmin } from '../../../../helpers';
 import { useTranslation } from 'react-i18next';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import SupplierCapabilityFormFields from '../../../supplier/SupplierCapabilityFormFields';
+import CountryPhoneInput from '../../../common/form/CountryPhoneInput';
 
 const { Text } = Typography;
 const supplierTypeOptions = [
@@ -173,6 +175,13 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
   const [wizardDraftValues, setWizardDraftValues] = useState({});
   /** 技术能力页真实性承诺勾选态（用于禁用提交按钮）。 */
   const [commitmentChecked, setCommitmentChecked] = useState(false);
+  /** 对接人手机号：受控输入，避免 Semi Form.Slot 渲染时拿不到 value。 */
+  const [contactMobile, setContactMobile] = useState('');
+  const [contactMobileError, setContactMobileError] = useState('');
+  const [smsIntlEnabled, setSmsIntlEnabled] = useState(false);
+  const PHONE_REGEX = smsIntlEnabled
+    ? /^1[3-9]\d{9}$|^\+[1-9]\d{4,14}$/
+    : /^1[3-9]\d{9}$/;
 
   const isCreateWizard = !supplier && isAdmin();
 
@@ -238,6 +247,26 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
     };
   }, [searchUsers]);
 
+  // 拉取后端公开状态，判断国际号是否启用
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await API.get('/api/status');
+        if (!cancelled) {
+          setSmsIntlEnabled(
+            Boolean(res.data?.data?.sms_login_international_enabled),
+          );
+        }
+      } catch (e) {
+        // ignore
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const fetchSupplierData = useCallback(
     async (supplierId) => {
       setFetchingData(true);
@@ -249,6 +278,7 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
         const { success, data, message } = res.data;
         if (success) {
           setSupplierData(data);
+          setContactMobile(data?.contact_mobile || '');
         } else {
           showError(t(message));
         }
@@ -570,7 +600,7 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
         company_logo_url: companyLogoUrl,
         company_name: mergedValues.company_name || '',
         company_size: mergedValues.company_size || '',
-        contact_mobile: mergedValues.contact_mobile || '',
+        contact_mobile: contactMobile || '',
         contact_name: mergedValues.contact_name || '',
         contact_wechat: mergedValues.contact_wechat || '',
         credit_code: mergedValues.credit_code || '',
@@ -1036,20 +1066,28 @@ const SupplierEditModal = ({ visible, supplier, handleClose, onSuccess }) => {
           />
         </Col>
         <Col span={24}>
-          <Form.Input
-            field='contact_mobile'
-            label={<Text strong>{t('对接人手机号')}</Text>}
-            placeholder={t('填写实名手机号')}
-            rules={[
-              { required: true, message: t('请输入对接人手机号') },
-              {
-                pattern: /^1[3-9]\d{9}$/,
-                message: t('请输入有效的手机号'),
-              },
-            ]}
-            showClear
-            extraText={t('用于紧急联系')}
-          />
+          <Form.Slot label={<Text strong>{t('对接人手机号')}</Text>}>
+            <CountryPhoneInput
+              value={contactMobile}
+              onChange={(v) => {
+                setContactMobile(v);
+                setContactMobileError(
+                  v && !PHONE_REGEX.test(v) ? t('请输入有效的手机号') : '',
+                );
+              }}
+              intlEnabled={smsIntlEnabled}
+              placeholder={t('填写实名手机号')}
+            />
+            <div
+              style={{
+                color: 'var(--semi-color-danger)',
+                fontSize: 12,
+                marginTop: 4,
+              }}
+            >
+              {contactMobileError || t('用于紧急联系')}
+            </div>
+          </Form.Slot>
         </Col>
         <Col span={24}>
           <Form.Input

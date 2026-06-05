@@ -15,7 +15,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Modal, Form, Typography, Space, Button } from '@douyinfe/semi-ui';
+import { Modal, Form, Typography, Space, Button, useFormState } from '@douyinfe/semi-ui';
 import { IconLock } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
 import { UserContext } from '../../context/User';
@@ -26,6 +26,7 @@ import {
   mergeSelfResponseIntoLocalUser,
 } from '../../helpers';
 import { buildAdminUserPhoneFieldRules } from '../table/users/modals/userPhoneFormRules';
+import CountryPhoneInput from '../common/form/CountryPhoneInput';
 
 const { Text, Title } = Typography;
 
@@ -36,6 +37,7 @@ const AdminInitialSetupModal = () => {
   const { t } = useTranslation();
   const [state, dispatch] = useContext(UserContext);
   const formApiRef = useRef(null);
+  const phoneValidateRef = useRef(null);
   const [submitting, setSubmitting] = useState(false);
 
   /** 合并 Context 与 localStorage，避免刷新后尚未 dispatch 时拿不到用户。 */
@@ -61,6 +63,15 @@ const AdminInitialSetupModal = () => {
   /** 提交首次设置：改密 + 必要时绑定手机，成功后刷新 /api/user/self 并合并本地态。 */
   const handleSubmit = useCallback(
     async (values) => {
+      if (phoneRequired && phoneValidateRef.current) {
+        const err = await phoneValidateRef.current.runFullValidate(
+          values.phone || '',
+        );
+        if (err) {
+          showError(err);
+          return;
+        }
+      }
       setSubmitting(true);
       try {
         const payload = {
@@ -131,40 +142,56 @@ const AdminInitialSetupModal = () => {
           formApiRef.current?.scrollToError();
         }}
       >
-        <Form.Input
-          field='new_password'
-          label={t('新密码')}
-          mode='password'
-          placeholder={t('请输入 8～20 位新密码')}
-          rules={[
-            { required: true, message: t('请输入新密码') },
-            { min: 8, max: 20, message: t('密码长度须在 8～20 位之间') },
-          ]}
-        />
-        <Form.Input
-          field='confirm_password'
-          label={t('确认新密码')}
-          mode='password'
-          placeholder={t('请再次输入新密码')}
-          rules={[
-            { required: true, message: t('请确认新密码') },
-            {
-              validator: (rule, value) => {
-                const p = formApiRef.current?.getValue('new_password');
-                if ((value || '') !== (p || '')) {
-                  return new Error(t('两次输入的密码不一致'));
-                }
-                return true;
-              },
+        {({ values, formApi }) => (
+          <PhoneFormBody values={values} formApi={formApi} formApiRef={formApiRef} t={t} phoneRequired={phoneRequired} submitting={submitting} />
+        )}
+      </Form>
+    </Modal>
+  );
+};
+
+const PhoneFormBody = ({ values, formApi, formApiRef, t, phoneRequired, submitting }) => {
+  return (
+    <>
+      <Form.Input
+        field='new_password'
+        label={t('新密码')}
+        mode='password'
+        placeholder={t('请输入 8～20 位新密码')}
+        rules={[
+          { required: true, message: t('请输入新密码') },
+          { min: 8, max: 20, message: t('密码长度须在 8～20 位之间') },
+        ]}
+      />
+      <Form.Input
+        field='confirm_password'
+        label={t('确认新密码')}
+        mode='password'
+        placeholder={t('请再次输入新密码')}
+        rules={[
+          { required: true, message: t('请确认新密码') },
+          {
+            validator: (rule, value) => {
+              const p = formApiRef.current?.getValue('new_password');
+              if ((value || '') !== (p || '')) {
+                return new Error(t('两次输入的密码不一致'));
+              }
+              return true;
             },
-          ]}
-        />
-        {phoneRequired && (
+          },
+        ]}
+      />
+      {phoneRequired && (
+        <>
           <Form.Input
             field='phone'
-            label={t('手机号')}
-            placeholder={t('请输入手机号')}
-            showClear
+            noLabel
+            noErrorMessage
+            fieldStyle={{
+              height: 0,
+              overflow: 'hidden',
+              marginBottom: 0,
+            }}
             rules={[
               { required: true, message: t('请输入手机号') },
               ...buildAdminUserPhoneFieldRules(t, {
@@ -172,18 +199,44 @@ const AdminInitialSetupModal = () => {
               }),
             ]}
           />
-        )}
-        <Button
-          block
-          type='primary'
-          theme='solid'
-          htmlType='submit'
-          loading={submitting}
-        >
-          {t('完成并继续')}
-        </Button>
-      </Form>
-    </Modal>
+          <div style={{ marginTop: 0 }}>
+            <CountryPhoneInput
+              value={values.phone || ''}
+              onChange={(v) => formApi.setValue('phone', v)}
+              placeholder={t('请输入手机号')}
+            />
+            <PhoneFieldError />
+          </div>
+        </>
+      )}
+      <Button
+        block
+        type='primary'
+        theme='solid'
+        htmlType='submit'
+        loading={submitting}
+      >
+        {t('完成并继续')}
+      </Button>
+    </>
+  );
+};
+
+const PhoneFieldError = () => {
+  const formState = useFormState();
+  const err = formState?.errors?.phone;
+  if (!err) return null;
+  const msg = Array.isArray(err) ? err[0] : err;
+  return (
+    <div
+      style={{
+        color: 'var(--semi-color-danger)',
+        fontSize: 12,
+        marginTop: 4,
+      }}
+    >
+      {msg}
+    </div>
   );
 };
 

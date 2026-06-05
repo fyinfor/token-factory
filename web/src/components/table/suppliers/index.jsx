@@ -82,9 +82,14 @@ const SuppliersPage = () => {
 
   /**
    * 打开指定供应商的数据看板（复用供应商数据看板页面）。
+   * 同时把供应商用户名传过去，仪表盘标题可拼接。
    */
   const openSupplierDashboard = (supplier) => {
-    navigate(`/console/supplier/dashboard?supplier_id=${supplier.id}`);
+    const name = supplier?.applicant_username || '';
+    const params = new URLSearchParams();
+    params.set('supplier_id', String(supplier.id));
+    if (name) params.set('supplier_name', name);
+    navigate(`/console/supplier/dashboard?${params.toString()}`);
   };
 
   return (

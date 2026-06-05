@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React from 'react';
+import React, { useContext } from 'react';
 import { Tabs } from '@douyinfe/semi-ui';
 import CardPro from '../../common/ui/CardPro';
 import UsersTable from './UsersTable';
@@ -30,6 +30,7 @@ import ImportUsersModal from './modals/ImportUsersModal';
 import { useUsersData } from '../../../hooks/users/useUsersData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import { createCardProPagination } from '../../../helpers/utils';
+import { StatusContext } from '../../../context/Status';
 
 const UsersPage = () => {
   const usersData = useUsersData();
@@ -75,6 +76,8 @@ const UsersPage = () => {
     t,
     language,
   } = usersData;
+  const [statusState] = useContext(StatusContext);
+  const intlEnabled = Boolean(statusState?.status?.sms_login_international_enabled);
 
   return (
     <>
@@ -94,6 +97,7 @@ const UsersPage = () => {
         visible={showAddUser}
         handleClose={closeAddUser}
         tagOptions={tagOptions}
+        intlEnabled={intlEnabled}
       />
 
       <ImportUsersModal
@@ -110,6 +114,7 @@ const UsersPage = () => {
         handleClose={closeEditUser}
         editingUser={editingUser}
         tagOptions={tagOptions}
+        intlEnabled={intlEnabled}
       />
 
       <CardPro

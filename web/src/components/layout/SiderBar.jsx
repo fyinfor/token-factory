@@ -156,8 +156,8 @@ const SiderBar = ({ onNavigate = () => {} }) => {
       {
         text: t('供应商'),
         itemKey: 'supplier',
-        className:
-          isSupplier() || isAdmin() || isRoot() ? '' : 'tableHiddle',
+        // 仅供应商用户可见；管理员/超级管理员不在此入口查看供应商功能
+        className: isSupplier() ? '' : 'tableHiddle',
         items: [
           {
             text: t('申请'),

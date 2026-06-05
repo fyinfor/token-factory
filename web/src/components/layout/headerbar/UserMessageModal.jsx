@@ -29,7 +29,12 @@ import {
   Tabs,
   Tag,
 } from '@douyinfe/semi-ui';
-import { API, showError, timestamp2string } from '../../../helpers';
+import {
+  API,
+  showError,
+  showSuccess,
+  timestamp2string,
+} from '../../../helpers';
 
 const PAGE_SIZE = 10;
 
@@ -46,6 +51,7 @@ const UserMessageModal = ({
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [markingID, setMarkingID] = useState(0);
+  const [bindActionID, setBindActionID] = useState(0);
   const [markingAll, setMarkingAll] = useState(false);
   const [readTab, setReadTab] = useState('all');
   const [titleKeyword, setTitleKeyword] = useState('');
@@ -237,6 +243,52 @@ const UserMessageModal = ({
     loadMessages(1, readTab, titleKeyword);
   }, [loadMessages, readTab, titleKeyword]);
 
+  const handleBindRequestAction = useCallback(
+    async (messageItem, action) => {
+      const requestID = Number(messageItem?.biz_id || 0);
+      if (!requestID || bindActionID > 0) {
+        return;
+      }
+      setBindActionID(requestID);
+      try {
+        const res = await API.post(
+          `/api/distributor/bind_requests/${requestID}/${action}`,
+          null,
+          { skipErrorHandler: true },
+        );
+        const { success, message, data } = res.data || {};
+        if (!success) {
+          showError(message || t('处理绑定请求失败'));
+          return;
+        }
+        showSuccess(message || t('绑定请求已处理'));
+        const nextStatus = Number(
+          data?.status || (action === 'accept' ? 2 : 3),
+        );
+        setItems((prev) =>
+          prev.map((item) =>
+            item.id === messageItem.id
+              ? {
+                  ...item,
+                  is_read: true,
+                  read_at: item.read_at || Math.floor(Date.now() / 1000),
+                  bind_request_status: nextStatus,
+                }
+              : item,
+          ),
+        );
+        if (onReadStateChanged) {
+          await onReadStateChanged();
+        }
+      } catch (error) {
+        showError(error?.message || t('处理绑定请求失败'));
+      } finally {
+        setBindActionID(0);
+      }
+    },
+    [bindActionID, onReadStateChanged, t],
+  );
+
   return (
     <Modal
       title={t('站内消息')}
@@ -318,6 +370,45 @@ const UserMessageModal = ({
                 <div className='text-sm text-semi-color-text-1 whitespace-pre-wrap break-words'>
                   {item.content || ''}
                 </div>
+                {item.biz_type === 'distributor_bind_request' &&
+                  item.type === 'distributor_bind_request' && (
+                    <div className='mt-3 flex items-center gap-2'>
+                      {Number(item.bind_request_status) === 1 ? (
+                        <>
+                          <Button
+                            size='small'
+                            theme='solid'
+                            type='primary'
+                            loading={bindActionID === item.biz_id}
+                            onClick={() =>
+                              handleBindRequestAction(item, 'accept')
+                            }
+                          >
+                            {t('接受')}
+                          </Button>
+                          <Button
+                            size='small'
+                            theme='light'
+                            type='tertiary'
+                            disabled={bindActionID === item.biz_id}
+                            onClick={() =>
+                              handleBindRequestAction(item, 'reject')
+                            }
+                          >
+                            {t('拒绝')}
+                          </Button>
+                        </>
+                      ) : Number(item.bind_request_status) === 2 ? (
+                        <Tag color='green' size='small'>
+                          {t('已接受')}
+                        </Tag>
+                      ) : Number(item.bind_request_status) === 3 ? (
+                        <Tag color='grey' size='small'>
+                          {t('已拒绝')}
+                        </Tag>
+                      ) : null}
+                    </div>
+                  )}
                 <div className='mt-2 flex items-center justify-between'>
                   <span className='text-xs text-semi-color-text-2'>
                     {timestamp2string(item.created_at || 0)}
