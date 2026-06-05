@@ -3,6 +3,7 @@ package model
 import (
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -322,13 +323,18 @@ func UpdateAffInviteeCommission(inviterId, inviteeUserId, commissionBps int) err
 
 // InviteeModelMarkupDiscountRateItem 定价页可见的模型×渠道加价折扣配置项（API 列表元素）。
 type InviteeModelMarkupDiscountRateItem struct {
-	ModelName                 string  `json:"model_name"`
-	ChannelID                 int     `json:"channel_id"`
-	ChannelPath               string  `json:"channel_path"` // 与定价页通道列表「复制」一致：model/route_slug 或 alias/model/channel_no
-	SupplierType              string  `json:"supplier_type"`
-	ChannelName               string  `json:"channel_name"`
-	DefaultMarkupDiscountRate float64 `json:"default_markup_discount_rate"` // 渠道默认官方价加价折扣率(%)
-	CurrentMarkupDiscountRate float64 `json:"current_markup_discount_rate"` // 对该被邀请用户生效的加价折扣率(%)
+	ModelName                      string  `json:"model_name"`
+	ChannelID                      int     `json:"channel_id"`
+	ChannelPath                    string  `json:"channel_path"` // 与定价页通道列表「复制」一致：model/route_slug 或 alias/model/channel_no
+	SupplierType                   string  `json:"supplier_type"`
+	ChannelName                    string  `json:"channel_name"`
+	DefaultMarkupDiscountRate      float64 `json:"default_markup_discount_rate"`      // 渠道默认官方价加价折扣率(%)
+	CurrentMarkupDiscountRate      float64 `json:"current_markup_discount_rate"`      // 对该被邀请用户生效的加价折扣率(%)
+	OfficialCurrentDiscountPercent float64 `json:"official_current_discount_percent"` // 定价首页当前展示折扣(%)
+	ChannelPriceDiscountPercent    float64 `json:"channel_price_discount_percent"`    // 成本折扣率(%)
+	OfficialBasePrice              float64 `json:"official_base_price"`               // 官方根价/倍率
+	ChannelBasePrice               float64 `json:"channel_base_price"`                // 渠道原始价/倍率
+	PricingQuotaType               int     `json:"pricing_quota_type"`                // 0=按量，1=按次
 }
 
 // inviteePricingChannelPath 与前端 ModelChannelList 复制通道路径格式一致。
@@ -395,6 +401,88 @@ func inviteeModelMarkupDiscountRateMap(list []inviteeModelMarkupDiscountRateEntr
 	return m
 }
 
+func inviteeModelActualDiscountPercent(officialBase, channelBase, costDiscountPercent, markupDiscountRate float64) float64 {
+	if officialBase <= 0 || !isFiniteFloat(officialBase) || !isFiniteFloat(channelBase) {
+		return 0
+	}
+	effective := channelBase*costDiscountPercent/100 + officialBase*markupDiscountRate/100
+	if !isFiniteFloat(effective) || effective >= officialBase {
+		return 0
+	}
+	discount := math.Round((1 - effective/officialBase) * 100)
+	if discount < 0 {
+		return 0
+	}
+	return discount
+}
+
+func isFiniteFloat(v float64) bool {
+	return !math.IsNaN(v) && !math.IsInf(v, 0)
+}
+
+func inviteeTierDiscountPercent(current, official float64) float64 {
+	if official <= 0 || !isFiniteFloat(current) || !isFiniteFloat(official) || current >= official {
+		return 0
+	}
+	discount := math.Round((1 - current/official) * 100)
+	if discount < 0 {
+		return 0
+	}
+	return discount
+}
+
+func inviteeTierPreviewBases(current, official, markupDiscountRate float64) (float64, float64) {
+	costPart := current - official*markupDiscountRate/100
+	if !isFiniteFloat(costPart) || costPart < 0 {
+		costPart = 0
+	}
+	return official, costPart
+}
+
+func bestVideoFlatClipDiscountBases(hint *VideoFlatClipPricingHint, markupDiscountRate float64) (float64, float64, float64, bool) {
+	if hint == nil {
+		return 0, 0, 0, false
+	}
+	bestDiscount := 0.0
+	bestCurrent := 0.0
+	bestOfficial := 0.0
+	for _, row := range hint.Tiers {
+		discount := inviteeTierDiscountPercent(row.UsdAfterChannelDiscount, row.UsdOfficial)
+		if discount > bestDiscount {
+			bestDiscount = discount
+			bestCurrent = row.UsdAfterChannelDiscount
+			bestOfficial = row.UsdOfficial
+		}
+	}
+	if bestDiscount <= 0 || bestOfficial <= 0 {
+		return 0, 0, 0, false
+	}
+	officialBase, channelCostPart := inviteeTierPreviewBases(bestCurrent, bestOfficial, markupDiscountRate)
+	return officialBase, channelCostPart, bestDiscount, true
+}
+
+func bestImagePerImageDiscountBases(hint *ImagePerImagePricingHint, markupDiscountRate float64) (float64, float64, float64, bool) {
+	if hint == nil {
+		return 0, 0, 0, false
+	}
+	bestDiscount := 0.0
+	bestCurrent := 0.0
+	bestOfficial := 0.0
+	for _, row := range hint.Tiers {
+		discount := inviteeTierDiscountPercent(row.UsdAfterChannelDiscount, row.UsdOfficial)
+		if discount > bestDiscount {
+			bestDiscount = discount
+			bestCurrent = row.UsdAfterChannelDiscount
+			bestOfficial = row.UsdOfficial
+		}
+	}
+	if bestDiscount <= 0 || bestOfficial <= 0 {
+		return 0, 0, 0, false
+	}
+	officialBase, channelCostPart := inviteeTierPreviewBases(bestCurrent, bestOfficial, markupDiscountRate)
+	return officialBase, channelCostPart, bestDiscount, true
+}
+
 func listPricingVisibleMarkupDiscountRateItems() ([]InviteeModelMarkupDiscountRateItem, map[string]float64, error) {
 	pricing := GetPricing()
 	filtered := make([]Pricing, 0, len(pricing))
@@ -437,15 +525,43 @@ func listPricingVisibleMarkupDiscountRateItems() ([]InviteeModelMarkupDiscountRa
 			continue
 		}
 		defaultRate := ch.MarkupDiscountRate
+		quotaType := p.QuotaType
+		if ch.QuotaType == 1 {
+			quotaType = 1
+		}
+		officialBase := p.ModelRatio
+		channelBase := ch.ModelRatio
+		if quotaType == 1 {
+			officialBase = p.ModelPrice
+			channelBase = ch.ModelPrice
+		}
+		costDiscountPercent := ch.PriceDiscountPercent
+		currentDiscount := inviteeModelActualDiscountPercent(officialBase, channelBase, costDiscountPercent, defaultRate)
+		if tierOfficial, tierCostPart, tierDiscount, ok := bestVideoFlatClipDiscountBases(p.VideoFlatClipHint, defaultRate); ok {
+			officialBase = tierOfficial
+			channelBase = tierCostPart
+			costDiscountPercent = 100
+			currentDiscount = tierDiscount
+		} else if tierOfficial, tierCostPart, tierDiscount, ok := bestImagePerImageDiscountBases(p.ImagePerImageHint, defaultRate); ok {
+			officialBase = tierOfficial
+			channelBase = tierCostPart
+			costDiscountPercent = 100
+			currentDiscount = tierDiscount
+		}
 		defaultRates[key] = defaultRate
 		items = append(items, InviteeModelMarkupDiscountRateItem{
-			ModelName:                 modelName,
-			ChannelID:                 ch.ChannelID,
-			ChannelPath:               inviteePricingChannelPath(modelName, ch),
-			SupplierType:              channelSupplierTypes[ch.ChannelID],
-			ChannelName:               channelNames[ch.ChannelID],
-			DefaultMarkupDiscountRate: defaultRate,
-			CurrentMarkupDiscountRate: defaultRate,
+			ModelName:                      modelName,
+			ChannelID:                      ch.ChannelID,
+			ChannelPath:                    inviteePricingChannelPath(modelName, ch),
+			SupplierType:                   channelSupplierTypes[ch.ChannelID],
+			ChannelName:                    channelNames[ch.ChannelID],
+			DefaultMarkupDiscountRate:      defaultRate,
+			CurrentMarkupDiscountRate:      defaultRate,
+			OfficialCurrentDiscountPercent: currentDiscount,
+			ChannelPriceDiscountPercent:    costDiscountPercent,
+			OfficialBasePrice:              officialBase,
+			ChannelBasePrice:               channelBase,
+			PricingQuotaType:               quotaType,
 		})
 	}
 	sort.Slice(items, func(i, j int) bool {

@@ -29,10 +29,8 @@ import {
   Spin,
   Space,
   Select,
-  Tooltip,
 } from '@douyinfe/semi-ui';
 import { IconSearch, IconInfoCircle } from '@douyinfe/semi-icons';
-import { AlertCircle } from 'lucide-react';
 import { API, showError, showSuccess, showInfo } from '../../helpers';
 import { CHANNEL_SUPPLIER_TYPE_OPTIONS } from '../../constants';
 
@@ -44,6 +42,53 @@ const getRowKey = (item) => `${item.channel_id || 0}:${item.model_name || ''}`;
 
 const markupRatesEqual = (a, b) =>
   Math.round(Number(a ?? 0) * 100) === Math.round(Number(b ?? 0) * 100);
+
+const clampMarkupRate = (value, max = 100) => {
+  const n = Number(value ?? 0);
+  if (!Number.isFinite(n)) return 0;
+  return Math.max(0, Math.min(max, n));
+};
+
+const formatMarkupRate = (value) => {
+  const n = Number(value ?? 0);
+  if (!Number.isFinite(n)) return '0.0%';
+  return `${n.toFixed(1)}%`;
+};
+
+const calcSaleRatePercent = (record, markupRate) => {
+  const officialBase = Number(record.official_base_price ?? 0);
+  const channelBase = Number(record.channel_base_price ?? 0);
+  const costDiscountPercent = Number(
+    record.channel_price_discount_percent ?? 100,
+  );
+  const markup = Number(markupRate ?? 0);
+  if (
+    !Number.isFinite(officialBase) ||
+    !Number.isFinite(channelBase) ||
+    !Number.isFinite(costDiscountPercent) ||
+    !Number.isFinite(markup) ||
+    officialBase <= 0
+  ) {
+    const fallbackDiscount = Number(
+      record.official_current_discount_percent ?? 0,
+    );
+    if (!Number.isFinite(fallbackDiscount)) return 100;
+    return Math.max(0, 100 - Math.round(fallbackDiscount));
+  }
+  const effective =
+    (channelBase * costDiscountPercent) / 100 + (officialBase * markup) / 100;
+  if (!Number.isFinite(effective)) return 100;
+  return Math.max(0, Math.round((effective / officialBase) * 100));
+};
+
+const formatSaleRate = (value, record, markupRate) => {
+  if (record) {
+    return `${calcSaleRatePercent(record, markupRate)}%`;
+  }
+  const n = Number(value ?? 0);
+  if (!Number.isFinite(n) || n <= 0) return '100%';
+  return `${Math.max(0, 100 - Math.round(n))}%`;
+};
 
 function supplierTypeDisplay(value) {
   const v = String(value || '').trim();
@@ -89,7 +134,11 @@ const InviteeModelDiscountModal = ({
 
         const initialValues = {};
         items.forEach((item) => {
-          initialValues[getRowKey(item)] = item.current_markup_discount_rate;
+          const maxRate = Number(item.default_markup_discount_rate || 0);
+          initialValues[getRowKey(item)] = clampMarkupRate(
+            item.current_markup_discount_rate,
+            maxRate,
+          );
         });
         setBaselineValues(initialValues);
         setDiscountValues(initialValues);
@@ -138,7 +187,8 @@ const InviteeModelDiscountModal = ({
     let result = modelData;
     if (filterSupplierType != null && filterSupplierType !== '') {
       result = result.filter(
-        (item) => String(item.supplier_type || '').trim() === filterSupplierType,
+        (item) =>
+          String(item.supplier_type || '').trim() === filterSupplierType,
       );
     }
     const keyword = searchKeyword.toLowerCase().trim();
@@ -146,8 +196,11 @@ const InviteeModelDiscountModal = ({
       return result;
     }
     return result.filter((item) => {
-      const path = `${item.channel_path || ''} ${item.model_name || ''} ${item.channel_id || ''}`.toLowerCase();
-      const raw = String(item.supplier_type || '').trim().toLowerCase();
+      const path =
+        `${item.channel_path || ''} ${item.model_name || ''} ${item.channel_id || ''}`.toLowerCase();
+      const raw = String(item.supplier_type || '')
+        .trim()
+        .toLowerCase();
       const disp = supplierTypeDisplay(item.supplier_type).toLowerCase();
       return (
         path.includes(keyword) ||
@@ -175,13 +228,10 @@ const InviteeModelDiscountModal = ({
     setPage(1);
   }, [searchKeyword, filterSupplierType, modelData.length]);
 
-  const handleDiscountChange = (rowKey, value) => {
-    const numValue = value === null || value === undefined ? 0 : Number(value);
-    const clampedValue = Math.max(0, Math.min(100, numValue));
-
+  const handleDiscountChange = (rowKey, value, maxRate) => {
     setDiscountValues((prev) => ({
       ...prev,
-      [rowKey]: clampedValue,
+      [rowKey]: clampMarkupRate(value, maxRate),
     }));
   };
 
@@ -197,7 +247,13 @@ const InviteeModelDiscountModal = ({
         model_name: item.model_name,
         channel_id: item.channel_id,
         markup_discount_rate:
-          discountValues[getRowKey(item)] ?? item.current_markup_discount_rate,
+          Number(item.default_markup_discount_rate || 0) > 0
+            ? clampMarkupRate(
+                discountValues[getRowKey(item)] ??
+                  item.current_markup_discount_rate,
+                Number(item.default_markup_discount_rate || 0),
+              )
+            : 0,
       }));
 
       const res = await API.put('/api/distributor/invitee-model-discounts', {
@@ -237,7 +293,7 @@ const InviteeModelDiscountModal = ({
     {
       title: t('模型 / 通道路径'),
       dataIndex: 'model_name',
-      width: 380,
+      width: 300,
       render: (text, record) => (
         <div className='flex flex-col gap-1'>
           <Typography.Text strong copyable>
@@ -253,59 +309,86 @@ const InviteeModelDiscountModal = ({
       ),
     },
     {
-      title: t('系统折扣率'),
-      dataIndex: 'default_markup_discount_rate',
-      width: 140,
-      render: (value) => (
-        <Text type='secondary'>{Number(value || 0).toFixed(2)}%</Text>
+      title: t('平台售价比例'),
+      dataIndex: 'official_current_discount_percent',
+      width: 130,
+      render: (value, record) => (
+        <Text
+          type={
+            calcSaleRatePercent(record, record.default_markup_discount_rate) <
+            100
+              ? 'success'
+              : 'secondary'
+          }
+        >
+          {formatSaleRate(value, record, record.default_markup_discount_rate)}
+        </Text>
       ),
     },
     {
-      title: t('模型折扣率'),
+      title: t('平台加价折扣比例'),
+      dataIndex: 'default_markup_discount_rate',
+      width: 130,
+      render: (value) => (
+        <Text type='secondary'>
+          {Number(value || 0) > 0 ? formatMarkupRate(value) : '-'}
+        </Text>
+      ),
+    },
+    {
+      title: t('代理可加价比例'),
       dataIndex: 'current_markup_discount_rate',
-      width: 200,
+      width: 210,
       render: (_, record) => {
         const rowKey = getRowKey(record);
+        const maxRate = Number(record.default_markup_discount_rate || 0);
+        if (maxRate <= 0) {
+          return <Text type='tertiary'>-</Text>;
+        }
         const currentValue =
-          discountValues[rowKey] ?? record.current_markup_discount_rate;
+          discountValues[rowKey] ??
+          clampMarkupRate(record.current_markup_discount_rate, maxRate);
         const baseline =
-          baselineValues[rowKey] ?? record.current_markup_discount_rate;
+          baselineValues[rowKey] ??
+          clampMarkupRate(record.current_markup_discount_rate, maxRate);
         const isModified = !markupRatesEqual(currentValue, baseline);
-        const systemRate = Number(record.default_markup_discount_rate ?? 0);
-        const aboveSystem = currentValue > systemRate + 1e-6;
-        const tipContent = t(
-          '您当前设置的折扣率高于系统默认折扣率，会导致用户使用价格高于正常价。',
-        );
         return (
-          <div className='flex items-center gap-1.5 w-full min-w-0'>
-            {aboveSystem ? (
-              <Tooltip content={tipContent} position='top'>
-                <span
-                  className='inline-flex shrink-0 cursor-help text-amber-500 dark:text-amber-400'
-                  role='img'
-                  aria-label={tipContent}
-                >
-                  <AlertCircle size={18} strokeWidth={2.25} />
-                </span>
-              </Tooltip>
-            ) : (
-              <span
-                className='inline-flex w-[18px] shrink-0 justify-center'
-                aria-hidden
-              />
-            )}
+          <div className='w-full min-w-0'>
             <InputNumber
               value={currentValue}
-              onChange={(v) => handleDiscountChange(rowKey, v)}
+              onChange={(v) => handleDiscountChange(rowKey, v, maxRate)}
               min={0}
-              max={100}
-              precision={2}
+              max={maxRate}
+              precision={1}
               suffix='%'
-              className={`min-w-0 flex-1 ${
+              className={`w-full ${
                 isModified ? 'border-semi-color-primary' : ''
               }`}
             />
+            <Text type='tertiary' size='small' className='mt-1 !block'>
+              {t('可输入范围')}：0.0% - {formatMarkupRate(maxRate)}
+            </Text>
           </div>
+        );
+      },
+    },
+    {
+      title: t('修改后平台售价比例'),
+      dataIndex: 'preview_discount_percent',
+      width: 130,
+      render: (_, record) => {
+        const rowKey = getRowKey(record);
+        const maxRate = Number(record.default_markup_discount_rate || 0);
+        const currentValue =
+          maxRate > 0
+            ? (discountValues[rowKey] ??
+              clampMarkupRate(record.current_markup_discount_rate, maxRate))
+            : 0;
+        const saleRate = calcSaleRatePercent(record, currentValue);
+        return (
+          <Text type={saleRate < 100 ? 'success' : 'secondary'}>
+            {formatSaleRate(null, record, currentValue)}
+          </Text>
         );
       },
     },
@@ -333,7 +416,7 @@ const InviteeModelDiscountModal = ({
       }
       visible={visible}
       onCancel={onCancel}
-      width={760}
+      width={980}
       footer={
         <div className='flex flex-wrap justify-end gap-2'>
           <Button
@@ -361,7 +444,7 @@ const InviteeModelDiscountModal = ({
             icon={<IconInfoCircle />}
             className='!rounded-lg'
             description={t(
-              '说明：本功能用于为被邀请用户配置各模型的折扣率（在官方定价基础上的加价比例）。当设置的折扣率高于系统折扣率时，用户侧模型价格会高于系统默认；低于系统折扣率时则会低于系统默认（即减价）。未修改时与渠道系统折扣率一致，修改后仅对该用户生效。',
+              '说明：本功能用于为被邀请用户配置各模型的代理可加价比例（在官方定价基础上的加价比例）。平台加价折扣比例来自渠道配置；平台加价折扣比例为 0 时不可设置。代理可加价比例范围为 0 到平台加价折扣比例，单位为百分比且保留 1 位小数。平台售价比例与修改后平台售价比例均按首页卡片同口径折算。',
             )}
           />
 

@@ -27,7 +27,12 @@ import {
   Typography,
 } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
-import { selectFilter } from '../../../../helpers';
+import {
+  API,
+  getModelCategories,
+  selectFilter,
+  showError,
+} from '../../../../helpers';
 
 const APP_CONFIGS = {
   claude: {
@@ -51,6 +56,66 @@ const APP_CONFIGS = {
     modelFields: [{ key: 'model', label: '主模型' }],
   },
 };
+
+function buildCCSwitchModelOptions(items, t) {
+  const categories = getModelCategories(t);
+  const options = [];
+  const seen = new Set();
+
+  const addOption = (value, channelLabel) => {
+    if (!value || seen.has(value)) return;
+    seen.add(value);
+    const baseModel = value.includes('/') ? value.split('/')[0] : value;
+    let icon = null;
+    for (const [key, category] of Object.entries(categories)) {
+      if (key !== 'all' && category.filter({ model_name: baseModel })) {
+        icon = category.icon;
+        break;
+      }
+    }
+    options.push({
+      label: (
+        <span className='flex items-center gap-1'>
+          {icon}
+          <span>
+            {value}
+            {channelLabel ? (
+              <Typography.Text type='tertiary' size='small'>
+                {' '}
+                ({channelLabel})
+              </Typography.Text>
+            ) : null}
+          </span>
+        </span>
+      ),
+      value,
+    });
+  };
+
+  for (const item of items) {
+    if (typeof item === 'string') {
+      addOption(item);
+      continue;
+    }
+    const modelName = item?.model_name;
+    if (!modelName) continue;
+    addOption(modelName);
+    const channelOptions = Array.isArray(item.channel_options)
+      ? item.channel_options
+      : [];
+    for (const ch of channelOptions) {
+      const routeSlug = String(ch?.route_slug || '').trim();
+      if (!routeSlug) continue;
+      const routeSlugLabel = [routeSlug, String(ch?.supplier_type || '').trim()]
+        .filter(Boolean)
+        .join('-');
+      addOption(`${modelName}/${routeSlug}`, routeSlugLabel);
+    }
+  }
+
+  options.sort((a, b) => String(a.value).localeCompare(String(b.value)));
+  return options;
+}
 
 function getServerAddress() {
   try {
@@ -84,14 +149,46 @@ export default function CCSwitchModal({
   visible,
   onClose,
   tokenKey,
-  modelOptions,
 }) {
   const { t } = useTranslation();
   const [app, setApp] = useState('claude');
   const [name, setName] = useState(APP_CONFIGS.claude.defaultName);
   const [models, setModels] = useState({});
+  const [modelOptions, setModelOptions] = useState([]);
+  const [loadingModels, setLoadingModels] = useState(false);
 
   const currentConfig = APP_CONFIGS[app];
+
+  useEffect(() => {
+    if (!visible) return;
+    let cancelled = false;
+    const loadModels = async () => {
+      setLoadingModels(true);
+      try {
+        const res = await API.get('/api/user/models?scene=playground');
+        const { success, message, data } = res.data || {};
+        if (cancelled) return;
+        if (!success) {
+          showError(t(message));
+          setModelOptions([]);
+          return;
+        }
+        const items = Array.isArray(data) ? data : data?.items || [];
+        setModelOptions(buildCCSwitchModelOptions(items, t));
+      } catch (e) {
+        if (!cancelled) {
+          showError(e?.message || t('加载模型失败'));
+          setModelOptions([]);
+        }
+      } finally {
+        if (!cancelled) setLoadingModels(false);
+      }
+    };
+    loadModels();
+    return () => {
+      cancelled = true;
+    };
+  }, [visible, t]);
 
   useEffect(() => {
     if (visible) {
@@ -184,6 +281,7 @@ export default function CCSwitchModal({
               style={{ width: '100%' }}
               showClear
               searchable
+              loading={loadingModels}
               emptyContent={t('暂无数据')}
             />
           </div>

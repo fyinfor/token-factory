@@ -192,9 +192,6 @@ function TokensPage() {
   openFluentNotificationRef.current = openFluentNotification;
 
   function openCCSwitchModal(key) {
-    if (modelOptions.length === 0) {
-      loadModels();
-    }
     setCCSwitchKey(key || '');
     setCCSwitchVisible(true);
   }
@@ -388,7 +385,6 @@ function TokensPage() {
         visible={ccSwitchVisible}
         onClose={() => setCCSwitchVisible(false)}
         tokenKey={ccSwitchKey}
-        modelOptions={modelOptions}
       />
 
       <CardPro
