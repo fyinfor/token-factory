@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/QuantumNous/new-api/common"
@@ -19,12 +18,15 @@ func ossUploadFail(c *gin.Context, message string) {
 	})
 }
 
-// OssUpload 通用 OSS 上传（需登录；需在运营设置中启用并填写 OSS 参数）。
+// OssUpload 通用文件上传（需登录；需在运营设置中启用上传）。
+// 根据 storage_type 分发到本地存储或阿里云 OSS。
 func OssUpload(c *gin.Context) {
-	if !operation_setting.IsOssUploadReady() {
-		ossUploadFail(c, service.ErrOssNotConfigured.Error())
+	cfg := operation_setting.GetOssSetting()
+	if !cfg.Enabled {
+		ossUploadFail(c, "文件上传未启用，请先在运营设置中启用")
 		return
 	}
+
 	id := c.GetInt("id")
 	if id == 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{
@@ -52,12 +54,18 @@ func OssUpload(c *gin.Context) {
 		return
 	}
 
-	publicURL, err := service.OssUploadMultipartFile(file, id)
-	if err != nil {
-		if errors.Is(err, service.ErrOssNotConfigured) {
-			ossUploadFail(c, err.Error())
+	var publicURL string
+	if cfg.StorageType == operation_setting.StorageTypeLocal {
+		publicURL, err = service.LocalUploadMultipartFile(file, id)
+	} else {
+		if !operation_setting.IsOssUploadReady() {
+			ossUploadFail(c, service.ErrOssNotConfigured.Error())
 			return
 		}
+		publicURL, err = service.OssUploadMultipartFile(file, id)
+	}
+
+	if err != nil {
 		ossUploadFail(c, err.Error())
 		return
 	}

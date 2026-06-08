@@ -129,6 +129,7 @@ const SystemSetting = () => {
     'fetch_setting.allowed_ports': [],
     'fetch_setting.apply_ip_filter_for_domain': true,
     'oss_setting.enabled': false,
+    'oss_setting.storage_type': 'local',
     'oss_setting.endpoint': '',
     'oss_setting.bucket': '',
     'oss_setting.access_key_id': '',
@@ -136,6 +137,7 @@ const SystemSetting = () => {
     'oss_setting.public_base_url': '',
     'oss_setting.object_key_prefix': 'uploads/',
     'oss_setting.max_file_size_mb': 20,
+    'oss_setting.local_storage_path': 'uploads',
   });
 
   const [originInputs, setOriginInputs] = useState({});

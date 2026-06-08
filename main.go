@@ -279,6 +279,11 @@ func InitResources() error {
 	service.InitHttpClient()
 	service.InitOssHttpClient()
 
+	// 初始化本地存储目录（如果启用了本地存储模式）
+	if err := service.EnsureLocalStorageDir(); err != nil {
+		common.SysError("local storage init: " + err.Error())
+	}
+
 	service.InitTokenEncoders()
 
 	// Initialize SQL Database
