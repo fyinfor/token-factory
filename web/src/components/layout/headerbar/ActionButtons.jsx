@@ -17,12 +17,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React from 'react';
-import NewYearButton from './NewYearButton';
+import React, { useState } from 'react';
+import { Button } from '@douyinfe/semi-ui';
+import { ScrollText } from 'lucide-react';
 import NotificationButton from './NotificationButton';
 import ThemeToggle from './ThemeToggle';
 import LanguageSelector from './LanguageSelector';
 import UserArea from './UserArea';
+import ChangelogSideSheet from './ChangelogSideSheet';
 
 const ActionButtons = ({
   isNewYear,
@@ -41,10 +43,25 @@ const ActionButtons = ({
   t,
 }) => {
   const shouldShowNoticeButton = Boolean(userState?.user?.id);
+  const [changelogVisible, setChangelogVisible] = useState(false);
 
   return (
     <div className='flex items-center gap-2 md:gap-3'>
       {/* <NewYearButton isNewYear={isNewYear} /> */}
+      <Button
+        icon={<ScrollText size={18} />}
+        aria-label={t('更新日志')}
+        onClick={() => setChangelogVisible(true)}
+        theme='borderless'
+        type='tertiary'
+        className='!p-1.5 !text-current focus:!bg-semi-color-fill-1 dark:focus:!bg-gray-700 !rounded-full !bg-semi-color-fill-0 dark:!bg-semi-color-fill-1 hover:!bg-semi-color-fill-1 dark:hover:!bg-semi-color-fill-2'
+      />
+      <ChangelogSideSheet
+        visible={changelogVisible}
+        onClose={() => setChangelogVisible(false)}
+        isMobile={isMobile}
+        t={t}
+      />
       {shouldShowNoticeButton && (
         <NotificationButton
           unreadCount={unreadCount}

@@ -21,6 +21,7 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/setup", controller.GetSetup)
 		apiRouter.POST("/setup", controller.PostSetup)
 		apiRouter.GET("/status", controller.GetStatus)
+		apiRouter.GET("/changelog", controller.ListPublicChangelogs)
 		apiRouter.GET("/uptime/status", controller.GetUptimeKumaStatus)
 		apiRouter.GET("/api/vendors", controller.GetVendors)
 		apiRouter.GET("/models", middleware.UserAuth(), controller.DashboardListModels)
@@ -234,8 +235,8 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.DELETE("/:id/bindings/:binding_type", controller.AdminClearUserBinding)
 				adminRoute.GET("/check_phone", controller.AdminCheckPhoneAvailable)
 				adminRoute.GET("/:id", controller.GetUser)
-			adminRoute.GET("/:id/log/export", controller.ExportUserLogsAdmin)
-			adminRoute.POST("/log/export_all", controller.ExportAllUsersLogsAdmin)
+				adminRoute.GET("/:id/log/export", controller.ExportUserLogsAdmin)
+				adminRoute.POST("/log/export_all", controller.ExportAllUsersLogsAdmin)
 				adminRoute.POST("/", controller.CreateUser)
 				adminRoute.POST("/manage", controller.ManageUser)
 				adminRoute.PUT("/aff_invitees/commission", controller.PutAffInviteeCommission)
@@ -291,6 +292,14 @@ func SetApiRouter(router *gin.Engine) {
 			optionRoute.DELETE("/rate_limit_blacklist_users", middleware.RootAuth(), controller.DeleteRateLimitBlacklistUser)
 			optionRoute.POST("/rest_model_ratio", middleware.RootAuth(), controller.ResetModelRatio)
 			optionRoute.POST("/migrate_console_setting", middleware.RootAuth(), controller.MigrateConsoleSetting) // 用于迁移检测的旧键，下个版本会删除
+		}
+		changelogAdminRoute := apiRouter.Group("/changelog/admin")
+		changelogAdminRoute.Use(middleware.AdminAuth())
+		{
+			changelogAdminRoute.GET("/", controller.AdminListChangelogs)
+			changelogAdminRoute.POST("/", controller.AdminCreateChangelog)
+			changelogAdminRoute.PUT("/:id", controller.AdminUpdateChangelog)
+			changelogAdminRoute.DELETE("/:id", controller.AdminDeleteChangelog)
 		}
 
 		// Custom OAuth provider management (root only)

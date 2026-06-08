@@ -76,6 +76,9 @@ const EditUserModal = (props) => {
   const [bindingModalVisible, setBindingModalVisible] = useState(false);
   const formApiRef = useRef(null);
   const phoneValidateRef = useRef(null);
+  // 单独维护手机号：loadUser 完成后用接口返回的回显值，
+  // 避免依赖 Semi Form render prop 中的 values 在 setValues 之后首帧未及时下发。
+  const [phoneValue, setPhoneValue] = useState('');
 
   const isEdit = Boolean(userId);
 
@@ -135,6 +138,9 @@ const EditUserModal = (props) => {
         data.tags = [];
       }
       formApiRef.current?.setValues({ ...getInitValues(), ...data });
+      // 直接以接口返回的 phone 回显到 CountryPhoneInput，绕开 Semi Form
+      // render prop 中 values 首次帧下发不及时导致的手机号空白问题。
+      setPhoneValue(data.phone || '');
     } else {
       showError(message);
     }
@@ -142,6 +148,8 @@ const EditUserModal = (props) => {
   };
 
   useEffect(() => {
+    // 切换编辑目标时重置本地手机号，避免上一个用户的号码被带入。
+    setPhoneValue('');
     loadUser();
     if (userId) fetchGroups();
     setBindingModalVisible(false);
@@ -157,10 +165,13 @@ const EditUserModal = (props) => {
 
   /* ----------------------- submit ----------------------- */
   const submit = async (values) => {
+    // 优先使用本地手机号 state（编辑回显的来源），避免 Semi Form
+    // 中 values.phone 在某些时序下不是最新输入。
+    const effectivePhone = phoneValue || values.phone || '';
     // 手动跑 phone 字段完整校验
     if (phoneValidateRef.current) {
       const err = await phoneValidateRef.current.runFullValidate(
-        values.phone || '',
+        effectivePhone,
       );
       if (err) {
         showError(err);
@@ -168,7 +179,7 @@ const EditUserModal = (props) => {
       }
     }
     setLoading(true);
-    let payload = { ...values };
+    let payload = { ...values, phone: effectivePhone };
     if (typeof payload.quota === 'string')
       payload.quota = parseInt(payload.quota) || 0;
     if (userId) {
@@ -321,8 +332,11 @@ const EditUserModal = (props) => {
                         {t('手机号')}
                       </div>
                       <CountryPhoneInput
-                        value={values.phone || ''}
-                        onChange={(v) => formApi.setValue('phone', v)}
+                        value={phoneValue}
+                        onChange={(v) => {
+                          setPhoneValue(v);
+                          formApi.setValue('phone', v);
+                        }}
                         intlEnabled={intlEnabled}
                         placeholder={t('请输入手机号')}
                         rules={buildAdminUserPhoneFieldRules(t, {

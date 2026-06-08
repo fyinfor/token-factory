@@ -1013,6 +1013,19 @@ const RegisterForm = () => {
     );
   };
 
+  // 后端在 "系统设置 -> 配置登录注册 -> 允许新用户注册" 关闭时拒绝注册。
+  // 这里加上前端守卫，避免未登录用户直接通过 URL 打开注册页。
+  const registerEnabled = status?.register_enabled;
+  useEffect(() => {
+    if (registerEnabled === false) {
+      showError(t('注册已关闭'));
+      navigate('/login', { replace: true });
+    }
+  }, [registerEnabled, navigate, t]);
+  if (registerEnabled === false) {
+    return null;
+  }
+
   return (
     <div className='relative overflow-hidden bg-gray-100 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8'>
       {/* 背景模糊晕染球 */}

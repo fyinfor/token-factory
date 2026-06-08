@@ -2721,6 +2721,7 @@
     "未测试": "Not tested",
     "未添加附加条件时，仅使用上方 type 进行清理。": "When no additional conditions are added, only the above type is used for pruning.",
     "未登录或登录已过期，请重新登录": "Not logged in or login has expired, please log in again",
+    "注册已关闭": "Registration is disabled",
     "未登录模糊价格": "Ambiguous price not logged in",
     "成本价": "Cost price",
     "折扣": "Discount",
@@ -5641,6 +5642,24 @@
     "对账单导出成功": "Statement exported successfully",
     "对账单导出失败": "Failed to export statement",
     "当前视图不支持导出对账单": "Current view does not support statement export",
-    "供应商视图不支持导出对账单": "Supplier view does not support statement export"
+    "供应商视图不支持导出对账单": "Supplier view does not support statement export",
+    "13800000000": "13800000000",
+    "更新日志": "Changelog",
+    "新增更新日志": "Add changelog",
+    "保存更新日志": "Save changelog",
+    "暂无更新日志": "No changelog yet",
+    "内容（Markdown）": "Content (Markdown)",
+    "请输入更新内容，支持 Markdown": "Enter update content, Markdown supported",
+    "请完整填写每条更新日志的日期和内容": "Please fill in the date and content for each changelog entry",
+    "确定删除这条更新日志？": "Delete this changelog entry?",
+    "更新日志已保存": "Changelog saved",
+    "更新日志保存失败": "Failed to save changelog",
+    "加载更新日志失败": "Failed to load changelog",
+    "请完整填写更新日志日期和内容": "Please fill in the changelog date and content",
+    "删除更新日志失败": "Failed to delete changelog",
+    "更新日志已删除": "Changelog deleted",
+    "编辑更新日志": "Edit changelog",
+    "请输入日期": "Please enter a date",
+    "请输入更新内容": "Please enter update content"
   }
 }
