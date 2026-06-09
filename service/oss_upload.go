@@ -12,12 +12,10 @@ import (
 	"mime/multipart"
 	"net"
 	"net/http"
-	"path"
 	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/setting/operation_setting"
-	"github.com/google/uuid"
 )
 
 const (
@@ -31,16 +29,21 @@ var ErrOssNotConfigured = errors.New("未配置阿里云 OSS，请先在运营�
 // OssUploadMultipartFile 将表单文件上传到已配置的阿里云 OSS（REST PutObject + 签名版本 1），返回对外访问 URL。
 // 需 Bucket/对象可读（公共读、CDN 或已授权访问）。
 func OssUploadMultipartFile(file *multipart.FileHeader, userID int) (string, error) {
+	_ = userID
 	if !operation_setting.IsOssUploadReady() {
 		return "", ErrOssNotConfigured
 	}
 	cfg := operation_setting.GetOssSetting()
-	maxBytes := int64(cfg.MaxFileSizeMB) * 1024 * 1024
-	if cfg.MaxFileSizeMB <= 0 {
-		maxBytes = 20 * 1024 * 1024
+	maxFileSizeMB := cfg.OssMaxFileSizeMB
+	if maxFileSizeMB <= 0 {
+		maxFileSizeMB = cfg.MaxFileSizeMB
 	}
+	if maxFileSizeMB <= 0 {
+		maxFileSizeMB = 20
+	}
+	maxBytes := int64(maxFileSizeMB) * 1024 * 1024
 	if file.Size > maxBytes {
-		return "", fmt.Errorf("文件超过大小限制（最大 %d MB）", cfg.MaxFileSizeMB)
+		return "", fmt.Errorf("文件超过大小限制（最大 %d MB）", maxFileSizeMB)
 	}
 
 	f, err := file.Open()
@@ -54,16 +57,10 @@ func OssUploadMultipartFile(file *multipart.FileHeader, userID int) (string, err
 		return "", err
 	}
 	if int64(len(data)) > maxBytes {
-		return "", fmt.Errorf("文件超过大小限制（最大 %d MB）", cfg.MaxFileSizeMB)
+		return "", fmt.Errorf("文件超过大小限制（最大 %d MB）", maxFileSizeMB)
 	}
 
-	orig := strings.TrimSpace(file.Filename)
-	ext := path.Ext(orig)
-	if ext != "" && len(ext) > 16 {
-		ext = ""
-	}
-	ext = strings.ToLower(ext)
-	objectKey := ossObjectKey(cfg.ObjectKeyPrefix, userID, ext)
+	objectKey := BuildUploadObjectPath(cfg.ObjectKeyPrefix, uploadFileExt(file.Filename))
 
 	contentType := file.Header.Get("Content-Type")
 	if contentType == "" {
@@ -74,18 +71,6 @@ func OssUploadMultipartFile(file *multipart.FileHeader, userID int) (string, err
 		return "", err
 	}
 	return publicObjectURL(cfg, objectKey), nil
-}
-
-func ossObjectKey(prefix string, userID int, ext string) string {
-	p := strings.Trim(prefix, "/")
-	if p != "" {
-		p += "/"
-	}
-	id := uuid.NewString()
-	if ext != "" && !strings.HasPrefix(ext, ".") {
-		ext = "." + ext
-	}
-	return fmt.Sprintf("%s%d/%s%s", p, userID, id, ext)
 }
 
 func publicObjectURL(cfg *operation_setting.OssSetting, objectKey string) string {
