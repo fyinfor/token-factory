@@ -66,8 +66,14 @@ const CountryPhoneInput = ({
   const [countryCode, setCountryCode] = React.useState(split.countryCode);
   const [localNumber, setLocalNumber] = React.useState(split.localNumber);
   const [internalError, setInternalError] = React.useState('');
+  // 记录上一次外部 value，避免 effect 依赖在对象引用变化时错过同步。
+  const lastSyncedValueRef = React.useRef(value);
 
   React.useEffect(() => {
+    if (lastSyncedValueRef.current === value) {
+      return;
+    }
+    lastSyncedValueRef.current = value;
     const s = splitE164Phone(value);
     setCountryCode(s.countryCode);
     setLocalNumber(s.localNumber);

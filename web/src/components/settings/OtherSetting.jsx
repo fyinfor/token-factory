@@ -25,8 +25,11 @@ import {
   Form,
   Row,
   Modal,
+  Popconfirm,
   Space,
   Card,
+  Tabs,
+  Table,
   Upload,
 } from '@douyinfe/semi-ui';
 import {
@@ -41,6 +44,7 @@ import { useTranslation } from 'react-i18next';
 import { languageSelectOptions } from '../../i18n/language';
 import { StatusContext } from '../../context/Status';
 import Text from '@douyinfe/semi-ui/lib/es/typography/text';
+import MarkdownRenderer from '../common/markdown/MarkdownRenderer';
 
 const LEGAL_USER_AGREEMENT_KEY = 'legal.user_agreement';
 const LEGAL_PRIVACY_POLICY_KEY = 'legal.privacy_policy';
@@ -81,6 +85,23 @@ const docsImageEmptyStyle = {
   cursor: 'default',
 };
 
+const formatChangelogDate = (value) => {
+  if (!value) {
+    return '';
+  }
+  if (value instanceof Date) {
+    const year = value.getFullYear();
+    const month = String(value.getMonth() + 1).padStart(2, '0');
+    const day = String(value.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+  const str = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    return str.slice(0, 10);
+  }
+  return str;
+};
+
 const OtherSetting = () => {
   const { t } = useTranslation();
   let [inputs, setInputs] = useState({
@@ -111,6 +132,17 @@ const OtherSetting = () => {
   let [loading, setLoading] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [statusState] = useContext(StatusContext);
+  const [changelogEntries, setChangelogEntries] = useState([]);
+  const [changelogTotal, setChangelogTotal] = useState(0);
+  const [changelogPage, setChangelogPage] = useState(1);
+  const [changelogPageSize, setChangelogPageSize] = useState(10);
+  const [changelogLoading, setChangelogLoading] = useState(false);
+  const [changelogModalVisible, setChangelogModalVisible] = useState(false);
+  const [editingChangelog, setEditingChangelog] = useState(null);
+  const [changelogForm, setChangelogForm] = useState({
+    date: '',
+    content: '',
+  });
   const [updateData, setUpdateData] = useState({
     tag_name: '',
     content: '',
@@ -149,12 +181,152 @@ const OtherSetting = () => {
     About: false,
     Footer: false,
     CheckUpdate: false,
+    Changelog: false,
     DefaultSiteLanguage: false,
   });
   const handleInputChange = async (value, e) => {
     const name = e.target.id;
     setInputs((inputs) => ({ ...inputs, [name]: value }));
   };
+  const loadChangelogs = async (
+    targetPage = changelogPage,
+    targetPageSize = changelogPageSize,
+  ) => {
+    setChangelogLoading(true);
+    try {
+      const res = await API.get('/api/changelog/admin/', {
+        params: {
+          p: targetPage,
+          page_size: targetPageSize,
+        },
+      });
+      const { success, message, data } = res.data || {};
+      if (!success) {
+        showError(message || t('加载更新日志失败'));
+        return;
+      }
+      const items = Array.isArray(data?.items) ? data.items : [];
+      setChangelogEntries(items);
+      setChangelogTotal(Number(data?.total || items.length || 0));
+    } catch (error) {
+      showError(error?.message || t('加载更新日志失败'));
+    } finally {
+      setChangelogLoading(false);
+    }
+  };
+  const openCreateChangelogModal = () => {
+    setEditingChangelog(null);
+    setChangelogForm({ date: '', content: '' });
+    setChangelogModalVisible(true);
+  };
+  const openEditChangelogModal = (record) => {
+    setEditingChangelog(record);
+    setChangelogForm({
+      date: record.date || '',
+      content: record.content || '',
+    });
+    setChangelogModalVisible(true);
+  };
+  const submitChangelogModal = async () => {
+    const payload = {
+      date: formatChangelogDate(changelogForm.date),
+      content: String(changelogForm.content || '').trim(),
+    };
+    if (!payload.date || !payload.content) {
+      showError(t('请完整填写更新日志日期和内容'));
+      return;
+    }
+    try {
+      setLoadingInput((loadingInput) => ({ ...loadingInput, Changelog: true }));
+      const res = editingChangelog?.id
+        ? await API.put(`/api/changelog/admin/${editingChangelog.id}`, payload)
+        : await API.post('/api/changelog/admin/', payload);
+      const { success, message } = res.data || {};
+      if (!success) {
+        showError(message || t('更新日志保存失败'));
+        return;
+      }
+      showSuccess(t('更新日志已保存'));
+      setChangelogModalVisible(false);
+      const nextPage = editingChangelog?.id ? changelogPage : 1;
+      setChangelogPage(nextPage);
+      await loadChangelogs(nextPage, changelogPageSize);
+    } catch (error) {
+      showError(error?.message || t('更新日志保存失败'));
+    } finally {
+      setLoadingInput((loadingInput) => ({
+        ...loadingInput,
+        Changelog: false,
+      }));
+    }
+  };
+  const deleteChangelog = async (id) => {
+    try {
+      const res = await API.delete(`/api/changelog/admin/${id}`);
+      const { success, message } = res.data || {};
+      if (!success) {
+        showError(message || t('删除更新日志失败'));
+        return;
+      }
+      showSuccess(t('更新日志已删除'));
+      const nextPage =
+        changelogEntries.length === 1 && changelogPage > 1
+          ? changelogPage - 1
+          : changelogPage;
+      setChangelogPage(nextPage);
+      await loadChangelogs(nextPage, changelogPageSize);
+    } catch (error) {
+      showError(error?.message || t('删除更新日志失败'));
+    }
+  };
+  const changelogColumns = [
+    {
+      title: t('日期'),
+      dataIndex: 'date',
+      width: 180,
+    },
+    {
+      title: t('内容（Markdown）'),
+      dataIndex: 'content',
+      render: (content) => (
+        <div
+          style={{
+            maxWidth: 560,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+          title={content}
+        >
+          {content}
+        </div>
+      ),
+    },
+    {
+      title: t('操作'),
+      dataIndex: 'action',
+      width: 100,
+      render: (_, record) => (
+        <Space>
+          <Button
+            theme='borderless'
+            onClick={() => openEditChangelogModal(record)}
+          >
+            {t('编辑')}
+          </Button>
+          <Popconfirm
+            title={t('确定删除这条更新日志？')}
+            onConfirm={() => deleteChangelog(record.id)}
+            position='left'
+          >
+            <Button type='danger' theme='borderless'>
+              {t('删除')}
+            </Button>
+          </Popconfirm>
+        </Space>
+      ),
+    },
+  ];
 
   // 通用设置
   const formAPISettingGeneral = useRef();
@@ -505,6 +677,7 @@ const OtherSetting = () => {
 
   useEffect(() => {
     getOptions();
+    loadChangelogs(1, changelogPageSize);
   }, []);
 
   // Function to open GitHub release page
@@ -639,6 +812,49 @@ const OtherSetting = () => {
               >
                 {t('设置隐私政策')}
               </Button>
+            </Form.Section>
+          </Card>
+        </Form>
+        {/* 更新日志 */}
+        <Form>
+          <Card>
+            <Form.Section text={t('更新日志')}>
+              <Space vertical align='start' style={{ width: '100%' }}>
+                <Space wrap>
+                  <Button type='primary' onClick={openCreateChangelogModal}>
+                    {t('新增更新日志')}
+                  </Button>
+                </Space>
+                <Table
+                  rowKey='id'
+                  columns={changelogColumns}
+                  dataSource={changelogEntries}
+                  loading={changelogLoading}
+                  scroll={{ y: 360, x: 'max-content' }}
+                  pagination={{
+                    currentPage: changelogPage,
+                    pageSize: changelogPageSize,
+                    total: changelogTotal,
+                    hideOnSinglePage: false,
+                    showSizeChanger: true,
+                    showQuickJumper: true,
+                    showTotal: true,
+                    pageSizeOptions: ['5', '10', '20', '50'],
+                    onChange: (page, size) => {
+                      setChangelogPage(page);
+                      setChangelogPageSize(size);
+                      loadChangelogs(page, size);
+                    },
+                    onShowSizeChange: (current, size) => {
+                      setChangelogPage(1);
+                      setChangelogPageSize(size);
+                      loadChangelogs(1, size);
+                    },
+                  }}
+                  empty={t('暂无更新日志')}
+                  style={{ width: '100%' }}
+                />
+              </Space>
             </Form.Section>
           </Card>
         </Form>
@@ -1022,6 +1238,80 @@ const OtherSetting = () => {
             />
           </div>
         )}
+      </Modal>
+      <Modal
+        title={editingChangelog ? t('编辑更新日志') : t('新增更新日志')}
+        visible={changelogModalVisible}
+        onOk={submitChangelogModal}
+        onCancel={() => setChangelogModalVisible(false)}
+        okText={t('保存')}
+        cancelText={t('取消')}
+        confirmLoading={loadingInput['Changelog']}
+        width={720}
+      >
+        <Form
+          layout='vertical'
+          initValues={changelogForm}
+          key={
+            editingChangelog?.id
+              ? `edit-changelog-${editingChangelog.id}`
+              : `new-changelog-${changelogModalVisible ? 'open' : 'closed'}`
+          }
+        >
+          <Form.DatePicker
+            field='date'
+            label={t('日期')}
+            type='date'
+            placeholder={t('请选择日期')}
+            style={{ width: '100%' }}
+            rules={[{ required: true, message: t('请输入日期') }]}
+            onChange={(value) =>
+              setChangelogForm((prev) => ({
+                ...prev,
+                date: formatChangelogDate(value),
+              }))
+            }
+          />
+          <Form.Slot label={t('内容（Markdown）')}>
+            <Tabs type='line'>
+              <Tabs.TabPane tab={t('编辑')} itemKey='edit'>
+                <Form.TextArea
+                  field='content'
+                  label={t('内容（Markdown）')}
+                  placeholder={t('请输入更新内容，支持 Markdown')}
+                  autosize={{ minRows: 8, maxRows: 16 }}
+                  rules={[{ required: true, message: t('请输入更新内容') }]}
+                  style={{ fontFamily: 'JetBrains Mono, Consolas' }}
+                  onChange={(value) =>
+                    setChangelogForm((prev) => ({
+                      ...prev,
+                      content: value,
+                    }))
+                  }
+                />
+              </Tabs.TabPane>
+              <Tabs.TabPane tab={t('预览')} itemKey='preview'>
+                <div
+                  style={{
+                    minHeight: 220,
+                    maxHeight: 420,
+                    overflowY: 'auto',
+                    padding: 12,
+                    border: '1px solid var(--semi-color-border)',
+                    borderRadius: 6,
+                    background: 'var(--semi-color-bg-0)',
+                  }}
+                >
+                  {String(changelogForm.content || '').trim() ? (
+                    <MarkdownRenderer content={changelogForm.content} />
+                  ) : (
+                    <Text type='tertiary'>{t('暂无内容')}</Text>
+                  )}
+                </div>
+              </Tabs.TabPane>
+            </Tabs>
+          </Form.Slot>
+        </Form>
       </Modal>
     </Row>
   );

@@ -5,6 +5,7 @@
 .zed
 .history
 upload
+uploads/
 *.exe
 *.db
 build

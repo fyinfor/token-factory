@@ -29,6 +29,7 @@ services:
     volumes:
       - ./data:/data
       - ./logs:/app/logs
+      - ./uploads:/app/uploads
     environment:
       # 与下方 postgres 的账号库名一致；密码勿含 : @ / # ? 等字符，否则需自行 URL 编码后写入 SQL_DSN
       - SQL_DSN=postgresql://${POSTGRES_USER:-root}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-token-factory}
