@@ -357,6 +357,82 @@ code {
   scrollbar-width: none;
 }
 
+.playground-ai-dialogue.semi-ai-chat-dialogue {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  max-width: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.playground-ai-dialogue .semi-ai-chat-dialogue-list {
+  flex: 1;
+  min-height: 0;
+  max-width: 100%;
+  overflow-x: hidden !important;
+}
+
+.playground-ai-dialogue .semi-ai-chat-dialogue-container,
+.playground-ai-dialogue .semi-ai-chat-dialogue-inner,
+.playground-ai-dialogue .semi-ai-chat-dialogue-content,
+.playground-ai-dialogue .semi-ai-chat-dialogue-content-wrapper,
+.playground-ai-dialogue .semi-ai-chat-dialogue-content-inner {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.playground-ai-dialogue .semi-ai-chat-dialogue-content {
+  overflow-wrap: anywhere;
+}
+
+.playground-ai-dialogue .semi-ai-chat-dialogue-content-bubble {
+  max-width: min(100%, 780px) !important;
+}
+
+.playground-ai-dialogue .semi-ai-chat-dialogue-action {
+  column-gap: 0 !important;
+}
+
+.playground-ai-dialogue .playground-ai-video {
+  width: min(100%, 780px);
+  max-width: 100%;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.playground-ai-dialogue .playground-ai-video-player {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+  border: 1px solid var(--semi-color-border);
+  border-radius: 8px;
+  background: var(--semi-color-fill-0);
+}
+
+.playground-ai-dialogue .semi-ai-chat-dialogue-list::-webkit-scrollbar {
+  display: none;
+}
+
+.playground-ai-dialogue .semi-ai-chat-dialogue-list {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.playground-ai-input.semi-aiChatInput {
+  max-height: 220px;
+  overflow: hidden;
+  border-radius: 16px;
+}
+
+.playground-ai-input .semi-aiChatInput-editor-content {
+  max-height: 140px;
+  overflow-y: auto;
+}
+
 /* ==================== 组件特定样式 ==================== */
 /* SelectableButtonGroup */
 .sbg-button .semi-button-content {

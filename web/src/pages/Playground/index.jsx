@@ -34,10 +34,8 @@ import { useIsMobile } from '../../hooks/common/useIsMobile';
 
 // hooks
 import { usePlaygroundState } from '../../hooks/playground/usePlaygroundState';
-import { useMessageActions } from '../../hooks/playground/useMessageActions';
 import { useApiRequest } from '../../hooks/playground/useApiRequest';
 import { useSyncMessageAndCustomBody } from '../../hooks/playground/useSyncMessageAndCustomBody';
-import { useMessageEdit } from '../../hooks/playground/useMessageEdit';
 import { useDataLoader } from '../../hooks/playground/useDataLoader';
 
 // Constants and utils
@@ -45,7 +43,9 @@ import {
   MESSAGE_ROLES,
   ERROR_MESSAGES,
   getDefaultMessages,
+  PLAYGROUND_MEDIA_MAX_COUNT,
 } from '../../constants/playground.constants';
+import { appendUploadedMediaUrl } from '../../helpers/playgroundMediaInputUtils';
 import {
   getLogo,
   stringToColor,
@@ -61,8 +61,6 @@ import {
 import {
   OptimizedSettingsPanel,
   OptimizedDebugPanel,
-  OptimizedMessageContent,
-  OptimizedMessageActions,
 } from '../../components/playground/OptimizedComponents';
 import {
   getMessageStorageKey,
@@ -70,7 +68,6 @@ import {
   saveModeMessages,
 } from '../../components/playground/messageStorage';
 import ChatArea from '../../components/playground/ChatArea';
-import LazyVisibleMessage from '../../components/playground/LazyVisibleMessage';
 import FloatingButtons from '../../components/playground/FloatingButtons';
 import { PlaygroundProvider } from '../../contexts/PlaygroundContext';
 
@@ -88,6 +85,80 @@ const generateAvatarDataUrl = (username) => {
     </svg>
   `;
   return `data:image/svg+xml;base64,${encodeToBase64(svg)}`;
+};
+
+const arePlaygroundMessagesEquivalent = (nextMessages, currentMessages) => {
+  if (!Array.isArray(nextMessages) || !Array.isArray(currentMessages)) {
+    return false;
+  }
+  if (nextMessages.length !== currentMessages.length) {
+    return false;
+  }
+  return nextMessages.every((next, index) => {
+    const current = currentMessages[index];
+    return (
+      String(next?.id || '') === String(current?.id || '') &&
+      next?.role === current?.role &&
+      next?.status === current?.status &&
+      Boolean(next?.editing) === Boolean(current?.editing) &&
+      Boolean(next?.like) === Boolean(current?.like) &&
+      Boolean(next?.dislike) === Boolean(current?.dislike) &&
+      next?.content === current?.content &&
+      next?.reasoningContent === current?.reasoningContent &&
+      next?.isReasoningExpanded === current?.isReasoningExpanded &&
+      next?.generatedImages === current?.generatedImages &&
+      next?.mediaDimensions === current?.mediaDimensions &&
+      next?.videoTask === current?.videoTask
+    );
+  });
+};
+
+const stripDialogueTransientState = (messages) =>
+  (Array.isArray(messages) ? messages : []).map((message) => {
+    if (!message || typeof message !== 'object') {
+      return message;
+    }
+    const { editing, ...rest } = message;
+    return rest;
+  });
+
+const loadSavedModeMessages = async (userId) => {
+  const saved = await loadModeMessages(userId);
+  if (saved || !userId) {
+    return saved;
+  }
+  return loadModeMessages(null);
+};
+
+const loadLegacyModeMessages = (userId) => {
+  const legacyRaw = localStorage.getItem(getMessageStorageKey(userId));
+  if (legacyRaw || !userId) {
+    return {
+      raw: legacyRaw,
+      key: getMessageStorageKey(userId),
+    };
+  }
+  return {
+    raw: localStorage.getItem(getMessageStorageKey(null)),
+    key: getMessageStorageKey(null),
+  };
+};
+
+const loadLegacyMessages = (userId) => {
+  const legacyMessageKey = userId
+    ? `playground_messages_${userId}`
+    : 'playground_messages';
+  const legacyMessageRaw = localStorage.getItem(legacyMessageKey);
+  if (legacyMessageRaw || !userId) {
+    return {
+      raw: legacyMessageRaw,
+      key: legacyMessageKey,
+    };
+  }
+  return {
+    raw: localStorage.getItem('playground_messages'),
+    key: 'playground_messages',
+  };
 };
 
 const Playground = () => {
@@ -189,6 +260,7 @@ const Playground = () => {
       const width = Number(dimensions?.width || 0);
       const height = Number(dimensions?.height || 0);
       if (!messageId || !url || !width || !height) return;
+
       const currentMode =
         previousModeRef.current || inputs.display_mode || 'text';
       setMessageForMode((prevMessages) => {
@@ -222,14 +294,6 @@ const Playground = () => {
     },
     [inputs.display_mode, saveMessagesForMode, setMessageForMode],
   );
-
-  const handleRevealProgress = useCallback(() => {
-    try {
-      chatRef.current?.scrollToBottom?.(false);
-    } catch (_) {
-      // Semi Chat ref 在极少数情况下可能尚未就绪
-    }
-  }, []);
 
   useLayoutEffect(() => {
     if (!pendingPlaygroundChatScrollRef.current) return;
@@ -344,54 +408,55 @@ const Playground = () => {
     }
   }, [inputs.display_mode, inputs.stream, handleInputChange]);
 
-  useEffect(() => {
-    if (modeStoreInitializedRef.current) return;
-    const currentMode = inputs.display_mode || 'text';
-    modeMessagesRef.current[currentMode] = Array.isArray(message)
-      ? message
-      : [];
-    previousModeRef.current = currentMode;
-    modeStoreInitializedRef.current = true;
-  }, [inputs.display_mode, message]);
-
   // 恢复分模式消息（文本/图片/视频）持久化快照
   useEffect(() => {
     let cancelled = false;
+    modeStoreInitializedRef.current = false;
     const restoreModeMessages = async () => {
       const defaultMsgs = getDefaultMessages(t);
       let restored;
       try {
-        const saved = await loadModeMessages(userState?.user?.id);
+        const userId = userState?.user?.id;
+        const saved = await loadSavedModeMessages(userId);
         let parsed = saved;
 
         if (!parsed) {
-          const legacyRaw = localStorage.getItem(
-            getMessageStorageKey(userState?.user?.id),
-          );
-          if (legacyRaw) {
-            parsed = JSON.parse(legacyRaw);
-            await saveModeMessages(userState?.user?.id, parsed);
-            localStorage.removeItem(getMessageStorageKey(userState?.user?.id));
+          const legacyMode = loadLegacyModeMessages(userId);
+          if (legacyMode.raw) {
+            parsed = JSON.parse(legacyMode.raw);
+            await saveModeMessages(userId, parsed);
+            localStorage.removeItem(legacyMode.key);
           }
         }
 
         if (!parsed) {
-          const legacyMessageKey = userState?.user?.id
-            ? `playground_messages_${userState.user.id}`
-            : 'playground_messages';
-          const legacyMessageRaw = localStorage.getItem(legacyMessageKey);
-          if (legacyMessageRaw) {
-            const legacyMessageData = JSON.parse(legacyMessageRaw);
+          const legacyMessage = loadLegacyMessages(userId);
+          if (legacyMessage.raw) {
+            const legacyMessageData = JSON.parse(legacyMessage.raw);
             if (Array.isArray(legacyMessageData?.messages)) {
               parsed = {
                 text: legacyMessageData.messages,
                 image: defaultMsgs,
                 video: defaultMsgs,
               };
-              await saveModeMessages(userState?.user?.id, parsed);
-              localStorage.removeItem(legacyMessageKey);
+              await saveModeMessages(userId, parsed);
+              localStorage.removeItem(legacyMessage.key);
             }
           }
+        }
+
+        if (Array.isArray(parsed)) {
+          parsed = {
+            text: parsed,
+            image: defaultMsgs,
+            video: defaultMsgs,
+          };
+        } else if (Array.isArray(parsed?.messages)) {
+          parsed = {
+            text: parsed.messages,
+            image: defaultMsgs,
+            video: defaultMsgs,
+          };
         }
 
         if (!parsed) {
@@ -403,18 +468,9 @@ const Playground = () => {
           };
         } else {
           restored = {
-            text:
-              Array.isArray(parsed.text) && parsed.text.length > 0
-                ? parsed.text
-                : defaultMsgs,
-            image:
-              Array.isArray(parsed.image) && parsed.image.length > 0
-                ? parsed.image
-                : defaultMsgs,
-            video:
-              Array.isArray(parsed.video) && parsed.video.length > 0
-                ? parsed.video
-                : defaultMsgs,
+            text: Array.isArray(parsed.text) ? parsed.text : defaultMsgs,
+            image: Array.isArray(parsed.image) ? parsed.image : defaultMsgs,
+            video: Array.isArray(parsed.video) ? parsed.video : defaultMsgs,
           };
         }
         if (cancelled) return;
@@ -430,15 +486,29 @@ const Playground = () => {
         modeStoreInitializedRef.current = true;
       } catch (err) {
         console.warn('恢复分模式消息失败:', err);
+        if (cancelled) return;
+        const fallbackMessages = getDefaultMessages(t);
+        const currentMode = inputs.display_mode || 'text';
+        restored = {
+          text: fallbackMessages,
+          image: fallbackMessages,
+          video: fallbackMessages,
+        };
+        modeMessagesRef.current = restored;
+        pendingPlaygroundChatScrollRef.current = true;
+        setMessage(restored[currentMode] || []);
+        previousModeRef.current = currentMode;
+        modeStoreInitializedRef.current = true;
       }
     };
     restoreModeMessages();
     return () => {
       cancelled = true;
     };
-  }, [inputs.display_mode, setMessage, t, userState?.user?.id]);
+  }, [setMessage, t, userState?.user?.id]);
 
   useEffect(() => {
+    if (!modeStoreInitializedRef.current) return;
     const activeMessageMode =
       previousModeRef.current || inputs.display_mode || 'text';
     modeMessagesRef.current[activeMessageMode] = Array.isArray(message)
@@ -457,22 +527,6 @@ const Playground = () => {
     setMessage(Array.isArray(nextMessages) ? nextMessages : []);
     previousModeRef.current = nextMode;
   }, [inputs.display_mode, setMessage]);
-
-  // 消息编辑
-  const {
-    editingMessageId,
-    editValue,
-    setEditValue,
-    handleMessageEdit,
-    handleEditSave,
-    handleEditCancel,
-  } = useMessageEdit(
-    setMessageForMode,
-    inputs,
-    parameterEnabled,
-    sendRequest,
-    saveMessagesForMode,
-  );
 
   // 消息和自定义请求体同步
   const { syncMessageToCustomBody, syncCustomBodyToMessage } =
@@ -501,14 +555,6 @@ const Playground = () => {
       avatar: getLogo(),
     },
   };
-
-  // 消息操作
-  const messageActions = useMessageActions(
-    message,
-    setMessage,
-    onMessageSend,
-    saveMessagesForMode,
-  );
 
   // 构建预览请求体
   const constructPreviewPayload = useCallback(() => {
@@ -631,105 +677,85 @@ const Playground = () => {
     });
   }
 
-  // 切换推理展开状态
-  const toggleReasoningExpansion = useCallback(
-    (messageId) => {
-      setMessage((prevMessages) =>
-        prevMessages.map((msg) =>
-          msg.id === messageId && msg.role === MESSAGE_ROLES.ASSISTANT
-            ? { ...msg, isReasoningExpanded: !msg.isReasoningExpanded }
-            : msg,
-        ),
-      );
-    },
-    [setMessage],
-  );
+  const handleDialogueChatsChange = useCallback(
+    (nextMessages = []) => {
+      const normalizedMessages = Array.isArray(nextMessages)
+        ? nextMessages
+        : [];
+      const currentMessages = Array.isArray(currentMessagesRef.current)
+        ? currentMessagesRef.current
+        : [];
 
-  // 渲染函数
-  const renderCustomChatContent = useCallback(
-    ({ message: msg, className }) => {
-      const isCurrentlyEditing = editingMessageId === msg.id;
-      const displayMode = inputs.display_mode || 'text';
-      const isMediaMode = displayMode === 'image' || displayMode === 'video';
-      const isLastInThread =
-        Array.isArray(message) &&
-        message.length > 0 &&
-        msg?.id === message[message.length - 1]?.id;
-      const skipLazy =
-        msg?.status === 'loading' ||
-        msg?.status === 'incomplete' ||
-        msg?.status === 'error' ||
-        isMediaMode ||
-        (!isMediaMode && isLastInThread);
-
-      const body = (
-        <OptimizedMessageContent
-          message={msg}
-          className={skipLazy ? className : undefined}
-          styleState={styleState}
-          onToggleReasoningExpansion={toggleReasoningExpansion}
-          isEditing={isCurrentlyEditing}
-          onEditSave={handleEditSave}
-          onEditCancel={handleEditCancel}
-          editValue={editValue}
-          onEditValueChange={setEditValue}
-          onMediaDimensionsChange={handleMediaDimensionsChange}
-          onRevealProgress={handleRevealProgress}
-        />
-      );
-
-      if (skipLazy) {
-        return body;
+      if (
+        arePlaygroundMessagesEquivalent(normalizedMessages, currentMessages)
+      ) {
+        return;
       }
 
-      return (
-        <LazyVisibleMessage
-          messageId={msg.id}
-          className={className}
-          variant={isMediaMode ? 'media' : 'default'}
-        >
-          {body}
-        </LazyVisibleMessage>
+      const mode = previousModeRef.current || inputs.display_mode || 'text';
+      setMessage(normalizedMessages);
+      setTimeout(
+        () =>
+          saveMessagesForMode(
+            stripDialogueTransientState(normalizedMessages),
+            mode,
+          ),
+        0,
       );
     },
-    [
-      styleState,
-      editingMessageId,
-      editValue,
-      handleEditSave,
-      handleEditCancel,
-      handleMediaDimensionsChange,
-      handleRevealProgress,
-      setEditValue,
-      toggleReasoningExpansion,
-      message,
-      inputs.display_mode,
-    ],
+    [inputs.display_mode, saveMessagesForMode, setMessage],
   );
 
-  const renderChatBoxAction = useCallback(
-    (props) => {
-      const { message: currentMessage } = props;
-      const isAnyMessageGenerating = message.some(
-        (msg) => msg.status === 'loading' || msg.status === 'incomplete',
+  const handleDialogueMessageReset = useCallback(
+    (targetMessage) => {
+      const currentMessages = Array.isArray(currentMessagesRef.current)
+        ? currentMessagesRef.current
+        : [];
+      let messageIndex = currentMessages.findIndex(
+        (msg) => msg?.id === targetMessage?.id,
       );
-      const isCurrentlyEditing = editingMessageId === currentMessage.id;
 
-      return (
-        <OptimizedMessageActions
-          message={currentMessage}
-          styleState={styleState}
-          onMessageReset={messageActions.handleMessageReset}
-          onMessageCopy={messageActions.handleMessageCopy}
-          onMessageDelete={messageActions.handleMessageDelete}
-          onRoleToggle={messageActions.handleRoleToggle}
-          onMessageEdit={handleMessageEdit}
-          isAnyMessageGenerating={isAnyMessageGenerating}
-          isEditing={isCurrentlyEditing}
-        />
-      );
+      if (messageIndex === -1) {
+        messageIndex = currentMessages.findIndex(
+          (msg) => msg === targetMessage,
+        );
+      }
+
+      if (messageIndex === -1) {
+        return;
+      }
+
+      let contentToSend = '';
+      let messagesToKeep = currentMessages;
+
+      if (targetMessage.role === MESSAGE_ROLES.USER) {
+        contentToSend = getTextContent(currentMessages[messageIndex]);
+        messagesToKeep = currentMessages.slice(0, messageIndex);
+      } else {
+        let userMessageIndex = messageIndex - 1;
+        while (
+          userMessageIndex >= 0 &&
+          currentMessages[userMessageIndex]?.role !== MESSAGE_ROLES.USER
+        ) {
+          userMessageIndex--;
+        }
+
+        if (userMessageIndex >= 0) {
+          contentToSend = getTextContent(currentMessages[userMessageIndex]);
+          messagesToKeep = currentMessages.slice(0, userMessageIndex);
+        }
+      }
+
+      if (!contentToSend || contentToSend.trim() === '') {
+        return;
+      }
+
+      const mode = previousModeRef.current || inputs.display_mode || 'text';
+      setMessage(messagesToKeep);
+      setTimeout(() => saveMessagesForMode(messagesToKeep, mode), 0);
+      setTimeout(() => onMessageSend(contentToSend), 100);
     },
-    [messageActions, styleState, message, editingMessageId, handleMessageEdit],
+    [inputs.display_mode, onMessageSend, saveMessagesForMode, setMessage],
   );
 
   // Effects
@@ -791,6 +817,7 @@ const Playground = () => {
   // 兜底持久化：任何消息变更（含视频轮询进度与完成态）都同步落盘，
   // 避免刷新后丢失 videoTask.playableUrl 导致播放器消失。
   useEffect(() => {
+    if (!modeStoreInitializedRef.current) return;
     const timer = setTimeout(() => {
       persistModeMessages();
     }, 120);
@@ -830,11 +857,23 @@ const Playground = () => {
       if (mode !== 'image' && mode !== 'video') {
         return;
       }
-      // 添加图片到 imageUrls 数组
-      const newUrls = [...(inputs.imageUrls || []), base64Data];
-      handleInputChange('imageUrls', newUrls);
+      const { urls, ok } = appendUploadedMediaUrl(
+        inputs.imageUrls,
+        base64Data,
+        PLAYGROUND_MEDIA_MAX_COUNT,
+      );
+      if (!ok) {
+        Toast.warning({
+          content: t('操练场素材已达上限', '最多添加 {{count}} 个', {
+            count: PLAYGROUND_MEDIA_MAX_COUNT,
+          }),
+          duration: 3,
+        });
+        return;
+      }
+      handleInputChange('imageUrls', urls);
     },
-    [inputs.display_mode, inputs.imageUrls, handleInputChange],
+    [inputs.display_mode, inputs.imageUrls, handleInputChange, t],
   );
 
   // Playground Context 值
@@ -897,14 +936,12 @@ const Playground = () => {
                   showDebugPanel={showDebugPanel}
                   roleInfo={roleInfo}
                   onMessageSend={onMessageSend}
-                  onMessageCopy={messageActions.handleMessageCopy}
-                  onMessageReset={messageActions.handleMessageReset}
-                  onMessageDelete={messageActions.handleMessageDelete}
+                  onMessageReset={handleDialogueMessageReset}
+                  onChatsChange={handleDialogueChatsChange}
+                  onMediaDimensionsChange={handleMediaDimensionsChange}
                   onStopGenerator={onStopGenerator}
                   onClearMessages={handleClearMessages}
                   onToggleDebugPanel={() => setShowDebugPanel(!showDebugPanel)}
-                  renderCustomChatContent={renderCustomChatContent}
-                  renderChatBoxAction={renderChatBoxAction}
                 />
               </div>
 
