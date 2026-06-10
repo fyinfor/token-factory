@@ -1,8 +1,9 @@
 package service
 
 import (
-	"encoding/binary"
+	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -137,28 +138,74 @@ func probeVideoMetadataByHTTPRange(videoURL string) (*VideoMetadata, error) {
 		return nil, fmt.Errorf("invalid video url: %w", err)
 	}
 	client := http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, videoURL, nil)
+	data, totalSize, err := fetchVideoMetadataRange(&client, videoURL, "bytes=0-204800", 205824)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Range", "bytes=0-204800")
-	resp, err := client.Do(req)
+	if meta, err := parseMP4MetadataFromRangePayload(data); err == nil {
+		return meta, nil
+	}
+	if totalSize <= int64(len(data)) {
+		return nil, fmt.Errorf("moov box not found in range payload")
+	}
+	tailStart := totalSize - 1024*1024
+	if tailStart < 0 {
+		tailStart = 0
+	}
+	tailRange := fmt.Sprintf("bytes=%d-%d", tailStart, totalSize-1)
+	tailData, _, err := fetchVideoMetadataRange(&client, videoURL, tailRange, 1024*1024+1024)
 	if err != nil {
 		return nil, err
+	}
+	return parseMP4MetadataFromRangePayload(tailData)
+}
+
+func fetchVideoMetadataRange(client *http.Client, videoURL, rangeHeader string, limit int64) ([]byte, int64, error) {
+	req, err := http.NewRequest(http.MethodGet, videoURL, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("Range", rangeHeader)
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, 0, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusPartialContent && resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected http status: %d", resp.StatusCode)
+		return nil, 0, fmt.Errorf("unexpected http status: %d", resp.StatusCode)
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 205824))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, limit))
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
+	totalSize := parseHTTPContentRangeTotal(resp.Header.Get("Content-Range"))
+	if totalSize <= 0 && resp.StatusCode == http.StatusOK {
+		totalSize = resp.ContentLength
+	}
+	return data, totalSize, nil
+}
+
+func parseHTTPContentRangeTotal(contentRange string) int64 {
+	slash := strings.LastIndex(contentRange, "/")
+	if slash < 0 || slash+1 >= len(contentRange) {
+		return 0
+	}
+	total, err := strconv.ParseInt(strings.TrimSpace(contentRange[slash+1:]), 10, 64)
+	if err != nil {
+		return 0
+	}
+	return total
+}
+
+func parseMP4MetadataFromRangePayload(data []byte) (*VideoMetadata, error) {
 	if len(data) < 12 {
 		return nil, fmt.Errorf("insufficient data for mp4 parsing")
 	}
 	meta := &VideoMetadata{}
 	moov, ok := findFirstBox(data, 0, len(data), "moov")
+	if !ok {
+		moov, ok = findBoxBySignature(data, "moov")
+	}
 	if !ok {
 		return nil, fmt.Errorf("moov box not found in range payload")
 	}
@@ -183,6 +230,42 @@ func probeVideoMetadataByHTTPRange(videoURL string) (*VideoMetadata, error) {
 	}
 	meta.DurationSec = math.Ceil(meta.DurationSec*1000) / 1000
 	return meta, nil
+}
+
+func findBoxBySignature(data []byte, target string) (mp4Box, bool) {
+	if len(target) != 4 {
+		return mp4Box{}, false
+	}
+	cursor := 0
+	signature := []byte(target)
+	for {
+		idx := bytes.Index(data[cursor:], signature)
+		if idx < 0 {
+			return mp4Box{}, false
+		}
+		boxTypeStart := cursor + idx
+		boxStart := boxTypeStart - 4
+		if boxStart >= 0 && boxStart+8 <= len(data) {
+			size := int(binary.BigEndian.Uint32(data[boxStart : boxStart+4]))
+			headerLen := 8
+			if size == 1 && boxStart+16 <= len(data) {
+				size64 := binary.BigEndian.Uint64(data[boxStart+8 : boxStart+16])
+				if size64 <= uint64(^uint(0)>>1) {
+					size = int(size64)
+					headerLen = 16
+				}
+			}
+			if size >= headerLen && boxStart+size <= len(data) {
+				return mp4Box{
+					boxType: target,
+					start:   boxStart,
+					size:    size,
+					payload: boxStart + headerLen,
+				}, true
+			}
+		}
+		cursor = boxTypeStart + len(signature)
+	}
 }
 
 func findFirstBox(data []byte, start, end int, target string) (mp4Box, bool) {
@@ -341,17 +424,24 @@ func ffprobeCommandName() string {
 }
 
 func ffprobeLocalCandidates(cmdName string) []string {
-	exePath, err := os.Executable()
-	if err != nil || exePath == "" {
-		return nil
-	}
-	exeDir := filepath.Dir(exePath)
 	target := fmt.Sprintf("%s-%s", runtime.GOOS, runtime.GOARCH)
-	return []string{
-		filepath.Join(exeDir, cmdName),
-		filepath.Join(exeDir, "bin", "ffprobe", target, cmdName),
-		filepath.Join(exeDir, "ffprobe", target, cmdName),
+	candidates := make([]string, 0, 6)
+	exePath, err := os.Executable()
+	if err == nil && exePath != "" {
+		exeDir := filepath.Dir(exePath)
+		candidates = append(candidates,
+			filepath.Join(exeDir, cmdName),
+			filepath.Join(exeDir, "bin", "ffprobe", target, cmdName),
+			filepath.Join(exeDir, "ffprobe", target, cmdName),
+		)
 	}
+	if cwd, err := os.Getwd(); err == nil && cwd != "" {
+		candidates = append(candidates,
+			filepath.Join(cwd, "service", "ffprobe-bin", target, cmdName),
+			filepath.Join(cwd, "ffprobe-bin", target, cmdName),
+		)
+	}
+	return candidates
 }
 
 func isExecutableFile(path string) bool {

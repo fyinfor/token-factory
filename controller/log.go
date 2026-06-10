@@ -3,12 +3,19 @@ package controller
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 
 	"github.com/gin-gonic/gin"
 )
+
+func includeRawBillingLogs(c *gin.Context) bool {
+	billingView := strings.TrimSpace(strings.ToLower(c.Query("billing_view")))
+	includeRaw := strings.TrimSpace(strings.ToLower(c.Query("include_raw_billing_logs")))
+	return billingView == "raw" || includeRaw == "1" || includeRaw == "true" || includeRaw == "yes"
+}
 
 func GetAllLogs(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
@@ -21,7 +28,7 @@ func GetAllLogs(c *gin.Context) {
 	channel, _ := strconv.Atoi(c.Query("channel"))
 	group := c.Query("group")
 	requestId := c.Query("request_id")
-	logs, total, err := model.GetAllLogs(logTypes, startTimestamp, endTimestamp, modelName, username, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), channel, group, requestId)
+	logs, total, err := model.GetAllLogs(logTypes, startTimestamp, endTimestamp, modelName, username, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), channel, group, requestId, includeRawBillingLogs(c))
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -42,7 +49,7 @@ func GetUserLogs(c *gin.Context) {
 	modelName := c.Query("model_name")
 	group := c.Query("group")
 	requestId := c.Query("request_id")
-	logs, total, err := model.GetUserLogs(userId, logTypes, startTimestamp, endTimestamp, modelName, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), group, requestId)
+	logs, total, err := model.GetUserLogs(userId, logTypes, startTimestamp, endTimestamp, modelName, tokenName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), group, requestId, includeRawBillingLogs(c))
 	if err != nil {
 		common.ApiError(c, err)
 		return
