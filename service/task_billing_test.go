@@ -914,6 +914,41 @@ func TestMatchPerSecondPrice_UsesTargetAspectRatio(t *testing.T) {
 	assert.Equal(t, 9.0, price, "21:9 1120x480 should fit the 480p tier for that aspect ratio")
 }
 
+func TestMatchPerSecondPrice_CapsAboveHighestTierWithinMode(t *testing.T) {
+	rules := ratio_setting.VideoPricingRules{
+		TextToVideoPerSecond: []ratio_setting.VideoResolutionAudioPriceRule{
+			{Resolution: "4k", HasAudio: false, Price: 999},
+		},
+		ImageToVideoPerSecond: []ratio_setting.VideoResolutionAudioPriceRule{
+			{Resolution: "480p", HasAudio: false, Price: 10},
+			{Resolution: "720p", HasAudio: false, Price: 20},
+		},
+	}
+
+	match, ok := matchPerSecondPriceDetail(rules, "image_to_video", 7680, 4320, false)
+
+	require.True(t, ok)
+	assert.Equal(t, "720p", match.Resolution)
+	assert.Equal(t, 20.0, match.PricePerSecond)
+	assert.True(t, match.CappedToMaxTier)
+}
+
+func TestMatchPerSecondPrice_CapsAboveHighestTierWhenAudioLaneMissing(t *testing.T) {
+	rules := ratio_setting.VideoPricingRules{
+		ImageToVideoPerSecond: []ratio_setting.VideoResolutionAudioPriceRule{
+			{Resolution: "480p", HasAudio: false, Price: 10},
+			{Resolution: "720p", HasAudio: false, Price: 20},
+		},
+	}
+
+	match, ok := matchPerSecondPriceDetail(rules, "image_to_video", 1440, 1440, true)
+
+	require.True(t, ok)
+	assert.Equal(t, "720p", match.Resolution)
+	assert.Equal(t, 20.0, match.PricePerSecond)
+	assert.True(t, match.CappedToMaxTier)
+}
+
 func TestSettle_NonPerCall_AdaptorAdjustWorks(t *testing.T) {
 	truncate(t)
 	ctx := context.Background()
