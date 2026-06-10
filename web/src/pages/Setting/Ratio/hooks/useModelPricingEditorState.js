@@ -19,13 +19,17 @@ For commercial licensing, please contact support@quantumnous.com
 import { useEffect, useMemo, useState } from 'react';
 import { API, showError, showSuccess } from '../../../../helpers';
 import {
-    hasTierRule,
+    emptyTierPricing,
+    hasTierPricing,
     hasTierSegments,
-    normalizeTierRule,
+    legacyToUnified,
+    normalizeTierPricing,
     normalizeTierSegments,
+    normalizeTierRule,
     serializeTierRule,
-    summarizeTierRule,
-    validateTierRule,
+    summarizeTierPricing,
+    unifiedToLegacy,
+    validateTierPricing,
 } from '../utils/requestTierPricing';
 import {
     mergeVideoPricingFromJsonEditor,
@@ -80,10 +84,7 @@ const EMPTY_MODEL = {
         imagePrice: '',
         imagePricingRules: null,
     },
-    modelTierRatio: null,
-    completionTierRatio: null,
-    cacheTierRatio: null,
-    createCacheTierRatio: null,
+    tierPricing: emptyTierPricing(),
 };
 
 const isTokenBillingMode = (billingMode) =>
@@ -95,12 +96,9 @@ export const hasValue = (value) =>
     value !== '' && value !== null && value !== undefined && value !== false;
 
 const hasAnyTierPricing = (model) =>
-    hasTierSegments(model?.modelTierRatio) ||
-    hasTierSegments(model?.completionTierRatio) ||
-    hasTierSegments(model?.cacheTierRatio) ||
-    hasTierSegments(model?.createCacheTierRatio);
+    hasTierPricing(model?.tierPricing);
 
-const hasBaseTierPricing = (model) => hasTierSegments(model?.modelTierRatio);
+const hasBaseTierPricing = (model) => hasTierPricing(model?.tierPricing);
 
 export const getEffectiveBillingMode = (model) => {
     if (!model) return 'per-token';
@@ -485,19 +483,14 @@ const buildModelState = (name, sourceMaps) => {
     const hasPerImageTable =
         imagePricingRules.textToImage.length > 0 ||
         imagePricingRules.imageToImage.length > 0;
-    // 新的四个独立阶梯倍率
-    const modelTierRatio = sourceMaps.ModelTierRatio?.[name]
-        ? normalizeTierSegments(sourceMaps.ModelTierRatio[name])
-        : null;
-    const completionTierRatio = sourceMaps.CompletionTierRatio?.[name]
-        ? normalizeTierSegments(sourceMaps.CompletionTierRatio[name])
-        : null;
-    const cacheTierRatio = sourceMaps.CacheTierRatio?.[name]
-        ? normalizeTierSegments(sourceMaps.CacheTierRatio[name])
-        : null;
-    const createCacheTierRatio = sourceMaps.CreateCacheTierRatio?.[name]
-        ? normalizeTierSegments(sourceMaps.CreateCacheTierRatio[name])
-        : null;
+    // 统一阶梯计价：从4个legacy key合并
+    const tierPricing = legacyToUnified(
+        sourceMaps.ModelTierRatio?.[name] || null,
+        sourceMaps.CompletionTierRatio?.[name] || null,
+        sourceMaps.CacheTierRatio?.[name] || null,
+        sourceMaps.CreateCacheTierRatio?.[name] || null,
+        'USD',
+    );
     const hasPerSecondTable =
         videoPricingRules.textToVideoPerSecond.length > 0 ||
         videoPricingRules.imageToVideoPerSecond.length > 0 ||
@@ -601,10 +594,7 @@ const buildModelState = (name, sourceMaps) => {
         name,
         billingMode: getEffectiveBillingMode({
             fixedPrice,
-            modelTierRatio,
-            completionTierRatio,
-            cacheTierRatio,
-            createCacheTierRatio,
+            tierPricing,
         }),
         fixedPrice,
         inputPrice,
@@ -738,10 +728,7 @@ const buildModelState = (name, sourceMaps) => {
                     ? sourceMaps.ImagePricingRules[name]
                     : null,
         },
-        modelTierRatio,
-        completionTierRatio,
-        cacheTierRatio,
-        createCacheTierRatio,
+        tierPricing,
     };
 };
 
@@ -961,12 +948,8 @@ export const buildSummaryText = (model, t, visibleCategories = null) => {
         return `${t('按次')} $${model.fixedPrice} / ${t('次')}`;
     }
     if (effectiveBillingMode === 'tiered' && hasAnyTierPricing(model)) {
-        const parts = [];
-        if (hasTierSegments(model.modelTierRatio)) parts.push(t('输入'));
-        if (hasTierSegments(model.completionTierRatio)) parts.push(t('输出'));
-        if (hasTierSegments(model.cacheTierRatio)) parts.push(t('缓存读取'));
-        if (hasTierSegments(model.createCacheTierRatio)) parts.push(t('缓存写入'));
-        return `${t('阶梯计费')}｜${parts.join(' / ')}`;
+        const tp = normalizeTierPricing(model.tierPricing);
+        return `${t('阶梯计费')}｜${tp.tiers.length}${t('档')}`;
     }
 
     if (hasValue(model.inputPrice)) {
@@ -1095,34 +1078,28 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
         }
     }
 
-    if (hasTierSegments(model.modelTierRatio)) {
-        result.ModelTierRatio = {
-            segments: model.modelTierRatio.segments,
-        };
-    }
-    if (
-        (visibleCategories === null || visibleCategories.output) &&
-        hasTierSegments(model.completionTierRatio)
-    ) {
-        result.CompletionTierRatio = {
-            segments: model.completionTierRatio.segments,
-        };
-    }
-    if (
-        (visibleCategories === null || visibleCategories.cache_read) &&
-        hasTierSegments(model.cacheTierRatio)
-    ) {
-        result.CacheTierRatio = {
-            segments: model.cacheTierRatio.segments,
-        };
-    }
-    if (
-        (visibleCategories === null || visibleCategories.cache_write) &&
-        hasTierSegments(model.createCacheTierRatio)
-    ) {
-        result.CreateCacheTierRatio = {
-            segments: model.createCacheTierRatio.segments,
-        };
+    // 统一阶梯计价 → 拆分为4个legacy key
+    if (hasTierPricing(model.tierPricing)) {
+        const legacy = unifiedToLegacy(model.tierPricing);
+        if (legacy.modelTierRatio) result.ModelTierRatio = legacy.modelTierRatio;
+        if (
+            (visibleCategories === null || visibleCategories.output) &&
+            legacy.completionTierRatio
+        ) {
+            result.CompletionTierRatio = legacy.completionTierRatio;
+        }
+        if (
+            (visibleCategories === null || visibleCategories.cache_read) &&
+            legacy.cacheTierRatio
+        ) {
+            result.CacheTierRatio = legacy.cacheTierRatio;
+        }
+        if (
+            (visibleCategories === null || visibleCategories.cache_write) &&
+            legacy.createCacheTierRatio
+        ) {
+            result.CreateCacheTierRatio = legacy.createCacheTierRatio;
+        }
     }
 
     const inputPrice = toNumberOrNull(model.inputPrice);
@@ -1532,34 +1509,27 @@ export const buildPreviewRows = (model, t) => {
         },
     ];
 
+    const tp = normalizeTierPricing(model.tierPricing);
     const tieredRows = [
         {
             key: 'ModelTierRatio',
             label: 'ModelTierRatio',
-            value: hasTierSegments(model.modelTierRatio)
-                ? `${model.modelTierRatio.segments.length}${t('档')}`
-                : t('空'),
+            value: tp.tiers.length > 0 ? `${tp.tiers.length}${t('档')}` : t('空'),
         },
         {
             key: 'CompletionTierRatio',
             label: 'CompletionTierRatio',
-            value: hasTierSegments(model.completionTierRatio)
-                ? `${model.completionTierRatio.segments.length}${t('档')}`
-                : t('空'),
+            value: tp.tiers.length > 0 ? `${tp.tiers.length}${t('档')}` : t('空'),
         },
         {
             key: 'CacheTierRatio',
             label: 'CacheTierRatio',
-            value: hasTierSegments(model.cacheTierRatio)
-                ? `${model.cacheTierRatio.segments.length}${t('档')}`
-                : t('空'),
+            value: tp.tiers.length > 0 ? `${tp.tiers.length}${t('档')}` : t('空'),
         },
         {
             key: 'CreateCacheTierRatio',
             label: 'CreateCacheTierRatio',
-            value: hasTierSegments(model.createCacheTierRatio)
-                ? `${model.createCacheTierRatio.segments.length}${t('档')}`
-                : t('空'),
+            value: tp.tiers.length > 0 ? `${tp.tiers.length}${t('档')}` : t('空'),
         },
     ];
 
@@ -2452,10 +2422,6 @@ export function useModelPricingEditorState({
             ...EMPTY_MODEL,
             name: trimmedName,
             rawRatios: { ...EMPTY_MODEL.rawRatios },
-            modelTierRatio: null,
-            completionTierRatio: null,
-            cacheTierRatio: null,
-            createCacheTierRatio: null,
         };
 
         setModels((previous) => [nextModel, ...previous]);
@@ -2552,18 +2518,9 @@ export function useModelPricingEditorState({
                     imageTextToImageRules: selectedModel.imageTextToImageRules,
                     imageImageToImageRules: selectedModel.imageImageToImageRules,
                     imageSimilarityThreshold: selectedModel.imageSimilarityThreshold,
-                    modelTierRatio: selectedModel.modelTierRatio
-                        ? normalizeTierSegments(selectedModel.modelTierRatio)
-                        : null,
-                    completionTierRatio: selectedModel.completionTierRatio
-                        ? normalizeTierSegments(selectedModel.completionTierRatio)
-                        : null,
-                    cacheTierRatio: selectedModel.cacheTierRatio
-                        ? normalizeTierSegments(selectedModel.cacheTierRatio)
-                        : null,
-                    createCacheTierRatio: selectedModel.createCacheTierRatio
-                        ? normalizeTierSegments(selectedModel.createCacheTierRatio)
-                        : null,
+                    tierPricing: selectedModel.tierPricing
+                        ? normalizeTierPricing(selectedModel.tierPricing)
+                        : emptyTierPricing(),
                 };
 
                 if (
@@ -2698,45 +2655,12 @@ export function useModelPricingEditorState({
         }
     };
 
-    const updateModelTierRatio = (tier) => {
+    const updateTierPricing = (tierPricing) => {
         if (!selectedModel) return;
         upsertModel(selectedModel.name, (model) => {
             const nextModel = {
                 ...model,
-                modelTierRatio: tier ? normalizeTierSegments(tier) : null,
-            };
-            return nextModel;
-        });
-    };
-
-    const updateCompletionTierRatio = (tier) => {
-        if (!selectedModel) return;
-        upsertModel(selectedModel.name, (model) => {
-            const nextModel = {
-                ...model,
-                completionTierRatio: tier ? normalizeTierSegments(tier) : null,
-            };
-            return nextModel;
-        });
-    };
-
-    const updateCacheTierRatio = (tier) => {
-        if (!selectedModel) return;
-        upsertModel(selectedModel.name, (model) => {
-            const nextModel = {
-                ...model,
-                cacheTierRatio: tier ? normalizeTierSegments(tier) : null,
-            };
-            return nextModel;
-        });
-    };
-
-    const updateCreateCacheTierRatio = (tier) => {
-        if (!selectedModel) return;
-        upsertModel(selectedModel.name, (model) => {
-            const nextModel = {
-                ...model,
-                createCacheTierRatio: tier ? normalizeTierSegments(tier) : null,
+                tierPricing: tierPricing || emptyTierPricing(),
             };
             return nextModel;
         });
@@ -2747,10 +2671,7 @@ export function useModelPricingEditorState({
         upsertModel(selectedModel.name, (model) => {
             const nextModel = {
                 ...model,
-                modelTierRatio: null,
-                completionTierRatio: null,
-                cacheTierRatio: null,
-                createCacheTierRatio: null,
+                tierPricing: emptyTierPricing(),
             };
             return nextModel;
         });
@@ -2759,40 +2680,15 @@ export function useModelPricingEditorState({
     const applyTierTemplate = (template) => {
         if (!selectedModel || !template) return;
 
-        const rule = normalizeTierRule(template.RequestTierPricingRule || template);
-        const categoriesToOpen = [];
-        const categoriesToClose = [];
+        const tp = normalizeTierRule(template.RequestTierPricingRule || template);
         upsertModel(selectedModel.name, (model) => {
-            const nextModel = { ...model };
-
-            if (rule.input.length > 0) {
-                nextModel.modelTierRatio = { segments: rule.input };
-            }
-            if (rule.output.length > 0) {
-                nextModel.completionTierRatio = { segments: rule.output };
-                categoriesToOpen.push('output');
-            } else {
-                nextModel.completionTierRatio = null;
-                categoriesToClose.push('output');
-            }
-            if (rule.cache_read.length > 0) {
-                nextModel.cacheTierRatio = { segments: rule.cache_read };
-                categoriesToOpen.push('cache_read');
-            } else {
-                nextModel.cacheTierRatio = null;
-                categoriesToClose.push('cache_read');
-            }
-            if (rule.cache_write.length > 0) {
-                nextModel.createCacheTierRatio = { segments: rule.cache_write };
-                categoriesToOpen.push('cache_write');
-            } else {
-                nextModel.createCacheTierRatio = null;
-                categoriesToClose.push('cache_write');
-            }
-
+            const nextModel = {
+                ...model,
+                tierPricing: tp,
+            };
             return nextModel;
         });
-        return { categoriesToOpen, categoriesToClose };
+        return { tierCount: tp.tiers?.length || 0 };
     };
 
     return {
@@ -2827,10 +2723,7 @@ export function useModelPricingEditorState({
         updateImageRuleRow,
         addImageRuleRow,
         removeImageRuleRow,
-        updateModelTierRatio,
-        updateCompletionTierRatio,
-        updateCacheTierRatio,
-        updateCreateCacheTierRatio,
+        updateTierPricing,
         clearAllTierRatios,
         applyTierTemplate,
         handleSubmit,

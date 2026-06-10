@@ -35,3 +35,4 @@ redis_data/
 .gomodcache/
 .gocache-temp
 .gopath
+.reasonix/

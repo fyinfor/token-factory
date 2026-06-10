@@ -22,37 +22,45 @@ import {
   Button,
   Card,
   Form,
-  Input,
   Modal,
+  Select,
   Space,
-  Switch,
   Table,
   Typography,
 } from '@douyinfe/semi-ui';
-import { IconDelete, IconEdit, IconPlus, IconSave, IconSetting } from '@douyinfe/semi-icons';
+import {
+  IconDelete,
+  IconEdit,
+  IconPlus,
+  IconSave,
+} from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
 import { API, showError, showSuccess } from '../../../helpers';
 import {
-  emptyTierRule,
-  hasTierRule,
+  emptyTierTemplate,
+  normalizeTierPricing,
   normalizeTierRule,
   parseJSONMap,
   serializeTierRule,
-  summarizeTierRule,
-  validateTierRule,
+  summarizeTierPricing,
+  validateTierPricing,
+  CURRENCY_OPTIONS,
+  getCurrencySymbol,
 } from './utils/requestTierPricing';
 import TierRowsEditor from './components/TierRowsEditor';
 
 const { Text } = Typography;
-const DEFAULT_TIER_SEGMENTS = {
-  segments: [{ up_to: 0, ratio: 0 }],
-};
 
-const createEmptyTemplate = () => ({
-  name: '',
-  ...emptyTierRule(),
-});
+// ============================================================
+// RequestTierPricingTemplateSettings — 阶梯计费模板管理（v2 重构版）
+// ============================================================
+// 新模型：仅以输入Token区间划分档位，每个档位绑定4项价格。
+// 顶部新增货币汇率选择器，统一表格编辑。
+// ============================================================
 
+/**
+ * 生成唯一模板 ID
+ */
 const createTemplateId = (templates) => {
   const base = `tpl_${Date.now()}`;
   let id = base;
@@ -64,6 +72,21 @@ const createTemplateId = (templates) => {
   return id;
 };
 
+/**
+ * 将旧格式模板（4 种类别）转换为新格式
+ */
+const migrateOldTemplate = (template) => {
+  const normalized = normalizeTierRule(template);
+  // 旧模板没有 currency，默认 USD
+  if (!normalized.currency || !['USD', 'CNY', 'CUSTOM'].includes(normalized.currency)) {
+    normalized.currency = 'USD';
+  }
+  return {
+    name: template?.name || '',
+    ...normalized,
+  };
+};
+
 export default function RequestTierPricingTemplateSettings({
   options,
   refresh,
@@ -72,24 +95,32 @@ export default function RequestTierPricingTemplateSettings({
   const [templates, setTemplates] = useState({});
   const [editing, setEditing] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [visibleCategories, setVisibleCategories] = useState({
-    output: false,
-    cache_read: false,
-    cache_write: false,
-  });
+  const [localCurrency, setLocalCurrency] = useState('USD');
 
-  // 获取汇率
-  const exchangeRate = options?.usd_exchange_rate || 1;
-
+  // 从 options 加载模板，兼容旧格式
   useEffect(() => {
-    setTemplates(parseJSONMap(options.RequestTierPricingTemplates));
+    const raw = parseJSONMap(options.RequestTierPricingTemplates);
+    const migrated = {};
+    for (const [id, tpl] of Object.entries(raw)) {
+      migrated[id] = migrateOldTemplate(tpl);
+    }
+    setTemplates(migrated);
   }, [options.RequestTierPricingTemplates]);
 
+  // 模板列表数据
   const data = useMemo(
-    () => Object.entries(templates).map(([id, tpl]) => ({ id, ...tpl })),
+    () =>
+      Object.entries(templates).map(([id, tpl]) => ({
+        id,
+        ...tpl,
+        // 保留原始 tiers 用于表格展示
+        _tierCount: tpl.tiers?.length || 0,
+        _currency: tpl.currency || 'USD',
+      })),
     [templates],
   );
 
+  /** 持久化模板到后端 */
   const save = async (nextTemplates) => {
     setLoading(true);
     try {
@@ -108,41 +139,39 @@ export default function RequestTierPricingTemplateSettings({
     }
   };
 
+  /** 提交编辑 */
   const handleSubmit = async () => {
-    const id = String(editing?.id || '').trim();
-    // 过滤掉开关未打开的类别（除了 input，input 始终保留）
-    const filteredEditing = { ...editing };
-    if (!visibleCategories.output) delete filteredEditing.output;
-    if (!visibleCategories.cache_read) delete filteredEditing.cache_read;
-    if (!visibleCategories.cache_write) delete filteredEditing.cache_write;
-    const rule = serializeTierRule(filteredEditing);
-    const error = validateTierRule(rule, t);
+    if (!editing) return;
+
+    const error = validateTierPricing(editing, t);
     if (error) {
       showError(error);
       return;
     }
+
     const template = {
       name: editing.name || t('未命名模板'),
-      ...rule,
+      mode: editing.mode || 'progressive',
+      currency: editing.currency || 'USD',
+      tiers: editing.tiers || [],
     };
+
+    const id = String(editing._id || '').trim();
     setEditing(null);
+
     if (id) {
-      const next = {
-        ...templates,
-        [id]: template,
-      };
+      const next = { ...templates, [id]: template };
       setTemplates(next);
       await save(next);
       return;
     }
-    const next = {
-      ...templates,
-      [createTemplateId(templates)]: template,
-    };
+
+    const next = { ...templates, [createTemplateId(templates)]: template };
     setTemplates(next);
     await save(next);
   };
 
+  /** 删除模板 */
   const removeTemplate = async (id) => {
     const next = { ...templates };
     delete next[id];
@@ -150,43 +179,49 @@ export default function RequestTierPricingTemplateSettings({
     await save(next);
   };
 
+  /** 新增模板 */
   const beginCreate = () => {
-    setVisibleCategories({
-      output: false,
-      cache_read: false,
-      cache_write: false,
+    setLocalCurrency('USD');
+    setEditing({
+      ...emptyTierTemplate(),
+      _id: '',
     });
-    setEditing(createEmptyTemplate());
   };
 
+  /** 编辑已有模板 */
   const beginEdit = (row) => {
-    const rule = normalizeTierRule(row);
-    setVisibleCategories({
-      output: rule.output.length > 0,
-      cache_read: rule.cache_read.length > 0,
-      cache_write: rule.cache_write.length > 0,
-    });
+    setLocalCurrency(row.currency || row._currency || 'USD');
     setEditing({
       ...row,
-      ...rule,
+      _id: row.id,
+      currency: row.currency || row._currency || 'USD',
+      tiers: Array.isArray(row.tiers) ? [...row.tiers] : [],
+      name: row.name || '',
     });
   };
 
-  const updateEditingTier = (key, value) => {
-    setEditing((previous) => ({
-      ...previous,
-      [key]: value?.segments || [],
-    }));
+  /** 更新编辑中的 tiers */
+  const updateTiers = (nextTiers) => {
+    setEditing((prev) => (prev ? { ...prev, tiers: nextTiers } : prev));
   };
+
+  /** 货币切换 */
+  const handleCurrencyChange = (value) => {
+    setLocalCurrency(value);
+    setEditing((prev) => (prev ? { ...prev, currency: value } : prev));
+  };
+
+  const currencyOptionList = CURRENCY_OPTIONS.map((c) => ({
+    label: c.label,
+    value: c.key,
+  }));
 
   return (
     <Card>
       <Space vertical align='start' style={{ width: '100%' }}>
+        {/* 操作栏 */}
         <Space>
-          <Button
-            icon={<IconPlus />}
-            onClick={beginCreate}
-          >
+          <Button icon={<IconPlus />} onClick={beginCreate}>
             {t('添加模板')}
           </Button>
           <Button
@@ -197,24 +232,37 @@ export default function RequestTierPricingTemplateSettings({
             {t('保存模板')}
           </Button>
         </Space>
+
         <Text type='secondary'>
-          {t(
-            '模板仅用于前端快速套用，模型保存和主站同步都会写入完整阶梯规则。',
-          )}
+          {t('模板仅用于前端快速套用，模型保存和主站同步都会写入完整阶梯规则。')}
         </Text>
+
+        {/* 模板列表 */}
         <Table
           dataSource={data}
           rowKey='id'
           pagination={false}
           columns={[
-            { title: t('模板 ID'), dataIndex: 'id' },
-            { title: t('模板名称'), dataIndex: 'name' },
+            { title: t('模板 ID'), dataIndex: 'id', width: 200 },
+            { title: t('模板名称'), dataIndex: 'name', width: 160 },
+            {
+              title: t('货币'),
+              width: 100,
+              render: (_, row) =>
+                getCurrencySymbol(row._currency || 'USD'),
+            },
+            {
+              title: t('档位'),
+              width: 80,
+              render: (_, row) => `${row._tierCount || 0}${t('档')}`,
+            },
             {
               title: t('规则摘要'),
-              render: (_, row) => summarizeTierRule(row, t),
+              render: (_, row) => summarizeTierPricing(row, t),
             },
             {
               title: t('操作'),
+              width: 120,
               render: (_, row) => (
                 <Space>
                   <Button
@@ -234,6 +282,8 @@ export default function RequestTierPricingTemplateSettings({
           ]}
         />
       </Space>
+
+      {/* 编辑弹窗 */}
       <Modal
         title={t('编辑阶梯计费模板')}
         visible={Boolean(editing)}
@@ -243,107 +293,43 @@ export default function RequestTierPricingTemplateSettings({
       >
         {editing ? (
           <Form labelPosition='left'>
+            {/* 模板名称 */}
             <Form.Input
               label={t('模板名称')}
               field='name'
               initValue={editing.name}
-              onChange={(v) => setEditing({ ...editing, name: v })}
+              onChange={(v) =>
+                setEditing((prev) => (prev ? { ...prev, name: v } : prev))
+              }
             />
+
+            {/* 货币汇率选择器 */}
+            <Form.Slot label={t('货币单位')}>
+              <Select
+                value={localCurrency}
+                optionList={currencyOptionList}
+                onChange={handleCurrencyChange}
+                style={{ width: 200 }}
+              />
+            </Form.Slot>
+
+            <div className='my-3 text-xs text-gray-500'>
+              {t('阶梯区间从 0 开始；最后一档固定为无限且不能删除。每个档位统一配置 4 项价格。')}
+            </div>
+
+            {/* 统一档位编辑器 */}
             <Card
-              title={<span>{t('输入价格')}</span>}
-              style={{ width: '100%', marginBottom: 8, background: 'var(--semi-color-fill-0)' }}
+              style={{
+                width: '100%',
+                background: 'var(--semi-color-fill-0)',
+              }}
             >
               <TierRowsEditor
                 t={t}
-                value={{ segments: editing.input || DEFAULT_TIER_SEGMENTS.segments }}
-                onChange={(value) => updateEditingTier('input', value)}
-                exchangeRate={exchangeRate}
-                tierType='model'
+                value={editing.tiers || []}
+                onChange={updateTiers}
+                currency={localCurrency}
               />
-            </Card>
-            <Card
-              title={
-                <div className='flex justify-between items-center'>
-                  <span>{t('输出价格')}</span>
-                  <Switch
-                    size='small'
-                    checked={visibleCategories.output}
-                    onChange={(checked) =>
-                      setVisibleCategories((previous) => ({
-                        ...previous,
-                        output: checked,
-                      }))
-                    }
-                  />
-                </div>
-              }
-              style={{ width: '100%', marginBottom: 8, background: 'var(--semi-color-fill-0)' }}
-            >
-              {visibleCategories.output ? (
-                <TierRowsEditor
-                  t={t}
-                  value={{ segments: editing.output || DEFAULT_TIER_SEGMENTS.segments }}
-                  onChange={(value) => updateEditingTier('output', value)}
-                  exchangeRate={exchangeRate}
-                  tierType='completion'
-                />
-              ) : null}
-            </Card>
-            <Card
-              title={
-                <div className='flex justify-between items-center'>
-                  <span>{t('缓存读取价格')}</span>
-                  <Switch
-                    size='small'
-                    checked={visibleCategories.cache_read}
-                    onChange={(checked) =>
-                      setVisibleCategories((previous) => ({
-                        ...previous,
-                        cache_read: checked,
-                      }))
-                    }
-                  />
-                </div>
-              }
-              style={{ width: '100%', marginBottom: 8, background: 'var(--semi-color-fill-0)' }}
-            >
-              {visibleCategories.cache_read ? (
-                <TierRowsEditor
-                  t={t}
-                  value={{ segments: editing.cache_read || DEFAULT_TIER_SEGMENTS.segments }}
-                  onChange={(value) => updateEditingTier('cache_read', value)}
-                  exchangeRate={exchangeRate}
-                  tierType='cache'
-                />
-              ) : null}
-            </Card>
-            <Card
-              title={
-                <div className='flex justify-between items-center'>
-                  <span>{t('缓存写入价格')}</span>
-                  <Switch
-                    size='small'
-                    checked={visibleCategories.cache_write}
-                    onChange={(checked) =>
-                      setVisibleCategories((previous) => ({
-                        ...previous,
-                        cache_write: checked,
-                      }))
-                    }
-                  />
-                </div>
-              }
-              style={{ width: '100%', marginBottom: 8, background: 'var(--semi-color-fill-0)' }}
-            >
-              {visibleCategories.cache_write ? (
-                <TierRowsEditor
-                  t={t}
-                  value={{ segments: editing.cache_write || DEFAULT_TIER_SEGMENTS.segments }}
-                  onChange={(value) => updateEditingTier('cache_write', value)}
-                  exchangeRate={exchangeRate}
-                  tierType='createCache'
-                />
-              ) : null}
             </Card>
           </Form>
         ) : null}
