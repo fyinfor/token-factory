@@ -17,61 +17,394 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-export const TIER_CATEGORIES = [
-  { key: 'input', label: '输入价格' },
-  { key: 'output', label: '输出价格' },
-  { key: 'cache_read', label: '缓存读取价格' },
-  { key: 'cache_write', label: '缓存写入价格' },
+// ============================================================
+// 阶梯计费 — 统一数据模型与工具函数（v2 重构版）
+// ============================================================
+// 新模型：以【输入Token数量区间】作为唯一阶梯划分条件，
+// 每个档位统一绑定 4 项计费单价：输入 / 输出 / 缓存读取 / 缓存写入。
+// 后端仍存储 4 个独立 Option Key，前端在序列化时自动转换。
+// ============================================================
+
+// ---- 常量定义 -------------------------------------------------
+
+/** 阶梯计费模式（固定 progressive） */
+export const TIER_MODE = 'progressive';
+
+/** 内部 ratio 换算基准倍率（与后端 model_ratio 默认 2 对齐） */
+export const TIER_RATIO_BASE = 2;
+
+/** 货币选项 */
+export const CURRENCY_OPTIONS = [
+  {
+    key: 'USD',
+    label: 'USD ($)',
+    symbol: '$',
+    rate: 1,
+  },
+  {
+    key: 'CNY',
+    label: 'CNY (¥)',
+    symbol: '¥',
+    rate: 7.2, // 默认汇率，可从站点配置覆盖
+  },
+  {
+    key: 'CUSTOM',
+    label: '自定义 ($)',
+    symbol: '$',
+    rate: 1,
+  },
 ];
 
-// 新的四个独立阶梯倍率类型
-export const TIER_RATIO_TYPES = [
-  { key: 'model', label: '输入' },
-  { key: 'completion', label: '输出' },
-  { key: 'cache', label: '缓存读取' },
-  { key: 'createCache', label: '缓存写入' },
-];
+/** 根据 currency key 获取显示符号 */
+export const getCurrencySymbol = (currency) => {
+  const opt = CURRENCY_OPTIONS.find((c) => c.key === currency);
+  return opt ? opt.symbol : '$';
+};
 
-export const emptyTierRule = () => ({
-  mode: 'progressive',
-  input: [],
-  output: [],
-  cache_read: [],
-  cache_write: [],
+/** 根据 currency key 获取汇率 */
+export const getCurrencyRate = (currency) => {
+  const opt = CURRENCY_OPTIONS.find((c) => c.key === currency);
+  return opt ? opt.rate : 1;
+};
+
+// ---- 数据结构定义 ----------------------------------------------
+
+/**
+ * 单条阶梯档位（前端编辑模型）
+ * @typedef {Object} TierRow
+ * @property {number} up_to — 输入Token上限 (0=无限，仅最后一行)
+ * @property {number} inputPrice — 输入价格 (用户输入货币单位/1M tokens)
+ * @property {number} outputPrice — 输出价格
+ * @property {number} cacheReadPrice — 缓存读取价格
+ * @property {number} cacheWritePrice — 缓存写入价格
+ */
+
+/**
+ * 统一阶梯定价数据
+ * @typedef {Object} TierPricing
+ * @property {'progressive'} mode
+ * @property {'USD'|'CNY'|'CUSTOM'} currency
+ * @property {TierRow[]} tiers
+ */
+
+/** 创建空的阶梯定价对象 */
+export const emptyTierPricing = () => ({
+  mode: TIER_MODE,
+  currency: 'USD',
+  tiers: [],
 });
 
-// 新的空阶梯倍率（单个类型）
-export const emptyTierSegments = () => ({
-  segments: [],
+/** 创建空模板 */
+export const emptyTierTemplate = () => ({
+  name: '',
+  ...emptyTierPricing(),
 });
 
-// 规范化单个类型的阶梯倍率
-export const normalizeTierSegments = (tier) => {
-  const src = tier && typeof tier === 'object' ? tier : {};
+// ---- 货币无关的价格 ↔ ratio 转换 --------------------------------
+
+/**
+ * 价格 → 后端 ratio
+ * 公式：ratio = price / TIER_RATIO_BASE
+ * 含义：ratio * model_ratio(2) = price (per 1M tokens)
+ */
+export const priceToTierRatio = (price) => {
+  if (!Number.isFinite(Number(price))) return 0;
+  return Math.max(0, Number(price) / TIER_RATIO_BASE);
+};
+
+/**
+ * 后端 ratio → 显示价格
+ * 公式：price = ratio * TIER_RATIO_BASE
+ */
+export const tierRatioToPrice = (ratio) => {
+  if (!Number.isFinite(Number(ratio))) return 0;
+  return Math.max(0, Number(ratio) * TIER_RATIO_BASE);
+};
+
+// 保留旧版函数名以兼容现有代码中的直接调用
+export { priceToTierRatio as priceToRatio };
+export { tierRatioToPrice as ratioToPrice };
+
+// ---- 规范化 & 校验 ---------------------------------------------
+
+/** 规范化单条档位：补齐默认值，过滤非法数据 */
+export const normalizeTierRow = (row) => {
+  const upTo = Number(row?.up_to ?? 0);
+  if (!Number.isFinite(upTo) || upTo < 0) return null;
   return {
-    segments: (Array.isArray(src.segments) ? src.segments : [])
-      .map((row) => ({
-        up_to: Number(row?.up_to || 0),
-        ratio: Number(row?.ratio ?? 0),
-      }))
-      .filter((row) => Number.isFinite(row.up_to) && Number.isFinite(row.ratio)),
+    up_to: upTo,
+    inputPrice: Math.max(0, Number(row?.inputPrice ?? row?.input_price ?? 0)),
+    outputPrice: Math.max(0, Number(row?.outputPrice ?? row?.output_price ?? 0)),
+    cacheReadPrice: Math.max(
+      0,
+      Number(row?.cacheReadPrice ?? row?.cache_read_price ?? row?.cacheReadPrice ?? row?.cache_read_price ?? 0),
+    ),
+    cacheWritePrice: Math.max(
+      0,
+      Number(row?.cacheWritePrice ?? row?.cache_write_price ?? row?.cacheWritePrice ?? row?.cache_write_price ?? 0),
+    ),
   };
 };
 
-// 确保最后一个档位是无限
-export const ensureFinalInfinityTierSegments = (segments) => {
-  const normalized = Array.isArray(segments) ? segments : [];
-  if (!normalized.length) return normalized;
-  if (normalized[normalized.length - 1].up_to === 0) return normalized;
-  return [...normalized, { up_to: 0, ratio: 0 }];
+/** 规范化档位列表：排序 + 保证最后一档无限 + 去重 */
+export const normalizeTierRows = (rows) => {
+  if (!Array.isArray(rows)) return [];
+  // 过滤 + 规范化
+  const normalized = rows
+    .map(normalizeTierRow)
+    .filter(Boolean);
+
+  if (normalized.length === 0) return [];
+
+  // 按 up_to 升序排列（0=无限 放最后）
+  const sorted = [...normalized].sort((a, b) => {
+    if (a.up_to === 0) return 1;
+    if (b.up_to === 0) return -1;
+    return a.up_to - b.up_to;
+  });
+
+  // 去重：相同 up_to 只保留第一个
+  const deduped = [];
+  const seen = new Set();
+  for (const row of sorted) {
+    if (seen.has(row.up_to)) continue;
+    seen.add(row.up_to);
+    deduped.push(row);
+  }
+
+  // 确保最后一行 up_to = 0
+  if (deduped.length > 0 && deduped[deduped.length - 1].up_to !== 0) {
+    deduped.push({ ...deduped[deduped.length - 1], up_to: 0, inputPrice: 0, outputPrice: 0, cacheReadPrice: 0, cacheWritePrice: 0 });
+  }
+
+  return deduped;
 };
 
-// 检查是否有阶梯倍率
+/** 规范化完整阶梯定价对象 */
+export const normalizeTierPricing = (tp) => {
+  const src = tp && typeof tp === 'object' ? tp : {};
+  return {
+    mode: src.mode || TIER_MODE,
+    currency: ['USD', 'CNY', 'CUSTOM'].includes(src.currency) ? src.currency : 'USD',
+    tiers: normalizeTierRows(src.tiers),
+  };
+};
+
+/** 检查是否有阶梯定价数据 */
+export const hasTierPricing = (tp) => {
+  const normalized = normalizeTierPricing(tp);
+  return normalized.tiers.length > 0;
+};
+
+/** 兼容旧接口：检查是否有 tier 数据 */
+export const hasTierRule = (tp) => hasTierPricing(tp);
+
+/** 兼容旧接口：检查是否有 tier segments */
 export const hasTierSegments = (tier) => {
-  const normalized = normalizeTierSegments(tier);
-  return normalized.segments.length > 0;
+  if (!tier) return false;
+  if (Array.isArray(tier?.segments)) {
+    return tier.segments.length > 0;
+  }
+  // 新格式
+  if (Array.isArray(tier?.tiers)) {
+    return tier.tiers.length > 0;
+  }
+  return false;
 };
 
+/**
+ * 校验阶梯定价数据
+ * @returns {string} 错误信息，空字符串表示无错误
+ */
+export const validateTierPricing = (tp, t = (v) => v) => {
+  const { tiers } = normalizeTierPricing(tp);
+  if (tiers.length === 0) return '';
+
+  let previous = 0;
+  for (let i = 0; i < tiers.length; i += 1) {
+    const row = tiers[i];
+
+    // 检查 up_to 递增
+    if (row.up_to === 0) {
+      if (i !== tiers.length - 1) {
+        return t('只有最后一档上限可以为 0（无限）');
+      }
+      continue;
+    }
+    if (row.up_to <= previous) {
+      return t('输入Token区间上限必须递增，第 {{index}} 档异常', { index: i + 1 });
+    }
+    previous = row.up_to;
+
+    // 检查价格非负数（至少输入价格必填）
+    if (row.inputPrice < 0 || row.outputPrice < 0 || row.cacheReadPrice < 0 || row.cacheWritePrice < 0) {
+      return t('价格不能为负数，第 {{index}} 档异常', { index: i + 1 });
+    }
+  }
+
+  // 检查至少有一档有有效输入价格
+  if (!tiers.some((row) => row.inputPrice > 0)) {
+    return t('至少需要一档输入价格大于 0');
+  }
+
+  return '';
+};
+
+/** 兼容旧接口 */
+export const validateTierRule = (tp, t) => validateTierPricing(tp, t);
+
+// ---- 摘要 & 明细 -----------------------------------------------
+
+/** 生成阶梯定价摘要文本 */
+export const summarizeTierPricing = (tp, t = (v) => v) => {
+  const { currency, tiers } = normalizeTierPricing(tp);
+  if (tiers.length === 0) return t('未配置');
+  const symbol = getCurrencySymbol(currency);
+  return `${tiers.length}${t('档')} / ${t('输入')} ${tiers.map((r) => `${symbol}${Number(r.inputPrice.toFixed(2))}`).join(' → ')}`;
+};
+
+/** 兼容旧接口 */
+export const summarizeTierRule = (tp, t) => summarizeTierPricing(tp, t);
+
+/**
+ * 构建阶梯定价明细（用于 Tooltip / 预览）
+ * @returns {{ key: string, label: string, symbol: string, segments: { range: string, price: string }[] }[]}
+ */
+export const buildTierPriceDetails = (tp, t = (v) => v) => {
+  const normalized = normalizeTierPricing(tp);
+  if (normalized.tiers.length === 0) return [];
+
+  const symbol = getCurrencySymbol(normalized.currency);
+
+  const categories = [
+    { key: 'input', label: t('输入价格'), priceKey: 'inputPrice' },
+    { key: 'output', label: t('输出价格'), priceKey: 'outputPrice' },
+    { key: 'cache_read', label: t('缓存读取价格'), priceKey: 'cacheReadPrice' },
+    { key: 'cache_write', label: t('缓存写入价格'), priceKey: 'cacheWritePrice' },
+  ];
+
+  return categories.map(({ key, label, priceKey }) => {
+    let prev = 0;
+    const segments = normalized.tiers.map((row) => {
+      const from = prev;
+      const to = row.up_to || '∞';
+      prev = row.up_to || prev;
+      const price = row[priceKey];
+      return {
+        range: `${from}～${to}`,
+        price: price > 0 ? `${symbol}${Number(price.toFixed(6))}` : '-',
+        rawPrice: price,
+      };
+    });
+    return { key, label, symbol, segments };
+  });
+};
+
+// 兼容旧接口：保留 buildTierPriceDetails 的兼容别名
+// buildTierPriceDetails 的参数签名已变更，旧的调用者会收到更新后的返回格式
+
+// ---- 序列化 / 反序列化 -----------------------------------------
+
+/**
+ * 将统一阶梯定价拆分为 4 个独立 { segments: [{ up_to, ratio }] } 对象
+ * 适配后端 4 个 Option Key：ModelTierRatio / CompletionTierRatio / CacheTierRatio / CreateCacheTierRatio
+ */
+export const unifiedToLegacy = (tp) => {
+  const { tiers } = normalizeTierPricing(tp);
+  if (tiers.length === 0) {
+    return {
+      modelTierRatio: null,
+      completionTierRatio: null,
+      cacheTierRatio: null,
+      createCacheTierRatio: null,
+    };
+  }
+
+  const toSegments = (priceKey) => ({
+    segments: tiers.map((row) => ({
+      up_to: row.up_to,
+      ratio: priceToTierRatio(row[priceKey]),
+    })),
+  });
+
+  return {
+    modelTierRatio: toSegments('inputPrice'),
+    completionTierRatio: toSegments('outputPrice'),
+    cacheTierRatio: toSegments('cacheReadPrice'),
+    createCacheTierRatio: toSegments('cacheWritePrice'),
+  };
+};
+
+/**
+ * 从 4 个独立 legacy 对象合并回统一阶梯定价
+ * @param {Object} modelTierRatio — { segments: [{ up_to, ratio }] }
+ * @param {Object} completionTierRatio
+ * @param {Object} cacheTierRatio
+ * @param {Object} createCacheTierRatio
+ * @param {string} currency — 货币类型
+ * @returns {TierPricing}
+ */
+export const legacyToUnified = (
+  modelTierRatio,
+  completionTierRatio,
+  cacheTierRatio,
+  createCacheTierRatio,
+  currency = 'USD',
+) => {
+  const inputSegments = Array.isArray(modelTierRatio?.segments)
+    ? modelTierRatio.segments
+    : [];
+  const outputSegments = Array.isArray(completionTierRatio?.segments)
+    ? completionTierRatio.segments
+    : [];
+  const cacheReadSegments = Array.isArray(cacheTierRatio?.segments)
+    ? cacheTierRatio.segments
+    : [];
+  const cacheWriteSegments = Array.isArray(createCacheTierRatio?.segments)
+    ? createCacheTierRatio.segments
+    : [];
+
+  if (inputSegments.length === 0) {
+    // 尝试从其他三类推断 up_to（兼容旧数据遗留）
+    const allSegments = [outputSegments, cacheReadSegments, cacheWriteSegments]
+      .find((s) => s.length > 0);
+    if (!allSegments) return emptyTierPricing();
+  }
+
+  // 以 input 的 up_to 为基准构建 tiers
+  // 如果 input 为空但其他非空，使用其他类的 up_to（向后兼容）
+  const baseSegments = inputSegments.length > 0 ? inputSegments
+    : (outputSegments.length > 0 ? outputSegments
+      : (cacheReadSegments.length > 0 ? cacheReadSegments : cacheWriteSegments));
+
+  if (baseSegments.length === 0) return emptyTierPricing();
+
+  // 建立 up_to → ratio 映射
+  const outputMap = new Map(outputSegments.map((s) => [s.up_to, s.ratio]));
+  const cacheReadMap = new Map(cacheReadSegments.map((s) => [s.up_to, s.ratio]));
+  const cacheWriteMap = new Map(cacheWriteSegments.map((s) => [s.up_to, s.ratio]));
+  const inputMap = new Map(inputSegments.map((s) => [s.up_to, s.ratio]));
+
+  const tiers = baseSegments
+    .filter((s) => Number.isFinite(s.up_to) && s.up_to >= 0)
+    .map((s) => ({
+      up_to: s.up_to,
+      inputPrice: tierRatioToPrice(inputMap.get(s.up_to) ?? 0),
+      outputPrice: tierRatioToPrice(outputMap.get(s.up_to) ?? 0),
+      cacheReadPrice: tierRatioToPrice(cacheReadMap.get(s.up_to) ?? 0),
+      cacheWritePrice: tierRatioToPrice(cacheWriteMap.get(s.up_to) ?? 0),
+    }));
+
+  return {
+    mode: TIER_MODE,
+    currency: ['USD', 'CNY', 'CUSTOM'].includes(currency) ? currency : 'USD',
+    tiers: normalizeTierRows(tiers),
+  };
+};
+
+// ---- JSON 解析工具 ---------------------------------------------
+
+/** 安全解析 JSON 字符串为对象 */
 export const parseJSONMap = (raw) => {
   if (!raw || String(raw).trim() === '') return {};
   try {
@@ -89,151 +422,86 @@ export const parseJSONMap = (raw) => {
   }
 };
 
-export const normalizeTierRows = (rows) =>
-  (Array.isArray(rows) ? rows : [])
-    .map((row) => ({
-      up_to: Number(row?.up_to || 0),
-      ratio: Number(row?.ratio ?? 0),
-    }))
-    .filter((row) => Number.isFinite(row.up_to) && Number.isFinite(row.ratio));
+// ---- 兼容旧版导出（便于逐步迁移）--------------------------------
 
+/** 兼容旧版 TIER_CATEGORIES 引用 */
+export const TIER_CATEGORIES = [
+  { key: 'input', label: '输入价格' },
+  { key: 'output', label: '输出价格' },
+  { key: 'cache_read', label: '缓存读取价格' },
+  { key: 'cache_write', label: '缓存写入价格' },
+];
+
+/** 兼容旧版 normalizeTierRule */
 export const normalizeTierRule = (rule) => {
   const src = rule && typeof rule === 'object' ? rule : {};
+  // 新格式
+  if (Array.isArray(src.tiers)) return normalizeTierPricing(src);
+  // 旧格式：4 个独立类别
   return {
-    mode: src.mode || 'progressive',
-    input: normalizeTierRows(src.input),
-    output: normalizeTierRows(src.output),
-    cache_read: normalizeTierRows(src.cache_read),
-    cache_write: normalizeTierRows(src.cache_write),
+    mode: src.mode || TIER_MODE,
+    currency: 'USD',
+    tiers: normalizeTierRows(
+      (Array.isArray(src.input) ? src.input : []).map((row, i) => {
+        const outputRow = Array.isArray(src.output) ? src.output[i] : null;
+        const cacheReadRow = Array.isArray(src.cache_read) ? src.cache_read[i] : null;
+        const cacheWriteRow = Array.isArray(src.cache_write) ? src.cache_write[i] : null;
+        return {
+          up_to: row?.up_to ?? 0,
+          inputPrice: tierRatioToPrice(row?.ratio ?? 0),
+          outputPrice: tierRatioToPrice(outputRow?.ratio ?? 0),
+          cacheReadPrice: tierRatioToPrice(cacheReadRow?.ratio ?? 0),
+          cacheWritePrice: tierRatioToPrice(cacheWriteRow?.ratio ?? 0),
+        };
+      }),
+    ),
   };
 };
 
-export const ensureFinalInfinityTierRows = (rows) => {
-  const normalized = normalizeTierRows(rows);
-  if (!normalized.length) return normalized;
-  if (normalized[normalized.length - 1].up_to === 0) return normalized;
-  return [...normalized, { up_to: 0, ratio: 0 }];
-};
-
-export const hasTierRule = (rule) => {
-  const normalized = normalizeTierRule(rule);
-  return TIER_CATEGORIES.some(({ key }) => normalized[key].length > 0);
-};
-
-export const summarizeTierRule = (rule, t = (v) => v, visibleCategories = null) => {
-  if (!hasTierRule(rule)) return t('未配置');
-  const normalized = normalizeTierRule(rule);
-  return TIER_CATEGORIES.filter(({ key }) => {
-    // 如果提供了 visibleCategories，只显示开关打开的类别（或 input）
-    if (visibleCategories !== null) {
-      return key === 'input' || visibleCategories[key];
-    }
-    // 否则显示所有有数据的类别
-    return normalized[key].length > 0;
-  })
-    .filter(({ key }) => normalized[key].length > 0)
-    .map(({ key, label }) => `${t(label)} ${normalized[key].length}${t('档')}`)
-    .join(' / ');
-};
-
-const formatTierStartBound = (value) => String(value);
-
-const formatTierEndBound = (value) => {
-  if (value === 0) return '∞';
-  return String(value);
-};
-
-const formatTierPrice = (value) => {
-  if (!Number.isFinite(value)) return '-';
-  const fixed = Number(value.toFixed(6));
-  return `$${fixed}`;
-};
-
-export const buildTierPriceDetails = (rule, basePrices = {}, t = (v) => v, visibleCategories = null) => {
-  if (!hasTierRule(rule)) return [];
-  const normalized = normalizeTierRule(rule);
-  return TIER_CATEGORIES.filter(({ key }) => {
-    // 如果提供了 visibleCategories，只显示开关打开的类别（或 input）
-    if (visibleCategories !== null) {
-      return key === 'input' || visibleCategories[key];
-    }
-    // 否则显示所有有数据的类别
-    return normalized[key].length > 0;
-  })
-    .filter(({ key }) => normalized[key].length > 0)
-    .map(({ key, label }) => {
-      let previous = 0;
-      const rows = ensureFinalInfinityTierRows(normalized[key]);
-      const segments = rows.map((row) => {
-        const from = previous;
-        const to = row.up_to;
-        previous = row.up_to || previous;
-        // 使用固定的 1M token 数量计算价格，不随档位变化
-        const fixedTokenCount = 1000000;
-        // 直接从 ratio 转换为价格，不使用 basePrices
-        const price = formatTierPrice(
-          row.ratio ? ratioToPrice(row.ratio, fixedTokenCount, 1) : 0,
-        );
-        return {
-          range: `${formatTierStartBound(from)}～${formatTierEndBound(to)}`,
-          price,
-          ratio: row.ratio,
-        };
-      });
-      return {
-        key,
-        category: key,
-        label: t(label),
-        segments,
-      };
-    });
-};
-
-export const validateTierRule = (rule, t = (v) => v) => {
-  const normalized = normalizeTierRule(rule);
-  if (normalized.mode !== 'progressive') {
-    return t('仅支持 progressive 阶梯计费模式');
+/** 兼容旧版 serializeTierRule */
+export const serializeTierRule = (tp) => {
+  const inherited = unifiedToLegacy(tp);
+  const out = { mode: tp?.mode || TIER_MODE };
+  if (inherited.modelTierRatio?.segments?.length > 0) {
+    out.input = inherited.modelTierRatio.segments;
   }
-  for (const { key, label } of TIER_CATEGORIES) {
-    let previous = 0;
-    const rows = normalized[key];
-    for (let i = 0; i < rows.length; i += 1) {
-      const row = rows[i];
-      if (row.ratio === 0 || row.ratio === null || row.ratio === undefined) return `${t(label)} ${t('价格不能为空')}`;
-      if (row.ratio < 0) return `${t(label)} ${t('倍率不能小于 0')}`;
-      if (row.up_to < 0) return `${t(label)} up_to ${t('不能小于 0')}`;
-      if (row.up_to === 0 && i !== rows.length - 1) {
-        return `${t(label)} ${t('只有最后一档 up_to 可以为 0')}`;
-      }
-      if (row.up_to !== 0 && row.up_to <= previous) {
-        return `${t(label)} up_to ${t('必须递增')}`;
-      }
-      if (row.up_to !== 0) previous = row.up_to;
-    }
+  if (inherited.completionTierRatio?.segments?.length > 0) {
+    out.output = inherited.completionTierRatio.segments;
   }
-  return '';
-};
-
-export const serializeTierRule = (rule) => {
-  const normalized = normalizeTierRule(rule);
-  const out = { mode: normalized.mode || 'progressive' };
-  TIER_CATEGORIES.forEach(({ key }) => {
-    if (normalized[key].length > 0) out[key] = normalized[key];
-  });
+  if (inherited.cacheTierRatio?.segments?.length > 0) {
+    out.cache_read = inherited.cacheTierRatio.segments;
+  }
+  if (inherited.createCacheTierRatio?.segments?.length > 0) {
+    out.cache_write = inherited.createCacheTierRatio.segments;
+  }
   return out;
 };
 
-// 价格转倍率：倍率 = 价格(USD/1M token) × 1M / token数（阶梯计费参考按量计费）
-export const priceToRatio = (priceUSD, tokenCount, exchangeRate = 1) => {
-  if (!priceUSD || !tokenCount || tokenCount <= 0) return 0;
-  // 价格单位是 $/1M token，所以需要乘以 1M 再除以 token 数
-  const ratio = (priceUSD * 1000000) / tokenCount;
-  return Math.max(0, ratio);
+/** 兼容旧版 emptyTierRule */
+export const emptyTierRule = emptyTierPricing;
+
+/** 兼容旧版 normalizeTierSegments */
+export const normalizeTierSegments = (tier) => {
+  const src = tier && typeof tier === 'object' ? tier : {};
+  // 新格式：{ tiers: [...] }
+  if (Array.isArray(src.tiers)) {
+    return { segments: src.tiers.map((r) => ({ up_to: r.up_to, ratio: priceToTierRatio(r.inputPrice) })) };
+  }
+  // 旧格式：{ segments: [...] }
+  return {
+    segments: (Array.isArray(src.segments) ? src.segments : [])
+      .map((row) => ({
+        up_to: Number(row?.up_to || 0),
+        ratio: Number(row?.ratio ?? 0),
+      }))
+      .filter((row) => Number.isFinite(row.up_to) && Number.isFinite(row.ratio)),
+  };
 };
 
-// 倍率转价格：价格 = 倍率 × token数 / 1M（阶梯计费参考按量计费）
-export const ratioToPrice = (ratio, tokenCount, exchangeRate = 1) => {
-  if (!ratio || !tokenCount || tokenCount <= 0) return 0;
-  // 价格单位是 $/1M token，所以倍率 × token 数再除以 1M
-  return (ratio * tokenCount) / 1000000;
+/** 兼容旧版 ensureFinalInfinityTierSegments */
+export const ensureFinalInfinityTierSegments = (segments) => {
+  const normalized = Array.isArray(segments) ? segments : [];
+  if (!normalized.length) return normalized;
+  if (normalized[normalized.length - 1].up_to === 0) return normalized;
+  return [...normalized, { up_to: 0, ratio: 0 }];
 };
