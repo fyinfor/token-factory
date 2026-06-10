@@ -482,7 +482,7 @@ const ModelChannelList = ({
       channel.quota_type !== undefined
         ? channel.quota_type
         : modelData?.quota_type;
-    const isPerToken = quotaType === 0; // 0=按量计费, 1=按次计费
+    const isPerToken = quotaType === 0 || quotaType === 3; // 0=按量计费, 1=按次计费, 3=阶梯计费（按量）
 
     // ============================================================
     // 新计费公式参数：ch.model_ratio / ch.model_price 为原始渠道倍率（后端不再预乘成本折扣）
