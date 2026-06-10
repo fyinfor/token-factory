@@ -709,6 +709,7 @@ func recalcVideoPerSecondQuotaDetailOnComplete(task *model.Task, taskResult *rel
 		QuotaPerUnit:            common.QuotaPerUnit,
 		ChannelDiscountPercent:  channelDiscountPercent,
 		UnifiedAudio:            match.UnifiedAudio,
+		CappedToMaxTier:         match.CappedToMaxTier,
 	}
 	return quota, detail
 }
@@ -830,11 +831,12 @@ func detectTaskVideoBillingMode(task *model.Task) string {
 }
 
 type videoPerSecondPriceMatch struct {
-	Resolution     string
-	RuleWidth      int
-	RuleHeight     int
-	PricePerSecond float64
-	UnifiedAudio   bool
+	Resolution      string
+	RuleWidth       int
+	RuleHeight      int
+	PricePerSecond  float64
+	UnifiedAudio    bool
+	CappedToMaxTier bool
 }
 
 type videoPerSecondBillingDetail struct {
@@ -854,6 +856,7 @@ type videoPerSecondBillingDetail struct {
 	QuotaPerUnit            float64
 	ChannelDiscountPercent  float64
 	UnifiedAudio            bool
+	CappedToMaxTier         bool
 }
 
 // taskPreferVideoPerSecondSettlement 该任务是否应按视频按秒规则结算（避免误走文本 token 重算）。
@@ -897,13 +900,36 @@ func matchPerSecondPriceDetail(r ratio_setting.VideoPricingRules, mode string, w
 	}
 	targetLong, targetShort := normalizeVideoResolutionSides(width, height)
 	targetRatio := targetVideoResolutionRatio(width, height)
+	best, capped := matchPerSecondPriceRow(rows, targetLong, targetShort, targetRatio, hasAudio, true)
+	if best < 0 && !hasPerSecondPriceRowsForAudio(rows, hasAudio) {
+		best, capped = matchPerSecondPriceRow(rows, targetLong, targetShort, targetRatio, hasAudio, false)
+	}
+	if best < 0 {
+		return nil, false
+	}
+	row := rows[best]
+	rw, rh, _ := parseVideoResolutionFlexibleForRatio(row.Resolution, targetRatio)
+	return &videoPerSecondPriceMatch{
+		Resolution:      row.Resolution,
+		RuleWidth:       rw,
+		RuleHeight:      rh,
+		PricePerSecond:  row.Price,
+		UnifiedAudio:    hasSamePerSecondPriceForAudio(rows, row),
+		CappedToMaxTier: capped,
+	}, true
+}
+
+func matchPerSecondPriceRow(rows []ratio_setting.VideoResolutionAudioPriceRule, targetLong, targetShort int, targetRatio float64, hasAudio bool, requireAudioMatch bool) (int, bool) {
 	best := -1
 	bestPixels := int(^uint(0) >> 1)
-	fallback := -1
-	fallbackPixels := 0
+	maxTier := -1
+	maxTierPixels := 0
 	for i := range rows {
 		row := rows[i]
-		if row.Price <= 0 || row.HasAudio != hasAudio {
+		if row.Price <= 0 {
+			continue
+		}
+		if requireAudioMatch && row.HasAudio != hasAudio {
 			continue
 		}
 		rw, rh, ok := parseVideoResolutionFlexibleForRatio(row.Resolution, targetRatio)
@@ -914,34 +940,31 @@ func matchPerSecondPriceDetail(r ratio_setting.VideoPricingRules, mode string, w
 		if p <= 0 {
 			continue
 		}
+		if p > maxTierPixels {
+			maxTierPixels = p
+			maxTier = i
+		}
 		ruleLong, ruleShort := normalizeVideoResolutionSides(rw, rh)
 		if ruleLong >= targetLong && ruleShort >= targetShort {
 			if p < bestPixels {
 				bestPixels = p
 				best = i
 			}
-			continue
-		}
-		if p > fallbackPixels {
-			fallbackPixels = p
-			fallback = i
 		}
 	}
 	if best < 0 {
-		best = fallback
+		return maxTier, maxTier >= 0
 	}
-	if best < 0 {
-		return nil, false
+	return best, false
+}
+
+func hasPerSecondPriceRowsForAudio(rows []ratio_setting.VideoResolutionAudioPriceRule, hasAudio bool) bool {
+	for _, row := range rows {
+		if row.Price > 0 && row.HasAudio == hasAudio {
+			return true
+		}
 	}
-	row := rows[best]
-	rw, rh, _ := parseVideoResolutionFlexibleForRatio(row.Resolution, targetRatio)
-	return &videoPerSecondPriceMatch{
-		Resolution:     row.Resolution,
-		RuleWidth:      rw,
-		RuleHeight:     rh,
-		PricePerSecond: row.Price,
-		UnifiedAudio:   hasSamePerSecondPriceForAudio(rows, row),
-	}, true
+	return false
 }
 
 func hasSamePerSecondPriceForAudio(rows []ratio_setting.VideoResolutionAudioPriceRule, row ratio_setting.VideoResolutionAudioPriceRule) bool {

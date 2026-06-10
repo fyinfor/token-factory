@@ -362,6 +362,40 @@ function getUsageLogDetailSummary(record, text, billingDisplayMode, t) {
   const other = getLogOther(record.other);
 
   if (record.type === 6) {
+    const phase = other?.billing_phase;
+    if (phase === 'delta_refund') {
+      const actualQuota = Number(other?.actual_quota);
+      const preConsumedQuota = Number(other?.pre_consumed_quota);
+      const refundQuota = Number(
+        other?.display_quota ?? other?.balance_delta ?? record?.quota ?? 0,
+      );
+      return {
+        segments: [
+          { text: t('异步任务差额退款'), tone: 'primary' },
+          Number.isFinite(preConsumedQuota) && preConsumedQuota > 0
+            ? {
+                text: `${t('预扣费')}：${renderQuota(preConsumedQuota)}`,
+                tone: 'secondary',
+              }
+            : null,
+          Number.isFinite(actualQuota) && actualQuota > 0
+            ? {
+                text: `${t('实际扣费')}：${renderQuota(actualQuota)}`,
+                tone: 'secondary',
+              }
+            : null,
+          {
+            text: `${t('返还差额')}：${renderQuota(refundQuota)}`,
+            tone: 'secondary',
+          },
+        ].filter(Boolean),
+      };
+    }
+    if (phase === 'refund') {
+      return {
+        segments: [{ text: t('异步任务失败退款'), tone: 'primary' }],
+      };
+    }
     return {
       segments: [{ text: t('异步任务退款'), tone: 'primary' }],
     };
