@@ -28,6 +28,11 @@ type Pricing struct {
 	CompletionRatio        *float64                `json:"completion_ratio,omitempty"`
 	CacheRatio             *float64                `json:"cache_ratio,omitempty"`
 	CreateCacheRatio       *float64                `json:"create_cache_ratio,omitempty"`
+	// 全局阶梯倍率（模型名 -> segments），供定价页展示官方阶梯价
+	ModelTierRatio       any `json:"model_tier_ratio,omitempty"`
+	CompletionTierRatio  any `json:"completion_tier_ratio,omitempty"`
+	CacheTierRatio       any `json:"cache_tier_ratio,omitempty"`
+	CreateCacheTierRatio any `json:"create_cache_tier_ratio,omitempty"`
 	ImageRatio             *float64                `json:"image_ratio,omitempty"`
 	AudioRatio             *float64                `json:"audio_ratio,omitempty"`
 	AudioCompletionRatio   *float64                `json:"audio_completion_ratio,omitempty"`
@@ -303,9 +308,12 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 				QuotaType: func() int {
 					if baseMp > 0 {
 						return 1
-					} else {
-						return 0
 					}
+					// 阶梯计费：quota_type = 3（优先级：按次 > 阶梯 > 按量）
+					if hasModelTierRatio || hasCompletionTierRatio || hasCacheTierRatio || hasCreateCacheTierRatio {
+						return 3
+					}
+					return 0
 				}(),
 			}
 			if hasModelTierRatio {
@@ -643,6 +651,18 @@ func updatePricing() {
 		}
 		if createCacheRatio, ok := ratio_setting.GetCreateCacheRatio(model); ok {
 			pricing.CreateCacheRatio = &createCacheRatio
+		}
+		if tierRatio, ok := ratio_setting.GetModelTierRatio(model); ok && len(tierRatio.Segments) > 0 {
+			pricing.ModelTierRatio = tierRatio
+		}
+		if tierRatio, ok := ratio_setting.GetCompletionTierRatio(model); ok && len(tierRatio.Segments) > 0 {
+			pricing.CompletionTierRatio = tierRatio
+		}
+		if tierRatio, ok := ratio_setting.GetCacheTierRatio(model); ok && len(tierRatio.Segments) > 0 {
+			pricing.CacheTierRatio = tierRatio
+		}
+		if tierRatio, ok := ratio_setting.GetCreateCacheTierRatio(model); ok && len(tierRatio.Segments) > 0 {
+			pricing.CreateCacheTierRatio = tierRatio
 		}
 		if imageRatio, ok := ratio_setting.GetImageRatio(model); ok {
 			pricing.ImageRatio = &imageRatio

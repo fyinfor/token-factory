@@ -92,6 +92,10 @@ func sanitizePricingData(data []model.PricingAPIItem) {
 		data[i].CompletionRatio = nil
 		data[i].CacheRatio = nil
 		data[i].CreateCacheRatio = nil
+		data[i].ModelTierRatio = nil
+		data[i].CompletionTierRatio = nil
+		data[i].CacheTierRatio = nil
+		data[i].CreateCacheTierRatio = nil
 		data[i].ImageRatio = nil
 		data[i].AudioRatio = nil
 		data[i].AudioCompletionRatio = nil
@@ -252,6 +256,10 @@ func GetPricing(c *gin.Context) {
 	channelCompletionTierRatio := map[string]map[string]ratio_setting.TierSegments{}
 	channelCacheTierRatio := map[string]map[string]ratio_setting.TierSegments{}
 	channelCreateCacheTierRatio := map[string]map[string]ratio_setting.TierSegments{}
+	globalModelTierRatio := ratio_setting.GetModelTierRatioCopy()
+	globalCompletionTierRatio := ratio_setting.GetCompletionTierRatioCopy()
+	globalCacheTierRatio := ratio_setting.GetCacheTierRatioCopy()
+	globalCreateCacheTierRatio := ratio_setting.GetCreateCacheTierRatioCopy()
 	supplierModelPrice := map[string]map[string]float64{}
 	supplierModelRatio := map[string]map[string]float64{}
 	for s, f := range ratio_setting.GetGroupRatioCopy() {
@@ -483,6 +491,10 @@ func GetPricing(c *gin.Context) {
 		channelCompletionTierRatio = map[string]map[string]ratio_setting.TierSegments{}
 		channelCacheTierRatio = map[string]map[string]ratio_setting.TierSegments{}
 		channelCreateCacheTierRatio = map[string]map[string]ratio_setting.TierSegments{}
+		globalModelTierRatio = map[string]ratio_setting.TierSegments{}
+		globalCompletionTierRatio = map[string]ratio_setting.TierSegments{}
+		globalCacheTierRatio = map[string]ratio_setting.TierSegments{}
+		globalCreateCacheTierRatio = map[string]ratio_setting.TierSegments{}
 		supplierModelPrice = map[string]map[string]float64{}
 		supplierModelRatio = map[string]map[string]float64{}
 	}
@@ -513,6 +525,10 @@ func GetPricing(c *gin.Context) {
 		"channel_completion_tier_ratio":   channelCompletionTierRatio,
 		"channel_cache_tier_ratio":        channelCacheTierRatio,
 		"channel_create_cache_tier_ratio": channelCreateCacheTierRatio,
+		"global_model_tier_ratio":         globalModelTierRatio,
+		"global_completion_tier_ratio":    globalCompletionTierRatio,
+		"global_cache_tier_ratio":         globalCacheTierRatio,
+		"global_create_cache_tier_ratio":  globalCreateCacheTierRatio,
 		"supplier_model_price":            supplierModelPrice,
 		"supplier_model_ratio":            supplierModelRatio,
 		"usable_group":                    usableGroup,
