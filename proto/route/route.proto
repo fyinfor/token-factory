@@ -76,6 +76,8 @@ message ChannelSnapshot {
   // model_prices 每个模型的最终单价（已含成本 / 加价折扣），key=模型名。
   // 用于 TokenFactory 价格优模式展示与排序。
   map<string, double> model_prices = 18;
+  // route_slug 全局渠道路由后缀（如 u1abc），调用格式 {model}/{route_slug}。
+  string route_slug = 19;
 }
 
 message SyncChannelsResponse {

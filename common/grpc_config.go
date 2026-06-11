@@ -37,13 +37,13 @@ func TokenFactoryRouteErrorThreshold() int {
 	return 3
 }
 
-// TokenFactoryRouteStickyTTLSeconds 黏性绑定的存活秒数（默认 3600）。
+// TokenFactoryRouteStickyTTLSeconds 黏性绑定的存活秒数（默认 1800，即 30 分钟）。
 // 环境变量 TOKENFACTORY_ROUTE_STICKY_TTL_SECONDS。
 func TokenFactoryRouteStickyTTLSeconds() int {
 	if v, err := strconv.Atoi(os.Getenv("TOKENFACTORY_ROUTE_STICKY_TTL_SECONDS")); err == nil && v > 0 {
 		return v
 	}
-	return 3600
+	return 1800
 }
 
 // TokenFactoryRouteErrorTTLSeconds 错误计数的窗口秒数（默认 600，超时即视为非「连续」）。

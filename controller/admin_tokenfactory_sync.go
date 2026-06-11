@@ -67,6 +67,10 @@ func AdminTokenFactorySyncChannels(c *gin.Context) {
 			modelsCSV = ""
 			modelPrices = nil
 		}
+		routeSlug := strings.TrimSpace(ch.RouteSlug)
+		if routeSlug == "" {
+			routeSlug = model.DefaultRouteSlugFromChannelID(int64(ch.Id))
+		}
 		snapshots = append(snapshots, &pb.ChannelSnapshot{
 			Id:                   int32(ch.Id),
 			Name:                 ch.Name,
@@ -79,6 +83,7 @@ func AdminTokenFactorySyncChannels(c *gin.Context) {
 			BaseUrl:              baseURL,
 			Balance:              0,
 			ChannelNo:            ch.ChannelNo,
+			RouteSlug:            routeSlug,
 			SupplierAlias:        ch.SupplierType,
 			ProviderSlug:         strings.ToLower(strings.TrimSpace(ch.SupplierType)),
 			PriceDiscountPercent: priceDiscount,

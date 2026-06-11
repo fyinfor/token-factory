@@ -386,7 +386,9 @@ type ChannelSnapshot struct {
 	ModelMapping          string                 `protobuf:"bytes,17,opt,name=model_mapping,json=modelMapping,proto3" json:"model_mapping,omitempty"` // JSON
 	// model_prices 每个模型的最终单价（已含成本 / 加价折扣），key=模型名。
 	// 用于 TokenFactory 价格优模式展示与排序。
-	ModelPrices   map[string]float64 `protobuf:"bytes,18,rep,name=model_prices,json=modelPrices,proto3" json:"model_prices,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"fixed64,2,opt,name=value"`
+	ModelPrices map[string]float64 `protobuf:"bytes,18,rep,name=model_prices,json=modelPrices,proto3" json:"model_prices,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"fixed64,2,opt,name=value"`
+	// route_slug 全局渠道路由后缀（如 u1abc），调用格式 {model}/{route_slug}。
+	RouteSlug     string `protobuf:"bytes,19,opt,name=route_slug,json=routeSlug,proto3" json:"route_slug,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -545,6 +547,13 @@ func (x *ChannelSnapshot) GetModelPrices() map[string]float64 {
 		return x.ModelPrices
 	}
 	return nil
+}
+
+func (x *ChannelSnapshot) GetRouteSlug() string {
+	if x != nil {
+		return x.RouteSlug
+	}
+	return ""
 }
 
 type SyncChannelsResponse struct {
@@ -718,7 +727,7 @@ const file_proto_route_route_proto_rawDesc = "" +
 	"\bfallback\x18\x04 \x01(\bR\bfallback\"p\n" +
 	"\x13SyncChannelsRequest\x122\n" +
 	"\bchannels\x18\x01 \x03(\v2\x16.route.ChannelSnapshotR\bchannels\x12%\n" +
-	"\x0esync_timestamp\x18\x02 \x01(\x03R\rsyncTimestamp\"\xb4\x05\n" +
+	"\x0esync_timestamp\x18\x02 \x01(\x03R\rsyncTimestamp\"\xd3\x05\n" +
 	"\x0fChannelSnapshot\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -739,7 +748,9 @@ const file_proto_route_route_proto_rawDesc = "" +
 	"\x16price_discount_percent\x18\x0f \x01(\x01R\x14priceDiscountPercent\x120\n" +
 	"\x14markup_discount_rate\x18\x10 \x01(\x01R\x12markupDiscountRate\x12#\n" +
 	"\rmodel_mapping\x18\x11 \x01(\tR\fmodelMapping\x12J\n" +
-	"\fmodel_prices\x18\x12 \x03(\v2'.route.ChannelSnapshot.ModelPricesEntryR\vmodelPrices\x1a>\n" +
+	"\fmodel_prices\x18\x12 \x03(\v2'.route.ChannelSnapshot.ModelPricesEntryR\vmodelPrices\x12\x1d\n" +
+	"\n" +
+	"route_slug\x18\x13 \x01(\tR\trouteSlug\x1a>\n" +
 	"\x10ModelPricesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"9\n" +
