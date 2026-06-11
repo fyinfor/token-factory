@@ -42,15 +42,18 @@ import {
   getUsedGroupContext,
   pickChannelScopedModelFloat,
   computeChannelBillingRates,
-  costDiscountMultiplier,
-  markupRateFromPercent,
-  pickChannelScopedModelTierSegments,
-  pickGlobalModelTierSegments,
   formatVideoResolutionDisplayLabel,
   compareVideoResolutionAsc,
   isVideoPricingModel,
   hasNumericValue,
 } from '../../../../../helpers';
+import {
+  TIER_CATEGORY_STYLES,
+  detectTokenTierPricing,
+  resolveTierSegmentSources,
+  buildTokenTierPreviewItems,
+  formatTierBound,
+} from './tierUtils';
 import { VIDEO_FLAT_LANE_I18N_KEY } from '../../constants/videoFlatClipLaneI18n';
 import PricingCardSkeleton from './PricingCardSkeleton';
 import { useMinimumLoadingTime } from '../../../../../hooks/common/useMinimumLoadingTime';
@@ -62,260 +65,6 @@ const CARD_STYLES = {
   icon: 'w-8 h-8 flex items-center justify-center',
   selected: 'border-blue-500 bg-blue-50 shadow-md',
   default: 'border-gray-200 hover:border-blue-200 hover:shadow-md',
-};
-
-/** 阶梯计费类别 -> 阶梯倍率字段名（渠道与模型全局同名） */
-const TIER_FIELD_MAP = {
-  input: 'model_tier_ratio',
-  output: 'completion_tier_ratio',
-  cache_read: 'cache_tier_ratio',
-  cache_write: 'create_cache_tier_ratio',
-};
-
-/** 阶梯类别 -> 定价接口全局/渠道阶梯倍率映射字段 */
-const TIER_GLOBAL_MAP_KEYS = {
-  input: 'globalModelTierRatio',
-  output: 'globalCompletionTierRatio',
-  cache_read: 'globalCacheTierRatio',
-  cache_write: 'globalCreateCacheTierRatio',
-};
-const TIER_CHANNEL_MAP_KEYS = {
-  input: 'channelModelTierRatio',
-  output: 'channelCompletionTierRatio',
-  cache_read: 'channelCacheTierRatio',
-  cache_write: 'channelCreateCacheTierRatio',
-};
-
-/** 取阶梯倍率 segments（结构：{ segments: [{ up_to, ratio }] }，up_to=0 表示无上限） */
-const getTierSegments = (source, field) =>
-  Array.isArray(source?.[field]?.segments) ? source[field].segments : [];
-
-const TIER_CATEGORY_FLAGS = [
-  { cat: 'input', flag: 'hasModelTier' },
-  { cat: 'output', flag: 'hasCompletionTier' },
-  { cat: 'cache_read', flag: 'hasCacheTier' },
-  { cat: 'cache_write', flag: 'hasCreateCacheTier' },
-];
-
-const emptyTierFlags = () => ({
-  hasModelTier: false,
-  hasCompletionTier: false,
-  hasCacheTier: false,
-  hasCreateCacheTier: false,
-});
-
-const categoryHasTierData = (model, channel, cat, tierRatioMaps = {}) => {
-  const field = TIER_FIELD_MAP[cat];
-  if (getTierSegments(channel, field).length > 0) return true;
-  if (getTierSegments(model, field).length > 0) return true;
-  const globalMap = tierRatioMaps[TIER_GLOBAL_MAP_KEYS[cat]];
-  if (pickGlobalModelTierSegments(globalMap, model.model_name).length > 0) {
-    return true;
-  }
-  const channelMap = tierRatioMaps[TIER_CHANNEL_MAP_KEYS[cat]];
-  if (
-    pickChannelScopedModelTierSegments(
-      channelMap,
-      channel?.channel_id,
-      model.model_name,
-    ).length > 0
-  ) {
-    return true;
-  }
-  return false;
-};
-
-/**
- * 解析阶梯 segments：官方价用 globalSegments，平台价用 baseSegments
- * 优先级：
- *   globalSegments = 全局映射 → 模型内嵌 → 渠道内嵌（仅无渠道专属覆盖时）
- *   baseSegments   = 渠道专属映射 → globalSegments → 渠道内嵌
- */
-const resolveTierSegmentSources = ({
-  model,
-  channel,
-  channelId,
-  cat,
-  tierRatioMaps,
-}) => {
-  const field = TIER_FIELD_MAP[cat];
-  const globalMap = tierRatioMaps[TIER_GLOBAL_MAP_KEYS[cat]];
-  const channelMap = tierRatioMaps[TIER_CHANNEL_MAP_KEYS[cat]];
-  const channelEmbedSegments = getTierSegments(channel, field);
-  const channelOnlySegments = pickChannelScopedModelTierSegments(
-    channelMap,
-    channelId,
-    model.model_name,
-  );
-
-  let globalSegments = pickGlobalModelTierSegments(globalMap, model.model_name);
-  if (globalSegments.length === 0) {
-    globalSegments = getTierSegments(model, field);
-  }
-  if (globalSegments.length === 0 && channelOnlySegments.length === 0) {
-    globalSegments = channelEmbedSegments;
-  }
-
-  let baseSegments =
-    channelOnlySegments.length > 0 ? channelOnlySegments : globalSegments;
-  if (baseSegments.length === 0) {
-    baseSegments = channelEmbedSegments;
-  }
-
-  return { globalSegments, baseSegments, channelOnlySegments };
-};
-
-/**
- * 检查模型是否配置了阶梯倍率（渠道内嵌 / quota_type=3 / 全局映射 / 模型内嵌）
- */
-const detectTokenTierPricing = (model, tierRatioMaps = {}) => {
-  if (!model?.channel_list || model.channel_list.length === 0) return null;
-
-  for (const ch of model.channel_list) {
-    const flags = emptyTierFlags();
-    let matched = ch.quota_type === 3;
-    for (const { cat, flag } of TIER_CATEGORY_FLAGS) {
-      if (categoryHasTierData(model, ch, cat, tierRatioMaps)) {
-        flags[flag] = true;
-        matched = true;
-      }
-    }
-    if (matched) {
-      return { ...flags, channel: ch };
-    }
-  }
-  return null;
-};
-
-/**
- * 格式化阶梯 Token 区间显示文本
- */
-const formatTierRange = (from, to, t) => {
-  const formatBound = (v) => {
-    if (v >= 1000000) return `${(v / 1000000).toFixed(v % 1000000 === 0 ? 0 : 1)}M`;
-    if (v >= 1000) return `${(v / 1000).toFixed(v % 1000 === 0 ? 0 : 1)}K`;
-    return String(v);
-  };
-  if (to === 0) return `${formatBound(from)}+`;
-  return `${formatBound(from)}~${formatBound(to)}`;
-};
-
-/**
- * 阶梯计费类别配置：颜色与标签
- */
-const TIER_CATEGORY_STYLES = {
-  input: {
-    labelKey: '输入',
-    color: 'blue',
-    backgroundColor: 'rgba(var(--semi-blue-0), .55)',
-    rowBackgroundColor: 'rgba(var(--semi-blue-0), .22)',
-    textColor: 'var(--semi-blue-7)',
-    borderColor: 'var(--semi-blue-4)',
-  },
-  output: {
-    labelKey: '输出',
-    color: 'violet',
-    backgroundColor: 'rgba(var(--semi-violet-0), .55)',
-    rowBackgroundColor: 'rgba(var(--semi-violet-0), .22)',
-    textColor: 'var(--semi-violet-7)',
-    borderColor: 'var(--semi-violet-4)',
-  },
-  cache_read: {
-    labelKey: '缓存读取',
-    color: 'cyan',
-    backgroundColor: 'rgba(var(--semi-cyan-0), .55)',
-    rowBackgroundColor: 'rgba(var(--semi-cyan-0), .22)',
-    textColor: 'var(--semi-cyan-7)',
-    borderColor: 'var(--semi-cyan-4)',
-  },
-  cache_write: {
-    labelKey: '缓存写入',
-    color: 'amber',
-    backgroundColor: 'rgba(var(--semi-amber-0), .55)',
-    rowBackgroundColor: 'rgba(var(--semi-amber-0), .22)',
-    textColor: 'var(--semi-amber-7)',
-    borderColor: 'var(--semi-amber-4)',
-  },
-};
-
-/**
- * 构建阶梯计费展示行数据
- * 遍历基准阶梯（渠道阶梯优先，渠道无配置时回退全局阶梯）的所有区间，逐档计算：
- *   官方价     = 全局阶梯对应区间 ratio × 2
- *   阶梯基准原价 = 基准阶梯对应区间 ratio × 2
- *   平台价     = (基准阶梯 ratio × 成本折扣率 + 全局阶梯 ratio × 加价折扣率) × 2 × 分组倍率
- *   折扣率     = round((1 - 平台价/官方价) × 100)%
- */
-const buildTokenTierPreviewItems = (
-  baseSegments,
-  globalSegments,
-  channel,
-  tierType,
-  usedGroupRatio,
-  displayPrice,
-  t,
-) => {
-  if (!Array.isArray(baseSegments) || baseSegments.length === 0) return [];
-
-  const priceDiscountPercent =
-    channel.price_discount_percent != null ? channel.price_discount_percent : 100;
-  const costDisc = costDiscountMultiplier(priceDiscountPercent);
-  const markupRate = markupRateFromPercent(channel.markup_discount_rate || 0);
-
-  // 按区间起点匹配全局阶梯对应档位（up_to=0 代表大于上一区间的所有范围）
-  const findGlobalRatio = (from, fallbackRatio) => {
-    if (!Array.isArray(globalSegments)) return fallbackRatio;
-    for (const seg of globalSegments) {
-      const upTo = Number(seg.up_to) || 0;
-      if (upTo === 0 || from < upTo) return Number(seg.ratio) || 0;
-    }
-    return fallbackRatio;
-  };
-
-  const rows = [];
-  let previousUpTo = 0;
-  for (const seg of baseSegments) {
-    const baseRatio = Number(seg.ratio) || 0;
-    const upTo = Number(seg.up_to) || 0;
-    // 全局阶梯无对应区间时回退基准阶梯 ratio
-    const globalRatio = findGlobalRatio(previousUpTo, baseRatio);
-
-    // 官方价 = 全局阶梯对应区间 ratio × 2
-    const officialUsdPerM = globalRatio * 2;
-    // 平台价 = (基准阶梯 ratio × 成本折扣率 + 全局阶梯 ratio × 加价折扣率) × 2 × 分组倍率
-    const platformUsdPerM =
-      (baseRatio * costDisc + globalRatio * markupRate) * 2 * usedGroupRatio;
-
-    if (!Number.isFinite(platformUsdPerM) || platformUsdPerM <= 0) {
-      previousUpTo = upTo || previousUpTo;
-      continue;
-    }
-
-    const discount =
-      Number.isFinite(officialUsdPerM) &&
-      officialUsdPerM > 0 &&
-      officialUsdPerM > platformUsdPerM
-        ? Math.round((1 - platformUsdPerM / officialUsdPerM) * 100)
-        : null;
-
-    rows.push({
-      key: `${tierType}-${upTo}-${baseRatio}`,
-      range: formatTierRange(previousUpTo, upTo, t),
-      platformPrice: displayPrice(platformUsdPerM),
-      platformPriceUsd: platformUsdPerM,
-      officialPrice:
-        Number.isFinite(officialUsdPerM) && officialUsdPerM > 0
-          ? displayPrice(officialUsdPerM)
-          : '-',
-      officialPriceUsd: officialUsdPerM,
-      discount,
-      tierType,
-    });
-
-    previousUpTo = upTo || previousUpTo;
-  }
-
-  return rows;
 };
 
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -490,6 +239,135 @@ const getVideoTierGroupStyle = (family) => {
         borderColor: 'var(--semi-blue-4)',
       };
   }
+};
+
+/**
+ * TokenTierTable — 阶梯计费简化展示
+ *
+ * 仅展示第一档区间内 input / output 两类价格，以紧凑四列表格呈现：
+ * | 区间 | 平台价 / M | 官方价 / M | 折扣 |
+ */
+const TokenTierTable = ({ items, t }) => {
+  if (!items || !Array.isArray(items.rows) || items.rows.length === 0) {
+    return null;
+  }
+
+  const firstRow = items.rows[0];
+  const inputCell = firstRow.cells?.input;
+  const outputCell = firstRow.cells?.output;
+
+  const displayRows = [];
+  if (inputCell && inputCell.platformPriceUsd > 0) {
+    displayRows.push({ key: 'input', label: '输入价格', cell: inputCell });
+  }
+  if (outputCell && outputCell.platformPriceUsd > 0) {
+    displayRows.push({ key: 'output', label: '输出价格', cell: outputCell });
+  }
+  if (displayRows.length === 0) return null;
+
+  const rangeLabel = firstRow.range
+    ? (firstRow.fromToken === 0 && firstRow.upTo > 0
+        ? `< ${formatTierBound(firstRow.upTo)}`
+        : firstRow.range)
+    : '';
+
+  return (
+    <div
+      className='w-full min-w-0 overflow-hidden rounded-lg border'
+      style={{
+        borderColor: 'var(--semi-color-border)',
+        backgroundColor: 'var(--semi-color-fill-0)',
+      }}
+    >
+      <table
+        className='w-full border-collapse'
+        style={{ fontSize: 11 }}
+      >
+        <thead>
+          <tr style={{ backgroundColor: 'var(--semi-color-bg-2)' }}>
+            <th
+              className='px-2 py-1 text-left font-semibold'
+              style={{ color: 'var(--semi-color-text-1)', borderBottom: '1px solid var(--semi-color-border)' }}
+            >
+              {rangeLabel}
+            </th>
+            <th
+              className='px-2 py-1 text-center font-medium'
+              style={{ color: 'var(--semi-color-text-2)', borderBottom: '1px solid var(--semi-color-border)' }}
+            >
+              平台价 / M
+            </th>
+            <th
+              className='px-2 py-1 text-center font-medium'
+              style={{ color: 'var(--semi-color-text-2)', borderBottom: '1px solid var(--semi-color-border)' }}
+            >
+              官方价 / M
+            </th>
+            <th
+              className='px-2 py-1 text-center font-medium'
+              style={{ color: 'var(--semi-color-text-2)', borderBottom: '1px solid var(--semi-color-border)' }}
+            >
+              折扣率
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {displayRows.map(({ key, label, cell }) => {
+            const catStyle =
+              TIER_CATEGORY_STYLES[key] || TIER_CATEGORY_STYLES.input;
+            const showStrike =
+              cell.officialPriceUsd > 0 &&
+              cell.officialPriceUsd > cell.platformPriceUsd;
+            return (
+              <tr
+                key={key}
+                style={{
+                  backgroundColor: catStyle.rowBackgroundColor,
+                  borderBottom: '1px solid var(--semi-color-border)',
+                }}
+              >
+                <td
+                  className='px-2 py-1.5 font-semibold'
+                  style={{ color: catStyle.textColor }}
+                >
+                  {t(label)}
+                </td>
+                <td
+                  className='px-2 py-1.5 text-center font-bold'
+                  style={{ color: 'var(--semi-color-primary)' }}
+                >
+                  {cell.platformPrice}
+                </td>
+                <td
+                  className='px-2 py-1.5 text-center font-medium'
+                  style={{
+                    color: 'var(--semi-color-text-2)',
+                    textDecoration: showStrike ? 'line-through' : 'none',
+                  }}
+                >
+                  {cell.officialPrice}
+                </td>
+                <td className='px-2 py-1.5 text-center'>
+                  {cell.discount != null && cell.discount > 0 ? (
+                    <Tag
+                      color='red'
+                      size='small'
+                      shape='circle'
+                      style={{ zoom: 0.72 }}
+                    >
+                      -{cell.discount}%
+                    </Tag>
+                  ) : (
+                    <span style={{ color: 'var(--semi-color-text-3)' }}>-</span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
 };
 
 const PricingCardView = ({
@@ -1191,6 +1069,8 @@ const PricingCardView = ({
     }
 
     // 阶梯计费：以阶梯表展示（quota_type=3；兼容旧数据 quota_type=0 + 阶梯配置）
+    // 同一模型下，多个阶梯类别（输入/输出/缓存读取/缓存写入）合并为单张表，
+    // 行按"输入 Token 区间"对齐，列为各阶梯类别。
     if (tokenTierInfo && (quotaType === 0 || quotaType === 3)) {
       const { usedGroupRatio } = getUsedGroupContext(
         model,
@@ -1200,6 +1080,8 @@ const PricingCardView = ({
       const channelId = tokenTierInfo.channel?.channel_id;
 
       const tierCategoryOrder = ['input', 'output', 'cache_read', 'cache_write'];
+      const perCategoryRows = {};
+      const activeCategories = [];
       for (const cat of tierCategoryOrder) {
         const { globalSegments, baseSegments } = resolveTierSegmentSources({
           model,
@@ -1209,7 +1091,6 @@ const PricingCardView = ({
           tierRatioMaps,
         });
         if (baseSegments.length === 0) continue;
-
         const rows = buildTokenTierPreviewItems(
           baseSegments,
           globalSegments,
@@ -1220,13 +1101,58 @@ const PricingCardView = ({
           t,
         );
         if (rows.length > 0) {
-          items.push({
-            key: `token-tier-${cat}`,
-            tokenTierCategory: cat,
-            tokenTierRows: rows,
-            tokenTierCount: rows.length,
-          });
+          perCategoryRows[cat] = rows;
+          activeCategories.push(cat);
         }
+      }
+
+      if (activeCategories.length > 0) {
+        // 以"输入类别"的区间为行基准；
+        // 输入未配置阶梯时回退到"输出类别"的区间。
+        const baseCat = perCategoryRows.input
+          ? 'input'
+          : perCategoryRows.output
+            ? 'output'
+            : activeCategories[0];
+        const baseRows = perCategoryRows[baseCat];
+
+        const mergedRows = baseRows.map((baseRow, idx) => {
+          const cells = {};
+          for (const cat of activeCategories) {
+            const catRows = perCategoryRows[cat];
+            // 优先按 upTo 对齐；若对齐不上则回退到同 index
+            let cellRow =
+              catRows.find(
+                (r) =>
+                  Number(r.upTo) === Number(baseRow.upTo) &&
+                  Number(r.fromToken) === Number(baseRow.fromToken),
+              ) || catRows[idx];
+            if (cellRow) {
+              cells[cat] = {
+                platformPrice: cellRow.platformPrice,
+                platformPriceUsd: cellRow.platformPriceUsd,
+                officialPrice: cellRow.officialPrice,
+                officialPriceUsd: cellRow.officialPriceUsd,
+                discount: cellRow.discount,
+              };
+            }
+          }
+          return {
+            key: `tier-row-${baseRow.key}`,
+            range: baseRow.range,
+            fromToken: baseRow.fromToken,
+            upTo: baseRow.upTo,
+            cells,
+          };
+        });
+
+        items.push({
+          key: 'token-tier-table',
+          tokenTierMerged: {
+            columns: activeCategories.map((cat) => ({ key: cat })),
+            rows: mergedRows,
+          },
+        });
       }
     }
 
@@ -1414,7 +1340,6 @@ const PricingCardView = ({
             const hasChannelList =
               Array.isArray(model.channel_list) &&
               model.channel_list.length > 0;
-
             return (
               <Card
                 key={modelKey || index}
@@ -1447,14 +1372,14 @@ const PricingCardView = ({
                         >
                           {getModelPriceItemsForCard(model, priceData).map(
                             (item) => (
-                              <div
-                                key={item.key}
-                                className={
-                                  item.videoTierRows || item.tokenTierRows
-                                    ? 'flex flex-col gap-1'
-                                    : 'flex items-center'
-                                }
-                              >
+                              <React.Fragment key={item.key}>
+                                <div
+                                  className={
+                                    item.videoTierRows || item.tokenTierMerged
+                                      ? 'flex flex-col gap-1'
+                                      : 'flex items-center'
+                                  }
+                                >
                                 {item.videoTierRows ? (
                                   <div className='w-full min-w-0 overflow-hidden'>
                                     <div className='grid grid-cols-[minmax(54px,1.05fr)_minmax(50px,.95fr)_minmax(50px,.95fr)_minmax(34px,.55fr)] items-center gap-x-1.5 py-0.5 text-center text-[9px] font-medium text-semi-color-text-2'>
@@ -1554,72 +1479,11 @@ const PricingCardView = ({
                                       </button>
                                     ) : null}
                                   </div>
-                                ) : item.tokenTierRows ? (
-                                  <div className='w-full min-w-0 overflow-hidden'>
-                                    {(() => {
-                                      const catStyle =
-                                        TIER_CATEGORY_STYLES[item.tokenTierCategory] ||
-                                        TIER_CATEGORY_STYLES.input;
-                                      return (
-                                        <>
-                                          <div
-                                            className='grid grid-cols-[minmax(54px,1.05fr)_minmax(50px,.95fr)_minmax(50px,.95fr)_minmax(34px,.55fr)] items-center gap-x-1.5 rounded px-1.5 py-0.5 text-center text-[10px] font-semibold'
-                                            style={{
-                                              backgroundColor: catStyle.backgroundColor,
-                                              color: catStyle.textColor,
-                                            }}
-                                          >
-                                            <span
-                                              className='min-w-0 truncate text-left inline-flex items-center gap-1'
-                                              style={{ color: catStyle.textColor }}
-                                            >
-                                              <span
-                                                className='h-3 w-0.5 rounded-full'
-                                                style={{ backgroundColor: catStyle.borderColor }}
-                                              />
-                                              {t(catStyle.labelKey)}
-                                              {t('阶梯计费')}
-                                            </span>
-                                            <span className='min-w-0 truncate' style={{ color: catStyle.textColor }}>
-                                              {t('平台价')}
-                                            </span>
-                                            <span className='min-w-0 truncate' style={{ color: catStyle.textColor }}>
-                                              {t('官方价')}
-                                            </span>
-                                            <span className='min-w-0 truncate' style={{ color: catStyle.textColor }}>
-                                              {t('折扣率')}
-                                            </span>
-                                          </div>
-                                          {item.tokenTierRows.map((row) => (
-                                            <div
-                                              key={row.key}
-                                              className='grid grid-cols-[minmax(54px,1.05fr)_minmax(50px,.95fr)_minmax(50px,.95fr)_minmax(34px,.55fr)] items-center gap-x-1.5 rounded py-0.5 pl-3 pr-1 text-center text-[11px]'
-                                              style={{ backgroundColor: catStyle.rowBackgroundColor }}
-                                            >
-                                              <span className='min-w-0 truncate font-semibold' style={{ color: catStyle.textColor }}>
-                                                {row.range}
-                                              </span>
-                                              <span className='min-w-0 truncate font-bold text-semi-color-primary'>
-                                                {row.platformPrice}
-                                              </span>
-                                              <span className='min-w-0 truncate font-medium text-semi-color-text-2'>
-                                                {row.officialPrice}
-                                              </span>
-                                              <span className='min-w-0 truncate font-semibold text-semi-color-text-2'>
-                                                {row.discount != null && row.discount > 0 ? (
-                                                  <Tag color='red' size='small' shape='circle' style={{ zoom: 0.7 }}>
-                                                    -{row.discount}%
-                                                  </Tag>
-                                                ) : (
-                                                  '-'
-                                                )}
-                                              </span>
-                                            </div>
-                                          ))}
-                                        </>
-                                      );
-                                    })()}
-                                  </div>
+                                ) : item.tokenTierMerged ? (
+                                  <TokenTierTable
+                                    items={item.tokenTierMerged}
+                                    t={t}
+                                  />
                                 ) : (
                                   <>
                                     <span className='w-20 flex-shrink-0'>
@@ -1639,7 +1503,7 @@ const PricingCardView = ({
                                     </span>
                                   </>
                                 )}
-                                {!item.videoTierRows && !item.tokenTierRows ? (
+                                {!item.videoTierRows && !item.tokenTierMerged ? (
                                   <span className='flex-1 font-bold text-black inline-flex items-center flex-wrap gap-1'>
                                     {item.valueNode ? (
                                       item.valueNode
@@ -1695,7 +1559,8 @@ const PricingCardView = ({
                                     )}
                                   </span>
                                 ) : null}
-                              </div>
+                                </div>
+                              </React.Fragment>
                             ),
                           )}
                           <div className='flex items-center'>
