@@ -44,6 +44,20 @@ const LogsActions = ({
   const [exporting, setExporting] = useState(false);
   const { i18n } = useTranslation();
 
+  const buildLogTypeQueryParam = (logType) => {
+    if (logType == null || logType === '' || logType === '0') {
+      return '0';
+    }
+    const raw = Array.isArray(logType) ? logType : [logType];
+    const types = raw
+      .map((v) => parseInt(String(v), 10))
+      .filter((n) => !Number.isNaN(n) && n > 0);
+    if (!types.length) {
+      return '0';
+    }
+    return [...new Set(types)].join(',');
+  };
+
   const handleExportStatement = async () => {
     if (typeof getFormValues !== 'function') {
       showError(t('当前视图不支持导出对账单'));
@@ -63,13 +77,17 @@ const LogsActions = ({
         end_timestamp: String(endTs),
         model_name: formValues.model_name || '',
         token_name: formValues.token_name || '',
+        group: formValues.group || '',
+        request_id: formValues.request_id || '',
+        type: buildLogTypeQueryParam(formValues.logType),
         lang: lang || '',
       });
       let url;
       if (supplierChannelLogsView) {
-        showError(t('供应商视图不支持导出对账单'));
-        setExporting(false);
-        return;
+        if (formValues.channel) {
+          params.set('channel', String(formValues.channel));
+        }
+        url = `/api/user/supplier-channel-logs/export?${params.toString()}`;
       } else {
         url = `/api/log/self/export?${params.toString()}`;
       }
