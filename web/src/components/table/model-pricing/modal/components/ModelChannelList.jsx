@@ -39,6 +39,12 @@ import {
   pickChannelScopedModelFloat,
   userCanViewHomeCostPrice,
 } from '../../../../../helpers/utils';
+import {
+  detectTokenTierPricing,
+  resolveTierSegmentSources,
+  buildTokenTierPreviewItems,
+  formatTierBound,
+} from '../../view/card/tierUtils';
 import { UserContext } from '../../../../../context/User';
 import ApiDocsSidePanel from './ApiDocsSidePanel';
 import ModelTokenList from './ModelTokenList';
@@ -188,6 +194,258 @@ const formatCostDiscountDisplay = (priceDiscountPercent, t) => {
     return { text: `${t('成本折扣')}：${t('0折扣')}`, hasDiscount: false };
   }
   return { text: `${t('成本折扣')}：-${savingsPercent}%`, hasDiscount: true };
+};
+
+const TokenTierDetailTable = ({
+  model,
+  channel,
+  tierRatioMaps,
+  usedGroupRatio,
+  displayPrice,
+  t,
+}) => {
+  const tokenTierInfo = detectTokenTierPricing(model, tierRatioMaps);
+  if (!tokenTierInfo) return null;
+
+  const channelId = tokenTierInfo.channel?.channel_id;
+  const tierCategoryOrder = ['input', 'output', 'cache_read', 'cache_write'];
+  const perCategoryRows = {};
+  const activeCategories = [];
+
+  for (const cat of tierCategoryOrder) {
+    const { globalSegments, baseSegments } = resolveTierSegmentSources({
+      model,
+      channel: tokenTierInfo.channel,
+      channelId,
+      cat,
+      tierRatioMaps,
+    });
+    if (baseSegments.length === 0) continue;
+    const rows = buildTokenTierPreviewItems(
+      baseSegments,
+      globalSegments,
+      tokenTierInfo.channel,
+      cat,
+      usedGroupRatio,
+      displayPrice,
+      t,
+    );
+    if (rows.length > 0) {
+      perCategoryRows[cat] = rows;
+      activeCategories.push(cat);
+    }
+  }
+
+  if (activeCategories.length === 0) return null;
+
+  const catLabelMap = {
+    input: t('输入'),
+    output: t('输出'),
+    cache_read: t('缓存读取'),
+    cache_write: t('缓存写入'),
+  };
+
+  const displayCols = activeCategories.filter((c) =>
+    ['input', 'output', 'cache_read'].includes(c),
+  );
+  if (displayCols.length === 0) return null;
+
+  const colHeaders = displayCols.map((c) => catLabelMap[c]);
+
+  const baseCat = perCategoryRows.input
+    ? 'input'
+    : perCategoryRows.output
+      ? 'output'
+      : activeCategories[0];
+  const baseRows = perCategoryRows[baseCat];
+
+  const tierRanges = baseRows.map((baseRow, idx) => {
+    const rowData = {};
+    for (const cat of displayCols) {
+      const catRows = perCategoryRows[cat];
+      const cellRow =
+        catRows.find(
+          (r) =>
+            Number(r.upTo) === Number(baseRow.upTo) &&
+            Number(r.fromToken) === Number(baseRow.fromToken),
+        ) || catRows[idx];
+      if (cellRow) {
+        rowData[cat] = {
+          platformPrice: cellRow.platformPrice,
+          platformPriceUsd: cellRow.platformPriceUsd,
+          officialPrice: cellRow.officialPrice,
+          officialPriceUsd: cellRow.officialPriceUsd,
+          discount: cellRow.discount,
+        };
+      }
+    }
+    return {
+      range: baseRow.range,
+      fromToken: baseRow.fromToken,
+      upTo: baseRow.upTo,
+      cells: rowData,
+    };
+  });
+
+  const cellStyle = {
+    padding: '6px 10px',
+    fontSize: 12,
+    borderBottom: '1px solid var(--semi-color-border)',
+    textAlign: 'center',
+  };
+
+  const headerStyle = {
+    ...cellStyle,
+    backgroundColor: 'var(--semi-color-fill-0)',
+    color: 'var(--semi-color-text-2)',
+    fontWeight: 600,
+    fontSize: 11,
+  };
+
+  const typeStyleMap = {
+    official: {
+      label: '官方',
+      color: 'var(--semi-color-text-2)',
+      bgColor: 'var(--semi-color-fill-1)',
+    },
+    platform: {
+      label: '平台',
+      color: 'var(--semi-color-primary)',
+      bgColor: 'transparent',
+    },
+    discount: {
+      label: '折扣',
+      color: 'var(--semi-color-danger)',
+      bgColor: 'rgba(var(--semi-red-0), 0.15)',
+    },
+  };
+
+  return (
+    <div
+      className='w-full min-w-0 overflow-hidden rounded-lg border'
+      style={{
+        borderColor: 'var(--semi-color-border)',
+        marginTop: 8,
+      }}
+    >
+      <table className='w-full border-collapse' style={{ fontSize: 12 }}>
+        <thead>
+          <tr>
+            <th style={{ ...headerStyle, textAlign: 'left', width: '28%' }}>
+              输入 TOKEN 区间
+            </th>
+            <th style={{ ...headerStyle, width: '12%' }}>类型</th>
+            {displayCols.map((cat, i) => (
+              <th key={cat} style={{ ...headerStyle, width: `${60 / displayCols.length}%` }}>
+                {colHeaders[i]} / M
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {tierRanges.map((range, rangeIdx) => {
+            const rowTypes = ['official', 'platform', 'discount'];
+            return rowTypes.map((type, typeIdx) => {
+              const ts = typeStyleMap[type];
+              const showRange = typeIdx === 0;
+              const rangeRowSpan = 3;
+              return (
+                <tr key={`${rangeIdx}-${type}`}>
+                  {showRange && (
+                    <td
+                      rowSpan={rangeRowSpan}
+                      style={{
+                        ...cellStyle,
+                        textAlign: 'left',
+                        fontWeight: 600,
+                        color: 'var(--semi-color-text-0)',
+                        verticalAlign: 'middle',
+                      }}
+                    >
+                      {range.fromToken === 0 && range.upTo > 0
+                        ? `< ${formatTierBound(range.upTo)}`
+                        : range.range}
+                    </td>
+                  )}
+                  <td
+                    style={{
+                      ...cellStyle,
+                      fontWeight: 600,
+                      color: ts.color,
+                      backgroundColor: ts.bgColor,
+                    }}
+                  >
+                    {ts.label}
+                  </td>
+                  {displayCols.map((cat) => {
+                    const cell = range.cells[cat];
+                    if (!cell) {
+                      return (
+                        <td key={cat} style={cellStyle}>
+                          —
+                        </td>
+                      );
+                    }
+                    if (type === 'official') {
+                      const showStrike =
+                        cell.officialPriceUsd > 0 &&
+                        cell.officialPriceUsd > cell.platformPriceUsd;
+                      return (
+                        <td
+                          key={cat}
+                          style={{
+                            ...cellStyle,
+                            color: 'var(--semi-color-text-2)',
+                            textDecoration: showStrike
+                              ? 'line-through'
+                              : 'none',
+                          }}
+                        >
+                          {cell.officialPrice}
+                        </td>
+                      );
+                    }
+                    if (type === 'platform') {
+                      return (
+                        <td
+                          key={cat}
+                          style={{
+                            ...cellStyle,
+                            color: 'var(--semi-color-primary)',
+                            fontWeight: 700,
+                          }}
+                        >
+                          {cell.platformPrice}
+                        </td>
+                      );
+                    }
+                    return (
+                      <td key={cat} style={{ ...cellStyle, backgroundColor: ts.bgColor }}>
+                        {cell.discount != null && cell.discount > 0 ? (
+                          <Tag
+                            color='red'
+                            size='small'
+                            shape='circle'
+                            style={{ zoom: 0.75 }}
+                          >
+                            -{cell.discount}%
+                          </Tag>
+                        ) : (
+                          <span style={{ color: 'var(--semi-color-text-3)' }}>
+                            —
+                          </span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            });
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
 };
 
 const PriceComparisonList = ({ items, t, blurPricing = false }) => {
@@ -373,7 +631,26 @@ const ModelChannelList = ({
   channelVideoRatioMap = {},
   channelVideoCompletionRatioMap = {},
   channelVideoPriceMap = {},
+  channelModelTierRatio = {},
+  channelCompletionTierRatio = {},
+  channelCacheTierRatio = {},
+  channelCreateCacheTierRatio = {},
+  globalModelTierRatio = {},
+  globalCompletionTierRatio = {},
+  globalCacheTierRatio = {},
+  globalCreateCacheTierRatio = {},
 }) => {
+  const tierRatioMaps = {
+    globalModelTierRatio,
+    globalCompletionTierRatio,
+    globalCacheTierRatio,
+    globalCreateCacheTierRatio,
+    channelModelTierRatio,
+    channelCompletionTierRatio,
+    channelCacheTierRatio,
+    channelCreateCacheTierRatio,
+  };
+
   const [userState] = useContext(UserContext);
   const [docsVisible, setDocsVisible] = useState(false);
   const [docsModelName, setDocsModelName] = useState('');
@@ -1038,6 +1315,12 @@ const ModelChannelList = ({
                       const channelBadge =
                         channel.route_slug || channel.channel_no || String(idx);
 
+                      const channelQuotaType =
+                        channel.quota_type !== undefined
+                          ? channel.quota_type
+                          : modelData?.quota_type;
+                      const isTierBilling = channelQuotaType === 3;
+
                       const handleCopy = () => {
                         copyModelName(channelPath, t);
                       };
@@ -1099,11 +1382,22 @@ const ModelChannelList = ({
                                   </Tooltip>
                                 </div>
                               </div>
-                              <PriceComparisonList
-                                items={channelItems}
-                                t={t}
-                                blurPricing={blurPricing}
-                              />
+                              {isTierBilling ? (
+                                <TokenTierDetailTable
+                                  model={modelData}
+                                  channel={channel}
+                                  tierRatioMaps={tierRatioMaps}
+                                  usedGroupRatio={usedGroupRatio}
+                                  displayPrice={displayPrice}
+                                  t={t}
+                                />
+                              ) : (
+                                <PriceComparisonList
+                                  items={channelItems}
+                                  t={t}
+                                  blurPricing={blurPricing}
+                                />
+                              )}
                               {showVideoFlatTable ? (
                                 <VideoFlatClipHintTable
                                   hint={vHint}
