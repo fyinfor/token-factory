@@ -79,6 +79,7 @@ func SetApiRouter(router *gin.Engine) {
 			distributorRoute.GET("/invitee/:invitee_id/commissions", controller.GetDistributorInviteeCommissionLogs)
 			distributorRoute.GET("/invitee/:invitee_id/profit-shares", controller.GetDistributorInviteeProfitShareLogs)
 			distributorRoute.GET("/invitee-model-discounts", controller.GetInviteeModelDiscounts)
+			distributorRoute.GET("/invitee-model-discounts/export", controller.ExportInviteeModelDiscounts)
 			distributorRoute.PUT("/invitee-model-discounts", controller.PutInviteeModelDiscounts)
 			distributorRoute.POST("/withdrawal", controller.PostDistributorWithdrawal)
 			distributorRoute.GET("/withdrawals", controller.GetDistributorWithdrawals)

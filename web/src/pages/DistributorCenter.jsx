@@ -769,7 +769,7 @@ export default function DistributorCenter() {
         }
       />
 
-      <div className='mt-2 flex flex-col xl:flex-row gap-8 xl:gap-10 items-start'>
+      <div className='mt-2 flex flex-col xl:flex-row gap-8 xl:gap-2 items-start'>
         {/* 窄屏：右侧栏在上，表格在下；宽屏：左表格、右栏 */}
         <aside className='flex w-full flex-col gap-[10px] xl:w-[520px] flex-shrink-0 order-1 xl:order-2'>
           <Card
@@ -799,7 +799,7 @@ export default function DistributorCenter() {
                           marginTop: 6,
                         }}
                       >
-                        {t('当前分销比例')}：
+                        {t('当前分成比例')}：
                         {formatCommissionRatioPercent(
                           center?.effective_commission_bps ?? 0,
                         )}
