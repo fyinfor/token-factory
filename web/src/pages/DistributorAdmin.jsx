@@ -217,6 +217,17 @@ export default function DistributorAdmin() {
   const [appStatusFilter, setAppStatusFilter] = useState(0);
   const [appApplyTypeFilter, setAppApplyTypeFilter] = useState(0);
 
+  const [identityLoading, setIdentityLoading] = useState(false);
+  const [identityRows, setIdentityRows] = useState([]);
+  const [identityTotal, setIdentityTotal] = useState(0);
+  const [identityPage, setIdentityPage] = useState(1);
+  const [identityPageSize, setIdentityPageSize] = useState(10);
+  const [identityKeyword, setIdentityKeyword] = useState('');
+  const [identityStatusFilter, setIdentityStatusFilter] = useState(0);
+  const [identityTargetTypeFilter, setIdentityTargetTypeFilter] = useState(0);
+  const [identityDetailOpen, setIdentityDetailOpen] = useState(false);
+  const [identityDetail, setIdentityDetail] = useState(null);
+
   const [detailOpen, setDetailOpen] = useState(false);
   const [detail, setDetail] = useState(null);
   const [qualImagePreview, setQualImagePreview] = useState(null);
@@ -224,6 +235,9 @@ export default function DistributorAdmin() {
   const [rejectOpen, setRejectOpen] = useState(false);
   const [rejectId, setRejectId] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [identityRejectOpen, setIdentityRejectOpen] = useState(false);
+  const [identityRejectId, setIdentityRejectId] = useState(null);
+  const [identityRejectReason, setIdentityRejectReason] = useState('');
 
   /** 审核通过：二次确认并设置默认分成比例（万分之一由后端存储） */
   const [approveOpen, setApproveOpen] = useState(false);
@@ -325,6 +339,42 @@ export default function DistributorAdmin() {
     t,
   ]);
 
+  const loadIdentityApplications = useCallback(async () => {
+    setIdentityLoading(true);
+    try {
+      const q = new URLSearchParams({
+        p: String(identityPage),
+        page_size: String(identityPageSize),
+      });
+      if (identityKeyword.trim()) q.set('keyword', identityKeyword.trim());
+      if (identityStatusFilter) q.set('status', String(identityStatusFilter));
+      if (identityTargetTypeFilter) {
+        q.set('target_apply_type', String(identityTargetTypeFilter));
+      }
+      const res = await API.get(
+        `/api/distributor/admin/identity_applications?${q}`,
+      );
+      const { success, message, data } = res.data;
+      if (!success) {
+        showError(message);
+        return;
+      }
+      setIdentityRows(data?.items || []);
+      setIdentityTotal(data?.total ?? 0);
+    } catch {
+      showError(t('加载失败'));
+    } finally {
+      setIdentityLoading(false);
+    }
+  }, [
+    identityPage,
+    identityPageSize,
+    identityKeyword,
+    identityStatusFilter,
+    identityTargetTypeFilter,
+    t,
+  ]);
+
   const loadDists = useCallback(async () => {
     setDistLoading(true);
     try {
@@ -376,6 +426,10 @@ export default function DistributorAdmin() {
   }, [tab, loadApps]);
 
   useEffect(() => {
+    if (tab === 'identity') loadIdentityApplications();
+  }, [tab, loadIdentityApplications]);
+
+  useEffect(() => {
     if (tab === 'dist') loadDists();
   }, [tab, loadDists]);
 
@@ -388,7 +442,8 @@ export default function DistributorAdmin() {
       });
       if (wdKeyword.trim()) q.set('keyword', wdKeyword.trim());
       if (wdStatusFilter) q.set('status', String(wdStatusFilter));
-      if (wdAccountTypeFilter) q.set('account_type', String(wdAccountTypeFilter));
+      if (wdAccountTypeFilter)
+        q.set('account_type', String(wdAccountTypeFilter));
       const res = await API.get(`/api/distributor/admin/withdrawals?${q}`);
       const { success, message, data } = res.data;
       if (!success) {
@@ -526,6 +581,43 @@ export default function DistributorAdmin() {
     }
   };
 
+  const openIdentityDetail = async (id) => {
+    try {
+      const res = await API.get(
+        `/api/distributor/admin/identity_applications/${id}`,
+      );
+      const { success, message, data } = res.data;
+      if (!success) {
+        showError(message);
+        return;
+      }
+      setIdentityDetail(data);
+      setIdentityDetailOpen(true);
+    } catch {
+      showError(t('加载失败'));
+    }
+  };
+
+  const approveIdentityApplication = async (id) => {
+    try {
+      const res = await API.post(
+        `/api/distributor/admin/identity_applications/${id}/approve`,
+      );
+      if (res.data.success) {
+        showSuccess(t('已通过'));
+        loadIdentityApplications();
+        if (identityDetailOpen) {
+          setIdentityDetailOpen(false);
+          setIdentityDetail(null);
+        }
+      } else {
+        showError(res.data.message);
+      }
+    } catch {
+      showError(t('操作失败'));
+    }
+  };
+
   const openApproveApplication = async (id) => {
     setApproveAppId(id);
     let defBps = 1000;
@@ -594,28 +686,58 @@ export default function DistributorAdmin() {
     }
   };
 
-  const fetchInviteeProfitShares = useCallback(async (distributorId, inviteeId, p, ps) => {
-    if (!distributorId || !inviteeId) return;
-    setInvProfitLoading(true);
-    try {
-      const res = await API.get(
-        `/api/distributor/admin/distributors/${distributorId}/invitees/${inviteeId}/profit-shares?p=${p}&page_size=${ps}`,
-      );
-      const { success, message, data } = res.data;
-      if (!success) {
-        showError(message || t('加载失败'));
-        return;
-      }
-      setInvProfitRows(data?.items || []);
-      setInvProfitTotal(data?.total ?? 0);
-      setInvProfitPage(p);
-      setInvProfitPs(ps);
-    } catch {
-      showError(t('加载失败'));
-    } finally {
-      setInvProfitLoading(false);
+  const submitIdentityReject = async () => {
+    if (!identityRejectReason.trim()) {
+      showError(t('请填写驳回原因'));
+      return;
     }
-  }, [t]);
+    try {
+      const res = await API.post(
+        `/api/distributor/admin/identity_applications/${identityRejectId}/reject`,
+        { reason: identityRejectReason },
+      );
+      if (res.data.success) {
+        showSuccess(t('已驳回'));
+        setIdentityRejectOpen(false);
+        setIdentityRejectReason('');
+        loadIdentityApplications();
+        if (identityDetailOpen) {
+          setIdentityDetailOpen(false);
+          setIdentityDetail(null);
+        }
+      } else {
+        showError(res.data.message);
+      }
+    } catch {
+      showError(t('操作失败'));
+    }
+  };
+
+  const fetchInviteeProfitShares = useCallback(
+    async (distributorId, inviteeId, p, ps) => {
+      if (!distributorId || !inviteeId) return;
+      setInvProfitLoading(true);
+      try {
+        const res = await API.get(
+          `/api/distributor/admin/distributors/${distributorId}/invitees/${inviteeId}/profit-shares?p=${p}&page_size=${ps}`,
+        );
+        const { success, message, data } = res.data;
+        if (!success) {
+          showError(message || t('加载失败'));
+          return;
+        }
+        setInvProfitRows(data?.items || []);
+        setInvProfitTotal(data?.total ?? 0);
+        setInvProfitPage(p);
+        setInvProfitPs(ps);
+      } catch {
+        showError(t('加载失败'));
+      } finally {
+        setInvProfitLoading(false);
+      }
+    },
+    [t],
+  );
 
   const openInviteeProfitConsumption = useCallback(
     async (inviteeRow) => {
@@ -623,7 +745,9 @@ export default function DistributorAdmin() {
       if (!uid || !invDistributorId) return;
       setInvProfitInviteeId(uid);
       setInvProfitInviteeLabel(
-        String(inviteeRow.display_name || inviteeRow.username || `#${uid}`).trim(),
+        String(
+          inviteeRow.display_name || inviteeRow.username || `#${uid}`,
+        ).trim(),
       );
       setInvProfitOpen(true);
       setInvProfitPage(1);
@@ -642,17 +766,11 @@ export default function DistributorAdmin() {
     await fetchInvitees(userId, 1, invPs, '');
   };
 
-  const fetchInvitees = async (
-    userId,
-    p,
-    ps,
-    keywordOverride = undefined,
-  ) => {
-    const kw =
-      keywordOverride !== undefined
-        ? keywordOverride
-        : invKeyword;
-    const trimmed = String(kw ?? '').trim().slice(0, ADMIN_KEYWORD_MAX_LEN);
+  const fetchInvitees = async (userId, p, ps, keywordOverride = undefined) => {
+    const kw = keywordOverride !== undefined ? keywordOverride : invKeyword;
+    const trimmed = String(kw ?? '')
+      .trim()
+      .slice(0, ADMIN_KEYWORD_MAX_LEN);
     const q = new URLSearchParams({
       p: String(p),
       page_size: String(ps),
@@ -850,6 +968,91 @@ export default function DistributorAdmin() {
     },
   ];
 
+  const identityColumns = [
+    { title: t('用户名'), dataIndex: 'username', width: 120 },
+    {
+      title: t('身份变更'),
+      width: 180,
+      render: (_, r) => (
+        <div className='flex items-center gap-2'>
+          {applyTypeTag(t, r.current_apply_type)}
+          <Text type='tertiary'>→</Text>
+          {applyTypeTag(t, r.target_apply_type)}
+        </div>
+      ),
+    },
+    {
+      title: t('申请主体'),
+      dataIndex: 'real_name',
+      ellipsis: true,
+    },
+    {
+      title: t('证件号/统一社会信用代码'),
+      dataIndex: 'id_card_no_mask',
+      width: 168,
+      ellipsis: true,
+    },
+    { title: t('联系方式'), dataIndex: 'contact', ellipsis: true },
+    {
+      title: t('资格证书'),
+      dataIndex: 'qualification_urls',
+      width: 220,
+      render: (_, r) => (
+        <QualificationThumbnails
+          urls={parseQualificationUrls(r.qualification_urls)}
+          compact
+          onImagePreview={(u) => setQualImagePreview(u)}
+        />
+      ),
+    },
+    {
+      title: t('状态'),
+      dataIndex: 'status',
+      width: 100,
+      render: (s) => appStatusTag(t, s),
+    },
+    {
+      title: t('申请时间'),
+      dataIndex: 'created_at',
+      width: 160,
+      render: (ts) =>
+        ts ? dayjs.unix(Number(ts)).format('YYYY-MM-DD HH:mm') : '—',
+    },
+    {
+      title: t('操作'),
+      width: 180,
+      render: (_, r) => (
+        <div className='flex flex-wrap gap-1'>
+          <Button size='small' onClick={() => openIdentityDetail(r.id)}>
+            {t('详情')}
+          </Button>
+          {r.status === 1 && (
+            <>
+              <Button
+                size='small'
+                type='primary'
+                onClick={() => approveIdentityApplication(r.id)}
+              >
+                {t('通过')}
+              </Button>
+              <Button
+                size='small'
+                type='danger'
+                onClick={() => {
+                  setIdentityRejectId(r.id);
+                  setIdentityRejectReason('');
+                  setIdentityRejectOpen(true);
+                }}
+              >
+                {t('驳回')}
+              </Button>
+            </>
+          )}
+        </div>
+      ),
+    },
+  ];
+
   const distColumns = [
     { title: t('用户名'), dataIndex: 'username' },
     {
@@ -927,9 +1130,7 @@ export default function DistributorAdmin() {
       render: (_, r) => (
         <div className='text-xs space-y-0.5 max-w-[200px]'>
           <div className='font-medium'>{r.real_name}</div>
-          <div className='text-[var(--semi-color-text-2)]'>
-            {r.bank_name}
-          </div>
+          <div className='text-[var(--semi-color-text-2)]'>{r.bank_name}</div>
           <div className='text-[var(--semi-color-text-2)] break-all'>
             {r.bank_account}
           </div>
@@ -1242,6 +1443,108 @@ export default function DistributorAdmin() {
             />
           </CardPro>
         </Tabs.TabPane>
+        <Tabs.TabPane tab={t('身份变更审批')} itemKey='identity'>
+          <CardPro
+            className='w-full'
+            type='type1'
+            actionsArea={
+              <div className='flex flex-col md:flex-row justify-end items-center gap-2 w-full'>
+                <div className='flex flex-col md:flex-row items-center gap-2 w-full md:w-auto'>
+                  <div className='relative w-full md:w-64'>
+                    <Input
+                      value={identityKeyword}
+                      maxLength={ADMIN_KEYWORD_MAX_LEN}
+                      prefix={<IconSearch />}
+                      showClear
+                      pure
+                      size='small'
+                      placeholder={t('搜索主体、用户名、联系方式、证件号')}
+                      onChange={(v) =>
+                        setIdentityKeyword(
+                          String(v ?? '').slice(0, ADMIN_KEYWORD_MAX_LEN),
+                        )
+                      }
+                    />
+                  </div>
+                  <div className='w-full md:w-36'>
+                    <Select
+                      value={identityTargetTypeFilter}
+                      className='w-full'
+                      size='small'
+                      onChange={(v) => setIdentityTargetTypeFilter(Number(v))}
+                    >
+                      <Select.Option value={0}>{t('全部身份')}</Select.Option>
+                      <Select.Option value={1}>{t('个人')}</Select.Option>
+                      <Select.Option value={2}>{t('企业')}</Select.Option>
+                    </Select>
+                  </div>
+                  <div className='w-full md:w-48'>
+                    <Select
+                      value={identityStatusFilter}
+                      className='w-full'
+                      size='small'
+                      onChange={(v) => setIdentityStatusFilter(Number(v))}
+                    >
+                      <Select.Option value={0}>{t('全部状态')}</Select.Option>
+                      <Select.Option value={1}>{t('待审核')}</Select.Option>
+                      <Select.Option value={2}>{t('已通过')}</Select.Option>
+                      <Select.Option value={3}>{t('已驳回')}</Select.Option>
+                    </Select>
+                  </div>
+                  <div className='flex gap-2 w-full md:w-auto'>
+                    <Button
+                      type='tertiary'
+                      size='small'
+                      className='flex-1 md:flex-initial'
+                      loading={identityLoading}
+                      onClick={() => loadIdentityApplications()}
+                    >
+                      {t('查询')}
+                    </Button>
+                    <Button
+                      type='tertiary'
+                      size='small'
+                      className='flex-1 md:flex-initial'
+                      onClick={() => {
+                        setIdentityKeyword('');
+                        setIdentityStatusFilter(0);
+                        setIdentityTargetTypeFilter(0);
+                        setIdentityPage(1);
+                      }}
+                    >
+                      {t('重置')}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            }
+            paginationArea={createCardProPagination({
+              currentPage: identityPage,
+              pageSize: identityPageSize,
+              total: identityTotal,
+              onPageChange: (p) => setIdentityPage(p),
+              onPageSizeChange: (ps) => {
+                setIdentityPageSize(ps);
+                setIdentityPage(1);
+              },
+              isMobile,
+              t,
+            })}
+            t={t}
+          >
+            <CardTable
+              rowKey='id'
+              loading={identityLoading}
+              columns={identityColumns}
+              dataSource={identityRows}
+              hidePagination
+              empty={tableEmpty}
+              className='w-full min-w-0 overflow-hidden'
+              style={{ width: '100%' }}
+              size='middle'
+            />
+          </CardPro>
+        </Tabs.TabPane>
         <Tabs.TabPane tab={t('提现审核')} itemKey='wd'>
           <CardPro
             className='w-full'
@@ -1479,6 +1782,93 @@ export default function DistributorAdmin() {
               </Text>
               <QualificationThumbnails
                 urls={parseQualificationUrls(detail.qualification_urls)}
+                onImagePreview={(u) => setQualImagePreview(u)}
+              />
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        title={t('身份变更申请详情')}
+        visible={identityDetailOpen}
+        onCancel={() => setIdentityDetailOpen(false)}
+        footer={
+          <div className='flex justify-end gap-2'>
+            <Button onClick={() => setIdentityDetailOpen(false)}>
+              {t('关闭')}
+            </Button>
+            {identityDetail?.status === 1 ? (
+              <>
+                <Button
+                  type='danger'
+                  onClick={() => {
+                    setIdentityRejectId(identityDetail.id);
+                    setIdentityRejectReason('');
+                    setIdentityRejectOpen(true);
+                  }}
+                >
+                  {t('驳回')}
+                </Button>
+                <Button
+                  type='primary'
+                  onClick={() => approveIdentityApplication(identityDetail.id)}
+                >
+                  {t('通过')}
+                </Button>
+              </>
+            ) : null}
+          </div>
+        }
+        width={800}
+      >
+        {identityDetail && (
+          <div className='space-y-3 text-sm'>
+            <div>
+              <Text strong>{t('用户名')}</Text>：{identityDetail.username}
+            </div>
+            <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
+              <Text strong>{t('身份变更')}</Text>
+              <span>：</span>
+              {applyTypeTag(t, identityDetail.current_apply_type)}
+              <Text type='tertiary'>→</Text>
+              {applyTypeTag(t, identityDetail.target_apply_type)}
+            </div>
+            <div>
+              <Text strong>{t('当前主体')}</Text>：
+              {identityDetail.current_real_name || '—'}
+            </div>
+            <div>
+              <Text strong>{t('申请主体')}</Text>：{identityDetail.real_name}
+            </div>
+            <div>
+              <Text strong>
+                {Number(identityDetail.target_apply_type) === 2
+                  ? t('统一社会信用代码')
+                  : t('身份证号')}
+              </Text>
+              ：{identityDetail.id_card_no}
+            </div>
+            <div>
+              <Text strong>{t('联系方式')}</Text>：{identityDetail.contact}
+            </div>
+            <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
+              <Text strong>{t('状态')}</Text>
+              <span>：</span>
+              {appStatusTag(t, identityDetail.status)}
+            </div>
+            {identityDetail.reject_reason ? (
+              <div>
+                <Text strong>{t('驳回原因')}</Text>：
+                {identityDetail.reject_reason}
+              </div>
+            ) : null}
+            <div>
+              <Text strong className='block mb-2'>
+                {t('资格证书')}
+              </Text>
+              <QualificationThumbnails
+                urls={parseQualificationUrls(identityDetail.qualification_urls)}
                 onImagePreview={(u) => setQualImagePreview(u)}
               />
             </div>
@@ -1806,6 +2196,20 @@ export default function DistributorAdmin() {
       </Modal>
 
       <Modal
+        title={t('驳回身份变更')}
+        visible={identityRejectOpen}
+        onOk={submitIdentityReject}
+        onCancel={() => setIdentityRejectOpen(false)}
+      >
+        <TextArea
+          value={identityRejectReason}
+          onChange={setIdentityRejectReason}
+          placeholder={t('请填写驳回原因')}
+          rows={3}
+        />
+      </Modal>
+
+      <Modal
         title={t('审核通过')}
         visible={approveOpen}
         onOk={submitApproveApplication}
@@ -1971,7 +2375,12 @@ export default function DistributorAdmin() {
             onPageSizeChange: (ps) =>
               invDistributorId &&
               invProfitInviteeId &&
-              fetchInviteeProfitShares(invDistributorId, invProfitInviteeId, 1, ps),
+              fetchInviteeProfitShares(
+                invDistributorId,
+                invProfitInviteeId,
+                1,
+                ps,
+              ),
           }}
         />
       </Modal>
