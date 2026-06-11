@@ -362,7 +362,6 @@ const Playground = () => {
         const nextMessageStatus = String(patch?.status || '').toLowerCase();
         const isTerminal =
           terminalStatuses.has(nextTaskStatus) ||
-          nextMessageStatus === 'complete' ||
           nextMessageStatus === 'error';
         if (isTerminal) {
           activeVideoPollTaskIdsRef.current.delete(taskId);
@@ -627,7 +626,12 @@ const Playground = () => {
           const newMessages = [...prevMessage, userMessage, loadingMessage];
 
           // 发送自定义请求体
-          sendRequest(customPayload, customPayload.stream !== false, mode);
+          sendRequest(
+            customPayload,
+            customPayload.stream !== false,
+            mode,
+            loadingMessage.id,
+          );
 
           // 发送消息后保存，传入新消息列表
           setTimeout(() => saveMessagesForMode(newMessages, mode), 0);
@@ -667,7 +671,12 @@ const Playground = () => {
     );
     setMessage((prevMessage) => {
       const isChatEndpoint = payload?.__endpoint === 'chat';
-      sendRequest(payload, isChatEndpoint ? inputs.stream : false, mode);
+      sendRequest(
+        payload,
+        isChatEndpoint ? inputs.stream : false,
+        mode,
+        loadingMessage.id,
+      );
 
       // 发送消息后保存，传入新消息列表（包含用户消息和加载消息）
       const messagesWithLoading = [...newMessages, loadingMessage];

@@ -235,6 +235,7 @@ export const useApiRequest = (
           }
           updateMessage({
             content: '视频生成中，请稍后…',
+            status: MESSAGE_STATUS.COMPLETE,
             videoTask: {
               taskId,
               status: 'queued',
@@ -255,6 +256,7 @@ export const useApiRequest = (
         });
         updateMessage({
           content: '视频生成中，请稍后…',
+          status: MESSAGE_STATUS.COMPLETE,
           videoTask: {
             taskId,
             status: status || 'queued',
@@ -329,6 +331,20 @@ export const useApiRequest = (
     if (!payload || typeof payload !== 'object') return payload;
     const { __endpoint, ...rest } = payload;
     return rest;
+  }, []);
+
+  const findTargetAssistantIndex = useCallback((messages, targetMessageId) => {
+    if (!Array.isArray(messages) || messages.length === 0) return -1;
+    if (targetMessageId) {
+      return messages.findIndex(
+        (message) =>
+          message?.id === targetMessageId && message?.role === 'assistant',
+      );
+    }
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i]?.role === 'assistant') return i;
+    }
+    return -1;
   }, []);
 
   const { t } = useTranslation();
@@ -465,7 +481,7 @@ export const useApiRequest = (
 
   // 非流式请求
   const handleNonStreamRequest = useCallback(
-    async (payload, requestMode) => {
+    async (payload, requestMode, targetMessageId) => {
       const endpoint = resolveEndpoint(payload);
       const requestBody = stripLocalFields(payload);
       setDebugData((prev) => ({
@@ -544,15 +560,19 @@ export const useApiRequest = (
 
           setMessage((prevMessage) => {
             const newMessages = [...prevMessage];
-            const lastMessage = newMessages[newMessages.length - 1];
-            if (lastMessage?.status === MESSAGE_STATUS.LOADING) {
+            const targetIndex = findTargetAssistantIndex(
+              newMessages,
+              targetMessageId,
+            );
+            const targetMessage = newMessages[targetIndex];
+            if (targetMessage?.status === MESSAGE_STATUS.LOADING) {
               const autoCollapseState = applyAutoCollapseLogic(
-                lastMessage,
+                targetMessage,
                 true,
               );
 
-              newMessages[newMessages.length - 1] = {
-                ...lastMessage,
+              newMessages[targetIndex] = {
+                ...targetMessage,
                 content: processed.content,
                 reasoningContent: processed.reasoningContent,
                 status: MESSAGE_STATUS.COMPLETE,
@@ -579,14 +599,18 @@ export const useApiRequest = (
             );
           setMessage((prevMessage) => {
             const newMessages = [...prevMessage];
-            const lastMessage = newMessages[newMessages.length - 1];
-            if (lastMessage?.status === MESSAGE_STATUS.LOADING) {
+            const targetIndex = findTargetAssistantIndex(
+              newMessages,
+              targetMessageId,
+            );
+            const targetMessage = newMessages[targetIndex];
+            if (targetMessage?.status === MESSAGE_STATUS.LOADING) {
               const autoCollapseState = applyAutoCollapseLogic(
-                lastMessage,
+                targetMessage,
                 true,
               );
-              newMessages[newMessages.length - 1] = {
-                ...lastMessage,
+              newMessages[targetIndex] = {
+                ...targetMessage,
                 content:
                   imagePatch?.content ||
                   (shouldPollImage
@@ -605,11 +629,16 @@ export const useApiRequest = (
             pollImageTaskUntilReady(imageTaskId, (patch) => {
               setMessage((prevMessage) => {
                 const newMessages = [...prevMessage];
-                const lastMessage = newMessages[newMessages.length - 1];
-                if (!lastMessage || lastMessage.role !== 'assistant')
+                const targetIndex = findTargetAssistantIndex(
+                  newMessages,
+                  targetMessageId,
+                );
+                const targetMessage = newMessages[targetIndex];
+                if (!targetMessage || targetMessage.role !== 'assistant') {
                   return prevMessage;
-                newMessages[newMessages.length - 1] = {
-                  ...lastMessage,
+                }
+                newMessages[targetIndex] = {
+                  ...targetMessage,
                   ...(patch.content !== undefined
                     ? { content: patch.content }
                     : {}),
@@ -630,17 +659,20 @@ export const useApiRequest = (
             taskPayload?.id ||
             data?.task_id ||
             data?.id;
-          const shouldPollVideo = payload?.__endpoint === 'video' && !!taskId;
           setMessage((prevMessage) => {
             const newMessages = [...prevMessage];
-            const lastMessage = newMessages[newMessages.length - 1];
-            if (lastMessage?.status === MESSAGE_STATUS.LOADING) {
+            const targetIndex = findTargetAssistantIndex(
+              newMessages,
+              targetMessageId,
+            );
+            const targetMessage = newMessages[targetIndex];
+            if (targetMessage?.status === MESSAGE_STATUS.LOADING) {
               const autoCollapseState = applyAutoCollapseLogic(
-                lastMessage,
+                targetMessage,
                 true,
               );
-              newMessages[newMessages.length - 1] = {
-                ...lastMessage,
+              newMessages[targetIndex] = {
+                ...targetMessage,
                 content:
                   payload?.__endpoint === 'video'
                     ? '视频生成中，请稍后…'
@@ -663,28 +695,6 @@ export const useApiRequest = (
             }
             return newMessages;
           }, requestMode);
-          if (shouldPollVideo) {
-            console.debug('[playground-video] poll start', { taskId });
-            pollVideoTaskUntilReady(taskId, (patch) => {
-              setMessage((prevMessage) => {
-                const newMessages = [...prevMessage];
-                const lastMessage = newMessages[newMessages.length - 1];
-                if (!lastMessage || lastMessage.role !== 'assistant')
-                  return prevMessage;
-                newMessages[newMessages.length - 1] = {
-                  ...lastMessage,
-                  ...(patch.content !== undefined
-                    ? { content: patch.content }
-                    : {}),
-                  ...(patch.status ? { status: patch.status } : {}),
-                  ...(patch.videoTask !== undefined
-                    ? { videoTask: patch.videoTask }
-                    : {}),
-                };
-                return newMessages;
-              }, requestMode);
-            });
-          }
         }
       } catch (error) {
         console.error('Non-stream request error:', error);
@@ -698,12 +708,19 @@ export const useApiRequest = (
 
         setMessage((prevMessage) => {
           const newMessages = [...prevMessage];
-          const lastMessage = newMessages[newMessages.length - 1];
-          if (lastMessage?.status === MESSAGE_STATUS.LOADING) {
-            const autoCollapseState = applyAutoCollapseLogic(lastMessage, true);
+          const targetIndex = findTargetAssistantIndex(
+            newMessages,
+            targetMessageId,
+          );
+          const targetMessage = newMessages[targetIndex];
+          if (targetMessage?.status === MESSAGE_STATUS.LOADING) {
+            const autoCollapseState = applyAutoCollapseLogic(
+              targetMessage,
+              true,
+            );
 
-            newMessages[newMessages.length - 1] = {
-              ...lastMessage,
+            newMessages[targetIndex] = {
+              ...targetMessage,
               content: t('请求发生错误: ') + error.message,
               status: MESSAGE_STATUS.ERROR,
               ...autoCollapseState,
@@ -724,6 +741,7 @@ export const useApiRequest = (
       pollVideoTaskUntilReady,
       getVideoTaskPayload,
       pollImageTaskUntilReady,
+      findTargetAssistantIndex,
     ],
   );
 
@@ -950,11 +968,11 @@ export const useApiRequest = (
 
   // 发送请求
   const sendRequest = useCallback(
-    (payload, isStream, requestMode) => {
+    (payload, isStream, requestMode, targetMessageId) => {
       if (isStream) {
         handleSSE(payload, requestMode);
       } else {
-        handleNonStreamRequest(payload, requestMode);
+        handleNonStreamRequest(payload, requestMode, targetMessageId);
       }
     },
     [handleSSE, handleNonStreamRequest],

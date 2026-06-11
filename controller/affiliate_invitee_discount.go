@@ -20,14 +20,29 @@ For commercial licensing, please contact support@quantumnous.com
 package controller
 
 import (
+	"bytes"
+	"fmt"
+	"math"
 	"net/http"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 
 	"github.com/gin-gonic/gin"
+	"github.com/xuri/excelize/v2"
 )
+
+const inviteeModelDiscountExportContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+var inviteeModelDiscountExportHeaders = []string{
+	"模型 / 通道路径",
+	"平台售价/折扣率",
+	"代理可参与分配比例/折扣率",
+	"代理最低调用价（未税价折扣）",
+}
 
 // GetInviteeModelDiscounts 获取被邀请用户的模型折扣列表
 // GET /api/distributor/invitee-model-discounts?invitee_id=xxx
@@ -63,6 +78,200 @@ func GetInviteeModelDiscounts(c *gin.Context) {
 			"total": len(items),
 		},
 	})
+}
+
+// ExportInviteeModelDiscounts 导出被邀请用户的模型折扣价格表
+// GET /api/distributor/invitee-model-discounts/export?invitee_id=xxx
+func ExportInviteeModelDiscounts(c *gin.Context) {
+	userId := c.GetInt("id")
+	u, err := model.GetUserById(userId, false)
+	if err != nil || !model.UserIsDistributor(u) {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "仅分销商可查看"})
+		return
+	}
+	if !common.IsDistributorProfitShareMode() {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "当前站点未启用利润分成模式"})
+		return
+	}
+
+	inviteeId, err := strconv.Atoi(c.Query("invitee_id"))
+	if err != nil || inviteeId <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "参数错误"})
+		return
+	}
+
+	items, _, err := model.GetInviteeModelDiscounts(userId, inviteeId)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	items = filterInviteeModelDiscountExportItems(items, c.Query("q"), c.Query("supplier_type"))
+
+	data, err := buildInviteeModelDiscountExportWorkbook(items)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	filename := fmt.Sprintf("agent-model-discount-prices-%s.xlsx", time.Now().Format("20060102-150405"))
+	c.Header("Content-Type", inviteeModelDiscountExportContentType)
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	c.Header("Content-Length", strconv.Itoa(len(data)))
+	c.Data(http.StatusOK, inviteeModelDiscountExportContentType, data)
+}
+
+func filterInviteeModelDiscountExportItems(items []model.InviteeModelMarkupDiscountRateItem, keyword, supplierType string) []model.InviteeModelMarkupDiscountRateItem {
+	supplierType = strings.TrimSpace(supplierType)
+	keyword = strings.ToLower(strings.TrimSpace(keyword))
+	if supplierType == "" && keyword == "" {
+		return items
+	}
+	out := make([]model.InviteeModelMarkupDiscountRateItem, 0, len(items))
+	for _, item := range items {
+		if supplierType != "" && strings.TrimSpace(item.SupplierType) != supplierType {
+			continue
+		}
+		if keyword != "" {
+			searchText := strings.ToLower(fmt.Sprintf("%s %s %d %s %s",
+				item.ModelName,
+				item.ChannelPath,
+				item.ChannelID,
+				item.SupplierType,
+				item.ChannelName,
+			))
+			if !strings.Contains(searchText, keyword) {
+				continue
+			}
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func buildInviteeModelDiscountExportWorkbook(items []model.InviteeModelMarkupDiscountRateItem) ([]byte, error) {
+	f := excelize.NewFile()
+	defer f.Close()
+
+	sheet := "价格表"
+	defaultSheet := f.GetSheetName(0)
+	if err := f.SetSheetName(defaultSheet, sheet); err != nil {
+		return nil, err
+	}
+
+	for i, header := range inviteeModelDiscountExportHeaders {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		if err := f.SetCellValue(sheet, cell, header); err != nil {
+			return nil, err
+		}
+	}
+
+	headerStyle, _ := f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{Bold: true, Color: "FFFFFF"},
+		Fill: excelize.Fill{Type: "pattern", Color: []string{"4472C4"}, Pattern: 1},
+		Alignment: &excelize.Alignment{
+			Horizontal: "center",
+			Vertical:   "center",
+			WrapText:   true,
+		},
+	})
+	bodyStyle, _ := f.NewStyle(&excelize.Style{
+		Alignment: &excelize.Alignment{
+			Vertical: "center",
+			WrapText: true,
+		},
+	})
+	centerStyle, _ := f.NewStyle(&excelize.Style{
+		Alignment: &excelize.Alignment{
+			Horizontal: "center",
+			Vertical:   "center",
+			WrapText:   true,
+		},
+	})
+
+	_ = f.SetCellStyle(sheet, "A1", "D1", headerStyle)
+	_ = f.SetColWidth(sheet, "A", "A", 46)
+	_ = f.SetColWidth(sheet, "B", "B", 20)
+	_ = f.SetColWidth(sheet, "C", "C", 34)
+	_ = f.SetColWidth(sheet, "D", "D", 34)
+	_ = f.SetRowHeight(sheet, 1, 28)
+	_ = f.SetPanes(sheet, &excelize.Panes{
+		Freeze:      true,
+		Split:       false,
+		XSplit:      0,
+		YSplit:      1,
+		TopLeftCell: "A2",
+		ActivePane:  "bottomLeft",
+	})
+
+	for idx, item := range items {
+		row := idx + 2
+		values := []any{
+			inviteeModelDiscountExportModelPath(item),
+			formatInviteeModelDiscountSaleRate(item, item.DefaultMarkupDiscountRate),
+			formatInviteeModelDiscountMarkupRate(item.DefaultMarkupDiscountRate),
+			formatInviteeModelDiscountSaleRate(item, 0),
+		}
+		for col, value := range values {
+			cell, _ := excelize.CoordinatesToCellName(col+1, row)
+			if err := f.SetCellValue(sheet, cell, value); err != nil {
+				return nil, err
+			}
+		}
+		_ = f.SetRowHeight(sheet, row, 38)
+		_ = f.SetCellStyle(sheet, fmt.Sprintf("A%d", row), fmt.Sprintf("A%d", row), bodyStyle)
+		_ = f.SetCellStyle(sheet, fmt.Sprintf("B%d", row), fmt.Sprintf("D%d", row), centerStyle)
+	}
+
+	var buf bytes.Buffer
+	if err := f.Write(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+func inviteeModelDiscountExportModelPath(item model.InviteeModelMarkupDiscountRateItem) string {
+	modelName := strings.TrimSpace(item.ModelName)
+	channelPath := strings.TrimSpace(item.ChannelPath)
+	if channelPath == "" {
+		return modelName
+	}
+	return modelName + "\n" + channelPath
+}
+
+func formatInviteeModelDiscountMarkupRate(value float64) string {
+	if value <= 0 || !isFiniteInviteeModelDiscountFloat(value) {
+		return "-"
+	}
+	return fmt.Sprintf("%.1f%%", value)
+}
+
+func formatInviteeModelDiscountSaleRate(item model.InviteeModelMarkupDiscountRateItem, markupRate float64) string {
+	return fmt.Sprintf("%d%%", calcInviteeModelDiscountSaleRatePercent(item, markupRate))
+}
+
+func calcInviteeModelDiscountSaleRatePercent(item model.InviteeModelMarkupDiscountRateItem, markupRate float64) int {
+	officialBase := item.OfficialBasePrice
+	channelBase := item.ChannelBasePrice
+	costDiscountPercent := item.ChannelPriceDiscountPercent
+	if !isFiniteInviteeModelDiscountFloat(officialBase) ||
+		!isFiniteInviteeModelDiscountFloat(channelBase) ||
+		!isFiniteInviteeModelDiscountFloat(costDiscountPercent) ||
+		!isFiniteInviteeModelDiscountFloat(markupRate) ||
+		officialBase <= 0 {
+		if !isFiniteInviteeModelDiscountFloat(item.OfficialCurrentDiscountPercent) {
+			return 100
+		}
+		return max(0, int(100-math.Round(item.OfficialCurrentDiscountPercent)))
+	}
+	effective := channelBase*costDiscountPercent/100 + officialBase*markupRate/100
+	if !isFiniteInviteeModelDiscountFloat(effective) {
+		return 100
+	}
+	return max(0, int(math.Round(effective/officialBase*100)))
+}
+
+func isFiniteInviteeModelDiscountFloat(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0)
 }
 
 // PutInviteeModelDiscounts 更新被邀请用户的模型折扣配置

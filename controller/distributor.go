@@ -218,6 +218,38 @@ func GetMyDistributorApplication(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": app})
 }
 
+func GetMyDistributorIdentityApplication(c *gin.Context) {
+	userId := c.GetInt("id")
+	app, err := model.GetLatestDistributorIdentityApplicationByUserId(userId)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": app})
+}
+
+func PostDistributorIdentityApplication(c *gin.Context) {
+	userId := c.GetInt("id")
+	var req submitDistributorApplicationRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的请求"})
+		return
+	}
+	if req.ApplyType == 0 {
+		req.ApplyType = model.DistributorApplyTypePersonal
+	}
+	urlsJSON, err := common.Marshal(req.QualificationUrls)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "资料序列化失败"})
+		return
+	}
+	if err := model.SubmitDistributorIdentityApplication(userId, req.ApplyType, req.RealName, req.IdCardNo, string(urlsJSON), req.Contact); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+}
+
 // GetDistributorCenterInfo 分销商中心汇总（邀请短链、默认比例等）
 func GetDistributorCenterInfo(c *gin.Context) {
 	userId := c.GetInt("id")
@@ -381,6 +413,34 @@ func maskIdCard(id string) string {
 	return id[:4] + strings.Repeat("*", len(id)-8) + id[len(id)-4:]
 }
 
+func distributorIdentityApplicationListItemToJSON(item model.DistributorIdentityApplicationListItem, includeFullIdCard bool) gin.H {
+	app := item.Application
+	data := gin.H{
+		"id":                 app.Id,
+		"user_id":            app.UserId,
+		"username":           item.Username,
+		"source_apply_type":  app.SourceApplyType,
+		"source_real_name":   app.SourceRealName,
+		"current_apply_type": item.CurrentApplyType,
+		"current_real_name":  item.CurrentRealName,
+		"target_apply_type":  app.TargetApplyType,
+		"real_name":          app.RealName,
+		"contact":            app.Contact,
+		"status":             app.Status,
+		"reject_reason":      app.RejectReason,
+		"reviewer_id":        app.ReviewerId,
+		"reviewed_at":        app.ReviewedAt,
+		"created_at":         app.CreatedAt,
+		"updated_at":         app.UpdatedAt,
+		"id_card_no_mask":    maskIdCard(app.IdCardNo),
+		"qualification_urls": app.QualificationUrls,
+	}
+	if includeFullIdCard {
+		data["id_card_no"] = app.IdCardNo
+	}
+	return data
+}
+
 // GetDistributorApplicationAdmin 申请详情（管理员）
 func GetDistributorApplicationAdmin(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
@@ -469,6 +529,78 @@ func RejectDistributorApplicationAdmin(c *gin.Context) {
 	}
 	if errApp == nil && app != nil {
 		service.NotifyDistributorApplicationRejected(app.UserId, req.Reason)
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+}
+
+func ListDistributorIdentityApplicationsAdmin(c *gin.Context) {
+	pageInfo := common.GetPageQuery(c)
+	status, _ := strconv.Atoi(c.Query("status"))
+	targetApplyType, _ := strconv.Atoi(c.Query("target_apply_type"))
+	rows, total, err := model.ListDistributorIdentityApplicationsAdmin(model.DistributorIdentityApplicationListQuery{
+		Keyword:         c.Query("keyword"),
+		Status:          status,
+		TargetApplyType: targetApplyType,
+		PageInfo:        pageInfo,
+	})
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	items := make([]gin.H, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, distributorIdentityApplicationListItemToJSON(row, false))
+	}
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(items)
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": pageInfo})
+}
+
+func GetDistributorIdentityApplicationAdmin(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "invalid id"})
+		return
+	}
+	item, err := model.GetDistributorIdentityApplicationByIdAdmin(id)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    distributorIdentityApplicationListItemToJSON(*item, true),
+	})
+}
+
+func ApproveDistributorIdentityApplicationAdmin(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "invalid id"})
+		return
+	}
+	if err := model.ApproveDistributorIdentityApplication(id, c.GetInt("id")); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+}
+
+func RejectDistributorIdentityApplicationAdmin(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "invalid id"})
+		return
+	}
+	var req rejectApplicationRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的请求"})
+		return
+	}
+	if err := model.RejectDistributorIdentityApplication(id, c.GetInt("id"), req.Reason); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
 }
