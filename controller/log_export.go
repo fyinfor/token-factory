@@ -362,49 +362,77 @@ func logTypeLabelI18n(t int, dict statementI18n) string {
 	return dict.DefaultLabel
 }
 
+// logExportQuery 对账单/日志导出查询参数（与控制台使用日志筛选对齐）。
+type logExportQuery struct {
+	StartTs, EndTs                         int64
+	ModelName, TokenName, Group, RequestID string
+	LogTypes                               []int
+	Lang                                   string
+}
+
 // 解析对账单导出参数；统一做合法性校验（不抛错时返回 0 表示不限）。
 // 返回 lang 时做白名单校验，未知 lang 回退到 zh-CN。
-func parseStatementParams(c *gin.Context) (startTs, endTs int64, modelName, tokenName, lang string, err error) {
+func parseLogExportQuery(c *gin.Context) (logExportQuery, error) {
+	var q logExportQuery
 	if s := c.Query("start_timestamp"); s != "" {
 		v, perr := strconv.ParseInt(s, 10, 64)
 		if perr != nil || v < 0 {
-			return 0, 0, "", "", "", fmt.Errorf("start_timestamp 非法")
+			return q, fmt.Errorf("start_timestamp 非法")
 		}
-		startTs = v
+		q.StartTs = v
 	}
 	if s := c.Query("end_timestamp"); s != "" {
 		v, perr := strconv.ParseInt(s, 10, 64)
 		if perr != nil || v < 0 {
-			return 0, 0, "", "", "", fmt.Errorf("end_timestamp 非法")
+			return q, fmt.Errorf("end_timestamp 非法")
 		}
-		endTs = v
+		q.EndTs = v
 	}
 	// 默认窗口：近 3 个月。
 	now := common.GetTimestamp()
-	if endTs == 0 {
-		endTs = now
+	if q.EndTs == 0 {
+		q.EndTs = now
 	}
-	if startTs == 0 {
-		startTs = endTs - logExportMaxWindowSeconds
+	if q.StartTs == 0 {
+		q.StartTs = q.EndTs - logExportMaxWindowSeconds
 	}
-	if endTs < startTs {
-		return 0, 0, "", "", "", fmt.Errorf("end_timestamp 早于 start_timestamp")
+	if q.EndTs < q.StartTs {
+		return q, fmt.Errorf("end_timestamp 早于 start_timestamp")
 	}
-	if endTs-startTs > logExportMaxWindowSeconds {
-		return 0, 0, "", "", "", fmt.Errorf("时间范围超出限制(最多 3 个月)")
+	if q.EndTs-q.StartTs > logExportMaxWindowSeconds {
+		return q, fmt.Errorf("时间范围超出限制(最多 3 个月)")
 	}
-	modelName = c.Query("model_name")
-	tokenName = c.Query("token_name")
-	lang = c.Query("lang")
-	switch lang {
+	q.ModelName = c.Query("model_name")
+	q.TokenName = c.Query("token_name")
+	q.Group = c.Query("group")
+	q.RequestID = c.Query("request_id")
+	q.LogTypes = model.ParseLogTypesQuery(c.Query("type"))
+	q.Lang = c.Query("lang")
+	switch q.Lang {
 	case "zh-CN", "zh-TW", "en", "fr", "ru", "ja", "vi", "id", "ms", "th", "sw":
 		// ok
 	case "":
-		lang = "zh-CN"
+		q.Lang = "zh-CN"
 	default:
-		lang = "zh-CN"
+		q.Lang = "zh-CN"
 	}
-	return
+	return q, nil
+}
+
+func (q logExportQuery) toModelFilter() model.LogExportFilter {
+	return model.LogExportFilter{
+		FromTs:     q.StartTs,
+		ToTs:       q.EndTs,
+		ModelName:  q.ModelName,
+		TokenName:  q.TokenName,
+		Group:      q.Group,
+		RequestID:  q.RequestID,
+		LogTypes:   q.LogTypes,
+	}
+}
+
+func (q logExportQuery) hasRowFilterBeyondTime() bool {
+	return q.ModelName != "" || q.TokenName != "" || q.Group != "" || q.RequestID != "" || len(q.LogTypes) > 0
 }
 
 // 写入一条 CSV 行。csv.Writer 已做 RFC4180 转义（含逗号、引号、换行）。
@@ -418,12 +446,12 @@ func writeStatementRow(w *csv.Writer, row []string) error {
 
 // 流式写出单个用户的对账单。filename 不含扩展名，由调用方传入。
 // dict 为表头/元信息/类型文案的语言字典，由 parseStatementParams 解析 lang 后查表得到。
-func streamUserStatementCSV(c *gin.Context, user *model.User, startTs, endTs int64, modelName, tokenName, filename string, dict statementI18n) {
+func streamUserStatementCSV(c *gin.Context, user *model.User, query logExportQuery, filename string, dict statementI18n) {
 	if user == nil {
 		common.ApiError(c, fmt.Errorf("用户不存在"))
 		return
 	}
-	logs, total, err := model.GetUserLogsForExport(user.Id, startTs, endTs, modelName, tokenName)
+	logs, total, err := model.GetUserLogsForExport(user.Id, query.toModelFilter())
 	if err != nil {
 		// 行数超限
 		common.ApiError(c, err)
@@ -433,19 +461,23 @@ func streamUserStatementCSV(c *gin.Context, user *model.User, startTs, endTs int
 
 	// 1) 反推"窗口期初余额"：当前余额 - 窗口内净变动。
 	// 注意：净变动只取真实影响 User.Quota 的三类日志（Consume/Topup/Refund）。
-	delta, derr := model.GetChargeableDeltaByUser(user.Id, startTs, endTs)
-	if derr != nil {
-		common.ApiError(c, derr)
-		return
+	// 若存在除时间外的筛选条件，则余额列按导出子集累计，不再做全量对账。
+	running := int64(0)
+	if !query.hasRowFilterBeyondTime() {
+		delta, derr := model.GetChargeableDeltaByUser(user.Id, query.StartTs, query.EndTs)
+		if derr != nil {
+			common.ApiError(c, derr)
+			return
+		}
+		running = int64(user.Quota) - delta
 	}
-	running := int64(user.Quota) - delta
 
 	c.Header("Content-Type", "text/csv; charset=utf-8")
 	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 	c.Header("X-Content-Type-Options", "nosniff")
 	c.Header("X-Statement-Current-Balance", strconv.Itoa(user.Quota))
-	c.Header("X-Statement-Window-Start", strconv.FormatInt(startTs, 10))
-	c.Header("X-Statement-Window-End", strconv.FormatInt(endTs, 10))
+	c.Header("X-Statement-Window-Start", strconv.FormatInt(query.StartTs, 10))
+	c.Header("X-Statement-Window-End", strconv.FormatInt(query.EndTs, 10))
 	c.Header("X-Statement-Lang", dictHeaderLangTag(dict))
 	c.Status(200)
 
@@ -464,8 +496,8 @@ func streamUserStatementCSV(c *gin.Context, user *model.User, startTs, endTs int
 		common.SysError("write statement meta1: " + err.Error())
 		return
 	}
-	periodStart := time.Unix(startTs, 0).Format("2006-01-02 15:04:05")
-	periodEnd := time.Unix(endTs, 0).Format("2006-01-02 15:04:05")
+	periodStart := time.Unix(query.StartTs, 0).Format("2006-01-02 15:04:05")
+	periodEnd := time.Unix(query.EndTs, 0).Format("2006-01-02 15:04:05")
 	meta2 := fmt.Sprintf(dict.Meta2, periodStart, periodEnd)
 	if err := writeStatementRow(w, append([]string{meta2}, emptyRow[1:]...)); err != nil {
 		common.SysError("write statement meta2: " + err.Error())
@@ -521,19 +553,20 @@ func streamUserStatementCSV(c *gin.Context, user *model.User, startTs, endTs int
 		}
 	}
 
-	// 3) 末尾对账校验行：用户拿这一行的"变动后余额"和 User.Quota 实际值对比。
-	// 若不一致，差异来自 quota=0 的管理/系统调整（已直接落地到 User.Quota）。
-	footer1 := append([]string{dict.Footer1Label}, emptyRow[1:len(emptyRow)-2]...)
-	footer1 = append(footer1, dict.Footer1Key, fmt.Sprintf("%d / %s", user.Quota, formatBalanceAmount(user.Quota)))
-	if err := writeStatementRow(w, footer1); err != nil {
-		common.SysError("write statement footer: " + err.Error())
-		return
-	}
-	footer2 := append([]string{dict.Footer2Label}, emptyRow[1:len(emptyRow)-2]...)
-	footer2 = append(footer2, dict.Footer2Key, fmt.Sprintf("%d quota (%s)", running-int64(user.Quota), formatBalanceAmount(int(running-int64(user.Quota)))))
-	if err := writeStatementRow(w, footer2); err != nil {
-		common.SysError("write statement check: " + err.Error())
-		return
+	// 3) 末尾对账校验行：仅全量时间窗口导出时输出，筛选导出跳过以免误导。
+	if !query.hasRowFilterBeyondTime() {
+		footer1 := append([]string{dict.Footer1Label}, emptyRow[1:len(emptyRow)-2]...)
+		footer1 = append(footer1, dict.Footer1Key, fmt.Sprintf("%d / %s", user.Quota, formatBalanceAmount(user.Quota)))
+		if err := writeStatementRow(w, footer1); err != nil {
+			common.SysError("write statement footer: " + err.Error())
+			return
+		}
+		footer2 := append([]string{dict.Footer2Label}, emptyRow[1:len(emptyRow)-2]...)
+		footer2 = append(footer2, dict.Footer2Key, fmt.Sprintf("%d quota (%s)", running-int64(user.Quota), formatBalanceAmount(int(running-int64(user.Quota)))))
+		if err := writeStatementRow(w, footer2); err != nil {
+			common.SysError("write statement check: " + err.Error())
+			return
+		}
 	}
 }
 
@@ -661,14 +694,14 @@ func ExportUserLogsSelf(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	startTs, endTs, modelName, tokenName, lang, err := parseStatementParams(c)
+	query, err := parseLogExportQuery(c)
 	if err != nil {
 		c.JSON(400, gin.H{"success": false, "message": err.Error()})
 		return
 	}
-	dict := resolveStatementDict(lang)
+	dict := resolveStatementDict(query.Lang)
 	filename := fmt.Sprintf("statement-%s-%d.csv", sanitizeFilename(user.Username), time.Now().Unix())
-	streamUserStatementCSV(c, user, startTs, endTs, modelName, tokenName, filename, dict)
+	streamUserStatementCSV(c, user, query, filename, dict)
 }
 
 // GET /api/admin/log/:userId/export 管理员代查任意用户对账单
@@ -688,14 +721,14 @@ func ExportUserLogsAdmin(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	startTs, endTs, modelName, tokenName, lang, err := parseStatementParams(c)
+	query, err := parseLogExportQuery(c)
 	if err != nil {
 		c.JSON(400, gin.H{"success": false, "message": err.Error()})
 		return
 	}
-	dict := resolveStatementDict(lang)
+	dict := resolveStatementDict(query.Lang)
 	filename := fmt.Sprintf("statement-%s-%d-admin.csv", sanitizeFilename(user.Username), time.Now().Unix())
-	streamUserStatementCSV(c, user, startTs, endTs, modelName, tokenName, filename, dict)
+	streamUserStatementCSV(c, user, query, filename, dict)
 }
 
 // POST /api/admin/log/export_all 管理员全平台批量对账单：返回 zip 包，
@@ -706,12 +739,12 @@ func ExportAllUsersLogsAdmin(c *gin.Context) {
 		c.JSON(403, gin.H{"success": false, "message": "需要管理员权限"})
 		return
 	}
-	startTs, endTs, modelName, tokenName, lang, err := parseStatementParams(c)
+	query, err := parseLogExportQuery(c)
 	if err != nil {
 		c.JSON(400, gin.H{"success": false, "message": err.Error()})
 		return
 	}
-	dict := resolveStatementDict(lang)
+	dict := resolveStatementDict(query.Lang)
 	pageInfo := &common.PageInfo{
 		Page: 1, PageSize: 200,
 	}
@@ -743,20 +776,23 @@ func ExportAllUsersLogsAdmin(c *gin.Context) {
 			common.SysError("zip create: " + ferr.Error())
 			continue
 		}
-		writeSingleUserCSV(fw, u, startTs, endTs, modelName, tokenName, dict)
+		writeSingleUserCSV(fw, u, query, dict)
 	}
 }
 
 // writeSingleUserCSV 复用 streamUserStatementCSV 的写表逻辑，但目标 io.Writer 由调用方控制。
 func writeSingleUserCSV(w interface {
 	Write(p []byte) (int, error)
-}, user *model.User, startTs, endTs int64, modelName, tokenName string, dict statementI18n) {
-	logs, _, err := model.GetUserLogsForExport(user.Id, startTs, endTs, modelName, tokenName)
+}, user *model.User, query logExportQuery, dict statementI18n) {
+	logs, _, err := model.GetUserLogsForExport(user.Id, query.toModelFilter())
 	if err != nil {
 		return
 	}
-	delta, _ := model.GetChargeableDeltaByUser(user.Id, startTs, endTs)
-	running := int64(user.Quota) - delta
+	running := int64(0)
+	if !query.hasRowFilterBeyondTime() {
+		delta, _ := model.GetChargeableDeltaByUser(user.Id, query.StartTs, query.EndTs)
+		running = int64(user.Quota) - delta
+	}
 
 	// BOM
 	w.Write([]byte("\xEF\xBB\xBF"))
@@ -764,8 +800,8 @@ func writeSingleUserCSV(w interface {
 	emptyRow := make([]string, len(dict.Header))
 	cw.Write([]string{fmt.Sprintf(dict.Meta1, user.Username, user.Id), "", "", "", "", "", "", "", "", "", "", "", "", ""})
 	cw.Write([]string{fmt.Sprintf(dict.Meta2,
-		time.Unix(startTs, 0).Format("2006-01-02 15:04:05"),
-		time.Unix(endTs, 0).Format("2006-01-02 15:04:05"),
+		time.Unix(query.StartTs, 0).Format("2006-01-02 15:04:05"),
+		time.Unix(query.EndTs, 0).Format("2006-01-02 15:04:05"),
 	), "", "", "", "", "", "", "", "", "", "", "", ""})
 	cw.Write([]string{
 		fmt.Sprintf(dict.Meta3, user.Quota, formatBalanceAmount(user.Quota)),
@@ -791,13 +827,111 @@ func writeSingleUserCSV(w interface {
 			formatBalanceAmount(int(running)),
 		})
 	}
-	footer1 := append([]string{dict.Footer1Label}, emptyRow[1:len(emptyRow)-2]...)
-	footer1 = append(footer1, dict.Footer1Key, fmt.Sprintf("%d / %s", user.Quota, formatBalanceAmount(user.Quota)))
-	cw.Write(footer1)
-	footer2 := append([]string{dict.Footer2Label}, emptyRow[1:len(emptyRow)-2]...)
-	footer2 = append(footer2, dict.Footer2Key, fmt.Sprintf("%d quota (%s)", running-int64(user.Quota), formatBalanceAmount(int(running-int64(user.Quota)))))
-	cw.Write(footer2)
+	if !query.hasRowFilterBeyondTime() {
+		footer1 := append([]string{dict.Footer1Label}, emptyRow[1:len(emptyRow)-2]...)
+		footer1 = append(footer1, dict.Footer1Key, fmt.Sprintf("%d / %s", user.Quota, formatBalanceAmount(user.Quota)))
+		cw.Write(footer1)
+		footer2 := append([]string{dict.Footer2Label}, emptyRow[1:len(emptyRow)-2]...)
+		footer2 = append(footer2, dict.Footer2Key, fmt.Sprintf("%d quota (%s)", running-int64(user.Quota), formatBalanceAmount(int(running-int64(user.Quota)))))
+		cw.Write(footer2)
+	}
 	cw.Flush()
+}
+
+// supplierChannelLogExportI18n 供应商渠道日志导出表头。
+type supplierChannelLogExportI18n struct {
+	Header []string
+	Meta1  string // "供应商渠道日志"
+	Meta2  string // "账期: %s ~ %s"
+}
+
+var supplierChannelLogExportDictZHCN = supplierChannelLogExportI18n{
+	Header: []string{
+		"序号", "时间", "类型", "用户", "令牌", "模型", "渠道", "分组", "Request ID",
+		"输入 tokens", "输出 tokens", "缓存 tokens", "消耗额度(quota)", "消耗额度(等值)",
+	},
+	Meta1: "供应商渠道日志",
+	Meta2: "账期: %s ~ %s",
+}
+
+var supplierChannelLogExportDictEN = supplierChannelLogExportI18n{
+	Header: []string{
+		"No.", "Time", "Type", "User", "Token", "Model", "Channel", "Group", "Request ID",
+		"Input tokens", "Output tokens", "Cache tokens", "Quota", "Amount",
+	},
+	Meta1: "Supplier channel logs",
+	Meta2: "Period: %s ~ %s",
+}
+
+func resolveSupplierChannelLogExportDict(lang string) supplierChannelLogExportI18n {
+	if lang == "en" {
+		return supplierChannelLogExportDictEN
+	}
+	return supplierChannelLogExportDictZHCN
+}
+
+// streamSupplierChannelLogsCSV 流式写出供应商渠道日志 CSV。
+func streamSupplierChannelLogsCSV(c *gin.Context, logs []*model.Log, query logExportQuery, filename string, dict supplierChannelLogExportI18n) {
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("X-Statement-Window-Start", strconv.FormatInt(query.StartTs, 10))
+	c.Header("X-Statement-Window-End", strconv.FormatInt(query.EndTs, 10))
+	c.Status(200)
+
+	c.Writer.WriteString("\xEF\xBB\xBF")
+	bw := bufio.NewWriterSize(c.Writer, 32*1024)
+	defer bw.Flush()
+	w := csv.NewWriter(bw)
+	defer w.Flush()
+
+	emptyRow := make([]string, len(dict.Header))
+	if err := writeStatementRow(w, append([]string{dict.Meta1}, emptyRow[1:]...)); err != nil {
+		common.SysError("write supplier export meta1: " + err.Error())
+		return
+	}
+	periodStart := time.Unix(query.StartTs, 0).Format("2006-01-02 15:04:05")
+	periodEnd := time.Unix(query.EndTs, 0).Format("2006-01-02 15:04:05")
+	meta2 := fmt.Sprintf(dict.Meta2, periodStart, periodEnd)
+	if err := writeStatementRow(w, append([]string{meta2}, emptyRow[1:]...)); err != nil {
+		common.SysError("write supplier export meta2: " + err.Error())
+		return
+	}
+	if err := writeStatementRow(w, dict.Header); err != nil {
+		common.SysError("write supplier export header: " + err.Error())
+		return
+	}
+
+	statementDict := resolveStatementDict(query.Lang)
+	for idx, l := range logs {
+		ts := time.Unix(l.CreatedAt, 0).Format("2006-01-02 15:04:05")
+		channelDisplay := l.ChannelDisplay
+		if channelDisplay == "" {
+			channelDisplay = strconv.Itoa(l.ChannelId)
+		}
+		cacheTokens := extractCacheReadTokens(l.Other)
+		quota := int64(l.Quota)
+		row := []string{
+			strconv.Itoa(idx + 1),
+			ts,
+			logTypeLabelI18n(l.Type, statementDict),
+			l.Username,
+			l.TokenName,
+			l.ModelName,
+			channelDisplay,
+			l.Group,
+			l.RequestId,
+			strconv.Itoa(l.PromptTokens),
+			strconv.Itoa(l.CompletionTokens),
+			strconv.Itoa(cacheTokens),
+			strconv.FormatInt(quota, 10),
+			formatQuotaDisplay(quota),
+		}
+		if err := writeStatementRow(w, row); err != nil {
+			common.SysError("write supplier export row: " + err.Error())
+			return
+		}
+	}
 }
 
 // sanitizeFilename 过滤文件名中的非法字符，保留中英文/数字/下划线/点/连字符。
