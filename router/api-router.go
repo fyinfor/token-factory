@@ -187,6 +187,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.GET("/supplier-dashboard/model-users", controller.GetSupplierDashboardModelUserUsage)
 				selfRoute.GET("/supplier-channel-logs", controller.GetSupplierChannelLogs)
 				selfRoute.GET("/supplier-channel-logs/stat", controller.GetSupplierChannelLogsStat)
+				selfRoute.GET("/supplier-channel-logs/export", middleware.SearchRateLimit(), controller.ExportSupplierChannelLogs)
 				selfRoute.GET("/supplier/pricing/global", controller.GetSupplierGlobalPricing)
 				selfRoute.PUT("/supplier/pricing/global", controller.PutSupplierGlobalPricing)
 				selfRoute.GET("/supplier/pricing/channel/:channel_id", controller.GetSupplierChannelPricing)
