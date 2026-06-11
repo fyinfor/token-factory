@@ -30,6 +30,9 @@ export const MESSAGE_ROLES = {
   SYSTEM: 'system',
 };
 
+/** 操练场图片/视频素材 URL 各自最多条数 */
+export const PLAYGROUND_MEDIA_MAX_COUNT = 3;
+
 // 默认消息示例 - 使用函数生成以支持 i18n
 export const getDefaultMessages = (t) => [
   {

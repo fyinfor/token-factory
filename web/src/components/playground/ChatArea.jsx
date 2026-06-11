@@ -17,11 +17,147 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React from 'react';
-import { Card, Chat, Typography, Button } from '@douyinfe/semi-ui';
+import React, { useCallback, useMemo, useState } from 'react';
+import {
+  AIChatDialogue,
+  AIChatInput,
+  Button,
+  Card,
+  Toast,
+  Typography,
+} from '@douyinfe/semi-ui';
 import { MessageSquare, Eye, EyeOff, MessageSquarePlus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import CustomInputRender from './CustomInputRender';
+import { usePlayground } from '../../contexts/PlaygroundContext';
+import {
+  PLAYGROUND_MEDIA_MAX_HEIGHT,
+  PLAYGROUND_MEDIA_MAX_WIDTH,
+  PLAYGROUND_MEDIA_MAX_WIDTH_PX,
+} from '../../constants/playground.constants';
+import { usePlaygroundMediaMaxHeightPx } from '../../hooks/playground/usePlaygroundMediaMaxHeight';
+
+const getConstrainedMediaSize = (
+  dimensions,
+  maxWidth = PLAYGROUND_MEDIA_MAX_WIDTH_PX,
+  maxHeight,
+) => {
+  const width = Number(dimensions?.width || 0);
+  const height = Number(dimensions?.height || 0);
+  if (!width || !height) return {};
+  const resolvedMaxHeight = Number(maxHeight || 640);
+  const ratio = Math.min(maxWidth / width, resolvedMaxHeight / height, 1);
+  return {
+    width: Math.round(width * ratio),
+    height: Math.round(height * ratio),
+  };
+};
+
+const getVideoUrl = (item) =>
+  item?.video_url || item?.file_url || item?.url || item?.src || '';
+
+const getInputText = (messageContent) => {
+  if (typeof messageContent === 'string') {
+    return messageContent;
+  }
+
+  if (!messageContent || typeof messageContent !== 'object') {
+    return '';
+  }
+
+  const inputContents = Array.isArray(messageContent.inputContents)
+    ? messageContent.inputContents
+    : [];
+
+  return inputContents
+    .map((item) => {
+      if (typeof item?.text === 'string') {
+        return item.text;
+      }
+      if (typeof item?.content === 'string') {
+        return item.content;
+      }
+      return '';
+    })
+    .join('')
+    .trim();
+};
+
+const toDialogueStatus = (status) => {
+  switch (status) {
+    case 'loading':
+      return 'in_progress';
+    case 'error':
+      return 'failed';
+    case 'complete':
+      return 'completed';
+    default:
+      return status;
+  }
+};
+
+const restorePlaygroundMessage = (message) => {
+  if (!message || typeof message !== 'object') {
+    return message;
+  }
+
+  const restored = { ...message };
+  if (Object.prototype.hasOwnProperty.call(restored, 'playgroundContent')) {
+    restored.content = restored.playgroundContent;
+    delete restored.playgroundContent;
+  }
+  if (Object.prototype.hasOwnProperty.call(restored, 'playgroundStatus')) {
+    restored.status = restored.playgroundStatus;
+    delete restored.playgroundStatus;
+  }
+  return restored;
+};
+
+const normalizeDialogueContent = (message) => {
+  const { content, role, videoTask } = message || {};
+  const normalizedContent = [];
+
+  if (Array.isArray(content)) {
+    content.forEach((item) => {
+      if (item?.type === 'text') {
+        normalizedContent.push({
+          type: 'input_text',
+          text: item.text || '',
+        });
+      } else if (item?.type === 'image_url' && item.image_url?.url) {
+        normalizedContent.push({
+          type: 'input_image',
+          image_url: item.image_url.url,
+          detail: item.image_url?.detail || 'auto',
+        });
+      }
+    });
+  } else if (typeof content === 'string' && content.trim()) {
+    normalizedContent.push({
+      type: 'input_text',
+      text: content,
+    });
+  }
+
+  if (videoTask?.playableUrl) {
+    normalizedContent.push({
+      type: 'playground_video',
+      video_url: videoTask.playableUrl,
+      filename: 'generated-video.mp4',
+    });
+  }
+
+  if (normalizedContent.length === 0) {
+    return content;
+  }
+
+  return [
+    {
+      type: 'message',
+      role,
+      content: normalizedContent,
+    },
+  ];
+};
 
 const ChatArea = ({
   chatRef,
@@ -31,17 +167,19 @@ const ChatArea = ({
   showDebugPanel,
   roleInfo,
   onMessageSend,
-  onMessageCopy,
   onMessageReset,
-  onMessageDelete,
+  onChatsChange,
+  onMediaDimensionsChange,
   onStopGenerator,
   onClearMessages,
   onToggleDebugPanel,
-  renderCustomChatContent,
-  renderChatBoxAction,
 }) => {
   const { t } = useTranslation();
-  const safeChats = React.useMemo(() => {
+  const { onPasteImage, imageEnabled } = usePlayground();
+  const mediaMaxHeightPx = usePlaygroundMediaMaxHeightPx();
+  const [inputFocused, setInputFocused] = useState(false);
+
+  const safeChats = useMemo(() => {
     const list = Array.isArray(message) ? message : [];
     const seen = new Set();
     return list.map((item, index) => {
@@ -54,16 +192,180 @@ const ChatArea = ({
         nextId = `${baseId}-${index}`;
       }
       seen.add(nextId);
+      const dialogueStatus = toDialogueStatus(item?.status);
+      const dialogueContent = normalizeDialogueContent(item);
       return {
         ...item,
         id: nextId,
+        ...(dialogueStatus !== item?.status
+          ? {
+              status: dialogueStatus,
+              playgroundStatus: item?.status,
+            }
+          : {}),
+        ...(dialogueContent !== item?.content
+          ? {
+              content: dialogueContent,
+              playgroundContent: item?.content,
+            }
+          : {}),
       };
     });
   }, [message]);
 
-  const renderInputArea = React.useCallback((props) => {
-    return <CustomInputRender {...props} />;
-  }, []);
+  const generating = useMemo(
+    () =>
+      safeChats.some((item) =>
+        ['loading', 'incomplete', 'in_progress'].includes(
+          item?.playgroundStatus || item?.status,
+        ),
+      ),
+    [safeChats],
+  );
+
+  const handleInputMessageSend = useCallback(
+    (messageContent) => {
+      const content = getInputText(messageContent);
+      if (!content) {
+        return;
+      }
+      onMessageSend(content, messageContent?.attachments);
+    },
+    [onMessageSend],
+  );
+
+  const handlePaste = useCallback(
+    (event) => {
+      const items = event.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (!item.type?.includes('image')) continue;
+
+        event.preventDefault();
+        const file = item.getAsFile();
+        if (!file) return;
+
+        if (!imageEnabled) {
+          Toast.warning({
+            content: t('请先在设置中启用图片功能'),
+            duration: 3,
+          });
+          return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (readerEvent) => {
+          const base64 = readerEvent.target.result;
+          if (onPasteImage) {
+            onPasteImage(base64);
+            Toast.success({
+              content: t('图片已添加'),
+              duration: 2,
+            });
+          } else {
+            Toast.error({
+              content: t('无法添加图片'),
+              duration: 2,
+            });
+          }
+        };
+        reader.onerror = () => {
+          Toast.error({
+            content: t('粘贴图片失败'),
+            duration: 2,
+          });
+        };
+        reader.readAsDataURL(file);
+        return;
+      }
+    },
+    [imageEnabled, onPasteImage, t],
+  );
+
+  const dialogueRenderConfig = useMemo(
+    () => ({
+      renderDialogueAction: ({ className, defaultActionsObj }) => {
+        const actions = [
+          ['copy', defaultActionsObj?.copyNode],
+          ['reset', defaultActionsObj?.resetNode],
+          ['more', defaultActionsObj?.moreNode],
+        ]
+          .filter(([, node]) => Boolean(node))
+          .map(([key, node]) =>
+            React.isValidElement(node) ? (
+              React.cloneElement(node, { key })
+            ) : (
+              <React.Fragment key={key}>{node}</React.Fragment>
+            ),
+          );
+
+        return <div className={className}>{actions}</div>;
+      },
+      renderDialogueTitle: () => null,
+    }),
+    [],
+  );
+
+  const renderDialogueContentItem = useMemo(
+    () => ({
+      playground_video: (item, currentMessage) => {
+        const videoUrl = getVideoUrl(item);
+        if (!videoUrl) return null;
+
+        const dimensions = currentMessage?.mediaDimensions?.[videoUrl];
+        const constrainedVideoSize = getConstrainedMediaSize(
+          dimensions,
+          PLAYGROUND_MEDIA_MAX_WIDTH_PX,
+          mediaMaxHeightPx,
+        );
+
+        return (
+          <div className='playground-ai-video'>
+            <video
+              controls
+              preload='metadata'
+              src={videoUrl}
+              className='playground-ai-video-player'
+              style={{
+                width: constrainedVideoSize.width
+                  ? `${constrainedVideoSize.width}px`
+                  : '100%',
+                height: constrainedVideoSize.height
+                  ? `${constrainedVideoSize.height}px`
+                  : 'auto',
+                maxWidth: PLAYGROUND_MEDIA_MAX_WIDTH,
+                maxHeight: PLAYGROUND_MEDIA_MAX_HEIGHT,
+              }}
+              onLoadedMetadata={(event) => {
+                const nextDimensions = {
+                  width: event.currentTarget.videoWidth,
+                  height: event.currentTarget.videoHeight,
+                };
+                onMediaDimensionsChange?.(
+                  currentMessage?.id,
+                  videoUrl,
+                  nextDimensions,
+                );
+              }}
+            />
+          </div>
+        );
+      },
+    }),
+    [mediaMaxHeightPx, onMediaDimensionsChange],
+  );
+
+  const handleChatsChange = useCallback(
+    (chats) => {
+      const restoredChats = Array.isArray(chats)
+        ? chats.map(restorePlaygroundMessage)
+        : [];
+      onChatsChange?.(restoredChats);
+    },
+    [onChatsChange],
+  );
 
   return (
     <Card
@@ -122,34 +424,60 @@ const ChatArea = ({
       )}
 
       {/* 聊天内容区域 */}
-      <div className='flex-1 overflow-hidden'>
-        <Chat
+      <div className='flex min-h-0 flex-1 flex-col overflow-hidden'>
+        <AIChatDialogue
           ref={chatRef}
-          enableUpload={false}
-          chatBoxRenderConfig={{
-            renderChatBoxContent: renderCustomChatContent,
-            renderChatBoxAction: renderChatBoxAction,
-            renderChatBoxTitle: () => null,
-          }}
-          renderInputArea={renderInputArea}
+          align='leftRight'
+          mode='bubble'
           roleConfig={roleInfo}
+          dialogueRenderConfig={dialogueRenderConfig}
+          renderDialogueContentItem={renderDialogueContentItem}
+          chats={safeChats}
+          onChatsChange={handleChatsChange}
+          onMessageReset={onMessageReset}
+          className='playground-ai-dialogue'
           style={{
-            height: '100%',
+            flex: 1,
+            minHeight: 0,
             maxWidth: '100%',
             overflow: 'hidden',
           }}
-          chats={safeChats}
-          onMessageSend={onMessageSend}
-          onMessageCopy={onMessageCopy}
-          onMessageReset={onMessageReset}
-          onMessageDelete={onMessageDelete}
-          showClearContext
-          showStopGenerate
-          onStopGenerator={onStopGenerator}
-          onClear={onClearMessages}
-          className='h-full'
-          placeholder={t('请输入您的问题...')}
         />
+        <div className='relative flex-shrink-0 p-2 sm:p-4'>
+          <div
+            className={`pointer-events-none absolute left-2 right-2 sm:left-4 sm:right-4 transition-all duration-300 ease-out ${
+              inputFocused ? 'top-[-30px] opacity-100' : 'top-0 opacity-0'
+            }`}
+          >
+            <div
+              className='inline-block rounded-xl sm:rounded-2xl px-3 py-2 text-xs sm:text-sm text-gray-600 dark:text-gray-300 shadow-md'
+              style={{
+                border: '1px solid var(--semi-color-border)',
+                backgroundColor: 'var(--semi-color-bg-1)',
+              }}
+            >
+              {t('使用操练场会产生扣费，请确认模型与参数后再发送。')}
+            </div>
+          </div>
+          <AIChatInput
+            className='playground-ai-input'
+            style={{
+              width: '100%',
+            }}
+            generating={generating}
+            showUploadButton={false}
+            showUploadFile={false}
+            showReference={false}
+            sendHotKey='enter'
+            clearContentOnGenerating
+            onPaste={handlePaste}
+            onFocus={() => setInputFocused(true)}
+            onBlur={() => setInputFocused(false)}
+            onMessageSend={handleInputMessageSend}
+            onStopGenerate={onStopGenerator}
+            placeholder={t('请输入您的问题...')}
+          />
+        </div>
       </div>
     </Card>
   );
