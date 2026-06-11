@@ -132,7 +132,6 @@ export const useDataLoader = (
     size: inputs.image_size,
   });
   const videoPricingTierCacheRef = useRef(new Map());
-  const imagePricingTierCacheRef = useRef(new Map());
   const loadModelsRequestIdRef = useRef(0);
 
   useEffect(() => {
