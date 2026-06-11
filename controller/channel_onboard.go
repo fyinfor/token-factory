@@ -342,12 +342,10 @@ func BulkTestChannelModels(c *gin.Context) {
 			msg = res.tokenFactoryError.Error()
 		}
 
-		// 持久化（与单测保持一致）
+		// 持久化（与单测保持一致，同步写入避免接口返回后结果尚未落库）
 		ms := int64(elapsed * 1000)
-		go func(ch *model.Channel, mn string, ok bool, ms int64, m string) {
-			ch.UpdateTestResult(ok, ms, m, mn)
-			_ = model.UpsertModelTestResult(ch.Id, mn, ok, ms, m)
-		}(channel, modelName, success, ms, msg)
+		modelForRecord := modelNameForChannelTestRecord(channel, modelName, res)
+		persistChannelTestResult(channel, modelForRecord, success, ms, msg)
 
 		results = append(results, BulkTestModelItem{
 			ModelName: modelName,

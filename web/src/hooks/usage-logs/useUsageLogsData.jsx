@@ -360,6 +360,9 @@ export const useLogsData = () => {
     );
     const modeValue = inlineTags(
       tagValue(t('分辨率阶梯计费'), 'blue', 'billing-mode'),
+      other?.video_capped_to_max_tier === true
+        ? tagValue(t('最高档封顶'), 'orange', 'max-tier-cap')
+        : null,
     );
     const actualVideoValue = inlineTags(
       tagValue(`${width}×${height}`, 'cyan', 'actual-resolution'),
@@ -1010,6 +1013,10 @@ export const useLogsData = () => {
       logs[i].timestamp2string = timestamp2string(logs[i].created_at);
       logs[i].key = logs[i].id;
       let other = getLogOther(logs[i].other);
+      const isDeltaRefundLog =
+        logs[i].type === 6 && other?.billing_phase === 'delta_refund';
+      const shouldShowConsumeBillingDetail =
+        logs[i].type === 2 || isDeltaRefundLog;
       const billingPhase = getVideoBillingPhase(other, logs[i]?.quota || 0);
       const actualQuota = Number(other?.actual_quota);
       const displayQuota = billingPhase
@@ -1109,7 +1116,7 @@ export const useLogsData = () => {
           value: other.cache_creation_tokens,
         });
       }
-      if (logs[i].type === 2) {
+      if (shouldShowConsumeBillingDetail) {
         expandDataLocal.push({
           key: t('日志详情'),
           value: zeroBilledVideoNoChargeText
@@ -1182,7 +1189,7 @@ export const useLogsData = () => {
           });
         }
       }
-      if (logs[i].type === 2) {
+      if (shouldShowConsumeBillingDetail) {
         let modelMapped =
           other?.is_model_mapped &&
           other?.upstream_model_name &&

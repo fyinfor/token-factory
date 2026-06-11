@@ -11,43 +11,41 @@ import (
 
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
-	"github.com/google/uuid"
 )
 
 // ErrLocalStorageNotConfigured 本地存储目录不可写。
 var ErrLocalStorageNotConfigured = fmt.Errorf("本地存储未正确配置，请检查存储目录是否可写")
 
 // LocalUploadMultipartFile 将表单文件保存到本地磁盘，返回对外访问 URL。
-// 文件存储路径为 local_storage_path/userID/uuid.ext
-// 对外访问 URL 为 {ServerAddress}/{object_key_prefix}userID/uuid.ext
+// 文件存储路径为 local_storage_path/uploads/local_object_key_prefix/yyyy/mm/dd/uuid.ext
+// 对外访问 URL 为 {local_url_prefix}/uploads/local_object_key_prefix/yyyy/mm/dd/uuid.ext
 func LocalUploadMultipartFile(file *multipart.FileHeader, userID int) (string, error) {
+	_ = userID
 	cfg := operation_setting.GetOssSetting()
 
-	maxBytes := int64(cfg.MaxFileSizeMB) * 1024 * 1024
-	if cfg.MaxFileSizeMB <= 0 {
-		maxBytes = 20 * 1024 * 1024
+	maxFileSizeMB := cfg.LocalMaxFileSizeMB
+	if maxFileSizeMB <= 0 {
+		maxFileSizeMB = cfg.MaxFileSizeMB
 	}
+	if maxFileSizeMB <= 0 {
+		maxFileSizeMB = 20
+	}
+	maxBytes := int64(maxFileSizeMB) * 1024 * 1024
 	if file.Size > maxBytes {
-		return "", fmt.Errorf("文件超过大小限制（最大 %d MB）", cfg.MaxFileSizeMB)
+		return "", fmt.Errorf("文件超过大小限制（最大 %d MB）", maxFileSizeMB)
 	}
 
-	// 确定存储根目录
-	storeDir := strings.TrimSpace(cfg.LocalStoragePath)
-	if storeDir == "" {
-		storeDir = "uploads"
-	}
+	// 确定存储根目录：本地上传固定写入 uploads 目录，配置的文件夹前缀只作为 uploads 下的子目录。
+	storeDir := LocalUploadBaseDir(cfg.LocalStoragePath)
 
-	// 生成文件相对路径：userID/uuid.ext
-	orig := strings.TrimSpace(file.Filename)
-	ext := path.Ext(orig)
-	if ext != "" && len(ext) > 16 {
-		ext = ""
+	// 生成文件相对路径：local_object_key_prefix/yyyy/mm/dd/uuid.ext
+	relPath, err := BuildLocalUploadObjectPath(cfg.LocalObjectKeyPrefix, uploadFileExt(file.Filename))
+	if err != nil {
+		return "", err
 	}
-	ext = strings.ToLower(ext)
-	relPath := fmt.Sprintf("%d/%s%s", userID, uuid.NewString(), ext)
 
 	// 完整文件路径
-	fullPath := filepath.Join(storeDir, relPath)
+	fullPath := filepath.Join(storeDir, filepath.FromSlash(relPath))
 
 	// 确保目录存在
 	dir := filepath.Dir(fullPath)
@@ -76,20 +74,26 @@ func LocalUploadMultipartFile(file *multipart.FileHeader, userID int) (string, e
 	}
 	if written > maxBytes {
 		os.Remove(fullPath)
-		return "", fmt.Errorf("文件超过大小限制（最大 %d MB）", cfg.MaxFileSizeMB)
+		return "", fmt.Errorf("文件超过大小限制（最大 %d MB）", maxFileSizeMB)
 	}
 
-	// 构建对外访问 URL：使用 ObjectKeyPrefix 作为 URL 路径前缀
-	urlPath := path.Join(strings.Trim(cfg.ObjectKeyPrefix, "/"), relPath)
-	return localObjectURL(urlPath), nil
+	return localObjectURL(cfg.LocalURLPrefix, path.Join(LocalUploadFolder, relPath)), nil
 }
 
 // localObjectURL 根据系统 ServerAddress 和路径生成对外访问 URL。
-func localObjectURL(urlPath string) string {
+func localObjectURL(urlPrefix string, objectPath string) string {
+	urlPrefix = strings.TrimSpace(urlPrefix)
+	if urlPrefix == "" {
+		urlPrefix = "/api"
+	}
+	if strings.HasPrefix(urlPrefix, "http://") || strings.HasPrefix(urlPrefix, "https://") {
+		return strings.TrimRight(urlPrefix, "/") + "/" + strings.TrimLeft(objectPath, "/")
+	}
 	base := strings.TrimRight(system_setting.ServerAddress, "/")
 	if base == "" {
-		base = "http://localhost:3000"
+		return "/" + path.Join(strings.Trim(urlPrefix, "/"), strings.Trim(objectPath, "/"))
 	}
+	urlPath := path.Join(strings.Trim(urlPrefix, "/"), strings.Trim(objectPath, "/"))
 	return base + "/" + urlPath
 }
 
@@ -99,10 +103,10 @@ func EnsureLocalStorageDir() error {
 	if cfg.StorageType != operation_setting.StorageTypeLocal {
 		return nil
 	}
-	storeDir := strings.TrimSpace(cfg.LocalStoragePath)
-	if storeDir == "" {
-		storeDir = "uploads"
+	if _, err := NormalizeLocalUploadPrefix(cfg.LocalObjectKeyPrefix); err != nil {
+		return err
 	}
+	storeDir := LocalUploadBaseDir(cfg.LocalStoragePath)
 	if err := os.MkdirAll(storeDir, 0755); err != nil {
 		return fmt.Errorf("无法创建本地存储目录 %s: %w", storeDir, err)
 	}

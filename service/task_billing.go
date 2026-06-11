@@ -116,6 +116,7 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		discPct = model.ResolveChannelPriceDiscountPercent(info.ChannelId)
 	}
 	other["channel_price_discount_percent"] = discPct
+	other = model.SetBillingLogMetadata(other, model.BillingPhasePreCharge, true, info.PriceData.Quota, -int64(info.PriceData.Quota))
 	model.RecordConsumeLog(c, info.UserId, model.RecordConsumeLogParams{
 		ChannelId: info.ChannelId,
 		ModelName: info.OriginModelName,
@@ -272,6 +273,7 @@ func videoPerSecondBillingDetailFromSubmit(c *gin.Context, info *relaycommon.Rel
 		QuotaPerUnit:           common.QuotaPerUnit,
 		ChannelDiscountPercent: resolveVideoLogChannelDiscountPercent(info),
 		UnifiedAudio:           match.UnifiedAudio,
+		CappedToMaxTier:        match.CappedToMaxTier,
 	}
 	fillVideoPerSecondEffectiveRates(detail, info.ChannelId, info.UserId, modelName, mode)
 	return detail
@@ -346,6 +348,7 @@ func videoPerSecondBillingDetailFromTask(task *model.Task) *videoPerSecondBillin
 		QuotaPerUnit:           common.QuotaPerUnit,
 		ChannelDiscountPercent: channelDiscount,
 		UnifiedAudio:           match.UnifiedAudio,
+		CappedToMaxTier:        match.CappedToMaxTier,
 	}
 	fillVideoPerSecondEffectiveRates(detail, task.ChannelId, task.UserId, modelName, mode)
 	return detail
@@ -505,6 +508,9 @@ func appendVideoPerSecondBillingDetailOther(other map[string]interface{}, detail
 	other["channel_price_discount"] = videoChannelDiscountPercent(detail)
 	other["video_billed_quota"] = quota
 	other["video_unified_audio_price"] = detail.UnifiedAudio
+	if detail.CappedToMaxTier {
+		other["video_capped_to_max_tier"] = true
+	}
 }
 
 type videoPerVideoBillingDetail struct {
@@ -747,6 +753,20 @@ func taskModelName(task *model.Task) string {
 	return task.Properties.OriginModelName
 }
 
+func taskUseTimeSeconds(task *model.Task) int {
+	if task == nil || task.FinishTime <= 0 {
+		return 0
+	}
+	start := task.SubmitTime
+	if start <= 0 {
+		start = task.StartTime
+	}
+	if start <= 0 || task.FinishTime <= start {
+		return 0
+	}
+	return int(task.FinishTime - start)
+}
+
 // RefundTaskQuota 统一的任务失败退款逻辑。
 // 当异步任务失败时，将预扣的 quota 退还给用户（支持钱包和订阅），并退还令牌额度。
 func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) {
@@ -768,17 +788,19 @@ func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) {
 	other := taskBillingOther(task)
 	other["task_id"] = task.TaskID
 	other["reason"] = reason
+	other = model.SetBillingLogMetadata(other, model.BillingPhaseRefund, true, quota, int64(quota))
 	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
-		UserId:    task.UserId,
-		LogType:   model.LogTypeRefund,
-		Content:   "",
-		ChannelId: task.ChannelId,
-		ModelName: taskModelName(task),
-		TokenName: task.PrivateData.TokenName,
-		Quota:     quota,
-		TokenId:   task.PrivateData.TokenId,
-		Group:     task.Group,
-		Other:     other,
+		UserId:         task.UserId,
+		LogType:        model.LogTypeRefund,
+		Content:        "",
+		ChannelId:      task.ChannelId,
+		ModelName:      taskModelName(task),
+		TokenName:      task.PrivateData.TokenName,
+		Quota:          quota,
+		TokenId:        task.PrivateData.TokenId,
+		UseTimeSeconds: taskUseTimeSeconds(task),
+		Group:          task.Group,
+		Other:          other,
 	})
 }
 
@@ -801,6 +823,7 @@ func recordVideoTaskSettlementMarker(ctx context.Context, task *model.Task, actu
 	other["pre_consumed_quota"] = preConsumed
 	other["video_final_quota"] = actualQuota
 	other["billing_mode"] = "video_per_second"
+	other = model.SetBillingLogMetadata(other, model.BillingPhaseSettlementMarker, false, actualQuota, 0)
 	if detail == nil {
 		detail = videoPerSecondBillingDetailFromTask(task)
 	}
@@ -808,16 +831,17 @@ func recordVideoTaskSettlementMarker(ctx context.Context, task *model.Task, actu
 		appendVideoPerSecondBillingDetailOther(other, detail, actualQuota)
 	}
 	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
-		UserId:    task.UserId,
-		LogType:   model.LogTypeConsume,
-		Content:   "",
-		ChannelId: task.ChannelId,
-		ModelName: taskModelName(task),
-		TokenName: task.PrivateData.TokenName,
-		Quota:     0,
-		TokenId:   task.PrivateData.TokenId,
-		Group:     task.Group,
-		Other:     other,
+		UserId:         task.UserId,
+		LogType:        model.LogTypeConsume,
+		Content:        "",
+		ChannelId:      task.ChannelId,
+		ModelName:      taskModelName(task),
+		TokenName:      task.PrivateData.TokenName,
+		Quota:          0,
+		TokenId:        task.PrivateData.TokenId,
+		UseTimeSeconds: taskUseTimeSeconds(task),
+		Group:          task.Group,
+		Other:          other,
 	})
 }
 
@@ -919,17 +943,25 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 		other["billing_mode"] = "video_per_second"
 		appendVideoPerSecondBillingDetailOther(other, detail, actualQuota)
 	}
+	phase := model.BillingPhaseDeltaCharge
+	balanceDelta := -int64(logQuota)
+	if logType == model.LogTypeRefund {
+		phase = model.BillingPhaseDeltaRefund
+		balanceDelta = int64(logQuota)
+	}
+	other = model.SetBillingLogMetadata(other, phase, true, logQuota, balanceDelta)
 	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
-		UserId:    task.UserId,
-		LogType:   logType,
-		Content:   "",
-		ChannelId: task.ChannelId,
-		ModelName: taskModelName(task),
-		TokenName: task.PrivateData.TokenName,
-		Quota:     logQuota,
-		TokenId:   task.PrivateData.TokenId,
-		Group:     task.Group,
-		Other:     other,
+		UserId:         task.UserId,
+		LogType:        logType,
+		Content:        "",
+		ChannelId:      task.ChannelId,
+		ModelName:      taskModelName(task),
+		TokenName:      task.PrivateData.TokenName,
+		Quota:          logQuota,
+		TokenId:        task.PrivateData.TokenId,
+		UseTimeSeconds: taskUseTimeSeconds(task),
+		Group:          task.Group,
+		Other:          other,
 	})
 }
 

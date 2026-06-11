@@ -19,19 +19,31 @@ type OssSetting struct {
 	AccessKeySecret string `json:"access_key_secret"`
 	// PublicBaseURL 对外访问基址，可填 CDN/自定义域名，如 https://img.example.com；为空则使用 https://{bucket}.{endpoint}/（仅 OSS）
 	PublicBaseURL string `json:"public_base_url"`
-	// ObjectKeyPrefix 对象键前缀，如 uploads/（OSS 与本地存储共用）
+	// ObjectKeyPrefix OSS 对象键前缀，如 uploads/。
 	ObjectKeyPrefix string `json:"object_key_prefix"`
 	// MaxFileSizeMB 单文件大小上限（MB）
 	MaxFileSizeMB int `json:"max_file_size_mb"`
-	// LocalStoragePath 本地存储目录（相对于程序工作目录），默认 "uploads"
+	// LocalMaxFileSizeMB 本地存储单文件大小上限（MB）。
+	LocalMaxFileSizeMB int `json:"local_max_file_size_mb"`
+	// OssMaxFileSizeMB OSS 单文件大小上限（MB）。
+	OssMaxFileSizeMB int `json:"oss_max_file_size_mb"`
+	// LocalStoragePath 本地存储根目录（相对于程序工作目录），默认当前目录；文件固定写入该目录下的 uploads 子目录。
 	LocalStoragePath string `json:"local_storage_path"`
+	// LocalURLPrefix 本地存储对外访问前缀，如 /api 或 https://img.example.com/api；为空时使用 ServerAddress + /api。
+	LocalURLPrefix string `json:"local_url_prefix"`
+	// LocalObjectKeyPrefix 本地存储 uploads 目录下的子文件夹前缀，如 images/。
+	LocalObjectKeyPrefix string `json:"local_object_key_prefix"`
 }
 
 var ossSetting = OssSetting{
-	StorageType:      StorageTypeLocal,
-	ObjectKeyPrefix:  "uploads/",
-	MaxFileSizeMB:    20,
-	LocalStoragePath: "uploads",
+	StorageType:          StorageTypeLocal,
+	ObjectKeyPrefix:      "uploads/",
+	MaxFileSizeMB:        20,
+	LocalMaxFileSizeMB:   20,
+	OssMaxFileSizeMB:     20,
+	LocalStoragePath:     ".",
+	LocalURLPrefix:       "",
+	LocalObjectKeyPrefix: "",
 }
 
 func init() {

@@ -53,6 +53,285 @@ const (
 	LogTypeRefund  = 6
 )
 
+const (
+	BillingPhaseNormal           = "normal"
+	BillingPhasePreCharge        = "pre_charge"
+	BillingPhaseSettlementMarker = "settlement_marker"
+	BillingPhaseSettlementMerged = "settlement_merged"
+	BillingPhaseDeltaCharge      = "delta_charge"
+	BillingPhaseDeltaRefund      = "delta_refund"
+	BillingPhaseRefund           = "refund"
+)
+
+func SetBillingLogMetadata(other map[string]interface{}, phase string, affectsBalance bool, displayQuota int, balanceDelta int64) map[string]interface{} {
+	if other == nil {
+		other = make(map[string]interface{})
+	}
+	if strings.TrimSpace(phase) == "" {
+		phase = BillingPhaseNormal
+	}
+	other["billing_phase"] = phase
+	other["affects_balance"] = affectsBalance
+	other["display_quota"] = displayQuota
+	other["balance_delta"] = balanceDelta
+	return other
+}
+
+func logOtherNumber(v interface{}) (float64, bool) {
+	switch x := v.(type) {
+	case float64:
+		return x, true
+	case float32:
+		return float64(x), true
+	case int:
+		return float64(x), true
+	case int64:
+		return float64(x), true
+	case int32:
+		return float64(x), true
+	case uint:
+		return float64(x), true
+	case uint64:
+		return float64(x), true
+	case uint32:
+		return float64(x), true
+	case string:
+		f, err := strconv.ParseFloat(strings.TrimSpace(x), 64)
+		return f, err == nil
+	}
+	return 0, false
+}
+
+func logOtherHasPositiveNumber(other map[string]interface{}, key string) bool {
+	if other == nil {
+		return false
+	}
+	n, ok := logOtherNumber(other[key])
+	return ok && n > 0
+}
+
+func isTaskSettlementMarkerLog(log *Log, other map[string]interface{}) bool {
+	if log == nil || other == nil {
+		return false
+	}
+	phase, _ := other["billing_phase"].(string)
+	if phase == BillingPhaseSettlementMarker {
+		return true
+	}
+	if log.Type != LogTypeConsume || log.Quota != 0 {
+		return false
+	}
+	_, hasTaskID := other["task_id"].(string)
+	return hasTaskID &&
+		logOtherHasPositiveNumber(other, "actual_quota") &&
+		logOtherHasPositiveNumber(other, "pre_consumed_quota")
+}
+
+func inferBillingPhase(log *Log, other map[string]interface{}) string {
+	if log == nil {
+		return BillingPhaseNormal
+	}
+	if phase, _ := other["billing_phase"].(string); strings.TrimSpace(phase) != "" {
+		return phase
+	}
+	if _, ok := other["task_id"]; ok {
+		switch log.Type {
+		case LogTypeRefund:
+			return BillingPhaseRefund
+		case LogTypeConsume:
+			hasSettlementNumbers := logOtherHasPositiveNumber(other, "actual_quota") &&
+				logOtherHasPositiveNumber(other, "pre_consumed_quota")
+			if log.Quota == 0 && hasSettlementNumbers {
+				return BillingPhaseSettlementMarker
+			}
+			if log.Quota > 0 && hasSettlementNumbers {
+				if actual, _ := logOtherNumber(other["actual_quota"]); actual > 0 {
+					if pre, _ := logOtherNumber(other["pre_consumed_quota"]); pre > actual {
+						return BillingPhaseDeltaRefund
+					}
+				}
+				return BillingPhaseDeltaCharge
+			}
+			if log.Quota > 0 {
+				return BillingPhasePreCharge
+			}
+		}
+	}
+	return BillingPhaseNormal
+}
+
+func normalizeLogBillingMetadata(log *Log) {
+	if log == nil || strings.TrimSpace(log.Other) == "" {
+		return
+	}
+	other, err := common.StrToMap(log.Other)
+	if err != nil || other == nil {
+		return
+	}
+	phase := inferBillingPhase(log, other)
+	if phase == BillingPhaseNormal {
+		return
+	}
+	displayQuota := log.Quota
+	if phase == BillingPhaseSettlementMarker {
+		if actual, ok := logOtherNumber(other["actual_quota"]); ok && actual > 0 {
+			displayQuota = int(actual)
+		}
+	}
+	affectsBalance := LogTypeChargeable(log.Type) && log.Quota > 0
+	balanceDelta := SignedLogDelta(log.Quota, log.Type)
+	if phase == BillingPhaseSettlementMarker {
+		affectsBalance = false
+		balanceDelta = 0
+	}
+	SetBillingLogMetadata(other, phase, affectsBalance, displayQuota, balanceDelta)
+	log.Other = common.MapToJsonStr(other)
+}
+
+func normalizeLogsBillingMetadata(logs []*Log) {
+	for _, log := range logs {
+		normalizeLogBillingMetadata(log)
+	}
+}
+
+func logTaskID(other map[string]interface{}) string {
+	if other == nil {
+		return ""
+	}
+	taskID, _ := other["task_id"].(string)
+	return strings.TrimSpace(taskID)
+}
+
+func querySettlementMarkerByTaskID(taskID string) (*Log, map[string]interface{}) {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return nil, nil
+	}
+	var marker Log
+	err := LOG_DB.
+		Where("logs.type = ? AND logs.quota = 0 AND logs.other LIKE ? AND logs.other LIKE ? AND logs.other LIKE ?",
+			LogTypeConsume,
+			"%"+taskID+"%",
+			"%\"actual_quota\"%",
+			"%\"pre_consumed_quota\"%",
+		).
+		Order("logs.id desc").
+		Limit(1).
+		Find(&marker).Error
+	if err != nil || marker.Id == 0 {
+		return nil, nil
+	}
+	other, err := common.StrToMap(marker.Other)
+	if err != nil || other == nil || !isTaskSettlementMarkerLog(&marker, other) {
+		return nil, nil
+	}
+	return &marker, other
+}
+
+func queryTaskUseTimeByTaskID(taskID string) int {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return 0
+	}
+	var task Task
+	err := DB.
+		Select("id", "submit_time", "start_time", "finish_time").
+		Where("task_id = ?", taskID).
+		Limit(1).
+		Find(&task).Error
+	if err != nil || task.ID == 0 || task.FinishTime <= 0 {
+		return 0
+	}
+	start := task.SubmitTime
+	if start <= 0 {
+		start = task.StartTime
+	}
+	if start <= 0 || task.FinishTime <= start {
+		return 0
+	}
+	return int(task.FinishTime - start)
+}
+
+func fillTaskUseTime(logs []*Log) {
+	cache := make(map[string]int)
+	for _, log := range logs {
+		if log == nil || log.UseTime > 0 || strings.TrimSpace(log.Other) == "" {
+			continue
+		}
+		other, err := common.StrToMap(log.Other)
+		if err != nil || other == nil {
+			continue
+		}
+		taskID := logTaskID(other)
+		if taskID == "" {
+			continue
+		}
+		useTime, ok := cache[taskID]
+		if !ok {
+			useTime = queryTaskUseTimeByTaskID(taskID)
+			cache[taskID] = useTime
+		}
+		if useTime > 0 {
+			log.UseTime = useTime
+		}
+	}
+}
+
+func mergeSettlementMarkersIntoPreChargeLogs(logs []*Log) {
+	for _, log := range logs {
+		if log == nil || log.Type != LogTypeConsume || log.Quota <= 0 {
+			continue
+		}
+		other, err := common.StrToMap(log.Other)
+		if err != nil || other == nil {
+			continue
+		}
+		if logOtherHasPositiveNumber(other, "actual_quota") {
+			continue
+		}
+		taskID := logTaskID(other)
+		if taskID == "" {
+			continue
+		}
+		marker, markerOther := querySettlementMarkerByTaskID(taskID)
+		if marker == nil || markerOther == nil {
+			continue
+		}
+		for key, value := range markerOther {
+			switch key {
+			case "request_path", "billing_phase", "affects_balance", "balance_delta", "display_quota":
+				continue
+			default:
+				other[key] = value
+			}
+		}
+		actualQuota := log.Quota
+		if actual, ok := logOtherNumber(markerOther["actual_quota"]); ok && actual > 0 {
+			actualQuota = int(actual)
+		}
+		other["source_log_ids"] = map[string]interface{}{
+			"pre_charge": log.Id,
+			"settlement": marker.Id,
+		}
+		SetBillingLogMetadata(other, BillingPhaseSettlementMerged, true, actualQuota, SignedLogDelta(log.Quota, log.Type))
+		log.Other = common.MapToJsonStr(other)
+	}
+}
+
+func applyBillingLogVisibility(tx *gorm.DB, includeRawBillingLogs bool) *gorm.DB {
+	if includeRawBillingLogs {
+		return tx
+	}
+	// Hide async task settlement markers by default. They confirm the final task
+	// price but do not change balance; raw mode can still return them for audit.
+	return tx.Where(
+		"NOT (logs.type = ? AND logs.quota = 0 AND logs.other LIKE ? AND logs.other LIKE ?)",
+		LogTypeConsume,
+		"%\"actual_quota\"%",
+		"%\"pre_consumed_quota\"%",
+	)
+}
+
 func formatUserLogs(logs []*Log, startIdx int) {
 	for i := range logs {
 		logs[i].ChannelName = ""
@@ -287,16 +566,17 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 }
 
 type RecordTaskBillingLogParams struct {
-	UserId    int
-	LogType   int
-	Content   string
-	ChannelId int
-	ModelName string
-	TokenName string
-	Quota     int
-	TokenId   int
-	Group     string
-	Other     map[string]interface{}
+	UserId         int
+	LogType        int
+	Content        string
+	ChannelId      int
+	ModelName      string
+	TokenName      string
+	Quota          int
+	TokenId        int
+	UseTimeSeconds int
+	Group          string
+	Other          map[string]interface{}
 }
 
 func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
@@ -324,6 +604,7 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 		Quota:     params.Quota,
 		ChannelId: params.ChannelId,
 		TokenId:   params.TokenId,
+		UseTime:   params.UseTimeSeconds,
 		Group:     params.Group,
 		Other:     common.MapToJsonStr(params.Other),
 	}
@@ -374,9 +655,10 @@ func applyLogTypesFilter(tx *gorm.DB, logTypes []int) *gorm.DB {
 	return tx.Where("logs.type IN ?", logTypes)
 }
 
-func GetAllLogs(logTypes []int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string) (logs []*Log, total int64, err error) {
+func GetAllLogs(logTypes []int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, startIdx int, num int, channel int, group string, requestId string, includeRawBillingLogs bool) (logs []*Log, total int64, err error) {
 	tx := LOG_DB
 	tx = applyLogTypesFilter(tx, logTypes)
+	tx = applyBillingLogVisibility(tx, includeRawBillingLogs)
 
 	if modelName != "" {
 		tx = tx.Where("logs.model_name like ?", modelName)
@@ -411,6 +693,11 @@ func GetAllLogs(logTypes []int, startTimestamp int64, endTimestamp int64, modelN
 		return nil, 0, err
 	}
 	attachLogChannelDisplays(logs)
+	normalizeLogsBillingMetadata(logs)
+	fillTaskUseTime(logs)
+	if !includeRawBillingLogs {
+		mergeSettlementMarkersIntoPreChargeLogs(logs)
+	}
 
 	for i := range logs {
 		if logs[i].Other == "" {
@@ -430,9 +717,10 @@ func GetAllLogs(logTypes []int, startTimestamp int64, endTimestamp int64, modelN
 
 const logSearchCountLimit = 10000
 
-func GetUserLogs(userId int, logTypes []int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string) (logs []*Log, total int64, err error) {
+func GetUserLogs(userId int, logTypes []int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, includeRawBillingLogs bool) (logs []*Log, total int64, err error) {
 	tx := LOG_DB.Where("logs.user_id = ?", userId)
 	tx = applyLogTypesFilter(tx, logTypes)
+	tx = applyBillingLogVisibility(tx, includeRawBillingLogs)
 
 	if modelName != "" {
 		modelNamePattern, err := sanitizeLikePattern(modelName)
@@ -467,20 +755,27 @@ func GetUserLogs(userId int, logTypes []int, startTimestamp int64, endTimestamp 
 		return nil, 0, errors.New("查询日志失败")
 	}
 
+	normalizeLogsBillingMetadata(logs)
+	fillTaskUseTime(logs)
+	if !includeRawBillingLogs {
+		mergeSettlementMarkersIntoPreChargeLogs(logs)
+	}
 	formatUserLogs(logs, startIdx)
 	return logs, total, err
 }
 
 type Stat struct {
-	Quota          int     `json:"quota"`
-	DisplayAmount  float64 `json:"display_amount"`
-	Rpm            int     `json:"rpm"`
-	Tpm            int     `json:"tpm"`
+	Quota         int     `json:"quota"`
+	DisplayAmount float64 `json:"display_amount"`
+	Rpm           int     `json:"rpm"`
+	Tpm           int     `json:"tpm"`
 }
 
 func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string) (stat Stat, err error) {
 	quotaListQuery := LOG_DB.Table("logs").Select("quota")
 	rpmTpmQuery := LOG_DB.Table("logs").Select("count(*) rpm, COALESCE(sum(prompt_tokens), 0) + COALESCE(sum(completion_tokens), 0) tpm")
+	quotaListQuery = applyBillingLogVisibility(quotaListQuery, false)
+	rpmTpmQuery = applyBillingLogVisibility(rpmTpmQuery, false)
 
 	if username != "" {
 		quotaListQuery = quotaListQuery.Where("username = ?", username)
@@ -653,30 +948,44 @@ func GetChargeableDeltaByUser(userId int, fromTs int64, toTs int64) (int64, erro
 	return r.Sum, nil
 }
 
-// GetUserLogsForExport 拉取对账单导出所需的日志行（升序），不含 Error 类型。
+// LogExportFilter 对账单/日志导出筛选条件，与控制台使用日志列表查询口径对齐。
+type LogExportFilter struct {
+	FromTs, ToTs                           int64
+	ModelName, TokenName, Group, RequestID string
+	LogTypes                               []int
+}
+
+// GetUserLogsForExport 拉取对账单导出所需的日志行（升序）。
 // 内部使用 LOOP 形式而非 GORM Stream 保持实现简单；调用方负责后续流式写出。
 // 上限 logExportCountLimit 条；超过则 controller 返回 400。
 const logExportCountLimit = 100000
 
-func GetUserLogsForExport(userId int, fromTs int64, toTs int64, modelName string, tokenName string) ([]*Log, int64, error) {
-	tx := LOG_DB.Where("user_id = ?", userId).
-		Where("type <> ?", LogTypeError)
+func GetUserLogsForExport(userId int, filter LogExportFilter) ([]*Log, int64, error) {
+	tx := LOG_DB.Where("user_id = ?", userId)
+	tx = applyLogTypesFilter(tx, filter.LogTypes)
+	tx = applyBillingLogVisibility(tx, false)
 
-	if modelName != "" {
-		pattern, err := sanitizeLikePattern(modelName)
+	if filter.ModelName != "" {
+		pattern, err := sanitizeLikePattern(filter.ModelName)
 		if err != nil {
 			return nil, 0, err
 		}
 		tx = tx.Where("model_name LIKE ? ESCAPE '!'", pattern)
 	}
-	if tokenName != "" {
-		tx = tx.Where("token_name = ?", tokenName)
+	if filter.TokenName != "" {
+		tx = tx.Where("token_name = ?", filter.TokenName)
 	}
-	if fromTs > 0 {
-		tx = tx.Where("created_at >= ?", fromTs)
+	if filter.RequestID != "" {
+		tx = tx.Where("request_id = ?", filter.RequestID)
 	}
-	if toTs > 0 {
-		tx = tx.Where("created_at <= ?", toTs)
+	if filter.Group != "" {
+		tx = tx.Where(logGroupCol+" = ?", filter.Group)
+	}
+	if filter.FromTs > 0 {
+		tx = tx.Where("created_at >= ?", filter.FromTs)
+	}
+	if filter.ToTs > 0 {
+		tx = tx.Where("created_at <= ?", filter.ToTs)
 	}
 
 	var total int64

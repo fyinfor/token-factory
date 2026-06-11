@@ -7,11 +7,19 @@ published by the Free Software Foundation, either version 3 of the
 License, or (at your option) any later version.
 */
 
-import React from 'react';
-import { Input, Typography, Button, Switch } from '@douyinfe/semi-ui';
+import React, { useCallback, useState } from 'react';
+import { Input, Typography, Button, Switch, Upload } from '@douyinfe/semi-ui';
 import { IconFile } from '@douyinfe/semi-icons';
-import { Plus, X, Film } from 'lucide-react';
+import { Plus, X, Film, Upload as UploadIcon, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { PLAYGROUND_MEDIA_MAX_COUNT } from '../../constants/playground.constants';
+import { showError, showSuccess } from '../../helpers';
+import {
+  appendUploadedMediaUrl,
+  canAddMoreMediaUrls,
+  countFilledMediaUrls,
+  uploadPlaygroundMediaFile,
+} from '../../helpers/playgroundMediaInputUtils';
 
 const VideoUrlInput = ({
   videoUrls,
@@ -20,25 +28,85 @@ const VideoUrlInput = ({
   onVideoEnabledChange,
   allowToggle = true,
   disabled = false,
+  maxCount = PLAYGROUND_MEDIA_MAX_COUNT,
 }) => {
   const { t } = useTranslation();
+  const [uploading, setUploading] = useState(false);
+
+  const enabled = videoEnabled !== false;
+  const list = videoUrls || [];
+  const filledCount = countFilledMediaUrls(list);
+  const canAddMore = canAddMoreMediaUrls(list, maxCount);
 
   const handleAdd = () => {
-    onVideoUrlsChange([...(videoUrls || []), '']);
+    if (!canAddMore) {
+      return;
+    }
+    onVideoUrlsChange([...list, '']);
   };
 
   const handleUpdate = (index, value) => {
-    const next = [...(videoUrls || [])];
+    const next = [...list];
     next[index] = value;
     onVideoUrlsChange(next);
   };
 
   const handleRemove = (index) => {
-    onVideoUrlsChange((videoUrls || []).filter((_, i) => i !== index));
+    const next = list.filter((_, i) => i !== index);
+    onVideoUrlsChange(next.length > 0 ? next : ['']);
   };
 
-  const enabled = videoEnabled !== false;
-  const list = videoUrls || [];
+  const handleUpload = useCallback(
+    async ({ file, onSuccess, onError }) => {
+      const inst = file?.fileInstance || file;
+      if (!inst) {
+        onError?.(new Error('no file'));
+        return;
+      }
+
+      if (!canAddMoreMediaUrls(list, maxCount)) {
+        showError(
+          t('操练场素材已达上限', '最多添加 {{count}} 个', {
+            count: maxCount,
+          }),
+        );
+        onError?.(new Error('limit'));
+        return;
+      }
+
+      setUploading(true);
+      try {
+        const uploadedUrl = await uploadPlaygroundMediaFile(inst);
+        const { urls, ok } = appendUploadedMediaUrl(
+          list,
+          uploadedUrl,
+          maxCount,
+        );
+        if (!ok) {
+          showError(
+            t('操练场素材已达上限', '最多添加 {{count}} 个', {
+              count: maxCount,
+            }),
+          );
+          onError?.(new Error('limit'));
+          return;
+        }
+        onVideoUrlsChange(urls);
+        onSuccess?.({ url: uploadedUrl });
+        showSuccess(t('上传成功'));
+      } catch (error) {
+        const message =
+          error?.response?.data?.message ||
+          error?.message ||
+          t('上传失败，请确认已启用文件上传并完成配置');
+        showError(message);
+        onError?.(error);
+      } finally {
+        setUploading(false);
+      }
+    },
+    [list, maxCount, onVideoUrlsChange, t],
+  );
 
   return (
     <div className={`mt-4 ${disabled ? 'opacity-50' : ''}`}>
@@ -69,6 +137,29 @@ const VideoUrlInput = ({
               disabled={disabled}
             />
           )}
+          <Upload
+            action=''
+            accept='video/*,.mp4,.mov,.webm,.avi,.mkv'
+            showUploadList={false}
+            customRequest={handleUpload}
+            disabled={!enabled || disabled || uploading || !canAddMore}
+          >
+            <Button
+              icon={
+                uploading ? (
+                  <Loader2 size={14} className='animate-spin' />
+                ) : (
+                  <UploadIcon size={14} />
+                )
+              }
+              size='small'
+              theme='light'
+              className='!rounded-lg'
+              disabled={!enabled || disabled || uploading || !canAddMore}
+            >
+              {uploading ? t('上传中') : t('上传')}
+            </Button>
+          </Upload>
           <Button
             icon={<Plus size={14} />}
             size='small'
@@ -76,7 +167,7 @@ const VideoUrlInput = ({
             type='primary'
             onClick={handleAdd}
             className='!rounded-full !w-4 !h-4 !p-0 !min-w-0'
-            disabled={!enabled || disabled}
+            disabled={!enabled || disabled || !canAddMore}
           />
         </div>
       </div>
@@ -87,11 +178,11 @@ const VideoUrlInput = ({
         </Typography.Text>
       ) : list.length === 0 ? (
         <Typography.Text className='text-xs text-gray-500 mb-2 block'>
-          {t('操练场视频地址空列表提示', '点击 + 添加 .mp4 / .mov 等可访问的视频链接')}
+          {t('操练场视频地址空列表提示', '点击上传或 + 添加 .mp4 / .mov 等可访问的视频链接')}
         </Typography.Text>
       ) : (
         <Typography.Text className='text-xs text-gray-500 mb-2 block'>
-          {t('已添加')} {list.length} {t('个视频')}
+          {t('已添加')} {filledCount}/{maxCount} {t('个视频')}
         </Typography.Text>
       )}
 

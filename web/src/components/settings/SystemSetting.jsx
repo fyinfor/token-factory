@@ -137,7 +137,11 @@ const SystemSetting = () => {
     'oss_setting.public_base_url': '',
     'oss_setting.object_key_prefix': 'uploads/',
     'oss_setting.max_file_size_mb': 20,
-    'oss_setting.local_storage_path': 'uploads',
+    'oss_setting.local_max_file_size_mb': 20,
+    'oss_setting.oss_max_file_size_mb': 20,
+    'oss_setting.local_storage_path': '.',
+    'oss_setting.local_url_prefix': '',
+    'oss_setting.local_object_key_prefix': '',
   });
 
   const [originInputs, setOriginInputs] = useState({});
@@ -256,7 +260,9 @@ const SystemSetting = () => {
           case 'oss_setting.enabled':
             item.value = toBoolean(item.value);
             break;
-          case 'oss_setting.max_file_size_mb': {
+          case 'oss_setting.max_file_size_mb':
+          case 'oss_setting.local_max_file_size_mb':
+          case 'oss_setting.oss_max_file_size_mb': {
             const n = parseInt(item.value, 10);
             item.value = Number.isFinite(n) ? n : 20;
             break;

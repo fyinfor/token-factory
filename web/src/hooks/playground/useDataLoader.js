@@ -127,6 +127,7 @@ export const useDataLoader = (
     resolution: inputs.video_resolution_preset,
   });
   const videoPricingTierCacheRef = useRef(new Map());
+  const loadModelsRequestIdRef = useRef(0);
 
   useEffect(() => {
     latestVideoPricingStateRef.current = {
@@ -139,10 +140,14 @@ export const useDataLoader = (
    * 拉取 scene=playground 模型列表，写入「类型选项」与原始行；不依赖当前 model_type，避免重复请求与请求返回顺序错配。
    */
   const loadModels = useCallback(async () => {
+    const requestId = ++loadModelsRequestIdRef.current;
     try {
       const res = await API.get(
         `${API_ENDPOINTS.USER_MODELS}?scene=playground`,
       );
+      if (requestId !== loadModelsRequestIdRef.current) {
+        return;
+      }
       const { success, message, data } = res.data;
 
       if (success) {
@@ -211,6 +216,9 @@ export const useDataLoader = (
         showError(t(message));
       }
     } catch (error) {
+      if (requestId !== loadModelsRequestIdRef.current) {
+        return;
+      }
       showError(t('加载模型失败'));
     }
   }, [setModelTypes, t]);
@@ -445,12 +453,6 @@ export const useDataLoader = (
       loadGroups();
     }
   }, [userState?.user, loadModels, loadGroups]);
-
-  // 切换展示模式时主动刷新模型数据，确保网络请求与筛选状态同步更新
-  useEffect(() => {
-    if (!userState?.user) return;
-    loadModels();
-  }, [inputs.display_mode, userState?.user, loadModels]);
 
   return {
     loadModels,

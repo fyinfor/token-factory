@@ -1409,10 +1409,7 @@ func TestChannel(c *gin.Context) {
 	consumedTime := float64(milliseconds) / 1000.0
 	modelForRecord := modelNameForChannelTestRecord(channel, testModel, result)
 	if result.localErr != nil {
-		go channel.UpdateTestResult(false, milliseconds, result.localErr.Error(), modelForRecord)
-		go func() {
-			_ = model.UpsertModelTestResult(channel.Id, modelForRecord, false, milliseconds, result.localErr.Error())
-		}()
+		persistChannelTestResult(channel, modelForRecord, false, milliseconds, result.localErr.Error())
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": result.localErr.Error(),
@@ -1421,10 +1418,7 @@ func TestChannel(c *gin.Context) {
 		return
 	}
 	if result.tokenFactoryError != nil {
-		go channel.UpdateTestResult(false, milliseconds, result.tokenFactoryError.Error(), modelForRecord)
-		go func() {
-			_ = model.UpsertModelTestResult(channel.Id, modelForRecord, false, milliseconds, result.tokenFactoryError.Error())
-		}()
+		persistChannelTestResult(channel, modelForRecord, false, milliseconds, result.tokenFactoryError.Error())
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": result.tokenFactoryError.Error(),
@@ -1432,8 +1426,7 @@ func TestChannel(c *gin.Context) {
 		})
 		return
 	}
-	go channel.UpdateTestResult(true, milliseconds, "", modelForRecord)
-	go func() { _ = model.UpsertModelTestResult(channel.Id, modelForRecord, true, milliseconds, "") }()
+	persistChannelTestResult(channel, modelForRecord, true, milliseconds, "")
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -1461,6 +1454,12 @@ func collectModelsForScheduledChannelTest(channel *model.Channel) []string {
 		return []string{""}
 	}
 	return out
+}
+
+// persistChannelTestResult 同步写入渠道级与 (channel, model) 级测试结果，与定时全量测试一致。
+func persistChannelTestResult(channel *model.Channel, modelForRecord string, success bool, milliseconds int64, message string) {
+	channel.UpdateTestResult(success, milliseconds, message, modelForRecord)
+	_ = model.UpsertModelTestResult(channel.Id, modelForRecord, success, milliseconds, message)
 }
 
 // modelNameForChannelTestRecord 与 TestChannel HTTP 接口写入逻辑一致：优先 relay 解析名，其次本次请求模型名，再兜底渠道配置。
@@ -1540,8 +1539,7 @@ func testAllChannels(notify bool) error {
 				testSuccess := result.localErr == nil && result.tokenFactoryError == nil
 
 				modelForRecord := modelNameForChannelTestRecord(channel, modelName, result)
-				channel.UpdateTestResult(testSuccess, ms, testMessage, modelForRecord)
-				_ = model.UpsertModelTestResult(channel.Id, modelForRecord, testSuccess, ms, testMessage)
+				persistChannelTestResult(channel, modelForRecord, testSuccess, ms, testMessage)
 
 				tfErr := result.tokenFactoryError
 				shouldBanThis := false
