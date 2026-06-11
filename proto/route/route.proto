@@ -73,6 +73,9 @@ message ChannelSnapshot {
   double price_discount_percent = 15;
   double markup_discount_rate = 16;
   string model_mapping = 17;  // JSON
+  // model_prices 每个模型的最终单价（已含成本 / 加价折扣），key=模型名。
+  // 用于 TokenFactory 价格优模式展示与排序。
+  map<string, double> model_prices = 18;
 }
 
 message SyncChannelsResponse {

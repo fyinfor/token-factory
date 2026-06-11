@@ -2,6 +2,7 @@ package common
 
 import (
 	"os"
+	"strconv"
 )
 
 // ── TokenFactory gRPC 连接配置 ──────────────────────────────────
@@ -25,4 +26,31 @@ func TokenFactoryRouteEnabled() bool {
 // TokenFactorySyncSecret 返回 TFOpenSync 同步密钥。
 func TokenFactorySyncSecret() string {
 	return os.Getenv("TOKENFACTORY_OPEN_SYNC_SECRET")
+}
+
+// TokenFactoryRouteErrorThreshold 黏性渠道连续报错多少次后熔断切换（默认 3）。
+// 环境变量 TOKENFACTORY_ROUTE_ERROR_THRESHOLD。
+func TokenFactoryRouteErrorThreshold() int {
+	if v, err := strconv.Atoi(os.Getenv("TOKENFACTORY_ROUTE_ERROR_THRESHOLD")); err == nil && v > 0 {
+		return v
+	}
+	return 3
+}
+
+// TokenFactoryRouteStickyTTLSeconds 黏性绑定的存活秒数（默认 3600）。
+// 环境变量 TOKENFACTORY_ROUTE_STICKY_TTL_SECONDS。
+func TokenFactoryRouteStickyTTLSeconds() int {
+	if v, err := strconv.Atoi(os.Getenv("TOKENFACTORY_ROUTE_STICKY_TTL_SECONDS")); err == nil && v > 0 {
+		return v
+	}
+	return 3600
+}
+
+// TokenFactoryRouteErrorTTLSeconds 错误计数的窗口秒数（默认 600，超时即视为非「连续」）。
+// 环境变量 TOKENFACTORY_ROUTE_ERROR_TTL_SECONDS。
+func TokenFactoryRouteErrorTTLSeconds() int {
+	if v, err := strconv.Atoi(os.Getenv("TOKENFACTORY_ROUTE_ERROR_TTL_SECONDS")); err == nil && v > 0 {
+		return v
+	}
+	return 600
 }

@@ -773,6 +773,7 @@ func tryTokenFactoryRoute(c *gin.Context, modelName string, group string) (*mode
 			Weight:       ch.GetWeight(),
 			Status:       ch.Status,
 			ProviderSlug: strings.ToLower(strings.TrimSpace(ch.SupplierType)),
+			Price:        service.ResolveChannelModelUnitPrice(ch, modelName),
 		})
 	}
 
@@ -790,13 +791,13 @@ func tryTokenFactoryRoute(c *gin.Context, modelName string, group string) (*mode
 		return nil, false
 	}
 
-	orderedIDs, strategy, fallback, err := service.SelectChannelFromTF(jwtToken, modelName, group, userID, userRole, grpcCandidates)
+	orderedIDs, strategy, groupKey, fallback, err := service.SelectChannelFromTF(jwtToken, modelName, group, userID, userRole, grpcCandidates)
 	if err != nil {
 		logger.LogInfo(c, fmt.Sprintf("tf_route skip: gRPC error: %v", err))
 		return nil, false
 	}
 	if fallback {
-		logger.LogInfo(c, "tf_route skip: no matching policy (fallback)")
+		logger.LogInfo(c, "tf_route skip: 默认/未实现模式或无候选 (fallback)")
 		return nil, false
 	}
 	if len(orderedIDs) == 0 {
@@ -804,14 +805,27 @@ func tryTokenFactoryRoute(c *gin.Context, modelName string, group string) (*mode
 		return nil, false
 	}
 
-	// 使用排序结果的第一个可用渠道。
+	// 转为 []int 候选集。
+	ordered := make([]int, 0, len(orderedIDs))
 	for _, id := range orderedIDs {
-		ch, err := model.CacheGetChannel(int(id))
-		if err == nil && ch != nil && ch.Status == common.ChannelStatusEnabled {
-			logger.LogInfo(c, fmt.Sprintf("tf_route selected: channel=%s(id=%d) model=%s strategy=%s ordered=%v", ch.Name, ch.Id, modelName, strategy, orderedIDs))
-			return ch, true
-		}
+		ordered = append(ordered, int(id))
 	}
-	return nil, false
+
+	// 黏性 + 报错熔断选择：同一 (归类+group) 维度复用渠道，连续报错达阈值才顺延。
+	isEnabled := func(id int) bool {
+		ch, err := model.CacheGetChannel(id)
+		return err == nil && ch != nil && ch.Status == common.ChannelStatusEnabled
+	}
+	picked, ok := service.TFRoutePickChannel(c, groupKey, group, ordered, isEnabled)
+	if !ok {
+		logger.LogInfo(c, "tf_route skip: 候选均不可用")
+		return nil, false
+	}
+	ch, err := model.CacheGetChannel(picked)
+	if err != nil || ch == nil || ch.Status != common.ChannelStatusEnabled {
+		return nil, false
+	}
+	logger.LogInfo(c, fmt.Sprintf("tf_route selected: channel=%s(id=%d) model=%s group=%s strategy=%s ordered=%v", ch.Name, ch.Id, modelName, groupKey, strategy, ordered))
+	return ch, true
 }
 

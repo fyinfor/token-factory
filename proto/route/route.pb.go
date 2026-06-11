@@ -384,8 +384,11 @@ type ChannelSnapshot struct {
 	PriceDiscountPercent  float64                `protobuf:"fixed64,15,opt,name=price_discount_percent,json=priceDiscountPercent,proto3" json:"price_discount_percent,omitempty"`
 	MarkupDiscountRate    float64                `protobuf:"fixed64,16,opt,name=markup_discount_rate,json=markupDiscountRate,proto3" json:"markup_discount_rate,omitempty"`
 	ModelMapping          string                 `protobuf:"bytes,17,opt,name=model_mapping,json=modelMapping,proto3" json:"model_mapping,omitempty"` // JSON
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// model_prices 每个模型的最终单价（已含成本 / 加价折扣），key=模型名。
+	// 用于 TokenFactory 价格优模式展示与排序。
+	ModelPrices   map[string]float64 `protobuf:"bytes,18,rep,name=model_prices,json=modelPrices,proto3" json:"model_prices,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"fixed64,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ChannelSnapshot) Reset() {
@@ -535,6 +538,13 @@ func (x *ChannelSnapshot) GetModelMapping() string {
 		return x.ModelMapping
 	}
 	return ""
+}
+
+func (x *ChannelSnapshot) GetModelPrices() map[string]float64 {
+	if x != nil {
+		return x.ModelPrices
+	}
+	return nil
 }
 
 type SyncChannelsResponse struct {
@@ -708,7 +718,7 @@ const file_proto_route_route_proto_rawDesc = "" +
 	"\bfallback\x18\x04 \x01(\bR\bfallback\"p\n" +
 	"\x13SyncChannelsRequest\x122\n" +
 	"\bchannels\x18\x01 \x03(\v2\x16.route.ChannelSnapshotR\bchannels\x12%\n" +
-	"\x0esync_timestamp\x18\x02 \x01(\x03R\rsyncTimestamp\"\xa8\x04\n" +
+	"\x0esync_timestamp\x18\x02 \x01(\x03R\rsyncTimestamp\"\xb4\x05\n" +
 	"\x0fChannelSnapshot\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x05R\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -728,7 +738,11 @@ const file_proto_route_route_proto_rawDesc = "" +
 	"\rprovider_slug\x18\x0e \x01(\tR\fproviderSlug\x124\n" +
 	"\x16price_discount_percent\x18\x0f \x01(\x01R\x14priceDiscountPercent\x120\n" +
 	"\x14markup_discount_rate\x18\x10 \x01(\x01R\x12markupDiscountRate\x12#\n" +
-	"\rmodel_mapping\x18\x11 \x01(\tR\fmodelMapping\"9\n" +
+	"\rmodel_mapping\x18\x11 \x01(\tR\fmodelMapping\x12J\n" +
+	"\fmodel_prices\x18\x12 \x03(\v2'.route.ChannelSnapshot.ModelPricesEntryR\vmodelPrices\x1a>\n" +
+	"\x10ModelPricesEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\x01R\x05value:\x028\x01\"9\n" +
 	"\x14SyncChannelsResponse\x12!\n" +
 	"\fsynced_count\x18\x01 \x01(\x05R\vsyncedCount\"\x14\n" +
 	"\x12HealthCheckRequest\"I\n" +
@@ -752,7 +766,7 @@ func file_proto_route_route_proto_rawDescGZIP() []byte {
 	return file_proto_route_route_proto_rawDescData
 }
 
-var file_proto_route_route_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
+var file_proto_route_route_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_proto_route_route_proto_goTypes = []any{
 	(*SelectChannelRequest)(nil),  // 0: route.SelectChannelRequest
 	(*ChannelCandidate)(nil),      // 1: route.ChannelCandidate
@@ -762,21 +776,23 @@ var file_proto_route_route_proto_goTypes = []any{
 	(*SyncChannelsResponse)(nil),  // 5: route.SyncChannelsResponse
 	(*HealthCheckRequest)(nil),    // 6: route.HealthCheckRequest
 	(*HealthCheckResponse)(nil),   // 7: route.HealthCheckResponse
+	nil,                           // 8: route.ChannelSnapshot.ModelPricesEntry
 }
 var file_proto_route_route_proto_depIdxs = []int32{
 	1, // 0: route.SelectChannelRequest.candidates:type_name -> route.ChannelCandidate
 	4, // 1: route.SyncChannelsRequest.channels:type_name -> route.ChannelSnapshot
-	0, // 2: route.RouteService.SelectChannel:input_type -> route.SelectChannelRequest
-	3, // 3: route.RouteService.SyncChannels:input_type -> route.SyncChannelsRequest
-	6, // 4: route.RouteService.HealthCheck:input_type -> route.HealthCheckRequest
-	2, // 5: route.RouteService.SelectChannel:output_type -> route.SelectChannelResponse
-	5, // 6: route.RouteService.SyncChannels:output_type -> route.SyncChannelsResponse
-	7, // 7: route.RouteService.HealthCheck:output_type -> route.HealthCheckResponse
-	5, // [5:8] is the sub-list for method output_type
-	2, // [2:5] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	8, // 2: route.ChannelSnapshot.model_prices:type_name -> route.ChannelSnapshot.ModelPricesEntry
+	0, // 3: route.RouteService.SelectChannel:input_type -> route.SelectChannelRequest
+	3, // 4: route.RouteService.SyncChannels:input_type -> route.SyncChannelsRequest
+	6, // 5: route.RouteService.HealthCheck:input_type -> route.HealthCheckRequest
+	2, // 6: route.RouteService.SelectChannel:output_type -> route.SelectChannelResponse
+	5, // 7: route.RouteService.SyncChannels:output_type -> route.SyncChannelsResponse
+	7, // 8: route.RouteService.HealthCheck:output_type -> route.HealthCheckResponse
+	6, // [6:9] is the sub-list for method output_type
+	3, // [3:6] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_proto_route_route_proto_init() }
@@ -790,7 +806,7 @@ func file_proto_route_route_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_route_route_proto_rawDesc), len(file_proto_route_route_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   8,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -43,20 +43,47 @@ func AdminTokenFactorySyncChannels(c *gin.Context) {
 		if ch.BaseURL != nil {
 			baseURL = *ch.BaseURL
 		}
+		priceDiscount := float64(100)
+		if ch.PriceDiscountPercent != nil {
+			priceDiscount = *ch.PriceDiscountPercent
+		}
+		markupRate := float64(0)
+		if ch.MarkupDiscountRate != nil {
+			markupRate = *ch.MarkupDiscountRate
+		}
+		// 已关闭渠道仍同步元数据，但不推送模型列表与单价（不参与归类 / 路由）。
+		modelsCSV := ch.Models
+		var modelPrices map[string]float64
+		if ch.Status == common.ChannelStatusEnabled {
+			modelPrices = make(map[string]float64)
+			for _, m := range strings.Split(ch.Models, ",") {
+				m = strings.TrimSpace(m)
+				if m == "" {
+					continue
+				}
+				modelPrices[m] = service.ResolveChannelModelUnitPrice(ch, m)
+			}
+		} else {
+			modelsCSV = ""
+			modelPrices = nil
+		}
 		snapshots = append(snapshots, &pb.ChannelSnapshot{
-			Id:            int32(ch.Id),
-			Name:          ch.Name,
-			Type:          int32(ch.Type),
-			Models:        ch.Models,
-			Group:         ch.Group,
-			Status:        int32(ch.Status),
-			Priority:      prio,
-			Weight:        wt,
-			BaseUrl:       baseURL,
-			Balance:       0,
-			ChannelNo:     ch.ChannelNo,
-			SupplierAlias: ch.SupplierType,
-			ProviderSlug:  strings.ToLower(strings.TrimSpace(ch.SupplierType)),
+			Id:                   int32(ch.Id),
+			Name:                 ch.Name,
+			Type:                 int32(ch.Type),
+			Models:               modelsCSV,
+			Group:                ch.Group,
+			Status:               int32(ch.Status),
+			Priority:             prio,
+			Weight:               wt,
+			BaseUrl:              baseURL,
+			Balance:              0,
+			ChannelNo:            ch.ChannelNo,
+			SupplierAlias:        ch.SupplierType,
+			ProviderSlug:         strings.ToLower(strings.TrimSpace(ch.SupplierType)),
+			PriceDiscountPercent: priceDiscount,
+			MarkupDiscountRate:   markupRate,
+			ModelPrices:          modelPrices,
 		})
 	}
 
