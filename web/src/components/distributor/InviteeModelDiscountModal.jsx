@@ -30,7 +30,7 @@ import {
   Space,
   Select,
 } from '@douyinfe/semi-ui';
-import { IconSearch, IconInfoCircle } from '@douyinfe/semi-icons';
+import { IconSearch, IconInfoCircle, IconDownload } from '@douyinfe/semi-icons';
 import { API, showError, showSuccess, showInfo } from '../../helpers';
 import { CHANNEL_SUPPLIER_TYPE_OPTIONS } from '../../constants';
 
@@ -90,6 +90,37 @@ const formatSaleRate = (value, record, markupRate) => {
   return `${Math.max(0, 100 - Math.round(n))}%`;
 };
 
+const formatExportTimestamp = () => {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(
+    d.getHours(),
+  )}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+};
+
+const downloadBlob = (blob, filename) => {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+};
+
+const getDownloadFilename = (disposition, fallback) => {
+  const text = String(disposition || '');
+  const utf8Match = text.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return fallback;
+    }
+  }
+  const asciiMatch = text.match(/filename="?([^";]+)"?/i);
+  return asciiMatch?.[1] || fallback;
+};
+
 function supplierTypeDisplay(value) {
   const v = String(value || '').trim();
   if (!v) return '—';
@@ -109,6 +140,7 @@ const InviteeModelDiscountModal = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [modelData, setModelData] = useState([]);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [filterSupplierType, setFilterSupplierType] = useState(null);
@@ -288,6 +320,56 @@ const InviteeModelDiscountModal = ({
   const handleClose = () => {
     onCancel();
   };
+
+  const handleExportPriceTable = useCallback(() => {
+    if (!filteredData.length) {
+      showError(t('\u8bf7\u9009\u62e9\u8981\u5bfc\u51fa\u7684\u6570\u636e'));
+      return;
+    }
+
+    const fallbackName = `agent-model-discount-prices-${formatExportTimestamp()}.xlsx`;
+    setExporting(true);
+    API.get('/api/distributor/invitee-model-discounts/export', {
+      responseType: 'blob',
+      disableDuplicate: true,
+      params: {
+        invitee_id: inviteeId,
+        q: searchKeyword.trim(),
+        supplier_type: filterSupplierType || '',
+      },
+    })
+      .then(async (res) => {
+        const contentType =
+          res.headers?.['content-type'] || res.data?.type || '';
+        if (contentType.includes('application/json')) {
+          const text = await res.data.text();
+          try {
+            const payload = JSON.parse(text);
+            showError(payload?.message || t('\u5bfc\u51fa\u5931\u8d25'));
+          } catch {
+            showError(text || t('\u5bfc\u51fa\u5931\u8d25'));
+          }
+          return;
+        }
+        const blob = new Blob([res.data], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        downloadBlob(
+          blob,
+          getDownloadFilename(
+            res.headers?.['content-disposition'],
+            fallbackName,
+          ),
+        );
+        showSuccess(t('\u4ef7\u683c\u5bfc\u51fa\u6210\u529f'));
+      })
+      .catch(() => {
+        showError(t('\u5bfc\u51fa\u5931\u8d25'));
+      })
+      .finally(() => {
+        setExporting(false);
+      });
+  }, [filterSupplierType, filteredData.length, inviteeId, searchKeyword, t]);
 
   const columns = [
     {
@@ -471,6 +553,18 @@ const InviteeModelDiscountModal = ({
                 </Option>
               ))}
             </Select>
+            <Button
+              type='tertiary'
+              icon={<IconDownload />}
+              loading={exporting}
+              disabled={
+                loading || saving || exporting || filteredData.length === 0
+              }
+              onClick={handleExportPriceTable}
+              className='w-full sm:w-auto flex-shrink-0'
+            >
+              {t('导出')} Excel
+            </Button>
           </div>
 
           <Space className='text-sm'>

@@ -1024,16 +1024,16 @@ export default function DistributorAdmin() {
         },
       },
       {
-        title: t('用户消耗额度'),
+        title: t('用户消耗金额'),
         dataIndex: 'user_quota_charged',
         width: 120,
         render: (q) => renderProfitShareQuotaCell(q),
       },
       {
         title: (
-          <Tooltip content={t('加价切片额度说明')}>
+          <Tooltip content={t('利润金额说明')}>
             <span className='cursor-help border-b border-dotted border-gray-400'>
-              {t('加价切片额度')}
+              {t('利润金额')}
             </span>
           </Tooltip>
         ),

@@ -47,7 +47,7 @@ export function renderProfitShareQuotaCell(quota) {
 
 export function ProfitShareRewardFormulaTooltipContent({ t }) {
   return (
-    <div className='w-[360px] max-w-[min(360px,calc(100vw-32px))] text-xs leading-relaxed space-y-1.5 py-0.5'>
+    <div className='w-[460px] max-w-[min(460px,calc(100vw-32px))] text-xs leading-relaxed space-y-1.5 py-0.5'>
       <div className='font-semibold text-[var(--semi-color-text-0)]'>
         {t('利润分成计算公式')}
       </div>
@@ -55,10 +55,7 @@ export function ProfitShareRewardFormulaTooltipContent({ t }) {
         {t('利润分成计算说明-用户消耗')}
       </div>
       <div className='text-[var(--semi-color-text-2)]'>
-        {t('利润分成计算说明-加价折扣')}
-      </div>
-      <div className='text-[var(--semi-color-text-2)]'>
-        {t('利润分成计算说明-加价切片')}
+        {t('利润分成计算说明-利润')}
       </div>
       <div className='text-[var(--semi-color-text-2)]'>
         {t('利润分成计算说明-分成比例')}
@@ -70,11 +67,11 @@ export function ProfitShareRewardFormulaTooltipContent({ t }) {
   );
 }
 
-/** 「收益额度」列表头：标题旁问号，点击展示计算公式（挂载 body，避免被弹窗裁切）。 */
+/** 「收益金额」列表头：标题旁问号，点击展示计算公式（挂载 body，避免被弹窗裁切）。 */
 export function ProfitShareRewardColumnTitle({ t }) {
   return (
     <div className='inline-flex items-center gap-1'>
-      <span>{t('收益额度')}</span>
+      <span>{t('收益金额')}</span>
       <Popover
         content={<ProfitShareRewardFormulaTooltipContent t={t} />}
         position='leftTop'
@@ -93,7 +90,7 @@ export function ProfitShareRewardColumnTitle({ t }) {
   );
 }
 
-/** 收益额度单元格：悬停展示本笔代入公式。 */
+/** 收益金额单元格：悬停展示本笔代入公式。 */
 export function renderProfitShareRewardCell(row, t) {
   const reward = Number(row?.reward_quota) || 0;
   const slice = Number(row?.markup_slice_quota) || 0;
