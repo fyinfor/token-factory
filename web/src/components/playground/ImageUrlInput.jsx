@@ -17,11 +17,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React from 'react';
-import { Input, Typography, Button, Switch } from '@douyinfe/semi-ui';
+import React, { useCallback, useState } from 'react';
+import { Input, Typography, Button, Switch, Upload } from '@douyinfe/semi-ui';
 import { IconFile } from '@douyinfe/semi-icons';
-import { FileText, Plus, X, Image } from 'lucide-react';
+import { Plus, X, Image, Upload as UploadIcon, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { PLAYGROUND_MEDIA_MAX_COUNT } from '../../constants/playground.constants';
+import { showError, showSuccess } from '../../helpers';
+import {
+  appendUploadedMediaUrl,
+  canAddMoreMediaUrls,
+  countFilledMediaUrls,
+  uploadPlaygroundMediaFile,
+} from '../../helpers/playgroundMediaInputUtils';
 
 const ImageUrlInput = ({
   imageUrls,
@@ -30,11 +38,19 @@ const ImageUrlInput = ({
   onImageEnabledChange,
   allowToggle = true,
   disabled = false,
+  maxCount = PLAYGROUND_MEDIA_MAX_COUNT,
 }) => {
   const { t } = useTranslation();
+  const [uploading, setUploading] = useState(false);
+
+  const filledCount = countFilledMediaUrls(imageUrls);
+  const canAddMore = canAddMoreMediaUrls(imageUrls, maxCount);
+
   const handleAddImageUrl = () => {
-    const newUrls = [...imageUrls, ''];
-    onImageUrlsChange(newUrls);
+    if (!canAddMore) {
+      return;
+    }
+    onImageUrlsChange([...(imageUrls || []), '']);
   };
 
   const handleUpdateImageUrl = (index, value) => {
@@ -45,8 +61,60 @@ const ImageUrlInput = ({
 
   const handleRemoveImageUrl = (index) => {
     const newUrls = imageUrls.filter((_, i) => i !== index);
-    onImageUrlsChange(newUrls);
+    onImageUrlsChange(newUrls.length > 0 ? newUrls : ['']);
   };
+
+  const handleUpload = useCallback(
+    async ({ file, onSuccess, onError }) => {
+      const inst = file?.fileInstance || file;
+      if (!inst) {
+        onError?.(new Error('no file'));
+        return;
+      }
+
+      if (!canAddMoreMediaUrls(imageUrls, maxCount)) {
+        showError(
+          t('操练场素材已达上限', '最多添加 {{count}} 个', {
+            count: maxCount,
+          }),
+        );
+        onError?.(new Error('limit'));
+        return;
+      }
+
+      setUploading(true);
+      try {
+        const uploadedUrl = await uploadPlaygroundMediaFile(inst);
+        const { urls, ok } = appendUploadedMediaUrl(
+          imageUrls,
+          uploadedUrl,
+          maxCount,
+        );
+        if (!ok) {
+          showError(
+            t('操练场素材已达上限', '最多添加 {{count}} 个', {
+              count: maxCount,
+            }),
+          );
+          onError?.(new Error('limit'));
+          return;
+        }
+        onImageUrlsChange(urls);
+        onSuccess?.({ url: uploadedUrl });
+        showSuccess(t('上传成功'));
+      } catch (error) {
+        const message =
+          error?.response?.data?.message ||
+          error?.message ||
+          t('上传失败，请确认已启用文件上传并完成配置');
+        showError(message);
+        onError?.(error);
+      } finally {
+        setUploading(false);
+      }
+    },
+    [imageUrls, maxCount, onImageUrlsChange, t],
+  );
 
   return (
     <div className={disabled ? 'opacity-50' : ''}>
@@ -77,6 +145,29 @@ const ImageUrlInput = ({
             className='flex-shrink-0'
             disabled={disabled || !allowToggle}
           />
+          <Upload
+            action=''
+            accept='image/*,.jpg,.jpeg,.png,.gif,.webp'
+            showUploadList={false}
+            customRequest={handleUpload}
+            disabled={!imageEnabled || disabled || uploading || !canAddMore}
+          >
+            <Button
+              icon={
+                uploading ? (
+                  <Loader2 size={14} className='animate-spin' />
+                ) : (
+                  <UploadIcon size={14} />
+                )
+              }
+              size='small'
+              theme='light'
+              className='!rounded-lg'
+              disabled={!imageEnabled || disabled || uploading || !canAddMore}
+            >
+              {uploading ? t('上传中') : t('上传')}
+            </Button>
+          </Upload>
           <Button
             icon={<Plus size={14} />}
             size='small'
@@ -84,7 +175,7 @@ const ImageUrlInput = ({
             type='primary'
             onClick={handleAddImageUrl}
             className='!rounded-full !w-4 !h-4 !p-0 !min-w-0'
-            disabled={!imageEnabled || disabled}
+            disabled={!imageEnabled || disabled || !canAddMore}
           />
         </div>
       </div>
@@ -99,11 +190,11 @@ const ImageUrlInput = ({
         <Typography.Text className='text-xs text-gray-500 mb-2 block'>
           {disabled
             ? t('图片功能在自定义请求体模式下不可用')
-            : t('点击 + 按钮添加图片URL进行多模态对话')}
+            : t('点击上传或 + 按钮添加图片')}
         </Typography.Text>
       ) : (
         <Typography.Text className='text-xs text-gray-500 mb-2 block'>
-          {t('已添加')} {imageUrls.length} {t('张图片')}
+          {t('已添加')} {filledCount}/{maxCount} {t('张图片')}
           {disabled ? ` (${t('自定义模式下不可用')})` : ''}
         </Typography.Text>
       )}

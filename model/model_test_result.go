@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -41,7 +42,11 @@ func (ModelTestResult) TableName() string {
 // UpsertModelTestResult 按 (channel_id, model_name) 更新模型测试结果；不存在则插入。
 func UpsertModelTestResult(channelId int, modelName string, success bool, responseTime int64, message string) error {
 	modelName = strings.TrimSpace(modelName)
-	if channelId <= 0 || modelName == "" {
+	if channelId <= 0 {
+		return nil
+	}
+	if modelName == "" {
+		common.SysLog(fmt.Sprintf("skip upsert model test result: empty model_name channel_id=%d", channelId))
 		return nil
 	}
 	now := common.GetTimestamp()
@@ -69,7 +74,14 @@ func UpsertModelTestResult(channelId int, modelName string, success bool, respon
 	} else {
 		update["test_count_fail"] = DB.Raw("test_count_fail + 1")
 	}
-	return DB.Where("channel_id = ? AND model_name = ?", channelId, modelName).Assign(update).FirstOrCreate(result).Error
+	err := DB.Where("channel_id = ? AND model_name = ?", channelId, modelName).Assign(update).FirstOrCreate(result).Error
+	if err != nil {
+		common.SysError(fmt.Sprintf(
+			"failed to upsert model test result: channel_id=%d model_name=%s success=%v error=%v",
+			channelId, modelName, success, err,
+		))
+	}
+	return err
 }
 
 // mtrResultTableNames 以正式表名 model_test_results 为首；少数旧环境若仅有 model_test_result 会第二顺位尝试读。
