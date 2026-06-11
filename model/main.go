@@ -320,6 +320,7 @@ func migrateDB() error {
 		&AffInviteProfitShareLog{},
 		&AffFunnelDaily{},
 		&DistributorApplication{},
+		&DistributorIdentityApplication{},
 		&DistributorWithdrawal{},
 	)
 	if err != nil {
@@ -339,6 +340,9 @@ func migrateDB() error {
 	}
 	if err := BackfillAffInviteRelationsIfNeeded(); err != nil {
 		common.SysError("aff_invite_relations backfill: " + err.Error())
+	}
+	if err := BackfillDistributorIdentityApplicationSourcesIfNeeded(); err != nil {
+		common.SysError("distributor identity application source backfill: " + err.Error())
 	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
@@ -397,6 +401,7 @@ func migrateDBFast() error {
 		{&AffInviteProfitShareLog{}, "AffInviteProfitShareLog"},
 		{&AffFunnelDaily{}, "AffFunnelDaily"},
 		{&DistributorApplication{}, "DistributorApplication"},
+		{&DistributorIdentityApplication{}, "DistributorIdentityApplication"},
 		{&DistributorWithdrawal{}, "DistributorWithdrawal"},
 	}
 	// 动态计算migration数量，确保errChan缓冲区足够大
@@ -442,6 +447,9 @@ func migrateDBFast() error {
 	}
 	if err := BackfillAffInviteRelationsIfNeeded(); err != nil {
 		common.SysError("aff_invite_relations backfill: " + err.Error())
+	}
+	if err := BackfillDistributorIdentityApplicationSourcesIfNeeded(); err != nil {
+		common.SysError("distributor identity application source backfill: " + err.Error())
 	}
 	if err := BackfillEmptyAffCodes(); err != nil {
 		common.SysError("backfill empty aff_code: " + err.Error())

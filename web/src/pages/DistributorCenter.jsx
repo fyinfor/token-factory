@@ -47,6 +47,11 @@ import {
   Zap,
   Copy,
   UserPlus,
+  BadgeCheck,
+  Building2,
+  Clock3,
+  UserRound,
+  XCircle,
 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
@@ -68,6 +73,7 @@ import { useNavigate } from 'react-router-dom';
 import AffInviteeCommissionDetailModal from '../components/distributor/AffInviteeCommissionDetailModal';
 import InviteeModelDiscountModal from '../components/distributor/InviteeModelDiscountModal';
 import DistributorWithdrawFormFields from '../components/distributor/DistributorWithdrawFormFields';
+import DistributorApplyFileUpload from '../components/distributor/DistributorApplyFileUpload';
 import {
   WD_ACCOUNT_PERSONAL,
   WD_ACCOUNT_ENTERPRISE,
@@ -89,6 +95,19 @@ const QR_CODE_SIZE = 168;
 const QR_DOWNLOAD_PADDING = 20;
 const QR_DOWNLOAD_BORDER_WIDTH = 2;
 const QR_DOWNLOAD_BORDER_RADIUS = 14;
+const IDENTITY_APP_STATUS_PENDING = 1;
+const IDENTITY_APP_STATUS_APPROVED = 2;
+const IDENTITY_APP_STATUS_REJECTED = 3;
+
+function distributorIdentityLabel(t, type) {
+  return Number(type) === WD_ACCOUNT_ENTERPRISE ? t('企业') : t('个人');
+}
+
+function oppositeDistributorIdentity(type) {
+  return Number(type) === WD_ACCOUNT_ENTERPRISE
+    ? WD_ACCOUNT_PERSONAL
+    : WD_ACCOUNT_ENTERPRISE;
+}
 
 function drawRoundedRect(ctx, x, y, width, height, radius) {
   const r = Math.min(radius, width / 2, height / 2);
@@ -234,6 +253,18 @@ export default function DistributorCenter() {
   const [bindSearchLoading, setBindSearchLoading] = useState(false);
   const [bindSubmitting, setBindSubmitting] = useState(false);
   const [bindUser, setBindUser] = useState(null);
+  const [identityApp, setIdentityApp] = useState(null);
+  const [identityModalOpen, setIdentityModalOpen] = useState(false);
+  const [identitySubmitting, setIdentitySubmitting] = useState(false);
+  const [identityTargetType, setIdentityTargetType] = useState(
+    WD_ACCOUNT_ENTERPRISE,
+  );
+  const [identityForm, setIdentityForm] = useState({
+    real_name: '',
+    id_card_no: '',
+    contact: '',
+  });
+  const [identityUrls, setIdentityUrls] = useState([]);
 
   const withdrawImg = (
     statusState?.status?.distributor_withdraw_cs_image_url || ''
@@ -326,6 +357,20 @@ export default function DistributorCenter() {
       return;
     }
     setCenter(data);
+  };
+
+  const loadIdentityApplication = async () => {
+    try {
+      const res = await API.get('/api/distributor/identity_application');
+      const { success, message, data } = res.data;
+      if (!success) {
+        showError(message);
+        return;
+      }
+      setIdentityApp(data || null);
+    } catch {
+      showError(t('加载失败'));
+    }
   };
 
   const refreshUser = useCallback(async () => {
@@ -437,6 +482,7 @@ export default function DistributorCenter() {
       setLoading(true);
       try {
         await loadCenter();
+        await loadIdentityApplication();
         await loadInvitees(1, pageSize);
         await refreshUser();
       } finally {
@@ -465,6 +511,64 @@ export default function DistributorCenter() {
       ...EMPTY_WD_FORM,
       real_name: String(center?.application_real_name || '').trim(),
     });
+  };
+
+  const identityApplicationPending =
+    Number(identityApp?.status) === IDENTITY_APP_STATUS_PENDING;
+  const identityApplicationRejected =
+    Number(identityApp?.status) === IDENTITY_APP_STATUS_REJECTED;
+
+  const openIdentityApplicationModal = () => {
+    const target = oppositeDistributorIdentity(distributorApplyType);
+    setIdentityTargetType(target);
+    setIdentityForm({
+      real_name: '',
+      id_card_no: '',
+      contact: '',
+    });
+    setIdentityUrls([]);
+    setIdentityModalOpen(true);
+  };
+
+  const setIdentityField = (key, val) => {
+    setIdentityForm((prev) => ({ ...prev, [key]: val }));
+  };
+
+  const submitIdentityApplication = async () => {
+    const realName = String(identityForm.real_name || '').trim();
+    const idCardNo = String(identityForm.id_card_no || '').trim();
+    const contact = String(identityForm.contact || '').trim();
+    const urls = identityUrls.filter(Boolean);
+    if (!realName || !idCardNo || !contact) {
+      showError(t('请填写完整资料'));
+      return;
+    }
+    if (!urls.length) {
+      showError(t('请上传资格证书'));
+      return;
+    }
+    setIdentitySubmitting(true);
+    try {
+      const res = await API.post('/api/distributor/identity_application', {
+        apply_type: identityTargetType,
+        real_name: realName,
+        id_card_no: idCardNo,
+        contact,
+        qualification_urls: urls,
+      });
+      const { success, message } = res.data || {};
+      if (!success) {
+        showError(message);
+        return;
+      }
+      showSuccess(t('申请已提交，请等待审核'));
+      setIdentityModalOpen(false);
+      await loadIdentityApplication();
+    } catch {
+      showError(t('提交失败'));
+    } finally {
+      setIdentitySubmitting(false);
+    }
   };
 
   const submitWithdraw = async () => {
@@ -950,6 +1054,165 @@ export default function DistributorCenter() {
           </Card>
 
           <Card
+            className='!rounded-2xl shadow-sm border-0'
+            bodyStyle={{ padding: 18 }}
+          >
+            <div className='space-y-4'>
+              <div className='flex items-start justify-between gap-3'>
+                <div className='flex min-w-0 items-center gap-3'>
+                  <div
+                    className={[
+                      'flex h-11 w-11 shrink-0 items-center justify-center rounded-xl',
+                      'border border-solid border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)]',
+                    ].join(' ')}
+                  >
+                    {distributorApplyType === WD_ACCOUNT_ENTERPRISE ? (
+                      <Building2
+                        size={21}
+                        className='text-[var(--semi-color-warning)]'
+                      />
+                    ) : (
+                      <UserRound
+                        size={21}
+                        className='text-[var(--semi-color-primary)]'
+                      />
+                    )}
+                  </div>
+                  <div className='min-w-0'>
+                    <Text
+                      type='tertiary'
+                      size='small'
+                      className='block !leading-tight'
+                    >
+                      {t('当前代理身份')}
+                    </Text>
+                    <div className='mt-1 flex min-w-0 items-center gap-2'>
+                      <Text strong className='!text-base !leading-tight'>
+                        {distributorIdentityLabel(t, distributorApplyType)}
+                      </Text>
+                      <Tag
+                        color={
+                          distributorApplyType === WD_ACCOUNT_ENTERPRISE
+                            ? 'orange'
+                            : 'blue'
+                        }
+                        type='light'
+                        size='small'
+                      >
+                        {t('已生效')}
+                      </Tag>
+                    </div>
+                  </div>
+                </div>
+                {identityApplicationPending ? (
+                  <Tag color='light-blue' type='light' size='small'>
+                    {t('审核中')}
+                  </Tag>
+                ) : identityApplicationRejected ? (
+                  <Tag color='red' type='light' size='small'>
+                    {t('已驳回')}
+                  </Tag>
+                ) : (
+                  <Tag color='green' type='light' size='small'>
+                    {t('正常')}
+                  </Tag>
+                )}
+              </div>
+
+              <div className='grid grid-cols-1 gap-2 sm:grid-cols-2'>
+                <div className='rounded-lg border border-solid border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)] px-3 py-2.5'>
+                  <Text type='tertiary' size='small' className='block'>
+                    {t('当前主体')}
+                  </Text>
+                  <Text strong className='mt-1 block break-all !leading-snug'>
+                    {String(center?.application_real_name || '').trim() || '—'}
+                  </Text>
+                </div>
+                <div className='rounded-lg border border-solid border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)] px-3 py-2.5'>
+                  <Text type='tertiary' size='small' className='block'>
+                    {identityApplicationPending
+                      ? t('申请身份')
+                      : t('可申请身份')}
+                  </Text>
+                  <Text strong className='mt-1 block !leading-snug'>
+                    {distributorIdentityLabel(
+                      t,
+                      identityApplicationPending
+                        ? identityApp?.target_apply_type
+                        : oppositeDistributorIdentity(distributorApplyType),
+                    )}
+                  </Text>
+                </div>
+              </div>
+
+              {identityApplicationPending ? (
+                <div className='flex gap-2 rounded-lg border border-solid border-[var(--semi-color-info-light-hover)] bg-[var(--semi-color-info-light-default)] p-3'>
+                  <Clock3
+                    size={17}
+                    className='mt-0.5 shrink-0 text-[var(--semi-color-primary)]'
+                  />
+                  <Text size='small' className='!leading-relaxed'>
+                    {t('审核中，提现仍按当前已生效身份处理，审核通过后生效')}
+                  </Text>
+                </div>
+              ) : identityApplicationRejected ? (
+                <div className='flex gap-2 rounded-lg border border-solid border-[var(--semi-color-danger-light-hover)] bg-[var(--semi-color-danger-light-default)] p-3'>
+                  <XCircle
+                    size={17}
+                    className='mt-0.5 shrink-0 text-[var(--semi-color-danger)]'
+                  />
+                  <div className='min-w-0'>
+                    <Text size='small' className='block !leading-relaxed'>
+                      {t('身份变更申请已驳回')}：
+                      {identityApp?.reject_reason || t('未填写原因')}
+                    </Text>
+                    <Text type='tertiary' size='small' className='mt-1 block'>
+                      {t('可修改资料后重新提交')}
+                    </Text>
+                  </div>
+                </div>
+              ) : (
+                <div className='flex gap-2 rounded-lg border border-solid border-[var(--semi-color-success-light-hover)] bg-[var(--semi-color-success-light-default)] p-3'>
+                  <BadgeCheck
+                    size={17}
+                    className='mt-0.5 shrink-0 text-[var(--semi-color-success)]'
+                  />
+                  <Text size='small' className='!leading-relaxed'>
+                    {t('身份资料已生效，可按需提交身份变更申请')}
+                  </Text>
+                </div>
+              )}
+
+              <Button
+                type='primary'
+                theme={identityApplicationPending ? 'light' : 'solid'}
+                className='w-full !rounded-lg'
+                disabled={identityApplicationPending}
+                icon={
+                  identityApplicationPending ? (
+                    <Clock3 size={14} />
+                  ) : oppositeDistributorIdentity(distributorApplyType) ===
+                    WD_ACCOUNT_ENTERPRISE ? (
+                    <Building2 size={14} />
+                  ) : (
+                    <UserRound size={14} />
+                  )
+                }
+                onClick={openIdentityApplicationModal}
+              >
+                {identityApplicationPending
+                  ? t('身份变更审核中')
+                  : t('申请') +
+                    distributorIdentityLabel(
+                      t,
+                      oppositeDistributorIdentity(distributorApplyType),
+                    ) +
+                    t('身份')}
+              </Button>
+            </div>
+          </Card>
+
+          <Card
             className='!rounded-2xl'
             title={t('注册二维码')}
             bodyStyle={{ paddingTop: 20, paddingBottom: 24 }}
@@ -1138,6 +1401,106 @@ export default function DistributorCenter() {
             </div>
           ) : null}
         </Space>
+      </Modal>
+
+      <Modal
+        title={
+          t('申请') +
+          distributorIdentityLabel(t, identityTargetType) +
+          t('身份')
+        }
+        visible={identityModalOpen}
+        onCancel={() => setIdentityModalOpen(false)}
+        footer={
+          <Space>
+            <Button onClick={() => setIdentityModalOpen(false)}>
+              {t('关闭')}
+            </Button>
+            <Button
+              type='primary'
+              theme='solid'
+              loading={identitySubmitting}
+              onClick={submitIdentityApplication}
+            >
+              {t('提交申请')}
+            </Button>
+          </Space>
+        }
+        width={720}
+      >
+        <Banner
+          type='info'
+          className='mb-4 !rounded-lg'
+          closeIcon={null}
+          description={t(
+            '提交后由管理员审批；审核通过前，提现仍按当前已生效身份处理。',
+          )}
+        />
+        <div className='space-y-4'>
+          <div className='flex items-center justify-between gap-3 rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)] px-3 py-2'>
+            <Text type='secondary'>{t('申请身份')}</Text>
+            <Tag
+              color={
+                identityTargetType === WD_ACCOUNT_ENTERPRISE ? 'orange' : 'blue'
+              }
+              type='light'
+            >
+              {distributorIdentityLabel(t, identityTargetType)}
+            </Tag>
+          </div>
+          <div>
+            <Text strong className='mb-1 block'>
+              {identityTargetType === WD_ACCOUNT_ENTERPRISE
+                ? t('企业名称')
+                : t('姓名')}
+            </Text>
+            <Input
+              value={identityForm.real_name}
+              onChange={(v) => setIdentityField('real_name', String(v ?? ''))}
+              placeholder={
+                identityTargetType === WD_ACCOUNT_ENTERPRISE
+                  ? t('企业名称')
+                  : t('真实姓名')
+              }
+            />
+          </div>
+          <div>
+            <Text strong className='mb-1 block'>
+              {identityTargetType === WD_ACCOUNT_ENTERPRISE
+                ? t('统一社会信用代码')
+                : t('身份证号')}
+            </Text>
+            <Input
+              value={identityForm.id_card_no}
+              onChange={(v) => setIdentityField('id_card_no', String(v ?? ''))}
+              placeholder={
+                identityTargetType === WD_ACCOUNT_ENTERPRISE
+                  ? t('统一社会信用代码')
+                  : t('身份证号')
+              }
+            />
+          </div>
+          <div>
+            <Text strong className='mb-1 block'>
+              {t('联系方式')}
+            </Text>
+            <Input
+              value={identityForm.contact}
+              onChange={(v) => setIdentityField('contact', String(v ?? ''))}
+              placeholder={t('手机或邮箱等')}
+            />
+          </div>
+          <DistributorApplyFileUpload
+            label={t('资格证书')}
+            required
+            urls={identityUrls}
+            onUrlsChange={setIdentityUrls}
+            maxCount={5}
+            multiple
+            onPreview={setWdVoucherPreview}
+            hint={t('支持图片或 PDF，最大 5 个；点击图片可大图预览')}
+          />
+        </div>
       </Modal>
 
       <Modal
@@ -1361,7 +1724,18 @@ export default function DistributorCenter() {
           typeof window !== 'undefined' ? window.innerWidth - 48 : 900,
         )}
       >
-        {wdVoucherPreview && !isPdfUrl(wdVoucherPreview) ? (
+        {wdVoucherPreview && isPdfUrl(wdVoucherPreview) ? (
+          <div className='py-6 text-center'>
+            <Button
+              type='primary'
+              onClick={() =>
+                window.open(wdVoucherPreview, '_blank', 'noopener,noreferrer')
+              }
+            >
+              {t('在新窗口打开 PDF')}
+            </Button>
+          </div>
+        ) : wdVoucherPreview ? (
           <div className='flex max-h-[85vh] justify-center overflow-auto p-2'>
             <img
               src={wdVoucherPreview}
