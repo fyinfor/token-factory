@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -271,6 +272,75 @@ func GetSupplierChannelLogs(
 	}
 	err = tx.Order("logs.id desc").Limit(num).Offset(startIdx).Find(&logs).Error
 	if err != nil {
+		return nil, 0, errors.New("查询供应商渠道日志失败")
+	}
+	attachLogChannelDisplays(logs)
+	for i := range logs {
+		if logs[i].Other == "" {
+			continue
+		}
+		otherMap, errParse := common.StrToMap(logs[i].Other)
+		if errParse != nil || otherMap == nil {
+			continue
+		}
+		delete(otherMap, "channel_name")
+		logs[i].Other = common.MapToJsonStr(otherMap)
+	}
+	return logs, total, nil
+}
+
+// GetSupplierChannelLogsForExport 拉取供应商渠道日志导出数据（升序，不分页）。
+func GetSupplierChannelLogsForExport(
+	channelIDs []int,
+	logTypes []int,
+	startTimestamp, endTimestamp int64,
+	modelName, tokenName, group, requestID string,
+	channelFilter int,
+) (logs []*Log, total int64, err error) {
+	if len(channelIDs) == 0 {
+		return []*Log{}, 0, nil
+	}
+	allowed := make(map[int]struct{}, len(channelIDs))
+	for _, id := range channelIDs {
+		if id > 0 {
+			allowed[id] = struct{}{}
+		}
+	}
+	if channelFilter > 0 {
+		if _, ok := allowed[channelFilter]; !ok {
+			return []*Log{}, 0, nil
+		}
+		channelIDs = []int{channelFilter}
+	}
+
+	tx := LOG_DB.Table("logs")
+	tx = applySupplierChannelScope(tx, startTimestamp, endTimestamp, channelIDs)
+	tx = applyLogTypesFilter(tx, logTypes)
+	tx = applyBillingLogVisibility(tx, false)
+	if modelName != "" {
+		modelNamePattern, patErr := sanitizeLikePattern(modelName)
+		if patErr != nil {
+			return nil, 0, patErr
+		}
+		tx = tx.Where("logs.model_name LIKE ? ESCAPE '!'", modelNamePattern)
+	}
+	if tokenName != "" {
+		tx = tx.Where("logs.token_name = ?", tokenName)
+	}
+	if requestID != "" {
+		tx = tx.Where("logs.request_id = ?", requestID)
+	}
+	if group != "" {
+		tx = tx.Where("logs."+logGroupCol+" = ?", group)
+	}
+
+	if err = tx.Session(&gorm.Session{}).Model(&Log{}).Limit(logExportCountLimit).Count(&total).Error; err != nil {
+		return nil, 0, errors.New("查询供应商渠道日志失败")
+	}
+	if total > logExportCountLimit {
+		return nil, total, fmt.Errorf("导出行数超过 %d 上限", logExportCountLimit)
+	}
+	if err = tx.Order("logs.id ASC").Find(&logs).Error; err != nil {
 		return nil, 0, errors.New("查询供应商渠道日志失败")
 	}
 	attachLogChannelDisplays(logs)

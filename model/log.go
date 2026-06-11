@@ -948,30 +948,44 @@ func GetChargeableDeltaByUser(userId int, fromTs int64, toTs int64) (int64, erro
 	return r.Sum, nil
 }
 
-// GetUserLogsForExport 拉取对账单导出所需的日志行（升序），不含 Error 类型。
+// LogExportFilter 对账单/日志导出筛选条件，与控制台使用日志列表查询口径对齐。
+type LogExportFilter struct {
+	FromTs, ToTs                           int64
+	ModelName, TokenName, Group, RequestID string
+	LogTypes                               []int
+}
+
+// GetUserLogsForExport 拉取对账单导出所需的日志行（升序）。
 // 内部使用 LOOP 形式而非 GORM Stream 保持实现简单；调用方负责后续流式写出。
 // 上限 logExportCountLimit 条；超过则 controller 返回 400。
 const logExportCountLimit = 100000
 
-func GetUserLogsForExport(userId int, fromTs int64, toTs int64, modelName string, tokenName string) ([]*Log, int64, error) {
-	tx := LOG_DB.Where("user_id = ?", userId).
-		Where("type <> ?", LogTypeError)
+func GetUserLogsForExport(userId int, filter LogExportFilter) ([]*Log, int64, error) {
+	tx := LOG_DB.Where("user_id = ?", userId)
+	tx = applyLogTypesFilter(tx, filter.LogTypes)
+	tx = applyBillingLogVisibility(tx, false)
 
-	if modelName != "" {
-		pattern, err := sanitizeLikePattern(modelName)
+	if filter.ModelName != "" {
+		pattern, err := sanitizeLikePattern(filter.ModelName)
 		if err != nil {
 			return nil, 0, err
 		}
 		tx = tx.Where("model_name LIKE ? ESCAPE '!'", pattern)
 	}
-	if tokenName != "" {
-		tx = tx.Where("token_name = ?", tokenName)
+	if filter.TokenName != "" {
+		tx = tx.Where("token_name = ?", filter.TokenName)
 	}
-	if fromTs > 0 {
-		tx = tx.Where("created_at >= ?", fromTs)
+	if filter.RequestID != "" {
+		tx = tx.Where("request_id = ?", filter.RequestID)
 	}
-	if toTs > 0 {
-		tx = tx.Where("created_at <= ?", toTs)
+	if filter.Group != "" {
+		tx = tx.Where(logGroupCol+" = ?", filter.Group)
+	}
+	if filter.FromTs > 0 {
+		tx = tx.Where("created_at >= ?", filter.FromTs)
+	}
+	if filter.ToTs > 0 {
+		tx = tx.Where("created_at <= ?", filter.ToTs)
 	}
 
 	var total int64

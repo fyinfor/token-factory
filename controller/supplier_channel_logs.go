@@ -1,8 +1,10 @@
 package controller
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -73,4 +75,56 @@ func GetSupplierChannelLogsStat(c *gin.Context) {
 		"message": "",
 		"data":    stat,
 	})
+}
+
+// ExportSupplierChannelLogs 供应商渠道使用日志导出（需供应商身份或管理员）。
+func ExportSupplierChannelLogs(c *gin.Context) {
+	role := c.GetInt("role")
+	if role < common.RoleAdminUser {
+		user, err := model.GetUserById(c.GetInt("id"), false)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		if user == nil || user.SupplierID == 0 {
+			c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "需要供应商权限"})
+			return
+		}
+	}
+
+	scope, err := resolveSupplierDashboardScopeForRequest(c)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if len(scope.ChannelIDs) == 0 {
+		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "未找到可导出的供应商渠道"})
+		return
+	}
+
+	query, err := parseLogExportQuery(c)
+	if err != nil {
+		c.JSON(400, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	channelFilter, _ := strconv.Atoi(c.Query("channel"))
+	logs, _, err := model.GetSupplierChannelLogsForExport(
+		scope.ChannelIDs,
+		query.LogTypes,
+		query.StartTs,
+		query.EndTs,
+		query.ModelName,
+		query.TokenName,
+		query.Group,
+		query.RequestID,
+		channelFilter,
+	)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	dict := resolveSupplierChannelLogExportDict(query.Lang)
+	filename := fmt.Sprintf("supplier-channel-logs-%d.csv", time.Now().Unix())
+	streamSupplierChannelLogsCSV(c, logs, query, filename, dict)
 }
