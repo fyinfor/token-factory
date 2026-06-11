@@ -1,0 +1,89 @@
+syntax = "proto3";
+
+package route;
+
+option go_package = "github.com/QuantumNous/new-api/proto/route";
+
+// RouteService 智能路由服务：token-factory 调用此服务获取渠道排序建议。
+service RouteService {
+  // SelectChannel 根据模型、分组和候选渠道返回排序后的渠道 ID 列表。
+  rpc SelectChannel(SelectChannelRequest) returns (SelectChannelResponse);
+  // SyncChannels token-factory 将当前渠道快照推送给 TokenFactory（或 TokenFactory 拉取）。
+  rpc SyncChannels(SyncChannelsRequest) returns (SyncChannelsResponse);
+  // HealthCheck 简单的健康检查。
+  rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+}
+
+// ── SelectChannel ──────────────────────────────────────────────
+
+message SelectChannelRequest {
+  string model = 1;
+  string group = 2;           // token-factory 的逗号分隔 group，如 "default,vip"
+  int32  user_id = 3;
+  int32  user_role = 4;       // 角色: 1=common, 10=admin, 100=root
+  string token_key = 5;       // 脱敏后的 token key 前缀，用于日志
+  repeated ChannelCandidate candidates = 6;
+}
+
+message ChannelCandidate {
+  int32  channel_id = 1;
+  string channel_name = 2;
+  int32  channel_type = 3;    // 渠道类型常量（1=OpenAI, 3=Azure, 等）
+  string models = 4;          // 逗号分隔的模型列表
+  string group = 5;           // 逗号分隔的 group
+  int32  priority = 6;
+  int32  weight = 7;
+  int32  status = 8;
+  double price = 9;           // 该渠道该模型的单价（可选）
+  bool   healthy = 10;        // 是否健康
+  double latency_p50 = 11;    // P50 延迟（秒），可选
+  double throughput_tps = 12; // 吞吐量，可选
+  string provider_slug = 13;  // 供应商标识，如 openai/anthropic
+}
+
+message SelectChannelResponse {
+  repeated int32 ordered_channel_ids = 1; // 排序后的渠道 ID 列表
+  string strategy = 2;                     // 使用的策略名，如 weight_priority/price_lowest 等
+  string policy_name = 3;                  // 命中的 RoutePolicy 名称
+  bool   fallback = 4;                     // 是否回退到默认策略（未匹配到策略）
+}
+
+// ── SyncChannels ───────────────────────────────────────────────
+
+message SyncChannelsRequest {
+  repeated ChannelSnapshot channels = 1;
+  int64  sync_timestamp = 2;
+}
+
+message ChannelSnapshot {
+  int32  id = 1;
+  string name = 2;
+  int32  type = 3;
+  string models = 4;          // 逗号分隔
+  string group = 5;           // 逗号分隔
+  int32  status = 6;
+  int32  priority = 7;
+  int32  weight = 8;
+  string base_url = 9;
+  double balance = 10;
+  string channel_no = 11;
+  int32  supplier_application_id = 12;
+  string supplier_alias = 13;
+  string provider_slug = 14;
+  double price_discount_percent = 15;
+  double markup_discount_rate = 16;
+  string model_mapping = 17;  // JSON
+}
+
+message SyncChannelsResponse {
+  int32 synced_count = 1;
+}
+
+// ── HealthCheck ────────────────────────────────────────────────
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  bool   healthy = 1;
+  string version = 2;
+}

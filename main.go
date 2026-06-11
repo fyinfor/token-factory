@@ -66,6 +66,11 @@ func main() {
 	}
 
 	common.SysLog("TokenFactory " + common.Version + " started")
+	if common.TokenFactoryRouteEnabled() {
+		common.SysLog("TokenFactory smart route enabled, gRPC endpoint=" + common.TokenFactoryGRPCEndpoint())
+	} else {
+		common.SysLog("TokenFactory smart route disabled (set TOKENFACTORY_ROUTE_ENABLED=true to enable)")
+	}
 	if os.Getenv("GIN_MODE") != "debug" {
 		gin.SetMode(gin.ReleaseMode)
 	}

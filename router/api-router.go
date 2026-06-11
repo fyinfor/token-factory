@@ -333,9 +333,15 @@ func SetApiRouter(router *gin.Engine) {
 		priceRoute := apiRouter.Group("/admin/price")
 		priceRoute.Use(middleware.AdminAuth())
 		{
-			priceRoute.GET("/export", controller.ExportPrices)
-			priceRoute.POST("/import", controller.ImportPrices)
+		priceRoute.GET("/export", controller.ExportPrices)
+		priceRoute.POST("/import", controller.ImportPrices)
 		}
+
+		// TokenFactory 智能路由：手动触发一次渠道快照同步（仅管理员）
+		apiRouter.POST("/admin/tokenfactory/sync_channels",
+			middleware.AdminAuth(),
+			controller.AdminTokenFactorySyncChannels,
+		)
 		tfOpenSyncRoute := apiRouter.Group("/tf_open_sync")
 		{
 			// 子站 TokenFactoryOpen 拉全站渠道（脱敏+定价）；鉴权见 controller.authorizeTFOpenSyncExport

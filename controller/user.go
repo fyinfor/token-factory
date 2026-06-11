@@ -149,20 +149,26 @@ func setupLogin(user *model.User, c *gin.Context) {
 	model.TouchUserLastLogin(user.Id)
 	requireAdminInitialSetup := user.CreatedBy == common.UserCreatedByAdmin && !user.AdminInitialSetupCompleted
 	adminSetupPhoneRequired := requireAdminInitialSetup && strings.TrimSpace(user.Phone) == ""
+
+	// 签发 JWT 供 TokenFactory 侧验证（与 TokenFactory 共享 JWT_SECRET）。
+	data := map[string]any{
+		"id":                          user.Id,
+		"username":                    user.Username,
+		"display_name":                user.DisplayName,
+		"role":                        user.Role,
+		"status":                      user.Status,
+		"group":                       user.Group,
+		"is_distributor":              user.IsDistributor,
+		"require_admin_initial_setup": requireAdminInitialSetup,
+		"admin_setup_phone_required":  adminSetupPhoneRequired,
+	}
+	if jwtStr, jwtErr := common.IssueTokenFactoryJWT(user.Id, user.Role); jwtErr == nil {
+		data["jwt"] = jwtStr
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"message": "",
 		"success": true,
-		"data": map[string]any{
-			"id":                          user.Id,
-			"username":                    user.Username,
-			"display_name":                user.DisplayName,
-			"role":                        user.Role,
-			"status":                      user.Status,
-			"group":                       user.Group,
-			"is_distributor":              user.IsDistributor,
-			"require_admin_initial_setup": requireAdminInitialSetup,
-			"admin_setup_phone_required":  adminSetupPhoneRequired,
-		},
+		"data":    data,
 	})
 }
 

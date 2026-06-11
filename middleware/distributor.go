@@ -196,6 +196,20 @@ func Distribute() func(c *gin.Context) {
 					}
 				}
 
+				// ★ TokenFactory 智能路由：在本地路由之前尝试查询 TokenFactory 的策略。
+				// 如果 TokenFactory 返回了排序结果，直接使用第一个渠道。
+				// 注意：未指定渠道时 GetContextKey 返回 (nil, false)，不能用 channelId == "" 判断。
+				if common.TokenFactoryRouteEnabled() && !ok {
+					if tfChannel, ok := tryTokenFactoryRoute(c, modelRequest.Model, usingGroup); ok && tfChannel != nil {
+						channel = tfChannel
+						common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
+						logSelectedUpstream(c, channel, modelRequest.Model, "tf_route")
+						SetupContextForSelectedChannel(c, channel, modelRequest.Model)
+						c.Next()
+						return
+					}
+				}
+
 				// 命中「指定供应商 + 任意渠道」：跳过亲和选择，直接在供应商内按 SmartRouter / 优先级挑选。
 				// 若候选池为空，直接报"无可用渠道"，不再回落到跨供应商的全局池，保持用户显式意图。
 				if forcedSupplierID, hasForcedSupplier := service.ForcedSupplierFromContext(c); hasForcedSupplier {
@@ -376,13 +390,17 @@ func rewriteRequestModelField(c *gin.Context, modelName string) error {
 	return common.ReplaceRequestBody(c, newBody)
 }
 
-func logSelectedUpstream(c *gin.Context, channel *model.Channel, modelName string) {
+func logSelectedUpstream(c *gin.Context, channel *model.Channel, modelName string, via ...string) {
 	if c == nil || channel == nil {
 		return
 	}
 	upstreamName := channel.Name
 	upstreamBaseURL := channel.GetBaseURL()
-	msg := fmt.Sprintf("upstream selected: channel=%s(id=%d) base_url=%s model=%s", upstreamName, channel.Id, upstreamBaseURL, modelName)
+	prefix := "upstream selected"
+	if len(via) > 0 && via[0] != "" {
+		prefix = via[0] + " selected"
+	}
+	msg := fmt.Sprintf("%s: channel=%s(id=%d) base_url=%s model=%s", prefix, upstreamName, channel.Id, upstreamBaseURL, modelName)
 	logger.LogInfo(c, msg)
 }
 
@@ -718,3 +736,82 @@ func extractModelNameFromGeminiPath(path string) string {
 	// 返回模型名部分
 	return path[startIndex : startIndex+colonIndex]
 }
+
+// tryTokenFactoryRoute 尝试通过 TokenFactory 智能路由服务获取渠道选择。
+// 如果成功返回排序后的第一个渠道，返回 (channel, true)。
+// 如果 TokenFactory 不可用或无匹配策略，返回 (nil, false)，调用方应回退到本地路由。
+func tryTokenFactoryRoute(c *gin.Context, modelName string, group string) (*model.Channel, bool) {
+	userID := c.GetInt("id")
+	userRole := c.GetInt("role")
+
+	// 获取当前 group 下该模型的所有可用渠道 ID。
+	channelIDs := model.GetGroupEnabledChannelIDs(group, modelName)
+	if len(channelIDs) == 0 {
+		logger.LogInfo(c, fmt.Sprintf("tf_route skip: no enabled channels for model=%s group=%s", modelName, group))
+		return nil, false
+	}
+
+	// 构建候选渠道信息列表（从缓存获取完整渠道数据）。
+	var candidates []service.ChannelRouteInfo
+	seen := make(map[int]bool)
+	for _, cid := range channelIDs {
+		if seen[cid] {
+			continue
+		}
+		seen[cid] = true
+		ch, err := model.CacheGetChannel(cid)
+		if err != nil || ch == nil || ch.Status != common.ChannelStatusEnabled {
+			continue
+		}
+		candidates = append(candidates, service.ChannelRouteInfo{
+			ID:           ch.Id,
+			Name:         ch.Name,
+			Type:         ch.Type,
+			Models:       ch.Models,
+			Group:        ch.Group,
+			Priority:     int(ch.GetPriority()),
+			Weight:       ch.GetWeight(),
+			Status:       ch.Status,
+			ProviderSlug: strings.ToLower(strings.TrimSpace(ch.SupplierType)),
+		})
+	}
+
+	if len(candidates) == 0 {
+		return nil, false
+	}
+
+	// 构建 gRPC 请求候选列表。
+	grpcCandidates := service.BuildChannelCandidates(candidates)
+
+	// gRPC 鉴权使用服务账号 JWT（uid=1），与 SyncChannels 一致；实际用户 ID 通过请求体传给 TokenFactory 做 workspace 策略匹配。
+	jwtToken, err := common.IssueTokenFactoryJWT(1, common.RoleRootUser)
+	if err != nil || jwtToken == "" {
+		logger.LogInfo(c, fmt.Sprintf("tf_route skip: issue service jwt failed: %v", err))
+		return nil, false
+	}
+
+	orderedIDs, strategy, fallback, err := service.SelectChannelFromTF(jwtToken, modelName, group, userID, userRole, grpcCandidates)
+	if err != nil {
+		logger.LogInfo(c, fmt.Sprintf("tf_route skip: gRPC error: %v", err))
+		return nil, false
+	}
+	if fallback {
+		logger.LogInfo(c, "tf_route skip: no matching policy (fallback)")
+		return nil, false
+	}
+	if len(orderedIDs) == 0 {
+		logger.LogInfo(c, "tf_route skip: empty ordered channel ids")
+		return nil, false
+	}
+
+	// 使用排序结果的第一个可用渠道。
+	for _, id := range orderedIDs {
+		ch, err := model.CacheGetChannel(int(id))
+		if err == nil && ch != nil && ch.Status == common.ChannelStatusEnabled {
+			logger.LogInfo(c, fmt.Sprintf("tf_route selected: channel=%s(id=%d) model=%s strategy=%s ordered=%v", ch.Name, ch.Id, modelName, strategy, orderedIDs))
+			return ch, true
+		}
+	}
+	return nil, false
+}
+
