@@ -63,14 +63,6 @@ const ModelDetailSideSheet = ({
   channelVideoRatioMap = {},
   channelVideoCompletionRatioMap = {},
   channelVideoPriceMap = {},
-  channelModelTierRatio = {},
-  channelCompletionTierRatio = {},
-  channelCacheTierRatio = {},
-  channelCreateCacheTierRatio = {},
-  globalModelTierRatio = {},
-  globalCompletionTierRatio = {},
-  globalCacheTierRatio = {},
-  globalCreateCacheTierRatio = {},
 }) => {
   const isMobile = useIsMobile();
   /**
@@ -193,14 +185,6 @@ const ModelDetailSideSheet = ({
               channelVideoRatioMap={channelVideoRatioMap}
               channelVideoCompletionRatioMap={channelVideoCompletionRatioMap}
               channelVideoPriceMap={channelVideoPriceMap}
-              channelModelTierRatio={channelModelTierRatio}
-              channelCompletionTierRatio={channelCompletionTierRatio}
-              channelCacheTierRatio={channelCacheTierRatio}
-              channelCreateCacheTierRatio={channelCreateCacheTierRatio}
-              globalModelTierRatio={globalModelTierRatio}
-              globalCompletionTierRatio={globalCompletionTierRatio}
-              globalCacheTierRatio={globalCacheTierRatio}
-              globalCreateCacheTierRatio={globalCreateCacheTierRatio}
             />
             {/* <ModelPricingTable
               modelData={modelData}

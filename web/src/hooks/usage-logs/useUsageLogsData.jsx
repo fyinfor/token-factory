@@ -1116,7 +1116,7 @@ export const useLogsData = () => {
           value: other.cache_creation_tokens,
         });
       }
-      if (shouldShowConsumeBillingDetail) {
+      if (shouldShowConsumeBillingDetail && !other?.request_tier_pricing) {
         expandDataLocal.push({
           key: t('日志详情'),
           value: zeroBilledVideoNoChargeText

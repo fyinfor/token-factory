@@ -400,25 +400,7 @@ const PricingCardView = ({
   channelVideoRatio = {},
   channelVideoCompletionRatio = {},
   channelVideoPrice = {},
-  channelModelTierRatio = {},
-  channelCompletionTierRatio = {},
-  channelCacheTierRatio = {},
-  channelCreateCacheTierRatio = {},
-  globalModelTierRatio = {},
-  globalCompletionTierRatio = {},
-  globalCacheTierRatio = {},
-  globalCreateCacheTierRatio = {},
 }) => {
-  const tierRatioMaps = {
-    globalModelTierRatio,
-    globalCompletionTierRatio,
-    globalCacheTierRatio,
-    globalCreateCacheTierRatio,
-    channelModelTierRatio,
-    channelCompletionTierRatio,
-    channelCacheTierRatio,
-    channelCreateCacheTierRatio,
-  };
   const showSkeleton = useMinimumLoadingTime(loading);
   const startIndex = (currentPage - 1) * pageSize;
   const paginatedModels = filteredModels.slice(
@@ -930,7 +912,7 @@ const PricingCardView = ({
     } = channelPrices;
 
     // 阶梯计费检测（提前检测，在 if/else 两个分支中都需要使用）
-    const tokenTierInfo = detectTokenTierPricing(model, tierRatioMaps);
+    const tokenTierInfo = detectTokenTierPricing(model);
 
     // 按次计费
     if (quotaType === 1 && fixed) {
@@ -1077,23 +1059,21 @@ const PricingCardView = ({
         selectedGroup,
         groupRatio,
       );
-      const channelId = tokenTierInfo.channel?.channel_id;
-
       const tierCategoryOrder = ['input', 'output', 'cache_read', 'cache_write'];
       const perCategoryRows = {};
       const activeCategories = [];
       for (const cat of tierCategoryOrder) {
-        const { globalSegments, baseSegments } = resolveTierSegmentSources({
-          model,
-          channel: tokenTierInfo.channel,
-          channelId,
-          cat,
-          tierRatioMaps,
-        });
-        if (baseSegments.length === 0) continue;
+        const { globalSegments, channelSegments, bandSegments } =
+          resolveTierSegmentSources({
+            model,
+            channel: tokenTierInfo.channel,
+            cat,
+          });
+        if (bandSegments.length === 0) continue;
         const rows = buildTokenTierPreviewItems(
-          baseSegments,
+          bandSegments,
           globalSegments,
+          channelSegments,
           tokenTierInfo.channel,
           cat,
           usedGroupRatio,

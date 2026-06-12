@@ -73,6 +73,128 @@ var channelCompletionTierRatioMap = types.NewRWMap[string, map[string]TierSegmen
 var channelCacheTierRatioMap = types.NewRWMap[string, map[string]TierSegments]()
 var channelCreateCacheTierRatioMap = types.NewRWMap[string, map[string]TierSegments]()
 
+// BuildTierLabel 根据实际 token 数量确定所属阶梯档位并生成展示标签
+// tokens: 实际使用的 token 数量，用于确定所属档位
+// 示例: "输入token<32k"
+func BuildTierLabel(tokenType string, segments []RequestTierSegment, tokens int64) string {
+	if len(segments) == 0 {
+		return ""
+	}
+	prefix := tokenType + "token"
+	// 找到 token 实际所属的档位（按 up_to 递增排列，最后一个 up_to=0 表示无上限）
+	var matchedSegment *RequestTierSegment
+	previous := int64(0)
+	for i := range segments {
+		seg := &segments[i]
+		if seg.UpTo == 0 {
+			// 无上限档位：tokens >= previous 即命中此档
+			matchedSegment = seg
+			break
+		}
+		if tokens < seg.UpTo {
+			matchedSegment = seg
+			break
+		}
+		previous = seg.UpTo
+	}
+	if matchedSegment == nil {
+		// 兜底：使用最后一个档位
+		matchedSegment = &segments[len(segments)-1]
+	}
+	if matchedSegment.UpTo > 0 {
+		return fmt.Sprintf("%s<%d", prefix, matchedSegment.UpTo)
+	}
+	// 无上限档位
+	return fmt.Sprintf("%s≥%d", prefix, previous)
+}
+
+// TierSegmentPair 渠道与全局阶梯 segments（与前端 resolveTierSegmentSources 一致）
+type TierSegmentPair struct {
+	Channel []RequestTierSegment
+	Global  []RequestTierSegment
+}
+
+// LoadTierSegmentPair 分别加载渠道与全局阶梯 segments
+func LoadTierSegmentPair(
+	channelID int,
+	model string,
+	getChannel func(int, string) (TierSegments, bool),
+	getGlobal func(string) (TierSegments, bool),
+) TierSegmentPair {
+	var pair TierSegmentPair
+	if globalTier, ok := getGlobal(model); ok {
+		pair.Global = globalTier.Segments
+	}
+	if channelTier, ok := getChannel(channelID, model); ok {
+		pair.Channel = channelTier.Segments
+	}
+	return pair
+}
+
+// SelectBandSegments 区间结构优先渠道阶梯，否则全局阶梯
+func SelectBandSegments(pair TierSegmentPair) []RequestTierSegment {
+	if len(pair.Channel) > 0 {
+		return pair.Channel
+	}
+	return pair.Global
+}
+
+// FindTierBandFromTokens 根据 token 数量确定所属区间起点（fromToken）
+func FindTierBandFromTokens(tokens int64, segments []RequestTierSegment) int64 {
+	if len(segments) == 0 {
+		return 0
+	}
+	previous := int64(0)
+	for i := range segments {
+		seg := &segments[i]
+		if seg.UpTo == 0 {
+			return previous
+		}
+		if tokens < seg.UpTo {
+			return previous
+		}
+		previous = seg.UpTo
+	}
+	return previous
+}
+
+// FindTierRatioAtBand 按区间起点在 segments 中查找倍率
+func FindTierRatioAtBand(segments []RequestTierSegment, fromToken int64) (float64, bool) {
+	for _, seg := range segments {
+		if seg.UpTo == 0 || fromToken < seg.UpTo {
+			return seg.Ratio, true
+		}
+	}
+	return 0, false
+}
+
+func tierEffectiveRate(channelRatio, globalRatio, costDiscPercent, markupDiscPercent float64) float64 {
+	return channelRatio*(costDiscPercent/100.0) + globalRatio*(markupDiscPercent/100.0)
+}
+
+// TierPlatformUsdPerM 计算命中档位下的平台展示单价（$/1M tokens，含分组倍率）
+// 与前端 buildTokenTierPreviewItems 公式一致：
+//
+//	(baseRatio × costDisc% + globalRatio × markupDisc%) × 2 × groupRatio
+func TierPlatformUsdPerM(
+	channelSegments, globalSegments []RequestTierSegment,
+	bandFrom int64,
+	costDiscPercent, markupDiscPercent, groupRatio float64,
+) float64 {
+	globalRatio, globalOk := FindTierRatioAtBand(globalSegments, bandFrom)
+	if !globalOk {
+		globalRatio = 0
+	}
+	baseRatio := globalRatio
+	if len(channelSegments) > 0 {
+		if channelRatio, ok := FindTierRatioAtBand(channelSegments, bandFrom); ok {
+			baseRatio = channelRatio
+		}
+	}
+	effRate := tierEffectiveRate(baseRatio, globalRatio, costDiscPercent, markupDiscPercent)
+	return effRate * 2 * groupRatio
+}
+
 func normalizeRequestTierSegments(segments []RequestTierSegment) []RequestTierSegment {
 	out := make([]RequestTierSegment, 0, len(segments))
 	for _, segment := range segments {

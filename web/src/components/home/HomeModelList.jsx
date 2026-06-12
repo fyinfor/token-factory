@@ -405,22 +405,6 @@ const HomeModelList = () => {
                 pricingData.channelVideoCompletionRatio
               }
               channelVideoPrice={pricingData.channelVideoPrice}
-              channelModelTierRatio={pricingData.channelModelTierRatio}
-              channelCompletionTierRatio={
-                pricingData.channelCompletionTierRatio
-              }
-              channelCacheTierRatio={pricingData.channelCacheTierRatio}
-              channelCreateCacheTierRatio={
-                pricingData.channelCreateCacheTierRatio
-              }
-              globalModelTierRatio={pricingData.globalModelTierRatio}
-              globalCompletionTierRatio={
-                pricingData.globalCompletionTierRatio
-              }
-              globalCacheTierRatio={pricingData.globalCacheTierRatio}
-              globalCreateCacheTierRatio={
-                pricingData.globalCreateCacheTierRatio
-              }
               showRatio={false}
               t={pricingData.t}
               selectedRowKeys={[]}
