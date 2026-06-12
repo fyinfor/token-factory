@@ -17,7 +17,43 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import { pickChannelScopedModelFloat } from './utils';
+import {
+  formatMatchingModelName,
+  pickChannelScopedModelFloat,
+} from './utils';
+
+/** 从阶梯倍率对象或映射条目读取 segments */
+function readTierSegments(tierEntry) {
+  return Array.isArray(tierEntry?.segments) ? tierEntry.segments : [];
+}
+
+/** 按模型名从全局阶梯倍率映射读取 segments（model_name → { segments }） */
+export function pickGlobalModelTierSegments(globalTierMap, modelName) {
+  if (!globalTierMap || modelName == null) return [];
+  const formatted = formatMatchingModelName(modelName);
+  for (const key of [modelName, formatted]) {
+    const segments = readTierSegments(globalTierMap[key]);
+    if (segments.length > 0) return segments;
+  }
+  return [];
+}
+
+/** 从渠道专属阶梯倍率映射读取 segments（channel_id → model_name → { segments }，不含全局回退） */
+export function pickChannelScopedModelTierSegments(
+  channelTierMap,
+  channelId,
+  modelName,
+) {
+  if (!channelTierMap || channelId == null || modelName == null) return [];
+  const byChannel = channelTierMap[String(channelId)];
+  if (!byChannel || typeof byChannel !== 'object') return [];
+  const formatted = formatMatchingModelName(modelName);
+  for (const key of [modelName, formatted]) {
+    const segments = readTierSegments(byChannel[key]);
+    if (segments.length > 0) return segments;
+  }
+  return [];
+}
 
 /** Claude 1h 缓存创建全局倍率相对 5m 的乘数（与 service/text_quota.go 一致） */
 export const CLAUDE_CACHE_CREATE_1H_GLOBAL_MULT = 6 / 3.75;
@@ -139,7 +175,8 @@ export function computeChannelCostRates({
   quotaType = 0,
 } = {}) {
   const costDisc = costDiscountMultiplier(priceDiscountPercent);
-  const isPerToken = quotaType === 0;
+  // 0=按量计费, 1=按次计费, 3=阶梯计费（按量口径）
+  const isPerToken = quotaType === 0 || quotaType === 3;
   const items = [];
 
   /** 追加按量计费成本项（$/1M tokens 展示价） */
@@ -556,6 +593,21 @@ export function getBillingCurrencyConfig() {
 /**
  * 将 USD 单价格式化为与首页卡片 formatPrice 一致的展示字符串（默认 2 位小数）。
  */
+/**
+ * 阶梯/日志单价：最多 6 位小数，去除尾随零（7.500000 → 7.5，0.06666666 → 0.066667）
+ */
+export function formatTierUsdPrice(usdAmount) {
+  const n = Number(usdAmount);
+  if (!Number.isFinite(n)) {
+    return '0';
+  }
+  let s = n.toFixed(6);
+  if (s.includes('.')) {
+    s = s.replace(/0+$/, '').replace(/\.$/, '');
+  }
+  return s;
+}
+
 export function formatBillingUsdDisplay(usdAmount, { tokenUnit = 'M' } = {}) {
   const { symbol, rate } = getBillingCurrencyConfig();
   const unitDivisor = tokenUnit === 'K' ? 1000 : 1;

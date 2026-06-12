@@ -47,6 +47,13 @@ import {
   isVideoPricingModel,
   hasNumericValue,
 } from '../../../../../helpers';
+import {
+  TIER_CATEGORY_STYLES,
+  detectTokenTierPricing,
+  resolveTierSegmentSources,
+  buildTokenTierPreviewItems,
+  formatTierBound,
+} from './tierUtils';
 import { VIDEO_FLAT_LANE_I18N_KEY } from '../../constants/videoFlatClipLaneI18n';
 import PricingCardSkeleton from './PricingCardSkeleton';
 import { useMinimumLoadingTime } from '../../../../../hooks/common/useMinimumLoadingTime';
@@ -232,6 +239,135 @@ const getVideoTierGroupStyle = (family) => {
         borderColor: 'var(--semi-blue-4)',
       };
   }
+};
+
+/**
+ * TokenTierTable — 阶梯计费简化展示
+ *
+ * 仅展示第一档区间内 input / output 两类价格，以紧凑四列表格呈现：
+ * | 区间 | 平台价 / M | 官方价 / M | 折扣 |
+ */
+const TokenTierTable = ({ items, t }) => {
+  if (!items || !Array.isArray(items.rows) || items.rows.length === 0) {
+    return null;
+  }
+
+  const firstRow = items.rows[0];
+  const inputCell = firstRow.cells?.input;
+  const outputCell = firstRow.cells?.output;
+
+  const displayRows = [];
+  if (inputCell && inputCell.platformPriceUsd > 0) {
+    displayRows.push({ key: 'input', label: '输入价格', cell: inputCell });
+  }
+  if (outputCell && outputCell.platformPriceUsd > 0) {
+    displayRows.push({ key: 'output', label: '输出价格', cell: outputCell });
+  }
+  if (displayRows.length === 0) return null;
+
+  const rangeLabel = firstRow.range
+    ? (firstRow.fromToken === 0 && firstRow.upTo > 0
+        ? `< ${formatTierBound(firstRow.upTo)}`
+        : firstRow.range)
+    : '';
+
+  return (
+    <div
+      className='w-full min-w-0 overflow-hidden rounded-lg border'
+      style={{
+        borderColor: 'var(--semi-color-border)',
+        backgroundColor: 'var(--semi-color-fill-0)',
+      }}
+    >
+      <table
+        className='w-full border-collapse'
+        style={{ fontSize: 11 }}
+      >
+        <thead>
+          <tr style={{ backgroundColor: 'var(--semi-color-bg-2)' }}>
+            <th
+              className='px-2 py-1 text-left font-semibold'
+              style={{ color: 'var(--semi-color-text-1)', borderBottom: '1px solid var(--semi-color-border)' }}
+            >
+              {rangeLabel}
+            </th>
+            <th
+              className='px-2 py-1 text-center font-medium'
+              style={{ color: 'var(--semi-color-text-2)', borderBottom: '1px solid var(--semi-color-border)' }}
+            >
+              平台价 / M
+            </th>
+            <th
+              className='px-2 py-1 text-center font-medium'
+              style={{ color: 'var(--semi-color-text-2)', borderBottom: '1px solid var(--semi-color-border)' }}
+            >
+              官方价 / M
+            </th>
+            <th
+              className='px-2 py-1 text-center font-medium'
+              style={{ color: 'var(--semi-color-text-2)', borderBottom: '1px solid var(--semi-color-border)' }}
+            >
+              折扣率
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {displayRows.map(({ key, label, cell }) => {
+            const catStyle =
+              TIER_CATEGORY_STYLES[key] || TIER_CATEGORY_STYLES.input;
+            const showStrike =
+              cell.officialPriceUsd > 0 &&
+              cell.officialPriceUsd > cell.platformPriceUsd;
+            return (
+              <tr
+                key={key}
+                style={{
+                  backgroundColor: catStyle.rowBackgroundColor,
+                  borderBottom: '1px solid var(--semi-color-border)',
+                }}
+              >
+                <td
+                  className='px-2 py-1.5 font-semibold'
+                  style={{ color: catStyle.textColor }}
+                >
+                  {t(label)}
+                </td>
+                <td
+                  className='px-2 py-1.5 text-center font-bold'
+                  style={{ color: 'var(--semi-color-primary)' }}
+                >
+                  {cell.platformPrice}
+                </td>
+                <td
+                  className='px-2 py-1.5 text-center font-medium'
+                  style={{
+                    color: 'var(--semi-color-text-2)',
+                    textDecoration: showStrike ? 'line-through' : 'none',
+                  }}
+                >
+                  {cell.officialPrice}
+                </td>
+                <td className='px-2 py-1.5 text-center'>
+                  {cell.discount != null && cell.discount > 0 ? (
+                    <Tag
+                      color='red'
+                      size='small'
+                      shape='circle'
+                      style={{ zoom: 0.72 }}
+                    >
+                      -{cell.discount}%
+                    </Tag>
+                  ) : (
+                    <span style={{ color: 'var(--semi-color-text-3)' }}>-</span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
 };
 
 const PricingCardView = ({
@@ -728,7 +864,10 @@ const PricingCardView = ({
       unitSuffix,
       fixedSuffix,
       videoFlatSuffix: ` / ${t('条')}`,
-      quotaType: model.quota_type,
+      quotaType:
+        model.channel_list?.[0]?.quota_type != null
+          ? model.channel_list[0].quota_type
+          : model.quota_type,
     };
   };
 
@@ -772,6 +911,9 @@ const PricingCardView = ({
       quotaType,
     } = channelPrices;
 
+    // 阶梯计费检测（提前检测，在 if/else 两个分支中都需要使用）
+    const tokenTierInfo = detectTokenTierPricing(model);
+
     // 按次计费
     if (quotaType === 1 && fixed) {
       items.push({
@@ -786,7 +928,18 @@ const PricingCardView = ({
     }
     // 按量计费
     else {
-      if (input) {
+      // 当有阶梯倍率时，跳过对应的平铺价格，用阶梯表替代
+      const isTierBilling = quotaType === 3;
+      const skipFlatInput =
+        isTierBilling || !!tokenTierInfo?.hasModelTier;
+      const skipFlatOutput =
+        isTierBilling || !!tokenTierInfo?.hasCompletionTier;
+      const skipFlatCache =
+        isTierBilling || !!tokenTierInfo?.hasCacheTier;
+      const skipFlatCreateCache =
+        isTierBilling || !!tokenTierInfo?.hasCreateCacheTier;
+
+      if (input && !skipFlatInput) {
         items.push({
           key: 'input',
           label: t('输入价格'),
@@ -798,7 +951,7 @@ const PricingCardView = ({
         });
       }
 
-      if (output) {
+      if (output && !skipFlatOutput) {
         items.push({
           key: 'output',
           label: t('输出价格'),
@@ -897,6 +1050,92 @@ const PricingCardView = ({
       });
     }
 
+    // 阶梯计费：以阶梯表展示（quota_type=3；兼容旧数据 quota_type=0 + 阶梯配置）
+    // 同一模型下，多个阶梯类别（输入/输出/缓存读取/缓存写入）合并为单张表，
+    // 行按"输入 Token 区间"对齐，列为各阶梯类别。
+    if (tokenTierInfo && (quotaType === 0 || quotaType === 3)) {
+      const { usedGroupRatio } = getUsedGroupContext(
+        model,
+        selectedGroup,
+        groupRatio,
+      );
+      const tierCategoryOrder = ['input', 'output', 'cache_read', 'cache_write'];
+      const perCategoryRows = {};
+      const activeCategories = [];
+      for (const cat of tierCategoryOrder) {
+        const { globalSegments, channelSegments, bandSegments } =
+          resolveTierSegmentSources({
+            model,
+            channel: tokenTierInfo.channel,
+            cat,
+          });
+        if (bandSegments.length === 0) continue;
+        const rows = buildTokenTierPreviewItems(
+          bandSegments,
+          globalSegments,
+          channelSegments,
+          tokenTierInfo.channel,
+          cat,
+          usedGroupRatio,
+          displayPrice,
+          t,
+        );
+        if (rows.length > 0) {
+          perCategoryRows[cat] = rows;
+          activeCategories.push(cat);
+        }
+      }
+
+      if (activeCategories.length > 0) {
+        // 以"输入类别"的区间为行基准；
+        // 输入未配置阶梯时回退到"输出类别"的区间。
+        const baseCat = perCategoryRows.input
+          ? 'input'
+          : perCategoryRows.output
+            ? 'output'
+            : activeCategories[0];
+        const baseRows = perCategoryRows[baseCat];
+
+        const mergedRows = baseRows.map((baseRow, idx) => {
+          const cells = {};
+          for (const cat of activeCategories) {
+            const catRows = perCategoryRows[cat];
+            // 优先按 upTo 对齐；若对齐不上则回退到同 index
+            let cellRow =
+              catRows.find(
+                (r) =>
+                  Number(r.upTo) === Number(baseRow.upTo) &&
+                  Number(r.fromToken) === Number(baseRow.fromToken),
+              ) || catRows[idx];
+            if (cellRow) {
+              cells[cat] = {
+                platformPrice: cellRow.platformPrice,
+                platformPriceUsd: cellRow.platformPriceUsd,
+                officialPrice: cellRow.officialPrice,
+                officialPriceUsd: cellRow.officialPriceUsd,
+                discount: cellRow.discount,
+              };
+            }
+          }
+          return {
+            key: `tier-row-${baseRow.key}`,
+            range: baseRow.range,
+            fromToken: baseRow.fromToken,
+            upTo: baseRow.upTo,
+            cells,
+          };
+        });
+
+        items.push({
+          key: 'token-tier-table',
+          tokenTierMerged: {
+            columns: activeCategories.map((cat) => ({ key: cat })),
+            rows: mergedRows,
+          },
+        });
+      }
+    }
+
     return items;
   };
 
@@ -976,6 +1215,13 @@ const PricingCardView = ({
           {t('按次计费')}
         </Tag>
       );
+    } else if (channelQuotaType === 3) {
+      // 阶梯计费：quota_type === 3
+      billingTag = (
+        <Tag key='tier' shape='circle' color='orange' size='small'>
+          {t('阶梯计费')}
+        </Tag>
+      );
     } else if (channelQuotaType === 0) {
       billingTag = (
         <Tag key='billing' shape='circle' color='violet' size='small'>
@@ -1004,7 +1250,9 @@ const PricingCardView = ({
 
     return (
       <div className='flex items-center justify-between'>
-        <div className='flex items-center gap-2'>{billingTag}</div>
+        <div className='flex items-center gap-2'>
+          {billingTag}
+        </div>
         <div className='flex items-center gap-1'>
           {customTags.length > 0 &&
             renderLimitedItems({
@@ -1072,7 +1320,6 @@ const PricingCardView = ({
             const hasChannelList =
               Array.isArray(model.channel_list) &&
               model.channel_list.length > 0;
-
             return (
               <Card
                 key={modelKey || index}
@@ -1105,14 +1352,14 @@ const PricingCardView = ({
                         >
                           {getModelPriceItemsForCard(model, priceData).map(
                             (item) => (
-                              <div
-                                key={item.key}
-                                className={
-                                  item.videoTierRows
-                                    ? 'flex flex-col gap-1'
-                                    : 'flex items-center'
-                                }
-                              >
+                              <React.Fragment key={item.key}>
+                                <div
+                                  className={
+                                    item.videoTierRows || item.tokenTierMerged
+                                      ? 'flex flex-col gap-1'
+                                      : 'flex items-center'
+                                  }
+                                >
                                 {item.videoTierRows ? (
                                   <div className='w-full min-w-0 overflow-hidden'>
                                     <div className='grid grid-cols-[minmax(54px,1.05fr)_minmax(50px,.95fr)_minmax(50px,.95fr)_minmax(34px,.55fr)] items-center gap-x-1.5 py-0.5 text-center text-[9px] font-medium text-semi-color-text-2'>
@@ -1212,6 +1459,11 @@ const PricingCardView = ({
                                       </button>
                                     ) : null}
                                   </div>
+                                ) : item.tokenTierMerged ? (
+                                  <TokenTierTable
+                                    items={item.tokenTierMerged}
+                                    t={t}
+                                  />
                                 ) : (
                                   <>
                                     <span className='w-20 flex-shrink-0'>
@@ -1231,7 +1483,7 @@ const PricingCardView = ({
                                     </span>
                                   </>
                                 )}
-                                {!item.videoTierRows ? (
+                                {!item.videoTierRows && !item.tokenTierMerged ? (
                                   <span className='flex-1 font-bold text-black inline-flex items-center flex-wrap gap-1'>
                                     {item.valueNode ? (
                                       item.valueNode
@@ -1287,7 +1539,8 @@ const PricingCardView = ({
                                     )}
                                   </span>
                                 ) : null}
-                              </div>
+                                </div>
+                              </React.Fragment>
                             ),
                           )}
                           <div className='flex items-center'>

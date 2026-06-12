@@ -22,6 +22,7 @@ import i18next from 'i18next';
 import {
   resolveConsumeLogBillingRates,
   formatBillingUsdDisplay,
+  formatTierUsdPrice,
 } from './billingFormula';
 import { formatVideoResolutionDisplayLabel } from './videoResolutionLabel';
 import { Modal, Tag, Typography, Avatar } from '@douyinfe/semi-ui';
@@ -4231,6 +4232,19 @@ function renderRequestTierConsumeArticle(
   channelPriceDiscountPercent,
   tr = i18next.t.bind(i18next),
 ) {
+  // 优先使用后端预构建的展示文本（严格格式）
+  const displayText = other?.request_tier_display;
+  if (displayText) {
+    const lines = [`${tr('阶梯计费')}`];
+    // 预构建文本已包含档位、单价、公式和参考说明
+    const formulaLines = displayText.split('\n');
+    for (const line of formulaLines) {
+      lines.push(line);
+    }
+    return renderBillingArticle(lines, { showReferenceNote: false });
+  }
+
+  // 后端未提供 request_tier_display 时的降级展示
   const bd = other?.request_tier_breakdown || {};
   const lines = [];
   lines.push(`${tr('阶梯计费')}（progressive）`);
@@ -4267,6 +4281,34 @@ function renderRequestTierConsumeArticle(
     'cache_write_before',
     'cache_write_after',
   );
+
+  // 使用后端 tier 标签和单价字段（档位判定只依据输入 Token，6 位小数）
+  const tierInputLabel = other?.tier_input_label;
+  const tierInputUnitPrice = other?.tier_input_unit_price;
+  const tierOutputUnitPrice = other?.tier_output_unit_price;
+  const tierCacheReadUnitPrice = other?.tier_cache_read_unit_price;
+  const tierCacheWriteUnitPrice = other?.tier_cache_write_unit_price;
+
+  if (tierInputLabel) {
+    lines.push('');
+    lines.push(`${tr('命中档位')}：${tierInputLabel}`);
+    if (tierInputUnitPrice != null) {
+      lines.push(`${tr('输入价格')}：$${formatTierUsdPrice(tierInputUnitPrice)} / 1M tokens`);
+    }
+    if (tierOutputUnitPrice != null) {
+      lines.push(`${tr('输出价格')}：$${formatTierUsdPrice(tierOutputUnitPrice)} / 1M tokens`);
+    }
+    if (other?.cache_tokens > 0 && tierCacheReadUnitPrice != null && tierCacheReadUnitPrice > 0) {
+      lines.push(`${tr('缓存读取价格')}：$${formatTierUsdPrice(tierCacheReadUnitPrice)} / 1M tokens`);
+    }
+    if (
+      (other?.cache_creation_tokens > 0 || other?.cache_write_tokens > 0) &&
+      tierCacheWriteUnitPrice != null &&
+      tierCacheWriteUnitPrice > 0
+    ) {
+      lines.push(`${tr('缓存写入价格')}：$${formatTierUsdPrice(tierCacheWriteUnitPrice)} / 1M tokens`);
+    }
+  }
 
   const catLabels = {
     input: tr('输入'),
@@ -4384,8 +4426,9 @@ export function renderConsumeBillingProcess({
 
   if (
     other?.request_tier_pricing &&
-    other?.request_tier_breakdown &&
-    typeof other.request_tier_breakdown === 'object'
+    (other?.request_tier_display ||
+      (other?.request_tier_breakdown &&
+        typeof other.request_tier_breakdown === 'object'))
   ) {
     return renderRequestTierConsumeArticle(other, chPct, tr);
   }

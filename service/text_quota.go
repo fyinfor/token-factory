@@ -62,6 +62,26 @@ type textQuotaSummary struct {
 	GlobalCompletionRatio  float64 // 全局模型输出倍率（用于输出侧加价计算）
 	GlobalCacheRatio       float64 // 全局缓存读取倍率（用于缓存读取侧加价计算）
 	GlobalCreateCacheRatio float64 // 全局缓存创建倍率（用于缓存写入侧加价计算）
+
+	// 阶梯计费展示字段
+	TierInputLabel          string  // 输入档位标签，如 "输入token<32k"
+	TierOutputLabel         string  // 输出档位标签
+	TierCacheReadLabel      string  // 缓存读取档位标签
+	TierCacheWriteLabel     string  // 缓存写入档位标签
+	TierInputUnitPrice      float64 // 输入单价（$/1M tokens，仅文本输入，已含阶梯折抵+有效倍率+分组倍率）
+	TierOutputUnitPrice     float64 // 输出单价（$/1M tokens）
+	TierCacheReadUnitPrice  float64 // 缓存读取单价（$/1M tokens）
+	TierCacheWriteUnitPrice float64 // 缓存写入单价（$/1M tokens）
+}
+
+// formatTierUsdPrice 格式化为最多 6 位小数，并去除尾随零（$7.500000 → 7.5，0.06666666 → 0.066667）
+func formatTierUsdPrice(price float64) string {
+	s := fmt.Sprintf("%.6f", price)
+	if strings.Contains(s, ".") {
+		s = strings.TrimRight(s, "0")
+		s = strings.TrimRight(s, ".")
+	}
+	return s
 }
 
 func cacheWriteTokensTotal(summary textQuotaSummary) int {
@@ -135,19 +155,19 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 	markupDisc := relayInfo.PriceData.MarkupDiscountPercent
 
 	summary := textQuotaSummary{
-		ModelName:             relayInfo.OriginModelName,
-		TokenName:             ctx.GetString("token_name"),
-		UseTimeSeconds:        time.Now().Unix() - relayInfo.StartTime.Unix(),
-		CompletionRatio:       relayInfo.PriceData.CompletionRatio,
-		CacheRatio:            relayInfo.PriceData.CacheRatio,
-		ImageRatio:            relayInfo.PriceData.ImageRatio,
-		ModelRatio:            relayInfo.PriceData.ModelRatio,
-		GroupRatio:            relayInfo.PriceData.GroupRatioInfo.GroupRatio,
-		ModelPrice:            relayInfo.PriceData.ModelPrice,
-		CacheCreationRatio:    relayInfo.PriceData.CacheCreationRatio,
-		CacheCreationRatio5m:  relayInfo.PriceData.CacheCreation5mRatio,
-		CacheCreationRatio1h:  relayInfo.PriceData.CacheCreation1hRatio,
-		UsageSemantic:         usageSemanticFromUsage(relayInfo, usage),
+		ModelName:              relayInfo.OriginModelName,
+		TokenName:              ctx.GetString("token_name"),
+		UseTimeSeconds:         time.Now().Unix() - relayInfo.StartTime.Unix(),
+		CompletionRatio:        relayInfo.PriceData.CompletionRatio,
+		CacheRatio:             relayInfo.PriceData.CacheRatio,
+		ImageRatio:             relayInfo.PriceData.ImageRatio,
+		ModelRatio:             relayInfo.PriceData.ModelRatio,
+		GroupRatio:             relayInfo.PriceData.GroupRatioInfo.GroupRatio,
+		ModelPrice:             relayInfo.PriceData.ModelPrice,
+		CacheCreationRatio:     relayInfo.PriceData.CacheCreationRatio,
+		CacheCreationRatio5m:   relayInfo.PriceData.CacheCreation5mRatio,
+		CacheCreationRatio1h:   relayInfo.PriceData.CacheCreation1hRatio,
+		UsageSemantic:          usageSemanticFromUsage(relayInfo, usage),
 		CostDiscountPercent:    costDisc,
 		MarkupDiscountPercent:  markupDisc,
 		GlobalModelRatio:       relayInfo.PriceData.GlobalModelRatio,
@@ -398,6 +418,79 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 			quotaCalculateDecimal = decimal.NewFromInt(1)
 		}
 		summary.Quota = int(quotaCalculateDecimal.Round(0).IntPart())
+
+		// 阶梯计费展示字段：按命中档位区间倍率计算平台单价（$/1M tokens），与定价页阶梯表一致
+		if summary.RequestTierPricing {
+			inputTierPair := ratio_setting.LoadTierSegmentPair(
+				channelID, summary.ModelName,
+				ratio_setting.GetChannelModelTierRatio,
+				ratio_setting.GetModelTierRatio,
+			)
+			bandSegments := ratio_setting.SelectBandSegments(inputTierPair)
+			bandFrom := ratio_setting.FindTierBandFromTokens(int64(summary.PromptTokens), bandSegments)
+			costDisc := summary.CostDiscountPercent
+			markupDisc := summary.MarkupDiscountPercent
+			groupRatio := summary.GroupRatio
+
+			if len(inputTierPair.Channel) > 0 || len(inputTierPair.Global) > 0 {
+				summary.TierInputUnitPrice = ratio_setting.TierPlatformUsdPerM(
+					inputTierPair.Channel, inputTierPair.Global, bandFrom, costDisc, markupDisc, groupRatio,
+				)
+			}
+
+			outputTierPair := ratio_setting.LoadTierSegmentPair(
+				channelID, summary.ModelName,
+				ratio_setting.GetChannelCompletionTierRatio,
+				ratio_setting.GetCompletionTierRatio,
+			)
+			if len(outputTierPair.Channel) > 0 || len(outputTierPair.Global) > 0 {
+				summary.TierOutputUnitPrice = ratio_setting.TierPlatformUsdPerM(
+					outputTierPair.Channel, outputTierPair.Global, bandFrom, costDisc, markupDisc, groupRatio,
+				)
+			}
+
+			cacheReadTierPair := ratio_setting.LoadTierSegmentPair(
+				channelID, summary.ModelName,
+				ratio_setting.GetChannelCacheTierRatio,
+				ratio_setting.GetCacheTierRatio,
+			)
+			if len(cacheReadTierPair.Channel) > 0 || len(cacheReadTierPair.Global) > 0 {
+				summary.TierCacheReadUnitPrice = ratio_setting.TierPlatformUsdPerM(
+					cacheReadTierPair.Channel, cacheReadTierPair.Global, bandFrom, costDisc, markupDisc, groupRatio,
+				)
+			}
+
+			cacheWriteTierPair := ratio_setting.LoadTierSegmentPair(
+				channelID, summary.ModelName,
+				ratio_setting.GetChannelCreateCacheTierRatio,
+				ratio_setting.GetCreateCacheTierRatio,
+			)
+			if len(cacheWriteTierPair.Channel) > 0 || len(cacheWriteTierPair.Global) > 0 {
+				summary.TierCacheWriteUnitPrice = ratio_setting.TierPlatformUsdPerM(
+					cacheWriteTierPair.Channel, cacheWriteTierPair.Global, bandFrom, costDisc, markupDisc, groupRatio,
+				)
+			}
+
+			// 档位判定只依据输入 Token，所有类型共用同一档位标签
+			modelTier, modelTierOk := ratio_setting.ResolveModelTierRatio(channelID, summary.ModelName)
+			completionTier, compTierOk := ratio_setting.ResolveCompletionTierRatio(channelID, summary.ModelName)
+			cacheTier, cacheTierOk := ratio_setting.ResolveCacheTierRatio(channelID, summary.ModelName)
+			createCacheTier, createCacheTierOk := ratio_setting.ResolveCreateCacheTierRatio(channelID, summary.ModelName)
+
+			if modelTierOk && len(modelTier.Segments) > 0 {
+				tierLabel := ratio_setting.BuildTierLabel("输入", modelTier.Segments, int64(summary.PromptTokens))
+				summary.TierInputLabel = tierLabel
+				if compTierOk && len(completionTier.Segments) > 0 {
+					summary.TierOutputLabel = tierLabel
+				}
+				if cacheTierOk && len(cacheTier.Segments) > 0 {
+					summary.TierCacheReadLabel = tierLabel
+				}
+				if createCacheTierOk && len(createCacheTier.Segments) > 0 {
+					summary.TierCacheWriteLabel = tierLabel
+				}
+			}
+		}
 	} else {
 		// ============================================================
 		// 新计费公式（固定价格）：
@@ -620,6 +713,76 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	if summary.RequestTierPricing {
 		other["request_tier_pricing"] = true
 		other["request_tier_breakdown"] = summary.RequestTierBreakdown
+		other["tier_input_label"] = summary.TierInputLabel
+		other["tier_output_label"] = summary.TierOutputLabel
+		other["tier_cache_read_label"] = summary.TierCacheReadLabel
+		other["tier_cache_write_label"] = summary.TierCacheWriteLabel
+		other["tier_input_unit_price"] = summary.TierInputUnitPrice
+		other["tier_output_unit_price"] = summary.TierOutputUnitPrice
+		other["tier_cache_read_unit_price"] = summary.TierCacheReadUnitPrice
+		other["tier_cache_write_unit_price"] = summary.TierCacheWriteUnitPrice
+
+		// 构建日志展示文本（固定 6 行格式，小数点保留 6 位）
+		// 第一行：阶梯计费
+		// 第二行：命中档位（仅依据输入 Token）
+		// 第三行：输入价格
+		// 第四行：输出价格
+		// 第五行：计算公式
+		// 第六行：仅供参考
+		tierLines := make([]string, 0, 6)
+
+		// 第一行：阶梯计费
+		// tierLines = append(tierLines, "阶梯计费")
+
+		// 第二行：命中档位（档位判定只依据输入 Token）
+		if summary.TierInputLabel != "" {
+			tierLines = append(tierLines, fmt.Sprintf("命中档位：%s", summary.TierInputLabel))
+		}
+
+		// 第三行：输入价格
+		tierLines = append(tierLines, fmt.Sprintf("输入价格：$%s / 1M tokens", formatTierUsdPrice(summary.TierInputUnitPrice)))
+
+		// 第四行：输出价格
+		tierLines = append(tierLines, fmt.Sprintf("输出价格：$%s / 1M tokens", formatTierUsdPrice(summary.TierOutputUnitPrice)))
+
+		// 缓存读取/写入价格（仅在实际使用对应 token 时展示）
+		if summary.CacheTokens > 0 && summary.TierCacheReadUnitPrice > 0 {
+			tierLines = append(tierLines, fmt.Sprintf("缓存读取价格：$%s / 1M tokens", formatTierUsdPrice(summary.TierCacheReadUnitPrice)))
+		}
+		cacheWriteTokens := cacheWriteTokensTotal(summary)
+		if cacheWriteTokens > 0 && summary.TierCacheWriteUnitPrice > 0 {
+			tierLines = append(tierLines, fmt.Sprintf("缓存写入价格：$%s / 1M tokens", formatTierUsdPrice(summary.TierCacheWriteUnitPrice)))
+		}
+
+		// 第五行：计算展示公式
+		inputUSD := decimal.NewFromFloat(summary.TierInputUnitPrice).Mul(decimal.NewFromInt(int64(summary.PromptTokens))).Div(decimal.NewFromInt(1_000_000))
+		outputUSD := decimal.NewFromFloat(summary.TierOutputUnitPrice).Mul(decimal.NewFromInt(int64(summary.CompletionTokens))).Div(decimal.NewFromInt(1_000_000))
+		cacheReadUSD := decimal.NewFromFloat(summary.TierCacheReadUnitPrice).Mul(decimal.NewFromInt(int64(summary.CacheTokens))).Div(decimal.NewFromInt(1_000_000))
+		cacheWriteUSD := decimal.NewFromFloat(summary.TierCacheWriteUnitPrice).Mul(decimal.NewFromInt(int64(cacheWriteTokens))).Div(decimal.NewFromInt(1_000_000))
+		totalUSD := inputUSD.Add(outputUSD).Add(cacheReadUSD).Add(cacheWriteUSD)
+
+		formulaParts := make([]string, 0, 4)
+		if summary.PromptTokens > 0 {
+			formulaParts = append(formulaParts, fmt.Sprintf("输入 %d tokens / 1M tokens * $%s", summary.PromptTokens, formatTierUsdPrice(summary.TierInputUnitPrice)))
+		}
+		if summary.CompletionTokens > 0 {
+			formulaParts = append(formulaParts, fmt.Sprintf("输出 %d tokens / 1M tokens * $%s", summary.CompletionTokens, formatTierUsdPrice(summary.TierOutputUnitPrice)))
+		}
+		if summary.CacheTokens > 0 && summary.TierCacheReadUnitPrice > 0 {
+			formulaParts = append(formulaParts, fmt.Sprintf("缓存读取 %d tokens / 1M tokens * $%s", summary.CacheTokens, formatTierUsdPrice(summary.TierCacheReadUnitPrice)))
+		}
+		if cacheWriteTokens > 0 && summary.TierCacheWriteUnitPrice > 0 {
+			formulaParts = append(formulaParts, fmt.Sprintf("缓存写入 %d tokens / 1M tokens * $%s", cacheWriteTokens, formatTierUsdPrice(summary.TierCacheWriteUnitPrice)))
+		}
+		if len(formulaParts) > 0 {
+			tierLines = append(tierLines, fmt.Sprintf("(%s) = $%s", strings.Join(formulaParts, " + "), formatTierUsdPrice(totalUSD.InexactFloat64())))
+		} else {
+			tierLines = append(tierLines, fmt.Sprintf("(=) = $%s", formatTierUsdPrice(totalUSD.InexactFloat64())))
+		}
+
+		// 第六行：仅供参考
+		tierLines = append(tierLines, "仅供参考，以实际扣费为准")
+		other["request_tier_display"] = strings.Join(tierLines, "\n")
 	}
 	// use_price：与 PriceData.UsePrice 一致，供前端区分按量（token 单价）与按次等计费形态（旧日志无此字段时前端自行推断）
 	other["use_price"] = relayInfo.PriceData.UsePrice
