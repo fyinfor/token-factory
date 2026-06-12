@@ -85,6 +85,8 @@ export const API_ENDPOINTS = {
   USER_MODELS: '/api/user/models',
   USER_PLAYGROUND_VIDEO_PRICING_TIERS:
     '/api/user/playground/video-pricing-tiers',
+  USER_PLAYGROUND_IMAGE_PRICING_TIERS:
+    '/api/user/playground/image-pricing-tiers',
   USER_GROUPS: '/api/user/self/groups',
 };
 
@@ -109,6 +111,7 @@ export const DEFAULT_CONFIG = {
     selected_model_tags: [],
     image_size: '1280x720',
     image_n: 1,
+    selected_image_pricing_tiers: [],
     image_quality: 'standard',
     image_response_format: 'url',
     image_style: 'vivid',

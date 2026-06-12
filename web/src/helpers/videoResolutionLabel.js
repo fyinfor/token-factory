@@ -17,7 +17,7 @@ function parseResolutionDimsForSort(raw) {
     }
   }
 
-  if (/^\d+p$/i.test(compact)) {
+  if (/^\d+p?$/i.test(compact)) {
     const n = parseInt(compact, 10);
     if (Number.isFinite(n)) return { short: n, long: n };
   }
@@ -66,7 +66,7 @@ export function formatVideoResolutionDisplayLabel(raw) {
   const compact = s.replace(/\s+/g, '');
   const lower = compact.toLowerCase();
 
-  if (/^\d+p$/i.test(compact)) {
+  if (/^\d+p?$/i.test(compact)) {
     const n = parseInt(compact, 10);
     return Number.isFinite(n) ? `${n}p` : s;
   }
@@ -130,7 +130,7 @@ function parseResolutionDimensions(raw) {
   if (VIDEO_RESOLUTION_DIMENSIONS[label]) {
     return VIDEO_RESOLUTION_DIMENSIONS[label];
   }
-  const p = compact.match(/^(\d+)p$/i);
+  const p = compact.match(/^(\d+)p?$/i);
   if (p) {
     const short = parseInt(p[1], 10);
     if (Number.isFinite(short) && short > 0) {
@@ -185,6 +185,55 @@ export function buildPlaygroundVideoResolutionOptions(tiers) {
       { label: '720p', value: '720p', rawResolution: '720p' },
       { label: '1080p', value: '1080p', rawResolution: '1080p' },
     ];
+  }
+
+  return options.sort((a, b) =>
+    compareVideoResolutionAsc(a.rawResolution, b.rawResolution),
+  );
+}
+
+const DEFAULT_PLAYGROUND_IMAGE_SIZE_OPTIONS = [
+  { label: '480p', value: '854x480', rawResolution: '854x480' },
+  { label: '720p', value: '1280x720', rawResolution: '1280x720' },
+  { label: '1080p', value: '1920x1080', rawResolution: '1920x1080' },
+  { label: '2K', value: '2560x1440', rawResolution: '2560x1440' },
+];
+
+function getImageSizeValueForResolution(resolution) {
+  const dims = parseResolutionDimensions(resolution);
+  if (!dims) {
+    return String(resolution || '').trim();
+  }
+  return `${dims.width}x${dims.height}`;
+}
+
+export function buildPlaygroundImageSizeOptions(tiers) {
+  const rawResolutions = (Array.isArray(tiers) ? tiers : [])
+    .map((tier) => (typeof tier === 'string' ? tier : tier?.resolution))
+    .map((resolution) => String(resolution || '').trim())
+    .filter(Boolean);
+
+  const seen = new Set();
+  const options = [];
+  for (const resolution of rawResolutions) {
+    const value = getImageSizeValueForResolution(resolution);
+    if (!value || seen.has(value)) continue;
+    const label = formatVideoResolutionDisplayLabel(resolution) || value;
+    const rawCompact = resolution.replace(/\s+/g, '');
+    const displayLabel =
+      rawCompact && rawCompact.toLowerCase() !== String(label).toLowerCase()
+        ? `${label} (${value})`
+        : label;
+    seen.add(value);
+    options.push({
+      label: displayLabel,
+      value,
+      rawResolution: resolution,
+    });
+  }
+
+  if (options.length === 0) {
+    return DEFAULT_PLAYGROUND_IMAGE_SIZE_OPTIONS;
   }
 
   return options.sort((a, b) =>

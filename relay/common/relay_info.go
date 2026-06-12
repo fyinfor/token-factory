@@ -187,11 +187,15 @@ type RelayInfo struct {
 
 // ImageBillingSnapshot tracks per-image generation pricing for pre-consume and settlement.
 type ImageBillingSnapshot struct {
-	UsdPerImage float64
-	Width       int
-	Height      int
-	Count       int
-	Mode        string
+	UsdPerImage     float64
+	Width           int
+	Height          int
+	RuleWidth       int
+	RuleHeight      int
+	RuleRes         string
+	Count           int
+	Mode            string
+	CappedToMaxTier bool
 }
 
 func (info *RelayInfo) InitChannelMeta(c *gin.Context) {

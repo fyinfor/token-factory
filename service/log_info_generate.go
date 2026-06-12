@@ -224,6 +224,15 @@ func appendImagePerImageBillingInfo(relayInfo *relaycommon.RelayInfo, other map[
 	if b.Width > 0 && b.Height > 0 {
 		other["image_resolution"] = fmt.Sprintf("%dx%d", b.Width, b.Height)
 	}
+	if b.RuleWidth > 0 && b.RuleHeight > 0 {
+		other["image_rule_resolution"] = fmt.Sprintf("%dx%d", b.RuleWidth, b.RuleHeight)
+	}
+	if b.RuleRes != "" {
+		other["image_rule_tier"] = b.RuleRes
+	}
+	if b.CappedToMaxTier {
+		other["image_capped_to_max_tier"] = true
+	}
 	if b.Mode != "" {
 		other["image_billing_mode"] = b.Mode
 	}

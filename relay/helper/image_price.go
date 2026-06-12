@@ -32,6 +32,14 @@ type imageEstimateContext struct {
 	Count  int
 }
 
+type imagePerImagePriceMatch struct {
+	Price           float64
+	Resolution      string
+	RuleWidth       int
+	RuleHeight      int
+	CappedToMaxTier bool
+}
+
 // HasImagePerImageTablePricing reports whether resolution-tier per-image rules exist.
 func HasImagePerImageTablePricing(channelID int, modelName string) bool {
 	_, ok := resolveImagePricingRules(channelID, modelName)
@@ -273,7 +281,7 @@ func TryModelPriceHelperImage(c *gin.Context, info *relaycommon.RelayInfo) (type
 		names = imageModelNameCandidates(modelName)
 	}
 	estimateCtx := estimateImageRequestContext(c, info)
-	channelUSD, globalUSD, chOK, glOK := resolveImagePerImageUnitUSD(channelID, names, estimateCtx)
+	channelUSD, globalUSD, chOK, glOK, channelMatch, globalMatch := resolveImagePerImageUnitUSD(channelID, names, estimateCtx)
 	usdPerImage := channelUSD
 	okPrice := chOK
 	if !okPrice || usdPerImage <= 0 {
@@ -297,7 +305,7 @@ func TryModelPriceHelperImage(c *gin.Context, info *relaycommon.RelayInfo) (type
 	}
 	estimateCtx.Count = count
 
-	priceData, ok := buildImagePerImagePriceData(c, info, channelID, channelUSD, globalUSD, chOK, glOK, usdPerImage, estimateCtx)
+	priceData, ok := buildImagePerImagePriceData(c, info, channelID, channelUSD, globalUSD, chOK, glOK, channelMatch, globalMatch, usdPerImage, estimateCtx)
 	if !ok {
 		matchName := ratio_setting.FormatMatchingModelName(modelName)
 		if matchName == "" {
@@ -313,14 +321,14 @@ func TryModelPriceHelperImage(c *gin.Context, info *relaycommon.RelayInfo) (type
 }
 
 // resolveImagePerImageUnitUSD 分别解析渠道规则价与全局规则价（不合并规则表）。
-func resolveImagePerImageUnitUSD(channelID int, names []string, estimateCtx imageEstimateContext) (channelUSD, globalUSD float64, chOK, glOK bool) {
+func resolveImagePerImageUnitUSD(channelID int, names []string, estimateCtx imageEstimateContext) (channelUSD, globalUSD float64, chOK, glOK bool, channelMatch, globalMatch *imagePerImagePriceMatch) {
 	channelRules, chHasRules := resolveChannelOnlyImagePricingRules(channelID, names)
 	globalRules, glHasRules := resolveGlobalOnlyImagePricingRules(names)
 	chFallback, chHasFallback := resolveChannelImageFlatUSD(channelID, names)
 	glFallback, glHasFallback := resolveGlobalImageFlatUSD(names)
-	channelUSD, chOK = matchFlatPerImageUSDRules(estimateCtx, channelRules, chHasRules, chFallback, chHasFallback)
-	globalUSD, glOK = matchFlatPerImageUSDRules(estimateCtx, globalRules, glHasRules, glFallback, glHasFallback)
-	return channelUSD, globalUSD, chOK, glOK
+	channelUSD, chOK, channelMatch = matchFlatPerImageUSDRules(estimateCtx, channelRules, chHasRules, chFallback, chHasFallback)
+	globalUSD, glOK, globalMatch = matchFlatPerImageUSDRules(estimateCtx, globalRules, glHasRules, glFallback, glHasFallback)
+	return channelUSD, globalUSD, chOK, glOK, channelMatch, globalMatch
 }
 
 func buildImagePerImagePriceData(
@@ -329,6 +337,7 @@ func buildImagePerImagePriceData(
 	channelID int,
 	channelUSD, globalUSD float64,
 	chOK, glOK bool,
+	channelMatch, globalMatch *imagePerImagePriceMatch,
 	fallbackUSD float64,
 	estimateCtx imageEstimateContext,
 ) (types.PriceData, bool) {
@@ -337,9 +346,11 @@ func buildImagePerImagePriceData(
 	}
 	usdPerImage := channelUSD
 	okPrice := chOK
+	selectedMatch := channelMatch
 	if !okPrice || usdPerImage <= 0 {
 		usdPerImage = globalUSD
 		okPrice = glOK
+		selectedMatch = globalMatch
 	}
 	if !okPrice || usdPerImage <= 0 {
 		return types.PriceData{}, false
@@ -394,11 +405,17 @@ func buildImagePerImagePriceData(
 	}
 	priceData.AddOtherRatio("n", float64(count))
 	info.ImageBilling = &relaycommon.ImageBillingSnapshot{
-		UsdPerImage: effUsdPerImage,
-		Width:       estimateCtx.Width,
-		Height:      estimateCtx.Height,
-		Count:       count,
-		Mode:        string(estimateCtx.Mode),
+		UsdPerImage:     effUsdPerImage,
+		Width:           estimateCtx.Width,
+		Height:          estimateCtx.Height,
+		Count:           count,
+		Mode:            string(estimateCtx.Mode),
+		CappedToMaxTier: selectedMatch != nil && selectedMatch.CappedToMaxTier,
+	}
+	if selectedMatch != nil {
+		info.ImageBilling.RuleWidth = selectedMatch.RuleWidth
+		info.ImageBilling.RuleHeight = selectedMatch.RuleHeight
+		info.ImageBilling.RuleRes = selectedMatch.Resolution
 	}
 	if common.DebugEnabled {
 		logger.LogDebug(c, fmt.Sprintf(
@@ -423,7 +440,7 @@ func SyncImagePerImagePriceData(c *gin.Context, info *relaycommon.RelayInfo, est
 	if len(names) == 0 {
 		names = imageModelNameCandidates(info.OriginModelName)
 	}
-	channelUSD, globalUSD, chOK, glOK := resolveImagePerImageUnitUSD(channelID, names, estimateCtx)
+	channelUSD, globalUSD, chOK, glOK, channelMatch, globalMatch := resolveImagePerImageUnitUSD(channelID, names, estimateCtx)
 	usdPerImage := channelUSD
 	okPrice := chOK
 	if !okPrice || usdPerImage <= 0 {
@@ -433,7 +450,7 @@ func SyncImagePerImagePriceData(c *gin.Context, info *relaycommon.RelayInfo, est
 	if !okPrice || usdPerImage <= 0 {
 		return false
 	}
-	pd, ok := buildImagePerImagePriceData(c, info, channelID, channelUSD, globalUSD, chOK, glOK, usdPerImage, estimateCtx)
+	pd, ok := buildImagePerImagePriceData(c, info, channelID, channelUSD, globalUSD, chOK, glOK, channelMatch, globalMatch, usdPerImage, estimateCtx)
 	if !ok {
 		return false
 	}
@@ -483,7 +500,7 @@ func matchFlatPerImageUSDRules(
 	hasRules bool,
 	fallbackUSD float64,
 	hasFallback bool,
-) (float64, bool) {
+) (float64, bool, *imagePerImagePriceMatch) {
 	if hasRules {
 		threshold := rules.SimilarityThreshold
 		if threshold <= 0 {
@@ -495,40 +512,46 @@ func matchFlatPerImageUSDRules(
 		} else {
 			rows = rules.TextToImagePerImage
 		}
-		if price, ok := matchPerImageRulesByPixels(ctx, rows, threshold, fallbackUSD, hasFallback); ok {
-			return price, true
+		if match, ok := matchPerImageRulesByPixels(ctx, rows, threshold, fallbackUSD, hasFallback); ok {
+			if match != nil {
+				return match.Price, true, match
+			}
+			return fallbackUSD, true, nil
 		}
 	}
 	if hasFallback && fallbackUSD > 0 {
-		return fallbackUSD, true
+		return fallbackUSD, true, nil
 	}
-	return 0, false
+	return 0, false, nil
 }
 
-// matchPerImageRulesByPixels picks the closest resolution row. When request has no
-// resolution or relative pixel gap exceeds threshold, uses fallbackUSD when configured.
+// matchPerImageRulesByPixels picks the closest resolution row. If the image is
+// larger than every configured tier in the current lane, it caps to that lane's
+// highest tier instead of falling back to a generic fixed price.
 func matchPerImageRulesByPixels(
 	ctx imageEstimateContext,
 	rules []ratio_setting.ImageResolutionPerImageRule,
 	threshold float64,
 	fallbackUSD float64,
 	hasFallback bool,
-) (float64, bool) {
+) (*imagePerImagePriceMatch, bool) {
 	if len(rules) == 0 {
 		if hasFallback && fallbackUSD > 0 {
-			return fallbackUSD, true
+			return nil, true
 		}
-		return 0, false
+		return nil, false
 	}
 	if ctx.Width <= 0 || ctx.Height <= 0 {
 		if hasFallback && fallbackUSD > 0 {
-			return fallbackUSD, true
+			return nil, true
 		}
-		return 0, false
+		return nil, false
 	}
 	bestIdx := -1
 	targetPixels := ctx.Width * ctx.Height
 	minDiffRatio := math.MaxFloat64
+	maxTierIdx := -1
+	maxTierPixels := 0
 	for i, rule := range rules {
 		if rule.ImagePrice <= 0 {
 			continue
@@ -541,6 +564,10 @@ func matchPerImageRulesByPixels(
 		if rulePixels <= 0 {
 			continue
 		}
+		if rulePixels > maxTierPixels {
+			maxTierPixels = rulePixels
+			maxTierIdx = i
+		}
 		diffRatio := math.Abs(float64(targetPixels-rulePixels)) / float64(rulePixels)
 		if diffRatio < minDiffRatio {
 			minDiffRatio = diffRatio
@@ -549,20 +576,44 @@ func matchPerImageRulesByPixels(
 	}
 	if bestIdx < 0 {
 		if hasFallback && fallbackUSD > 0 {
-			return fallbackUSD, true
+			return nil, true
 		}
-		return 0, false
+		return nil, false
+	}
+	if targetPixels > maxTierPixels && maxTierIdx >= 0 {
+		match := imagePerImageRuleMatch(rules[maxTierIdx], true)
+		if match != nil {
+			return match, true
+		}
 	}
 	if threshold <= 0 {
 		threshold = 0.35
 	}
 	if minDiffRatio > threshold {
 		if hasFallback && fallbackUSD > 0 {
-			return fallbackUSD, true
+			return nil, true
 		}
-		return 0, false
+		return nil, false
 	}
-	return rules[bestIdx].ImagePrice, true
+	match := imagePerImageRuleMatch(rules[bestIdx], false)
+	return match, match != nil
+}
+
+func imagePerImageRuleMatch(rule ratio_setting.ImageResolutionPerImageRule, capped bool) *imagePerImagePriceMatch {
+	if rule.ImagePrice <= 0 {
+		return nil
+	}
+	w, h, ok := parseResolution(rule.Resolution)
+	if !ok {
+		return nil
+	}
+	return &imagePerImagePriceMatch{
+		Price:           rule.ImagePrice,
+		Resolution:      strings.TrimSpace(rule.Resolution),
+		RuleWidth:       w,
+		RuleHeight:      h,
+		CappedToMaxTier: capped,
+	}
 }
 
 // ModelPriceHelperForImageFallback is used only when per-image rules are not configured.
