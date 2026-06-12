@@ -110,16 +110,16 @@ export default function AffInviteeCommissionDetailModal({
           },
         },
         {
-          title: t('用户消耗额度'),
+          title: t('用户消耗金额'),
           dataIndex: 'user_quota_charged',
           width: 130,
           render: (q) => renderProfitShareQuotaCell(q),
         },
         {
           title: (
-            <Tooltip content={t('加价切片额度说明')}>
+            <Tooltip content={t('利润金额说明')}>
               <span className='cursor-help border-b border-dotted border-gray-400'>
-                {t('加价切片额度')}
+                {t('利润金额')}
               </span>
             </Tooltip>
           ),
@@ -164,7 +164,7 @@ export default function AffInviteeCommissionDetailModal({
         render: (bps) => formatCommissionRatioPercent(bps),
       },
       {
-        title: t('收益额度'),
+        title: t('收益金额'),
         dataIndex: 'reward_quota',
         render: (q) => renderQuota(q || 0),
       },
