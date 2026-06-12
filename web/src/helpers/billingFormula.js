@@ -593,6 +593,21 @@ export function getBillingCurrencyConfig() {
 /**
  * 将 USD 单价格式化为与首页卡片 formatPrice 一致的展示字符串（默认 2 位小数）。
  */
+/**
+ * 阶梯/日志单价：最多 6 位小数，去除尾随零（7.500000 → 7.5，0.06666666 → 0.066667）
+ */
+export function formatTierUsdPrice(usdAmount) {
+  const n = Number(usdAmount);
+  if (!Number.isFinite(n)) {
+    return '0';
+  }
+  let s = n.toFixed(6);
+  if (s.includes('.')) {
+    s = s.replace(/0+$/, '').replace(/\.$/, '');
+  }
+  return s;
+}
+
 export function formatBillingUsdDisplay(usdAmount, { tokenUnit = 'M' } = {}) {
   const { symbol, rate } = getBillingCurrencyConfig();
   const unitDivisor = tokenUnit === 'K' ? 1000 : 1;

@@ -40,7 +40,6 @@ import {
   userCanViewHomeCostPrice,
 } from '../../../../../helpers/utils';
 import {
-  detectTokenTierPricing,
   resolveTierSegmentSources,
   buildTokenTierPreviewItems,
   formatTierBound,
@@ -195,36 +194,31 @@ const formatCostDiscountDisplay = (priceDiscountPercent, t) => {
   }
   return { text: `${t('成本折扣')}：-${savingsPercent}%`, hasDiscount: true };
 };
-
+// 阶梯计费表格：输入 TOKEN 区间 类型 输入 / M 输出 / M 缓存读取 / M 缓存写入 / M
 const TokenTierDetailTable = ({
   model,
   channel,
-  tierRatioMaps,
   usedGroupRatio,
   displayPrice,
   t,
 }) => {
-  const tokenTierInfo = detectTokenTierPricing(model, tierRatioMaps);
-  if (!tokenTierInfo) return null;
-
-  const channelId = tokenTierInfo.channel?.channel_id;
+  if (!channel) return null;
   const tierCategoryOrder = ['input', 'output', 'cache_read', 'cache_write'];
   const perCategoryRows = {};
   const activeCategories = [];
-
   for (const cat of tierCategoryOrder) {
-    const { globalSegments, baseSegments } = resolveTierSegmentSources({
-      model,
-      channel: tokenTierInfo.channel,
-      channelId,
-      cat,
-      tierRatioMaps,
-    });
-    if (baseSegments.length === 0) continue;
+    const { globalSegments, channelSegments, bandSegments } =
+      resolveTierSegmentSources({
+        model,
+        channel,
+        cat,
+      });
+    if (bandSegments.length === 0) continue;
     const rows = buildTokenTierPreviewItems(
-      baseSegments,
+      bandSegments,
       globalSegments,
-      tokenTierInfo.channel,
+      channelSegments,
+      channel,
       cat,
       usedGroupRatio,
       displayPrice,
@@ -246,7 +240,7 @@ const TokenTierDetailTable = ({
   };
 
   const displayCols = activeCategories.filter((c) =>
-    ['input', 'output', 'cache_read'].includes(c),
+    ['input', 'output', 'cache_read', 'cache_write'].includes(c),
   );
   if (displayCols.length === 0) return null;
 
@@ -631,26 +625,7 @@ const ModelChannelList = ({
   channelVideoRatioMap = {},
   channelVideoCompletionRatioMap = {},
   channelVideoPriceMap = {},
-  channelModelTierRatio = {},
-  channelCompletionTierRatio = {},
-  channelCacheTierRatio = {},
-  channelCreateCacheTierRatio = {},
-  globalModelTierRatio = {},
-  globalCompletionTierRatio = {},
-  globalCacheTierRatio = {},
-  globalCreateCacheTierRatio = {},
 }) => {
-  const tierRatioMaps = {
-    globalModelTierRatio,
-    globalCompletionTierRatio,
-    globalCacheTierRatio,
-    globalCreateCacheTierRatio,
-    channelModelTierRatio,
-    channelCompletionTierRatio,
-    channelCacheTierRatio,
-    channelCreateCacheTierRatio,
-  };
-
   const [userState] = useContext(UserContext);
   const [docsVisible, setDocsVisible] = useState(false);
   const [docsModelName, setDocsModelName] = useState('');
@@ -1386,7 +1361,6 @@ const ModelChannelList = ({
                                 <TokenTierDetailTable
                                   model={modelData}
                                   channel={channel}
-                                  tierRatioMaps={tierRatioMaps}
                                   usedGroupRatio={usedGroupRatio}
                                   displayPrice={displayPrice}
                                   t={t}

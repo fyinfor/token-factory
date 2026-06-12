@@ -4,8 +4,6 @@
  */
 
 import {
-  pickChannelScopedModelTierSegments,
-  pickGlobalModelTierSegments,
   costDiscountMultiplier,
   markupRateFromPercent,
 } from '../../../../../helpers';
@@ -16,21 +14,6 @@ export const TIER_FIELD_MAP = {
   output: 'completion_tier_ratio',
   cache_read: 'cache_tier_ratio',
   cache_write: 'create_cache_tier_ratio',
-};
-
-/** 阶梯类别 -> 定价接口全局/渠道阶梯倍率映射字段 */
-export const TIER_GLOBAL_MAP_KEYS = {
-  input: 'globalModelTierRatio',
-  output: 'globalCompletionTierRatio',
-  cache_read: 'globalCacheTierRatio',
-  cache_write: 'globalCreateCacheTierRatio',
-};
-
-export const TIER_CHANNEL_MAP_KEYS = {
-  input: 'channelModelTierRatio',
-  output: 'channelCompletionTierRatio',
-  cache_read: 'channelCacheTierRatio',
-  cache_write: 'channelCreateCacheTierRatio',
 };
 
 export const TIER_CATEGORY_FLAGS = [
@@ -95,80 +78,57 @@ export const emptyTierFlags = () => ({
 });
 
 /**
- * 检查类别是否有阶梯数据
+ * 按区间起点在 segments 中查找倍率；未匹配到区间返回 null
  */
-export const categoryHasTierData = (model, channel, cat, tierRatioMaps = {}) => {
-  const field = TIER_FIELD_MAP[cat];
-  if (getTierSegments(channel, field).length > 0) return true;
-  if (getTierSegments(model, field).length > 0) return true;
-  const globalMap = tierRatioMaps[TIER_GLOBAL_MAP_KEYS[cat]];
-  if (pickGlobalModelTierSegments(globalMap, model.model_name).length > 0) {
-    return true;
+export const findTierRatioAtBand = (segments, fromToken) => {
+  if (!Array.isArray(segments) || segments.length === 0) return null;
+  for (const seg of segments) {
+    const upTo = Number(seg.up_to) || 0;
+    if (upTo === 0 || fromToken < upTo) {
+      const ratio = Number(seg.ratio);
+      return Number.isFinite(ratio) ? ratio : null;
+    }
   }
-  const channelMap = tierRatioMaps[TIER_CHANNEL_MAP_KEYS[cat]];
-  if (
-    pickChannelScopedModelTierSegments(
-      channelMap,
-      channel?.channel_id,
-      model.model_name,
-    ).length > 0
-  ) {
-    return true;
-  }
-  return false;
+  return null;
 };
 
 /**
- * 解析阶梯 segments：官方价用 globalSegments，平台价用 baseSegments
- * 优先级：
- *   globalSegments = 全局映射 → 模型内嵌 → 渠道内嵌（仅无渠道专属覆盖时）
- *   baseSegments   = 渠道专属映射 → globalSegments → 渠道内嵌
+ * 检查类别是否有阶梯数据（模型全局或渠道内嵌）
  */
-export const resolveTierSegmentSources = ({
-  model,
-  channel,
-  channelId,
-  cat,
-  tierRatioMaps,
-}) => {
+export const categoryHasTierData = (model, channel, cat) => {
   const field = TIER_FIELD_MAP[cat];
-  const globalMap = tierRatioMaps[TIER_GLOBAL_MAP_KEYS[cat]];
-  const channelMap = tierRatioMaps[TIER_CHANNEL_MAP_KEYS[cat]];
-  const channelEmbedSegments = getTierSegments(channel, field);
-  const channelOnlySegments = pickChannelScopedModelTierSegments(
-    channelMap,
-    channelId,
-    model.model_name,
+  return (
+    getTierSegments(channel, field).length > 0 ||
+    getTierSegments(model, field).length > 0
   );
-
-  let globalSegments = pickGlobalModelTierSegments(globalMap, model.model_name);
-  if (globalSegments.length === 0) {
-    globalSegments = getTierSegments(model, field);
-  }
-  if (globalSegments.length === 0 && channelOnlySegments.length === 0) {
-    globalSegments = channelEmbedSegments;
-  }
-
-  let baseSegments =
-    channelOnlySegments.length > 0 ? channelOnlySegments : globalSegments;
-  if (baseSegments.length === 0) {
-    baseSegments = channelEmbedSegments;
-  }
-
-  return { globalSegments, baseSegments, channelOnlySegments };
 };
 
 /**
- * 检查模型是否配置了阶梯倍率（渠道内嵌 / quota_type=3 / 全局映射 / 模型内嵌）
+ * 解析阶梯 segments：
+ *   globalSegments = 模型全局阶梯（官方价）
+ *   channelSegments = 渠道阶梯（平台价基准）
+ *   bandSegments    = 区间结构，优先渠道阶梯，否则全局阶梯
  */
-export const detectTokenTierPricing = (model, tierRatioMaps = {}) => {
+export const resolveTierSegmentSources = ({ model, channel, cat }) => {
+  const field = TIER_FIELD_MAP[cat];
+  const globalSegments = getTierSegments(model, field);
+  const channelSegments = getTierSegments(channel, field);
+  const bandSegments =
+    channelSegments.length > 0 ? channelSegments : globalSegments;
+  return { globalSegments, channelSegments, bandSegments };
+};
+
+/**
+ * 检查模型是否配置了阶梯倍率（渠道内嵌 / quota_type=3 / 模型全局内嵌）
+ */
+export const detectTokenTierPricing = (model) => {
   if (!model?.channel_list || model.channel_list.length === 0) return null;
 
   for (const ch of model.channel_list) {
     const flags = emptyTierFlags();
     let matched = ch.quota_type === 3;
     for (const { cat, flag } of TIER_CATEGORY_FLAGS) {
-      if (categoryHasTierData(model, ch, cat, tierRatioMaps)) {
+      if (categoryHasTierData(model, ch, cat)) {
         flags[flag] = true;
         matched = true;
       }
@@ -196,49 +156,43 @@ export const formatTierRange = (from, to, t) => {
 
 /**
  * 构建阶梯计费展示行数据
- * 遍历基准阶梯（渠道阶梯优先，渠道无配置时回退全局阶梯）的所有区间，逐档计算：
- *   官方价     = 全局阶梯对应区间 ratio × 2
- *   阶梯基准原价 = 基准阶梯对应区间 ratio × 2
- *   平台价     = (基准阶梯 ratio × 成本折扣率 + 全局阶梯 ratio × 加价折扣率) × 2 × 分组倍率
- *   折扣率     = round((1 - 平台价/官方价) × 100)%
+ * 遍历 bandSegments 的所有区间，逐档计算：
+ *   全局倍率 = 全局阶梯对应区间 ratio，无值则为 0
+ *   渠道倍率 = 渠道阶梯对应区间 ratio，无值则回退全局倍率
+ *   官方价   = 全局倍率 × 2
+ *   平台价   = (渠道倍率 × 成本折扣率 + 全局倍率 × 加价折扣率) × 2 × 分组倍率
+ *   折扣率   = 仅当官方价 > 0 时计算
  */
 export const buildTokenTierPreviewItems = (
-  baseSegments,
+  bandSegments,
   globalSegments,
+  channelSegments,
   channel,
   tierType,
   usedGroupRatio,
   displayPrice,
   t,
 ) => {
-  if (!Array.isArray(baseSegments) || baseSegments.length === 0) return [];
-
+  if (!Array.isArray(bandSegments) || bandSegments.length === 0) return [];
   const priceDiscountPercent =
     channel.price_discount_percent != null ? channel.price_discount_percent : 100;
   const costDisc = costDiscountMultiplier(priceDiscountPercent);
   const markupRate = markupRateFromPercent(channel.markup_discount_rate || 0);
 
-  // 按区间起点匹配全局阶梯对应档位（up_to=0 代表大于上一区间的所有范围）
-  const findGlobalRatio = (from, fallbackRatio) => {
-    if (!Array.isArray(globalSegments)) return fallbackRatio;
-    for (const seg of globalSegments) {
-      const upTo = Number(seg.up_to) || 0;
-      if (upTo === 0 || from < upTo) return Number(seg.ratio) || 0;
-    }
-    return fallbackRatio;
-  };
-
   const rows = [];
   let previousUpTo = 0;
-  for (const seg of baseSegments) {
-    const baseRatio = Number(seg.ratio) || 0;
+  for (const seg of bandSegments) {
     const upTo = Number(seg.up_to) || 0;
-    // 全局阶梯无对应区间时回退基准阶梯 ratio
-    const globalRatio = findGlobalRatio(previousUpTo, baseRatio);
+    const globalRatio = findTierRatioAtBand(globalSegments, previousUpTo) ?? 0;
+    const channelRatio = findTierRatioAtBand(channelSegments, previousUpTo);
+    const baseRatio =
+      channelSegments.length > 0
+        ? channelRatio != null
+          ? channelRatio
+          : globalRatio
+        : globalRatio;
 
-    // 官方价 = 全局阶梯对应区间 ratio × 2
     const officialUsdPerM = globalRatio * 2;
-    // 平台价 = (基准阶梯 ratio × 成本折扣率 + 全局阶梯 ratio × 加价折扣率) × 2 × 分组倍率
     const platformUsdPerM =
       (baseRatio * costDisc + globalRatio * markupRate) * 2 * usedGroupRatio;
 
@@ -246,11 +200,8 @@ export const buildTokenTierPreviewItems = (
       previousUpTo = upTo || previousUpTo;
       continue;
     }
-
     const discount =
-      Number.isFinite(officialUsdPerM) &&
-      officialUsdPerM > 0 &&
-      officialUsdPerM > platformUsdPerM
+      officialUsdPerM > 0 && officialUsdPerM > platformUsdPerM
         ? Math.round((1 - platformUsdPerM / officialUsdPerM) * 100)
         : null;
 
@@ -261,17 +212,12 @@ export const buildTokenTierPreviewItems = (
       upTo,
       platformPrice: displayPrice(platformUsdPerM),
       platformPriceUsd: platformUsdPerM,
-      officialPrice:
-        Number.isFinite(officialUsdPerM) && officialUsdPerM > 0
-          ? displayPrice(officialUsdPerM)
-          : '-',
+      officialPrice: officialUsdPerM > 0 ? displayPrice(officialUsdPerM) : '-',
       officialPriceUsd: officialUsdPerM,
       discount,
       tierType,
     });
-
     previousUpTo = upTo || previousUpTo;
   }
-
   return rows;
 };
