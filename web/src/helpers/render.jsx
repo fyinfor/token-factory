@@ -1707,6 +1707,10 @@ function resolveImagePerImageBillingMeta(billingMeta, modelPrice, channelDiscoun
     count: Math.max(1, Number(meta?.image_count) || 1),
     usdPerImage,
     resolution: String(meta?.image_resolution || '').trim(),
+    ruleResolution: String(
+      meta?.image_rule_tier || meta?.image_rule_resolution || '',
+    ).trim(),
+    cappedToMaxTier: meta?.image_capped_to_max_tier === true,
   };
 }
 
@@ -1764,12 +1768,16 @@ function resolveImagePerImageBillingDisplay(
   const resolutionLabel =
     formatVideoResolutionDisplayLabel(imageMeta.resolution) ||
     imageMeta.resolution;
+  const ruleResolutionLabel =
+    formatVideoResolutionDisplayLabel(imageMeta.ruleResolution) ||
+    imageMeta.ruleResolution;
   return {
     symbol,
     rate,
     imageMeta,
     perImageUsd,
     resolutionLabel,
+    ruleResolutionLabel,
     displayPrice: formatBillingDisplayPrice(perImageUsd, rate),
     totalDisplayPrice: formatBillingDisplayPrice(
       perImageUsd * imageMeta.count,
@@ -1820,8 +1828,14 @@ function buildImagePerImageBillingTagItems(
   } = {},
 ) {
   const tr = typeof t === 'function' ? t : i18next.t.bind(i18next);
-  const { symbol, imageMeta, displayPrice, totalDisplayPrice, resolutionLabel } =
-    resolveImagePerImageBillingDisplay(billingMeta, {
+  const {
+    symbol,
+    imageMeta,
+    displayPrice,
+    totalDisplayPrice,
+    resolutionLabel,
+    ruleResolutionLabel,
+  } = resolveImagePerImageBillingDisplay(billingMeta, {
       modelPrice,
       groupRatio,
       user_group_ratio,
@@ -1843,6 +1857,20 @@ function buildImagePerImageBillingTagItems(
       key: 'resolution',
       color: 'cyan',
       label: resolutionLabel,
+    });
+  }
+  if (ruleResolutionLabel && ruleResolutionLabel !== resolutionLabel) {
+    items.push({
+      key: 'rule-resolution',
+      color: 'blue',
+      label: `${tr('计费档位')} ${ruleResolutionLabel}`,
+    });
+  }
+  if (imageMeta.cappedToMaxTier) {
+    items.push({
+      key: 'max-tier-cap',
+      color: 'orange',
+      label: tr('最高档封顶'),
     });
   }
   if (showTotal) {
