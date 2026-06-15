@@ -38,9 +38,9 @@ const discountStyle = (hasDiscount) => ({
   borderRadius: 999,
   fontSize: 11,
   fontWeight: 600,
-  color: hasDiscount ? '#dc2626' : 'var(--semi-color-text-2)',
+  color: hasDiscount ? '#E74C3C' : 'var(--semi-color-text-2)',
   backgroundColor: hasDiscount
-    ? 'rgba(255, 59, 48, 0.11)'
+    ? 'rgba(231, 76, 60, 0.11)'
     : 'rgba(142, 142, 147, 0.12)',
 });
 

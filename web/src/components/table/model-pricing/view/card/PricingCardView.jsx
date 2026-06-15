@@ -54,6 +54,19 @@ import {
   buildTokenTierPreviewItems,
   formatTierBound,
 } from './tierUtils';
+import {
+  PRICING_TABLE_WRAPPER_STYLE,
+  PRICING_TABLE_HEAD_BG,
+  PRICING_TABLE_HEAD_CELL_STYLE,
+  PRICING_TABLE_ROW_BORDER,
+  PRICING_TABLE_BODY_BG,
+  DISCOUNT_MUTED_STYLE,
+  TABLE_CELL_CLASS,
+  FLAT_PRICING_COLUMNS,
+  FIXED_PRICING_COLUMNS,
+  VIDEO_PRICING_COLUMNS,
+  TIER_PRICING_COLUMNS,
+} from './pricingTableStyles';
 import { VIDEO_FLAT_LANE_I18N_KEY } from '../../constants/videoFlatClipLaneI18n';
 import PricingCardSkeleton from './PricingCardSkeleton';
 import { useMinimumLoadingTime } from '../../../../../hooks/common/useMinimumLoadingTime';
@@ -242,10 +255,53 @@ const getVideoTierGroupStyle = (family) => {
 };
 
 /**
- * TokenTierTable — 阶梯计费简化展示
+ * 渲染折扣单元格
+ * 折扣视觉效果：Tag 胶囊标签样式，颜色统一 #E74C3C
+ */
+const renderDiscountCell = (discount) => {
+  if (discount != null && discount > 0) {
+    return (
+      <Tag
+        size='small'
+        shape='circle'
+        style={{
+          fontSize: 11,
+          fontWeight: 700,
+          color: '#E74C3C',
+          backgroundColor: 'rgba(231, 76, 60, 0.11)',
+          border: 'none',
+        }}
+      >
+        -{discount}%
+      </Tag>
+    );
+  }
+  return <span style={DISCOUNT_MUTED_STYLE}>-</span>;
+};
+
+/**
+ * 渲染官方价单元格
+ * 当有折扣时，官方价添加删除线样式
+ */
+const renderOfficialCell = (officialPrice, hasDiscount) => {
+  return (
+    <span
+      style={{
+        color: 'var(--semi-color-text-2)',
+        textDecoration: hasDiscount ? 'line-through' : 'none',
+      }}
+    >
+      {officialPrice}
+    </span>
+  );
+};
+
+/**
+ * TokenTierTable — 阶梯计费表格
  *
- * 仅展示第一档区间内 input / output 两类价格，以紧凑四列表格呈现：
- * | 区间 | 平台价 / M | 官方价 / M | 折扣 |
+ * 统一四列表格：区间 | 平台价 / M | 官方价 / M | 折扣
+ * 边界逻辑：当所有行均无有效折扣数据（discount <= 0 或 null）时，隐藏官方价和折扣列
+ * 折扣视觉：加粗、放大、高饱和度鲜艳色
  */
 const TokenTierTable = ({ items, t }) => {
   if (!items || !Array.isArray(items.rows) || items.rows.length === 0) {
@@ -271,44 +327,51 @@ const TokenTierTable = ({ items, t }) => {
         : firstRow.range)
     : '';
 
+  // 边界隐藏逻辑：所有行都没有有效折扣（discount <= 0 或 null）时，隐藏官方价和折扣列
+  const hideOfficialCols = displayRows.every(
+    ({ cell }) => cell.discount == null || cell.discount <= 0
+  );
+
   return (
     <div
       className='w-full min-w-0 overflow-hidden rounded-lg border'
-      style={{
-        borderColor: 'var(--semi-color-border)',
-        backgroundColor: 'var(--semi-color-fill-0)',
-      }}
+      style={PRICING_TABLE_WRAPPER_STYLE}
     >
       <table
         className='w-full border-collapse'
         style={{ fontSize: 11 }}
       >
         <thead>
-          <tr style={{ backgroundColor: 'var(--semi-color-bg-2)' }}>
+          <tr style={{ backgroundColor: PRICING_TABLE_HEAD_BG }}>
             <th
-              className='px-2 py-1 text-left font-semibold'
-              style={{ color: 'var(--semi-color-text-1)', borderBottom: '1px solid var(--semi-color-border)' }}
+              className={TABLE_CELL_CLASS.thLeft}
+              style={PRICING_TABLE_HEAD_CELL_STYLE}
             >
               {rangeLabel}
             </th>
             <th
-              className='px-2 py-1 text-center font-medium'
-              style={{ color: 'var(--semi-color-text-2)', borderBottom: '1px solid var(--semi-color-border)' }}
+              className={TABLE_CELL_CLASS.thCenter}
+              style={PRICING_TABLE_HEAD_CELL_STYLE}
             >
-              平台价 / M
+              {TIER_PRICING_COLUMNS.platform}
             </th>
-            <th
-              className='px-2 py-1 text-center font-medium'
-              style={{ color: 'var(--semi-color-text-2)', borderBottom: '1px solid var(--semi-color-border)' }}
-            >
-              官方价 / M
-            </th>
-            <th
-              className='px-2 py-1 text-center font-medium'
-              style={{ color: 'var(--semi-color-text-2)', borderBottom: '1px solid var(--semi-color-border)' }}
-            >
-              折扣率
-            </th>
+            {/* 边界隐藏逻辑：hideOfficialCols 为 true 时隐藏官方价和折扣列 */}
+            {!hideOfficialCols && (
+              <th
+                className={TABLE_CELL_CLASS.thCenter}
+                style={PRICING_TABLE_HEAD_CELL_STYLE}
+              >
+                {TIER_PRICING_COLUMNS.official}
+              </th>
+            )}
+            {!hideOfficialCols && (
+              <th
+                className={TABLE_CELL_CLASS.thCenter}
+                style={PRICING_TABLE_HEAD_CELL_STYLE}
+              >
+                {TIER_PRICING_COLUMNS.discount}
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -322,50 +385,404 @@ const TokenTierTable = ({ items, t }) => {
               <tr
                 key={key}
                 style={{
-                  backgroundColor: catStyle.rowBackgroundColor,
-                  borderBottom: '1px solid var(--semi-color-border)',
+                  backgroundColor: PRICING_TABLE_BODY_BG,
+                  borderBottom: PRICING_TABLE_ROW_BORDER,
                 }}
               >
                 <td
-                  className='px-2 py-1.5 font-semibold'
+                  className={TABLE_CELL_CLASS.tdLabel}
                   style={{ color: catStyle.textColor }}
                 >
                   {t(label)}
                 </td>
                 <td
-                  className='px-2 py-1.5 text-center font-bold'
+                  className={TABLE_CELL_CLASS.tdPlatform}
                   style={{ color: 'var(--semi-color-primary)' }}
                 >
                   {cell.platformPrice}
                 </td>
-                <td
-                  className='px-2 py-1.5 text-center font-medium'
-                  style={{
-                    color: 'var(--semi-color-text-2)',
-                    textDecoration: showStrike ? 'line-through' : 'none',
-                  }}
-                >
-                  {cell.officialPrice}
-                </td>
-                <td className='px-2 py-1.5 text-center'>
-                  {cell.discount != null && cell.discount > 0 ? (
-                    <Tag
-                      color='red'
-                      size='small'
-                      shape='circle'
-                      style={{ zoom: 0.72 }}
-                    >
-                      -{cell.discount}%
-                    </Tag>
-                  ) : (
-                    <span style={{ color: 'var(--semi-color-text-3)' }}>-</span>
-                  )}
-                </td>
+                {/* 边界隐藏逻辑：hideOfficialCols 为 true 时隐藏官方价和折扣列 */}
+                {!hideOfficialCols && (
+                  <td className={TABLE_CELL_CLASS.tdOfficial}>
+                    {renderOfficialCell(cell.officialPrice, showStrike)}
+                  </td>
+                )}
+                {!hideOfficialCols && (
+                  <td className={TABLE_CELL_CLASS.tdDiscount}>
+                    {renderDiscountCell(cell.discount)}
+                  </td>
+                )}
               </tr>
             );
           })}
         </tbody>
       </table>
+    </div>
+  );
+};
+
+/**
+ * FlatPricingTable — 按量计费表格
+ *
+ * 统一四列表格：价格项 | 平台价 / M | 官方价 / M | 折扣
+ * 仅展示输入价格、输出价格两项数据
+ * 边界逻辑：当所有行均无有效的官方价/折扣数据时（平台价 ≥ 官方价），
+ *   隐藏官方价和折扣列，仅保留价格项和平台价
+ * 折扣视觉：加粗、放大、高饱和度鲜艳色
+ */
+const FlatPricingTable = ({ items, unitSuffix, t }) => {
+  // 收集输入/输出行数据，用于统一表格渲染
+  const rows = [];
+  for (const item of items) {
+    if (item.key !== 'input' && item.key !== 'output') continue;
+    // 从 item 中提取平台价、官方价、折扣信息
+    const platformValue = item.value || '-';
+    const officialValue = item.original?.text || '-';
+    const discount = item.original?.discount ?? null;
+
+    rows.push({
+      key: item.key,
+      label: item.label,
+      platformValue,
+      officialValue,
+      discount,
+      hasOriginal: !!item.original,
+    });
+  }
+
+  if (rows.length === 0) return null;
+
+  // 边界隐藏逻辑：当所有行都没有 original 数据时（说明无有效官方价/折扣），隐藏官方价和折扣列
+  // original 存在的条件是 rootValue > minChannel 且 discount > 0
+  // 因此 original 不存在意味着：平台价 ≥ 官方价 或 无官方价数据，即折扣 ≤ 0
+  const hideOfficialCols = rows.every((r) => !r.hasOriginal);
+
+  return (
+    <div
+      className='w-full min-w-0 overflow-hidden rounded-lg border'
+      style={PRICING_TABLE_WRAPPER_STYLE}
+    >
+      <table
+        className='w-full border-collapse'
+        style={{ fontSize: 11 }}
+      >
+        <thead>
+          <tr style={{ backgroundColor: PRICING_TABLE_HEAD_BG }}>
+            <th
+              className={TABLE_CELL_CLASS.thLeft}
+              style={PRICING_TABLE_HEAD_CELL_STYLE}
+            >
+              {FLAT_PRICING_COLUMNS.label}
+            </th>
+            <th
+              className={TABLE_CELL_CLASS.thCenter}
+              style={PRICING_TABLE_HEAD_CELL_STYLE}
+            >
+              {FLAT_PRICING_COLUMNS.platform}
+            </th>
+            {/* 边界隐藏逻辑：hideOfficialCols 为 true 时隐藏官方价和折扣列 */}
+            {!hideOfficialCols && (
+              <th
+                className={TABLE_CELL_CLASS.thCenter}
+                style={PRICING_TABLE_HEAD_CELL_STYLE}
+              >
+                {FLAT_PRICING_COLUMNS.official}
+              </th>
+            )}
+            {!hideOfficialCols && (
+              <th
+                className={TABLE_CELL_CLASS.thCenter}
+                style={PRICING_TABLE_HEAD_CELL_STYLE}
+              >
+                {FLAT_PRICING_COLUMNS.discount}
+              </th>
+            )}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr
+              key={row.key}
+              style={{
+                backgroundColor: PRICING_TABLE_BODY_BG,
+                borderBottom: PRICING_TABLE_ROW_BORDER,
+              }}
+            >
+              <td
+                className={TABLE_CELL_CLASS.tdLabel}
+                style={{
+                  color:
+                    row.key === 'input'
+                      ? 'var(--semi-blue-7)'
+                      : 'var(--semi-violet-7)',
+                }}
+              >
+                {row.label}
+              </td>
+              <td
+                className={TABLE_CELL_CLASS.tdPlatform}
+                style={{ color: 'var(--semi-color-primary)' }}
+              >
+                {row.platformValue}
+              </td>
+              {!hideOfficialCols && (
+                <td className={TABLE_CELL_CLASS.tdOfficial}>
+                  {row.hasOriginal
+                    ? renderOfficialCell(row.officialValue, row.discount > 0)
+                    : <span style={{ color: 'var(--semi-color-text-3)' }}>-</span>
+                  }
+                </td>
+              )}
+              {!hideOfficialCols && (
+                <td className={TABLE_CELL_CLASS.tdDiscount}>
+                  {renderDiscountCell(row.discount)}
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+/**
+ * FixedPricingTable — 按次计费表格
+ *
+ * 统一四列表格：价格项 | 平台价/次 | 官方价/次 | 折扣
+ * 仅展示模型价格一项数据
+ * 边界逻辑：当无有效的官方价/折扣数据时，隐藏官方价和折扣列
+ * 折扣视觉：加粗、放大、颜色统一 #E74C3C
+ */
+const FixedPricingTable = ({ row, t }) => {
+  if (!row) return null;
+
+  const platformValue = row.value || '-';
+  const officialValue = row.original?.text || '-';
+  const discount = row.original?.discount ?? null;
+  const hasOriginal = !!row.original;
+
+  // 边界隐藏逻辑：无 original 数据时隐藏官方价和折扣列
+  const hideOfficialCols = !hasOriginal;
+
+  return (
+    <div
+      className='w-full min-w-0 overflow-hidden rounded-lg border'
+      style={PRICING_TABLE_WRAPPER_STYLE}
+    >
+      <table
+        className='w-full border-collapse'
+        style={{ fontSize: 11 }}
+      >
+        <thead>
+          <tr style={{ backgroundColor: PRICING_TABLE_HEAD_BG }}>
+            <th
+              className={TABLE_CELL_CLASS.thLeft}
+              style={PRICING_TABLE_HEAD_CELL_STYLE}
+            >
+              {FIXED_PRICING_COLUMNS.label}
+            </th>
+            <th
+              className={TABLE_CELL_CLASS.thCenter}
+              style={PRICING_TABLE_HEAD_CELL_STYLE}
+            >
+              {FIXED_PRICING_COLUMNS.platform}
+            </th>
+            {/* 边界隐藏逻辑：hideOfficialCols 为 true 时隐藏官方价和折扣列 */}
+            {!hideOfficialCols && (
+              <th
+                className={TABLE_CELL_CLASS.thCenter}
+                style={PRICING_TABLE_HEAD_CELL_STYLE}
+              >
+                {FIXED_PRICING_COLUMNS.official}
+              </th>
+            )}
+            {!hideOfficialCols && (
+              <th
+                className={TABLE_CELL_CLASS.thCenter}
+                style={PRICING_TABLE_HEAD_CELL_STYLE}
+              >
+                {FIXED_PRICING_COLUMNS.discount}
+              </th>
+            )}
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            style={{
+              backgroundColor: PRICING_TABLE_BODY_BG,
+              borderBottom: PRICING_TABLE_ROW_BORDER,
+            }}
+          >
+            <td
+              className={TABLE_CELL_CLASS.tdLabel}
+              style={{ color: 'var(--semi-color-teal-7)' }}
+            >
+              {row.label}
+            </td>
+            <td
+              className={TABLE_CELL_CLASS.tdPlatform}
+              style={{ color: 'var(--semi-color-primary)' }}
+            >
+              {platformValue}
+            </td>
+            {!hideOfficialCols && (
+              <td className={TABLE_CELL_CLASS.tdOfficial}>
+                {hasOriginal
+                  ? renderOfficialCell(officialValue, discount > 0)
+                  : <span style={{ color: 'var(--semi-color-text-3)' }}>-</span>
+                }
+              </td>
+            )}
+            {!hideOfficialCols && (
+              <td className={TABLE_CELL_CLASS.tdDiscount}>
+                {renderDiscountCell(discount)}
+              </td>
+            )}
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+/**
+ * VideoPricingTable — 视频类型计费表格
+ *
+ * 每个视频分组（文生视频/图生视频/视频生视频）有独立的表头行，
+ * 分组名称作为首列标题，后跟 平台价 | 官方价 | 折扣
+ * 数据行按分辨率/时长维度填写
+ * 边界逻辑：当所有行均无有效折扣数据（平台价 ≥ 官方价 或 无官方价）时，隐藏官方价和折扣列
+ * 折扣视觉：加粗、放大、高饱和度鲜艳色
+ */
+const VideoPricingTable = ({ videoTierRows, hiddenCount, openDetail, blurPricing, model, t }) => {
+  if (!videoTierRows || videoTierRows.length === 0) return null;
+
+  const groups = groupVideoTierPreviewRows(videoTierRows);
+
+  // 边界隐藏逻辑：所有行都没有有效折扣（discount <= 0 或 null）时，隐藏官方价和折扣列
+  // discount > 0 表示平台价 < 官方价（有折扣），不应隐藏
+  // discount <= 0 或 null 表示平台价 ≥ 官方价 或 无数据，应隐藏
+  const allRowsNoDiscount = videoTierRows.every(
+    (row) => row.discount == null || row.discount <= 0
+  );
+
+  return (
+    <div
+      className='w-full min-w-0 overflow-hidden rounded-lg border'
+      style={PRICING_TABLE_WRAPPER_STYLE}
+    >
+      {groups.map((group, groupIdx) => (
+        <table
+          key={group.family}
+          className='w-full border-collapse'
+          style={{ fontSize: 11 }}
+        >
+          {/* 分组表头行：分组名称作为首列标题，后跟 平台价 | 官方价 | 折扣 */}
+          <thead>
+            <tr style={{ backgroundColor: getVideoTierGroupStyle(group.family).backgroundColor }}>
+              <th
+                className={TABLE_CELL_CLASS.thLeft}
+                style={{
+                  borderBottom: PRICING_TABLE_ROW_BORDER,
+                  color: getVideoTierGroupStyle(group.family).color,
+                }}
+              >
+                <div className='flex items-center gap-1'>
+                  <span
+                    className='h-3 w-0.5 rounded-full'
+                    style={{
+                      backgroundColor: getVideoTierGroupStyle(group.family).borderColor,
+                    }}
+                  />
+                  <span className='font-semibold'>{group.label}</span>
+                </div>
+              </th>
+              <th
+                className={TABLE_CELL_CLASS.thCenter}
+                style={{
+                  borderBottom: PRICING_TABLE_ROW_BORDER,
+                  color: 'var(--semi-color-text-2)',
+                }}
+              >
+                {VIDEO_PRICING_COLUMNS.platform}
+              </th>
+              {/* 边界隐藏逻辑：allRowsNoDiscount 为 true 时隐藏官方价和折扣列 */}
+              {!allRowsNoDiscount && (
+                <th
+                  className={TABLE_CELL_CLASS.thCenter}
+                  style={{
+                    borderBottom: PRICING_TABLE_ROW_BORDER,
+                    color: 'var(--semi-color-text-2)',
+                  }}
+                >
+                  {VIDEO_PRICING_COLUMNS.official}
+                </th>
+              )}
+              {!allRowsNoDiscount && (
+                <th
+                  className={TABLE_CELL_CLASS.thCenter}
+                  style={{
+                    borderBottom: PRICING_TABLE_ROW_BORDER,
+                    color: 'var(--semi-color-text-2)',
+                  }}
+                >
+                  {VIDEO_PRICING_COLUMNS.discount}
+                </th>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {group.rows.map((row) => (
+              <tr
+                key={row.key}
+                style={{
+                  backgroundColor: PRICING_TABLE_BODY_BG,
+                  borderBottom: PRICING_TABLE_ROW_BORDER,
+                }}
+              >
+                <td
+                  className={TABLE_CELL_CLASS.tdLabel}
+                  style={{ color: getVideoTierGroupStyle(group.family).color }}
+                  title={`${row.title} · ${row.audioLabel}`}
+                >
+                  {row.spec}
+                </td>
+                <td
+                  className={TABLE_CELL_CLASS.tdPlatform}
+                  style={{ color: 'var(--semi-color-primary)' }}
+                >
+                  {row.platformPrice}
+                </td>
+                {/* 边界隐藏逻辑：allRowsNoDiscount 为 true 时隐藏官方价和折扣列 */}
+                {!allRowsNoDiscount && (
+                  <td className={TABLE_CELL_CLASS.tdOfficial}>
+                    {renderOfficialCell(row.officialPrice, row.discount > 0)}
+                  </td>
+                )}
+                {!allRowsNoDiscount && (
+                  <td className={TABLE_CELL_CLASS.tdDiscount}>
+                    {renderDiscountCell(row.discount)}
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ))}
+      {hiddenCount > 0 ? (
+        <button
+          type='button'
+          className='w-full py-0.5 text-left text-[11px] font-medium text-semi-color-primary bg-transparent hover:text-semi-color-primary-hover'
+          style={{ borderTop: PRICING_TABLE_ROW_BORDER }}
+          onClick={(e) => {
+            e.stopPropagation();
+            !blurPricing && openDetail && openDetail(model);
+          }}
+        >
+          {t('查看更多')} {'>'}
+        </button>
+      ) : null}
     </div>
   );
 };
@@ -917,13 +1334,15 @@ const PricingCardView = ({
     // 按次计费
     if (quotaType === 1 && fixed) {
       items.push({
-        key: 'fixed',
-        label: t('模型价格'),
-        value:
-          fixed.single ||
-          `${fixed.symbol}${fixed.min} ~ ${fixed.symbol}${fixed.max}`,
-        suffix: fixedSuffix,
-        original: original?.fixed,
+        key: 'fixed-pricing-table',
+        fixedTableRow: {
+          label: t('模型价格'),
+          value:
+            fixed.single ||
+            `${fixed.symbol}${fixed.min} ~ ${fixed.symbol}${fixed.max}`,
+          suffix: fixedSuffix,
+          original: original?.fixed,
+        },
       });
     }
     // 按量计费
@@ -934,13 +1353,11 @@ const PricingCardView = ({
         isTierBilling || !!tokenTierInfo?.hasModelTier;
       const skipFlatOutput =
         isTierBilling || !!tokenTierInfo?.hasCompletionTier;
-      const skipFlatCache =
-        isTierBilling || !!tokenTierInfo?.hasCacheTier;
-      const skipFlatCreateCache =
-        isTierBilling || !!tokenTierInfo?.hasCreateCacheTier;
 
+      // 收集按量计费表格行（仅输入价格和输出价格）
+      const flatTableRows = [];
       if (input && !skipFlatInput) {
-        items.push({
+        flatTableRows.push({
           key: 'input',
           label: t('输入价格'),
           value:
@@ -952,7 +1369,7 @@ const PricingCardView = ({
       }
 
       if (output && !skipFlatOutput) {
-        items.push({
+        flatTableRows.push({
           key: 'output',
           label: t('输出价格'),
           value:
@@ -960,6 +1377,15 @@ const PricingCardView = ({
             `${output.symbol}${output.min} ~ ${output.symbol}${output.max}`,
           suffix: unitSuffix,
           original: original?.output,
+        });
+      }
+
+      // 当有按量计费行时，以表格标记项整体输出
+      if (flatTableRows.length > 0) {
+        items.push({
+          key: 'flat-pricing-table',
+          flatTableRows,
+          unitSuffix,
         });
       }
 
@@ -974,26 +1400,6 @@ const PricingCardView = ({
           original: original?.videoToken,
         });
       }
-
-      // if (cache) {
-      //   items.push({
-      //     key: 'cache',
-      //     label: t('缓存读取价格'),
-      //     value: cache.single || `${cache.symbol}${cache.min} ~ ${cache.symbol}${cache.max}`,
-      //     suffix: unitSuffix,
-      //     original: original?.cache,
-      //   });
-      // }
-
-      // if (createCache) {
-      //   items.push({
-      //     key: 'create-cache',
-      //     label: t('缓存创建价格'),
-      //     value: createCache.single || `${createCache.symbol}${createCache.min} ~ ${createCache.symbol}${createCache.max}`,
-      //     suffix: unitSuffix,
-      //     original: original?.createCache,
-      //   });
-      // }
     }
 
     if (videoFlat) {
@@ -1353,119 +1759,38 @@ const PricingCardView = ({
                           {getModelPriceItemsForCard(model, priceData).map(
                             (item) => (
                               <React.Fragment key={item.key}>
-                                <div
-                                  className={
-                                    item.videoTierRows || item.tokenTierMerged
-                                      ? 'flex flex-col gap-1'
-                                      : 'flex items-center'
-                                  }
-                                >
-                                {item.videoTierRows ? (
-                                  <div className='w-full min-w-0 overflow-hidden'>
-                                    <div className='grid grid-cols-[minmax(54px,1.05fr)_minmax(50px,.95fr)_minmax(50px,.95fr)_minmax(34px,.55fr)] items-center gap-x-1.5 py-0.5 text-center text-[9px] font-medium text-semi-color-text-2'>
-                                      <span />
-                                      <span className='min-w-0 truncate'>
-                                        {t('平台价')}
-                                      </span>
-                                      <span className='min-w-0 truncate'>
-                                        {t('官方价')}
-                                      </span>
-                                      <span className='min-w-0 truncate'>
-                                        {t('折扣率')}
-                                      </span>
-                                    </div>
-                                    {groupVideoTierPreviewRows(
-                                      item.videoTierRows,
-                                    ).map((group) => (
-                                      <div
-                                        key={group.family}
-                                        className='py-0.5'
-                                      >
-                                        <div
-                                          className='mb-0.5 flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-semibold'
-                                          style={getVideoTierGroupStyle(
-                                            group.family,
-                                          )}
-                                        >
-                                          <span
-                                            className='h-3 w-0.5 rounded-full'
-                                            style={{
-                                              backgroundColor:
-                                                getVideoTierGroupStyle(
-                                                  group.family,
-                                                ).borderColor,
-                                            }}
-                                          />
-                                          <span>{group.label}</span>
-                                        </div>
-                                        {group.rows.map((row) => (
-                                          <div
-                                            key={row.key}
-                                            className='grid grid-cols-[minmax(54px,1.05fr)_minmax(50px,.95fr)_minmax(50px,.95fr)_minmax(34px,.55fr)] items-center gap-x-1.5 rounded py-0.5 pl-3 pr-1 text-center text-[11px]'
-                                            style={{
-                                              backgroundColor:
-                                                getVideoTierGroupStyle(
-                                                  group.family,
-                                                ).rowBackgroundColor,
-                                            }}
-                                            title={`${row.title} · ${row.audioLabel}`}
-                                          >
-                                            <span
-                                              className='min-w-0 truncate font-semibold'
-                                              style={{
-                                                color: getVideoTierGroupStyle(
-                                                  group.family,
-                                                ).color,
-                                              }}
-                                            >
-                                              {row.spec}
-                                            </span>
-                                            <span className='min-w-0 truncate font-bold text-semi-color-primary'>
-                                              {row.platformPrice}
-                                            </span>
-                                            <span className='min-w-0 truncate font-medium text-semi-color-text-2'>
-                                              {row.officialPrice}
-                                            </span>
-                                            <span className='min-w-0 truncate font-semibold text-semi-color-text-2'>
-                                              {row.discount > 0 ? (
-                                                <Tag
-                                                  color='red'
-                                                  size='small'
-                                                  shape='circle'
-                                                  style={{ zoom: 0.7 }}
-                                                >
-                                                  -{row.discount}%
-                                                </Tag>
-                                              ) : (
-                                                '-'
-                                              )}
-                                            </span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ))}
-                                    {item.hiddenCount > 0 ? (
-                                      <button
-                                        type='button'
-                                        className='w-full py-0.5 text-left text-[11px] font-medium text-semi-color-primary bg-transparent hover:text-semi-color-primary-hover'
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          !blurPricing &&
-                                            openModelDetail &&
-                                            openModelDetail(model);
-                                        }}
-                                      >
-                                        {t('查看更多')} {'>'}
-                                      </button>
-                                    ) : null}
-                                  </div>
-                                ) : item.tokenTierMerged ? (
+                                {/* 按量计费表格：输入/输出价格统一为标准四列表格 */}
+                                {item.flatTableRows ? (
+                                  <FlatPricingTable
+                                    items={item.flatTableRows}
+                                    unitSuffix={item.unitSuffix}
+                                    t={t}
+                                  />
+                                ) : /* 按次计费表格 */
+                                item.fixedTableRow ? (
+                                  <FixedPricingTable
+                                    row={item.fixedTableRow}
+                                    t={t}
+                                  />
+                                ) : /* 视频类型计费表格 */
+                                item.videoTierRows ? (
+                                  <VideoPricingTable
+                                    videoTierRows={item.videoTierRows}
+                                    hiddenCount={item.hiddenCount}
+                                    openDetail={openModelDetail}
+                                    blurPricing={blurPricing}
+                                    model={model}
+                                    t={t}
+                                  />
+                                ) : /* 阶梯计费表格 */
+                                item.tokenTierMerged ? (
                                   <TokenTierTable
                                     items={item.tokenTierMerged}
                                     t={t}
                                   />
                                 ) : (
-                                  <>
+                                  /* 其他非表格价格项（视频倍率计价、按张计费等） */
+                                  <div className='flex items-center'>
                                     <span className='w-20 flex-shrink-0'>
                                       {item.labelColor ? (
                                         <Tag
@@ -1481,65 +1806,68 @@ const PricingCardView = ({
                                         item.label
                                       )}
                                     </span>
-                                  </>
-                                )}
-                                {!item.videoTierRows && !item.tokenTierMerged ? (
-                                  <span className='flex-1 font-bold text-black inline-flex items-center flex-wrap gap-1'>
-                                    {item.valueNode ? (
-                                      item.valueNode
-                                    ) : item.original ? (
-                                      <>
-                                        <span className='line-through text-gray-400 font-normal text-[10px]'>
-                                          <span
+                                    <span className='flex-1 font-bold text-black inline-flex items-center flex-wrap gap-1'>
+                                      {item.valueNode ? (
+                                        item.valueNode
+                                      ) : item.original ? (
+                                        <>
+                                          <span className='line-through text-gray-400 font-normal text-[10px]'>
+                                            <span
+                                              style={{
+                                                color:
+                                                  'var(--semi-color-primary)',
+                                              }}
+                                            >
+                                              官方
+                                            </span>{' '}
+                                            {item.original.text}
+                                          </span>
+                                          <Tag
+                                            size='small'
+                                            shape='circle'
                                             style={{
-                                              color:
-                                                'var(--semi-color-primary)',
+                                              fontSize: 11,
+                                              fontWeight: 700,
+                                              color: '#E74C3C',
+                                              backgroundColor: 'rgba(231, 76, 60, 0.11)',
+                                              border: 'none',
                                             }}
                                           >
-                                            官方
-                                          </span>{' '}
-                                          {item.original.text}
-                                        </span>
-                                        <Tag
-                                          color='red'
-                                          size='small'
-                                          shape='circle'
-                                        >
-                                          -{item.original.discount}%
-                                        </Tag>
-                                        <span>
-                                          <span
-                                            style={{
-                                              color:
-                                                'var(--semi-color-warning)',
-                                            }}
-                                          >
-                                            我们
-                                          </span>{' '}
-                                          {item.value}
-                                          {item.suffix}
-                                        </span>
-                                      </>
-                                    ) : (
-                                      <span
-                                        className={
-                                          item.labelColor
-                                            ? 'inline-flex min-w-0 flex-wrap items-baseline gap-1'
-                                            : undefined
-                                        }
-                                        title={item.title}
-                                      >
-                                        <span>{item.value}</span>
-                                        {item.suffix ? (
-                                          <span className='font-normal text-[10px] text-semi-color-text-2'>
+                                            -{item.original.discount}%
+                                          </Tag>
+                                          <span>
+                                            <span
+                                              style={{
+                                                color:
+                                                  'var(--semi-color-warning)',
+                                              }}
+                                            >
+                                              我们
+                                            </span>{' '}
+                                            {item.value}
                                             {item.suffix}
                                           </span>
-                                        ) : null}
-                                      </span>
-                                    )}
-                                  </span>
-                                ) : null}
-                                </div>
+                                        </>
+                                      ) : (
+                                        <span
+                                          className={
+                                            item.labelColor
+                                              ? 'inline-flex min-w-0 flex-wrap items-baseline gap-1'
+                                              : undefined
+                                          }
+                                          title={item.title}
+                                        >
+                                          <span>{item.value}</span>
+                                          {item.suffix ? (
+                                            <span className='font-normal text-[10px] text-semi-color-text-2'>
+                                              {item.suffix}
+                                            </span>
+                                          ) : null}
+                                        </span>
+                                      )}
+                                    </span>
+                                  </div>
+                                )}
                               </React.Fragment>
                             ),
                           )}
