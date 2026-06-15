@@ -365,9 +365,8 @@ func errVideoTaskChannelOnNonTaskRelay(ch *model.Channel) *types.TokenFactoryErr
 	}
 	return types.NewErrorWithStatusCode(
 		fmt.Errorf(
-			"当前模型命中渠道「%s」(type=%d) 为视频任务渠道，仅支持视频任务接口（如 POST /v1/videos 或操练场 POST /api/playground/videos），"+
+			"当前模型命中了视频任务渠道，仅支持视频任务接口（如 POST /v1/videos 或操练场 POST /api/playground/videos），"+
 				"不能使用聊天补全、嵌入、图生等非任务接口，否则会按文本 token 误计费；请改用视频任务 API 或为该模型配置文本类渠道",
-			ch.Name, ch.Type,
 		),
 		types.ErrorCodeInvalidRequest,
 		http.StatusBadRequest,
