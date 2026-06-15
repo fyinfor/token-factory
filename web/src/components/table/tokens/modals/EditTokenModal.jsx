@@ -22,7 +22,7 @@ import {
   API,
   showError,
   showSuccess,
-  timestamp2string,
+  toUnixTimestamp,
   renderGroupOption,
   renderQuotaWithPrompt,
   getModelCategories,
@@ -55,6 +55,7 @@ import { useTranslation } from 'react-i18next';
 import { StatusContext } from '../../../../context/Status';
 
 const { Text, Title } = Typography;
+const NEVER_EXPIRES = -1;
 
 const EditTokenModal = (props) => {
   const { t } = useTranslation();
@@ -70,7 +71,8 @@ const EditTokenModal = (props) => {
   const getInitValues = () => ({
     name: '',
     remain_quota: 0,
-    expired_time: -1,
+    expired_time: NEVER_EXPIRES,
+    expired_time_date: undefined,
     unlimited_quota: true,
     model_limits_enabled: false,
     model_limits: [],
@@ -94,22 +96,39 @@ const EditTokenModal = (props) => {
     if (!formApiRef.current) return;
     if (seconds !== 0) {
       timestamp += seconds;
-      formApiRef.current.setValue('expired_time', timestamp2string(timestamp));
+      formApiRef.current.setValue(
+        'expired_time_date',
+        new Date(timestamp * 1000),
+      );
       if (labelKey) {
         showSuccess(t('{{label}} 设置成功', { label: t(labelKey) }));
       }
     } else {
-      formApiRef.current.setValue('expired_time', -1);
+      formApiRef.current.setValue('expired_time', NEVER_EXPIRES);
+      formApiRef.current.setValue('expired_time_date', undefined);
     }
   };
 
   const handleExpirationModeChange = (mode) => {
     setExpirationMode(mode);
     if (!formApiRef.current) return;
-    formApiRef.current.setValue(
-      'expired_time',
-      mode === 'never' ? -1 : undefined,
-    );
+    formApiRef.current.setValue('expired_time', NEVER_EXPIRES);
+    formApiRef.current.setValue('expired_time_date', undefined);
+  };
+
+  const normalizeExpiredTime = (value) => {
+    if (Number(value) === NEVER_EXPIRES) {
+      return { valid: true, expiredTime: NEVER_EXPIRES };
+    }
+
+    const expiredTime = toUnixTimestamp(value);
+    if (!expiredTime) {
+      return { valid: false, message: t('过期时间格式错误！') };
+    }
+    if (expiredTime <= Math.floor(Date.now() / 1000)) {
+      return { valid: false, message: t('过期时间不能早于当前时间！') };
+    }
+    return { valid: true, expiredTime };
   };
 
   const loadModels = async () => {
@@ -169,9 +188,11 @@ const EditTokenModal = (props) => {
     let res = await API.get(`/api/token/${props.editingToken.id}`);
     const { success, message, data } = res.data;
     if (success) {
-      setExpirationMode(data.expired_time === -1 ? 'never' : 'custom');
-      if (data.expired_time !== -1) {
-        data.expired_time = timestamp2string(data.expired_time);
+      setExpirationMode(
+        Number(data.expired_time) === NEVER_EXPIRES ? 'never' : 'custom',
+      );
+      if (Number(data.expired_time) !== NEVER_EXPIRES) {
+        data.expired_time_date = new Date(Number(data.expired_time) * 1000);
       }
       if (data.model_limits !== '') {
         data.model_limits = data.model_limits.split(',');
@@ -227,20 +248,20 @@ const EditTokenModal = (props) => {
   const submit = async (values) => {
     setLoading(true);
     if (isEdit) {
-      let { tokenCount: _tc, ...localInputs } = values;
+      let { tokenCount: _tc, expired_time_date, ...localInputs } = values;
       localInputs.remain_quota = Math.max(
         0,
         parseInt(localInputs.remain_quota, 10) || 0,
       );
-      if (localInputs.expired_time !== -1) {
-        let time = Date.parse(localInputs.expired_time);
-        if (isNaN(time)) {
-          showError(t('过期时间格式错误！'));
-          setLoading(false);
-          return;
-        }
-        localInputs.expired_time = Math.ceil(time / 1000);
+      const expiredTimeResult = normalizeExpiredTime(
+        expired_time_date ?? localInputs.expired_time,
+      );
+      if (!expiredTimeResult.valid) {
+        showError(expiredTimeResult.message);
+        setLoading(false);
+        return;
       }
+      localInputs.expired_time = expiredTimeResult.expiredTime;
       localInputs.model_limits = localInputs.model_limits.join(',');
       localInputs.model_limits_enabled = localInputs.model_limits.length > 0;
       let res = await API.put(`/api/token/`, {
@@ -259,7 +280,7 @@ const EditTokenModal = (props) => {
       const count = parseInt(values.tokenCount, 10) || 1;
       let successCount = 0;
       for (let i = 0; i < count; i++) {
-        let { tokenCount: _tc, ...localInputs } = values;
+        let { tokenCount: _tc, expired_time_date, ...localInputs } = values;
         const baseName =
           values.name.trim() === '' ? 'default' : values.name.trim();
         if (i !== 0 || values.name.trim() === '') {
@@ -272,15 +293,15 @@ const EditTokenModal = (props) => {
           parseInt(localInputs.remain_quota, 10) || 0,
         );
 
-        if (localInputs.expired_time !== -1) {
-          let time = Date.parse(localInputs.expired_time);
-          if (isNaN(time)) {
-            showError(t('过期时间格式错误！'));
-            setLoading(false);
-            break;
-          }
-          localInputs.expired_time = Math.ceil(time / 1000);
+        const expiredTimeResult = normalizeExpiredTime(
+          expired_time_date ?? localInputs.expired_time,
+        );
+        if (!expiredTimeResult.valid) {
+          showError(expiredTimeResult.message);
+          setLoading(false);
+          break;
         }
+        localInputs.expired_time = expiredTimeResult.expiredTime;
         localInputs.model_limits = localInputs.model_limits.join(',');
         localInputs.model_limits_enabled = localInputs.model_limits.length > 0;
         let res = await API.post(`/api/token/`, localInputs);
@@ -431,68 +452,89 @@ const EditTokenModal = (props) => {
                       </Tabs>
                     </Form.Slot>
                   </Col>
-                  {expirationMode === 'custom' && (
-                    <>
-                      <Col xs={24} sm={24} md={24} lg={10} xl={10}>
-                        <Form.DatePicker
-                          field='expired_time'
-                          label={t('过期时间')}
-                          type='dateTime'
-                          placeholder={t('请选择过期时间')}
-                          rules={[
-                            { required: true, message: t('请选择过期时间') },
-                            {
-                              validator: (rule, value) => {
-                                if (value === -1 || !value)
-                                  return Promise.resolve();
-                                const time = Date.parse(value);
-                                if (isNaN(time)) {
-                                  return Promise.reject(
-                                    t('过期时间格式错误！'),
-                                  );
-                                }
-                                if (time <= Date.now()) {
-                                  return Promise.reject(
-                                    t('过期时间不能早于当前时间！'),
-                                  );
-                                }
-                                return Promise.resolve();
+                  <Col
+                    xs={24}
+                    sm={24}
+                    md={24}
+                    lg={10}
+                    xl={10}
+                    style={{
+                      display: expirationMode === 'custom' ? 'block' : 'none',
+                    }}
+                  >
+                    <Form.DatePicker
+                      field='expired_time_date'
+                      label={t('过期时间')}
+                      type='dateTime'
+                      placeholder={t('请选择过期时间')}
+                      rules={
+                        expirationMode === 'custom'
+                          ? [
+                              {
+                                required: true,
+                                message: t('请选择过期时间'),
                               },
-                            },
-                          ]}
-                          showClear
-                          style={{ width: '100%' }}
-                        />
-                      </Col>
-                      <Col xs={24} sm={24} md={24} lg={14} xl={14}>
-                        <Form.Slot label={t('过期时间快捷设置')}>
-                          <Space wrap>
-                            <Button
-                              theme='light'
-                              type='tertiary'
-                              onClick={() => setExpiredTime(1, 0, 0, 0, '一个月')}
-                            >
-                              {t('一个月')}
-                            </Button>
-                            <Button
-                              theme='light'
-                              type='tertiary'
-                              onClick={() => setExpiredTime(0, 1, 0, 0, '一天')}
-                            >
-                              {t('一天')}
-                            </Button>
-                            <Button
-                              theme='light'
-                              type='tertiary'
-                              onClick={() => setExpiredTime(0, 0, 1, 0, '一小时')}
-                            >
-                              {t('一小时')}
-                            </Button>
-                          </Space>
-                        </Form.Slot>
-                      </Col>
-                    </>
-                  )}
+                              {
+                                validator: (rule, value) => {
+                                  if (value === -1 || !value)
+                                    return Promise.resolve();
+                                  const time = toUnixTimestamp(value);
+                                  if (!time) {
+                                    return Promise.reject(
+                                      t('过期时间格式错误！'),
+                                    );
+                                  }
+                                  if (time <= Math.floor(Date.now() / 1000)) {
+                                    return Promise.reject(
+                                      t('过期时间不能早于当前时间！'),
+                                    );
+                                  }
+                                  return Promise.resolve();
+                                },
+                              },
+                            ]
+                          : []
+                      }
+                      showClear
+                      style={{ width: '100%' }}
+                    />
+                  </Col>
+                  <Col
+                    xs={24}
+                    sm={24}
+                    md={24}
+                    lg={14}
+                    xl={14}
+                    style={{
+                      display: expirationMode === 'custom' ? 'block' : 'none',
+                    }}
+                  >
+                    <Form.Slot label={t('过期时间快捷设置')}>
+                      <Space wrap>
+                        <Button
+                          theme='light'
+                          type='tertiary'
+                          onClick={() => setExpiredTime(1, 0, 0, 0, '一个月')}
+                        >
+                          {t('一个月')}
+                        </Button>
+                        <Button
+                          theme='light'
+                          type='tertiary'
+                          onClick={() => setExpiredTime(0, 1, 0, 0, '一天')}
+                        >
+                          {t('一天')}
+                        </Button>
+                        <Button
+                          theme='light'
+                          type='tertiary'
+                          onClick={() => setExpiredTime(0, 0, 1, 0, '一小时')}
+                        >
+                          {t('一小时')}
+                        </Button>
+                      </Space>
+                    </Form.Slot>
+                  </Col>
                   {!isEdit && (
                     <Col span={24}>
                       <Form.InputNumber
@@ -551,7 +593,11 @@ const EditTokenModal = (props) => {
                               { required: true, message: t('请输入额度') },
                               {
                                 validator: (rule, v) => {
-                                  if (v === '' || v === undefined || v === null) {
+                                  if (
+                                    v === '' ||
+                                    v === undefined ||
+                                    v === null
+                                  ) {
                                     return Promise.resolve();
                                   }
                                   const num = Number(v);
