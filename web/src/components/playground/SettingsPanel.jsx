@@ -193,8 +193,8 @@ const SettingsPanel = ({
           defaultPayload={previewPayload}
         />
 
-        {/* 分组选择 */}
-        <div className={customRequestMode ? 'opacity-50' : ''}>
+        {/* 分组选择（UI 隐藏，保留数据加载与配置逻辑） */}
+        <div className={`hidden ${customRequestMode ? 'opacity-50' : ''}`}>
           <div className='flex items-center gap-2 mb-2'>
             <Users size={16} className='text-gray-500' />
             <Typography.Text strong className='text-sm'>
