@@ -530,9 +530,7 @@ export const getTokensColumns = ({
       dataIndex: 'expired_time',
       render: (text, record, index) => {
         return (
-          <div>
-            {record.expired_time === -1 ? t('永不过期') : renderTimestamp(text)}
-          </div>
+          <div>{Number(text) <= 0 ? t('永不过期') : renderTimestamp(text)}</div>
         );
       },
     },
