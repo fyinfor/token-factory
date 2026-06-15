@@ -36,13 +36,13 @@ func TestChannelSupportsRelayMode(t *testing.T) {
 			want:      true,
 		},
 		{
-			name: "TokenFactoryOpen channel supports video submit",
+			name: "TokenFactoryOpen channel supports video submit when model has video tag",
 			channel: &model.Channel{
 				Type: constant.ChannelTypeTokenFactoryOpen,
 			},
 			modelName: "video-model",
 			relayMode: relayconstant.RelayModeVideoSubmit,
-			want:      true,
+			want:      false,
 		},
 		{
 			name: "OpenAI chat channel does not support video submit",
@@ -136,7 +136,12 @@ func TestGetEndpointTypesByChannelTypeForVideo(t *testing.T) {
 	}
 
 	for _, channelType := range videoChannelTypes {
-		endpointTypes := common.GetEndpointTypesByChannelType(channelType, "any-video-model")
+		var endpointTypes []constant.EndpointType
+		if channelType == constant.ChannelTypeTokenFactoryOpen {
+			endpointTypes = common.GetEndpointTypesByChannelTypeWithTags(channelType, "any-video-model", "视频")
+		} else {
+			endpointTypes = common.GetEndpointTypesByChannelType(channelType, "any-video-model")
+		}
 		hasVideoEndpoint := false
 		for _, et := range endpointTypes {
 			switch et {

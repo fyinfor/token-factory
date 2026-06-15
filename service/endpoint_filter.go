@@ -11,7 +11,11 @@ func ChannelSupportsRelayMode(channel *model.Channel, modelName string, relayMod
 	if channel == nil {
 		return false
 	}
-	endpointTypes := common.GetEndpointTypesByChannelType(channel.Type, modelName)
+	modelTags := ""
+	if channel.Type == constant.ChannelTypeTokenFactoryOpen {
+		modelTags = model.GetModelTagsByName(modelName)
+	}
+	endpointTypes := common.GetEndpointTypesByChannelTypeWithTags(channel.Type, modelName, modelTags)
 	supports := func(targets ...constant.EndpointType) bool {
 		for _, endpointType := range endpointTypes {
 			for _, target := range targets {
