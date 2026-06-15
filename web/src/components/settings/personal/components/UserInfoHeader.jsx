@@ -45,6 +45,9 @@ const UserInfoHeader = ({ t, userState }) => {
     return 'NA';
   };
 
+  const displayName = userState?.user?.display_name || getUsername();
+  const username = getUsername();
+
   return (
     <Card
       className='!rounded-2xl overflow-hidden'
@@ -71,8 +74,16 @@ const UserInfoHeader = ({ t, userState }) => {
                     className='text-3xl font-bold truncate'
                     style={{ color: 'white' }}
                   >
-                    {getUsername()}
+                    {displayName}
                   </div>
+                  {displayName !== username && (
+                    <div
+                      className='text-sm truncate'
+                      style={{ color: 'rgba(255,255,255,0.82)' }}
+                    >
+                      @{username}
+                    </div>
+                  )}
                   <div className='flex flex-wrap items-center gap-2'>
                     {isRoot() ? (
                       <Tag
