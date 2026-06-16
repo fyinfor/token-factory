@@ -1434,23 +1434,53 @@ func TestChannel(c *gin.Context) {
 	})
 }
 
+func buildModelTagFilter(tags []string) map[string]struct{} {
+	out := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		tag = strings.TrimSpace(tag)
+		if tag != "" {
+			out[tag] = struct{}{}
+		}
+	}
+	return out
+}
+
+func modelMatchesTagFilter(modelName string, tagFilter map[string]struct{}) bool {
+	if len(tagFilter) == 0 {
+		return true
+	}
+	tags := model.GetModelTagsByName(modelName)
+	if tags == "" {
+		return false
+	}
+	for tag := range tagFilter {
+		if common.ModelTagsContain(tags, tag) {
+			return true
+		}
+	}
+	return false
+}
+
 // collectModelsForScheduledChannelTest 返回定时全量测试要对渠道串行探测的模型名列表（与非空 models 的批量上架测试一致）；无任何绑定时返回单元素空串以走 testChannel 内置默认模型。
-func collectModelsForScheduledChannelTest(channel *model.Channel) []string {
+func collectModelsForScheduledChannelTest(channel *model.Channel, tagFilter map[string]struct{}) []string {
 	raw := channel.GetModels()
 	out := make([]string, 0, len(raw))
 	for _, m := range raw {
 		m = strings.TrimSpace(m)
-		if m != "" {
+		if m != "" && modelMatchesTagFilter(m, tagFilter) {
 			out = append(out, m)
 		}
 	}
 	if len(out) == 0 && channel.TestModel != nil {
 		tm := strings.TrimSpace(*channel.TestModel)
-		if tm != "" {
+		if tm != "" && modelMatchesTagFilter(tm, tagFilter) {
 			out = append(out, tm)
 		}
 	}
 	if len(out) == 0 {
+		if len(tagFilter) > 0 {
+			return []string{}
+		}
 		return []string{""}
 	}
 	return out
@@ -1502,6 +1532,7 @@ func testAllChannels(notify bool) error {
 	if disableThreshold == 0 {
 		disableThreshold = 10000000 // a impossible value
 	}
+	modelTagFilter := buildModelTagFilter(operation_setting.GetMonitorSetting().AutoTestModelTags)
 	gopool.Go(func() {
 		// 使用 defer 确保无论如何都会重置运行状态，防止死锁
 		defer func() {
@@ -1518,7 +1549,10 @@ func testAllChannels(notify bool) error {
 			isInitiallyEnabled := statusAtStart == common.ChannelStatusEnabled
 			isInitiallyAutoDisabled := statusAtStart == common.ChannelStatusAutoDisabled
 
-			modelsToRun := collectModelsForScheduledChannelTest(channel)
+			modelsToRun := collectModelsForScheduledChannelTest(channel, modelTagFilter)
+			if len(modelsToRun) == 0 {
+				continue
+			}
 
 			var firstBanCtx *gin.Context
 			var firstBanTfErr *types.TokenFactoryError

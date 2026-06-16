@@ -332,6 +332,9 @@ func ImportModelsMeta(c *gin.Context) {
 
 	// 刷新定价缓存
 	model.RefreshPricing()
+	if _, err := model.SyncModelTagsFromModels(); err != nil {
+		common.SysError("sync model tags after import: " + err.Error())
+	}
 
 	common.SysLog(fmt.Sprintf("模型导入完成：供应商新增 %d/更新 %d/失败 %d，模型新增 %d/更新 %d/失败 %d",
 		result.VendorsAdded, result.VendorsUpdated, result.VendorsFailed,
