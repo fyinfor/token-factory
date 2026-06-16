@@ -417,10 +417,15 @@ const TokenTierDetailTable = ({
                       <td key={cat} style={{ ...cellStyle, backgroundColor: ts.bgColor }}>
                         {cell.discount != null && cell.discount > 0 ? (
                           <Tag
-                            color='red'
                             size='small'
                             shape='circle'
-                            style={{ zoom: 0.75 }}
+                            style={{
+                              fontSize: 12,
+                              fontWeight: 700,
+                              color: '#E74C3C',
+                              backgroundColor: 'rgba(231, 76, 60, 0.11)',
+                              border: 'none',
+                            }}
                           >
                             -{cell.discount}%
                           </Tag>
@@ -581,10 +586,10 @@ const PriceComparisonList = ({ items, t, blurPricing = false }) => {
                     height: 22,
                     padding: '0 7px',
                     color: item.hasDiscount
-                      ? '#dc2626'
+                      ? '#E74C3C'
                       : 'var(--semi-color-text-2)',
                     backgroundColor: item.hasDiscount
-                      ? 'rgba(255, 59, 48, 0.11)'
+                      ? 'rgba(231, 76, 60, 0.11)'
                       : 'rgba(142, 142, 147, 0.12)',
                   }}
                 >
@@ -1444,10 +1449,10 @@ const ModelChannelList = ({
                                 height: 22,
                                 padding: '0 7px',
                                 color: discountDisplay.hasDiscount
-                                  ? '#dc2626'
+                                  ? '#E74C3C'
                                   : 'var(--semi-color-text-2)',
                                 backgroundColor: discountDisplay.hasDiscount
-                                  ? 'rgba(255, 59, 48, 0.11)'
+                                  ? 'rgba(231, 76, 60, 0.11)'
                                   : 'rgba(142, 142, 147, 0.12)',
                               }}
                             >
