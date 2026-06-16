@@ -450,6 +450,12 @@ func SyncUpstreamModels(c *gin.Context) {
 		}
 	}
 
+	if createdModels > 0 || updatedModels > 0 {
+		if _, err := model.SyncModelTagsFromModels(); err != nil {
+			common.SysError("sync model tags after upstream sync: " + err.Error())
+		}
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": gin.H{
