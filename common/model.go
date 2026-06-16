@@ -57,27 +57,3 @@ func IsOpenAITextModel(modelName string) bool {
 	}
 	return false
 }
-
-// ModelTagsContain 判断 models.tags 逗号列表是否包含指定标签（去空格后精确匹配）。
-func ModelTagsContain(tags string, keyword string) bool {
-	keyword = strings.TrimSpace(keyword)
-	if keyword == "" {
-		return false
-	}
-	for _, t := range strings.Split(tags, ",") {
-		if strings.TrimSpace(t) == keyword {
-			return true
-		}
-	}
-	return false
-}
-
-// ModelTagsIndicateVideoPricing 模型带「视频」标签时，定价卡片走视频展示口径。
-func ModelTagsIndicateVideoPricing(tags string) bool {
-	return ModelTagsContain(tags, "视频")
-}
-
-// ModelTagsIndicateImagePricing 模型带「图片」标签时，定价卡片走图片展示口径。
-func ModelTagsIndicateImagePricing(tags string) bool {
-	return ModelTagsContain(tags, "图片")
-}

@@ -270,23 +270,3 @@ func GetExistingModelNames(names []string) ([]string, error) {
 		Pluck("model_name", &result).Error
 	return result, err
 }
-
-// GetModelTagsByName 读取 models 表 tags 字段（精确 model_name 匹配；未找到返回空串）。
-func GetModelTagsByName(modelName string) string {
-	modelName = strings.TrimSpace(modelName)
-	if modelName == "" || DB == nil {
-		return ""
-	}
-	var row struct {
-		Tags string `gorm:"column:tags"`
-	}
-	err := DB.Model(&Model{}).
-		Select("tags").
-		Where("model_name = ? AND status = 1", modelName).
-		Limit(1).
-		Scan(&row).Error
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(row.Tags)
-}
