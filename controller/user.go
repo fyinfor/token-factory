@@ -43,6 +43,11 @@ type RegisterRequest struct {
 	SMSCode          string `json:"sms_verification_code"`
 }
 
+type playgroundImagePricingTier struct {
+	Resolution string `json:"resolution"`
+	Lane       string `json:"lane,omitempty"`
+}
+
 func ApplyStudent(c *gin.Context) {
 	id := c.GetInt("id")
 	user, err := model.GetUserById(id, true)
@@ -1019,18 +1024,78 @@ func collectPlaygroundVideoPricingTiers(modelName string, channelIDs map[int]str
 	return out
 }
 
-func GetPlaygroundVideoPricingTiers(c *gin.Context) {
-	modelName := strings.TrimSpace(c.Query("model"))
-	if modelName == "" {
-		common.ApiErrorMsg(c, "model is required")
+func appendPlaygroundImagePricingTier(out *[]playgroundImagePricingTier, seen map[string]struct{}, resolution, lane string) {
+	resolution = strings.TrimSpace(resolution)
+	if resolution == "" {
 		return
 	}
-	routeSlug := strings.TrimSpace(c.Query("route_slug"))
+	key := resolution + "|" + lane
+	if _, ok := seen[key]; ok {
+		return
+	}
+	seen[key] = struct{}{}
+	*out = append(*out, playgroundImagePricingTier{
+		Resolution: resolution,
+		Lane:       lane,
+	})
+}
+
+func appendPlaygroundImagePerImageRuleTiers(out *[]playgroundImagePricingTier, seen map[string]struct{}, rows []ratio_setting.ImageResolutionPerImageRule, lane string) {
+	for i := range rows {
+		if rows[i].ImagePrice <= 0 {
+			continue
+		}
+		appendPlaygroundImagePricingTier(out, seen, rows[i].Resolution, lane)
+	}
+}
+
+func appendPlaygroundImagePricingRuleTiers(out *[]playgroundImagePricingTier, seen map[string]struct{}, rules ratio_setting.ImagePricingRules) {
+	appendPlaygroundImagePerImageRuleTiers(out, seen, rules.TextToImagePerImage, "text_to_image")
+	appendPlaygroundImagePerImageRuleTiers(out, seen, rules.ImageToImagePerImage, "image_to_image")
+}
+
+func collectPlaygroundImagePricingTiers(modelName string, channelIDs map[int]struct{}) []playgroundImagePricingTier {
+	seen := make(map[string]struct{})
+	out := make([]playgroundImagePricingTier, 0)
+	if rules, ok := ratio_setting.GetImagePricingRules(modelName); ok {
+		appendPlaygroundImagePricingRuleTiers(&out, seen, rules)
+	}
+	for channelID := range channelIDs {
+		ch, err := model.CacheGetChannel(channelID)
+		if err != nil || ch == nil || ch.Status != common.ChannelStatusEnabled {
+			continue
+		}
+		if rules, ok := ratio_setting.GetChannelImagePricingRules(channelID, modelName); ok {
+			appendPlaygroundImagePricingRuleTiers(&out, seen, rules)
+		}
+		hint := model.BuildImagePerImageHint(
+			channelID,
+			modelName,
+			ch.ResolvedPriceDiscountPercent(),
+			ch.ResolvedMarkupDiscountRate(),
+		)
+		if hint == nil {
+			continue
+		}
+		for _, row := range hint.Tiers {
+			appendPlaygroundImagePricingTier(&out, seen, row.Resolution, row.Lane)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Resolution == out[j].Resolution {
+			return out[i].Lane < out[j].Lane
+		}
+		return out[i].Resolution < out[j].Resolution
+	})
+	return out
+}
+
+func getPlaygroundEnabledChannelIDs(c *gin.Context, modelName, routeSlug string) (map[int]struct{}, bool) {
 	userID := c.GetInt("id")
 	user, err := model.GetUserCache(userID)
 	if err != nil {
 		common.ApiError(c, err)
-		return
+		return nil, false
 	}
 	groups := service.GetUserUsableGroups(user.Group)
 	channelIDs := make(map[int]struct{})
@@ -1046,10 +1111,42 @@ func GetPlaygroundVideoPricingTiers(c *gin.Context) {
 			channelIDs[channelID] = struct{}{}
 		}
 	}
+	return channelIDs, true
+}
+
+func GetPlaygroundVideoPricingTiers(c *gin.Context) {
+	modelName := strings.TrimSpace(c.Query("model"))
+	if modelName == "" {
+		common.ApiErrorMsg(c, "model is required")
+		return
+	}
+	routeSlug := strings.TrimSpace(c.Query("route_slug"))
+	channelIDs, ok := getPlaygroundEnabledChannelIDs(c, modelName, routeSlug)
+	if !ok {
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
 		"data":    collectPlaygroundVideoPricingTiers(modelName, channelIDs),
+	})
+}
+
+func GetPlaygroundImagePricingTiers(c *gin.Context) {
+	modelName := strings.TrimSpace(c.Query("model"))
+	if modelName == "" {
+		common.ApiErrorMsg(c, "model is required")
+		return
+	}
+	routeSlug := strings.TrimSpace(c.Query("route_slug"))
+	channelIDs, ok := getPlaygroundEnabledChannelIDs(c, modelName, routeSlug)
+	if !ok {
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    collectPlaygroundImagePricingTiers(modelName, channelIDs),
 	})
 }
 
@@ -1584,6 +1681,10 @@ func UpdateSelf(c *gin.Context) {
 }
 
 func checkUpdatePassword(originalPassword string, newPassword string, userId int) (updatePassword bool, err error) {
+	if newPassword == "" {
+		return false, nil
+	}
+
 	var currentUser *model.User
 	currentUser, err = model.GetUserById(userId, true)
 	if err != nil {
@@ -1594,9 +1695,6 @@ func checkUpdatePassword(originalPassword string, newPassword string, userId int
 	// 支持第一次账号绑定时原密码为空的情况
 	if !common.ValidatePasswordAndHash(originalPassword, currentUser.Password) && currentUser.Password != "" {
 		err = fmt.Errorf("原密码错误")
-		return
-	}
-	if newPassword == "" {
 		return
 	}
 	updatePassword = true
