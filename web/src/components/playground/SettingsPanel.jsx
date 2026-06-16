@@ -31,16 +31,14 @@ import {
 import { Sparkles, Users, ToggleLeft, X, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
+  buildPlaygroundImageSizeOptions,
   buildPlaygroundVideoResolutionOptions,
   formatVideoResolutionDisplayLabel,
   getPlaygroundVideoSizeForTier,
   renderGroupOption,
   selectFilter,
 } from '../../helpers';
-import {
-  PLAYGROUND_IMAGE_SIZE_OPTIONS,
-  PLAYGROUND_VIDEO_DURATION_OPTIONS,
-} from '../../constants/playground.constants';
+import { PLAYGROUND_VIDEO_DURATION_OPTIONS } from '../../constants/playground.constants';
 import ParameterControl from './ParameterControl';
 
 /**
@@ -89,6 +87,14 @@ const SettingsPanel = ({
   const isImageMode = displayMode === 'image';
   const isVideoMode = displayMode === 'video';
   const mediaModeEnabled = isImageMode || isVideoMode;
+  const imageSizeOptions = buildPlaygroundImageSizeOptions(
+    inputs.selected_image_pricing_tiers,
+  );
+  const selectedImageSize = imageSizeOptions.some(
+    (option) => option.value === inputs.image_size,
+  )
+    ? inputs.image_size
+    : imageSizeOptions[0]?.value || '1280x720';
   const videoResolutionOptions = buildPlaygroundVideoResolutionOptions(
     inputs.selected_video_pricing_tiers,
   );
@@ -193,8 +199,8 @@ const SettingsPanel = ({
           defaultPayload={previewPayload}
         />
 
-        {/* 分组选择 */}
-        <div className={customRequestMode ? 'opacity-50' : ''}>
+        {/* 分组选择（UI 隐藏，保留数据加载与配置逻辑） */}
+        <div className={`hidden ${customRequestMode ? 'opacity-50' : ''}`}>
           <div className='flex items-center gap-2 mb-2'>
             <Users size={16} className='text-gray-500' />
             <Typography.Text strong className='text-sm'>
@@ -389,16 +395,16 @@ const SettingsPanel = ({
               </Typography.Text>
               <Select
                 placeholder={t('图片尺寸')}
-                optionList={PLAYGROUND_IMAGE_SIZE_OPTIONS}
-                value={inputs.image_size}
+                optionList={imageSizeOptions}
+                value={selectedImageSize}
                 onChange={(value) => onInputChange('image_size', value)}
                 disabled={customRequestMode}
                 style={{ width: '100%' }}
                 renderSelectedItem={(option) => (
                   <span>
                     {option?.label ??
-                      formatVideoResolutionDisplayLabel(inputs.image_size) ??
-                      inputs.image_size}
+                      formatVideoResolutionDisplayLabel(selectedImageSize) ??
+                      selectedImageSize}
                   </span>
                 )}
               />

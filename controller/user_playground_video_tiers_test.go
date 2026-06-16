@@ -50,3 +50,35 @@ func TestAppendPlaygroundVideoPricingRuleTiersIncludesConfiguredPerItemResolutio
 		}
 	}
 }
+
+func TestAppendPlaygroundImagePricingRuleTiersIncludesConfiguredResolutions(t *testing.T) {
+	rules := ratio_setting.ImagePricingRules{
+		TextToImagePerImage: []ratio_setting.ImageResolutionPerImageRule{
+			{Resolution: "854x480", ImagePrice: 0.01},
+			{Resolution: "1280x720", ImagePrice: 0.02},
+			{Resolution: "1920x1080", ImagePrice: 0},
+		},
+		ImageToImagePerImage: []ratio_setting.ImageResolutionPerImageRule{
+			{Resolution: "1280x720", ImagePrice: 0.03},
+			{Resolution: "2560x1440", ImagePrice: 0.04},
+		},
+	}
+	seen := make(map[string]struct{})
+	out := make([]playgroundImagePricingTier, 0)
+	appendPlaygroundImagePricingRuleTiers(&out, seen, rules)
+
+	want := []playgroundImagePricingTier{
+		{Resolution: "854x480", Lane: "text_to_image"},
+		{Resolution: "1280x720", Lane: "text_to_image"},
+		{Resolution: "1280x720", Lane: "image_to_image"},
+		{Resolution: "2560x1440", Lane: "image_to_image"},
+	}
+	if len(out) != len(want) {
+		t.Fatalf("tier count = %d, want %d: %#v", len(out), len(want), out)
+	}
+	for i := range want {
+		if out[i] != want[i] {
+			t.Fatalf("tier[%d] = %#v, want %#v", i, out[i], want[i])
+		}
+	}
+}

@@ -29,6 +29,7 @@ import {
   collectVideoMediaUrls,
 } from './playgroundVideoUtils';
 import {
+  buildPlaygroundImageSizeOptions,
   buildPlaygroundVideoResolutionOptions,
   getPlaygroundVideoSizeForTier,
 } from './videoResolutionLabel';
@@ -270,10 +271,18 @@ export const buildApiPayload = (
     return payload;
   }
   if (isImageMode) {
+    const sizeOptions = buildPlaygroundImageSizeOptions(
+      inputs.selected_image_pricing_tiers,
+    );
+    const selectedImageSize = sizeOptions.some(
+      (option) => option.value === inputs.image_size,
+    )
+      ? inputs.image_size
+      : sizeOptions[0]?.value || '1024x1024';
     const payload = {
       model: modelWithRoute,
       prompt: getLastUserPrompt(),
-      size: inputs.image_size || '1024x1024',
+      size: selectedImageSize,
       n: Number(inputs.image_n) || 1,
       __endpoint: 'image',
     };

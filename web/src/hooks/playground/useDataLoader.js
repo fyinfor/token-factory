@@ -21,6 +21,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   API,
+  buildPlaygroundImageSizeOptions,
   buildPlaygroundVideoResolutionOptions,
   processModelsData,
   processGroupsData,
@@ -126,7 +127,12 @@ export const useDataLoader = (
     tiers: inputs.selected_video_pricing_tiers || [],
     resolution: inputs.video_resolution_preset,
   });
+  const latestImagePricingStateRef = useRef({
+    tiers: inputs.selected_image_pricing_tiers || [],
+    size: inputs.image_size,
+  });
   const videoPricingTierCacheRef = useRef(new Map());
+  const imagePricingTierCacheRef = useRef(new Map());
   const loadModelsRequestIdRef = useRef(0);
 
   useEffect(() => {
@@ -135,6 +141,13 @@ export const useDataLoader = (
       resolution: inputs.video_resolution_preset,
     };
   }, [inputs.selected_video_pricing_tiers, inputs.video_resolution_preset]);
+
+  useEffect(() => {
+    latestImagePricingStateRef.current = {
+      tiers: inputs.selected_image_pricing_tiers || [],
+      size: inputs.image_size,
+    };
+  }, [inputs.selected_image_pricing_tiers, inputs.image_size]);
 
   /**
    * 拉取 scene=playground 模型列表，写入「类型选项」与原始行；不依赖当前 model_type，避免重复请求与请求返回顺序错配。
@@ -375,7 +388,10 @@ export const useDataLoader = (
         resolutionOptions.length > 0 &&
         !resolutionOptions.some((option) => option.value === latest.resolution)
       ) {
-        handleInputChange('video_resolution_preset', resolutionOptions[0].value);
+        handleInputChange(
+          'video_resolution_preset',
+          resolutionOptions[0].value,
+        );
       }
     };
     if (videoPricingTierCacheRef.current.has(cacheKey)) {
@@ -404,6 +420,67 @@ export const useDataLoader = (
       }
     };
     loadVideoPricingTiers();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    userState?.user,
+    inputs.display_mode,
+    inputs.model,
+    inputs.selected_route_slug,
+    handleInputChange,
+  ]);
+
+  useEffect(() => {
+    if (!userState?.user || (inputs.display_mode || 'text') !== 'image') {
+      return;
+    }
+    const modelName = String(inputs.model || '').trim();
+    if (!modelName) {
+      return;
+    }
+    const routeSlug = String(inputs.selected_route_slug || '').trim();
+    const cacheKey = `${modelName}\n${routeSlug}`;
+    let cancelled = false;
+    const applyImagePricingTiers = (tiers) => {
+      const latest = latestImagePricingStateRef.current;
+      if (JSON.stringify(latest.tiers || []) !== JSON.stringify(tiers)) {
+        handleInputChange('selected_image_pricing_tiers', tiers);
+      }
+      const sizeOptions = buildPlaygroundImageSizeOptions(tiers);
+      if (
+        sizeOptions.length > 0 &&
+        !sizeOptions.some((option) => option.value === latest.size)
+      ) {
+        handleInputChange('image_size', sizeOptions[0].value);
+      }
+    };
+    if (imagePricingTierCacheRef.current.has(cacheKey)) {
+      applyImagePricingTiers(imagePricingTierCacheRef.current.get(cacheKey));
+      return;
+    }
+    const loadImagePricingTiers = async () => {
+      try {
+        const res = await API.get(
+          API_ENDPOINTS.USER_PLAYGROUND_IMAGE_PRICING_TIERS,
+          {
+            params: {
+              model: modelName,
+              route_slug: routeSlug,
+            },
+          },
+        );
+        if (cancelled) return;
+        const { success, data } = res.data || {};
+        if (!success) return;
+        const tiers = Array.isArray(data) ? data : [];
+        imagePricingTierCacheRef.current.set(cacheKey, tiers);
+        applyImagePricingTiers(tiers);
+      } catch {
+        // Playground can keep the built-in image size fallback if tier loading fails.
+      }
+    };
+    loadImagePricingTiers();
     return () => {
       cancelled = true;
     };

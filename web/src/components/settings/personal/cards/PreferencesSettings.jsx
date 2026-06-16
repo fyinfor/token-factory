@@ -18,8 +18,15 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useState, useEffect, useContext } from 'react';
-import { Card, Select, Typography, Avatar } from '@douyinfe/semi-ui';
-import { Languages } from 'lucide-react';
+import {
+  Avatar,
+  Button,
+  Card,
+  Input,
+  Select,
+  Typography,
+} from '@douyinfe/semi-ui';
+import { Languages, UserRound } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { API, showSuccess, showError } from '../../../../helpers';
 import { UserContext } from '../../../../context/User';
@@ -46,7 +53,11 @@ const PreferencesSettings = ({ t }) => {
   const [currentLanguage, setCurrentLanguage] = useState(
     normalizeLanguage(i18n.language) || 'zh-CN',
   );
-  const [loading, setLoading] = useState(false);
+  const [languageLoading, setLanguageLoading] = useState(false);
+  const [displayName, setDisplayName] = useState(
+    userState?.user?.display_name || '',
+  );
+  const [displayNameSaving, setDisplayNameSaving] = useState(false);
 
   // Load saved language preference from user settings
   useEffect(() => {
@@ -67,10 +78,27 @@ const PreferencesSettings = ({ t }) => {
     }
   }, [userState?.user?.setting, i18n]);
 
+  useEffect(() => {
+    setDisplayName(userState?.user?.display_name || '');
+  }, [userState?.user?.display_name]);
+
+  const syncLocalUser = (patch) => {
+    const nextUser = {
+      ...(userState?.user || {}),
+      ...patch,
+    };
+    userDispatch({
+      type: 'login',
+      payload: nextUser,
+    });
+    localStorage.setItem('user', JSON.stringify(nextUser));
+    return nextUser;
+  };
+
   const handleLanguagePreferenceChange = async (lang) => {
     if (lang === currentLanguage) return;
 
-    setLoading(true);
+    setLanguageLoading(true);
     const previousLang = currentLanguage;
 
     try {
@@ -96,15 +124,7 @@ const PreferencesSettings = ({ t }) => {
           }
         }
         settings.language = lang;
-        const nextUser = {
-          ...userState.user,
-          setting: JSON.stringify(settings),
-        };
-        userDispatch({
-          type: 'login',
-          payload: nextUser,
-        });
-        localStorage.setItem('user', JSON.stringify(nextUser));
+        syncLocalUser({ setting: JSON.stringify(settings) });
       } else {
         showError(res.data.message || t('保存失败'));
         // Revert on error
@@ -119,7 +139,39 @@ const PreferencesSettings = ({ t }) => {
       i18n.changeLanguage(previousLang);
       localStorage.setItem('i18nextLng', previousLang);
     } finally {
-      setLoading(false);
+      setLanguageLoading(false);
+    }
+  };
+
+  const handleDisplayNameSave = async () => {
+    const nextDisplayName = displayName.trim();
+    const previousDisplayName = userState?.user?.display_name || '';
+    if (nextDisplayName === previousDisplayName) return;
+    if (!nextDisplayName) {
+      showError(t('请输入显示名称'));
+      return;
+    }
+    if (nextDisplayName.length > 20) {
+      showError(t('显示名称不能超过 20 个字符'));
+      return;
+    }
+
+    setDisplayNameSaving(true);
+    try {
+      const res = await API.put('/api/user/self', {
+        display_name: nextDisplayName,
+      });
+      if (res.data.success) {
+        setDisplayName(nextDisplayName);
+        syncLocalUser({ display_name: nextDisplayName });
+        showSuccess(t('显示名称已保存'));
+      } else {
+        showError(res.data.message || t('保存失败'));
+      }
+    } catch (error) {
+      showError(t('保存失败，请重试'));
+    } finally {
+      setDisplayNameSaving(false);
     }
   };
 
@@ -139,6 +191,50 @@ const PreferencesSettings = ({ t }) => {
           </div>
         </div>
       </div>
+      {/* Display Name Setting Card */}
+      <Card className='!rounded-xl border dark:border-gray-700'>
+        <div className='flex flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-4'>
+          <div className='flex items-start w-full sm:w-auto'>
+            <div className='w-12 h-12 rounded-full bg-blue-50 dark:bg-blue-900/30 flex items-center justify-center mr-4 flex-shrink-0'>
+              <UserRound
+                size={20}
+                className='text-blue-600 dark:text-blue-400'
+              />
+            </div>
+            <div>
+              <Typography.Title heading={6} className='mb-1'>
+                {t('显示名称')}
+              </Typography.Title>
+              <Typography.Text type='tertiary' className='text-sm'>
+                {t('设置在界面中展示的个人名称，不影响登录用户名')}
+              </Typography.Text>
+            </div>
+          </div>
+          <div className='flex w-full sm:w-auto gap-2'>
+            <Input
+              value={displayName}
+              onChange={setDisplayName}
+              maxLength={20}
+              showClear
+              placeholder={t('请输入显示名称')}
+              style={{ width: 220 }}
+              disabled={displayNameSaving}
+              onEnterPress={handleDisplayNameSave}
+            />
+            <Button
+              type='primary'
+              loading={displayNameSaving}
+              disabled={
+                displayName.trim() === (userState?.user?.display_name || '')
+              }
+              onClick={handleDisplayNameSave}
+            >
+              {t('保存')}
+            </Button>
+          </div>
+        </div>
+      </Card>
+      <div className='h-4'></div>
       {/* Language Setting Card */}
       <Card className='!rounded-xl border dark:border-gray-700'>
         <div className='flex flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-4'>
@@ -162,7 +258,7 @@ const PreferencesSettings = ({ t }) => {
             value={currentLanguage}
             onChange={handleLanguagePreferenceChange}
             style={{ width: 180 }}
-            loading={loading}
+            loading={languageLoading}
             optionList={languageOptions.map((opt) => ({
               value: opt.value,
               label: opt.label,

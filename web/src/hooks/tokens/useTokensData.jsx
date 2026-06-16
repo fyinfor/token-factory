@@ -29,6 +29,7 @@ import {
   encodeToBase64,
   openAppLink,
   isCustomProtocolUrl,
+  getSystemName,
 } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
@@ -266,8 +267,10 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
         serverAddress = window.location.origin;
       }
       if (url.includes('{cherryConfig}') === true) {
+        const platformName = getSystemName();
         let cherryConfig = {
-          id: 'new-api',
+          id: platformName,
+          name: platformName,
           baseUrl: serverAddress,
           apiKey: `sk-${fullKey}`,
         };
@@ -276,8 +279,10 @@ export const useTokensData = (openFluentNotification, openCCSwitchModal) => {
         );
         url = url.replaceAll('{cherryConfig}', encodedConfig);
       } else if (url.includes('{aionuiConfig}') === true) {
+        const platformName = getSystemName();
         let aionuiConfig = {
-          platform: 'new-api',
+          platform: platformName,
+          name: platformName,
           baseUrl: serverAddress,
           apiKey: `sk-${fullKey}`,
         };
