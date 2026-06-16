@@ -29,6 +29,7 @@ func TestTryDelegateTokenFactoryOpenChannelTestSendsUpstreamIdentity(t *testing.
 	defer server.Close()
 
 	otherInfo, err := common.Marshal(map[string]any{
+		"upstream_channel_id":     158,
 		"source":                  "tokenfactory_open",
 		"upstream_route_slug":     "uAb12",
 		"upstream_supplier_alias": "P0",
@@ -50,6 +51,7 @@ func TestTryDelegateTokenFactoryOpenChannelTestSendsUpstreamIdentity(t *testing.
 	require.Equal(t, "happyhorse-1.0-t2v", gotReq.Model)
 	require.Equal(t, "image-generation", gotReq.EndpointType)
 	require.True(t, gotReq.Stream)
+	require.Equal(t, 158, gotReq.UpstreamChannelID)
 	require.Equal(t, "uAb12", gotReq.UpstreamRouteSlug)
 	require.Equal(t, "P0", gotReq.UpstreamSupplierAlias)
 	require.Equal(t, "c3", gotReq.UpstreamChannelNo)
@@ -97,4 +99,26 @@ func TestResolveTFOpenSyncChannelTestChannelByRouteSlug(t *testing.T) {
 	require.NotNil(t, resolved)
 	require.Equal(t, channel.Id, resolved.Id)
 	require.Equal(t, constant.ChannelTypeOpenAIVideo, resolved.Type)
+}
+
+func TestResolveTFOpenSyncChannelTestChannelByID(t *testing.T) {
+	setupChannelImportTestDB(t)
+
+	channel := &model.Channel{
+		Name:   "upstream-kling",
+		Type:   constant.ChannelTypeKling,
+		Status: common.ChannelStatusEnabled,
+		Models: "Kling-3.0",
+	}
+	require.NoError(t, model.DB.Create(channel).Error)
+
+	resolved, err := resolveTFOpenSyncChannelTestChannel(tfOpenSyncChannelTestRequest{
+		Model:             "Kling-3.0",
+		UpstreamChannelID: channel.Id,
+	})
+
+	require.NoError(t, err)
+	require.NotNil(t, resolved)
+	require.Equal(t, channel.Id, resolved.Id)
+	require.Equal(t, constant.ChannelTypeKling, resolved.Type)
 }
