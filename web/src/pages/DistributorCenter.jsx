@@ -52,6 +52,8 @@ import {
   Clock3,
   UserRound,
   XCircle,
+  ReceiptText,
+  SlidersHorizontal,
 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
@@ -72,6 +74,7 @@ import { UserContext } from '../context/User';
 import { useNavigate } from 'react-router-dom';
 import AffInviteeCommissionDetailModal from '../components/distributor/AffInviteeCommissionDetailModal';
 import InviteeModelDiscountModal from '../components/distributor/InviteeModelDiscountModal';
+import InviteeTopupHistoryModal from '../components/distributor/InviteeTopupHistoryModal';
 import DistributorWithdrawFormFields from '../components/distributor/DistributorWithdrawFormFields';
 import DistributorApplyFileUpload from '../components/distributor/DistributorApplyFileUpload';
 import {
@@ -242,6 +245,9 @@ export default function DistributorCenter() {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailInviteeId, setDetailInviteeId] = useState(null);
   const [detailInviteeLabel, setDetailInviteeLabel] = useState('');
+  const [topupHistoryOpen, setTopupHistoryOpen] = useState(false);
+  const [topupHistoryInviteeId, setTopupHistoryInviteeId] = useState(null);
+  const [topupHistoryInviteeLabel, setTopupHistoryInviteeLabel] = useState('');
   const [discountModalOpen, setDiscountModalOpen] = useState(false);
   const [discountModalInviteeId, setDiscountModalInviteeId] = useState(null);
   const [discountModalInviteeLabel, setDiscountModalInviteeLabel] =
@@ -796,6 +802,14 @@ export default function DistributorCenter() {
     setDetailOpen(true);
   };
 
+  const openTopupHistoryModal = (r) => {
+    setTopupHistoryInviteeId(r.invitee_id);
+    setTopupHistoryInviteeLabel(
+      String(r.display_name || r.username || `#${r.invitee_id}`).trim(),
+    );
+    setTopupHistoryOpen(true);
+  };
+
   const openDiscountModal = (r) => {
     setDiscountModalInviteeId(r.invitee_id);
     setDiscountModalInviteeLabel(
@@ -807,7 +821,7 @@ export default function DistributorCenter() {
   const columns = useMemo(
     () => [
       {
-        title: t('被邀请用户'),
+        title: t('用户'),
         dataIndex: 'username',
         render: (_, r) => r.display_name || r.username || r.invitee_id,
       },
@@ -819,7 +833,7 @@ export default function DistributorCenter() {
           ts ? dayjs.unix(Number(ts)).format('YYYY-MM-DD HH:mm') : '—',
       },
       {
-        title: isProfitShareMode ? t('累计利润分成额度') : t('累计分成额度'),
+        title: isProfitShareMode ? t('累计分润') : t('累计分成额度'),
         dataIndex: isProfitShareMode
           ? 'profit_share_earned_quota'
           : 'commission_earned_quota',
@@ -827,22 +841,42 @@ export default function DistributorCenter() {
       },
       {
         title: t('操作'),
-        width: 160,
+        width: 280,
         render: (_, r) => (
-          <Space>
-            <Button size='small' type='tertiary' onClick={() => openDetail(r)}>
+          <div className='flex flex-wrap gap-2'>
+            <Button
+              size='small'
+              type='primary'
+              theme='light'
+              icon={<BarChart2 size={14} aria-hidden={true} />}
+              onClick={() => openDetail(r)}
+            >
               {t('详情')}
+            </Button>
+            <Button
+              size='small'
+              theme='light'
+              icon={<ReceiptText size={14} aria-hidden={true} />}
+              style={{
+                color: 'var(--semi-color-success)',
+                backgroundColor: 'var(--semi-color-success-light-default)',
+              }}
+              onClick={() => openTopupHistoryModal(r)}
+            >
+              {t('充值记录')}
             </Button>
             {isProfitShareMode ? (
               <Button
                 size='small'
-                type='tertiary'
+                type='warning'
+                theme='light'
+                icon={<SlidersHorizontal size={14} aria-hidden={true} />}
                 onClick={() => openDiscountModal(r)}
               >
                 {t('模型折扣率')}
               </Button>
             ) : null}
-          </Space>
+          </div>
         ),
       },
     ],
@@ -1299,6 +1333,18 @@ export default function DistributorCenter() {
         inviteeId={detailInviteeId}
         inviteeLabel={detailInviteeLabel}
         commissionMode={isProfitShareMode ? 'profit_share' : 'topup'}
+      />
+
+      <InviteeTopupHistoryModal
+        visible={topupHistoryOpen}
+        onCancel={() => {
+          setTopupHistoryOpen(false);
+          setTopupHistoryInviteeId(null);
+          setTopupHistoryInviteeLabel('');
+        }}
+        inviteeId={topupHistoryInviteeId}
+        inviteeLabel={topupHistoryInviteeLabel}
+        t={t}
       />
 
       <InviteeModelDiscountModal

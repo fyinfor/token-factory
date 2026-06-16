@@ -82,6 +82,64 @@ func GetInviteeModelDiscounts(c *gin.Context) {
 	})
 }
 
+func validateAdminInviteeModelDiscountTarget(distributorId, inviteeId int) string {
+	if distributorId <= 0 || inviteeId <= 0 {
+		return "参数错误"
+	}
+	if !common.IsDistributorProfitShareMode() {
+		return "当前站点未启用利润分成模式"
+	}
+	dist, err := model.GetUserById(distributorId, false)
+	if err != nil || dist == nil || !model.UserIsDistributor(dist) {
+		return "用户不是分销商"
+	}
+	invitee, err := model.GetUserById(inviteeId, false)
+	if err != nil || invitee == nil || invitee.InviterId != distributorId {
+		return "该用户不是此分销商邀请的下级"
+	}
+	return ""
+}
+
+func parseAdminInviteeModelDiscountQuery(c *gin.Context) (int, int, string) {
+	distributorId, err := strconv.Atoi(c.Query("distributor_id"))
+	if err != nil || distributorId <= 0 {
+		return 0, 0, "参数错误"
+	}
+	inviteeId, err := strconv.Atoi(c.Query("invitee_id"))
+	if err != nil || inviteeId <= 0 {
+		return 0, 0, "参数错误"
+	}
+	if msg := validateAdminInviteeModelDiscountTarget(distributorId, inviteeId); msg != "" {
+		return 0, 0, msg
+	}
+	return distributorId, inviteeId, ""
+}
+
+// GetInviteeModelDiscountsAdmin 管理员查看某个代理下级用户的模型折扣列表。
+// GET /api/distributor/admin/invitee-model-discounts?distributor_id=xxx&invitee_id=xxx
+func GetInviteeModelDiscountsAdmin(c *gin.Context) {
+	distributorId, inviteeId, msg := parseAdminInviteeModelDiscountQuery(c)
+	if msg != "" {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": msg})
+		return
+	}
+
+	items, _, err := model.GetInviteeModelDiscounts(distributorId, inviteeId)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data": gin.H{
+			"items": items,
+			"total": len(items),
+		},
+	})
+}
+
 // ExportInviteeModelDiscounts 导出被邀请用户的模型折扣价格表
 // GET /api/distributor/invitee-model-discounts/export?invitee_id=xxx
 func ExportInviteeModelDiscounts(c *gin.Context) {
@@ -103,6 +161,35 @@ func ExportInviteeModelDiscounts(c *gin.Context) {
 	}
 
 	items, _, err := model.GetInviteeModelDiscounts(userId, inviteeId)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	items = filterInviteeModelDiscountExportItems(items, c.Query("q"), c.Query("supplier_type"))
+
+	data, err := buildInviteeModelDiscountExportWorkbook(items)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	filename := fmt.Sprintf("agent-model-discount-prices-%s.xlsx", time.Now().Format("20060102-150405"))
+	c.Header("Content-Type", inviteeModelDiscountExportContentType)
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	c.Header("Content-Length", strconv.Itoa(len(data)))
+	c.Data(http.StatusOK, inviteeModelDiscountExportContentType, data)
+}
+
+// ExportInviteeModelDiscountsAdmin 管理员导出某个代理下级用户的模型折扣价格表。
+// GET /api/distributor/admin/invitee-model-discounts/export?distributor_id=xxx&invitee_id=xxx
+func ExportInviteeModelDiscountsAdmin(c *gin.Context) {
+	distributorId, inviteeId, msg := parseAdminInviteeModelDiscountQuery(c)
+	if msg != "" {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": msg})
+		return
+	}
+
+	items, _, err := model.GetInviteeModelDiscounts(distributorId, inviteeId)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
@@ -303,5 +390,30 @@ func PutInviteeModelDiscounts(c *gin.Context) {
 		return
 	}
 
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+}
+
+type putInviteeModelDiscountsAdminRequest struct {
+	DistributorId int                                          `json:"distributor_id"`
+	InviteeId     int                                          `json:"invitee_id"`
+	Discounts     []model.ModelMarkupDiscountRateUpdateRequest `json:"discounts"`
+}
+
+// PutInviteeModelDiscountsAdmin 管理员为某个代理下级用户更新模型折扣配置。
+// PUT /api/distributor/admin/invitee-model-discounts
+func PutInviteeModelDiscountsAdmin(c *gin.Context) {
+	var req putInviteeModelDiscountsAdminRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的请求"})
+		return
+	}
+	if msg := validateAdminInviteeModelDiscountTarget(req.DistributorId, req.InviteeId); msg != "" {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": msg})
+		return
+	}
+	if err := model.UpdateInviteeModelDiscounts(req.DistributorId, req.InviteeId, req.Discounts); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
 }
