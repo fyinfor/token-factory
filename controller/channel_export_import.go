@@ -17,22 +17,22 @@ import (
 // ─── 导出字段键常量 ────────────────────────────────────────────────────────────
 
 const (
-	chFieldName             = "name"
-	chFieldDiscountRate     = "discountRate"
-	chFieldMarkupDiscount   = "markupDiscountRate"
-	chFieldRouteSlug     = "routeSlug"
-	chFieldQuota         = "quota"
-	chFieldDisabled      = "disabled"
-	chFieldSupplierName  = "supplierName"
-	chFieldType          = "type"
-	chFieldLogo          = "logo"
-	chFieldProviderType  = "providerType"
-	chFieldApiKey        = "apiKey"
-	chFieldApiBaseUrl    = "apiBaseUrl"
-	chFieldModels        = "models"
-	chFieldGroups        = "groups"
-	chFieldModelRedirect = "modelRedirect"
-	chFieldOtherInfo     = "otherInfo"
+	chFieldName           = "name"
+	chFieldDiscountRate   = "discountRate"
+	chFieldMarkupDiscount = "markupDiscountRate"
+	chFieldRouteSlug      = "routeSlug"
+	chFieldQuota          = "quota"
+	chFieldDisabled       = "disabled"
+	chFieldSupplierName   = "supplierName"
+	chFieldType           = "type"
+	chFieldLogo           = "logo"
+	chFieldProviderType   = "providerType"
+	chFieldApiKey         = "apiKey"
+	chFieldApiBaseUrl     = "apiBaseUrl"
+	chFieldModels         = "models"
+	chFieldGroups         = "groups"
+	chFieldModelRedirect  = "modelRedirect"
+	chFieldOtherInfo      = "otherInfo"
 )
 
 // chAllowedExportFields 允许导出的合法字段集合，防止非法字段注入。
@@ -255,8 +255,11 @@ func buildSiteBuilderExportItem(c *gin.Context, ch *model.Channel, fields map[st
 		otherInfo["upstream_route_slug"] = ch.RouteSlug
 	}
 	// 保留原渠道的 supplier 信息
-	if ch.SupplierName != "" {
-		otherInfo["upstream_supplier_alias"] = ch.SupplierName
+	if alias := chUpstreamSupplierAlias(ch); alias != "" {
+		otherInfo["upstream_supplier_alias"] = alias
+	}
+	if ch.ChannelNo != "" {
+		otherInfo["upstream_channel_no"] = ch.ChannelNo
 	}
 	item[chFieldOtherInfo] = otherInfo
 	fields[chFieldOtherInfo] = true
@@ -300,8 +303,9 @@ func ImportChannels(c *gin.Context) {
 			continue
 		}
 
-		// 按名称查询是否存在同名渠道
-		existing, err := model.GetChannelByName(name)
+		// 建站用户导入不能按同名覆盖普通渠道；仅在已有 TokenFactoryOpen
+		// 建站渠道中按上游身份匹配，否则新增。
+		existing, err := chFindExistingForImport(name, item)
 		if err != nil {
 			result.Failed++
 			result.Failures = append(result.Failures, ChannelImportFailure{Name: name, Reason: "查询渠道失败: " + err.Error()})
@@ -370,6 +374,134 @@ func chToFloat64(v interface{}) float64 {
 		return f
 	}
 	return 0
+}
+
+func chIsSiteBuilderItem(item map[string]interface{}) bool {
+	if v, ok := item["type"]; ok && int(chToFloat64(v)) == constant.ChannelTypeTokenFactoryOpen {
+		return true
+	}
+	if m, ok := item["otherInfo"].(map[string]interface{}); ok {
+		source := strings.TrimSpace(common.Interface2String(m["source"]))
+		return source == "tokenfactory_open"
+	}
+	return false
+}
+
+func chNormalizeBaseURL(s string) string {
+	return strings.TrimRight(strings.TrimSpace(s), "/")
+}
+
+func chUpstreamSupplierAlias(ch *model.Channel) string {
+	if ch == nil {
+		return ""
+	}
+	if ch.SupplierApplicationID == 0 {
+		return "P0"
+	}
+	var row struct {
+		SupplierAlias *string `gorm:"column:supplier_alias"`
+	}
+	if err := model.DB.Model(&model.SupplierApplication{}).
+		Select("supplier_alias").
+		Where("id = ?", ch.SupplierApplicationID).
+		Scan(&row).Error; err == nil && row.SupplierAlias != nil {
+		if alias := strings.TrimSpace(*row.SupplierAlias); alias != "" {
+			return alias
+		}
+	}
+	return model.SupplierApplicationAutoAlias(ch.SupplierApplicationID)
+}
+
+type chSiteBuilderIdentity struct {
+	BaseURL       string
+	UpstreamRoute string
+	Alias         string
+	ChannelNo     string
+}
+
+func chSiteBuilderIdentityFromItem(item map[string]interface{}) chSiteBuilderIdentity {
+	var ident chSiteBuilderIdentity
+	if s, ok := item["apiBaseUrl"].(string); ok {
+		ident.BaseURL = chNormalizeBaseURL(s)
+	}
+	if m, ok := item["otherInfo"].(map[string]interface{}); ok {
+		ident.UpstreamRoute = strings.TrimSpace(common.Interface2String(m["upstream_route_slug"]))
+		ident.Alias = strings.TrimSpace(common.Interface2String(m["upstream_supplier_alias"]))
+		ident.ChannelNo = strings.TrimSpace(common.Interface2String(m["upstream_channel_no"]))
+	}
+	return ident
+}
+
+func chSiteBuilderIdentityFromChannel(ch *model.Channel) chSiteBuilderIdentity {
+	otherInfo := ch.GetOtherInfo()
+	return chSiteBuilderIdentity{
+		BaseURL:       chNormalizeBaseURL(ch.GetBaseURL()),
+		UpstreamRoute: strings.TrimSpace(common.Interface2String(otherInfo["upstream_route_slug"])),
+		Alias:         strings.TrimSpace(common.Interface2String(otherInfo["upstream_supplier_alias"])),
+		ChannelNo:     strings.TrimSpace(common.Interface2String(otherInfo["upstream_channel_no"])),
+	}
+}
+
+func chSiteBuilderIdentityHasRoute(ident chSiteBuilderIdentity) bool {
+	return ident.UpstreamRoute != "" || (ident.Alias != "" && ident.ChannelNo != "")
+}
+
+func chSiteBuilderIdentityMatches(a, b chSiteBuilderIdentity) bool {
+	if a.BaseURL != "" && b.BaseURL != "" && a.BaseURL != b.BaseURL {
+		return false
+	}
+	if a.UpstreamRoute != "" && b.UpstreamRoute != "" {
+		return a.UpstreamRoute == b.UpstreamRoute
+	}
+	if a.Alias != "" && a.ChannelNo != "" && b.Alias != "" && b.ChannelNo != "" {
+		return a.Alias == b.Alias && a.ChannelNo == b.ChannelNo
+	}
+	return false
+}
+
+func chFindExistingForImport(name string, item map[string]interface{}) (*model.Channel, error) {
+	if !chIsSiteBuilderItem(item) {
+		return model.GetChannelByName(name)
+	}
+
+	var candidates []model.Channel
+	if err := model.DB.
+		Where("name = ? AND type = ?", name, constant.ChannelTypeTokenFactoryOpen).
+		Find(&candidates).Error; err != nil {
+		return nil, err
+	}
+	if len(candidates) == 0 {
+		return nil, nil
+	}
+
+	incoming := chSiteBuilderIdentityFromItem(item)
+	if chSiteBuilderIdentityHasRoute(incoming) {
+		for i := range candidates {
+			existing := chSiteBuilderIdentityFromChannel(&candidates[i])
+			if chSiteBuilderIdentityMatches(incoming, existing) {
+				return &candidates[i], nil
+			}
+		}
+		return nil, nil
+	}
+
+	if len(candidates) == 1 {
+		return &candidates[0], nil
+	}
+	return nil, nil
+}
+
+func chShouldRefreshAbilities(item map[string]interface{}) bool {
+	if _, ok := item["models"]; ok {
+		return true
+	}
+	if _, ok := item["groups"]; ok {
+		return true
+	}
+	if _, ok := item["disabled"]; ok {
+		return true
+	}
+	return false
 }
 
 // chValidateItem 校验导入条目中各字段的类型合法性。
@@ -534,7 +666,19 @@ func chApplyToExisting(ch *model.Channel, item map[string]interface{}, siteBuild
 	}
 
 	// 使用精确列选择更新，确保只写入指定列
-	return model.PartialUpdateChannelFields(ch.Id, cols, updates)
+	if err := model.PartialUpdateChannelFields(ch.Id, cols, updates); err != nil {
+		return err
+	}
+	if chShouldRefreshAbilities(item) {
+		refreshed, err := model.GetChannelById(ch.Id, true)
+		if err != nil {
+			return fmt.Errorf("刷新渠道能力失败: %w", err)
+		}
+		if err := refreshed.UpdateAbilities(nil); err != nil {
+			return fmt.Errorf("刷新渠道能力失败: %w", err)
+		}
+	}
+	return nil
 }
 
 // chApplyToNew 将导入数据写入新渠道对象，用于新增场景。

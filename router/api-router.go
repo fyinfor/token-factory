@@ -351,6 +351,7 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			// 子站 TokenFactoryOpen 拉全站渠道（脱敏+定价）；鉴权见 controller.authorizeTFOpenSyncExport
 			tfOpenSyncRoute.GET("/channels", middleware.CriticalRateLimit(), controller.TFOpenSyncExportChannels)
+			tfOpenSyncRoute.POST("/channel_test", middleware.CriticalRateLimit(), controller.TFOpenSyncChannelTest)
 		}
 		channelRoute := apiRouter.Group("/channel")
 		{
