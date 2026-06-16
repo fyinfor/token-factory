@@ -17,16 +17,21 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useState, useContext, useRef } from 'react';
+import React, { useEffect, useState, useContext, useRef, useMemo } from 'react';
 import {
   API,
   showError,
   showSuccess,
   toUnixTimestamp,
   renderGroupOption,
+  renderQuota,
   renderQuotaWithPrompt,
   getModelCategories,
   selectFilter,
+  getCurrencyConfig,
+  getQuotaPerUnit,
+  quotaToDisplayInputAmount,
+  displayInputAmountToQuota,
 } from '../../../../helpers';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import {
@@ -68,9 +73,30 @@ const EditTokenModal = (props) => {
   const [expirationMode, setExpirationMode] = useState('never');
   const isEdit = props.editingToken.id !== undefined;
 
+  const isTokensMode = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return (localStorage.getItem('quota_display_type') || 'USD') === 'TOKENS';
+  }, [props.visiable]);
+
+  const quotaPresetOptions = useMemo(() => {
+    const qpu = getQuotaPerUnit() || 500000;
+    const usdPresets = [1, 10, 50, 100, 500, 1000];
+    return usdPresets.map((usd) => {
+      const quota = Math.round(usd * qpu);
+      if (isTokensMode) {
+        return { value: quota, label: `${usd}$` };
+      }
+      return {
+        value: quotaToDisplayInputAmount(quota),
+        label: renderQuota(quota),
+      };
+    });
+  }, [isTokensMode]);
+
   const getInitValues = () => ({
     name: '',
     remain_quota: 0,
+    remain_quota_amount: 0,
     expired_time: NEVER_EXPIRES,
     expired_time_date: undefined,
     unlimited_quota: true,
@@ -199,6 +225,9 @@ const EditTokenModal = (props) => {
       } else {
         data.model_limits = [];
       }
+      data.remain_quota_amount = quotaToDisplayInputAmount(
+        data.remain_quota || 0,
+      );
       if (formApiRef.current) {
         formApiRef.current.setValues({ ...getInitValues(), ...data });
       }
@@ -245,14 +274,23 @@ const EditTokenModal = (props) => {
     return result;
   };
 
+  const resolveRemainQuota = (values) => {
+    if (isTokensMode) {
+      return Math.max(0, parseInt(values.remain_quota, 10) || 0);
+    }
+    return Math.max(0, displayInputAmountToQuota(values.remain_quota_amount));
+  };
+
   const submit = async (values) => {
     setLoading(true);
     if (isEdit) {
-      let { tokenCount: _tc, expired_time_date, ...localInputs } = values;
-      localInputs.remain_quota = Math.max(
-        0,
-        parseInt(localInputs.remain_quota, 10) || 0,
-      );
+      let {
+        tokenCount: _tc,
+        expired_time_date,
+        remain_quota_amount: _rqa,
+        ...localInputs
+      } = values;
+      localInputs.remain_quota = resolveRemainQuota(values);
       const expiredTimeResult = normalizeExpiredTime(
         expired_time_date ?? localInputs.expired_time,
       );
@@ -280,7 +318,12 @@ const EditTokenModal = (props) => {
       const count = parseInt(values.tokenCount, 10) || 1;
       let successCount = 0;
       for (let i = 0; i < count; i++) {
-        let { tokenCount: _tc, expired_time_date, ...localInputs } = values;
+        let {
+          tokenCount: _tc,
+          expired_time_date,
+          remain_quota_amount: _rqa,
+          ...localInputs
+        } = values;
         const baseName =
           values.name.trim() === '' ? 'default' : values.name.trim();
         if (i !== 0 || values.name.trim() === '') {
@@ -288,10 +331,7 @@ const EditTokenModal = (props) => {
         } else {
           localInputs.name = baseName;
         }
-        localInputs.remain_quota = Math.max(
-          0,
-          parseInt(localInputs.remain_quota, 10) || 0,
-        );
+        localInputs.remain_quota = resolveRemainQuota(values);
 
         const expiredTimeResult = normalizeExpiredTime(
           expired_time_date ?? localInputs.expired_time,
@@ -567,57 +607,110 @@ const EditTokenModal = (props) => {
                 </div>
                 <Row gutter={12}>
                   <Col span={24}>
-                    <Form.AutoComplete
-                      field='remain_quota'
-                      label={t('额度')}
-                      placeholder={t('请输入额度')}
-                      type='number'
-                      disabled={values.unlimited_quota}
-                      inputProps={{ min: 0 }}
-                      onChange={(value) => {
-                        if (
-                          value !== '' &&
-                          value !== undefined &&
-                          value !== null &&
-                          !isNaN(Number(value)) &&
-                          Number(value) < 0
-                        ) {
-                          formApiRef.current?.setValue('remain_quota', 0);
-                        }
-                      }}
-                      extraText={renderQuotaWithPrompt(values.remain_quota)}
-                      rules={
-                        values.unlimited_quota
-                          ? []
-                          : [
-                              { required: true, message: t('请输入额度') },
-                              {
-                                validator: (rule, v) => {
-                                  if (
-                                    v === '' ||
-                                    v === undefined ||
-                                    v === null
-                                  ) {
+                    {isTokensMode ? (
+                      <Form.AutoComplete
+                        field='remain_quota'
+                        label={t('额度')}
+                        placeholder={t('请输入额度')}
+                        type='number'
+                        disabled={values.unlimited_quota}
+                        inputProps={{ min: 0 }}
+                        onChange={(value) => {
+                          if (
+                            value !== '' &&
+                            value !== undefined &&
+                            value !== null &&
+                            !isNaN(Number(value)) &&
+                            Number(value) < 0
+                          ) {
+                            formApiRef.current?.setValue('remain_quota', 0);
+                          }
+                        }}
+                        extraText={renderQuotaWithPrompt(values.remain_quota)}
+                        rules={
+                          values.unlimited_quota
+                            ? []
+                            : [
+                                { required: true, message: t('请输入额度') },
+                                {
+                                  validator: (rule, v) => {
+                                    if (
+                                      v === '' ||
+                                      v === undefined ||
+                                      v === null
+                                    ) {
+                                      return Promise.resolve();
+                                    }
+                                    const num = Number(v);
+                                    if (isNaN(num) || num < 0) {
+                                      return Promise.reject(t('不能小于 0'));
+                                    }
                                     return Promise.resolve();
-                                  }
-                                  const num = Number(v);
-                                  if (isNaN(num) || num < 0) {
-                                    return Promise.reject(t('不能小于 0'));
-                                  }
-                                  return Promise.resolve();
+                                  },
                                 },
-                              },
-                            ]
-                      }
-                      data={[
-                        { value: 500000, label: '1$' },
-                        { value: 5000000, label: '10$' },
-                        { value: 25000000, label: '50$' },
-                        { value: 50000000, label: '100$' },
-                        { value: 250000000, label: '500$' },
-                        { value: 500000000, label: '1000$' },
-                      ]}
-                    />
+                              ]
+                        }
+                        data={quotaPresetOptions}
+                      />
+                    ) : (
+                      <Form.AutoComplete
+                        field='remain_quota_amount'
+                        label={`${t('额度')} (${getCurrencyConfig().symbol})`}
+                        placeholder={t('请输入额度')}
+                        type='number'
+                        disabled={values.unlimited_quota}
+                        inputProps={{ min: 0, step: 0.01 }}
+                        onChange={(value) => {
+                          if (
+                            value !== '' &&
+                            value !== undefined &&
+                            value !== null &&
+                            !isNaN(Number(value)) &&
+                            Number(value) < 0
+                          ) {
+                            formApiRef.current?.setValue(
+                              'remain_quota_amount',
+                              0,
+                            );
+                          }
+                        }}
+                        extraText={
+                          <>
+                            {t('仅用于换算，实际保存的是额度')}
+                            {': '}
+                            {renderQuota(
+                              displayInputAmountToQuota(
+                                values.remain_quota_amount,
+                              ),
+                            )}
+                          </>
+                        }
+                        rules={
+                          values.unlimited_quota
+                            ? []
+                            : [
+                                { required: true, message: t('请输入额度') },
+                                {
+                                  validator: (rule, v) => {
+                                    if (
+                                      v === '' ||
+                                      v === undefined ||
+                                      v === null
+                                    ) {
+                                      return Promise.resolve();
+                                    }
+                                    const num = Number(v);
+                                    if (isNaN(num) || num < 0) {
+                                      return Promise.reject(t('不能小于 0'));
+                                    }
+                                    return Promise.resolve();
+                                  },
+                                },
+                              ]
+                        }
+                        data={quotaPresetOptions}
+                      />
+                    )}
                   </Col>
                   <Col span={24}>
                     <Form.Switch
