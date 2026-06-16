@@ -324,6 +324,7 @@ func migrateDB() error {
 		&DistributorApplication{},
 		&DistributorIdentityApplication{},
 		&DistributorWithdrawal{},
+		&ModelTag{},
 	)
 	if err != nil {
 		return err

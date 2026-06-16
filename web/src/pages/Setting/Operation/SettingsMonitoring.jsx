@@ -30,9 +30,39 @@ import {
 import { useTranslation } from 'react-i18next';
 import HttpStatusCodeRulesInput from '../../../components/settings/HttpStatusCodeRulesInput';
 
+const AUTO_TEST_MODEL_TAGS_KEY = 'monitor_setting.auto_test_model_tags';
+
+const normalizeTagList = (value) => {
+  if (Array.isArray(value)) {
+    return value.map((tag) => String(tag).trim()).filter(Boolean);
+  }
+  if (typeof value !== 'string' || value.trim() === '') {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return normalizeTagList(parsed);
+  } catch {
+    return value
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+  }
+};
+
+const isSameTagList = (a, b) => {
+  const left = normalizeTagList(a);
+  const right = normalizeTagList(b);
+  return (
+    left.length === right.length &&
+    left.every((tag, index) => tag === right[index])
+  );
+};
+
 export default function SettingsMonitoring(props) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
+  const [modelTagOptions, setModelTagOptions] = useState([]);
   const [inputs, setInputs] = useState({
     ChannelDisableThreshold: '',
     QuotaRemindThreshold: '',
@@ -44,6 +74,7 @@ export default function SettingsMonitoring(props) {
       '100-199,300-399,401-407,409-499,500-503,505-523,525-599',
     'monitor_setting.auto_test_channel_enabled': false,
     'monitor_setting.auto_test_channel_minutes': 10,
+    [AUTO_TEST_MODEL_TAGS_KEY]: [],
   });
   const refForm = useRef();
   const [inputsRow, setInputsRow] = useState(inputs);
@@ -54,8 +85,32 @@ export default function SettingsMonitoring(props) {
     inputs.AutomaticRetryStatusCodes || '',
   );
 
+  const loadModelTags = async () => {
+    try {
+      const res = await API.get('/api/models/tags');
+      const { success, data, message } = res.data || {};
+      if (!success) {
+        showError(message || t('加载模型标签失败'));
+        return;
+      }
+      setModelTagOptions(
+        (Array.isArray(data) ? data : []).map((tag) => ({
+          label: t(tag, { defaultValue: tag }),
+          value: tag,
+        })),
+      );
+    } catch (error) {
+      showError(t('加载模型标签失败'));
+    }
+  };
+
   function onSubmit() {
-    const updateArray = compareObjects(inputs, inputsRow);
+    const updateArray = compareObjects(inputs, inputsRow).filter((item) => {
+      if (item.key !== AUTO_TEST_MODEL_TAGS_KEY) {
+        return true;
+      }
+      return !isSameTagList(item.oldValue, item.newValue);
+    });
     if (!updateArray.length) return showWarning(t('你似乎并没有修改什么'));
     if (!parsedAutoDisableStatusCodes.ok) {
       const details =
@@ -81,6 +136,9 @@ export default function SettingsMonitoring(props) {
         const normalizedMap = {
           AutomaticDisableStatusCodes: parsedAutoDisableStatusCodes.normalized,
           AutomaticRetryStatusCodes: parsedAutoRetryStatusCodes.normalized,
+          [AUTO_TEST_MODEL_TAGS_KEY]: JSON.stringify(
+            normalizeTagList(inputs[AUTO_TEST_MODEL_TAGS_KEY]),
+          ),
         };
         value = normalizedMap[item.key] ?? inputs[item.key];
       }
@@ -113,13 +171,23 @@ export default function SettingsMonitoring(props) {
     const currentInputs = {};
     for (let key in props.options) {
       if (Object.keys(inputs).includes(key)) {
-        currentInputs[key] = props.options[key];
+        currentInputs[key] =
+          key === AUTO_TEST_MODEL_TAGS_KEY
+            ? normalizeTagList(props.options[key])
+            : props.options[key];
       }
+    }
+    if (!Object.keys(currentInputs).includes(AUTO_TEST_MODEL_TAGS_KEY)) {
+      currentInputs[AUTO_TEST_MODEL_TAGS_KEY] = [];
     }
     setInputs(currentInputs);
     setInputsRow(structuredClone(currentInputs));
     refForm.current.setValues(currentInputs);
   }, [props.options]);
+
+  useEffect(() => {
+    loadModelTags();
+  }, []);
 
   return (
     <>
@@ -160,6 +228,28 @@ export default function SettingsMonitoring(props) {
                       ...inputs,
                       'monitor_setting.auto_test_channel_minutes':
                         parseInt(value),
+                    })
+                  }
+                />
+              </Col>
+            </Row>
+            <Row gutter={16}>
+              <Col xs={24} sm={16} md={12} lg={12} xl={12}>
+                <Form.Select
+                  field={AUTO_TEST_MODEL_TAGS_KEY}
+                  label={t('模型标签筛选')}
+                  placeholder={t('不选择则默认全部模型')}
+                  extraText={t(
+                    '定时或手动测试所有通道时，仅测试命中任一所选标签的模型；不选择时测试全部模型',
+                  )}
+                  multiple
+                  filter
+                  showClear
+                  optionList={modelTagOptions}
+                  onChange={(value) =>
+                    setInputs({
+                      ...inputs,
+                      [AUTO_TEST_MODEL_TAGS_KEY]: normalizeTagList(value),
                     })
                   }
                 />

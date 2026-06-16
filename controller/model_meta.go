@@ -13,8 +13,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var defaultModelTags = []string{"文本", "视频", "图片"}
-
 // GetAllModelsMeta 获取模型列表（分页）
 func GetAllModelsMeta(c *gin.Context) {
 
@@ -86,50 +84,18 @@ func splitModelTagsCSV(csv string) []string {
 	return normalizeModelTags(strings.Split(csv, ","))
 }
 
+func syncModelTagsInUse() error {
+	_, err := model.SyncModelTagsFromModels()
+	return err
+}
+
 func GetModelTags(c *gin.Context) {
-	merged := make([]string, 0, 32)
-	seen := make(map[string]struct{}, 32)
-	appendTag := func(name string) {
-		tag := strings.TrimSpace(name)
-		if tag == "" {
-			return
-		}
-		if _, ok := seen[tag]; ok {
-			return
-		}
-		seen[tag] = struct{}{}
-		merged = append(merged, tag)
-	}
-
-	for _, tag := range defaultModelTags {
-		appendTag(tag)
-	}
-
-	dbTags, err := model.GetAllModelTagNames()
+	tags, err := model.SyncModelTagsFromModels()
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	for _, tag := range dbTags {
-		appendTag(tag)
-	}
-
-	var allTagCSVs []string
-	if err := model.DB.Model(&model.Model{}).Where("tags <> ?", "").Pluck("tags", &allTagCSVs).Error; err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	for _, csv := range allTagCSVs {
-		for _, tag := range splitModelTagsCSV(csv) {
-			appendTag(tag)
-		}
-	}
-
-	if err := model.UpsertModelTags(merged); err != nil {
-		common.ApiError(c, err)
-		return
-	}
-	common.ApiSuccess(c, merged)
+	common.ApiSuccess(c, tags)
 }
 
 type BatchSetModelTagsRequest struct {
@@ -183,7 +149,7 @@ func BatchSetModelTags(c *gin.Context) {
 		updated++
 	}
 
-	if err := model.UpsertModelTags(normalizedTags); err != nil {
+	if err := syncModelTagsInUse(); err != nil {
 		common.ApiError(c, err)
 		return
 	}
@@ -268,6 +234,10 @@ func CreateModelMeta(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	if err := syncModelTagsInUse(); err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	model.RefreshPricing()
 	common.ApiSuccess(c, &m)
 }
@@ -315,6 +285,10 @@ func UpdateModelMeta(c *gin.Context) {
 			common.ApiError(c, err)
 			return
 		}
+		if err := syncModelTagsInUse(); err != nil {
+			common.ApiError(c, err)
+			return
+		}
 	}
 	model.RefreshPricing()
 	common.ApiSuccess(c, &m)
@@ -329,6 +303,10 @@ func DeleteModelMeta(c *gin.Context) {
 		return
 	}
 	if err := model.DB.Delete(&model.Model{}, id).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if err := syncModelTagsInUse(); err != nil {
 		common.ApiError(c, err)
 		return
 	}

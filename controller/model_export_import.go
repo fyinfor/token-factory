@@ -18,10 +18,10 @@ import (
 
 // ModelExportPayload 模型元数据导出响应结构
 type ModelExportPayload struct {
-	Version    string              `json:"version"`
-	ExportTime string              `json:"exportTime"`
-	Vendors    []VendorExportItem  `json:"vendors"`
-	Models     []ModelExportItem   `json:"models"`
+	Version    string             `json:"version"`
+	ExportTime string             `json:"exportTime"`
+	Vendors    []VendorExportItem `json:"vendors"`
+	Models     []ModelExportItem  `json:"models"`
 }
 
 // VendorExportItem 模型类型（供应商）导出项
@@ -33,15 +33,17 @@ type VendorExportItem struct {
 
 // ModelExportItem 模型数据导出项
 type ModelExportItem struct {
-	ModelName    string `json:"model_name"`
-	NameRule     int    `json:"name_rule"`
-	Icon         string `json:"icon"`
-	Description  string `json:"description"`
-	Tags         string `json:"tags"`
-	Vendor       string `json:"vendor"`
-	Endpoints    string `json:"endpoints"`
-	SyncOfficial int    `json:"sync_official"`
-	Status       int    `json:"status"`
+	ModelName       string  `json:"model_name"`
+	NameRule        int     `json:"name_rule"`
+	Icon            string  `json:"icon"`
+	Description     string  `json:"description"`
+	DocIntroduction *string `json:"doc_introduction,omitempty"`
+	ApiDocs         *string `json:"api_docs,omitempty"`
+	Tags            string  `json:"tags"`
+	Vendor          string  `json:"vendor"`
+	Endpoints       string  `json:"endpoints"`
+	SyncOfficial    int     `json:"sync_official"`
+	Status          int     `json:"status"`
 }
 
 // ModelImportRequest 模型导入请求结构
@@ -68,6 +70,10 @@ type ModelImportFailureItem struct {
 	Name   string `json:"name"`
 	Reason string `json:"reason"`
 	Type   string `json:"type"` // "vendor" | "model"
+}
+
+func stringPtr(s string) *string {
+	return &s
 }
 
 // ─── 导出接口 ──────────────────────────────────────────────────────────────
@@ -108,15 +114,17 @@ func ExportModelsMeta(c *gin.Context) {
 	for _, m := range models {
 		vendorName := vendorNameMap[m.VendorID]
 		modelItems = append(modelItems, ModelExportItem{
-			ModelName:    m.ModelName,
-			NameRule:     m.NameRule,
-			Icon:         m.Icon,
-			Description:  m.Description,
-			Tags:         m.Tags,
-			Vendor:       vendorName,
-			Endpoints:    m.Endpoints,
-			SyncOfficial: m.SyncOfficial,
-			Status:       m.Status,
+			ModelName:       m.ModelName,
+			NameRule:        m.NameRule,
+			Icon:            m.Icon,
+			Description:     m.Description,
+			DocIntroduction: stringPtr(m.DocIntroduction),
+			ApiDocs:         stringPtr(m.ApiDocs),
+			Tags:            m.Tags,
+			Vendor:          vendorName,
+			Endpoints:       m.Endpoints,
+			SyncOfficial:    m.SyncOfficial,
+			Status:          m.Status,
 		})
 	}
 
@@ -261,14 +269,20 @@ func ImportModelsMeta(c *gin.Context) {
 			if existing.Id > 0 {
 				// 已存在：覆盖更新指定字段
 				updates := map[string]interface{}{
-					"name_rule":      mItem.NameRule,
-					"icon":           mItem.Icon,
-					"description":    mItem.Description,
-					"tags":           mItem.Tags,
-					"endpoints":      mItem.Endpoints,
-					"sync_official":  mItem.SyncOfficial,
-					"status":         mItem.Status,
-					"updated_time":   common.GetTimestamp(),
+					"name_rule":     mItem.NameRule,
+					"icon":          mItem.Icon,
+					"description":   mItem.Description,
+					"tags":          mItem.Tags,
+					"endpoints":     mItem.Endpoints,
+					"sync_official": mItem.SyncOfficial,
+					"status":        mItem.Status,
+					"updated_time":  common.GetTimestamp(),
+				}
+				if mItem.DocIntroduction != nil {
+					updates["doc_introduction"] = *mItem.DocIntroduction
+				}
+				if mItem.ApiDocs != nil {
+					updates["api_docs"] = *mItem.ApiDocs
 				}
 				if vendorID > 0 {
 					updates["vendor_id"] = vendorID
@@ -296,6 +310,12 @@ func ImportModelsMeta(c *gin.Context) {
 					SyncOfficial: mItem.SyncOfficial,
 					Status:       mItem.Status,
 				}
+				if mItem.DocIntroduction != nil {
+					newModel.DocIntroduction = *mItem.DocIntroduction
+				}
+				if mItem.ApiDocs != nil {
+					newModel.ApiDocs = *mItem.ApiDocs
+				}
 				if err := newModel.Insert(); err != nil {
 					result.ModelsFailed++
 					result.Failures = append(result.Failures, ModelImportFailureItem{
@@ -312,6 +332,9 @@ func ImportModelsMeta(c *gin.Context) {
 
 	// 刷新定价缓存
 	model.RefreshPricing()
+	if _, err := model.SyncModelTagsFromModels(); err != nil {
+		common.SysError("sync model tags after import: " + err.Error())
+	}
 
 	common.SysLog(fmt.Sprintf("模型导入完成：供应商新增 %d/更新 %d/失败 %d，模型新增 %d/更新 %d/失败 %d",
 		result.VendorsAdded, result.VendorsUpdated, result.VendorsFailed,

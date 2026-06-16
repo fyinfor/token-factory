@@ -26,7 +26,7 @@ import { API, showError, showSuccess } from '../../../../helpers';
 /**
  * ModelExportButton 模型数据一键导出按钮组件。
  * 点击后直接调用后端 API 导出，下载 JSON 文件。
- * 导出固定字段：模型类型（name, description, icon）、模型数据（model_name, name_rule, icon, description, tags, vendor, endpoints, sync_official, status）
+ * 导出固定字段：模型类型（name, description, icon）、模型数据（model_name, name_rule, icon, description, doc_introduction, api_docs, tags, vendor, endpoints, sync_official, status）
  */
 export default function ModelExportButton() {
   const { t } = useTranslation();
