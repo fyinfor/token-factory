@@ -608,9 +608,34 @@ func GetInviteeModelDiscounts(inviterId, inviteeUserId int) ([]InviteeModelMarku
 		if rate, ok := savedByKey[key]; ok {
 			items[i].CurrentMarkupDiscountRate = rate
 		}
+		items[i].CurrentMarkupDiscountRate = clampChannelMarkupDiscountRate(items[i].CurrentMarkupDiscountRate)
+		maxRate := MaxInviteeMarkupDiscountRate(items[i])
+		if items[i].CurrentMarkupDiscountRate > maxRate {
+			items[i].CurrentMarkupDiscountRate = maxRate
+		}
 	}
 
 	return items, 0, nil
+}
+
+// MaxInviteeMarkupDiscountRate returns the highest agent markup that keeps the
+// invitee-facing sale rate at or below the official/base price.
+func MaxInviteeMarkupDiscountRate(item InviteeModelMarkupDiscountRateItem) float64 {
+	costPercent := item.ChannelPriceDiscountPercent
+	if !isFiniteFloat(costPercent) {
+		costPercent = 100
+	}
+	if costPercent < 0 {
+		costPercent = 0
+	}
+	maxRate := 100 - costPercent
+	if maxRate < 0 {
+		return 0
+	}
+	if maxRate > 100 {
+		return 100
+	}
+	return maxRate
 }
 
 // UpdateInviteeModelDiscounts 更新被邀请用户的模型加价折扣率（仅存与渠道默认不同的项，JSON 数组全量覆盖）。
@@ -639,9 +664,13 @@ func UpdateInviteeModelDiscounts(inviterId, inviteeUserId int, updates []ModelMa
 		return errors.New("not your invitee")
 	}
 
-	_, defaultRates, err := listPricingVisibleMarkupDiscountRateItems()
+	items, defaultRates, err := listPricingVisibleMarkupDiscountRateItems()
 	if err != nil {
 		return err
+	}
+	maxRates := make(map[string]float64, len(items))
+	for _, item := range items {
+		maxRates[inviteeModelMarkupKey(item.ChannelID, item.ModelName)] = MaxInviteeMarkupDiscountRate(item)
 	}
 
 	ratesToSave := make([]inviteeModelMarkupDiscountRateEntry, 0)
@@ -652,7 +681,11 @@ func UpdateInviteeModelDiscounts(inviterId, inviteeUserId int, updates []ModelMa
 		if !hasModel {
 			continue
 		}
-		if u.MarkupDiscountRate != defaultRate {
+		maxRate := maxRates[key]
+		if u.MarkupDiscountRate > maxRate+0.000001 {
+			return fmt.Errorf("markup_discount_rate for model %s must be between 0 and %.1f", modelName, maxRate)
+		}
+		if math.Abs(u.MarkupDiscountRate-defaultRate) > 0.000001 {
 			ratesToSave = append(ratesToSave, inviteeModelMarkupDiscountRateEntry{
 				ModelName:          modelName,
 				ChannelID:          u.ChannelID,

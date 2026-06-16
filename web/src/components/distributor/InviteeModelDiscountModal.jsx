@@ -29,6 +29,7 @@ import {
   Spin,
   Space,
   Select,
+  Tooltip,
 } from '@douyinfe/semi-ui';
 import { IconSearch, IconInfoCircle, IconDownload } from '@douyinfe/semi-icons';
 import { API, showError, showSuccess, showInfo } from '../../helpers';
@@ -55,40 +56,43 @@ const formatMarkupRate = (value) => {
   return `${n.toFixed(1)}%`;
 };
 
-const calcSaleRatePercent = (record, markupRate) => {
-  const officialBase = Number(record.official_base_price ?? 0);
-  const channelBase = Number(record.channel_base_price ?? 0);
-  const costDiscountPercent = Number(
-    record.channel_price_discount_percent ?? 100,
-  );
-  const markup = Number(markupRate ?? 0);
-  if (
-    !Number.isFinite(officialBase) ||
-    !Number.isFinite(channelBase) ||
-    !Number.isFinite(costDiscountPercent) ||
-    !Number.isFinite(markup) ||
-    officialBase <= 0
-  ) {
-    const fallbackDiscount = Number(
-      record.official_current_discount_percent ?? 0,
-    );
-    if (!Number.isFinite(fallbackDiscount)) return 100;
-    return Math.max(0, 100 - Math.round(fallbackDiscount));
-  }
-  const effective =
-    (channelBase * costDiscountPercent) / 100 + (officialBase * markup) / 100;
-  if (!Number.isFinite(effective)) return 100;
-  return Math.max(0, Math.round((effective / officialBase) * 100));
+const getCostDiscountPercent = (record) => {
+  const n = Number(record?.channel_price_discount_percent ?? 100);
+  if (!Number.isFinite(n)) return 100;
+  return Math.max(0, n);
 };
 
-const formatSaleRate = (value, record, markupRate) => {
-  if (record) {
-    return `${calcSaleRatePercent(record, markupRate)}%`;
-  }
-  const n = Number(value ?? 0);
-  if (!Number.isFinite(n) || n <= 0) return '100%';
-  return `${Math.max(0, 100 - Math.round(n))}%`;
+const maxAgentMarkupRate = (record) =>
+  Math.max(0, 100 - getCostDiscountPercent(record));
+
+const calcSaleRatePercent = (record, markupRate) => {
+  const costDiscountPercent = getCostDiscountPercent(record);
+  const markup = Number(markupRate ?? 0);
+  if (!Number.isFinite(markup)) return costDiscountPercent;
+  return Math.max(0, costDiscountPercent + Math.max(0, markup));
 };
+
+const FormulaHeader = ({ title, hint }) => (
+  <Tooltip content={hint} position='top'>
+    <span className='cursor-help'>{title}</span>
+  </Tooltip>
+);
+
+const FormulaCell = ({ cost, markup, result, markupType = 'secondary' }) => (
+  <div className='flex min-w-0 flex-col gap-1 font-mono tabular-nums'>
+    <div className='whitespace-nowrap'>
+      <Text type='tertiary'>{formatMarkupRate(cost)}</Text>
+      <Text type='tertiary'> + </Text>
+      <Text type={markupType}>{formatMarkupRate(markup)}</Text>
+    </div>
+    <div className='whitespace-nowrap'>
+      <Text type='tertiary'>= </Text>
+      <Text strong type={result > 100 ? 'warning' : 'success'}>
+        {formatMarkupRate(result)}
+      </Text>
+    </div>
+  </div>
+);
 
 const formatExportTimestamp = () => {
   const d = new Date();
@@ -166,7 +170,7 @@ const InviteeModelDiscountModal = ({
 
         const initialValues = {};
         items.forEach((item) => {
-          const maxRate = Number(item.default_markup_discount_rate || 0);
+          const maxRate = maxAgentMarkupRate(item);
           initialValues[getRowKey(item)] = clampMarkupRate(
             item.current_markup_discount_rate,
             maxRate,
@@ -278,14 +282,10 @@ const InviteeModelDiscountModal = ({
       const discounts = modelData.map((item) => ({
         model_name: item.model_name,
         channel_id: item.channel_id,
-        markup_discount_rate:
-          Number(item.default_markup_discount_rate || 0) > 0
-            ? clampMarkupRate(
-                discountValues[getRowKey(item)] ??
-                  item.current_markup_discount_rate,
-                Number(item.default_markup_discount_rate || 0),
-              )
-            : 0,
+        markup_discount_rate: clampMarkupRate(
+          discountValues[getRowKey(item)] ?? item.current_markup_discount_rate,
+          maxAgentMarkupRate(item),
+        ),
       }));
 
       const res = await API.put('/api/distributor/invitee-model-discounts', {
@@ -375,7 +375,7 @@ const InviteeModelDiscountModal = ({
     {
       title: t('模型 / 通道路径'),
       dataIndex: 'model_name',
-      width: 300,
+      width: 320,
       render: (text, record) => (
         <div className='flex flex-col gap-1'>
           <Typography.Text strong copyable>
@@ -391,42 +391,63 @@ const InviteeModelDiscountModal = ({
       ),
     },
     {
-      title: t('平台售价比例'),
-      dataIndex: 'official_current_discount_percent',
-      width: 130,
-      render: (value, record) => (
-        <Text
-          type={
-            calcSaleRatePercent(record, record.default_markup_discount_rate) <
-            100
-              ? 'success'
-              : 'secondary'
-          }
-        >
-          {formatSaleRate(value, record, record.default_markup_discount_rate)}
-        </Text>
+      title: (
+        <FormulaHeader
+          title={t('成本折扣')}
+          hint={t('渠道成本价占官方价的比例，来自渠道成本折扣配置。')}
+        />
+      ),
+      dataIndex: 'channel_price_discount_percent',
+      width: 120,
+      render: (_, record) => (
+        <div className='font-mono tabular-nums'>
+          <Text type='secondary'>
+            {formatMarkupRate(getCostDiscountPercent(record))}
+          </Text>
+        </div>
       ),
     },
     {
-      title: t('平台加价折扣比例'),
+      title: (
+        <FormulaHeader
+          title={t('平台加价折扣比例')}
+          hint={t('平台默认加价比例，默认作为代理加价比例初始值。')}
+        />
+      ),
       dataIndex: 'default_markup_discount_rate',
-      width: 130,
+      width: 145,
       render: (value) => (
-        <Text type='secondary'>
-          {Number(value || 0) > 0 ? formatMarkupRate(value) : '-'}
-        </Text>
+        <Text type='secondary'>{formatMarkupRate(value)}</Text>
       ),
     },
     {
-      title: t('代理可加价比例'),
+      title: (
+        <FormulaHeader
+          title={t('平台售价比例')}
+          hint={t('成本折扣 + 平台加价折扣比例 = 平台售价比例。')}
+        />
+      ),
+      dataIndex: 'platform_sale_rate',
+      width: 150,
+      render: (_, record) => {
+        const cost = getCostDiscountPercent(record);
+        const markup = Number(record.default_markup_discount_rate || 0);
+        const result = calcSaleRatePercent(record, markup);
+        return <FormulaCell cost={cost} markup={markup} result={result} />;
+      },
+    },
+    {
+      title: (
+        <FormulaHeader
+          title={t('代理加价比例')}
+          hint={t('代理为该下级设置的加价比例，上限为 100% - 成本折扣。')}
+        />
+      ),
       dataIndex: 'current_markup_discount_rate',
-      width: 210,
+      width: 240,
       render: (_, record) => {
         const rowKey = getRowKey(record);
-        const maxRate = Number(record.default_markup_discount_rate || 0);
-        if (maxRate <= 0) {
-          return <Text type='tertiary'>-</Text>;
-        }
+        const maxRate = maxAgentMarkupRate(record);
         const currentValue =
           discountValues[rowKey] ??
           clampMarkupRate(record.current_markup_discount_rate, maxRate);
@@ -443,6 +464,8 @@ const InviteeModelDiscountModal = ({
               max={maxRate}
               precision={1}
               suffix='%'
+              aria-label={t('代理加价比例')}
+              disabled={maxRate <= 0}
               className={`w-full ${
                 isModified ? 'border-semi-color-primary' : ''
               }`}
@@ -450,27 +473,37 @@ const InviteeModelDiscountModal = ({
             <Text type='tertiary' size='small' className='mt-1 !block'>
               {t('可输入范围')}：0.0% - {formatMarkupRate(maxRate)}
             </Text>
+            <Text type='tertiary' size='small' className='!block'>
+              {t('上限 = 100% - 成本折扣')}
+            </Text>
           </div>
         );
       },
     },
     {
-      title: t('修改后平台售价比例'),
+      title: (
+        <FormulaHeader
+          title={t('修改后售价比例')}
+          hint={t('成本折扣 + 当前代理加价比例 = 下级用户最终售价比例。')}
+        />
+      ),
       dataIndex: 'preview_discount_percent',
-      width: 130,
+      width: 150,
       render: (_, record) => {
         const rowKey = getRowKey(record);
-        const maxRate = Number(record.default_markup_discount_rate || 0);
+        const maxRate = maxAgentMarkupRate(record);
         const currentValue =
-          maxRate > 0
-            ? (discountValues[rowKey] ??
-              clampMarkupRate(record.current_markup_discount_rate, maxRate))
-            : 0;
+          discountValues[rowKey] ??
+          clampMarkupRate(record.current_markup_discount_rate, maxRate);
+        const cost = getCostDiscountPercent(record);
         const saleRate = calcSaleRatePercent(record, currentValue);
         return (
-          <Text type={saleRate < 100 ? 'success' : 'secondary'}>
-            {formatSaleRate(null, record, currentValue)}
-          </Text>
+          <FormulaCell
+            cost={cost}
+            markup={currentValue}
+            result={saleRate}
+            markupType='primary'
+          />
         );
       },
     },
@@ -498,7 +531,7 @@ const InviteeModelDiscountModal = ({
       }
       visible={visible}
       onCancel={onCancel}
-      width={980}
+      width={1180}
       footer={
         <div className='flex flex-wrap justify-end gap-2'>
           <Button
@@ -526,7 +559,7 @@ const InviteeModelDiscountModal = ({
             icon={<IconInfoCircle />}
             className='!rounded-lg'
             description={t(
-              '说明：本功能用于为被邀请用户配置各模型的代理可加价比例（在官方定价基础上的加价比例）。平台加价折扣比例来自渠道配置；平台加价折扣比例为 0 时不可设置。代理可加价比例范围为 0 到平台加价折扣比例，单位为百分比且保留 1 位小数。平台售价比例与修改后平台售价比例均按首页卡片同口径折算。',
+              '说明：本功能用于为被邀请用户配置各模型的代理加价比例。成本折扣 + 平台加价折扣比例 = 平台售价比例；成本折扣 + 代理加价比例 = 修改后售价比例。代理加价比例上限为 100% - 成本折扣，避免超过官方价。',
             )}
           />
 
@@ -588,9 +621,48 @@ const InviteeModelDiscountModal = ({
             )}
           </Space>
 
+          <style>
+            {`
+              .invitee-model-discount-table .semi-table-thead > .semi-table-row > .semi-table-row-head:nth-child(n + 2):nth-child(-n + 4),
+              .invitee-model-discount-table .semi-table-tbody > .semi-table-row > .semi-table-row-cell:nth-child(n + 2):nth-child(-n + 4) {
+                background: color-mix(in srgb, var(--semi-color-info) 4%, var(--semi-color-bg-2)) !important;
+              }
+
+              .invitee-model-discount-table .semi-table-thead > .semi-table-row > .semi-table-row-head:nth-child(n + 5):nth-child(-n + 6),
+              .invitee-model-discount-table .semi-table-tbody > .semi-table-row > .semi-table-row-cell:nth-child(n + 5):nth-child(-n + 6) {
+                background: color-mix(in srgb, var(--semi-color-success) 5%, var(--semi-color-bg-2)) !important;
+              }
+
+              .invitee-model-discount-table .semi-table-tbody > .semi-table-row:hover > .semi-table-row-cell:nth-child(n + 2):nth-child(-n + 4) {
+                background: color-mix(in srgb, var(--semi-color-info) 8%, var(--semi-color-fill-0)) !important;
+              }
+
+              .invitee-model-discount-table .semi-table-tbody > .semi-table-row:hover > .semi-table-row-cell:nth-child(n + 5):nth-child(-n + 6) {
+                background: color-mix(in srgb, var(--semi-color-success) 9%, var(--semi-color-fill-0)) !important;
+              }
+
+              .invitee-model-discount-table,
+              .invitee-model-discount-table .semi-table-container,
+              .invitee-model-discount-table .semi-table-header,
+              .invitee-model-discount-table .semi-table-body,
+              .invitee-model-discount-table table {
+                width: 100% !important;
+              }
+
+              .invitee-model-discount-table .semi-table-thead > .semi-table-row > .semi-table-row-head:nth-child(2),
+              .invitee-model-discount-table .semi-table-tbody > .semi-table-row > .semi-table-row-cell:nth-child(2),
+              .invitee-model-discount-table .semi-table-thead > .semi-table-row > .semi-table-row-head:nth-child(5),
+              .invitee-model-discount-table .semi-table-tbody > .semi-table-row > .semi-table-row-cell:nth-child(5) {
+                box-shadow: inset 1px 0 0 var(--semi-color-border);
+              }
+            `}
+          </style>
+
           <Table
+            className='invitee-model-discount-table'
             columns={columns}
             dataSource={pagedData}
+            scroll={{ x: 1125 }}
             pagination={{
               currentPage: page,
               pageSize: MODEL_TABLE_PAGE_SIZE,
