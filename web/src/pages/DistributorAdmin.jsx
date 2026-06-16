@@ -53,9 +53,10 @@ import { createCardProPagination } from '../helpers/utils';
 import { useIsMobile } from '../hooks/common/useIsMobile';
 import CardPro from '../components/common/ui/CardPro';
 import CardTable from '../components/common/ui/CardTable';
-import { IconFile, IconSearch } from '@douyinfe/semi-icons';
+import { IconFile, IconSearch, IconSetting } from '@douyinfe/semi-icons';
 import DistributorAnalyticsBoard from '../components/distributor/DistributorAnalyticsBoard';
 import DistributorWithdrawProfileDetail from '../components/distributor/DistributorWithdrawProfileDetail';
+import InviteeModelDiscountModal from '../components/distributor/InviteeModelDiscountModal';
 import {
   ProfitShareRewardColumnTitle,
   renderProfitShareQuotaCell,
@@ -265,6 +266,9 @@ export default function DistributorAdmin() {
   const [invPs, setInvPs] = useState(10);
   const [invDistributorId, setInvDistributorId] = useState(null);
   const [invKeyword, setInvKeyword] = useState('');
+  const [invDiscountOpen, setInvDiscountOpen] = useState(false);
+  const [invDiscountInviteeId, setInvDiscountInviteeId] = useState(null);
+  const [invDiscountInviteeLabel, setInvDiscountInviteeLabel] = useState('');
   /** admin 全局：顶部 /api/status，与控制台利润分成开关一致 */
   const [adminDistCommissionMode, setAdminDistCommissionMode] =
     useState('topup');
@@ -755,6 +759,21 @@ export default function DistributorAdmin() {
       await fetchInviteeProfitShares(invDistributorId, uid, 1, 10);
     },
     [invDistributorId, fetchInviteeProfitShares],
+  );
+
+  const openInviteeModelDiscount = useCallback(
+    (inviteeRow) => {
+      const uid = inviteeRow?.invitee_id;
+      if (!uid || !invDistributorId) return;
+      setInvDiscountInviteeId(uid);
+      setInvDiscountInviteeLabel(
+        String(
+          inviteeRow.display_name || inviteeRow.username || `#${uid}`,
+        ).trim(),
+      );
+      setInvDiscountOpen(true);
+    },
+    [invDistributorId],
   );
 
   const openInvitees = async (userId) => {
@@ -1289,15 +1308,26 @@ export default function DistributorAdmin() {
         },
         {
           title: t('操作'),
-          width: 120,
+          width: 230,
           render: (_, row) => (
-            <Button
-              size='small'
-              type='tertiary'
-              onClick={() => openInviteeProfitConsumption(row)}
-            >
-              {t('消费明细')}
-            </Button>
+            <div className='flex flex-wrap gap-2'>
+              <Button
+                size='small'
+                type='tertiary'
+                onClick={() => openInviteeProfitConsumption(row)}
+              >
+                {t('消费明细')}
+              </Button>
+              <Button
+                size='small'
+                type='warning'
+                theme='light'
+                icon={<IconSetting />}
+                onClick={() => openInviteeModelDiscount(row)}
+              >
+                {t('模型折扣率')}
+              </Button>
+            </div>
           ),
         },
       ];
@@ -1315,7 +1345,12 @@ export default function DistributorAdmin() {
         render: (q) => renderQuota(q || 0),
       },
     ];
-  }, [isAdminProfitShare, t, openInviteeProfitConsumption]);
+  }, [
+    isAdminProfitShare,
+    t,
+    openInviteeProfitConsumption,
+    openInviteeModelDiscount,
+  ]);
 
   const tableEmpty = (
     <Empty
@@ -2296,6 +2331,7 @@ export default function DistributorAdmin() {
         onCancel={() => {
           setInvOpen(false);
           setInvProfitOpen(false);
+          setInvDiscountOpen(false);
           setInvKeyword('');
         }}
         footer={null}
@@ -2333,6 +2369,20 @@ export default function DistributorAdmin() {
           }}
         />
       </Modal>
+
+      <InviteeModelDiscountModal
+        visible={invDiscountOpen}
+        onCancel={() => {
+          setInvDiscountOpen(false);
+          setInvDiscountInviteeId(null);
+          setInvDiscountInviteeLabel('');
+        }}
+        inviteeId={invDiscountInviteeId}
+        inviteeLabel={invDiscountInviteeLabel}
+        adminMode
+        distributorId={invDistributorId}
+        t={t}
+      />
 
       <Modal
         title={
