@@ -251,6 +251,9 @@ func buildSiteBuilderExportItem(c *gin.Context, ch *model.Channel, fields map[st
 	}
 	otherInfo["source"] = "tokenfactory_open"
 	// 保留原渠道的 route_slug 作为 upstream_route_slug
+	if ch.Id > 0 {
+		otherInfo["upstream_channel_id"] = ch.Id
+	}
 	if ch.RouteSlug != "" {
 		otherInfo["upstream_route_slug"] = ch.RouteSlug
 	}
@@ -414,6 +417,7 @@ func chUpstreamSupplierAlias(ch *model.Channel) string {
 
 type chSiteBuilderIdentity struct {
 	BaseURL       string
+	UpstreamID    int
 	UpstreamRoute string
 	Alias         string
 	ChannelNo     string
@@ -425,6 +429,7 @@ func chSiteBuilderIdentityFromItem(item map[string]interface{}) chSiteBuilderIde
 		ident.BaseURL = chNormalizeBaseURL(s)
 	}
 	if m, ok := item["otherInfo"].(map[string]interface{}); ok {
+		ident.UpstreamID = int(chToFloat64(m["upstream_channel_id"]))
 		ident.UpstreamRoute = strings.TrimSpace(common.Interface2String(m["upstream_route_slug"]))
 		ident.Alias = strings.TrimSpace(common.Interface2String(m["upstream_supplier_alias"]))
 		ident.ChannelNo = strings.TrimSpace(common.Interface2String(m["upstream_channel_no"]))
@@ -436,6 +441,7 @@ func chSiteBuilderIdentityFromChannel(ch *model.Channel) chSiteBuilderIdentity {
 	otherInfo := ch.GetOtherInfo()
 	return chSiteBuilderIdentity{
 		BaseURL:       chNormalizeBaseURL(ch.GetBaseURL()),
+		UpstreamID:    int(chToFloat64(otherInfo["upstream_channel_id"])),
 		UpstreamRoute: strings.TrimSpace(common.Interface2String(otherInfo["upstream_route_slug"])),
 		Alias:         strings.TrimSpace(common.Interface2String(otherInfo["upstream_supplier_alias"])),
 		ChannelNo:     strings.TrimSpace(common.Interface2String(otherInfo["upstream_channel_no"])),
@@ -443,7 +449,7 @@ func chSiteBuilderIdentityFromChannel(ch *model.Channel) chSiteBuilderIdentity {
 }
 
 func chSiteBuilderIdentityHasRoute(ident chSiteBuilderIdentity) bool {
-	return ident.UpstreamRoute != "" || (ident.Alias != "" && ident.ChannelNo != "")
+	return ident.UpstreamRoute != "" || ident.UpstreamID > 0 || (ident.Alias != "" && ident.ChannelNo != "")
 }
 
 func chSiteBuilderIdentityMatches(a, b chSiteBuilderIdentity) bool {
@@ -452,6 +458,9 @@ func chSiteBuilderIdentityMatches(a, b chSiteBuilderIdentity) bool {
 	}
 	if a.UpstreamRoute != "" && b.UpstreamRoute != "" {
 		return a.UpstreamRoute == b.UpstreamRoute
+	}
+	if a.UpstreamID > 0 && b.UpstreamID > 0 {
+		return a.UpstreamID == b.UpstreamID
 	}
 	if a.Alias != "" && a.ChannelNo != "" && b.Alias != "" && b.ChannelNo != "" {
 		return a.Alias == b.Alias && a.ChannelNo == b.ChannelNo
