@@ -298,6 +298,7 @@ func migrateDB() error {
 		&QuotaData{},
 		&Task{},
 		&Model{},
+		&ModelTag{},
 		&ModelTestResult{},
 		&Vendor{},
 		&PrefillGroup{},
@@ -323,6 +324,7 @@ func migrateDB() error {
 		&DistributorApplication{},
 		&DistributorIdentityApplication{},
 		&DistributorWithdrawal{},
+		&ModelTag{},
 	)
 	if err != nil {
 		return err
@@ -380,6 +382,7 @@ func migrateDBFast() error {
 		{&QuotaData{}, "QuotaData"},
 		{&Task{}, "Task"},
 		{&Model{}, "Model"},
+		{&ModelTag{}, "ModelTag"},
 		{&ModelTestResult{}, "ModelTestResult"},
 		{&Vendor{}, "Vendor"},
 		{&PrefillGroup{}, "PrefillGroup"},

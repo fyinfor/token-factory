@@ -1,10 +1,13 @@
 package controller
 
 import (
+	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -33,6 +36,7 @@ type tfOpenSyncExportRow struct {
 	Status                int                `json:"status"`
 	Type                  int                `json:"type"`
 	ChannelNo             string             `json:"channel_no"`
+	RouteSlug             string             `json:"route_slug,omitempty"`
 	SupplierApplicationID int                `json:"supplier_application_id"`
 	SupplierAlias         string             `json:"supplier_alias,omitempty"`
 	SupplierType          string             `json:"supplier_type,omitempty"`
@@ -42,6 +46,23 @@ type tfOpenSyncExportRow struct {
 	ModelMapping          string             `json:"model_mapping,omitempty"`
 	ModelPrice            map[string]float64 `json:"model_price,omitempty"`
 	ModelRatio            map[string]float64 `json:"model_ratio,omitempty"`
+}
+
+type tfOpenSyncChannelTestRequest struct {
+	Model                 string `json:"model"`
+	EndpointType          string `json:"endpoint_type,omitempty"`
+	Stream                bool   `json:"stream,omitempty"`
+	UpstreamChannelID     int    `json:"upstream_channel_id,omitempty"`
+	UpstreamRouteSlug     string `json:"upstream_route_slug,omitempty"`
+	UpstreamSupplierAlias string `json:"upstream_supplier_alias,omitempty"`
+	UpstreamChannelNo     string `json:"upstream_channel_no,omitempty"`
+}
+
+type tfOpenSyncChannelTestResponse struct {
+	Success bool    `json:"success"`
+	Message string  `json:"message"`
+	Time    float64 `json:"time"`
+	Model   string  `json:"model,omitempty"`
 }
 
 func authorizeTFOpenSyncExport(c *gin.Context) bool {
@@ -180,6 +201,7 @@ func TFOpenSyncExportChannels(c *gin.Context) {
 			Status:                ch.Status,
 			Type:                  ch.Type,
 			ChannelNo:             strings.TrimSpace(ch.ChannelNo),
+			RouteSlug:             strings.TrimSpace(ch.RouteSlug),
 			SupplierApplicationID: ch.SupplierApplicationID,
 			SupplierAlias:         aliasByAppID[ch.SupplierApplicationID],
 			SupplierType:          coalesceStr(supplierTypeByAppID[ch.SupplierApplicationID], strings.TrimSpace(ch.SupplierType)),
@@ -193,4 +215,119 @@ func TFOpenSyncExportChannels(c *gin.Context) {
 	}
 
 	common.ApiSuccess(c, gin.H{"channels": out})
+}
+
+func resolveTFOpenSyncChannelTestChannel(req tfOpenSyncChannelTestRequest) (*model.Channel, error) {
+	modelName := strings.TrimSpace(req.Model)
+	modelNameForLookup := modelName
+	if strings.HasSuffix(modelNameForLookup, ratio_setting.CompactModelSuffix) {
+		modelNameForLookup = strings.TrimSuffix(modelNameForLookup, ratio_setting.CompactModelSuffix)
+	}
+	if slug := strings.TrimSpace(req.UpstreamRouteSlug); slug != "" {
+		var candidates []model.Channel
+		if err := model.DB.Select("id", "models").
+			Where("route_slug = ?", slug).
+			Find(&candidates).Error; err != nil {
+			return nil, err
+		}
+		if len(candidates) == 0 {
+			return nil, fmt.Errorf("未找到上游 route_slug: %s", slug)
+		}
+		for i := range candidates {
+			if modelNameForLookup == "" || model.ChannelModelsRawContains(candidates[i].Models, modelNameForLookup) {
+				return model.GetChannelById(candidates[i].Id, true)
+			}
+		}
+		return nil, fmt.Errorf("route_slug %s 未绑定模型 %s", slug, modelName)
+	}
+
+	if req.UpstreamChannelID > 0 {
+		ch, err := model.GetChannelById(req.UpstreamChannelID, true)
+		if err != nil {
+			return nil, fmt.Errorf("未找到上游渠道 ID %d: %w", req.UpstreamChannelID, err)
+		}
+		if modelNameForLookup != "" && !model.ChannelModelsRawContains(ch.Models, modelNameForLookup) {
+			return nil, fmt.Errorf("上游渠道 ID %d 未绑定模型 %s", req.UpstreamChannelID, modelName)
+		}
+		return ch, nil
+	}
+
+	alias := strings.TrimSpace(req.UpstreamSupplierAlias)
+	channelNo := strings.TrimSpace(req.UpstreamChannelNo)
+	if alias != "" && channelNo != "" {
+		channelID, err := model.FindChannelIDBySupplierAliasAndNo(alias, channelNo)
+		if err != nil {
+			return nil, err
+		}
+		return model.GetChannelById(channelID, true)
+	}
+	return nil, fmt.Errorf("缺少上游渠道身份")
+}
+
+func TFOpenSyncChannelTest(c *gin.Context) {
+	if !authorizeTFOpenSyncExport(c) {
+		c.JSON(http.StatusOK, tfOpenSyncChannelTestResponse{
+			Success: false,
+			Message: "无权测试：请使用同步密钥（X-TokenFactory-Open-Sync-Secret）或 Bearer 携带可用令牌（sk- 或 access token）",
+		})
+		return
+	}
+
+	var req tfOpenSyncChannelTestRequest
+	if err := common.DecodeJson(io.LimitReader(c.Request.Body, 1024*1024), &req); err != nil {
+		c.JSON(http.StatusOK, tfOpenSyncChannelTestResponse{
+			Success: false,
+			Message: "解析测试请求失败: " + err.Error(),
+		})
+		return
+	}
+
+	channel, err := resolveTFOpenSyncChannelTestChannel(req)
+	if err != nil {
+		c.JSON(http.StatusOK, tfOpenSyncChannelTestResponse{
+			Success: false,
+			Message: "定位上游渠道失败: " + err.Error(),
+		})
+		return
+	}
+	if channel.Type == constant.ChannelTypeTokenFactoryOpen {
+		c.JSON(http.StatusOK, tfOpenSyncChannelTestResponse{
+			Success: false,
+			Message: "上游测试委托不能继续委托 TokenFactoryOpen 渠道",
+		})
+		return
+	}
+
+	tik := time.Now()
+	result := testChannel(channel, strings.TrimSpace(req.Model), strings.TrimSpace(req.EndpointType), req.Stream)
+	milliseconds := time.Since(tik).Milliseconds()
+	consumedTime := float64(milliseconds) / 1000.0
+	modelForRecord := modelNameForChannelTestRecord(channel, req.Model, result)
+	if result.localErr != nil {
+		persistChannelTestResult(channel, modelForRecord, false, milliseconds, result.localErr.Error())
+		c.JSON(http.StatusOK, tfOpenSyncChannelTestResponse{
+			Success: false,
+			Message: result.localErr.Error(),
+			Time:    consumedTime,
+			Model:   modelForRecord,
+		})
+		return
+	}
+	if result.tokenFactoryError != nil {
+		persistChannelTestResult(channel, modelForRecord, false, milliseconds, result.tokenFactoryError.Error())
+		c.JSON(http.StatusOK, tfOpenSyncChannelTestResponse{
+			Success: false,
+			Message: result.tokenFactoryError.Error(),
+			Time:    consumedTime,
+			Model:   modelForRecord,
+		})
+		return
+	}
+	persistChannelTestResult(channel, modelForRecord, true, milliseconds, "")
+	c.JSON(http.StatusOK, tfOpenSyncChannelTestResponse{
+		Success: true,
+		Message: "",
+		Time:    consumedTime,
+		Model:   modelForRecord,
+	})
 }
