@@ -141,6 +141,8 @@ const InviteeModelDiscountModal = ({
   inviteeId,
   inviteeLabel,
   t,
+  adminMode = false,
+  distributorId = null,
 }) => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -152,15 +154,40 @@ const InviteeModelDiscountModal = ({
   const [baselineValues, setBaselineValues] = useState({});
   const [discountValues, setDiscountValues] = useState({});
 
+  const listApiPath = adminMode
+    ? '/api/distributor/admin/invitee-model-discounts'
+    : '/api/distributor/invitee-model-discounts';
+  const saveApiPath = adminMode
+    ? '/api/distributor/admin/invitee-model-discounts'
+    : '/api/distributor/invitee-model-discounts';
+  const exportApiPath = adminMode
+    ? '/api/distributor/admin/invitee-model-discounts/export'
+    : '/api/distributor/invitee-model-discounts/export';
+
+  const buildRequestParams = useCallback(
+    (extra = {}) => {
+      const params = {
+        invitee_id: inviteeId,
+        ...extra,
+      };
+      if (adminMode) {
+        params.distributor_id = distributorId;
+      }
+      return params;
+    },
+    [adminMode, distributorId, inviteeId],
+  );
+
   const loadData = useCallback(
     async (opts = {}) => {
       const { silent = false } = opts;
-      if (!inviteeId || !visible) return;
+      if (!inviteeId || !visible || (adminMode && !distributorId)) return;
       if (!silent) setLoading(true);
       try {
-        const res = await API.get(
-          `/api/distributor/invitee-model-discounts?invitee_id=${inviteeId}`,
-        );
+        const res = await API.get(listApiPath, {
+          params: buildRequestParams(),
+          disableDuplicate: true,
+        });
         if (!res.data?.success) {
           showError(res.data?.message || t('加载失败'));
           return;
@@ -184,7 +211,15 @@ const InviteeModelDiscountModal = ({
         if (!silent) setLoading(false);
       }
     },
-    [inviteeId, visible, t],
+    [
+      adminMode,
+      buildRequestParams,
+      distributorId,
+      inviteeId,
+      listApiPath,
+      visible,
+      t,
+    ],
   );
 
   useEffect(() => {
@@ -288,10 +323,15 @@ const InviteeModelDiscountModal = ({
         ),
       }));
 
-      const res = await API.put('/api/distributor/invitee-model-discounts', {
+      const body = {
         invitee_id: inviteeId,
         discounts,
-      });
+      };
+      if (adminMode) {
+        body.distributor_id = distributorId;
+      }
+
+      const res = await API.put(saveApiPath, body);
 
       if (res.data?.success) {
         showSuccess(t('保存成功'));
@@ -329,14 +369,13 @@ const InviteeModelDiscountModal = ({
 
     const fallbackName = `agent-model-discount-prices-${formatExportTimestamp()}.xlsx`;
     setExporting(true);
-    API.get('/api/distributor/invitee-model-discounts/export', {
+    API.get(exportApiPath, {
       responseType: 'blob',
       disableDuplicate: true,
-      params: {
-        invitee_id: inviteeId,
+      params: buildRequestParams({
         q: searchKeyword.trim(),
         supplier_type: filterSupplierType || '',
-      },
+      }),
     })
       .then(async (res) => {
         const contentType =
@@ -369,7 +408,14 @@ const InviteeModelDiscountModal = ({
       .finally(() => {
         setExporting(false);
       });
-  }, [filterSupplierType, filteredData.length, inviteeId, searchKeyword, t]);
+  }, [
+    buildRequestParams,
+    exportApiPath,
+    filterSupplierType,
+    filteredData.length,
+    searchKeyword,
+    t,
+  ]);
 
   const columns = [
     {
