@@ -39,9 +39,11 @@ const inviteeModelDiscountExportContentType = "application/vnd.openxmlformats-of
 
 var inviteeModelDiscountExportHeaders = []string{
 	"模型 / 通道路径",
-	"平台售价/折扣率",
-	"代理可参与分配比例/折扣率",
-	"代理最低调用价（未税价折扣）",
+	"成本折扣",
+	"平台加价折扣比例",
+	"平台售价比例",
+	"当前代理加价比例",
+	"修改后售价比例",
 }
 
 // GetInviteeModelDiscounts 获取被邀请用户的模型折扣列表
@@ -188,11 +190,10 @@ func buildInviteeModelDiscountExportWorkbook(items []model.InviteeModelMarkupDis
 		},
 	})
 
-	_ = f.SetCellStyle(sheet, "A1", "D1", headerStyle)
+	_ = f.SetCellStyle(sheet, "A1", "F1", headerStyle)
 	_ = f.SetColWidth(sheet, "A", "A", 46)
 	_ = f.SetColWidth(sheet, "B", "B", 20)
-	_ = f.SetColWidth(sheet, "C", "C", 34)
-	_ = f.SetColWidth(sheet, "D", "D", 34)
+	_ = f.SetColWidth(sheet, "C", "F", 24)
 	_ = f.SetRowHeight(sheet, 1, 28)
 	_ = f.SetPanes(sheet, &excelize.Panes{
 		Freeze:      true,
@@ -207,9 +208,11 @@ func buildInviteeModelDiscountExportWorkbook(items []model.InviteeModelMarkupDis
 		row := idx + 2
 		values := []any{
 			inviteeModelDiscountExportModelPath(item),
-			formatInviteeModelDiscountSaleRate(item, item.DefaultMarkupDiscountRate),
+			formatInviteeModelDiscountMarkupRate(item.ChannelPriceDiscountPercent),
 			formatInviteeModelDiscountMarkupRate(item.DefaultMarkupDiscountRate),
-			formatInviteeModelDiscountSaleRate(item, 0),
+			formatInviteeModelDiscountSaleFormula(item, item.DefaultMarkupDiscountRate),
+			formatInviteeModelDiscountMarkupRate(item.CurrentMarkupDiscountRate),
+			formatInviteeModelDiscountSaleFormula(item, item.CurrentMarkupDiscountRate),
 		}
 		for col, value := range values {
 			cell, _ := excelize.CoordinatesToCellName(col+1, row)
@@ -219,7 +222,7 @@ func buildInviteeModelDiscountExportWorkbook(items []model.InviteeModelMarkupDis
 		}
 		_ = f.SetRowHeight(sheet, row, 38)
 		_ = f.SetCellStyle(sheet, fmt.Sprintf("A%d", row), fmt.Sprintf("A%d", row), bodyStyle)
-		_ = f.SetCellStyle(sheet, fmt.Sprintf("B%d", row), fmt.Sprintf("D%d", row), centerStyle)
+		_ = f.SetCellStyle(sheet, fmt.Sprintf("B%d", row), fmt.Sprintf("F%d", row), centerStyle)
 	}
 
 	var buf bytes.Buffer
@@ -239,35 +242,26 @@ func inviteeModelDiscountExportModelPath(item model.InviteeModelMarkupDiscountRa
 }
 
 func formatInviteeModelDiscountMarkupRate(value float64) string {
-	if value <= 0 || !isFiniteInviteeModelDiscountFloat(value) {
+	if !isFiniteInviteeModelDiscountFloat(value) {
 		return "-"
 	}
 	return fmt.Sprintf("%.1f%%", value)
 }
 
-func formatInviteeModelDiscountSaleRate(item model.InviteeModelMarkupDiscountRateItem, markupRate float64) string {
-	return fmt.Sprintf("%d%%", calcInviteeModelDiscountSaleRatePercent(item, markupRate))
+func formatInviteeModelDiscountSaleFormula(item model.InviteeModelMarkupDiscountRateItem, markupRate float64) string {
+	costRate := normalizeInviteeModelDiscountCostRate(item.ChannelPriceDiscountPercent)
+	markupRate = max(0, markupRate)
+	return fmt.Sprintf("%.1f%% + %.1f%% = %.1f%%", costRate, markupRate, costRate+markupRate)
 }
 
-func calcInviteeModelDiscountSaleRatePercent(item model.InviteeModelMarkupDiscountRateItem, markupRate float64) int {
-	officialBase := item.OfficialBasePrice
-	channelBase := item.ChannelBasePrice
-	costDiscountPercent := item.ChannelPriceDiscountPercent
-	if !isFiniteInviteeModelDiscountFloat(officialBase) ||
-		!isFiniteInviteeModelDiscountFloat(channelBase) ||
-		!isFiniteInviteeModelDiscountFloat(costDiscountPercent) ||
-		!isFiniteInviteeModelDiscountFloat(markupRate) ||
-		officialBase <= 0 {
-		if !isFiniteInviteeModelDiscountFloat(item.OfficialCurrentDiscountPercent) {
-			return 100
-		}
-		return max(0, int(100-math.Round(item.OfficialCurrentDiscountPercent)))
-	}
-	effective := channelBase*costDiscountPercent/100 + officialBase*markupRate/100
-	if !isFiniteInviteeModelDiscountFloat(effective) {
+func normalizeInviteeModelDiscountCostRate(value float64) float64 {
+	if !isFiniteInviteeModelDiscountFloat(value) {
 		return 100
 	}
-	return max(0, int(math.Round(effective/officialBase*100)))
+	if value < 0 {
+		return 0
+	}
+	return math.Round(value*10) / 10
 }
 
 func isFiniteInviteeModelDiscountFloat(value float64) bool {
