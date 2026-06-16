@@ -37,6 +37,9 @@ import {
 } from '../../helpers/playgroundImageUtils';
 import { formatVideoTaskError } from '../../helpers/playgroundVideoUtils';
 
+const TASK_POLL_INTERVAL_MS = 10000;
+const TASK_POLL_MAX_ATTEMPTS = 24;
+
 export const useApiRequest = (
   setMessage,
   setDebugData,
@@ -110,9 +113,10 @@ export const useApiRequest = (
   const pollImageTaskUntilReady = useCallback(
     async (taskId, updateMessage) => {
       if (!taskId) return;
-      const maxAttempts = 120;
-      for (let i = 0; i < maxAttempts; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+      for (let i = 0; i < TASK_POLL_MAX_ATTEMPTS; i++) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, TASK_POLL_INTERVAL_MS),
+        );
         let data = {};
         try {
           const response = await fetch(
@@ -170,10 +174,12 @@ export const useApiRequest = (
   const pollVideoTaskUntilReady = useCallback(
     async (taskId, updateMessage) => {
       if (!taskId) return;
-      const maxAttempts = 120; // 最长约4分钟（2秒轮询）
+      // 最长约4分钟（10秒轮询）
       let consecutiveNetworkFailures = 0;
-      for (let i = 0; i < maxAttempts; i++) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+      for (let i = 0; i < TASK_POLL_MAX_ATTEMPTS; i++) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, TASK_POLL_INTERVAL_MS),
+        );
         let data = {};
         try {
           const response = await fetch(

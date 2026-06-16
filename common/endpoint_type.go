@@ -2,8 +2,15 @@ package common
 
 import "github.com/QuantumNous/new-api/constant"
 
-// GetEndpointTypesByChannelType 获取渠道最优先端点类型（所有的渠道都支持 OpenAI 端点）
+// GetEndpointTypesByChannelType 获取渠道最优先端点类型（所有的渠道都支持 OpenAI 端点）。
+// TokenFactoryOpen(60) 需结合模型标签判断视频/图片端点，无标签时请用 GetEndpointTypesByChannelTypeWithTags。
 func GetEndpointTypesByChannelType(channelType int, modelName string) []constant.EndpointType {
+	return GetEndpointTypesByChannelTypeWithTags(channelType, modelName, "")
+}
+
+// GetEndpointTypesByChannelTypeWithTags 在 GetEndpointTypesByChannelType 基础上传入 models.tags，
+// 供 TokenFactoryOpen(60) 按「视频」「图片」标签附加 tokenfactory-video / image-generation。
+func GetEndpointTypesByChannelTypeWithTags(channelType int, modelName string, modelTags string) []constant.EndpointType {
 	var endpointTypes []constant.EndpointType
 	switch channelType {
 	case constant.ChannelTypeJina:
@@ -33,7 +40,15 @@ func GetEndpointTypesByChannelType(channelType int, modelName string) []constant
 	case constant.ChannelTypeOpenAIVideo:
 		endpointTypes = []constant.EndpointType{constant.EndpointTypeOpenAIVideoGW}
 	case constant.ChannelTypeTokenFactoryOpen:
-		endpointTypes = []constant.EndpointType{constant.EndpointTypeTokenFactoryVideo, constant.EndpointTypeOpenAI}
+		// 建站渠道默认仅声明 OpenAI 文本入口；带「视频」「图片」标签的模型再附加对应端点，
+		// 避免所有模型带上 tokenfactory-video 导致首页误走视频计价卡片。
+		endpointTypes = []constant.EndpointType{constant.EndpointTypeOpenAI}
+		if ModelTagsIndicateVideoPricing(modelTags) {
+			endpointTypes = append([]constant.EndpointType{constant.EndpointTypeTokenFactoryVideo}, endpointTypes...)
+		}
+		if ModelTagsIndicateImagePricing(modelTags) {
+			endpointTypes = append([]constant.EndpointType{constant.EndpointTypeImageGeneration}, endpointTypes...)
+		}
 	case constant.ChannelTypeVideoGenerator:
 		endpointTypes = []constant.EndpointType{constant.EndpointTypeVideoGenerator}
 	case constant.ChannelTypeTencentCloudVideo:

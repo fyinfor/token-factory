@@ -531,7 +531,11 @@ func updatePricing() {
 	// 先根据已有能力填充原生端点
 	for _, ability := range enableAbilities {
 		endpoints := modelSupportEndpointsStr[ability.Model]
-		channelTypes := common.GetEndpointTypesByChannelType(ability.ChannelType, ability.Model)
+		modelTags := ""
+		if meta, ok := metaMap[ability.Model]; ok && meta != nil {
+			modelTags = meta.Tags
+		}
+		channelTypes := common.GetEndpointTypesByChannelTypeWithTags(ability.ChannelType, ability.Model, modelTags)
 		for _, channelType := range channelTypes {
 			if !common.StringsContains(endpoints, string(channelType)) {
 				endpoints = append(endpoints, string(channelType))
