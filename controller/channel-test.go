@@ -163,23 +163,24 @@ func isVideoChannelTestEndpoint(endpointType string) bool {
 	}
 }
 
-func tokenFactoryOpenChannelTestRouteInfo(channel *model.Channel) (routeSlug string, alias string, channelNo string) {
+func tokenFactoryOpenChannelTestRouteInfo(channel *model.Channel) (channelID int, routeSlug string, alias string, channelNo string) {
 	if channel == nil {
-		return "", "", ""
+		return 0, "", "", ""
 	}
 	otherInfo := channel.GetOtherInfo()
+	channelID = int(chToFloat64(otherInfo["upstream_channel_id"]))
 	routeSlug = strings.TrimSpace(common.Interface2String(otherInfo["upstream_route_slug"]))
 	alias = strings.TrimSpace(common.Interface2String(otherInfo["upstream_supplier_alias"]))
 	channelNo = strings.TrimSpace(common.Interface2String(otherInfo["upstream_channel_no"]))
-	return routeSlug, alias, channelNo
+	return channelID, routeSlug, alias, channelNo
 }
 
 func tryDelegateTokenFactoryOpenChannelTest(channel *model.Channel, testModel string, endpointType string, isStream bool) (testResult, bool) {
 	if channel == nil || channel.Type != constant.ChannelTypeTokenFactoryOpen {
 		return testResult{}, false
 	}
-	routeSlug, alias, channelNo := tokenFactoryOpenChannelTestRouteInfo(channel)
-	if routeSlug == "" && (alias == "" || channelNo == "") {
+	channelID, routeSlug, alias, channelNo := tokenFactoryOpenChannelTestRouteInfo(channel)
+	if routeSlug == "" && channelID <= 0 && (alias == "" || channelNo == "") {
 		return testResult{}, false
 	}
 	baseURL := strings.TrimRight(strings.TrimSpace(channel.GetBaseURL()), "/")
@@ -205,6 +206,7 @@ func tryDelegateTokenFactoryOpenChannelTest(channel *model.Channel, testModel st
 		Model:                 strings.TrimSpace(testModel),
 		EndpointType:          strings.TrimSpace(endpointType),
 		Stream:                isStream,
+		UpstreamChannelID:     channelID,
 		UpstreamRouteSlug:     routeSlug,
 		UpstreamSupplierAlias: alias,
 		UpstreamChannelNo:     channelNo,

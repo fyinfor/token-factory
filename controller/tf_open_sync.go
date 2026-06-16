@@ -36,6 +36,7 @@ type tfOpenSyncExportRow struct {
 	Status                int                `json:"status"`
 	Type                  int                `json:"type"`
 	ChannelNo             string             `json:"channel_no"`
+	RouteSlug             string             `json:"route_slug,omitempty"`
 	SupplierApplicationID int                `json:"supplier_application_id"`
 	SupplierAlias         string             `json:"supplier_alias,omitempty"`
 	SupplierType          string             `json:"supplier_type,omitempty"`
@@ -51,6 +52,7 @@ type tfOpenSyncChannelTestRequest struct {
 	Model                 string `json:"model"`
 	EndpointType          string `json:"endpoint_type,omitempty"`
 	Stream                bool   `json:"stream,omitempty"`
+	UpstreamChannelID     int    `json:"upstream_channel_id,omitempty"`
 	UpstreamRouteSlug     string `json:"upstream_route_slug,omitempty"`
 	UpstreamSupplierAlias string `json:"upstream_supplier_alias,omitempty"`
 	UpstreamChannelNo     string `json:"upstream_channel_no,omitempty"`
@@ -199,6 +201,7 @@ func TFOpenSyncExportChannels(c *gin.Context) {
 			Status:                ch.Status,
 			Type:                  ch.Type,
 			ChannelNo:             strings.TrimSpace(ch.ChannelNo),
+			RouteSlug:             strings.TrimSpace(ch.RouteSlug),
 			SupplierApplicationID: ch.SupplierApplicationID,
 			SupplierAlias:         aliasByAppID[ch.SupplierApplicationID],
 			SupplierType:          coalesceStr(supplierTypeByAppID[ch.SupplierApplicationID], strings.TrimSpace(ch.SupplierType)),
@@ -236,6 +239,17 @@ func resolveTFOpenSyncChannelTestChannel(req tfOpenSyncChannelTestRequest) (*mod
 			}
 		}
 		return nil, fmt.Errorf("route_slug %s 未绑定模型 %s", slug, modelName)
+	}
+
+	if req.UpstreamChannelID > 0 {
+		ch, err := model.GetChannelById(req.UpstreamChannelID, true)
+		if err != nil {
+			return nil, fmt.Errorf("未找到上游渠道 ID %d: %w", req.UpstreamChannelID, err)
+		}
+		if modelNameForLookup != "" && !model.ChannelModelsRawContains(ch.Models, modelNameForLookup) {
+			return nil, fmt.Errorf("上游渠道 ID %d 未绑定模型 %s", req.UpstreamChannelID, modelName)
+		}
+		return ch, nil
 	}
 
 	alias := strings.TrimSpace(req.UpstreamSupplierAlias)
