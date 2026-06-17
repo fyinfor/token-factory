@@ -321,6 +321,73 @@ func UpdateAffInviteeCommission(inviterId, inviteeUserId, commissionBps int) err
 	return DB.Save(&rel).Error
 }
 
+// UnbindDistributorInvitee 解除分销商与下级用户的邀请绑定，写入解绑快照，不回滚历史流水和已产生收益。
+func UnbindDistributorInvitee(inviterId, inviteeUserId, operatorId int, reason string) error {
+	if inviterId <= 0 || inviteeUserId <= 0 {
+		return errors.New("invalid id")
+	}
+	inviter, err := GetUserById(inviterId, false)
+	if err != nil || inviter == nil || !UserIsDistributor(inviter) {
+		return errors.New("user is not distributor")
+	}
+	invitee, err := GetUserById(inviteeUserId, false)
+	if err != nil || invitee == nil {
+		return errors.New("user not found")
+	}
+	if invitee.InviterId != inviterId {
+		return errors.New("not this distributor's invitee")
+	}
+	operatorUsername := ""
+	if operatorId > 0 {
+		if operator, err := GetUserById(operatorId, false); err == nil && operator != nil {
+			operatorUsername = operator.Username
+		}
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var rel AffInviteRelation
+		err := tx.Where("inviter_id = ? AND invitee_user_id = ?", inviterId, inviteeUserId).First(&rel).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		log := DistributorInviteeUnbindLog{
+			DistributorId:           inviterId,
+			InviteeUserId:           inviteeUserId,
+			OperatorId:              operatorId,
+			InviteeUsername:         invitee.Username,
+			InviteeDisplayName:      invitee.DisplayName,
+			OperatorUsername:        operatorUsername,
+			Reason:                  strings.TrimSpace(reason),
+			CommissionRatioBps:      rel.CommissionRatioBps,
+			CommissionEarnedQuota:   rel.CommissionEarnedQuota,
+			ProfitShareEarnedQuota:  rel.ProfitShareEarnedQuota,
+			ModelMarkupDiscountRate: rel.ModelMarkupDiscountRate,
+			CreatedAt:               common.GetTimestamp(),
+		}
+		if log.CommissionRatioBps <= 0 {
+			log.CommissionRatioBps = defaultCommissionBpsForNewInviteRelation(inviterId)
+		}
+		if err := tx.Create(&log).Error; err != nil {
+			return err
+		}
+		res := tx.Model(&User{}).
+			Where("id = ? AND inviter_id = ?", inviteeUserId, inviterId).
+			Update("inviter_id", 0)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return errors.New("invitee binding changed")
+		}
+		if err := tx.Where("inviter_id = ? AND invitee_user_id = ?", inviterId, inviteeUserId).
+			Delete(&AffInviteRelation{}).Error; err != nil {
+			return err
+		}
+		return tx.Model(&User{}).Where("id = ?", inviterId).
+			UpdateColumn("aff_count", gorm.Expr("CASE WHEN aff_count > 0 THEN aff_count - ? ELSE 0 END", 1)).
+			Error
+	})
+}
+
 // InviteeModelMarkupDiscountRateItem 定价页可见的模型×渠道加价折扣配置项（API 列表元素）。
 type InviteeModelMarkupDiscountRateItem struct {
 	ModelName                      string  `json:"model_name"`
@@ -370,7 +437,36 @@ func parseInviteeModelMarkupDiscountRates(raw string) ([]inviteeModelMarkupDisco
 	}
 	var list []inviteeModelMarkupDiscountRateEntryRaw
 	if err := common.UnmarshalJsonStr(raw, &list); err != nil {
-		return nil, err
+		var legacy map[string]float64
+		if legacyErr := common.UnmarshalJsonStr(raw, &legacy); legacyErr != nil {
+			return nil, err
+		}
+		out := make([]inviteeModelMarkupDiscountRateEntry, 0, len(legacy))
+		for key, rate := range legacy {
+			key = strings.TrimSpace(key)
+			modelName := ""
+			channelID := 0
+			if idx := strings.LastIndex(key, "/"); idx > 0 && idx < len(key)-1 {
+				modelName = strings.TrimSpace(key[:idx])
+				channelID, _ = strconv.Atoi(strings.TrimSpace(key[idx+1:]))
+			}
+			if channelID <= 0 {
+				parts := strings.SplitN(key, ":", 2)
+				if len(parts) == 2 {
+					channelID, _ = strconv.Atoi(strings.TrimSpace(parts[0]))
+					modelName = strings.TrimSpace(parts[1])
+				}
+			}
+			if channelID <= 0 || modelName == "" {
+				continue
+			}
+			out = append(out, inviteeModelMarkupDiscountRateEntry{
+				ModelName:          modelName,
+				ChannelID:          channelID,
+				MarkupDiscountRate: rate,
+			})
+		}
+		return out, nil
 	}
 	out := make([]inviteeModelMarkupDiscountRateEntry, 0, len(list))
 	for _, item := range list {
@@ -537,17 +633,6 @@ func listPricingVisibleMarkupDiscountRateItems() ([]InviteeModelMarkupDiscountRa
 		}
 		costDiscountPercent := ch.PriceDiscountPercent
 		currentDiscount := inviteeModelActualDiscountPercent(officialBase, channelBase, costDiscountPercent, defaultRate)
-		if tierOfficial, tierCostPart, tierDiscount, ok := bestVideoFlatClipDiscountBases(p.VideoFlatClipHint, defaultRate); ok {
-			officialBase = tierOfficial
-			channelBase = tierCostPart
-			costDiscountPercent = 100
-			currentDiscount = tierDiscount
-		} else if tierOfficial, tierCostPart, tierDiscount, ok := bestImagePerImageDiscountBases(p.ImagePerImageHint, defaultRate); ok {
-			officialBase = tierOfficial
-			channelBase = tierCostPart
-			costDiscountPercent = 100
-			currentDiscount = tierDiscount
-		}
 		defaultRates[key] = defaultRate
 		items = append(items, InviteeModelMarkupDiscountRateItem{
 			ModelName:                      modelName,

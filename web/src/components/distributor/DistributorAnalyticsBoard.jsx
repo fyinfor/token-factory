@@ -10,6 +10,7 @@ License, or (at your option) any later version.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card, Select, Spin, Typography, Space } from '@douyinfe/semi-ui';
 import { VChart } from '@visactor/react-vchart';
+import { initVChartSemiTheme } from '@visactor/vchart-semi-theme';
 import { BarChart3, LineChart, TrendingUp } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -22,6 +23,9 @@ import {
 import { CHART_CONFIG } from '../../constants/dashboard.constants';
 
 const { Text, Title } = Typography;
+
+const analyticsIconClassName =
+  'text-[var(--semi-color-text-1)] dark:text-[var(--semi-color-text-0)]';
 
 /** 与控制台金额展示一致；TOKENS 展示模式下纵轴用美元等价（quota / quota_per_unit）。 */
 function quotaToChartMoneyNumber(quota) {
@@ -134,6 +138,12 @@ export default function DistributorAnalyticsBoard({ adminMode = false }) {
       setLoading(false);
     }
   }, [adminMode, days, t]);
+
+  useEffect(() => {
+    initVChartSemiTheme({
+      isWatchingThemeSwitch: true,
+    });
+  }, []);
 
   useEffect(() => {
     load();
@@ -320,7 +330,7 @@ export default function DistributorAnalyticsBoard({ adminMode = false }) {
       <div className='flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3'>
         <div>
           <Title heading={5} className='!mb-1 flex items-center gap-2'>
-            <TrendingUp size={18} />
+            <TrendingUp size={18} className={analyticsIconClassName} />
             {adminMode ? t('分销数据大盘') : t('数据看板')}
           </Title>
           {!adminMode && effectiveBps > 0 ? (
@@ -353,7 +363,7 @@ export default function DistributorAnalyticsBoard({ adminMode = false }) {
             <Card
               title={
                 <span className='flex items-center gap-2'>
-                  <LineChart size={16} />
+                  <LineChart size={16} className={analyticsIconClassName} />
                   {t('近7日流量与注册')}
                 </span>
               }
@@ -367,7 +377,7 @@ export default function DistributorAnalyticsBoard({ adminMode = false }) {
             <Card
               title={
                 <span className='flex items-center gap-2'>
-                  <LineChart size={16} />
+                  <LineChart size={16} className={analyticsIconClassName} />
                   {t('收益与充值带动')}
                   <Text type='tertiary' size='small' className='!font-normal'>
                     ({t('所选区间')} · {t('金额为展示货币')})
@@ -387,7 +397,7 @@ export default function DistributorAnalyticsBoard({ adminMode = false }) {
             <Card
               title={
                 <span className='flex items-center gap-2'>
-                  <BarChart3 size={16} />
+                  <BarChart3 size={16} className={analyticsIconClassName} />
                   {t('被邀请人收益 TOP10')}
                 </span>
               }
