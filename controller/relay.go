@@ -727,6 +727,7 @@ func RelayTask(c *gin.Context) {
 		if relayInfo.PriceData.ChannelPriceDiscount != nil {
 			chDiscPct = *relayInfo.PriceData.ChannelPriceDiscount
 		}
+		markupDiscPct := relayInfo.PriceData.MarkupDiscountPercent
 		task.PrivateData.BillingContext = &model.TaskBillingContext{
 			ModelPrice:                  relayInfo.PriceData.ModelPrice,
 			GroupRatio:                  relayInfo.PriceData.GroupRatioInfo.GroupRatio,
@@ -735,6 +736,14 @@ func RelayTask(c *gin.Context) {
 			OriginModelName:             relayInfo.OriginModelName,
 			PerCallBilling:              common.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName),
 			ChannelPriceDiscountPercent: chDiscPct,
+			MarkupDiscountPercent:       &markupDiscPct,
+			VideoRuleUnit:               relayInfo.PriceData.VideoRuleUnit,
+			VideoBillingMode:            relayInfo.PriceData.VideoBillingMode,
+			VideoChannelRulePrice:       relayInfo.PriceData.VideoChannelRulePrice,
+			VideoGlobalRulePrice:        relayInfo.PriceData.VideoGlobalRulePrice,
+			VideoRuleWidth:              relayInfo.PriceData.VideoRuleWidth,
+			VideoRuleHeight:             relayInfo.PriceData.VideoRuleHeight,
+			VideoRuleHasAudio:           relayInfo.PriceData.VideoRuleHasAudio,
 		}
 		task.Quota = actualQuota
 		task.Data = result.TaskData
