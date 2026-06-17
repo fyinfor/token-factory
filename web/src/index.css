@@ -391,6 +391,42 @@ code {
   max-width: min(100%, 780px) !important;
 }
 
+/* 操练场生成图：气泡宽度随图片收缩，消除图片与气泡右边框之间的空白 */
+.playground-ai-dialogue
+  .semi-ai-chat-dialogue-content-bubble:has(.playground-dialogue-markdown-img) {
+  width: fit-content !important;
+  max-width: min(100%, 780px) !important;
+}
+
+.playground-ai-dialogue
+  .semi-ai-chat-dialogue-content-bubble:has(.playground-dialogue-markdown-img)
+  .semi-markdownRender {
+  width: fit-content;
+  max-width: 100%;
+}
+
+.playground-ai-dialogue
+  .semi-ai-chat-dialogue-content-bubble:has(.playground-dialogue-markdown-img)
+  .semi-markdownRender-component-p {
+  width: fit-content;
+  max-width: 100%;
+  margin: 0;
+}
+
+.playground-ai-dialogue .playground-dialogue-markdown-img {
+  margin: 0;
+  width: fit-content !important;
+  max-width: min(100%, 780px);
+}
+
+.playground-ai-dialogue .playground-dialogue-markdown-img .semi-image-img {
+  width: auto !important;
+  height: auto !important;
+  max-width: min(100%, 780px);
+  max-height: 60vh;
+  object-fit: contain;
+}
+
 .playground-ai-dialogue .semi-ai-chat-dialogue-action {
   column-gap: 0 !important;
 }
