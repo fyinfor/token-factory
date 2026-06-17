@@ -55,6 +55,16 @@ type PriceData struct {
 	// GlobalCreateCacheRatio 全局缓存创建倍率，用于缓存写入侧加价计算
 	// 新公式缓存创建加价部分 = globalMr × GlobalCreateCacheRatio × markupRate%
 	GlobalCreateCacheRatio float64
+
+	// Video rule billing snapshot. Used by async task settlement/profit share to
+	// keep per-task billing stable when pricing settings change after submit.
+	VideoRuleUnit         string
+	VideoBillingMode      string
+	VideoChannelRulePrice float64
+	VideoGlobalRulePrice  float64
+	VideoRuleWidth        int
+	VideoRuleHeight       int
+	VideoRuleHasAudio     bool
 }
 
 func (p *PriceData) AddOtherRatio(key string, ratio float64) {

@@ -108,6 +108,17 @@ func ListAffInviteProfitShareLogs(inviterId, inviteeUserId int, pageInfo *common
 	return rows, total, nil
 }
 
+func HasAffInviteProfitShareHistory(inviterId, inviteeUserId int) (bool, error) {
+	if inviterId <= 0 || inviteeUserId <= 0 {
+		return false, nil
+	}
+	var count int64
+	err := DB.Model(&AffInviteProfitShareLog{}).
+		Where("inviter_id = ? AND invitee_user_id = ?", inviterId, inviteeUserId).
+		Count(&count).Error
+	return count > 0, err
+}
+
 func attachProfitShareLogRouteSlugs(rows []AffInviteProfitShareLog) {
 	if len(rows) == 0 {
 		return

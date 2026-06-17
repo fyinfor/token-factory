@@ -955,6 +955,13 @@ func tryVideoPerVideoRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo)
 		CostDiscountPercent:   chDiscVPV,
 		MarkupDiscountPercent: markupDiscVPV,
 		GlobalModelPrice:      globalUsd,
+		VideoRuleUnit:         "per_video",
+		VideoBillingMode:      string(estimateCtx.Mode),
+		VideoChannelRulePrice: usd,
+		VideoGlobalRulePrice:  globalUsd,
+		VideoRuleWidth:        estimateCtx.Width,
+		VideoRuleHeight:       estimateCtx.Height,
+		VideoRuleHasAudio:     hasAudio,
 	}
 	if common.DebugEnabled {
 		logger.LogDebug(c, fmt.Sprintf(

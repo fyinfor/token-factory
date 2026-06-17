@@ -929,19 +929,21 @@ export default function DistributorCenter() {
                       <Text strong style={{ color: 'white', fontSize: '16px' }}>
                         {t('收益统计')}
                       </Text>
-                      <Text
-                        style={{
-                          color: 'rgba(255,255,255,0.88)',
-                          fontSize: '12px',
-                          display: 'block',
-                          marginTop: 6,
-                        }}
-                      >
-                        {t('当前分成比例')}：
-                        {formatCommissionRatioPercent(
-                          center?.effective_commission_bps ?? 0,
-                        )}
-                      </Text>
+                      {!isProfitShareMode && (
+                        <Text
+                          style={{
+                            color: 'rgba(255,255,255,0.88)',
+                            fontSize: '12px',
+                            display: 'block',
+                            marginTop: 6,
+                          }}
+                        >
+                          {t('当前分成比例')}：
+                          {formatCommissionRatioPercent(
+                            center?.effective_commission_bps ?? 0,
+                          )}
+                        </Text>
+                      )}
                     </div>
                     <div className='flex flex-wrap items-center justify-end gap-2 flex-shrink-0'>
                       <Button
