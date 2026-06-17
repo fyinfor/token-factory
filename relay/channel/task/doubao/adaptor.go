@@ -306,6 +306,7 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 				r.Content = append(r.Content, ContentItem{
 					Type:     "image_url",
 					ImageURL: &MediaURL{URL: u},
+					Role:     "reference_image",
 				})
 			}
 		}
