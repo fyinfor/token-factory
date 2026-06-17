@@ -10,15 +10,24 @@ import (
 // 非利润分成模式、或用户非分销商邀请链下被邀请人时，回退为渠道默认加价折扣率。
 func ResolveEffectiveMarkupDiscountPercentForInviteeBilling(inviteeUserId, channelId int, originModelName string) float64 {
 	base := ResolveChannelMarkupDiscountRate(channelId)
-	if !common.IsDistributorProfitShareMode() || inviteeUserId <= 0 || channelId <= 0 {
+	if inviteeUserId <= 0 || channelId <= 0 {
+		return base
+	}
+	u, err := GetUserById(inviteeUserId, false)
+	if err != nil || u == nil {
+		return base
+	}
+	if UserIsDistributor(u) {
+		return 0
+	}
+	if !common.IsDistributorProfitShareMode() {
 		return base
 	}
 	modelName := strings.TrimSpace(originModelName)
 	if modelName == "" {
 		return base
 	}
-	u, err := GetUserById(inviteeUserId, false)
-	if err != nil || u == nil || u.InviterId <= 0 {
+	if u.InviterId <= 0 {
 		return base
 	}
 	inv, err := GetUserById(u.InviterId, false)
@@ -44,7 +53,21 @@ func ResolveEffectiveMarkupDiscountPercentForInviteeBilling(inviteeUserId, chann
 // ApplyInviteeMarkupToPricingAPIForUser 在利润分成模式下，将登录被邀请用户的模型×渠道加价覆盖到定价接口展示数据，
 // 并按被邀请人加价折扣率重算视频/图片分档展示价（video_flat_clip_hint / image_per_image_hint）。
 func ApplyInviteeMarkupToPricingAPIForUser(inviteeUserId int, pricingData []PricingAPIItem) {
-	if inviteeUserId <= 0 || !common.IsDistributorProfitShareMode() || len(pricingData) == 0 {
+	if inviteeUserId <= 0 || len(pricingData) == 0 {
+		return
+	}
+	u, err := GetUserById(inviteeUserId, false)
+	if err != nil || u == nil {
+		return
+	}
+	isDistributor := UserIsDistributor(u)
+	if isDistributor {
+		return
+	}
+	if !isDistributor && !common.IsDistributorProfitShareMode() {
+		return
+	}
+	if !isDistributor && u.InviterId <= 0 {
 		return
 	}
 	for i := range pricingData {

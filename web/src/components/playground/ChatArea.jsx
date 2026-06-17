@@ -23,9 +23,11 @@ import {
   AIChatInput,
   Button,
   Card,
+  Image,
   Toast,
   Typography,
 } from '@douyinfe/semi-ui';
+import { IconUploadError } from '@douyinfe/semi-icons';
 import { MessageSquare, Eye, EyeOff, MessageSquarePlus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { usePlayground } from '../../contexts/PlaygroundContext';
@@ -54,6 +56,51 @@ const getConstrainedMediaSize = (
 
 const getVideoUrl = (item) =>
   item?.video_url || item?.file_url || item?.url || item?.src || '';
+
+/** 操练场 Markdown 图片：避免 Semi 默认 50% 宽，并保留点击预览 */
+const PlaygroundDialogueMarkdownImage = ({
+  src,
+  alt,
+  style,
+  className,
+  ...rest
+}) => (
+  <Image
+    {...rest}
+    src={src}
+    alt={alt || ''}
+    preview
+    fallback={<IconUploadError />}
+    className={
+      className
+        ? `${className} playground-dialogue-markdown-img`
+        : 'playground-dialogue-markdown-img'
+    }
+    style={{
+      display: 'inline-block',
+      width: 'auto',
+      height: 'auto',
+      maxWidth: PLAYGROUND_MEDIA_MAX_WIDTH,
+      maxHeight: PLAYGROUND_MEDIA_MAX_HEIGHT,
+      ...style,
+    }}
+    imgStyle={{
+      display: 'block',
+      width: 'auto',
+      height: 'auto',
+      maxWidth: PLAYGROUND_MEDIA_MAX_WIDTH,
+      maxHeight: PLAYGROUND_MEDIA_MAX_HEIGHT,
+      objectFit: 'contain',
+      borderRadius: 8,
+    }}
+  />
+);
+
+const playgroundMarkdownRenderProps = {
+  components: {
+    img: PlaygroundDialogueMarkdownImage,
+  },
+};
 
 const getInputText = (messageContent) => {
   if (typeof messageContent === 'string') {
@@ -113,11 +160,12 @@ const restorePlaygroundMessage = (message) => {
 };
 
 const normalizeDialogueContent = (message) => {
-  const { content, role, videoTask } = message || {};
+  const { role, videoTask } = message || {};
+  const rawContent = message?.playgroundContent ?? message?.content;
   const normalizedContent = [];
 
-  if (Array.isArray(content)) {
-    content.forEach((item) => {
+  if (Array.isArray(rawContent)) {
+    rawContent.forEach((item) => {
       if (item?.type === 'text') {
         normalizedContent.push({
           type: 'input_text',
@@ -131,10 +179,10 @@ const normalizeDialogueContent = (message) => {
         });
       }
     });
-  } else if (typeof content === 'string' && content.trim()) {
+  } else if (typeof rawContent === 'string' && rawContent.trim()) {
     normalizedContent.push({
       type: 'input_text',
-      text: content,
+      text: rawContent,
     });
   }
 
@@ -147,7 +195,7 @@ const normalizeDialogueContent = (message) => {
   }
 
   if (normalizedContent.length === 0) {
-    return content;
+    return rawContent;
   }
 
   return [
@@ -431,6 +479,7 @@ const ChatArea = ({
           mode='bubble'
           roleConfig={roleInfo}
           dialogueRenderConfig={dialogueRenderConfig}
+          markdownRenderProps={playgroundMarkdownRenderProps}
           renderDialogueContentItem={renderDialogueContentItem}
           chats={safeChats}
           onChatsChange={handleChatsChange}
