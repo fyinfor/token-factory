@@ -45,7 +45,29 @@ func TestConvertToRequestPayload_Image2Video(t *testing.T) {
 	require.Len(t, body.Content, 2)
 	assert.Equal(t, "text", body.Content[0].Type)
 	assert.Equal(t, "image_url", body.Content[1].Type)
+	assert.Equal(t, "reference_image", body.Content[1].Role)
 	assert.Equal(t, "https://example.com/photo.jpg", body.Content[1].ImageURL.URL)
+}
+
+func TestConvertToRequestPayload_MultiImage2Video(t *testing.T) {
+	a := &TaskAdaptor{}
+	body, err := a.convertToRequestPayload(&relaycommon.TaskSubmitReq{
+		Model:  "doubao-seedance-2-0-260128",
+		Prompt: "多参考图生成视频",
+		Images: []string{
+			"https://example.com/ref1.png",
+			"https://example.com/ref2.png",
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, body.Content, 3)
+	assert.Equal(t, "text", body.Content[0].Type)
+	for i := 1; i < len(body.Content); i++ {
+		assert.Equal(t, "image_url", body.Content[i].Type)
+		assert.Equal(t, "reference_image", body.Content[i].Role)
+	}
+	assert.Equal(t, "https://example.com/ref1.png", body.Content[1].ImageURL.URL)
+	assert.Equal(t, "https://example.com/ref2.png", body.Content[2].ImageURL.URL)
 }
 
 func TestConvertToRequestPayload_Video2Video(t *testing.T) {
