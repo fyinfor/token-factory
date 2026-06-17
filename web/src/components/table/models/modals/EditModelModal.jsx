@@ -59,7 +59,8 @@ const nameRuleOptions = [
   { label: '后缀名称匹配', value: 3 },
 ];
 
-const DEFAULT_MODEL_TAGS = ['文本', '视频', '图片'];
+// 仅作为下拉建议，不会写入 model_tags，直到保存到模型
+const SUGGESTED_MODEL_TAGS = ['文本', '视频', '图片'];
 
 const normalizeTags = (tags) => {
   if (!Array.isArray(tags)) return [];
@@ -89,12 +90,34 @@ const EditModelModal = (props) => {
   // 预填组（标签、端点）
   const [tagGroups, setTagGroups] = useState([]);
   const [endpointGroups, setEndpointGroups] = useState([]);
-  const providedTagOptions = Array.isArray(props.tagOptions) ? props.tagOptions : [];
+  const [localTagOptions, setLocalTagOptions] = useState([]);
+  const [loadedModelTags, setLoadedModelTags] = useState([]);
+  const [selectInstanceKey, setSelectInstanceKey] = useState(0);
   const tagOptionList = useMemo(() => {
-    const base = [...DEFAULT_MODEL_TAGS, ...providedTagOptions];
-    const values = normalizeTags(base);
+    const prefillTags = tagGroups.flatMap((group) =>
+      Array.isArray(group.items) ? group.items : [],
+    );
+    const values = normalizeTags([
+      ...SUGGESTED_MODEL_TAGS,
+      ...(Array.isArray(props.tagOptions) ? props.tagOptions : []),
+      ...localTagOptions,
+      ...prefillTags,
+      ...loadedModelTags,
+    ]);
     return values.map((tag) => ({ label: tag, value: tag }));
-  }, [providedTagOptions]);
+  }, [props.tagOptions, localTagOptions, tagGroups, loadedModelTags]);
+  const tagOptionsKey = tagOptionList.map((option) => option.value).join('\0');
+
+  const fetchTagOptions = async () => {
+    try {
+      const res = await API.get('/api/models/tags');
+      if (res.data?.success) {
+        setLocalTagOptions(Array.isArray(res.data.data) ? res.data.data : []);
+      }
+    } catch (error) {
+      // ignore
+    }
+  };
 
   // 获取模型类型列表
   const fetchVendors = async () => {
@@ -128,12 +151,16 @@ const EditModelModal = (props) => {
   };
 
   useEffect(() => {
-    if (props.visiable) {
-      fetchVendors();
-      fetchPrefillGroups();
-      props.loadTagOptions?.();
+    if (!props.visiable) {
+      setLoadedModelTags([]);
+      return;
     }
-  }, [props.visiable]);
+    setSelectInstanceKey((key) => key + 1);
+    fetchVendors();
+    fetchPrefillGroups();
+    fetchTagOptions();
+    props.loadTagOptions?.();
+  }, [props.visiable, props.editingModel?.id]);
 
   const getInitValues = () => ({
     model_name: props.editingModel?.model_name || '',
@@ -167,6 +194,7 @@ const EditModelModal = (props) => {
         } else {
           data.tags = [];
         }
+        setLoadedModelTags(data.tags);
         // endpoints 保持原始 JSON 字符串，若为空设为空串
         if (!data.endpoints) {
           data.endpoints = '';
@@ -229,6 +257,7 @@ const EditModelModal = (props) => {
         const { success, message } = res.data;
         if (success) {
           showSuccess(t('模型更新成功！'));
+          await props.loadTagOptions?.();
           props.refresh();
           props.handleClose();
         } else {
@@ -239,6 +268,7 @@ const EditModelModal = (props) => {
         const { success, message } = res.data;
         if (success) {
           showSuccess(t('模型创建成功！'));
+          await props.loadTagOptions?.();
           props.refresh();
           props.handleClose();
         } else {
@@ -303,7 +333,7 @@ const EditModelModal = (props) => {
     >
       <Spin spinning={loading}>
         <Form
-          key={isEdit ? 'edit' : 'new'}
+          key={`${isEdit ? 'edit' : 'new'}-${props.editingModel?.id ?? 'none'}`}
           initValues={getInitValues()}
           getFormApi={(api) => (formApiRef.current = api)}
           onSubmit={submit}
@@ -390,6 +420,7 @@ const EditModelModal = (props) => {
                   </Col>
                   <Col span={24}>
                     <Form.Select
+                      key={`model-tags-select-${selectInstanceKey}-${tagOptionsKey}`}
                       field='tags'
                       label={t('标签')}
                       placeholder={t('请选择或输入标签')}

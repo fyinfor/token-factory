@@ -39,9 +39,11 @@ const inviteeModelDiscountExportContentType = "application/vnd.openxmlformats-of
 
 var inviteeModelDiscountExportHeaders = []string{
 	"模型 / 通道路径",
-	"平台售价/折扣率",
-	"代理可参与分配比例/折扣率",
-	"代理最低调用价（未税价折扣）",
+	"成本折扣",
+	"平台加价折扣比例",
+	"平台售价比例",
+	"当前代理加价比例",
+	"修改后售价比例",
 }
 
 // GetInviteeModelDiscounts 获取被邀请用户的模型折扣列表
@@ -80,6 +82,64 @@ func GetInviteeModelDiscounts(c *gin.Context) {
 	})
 }
 
+func validateAdminInviteeModelDiscountTarget(distributorId, inviteeId int) string {
+	if distributorId <= 0 || inviteeId <= 0 {
+		return "参数错误"
+	}
+	if !common.IsDistributorProfitShareMode() {
+		return "当前站点未启用利润分成模式"
+	}
+	dist, err := model.GetUserById(distributorId, false)
+	if err != nil || dist == nil || !model.UserIsDistributor(dist) {
+		return "用户不是分销商"
+	}
+	invitee, err := model.GetUserById(inviteeId, false)
+	if err != nil || invitee == nil || invitee.InviterId != distributorId {
+		return "该用户不是此分销商邀请的下级"
+	}
+	return ""
+}
+
+func parseAdminInviteeModelDiscountQuery(c *gin.Context) (int, int, string) {
+	distributorId, err := strconv.Atoi(c.Query("distributor_id"))
+	if err != nil || distributorId <= 0 {
+		return 0, 0, "参数错误"
+	}
+	inviteeId, err := strconv.Atoi(c.Query("invitee_id"))
+	if err != nil || inviteeId <= 0 {
+		return 0, 0, "参数错误"
+	}
+	if msg := validateAdminInviteeModelDiscountTarget(distributorId, inviteeId); msg != "" {
+		return 0, 0, msg
+	}
+	return distributorId, inviteeId, ""
+}
+
+// GetInviteeModelDiscountsAdmin 管理员查看某个代理下级用户的模型折扣列表。
+// GET /api/distributor/admin/invitee-model-discounts?distributor_id=xxx&invitee_id=xxx
+func GetInviteeModelDiscountsAdmin(c *gin.Context) {
+	distributorId, inviteeId, msg := parseAdminInviteeModelDiscountQuery(c)
+	if msg != "" {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": msg})
+		return
+	}
+
+	items, _, err := model.GetInviteeModelDiscounts(distributorId, inviteeId)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data": gin.H{
+			"items": items,
+			"total": len(items),
+		},
+	})
+}
+
 // ExportInviteeModelDiscounts 导出被邀请用户的模型折扣价格表
 // GET /api/distributor/invitee-model-discounts/export?invitee_id=xxx
 func ExportInviteeModelDiscounts(c *gin.Context) {
@@ -101,6 +161,35 @@ func ExportInviteeModelDiscounts(c *gin.Context) {
 	}
 
 	items, _, err := model.GetInviteeModelDiscounts(userId, inviteeId)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	items = filterInviteeModelDiscountExportItems(items, c.Query("q"), c.Query("supplier_type"))
+
+	data, err := buildInviteeModelDiscountExportWorkbook(items)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	filename := fmt.Sprintf("agent-model-discount-prices-%s.xlsx", time.Now().Format("20060102-150405"))
+	c.Header("Content-Type", inviteeModelDiscountExportContentType)
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	c.Header("Content-Length", strconv.Itoa(len(data)))
+	c.Data(http.StatusOK, inviteeModelDiscountExportContentType, data)
+}
+
+// ExportInviteeModelDiscountsAdmin 管理员导出某个代理下级用户的模型折扣价格表。
+// GET /api/distributor/admin/invitee-model-discounts/export?distributor_id=xxx&invitee_id=xxx
+func ExportInviteeModelDiscountsAdmin(c *gin.Context) {
+	distributorId, inviteeId, msg := parseAdminInviteeModelDiscountQuery(c)
+	if msg != "" {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": msg})
+		return
+	}
+
+	items, _, err := model.GetInviteeModelDiscounts(distributorId, inviteeId)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
@@ -188,11 +277,10 @@ func buildInviteeModelDiscountExportWorkbook(items []model.InviteeModelMarkupDis
 		},
 	})
 
-	_ = f.SetCellStyle(sheet, "A1", "D1", headerStyle)
+	_ = f.SetCellStyle(sheet, "A1", "F1", headerStyle)
 	_ = f.SetColWidth(sheet, "A", "A", 46)
 	_ = f.SetColWidth(sheet, "B", "B", 20)
-	_ = f.SetColWidth(sheet, "C", "C", 34)
-	_ = f.SetColWidth(sheet, "D", "D", 34)
+	_ = f.SetColWidth(sheet, "C", "F", 24)
 	_ = f.SetRowHeight(sheet, 1, 28)
 	_ = f.SetPanes(sheet, &excelize.Panes{
 		Freeze:      true,
@@ -207,9 +295,11 @@ func buildInviteeModelDiscountExportWorkbook(items []model.InviteeModelMarkupDis
 		row := idx + 2
 		values := []any{
 			inviteeModelDiscountExportModelPath(item),
-			formatInviteeModelDiscountSaleRate(item, item.DefaultMarkupDiscountRate),
+			formatInviteeModelDiscountMarkupRate(item.ChannelPriceDiscountPercent),
 			formatInviteeModelDiscountMarkupRate(item.DefaultMarkupDiscountRate),
-			formatInviteeModelDiscountSaleRate(item, 0),
+			formatInviteeModelDiscountSaleFormula(item, item.DefaultMarkupDiscountRate),
+			formatInviteeModelDiscountMarkupRate(item.CurrentMarkupDiscountRate),
+			formatInviteeModelDiscountSaleFormula(item, item.CurrentMarkupDiscountRate),
 		}
 		for col, value := range values {
 			cell, _ := excelize.CoordinatesToCellName(col+1, row)
@@ -219,7 +309,7 @@ func buildInviteeModelDiscountExportWorkbook(items []model.InviteeModelMarkupDis
 		}
 		_ = f.SetRowHeight(sheet, row, 38)
 		_ = f.SetCellStyle(sheet, fmt.Sprintf("A%d", row), fmt.Sprintf("A%d", row), bodyStyle)
-		_ = f.SetCellStyle(sheet, fmt.Sprintf("B%d", row), fmt.Sprintf("D%d", row), centerStyle)
+		_ = f.SetCellStyle(sheet, fmt.Sprintf("B%d", row), fmt.Sprintf("F%d", row), centerStyle)
 	}
 
 	var buf bytes.Buffer
@@ -239,35 +329,26 @@ func inviteeModelDiscountExportModelPath(item model.InviteeModelMarkupDiscountRa
 }
 
 func formatInviteeModelDiscountMarkupRate(value float64) string {
-	if value <= 0 || !isFiniteInviteeModelDiscountFloat(value) {
+	if !isFiniteInviteeModelDiscountFloat(value) {
 		return "-"
 	}
 	return fmt.Sprintf("%.1f%%", value)
 }
 
-func formatInviteeModelDiscountSaleRate(item model.InviteeModelMarkupDiscountRateItem, markupRate float64) string {
-	return fmt.Sprintf("%d%%", calcInviteeModelDiscountSaleRatePercent(item, markupRate))
+func formatInviteeModelDiscountSaleFormula(item model.InviteeModelMarkupDiscountRateItem, markupRate float64) string {
+	costRate := normalizeInviteeModelDiscountCostRate(item.ChannelPriceDiscountPercent)
+	markupRate = max(0, markupRate)
+	return fmt.Sprintf("%.1f%% + %.1f%% = %.1f%%", costRate, markupRate, costRate+markupRate)
 }
 
-func calcInviteeModelDiscountSaleRatePercent(item model.InviteeModelMarkupDiscountRateItem, markupRate float64) int {
-	officialBase := item.OfficialBasePrice
-	channelBase := item.ChannelBasePrice
-	costDiscountPercent := item.ChannelPriceDiscountPercent
-	if !isFiniteInviteeModelDiscountFloat(officialBase) ||
-		!isFiniteInviteeModelDiscountFloat(channelBase) ||
-		!isFiniteInviteeModelDiscountFloat(costDiscountPercent) ||
-		!isFiniteInviteeModelDiscountFloat(markupRate) ||
-		officialBase <= 0 {
-		if !isFiniteInviteeModelDiscountFloat(item.OfficialCurrentDiscountPercent) {
-			return 100
-		}
-		return max(0, int(100-math.Round(item.OfficialCurrentDiscountPercent)))
-	}
-	effective := channelBase*costDiscountPercent/100 + officialBase*markupRate/100
-	if !isFiniteInviteeModelDiscountFloat(effective) {
+func normalizeInviteeModelDiscountCostRate(value float64) float64 {
+	if !isFiniteInviteeModelDiscountFloat(value) {
 		return 100
 	}
-	return max(0, int(math.Round(effective/officialBase*100)))
+	if value < 0 {
+		return 0
+	}
+	return math.Round(value*10) / 10
 }
 
 func isFiniteInviteeModelDiscountFloat(value float64) bool {
@@ -309,5 +390,30 @@ func PutInviteeModelDiscounts(c *gin.Context) {
 		return
 	}
 
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+}
+
+type putInviteeModelDiscountsAdminRequest struct {
+	DistributorId int                                          `json:"distributor_id"`
+	InviteeId     int                                          `json:"invitee_id"`
+	Discounts     []model.ModelMarkupDiscountRateUpdateRequest `json:"discounts"`
+}
+
+// PutInviteeModelDiscountsAdmin 管理员为某个代理下级用户更新模型折扣配置。
+// PUT /api/distributor/admin/invitee-model-discounts
+func PutInviteeModelDiscountsAdmin(c *gin.Context) {
+	var req putInviteeModelDiscountsAdminRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的请求"})
+		return
+	}
+	if msg := validateAdminInviteeModelDiscountTarget(req.DistributorId, req.InviteeId); msg != "" {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": msg})
+		return
+	}
+	if err := model.UpdateInviteeModelDiscounts(req.DistributorId, req.InviteeId, req.Discounts); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
 }

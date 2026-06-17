@@ -321,6 +321,73 @@ func UpdateAffInviteeCommission(inviterId, inviteeUserId, commissionBps int) err
 	return DB.Save(&rel).Error
 }
 
+// UnbindDistributorInvitee 解除分销商与下级用户的邀请绑定，写入解绑快照，不回滚历史流水和已产生收益。
+func UnbindDistributorInvitee(inviterId, inviteeUserId, operatorId int, reason string) error {
+	if inviterId <= 0 || inviteeUserId <= 0 {
+		return errors.New("invalid id")
+	}
+	inviter, err := GetUserById(inviterId, false)
+	if err != nil || inviter == nil || !UserIsDistributor(inviter) {
+		return errors.New("user is not distributor")
+	}
+	invitee, err := GetUserById(inviteeUserId, false)
+	if err != nil || invitee == nil {
+		return errors.New("user not found")
+	}
+	if invitee.InviterId != inviterId {
+		return errors.New("not this distributor's invitee")
+	}
+	operatorUsername := ""
+	if operatorId > 0 {
+		if operator, err := GetUserById(operatorId, false); err == nil && operator != nil {
+			operatorUsername = operator.Username
+		}
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var rel AffInviteRelation
+		err := tx.Where("inviter_id = ? AND invitee_user_id = ?", inviterId, inviteeUserId).First(&rel).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		log := DistributorInviteeUnbindLog{
+			DistributorId:           inviterId,
+			InviteeUserId:           inviteeUserId,
+			OperatorId:              operatorId,
+			InviteeUsername:         invitee.Username,
+			InviteeDisplayName:      invitee.DisplayName,
+			OperatorUsername:        operatorUsername,
+			Reason:                  strings.TrimSpace(reason),
+			CommissionRatioBps:      rel.CommissionRatioBps,
+			CommissionEarnedQuota:   rel.CommissionEarnedQuota,
+			ProfitShareEarnedQuota:  rel.ProfitShareEarnedQuota,
+			ModelMarkupDiscountRate: rel.ModelMarkupDiscountRate,
+			CreatedAt:               common.GetTimestamp(),
+		}
+		if log.CommissionRatioBps <= 0 {
+			log.CommissionRatioBps = defaultCommissionBpsForNewInviteRelation(inviterId)
+		}
+		if err := tx.Create(&log).Error; err != nil {
+			return err
+		}
+		res := tx.Model(&User{}).
+			Where("id = ? AND inviter_id = ?", inviteeUserId, inviterId).
+			Update("inviter_id", 0)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return errors.New("invitee binding changed")
+		}
+		if err := tx.Where("inviter_id = ? AND invitee_user_id = ?", inviterId, inviteeUserId).
+			Delete(&AffInviteRelation{}).Error; err != nil {
+			return err
+		}
+		return tx.Model(&User{}).Where("id = ?", inviterId).
+			UpdateColumn("aff_count", gorm.Expr("CASE WHEN aff_count > 0 THEN aff_count - ? ELSE 0 END", 1)).
+			Error
+	})
+}
+
 // InviteeModelMarkupDiscountRateItem 定价页可见的模型×渠道加价折扣配置项（API 列表元素）。
 type InviteeModelMarkupDiscountRateItem struct {
 	ModelName                      string  `json:"model_name"`
@@ -370,7 +437,36 @@ func parseInviteeModelMarkupDiscountRates(raw string) ([]inviteeModelMarkupDisco
 	}
 	var list []inviteeModelMarkupDiscountRateEntryRaw
 	if err := common.UnmarshalJsonStr(raw, &list); err != nil {
-		return nil, err
+		var legacy map[string]float64
+		if legacyErr := common.UnmarshalJsonStr(raw, &legacy); legacyErr != nil {
+			return nil, err
+		}
+		out := make([]inviteeModelMarkupDiscountRateEntry, 0, len(legacy))
+		for key, rate := range legacy {
+			key = strings.TrimSpace(key)
+			modelName := ""
+			channelID := 0
+			if idx := strings.LastIndex(key, "/"); idx > 0 && idx < len(key)-1 {
+				modelName = strings.TrimSpace(key[:idx])
+				channelID, _ = strconv.Atoi(strings.TrimSpace(key[idx+1:]))
+			}
+			if channelID <= 0 {
+				parts := strings.SplitN(key, ":", 2)
+				if len(parts) == 2 {
+					channelID, _ = strconv.Atoi(strings.TrimSpace(parts[0]))
+					modelName = strings.TrimSpace(parts[1])
+				}
+			}
+			if channelID <= 0 || modelName == "" {
+				continue
+			}
+			out = append(out, inviteeModelMarkupDiscountRateEntry{
+				ModelName:          modelName,
+				ChannelID:          channelID,
+				MarkupDiscountRate: rate,
+			})
+		}
+		return out, nil
 	}
 	out := make([]inviteeModelMarkupDiscountRateEntry, 0, len(list))
 	for _, item := range list {
@@ -537,17 +633,6 @@ func listPricingVisibleMarkupDiscountRateItems() ([]InviteeModelMarkupDiscountRa
 		}
 		costDiscountPercent := ch.PriceDiscountPercent
 		currentDiscount := inviteeModelActualDiscountPercent(officialBase, channelBase, costDiscountPercent, defaultRate)
-		if tierOfficial, tierCostPart, tierDiscount, ok := bestVideoFlatClipDiscountBases(p.VideoFlatClipHint, defaultRate); ok {
-			officialBase = tierOfficial
-			channelBase = tierCostPart
-			costDiscountPercent = 100
-			currentDiscount = tierDiscount
-		} else if tierOfficial, tierCostPart, tierDiscount, ok := bestImagePerImageDiscountBases(p.ImagePerImageHint, defaultRate); ok {
-			officialBase = tierOfficial
-			channelBase = tierCostPart
-			costDiscountPercent = 100
-			currentDiscount = tierDiscount
-		}
 		defaultRates[key] = defaultRate
 		items = append(items, InviteeModelMarkupDiscountRateItem{
 			ModelName:                      modelName,
@@ -608,9 +693,34 @@ func GetInviteeModelDiscounts(inviterId, inviteeUserId int) ([]InviteeModelMarku
 		if rate, ok := savedByKey[key]; ok {
 			items[i].CurrentMarkupDiscountRate = rate
 		}
+		items[i].CurrentMarkupDiscountRate = clampChannelMarkupDiscountRate(items[i].CurrentMarkupDiscountRate)
+		maxRate := MaxInviteeMarkupDiscountRate(items[i])
+		if items[i].CurrentMarkupDiscountRate > maxRate {
+			items[i].CurrentMarkupDiscountRate = maxRate
+		}
 	}
 
 	return items, 0, nil
+}
+
+// MaxInviteeMarkupDiscountRate returns the highest agent markup that keeps the
+// invitee-facing sale rate at or below the official/base price.
+func MaxInviteeMarkupDiscountRate(item InviteeModelMarkupDiscountRateItem) float64 {
+	costPercent := item.ChannelPriceDiscountPercent
+	if !isFiniteFloat(costPercent) {
+		costPercent = 100
+	}
+	if costPercent < 0 {
+		costPercent = 0
+	}
+	maxRate := 100 - costPercent
+	if maxRate < 0 {
+		return 0
+	}
+	if maxRate > 100 {
+		return 100
+	}
+	return maxRate
 }
 
 // UpdateInviteeModelDiscounts 更新被邀请用户的模型加价折扣率（仅存与渠道默认不同的项，JSON 数组全量覆盖）。
@@ -639,9 +749,13 @@ func UpdateInviteeModelDiscounts(inviterId, inviteeUserId int, updates []ModelMa
 		return errors.New("not your invitee")
 	}
 
-	_, defaultRates, err := listPricingVisibleMarkupDiscountRateItems()
+	items, defaultRates, err := listPricingVisibleMarkupDiscountRateItems()
 	if err != nil {
 		return err
+	}
+	maxRates := make(map[string]float64, len(items))
+	for _, item := range items {
+		maxRates[inviteeModelMarkupKey(item.ChannelID, item.ModelName)] = MaxInviteeMarkupDiscountRate(item)
 	}
 
 	ratesToSave := make([]inviteeModelMarkupDiscountRateEntry, 0)
@@ -652,7 +766,11 @@ func UpdateInviteeModelDiscounts(inviterId, inviteeUserId int, updates []ModelMa
 		if !hasModel {
 			continue
 		}
-		if u.MarkupDiscountRate != defaultRate {
+		maxRate := maxRates[key]
+		if u.MarkupDiscountRate > maxRate+0.000001 {
+			return fmt.Errorf("markup_discount_rate for model %s must be between 0 and %.1f", modelName, maxRate)
+		}
+		if math.Abs(u.MarkupDiscountRate-defaultRate) > 0.000001 {
 			ratesToSave = append(ratesToSave, inviteeModelMarkupDiscountRateEntry{
 				ModelName:          modelName,
 				ChannelID:          u.ChannelID,

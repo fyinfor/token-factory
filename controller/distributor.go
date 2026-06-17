@@ -353,6 +353,37 @@ func GetDistributorInviteeProfitShareLogs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": pageInfo})
 }
 
+// GetDistributorInviteeTopUps 分销商查看某个被邀请用户的充值记录。
+func GetDistributorInviteeTopUps(c *gin.Context) {
+	userId := c.GetInt("id")
+	u, err := model.GetUserById(userId, false)
+	if err != nil || !model.UserIsDistributor(u) {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "仅分销商可查看"})
+		return
+	}
+	inviteeId, err := strconv.Atoi(c.Param("invitee_id"))
+	if err != nil || inviteeId <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "参数错误"})
+		return
+	}
+	invitee, err := model.GetUserById(inviteeId, false)
+	if err != nil || invitee == nil || invitee.InviterId != userId {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无权查看或用户不存在"})
+		return
+	}
+	pageInfo := common.GetPageQuery(c)
+	tradeNoKeyword := parseTopUpTradeNoKeyword(c)
+	statusFilter := parseTopUpListStatusFilter(c)
+	items, total, err := model.GetUserTopUps(inviteeId, pageInfo, statusFilter, tradeNoKeyword)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(items)
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": pageInfo})
+}
+
 type rejectApplicationRequest struct {
 	Reason string `json:"reason"`
 }
@@ -696,7 +727,7 @@ func GetDistributorInviteesAdmin(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": pageInfo})
 }
 
-// GetDistributorInviteeProfitSharesAdmin 管理端查看某分销商下某一被邀请用户的利润分成消费流水（分页）。
+// GetDistributorInviteeProfitSharesAdmin 管理端查看某分销商下某一被邀请用户的利润分成消费流水（分页），包含已解绑用户的历史流水。
 func GetDistributorInviteeProfitSharesAdmin(c *gin.Context) {
 	distributorId, err := strconv.Atoi(c.Param("id"))
 	if err != nil || distributorId <= 0 {
@@ -718,12 +749,88 @@ func GetDistributorInviteeProfitSharesAdmin(c *gin.Context) {
 		return
 	}
 	invitee, err := model.GetUserById(inviteeId, false)
-	if err != nil || invitee == nil || invitee.InviterId != distributorId {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "该用户不是此分销商邀请的下级"})
+	if err != nil || invitee == nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "用户不存在"})
 		return
+	}
+	if invitee.InviterId != distributorId {
+		hasProfitHistory, err := model.HasAffInviteProfitShareHistory(distributorId, inviteeId)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+		hasUnbindLog, err := model.HasDistributorInviteeUnbindLog(distributorId, inviteeId)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+		if !hasProfitHistory && !hasUnbindLog {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "该用户不是此分销商邀请的下级"})
+			return
+		}
 	}
 	pageInfo := common.GetPageQuery(c)
 	items, total, err := model.ListAffInviteProfitShareLogs(distributorId, inviteeId, pageInfo)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(items)
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": pageInfo})
+}
+
+// PostDistributorInviteeUnbindAdmin 管理端解除某分销商与下级用户的绑定。
+type distributorInviteeUnbindAdminRequest struct {
+	Reason string `json:"reason"`
+}
+
+func PostDistributorInviteeUnbindAdmin(c *gin.Context) {
+	distributorId, err := strconv.Atoi(c.Param("id"))
+	if err != nil || distributorId <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "invalid distributor id"})
+		return
+	}
+	inviteeId, err := strconv.Atoi(c.Param("invitee_id"))
+	if err != nil || inviteeId <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "invalid invitee id"})
+		return
+	}
+	var req distributorInviteeUnbindAdminRequest
+	if c.Request.Body != nil {
+		body, readErr := io.ReadAll(c.Request.Body)
+		if readErr != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的请求"})
+			return
+		}
+		if len(strings.TrimSpace(string(body))) > 0 {
+			if err := common.Unmarshal(body, &req); err != nil {
+				c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的请求"})
+				return
+			}
+		}
+	}
+	if err := model.UnbindDistributorInvitee(distributorId, inviteeId, c.GetInt("id"), req.Reason); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+}
+
+// GetDistributorInviteeUnbindLogsAdmin 管理端查看某分销商的下级解绑记录。
+func GetDistributorInviteeUnbindLogsAdmin(c *gin.Context) {
+	distributorId, err := strconv.Atoi(c.Param("id"))
+	if err != nil || distributorId <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "invalid distributor id"})
+		return
+	}
+	dist, err := model.GetUserById(distributorId, false)
+	if err != nil || dist == nil || !model.UserIsDistributor(dist) {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "用户不是分销商"})
+		return
+	}
+	pageInfo := common.GetPageQuery(c)
+	items, total, err := model.ListDistributorInviteeUnbindLogs(distributorId, pageInfo)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return

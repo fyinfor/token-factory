@@ -80,6 +80,7 @@ func SetApiRouter(router *gin.Engine) {
 			distributorRoute.POST("/bind_requests/:id/reject", controller.RejectDistributorBindRequest)
 			distributorRoute.GET("/invitee/:invitee_id/commissions", controller.GetDistributorInviteeCommissionLogs)
 			distributorRoute.GET("/invitee/:invitee_id/profit-shares", controller.GetDistributorInviteeProfitShareLogs)
+			distributorRoute.GET("/invitee/:invitee_id/topups", controller.GetDistributorInviteeTopUps)
 			distributorRoute.GET("/invitee-model-discounts", controller.GetInviteeModelDiscounts)
 			distributorRoute.GET("/invitee-model-discounts/export", controller.ExportInviteeModelDiscounts)
 			distributorRoute.PUT("/invitee-model-discounts", controller.PutInviteeModelDiscounts)
@@ -103,7 +104,12 @@ func SetApiRouter(router *gin.Engine) {
 			distributorAdminRoute.PUT("/distributors/:id/application", controller.PutDistributorApplicationByUserAdmin)
 			distributorAdminRoute.PUT("/distributors/:id/commission", controller.PutDistributorCommissionAdmin)
 			distributorAdminRoute.GET("/distributors/:id/invitees", controller.GetDistributorInviteesAdmin)
+			distributorAdminRoute.GET("/distributors/:id/invitee-unbind-logs", controller.GetDistributorInviteeUnbindLogsAdmin)
 			distributorAdminRoute.GET("/distributors/:id/invitees/:invitee_id/profit-shares", controller.GetDistributorInviteeProfitSharesAdmin)
+			distributorAdminRoute.POST("/distributors/:id/invitees/:invitee_id/unbind", controller.PostDistributorInviteeUnbindAdmin)
+			distributorAdminRoute.GET("/invitee-model-discounts", controller.GetInviteeModelDiscountsAdmin)
+			distributorAdminRoute.GET("/invitee-model-discounts/export", controller.ExportInviteeModelDiscountsAdmin)
+			distributorAdminRoute.PUT("/invitee-model-discounts", controller.PutInviteeModelDiscountsAdmin)
 			distributorAdminRoute.POST("/distributors/:id/settle", controller.PostDistributorSettleAdmin)
 			distributorAdminRoute.GET("/withdrawals", controller.ListDistributorWithdrawalsAdmin)
 			distributorAdminRoute.POST("/withdrawals/:id/approve", controller.ApproveDistributorWithdrawalAdmin)
@@ -351,6 +357,7 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			// 子站 TokenFactoryOpen 拉全站渠道（脱敏+定价）；鉴权见 controller.authorizeTFOpenSyncExport
 			tfOpenSyncRoute.GET("/channels", middleware.CriticalRateLimit(), controller.TFOpenSyncExportChannels)
+			tfOpenSyncRoute.POST("/channel_test", middleware.CriticalRateLimit(), controller.TFOpenSyncChannelTest)
 		}
 		channelRoute := apiRouter.Group("/channel")
 		{

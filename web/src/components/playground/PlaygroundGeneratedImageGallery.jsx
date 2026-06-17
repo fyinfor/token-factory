@@ -117,7 +117,7 @@ const PlaygroundGeneratedImageGallery = ({
             >
               <img
                 src={src}
-                alt={t('生成图片 {{index}}', { index: index + 1 })}
+                alt=''
                 className='block rounded-lg border border-gray-200 object-contain bg-gray-50'
                 style={{
                   width: constrainedSize.width

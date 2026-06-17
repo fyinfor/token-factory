@@ -53,14 +53,16 @@ import { createCardProPagination } from '../helpers/utils';
 import { useIsMobile } from '../hooks/common/useIsMobile';
 import CardPro from '../components/common/ui/CardPro';
 import CardTable from '../components/common/ui/CardTable';
-import { IconFile, IconSearch } from '@douyinfe/semi-icons';
+import {
+  IconDelete,
+  IconFile,
+  IconSearch,
+  IconSetting,
+} from '@douyinfe/semi-icons';
 import DistributorAnalyticsBoard from '../components/distributor/DistributorAnalyticsBoard';
 import DistributorWithdrawProfileDetail from '../components/distributor/DistributorWithdrawProfileDetail';
-import {
-  ProfitShareRewardColumnTitle,
-  renderProfitShareQuotaCell,
-  renderProfitShareRewardCell,
-} from '../components/distributor/profitShareDisplay';
+import InviteeModelDiscountModal from '../components/distributor/InviteeModelDiscountModal';
+import { renderProfitShareQuotaCell } from '../components/distributor/profitShareDisplay';
 
 const { Text } = Typography;
 
@@ -265,6 +267,19 @@ export default function DistributorAdmin() {
   const [invPs, setInvPs] = useState(10);
   const [invDistributorId, setInvDistributorId] = useState(null);
   const [invKeyword, setInvKeyword] = useState('');
+  const [invActiveTab, setInvActiveTab] = useState('current');
+  const [invUnbindRows, setInvUnbindRows] = useState([]);
+  const [invUnbindTotal, setInvUnbindTotal] = useState(0);
+  const [invUnbindPage, setInvUnbindPage] = useState(1);
+  const [invUnbindPs, setInvUnbindPs] = useState(10);
+  const [invUnbindLoading, setInvUnbindLoading] = useState(false);
+  const [unbindModalOpen, setUnbindModalOpen] = useState(false);
+  const [unbindTarget, setUnbindTarget] = useState(null);
+  const [unbindReason, setUnbindReason] = useState('');
+  const [unbindSubmitting, setUnbindSubmitting] = useState(false);
+  const [invDiscountOpen, setInvDiscountOpen] = useState(false);
+  const [invDiscountInviteeId, setInvDiscountInviteeId] = useState(null);
+  const [invDiscountInviteeLabel, setInvDiscountInviteeLabel] = useState('');
   /** admin 全局：顶部 /api/status，与控制台利润分成开关一致 */
   const [adminDistCommissionMode, setAdminDistCommissionMode] =
     useState('topup');
@@ -741,12 +756,16 @@ export default function DistributorAdmin() {
 
   const openInviteeProfitConsumption = useCallback(
     async (inviteeRow) => {
-      const uid = inviteeRow?.invitee_id;
+      const uid = inviteeRow?.invitee_id || inviteeRow?.invitee_user_id;
       if (!uid || !invDistributorId) return;
       setInvProfitInviteeId(uid);
       setInvProfitInviteeLabel(
         String(
-          inviteeRow.display_name || inviteeRow.username || `#${uid}`,
+          inviteeRow.display_name ||
+            inviteeRow.invitee_display_name ||
+            inviteeRow.username ||
+            inviteeRow.invitee_username ||
+            `#${uid}`,
         ).trim(),
       );
       setInvProfitOpen(true);
@@ -757,10 +776,29 @@ export default function DistributorAdmin() {
     [invDistributorId, fetchInviteeProfitShares],
   );
 
+  const openInviteeModelDiscount = useCallback(
+    (inviteeRow) => {
+      const uid = inviteeRow?.invitee_id;
+      if (!uid || !invDistributorId) return;
+      setInvDiscountInviteeId(uid);
+      setInvDiscountInviteeLabel(
+        String(
+          inviteeRow.display_name || inviteeRow.username || `#${uid}`,
+        ).trim(),
+      );
+      setInvDiscountOpen(true);
+    },
+    [invDistributorId],
+  );
+
   const openInvitees = async (userId) => {
     setInvDistributorId(userId);
     setInvKeyword('');
     setInvPage(1);
+    setInvActiveTab('current');
+    setInvUnbindRows([]);
+    setInvUnbindTotal(0);
+    setInvUnbindPage(1);
     setInvOpen(true);
     await loadAdminDistCommissionMode();
     await fetchInvitees(userId, 1, invPs, '');
@@ -789,6 +827,93 @@ export default function DistributorAdmin() {
     setInvPage(p);
     setInvPs(ps);
   };
+
+  const fetchInviteeUnbindLogs = useCallback(
+    async (userId, p = 1, ps = invUnbindPs) => {
+      if (!userId) return;
+      setInvUnbindLoading(true);
+      try {
+        const res = await API.get(
+          `/api/distributor/admin/distributors/${userId}/invitee-unbind-logs?p=${p}&page_size=${ps}`,
+        );
+        const { success, message, data } = res.data || {};
+        if (!success) {
+          showError(message || t('加载失败'));
+          return;
+        }
+        setInvUnbindRows(data?.items || []);
+        setInvUnbindTotal(data?.total ?? 0);
+        setInvUnbindPage(p);
+        setInvUnbindPs(ps);
+      } catch {
+        showError(t('加载失败'));
+      } finally {
+        setInvUnbindLoading(false);
+      }
+    },
+    [invUnbindPs, t],
+  );
+
+  const openUnbindModal = useCallback((inviteeRow) => {
+    setUnbindTarget(inviteeRow || null);
+    setUnbindReason('');
+    setUnbindModalOpen(true);
+  }, []);
+
+  const submitUnbindInvitee = useCallback(async () => {
+    const uid = unbindTarget?.invitee_id;
+    if (!uid || !invDistributorId) return;
+    setUnbindSubmitting(true);
+    try {
+      const res = await API.post(
+        `/api/distributor/admin/distributors/${invDistributorId}/invitees/${uid}/unbind`,
+        { reason: String(unbindReason || '').trim() },
+      );
+      const { success, message } = res.data || {};
+      if (!success) {
+        showError(message || t('操作失败'));
+        return;
+      }
+      showSuccess(t('已解除绑定'));
+      if (invProfitInviteeId === uid) {
+        setInvProfitOpen(false);
+      }
+      if (invDiscountInviteeId === uid) {
+        setInvDiscountOpen(false);
+      }
+      setUnbindModalOpen(false);
+      setUnbindTarget(null);
+      setUnbindReason('');
+      await fetchInvitees(invDistributorId, invPage, invPs, invKeyword);
+      if (invActiveTab === 'unbind') {
+        await fetchInviteeUnbindLogs(
+          invDistributorId,
+          invUnbindPage,
+          invUnbindPs,
+        );
+      }
+      await loadDists();
+    } catch {
+      showError(t('操作失败'));
+    } finally {
+      setUnbindSubmitting(false);
+    }
+  }, [
+    fetchInviteeUnbindLogs,
+    invDiscountInviteeId,
+    invActiveTab,
+    invDistributorId,
+    invKeyword,
+    invPage,
+    invProfitInviteeId,
+    invPs,
+    invUnbindPage,
+    invUnbindPs,
+    loadDists,
+    t,
+    unbindReason,
+    unbindTarget,
+  ]);
 
   const submitInviteeSearch = () => {
     if (!invDistributorId) return;
@@ -1092,7 +1217,7 @@ export default function DistributorAdmin() {
             {r.needs_supplement ? t('补充资料') : t('查看资料')}
           </Button>
           <Button size='small' onClick={() => openInvitees(r.id)}>
-            {t('收益明细')}
+            {t('下级用户')}
           </Button>
           <Button
             size='small'
@@ -1243,19 +1368,10 @@ export default function DistributorAdmin() {
         render: (q) => renderProfitShareQuotaCell(q),
       },
       {
-        title: t('当时分成比例'),
-        dataIndex: 'commission_bps',
-        width: 100,
-        render: (bps) =>
-          typeof bps === 'number' && bps > 0
-            ? formatCommissionRatioPercent(bps)
-            : '—',
-      },
-      {
-        title: <ProfitShareRewardColumnTitle t={t} />,
+        title: t('收益金额'),
         dataIndex: 'reward_quota',
         width: 110,
-        render: (_, row) => renderProfitShareRewardCell(row, t),
+        render: (q) => renderProfitShareQuotaCell(q),
       },
     ],
     [t],
@@ -1277,33 +1393,51 @@ export default function DistributorAdmin() {
             ts ? dayjs.unix(Number(ts)).format('YYYY-MM-DD HH:mm') : '—',
         },
         {
-          title: t('分润比例'),
-          dataIndex: 'commission_ratio_bps',
-          width: 100,
-          render: (b) => formatCommissionRatioPercent(b),
-        },
-        {
           title: t('累计利润分成额度'),
           dataIndex: 'profit_share_earned_quota',
           render: (q) => renderQuota(q || 0),
         },
         {
           title: t('操作'),
-          width: 120,
+          width: 330,
           render: (_, row) => (
-            <Button
-              size='small'
-              type='tertiary'
-              onClick={() => openInviteeProfitConsumption(row)}
-            >
-              {t('消费明细')}
-            </Button>
+            <div className='flex flex-wrap gap-2'>
+              <Button
+                size='small'
+                type='tertiary'
+                onClick={() => openInviteeProfitConsumption(row)}
+              >
+                {t('分润流水')}
+              </Button>
+              <Button
+                size='small'
+                type='warning'
+                theme='light'
+                icon={<IconSetting />}
+                onClick={() => openInviteeModelDiscount(row)}
+              >
+                {t('模型折扣率')}
+              </Button>
+              <Button
+                size='small'
+                type='danger'
+                theme='light'
+                icon={<IconDelete />}
+                onClick={() => openUnbindModal(row)}
+              >
+                {t('解除绑定')}
+              </Button>
+            </div>
           ),
         },
       ];
     }
     return [
-      { title: t('用户'), dataIndex: 'username' },
+      {
+        title: t('用户'),
+        dataIndex: 'username',
+        render: (_, r) => r.display_name || r.username || r.invitee_id,
+      },
       {
         title: t('分成'),
         dataIndex: 'commission_ratio_bps',
@@ -1314,8 +1448,115 @@ export default function DistributorAdmin() {
         dataIndex: 'commission_earned_quota',
         render: (q) => renderQuota(q || 0),
       },
+      {
+        title: t('操作'),
+        width: 120,
+        render: (_, row) => (
+          <Button
+            size='small'
+            type='danger'
+            theme='light'
+            icon={<IconDelete />}
+            onClick={() => openUnbindModal(row)}
+          >
+            {t('解除绑定')}
+          </Button>
+        ),
+      },
     ];
-  }, [isAdminProfitShare, t, openInviteeProfitConsumption]);
+  }, [
+    isAdminProfitShare,
+    t,
+    openInviteeProfitConsumption,
+    openInviteeModelDiscount,
+    openUnbindModal,
+  ]);
+
+  const invUnbindColumns = useMemo(
+    () => [
+      {
+        title: t('用户'),
+        dataIndex: 'invitee_username',
+        render: (_, r) =>
+          r.invitee_display_name || r.invitee_username || r.invitee_user_id,
+      },
+      {
+        title: t('解绑时间'),
+        dataIndex: 'created_at',
+        width: 168,
+        render: (ts) =>
+          ts ? dayjs.unix(Number(ts)).format('YYYY-MM-DD HH:mm') : '-',
+      },
+      {
+        title: t('操作管理员'),
+        dataIndex: 'operator_username',
+        width: 130,
+        render: (_, r) => r.operator_username || `#${r.operator_id || '-'}`,
+      },
+      {
+        title: isAdminProfitShare ? t('解绑前累计分润') : t('解绑前累计分成'),
+        dataIndex: isAdminProfitShare
+          ? 'profit_share_earned_quota'
+          : 'commission_earned_quota',
+        width: 140,
+        render: (q) => renderQuota(q || 0),
+      },
+      {
+        title: t('解绑原因'),
+        dataIndex: 'reason',
+        width: 260,
+        render: (reason) => {
+          const text = String(reason || '').trim();
+          if (!text) return '-';
+          return (
+            <div className='flex min-h-8 items-center'>
+              <Tooltip
+                content={
+                  <div className='max-w-[420px] whitespace-pre-wrap break-words'>
+                    {text}
+                  </div>
+                }
+              >
+                <span
+                  className='inline-block max-w-[240px] cursor-help border-b border-dotted border-gray-400 text-xs leading-relaxed align-middle'
+                  style={{
+                    display: '-webkit-box',
+                    WebkitBoxOrient: 'vertical',
+                    WebkitLineClamp: 2,
+                    overflow: 'hidden',
+                    whiteSpace: 'normal',
+                    wordBreak: 'break-word',
+                  }}
+                >
+                  {text}
+                </span>
+              </Tooltip>
+            </div>
+          );
+        },
+      },
+      ...(isAdminProfitShare
+        ? [
+            {
+              title: t('操作'),
+              width: 120,
+              render: (_, row) => (
+                <Button
+                  size='small'
+                  type='tertiary'
+                  theme='light'
+                  icon={<IconFile />}
+                  onClick={() => openInviteeProfitConsumption(row)}
+                >
+                  {t('分润流水')}
+                </Button>
+              ),
+            },
+          ]
+        : []),
+    ],
+    [isAdminProfitShare, t, openInviteeProfitConsumption],
+  );
 
   const tableEmpty = (
     <Empty
@@ -2296,48 +2537,164 @@ export default function DistributorAdmin() {
         onCancel={() => {
           setInvOpen(false);
           setInvProfitOpen(false);
+          setInvDiscountOpen(false);
+          setUnbindModalOpen(false);
           setInvKeyword('');
         }}
         footer={null}
-        width={isAdminProfitShare ? 960 : 800}
+        width={isAdminProfitShare ? 1080 : 920}
       >
-        <div className='flex items-center gap-2 mb-3'>
-          <Input
-            size='small'
-            className='w-[200px]'
-            prefix={<IconSearch />}
-            showClear
-            placeholder={t('邀请用户搜索占位')}
-            maxLength={ADMIN_KEYWORD_MAX_LEN}
-            value={invKeyword}
-            onChange={(v) =>
-              setInvKeyword(String(v ?? '').slice(0, ADMIN_KEYWORD_MAX_LEN))
+        <Tabs
+          activeKey={invActiveTab}
+          onChange={(key) => {
+            setInvActiveTab(key);
+            if (key === 'unbind' && invDistributorId) {
+              fetchInviteeUnbindLogs(invDistributorId, 1, invUnbindPs);
             }
-            onEnterPress={submitInviteeSearch}
-          />
-          <Button type='primary' size='small' onClick={submitInviteeSearch}>
-            {t('搜索')}
-          </Button>
-        </div>
-        <Table
-          columns={invColumns}
-          dataSource={invRows}
-          pagination={{
-            currentPage: invPage,
-            pageSize: invPs,
-            total: invTotal,
-            onPageChange: (p) =>
-              invDistributorId && fetchInvitees(invDistributorId, p, invPs),
-            onPageSizeChange: (ps) =>
-              invDistributorId && fetchInvitees(invDistributorId, 1, ps),
           }}
+          type='line'
+        >
+          <Tabs.TabPane tab={t('当前下级')} itemKey='current'>
+            <div className='pt-3'>
+              <div className='flex items-center gap-2 mb-3'>
+                <Input
+                  size='small'
+                  className='w-[200px]'
+                  prefix={<IconSearch />}
+                  showClear
+                  placeholder={t('邀请用户搜索占位')}
+                  maxLength={ADMIN_KEYWORD_MAX_LEN}
+                  value={invKeyword}
+                  onChange={(v) =>
+                    setInvKeyword(
+                      String(v ?? '').slice(0, ADMIN_KEYWORD_MAX_LEN),
+                    )
+                  }
+                  onEnterPress={submitInviteeSearch}
+                />
+                <Button
+                  type='primary'
+                  size='small'
+                  onClick={submitInviteeSearch}
+                >
+                  {t('搜索')}
+                </Button>
+              </div>
+              <Table
+                columns={invColumns}
+                dataSource={invRows}
+                pagination={{
+                  currentPage: invPage,
+                  pageSize: invPs,
+                  total: invTotal,
+                  onPageChange: (p) =>
+                    invDistributorId &&
+                    fetchInvitees(invDistributorId, p, invPs, invKeyword),
+                  onPageSizeChange: (ps) =>
+                    invDistributorId &&
+                    fetchInvitees(invDistributorId, 1, ps, invKeyword),
+                }}
+              />
+            </div>
+          </Tabs.TabPane>
+          <Tabs.TabPane tab={t('解绑记录')} itemKey='unbind'>
+            <div className='pt-3'>
+              <Table
+                loading={invUnbindLoading}
+                columns={invUnbindColumns}
+                dataSource={invUnbindRows}
+                rowKey='id'
+                pagination={{
+                  currentPage: invUnbindPage,
+                  pageSize: invUnbindPs,
+                  total: invUnbindTotal,
+                  onPageChange: (p) =>
+                    invDistributorId &&
+                    fetchInviteeUnbindLogs(invDistributorId, p, invUnbindPs),
+                  onPageSizeChange: (ps) =>
+                    invDistributorId &&
+                    fetchInviteeUnbindLogs(invDistributorId, 1, ps),
+                }}
+              />
+            </div>
+          </Tabs.TabPane>
+        </Tabs>
+      </Modal>
+
+      <Modal
+        title={t('解除绑定')}
+        visible={unbindModalOpen}
+        onCancel={() => {
+          if (unbindSubmitting) return;
+          setUnbindModalOpen(false);
+          setUnbindTarget(null);
+          setUnbindReason('');
+        }}
+        footer={
+          <div className='flex justify-end gap-2'>
+            <Button
+              disabled={unbindSubmitting}
+              onClick={() => {
+                setUnbindModalOpen(false);
+                setUnbindTarget(null);
+                setUnbindReason('');
+              }}
+            >
+              {t('取消')}
+            </Button>
+            <Button
+              type='danger'
+              theme='solid'
+              icon={<IconDelete />}
+              loading={unbindSubmitting}
+              onClick={submitUnbindInvitee}
+            >
+              {t('确认解除')}
+            </Button>
+          </div>
+        }
+      >
+        <Text type='warning' size='small' className='block mb-3'>
+          {t(
+            '解除后该用户将不再属于此代理名下，模型价格会恢复平台正常价；历史流水和已产生收益不会回滚。',
+          )}
+        </Text>
+        <Text type='secondary' size='small' className='block mb-2'>
+          {t('用户')}：
+          {unbindTarget
+            ? unbindTarget.display_name ||
+              unbindTarget.username ||
+              `#${unbindTarget.invitee_id}`
+            : '-'}
+        </Text>
+        <TextArea
+          autosize
+          rows={3}
+          maxCount={200}
+          value={unbindReason}
+          onChange={(v) => setUnbindReason(String(v ?? ''))}
+          placeholder={t('填写解绑原因，便于后续追溯')}
         />
       </Modal>
+
+      <InviteeModelDiscountModal
+        visible={invDiscountOpen}
+        onCancel={() => {
+          setInvDiscountOpen(false);
+          setInvDiscountInviteeId(null);
+          setInvDiscountInviteeLabel('');
+        }}
+        inviteeId={invDiscountInviteeId}
+        inviteeLabel={invDiscountInviteeLabel}
+        adminMode
+        distributorId={invDistributorId}
+        t={t}
+      />
 
       <Modal
         title={
           <span>
-            {t('消费明细')}
+            {t('分润流水')}
             {invProfitInviteeLabel ? (
               <Text type='tertiary' size='small' className='ml-2 font-normal'>
                 {invProfitInviteeLabel}
@@ -2351,9 +2708,6 @@ export default function DistributorAdmin() {
         width={1180}
         bodyStyle={{ overflow: 'visible' }}
       >
-        <Text type='tertiary' size='small' className='block mb-3'>
-          {t('利润分成明细说明')}
-        </Text>
         <Table
           loading={invProfitLoading}
           rowKey='id'

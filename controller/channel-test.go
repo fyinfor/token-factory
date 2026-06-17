@@ -48,53 +48,34 @@ type testResult struct {
 	recordedModelName string
 }
 
-// tokenFactoryOpenVideoTestHeuristic 在「端点类型留空」且模型元数据未指明端点时，
-// 判断 TokenFactoryOpen(60) 是否应按视频任务入口测试。
-// 与真实客户端一致：视频走 POST /v1/video/generations，而非 chat 或外部 Hidream 的 /v1/videos/generations。
-//
-// 注意：
-// - 豆包 LLM（doubao-seed-*）与视频（doubao-seedance-*）均含 "doubao"，勿用裸 "doubao"。
-// - MiniMax 对话（MiniMax-M*）与视频（MiniMax-Hailuo-*）均含 "minimax"，勿用裸 "minimax"，用 hailuo。
-// - 万相视频为 wanx*，勿用裸 "wan" 以免误伤含 wan 子串的模型名。
-func tokenFactoryOpenVideoTestHeuristic(modelName string) bool {
-	s := strings.ToLower(strings.TrimSpace(modelName))
-	if s == "" {
-		return false
-	}
-	if strings.Contains(s, "seedance") || strings.Contains(s, "sora") ||
-		strings.Contains(s, "kling") || strings.Contains(s, "wanx") ||
-		strings.Contains(s, "vidu") || strings.Contains(s, "veo") ||
-		strings.Contains(s, "jimeng") ||
-		strings.Contains(s, "hailuo") ||
-		strings.Contains(s, "text2video") || strings.Contains(s, "image2video") {
-		return true
-	}
-	if strings.HasPrefix(strings.TrimSpace(modelName), "Video-") {
-		return true
-	}
-	return false
-}
-
-// tokenFactoryOpenTestEndpointFromMeta 若模型元数据/能力表仅声明视频端点，则返回 tokenfactory-video；否则留空走 chat 探测。
+// tokenFactoryOpenTestEndpointFromMeta 若模型元数据/能力表仅声明一种可测试端点，则按该端点测试。
 func tokenFactoryOpenTestEndpointFromMeta(modelName string) string {
 	eps := model.GetModelSupportEndpointTypes(modelName)
 	if len(eps) == 0 {
 		return ""
 	}
-	hasNonVideo := false
+	unique := make(map[constant.EndpointType]struct{})
 	for _, et := range eps {
 		switch et {
 		case constant.EndpointTypeTokenFactoryVideo,
 			constant.EndpointTypeOpenAIVideo,
 			constant.EndpointTypeOpenAIVideoGW,
 			constant.EndpointTypeVideoGenerator,
-			constant.EndpointTypeTencentCloudVODVideo:
+			constant.EndpointTypeTencentCloudVODVideo,
+			constant.EndpointTypeAliVideo,
+			constant.EndpointTypeSeedanceVideo:
+			unique[constant.EndpointTypeTokenFactoryVideo] = struct{}{}
 		default:
-			hasNonVideo = true
+			if _, ok := common.GetDefaultEndpointInfo(et); ok {
+				unique[et] = struct{}{}
+			}
 		}
 	}
-	if !hasNonVideo {
-		return string(constant.EndpointTypeTokenFactoryVideo)
+	if len(unique) != 1 {
+		return ""
+	}
+	for et := range unique {
+		return string(et)
 	}
 	return ""
 }
@@ -145,9 +126,6 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 		if ep := tokenFactoryOpenTestEndpointFromMeta(modelName); ep != "" {
 			return ep
 		}
-		if tokenFactoryOpenVideoTestHeuristic(modelName) {
-			return string(constant.EndpointTypeTokenFactoryVideo)
-		}
 	}
 	if channel != nil && channel.Type == constant.ChannelTypeVideoGenerator {
 		return string(constant.EndpointTypeVideoGenerator)
@@ -168,6 +146,156 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 		return string(constant.EndpointTypeSeedanceVideo)
 	}
 	return normalized
+}
+
+func isVideoChannelTestEndpoint(endpointType string) bool {
+	switch constant.EndpointType(endpointType) {
+	case constant.EndpointTypeOpenAIVideo,
+		constant.EndpointTypeOpenAIVideoGW,
+		constant.EndpointTypeTokenFactoryVideo,
+		constant.EndpointTypeVideoGenerator,
+		constant.EndpointTypeTencentCloudVODVideo,
+		constant.EndpointTypeAliVideo,
+		constant.EndpointTypeSeedanceVideo:
+		return true
+	default:
+		return false
+	}
+}
+
+func tokenFactoryOpenChannelTestRouteInfo(channel *model.Channel) (channelID int, routeSlug string, alias string, channelNo string) {
+	if channel == nil {
+		return 0, "", "", ""
+	}
+	otherInfo := channel.GetOtherInfo()
+	channelID = int(chToFloat64(otherInfo["upstream_channel_id"]))
+	routeSlug = strings.TrimSpace(common.Interface2String(otherInfo["upstream_route_slug"]))
+	alias = strings.TrimSpace(common.Interface2String(otherInfo["upstream_supplier_alias"]))
+	channelNo = strings.TrimSpace(common.Interface2String(otherInfo["upstream_channel_no"]))
+	return channelID, routeSlug, alias, channelNo
+}
+
+func tryDelegateTokenFactoryOpenChannelTest(channel *model.Channel, testModel string, endpointType string, isStream bool) (testResult, bool) {
+	if channel == nil || channel.Type != constant.ChannelTypeTokenFactoryOpen {
+		return testResult{}, false
+	}
+	channelID, routeSlug, alias, channelNo := tokenFactoryOpenChannelTestRouteInfo(channel)
+	if routeSlug == "" && channelID <= 0 && (alias == "" || channelNo == "") {
+		return testResult{}, false
+	}
+	baseURL := strings.TrimRight(strings.TrimSpace(channel.GetBaseURL()), "/")
+	if baseURL == "" {
+		err := errors.New("TokenFactoryOpen 上游地址为空")
+		return testResult{
+			localErr:          err,
+			tokenFactoryError: types.NewError(err, types.ErrorCodeChannelBaseUrlEmpty),
+			recordedModelName: strings.TrimSpace(testModel),
+		}, true
+	}
+	key := strings.TrimSpace(channel.Key)
+	if key == "" {
+		err := errors.New("建站渠道密钥为空，请导入后填写上游访问密钥")
+		return testResult{
+			localErr:          err,
+			tokenFactoryError: types.NewError(err, types.ErrorCodeChannelInvalidKey),
+			recordedModelName: strings.TrimSpace(testModel),
+		}, true
+	}
+
+	reqBody := tfOpenSyncChannelTestRequest{
+		Model:                 strings.TrimSpace(testModel),
+		EndpointType:          strings.TrimSpace(endpointType),
+		Stream:                isStream,
+		UpstreamChannelID:     channelID,
+		UpstreamRouteSlug:     routeSlug,
+		UpstreamSupplierAlias: alias,
+		UpstreamChannelNo:     channelNo,
+	}
+	bodyBytes, err := common.Marshal(reqBody)
+	if err != nil {
+		return testResult{
+			localErr:          err,
+			tokenFactoryError: types.NewError(err, types.ErrorCodeJsonMarshalFailed),
+			recordedModelName: reqBody.Model,
+		}, true
+	}
+
+	url := baseURL + "/api/tf_open_sync/channel_test"
+	httpReq, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(bodyBytes))
+	if err != nil {
+		return testResult{
+			localErr:          err,
+			tokenFactoryError: types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError),
+			recordedModelName: reqBody.Model,
+		}, true
+	}
+	httpReq.Header.Set("Authorization", "Bearer "+key)
+	httpReq.Header.Set("X-TokenFactory-Open-Sync-Secret", key)
+	httpReq.Header.Set("Content-Type", "application/json")
+
+	client := service.GetHttpClient()
+	if client == nil {
+		client = http.DefaultClient
+	}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return testResult{
+			localErr:          err,
+			tokenFactoryError: types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError),
+			recordedModelName: reqBody.Model,
+		}, true
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode == http.StatusNotFound || resp.StatusCode == http.StatusMethodNotAllowed {
+		return testResult{}, false
+	}
+	respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 1024*1024))
+	if readErr != nil {
+		return testResult{
+			localErr:          readErr,
+			tokenFactoryError: types.NewOpenAIError(readErr, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError),
+			recordedModelName: reqBody.Model,
+		}, true
+	}
+	if resp.StatusCode != http.StatusOK {
+		msg := strings.TrimSpace(string(respBody))
+		if msg == "" {
+			msg = fmt.Sprintf("上游测试委托接口返回 status %d", resp.StatusCode)
+		}
+		err := fmt.Errorf("上游测试委托失败: %s", msg)
+		return testResult{
+			localErr:          err,
+			tokenFactoryError: types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError),
+			recordedModelName: reqBody.Model,
+		}, true
+	}
+
+	var payload tfOpenSyncChannelTestResponse
+	if err := common.Unmarshal(respBody, &payload); err != nil {
+		return testResult{}, false
+	}
+	recordedModel := strings.TrimSpace(payload.Model)
+	if recordedModel == "" {
+		recordedModel = reqBody.Model
+	}
+	if !payload.Success {
+		msg := strings.TrimSpace(payload.Message)
+		if msg == "" {
+			msg = "上游渠道测试失败"
+		}
+		err := errors.New(msg)
+		return testResult{
+			localErr:          err,
+			tokenFactoryError: types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError),
+			recordedModelName: recordedModel,
+		}, true
+	}
+	return testResult{
+		localErr:          nil,
+		tokenFactoryError: nil,
+		recordedModelName: recordedModel,
+	}, true
 }
 
 func testChannel(channel *model.Channel, testModel string, endpointType string, isStream bool) testResult {
@@ -207,6 +335,10 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 				}
 			}
 		}
+	}
+
+	if result, delegated := tryDelegateTokenFactoryOpenChannelTest(channel, testModel, endpointType, isStream); delegated {
+		return result
 	}
 
 	endpointType = normalizeChannelTestEndpoint(channel, testModel, endpointType)
@@ -288,13 +420,7 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 	// 视频生成端点走任务式异步上游协议（Sora /v1/videos、OpenAI 视频网关 /v1/videos/generations 等），
 	// 与同步 chat/embeddings/image 走的 relay.GetAdaptor 流程不兼容，因此在这里直接旁路：
 	// 仅校验上游能正确接收任务创建请求并返回 task_id，不做轮询。
-	if endpointType == string(constant.EndpointTypeOpenAIVideo) ||
-		endpointType == string(constant.EndpointTypeOpenAIVideoGW) ||
-		endpointType == string(constant.EndpointTypeTokenFactoryVideo) ||
-		endpointType == string(constant.EndpointTypeVideoGenerator) ||
-		endpointType == string(constant.EndpointTypeTencentCloudVODVideo) ||
-		endpointType == string(constant.EndpointTypeAliVideo) ||
-		endpointType == string(constant.EndpointTypeSeedanceVideo) {
+	if isVideoChannelTestEndpoint(endpointType) {
 		return testChannelVideo(c, channel, testModel, endpointType, tik)
 	}
 
@@ -1434,23 +1560,53 @@ func TestChannel(c *gin.Context) {
 	})
 }
 
+func buildModelTagFilter(tags []string) map[string]struct{} {
+	out := make(map[string]struct{}, len(tags))
+	for _, tag := range tags {
+		tag = strings.TrimSpace(tag)
+		if tag != "" {
+			out[tag] = struct{}{}
+		}
+	}
+	return out
+}
+
+func modelMatchesTagFilter(modelName string, tagFilter map[string]struct{}) bool {
+	if len(tagFilter) == 0 {
+		return true
+	}
+	tags := model.GetModelTagsByName(modelName)
+	if tags == "" {
+		return false
+	}
+	for tag := range tagFilter {
+		if common.ModelTagsContain(tags, tag) {
+			return true
+		}
+	}
+	return false
+}
+
 // collectModelsForScheduledChannelTest 返回定时全量测试要对渠道串行探测的模型名列表（与非空 models 的批量上架测试一致）；无任何绑定时返回单元素空串以走 testChannel 内置默认模型。
-func collectModelsForScheduledChannelTest(channel *model.Channel) []string {
+func collectModelsForScheduledChannelTest(channel *model.Channel, tagFilter map[string]struct{}) []string {
 	raw := channel.GetModels()
 	out := make([]string, 0, len(raw))
 	for _, m := range raw {
 		m = strings.TrimSpace(m)
-		if m != "" {
+		if m != "" && modelMatchesTagFilter(m, tagFilter) {
 			out = append(out, m)
 		}
 	}
 	if len(out) == 0 && channel.TestModel != nil {
 		tm := strings.TrimSpace(*channel.TestModel)
-		if tm != "" {
+		if tm != "" && modelMatchesTagFilter(tm, tagFilter) {
 			out = append(out, tm)
 		}
 	}
 	if len(out) == 0 {
+		if len(tagFilter) > 0 {
+			return []string{}
+		}
 		return []string{""}
 	}
 	return out
@@ -1502,6 +1658,7 @@ func testAllChannels(notify bool) error {
 	if disableThreshold == 0 {
 		disableThreshold = 10000000 // a impossible value
 	}
+	modelTagFilter := buildModelTagFilter(operation_setting.GetMonitorSetting().AutoTestModelTags)
 	gopool.Go(func() {
 		// 使用 defer 确保无论如何都会重置运行状态，防止死锁
 		defer func() {
@@ -1518,7 +1675,10 @@ func testAllChannels(notify bool) error {
 			isInitiallyEnabled := statusAtStart == common.ChannelStatusEnabled
 			isInitiallyAutoDisabled := statusAtStart == common.ChannelStatusAutoDisabled
 
-			modelsToRun := collectModelsForScheduledChannelTest(channel)
+			modelsToRun := collectModelsForScheduledChannelTest(channel, modelTagFilter)
+			if len(modelsToRun) == 0 {
+				continue
+			}
 
 			var firstBanCtx *gin.Context
 			var firstBanTfErr *types.TokenFactoryError

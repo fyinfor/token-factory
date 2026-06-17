@@ -105,9 +105,15 @@ export function extractImageSources(obj, depth = 0) {
   return dedupeImageSources(results);
 }
 
+/** 操练场生成图 markdown 占位（空 alt，兼容旧版 generated-image-N） */
+const GENERATED_IMAGE_MARKDOWN_REGEX =
+  /!\[(?:generated-image-\d+)?\]\(([\s\S]*?)\)/g;
+const GENERATED_IMAGE_MARKDOWN_STRIP_REGEX =
+  /!\[(?:generated-image-\d+)?\]\([\s\S]*?\)\s*/g;
+
 export function buildImageMarkdown(sources) {
   return dedupeImageSources(sources)
-    .map((src, index) => `![generated-image-${index + 1}](${src})`)
+    .map((src) => `![](${src})`)
     .join('\n\n');
 }
 
@@ -121,13 +127,11 @@ export function buildImageMessageContentPatch(sources) {
   };
 }
 
-/** 从助手消息 markdown 中解析 generated-image 图片地址 */
+/** 从助手消息 markdown 中解析生成图占位地址 */
 export function extractGeneratedImagesFromMarkdown(text) {
   if (typeof text !== 'string' || !text.trim()) return [];
   const images = [];
-  const regex = /!\[generated-image-\d+\]\(([\s\S]*?)\)/g;
-  let match;
-  while ((match = regex.exec(text)) !== null) {
+  for (const match of text.matchAll(GENERATED_IMAGE_MARKDOWN_REGEX)) {
     const src = match[1]?.trim();
     if (src) images.push(src);
   }
@@ -146,11 +150,11 @@ export function resolveMessageGeneratedImages(message) {
   return [];
 }
 
-/** 展示 markdown 时去掉已由画廊渲染的 generated-image 占位图 */
+/** 展示 markdown 时去掉已由画廊渲染的生成图占位 */
 export function stripGeneratedImageMarkdown(text) {
   if (typeof text !== 'string' || !text.trim()) return '';
   return text
-    .replace(/!\[generated-image-\d+\]\([\s\S]*?\)\s*/g, '')
+    .replace(GENERATED_IMAGE_MARKDOWN_STRIP_REGEX, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
