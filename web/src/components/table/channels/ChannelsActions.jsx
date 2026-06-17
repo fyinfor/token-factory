@@ -67,6 +67,23 @@ const ChannelsActions = ({
 }) => {
   const [showExportModal, setShowExportModal] = useState(false);
   const adminUser = isAdmin();
+  const exportDisabled =
+    !enableBatchDelete || (selectedChannels || []).length === 0;
+  const exportButton = (
+    <Button
+      size='small'
+      icon={<IconDownload />}
+      theme='light'
+      disabled={exportDisabled}
+      onClick={() => setShowExportModal(true)}
+      className='w-full md:w-auto'
+    >
+      {t('导出')}
+      {enableBatchDelete && (selectedChannels || []).length > 0
+        ? `（${selectedChannels.length}）`
+        : ''}
+    </Button>
+  );
   return (
     <>
       {/* 导出字段选择弹窗 */}
@@ -103,30 +120,15 @@ const ChannelsActions = ({
             {adminUser && (
               <>
                 <ChannelImportModal refresh={refresh} />
-                <Tooltip
-                  content={
-                    !enableBatchDelete || (selectedChannels || []).length === 0
-                      ? t('请先开启批量操作并勾选需要导出的渠道')
-                      : ''
-                  }
-                >
-                  <Button
-                    size='small'
-                    icon={<IconDownload />}
-                    theme='light'
-                    disabled={
-                      !enableBatchDelete ||
-                      (selectedChannels || []).length === 0
-                    }
-                    onClick={() => setShowExportModal(true)}
-                    className='w-full md:w-auto'
+                {exportDisabled ? (
+                  <Tooltip
+                    content={t('请先开启批量操作并勾选需要导出的渠道')}
                   >
-                    {t('导出')}
-                    {enableBatchDelete && (selectedChannels || []).length > 0
-                      ? `（${selectedChannels.length}）`
-                      : ''}
-                  </Button>
-                </Tooltip>
+                    {exportButton}
+                  </Tooltip>
+                ) : (
+                  exportButton
+                )}
               </>
             )}
 

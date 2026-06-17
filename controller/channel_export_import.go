@@ -37,7 +37,7 @@ const (
 
 // chAllowedExportFields 允许导出的合法字段集合，防止非法字段注入。
 var chAllowedExportFields = map[string]bool{
-	chFieldName: true, chFieldDiscountRate: true, chFieldRouteSlug: true,
+	chFieldName: true, chFieldDiscountRate: true, chFieldMarkupDiscount: true, chFieldRouteSlug: true,
 	chFieldQuota: true, chFieldDisabled: true,
 	chFieldSupplierName: true, chFieldType: true, chFieldLogo: true,
 	chFieldProviderType: true, chFieldApiKey: true, chFieldApiBaseUrl: true,
