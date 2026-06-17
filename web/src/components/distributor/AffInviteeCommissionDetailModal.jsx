@@ -27,11 +27,7 @@ import {
   formatCommissionRatioPercent,
   renderQuota,
 } from '../../helpers';
-import {
-  ProfitShareRewardColumnTitle,
-  renderProfitShareQuotaCell,
-  renderProfitShareRewardCell,
-} from './profitShareDisplay';
+import { renderProfitShareQuotaCell } from './profitShareDisplay';
 
 const { Text } = Typography;
 
@@ -128,19 +124,10 @@ export default function AffInviteeCommissionDetailModal({
           render: (q) => renderProfitShareQuotaCell(q),
         },
         {
-          title: t('当时分成比例'),
-          dataIndex: 'commission_bps',
-          width: 110,
-          render: (bps) =>
-            typeof bps === 'number' && bps > 0
-              ? formatCommissionRatioPercent(bps)
-              : '—',
-        },
-        {
-          title: <ProfitShareRewardColumnTitle t={t} />,
+          title: t('收益金额'),
           dataIndex: 'reward_quota',
           width: 120,
-          render: (_, row) => renderProfitShareRewardCell(row, t),
+          render: (q) => renderProfitShareQuotaCell(q),
         },
       ];
     }

@@ -98,6 +98,9 @@ func taskProfitShareMarkupSliceRatio(task *model.Task, hintTotalTokens int) (flo
 		if r, ok := taskProfitShareMarkupRatioVideoSubmitInput(task); ok {
 			return r, true
 		}
+		if r, ok := taskProfitShareMarkupRatioVideoPerVideoSubmitInput(task); ok {
+			return r, true
+		}
 	}
 	if hintTotalTokens > 0 {
 		if r, ok := taskProfitShareMarkupRatioFromUpstreamTokens(task, hintTotalTokens); ok {
@@ -133,7 +136,7 @@ func taskProfitShareMarkupRatioVideoComplete(task *model.Task) (float64, bool) {
 		groupRatio = task.PrivateData.BillingContext.GroupRatio
 	}
 	costDisc := channelCostDiscountPercentFromTask(task)
-	markup := model.ResolveEffectiveMarkupDiscountPercentForInviteeBilling(task.UserId, task.ChannelId, modelName)
+	markup := markupDiscountPercentFromTask(task, modelName)
 	globalPerSec := globalVideoPerSecondUSD(modelName, mode, meta.Width, meta.Height, meta.HasAudio)
 	effW := effectiveVideoPerSecondUSD(channelPerSec, globalPerSec, costDisc, markup)
 	eff0 := effectiveVideoPerSecondUSD(channelPerSec, globalPerSec, costDisc, 0)
@@ -163,6 +166,108 @@ func taskProfitShareMarkupRatioVideoSubmitInput(task *model.Task) (float64, bool
 		return 0, false
 	}
 	return float64(qW-q0) / float64(qW), true
+}
+
+func taskProfitShareMarkupRatioVideoPerVideoSubmitInput(task *model.Task) (float64, bool) {
+	if r, ok := taskProfitShareMarkupRatioVideoPerVideoSnapshot(task); ok {
+		return r, true
+	}
+	if task == nil || strings.TrimSpace(task.Properties.Input) == "" {
+		return 0, false
+	}
+	var req relaycommon.TaskSubmitReq
+	if err := common.UnmarshalJsonStr(task.Properties.Input, &req); err != nil {
+		return 0, false
+	}
+	modelName := strings.TrimSpace(taskModelName(task))
+	if modelName == "" {
+		return 0, false
+	}
+	mode := detectVideoBillingModeFromTaskReq(&req)
+	width, height := videoDimensionsFromTaskRequest(req)
+	hasAudio := taskRequestHasAudio(req)
+	channelUSD, ok := channelVideoPerVideoUSDForProfitShare(task.ChannelId, modelName, mode, width, height, hasAudio)
+	if !ok || channelUSD <= 0 {
+		return 0, false
+	}
+	groupRatio := 1.0
+	if task.PrivateData.BillingContext != nil && task.PrivateData.BillingContext.GroupRatio > 0 {
+		groupRatio = task.PrivateData.BillingContext.GroupRatio
+	}
+	costDisc := channelCostDiscountPercentFromTask(task)
+	markup := markupDiscountPercentFromTask(task, modelName)
+	globalUSD := globalVideoPerVideoUSDForProfitShare(modelName, mode, width, height, hasAudio)
+	return taskProfitShareMarkupRatioFromRulePrices(channelUSD, globalUSD, costDisc, markup, groupRatio)
+}
+
+func taskProfitShareMarkupRatioVideoPerVideoSnapshot(task *model.Task) (float64, bool) {
+	if task == nil || task.PrivateData.BillingContext == nil {
+		return 0, false
+	}
+	bc := task.PrivateData.BillingContext
+	if !strings.EqualFold(strings.TrimSpace(bc.VideoRuleUnit), "per_video") || bc.VideoChannelRulePrice <= 0 {
+		return 0, false
+	}
+	modelName := strings.TrimSpace(taskModelName(task))
+	if modelName == "" {
+		return 0, false
+	}
+	groupRatio := bc.GroupRatio
+	if groupRatio <= 0 {
+		groupRatio = 1
+	}
+	costDisc := channelCostDiscountPercentFromTask(task)
+	markup := markupDiscountPercentFromTask(task, modelName)
+	return taskProfitShareMarkupRatioFromRulePrices(bc.VideoChannelRulePrice, bc.VideoGlobalRulePrice, costDisc, markup, groupRatio)
+}
+
+func taskProfitShareMarkupRatioFromRulePrices(channelUSD, globalUSD, costDisc, markup, groupRatio float64) (float64, bool) {
+	effW := effectiveVideoPerVideoUSD(channelUSD, globalUSD, costDisc, markup)
+	eff0 := effectiveVideoPerVideoUSD(channelUSD, globalUSD, costDisc, 0)
+	qW := int(math.Round(effW * common.QuotaPerUnit * groupRatio))
+	q0 := int(math.Round(eff0 * common.QuotaPerUnit * groupRatio))
+	if qW <= 0 || qW <= q0 {
+		return 0, false
+	}
+	return float64(qW-q0) / float64(qW), true
+}
+
+func markupDiscountPercentFromTask(task *model.Task, modelName string) float64 {
+	if task == nil {
+		return 0
+	}
+	if bc := task.PrivateData.BillingContext; bc != nil && bc.MarkupDiscountPercent != nil {
+		return *bc.MarkupDiscountPercent
+	}
+	return model.ResolveEffectiveMarkupDiscountPercentForInviteeBilling(task.UserId, task.ChannelId, modelName)
+}
+
+func channelVideoPerVideoUSDForProfitShare(channelId int, modelName, mode string, width, height int, hasAudio bool) (float64, bool) {
+	rules, ok := ratio_setting.GetChannelVideoPricingRules(channelId, modelName)
+	if !ok || !ratio_setting.HasUsableVideoPerVideoRules(rules) {
+		var globalOK bool
+		rules, globalOK = ratio_setting.GetVideoPricingRules(modelName)
+		if !globalOK || !ratio_setting.HasUsableVideoPerVideoRules(rules) {
+			return 0, false
+		}
+	}
+	match, ok := matchPerVideoPriceDetail(rules, mode, width, height, hasAudio)
+	if !ok || match == nil || match.PricePerVideo <= 0 {
+		return 0, false
+	}
+	return match.PricePerVideo, true
+}
+
+func globalVideoPerVideoUSDForProfitShare(modelName, mode string, width, height int, hasAudio bool) float64 {
+	rules, ok := ratio_setting.GetVideoPricingRules(modelName)
+	if !ok || !ratio_setting.HasUsableVideoPerVideoRules(rules) {
+		return 0
+	}
+	match, ok := matchPerVideoPriceDetail(rules, mode, width, height, hasAudio)
+	if !ok || match == nil {
+		return 0
+	}
+	return match.PricePerVideo
 }
 
 func taskProfitShareMarkupRatioFromUpstreamTokens(task *model.Task, totalTokens int) (float64, bool) {
@@ -201,7 +306,7 @@ func taskProfitShareMarkupRatioPerCallModelPrice(task *model.Task) (float64, boo
 		return 0, false
 	}
 	costDisc := channelCostDiscountPercentFromTask(task)
-	markup := model.ResolveEffectiveMarkupDiscountPercentForInviteeBilling(task.UserId, task.ChannelId, modelName)
+	markup := markupDiscountPercentFromTask(task, modelName)
 	globalPrice, _ := ratio_setting.GetModelPrice(modelName, false)
 	effW := model.EffectiveModelPrice(bc.ModelPrice, globalPrice, costDisc, markup)
 	eff0 := model.EffectiveModelPrice(bc.ModelPrice, globalPrice, costDisc, 0)
@@ -237,7 +342,7 @@ func relayInfoSnapshotForProfitShare(task *model.Task) (*relaycommon.RelayInfo, 
 	if modelName == "" {
 		return nil, false
 	}
-	markup := model.ResolveEffectiveMarkupDiscountPercentForInviteeBilling(task.UserId, task.ChannelId, modelName)
+	markup := markupDiscountPercentFromTask(task, modelName)
 	cost := bc.ChannelPriceDiscountPercent
 	if cost <= 0 {
 		cost = model.ResolveChannelPriceDiscountPercent(task.ChannelId)
@@ -251,10 +356,10 @@ func relayInfoSnapshotForProfitShare(task *model.Task) (*relaycommon.RelayInfo, 
 		globalMr = 0
 	}
 	ri := &relaycommon.RelayInfo{
-		UserId:            task.UserId,
-		OriginModelName:   modelName,
-		BillingSource:     task.PrivateData.BillingSource,
-		ChannelMeta:       &relaycommon.ChannelMeta{ChannelType: ch.Type, ChannelId: task.ChannelId},
+		UserId:          task.UserId,
+		OriginModelName: modelName,
+		BillingSource:   task.PrivateData.BillingSource,
+		ChannelMeta:     &relaycommon.ChannelMeta{ChannelType: ch.Type, ChannelId: task.ChannelId},
 	}
 	other := bc.OtherRatios
 	if other != nil {
@@ -265,15 +370,15 @@ func relayInfoSnapshotForProfitShare(task *model.Task) (*relaycommon.RelayInfo, 
 		other = cp
 	}
 	ri.PriceData = types.PriceData{
-		ModelPrice:             bc.ModelPrice,
-		ModelRatio:             bc.ModelRatio,
-		GlobalModelRatio:       globalMr,
-		GroupRatioInfo:         types.GroupRatioInfo{GroupRatio: gr},
-		UsePrice:               true,
-		CostDiscountPercent:    cost,
-		MarkupDiscountPercent:  markup,
-		OtherRatios:            other,
-		VideoOutputTokens:      0,
+		ModelPrice:            bc.ModelPrice,
+		ModelRatio:            bc.ModelRatio,
+		GlobalModelRatio:      globalMr,
+		GroupRatioInfo:        types.GroupRatioInfo{GroupRatio: gr},
+		UsePrice:              true,
+		CostDiscountPercent:   cost,
+		MarkupDiscountPercent: markup,
+		OtherRatios:           other,
+		VideoOutputTokens:     0,
 	}
 	return ri, true
 }
