@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"log"
 	"net/http"
 	"strings"
 
@@ -114,10 +115,12 @@ func AdminTokenFactorySyncChannels(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "同步成功",
-		"pushed":  count,
-		"total":   len(snapshots),
+		"success":  true,
+		"message":  "同步成功",
+		"pushed":   count,
+		"total":    len(snapshots),
+		"channels": len(channels),
+		"site_key": common.TokenFactorySiteKey(),
 	})
 }
 
@@ -126,12 +129,18 @@ func AdminTokenFactorySyncChannels(c *gin.Context) {
 // 会做权限校验、写入日志等副作用，不适合在服务间同步场景下调用。
 func tfSyncExportChannels() ([]*model.Channel, error) {
 	var channels []*model.Channel
+	var totalChannels int64
+	model.DB.Model(&model.Channel{}).Count(&totalChannels)
+
 	q := model.DB.Model(&model.Channel{}).
 		Omit("key").
 		Where("type <> ?", constant.ChannelTypeTokenFactoryOpen).
 		Order("id asc")
 	if err := q.Find(&channels).Error; err != nil {
+		log.Printf("[SYS] tfSyncExportChannels: query failed, total=%d, err=%v", totalChannels, err)
 		return nil, err
 	}
+	log.Printf("[SYS] tfSyncExportChannels: total_channels=%d, exported=%d (excluded type=%d)",
+		totalChannels, len(channels), constant.ChannelTypeTokenFactoryOpen)
 	return channels, nil
 }

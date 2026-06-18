@@ -2,16 +2,30 @@ syntax = "proto3";
 
 package route;
 
-option go_package = "github.com/QuantumNous/new-api/proto/route";
+option go_package = "github.com/lingjing/tokenfactory/proto/route";
 
 // RouteService 智能路由服务：token-factory 调用此服务获取渠道排序建议。
 service RouteService {
   // SelectChannel 根据模型、分组和候选渠道返回排序后的渠道 ID 列表。
   rpc SelectChannel(SelectChannelRequest) returns (SelectChannelResponse);
-  // SyncChannels token-factory 将当前渠道快照推送给 TokenFactory（或 TokenFactory 拉取）。
+  // SyncChannels token-factory 将当前渠道快照推送给 TokenFactory（按站点隔离）。
   rpc SyncChannels(SyncChannelsRequest) returns (SyncChannelsResponse);
   // HealthCheck 简单的健康检查。
   rpc HealthCheck(HealthCheckRequest) returns (HealthCheckResponse);
+
+  // ── 用户级路由策略 ────────────────────────────────────────────
+  // GetUserRoutePolicy 获取用户级路由策略（供 token-factory 用户界面调用）。
+  rpc GetUserRoutePolicy(GetUserRoutePolicyRequest) returns (GetUserRoutePolicyResponse);
+  // UpsertUserRoutePolicy 更新用户级路由策略（模式 / 权重 / 覆盖）。
+  rpc UpsertUserRoutePolicy(UpsertUserRoutePolicyRequest) returns (UpsertUserRoutePolicyResponse);
+  // DeleteUserModelGroupWeight 删除用户级归类权重。
+  rpc DeleteUserModelGroupWeight(DeleteUserModelGroupWeightRequest) returns (DeleteUserModelGroupWeightResponse);
+  // DeleteUserModelGroupOverride 删除用户级模型归类覆盖。
+  rpc DeleteUserModelGroupOverride(DeleteUserModelGroupOverrideRequest) returns (DeleteUserModelGroupOverrideResponse);
+
+  // ── 多站点用户同步 ────────────────────────────────────────────
+  // SyncUsers token-factory 将用户快照推送给 TokenFactory（按站点隔离）。
+  rpc SyncUsers(SyncUsersRequest) returns (SyncUsersResponse);
 }
 
 // ── SelectChannel ──────────────────────────────────────────────
@@ -23,6 +37,7 @@ message SelectChannelRequest {
   int32  user_role = 4;       // 角色: 1=common, 10=admin, 100=root
   string token_key = 5;       // 脱敏后的 token key 前缀，用于日志
   repeated ChannelCandidate candidates = 6;
+  string site_key = 7;        // 站点标识，如 "site-a"
 }
 
 message ChannelCandidate {
@@ -51,6 +66,7 @@ message SelectChannelResponse {
 // ── SyncChannels ───────────────────────────────────────────────
 
 message SyncChannelsRequest {
+  string site_key = 3;       // 站点标识（新增字段，field number 3 避免与已有字段冲突）
   repeated ChannelSnapshot channels = 1;
   int64  sync_timestamp = 2;
 }
@@ -91,4 +107,127 @@ message HealthCheckRequest {}
 message HealthCheckResponse {
   bool   healthy = 1;
   string version = 2;
+}
+
+// ── 用户级路由策略 ──────────────────────────────────────────────
+
+message GetUserRoutePolicyRequest {
+  int32 user_id = 1;
+  int32 user_role = 2;       // 用于权限判断：admin/root 看完整渠道名
+  string site_key = 3;       // 站点标识
+}
+
+message GetUserRoutePolicyResponse {
+  string mode = 1;            // 用户级模式（空=跟随全局）
+  string global_mode = 2;    // 全局当前模式（供 UI 展示）
+  repeated RouteModelGroup groups = 3;   // 模型分组（含渠道、权重、价格）
+  repeated RouteOverrideItem user_overrides = 4;
+  repeated RouteOverrideItem global_overrides = 5;
+}
+
+message RouteModelGroup {
+  string group_key = 1;
+  string display_name = 2;
+  repeated string models = 3;
+  int32 channel_count = 4;
+  repeated RouteGroupChannel channels = 5;
+}
+
+message RouteGroupChannel {
+  int32 channel_id = 1;
+  string channel_name = 2;      // admin/root: 完整名称; 非admin: 脱敏
+  string masked_name = 3;       // 脱敏后的名称（前端根据角色选字段）
+  string route_slug = 4;
+  string provider_slug = 5;
+  string supplier_alias = 6;
+  int32 status = 7;
+  repeated string models_in_group = 8;
+  int32 user_weight = 9;        // 用户级权重（0=未配置，用全局）
+  bool user_enabled = 10;       // 用户级启用状态
+  bool user_configured = 11;    // 用户是否有显式配置
+  int32 global_weight = 12;     // 全局权重
+  bool global_enabled = 13;     // 全局启用状态
+  bool global_configured = 14;  // 全局是否有显式配置
+  double price = 15;
+}
+
+message RouteOverrideItem {
+  uint32 id = 1;
+  string raw_model = 2;
+  string group_key = 3;
+  bool is_user = 4;            // true=用户级, false=全局
+}
+
+message UpsertUserRoutePolicyRequest {
+  int32 user_id = 1;
+  int32 user_role = 2;
+  // 路由模式：空字符串=跟随全局，"default"/"weight"/"price"
+  optional string mode = 3;
+  // 归类权重 upsert（可选，一次只更新一个）
+  optional UpsertWeightItem weight = 4;
+  // 归类覆盖 upsert（可选，一次只更新一个）
+  optional UpsertOverrideItem override = 5;
+  // 如果 mode 设为 "follow_global"（特殊值），则删除用户级配置，恢复跟随全局
+  bool reset_mode = 6;
+  string site_key = 7;       // 站点标识
+}
+
+message UpsertWeightItem {
+  string group_key = 1;
+  int32 channel_id = 2;
+  int32 weight = 3;
+  bool enabled = 4;
+}
+
+message UpsertOverrideItem {
+  string raw_model = 1;
+  string group_key = 2;
+}
+
+message UpsertUserRoutePolicyResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message DeleteUserModelGroupWeightRequest {
+  int32 user_id = 1;
+  int32 user_role = 2;
+  uint32 weight_id = 3;
+  string site_key = 4;       // 站点标识
+}
+
+message DeleteUserModelGroupWeightResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+message DeleteUserModelGroupOverrideRequest {
+  int32 user_id = 1;
+  int32 user_role = 2;
+  uint32 override_id = 3;
+  string site_key = 4;       // 站点标识
+}
+
+message DeleteUserModelGroupOverrideResponse {
+  bool success = 1;
+  string error = 2;
+}
+
+// ── 多站点用户同步 ────────────────────────────────────────────
+
+message SyncUsersRequest {
+  string site_key = 1;           // 站点标识
+  repeated ExternalUserInfo users = 2;
+}
+
+message ExternalUserInfo {
+  int32  uid = 1;                // 站点侧用户 ID
+  string username = 2;           // 用户名
+  string display_name = 3;       // 显示名
+  int32  role = 4;               // 角色: 1=common, 10=admin, 100=root
+  int32  status = 5;             // 1=启用, 0=禁用
+}
+
+message SyncUsersResponse {
+  int32 synced_count = 1;        // 同步的用户数
 }

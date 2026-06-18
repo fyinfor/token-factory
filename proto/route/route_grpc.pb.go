@@ -19,9 +19,14 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	RouteService_SelectChannel_FullMethodName = "/route.RouteService/SelectChannel"
-	RouteService_SyncChannels_FullMethodName  = "/route.RouteService/SyncChannels"
-	RouteService_HealthCheck_FullMethodName   = "/route.RouteService/HealthCheck"
+	RouteService_SelectChannel_FullMethodName                = "/route.RouteService/SelectChannel"
+	RouteService_SyncChannels_FullMethodName                 = "/route.RouteService/SyncChannels"
+	RouteService_HealthCheck_FullMethodName                  = "/route.RouteService/HealthCheck"
+	RouteService_GetUserRoutePolicy_FullMethodName           = "/route.RouteService/GetUserRoutePolicy"
+	RouteService_UpsertUserRoutePolicy_FullMethodName        = "/route.RouteService/UpsertUserRoutePolicy"
+	RouteService_DeleteUserModelGroupWeight_FullMethodName   = "/route.RouteService/DeleteUserModelGroupWeight"
+	RouteService_DeleteUserModelGroupOverride_FullMethodName = "/route.RouteService/DeleteUserModelGroupOverride"
+	RouteService_SyncUsers_FullMethodName                    = "/route.RouteService/SyncUsers"
 )
 
 // RouteServiceClient is the client API for RouteService service.
@@ -32,10 +37,22 @@ const (
 type RouteServiceClient interface {
 	// SelectChannel 根据模型、分组和候选渠道返回排序后的渠道 ID 列表。
 	SelectChannel(ctx context.Context, in *SelectChannelRequest, opts ...grpc.CallOption) (*SelectChannelResponse, error)
-	// SyncChannels token-factory 将当前渠道快照推送给 TokenFactory（或 TokenFactory 拉取）。
+	// SyncChannels token-factory 将当前渠道快照推送给 TokenFactory（按站点隔离）。
 	SyncChannels(ctx context.Context, in *SyncChannelsRequest, opts ...grpc.CallOption) (*SyncChannelsResponse, error)
 	// HealthCheck 简单的健康检查。
 	HealthCheck(ctx context.Context, in *HealthCheckRequest, opts ...grpc.CallOption) (*HealthCheckResponse, error)
+	// ── 用户级路由策略 ────────────────────────────────────────────
+	// GetUserRoutePolicy 获取用户级路由策略（供 token-factory 用户界面调用）。
+	GetUserRoutePolicy(ctx context.Context, in *GetUserRoutePolicyRequest, opts ...grpc.CallOption) (*GetUserRoutePolicyResponse, error)
+	// UpsertUserRoutePolicy 更新用户级路由策略（模式 / 权重 / 覆盖）。
+	UpsertUserRoutePolicy(ctx context.Context, in *UpsertUserRoutePolicyRequest, opts ...grpc.CallOption) (*UpsertUserRoutePolicyResponse, error)
+	// DeleteUserModelGroupWeight 删除用户级归类权重。
+	DeleteUserModelGroupWeight(ctx context.Context, in *DeleteUserModelGroupWeightRequest, opts ...grpc.CallOption) (*DeleteUserModelGroupWeightResponse, error)
+	// DeleteUserModelGroupOverride 删除用户级模型归类覆盖。
+	DeleteUserModelGroupOverride(ctx context.Context, in *DeleteUserModelGroupOverrideRequest, opts ...grpc.CallOption) (*DeleteUserModelGroupOverrideResponse, error)
+	// ── 多站点用户同步 ────────────────────────────────────────────
+	// SyncUsers token-factory 将用户快照推送给 TokenFactory（按站点隔离）。
+	SyncUsers(ctx context.Context, in *SyncUsersRequest, opts ...grpc.CallOption) (*SyncUsersResponse, error)
 }
 
 type routeServiceClient struct {
@@ -76,6 +93,56 @@ func (c *routeServiceClient) HealthCheck(ctx context.Context, in *HealthCheckReq
 	return out, nil
 }
 
+func (c *routeServiceClient) GetUserRoutePolicy(ctx context.Context, in *GetUserRoutePolicyRequest, opts ...grpc.CallOption) (*GetUserRoutePolicyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetUserRoutePolicyResponse)
+	err := c.cc.Invoke(ctx, RouteService_GetUserRoutePolicy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *routeServiceClient) UpsertUserRoutePolicy(ctx context.Context, in *UpsertUserRoutePolicyRequest, opts ...grpc.CallOption) (*UpsertUserRoutePolicyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(UpsertUserRoutePolicyResponse)
+	err := c.cc.Invoke(ctx, RouteService_UpsertUserRoutePolicy_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *routeServiceClient) DeleteUserModelGroupWeight(ctx context.Context, in *DeleteUserModelGroupWeightRequest, opts ...grpc.CallOption) (*DeleteUserModelGroupWeightResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteUserModelGroupWeightResponse)
+	err := c.cc.Invoke(ctx, RouteService_DeleteUserModelGroupWeight_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *routeServiceClient) DeleteUserModelGroupOverride(ctx context.Context, in *DeleteUserModelGroupOverrideRequest, opts ...grpc.CallOption) (*DeleteUserModelGroupOverrideResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(DeleteUserModelGroupOverrideResponse)
+	err := c.cc.Invoke(ctx, RouteService_DeleteUserModelGroupOverride_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *routeServiceClient) SyncUsers(ctx context.Context, in *SyncUsersRequest, opts ...grpc.CallOption) (*SyncUsersResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SyncUsersResponse)
+	err := c.cc.Invoke(ctx, RouteService_SyncUsers_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RouteServiceServer is the server API for RouteService service.
 // All implementations must embed UnimplementedRouteServiceServer
 // for forward compatibility.
@@ -84,10 +151,22 @@ func (c *routeServiceClient) HealthCheck(ctx context.Context, in *HealthCheckReq
 type RouteServiceServer interface {
 	// SelectChannel 根据模型、分组和候选渠道返回排序后的渠道 ID 列表。
 	SelectChannel(context.Context, *SelectChannelRequest) (*SelectChannelResponse, error)
-	// SyncChannels token-factory 将当前渠道快照推送给 TokenFactory（或 TokenFactory 拉取）。
+	// SyncChannels token-factory 将当前渠道快照推送给 TokenFactory（按站点隔离）。
 	SyncChannels(context.Context, *SyncChannelsRequest) (*SyncChannelsResponse, error)
 	// HealthCheck 简单的健康检查。
 	HealthCheck(context.Context, *HealthCheckRequest) (*HealthCheckResponse, error)
+	// ── 用户级路由策略 ────────────────────────────────────────────
+	// GetUserRoutePolicy 获取用户级路由策略（供 token-factory 用户界面调用）。
+	GetUserRoutePolicy(context.Context, *GetUserRoutePolicyRequest) (*GetUserRoutePolicyResponse, error)
+	// UpsertUserRoutePolicy 更新用户级路由策略（模式 / 权重 / 覆盖）。
+	UpsertUserRoutePolicy(context.Context, *UpsertUserRoutePolicyRequest) (*UpsertUserRoutePolicyResponse, error)
+	// DeleteUserModelGroupWeight 删除用户级归类权重。
+	DeleteUserModelGroupWeight(context.Context, *DeleteUserModelGroupWeightRequest) (*DeleteUserModelGroupWeightResponse, error)
+	// DeleteUserModelGroupOverride 删除用户级模型归类覆盖。
+	DeleteUserModelGroupOverride(context.Context, *DeleteUserModelGroupOverrideRequest) (*DeleteUserModelGroupOverrideResponse, error)
+	// ── 多站点用户同步 ────────────────────────────────────────────
+	// SyncUsers token-factory 将用户快照推送给 TokenFactory（按站点隔离）。
+	SyncUsers(context.Context, *SyncUsersRequest) (*SyncUsersResponse, error)
 	mustEmbedUnimplementedRouteServiceServer()
 }
 
@@ -106,6 +185,21 @@ func (UnimplementedRouteServiceServer) SyncChannels(context.Context, *SyncChanne
 }
 func (UnimplementedRouteServiceServer) HealthCheck(context.Context, *HealthCheckRequest) (*HealthCheckResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method HealthCheck not implemented")
+}
+func (UnimplementedRouteServiceServer) GetUserRoutePolicy(context.Context, *GetUserRoutePolicyRequest) (*GetUserRoutePolicyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetUserRoutePolicy not implemented")
+}
+func (UnimplementedRouteServiceServer) UpsertUserRoutePolicy(context.Context, *UpsertUserRoutePolicyRequest) (*UpsertUserRoutePolicyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method UpsertUserRoutePolicy not implemented")
+}
+func (UnimplementedRouteServiceServer) DeleteUserModelGroupWeight(context.Context, *DeleteUserModelGroupWeightRequest) (*DeleteUserModelGroupWeightResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteUserModelGroupWeight not implemented")
+}
+func (UnimplementedRouteServiceServer) DeleteUserModelGroupOverride(context.Context, *DeleteUserModelGroupOverrideRequest) (*DeleteUserModelGroupOverrideResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method DeleteUserModelGroupOverride not implemented")
+}
+func (UnimplementedRouteServiceServer) SyncUsers(context.Context, *SyncUsersRequest) (*SyncUsersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SyncUsers not implemented")
 }
 func (UnimplementedRouteServiceServer) mustEmbedUnimplementedRouteServiceServer() {}
 func (UnimplementedRouteServiceServer) testEmbeddedByValue()                      {}
@@ -182,6 +276,96 @@ func _RouteService_HealthCheck_Handler(srv interface{}, ctx context.Context, dec
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RouteService_GetUserRoutePolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetUserRoutePolicyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RouteServiceServer).GetUserRoutePolicy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RouteService_GetUserRoutePolicy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RouteServiceServer).GetUserRoutePolicy(ctx, req.(*GetUserRoutePolicyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RouteService_UpsertUserRoutePolicy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpsertUserRoutePolicyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RouteServiceServer).UpsertUserRoutePolicy(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RouteService_UpsertUserRoutePolicy_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RouteServiceServer).UpsertUserRoutePolicy(ctx, req.(*UpsertUserRoutePolicyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RouteService_DeleteUserModelGroupWeight_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteUserModelGroupWeightRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RouteServiceServer).DeleteUserModelGroupWeight(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RouteService_DeleteUserModelGroupWeight_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RouteServiceServer).DeleteUserModelGroupWeight(ctx, req.(*DeleteUserModelGroupWeightRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RouteService_DeleteUserModelGroupOverride_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteUserModelGroupOverrideRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RouteServiceServer).DeleteUserModelGroupOverride(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RouteService_DeleteUserModelGroupOverride_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RouteServiceServer).DeleteUserModelGroupOverride(ctx, req.(*DeleteUserModelGroupOverrideRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _RouteService_SyncUsers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncUsersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RouteServiceServer).SyncUsers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RouteService_SyncUsers_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RouteServiceServer).SyncUsers(ctx, req.(*SyncUsersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // RouteService_ServiceDesc is the grpc.ServiceDesc for RouteService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -200,6 +384,26 @@ var RouteService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "HealthCheck",
 			Handler:    _RouteService_HealthCheck_Handler,
+		},
+		{
+			MethodName: "GetUserRoutePolicy",
+			Handler:    _RouteService_GetUserRoutePolicy_Handler,
+		},
+		{
+			MethodName: "UpsertUserRoutePolicy",
+			Handler:    _RouteService_UpsertUserRoutePolicy_Handler,
+		},
+		{
+			MethodName: "DeleteUserModelGroupWeight",
+			Handler:    _RouteService_DeleteUserModelGroupWeight_Handler,
+		},
+		{
+			MethodName: "DeleteUserModelGroupOverride",
+			Handler:    _RouteService_DeleteUserModelGroupOverride_Handler,
+		},
+		{
+			MethodName: "SyncUsers",
+			Handler:    _RouteService_SyncUsers_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

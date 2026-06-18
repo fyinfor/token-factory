@@ -54,3 +54,14 @@ func TokenFactoryRouteErrorTTLSeconds() int {
 	}
 	return 600
 }
+
+// TokenFactorySiteKey 返回当前站点的唯一标识，用于多站点隔离。
+// 环境变量 TOKENFACTORY_SITE_KEY，如 "site-a"、"site-b"。
+// 若为空，默认 "default"。
+func TokenFactorySiteKey() string {
+	key := os.Getenv("TOKENFACTORY_SITE_KEY")
+	if key == "" {
+		return "default"
+	}
+	return key
+}

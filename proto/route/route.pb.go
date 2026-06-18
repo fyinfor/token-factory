@@ -29,6 +29,7 @@ type SelectChannelRequest struct {
 	UserRole      int32                  `protobuf:"varint,4,opt,name=user_role,json=userRole,proto3" json:"user_role,omitempty"` // 角色: 1=common, 10=admin, 100=root
 	TokenKey      string                 `protobuf:"bytes,5,opt,name=token_key,json=tokenKey,proto3" json:"token_key,omitempty"`  // 脱敏后的 token key 前缀，用于日志
 	Candidates    []*ChannelCandidate    `protobuf:"bytes,6,rep,name=candidates,proto3" json:"candidates,omitempty"`
+	SiteKey       string                 `protobuf:"bytes,7,opt,name=site_key,json=siteKey,proto3" json:"site_key,omitempty"` // 站点标识，如 "site-a"
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -103,6 +104,13 @@ func (x *SelectChannelRequest) GetCandidates() []*ChannelCandidate {
 		return x.Candidates
 	}
 	return nil
+}
+
+func (x *SelectChannelRequest) GetSiteKey() string {
+	if x != nil {
+		return x.SiteKey
+	}
+	return ""
 }
 
 type ChannelCandidate struct {
@@ -315,6 +323,7 @@ func (x *SelectChannelResponse) GetFallback() bool {
 
 type SyncChannelsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	SiteKey       string                 `protobuf:"bytes,3,opt,name=site_key,json=siteKey,proto3" json:"site_key,omitempty"` // 站点标识（新增字段，field number 3 避免与已有字段冲突）
 	Channels      []*ChannelSnapshot     `protobuf:"bytes,1,rep,name=channels,proto3" json:"channels,omitempty"`
 	SyncTimestamp int64                  `protobuf:"varint,2,opt,name=sync_timestamp,json=syncTimestamp,proto3" json:"sync_timestamp,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -349,6 +358,13 @@ func (x *SyncChannelsRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use SyncChannelsRequest.ProtoReflect.Descriptor instead.
 func (*SyncChannelsRequest) Descriptor() ([]byte, []int) {
 	return file_proto_route_route_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *SyncChannelsRequest) GetSiteKey() string {
+	if x != nil {
+		return x.SiteKey
+	}
+	return ""
 }
 
 func (x *SyncChannelsRequest) GetChannels() []*ChannelSnapshot {
@@ -688,11 +704,1127 @@ func (x *HealthCheckResponse) GetVersion() string {
 	return ""
 }
 
+type GetUserRoutePolicyRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        int32                  `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	UserRole      int32                  `protobuf:"varint,2,opt,name=user_role,json=userRole,proto3" json:"user_role,omitempty"` // 用于权限判断：admin/root 看完整渠道名
+	SiteKey       string                 `protobuf:"bytes,3,opt,name=site_key,json=siteKey,proto3" json:"site_key,omitempty"`     // 站点标识
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetUserRoutePolicyRequest) Reset() {
+	*x = GetUserRoutePolicyRequest{}
+	mi := &file_proto_route_route_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetUserRoutePolicyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetUserRoutePolicyRequest) ProtoMessage() {}
+
+func (x *GetUserRoutePolicyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_route_route_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetUserRoutePolicyRequest.ProtoReflect.Descriptor instead.
+func (*GetUserRoutePolicyRequest) Descriptor() ([]byte, []int) {
+	return file_proto_route_route_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *GetUserRoutePolicyRequest) GetUserId() int32 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
+func (x *GetUserRoutePolicyRequest) GetUserRole() int32 {
+	if x != nil {
+		return x.UserRole
+	}
+	return 0
+}
+
+func (x *GetUserRoutePolicyRequest) GetSiteKey() string {
+	if x != nil {
+		return x.SiteKey
+	}
+	return ""
+}
+
+type GetUserRoutePolicyResponse struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Mode            string                 `protobuf:"bytes,1,opt,name=mode,proto3" json:"mode,omitempty"`                               // 用户级模式（空=跟随全局）
+	GlobalMode      string                 `protobuf:"bytes,2,opt,name=global_mode,json=globalMode,proto3" json:"global_mode,omitempty"` // 全局当前模式（供 UI 展示）
+	Groups          []*RouteModelGroup     `protobuf:"bytes,3,rep,name=groups,proto3" json:"groups,omitempty"`                           // 模型分组（含渠道、权重、价格）
+	UserOverrides   []*RouteOverrideItem   `protobuf:"bytes,4,rep,name=user_overrides,json=userOverrides,proto3" json:"user_overrides,omitempty"`
+	GlobalOverrides []*RouteOverrideItem   `protobuf:"bytes,5,rep,name=global_overrides,json=globalOverrides,proto3" json:"global_overrides,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *GetUserRoutePolicyResponse) Reset() {
+	*x = GetUserRoutePolicyResponse{}
+	mi := &file_proto_route_route_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetUserRoutePolicyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetUserRoutePolicyResponse) ProtoMessage() {}
+
+func (x *GetUserRoutePolicyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_route_route_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetUserRoutePolicyResponse.ProtoReflect.Descriptor instead.
+func (*GetUserRoutePolicyResponse) Descriptor() ([]byte, []int) {
+	return file_proto_route_route_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *GetUserRoutePolicyResponse) GetMode() string {
+	if x != nil {
+		return x.Mode
+	}
+	return ""
+}
+
+func (x *GetUserRoutePolicyResponse) GetGlobalMode() string {
+	if x != nil {
+		return x.GlobalMode
+	}
+	return ""
+}
+
+func (x *GetUserRoutePolicyResponse) GetGroups() []*RouteModelGroup {
+	if x != nil {
+		return x.Groups
+	}
+	return nil
+}
+
+func (x *GetUserRoutePolicyResponse) GetUserOverrides() []*RouteOverrideItem {
+	if x != nil {
+		return x.UserOverrides
+	}
+	return nil
+}
+
+func (x *GetUserRoutePolicyResponse) GetGlobalOverrides() []*RouteOverrideItem {
+	if x != nil {
+		return x.GlobalOverrides
+	}
+	return nil
+}
+
+type RouteModelGroup struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GroupKey      string                 `protobuf:"bytes,1,opt,name=group_key,json=groupKey,proto3" json:"group_key,omitempty"`
+	DisplayName   string                 `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	Models        []string               `protobuf:"bytes,3,rep,name=models,proto3" json:"models,omitempty"`
+	ChannelCount  int32                  `protobuf:"varint,4,opt,name=channel_count,json=channelCount,proto3" json:"channel_count,omitempty"`
+	Channels      []*RouteGroupChannel   `protobuf:"bytes,5,rep,name=channels,proto3" json:"channels,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RouteModelGroup) Reset() {
+	*x = RouteModelGroup{}
+	mi := &file_proto_route_route_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RouteModelGroup) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RouteModelGroup) ProtoMessage() {}
+
+func (x *RouteModelGroup) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_route_route_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RouteModelGroup.ProtoReflect.Descriptor instead.
+func (*RouteModelGroup) Descriptor() ([]byte, []int) {
+	return file_proto_route_route_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *RouteModelGroup) GetGroupKey() string {
+	if x != nil {
+		return x.GroupKey
+	}
+	return ""
+}
+
+func (x *RouteModelGroup) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *RouteModelGroup) GetModels() []string {
+	if x != nil {
+		return x.Models
+	}
+	return nil
+}
+
+func (x *RouteModelGroup) GetChannelCount() int32 {
+	if x != nil {
+		return x.ChannelCount
+	}
+	return 0
+}
+
+func (x *RouteModelGroup) GetChannels() []*RouteGroupChannel {
+	if x != nil {
+		return x.Channels
+	}
+	return nil
+}
+
+type RouteGroupChannel struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	ChannelId        int32                  `protobuf:"varint,1,opt,name=channel_id,json=channelId,proto3" json:"channel_id,omitempty"`
+	ChannelName      string                 `protobuf:"bytes,2,opt,name=channel_name,json=channelName,proto3" json:"channel_name,omitempty"` // admin/root: 完整名称; 非admin: 脱敏
+	MaskedName       string                 `protobuf:"bytes,3,opt,name=masked_name,json=maskedName,proto3" json:"masked_name,omitempty"`    // 脱敏后的名称（前端根据角色选字段）
+	RouteSlug        string                 `protobuf:"bytes,4,opt,name=route_slug,json=routeSlug,proto3" json:"route_slug,omitempty"`
+	ProviderSlug     string                 `protobuf:"bytes,5,opt,name=provider_slug,json=providerSlug,proto3" json:"provider_slug,omitempty"`
+	SupplierAlias    string                 `protobuf:"bytes,6,opt,name=supplier_alias,json=supplierAlias,proto3" json:"supplier_alias,omitempty"`
+	Status           int32                  `protobuf:"varint,7,opt,name=status,proto3" json:"status,omitempty"`
+	ModelsInGroup    []string               `protobuf:"bytes,8,rep,name=models_in_group,json=modelsInGroup,proto3" json:"models_in_group,omitempty"`
+	UserWeight       int32                  `protobuf:"varint,9,opt,name=user_weight,json=userWeight,proto3" json:"user_weight,omitempty"`                    // 用户级权重（0=未配置，用全局）
+	UserEnabled      bool                   `protobuf:"varint,10,opt,name=user_enabled,json=userEnabled,proto3" json:"user_enabled,omitempty"`                // 用户级启用状态
+	UserConfigured   bool                   `protobuf:"varint,11,opt,name=user_configured,json=userConfigured,proto3" json:"user_configured,omitempty"`       // 用户是否有显式配置
+	GlobalWeight     int32                  `protobuf:"varint,12,opt,name=global_weight,json=globalWeight,proto3" json:"global_weight,omitempty"`             // 全局权重
+	GlobalEnabled    bool                   `protobuf:"varint,13,opt,name=global_enabled,json=globalEnabled,proto3" json:"global_enabled,omitempty"`          // 全局启用状态
+	GlobalConfigured bool                   `protobuf:"varint,14,opt,name=global_configured,json=globalConfigured,proto3" json:"global_configured,omitempty"` // 全局是否有显式配置
+	Price            float64                `protobuf:"fixed64,15,opt,name=price,proto3" json:"price,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *RouteGroupChannel) Reset() {
+	*x = RouteGroupChannel{}
+	mi := &file_proto_route_route_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RouteGroupChannel) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RouteGroupChannel) ProtoMessage() {}
+
+func (x *RouteGroupChannel) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_route_route_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RouteGroupChannel.ProtoReflect.Descriptor instead.
+func (*RouteGroupChannel) Descriptor() ([]byte, []int) {
+	return file_proto_route_route_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *RouteGroupChannel) GetChannelId() int32 {
+	if x != nil {
+		return x.ChannelId
+	}
+	return 0
+}
+
+func (x *RouteGroupChannel) GetChannelName() string {
+	if x != nil {
+		return x.ChannelName
+	}
+	return ""
+}
+
+func (x *RouteGroupChannel) GetMaskedName() string {
+	if x != nil {
+		return x.MaskedName
+	}
+	return ""
+}
+
+func (x *RouteGroupChannel) GetRouteSlug() string {
+	if x != nil {
+		return x.RouteSlug
+	}
+	return ""
+}
+
+func (x *RouteGroupChannel) GetProviderSlug() string {
+	if x != nil {
+		return x.ProviderSlug
+	}
+	return ""
+}
+
+func (x *RouteGroupChannel) GetSupplierAlias() string {
+	if x != nil {
+		return x.SupplierAlias
+	}
+	return ""
+}
+
+func (x *RouteGroupChannel) GetStatus() int32 {
+	if x != nil {
+		return x.Status
+	}
+	return 0
+}
+
+func (x *RouteGroupChannel) GetModelsInGroup() []string {
+	if x != nil {
+		return x.ModelsInGroup
+	}
+	return nil
+}
+
+func (x *RouteGroupChannel) GetUserWeight() int32 {
+	if x != nil {
+		return x.UserWeight
+	}
+	return 0
+}
+
+func (x *RouteGroupChannel) GetUserEnabled() bool {
+	if x != nil {
+		return x.UserEnabled
+	}
+	return false
+}
+
+func (x *RouteGroupChannel) GetUserConfigured() bool {
+	if x != nil {
+		return x.UserConfigured
+	}
+	return false
+}
+
+func (x *RouteGroupChannel) GetGlobalWeight() int32 {
+	if x != nil {
+		return x.GlobalWeight
+	}
+	return 0
+}
+
+func (x *RouteGroupChannel) GetGlobalEnabled() bool {
+	if x != nil {
+		return x.GlobalEnabled
+	}
+	return false
+}
+
+func (x *RouteGroupChannel) GetGlobalConfigured() bool {
+	if x != nil {
+		return x.GlobalConfigured
+	}
+	return false
+}
+
+func (x *RouteGroupChannel) GetPrice() float64 {
+	if x != nil {
+		return x.Price
+	}
+	return 0
+}
+
+type RouteOverrideItem struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            uint32                 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	RawModel      string                 `protobuf:"bytes,2,opt,name=raw_model,json=rawModel,proto3" json:"raw_model,omitempty"`
+	GroupKey      string                 `protobuf:"bytes,3,opt,name=group_key,json=groupKey,proto3" json:"group_key,omitempty"`
+	IsUser        bool                   `protobuf:"varint,4,opt,name=is_user,json=isUser,proto3" json:"is_user,omitempty"` // true=用户级, false=全局
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RouteOverrideItem) Reset() {
+	*x = RouteOverrideItem{}
+	mi := &file_proto_route_route_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RouteOverrideItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RouteOverrideItem) ProtoMessage() {}
+
+func (x *RouteOverrideItem) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_route_route_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RouteOverrideItem.ProtoReflect.Descriptor instead.
+func (*RouteOverrideItem) Descriptor() ([]byte, []int) {
+	return file_proto_route_route_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *RouteOverrideItem) GetId() uint32 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *RouteOverrideItem) GetRawModel() string {
+	if x != nil {
+		return x.RawModel
+	}
+	return ""
+}
+
+func (x *RouteOverrideItem) GetGroupKey() string {
+	if x != nil {
+		return x.GroupKey
+	}
+	return ""
+}
+
+func (x *RouteOverrideItem) GetIsUser() bool {
+	if x != nil {
+		return x.IsUser
+	}
+	return false
+}
+
+type UpsertUserRoutePolicyRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	UserId   int32                  `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	UserRole int32                  `protobuf:"varint,2,opt,name=user_role,json=userRole,proto3" json:"user_role,omitempty"`
+	// 路由模式：空字符串=跟随全局，"default"/"weight"/"price"
+	Mode *string `protobuf:"bytes,3,opt,name=mode,proto3,oneof" json:"mode,omitempty"`
+	// 归类权重 upsert（可选，一次只更新一个）
+	Weight *UpsertWeightItem `protobuf:"bytes,4,opt,name=weight,proto3,oneof" json:"weight,omitempty"`
+	// 归类覆盖 upsert（可选，一次只更新一个）
+	Override *UpsertOverrideItem `protobuf:"bytes,5,opt,name=override,proto3,oneof" json:"override,omitempty"`
+	// 如果 mode 设为 "follow_global"（特殊值），则删除用户级配置，恢复跟随全局
+	ResetMode     bool   `protobuf:"varint,6,opt,name=reset_mode,json=resetMode,proto3" json:"reset_mode,omitempty"`
+	SiteKey       string `protobuf:"bytes,7,opt,name=site_key,json=siteKey,proto3" json:"site_key,omitempty"` // 站点标识
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpsertUserRoutePolicyRequest) Reset() {
+	*x = UpsertUserRoutePolicyRequest{}
+	mi := &file_proto_route_route_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpsertUserRoutePolicyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpsertUserRoutePolicyRequest) ProtoMessage() {}
+
+func (x *UpsertUserRoutePolicyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_route_route_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpsertUserRoutePolicyRequest.ProtoReflect.Descriptor instead.
+func (*UpsertUserRoutePolicyRequest) Descriptor() ([]byte, []int) {
+	return file_proto_route_route_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *UpsertUserRoutePolicyRequest) GetUserId() int32 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
+func (x *UpsertUserRoutePolicyRequest) GetUserRole() int32 {
+	if x != nil {
+		return x.UserRole
+	}
+	return 0
+}
+
+func (x *UpsertUserRoutePolicyRequest) GetMode() string {
+	if x != nil && x.Mode != nil {
+		return *x.Mode
+	}
+	return ""
+}
+
+func (x *UpsertUserRoutePolicyRequest) GetWeight() *UpsertWeightItem {
+	if x != nil {
+		return x.Weight
+	}
+	return nil
+}
+
+func (x *UpsertUserRoutePolicyRequest) GetOverride() *UpsertOverrideItem {
+	if x != nil {
+		return x.Override
+	}
+	return nil
+}
+
+func (x *UpsertUserRoutePolicyRequest) GetResetMode() bool {
+	if x != nil {
+		return x.ResetMode
+	}
+	return false
+}
+
+func (x *UpsertUserRoutePolicyRequest) GetSiteKey() string {
+	if x != nil {
+		return x.SiteKey
+	}
+	return ""
+}
+
+type UpsertWeightItem struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	GroupKey      string                 `protobuf:"bytes,1,opt,name=group_key,json=groupKey,proto3" json:"group_key,omitempty"`
+	ChannelId     int32                  `protobuf:"varint,2,opt,name=channel_id,json=channelId,proto3" json:"channel_id,omitempty"`
+	Weight        int32                  `protobuf:"varint,3,opt,name=weight,proto3" json:"weight,omitempty"`
+	Enabled       bool                   `protobuf:"varint,4,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpsertWeightItem) Reset() {
+	*x = UpsertWeightItem{}
+	mi := &file_proto_route_route_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpsertWeightItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpsertWeightItem) ProtoMessage() {}
+
+func (x *UpsertWeightItem) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_route_route_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpsertWeightItem.ProtoReflect.Descriptor instead.
+func (*UpsertWeightItem) Descriptor() ([]byte, []int) {
+	return file_proto_route_route_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *UpsertWeightItem) GetGroupKey() string {
+	if x != nil {
+		return x.GroupKey
+	}
+	return ""
+}
+
+func (x *UpsertWeightItem) GetChannelId() int32 {
+	if x != nil {
+		return x.ChannelId
+	}
+	return 0
+}
+
+func (x *UpsertWeightItem) GetWeight() int32 {
+	if x != nil {
+		return x.Weight
+	}
+	return 0
+}
+
+func (x *UpsertWeightItem) GetEnabled() bool {
+	if x != nil {
+		return x.Enabled
+	}
+	return false
+}
+
+type UpsertOverrideItem struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RawModel      string                 `protobuf:"bytes,1,opt,name=raw_model,json=rawModel,proto3" json:"raw_model,omitempty"`
+	GroupKey      string                 `protobuf:"bytes,2,opt,name=group_key,json=groupKey,proto3" json:"group_key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpsertOverrideItem) Reset() {
+	*x = UpsertOverrideItem{}
+	mi := &file_proto_route_route_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpsertOverrideItem) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpsertOverrideItem) ProtoMessage() {}
+
+func (x *UpsertOverrideItem) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_route_route_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpsertOverrideItem.ProtoReflect.Descriptor instead.
+func (*UpsertOverrideItem) Descriptor() ([]byte, []int) {
+	return file_proto_route_route_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *UpsertOverrideItem) GetRawModel() string {
+	if x != nil {
+		return x.RawModel
+	}
+	return ""
+}
+
+func (x *UpsertOverrideItem) GetGroupKey() string {
+	if x != nil {
+		return x.GroupKey
+	}
+	return ""
+}
+
+type UpsertUserRoutePolicyResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpsertUserRoutePolicyResponse) Reset() {
+	*x = UpsertUserRoutePolicyResponse{}
+	mi := &file_proto_route_route_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpsertUserRoutePolicyResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpsertUserRoutePolicyResponse) ProtoMessage() {}
+
+func (x *UpsertUserRoutePolicyResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_route_route_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpsertUserRoutePolicyResponse.ProtoReflect.Descriptor instead.
+func (*UpsertUserRoutePolicyResponse) Descriptor() ([]byte, []int) {
+	return file_proto_route_route_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *UpsertUserRoutePolicyResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *UpsertUserRoutePolicyResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type DeleteUserModelGroupWeightRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        int32                  `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	UserRole      int32                  `protobuf:"varint,2,opt,name=user_role,json=userRole,proto3" json:"user_role,omitempty"`
+	WeightId      uint32                 `protobuf:"varint,3,opt,name=weight_id,json=weightId,proto3" json:"weight_id,omitempty"`
+	SiteKey       string                 `protobuf:"bytes,4,opt,name=site_key,json=siteKey,proto3" json:"site_key,omitempty"` // 站点标识
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteUserModelGroupWeightRequest) Reset() {
+	*x = DeleteUserModelGroupWeightRequest{}
+	mi := &file_proto_route_route_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteUserModelGroupWeightRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteUserModelGroupWeightRequest) ProtoMessage() {}
+
+func (x *DeleteUserModelGroupWeightRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_route_route_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteUserModelGroupWeightRequest.ProtoReflect.Descriptor instead.
+func (*DeleteUserModelGroupWeightRequest) Descriptor() ([]byte, []int) {
+	return file_proto_route_route_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *DeleteUserModelGroupWeightRequest) GetUserId() int32 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
+func (x *DeleteUserModelGroupWeightRequest) GetUserRole() int32 {
+	if x != nil {
+		return x.UserRole
+	}
+	return 0
+}
+
+func (x *DeleteUserModelGroupWeightRequest) GetWeightId() uint32 {
+	if x != nil {
+		return x.WeightId
+	}
+	return 0
+}
+
+func (x *DeleteUserModelGroupWeightRequest) GetSiteKey() string {
+	if x != nil {
+		return x.SiteKey
+	}
+	return ""
+}
+
+type DeleteUserModelGroupWeightResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteUserModelGroupWeightResponse) Reset() {
+	*x = DeleteUserModelGroupWeightResponse{}
+	mi := &file_proto_route_route_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteUserModelGroupWeightResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteUserModelGroupWeightResponse) ProtoMessage() {}
+
+func (x *DeleteUserModelGroupWeightResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_route_route_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteUserModelGroupWeightResponse.ProtoReflect.Descriptor instead.
+func (*DeleteUserModelGroupWeightResponse) Descriptor() ([]byte, []int) {
+	return file_proto_route_route_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *DeleteUserModelGroupWeightResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *DeleteUserModelGroupWeightResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type DeleteUserModelGroupOverrideRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserId        int32                  `protobuf:"varint,1,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
+	UserRole      int32                  `protobuf:"varint,2,opt,name=user_role,json=userRole,proto3" json:"user_role,omitempty"`
+	OverrideId    uint32                 `protobuf:"varint,3,opt,name=override_id,json=overrideId,proto3" json:"override_id,omitempty"`
+	SiteKey       string                 `protobuf:"bytes,4,opt,name=site_key,json=siteKey,proto3" json:"site_key,omitempty"` // 站点标识
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteUserModelGroupOverrideRequest) Reset() {
+	*x = DeleteUserModelGroupOverrideRequest{}
+	mi := &file_proto_route_route_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteUserModelGroupOverrideRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteUserModelGroupOverrideRequest) ProtoMessage() {}
+
+func (x *DeleteUserModelGroupOverrideRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_route_route_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteUserModelGroupOverrideRequest.ProtoReflect.Descriptor instead.
+func (*DeleteUserModelGroupOverrideRequest) Descriptor() ([]byte, []int) {
+	return file_proto_route_route_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *DeleteUserModelGroupOverrideRequest) GetUserId() int32 {
+	if x != nil {
+		return x.UserId
+	}
+	return 0
+}
+
+func (x *DeleteUserModelGroupOverrideRequest) GetUserRole() int32 {
+	if x != nil {
+		return x.UserRole
+	}
+	return 0
+}
+
+func (x *DeleteUserModelGroupOverrideRequest) GetOverrideId() uint32 {
+	if x != nil {
+		return x.OverrideId
+	}
+	return 0
+}
+
+func (x *DeleteUserModelGroupOverrideRequest) GetSiteKey() string {
+	if x != nil {
+		return x.SiteKey
+	}
+	return ""
+}
+
+type DeleteUserModelGroupOverrideResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteUserModelGroupOverrideResponse) Reset() {
+	*x = DeleteUserModelGroupOverrideResponse{}
+	mi := &file_proto_route_route_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteUserModelGroupOverrideResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteUserModelGroupOverrideResponse) ProtoMessage() {}
+
+func (x *DeleteUserModelGroupOverrideResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_route_route_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteUserModelGroupOverrideResponse.ProtoReflect.Descriptor instead.
+func (*DeleteUserModelGroupOverrideResponse) Descriptor() ([]byte, []int) {
+	return file_proto_route_route_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *DeleteUserModelGroupOverrideResponse) GetSuccess() bool {
+	if x != nil {
+		return x.Success
+	}
+	return false
+}
+
+func (x *DeleteUserModelGroupOverrideResponse) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type SyncUsersRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SiteKey       string                 `protobuf:"bytes,1,opt,name=site_key,json=siteKey,proto3" json:"site_key,omitempty"` // 站点标识
+	Users         []*ExternalUserInfo    `protobuf:"bytes,2,rep,name=users,proto3" json:"users,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncUsersRequest) Reset() {
+	*x = SyncUsersRequest{}
+	mi := &file_proto_route_route_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncUsersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncUsersRequest) ProtoMessage() {}
+
+func (x *SyncUsersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_route_route_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncUsersRequest.ProtoReflect.Descriptor instead.
+func (*SyncUsersRequest) Descriptor() ([]byte, []int) {
+	return file_proto_route_route_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *SyncUsersRequest) GetSiteKey() string {
+	if x != nil {
+		return x.SiteKey
+	}
+	return ""
+}
+
+func (x *SyncUsersRequest) GetUsers() []*ExternalUserInfo {
+	if x != nil {
+		return x.Users
+	}
+	return nil
+}
+
+type ExternalUserInfo struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Uid           int32                  `protobuf:"varint,1,opt,name=uid,proto3" json:"uid,omitempty"`                                   // 站点侧用户 ID
+	Username      string                 `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`                          // 用户名
+	DisplayName   string                 `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"` // 显示名
+	Role          int32                  `protobuf:"varint,4,opt,name=role,proto3" json:"role,omitempty"`                                 // 角色: 1=common, 10=admin, 100=root
+	Status        int32                  `protobuf:"varint,5,opt,name=status,proto3" json:"status,omitempty"`                             // 1=启用, 0=禁用
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExternalUserInfo) Reset() {
+	*x = ExternalUserInfo{}
+	mi := &file_proto_route_route_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExternalUserInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExternalUserInfo) ProtoMessage() {}
+
+func (x *ExternalUserInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_route_route_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExternalUserInfo.ProtoReflect.Descriptor instead.
+func (*ExternalUserInfo) Descriptor() ([]byte, []int) {
+	return file_proto_route_route_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *ExternalUserInfo) GetUid() int32 {
+	if x != nil {
+		return x.Uid
+	}
+	return 0
+}
+
+func (x *ExternalUserInfo) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *ExternalUserInfo) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *ExternalUserInfo) GetRole() int32 {
+	if x != nil {
+		return x.Role
+	}
+	return 0
+}
+
+func (x *ExternalUserInfo) GetStatus() int32 {
+	if x != nil {
+		return x.Status
+	}
+	return 0
+}
+
+type SyncUsersResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	SyncedCount   int32                  `protobuf:"varint,1,opt,name=synced_count,json=syncedCount,proto3" json:"synced_count,omitempty"` // 同步的用户数
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SyncUsersResponse) Reset() {
+	*x = SyncUsersResponse{}
+	mi := &file_proto_route_route_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncUsersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncUsersResponse) ProtoMessage() {}
+
+func (x *SyncUsersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_route_route_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncUsersResponse.ProtoReflect.Descriptor instead.
+func (*SyncUsersResponse) Descriptor() ([]byte, []int) {
+	return file_proto_route_route_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *SyncUsersResponse) GetSyncedCount() int32 {
+	if x != nil {
+		return x.SyncedCount
+	}
+	return 0
+}
+
 var File_proto_route_route_proto protoreflect.FileDescriptor
 
 const file_proto_route_route_proto_rawDesc = "" +
 	"\n" +
-	"\x17proto/route/route.proto\x12\x05route\"\xce\x01\n" +
+	"\x17proto/route/route.proto\x12\x05route\"\xe9\x01\n" +
 	"\x14SelectChannelRequest\x12\x14\n" +
 	"\x05model\x18\x01 \x01(\tR\x05model\x12\x14\n" +
 	"\x05group\x18\x02 \x01(\tR\x05group\x12\x17\n" +
@@ -701,7 +1833,8 @@ const file_proto_route_route_proto_rawDesc = "" +
 	"\ttoken_key\x18\x05 \x01(\tR\btokenKey\x127\n" +
 	"\n" +
 	"candidates\x18\x06 \x03(\v2\x17.route.ChannelCandidateR\n" +
-	"candidates\"\x8e\x03\n" +
+	"candidates\x12\x19\n" +
+	"\bsite_key\x18\a \x01(\tR\asiteKey\"\x8e\x03\n" +
 	"\x10ChannelCandidate\x12\x1d\n" +
 	"\n" +
 	"channel_id\x18\x01 \x01(\x05R\tchannelId\x12!\n" +
@@ -724,8 +1857,9 @@ const file_proto_route_route_proto_rawDesc = "" +
 	"\bstrategy\x18\x02 \x01(\tR\bstrategy\x12\x1f\n" +
 	"\vpolicy_name\x18\x03 \x01(\tR\n" +
 	"policyName\x12\x1a\n" +
-	"\bfallback\x18\x04 \x01(\bR\bfallback\"p\n" +
-	"\x13SyncChannelsRequest\x122\n" +
+	"\bfallback\x18\x04 \x01(\bR\bfallback\"\x8b\x01\n" +
+	"\x13SyncChannelsRequest\x12\x19\n" +
+	"\bsite_key\x18\x03 \x01(\tR\asiteKey\x122\n" +
 	"\bchannels\x18\x01 \x03(\v2\x16.route.ChannelSnapshotR\bchannels\x12%\n" +
 	"\x0esync_timestamp\x18\x02 \x01(\x03R\rsyncTimestamp\"\xd3\x05\n" +
 	"\x0fChannelSnapshot\x12\x0e\n" +
@@ -759,11 +1893,111 @@ const file_proto_route_route_proto_rawDesc = "" +
 	"\x12HealthCheckRequest\"I\n" +
 	"\x13HealthCheckResponse\x12\x18\n" +
 	"\ahealthy\x18\x01 \x01(\bR\ahealthy\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\tR\aversion2\xe9\x01\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\"l\n" +
+	"\x19GetUserRoutePolicyRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\x05R\x06userId\x12\x1b\n" +
+	"\tuser_role\x18\x02 \x01(\x05R\buserRole\x12\x19\n" +
+	"\bsite_key\x18\x03 \x01(\tR\asiteKey\"\x87\x02\n" +
+	"\x1aGetUserRoutePolicyResponse\x12\x12\n" +
+	"\x04mode\x18\x01 \x01(\tR\x04mode\x12\x1f\n" +
+	"\vglobal_mode\x18\x02 \x01(\tR\n" +
+	"globalMode\x12.\n" +
+	"\x06groups\x18\x03 \x03(\v2\x16.route.RouteModelGroupR\x06groups\x12?\n" +
+	"\x0euser_overrides\x18\x04 \x03(\v2\x18.route.RouteOverrideItemR\ruserOverrides\x12C\n" +
+	"\x10global_overrides\x18\x05 \x03(\v2\x18.route.RouteOverrideItemR\x0fglobalOverrides\"\xc4\x01\n" +
+	"\x0fRouteModelGroup\x12\x1b\n" +
+	"\tgroup_key\x18\x01 \x01(\tR\bgroupKey\x12!\n" +
+	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x16\n" +
+	"\x06models\x18\x03 \x03(\tR\x06models\x12#\n" +
+	"\rchannel_count\x18\x04 \x01(\x05R\fchannelCount\x124\n" +
+	"\bchannels\x18\x05 \x03(\v2\x18.route.RouteGroupChannelR\bchannels\"\x9d\x04\n" +
+	"\x11RouteGroupChannel\x12\x1d\n" +
+	"\n" +
+	"channel_id\x18\x01 \x01(\x05R\tchannelId\x12!\n" +
+	"\fchannel_name\x18\x02 \x01(\tR\vchannelName\x12\x1f\n" +
+	"\vmasked_name\x18\x03 \x01(\tR\n" +
+	"maskedName\x12\x1d\n" +
+	"\n" +
+	"route_slug\x18\x04 \x01(\tR\trouteSlug\x12#\n" +
+	"\rprovider_slug\x18\x05 \x01(\tR\fproviderSlug\x12%\n" +
+	"\x0esupplier_alias\x18\x06 \x01(\tR\rsupplierAlias\x12\x16\n" +
+	"\x06status\x18\a \x01(\x05R\x06status\x12&\n" +
+	"\x0fmodels_in_group\x18\b \x03(\tR\rmodelsInGroup\x12\x1f\n" +
+	"\vuser_weight\x18\t \x01(\x05R\n" +
+	"userWeight\x12!\n" +
+	"\fuser_enabled\x18\n" +
+	" \x01(\bR\vuserEnabled\x12'\n" +
+	"\x0fuser_configured\x18\v \x01(\bR\x0euserConfigured\x12#\n" +
+	"\rglobal_weight\x18\f \x01(\x05R\fglobalWeight\x12%\n" +
+	"\x0eglobal_enabled\x18\r \x01(\bR\rglobalEnabled\x12+\n" +
+	"\x11global_configured\x18\x0e \x01(\bR\x10globalConfigured\x12\x14\n" +
+	"\x05price\x18\x0f \x01(\x01R\x05price\"v\n" +
+	"\x11RouteOverrideItem\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\rR\x02id\x12\x1b\n" +
+	"\traw_model\x18\x02 \x01(\tR\brawModel\x12\x1b\n" +
+	"\tgroup_key\x18\x03 \x01(\tR\bgroupKey\x12\x17\n" +
+	"\ais_user\x18\x04 \x01(\bR\x06isUser\"\xba\x02\n" +
+	"\x1cUpsertUserRoutePolicyRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\x05R\x06userId\x12\x1b\n" +
+	"\tuser_role\x18\x02 \x01(\x05R\buserRole\x12\x17\n" +
+	"\x04mode\x18\x03 \x01(\tH\x00R\x04mode\x88\x01\x01\x124\n" +
+	"\x06weight\x18\x04 \x01(\v2\x17.route.UpsertWeightItemH\x01R\x06weight\x88\x01\x01\x12:\n" +
+	"\boverride\x18\x05 \x01(\v2\x19.route.UpsertOverrideItemH\x02R\boverride\x88\x01\x01\x12\x1d\n" +
+	"\n" +
+	"reset_mode\x18\x06 \x01(\bR\tresetMode\x12\x19\n" +
+	"\bsite_key\x18\a \x01(\tR\asiteKeyB\a\n" +
+	"\x05_modeB\t\n" +
+	"\a_weightB\v\n" +
+	"\t_override\"\x80\x01\n" +
+	"\x10UpsertWeightItem\x12\x1b\n" +
+	"\tgroup_key\x18\x01 \x01(\tR\bgroupKey\x12\x1d\n" +
+	"\n" +
+	"channel_id\x18\x02 \x01(\x05R\tchannelId\x12\x16\n" +
+	"\x06weight\x18\x03 \x01(\x05R\x06weight\x12\x18\n" +
+	"\aenabled\x18\x04 \x01(\bR\aenabled\"N\n" +
+	"\x12UpsertOverrideItem\x12\x1b\n" +
+	"\traw_model\x18\x01 \x01(\tR\brawModel\x12\x1b\n" +
+	"\tgroup_key\x18\x02 \x01(\tR\bgroupKey\"O\n" +
+	"\x1dUpsertUserRoutePolicyResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\x91\x01\n" +
+	"!DeleteUserModelGroupWeightRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\x05R\x06userId\x12\x1b\n" +
+	"\tuser_role\x18\x02 \x01(\x05R\buserRole\x12\x1b\n" +
+	"\tweight_id\x18\x03 \x01(\rR\bweightId\x12\x19\n" +
+	"\bsite_key\x18\x04 \x01(\tR\asiteKey\"T\n" +
+	"\"DeleteUserModelGroupWeightResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\x97\x01\n" +
+	"#DeleteUserModelGroupOverrideRequest\x12\x17\n" +
+	"\auser_id\x18\x01 \x01(\x05R\x06userId\x12\x1b\n" +
+	"\tuser_role\x18\x02 \x01(\x05R\buserRole\x12\x1f\n" +
+	"\voverride_id\x18\x03 \x01(\rR\n" +
+	"overrideId\x12\x19\n" +
+	"\bsite_key\x18\x04 \x01(\tR\asiteKey\"V\n" +
+	"$DeleteUserModelGroupOverrideResponse\x12\x18\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\"\\\n" +
+	"\x10SyncUsersRequest\x12\x19\n" +
+	"\bsite_key\x18\x01 \x01(\tR\asiteKey\x12-\n" +
+	"\x05users\x18\x02 \x03(\v2\x17.route.ExternalUserInfoR\x05users\"\x8f\x01\n" +
+	"\x10ExternalUserInfo\x12\x10\n" +
+	"\x03uid\x18\x01 \x01(\x05R\x03uid\x12\x1a\n" +
+	"\busername\x18\x02 \x01(\tR\busername\x12!\n" +
+	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12\x12\n" +
+	"\x04role\x18\x04 \x01(\x05R\x04role\x12\x16\n" +
+	"\x06status\x18\x05 \x01(\x05R\x06status\"6\n" +
+	"\x11SyncUsersResponse\x12!\n" +
+	"\fsynced_count\x18\x01 \x01(\x05R\vsyncedCount2\xd4\x05\n" +
 	"\fRouteService\x12J\n" +
 	"\rSelectChannel\x12\x1b.route.SelectChannelRequest\x1a\x1c.route.SelectChannelResponse\x12G\n" +
 	"\fSyncChannels\x12\x1a.route.SyncChannelsRequest\x1a\x1b.route.SyncChannelsResponse\x12D\n" +
-	"\vHealthCheck\x12\x19.route.HealthCheckRequest\x1a\x1a.route.HealthCheckResponseB,Z*github.com/QuantumNous/new-api/proto/routeb\x06proto3"
+	"\vHealthCheck\x12\x19.route.HealthCheckRequest\x1a\x1a.route.HealthCheckResponse\x12Y\n" +
+	"\x12GetUserRoutePolicy\x12 .route.GetUserRoutePolicyRequest\x1a!.route.GetUserRoutePolicyResponse\x12b\n" +
+	"\x15UpsertUserRoutePolicy\x12#.route.UpsertUserRoutePolicyRequest\x1a$.route.UpsertUserRoutePolicyResponse\x12q\n" +
+	"\x1aDeleteUserModelGroupWeight\x12(.route.DeleteUserModelGroupWeightRequest\x1a).route.DeleteUserModelGroupWeightResponse\x12w\n" +
+	"\x1cDeleteUserModelGroupOverride\x12*.route.DeleteUserModelGroupOverrideRequest\x1a+.route.DeleteUserModelGroupOverrideResponse\x12>\n" +
+	"\tSyncUsers\x12\x17.route.SyncUsersRequest\x1a\x18.route.SyncUsersResponseB,Z*github.com/QuantumNous/new-api/proto/routeb\x06proto3"
 
 var (
 	file_proto_route_route_proto_rawDescOnce sync.Once
@@ -777,33 +2011,66 @@ func file_proto_route_route_proto_rawDescGZIP() []byte {
 	return file_proto_route_route_proto_rawDescData
 }
 
-var file_proto_route_route_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_proto_route_route_proto_msgTypes = make([]protoimpl.MessageInfo, 25)
 var file_proto_route_route_proto_goTypes = []any{
-	(*SelectChannelRequest)(nil),  // 0: route.SelectChannelRequest
-	(*ChannelCandidate)(nil),      // 1: route.ChannelCandidate
-	(*SelectChannelResponse)(nil), // 2: route.SelectChannelResponse
-	(*SyncChannelsRequest)(nil),   // 3: route.SyncChannelsRequest
-	(*ChannelSnapshot)(nil),       // 4: route.ChannelSnapshot
-	(*SyncChannelsResponse)(nil),  // 5: route.SyncChannelsResponse
-	(*HealthCheckRequest)(nil),    // 6: route.HealthCheckRequest
-	(*HealthCheckResponse)(nil),   // 7: route.HealthCheckResponse
-	nil,                           // 8: route.ChannelSnapshot.ModelPricesEntry
+	(*SelectChannelRequest)(nil),                 // 0: route.SelectChannelRequest
+	(*ChannelCandidate)(nil),                     // 1: route.ChannelCandidate
+	(*SelectChannelResponse)(nil),                // 2: route.SelectChannelResponse
+	(*SyncChannelsRequest)(nil),                  // 3: route.SyncChannelsRequest
+	(*ChannelSnapshot)(nil),                      // 4: route.ChannelSnapshot
+	(*SyncChannelsResponse)(nil),                 // 5: route.SyncChannelsResponse
+	(*HealthCheckRequest)(nil),                   // 6: route.HealthCheckRequest
+	(*HealthCheckResponse)(nil),                  // 7: route.HealthCheckResponse
+	(*GetUserRoutePolicyRequest)(nil),            // 8: route.GetUserRoutePolicyRequest
+	(*GetUserRoutePolicyResponse)(nil),           // 9: route.GetUserRoutePolicyResponse
+	(*RouteModelGroup)(nil),                      // 10: route.RouteModelGroup
+	(*RouteGroupChannel)(nil),                    // 11: route.RouteGroupChannel
+	(*RouteOverrideItem)(nil),                    // 12: route.RouteOverrideItem
+	(*UpsertUserRoutePolicyRequest)(nil),         // 13: route.UpsertUserRoutePolicyRequest
+	(*UpsertWeightItem)(nil),                     // 14: route.UpsertWeightItem
+	(*UpsertOverrideItem)(nil),                   // 15: route.UpsertOverrideItem
+	(*UpsertUserRoutePolicyResponse)(nil),        // 16: route.UpsertUserRoutePolicyResponse
+	(*DeleteUserModelGroupWeightRequest)(nil),    // 17: route.DeleteUserModelGroupWeightRequest
+	(*DeleteUserModelGroupWeightResponse)(nil),   // 18: route.DeleteUserModelGroupWeightResponse
+	(*DeleteUserModelGroupOverrideRequest)(nil),  // 19: route.DeleteUserModelGroupOverrideRequest
+	(*DeleteUserModelGroupOverrideResponse)(nil), // 20: route.DeleteUserModelGroupOverrideResponse
+	(*SyncUsersRequest)(nil),                     // 21: route.SyncUsersRequest
+	(*ExternalUserInfo)(nil),                     // 22: route.ExternalUserInfo
+	(*SyncUsersResponse)(nil),                    // 23: route.SyncUsersResponse
+	nil,                                          // 24: route.ChannelSnapshot.ModelPricesEntry
 }
 var file_proto_route_route_proto_depIdxs = []int32{
-	1, // 0: route.SelectChannelRequest.candidates:type_name -> route.ChannelCandidate
-	4, // 1: route.SyncChannelsRequest.channels:type_name -> route.ChannelSnapshot
-	8, // 2: route.ChannelSnapshot.model_prices:type_name -> route.ChannelSnapshot.ModelPricesEntry
-	0, // 3: route.RouteService.SelectChannel:input_type -> route.SelectChannelRequest
-	3, // 4: route.RouteService.SyncChannels:input_type -> route.SyncChannelsRequest
-	6, // 5: route.RouteService.HealthCheck:input_type -> route.HealthCheckRequest
-	2, // 6: route.RouteService.SelectChannel:output_type -> route.SelectChannelResponse
-	5, // 7: route.RouteService.SyncChannels:output_type -> route.SyncChannelsResponse
-	7, // 8: route.RouteService.HealthCheck:output_type -> route.HealthCheckResponse
-	6, // [6:9] is the sub-list for method output_type
-	3, // [3:6] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	1,  // 0: route.SelectChannelRequest.candidates:type_name -> route.ChannelCandidate
+	4,  // 1: route.SyncChannelsRequest.channels:type_name -> route.ChannelSnapshot
+	24, // 2: route.ChannelSnapshot.model_prices:type_name -> route.ChannelSnapshot.ModelPricesEntry
+	10, // 3: route.GetUserRoutePolicyResponse.groups:type_name -> route.RouteModelGroup
+	12, // 4: route.GetUserRoutePolicyResponse.user_overrides:type_name -> route.RouteOverrideItem
+	12, // 5: route.GetUserRoutePolicyResponse.global_overrides:type_name -> route.RouteOverrideItem
+	11, // 6: route.RouteModelGroup.channels:type_name -> route.RouteGroupChannel
+	14, // 7: route.UpsertUserRoutePolicyRequest.weight:type_name -> route.UpsertWeightItem
+	15, // 8: route.UpsertUserRoutePolicyRequest.override:type_name -> route.UpsertOverrideItem
+	22, // 9: route.SyncUsersRequest.users:type_name -> route.ExternalUserInfo
+	0,  // 10: route.RouteService.SelectChannel:input_type -> route.SelectChannelRequest
+	3,  // 11: route.RouteService.SyncChannels:input_type -> route.SyncChannelsRequest
+	6,  // 12: route.RouteService.HealthCheck:input_type -> route.HealthCheckRequest
+	8,  // 13: route.RouteService.GetUserRoutePolicy:input_type -> route.GetUserRoutePolicyRequest
+	13, // 14: route.RouteService.UpsertUserRoutePolicy:input_type -> route.UpsertUserRoutePolicyRequest
+	17, // 15: route.RouteService.DeleteUserModelGroupWeight:input_type -> route.DeleteUserModelGroupWeightRequest
+	19, // 16: route.RouteService.DeleteUserModelGroupOverride:input_type -> route.DeleteUserModelGroupOverrideRequest
+	21, // 17: route.RouteService.SyncUsers:input_type -> route.SyncUsersRequest
+	2,  // 18: route.RouteService.SelectChannel:output_type -> route.SelectChannelResponse
+	5,  // 19: route.RouteService.SyncChannels:output_type -> route.SyncChannelsResponse
+	7,  // 20: route.RouteService.HealthCheck:output_type -> route.HealthCheckResponse
+	9,  // 21: route.RouteService.GetUserRoutePolicy:output_type -> route.GetUserRoutePolicyResponse
+	16, // 22: route.RouteService.UpsertUserRoutePolicy:output_type -> route.UpsertUserRoutePolicyResponse
+	18, // 23: route.RouteService.DeleteUserModelGroupWeight:output_type -> route.DeleteUserModelGroupWeightResponse
+	20, // 24: route.RouteService.DeleteUserModelGroupOverride:output_type -> route.DeleteUserModelGroupOverrideResponse
+	23, // 25: route.RouteService.SyncUsers:output_type -> route.SyncUsersResponse
+	18, // [18:26] is the sub-list for method output_type
+	10, // [10:18] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_proto_route_route_proto_init() }
@@ -811,13 +2078,14 @@ func file_proto_route_route_proto_init() {
 	if File_proto_route_route_proto != nil {
 		return
 	}
+	file_proto_route_route_proto_msgTypes[13].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_route_route_proto_rawDesc), len(file_proto_route_route_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   9,
+			NumMessages:   25,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
