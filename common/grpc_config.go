@@ -3,6 +3,8 @@ package common
 import (
 	"os"
 	"strconv"
+	"strings"
+	"time"
 )
 
 // ── TokenFactory gRPC 连接配置 ──────────────────────────────────
@@ -64,4 +66,26 @@ func TokenFactorySiteKey() string {
 		return "default"
 	}
 	return key
+}
+
+// TokenFactoryChannelSyncEnabled 是否启用定时站点数据同步到 TokenFactory（渠道快照 + 外部用户，同频率）。
+// 默认：TOKENFACTORY_ROUTE_ENABLED=true 时启用；可用 TOKENFACTORY_CHANNEL_SYNC_ENABLED=false 关闭。
+func TokenFactoryChannelSyncEnabled() bool {
+	if !TokenFactoryRouteEnabled() {
+		return false
+	}
+	v := strings.TrimSpace(os.Getenv("TOKENFACTORY_CHANNEL_SYNC_ENABLED"))
+	if v == "false" || v == "0" || strings.EqualFold(v, "off") || strings.EqualFold(v, "no") {
+		return false
+	}
+	return true
+}
+
+// TokenFactoryChannelSyncInterval 定时同步间隔，默认 5 分钟。
+// 环境变量 TOKENFACTORY_CHANNEL_SYNC_INTERVAL（秒）。
+func TokenFactoryChannelSyncInterval() time.Duration {
+	if v, err := strconv.Atoi(os.Getenv("TOKENFACTORY_CHANNEL_SYNC_INTERVAL")); err == nil && v > 0 {
+		return time.Duration(v) * time.Second
+	}
+	return 5 * time.Minute
 }
