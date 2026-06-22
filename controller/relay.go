@@ -291,6 +291,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 		if tokenFactoryError == nil {
 			relayInfo.LastError = nil
+			// 反馈给 TokenFactory 黏性熔断器：成功则清零该渠道的连续报错计数。
+			service.RecordTFRouteResult(c, channel.Id, true)
 			return
 		}
 
@@ -298,6 +300,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		relayInfo.LastError = tokenFactoryError
 
 		processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), tokenFactoryError)
+		// 反馈给 TokenFactory 黏性熔断器：仅统计 TF 选中的那个渠道的连续报错。
+		service.RecordTFRouteResult(c, channel.Id, false)
 
 		if !shouldRetry(c, tokenFactoryError, common.RetryTimes-retryParam.GetRetry()) {
 			break

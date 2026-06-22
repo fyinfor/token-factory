@@ -66,6 +66,14 @@ func main() {
 	}
 
 	common.SysLog("TokenFactory " + common.Version + " started")
+	if common.TokenFactoryRouteEnabled() {
+		common.SysLog("TokenFactory smart route enabled, gRPC endpoint=" + common.TokenFactoryGRPCEndpoint() + ", site_key=" + common.TokenFactorySiteKey())
+		if common.TokenFactoryChannelSyncEnabled() {
+			common.SysLog(fmt.Sprintf("TokenFactory site sync enabled (channels+users), interval=%s", common.TokenFactoryChannelSyncInterval()))
+		}
+	} else {
+		common.SysLog("TokenFactory smart route disabled (set TOKENFACTORY_ROUTE_ENABLED=true to enable)")
+	}
 	if os.Getenv("GIN_MODE") != "debug" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -139,6 +147,9 @@ func main() {
 
 	// Channel upstream model update check task
 	controller.StartChannelUpstreamModelUpdateTask()
+
+	// TokenFactory 站点数据定时同步（渠道快照 + 外部用户，供智能路由规则选择）
+	service.StartTokenFactoryChannelSyncTask()
 
 	if common.IsMasterNode && constant.UpdateTask {
 		gopool.Go(func() {
