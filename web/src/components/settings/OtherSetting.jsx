@@ -45,6 +45,7 @@ import { languageSelectOptions } from '../../i18n/language';
 import { StatusContext } from '../../context/Status';
 import Text from '@douyinfe/semi-ui/lib/es/typography/text';
 import MarkdownRenderer from '../common/markdown/MarkdownRenderer';
+import SettingsSeedance from './SettingsSeedance';
 
 const LEGAL_USER_AGREEMENT_KEY = 'legal.user_agreement';
 const LEGAL_PRIVACY_POLICY_KEY = 'legal.privacy_policy';
@@ -1196,6 +1197,9 @@ const OtherSetting = () => {
             </Form.Section>
           </Card>
         </Form>
+
+        {/* 素材设置（Seedance2.0 合规素材库） */}
+        <SettingsSeedance />
       </Col>
       <Modal
         title={t('新版本') + '：' + updateData.tag_name}

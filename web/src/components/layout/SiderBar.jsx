@@ -57,6 +57,7 @@ const routerMap = {
   'model-heat': '/console/model-heat',
   playground: '/console/playground',
   personal: '/console/personal',
+  'seedance-material': '/console/seedance/material',
   supplier: null,
   distributor: '/console/distributor/admin',
   distributor_center: '/console/distributor/center',
@@ -152,6 +153,11 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('个人设置'),
         itemKey: 'personal',
         to: '/personal',
+      },
+      {
+        text: t('素材管理'),
+        itemKey: 'seedance-material',
+        to: '/console/seedance/material',
       },
       {
         text: t('供应商'),
