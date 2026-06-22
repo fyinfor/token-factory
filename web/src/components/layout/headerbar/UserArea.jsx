@@ -27,7 +27,7 @@ import {
   IconCreditCard,
   IconKey,
 } from '@douyinfe/semi-icons';
-import { stringToColor } from '../../../helpers';
+import { renderQuota, stringToColor } from '../../../helpers';
 import SkeletonWrapper from '../components/SkeletonWrapper';
 
 const UserArea = ({
@@ -51,6 +51,13 @@ const UserArea = ({
   }
 
   if (userState.user) {
+    const user = userState.user;
+    const displayName = user.display_name || user.username;
+    const quota = user.quota ?? 0;
+    const goTopUp = () => {
+      navigate('/console/topup');
+    };
+
     return (
       <div className='relative'>
         <Dropdown
@@ -59,6 +66,34 @@ const UserArea = ({
           zIndex={2000}
           render={
             <Dropdown.Menu className='!bg-semi-color-bg-overlay !border-semi-color-border !shadow-lg !rounded-lg dark:!bg-gray-700 dark:!border-gray-600'>
+              <div className='min-w-[230px]'>
+                <div className='flex items-center justify-between gap-3 rounded-md px-2.5 py-2.5'>
+                  <div className='min-w-0 flex-1'>
+                    <button
+                      type='button'
+                      onClick={goTopUp}
+                      className='block max-w-full text-left'
+                    >
+                      <span className='block text-xs leading-4 text-semi-color-text-2 dark:text-gray-400'>
+                        {t('账户余额')}
+                      </span>
+                      <span className='block max-w-[128px] truncate text-base font-semibold leading-6 text-semi-color-primary'>
+                        {renderQuota(quota)}
+                      </span>
+                    </button>
+                  </div>
+                  <Button
+                    size='small'
+                    type='primary'
+                    theme='solid'
+                    icon={<IconCreditCard size='small' />}
+                    onClick={goTopUp}
+                    className='!px-2.5'
+                  >
+                    {t('充值')}
+                  </Button>
+                </div>
+              </div>
               <Dropdown.Item
                 onClick={() => {
                   navigate('/console/personal');
@@ -119,19 +154,30 @@ const UserArea = ({
           <Button
             theme='borderless'
             type='tertiary'
-            className='flex items-center gap-1.5 !p-1 !rounded-full hover:!bg-semi-color-fill-1 dark:hover:!bg-gray-700 !bg-semi-color-fill-0 dark:!bg-semi-color-fill-1 dark:hover:!bg-semi-color-fill-2'
+            className='flex items-center gap-1.5 !px-1.5 !py-1 !rounded-full hover:!bg-semi-color-fill-1 dark:hover:!bg-gray-700 !bg-semi-color-fill-0 dark:!bg-semi-color-fill-1 dark:hover:!bg-semi-color-fill-2'
           >
             <Avatar
               size='extra-small'
-              color={stringToColor(userState.user.username)}
+              color={stringToColor(user.username)}
               className='mr-1'
             >
-              {userState.user.username?.[0]?.toUpperCase() || ''}
+              {user.username?.[0]?.toUpperCase() || ''}
             </Avatar>
             <span className='hidden md:inline'>
-              <Typography.Text className='!text-xs !font-medium !text-semi-color-text-1 dark:!text-gray-300 mr-1'>
-                {userState.user.display_name || userState.user.username}
-              </Typography.Text>
+              <span className='flex h-8 max-w-[7rem] flex-col items-start justify-center gap-[1px] leading-none mr-1'>
+                <Typography.Text
+                  ellipsis={{ showTooltip: true }}
+                  className='!text-xs !leading-4 !font-medium !text-semi-color-text-1 dark:!text-gray-300'
+                >
+                  {displayName}
+                </Typography.Text>
+                <Typography.Text
+                  ellipsis={{ showTooltip: true }}
+                  className='!text-[11px] !leading-3 !font-semibold !text-semi-color-primary'
+                >
+                  {renderQuota(quota)}
+                </Typography.Text>
+              </span>
             </span>
             <ChevronDown
               size={14}
