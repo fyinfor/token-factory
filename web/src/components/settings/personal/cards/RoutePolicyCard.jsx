@@ -19,6 +19,7 @@ import {
 import { Route, ChevronDown, ChevronRight, Plus, Trash2, Info } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { API, showSuccess, showError } from '../../../../helpers';
+import { getCurrencyConfig } from '../../../../helpers/render';
 import { UserContext } from '../../../../context/User';
 
 const ROUTE_MODES = [
@@ -69,10 +70,9 @@ const RoutePolicyCard = ({ t }) => {
         showError(msg);
       }
     } catch (err) {
-      const msg =
-        tLocal('route_policy.load_failed') +
-        ': ' +
-        (err.response?.data?.error || err.message || String(err));
+      const msg = tLocal('route_policy.load_failed_with_reason', {
+        reason: err.response?.data?.error || err.message || String(err),
+      });
       setLoadError(msg);
       showError(msg);
     } finally {
@@ -579,7 +579,10 @@ const ChannelRow = ({ channel, groupKey, isAdmin, onWeightChange, onDeleteWeight
         <td className='py-2 pr-3'>
           {channel.price > 0 ? (
             <Typography.Text size='small'>
-              ¥{channel.price.toFixed(4)}/1K
+              {t('route_policy.price_per_1k', {
+                symbol: getCurrencyConfig().symbol,
+                price: channel.price.toFixed(4),
+              })}
             </Typography.Text>
           ) : (
             <Typography.Text size='small' type='quaternary'>

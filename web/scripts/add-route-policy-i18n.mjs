@@ -27,6 +27,7 @@ const zhCN = {
   'route_policy.group_key_placeholder': '例如 gpt-4o',
   'route_policy.group_models': '包含模型',
   'route_policy.load_failed': '加载路由策略失败',
+  'route_policy.load_failed_with_reason': '加载路由策略失败：{{reason}}',
   'route_policy.mode_default': '默认（本站原生）',
   'route_policy.mode_default_hint':
     '我的请求不走 TokenFactory 智能路由，由本站原生逻辑选路。',
@@ -49,6 +50,7 @@ const zhCN = {
   'route_policy.overrides_desc':
     '将特定原始模型名映射到指定归类，优先于自动归类规则。',
   'route_policy.price': '单价',
+  'route_policy.price_per_1k': '{{symbol}}{{price}}/1K',
   'route_policy.provider': '供应商',
   'route_policy.raw_model': '原始模型名',
   'route_policy.raw_model_placeholder': '例如 gpt-4o-2024-08-06',
@@ -81,6 +83,7 @@ const zhTW = {
   'route_policy.group_key_placeholder': '例如 gpt-4o',
   'route_policy.group_models': '包含模型',
   'route_policy.load_failed': '載入路由策略失敗',
+  'route_policy.load_failed_with_reason': '載入路由策略失敗：{{reason}}',
   'route_policy.mode_default': '預設（本站原生）',
   'route_policy.mode_default_hint':
     '我的請求不走 TokenFactory 智能路由，由本站原生邏輯選路。',
@@ -103,6 +106,7 @@ const zhTW = {
   'route_policy.overrides_desc':
     '將特定原始模型名對應到指定歸類，優先於自動歸類規則。',
   'route_policy.price': '單價',
+  'route_policy.price_per_1k': '{{symbol}}{{price}}/1K',
   'route_policy.provider': '供應商',
   'route_policy.raw_model': '原始模型名',
   'route_policy.raw_model_placeholder': '例如 gpt-4o-2024-08-06',
@@ -135,6 +139,7 @@ const en = {
   'route_policy.group_key_placeholder': 'e.g. gpt-4o',
   'route_policy.group_models': 'Models in group',
   'route_policy.load_failed': 'Failed to load routing policy',
+  'route_policy.load_failed_with_reason': 'Failed to load routing policy: {{reason}}',
   'route_policy.mode_default': 'Default (native)',
   'route_policy.mode_default_hint':
     'Your requests skip TokenFactory smart routing and use this site’s native channel selection.',
@@ -158,6 +163,7 @@ const en = {
   'route_policy.overrides_desc':
     'Map a specific raw model name to a target group, taking priority over automatic grouping.',
   'route_policy.price': 'Unit price',
+  'route_policy.price_per_1k': '{{symbol}}{{price}}/1K',
   'route_policy.provider': 'Provider',
   'route_policy.raw_model': 'Raw model name',
   'route_policy.raw_model_placeholder': 'e.g. gpt-4o-2024-08-06',
@@ -190,6 +196,7 @@ const fr = {
   'route_policy.group_key_placeholder': 'ex. gpt-4o',
   'route_policy.group_models': 'Modèles du groupe',
   'route_policy.load_failed': 'Échec du chargement de la politique de routage',
+  'route_policy.load_failed_with_reason': 'Échec du chargement de la politique de routage : {{reason}}',
   'route_policy.mode_default': 'Par défaut (natif)',
   'route_policy.mode_default_hint':
     'Vos requêtes ignorent le routage intelligent TokenFactory et utilisent la sélection native du site.',
@@ -213,6 +220,7 @@ const fr = {
   'route_policy.overrides_desc':
     'Associe un nom de modèle brut à un groupe cible, prioritaire sur le regroupement automatique.',
   'route_policy.price': 'Prix unitaire',
+  'route_policy.price_per_1k': '{{symbol}}{{price}}/1K',
   'route_policy.provider': 'Fournisseur',
   'route_policy.raw_model': 'Nom de modèle brut',
   'route_policy.raw_model_placeholder': 'ex. gpt-4o-2024-08-06',
@@ -245,6 +253,7 @@ const ja = {
   'route_policy.group_key_placeholder': '例: gpt-4o',
   'route_policy.group_models': 'グループ内モデル',
   'route_policy.load_failed': 'ルーティングポリシーの読み込みに失敗しました',
+  'route_policy.load_failed_with_reason': 'ルーティングポリシーの読み込みに失敗しました：{{reason}}',
   'route_policy.mode_default': '既定（ネイティブ）',
   'route_policy.mode_default_hint':
     'TokenFactory のスマートルーティングを使わず、このサイトのネイティブ選路を使用します。',
@@ -267,6 +276,7 @@ const ja = {
   'route_policy.overrides_desc':
     '特定の生モデル名を対象グループにマッピングし、自動グループ化より優先します。',
   'route_policy.price': '単価',
+  'route_policy.price_per_1k': '{{symbol}}{{price}}/1K',
   'route_policy.provider': 'プロバイダー',
   'route_policy.raw_model': '生のモデル名',
   'route_policy.raw_model_placeholder': '例: gpt-4o-2024-08-06',
@@ -299,6 +309,7 @@ const ru = {
   'route_policy.group_key_placeholder': 'напр. gpt-4o',
   'route_policy.group_models': 'Модели в группе',
   'route_policy.load_failed': 'Не удалось загрузить политику маршрутизации',
+  'route_policy.load_failed_with_reason': 'Не удалось загрузить политику маршрутизации: {{reason}}',
   'route_policy.mode_default': 'По умолчанию (нативный)',
   'route_policy.mode_default_hint':
     'Ваши запросы не используют умную маршрутизацию TokenFactory и выбирают канал нативной логикой сайта.',
@@ -322,6 +333,7 @@ const ru = {
   'route_policy.overrides_desc':
     'Сопоставляет исходное имя модели с целевой группой, приоритетнее автоматической группировки.',
   'route_policy.price': 'Цена за единицу',
+  'route_policy.price_per_1k': '{{symbol}}{{price}}/1K',
   'route_policy.provider': 'Поставщик',
   'route_policy.raw_model': 'Исходное имя модели',
   'route_policy.raw_model_placeholder': 'напр. gpt-4o-2024-08-06',
@@ -354,6 +366,7 @@ const vi = {
   'route_policy.group_key_placeholder': 'vd. gpt-4o',
   'route_policy.group_models': 'Mô hình trong nhóm',
   'route_policy.load_failed': 'Không tải được chính sách định tuyến',
+  'route_policy.load_failed_with_reason': 'Không tải được chính sách định tuyến: {{reason}}',
   'route_policy.mode_default': 'Mặc định (gốc)',
   'route_policy.mode_default_hint':
     'Yêu cầu của bạn không dùng định tuyến thông minh TokenFactory mà dùng logic chọn kênh gốc của trang.',
@@ -377,6 +390,7 @@ const vi = {
   'route_policy.overrides_desc':
     'Ánh xạ tên mô hình gốc cụ thể vào nhóm đích, ưu tiên hơn nhóm tự động.',
   'route_policy.price': 'Đơn giá',
+  'route_policy.price_per_1k': '{{symbol}}{{price}}/1K',
   'route_policy.provider': 'Nhà cung cấp',
   'route_policy.raw_model': 'Tên mô hình gốc',
   'route_policy.raw_model_placeholder': 'vd. gpt-4o-2024-08-06',
