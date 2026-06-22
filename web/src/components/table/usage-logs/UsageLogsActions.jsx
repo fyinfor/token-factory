@@ -88,6 +88,12 @@ const LogsActions = ({
           params.set('channel', String(formValues.channel));
         }
         url = `/api/user/supplier-channel-logs/export?${params.toString()}`;
+      } else if (isAdminUser) {
+        params.set('username', formValues.username || '');
+        if (formValues.channel) {
+          params.set('channel', String(formValues.channel));
+        }
+        url = `/api/log/export?${params.toString()}`;
       } else {
         url = `/api/log/self/export?${params.toString()}`;
       }

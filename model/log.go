@@ -955,6 +955,13 @@ type LogExportFilter struct {
 	LogTypes                               []int
 }
 
+// AdminLogExportFilter 管理员全站日志导出筛选，与 GetAllLogs 列表口径对齐。
+type AdminLogExportFilter struct {
+	LogExportFilter
+	Username string
+	Channel  int
+}
+
 // GetUserLogsForExport 拉取对账单导出所需的日志行（升序）。
 // 内部使用 LOOP 形式而非 GORM Stream 保持实现简单；调用方负责后续流式写出。
 // 上限 logExportCountLimit 条；超过则 controller 返回 400。
@@ -999,6 +1006,64 @@ func GetUserLogsForExport(userId int, filter LogExportFilter) ([]*Log, int64, er
 	var logs []*Log
 	if err := tx.Order("id ASC").Find(&logs).Error; err != nil {
 		return nil, 0, err
+	}
+	return logs, total, nil
+}
+
+// GetAllLogsForExport 拉取管理员全站日志导出数据（升序，不分页），筛选与 GetAllLogs 一致。
+func GetAllLogsForExport(filter AdminLogExportFilter) ([]*Log, int64, error) {
+	tx := LOG_DB
+	tx = applyLogTypesFilter(tx, filter.LogTypes)
+	tx = applyBillingLogVisibility(tx, false)
+
+	if filter.ModelName != "" {
+		tx = tx.Where("logs.model_name LIKE ?", filter.ModelName)
+	}
+	if filter.Username != "" {
+		tx = tx.Where("logs.username = ?", filter.Username)
+	}
+	if filter.TokenName != "" {
+		tx = tx.Where("logs.token_name = ?", filter.TokenName)
+	}
+	if filter.RequestID != "" {
+		tx = tx.Where("logs.request_id = ?", filter.RequestID)
+	}
+	if filter.FromTs > 0 {
+		tx = tx.Where("logs.created_at >= ?", filter.FromTs)
+	}
+	if filter.ToTs > 0 {
+		tx = tx.Where("logs.created_at <= ?", filter.ToTs)
+	}
+	if filter.Channel > 0 {
+		tx = tx.Where("logs.channel_id = ?", filter.Channel)
+	}
+	if filter.Group != "" {
+		tx = tx.Where("logs."+logGroupCol+" = ?", filter.Group)
+	}
+
+	var total int64
+	if err := tx.Model(&Log{}).Limit(logExportCountLimit).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	if total > logExportCountLimit {
+		return nil, total, fmt.Errorf("导出行数超过 %d 上限", logExportCountLimit)
+	}
+
+	var logs []*Log
+	if err := tx.Order("logs.id ASC").Find(&logs).Error; err != nil {
+		return nil, 0, err
+	}
+	attachLogChannelDisplays(logs)
+	for i := range logs {
+		if logs[i].Other == "" {
+			continue
+		}
+		otherMap, errParse := common.StrToMap(logs[i].Other)
+		if errParse != nil || otherMap == nil {
+			continue
+		}
+		delete(otherMap, "channel_name")
+		logs[i].Other = common.MapToJsonStr(otherMap)
 	}
 	return logs, total, nil
 }

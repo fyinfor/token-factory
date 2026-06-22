@@ -10,7 +10,6 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/gin-gonic/gin"
 )
@@ -53,11 +52,7 @@ func tokenAllowsDiscoveryModel(c *gin.Context, modelName string) bool {
 	if !ok {
 		return false
 	}
-	if limits[modelName] {
-		return true
-	}
-	normalized := ratio_setting.FormatMatchingModelName(modelName)
-	return normalized != "" && limits[normalized]
+	return model.ModelLimitMapAllows(limits, modelName)
 }
 
 func playgroundDiscoveryGroupsForToken(c *gin.Context) ([]string, bool) {

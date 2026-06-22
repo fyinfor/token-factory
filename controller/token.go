@@ -222,6 +222,8 @@ func AddToken(c *gin.Context) {
 		Group:              token.Group,
 		CrossGroupRetry:    token.CrossGroupRetry,
 	}
+	// 修复点：持久化前同步白名单字段，确保 enabled 与 model_limits 一致
+	cleanToken.SyncModelLimits()
 	err = cleanToken.Insert()
 	if err != nil {
 		common.ApiError(c, err)
@@ -299,6 +301,8 @@ func UpdateToken(c *gin.Context) {
 		cleanToken.AllowIps = token.AllowIps
 		cleanToken.Group = token.Group
 		cleanToken.CrossGroupRetry = token.CrossGroupRetry
+		// 修复点：持久化前同步白名单字段，确保 enabled 与 model_limits 一致
+		cleanToken.SyncModelLimits()
 	}
 	err = cleanToken.Update()
 	if err != nil {
