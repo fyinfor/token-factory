@@ -209,7 +209,10 @@ func GetAbout(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    common.OptionMap["About"],
+		"data": gin.H{
+			"about":    common.OptionMap["About"],
+			"about_en": common.OptionMap["AboutEn"],
+		},
 	})
 	return
 }

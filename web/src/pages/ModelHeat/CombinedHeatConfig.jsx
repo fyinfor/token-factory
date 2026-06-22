@@ -177,7 +177,7 @@ const CombinedHeatConfig = () => {
             vendor_id: model.vendor_id,
             tags: model.tags || '',
             channel_id: channelID,
-            channel_name: channelInfo?.name || ch.SupplierAlias || `渠道${channelID}`,
+            channel_name: channelInfo?.name || ch.SupplierAlias || `${t('渠道')}${channelID}`,
             // 全部使用渠道-模型独立配置（channel_model_heats 表）
             model_sort_weight: heatConfig?.model_sort_weight ?? 1,
             channel_sort_weight: heatConfig?.channel_sort_weight ?? 1,
@@ -216,7 +216,7 @@ const CombinedHeatConfig = () => {
     });
 
     return merged;
-  }, []);
+  }, [t]);
 
   // 加载所有数据
   const loadData = useCallback(async () => {

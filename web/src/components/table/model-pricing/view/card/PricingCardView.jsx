@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Card,
   Tag,
@@ -46,6 +47,9 @@ import {
   compareVideoResolutionAsc,
   isVideoPricingModel,
   hasNumericValue,
+  getModelTagLabel,
+  getSupplierTypeLabel,
+  getModelDescription,
 } from '../../../../../helpers';
 import {
   TIER_CATEGORY_STYLES,
@@ -818,6 +822,7 @@ const PricingCardView = ({
   channelVideoCompletionRatio = {},
   channelVideoPrice = {},
 }) => {
+  const { i18n } = useTranslation();
   const showSkeleton = useMinimumLoadingTime(loading);
   const startIndex = (currentPage - 1) * pageSize;
   const paginatedModels = filteredModels.slice(
@@ -1598,9 +1603,8 @@ const PricingCardView = ({
   };
 
   // 获取模型描述
-  const getModelDescription = (record) => {
-    return record.description || '';
-  };
+  const resolveModelDescription = (record) =>
+    getModelDescription(record, i18n.language);
 
   // 渲染标签
   const renderTags = (record) => {
@@ -1641,6 +1645,7 @@ const PricingCardView = ({
     if (record.tags) {
       const tagArr = record.tags.split(',').filter(Boolean);
       tagArr.forEach((tg, idx) => {
+        const tagText = getModelTagLabel(tg, t);
         customTags.push(
           <Tag
             key={`custom-${idx}`}
@@ -1648,7 +1653,7 @@ const PricingCardView = ({
             color={stringToColor(tg)}
             size='small'
           >
-            {renderHighlightedText(tg)}
+            {renderHighlightedText(tagText)}
           </Tag>,
         );
       });
@@ -1908,7 +1913,7 @@ const PricingCardView = ({
                                         )}
                                         className='mx-1'
                                       >
-                                        {s.supplierType}
+                                        {getSupplierTypeLabel(s.supplierType, t)}
                                       </Tag>
                                     )}
                                   </div>
@@ -1963,7 +1968,7 @@ const PricingCardView = ({
                       className='text-xs line-clamp-2 leading-relaxed'
                       style={{ color: 'var(--semi-color-text-2)' }}
                     >
-                      {renderHighlightedText(getModelDescription(model))}
+                      {renderHighlightedText(resolveModelDescription(model))}
                     </p>
                   </div>
 
