@@ -129,13 +129,13 @@ func Distribute() func(c *gin.Context) {
 					abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorTokenNoModelAccess))
 					return
 				}
-				var tokenModelLimit map[string]bool
-				tokenModelLimit, ok = s.(map[string]bool)
-				if !ok {
-					tokenModelLimit = map[string]bool{}
+				tokenModelLimit, ok := s.(map[string]bool)
+				if !ok || len(tokenModelLimit) == 0 {
+					abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorTokenNoModelAccess))
+					return
 				}
-				matchName := ratio_setting.FormatMatchingModelName(modelRequest.Model) // match gpts & thinking-*
-				if _, ok := tokenModelLimit[matchName]; !ok {
+				// 修复点：使用与 GetModelLimitsMap 一致的匹配逻辑，兼容 gizmo/thinking-* 等规范化模型名
+				if !model.ModelLimitMapAllows(tokenModelLimit, modelRequest.Model) {
 					abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorTokenModelForbidden, map[string]any{"Model": modelRequest.Model}))
 					return
 				}
