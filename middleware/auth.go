@@ -404,10 +404,11 @@ func SetupContextForToken(c *gin.Context, token *model.Token, parts ...string) e
 		c.Set("token_quota", token.RemainQuota)
 	}
 	if token.ModelLimitsEnabled {
-		c.Set("token_model_limit_enabled", true)
-		c.Set("token_model_limit", token.GetModelLimitsMap())
+		limitsMap := token.GetModelLimitsMap()
+		common.SetContextKey(c, constant.ContextKeyTokenModelLimitEnabled, true)
+		common.SetContextKey(c, constant.ContextKeyTokenModelLimit, limitsMap)
 	} else {
-		c.Set("token_model_limit_enabled", false)
+		common.SetContextKey(c, constant.ContextKeyTokenModelLimitEnabled, false)
 	}
 	common.SetContextKey(c, constant.ContextKeyTokenGroup, token.Group)
 	common.SetContextKey(c, constant.ContextKeyTokenCrossGroupRetry, token.CrossGroupRetry)
