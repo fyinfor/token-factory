@@ -42,6 +42,7 @@
     "我已知晓": "我已知晓",
     "暂无协议详情": "暂无协议详情",
     "Seedance2.0 合规素材库": "Seedance2.0 合规素材库",
+    " + 图片生成调用 {{symbol}}{{price}} / 1次": " + 图片生成调用 {{symbol}}{{price}} / 1次",
     " + 图片生成调用 {{symbol}}{{price}} / 1次 * {{ratioType}} {{ratio}}": " + 图片生成调用 {{symbol}}{{price}} / 1次 * {{ratioType}} {{ratio}}",
     " + 文件搜索 {{count}}次 / 1K 次 * {{symbol}}{{price}}": " + 文件搜索 {{count}}次 / 1K 次 * {{symbol}}{{price}}",
     " + 文件搜索 {{count}}次 / 1K 次 * {{symbol}}{{price}} * {{ratioType}} {{ratio}}_few": " + 文件搜索 {{count}}次 / 1K 次 * {{symbol}}{{price}} * {{ratioType}} {{ratio}}",
