@@ -94,7 +94,7 @@ code {
 }
 
 .semi-navigation-sub-title {
-  padding: 0 !important;
+  padding: 4px 12px !important;
 }
 
 .semi-navigation-item-icon {
@@ -114,6 +114,10 @@ code {
 .semi-navigation-item,
 .semi-navigation-sub-title {
   height: 100% !important;
+}
+
+.semi-navigation-item-sub {
+  padding: 0 !important;
 }
 
 .semi-navigation-item-collapsed {
