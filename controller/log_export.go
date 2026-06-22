@@ -370,6 +370,13 @@ type logExportQuery struct {
 	Lang                                   string
 }
 
+// adminLogExportQuery 管理员全站日志导出参数，在 logExportQuery 基础上增加 username/channel。
+type adminLogExportQuery struct {
+	logExportQuery
+	Username string
+	Channel  int
+}
+
 // 解析对账单导出参数；统一做合法性校验（不抛错时返回 0 表示不限）。
 // 返回 lang 时做白名单校验，未知 lang 回退到 zh-CN。
 func parseLogExportQuery(c *gin.Context) (logExportQuery, error) {
@@ -417,6 +424,31 @@ func parseLogExportQuery(c *gin.Context) (logExportQuery, error) {
 		q.Lang = "zh-CN"
 	}
 	return q, nil
+}
+
+func parseAdminLogExportQuery(c *gin.Context) (adminLogExportQuery, error) {
+	base, err := parseLogExportQuery(c)
+	if err != nil {
+		return adminLogExportQuery{}, err
+	}
+	q := adminLogExportQuery{logExportQuery: base}
+	q.Username = c.Query("username")
+	if s := c.Query("channel"); s != "" {
+		ch, perr := strconv.Atoi(s)
+		if perr != nil || ch < 0 {
+			return q, fmt.Errorf("channel 非法")
+		}
+		q.Channel = ch
+	}
+	return q, nil
+}
+
+func (q adminLogExportQuery) toAdminModelFilter() model.AdminLogExportFilter {
+	return model.AdminLogExportFilter{
+		LogExportFilter: q.toModelFilter(),
+		Username:        q.Username,
+		Channel:         q.Channel,
+	}
 }
 
 func (q logExportQuery) toModelFilter() model.LogExportFilter {
@@ -704,6 +736,23 @@ func ExportUserLogsSelf(c *gin.Context) {
 	streamUserStatementCSV(c, user, query, filename, dict)
 }
 
+// GET /api/log/export 管理员导出全站日志（筛选口径与 /api/log/ 列表一致）
+func ExportAdminLogs(c *gin.Context) {
+	query, err := parseAdminLogExportQuery(c)
+	if err != nil {
+		c.JSON(400, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	logs, _, err := model.GetAllLogsForExport(query.toAdminModelFilter())
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	dict := resolveAdminLogExportDict(query.Lang)
+	filename := fmt.Sprintf("admin-logs-%d.csv", time.Now().Unix())
+	streamAdminLogsCSV(c, logs, query.logExportQuery, filename, dict)
+}
+
 // GET /api/admin/log/:userId/export 管理员代查任意用户对账单
 func ExportUserLogsAdmin(c *gin.Context) {
 	if !model.IsAdmin(c.GetInt("role")) {
@@ -843,6 +892,103 @@ type supplierChannelLogExportI18n struct {
 	Header []string
 	Meta1  string // "供应商渠道日志"
 	Meta2  string // "账期: %s ~ %s"
+}
+
+// adminLogExportI18n 管理员全站日志导出表头。
+type adminLogExportI18n struct {
+	Header []string
+	Meta1  string // "全站使用日志"
+	Meta2  string // "账期: %s ~ %s"
+}
+
+var adminLogExportDictZHCN = adminLogExportI18n{
+	Header: []string{
+		"序号", "时间", "类型", "用户", "令牌", "模型", "渠道", "分组", "Request ID", "事件",
+		"输入 tokens", "输出 tokens", "缓存 tokens", "消耗额度(quota)", "消耗额度(等值)",
+	},
+	Meta1: "全站使用日志",
+	Meta2: "账期: %s ~ %s",
+}
+
+var adminLogExportDictEN = adminLogExportI18n{
+	Header: []string{
+		"No.", "Time", "Type", "User", "Token", "Model", "Channel", "Group", "Request ID", "Event",
+		"Input tokens", "Output tokens", "Cache tokens", "Quota", "Amount",
+	},
+	Meta1: "Platform usage logs",
+	Meta2: "Period: %s ~ %s",
+}
+
+func resolveAdminLogExportDict(lang string) adminLogExportI18n {
+	if lang == "en" {
+		return adminLogExportDictEN
+	}
+	return adminLogExportDictZHCN
+}
+
+// streamAdminLogsCSV 流式写出管理员全站日志 CSV。
+func streamAdminLogsCSV(c *gin.Context, logs []*model.Log, query logExportQuery, filename string, dict adminLogExportI18n) {
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("X-Statement-Window-Start", strconv.FormatInt(query.StartTs, 10))
+	c.Header("X-Statement-Window-End", strconv.FormatInt(query.EndTs, 10))
+	c.Status(200)
+
+	c.Writer.WriteString("\xEF\xBB\xBF")
+	bw := bufio.NewWriterSize(c.Writer, 32*1024)
+	defer bw.Flush()
+	w := csv.NewWriter(bw)
+	defer w.Flush()
+
+	emptyRow := make([]string, len(dict.Header))
+	if err := writeStatementRow(w, append([]string{dict.Meta1}, emptyRow[1:]...)); err != nil {
+		common.SysError("write admin export meta1: " + err.Error())
+		return
+	}
+	periodStart := time.Unix(query.StartTs, 0).Format("2006-01-02 15:04:05")
+	periodEnd := time.Unix(query.EndTs, 0).Format("2006-01-02 15:04:05")
+	meta2 := fmt.Sprintf(dict.Meta2, periodStart, periodEnd)
+	if err := writeStatementRow(w, append([]string{meta2}, emptyRow[1:]...)); err != nil {
+		common.SysError("write admin export meta2: " + err.Error())
+		return
+	}
+	if err := writeStatementRow(w, dict.Header); err != nil {
+		common.SysError("write admin export header: " + err.Error())
+		return
+	}
+
+	statementDict := resolveStatementDict(query.Lang)
+	for idx, l := range logs {
+		ts := time.Unix(l.CreatedAt, 0).Format("2006-01-02 15:04:05")
+		channelDisplay := l.ChannelDisplay
+		if channelDisplay == "" {
+			channelDisplay = strconv.Itoa(l.ChannelId)
+		}
+		cacheTokens := extractCacheReadTokens(l.Other)
+		quota := int64(l.Quota)
+		row := []string{
+			strconv.Itoa(idx + 1),
+			ts,
+			logTypeLabelI18n(l.Type, statementDict),
+			l.Username,
+			l.TokenName,
+			l.ModelName,
+			channelDisplay,
+			l.Group,
+			l.RequestId,
+			l.Content,
+			strconv.Itoa(l.PromptTokens),
+			strconv.Itoa(l.CompletionTokens),
+			strconv.Itoa(cacheTokens),
+			strconv.FormatInt(quota, 10),
+			formatQuotaDisplay(quota),
+		}
+		if err := writeStatementRow(w, row); err != nil {
+			common.SysError("write admin export row: " + err.Error())
+			return
+		}
+	}
 }
 
 var supplierChannelLogExportDictZHCN = supplierChannelLogExportI18n{
