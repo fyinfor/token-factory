@@ -256,16 +256,16 @@ const ModelEndpoints = ({ modelData, endpointMap = {}, t }) => {
     }
   };
 
-  const copyText = async (text, successText = '已复制') => {
+  const copyText = async (text, successText = '已复制', successOptions) => {
     if (await copy(text)) {
-      Toast.success({ content: t(successText) });
+      Toast.success({ content: t(successText, successOptions) });
     } else {
       Toast.error({ content: t('复制失败') });
     }
   };
 
   const copyModelName = async (modelName) => {
-    await copyText(modelName, `模型${modelName}复制成功`);
+    await copyText(modelName, '模型{{modelName}}复制成功', { modelName });
   };
 
   const fetchTokenKey = async (token) => {

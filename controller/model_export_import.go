@@ -37,6 +37,7 @@ type ModelExportItem struct {
 	NameRule        int     `json:"name_rule"`
 	Icon            string  `json:"icon"`
 	Description     string  `json:"description"`
+	DescriptionEn   string  `json:"description_en,omitempty"`
 	DocIntroduction *string `json:"doc_introduction,omitempty"`
 	ApiDocs         *string `json:"api_docs,omitempty"`
 	Tags            string  `json:"tags"`
@@ -118,6 +119,7 @@ func ExportModelsMeta(c *gin.Context) {
 			NameRule:        m.NameRule,
 			Icon:            m.Icon,
 			Description:     m.Description,
+			DescriptionEn:   m.DescriptionEn,
 			DocIntroduction: stringPtr(m.DocIntroduction),
 			ApiDocs:         stringPtr(m.ApiDocs),
 			Tags:            m.Tags,
@@ -269,10 +271,11 @@ func ImportModelsMeta(c *gin.Context) {
 			if existing.Id > 0 {
 				// 已存在：覆盖更新指定字段
 				updates := map[string]interface{}{
-					"name_rule":     mItem.NameRule,
-					"icon":          mItem.Icon,
-					"description":   mItem.Description,
-					"tags":          mItem.Tags,
+					"name_rule":      mItem.NameRule,
+					"icon":           mItem.Icon,
+					"description":    mItem.Description,
+					"description_en": mItem.DescriptionEn,
+					"tags":           mItem.Tags,
 					"endpoints":     mItem.Endpoints,
 					"sync_official": mItem.SyncOfficial,
 					"status":        mItem.Status,
@@ -300,11 +303,12 @@ func ImportModelsMeta(c *gin.Context) {
 			} else {
 				// 不存在：新增
 				newModel := &model.Model{
-					ModelName:    mName,
-					NameRule:     mItem.NameRule,
-					Icon:         mItem.Icon,
-					Description:  mItem.Description,
-					Tags:         mItem.Tags,
+					ModelName:     mName,
+					NameRule:      mItem.NameRule,
+					Icon:          mItem.Icon,
+					Description:   mItem.Description,
+					DescriptionEn: mItem.DescriptionEn,
+					Tags:          mItem.Tags,
 					VendorID:     vendorID,
 					Endpoints:    mItem.Endpoints,
 					SyncOfficial: mItem.SyncOfficial,

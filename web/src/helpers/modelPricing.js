@@ -1,3 +1,5 @@
+import { normalizeLanguage } from '../i18n/language';
+
 export const VIDEO_ENDPOINT_TYPES = new Set([
   'openai-video',
   'hidream-video',
@@ -6,6 +8,51 @@ export const VIDEO_ENDPOINT_TYPES = new Set([
   'tencentcloud-vod-video',
   'ali-video',
 ]);
+
+const TRANSLATABLE_MODEL_TAGS = new Set(['文本', '视频', '图片']);
+
+/** 按界面语言选择中文/英文内容（英文缺失时回退中文） */
+export function getLocalizedContent(zhContent, enContent, language) {
+  const zh = String(zhContent ?? '').trim();
+  const en = String(enContent ?? '').trim();
+  const lang = normalizeLanguage(language);
+  if (lang === 'zh-CN' || lang === 'zh-TW') {
+    return zh;
+  }
+  return en || zh;
+}
+
+/** 模型描述：中文界面用 description，其他语言优先 description_en */
+export function getModelDescription(record, language) {
+  return getLocalizedContent(record?.description, record?.description_en, language);
+}
+
+const TRANSLATABLE_SUPPLIER_TYPES = new Set([
+  '公有云',
+  'AIDC',
+  '企业中转站',
+  '个人中转站',
+]);
+
+/** 模型标签展示文案：内置标签（文本/视频/图片）走 i18n，其余原样返回 */
+export function getModelTagLabel(tag, t) {
+  const trimmed = String(tag ?? '').trim();
+  if (!trimmed) return trimmed;
+  if (TRANSLATABLE_MODEL_TAGS.has(trimmed)) {
+    return t(trimmed);
+  }
+  return trimmed;
+}
+
+/** 供应商类型展示文案：内置枚举值走 i18n，其余原样返回 */
+export function getSupplierTypeLabel(supplierType, t) {
+  const trimmed = String(supplierType ?? '').trim();
+  if (!trimmed) return trimmed;
+  if (TRANSLATABLE_SUPPLIER_TYPES.has(trimmed) && t) {
+    return t(trimmed);
+  }
+  return trimmed;
+}
 
 export const hasNumericValue = (value) =>
   value != null && value !== '' && Number.isFinite(Number(value));

@@ -33,6 +33,7 @@ import {
   copy,
   stringToColor,
   isVideoPricingModel,
+  getSupplierTypeLabel,
 } from '../../../../../helpers';
 import {
   getUsedGroupContext,
@@ -95,9 +96,9 @@ const StepTitle = ({ label, title, desc, icon }) => (
   </div>
 );
 
-const copyText = async (text, t, successText = '已复制') => {
+const copyText = async (text, t, successText = '已复制', successOptions) => {
   if (await copy(text)) {
-    Toast.success({ content: t(successText) });
+    Toast.success({ content: t(successText, successOptions) });
   } else {
     Toast.error({ content: t('复制失败') });
   }
@@ -133,7 +134,7 @@ const getChannelRouteModelName = (modelData, channel) => {
 };
 
 const copyModelName = (modelName, t) => {
-  copyText(modelName, t, `模型${modelName}复制成功`);
+  copyText(modelName, t, '模型{{modelName}}复制成功', { modelName });
 };
 
 const getStabilityLevel = (row) => {
@@ -298,17 +299,17 @@ const TokenTierDetailTable = ({
 
   const typeStyleMap = {
     official: {
-      label: '官方',
+      label: t('官方'),
       color: 'var(--semi-color-text-2)',
       bgColor: 'var(--semi-color-fill-1)',
     },
     platform: {
-      label: '平台',
+      label: t('平台'),
       color: 'var(--semi-color-primary)',
       bgColor: 'transparent',
     },
     discount: {
-      label: '折扣',
+      label: t('折扣'),
       color: 'var(--semi-color-danger)',
       bgColor: 'rgba(var(--semi-red-0), 0.15)',
     },
@@ -326,9 +327,9 @@ const TokenTierDetailTable = ({
         <thead>
           <tr>
             <th style={{ ...headerStyle, textAlign: 'left', width: '28%' }}>
-              输入 TOKEN 区间
+              {t('输入 TOKEN 区间')}
             </th>
-            <th style={{ ...headerStyle, width: '12%' }}>类型</th>
+            <th style={{ ...headerStyle, width: '12%' }}>{t('类型')}</th>
             {displayCols.map((cat, i) => (
               <th key={cat} style={{ ...headerStyle, width: `${60 / displayCols.length}%` }}>
                 {colHeaders[i]} / M
@@ -1161,7 +1162,7 @@ const ModelChannelList = ({
                         color={getSupplierTypeColor(channel.supplier_type)}
                         className='shrink-0'
                       >
-                        {channel.supplier_type}
+                        {getSupplierTypeLabel(channel.supplier_type, t)}
                       </Tag>
                     ) : null}
                     <div className='shrink-0'>
@@ -1260,7 +1261,7 @@ const ModelChannelList = ({
                             color={getSupplierTypeColor(group.supplierType)}
                             className='mx-1'
                           >
-                            {group.supplierType}
+                            {getSupplierTypeLabel(group.supplierType, t)}
                           </Tag>
                         )}
                       </span>
