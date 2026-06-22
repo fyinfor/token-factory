@@ -20,7 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 import React from 'react';
 import { Tag } from '@douyinfe/semi-ui';
 import SelectableButtonGroup from '../../../common/ui/SelectableButtonGroup';
-import { stringToColor } from '../../../../helpers';
+import { stringToColor, getSupplierTypeLabel } from '../../../../helpers';
 
 const getSupplierTypeColor = (supplierType) => {
   switch (supplierType) {
@@ -102,7 +102,7 @@ const PricingProviderType = ({
             shape='circle'
             color={getSupplierTypeColor(supplierType)}
           >
-            {supplierType}
+            {getSupplierTypeLabel(supplierType, t)}
           </Tag>
         ),
         tagCount: getCount(supplierType),

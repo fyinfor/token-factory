@@ -610,7 +610,9 @@ const ApiDocsSidePanel = ({
         String(val || '').trim() ? (
           <Tooltip
             content={
-              <div style={{ maxWidth: 360, whiteSpace: 'pre-wrap' }}>{val}</div>
+              <div style={{ maxWidth: 360, whiteSpace: 'pre-wrap' }}>
+                {t(val)}
+              </div>
             }
             trigger='hover'
             showArrow
