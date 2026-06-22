@@ -16,6 +16,7 @@ import (
 type Pricing struct {
 	ModelName              string                  `json:"model_name"`
 	Description            string                  `json:"description,omitempty"`
+	DescriptionEn          string                  `json:"description_en,omitempty"`
 	DocIntroduction        string                  `json:"doc_introduction,omitempty"`
 	ApiDocs                any                     `json:"api_docs,omitempty"`
 	Icon                   string                  `json:"icon,omitempty"`
@@ -630,6 +631,7 @@ func updatePricing() {
 				continue
 			}
 			pricing.Description = meta.Description
+			pricing.DescriptionEn = meta.DescriptionEn
 			pricing.DocIntroduction = meta.DocIntroduction
 			pricing.ApiDocs = parsePricingApiDocs(meta.ApiDocs)
 			pricing.Icon = meta.Icon

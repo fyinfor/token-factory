@@ -25,8 +25,9 @@ type BoundChannel struct {
 type Model struct {
 	Id              int            `json:"id"`
 	ModelName       string         `json:"model_name" gorm:"size:128;not null;uniqueIndex:uk_model_name_delete_at,priority:1"`
-	Description     string         `json:"description,omitempty" gorm:"type:text"`
-	DocIntroduction string         `json:"doc_introduction,omitempty" gorm:"type:text"`
+	Description       string         `json:"description,omitempty" gorm:"type:text"`
+	DescriptionEn     string         `json:"description_en,omitempty" gorm:"type:text"`
+	DocIntroduction   string         `json:"doc_introduction,omitempty" gorm:"type:text"`
 	ApiDocs         string         `json:"api_docs,omitempty" gorm:"type:text"`
 	Icon            string         `json:"icon,omitempty" gorm:"type:varchar(128)"`
 	Tags            string         `json:"tags,omitempty" gorm:"type:varchar(255)"`
@@ -87,7 +88,7 @@ func (mi *Model) Update() error {
 	mi.UpdatedTime = common.GetTimestamp()
 	// 使用 Select 强制更新所有字段，包括零值
 	return DB.Model(&Model{}).Where("id = ?", mi.Id).
-		Select("model_name", "description", "doc_introduction", "api_docs", "icon", "tags", "vendor_id", "endpoints", "status", "sync_official", "name_rule", "owner_user_id", "supplier_application_id", "updated_time").
+		Select("model_name", "description", "description_en", "doc_introduction", "api_docs", "icon", "tags", "vendor_id", "endpoints", "status", "sync_official", "name_rule", "owner_user_id", "supplier_application_id", "updated_time").
 		Updates(mi).Error
 }
 

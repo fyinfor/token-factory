@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 import React from 'react';
 import SelectableButtonGroup from '../../../common/ui/SelectableButtonGroup';
+import { getModelTagLabel } from '@/helpers';
 
 /**
  * 模型标签筛选组件
@@ -87,7 +88,7 @@ const PricingTags = ({
       const count = getTagCount(tag);
       result.push({
         value: tag,
-        label: t(tag, { defaultValue: tag }),
+        label: getModelTagLabel(tag, t),
         tagCount: count,
       });
     });

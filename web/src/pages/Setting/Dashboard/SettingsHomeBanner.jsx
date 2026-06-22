@@ -25,6 +25,8 @@ import {
   Modal,
   Select,
   Space,
+  TabPane,
+  Tabs,
   Table,
   TextArea,
   Typography,
@@ -43,10 +45,15 @@ const DEFAULT_INTERVAL_SEC = 4;
 const emptySlide = () => ({
   image_url: '',
   badge: 'NEW',
+  badge_en: '',
   title: '',
+  title_en: '',
   title_highlight: '',
+  title_highlight_en: '',
   subtitle: '',
+  subtitle_en: '',
   button_text: '',
+  button_text_en: '',
   target_model: '',
 });
 
@@ -80,6 +87,7 @@ const SettingsHomeBanner = ({ options, refresh }) => {
   const [modelOptions, setModelOptions] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editIndex, setEditIndex] = useState(null);
+  const [copyTab, setCopyTab] = useState('zh');
   const [form, setForm] = useState(emptySlide());
 
   const raw = options?.[OPTION_KEY] ?? '';
@@ -179,12 +187,14 @@ const SettingsHomeBanner = ({ options, refresh }) => {
   const openAdd = useCallback(() => {
     setEditIndex(null);
     setForm(emptySlide());
+    setCopyTab('zh');
     setModalOpen(true);
   }, []);
 
   const openEdit = useCallback((idx) => {
     setEditIndex(idx);
     setForm({ ...emptySlide(), ...slides[idx] });
+    setCopyTab('zh');
     setModalOpen(true);
   }, [slides]);
 
@@ -207,6 +217,7 @@ const SettingsHomeBanner = ({ options, refresh }) => {
 
   const handleModalOk = async () => {
     if (!form.title?.trim()) {
+      setCopyTab('zh');
       showError(t('首页广告标题必填'));
       return;
     }
@@ -387,7 +398,7 @@ const SettingsHomeBanner = ({ options, refresh }) => {
         onOk={handleModalOk}
         onCancel={() => setModalOpen(false)}
         confirmLoading={saving}
-        width={560}
+        width={640}
       >
         <div className='space-y-3'>
           <div>
@@ -422,67 +433,152 @@ const SettingsHomeBanner = ({ options, refresh }) => {
               {t('首页广告图片说明')}
             </Text>
           </div>
-          <div>
-            <Text strong className='!block !mb-1'>
-              {t('角标文案')}
-            </Text>
-            <Input
-              value={form.badge}
-              onChange={(v) => setForm((f) => ({ ...f, badge: v }))}
-            />
-          </div>
-          <div>
-            <Text strong className='!block !mb-1'>
-              {t('广告标题列')}
-            </Text>
-            <TextArea
-              value={form.title}
-              onChange={(v) => setForm((f) => ({ ...f, title: v }))}
-              rows={3}
-              placeholder={t('广告标题换行占位')}
-            />
-            <Text type='tertiary' size='small' className='!mt-1 !block'>
-              {t('广告标题换行说明')}
-            </Text>
-          </div>
-          <div>
-            <Text strong className='!block !mb-1'>
-              {t('广告标题高亮词')}
-            </Text>
-            <Input
-              value={form.title_highlight}
-              onChange={(v) => setForm((f) => ({ ...f, title_highlight: v }))}
-              placeholder={t('广告标题高亮词占位')}
-            />
-            <Text type='tertiary' size='small' className='!mt-1 !block'>
-              {t('广告标题高亮词说明')}
-            </Text>
-          </div>
-          <div>
-            <Text strong className='!block !mb-1'>
-              {t('广告副标题')}
-            </Text>
-            <TextArea
-              value={form.subtitle}
-              onChange={(v) => setForm((f) => ({ ...f, subtitle: v }))}
-              rows={2}
-              placeholder={t('广告副标题占位')}
-            />
-            <Text type='tertiary' size='small' className='!mt-1 !block'>
-              {t('广告副标题强调说明')}
-            </Text>
-          </div>
-          <div>
-            <Text strong className='!block !mb-1'>
-              {t('广告按钮文案')}
-            </Text>
-            <Input
-              value={form.button_text}
-              onChange={(v) => setForm((f) => ({ ...f, button_text: v }))}
-              placeholder={t('立即体验')}
-            />
-          </div>
-          <div>
+          <Tabs
+            type='line'
+            activeKey={copyTab}
+            onChange={setCopyTab}
+            className='!mt-1'
+          >
+            <TabPane tab={t('首页广告中文文案')} itemKey='zh'>
+              <div className='space-y-3 pt-2'>
+                <div>
+                  <Text strong className='!block !mb-1'>
+                    {t('角标文案')}
+                  </Text>
+                  <Input
+                    value={form.badge}
+                    onChange={(v) => setForm((f) => ({ ...f, badge: v }))}
+                  />
+                </div>
+                <div>
+                  <Text strong className='!block !mb-1'>
+                    {t('广告标题列')}
+                  </Text>
+                  <TextArea
+                    value={form.title}
+                    onChange={(v) => setForm((f) => ({ ...f, title: v }))}
+                    rows={3}
+                    placeholder={t('广告标题换行占位')}
+                  />
+                  <Text type='tertiary' size='small' className='!mt-1 !block'>
+                    {t('广告标题换行说明')}
+                  </Text>
+                </div>
+                <div>
+                  <Text strong className='!block !mb-1'>
+                    {t('广告标题高亮词')}
+                  </Text>
+                  <Input
+                    value={form.title_highlight}
+                    onChange={(v) =>
+                      setForm((f) => ({ ...f, title_highlight: v }))
+                    }
+                    placeholder={t('广告标题高亮词占位')}
+                  />
+                  <Text type='tertiary' size='small' className='!mt-1 !block'>
+                    {t('广告标题高亮词说明')}
+                  </Text>
+                </div>
+                <div>
+                  <Text strong className='!block !mb-1'>
+                    {t('广告副标题')}
+                  </Text>
+                  <TextArea
+                    value={form.subtitle}
+                    onChange={(v) => setForm((f) => ({ ...f, subtitle: v }))}
+                    rows={2}
+                    placeholder={t('广告副标题占位')}
+                  />
+                  <Text type='tertiary' size='small' className='!mt-1 !block'>
+                    {t('广告副标题强调说明')}
+                  </Text>
+                </div>
+                <div>
+                  <Text strong className='!block !mb-1'>
+                    {t('广告按钮文案')}
+                  </Text>
+                  <Input
+                    value={form.button_text}
+                    onChange={(v) => setForm((f) => ({ ...f, button_text: v }))}
+                    placeholder={t('立即体验')}
+                  />
+                </div>
+              </div>
+            </TabPane>
+            <TabPane tab={t('首页广告英文文案')} itemKey='en'>
+              <div className='space-y-3 pt-2'>
+                <Text type='tertiary' size='small' className='!block'>
+                  {t('首页广告英文文案说明')}
+                </Text>
+                <div>
+                  <Text strong className='!block !mb-1'>
+                    {t('角标文案')}
+                  </Text>
+                  <Input
+                    value={form.badge_en}
+                    onChange={(v) => setForm((f) => ({ ...f, badge_en: v }))}
+                  />
+                </div>
+                <div>
+                  <Text strong className='!block !mb-1'>
+                    {t('广告标题列')}
+                  </Text>
+                  <TextArea
+                    value={form.title_en}
+                    onChange={(v) => setForm((f) => ({ ...f, title_en: v }))}
+                    rows={3}
+                    placeholder={t('广告标题换行占位')}
+                  />
+                  <Text type='tertiary' size='small' className='!mt-1 !block'>
+                    {t('广告标题换行说明')}
+                  </Text>
+                </div>
+                <div>
+                  <Text strong className='!block !mb-1'>
+                    {t('广告标题高亮词')}
+                  </Text>
+                  <Input
+                    value={form.title_highlight_en}
+                    onChange={(v) =>
+                      setForm((f) => ({ ...f, title_highlight_en: v }))
+                    }
+                    placeholder={t('广告标题高亮词占位')}
+                  />
+                  <Text type='tertiary' size='small' className='!mt-1 !block'>
+                    {t('广告标题高亮词说明')}
+                  </Text>
+                </div>
+                <div>
+                  <Text strong className='!block !mb-1'>
+                    {t('广告副标题')}
+                  </Text>
+                  <TextArea
+                    value={form.subtitle_en}
+                    onChange={(v) => setForm((f) => ({ ...f, subtitle_en: v }))}
+                    rows={2}
+                    placeholder={t('广告副标题占位')}
+                  />
+                  <Text type='tertiary' size='small' className='!mt-1 !block'>
+                    {t('广告副标题强调说明')}
+                  </Text>
+                </div>
+                <div>
+                  <Text strong className='!block !mb-1'>
+                    {t('广告按钮文案')}
+                  </Text>
+                  <Input
+                    value={form.button_text_en}
+                    onChange={(v) =>
+                      setForm((f) => ({ ...f, button_text_en: v }))
+                    }
+                    placeholder={t('立即体验')}
+                  />
+                </div>
+              </div>
+            </TabPane>
+          </Tabs>
+
+          <div className='!mt-3'>
             <Text strong className='!block !mb-1'>
               {t('跳转模型')}
             </Text>

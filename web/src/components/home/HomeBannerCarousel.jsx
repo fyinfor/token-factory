@@ -27,6 +27,7 @@ import React, {
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { normalizeLanguage } from '../../i18n/language';
 import HomeBannerIllustration from './HomeBannerIllustration';
 import { renderBannerRichText } from './home-banner-rich-text';
 import './model-ad-banner.css';
@@ -78,6 +79,31 @@ function renderTitleNodes(line, highlight) {
       ) : null}
     </React.Fragment>
   ));
+}
+
+function shouldUseChineseCopy(language) {
+  const normalized = normalizeLanguage(language);
+  return normalized === 'zh-CN' || normalized === 'zh-TW';
+}
+
+function localizedField(slide, key, useChineseCopy) {
+  const value = slide?.[key];
+  const englishValue = slide?.[`${key}_en`];
+  if (useChineseCopy) {
+    return value;
+  }
+  return englishValue || value;
+}
+
+function localizeSlideCopy(slide, useChineseCopy) {
+  return {
+    ...slide,
+    badge: localizedField(slide, 'badge', useChineseCopy),
+    title: localizedField(slide, 'title', useChineseCopy),
+    title_highlight: localizedField(slide, 'title_highlight', useChineseCopy),
+    subtitle: localizedField(slide, 'subtitle', useChineseCopy),
+    button_text: localizedField(slide, 'button_text', useChineseCopy),
+  };
 }
 
 function SlideBanner({ slide, t, active, go }) {
@@ -137,11 +163,7 @@ function SlideBanner({ slide, t, active, go }) {
           </div>
         </div>
 
-        <button
-          className='ad-button'
-          type='button'
-          onClick={() => go(slide)}
-        >
+        <button className='ad-button' type='button' onClick={() => go(slide)}>
           {btnText}
           {' →'}
         </button>
@@ -151,9 +173,18 @@ function SlideBanner({ slide, t, active, go }) {
 }
 
 const HomeBannerCarousel = ({ rawSlides, intervalSec }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-  const slides = useMemo(() => parseSlides(rawSlides), [rawSlides]);
+  const useChineseCopy = shouldUseChineseCopy(
+    i18n.resolvedLanguage || i18n.language,
+  );
+  const slides = useMemo(
+    () =>
+      parseSlides(rawSlides).map((slide) =>
+        localizeSlideCopy(slide, useChineseCopy),
+      ),
+    [rawSlides, useChineseCopy],
+  );
   const intervalMs = clampIntervalSec(intervalSec) * 1000;
   const [index, setIndex] = useState(0);
   const autoPauseUntilRef = useRef(0);
@@ -203,13 +234,7 @@ const HomeBannerCarousel = ({ rawSlides, intervalSec }) => {
       className={`model-ad-banner-root${multi ? ' model-ad-banner-root--with-nav' : ''}`}
     >
       {slides.map((slide, i) => (
-        <SlideBanner
-          key={i}
-          slide={slide}
-          t={t}
-          active={i === index}
-          go={go}
-        />
+        <SlideBanner key={i} slide={slide} t={t} active={i === index} go={go} />
       ))}
 
       {multi ? (
@@ -240,7 +265,11 @@ const HomeBannerCarousel = ({ rawSlides, intervalSec }) => {
       ) : null}
 
       {multi ? (
-        <div className='ad-dots' role='tablist' aria-label={t('首页广告轮播说明')}>
+        <div
+          className='ad-dots'
+          role='tablist'
+          aria-label={t('首页广告轮播说明')}
+        >
           {slides.map((_, i) => (
             <button
               key={i}

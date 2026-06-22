@@ -20,7 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 import React from 'react';
 import { Tag } from '@douyinfe/semi-ui';
 import SelectableButtonGroup from '../common/ui/SelectableButtonGroup';
-import { stringToColor } from '../../helpers';
+import { stringToColor, getSupplierTypeLabel } from '../../helpers';
 
 const getSupplierTypeColor = (supplierType) => {
   switch (supplierType) {
@@ -37,7 +37,7 @@ const getSupplierTypeColor = (supplierType) => {
   }
 };
 
-const buildSupplierIcon = (logo, supplierType) => {
+const buildSupplierIcon = (logo, supplierType, t) => {
   if (!logo && !supplierType) return null;
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
@@ -50,7 +50,7 @@ const buildSupplierIcon = (logo, supplierType) => {
       )}
       {supplierType && (
         <Tag size='small' shape='circle' color={getSupplierTypeColor(supplierType)}>
-          {supplierType}
+          {getSupplierTypeLabel(supplierType, t)}
         </Tag>
       )}
     </span>
@@ -109,7 +109,7 @@ const PricingSuppliers = ({
       { value: 'all', label: t('全部供应商'), tagCount: getCount('all') },
     ];
     allSuppliers.forEach(({ alias, logo, supplierType }) => {
-      const icon = buildSupplierIcon(logo, supplierType);
+      const icon = buildSupplierIcon(logo, supplierType, t);
       result.push({
         value: alias,
         label: logo ? '' : alias,

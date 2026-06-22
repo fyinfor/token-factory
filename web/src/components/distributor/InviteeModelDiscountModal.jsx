@@ -32,7 +32,7 @@ import {
   Tooltip,
 } from '@douyinfe/semi-ui';
 import { IconSearch, IconInfoCircle, IconDownload } from '@douyinfe/semi-icons';
-import { API, showError, showSuccess, showInfo } from '../../helpers';
+import { API, showError, showSuccess, showInfo, getSupplierTypeLabel } from '../../helpers';
 import { CHANNEL_SUPPLIER_TYPE_OPTIONS } from '../../constants';
 
 const { Text } = Typography;
@@ -125,11 +125,10 @@ const getDownloadFilename = (disposition, fallback) => {
   return asciiMatch?.[1] || fallback;
 };
 
-function supplierTypeDisplay(value) {
+function supplierTypeDisplay(value, t) {
   const v = String(value || '').trim();
   if (!v) return '—';
-  const opt = CHANNEL_SUPPLIER_TYPE_OPTIONS.find((o) => o.value === v);
-  return opt ? opt.label : v;
+  return getSupplierTypeLabel(v, t);
 }
 
 /**
@@ -241,18 +240,18 @@ const InviteeModelDiscountModal = ({
       const has = modelData.some(
         (item) => String(item.supplier_type || '').trim() === opt.value,
       );
-      if (has) ordered.push({ value: opt.value, label: opt.label });
+      if (has) ordered.push({ value: opt.value, label: getSupplierTypeLabel(opt.value, t) });
       seen.add(opt.value);
     });
     modelData.forEach((item) => {
       const v = String(item.supplier_type || '').trim();
       if (v && !seen.has(v)) {
         seen.add(v);
-        ordered.push({ value: v, label: v });
+        ordered.push({ value: v, label: getSupplierTypeLabel(v, t) });
       }
     });
     return ordered;
-  }, [modelData]);
+  }, [modelData, t]);
 
   const filteredData = useMemo(() => {
     let result = modelData;
@@ -272,14 +271,14 @@ const InviteeModelDiscountModal = ({
       const raw = String(item.supplier_type || '')
         .trim()
         .toLowerCase();
-      const disp = supplierTypeDisplay(item.supplier_type).toLowerCase();
+      const disp = supplierTypeDisplay(item.supplier_type, t).toLowerCase();
       return (
         path.includes(keyword) ||
         raw.includes(keyword) ||
         disp.includes(keyword)
       );
     });
-  }, [modelData, searchKeyword, filterSupplierType]);
+  }, [modelData, searchKeyword, filterSupplierType, t]);
 
   const hasActiveFilter =
     (filterSupplierType != null && filterSupplierType !== '') ||
@@ -431,7 +430,7 @@ const InviteeModelDiscountModal = ({
             {record.channel_path || '—'}
           </Typography.Text>
           <Typography.Text type='tertiary' size='small'>
-            {supplierTypeDisplay(record.supplier_type)}
+            {supplierTypeDisplay(record.supplier_type, t)}
           </Typography.Text>
         </div>
       ),
