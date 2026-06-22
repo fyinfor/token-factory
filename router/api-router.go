@@ -434,6 +434,15 @@ func SetApiRouter(router *gin.Engine) {
 			tokenRoute.POST("/batch", controller.DeleteTokenBatch)
 		}
 
+		materialRoute := apiRouter.Group("/material")
+		materialRoute.Use(middleware.UserAuth())
+		{
+			materialRoute.GET("/config", controller.GetMaterialConfig)
+			materialRoute.GET("/group", controller.GetMaterialGroup)
+			materialRoute.GET("/assets", controller.ListMaterialAssets)
+			materialRoute.POST("/upload", middleware.UploadRateLimit(), controller.UploadMaterial)
+		}
+
 		usageRoute := apiRouter.Group("/usage")
 		usageRoute.Use(middleware.CORS(), middleware.CriticalRateLimit())
 		{

@@ -33,6 +33,7 @@ import PasswordResetForm from './components/auth/PasswordResetForm';
 import PasswordResetConfirm from './components/auth/PasswordResetConfirm';
 import Channel from './pages/Channel';
 import Token from './pages/Token';
+import SeedanceMaterial from './pages/Seedance';
 import Redemption from './pages/Redemption';
 import TopUp from './pages/TopUp';
 import Log from './pages/Log';
@@ -307,6 +308,14 @@ function App() {
               <Suspense fallback={<Loading></Loading>} key={location.pathname}>
                 <PersonalSetting />
               </Suspense>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/seedance/material'
+          element={
+            <PrivateRoute>
+              <SeedanceMaterial />
             </PrivateRoute>
           }
         />
