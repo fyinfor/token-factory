@@ -300,8 +300,15 @@ const EditTokenModal = (props) => {
         return;
       }
       localInputs.expired_time = expiredTimeResult.expiredTime;
-      localInputs.model_limits = localInputs.model_limits.join(',');
-      localInputs.model_limits_enabled = localInputs.model_limits.length > 0;
+      const modelLimits = Array.isArray(localInputs.model_limits)
+        ? localInputs.model_limits
+        : String(localInputs.model_limits || '')
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean);
+      // 修复点：在 join 之前根据数组长度判断，避免字符串 length 误判；并同步 enabled 状态
+      localInputs.model_limits = modelLimits.join(',');
+      localInputs.model_limits_enabled = modelLimits.length > 0;
       let res = await API.put(`/api/token/`, {
         ...localInputs,
         id: parseInt(props.editingToken.id),
@@ -342,8 +349,14 @@ const EditTokenModal = (props) => {
           break;
         }
         localInputs.expired_time = expiredTimeResult.expiredTime;
-        localInputs.model_limits = localInputs.model_limits.join(',');
-        localInputs.model_limits_enabled = localInputs.model_limits.length > 0;
+        const modelLimits = Array.isArray(localInputs.model_limits)
+          ? localInputs.model_limits
+          : String(localInputs.model_limits || '')
+              .split(',')
+              .map((item) => item.trim())
+              .filter(Boolean);
+        localInputs.model_limits = modelLimits.join(',');
+        localInputs.model_limits_enabled = modelLimits.length > 0;
         let res = await API.post(`/api/token/`, localInputs);
         const { success, message } = res.data;
         if (success) {
