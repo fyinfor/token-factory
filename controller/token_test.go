@@ -12,6 +12,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
@@ -122,6 +123,28 @@ func decodeAPIResponse(t *testing.T, recorder *httptest.ResponseRecorder) tokenA
 		t.Fatalf("failed to decode api response: %v", err)
 	}
 	return response
+}
+
+func TestRenderTokenUsageDisplayQuotaMatchesConsoleCNY(t *testing.T) {
+	oldQuotaPerUnit := common.QuotaPerUnit
+	oldDisplayType := operation_setting.GetGeneralSetting().QuotaDisplayType
+	oldUSDExchangeRate := operation_setting.USDExchangeRate
+	t.Cleanup(func() {
+		common.QuotaPerUnit = oldQuotaPerUnit
+		operation_setting.GetGeneralSetting().QuotaDisplayType = oldDisplayType
+		operation_setting.USDExchangeRate = oldUSDExchangeRate
+	})
+
+	common.QuotaPerUnit = 500000
+	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeCNY
+	operation_setting.USDExchangeRate = 6.8
+
+	if got := renderTokenUsageDisplayQuota(50000000); got != 680 {
+		t.Fatalf("expected remaining quota display 680, got %v", got)
+	}
+	if got := renderTokenUsageDisplayQuota(1); got != 0.01 {
+		t.Fatalf("expected tiny positive quota display 0.01, got %v", got)
+	}
 }
 
 func TestGetAllTokensMasksKeyInResponse(t *testing.T) {
