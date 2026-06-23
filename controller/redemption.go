@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"unicode/utf8"
@@ -12,9 +13,21 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+func redemptionQueryOptions(c *gin.Context) model.RedemptionQueryOptions {
+	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	return model.RedemptionQueryOptions{
+		OperatorId:     c.GetInt("id"),
+		OperatorRole:   c.GetInt("role"),
+		Keyword:        c.Query("keyword"),
+		StartTimestamp: startTimestamp,
+		EndTimestamp:   endTimestamp,
+	}
+}
+
 func GetAllRedemptions(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
-	redemptions, total, err := model.GetAllRedemptions(pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	redemptions, total, err := model.GetAllRedemptions(redemptionQueryOptions(c), pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -22,13 +35,11 @@ func GetAllRedemptions(c *gin.Context) {
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(redemptions)
 	common.ApiSuccess(c, pageInfo)
-	return
 }
 
 func SearchRedemptions(c *gin.Context) {
-	keyword := c.Query("keyword")
 	pageInfo := common.GetPageQuery(c)
-	redemptions, total, err := model.SearchRedemptions(keyword, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	redemptions, total, err := model.SearchRedemptions(redemptionQueryOptions(c), pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -36,7 +47,6 @@ func SearchRedemptions(c *gin.Context) {
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(redemptions)
 	common.ApiSuccess(c, pageInfo)
-	return
 }
 
 func GetRedemption(c *gin.Context) {
@@ -45,7 +55,7 @@ func GetRedemption(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	redemption, err := model.GetRedemptionById(id)
+	redemption, err := model.GetRedemptionById(id, c.GetInt("id"), c.GetInt("role"))
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -55,7 +65,6 @@ func GetRedemption(c *gin.Context) {
 		"message": "",
 		"data":    redemption,
 	})
-	return
 }
 
 func AddRedemption(c *gin.Context) {
@@ -77,44 +86,38 @@ func AddRedemption(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgRedemptionCountMax)
 		return
 	}
+	if redemption.Quota <= 0 {
+		common.ApiErrorI18n(c, i18n.MsgQuotaThresholdGtZero)
+		return
+	}
 	if valid, msg := validateExpiredTime(c, redemption.ExpiredTime); !valid {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": msg})
 		return
 	}
-	var keys []string
-	for i := 0; i < redemption.Count; i++ {
-		key := common.GetUUID()
-		cleanRedemption := model.Redemption{
-			UserId:      c.GetInt("id"),
-			Name:        redemption.Name,
-			Key:         key,
-			CreatedTime: common.GetTimestamp(),
-			Quota:       redemption.Quota,
-			ExpiredTime: redemption.ExpiredTime,
-		}
-		err = cleanRedemption.Insert()
-		if err != nil {
-			common.SysError("failed to insert redemption: " + err.Error())
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": i18n.T(c, i18n.MsgRedemptionCreateFailed),
-				"data":    keys,
-			})
+	keys, err := model.CreateRedemptionsWithQuota(c.GetInt("id"), redemption.Name, redemption.Quota, redemption.Count, redemption.ExpiredTime)
+	if err != nil {
+		if errors.Is(err, model.ErrRedemptionQuotaInsufficient) {
+			common.ApiErrorI18n(c, i18n.MsgQuotaInsufficient)
 			return
 		}
-		keys = append(keys, key)
+		common.SysError("failed to insert redemption: " + err.Error())
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": i18n.T(c, i18n.MsgRedemptionCreateFailed),
+			"data":    keys,
+		})
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
 		"data":    keys,
 	})
-	return
 }
 
 func DeleteRedemption(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
-	err := model.DeleteRedemptionById(id)
+	err := model.DeleteRedemptionById(id, c.GetInt("id"), c.GetInt("role"))
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -123,7 +126,6 @@ func DeleteRedemption(c *gin.Context) {
 		"success": true,
 		"message": "",
 	})
-	return
 }
 
 func UpdateRedemption(c *gin.Context) {
@@ -134,26 +136,30 @@ func UpdateRedemption(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	cleanRedemption, err := model.GetRedemptionById(redemption.Id)
-	if err != nil {
-		common.ApiError(c, err)
-		return
-	}
+	var cleanRedemption *model.Redemption
 	if statusOnly == "" {
+		if redemption.Quota <= 0 {
+			common.ApiErrorI18n(c, i18n.MsgQuotaThresholdGtZero)
+			return
+		}
 		if valid, msg := validateExpiredTime(c, redemption.ExpiredTime); !valid {
 			c.JSON(http.StatusOK, gin.H{"success": false, "message": msg})
 			return
 		}
-		// If you add more fields, please also update redemption.Update()
-		cleanRedemption.Name = redemption.Name
-		cleanRedemption.Quota = redemption.Quota
-		cleanRedemption.ExpiredTime = redemption.ExpiredTime
+		cleanRedemption, err = model.UpdateRedemptionInfo(&redemption, c.GetInt("id"), c.GetInt("role"))
+	} else if redemption.Status == common.RedemptionCodeStatusEnabled {
+		cleanRedemption, err = model.EnableRedemptionById(redemption.Id, c.GetInt("id"), c.GetInt("role"))
+	} else if redemption.Status == common.RedemptionCodeStatusDisabled {
+		cleanRedemption, err = model.DisableRedemptionById(redemption.Id, c.GetInt("id"), c.GetInt("role"), "禁用兑换码")
+	} else {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
 	}
-	if statusOnly != "" {
-		cleanRedemption.Status = redemption.Status
-	}
-	err = cleanRedemption.Update()
 	if err != nil {
+		if errors.Is(err, model.ErrRedemptionQuotaInsufficient) {
+			common.ApiErrorI18n(c, i18n.MsgQuotaInsufficient)
+			return
+		}
 		common.ApiError(c, err)
 		return
 	}
@@ -162,11 +168,10 @@ func UpdateRedemption(c *gin.Context) {
 		"message": "",
 		"data":    cleanRedemption,
 	})
-	return
 }
 
 func DeleteInvalidRedemption(c *gin.Context) {
-	rows, err := model.DeleteInvalidRedemptions()
+	rows, err := model.DeleteInvalidRedemptions(c.GetInt("id"), c.GetInt("role"))
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -176,7 +181,6 @@ func DeleteInvalidRedemption(c *gin.Context) {
 		"message": "",
 		"data":    rows,
 	})
-	return
 }
 
 func validateExpiredTime(c *gin.Context, expired int64) (bool, string) {

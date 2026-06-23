@@ -21,7 +21,12 @@ import React, { lazy, Suspense, useContext, useMemo } from 'react';
 import { Route, Routes, useLocation, useParams } from 'react-router-dom';
 import Loading from './components/common/ui/Loading';
 import User from './pages/User';
-import { AuthRedirect, PrivateRoute, AdminRoute } from './helpers';
+import {
+  AuthRedirect,
+  PrivateRoute,
+  AdminRoute,
+  AdminOrDistributorRoute,
+} from './helpers';
 import RegisterForm from './components/auth/RegisterForm';
 import LoginForm from './components/auth/LoginForm';
 import NotFound from './pages/NotFound';
@@ -179,9 +184,9 @@ function App() {
         <Route
           path='/console/redemption'
           element={
-            <AdminRoute>
+            <AdminOrDistributorRoute>
               <Redemption />
-            </AdminRoute>
+            </AdminOrDistributorRoute>
           }
         />
         <Route

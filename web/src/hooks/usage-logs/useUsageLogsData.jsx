@@ -39,6 +39,7 @@ import {
   renderClaudeLogContent,
   renderLogContent,
   renderConsumeBillingProcess,
+  trimDecimalsInLogDetailText,
 } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
@@ -1204,7 +1205,7 @@ export const useLogsData = () => {
         ) {
           expandDataLocal.push({
             key: t('其他详情'),
-            value: logs[i].content,
+            value: trimDecimalsInLogDetailText(logs[i].content),
           });
         }
         if (isAdminUser && other?.reject_reason) {

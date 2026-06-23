@@ -31,6 +31,11 @@ import { renderProfitShareQuotaCell } from './profitShareDisplay';
 
 const { Text } = Typography;
 
+const renderLoggedCommissionRatio = (bps) => {
+  const n = Number(bps);
+  return Number.isFinite(n) && n > 0 ? formatCommissionRatioPercent(n) : '-';
+};
+
 export default function AffInviteeCommissionDetailModal({
   visible,
   onCancel,
@@ -124,6 +129,12 @@ export default function AffInviteeCommissionDetailModal({
           render: (q) => renderProfitShareQuotaCell(q),
         },
         {
+          title: t('当时分销比例'),
+          dataIndex: 'commission_bps',
+          width: 120,
+          render: (bps) => renderLoggedCommissionRatio(bps),
+        },
+        {
           title: t('收益金额'),
           dataIndex: 'reward_quota',
           width: 120,
@@ -148,7 +159,7 @@ export default function AffInviteeCommissionDetailModal({
         title: t('当时分成比例'),
         dataIndex: 'commission_bps',
         width: 120,
-        render: (bps) => formatCommissionRatioPercent(bps),
+        render: (bps) => renderLoggedCommissionRatio(bps),
       },
       {
         title: t('收益金额'),

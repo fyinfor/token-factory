@@ -974,21 +974,19 @@ export default function DistributorCenter() {
                       <Text strong style={{ color: 'white', fontSize: '16px' }}>
                         {t('收益统计')}
                       </Text>
-                      {!isProfitShareMode && (
-                        <Text
-                          style={{
-                            color: 'rgba(255,255,255,0.88)',
-                            fontSize: '12px',
-                            display: 'block',
-                            marginTop: 6,
-                          }}
-                        >
-                          {t('当前分成比例')}：
-                          {formatCommissionRatioPercent(
-                            center?.effective_commission_bps ?? 0,
-                          )}
-                        </Text>
-                      )}
+                      <Text
+                        style={{
+                          color: 'rgba(255,255,255,0.88)',
+                          fontSize: '12px',
+                          display: 'block',
+                          marginTop: 6,
+                        }}
+                      >
+                        {t('当前分销比例')}：
+                        {formatCommissionRatioPercent(
+                          center?.effective_commission_bps ?? 0,
+                        )}
+                      </Text>
                     </div>
                     <div className='flex flex-wrap items-center justify-end gap-2 flex-shrink-0'>
                       <Button
@@ -1693,28 +1691,24 @@ export default function DistributorCenter() {
               affQuota={center?.aff_quota}
               renderQuota={renderQuota}
             />
-            <div className='mt-4'>
-              <Text size='small' strong className='block mb-2'>
-                {t('提现说明')}
-              </Text>
-              <Spin spinning={withdrawNoticeLoading}>
-                {withdrawNoticeContent ? (
-                  <Text
-                    type='secondary'
-                    size='small'
-                    className='block whitespace-pre-wrap break-words'
-                  >
-                    {withdrawNoticeContent}
-                  </Text>
-                ) : (
-                  !withdrawNoticeLoading && (
-                    <Text type='tertiary' size='small'>
-                      {t('管理员未配置提现说明')}
+            {(withdrawNoticeLoading || withdrawNoticeContent) && (
+              <div className='mt-4'>
+                <Text size='small' strong className='block mb-2'>
+                  {t('提现说明')}
+                </Text>
+                <Spin spinning={withdrawNoticeLoading}>
+                  {withdrawNoticeContent ? (
+                    <Text
+                      type='secondary'
+                      size='small'
+                      className='block whitespace-pre-wrap break-words'
+                    >
+                      {withdrawNoticeContent}
                     </Text>
-                  )
-                )}
-              </Spin>
-            </div>
+                  ) : null}
+                </Spin>
+              </div>
+            )}
           </div>
           <div className='w-full lg:w-[280px] flex-shrink-0'>
             <Text strong className='block mb-2'>
