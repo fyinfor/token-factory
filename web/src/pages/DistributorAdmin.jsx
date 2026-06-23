@@ -68,6 +68,11 @@ import { renderProfitShareQuotaCell } from '../components/distributor/profitShar
 
 const { Text } = Typography;
 
+const renderLoggedCommissionRatio = (bps) => {
+  const n = Number(bps);
+  return Number.isFinite(n) && n > 0 ? formatCommissionRatioPercent(n) : '-';
+};
+
 /** 代理管理筛选：关键字最大长度（与后端查询参数长度协调） */
 const ADMIN_KEYWORD_MAX_LEN = 120;
 
@@ -1437,6 +1442,12 @@ export default function DistributorAdmin() {
         dataIndex: 'markup_slice_quota',
         width: 120,
         render: (q) => renderProfitShareQuotaCell(q),
+      },
+      {
+        title: t('当时分销比例'),
+        dataIndex: 'commission_bps',
+        width: 120,
+        render: (bps) => renderLoggedCommissionRatio(bps),
       },
       {
         title: t('收益金额'),

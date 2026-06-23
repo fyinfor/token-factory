@@ -160,6 +160,26 @@ func AdminAuth() func(c *gin.Context) {
 	}
 }
 
+func AdminOrDistributorAuth() func(c *gin.Context) {
+	return func(c *gin.Context) {
+		role := c.GetInt("role")
+		if role >= common.RoleAdminUser {
+			c.Next()
+			return
+		}
+		user, err := model.GetUserById(c.GetInt("id"), false)
+		if err == nil && model.UserIsDistributor(user) {
+			c.Next()
+			return
+		}
+		c.JSON(http.StatusForbidden, gin.H{
+			"success": false,
+			"message": "无权进行此操作，权限不足",
+		})
+		c.Abort()
+	}
+}
+
 // AdminOrApprovedSupplierAuth 允许管理员或审核通过的供应商访问。
 // 需配合 UserAuth 使用：先完成登录态解析，再基于角色/供应商状态放行。
 func AdminOrApprovedSupplierAuth() func(c *gin.Context) {

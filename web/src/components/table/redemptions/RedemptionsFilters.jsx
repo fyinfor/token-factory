@@ -56,6 +56,17 @@ const RedemptionsFilters = ({
       className='w-full md:w-auto order-1 md:order-2'
     >
       <div className='flex flex-col md:flex-row items-center gap-2 w-full md:w-auto'>
+        <div className='relative w-full md:w-80'>
+          <Form.DatePicker
+            field='dateRange'
+            className='w-full'
+            type='dateTimeRange'
+            placeholder={[t('开始时间'), t('结束时间')]}
+            showClear
+            pure
+            size='small'
+          />
+        </div>
         <div className='relative w-full md:w-64'>
           <Form.Input
             field='searchKeyword'

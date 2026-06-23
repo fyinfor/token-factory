@@ -1485,9 +1485,7 @@ export function renderQuotaSum(quotas, digits = 2) {
     sum += quotaToRoundedDisplayValue(quota, digits);
   }
   const totalFixed = parseFloat(sum.toFixed(digits));
-  return (
-    firstParts.symbol + trimFixedDecimalDisplay(totalFixed, digits)
-  );
+  return firstParts.symbol + trimFixedDecimalDisplay(totalFixed, digits);
 }
 
 /** 使用日志顶部「消耗额度」：与列表各行 renderQuota 按行舍入后再合计一致。 */
@@ -1619,6 +1617,45 @@ export function trimFixedDecimalDisplay(num, fractionDigits = 2) {
   return s;
 }
 
+function normalizeLogDetailText(detail) {
+  return String(detail || '')
+    .replace(/\n\r/g, '\n')
+    .replace(/\r\n/g, '\n');
+}
+
+export function trimDecimalsInLogDetailText(raw) {
+  const s = normalizeLogDetailText(raw);
+  return s
+    .replace(
+      /([¥￥$＄¤€£楼]\s*)(\d+\.\d{3,})(?=\s*额度)/g,
+      (_, symbol, amount) => {
+        const v = Number(amount);
+        if (!Number.isFinite(v)) {
+          return `${symbol}${amount}`;
+        }
+        return `${symbol}${v.toFixed(2)}`;
+      },
+    )
+    .replace(/\b\d+\.\d+\b/g, (match, offset, fullText) => {
+      const before = fullText.slice(0, offset);
+      const after = fullText.slice(offset + match.length);
+      if (/[¥￥$＄¤€£楼]\s*$/.test(before) && /^\s*额度/.test(after)) {
+        const v = Number(match);
+        return Number.isFinite(v) ? v.toFixed(2) : match;
+      }
+      const m = match.match(/^(\d+)\.(\d+)$/);
+      if (!m) {
+        return match;
+      }
+      const fracLen = m[2].length;
+      const v = parseFloat(match);
+      if (!Number.isFinite(v)) {
+        return match;
+      }
+      return trimFixedDecimalDisplay(v, Math.min(fracLen, 12));
+    });
+}
+
 function appendPricePart(parts, condition, key, vars) {
   if (!condition) {
     return;
@@ -1658,7 +1695,12 @@ function formatBillingDisplayPrice(usdAmount, rate, digits = 2) {
 }
 
 /** 消费日志「计费过程」合计：与列表 renderQuota 同一套舍入与最小展示规则 */
-function resolveBillingProcessTotalDisplay(actualQuota, calculatedUsdAmount, rate, digits = 2) {
+function resolveBillingProcessTotalDisplay(
+  actualQuota,
+  calculatedUsdAmount,
+  rate,
+  digits = 2,
+) {
   if (actualQuota != null && Number.isFinite(Number(actualQuota))) {
     return quotaToRoundedDisplayValue(Number(actualQuota), digits);
   }
@@ -1696,7 +1738,11 @@ function renderBillingArticle(lines, { showReferenceNote = true } = {}) {
   );
 }
 
-function resolveImagePerImageBillingMeta(billingMeta, modelPrice, channelDiscountMult) {
+function resolveImagePerImageBillingMeta(
+  billingMeta,
+  modelPrice,
+  channelDiscountMult,
+) {
   const meta =
     billingMeta && typeof billingMeta === 'object' ? billingMeta : {};
   let usdPerImage = Number(meta?.image_usd_per_image);
@@ -1841,11 +1887,11 @@ function buildImagePerImageBillingTagItems(
     resolutionLabel,
     ruleResolutionLabel,
   } = resolveImagePerImageBillingDisplay(billingMeta, {
-      modelPrice,
-      groupRatio,
-      user_group_ratio,
-      channelPriceDiscountPercent,
-    });
+    modelPrice,
+    groupRatio,
+    user_group_ratio,
+    channelPriceDiscountPercent,
+  });
   const items = [
     {
       key: 'brief',
@@ -1922,10 +1968,7 @@ function renderImagePerImageBillingTags(
   );
 }
 
-function buildImagePerImageLogSummarySegments(
-  billingMeta,
-  options = {},
-) {
+function buildImagePerImageLogSummarySegments(billingMeta, options = {}) {
   return [
     {
       tone: 'secondary',
@@ -2073,7 +2116,10 @@ function renderPriceSimpleCore({
       //           ) * modelRatio * groupRatio
       // Effective $/1M-token unit prices (already folded with groupMult):
       const videoUnitPrice =
-        inputRatioPrice * (videoRatio || 1) * (videoCompletionRatio || 1) * groupMult;
+        inputRatioPrice *
+        (videoRatio || 1) *
+        (videoCompletionRatio || 1) *
+        groupMult;
       segments.push({
         tone: 'secondary',
         text: i18next.t('视频输出 {{price}} / 1M tokens', {
@@ -2145,9 +2191,7 @@ function renderPriceSimpleCore({
         segments.push({
           tone: 'secondary',
           text: i18next.t('缓存创建 {{price}} / 1M tokens', {
-            price: formatBillingUnitPrice(
-              cacheCreationRatioPrice * groupMult,
-            ),
+            price: formatBillingUnitPrice(cacheCreationRatioPrice * groupMult),
           }),
         });
       }
@@ -2979,13 +3023,8 @@ export function renderLogContent(
     channelPriceDiscountPercent,
     billingMeta,
   });
-  const {
-    inputRatioPrice,
-    completionRatioPrice,
-    cacheRatioPrice,
-    mp,
-    mr,
-  } = rates;
+  const { inputRatioPrice, completionRatioPrice, cacheRatioPrice, mp, mr } =
+    rates;
 
   const isVideoPerVideoFlatBilling =
     billingMode === 'video_per_video' &&
@@ -3158,7 +3197,9 @@ export function renderLogContent(
     const parts = [
       i18next.t('输入价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
-        price: parseFloat((inputRatioPrice * displayMultiplier * rate).toFixed(2)),
+        price: parseFloat(
+          (inputRatioPrice * displayMultiplier * rate).toFixed(2),
+        ),
       }),
       i18next.t('输出价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
@@ -3851,11 +3892,7 @@ export function renderClaudeModelPrice(
         ? buildBillingText('{{breakdown}} = {{symbol}}{{total}}', {
             breakdown: breakdownText,
             symbol,
-            total: resolveBillingProcessTotalDisplay(
-              actualQuota,
-              price,
-              rate,
-            ),
+            total: resolveBillingProcessTotalDisplay(actualQuota, price, rate),
           })
         : buildBillingText(
             '{{breakdown}} * {{ratioType}} {{ratio}} = {{symbol}}{{total}}',
@@ -4121,7 +4158,9 @@ export function renderClaudeLogContent(
     const parts = [
       i18next.t('输入价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
-        price: parseFloat((inputRatioPrice * displayMultiplier * rate).toFixed(2)),
+        price: parseFloat(
+          (inputRatioPrice * displayMultiplier * rate).toFixed(2),
+        ),
       }),
       i18next.t('输出价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
@@ -4326,20 +4365,32 @@ function renderRequestTierConsumeArticle(
     lines.push('');
     lines.push(`${tr('命中档位')}：${tierInputLabel}`);
     if (tierInputUnitPrice != null) {
-      lines.push(`${tr('输入价格')}：$${formatTierUsdPrice(tierInputUnitPrice)} / 1M tokens`);
+      lines.push(
+        `${tr('输入价格')}：$${formatTierUsdPrice(tierInputUnitPrice)} / 1M tokens`,
+      );
     }
     if (tierOutputUnitPrice != null) {
-      lines.push(`${tr('输出价格')}：$${formatTierUsdPrice(tierOutputUnitPrice)} / 1M tokens`);
+      lines.push(
+        `${tr('输出价格')}：$${formatTierUsdPrice(tierOutputUnitPrice)} / 1M tokens`,
+      );
     }
-    if (other?.cache_tokens > 0 && tierCacheReadUnitPrice != null && tierCacheReadUnitPrice > 0) {
-      lines.push(`${tr('缓存读取价格')}：$${formatTierUsdPrice(tierCacheReadUnitPrice)} / 1M tokens`);
+    if (
+      other?.cache_tokens > 0 &&
+      tierCacheReadUnitPrice != null &&
+      tierCacheReadUnitPrice > 0
+    ) {
+      lines.push(
+        `${tr('缓存读取价格')}：$${formatTierUsdPrice(tierCacheReadUnitPrice)} / 1M tokens`,
+      );
     }
     if (
       (other?.cache_creation_tokens > 0 || other?.cache_write_tokens > 0) &&
       tierCacheWriteUnitPrice != null &&
       tierCacheWriteUnitPrice > 0
     ) {
-      lines.push(`${tr('缓存写入价格')}：$${formatTierUsdPrice(tierCacheWriteUnitPrice)} / 1M tokens`);
+      lines.push(
+        `${tr('缓存写入价格')}：$${formatTierUsdPrice(tierCacheWriteUnitPrice)} / 1M tokens`,
+      );
     }
   }
 

@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import { useState, useEffect } from 'react';
-import { API, showError, showSuccess, copy } from '../../helpers';
+import { API, showError, showSuccess, copy, toUnixTimestamp } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import {
   REDEMPTION_ACTIONS,
@@ -55,14 +55,44 @@ export const useRedemptionsData = () => {
   // Form state
   const formInitValues = {
     searchKeyword: '',
+    dateRange: null,
   };
 
   // Get form values
   const getFormValues = () => {
     const formValues = formApi ? formApi.getValues() : {};
+    let startTimestamp = 0;
+    let endTimestamp = 0;
+    if (
+      formValues.dateRange &&
+      Array.isArray(formValues.dateRange) &&
+      formValues.dateRange.length === 2
+    ) {
+      startTimestamp = toUnixTimestamp(formValues.dateRange[0]);
+      endTimestamp = toUnixTimestamp(formValues.dateRange[1]);
+    }
     return {
       searchKeyword: formValues.searchKeyword || '',
+      startTimestamp,
+      endTimestamp,
     };
+  };
+
+  const buildQueryString = (page, size, values = getFormValues()) => {
+    const params = new URLSearchParams({
+      p: String(page),
+      page_size: String(size),
+    });
+    if (values.searchKeyword) {
+      params.set('keyword', values.searchKeyword);
+    }
+    if (values.startTimestamp > 0) {
+      params.set('start_timestamp', String(values.startTimestamp));
+    }
+    if (values.endTimestamp > 0) {
+      params.set('end_timestamp', String(values.endTimestamp));
+    }
+    return params.toString();
   };
 
   // Set redemption data format
@@ -74,9 +104,7 @@ export const useRedemptionsData = () => {
   const loadRedemptions = async (page = 1, pageSize) => {
     setLoading(true);
     try {
-      const res = await API.get(
-        `/api/redemption/?p=${page}&page_size=${pageSize}`,
-      );
+      const res = await API.get(`/api/redemption/?${buildQueryString(page, pageSize)}`);
       const { success, message, data } = res.data;
       if (success) {
         const newPageData = data.items;
@@ -93,22 +121,17 @@ export const useRedemptionsData = () => {
   };
 
   // Search redemption codes
-  const searchRedemptions = async () => {
-    const { searchKeyword } = getFormValues();
-    if (searchKeyword === '') {
-      await loadRedemptions(1, pageSize);
-      return;
-    }
-
+  const searchRedemptions = async (page = 1, size = pageSize) => {
+    const values = getFormValues();
     setSearching(true);
     try {
       const res = await API.get(
-        `/api/redemption/search?keyword=${searchKeyword}&p=1&page_size=${pageSize}`,
+        `/api/redemption/search?${buildQueryString(page, size, values)}`,
       );
       const { success, message, data } = res.data;
       if (success) {
         const newPageData = data.items;
-        setActivePage(data.page || 1);
+        setActivePage(data.page || page);
         setTokenCount(data.total);
         setRedemptionFormat(newPageData);
       } else {
@@ -163,35 +186,20 @@ export const useRedemptionsData = () => {
 
   // Refresh data
   const refresh = async (page = activePage) => {
-    const { searchKeyword } = getFormValues();
-    if (searchKeyword === '') {
-      await loadRedemptions(page, pageSize);
-    } else {
-      await searchRedemptions();
-    }
+    await searchRedemptions(page);
   };
 
   // Handle page change
   const handlePageChange = (page) => {
     setActivePage(page);
-    const { searchKeyword } = getFormValues();
-    if (searchKeyword === '') {
-      loadRedemptions(page, pageSize);
-    } else {
-      searchRedemptions();
-    }
+    searchRedemptions(page);
   };
 
   // Handle page size change
   const handlePageSizeChange = (size) => {
     setPageSize(size);
     setActivePage(1);
-    const { searchKeyword } = getFormValues();
-    if (searchKeyword === '') {
-      loadRedemptions(1, size);
-    } else {
-      searchRedemptions();
-    }
+    searchRedemptions(1, size);
   };
 
   // Row selection configuration
