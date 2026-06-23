@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -115,6 +116,24 @@ func GetTokenStatus(c *gin.Context) {
 	})
 }
 
+func renderTokenUsageDisplayQuota(quota int) float64 {
+	q := float64(quota)
+	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
+		return q
+	}
+
+	quotaPerUnit := common.QuotaPerUnit
+	if quotaPerUnit <= 0 {
+		quotaPerUnit = 500000
+	}
+	value := q / quotaPerUnit * operation_setting.GetUsdToCurrencyRate(operation_setting.USDExchangeRate)
+	fixed := math.Floor(value*100) / 100
+	if fixed == 0 && q > 0 && value > 0 {
+		return 0.01
+	}
+	return fixed
+}
+
 func GetTokenUsage(c *gin.Context) {
 	authHeader := c.GetHeader("Authorization")
 	if authHeader == "" {
@@ -147,19 +166,26 @@ func GetTokenUsage(c *gin.Context) {
 		expiredAt = 0
 	}
 
+	totalGranted := token.RemainQuota + token.UsedQuota
 	c.JSON(http.StatusOK, gin.H{
 		"code":    true,
 		"message": "ok",
 		"data": gin.H{
-			"object":               "token_usage",
-			"name":                 token.Name,
-			"total_granted":        token.RemainQuota + token.UsedQuota,
-			"total_used":           token.UsedQuota,
-			"total_available":      token.RemainQuota,
-			"unlimited_quota":      token.UnlimitedQuota,
-			"model_limits":         token.GetModelLimitsMap(),
-			"model_limits_enabled": token.ModelLimitsEnabled,
-			"expires_at":           expiredAt,
+			"object":                  "token_usage",
+			"name":                    token.Name,
+			"total_granted":           totalGranted,
+			"total_used":              token.UsedQuota,
+			"total_available":         token.RemainQuota,
+			"total_granted_display":   renderTokenUsageDisplayQuota(totalGranted),
+			"total_used_display":      renderTokenUsageDisplayQuota(token.UsedQuota),
+			"total_available_display": renderTokenUsageDisplayQuota(token.RemainQuota),
+			"display_unit":            operation_setting.GetCurrencySymbol(),
+			"display_type":            operation_setting.GetQuotaDisplayType(),
+			"display_rate":            operation_setting.GetUsdToCurrencyRate(operation_setting.USDExchangeRate),
+			"unlimited_quota":         token.UnlimitedQuota,
+			"model_limits":            token.GetModelLimitsMap(),
+			"model_limits_enabled":    token.ModelLimitsEnabled,
+			"expires_at":              expiredAt,
 		},
 	})
 }
