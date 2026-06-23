@@ -35,6 +35,8 @@ type Log struct {
 	ChannelName string `json:"-" gorm:"->"`
 	// ChannelDisplay is a read-only API display value, e.g. route_slug_supplier_type.
 	ChannelDisplay string `json:"channel_display,omitempty" gorm:"-"`
+	// RouteSlug is the channel route suffix for user-facing logs (model/{route_slug}).
+	RouteSlug string `json:"route_slug,omitempty" gorm:"-"`
 	TokenId        int    `json:"token_id" gorm:"default:0;index"`
 	Group          string `json:"group" gorm:"index"`
 	Ip             string `json:"ip" gorm:"index;default:''"`
@@ -335,6 +337,7 @@ func applyBillingLogVisibility(tx *gorm.DB, includeRawBillingLogs bool) *gorm.DB
 func formatUserLogs(logs []*Log, startIdx int) {
 	for i := range logs {
 		logs[i].ChannelName = ""
+		// Hide admin-only channel display; route_slug remains for user-facing logs.
 		logs[i].ChannelDisplay = ""
 		var otherMap map[string]interface{}
 		otherMap, _ = common.StrToMap(logs[i].Other)
@@ -362,6 +365,23 @@ func formatChannelDisplay(routeSlug string, supplierType string, channelID int) 
 		return routeSlug
 	}
 	return routeSlug + "_" + supplierType
+}
+
+// userFacingLogRouteSlug 返回控制台日志面向用户的路由后缀（u 开头的 route_slug）。
+// 缺失或非 u 前缀时回退为渠道默认后缀 u+base62(id)，不向普通用户暴露渠道 ID。
+func userFacingLogRouteSlug(routeSlug string, channelID int) string {
+	if channelID <= 0 {
+		return ""
+	}
+	defaultSlug := DefaultRouteSlugFromChannelID(int64(channelID))
+	slug := strings.TrimSpace(routeSlug)
+	if slug == "" {
+		return defaultSlug
+	}
+	if strings.HasPrefix(slug, "u") {
+		return slug
+	}
+	return defaultSlug
 }
 
 func attachLogChannelDisplays(logs []*Log) {
@@ -399,14 +419,28 @@ func attachLogChannelDisplays(logs []*Log) {
 	}
 
 	displayMap := make(map[int]string, len(rows))
+	routeSlugMap := make(map[int]string, len(rows))
 	for _, row := range rows {
+		routeSlug := strings.TrimSpace(row.RouteSlug)
+		if routeSlug == "" && row.Id > 0 {
+			routeSlug = DefaultRouteSlugFromChannelID(int64(row.Id))
+		}
+		if routeSlug != "" {
+			routeSlugMap[row.Id] = routeSlug
+		}
 		display := formatChannelDisplay(row.RouteSlug, row.SupplierType, row.Id)
 		if display != "" {
 			displayMap[row.Id] = display
 		}
 	}
 	for i := range logs {
-		if display, ok := displayMap[logs[i].ChannelId]; ok {
+		channelID := logs[i].ChannelId
+		if channelID <= 0 {
+			continue
+		}
+		storedSlug := routeSlugMap[channelID]
+		logs[i].RouteSlug = userFacingLogRouteSlug(storedSlug, channelID)
+		if display, ok := displayMap[channelID]; ok {
 			logs[i].ChannelDisplay = display
 		}
 	}
@@ -414,6 +448,7 @@ func attachLogChannelDisplays(logs []*Log) {
 
 func GetLogByTokenId(tokenId int) (logs []*Log, err error) {
 	err = LOG_DB.Model(&Log{}).Where("token_id = ?", tokenId).Order("id desc").Limit(common.MaxRecentItems).Find(&logs).Error
+	attachLogChannelDisplays(logs)
 	formatUserLogs(logs, 0)
 	return logs, err
 }
@@ -760,6 +795,7 @@ func GetUserLogs(userId int, logTypes []int, startTimestamp int64, endTimestamp 
 	if !includeRawBillingLogs {
 		mergeSettlementMarkersIntoPreChargeLogs(logs)
 	}
+	attachLogChannelDisplays(logs)
 	formatUserLogs(logs, startIdx)
 	return logs, total, err
 }
