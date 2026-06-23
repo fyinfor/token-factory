@@ -58,6 +58,14 @@ func validateDistributorIdentityApplicationInput(applyType int, realName, idCard
 	if applyType != DistributorApplyTypePersonal && applyType != DistributorApplyTypeEnterprise {
 		return "", "", "", "", errors.New("申请身份无效")
 	}
+	normRealName, normIdCardNo, normQualJSON, normContact, err := validateDistributorApplicationProfile(applyType, realName, idCardNo, qualificationUrlsJSON, contact)
+	if err != nil {
+		return "", "", "", "", err
+	}
+	return normRealName, normIdCardNo, normContact, normQualJSON, nil
+	if applyType != DistributorApplyTypePersonal && applyType != DistributorApplyTypeEnterprise {
+		return "", "", "", "", errors.New("申请身份无效")
+	}
 	realName = strings.TrimSpace(realName)
 	idCardNo = strings.TrimSpace(idCardNo)
 	contact = strings.TrimSpace(contact)
@@ -98,7 +106,12 @@ func SubmitDistributorIdentityApplication(userId, targetApplyType int, realName,
 	if err != nil {
 		return err
 	}
-	if currentApplyType == targetApplyType {
+	currentApp, err := GetDistributorApplicationByUserId(userId)
+	if err != nil {
+		return err
+	}
+	needsSupplement := !IsDistributorApplicationProfileComplete(currentApp)
+	if currentApplyType == targetApplyType && !needsSupplement {
 		return errors.New("申请身份与当前身份一致")
 	}
 	var pending int64
