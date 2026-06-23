@@ -17,8 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useState } from 'react';
-import { API, showError } from '../../helpers';
+import React, { useEffect, useMemo, useState } from 'react';
+import { API, showError, getLocalizedContent } from '../../helpers';
 import { marked } from 'marked';
 import { Empty } from '@douyinfe/semi-ui';
 import {
@@ -27,33 +27,91 @@ import {
 } from '@douyinfe/semi-illustrations';
 import { useTranslation } from 'react-i18next';
 
-const About = () => {
-  const { t } = useTranslation();
-  const [about, setAbout] = useState('');
-  const [aboutLoaded, setAboutLoaded] = useState(false);
-  const currentYear = new Date().getFullYear();
+const ABOUT_CACHE_KEY = 'about_content_v2';
 
-  const displayAbout = async () => {
-    setAbout(localStorage.getItem('about') || '');
-    const res = await API.get('/api/about');
-    const { success, message, data } = res.data;
-    if (success) {
-      let aboutContent = data;
-      if (!data.startsWith('https://')) {
-        aboutContent = marked.parse(data);
-      }
-      setAbout(aboutContent);
-      localStorage.setItem('about', aboutContent);
-    } else {
-      showError(message);
-      setAbout(t('加载关于内容失败...'));
-    }
-    setAboutLoaded(true);
+const parseAboutContent = (raw) => {
+  const text = String(raw ?? '').trim();
+  if (!text) return '';
+  if (text.startsWith('https://')) {
+    return text;
+  }
+  return marked.parse(text);
+};
+
+const normalizeAboutPayload = (data) => {
+  if (data && typeof data === 'object' && !Array.isArray(data)) {
+    return {
+      about: String(data.about ?? ''),
+      about_en: String(data.about_en ?? ''),
+    };
+  }
+  return {
+    about: String(data ?? ''),
+    about_en: '',
   };
+};
+
+const About = () => {
+  const { t, i18n } = useTranslation();
+  const [aboutSource, setAboutSource] = useState({ about: '', about_en: '' });
+  const [aboutLoaded, setAboutLoaded] = useState(false);
 
   useEffect(() => {
-    displayAbout().then();
-  }, []);
+    let cancelled = false;
+
+    const loadAbout = async () => {
+      try {
+        const cached = localStorage.getItem(ABOUT_CACHE_KEY);
+        if (cached) {
+          const parsed = normalizeAboutPayload(JSON.parse(cached));
+          if (!cancelled) {
+            setAboutSource(parsed);
+          }
+        }
+      } catch {
+        /* ignore invalid cache */
+      }
+
+      try {
+        const res = await API.get('/api/about');
+        const { success, message, data } = res.data;
+        if (success) {
+          const payload = normalizeAboutPayload(data);
+          if (!cancelled) {
+            setAboutSource(payload);
+            localStorage.setItem(ABOUT_CACHE_KEY, JSON.stringify(payload));
+          }
+        } else if (!cancelled) {
+          showError(message);
+        }
+      } catch {
+        if (!cancelled) {
+          showError(t('加载关于内容失败...'));
+        }
+      } finally {
+        if (!cancelled) {
+          setAboutLoaded(true);
+        }
+      }
+    };
+
+    loadAbout();
+    return () => {
+      cancelled = true;
+    };
+  }, [t]);
+
+  const rawAbout = useMemo(
+    () =>
+      getLocalizedContent(
+        aboutSource.about,
+        aboutSource.about_en,
+        i18n.language,
+      ),
+    [aboutSource.about, aboutSource.about_en, i18n.language],
+  );
+
+  const about = useMemo(() => parseAboutContent(rawAbout), [rawAbout]);
 
   const emptyStyle = {
     padding: '24px',
@@ -62,73 +120,6 @@ const About = () => {
   const customDescription = (
     <div style={{ textAlign: 'center' }}>
       <p>{t('可在设置页面设置关于内容，支持 HTML & Markdown')}</p>
-      {/* {t('New API项目仓库地址：')}
-      <a
-        href='https://github.com/QuantumNous/new-api'
-        target='_blank'
-        rel='noopener noreferrer'
-        className='!text-semi-color-primary'
-      >
-        https://github.com/QuantumNous/new-api
-      </a>
-      <p>
-        <a
-          href='https://github.com/QuantumNous/new-api'
-          target='_blank'
-          rel='noopener noreferrer'
-          className='!text-semi-color-primary'
-        >
-          NewAPI
-        </a>{' '}
-        {t('© {{currentYear}}', { currentYear })}{' '}
-        <a
-          href='https://github.com/QuantumNous'
-          target='_blank'
-          rel='noopener noreferrer'
-          className='!text-semi-color-primary'
-        >
-          QuantumNous
-        </a>{' '}
-        {t('| 基于')}{' '}
-        <a
-          href='https://github.com/songquanpeng/one-api/releases/tag/v0.5.4'
-          target='_blank'
-          rel='noopener noreferrer'
-          className='!text-semi-color-primary'
-        >
-          One API v0.5.4
-        </a>{' '}
-        © 2023{' '}
-        <a
-          href='https://github.com/songquanpeng'
-          target='_blank'
-          rel='noopener noreferrer'
-          className='!text-semi-color-primary'
-        >
-          JustSong
-        </a>
-      </p>
-      <p>
-        {t('本项目根据')}
-        <a
-          href='https://github.com/songquanpeng/one-api/blob/v0.5.4/LICENSE'
-          target='_blank'
-          rel='noopener noreferrer'
-          className='!text-semi-color-primary'
-        >
-          {t('MIT许可证')}
-        </a>
-        {t('授权，需在遵守')}
-        <a
-          href='https://www.gnu.org/licenses/agpl-3.0.html'
-          target='_blank'
-          rel='noopener noreferrer'
-          className='!text-semi-color-primary'
-        >
-          {t('AGPL v3.0协议')}
-        </a>
-        {t('的前提下使用。')}
-      </p> */}
     </div>
   );
 
@@ -157,6 +148,7 @@ const About = () => {
             <iframe
               src={about}
               style={{ width: '100%', height: '100vh', border: 'none' }}
+              title={t('关于')}
             />
           ) : (
             <div

@@ -64,6 +64,7 @@ func InitOptionMap() {
 	common.OptionMap["SMTPSSLEnabled"] = strconv.FormatBool(common.SMTPSSLEnabled)
 	common.OptionMap["Notice"] = ""
 	common.OptionMap["About"] = ""
+	common.OptionMap["AboutEn"] = ""
 	common.OptionMap["HomePageContent"] = ""
 	// 首页轮播广告 JSON 数组，见 web SettingsHomeBanner / HomeBannerCarousel
 	common.OptionMap["HomeBannerSlides"] = "[]"

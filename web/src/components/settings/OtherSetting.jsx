@@ -45,6 +45,7 @@ import { languageSelectOptions } from '../../i18n/language';
 import { StatusContext } from '../../context/Status';
 import Text from '@douyinfe/semi-ui/lib/es/typography/text';
 import MarkdownRenderer from '../common/markdown/MarkdownRenderer';
+import SettingsSeedance from './SettingsSeedance';
 
 const LEGAL_USER_AGREEMENT_KEY = 'legal.user_agreement';
 const LEGAL_PRIVACY_POLICY_KEY = 'legal.privacy_policy';
@@ -127,6 +128,7 @@ const OtherSetting = () => {
     DocsBusinessWechatQrUrl: '',
     Footer: '',
     About: '',
+    AboutEn: '',
     HomePageContent: '',
   });
   let [loading, setLoading] = useState(false);
@@ -179,6 +181,7 @@ const OtherSetting = () => {
     DocsBusinessWechatQrUrl: false,
     HomePageContent: false,
     About: false,
+    AboutEn: false,
     Footer: false,
     CheckUpdate: false,
     Changelog: false,
@@ -583,10 +586,11 @@ const OtherSetting = () => {
     try {
       setLoadingInput((loadingInput) => ({ ...loadingInput, About: true }));
       await updateOption('About', inputs.About);
-      showSuccess('关于内容已更新');
+      await updateOption('AboutEn', inputs.AboutEn);
+      showSuccess(t('关于内容已更新'));
     } catch (error) {
       console.error('关于内容更新失败', error);
-      showError('关于内容更新失败');
+      showError(t('关于内容更新失败'));
     } finally {
       setLoadingInput((loadingInput) => ({ ...loadingInput, About: false }));
     }
@@ -936,6 +940,16 @@ const OtherSetting = () => {
                 style={{ fontFamily: 'JetBrains Mono, Consolas' }}
                 autosize={{ minRows: 6, maxRows: 12 }}
               />
+              <Form.TextArea
+                label={t('关于（英文）')}
+                placeholder={t(
+                  '在此输入关于内容的英文版，支持 Markdown & HTML 代码。如果输入的是一个链接，则会使用该链接作为 iframe 的 src 属性',
+                )}
+                field={'AboutEn'}
+                onChange={handleInputChange}
+                style={{ fontFamily: 'JetBrains Mono, Consolas' }}
+                autosize={{ minRows: 6, maxRows: 12 }}
+              />
               <Button onClick={submitAbout} loading={loadingInput['About']}>
                 {t('设置关于')}
               </Button>
@@ -1196,6 +1210,9 @@ const OtherSetting = () => {
             </Form.Section>
           </Card>
         </Form>
+
+        {/* 素材设置（Seedance2.0 合规素材库） */}
+        <SettingsSeedance />
       </Col>
       <Modal
         title={t('新版本') + '：' + updateData.tag_name}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/bytedance/gopkg/util/gopool"
 	"gorm.io/gorm"
 )
@@ -343,19 +344,74 @@ func (token *Token) IsModelLimitsEnabled() bool {
 }
 
 func (token *Token) GetModelLimits() []string {
-	if token.ModelLimits == "" {
+	return NormalizeModelLimitNames(strings.Split(token.ModelLimits, ","))
+}
+
+// NormalizeModelLimitNames 清洗令牌模型白名单：去空白、去重，保留用户配置的原始模型名。
+func NormalizeModelLimitNames(models []string) []string {
+	if len(models) == 0 {
 		return []string{}
 	}
-	return strings.Split(token.ModelLimits, ",")
+	normalized := make([]string, 0, len(models))
+	seen := make(map[string]struct{}, len(models))
+	for _, modelName := range models {
+		modelName = strings.TrimSpace(modelName)
+		if modelName == "" {
+			continue
+		}
+		if _, ok := seen[modelName]; ok {
+			continue
+		}
+		seen[modelName] = struct{}{}
+		normalized = append(normalized, modelName)
+	}
+	return normalized
+}
+
+// addModelLimitKeys 将原始模型名及其 FormatMatchingModelName 规范化名一并写入白名单 map，
+// 与 distributor 鉴权侧使用的模型名规范化规则保持一致。
+func addModelLimitKeys(limitsMap map[string]bool, modelName string) {
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" {
+		return
+	}
+	limitsMap[modelName] = true
+	if formatted := ratio_setting.FormatMatchingModelName(modelName); formatted != "" {
+		limitsMap[formatted] = true
+	}
 }
 
 func (token *Token) GetModelLimitsMap() map[string]bool {
-	limits := token.GetModelLimits()
 	limitsMap := make(map[string]bool)
-	for _, limit := range limits {
-		limitsMap[limit] = true
+	for _, limit := range token.GetModelLimits() {
+		addModelLimitKeys(limitsMap, limit)
 	}
 	return limitsMap
+}
+
+// ModelLimitMapAllows 判断请求模型是否命中令牌白名单（兼容原始名与规范化名）。
+func ModelLimitMapAllows(limits map[string]bool, modelName string) bool {
+	if len(limits) == 0 {
+		return false
+	}
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" {
+		return false
+	}
+	if limits[modelName] {
+		return true
+	}
+	if formatted := ratio_setting.FormatMatchingModelName(modelName); formatted != "" && limits[formatted] {
+		return true
+	}
+	return false
+}
+
+// SyncModelLimits 在持久化前统一 model_limits 与 model_limits_enabled，避免「已启用但列表为空」等脏数据。
+func (token *Token) SyncModelLimits() {
+	limits := token.GetModelLimits()
+	token.ModelLimits = strings.Join(limits, ",")
+	token.ModelLimitsEnabled = len(limits) > 0
 }
 
 func DisableModelLimits(tokenId int) error {

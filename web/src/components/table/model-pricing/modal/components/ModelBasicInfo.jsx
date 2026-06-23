@@ -18,20 +18,22 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Card, Avatar, Typography, Tag, Space } from '@douyinfe/semi-ui';
 import { IconInfoCircle } from '@douyinfe/semi-icons';
-import { stringToColor } from '../../../../../helpers';
+import { stringToColor, getModelTagLabel, getModelDescription } from '../../../../../helpers';
 
 const { Text } = Typography;
 
 const ModelBasicInfo = ({ modelData, vendorsMap = {}, t }) => {
+  const { i18n } = useTranslation();
   // 获取模型描述（使用后端真实数据）
-  const getModelDescription = () => {
+  const getModelDescriptionText = () => {
     if (!modelData) return t('暂无模型描述');
 
-    // 优先使用后端提供的描述
-    if (modelData.description) {
-      return modelData.description;
+    const description = getModelDescription(modelData, i18n.language);
+    if (description) {
+      return description;
     }
 
     // 如果没有描述但有供应商描述，显示供应商信息
@@ -71,12 +73,12 @@ const ModelBasicInfo = ({ modelData, vendorsMap = {}, t }) => {
         </div>
       </div>
       <div className='text-gray-600'>
-        <p className='mb-4'>{getModelDescription()}</p>
+        <p className='mb-4'>{getModelDescriptionText()}</p>
         {getModelTags().length > 0 && (
           <Space wrap>
             {getModelTags().map((tag, index) => (
               <Tag key={index} color={tag.color} shape='circle' size='small'>
-                {tag.text}
+                {getModelTagLabel(tag.text, t)}
               </Tag>
             ))}
           </Space>

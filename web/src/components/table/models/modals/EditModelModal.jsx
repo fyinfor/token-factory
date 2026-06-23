@@ -165,6 +165,7 @@ const EditModelModal = (props) => {
   const getInitValues = () => ({
     model_name: props.editingModel?.model_name || '',
     description: '',
+    description_en: '',
     icon: '',
     tags: [],
     vendor_id: undefined,
@@ -414,6 +415,15 @@ const EditModelModal = (props) => {
                       field='description'
                       label={t('描述')}
                       placeholder={t('请输入模型描述')}
+                      rows={3}
+                      showClear
+                    />
+                  </Col>
+                  <Col span={24}>
+                    <Form.TextArea
+                      field='description_en'
+                      label={t('描述（英文）')}
+                      placeholder={t('请输入模型英文描述')}
                       rows={3}
                       showClear
                     />

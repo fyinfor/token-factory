@@ -435,6 +435,15 @@ func SetApiRouter(router *gin.Engine) {
 			tokenRoute.POST("/batch", controller.DeleteTokenBatch)
 		}
 
+		materialRoute := apiRouter.Group("/material")
+		materialRoute.Use(middleware.UserAuth())
+		{
+			materialRoute.GET("/config", controller.GetMaterialConfig)
+			materialRoute.GET("/group", controller.GetMaterialGroup)
+			materialRoute.GET("/assets", controller.ListMaterialAssets)
+			materialRoute.POST("/upload", middleware.UploadRateLimit(), controller.UploadMaterial)
+		}
+
 		usageRoute := apiRouter.Group("/usage")
 		usageRoute.Use(middleware.CORS(), middleware.CriticalRateLimit())
 		{
@@ -464,6 +473,7 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/channel_affinity_usage_cache", middleware.AdminAuth(), controller.GetChannelAffinityUsageCacheStats)
 		logRoute.GET("/search", middleware.AdminAuth(), controller.SearchAllLogs)
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
+		logRoute.GET("/export", middleware.AdminAuth(), middleware.SearchRateLimit(), controller.ExportAdminLogs)
 		logRoute.GET("/self/export", middleware.UserAuth(), middleware.SearchRateLimit(), controller.ExportUserLogsSelf)
 		logRoute.GET("/self/search", middleware.UserAuth(), middleware.SearchRateLimit(), controller.SearchUserLogs)
 
