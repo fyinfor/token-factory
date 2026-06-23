@@ -74,6 +74,44 @@ func channelProviderSlug(ch *model.Channel) string {
 	}
 }
 
+// ResolveChannelModelUnitPrice 解析某渠道下某模型的「最终单价信号」，用于路由排序
+// （价格优 / SmartRouter）。计算口径与 relay 计费一致，已计入供应商成本折扣
+// （price_discount_percent）与加价折扣（markup_discount_rate）：
+//
+//	固定价模型：channelPrice × 成本折扣% + globalPrice × 加价折扣%
+//	倍率模型：  channelRatio × 成本折扣% + globalRatio × 加价折扣%
+//
+// 解析优先级与计费一致：供应商作用域固定价 → 供应商作用域倍率 → 全局模型倍率 → 兜底 1。
+// 返回值为相对排序信号（非精确计费单价），但渠道间相对高低与用户最终支付价一致。
+func ResolveChannelModelUnitPrice(ch *model.Channel, modelName string) float64 {
+	channelID := ch.Id
+	sid := ch.SupplierApplicationID
+	costDisc := model.ResolveChannelPriceDiscountPercent(channelID) // 成本折扣%（默认 100）
+	markupDisc := model.ResolveChannelMarkupDiscountRate(channelID) // 加价折扣%（默认 0）
+
+	// 固定价优先（对应计费 usePrice 分支）。
+	if channelPrice, ok := model.ResolveSupplierScopedFixedModelPrice(channelID, sid, modelName); ok {
+		globalPrice, _ := ratio_setting.GetModelPrice(modelName, false)
+		if eff := model.EffectiveModelPrice(channelPrice, globalPrice, costDisc, markupDisc); eff > 0 {
+			return eff
+		}
+	}
+
+	// 倍率分支。
+	if channelRatio, ok, _ := model.ResolveSupplierScopedModelRatio(channelID, sid, modelName); ok {
+		globalRatio, _, _ := ratio_setting.GetModelRatio(modelName)
+		if eff := model.EffectiveInputRate(channelRatio, globalRatio, costDisc, markupDisc); eff > 0 {
+			return eff
+		}
+	}
+
+	// 全局倍率兜底。
+	if ratio, _, _ := ratio_setting.GetModelRatio(modelName); ratio > 0 {
+		return ratio
+	}
+	return 1
+}
+
 func buildRouterCandidates(group, modelName string) ([]*router.EndpointCandidate, error) {
 	return buildRouterCandidatesFiltered(group, modelName, nil)
 }
@@ -98,22 +136,7 @@ func buildRouterCandidatesFiltered(group, modelName string, filter func(*model.C
 			continue
 		}
 		// UnitPrice is the primary sorting signal for smart routing（与 relay 定价优先级对齐）。
-		unitPrice := 1.0
-		sid := ch.SupplierApplicationID
-		if p, ok := model.ResolveSupplierScopedFixedModelPrice(ch.Id, sid, modelName); ok {
-			unitPrice = p
-		} else if r, ok, _ := model.ResolveSupplierScopedModelRatio(ch.Id, sid, modelName); ok {
-			unitPrice = r
-		}
-		if unitPrice <= 0 {
-			ratio, _, _ := ratio_setting.GetModelRatio(modelName)
-			if ratio > 0 {
-				unitPrice = ratio
-			}
-		}
-		if unitPrice <= 0 {
-			unitPrice = 1
-		}
+		unitPrice := ResolveChannelModelUnitPrice(ch, modelName)
 		latSec := float64(ch.ResponseTime) / 1000.0
 		if latSec <= 0 {
 			latSec = 0.001

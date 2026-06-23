@@ -98,6 +98,7 @@ import {
   BookOpen,
   Info,
   LayoutGrid,
+  Route,
 } from 'lucide-react';
 import {
   SiAtlassian,
@@ -169,6 +170,8 @@ export function getLucideIcon(key, selected = false) {
     case 'user':
     case 'personal':
       return <User {...commonProps} color={iconColor} />;
+    case 'route_policy':
+      return <Route {...commonProps} color={iconColor} />;
     case 'seedance-material':
       return <ImageIcon {...commonProps} color={iconColor} />;
     case 'models':

@@ -57,6 +57,7 @@ export default function SettingsSidebarModulesAdmin(props) {
       enabled: true,
       topup: true,
       personal: true,
+      route_policy: true,
       'seedance-material': true,
       supplier: true,
       distributor_center: true,
@@ -276,6 +277,11 @@ export default function SettingsSidebarModulesAdmin(props) {
           key: 'personal',
           title: t('个人设置'),
           description: t('个人信息设置'),
+        },
+        {
+          key: 'route_policy',
+          title: t('智能路由策略'),
+          description: t('route_policy.description'),
         },
         {
           key: 'seedance-material',

@@ -224,9 +224,17 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.GET("/checkin", controller.GetCheckinStatus)
 				selfRoute.POST("/checkin", middleware.TurnstileCheck(), controller.DoCheckin)
 
-				// Custom OAuth bindings
-				selfRoute.GET("/oauth/bindings", controller.GetUserOAuthBindings)
-				selfRoute.DELETE("/oauth/bindings/:provider_id", controller.UnbindCustomOAuth)
+			// Custom OAuth bindings
+			selfRoute.GET("/oauth/bindings", controller.GetUserOAuthBindings)
+			selfRoute.DELETE("/oauth/bindings/:provider_id", controller.UnbindCustomOAuth)
+
+			// 用户智能路由策略（代理到 TokenFactory gRPC）
+			selfRoute.GET("/route-policy", controller.UserGetRoutePolicy)
+			selfRoute.PUT("/route-policy/mode", controller.UserUpdateRouteMode)
+			selfRoute.POST("/route-policy/weights", controller.UserUpsertRouteWeight)
+			selfRoute.DELETE("/route-policy/weights/:id", controller.UserDeleteRouteWeight)
+			selfRoute.POST("/route-policy/overrides", controller.UserUpsertRouteOverride)
+			selfRoute.DELETE("/route-policy/overrides/:id", controller.UserDeleteRouteOverride)
 			}
 
 			adminRoute := userRoute.Group("/")
@@ -350,9 +358,20 @@ func SetApiRouter(router *gin.Engine) {
 		priceRoute := apiRouter.Group("/admin/price")
 		priceRoute.Use(middleware.AdminAuth())
 		{
-			priceRoute.GET("/export", controller.ExportPrices)
-			priceRoute.POST("/import", controller.ImportPrices)
+		priceRoute.GET("/export", controller.ExportPrices)
+		priceRoute.POST("/import", controller.ImportPrices)
 		}
+
+		// TokenFactory 智能路由：手动触发一次渠道快照同步（仅管理员）
+		apiRouter.POST("/admin/tokenfactory/sync_channels",
+			middleware.AdminAuth(),
+			controller.AdminTokenFactorySyncChannels,
+		)
+		// TokenFactory 智能路由：手动触发一次用户快照同步（仅管理员）
+		apiRouter.POST("/admin/tokenfactory/sync_users",
+			middleware.AdminAuth(),
+			controller.AdminTokenFactorySyncUsers,
+		)
 		tfOpenSyncRoute := apiRouter.Group("/tf_open_sync")
 		{
 			// 子站 TokenFactoryOpen 拉全站渠道（脱敏+定价）；鉴权见 controller.authorizeTFOpenSyncExport

@@ -49,6 +49,7 @@ import Playground from './pages/Playground';
 import Subscription from './pages/Subscription';
 import OAuth2Callback from './components/auth/OAuth2Callback';
 import PersonalSetting from './components/settings/PersonalSetting';
+import RoutePolicyPage from './pages/RoutePolicy';
 import SupplierApplyPage from './pages/Supplier/Apply';
 import SupplierChannelPage from './pages/Supplier/Channel';
 import PricingSettingsPage from './pages/Supplier/PricingSettings';
@@ -308,6 +309,14 @@ function App() {
               <Suspense fallback={<Loading></Loading>} key={location.pathname}>
                 <PersonalSetting />
               </Suspense>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/route-policy'
+          element={
+            <PrivateRoute>
+              <RoutePolicyPage />
             </PrivateRoute>
           }
         />
