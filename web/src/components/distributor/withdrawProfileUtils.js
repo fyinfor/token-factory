@@ -27,6 +27,7 @@ export const EMPTY_WD_FORM = {
   bank_branch_code: '',
   contact_person: '',
   business_license_url: '',
+  legal_person_id_card_url: '',
   corporate_account_proof_url: '',
   invoice_url: '',
 };
@@ -54,6 +55,8 @@ export function parseWithdrawRow(row) {
     bank_branch_code: r.bank_branch_code || pd.bank_branch_code || '',
     contact_person: r.contact_person || pd.contact_person || '',
     business_license_url: r.business_license_url || pd.business_license_url || '',
+    legal_person_id_card_url:
+      r.legal_person_id_card_url || pd.legal_person_id_card_url || '',
     corporate_account_proof_url:
       r.corporate_account_proof_url || pd.corporate_account_proof_url || '',
     invoice_url: r.invoice_url || pd.invoice_url || '',
@@ -115,6 +118,9 @@ export function validateWithdrawForm(t, accountType, f) {
     if (!String(f.bank_branch_code || '').trim()) return t('请填写联行号');
     if (!String(f.contact_person || '').trim()) return t('请填写联系人');
     if (!String(f.business_license_url || '').trim()) return t('请上传营业执照');
+    if (!String(f.legal_person_id_card_url || '').trim()) {
+      return t('请上传法人身份证');
+    }
     if (!String(f.corporate_account_proof_url || '').trim()) {
       return t('请上传对公账户证明');
     }
@@ -152,6 +158,7 @@ export function buildWithdrawSubmitBody(accountType, f, quotaAmount) {
     bank_branch_code: String(f.bank_branch_code || '').trim(),
     contact_person: String(f.contact_person || '').trim(),
     business_license_url: String(f.business_license_url || '').trim(),
+    legal_person_id_card_url: String(f.legal_person_id_card_url || '').trim(),
     corporate_account_proof_url: String(f.corporate_account_proof_url || '').trim(),
     invoice_url: String(f.invoice_url || '').trim(),
   };

@@ -115,6 +115,7 @@ func SetApiRouter(router *gin.Engine) {
 			distributorAdminRoute.POST("/withdrawals/:id/approve", controller.ApproveDistributorWithdrawalAdmin)
 			distributorAdminRoute.POST("/withdrawals/:id/reject", controller.RejectDistributorWithdrawalAdmin)
 			distributorAdminRoute.GET("/analytics", controller.GetDistributorAdminAnalytics)
+			distributorAdminRoute.GET("/file/download", controller.DownloadDistributorAdminFile)
 		}
 
 		apiRouter.POST("/stripe/webhook", controller.StripeWebhook)

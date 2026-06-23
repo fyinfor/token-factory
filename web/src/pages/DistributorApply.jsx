@@ -35,7 +35,13 @@ import {
   IconTick,
 } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
-import { API, showError, showSuccess, userIsDistributorUser } from '../helpers';
+import {
+  API,
+  showError,
+  showSuccess,
+  userIsDistributorUser,
+  isValidPhoneNumber,
+} from '../helpers';
 import { StatusContext } from '../context/Status';
 import { UserContext } from '../context/User';
 import DOMPurify from 'dompurify';
@@ -239,8 +245,13 @@ export default function DistributorApply() {
       return;
     }
     const values = api.getValues();
-    if (!urls.length) {
-      showError(t('请上传资格证书'));
+    const phone = String(values.contact || '').trim();
+    if (!isValidPhoneNumber(phone)) {
+      showError(t('请输入有效的手机号'));
+      return;
+    }
+    if (applyType === 2 && !urls.length) {
+      showError(t('请上传营业执照'));
       return;
     }
     setSubmitting(true);
@@ -249,8 +260,8 @@ export default function DistributorApply() {
         apply_type: applyType,
         real_name: values.real_name,
         id_card_no: values.id_card_no,
-        contact: values.contact,
-        qualification_urls: urls,
+        contact: phone,
+        qualification_urls: applyType === 2 ? urls : [],
       });
       const { success, message } = res.data;
       if (success) {
@@ -376,19 +387,26 @@ export default function DistributorApply() {
           />
           <Form.Input
             field='contact'
-            label={<ApplyRequiredLabel>{t('联系方式')}</ApplyRequiredLabel>}
+            label={
+              <ApplyRequiredLabel>
+                {applyType === 2 ? t('法人手机号码') : t('手机号码')}
+              </ApplyRequiredLabel>
+            }
             rules={[applyTrimmedRequiredRule(t)]}
           />
-          <DistributorApplyFileUpload
-            label={t('资格证书')}
-            required
-            urls={urls}
-            onUrlsChange={setUrls}
-            maxCount={5}
-            multiple
-            onPreview={setPreviewUrl}
-            hint={t('支持图片或 PDF，最多 5 个；点击图片可大图预览')}
-          />
+          {applyType === 2 ? (
+            <DistributorApplyFileUpload
+              label={t('营业执照')}
+              labelExtra={t('需加盖公章')}
+              required
+              urls={urls}
+              onUrlsChange={setUrls}
+              maxCount={5}
+              multiple
+              onPreview={setPreviewUrl}
+              hint={t('支持图片或 PDF，最多 5 个；点击图片可大图预览')}
+            />
+          ) : null}
           <div className='flex justify-center pt-1'>
             <Button
               theme='solid'
