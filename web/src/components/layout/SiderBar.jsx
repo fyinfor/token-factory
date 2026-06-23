@@ -265,7 +265,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('兑换码管理'),
         itemKey: 'redemption',
         to: '/redemption',
-        className: isAdmin() ? '' : 'tableHiddle',
+        className: isAdmin() || isDistributor() ? '' : 'tableHiddle',
       },
       {
         text: t('用户管理'),
@@ -322,13 +322,24 @@ const SiderBar = ({ onNavigate = () => {} }) => {
           return { ...item, items: visibleSubItems };
         }
         // 检查当前项是否可见
-        const configVisible = isModuleVisible('admin', item.itemKey);
+        const configVisible =
+          item.itemKey === 'redemption' && isDistributor()
+            ? true
+            : isModuleVisible('admin', item.itemKey);
         return configVisible ? item : null;
       })
       .filter((item) => item !== null);
 
     return filteredItems;
-  }, [isAdmin(), isRoot(), t, isModuleVisible, userState?.user?.role]);
+  }, [
+    isAdmin(),
+    isDistributor(),
+    isRoot(),
+    t,
+    isModuleVisible,
+    userState?.user?.role,
+    userState?.user?.is_distributor,
+  ]);
 
   const chatMenuItems = useMemo(() => {
     const items = [
@@ -540,7 +551,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         type='sidebar'
         className=''
         collapsed={collapsed}
-        showAdmin={isAdmin()}
+        showAdmin={isAdmin() || isDistributor()}
       >
         <Nav
           className='sidebar-nav'
@@ -618,7 +629,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
           )}
 
           {/* 管理员区域 - 只在管理员时显示且配置允许时显示 */}
-          {isAdmin() && hasSectionVisibleModules('admin') && (
+          {(isAdmin() || isDistributor()) && adminItems.length > 0 && (
             <>
               <Divider className='sidebar-divider' />
               <div>

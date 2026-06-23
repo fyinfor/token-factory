@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   API,
@@ -26,6 +26,9 @@ import {
   showSuccess,
   renderQuota,
   renderQuotaWithPrompt,
+  getCurrencyConfig,
+  getQuotaPerUnit,
+  quotaToDisplayInputAmount,
 } from '../../../../helpers';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import {
@@ -58,9 +61,50 @@ const EditRedemptionModal = (props) => {
   const isMobile = useIsMobile();
   const formApiRef = useRef(null);
 
+  const isTokensMode = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return (localStorage.getItem('quota_display_type') || 'USD') === 'TOKENS';
+  }, [props.visiable]);
+
+  const quotaPresetOptions = useMemo(() => {
+    const qpu = getQuotaPerUnit() || 500000;
+    const usdPresets = [1, 10, 50, 100, 500, 1000];
+    return usdPresets.map((usd) => {
+      const quota = Math.round(usd * qpu);
+      if (isTokensMode) {
+        return { value: quota, label: `${usd}$` };
+      }
+      return {
+        value: quotaToDisplayInputAmount(quota),
+        label: renderQuota(quota),
+      };
+    });
+  }, [isTokensMode, props.visiable]);
+
+  const quotaToFormAmount = (quota) => {
+    const amount = quotaToDisplayInputAmount(quota);
+    if (isTokensMode) {
+      return amount;
+    }
+    return Number(Number(amount).toFixed(2));
+  };
+
+  const displayAmountToRedemptionQuota = (amount) => {
+    const val = Number(amount || 0);
+    if (!Number.isFinite(val) || val <= 0) return 0;
+    if (isTokensMode) return Math.ceil(val);
+
+    const quotaPerUnit = getQuotaPerUnit() || 500000;
+    const { type, rate } = getCurrencyConfig();
+    const displayRate = type === 'USD' ? 1 : rate || 1;
+    const rawQuota = (val / displayRate) * quotaPerUnit;
+    return Math.max(0, Math.ceil(rawQuota - 1e-8));
+  };
+
   const getInitValues = () => ({
     name: '',
     quota: 100000,
+    quota_amount: quotaToFormAmount(100000),
     count: 1,
     expired_time: null,
   });
@@ -79,6 +123,7 @@ const EditRedemptionModal = (props) => {
       } else {
         data.expired_time = new Date(data.expired_time * 1000);
       }
+      data.quota_amount = quotaToFormAmount(data.quota || 0);
       formApiRef.current?.setValues({ ...getInitValues(), ...data });
     } else {
       showError(message);
@@ -98,13 +143,17 @@ const EditRedemptionModal = (props) => {
 
   const submit = async (values) => {
     let name = values.name;
+    const resolvedQuota = isTokensMode
+      ? parseInt(values.quota, 10) || 0
+      : displayAmountToRedemptionQuota(values.quota_amount);
     if (!isEdit && (!name || name === '')) {
-      name = renderQuota(values.quota);
+      name = renderQuota(resolvedQuota);
     }
     setLoading(true);
     let localInputs = { ...values };
     localInputs.count = parseInt(localInputs.count) || 0;
-    localInputs.quota = parseInt(localInputs.quota) || 0;
+    localInputs.quota = resolvedQuota;
+    delete localInputs.quota_amount;
     localInputs.name = name;
     if (!localInputs.expired_time) {
       localInputs.expired_time = 0;
@@ -286,36 +335,55 @@ const EditRedemptionModal = (props) => {
 
                   <Row gutter={12}>
                     <Col span={12}>
-                      <Form.AutoComplete
-                        field='quota'
-                        label={t('额度')}
-                        placeholder={t('请输入额度')}
-                        style={{ width: '100%' }}
-                        type='number'
-                        rules={[
-                          { required: true, message: t('请输入额度') },
-                          {
-                            validator: (rule, v) => {
-                              const num = parseInt(v, 10);
-                              return num > 0
-                                ? Promise.resolve()
-                                : Promise.reject(t('额度必须大于0'));
+                      {isTokensMode ? (
+                        <Form.AutoComplete
+                          field='quota'
+                          label={t('额度')}
+                          placeholder={t('请输入额度')}
+                          style={{ width: '100%' }}
+                          type='number'
+                          inputProps={{ min: 0, step: 1 }}
+                          rules={[
+                            { required: true, message: t('请输入额度') },
+                            {
+                              validator: (rule, v) => {
+                                const num = parseInt(v, 10);
+                                return num > 0
+                                  ? Promise.resolve()
+                                  : Promise.reject(t('额度必须大于0'));
+                              },
                             },
-                          },
-                        ]}
-                        extraText={renderQuotaWithPrompt(
-                          Number(values.quota) || 0,
-                        )}
-                        data={[
-                          { value: 500000, label: '1$' },
-                          { value: 5000000, label: '10$' },
-                          { value: 25000000, label: '50$' },
-                          { value: 50000000, label: '100$' },
-                          { value: 250000000, label: '500$' },
-                          { value: 500000000, label: '1000$' },
-                        ]}
-                        showClear
-                      />
+                          ]}
+                          extraText={renderQuotaWithPrompt(
+                            Number(values.quota) || 0,
+                          )}
+                          data={quotaPresetOptions}
+                          showClear
+                        />
+                      ) : (
+                        <Form.AutoComplete
+                          field='quota_amount'
+                          label={`${t('额度')} (${getCurrencyConfig().symbol})`}
+                          placeholder={t('请输入额度')}
+                          style={{ width: '100%' }}
+                          type='number'
+                          inputProps={{ min: 0, step: 0.01 }}
+                          rules={[
+                            { required: true, message: t('请输入额度') },
+                            {
+                              validator: (rule, v) => {
+                                const num = Number(v);
+                                return num > 0
+                                  ? Promise.resolve()
+                                  : Promise.reject(t('额度必须大于0'));
+                              },
+                            },
+                          ]}
+                          extraText={t('提交时按当前汇率换算为额度保存')}
+                          data={quotaPresetOptions}
+                          showClear
+                        />
+                      )}
                     </Col>
                     {!isEdit && (
                       <Col span={12}>
