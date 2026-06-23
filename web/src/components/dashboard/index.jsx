@@ -176,24 +176,23 @@ const Dashboard = () => {
         <DistributorAnalyticsBoard />
       ) : null}
 
-      {/* API信息和图表面板 */}
-      <div>
-        <div
-          className={`grid grid-cols-1 gap-6 ${dashboardData.hasApiInfoPanel ? 'lg:grid-cols-4' : ''}`}
-        >
-          <ChartsPanel
-            activeChartTab={dashboardData.activeChartTab}
-            setActiveChartTab={dashboardData.setActiveChartTab}
-            spec_line={dashboardCharts.spec_line}
-            spec_model_line={dashboardCharts.spec_model_line}
-            spec_pie={dashboardCharts.spec_pie}
-            spec_rank_bar={dashboardCharts.spec_rank_bar}
-            CARD_PROPS={CARD_PROPS}
-            CHART_CONFIG={CHART_CONFIG}
-            FLEX_CENTER_GAP2={FLEX_CENTER_GAP2}
-            hasApiInfoPanel={dashboardData.hasApiInfoPanel}
-            t={dashboardData.t}
-          />
+      {/* 系统公告和 API 信息 */}
+      {(dashboardData.announcementsEnabled ||
+        dashboardData.hasApiInfoPanel) && (
+        <div className='grid grid-cols-1 lg:grid-cols-4 gap-6'>
+          {dashboardData.announcementsEnabled && (
+            <AnnouncementsPanel
+              announcementData={announcementData}
+              announcementLegendData={ANNOUNCEMENT_LEGEND_DATA.map((item) => ({
+                ...item,
+                label: dashboardData.t(item.label),
+              }))}
+              className={`shadow-sm !rounded-2xl ${dashboardData.hasApiInfoPanel ? 'lg:col-span-3' : 'lg:col-span-2'}`}
+              CARD_PROPS={CARD_PROPS}
+              ILLUSTRATION_SIZE={ILLUSTRATION_SIZE}
+              t={dashboardData.t}
+            />
+          )}
 
           {dashboardData.hasApiInfoPanel && (
             <ApiInfoPanel
@@ -207,28 +206,27 @@ const Dashboard = () => {
             />
           )}
         </div>
-      </div>
+      )}
 
-      {/* 系统公告和常见问答卡片 */}
-      {dashboardData.hasInfoPanels && (
+      {/* 图表面板 */}
+      <ChartsPanel
+        activeChartTab={dashboardData.activeChartTab}
+        setActiveChartTab={dashboardData.setActiveChartTab}
+        spec_line={dashboardCharts.spec_line}
+        spec_model_line={dashboardCharts.spec_model_line}
+        spec_pie={dashboardCharts.spec_pie}
+        spec_rank_bar={dashboardCharts.spec_rank_bar}
+        CARD_PROPS={CARD_PROPS}
+        CHART_CONFIG={CHART_CONFIG}
+        FLEX_CENTER_GAP2={FLEX_CENTER_GAP2}
+        hasApiInfoPanel={false}
+        t={dashboardData.t}
+      />
+
+      {/* 常见问答和可用性监控卡片 */}
+      {(dashboardData.faqEnabled || dashboardData.uptimeEnabled) && (
         <div>
           <div className='grid grid-cols-1 lg:grid-cols-4 gap-6'>
-            {/* 公告卡片 */}
-            {dashboardData.announcementsEnabled && (
-              <AnnouncementsPanel
-                announcementData={announcementData}
-                announcementLegendData={ANNOUNCEMENT_LEGEND_DATA.map(
-                  (item) => ({
-                    ...item,
-                    label: dashboardData.t(item.label),
-                  }),
-                )}
-                CARD_PROPS={CARD_PROPS}
-                ILLUSTRATION_SIZE={ILLUSTRATION_SIZE}
-                t={dashboardData.t}
-              />
-            )}
-
             {/* 常见问答卡片 */}
             {dashboardData.faqEnabled && (
               <FaqPanel
