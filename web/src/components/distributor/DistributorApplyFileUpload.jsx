@@ -75,6 +75,7 @@ function UploadThumbRemoveButton({ onClick, label }) {
  */
 export default function DistributorApplyFileUpload({
   label,
+  labelExtra,
   required = false,
   url = '',
   onUrlChange,
@@ -182,11 +183,25 @@ export default function DistributorApplyFileUpload({
     <div className={compact ? 'mb-0' : 'mb-4'}>
       {label ? (
         required ? (
-          <ApplyRequiredLabel className='block mb-2'>{label}</ApplyRequiredLabel>
+          <div className='mb-2 flex flex-wrap items-center gap-2'>
+            <ApplyRequiredLabel>{label}</ApplyRequiredLabel>
+            {labelExtra ? (
+              <Text type='warning' size='small'>
+                {labelExtra}
+              </Text>
+            ) : null}
+          </div>
         ) : (
-          <Text strong className='block mb-2 text-[var(--semi-color-text-0)]'>
-            {label}
-          </Text>
+          <div className='mb-2 flex flex-wrap items-center gap-2'>
+            <Text strong className='text-[var(--semi-color-text-0)]'>
+              {label}
+            </Text>
+            {labelExtra ? (
+              <Text type='warning' size='small'>
+                {labelExtra}
+              </Text>
+            ) : null}
+          </div>
         )
       ) : null}
       <Upload

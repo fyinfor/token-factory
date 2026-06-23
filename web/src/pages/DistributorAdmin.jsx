@@ -33,6 +33,8 @@ import {
   Progress,
   Tag,
   Tooltip,
+  Image,
+  ImagePreview,
 } from '@douyinfe/semi-ui';
 import {
   IllustrationNoResult,
@@ -93,6 +95,73 @@ function isPdfUrl(u) {
   return /\.pdf(\?|$)/i.test(u || '');
 }
 
+function getDownloadFileName(url) {
+  try {
+    const path = new URL(url, window.location.origin).pathname;
+    const base = path.split('/').filter(Boolean).pop();
+    if (base) return decodeURIComponent(base);
+  } catch {
+    // ignore invalid url
+  }
+  return 'image';
+}
+
+function saveBlob(blob, filename) {
+  const objectUrl = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = objectUrl;
+  a.download = filename || 'image';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(objectUrl);
+}
+
+function getDownloadFilenameFromDisposition(disposition, fallback) {
+  const text = String(disposition || '');
+  const utf8Match = text.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1].trim());
+    } catch {
+      return utf8Match[1].trim();
+    }
+  }
+  const asciiMatch = text.match(/filename="?([^";]+)"?/i);
+  return asciiMatch?.[1]?.trim() || fallback;
+}
+
+async function downloadPreviewImage(url) {
+  const u = String(url || '').trim();
+  if (!u) return;
+  try {
+    const absoluteUrl = new URL(u, window.location.origin).href;
+    const fallback = getDownloadFileName(absoluteUrl);
+    const res = await API.get('/api/distributor/admin/file/download', {
+      params: { url: absoluteUrl },
+      responseType: 'blob',
+    });
+    const blob = res.data;
+    if (String(blob?.type || '').includes('application/json')) {
+      const text = await blob.text();
+      try {
+        const data = JSON.parse(text);
+        showError(data?.message || '下载失败');
+      } catch {
+        showError('下载失败');
+      }
+      return;
+    }
+    const filename = getDownloadFilenameFromDisposition(
+      res.headers?.['content-disposition'],
+      fallback,
+    );
+    saveBlob(blob, filename);
+  } catch (e) {
+    showError(e?.response?.data?.message || '下载失败');
+  }
+}
+
 /** 资格证书缩略图：点击图片回调大图预览；PDF 新窗口打开 */
 function QualificationThumbnails({ urls, onImagePreview, compact }) {
   const list = urls || [];
@@ -133,7 +202,14 @@ function QualificationThumbnails({ urls, onImagePreview, compact }) {
             className={`relative flex-shrink-0 overflow-hidden rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)] ${box} cursor-zoom-in p-0`}
             onClick={() => onImagePreview?.(u)}
           >
-            <img src={u} alt='' className='h-full w-full object-cover' />
+            <Image
+              src={u}
+              alt=''
+              preview={false}
+              width='100%'
+              height='100%'
+              imgStyle={{ objectFit: 'cover' }}
+            />
           </button>
         ),
       )}
@@ -519,22 +595,6 @@ export default function DistributorAdmin() {
   const saveDistributorProfile = async () => {
     if (!profileUserId) return;
     const urls = profileQualUrls.filter(Boolean);
-    if (!profileRealName.trim()) {
-      showError(t('请填写姓名或企业名称'));
-      return;
-    }
-    if (!profileIdCard.trim()) {
-      showError(t('请填写证件号码'));
-      return;
-    }
-    if (!profileContact.trim()) {
-      showError(t('请填写联系方式'));
-      return;
-    }
-    if (urls.length === 0) {
-      showError(t('请上传资格证书'));
-      return;
-    }
     setProfileSaving(true);
     try {
       const res = await API.put(
@@ -544,7 +604,7 @@ export default function DistributorAdmin() {
           real_name: profileRealName.trim(),
           id_card_no: profileIdCard.trim(),
           contact: profileContact.trim(),
-          qualification_urls: urls,
+          qualification_urls: profileApplyType === 2 ? urls : [],
         },
       );
       if (res.data.success) {
@@ -1029,14 +1089,14 @@ export default function DistributorAdmin() {
       ellipsis: true,
     },
     {
-      title: t('身份证/统一社会信用代码'),
+      title: t('身份证号码/统一社会信用代码'),
       dataIndex: 'id_card_no_mask',
       width: 168,
       ellipsis: true,
     },
-    { title: t('联系方式'), dataIndex: 'contact', ellipsis: true },
+    { title: t('手机号'), dataIndex: 'contact', ellipsis: true },
     {
-      title: t('资格证书'),
+      title: t('营业执照'),
       dataIndex: 'qualification_urls',
       width: 220,
       render: (_, r) => (
@@ -1099,10 +1159,21 @@ export default function DistributorAdmin() {
       title: t('身份变更'),
       width: 180,
       render: (_, r) => (
-        <div className='flex items-center gap-2'>
-          {applyTypeTag(t, r.current_apply_type)}
-          <Text type='tertiary'>→</Text>
-          {applyTypeTag(t, r.target_apply_type)}
+        <div className='flex flex-wrap items-center gap-2'>
+          {r.is_supplement ? (
+            applyTypeTag(t, r.target_apply_type)
+          ) : (
+            <>
+              {applyTypeTag(t, r.current_apply_type)}
+              <Text type='tertiary'>→</Text>
+              {applyTypeTag(t, r.target_apply_type)}
+            </>
+          )}
+          {r.is_supplement ? (
+            <Tag color='orange' type='light' size='small'>
+              {t('资料补充申请')}
+            </Tag>
+          ) : null}
         </div>
       ),
     },
@@ -1117,9 +1188,9 @@ export default function DistributorAdmin() {
       width: 168,
       ellipsis: true,
     },
-    { title: t('联系方式'), dataIndex: 'contact', ellipsis: true },
+    { title: t('手机号'), dataIndex: 'contact', ellipsis: true },
     {
-      title: t('资格证书'),
+      title: t('营业执照'),
       dataIndex: 'qualification_urls',
       width: 220,
       render: (_, r) => (
@@ -2010,21 +2081,30 @@ export default function DistributorAdmin() {
               <Text strong>
                 {Number(detail.apply_type) === 2
                   ? t('统一社会信用代码')
-                  : t('身份证')}
+                  : t('身份证号码')}
               </Text>
               ：{detail.id_card_no}
             </div>
             <div>
-              <Text strong>{t('联系方式')}</Text>：{detail.contact}
+              <Text strong>
+                {Number(detail.apply_type) === 2
+                  ? t('法人手机号码')
+                  : t('手机号码')}
+              </Text>
+              ：{detail.contact}
             </div>
             <div>
-              <Text strong className='block mb-2'>
-                {t('资格证书')}
-              </Text>
-              <QualificationThumbnails
-                urls={parseQualificationUrls(detail.qualification_urls)}
-                onImagePreview={(u) => setQualImagePreview(u)}
-              />
+              {Number(detail.apply_type) === 2 ? (
+                <>
+                  <Text strong className='block mb-2'>
+                    {t('营业执照')}
+                  </Text>
+                  <QualificationThumbnails
+                    urls={parseQualificationUrls(detail.qualification_urls)}
+                    onImagePreview={(u) => setQualImagePreview(u)}
+                  />
+                </>
+              ) : null}
             </div>
           </div>
         )}
@@ -2071,10 +2151,26 @@ export default function DistributorAdmin() {
             <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
               <Text strong>{t('身份变更')}</Text>
               <span>：</span>
-              {applyTypeTag(t, identityDetail.current_apply_type)}
-              <Text type='tertiary'>→</Text>
-              {applyTypeTag(t, identityDetail.target_apply_type)}
+              {identityDetail.is_supplement ? (
+                applyTypeTag(t, identityDetail.target_apply_type)
+              ) : (
+                <>
+                  {applyTypeTag(t, identityDetail.current_apply_type)}
+                  <Text type='tertiary'>→</Text>
+                  {applyTypeTag(t, identityDetail.target_apply_type)}
+                </>
+              )}
             </div>
+            {identityDetail.is_supplement ? (
+              <Banner
+                type='warning'
+                fullMode={false}
+                bordered
+                description={t(
+                  '这是资料补充申请，不是代理身份类型变更；审核通过后将补全当前代理身份资料。',
+                )}
+              />
+            ) : null}
             <div>
               <Text strong>{t('当前主体')}</Text>：
               {identityDetail.current_real_name || '—'}
@@ -2086,12 +2182,17 @@ export default function DistributorAdmin() {
               <Text strong>
                 {Number(identityDetail.target_apply_type) === 2
                   ? t('统一社会信用代码')
-                  : t('身份证号')}
+                  : t('身份证号码')}
               </Text>
               ：{identityDetail.id_card_no}
             </div>
             <div>
-              <Text strong>{t('联系方式')}</Text>：{identityDetail.contact}
+              <Text strong>
+                {Number(identityDetail.target_apply_type) === 2
+                  ? t('法人手机号码')
+                  : t('手机号码')}
+              </Text>
+              ：{identityDetail.contact}
             </div>
             <div className='flex flex-wrap items-center gap-x-2 gap-y-1'>
               <Text strong>{t('状态')}</Text>
@@ -2105,13 +2206,19 @@ export default function DistributorAdmin() {
               </div>
             ) : null}
             <div>
-              <Text strong className='block mb-2'>
-                {t('资格证书')}
-              </Text>
-              <QualificationThumbnails
-                urls={parseQualificationUrls(identityDetail.qualification_urls)}
-                onImagePreview={(u) => setQualImagePreview(u)}
-              />
+              {Number(identityDetail.target_apply_type) === 2 ? (
+                <>
+                  <Text strong className='block mb-2'>
+                    {t('营业执照')}
+                  </Text>
+                  <QualificationThumbnails
+                    urls={parseQualificationUrls(
+                      identityDetail.qualification_urls,
+                    )}
+                    onImagePreview={(u) => setQualImagePreview(u)}
+                  />
+                </>
+              ) : null}
             </div>
           </div>
         )}
@@ -2208,18 +2315,26 @@ export default function DistributorAdmin() {
             </div>
             <div>
               <div className='mb-1'>
-                <Text strong>{t('联系方式')}</Text>
+                <Text strong>
+                  {profileApplyType === 2 ? t('法人手机号码') : t('手机号码')}
+                </Text>
               </div>
               <Input
                 value={profileContact}
                 onChange={(v) => setProfileContact(String(v ?? ''))}
-                placeholder={t('手机或邮箱等')}
+                placeholder={
+                  profileApplyType === 2 ? t('法人手机号码') : t('手机号码')
+                }
               />
             </div>
+            {profileApplyType === 2 ? (
             <div>
-              <Text strong className='block mb-2'>
-                {t('资格证书')}
-              </Text>
+              <div className='mb-2 flex flex-wrap items-center gap-2'>
+                <Text strong>{t('营业执照')}</Text>
+                <Text type='warning' size='small'>
+                  {t('需加盖公章')}
+                </Text>
+              </div>
               <Upload
                 action=''
                 accept='image/*,.pdf'
@@ -2334,10 +2449,13 @@ export default function DistributorAdmin() {
                           className='block h-full w-full cursor-zoom-in border-0 bg-transparent p-0'
                           onClick={() => setQualImagePreview(u)}
                         >
-                          <img
+                          <Image
                             src={u}
                             alt=''
-                            className='h-full w-full object-cover'
+                            preview={false}
+                            width='100%'
+                            height='100%'
+                            imgStyle={{ objectFit: 'cover' }}
                           />
                         </button>
                         <Button
@@ -2360,6 +2478,7 @@ export default function DistributorAdmin() {
                 </div>
               )}
             </div>
+            ) : null}
           </div>
         )}
       </Modal>
@@ -2401,26 +2520,15 @@ export default function DistributorAdmin() {
         ) : null}
       </Modal>
 
-      <Modal
-        title={t('预览')}
+      <ImagePreview
+        src={qualImagePreview || ''}
         visible={Boolean(qualImagePreview)}
-        onCancel={() => setQualImagePreview(null)}
-        footer={null}
-        width={Math.min(
-          960,
-          typeof window !== 'undefined' ? window.innerWidth - 48 : 960,
-        )}
-      >
-        {qualImagePreview ? (
-          <div className='flex max-h-[85vh] justify-center overflow-auto p-2'>
-            <img
-              src={qualImagePreview}
-              alt=''
-              className='max-h-[85vh] max-w-full object-contain'
-            />
-          </div>
-        ) : null}
-      </Modal>
+        setDownloadName={getDownloadFileName}
+        onDownloadError={downloadPreviewImage}
+        onVisibleChange={(visible) => {
+          if (!visible) setQualImagePreview(null);
+        }}
+      />
 
       <Modal
         title={t('驳回原因')}

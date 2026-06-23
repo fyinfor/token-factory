@@ -124,6 +124,7 @@ function TextField({ label, required, value, onChange, placeholder }) {
 
 function DocUploadField({
   label,
+  labelExtra,
   url,
   onUrlChange,
   onPreview,
@@ -134,6 +135,7 @@ function DocUploadField({
     <FormField>
       <DistributorWithdrawDocUpload
         label={label}
+        labelExtra={labelExtra}
         required
         url={url}
         onUrlChange={onUrlChange}
@@ -334,13 +336,23 @@ export default function DistributorWithdrawFormFields({
           <FormSection title={t('企业附件')}>
             <DocUploadField
               label={t('营业执照')}
+              labelExtra={t('需加盖公章')}
               url={form.business_license_url}
               onUrlChange={(u) => set('business_license_url', u)}
               onPreview={onPreview}
               imagesOnly
             />
             <DocUploadField
+              label={t('法人身份证')}
+              labelExtra={t('需加盖公章')}
+              url={form.legal_person_id_card_url}
+              onUrlChange={(u) => set('legal_person_id_card_url', u)}
+              onPreview={onPreview}
+              imagesOnly
+            />
+            <DocUploadField
               label={t('对公账户证明')}
+              labelExtra={t('需加盖公章')}
               url={form.corporate_account_proof_url}
               onUrlChange={(u) => set('corporate_account_proof_url', u)}
               onPreview={onPreview}

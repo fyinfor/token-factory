@@ -82,6 +82,29 @@ func NormalizeDistributorQualificationURLsJSON(raw string) (string, error) {
 }
 
 // UpsertDistributorApplication 用户提交或驳回后重新提交
+func validateDistributorApplicationProfile(applyType int, realName, idCardNo, qualificationUrlsJSON, contact string) (string, string, string, string, error) {
+	realName = strings.TrimSpace(realName)
+	idCardNo = strings.TrimSpace(idCardNo)
+	contact = common.NormalizePhone(contact)
+	qualJSON, err := NormalizeDistributorQualificationURLsJSON(qualificationUrlsJSON)
+	if err != nil {
+		return "", "", "", "", err
+	}
+	if realName == "" || idCardNo == "" || contact == "" {
+		return "", "", "", "", errors.New("请填写完整资料")
+	}
+	if !common.IsValidLoginPhone(contact) {
+		return "", "", "", "", errors.New("请输入有效的手机号")
+	}
+	if applyType == DistributorApplyTypePersonal {
+		return realName, idCardNo, "[]", contact, nil
+	}
+	if !distributorQualificationURLsNonEmpty(qualJSON) {
+		return "", "", "", "", errors.New("请上传营业执照")
+	}
+	return realName, idCardNo, qualJSON, contact, nil
+}
+
 func UpsertDistributorApplication(userId, applyType int, realName, idCardNo, qualificationUrlsJSON, contact string) error {
 	if userId <= 0 {
 		return errors.New("invalid user")
@@ -89,18 +112,9 @@ func UpsertDistributorApplication(userId, applyType int, realName, idCardNo, qua
 	if applyType != DistributorApplyTypePersonal && applyType != DistributorApplyTypeEnterprise {
 		return errors.New("申请类型无效")
 	}
-	realName = strings.TrimSpace(realName)
-	idCardNo = strings.TrimSpace(idCardNo)
-	contact = strings.TrimSpace(contact)
-	qualJSON, err := NormalizeDistributorQualificationURLsJSON(qualificationUrlsJSON)
+	realName, idCardNo, qualJSON, contact, err := validateDistributorApplicationProfile(applyType, realName, idCardNo, qualificationUrlsJSON, contact)
 	if err != nil {
 		return err
-	}
-	if !distributorQualificationURLsNonEmpty(qualJSON) {
-		return errors.New("请上传资格证书")
-	}
-	if realName == "" || idCardNo == "" || contact == "" {
-		return errors.New("请填写完整资料")
 	}
 	u, err := GetUserById(userId, false)
 	if err != nil {
@@ -464,6 +478,12 @@ func IsDistributorApplicationProfileComplete(app *DistributorApplication) bool {
 	if strings.TrimSpace(app.RealName) == "" || strings.TrimSpace(app.IdCardNo) == "" || strings.TrimSpace(app.Contact) == "" {
 		return false
 	}
+	if !common.IsValidLoginPhone(common.NormalizePhone(app.Contact)) {
+		return false
+	}
+	if app.ApplyType == DistributorApplyTypePersonal {
+		return true
+	}
 	return distributorQualificationURLsNonEmpty(app.QualificationUrls)
 }
 
@@ -502,11 +522,8 @@ func AdminUpsertDistributorApplicationByUser(userId, reviewerId, applyType int, 
 	if err != nil {
 		return err
 	}
-	if !distributorQualificationURLsNonEmpty(qualJSON) {
-		return errors.New("请上传资格证书")
-	}
-	if realName == "" || idCardNo == "" || contact == "" {
-		return errors.New("请填写完整资料")
+	if applyType == DistributorApplyTypePersonal {
+		qualJSON = "[]"
 	}
 	u, err := GetUserById(userId, false)
 	if err != nil {

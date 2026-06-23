@@ -24,6 +24,9 @@ import { normalizeLanguage } from '../../i18n/language';
 import { API, mergeSelfResponseIntoLocalUser } from '../../helpers';
 import AdminInitialSetupModal from '../../components/auth/AdminInitialSetupModal';
 
+const USER_SELF_REFRESH_INTERVAL = 60 * 1000;
+const USER_SELF_REFRESH_DEBOUNCE = 2 * 1000;
+
 export const UserContext = React.createContext({
   state: initialState,
   dispatch: () => null,
@@ -50,6 +53,56 @@ export const UserProvider = ({ children }) => {
       cancelled = true;
     };
   }, [dispatch]);
+
+  useEffect(() => {
+    if (!state.user?.id) return;
+
+    let cancelled = false;
+    let refreshing = false;
+    let lastRefreshAt = 0;
+
+    const refreshSelf = async () => {
+      if (cancelled || refreshing) return;
+      if (!localStorage.getItem('user')) return;
+      if (document.visibilityState === 'hidden') return;
+
+      const now = Date.now();
+      if (now - lastRefreshAt < USER_SELF_REFRESH_DEBOUNCE) return;
+
+      refreshing = true;
+      lastRefreshAt = now;
+      try {
+        const res = await API.get('/api/user/self', { skipErrorHandler: true });
+        if (cancelled || !res.data.success || !res.data.data) return;
+        mergeSelfResponseIntoLocalUser(res.data.data, dispatch);
+      } catch (e) {
+        // Ignore transient refresh failures.
+      } finally {
+        refreshing = false;
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshSelf();
+      }
+    };
+
+    const refreshTimer = window.setInterval(
+      refreshSelf,
+      USER_SELF_REFRESH_INTERVAL,
+    );
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', refreshSelf);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(refreshTimer);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', refreshSelf);
+    };
+  }, [state.user?.id, dispatch]);
 
   // Sync language preference when user data is loaded
   useEffect(() => {

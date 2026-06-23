@@ -40,6 +40,7 @@ type DistributorWithdrawalProfile struct {
 	BankBranchCode           string `json:"bank_branch_code,omitempty"`
 	ContactPerson            string `json:"contact_person,omitempty"`
 	BusinessLicenseUrl       string `json:"business_license_url,omitempty"`
+	LegalPersonIdCardUrl     string `json:"legal_person_id_card_url,omitempty"`
 	CorporateAccountProofUrl string `json:"corporate_account_proof_url,omitempty"`
 	InvoiceUrl               string `json:"invoice_url,omitempty"`
 }
@@ -167,6 +168,7 @@ func normalizeDistributorWithdrawalProfile(accountType int, p *DistributorWithdr
 		trim(&p.BankBranchCode)
 		trim(&p.ContactPerson)
 		trim(&p.BusinessLicenseUrl)
+		trim(&p.LegalPersonIdCardUrl)
 		trim(&p.CorporateAccountProofUrl)
 		trim(&p.InvoiceUrl)
 		if p.CreditCode == "" {
@@ -189,6 +191,7 @@ func normalizeDistributorWithdrawalProfile(accountType int, p *DistributorWithdr
 			u     string
 		}{
 			{"营业执照", p.BusinessLicenseUrl},
+			{"法人身份证", p.LegalPersonIdCardUrl},
 			{"对公账户证明", p.CorporateAccountProofUrl},
 			{"发票", p.InvoiceUrl},
 		} {

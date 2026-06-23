@@ -13,6 +13,7 @@ import DistributorApplyFileUpload from './DistributorApplyFileUpload';
 /** 提现资料上传：复用分销商申请页同款上传组件 */
 export default function DistributorWithdrawDocUpload({
   label,
+  labelExtra,
   required,
   url,
   onUrlChange,
@@ -25,6 +26,7 @@ export default function DistributorWithdrawDocUpload({
   return (
     <DistributorApplyFileUpload
       label={label}
+      labelExtra={labelExtra}
       required={required}
       url={url}
       onUrlChange={onUrlChange}

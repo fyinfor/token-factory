@@ -8,7 +8,7 @@ License, or (at your option) any later version.
 */
 
 import React from 'react';
-import { Typography } from '@douyinfe/semi-ui';
+import { Image, Typography } from '@douyinfe/semi-ui';
 import { IconFile } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
 import {
@@ -129,7 +129,14 @@ function DocInvoiceThumb({ label, url }) {
             </span>
           </div>
         ) : (
-          <img src={u} alt={label} className='h-full w-full object-cover' />
+          <Image
+            src={u}
+            alt={label}
+            preview={false}
+            width='100%'
+            height='100%'
+            imgStyle={{ objectFit: 'cover' }}
+          />
         )}
       </button>
     </div>
@@ -155,7 +162,14 @@ function DocImagePreview({ label, url, onPreview }) {
         onClick={() => onPreview?.(u)}
         title={t('点击放大')}
       >
-        <img src={u} alt={label} className='h-full w-full object-cover' />
+        <Image
+          src={u}
+          alt={label}
+          preview={false}
+          width='100%'
+          height='100%'
+          imgStyle={{ objectFit: 'cover' }}
+        />
       </button>
     </div>
   );
@@ -185,12 +199,17 @@ export default function DistributorWithdrawProfileDetail({ row, onImagePreview }
           <FieldRow label={t('联系人')} value={f.contact_person} />
           <div className='flex flex-wrap gap-4 pt-1'>
             <DocImagePreview
-              label={t('营业执照')}
+              label={t('营业执照（需加盖公章）')}
               url={f.business_license_url}
               onPreview={onImagePreview}
             />
             <DocImagePreview
-              label={t('对公账户证明')}
+              label={t('法人身份证（需加盖公章）')}
+              url={f.legal_person_id_card_url}
+              onPreview={onImagePreview}
+            />
+            <DocImagePreview
+              label={t('对公账户证明（需加盖公章）')}
               url={f.corporate_account_proof_url}
               onPreview={onImagePreview}
             />

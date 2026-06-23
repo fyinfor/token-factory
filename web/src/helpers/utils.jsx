@@ -55,6 +55,11 @@ export function isDistributor() {
   }
 }
 
+export function isValidPhoneNumber(phone) {
+  const v = String(phone || '').trim();
+  return /^1[3-9]\d{9}$/.test(v) || /^\+[1-9]\d{4,14}$/.test(v);
+}
+
 export function isAdmin() {
   let user = localStorage.getItem('user');
   if (!user) return false;

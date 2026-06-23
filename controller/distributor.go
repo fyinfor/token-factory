@@ -1,18 +1,166 @@
 package controller
 
 import (
+	"fmt"
 	"io"
 	"math"
+	"mime"
 	"net/http"
+	"net/url"
+	"os"
+	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
 )
+
+func distributorDownloadFileName(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err == nil {
+		base := path.Base(u.Path)
+		if base != "." && base != "/" && strings.TrimSpace(base) != "" {
+			return strings.NewReplacer("\r", "", "\n", "", `"`, "").Replace(base)
+		}
+	}
+	return "image"
+}
+
+func normalizeDistributorLocalStorageAccessPrefix(raw string) string {
+	prefix := strings.TrimSpace(raw)
+	if prefix == "" {
+		return "/api"
+	}
+	if u, err := url.Parse(prefix); err == nil && u.Scheme != "" && u.Path != "" {
+		prefix = u.Path
+	}
+	prefix = strings.Trim(prefix, "/")
+	if prefix == "" {
+		return ""
+	}
+	return "/" + prefix
+}
+
+func distributorLocalUploadFileParam(rawURL string) (string, bool) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "", false
+	}
+	cfg := operation_setting.GetOssSetting()
+	objPrefix, err := service.NormalizeLocalUploadPrefix(cfg.LocalObjectKeyPrefix)
+	if err != nil {
+		return "", false
+	}
+	routes := []struct {
+		urlPrefix    string
+		objectPrefix string
+	}{
+		{
+			urlPrefix:    "/" + strings.Trim(path.Join(strings.Trim(normalizeDistributorLocalStorageAccessPrefix(cfg.LocalURLPrefix), "/"), service.LocalUploadFolder, objPrefix), "/") + "/",
+			objectPrefix: objPrefix,
+		},
+		{
+			urlPrefix:    "/" + strings.Trim(path.Join("api", service.LocalUploadFolder), "/") + "/",
+			objectPrefix: "",
+		},
+	}
+	for _, route := range routes {
+		if route.urlPrefix == "" || !strings.HasPrefix(u.Path, route.urlPrefix) {
+			continue
+		}
+		fileParam := path.Join(route.objectPrefix, strings.TrimPrefix(u.Path, route.urlPrefix))
+		if fileParam == "." || strings.TrimSpace(fileParam) == "" {
+			return "", false
+		}
+		return fileParam, true
+	}
+	return "", false
+}
+
+func tryServeDistributorLocalUploadAttachment(c *gin.Context, rawURL string) bool {
+	fileParam, ok := distributorLocalUploadFileParam(rawURL)
+	if !ok {
+		return false
+	}
+	cfg := operation_setting.GetOssSetting()
+	storeDir := service.LocalUploadBaseDir(cfg.LocalStoragePath)
+	fileParam = filepath.Clean("/" + fileParam)
+	fileParam = strings.TrimPrefix(fileParam, "/")
+	fullPath := filepath.Join(storeDir, filepath.FromSlash(fileParam))
+	absPath, err := filepath.Abs(fullPath)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "file not found"})
+		return true
+	}
+	absDir, err := filepath.Abs(storeDir)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "file not found"})
+		return true
+	}
+	if !strings.HasPrefix(absPath, absDir+string(filepath.Separator)) && absPath != absDir {
+		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "forbidden"})
+		return true
+	}
+	info, err := os.Stat(absPath)
+	if err != nil || info.IsDir() {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "file not found"})
+		return true
+	}
+	contentType := mime.TypeByExtension(filepath.Ext(absPath))
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	filename := strings.NewReplacer("\r", "", "\n", "", `"`, "").Replace(filepath.Base(absPath))
+	c.Header("Content-Type", contentType)
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"; filename*=UTF-8''%s`, filename, url.PathEscape(filename)))
+	c.File(absPath)
+	return true
+}
+
+// DownloadDistributorAdminFile proxies uploaded distributor images as an attachment.
+func DownloadDistributorAdminFile(c *gin.Context) {
+	rawURL := strings.TrimSpace(c.Query("url"))
+	if rawURL == "" {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "url is required"})
+		return
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "invalid url"})
+		return
+	}
+	if tryServeDistributorLocalUploadAttachment(c, rawURL) {
+		return
+	}
+	resp, err := service.DoDownloadRequest(rawURL, "distributor_admin_file_download")
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": fmt.Sprintf("download failed: %d", resp.StatusCode)})
+		return
+	}
+	filename := distributorDownloadFileName(rawURL)
+	contentType := resp.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+	escapedName := url.PathEscape(filename)
+	c.Header("Content-Type", contentType)
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"; filename*=UTF-8''%s`, filename, escapedName))
+	if resp.ContentLength > 0 {
+		c.Header("Content-Length", strconv.FormatInt(resp.ContentLength, 10))
+	}
+	_, _ = io.Copy(c.Writer, resp.Body)
+}
 
 type createDistributorWithdrawalRequest struct {
 	AccountType   int    `json:"account_type"`
@@ -37,6 +185,7 @@ type createDistributorWithdrawalRequest struct {
 	BankBranchCode           string `json:"bank_branch_code"`
 	ContactPerson            string `json:"contact_person"`
 	BusinessLicenseUrl       string `json:"business_license_url"`
+	LegalPersonIdCardUrl     string `json:"legal_person_id_card_url"`
 	CorporateAccountProofUrl string `json:"corporate_account_proof_url"`
 	InvoiceUrl               string `json:"invoice_url"`
 }
@@ -75,6 +224,7 @@ func distributorWithdrawalToJSON(w model.DistributorWithdrawal, username string)
 		"bank_branch_code":            profile.BankBranchCode,
 		"contact_person":              profile.ContactPerson,
 		"business_license_url":        profile.BusinessLicenseUrl,
+		"legal_person_id_card_url":    profile.LegalPersonIdCardUrl,
 		"corporate_account_proof_url": profile.CorporateAccountProofUrl,
 		"invoice_url":                 profile.InvoiceUrl,
 	}
@@ -99,6 +249,7 @@ func buildWithdrawalProfileJSON(req createDistributorWithdrawalRequest) (string,
 		BankBranchCode:           strings.TrimSpace(req.BankBranchCode),
 		ContactPerson:            strings.TrimSpace(req.ContactPerson),
 		BusinessLicenseUrl:       strings.TrimSpace(req.BusinessLicenseUrl),
+		LegalPersonIdCardUrl:     strings.TrimSpace(req.LegalPersonIdCardUrl),
 		CorporateAccountProofUrl: strings.TrimSpace(req.CorporateAccountProofUrl),
 		InvoiceUrl:               strings.TrimSpace(req.InvoiceUrl),
 	}
@@ -278,19 +429,37 @@ func GetDistributorCenterInfo(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
+	app, err := model.GetDistributorApplicationByUserId(userId)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	identityNeedsSupplement := !model.IsDistributorApplicationProfileComplete(app)
+	applicationIdCardNo := ""
+	applicationContact := ""
+	applicationQualificationUrls := "[]"
+	if app != nil {
+		applicationIdCardNo = app.IdCardNo
+		applicationContact = app.Contact
+		applicationQualificationUrls = app.QualificationUrls
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
 		"data": gin.H{
-			"aff_code":                   user.AffCode,
-			"aff_quota":                  user.AffQuota,
-			"aff_history_quota":          user.AffHistoryQuota,
-			"aff_count":                  user.AffCount,
-			"distributor_commission_bps": user.DistributorCommissionBps,
-			"effective_commission_bps":   bps,
-			"default_commission_bps":     common.AffiliateDefaultCommissionBps,
-			"apply_type":                 applyType,
-			"application_real_name":      applicationRealName,
+			"aff_code":                       user.AffCode,
+			"aff_quota":                      user.AffQuota,
+			"aff_history_quota":              user.AffHistoryQuota,
+			"aff_count":                      user.AffCount,
+			"distributor_commission_bps":     user.DistributorCommissionBps,
+			"effective_commission_bps":       bps,
+			"default_commission_bps":         common.AffiliateDefaultCommissionBps,
+			"apply_type":                     applyType,
+			"application_real_name":          applicationRealName,
+			"application_id_card_no":         applicationIdCardNo,
+			"application_contact":            applicationContact,
+			"application_qualification_urls": applicationQualificationUrls,
+			"identity_needs_supplement":      identityNeedsSupplement,
 		},
 	})
 }
@@ -452,6 +621,7 @@ func distributorIdentityApplicationListItemToJSON(item model.DistributorIdentity
 		"username":           item.Username,
 		"source_apply_type":  app.SourceApplyType,
 		"source_real_name":   app.SourceRealName,
+		"is_supplement":      app.SourceApplyType == app.TargetApplyType,
 		"current_apply_type": item.CurrentApplyType,
 		"current_real_name":  item.CurrentRealName,
 		"target_apply_type":  app.TargetApplyType,
