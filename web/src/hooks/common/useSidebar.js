@@ -45,6 +45,7 @@ export const DEFAULT_ADMIN_CONFIG = {
     topup: true,
     personal: true,
     route_policy: true,
+    'seedance-material': true,
     supplier: true,
     distributor_center: true,
     'supplier-apply': true,

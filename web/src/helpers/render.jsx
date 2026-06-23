@@ -172,6 +172,8 @@ export function getLucideIcon(key, selected = false) {
       return <User {...commonProps} color={iconColor} />;
     case 'route_policy':
       return <Route {...commonProps} color={iconColor} />;
+    case 'seedance-material':
+      return <ImageIcon {...commonProps} color={iconColor} />;
     case 'models':
       return <Package {...commonProps} color={iconColor} />;
     case 'deployment':

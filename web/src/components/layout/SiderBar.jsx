@@ -58,6 +58,7 @@ const routerMap = {
   playground: '/console/playground',
   personal: '/console/personal',
   route_policy: '/console/route-policy',
+  'seedance-material': '/console/seedance/material',
   supplier: null,
   distributor: '/console/distributor/admin',
   distributor_center: '/console/distributor/center',
@@ -158,6 +159,11 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('智能路由策略'),
         itemKey: 'route_policy',
         to: '/route-policy',
+      },
+      {
+        text: t('素材管理'),
+        itemKey: 'seedance-material',
+        to: '/console/seedance/material',
       },
       {
         text: t('供应商'),
