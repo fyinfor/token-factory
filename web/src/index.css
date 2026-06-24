@@ -1516,6 +1516,292 @@ html.dark .with-pastel-balls::before {
   padding-top: 0.75rem !important;
 }
 
+@keyframes distributor-center-page-drift {
+  0%,
+  100% {
+    transform: translate3d(-1.25rem, -0.75rem, 0) scale(1.04);
+  }
+  50% {
+    transform: translate3d(1.25rem, 0.75rem, 0) scale(1.04);
+  }
+}
+
+.distributor-center-root::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  content: '';
+  background:
+    linear-gradient(
+      180deg,
+      var(--semi-color-bg-0) 0%,
+      rgba(var(--semi-blue-0), 0.4) 48%,
+      var(--semi-color-bg-0) 100%
+    );
+  background-position: center;
+  background-size: cover;
+  filter: saturate(1.05);
+  opacity: 0.12;
+  animation: distributor-center-page-drift 18s ease-in-out infinite;
+}
+
+.distributor-center-root > * {
+  position: relative;
+  z-index: 1;
+}
+
+.distributor-center-stats-card.semi-card .semi-card-body {
+  padding: 12px 14px 14px;
+}
+
+.distributor-center-stats-cover {
+  overflow: hidden;
+  background: linear-gradient(180deg, #7ec8f7 0%, #c5eafe 63%, #1191a8 64%, #056779 100%);
+}
+
+.distributor-center-stats-cover::before {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  content: '';
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.14) 0%,
+      rgba(255, 255, 255, 0.04) 61%,
+      rgba(0, 71, 88, 0.24) 64%,
+      rgba(0, 32, 44, 0.36) 100%
+    );
+}
+
+.distributor-center-sea-scene {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.distributor-center-celestial {
+  position: absolute;
+  top: 14px;
+  right: 28px;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  background: #ffd35d;
+  box-shadow:
+    0 0 0 10px rgba(255, 211, 93, 0.14),
+    0 0 28px rgba(255, 201, 64, 0.5);
+}
+
+.distributor-center-cloud {
+  position: absolute;
+  top: 20px;
+  left: -80px;
+  width: 54px;
+  height: 16px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.68);
+  box-shadow:
+    14px -7px 0 1px rgba(255, 255, 255, 0.62),
+    31px -4px 0 -1px rgba(255, 255, 255, 0.58);
+  animation: distributor-center-cloud-sail 28s linear infinite;
+}
+
+.distributor-center-cloud--b {
+  top: 35px;
+  width: 42px;
+  height: 13px;
+  opacity: 0.46;
+  animation-duration: 42s;
+  animation-delay: -22s;
+}
+
+.distributor-center-boat {
+  position: absolute;
+  bottom: 35px;
+  left: -64px;
+  width: 54px;
+  height: 34px;
+  animation: distributor-center-boat-sail 16s linear infinite;
+}
+
+.distributor-center-boat-sail {
+  position: absolute;
+  left: 23px;
+  bottom: 11px;
+  width: 0;
+  height: 0;
+  border-bottom: 28px solid rgba(255, 255, 255, 0.86);
+  border-left: 0 solid transparent;
+  border-right: 18px solid transparent;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.16));
+}
+
+.distributor-center-boat-hull {
+  position: absolute;
+  right: 5px;
+  bottom: 2px;
+  width: 44px;
+  height: 12px;
+  border-radius: 0 0 16px 16px;
+  background: #784325;
+  transform: skewX(-18deg);
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.2);
+}
+
+.distributor-center-wave {
+  position: absolute;
+  left: -70px;
+  right: -70px;
+  bottom: 0;
+  height: 34px;
+  opacity: 0.72;
+  background:
+    radial-gradient(40px 16px at 20px 2px, rgba(255, 255, 255, 0.34) 42%, transparent 44%) 0 0 / 80px 32px repeat-x,
+    linear-gradient(180deg, rgba(37, 170, 190, 0.72), rgba(2, 89, 110, 0.92));
+  animation: distributor-center-wave-roll 8s linear infinite;
+}
+
+.distributor-center-wave--b {
+  bottom: 12px;
+  height: 28px;
+  opacity: 0.42;
+  animation-duration: 12s;
+  animation-direction: reverse;
+}
+
+.distributor-center-wave--c {
+  bottom: -14px;
+  height: 42px;
+  opacity: 0.5;
+  animation-duration: 15s;
+}
+
+html.dark .distributor-center-stats-cover {
+  background: linear-gradient(180deg, #06111f 0%, #10233a 63%, #063244 64%, #021d29 100%);
+}
+
+html.dark .distributor-center-stats-cover::before {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(4, 10, 22, 0.22) 0%,
+      rgba(4, 10, 22, 0.04) 61%,
+      rgba(0, 18, 30, 0.34) 64%,
+      rgba(0, 8, 14, 0.48) 100%
+    );
+}
+
+html.dark .distributor-center-celestial {
+  background: #f4f0d5;
+  box-shadow:
+    inset -9px -4px 0 #cfd4dc,
+    0 0 0 9px rgba(244, 240, 213, 0.08),
+    0 0 24px rgba(199, 220, 255, 0.28);
+}
+
+html.dark .distributor-center-cloud {
+  background: rgba(171, 190, 214, 0.32);
+  box-shadow:
+    18px -9px 0 2px rgba(171, 190, 214, 0.28),
+    42px -5px 0 0 rgba(171, 190, 214, 0.24);
+}
+
+html.dark .distributor-center-wave {
+  background:
+    radial-gradient(40px 16px at 20px 2px, rgba(151, 210, 232, 0.16) 42%, transparent 44%) 0 0 / 80px 32px repeat-x,
+    linear-gradient(180deg, rgba(15, 91, 117, 0.66), rgba(1, 35, 52, 0.94));
+}
+
+.distributor-center-ratio-badge {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.14);
+}
+
+html:not(.dark) .distributor-center-ratio-badge {
+  color: rgba(5, 73, 88, 0.96);
+  background:
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.78),
+      rgba(255, 255, 255, 0.42)
+    ),
+    rgba(255, 255, 255, 0.36);
+  border: 1px solid rgba(255, 255, 255, 0.74);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.74),
+    0 8px 22px rgba(14, 83, 100, 0.18);
+  backdrop-filter: blur(14px) saturate(1.35);
+  -webkit-backdrop-filter: blur(14px) saturate(1.35);
+}
+
+@keyframes distributor-center-cloud-sail {
+  from {
+    left: -90px;
+  }
+  to {
+    left: calc(100% + 90px);
+  }
+}
+
+@keyframes distributor-center-boat-sail {
+  0% {
+    left: -64px;
+    transform: translateY(0) rotate(-1deg);
+  }
+  50% {
+    transform: translateY(-2px) rotate(1deg);
+  }
+  100% {
+    left: calc(100% + 64px);
+    transform: translateY(0) rotate(-1deg);
+  }
+}
+
+@keyframes distributor-center-wave-roll {
+  from {
+    background-position:
+      0 0,
+      0 0;
+  }
+  to {
+    background-position:
+      80px 0,
+      0 0;
+  }
+}
+
+@keyframes distributor-center-selected-actions-in {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -6px, 0) scale(0.98);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+.distributor-center-selected-actions {
+  transform-origin: right center;
+  animation: distributor-center-selected-actions-in 0.18s ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .distributor-center-root::before,
+  .distributor-center-cloud,
+  .distributor-center-boat,
+  .distributor-center-wave,
+  .distributor-center-selected-actions {
+    animation: none;
+  }
+}
+
 /* ==================== 模型定价页面布局 ==================== */
 @keyframes distributor-supplement-pulse {
   0% {
