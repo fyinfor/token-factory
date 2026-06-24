@@ -8,21 +8,38 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 )
 
-// 素材库接口 Action 常量。
+// 素材库接口 Action 常量（与上游素材库 API 严格对齐，大小写不可改）。
 const (
 	materialActionCreateAssetGroup = "CreateAssetGroup"
 	materialActionGetAssetGroup    = "GetAssetGroup"
 	materialActionCreateAsset      = "CreateAsset"
 	materialActionGetAsset         = "GetAsset"
+	materialActionDeleteAsset      = "DeleteAsset"
 
-	// MaterialAssetTypeImage 图片素材类型。
+	// 素材资产类型枚举（AssetType，与上游接口严格对齐）：图片 / 视频 / 音频。
 	MaterialAssetTypeImage = "Image"
+	MaterialAssetTypeVideo = "Video"
+	MaterialAssetTypeAudio = "Audio"
+
+	// 素材状态枚举（Status，与上游接口严格对齐）：可用 / 失败 / 处理中。
+	MaterialStatusActive  = "Active"
+	MaterialStatusFailed  = "Failed"
+	MaterialStatusPending = "Pending"
+
+	materialGetAssetMaxAttempts  = 20
+	materialGetAssetPollInterval = time.Second
 )
+
+// IsValidMaterialAssetType 判断素材类型是否为业务允许上传的图片/视频（音频等其他类型一律拦截）。
+func IsValidMaterialAssetType(assetType string) bool {
+	return assetType == MaterialAssetTypeImage || assetType == MaterialAssetTypeVideo
+}
 
 // materialResponse 素材库接口通用响应包装。
 type materialResponse struct {
@@ -181,12 +198,109 @@ func MaterialCreateAsset(groupId string, url string, name string, assetType stri
 	return result.Id, nil
 }
 
-// MaterialGetAsset 查询单个素材信息（用于状态刷新）。
+// NormalizeMaterialStatus 归一化上游 Status 枚举（兼容大小写差异）。
+func NormalizeMaterialStatus(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "active":
+		return MaterialStatusActive
+	case "failed":
+		return MaterialStatusFailed
+	case "pending":
+		return MaterialStatusPending
+	default:
+		return strings.TrimSpace(status)
+	}
+}
+
+func materialURLsEquivalent(a, b string) bool {
+	return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b))
+}
+
+// shouldContinueMaterialPoll 判断是否应继续轮询 GetAsset。
+// sourceURL 为 CreateAsset 时传入的原始地址；本地上传场景下需等待上游返回不同的永久 URL。
+func shouldContinueMaterialPoll(info *MaterialAssetResult, sourceURL string) bool {
+	if info == nil {
+		return true
+	}
+	status := NormalizeMaterialStatus(info.Status)
+	url := strings.TrimSpace(info.URL)
+	sourceURL = strings.TrimSpace(sourceURL)
+
+	if status == MaterialStatusFailed {
+		return false
+	}
+
+	if IsLocalMaterialUploadURL(sourceURL) {
+		if url != "" && !materialURLsEquivalent(url, sourceURL) {
+			return false
+		}
+		return status == MaterialStatusPending || url == "" || materialURLsEquivalent(url, sourceURL)
+	}
+
+	if status == MaterialStatusActive && url != "" {
+		return false
+	}
+	return status == MaterialStatusPending || url == ""
+}
+
+// MaterialGetAsset 查询单个素材信息（GetAsset）。
+// 入参：素材资产 ID 字符串（必填）。返回 Result 完整结构（含 URL/AssetType/GroupId/Status/CreateTime）。
 func MaterialGetAsset(assetId string) (*MaterialAssetResult, error) {
+	// 请求 Body：{"Id": "素材资产ID字符串，必填"}
 	payload := map[string]string{"Id": assetId}
 	var result MaterialAssetResult
 	if err := doMaterialRequest(materialActionGetAsset, payload, &result); err != nil {
 		return nil, err
 	}
+	if strings.TrimSpace(result.Id) == "" {
+		return nil, errors.New("素材库未返回有效素材信息")
+	}
+	result.Status = NormalizeMaterialStatus(result.Status)
 	return &result, nil
+}
+
+// MaterialPollAsset 轮询 GetAsset，直到上游素材处理完成或达到最大次数。
+// sourceURL 为 CreateAsset 传入的原始 URL，用于判断本地上传是否已拿到永久地址。
+func MaterialPollAsset(assetId, sourceURL string) (*MaterialAssetResult, error) {
+	var last *MaterialAssetResult
+	var lastErr error
+	for attempt := 0; attempt < materialGetAssetMaxAttempts; attempt++ {
+		info, err := MaterialGetAsset(assetId)
+		if err != nil {
+			lastErr = err
+			if attempt < materialGetAssetMaxAttempts-1 {
+				time.Sleep(materialGetAssetPollInterval)
+				continue
+			}
+			return nil, err
+		}
+		last = info
+		if !shouldContinueMaterialPoll(info, sourceURL) {
+			return info, nil
+		}
+		if attempt < materialGetAssetMaxAttempts-1 {
+			time.Sleep(materialGetAssetPollInterval)
+		}
+	}
+	if last != nil {
+		return last, nil
+	}
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, errors.New("查询素材信息超时")
+}
+
+// MaterialDeleteAsset 删除素材（DeleteAsset）。
+// 入参：待删除资产 ID（必填）。返回 Result.Id（本次删除成功的资产 ID）。
+func MaterialDeleteAsset(assetId string) (string, error) {
+	// 请求 Body：{"Id": "待删除资产ID，必填"}
+	payload := map[string]string{"Id": assetId}
+	var result struct {
+		Id string `json:"Id"`
+	}
+	if err := doMaterialRequest(materialActionDeleteAsset, payload, &result); err != nil {
+		return "", err
+	}
+	return result.Id, nil
 }

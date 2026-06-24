@@ -38,6 +38,7 @@ import {
   showInfo,
   showSuccess,
   timestamp2string,
+  getSystemName,
 } from '../../helpers';
 import { marked } from 'marked';
 import { useTranslation } from 'react-i18next';
@@ -111,6 +112,7 @@ const OtherSetting = () => {
     [LEGAL_USER_AGREEMENT_KEY]: '',
     [LEGAL_PRIVACY_POLICY_KEY]: '',
     SystemName: '',
+    SystemNameEn: '',
     Logo: '',
     DocsBrandName: '',
     DocsSiteNameEn: '',
@@ -416,10 +418,14 @@ const OtherSetting = () => {
         SystemName: true,
       }));
       await updateOption('SystemName', inputs.SystemName);
-      const name = String(inputs.SystemName ?? '').trim();
-      localStorage.setItem('system_name', name);
-      if (name) {
-        document.title = name;
+      await updateOption('SystemNameEn', inputs.SystemNameEn);
+      const zhName = String(inputs.SystemName ?? '').trim();
+      const enName = String(inputs.SystemNameEn ?? '').trim();
+      localStorage.setItem('system_name', zhName);
+      localStorage.setItem('system_name_en', enName);
+      const displayName = getSystemName();
+      if (displayName) {
+        document.title = displayName;
       }
       showSuccess(t('系统名称已更新'));
     } catch (error) {
@@ -870,9 +876,15 @@ const OtherSetting = () => {
           <Card>
             <Form.Section text={t('个性化设置')}>
               <Form.Input
-                label={t('系统名称')}
+                label={t('中文系统名称')}
                 placeholder={t('在此输入系统名称')}
                 field={'SystemName'}
+                onChange={handleInputChange}
+              />
+              <Form.Input
+                label={t('英文系统名称')}
+                placeholder={t('在此输入英文系统名称')}
+                field={'SystemNameEn'}
                 onChange={handleInputChange}
               />
               <Button

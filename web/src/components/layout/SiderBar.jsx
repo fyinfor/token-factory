@@ -156,7 +156,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         to: '/personal',
       },
       {
-        text: t('智能路由策略'),
+        text: t('智能路由'),
         itemKey: 'route_policy',
         to: '/route-policy',
       },

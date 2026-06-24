@@ -51,6 +51,8 @@ type User struct {
 	AffQuota                 int        `json:"aff_quota" gorm:"type:int;default:0;column:aff_quota"`           // 邀请剩余额度
 	AffHistoryQuota          int        `json:"aff_history_quota" gorm:"type:int;default:0;column:aff_history"` // 邀请历史额度
 	InviterId                int        `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
+	InviterDisplayName       string     `json:"inviter_display_name,omitempty" gorm:"-"`
+	InviterUsername          string     `json:"inviter_username,omitempty" gorm:"-"`
 	DistributorCommissionBps int        `json:"distributor_commission_bps" gorm:"type:int;default:0;column:distributor_commission_bps"` // 分销商名下新邀请关系的默认分成（万分之一），0 表示跟随系统 AffiliateDefaultCommissionBps
 	// IsDistributor 分销商资格 0/1（与 role 解耦）；普通用户 role=1 时可同时为分销商。旧版 role=5 已迁移为 role=1 + is_distributor=1。
 	IsDistributor     int            `json:"is_distributor" gorm:"column:is_distributor;type:integer;default:0;index"`
@@ -356,7 +358,51 @@ func GetAllUsers(pageInfo *common.PageInfo, studentView string, tag string) (use
 		return nil, 0, err
 	}
 
+	_ = fillInviterProfilesForUsers(users)
+
 	return users, total, nil
+}
+
+func fillInviterProfilesForUsers(users []*User) error {
+	if len(users) == 0 {
+		return nil
+	}
+	idSet := make(map[int]struct{})
+	for _, user := range users {
+		if user != nil && user.InviterId > 0 {
+			idSet[user.InviterId] = struct{}{}
+		}
+	}
+	if len(idSet) == 0 {
+		return nil
+	}
+	ids := make([]int, 0, len(idSet))
+	for id := range idSet {
+		ids = append(ids, id)
+	}
+	type inviterProfile struct {
+		Id          int    `gorm:"column:id"`
+		Username    string `gorm:"column:username"`
+		DisplayName string `gorm:"column:display_name"`
+	}
+	var inviters []inviterProfile
+	if err := DB.Model(&User{}).Select("id", "username", "display_name").Where("id IN ?", ids).Find(&inviters).Error; err != nil {
+		return err
+	}
+	byID := make(map[int]inviterProfile, len(inviters))
+	for _, inviter := range inviters {
+		byID[inviter.Id] = inviter
+	}
+	for _, user := range users {
+		if user == nil || user.InviterId <= 0 {
+			continue
+		}
+		if inviter, ok := byID[user.InviterId]; ok {
+			user.InviterDisplayName = inviter.DisplayName
+			user.InviterUsername = inviter.Username
+		}
+	}
+	return nil
 }
 
 func SearchUsers(keyword string, group string, studentView string, tag string, remark string, startIdx int, num int) ([]*User, int64, error) {
@@ -445,6 +491,8 @@ func SearchUsers(keyword string, group string, studentView string, tag string, r
 	if err = tx.Commit().Error; err != nil {
 		return nil, 0, err
 	}
+
+	_ = fillInviterProfilesForUsers(users)
 
 	return users, total, nil
 }

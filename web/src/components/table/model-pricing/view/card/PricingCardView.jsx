@@ -66,10 +66,10 @@ import {
   PRICING_TABLE_BODY_BG,
   DISCOUNT_MUTED_STYLE,
   TABLE_CELL_CLASS,
-  FLAT_PRICING_COLUMNS,
-  FIXED_PRICING_COLUMNS,
-  VIDEO_PRICING_COLUMNS,
-  TIER_PRICING_COLUMNS,
+  getFlatPricingColumns,
+  getFixedPricingColumns,
+  getVideoPricingColumns,
+  getTierPricingColumns,
 } from './pricingTableStyles';
 import { VIDEO_FLAT_LANE_I18N_KEY } from '../../constants/videoFlatClipLaneI18n';
 import PricingCardSkeleton from './PricingCardSkeleton';
@@ -312,16 +312,17 @@ const TokenTierTable = ({ items, t }) => {
     return null;
   }
 
+  const tierColumns = getTierPricingColumns(t);
   const firstRow = items.rows[0];
   const inputCell = firstRow.cells?.input;
   const outputCell = firstRow.cells?.output;
 
   const displayRows = [];
   if (inputCell && inputCell.platformPriceUsd > 0) {
-    displayRows.push({ key: 'input', label: '输入价格', cell: inputCell });
+    displayRows.push({ key: 'input', label: t('输入价格'), cell: inputCell });
   }
   if (outputCell && outputCell.platformPriceUsd > 0) {
-    displayRows.push({ key: 'output', label: '输出价格', cell: outputCell });
+    displayRows.push({ key: 'output', label: t('输出价格'), cell: outputCell });
   }
   if (displayRows.length === 0) return null;
 
@@ -357,7 +358,7 @@ const TokenTierTable = ({ items, t }) => {
               className={TABLE_CELL_CLASS.thCenter}
               style={PRICING_TABLE_HEAD_CELL_STYLE}
             >
-              {TIER_PRICING_COLUMNS.platform}
+              {tierColumns.platform}
             </th>
             {/* 边界隐藏逻辑：hideOfficialCols 为 true 时隐藏官方价和折扣列 */}
             {!hideOfficialCols && (
@@ -365,7 +366,7 @@ const TokenTierTable = ({ items, t }) => {
                 className={TABLE_CELL_CLASS.thCenter}
                 style={PRICING_TABLE_HEAD_CELL_STYLE}
               >
-                {TIER_PRICING_COLUMNS.official}
+                {tierColumns.official}
               </th>
             )}
             {!hideOfficialCols && (
@@ -373,7 +374,7 @@ const TokenTierTable = ({ items, t }) => {
                 className={TABLE_CELL_CLASS.thCenter}
                 style={PRICING_TABLE_HEAD_CELL_STYLE}
               >
-                {TIER_PRICING_COLUMNS.discount}
+                {tierColumns.discount}
               </th>
             )}
           </tr>
@@ -397,7 +398,7 @@ const TokenTierTable = ({ items, t }) => {
                   className={TABLE_CELL_CLASS.tdLabel}
                   style={{ color: catStyle.textColor }}
                 >
-                  {t(label)}
+                  {label}
                 </td>
                 <td
                   className={TABLE_CELL_CLASS.tdPlatform}
@@ -435,6 +436,7 @@ const TokenTierTable = ({ items, t }) => {
  * 折扣视觉：加粗、放大、高饱和度鲜艳色
  */
 const FlatPricingTable = ({ items, unitSuffix, t }) => {
+  const flatColumns = getFlatPricingColumns(t);
   // 收集输入/输出行数据，用于统一表格渲染
   const rows = [];
   for (const item of items) {
@@ -476,13 +478,13 @@ const FlatPricingTable = ({ items, unitSuffix, t }) => {
               className={TABLE_CELL_CLASS.thLeft}
               style={PRICING_TABLE_HEAD_CELL_STYLE}
             >
-              {FLAT_PRICING_COLUMNS.label}
+              {flatColumns.label}
             </th>
             <th
               className={TABLE_CELL_CLASS.thCenter}
               style={PRICING_TABLE_HEAD_CELL_STYLE}
             >
-              {FLAT_PRICING_COLUMNS.platform}
+              {flatColumns.platform}
             </th>
             {/* 边界隐藏逻辑：hideOfficialCols 为 true 时隐藏官方价和折扣列 */}
             {!hideOfficialCols && (
@@ -490,7 +492,7 @@ const FlatPricingTable = ({ items, unitSuffix, t }) => {
                 className={TABLE_CELL_CLASS.thCenter}
                 style={PRICING_TABLE_HEAD_CELL_STYLE}
               >
-                {FLAT_PRICING_COLUMNS.official}
+                {flatColumns.official}
               </th>
             )}
             {!hideOfficialCols && (
@@ -498,7 +500,7 @@ const FlatPricingTable = ({ items, unitSuffix, t }) => {
                 className={TABLE_CELL_CLASS.thCenter}
                 style={PRICING_TABLE_HEAD_CELL_STYLE}
               >
-                {FLAT_PRICING_COLUMNS.discount}
+                {flatColumns.discount}
               </th>
             )}
           </tr>
@@ -561,6 +563,7 @@ const FlatPricingTable = ({ items, unitSuffix, t }) => {
 const FixedPricingTable = ({ row, t }) => {
   if (!row) return null;
 
+  const fixedColumns = getFixedPricingColumns(t);
   const platformValue = row.value || '-';
   const officialValue = row.original?.text || '-';
   const discount = row.original?.discount ?? null;
@@ -584,13 +587,13 @@ const FixedPricingTable = ({ row, t }) => {
               className={TABLE_CELL_CLASS.thLeft}
               style={PRICING_TABLE_HEAD_CELL_STYLE}
             >
-              {FIXED_PRICING_COLUMNS.label}
+              {fixedColumns.label}
             </th>
             <th
               className={TABLE_CELL_CLASS.thCenter}
               style={PRICING_TABLE_HEAD_CELL_STYLE}
             >
-              {FIXED_PRICING_COLUMNS.platform}
+              {fixedColumns.platform}
             </th>
             {/* 边界隐藏逻辑：hideOfficialCols 为 true 时隐藏官方价和折扣列 */}
             {!hideOfficialCols && (
@@ -598,7 +601,7 @@ const FixedPricingTable = ({ row, t }) => {
                 className={TABLE_CELL_CLASS.thCenter}
                 style={PRICING_TABLE_HEAD_CELL_STYLE}
               >
-                {FIXED_PRICING_COLUMNS.official}
+                {fixedColumns.official}
               </th>
             )}
             {!hideOfficialCols && (
@@ -606,7 +609,7 @@ const FixedPricingTable = ({ row, t }) => {
                 className={TABLE_CELL_CLASS.thCenter}
                 style={PRICING_TABLE_HEAD_CELL_STYLE}
               >
-                {FIXED_PRICING_COLUMNS.discount}
+                {fixedColumns.discount}
               </th>
             )}
           </tr>
@@ -662,6 +665,7 @@ const FixedPricingTable = ({ row, t }) => {
 const VideoPricingTable = ({ videoTierRows, hiddenCount, openDetail, blurPricing, model, t }) => {
   if (!videoTierRows || videoTierRows.length === 0) return null;
 
+  const videoColumns = getVideoPricingColumns(t);
   const groups = groupVideoTierPreviewRows(videoTierRows);
 
   // 边界隐藏逻辑：所有行都没有有效折扣（discount <= 0 或 null）时，隐藏官方价和折扣列
@@ -709,7 +713,7 @@ const VideoPricingTable = ({ videoTierRows, hiddenCount, openDetail, blurPricing
                   color: 'var(--semi-color-text-2)',
                 }}
               >
-                {VIDEO_PRICING_COLUMNS.platform}
+                {videoColumns.platform}
               </th>
               {/* 边界隐藏逻辑：allRowsNoDiscount 为 true 时隐藏官方价和折扣列 */}
               {!allRowsNoDiscount && (
@@ -720,7 +724,7 @@ const VideoPricingTable = ({ videoTierRows, hiddenCount, openDetail, blurPricing
                     color: 'var(--semi-color-text-2)',
                   }}
                 >
-                  {VIDEO_PRICING_COLUMNS.official}
+                  {videoColumns.official}
                 </th>
               )}
               {!allRowsNoDiscount && (
@@ -731,7 +735,7 @@ const VideoPricingTable = ({ videoTierRows, hiddenCount, openDetail, blurPricing
                     color: 'var(--semi-color-text-2)',
                   }}
                 >
-                  {VIDEO_PRICING_COLUMNS.discount}
+                  {videoColumns.discount}
                 </th>
               )}
             </tr>

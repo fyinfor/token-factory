@@ -35,7 +35,7 @@ import {
   Typography,
 } from '@douyinfe/semi-ui';
 import { Search } from 'lucide-react';
-import { API, showError, timestamp2string } from '../../helpers';
+import { API, showError, timestamp2string, getPayMethodDisplayName } from '../../helpers';
 import { StatusContext } from '../../context/Status';
 
 const { Text } = Typography;
@@ -47,16 +47,6 @@ const STATUS_META = {
   pending: { color: 'blue', label: '待支付' },
   failed: { color: 'red', label: '失败' },
   expired: { color: 'grey', label: '已过期' },
-};
-
-const PAYMENT_METHOD_MAP = {
-  stripe: 'Stripe',
-  creem: 'Creem',
-  waffo: 'Waffo',
-  alipay: '支付宝',
-  wxpay: '微信',
-  ALI_PC: '支付宝',
-  WX_NATIVE: '微信',
 };
 
 function semiInputString(valOrEvt) {
@@ -186,8 +176,7 @@ export default function InviteeTopupHistoryModal({
 
   const renderPaymentMethod = useCallback(
     (method) => {
-      const label = PAYMENT_METHOD_MAP[method] || method || '-';
-      return <Text>{label === '-' ? label : t(label)}</Text>;
+      return <Text>{getPayMethodDisplayName(method, t)}</Text>;
     },
     [t],
   );

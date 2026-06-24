@@ -431,6 +431,12 @@ code {
   object-fit: contain;
 }
 
+/* Semi Image 预览放大：Tailwind preflight 的 img { max-width: 100% } 会限制宽度，
+   但预览层仍保留 inline height，导致宽高比失真 */
+.semi-image-preview-image-img {
+  max-width: none !important;
+}
+
 .playground-ai-dialogue .semi-ai-chat-dialogue-action {
   column-gap: 0 !important;
 }
