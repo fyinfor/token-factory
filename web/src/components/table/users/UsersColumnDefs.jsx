@@ -250,12 +250,22 @@ const renderQuotaUsage = (text, record, t) => {
 /**
  * Render invite information
  */
+const getInviterDisplayName = (record) => {
+  const nickname = String(record?.inviter_display_name ?? '').trim();
+  if (nickname) return nickname;
+  const username = String(record?.inviter_username ?? '').trim();
+  if (username) return username;
+  return record?.inviter_id ? String(record.inviter_id) : '';
+};
+
 const renderInviteInfo = (text, record, t) => {
+  const inviterLabel = getInviterDisplayName(record);
   return (
     <div>
       <Space spacing={1}>
         <Tag color='white' shape='circle' className='!text-xs'>
           {t('邀请')}: {renderNumber(record.aff_count)}
+          {t('人')}
         </Tag>
         <Tag color='white' shape='circle' className='!text-xs'>
           {t('收益')}: {renderQuota(record.aff_history_quota)}
@@ -263,7 +273,7 @@ const renderInviteInfo = (text, record, t) => {
         <Tag color='white' shape='circle' className='!text-xs'>
           {record.inviter_id === 0
             ? t('无邀请人')
-            : `${t('邀请人')}: ${record.inviter_id}`}
+            : `${t('邀请人')}: ${inviterLabel}`}
         </Tag>
       </Space>
     </div>

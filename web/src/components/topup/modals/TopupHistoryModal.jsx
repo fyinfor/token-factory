@@ -35,7 +35,7 @@ import {
 } from '@douyinfe/semi-illustrations';
 import { Coins } from 'lucide-react';
 import { IconSearch } from '@douyinfe/semi-icons';
-import { API, timestamp2string } from '../../../helpers';
+import { API, timestamp2string, getPayMethodDisplayName } from '../../../helpers';
 import { isAdmin } from '../../../helpers/utils';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import { StatusContext } from '../../../context/Status';
@@ -49,16 +49,7 @@ const STATUS_CONFIG = {
   expired: { type: 'danger', key: '已过期' },
 };
 
-// 支付方式映射
-const PAYMENT_METHOD_MAP = {
-  stripe: 'Stripe',
-  creem: 'Creem',
-  waffo: 'Waffo',
-  alipay: '支付宝',
-  wxpay: '微信',
-  ALI_PC: '支付宝',
-  WX_NATIVE: '微信',
-};
+// 支付方式映射（历史订单 payment_method 字段，已由 getPayMethodDisplayName 统一处理）
 
 /** 支付状态筛选项「不限」占位值（Semi Select 对 value="" 不稳定，勿用空串） */
 const TOPUP_STATUS_ALL = '__all__';
@@ -252,8 +243,7 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
 
   // 渲染支付方式
   const renderPaymentMethod = (pm) => {
-    const displayName = PAYMENT_METHOD_MAP[pm];
-    return <Text>{displayName ? t(displayName) : pm || '-'}</Text>;
+    return <Text>{getPayMethodDisplayName(pm, t)}</Text>;
   };
 
   const isSubscriptionTopup = (record) => {

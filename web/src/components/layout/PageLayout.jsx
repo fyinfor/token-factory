@@ -28,7 +28,7 @@ import React, { useContext, useEffect, useState } from 'react';
 import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { useSidebarCollapsed } from '../../hooks/common/useSidebarCollapsed';
 import { useTranslation } from 'react-i18next';
-import { API, getLogo, showError, setStatusData } from '../../helpers';
+import { API, getLogo, getSystemName, showError, setStatusData } from '../../helpers';
 import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
 import { useLocation } from 'react-router-dom';
@@ -101,11 +101,14 @@ const PageLayout = () => {
 
   /** 与 localStorage 中的 status 派生字段一致（须在 setStatusData 之后调用） */
   const syncDocumentBrandingFromStorage = () => {
-    // 仅用显式缓存：避免用 getSystemName() 的占位文案抢在 /api/status 之前改标题，
-    // 也避免旧缓存里的默认名（如 TokenFactory）闪一下。
-    const systemName = localStorage.getItem('system_name');
-    if (systemName) {
-      document.title = systemName;
+    const hasCachedName =
+      localStorage.getItem('system_name') ||
+      localStorage.getItem('system_name_en');
+    if (hasCachedName) {
+      const systemName = getSystemName(i18n.language);
+      if (systemName) {
+        document.title = systemName;
+      }
     }
     const logo = getLogo();
     if (logo) {
@@ -138,6 +141,17 @@ const PageLayout = () => {
     loadUser();
     loadStatus().catch(console.error);
   }, []);
+
+  useEffect(() => {
+    const hasCachedName =
+      localStorage.getItem('system_name') ||
+      localStorage.getItem('system_name_en');
+    if (!hasCachedName) return;
+    const systemName = getSystemName(i18n.language);
+    if (systemName) {
+      document.title = systemName;
+    }
+  }, [i18n.language]);
 
   useEffect(() => {
     const status = statusState?.status;

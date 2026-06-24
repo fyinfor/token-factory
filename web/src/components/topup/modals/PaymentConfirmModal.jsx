@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React from 'react';
+import { getPayMethodDisplayName } from '../../../helpers';
 import { Modal, Typography, Card, Skeleton } from '@douyinfe/semi-ui';
 import { SiAlipay, SiWechat, SiStripe } from 'react-icons/si';
 import { CreditCard } from 'lucide-react';
@@ -163,7 +163,7 @@ const PaymentConfirmModal = ({
                           />
                         )}
                         <Text className='text-slate-900 dark:text-slate-100'>
-                          {payMethod.name}
+                          {getPayMethodDisplayName(payMethod, t)}
                         </Text>
                       </>
                     );
