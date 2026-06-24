@@ -1191,6 +1191,7 @@ func GetUserModels(c *gin.Context) {
 			ChannelNo         string                       `json:"channel_no,omitempty"`
 			RouteSlug         string                       `json:"route_slug,omitempty"`
 			SupplierType      string                       `json:"supplier_type,omitempty"`
+			ChannelType       int                          `json:"channel_type,omitempty"`
 			VideoPricingTiers []playgroundVideoPricingTier `json:"video_pricing_tiers,omitempty"`
 		}
 		type playgroundModelItem struct {
@@ -1371,6 +1372,7 @@ func GetUserModels(c *gin.Context) {
 					ChannelNo:    strings.TrimSpace(ch.ChannelNo),
 					RouteSlug:    strings.TrimSpace(ch.RouteSlug),
 					SupplierType: strings.TrimSpace(ch.SupplierType),
+					ChannelType:  ch.Type,
 				}
 			}
 		}
