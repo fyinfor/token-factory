@@ -1219,9 +1219,10 @@ html.dark .home-distributor-cta-btn {
   overflow: hidden;
 }
 
-/* 分销申请 - 细滚动条（低对比、淡色）：说明区独立滚动 或 窄屏整卡单列滚动 */
+/* 分销申请 / 协议弹窗 - 细滚动条（低对比、淡色） */
 .distributor-apply-intro-scroll,
-.distributor-apply-card-stacked-scroll {
+.distributor-apply-card-stacked-scroll,
+.agreement-detail-scroll {
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: color-mix(
@@ -1233,20 +1234,23 @@ html.dark .home-distributor-cta-btn {
 }
 
 .distributor-apply-intro-scroll::-webkit-scrollbar,
-.distributor-apply-card-stacked-scroll::-webkit-scrollbar {
+.distributor-apply-card-stacked-scroll::-webkit-scrollbar,
+.agreement-detail-scroll::-webkit-scrollbar {
   width: 7px;
   height: 7px;
 }
 
 .distributor-apply-intro-scroll::-webkit-scrollbar-track,
-.distributor-apply-card-stacked-scroll::-webkit-scrollbar-track {
+.distributor-apply-card-stacked-scroll::-webkit-scrollbar-track,
+.agreement-detail-scroll::-webkit-scrollbar-track {
   margin: 6px 0 8px;
   background: color-mix(in srgb, var(--semi-color-border) 12%, transparent);
   border-radius: 100px;
 }
 
 .distributor-apply-intro-scroll::-webkit-scrollbar-thumb,
-.distributor-apply-card-stacked-scroll::-webkit-scrollbar-thumb {
+.distributor-apply-card-stacked-scroll::-webkit-scrollbar-thumb,
+.agreement-detail-scroll::-webkit-scrollbar-thumb {
   background: linear-gradient(
     180deg,
     color-mix(in srgb, var(--semi-color-primary) 16%, var(--semi-color-fill-2))
@@ -1261,7 +1265,8 @@ html.dark .home-distributor-cta-btn {
 }
 
 .distributor-apply-intro-scroll::-webkit-scrollbar-thumb:hover,
-.distributor-apply-card-stacked-scroll::-webkit-scrollbar-thumb:hover {
+.distributor-apply-card-stacked-scroll::-webkit-scrollbar-thumb:hover,
+.agreement-detail-scroll::-webkit-scrollbar-thumb:hover {
   background: linear-gradient(
     180deg,
     color-mix(in srgb, var(--semi-color-primary) 26%, var(--semi-color-fill-1))

@@ -55,6 +55,7 @@ import { useTranslation } from 'react-i18next';
 import { copy, showSuccess, showError } from '../../helpers';
 import { MaterialAssetType, MaterialStatus } from '../../constants';
 import { useMaterialLibrary } from '../../hooks/seedance/useMaterialLibrary';
+import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { useSmoothUploadProgress } from '../distributor/useSmoothUploadProgress';
 
 const { Title, Text } = Typography;
@@ -105,6 +106,7 @@ const MaterialLibrary = () => {
     handleUploadByURL,
     handleDelete,
   } = useMaterialLibrary();
+  const isMobile = useIsMobile();
 
   // 协议详情弹窗 / 在线链接上传弹窗的本地 UI 状态。
   const [detailVisible, setDetailVisible] = useState(false);
@@ -533,13 +535,17 @@ const MaterialLibrary = () => {
         title={t('虚拟人像合规承诺函')}
         visible={detailVisible}
         onCancel={() => setDetailVisible(false)}
+        width={isMobile ? 'calc(100vw - 32px)' : 720}
         footer={
           <Button theme='solid' onClick={() => setDetailVisible(false)}>
             {t('我已知晓')}
           </Button>
         }
       >
-        <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8 }}>
+        <div
+          className='agreement-detail-scroll max-h-[60vh] overflow-y-auto overscroll-y-contain pr-1'
+          style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8 }}
+        >
           {agreementDetail || t('暂无协议详情')}
         </div>
       </Modal>
