@@ -46,6 +46,9 @@ import {
   Users,
   Zap,
   Copy,
+  Download,
+  Wallet,
+  History,
   UserPlus,
   BadgeCheck,
   Building2,
@@ -933,53 +936,55 @@ export default function DistributorCenter() {
   }
 
   return (
-    <div className='mt-14 px-4 pb-16 max-w-7xl mx-auto'>
+    <div className='distributor-center-root relative mt-14 mx-auto max-w-[1600px] overflow-hidden px-4 pb-16'>
       <Title heading={3} className='mb-8'>
         {t('代理分销')}
       </Title>
 
-      <Banner
-        type='info'
-        className='mt-2 !rounded-xl'
-        description={
-          isProfitShareMode
-            ? t(
-                '邀请用户用量产生的加价部分将计入您的待使用收益，可在详情中按笔查看。',
-              )
-            : t(
-                '邀请的用户充值后，您将获得对应比例的分销额度（待使用收益）。分成比例以您账号当前设置为准；可在「详情」中查看每笔充值的入账额度、当时比例与收益。',
-              )
-        }
-      />
+      {!isProfitShareMode && (
+        <Banner
+          type='info'
+          className='mt-2 !rounded-xl'
+          description={t(
+            '邀请的用户充值后，您将获得对应比例的分销额度（待使用收益）。分成比例以您账号当前设置为准；可在「详情」中查看每笔充值的入账额度、当时比例与收益。',
+          )}
+        />
+      )}
 
-      <div className='mt-2 flex flex-col xl:flex-row gap-8 xl:gap-2 items-start'>
+      <div className='relative z-[1] mt-2 flex flex-col xl:flex-row gap-8 xl:gap-4 items-start'>
         {/* 窄屏：右侧栏在上，表格在下；宽屏：左表格、右栏 */}
-        <aside className='flex w-full flex-col gap-[10px] xl:w-[520px] flex-shrink-0 order-1 xl:order-2'>
+        <aside className='flex w-full flex-col gap-[10px] xl:w-[400px] 2xl:w-[420px] flex-shrink-0 order-1 xl:order-2'>
           <Card
-            className='!rounded-xl w-full shadow-sm border-0'
+            className='distributor-center-stats-card !rounded-xl w-full shadow-sm border-0'
             cover={
               <div
-                className='relative min-h-[10.5rem]'
-                style={{
-                  '--palette-primary-darkerChannel': '0 75 80',
-                  backgroundImage: `linear-gradient(0deg, rgba(var(--palette-primary-darkerChannel) / 80%), rgba(var(--palette-primary-darkerChannel) / 80%)), url('/cover-4.webp')`,
-                  backgroundSize: 'cover',
-                  backgroundPosition: 'center',
-                  backgroundRepeat: 'no-repeat',
-                }}
+                className='distributor-center-stats-cover relative min-h-[8.75rem]'
               >
+                <div className='distributor-center-sea-scene' aria-hidden='true'>
+                  <span className='distributor-center-celestial' />
+                  <span className='distributor-center-cloud distributor-center-cloud--a' />
+                  <span className='distributor-center-cloud distributor-center-cloud--b' />
+                  <span className='distributor-center-boat'>
+                    <span className='distributor-center-boat-sail' />
+                    <span className='distributor-center-boat-hull' />
+                  </span>
+                  <span className='distributor-center-wave distributor-center-wave--a' />
+                  <span className='distributor-center-wave distributor-center-wave--b' />
+                  <span className='distributor-center-wave distributor-center-wave--c' />
+                </div>
                 <div className='relative z-10 h-full flex flex-col justify-between p-4'>
-                  <div className='flex justify-between items-start gap-2'>
-                    <div>
+                  <div className='flex flex-wrap items-center gap-x-3 gap-y-1'>
+                    <div className='flex min-w-0 items-center gap-2'>
                       <Text strong style={{ color: 'white', fontSize: '16px' }}>
                         {t('收益统计')}
                       </Text>
                       <Text
+                        className='rounded-full px-2 py-0.5'
                         style={{
                           color: 'rgba(255,255,255,0.88)',
+                          backgroundColor: 'rgba(255,255,255,0.14)',
                           fontSize: '12px',
-                          display: 'block',
-                          marginTop: 6,
+                          lineHeight: 1.6,
                         }}
                       >
                         {t('当前分销比例')}：
@@ -988,57 +993,12 @@ export default function DistributorCenter() {
                         )}
                       </Text>
                     </div>
-                    <div className='flex flex-wrap items-center justify-end gap-2 flex-shrink-0'>
-                      <Button
-                        type='primary'
-                        theme='solid'
-                        size='small'
-                        onClick={() => {
-                          if (identityNeedsSupplement) {
-                            showError(t('请先补充代理身份信息后再提现'));
-                            blinkSupplementButton();
-                            return;
-                          }
-                          resetWdForm();
-                          setWdQuotaInput('');
-                          setWdFiatAmount(undefined);
-                          setWdVoucherPreview(null);
-                          setWithdrawOpen(true);
-                        }}
-                        className='!rounded-lg !border-0 !bg-emerald-600 hover:!bg-emerald-700 active:!bg-emerald-800 !text-white'
-                      >
-                        {t('提现')}
-                      </Button>
-                      <Button
-                        type='tertiary'
-                        theme='solid'
-                        size='small'
-                        onClick={async () => {
-                          setWithdrawLogOpen(true);
-                          await loadWithdrawLogs(1, wdLogPs);
-                        }}
-                        className='!rounded-lg'
-                      >
-                        {t('提现记录')}
-                      </Button>
-                      <Button
-                        type='primary'
-                        theme='solid'
-                        size='small'
-                        disabled={!center?.aff_quota || center.aff_quota <= 0}
-                        onClick={() => openTransferModal()}
-                        className='!rounded-lg'
-                      >
-                        <Zap size={12} className='mr-1' />
-                        {t('划转到余额')}
-                      </Button>
-                    </div>
                   </div>
 
-                  <div className='grid grid-cols-3 gap-4 sm:gap-6 mt-4'>
+                  <div className='grid grid-cols-3 gap-3 sm:gap-4 mt-4'>
                     <div className='text-center'>
                       <div
-                        className='text-base sm:text-2xl font-bold mb-2'
+                        className='text-base sm:text-xl font-bold mb-1.5'
                         style={{ color: 'white' }}
                       >
                         {renderQuota(center?.aff_quota || 0)}
@@ -1062,7 +1022,7 @@ export default function DistributorCenter() {
 
                     <div className='text-center'>
                       <div
-                        className='text-base sm:text-2xl font-bold mb-2'
+                        className='text-base sm:text-xl font-bold mb-1.5'
                         style={{ color: 'white' }}
                       >
                         {renderQuota(center?.aff_history_quota || 0)}
@@ -1086,7 +1046,7 @@ export default function DistributorCenter() {
 
                     <div className='text-center'>
                       <div
-                        className='text-base sm:text-2xl font-bold mb-2'
+                        className='text-base sm:text-xl font-bold mb-1.5'
                         style={{ color: 'white' }}
                       >
                         {center?.aff_count ?? 0}
@@ -1112,7 +1072,60 @@ export default function DistributorCenter() {
               </div>
             }
           >
-            <Space vertical style={{ width: '100%' }} className='!gap-3'>
+            <div className='grid grid-cols-1 gap-2 sm:grid-cols-3'>
+              <Button
+                type='primary'
+                theme='solid'
+                size='small'
+                onClick={() => {
+                  if (identityNeedsSupplement) {
+                    showError(t('请先补充代理身份信息后再提现'));
+                    blinkSupplementButton();
+                    return;
+                  }
+                  resetWdForm();
+                  setWdQuotaInput('');
+                  setWdFiatAmount(undefined);
+                  setWdVoucherPreview(null);
+                  setWithdrawOpen(true);
+                }}
+                className='!rounded-lg !border-0 !bg-emerald-600 hover:!bg-emerald-700 active:!bg-emerald-800 !text-white'
+              >
+                <Wallet size={12} className='mr-1' />
+                {t('提现')}
+              </Button>
+              <Button
+                type='tertiary'
+                theme='solid'
+                size='small'
+                onClick={async () => {
+                  setWithdrawLogOpen(true);
+                  await loadWithdrawLogs(1, wdLogPs);
+                }}
+                className='!rounded-lg'
+              >
+                <History size={12} className='mr-1' />
+                {t('提现记录')}
+              </Button>
+              <Button
+                type='primary'
+                theme='solid'
+                size='small'
+                disabled={!center?.aff_quota || center.aff_quota <= 0}
+                onClick={() => openTransferModal()}
+                className='!rounded-lg'
+              >
+                <Zap size={12} className='mr-1' />
+                {t('划转到余额')}
+              </Button>
+            </div>
+          </Card>
+
+          <Card
+            className='!rounded-xl w-full shadow-sm border-0'
+            bodyStyle={{ padding: 14 }}
+          >
+            <Space vertical style={{ width: '100%' }} className='!gap-2'>
               <Input
                 value={shortLink || ''}
                 readonly
@@ -1329,33 +1342,36 @@ export default function DistributorCenter() {
           <Card
             className='!rounded-2xl'
             title={t('注册二维码')}
+            headerExtraContent={
+              <Button
+                size='small'
+                type='primary'
+                theme='light'
+                icon={<Download size={14} />}
+                disabled={!shortLink}
+                onClick={downloadRegistrationQrCode}
+              >
+                {t('下载二维码')}
+              </Button>
+            }
             bodyStyle={{ paddingTop: 20, paddingBottom: 24 }}
           >
             <div className='w-full flex flex-col items-center'>
               {shortLink ? (
-                <>
-                  <div className='inline-flex rounded-xl bg-[var(--semi-color-fill-0)] p-2 ring-1 ring-[var(--semi-color-border)]'>
-                    <div
-                      className='rounded-lg bg-semi-color-white p-2 shadow-[0_2px_8px_rgba(0,0,0,0.08)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.55)] ring-1 ring-black/[0.06] dark:ring-white/[0.12]'
-                      id='dist-qr-wrap'
-                    >
-                      <QRCodeSVG
-                        value={shortLink}
-                        size={QR_CODE_SIZE}
-                        level='M'
-                        bgColor='#ffffff'
-                        fgColor='#000000'
-                      />
-                    </div>
-                  </div>
-                  <Button
-                    className='mt-2'
-                    size='small'
-                    onClick={downloadRegistrationQrCode}
+                <div className='inline-flex rounded-xl bg-[var(--semi-color-fill-0)] p-2 ring-1 ring-[var(--semi-color-border)]'>
+                  <div
+                    className='rounded-lg bg-semi-color-white p-2 shadow-[0_2px_8px_rgba(0,0,0,0.08)] dark:shadow-[0_4px_16px_rgba(0,0,0,0.55)] ring-1 ring-black/[0.06] dark:ring-white/[0.12]'
+                    id='dist-qr-wrap'
                   >
-                    {t('下载二维码')}
-                  </Button>
-                </>
+                    <QRCodeSVG
+                      value={shortLink}
+                      size={QR_CODE_SIZE}
+                      level='M'
+                      bgColor='#ffffff'
+                      fgColor='#000000'
+                    />
+                  </div>
+                </div>
               ) : (
                 <Text type='tertiary'>—</Text>
               )}
