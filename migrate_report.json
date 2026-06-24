@@ -1,0 +1,605 @@
+{
+  "agent_count": 191,
+  "total_candidates": 347,
+  "inserted": 288,
+  "skipped_existing_same_person": [
+    {
+      "old_id": 40,
+      "username": "sunzk",
+      "display_name": "sunzk",
+      "email": "1085214117@qq.com",
+      "phone": "17602237923",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 54,
+      "username": "13910863171",
+      "display_name": "张今伟",
+      "email": "13910863171@163.COM",
+      "phone": "13910863171",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 61,
+      "username": "19980504916",
+      "display_name": "肖黄武",
+      "email": "653589277@qq.com",
+      "phone": "19980504916",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 62,
+      "username": "13799332233",
+      "display_name": "翁铭",
+      "email": "3280306@qq.com",
+      "phone": "13799332233",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 71,
+      "username": "13612303969",
+      "display_name": "肖梓渊",
+      "email": "moon68@vip.qq.com",
+      "phone": "",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 80,
+      "username": "18825263635",
+      "display_name": "唐博",
+      "email": "517281259@qq.com",
+      "phone": "18825263635",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 99,
+      "username": "18986301884",
+      "display_name": "钮中必",
+      "email": "1004825282@qq.com",
+      "phone": "",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 126,
+      "username": "15016332440",
+      "display_name": "张丰麟",
+      "email": "813655035@qq.com",
+      "phone": "",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 146,
+      "username": "yufeng",
+      "display_name": "yufeng",
+      "email": "541490527@qq.com",
+      "phone": "",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 147,
+      "username": "13848115807",
+      "display_name": "苗晓东",
+      "email": "761403204@qq.com",
+      "phone": "13848115807",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 181,
+      "username": "18126547840",
+      "display_name": "18126547840",
+      "email": "jw00861@163.com",
+      "phone": "18126547840",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 192,
+      "username": "ZS",
+      "display_name": "ZS",
+      "email": "",
+      "phone": "13250532150",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 205,
+      "username": "19181931915",
+      "display_name": "19181931915",
+      "email": "843156455@qq.com",
+      "phone": "19181931915",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 226,
+      "username": "13828428993",
+      "display_name": "13828428993",
+      "email": "",
+      "phone": "13828428993",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 251,
+      "username": "13166569525",
+      "display_name": "李国林",
+      "email": "",
+      "phone": "13166569525",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 263,
+      "username": "18328301945",
+      "display_name": "李秋实",
+      "email": "",
+      "phone": "18328301945",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 269,
+      "username": "13575880104",
+      "display_name": "金书杰",
+      "email": "",
+      "phone": "13575880104",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 287,
+      "username": "13456128598",
+      "display_name": "孙永华",
+      "email": "",
+      "phone": "13456128598",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 288,
+      "username": "13763892991",
+      "display_name": "林艳鹏",
+      "email": "",
+      "phone": "13763892991",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 294,
+      "username": "13708308805",
+      "display_name": "李顺",
+      "email": "",
+      "phone": "13708308805",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 302,
+      "username": "17816871984",
+      "display_name": "陈肖苇",
+      "email": "",
+      "phone": "17816871984",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 307,
+      "username": "18958498112",
+      "display_name": "楼子建",
+      "email": "",
+      "phone": "18958498112",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 316,
+      "username": "GouZi",
+      "display_name": "GouZi",
+      "email": "1041854896@qq.com",
+      "phone": "",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 320,
+      "username": "13825015549",
+      "display_name": "13825015549",
+      "email": "",
+      "phone": "13825015549",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 365,
+      "username": "lis",
+      "display_name": "lis",
+      "email": "277674624@qq.com",
+      "phone": "",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 383,
+      "username": "bruce",
+      "display_name": "bruce",
+      "email": "1341360644@qq.com",
+      "phone": "",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 401,
+      "username": "彭凯",
+      "display_name": "彭凯",
+      "email": "364593661@qq.com",
+      "phone": "",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 424,
+      "username": "黄良发",
+      "display_name": "黄良发",
+      "email": "1655591195@qq.com",
+      "phone": "13055412614",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 454,
+      "username": "xxqa233",
+      "display_name": "xxqa233",
+      "email": "wuxiaoqiang@fyinfor.com",
+      "phone": "",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 459,
+      "username": "张恩琴",
+      "display_name": "张恩琴",
+      "email": "1346811094@qq.com",
+      "phone": "",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 473,
+      "username": "speed0412",
+      "display_name": "speed0412",
+      "email": "269189693@qq.com",
+      "phone": "13980862403",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 478,
+      "username": "懒洋洋",
+      "display_name": "懒洋洋",
+      "email": "3197358101@qq.com",
+      "phone": "19277460372",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 498,
+      "username": "2ouii",
+      "display_name": "2ouii",
+      "email": "1318850956@qq.com",
+      "phone": "17398896189",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 499,
+      "username": "13880663966",
+      "display_name": "13880663966",
+      "email": "",
+      "phone": "13880663966",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 500,
+      "username": "K",
+      "display_name": "K",
+      "email": "2817211254@qq.com",
+      "phone": "18402042820",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 503,
+      "username": "chenchen",
+      "display_name": "chenchen",
+      "email": "",
+      "phone": "13826578074",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 512,
+      "username": "18764676201",
+      "display_name": "18764676201",
+      "email": "a18263679060@163.com",
+      "phone": "18764676201",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 527,
+      "username": "malalaotoubishi",
+      "display_name": "malalaotoubishi",
+      "email": "1849903877@qq.com",
+      "phone": "18012835735",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 529,
+      "username": "zhanqijun",
+      "display_name": "zhanqijun",
+      "email": "zhanqijun@outlook.com",
+      "phone": "15629948982",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 537,
+      "username": "张秋林",
+      "display_name": "张秋林",
+      "email": "297406412@qq.com",
+      "phone": "15828323722",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    },
+    {
+      "old_id": 551,
+      "username": "2733448512",
+      "display_name": "2733448512",
+      "email": "lyl13397069727@outlook.com",
+      "phone": "13397069727",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "目标库已存在同名且手机号/邮箱一致，判定为同一用户"
+    }
+  ],
+  "conflict_same_username_diff_contact": [
+    {
+      "old_id": 13,
+      "username": "代理",
+      "display_name": "代理",
+      "email": "",
+      "phone": "",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库存在同名但手机号与邮箱均不一致，需人工处理"
+    },
+    {
+      "old_id": 24,
+      "username": "tuling_xie",
+      "display_name": "tuling_xie",
+      "email": "",
+      "phone": "",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库存在同名但手机号与邮箱均不一致，需人工处理"
+    },
+    {
+      "old_id": 69,
+      "username": "18010123778",
+      "display_name": "苏健",
+      "email": "14970000@qq.com",
+      "phone": "18010123778",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库存在同名但手机号与邮箱均不一致，需人工处理"
+    },
+    {
+      "old_id": 73,
+      "username": "18302098438",
+      "display_name": "朱俊锋",
+      "email": "23639895@qq.com",
+      "phone": "18302098438",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库存在同名但手机号与邮箱均不一致，需人工处理"
+    },
+    {
+      "old_id": 171,
+      "username": "yuanliang",
+      "display_name": "yuanliang",
+      "email": "380684556@qq.com",
+      "phone": "",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库存在同名但手机号与邮箱均不一致，需人工处理"
+    },
+    {
+      "old_id": 257,
+      "username": "13920039209",
+      "display_name": "陶蓥嵩",
+      "email": "",
+      "phone": "",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库存在同名但手机号与邮箱均不一致，需人工处理"
+    },
+    {
+      "old_id": 291,
+      "username": "15556965187",
+      "display_name": "张周",
+      "email": "",
+      "phone": "",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库存在同名但手机号与邮箱均不一致，需人工处理"
+    },
+    {
+      "old_id": 296,
+      "username": "18183053099",
+      "display_name": "冯运涛",
+      "email": "",
+      "phone": "",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库存在同名但手机号与邮箱均不一致，需人工处理"
+    },
+    {
+      "old_id": 332,
+      "username": "19527799518",
+      "display_name": "胡琨",
+      "email": "",
+      "phone": "",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库存在同名但手机号与邮箱均不一致，需人工处理"
+    },
+    {
+      "old_id": 415,
+      "username": "13503023579",
+      "display_name": "13503023579",
+      "email": "1049299126@qq.com",
+      "phone": "",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "目标库存在同名但手机号与邮箱均不一致，需人工处理"
+    },
+    {
+      "old_id": 455,
+      "username": "13503092592",
+      "display_name": "13503092592",
+      "email": "1@qq.com",
+      "phone": "",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "目标库存在同名但手机号与邮箱均不一致，需人工处理"
+    },
+    {
+      "old_id": 456,
+      "username": "彭凯-TW",
+      "display_name": "彭凯-TW",
+      "email": "",
+      "phone": "",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "目标库存在同名但手机号与邮箱均不一致，需人工处理"
+    },
+    {
+      "old_id": 523,
+      "username": "木土",
+      "display_name": "木土",
+      "email": "36508536@qq.com",
+      "phone": "",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "目标库存在同名但手机号与邮箱均不一致，需人工处理"
+    }
+  ],
+  "phone_or_email_taken_by_other": [
+    {
+      "old_id": 14,
+      "username": "pengrui",
+      "display_name": "pengrui",
+      "email": "6045811@qq.com",
+      "phone": "13802729588",
+      "role": 1,
+      "is_distributor": 1,
+      "reason": "手机号或邮箱已被目标库其他账户(username=JerryPeng)占用"
+    },
+    {
+      "old_id": 390,
+      "username": "lishuang",
+      "display_name": "lishuang",
+      "email": "",
+      "phone": "13896449636",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "手机号或邮箱已被目标库其他账户(username=lis)占用"
+    },
+    {
+      "old_id": 417,
+      "username": "water",
+      "display_name": "water",
+      "email": "1356231055@qq.com",
+      "phone": "",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "手机号或邮箱已被目标库其他账户(username=blade)占用"
+    },
+    {
+      "old_id": 490,
+      "username": "Sammy Jin",
+      "display_name": "Sammy Jin",
+      "email": "",
+      "phone": "13566450408",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "手机号或邮箱已被目标库其他账户(username=Sammywang)占用"
+    },
+    {
+      "old_id": 565,
+      "username": "tokenhub",
+      "display_name": "tokenhub",
+      "email": "tokenhublink@gmail.com",
+      "phone": "17743560524",
+      "role": 1,
+      "is_distributor": 0,
+      "reason": "手机号或邮箱已被目标库其他账户(username=17743560524)占用"
+    }
+  ],
+  "dropped_bindings": [],
+  "relations_candidate": 125,
+  "relations_migrated": 120,
+  "relations_skipped_existing": 5
+}

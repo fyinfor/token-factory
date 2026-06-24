@@ -153,6 +153,7 @@ func SetApiRouter(router *gin.Engine) {
 			userRoute.GET("/logout", controller.Logout)
 			userRoute.POST("/epay/notify", controller.EpayNotify)
 			userRoute.GET("/epay/notify", controller.EpayNotify)
+			userRoute.POST("/ubcoin/notify", controller.UcoinNotify)
 			userRoute.GET("/groups", controller.GetUserGroups)
 
 			selfRoute := userRoute.Group("/")
@@ -187,6 +188,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/stripe/amount", controller.RequestStripeAmount)
 				selfRoute.POST("/creem/pay", middleware.CriticalRateLimit(), controller.RequestCreemPay)
 				selfRoute.POST("/waffo/pay", middleware.CriticalRateLimit(), controller.RequestWaffoPay)
+				selfRoute.POST("/ubcoin/pay", middleware.CriticalRateLimit(), controller.RequestUcoinPay)
 				selfRoute.POST("/aff_transfer", controller.TransferAffQuota)
 				selfRoute.GET("/aff_invitees", controller.GetAffInvitees)
 				selfRoute.PUT("/setting", controller.UpdateUserSetting)

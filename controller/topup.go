@@ -87,6 +87,12 @@ func GetTopUpInfo(c *gin.Context) {
 		}
 	}
 
+	enableUcoin := setting.UcoinEnabled &&
+		setting.UcoinBaseUrl != "" &&
+		setting.UcoinMerchantId != "" &&
+		setting.UcoinApiKey != "" &&
+		len(setting.GetUcoinCoinPairs()) > 0
+
 	data := gin.H{
 		"enable_online_topup": (operation_setting.OnlinePayProvider == "yipay" &&
 			(operation_setting.YipayRequestURL != "" || operation_setting.PayAddress != "") &&
@@ -111,6 +117,14 @@ func GetTopUpInfo(c *gin.Context) {
 		"min_topup":           operation_setting.MinTopUp,
 		"stripe_min_topup":    setting.StripeMinTopUp,
 		"waffo_min_topup":     setting.WaffoMinTopUp,
+		"enable_ubcoin_topup": enableUcoin,
+		"ubcoin_min_topup":    setting.UcoinMinTopUp,
+		"ubcoin_coin_pairs": func() interface{} {
+			if enableUcoin {
+				return setting.GetUcoinCoinPairs()
+			}
+			return nil
+		}(),
 		"amount_options":      operation_setting.GetPaymentSetting().AmountOptions,
 		"discount":            operation_setting.GetPaymentSetting().AmountDiscount,
 		"online_pay_provider": operation_setting.OnlinePayProvider,

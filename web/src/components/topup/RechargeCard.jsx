@@ -16,7 +16,12 @@ import {
   Tabs,
   TabPane,
 } from '@douyinfe/semi-ui';
-import { SiAlipay, SiWechat, SiStripe } from 'react-icons/si';
+import { SiStripe, SiBinance, SiEthereum, SiPaypal } from 'react-icons/si';
+import {
+  AlipayPayLogo,
+  WeChatPayLogo,
+  isLogoOnlyPayMethod,
+} from './PaymentBrandIcons';
 import {
   CreditCard,
   Coins,
@@ -33,6 +38,63 @@ import SubscriptionPlansCard from './SubscriptionPlansCard';
 import './preset-amount-card.css';
 
 const { Text } = Typography;
+
+const PAY_ICON_SIZE = 22;
+
+const iconOnlyBtnClass = '!rounded-lg !p-2 !min-w-[40px] !min-h-[40px]';
+const payBtnClass = '!rounded-lg !px-4 !py-2';
+
+function renderPayMethodIcon(payMethod) {
+  switch (payMethod.type) {
+    case 'alipay':
+      return <AlipayPayLogo size={28} />;
+    case 'wxpay':
+      return <WeChatPayLogo size={28} />;
+    case 'stripe':
+      return <SiStripe size={PAY_ICON_SIZE} color='#635BFF' />;
+    case 'paypal':
+      return <SiPaypal size={PAY_ICON_SIZE} color='#003087' />;
+    default:
+      return (
+        <CreditCard
+          size={PAY_ICON_SIZE}
+          color={payMethod.color || 'var(--semi-color-text-2)'}
+        />
+      );
+  }
+}
+
+function getPayMethodLabel(payMethod, t) {
+  if (payMethod.name) return payMethod.name;
+  switch (payMethod.type) {
+    case 'alipay':
+      return t('支付宝');
+    case 'wxpay':
+      return t('微信');
+    case 'stripe':
+      return 'Stripe';
+    case 'paypal':
+      return 'PayPal';
+    default:
+      return payMethod.type;
+  }
+}
+
+function renderUcoinPairIcon(pair) {
+  const haystack =
+    `${pair.name || ''} ${pair.coinType || ''} ${pair.mainCoinType || ''}`.toUpperCase();
+  if (/\bBNB\b|BINANCE/.test(haystack)) {
+    return <SiBinance size={PAY_ICON_SIZE} color='#F3BA2F' />;
+  }
+  if (/\bETH\b|ETHEREUM/.test(haystack)) {
+    return <SiEthereum size={PAY_ICON_SIZE} color='#627EEA' />;
+  }
+  return <Coins size={PAY_ICON_SIZE} color='var(--semi-color-text-2)' />;
+}
+
+function getUcoinPairLabel(pair) {
+  return pair.name || `${pair.mainCoinType}/${pair.coinType}`;
+}
 
 const RechargeCard = ({
   t,
@@ -57,8 +119,7 @@ const RechargeCard = ({
   amountLoading,
   payMethods,
   preTopUp,
-  paymentLoading,
-  payWay,
+  activePaymentKey = '',
   redemptionCode,
   setRedemptionCode,
   topUp,
@@ -73,6 +134,9 @@ const RechargeCard = ({
   enableWaffoTopUp,
   waffoTopUp,
   waffoPayMethods,
+  enableUcoinTopUp,
+  ucoinTopUp,
+  ucoinCoinPairs = [],
   subscriptionLoading = false,
   subscriptionPlans = [],
   billingPreference,
@@ -213,13 +277,17 @@ const RechargeCard = ({
         ) : enableOnlineTopUp ||
           enableStripeTopUp ||
           enableCreemTopUp ||
-          enableWaffoTopUp ? (
+          enableWaffoTopUp ||
+          enableUcoinTopUp ? (
           <Form
             getFormApi={(api) => (onlineFormApiRef.current = api)}
             initValues={{ topUpCount: topUpCount }}
           >
             <div className='space-y-6'>
-              {(enableOnlineTopUp || enableStripeTopUp || enableWaffoTopUp) && (
+              {(enableOnlineTopUp ||
+                enableStripeTopUp ||
+                enableWaffoTopUp ||
+                enableUcoinTopUp) && (
                 <Row gutter={12}>
                   <Col xs={24} sm={24} md={24} lg={10} xl={10}>
                     <Form.InputNumber
@@ -228,7 +296,8 @@ const RechargeCard = ({
                       disabled={
                         !enableOnlineTopUp &&
                         !enableStripeTopUp &&
-                        !enableWaffoTopUp
+                        !enableWaffoTopUp &&
+                        !enableUcoinTopUp
                       }
                       placeholder={
                         t('充值数量，最低 ') + renderTopUpCount(minTopUp)
@@ -281,14 +350,18 @@ const RechargeCard = ({
                       style={{ width: '100%' }}
                     />
                   </Col>
-                  {payMethods &&
-                    payMethods.filter((m) => m.type !== 'waffo').length > 0 && (
+                  {((payMethods &&
+                    payMethods.filter((m) => m.type !== 'waffo').length > 0) ||
+                    (enableUcoinTopUp &&
+                      ucoinCoinPairs &&
+                      ucoinCoinPairs.length > 0)) && (
                       <Col xs={24} sm={24} md={24} lg={14} xl={14}>
                         <Form.Slot label={t('选择支付方式')}>
                           <Space wrap>
-                            {payMethods
-                              .filter((m) => m.type !== 'waffo')
-                              .map((payMethod) => {
+                            {payMethods &&
+                              payMethods
+                                .filter((m) => m.type !== 'waffo')
+                                .map((payMethod) => {
                                 const minTopupVal =
                                   Number(payMethod.min_topup) || 0;
                                 const maxTopupVal =
@@ -304,6 +377,11 @@ const RechargeCard = ({
                                   belowMin ||
                                   aboveMax;
 
+                                const payLabel = getPayMethodLabel(payMethod, t);
+                                const logoOnly = isLogoOnlyPayMethod(payMethod.type);
+                                const displayLabel =
+                                  payMethod.name || payLabel;
+
                                 const buttonEl = (
                                   <Button
                                     key={payMethod.type}
@@ -312,29 +390,15 @@ const RechargeCard = ({
                                     onClick={() => preTopUp(payMethod.type)}
                                     disabled={disabled}
                                     loading={
-                                      paymentLoading &&
-                                      payWay === payMethod.type
+                                      activePaymentKey === payMethod.type
                                     }
-                                    icon={
-                                      payMethod.type === 'alipay' ? (
-                                        <SiAlipay size={18} color='#1677FF' />
-                                      ) : payMethod.type === 'wxpay' ? (
-                                        <SiWechat size={18} color='#07C160' />
-                                      ) : payMethod.type === 'stripe' ? (
-                                        <SiStripe size={18} color='#635BFF' />
-                                      ) : (
-                                        <CreditCard
-                                          size={18}
-                                          color={
-                                            payMethod.color ||
-                                            'var(--semi-color-text-2)'
-                                          }
-                                        />
-                                      )
+                                    icon={renderPayMethodIcon(payMethod)}
+                                    aria-label={displayLabel}
+                                    className={
+                                      logoOnly ? iconOnlyBtnClass : payBtnClass
                                     }
-                                    className='!rounded-lg !px-4 !py-2'
                                   >
-                                    {payMethod.name}
+                                    {logoOnly ? null : displayLabel}
                                   </Button>
                                 );
 
@@ -352,10 +416,35 @@ const RechargeCard = ({
                                   >
                                     {buttonEl}
                                   </Tooltip>
+                                ) : logoOnly ? (
+                                  <Tooltip content={displayLabel} key={payMethod.type}>
+                                    {buttonEl}
+                                  </Tooltip>
                                 ) : (
                                   <React.Fragment key={payMethod.type}>
                                     {buttonEl}
                                   </React.Fragment>
+                                );
+                              })}
+                            {enableUcoinTopUp &&
+                              ucoinCoinPairs &&
+                              ucoinCoinPairs.map((pair, index) => {
+                                const pairLabel = getUcoinPairLabel(pair);
+                                return (
+                                  <Button
+                                    key={`ucoin-${index}`}
+                                    theme='outline'
+                                    type='tertiary'
+                                    onClick={() => ucoinTopUp(index)}
+                                    loading={
+                                      activePaymentKey === `ucoin:${index}`
+                                    }
+                                    icon={renderUcoinPairIcon(pair)}
+                                    aria-label={pairLabel}
+                                    className={payBtnClass}
+                                  >
+                                    {pairLabel}
+                                  </Button>
                                 );
                               })}
                           </Space>
@@ -365,7 +454,10 @@ const RechargeCard = ({
                 </Row>
               )}
 
-              {(enableOnlineTopUp || enableStripeTopUp || enableWaffoTopUp) && (
+              {(enableOnlineTopUp ||
+                enableStripeTopUp ||
+                enableWaffoTopUp ||
+                enableUcoinTopUp) && (
                 <Form.Slot
                   label={
                     <div className='flex items-center gap-2'>
@@ -503,7 +595,7 @@ const RechargeCard = ({
                           theme='outline'
                           type='tertiary'
                           onClick={() => waffoTopUp(index)}
-                          loading={paymentLoading}
+                          loading={activePaymentKey === `waffo:${index}`}
                           icon={
                             method.icon ? (
                               <img
