@@ -37,6 +37,7 @@ func (AffInviteRelation) TableName() string {
 }
 
 const maxAffiliateCommissionBps = 10000
+const maxInviteeSaleRatePercent = 200.0
 
 // AffInviteeListItem 邀请人视角下的被邀请人列表项
 type AffInviteeListItem struct {
@@ -282,6 +283,15 @@ func ListAffInvitees(inviterId int, keyword string, pageInfo *common.PageInfo) (
 		})
 	}
 	return items, total, nil
+}
+
+func CountAffInvitees(inviterId int) (int64, error) {
+	if inviterId <= 0 {
+		return 0, errors.New("invalid inviter")
+	}
+	var total int64
+	err := DB.Model(&User{}).Where("inviter_id = ?", inviterId).Count(&total).Error
+	return total, err
 }
 
 // UpdateAffInviteeCommission 邀请人修改某一被邀请人的分销比例（验证被邀请人确实属于当前邀请人）。
@@ -713,12 +723,12 @@ func MaxInviteeMarkupDiscountRate(item InviteeModelMarkupDiscountRateItem) float
 	if costPercent < 0 {
 		costPercent = 0
 	}
-	maxRate := 100 - costPercent
+	maxRate := maxInviteeSaleRatePercent - costPercent
 	if maxRate < 0 {
 		return 0
 	}
-	if maxRate > 100 {
-		return 100
+	if maxRate > maxInviteeSaleRatePercent {
+		return maxInviteeSaleRatePercent
 	}
 	return maxRate
 }
@@ -730,28 +740,16 @@ type ModelMarkupDiscountRateUpdateRequest struct {
 	MarkupDiscountRate float64 `json:"markup_discount_rate"`
 }
 
-func UpdateInviteeModelDiscounts(inviterId, inviteeUserId int, updates []ModelMarkupDiscountRateUpdateRequest) error {
-	if inviterId <= 0 || inviteeUserId <= 0 {
-		return errors.New("invalid id")
-	}
+func buildModelMarkupDiscountRateJSON(updates []ModelMarkupDiscountRateUpdateRequest) (string, error) {
 	for _, u := range updates {
-		if u.MarkupDiscountRate < 0 || u.MarkupDiscountRate > 100 {
-			return fmt.Errorf("markup_discount_rate for model %s must be between 0 and 100", u.ModelName)
+		if u.MarkupDiscountRate < 0 || u.MarkupDiscountRate > maxInviteeSaleRatePercent {
+			return "", fmt.Errorf("markup_discount_rate for model %s must be between 0 and %.0f", u.ModelName, maxInviteeSaleRatePercent)
 		}
-	}
-
-	// 验证被邀请人确实属于当前邀请人
-	invitee, err := GetUserById(inviteeUserId, false)
-	if err != nil {
-		return errors.New("user not found")
-	}
-	if invitee.InviterId != inviterId {
-		return errors.New("not your invitee")
 	}
 
 	items, defaultRates, err := listPricingVisibleMarkupDiscountRateItems()
 	if err != nil {
-		return err
+		return "", err
 	}
 	maxRates := make(map[string]float64, len(items))
 	for _, item := range items {
@@ -768,7 +766,7 @@ func UpdateInviteeModelDiscounts(inviterId, inviteeUserId int, updates []ModelMa
 		}
 		maxRate := maxRates[key]
 		if u.MarkupDiscountRate > maxRate+0.000001 {
-			return fmt.Errorf("markup_discount_rate for model %s must be between 0 and %.1f", modelName, maxRate)
+			return "", fmt.Errorf("markup_discount_rate for model %s must be between 0 and %.1f", modelName, maxRate)
 		}
 		if math.Abs(u.MarkupDiscountRate-defaultRate) > 0.000001 {
 			ratesToSave = append(ratesToSave, inviteeModelMarkupDiscountRateEntry{
@@ -781,6 +779,26 @@ func UpdateInviteeModelDiscounts(inviterId, inviteeUserId int, updates []ModelMa
 
 	discountsJSON, err := common.Marshal(ratesToSave)
 	if err != nil {
+		return "", err
+	}
+	return string(discountsJSON), nil
+}
+
+func UpdateInviteeModelDiscounts(inviterId, inviteeUserId int, updates []ModelMarkupDiscountRateUpdateRequest) error {
+	if inviterId <= 0 || inviteeUserId <= 0 {
+		return errors.New("invalid id")
+	}
+	// 验证被邀请人确实属于当前邀请人
+	invitee, err := GetUserById(inviteeUserId, false)
+	if err != nil {
+		return errors.New("user not found")
+	}
+	if invitee.InviterId != inviterId {
+		return errors.New("not your invitee")
+	}
+
+	discountsJSON, err := buildModelMarkupDiscountRateJSON(updates)
+	if err != nil {
 		return err
 	}
 
@@ -792,7 +810,7 @@ func UpdateInviteeModelDiscounts(inviterId, inviteeUserId int, updates []ModelMa
 		rel = AffInviteRelation{
 			InviterId:               inviterId,
 			InviteeUserId:           inviteeUserId,
-			ModelMarkupDiscountRate: string(discountsJSON),
+			ModelMarkupDiscountRate: discountsJSON,
 			CreatedAt:               ts,
 			UpdatedAt:               ts,
 		}
@@ -802,9 +820,194 @@ func UpdateInviteeModelDiscounts(inviterId, inviteeUserId int, updates []ModelMa
 		return err
 	}
 
-	rel.ModelMarkupDiscountRate = string(discountsJSON)
+	rel.ModelMarkupDiscountRate = discountsJSON
 	rel.UpdatedAt = ts
 	return DB.Save(&rel).Error
+}
+
+func overlayModelMarkupDiscountItems(raw string) ([]InviteeModelMarkupDiscountRateItem, error) {
+	items, _, err := listPricingVisibleMarkupDiscountRateItems()
+	if err != nil {
+		return nil, err
+	}
+	savedList, parseErr := parseInviteeModelMarkupDiscountRates(raw)
+	if parseErr != nil {
+		return nil, parseErr
+	}
+	savedByKey := inviteeModelMarkupDiscountRateMap(savedList)
+	for i := range items {
+		key := inviteeModelMarkupKey(items[i].ChannelID, items[i].ModelName)
+		if rate, ok := savedByKey[key]; ok {
+			items[i].CurrentMarkupDiscountRate = rate
+		}
+		items[i].CurrentMarkupDiscountRate = clampChannelMarkupDiscountRate(items[i].CurrentMarkupDiscountRate)
+		maxRate := MaxInviteeMarkupDiscountRate(items[i])
+		if items[i].CurrentMarkupDiscountRate > maxRate {
+			items[i].CurrentMarkupDiscountRate = maxRate
+		}
+	}
+	return items, nil
+}
+
+func GetDistributorModelDiscountTemplate(distributorId int) ([]InviteeModelMarkupDiscountRateItem, int64, error) {
+	if distributorId <= 0 {
+		return nil, 0, errors.New("invalid distributor")
+	}
+	var user User
+	if err := DB.Select("id", "distributor_model_markup_discount_template").Where("id = ?", distributorId).First(&user).Error; err != nil {
+		return nil, 0, err
+	}
+	items, err := overlayModelMarkupDiscountItems(user.DistributorModelMarkupDiscountTemplate)
+	if err != nil {
+		return nil, 0, err
+	}
+	total, err := CountAffInvitees(distributorId)
+	if err != nil {
+		return nil, 0, err
+	}
+	return items, total, nil
+}
+
+func UpdateDistributorModelDiscountTemplate(distributorId int, updates []ModelMarkupDiscountRateUpdateRequest) error {
+	if distributorId <= 0 {
+		return errors.New("invalid distributor")
+	}
+	discountsJSON, err := buildModelMarkupDiscountRateJSON(updates)
+	if err != nil {
+		return err
+	}
+	return DB.Model(&User{}).Where("id = ?", distributorId).UpdateColumn("distributor_model_markup_discount_template", discountsJSON).Error
+}
+
+func inviteeIDsForBatch(inviterId int, all bool, selectedIDs []int) ([]int, error) {
+	if inviterId <= 0 {
+		return nil, errors.New("invalid inviter")
+	}
+	if all {
+		var ids []int
+		if err := DB.Model(&User{}).Where("inviter_id = ?", inviterId).Pluck("id", &ids).Error; err != nil {
+			return nil, err
+		}
+		return ids, nil
+	}
+	seen := map[int]struct{}{}
+	ids := make([]int, 0, len(selectedIDs))
+	for _, id := range selectedIDs {
+		if id <= 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return nil, errors.New("no invitees selected")
+	}
+	var matched []int
+	if err := DB.Model(&User{}).Where("inviter_id = ? AND id IN ?", inviterId, ids).Pluck("id", &matched).Error; err != nil {
+		return nil, err
+	}
+	if len(matched) != len(ids) {
+		return nil, errors.New("some invitees do not belong to this distributor")
+	}
+	return matched, nil
+}
+
+func updateInviteeModelDiscountsRawBatch(inviterId int, inviteeIDs []int, raw string) (int, error) {
+	if len(inviteeIDs) == 0 {
+		return 0, nil
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		raw = "[]"
+	}
+	ts := common.GetTimestamp()
+	return len(inviteeIDs), DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&AffInviteRelation{}).
+			Where("inviter_id = ? AND invitee_user_id IN ?", inviterId, inviteeIDs).
+			Updates(map[string]interface{}{
+				"model_markup_discount_rate": raw,
+				"updated_at":                 ts,
+			}).Error; err != nil {
+			return err
+		}
+		if raw == "[]" {
+			return nil
+		}
+		var existing []int
+		if err := tx.Model(&AffInviteRelation{}).
+			Where("inviter_id = ? AND invitee_user_id IN ?", inviterId, inviteeIDs).
+			Pluck("invitee_user_id", &existing).Error; err != nil {
+			return err
+		}
+		existingSet := make(map[int]struct{}, len(existing))
+		for _, id := range existing {
+			existingSet[id] = struct{}{}
+		}
+		defaultBps := defaultCommissionBpsForNewInviteRelation(inviterId)
+		toCreate := make([]AffInviteRelation, 0)
+		for _, id := range inviteeIDs {
+			if _, ok := existingSet[id]; ok {
+				continue
+			}
+			toCreate = append(toCreate, AffInviteRelation{
+				InviterId:               inviterId,
+				InviteeUserId:           id,
+				CommissionRatioBps:      defaultBps,
+				CommissionEarnedQuota:   0,
+				ProfitShareEarnedQuota:  0,
+				ModelMarkupDiscountRate: raw,
+				CreatedAt:               ts,
+				UpdatedAt:               ts,
+			})
+		}
+		if len(toCreate) == 0 {
+			return nil
+		}
+		return tx.Create(&toCreate).Error
+	})
+}
+
+func ApplyDistributorModelDiscountTemplate(inviterId int, all bool, selectedIDs []int) (int, error) {
+	inviteeIDs, err := inviteeIDsForBatch(inviterId, all, selectedIDs)
+	if err != nil {
+		return 0, err
+	}
+	var user User
+	if err := DB.Select("id", "distributor_model_markup_discount_template").Where("id = ?", inviterId).First(&user).Error; err != nil {
+		return 0, err
+	}
+	raw := strings.TrimSpace(user.DistributorModelMarkupDiscountTemplate)
+	if raw == "" {
+		raw = "[]"
+	}
+	list, err := parseInviteeModelMarkupDiscountRates(raw)
+	if err != nil {
+		return 0, err
+	}
+	updates := make([]ModelMarkupDiscountRateUpdateRequest, 0, len(list))
+	for _, item := range list {
+		updates = append(updates, ModelMarkupDiscountRateUpdateRequest{
+			ModelName:          item.ModelName,
+			ChannelID:          item.ChannelID,
+			MarkupDiscountRate: item.MarkupDiscountRate,
+		})
+	}
+	raw, err = buildModelMarkupDiscountRateJSON(updates)
+	if err != nil {
+		return 0, err
+	}
+	return updateInviteeModelDiscountsRawBatch(inviterId, inviteeIDs, raw)
+}
+
+func ResetInviteeModelDiscountsBatch(inviterId int, all bool, selectedIDs []int) (int, error) {
+	inviteeIDs, err := inviteeIDsForBatch(inviterId, all, selectedIDs)
+	if err != nil {
+		return 0, err
+	}
+	return updateInviteeModelDiscountsRawBatch(inviterId, inviteeIDs, "[]")
 }
 
 func affInviteRelationColumnExists(column string) bool {

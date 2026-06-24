@@ -32,13 +32,20 @@ import {
   Tooltip,
 } from '@douyinfe/semi-ui';
 import { IconSearch, IconInfoCircle, IconDownload } from '@douyinfe/semi-icons';
-import { API, showError, showSuccess, showInfo, getSupplierTypeLabel } from '../../helpers';
+import {
+  API,
+  showError,
+  showSuccess,
+  showInfo,
+  getSupplierTypeLabel,
+} from '../../helpers';
 import { CHANNEL_SUPPLIER_TYPE_OPTIONS } from '../../constants';
 
 const { Text } = Typography;
 const { Option } = Select;
 
 const MODEL_TABLE_PAGE_SIZE = 10;
+const MAX_SALE_RATE_PERCENT = 200;
 const getRowKey = (item) => `${item.channel_id || 0}:${item.model_name || ''}`;
 
 const markupRatesEqual = (a, b) =>
@@ -63,7 +70,7 @@ const getCostDiscountPercent = (record) => {
 };
 
 const maxAgentMarkupRate = (record) =>
-  Math.max(0, 100 - getCostDiscountPercent(record));
+  Math.max(0, MAX_SALE_RATE_PERCENT - getCostDiscountPercent(record));
 
 const calcSaleRatePercent = (record, markupRate) => {
   const costDiscountPercent = getCostDiscountPercent(record);
@@ -142,6 +149,7 @@ const InviteeModelDiscountModal = ({
   t,
   adminMode = false,
   distributorId = null,
+  templateMode = false,
 }) => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -153,12 +161,16 @@ const InviteeModelDiscountModal = ({
   const [baselineValues, setBaselineValues] = useState({});
   const [discountValues, setDiscountValues] = useState({});
 
-  const listApiPath = adminMode
-    ? '/api/distributor/admin/invitee-model-discounts'
-    : '/api/distributor/invitee-model-discounts';
-  const saveApiPath = adminMode
-    ? '/api/distributor/admin/invitee-model-discounts'
-    : '/api/distributor/invitee-model-discounts';
+  const listApiPath = templateMode
+    ? '/api/distributor/model-discount-template'
+    : adminMode
+      ? '/api/distributor/admin/invitee-model-discounts'
+      : '/api/distributor/invitee-model-discounts';
+  const saveApiPath = templateMode
+    ? '/api/distributor/model-discount-template'
+    : adminMode
+      ? '/api/distributor/admin/invitee-model-discounts'
+      : '/api/distributor/invitee-model-discounts';
   const exportApiPath = adminMode
     ? '/api/distributor/admin/invitee-model-discounts/export'
     : '/api/distributor/invitee-model-discounts/export';
@@ -166,21 +178,26 @@ const InviteeModelDiscountModal = ({
   const buildRequestParams = useCallback(
     (extra = {}) => {
       const params = {
-        invitee_id: inviteeId,
+        ...(templateMode ? {} : { invitee_id: inviteeId }),
         ...extra,
       };
-      if (adminMode) {
+      if (adminMode && !templateMode) {
         params.distributor_id = distributorId;
       }
       return params;
     },
-    [adminMode, distributorId, inviteeId],
+    [adminMode, distributorId, inviteeId, templateMode],
   );
 
   const loadData = useCallback(
     async (opts = {}) => {
       const { silent = false } = opts;
-      if (!inviteeId || !visible || (adminMode && !distributorId)) return;
+      if (
+        !visible ||
+        (!templateMode && !inviteeId) ||
+        (adminMode && !distributorId)
+      )
+        return;
       if (!silent) setLoading(true);
       try {
         const res = await API.get(listApiPath, {
@@ -216,6 +233,7 @@ const InviteeModelDiscountModal = ({
       distributorId,
       inviteeId,
       listApiPath,
+      templateMode,
       visible,
       t,
     ],
@@ -240,7 +258,11 @@ const InviteeModelDiscountModal = ({
       const has = modelData.some(
         (item) => String(item.supplier_type || '').trim() === opt.value,
       );
-      if (has) ordered.push({ value: opt.value, label: getSupplierTypeLabel(opt.value, t) });
+      if (has)
+        ordered.push({
+          value: opt.value,
+          label: getSupplierTypeLabel(opt.value, t),
+        });
       seen.add(opt.value);
     });
     modelData.forEach((item) => {
@@ -322,11 +344,13 @@ const InviteeModelDiscountModal = ({
         ),
       }));
 
-      const body = {
-        invitee_id: inviteeId,
-        discounts,
-      };
-      if (adminMode) {
+      const body = templateMode
+        ? { discounts }
+        : {
+            invitee_id: inviteeId,
+            discounts,
+          };
+      if (adminMode && !templateMode) {
         body.distributor_id = distributorId;
       }
 
@@ -485,7 +509,7 @@ const InviteeModelDiscountModal = ({
       title: (
         <FormulaHeader
           title={t('代理加价比例')}
-          hint={t('代理为该下级设置的加价比例，上限为 100% - 成本折扣。')}
+          hint={t('代理为该下级设置的加价比例，上限为 200% - 成本折扣。')}
         />
       ),
       dataIndex: 'current_markup_discount_rate',
@@ -519,7 +543,7 @@ const InviteeModelDiscountModal = ({
               {t('可输入范围')}：0.0% - {formatMarkupRate(maxRate)}
             </Text>
             <Text type='tertiary' size='small' className='!block'>
-              {t('上限 = 100% - 成本折扣')}
+              {t('上限 = 200% - 成本折扣')}
             </Text>
           </div>
         );
@@ -565,7 +589,7 @@ const InviteeModelDiscountModal = ({
       title={
         <div className='flex items-center gap-2'>
           <Typography.Text strong className='!text-base'>
-            {t('模型折扣率设置')}
+            {templateMode ? t('模型折扣率模板') : t('模型折扣率设置')}
           </Typography.Text>
           {inviteeLabel && (
             <Typography.Text type='tertiary' size='small'>
@@ -604,7 +628,9 @@ const InviteeModelDiscountModal = ({
             icon={<IconInfoCircle />}
             className='!rounded-lg'
             description={t(
-              '说明：本功能用于为被邀请用户配置各模型的代理加价比例。成本折扣 + 平台加价折扣比例 = 平台售价比例；成本折扣 + 代理加价比例 = 修改后售价比例。代理加价比例上限为 100% - 成本折扣，避免超过官方价。',
+              templateMode
+                ? '说明：模板用于批量应用到下级用户。成本折扣 + 代理加价比例 = 应用后的用户售价比例。代理加价比例上限为 200% - 成本折扣，避免最终售价比例超过 200%。'
+                : '说明：本功能用于为被邀请用户配置各模型的代理加价比例。成本折扣 + 平台加价折扣比例 = 平台售价比例；成本折扣 + 代理加价比例 = 修改后售价比例。代理加价比例上限为 200% - 成本折扣，避免最终售价比例超过 200%。',
             )}
           />
 
@@ -631,18 +657,20 @@ const InviteeModelDiscountModal = ({
                 </Option>
               ))}
             </Select>
-            <Button
-              type='tertiary'
-              icon={<IconDownload />}
-              loading={exporting}
-              disabled={
-                loading || saving || exporting || filteredData.length === 0
-              }
-              onClick={handleExportPriceTable}
-              className='w-full sm:w-auto flex-shrink-0'
-            >
-              {t('导出')} Excel
-            </Button>
+            {!templateMode && (
+              <Button
+                type='tertiary'
+                icon={<IconDownload />}
+                loading={exporting}
+                disabled={
+                  loading || saving || exporting || filteredData.length === 0
+                }
+                onClick={handleExportPriceTable}
+                className='w-full sm:w-auto flex-shrink-0'
+              >
+                {t('导出')} Excel
+              </Button>
+            )}
           </div>
 
           <Space className='text-sm'>
