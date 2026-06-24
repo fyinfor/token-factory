@@ -97,6 +97,65 @@ func localObjectURL(urlPrefix string, objectPath string) string {
 	return base + "/" + urlPath
 }
 
+// IsLocalMaterialUploadURL 判断 URL 是否为本系统本地临时上传地址（含 /uploads/ 段）。
+func IsLocalMaterialUploadURL(publicURL string) bool {
+	publicURL = strings.TrimSpace(publicURL)
+	if publicURL == "" {
+		return false
+	}
+	cfg := operation_setting.GetOssSetting()
+	if cfg.StorageType != operation_setting.StorageTypeLocal {
+		return false
+	}
+	marker := "/" + LocalUploadFolder + "/"
+	return strings.Contains(publicURL, marker)
+}
+
+// CleanupLocalUploadByURL 根据对外访问 URL 删除本地存储的临时上传文件。
+// 仅在本地存储模式下生效；OSS 模式或无法解析的 URL 直接忽略（best-effort，不影响主流程）。
+// 用途：素材上传拿到上游永久 URL 后，丢弃本地临时文件，避免冗余占用磁盘。
+func CleanupLocalUploadByURL(publicURL string) error {
+	publicURL = strings.TrimSpace(publicURL)
+	if publicURL == "" {
+		return nil
+	}
+	cfg := operation_setting.GetOssSetting()
+	// 仅清理本地存储产生的临时文件，远端 URL（OSS/在线链接）不在此处理。
+	if cfg.StorageType != operation_setting.StorageTypeLocal {
+		return nil
+	}
+
+	// 定位 URL 中的 /uploads/ 段，截取其后的相对路径作为本地文件相对位置。
+	marker := "/" + LocalUploadFolder + "/"
+	idx := strings.Index(publicURL, marker)
+	if idx < 0 {
+		return nil
+	}
+	rel := publicURL[idx+len(marker):]
+	// 去除可能存在的查询参数与锚点。
+	if q := strings.IndexAny(rel, "?#"); q >= 0 {
+		rel = rel[:q]
+	}
+	rel = strings.TrimSpace(rel)
+	if rel == "" {
+		return nil
+	}
+
+	// 防御路径穿越：禁止 .. 与绝对路径。
+	cleaned := path.Clean(rel)
+	if cleaned == "." || strings.HasPrefix(cleaned, "..") || path.IsAbs(cleaned) {
+		return nil
+	}
+
+	storeDir := LocalUploadBaseDir(cfg.LocalStoragePath)
+	fullPath := filepath.Join(storeDir, filepath.FromSlash(cleaned))
+	if _, err := os.Stat(fullPath); err != nil {
+		// 文件不存在等情况直接忽略。
+		return nil
+	}
+	return os.Remove(fullPath)
+}
+
 // EnsureLocalStorageDir 确保本地存储目录存在且可写。
 func EnsureLocalStorageDir() error {
 	cfg := operation_setting.GetOssSetting()

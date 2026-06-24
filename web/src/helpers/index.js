@@ -35,3 +35,4 @@ export * from './videoResolutionLabel';
 export * from './modelPricing';
 export * from './appLink';
 export * from './payMethodLabel';
+export * from './materialApi';

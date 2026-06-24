@@ -35,6 +35,7 @@ import {
 } from './videoResolutionLabel';
 import axios from 'axios';
 import { MESSAGE_ROLES } from '../constants/playground.constants';
+import { CHANNEL_TYPES_WITH_GENERATE_AUDIO } from '../constants/channel.constants';
 
 export let API = axios.create({
   baseURL: import.meta.env.VITE_REACT_APP_SERVER_URL
@@ -223,6 +224,10 @@ export const buildApiPayload = (
       (item) => Math.abs(ratioValue - item.ratio) < 0.03,
     );
     const prompt = getLastUserPrompt();
+    const selectedChannelType = Number(inputs.selected_channel_type ?? 0);
+    const supportsGenerateAudio =
+      CHANNEL_TYPES_WITH_GENERATE_AUDIO.has(selectedChannelType);
+    const generateAudio = inputs.generate_audio !== false;
     const {
       images: imageMediaUrls,
       videos: videoMediaUrls,
@@ -237,7 +242,7 @@ export const buildApiPayload = (
         duration: videoDuration,
         resolution,
         ratio: matchedRatio?.value || 'adaptive',
-        generate_audio: false,
+        ...(supportsGenerateAudio ? { generate_audio: generateAudio } : {}),
         ...(videoMediaUrls.length > 0 ? { video_urls: videoMediaUrls } : {}),
         ...(audioMediaUrls.length > 0 ? { audio_urls: audioMediaUrls } : {}),
       },

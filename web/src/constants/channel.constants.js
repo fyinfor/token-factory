@@ -239,6 +239,12 @@ export const CHANNEL_OPTIONS = [
     },
 ];
 
+/** 火山方舟-Seedance 2.0 视频（与后端 constant.ChannelTypeSeedance 一致） */
+export const CHANNEL_TYPE_SEEDANCE = 65;
+
+/** 支持操练场 generate_audio 参数的渠道类型 */
+export const CHANNEL_TYPES_WITH_GENERATE_AUDIO = new Set([CHANNEL_TYPE_SEEDANCE]);
+
 // Channel types that support upstream model list fetching in UI.
 export const MODEL_FETCHABLE_CHANNEL_TYPES = new Set([
     1, 4, 14, 34, 17, 26, 27, 24, 47, 25, 20, 23, 31, 40, 42, 48, 43, 61, 62, 63, 64,

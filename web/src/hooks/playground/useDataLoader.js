@@ -328,6 +328,7 @@ export const useDataLoader = (
           return {
             label,
             value: routeSlug,
+            channelType: Number(option?.channel_type ?? 0),
           };
         })
         .filter(Boolean),
@@ -352,6 +353,21 @@ export const useDataLoader = (
     if (!hasSelectedSupplier) {
       handleInputChange('selected_route_slug', '');
     }
+    const selectedRouteSlugTrimmed = String(selectedRouteSlug || '').trim();
+    let nextChannelType = '';
+    if (selectedRouteSlugTrimmed) {
+      const matchedSupplier = supplierOptionsRaw.find(
+        (option) =>
+          String(option?.route_slug || '').trim() === selectedRouteSlugTrimmed,
+      );
+      const channelType = Number(matchedSupplier?.channel_type ?? 0);
+      if (Number.isFinite(channelType) && channelType > 0) {
+        nextChannelType = channelType;
+      }
+    }
+    if (inputs.selected_channel_type !== nextChannelType) {
+      handleInputChange('selected_channel_type', nextChannelType);
+    }
   }, [
     userState?.user,
     playgroundRawModels,
@@ -360,6 +376,7 @@ export const useDataLoader = (
     inputs.model,
     inputs.display_mode,
     inputs.selected_route_slug,
+    inputs.selected_channel_type,
     t,
     setModels,
     setSupplierOptions,

@@ -124,6 +124,8 @@ export const DEFAULT_CONFIG = {
     video_fps: 24,
     video_motion: 0.4,
     video_n: 1,
+    generate_audio: true,
+    selected_channel_type: '',
   },
   parameterEnabled: {
     temperature: true,
