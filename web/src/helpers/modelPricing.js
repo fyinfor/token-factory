@@ -9,7 +9,7 @@ export const VIDEO_ENDPOINT_TYPES = new Set([
   'ali-video',
 ]);
 
-const TRANSLATABLE_MODEL_TAGS = new Set(['文本', '视频', '图片']);
+const TRANSLATABLE_MODEL_TAGS = new Set(['文本', '视频', '图片', '多模态', '热门']);
 
 /** 按界面语言选择中文/英文内容（英文缺失时回退中文） */
 export function getLocalizedContent(zhContent, enContent, language) {
@@ -34,7 +34,7 @@ const TRANSLATABLE_SUPPLIER_TYPES = new Set([
   '个人中转站',
 ]);
 
-/** 模型标签展示文案：内置标签（文本/视频/图片）走 i18n，其余原样返回 */
+/** 模型标签展示文案：内置标签（文本/视频/图片/多模态/热门）走 i18n，其余原样返回 */
 export function getModelTagLabel(tag, t) {
   const trimmed = String(tag ?? '').trim();
   if (!trimmed) return trimmed;

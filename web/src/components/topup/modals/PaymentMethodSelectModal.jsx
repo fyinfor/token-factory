@@ -1,4 +1,4 @@
-import React from 'react';
+import { getPayMethodDisplayName } from '../../../helpers';
 import { Modal, Typography, Space, Button, Tooltip } from '@douyinfe/semi-ui';
 import { SiAlipay, SiWechat, SiStripe } from 'react-icons/si';
 import { CreditCard, Wallet } from 'lucide-react';
@@ -84,7 +84,7 @@ const PaymentMethodSelectModal = ({
                 icon={renderPayIcon(payMethod)}
                 className='!rounded-xl !justify-start !px-4 !py-3'
               >
-                {payMethod.name}
+                {getPayMethodDisplayName(payMethod, t)}
               </Button>
             );
 
