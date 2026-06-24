@@ -280,7 +280,7 @@ export default function SettingsSidebarModulesAdmin(props) {
         },
         {
           key: 'route_policy',
-          title: t('智能路由策略'),
+          title: t('智能路由'),
           description: t('route_policy.description'),
         },
         {
