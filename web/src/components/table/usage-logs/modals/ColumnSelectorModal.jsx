@@ -108,8 +108,7 @@ const ColumnSelectorModal = ({
           // Skip admin-only columns for non-admin users
           if (
             !isAdminUser &&
-            (column.key === COLUMN_KEYS.CHANNEL ||
-              column.key === COLUMN_KEYS.USERNAME ||
+            (column.key === COLUMN_KEYS.USERNAME ||
               column.key === COLUMN_KEYS.RETRY)
           ) {
             return null;
@@ -119,6 +118,9 @@ const ColumnSelectorModal = ({
             <div key={column.key} className='w-1/2 mb-4 pr-2'>
               <Checkbox
                 checked={!!visibleColumns[column.key]}
+                disabled={
+                  !isAdminUser && column.key === COLUMN_KEYS.CHANNEL
+                }
                 onChange={(e) =>
                   handleColumnVisibilityChange(column.key, e.target.checked)
                 }

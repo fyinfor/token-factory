@@ -2055,6 +2055,16 @@ func ManageUser(c *gin.Context) {
 			model.RecordLog(user.Id, model.LogTypeManage, fmt.Sprintf("%s，赠送 %s", actionLabel, logger.LogQuota(rewardQuota)))
 		}
 	}
+	if req.Action == "unset_distributor" || req.Action == "demote" {
+		reason := "取消兑换码管理资格"
+		if req.Action == "unset_distributor" {
+			reason = "取消代理资格"
+		}
+		if _, _, err := model.DisableUserActiveRedemptions(user.Id, reason); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	}
 	switch req.Action {
 	case "set_distributor":
 		service.NotifyDistributorRoleGranted(user.Id)

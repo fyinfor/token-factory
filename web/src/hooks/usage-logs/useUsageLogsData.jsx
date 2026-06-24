@@ -39,6 +39,7 @@ import {
   renderClaudeLogContent,
   renderLogContent,
   renderConsumeBillingProcess,
+  trimDecimalsInLogDetailText,
 } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
@@ -603,11 +604,22 @@ export const useLogsData = () => {
     logType: [],
   };
 
+  const applyRoleColumnVisibilityGuards = (columns) => {
+    const next = { ...columns };
+    if (!isAdminUser) {
+      next[COLUMN_KEYS.USERNAME] = false;
+      next[COLUMN_KEYS.RETRY] = false;
+      // 普通用户主表固定展示路由后缀列（如 u75），不可关闭。
+      next[COLUMN_KEYS.CHANNEL] = true;
+    }
+    return next;
+  };
+
   // Get default column visibility based on user role
   const getDefaultColumnVisibility = () => {
-    return {
+    return applyRoleColumnVisibilityGuards({
       [COLUMN_KEYS.TIME]: true,
-      [COLUMN_KEYS.CHANNEL]: isAdminUser || supplierChannelLogsView,
+      [COLUMN_KEYS.CHANNEL]: true,
       [COLUMN_KEYS.USERNAME]: isAdminUser || supplierChannelLogsView,
       [COLUMN_KEYS.TOKEN]: true,
       [COLUMN_KEYS.GROUP]: true,
@@ -620,7 +632,7 @@ export const useLogsData = () => {
       [COLUMN_KEYS.RETRY]: isAdminUser,
       [COLUMN_KEYS.IP]: true,
       [COLUMN_KEYS.DETAILS]: true,
-    };
+    });
   };
 
   const getInitialVisibleColumns = () => {
@@ -633,15 +645,7 @@ export const useLogsData = () => {
 
     try {
       const parsed = JSON.parse(savedColumns);
-      const merged = { ...defaults, ...parsed };
-
-      if (!isAdminUser) {
-        merged[COLUMN_KEYS.CHANNEL] = false;
-        merged[COLUMN_KEYS.USERNAME] = false;
-        merged[COLUMN_KEYS.RETRY] = false;
-      }
-
-      return merged;
+      return applyRoleColumnVisibilityGuards({ ...defaults, ...parsed });
     } catch (e) {
       console.error('Failed to parse saved column preferences', e);
       return defaults;
@@ -698,7 +702,13 @@ export const useLogsData = () => {
 
   // Handle column visibility change
   const handleColumnVisibilityChange = (columnKey, checked) => {
-    const updatedColumns = { ...visibleColumns, [columnKey]: checked };
+    if (!isAdminUser && columnKey === COLUMN_KEYS.CHANNEL) {
+      return;
+    }
+    const updatedColumns = applyRoleColumnVisibilityGuards({
+      ...visibleColumns,
+      [columnKey]: checked,
+    });
     setVisibleColumns(updatedColumns);
   };
 
@@ -709,9 +719,7 @@ export const useLogsData = () => {
 
     allKeys.forEach((key) => {
       if (
-        (key === COLUMN_KEYS.CHANNEL ||
-          key === COLUMN_KEYS.USERNAME ||
-          key === COLUMN_KEYS.RETRY) &&
+        (key === COLUMN_KEYS.USERNAME || key === COLUMN_KEYS.RETRY) &&
         !isAdminUser
       ) {
         updatedColumns[key] = false;
@@ -720,13 +728,16 @@ export const useLogsData = () => {
       }
     });
 
-    setVisibleColumns(updatedColumns);
+    setVisibleColumns(applyRoleColumnVisibilityGuards(updatedColumns));
   };
 
   // Persist column settings to the role-specific STORAGE_KEY
   useEffect(() => {
     if (Object.keys(visibleColumns).length > 0) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(visibleColumns));
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify(applyRoleColumnVisibilityGuards(visibleColumns)),
+      );
     }
   }, [visibleColumns]);
 
@@ -1051,13 +1062,28 @@ export const useLogsData = () => {
         : null;
       let expandDataLocal = [];
 
+      const routeSlug = String(logs[i].route_slug || '').trim();
+      if (
+        routeSlug &&
+        (logs[i].type === 0 ||
+          logs[i].type === 2 ||
+          logs[i].type === 5 ||
+          logs[i].type === 6)
+      ) {
+        expandDataLocal.push({
+          key: t('路由后缀'),
+          value: routeSlug,
+        });
+      }
       if (
         isAdminUser &&
+        logs[i].channel != null &&
+        String(logs[i].channel) !== '' &&
         (logs[i].type === 0 || logs[i].type === 2 || logs[i].type === 6)
       ) {
         expandDataLocal.push({
-          key: t('渠道信息'),
-          value: logs[i].channel_display || String(logs[i].channel ?? ''),
+          key: t('渠道'),
+          value: String(logs[i].channel),
         });
       }
       if (logs[i].request_id) {
@@ -1179,7 +1205,7 @@ export const useLogsData = () => {
         ) {
           expandDataLocal.push({
             key: t('其他详情'),
-            value: logs[i].content,
+            value: trimDecimalsInLogDetailText(logs[i].content),
           });
         }
         if (isAdminUser && other?.reject_reason) {

@@ -125,6 +125,13 @@ export const getRedemptionsColumns = ({
       },
     },
     {
+      title: t('创建人'),
+      dataIndex: 'creator_name',
+      render: (text, record) => {
+        return <div>{text || record.user_id || t('未知')}</div>;
+      },
+    },
+    {
       title: t('过期时间'),
       dataIndex: 'expired_time',
       render: (text) => {
@@ -136,6 +143,18 @@ export const getRedemptionsColumns = ({
       dataIndex: 'used_user_id',
       render: (text) => {
         return <div>{text === 0 ? t('无') : text}</div>;
+      },
+    },
+    {
+      title: t('兑换人'),
+      dataIndex: 'redeemer_name',
+      render: (text, record) => {
+        return (
+          <div>
+            {text ||
+              (record.used_user_id === 0 ? t('无') : record.used_user_id)}
+          </div>
+        );
       },
     },
     {
