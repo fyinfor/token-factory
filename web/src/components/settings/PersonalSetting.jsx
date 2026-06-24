@@ -659,7 +659,7 @@ const PersonalSetting = () => {
               {/* 偏好设置（语言等） */}
               <PreferencesSettings t={t} />
 
-              {/* 智能路由策略 */}
+              {/* 智能路由 */}
               <RoutePolicyCard t={t} />
             </div>
 

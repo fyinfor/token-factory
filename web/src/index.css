@@ -745,6 +745,88 @@ html.dark .sbg-variant-green {
 }
 
 /* 图片列表滚动条样式 */
+.playground-settings-panel {
+  color: var(--semi-color-text-0);
+}
+
+.playground-settings-panel .semi-radioGroup-buttonRadio {
+  border-radius: 7px;
+}
+
+.playground-settings-panel .semi-radioGroup-buttonRadio-checked {
+  box-shadow: 0 6px 18px rgba(var(--semi-blue-5), 0.16);
+}
+
+.playground-section-tab:focus-visible {
+  outline: 2px solid var(--semi-color-primary);
+  outline-offset: 2px;
+}
+
+.playground-section-tab svg {
+  flex-shrink: 0;
+}
+
+.playground-settings-panel .semi-tag {
+  border-radius: 999px;
+  font-weight: 500;
+}
+
+.playground-material-surface {
+  box-shadow:
+    0 10px 28px rgba(15, 23, 42, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.playground-material-surface-image {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--semi-blue-0), 0.88),
+      rgba(var(--semi-blue-0), 0.46)
+    ),
+    var(--semi-color-bg-0);
+}
+
+.playground-material-surface-video {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--semi-violet-0), 0.88),
+      rgba(var(--semi-violet-0), 0.5)
+    ),
+    var(--semi-color-bg-0);
+}
+
+.playground-media-input {
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(var(--semi-white), 0.72);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.04),
+    inset 0 0 0 1px rgba(var(--semi-grey-1), 0.22);
+}
+
+.playground-media-input + .playground-media-input {
+  margin-top: 0;
+}
+
+.playground-media-input-image {
+  background: rgba(var(--semi-blue-0), 0.52);
+}
+
+.playground-media-input-video {
+  background: rgba(var(--semi-violet-0), 0.56);
+}
+
+.playground-media-input .semi-input-wrapper {
+  background: rgba(var(--semi-white), 0.82);
+  box-shadow: inset 0 0 0 1px rgba(var(--semi-grey-1), 0.18);
+}
+
+.playground-media-input .semi-button-light {
+  background: rgba(var(--semi-white), 0.78);
+}
+
 .image-list-scroll::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -1481,7 +1563,9 @@ html.dark .with-pastel-balls::before {
       transparent 100%
     ),
     var(--semi-color-warning) !important;
-  background-size: 220% 100%, auto !important;
+  background-size:
+    220% 100%,
+    auto !important;
   border-color: var(--semi-color-warning) !important;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24);
 }

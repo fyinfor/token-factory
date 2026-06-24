@@ -117,7 +117,9 @@ const ImageUrlInput = ({
   );
 
   return (
-    <div className={disabled ? 'opacity-50' : ''}>
+    <div
+      className={`playground-media-input playground-media-input-image ${disabled ? 'opacity-50' : ''}`}
+    >
       <div className='flex items-center justify-between mb-2'>
         <div className='flex items-center gap-2'>
           <Image
