@@ -101,40 +101,40 @@ export const shouldHideOfficialColumnsForRows = (rows) => {
 };
 
 /* ============================================================
- * 表头列定义常量
+ * 表头列定义（i18n）
  * ============================================================ */
 
 /** 按量计费表头列（完整四列） */
-export const FLAT_PRICING_COLUMNS = {
-  label: '价格项',
-  platform: '平台价 / M',
-  official: '官方价 / M',
-  discount: '折扣',
-};
+export const getFlatPricingColumns = (t) => ({
+  label: t('价格项'),
+  platform: t('平台价 / M'),
+  official: t('官方价 / M'),
+  discount: t('折扣'),
+});
 
 /** 按次计费表头列（完整四列） */
-export const FIXED_PRICING_COLUMNS = {
-  label: '价格项',
-  platform: '平台价 / 次',
-  official: '官方价 / 次',
-  discount: '折扣',
-};
+export const getFixedPricingColumns = (t) => ({
+  label: t('价格项'),
+  platform: t('平台价 / 次'),
+  official: t('官方价 / 次'),
+  discount: t('折扣'),
+});
 
 /** 视频计费表头列（完整四列） */
-export const VIDEO_PRICING_COLUMNS = {
-  label: '计费类型',
-  platform: '平台价',
-  official: '官方价',
-  discount: '折扣',
-};
+export const getVideoPricingColumns = (t) => ({
+  label: t('计费类型'),
+  platform: t('平台价'),
+  official: t('官方价'),
+  discount: t('折扣'),
+});
 
-/** 阶梯计费表头列前缀（完整四列，首列为区间） */
-export const TIER_PRICING_COLUMNS = {
-  label: '区间',
-  platform: '平台价 / M',
-  official: '官方价 / M',
-  discount: '折扣',
-};
+/** 阶梯计费表头列（完整四列，首列通常为 token 区间） */
+export const getTierPricingColumns = (t) => ({
+  label: t('区间'),
+  platform: t('平台价 / M'),
+  official: t('官方价 / M'),
+  discount: t('折扣'),
+});
 
 /* ============================================================
  * 通用表格单元格 class

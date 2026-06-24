@@ -28,6 +28,7 @@ import {
 import { TABLE_COMPACT_MODES_KEY } from '../constants';
 import { USER_ROLES } from '../constants/user.constants';
 import { MOBILE_BREAKPOINT } from '../hooks/common/useIsMobile';
+import { normalizeLanguage } from '../i18n/language';
 
 const HTMLToastContent = ({ htmlContent }) => {
   return <div dangerouslySetInnerHTML={{ __html: htmlContent }} />;
@@ -146,10 +147,24 @@ export function parseCommissionPercentStringToBps(s) {
   return Math.round(p * 100);
 }
 
-export function getSystemName() {
-  let system_name = localStorage.getItem('system_name');
-  if (!system_name) return '词元工厂';
-  return system_name;
+export function getSystemName(language) {
+  const lang = normalizeLanguage(
+    language || localStorage.getItem('i18nextLng') || 'zh-CN',
+  );
+  const useChinese = lang === 'zh-CN' || lang === 'zh-TW';
+
+  if (useChinese) {
+    const systemName = localStorage.getItem('system_name');
+    if (systemName) return systemName;
+    return '词元工厂';
+  }
+
+  const systemNameEn = localStorage.getItem('system_name_en');
+  if (systemNameEn) return systemNameEn;
+
+  const systemName = localStorage.getItem('system_name');
+  if (systemName) return systemName;
+  return 'TokenFactory';
 }
 
 export function getLogo() {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext, useCallback } from 'react';
+import React, { useState, useEffect, useContext, useCallback, useMemo, useRef } from 'react';
 import {
   Avatar,
   Button,
@@ -16,18 +16,52 @@ import {
   Spin,
   Toast,
 } from '@douyinfe/semi-ui';
-import { Route, ChevronDown, ChevronRight, Plus, Trash2, Info } from 'lucide-react';
+import { Route, ChevronDown, ChevronRight, Plus, Trash2, Info, Search, GripVertical } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { API, showSuccess, showError } from '../../../../helpers';
 import { getCurrencyConfig } from '../../../../helpers/render';
 import { UserContext } from '../../../../context/User';
 
 const ROUTE_MODES = [
-  { value: '', label_key: 'route_policy.disabled' },
   { value: 'default', label_key: 'route_policy.mode_default' },
   { value: 'weight', label_key: 'route_policy.mode_weight' },
   { value: 'price', label_key: 'route_policy.mode_price' },
 ];
+
+const computeWeightsFromOrder = (channels) => {
+  const total = channels.length;
+  return channels.map((channel, index) => ({
+    channel,
+    weight: Math.max(10, (total - index) * 10),
+  }));
+};
+
+const resolveEffectiveEnabled = (channel) => {
+  if (channel.user_configured) return channel.user_enabled;
+  if (channel.global_configured) return channel.global_enabled;
+  return true;
+};
+
+const resolveDisplayWeight = (channel) => {
+  if (channel.user_configured) return channel.user_weight || 0;
+  if (channel.global_configured) return channel.global_weight || 0;
+  return 0;
+};
+
+const applyOrderWeightsToChannels = (channels) =>
+  computeWeightsFromOrder(channels).map(({ channel, weight }) => ({
+    ...channel,
+    user_weight: weight,
+    user_configured: true,
+    user_enabled: resolveEffectiveEnabled(channel),
+  }));
+
+const fuzzyMatchModelQuery = (query, model, groupKey, displayName) => {
+  const q = query.trim().toLowerCase();
+  if (!q) return false;
+  const haystacks = [model, groupKey, displayName].filter(Boolean).map((s) => s.toLowerCase());
+  return haystacks.some((text) => text.includes(q));
+};
 
 const RoutePolicyCard = ({ t }) => {
   const { t: translate } = useTranslation();
@@ -46,15 +80,20 @@ const RoutePolicyCard = ({ t }) => {
   const [newOverrideModel, setNewOverrideModel] = useState('');
   const [newOverrideGroup, setNewOverrideGroup] = useState('');
   const [addingOverride, setAddingOverride] = useState(false);
+  const [modelSearch, setModelSearch] = useState('');
+  const [highlightedGroupKey, setHighlightedGroupKey] = useState('');
+  const groupRefs = useRef({});
 
   const tLocal = useCallback(
     (key) => t ? t(key) : translate(key),
     [t, translate]
   );
 
-  const fetchPolicy = useCallback(async () => {
-    setLoading(true);
-    setLoadError('');
+  const fetchPolicy = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) {
+      setLoading(true);
+      setLoadError('');
+    }
     try {
       const res = await API.get('/api/user/route-policy');
       const { data } = res;
@@ -64,19 +103,23 @@ const RoutePolicyCard = ({ t }) => {
         setGroups(data.groups ?? []);
         setUserOverrides(data.user_overrides ?? []);
         setGlobalOverrides(data.global_overrides ?? []);
-      } else {
+      } else if (!silent) {
         const msg = data.error || tLocal('route_policy.load_failed');
         setLoadError(msg);
         showError(msg);
       }
     } catch (err) {
-      const msg = tLocal('route_policy.load_failed_with_reason', {
-        reason: err.response?.data?.error || err.message || String(err),
-      });
-      setLoadError(msg);
-      showError(msg);
+      if (!silent) {
+        const msg = tLocal('route_policy.load_failed_with_reason', {
+          reason: err.response?.data?.error || err.message || String(err),
+        });
+        setLoadError(msg);
+        showError(msg);
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, [tLocal]);
 
@@ -89,22 +132,12 @@ const RoutePolicyCard = ({ t }) => {
     setMode(newMode);
     setSavingMode(true);
     try {
-      if (newMode === '') {
-        const res = await API.put('/api/user/route-policy/mode', { reset_mode: true });
-        if (res.data.success) {
-          showSuccess(tLocal('route_policy.mode_reset'));
-        } else {
-          showError(res.data.error || tLocal('route_policy.save_failed'));
-          setMode(prevMode);
-        }
+      const res = await API.put('/api/user/route-policy/mode', { mode: newMode });
+      if (res.data.success) {
+        showSuccess(tLocal('route_policy.mode_updated'));
       } else {
-        const res = await API.put('/api/user/route-policy/mode', { mode: newMode });
-        if (res.data.success) {
-          showSuccess(tLocal('route_policy.mode_updated'));
-        } else {
-          showError(res.data.error || tLocal('route_policy.save_failed'));
-          setMode(prevMode);
-        }
+        showError(res.data.error || tLocal('route_policy.save_failed'));
+        setMode(prevMode);
       }
     } catch (err) {
       showError(tLocal('route_policy.save_failed'));
@@ -114,7 +147,7 @@ const RoutePolicyCard = ({ t }) => {
     }
   };
 
-  const handleWeightChange = async (groupKey, channelID, weight, enabled) => {
+  const handleWeightChange = async (groupKey, channelID, weight, enabled, { quiet = false } = {}) => {
     try {
       const res = await API.post('/api/user/route-policy/weights', {
         group_key: groupKey,
@@ -123,13 +156,39 @@ const RoutePolicyCard = ({ t }) => {
         enabled,
       });
       if (res.data.success) {
-        showSuccess(tLocal('route_policy.weight_updated'));
-        fetchPolicy();
-      } else {
+        if (!quiet) {
+          showSuccess(tLocal('route_policy.weight_updated'));
+          fetchPolicy({ silent: true });
+        }
+        return true;
+      }
+      if (!quiet) {
         showError(res.data.error || tLocal('route_policy.save_failed'));
       }
+      return false;
     } catch (err) {
-      showError(tLocal('route_policy.save_failed'));
+      if (!quiet) {
+        showError(tLocal('route_policy.save_failed'));
+      }
+      return false;
+    }
+  };
+
+  const handleBatchWeightChange = async (groupKey, updates) => {
+    let changed = 0;
+    for (const item of updates) {
+      const ok = await handleWeightChange(
+        groupKey,
+        item.channel_id,
+        item.weight,
+        item.enabled,
+        { quiet: true },
+      );
+      if (ok) changed += 1;
+    }
+    if (changed > 0) {
+      showSuccess(tLocal('route_policy.weight_updated'));
+      fetchPolicy({ silent: true });
     }
   };
 
@@ -138,7 +197,7 @@ const RoutePolicyCard = ({ t }) => {
       const res = await API.delete(`/api/user/route-policy/weights/${weightID}`);
       if (res.data.success) {
         showSuccess(tLocal('route_policy.weight_deleted'));
-        fetchPolicy();
+        fetchPolicy({ silent: true });
       } else {
         showError(res.data.error || tLocal('route_policy.delete_failed'));
       }
@@ -162,7 +221,7 @@ const RoutePolicyCard = ({ t }) => {
         showSuccess(tLocal('route_policy.override_added'));
         setNewOverrideModel('');
         setNewOverrideGroup('');
-        fetchPolicy();
+        fetchPolicy({ silent: true });
       } else {
         showError(res.data.error || tLocal('route_policy.save_failed'));
       }
@@ -178,7 +237,7 @@ const RoutePolicyCard = ({ t }) => {
       const res = await API.delete(`/api/user/route-policy/overrides/${overrideID}`);
       if (res.data.success) {
         showSuccess(tLocal('route_policy.override_deleted'));
-        fetchPolicy();
+        fetchPolicy({ silent: true });
       } else {
         showError(res.data.error || tLocal('route_policy.delete_failed'));
       }
@@ -191,25 +250,11 @@ const RoutePolicyCard = ({ t }) => {
     setExpandedGroups((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }));
   };
 
-  // mode === ''：未开启个人 TokenFactory 智能路由（本站原生选路）。
-  // mode 为 default/weight/price 时：启用个人策略，对应 TokenFactory 三种模式。
-  const radioValue = mode === '' ? '' : mode;
-  const smartRoutingEnabled = mode !== '';
-
-  const modeLabel = (m) => {
-    switch (m) {
-      case 'weight': return tLocal('route_policy.mode_weight');
-      case 'price': return tLocal('route_policy.mode_price');
-      case 'default': return tLocal('route_policy.mode_default');
-      default: return tLocal('route_policy.disabled');
-    }
-  };
+  // mode === '' 时跟随系统全局模式；界面直接展示 effectiveMode，管理员改默认后自动对齐。
+  const effectiveMode = mode === '' ? globalMode : mode;
 
   const modeHint = () => {
-    if (mode === '') {
-      return tLocal('route_policy.disabled_hint');
-    }
-    switch (mode) {
+    switch (effectiveMode) {
       case 'default':
         return tLocal('route_policy.mode_default_hint');
       case 'weight':
@@ -266,6 +311,43 @@ const RoutePolicyCard = ({ t }) => {
     ...globalOverrides.map((o) => ({ ...o, is_user: false })),
   ];
 
+  const modelIndex = useMemo(() => {
+    const items = [];
+    groups.forEach((group) => {
+      const displayName = group.display_name || group.group_key;
+      (group.models || []).forEach((model) => {
+        items.push({
+          model,
+          groupKey: group.group_key,
+          displayName,
+        });
+      });
+    });
+    return items;
+  }, [groups]);
+
+  const modelSearchResults = useMemo(() => {
+    const query = modelSearch.trim();
+    if (!query) return [];
+    return modelIndex
+      .filter((item) =>
+        fuzzyMatchModelQuery(query, item.model, item.groupKey, item.displayName),
+      )
+      .slice(0, 80);
+  }, [modelIndex, modelSearch]);
+
+  const jumpToModelGroup = (groupKey, modelName = '') => {
+    setExpandedGroups((prev) => ({ ...prev, [groupKey]: true }));
+    setHighlightedGroupKey(groupKey);
+    if (modelName) {
+      setModelSearch(modelName);
+    }
+    window.setTimeout(() => {
+      groupRefs.current[groupKey]?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 120);
+    window.setTimeout(() => setHighlightedGroupKey(''), 1800);
+  };
+
   return (
     <Card className='!rounded-2xl shadow-sm border-0'>
       {/* Card Header */}
@@ -316,54 +398,104 @@ const RoutePolicyCard = ({ t }) => {
               <div className='ml-16'>
                 <RadioGroup
                   type='button'
-                  value={radioValue}
+                  value={effectiveMode}
                   onChange={(e) => handleModeChange(e.target.value)}
                   disabled={savingMode}
                 >
                   {ROUTE_MODES.map((m) => (
-                    <Radio key={m.value || 'disabled'} value={m.value}>
+                    <Radio key={m.value} value={m.value}>
                       {tLocal(m.label_key)}
                     </Radio>
                   ))}
                 </RadioGroup>
-                <div className='mt-2 space-y-1'>
+                <div className='mt-2'>
                   <div className='text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1'>
                     <Info size={12} />
                     {modeHint()}
                   </div>
-                  {!smartRoutingEnabled && globalMode ? (
-                    <div className='text-xs text-gray-400 dark:text-gray-500'>
-                      {tLocal('route_policy.site_global_ref')}: {modeLabel(globalMode)}
-                    </div>
-                  ) : null}
                 </div>
               </div>
             </div>
           </Card>
 
           {/* Model Groups with Channels */}
-          {mode === 'weight' && groups.length > 0 && (
+          {effectiveMode === 'weight' && groups.length > 0 && (
             <Card className='!rounded-xl border dark:border-gray-700 mb-4'>
-              <Typography.Title heading={6} className='mb-3'>
-                {tLocal('route_policy.model_groups')}
-              </Typography.Title>
+              <div className='flex flex-col gap-3 mb-3 lg:flex-row lg:items-start lg:justify-between'>
+                <div>
+                  <Typography.Title heading={6}>
+                    {tLocal('route_policy.model_groups')}
+                  </Typography.Title>
+                  <Typography.Text type='tertiary' size='small' className='block mt-1'>
+                    {tLocal('route_policy.drag_sort_hint')}
+                  </Typography.Text>
+                </div>
+                <div className='w-full lg:w-72 shrink-0'>
+                  <Typography.Text size='small' className='mb-1 block'>
+                    {tLocal('route_policy.model_search')}
+                  </Typography.Text>
+                  <Input
+                    prefix={<Search size={14} className='text-gray-400' />}
+                    value={modelSearch}
+                    onChange={setModelSearch}
+                    placeholder={tLocal('route_policy.model_search_placeholder')}
+                    size='small'
+                    showClear
+                  />
+                  <Typography.Text type='tertiary' size='small' className='mt-1 block'>
+                    {tLocal('route_policy.model_search_hint')}
+                  </Typography.Text>
+                  {modelSearch.trim() ? (
+                    <div className='mt-2 max-h-56 overflow-y-auto rounded-lg border dark:border-gray-600 bg-gray-50/80 dark:bg-gray-900/40'>
+                      {modelSearchResults.length > 0 ? (
+                        modelSearchResults.map((item) => (
+                          <button
+                            key={`${item.groupKey}-${item.model}`}
+                            type='button'
+                            className='w-full px-3 py-2 text-left text-sm hover:bg-white dark:hover:bg-gray-800 border-b last:border-b-0 dark:border-gray-700'
+                            onClick={() => jumpToModelGroup(item.groupKey, item.model)}
+                          >
+                            <div className='font-medium truncate'>{item.model}</div>
+                            <div className='text-xs text-gray-500 dark:text-gray-400 truncate'>
+                              {item.displayName}
+                              <span className='mx-1'>·</span>
+                              <code>{item.groupKey}</code>
+                            </div>
+                          </button>
+                        ))
+                      ) : (
+                        <div className='px-3 py-4 text-xs text-gray-500 dark:text-gray-400 text-center'>
+                          {tLocal('route_policy.model_search_empty')}
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
               <div className='space-y-2'>
                 {groups.map((group) => (
                   <div
                     key={group.group_key}
-                    className='border dark:border-gray-600 rounded-lg overflow-hidden'
+                    ref={(el) => {
+                      groupRefs.current[group.group_key] = el;
+                    }}
+                    className={`border dark:border-gray-600 rounded-lg overflow-hidden transition-colors ${
+                      highlightedGroupKey === group.group_key
+                        ? 'ring-2 ring-green-400/70 dark:ring-green-500/50'
+                        : ''
+                    }`}
                   >
                     <div
                       className='flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800'
                       onClick={() => toggleGroup(group.group_key)}
                     >
-                      <div className='flex items-center gap-2'>
+                      <div className='flex items-center gap-2 min-w-0'>
                         {expandedGroups[group.group_key] ? (
                           <ChevronDown size={16} />
                         ) : (
                           <ChevronRight size={16} />
                         )}
-                        <Typography.Text strong>
+                        <Typography.Text strong className='truncate'>
                           {group.display_name || group.group_key}
                         </Typography.Text>
                         <Tag size='small' color='blue'>
@@ -380,42 +512,16 @@ const RoutePolicyCard = ({ t }) => {
                           {tLocal('route_policy.group_models')}: {group.models.slice(0, 10).join(', ')}
                           {group.models.length > 10 ? '...' : ''}
                         </div>
-                        <div className='overflow-x-auto'>
-                          <table className='w-full text-sm'>
-                            <thead>
-                              <tr className='border-b dark:border-gray-600 text-left text-xs text-gray-500'>
-                                <th className='py-2 pr-3'>{tLocal('route_policy.channel_name')}</th>
-                                <th className='py-2 pr-3'>{tLocal('route_policy.provider')}</th>
-                                {mode === 'weight' && (
-                                  <th className='py-2 pr-3'>{tLocal('route_policy.user_weight')}</th>
-                                )}
-                                {mode === 'weight' && (
-                                  <th className='py-2 pr-3'>{tLocal('route_policy.enabled')}</th>
-                                )}
-                                {mode === 'weight' && (
-                                  <th className='py-2 pr-3'>{tLocal('route_policy.global_weight')}</th>
-                                )}
-                                {mode === 'price' && (
-                                  <th className='py-2 pr-3'>{tLocal('route_policy.price')}</th>
-                                )}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {group.channels.map((ch) => (
-                                <ChannelRow
-                                  key={ch.channel_id}
-                                  channel={ch}
-                                  groupKey={group.group_key}
-                                  isAdmin={isAdmin}
-                                  onWeightChange={handleWeightChange}
-                                  onDeleteWeight={handleDeleteWeight}
-                                  routeMode={mode}
-                                  t={tLocal}
-                                />
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
+                        <WeightChannelTable
+                          groupKey={group.group_key}
+                          channels={group.channels}
+                          isAdmin={isAdmin}
+                          onWeightChange={handleWeightChange}
+                          onBatchWeightChange={handleBatchWeightChange}
+                          onDeleteWeight={handleDeleteWeight}
+                          onSaved={() => fetchPolicy({ silent: true })}
+                          t={tLocal}
+                        />
                       </div>
                     </Collapsible>
                   </div>
@@ -485,34 +591,221 @@ const RoutePolicyCard = ({ t }) => {
   );
 };
 
-// ChannelRow renders a single channel in the group table with editable weight/switch.
-const ChannelRow = ({ channel, groupKey, isAdmin, onWeightChange, onDeleteWeight, routeMode, t }) => {
-  const [weight, setWeight] = useState(channel.user_weight || 0);
-  const [enabled, setEnabled] = useState(channel.user_enabled);
+// WeightChannelTable supports pointer-drag to adjust channel weights within a group.
+const WeightChannelTable = ({
+  groupKey,
+  channels,
+  isAdmin,
+  onWeightChange,
+  onBatchWeightChange,
+  onDeleteWeight,
+  onSaved,
+  t,
+}) => {
+  const [orderedChannels, setOrderedChannels] = useState(channels);
+  const [dragIndex, setDragIndex] = useState(null);
+  const [dragging, setDragging] = useState(false);
   const [saving, setSaving] = useState(false);
+  const orderedChannelsRef = useRef(channels);
+  const dragIndexRef = useRef(null);
+  const draggingRef = useRef(false);
+  const baselineOrderRef = useRef('');
 
   useEffect(() => {
-    setWeight(channel.user_weight || 0);
-    setEnabled(channel.user_enabled);
-  }, [channel.user_weight, channel.user_enabled]);
+    setOrderedChannels(channels);
+    orderedChannelsRef.current = channels;
+    baselineOrderRef.current = channels.map((ch) => ch.channel_id).join(',');
+  }, [channels]);
+
+  const persistOrderWeights = async (nextChannels) => {
+    const updates = computeWeightsFromOrder(nextChannels).map(({ channel, weight }) => ({
+      channel_id: channel.channel_id,
+      weight,
+      enabled: resolveEffectiveEnabled(channel),
+    }));
+
+    if (updates.length === 0) return;
+
+    setSaving(true);
+    await onBatchWeightChange(groupKey, updates);
+    setSaving(false);
+  };
+
+  const handleGripPointerDown = (index, event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragIndexRef.current = index;
+    draggingRef.current = true;
+    setDragIndex(index);
+    setDragging(true);
+  };
+
+  const handleRowPointerEnter = (index) => {
+    if (!draggingRef.current) return;
+    const from = dragIndexRef.current;
+    if (from === null || from === index) return;
+
+    setOrderedChannels((prev) => {
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(index, 0, moved);
+      const weighted = applyOrderWeightsToChannels(next);
+      orderedChannelsRef.current = weighted;
+      return weighted;
+    });
+    dragIndexRef.current = index;
+    setDragIndex(index);
+  };
+
+  useEffect(() => {
+    const finishDrag = async () => {
+      if (!draggingRef.current) return;
+
+      const nextOrder = orderedChannelsRef.current.map((ch) => ch.channel_id).join(',');
+      const orderChanged = nextOrder !== baselineOrderRef.current;
+
+      draggingRef.current = false;
+      dragIndexRef.current = null;
+      setDragIndex(null);
+      setDragging(false);
+
+      if (orderChanged) {
+        await persistOrderWeights(orderedChannelsRef.current);
+      }
+    };
+
+    if (!dragging) return undefined;
+
+    const onPointerUp = () => {
+      void finishDrag();
+    };
+    window.addEventListener('pointerup', onPointerUp);
+    return () => window.removeEventListener('pointerup', onPointerUp);
+  }, [dragging, groupKey, onBatchWeightChange]);
+
+  return (
+    <div className={`overflow-x-auto ${dragging ? 'select-none' : ''}`}>
+      <table className='w-full text-sm'>
+        <thead>
+          <tr className='border-b dark:border-gray-600 text-left text-xs text-gray-500'>
+            <th className='py-2 pr-2 w-9' />
+            <th className='py-2 pr-3'>{t('route_policy.channel_name')}</th>
+            <th className='py-2 pr-3'>{t('route_policy.provider')}</th>
+            <th className='py-2 pr-3'>{t('route_policy.user_weight')}</th>
+            <th className='py-2 pr-3'>{t('route_policy.enabled')}</th>
+            <th className='py-2 pr-3'>{t('route_policy.global_weight')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {orderedChannels.map((channel, index) => (
+            <ChannelRow
+              key={channel.channel_id}
+              channel={channel}
+              groupKey={groupKey}
+              isAdmin={isAdmin}
+              index={index}
+              isDragging={dragIndex === index}
+              isTableDragging={dragging}
+              saving={saving}
+              onGripPointerDown={handleGripPointerDown}
+              onRowPointerEnter={handleRowPointerEnter}
+              onWeightChange={onWeightChange}
+              onDeleteWeight={onDeleteWeight}
+              onSaved={onSaved}
+              routeMode='weight'
+              t={t}
+            />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+// ChannelRow renders a single channel in the group table with editable weight/switch.
+const ChannelRow = ({
+  channel,
+  groupKey,
+  isAdmin,
+  index = 0,
+  isDragging = false,
+  isTableDragging = false,
+  saving = false,
+  onGripPointerDown,
+  onRowPointerEnter,
+  onWeightChange,
+  onDeleteWeight,
+  onSaved,
+  routeMode,
+  t,
+}) => {
+  const [weight, setWeight] = useState(() => resolveDisplayWeight(channel));
+  const [enabled, setEnabled] = useState(() => resolveEffectiveEnabled(channel));
+  const [rowSaving, setRowSaving] = useState(false);
+
+  useEffect(() => {
+    setWeight(resolveDisplayWeight(channel));
+    setEnabled(resolveEffectiveEnabled(channel));
+  }, [
+    channel.user_weight,
+    channel.user_enabled,
+    channel.user_configured,
+    channel.global_weight,
+    channel.global_enabled,
+    channel.global_configured,
+  ]);
 
   const handleWeightSave = async () => {
-    setSaving(true);
-    await onWeightChange(groupKey, channel.channel_id, weight, enabled);
-    setSaving(false);
+    setRowSaving(true);
+    const ok = await onWeightChange(groupKey, channel.channel_id, weight, enabled);
+    if (ok) {
+      onSaved?.();
+    }
+    setRowSaving(false);
   };
 
   const handleToggle = async (checked) => {
     setEnabled(checked);
-    setSaving(true);
-    await onWeightChange(groupKey, channel.channel_id, weight, checked);
-    setSaving(false);
+    setRowSaving(true);
+    const ok = await onWeightChange(groupKey, channel.channel_id, weight, checked);
+    if (ok) {
+      onSaved?.();
+    }
+    setRowSaving(false);
   };
 
   const displayName = isAdmin ? channel.name : channel.masked_name;
+  const dragEnabled = routeMode === 'weight' && onGripPointerDown;
+  const disabled = saving || rowSaving;
 
   return (
-    <tr className='border-b dark:border-gray-700'>
+    <tr
+      className={`border-b dark:border-gray-700 transition-all duration-200 ${
+        isDragging
+          ? 'relative z-10 bg-white dark:bg-gray-800 shadow-lg ring-1 ring-green-300/70 dark:ring-green-700/60 scale-[1.01]'
+          : isTableDragging
+            ? 'opacity-90'
+            : 'hover:bg-gray-50/60 dark:hover:bg-gray-800/40'
+      }`}
+      onPointerEnter={() => onRowPointerEnter?.(index)}
+    >
+      <td className='py-2 pr-2 w-9 align-middle'>
+        {dragEnabled ? (
+          <div
+            role='button'
+            tabIndex={-1}
+            className={`touch-none inline-flex items-center justify-center rounded-md p-1.5 transition-all duration-200 ${
+              isDragging
+                ? 'cursor-grabbing bg-green-100 text-green-600 shadow-md ring-1 ring-green-300/80 dark:bg-green-900/50 dark:text-green-400 dark:ring-green-700/60'
+                : 'cursor-grab text-gray-400 hover:bg-gray-100 hover:text-green-600 hover:shadow-sm hover:ring-1 hover:ring-gray-200 dark:hover:bg-gray-700/80 dark:hover:text-green-400 dark:hover:ring-gray-600 active:scale-95 active:bg-green-50 active:text-green-600 active:shadow-md dark:active:bg-green-900/40'
+            }`}
+            title={t('route_policy.drag_handle')}
+            onPointerDown={(event) => onGripPointerDown(index, event)}
+          >
+            <GripVertical size={15} strokeWidth={2.25} />
+          </div>
+        ) : null}
+      </td>
       <td className='py-2 pr-3'>
         <Typography.Text size='small'>{displayName}</Typography.Text>
         {channel.route_slug && (
@@ -537,15 +830,15 @@ const ChannelRow = ({ channel, groupKey, isAdmin, onWeightChange, onDeleteWeight
               size='small'
               style={{ width: 70 }}
               onBlur={handleWeightSave}
-              disabled={saving}
+              disabled={disabled}
             />
-            {channel.user_configured && (
+            {channel.user_configured && channel.user_weight_id > 0 && (
               <Button
                 size='small'
                 type='danger'
                 icon={<Trash2 size={12} />}
-                onClick={() => onDeleteWeight(0)}
-                disabled={saving}
+                onClick={() => onDeleteWeight(channel.user_weight_id)}
+                disabled={disabled}
               />
             )}
           </div>
@@ -557,7 +850,7 @@ const ChannelRow = ({ channel, groupKey, isAdmin, onWeightChange, onDeleteWeight
             size='small'
             checked={enabled}
             onChange={handleToggle}
-            disabled={saving}
+            disabled={disabled}
           />
         </td>
       )}

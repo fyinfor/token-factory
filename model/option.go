@@ -72,6 +72,7 @@ func InitOptionMap() {
 	common.OptionMap["HomeBannerIntervalSec"] = "4"
 	common.OptionMap["Footer"] = common.Footer
 	common.OptionMap["SystemName"] = common.SystemName
+	common.OptionMap["SystemNameEn"] = common.SystemNameEn
 	common.OptionMap["Logo"] = common.Logo
 	common.OptionMap["DocsBrandName"] = "TokenFactory"
 	common.OptionMap["DocsSiteNameEn"] = "TokenFactory"
@@ -554,6 +555,8 @@ func updateOptionMap(key string, value string) (err error) {
 		common.Footer = value
 	case "SystemName":
 		common.SystemName = value
+	case "SystemNameEn":
+		common.SystemNameEn = value
 	case "Logo":
 		common.Logo = value
 	case "WeChatServerAddress":

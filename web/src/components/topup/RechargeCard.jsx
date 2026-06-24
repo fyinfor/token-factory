@@ -29,6 +29,7 @@ import {
 import { IconGift } from '@douyinfe/semi-icons';
 import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime';
 import { getCurrencyConfig } from '../../helpers/render';
+import { getPayMethodDisplayName } from '../../helpers';
 import SubscriptionPlansCard from './SubscriptionPlansCard';
 import './preset-amount-card.css';
 
@@ -334,7 +335,7 @@ const RechargeCard = ({
                                     }
                                     className='!rounded-lg !px-4 !py-2'
                                   >
-                                    {payMethod.name}
+                                    {getPayMethodDisplayName(payMethod, t)}
                                   </Button>
                                 );
 
@@ -524,7 +525,7 @@ const RechargeCard = ({
                           }
                           className='!rounded-lg !px-4 !py-2'
                         >
-                          {method.name}
+                          {getPayMethodDisplayName(method, t)}
                         </Button>
                       ))}
                     </Space>

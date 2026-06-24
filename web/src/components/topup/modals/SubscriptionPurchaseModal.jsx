@@ -31,7 +31,7 @@ import {
 import { Crown, CalendarClock, Package } from 'lucide-react';
 import { SiStripe } from 'react-icons/si';
 import { IconCreditCard } from '@douyinfe/semi-icons';
-import { renderQuota } from '../../../helpers';
+import { getPayMethodDisplayName } from '../../../helpers';
 import { getCurrencyConfig } from '../../../helpers/render';
 import {
   formatSubscriptionDuration,
@@ -226,7 +226,7 @@ const SubscriptionPurchaseModal = ({
                     placeholder={t('选择支付方式')}
                     optionList={epayMethods.map((m) => ({
                       value: m.type,
-                      label: m.name || m.type,
+                      label: getPayMethodDisplayName(m, t),
                     }))}
                     disabled={purchaseLimitReached}
                   />
