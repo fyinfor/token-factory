@@ -461,6 +461,8 @@ func SetApiRouter(router *gin.Engine) {
 			materialRoute.GET("/group", controller.GetMaterialGroup)
 			materialRoute.GET("/assets", controller.ListMaterialAssets)
 			materialRoute.POST("/upload", middleware.UploadRateLimit(), controller.UploadMaterial)
+			materialRoute.POST("/upload-url", middleware.UploadRateLimit(), controller.UploadMaterialByURL)
+			materialRoute.DELETE("/asset/:id", controller.DeleteMaterial)
 		}
 
 		usageRoute := apiRouter.Group("/usage")

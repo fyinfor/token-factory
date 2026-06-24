@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Banner,
   Button,
@@ -25,75 +25,92 @@ import {
   Checkbox,
   Empty,
   Image,
+  Input,
   Modal,
+  Popconfirm,
+  Progress,
+  Space,
   Spin,
   Tabs,
-  Tag,
   Tooltip,
   Typography,
   Upload,
 } from '@douyinfe/semi-ui';
-import { IconCopy, IconUpload, IconHelpCircle } from '@douyinfe/semi-icons';
+import {
+  IconCopy,
+  IconUpload,
+  IconLink,
+  IconDelete,
+  IconRefresh,
+  IconHelpCircle,
+} from '@douyinfe/semi-icons';
+import {
+  Image as ImageTypeIcon,
+  Video as VideoTypeIcon,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { API, copy, showError, showSuccess, showWarning } from '../../helpers';
+import { copy, showSuccess, showError } from '../../helpers';
+import { MaterialAssetType, MaterialStatus } from '../../constants';
+import { useMaterialLibrary } from '../../hooks/seedance/useMaterialLibrary';
+import { useSmoothUploadProgress } from '../distributor/useSmoothUploadProgress';
 
 const { Title, Text } = Typography;
+
+/* ========================= 工具方法（纯展示映射） ========================= */
+
+// 素材类型 -> 图标 + 文案映射（替代纯文字标签）。
+const getAssetTypeMeta = (assetType, t) => {
+  if (assetType === MaterialAssetType.VIDEO) {
+    return { icon: VideoTypeIcon, label: t('视频'), color: 'var(--semi-color-warning)' };
+  }
+  // 默认按图片处理（音频已在后端拦截，理论上不会出现在列表）。
+  return { icon: ImageTypeIcon, label: t('图片'), color: 'var(--semi-color-primary)' };
+};
+
+// 素材状态 -> 图标 + 颜色映射（仅渲染图标，不展示状态文字）。
+const getStatusMeta = (status) => {
+  switch (status) {
+    case MaterialStatus.ACTIVE:
+      return { icon: CheckCircle2, color: 'var(--semi-color-success)' };
+    case MaterialStatus.FAILED:
+      return { icon: AlertCircle, color: 'var(--semi-color-danger)' };
+    case MaterialStatus.PENDING:
+    default:
+      return { icon: Clock, color: 'var(--semi-color-warning)' };
+  }
+};
+
+/* ========================= 页面组件 ========================= */
 
 const MaterialLibrary = () => {
   const { t, i18n } = useTranslation();
   const isEn = (i18n.language || '').toLowerCase().startsWith('en');
 
-  const [config, setConfig] = useState({
-    enabled: false,
-    ready: false,
-    max_image_size_mb: 10,
-    agreement_zh: '',
-    agreement_en: '',
-    agreement_detail_zh: '',
-    agreement_detail_en: '',
-  });
-  const [assets, setAssets] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [agreed, setAgreed] = useState(false);
+  // 业务状态与操作统一收敛到 hook，组件仅负责渲染与交互。
+  const {
+    config,
+    assets,
+    loading,
+    uploading,
+    uploadProgress,
+    deletingId,
+    agreed,
+    maxSizeMB,
+    setAgreed,
+    loadAssets,
+    handleUploadFile,
+    handleUploadByURL,
+    handleDelete,
+  } = useMaterialLibrary();
+
+  // 协议详情弹窗 / 在线链接上传弹窗的本地 UI 状态。
   const [detailVisible, setDetailVisible] = useState(false);
-
-  const maxSizeMB = config.max_image_size_mb || 10;
-
-  const loadConfig = async () => {
-    try {
-      const res = await API.get('/api/material/config');
-      const { success, data } = res.data;
-      if (success && data) setConfig(data);
-    } catch (e) {
-      // 静默：配置加载失败时使用默认值
-    }
-  };
-
-  const loadAssets = async () => {
-    setLoading(true);
-    try {
-      const res = await API.get('/api/material/assets', {
-        params: { p: 1, size: 100 },
-      });
-      const { success, message, data } = res.data;
-      if (success) {
-        setAssets(data?.items || []);
-      } else {
-        showError(message);
-      }
-    } catch (e) {
-      showError(t('加载素材列表失败'));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadConfig();
-    loadAssets();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const [urlModalVisible, setUrlModalVisible] = useState(false);
+  const [urlInput, setUrlInput] = useState('');
+  const [urlName, setUrlName] = useState('');
 
   const agreementText = isEn ? config.agreement_en : config.agreement_zh;
   const agreementDetail = isEn
@@ -126,53 +143,40 @@ const MaterialLibrary = () => {
     return <span>{text}</span>;
   }, [agreementText]);
 
-  const beforeUpload = ({ file }) => {
-    const inst = file?.fileInstance || file;
-    if (inst && inst.size > maxSizeMB * 1024 * 1024) {
-      showError(t('图片超过大小限制（最大 {{n}}MB）', { n: maxSizeMB }));
-      return false;
-    }
-    return true;
-  };
+  const uploadDisabled = !agreed || !config.ready || uploading;
+  const uploadDisplayPct = useSmoothUploadProgress(uploadProgress);
 
+  // 【改动】每用户唯一固定素材分组：从已有列表数据推导素材库 ID，供页面级展示（不新增接口请求）。
+  const libraryId = useMemo(() => {
+    const found = assets.find((a) => a.group_id);
+    return found?.group_id || '';
+  }, [assets]);
+
+  /* --------------------------- 交互事件 --------------------------- */
+
+  // Semi Upload 自定义请求：交由 hook 统一处理上传与异常。
   const customRequest = async ({ file, onSuccess, onError }) => {
-    if (!agreed) {
-      showWarning(t('请先阅读并勾选同意虚拟人像合规协议'));
-      onError && onError({ message: 'not agreed' });
-      return;
-    }
     const inst = file?.fileInstance || file;
-    if (inst && inst.size > maxSizeMB * 1024 * 1024) {
-      showError(t('图片超过大小限制（最大 {{n}}MB）', { n: maxSizeMB }));
-      onError && onError({ message: 'too large' });
-      return;
-    }
-    const fd = new FormData();
-    fd.append('file', inst);
-    fd.append('agreed', 'true');
-    setUploading(true);
-    try {
-      const res = await API.post('/api/material/upload', fd, {
-        skipErrorHandler: true,
-      });
-      const { success, message, data } = res.data || {};
-      if (!success) {
-        showError(message || t('上传失败'));
-        onError && onError({ message });
-        return;
-      }
-      showSuccess(t('上传成功'));
-      onSuccess && onSuccess(data);
-      await loadAssets();
-    } catch (e) {
-      showError(t('上传失败，请重试'));
-      onError && onError(e);
-    } finally {
-      setUploading(false);
+    const ok = await handleUploadFile(inst);
+    if (ok) {
+      onSuccess && onSuccess({});
+    } else {
+      onError && onError({ message: 'upload failed' });
     }
   };
 
-  const handleCopy = async (asset) => {
+  // 在线链接上传提交。
+  const submitUrlUpload = async () => {
+    const ok = await handleUploadByURL({ url: urlInput, name: urlName });
+    if (ok) {
+      setUrlModalVisible(false);
+      setUrlInput('');
+      setUrlName('');
+    }
+  };
+
+  // 复制 asset:// 资源地址（用于替换图片资源地址）。
+  const handleCopyURI = async (asset) => {
     const ok = await copy(asset.asset_uri);
     if (ok) {
       showSuccess(t('已复制资源地址，可替换图片资源地址'));
@@ -181,17 +185,158 @@ const MaterialLibrary = () => {
     }
   };
 
-  const renderStatusTag = (status) => {
-    if (status === 'Active') return <Tag color='green'>{t('可用')}</Tag>;
-    if (status === 'Failed') return <Tag color='red'>{t('失败')}</Tag>;
-    return <Tag color='amber'>{t('处理中')}</Tag>;
+  // 【改动】复制页面级素材库 ID（原卡片内分组 ID 已迁移至标题下方）。
+  const handleCopyLibraryId = async () => {
+    if (!libraryId) {
+      showError(t('暂无素材库 ID'));
+      return;
+    }
+    const ok = await copy(libraryId);
+    if (ok) {
+      showSuccess(t('已复制素材库 ID'));
+    } else {
+      showError(t('复制失败，请手动复制：') + libraryId);
+    }
   };
 
-  const uploadDisabled = !agreed || !config.ready || uploading;
+  /* --------------------------- 渲染：单张素材卡片 --------------------------- */
+
+  const renderAssetCard = (asset) => {
+    const typeMeta = getAssetTypeMeta(asset.asset_type, t);
+    const statusMeta = getStatusMeta(asset.status);
+    const TypeIcon = typeMeta.icon;
+    const StatusIcon = statusMeta.icon;
+    const isVideo = asset.asset_type === MaterialAssetType.VIDEO;
+
+    return (
+      <Card
+        key={asset.id}
+        className='material-asset-card'
+        style={{ width: 200 }}
+        bodyStyle={{ padding: 0 }}
+        bordered
+      >
+        {/* 预览区 */}
+        <div
+          style={{
+            position: 'relative',
+            height: 150,
+            background: 'var(--semi-color-fill-1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+          }}
+        >
+          {/* 类型图标徽标（替代纯文字标签） */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 6,
+              left: 6,
+              zIndex: 2,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '2px 6px',
+              borderRadius: 6,
+              background: 'rgba(0,0,0,0.55)',
+              color: '#fff',
+            }}
+          >
+            <TypeIcon size={14} />
+            <span style={{ fontSize: 12 }}>{typeMeta.label}</span>
+          </div>
+
+          {isVideo ? (
+            <video
+              src={asset.url}
+              controls
+              preload='metadata'
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+          ) : (
+            <Image
+              src={asset.url}
+              width='100%'
+              height={150}
+              style={{ objectFit: 'cover' }}
+              alt={asset.name}
+            />
+          )}
+        </div>
+
+        {/* 信息区 */}
+        <div style={{ padding: '8px 10px' }}>
+          {/* 名称 + 状态图标（仅图标，无状态文字） */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 6,
+              marginBottom: 8,
+            }}
+          >
+            <Tooltip content={asset.name}>
+              <Text
+                ellipsis={{ showTooltip: false }}
+                style={{ maxWidth: 140, fontSize: 13 }}
+              >
+                {asset.name || t('未命名素材')}
+              </Text>
+            </Tooltip>
+            <StatusIcon size={16} style={{ color: statusMeta.color, flexShrink: 0 }} />
+          </div>
+
+          {/* 操作区：复制资源地址 + 删除 */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 6,
+            }}
+          >
+            <Tooltip content={asset.asset_uri}>
+              <Button
+                size='small'
+                icon={<IconCopy />}
+                onClick={() => handleCopyURI(asset)}
+              >
+                {t('复制地址')}
+              </Button>
+            </Tooltip>
+
+            {/* 删除二次确认 */}
+            <Popconfirm
+              title={t('确认删除该素材？')}
+              content={t('删除后将同时移除云端资产，且不可恢复。')}
+              okType='danger'
+              okText={t('删除')}
+              cancelText={t('取消')}
+              onConfirm={() => handleDelete(asset)}
+            >
+              <Button
+                size='small'
+                type='danger'
+                theme='borderless'
+                icon={<IconDelete />}
+                loading={deletingId === asset.id}
+                aria-label={t('删除')}
+              />
+            </Popconfirm>
+          </div>
+        </div>
+      </Card>
+    );
+  };
+
+  /* --------------------------- 渲染：主体 --------------------------- */
 
   return (
     <Card style={{ minHeight: '70vh' }}>
-      {/* 标题 */}
+      {/* 标题栏 */}
       <div
         style={{
           display: 'flex',
@@ -211,9 +356,53 @@ const MaterialLibrary = () => {
           <IconHelpCircle style={{ color: 'var(--semi-color-text-2)' }} />
         </Tooltip>
         <div style={{ flex: 1 }} />
-        <Text type='tertiary'>{t('共 {{n}} 张素材', { n: assets.length })}</Text>
+        <Text type='tertiary'>{t('共 {{n}} 个素材', { n: assets.length })}</Text>
+        <Tooltip content={t('刷新列表')}>
+          <Button
+            theme='borderless'
+            type='tertiary'
+            icon={<IconRefresh />}
+            loading={loading}
+            onClick={loadAssets}
+          />
+        </Tooltip>
       </div>
 
+      {/* 【改动】素材库 ID：页面级展示（每用户唯一固定分组，不再在素材卡片内重复展示） */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          marginBottom: 12,
+        }}
+      >
+        <Text type='tertiary' size='small' style={{ flexShrink: 0 }}>
+          {t('素材库ID')}:
+        </Text>
+        <Tooltip content={libraryId || t('暂无')}>
+          <Text
+            type='tertiary'
+            size='small'
+            ellipsis={{ showTooltip: false }}
+            style={{ maxWidth: 360 }}
+          >
+            {libraryId || t('暂无')}
+          </Text>
+        </Tooltip>
+        <Tooltip content={t('复制素材库 ID')}>
+          <Button
+            size='small'
+            theme='borderless'
+            type='tertiary'
+            icon={<IconCopy size='small' />}
+            disabled={!libraryId}
+            onClick={handleCopyLibraryId}
+          />
+        </Tooltip>
+      </div>
+
+      {/* 状态提示 */}
       {!config.enabled && (
         <Banner
           type='warning'
@@ -241,6 +430,47 @@ const MaterialLibrary = () => {
             </Checkbox>
           </div>
 
+          {/* 上传入口：本地文件 / 在线链接 */}
+          <Space style={{ marginBottom: 16 }}>
+            <Upload
+              action=''
+              accept='image/*,video/*'
+              showUploadList={false}
+              disabled={uploadDisabled}
+              customRequest={customRequest}
+            >
+              <Button
+                icon={<IconUpload />}
+                theme='solid'
+                loading={uploading}
+                disabled={uploadDisabled}
+              >
+                {t('本地上传')}
+              </Button>
+            </Upload>
+
+            <Button
+              icon={<IconLink />}
+              disabled={uploadDisabled}
+              onClick={() => setUrlModalVisible(true)}
+            >
+              {t('链接上传')}
+            </Button>
+
+            <Text type='tertiary' size='small'>
+              {t('支持图片/视频，单个文件不超过 {{n}}MB', { n: maxSizeMB })}
+            </Text>
+          </Space>
+
+          {uploadProgress != null && (
+            <Progress
+              percent={uploadDisplayPct ?? uploadProgress}
+              showInfo
+              style={{ marginBottom: 16, maxWidth: 480 }}
+            />
+          )}
+
+          {/* 素材列表 */}
           <Spin spinning={loading}>
             <div
               style={{
@@ -249,109 +479,54 @@ const MaterialLibrary = () => {
                 gap: 16,
               }}
             >
-              {/* 上传卡片 */}
-              <div
-                style={{
-                  width: 160,
-                  height: 200,
-                  border: '1px dashed var(--semi-color-border)',
-                  borderRadius: 8,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 12,
-                  background: 'var(--semi-color-fill-0)',
-                }}
-              >
-                <Upload
-                  action=''
-                  accept='image/*'
-                  showUploadList={false}
-                  disabled={uploadDisabled}
-                  beforeUpload={beforeUpload}
-                  customRequest={customRequest}
-                >
-                  <Button
-                    icon={<IconUpload />}
-                    theme='solid'
-                    loading={uploading}
-                    disabled={uploadDisabled}
-                  >
-                    {t('本地上传')}
-                  </Button>
-                </Upload>
-                <Text type='tertiary' size='small'>
-                  {t('请上传<{{n}}M的图片', { n: maxSizeMB })}
-                </Text>
-              </div>
-
-              {/* 素材列表 */}
-              {assets.map((asset) => (
-                <div
-                  key={asset.id}
-                  style={{
-                    width: 160,
-                    height: 200,
-                    border: '1px solid var(--semi-color-border)',
-                    borderRadius: 8,
-                    overflow: 'hidden',
-                    position: 'relative',
-                    display: 'flex',
-                    flexDirection: 'column',
-                  }}
-                >
-                  <div
-                    style={{
-                      flex: 1,
-                      background: 'var(--semi-color-fill-1)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      overflow: 'hidden',
-                    }}
-                  >
-                    <Image
-                      src={asset.url}
-                      width='100%'
-                      height={150}
-                      style={{ objectFit: 'cover' }}
-                      alt={asset.name}
-                    />
-                  </div>
-                  <div
-                    style={{
-                      padding: '6px 8px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 4,
-                    }}
-                  >
-                    {renderStatusTag(asset.status)}
-                    <Tooltip content={asset.asset_uri}>
-                      <Button
-                        size='small'
-                        icon={<IconCopy />}
-                        onClick={() => handleCopy(asset)}
-                      >
-                        {t('复制地址')}
-                      </Button>
-                    </Tooltip>
-                  </div>
-                </div>
-              ))}
+              {assets.map((asset) => renderAssetCard(asset))}
             </div>
 
             {assets.length === 0 && !loading && (
               <Empty
                 style={{ marginTop: 24 }}
-                description={t('暂无素材，点击「本地上传」添加虚拟人像')}
+                description={t('暂无素材，点击「本地上传」或「链接上传」添加')}
               />
             )}
           </Spin>
         </Tabs.TabPane>
       </Tabs>
+
+      {/* 在线链接上传弹窗 */}
+      <Modal
+        title={t('通过在线链接上传')}
+        visible={urlModalVisible}
+        onCancel={() => setUrlModalVisible(false)}
+        onOk={submitUrlUpload}
+        okText={t('上传')}
+        cancelText={t('取消')}
+        confirmLoading={uploading}
+      >
+        <div style={{ marginBottom: 12 }}>
+          <Text>{t('资源链接')}</Text>
+          <Input
+            value={urlInput}
+            onChange={setUrlInput}
+            placeholder='https://example.com/portrait.png'
+            style={{ marginTop: 4 }}
+          />
+        </div>
+        <div>
+          <Text>{t('素材名称（可选）')}</Text>
+          <Input
+            value={urlName}
+            onChange={setUrlName}
+            placeholder={t('不填则自动取链接文件名')}
+            style={{ marginTop: 4 }}
+          />
+        </div>
+        <Banner
+          type='info'
+          closeIcon={null}
+          description={t('仅支持图片或视频的公开可访问链接（http/https）。')}
+          style={{ marginTop: 12 }}
+        />
+      </Modal>
 
       {/* 协议详情弹窗 */}
       <Modal
