@@ -326,6 +326,11 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 		r.Duration = lo.ToPtr(dto.IntValue(req.Duration))
 	}
 
+	// Seedance 2.0：未显式指定时默认生成音频，与上游 API 约定一致。
+	if a.ChannelType == constant.ChannelTypeSeedance && r.GenerateAudio == nil {
+		r.GenerateAudio = lo.ToPtr(dto.BoolValue(true))
+	}
+
 	return &r, nil
 }
 

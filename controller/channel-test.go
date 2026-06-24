@@ -1044,10 +1044,11 @@ func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, 
 			"content": []map[string]any{
 				{"type": "text", "text": "a cute cat dancing in a sunny garden"},
 			},
-			"resolution": "480p",
-			"ratio":      "16:9",
-			"duration":   5,
-			"watermark":  false,
+			"resolution":      "480p",
+			"ratio":           "16:9",
+			"duration":        5,
+			"watermark":       false,
+			"generate_audio":  true,
 		}
 	default:
 		err := fmt.Errorf("unsupported video endpoint type: %s", endpointType)
