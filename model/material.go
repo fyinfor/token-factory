@@ -119,3 +119,37 @@ func UpdateMaterialAssetStatus(id int, status string) error {
 	return DB.Model(&MaterialAsset{}).Where("id = ?", id).
 		Updates(map[string]interface{}{"status": status, "updated_at": time.Now().Unix()}).Error
 }
+
+// UpdateMaterialAssetInfo 刷新素材的状态/URL/类型（GetAsset 轮询拿到上游永久 URL 时使用）。
+// 仅更新非空字段，避免空值覆盖已有数据。
+func UpdateMaterialAssetInfo(id int, status string, url string, assetType string) error {
+	updates := map[string]interface{}{"updated_at": time.Now().Unix()}
+	if strings.TrimSpace(status) != "" {
+		updates["status"] = status
+	}
+	if strings.TrimSpace(url) != "" {
+		updates["url"] = url
+	}
+	if strings.TrimSpace(assetType) != "" {
+		updates["asset_type"] = assetType
+	}
+	return DB.Model(&MaterialAsset{}).Where("id = ?", id).Updates(updates).Error
+}
+
+// GetMaterialAssetByIdAndUser 按主键查询素材并校验归属用户，不存在时返回 (nil, nil)。
+func GetMaterialAssetByIdAndUser(id int, userId int) (*MaterialAsset, error) {
+	var asset MaterialAsset
+	err := DB.Where("id = ? AND user_id = ?", id, userId).First(&asset).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &asset, nil
+}
+
+// DeleteMaterialAsset 按主键物理删除素材记录。
+func DeleteMaterialAsset(id int) error {
+	return DB.Delete(&MaterialAsset{}, id).Error
+}
