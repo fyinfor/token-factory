@@ -39,6 +39,7 @@ import {
   selectFilter,
 } from '../../helpers';
 import { PLAYGROUND_VIDEO_DURATION_OPTIONS } from '../../constants/playground.constants';
+import { CHANNEL_TYPES_WITH_GENERATE_AUDIO } from '../../constants/channel.constants';
 import ParameterControl from './ParameterControl';
 
 /**
@@ -113,6 +114,10 @@ const SettingsPanel = ({
         '图片地址：第 1 张为首帧，2 张为首尾帧，更多张时最后一张为尾帧。视频地址：填写则作为源视频参与生成。未填写的字段不会加入请求。',
       )
     : '';
+  const selectedChannelType = Number(inputs.selected_channel_type ?? 0);
+  const showGenerateAudioSwitch =
+    isVideoMode &&
+    CHANNEL_TYPES_WITH_GENERATE_AUDIO.has(selectedChannelType);
   const applyVideoResolutionPreset = (preset) => {
     onInputChange('video_resolution_preset', preset);
   };
@@ -489,6 +494,23 @@ const SettingsPanel = ({
               <Typography.Text className='text-xs text-gray-500 block'>
                 {selectedVideoSize.size}
               </Typography.Text>
+              {showGenerateAudioSwitch && (
+                <div className='flex items-center justify-between pt-1'>
+                  <Typography.Text strong className='text-sm'>
+                    {t('生成音频')}
+                  </Typography.Text>
+                  <Switch
+                    checked={inputs.generate_audio !== false}
+                    onChange={(checked) =>
+                      onInputChange('generate_audio', checked)
+                    }
+                    checkedText={t('开')}
+                    uncheckedText={t('关')}
+                    size='small'
+                    disabled={customRequestMode}
+                  />
+                </div>
+              )}
               <div className='hidden'>
                 <Input
                   type='number'
