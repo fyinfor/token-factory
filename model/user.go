@@ -55,19 +55,20 @@ type User struct {
 	InviterUsername          string     `json:"inviter_username,omitempty" gorm:"-"`
 	DistributorCommissionBps int        `json:"distributor_commission_bps" gorm:"type:int;default:0;column:distributor_commission_bps"` // 分销商名下新邀请关系的默认分成（万分之一），0 表示跟随系统 AffiliateDefaultCommissionBps
 	// IsDistributor 分销商资格 0/1（与 role 解耦）；普通用户 role=1 时可同时为分销商。旧版 role=5 已迁移为 role=1 + is_distributor=1。
-	IsDistributor     int            `json:"is_distributor" gorm:"column:is_distributor;type:integer;default:0;index"`
-	IsStudent         int            `json:"is_student" gorm:"column:is_student;type:integer;default:0;index"`
-	StudentStatus     int            `json:"student_status" gorm:"column:student_status;type:integer;default:0;index"`
-	StudentApplied    *time.Time     `json:"student_applied_at,omitempty" gorm:"column:student_applied_at"`
-	StudentApprovedAt *time.Time     `json:"student_approved_at,omitempty" gorm:"column:student_approved_at"`
-	StudentApprovedBy int            `json:"student_approved_by" gorm:"column:student_approved_by;type:int;default:0;index"`
-	DeletedAt         gorm.DeletedAt `gorm:"index"`
-	LinuxDOId         string         `json:"linux_do_id" gorm:"column:linux_do_id;index"`
-	Setting           string         `json:"setting" gorm:"type:text;column:setting"`
-	Remark            string         `json:"remark,omitempty" gorm:"type:varchar(255)" validate:"max=255"`
-	Tags              string         `json:"tags,omitempty" gorm:"type:varchar(255)"`
-	StripeCustomer    string         `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
-	SupplierID        int            `json:"supplier_id" gorm:"type:int;column:supplier_id;index;default:0;comment:供应商申请ID 0表示非供应商"`
+	IsDistributor                          int            `json:"is_distributor" gorm:"column:is_distributor;type:integer;default:0;index"`
+	DistributorModelMarkupDiscountTemplate string         `json:"-" gorm:"type:text;column:distributor_model_markup_discount_template;comment:分销商模型加价模板(JSON数组)"`
+	IsStudent                              int            `json:"is_student" gorm:"column:is_student;type:integer;default:0;index"`
+	StudentStatus                          int            `json:"student_status" gorm:"column:student_status;type:integer;default:0;index"`
+	StudentApplied                         *time.Time     `json:"student_applied_at,omitempty" gorm:"column:student_applied_at"`
+	StudentApprovedAt                      *time.Time     `json:"student_approved_at,omitempty" gorm:"column:student_approved_at"`
+	StudentApprovedBy                      int            `json:"student_approved_by" gorm:"column:student_approved_by;type:int;default:0;index"`
+	DeletedAt                              gorm.DeletedAt `gorm:"index"`
+	LinuxDOId                              string         `json:"linux_do_id" gorm:"column:linux_do_id;index"`
+	Setting                                string         `json:"setting" gorm:"type:text;column:setting"`
+	Remark                                 string         `json:"remark,omitempty" gorm:"type:varchar(255)" validate:"max=255"`
+	Tags                                   string         `json:"tags,omitempty" gorm:"type:varchar(255)"`
+	StripeCustomer                         string         `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
+	SupplierID                             int            `json:"supplier_id" gorm:"type:int;column:supplier_id;index;default:0;comment:供应商申请ID 0表示非供应商"`
 	// AdminInitialSetupCompleted 管理员代建账号首次登录前须为 false；自助注册等为 true。注意：GORM Create 会省略 bool 的 false，代建分支须在 Insert 内显式 UPDATE 落库为 0。
 	AdminInitialSetupCompleted bool `json:"admin_initial_setup_completed" gorm:"column:admin_initial_setup_completed;type:boolean;not null;default:true"`
 }

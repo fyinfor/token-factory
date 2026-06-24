@@ -31,12 +31,21 @@ func GetAffInvitees(c *gin.Context) {
 		})
 		return
 	}
+	allInviteeCount, err := model.CountAffInvitees(inviterId)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
 		"data": gin.H{
 			"items":                        items,
 			"total":                        total,
+			"all_invitee_count":            allInviteeCount,
 			"default_commission_ratio_bps": common.AffiliateDefaultCommissionBps,
 		},
 	})

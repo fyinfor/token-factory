@@ -393,6 +393,108 @@ func PutInviteeModelDiscounts(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
 }
 
+func GetDistributorModelDiscountTemplate(c *gin.Context) {
+	userId := c.GetInt("id")
+	u, err := model.GetUserById(userId, false)
+	if err != nil || !model.UserIsDistributor(u) {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "仅分销商可查看"})
+		return
+	}
+	if !common.IsDistributorProfitShareMode() {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "当前站点未启用利润分成模式"})
+		return
+	}
+
+	items, inviteeCount, err := model.GetDistributorModelDiscountTemplate(userId)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data": gin.H{
+			"items":         items,
+			"total":         len(items),
+			"invitee_count": inviteeCount,
+		},
+	})
+}
+
+type putDistributorModelDiscountTemplateRequest struct {
+	Discounts []model.ModelMarkupDiscountRateUpdateRequest `json:"discounts"`
+}
+
+func PutDistributorModelDiscountTemplate(c *gin.Context) {
+	userId := c.GetInt("id")
+	u, err := model.GetUserById(userId, false)
+	if err != nil || !model.UserIsDistributor(u) {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "仅分销商可操作"})
+		return
+	}
+	if !common.IsDistributorProfitShareMode() {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "当前站点未启用利润分成模式"})
+		return
+	}
+	var req putDistributorModelDiscountTemplateRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的请求"})
+		return
+	}
+	if err := model.UpdateDistributorModelDiscountTemplate(userId, req.Discounts); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+}
+
+type batchInviteeModelDiscountsRequest struct {
+	Action     string `json:"action"`
+	Scope      string `json:"scope"`
+	InviteeIds []int  `json:"invitee_ids"`
+}
+
+func PostBatchInviteeModelDiscounts(c *gin.Context) {
+	userId := c.GetInt("id")
+	u, err := model.GetUserById(userId, false)
+	if err != nil || !model.UserIsDistributor(u) {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "仅分销商可操作"})
+		return
+	}
+	if !common.IsDistributorProfitShareMode() {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "当前站点未启用利润分成模式"})
+		return
+	}
+	var req batchInviteeModelDiscountsRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的请求"})
+		return
+	}
+	all := strings.EqualFold(strings.TrimSpace(req.Scope), "all")
+	action := strings.TrimSpace(req.Action)
+	var affected int
+	switch action {
+	case "apply_template":
+		affected, err = model.ApplyDistributorModelDiscountTemplate(userId, all, req.InviteeIds)
+	case "reset_default":
+		affected, err = model.ResetInviteeModelDiscountsBatch(userId, all, req.InviteeIds)
+	default:
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "未知操作"})
+		return
+	}
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data": gin.H{
+			"affected_count": affected,
+		},
+	})
+}
+
 type putInviteeModelDiscountsAdminRequest struct {
 	DistributorId int                                          `json:"distributor_id"`
 	InviteeId     int                                          `json:"invitee_id"`

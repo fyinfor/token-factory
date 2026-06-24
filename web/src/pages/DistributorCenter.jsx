@@ -47,6 +47,7 @@ import {
   Zap,
   Copy,
   Download,
+  CheckSquare,
   Wallet,
   History,
   UserPlus,
@@ -56,6 +57,8 @@ import {
   UserRound,
   XCircle,
   ReceiptText,
+  RotateCcw,
+  Search,
   SlidersHorizontal,
 } from 'lucide-react';
 import dayjs from 'dayjs';
@@ -228,6 +231,7 @@ export default function DistributorCenter() {
   const [center, setCenter] = useState(null);
   const [rows, setRows] = useState([]);
   const [total, setTotal] = useState(0);
+  const [allInviteeTotal, setAllInviteeTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
@@ -257,6 +261,10 @@ export default function DistributorCenter() {
   const [discountModalInviteeId, setDiscountModalInviteeId] = useState(null);
   const [discountModalInviteeLabel, setDiscountModalInviteeLabel] =
     useState('');
+  const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  const [selectedInviteeIds, setSelectedInviteeIds] = useState([]);
+  const [inviteeKeyword, setInviteeKeyword] = useState('');
+  const [batchDiscountSubmitting, setBatchDiscountSubmitting] = useState(false);
   const [openTransfer, setOpenTransfer] = useState(false);
   const [transferAmount, setTransferAmount] = useState(() => getQuotaPerUnit());
   const [bindModalOpen, setBindModalOpen] = useState(false);
@@ -398,10 +406,15 @@ export default function DistributorCenter() {
   }, [userDispatch]);
 
   const loadInvitees = useCallback(
-    async (p = 1, ps = pageSize) => {
-      const res = await API.get(
-        `/api/user/aff_invitees?p=${p}&page_size=${ps}`,
-      );
+    async (p = 1, ps = pageSize, keyword = inviteeKeyword) => {
+      const kw = String(keyword || '').trim();
+      const res = await API.get('/api/user/aff_invitees', {
+        params: {
+          p,
+          page_size: ps,
+          ...(kw ? { keyword: kw } : {}),
+        },
+      });
       const { success, message, data } = res.data;
       if (!success) {
         showError(message);
@@ -409,9 +422,10 @@ export default function DistributorCenter() {
       }
       setRows(data?.items || []);
       setTotal(data?.total ?? 0);
+      setAllInviteeTotal(data?.all_invitee_count ?? data?.total ?? 0);
       setPage(p);
     },
-    [pageSize],
+    [inviteeKeyword, pageSize],
   );
 
   const searchBindableUser = useCallback(async () => {
@@ -525,9 +539,7 @@ export default function DistributorCenter() {
     const applicationIdCardNo = String(
       center?.application_id_card_no || '',
     ).trim();
-    const applicationContact = String(
-      center?.application_contact || '',
-    ).trim();
+    const applicationContact = String(center?.application_contact || '').trim();
     const applicationUrls = parseVoucherUrls(
       center?.application_qualification_urls,
     );
@@ -866,6 +878,75 @@ export default function DistributorCenter() {
     setDiscountModalOpen(true);
   };
 
+  const submitBatchModelDiscounts = useCallback(
+    async (action, scope) => {
+      setBatchDiscountSubmitting(true);
+      try {
+        const res = await API.post(
+          '/api/distributor/invitee-model-discounts/batch',
+          {
+            action,
+            scope,
+            invitee_ids: scope === 'all' ? [] : selectedInviteeIds,
+          },
+        );
+        const { success, message, data } = res.data || {};
+        if (!success) {
+          showError(message || t('操作失败'));
+          return;
+        }
+        showSuccess(
+          t('已处理 ${count} 个用户').replace(
+            '${count}',
+            String(data?.affected_count ?? 0),
+          ),
+        );
+        setSelectedInviteeIds([]);
+        loadInvitees(page, pageSize);
+      } catch {
+        showError(t('操作失败'));
+      } finally {
+        setBatchDiscountSubmitting(false);
+      }
+    },
+    [loadInvitees, page, pageSize, selectedInviteeIds, t],
+  );
+
+  const confirmBatchModelDiscounts = useCallback(
+    (action, scope) => {
+      const isAll = scope === 'all';
+      const count = isAll ? allInviteeTotal : selectedInviteeIds.length;
+      if (count <= 0) {
+        showError(isAll ? t('暂无可操作用户') : t('请先选择用户'));
+        return;
+      }
+      const isReset = action === 'reset_default';
+      Modal.confirm({
+        title: isReset ? t('批量还原系统默认值') : t('批量应用模型折扣率模板'),
+        content: t('本次将作用于 ${count} 个用户，是否继续？').replace(
+          '${count}',
+          String(count),
+        ),
+        okText: t('确认'),
+        cancelText: t('取消'),
+        okButtonProps: isReset ? { type: 'danger' } : { type: 'primary' },
+        onOk: () => submitBatchModelDiscounts(action, scope),
+      });
+    },
+    [allInviteeTotal, selectedInviteeIds.length, submitBatchModelDiscounts, t],
+  );
+
+  const inviteeRowSelection = useMemo(
+    () =>
+      isProfitShareMode
+        ? {
+            selectedRowKeys: selectedInviteeIds,
+            onChange: (keys) => setSelectedInviteeIds(keys),
+          }
+        : undefined,
+    [isProfitShareMode, selectedInviteeIds],
+  );
+
   const columns = useMemo(
     () => [
       {
@@ -889,9 +970,11 @@ export default function DistributorCenter() {
       },
       {
         title: t('操作'),
-        width: 280,
+        width: isProfitShareMode ? 360 : 240,
+        fixed: 'right',
+        align: 'right',
         render: (_, r) => (
-          <div className='flex flex-wrap gap-2'>
+          <div className='flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap'>
             <Button
               size='small'
               type='primary'
@@ -957,10 +1040,11 @@ export default function DistributorCenter() {
           <Card
             className='distributor-center-stats-card !rounded-xl w-full shadow-sm border-0'
             cover={
-              <div
-                className='distributor-center-stats-cover relative min-h-[8.75rem]'
-              >
-                <div className='distributor-center-sea-scene' aria-hidden='true'>
+              <div className='distributor-center-stats-cover relative min-h-[8.75rem]'>
+                <div
+                  className='distributor-center-sea-scene'
+                  aria-hidden='true'
+                >
                   <span className='distributor-center-celestial' />
                   <span className='distributor-center-cloud distributor-center-cloud--a' />
                   <span className='distributor-center-cloud distributor-center-cloud--b' />
@@ -979,10 +1063,8 @@ export default function DistributorCenter() {
                         {t('收益统计')}
                       </Text>
                       <Text
-                        className='rounded-full px-2 py-0.5'
+                        className='distributor-center-ratio-badge rounded-full px-2 py-0.5'
                         style={{
-                          color: 'rgba(255,255,255,0.88)',
-                          backgroundColor: 'rgba(255,255,255,0.14)',
                           fontSize: '12px',
                           lineHeight: 1.6,
                         }}
@@ -1267,7 +1349,9 @@ export default function DistributorCenter() {
                     className='mt-0.5 shrink-0 text-[var(--semi-color-warning)]'
                   />
                   <Text size='small' className='!leading-relaxed'>
-                    {t('当前代理身份信息待补充，请先补充并等待审核通过后再提现。')}
+                    {t(
+                      '当前代理身份信息待补充，请先补充并等待审核通过后再提现。',
+                    )}
                   </Text>
                 </div>
               ) : identityApplicationRejected ? (
@@ -1329,12 +1413,12 @@ export default function DistributorCenter() {
                     : t('身份变更审核中')
                   : identityNeedsSupplement
                     ? t('信息补充')
-                  : t('申请') +
-                    distributorIdentityLabel(
-                      t,
-                      oppositeDistributorIdentity(distributorApplyType),
-                    ) +
-                    t('身份')}
+                    : t('申请') +
+                      distributorIdentityLabel(
+                        t,
+                        oppositeDistributorIdentity(distributorApplyType),
+                      ) +
+                      t('身份')}
               </Button>
             </div>
           </Card>
@@ -1384,26 +1468,121 @@ export default function DistributorCenter() {
             className='!rounded-2xl'
             title={t('邀请用户列表')}
             headerExtraContent={
-              <Button
-                size='small'
-                theme='light'
-                type='primary'
-                icon={<UserPlus size={14} />}
-                onClick={() => {
-                  setBindModalOpen(true);
-                  setBindKeyword('');
-                  setBindUser(null);
-                }}
-              >
-                {t('用户绑定')}
-              </Button>
+              <div className='flex flex-wrap justify-end gap-2'>
+                {isProfitShareMode ? (
+                  <>
+                    <Button
+                      size='small'
+                      type='warning'
+                      theme='light'
+                      icon={<SlidersHorizontal size={14} />}
+                      onClick={() => setTemplateModalOpen(true)}
+                    >
+                      {t('编辑模板')}
+                    </Button>
+                    {selectedInviteeIds.length > 0 ? (
+                      <div className='distributor-center-selected-actions flex flex-wrap justify-end gap-2'>
+                        <Button
+                          size='small'
+                          type='primary'
+                          theme='light'
+                          icon={<CheckSquare size={14} />}
+                          loading={batchDiscountSubmitting}
+                          onClick={() =>
+                            confirmBatchModelDiscounts(
+                              'apply_template',
+                              'selected',
+                            )
+                          }
+                        >
+                          {t('应用到已选')} ({selectedInviteeIds.length})
+                        </Button>
+                        <Button
+                          size='small'
+                          type='danger'
+                          theme='light'
+                          icon={<RotateCcw size={14} />}
+                          loading={batchDiscountSubmitting}
+                          onClick={() =>
+                            confirmBatchModelDiscounts(
+                              'reset_default',
+                              'selected',
+                            )
+                          }
+                        >
+                          {t('还原已选')}
+                        </Button>
+                      </div>
+                    ) : null}
+                    <Button
+                      size='small'
+                      type='primary'
+                      theme='light'
+                      icon={<Users size={14} />}
+                      loading={batchDiscountSubmitting}
+                      disabled={allInviteeTotal <= 0}
+                      onClick={() =>
+                        confirmBatchModelDiscounts('apply_template', 'all')
+                      }
+                    >
+                      {t('模板应用到全部')} ({allInviteeTotal})
+                    </Button>
+                    <Button
+                      size='small'
+                      type='danger'
+                      theme='light'
+                      icon={<RotateCcw size={14} />}
+                      loading={batchDiscountSubmitting}
+                      disabled={allInviteeTotal <= 0}
+                      onClick={() =>
+                        confirmBatchModelDiscounts('reset_default', 'all')
+                      }
+                    >
+                      {t('还原全部折扣率')}
+                    </Button>
+                  </>
+                ) : null}
+                <Button
+                  size='small'
+                  theme='light'
+                  type='primary'
+                  icon={<UserPlus size={14} />}
+                  onClick={() => {
+                    setBindModalOpen(true);
+                    setBindKeyword('');
+                    setBindUser(null);
+                  }}
+                >
+                  {t('用户绑定')}
+                </Button>
+              </div>
             }
             loading={loading}
           >
+            <div className='mb-3 flex flex-col gap-2 sm:flex-row'>
+              <Input
+                value={inviteeKeyword}
+                onChange={setInviteeKeyword}
+                onEnterPress={() => loadInvitees(1, pageSize)}
+                prefix={<Search size={15} className='ml-1' />}
+                placeholder={t('搜索用户、显示名称或用户ID')}
+                showClear
+                className='min-w-0 flex-1'
+              />
+              <Button
+                type='primary'
+                theme='light'
+                icon={<Search size={14} />}
+                onClick={() => loadInvitees(1, pageSize)}
+              >
+                {t('查询')}
+              </Button>
+            </div>
             <Table
               rowKey='invitee_id'
               columns={columns}
               dataSource={rows}
+              rowSelection={inviteeRowSelection}
               pagination={{
                 currentPage: page,
                 pageSize,
@@ -1453,6 +1632,13 @@ export default function DistributorCenter() {
         inviteeId={discountModalInviteeId}
         inviteeLabel={discountModalInviteeLabel}
         t={t}
+      />
+
+      <InviteeModelDiscountModal
+        visible={templateModalOpen}
+        onCancel={() => setTemplateModalOpen(false)}
+        t={t}
+        templateMode
       />
 
       <TransferModal
