@@ -109,12 +109,16 @@ const VideoUrlInput = ({
   );
 
   return (
-    <div className={`mt-4 ${disabled ? 'opacity-50' : ''}`}>
+    <div
+      className={`playground-media-input playground-media-input-video ${disabled ? 'opacity-50' : ''}`}
+    >
       <div className='flex items-center justify-between mb-2'>
         <div className='flex items-center gap-2'>
           <Film
             size={16}
-            className={enabled && !disabled ? 'text-violet-500' : 'text-gray-400'}
+            className={
+              enabled && !disabled ? 'text-violet-500' : 'text-gray-400'
+            }
           />
           <Typography.Text strong className='text-sm'>
             {t('视频地址')}
@@ -174,11 +178,17 @@ const VideoUrlInput = ({
 
       {!enabled ? (
         <Typography.Text className='text-xs text-gray-500 mb-2 block'>
-          {t('操练场视频地址停用提示', '启用后可添加视频 URL（视频生视频、视频编辑等）')}
+          {t(
+            '操练场视频地址停用提示',
+            '启用后可添加视频 URL（视频生视频、视频编辑等）',
+          )}
         </Typography.Text>
       ) : list.length === 0 ? (
         <Typography.Text className='text-xs text-gray-500 mb-2 block'>
-          {t('操练场视频地址空列表提示', '点击上传或 + 添加 .mp4 / .mov 等可访问的视频链接')}
+          {t(
+            '操练场视频地址空列表提示',
+            '点击上传或 + 添加 .mp4 / .mov 等可访问的视频链接',
+          )}
         </Typography.Text>
       ) : (
         <Typography.Text className='text-xs text-gray-500 mb-2 block'>
