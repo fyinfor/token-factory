@@ -9,8 +9,7 @@ import (
 )
 
 // U币支付（虚拟币充值）相关配置。
-// 充值流程：先调用 BaseUrl + /api/generateAddress 生成收款地址，
-// 再以该地址调用 BaseUrl + /api/withdraw 发起提币申请，最终由回调入账。
+// 充值流程：调用 BaseUrl + /api/generateAddress 生成收款地址，用户转账后由回调入账。
 var (
 	UcoinEnabled    bool
 	UcoinBaseUrl    string

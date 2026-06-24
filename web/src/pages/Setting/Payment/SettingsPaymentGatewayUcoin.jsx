@@ -250,7 +250,7 @@ export default function SettingsPaymentGatewayUcoin(props) {
         <Form.Section text={t('U币支付设置')}>
           <Text>
             {t(
-              'U币支付（虚拟币充值）：用户充值时先调用接口生成收款地址，再以该地址发起提币申请，最终由回调入账。',
+              'U币支付（虚拟币充值）：用户充值时调用接口生成收款地址，用户向该地址转账后由回调入账。',
             )}
             <br />
           </Text>

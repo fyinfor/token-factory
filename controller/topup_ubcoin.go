@@ -40,18 +40,6 @@ type ucoinGenerateAddressBody struct {
 	CallUrl      string `json:"callUrl"`
 }
 
-// ucoinWithdrawBody /api/withdraw 请求体。
-type ucoinWithdrawBody struct {
-	MerchantId   string `json:"merchantId"`
-	MainCoinType int    `json:"mainCoinType"`
-	CallUrl      string `json:"callUrl"`
-	Address      string `json:"address"`
-	Amount       string `json:"amount"`
-	BusinessId   string `json:"businessId"`
-	CoinType     string `json:"coinType"`
-	Memo         string `json:"memo"`
-}
-
 // ucoinResponse 兼容两种返回：生成地址返回 data，提币返回 message。
 type ucoinResponse struct {
 	Code    int             `json:"code"`
@@ -171,7 +159,7 @@ type ucoinPayRequest struct {
 	CoinPairIndex int   `json:"coin_pair_index"`
 }
 
-// RequestUcoinPay 发起 U币充值：先生成地址，再以该地址申请提币。
+// RequestUcoinPay 发起 U币充值：生成收款地址并创建本地订单。
 func RequestUcoinPay(c *gin.Context) {
 	if !setting.UcoinEnabled {
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "U币支付未启用"})
@@ -270,35 +258,7 @@ func RequestUcoinPay(c *gin.Context) {
 		return
 	}
 
-	// 第二步：以生成的地址发起提币申请
-	withdrawResp, err := ucoinPost("/api/withdraw", ucoinWithdrawBody{
-		MerchantId:   setting.UcoinMerchantId,
-		MainCoinType: pair.MainCoinType,
-		CallUrl:      callbackURL,
-		Address:      address,
-		Amount:       strconv.FormatInt(req.Amount, 10),
-		BusinessId:   tradeNo,
-		CoinType:     strings.TrimSpace(pair.CoinType),
-		Memo:         fmt.Sprintf("用户%d充值", id),
-	})
-	if err != nil {
-		log.Printf("U币提币申请请求失败: %v, 订单: %s", err, tradeNo)
-		topUp.Status = common.TopUpStatusFailed
-		_ = topUp.Update()
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "提币申请失败"})
-		return
-	}
-	if withdrawResp.Code != 200 {
-		msg := ucoinResponseMessage(withdrawResp)
-		log.Printf("U币提币申请业务失败: code=%d msg=%s data=%s, 订单: %s",
-			withdrawResp.Code, msg, string(withdrawResp.Data), tradeNo)
-		topUp.Status = common.TopUpStatusFailed
-		_ = topUp.Update()
-		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "提币申请失败"})
-		return
-	}
-
-	log.Printf("U币提币申请成功 - 用户: %d, 订单: %s, 地址: %s, 数量: %d", id, tradeNo, address, req.Amount)
+	log.Printf("U币生成地址成功 - 用户: %d, 订单: %s, 地址: %s, 数量: %d", id, tradeNo, address, req.Amount)
 	c.JSON(http.StatusOK, gin.H{
 		"message": "success",
 		"data": gin.H{

@@ -23,6 +23,7 @@ import TransferModal from './modals/TransferModal';
 import PaymentConfirmModal from './modals/PaymentConfirmModal';
 import PaymentMethodSelectModal from './modals/PaymentMethodSelectModal';
 import TopupHistoryModal from './modals/TopupHistoryModal';
+import UcoinPayResultModal from './modals/UcoinPayResultModal';
 
 const DEFAULT_EPAY_MAX_TOPUP = 100000;
 
@@ -1113,62 +1114,12 @@ const TopUp = () => {
       </div>
 
       {/* U币支付结果弹窗：展示生成的收款地址 */}
-      <Modal
-        title={t('U币支付')}
+      <UcoinPayResultModal
+        t={t}
         visible={ucoinResultOpen}
         onCancel={() => setUcoinResultOpen(false)}
-        footer={null}
-        centered
-      >
-        {ucoinResult && (
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 12,
-            }}
-          >
-            <p style={{ textAlign: 'center' }}>
-              {t('请向以下地址转账完成充值，到账后将自动入账。')}
-            </p>
-            {ucoinResult.coin && (
-              <p>
-                {t('币种')}：{ucoinResult.coin}
-              </p>
-            )}
-            <p>
-              {t('充值数量')}：{ucoinResult.amount}
-            </p>
-            <div style={{ background: '#fff', padding: 12, borderRadius: 8 }}>
-              <QRCodeSVG value={ucoinResult.address || ''} size={180} />
-            </div>
-            <div
-              style={{
-                width: '100%',
-                wordBreak: 'break-all',
-                textAlign: 'center',
-                fontFamily: 'monospace',
-              }}
-            >
-              {ucoinResult.address}
-            </div>
-            <Button
-              theme='solid'
-              type='primary'
-              onClick={() => {
-                copy(ucoinResult.address || '');
-                showSuccess(t('已复制到剪贴板'));
-              }}
-            >
-              {t('复制地址')}
-            </Button>
-            <p style={{ color: 'var(--semi-color-text-2)', fontSize: 12 }}>
-              {t('订单号')}：{ucoinResult.order_id}
-            </p>
-          </div>
-        )}
-      </Modal>
+        ucoinResult={ucoinResult}
+      />
     </div>
   );
 };
