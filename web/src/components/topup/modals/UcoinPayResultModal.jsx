@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Button, Typography, Space } from '@douyinfe/semi-ui';
+import { Modal, Button, Typography, Space, Banner } from '@douyinfe/semi-ui';
 import { QRCodeSVG } from 'qrcode.react';
 import { ExternalLink } from 'lucide-react';
 import { copy, showSuccess } from '../../../helpers';
@@ -106,6 +106,15 @@ const UcoinPayResultModal = ({ t, visible, onCancel, ucoinResult }) => {
               </p>
             )}
           </div>
+
+          <Banner
+            type='warning'
+            closeIcon={null}
+            style={{ width: '100%' }}
+            description={t(
+              'USDT 转账到账后，系统自动入账可能存在约 5 分钟延迟，请勿重复转账，请耐心等待。',
+            )}
+          />
 
           <p style={{ margin: 0 }}>
             {t('充值数量')}：{ucoinResult.amount}
