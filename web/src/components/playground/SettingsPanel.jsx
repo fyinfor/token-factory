@@ -68,13 +68,10 @@ const SECTION_KEYS = {
 const renderPlaygroundGroupOption = (item) =>
   renderGroupOption({ ...item, ratio: undefined });
 
-// Public section selection: mode changes can move users to the most relevant section.
+// 切换文本/图片/视频时默认回到基础分栏；自定义请求模式进入高级分栏。
 const getDefaultSection = (displayMode, customRequestMode) => {
   if (customRequestMode) {
     return SECTION_KEYS.ADVANCED;
-  }
-  if (displayMode === 'image' || displayMode === 'video') {
-    return SECTION_KEYS.PARAMS;
   }
   return SECTION_KEYS.BASIC;
 };
