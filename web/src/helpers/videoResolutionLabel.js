@@ -143,10 +143,61 @@ function parseResolutionDimensions(raw) {
   return null;
 }
 
+function parseAspectRatioValue(ratio) {
+  const compact = String(ratio || '').trim();
+  if (!compact || compact === 'auto') return null;
+  const parts = compact.split(':');
+  if (parts.length !== 2) return null;
+  const widthRatio = Number(parts[0]);
+  const heightRatio = Number(parts[1]);
+  if (
+    !Number.isFinite(widthRatio) ||
+    !Number.isFinite(heightRatio) ||
+    widthRatio <= 0 ||
+    heightRatio <= 0
+  ) {
+    return null;
+  }
+  return { widthRatio, heightRatio };
+}
+
+function getSizeForAspectRatio(resolution, ratio) {
+  const aspect = parseAspectRatioValue(ratio);
+  if (!aspect) return null;
+
+  const dims =
+    parseResolutionDimensions(resolution) ||
+    VIDEO_RESOLUTION_DIMENSIONS['720p'];
+  const shortSide = Math.min(dims.width, dims.height);
+  const landscape = aspect.widthRatio >= aspect.heightRatio;
+  const baseShort = shortSide;
+  const baseLong = Math.max(
+    2,
+    Math.round(
+      (baseShort * Math.max(aspect.widthRatio, aspect.heightRatio)) /
+        Math.min(aspect.widthRatio, aspect.heightRatio) /
+        2,
+    ) * 2,
+  );
+  const width = landscape ? baseLong : baseShort;
+  const height = landscape ? baseShort : baseLong;
+  return {
+    width,
+    height,
+    size: `${width}x${height}`,
+  };
+}
+
 export function getPlaygroundVideoSizeForTier(
   resolution,
   orientation = 'landscape',
+  ratio = '',
 ) {
+  const ratioSize = getSizeForAspectRatio(resolution, ratio);
+  if (ratioSize) {
+    return ratioSize;
+  }
+
   const dims =
     parseResolutionDimensions(resolution) ||
     VIDEO_RESOLUTION_DIMENSIONS['720p'];

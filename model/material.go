@@ -136,6 +136,19 @@ func UpdateMaterialAssetInfo(id int, status string, url string, assetType string
 	return DB.Model(&MaterialAsset{}).Where("id = ?", id).Updates(updates).Error
 }
 
+// GetMaterialAssetByAssetIdAndUser 按上游 asset_id + user_id 查询素材，不存在时返回 (nil, nil)。
+func GetMaterialAssetByAssetIdAndUser(assetId string, userId int) (*MaterialAsset, error) {
+	var asset MaterialAsset
+	err := DB.Where("asset_id = ? AND user_id = ?", assetId, userId).First(&asset).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &asset, nil
+}
+
 // GetMaterialAssetByIdAndUser 按主键查询素材并校验归属用户，不存在时返回 (nil, nil)。
 func GetMaterialAssetByIdAndUser(id int, userId int) (*MaterialAsset, error) {
 	var asset MaterialAsset

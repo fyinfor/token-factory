@@ -40,6 +40,12 @@ import {
   PLAYGROUND_MEDIA_MAX_HEIGHT,
 } from '../../constants/playground.constants';
 import { usePlaygroundMediaMaxHeightPx } from '../../hooks/playground/usePlaygroundMediaMaxHeight';
+import { listMaterialAssets } from '../../helpers/materialApi';
+import {
+  buildAssetMap,
+  isAssetUri,
+  resolveAssetUrisInArray,
+} from '../../helpers/materialAssetUtils';
 
 const PLAYGROUND_MARKDOWN_MEDIA_CLASS =
   '[&_img]:max-w-[min(100%,780px)] [&_img]:max-h-[60vh] [&_img]:w-auto [&_img]:h-auto [&_img]:object-contain [&_img]:rounded-lg [&_img]:mx-auto [&_img]:cursor-zoom-in [&_video]:max-w-[min(100%,780px)] [&_video]:max-h-[60vh] [&_video]:w-auto [&_video]:h-auto [&_video]:object-contain [&_video]:rounded-lg [&_video]:mx-auto';
@@ -319,7 +325,27 @@ const MessageContent = ({
   }
 
   const finalExtractedThinkingContent = currentExtractedThinkingContent;
-  const generatedImages = resolveMessageGeneratedImages(message);
+  const rawGeneratedImages = resolveMessageGeneratedImages(message);
+
+  // 【需求6】预览图片地址 asset:// 协议转换
+  const [assetMap, setAssetMap] = React.useState(null);
+  React.useEffect(() => {
+    // 仅当存在 asset:// 地址时加载素材映射
+    const hasAssetUri = rawGeneratedImages.some(
+      (src) => typeof src === 'string' && isAssetUri(src),
+    );
+    if (!hasAssetUri || assetMap !== null) return;
+    listMaterialAssets({ page: 1, pageSize: 100 })
+      .then((res) => {
+        if (res?.success && Array.isArray(res.data?.items)) {
+          setAssetMap(buildAssetMap(res.data.items));
+        }
+      })
+      .catch(() => {});
+  }, [rawGeneratedImages, assetMap]);
+  const generatedImages = assetMap
+    ? resolveAssetUrisInArray(rawGeneratedImages, assetMap)
+    : rawGeneratedImages;
   const mediaDimensions = message.mediaDimensions || {};
   const videoPlayableUrl = message?.videoTask?.playableUrl;
   const mergedMediaDimensions = {
