@@ -1115,7 +1115,6 @@ const TopUp = () => {
 
       {/* U币支付结果弹窗：展示生成的收款地址 */}
       <UcoinPayResultModal
-        t={t}
         visible={ucoinResultOpen}
         onCancel={() => setUcoinResultOpen(false)}
         ucoinResult={ucoinResult}

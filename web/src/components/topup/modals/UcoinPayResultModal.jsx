@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal, Button, Typography } from '@douyinfe/semi-ui';
 import { QRCodeSVG } from 'qrcode.react';
 import { ExternalLink } from 'lucide-react';
@@ -76,7 +77,8 @@ function detectBrowserWallets() {
   return { hasMetaMask, hasBinance };
 }
 
-const UcoinPayResultModal = ({ t, visible, onCancel, ucoinResult }) => {
+const UcoinPayResultModal = ({ visible, onCancel, ucoinResult }) => {
+  const { t, i18n } = useTranslation();
   const [walletState, setWalletState] = useState({
     hasMetaMask: false,
     hasBinance: false,
@@ -100,6 +102,7 @@ const UcoinPayResultModal = ({ t, visible, onCancel, ucoinResult }) => {
 
   return (
     <Modal
+      key={i18n.language}
       title={t('U币支付')}
       visible={visible}
       onCancel={onCancel}
@@ -124,17 +127,17 @@ const UcoinPayResultModal = ({ t, visible, onCancel, ucoinResult }) => {
           <div style={{ width: '100%', textAlign: 'center' }}>
             {ucoinResult.network && (
               <p style={FIELD_TEXT_STYLE}>
-                {t('网络')}：{ucoinResult.network}
+                {t('网络')}: {ucoinResult.network}
               </p>
             )}
             {(ucoinResult.currency || ucoinResult.coin) && (
               <p style={FIELD_TEXT_STYLE}>
-                {t('币种')}：{ucoinResult.currency || ucoinResult.coin}
+                {t('币种')}: {ucoinResult.currency || ucoinResult.coin}
               </p>
             )}
             {ucoinResult.min_topup != null && (
               <p style={FIELD_TEXT_STYLE}>
-                {t('最小充值金额')}：{ucoinResult.min_topup}
+                {t('最小充值金额')}: {ucoinResult.min_topup}
               </p>
             )}
           </div>
@@ -256,7 +259,7 @@ const UcoinPayResultModal = ({ t, visible, onCancel, ucoinResult }) => {
               margin: 0,
             }}
           >
-            {t('订单号')}：{ucoinResult.order_id}
+            {t('订单号')}: {ucoinResult.order_id}
           </p>
         </div>
       )}
