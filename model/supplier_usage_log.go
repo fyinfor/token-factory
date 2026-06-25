@@ -34,6 +34,16 @@ type SupplierUsageByModel struct {
 	Quota     int    `json:"quota" gorm:"column:quota"`
 }
 
+// SupplierUsageByModelDetail 供应商看板按模型聚合（含输入/输出 Token 分项，供账单导出汇总段）。
+type SupplierUsageByModelDetail struct {
+	ModelName        string `json:"model_name" gorm:"column:model_name"`
+	Count            int    `json:"count" gorm:"column:count"`
+	PromptTokens     int    `json:"prompt_tokens" gorm:"column:prompt_tokens"`
+	CompletionTokens int    `json:"completion_tokens" gorm:"column:completion_tokens"`
+	TokenUsed        int    `json:"token_used" gorm:"column:token_used"`
+	Quota            int    `json:"quota" gorm:"column:quota"`
+}
+
 // SupplierUsageByUser 供应商看板按模型+用户聚合（同一模型下各用户的请求/Token/额度）。
 type SupplierUsageByUser struct {
 	UserID    int    `json:"user_id" gorm:"column:user_id"`
@@ -61,6 +71,36 @@ func applySupplierChannelScope(tx *gorm.DB, startTimestamp, endTimestamp int64, 
 func applySupplierChannelLogFilters(tx *gorm.DB, startTimestamp, endTimestamp int64, channelIDs []int) *gorm.DB {
 	return applySupplierChannelScope(tx, startTimestamp, endTimestamp, channelIDs).
 		Where("type = ?", LogTypeConsume)
+}
+
+// AggregateSupplierUsageByModelWithTokenBreakdown 按模型聚合消费，分项汇总输入/输出 Token（与看板统计范围一致）。
+func AggregateSupplierUsageByModelWithTokenBreakdown(
+	startTimestamp, endTimestamp int64,
+	channelIDs []int,
+) ([]SupplierUsageByModelDetail, error) {
+	if len(channelIDs) == 0 {
+		return []SupplierUsageByModelDetail{}, nil
+	}
+
+	base := LOG_DB.Table("logs")
+	base = applySupplierChannelLogFilters(base, startTimestamp, endTimestamp, channelIDs)
+
+	var rows []SupplierUsageByModelDetail
+	err := base.Session(&gorm.Session{}).
+		Select(
+			"model_name, count(*) as count, " +
+				"COALESCE(SUM(prompt_tokens), 0) as prompt_tokens, " +
+				"COALESCE(SUM(completion_tokens), 0) as completion_tokens, " +
+				supplierLogTokenSumExpr + " as token_used, " +
+				"sum(quota) as quota",
+		).
+		Group("model_name").
+		Order("quota desc, count desc").
+		Find(&rows).Error
+	if err != nil {
+		return nil, errors.New("查询供应商看板模型 Token 分项统计失败")
+	}
+	return rows, nil
 }
 
 // AggregateSupplierUsageFromLogs 从使用日志聚合供应商看板：仅统计指定渠道上的全部模型（按 model_name 汇总请求/Token/额度）。

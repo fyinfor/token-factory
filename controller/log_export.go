@@ -1080,6 +1080,213 @@ func streamSupplierChannelLogsCSV(c *gin.Context, logs []*model.Log, query logEx
 	}
 }
 
+// supplierDashboardExportI18n 供应商看板使用详情账单导出文案。
+type supplierDashboardExportI18n struct {
+	Meta1              string   // "供应商使用详情账单"
+	Meta2Supplier      string   // "供应商: %s"
+	Meta3Period        string   // "账期: %s ~ %s"
+	SummarySection     string   // "【模型汇总】"
+	SummaryHeader      []string // 模型汇总表头
+	SummaryTotal       string   // "合计"
+	DetailSection      string   // "【使用明细】"
+	DetailHeader       []string // 明细表头（与渠道日志导出一致）
+}
+
+var supplierDashboardExportDictZHCN = supplierDashboardExportI18n{
+	Meta1:         "供应商使用详情账单",
+	Meta2Supplier: "供应商: %s",
+	Meta3Period:   "账期: %s ~ %s",
+	SummarySection: "【模型汇总】",
+	SummaryHeader: []string{
+		"模型", "请求次数", "输入 tokens", "输出 tokens", "总 tokens", "消耗额度(quota)", "消耗额度(等值)",
+	},
+	SummaryTotal: "合计",
+	DetailSection: "【使用明细】",
+	DetailHeader: []string{
+		"序号", "时间", "类型", "用户", "令牌", "模型", "渠道", "分组", "Request ID",
+		"输入 tokens", "输出 tokens", "缓存 tokens", "消耗额度(quota)", "消耗额度(等值)",
+	},
+}
+
+var supplierDashboardExportDictEN = supplierDashboardExportI18n{
+	Meta1:         "Supplier usage detail statement",
+	Meta2Supplier: "Supplier: %s",
+	Meta3Period:   "Period: %s ~ %s",
+	SummarySection: "[Model summary]",
+	SummaryHeader: []string{
+		"Model", "Requests", "Input tokens", "Output tokens", "Total tokens", "Quota", "Amount",
+	},
+	SummaryTotal: "Total",
+	DetailSection: "[Usage details]",
+	DetailHeader: []string{
+		"No.", "Time", "Type", "User", "Token", "Model", "Channel", "Group", "Request ID",
+		"Input tokens", "Output tokens", "Cache tokens", "Quota", "Amount",
+	},
+}
+
+func resolveSupplierDashboardExportDict(lang string) supplierDashboardExportI18n {
+	if lang == "en" {
+		return supplierDashboardExportDictEN
+	}
+	return supplierDashboardExportDictZHCN
+}
+
+// streamSupplierDashboardUsageCSV 流式写出供应商看板使用详情账单（模型汇总 + 逐条明细）。
+func streamSupplierDashboardUsageCSV(
+	c *gin.Context,
+	modelRows []model.SupplierUsageByModelDetail,
+	logs []*model.Log,
+	query supplierDashboardExportQuery,
+	filename string,
+	dict supplierDashboardExportI18n,
+) {
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("X-Statement-Window-Start", strconv.FormatInt(query.StartTs, 10))
+	c.Header("X-Statement-Window-End", strconv.FormatInt(query.EndTs, 10))
+	c.Status(200)
+
+	c.Writer.WriteString("\xEF\xBB\xBF")
+	bw := bufio.NewWriterSize(c.Writer, 32*1024)
+	defer bw.Flush()
+	w := csv.NewWriter(bw)
+	defer w.Flush()
+
+	periodStart := time.Unix(query.StartTs, 0).Format("2006-01-02 15:04:05")
+	periodEnd := time.Unix(query.EndTs, 0).Format("2006-01-02 15:04:05")
+
+	summaryColCount := len(dict.SummaryHeader)
+	detailColCount := len(dict.DetailHeader)
+	if detailColCount > summaryColCount {
+		summaryColCount = detailColCount
+	}
+	emptyRow := make([]string, summaryColCount)
+
+	if err := writeStatementRow(w, append([]string{dict.Meta1}, emptyRow[1:]...)); err != nil {
+		common.SysError("write supplier dashboard export meta1: " + err.Error())
+		return
+	}
+	if query.SupplierName != "" {
+		meta2 := fmt.Sprintf(dict.Meta2Supplier, query.SupplierName)
+		if err := writeStatementRow(w, append([]string{meta2}, emptyRow[1:]...)); err != nil {
+			common.SysError("write supplier dashboard export meta2: " + err.Error())
+			return
+		}
+	}
+	metaPeriod := fmt.Sprintf(dict.Meta3Period, periodStart, periodEnd)
+	if err := writeStatementRow(w, append([]string{metaPeriod}, emptyRow[1:]...)); err != nil {
+		common.SysError("write supplier dashboard export period: " + err.Error())
+		return
+	}
+	if err := writeStatementRow(w, emptyRow); err != nil {
+		common.SysError("write supplier dashboard export blank: " + err.Error())
+		return
+	}
+
+	if err := writeStatementRow(w, append([]string{dict.SummarySection}, emptyRow[1:]...)); err != nil {
+		common.SysError("write supplier dashboard export summary title: " + err.Error())
+		return
+	}
+	if err := writeStatementRow(w, padRowToWidth(dict.SummaryHeader, summaryColCount)); err != nil {
+		common.SysError("write supplier dashboard export summary header: " + err.Error())
+		return
+	}
+
+	totalRequests := 0
+	totalPrompt := 0
+	totalCompletion := 0
+	totalTokens := 0
+	totalQuota := int64(0)
+	for _, row := range modelRows {
+		totalRequests += row.Count
+		totalPrompt += row.PromptTokens
+		totalCompletion += row.CompletionTokens
+		totalTokens += row.TokenUsed
+		totalQuota += int64(row.Quota)
+		summaryRow := []string{
+			row.ModelName,
+			strconv.Itoa(row.Count),
+			strconv.Itoa(row.PromptTokens),
+			strconv.Itoa(row.CompletionTokens),
+			strconv.Itoa(row.TokenUsed),
+			strconv.FormatInt(int64(row.Quota), 10),
+			formatQuotaDisplay(int64(row.Quota)),
+		}
+		if err := writeStatementRow(w, padRowToWidth(summaryRow, summaryColCount)); err != nil {
+			common.SysError("write supplier dashboard export summary row: " + err.Error())
+			return
+		}
+	}
+	totalRow := []string{
+		dict.SummaryTotal,
+		strconv.Itoa(totalRequests),
+		strconv.Itoa(totalPrompt),
+		strconv.Itoa(totalCompletion),
+		strconv.Itoa(totalTokens),
+		strconv.FormatInt(totalQuota, 10),
+		formatQuotaDisplay(totalQuota),
+	}
+	if err := writeStatementRow(w, padRowToWidth(totalRow, summaryColCount)); err != nil {
+		common.SysError("write supplier dashboard export summary total: " + err.Error())
+		return
+	}
+
+	if err := writeStatementRow(w, emptyRow); err != nil {
+		common.SysError("write supplier dashboard export blank2: " + err.Error())
+		return
+	}
+	if err := writeStatementRow(w, append([]string{dict.DetailSection}, emptyRow[1:]...)); err != nil {
+		common.SysError("write supplier dashboard export detail title: " + err.Error())
+		return
+	}
+	if err := writeStatementRow(w, padRowToWidth(dict.DetailHeader, summaryColCount)); err != nil {
+		common.SysError("write supplier dashboard export detail header: " + err.Error())
+		return
+	}
+
+	statementDict := resolveStatementDict(query.Lang)
+	for idx, l := range logs {
+		ts := time.Unix(l.CreatedAt, 0).Format("2006-01-02 15:04:05")
+		channelDisplay := l.ChannelDisplay
+		if channelDisplay == "" {
+			channelDisplay = strconv.Itoa(l.ChannelId)
+		}
+		cacheTokens := extractCacheReadTokens(l.Other)
+		quota := int64(l.Quota)
+		detailRow := []string{
+			strconv.Itoa(idx + 1),
+			ts,
+			logTypeLabelI18n(l.Type, statementDict),
+			l.Username,
+			l.TokenName,
+			l.ModelName,
+			channelDisplay,
+			l.Group,
+			l.RequestId,
+			strconv.Itoa(l.PromptTokens),
+			strconv.Itoa(l.CompletionTokens),
+			strconv.Itoa(cacheTokens),
+			strconv.FormatInt(quota, 10),
+			formatQuotaDisplay(quota),
+		}
+		if err := writeStatementRow(w, padRowToWidth(detailRow, summaryColCount)); err != nil {
+			common.SysError("write supplier dashboard export detail row: " + err.Error())
+			return
+		}
+	}
+}
+
+// padRowToWidth 将 CSV 行补齐到指定列宽，便于分段表头列数不一致时对齐。
+func padRowToWidth(row []string, width int) []string {
+	if len(row) >= width {
+		return row
+	}
+	out := make([]string, width)
+	copy(out, row)
+	return out
+}
+
 // sanitizeFilename 过滤文件名中的非法字符，保留中英文/数字/下划线/点/连字符。
 func sanitizeFilename(s string) string {
 	out := make([]rune, 0, len(s))
