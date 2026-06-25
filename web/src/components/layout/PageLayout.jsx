@@ -70,12 +70,13 @@ const PageLayout = () => {
     '/console/suppliers',
     '/console/playground',
     '/pricing',
+    '/rankings',
     '/console/model-heat'
   ];
 
   const shouldHideFooter = cardProPages.includes(location.pathname);
 
-  const pricingNaturalScroll = location.pathname === '/pricing';
+  const pricingNaturalScroll = location.pathname === '/pricing' || location.pathname === '/rankings';
 
   const shouldInnerPadding =
     location.pathname.includes('/console') &&
@@ -394,7 +395,7 @@ const PageLayout = () => {
           <Content
             style={{
               flex: '1 0 auto',
-              overflowY: isMobile ? 'visible' : 'hidden',
+              overflowY: isMobile || pricingNaturalScroll ? 'auto' : 'hidden',
               WebkitOverflowScrolling: 'touch',
               padding: shouldInnerPadding ? (isMobile ? '5px' : '24px') : '0',
               position: 'relative',

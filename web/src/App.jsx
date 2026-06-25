@@ -71,6 +71,7 @@ const DistributorCenter = lazy(() => import('./pages/DistributorCenter'));
 const DistributorAdmin = lazy(() => import('./pages/DistributorAdmin'));
 const InviteRedirect = lazy(() => import('./pages/InviteRedirect'));
 const About = lazy(() => import('./pages/About'));
+const Rankings = lazy(() => import('./pages/Rankings'));
 const UserAgreement = lazy(() => import('./pages/UserAgreement'));
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
 
@@ -468,6 +469,14 @@ function App() {
                 <Pricing />
               </Suspense>
             )
+          }
+        />
+        <Route
+          path='/rankings'
+          element={
+            <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+              <Rankings />
+            </Suspense>
           }
         />
         <Route

@@ -343,6 +343,9 @@ func SetApiRouter(router *gin.Engine) {
 			customOAuthRoute.PUT("/:id", controller.UpdateCustomOAuthProvider)
 			customOAuthRoute.DELETE("/:id", controller.DeleteCustomOAuthProvider)
 		}
+		apiRouter.GET("/perf_metrics", controller.GetPerfMetrics)
+		apiRouter.GET("/perf_metrics/summary", controller.GetPerfMetricsSummary)
+		apiRouter.GET("/rankings", controller.GetRankings)
 		performanceRoute := apiRouter.Group("/performance")
 		performanceRoute.Use(middleware.RootAuth())
 		{

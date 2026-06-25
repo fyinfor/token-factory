@@ -1870,6 +1870,20 @@ html:not(.dark) .distributor-center-ratio-badge {
   margin-top: 60px;
 }
 
+.rankings-page {
+  margin-top: 60px;
+  height: calc(100vh - 60px);
+  height: calc(100dvh - 60px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  background-color: var(--semi-color-bg-0);
+  -webkit-overflow-scrolling: touch;
+}
+
+.rankings-page__inner {
+  padding-bottom: 2.5rem;
+}
+
 .pricing-sidebar {
   width: clamp(280px, 24vw, 520px) !important;
   min-width: clamp(280px, 24vw, 520px) !important;
