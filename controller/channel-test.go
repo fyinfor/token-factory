@@ -1577,20 +1577,43 @@ func buildModelTagFilter(tags []string) map[string]struct{} {
 	return out
 }
 
+// monitorTestCategoryTags 监控测试标签筛选中的能力分类；未选中的分类不应因其它已选标签而被测到。
+var monitorTestCategoryTags = []string{"视频", "图片"}
+
 func modelMatchesTagFilter(modelName string, tagFilter map[string]struct{}) bool {
 	if len(tagFilter) == 0 {
 		return true
 	}
-	tags := model.GetModelTagsByName(modelName)
+	return modelTagsMatchMonitorFilter(model.GetModelTagsByName(modelName), tagFilter)
+}
+
+func modelTagsMatchMonitorFilter(tags string, tagFilter map[string]struct{}) bool {
+	if len(tagFilter) == 0 {
+		return true
+	}
+	tags = strings.TrimSpace(tags)
 	if tags == "" {
 		return false
 	}
+	matched := false
 	for tag := range tagFilter {
 		if common.ModelTagsContain(tags, tag) {
-			return true
+			matched = true
+			break
 		}
 	}
-	return false
+	if !matched {
+		return false
+	}
+	for _, categoryTag := range monitorTestCategoryTags {
+		if _, selected := tagFilter[categoryTag]; selected {
+			continue
+		}
+		if common.ModelTagsContain(tags, categoryTag) {
+			return false
+		}
+	}
+	return true
 }
 
 // collectModelsForScheduledChannelTest 返回定时全量测试要对渠道串行探测的模型名列表（与非空 models 的批量上架测试一致）；无任何绑定时返回单元素空串以走 testChannel 内置默认模型。
