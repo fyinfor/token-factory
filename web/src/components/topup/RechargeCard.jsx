@@ -452,19 +452,6 @@ const RechargeCard = ({
                                 );
                               })}
                           </Space>
-                          {enableUcoinTopUp &&
-                            ucoinCoinPairs &&
-                            ucoinCoinPairs.length > 0 && (
-                              <Text
-                                type='tertiary'
-                                size='small'
-                                style={{ display: 'block', marginTop: 8 }}
-                              >
-                                {t(
-                                  'USDT 等虚拟币转账到账后，入账可能存在约 5 分钟延迟。',
-                                )}
-                              </Text>
-                            )}
                         </Form.Slot>
                       </Col>
                     )}

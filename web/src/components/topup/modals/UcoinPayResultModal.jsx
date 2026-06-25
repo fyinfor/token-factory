@@ -1,15 +1,39 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Button, Typography, Space, Banner } from '@douyinfe/semi-ui';
+import { Modal, Button, Typography } from '@douyinfe/semi-ui';
 import { QRCodeSVG } from 'qrcode.react';
 import { ExternalLink } from 'lucide-react';
 import { copy, showSuccess } from '../../../helpers';
 
 const { Text } = Typography;
 
-const RED_TEXT_STYLE = {
-  color: 'var(--semi-color-danger)',
+const FIELD_TEXT_STYLE = {
+  color: 'var(--semi-color-text-0)',
   margin: 0,
   fontWeight: 600,
+};
+
+const NOTICE_BOX_STYLE = {
+  width: '100%',
+  padding: '10px 12px',
+  borderRadius: 8,
+  background: '#FFF9E6',
+  border: '1px solid #FFE58F',
+  color: 'var(--semi-color-text-0)',
+  fontSize: 14,
+  lineHeight: 1.6,
+  textAlign: 'center',
+  margin: 0,
+  fontFamily: 'inherit',
+};
+
+const ROW_ACTIONS_STYLE = {
+  display: 'flex',
+  flexWrap: 'nowrap',
+  alignItems: 'center',
+  gap: 8,
+  width: '100%',
+  overflowX: 'auto',
+  WebkitOverflowScrolling: 'touch',
 };
 
 const WALLET_LINKS = {
@@ -85,40 +109,29 @@ const UcoinPayResultModal = ({ t, visible, onCancel, ucoinResult }) => {
             gap: 12,
           }}
         >
-          <p style={{ textAlign: 'center', margin: 0 }}>
-            {t('请向以下地址转账完成充值，到账后将自动入账。')}
+          <p style={NOTICE_BOX_STYLE}>
+            {t(
+              '请选择相同区块链网络转账，选错将导致资产无法到账。区块链交易需区块确认，预计 10 分钟内到账，请勿重复提交。',
+            )}
           </p>
 
           <div style={{ width: '100%', textAlign: 'center' }}>
             {ucoinResult.network && (
-              <p style={RED_TEXT_STYLE}>
+              <p style={FIELD_TEXT_STYLE}>
                 {t('网络')}：{ucoinResult.network}
               </p>
             )}
             {(ucoinResult.currency || ucoinResult.coin) && (
-              <p style={RED_TEXT_STYLE}>
+              <p style={FIELD_TEXT_STYLE}>
                 {t('币种')}：{ucoinResult.currency || ucoinResult.coin}
               </p>
             )}
             {ucoinResult.min_topup != null && (
-              <p style={RED_TEXT_STYLE}>
+              <p style={FIELD_TEXT_STYLE}>
                 {t('最小充值金额')}：{ucoinResult.min_topup}
               </p>
             )}
           </div>
-
-          <Banner
-            type='warning'
-            closeIcon={null}
-            style={{ width: '100%' }}
-            description={t(
-              'USDT 转账到账后，系统自动入账可能存在约 5 分钟延迟，请勿重复转账，请耐心等待。',
-            )}
-          />
-
-          <p style={{ margin: 0 }}>
-            {t('充值数量')}：{ucoinResult.amount}
-          </p>
 
           <div style={{ background: '#fff', padding: 12, borderRadius: 8 }}>
             <QRCodeSVG value={ucoinResult.address || ''} size={180} />
@@ -161,62 +174,64 @@ const UcoinPayResultModal = ({ t, visible, onCancel, ucoinResult }) => {
                   '未检测到浏览器钱包插件，可安装后使用，也可直接用上方二维码转账。',
                 )}
               </Text>
-              <Space wrap>
+              <div style={ROW_ACTIONS_STYLE}>
                 <Button
+                  size='small'
                   theme='outline'
                   type='tertiary'
                   icon={<ExternalLink size={14} />}
                   onClick={() =>
                     window.open(WALLET_LINKS.binance.url, '_blank')
                   }
+                  style={{ flexShrink: 0 }}
                 >
                   {WALLET_LINKS.binance.name}
                 </Button>
                 <Button
+                  size='small'
                   theme='outline'
                   type='tertiary'
                   icon={<ExternalLink size={14} />}
                   onClick={() =>
                     window.open(WALLET_LINKS.metamask.url, '_blank')
                   }
+                  style={{ flexShrink: 0 }}
                 >
                   {WALLET_LINKS.metamask.name}
                 </Button>
                 <Button
+                  size='small'
                   theme='outline'
                   type='tertiary'
                   icon={<ExternalLink size={14} />}
                   onClick={() =>
                     window.open(WALLET_LINKS.eoraptor.url, '_blank')
                   }
+                  style={{ flexShrink: 0 }}
                 >
                   {WALLET_LINKS.eoraptor.name}
                 </Button>
-              </Space>
+              </div>
               <div
                 style={{
+                  ...ROW_ACTIONS_STYLE,
                   marginTop: 12,
                   paddingTop: 12,
                   borderTop: '1px solid var(--semi-color-border)',
                 }}
               >
-                <Text
-                  strong
-                  style={{
-                    display: 'block',
-                    marginBottom: 8,
-                    color: 'var(--semi-color-danger)',
-                  }}
-                >
+                <Text strong style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
                   {t('交易推荐')}
                 </Text>
                 <Button
+                  size='small'
                   theme='outline'
                   type='tertiary'
                   icon={<ExternalLink size={14} />}
                   onClick={() =>
                     window.open(EXCHANGE_LINKS.eoraptor.url, '_blank')
                   }
+                  style={{ flexShrink: 0 }}
                 >
                   {EXCHANGE_LINKS.eoraptor.name}
                 </Button>
