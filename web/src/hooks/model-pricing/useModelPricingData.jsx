@@ -20,6 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState, useEffect, useContext, useRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { API, copy, showError, showInfo, showSuccess } from '../../helpers';
+import { fetchPerfMetricsSummary } from '../../helpers/perfMetrics';
 import { Modal } from '@douyinfe/semi-ui';
 import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
@@ -50,6 +51,7 @@ export const useModelPricingData = (options = {}) => {
   const [showWithRecharge, setShowWithRecharge] = useState(false);
   const [tokenUnit, setTokenUnit] = useState('M');
   const [models, setModels] = useState([]);
+  const [perfMetricsMap, setPerfMetricsMap] = useState({});
   const [vendorsMap, setVendorsMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [groupRatio, setGroupRatio] = useState({});
@@ -580,8 +582,17 @@ export const useModelPricingData = (options = {}) => {
     setLoading(false);
   };
 
+  const loadPerfMetrics = async () => {
+    try {
+      const map = await fetchPerfMetricsSummary(24);
+      setPerfMetricsMap(map);
+    } catch (err) {
+      setPerfMetricsMap({});
+    }
+  };
+
   const refresh = async () => {
-    await loadPricing();
+    await Promise.all([loadPricing(), loadPerfMetrics()]);
   };
 
   const copyText = async (text) => {
@@ -710,6 +721,7 @@ export const useModelPricingData = (options = {}) => {
     tokenUnit,
     setTokenUnit,
     models,
+    perfMetricsMap,
     loading,
     groupRatio,
     groupModelPrice,

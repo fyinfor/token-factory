@@ -114,6 +114,7 @@ const PricingPage = () => {
         channelVideoRatioMap={pricingData.channelVideoRatio}
         channelVideoCompletionRatioMap={pricingData.channelVideoCompletionRatio}
         channelVideoPriceMap={pricingData.channelVideoPrice}
+        perfMetricsMap={pricingData.perfMetricsMap}
       />
     </div>
   );
