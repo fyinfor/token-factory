@@ -20,6 +20,7 @@ type TopUp struct {
 	Amount           int64   `json:"amount"`
 	Money            float64 `json:"money"`
 	TradeNo          string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
+	DepositAddress   string  `json:"deposit_address" gorm:"type:varchar(255);index"`
 	PaymentMethod    string  `json:"payment_method" gorm:"type:varchar(50)"`
 	CreateTime       int64   `json:"create_time"`
 	CompleteTime     int64   `json:"complete_time"`
@@ -97,6 +98,43 @@ func GetTopUpByTradeNo(tradeNo string) *TopUp {
 		return nil
 	}
 	return topUp
+}
+
+// GetPendingUcoinTopUpByDepositAddress 按收款地址查找待支付的 U币订单（地址大小写不敏感）。
+func GetPendingUcoinTopUpByDepositAddress(address string) *TopUp {
+	address = strings.TrimSpace(address)
+	if address == "" {
+		return nil
+	}
+	var topUp TopUp
+	err := DB.Where(
+		"payment_method = ? AND status = ? AND LOWER(deposit_address) = LOWER(?)",
+		"ubcoin",
+		common.TopUpStatusPending,
+		address,
+	).Order("id desc").First(&topUp).Error
+	if err != nil {
+		return nil
+	}
+	return &topUp
+}
+
+// GetPendingUcoinTopUpByUserId 查找用户最近一笔待支付的 U币订单。
+func GetPendingUcoinTopUpByUserId(userId int) *TopUp {
+	if userId <= 0 {
+		return nil
+	}
+	var topUp TopUp
+	err := DB.Where(
+		"user_id = ? AND payment_method = ? AND status = ?",
+		userId,
+		"ubcoin",
+		common.TopUpStatusPending,
+	).Order("id desc").First(&topUp).Error
+	if err != nil {
+		return nil
+	}
+	return &topUp
 }
 
 func Recharge(referenceId string, customerId string) (err error) {

@@ -20,6 +20,7 @@ import { SiStripe, SiBinance, SiEthereum, SiPaypal } from 'react-icons/si';
 import {
   AlipayPayLogo,
   WeChatPayLogo,
+  ErpPayLogo,
   isLogoOnlyPayMethod,
 } from './PaymentBrandIcons';
 import {
@@ -82,12 +83,15 @@ function getPayMethodLabel(payMethod, t) {
 
 function renderUcoinPairIcon(pair) {
   const haystack =
-    `${pair.name || ''} ${pair.coinType || ''} ${pair.mainCoinType || ''}`.toUpperCase();
+    `${pair.name || ''} ${pair.coinType || ''} ${pair.mainCoinType || ''} ${pair.network || ''}`.toUpperCase();
   if (/\bBNB\b|BINANCE/.test(haystack)) {
     return <SiBinance size={PAY_ICON_SIZE} color='#F3BA2F' />;
   }
   if (/\bETH\b|ETHEREUM/.test(haystack)) {
     return <SiEthereum size={PAY_ICON_SIZE} color='#627EEA' />;
+  }
+  if (/\bERP\b|EORAPTOR/.test(haystack)) {
+    return <ErpPayLogo size={PAY_ICON_SIZE} />;
   }
   return <Coins size={PAY_ICON_SIZE} color='var(--semi-color-text-2)' />;
 }

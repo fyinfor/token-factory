@@ -25,6 +25,8 @@ type UcoinCoinPair struct {
 	Name         string `json:"name"`         // 展示名称，如 USDT-TRC20
 	MainCoinType int    `json:"mainCoinType"` // 主币种编号
 	CoinType     string `json:"coinType"`     // 子币种编号/地址（字符串，可为链上地址或编号）
+	Network      string `json:"network"`      // 网络展示，如 BNB Chain、Ethereum
+	Currency     string `json:"currency"`     // 币种展示，如 USDT
 }
 
 // GetUcoinCoinPairs 从 OptionMap 读取币种对配置。
@@ -44,16 +46,29 @@ func parseUcoinCoinPairs(jsonStr string) []UcoinCoinPair {
 		Name         string      `json:"name"`
 		MainCoinType int         `json:"mainCoinType"`
 		CoinType     interface{} `json:"coinType"`
+		Network      string      `json:"network"`
+		Currency     string      `json:"currency"`
 	}
 	if err := common.UnmarshalJsonStr(jsonStr, &raw); err != nil {
 		return []UcoinCoinPair{}
 	}
 	pairs := make([]UcoinCoinPair, 0, len(raw))
 	for _, item := range raw {
+		name := strings.TrimSpace(item.Name)
+		network := strings.TrimSpace(item.Network)
+		currency := strings.TrimSpace(item.Currency)
+		if network == "" {
+			network = ucoinInferNetwork(name)
+		}
+		if currency == "" {
+			currency = ucoinInferCurrency(name)
+		}
 		pairs = append(pairs, UcoinCoinPair{
-			Name:         item.Name,
+			Name:         name,
 			MainCoinType: item.MainCoinType,
 			CoinType:     normalizeUcoinCoinType(item.CoinType),
+			Network:      network,
+			Currency:     currency,
 		})
 	}
 	return pairs
@@ -78,6 +93,36 @@ func normalizeUcoinCoinType(v interface{}) string {
 	default:
 		return strings.TrimSpace(fmt.Sprintf("%v", t))
 	}
+}
+
+func ucoinInferNetwork(name string) string {
+	upper := strings.ToUpper(name)
+	switch {
+	case strings.Contains(upper, "BNB"), strings.Contains(upper, "BSC"):
+		return "BNB Chain"
+	case strings.Contains(upper, "ETH"), strings.Contains(upper, "ERC"):
+		return "Ethereum"
+	case strings.Contains(upper, "ERP"), strings.Contains(upper, "EORAPTOR"):
+		return "Eoraptor"
+	case strings.Contains(upper, "TRC"), strings.Contains(upper, "TRON"):
+		return "TRON"
+	default:
+		if name != "" {
+			return name
+		}
+		return "—"
+	}
+}
+
+func ucoinInferCurrency(name string) string {
+	upper := strings.ToUpper(name)
+	if strings.Contains(upper, "USDT") {
+		return "USDT"
+	}
+	if strings.Contains(upper, "USDC") {
+		return "USDC"
+	}
+	return "USDT"
 }
 
 // UcoinCoinPairs2JsonString 返回默认币种对 JSON（供 InitOptionMap 使用）。

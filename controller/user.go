@@ -459,6 +459,7 @@ func Register(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserRegisterFailed)
 		return
 	}
+	service.TryProvisionUcoinAddressAsync(insertedUser.Id)
 	// 生成默认令牌
 	if constant.GenerateDefaultToken {
 		key, err := common.GenerateKey()
@@ -1816,6 +1817,7 @@ func CreateUser(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	service.TryProvisionUcoinAddressAsync(cleanUser.Id)
 	if cleanUser.Tags != "" {
 		tags := model.GetUserTagsList(cleanUser.Tags)
 		if len(tags) > 0 {

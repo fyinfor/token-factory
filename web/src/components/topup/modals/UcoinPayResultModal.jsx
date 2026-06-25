@@ -1,10 +1,16 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Button, Typography, Space, Banner } from '@douyinfe/semi-ui';
+import { Modal, Button, Typography, Space } from '@douyinfe/semi-ui';
 import { QRCodeSVG } from 'qrcode.react';
 import { ExternalLink } from 'lucide-react';
 import { copy, showSuccess } from '../../../helpers';
 
 const { Text } = Typography;
+
+const RED_TEXT_STYLE = {
+  color: 'var(--semi-color-danger)',
+  margin: 0,
+  fontWeight: 600,
+};
 
 const WALLET_LINKS = {
   binance: {
@@ -14,6 +20,17 @@ const WALLET_LINKS = {
   metamask: {
     name: 'MetaMask',
     url: 'https://metamask.io/download/',
+  },
+  eoraptor: {
+    name: 'Eoraptor Wallet',
+    url: 'https://ts-apk.s3.ap-east-1.amazonaws.com/ts-apk/EORAPTORWallet.apk',
+  },
+};
+
+const EXCHANGE_LINKS = {
+  eoraptor: {
+    name: 'Eoraptor',
+    url: 'https://web.eoraptor.org/',
   },
 };
 
@@ -71,11 +88,25 @@ const UcoinPayResultModal = ({ t, visible, onCancel, ucoinResult }) => {
           <p style={{ textAlign: 'center', margin: 0 }}>
             {t('请向以下地址转账完成充值，到账后将自动入账。')}
           </p>
-          {ucoinResult.coin && (
-            <p style={{ margin: 0 }}>
-              {t('币种')}：{ucoinResult.coin}
-            </p>
-          )}
+
+          <div style={{ width: '100%', textAlign: 'center' }}>
+            {ucoinResult.network && (
+              <p style={RED_TEXT_STYLE}>
+                {t('网络')}：{ucoinResult.network}
+              </p>
+            )}
+            {(ucoinResult.currency || ucoinResult.coin) && (
+              <p style={RED_TEXT_STYLE}>
+                {t('币种')}：{ucoinResult.currency || ucoinResult.coin}
+              </p>
+            )}
+            {ucoinResult.min_topup != null && (
+              <p style={RED_TEXT_STYLE}>
+                {t('最小充值金额')}：{ucoinResult.min_topup}
+              </p>
+            )}
+          </div>
+
           <p style={{ margin: 0 }}>
             {t('充值数量')}：{ucoinResult.amount}
           </p>
@@ -117,14 +148,18 @@ const UcoinPayResultModal = ({ t, visible, onCancel, ucoinResult }) => {
                 size='small'
                 style={{ display: 'block', marginBottom: 10 }}
               >
-                {t('未检测到浏览器钱包插件，可安装后使用，也可直接用下方二维码转账。')}
+                {t(
+                  '未检测到浏览器钱包插件，可安装后使用，也可直接用上方二维码转账。',
+                )}
               </Text>
               <Space wrap>
                 <Button
                   theme='outline'
                   type='tertiary'
                   icon={<ExternalLink size={14} />}
-                  onClick={() => window.open(WALLET_LINKS.binance.url, '_blank')}
+                  onClick={() =>
+                    window.open(WALLET_LINKS.binance.url, '_blank')
+                  }
                 >
                   {WALLET_LINKS.binance.name}
                 </Button>
@@ -132,17 +167,51 @@ const UcoinPayResultModal = ({ t, visible, onCancel, ucoinResult }) => {
                   theme='outline'
                   type='tertiary'
                   icon={<ExternalLink size={14} />}
-                  onClick={() => window.open(WALLET_LINKS.metamask.url, '_blank')}
+                  onClick={() =>
+                    window.open(WALLET_LINKS.metamask.url, '_blank')
+                  }
                 >
                   {WALLET_LINKS.metamask.name}
                 </Button>
+                <Button
+                  theme='outline'
+                  type='tertiary'
+                  icon={<ExternalLink size={14} />}
+                  onClick={() =>
+                    window.open(WALLET_LINKS.eoraptor.url, '_blank')
+                  }
+                >
+                  {WALLET_LINKS.eoraptor.name}
+                </Button>
               </Space>
-              <Banner
-                type='info'
-                closeIcon={null}
-                style={{ marginTop: 10 }}
-                description={t('或使用交易所/手机钱包扫码转账')}
-              />
+              <div
+                style={{
+                  marginTop: 12,
+                  paddingTop: 12,
+                  borderTop: '1px solid var(--semi-color-border)',
+                }}
+              >
+                <Text
+                  strong
+                  style={{
+                    display: 'block',
+                    marginBottom: 8,
+                    color: 'var(--semi-color-danger)',
+                  }}
+                >
+                  {t('交易推荐')}
+                </Text>
+                <Button
+                  theme='outline'
+                  type='tertiary'
+                  icon={<ExternalLink size={14} />}
+                  onClick={() =>
+                    window.open(EXCHANGE_LINKS.eoraptor.url, '_blank')
+                  }
+                >
+                  {EXCHANGE_LINKS.eoraptor.name}
+                </Button>
+              </div>
             </div>
           ) : (
             <Text type='tertiary' size='small' style={{ textAlign: 'center' }}>

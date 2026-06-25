@@ -58,6 +58,8 @@ export default function SettingsPaymentGatewayUcoin(props) {
     name: '',
     mainCoinType: '',
     coinType: '',
+    network: '',
+    currency: '',
   });
 
   useEffect(() => {
@@ -91,6 +93,8 @@ export default function SettingsPaymentGatewayUcoin(props) {
                   item.coinType !== undefined && item.coinType !== null
                     ? String(item.coinType)
                     : '',
+                network: item.network || '',
+                currency: item.currency || '',
               })),
             );
           }
@@ -161,7 +165,7 @@ export default function SettingsPaymentGatewayUcoin(props) {
 
   const openAddPairModal = () => {
     setEditingPairIndex(-1);
-    setPairForm({ name: '', mainCoinType: '', coinType: '' });
+    setPairForm({ name: '', mainCoinType: '', coinType: '', network: '', currency: '' });
     setPairModalVisible(true);
   };
 
@@ -172,6 +176,8 @@ export default function SettingsPaymentGatewayUcoin(props) {
       mainCoinType:
         record.mainCoinType !== undefined ? String(record.mainCoinType) : '',
       coinType: record.coinType !== undefined ? String(record.coinType) : '',
+      network: record.network || '',
+      currency: record.currency || '',
     });
     setPairModalVisible(true);
   };
@@ -191,6 +197,8 @@ export default function SettingsPaymentGatewayUcoin(props) {
       name: (pairForm.name || '').trim(),
       mainCoinType,
       coinType,
+      network: (pairForm.network || '').trim(),
+      currency: (pairForm.currency || '').trim(),
     };
     if (editingPairIndex === -1) {
       setCoinPairs([...coinPairs, newPair]);
@@ -219,6 +227,16 @@ export default function SettingsPaymentGatewayUcoin(props) {
     {
       title: t('子币种编号'),
       dataIndex: 'coinType',
+    },
+    {
+      title: t('网络'),
+      dataIndex: 'network',
+      render: (text) => text || <Text type='tertiary'>—</Text>,
+    },
+    {
+      title: t('币种'),
+      dataIndex: 'currency',
+      render: (text) => text || <Text type='tertiary'>—</Text>,
     },
     {
       title: t('操作'),
@@ -250,7 +268,7 @@ export default function SettingsPaymentGatewayUcoin(props) {
         <Form.Section text={t('U币支付设置')}>
           <Text>
             {t(
-              'U币支付（虚拟币充值）：用户充值时调用接口生成收款地址，用户向该地址转账后由回调入账。',
+              'U币支付（虚拟币充值）：用户注册时生成专属 U地址；充值时展示该地址与二维码，转账后由回调入账。',
             )}
             <br />
           </Text>
@@ -403,6 +421,32 @@ export default function SettingsPaymentGatewayUcoin(props) {
             />
             <Text type='tertiary' size='small'>
               {t('支持字符串，可为链上地址或编号')}
+            </Text>
+          </div>
+          <div>
+            <div style={{ marginBottom: 4 }}>
+              <Text strong>{t('网络')}</Text>
+            </div>
+            <Input
+              value={pairForm.network}
+              onChange={(val) => setPairForm({ ...pairForm, network: val })}
+              placeholder={t('例如：BNB Chain、Ethereum、Eoraptor')}
+            />
+            <Text type='tertiary' size='small'>
+              {t('支付页红色提示展示，可空则按展示名称自动推断')}
+            </Text>
+          </div>
+          <div>
+            <div style={{ marginBottom: 4 }}>
+              <Text strong>{t('币种')}</Text>
+            </div>
+            <Input
+              value={pairForm.currency}
+              onChange={(val) => setPairForm({ ...pairForm, currency: val })}
+              placeholder='USDT'
+            />
+            <Text type='tertiary' size='small'>
+              {t('支付页红色提示展示，可空则默认为 USDT')}
             </Text>
           </div>
         </div>

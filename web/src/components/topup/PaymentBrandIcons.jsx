@@ -8,6 +8,7 @@ import React from 'react';
 
 const ALIPAY_LOGO_SRC = '/payment-brands/alipay.png';
 const WECHAT_PAY_LOGO_SRC = '/payment-brands/wechatpay.png';
+const ERP_LOGO_SRC = '/payment-brands/erp.png';
 
 function PayBrandImage({ src, size, className, alt }) {
   return (
@@ -44,6 +45,17 @@ export function WeChatPayLogo({ size = 24, className }) {
   return (
     <PayBrandImage
       src={WECHAT_PAY_LOGO_SRC}
+      size={size}
+      className={className}
+      alt=''
+    />
+  );
+}
+
+export function ErpPayLogo({ size = 24, className }) {
+  return (
+    <PayBrandImage
+      src={ERP_LOGO_SRC}
       size={size}
       className={className}
       alt=''
