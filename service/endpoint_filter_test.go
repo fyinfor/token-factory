@@ -63,6 +63,15 @@ func TestChannelSupportsRelayMode(t *testing.T) {
 			want:      true,
 		},
 		{
+			name: "Ali Qwen image channel supports image generations",
+			channel: &model.Channel{
+				Type: constant.ChannelTypeAliImage,
+			},
+			modelName: "qwen-image-2.0-pro",
+			relayMode: relayconstant.RelayModeImagesGenerations,
+			want:      true,
+		},
+		{
 			name: "nil channel returns false",
 			channel:   nil,
 			modelName: "any",
