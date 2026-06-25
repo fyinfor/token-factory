@@ -328,6 +328,7 @@ func migrateDB() error {
 		&ModelTag{},
 		&MaterialGroup{},
 		&MaterialAsset{},
+		&PerfMetric{},
 	)
 	if err != nil {
 		return err

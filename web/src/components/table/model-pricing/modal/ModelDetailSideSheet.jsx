@@ -28,6 +28,7 @@ import ModelBasicInfo from './components/ModelBasicInfo';
 import ModelEndpoints from './components/ModelEndpoints';
 import ModelPricingTable from './components/ModelPricingTable';
 import ModelChannelList from './components/ModelChannelList';
+import ModelPerfPanel from './components/ModelPerfPanel';
 
 const { Text } = Typography;
 
@@ -63,6 +64,7 @@ const ModelDetailSideSheet = ({
   channelVideoRatioMap = {},
   channelVideoCompletionRatioMap = {},
   channelVideoPriceMap = {},
+  perfMetricsMap = {},
 }) => {
   const isMobile = useIsMobile();
   /**
@@ -158,6 +160,11 @@ const ModelDetailSideSheet = ({
             <ModelEndpoints
               modelData={modelData}
               endpointMap={endpointMap}
+              t={t}
+            />
+            <ModelPerfPanel
+              modelName={modelData.model_name}
+              perfSummary={perfMetricsMap[modelData.model_name]}
               t={t}
             />
             <ModelChannelList

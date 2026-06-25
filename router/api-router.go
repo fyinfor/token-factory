@@ -205,6 +205,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.GET("/supplier/models", controller.ListMySupplierModels)
 				selfRoute.GET("/supplier-dashboard", controller.GetSupplierDashboardData)
 				selfRoute.GET("/supplier-dashboard/model-users", controller.GetSupplierDashboardModelUserUsage)
+				selfRoute.GET("/supplier-dashboard/export", controller.ExportSupplierDashboardUsage)
 				selfRoute.GET("/supplier-channel-logs", controller.GetSupplierChannelLogs)
 				selfRoute.GET("/supplier-channel-logs/stat", controller.GetSupplierChannelLogsStat)
 				selfRoute.GET("/supplier-channel-logs/export", middleware.SearchRateLimit(), controller.ExportSupplierChannelLogs)
@@ -342,6 +343,9 @@ func SetApiRouter(router *gin.Engine) {
 			customOAuthRoute.PUT("/:id", controller.UpdateCustomOAuthProvider)
 			customOAuthRoute.DELETE("/:id", controller.DeleteCustomOAuthProvider)
 		}
+		apiRouter.GET("/perf_metrics", controller.GetPerfMetrics)
+		apiRouter.GET("/perf_metrics/summary", controller.GetPerfMetricsSummary)
+		apiRouter.GET("/rankings", controller.GetRankings)
 		performanceRoute := apiRouter.Group("/performance")
 		performanceRoute.Use(middleware.RootAuth())
 		{

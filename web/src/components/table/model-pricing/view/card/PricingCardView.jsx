@@ -73,6 +73,7 @@ import {
 } from './pricingTableStyles';
 import { VIDEO_FLAT_LANE_I18N_KEY } from '../../constants/videoFlatClipLaneI18n';
 import PricingCardSkeleton from './PricingCardSkeleton';
+import ModelPerfCardSection from '../../components/ModelPerfCardSection';
 import { useMinimumLoadingTime } from '../../../../../hooks/common/useMinimumLoadingTime';
 import { renderLimitedItems } from '../../../../common/ui/RenderUtils';
 import { useIsMobile } from '../../../../../hooks/common/useIsMobile';
@@ -825,6 +826,7 @@ const PricingCardView = ({
   channelVideoRatio = {},
   channelVideoCompletionRatio = {},
   channelVideoPrice = {},
+  perfMetricsMap = {},
 }) => {
   const { i18n } = useTranslation();
   const showSkeleton = useMinimumLoadingTime(loading);
@@ -1750,9 +1752,11 @@ const PricingCardView = ({
                     <div className='flex items-start space-x-3 flex-1 min-w-0'>
                       {getModelIcon(model)}
                       <div className='flex-1 min-w-0'>
-                        <h3 className='text-lg font-bold text-gray-900 truncate'>
-                          {renderHighlightedText(model.model_name)}
-                        </h3>
+                        <div className='flex items-start justify-between gap-2'>
+                          <h3 className='text-lg font-bold text-gray-900 truncate flex-1'>
+                            {renderHighlightedText(model.model_name)}
+                          </h3>
+                        </div>
                         <div
                           className='flex flex-col gap-1 text-xs mt-1'
                           style={
@@ -1989,6 +1993,12 @@ const PricingCardView = ({
                         : undefined
                     }
                   >
+                    {/* 运行性能 */}
+                    <ModelPerfCardSection
+                      perf={perfMetricsMap[model.model_name]}
+                      t={t}
+                    />
+
                     {/* 标签区域 */}
                     {renderTags(model)}
 

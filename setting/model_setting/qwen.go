@@ -16,6 +16,8 @@ var defaultQwenSettings = QwenSettings{
 	SyncImageModels: []string{
 		"z-image",
 		"qwen-image",
+		"qwen-image-2.0",
+		"qwen-image-max",
 		"wan2.6",
 		"wan2.7",
 		"qwen-image-edit",

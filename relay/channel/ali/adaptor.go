@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/dto"
+	apiconstant "github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/claude"
 	"github.com/QuantumNous/new-api/relay/channel/openai"
@@ -22,6 +23,7 @@ import (
 
 type Adaptor struct {
 	IsSyncImageModel bool
+	ChannelType      int
 }
 
 /*
@@ -67,6 +69,7 @@ func (a *Adaptor) ConvertClaudeRequest(c *gin.Context, info *relaycommon.RelayIn
 }
 
 func (a *Adaptor) Init(info *relaycommon.RelayInfo) {
+	a.ChannelType = info.ChannelType
 }
 
 func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
@@ -246,9 +249,15 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 }
 
 func (a *Adaptor) GetModelList() []string {
+	if a.ChannelType == apiconstant.ChannelTypeAliImage {
+		return ImageModelList
+	}
 	return ModelList
 }
 
 func (a *Adaptor) GetChannelName() string {
+	if a.ChannelType == apiconstant.ChannelTypeAliImage {
+		return "ali-image"
+	}
 	return ChannelName
 }

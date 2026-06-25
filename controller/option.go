@@ -263,15 +263,21 @@ func UpdateOption(c *gin.Context) {
 		})
 		return
 	}
-	switch option.Value.(type) {
+	switch v := option.Value.(type) {
 	case bool:
-		option.Value = common.Interface2String(option.Value.(bool))
+		option.Value = common.Interface2String(v)
 	case float64:
-		option.Value = common.Interface2String(option.Value.(float64))
+		option.Value = common.Interface2String(v)
 	case int:
-		option.Value = common.Interface2String(option.Value.(int))
+		option.Value = common.Interface2String(v)
+	case string:
+		option.Value = v
 	default:
-		option.Value = fmt.Sprintf("%v", option.Value)
+		if bytes, err := common.Marshal(option.Value); err == nil {
+			option.Value = string(bytes)
+		} else {
+			option.Value = fmt.Sprintf("%v", option.Value)
+		}
 	}
 	valStr := strings.TrimSpace(option.Value.(string))
 	// 已审核供应商仅可更新自己模型范围内的倍率相关配置，不可修改其他全局设置。

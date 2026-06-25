@@ -29,6 +29,7 @@ import ApiInfoPanel from './ApiInfoPanel';
 import AnnouncementsPanel from './AnnouncementsPanel';
 import FaqPanel from './FaqPanel';
 import UptimePanel from './UptimePanel';
+import PerfOverviewPanel from './PerfOverviewPanel';
 import SearchModal from './modals/SearchModal';
 import DistributorAnalyticsBoard from '../distributor/DistributorAnalyticsBoard';
 
@@ -171,6 +172,8 @@ const Dashboard = () => {
         CARD_PROPS={CARD_PROPS}
         CHART_CONFIG={CHART_CONFIG}
       />
+
+      <PerfOverviewPanel CARD_PROPS={CARD_PROPS} t={dashboardData.t} />
 
       {userIsDistributorUser(userState?.user) ? (
         <DistributorAnalyticsBoard />
