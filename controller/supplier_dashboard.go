@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
@@ -241,4 +242,96 @@ func GetSupplierDashboardModelUserUsage(c *gin.Context) {
 			},
 		},
 	})
+}
+
+const supplierDashboardExportMaxRangeSec = 366 * 24 * 3600
+
+// supplierDashboardExportQuery 供应商看板使用详情导出参数（与看板统计时间范围口径一致）。
+type supplierDashboardExportQuery struct {
+	StartTs, EndTs int64
+	Lang           string
+	SupplierName   string
+}
+
+// parseSupplierDashboardExportQuery 解析看板导出时间范围与语言；最长一年，与看板查询一致。
+func parseSupplierDashboardExportQuery(c *gin.Context) (supplierDashboardExportQuery, error) {
+	var q supplierDashboardExportQuery
+	startTimestamp, endTimestamp := parseSupplierDashboardTimeRange(c)
+	q.StartTs = startTimestamp
+	q.EndTs = endTimestamp
+	if q.EndTs-q.StartTs > supplierDashboardExportMaxRangeSec {
+		return q, fmt.Errorf("时间范围超出限制(最多一年)")
+	}
+	q.SupplierName = strings.TrimSpace(c.Query("supplier_name"))
+	q.Lang = c.Query("lang")
+	switch q.Lang {
+	case "zh-CN", "zh-TW", "en", "fr", "ru", "ja", "vi", "id", "ms", "th", "sw":
+		// ok
+	case "":
+		q.Lang = "zh-CN"
+	default:
+		q.Lang = "zh-CN"
+	}
+	return q, nil
+}
+
+// ExportSupplierDashboardUsage 导出供应商看板使用详情账单（模型汇总 + 逐条明细，含输入/输出 Token）。
+func ExportSupplierDashboardUsage(c *gin.Context) {
+	role := c.GetInt("role")
+	if role < common.RoleAdminUser {
+		user, err := model.GetUserById(c.GetInt("id"), false)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		if user == nil || user.SupplierID == 0 {
+			c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "需要供应商权限"})
+			return
+		}
+	}
+
+	scope, err := resolveSupplierDashboardScopeForRequest(c)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if len(scope.ChannelIDs) == 0 {
+		c.JSON(http.StatusForbidden, gin.H{"success": false, "message": "未找到可导出的供应商渠道"})
+		return
+	}
+
+	query, err := parseSupplierDashboardExportQuery(c)
+	if err != nil {
+		c.JSON(400, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	modelRows, err := model.AggregateSupplierUsageByModelWithTokenBreakdown(
+		query.StartTs, query.EndTs, scope.ChannelIDs,
+	)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	logTypes := model.ParseLogTypesQuery(c.Query("type"))
+	logs, _, err := model.GetSupplierChannelLogsForExport(
+		scope.ChannelIDs,
+		logTypes,
+		query.StartTs,
+		query.EndTs,
+		"",
+		"",
+		"",
+		"",
+		0,
+	)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	dict := resolveSupplierDashboardExportDict(query.Lang)
+	filename := fmt.Sprintf("supplier-usage-detail-%d.csv", time.Now().Unix())
+	streamSupplierDashboardUsageCSV(c, modelRows, logs, query, filename, dict)
 }
