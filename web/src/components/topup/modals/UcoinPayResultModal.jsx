@@ -32,8 +32,14 @@ const ROW_ACTIONS_STYLE = {
   alignItems: 'center',
   gap: 8,
   width: '100%',
-  overflowX: 'auto',
-  WebkitOverflowScrolling: 'touch',
+};
+
+const COMPACT_ACTION_BUTTON_STYLE = {
+  flex: '1 1 0',
+  minWidth: 0,
+  paddingLeft: 6,
+  paddingRight: 6,
+  fontSize: 12,
 };
 
 const WALLET_LINKS = {
@@ -183,7 +189,7 @@ const UcoinPayResultModal = ({ t, visible, onCancel, ucoinResult }) => {
                   onClick={() =>
                     window.open(WALLET_LINKS.binance.url, '_blank')
                   }
-                  style={{ flexShrink: 0 }}
+                  style={COMPACT_ACTION_BUTTON_STYLE}
                 >
                   {WALLET_LINKS.binance.name}
                 </Button>
@@ -195,7 +201,7 @@ const UcoinPayResultModal = ({ t, visible, onCancel, ucoinResult }) => {
                   onClick={() =>
                     window.open(WALLET_LINKS.metamask.url, '_blank')
                   }
-                  style={{ flexShrink: 0 }}
+                  style={COMPACT_ACTION_BUTTON_STYLE}
                 >
                   {WALLET_LINKS.metamask.name}
                 </Button>
@@ -207,7 +213,7 @@ const UcoinPayResultModal = ({ t, visible, onCancel, ucoinResult }) => {
                   onClick={() =>
                     window.open(WALLET_LINKS.eoraptor.url, '_blank')
                   }
-                  style={{ flexShrink: 0 }}
+                  style={COMPACT_ACTION_BUTTON_STYLE}
                 >
                   {WALLET_LINKS.eoraptor.name}
                 </Button>
@@ -231,7 +237,7 @@ const UcoinPayResultModal = ({ t, visible, onCancel, ucoinResult }) => {
                   onClick={() =>
                     window.open(EXCHANGE_LINKS.eoraptor.url, '_blank')
                   }
-                  style={{ flexShrink: 0 }}
+                  style={{ ...COMPACT_ACTION_BUTTON_STYLE, flex: '0 1 auto' }}
                 >
                   {EXCHANGE_LINKS.eoraptor.name}
                 </Button>

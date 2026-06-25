@@ -105,7 +105,7 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 
 	topUp := &model.TopUp{
 		UserId:        id,
-		Amount:        req.Amount,
+		Amount:        float64(req.Amount),
 		Money:         chargedMoney,
 		TradeNo:       referenceId,
 		PaymentMethod: PaymentMethodStripe,

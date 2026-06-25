@@ -78,7 +78,7 @@ func RequestUcoinPay(c *gin.Context) {
 	tradeNo := fmt.Sprintf("UCOIN-%d-%d-%s", id, time.Now().UnixMilli(), randstr.String(6))
 	topUp := &model.TopUp{
 		UserId:         id,
-		Amount:         req.Amount,
+		Amount:         float64(req.Amount),
 		Money:          float64(req.Amount),
 		TradeNo:        tradeNo,
 		DepositAddress: address,
@@ -146,7 +146,7 @@ func UcoinNotify(c *gin.Context) {
 	LockOrder(tradeNo)
 	defer UnlockOrder(tradeNo)
 
-	if err := model.RechargeUcoin(tradeNo); err != nil {
+	if err := model.RechargeUcoin(tradeNo, deposit.Amount); err != nil {
 		log.Printf("U币充值处理失败: %v, 订单: %s", err, tradeNo)
 		c.JSON(http.StatusOK, gin.H{"code": 10124, "msg": err.Error()})
 		return
