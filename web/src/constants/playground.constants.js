@@ -110,6 +110,7 @@ export const DEFAULT_CONFIG = {
     videoUrls: [''],
     selected_model_tags: [],
     image_size: '1280x720',
+    image_ratio: 'auto',
     image_n: 1,
     selected_image_pricing_tiers: [],
     image_quality: 'standard',
@@ -118,6 +119,7 @@ export const DEFAULT_CONFIG = {
     video_duration: 5,
     video_resolution_preset: '720p',
     video_orientation: 'landscape',
+    video_ratio: '16:9',
     selected_video_pricing_tiers: [],
     video_width: 1280,
     video_height: 720,
@@ -185,6 +187,16 @@ export const PLAYGROUND_IMAGE_SIZE_OPTIONS = [
   { label: '720p', value: '1280x720' },
   { label: '1080p', value: '1920x1080' },
   { label: '2K', value: '2560x1440' },
+];
+
+export const PLAYGROUND_ASPECT_RATIO_OPTIONS = [
+  { label: 'Auto', value: 'auto' },
+  { label: '16:9', value: '16:9' },
+  { label: '4:3', value: '4:3' },
+  { label: '1:1', value: '1:1' },
+  { label: '3:4', value: '3:4' },
+  { label: '9:16', value: '9:16' },
+  { label: '21:9', value: '21:9' },
 ];
 
 // ========== 存储键名 ==========

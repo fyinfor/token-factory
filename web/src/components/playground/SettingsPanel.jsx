@@ -35,7 +35,6 @@ import {
   Sliders,
   Sparkles,
   ToggleLeft,
-  Video as VideoIcon,
   Wand2,
   X,
 } from 'lucide-react';
@@ -48,7 +47,10 @@ import {
   renderGroupOption,
   selectFilter,
 } from '../../helpers';
-import { PLAYGROUND_VIDEO_DURATION_OPTIONS } from '../../constants/playground.constants';
+import {
+  PLAYGROUND_ASPECT_RATIO_OPTIONS,
+  PLAYGROUND_VIDEO_DURATION_OPTIONS,
+} from '../../constants/playground.constants';
 import { CHANNEL_TYPES_WITH_GENERATE_AUDIO } from '../../constants/channel.constants';
 import ConfigManager from './ConfigManager';
 import CustomRequestEditor from './CustomRequestEditor';
@@ -75,26 +77,6 @@ const getDefaultSection = (displayMode, customRequestMode) => {
     return SECTION_KEYS.PARAMS;
   }
   return SECTION_KEYS.BASIC;
-};
-
-const getModeIcon = (displayMode, size = 14) => {
-  if (displayMode === 'video') {
-    return <VideoIcon size={size} />;
-  }
-  if (displayMode === 'image') {
-    return <ImageIcon size={size} />;
-  }
-  return <Sparkles size={size} />;
-};
-
-const getModeLabel = (displayMode, t) => {
-  if (displayMode === 'video') {
-    return t('视频');
-  }
-  if (displayMode === 'image') {
-    return t('图片');
-  }
-  return t('文本');
 };
 
 const getImageResolutionLabel = (selectedImageSize) =>
@@ -162,6 +144,17 @@ const SectionTabButton = ({ active, icon, label, onClick }) => (
   </button>
 );
 
+const DisplayModeTab = ({ active, label, disabled, onClick }) => (
+  <button
+    type='button'
+    disabled={disabled}
+    onClick={onClick}
+    className={`playground-display-mode-tab ${active ? 'is-active' : ''}`}
+  >
+    {label}
+  </button>
+);
+
 const ResolutionBadge = ({ label, title }) => (
   <div className='mt-3 flex items-center justify-between rounded-lg bg-[var(--semi-color-fill-0)] px-3 py-2'>
     <Typography.Text className='text-xs text-[var(--semi-color-text-2)]'>
@@ -172,6 +165,52 @@ const ResolutionBadge = ({ label, title }) => (
     </Tag>
   </div>
 );
+
+const ASPECT_RATIO_ICON_MAX = 18;
+
+/** 在固定 18px 框内按比例计算预览矩形尺寸（竖屏按高度约束，横屏按宽度约束） */
+const getAspectRatioIconSize = (ratio) => {
+  const box = ASPECT_RATIO_ICON_MAX;
+  switch (ratio) {
+    case '16:9':
+      return { width: box, height: Math.round((box * 9) / 16) };
+    case '4:3':
+      return { width: box, height: Math.round((box * 3) / 4) };
+    case '1:1':
+      return { width: box, height: box };
+    case '3:4':
+      return { width: Math.round((box * 3) / 4), height: box };
+    case '9:16':
+      return { width: Math.round((box * 9) / 16), height: box };
+    case '21:9':
+      return { width: box, height: Math.round((box * 9) / 21) };
+    case 'auto':
+    default:
+      return { width: box, height: Math.round((box * 3) / 4) };
+  }
+};
+
+const AspectRatioIcon = ({ ratio }) => {
+  const size = getAspectRatioIconSize(ratio);
+  return (
+    <span className='playground-aspect-ratio-icon'>
+      <span style={{ width: size.width, height: size.height }} />
+    </span>
+  );
+};
+
+const buildAspectRatioOptions = (t, includeAuto = true) =>
+  PLAYGROUND_ASPECT_RATIO_OPTIONS.filter(
+    (option) => includeAuto || option.value !== 'auto',
+  ).map((option) => ({
+    value: option.value,
+    label: (
+      <span className='playground-aspect-ratio-option'>
+        <AspectRatioIcon ratio={option.value} />
+        <span>{option.value === 'auto' ? t('Auto') : option.label}</span>
+      </span>
+    ),
+  }));
 
 const EmptyState = ({ icon, text }) => (
   <div className='flex min-h-[220px] flex-col items-center justify-center rounded-lg bg-[var(--semi-color-fill-0)] px-4 text-center'>
@@ -244,6 +283,7 @@ const SettingsPanel = ({
   const selectedVideoSize = getPlaygroundVideoSizeForTier(
     selectedVideoResolution,
     inputs.video_orientation || 'landscape',
+    inputs.video_ratio || '',
   );
   const selectedVideoResolutionLabel =
     selectedVideoSize?.size || selectedVideoResolution;
@@ -259,9 +299,37 @@ const SettingsPanel = ({
   }, [preferredSection]);
 
   const sectionTabs = useMemo(() => buildSectionTabs(t), [t]);
+  const aspectRatioOptions = useMemo(() => buildAspectRatioOptions(t), [t]);
 
   const applyVideoResolutionPreset = (preset) => {
     onInputChange('video_resolution_preset', preset);
+  };
+
+  const applyVideoRatio = (ratio) => {
+    const nextRatio = ratio || 'auto';
+    if (nextRatio === 'auto') {
+      const nextOrientation = inputs.video_orientation || 'landscape';
+      const nextSize = getPlaygroundVideoSizeForTier(
+        selectedVideoResolution,
+        nextOrientation,
+        'auto',
+      );
+      onInputChange('video_ratio', 'auto');
+      onInputChange('video_width', nextSize.width);
+      onInputChange('video_height', nextSize.height);
+      return;
+    }
+    const nextOrientation =
+      nextRatio === '3:4' || nextRatio === '9:16' ? 'portrait' : 'landscape';
+    const nextSize = getPlaygroundVideoSizeForTier(
+      selectedVideoResolution,
+      nextOrientation,
+      nextRatio,
+    );
+    onInputChange('video_ratio', nextRatio);
+    onInputChange('video_orientation', nextOrientation);
+    onInputChange('video_width', nextSize.width);
+    onInputChange('video_height', nextSize.height);
   };
 
   const renderImageMaterial = () => (
@@ -276,6 +344,7 @@ const SettingsPanel = ({
         onImageEnabledChange={() => {}}
         allowToggle={false}
         disabled={customRequestMode}
+        channelType={selectedChannelType}
       />
     </Surface>
   );
@@ -293,6 +362,7 @@ const SettingsPanel = ({
           onImageEnabledChange={() => {}}
           allowToggle={false}
           disabled={customRequestMode}
+          channelType={selectedChannelType}
         />
         <VideoUrlInput
           videoUrls={inputs.videoUrls || ['']}
@@ -324,6 +394,19 @@ const SettingsPanel = ({
                   selectedImageSize}
               </span>
             )}
+          />
+        </Field>
+        <Field label={t('比例')} className='col-span-2'>
+          <RadioGroup
+            type='button'
+            buttonSize='small'
+            value={inputs.image_ratio || 'auto'}
+            options={aspectRatioOptions}
+            onChange={(e) =>
+              onInputChange('image_ratio', e?.target?.value || 'auto')
+            }
+            disabled={customRequestMode}
+            className='playground-aspect-ratio-group'
           />
         </Field>
         <Field label={t('生成数量')} className='col-span-2'>
@@ -377,22 +460,15 @@ const SettingsPanel = ({
             style={{ width: '100%' }}
           />
         </Field>
-        <Field label={t('画面方向')}>
+        <Field label={t('比例')} className='col-span-2'>
           <RadioGroup
             type='button'
             buttonSize='small'
-            value={inputs.video_orientation || 'landscape'}
-            options={[
-              { label: t('横屏'), value: 'landscape' },
-              { label: t('竖屏'), value: 'portrait' },
-            ]}
-            onChange={(e) =>
-              onInputChange(
-                'video_orientation',
-                e?.target?.value || 'landscape',
-              )
-            }
+            value={inputs.video_ratio || '16:9'}
+            options={aspectRatioOptions}
+            onChange={(e) => applyVideoRatio(e?.target?.value)}
             disabled={customRequestMode}
+            className='playground-aspect-ratio-group'
           />
         </Field>
         {showGenerateAudioSwitch && (
@@ -702,30 +778,20 @@ const SettingsPanel = ({
           )}
         </div>
 
-        <div className='rounded-lg bg-[var(--semi-color-fill-0)] p-2'>
-          <RadioGroup
-            type='button'
-            buttonSize='small'
-            value={displayMode}
-            options={[
-              { label: t('文本'), value: 'text' },
-              { label: t('图片'), value: 'image' },
-              { label: t('视频'), value: 'video' },
-            ]}
-            onChange={(e) => {
-              const nextMode = e?.target?.value || 'text';
-              onInputChange('display_mode', nextMode);
-              onInputChange('model_type', '');
-            }}
-            disabled={customRequestMode}
-            className='w-full'
-          />
-          <div className='mt-2 flex items-center gap-2 rounded-md bg-[var(--semi-color-bg-0)] px-2 py-1.5 text-[var(--semi-color-text-1)]'>
-            {getModeIcon(displayMode, 14)}
-            <Typography.Text className='truncate text-xs font-medium'>
-              {getModeLabel(displayMode, t)}
-            </Typography.Text>
-          </div>
+        <div className='playground-display-mode-tabs'>
+          {[
+            { label: t('文本'), value: 'text' },
+            { label: t('图片'), value: 'image' },
+            { label: t('视频'), value: 'video' },
+          ].map((mode) => (
+            <DisplayModeTab
+              key={mode.value}
+              label={mode.label}
+              active={displayMode === mode.value}
+              disabled={customRequestMode}
+              onClick={() => onInputChange('display_mode', mode.value)}
+            />
+          ))}
         </div>
       </div>
 

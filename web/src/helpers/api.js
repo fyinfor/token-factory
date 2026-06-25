@@ -195,6 +195,7 @@ export const buildApiPayload = (
     const videoSize = getPlaygroundVideoSizeForTier(
       selectedResolution,
       inputs.video_orientation || 'landscape',
+      inputs.video_ratio || '',
     );
     const width = videoSize.width;
     const height = videoSize.height;
@@ -211,6 +212,7 @@ export const buildApiPayload = (
       ),
     );
     const resolution = selectedResolution;
+    const explicitVideoRatio = String(inputs.video_ratio || '').trim();
     const ratioValue = width / height;
     const ratioOptions = [
       { value: '16:9', ratio: 16 / 9 },
@@ -223,6 +225,10 @@ export const buildApiPayload = (
     const matchedRatio = ratioOptions.find(
       (item) => Math.abs(ratioValue - item.ratio) < 0.03,
     );
+    const metadataRatio =
+      explicitVideoRatio === 'auto'
+        ? 'adaptive'
+        : explicitVideoRatio || matchedRatio?.value || 'adaptive';
     const prompt = getLastUserPrompt();
     const selectedChannelType = Number(inputs.selected_channel_type ?? 0);
     const supportsGenerateAudio =
@@ -241,7 +247,7 @@ export const buildApiPayload = (
       {
         duration: videoDuration,
         resolution,
-        ratio: matchedRatio?.value || 'adaptive',
+        ratio: metadataRatio,
         ...(supportsGenerateAudio ? { generate_audio: generateAudio } : {}),
         ...(videoMediaUrls.length > 0 ? { video_urls: videoMediaUrls } : {}),
         ...(audioMediaUrls.length > 0 ? { audio_urls: audioMediaUrls } : {}),
@@ -291,6 +297,9 @@ export const buildApiPayload = (
       n: Number(inputs.image_n) || 1,
       __endpoint: 'image',
     };
+    if (inputs.image_ratio && inputs.image_ratio !== 'auto') {
+      payload.ratio = inputs.image_ratio;
+    }
     return payload;
   }
   const payload = {
