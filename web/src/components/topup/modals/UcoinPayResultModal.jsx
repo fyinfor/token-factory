@@ -229,8 +229,15 @@ const UcoinPayResultModal = ({ visible, onCancel, ucoinResult }) => {
                   borderTop: '1px solid var(--semi-color-border)',
                 }}
               >
-                <Text strong style={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
-                  {t('交易推荐')}
+                <Text
+                  strong
+                  style={{
+                    flexShrink: 0,
+                    whiteSpace: 'nowrap',
+                    color: 'var(--semi-color-warning)',
+                  }}
+                >
+                  {t('推荐交易平台')}
                 </Text>
                 <Button
                   size='small'

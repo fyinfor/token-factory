@@ -5715,7 +5715,7 @@
         "请选择相同区块链网络转账，选错将导致资产无法到账。区块链交易需区块确认，预计 10 分钟内到账，请勿重复提交。": "Tafadhali hamisha kwenye mtandao sawa wa blockchain. Mtandao usio sahihi unaweza kusababisha upotevu wa kudumu wa fedha. Miamala ya blockchain inahitaji uthibitisho na kwa kawaida huwekwa ndani ya dakika 10. Usitume uhamisho wa mara mbili.",
         "最小充值金额": "Kiasi cha chini cha kuweka",
         "推荐钱包": "Mikoba inayopendekezwa",
-        "交易推荐": "Ubadilishaji unaopendekezwa",
+        "推荐交易平台": "Jukwaa la biashara linalopendekezwa",
         "未检测到浏览器钱包插件，可安装后使用，也可直接用上方二维码转账。": "Hakuna kiendelezi cha mkoba wa kivinjari kilichogunduliwa. Sakinisha kulipa kwenye kivinjari, au changanua msimbo wa QR hapo juu kuhamisha.",
         "或使用交易所/手机钱包扫码转账": "Au changanua msimbo wa QR kwa ubadilishaji au mkoba wa simu kuhamisha"
     },
