@@ -468,6 +468,18 @@ func SetApiRouter(router *gin.Engine) {
 			materialRoute.DELETE("/asset/:id", controller.DeleteMaterial)
 		}
 
+		// 个人素材接口：基于用户 API 令牌（sk-xxx）鉴权，自动识别归属用户，
+		// 仅允许操作当前令牌所属用户的个人素材，与 /api/material/* 互不干扰。
+		personalMaterialRoute := apiRouter.Group("/material/personal")
+		personalMaterialRoute.Use(middleware.TokenAuth())
+		{
+			personalMaterialRoute.POST("/upload", middleware.UploadRateLimit(), controller.UploadPersonalMaterial)
+			personalMaterialRoute.POST("/upload-url", middleware.UploadRateLimit(), controller.UploadPersonalMaterialByURL)
+			personalMaterialRoute.GET("/assets", controller.ListPersonalMaterialAssets)
+		personalMaterialRoute.DELETE("/asset/:asset_id", controller.DeletePersonalMaterial)
+		personalMaterialRoute.GET("/asset/:asset_id", controller.GetPersonalMaterial)
+		}
+
 		usageRoute := apiRouter.Group("/usage")
 		usageRoute.Use(middleware.CORS(), middleware.CriticalRateLimit())
 		{
