@@ -5637,6 +5637,7 @@
                 "route_policy.price": "单价",
                 "route_policy.price_per_1k": "{{symbol}}{{price}}/1K",
                 "route_policy.provider": "供应商",
+                "route_policy.route_slug": "路由编号",
                 "route_policy.raw_model": "原始模型名",
                 "route_policy.raw_model_placeholder": "例如 gpt-4o-2024-08-06",
                 "route_policy.retry": "重试",

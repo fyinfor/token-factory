@@ -5796,6 +5796,7 @@
                 "route_policy.price": "Unit price",
                 "route_policy.price_per_1k": "{{symbol}}{{price}}/1K",
                 "route_policy.provider": "Provider",
+                "route_policy.route_slug": "Route ID",
                 "route_policy.raw_model": "Raw model name",
                 "route_policy.raw_model_placeholder": "e.g. gpt-4o-2024-08-06",
                 "route_policy.retry": "Retry",

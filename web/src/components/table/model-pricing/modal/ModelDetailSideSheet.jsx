@@ -157,14 +157,14 @@ const ModelDetailSideSheet = ({
               vendorsMap={vendorsMap}
               t={t}
             />
-            <ModelEndpoints
-              modelData={modelData}
-              endpointMap={endpointMap}
-              t={t}
-            />
             <ModelPerfPanel
               modelName={modelData.model_name}
               perfSummary={perfMetricsMap[modelData.model_name]}
+              t={t}
+            />
+            <ModelEndpoints
+              modelData={modelData}
+              endpointMap={endpointMap}
               t={t}
             />
             <ModelChannelList
