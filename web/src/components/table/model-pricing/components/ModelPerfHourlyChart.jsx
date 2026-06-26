@@ -8,8 +8,10 @@ import {
   formatPerfLatency,
   formatPerfThroughput,
   formatPerfSuccessRate,
+  formatPerfCacheHitRate,
   formatPerfHourLabel,
   getHourlyBarColor,
+  getCacheHitRateColor,
 } from '../../../../helpers/perfMetrics';
 
 const TOOLTIP_STYLE = {
@@ -53,6 +55,15 @@ const buildHourlyTooltip = (point, t) => (
       <span style={{ color: TOOLTIP_STYLE.label }}>TPS</span>
       <span className='font-mono font-medium' style={{ color: TOOLTIP_STYLE.value }}>
         {formatPerfThroughput(point.avg_tps)}
+      </span>
+    </div>
+    <div className='flex justify-between gap-4'>
+      <span style={{ color: TOOLTIP_STYLE.label }}>Cache</span>
+      <span
+        className='font-mono font-medium'
+        style={{ color: getCacheHitRateColor(point.cache_hit_rate) }}
+      >
+        {formatPerfCacheHitRate(point.cache_hit_rate)}
       </span>
     </div>
     <div className='flex justify-between gap-4 mt-0.5'>
