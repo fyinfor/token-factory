@@ -706,8 +706,8 @@ const WeightChannelTable = ({
         <thead>
           <tr className='border-b dark:border-gray-600 text-left text-xs text-gray-500'>
             <th className='py-2 pr-2 w-9' />
-            <th className='py-2 pr-3'>{t('route_policy.channel_name')}</th>
             <th className='py-2 pr-3'>{t('route_policy.provider')}</th>
+            <th className='py-2 pr-3'>{t('route_policy.route_slug')}</th>
             <th className='py-2 pr-3'>{t('route_policy.user_weight')}</th>
             <th className='py-2 pr-3'>{t('route_policy.enabled')}</th>
             <th className='py-2 pr-3'>{t('route_policy.global_weight')}</th>
@@ -738,6 +738,11 @@ const WeightChannelTable = ({
     </div>
   );
 };
+
+const resolveSupplierLabel = (channel) =>
+  channel.supplier_alias?.trim() || channel.provider_slug?.trim() || '—';
+
+const resolveRouteSlugLabel = (channel) => channel.route_slug?.trim() || '—';
 
 // ChannelRow renders a single channel in the group table with editable weight/switch.
 const ChannelRow = ({
@@ -791,9 +796,10 @@ const ChannelRow = ({
     setRowSaving(false);
   };
 
-  const displayName = isAdmin ? channel.name : channel.masked_name;
   const dragEnabled = routeMode === 'weight' && onGripPointerDown;
   const disabled = saving || rowSaving;
+  const supplierLabel = resolveSupplierLabel(channel);
+  const routeSlugLabel = resolveRouteSlugLabel(channel);
 
   return (
     <tr
@@ -824,16 +830,11 @@ const ChannelRow = ({
         ) : null}
       </td>
       <td className='py-2 pr-3'>
-        <Typography.Text size='small'>{displayName}</Typography.Text>
-        {channel.route_slug && (
-          <Typography.Text size='small' type='tertiary' className='ml-1'>
-            /{channel.route_slug}
-          </Typography.Text>
-        )}
+        <Typography.Text size='small'>{supplierLabel}</Typography.Text>
       </td>
       <td className='py-2 pr-3'>
-        <Typography.Text size='small' type='tertiary'>
-          {channel.provider_slug}
+        <Typography.Text size='small' className='font-mono'>
+          {routeSlugLabel}
         </Typography.Text>
       </td>
       {routeMode === 'weight' && (
