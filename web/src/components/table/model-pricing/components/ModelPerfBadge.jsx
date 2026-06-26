@@ -8,6 +8,7 @@ import {
   formatPerfLatency,
   formatPerfThroughput,
   formatPerfSuccessRate,
+  formatPerfCacheHitRate,
   getSuccessRateColor,
 } from '../../../../helpers/perfMetrics';
 
@@ -30,6 +31,7 @@ const ModelPerfBadge = memo(({ perf, t, compact = false }) => {
             <div>E2E: {latencyLabel}</div>
             <div>TTFT: {ttftLabel}</div>
             <div>TPS: {tpsLabel}</div>
+            <div>Cache: {formatPerfCacheHitRate(perf.cache_hit_rate)}</div>
           </div>
         }
       >

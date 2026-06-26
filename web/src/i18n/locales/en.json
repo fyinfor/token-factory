@@ -2505,6 +2505,7 @@
         "E2E延迟说明": "End-to-end latency from request send to full response",
         "TTFT说明": "Time to first token — delay before the first output token arrives",
         "TPS说明": "Output throughput measured in tokens per second",
+        "缓存命中率说明": "Prompt cache hit rate: cached prompt tokens / total prompt tokens",
         "暂无该模型的性能数据": "No performance data for this model yet",
         "平台": "platform",
                 "平台价": "Platform price",

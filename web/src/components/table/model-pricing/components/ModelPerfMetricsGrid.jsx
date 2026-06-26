@@ -7,13 +7,15 @@ import {
   formatPerfLatency,
   formatPerfThroughput,
   formatPerfSuccessRate,
+  formatPerfCacheHitRate,
   getSuccessRateColor,
+  getCacheHitRateColor,
 } from '../../../../helpers/perfMetrics';
 import PerfMetricLabel from './PerfMetricLabel';
 
 const MetricItem = ({ label, value, valueColor, compact, showDivider }) => (
   <div
-    className='flex flex-col items-center justify-center min-w-0 flex-1 text-center relative'
+    className='flex flex-col items-center justify-center min-w-0 text-center relative px-1'
     style={
       showDivider
         ? { borderLeft: '1px solid var(--semi-color-border)' }
@@ -21,13 +23,13 @@ const MetricItem = ({ label, value, valueColor, compact, showDivider }) => (
     }
   >
     <div
-      className={`mb-1 truncate max-w-full px-1 ${compact ? 'text-[10px]' : 'text-xs'}`}
+      className={`mb-1 truncate max-w-full ${compact ? 'text-[10px]' : 'text-xs'}`}
       style={{ color: 'var(--semi-color-text-2)' }}
     >
       {label}
     </div>
     <div
-      className={`font-semibold font-mono tabular-nums truncate max-w-full px-1 ${
+      className={`font-semibold font-mono tabular-nums truncate max-w-full ${
         compact ? 'text-[13px] leading-tight' : 'text-base'
       }`}
       style={{ color: valueColor || 'var(--semi-color-text-0)' }}
@@ -65,6 +67,14 @@ const METRICS = [
     ),
     getValue: (perf) => formatPerfThroughput(perf.avg_tps),
   },
+  {
+    key: 'cache',
+    getLabel: (t) => (
+      <PerfMetricLabel label='Cache' hint={t('缓存命中率说明')} className='text-inherit' />
+    ),
+    getValue: (perf) => formatPerfCacheHitRate(perf.cache_hit_rate),
+    getColor: (perf) => getCacheHitRateColor(perf.cache_hit_rate),
+  },
 ];
 
 const ModelPerfMetricsGrid = memo(({ perf, t, compact = false }) => {
@@ -72,7 +82,7 @@ const ModelPerfMetricsGrid = memo(({ perf, t, compact = false }) => {
 
   return (
     <div
-      className='flex items-stretch'
+      className={`grid ${compact ? 'grid-cols-3 sm:grid-cols-5 gap-y-2' : 'grid-cols-2 sm:grid-cols-5 gap-3'}`}
       style={{
         paddingTop: compact ? 10 : 0,
         marginTop: compact ? 10 : 0,
@@ -83,7 +93,7 @@ const ModelPerfMetricsGrid = memo(({ perf, t, compact = false }) => {
         <MetricItem
           key={metric.key}
           compact={compact}
-          showDivider={index > 0}
+          showDivider={!compact && index > 0}
           label={metric.getLabel(t)}
           value={metric.getValue(perf)}
           valueColor={metric.getColor?.(perf)}
