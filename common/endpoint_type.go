@@ -55,7 +55,7 @@ func GetEndpointTypesByChannelTypeWithTags(channelType int, modelName string, mo
 		endpointTypes = []constant.EndpointType{constant.EndpointTypeTencentCloudVODVideo}
 	case constant.ChannelTypeTencentCloudImage:
 		endpointTypes = []constant.EndpointType{constant.EndpointTypeTencentCloudVODImage}
-	case constant.ChannelTypeOpenAIImage, constant.ChannelTypeAliImage:
+	case constant.ChannelTypeOpenAIImage, constant.ChannelTypeAliImage, constant.ChannelTypeHiDreamImage:
 		endpointTypes = []constant.EndpointType{constant.EndpointTypeImageGeneration}
 	case constant.ChannelTypeAliVideo:
 		endpointTypes = []constant.EndpointType{constant.EndpointTypeAliVideo}

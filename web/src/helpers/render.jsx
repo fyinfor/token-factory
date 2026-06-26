@@ -429,6 +429,7 @@ export function getChannelIcon(channelType) {
     case 58: // ZX-Videos
     case 59: // OpenAI 视频 (/videogenerator/generate)
     case 64: // OpenAI 图片
+    case 67: // 智象未来（图像）
       return <OpenAI size={iconSize} />;
     case 3: // Azure OpenAI
       return <AzureAI.Color size={iconSize} />;
