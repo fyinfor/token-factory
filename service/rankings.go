@@ -558,7 +558,7 @@ func rankingShare(value int64, total int64) float64 {
 	if total <= 0 || value <= 0 {
 		return 0
 	}
-	return roundRankingFloat(float64(value) / float64(total))
+	return roundRankingFloat((float64(value) / float64(total)) * 100)
 }
 
 func rankingGrowthPct(current int64, previous int64) float64 {

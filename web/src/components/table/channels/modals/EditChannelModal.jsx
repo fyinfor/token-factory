@@ -205,6 +205,8 @@ function type2secretPrompt(type) {
       return '请输入火山方舟-Seedance 2.0 上游 API Key（Bearer Token）';
     case 66:
       return '请输入阿里云 DashScope API Key（用于调用 multimodal-generation 文生图/图像编辑接口）';
+    case 67:
+      return '请输入智象未来 MaaS API Key（Bearer Token，用于调用 /v1/images/generations 接口）';
     default:
       return '请输入渠道对应的鉴权密钥';
   }
@@ -788,6 +790,19 @@ const EditChannelModal = (props) => {
             formApiRef.current.setValue(
               'base_url',
               'https://dashscope.aliyuncs.com',
+            );
+          }
+          break;
+        case 67:
+          localModels = getChannelModels(value);
+          setInputs((prevInputs) => ({
+            ...prevInputs,
+            base_url: 'https://maas.hidreamai.com/api/maas/gw',
+          }));
+          if (formApiRef.current) {
+            formApiRef.current.setValue(
+              'base_url',
+              'https://maas.hidreamai.com/api/maas/gw',
             );
           }
           break;
