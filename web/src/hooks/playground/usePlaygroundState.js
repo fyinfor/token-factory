@@ -259,10 +259,39 @@ export const usePlaygroundState = (userId) => {
   const chatRef = useRef(null);
   const saveConfigTimeoutRef = useRef(null);
   const saveMessagesTimeoutRef = useRef(null);
+  const modeModelCacheRef = useRef({
+    text: savedConfig.inputs?.model || DEFAULT_CONFIG.inputs.model,
+    image: savedConfig.inputs?.model || DEFAULT_CONFIG.inputs.model,
+    video: savedConfig.inputs?.model || DEFAULT_CONFIG.inputs.model,
+  });
 
   // 配置更新函数
   const handleInputChange = useCallback((name, value) => {
-    setInputs((prev) => ({ ...prev, [name]: value }));
+    setInputs((prev) => {
+      const currentMode = prev.display_mode || 'text';
+
+      if (name === 'model') {
+        modeModelCacheRef.current[currentMode] = value;
+        return { ...prev, model: value };
+      }
+
+      if (name === 'display_mode') {
+        const nextMode = value || 'text';
+        const nextCache = {
+          ...modeModelCacheRef.current,
+          [currentMode]: prev.model,
+        };
+        modeModelCacheRef.current = nextCache;
+
+        return {
+          ...prev,
+          display_mode: nextMode,
+          model: nextCache[nextMode] || prev.model,
+        };
+      }
+
+      return { ...prev, [name]: value };
+    });
   }, []);
 
   const handleParameterToggle = useCallback((paramName) => {

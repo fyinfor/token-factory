@@ -435,6 +435,7 @@ export function getChannelIcon(channelType) {
     case 55: // Sora
       return <Sora.Color size={iconSize} />;
     case 63: // 阿里云-视频
+    case 66: // 阿里通义千问（图像）
       return <Qwen.Color size={iconSize} />;
     case 2: // Midjourney Proxy
     case 5: // Midjourney Proxy Plus

@@ -152,12 +152,11 @@ func finalizeMaterialUpload(userId int, fallbackGroupId, assetId, name, fallback
 	return asset, nil
 }
 
-// materialAssetResponse 素材列表/上传返回结构。
+// materialAssetResponse 素材列表/上传返回结构（对外统一使用 asset_id，不暴露数据库真实主键）。
 type materialAssetResponse struct {
-	Id        int    `json:"id"`
 	AssetId   string `json:"asset_id"`
 	AssetURI  string `json:"asset_uri"` // asset://asset-xxxx，用于复制替换图片资源地址
-	GroupId   string `json:"group_id"`  // 上游分组 ID，前端展示并支持一键复制
+	GroupId   string `json:"group_id"`  // 上游分组 ID
 	Name      string `json:"name"`
 	AssetType string `json:"asset_type"`
 	URL       string `json:"url"`
@@ -167,7 +166,6 @@ type materialAssetResponse struct {
 
 func toMaterialAssetResponse(a *model.MaterialAsset) materialAssetResponse {
 	return materialAssetResponse{
-		Id:        a.Id,
 		AssetId:   a.AssetId,
 		AssetURI:  "asset://" + a.AssetId,
 		GroupId:   a.GroupId,
@@ -517,4 +515,332 @@ func DeleteMaterial(c *gin.Context) {
 	_ = service.CleanupLocalUploadByURL(asset.URL)
 
 	common.ApiSuccess(c, gin.H{"id": asset.AssetId})
+}
+
+// UploadPersonalMaterial 个人素材上传：基于 API 令牌（sk-xxx）鉴权，
+// 自动识别当前令牌归属用户，仅允许操作该用户的个人素材。
+// 复用现有素材上传的文件校验、存储、建组、上游 CreateAsset + GetAsset 落库逻辑。
+func UploadPersonalMaterial(c *gin.Context) {
+	if !operation_setting.IsSeedanceReady() {
+		common.ApiErrorMsg(c, "素材库功能未启用或基础地址未配置，请联系管理员")
+		return
+	}
+
+	// Token 鉴权中间件已写入当前用户 ID，直接读取即可隔离个人数据。
+	userId := c.GetInt("id")
+	if userId == 0 {
+		common.ApiErrorMsg(c, "未授权")
+		return
+	}
+	user, err := model.GetUserById(userId, false)
+	if err != nil || user == nil {
+		common.ApiErrorMsg(c, "用户无效")
+		return
+	}
+	if user.Role < common.FileUploadPermission {
+		common.ApiErrorMsg(c, "无上传权限")
+		return
+	}
+
+	// 协议同意校验（后端兜底）。
+	if strings.ToLower(strings.TrimSpace(c.PostForm("agreed"))) != "true" {
+		common.ApiErrorMsg(c, "请先阅读并勾选同意虚拟人像合规协议")
+		return
+	}
+
+	file, err := c.FormFile("file")
+	if err != nil {
+		common.ApiErrorMsg(c, "请选择文件字段 file")
+		return
+	}
+
+	// 扩展名校验：仅支持图片 / 视频，并据此标记 AssetType。
+	ext := strings.ToLower(filepath.Ext(file.Filename))
+	assetType, ok := detectMaterialAssetType(ext)
+	if !ok {
+		common.ApiErrorMsg(c, "仅支持上传图片或视频格式（图片：jpg/jpeg/png/webp/gif/bmp；视频：mp4/mov/webm/mkv/avi/m4v）")
+		return
+	}
+
+	// 大小校验：单个文件 < 配置上限（默认 10MB）。
+	maxSizeMB := operation_setting.GetSeedanceSetting().MaxImageSizeMB
+	if maxSizeMB <= 0 {
+		maxSizeMB = 10
+	}
+	if file.Size > int64(maxSizeMB)*1024*1024 {
+		common.ApiErrorMsg(c, "文件超过大小限制（最大 "+strconv.Itoa(maxSizeMB)+"MB）")
+		return
+	}
+
+	// 复用通用上传逻辑生成公网 URL（本地存储或 OSS）。
+	ossCfg := operation_setting.GetOssSetting()
+	if !ossCfg.Enabled {
+		common.ApiErrorMsg(c, "文件上传未启用，请先在运营设置中启用文件上传")
+		return
+	}
+	var publicURL string
+	if ossCfg.StorageType == operation_setting.StorageTypeLocal {
+		publicURL, err = service.LocalUploadMultipartFile(file, userId)
+	} else {
+		if !operation_setting.IsOssUploadReady() {
+			common.ApiErrorMsg(c, service.ErrOssNotConfigured.Error())
+			return
+		}
+		publicURL, err = service.OssUploadMultipartFile(file, userId)
+	}
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	// 复用自动建组逻辑：首次上传时自动创建用户专属素材分组。
+	group, err := ensureMaterialGroup(userId)
+	if err != nil {
+		common.ApiErrorMsg(c, "创建素材分组失败: "+err.Error())
+		return
+	}
+
+	// 复用素材库上传素材逻辑。
+	assetName := strings.TrimSpace(file.Filename)
+	if assetName == "" {
+		assetName = "portrait"
+	}
+	assetId, err := service.MaterialCreateAsset(group.GroupId, publicURL, assetName, assetType)
+	if err != nil {
+		common.ApiErrorMsg(c, "素材上传失败: "+err.Error())
+		return
+	}
+
+	// 复用上传后置逻辑：等待 GetAsset 拉取完整信息 -> 落库 -> 清理本地临时文件。
+	asset, err := finalizeMaterialUpload(userId, group.GroupId, assetId, assetName, assetType, publicURL, publicURL)
+	if err != nil {
+		common.ApiErrorMsg(c, err.Error())
+		return
+	}
+
+	common.ApiSuccess(c, toMaterialAssetResponse(asset))
+}
+
+// UploadPersonalMaterialByURL 个人素材在线链接上传：基于 API 令牌鉴权，复用现有 URL 上传核心逻辑。
+// 远端资源直接由素材库服务拉取，不产生本地临时文件。
+func UploadPersonalMaterialByURL(c *gin.Context) {
+	if !operation_setting.IsSeedanceReady() {
+		common.ApiErrorMsg(c, "素材库功能未启用或基础地址未配置，请联系管理员")
+		return
+	}
+
+	// Token 鉴权中间件已写入当前用户 ID。
+	userId := c.GetInt("id")
+	if userId == 0 {
+		common.ApiErrorMsg(c, "未授权")
+		return
+	}
+	user, err := model.GetUserById(userId, false)
+	if err != nil || user == nil {
+		common.ApiErrorMsg(c, "用户无效")
+		return
+	}
+	if user.Role < common.FileUploadPermission {
+		common.ApiErrorMsg(c, "无上传权限")
+		return
+	}
+
+	// 请求体：在线链接、可选名称、可选素材类型、合规协议同意标记。
+	var req struct {
+		URL       string `json:"url"`
+		Name      string `json:"name"`
+		AssetType string `json:"asset_type"`
+		Agreed    bool   `json:"agreed"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiErrorMsg(c, "请求参数解析失败")
+		return
+	}
+
+	// 协议同意校验（后端兜底）。
+	if !req.Agreed {
+		common.ApiErrorMsg(c, "请先阅读并勾选同意虚拟人像合规协议")
+		return
+	}
+
+	// 链接合法性校验：必须为 http(s) 绝对地址。
+	resourceURL := strings.TrimSpace(req.URL)
+	parsed, perr := url.ParseRequestURI(resourceURL)
+	if perr != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+		common.ApiErrorMsg(c, "请输入合法的在线资源链接（http/https）")
+		return
+	}
+
+	// 素材类型判定：优先按链接扩展名识别，其次采用前端传入的合法类型，默认 Image。
+	assetType := ""
+	if t, ok := detectMaterialAssetType(filepath.Ext(parsed.Path)); ok {
+		assetType = t
+	} else if service.IsValidMaterialAssetType(strings.TrimSpace(req.AssetType)) {
+		assetType = strings.TrimSpace(req.AssetType)
+	} else {
+		assetType = service.MaterialAssetTypeImage
+	}
+
+	// 复用自动建组逻辑。
+	group, err := ensureMaterialGroup(userId)
+	if err != nil {
+		common.ApiErrorMsg(c, "创建素材分组失败: "+err.Error())
+		return
+	}
+
+	// 素材名称：优先用户填写，其次取链接文件名，最后兜底。
+	assetName := strings.TrimSpace(req.Name)
+	if assetName == "" {
+		assetName = strings.TrimSpace(filepath.Base(parsed.Path))
+	}
+	if assetName == "" || assetName == "." || assetName == "/" {
+		assetName = "portrait"
+	}
+
+	// 复用素材库上传素材逻辑。
+	assetId, err := service.MaterialCreateAsset(group.GroupId, resourceURL, assetName, assetType)
+	if err != nil {
+		common.ApiErrorMsg(c, "素材上传失败: "+err.Error())
+		return
+	}
+
+	// 复用上传后置逻辑：等待 GetAsset 拉取完整信息 -> 落库（在线链接无本地临时文件，传空）。
+	asset, err := finalizeMaterialUpload(userId, group.GroupId, assetId, assetName, assetType, resourceURL, "")
+	if err != nil {
+		common.ApiErrorMsg(c, err.Error())
+		return
+	}
+
+	common.ApiSuccess(c, toMaterialAssetResponse(asset))
+}
+
+// ListPersonalMaterialAssets 个人素材列表查询：基于 API 令牌鉴权，复用现有列表查询核心逻辑。
+// 仅返回当前令牌归属用户的素材分页数据，自动隔离其他用户数据。
+func ListPersonalMaterialAssets(c *gin.Context) {
+	userId := c.GetInt("id")
+	if userId == 0 {
+		common.ApiErrorMsg(c, "未授权")
+		return
+	}
+
+	pageInfo := common.GetPageQuery(c)
+
+	// 复用自动建组逻辑以获取 group_id（首次调用会自动创建分组）。
+	group, err := ensureMaterialGroup(userId)
+	if err != nil {
+		common.ApiErrorMsg(c, "创建素材分组失败: "+err.Error())
+		return
+	}
+	groupId := ""
+	if group != nil {
+		groupId = group.GroupId
+	}
+
+	// 复用模型层分页查询。
+	assets, total, err := model.ListMaterialAssets(userId, groupId, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	// 复用列表页 best-effort 状态刷新逻辑（最多刷新 10 条，避免阻塞）。
+	refreshed := 0
+	items := make([]materialAssetResponse, 0, len(assets))
+	for _, a := range assets {
+		if materialAssetNeedsUpstreamRefresh(a) && refreshed < 10 && operation_setting.IsSeedanceReady() {
+			if info, e := service.MaterialGetAsset(a.AssetId); e == nil {
+				refreshMaterialAssetFromUpstream(a, info)
+			}
+			refreshed++
+		}
+		items = append(items, toMaterialAssetResponse(a))
+	}
+
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(items)
+	common.ApiSuccess(c, pageInfo)
+}
+
+// DeletePersonalMaterial 个人素材删除：基于 API 令牌鉴权，仅删除当前用户归属的素材。
+// 对外统一使用 asset_id 作为标识，不暴露数据库真实主键。
+// 复用现有删除逻辑：上游 DeleteAsset -> 本地记录删除 -> 清理本地临时文件。
+func DeletePersonalMaterial(c *gin.Context) {
+	userId := c.GetInt("id")
+	if userId == 0 {
+		common.ApiErrorMsg(c, "未授权")
+		return
+	}
+
+	assetId := strings.TrimSpace(c.Param("asset_id"))
+	if assetId == "" {
+		common.ApiErrorMsg(c, "素材 ID 无效")
+		return
+	}
+
+	// 校验素材归属当前令牌用户，防止越权操作其他用户素材。
+	asset, err := model.GetMaterialAssetByAssetIdAndUser(assetId, userId)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if asset == nil {
+		common.ApiErrorMsg(c, "素材不存在或无权操作")
+		return
+	}
+
+	// 复用上游素材删除逻辑。
+	if operation_setting.IsSeedanceReady() && strings.TrimSpace(asset.AssetId) != "" {
+		if _, e := service.MaterialDeleteAsset(asset.AssetId); e != nil {
+			common.ApiErrorMsg(c, "素材删除失败: "+e.Error())
+			return
+		}
+	}
+
+	// 复用本地记录删除逻辑（内部仍使用真实主键，对外不暴露）。
+	if err := model.DeleteMaterialAsset(asset.Id); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
+	// 复用本地临时文件清理逻辑（best-effort）。
+	_ = service.CleanupLocalUploadByURL(asset.URL)
+
+	common.ApiSuccess(c, gin.H{"asset_id": asset.AssetId})
+}
+
+// GetPersonalMaterial 个人素材详情查询：基于 API 令牌鉴权，仅查询当前用户归属素材。
+// 对外统一使用 asset_id 作为标识，不暴露数据库真实主键。
+// 若素材仍待同步或仍为本地临时 URL，执行一次 best-effort 上游刷新。
+func GetPersonalMaterial(c *gin.Context) {
+	userId := c.GetInt("id")
+	if userId == 0 {
+		common.ApiErrorMsg(c, "未授权")
+		return
+	}
+
+	assetId := strings.TrimSpace(c.Param("asset_id"))
+	if assetId == "" {
+		common.ApiErrorMsg(c, "素材 ID 无效")
+		return
+	}
+
+	// 校验素材归属当前令牌用户，隔离其他用户数据。
+	asset, err := model.GetMaterialAssetByAssetIdAndUser(assetId, userId)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if asset == nil {
+		common.ApiErrorMsg(c, "素材不存在或无权操作")
+		return
+	}
+
+	// 复用列表页的状态刷新逻辑：Pending 或本地 URL 时尝试向上游同步一次。
+	if materialAssetNeedsUpstreamRefresh(asset) && operation_setting.IsSeedanceReady() {
+		if info, e := service.MaterialGetAsset(asset.AssetId); e == nil {
+			refreshMaterialAssetFromUpstream(asset, info)
+		}
+	}
+
+	common.ApiSuccess(c, toMaterialAssetResponse(asset))
 }

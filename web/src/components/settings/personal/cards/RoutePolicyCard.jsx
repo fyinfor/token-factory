@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next';
 import { API, showSuccess, showError } from '../../../../helpers';
 import { getCurrencyConfig } from '../../../../helpers/render';
 import { UserContext } from '../../../../context/User';
+import { StatusContext } from '../../../../context/Status';
 
 const ROUTE_MODES = [
   { value: 'default', label_key: 'route_policy.mode_default' },
@@ -66,7 +67,10 @@ const fuzzyMatchModelQuery = (query, model, groupKey, displayName) => {
 const RoutePolicyCard = ({ t }) => {
   const { t: translate } = useTranslation();
   const [userState] = useContext(UserContext);
+  const [statusState] = useContext(StatusContext);
   const isAdmin = (userState?.user?.role || 0) >= 10;
+  const statusLoaded = statusState?.status != null;
+  const routeEnabled = statusState?.status?.tokenfactory_route_enabled === true;
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -124,8 +128,16 @@ const RoutePolicyCard = ({ t }) => {
   }, [tLocal]);
 
   useEffect(() => {
+    if (!statusLoaded) {
+      return;
+    }
+    if (!routeEnabled) {
+      setLoading(false);
+      setLoadError('');
+      return;
+    }
     fetchPolicy();
-  }, [fetchPolicy]);
+  }, [statusLoaded, routeEnabled, fetchPolicy]);
 
   const handleModeChange = async (newMode) => {
     const prevMode = mode;
@@ -347,6 +359,11 @@ const RoutePolicyCard = ({ t }) => {
     }, 120);
     window.setTimeout(() => setHighlightedGroupKey(''), 1800);
   };
+
+  // 路由能力关闭时不渲染该卡片（须放在所有 hooks 之后，避免 hooks 数量变化报错导致白屏）。
+  if (statusLoaded && !routeEnabled) {
+    return null;
+  }
 
   return (
     <Card className='!rounded-2xl shadow-sm border-0'>

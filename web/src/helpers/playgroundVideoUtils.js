@@ -8,6 +8,7 @@ License, or (at your option) any later version.
 */
 
 import { MESSAGE_ROLES } from '../constants/playground.constants';
+import { splitAssetUris } from './materialAssetUtils';
 
 export function isVideoURL(url) {
   return /\.(mp4|mov|avi|mkv|webm)(\?.*)?$/i.test(String(url || '').trim());
@@ -55,8 +56,14 @@ export function extractImageUrlsFromMessages(messages) {
  * 合并侧栏图片/视频地址与消息内图片。
  */
 export function collectVideoMediaUrls(sidebarImageUrls, sidebarVideoUrls, messages) {
+  // 【需求5】展开多素材拼接条目（支持分隔符拆分）
+  const expandedImageUrls = (sidebarImageUrls || []).flatMap((u) => {
+    const s = String(u || '').trim();
+    if (!s) return [];
+    return splitAssetUris(s);
+  });
   const fromImages = dedupeUrls([
-    ...(sidebarImageUrls || []).map((u) => String(u || '').trim()).filter(Boolean),
+    ...expandedImageUrls,
     ...extractImageUrlsFromMessages(messages),
   ]);
   const misclassifiedVideos = fromImages.filter((url) => isVideoURL(url));

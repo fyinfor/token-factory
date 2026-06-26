@@ -205,6 +205,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.GET("/supplier/models", controller.ListMySupplierModels)
 				selfRoute.GET("/supplier-dashboard", controller.GetSupplierDashboardData)
 				selfRoute.GET("/supplier-dashboard/model-users", controller.GetSupplierDashboardModelUserUsage)
+				selfRoute.GET("/supplier-dashboard/export", controller.ExportSupplierDashboardUsage)
 				selfRoute.GET("/supplier-channel-logs", controller.GetSupplierChannelLogs)
 				selfRoute.GET("/supplier-channel-logs/stat", controller.GetSupplierChannelLogsStat)
 				selfRoute.GET("/supplier-channel-logs/export", middleware.SearchRateLimit(), controller.ExportSupplierChannelLogs)
@@ -342,6 +343,9 @@ func SetApiRouter(router *gin.Engine) {
 			customOAuthRoute.PUT("/:id", controller.UpdateCustomOAuthProvider)
 			customOAuthRoute.DELETE("/:id", controller.DeleteCustomOAuthProvider)
 		}
+		apiRouter.GET("/perf_metrics", controller.GetPerfMetrics)
+		apiRouter.GET("/perf_metrics/summary", controller.GetPerfMetricsSummary)
+		apiRouter.GET("/rankings", controller.GetRankings)
 		performanceRoute := apiRouter.Group("/performance")
 		performanceRoute.Use(middleware.RootAuth())
 		{
@@ -466,6 +470,18 @@ func SetApiRouter(router *gin.Engine) {
 			materialRoute.POST("/upload", middleware.UploadRateLimit(), controller.UploadMaterial)
 			materialRoute.POST("/upload-url", middleware.UploadRateLimit(), controller.UploadMaterialByURL)
 			materialRoute.DELETE("/asset/:id", controller.DeleteMaterial)
+		}
+
+		// 个人素材接口：基于用户 API 令牌（sk-xxx）鉴权，自动识别归属用户，
+		// 仅允许操作当前令牌所属用户的个人素材，与 /api/material/* 互不干扰。
+		personalMaterialRoute := apiRouter.Group("/material/personal")
+		personalMaterialRoute.Use(middleware.TokenAuth())
+		{
+			personalMaterialRoute.POST("/upload", middleware.UploadRateLimit(), controller.UploadPersonalMaterial)
+			personalMaterialRoute.POST("/upload-url", middleware.UploadRateLimit(), controller.UploadPersonalMaterialByURL)
+			personalMaterialRoute.GET("/assets", controller.ListPersonalMaterialAssets)
+		personalMaterialRoute.DELETE("/asset/:asset_id", controller.DeletePersonalMaterial)
+		personalMaterialRoute.GET("/asset/:asset_id", controller.GetPersonalMaterial)
 		}
 
 		usageRoute := apiRouter.Group("/usage")

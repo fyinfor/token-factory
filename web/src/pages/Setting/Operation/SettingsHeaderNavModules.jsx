@@ -51,6 +51,7 @@ export default function SettingsHeaderNavModules(props) {
       requireAuth: false,
       blurPricing: false,
     },
+    rankings: true,
     docs: true,
     about: true,
   });
@@ -181,6 +182,7 @@ export default function SettingsHeaderNavModules(props) {
         requireAuth: false,
         blurPricing: false,
       },
+      rankings: true,
       docs: true,
       about: true,
     };
@@ -257,6 +259,9 @@ export default function SettingsHeaderNavModules(props) {
         if (typeof modules.pricing === 'object' && modules.pricing.blurPricing === undefined) {
           modules.pricing.blurPricing = false;
         }
+        if (modules.rankings === undefined) {
+          modules.rankings = true;
+        }
 
         setHeaderNavModules(modules);
       } catch (error) {
@@ -273,6 +278,7 @@ export default function SettingsHeaderNavModules(props) {
             requireAuth: false,
             blurPricing: false,
           },
+          rankings: true,
           docs: true,
           about: true,
         };
@@ -310,6 +316,11 @@ export default function SettingsHeaderNavModules(props) {
       description: t('模型定价，需要登录访问'),
       hasSubConfig: true,
       hasBlurPricing: true,
+    },
+    {
+      key: 'rankings',
+      title: t('模型排行榜'),
+      description: t('基于真实调用量的模型与供应商排行页'),
     },
     {
       key: 'docs',

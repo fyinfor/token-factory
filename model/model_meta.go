@@ -3,6 +3,8 @@ package model
 import (
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 
@@ -272,22 +274,128 @@ func GetExistingModelNames(names []string) ([]string, error) {
 	return result, err
 }
 
-// GetModelTagsByName 读取 models 表 tags 字段（精确 model_name 匹配；未找到返回空串）。
+var (
+	activeModelRowsCache     []Model
+	activeModelRowsCacheMu   sync.RWMutex
+	activeModelRowsCacheTime time.Time
+)
+
+const activeModelRowsCacheTTL = 30 * time.Second
+
+func modelNameRulePriority(rule int) int {
+	switch rule {
+	case NameRuleExact:
+		return 0
+	case NameRulePrefix:
+		return 1
+	case NameRuleSuffix:
+		return 2
+	case NameRuleContains:
+		return 3
+	default:
+		return 9
+	}
+}
+
+func modelNameMatchesRule(pattern, target string, rule int) bool {
+	switch rule {
+	case NameRuleExact:
+		return target == pattern
+	case NameRulePrefix:
+		return strings.HasPrefix(target, pattern)
+	case NameRuleSuffix:
+		return strings.HasSuffix(target, pattern)
+	case NameRuleContains:
+		return strings.Contains(target, pattern)
+	default:
+		return false
+	}
+}
+
+// resolveModelTagsFromRows 按 models 表 name_rule（精确/前缀/后缀/包含）解析模型标签。
+func resolveModelTagsFromRows(modelName string, rows []Model) string {
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" {
+		return ""
+	}
+	bestIdx := -1
+	for i := range rows {
+		row := rows[i]
+		if !modelNameMatchesRule(row.ModelName, modelName, row.NameRule) {
+			continue
+		}
+		if bestIdx < 0 {
+			bestIdx = i
+			continue
+		}
+		cur := rows[bestIdx]
+		curPriority := modelNameRulePriority(cur.NameRule)
+		newPriority := modelNameRulePriority(row.NameRule)
+		if newPriority < curPriority {
+			bestIdx = i
+			continue
+		}
+		if newPriority == curPriority && len(row.ModelName) > len(cur.ModelName) {
+			bestIdx = i
+		}
+	}
+	if bestIdx < 0 {
+		return ""
+	}
+	return strings.TrimSpace(rows[bestIdx].Tags)
+}
+
+func loadActiveModelRows() ([]Model, error) {
+	if DB == nil {
+		return nil, nil
+	}
+	var rows []Model
+	err := DB.Model(&Model{}).
+		Select("model_name", "tags", "name_rule").
+		Where("status = 1").
+		Find(&rows).Error
+	return rows, err
+}
+
+func getActiveModelRowsCached() []Model {
+	activeModelRowsCacheMu.RLock()
+	if time.Since(activeModelRowsCacheTime) < activeModelRowsCacheTTL && activeModelRowsCache != nil {
+		rows := activeModelRowsCache
+		activeModelRowsCacheMu.RUnlock()
+		return rows
+	}
+	activeModelRowsCacheMu.RUnlock()
+
+	activeModelRowsCacheMu.Lock()
+	defer activeModelRowsCacheMu.Unlock()
+	if time.Since(activeModelRowsCacheTime) < activeModelRowsCacheTTL && activeModelRowsCache != nil {
+		return activeModelRowsCache
+	}
+	rows, err := loadActiveModelRows()
+	if err != nil {
+		if activeModelRowsCache != nil {
+			return activeModelRowsCache
+		}
+		return nil
+	}
+	activeModelRowsCache = rows
+	activeModelRowsCacheTime = time.Now()
+	return rows
+}
+
+// InvalidateActiveModelRowsCache 在 models 元数据变更后使标签解析缓存失效。
+func InvalidateActiveModelRowsCache() {
+	activeModelRowsCacheMu.Lock()
+	defer activeModelRowsCacheMu.Unlock()
+	activeModelRowsCache = nil
+	activeModelRowsCacheTime = time.Time{}
+}
+
+// GetModelTagsByName 读取 models 表 tags 字段（支持 name_rule 匹配；未找到返回空串）。
 func GetModelTagsByName(modelName string) string {
 	modelName = strings.TrimSpace(modelName)
 	if modelName == "" || DB == nil {
 		return ""
 	}
-	var row struct {
-		Tags string `gorm:"column:tags"`
-	}
-	err := DB.Model(&Model{}).
-		Select("tags").
-		Where("model_name = ? AND status = 1", modelName).
-		Limit(1).
-		Scan(&row).Error
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(row.Tags)
+	return resolveModelTagsFromRows(modelName, getActiveModelRowsCached())
 }

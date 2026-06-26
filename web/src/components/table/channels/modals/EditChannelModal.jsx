@@ -203,6 +203,8 @@ function type2secretPrompt(type) {
       return '请输入阿里云 DashScope API Key（用于调用 video-synthesis 接口）';
     case 65:
       return '请输入火山方舟-Seedance 2.0 上游 API Key（Bearer Token）';
+    case 66:
+      return '请输入阿里云 DashScope API Key（用于调用 multimodal-generation 文生图/图像编辑接口）';
     default:
       return '请输入渠道对应的鉴权密钥';
   }
@@ -773,6 +775,19 @@ const EditChannelModal = (props) => {
             formApiRef.current.setValue(
               'base_url',
               'https://api.tokenspace.net.cn',
+            );
+          }
+          break;
+        case 66:
+          localModels = getChannelModels(value);
+          setInputs((prevInputs) => ({
+            ...prevInputs,
+            base_url: 'https://dashscope.aliyuncs.com',
+          }));
+          if (formApiRef.current) {
+            formApiRef.current.setValue(
+              'base_url',
+              'https://dashscope.aliyuncs.com',
             );
           }
           break;

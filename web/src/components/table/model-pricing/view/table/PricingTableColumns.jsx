@@ -27,6 +27,7 @@ import {
   getModelPriceItems,
   getLobeHubIcon,
 } from '../../../../../helpers';
+import ModelPerfBadge from '../../components/ModelPerfBadge';
 import {
   renderLimitedItems,
   renderDescription,
@@ -115,6 +116,7 @@ export const getPricingTableColumns = ({
   tokenUnit,
   displayPrice,
   showRatio,
+  perfMetricsMap = {},
 }) => {
   const isMobile = useIsMobile();
   const priceDataCache = new WeakMap();
@@ -150,11 +152,20 @@ export const getPricingTableColumns = ({
     title: t('模型名称'),
     dataIndex: 'model_name',
     render: (text, record, index) => {
-      return renderModelTag(text, {
-        onClick: () => {
-          copyText(text);
-        },
-      });
+      return (
+        <div className='flex items-center justify-between gap-2'>
+          {renderModelTag(text, {
+            onClick: () => {
+              copyText(text);
+            },
+          })}
+          <ModelPerfBadge
+            perf={perfMetricsMap[record.model_name]}
+            t={t}
+            compact
+          />
+        </div>
+      );
     },
     onFilter: (value, record) =>
       record.model_name.toLowerCase().includes(value.toLowerCase()),
