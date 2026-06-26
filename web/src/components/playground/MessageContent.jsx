@@ -44,6 +44,7 @@ import { listMaterialAssets } from '../../helpers/materialApi';
 import {
   buildAssetMap,
   isAssetUri,
+  resolveAssetUriToUrl,
   resolveAssetUrisInArray,
 } from '../../helpers/materialAssetUtils';
 
@@ -327,13 +328,22 @@ const MessageContent = ({
   const finalExtractedThinkingContent = currentExtractedThinkingContent;
   const rawGeneratedImages = resolveMessageGeneratedImages(message);
 
-  // 【需求6】预览图片地址 asset:// 协议转换
+  // 【需求6】预览图片地址 asset:// 协议转换（覆盖生成图 + 用户消息中的素材库图片）
   const [assetMap, setAssetMap] = React.useState(null);
   React.useEffect(() => {
-    // 仅当存在 asset:// 地址时加载素材映射
-    const hasAssetUri = rawGeneratedImages.some(
+    const hasAssetInGenerated = rawGeneratedImages.some(
       (src) => typeof src === 'string' && isAssetUri(src),
     );
+    let hasAssetInUserImages = false;
+    if (!hasAssetInGenerated && Array.isArray(message?.content)) {
+      hasAssetInUserImages = message.content.some(
+        (item) =>
+          item?.type === 'image_url' &&
+          typeof item?.image_url?.url === 'string' &&
+          isAssetUri(item.image_url.url),
+      );
+    }
+    const hasAssetUri = hasAssetInGenerated || hasAssetInUserImages;
     if (!hasAssetUri || assetMap !== null) return;
     listMaterialAssets({ page: 1, pageSize: 100 })
       .then((res) => {
@@ -342,7 +352,7 @@ const MessageContent = ({
         }
       })
       .catch(() => {});
-  }, [rawGeneratedImages, assetMap]);
+  }, [rawGeneratedImages, assetMap, message?.content]);
   const generatedImages = assetMap
     ? resolveAssetUrisInArray(rawGeneratedImages, assetMap)
     : rawGeneratedImages;
@@ -605,7 +615,10 @@ const MessageContent = ({
                       }}
                     >
                       {imageContents.map((imgItem, index) => {
-                        const imageUrl = imgItem.image_url.url;
+                        const rawImageUrl = imgItem.image_url.url;
+                        const imageUrl = assetMap
+                          ? resolveAssetUriToUrl(rawImageUrl, assetMap)
+                          : rawImageUrl;
                         const constrainedImageSize = getConstrainedMediaSize(
                           mergedMediaDimensions[imageUrl],
                           PLAYGROUND_MEDIA_MAX_WIDTH_PX,
