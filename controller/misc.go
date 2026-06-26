@@ -144,6 +144,10 @@ func GetStatus(c *gin.Context) {
 		"distributor_commission_mode":       common.DistributorCommissionMode,
 		"home_banner_slides":                strings.TrimSpace(common.Interface2String(common.OptionMap["HomeBannerSlides"])),
 		"home_banner_interval_sec":          strings.TrimSpace(common.Interface2String(common.OptionMap["HomeBannerIntervalSec"])),
+
+		// 路由能力开关（供前端隐藏 TokenFactory 智能路由 UI；实际选路见 middleware/distributor）
+		"tokenfactory_route_enabled": common.TokenFactoryRouteEnabled(),
+		"smart_router_enabled":       service.SmartRouterEnabled(),
 	}
 
 	// 根据启用状态注入可选内容
