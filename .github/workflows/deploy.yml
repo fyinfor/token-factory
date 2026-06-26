@@ -6,13 +6,14 @@ name: Deploy to Servers
 # 前提: 先手动运行 "编译 Docker 镜像 (GHCR)" 工作流构建并推送镜像
 #       镜像地址: ghcr.io/fyinfor/token-factory:latest
 #
-# 部署目标 (两台服务器 × 两个实例 = 4 个部署):
+# 部署目标 (两台服务器 × 多实例 = 5 个部署):
 #   服务器 A (43.132.223.112):
 #     ├─ /home/ubuntu/tokease-token-factory
 #     └─ /home/ubuntu/token-factory
 #   服务器 B (43.138.142.105):
 #     ├─ /home/ubuntu/tokease-token-factory
-#     └─ /home/ubuntu/token-factory
+#     ├─ /home/ubuntu/token-factory
+#     └─ /home/ubuntu/token-factory-123-tok
 #
 # Server A: pull → up → 健康检查 → 清理 → docker save → scp → Server B
 # Server B: docker load tar → up → 健康检查 → 清理
@@ -328,6 +329,51 @@ jobs:
 
             sudo docker compose ps
 
+      - name: Deploy token-factory-123-tok (43.138.142.105)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_B_HOST }}
+          port: ${{ secrets.SERVER_B_PORT || 22 }}
+          username: ${{ secrets.SERVER_B_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_105 }}
+          script: |
+            set -e
+            IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
+            DIR="/home/ubuntu/token-factory-123-tok"
+
+            echo "========================================="
+            echo "  服务器: ${{ secrets.SERVER_B_HOST }}"
+            echo "  实例:   token-factory-123-tok"
+            echo "  镜像:   $IMAGE"
+            echo "========================================="
+
+            cd "$DIR" || { echo "❌ 目录不存在: $DIR"; exit 1; }
+
+            echo "[1/2] Starting services (镜像已在 tokease 步骤加载)..."
+            sudo docker compose up -d
+
+            echo "[2/2] Health check..."
+            sleep 5
+            HEALTHY=false
+            for i in 1 2 3 4 5; do
+              if sudo docker compose ps --status running 2>/dev/null | grep -qE '(Up|running|healthy)'; then
+                HEALTHY=true
+                echo "✅ token-factory-123-tok 容器运行中 (第 ${i} 次检查)"
+                break
+              fi
+              echo "⏳ 等待... (${i}/5)"
+              sleep 10
+            done
+
+            if [ "$HEALTHY" = false ]; then
+              echo "⚠️ 健康检查未通过, 当前容器状态:"
+              sudo docker compose ps
+              sudo docker compose logs --tail=30
+              exit 1
+            fi
+
+            sudo docker compose ps
+
       - name: Cleanup old images (43.138.142.105)
         uses: appleboy/ssh-action@v1
         with:
@@ -353,4 +399,5 @@ jobs:
             echo "| 镜像 | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}\` |"
             echo "| 实例1 | tokease-token-factory |"
             echo "| 实例2 | token-factory |"
+            echo "| 实例3 | token-factory-123-tok |"
           } >> $GITHUB_STEP_SUMMARY
