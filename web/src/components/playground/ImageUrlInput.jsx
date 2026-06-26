@@ -30,7 +30,6 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { PLAYGROUND_MEDIA_MAX_COUNT } from '../../constants/playground.constants';
-import { CHANNEL_TYPE_SEEDANCE } from '../../constants/channel.constants';
 import { getMaterialAssetUri } from '../../helpers/materialAssetUtils';
 import MaterialSelectorModal from './MaterialSelectorModal';
 import { showError, showSuccess } from '../../helpers';
@@ -47,13 +46,12 @@ const ImageUrlInput = ({
   onImageUrlsChange,
   disabled = false,
   maxCount = PLAYGROUND_MEDIA_MAX_COUNT,
-  channelType,
+  showMaterialLibrary = false,
 }) => {
   const { t } = useTranslation();
   const [uploading, setUploading] = useState(false);
-  // 【需求3】素材库弹窗状态（仅渠道类型 === 65 时可用）
+  // 【需求3】素材库弹窗状态（由父组件通过 showMaterialLibrary 控制）
   const [materialModalVisible, setMaterialModalVisible] = useState(false);
-  const isSeedanceChannel = Number(channelType) === CHANNEL_TYPE_SEEDANCE;
 
   const filledCount = countFilledMediaUrls(imageUrls);
   const canAddMore = canAddMoreMediaUrls(imageUrls, maxCount);
@@ -169,7 +167,7 @@ const ImageUrlInput = ({
         </div>
         <div className='flex items-center gap-2'>
           {/* 【需求3】渠道权限显隐控制：仅火山方舟-Seedance 2.0 视频渠道显示素材库按钮 */}
-          {isSeedanceChannel && (
+          {showMaterialLibrary && (
             <Button
               icon={<Library size={14} />}
               size='small'
@@ -245,7 +243,7 @@ const ImageUrlInput = ({
         ))}
       </div>
       {/* 【需求4】素材库选择弹窗 */}
-      {isSeedanceChannel && (
+      {showMaterialLibrary && (
         <MaterialSelectorModal
           visible={materialModalVisible}
           onClose={() => setMaterialModalVisible(false)}
