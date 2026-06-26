@@ -3,12 +3,16 @@
 # 与仓库内 docker-compose.yml（本地开发 3000/5432/6379）的区别：
 #   - 应用 3020；Redis 6381；PostgreSQL 5434
 #   - 容器名 tokease-token-factory*；无 uploads 卷
-#   - 通过 external 网络 tokenfactoryops-prod_tf 连接 TokenFactory api gRPC
 #
-# 部署流程（需先启动 TokenFactory deploy 栈）:
-#   0. cp .env.prod.example .env  # 填写密码与 TOKENFACTORY_*（勿提交 .env）
+# 独立部署（默认，不依赖 TokenFactory gRPC）:
+#   0. cp .env.prod.example .env  # 填写密码；保持 TOKENFACTORY_ROUTE_ENABLED=false
 #   1. docker compose -f docker-compose.prod.yml up -d
 #   2. 浏览器打开 http://localhost:3020
+#
+# 接入 TokenFactory 智能路由（可选）:
+#   1. 先启动 TokenFactory deploy 栈
+#   2. .env 中 TOKENFACTORY_ROUTE_ENABLED=true 并填写 TOKENFACTORY_* 
+#   3. docker compose -f docker-compose.prod.yml -f docker-compose.prod.tokenfactory.yml up -d
 #
 # ⚠️  生产环境请修改所有默认密码
 
@@ -42,7 +46,6 @@ services:
       - postgres
     networks:
       - tokease-network
-      - tokenfactory-tf
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/api/status | grep -o '\"success\":\\s*true' || exit 1"]
       interval: 30s
@@ -83,10 +86,6 @@ services:
 networks:
   tokease-network:
     driver: bridge
-
-  tokenfactory-tf:
-    external: true
-    name: tokenfactoryops-prod_tf
 
 volumes:
   tokease_token_factory_postgres_data:
