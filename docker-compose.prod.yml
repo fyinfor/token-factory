@@ -1,0 +1,92 @@
+# token-factory 生产编排（与线上 43.132.223.112:/home/ubuntu/tokease-token-factory 同步）
+#
+# 与仓库内 docker-compose.yml（本地开发 3000/5432/6379）的区别：
+#   - 应用 3020；Redis 6381；PostgreSQL 5434
+#   - 容器名 tokease-token-factory*；无 uploads 卷
+#
+# 独立部署（默认，不依赖 TokenFactory gRPC）:
+#   0. cp .env.prod.example .env  # 填写密码；保持 TOKENFACTORY_ROUTE_ENABLED=false
+#   1. docker compose -f docker-compose.prod.yml up -d
+#   2. 浏览器打开 http://localhost:3020
+#
+# 接入 TokenFactory 智能路由（可选）:
+#   1. 先启动 TokenFactory deploy 栈
+#   2. .env 中 TOKENFACTORY_ROUTE_ENABLED=true 并填写 TOKENFACTORY_* 
+#   3. docker compose -f docker-compose.prod.yml -f docker-compose.prod.tokenfactory.yml up -d
+#
+# ⚠️  生产环境请修改所有默认密码
+
+services:
+  token-factory:
+    image: ghcr.io/fyinfor/token-factory:latest
+    container_name: tokease-token-factory
+    restart: always
+    command: --log-dir /app/logs
+    ports:
+      - "3020:3000"
+    volumes:
+      - ./data:/data
+      - ./logs:/app/logs
+    environment:
+      # 若 POSTGRES_PASSWORD 含 @ : # 等字符，请在 .env 中设置 SQL_DSN（密码需 URL 编码，@ -> %40）
+      - SQL_DSN=${SQL_DSN:-postgresql://${POSTGRES_USER:-root}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-token_factory}}
+      - REDIS_CONN_STRING=redis://redis
+      - TZ=Asia/Shanghai
+      - ERROR_LOG_ENABLED=true
+      - BATCH_UPDATE_ENABLED=true
+      - SESSION_SECRET=fb7918be2d9bda0ac754004f27c7ec2c
+
+      - TOKENFACTORY_ROUTE_ENABLED=${TOKENFACTORY_ROUTE_ENABLED:-false}
+      - TOKENFACTORY_GRPC_ENDPOINT=${TOKENFACTORY_GRPC_ENDPOINT:-api:9000}
+      - TOKENFACTORY_JWT_SECRET=${TOKENFACTORY_JWT_SECRET:-}
+      - TOKENFACTORY_SITE_KEY=${TOKENFACTORY_SITE_KEY:-default}
+      - TOKENFACTORY_ROUTE_STICKY_TTL_SECONDS=${TOKENFACTORY_ROUTE_STICKY_TTL_SECONDS:-1800}
+    depends_on:
+      - redis
+      - postgres
+    networks:
+      - tokease-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://localhost:3000/api/status | grep -o '\"success\":\\s*true' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redis:
+    image: redis:latest
+    container_name: tokease-token-factory-redis
+    restart: always
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+    volumes:
+      - ./redis_data:/data
+    networks:
+      - tokease-network
+    ports:
+      - "6381:6379"
+
+  postgres:
+    image: postgres:15
+    container_name: tokease-token-factory-postgres
+    restart: always
+    environment:
+      TZ: Asia/Hong_Kong
+      POSTGRES_USER: ${POSTGRES_USER:-root}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 中设置 POSTGRES_PASSWORD，可参考 .env.example}
+      POSTGRES_DB: ${POSTGRES_DB:-token_factory}
+    volumes:
+      - ./postgres_data:/var/lib/postgresql/data
+    networks:
+      - tokease-network
+    ports:
+      - "5434:5432"
+
+networks:
+  tokease-network:
+    driver: bridge
+
+volumes:
+  tokease_token_factory_postgres_data:
+    driver: local

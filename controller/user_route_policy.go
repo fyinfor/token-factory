@@ -15,9 +15,25 @@ import (
 //
 // 代理到 TokenFactory gRPC 服务，供 token-factory 用户控制台调用。
 // 所有 API 从 JWT session 获取当前用户 ID 和角色。
+// TOKENFACTORY_ROUTE_ENABLED=false 时返回 404，前端据此隐藏相关 UI。
+
+func rejectTokenFactoryRouteDisabled(c *gin.Context) bool {
+	if common.TokenFactoryRouteEnabled() {
+		return false
+	}
+	c.JSON(http.StatusNotFound, gin.H{
+		"success":         false,
+		"error":           "TokenFactory smart routing is not enabled on this site",
+		"feature_enabled": false,
+	})
+	return true
+}
 
 // UserGetRoutePolicy 获取当前用户的路由策略完整视图。
 func UserGetRoutePolicy(c *gin.Context) {
+	if rejectTokenFactoryRouteDisabled(c) {
+		return
+	}
 	userID := c.GetInt("id")
 	userRole := c.GetInt("role")
 	if userID <= 0 {
@@ -49,6 +65,9 @@ func UserGetRoutePolicy(c *gin.Context) {
 
 // UserUpdateRouteMode 更新当前用户的路由模式。
 func UserUpdateRouteMode(c *gin.Context) {
+	if rejectTokenFactoryRouteDisabled(c) {
+		return
+	}
 	userID := c.GetInt("id")
 	userRole := c.GetInt("role")
 	if userID <= 0 {
@@ -95,6 +114,9 @@ func UserUpdateRouteMode(c *gin.Context) {
 
 // UserUpsertRouteWeight 创建或更新用户级归类权重。
 func UserUpsertRouteWeight(c *gin.Context) {
+	if rejectTokenFactoryRouteDisabled(c) {
+		return
+	}
 	userID := c.GetInt("id")
 	userRole := c.GetInt("role")
 	if userID <= 0 {
@@ -145,6 +167,9 @@ func UserUpsertRouteWeight(c *gin.Context) {
 
 // UserDeleteRouteWeight 删除用户级归类权重。
 func UserDeleteRouteWeight(c *gin.Context) {
+	if rejectTokenFactoryRouteDisabled(c) {
+		return
+	}
 	userID := c.GetInt("id")
 	userRole := c.GetInt("role")
 	if userID <= 0 {
@@ -175,6 +200,9 @@ func UserDeleteRouteWeight(c *gin.Context) {
 
 // UserUpsertRouteOverride 创建或更新用户级模型归类覆盖。
 func UserUpsertRouteOverride(c *gin.Context) {
+	if rejectTokenFactoryRouteDisabled(c) {
+		return
+	}
 	userID := c.GetInt("id")
 	userRole := c.GetInt("role")
 	if userID <= 0 {
@@ -218,6 +246,9 @@ func UserUpsertRouteOverride(c *gin.Context) {
 
 // UserDeleteRouteOverride 删除用户级模型归类覆盖。
 func UserDeleteRouteOverride(c *gin.Context) {
+	if rejectTokenFactoryRouteDisabled(c) {
+		return
+	}
 	userID := c.GetInt("id")
 	userRole := c.GetInt("role")
 	if userID <= 0 {

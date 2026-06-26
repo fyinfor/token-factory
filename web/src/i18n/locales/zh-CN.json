@@ -4946,6 +4946,7 @@
         "E2E延迟说明": "从请求发起到完整响应返回的端到端总延迟",
         "TTFT说明": "首字时间：从请求发出到首个输出 token 返回的延迟",
         "TPS说明": "输出吞吐量：每秒生成的 token 数量",
+        "缓存命中率说明": "Prompt 缓存命中率：缓存命中的输入 token 数 / 输入 token 总数",
         "暂无该模型的性能数据": "暂无该模型的性能数据",
         "运营设置": "运营设置",
                 "再次输入部署名称": "再次输入部署名称",
@@ -5636,6 +5637,7 @@
                 "route_policy.price": "单价",
                 "route_policy.price_per_1k": "{{symbol}}{{price}}/1K",
                 "route_policy.provider": "供应商",
+                "route_policy.route_slug": "路由编号",
                 "route_policy.raw_model": "原始模型名",
                 "route_policy.raw_model_placeholder": "例如 gpt-4o-2024-08-06",
                 "route_policy.retry": "重试",
@@ -5796,5 +5798,6 @@
         "已选择 {{count}} 个素材": "已选择 {{count}} 个素材",
         "确认选择": "确认选择",
         "素材库": "素材库",
-        "图片加载失败": "图片加载失败"
+        "图片加载失败": "图片加载失败",
+        "仅支持Seedance2.0模型": "仅支持Seedance2.0模型"
 }

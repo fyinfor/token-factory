@@ -341,7 +341,6 @@ const SettingsPanel = ({
         onImageEnabledChange={() => {}}
         allowToggle={false}
         disabled={customRequestMode}
-        channelType={selectedChannelType}
       />
     </Surface>
   );
@@ -359,7 +358,7 @@ const SettingsPanel = ({
           onImageEnabledChange={() => {}}
           allowToggle={false}
           disabled={customRequestMode}
-          channelType={selectedChannelType}
+          showMaterialLibrary={true}
         />
         <VideoUrlInput
           videoUrls={inputs.videoUrls || ['']}

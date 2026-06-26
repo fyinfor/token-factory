@@ -133,7 +133,7 @@ const MaterialSelectorModal = ({
     if (!visible) return;
     const existingIdSet = new Set(
       (Array.isArray(existingAssets) ? existingAssets : [])
-        .map((a) => String(a?.id || ''))
+        .map((a) => String(a?.asset_id || ''))
         .filter(Boolean),
     );
     setSelectedIds(existingIdSet);
@@ -147,7 +147,7 @@ const MaterialSelectorModal = ({
 
   // 【需求4】全选/取消全选
   const allSelectableIds = useMemo(
-    () => selectableAssets.map((a) => String(a.id)),
+    () => selectableAssets.map((a) => String(a.asset_id)),
     [selectableAssets],
   );
   const isAllSelected =
@@ -204,7 +204,7 @@ const MaterialSelectorModal = ({
 
   // 【需求4】确认选择后回填、关闭弹窗、清空缓存
   const handleConfirm = useCallback(() => {
-    const selected = assets.filter((a) => selectedIds.has(String(a.id)));
+    const selected = assets.filter((a) => selectedIds.has(String(a.asset_id)));
     if (onConfirm) {
       onConfirm(selected);
     }
@@ -213,7 +213,7 @@ const MaterialSelectorModal = ({
 
   // 渲染单个素材卡片
   const renderAssetCard = (asset) => {
-    const assetId = String(asset.id);
+    const assetId = String(asset.asset_id);
     const isSelected = selectedIds.has(assetId);
     const typeMeta = getAssetTypeMeta(asset.asset_type, t);
     const statusMeta = getStatusMeta(asset.status);
@@ -413,14 +413,19 @@ const MaterialSelectorModal = ({
         >
           {t('全选')}
         </Checkbox>
-        <Button
-          icon={<IconRefresh />}
-          size='small'
-          onClick={loadAssets}
-          loading={loading}
-        >
-          {t('刷新')}
-        </Button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <Typography.Text type='tertiary' size='small'>
+            {t('仅支持Seedance2.0模型')}
+          </Typography.Text>
+          <Button
+            icon={<IconRefresh />}
+            size='small'
+            onClick={loadAssets}
+            loading={loading}
+          >
+            {t('刷新')}
+          </Button>
+        </div>
       </div>
 
       {/* 【需求1/2】素材列表 / 空状态 */}

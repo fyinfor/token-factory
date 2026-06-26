@@ -1,0 +1,19 @@
+# 可选叠加：接入独立 TokenFactory 部署栈的 gRPC（与 deploy 栈同机时使用）
+#
+# 用法（需先启动 TokenFactory deploy 栈并创建 external 网络 tokenfactoryops-prod_tf）:
+#   docker compose -f docker-compose.prod.yml -f docker-compose.prod.tokenfactory.yml up -d
+#
+# .env 中须设置:
+#   TOKENFACTORY_ROUTE_ENABLED=true
+#   TOKENFACTORY_GRPC_ENDPOINT=api:9000
+#   TOKENFACTORY_JWT_SECRET=<与 TokenFactory deploy/.env 中 JWT_SECRET 一致>
+
+services:
+  token-factory:
+    networks:
+      - tokenfactory-tf
+
+networks:
+  tokenfactory-tf:
+    external: true
+    name: tokenfactoryops-prod_tf

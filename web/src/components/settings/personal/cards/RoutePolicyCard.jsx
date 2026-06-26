@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next';
 import { API, showSuccess, showError } from '../../../../helpers';
 import { getCurrencyConfig } from '../../../../helpers/render';
 import { UserContext } from '../../../../context/User';
+import { StatusContext } from '../../../../context/Status';
 
 const ROUTE_MODES = [
   { value: 'default', label_key: 'route_policy.mode_default' },
@@ -66,7 +67,10 @@ const fuzzyMatchModelQuery = (query, model, groupKey, displayName) => {
 const RoutePolicyCard = ({ t }) => {
   const { t: translate } = useTranslation();
   const [userState] = useContext(UserContext);
+  const [statusState] = useContext(StatusContext);
   const isAdmin = (userState?.user?.role || 0) >= 10;
+  const statusLoaded = statusState?.status != null;
+  const routeEnabled = statusState?.status?.tokenfactory_route_enabled === true;
 
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -124,8 +128,16 @@ const RoutePolicyCard = ({ t }) => {
   }, [tLocal]);
 
   useEffect(() => {
+    if (!statusLoaded) {
+      return;
+    }
+    if (!routeEnabled) {
+      setLoading(false);
+      setLoadError('');
+      return;
+    }
     fetchPolicy();
-  }, [fetchPolicy]);
+  }, [statusLoaded, routeEnabled, fetchPolicy]);
 
   const handleModeChange = async (newMode) => {
     const prevMode = mode;
@@ -347,6 +359,11 @@ const RoutePolicyCard = ({ t }) => {
     }, 120);
     window.setTimeout(() => setHighlightedGroupKey(''), 1800);
   };
+
+  // 路由能力关闭时不渲染该卡片（须放在所有 hooks 之后，避免 hooks 数量变化报错导致白屏）。
+  if (statusLoaded && !routeEnabled) {
+    return null;
+  }
 
   return (
     <Card className='!rounded-2xl shadow-sm border-0'>
@@ -689,8 +706,8 @@ const WeightChannelTable = ({
         <thead>
           <tr className='border-b dark:border-gray-600 text-left text-xs text-gray-500'>
             <th className='py-2 pr-2 w-9' />
-            <th className='py-2 pr-3'>{t('route_policy.channel_name')}</th>
             <th className='py-2 pr-3'>{t('route_policy.provider')}</th>
+            <th className='py-2 pr-3'>{t('route_policy.route_slug')}</th>
             <th className='py-2 pr-3'>{t('route_policy.user_weight')}</th>
             <th className='py-2 pr-3'>{t('route_policy.enabled')}</th>
             <th className='py-2 pr-3'>{t('route_policy.global_weight')}</th>
@@ -721,6 +738,11 @@ const WeightChannelTable = ({
     </div>
   );
 };
+
+const resolveSupplierLabel = (channel) =>
+  channel.supplier_alias?.trim() || channel.provider_slug?.trim() || '—';
+
+const resolveRouteSlugLabel = (channel) => channel.route_slug?.trim() || '—';
 
 // ChannelRow renders a single channel in the group table with editable weight/switch.
 const ChannelRow = ({
@@ -774,9 +796,10 @@ const ChannelRow = ({
     setRowSaving(false);
   };
 
-  const displayName = isAdmin ? channel.name : channel.masked_name;
   const dragEnabled = routeMode === 'weight' && onGripPointerDown;
   const disabled = saving || rowSaving;
+  const supplierLabel = resolveSupplierLabel(channel);
+  const routeSlugLabel = resolveRouteSlugLabel(channel);
 
   return (
     <tr
@@ -807,16 +830,11 @@ const ChannelRow = ({
         ) : null}
       </td>
       <td className='py-2 pr-3'>
-        <Typography.Text size='small'>{displayName}</Typography.Text>
-        {channel.route_slug && (
-          <Typography.Text size='small' type='tertiary' className='ml-1'>
-            /{channel.route_slug}
-          </Typography.Text>
-        )}
+        <Typography.Text size='small'>{supplierLabel}</Typography.Text>
       </td>
       <td className='py-2 pr-3'>
-        <Typography.Text size='small' type='tertiary'>
-          {channel.provider_slug}
+        <Typography.Text size='small' className='font-mono'>
+          {routeSlugLabel}
         </Typography.Text>
       </td>
       {routeMode === 'weight' && (

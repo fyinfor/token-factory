@@ -2505,6 +2505,7 @@
         "E2E延迟说明": "End-to-end latency from request send to full response",
         "TTFT说明": "Time to first token — delay before the first output token arrives",
         "TPS说明": "Output throughput measured in tokens per second",
+        "缓存命中率说明": "Prompt cache hit rate: cached prompt tokens / total prompt tokens",
         "暂无该模型的性能数据": "No performance data for this model yet",
         "平台": "platform",
                 "平台价": "Platform price",
@@ -5795,6 +5796,7 @@
                 "route_policy.price": "Unit price",
                 "route_policy.price_per_1k": "{{symbol}}{{price}}/1K",
                 "route_policy.provider": "Provider",
+                "route_policy.route_slug": "Route ID",
                 "route_policy.raw_model": "Raw model name",
                 "route_policy.raw_model_placeholder": "e.g. gpt-4o-2024-08-06",
                 "route_policy.retry": "Retry",
@@ -5939,5 +5941,6 @@
         "已选择 {{count}} 个素材": "{{count}} materials selected",
         "确认选择": "Confirm Selection",
         "素材库": "Material Library",
-        "图片加载失败": "Image failed to load"
+        "图片加载失败": "Image failed to load",
+        "仅支持Seedance2.0模型": "Only supports Seedance 2.0 model"
 }
