@@ -534,7 +534,7 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 }
 
 // RechargeUcoin 按 U币（虚拟币）回调完成充值，幂等处理。
-// 充值金额以回调中的实际 amount 为准，且按 1 U = 1 USD 换算额度。
+// U币与美元固定 1:1：回调 amount 即为到账美元额度（如 0.3 U => $0.3）。
 func RechargeUcoin(tradeNo string, actualAmount string) (err error) {
 	if tradeNo == "" {
 		return errors.New("未提供支付单号")

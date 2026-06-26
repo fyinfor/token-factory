@@ -140,6 +140,12 @@ const UcoinPayResultModal = ({ visible, onCancel, ucoinResult }) => {
                 {t('最小充值金额')}: {ucoinResult.min_topup}
               </p>
             )}
+            {ucoinResult.amount != null && (
+              <p style={FIELD_TEXT_STYLE}>
+                {t('转账金额')}: {ucoinResult.amount}{' '}
+                {ucoinResult.currency || ucoinResult.coin || ''}
+              </p>
+            )}
           </div>
 
           <div style={{ background: '#fff', padding: 12, borderRadius: 8 }}>
