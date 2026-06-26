@@ -5939,5 +5939,6 @@
         "已选择 {{count}} 个素材": "{{count}} materials selected",
         "确认选择": "Confirm Selection",
         "素材库": "Material Library",
-        "图片加载失败": "Image failed to load"
+        "图片加载失败": "Image failed to load",
+        "仅支持Seedance2.0模型": "Only supports Seedance 2.0 model"
 }
