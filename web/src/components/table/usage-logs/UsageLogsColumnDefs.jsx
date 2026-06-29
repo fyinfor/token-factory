@@ -855,10 +855,12 @@ export const getLogsColumns = ({
         }
         const other = getLogOther(record.other);
         const isSubscription = other?.billing_source === 'subscription';
+        const quotaDigits =
+          other?.billing_mode === 'video_token_output' ? 6 : 2;
         if (isSubscription) {
           // Subscription billed: show only tag (no $0), but keep tooltip for equivalent cost.
           return (
-            <Tooltip content={`${t('由订阅抵扣')}：${renderQuota(text)}`}>
+            <Tooltip content={`${t('由订阅抵扣')}：${renderQuota(text, quotaDigits)}`}>
               <span>{renderBillingTag(record, t)}</span>
             </Tooltip>
           );
@@ -868,11 +870,11 @@ export const getLogsColumns = ({
           return (
             <span>
               <span className='text-gray-500'>{phaseLabel} </span>
-              {renderQuota(text)}
+              {renderQuota(text, quotaDigits)}
             </span>
           );
         }
-        return <>{renderQuota(text)}</>;
+        return <>{renderQuota(text, quotaDigits)}</>;
       },
     },
     {

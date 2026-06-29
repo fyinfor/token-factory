@@ -934,50 +934,6 @@ const ModelChannelList = ({
         }
       }
 
-      const chVideoRatio = pickChannelScopedModelFloat(
-        channelVideoRatioMap,
-        channel.channel_id,
-        modelData?.model_name,
-      );
-      const chVideoCompletionRatio = pickChannelScopedModelFloat(
-        channelVideoCompletionRatioMap,
-        channel.channel_id,
-        modelData?.model_name,
-      );
-      const modelHasVideoRatio = hasRatioValue(modelData?.video_ratio);
-      const modelHasVideoCompletion = hasRatioValue(
-        modelData?.video_completion_ratio,
-      );
-      const showVideoToken =
-        modelHasVideoRatio ||
-        modelHasVideoCompletion ||
-        chVideoRatio != null ||
-        chVideoCompletionRatio != null;
-      if (hasRatioValue(channel.model_ratio) && showVideoToken) {
-        const effInputRate =
-          Number(channel.model_ratio) * costDisc + globalMr * markupRate;
-        const effVideoRatio =
-          chVideoRatio != null
-            ? chVideoRatio
-            : modelHasVideoRatio
-              ? Number(modelData.video_ratio)
-              : 1;
-        const effVideoCompletionRatio =
-          chVideoCompletionRatio != null
-            ? chVideoCompletionRatio
-            : modelHasVideoCompletion
-              ? Number(modelData.video_completion_ratio)
-              : 1;
-        const effVideo = effInputRate * effVideoRatio * effVideoCompletionRatio;
-        const rootVideo = hasRatioValue(modelData?.model_ratio)
-          ? Number(modelData.model_ratio) *
-            (modelHasVideoRatio ? Number(modelData.video_ratio) : 1) *
-            (modelHasVideoCompletion
-              ? Number(modelData.video_completion_ratio)
-              : 1)
-          : null;
-        items.push(makeItem(t('视频（倍率计价）'), effVideo, rootVideo, false));
-      }
     }
 
     const chVideoPrice = pickChannelScopedModelFloat(
@@ -997,9 +953,16 @@ const ModelChannelList = ({
       currentVideoPrice != null &&
       currentVideoPrice > 0
     ) {
+      const videoBillingMode = String(vHint?.billing_mode || '');
+      const videoFlatLabel =
+        videoBillingMode === 'per_token'
+          ? t('视频按 token 计费')
+          : videoBillingMode === 'per_second'
+            ? t('视频按秒计费')
+            : t('视频按条（固定价）');
       items.push(
         makeItem(
-          t('视频按条（固定价）'),
+          videoFlatLabel,
           Number(currentVideoPrice),
           rootVideoPrice,
           true,
@@ -1019,11 +982,6 @@ const ModelChannelList = ({
     const showVideoFlatTable = hasVideoFlatClipTierTable(vHint);
     const iHint = pickImagePerImageHintForChannel(modelData, channel);
     const showImagePerImageTable = hasImagePerImageTierTable(iHint);
-    const modelHasVideoFlatPrice =
-      modelData?.video_price != null &&
-      modelData?.video_price !== undefined &&
-      Number.isFinite(Number(modelData.video_price)) &&
-      Number(modelData.video_price) > 0;
     const hideTextTokenPrices = isVideoPricingModel(modelData);
 
     const costItems = computeChannelCostRates({
@@ -1071,17 +1029,12 @@ const ModelChannelList = ({
       globalVideoPrice: modelData?.video_price,
       skipImageTokenPricing: showImagePerImageTable,
       skipImageFlatSimple: showImagePerImageTable,
-      skipVideoTokenPricing: showVideoFlatTable || modelHasVideoFlatPrice,
+      skipVideoTokenPricing: true,
       skipVideoFlatSimple: showVideoFlatTable,
       quotaType,
     }).filter((item) => {
       if (!hideTextTokenPrices) return true;
-      return (
-        item.key === 'video_input' ||
-        item.key === 'video_output' ||
-        item.key === 'video_flat' ||
-        item.key === 'model_price'
-      );
+      return item.key === 'video_flat' || item.key === 'model_price';
     });
     const formatCostDisplay = (displayUsdPerM, isFixedPrice, fixedUnitKey) => {
       const priceUSD = displayUsdPerM;
@@ -1363,6 +1316,15 @@ const ModelChannelList = ({
                                   </Tooltip>
                                 </div>
                               </div>
+                              {showVideoFlatTable ? (
+                                <VideoFlatClipHintTable
+                                  hint={vHint}
+                                  usedGroupRatio={usedGroupRatio}
+                                  displayPrice={displayPrice}
+                                  t={t}
+                                  blurPricing={blurPricing}
+                                />
+                              ) : null}
                               {isTierBilling ? (
                                 <TokenTierDetailTable
                                   model={modelData}
@@ -1378,15 +1340,6 @@ const ModelChannelList = ({
                                   blurPricing={blurPricing}
                                 />
                               )}
-                              {showVideoFlatTable ? (
-                                <VideoFlatClipHintTable
-                                  hint={vHint}
-                                  usedGroupRatio={usedGroupRatio}
-                                  displayPrice={displayPrice}
-                                  t={t}
-                                  blurPricing={blurPricing}
-                                />
-                              ) : null}
                               {showImagePerImageTable ? (
                                 <ImagePerImageHintTable
                                   hint={iHint}

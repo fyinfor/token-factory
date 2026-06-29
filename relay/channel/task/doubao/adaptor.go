@@ -365,6 +365,10 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		if taskResult.TotalTokens == 0 && taskResult.CompletionTokens > 0 {
 			taskResult.TotalTokens = taskResult.CompletionTokens
 		}
+		// 上游返回的真实成片规格，供视频按 Token 计费完成后覆盖计费日志展示字段。
+		taskResult.Resolution = resTask.Resolution
+		taskResult.Duration = resTask.Duration
+		taskResult.Ratio = resTask.Ratio
 	case "failed", "error", "cancelled", "canceled":
 		taskResult.Status = model.TaskStatusFailure
 		taskResult.Progress = "100%"

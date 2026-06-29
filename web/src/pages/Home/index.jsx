@@ -48,7 +48,6 @@ import {
 import { Link } from 'react-router-dom';
 import NoticeModal from '../../components/layout/NoticeModal';
 import HomeModelList from '../../components/home/HomeModelList';
-import HomeLandingHeroCopy from '../../components/home/HomeLandingHeroCopy';
 import HomeBannerCarousel from '../../components/home/HomeBannerCarousel';
 import {
   Moonshot,
@@ -214,12 +213,9 @@ const Home = () => {
         {homePageContentLoaded && homePageContent === '' ? (
           <div className='w-full'>
             {/* Banner 部分 */}
-            <div className='home-banner-bg w-full min-h-[400px] md:min-h-[500px]'>
-              <div className='h-full px-4 pt-16 md:pt-20'>
-                {/* 居中内容区：上留白保持，下留白缩小以拉近广告与模型列表 */}
-                <div className='mt-16 mb-5'>
-                  <HomeLandingHeroCopy />
-
+            <div className='home-banner-bg w-full'>
+              <div className='h-full px-4 pt-20 md:pt-24 pb-2'>
+                <div className='mb-6'>
                   <HomeBannerCarousel
                     rawSlides={statusState?.status?.home_banner_slides}
                     intervalSec={statusState?.status?.home_banner_interval_sec}
