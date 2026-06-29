@@ -8,7 +8,7 @@ import (
 )
 
 func GetRankings(c *gin.Context) {
-	result, err := service.GetRankingsSnapshot(c.DefaultQuery("period", "week"))
+	result, err := service.GetRankingsSnapshot(c.DefaultQuery("period", "week"), c.DefaultQuery("category", "all"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,

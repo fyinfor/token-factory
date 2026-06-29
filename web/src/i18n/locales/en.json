@@ -5925,7 +5925,11 @@
                 "YYYY-MM-DD HH:mm": "YYYY-MM-DD HH:mm",
                 "YYYY-MM-DD HH:mm:ss": "YYYY-MM-DD HH:mm:ss",
                 "zhipu": "Zhipu AI",
-                "Zhipu": "Zhipu AI"
+                "Zhipu": "Zhipu AI",
+                "文生图": "Text-to-image",
+                "Seedance": "Seedance",
+                "时间范围": "Time Range",
+                "模型分类": "Model Category"
         },
         "广告按钮文案（英文）": "Button label (English)",
         "广告标题高亮词（英文）": "Title highlight (English)",

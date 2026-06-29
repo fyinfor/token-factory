@@ -12,6 +12,7 @@ import {
   getRankingGrowthColor,
 } from '../../helpers/rankings';
 import { getLobeHubIcon } from '../../helpers';
+import CategoryBadge from './CategoryBadge';
 
 const RankBadge = ({ rank }) => {
   if (rank === 1) return <span className='text-amber-500 font-bold'>#{rank}</span>;
@@ -48,7 +49,10 @@ const ModelLeaderboard = memo(({ models = [], t, loading }) => (
                 {item.vendor_icon ? getLobeHubIcon(item.vendor_icon, 20) : null}
               </div>
               <div className='min-w-0 flex-1'>
-                <div className='font-medium text-sm truncate'>{item.model_name}</div>
+                <div className='font-medium text-sm truncate flex items-center gap-1'>
+                  <span className='truncate'>{item.model_name}</span>
+                  <CategoryBadge category={item.category} />
+                </div>
                 <div className='text-xs truncate' style={{ color: 'var(--semi-color-text-2)' }}>
                   {item.vendor || t('未知供应商')}
                 </div>
