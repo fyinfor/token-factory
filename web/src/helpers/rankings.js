@@ -5,10 +5,16 @@ Copyright (C) 2025 QuantumNous
 import { API } from './api';
 
 const VALID_PERIODS = new Set(['today', 'week', 'month', 'year']);
+const VALID_CATEGORIES = new Set(['all', 't2i', 't2v', 'seedance']);
 
 export function normalizeRankingPeriod(period) {
   const value = String(period || 'week').trim().toLowerCase();
   return VALID_PERIODS.has(value) ? value : 'week';
+}
+
+export function normalizeRankingCategory(category) {
+  const value = String(category || 'all').trim().toLowerCase();
+  return VALID_CATEGORIES.has(value) ? value : 'all';
 }
 
 export function formatRankingTokens(value) {
@@ -40,9 +46,40 @@ export function getRankingGrowthColor(growth) {
   return n > 0 ? '#10b981' : '#ef4444';
 }
 
-export async function fetchRankings(period = 'week') {
-  const normalized = normalizeRankingPeriod(period);
-  const res = await API.get('/api/rankings', { params: { period: normalized } });
+// 分类标签 i18n key 映射（用于在排行中按 category 显示徽章）。
+export const RANKING_CATEGORY_LABEL_KEYS = {
+  t2i: '文生图',
+  t2v: '文生视频',
+  seedance: 'Seedance',
+  chat: '对话',
+  all: '全部',
+};
+
+// 分类配色（与卡片风格保持一致，给前端徽章用）。
+export const RANKING_CATEGORY_COLORS = {
+  t2i: { color: '#0ea5e9', background: 'rgba(14, 165, 233, 0.12)' },
+  t2v: { color: '#8b5cf6', background: 'rgba(139, 92, 246, 0.12)' },
+  seedance: { color: '#f97316', background: 'rgba(249, 115, 22, 0.14)' },
+  chat: { color: '#64748b', background: 'rgba(100, 116, 139, 0.12)' },
+};
+
+// 在「全部」Tab 下，按分类的展示优先级：seedance > t2v > t2i > chat
+// 用于决定徽章显示的语义化标签。
+export function getRankingCategoryLabel(category, t) {
+  const key = RANKING_CATEGORY_LABEL_KEYS[category] || RANKING_CATEGORY_LABEL_KEYS.chat;
+  return t ? t(key) : key;
+}
+
+export function getRankingCategoryStyle(category) {
+  return RANKING_CATEGORY_COLORS[category] || RANKING_CATEGORY_COLORS.chat;
+}
+
+export async function fetchRankings(period = 'week', category = 'all') {
+  const normalizedPeriod = normalizeRankingPeriod(period);
+  const normalizedCategory = normalizeRankingCategory(category);
+  const res = await API.get('/api/rankings', {
+    params: { period: normalizedPeriod, category: normalizedCategory },
+  });
   const { success, data, message } = res.data || {};
   if (!success) {
     throw new Error(message || 'failed to load rankings');

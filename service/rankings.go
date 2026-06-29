@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 )
 
@@ -42,14 +43,15 @@ type RankedModel struct {
 }
 
 type RankedVendor struct {
-	Rank        int     `json:"rank"`
-	Vendor      string  `json:"vendor"`
-	VendorIcon  string  `json:"vendor_icon,omitempty"`
-	TotalTokens int64   `json:"total_tokens"`
-	Share       float64 `json:"share"`
-	GrowthPct   float64 `json:"growth_pct"`
-	ModelsCount int     `json:"models_count"`
-	TopModel    string  `json:"top_model"`
+	Rank             int     `json:"rank"`
+	Vendor           string  `json:"vendor"`
+	VendorIcon       string  `json:"vendor_icon,omitempty"`
+	TotalTokens      int64   `json:"total_tokens"`
+	Share            float64 `json:"share"`
+	GrowthPct        float64 `json:"growth_pct"`
+	ModelsCount      int     `json:"models_count"`
+	TopModel         string  `json:"top_model"`
+	TopModelCategory string  `json:"top_model_category,omitempty"`
 }
 
 type RankingMover struct {
@@ -134,27 +136,31 @@ var (
 	rankingCache   = map[string]rankingCacheItem{}
 )
 
-func GetRankingsSnapshot(period string) (*RankingsResponse, error) {
+func GetRankingsSnapshot(period string, category string) (*RankingsResponse, error) {
 	config, err := rankingConfig(period)
 	if err != nil {
 		return nil, err
 	}
+	if !common.IsRankingCategorySupported(category) {
+		category = common.RankingCategoryAll
+	}
 
 	now := time.Now()
+	cacheKey := config.id + ":" + category
 	rankingCacheMu.Lock()
-	if item, ok := rankingCache[config.id]; ok && now.Before(item.expiresAt) {
+	if item, ok := rankingCache[cacheKey]; ok && now.Before(item.expiresAt) {
 		rankingCacheMu.Unlock()
 		return item.data, nil
 	}
 	rankingCacheMu.Unlock()
 
-	data, err := buildRankingsSnapshot(config, now)
+	data, err := buildRankingsSnapshot(config, now, category)
 	if err != nil {
 		return nil, err
 	}
 
 	rankingCacheMu.Lock()
-	rankingCache[config.id] = rankingCacheItem{
+	rankingCache[cacheKey] = rankingCacheItem{
 		expiresAt: now.Add(rankingCacheTTL),
 		data:      data,
 	}
@@ -178,7 +184,7 @@ func rankingConfig(period string) (rankingPeriodConfig, error) {
 	}
 }
 
-func buildRankingsSnapshot(config rankingPeriodConfig, now time.Time) (*RankingsResponse, error) {
+func buildRankingsSnapshot(config rankingPeriodConfig, now time.Time, category string) (*RankingsResponse, error) {
 	startTime, endTime := rankingTimeRange(config, now)
 	currentTotals, err := model.GetRankingQuotaTotals(startTime, endTime)
 	if err != nil {
@@ -197,6 +203,11 @@ func buildRankingsSnapshot(config rankingPeriodConfig, now time.Time) (*Rankings
 			return nil, err
 		}
 	}
+
+	// 按分类后置过滤：让「全部」外的分类能基于模型名规则筛选出对应模型。
+	currentTotals = filterRankingQuotaByCategory(currentTotals, category)
+	currentBuckets = filterRankingBucketsByCategory(currentBuckets, category)
+	previousTotals = filterRankingQuotaByCategory(previousTotals, category)
 
 	meta := buildRankingModelMeta()
 	totalTokens := sumRankingTokens(currentTotals)
@@ -217,6 +228,35 @@ func buildRankingsSnapshot(config rankingPeriodConfig, now time.Time) (*Rankings
 		ModelsHistory:      modelHistory,
 		VendorShareHistory: vendorHistory,
 	}, nil
+}
+
+// filterRankingQuotaByCategory 按分类过滤 token 汇总行。
+// category 为空或 "all" 时不过滤；其余值依据 common.ModelCategory 决定保留。
+func filterRankingQuotaByCategory(rows []model.RankingQuotaTotal, category string) []model.RankingQuotaTotal {
+	if category == "" || category == common.RankingCategoryAll {
+		return rows
+	}
+	filtered := make([]model.RankingQuotaTotal, 0, len(rows))
+	for _, item := range rows {
+		if common.ModelCategory(item.ModelName) == category {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
+// filterRankingBucketsByCategory 按分类过滤时间桶行。
+func filterRankingBucketsByCategory(rows []model.RankingQuotaBucket, category string) []model.RankingQuotaBucket {
+	if category == "" || category == common.RankingCategoryAll {
+		return rows
+	}
+	filtered := make([]model.RankingQuotaBucket, 0, len(rows))
+	for _, item := range rows {
+		if common.ModelCategory(item.ModelName) == category {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }
 
 func rankingTimeRange(config rankingPeriodConfig, now time.Time) (int64, int64) {
@@ -279,7 +319,7 @@ func buildRankedModels(totals []model.RankingQuotaTotal, totalTokens int64, prev
 			ModelName:    item.ModelName,
 			Vendor:       modelMeta.vendor,
 			VendorIcon:   modelMeta.vendorIcon,
-			Category:     "all",
+			Category:     common.ModelCategory(item.ModelName),
 			TotalTokens:  item.TotalTokens,
 			Share:        rankingShare(item.TotalTokens, totalTokens),
 			GrowthPct:    growth,
@@ -316,13 +356,14 @@ func buildRankedVendors(currentTotals []model.RankingQuotaTotal, previousTotals 
 			growth = rankingGrowthPct(agg.totalTokens, agg.previousTokens)
 		}
 		rows = append(rows, RankedVendor{
-			Vendor:      agg.name,
-			VendorIcon:  agg.icon,
-			TotalTokens: agg.totalTokens,
-			Share:       rankingShare(agg.totalTokens, totalTokens),
-			GrowthPct:   growth,
-			ModelsCount: len(agg.models),
-			TopModel:    agg.topModel,
+			Vendor:           agg.name,
+			VendorIcon:       agg.icon,
+			TotalTokens:      agg.totalTokens,
+			Share:            rankingShare(agg.totalTokens, totalTokens),
+			GrowthPct:        growth,
+			ModelsCount:      len(agg.models),
+			TopModel:         agg.topModel,
+			TopModelCategory: common.ModelCategory(agg.topModel),
 		})
 	}
 	sort.Slice(rows, func(i, j int) bool {
