@@ -30,10 +30,10 @@ const VendorShareSection = memo(({ vendors = [], t, loading }) => (
         <div className='flex flex-col gap-3'>
           {vendors.map((item) => {
             // 代表模型所属分类由后端填入（service.RankedVendor.TopModelCategory），
-            // 仅在属于「文生图 / 文生视频 / Seedance」时显示徽章，避免重复推断。
+            // 仅在属于「图片 / 视频」时显示徽章；文本（默认）不显示，避免噪音。
             const topModelCategory = item.top_model_category;
             const showTopModelBadge =
-              topModelCategory && topModelCategory !== 'chat' && topModelCategory !== 'all';
+              topModelCategory && topModelCategory !== 'text' && topModelCategory !== 'all';
             const topModelStyle = showTopModelBadge
               ? getRankingCategoryStyle(topModelCategory)
               : null;

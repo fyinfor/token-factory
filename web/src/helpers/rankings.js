@@ -5,7 +5,9 @@ Copyright (C) 2025 QuantumNous
 import { API } from './api';
 
 const VALID_PERIODS = new Set(['today', 'week', 'month', 'year']);
-const VALID_CATEGORIES = new Set(['all', 't2i', 't2v', 'seedance']);
+// 分类取值与 system 其他位置（playground display_mode、供应商能力多模态选项）保持一致：
+// 'all' 不过滤；'text' 文本对话；'image' 文生图；'video' 文生视频（含 Seedance 等专用视频模型）。
+const VALID_CATEGORIES = new Set(['all', 'text', 'image', 'video']);
 
 export function normalizeRankingPeriod(period) {
   const value = String(period || 'week').trim().toLowerCase();
@@ -46,32 +48,30 @@ export function getRankingGrowthColor(growth) {
   return n > 0 ? '#10b981' : '#ef4444';
 }
 
-// 分类标签 i18n key 映射（用于在排行中按 category 显示徽章）。
+// 分类标签 i18n key 映射。
+// 保持与 system 内其他模块（playground/SettingsPanel、SupplierCapabilityFormFields）一致：
+// 文本/图片/视频。Seedance 仍归入视频 tab。
 export const RANKING_CATEGORY_LABEL_KEYS = {
-  t2i: '文生图',
-  t2v: '文生视频',
-  seedance: 'Seedance',
-  chat: '对话',
+  text: '文本',
+  image: '图片',
+  video: '视频',
   all: '全部',
 };
 
 // 分类配色（与卡片风格保持一致，给前端徽章用）。
 export const RANKING_CATEGORY_COLORS = {
-  t2i: { color: '#0ea5e9', background: 'rgba(14, 165, 233, 0.12)' },
-  t2v: { color: '#8b5cf6', background: 'rgba(139, 92, 246, 0.12)' },
-  seedance: { color: '#f97316', background: 'rgba(249, 115, 22, 0.14)' },
-  chat: { color: '#64748b', background: 'rgba(100, 116, 139, 0.12)' },
+  text: { color: '#0ea5e9', background: 'rgba(14, 165, 233, 0.12)' },
+  image: { color: '#f97316', background: 'rgba(249, 115, 22, 0.14)' },
+  video: { color: '#8b5cf6', background: 'rgba(139, 92, 246, 0.14)' },
 };
 
-// 在「全部」Tab 下，按分类的展示优先级：seedance > t2v > t2i > chat
-// 用于决定徽章显示的语义化标签。
 export function getRankingCategoryLabel(category, t) {
-  const key = RANKING_CATEGORY_LABEL_KEYS[category] || RANKING_CATEGORY_LABEL_KEYS.chat;
+  const key = RANKING_CATEGORY_LABEL_KEYS[category] || RANKING_CATEGORY_LABEL_KEYS.text;
   return t ? t(key) : key;
 }
 
 export function getRankingCategoryStyle(category) {
-  return RANKING_CATEGORY_COLORS[category] || RANKING_CATEGORY_COLORS.chat;
+  return RANKING_CATEGORY_COLORS[category] || RANKING_CATEGORY_COLORS.text;
 }
 
 export async function fetchRankings(period = 'week', category = 'all') {
