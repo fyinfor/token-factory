@@ -573,6 +573,11 @@ func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor
 		logger.LogInfo(ctx, fmt.Sprintf("任务 %s 按次计费，跳过差额结算", task.TaskID))
 		return
 	}
+	// 0.3 视频「按 Token 计费」模式（按量计费基础价格配置了输出价格）：
+	//     以 total_tokens × 输出单价补差，并覆盖视频规格日志字段。优先级高于通用 token / 视频按秒结算。
+	if SettleVideoTokenBillingOnComplete(ctx, task, taskResult) {
+		return
+	}
 	// 0.5 上游返回 total_tokens 时按 token 结算；视频按秒任务跳过，避免覆盖视频规则价。
 	if taskResult.TotalTokens > 0 && !taskPreferVideoPerSecondSettlement(task) {
 		if settled := RecalculateTaskQuotaByTokens(ctx, task, taskResult.TotalTokens); settled {
@@ -611,6 +616,10 @@ func SettleTaskBillingOnFetch(ctx context.Context, task *model.Task, taskResult 
 	}()
 	// 按次模型不做差额结算
 	if bc := task.PrivateData.BillingContext; bc != nil && bc.PerCallBilling {
+		return
+	}
+	// 视频「按 Token 计费」模式优先：以 total_tokens × 输出单价补差并覆盖视频规格日志字段。
+	if SettleVideoTokenBillingOnComplete(ctx, task, taskResult) {
 		return
 	}
 	if taskResult.TotalTokens > 0 && !taskPreferVideoPerSecondSettlement(task) {

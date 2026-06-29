@@ -71,16 +71,21 @@ function getDiscountPercent(currentUsd, officialUsd) {
   return official > current ? Math.round((1 - current / official) * 100) : 0;
 }
 
-function mapRowsToItems(rows, usedGroupRatio, displayPrice, unitLabel, t) {
+function mapRowsToItems(rows, usedGroupRatio, displayPrice, unitLabel, billingMode, t) {
   return rows.map((row, idx) => {
     const laneKey = VIDEO_FLAT_LANE_I18N_KEY[row.lane];
     const currentUsd = Number(row.usd_after_channel_discount || 0);
     const platformUsd = currentUsd * usedGroupRatio;
     const discount = getDiscountPercent(platformUsd, row.usd_official);
+    const resolutionLabel = formatVideoResolutionDisplayLabel(row.resolution) || '—';
+    const specLabel =
+      billingMode === 'per_token'
+        ? `${resolutionLabel}/M token`
+        : resolutionLabel;
     return {
       key: `v-${idx}-${row.lane}-${row.resolution}-${row.has_audio}`,
       lane: laneKey ? t(laneKey) : row.lane || '—',
-      resolution: formatVideoResolutionDisplayLabel(row.resolution) || '—',
+      resolution: specLabel,
       audio: getAudioLabel(row, t),
       price: formatTierPrice(currentUsd, usedGroupRatio, displayPrice),
       priceExact: currentUsd > 0 ? formatPreciseUsdPrice(platformUsd) : null,
@@ -110,19 +115,36 @@ function VideoFlatClipHintTable({
 
   if (!hint || groups.length === 0) return null;
 
-  const perSecond = hint.billing_mode === 'per_second';
-  const unitLabel = perSecond ? t('秒') : t('条');
-  const columns = [
-    { key: 'resolution', label: t('分辨率') },
-    { key: 'audio', label: t('音轨') },
-    { key: 'price', label: t('平台价'), unitLabel, strong: true },
-    { key: 'official', label: t('官方价'), unitLabel },
-    {
-      key: 'discount',
-      label: isCostPrice ? t('成本折扣') : t('折扣'),
-      align: 'right',
-    },
-  ];
+  const billingMode = String(hint.billing_mode || '');
+  const unitLabel =
+    billingMode === 'per_second'
+      ? t('秒')
+      : billingMode === 'per_token'
+        ? 'M token'
+        : t('条');
+  const columns =
+    billingMode === 'per_token'
+      ? [
+          { key: 'resolution', label: t('分辨率') },
+          { key: 'price', label: t('平台价'), unitLabel, strong: true },
+          { key: 'official', label: t('官方价'), unitLabel },
+          {
+            key: 'discount',
+            label: isCostPrice ? t('成本折扣') : t('折扣'),
+            align: 'right',
+          },
+        ]
+      : [
+          { key: 'resolution', label: t('分辨率') },
+          { key: 'audio', label: t('音轨') },
+          { key: 'price', label: t('平台价'), unitLabel, strong: true },
+          { key: 'official', label: t('官方价'), unitLabel },
+          {
+            key: 'discount',
+            label: isCostPrice ? t('成本折扣') : t('折扣'),
+            align: 'right',
+          },
+        ];
 
   return (
     <div className='mt-1 pt-2 border-t border-semi-color-border flex flex-col gap-2'>
@@ -130,19 +152,21 @@ function VideoFlatClipHintTable({
         <Text strong size='small'>
           {t('视频价格')}
         </Text>
-        <Tooltip
-          position='left'
-          content={
-            <div style={{ maxWidth: 220, whiteSpace: 'normal' }}>
-              {t('音轨列说明')}
-            </div>
-          }
-        >
-          <span className='inline-flex items-center gap-1 text-xs text-gray-500 cursor-help'>
-            <IconHelpCircle size='small' />
-            {t('有无音轨价格')}
-          </span>
-        </Tooltip>
+        {billingMode !== 'per_token' ? (
+          <Tooltip
+            position='left'
+            content={
+              <div style={{ maxWidth: 220, whiteSpace: 'normal' }}>
+                {t('音轨列说明')}
+              </div>
+            }
+          >
+            <span className='inline-flex items-center gap-1 text-xs text-gray-500 cursor-help'>
+              <IconHelpCircle size='small' />
+              {t('有无音轨价格')}
+            </span>
+          </Tooltip>
+        ) : null}
       </div>
       <div
         style={
@@ -163,6 +187,7 @@ function VideoFlatClipHintTable({
             usedGroupRatio,
             displayPrice,
             unitLabel,
+            billingMode,
             t,
           );
 
@@ -173,7 +198,7 @@ function VideoFlatClipHintTable({
               count={items.length}
               columns={columns}
               rows={items}
-              gridType='video'
+              gridType={billingMode === 'per_token' ? 'videoPerToken' : 'video'}
               accent={family === 'image_to_video' ? 'amber' : 'blue'}
               t={t}
               zeroDiscountLabel={isCostPrice ? t('0折扣') : '0%'}

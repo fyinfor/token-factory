@@ -17,7 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-/** 与后端 video_flat_clip_hint.lane 一致，值为 i18n 中文 key */export const VIDEO_FLAT_LANE_I18N_KEY = {
+/** 与后端 video_flat_clip_hint.lane 一致，值为 i18n 中文 key */
+export const VIDEO_FLAT_LANE_I18N_KEY = {
   text_to_video: '文生视频',
   image_to_video: '图生视频',
   video_to_video: '视频生视频',
@@ -28,6 +29,9 @@ For commercial licensing, please contact support@quantumnous.com
   text_to_video_per_second: '文生视频（按秒）',
   image_to_video_per_second: '图生视频（按秒）',
   video_to_video_per_second: '视频生视频（按秒）',
+  text_to_video_per_token: '文生视频（按 token）',
+  image_to_video_per_token: '图生视频（按 token）',
+  video_to_video_per_token: '视频生视频（按 token）',
 };
 
 const LANE_FAMILY_BUCKETS = {
@@ -35,17 +39,20 @@ const LANE_FAMILY_BUCKETS = {
     'text_to_video',
     'text_to_video_legacy',
     'text_to_video_per_second',
+    'text_to_video_per_token',
   ],
   image_to_video: [
     'image_to_video',
     'image_to_video_legacy',
     'image_to_video_per_second',
+    'image_to_video_per_token',
   ],
   video_to_video: [
     'video_to_video',
     'video_to_video_input_legacy',
     'video_to_video_output_legacy',
     'video_to_video_per_second',
+    'video_to_video_per_token',
   ],
 };
 

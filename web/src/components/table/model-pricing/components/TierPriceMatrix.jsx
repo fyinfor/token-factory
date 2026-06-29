@@ -26,6 +26,7 @@ const { Text } = Typography;
 const PRICE_GRID_COLUMNS = {
   image: '74px minmax(96px, 1fr) minmax(96px, 1fr) 52px',
   video: '70px 58px minmax(92px, 1fr) minmax(92px, 1fr) 52px',
+  videoPerToken: 'minmax(108px, 1fr) minmax(92px, 1fr) minmax(92px, 1fr) 52px',
 };
 
 const discountStyle = (hasDiscount) => ({

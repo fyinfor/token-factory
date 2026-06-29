@@ -394,11 +394,15 @@ export default function ModelPricingEditor({
     )
       ? selectedModel.videoPriceUnit
       : getCurrencyConfig().type;
-    if (unit === 'USD') return '$';
-    if (unit === 'CNY') return '¥';
-    if (unit === 'CUSTOM') return getCurrencyConfig().symbol || '¤';
-    return getCurrencyConfig().symbol || '$';
-  }, [selectedModel?.videoPriceUnit, t]);
+    let sym = getCurrencyConfig().symbol || '$';
+    if (unit === 'USD') sym = '$';
+    else if (unit === 'CNY') sym = '¥';
+    else if (unit === 'CUSTOM') sym = getCurrencyConfig().symbol || '¤';
+    if (selectedModel?.videoBillingMode === 'per-token') {
+      return `${sym} /1M token`;
+    }
+    return sym;
+  }, [selectedModel?.videoPriceUnit, selectedModel?.videoBillingMode, t]);
 
   const imagePerImageBillingHint = useMemo(() => {
     const { type } = getCurrencyConfig();
@@ -1439,6 +1443,9 @@ export default function ModelPricingEditor({
                                 <Radio value='per-item'>
                                   {t('按视频条数收费')}
                                 </Radio>
+                                <Radio value='per-token'>
+                                  {t('按 token 收费')}
+                                </Radio>
                               </RadioGroup>
                               <Select
                                 value={selectedModel.videoPriceUnit || 'USD'}
@@ -1456,12 +1463,17 @@ export default function ModelPricingEditor({
                                 ]}
                               />
                             </div>
-                            {selectedModel.videoBillingMode === 'per-second' ? (
+                            {(selectedModel.videoBillingMode === 'per-second' ||
+                              selectedModel.videoBillingMode === 'per-token') ? (
                               <>
                                 <div className='mb-2 text-xs text-gray-600'>
-                                  {t(
-                                    '按真实秒数向上取整计费；可按文生/图生/视频生 + 分辨率配置每秒价格。',
-                                  )}
+                                  {selectedModel.videoBillingMode === 'per-token'
+                                    ? t(
+                                        '按上游 total_tokens ÷ 1M × 分辨率单价（/1M tokens）计费；可按文生/图生/视频生 + 分辨率配置价格。',
+                                      )
+                                    : t(
+                                        '按真实秒数向上取整计费；可按文生/图生/视频生 + 分辨率配置每秒价格。',
+                                      )}
                                 </div>
 
                                 <div className='mb-2 font-medium text-gray-700'>

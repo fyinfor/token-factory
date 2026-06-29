@@ -21,14 +21,22 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 	tokenName := c.GetString("token_name")
 	logContent := fmt.Sprintf("操作 %s", info.Action)
 
-	// 视频按 token 计费分支：任务型视频渠道 + UsePrice + ModelPrice=0 + VideoOutputTokens>0。
+	// 视频按 token 规则计费：per_token 表 + 预扣固定 token。
+	isVideoPerTokenRuleBilling := constant.IsVideoTaskChannel(info.ChannelType) &&
+		info.PriceData.UsePrice &&
+		info.PriceData.ModelPrice == 0 &&
+		info.PriceData.VideoRuleUnit == VideoRuleUnitPerToken &&
+		info.PriceData.VideoOutputTokens > 0
+
+	// 视频按 token 计费分支（legacy token ratio 路径）：任务型视频渠道 + UsePrice + ModelPrice=0 + VideoOutputTokens>0。
 	// 该分支下 quota 已由 outputVideoTokens × ratios × group 直接算出，
 	// OtherRatios 的 seconds/size 不参与计费（已在 relay_task.go 步骤 5/6 跳过），
 	// 因此 logContent 应展示真实公式而非 "计算参数：seconds, size"。
 	isVideoTokenBilling := constant.IsVideoTaskChannel(info.ChannelType) &&
 		info.PriceData.UsePrice &&
 		info.PriceData.ModelPrice == 0 &&
-		info.PriceData.VideoOutputTokens > 0
+		info.PriceData.VideoOutputTokens > 0 &&
+		info.PriceData.VideoRuleUnit != VideoRuleUnitPerToken
 
 	// 视频按分辨率/条一口价（*_per_video）：ModelPriceHelperVideo 将 ModelRatio 置 0、
 	// VideoOutputTokens 为 0，预扣已在 relay 中按条合并，不应再展示为「按次 $0」或 seconds 倍率文案。
@@ -44,10 +52,20 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 	if isVideoPerSecondBilling {
 		videoPerSecondDetail = videoPerSecondBillingDetailFromSubmit(c, info)
 	}
+	var videoPerTokenDetail *videoPerTokenBillingDetail
+	if isVideoPerTokenRuleBilling {
+		if d := videoPerTokenBillingDetailFromSubmit(c, info); d != nil {
+			d.TotalTokens = info.PriceData.VideoOutputTokens
+			d.IsPreCharge = true
+			videoPerTokenDetail = d
+		}
+	}
 
 	switch {
 	case common.StringsContains(constant.TaskPricePatches, info.OriginModelName):
 		logContent = fmt.Sprintf("%s，按次计费", logContent)
+	case isVideoPerTokenRuleBilling:
+		logContent = formatVideoPerTokenBillingDetail(logContent+"，视频按 token 计费", videoPerTokenDetail, info.PriceData.Quota)
 	case isVideoTokenBilling:
 		// 例：操作 generate, 视频 tokens：86400 (输入文本 13), 模型倍率 15.00, 视频倍率 1.00 × 1.00
 		logContent = fmt.Sprintf(
@@ -91,8 +109,11 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		other["is_model_mapped"] = true
 		other["upstream_model_name"] = info.UpstreamModelName
 	}
-	// 视频按 token 计费：写入完整计费元数据，供前端日志详情按 token 公式展示。
-	if isVideoTokenBilling {
+	// 视频按 token 规则计费：写入完整计费元数据，供前端日志详情展示（结构与按秒计费对齐）。
+	if isVideoPerTokenRuleBilling {
+		other["billing_mode"] = SeedanceVideoTokenBillingMode
+		appendVideoPerTokenBillingDetailOther(other, videoPerTokenDetail, info.PriceData.Quota)
+	} else if isVideoTokenBilling {
 		other["billing_mode"] = "video_token"
 		other["model_ratio"] = info.PriceData.ModelRatio
 		other["video_ratio"] = info.PriceData.VideoRatio
@@ -279,6 +300,262 @@ func videoPerSecondBillingDetailFromSubmit(c *gin.Context, info *relaycommon.Rel
 	return detail
 }
 
+type videoPerTokenBillingDetail struct {
+	Mode                      string
+	TotalTokens               int
+	Width                     int
+	Height                    int
+	HasAudio                  bool
+	Resolution                string
+	RuleWidth                 int
+	RuleHeight                int
+	Ratio                     string
+	Duration                  int
+	PricePerMillionTokens     float64
+	GlobalPricePerMillion     float64
+	EffectivePricePerMillion float64
+	MarkupDiscountPercent     float64
+	GroupRatio                float64
+	QuotaPerUnit              float64
+	ChannelDiscountPercent    float64
+	UnifiedAudio              bool
+	CappedToMaxTier           bool
+	IsPreCharge               bool
+}
+
+func videoPerTokenBillingDetailFromSubmit(c *gin.Context, info *relaycommon.RelayInfo) *videoPerTokenBillingDetail {
+	if c == nil || info == nil {
+		return nil
+	}
+	req, err := relaycommon.GetTaskRequest(c)
+	if err != nil {
+		return nil
+	}
+	modelName := strings.TrimSpace(info.OriginModelName)
+	if modelName == "" {
+		return nil
+	}
+	rules, ok := ratio_setting.GetChannelVideoPricingRules(info.ChannelId, modelName)
+	if !ok || !ratio_setting.HasUsableVideoPerTokenRules(rules) {
+		var globalOK bool
+		rules, globalOK = ratio_setting.GetVideoPricingRules(modelName)
+		if !globalOK || !ratio_setting.HasUsableVideoPerTokenRules(rules) {
+			return nil
+		}
+	}
+	width, height := videoDimensionsFromTaskRequest(req)
+	hasAudio := taskRequestHasAudio(req)
+	mode := detectVideoBillingModeFromSubmitRequest(c)
+	match, ok := matchPerTokenPriceDetail(rules, mode, width, height, hasAudio)
+	if !ok || match.PricePerSecond <= 0 {
+		return nil
+	}
+	groupRatio := info.PriceData.GroupRatioInfo.GroupRatio
+	if groupRatio <= 0 {
+		groupRatio = 1
+	}
+	detail := &videoPerTokenBillingDetail{
+		Mode:                   mode,
+		Width:                  width,
+		Height:                 height,
+		HasAudio:               hasAudio,
+		Resolution:             match.Resolution,
+		RuleWidth:              match.RuleWidth,
+		RuleHeight:             match.RuleHeight,
+		PricePerMillionTokens:  match.PricePerSecond,
+		GroupRatio:             groupRatio,
+		QuotaPerUnit:           common.QuotaPerUnit,
+		ChannelDiscountPercent: resolveVideoLogChannelDiscountPercent(info),
+		UnifiedAudio:           match.UnifiedAudio,
+		CappedToMaxTier:        match.CappedToMaxTier,
+		Duration:               videoDurationFromTaskRequest(req),
+	}
+	if req.Metadata != nil {
+		if r, ok := req.Metadata["ratio"].(string); ok {
+			detail.Ratio = strings.TrimSpace(r)
+		}
+	}
+	fillVideoPerTokenEffectiveRates(detail, info.ChannelId, info.UserId, modelName, mode)
+	return detail
+}
+
+func videoPerTokenBillingDetailFromTask(task *model.Task, match *videoTokenRuleMatch, spec seedanceVideoSpec, totalTokens int) *videoPerTokenBillingDetail {
+	if task == nil {
+		return nil
+	}
+	var req relaycommon.TaskSubmitReq
+	_ = common.UnmarshalJsonStr(task.Properties.Input, &req)
+	modelName := strings.TrimSpace(taskModelName(task))
+	if modelName == "" {
+		return nil
+	}
+	width, height := videoDimensionsFromTaskRequest(req)
+	hasAudio := taskRequestHasAudio(req)
+	mode := relaycommon.DetectVideoBillingMode(&req)
+	if bc := task.PrivateData.BillingContext; bc != nil && strings.TrimSpace(bc.VideoBillingMode) != "" {
+		mode = bc.VideoBillingMode
+	}
+	groupRatio := 1.0
+	if bc := task.PrivateData.BillingContext; bc != nil && bc.GroupRatio > 0 {
+		groupRatio = bc.GroupRatio
+	}
+	detail := &videoPerTokenBillingDetail{
+		Mode:        mode,
+		TotalTokens: totalTokens,
+		Width:       width,
+		Height:      height,
+		HasAudio:    hasAudio,
+		Ratio:       spec.Ratio,
+		Duration:    spec.Duration,
+		GroupRatio:  groupRatio,
+		QuotaPerUnit: common.QuotaPerUnit,
+	}
+	if match != nil {
+		detail.Resolution = match.Resolution
+		detail.RuleWidth = match.RuleWidth
+		detail.RuleHeight = match.RuleHeight
+		detail.PricePerMillionTokens = match.ChannelPricePerToken
+		detail.UnifiedAudio = match.UnifiedAudio
+	} else if strings.TrimSpace(spec.Resolution) != "" {
+		detail.Resolution = spec.Resolution
+	}
+	if bc := task.PrivateData.BillingContext; bc != nil {
+		detail.ChannelDiscountPercent = bc.ChannelPriceDiscountPercent
+		if detail.PricePerMillionTokens <= 0 {
+			detail.PricePerMillionTokens = bc.VideoChannelRulePrice
+		}
+	}
+	if detail.ChannelDiscountPercent <= 0 {
+		detail.ChannelDiscountPercent = model.ResolveChannelPriceDiscountPercent(task.ChannelId)
+	}
+	fillVideoPerTokenEffectiveRates(detail, task.ChannelId, task.UserId, modelName, mode)
+	return detail
+}
+
+func fillVideoPerTokenEffectiveRates(detail *videoPerTokenBillingDetail, channelId, userId int, modelName, mode string) {
+	if detail == nil {
+		return
+	}
+	costDisc := detail.ChannelDiscountPercent
+	if costDisc <= 0 {
+		costDisc = model.ResolveChannelPriceDiscountPercent(channelId)
+		detail.ChannelDiscountPercent = costDisc
+	}
+	markupDisc := model.ResolveEffectiveMarkupDiscountPercentForInviteeBilling(userId, channelId, modelName)
+	globalPerM := globalVideoPerTokenUSDForChannelTier(
+		modelName, mode, detail.Resolution, detail.RuleWidth, detail.RuleHeight, detail.HasAudio, detail.UnifiedAudio,
+	)
+	detail.GlobalPricePerMillion = globalPerM
+	detail.MarkupDiscountPercent = markupDisc
+	detail.EffectivePricePerMillion = effectiveVideoPerSecondUSD(detail.PricePerMillionTokens, globalPerM, costDisc, markupDisc)
+}
+
+func formatVideoPerTokenBillingDetail(prefix string, detail *videoPerTokenBillingDetail, quota int) string {
+	if detail == nil {
+		return fmt.Sprintf("%s（按上游 total_tokens ÷ 1M × 对应分辨率 /1M tokens 单价）", prefix)
+	}
+	priceLabel := "Token价"
+	if !detail.UnifiedAudio {
+		if detail.HasAudio {
+			priceLabel = "有音轨价"
+		} else {
+			priceLabel = "无音轨价"
+		}
+	}
+	resolution := strings.TrimSpace(detail.Resolution)
+	if resolution == "" {
+		resolution = fmt.Sprintf("%dx%d", detail.RuleWidth, detail.RuleHeight)
+	}
+	pricePerM := detail.EffectivePricePerMillion
+	if pricePerM <= 0 {
+		pricePerM = detail.PricePerMillionTokens
+	}
+	tokenPart := fmt.Sprintf("%d tokens", detail.TotalTokens)
+	if detail.IsPreCharge && detail.TotalTokens > 0 {
+		tokenPart = fmt.Sprintf("预扣 %d tokens", detail.TotalTokens)
+	}
+	return fmt.Sprintf(
+		"%s：%s / 1M × %s(%dx%d，实际 %dx%d，%s) %s $%g/1M tokens(渠道$%g+全局$%g×加价%.0f%%) × QuotaPerUnit %.0f × 分组倍率 %.4g × 渠道折扣 %.4g%% = %d tokens",
+		prefix,
+		tokenPart,
+		resolution,
+		detail.RuleWidth,
+		detail.RuleHeight,
+		detail.Width,
+		detail.Height,
+		audioLabel(detail.HasAudio),
+		priceLabel,
+		pricePerM,
+		detail.PricePerMillionTokens,
+		detail.GlobalPricePerMillion,
+		detail.MarkupDiscountPercent,
+		detail.QuotaPerUnit,
+		detail.GroupRatio,
+		videoTokenChannelDiscountPercent(detail),
+		quota,
+	)
+}
+
+func videoTokenChannelDiscountPercent(detail *videoPerTokenBillingDetail) float64 {
+	if detail == nil || detail.ChannelDiscountPercent <= 0 {
+		return 100
+	}
+	return detail.ChannelDiscountPercent
+}
+
+func appendVideoPerTokenBillingDetailOther(other map[string]interface{}, detail *videoPerTokenBillingDetail, quota int) {
+	if other == nil || detail == nil {
+		return
+	}
+	if detail.TotalTokens > 0 {
+		other["video_total_tokens"] = detail.TotalTokens
+		other["video_output_tokens"] = detail.TotalTokens
+	}
+	other["video_width"] = detail.Width
+	other["video_height"] = detail.Height
+	other["video_has_audio"] = detail.HasAudio
+	if resolution := common.FormatVideoResolutionLabel(detail.Resolution); resolution != "" {
+		other["video_resolution"] = resolution
+	} else if detail.RuleWidth > 0 && detail.RuleHeight > 0 {
+		other["video_resolution"] = common.FormatVideoResolutionLabel(
+			fmt.Sprintf("%dx%d", detail.RuleWidth, detail.RuleHeight),
+		)
+	}
+	other["video_rule_width"] = detail.RuleWidth
+	other["video_rule_height"] = detail.RuleHeight
+	pricePerM := detail.EffectivePricePerMillion
+	if pricePerM <= 0 {
+		pricePerM = detail.PricePerMillionTokens
+	}
+	other["video_token_unit_price"] = pricePerM
+	other["video_channel_token_price"] = detail.PricePerMillionTokens
+	if detail.GlobalPricePerMillion > 0 {
+		other["video_global_token_price"] = detail.GlobalPricePerMillion
+	}
+	if detail.EffectivePricePerMillion > 0 {
+		other["effective_video_token_unit_price"] = detail.EffectivePricePerMillion
+	}
+	if detail.MarkupDiscountPercent > 0 {
+		other["markup_discount_rate"] = detail.MarkupDiscountPercent
+	}
+	other["video_quota_per_unit"] = detail.QuotaPerUnit
+	other["channel_price_discount"] = videoTokenChannelDiscountPercent(detail)
+	other["video_billed_quota"] = quota
+	other["video_unified_audio_price"] = detail.UnifiedAudio
+	if detail.CappedToMaxTier {
+		other["video_capped_to_max_tier"] = true
+	}
+	if detail.Ratio != "" {
+		other["video_ratio_label"] = detail.Ratio
+	}
+	if detail.Duration > 0 {
+		other["video_duration"] = detail.Duration
+	}
+	if detail.Mode != "" {
+		other["video_billing_lane"] = detail.Mode
+	}
+}
+
 // videoPerSecondBillingDetailFromTask rebuilds log detail from the saved request
 // when the completed video response does not expose probeable metadata.
 func videoPerSecondBillingDetailFromTask(task *model.Task) *videoPerSecondBillingDetail {
@@ -401,17 +678,9 @@ func videoDurationFromTaskRequest(req relaycommon.TaskSubmitReq) int {
 }
 
 func videoDimensionsFromTaskRequest(req relaycommon.TaskSubmitReq) (int, int) {
-	if size := strings.TrimSpace(req.Size); size != "" {
-		parts := strings.Split(strings.ToLower(size), "x")
-		if len(parts) == 2 {
-			w := toInt(parts[0])
-			h := toInt(parts[1])
-			if w > 0 && h > 0 {
-				return w, h
-			}
-		}
-	}
-	if w, h, ok := common.VideoDimensionsFromMetadata(req.Metadata); ok {
+	if w, h, ok := common.ResolveVideoDimensionsFromRequest(
+		req.Size, req.Resolution, req.Ratio, req.Metadata,
+	); ok {
 		return w, h
 	}
 	return 720, 1280

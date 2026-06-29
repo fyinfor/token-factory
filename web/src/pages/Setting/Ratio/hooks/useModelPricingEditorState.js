@@ -330,6 +330,9 @@ const parseVideoPricingRules = (rawRules) => {
             textToVideoPerSecond: [],
             imageToVideoPerSecond: [],
             videoToVideoPerSecond: [],
+            textToVideoPerToken: [],
+            imageToVideoPerToken: [],
+            videoToVideoPerToken: [],
             textToVideoPerVideo: [],
             imageToVideoPerVideo: [],
             videoUploadPerVideo: [],
@@ -369,6 +372,27 @@ const parseVideoPricingRules = (rawRules) => {
     }));
     const videoToVideoPerSecond = normalizeAudioPricedRows(
         rawRules.video_to_video_per_second,
+        'price',
+    ).map((row) => ({
+        ...row,
+        pixelCompression: '',
+    }));
+    const textToVideoPerToken = normalizeAudioPricedRows(
+        rawRules.text_to_video_per_token,
+        'price',
+    ).map((row) => ({
+        ...row,
+        pixelCompression: '',
+    }));
+    const imageToVideoPerToken = normalizeAudioPricedRows(
+        rawRules.image_to_video_per_token,
+        'price',
+    ).map((row) => ({
+        ...row,
+        pixelCompression: '',
+    }));
+    const videoToVideoPerToken = normalizeAudioPricedRows(
+        rawRules.video_to_video_per_token,
         'price',
     ).map((row) => ({
         ...row,
@@ -421,6 +445,9 @@ const parseVideoPricingRules = (rawRules) => {
         textToVideoPerSecond,
         imageToVideoPerSecond,
         videoToVideoPerSecond,
+        textToVideoPerToken,
+        imageToVideoPerToken,
+        videoToVideoPerToken,
         textToVideoPerVideo,
         imageToVideoPerVideo,
         videoUploadPerVideo: videoToVideoInputPerVideo,
@@ -495,6 +522,10 @@ const buildModelState = (name, sourceMaps) => {
         videoPricingRules.textToVideoPerSecond.length > 0 ||
         videoPricingRules.imageToVideoPerSecond.length > 0 ||
         videoPricingRules.videoToVideoPerSecond.length > 0;
+    const hasPerTokenTable =
+        videoPricingRules.textToVideoPerToken.length > 0 ||
+        videoPricingRules.imageToVideoPerToken.length > 0 ||
+        videoPricingRules.videoToVideoPerToken.length > 0;
     const hasPerVideoTable =
         videoPricingRules.textToVideoPerVideo.length > 0 ||
         videoPricingRules.imageToVideoPerVideo.length > 0 ||
@@ -545,6 +576,21 @@ const buildModelState = (name, sourceMaps) => {
     );
     const videoRowsDisplay = mapVideoRuleRowsToDisplayUnit(
         videoPricingRules.videoToVideoPerSecond,
+        resolvedVideoPriceUnit,
+        sourceMaps.VideoCurrencyRates,
+    );
+    const textPerTokenDisplay = mapVideoRuleRowsToDisplayUnit(
+        videoPricingRules.textToVideoPerToken,
+        resolvedVideoPriceUnit,
+        sourceMaps.VideoCurrencyRates,
+    );
+    const imagePerTokenDisplay = mapVideoRuleRowsToDisplayUnit(
+        videoPricingRules.imageToVideoPerToken,
+        resolvedVideoPriceUnit,
+        sourceMaps.VideoCurrencyRates,
+    );
+    const videoPerTokenDisplay = mapVideoRuleRowsToDisplayUnit(
+        videoPricingRules.videoToVideoPerToken,
         resolvedVideoPriceUnit,
         sourceMaps.VideoCurrencyRates,
     );
@@ -633,68 +679,78 @@ const buildModelState = (name, sourceMaps) => {
             toNumberOrNull(audioInputPrice) !== null && hasValue(audioCompletionRatio)
                 ? formatNumber(Number(audioInputPrice) * Number(audioCompletionRatio))
                 : '',
-        videoBillingMode: hasPerSecondTable
-            ? 'per-second'
-            : hasPerVideoTable
-                ? 'per-item'
-                : hasValue(videoPrice)
+        videoBillingMode: hasPerTokenTable
+            ? 'per-token'
+            : hasPerSecondTable
+                ? 'per-second'
+                : hasPerVideoTable
                     ? 'per-item'
-                    : 'per-second',
+                    : hasValue(videoPrice)
+                        ? 'per-item'
+                        : 'per-second',
         videoPriceUnit: resolvedVideoPriceUnit,
         // 保留“无分辨率表时的单视频价”回填值，避免切换/回显时看起来丢失
         videoFixedPrice: displayVideoPrice,
-        videoTextToVideoRules: hasPerSecondTable
-            ? textRowsDisplay
-            : hasPerVideoTable
-                ? textPerItemDisplay
-                : useLegacyRulesFallback
-                    ? [
-                        {
-                            resolution: '1280x720',
-                            tokenPrice: videoInputPrice,
-                            pixelCompression: DEFAULT_TEXT_VIDEO_PIXEL_COMPRESSION,
-                        },
-                    ]
-                    : videoPricingRules.textToVideo,
-        videoImageToVideoRules: hasPerSecondTable
-            ? imageRowsDisplay
-            : hasPerVideoTable
-                ? imagePerItemDisplay
-                : useLegacyRulesFallback
-                    ? [
-                        {
-                            resolution: '1280x720',
-                            tokenPrice: videoInputPrice,
-                            pixelCompression: DEFAULT_IMAGE_VIDEO_PIXEL_COMPRESSION,
-                        },
-                    ]
-                    : videoPricingRules.imageToVideo,
-        videoUploadRules: hasPerSecondTable
-            ? videoRowsDisplay
-            : hasPerVideoTable
-                ? uploadPerItemDisplay
-                : useLegacyRulesFallback
-                    ? [
-                        {
-                            resolution: '1280x720',
-                            tokenPrice: videoInputPrice,
-                            pixelCompression: DEFAULT_VIDEO_VIDEO_PIXEL_COMPRESSION,
-                        },
-                    ]
-                    : videoPricingRules.videoUpload,
-        videoGenerateRules: hasPerSecondTable
-            ? videoRowsDisplay
-            : hasPerVideoTable
-                ? generatePerItemDisplay
-                : useLegacyRulesFallback
-                    ? [
-                        {
-                            resolution: '1280x720',
-                            tokenPrice: videoOutputPrice || videoInputPrice,
-                            pixelCompression: DEFAULT_VIDEO_VIDEO_PIXEL_COMPRESSION,
-                        },
-                    ]
-                    : videoPricingRules.videoGenerate,
+        videoTextToVideoRules: hasPerTokenTable
+            ? textPerTokenDisplay
+            : hasPerSecondTable
+                ? textRowsDisplay
+                : hasPerVideoTable
+                    ? textPerItemDisplay
+                    : useLegacyRulesFallback
+                        ? [
+                            {
+                                resolution: '1280x720',
+                                tokenPrice: videoInputPrice,
+                                pixelCompression: DEFAULT_TEXT_VIDEO_PIXEL_COMPRESSION,
+                            },
+                        ]
+                        : videoPricingRules.textToVideo,
+        videoImageToVideoRules: hasPerTokenTable
+            ? imagePerTokenDisplay
+            : hasPerSecondTable
+                ? imageRowsDisplay
+                : hasPerVideoTable
+                    ? imagePerItemDisplay
+                    : useLegacyRulesFallback
+                        ? [
+                            {
+                                resolution: '1280x720',
+                                tokenPrice: videoInputPrice,
+                                pixelCompression: DEFAULT_IMAGE_VIDEO_PIXEL_COMPRESSION,
+                            },
+                        ]
+                        : videoPricingRules.imageToVideo,
+        videoUploadRules: hasPerTokenTable
+            ? videoPerTokenDisplay
+            : hasPerSecondTable
+                ? videoRowsDisplay
+                : hasPerVideoTable
+                    ? uploadPerItemDisplay
+                    : useLegacyRulesFallback
+                        ? [
+                            {
+                                resolution: '1280x720',
+                                tokenPrice: videoInputPrice,
+                                pixelCompression: DEFAULT_VIDEO_VIDEO_PIXEL_COMPRESSION,
+                            },
+                        ]
+                        : videoPricingRules.videoUpload,
+        videoGenerateRules: hasPerTokenTable
+            ? videoPerTokenDisplay
+            : hasPerSecondTable
+                ? videoRowsDisplay
+                : hasPerVideoTable
+                    ? generatePerItemDisplay
+                    : useLegacyRulesFallback
+                        ? [
+                            {
+                                resolution: '1280x720',
+                                tokenPrice: videoOutputPrice || videoInputPrice,
+                                pixelCompression: DEFAULT_VIDEO_VIDEO_PIXEL_COMPRESSION,
+                            },
+                        ]
+                        : videoPricingRules.videoGenerate,
         videoSimilarityThreshold: videoPricingRules.similarityThreshold,
         imageGenPriceUnit: resolvedImagePriceUnit,
         imageGenFixedPrice: displayImageFixedPrice,
@@ -842,7 +898,8 @@ export const getModelWarnings = (model, t) => {
 
     if (
         isTokenBillingMode(model.billingMode) &&
-        model.videoBillingMode === 'per-second'
+        (model.videoBillingMode === 'per-second' ||
+            model.videoBillingMode === 'per-token')
     ) {
         const hasInvalidTextRule = (model.videoTextToVideoRules || []).some(
             (row) =>
@@ -1110,8 +1167,10 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
     const audioInputPrice = toNumberOrNull(model.audioInputPrice);
     const audioOutputPrice = toNumberOrNull(model.audioOutputPrice);
     const videoFixedPrice = toNumberOrNull(model.videoFixedPrice);
-    const videoPerToken = model.videoBillingMode === 'per-second';
+    const videoPerSecond = model.videoBillingMode === 'per-second';
+    const videoPerTokenBilling = model.videoBillingMode === 'per-token';
     const videoPerVideo = model.videoBillingMode === 'per-item';
+    const videoPerUnitTable = videoPerSecond || videoPerTokenBilling;
 
     const hasDependentPrice = [
         completionPrice,
@@ -1120,10 +1179,10 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
         imagePrice,
         audioInputPrice,
         audioOutputPrice,
-        videoPerToken && (model.videoTextToVideoRules || []).length > 0 ? 1 : null,
-        videoPerToken && (model.videoImageToVideoRules || []).length > 0 ? 1 : null,
-        videoPerToken && (model.videoUploadRules || []).length > 0 ? 1 : null,
-        videoPerToken && (model.videoGenerateRules || []).length > 0 ? 1 : null,
+        videoPerUnitTable && (model.videoTextToVideoRules || []).length > 0 ? 1 : null,
+        videoPerUnitTable && (model.videoImageToVideoRules || []).length > 0 ? 1 : null,
+        videoPerUnitTable && (model.videoUploadRules || []).length > 0 ? 1 : null,
+        videoPerUnitTable && (model.videoGenerateRules || []).length > 0 ? 1 : null,
         videoPerVideo &&
             ((model.videoTextToVideoRules || []).some(
                 (row) => hasValue(row?.resolution) && hasValue(row?.videoPrice),
@@ -1180,7 +1239,7 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
                 model.rawRatios.audioCompletionRatio,
             );
         }
-        if (videoPerToken) {
+        if (videoPerSecond) {
             if (hasValue(model.rawRatios.videoRatio)) {
                 result.VideoRatio = toNormalizedNumber(model.rawRatios.videoRatio);
             }
@@ -1189,6 +1248,13 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
                     model.rawRatios.videoCompletionRatio,
                 );
             }
+            if (
+                model.rawRatios.videoPricingRules &&
+                typeof model.rawRatios.videoPricingRules === 'object'
+            ) {
+                result.VideoPricingRules = model.rawRatios.videoPricingRules;
+            }
+        } else if (videoPerTokenBilling) {
             if (
                 model.rawRatios.videoPricingRules &&
                 typeof model.rawRatios.videoPricingRules === 'object'
@@ -1262,7 +1328,7 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
         );
     }
 
-    if (videoPerToken) {
+    if (videoPerUnitTable) {
         const normalizeRows = (rows) =>
             (rows || [])
                 .filter(
@@ -1332,6 +1398,7 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
         const imageToVideoRules = normalizeRows(model.videoImageToVideoRules);
         const videoGenerateRules = normalizeRows(model.videoGenerateRules);
         const similarityThreshold = toNumberOrNull(model.videoSimilarityThreshold);
+        const perUnitSuffix = videoPerTokenBilling ? 'per_token' : 'per_second';
         if (
             textToVideo.length > 0 ||
             imageToVideoRules.length > 0 ||
@@ -1339,14 +1406,14 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
         ) {
             const pricingRules = {};
             if (textToVideo.length > 0) {
-                pricingRules.text_to_video_per_second = textToVideo.map((row) => ({
+                pricingRules[`text_to_video_${perUnitSuffix}`] = textToVideo.map((row) => ({
                     resolution: row.resolution,
                     has_audio: Boolean(row.has_audio),
                     price: toUSD(row.token_price),
                 }));
             }
             if (imageToVideoRules.length > 0) {
-                pricingRules.image_to_video_per_second = imageToVideoRules.map(
+                pricingRules[`image_to_video_${perUnitSuffix}`] = imageToVideoRules.map(
                     (row) => ({
                         resolution: row.resolution,
                         has_audio: Boolean(row.has_audio),
@@ -1356,7 +1423,7 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
             }
             if (videoGenerateRules.length > 0) {
                 const seen = new Set();
-                pricingRules.video_to_video_per_second = videoGenerateRules
+                pricingRules[`video_to_video_${perUnitSuffix}`] = videoGenerateRules
                     .map((row) => ({
                         resolution: row.resolution,
                         has_audio: Boolean(row.has_audio),
@@ -1369,7 +1436,7 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
                         return true;
                     });
             }
-            if (similarityThreshold !== null && similarityThreshold > 0) {
+            if (similarityThreshold !== null && similarityThreshold > 0 && videoPerSecond) {
                 pricingRules.similarity_threshold = similarityThreshold;
             }
             pricingRules.price_unit = fromUnit;

@@ -711,6 +711,8 @@ type TaskSubmitReq struct {
 	Images         []string               `json:"images,omitempty"`
 	N              *int                   `json:"n,omitempty"`
 	Size           string                 `json:"size,omitempty"`
+	Resolution     string                 `json:"resolution,omitempty"` // 分辨率标识，如 480p（Seedance/Doubao 顶层字段）
+	Ratio          string                 `json:"ratio,omitempty"`      // 画面比例，如 16:9
 	FPS            *int                   `json:"fps,omitempty"`
 	Motion         *float64               `json:"motion,omitempty"`
 	Duration       int                    `json:"duration,omitempty"`
@@ -785,6 +787,11 @@ type TaskInfo struct {
 	Progress         string `json:"progress,omitempty"`
 	CompletionTokens int    `json:"completion_tokens,omitempty"` // 用于按倍率计费
 	TotalTokens      int    `json:"total_tokens,omitempty"`      // 用于按倍率计费
+	// 以下三项为上游任务查询返回的真实视频规格，用于计费日志覆盖展示。
+	// 上游未返回时保持零值，由结算逻辑回退用户提交的原始参数。
+	Resolution string `json:"resolution,omitempty"` // 分辨率标识，如 480p / 1080p
+	Duration   int    `json:"duration,omitempty"`   // 成片时长（秒）
+	Ratio      string `json:"ratio,omitempty"`      // 画面比例，如 16:9
 }
 
 func FailTaskInfo(reason string) *TaskInfo {

@@ -31,3 +31,31 @@ func TestBuildVideoFlatClipHint_AppliesMarkupDiscount(t *testing.T) {
 		t.Fatalf("official=%v want 2", rows[0].UsdOfficial)
 	}
 }
+
+func TestBuildVideoFlatClipHint_PerTokenPriority(t *testing.T) {
+	channelRules := ratio_setting.VideoPricingRules{
+		TextToVideoPerToken: []ratio_setting.VideoResolutionAudioPriceRule{
+			{Resolution: "1280x720", HasAudio: false, Price: 0.00002},
+		},
+		TextToVideoPerSecond: []ratio_setting.VideoResolutionAudioPriceRule{
+			{Resolution: "1280x720", HasAudio: false, Price: 1},
+		},
+	}
+	globalRules := ratio_setting.VideoPricingRules{
+		TextToVideoPerToken: []ratio_setting.VideoResolutionAudioPriceRule{
+			{Resolution: "1280x720", HasAudio: false, Price: 0.00003},
+		},
+	}
+	_ = globalRules
+	tiers := collectVideoPerTokenTiers(channelRules)
+	if len(tiers) != 1 {
+		t.Fatalf("per_token tiers=%d want 1", len(tiers))
+	}
+	if tiers[0].Lane != "text_to_video_per_token" {
+		t.Fatalf("lane=%s", tiers[0].Lane)
+	}
+	rows := buildSortedTierRows(tiers, ratio_setting.VideoPricingRules{}, 100, 0)
+	if len(rows) != 1 || rows[0].UsdAfterChannelDiscount <= 0 {
+		t.Fatalf("rows=%+v", rows)
+	}
+}

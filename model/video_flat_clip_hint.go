@@ -208,6 +208,14 @@ func collectVideoPerSecondTiers(rules ratio_setting.VideoPricingRules) []videoFl
 	return out
 }
 
+func collectVideoPerTokenTiers(rules ratio_setting.VideoPricingRules) []videoFlatTier {
+	out := make([]videoFlatTier, 0, 24)
+	appendPerItemTiers(&out, rules.TextToVideoPerToken, "text_to_video_per_token")
+	appendPerItemTiers(&out, rules.ImageToVideoPerToken, "image_to_video_per_token")
+	appendPerItemTiers(&out, rules.VideoToVideoPerToken, "video_to_video_per_token")
+	return out
+}
+
 func pickMinVideoFlatTier(tiers []videoFlatTier) (videoFlatTier, bool) {
 	if len(tiers) == 0 {
 		return videoFlatTier{}, false
@@ -227,8 +235,9 @@ func pickMinVideoFlatTier(tiers []videoFlatTier) (videoFlatTier, bool) {
 }
 
 func videoRulesUsableForPricingHint(rules ratio_setting.VideoPricingRules) bool {
-	return ratio_setting.HasUsableVideoPerVideoRules(rules) ||
-		ratio_setting.HasUsableVideoPerSecondRules(rules)
+	return ratio_setting.HasUsableVideoPerTokenRules(rules) ||
+		ratio_setting.HasUsableVideoPerSecondRules(rules) ||
+		ratio_setting.HasUsableVideoPerVideoRules(rules)
 }
 
 func resolveChannelVideoRulesForPricingCardHint(channelID int, modelName string) (ratio_setting.VideoPricingRules, bool) {
@@ -251,9 +260,12 @@ func lookupVideoTierRawUSD(rules ratio_setting.VideoPricingRules, target videoFl
 	if !videoRulesUsableForPricingHint(rules) {
 		return 0
 	}
-	tiers := collectVideoFlatTiers(rules)
+	tiers := collectVideoPerTokenTiers(rules)
 	if len(tiers) == 0 {
 		tiers = collectVideoPerSecondTiers(rules)
+	}
+	if len(tiers) == 0 {
+		tiers = collectVideoFlatTiers(rules)
 	}
 	for _, c := range tiers {
 		if c.Lane != target.Lane {
@@ -294,6 +306,18 @@ func VideoBillingModeToPerSecondLane(mode string) string {
 	}
 }
 
+// VideoBillingModeToPerTokenLane 将计费模式映射为 VideoPricingRules 按 token 档位 lane 名。
+func VideoBillingModeToPerTokenLane(mode string) string {
+	switch strings.TrimSpace(mode) {
+	case "image_to_video":
+		return "image_to_video_per_token"
+	case "video_to_video":
+		return "video_to_video_per_token"
+	default:
+		return "text_to_video_per_token"
+	}
+}
+
 // LookupGlobalVideoPerSecondUSD 按与渠道已匹配档位相同的 lane+分辨率+音轨，查全局 VideoPricingRules 原价。
 // 与 BuildVideoFlatClipHint / 定价卡片展示一致；不得用成片实际像素去重匹全局档（否则会错档加价）。
 func LookupGlobalVideoPerSecondUSD(modelName, billingMode, resolution string, hasAudio, unifiedAudio bool) float64 {
@@ -314,6 +338,36 @@ func LookupGlobalVideoPerSecondUSD(modelName, billingMode, resolution string, ha
 		Lane:     lane,
 		HasAudio: ha,
 	})
+}
+
+// LookupGlobalVideoPerTokenUSD 按与渠道已匹配档位相同的 lane+分辨率+音轨，查全局 per_token 原价。
+func LookupGlobalVideoPerTokenUSD(modelName, billingMode, resolution string, hasAudio, unifiedAudio bool) float64 {
+	globalRules, ok := ratio_setting.GetVideoPricingRules(modelName)
+	if !ok || !ratio_setting.HasUsableVideoPerTokenRules(globalRules) {
+		return 0
+	}
+	lane := VideoBillingModeToPerTokenLane(billingMode)
+	var ha *bool
+	if unifiedAudio {
+		ha = nil
+	} else {
+		v := hasAudio
+		ha = &v
+	}
+	tiers := collectVideoPerTokenTiers(globalRules)
+	for _, c := range tiers {
+		if c.Lane != lane {
+			continue
+		}
+		if !strings.EqualFold(strings.TrimSpace(c.Res), strings.TrimSpace(resolution)) {
+			continue
+		}
+		if !videoTierAudioMatches(c.HasAudio, ha) {
+			continue
+		}
+		return c.RawUSD
+	}
+	return 0
 }
 
 func tierRowLess(a, b VideoFlatClipTierRow) bool {
@@ -378,7 +432,8 @@ func pickMinEffectiveVideoDisplayTier(tiers []videoFlatTier, globalRules ratio_s
 	return tiers[bestIdx], bestUsd, true
 }
 
-// BuildVideoFlatClipHint 汇总当前模型×渠道下视频分辨率档位（优先按条，否则按秒），返回最低价档（含成本折扣与加价折扣）及总档位数。
+// BuildVideoFlatClipHint 汇总当前模型×渠道下视频分辨率档位（优先按 token，否则按秒，否则按条），
+// 返回最低价档（含成本折扣与加价折扣）及总档位数。
 func BuildVideoFlatClipHint(channelID int, modelName string, costDiscPercent, markupDiscPercent float64) *VideoFlatClipPricingHint {
 	channelRules, chOK := resolveChannelVideoRulesForPricingCardHint(channelID, modelName)
 	globalRules, glOK := resolveGlobalVideoRulesForPricingCardHint(modelName)
@@ -389,11 +444,15 @@ func BuildVideoFlatClipHint(channelID int, modelName string, costDiscPercent, ma
 	if !chOK {
 		rulesForTiers = globalRules
 	}
-	tiers := collectVideoFlatTiers(rulesForTiers)
-	billingMode := "per_item"
+	tiers := collectVideoPerTokenTiers(rulesForTiers)
+	billingMode := "per_token"
 	if len(tiers) == 0 {
 		tiers = collectVideoPerSecondTiers(rulesForTiers)
 		billingMode = "per_second"
+	}
+	if len(tiers) == 0 {
+		tiers = collectVideoFlatTiers(rulesForTiers)
+		billingMode = "per_item"
 	}
 	if len(tiers) == 0 {
 		return nil

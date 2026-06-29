@@ -24,3 +24,15 @@ func TestVideoDimensionsFromMetadata(t *testing.T) {
 		t.Fatalf("portrait expected height > width, got %dx%d", w, h)
 	}
 }
+
+func TestFormatVideoSpecLabel(t *testing.T) {
+	if got := FormatVideoSpecLabel("1280x720", "16:9"); got != "720p 16:9" {
+		t.Fatalf("got %q", got)
+	}
+	if got := FormatVideoSpecLabel("480p", "16:9"); got != "480p 16:9" {
+		t.Fatalf("got %q", got)
+	}
+	if got := FormatVideoSpecLabel("1280x720", ""); got != "720p" {
+		t.Fatalf("got %q", got)
+	}
+}
