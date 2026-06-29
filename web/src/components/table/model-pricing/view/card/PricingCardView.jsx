@@ -142,17 +142,8 @@ const formatCompactVideoResolution = (resolution, t) => {
   return String(label);
 };
 
-const formatVideoTierSpec = (row, t, billingMode) => {
-  const res = formatCompactVideoResolution(row?.resolution, t);
-  const lane = String(row?.lane || '');
-  if (billingMode === 'per_second' || lane.includes('per_second')) {
-    return `${res}/${t('秒')}`;
-  }
-  if (billingMode === 'per_token' || lane.includes('per_token')) {
-    return `${res}/M token`;
-  }
-  return `${res}/${t('个')}`;
-};
+const formatVideoTierSpec = (row, t) =>
+  formatCompactVideoResolution(row?.resolution, t);
 
 const formatVideoTierDisplayPrice = (
   usd,
@@ -203,7 +194,7 @@ const buildVideoTierPreviewItems = (hint, usedGroupRatio, displayPrice, t) => {
       resolution: row?.resolution,
       label: laneMeta.label,
       labelColor: laneMeta.color,
-      spec: formatVideoTierSpec(row, t, billingMode),
+      spec: formatVideoTierSpec(row, t),
       platformPrice: formatVideoTierDisplayPrice(
         currentUsd,
         usedGroupRatio,

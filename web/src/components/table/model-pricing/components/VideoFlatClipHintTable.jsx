@@ -71,21 +71,17 @@ function getDiscountPercent(currentUsd, officialUsd) {
   return official > current ? Math.round((1 - current / official) * 100) : 0;
 }
 
-function mapRowsToItems(rows, usedGroupRatio, displayPrice, unitLabel, billingMode, t) {
+function mapRowsToItems(rows, usedGroupRatio, displayPrice, t) {
   return rows.map((row, idx) => {
     const laneKey = VIDEO_FLAT_LANE_I18N_KEY[row.lane];
     const currentUsd = Number(row.usd_after_channel_discount || 0);
     const platformUsd = currentUsd * usedGroupRatio;
     const discount = getDiscountPercent(platformUsd, row.usd_official);
     const resolutionLabel = formatVideoResolutionDisplayLabel(row.resolution) || '—';
-    const specLabel =
-      billingMode === 'per_token'
-        ? `${resolutionLabel}/M token`
-        : resolutionLabel;
     return {
       key: `v-${idx}-${row.lane}-${row.resolution}-${row.has_audio}`,
       lane: laneKey ? t(laneKey) : row.lane || '—',
-      resolution: specLabel,
+      resolution: resolutionLabel,
       audio: getAudioLabel(row, t),
       price: formatTierPrice(currentUsd, usedGroupRatio, displayPrice),
       priceExact: currentUsd > 0 ? formatPreciseUsdPrice(platformUsd) : null,
@@ -186,8 +182,6 @@ function VideoFlatClipHintTable({
             sortTierRowsByResolutionAsc(rows),
             usedGroupRatio,
             displayPrice,
-            unitLabel,
-            billingMode,
             t,
           );
 
