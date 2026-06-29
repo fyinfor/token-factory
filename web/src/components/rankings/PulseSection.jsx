@@ -6,6 +6,7 @@ import React, { memo } from 'react';
 import { Card, Empty, Spin, Tag } from '@douyinfe/semi-ui';
 import { TrendingDown, TrendingUp } from 'lucide-react';
 import { formatRankingGrowth, getRankingGrowthColor } from '../../helpers/rankings';
+import CategoryBadge from './CategoryBadge';
 
 const MoverList = ({ title, icon, items, emptyText, positive }) => (
   <div>
@@ -23,8 +24,11 @@ const MoverList = ({ title, icon, items, emptyText, positive }) => (
             className='flex items-center justify-between gap-2 rounded-lg px-3 py-2'
             style={{ backgroundColor: 'var(--semi-color-fill-0)' }}
           >
-            <div className='min-w-0'>
-              <div className='text-sm font-medium truncate'>{item.model_name}</div>
+            <div className='min-w-0 flex-1'>
+              <div className='text-sm font-medium truncate flex items-center gap-1'>
+                <span className='truncate'>{item.model_name}</span>
+                <CategoryBadge category={item.category} />
+              </div>
               <div className='text-xs truncate' style={{ color: 'var(--semi-color-text-2)' }}>
                 {item.vendor}
               </div>

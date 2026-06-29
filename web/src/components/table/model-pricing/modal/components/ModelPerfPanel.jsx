@@ -16,7 +16,7 @@ const ModelPerfPanel = ({ modelName, perfSummary, t }) => {
 
   if (!summary) {
     return (
-      <Card className='!rounded-xl' bodyStyle={{ padding: 16 }}>
+      <Card className='!rounded-xl mb-6' bodyStyle={{ padding: 16 }}>
         <Text type='secondary'>{t('暂无该模型的性能数据')}</Text>
       </Card>
     );
@@ -27,7 +27,7 @@ const ModelPerfPanel = ({ modelName, perfSummary, t }) => {
 
   return (
     <Card
-      className='!rounded-xl'
+      className='!rounded-xl mb-6'
       title={
         <div>
           <Title heading={6}>{t('运行性能')}</Title>

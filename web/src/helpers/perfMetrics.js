@@ -26,6 +26,17 @@ export function formatPerfSuccessRate(rate) {
   return `${rate.toFixed(1)}%`;
 }
 
+export function formatPerfCacheHitRate(rate) {
+  if (!Number.isFinite(rate)) return '—';
+  return `${rate.toFixed(1)}%`;
+}
+
+export function getCacheHitRateColor(rate) {
+  if (!Number.isFinite(rate) || rate <= 0) return 'var(--semi-color-text-2)';
+  if (rate >= 50) return '#3b82f6';
+  return '#60a5fa';
+}
+
 export function getSuccessRateLevel(rate) {
   if (!Number.isFinite(rate)) return 'unknown';
   if (rate >= 100) return 'excellent';

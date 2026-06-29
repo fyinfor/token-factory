@@ -20,6 +20,8 @@ import { Route, ChevronDown, ChevronRight, Plus, Trash2, Info, Search, GripVerti
 import { useTranslation } from 'react-i18next';
 import { API, showSuccess, showError } from '../../../../helpers';
 import { getCurrencyConfig } from '../../../../helpers/render';
+import { getUsedGroupContext } from '../../../../helpers/utils';
+import { computeChannelBillingRates } from '../../../../helpers/billingFormula';
 import { UserContext } from '../../../../context/User';
 import { StatusContext } from '../../../../context/Status';
 
@@ -64,6 +66,74 @@ const fuzzyMatchModelQuery = (query, model, groupKey, displayName) => {
   return haystacks.some((text) => text.includes(q));
 };
 
+// 后端 model_prices 对倍率型模型存的是「模型输入倍率」；与计费口径一致：
+// USD / 1M tokens = 倍率 × 2（参见 render.jsx 的 inputRatioPrice = modelRatio × 2）。
+// 仅在 /api/pricing 无对应数据时作为兜底展示。
+const RATIO_TO_USD_PER_1M = 2;
+
+// ── 与首页模型卡片定价统一 ──────────────────────────────────────
+// 首页卡片「平台价」= computeChannelBillingRates(...).inputRatioPrice × usedGroupRatio
+//   （= (渠道倍率×成本折扣% + 全局倍率×加价%) × 2 × 分组倍率），分组倍率取该模型可用分组中最便宜者。
+// 这里基于 /api/pricing 同源数据、同一套 helper 复刻该价，确保两处展示完全一致。
+
+// 卡片精度：与首页一致（保留 2 位有效小数四舍五入）。
+const fmtCardPrice = (value) => {
+  const v = Number(value);
+  if (!Number.isFinite(v) || v <= 0) return '—';
+  return String(parseFloat(v.toFixed(2)));
+};
+
+// buildPricingIndex 把 /api/pricing 的 data 打平为 channelId -> (modelName -> { value, perRequest })。
+const buildPricingIndex = (data, groupRatio) => {
+  const index = new Map();
+  (data || []).forEach((item) => {
+    if (!item) return;
+    const { usedGroupRatio } = getUsedGroupContext(item, 'all', groupRatio || {});
+    (item.channel_list || []).forEach((ch) => {
+      if (!ch || ch.channel_id == null) return;
+      const rates = computeChannelBillingRates({
+        channelModelRatio: ch.model_ratio,
+        channelCompletionRatio: ch.completion_ratio,
+        channelModelPrice:
+          ch.model_price != null && ch.model_price > 0 ? ch.model_price : -1,
+        priceDiscountPercent: ch.price_discount_percent,
+        markupDiscountPercent: ch.markup_discount_rate,
+        globalModelRatio: item.model_ratio,
+        globalModelPrice: item.model_price,
+        globalCompletionRatio: item.completion_ratio,
+      });
+      const perRequest = item.quota_type === 1;
+      const value = perRequest
+        ? (rates.mp > 0 ? rates.mp : 0) * usedGroupRatio
+        : rates.inputRatioPrice * usedGroupRatio;
+      if (!(value > 0)) return;
+      if (!index.has(ch.channel_id)) index.set(ch.channel_id, new Map());
+      const perChannel = index.get(ch.channel_id);
+      const prev = perChannel.get(item.model_name);
+      if (prev == null || value < prev.value) {
+        perChannel.set(item.model_name, { value, perRequest });
+      }
+    });
+  });
+  return index;
+};
+
+// resolveUnifiedChannelPrice 取某渠道在归类内各模型中的最低价（与后端 ch.Price 取 min 一致）。
+const resolveUnifiedChannelPrice = (pricingIndex, channel) => {
+  if (!pricingIndex) return null;
+  const perChannel = pricingIndex.get(channel.channel_id);
+  if (!perChannel) return null;
+  const models = channel.models_in_group || [];
+  let best = null;
+  models.forEach((m) => {
+    const entry = perChannel.get(m);
+    if (entry && entry.value > 0 && (best == null || entry.value < best.value)) {
+      best = entry;
+    }
+  });
+  return best;
+};
+
 const RoutePolicyCard = ({ t }) => {
   const { t: translate } = useTranslation();
   const [userState] = useContext(UserContext);
@@ -86,10 +156,11 @@ const RoutePolicyCard = ({ t }) => {
   const [addingOverride, setAddingOverride] = useState(false);
   const [modelSearch, setModelSearch] = useState('');
   const [highlightedGroupKey, setHighlightedGroupKey] = useState('');
+  const [pricingIndex, setPricingIndex] = useState(null);
   const groupRefs = useRef({});
 
   const tLocal = useCallback(
-    (key) => t ? t(key) : translate(key),
+    (key, options) => (t ? t(key, options) : translate(key, options)),
     [t, translate]
   );
 
@@ -127,6 +198,20 @@ const RoutePolicyCard = ({ t }) => {
     }
   }, [tLocal]);
 
+  // 拉取 /api/pricing，构建「渠道×模型 → 平台价」索引，使价格优模式展示与首页卡片完全一致。
+  const fetchPricing = useCallback(async () => {
+    try {
+      const res = await API.get('/api/pricing');
+      const { success, data, group_ratio } = res.data || {};
+      if (success !== false && Array.isArray(data)) {
+        setPricingIndex(buildPricingIndex(data, group_ratio));
+      }
+    } catch (err) {
+      // 定价同步失败时静默回退到 gRPC 快照价（fmtUsdPer1M），不阻塞页面。
+      setPricingIndex(null);
+    }
+  }, []);
+
   useEffect(() => {
     if (!statusLoaded) {
       return;
@@ -137,9 +222,16 @@ const RoutePolicyCard = ({ t }) => {
       return;
     }
     fetchPolicy();
-  }, [statusLoaded, routeEnabled, fetchPolicy]);
+    fetchPricing();
+  }, [statusLoaded, routeEnabled, fetchPolicy, fetchPricing]);
 
-  const handleModeChange = async (newMode) => {
+  // mode === '' 时跟随系统全局模式；界面直接展示 effectiveMode。
+  const effectiveMode = mode === '' ? globalMode : mode;
+
+  const handleModeChange = async (rawValue) => {
+    const newMode = rawValue?.target?.value ?? rawValue;
+    if (!newMode || newMode === effectiveMode) return;
+
     const prevMode = mode;
     setMode(newMode);
     setSavingMode(true);
@@ -147,12 +239,15 @@ const RoutePolicyCard = ({ t }) => {
       const res = await API.put('/api/user/route-policy/mode', { mode: newMode });
       if (res.data.success) {
         showSuccess(tLocal('route_policy.mode_updated'));
+        await fetchPolicy({ silent: true });
       } else {
         showError(res.data.error || tLocal('route_policy.save_failed'));
         setMode(prevMode);
       }
     } catch (err) {
-      showError(tLocal('route_policy.save_failed'));
+      showError(
+        err.response?.data?.error || tLocal('route_policy.save_failed'),
+      );
       setMode(prevMode);
     } finally {
       setSavingMode(false);
@@ -261,9 +356,6 @@ const RoutePolicyCard = ({ t }) => {
   const toggleGroup = (groupKey) => {
     setExpandedGroups((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }));
   };
-
-  // mode === '' 时跟随系统全局模式；界面直接展示 effectiveMode，管理员改默认后自动对齐。
-  const effectiveMode = mode === '' ? globalMode : mode;
 
   const modeHint = () => {
     switch (effectiveMode) {
@@ -416,7 +508,7 @@ const RoutePolicyCard = ({ t }) => {
                 <RadioGroup
                   type='button'
                   value={effectiveMode}
-                  onChange={(e) => handleModeChange(e.target.value)}
+                  onChange={handleModeChange}
                   disabled={savingMode}
                 >
                   {ROUTE_MODES.map((m) => (
@@ -436,7 +528,7 @@ const RoutePolicyCard = ({ t }) => {
           </Card>
 
           {/* Model Groups with Channels */}
-          {effectiveMode === 'weight' && groups.length > 0 && (
+          {(effectiveMode === 'weight' || effectiveMode === 'price') && groups.length > 0 && (
             <Card className='!rounded-xl border dark:border-gray-700 mb-4'>
               <div className='flex flex-col gap-3 mb-3 lg:flex-row lg:items-start lg:justify-between'>
                 <div>
@@ -444,7 +536,9 @@ const RoutePolicyCard = ({ t }) => {
                     {tLocal('route_policy.model_groups')}
                   </Typography.Title>
                   <Typography.Text type='tertiary' size='small' className='block mt-1'>
-                    {tLocal('route_policy.drag_sort_hint')}
+                    {effectiveMode === 'weight'
+                      ? tLocal('route_policy.drag_sort_hint')
+                      : tLocal('route_policy.mode_price_hint')}
                   </Typography.Text>
                 </div>
                 <div className='w-full lg:w-72 shrink-0'>
@@ -515,6 +609,9 @@ const RoutePolicyCard = ({ t }) => {
                         <Typography.Text strong className='truncate'>
                           {group.display_name || group.group_key}
                         </Typography.Text>
+                        <code className='text-xs text-gray-500 dark:text-gray-400 font-mono truncate max-w-[140px]'>
+                          {group.group_key}
+                        </code>
                         <Tag size='small' color='blue'>
                           {group.channel_count} {tLocal('route_policy.channels')}
                         </Tag>
@@ -525,20 +622,31 @@ const RoutePolicyCard = ({ t }) => {
                     </div>
                     <Collapsible isOpen={expandedGroups[group.group_key]}>
                       <div className='px-4 pb-3'>
-                        <div className='text-xs text-gray-500 dark:text-gray-400 mb-2'>
-                          {tLocal('route_policy.group_models')}: {group.models.slice(0, 10).join(', ')}
-                          {group.models.length > 10 ? '...' : ''}
+                        <div className='flex flex-wrap gap-1 mb-3'>
+                          {(group.models || []).map((modelName) => (
+                            <Tag key={modelName} size='small' color='light-blue'>
+                              {modelName}
+                            </Tag>
+                          ))}
                         </div>
-                        <WeightChannelTable
-                          groupKey={group.group_key}
-                          channels={group.channels}
-                          isAdmin={isAdmin}
-                          onWeightChange={handleWeightChange}
-                          onBatchWeightChange={handleBatchWeightChange}
-                          onDeleteWeight={handleDeleteWeight}
-                          onSaved={() => fetchPolicy({ silent: true })}
-                          t={tLocal}
-                        />
+                        {effectiveMode === 'weight' ? (
+                          <WeightChannelTable
+                            groupKey={group.group_key}
+                            channels={group.channels}
+                            isAdmin={isAdmin}
+                            onWeightChange={handleWeightChange}
+                            onBatchWeightChange={handleBatchWeightChange}
+                            onDeleteWeight={handleDeleteWeight}
+                            onSaved={() => fetchPolicy({ silent: true })}
+                            t={tLocal}
+                          />
+                        ) : (
+                          <PriceChannelTable
+                            channels={group.channels}
+                            pricingIndex={pricingIndex}
+                            t={tLocal}
+                          />
+                        )}
                       </div>
                     </Collapsible>
                   </div>
@@ -706,8 +814,8 @@ const WeightChannelTable = ({
         <thead>
           <tr className='border-b dark:border-gray-600 text-left text-xs text-gray-500'>
             <th className='py-2 pr-2 w-9' />
-            <th className='py-2 pr-3'>{t('route_policy.channel_name')}</th>
             <th className='py-2 pr-3'>{t('route_policy.provider')}</th>
+            <th className='py-2 pr-3'>{t('route_policy.route_slug')}</th>
             <th className='py-2 pr-3'>{t('route_policy.user_weight')}</th>
             <th className='py-2 pr-3'>{t('route_policy.enabled')}</th>
             <th className='py-2 pr-3'>{t('route_policy.global_weight')}</th>
@@ -729,7 +837,6 @@ const WeightChannelTable = ({
               onWeightChange={onWeightChange}
               onDeleteWeight={onDeleteWeight}
               onSaved={onSaved}
-              routeMode='weight'
               t={t}
             />
           ))}
@@ -738,6 +845,108 @@ const WeightChannelTable = ({
     </div>
   );
 };
+
+// PriceChannelTable shows read-only channel prices sorted ascending within a group.
+// 单价口径与首页模型卡片「平台价」一致：优先用 /api/pricing 索引（含分组倍率），
+// 无对应数据时回退到 gRPC 快照价（fmtUsdPer1M）。
+const PriceChannelTable = ({ channels, pricingIndex, t }) => {
+  const { symbol: currencySymbol, rate: currencyRate } = getCurrencyConfig();
+
+  // 计算每个渠道的统一展示价（USD/1M 或按次），并按价升序（无价排最后）。
+  const rows = useMemo(() => {
+    const withPrice = (channels || []).map((channel) => {
+      const unified = resolveUnifiedChannelPrice(pricingIndex, channel);
+      let value = null;
+      let perRequest = false;
+      if (unified && unified.value > 0) {
+        value = unified.value;
+        perRequest = unified.perRequest;
+      } else if (channel.price > 0) {
+        // 兜底：gRPC 快照价为有效输入倍率，×2 得 USD/1M。
+        value = channel.price * RATIO_TO_USD_PER_1M;
+      }
+      return { channel, value, perRequest };
+    });
+    return withPrice.sort((a, b) => {
+      const pa = a.value > 0 ? a.value : Number.POSITIVE_INFINITY;
+      const pb = b.value > 0 ? b.value : Number.POSITIVE_INFINITY;
+      if (pa !== pb) return pa - pb;
+      return a.channel.channel_id - b.channel.channel_id;
+    });
+  }, [channels, pricingIndex]);
+
+  return (
+    <div className='overflow-x-auto'>
+      <table className='w-full text-sm'>
+        <thead>
+          <tr className='border-b dark:border-gray-600 text-left text-xs text-gray-500'>
+            <th className='py-2 pr-3 w-14'>#</th>
+            <th className='py-2 pr-3'>{t('route_policy.provider')}</th>
+            <th className='py-2 pr-3'>{t('route_policy.route_slug')}</th>
+            <th className='py-2 pr-3'>{t('route_policy.group_models')}</th>
+            <th className='py-2 pr-3'>
+              {t('route_policy.price')} ({currencySymbol}/1M)
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(({ channel, value, perRequest }, index) => {
+            const modelsInGroup = channel.models_in_group || [];
+            const priceText =
+              value > 0
+                ? `${currencySymbol}${fmtCardPrice(value * currencyRate)}${perRequest ? '/次' : '/1M'}`
+                : '—';
+            return (
+              <tr
+                key={channel.channel_id}
+                className='border-b dark:border-gray-700 hover:bg-gray-50/60 dark:hover:bg-gray-800/40'
+              >
+                <td className='py-2 pr-3 align-top'>
+                  <Tag size='small' color={index === 0 ? 'green' : 'grey'}>
+                    #{index + 1}
+                  </Tag>
+                </td>
+                <td className='py-2 pr-3 align-top'>
+                  <Typography.Text size='small'>
+                    {resolveSupplierLabel(channel)}
+                  </Typography.Text>
+                </td>
+                <td className='py-2 pr-3 align-top'>
+                  <Typography.Text size='small' className='font-mono'>
+                    {resolveRouteSlugLabel(channel)}
+                  </Typography.Text>
+                </td>
+                <td className='py-2 pr-3 align-top'>
+                  <div className='flex flex-wrap gap-1'>
+                    {modelsInGroup.length > 0 ? (
+                      modelsInGroup.map((modelName) => (
+                        <Tag key={modelName} size='small' color='grey'>
+                          {modelName}
+                        </Tag>
+                      ))
+                    ) : (
+                      <Typography.Text size='small' type='quaternary'>
+                        —
+                      </Typography.Text>
+                    )}
+                  </div>
+                </td>
+                <td className='py-2 pr-3 align-top font-mono'>
+                  <Typography.Text size='small'>{priceText}</Typography.Text>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
+const resolveSupplierLabel = (channel) =>
+  channel.supplier_alias?.trim() || channel.provider_slug?.trim() || '—';
+
+const resolveRouteSlugLabel = (channel) => channel.route_slug?.trim() || '—';
 
 // ChannelRow renders a single channel in the group table with editable weight/switch.
 const ChannelRow = ({
@@ -753,7 +962,6 @@ const ChannelRow = ({
   onWeightChange,
   onDeleteWeight,
   onSaved,
-  routeMode,
   t,
 }) => {
   const [weight, setWeight] = useState(() => resolveDisplayWeight(channel));
@@ -791,9 +999,9 @@ const ChannelRow = ({
     setRowSaving(false);
   };
 
-  const displayName = isAdmin ? channel.name : channel.masked_name;
-  const dragEnabled = routeMode === 'weight' && onGripPointerDown;
   const disabled = saving || rowSaving;
+  const supplierLabel = resolveSupplierLabel(channel);
+  const routeSlugLabel = resolveRouteSlugLabel(channel);
 
   return (
     <tr
@@ -807,100 +1015,71 @@ const ChannelRow = ({
       onPointerEnter={() => onRowPointerEnter?.(index)}
     >
       <td className='py-2 pr-2 w-9 align-middle'>
-        {dragEnabled ? (
-          <div
-            role='button'
-            tabIndex={-1}
-            className={`touch-none inline-flex items-center justify-center rounded-md p-1.5 transition-all duration-200 ${
-              isDragging
-                ? 'cursor-grabbing bg-green-100 text-green-600 shadow-md ring-1 ring-green-300/80 dark:bg-green-900/50 dark:text-green-400 dark:ring-green-700/60'
-                : 'cursor-grab text-gray-400 hover:bg-gray-100 hover:text-green-600 hover:shadow-sm hover:ring-1 hover:ring-gray-200 dark:hover:bg-gray-700/80 dark:hover:text-green-400 dark:hover:ring-gray-600 active:scale-95 active:bg-green-50 active:text-green-600 active:shadow-md dark:active:bg-green-900/40'
-            }`}
-            title={t('route_policy.drag_handle')}
-            onPointerDown={(event) => onGripPointerDown(index, event)}
-          >
-            <GripVertical size={15} strokeWidth={2.25} />
-          </div>
-        ) : null}
+        <div
+          role='button'
+          tabIndex={-1}
+          className={`touch-none inline-flex items-center justify-center rounded-md p-1.5 transition-all duration-200 ${
+            isDragging
+              ? 'cursor-grabbing bg-green-100 text-green-600 shadow-md ring-1 ring-green-300/80 dark:bg-green-900/50 dark:text-green-400 dark:ring-green-700/60'
+              : 'cursor-grab text-gray-400 hover:bg-gray-100 hover:text-green-600 hover:shadow-sm hover:ring-1 hover:ring-gray-200 dark:hover:bg-gray-700/80 dark:hover:text-green-400 dark:hover:ring-gray-600 active:scale-95 active:bg-green-50 active:text-green-600 active:shadow-md dark:active:bg-green-900/40'
+          }`}
+          title={t('route_policy.drag_handle')}
+          onPointerDown={(event) => onGripPointerDown(index, event)}
+        >
+          <GripVertical size={15} strokeWidth={2.25} />
+        </div>
       </td>
       <td className='py-2 pr-3'>
-        <Typography.Text size='small'>{displayName}</Typography.Text>
-        {channel.route_slug && (
-          <Typography.Text size='small' type='tertiary' className='ml-1'>
-            /{channel.route_slug}
+        <Typography.Text size='small'>{supplierLabel}</Typography.Text>
+      </td>
+      <td className='py-2 pr-3'>
+        <Typography.Text size='small' className='font-mono'>
+          {routeSlugLabel}
+        </Typography.Text>
+      </td>
+      <td className='py-2 pr-3'>
+        <div className='flex items-center gap-1'>
+          <InputNumber
+            value={weight}
+            onChange={(v) => setWeight(v ?? 0)}
+            min={0}
+            max={1000}
+            size='small'
+            style={{ width: 70 }}
+            onBlur={handleWeightSave}
+            disabled={disabled}
+          />
+          {channel.user_configured && channel.user_weight_id > 0 && (
+            <Button
+              size='small'
+              type='danger'
+              icon={<Trash2 size={12} />}
+              onClick={() => onDeleteWeight(channel.user_weight_id)}
+              disabled={disabled}
+            />
+          )}
+        </div>
+      </td>
+      <td className='py-2 pr-3'>
+        <Switch
+          size='small'
+          checked={enabled}
+          onChange={handleToggle}
+          disabled={disabled}
+        />
+      </td>
+      <td className='py-2 pr-3'>
+        {channel.global_configured ? (
+          <Typography.Text size='small' type='tertiary'>
+            {channel.global_weight}
+            {!channel.global_enabled && ` (${t('route_policy.disabled')})`}
+          </Typography.Text>
+        ) : (
+          <Typography.Text size='small' type='quaternary'>
+            —
           </Typography.Text>
         )}
       </td>
-      <td className='py-2 pr-3'>
-        <Typography.Text size='small' type='tertiary'>
-          {channel.provider_slug}
-        </Typography.Text>
-      </td>
-      {routeMode === 'weight' && (
-        <td className='py-2 pr-3'>
-          <div className='flex items-center gap-1'>
-            <InputNumber
-              value={weight}
-              onChange={(v) => setWeight(v ?? 0)}
-              min={0}
-              max={1000}
-              size='small'
-              style={{ width: 70 }}
-              onBlur={handleWeightSave}
-              disabled={disabled}
-            />
-            {channel.user_configured && channel.user_weight_id > 0 && (
-              <Button
-                size='small'
-                type='danger'
-                icon={<Trash2 size={12} />}
-                onClick={() => onDeleteWeight(channel.user_weight_id)}
-                disabled={disabled}
-              />
-            )}
-          </div>
-        </td>
-      )}
-      {routeMode === 'weight' && (
-        <td className='py-2 pr-3'>
-          <Switch
-            size='small'
-            checked={enabled}
-            onChange={handleToggle}
-            disabled={disabled}
-          />
-        </td>
-      )}
-      {routeMode === 'weight' && (
-        <td className='py-2 pr-3'>
-          {channel.global_configured ? (
-            <Typography.Text size='small' type='tertiary'>
-              {channel.global_weight}
-              {!channel.global_enabled && ` (${t('route_policy.disabled')})`}
-            </Typography.Text>
-          ) : (
-            <Typography.Text size='small' type='quaternary'>
-              —
-            </Typography.Text>
-          )}
-        </td>
-      )}
-      {routeMode === 'price' && (
-        <td className='py-2 pr-3'>
-          {channel.price > 0 ? (
-            <Typography.Text size='small'>
-              {t('route_policy.price_per_1k', {
-                symbol: getCurrencyConfig().symbol,
-                price: channel.price.toFixed(4),
-              })}
-            </Typography.Text>
-          ) : (
-            <Typography.Text size='small' type='quaternary'>
-              —
-            </Typography.Text>
-          )}
-        </td>
-      )}
     </tr>
   );
 };

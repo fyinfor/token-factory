@@ -67,7 +67,12 @@ func BuildChannelSnapshotsForTF(channels []*model.Channel) []*pb.ChannelSnapshot
 				if m == "" {
 					continue
 				}
-				modelPrices[m] = ResolveChannelModelUnitPrice(ch, m)
+				// 仅推送「已配置定价」的有效单价（与 /api/pricing 口径一致）；
+				// 未配置定价的模型不写入，前端价格优模式展示为「—」并排在最后，
+				// 不再像旧逻辑兜底为倍率 1（≈$2/1M）造成虚假定价。
+				if price, ok := ResolveChannelModelConfiguredUnitPrice(ch, m); ok {
+					modelPrices[m] = price
+				}
 			}
 		} else {
 			modelsCSV = ""

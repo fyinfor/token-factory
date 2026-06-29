@@ -9,6 +9,7 @@ import { Button, Spin, TabPane, Tabs, Typography } from '@douyinfe/semi-ui';
 import { BarChart3, RefreshCw } from 'lucide-react';
 import { StatusContext } from '../../context/Status';
 import { useRankingsData } from '../../hooks/rankings/useRankingsData';
+import { normalizeRankingCategory } from '../../helpers/rankings';
 import ModelLeaderboard from '../../components/rankings/ModelLeaderboard';
 import VendorShareSection from '../../components/rankings/VendorShareSection';
 import PulseSection from '../../components/rankings/PulseSection';
@@ -22,11 +23,28 @@ const PERIOD_TABS = [
   { key: 'year', labelKey: '本年' },
 ];
 
+const CATEGORY_TABS = [
+  { key: 'all', labelKey: '全部' },
+  { key: 'text', labelKey: '文本' },
+  { key: 'image', labelKey: '图片' },
+  { key: 'video', labelKey: '视频' },
+];
+
 const RankingsPage = () => {
   const { t } = useTranslation();
   const [statusState] = useContext(StatusContext);
-  const { period, changePeriod, snapshot, loading, error, reload } = useRankingsData('week');
+  const {
+    period,
+    category,
+    changePeriod,
+    changeCategory,
+    snapshot,
+    loading,
+    error,
+    reload,
+  } = useRankingsData('week', 'all');
   const [activeTab, setActiveTab] = useState('week');
+  const [activeCategory, setActiveCategory] = useState('all');
 
   const rankingsEnabled = useMemo(() => {
     try {
@@ -42,6 +60,10 @@ const RankingsPage = () => {
   useEffect(() => {
     setActiveTab(period);
   }, [period]);
+
+  useEffect(() => {
+    setActiveCategory(normalizeRankingCategory(category));
+  }, [category]);
 
   if (!rankingsEnabled) {
     return <Navigate to='/' replace />;
@@ -73,19 +95,42 @@ const RankingsPage = () => {
         </Button>
       </div>
 
-      <Tabs
-        type='button'
-        activeKey={activeTab}
-        onChange={(key) => {
-          setActiveTab(key);
-          changePeriod(key);
-        }}
-        className='mb-6'
-      >
-        {PERIOD_TABS.map((tab) => (
-          <TabPane tab={t(tab.labelKey)} itemKey={tab.key} key={tab.key} />
-        ))}
-      </Tabs>
+      <div className='flex flex-col gap-3 mb-6'>
+        <div>
+          <div className='text-xs mb-2' style={{ color: 'var(--semi-color-text-2)' }}>
+            {t('时间范围')}
+          </div>
+          <Tabs
+            type='button'
+            activeKey={activeTab}
+            onChange={(key) => {
+              setActiveTab(key);
+              changePeriod(key);
+            }}
+          >
+            {PERIOD_TABS.map((tab) => (
+              <TabPane tab={t(tab.labelKey)} itemKey={tab.key} key={tab.key} />
+            ))}
+          </Tabs>
+        </div>
+        <div>
+          <div className='text-xs mb-2' style={{ color: 'var(--semi-color-text-2)' }}>
+            {t('模型分类')}
+          </div>
+          <Tabs
+            type='button'
+            activeKey={activeCategory}
+            onChange={(key) => {
+              setActiveCategory(key);
+              changeCategory(key);
+            }}
+          >
+            {CATEGORY_TABS.map((tab) => (
+              <TabPane tab={t(tab.labelKey)} itemKey={tab.key} key={tab.key} />
+            ))}
+          </Tabs>
+        </div>
+      </div>
 
       {error ? (
         <div

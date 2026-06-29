@@ -142,6 +142,9 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 	if channel != nil && channel.Type == constant.ChannelTypeAliImage {
 		return string(constant.EndpointTypeImageGeneration)
 	}
+	if channel != nil && channel.Type == constant.ChannelTypeHiDreamImage {
+		return string(constant.EndpointTypeImageGeneration)
+	}
 	if channel != nil && channel.Type == constant.ChannelTypeAliVideo {
 		return string(constant.EndpointTypeAliVideo)
 	}
@@ -335,6 +338,8 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 					testModel = "dall-e-3"
 				case constant.ChannelTypeAliImage:
 					testModel = "qwen-image-2.0-pro"
+				case constant.ChannelTypeHiDreamImage:
+					testModel = "hidream-H4.5-image"
 				default:
 					testModel = "gpt-4o-mini"
 				}

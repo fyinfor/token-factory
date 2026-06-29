@@ -242,6 +242,11 @@ export const CHANNEL_OPTIONS = [
         color: 'orange',
         label: '阿里通义千问（图像）',
     },
+    {
+        value: 67,
+        color: 'blue',
+        label: '智象未来（图像）',
+    },
 ];
 
 /** 火山方舟-Seedance 2.0 视频（与后端 constant.ChannelTypeSeedance 一致） */
@@ -249,6 +254,9 @@ export const CHANNEL_TYPE_SEEDANCE = 65;
 
 /** 阿里通义千问图像（与后端 constant.ChannelTypeAliImage 一致） */
 export const CHANNEL_TYPE_ALI_IMAGE = 66;
+
+/** 智象未来图像（与后端 constant.ChannelTypeHiDreamImage 一致） */
+export const CHANNEL_TYPE_HIDREAM_IMAGE = 67;
 
 /** 支持操练场 generate_audio 参数的渠道类型 */
 export const CHANNEL_TYPES_WITH_GENERATE_AUDIO = new Set([CHANNEL_TYPE_SEEDANCE]);

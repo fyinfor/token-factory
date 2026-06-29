@@ -84,6 +84,19 @@ func channelProviderSlug(ch *model.Channel) string {
 // 解析优先级与计费一致：供应商作用域固定价 → 供应商作用域倍率 → 全局模型倍率 → 兜底 1。
 // 返回值为相对排序信号（非精确计费单价），但渠道间相对高低与用户最终支付价一致。
 func ResolveChannelModelUnitPrice(ch *model.Channel, modelName string) float64 {
+	if price, ok := ResolveChannelModelConfiguredUnitPrice(ch, modelName); ok {
+		return price
+	}
+	// 未配置任何定价：兜底为倍率 1，保证选路时仍有可比价（不会被当成 0 即「免费」）。
+	return 1
+}
+
+// ResolveChannelModelConfiguredUnitPrice 与 ResolveChannelModelUnitPrice 同口径，
+// 但仅在「确有已配置定价」时返回 (price, true)；无任何配置时返回 (0, false)，不兜底为 1。
+// 用于价格优模式的展示 / 排序：未配置定价的渠道应显示「—」并排在最后，
+// 与 /api/pricing（仅展示已配置定价的模型）口径一致；而真实选路仍用带兜底的
+// ResolveChannelModelUnitPrice，避免未配置渠道因 0 价被误判为最便宜。
+func ResolveChannelModelConfiguredUnitPrice(ch *model.Channel, modelName string) (float64, bool) {
 	channelID := ch.Id
 	sid := ch.SupplierApplicationID
 	costDisc := model.ResolveChannelPriceDiscountPercent(channelID) // 成本折扣%（默认 100）
@@ -93,7 +106,7 @@ func ResolveChannelModelUnitPrice(ch *model.Channel, modelName string) float64 {
 	if channelPrice, ok := model.ResolveSupplierScopedFixedModelPrice(channelID, sid, modelName); ok {
 		globalPrice, _ := ratio_setting.GetModelPrice(modelName, false)
 		if eff := model.EffectiveModelPrice(channelPrice, globalPrice, costDisc, markupDisc); eff > 0 {
-			return eff
+			return eff, true
 		}
 	}
 
@@ -101,15 +114,15 @@ func ResolveChannelModelUnitPrice(ch *model.Channel, modelName string) float64 {
 	if channelRatio, ok, _ := model.ResolveSupplierScopedModelRatio(channelID, sid, modelName); ok {
 		globalRatio, _, _ := ratio_setting.GetModelRatio(modelName)
 		if eff := model.EffectiveInputRate(channelRatio, globalRatio, costDisc, markupDisc); eff > 0 {
-			return eff
+			return eff, true
 		}
 	}
 
-	// 全局倍率兜底。
+	// 全局倍率兜底（平台级定价，视为已配置）。
 	if ratio, _, _ := ratio_setting.GetModelRatio(modelName); ratio > 0 {
-		return ratio
+		return ratio, true
 	}
-	return 1
+	return 0, false
 }
 
 func buildRouterCandidates(group, modelName string) ([]*router.EndpointCandidate, error) {
