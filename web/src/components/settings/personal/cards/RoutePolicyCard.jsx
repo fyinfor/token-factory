@@ -139,7 +139,13 @@ const RoutePolicyCard = ({ t }) => {
     fetchPolicy();
   }, [statusLoaded, routeEnabled, fetchPolicy]);
 
-  const handleModeChange = async (newMode) => {
+  // mode === '' 时跟随系统全局模式；界面直接展示 effectiveMode。
+  const effectiveMode = mode === '' ? globalMode : mode;
+
+  const handleModeChange = async (rawValue) => {
+    const newMode = rawValue?.target?.value ?? rawValue;
+    if (!newMode || newMode === effectiveMode) return;
+
     const prevMode = mode;
     setMode(newMode);
     setSavingMode(true);
@@ -147,12 +153,15 @@ const RoutePolicyCard = ({ t }) => {
       const res = await API.put('/api/user/route-policy/mode', { mode: newMode });
       if (res.data.success) {
         showSuccess(tLocal('route_policy.mode_updated'));
+        await fetchPolicy({ silent: true });
       } else {
         showError(res.data.error || tLocal('route_policy.save_failed'));
         setMode(prevMode);
       }
     } catch (err) {
-      showError(tLocal('route_policy.save_failed'));
+      showError(
+        err.response?.data?.error || tLocal('route_policy.save_failed'),
+      );
       setMode(prevMode);
     } finally {
       setSavingMode(false);
@@ -261,9 +270,6 @@ const RoutePolicyCard = ({ t }) => {
   const toggleGroup = (groupKey) => {
     setExpandedGroups((prev) => ({ ...prev, [groupKey]: !prev[groupKey] }));
   };
-
-  // mode === '' 时跟随系统全局模式；界面直接展示 effectiveMode，管理员改默认后自动对齐。
-  const effectiveMode = mode === '' ? globalMode : mode;
 
   const modeHint = () => {
     switch (effectiveMode) {
@@ -416,7 +422,7 @@ const RoutePolicyCard = ({ t }) => {
                 <RadioGroup
                   type='button'
                   value={effectiveMode}
-                  onChange={(e) => handleModeChange(e.target.value)}
+                  onChange={handleModeChange}
                   disabled={savingMode}
                 >
                   {ROUTE_MODES.map((m) => (
@@ -436,7 +442,7 @@ const RoutePolicyCard = ({ t }) => {
           </Card>
 
           {/* Model Groups with Channels */}
-          {effectiveMode === 'weight' && groups.length > 0 && (
+          {(effectiveMode === 'weight' || effectiveMode === 'price') && groups.length > 0 && (
             <Card className='!rounded-xl border dark:border-gray-700 mb-4'>
               <div className='flex flex-col gap-3 mb-3 lg:flex-row lg:items-start lg:justify-between'>
                 <div>
@@ -444,7 +450,9 @@ const RoutePolicyCard = ({ t }) => {
                     {tLocal('route_policy.model_groups')}
                   </Typography.Title>
                   <Typography.Text type='tertiary' size='small' className='block mt-1'>
-                    {tLocal('route_policy.drag_sort_hint')}
+                    {effectiveMode === 'weight'
+                      ? tLocal('route_policy.drag_sort_hint')
+                      : tLocal('route_policy.mode_price_hint')}
                   </Typography.Text>
                 </div>
                 <div className='w-full lg:w-72 shrink-0'>
@@ -531,7 +539,14 @@ const RoutePolicyCard = ({ t }) => {
                         </div>
                         <WeightChannelTable
                           groupKey={group.group_key}
-                          channels={group.channels}
+                          channels={
+                            effectiveMode === 'price'
+                              ? [...group.channels].sort(
+                                  (a, b) => (a.price || 0) - (b.price || 0),
+                                )
+                              : group.channels
+                          }
+                          routeMode={effectiveMode}
                           isAdmin={isAdmin}
                           onWeightChange={handleWeightChange}
                           onBatchWeightChange={handleBatchWeightChange}
@@ -612,6 +627,7 @@ const RoutePolicyCard = ({ t }) => {
 const WeightChannelTable = ({
   groupKey,
   channels,
+  routeMode = 'weight',
   isAdmin,
   onWeightChange,
   onBatchWeightChange,
@@ -635,6 +651,8 @@ const WeightChannelTable = ({
   }, [channels]);
 
   const persistOrderWeights = async (nextChannels) => {
+    if (routeMode !== 'weight') return;
+
     const updates = computeWeightsFromOrder(nextChannels).map(({ channel, weight }) => ({
       channel_id: channel.channel_id,
       weight,
@@ -649,6 +667,7 @@ const WeightChannelTable = ({
   };
 
   const handleGripPointerDown = (index, event) => {
+    if (routeMode !== 'weight') return;
     event.preventDefault();
     event.stopPropagation();
     dragIndexRef.current = index;
@@ -705,12 +724,23 @@ const WeightChannelTable = ({
       <table className='w-full text-sm'>
         <thead>
           <tr className='border-b dark:border-gray-600 text-left text-xs text-gray-500'>
-            <th className='py-2 pr-2 w-9' />
+            {routeMode === 'weight' ? <th className='py-2 pr-2 w-9' /> : null}
             <th className='py-2 pr-3'>{t('route_policy.provider')}</th>
             <th className='py-2 pr-3'>{t('route_policy.route_slug')}</th>
-            <th className='py-2 pr-3'>{t('route_policy.user_weight')}</th>
-            <th className='py-2 pr-3'>{t('route_policy.enabled')}</th>
-            <th className='py-2 pr-3'>{t('route_policy.global_weight')}</th>
+            {routeMode === 'weight' ? (
+              <>
+                <th className='py-2 pr-3'>{t('route_policy.user_weight')}</th>
+                <th className='py-2 pr-3'>{t('route_policy.enabled')}</th>
+                <th className='py-2 pr-3'>{t('route_policy.global_weight')}</th>
+              </>
+            ) : (
+              <th className='py-2 pr-3'>
+                {t('route_policy.price_per_1k', {
+                  symbol: getCurrencyConfig().symbol,
+                  price: '…',
+                })}
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -729,7 +759,7 @@ const WeightChannelTable = ({
               onWeightChange={onWeightChange}
               onDeleteWeight={onDeleteWeight}
               onSaved={onSaved}
-              routeMode='weight'
+              routeMode={routeMode}
               t={t}
             />
           ))}
