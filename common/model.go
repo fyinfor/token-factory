@@ -35,7 +35,7 @@ var (
 		"prefix:t2i-",
 	}
 	// VideoGenerationModels 通用文生视频（T2V）/ 图生视频（I2V）模型名关键词。
-	// 顺序很重要：seedance-* 关键词在 SeedanceModels 中匹配；这里只放通用 video 关键词。
+	// Seedance 等专用视频模型也归入此列表。
 	VideoGenerationModels = []string{
 		"prefix:kling-",
 		"prefix:kling_",
@@ -46,6 +46,11 @@ var (
 		"prefix:tokenfactory-video-",
 		"prefix:tencentcloud-vod-video-",
 		"prefix:ali-video-",
+		"prefix:seedance-",
+		"prefix:seedance.",
+		"prefix:seedance_",
+		"prefix:doubao-seedance-",
+		"prefix:doubao-seedance.",
 		"hunyuan-video",
 		"prefix:cogvideox-",
 		"prefix:wan2-",
@@ -55,14 +60,6 @@ var (
 		"video-generation",
 		"prefix:t2v-",
 		"prefix:i2v-",
-	}
-	// SeedanceModels 字节豆包 Seedance 视频生成模型名关键词。
-	SeedanceModels = []string{
-		"prefix:seedance-",
-		"prefix:doubao-seedance-",
-		"prefix:doubao-seedance.",
-		"prefix:seedance.",
-		"prefix:seedance_",
 	}
 	OpenAITextModels = []string{
 		"gpt-",
@@ -126,39 +123,32 @@ func IsVideoGenerationModel(modelName string) bool {
 	return matchModelKeyword(modelName, VideoGenerationModels)
 }
 
-// IsSeedanceModel 判断模型名是否属于字节豆包 Seedance 视频生成。
-func IsSeedanceModel(modelName string) bool {
-	return matchModelKeyword(modelName, SeedanceModels)
-}
-
-// RankingCategory 排行分类常量，用于 rankings 服务的 category 维度。
+// RankingCategory 排行分类常量。值与系统内其他位置（playground、供应商能力）保持一致：
+// text / image / video，加上 all 表示不过滤。
 const (
-	RankingCategoryAll      = "all"
-	RankingCategoryChat     = "chat"
-	RankingCategoryT2I      = "t2i"      // 文生图
-	RankingCategoryT2V      = "t2v"      // 文生视频（含通用视频生成）
-	RankingCategorySeedance = "seedance" // Seedance 视频生成
+	RankingCategoryAll   = "all"
+	RankingCategoryText  = "text"  // 文本对话模型（GPT/Claude/DeepSeek/Qwen 等）
+	RankingCategoryImage = "image" // 文生图 / 图生图
+	RankingCategoryVideo = "video" // 文生视频 / 图生视频（包含 Seedance 等专用视频模型）
 )
 
 // ModelCategory 统一返回模型在排行中的分类标签。
-// 顺序：seedance → video → image → chat，确保 Seedance 模型不会被通用 video 抢走分类。
+// 与 system 中其他模块（playground display_mode、供应商能力多模态选项）保持一致。
+// Seedance 等专用视频模型归入 video，不单独成类。
 func ModelCategory(modelName string) string {
-	if IsSeedanceModel(modelName) {
-		return RankingCategorySeedance
-	}
 	if IsVideoGenerationModel(modelName) {
-		return RankingCategoryT2V
+		return RankingCategoryVideo
 	}
 	if IsTextToImageModel(modelName) {
-		return RankingCategoryT2I
+		return RankingCategoryImage
 	}
-	return RankingCategoryChat
+	return RankingCategoryText
 }
 
 // IsRankingCategorySupported 当前支持过滤的分类集合。
 func IsRankingCategorySupported(category string) bool {
 	switch category {
-	case "", RankingCategoryAll, RankingCategoryT2I, RankingCategoryT2V, RankingCategorySeedance:
+	case "", RankingCategoryAll, RankingCategoryText, RankingCategoryImage, RankingCategoryVideo:
 		return true
 	}
 	return false

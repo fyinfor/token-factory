@@ -25,9 +25,9 @@ const PERIOD_TABS = [
 
 const CATEGORY_TABS = [
   { key: 'all', labelKey: '全部' },
-  { key: 't2i', labelKey: '文生图' },
-  { key: 't2v', labelKey: '文生视频' },
-  { key: 'seedance', labelKey: 'Seedance' },
+  { key: 'text', labelKey: '文本' },
+  { key: 'image', labelKey: '图片' },
+  { key: 'video', labelKey: '视频' },
 ];
 
 const RankingsPage = () => {
