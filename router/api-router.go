@@ -480,8 +480,8 @@ func SetApiRouter(router *gin.Engine) {
 			personalMaterialRoute.POST("/upload", middleware.UploadRateLimit(), controller.UploadPersonalMaterial)
 			personalMaterialRoute.POST("/upload-url", middleware.UploadRateLimit(), controller.UploadPersonalMaterialByURL)
 			personalMaterialRoute.GET("/assets", controller.ListPersonalMaterialAssets)
-		personalMaterialRoute.DELETE("/asset/:asset_id", controller.DeletePersonalMaterial)
-		personalMaterialRoute.GET("/asset/:asset_id", controller.GetPersonalMaterial)
+			personalMaterialRoute.DELETE("/asset/:asset_id", controller.DeletePersonalMaterial)
+			personalMaterialRoute.GET("/asset/:asset_id", controller.GetPersonalMaterial)
 		}
 
 		usageRoute := apiRouter.Group("/usage")
@@ -575,6 +575,19 @@ func SetApiRouter(router *gin.Engine) {
 			modelsRoute.PUT("/", middleware.AdminAuth(), controller.UpdateModelMeta)
 			modelsRoute.DELETE("/:id", middleware.AdminAuth(), controller.DeleteModelMeta)
 			modelsRoute.POST("/batch_weight", middleware.AdminAuth(), controller.BatchUpdateModelWeight)
+		}
+
+		modelVisibilityRoute := apiRouter.Group("/model_visibility")
+		modelVisibilityRoute.Use(middleware.AdminAuth())
+		{
+			modelVisibilityRoute.GET("/sets", controller.GetModelVisibilitySets)
+			modelVisibilityRoute.GET("/sets/:id", controller.GetModelVisibilitySet)
+			modelVisibilityRoute.POST("/sets", controller.CreateModelVisibilitySet)
+			modelVisibilityRoute.PUT("/sets", controller.UpdateModelVisibilitySet)
+			modelVisibilityRoute.DELETE("/sets/:id", controller.DeleteModelVisibilitySet)
+			modelVisibilityRoute.PUT("/models/:id", controller.UpdateModelVisibilityBindings)
+			modelVisibilityRoute.GET("/users", controller.SearchModelVisibilityUsers)
+			modelVisibilityRoute.POST("/users/preview", controller.PreviewModelVisibilityUsers)
 		}
 
 		// Deployments (model deployment management)

@@ -27,9 +27,9 @@ type BoundChannel struct {
 type Model struct {
 	Id              int            `json:"id"`
 	ModelName       string         `json:"model_name" gorm:"size:128;not null;uniqueIndex:uk_model_name_delete_at,priority:1"`
-	Description       string         `json:"description,omitempty" gorm:"type:text"`
-	DescriptionEn     string         `json:"description_en,omitempty" gorm:"type:text"`
-	DocIntroduction   string         `json:"doc_introduction,omitempty" gorm:"type:text"`
+	Description     string         `json:"description,omitempty" gorm:"type:text"`
+	DescriptionEn   string         `json:"description_en,omitempty" gorm:"type:text"`
+	DocIntroduction string         `json:"doc_introduction,omitempty" gorm:"type:text"`
 	ApiDocs         string         `json:"api_docs,omitempty" gorm:"type:text"`
 	Icon            string         `json:"icon,omitempty" gorm:"type:varchar(128)"`
 	Tags            string         `json:"tags,omitempty" gorm:"type:varchar(255)"`
@@ -48,8 +48,10 @@ type Model struct {
 	OwnerUserID           int            `json:"owner_user_id" gorm:"type:int;index;default:0"`           // 模型归属用户ID（供应商场景）
 	SupplierApplicationID int            `json:"supplier_application_id" gorm:"type:int;index;default:0"` // 关联 supplier_applications.id
 
-	MatchedModels []string `json:"matched_models,omitempty" gorm:"-"`
-	MatchedCount  int      `json:"matched_count,omitempty" gorm:"-"`
+	MatchedModels    []string `json:"matched_models,omitempty" gorm:"-"`
+	MatchedCount     int      `json:"matched_count,omitempty" gorm:"-"`
+	Visibility       string   `json:"visibility" gorm:"-"`
+	VisibilitySetIDs []int    `json:"visibility_set_ids,omitempty" gorm:"-"`
 
 	// 排序权重和手动调用次数（用于热门排序干预）
 	SortWeight         float64 `json:"sort_weight" gorm:"default:1"`
@@ -351,7 +353,7 @@ func loadActiveModelRows() ([]Model, error) {
 	}
 	var rows []Model
 	err := DB.Model(&Model{}).
-		Select("model_name", "tags", "name_rule").
+		Select("id", "model_name", "tags", "name_rule").
 		Where("status = 1").
 		Find(&rows).Error
 	return rows, err

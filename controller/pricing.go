@@ -157,11 +157,19 @@ func buildPricingAPIData() []model.PricingAPIItem {
 //     （ManualDisplayResponseTime>0 或 LastTestSuccess && LastResponseTime>0；该渠道若已有任何成功单测，则本模型也需通过模糊匹配）。
 //
 // 用于操练场等需要"配好定价 + 测试连通性通过"判定与定价页保持一致的位置，避免两端各自实现的判定门槛漂移导致少展示。
-func CollectPricingShowableModelNames() map[string]bool {
+func CollectPricingShowableModelNames(userID ...int) map[string]bool {
 	pricing := model.GetPricing()
 	filtered := make([]model.Pricing, 0, len(pricing))
+	uid := 0
+	if len(userID) > 0 {
+		uid = userID[0]
+	}
 	for _, p := range pricing {
 		if ratio_setting.ModelHasConfiguredPricing(p.ModelName) {
+			allowed, err := model.UserCanAccessModel(uid, p.ModelName)
+			if err != nil || !allowed {
+				continue
+			}
 			filtered = append(filtered, p)
 		}
 	}
@@ -224,10 +232,21 @@ func PriceSync(c *gin.Context) {
 
 // GetPricing 返回前端定价展示数据。
 func GetPricing(c *gin.Context) {
+	userId, exists := c.Get("id")
+	uid := 0
+	if exists {
+		if id, ok := userId.(int); ok {
+			uid = id
+		}
+	}
 	pricing := model.GetPricing()
 	filtered := make([]model.Pricing, 0, len(pricing))
 	for _, p := range pricing {
 		if ratio_setting.ModelHasConfiguredPricing(p.ModelName) {
+			allowed, err := model.UserCanAccessModel(uid, p.ModelName)
+			if err != nil || !allowed {
+				continue
+			}
 			filtered = append(filtered, p)
 		}
 	}
@@ -235,7 +254,6 @@ func GetPricing(c *gin.Context) {
 	if err != nil {
 		visibleChannelIDs = map[int]struct{}{}
 	}
-	userId, exists := c.Get("id")
 	usableGroup := map[string]string{}
 	groupRatio := map[string]float64{}
 	groupModelPrice := map[string]map[string]float64{}
