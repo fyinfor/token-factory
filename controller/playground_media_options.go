@@ -80,7 +80,7 @@ func playgroundDiscoveryGroupsForToken(c *gin.Context) ([]string, bool) {
 }
 
 func collectDiscoveryModels(c *gin.Context, groups []string) []string {
-	pricingShowable := CollectPricingShowableModelNames()
+	pricingShowable := CollectPricingShowableModelNames(c.GetInt("id"))
 	seen := make(map[string]struct{})
 	out := make([]string, 0)
 	for _, group := range groups {
@@ -90,6 +90,10 @@ func collectDiscoveryModels(c *gin.Context, groups []string) []string {
 				continue
 			}
 			if !pricingShowable[modelName] || !tokenAllowsDiscoveryModel(c, modelName) {
+				continue
+			}
+			allowed, err := model.UserCanAccessModel(c.GetInt("id"), modelName)
+			if err != nil || !allowed {
 				continue
 			}
 			if _, ok := seen[modelName]; ok {

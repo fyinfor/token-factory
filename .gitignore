@@ -36,3 +36,5 @@ redis_data/
 .gocache-temp
 .gopath
 .reasonix/
+scripts/
+.codegraph/
