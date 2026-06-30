@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import { useMemo } from 'react';
+import { modelMatchesSearchTerm } from '../../components/table/model-pricing/utils/channelRoute';
 
 // 工具函数：将 tags 字符串转为小写去重数组
 const normalizeTags = (tags = '') =>
@@ -97,19 +98,13 @@ export const usePricingFilterCounts = ({
       }
     }
 
-    // 搜索
-    if (!ignore.includes('search') && searchValue.length > 0) {
-      const term = searchValue.toLowerCase();
-      if (
-        !(
-          (model.model_name && model.model_name.toLowerCase().includes(term)) ||
-          (model.description &&
-            model.description.toLowerCase().includes(term)) ||
-          (model.tags && model.tags.toLowerCase().includes(term)) ||
-          (model.vendor_name && model.vendor_name.toLowerCase().includes(term))
-        )
-      )
-        return false;
+    // 搜索（含渠道路径、route_slug、supplier_alias 等）
+    if (
+      !ignore.includes('search') &&
+      searchValue.length > 0 &&
+      !modelMatchesSearchTerm(model, searchValue)
+    ) {
+      return false;
     }
 
     return true;

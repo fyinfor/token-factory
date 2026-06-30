@@ -46,11 +46,13 @@ var (
 		"prefix:tokenfactory-video-",
 		"prefix:tencentcloud-vod-video-",
 		"prefix:ali-video-",
-		"prefix:seedance-",
-		"prefix:seedance.",
-		"prefix:seedance_",
-		"prefix:doubao-seedance-",
-		"prefix:doubao-seedance.",
+		// Seedance 系列统一用子串匹配，覆盖所有书写形态（已统一小写后比较）：
+		// doubao-seedance-1.0-lite / seedance-1.0-pro / Seedance2.0 / Seedance2.0-fast
+		// 以及线上实际出现的带空格别名 "Seedance 2.0"、"Seedance 2.0-pro"。
+		// 注意：文本模型是 "doubao-seed-..."（seed，无 ance），不会被 "seedance" 误命中。
+		"seedance",
+		// 兼容 OpenAI-Video 网关上 Seedance/Doubao 系列返回的「Video-xxx」opaque ID。
+		"prefix:video-",
 		"hunyuan-video",
 		"prefix:cogvideox-",
 		"prefix:wan2-",

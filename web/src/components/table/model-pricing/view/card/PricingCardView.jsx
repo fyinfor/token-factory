@@ -77,6 +77,7 @@ import ModelPerfCardSection from '../../components/ModelPerfCardSection';
 import { useMinimumLoadingTime } from '../../../../../hooks/common/useMinimumLoadingTime';
 import { renderLimitedItems } from '../../../../common/ui/RenderUtils';
 import { useIsMobile } from '../../../../../hooks/common/useIsMobile';
+import { getModelDisplayRouteName } from '../../utils/channelRoute';
 const CARD_STYLES = {
   container:
     'w-12 h-12 rounded-xl flex items-center justify-center relative shadow-sm border border-semi-color-border bg-white',
@@ -1708,6 +1709,7 @@ const PricingCardView = ({
             const hasChannelList =
               Array.isArray(model.channel_list) &&
               model.channel_list.length > 0;
+            const modelDisplayName = getModelDisplayRouteName(model);
             return (
               <Card
                 key={modelKey || index}
@@ -1725,7 +1727,7 @@ const PricingCardView = ({
                       <div className='flex-1 min-w-0'>
                         <div className='flex items-start justify-between gap-2'>
                           <h3 className='text-lg font-bold text-gray-900 truncate flex-1'>
-                            {renderHighlightedText(model.model_name)}
+                            {renderHighlightedText(modelDisplayName)}
                           </h3>
                         </div>
                         <div
@@ -1910,7 +1912,7 @@ const PricingCardView = ({
                         icon={<Copy size={12} />}
                         onClick={(e) => {
                           e.stopPropagation();
-                          copyText(model.model_name);
+                          copyText(modelDisplayName);
                         }}
                       />
 

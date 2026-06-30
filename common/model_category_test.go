@@ -12,6 +12,14 @@ func TestModelCategory(t *testing.T) {
 		{"seedance-lite", "doubao-seedance-1.0-lite", RankingCategoryVideo},
 		{"seedance-pro", "seedance-1.0-pro", RankingCategoryVideo},
 		{"seedance-mixed-case", "Doubao-Seedance-pro-250528", RankingCategoryVideo},
+		// OpenAI-Video 适配器下的 Seedance 2.0 可读别名（playground-facing）。
+		{"seedance2-alias", "Seedance2.0", RankingCategoryVideo},
+		{"seedance2-fast-alias", "Seedance2.0-fast", RankingCategoryVideo},
+		// 线上实际出现的带空格别名（之前因 "seedance2" 子串匹配不到空格而误判为 text）。
+		{"seedance-space", "Seedance 2.0", RankingCategoryVideo},
+		{"seedance-space-pro", "Seedance 2.0-pro", RankingCategoryVideo},
+		// OpenAI-Video 网关上 Seedance/Doubao 系列返回的「Video-xxx」opaque ID。
+		{"video-opaque-id", "Video-a4lzrja7", RankingCategoryVideo},
 
 		// 通用 video
 		{"kling", "kling-v1-5", RankingCategoryVideo},
@@ -47,6 +55,9 @@ func TestModelCategory(t *testing.T) {
 		{"deepseek", "deepseek-v3", RankingCategoryText},
 		{"qwen", "qwen-2.5-72b", RankingCategoryText},
 		{"unknown", "totally-custom-model", RankingCategoryText},
+		// 边界：doubao-seed-*（文本，含 "seed" 但非 "seedance"）不应被识别为 video。
+		{"doubao-seed-text", "doubao-seed-2-0-pro-260215", RankingCategoryText},
+		{"doubao-seed-lite-text", "doubao-seed-1-6-lite-251015", RankingCategoryText},
 
 		// 边界：Seedance 不会被识别为 image（即使包含 "image" 子串）
 		{"seedance-not-image", "seedance-image-alpha-test", RankingCategoryVideo},

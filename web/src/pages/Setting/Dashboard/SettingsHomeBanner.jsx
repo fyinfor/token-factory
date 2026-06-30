@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Button,
   Input,
@@ -35,6 +35,11 @@ import {
 import { Plus, Trash2, Edit2, ChevronUp, ChevronDown } from 'lucide-react';
 import { API, showError, showSuccess } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
+import {
+  augmentModelRouteSelectOptions,
+  buildModelRouteSelectOptions,
+  modelRouteSelectFilter,
+} from '../../../components/table/model-pricing/utils/channelRoute';
 
 const OPTION_KEY = 'HomeBannerSlides';
 const INTERVAL_OPTION_KEY = 'HomeBannerIntervalSec';
@@ -90,6 +95,11 @@ const SettingsHomeBanner = ({ options, refresh }) => {
   const [copyTab, setCopyTab] = useState('zh');
   const [form, setForm] = useState(emptySlide());
 
+  const modelSelectOptions = useMemo(
+    () => augmentModelRouteSelectOptions(modelOptions, form.target_model),
+    [modelOptions, form.target_model],
+  );
+
   const raw = options?.[OPTION_KEY] ?? '';
   const rawInterval = options?.[INTERVAL_OPTION_KEY] ?? String(DEFAULT_INTERVAL_SEC);
   const [intervalSec, setIntervalSec] = useState(DEFAULT_INTERVAL_SEC);
@@ -114,11 +124,7 @@ const SettingsHomeBanner = ({ options, refresh }) => {
         const res = await API.get('/api/pricing');
         const { success, data } = res.data || {};
         if (!success || !Array.isArray(data) || cancelled) return;
-        const opts = data
-          .map((m) => m?.model_name)
-          .filter(Boolean)
-          .sort((a, b) => String(a).localeCompare(String(b)))
-          .map((name) => ({ label: name, value: name }));
+        const opts = buildModelRouteSelectOptions(data);
         if (!cancelled) setModelOptions(opts);
       } catch {
         /* ignore */
@@ -587,8 +593,8 @@ const SettingsHomeBanner = ({ options, refresh }) => {
               onChange={(v) =>
                 setForm((f) => ({ ...f, target_model: v || '' }))
               }
-              optionList={modelOptions}
-              filter
+              optionList={modelSelectOptions}
+              filter={modelRouteSelectFilter}
               showClear
               placeholder={t('首页广告模型占位')}
               className='w-full'

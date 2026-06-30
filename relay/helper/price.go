@@ -437,10 +437,15 @@ func tryVideoPerTokenRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo)
 
 	groupRatioInfo := HandleGroupRatio(c, info)
 	preConsumeTokens := service.SeedanceTokenPreConsumeTokens
+	resolutionLabel := ""
+	if req, err := relaycommon.GetTaskRequest(c); err == nil {
+		resolutionLabel = service.VideoBillingResolutionLabelFromRequest(req)
+	}
 	quota, match, ok := service.CalcVideoTokenQuota(
 		channelID, info.UserId, info.OriginModelName, mode,
 		estimateCtx.Width, estimateCtx.Height, hasAudio,
 		preConsumeTokens, groupRatioInfo.GroupRatio,
+		resolutionLabel,
 	)
 	if !ok || quota <= 0 || match == nil {
 		return types.PriceData{}, false
@@ -840,15 +845,20 @@ func tryVideoPerSecondRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo
 	}
 	seconds = int(math.Ceil(float64(seconds)))
 
-	var pricePerSecond float64
-	switch estimateCtx.Mode {
-	case videoBillingModeImageToVideo:
-		pricePerSecond, ok = pickAudioPriceByResolution(estimateCtx, hasAudio, rules.ImageToVideoPerSecond)
-	case videoBillingModeVideoToVideo:
-		pricePerSecond, ok = pickAudioPriceByResolution(estimateCtx, hasAudio, rules.VideoToVideoPerSecond)
-	default:
-		pricePerSecond, ok = pickAudioPriceByResolution(estimateCtx, hasAudio, rules.TextToVideoPerSecond)
+	resolutionLabel := ""
+	if req, err := relaycommon.GetTaskRequest(c); err == nil {
+		resolutionLabel = service.VideoBillingResolutionLabelFromRequest(req)
 	}
+
+	var pricePerSecond float64
+	pricePerSecond, ok = service.VideoPerSecondChannelUnitPrice(
+		rules,
+		string(estimateCtx.Mode),
+		estimateCtx.Width,
+		estimateCtx.Height,
+		hasAudio,
+		resolutionLabel,
+	)
 	if !ok || pricePerSecond <= 0 {
 		return types.PriceData{}, false, nil
 	}
@@ -864,6 +874,7 @@ func tryVideoPerSecondRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo
 		hasAudio,
 		chDiscVPS,
 		markupDiscVPS,
+		resolutionLabel,
 	)
 	if !effOK || effPricePerSecond <= 0 {
 		// 渠道未配置按秒规则而仅配置全局规则时，按全局匹配单价计费。

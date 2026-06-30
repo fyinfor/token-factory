@@ -656,16 +656,14 @@ func recalcVideoPerSecondQuotaDetailOnComplete(task *model.Task, taskResult *rel
 	if videoURL == "" {
 		videoURL = strings.TrimSpace(task.GetResultURL())
 	}
-	// 成片时长优先 URL 探测（MP4 真实时长）。DashScope 回包里的 submit_time/end_time 是任务耗时，不能用于计费。
+	// 优先使用上游任务查询回包中的 resolution / duration / ratio；缺失时再 URL 探测或回退估算。
 	var meta *VideoMetadata
-	if videoURL != "" {
+	if m, ok := videoMetadataFromTaskCompletion(task, taskResult); ok {
+		meta = m
+	}
+	if meta == nil && videoURL != "" {
 		if probed, err := ProbeVideoMetadataFromURL(videoURL); err == nil {
 			meta = probed
-		}
-	}
-	if meta == nil {
-		if m, ok := extractVideoMetadataFromTaskData(task); ok {
-			meta = m
 		}
 	}
 	if meta == nil {
@@ -677,7 +675,8 @@ func recalcVideoPerSecondQuotaDetailOnComplete(task *model.Task, taskResult *rel
 		return 0, nil
 	}
 	mode := detectTaskVideoBillingMode(task)
-	match, ok := matchPerSecondPriceDetail(channelRules, mode, meta.Width, meta.Height, meta.HasAudio)
+	resolutionLabel := VideoBillingResolutionLabelForTask(task, taskResult)
+	match, ok := matchPerSecondPriceDetail(channelRules, mode, meta.Width, meta.Height, meta.HasAudio, resolutionLabel)
 	if !ok || match.PricePerSecond <= 0 {
 		return 0, nil
 	}
@@ -701,6 +700,7 @@ func recalcVideoPerSecondQuotaDetailOnComplete(task *model.Task, taskResult *rel
 		quota = 1
 	}
 	channelDiscountPercent := costDisc
+	upstreamSpec := resolveVideoOutputSpecFromUpstream(task, taskResult)
 	detail := &videoPerSecondBillingDetail{
 		Mode:                    mode,
 		Seconds:                 seconds,
@@ -719,6 +719,15 @@ func recalcVideoPerSecondQuotaDetailOnComplete(task *model.Task, taskResult *rel
 		ChannelDiscountPercent:  channelDiscountPercent,
 		UnifiedAudio:            match.UnifiedAudio,
 		CappedToMaxTier:         match.CappedToMaxTier,
+		Ratio:                   upstreamSpec.Ratio,
+	}
+	if display := common.FormatVideoResolutionLabel(resolutionLabel); display != "" {
+		detail.Resolution = display
+	} else if label := strings.TrimSpace(upstreamSpec.Resolution); label != "" {
+		detail.Resolution = common.FormatVideoResolutionLabel(label)
+		if detail.Resolution == "" {
+			detail.Resolution = label
+		}
 	}
 	return quota, detail
 }
@@ -855,6 +864,8 @@ type videoPerSecondBillingDetail struct {
 	Height                  int
 	HasAudio                bool
 	Resolution              string
+	Ratio                   string
+	ResolutionFromRequest   bool
 	RuleWidth               int
 	RuleHeight              int
 	PricePerSecond          float64
@@ -887,14 +898,28 @@ func taskPreferVideoPerSecondSettlement(task *model.Task) bool {
 }
 
 func matchPerSecondPrice(r ratio_setting.VideoPricingRules, mode string, width, height int, hasAudio bool) (float64, bool) {
-	match, ok := matchPerSecondPriceDetail(r, mode, width, height, hasAudio)
+	match, ok := matchPerSecondPriceDetail(r, mode, width, height, hasAudio, "")
 	if !ok {
 		return 0, false
 	}
 	return match.PricePerSecond, true
 }
 
-func matchPerSecondPriceDetail(r ratio_setting.VideoPricingRules, mode string, width, height int, hasAudio bool) (*videoPerSecondPriceMatch, bool) {
+// MatchVideoPerSecondUnitPrice 按 resolution 标识优先匹配按秒单价，再回退像素档位匹配。
+func MatchVideoPerSecondUnitPrice(r ratio_setting.VideoPricingRules, mode string, width, height int, hasAudio bool, resolutionLabel string) (*videoPerSecondPriceMatch, bool) {
+	return matchPerSecondPriceDetail(r, mode, width, height, hasAudio, resolutionLabel)
+}
+
+// VideoPerSecondChannelUnitPrice 返回渠道按秒单价（美元/秒）。
+func VideoPerSecondChannelUnitPrice(r ratio_setting.VideoPricingRules, mode string, width, height int, hasAudio bool, resolutionLabel string) (float64, bool) {
+	match, ok := matchPerSecondPriceDetail(r, mode, width, height, hasAudio, resolutionLabel)
+	if !ok || match == nil {
+		return 0, false
+	}
+	return match.PricePerSecond, true
+}
+
+func matchPerSecondPriceDetail(r ratio_setting.VideoPricingRules, mode string, width, height int, hasAudio bool, resolutionLabel string) (*videoPerSecondPriceMatch, bool) {
 	var rows []ratio_setting.VideoResolutionAudioPriceRule
 	switch mode {
 	case "image_to_video":
@@ -906,6 +931,14 @@ func matchPerSecondPriceDetail(r ratio_setting.VideoPricingRules, mode string, w
 	}
 	if len(rows) == 0 {
 		return nil, false
+	}
+	if label := strings.TrimSpace(resolutionLabel); label != "" {
+		if match, ok := matchPerSecondPriceRowByLabel(rows, label, width, height, hasAudio, true); ok {
+			return match, true
+		}
+		if match, ok := matchPerSecondPriceRowByLabel(rows, label, width, height, hasAudio, false); ok {
+			return match, true
+		}
 	}
 	targetLong, targetShort := normalizeVideoResolutionSides(width, height)
 	targetRatio := targetVideoResolutionRatio(width, height)
@@ -965,6 +998,58 @@ func matchPerSecondPriceRow(rows []ratio_setting.VideoResolutionAudioPriceRule, 
 		return maxTier, maxTier >= 0
 	}
 	return best, false
+}
+
+func normalizeResolutionLabelForMatch(raw string) string {
+	label := common.FormatVideoResolutionLabel(strings.TrimSpace(raw))
+	if label != "" {
+		return strings.ToLower(label)
+	}
+	return strings.ToLower(strings.TrimSpace(raw))
+}
+
+func matchPerSecondPriceRowByLabel(rows []ratio_setting.VideoResolutionAudioPriceRule, label string, width, height int, hasAudio, requireAudioMatch bool) (*videoPerSecondPriceMatch, bool) {
+	want := normalizeResolutionLabelForMatch(label)
+	if want == "" {
+		return nil, false
+	}
+	targetRatio := targetVideoResolutionRatio(width, height)
+	var best *videoPerSecondPriceMatch
+	bestPixels := int(^uint(0) >> 1)
+	for i := range rows {
+		row := rows[i]
+		if row.Price <= 0 {
+			continue
+		}
+		if requireAudioMatch && row.HasAudio != hasAudio {
+			continue
+		}
+		if normalizeResolutionLabelForMatch(row.Resolution) != want {
+			continue
+		}
+		rw, rh, ok := parseVideoResolutionFlexibleForRatio(row.Resolution, targetRatio)
+		if !ok {
+			rw, rh, ok = parseVideoResolutionFlexible(row.Resolution)
+		}
+		if !ok {
+			continue
+		}
+		pixels := rw * rh
+		if best == nil || pixels < bestPixels {
+			bestPixels = pixels
+			best = &videoPerSecondPriceMatch{
+				Resolution:     row.Resolution,
+				RuleWidth:      rw,
+				RuleHeight:     rh,
+				PricePerSecond: row.Price,
+				UnifiedAudio:   hasSamePerSecondPriceForAudio(rows, row),
+			}
+		}
+	}
+	if best != nil {
+		return best, true
+	}
+	return nil, false
 }
 
 func hasPerSecondPriceRowsForAudio(rows []ratio_setting.VideoResolutionAudioPriceRule, hasAudio bool) bool {
