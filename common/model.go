@@ -51,6 +51,11 @@ var (
 		"prefix:seedance_",
 		"prefix:doubao-seedance-",
 		"prefix:doubao-seedance.",
+		// 兼容 OpenAI-Video 适配器下 Seedance 2.0 的可读别名（playground-facing）。
+		// 案例：Seedance2.0、Seedance2.0-fast。模型名已统一小写后做子串匹配。
+		"seedance2",
+		// 兼容 OpenAI-Video 网关上 Seedance/Doubao 系列返回的「Video-xxx」opaque ID。
+		"prefix:video-",
 		"hunyuan-video",
 		"prefix:cogvideox-",
 		"prefix:wan2-",

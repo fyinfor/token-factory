@@ -538,6 +538,10 @@ type RecordConsumeLogParams struct {
 	ChannelId        int                    `json:"channel_id"`
 	PromptTokens     int                    `json:"prompt_tokens"`
 	CompletionTokens int                    `json:"completion_tokens"`
+	// TokenUsed 显式指定写入 quota_data.token_used 的值；<=0 时回退为 PromptTokens+CompletionTokens。
+	// 异步任务预扣路径（视频按 token/按秒/按次）没有真实 token 数，可将预扣额度作为消耗量上报，
+	// 以便 /rankings 排行（按 quota_data.token_used 聚合）也能覆盖到 Seedance/Kling/Sora 等异步视频模型。
+	TokenUsed        int                    `json:"token_used"`
 	ModelName        string                 `json:"model_name"`
 	TokenName        string                 `json:"token_name"`
 	Quota            int                    `json:"quota"`
@@ -595,7 +599,12 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 	}
 	if common.DataExportEnabled {
 		gopool.Go(func() {
-			LogQuotaData(userId, username, params.ModelName, params.Quota, common.GetTimestamp(), params.PromptTokens+params.CompletionTokens)
+			tokenUsed := params.PromptTokens + params.CompletionTokens
+			if params.TokenUsed > 0 {
+				// 异步任务（视频/Seedance 等）没有真实 token 数，用调用方显式上报的消耗量。
+				tokenUsed = params.TokenUsed
+			}
+			LogQuotaData(userId, username, params.ModelName, params.Quota, common.GetTimestamp(), tokenUsed)
 		})
 	}
 }
@@ -646,6 +655,28 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 	err := LOG_DB.Create(log).Error
 	if err != nil {
 		common.SysLog("failed to record task billing log: " + err.Error())
+	}
+	// 异步任务结算（refund / delta_charge / delta_refund）也写一份 quota_data，
+	// 使 /rankings 排行（按 quota_data.token_used 聚合）能覆盖到 Seedance/Kling/Sora 等异步视频模型。
+	// - pre_charge 已经由 LogTaskConsumption → RecordConsumeLog 写入 quota_data；
+	// - settlement_marker (Quota=0, affectsBalance=false) 仅作展示用，不重复写；
+	// - 这里只对真正影响余额的事件做带符号追加/扣减。
+	if common.DataExportEnabled && params.Quota > 0 && LogTypeChargeable(params.LogType) {
+		affectsBalance := true
+		if params.Other != nil {
+			if v, ok := params.Other["affects_balance"].(bool); ok {
+				affectsBalance = v
+			}
+		}
+		if affectsBalance {
+			signedQuota := params.Quota
+			if params.LogType == LogTypeRefund {
+				signedQuota = -params.Quota
+			}
+			gopool.Go(func() {
+				LogQuotaData(params.UserId, username, params.ModelName, signedQuota, common.GetTimestamp(), signedQuota)
+			})
+		}
 	}
 }
 

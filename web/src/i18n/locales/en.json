@@ -5931,7 +5931,11 @@
         "Zhipu": "Zhipu AI",
         "文生图": "Text-to-image",
         "时间范围": "Time Range",
-        "模型分类": "Model Category"
+        "模型分类": "Model Category",
+        "今日": "Today",
+        "本周": "This week",
+        "本月": "This month",
+        "本年": "This year"
     },
     "广告按钮文案（英文）": "Button label (English)",
     "广告标题高亮词（英文）": "Title highlight (English)",
