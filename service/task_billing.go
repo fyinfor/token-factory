@@ -265,7 +265,8 @@ func videoPerSecondBillingDetailFromSubmit(c *gin.Context, info *relaycommon.Rel
 	width, height := videoDimensionsFromTaskRequest(req)
 	hasAudio := taskRequestHasAudio(req)
 	mode := detectVideoBillingModeFromSubmitRequest(c)
-	match, ok := matchPerSecondPriceDetail(rules, mode, width, height, hasAudio)
+	resolutionLabel := VideoBillingResolutionLabelFromRequest(req)
+	match, ok := matchPerSecondPriceDetail(rules, mode, width, height, hasAudio, resolutionLabel)
 	if !ok || match.PricePerSecond <= 0 {
 		return nil
 	}
@@ -296,6 +297,15 @@ func videoPerSecondBillingDetailFromSubmit(c *gin.Context, info *relaycommon.Rel
 		UnifiedAudio:           match.UnifiedAudio,
 		CappedToMaxTier:        match.CappedToMaxTier,
 	}
+	applyPreChargeVideoResolution(req, &detail.Resolution, &detail.ResolutionFromRequest, match.Resolution)
+	if req.Metadata != nil {
+		if r, ok := req.Metadata["ratio"].(string); ok {
+			detail.Ratio = strings.TrimSpace(r)
+		}
+	}
+	if strings.TrimSpace(detail.Ratio) == "" && strings.TrimSpace(req.Ratio) != "" {
+		detail.Ratio = strings.TrimSpace(req.Ratio)
+	}
 	fillVideoPerSecondEffectiveRates(detail, info.ChannelId, info.UserId, modelName, mode)
 	return detail
 }
@@ -321,6 +331,7 @@ type videoPerTokenBillingDetail struct {
 	UnifiedAudio              bool
 	CappedToMaxTier           bool
 	IsPreCharge               bool
+	ResolutionFromRequest     bool
 }
 
 func videoPerTokenBillingDetailFromSubmit(c *gin.Context, info *relaycommon.RelayInfo) *videoPerTokenBillingDetail {
@@ -346,7 +357,8 @@ func videoPerTokenBillingDetailFromSubmit(c *gin.Context, info *relaycommon.Rela
 	width, height := videoDimensionsFromTaskRequest(req)
 	hasAudio := taskRequestHasAudio(req)
 	mode := detectVideoBillingModeFromSubmitRequest(c)
-	match, ok := matchPerTokenPriceDetail(rules, mode, width, height, hasAudio)
+	resolutionLabel := VideoBillingResolutionLabelFromRequest(req)
+	match, ok := matchPerTokenPriceDetail(rules, mode, width, height, hasAudio, resolutionLabel)
 	if !ok || match.PricePerSecond <= 0 {
 		return nil
 	}
@@ -370,6 +382,7 @@ func videoPerTokenBillingDetailFromSubmit(c *gin.Context, info *relaycommon.Rela
 		CappedToMaxTier:        match.CappedToMaxTier,
 		Duration:               videoDurationFromTaskRequest(req),
 	}
+	applyPreChargeVideoResolution(req, &detail.Resolution, &detail.ResolutionFromRequest, match.Resolution)
 	if req.Metadata != nil {
 		if r, ok := req.Metadata["ratio"].(string); ok {
 			detail.Ratio = strings.TrimSpace(r)
@@ -390,6 +403,9 @@ func videoPerTokenBillingDetailFromTask(task *model.Task, match *videoTokenRuleM
 		return nil
 	}
 	width, height := videoDimensionsFromTaskRequest(req)
+	if w, h, ok := videoDimensionsFromTaskCompletion(task, nil); ok {
+		width, height = w, h
+	}
 	hasAudio := taskRequestHasAudio(req)
 	mode := relaycommon.DetectVideoBillingMode(&req)
 	if bc := task.PrivateData.BillingContext; bc != nil && strings.TrimSpace(bc.VideoBillingMode) != "" {
@@ -418,6 +434,9 @@ func videoPerTokenBillingDetailFromTask(task *model.Task, match *videoTokenRuleM
 		detail.UnifiedAudio = match.UnifiedAudio
 	} else if strings.TrimSpace(spec.Resolution) != "" {
 		detail.Resolution = spec.Resolution
+	}
+	if display := common.FormatVideoResolutionLabel(strings.TrimSpace(spec.Resolution)); display != "" {
+		detail.Resolution = display
 	}
 	if bc := task.PrivateData.BillingContext; bc != nil {
 		detail.ChannelDiscountPercent = bc.ChannelPriceDiscountPercent
@@ -514,13 +533,7 @@ func appendVideoPerTokenBillingDetailOther(other map[string]interface{}, detail 
 	other["video_width"] = detail.Width
 	other["video_height"] = detail.Height
 	other["video_has_audio"] = detail.HasAudio
-	if resolution := common.FormatVideoResolutionLabel(detail.Resolution); resolution != "" {
-		other["video_resolution"] = resolution
-	} else if detail.RuleWidth > 0 && detail.RuleHeight > 0 {
-		other["video_resolution"] = common.FormatVideoResolutionLabel(
-			fmt.Sprintf("%dx%d", detail.RuleWidth, detail.RuleHeight),
-		)
-	}
+	writeVideoResolutionLogOther(other, detail.Resolution, detail.ResolutionFromRequest, detail.RuleWidth, detail.RuleHeight)
 	other["video_rule_width"] = detail.RuleWidth
 	other["video_rule_height"] = detail.RuleHeight
 	pricePerM := detail.EffectivePricePerMillion
@@ -579,6 +592,9 @@ func videoPerSecondBillingDetailFromTask(task *model.Task) *videoPerSecondBillin
 		}
 	}
 	width, height := videoDimensionsFromTaskRequest(req)
+	if w, h, ok := videoDimensionsFromTaskCompletion(task, nil); ok {
+		width, height = w, h
+	}
 	hasAudio := taskRequestHasAudio(req)
 	if bc := task.PrivateData.BillingContext; bc != nil && bc.OtherRatios != nil {
 		if bc.OtherRatios["has_audio"] > 0 {
@@ -586,17 +602,30 @@ func videoPerSecondBillingDetailFromTask(task *model.Task) *videoPerSecondBillin
 		}
 	}
 	mode := detectVideoBillingModeFromTaskReq(&req)
-	match, ok := matchPerSecondPriceDetail(rules, mode, width, height, hasAudio)
+	resolutionLabel := VideoBillingResolutionLabelForTask(task, nil)
+	match, ok := matchPerSecondPriceDetail(rules, mode, width, height, hasAudio, resolutionLabel)
 	if !ok || match.PricePerSecond <= 0 {
 		return nil
 	}
-	seconds := taskBillingSecondsEstimate(task)
+	seconds := 0
+	if meta, ok := extractVideoMetadataFromTaskData(task); ok && meta.DurationSec > 0 {
+		seconds = int(math.Ceil(meta.DurationSec))
+	}
+	if seconds <= 0 {
+		if spec := resolveVideoOutputSpecFromUpstream(task, nil); spec.Duration > 0 {
+			seconds = spec.Duration
+		}
+	}
+	if seconds <= 0 {
+		seconds = taskBillingSecondsEstimate(task)
+	}
 	if seconds <= 0 {
 		seconds = videoDurationFromTaskRequest(req)
 	}
 	if seconds <= 0 {
 		return nil
 	}
+	upstreamSpec := resolveVideoOutputSpecFromUpstream(task, nil)
 	groupRatio := 1.0
 	if bc := task.PrivateData.BillingContext; bc != nil && bc.GroupRatio > 0 {
 		groupRatio = bc.GroupRatio
@@ -626,6 +655,15 @@ func videoPerSecondBillingDetailFromTask(task *model.Task) *videoPerSecondBillin
 		ChannelDiscountPercent: channelDiscount,
 		UnifiedAudio:           match.UnifiedAudio,
 		CappedToMaxTier:        match.CappedToMaxTier,
+		Ratio:                  upstreamSpec.Ratio,
+	}
+	if display := common.FormatVideoResolutionLabel(resolutionLabel); display != "" {
+		detail.Resolution = display
+	} else if label := strings.TrimSpace(upstreamSpec.Resolution); label != "" {
+		detail.Resolution = common.FormatVideoResolutionLabel(label)
+		if detail.Resolution == "" {
+			detail.Resolution = label
+		}
 	}
 	fillVideoPerSecondEffectiveRates(detail, task.ChannelId, task.UserId, modelName, mode)
 	return detail
@@ -684,6 +722,63 @@ func videoDimensionsFromTaskRequest(req relaycommon.TaskSubmitReq) (int, int) {
 		return w, h
 	}
 	return 720, 1280
+}
+
+// videoResolutionParamFromRequest 读取用户显式提交的 resolution（顶层或 metadata），不含 size 推断。
+func videoResolutionParamFromRequest(req relaycommon.TaskSubmitReq) string {
+	if res := strings.TrimSpace(req.Resolution); res != "" {
+		return res
+	}
+	if req.Metadata != nil {
+		if v, ok := req.Metadata["resolution"].(string); ok {
+			if res := strings.TrimSpace(v); res != "" {
+				return res
+			}
+		}
+	}
+	return ""
+}
+
+// applyPreChargeVideoResolution 预扣日志：有 resolution 参数则原样展示，否则回退定价档位/推断。
+func applyPreChargeVideoResolution(req relaycommon.TaskSubmitReq, resolution *string, fromRequest *bool, ruleResolution string) {
+	if resolution == nil || fromRequest == nil {
+		return
+	}
+	if userRes := videoResolutionParamFromRequest(req); userRes != "" {
+		*resolution = userRes
+		*fromRequest = true
+		return
+	}
+	*fromRequest = false
+	if label, ok := inferredVideoResolutionLabel(ruleResolution, 0, 0); ok {
+		*resolution = label
+	}
+}
+
+func inferredVideoResolutionLabel(primary string, ruleWidth, ruleHeight int) (string, bool) {
+	if label := common.FormatVideoResolutionLabel(primary); label != "" {
+		return label, true
+	}
+	if ruleWidth > 0 && ruleHeight > 0 {
+		if label := common.FormatVideoResolutionLabel(fmt.Sprintf("%dx%d", ruleWidth, ruleHeight)); label != "" {
+			return label, true
+		}
+	}
+	return "", false
+}
+
+func writeVideoResolutionLogOther(other map[string]interface{}, resolution string, fromRequest bool, ruleWidth, ruleHeight int) {
+	if other == nil {
+		return
+	}
+	if fromRequest && strings.TrimSpace(resolution) != "" {
+		other["video_resolution"] = strings.TrimSpace(resolution)
+		other["video_resolution_from_input"] = true
+		return
+	}
+	if label, ok := inferredVideoResolutionLabel(resolution, ruleWidth, ruleHeight); ok {
+		other["video_resolution"] = label
+	}
 }
 
 func taskRequestHasAudio(req relaycommon.TaskSubmitReq) bool {
@@ -760,7 +855,7 @@ func appendVideoPerSecondBillingDetailOther(other map[string]interface{}, detail
 	other["video_width"] = detail.Width
 	other["video_height"] = detail.Height
 	other["video_has_audio"] = detail.HasAudio
-	other["video_resolution"] = detail.Resolution
+	writeVideoResolutionLogOther(other, detail.Resolution, detail.ResolutionFromRequest, detail.RuleWidth, detail.RuleHeight)
 	other["video_rule_width"] = detail.RuleWidth
 	other["video_rule_height"] = detail.RuleHeight
 	other["video_price_per_second"] = detail.PricePerSecond
@@ -780,6 +875,9 @@ func appendVideoPerSecondBillingDetailOther(other map[string]interface{}, detail
 	if detail.CappedToMaxTier {
 		other["video_capped_to_max_tier"] = true
 	}
+	if detail.Ratio != "" {
+		other["video_ratio_label"] = detail.Ratio
+	}
 }
 
 type videoPerVideoBillingDetail struct {
@@ -789,6 +887,7 @@ type videoPerVideoBillingDetail struct {
 	Height                 int
 	HasAudio               bool
 	Resolution             string
+	ResolutionFromRequest  bool
 	RuleWidth              int
 	RuleHeight             int
 	PricePerVideo          float64
@@ -842,7 +941,7 @@ func videoPerVideoBillingDetailFromSubmit(c *gin.Context, info *relaycommon.Rela
 	if common.QuotaPerUnit > 0 && quota > 0 {
 		finalPricePerVideo = float64(quota) / common.QuotaPerUnit / float64(count)
 	}
-	return &videoPerVideoBillingDetail{
+	detail := &videoPerVideoBillingDetail{
 		Mode:                   mode,
 		Count:                  count,
 		Width:                  width,
@@ -857,6 +956,8 @@ func videoPerVideoBillingDetailFromSubmit(c *gin.Context, info *relaycommon.Rela
 		ChannelDiscountPercent: resolveVideoLogChannelDiscountPercent(info),
 		UnifiedAudio:           match.UnifiedAudio,
 	}
+	applyPreChargeVideoResolution(req, &detail.Resolution, &detail.ResolutionFromRequest, match.Resolution)
+	return detail
 }
 
 func matchPerVideoPriceDetail(r ratio_setting.VideoPricingRules, mode string, width, height int, hasAudio bool) (*videoPerVideoPriceMatch, bool) {
@@ -871,7 +972,7 @@ func matchPerVideoPriceDetail(r ratio_setting.VideoPricingRules, mode string, wi
 	}
 	if match, ok := matchPerSecondPriceDetail(ratio_setting.VideoPricingRules{
 		TextToVideoPerSecond: rows,
-	}, "text_to_video", width, height, hasAudio); ok {
+	}, "text_to_video", width, height, hasAudio, ""); ok {
 		return &videoPerVideoPriceMatch{
 			Resolution:    match.Resolution,
 			RuleWidth:     match.RuleWidth,
@@ -971,7 +1072,7 @@ func appendVideoPerVideoBillingDetailOther(c *gin.Context, other map[string]inte
 		other["video_width"] = detail.Width
 		other["video_height"] = detail.Height
 		other["video_has_audio"] = detail.HasAudio
-		other["video_resolution"] = detail.Resolution
+		writeVideoResolutionLogOther(other, detail.Resolution, detail.ResolutionFromRequest, detail.RuleWidth, detail.RuleHeight)
 		other["video_rule_width"] = detail.RuleWidth
 		other["video_rule_height"] = detail.RuleHeight
 		other["video_price_per_video"] = detail.PricePerVideo

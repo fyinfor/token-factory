@@ -20,6 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal, Tag } from '@douyinfe/semi-ui';
+import { formatVideoResolutionDisplayLabel, resolveVideoBillingResolutionLabel } from '../../helpers/videoResolutionLabel';
 import {
   API,
   getTodayStartTimestamp,
@@ -124,6 +125,22 @@ export const useLogsData = () => {
 
   const hasVideoPerVideoDetail = (other) =>
     other?.billing_mode === 'video_per_video';
+
+  /** 规格展示：优先 video_resolution；用户输入分辨率原样展示，否则归一化推断值。 */
+  const getVideoSpecResolutionLabel = (other, specWidth, specHeight) => {
+    const fromInput = other?.video_resolution_from_input === true;
+    const upstream = String(other?.video_resolution || '').trim();
+    if (upstream) {
+      return resolveVideoBillingResolutionLabel(upstream, fromInput);
+    }
+    if (specWidth > 0 && specHeight > 0) {
+      const fromPixels = formatVideoResolutionDisplayLabel(
+        `${specWidth}x${specHeight}`,
+      );
+      return fromPixels || `${specWidth}×${specHeight}`;
+    }
+    return '';
+  };
 
   const isZeroBilledVideoNoChargeLog = (record, other) => {
     if (record?.type !== 2) {
@@ -315,8 +332,16 @@ export const useLogsData = () => {
         : t('无音轨价');
     const modelName = log?.model_name || '-';
     const upstreamModelName = other?.upstream_model_name || '';
+    const resolution = other?.video_resolution || '';
+    const ratioLabel =
+      other?.video_ratio_label || other?.video_aspect_ratio || '';
     const specWidth = ruleWidth || width;
     const specHeight = ruleHeight || height;
+    const specResolutionLabel = getVideoSpecResolutionLabel(
+      other,
+      specWidth,
+      specHeight,
+    );
     const effectivePerSecond = Number(
       other?.effective_video_price_per_second || 0,
     );
@@ -346,7 +371,8 @@ export const useLogsData = () => {
         : null,
     );
     const specValue = inlineTags(
-      tagValue(`${specWidth}×${specHeight}`, 'cyan', 'spec-resolution'),
+      tagValue(specResolutionLabel, 'cyan', 'spec-resolution'),
+      ratioLabel ? tagValue(ratioLabel, 'purple', 'spec-ratio') : null,
       tagValue(audioText, hasAudio ? 'green' : 'grey', 'spec-audio'),
       tagValue(t('{{seconds}} 秒', { seconds }), 'orange', 'spec-seconds'),
     );
@@ -537,7 +563,8 @@ export const useLogsData = () => {
     );
     const specValue = inlineTags(
       tagValue(
-        resolution || `${specWidth}×${specHeight}`,
+        getVideoSpecResolutionLabel(other, specWidth, specHeight) ||
+          `${specWidth}×${specHeight}`,
         'cyan',
         'spec-resolution',
       ),
@@ -654,12 +681,15 @@ export const useLogsData = () => {
         : null,
     );
     const specTags = [];
-    if (resolution || (ruleWidth > 0 && ruleHeight > 0)) {
+    const specResolutionLabel = getVideoSpecResolutionLabel(
+      other,
+      ruleWidth || width,
+      ruleHeight || height,
+    );
+    if (specResolutionLabel || resolution) {
       specTags.push(
         tagValue(
-          ruleWidth > 0 && ruleHeight > 0
-            ? `${ruleWidth}×${ruleHeight}`
-            : resolution,
+          specResolutionLabel || resolution,
           'cyan',
           'matched-resolution',
         ),

@@ -37,6 +37,24 @@ func TestExtractVolcEngineVideoMetadata_SeedanceSuccess(t *testing.T) {
 	}
 }
 
+func TestExtractVolcEngineVideoMetadata_ResolutionBeforeSize(t *testing.T) {
+	payload := map[string]any{
+		"id":         "task_abc",
+		"status":     "succeeded",
+		"duration":   5,
+		"resolution": "720p",
+		"ratio":      "16:9",
+		"size":       "1920x1080",
+	}
+	meta, ok := extractVolcEngineVideoMetadata(payload)
+	if !ok {
+		t.Fatal("expected volcengine metadata")
+	}
+	if meta.Width != 1280 || meta.Height != 720 {
+		t.Fatalf("got %dx%d want 1280x720 from resolution", meta.Width, meta.Height)
+	}
+}
+
 func TestExtractVideoMetadataFromMap_Seedance(t *testing.T) {
 	payload := map[string]any{
 		"id":         "task_x",

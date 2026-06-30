@@ -80,18 +80,18 @@ func perTokenRowsForMode(rules ratio_setting.VideoPricingRules, mode string) []r
 	}
 }
 
-// matchPerTokenPriceDetail 按分辨率匹配 token 单价（复用按秒匹配的像素/档位逻辑）。
-func matchPerTokenPriceDetail(rules ratio_setting.VideoPricingRules, mode string, width, height int, hasAudio bool) (*videoPerSecondPriceMatch, bool) {
+// matchPerTokenPriceDetail 按分辨率匹配 token 单价（resolution 标识优先，再回退像素档位）。
+func matchPerTokenPriceDetail(rules ratio_setting.VideoPricingRules, mode string, width, height int, hasAudio bool, resolutionLabel string) (*videoPerSecondPriceMatch, bool) {
 	rows := perTokenRowsForMode(rules, mode)
 	if len(rows) == 0 {
 		return nil, false
 	}
 	wrapped := ratio_setting.VideoPricingRules{TextToVideoPerSecond: rows}
-	return matchPerSecondPriceDetail(wrapped, relaycommon.VideoBillingModeTextToVideo, width, height, hasAudio)
+	return matchPerSecondPriceDetail(wrapped, relaycommon.VideoBillingModeTextToVideo, width, height, hasAudio, resolutionLabel)
 }
 
 func matchPerTokenPrice(rules ratio_setting.VideoPricingRules, mode string, width, height int, hasAudio bool) (float64, bool) {
-	match, ok := matchPerTokenPriceDetail(rules, mode, width, height, hasAudio)
+	match, ok := matchPerTokenPriceDetail(rules, mode, width, height, hasAudio, "")
 	if !ok {
 		return 0, false
 	}
@@ -99,8 +99,7 @@ func matchPerTokenPrice(rules ratio_setting.VideoPricingRules, mode string, widt
 }
 
 // MatchVideoTokenRuleForRequest 根据请求参数（分辨率 + 素材类型）匹配 token 单价规则。
-// 素材类型：有视频素材 → 视频生视频；有图片素材 → 图生视频；否则文生视频。
-func MatchVideoTokenRuleForRequest(channelID, userID int, modelName, mode string, width, height int, hasAudio bool) (*videoTokenRuleMatch, bool) {
+func MatchVideoTokenRuleForRequest(channelID, userID int, modelName, mode string, width, height int, hasAudio bool, resolutionLabel string) (*videoTokenRuleMatch, bool) {
 	modelName = strings.TrimSpace(modelName)
 	if modelName == "" || width <= 0 || height <= 0 {
 		return nil, false
@@ -109,7 +108,7 @@ func MatchVideoTokenRuleForRequest(channelID, userID int, modelName, mode string
 	if !ok {
 		return nil, false
 	}
-	match, ok := matchPerTokenPriceDetail(rules, mode, width, height, hasAudio)
+	match, ok := matchPerTokenPriceDetail(rules, mode, width, height, hasAudio, resolutionLabel)
 	if !ok || match.PricePerSecond <= 0 {
 		return nil, false
 	}
@@ -140,11 +139,11 @@ func ShouldUseVideoTokenBilling(channelID int, modelName string) bool {
 }
 
 // CalcVideoTokenQuota 按 token 单价折算 quota：tokens / 1M × 美元/1M tokens × QuotaPerUnit × 分组倍率。
-func CalcVideoTokenQuota(channelID, userID int, modelName, mode string, width, height int, hasAudio bool, totalTokens int, groupRatio float64) (int, *videoTokenRuleMatch, bool) {
+func CalcVideoTokenQuota(channelID, userID int, modelName, mode string, width, height int, hasAudio bool, totalTokens int, groupRatio float64, resolutionLabel string) (int, *videoTokenRuleMatch, bool) {
 	if totalTokens <= 0 {
 		return 0, nil, false
 	}
-	match, ok := MatchVideoTokenRuleForRequest(channelID, userID, modelName, mode, width, height, hasAudio)
+	match, ok := MatchVideoTokenRuleForRequest(channelID, userID, modelName, mode, width, height, hasAudio, resolutionLabel)
 	if !ok {
 		return 0, nil, false
 	}
@@ -175,12 +174,16 @@ func SettleSeedanceVideoTokenBillingOnComplete(ctx context.Context, task *model.
 
 	modelName := taskModelName(task)
 	mode, width, height, hasAudio := videoTokenBillingParamsFromTask(task)
+	if w, h, ok := videoDimensionsFromTaskCompletion(task, taskResult); ok {
+		width, height = w, h
+	}
+	resolutionLabel := VideoBillingResolutionLabelForTask(task, taskResult)
 	groupRatio := 1.0
 	if bc := task.PrivateData.BillingContext; bc != nil && bc.GroupRatio > 0 {
 		groupRatio = bc.GroupRatio
 	}
 
-	actualQuota, match, ok := CalcVideoTokenQuota(task.ChannelId, task.UserId, modelName, mode, width, height, hasAudio, totalTokens, groupRatio)
+	actualQuota, match, ok := CalcVideoTokenQuota(task.ChannelId, task.UserId, modelName, mode, width, height, hasAudio, totalTokens, groupRatio, resolutionLabel)
 	if !ok || actualQuota <= 0 {
 		// 回退：用提交时快照单价结算，避免规则变更导致无法结算。
 		actualQuota = calcVideoTokenQuotaFromBillingContext(task, totalTokens)
@@ -338,21 +341,10 @@ func buildSeedanceVideoTokenLogOther(totalTokens int, match *videoTokenRuleMatch
 	return other
 }
 
-func resolveSeedanceVideoSpec(task *model.Task, _ *relaycommon.TaskInfo) seedanceVideoSpec {
-	spec := seedanceVideoSpec{}
-	if len(task.Data) > 0 {
-		var upstream struct {
-			Resolution string `json:"resolution"`
-			Duration   int    `json:"duration"`
-			Ratio      string `json:"ratio"`
-		}
-		if err := common.Unmarshal(task.Data, &upstream); err == nil {
-			spec.Resolution = common.FormatVideoResolutionLabel(upstream.Resolution)
-			spec.Ratio = strings.TrimSpace(upstream.Ratio)
-			if upstream.Duration > 0 {
-				spec.Duration = upstream.Duration
-			}
-		}
+func resolveSeedanceVideoSpec(task *model.Task, taskResult *relaycommon.TaskInfo) seedanceVideoSpec {
+	spec := resolveVideoOutputSpecFromUpstream(task, taskResult)
+	if spec.Resolution != "" && spec.Ratio != "" && spec.Duration > 0 {
+		return spec
 	}
 	if spec.Resolution == "" || spec.Ratio == "" || spec.Duration <= 0 {
 		var req relaycommon.TaskSubmitReq
