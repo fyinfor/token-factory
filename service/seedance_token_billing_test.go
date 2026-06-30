@@ -39,11 +39,11 @@ func TestCalcVideoTokenQuota_PreConsumeAndSettle(t *testing.T) {
 	mode := relaycommon.VideoBillingModeTextToVideo
 	width, height := 1280, 720
 
-	preQuota, _, ok := CalcVideoTokenQuota(0, 0, modelName, mode, width, height, false, SeedanceTokenPreConsumeTokens, groupRatio)
+	preQuota, _, ok := CalcVideoTokenQuota(0, 0, modelName, mode, width, height, false, SeedanceTokenPreConsumeTokens, groupRatio, "")
 	require.True(t, ok)
 	require.Greater(t, preQuota, 0)
 
-	settleQuota, _, ok := CalcVideoTokenQuota(0, 0, modelName, mode, width, height, false, 50638, groupRatio)
+	settleQuota, _, ok := CalcVideoTokenQuota(0, 0, modelName, mode, width, height, false, 50638, groupRatio, "")
 	require.True(t, ok)
 	require.Greater(t, settleQuota, preQuota)
 
@@ -58,7 +58,7 @@ func TestMatchVideoTokenRule_DetectsImageToVideoLane(t *testing.T) {
 	modelName := "seedance-test-lane"
 	withVideoPricingRules(t, `{"`+modelName+`":{"image_to_video_per_token":[{"resolution":"1280x720","has_audio":false,"price":0.31}]}}`)
 	match, ok := MatchVideoTokenRuleForRequest(
-		0, 0, modelName, relaycommon.VideoBillingModeImageToVideo, 1280, 720, false,
+		0, 0, modelName, relaycommon.VideoBillingModeImageToVideo, 1280, 720, false, "720p",
 	)
 	require.True(t, ok)
 	require.Equal(t, relaycommon.VideoBillingModeImageToVideo, match.Mode)

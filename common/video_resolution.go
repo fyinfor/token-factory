@@ -27,34 +27,65 @@ func ParseVideoResolutionAndRatio(resolution, ratio string) (width, height int, 
 	return 0, 0, false
 }
 
-// ResolveVideoDimensionsFromRequest 从任务请求字段解析像素尺寸（供预扣/结算按分辨率匹配 token 单价）。
-// 优先级：metadata（含 resolution/ratio）> 顶层 resolution > size（支持 480p 或 WxH）。
+// ResolveVideoDimensionsFromRequest 从任务请求解析像素尺寸（供计费规则匹配）。
+// 优先级：metadata.resolution > 顶层 resolution > metadata.size / metadata 宽高 > 顶层 size。
 func ResolveVideoDimensionsFromRequest(size, resolution, ratio string, metadata map[string]interface{}) (width, height int, ok bool) {
-	if w, h, parsed := VideoDimensionsFromMetadata(metadata); parsed {
-		return w, h, true
-	}
 	r := strings.TrimSpace(ratio)
 	if r == "" && metadata != nil {
 		r = metadataString(metadata, "ratio")
+	}
+	if res := metadataResolution(metadata); res != "" {
+		if w, h, parsed := ParseVideoResolutionAndRatio(res, r); parsed {
+			return w, h, true
+		}
 	}
 	if res := strings.TrimSpace(resolution); res != "" {
 		if w, h, parsed := ParseVideoResolutionAndRatio(res, r); parsed {
 			return w, h, true
 		}
 	}
-	if s := strings.TrimSpace(size); s != "" {
-		if w, h, parsed := ParseVideoResolutionAndRatio(s, r); parsed {
+	if s := metadataSize(metadata); s != "" {
+		if w, h, parsed := parseVideoSizeLiteral(s, r); parsed {
 			return w, h, true
 		}
-		if w, h, parsed := parseVideoResolutionLiteral(strings.ToLower(s)); parsed {
+	}
+	if w, h, parsed := metadataExplicitDimensions(metadata); parsed {
+		return w, h, true
+	}
+	if s := strings.TrimSpace(size); s != "" {
+		if w, h, parsed := parseVideoSizeLiteral(s, r); parsed {
 			return w, h, true
 		}
 	}
 	return 0, 0, false
 }
 
-// VideoDimensionsFromMetadata reads width/height or resolution[/ratio] from task metadata.
+// VideoDimensionsFromMetadata reads billing dimensions from metadata only (same resolution-before-size priority).
 func VideoDimensionsFromMetadata(metadata map[string]interface{}) (width, height int, ok bool) {
+	return ResolveVideoDimensionsFromRequest("", "", "", metadata)
+}
+
+func metadataResolution(metadata map[string]interface{}) string {
+	if metadata == nil {
+		return ""
+	}
+	if v, ok := metadata["resolution"].(string); ok {
+		return strings.TrimSpace(v)
+	}
+	return ""
+}
+
+func metadataSize(metadata map[string]interface{}) string {
+	if metadata == nil {
+		return ""
+	}
+	if v, ok := metadata["size"].(string); ok {
+		return strings.TrimSpace(v)
+	}
+	return ""
+}
+
+func metadataExplicitDimensions(metadata map[string]interface{}) (int, int, bool) {
 	if metadata == nil {
 		return 0, 0, false
 	}
@@ -63,14 +94,21 @@ func VideoDimensionsFromMetadata(metadata map[string]interface{}) (width, height
 	if w > 0 && h > 0 {
 		return w, h, true
 	}
-	if size, _ := metadata["size"].(string); strings.TrimSpace(size) != "" {
-		if pw, ph, parsed := parseVideoResolutionLiteral(strings.ToLower(strings.TrimSpace(size))); parsed {
-			return pw, ph, true
-		}
+	return 0, 0, false
+}
+
+func parseVideoSizeLiteral(s, ratio string) (int, int, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, 0, false
 	}
-	resolution, _ := metadata["resolution"].(string)
-	ratio, _ := metadata["ratio"].(string)
-	return ParseVideoResolutionAndRatio(resolution, ratio)
+	if w, h, parsed := ParseVideoResolutionAndRatio(s, ratio); parsed {
+		return w, h, true
+	}
+	if w, h, parsed := parseVideoResolutionLiteral(strings.ToLower(s)); parsed {
+		return w, h, true
+	}
+	return 0, 0, false
 }
 
 func parseVideoResolutionLiteral(s string) (int, int, bool) {

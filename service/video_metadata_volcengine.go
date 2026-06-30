@@ -32,13 +32,23 @@ func extractVolcEngineVideoMetadata(payload map[string]any) (*VideoMetadata, boo
 		return nil, false
 	}
 
-	width := metadataToInt(payload["width"])
-	height := metadataToInt(payload["height"])
-	if width <= 0 || height <= 0 {
-		resolution, _ := payload["resolution"].(string)
-		ratio, _ := payload["ratio"].(string)
+	resolution, _ := payload["resolution"].(string)
+	ratio, _ := payload["ratio"].(string)
+	var width, height int
+	if strings.TrimSpace(resolution) != "" {
 		if w, h, ok := common.ParseVideoResolutionAndRatio(resolution, ratio); ok {
 			width, height = w, h
+		}
+	}
+	if width <= 0 || height <= 0 {
+		width = metadataToInt(payload["width"])
+		height = metadataToInt(payload["height"])
+	}
+	if width <= 0 || height <= 0 {
+		if size, _ := payload["size"].(string); strings.TrimSpace(size) != "" {
+			if w, h, ok := common.ParseVideoResolutionAndRatio(size, ratio); ok {
+				width, height = w, h
+			}
 		}
 	}
 	if width <= 0 || height <= 0 {
