@@ -138,11 +138,19 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 	}
 	other["channel_price_discount_percent"] = discPct
 	other = model.SetBillingLogMetadata(other, model.BillingPhasePreCharge, true, info.PriceData.Quota, -int64(info.PriceData.Quota))
+	// 异步任务没有真实 prompt/completion tokens，将预扣额度作为 token_used 上报，
+	// 使 /rankings 排行（聚合 quota_data.token_used）能看到 Seedance/Kling/Sora 等视频模型。
+	preChargeTokens := info.PriceData.Quota
+	if preChargeTokens <= 0 && info.PriceData.VideoOutputTokens > 0 {
+		// 兜底：使用按 token 规则计费时的预扣 token 数（按 token 视频任务的价格以这个为基准）。
+		preChargeTokens = info.PriceData.VideoOutputTokens
+	}
 	model.RecordConsumeLog(c, info.UserId, model.RecordConsumeLogParams{
 		ChannelId: info.ChannelId,
 		ModelName: info.OriginModelName,
 		TokenName: tokenName,
 		Quota:     info.PriceData.Quota,
+		TokenUsed: preChargeTokens,
 		Content:   logContent,
 		TokenId:   info.TokenId,
 		Group:     info.UsingGroup,

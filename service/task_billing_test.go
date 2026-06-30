@@ -48,6 +48,7 @@ func TestMain(m *testing.M) {
 		&model.Log{},
 		&model.Channel{},
 		&model.UserSubscription{},
+		&model.QuotaData{},
 	); err != nil {
 		panic("failed to migrate: " + err.Error())
 	}
@@ -68,6 +69,7 @@ func truncate(t *testing.T) {
 		model.DB.Exec("DELETE FROM logs")
 		model.DB.Exec("DELETE FROM channels")
 		model.DB.Exec("DELETE FROM user_subscriptions")
+		model.DB.Exec("DELETE FROM quota_data")
 	})
 }
 
@@ -978,4 +980,235 @@ func TestSettle_NonPerCall_AdaptorAdjustWorks(t *testing.T) {
 	log := getLastLog(t)
 	require.NotNil(t, log)
 	assert.Equal(t, model.LogTypeRefund, log.Type)
+}
+
+// ---------------------------------------------------------------------------
+// quota_data 写盘回归测试：异步任务（Seedance/Kling/Sora 等）必须能在
+// /rankings 排行中可见，即 quota_data.token_used 必须反映真实消耗量。
+// ---------------------------------------------------------------------------
+
+// drainQuotaDataCache 把当前 CacheQuotaData 强制刷到 quota_data 表里，
+// 同步流程避免测试中 gopool.Go 还在跑。
+func drainQuotaDataCache(t *testing.T) {
+	t.Helper()
+	model.SaveQuotaDataCache()
+}
+
+// quotaDataFor 读取 (user, model) 维度累计到现在的 quota_data 行。
+func quotaDataFor(t *testing.T, userID int, modelName string) []model.QuotaData {
+	t.Helper()
+	var rows []model.QuotaData
+	err := model.DB.Table("quota_data").
+		Where("user_id = ? AND model_name = ?", userID, modelName).
+		Find(&rows).Error
+	require.NoError(t, err)
+	return rows
+}
+
+func resetQuotaDataCache(t *testing.T) {
+	t.Helper()
+	model.CacheQuotaDataLock.Lock()
+	model.CacheQuotaData = make(map[string]*model.QuotaData)
+	model.CacheQuotaDataLock.Unlock()
+}
+
+func TestLogTaskConsumption_WritesQuotaDataForSeedance(t *testing.T) {
+	truncate(t)
+	resetQuotaDataCache(t)
+	t.Cleanup(func() { resetQuotaDataCache(t) })
+	seedUser(t, 1, 100000)
+	seedChannel(t, 1)
+
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
+
+	preConsumedQuota := 5000 // 模拟预扣额度
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelType: constant.ChannelTypeSeedance,
+			ChannelId:   1,
+		},
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{
+			Action: constant.TaskActionGenerate,
+		},
+		UserId:          1,
+		TokenId:         0,
+		UsingGroup:      "default",
+		OriginModelName: "doubao-seedance-1-0-lite",
+		PriceData: types.PriceData{
+			UsePrice:   true,
+			ModelPrice: 0,
+			ModelRatio: 0,
+			Quota:      preConsumedQuota,
+			GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1.0},
+		},
+	}
+
+	LogTaskConsumption(c, info)
+
+	// 等异步 LogQuotaData goroutine 跑完。
+	time.Sleep(50 * time.Millisecond)
+	drainQuotaDataCache(t)
+
+	rows := quotaDataFor(t, 1, "doubao-seedance-1-0-lite")
+	require.Len(t, rows, 1, "Seedance pre_charge 应当写到 quota_data")
+	assert.Equal(t, preConsumedQuota, rows[0].Quota)
+	assert.Equal(t, preConsumedQuota, rows[0].TokenUsed,
+		"TokenUsed 必须等于预扣额度，否则 /rankings 排行看不到 Seedance")
+}
+
+func TestRecordTaskBillingLog_DeltaChargeAppendsQuotaData(t *testing.T) {
+	truncate(t)
+	resetQuotaDataCache(t)
+	t.Cleanup(func() { resetQuotaDataCache(t) })
+	seedUser(t, 1, 100000)
+	seedChannel(t, 1)
+
+	// 1) 模拟预扣：pre_charge 写一条 token_used=1000 的 quota_data 记录
+	preConsumed := 1000
+	preChargeOther := map[string]interface{}{
+		"task_id":        "task-delta-charge-001",
+		"billing_phase":  model.BillingPhasePreCharge,
+		"affects_balance": true,
+	}
+	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
+		UserId:    1,
+		LogType:   model.LogTypeConsume,
+		ChannelId: 1,
+		ModelName: "doubao-seedance-1-0-lite",
+		TokenName: "tok",
+		Quota:     preConsumed,
+		Group:     "default",
+		Other:     preChargeOther,
+	})
+
+	// 2) 模拟结算差额：实际比预扣多 250，应当追加 +250
+	delta := 250
+	deltaOther := map[string]interface{}{
+		"task_id":           "task-delta-charge-001",
+		"pre_consumed_quota": preConsumed,
+		"actual_quota":      preConsumed + delta,
+		"billing_phase":     model.BillingPhaseDeltaCharge,
+		"affects_balance":   true,
+	}
+	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
+		UserId:    1,
+		LogType:   model.LogTypeConsume,
+		ChannelId: 1,
+		ModelName: "doubao-seedance-1-0-lite",
+		TokenName: "tok",
+		Quota:     delta,
+		Group:     "default",
+		Other:     deltaOther,
+	})
+
+	time.Sleep(50 * time.Millisecond)
+	drainQuotaDataCache(t)
+
+	rows := quotaDataFor(t, 1, "doubao-seedance-1-0-lite")
+	require.Len(t, rows, 1, "同一小时同模型应合并为一行")
+	assert.Equal(t, preConsumed+delta, rows[0].Quota, "quota = pre_charge + delta_charge")
+	assert.Equal(t, preConsumed+delta, rows[0].TokenUsed, "token_used = pre_charge + delta_charge")
+}
+
+func TestRecordTaskBillingLog_FullRefundZerosQuotaData(t *testing.T) {
+	truncate(t)
+	resetQuotaDataCache(t)
+	t.Cleanup(func() { resetQuotaDataCache(t) })
+	seedUser(t, 1, 100000)
+	seedChannel(t, 1)
+
+	preConsumed := 800
+	preChargeOther := map[string]interface{}{
+		"task_id":        "task-refund-001",
+		"billing_phase":  model.BillingPhasePreCharge,
+		"affects_balance": true,
+	}
+	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
+		UserId:    1,
+		LogType:   model.LogTypeConsume,
+		ChannelId: 1,
+		ModelName: "kling-v1-5",
+		TokenName: "tok",
+		Quota:     preConsumed,
+		Group:     "default",
+		Other:     preChargeOther,
+	})
+
+	refundOther := map[string]interface{}{
+		"task_id":        "task-refund-001",
+		"billing_phase":  model.BillingPhaseRefund,
+		"affects_balance": true,
+	}
+	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
+		UserId:    1,
+		LogType:   model.LogTypeRefund,
+		ChannelId: 1,
+		ModelName: "kling-v1-5",
+		TokenName: "tok",
+		Quota:     preConsumed,
+		Group:     "default",
+		Other:     refundOther,
+	})
+
+	time.Sleep(50 * time.Millisecond)
+	drainQuotaDataCache(t)
+
+	rows := quotaDataFor(t, 1, "kling-v1-5")
+	require.Len(t, rows, 1)
+	assert.Equal(t, 0, rows[0].Quota, "pre_charge 加上全量退款应为 0")
+	assert.Equal(t, 0, rows[0].TokenUsed)
+}
+
+func TestRecordTaskBillingLog_SettlementMarkerDoesNotDoubleCount(t *testing.T) {
+	truncate(t)
+	resetQuotaDataCache(t)
+	t.Cleanup(func() { resetQuotaDataCache(t) })
+	seedUser(t, 1, 100000)
+	seedChannel(t, 1)
+
+	// pre_charge 写 500
+	preConsumed := 500
+	preChargeOther := map[string]interface{}{
+		"task_id":        "task-marker-001",
+		"billing_phase":  model.BillingPhasePreCharge,
+		"affects_balance": true,
+	}
+	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
+		UserId:    1,
+		LogType:   model.LogTypeConsume,
+		ChannelId: 1,
+		ModelName: "sora-1.0-turbo",
+		TokenName: "tok",
+		Quota:     preConsumed,
+		Group:     "default",
+		Other:     preChargeOther,
+	})
+
+	// settlement_marker：Quota=0, affectsBalance=false，期望不写 quota_data
+	markerOther := map[string]interface{}{
+		"task_id":        "task-marker-001",
+		"billing_phase":  model.BillingPhaseSettlementMarker,
+		"affects_balance": false,
+	}
+	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
+		UserId:    1,
+		LogType:   model.LogTypeConsume,
+		ChannelId: 1,
+		ModelName: "sora-1.0-turbo",
+		TokenName: "tok",
+		Quota:     0,
+		Group:     "default",
+		Other:     markerOther,
+	})
+
+	time.Sleep(50 * time.Millisecond)
+	drainQuotaDataCache(t)
+
+	rows := quotaDataFor(t, 1, "sora-1.0-turbo")
+	require.Len(t, rows, 1)
+	assert.Equal(t, preConsumed, rows[0].Quota, "settlement_marker 不应再追加 quota")
+	assert.Equal(t, preConsumed, rows[0].TokenUsed, "settlement_marker 不应再追加 token_used")
 }
