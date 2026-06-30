@@ -99,6 +99,26 @@ export function formatVideoResolutionDisplayLabel(raw) {
   return `${short}p`;
 }
 
+/**
+ * 视频规格展示（计费日志规范）：统一展示「分辨率标识 + 画面比例」，禁止渲染像素尺寸。
+ * 例：formatVideoSpecLabel('1280x720', '16:9') => '720p 16:9'；
+ *     formatVideoSpecLabel('480p', '16:9')     => '480p 16:9'。
+ * 任一字段缺失时仅展示已有部分；均缺失返回空串。
+ *
+ * @param {string|number} resolution 分辨率（支持 480p / 720p / 1280x720 等，像素将被转为分辨率标识）
+ * @param {string} ratio 画面比例（如 '16:9'）
+ * @returns {string}
+ */
+export function formatVideoSpecLabel(resolution, ratio) {
+  // formatVideoResolutionDisplayLabel 会把 1280x720 等像素尺寸归一为 720p，确保不渲染像素。
+  const resLabel = formatVideoResolutionDisplayLabel(resolution);
+  const ratioLabel = String(ratio == null ? '' : ratio).trim();
+  if (resLabel && ratioLabel) {
+    return `${resLabel} ${ratioLabel}`;
+  }
+  return resLabel || ratioLabel || '';
+}
+
 const VIDEO_RESOLUTION_DIMENSIONS = {
   '480p': { width: 854, height: 480 },
   '540p': { width: 960, height: 540 },
@@ -143,10 +163,61 @@ function parseResolutionDimensions(raw) {
   return null;
 }
 
+function parseAspectRatioValue(ratio) {
+  const compact = String(ratio || '').trim();
+  if (!compact || compact === 'auto') return null;
+  const parts = compact.split(':');
+  if (parts.length !== 2) return null;
+  const widthRatio = Number(parts[0]);
+  const heightRatio = Number(parts[1]);
+  if (
+    !Number.isFinite(widthRatio) ||
+    !Number.isFinite(heightRatio) ||
+    widthRatio <= 0 ||
+    heightRatio <= 0
+  ) {
+    return null;
+  }
+  return { widthRatio, heightRatio };
+}
+
+function getSizeForAspectRatio(resolution, ratio) {
+  const aspect = parseAspectRatioValue(ratio);
+  if (!aspect) return null;
+
+  const dims =
+    parseResolutionDimensions(resolution) ||
+    VIDEO_RESOLUTION_DIMENSIONS['720p'];
+  const shortSide = Math.min(dims.width, dims.height);
+  const landscape = aspect.widthRatio >= aspect.heightRatio;
+  const baseShort = shortSide;
+  const baseLong = Math.max(
+    2,
+    Math.round(
+      (baseShort * Math.max(aspect.widthRatio, aspect.heightRatio)) /
+        Math.min(aspect.widthRatio, aspect.heightRatio) /
+        2,
+    ) * 2,
+  );
+  const width = landscape ? baseLong : baseShort;
+  const height = landscape ? baseShort : baseLong;
+  return {
+    width,
+    height,
+    size: `${width}x${height}`,
+  };
+}
+
 export function getPlaygroundVideoSizeForTier(
   resolution,
   orientation = 'landscape',
+  ratio = '',
 ) {
+  const ratioSize = getSizeForAspectRatio(resolution, ratio);
+  if (ratioSize) {
+    return ratioSize;
+  }
+
   const dims =
     parseResolutionDimensions(resolution) ||
     VIDEO_RESOLUTION_DIMENSIONS['720p'];

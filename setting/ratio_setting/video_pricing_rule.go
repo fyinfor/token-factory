@@ -56,6 +56,10 @@ type VideoPricingRules struct {
 	TextToVideoPerItem    []VideoResolutionAudioPriceRule `json:"text_to_video_per_item,omitempty"`
 	ImageToVideoPerItem   []VideoResolutionAudioPriceRule `json:"image_to_video_per_item,omitempty"`
 	VideoToVideoPerItem   []VideoResolutionAudioPriceRule `json:"video_to_video_per_item,omitempty"`
+	// 按 token 计费：price 为美元/1M tokens，按分辨率 + 文生/图生/视频生视频分档。
+	TextToVideoPerToken  []VideoResolutionAudioPriceRule `json:"text_to_video_per_token,omitempty"`
+	ImageToVideoPerToken []VideoResolutionAudioPriceRule `json:"image_to_video_per_token,omitempty"`
+	VideoToVideoPerToken []VideoResolutionAudioPriceRule `json:"video_to_video_per_token,omitempty"`
 }
 
 var videoPricingRulesMap = types.NewRWMap[string, VideoPricingRules]()
@@ -123,7 +127,36 @@ func normalizeVideoRules(v VideoPricingRules) VideoPricingRules {
 	for i := range v.VideoToVideoPerItem {
 		v.VideoToVideoPerItem[i].Resolution = strings.TrimSpace(v.VideoToVideoPerItem[i].Resolution)
 	}
+	for i := range v.TextToVideoPerToken {
+		v.TextToVideoPerToken[i].Resolution = strings.TrimSpace(v.TextToVideoPerToken[i].Resolution)
+	}
+	for i := range v.ImageToVideoPerToken {
+		v.ImageToVideoPerToken[i].Resolution = strings.TrimSpace(v.ImageToVideoPerToken[i].Resolution)
+	}
+	for i := range v.VideoToVideoPerToken {
+		v.VideoToVideoPerToken[i].Resolution = strings.TrimSpace(v.VideoToVideoPerToken[i].Resolution)
+	}
 	return v
+}
+
+// HasUsableVideoPerTokenRules 模型是否配置了「按 token 收费」分辨率规则（price>0）。
+func HasUsableVideoPerTokenRules(v VideoPricingRules) bool {
+	for _, r := range v.TextToVideoPerToken {
+		if r.Price > 0 {
+			return true
+		}
+	}
+	for _, r := range v.ImageToVideoPerToken {
+		if r.Price > 0 {
+			return true
+		}
+	}
+	for _, r := range v.VideoToVideoPerToken {
+		if r.Price > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // HasUsableVideoPerVideoRules reports whether any per-resolution flat video price tier exists

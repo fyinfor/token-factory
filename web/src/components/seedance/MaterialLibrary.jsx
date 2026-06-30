@@ -55,6 +55,7 @@ import { useTranslation } from 'react-i18next';
 import { copy, showSuccess, showError } from '../../helpers';
 import { MaterialAssetType, MaterialStatus } from '../../constants';
 import { useMaterialLibrary } from '../../hooks/seedance/useMaterialLibrary';
+import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { useSmoothUploadProgress } from '../distributor/useSmoothUploadProgress';
 
 const { Title, Text } = Typography;
@@ -105,6 +106,7 @@ const MaterialLibrary = () => {
     handleUploadByURL,
     handleDelete,
   } = useMaterialLibrary();
+  const isMobile = useIsMobile();
 
   // 协议详情弹窗 / 在线链接上传弹窗的本地 UI 状态。
   const [detailVisible, setDetailVisible] = useState(false);
@@ -146,12 +148,6 @@ const MaterialLibrary = () => {
   const uploadDisabled = !agreed || !config.ready || uploading;
   const uploadDisplayPct = useSmoothUploadProgress(uploadProgress);
 
-  // 【改动】每用户唯一固定素材分组：从已有列表数据推导素材库 ID，供页面级展示（不新增接口请求）。
-  const libraryId = useMemo(() => {
-    const found = assets.find((a) => a.group_id);
-    return found?.group_id || '';
-  }, [assets]);
-
   /* --------------------------- 交互事件 --------------------------- */
 
   // Semi Upload 自定义请求：交由 hook 统一处理上传与异常。
@@ -182,20 +178,6 @@ const MaterialLibrary = () => {
       showSuccess(t('已复制资源地址，可替换图片资源地址'));
     } else {
       showError(t('复制失败，请手动复制：') + asset.asset_uri);
-    }
-  };
-
-  // 【改动】复制页面级素材库 ID（原卡片内分组 ID 已迁移至标题下方）。
-  const handleCopyLibraryId = async () => {
-    if (!libraryId) {
-      showError(t('暂无素材库 ID'));
-      return;
-    }
-    const ok = await copy(libraryId);
-    if (ok) {
-      showSuccess(t('已复制素材库 ID'));
-    } else {
-      showError(t('复制失败，请手动复制：') + libraryId);
     }
   };
 
@@ -368,40 +350,6 @@ const MaterialLibrary = () => {
         </Tooltip>
       </div>
 
-      {/* 【改动】素材库 ID：页面级展示（每用户唯一固定分组，不再在素材卡片内重复展示） */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-          marginBottom: 12,
-        }}
-      >
-        <Text type='tertiary' size='small' style={{ flexShrink: 0 }}>
-          {t('素材库ID')}:
-        </Text>
-        <Tooltip content={libraryId || t('暂无')}>
-          <Text
-            type='tertiary'
-            size='small'
-            ellipsis={{ showTooltip: false }}
-            style={{ maxWidth: 360 }}
-          >
-            {libraryId || t('暂无')}
-          </Text>
-        </Tooltip>
-        <Tooltip content={t('复制素材库 ID')}>
-          <Button
-            size='small'
-            theme='borderless'
-            type='tertiary'
-            icon={<IconCopy size='small' />}
-            disabled={!libraryId}
-            onClick={handleCopyLibraryId}
-          />
-        </Tooltip>
-      </div>
-
       {/* 状态提示 */}
       {!config.enabled && (
         <Banner
@@ -533,13 +481,17 @@ const MaterialLibrary = () => {
         title={t('虚拟人像合规承诺函')}
         visible={detailVisible}
         onCancel={() => setDetailVisible(false)}
+        width={isMobile ? 'calc(100vw - 32px)' : 720}
         footer={
           <Button theme='solid' onClick={() => setDetailVisible(false)}>
             {t('我已知晓')}
           </Button>
         }
       >
-        <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8 }}>
+        <div
+          className='agreement-detail-scroll max-h-[60vh] overflow-y-auto overscroll-y-contain pr-1'
+          style={{ whiteSpace: 'pre-wrap', lineHeight: 1.8 }}
+        >
           {agreementDetail || t('暂无协议详情')}
         </div>
       </Modal>

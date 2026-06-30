@@ -40,6 +40,13 @@ import {
   PLAYGROUND_MEDIA_MAX_HEIGHT,
 } from '../../constants/playground.constants';
 import { usePlaygroundMediaMaxHeightPx } from '../../hooks/playground/usePlaygroundMediaMaxHeight';
+import { listMaterialAssets } from '../../helpers/materialApi';
+import {
+  buildAssetMap,
+  isAssetUri,
+  resolveAssetUriToUrl,
+  resolveAssetUrisInArray,
+} from '../../helpers/materialAssetUtils';
 
 const PLAYGROUND_MARKDOWN_MEDIA_CLASS =
   '[&_img]:max-w-[min(100%,780px)] [&_img]:max-h-[60vh] [&_img]:w-auto [&_img]:h-auto [&_img]:object-contain [&_img]:rounded-lg [&_img]:mx-auto [&_img]:cursor-zoom-in [&_video]:max-w-[min(100%,780px)] [&_video]:max-h-[60vh] [&_video]:w-auto [&_video]:h-auto [&_video]:object-contain [&_video]:rounded-lg [&_video]:mx-auto';
@@ -319,7 +326,36 @@ const MessageContent = ({
   }
 
   const finalExtractedThinkingContent = currentExtractedThinkingContent;
-  const generatedImages = resolveMessageGeneratedImages(message);
+  const rawGeneratedImages = resolveMessageGeneratedImages(message);
+
+  // 【需求6】预览图片地址 asset:// 协议转换（覆盖生成图 + 用户消息中的素材库图片）
+  const [assetMap, setAssetMap] = React.useState(null);
+  React.useEffect(() => {
+    const hasAssetInGenerated = rawGeneratedImages.some(
+      (src) => typeof src === 'string' && isAssetUri(src),
+    );
+    let hasAssetInUserImages = false;
+    if (!hasAssetInGenerated && Array.isArray(message?.content)) {
+      hasAssetInUserImages = message.content.some(
+        (item) =>
+          item?.type === 'image_url' &&
+          typeof item?.image_url?.url === 'string' &&
+          isAssetUri(item.image_url.url),
+      );
+    }
+    const hasAssetUri = hasAssetInGenerated || hasAssetInUserImages;
+    if (!hasAssetUri || assetMap !== null) return;
+    listMaterialAssets({ page: 1, pageSize: 100 })
+      .then((res) => {
+        if (res?.success && Array.isArray(res.data?.items)) {
+          setAssetMap(buildAssetMap(res.data.items));
+        }
+      })
+      .catch(() => {});
+  }, [rawGeneratedImages, assetMap, message?.content]);
+  const generatedImages = assetMap
+    ? resolveAssetUrisInArray(rawGeneratedImages, assetMap)
+    : rawGeneratedImages;
   const mediaDimensions = message.mediaDimensions || {};
   const videoPlayableUrl = message?.videoTask?.playableUrl;
   const mergedMediaDimensions = {
@@ -579,7 +615,10 @@ const MessageContent = ({
                       }}
                     >
                       {imageContents.map((imgItem, index) => {
-                        const imageUrl = imgItem.image_url.url;
+                        const rawImageUrl = imgItem.image_url.url;
+                        const imageUrl = assetMap
+                          ? resolveAssetUriToUrl(rawImageUrl, assetMap)
+                          : rawImageUrl;
                         const constrainedImageSize = getConstrainedMediaSize(
                           mergedMediaDimensions[imageUrl],
                           PLAYGROUND_MEDIA_MAX_WIDTH_PX,

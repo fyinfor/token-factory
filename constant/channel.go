@@ -63,6 +63,8 @@ const (
 	ChannelTypeAliVideo          = 63 // Alibaba DashScope video-synthesis (happyhorse / wan, etc.)
 	ChannelTypeOpenAIImage       = 64 // OpenAI official /v1/images/generations
 	ChannelTypeSeedance          = 65 // Seedance 2.0 / VolcEngine contents generations (e.g. TokenSpace)
+	ChannelTypeAliImage          = 66 // Alibaba DashScope Qwen-Image text-to-image & image edit (multimodal-generation)
+	ChannelTypeHiDreamImage      = 67 // HiDream MaaS async image generation (/v1/images/generations)
 	ChannelTypeDummy                  // this one is only for count, do not add any channel after this
 
 )
@@ -134,7 +136,9 @@ var ChannelBaseURLs = []string{
 	"https://dashscope.aliyuncs.com/api", //63 AliVideo (user may override)
 	"https://api.openai.com",             //64 OpenAIImage
 	"https://api.tokenspace.net.cn",      //65 Seedance (词元算力 / 火山 contents generations)
-	"",                                   //66 Dummy
+	"https://dashscope.aliyuncs.com",     //66 AliImage (Qwen-Image multimodal-generation)
+	"https://maas.hidreamai.com/api/maas/gw", //67 HiDreamImage
+	"",                                   //68 Dummy
 }
 
 var ChannelTypeNames = map[int]string{
@@ -200,6 +204,8 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeOpenAIImage:       "OpenAIImage",
 	ChannelTypeAliVideo:          "AliVideo",
 	ChannelTypeSeedance:          "Seedance",
+	ChannelTypeAliImage:          "AliImage",
+	ChannelTypeHiDreamImage:      "HiDreamImage",
 }
 
 func GetChannelTypeName(channelType int) string {

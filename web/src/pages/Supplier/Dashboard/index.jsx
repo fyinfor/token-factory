@@ -16,6 +16,7 @@ import {
 } from '@douyinfe/semi-illustrations';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { IconDownload } from '@douyinfe/semi-icons';
 import {
   Activity,
   BarChart3,
@@ -30,12 +31,14 @@ import {
   isAdmin,
   isSupplier,
   showError,
+  showSuccess,
   renderQuota,
   renderQuotaSum,
   renderQuotaWithPrompt,
 } from '../../../helpers';
 import dayjs from 'dayjs';
 import { DATE_RANGE_PRESETS } from '../../../constants/console.constants';
+import { normalizeLanguage } from '../../../i18n/language';
 
 const { Title, Text } = Typography;
 
@@ -121,7 +124,7 @@ const buildSupplierDashboardPresets = (t) => {
  * SupplierDashboardPage 供应商数据看板页。
  */
 export default function SupplierDashboardPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const selectedSupplierId = searchParams.get('supplier_id');
@@ -134,6 +137,7 @@ export default function SupplierDashboardPage() {
   const [detailModelName, setDetailModelName] = useState('');
   const [detailUsers, setDetailUsers] = useState([]);
   const [detailSummary, setDetailSummary] = useState(null);
+  const [exporting, setExporting] = useState(false);
 
   /** DatePicker 受控展示用的起止时间（由 timeRange 派生）。 */
   const rangePickerValue = useMemo(
@@ -202,6 +206,53 @@ export default function SupplierDashboardPage() {
   /** resetStatsRangeToLast24h 将统计区间重置为最近 24 小时（与默认一致）。 */
   const resetStatsRangeToLast24h = () => {
     setTimeRange(getDefaultRange());
+  };
+
+  /** handleExportUsageDetail 按当前统计时间范围导出使用详情账单（模型汇总 + 逐条明细）。 */
+  const handleExportUsageDetail = async () => {
+    setExporting(true);
+    try {
+      const lang = normalizeLanguage(i18n.language || '');
+      const params = new URLSearchParams({
+        start_timestamp: String(timeRange.startTimestamp),
+        end_timestamp: String(timeRange.endTimestamp),
+        lang: lang || '',
+      });
+      if (selectedSupplierId) {
+        params.set('supplier_id', selectedSupplierId);
+      }
+      if (selectedSupplierName) {
+        params.set('supplier_name', selectedSupplierName);
+      }
+      const res = await API.get(
+        `/api/user/supplier-dashboard/export?${params.toString()}`,
+        { responseType: 'blob' },
+      );
+      const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8' });
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = objectUrl;
+      a.download = `supplier-usage-detail-${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(objectUrl);
+      showSuccess(t('supplier_dashboard_export_success'));
+    } catch (error) {
+      let message = error?.message || String(error);
+      if (error?.response?.status === 429) {
+        message = t('supplier_dashboard_export_rate_limited');
+      } else if (error?.response?.data) {
+        try {
+          message = await error.response.data.text();
+        } catch (_) {
+          // ignore
+        }
+      }
+      showError(`${t('supplier_dashboard_export_failed')}: ${message}`);
+    } finally {
+      setExporting(false);
+    }
   };
 
   /**
@@ -505,6 +556,14 @@ export default function SupplierDashboardPage() {
             </div>
             <Button type='tertiary' onClick={resetStatsRangeToLast24h}>
               {t('supplier_dashboard_reset_24h')}
+            </Button>
+            <Button
+              type='tertiary'
+              icon={<IconDownload />}
+              loading={exporting}
+              onClick={handleExportUsageDetail}
+            >
+              {t('supplier_dashboard_export_usage')}
             </Button>
             <Button
               type='tertiary'

@@ -18,11 +18,20 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useCallback, useState } from 'react';
-import { Input, Typography, Button, Switch, Upload } from '@douyinfe/semi-ui';
+import { Input, Typography, Button, Upload } from '@douyinfe/semi-ui';
 import { IconFile } from '@douyinfe/semi-icons';
-import { Plus, X, Image, Upload as UploadIcon, Loader2 } from 'lucide-react';
+import {
+  Plus,
+  X,
+  Image,
+  Upload as UploadIcon,
+  Loader2,
+  Library,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { PLAYGROUND_MEDIA_MAX_COUNT } from '../../constants/playground.constants';
+import { getMaterialAssetUri } from '../../helpers/materialAssetUtils';
+import MaterialSelectorModal from './MaterialSelectorModal';
 import { showError, showSuccess } from '../../helpers';
 import {
   appendUploadedMediaUrl,
@@ -35,13 +44,14 @@ const ImageUrlInput = ({
   imageUrls,
   imageEnabled,
   onImageUrlsChange,
-  onImageEnabledChange,
-  allowToggle = true,
   disabled = false,
   maxCount = PLAYGROUND_MEDIA_MAX_COUNT,
+  showMaterialLibrary = false,
 }) => {
   const { t } = useTranslation();
   const [uploading, setUploading] = useState(false);
+  // 【需求3】素材库弹窗状态（由父组件通过 showMaterialLibrary 控制）
+  const [materialModalVisible, setMaterialModalVisible] = useState(false);
 
   const filledCount = countFilledMediaUrls(imageUrls);
   const canAddMore = canAddMoreMediaUrls(imageUrls, maxCount);
@@ -63,6 +73,24 @@ const ImageUrlInput = ({
     const newUrls = imageUrls.filter((_, i) => i !== index);
     onImageUrlsChange(newUrls.length > 0 ? newUrls : ['']);
   };
+
+  // 【需求4/5】素材库确认回调：将选中素材的 asset:// 地址填充到图片地址输入框
+  const handleMaterialConfirm = useCallback(
+    (selectedAssets) => {
+      if (!Array.isArray(selectedAssets) || selectedAssets.length === 0) return;
+      const currentUrls = imageUrls || [];
+      const newUris = selectedAssets
+        .filter((a) => a && (a.asset_uri || a.asset_id))
+        .map((a) => getMaterialAssetUri(a));
+      // 合并已有非空 URL + 新选素材 URI
+      const existingFilled = currentUrls.filter((u) => String(u || '').trim());
+      const merged = [...existingFilled, ...newUris];
+      // 确保至少保留一个空槽位
+      if (merged.length === 0) merged.push('');
+      onImageUrlsChange(merged);
+    },
+    [imageUrls, onImageUrlsChange],
+  );
 
   const handleUpload = useCallback(
     async ({ file, onSuccess, onError }) => {
@@ -117,9 +145,11 @@ const ImageUrlInput = ({
   );
 
   return (
-    <div className={disabled ? 'opacity-50' : ''}>
-      <div className='flex items-center justify-between mb-2'>
-        <div className='flex items-center gap-2'>
+    <div
+      className={`playground-media-input playground-media-input-image ${disabled ? 'opacity-50' : ''}`}
+    >
+      <div className='mb-2 flex flex-wrap items-center justify-between gap-2'>
+        <div className='playground-media-action-bar'>
           <Image
             size={16}
             className={
@@ -136,15 +166,19 @@ const ImageUrlInput = ({
           )}
         </div>
         <div className='flex items-center gap-2'>
-          <Switch
-            checked={imageEnabled}
-            onChange={onImageEnabledChange}
-            checkedText={t('启用')}
-            uncheckedText={t('停用')}
-            size='small'
-            className='flex-shrink-0'
-            disabled={disabled || !allowToggle}
-          />
+          {/* 【需求3】渠道权限显隐控制：仅火山方舟-Seedance 2.0 视频渠道显示素材库按钮 */}
+          {showMaterialLibrary && (
+            <Button
+              icon={<Library size={14} />}
+              size='small'
+              theme='light'
+              className='playground-media-action !rounded-lg'
+              onClick={() => setMaterialModalVisible(true)}
+              disabled={!imageEnabled || disabled}
+            >
+              {t('素材库')}
+            </Button>
+          )}
           <Upload
             action=''
             accept='image/*,.jpg,.jpeg,.png,.gif,.webp'
@@ -162,7 +196,7 @@ const ImageUrlInput = ({
               }
               size='small'
               theme='light'
-              className='!rounded-lg'
+              className='playground-media-action !rounded-lg'
               disabled={!imageEnabled || disabled || uploading || !canAddMore}
             >
               {uploading ? t('上传中') : t('上传')}
@@ -174,30 +208,11 @@ const ImageUrlInput = ({
             theme='solid'
             type='primary'
             onClick={handleAddImageUrl}
-            className='!rounded-full !w-4 !h-4 !p-0 !min-w-0'
+            className='playground-media-action-round'
             disabled={!imageEnabled || disabled || !canAddMore}
           />
         </div>
       </div>
-
-      {!imageEnabled ? (
-        <Typography.Text className='text-xs text-gray-500 mb-2 block'>
-          {disabled
-            ? t('图片功能在自定义请求体模式下不可用')
-            : t('启用后可添加图片URL进行多模态对话')}
-        </Typography.Text>
-      ) : imageUrls.length === 0 ? (
-        <Typography.Text className='text-xs text-gray-500 mb-2 block'>
-          {disabled
-            ? t('图片功能在自定义请求体模式下不可用')
-            : t('点击上传或 + 按钮添加图片')}
-        </Typography.Text>
-      ) : (
-        <Typography.Text className='text-xs text-gray-500 mb-2 block'>
-          {t('已添加')} {filledCount}/{maxCount} {t('张图片')}
-          {disabled ? ` (${t('自定义模式下不可用')})` : ''}
-        </Typography.Text>
-      )}
 
       <div
         className={`space-y-2 max-h-32 overflow-y-auto image-list-scroll ${!imageEnabled || disabled ? 'opacity-50' : ''}`}
@@ -227,6 +242,14 @@ const ImageUrlInput = ({
           </div>
         ))}
       </div>
+      {/* 【需求4】素材库选择弹窗 */}
+      {showMaterialLibrary && (
+        <MaterialSelectorModal
+          visible={materialModalVisible}
+          onClose={() => setMaterialModalVisible(false)}
+          onConfirm={handleMaterialConfirm}
+        />
+      )}
     </div>
   );
 };

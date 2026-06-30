@@ -290,7 +290,7 @@ export const useDataLoader = (
       inputs.model,
     );
     setModels(modelOptions);
-    if (selectedModel !== inputs.model) {
+    if (selectedModel && selectedModel !== inputs.model) {
       handleInputChange('model', selectedModel);
     }
     const selectedModelName =

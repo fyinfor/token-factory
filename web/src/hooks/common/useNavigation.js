@@ -26,6 +26,7 @@ export const useNavigation = (t, docsNav, headerNavModules) => {
       home: true,
       console: true,
       pricing: true,
+      rankings: true,
       docs: true,
       about: true,
     };
@@ -48,6 +49,11 @@ export const useNavigation = (t, docsNav, headerNavModules) => {
         text: t('模型广场'),
         itemKey: 'pricing',
         to: '/pricing',
+      },
+      {
+        text: t('模型排行榜'),
+        itemKey: 'rankings',
+        to: '/rankings',
       },
       ...(docsNav?.href
         ? [
@@ -72,7 +78,13 @@ export const useNavigation = (t, docsNav, headerNavModules) => {
       if (link.itemKey === 'docs') {
         return docsNav?.href && modules.docs;
       }
+      if (link.itemKey === 'rankings') {
+        return modules.rankings !== false;
+      }
       const moduleConfig = modules[link.itemKey];
+      if (moduleConfig === undefined) {
+        return true;
+      }
       if (typeof moduleConfig === 'object' && moduleConfig !== null) {
         return moduleConfig.enabled;
       }

@@ -76,6 +76,7 @@ func SyncModelTagsFromModels() ([]string, error) {
 	if err := SyncModelTags(tags); err != nil {
 		return nil, err
 	}
+	InvalidateActiveModelRowsCache()
 	sort.Strings(tags)
 	return tags, nil
 }

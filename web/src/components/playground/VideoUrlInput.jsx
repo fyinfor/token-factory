@@ -109,12 +109,16 @@ const VideoUrlInput = ({
   );
 
   return (
-    <div className={`mt-4 ${disabled ? 'opacity-50' : ''}`}>
-      <div className='flex items-center justify-between mb-2'>
-        <div className='flex items-center gap-2'>
+    <div
+      className={`playground-media-input playground-media-input-video ${disabled ? 'opacity-50' : ''}`}
+    >
+      <div className='mb-2 flex flex-wrap items-center justify-between gap-2'>
+        <div className='playground-media-action-bar'>
           <Film
             size={16}
-            className={enabled && !disabled ? 'text-violet-500' : 'text-gray-400'}
+            className={
+              enabled && !disabled ? 'text-violet-500' : 'text-gray-400'
+            }
           />
           <Typography.Text strong className='text-sm'>
             {t('视频地址')}
@@ -154,7 +158,7 @@ const VideoUrlInput = ({
               }
               size='small'
               theme='light'
-              className='!rounded-lg'
+              className='playground-media-action !rounded-lg'
               disabled={!enabled || disabled || uploading || !canAddMore}
             >
               {uploading ? t('上传中') : t('上传')}
@@ -166,21 +170,13 @@ const VideoUrlInput = ({
             theme='solid'
             type='primary'
             onClick={handleAdd}
-            className='!rounded-full !w-4 !h-4 !p-0 !min-w-0'
+            className='playground-media-action-round'
             disabled={!enabled || disabled || !canAddMore}
           />
         </div>
       </div>
 
-      {!enabled ? (
-        <Typography.Text className='text-xs text-gray-500 mb-2 block'>
-          {t('操练场视频地址停用提示', '启用后可添加视频 URL（视频生视频、视频编辑等）')}
-        </Typography.Text>
-      ) : list.length === 0 ? (
-        <Typography.Text className='text-xs text-gray-500 mb-2 block'>
-          {t('操练场视频地址空列表提示', '点击上传或 + 添加 .mp4 / .mov 等可访问的视频链接')}
-        </Typography.Text>
-      ) : (
+      {enabled && list.length > 0 && (
         <Typography.Text className='text-xs text-gray-500 mb-2 block'>
           {t('已添加')} {filledCount}/{maxCount} {t('个视频')}
         </Typography.Text>
