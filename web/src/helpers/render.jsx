@@ -27,6 +27,7 @@ import {
 import {
   formatVideoResolutionDisplayLabel,
   formatVideoSpecLabel,
+  formatVideoSpecLabelForBilling,
 } from './videoResolutionLabel';
 import { Modal, Tag, Typography, Avatar } from '@douyinfe/semi-ui';
 import { copy, showSuccess } from './utils';
@@ -3073,6 +3074,8 @@ export function renderLogContent(
       videoBillingDetail?.channel_price_discount || 100,
     );
     const resolution = videoBillingDetail?.video_resolution || '';
+    const resolutionFromInput =
+      videoBillingDetail?.video_resolution_from_input === true;
     const ratioLabel =
       videoBillingDetail?.video_ratio_label ||
       videoBillingDetail?.video_aspect_ratio ||
@@ -3081,7 +3084,11 @@ export function renderLogContent(
     const ruleHeight = Number(videoBillingDetail?.video_rule_height || 0);
     const hasAudio = videoBillingDetail?.video_has_audio === true;
     const unifiedAudio = videoBillingDetail?.video_unified_audio_price === true;
-    const videoSpecLabel = formatVideoSpecLabel(resolution, ratioLabel);
+    const videoSpecLabel = formatVideoSpecLabelForBilling(
+      resolution,
+      ratioLabel,
+      resolutionFromInput,
+    );
     const priceLabel = unifiedAudio
       ? i18next.t('Token价')
       : hasAudio
@@ -3101,7 +3108,11 @@ export function renderLogContent(
               tokens: totalTokens,
               spec:
                 videoSpecLabel ||
-                formatVideoSpecLabel(resolution || `${ruleWidth}x${ruleHeight}`),
+                formatVideoSpecLabelForBilling(
+                  resolution || `${ruleWidth}x${ruleHeight}`,
+                  ratioLabel,
+                  resolutionFromInput,
+                ),
               audio: audioLabel,
               priceLabel,
               price: pricePerMillion,
@@ -3137,6 +3148,8 @@ export function renderLogContent(
       videoBillingDetail?.channel_price_discount || 100,
     );
     const resolution = videoBillingDetail?.video_resolution || '';
+    const resolutionFromInput =
+      videoBillingDetail?.video_resolution_from_input === true;
     const ratioLabel =
       videoBillingDetail?.video_ratio_label ||
       videoBillingDetail?.video_aspect_ratio ||
@@ -3145,7 +3158,11 @@ export function renderLogContent(
     const ruleHeight = Number(videoBillingDetail?.video_rule_height || 0);
     const hasAudio = videoBillingDetail?.video_has_audio === true;
     const unifiedAudio = videoBillingDetail?.video_unified_audio_price === true;
-    const videoSpecLabel = formatVideoSpecLabel(resolution, ratioLabel);
+    const videoSpecLabel = formatVideoSpecLabelForBilling(
+      resolution,
+      ratioLabel,
+      resolutionFromInput,
+    );
     const priceLabel = unifiedAudio
       ? i18next.t('每秒价')
       : hasAudio
@@ -3165,7 +3182,11 @@ export function renderLogContent(
               seconds,
               spec:
                 videoSpecLabel ||
-                formatVideoSpecLabel(resolution || `${ruleWidth}x${ruleHeight}`),
+                formatVideoSpecLabelForBilling(
+                  resolution || `${ruleWidth}x${ruleHeight}`,
+                  ratioLabel,
+                  resolutionFromInput,
+                ),
               audio: audioLabel,
               priceLabel,
               price: pricePerSecond,

@@ -927,7 +927,7 @@ func TestMatchPerSecondPrice_CapsAboveHighestTierWithinMode(t *testing.T) {
 		},
 	}
 
-	match, ok := matchPerSecondPriceDetail(rules, "image_to_video", 7680, 4320, false)
+	match, ok := matchPerSecondPriceDetail(rules, "image_to_video", 7680, 4320, false, "")
 
 	require.True(t, ok)
 	assert.Equal(t, "720p", match.Resolution)
@@ -943,7 +943,7 @@ func TestMatchPerSecondPrice_CapsAboveHighestTierWhenAudioLaneMissing(t *testing
 		},
 	}
 
-	match, ok := matchPerSecondPriceDetail(rules, "image_to_video", 1440, 1440, true)
+	match, ok := matchPerSecondPriceDetail(rules, "image_to_video", 1440, 1440, true, "")
 
 	require.True(t, ok)
 	assert.Equal(t, "720p", match.Resolution)
