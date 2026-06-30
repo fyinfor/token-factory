@@ -44,7 +44,15 @@ import {
   Tag,
   Typography,
 } from '@douyinfe/semi-ui';
-import { IconEyeOpened, IconPlus } from '@douyinfe/semi-icons';
+import {
+  IconEyeOpened,
+  IconGlobe,
+  IconInfoCircle,
+  IconPlus,
+  IconSave,
+  IconSetting,
+  IconUserGroup,
+} from '@douyinfe/semi-icons';
 import {
   IllustrationNoResult,
   IllustrationNoResultDark,
@@ -171,10 +179,23 @@ const ModelWhitelistModal = ({ visible, model, onClose, onChanged }) => {
   const [savingBindings, setSavingBindings] = useState(false);
   const [visibilityMode, setVisibilityMode] = useState('public');
   const [selectedSetIDs, setSelectedSetIDs] = useState([]);
+  const [showSetManager, setShowSetManager] = useState(false);
 
   const editing = Boolean(editingSet);
   const currentModelName = model?.model_name || '-';
   const currentModelID = model?.id;
+  const selectedSetCount = selectedSetIDs.length;
+  const scopeSummary =
+    visibilityMode === 'sets'
+      ? selectedSetCount > 0
+        ? t('已选择 {{count}} 个用户集', { count: selectedSetCount })
+        : t('未选择用户集')
+      : t('所有人可见');
+  const scopeHelpText =
+    visibilityMode === 'sets'
+      ? t('仅命中所选用户集的登录用户可见')
+      : t('所有用户和未登录访问均可见');
+  const saveWhitelistText = savingBindings ? t('保存中…') : t('保存白名单');
 
   const loadSets = useCallback(async () => {
     setLoading(true);
@@ -626,6 +647,7 @@ const ModelWhitelistModal = ({ visible, model, onClose, onChanged }) => {
     if (!visible) {
       setSelectedSetIDs([]);
       setVisibilityMode('public');
+      setShowSetManager(false);
       return;
     }
     const ids = Array.isArray(model?.visibility_set_ids)
@@ -659,153 +681,265 @@ const ModelWhitelistModal = ({ visible, model, onClose, onChanged }) => {
       visible={visible}
       onCancel={onClose}
       width={isMobile ? '100%' : 960}
-      bodyStyle={{ padding: 0 }}
+      bodyStyle={{ padding: 0, overscrollBehavior: 'contain' }}
       closeIcon={null}
+      footer={
+        <div className='flex flex-col gap-3 rounded-xl border-t border-[var(--semi-color-border)] bg-[var(--semi-color-bg-0)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between'>
+          <div className='min-w-0'>
+            <div className='flex min-w-0 items-center gap-2'>
+              <Text strong>{t('当前可见范围')}</Text>
+              <Tag
+                color={visibilityMode === 'sets' ? 'orange' : 'green'}
+                shape='circle'
+              >
+                {scopeSummary}
+              </Tag>
+            </div>
+            <Text type='tertiary' size='small'>
+              {t('保存后立即生效')}
+            </Text>
+          </div>
+          <Button
+            type='primary'
+            theme='solid'
+            size='large'
+            icon={<IconSave />}
+            loading={savingBindings}
+            disabled={!currentModelID}
+            onClick={saveModelBindings}
+            className='w-full sm:w-auto'
+          >
+            {saveWhitelistText}
+          </Button>
+        </div>
+      }
     >
       <Spin spinning={loading}>
-        <div className='p-2'>
-          <Card className='!rounded-2xl shadow-sm border-0'>
-            <div className='flex flex-col gap-3'>
-              <div className='flex flex-col md:flex-row md:items-center gap-2 justify-between'>
-                <div className='min-w-0'>
-                  <Text type='tertiary'>{t('当前模型')}</Text>
-                  <div>
-                    <Text strong ellipsis={{ showTooltip: true }}>
-                      {currentModelName}
-                    </Text>
+        <div className='flex flex-col gap-3 p-3 pb-4'>
+          <Card className='!rounded-lg border border-[var(--semi-color-border)] shadow-sm'>
+            <div className='flex flex-col gap-4'>
+              <div className='flex flex-col gap-3 md:flex-row md:items-start md:justify-between'>
+                <div className='min-w-0 flex items-start gap-3'>
+                  <Avatar size='small' color='blue' className='shrink-0'>
+                    <IconSetting size={16} />
+                  </Avatar>
+                  <div className='min-w-0'>
+                    <Title heading={5} className='!mb-1 !mt-0'>
+                      {t('设置白名单')}
+                    </Title>
+                    <div className='flex min-w-0 flex-wrap items-center gap-2'>
+                      <Text type='tertiary'>{t('当前模型')}</Text>
+                      <Text
+                        strong
+                        ellipsis={{ showTooltip: true }}
+                        className='max-w-full'
+                        translate='no'
+                      >
+                        {currentModelName}
+                      </Text>
+                    </div>
                   </div>
                 </div>
-                <Button
-                  type='primary'
-                  theme='solid'
-                  size='small'
-                  loading={savingBindings}
-                  disabled={!currentModelID}
-                  onClick={saveModelBindings}
-                >
-                  {t('保存白名单')}
-                </Button>
+                <div className='flex shrink-0 items-center gap-2 rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)] px-3 py-2'>
+                  {visibilityMode === 'sets' ? (
+                    <IconUserGroup
+                      size={16}
+                      className='text-[var(--semi-color-warning)]'
+                    />
+                  ) : (
+                    <IconGlobe
+                      size={16}
+                      className='text-[var(--semi-color-success)]'
+                    />
+                  )}
+                  <div className='min-w-0'>
+                    <Text strong>{scopeSummary}</Text>
+                    <div>
+                      <Text type='tertiary' size='small'>
+                        {scopeHelpText}
+                      </Text>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              <RadioGroup
-                value={visibilityMode}
-                onChange={(event) => {
-                  const value = event?.target?.value ?? event;
-                  setVisibilityMode(value);
-                  if (value === 'public') {
-                    setSelectedSetIDs([]);
-                  }
-                }}
-                type='card'
-                direction={isMobile ? 'vertical' : 'horizontal'}
-                aria-label='模型白名单可见范围'
-                name='model-whitelist-visibility'
-              >
-                <Radio value='public' extra={t('首页卡片常驻展示')}>
-                  {t('所有人可见')}
-                </Radio>
-                <Radio value='sets' extra={t('登录后命中任一用户集可见')}>
-                  {t('指定用户集')}
-                </Radio>
-              </RadioGroup>
+              <div>
+                <div className='mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between'>
+                  <div className='flex items-center gap-2'>
+                    <Text strong>{t('可见范围')}</Text>
+                    <Tag color='blue' shape='circle' size='small'>
+                      {t('保存白名单后生效')}
+                    </Tag>
+                  </div>
+                  <Button
+                    type='tertiary'
+                    theme='solid'
+                    size='small'
+                    icon={<IconUserGroup />}
+                    onClick={() => setShowSetManager(true)}
+                    className='w-full sm:w-auto'
+                  >
+                    {t('白名单用户集')}
+                  </Button>
+                </div>
+                <RadioGroup
+                  value={visibilityMode}
+                  onChange={(event) => {
+                    const value = event?.target?.value ?? event;
+                    setVisibilityMode(value);
+                    if (value === 'public') {
+                      setSelectedSetIDs([]);
+                    }
+                  }}
+                  type='card'
+                  direction={isMobile ? 'vertical' : 'horizontal'}
+                  aria-label={t('模型白名单可见范围')}
+                  name='model-whitelist-visibility'
+                >
+                  <Radio value='public' extra={t('所有用户和未登录访问均可见')}>
+                    {t('所有人可见')}
+                  </Radio>
+                  <Radio value='sets' extra={t('登录后命中任一用户集可见')}>
+                    {t('指定用户集')}
+                  </Radio>
+                </RadioGroup>
+              </div>
 
               {visibilityMode === 'sets' ? (
-                <Select
-                  value={selectedSetIDs}
-                  onChange={(value) =>
-                    setSelectedSetIDs(
-                      Array.isArray(value) ? uniqIDs(value) : [],
-                    )
-                  }
-                  placeholder={t('请选择一个或多个用户集')}
-                  optionList={sets.map((item) => ({
-                    label: item.name,
-                    value: item.id,
-                  }))}
-                  multiple
-                  filter
-                  showClear
-                  style={{ width: '100%' }}
-                />
+                <div>
+                  <div className='mb-2 flex flex-wrap items-center justify-between gap-2'>
+                    <label
+                      className='text-sm font-medium text-[var(--semi-color-text-0)]'
+                      htmlFor='model-whitelist-set-select'
+                    >
+                      {t('选择白名单用户集')}
+                    </label>
+                    <Tag
+                      color={selectedSetCount > 0 ? 'green' : 'orange'}
+                      shape='circle'
+                      size='small'
+                    >
+                      {selectedSetCount > 0
+                        ? t('已选择 {{count}} 个用户集', {
+                            count: selectedSetCount,
+                          })
+                        : t('未选择用户集')}
+                    </Tag>
+                  </div>
+                  <Select
+                    id='model-whitelist-set-select'
+                    value={selectedSetIDs}
+                    onChange={(value) =>
+                      setSelectedSetIDs(
+                        Array.isArray(value) ? uniqIDs(value) : [],
+                      )
+                    }
+                    placeholder={t('请选择一个或多个用户集')}
+                    optionList={sets.map((item) => ({
+                      label: item.name,
+                      value: item.id,
+                    }))}
+                    multiple
+                    filter
+                    showClear
+                    style={{ width: '100%' }}
+                    aria-label={t('选择白名单用户集')}
+                  />
+                  <Text type='tertiary' size='small' className='mt-1 block'>
+                    {t(
+                      '通过上方“白名单用户集”按钮维护用户集，这里只选择应用到当前模型的范围。',
+                    )}
+                  </Text>
+                </div>
               ) : (
-                <Text type='tertiary'>
-                  {t('未选择用户集时，模型对所有用户和未登录访问保持可见。')}
-                </Text>
+                <div className='flex items-start gap-2 rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)] px-3 py-2'>
+                  <IconInfoCircle
+                    size={16}
+                    className='mt-0.5 shrink-0 text-[var(--semi-color-text-2)]'
+                  />
+                  <Text type='tertiary'>
+                    {t('未选择用户集时，模型对所有用户和未登录访问保持可见。')}
+                  </Text>
+                </div>
               )}
             </div>
           </Card>
-
-          {visibilityMode === 'sets' ? (
-            <Card
-              className='!rounded-2xl shadow-sm border-0'
-              style={{ marginTop: 4 }}
-            >
-              <div className='flex items-center gap-2 mb-3'>
-                <Avatar size='small' color='blue' className='shadow-md'>
-                  <IconEyeOpened size={16} />
-                </Avatar>
-                <div className='min-w-0 flex-1'>
-                  <Text className='text-lg font-medium'>
-                    {t('白名单用户集')}
-                  </Text>
-                </div>
-                <Button
-                  type='primary'
-                  theme='solid'
-                  size='small'
-                  icon={<IconPlus />}
-                  onClick={() => openEditor()}
-                >
-                  {t('新建用户集')}
-                </Button>
-              </div>
-              <div className='flex gap-2 mb-3 items-stretch'>
-                <Input
-                  prefix={<Search size={14} />}
-                  placeholder={t('搜索用户集')}
-                  value={keyword}
-                  onChange={(value) => setKeyword(value || '')}
-                  onEnterPress={loadSets}
-                  size='default'
-                  className={`${compactSearchClassName} flex-1`}
-                />
-                <Button
-                  size='default'
-                  theme='solid'
-                  type='tertiary'
-                  onClick={loadSets}
-                  className='h-8'
-                >
-                  {t('查询')}
-                </Button>
-              </div>
-              {sets.length > 0 ? (
-                <CardTable
-                  columns={columns}
-                  dataSource={sets}
-                  rowKey='id'
-                  hidePagination
-                  size='small'
-                  scroll={{ x: 'max-content' }}
-                />
-              ) : (
-                <Empty
-                  image={
-                    <IllustrationNoResult style={{ width: 150, height: 150 }} />
-                  }
-                  darkModeImage={
-                    <IllustrationNoResultDark
-                      style={{ width: 150, height: 150 }}
-                    />
-                  }
-                  description={t('暂无用户集')}
-                  style={{ padding: 30 }}
-                />
-              )}
-            </Card>
-          ) : null}
         </div>
       </Spin>
+
+      <SideSheet
+        placement='right'
+        title={
+          <Space>
+            <Avatar size='small' color='blue' className='shrink-0'>
+              <IconEyeOpened size={16} />
+            </Avatar>
+            <Text strong>{t('白名单用户集')}</Text>
+          </Space>
+        }
+        visible={showSetManager}
+        onCancel={() => setShowSetManager(false)}
+        width={isMobile ? '100%' : 760}
+        closeIcon={null}
+        bodyStyle={{ padding: isMobile ? 12 : 16 }}
+      >
+        <div className='mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+          <Text type='tertiary' size='small'>
+            {t('维护可复用的用户范围，保存白名单时才会应用到当前模型')}
+          </Text>
+          <Button
+            type='primary'
+            theme='solid'
+            size='small'
+            icon={<IconPlus />}
+            onClick={() => openEditor()}
+            className='w-full sm:w-auto'
+          >
+            {t('新建用户集')}
+          </Button>
+        </div>
+        <div className='flex gap-2 mb-3 items-stretch'>
+          <Input
+            prefix={<Search size={14} />}
+            placeholder={t('搜索用户集')}
+            value={keyword}
+            onChange={(value) => setKeyword(value || '')}
+            onEnterPress={loadSets}
+            size='default'
+            className={`${compactSearchClassName} flex-1`}
+          />
+          <Button
+            size='default'
+            theme='solid'
+            type='tertiary'
+            onClick={loadSets}
+            className='h-8'
+          >
+            {t('查询')}
+          </Button>
+        </div>
+        {sets.length > 0 ? (
+          <div className={tableSurfaceClassName}>
+            <CardTable
+              columns={columns}
+              dataSource={sets}
+              rowKey='id'
+              hidePagination
+              size='small'
+              scroll={{ x: 'max-content' }}
+            />
+          </div>
+        ) : (
+          <Empty
+            image={<IllustrationNoResult style={{ width: 150, height: 150 }} />}
+            darkModeImage={
+              <IllustrationNoResultDark style={{ width: 150, height: 150 }} />
+            }
+            description={t('暂无用户集')}
+            style={{ padding: 30 }}
+          />
+        )}
+      </SideSheet>
 
       <SideSheet
         placement='right'
