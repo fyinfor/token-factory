@@ -77,6 +77,12 @@ func BackfillVideoQuotaDataTokenUsed() (int, error) {
 	//    限定为 prompt+completion tokens == 0 的行（旧路径写入的"假 0 token"任务）。
 	//    token_used 直接用 quota 顶上（与 LogTaskConsumption 修复后的语义一致：
 	//    异步视频任务没有真实 token，把消耗的额度作为 token_used 上报）。
+	//
+	//    排除 settlement_marker（结算展示日志，affects_balance=false）：
+	//    它在 live 链路不写 quota_data（见 RecordTaskBillingLog 的 affects_balance 判断）。
+	//    Kling 等按秒任务的 marker 是 Quota=0 会被 `quota > 0` 天然过滤掉，但 Seedance
+	//    按 token 任务的 marker 记录的是 Quota=actualQuota（>0），若不排除会与 pre_charge
+	//    在同一 (user,model,hour) 桶内重复累加，导致 Seedance 回填后的 token_used 翻倍。
 	bucketExpr := backfillBucketExpr()
 	bucketQuery := LOG_DB.Table("logs").
 		Select(fmt.Sprintf(
@@ -86,6 +92,7 @@ func BackfillVideoQuotaDataTokenUsed() (int, error) {
 		Where("model_name IN ?", videoModels).
 		Where("quota > 0").
 		Where("prompt_tokens + completion_tokens = 0").
+		Where("other NOT LIKE ?", settlementMarkerOtherPattern).
 		Group(fmt.Sprintf("user_id, username, model_name, %s", bucketExpr))
 
 	var rows []quotaDataBackfillRow
@@ -159,6 +166,11 @@ func BackfillVideoQuotaDataTokenUsed() (int, error) {
 	))
 	return updated + inserted + skipped, nil
 }
+
+// settlementMarkerOtherPattern 匹配 logs.other 中由 SetBillingLogMetadata 写入的
+// settlement_marker 标记（紧凑 JSON，无空格，见 common.MapToJsonStr）。
+// 用于在回填聚合时排除「仅展示用、不影响余额」的结算日志，避免 Seedance 双重累加。
+const settlementMarkerOtherPattern = `%"billing_phase":"settlement_marker"%`
 
 func backfillBucketExpr() string {
 	if common.UsingMySQL {

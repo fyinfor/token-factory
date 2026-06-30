@@ -1235,6 +1235,29 @@ func seedLogRow(t *testing.T, userID int, username, modelName string, quota int,
 	require.NoError(t, model.LOG_DB.Create(row).Error)
 }
 
+// seedSettlementMarkerLog 模拟 Seedance 按 token 任务的结算展示日志：
+// type=consume、Quota=actualQuota(>0)、prompt+completion=0、billing_phase=settlement_marker、affects_balance=false。
+// 该日志在 live 链路不写 quota_data，回填也必须排除它，否则会与 pre_charge 在同桶内双重累加。
+func seedSettlementMarkerLog(t *testing.T, userID int, username, modelName string, quota int, createdAt int64) {
+	t.Helper()
+	other := model.SetBillingLogMetadata(map[string]interface{}{
+		"task_id": "task-marker",
+	}, model.BillingPhaseSettlementMarker, false, quota, 0)
+	row := &model.Log{
+		UserId:           userID,
+		Username:         username,
+		ModelName:        modelName,
+		Quota:            quota,
+		CreatedAt:        createdAt,
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		Type:             model.LogTypeConsume,
+		Content:          "",
+		Other:            common.MapToJsonStr(other),
+	}
+	require.NoError(t, model.LOG_DB.Create(row).Error)
+}
+
 // 模拟「升级后调用，新代码会写入正确 token_used；backfill 跑过之后会变成 update」场景。
 func seedExistingQuotaData(t *testing.T, userID int, username, modelName string, quota, tokenUsed, count int, createdAt int64) {
 	t.Helper()
@@ -1270,6 +1293,26 @@ func TestBackfillVideoQuotaDataTokenUsed_FixesSeedanceHistory(t *testing.T) {
 	assert.Equal(t, 3, rows[0].Count)
 	assert.Equal(t, 18000, rows[0].Quota)
 	assert.Equal(t, 18000, rows[0].TokenUsed, "Seedance 旧历史 pre_charge 应被回填 token_used=sum(quota)")
+}
+
+func TestBackfillVideoQuotaDataTokenUsed_ExcludesSeedanceSettlementMarker(t *testing.T) {
+	truncate(t)
+	// 模拟一次完整的 Seedance 按 token 历史任务：同一 (user, model, hour) 桶内
+	// 既有 pre_charge（quota=5000），又有 settlement_marker（quota=4200，affects_balance=false）。
+	// 回填应只计入 pre_charge，token_used=5000，绝不能累加成 9200。
+	hour := ((time.Now().Unix() / 3600) * 3600) - 3600
+	seedLogRow(t, 1, "carol", "doubao-seedance-1-0-lite", 5000, hour+10)
+	seedSettlementMarkerLog(t, 1, "carol", "doubao-seedance-1-0-lite", 4200, hour+120)
+
+	processed, err := model.BackfillVideoQuotaDataTokenUsed()
+	require.NoError(t, err)
+	assert.Greater(t, processed, 0)
+
+	rows := quotaDataFor(t, 1, "doubao-seedance-1-0-lite")
+	require.Len(t, rows, 1)
+	assert.Equal(t, 1, rows[0].Count, "只应计入 1 条 pre_charge，settlement_marker 不计数")
+	assert.Equal(t, 5000, rows[0].Quota)
+	assert.Equal(t, 5000, rows[0].TokenUsed, "settlement_marker 必须被排除，否则 Seedance 回填会翻倍")
 }
 
 func TestBackfillVideoQuotaDataTokenUsed_SkipsRowsAlreadyFixed(t *testing.T) {
