@@ -77,7 +77,7 @@ import ModelPerfCardSection from '../../components/ModelPerfCardSection';
 import { useMinimumLoadingTime } from '../../../../../hooks/common/useMinimumLoadingTime';
 import { renderLimitedItems } from '../../../../common/ui/RenderUtils';
 import { useIsMobile } from '../../../../../hooks/common/useIsMobile';
-import { getModelDisplayRouteName } from '../../utils/channelRoute';
+import { getModelChannelRouteSuffixes } from '../../utils/channelRoute';
 const CARD_STYLES = {
   container:
     'w-12 h-12 rounded-xl flex items-center justify-center relative shadow-sm border border-semi-color-border bg-white',
@@ -1637,10 +1637,25 @@ const PricingCardView = ({
       });
     }
 
+    const channelSuffixTags = getModelChannelRouteSuffixes(record).map(
+      (suffix, idx) => (
+        <Tag
+          key={`channel-${idx}`}
+          shape='circle'
+          color='blue'
+          type='light'
+          size='small'
+        >
+          {renderHighlightedText(suffix)}
+        </Tag>
+      ),
+    );
+
     return (
       <div className='flex items-center justify-between'>
         <div className='flex items-center gap-2'>
           {billingTag}
+          {channelSuffixTags}
         </div>
         <div className='flex items-center gap-1'>
           {customTags.length > 0 &&
@@ -1709,7 +1724,6 @@ const PricingCardView = ({
             const hasChannelList =
               Array.isArray(model.channel_list) &&
               model.channel_list.length > 0;
-            const modelDisplayName = getModelDisplayRouteName(model);
             return (
               <Card
                 key={modelKey || index}
@@ -1727,7 +1741,7 @@ const PricingCardView = ({
                       <div className='flex-1 min-w-0'>
                         <div className='flex items-start justify-between gap-2'>
                           <h3 className='text-lg font-bold text-gray-900 truncate flex-1'>
-                            {renderHighlightedText(modelDisplayName)}
+                            {renderHighlightedText(model.model_name)}
                           </h3>
                         </div>
                         <div
@@ -1912,7 +1926,7 @@ const PricingCardView = ({
                         icon={<Copy size={12} />}
                         onClick={(e) => {
                           e.stopPropagation();
-                          copyText(modelDisplayName);
+                          copyText(model.model_name);
                         }}
                       />
 

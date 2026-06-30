@@ -30,6 +30,36 @@ export const getModelDisplayRouteName = (model) => {
   return routeNames[0];
 };
 
+export const getChannelRouteSuffix = (modelData, channel) => {
+  if (!channel) return '';
+  if (channel.route_slug) {
+    return String(channel.route_slug);
+  }
+  const alias = String(channel.supplier_alias || '').trim();
+  const channelNo =
+    channel.channel_no != null ? String(channel.channel_no).trim() : '';
+  if (alias && channelNo) return `${alias}/${channelNo}`;
+  if (alias) return alias;
+  if (channelNo) return channelNo;
+  return '';
+};
+
+export const getModelChannelRouteSuffixes = (model) => {
+  const channelList = Array.isArray(model?.channel_list)
+    ? model.channel_list
+    : [];
+  if (channelList.length === 0) return [];
+  const seen = new Set();
+  const suffixes = [];
+  channelList.forEach((channel) => {
+    const suffix = getChannelRouteSuffix(model, channel);
+    if (!suffix || seen.has(suffix)) return;
+    seen.add(suffix);
+    suffixes.push(suffix);
+  });
+  return suffixes;
+};
+
 export const modelMatchesSearchTerm = (model, searchValue) => {
   const term = String(searchValue || '').trim().toLowerCase();
   if (!term) return true;
