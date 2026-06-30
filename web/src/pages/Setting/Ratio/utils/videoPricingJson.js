@@ -62,7 +62,7 @@ export const VIDEO_PRICING_JSON_RESOLUTION_KEYS = [
   '4k',
 ];
 
-export const VIDEO_PRICING_JSON_BILLING_MODES = ['per-item', 'per-second'];
+export const VIDEO_PRICING_JSON_BILLING_MODES = ['per-item', 'per-second', 'per-token'];
 export const VIDEO_PRICING_JSON_PRICE_UNITS = ['USD', 'CNY', 'CUSTOM'];
 
 const SECTION_META = [
@@ -251,7 +251,7 @@ export const stringifyVideoPricingJsonEditor = (model) => {
   const data = buildVideoPricingJsonEditor(model);
   const out = [];
   out.push('{');
-  out.push('  // billing_mode: per-item（按条）| per-second（按秒）');
+  out.push('  // billing_mode: per-item（按条）| per-second（按秒）| per-token（按 token）');
   out.push(`  "billing_mode": ${JSON.stringify(data.billing_mode)},`);
   out.push('  // price_unit: USD | CNY | CUSTOM');
   out.push(`  "price_unit": ${JSON.stringify(data.price_unit)},`);
@@ -462,7 +462,9 @@ export const mergeVideoPricingFromJsonEditor = (model, jsonObj) => {
       ? 'per-item'
       : billingModeRaw === 'per-second'
         ? 'per-second'
-        : model.videoBillingMode || 'per-second';
+        : billingModeRaw === 'per-token'
+          ? 'per-token'
+          : model.videoBillingMode || 'per-second';
   const perItem = billingMode === 'per-item';
 
   const priceUnitRaw = String(

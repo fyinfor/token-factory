@@ -51,6 +51,7 @@ export function getRankingGrowthColor(growth) {
 // 分类标签 i18n key 映射。
 // 保持与 system 内其他模块（playground/SettingsPanel、SupplierCapabilityFormFields）一致：
 // 文本/图片/视频。Seedance 仍归入视频 tab。
+// 取值是与 web/src/i18n/locales/*.json 的 translation.* 一一对应的 i18n key（中文表达同时作为 key 与 zh-CN 翻译）。
 export const RANKING_CATEGORY_LABEL_KEYS = {
   text: '文本',
   image: '图片',

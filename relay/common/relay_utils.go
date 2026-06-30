@@ -235,6 +235,12 @@ func ValidateBasicTaskRequest(c *gin.Context, info *RelayInfo, action string) *d
 	if req.Metadata == nil {
 		req.Metadata = make(map[string]interface{})
 	}
+	if res := strings.TrimSpace(req.Resolution); res != "" {
+		req.Metadata["resolution"] = res
+	}
+	if ratio := strings.TrimSpace(req.Ratio); ratio != "" {
+		req.Metadata["ratio"] = ratio
+	}
 	if req.N != nil && *req.N > 0 {
 		req.Metadata["n"] = *req.N
 	}

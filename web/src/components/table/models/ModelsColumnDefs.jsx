@@ -20,12 +20,13 @@ For commercial licensing, please contact support@quantumnous.com
 import React from 'react';
 import {
   Button,
+  Modal,
   Space,
   Tag,
-  Typography,
-  Modal,
   Tooltip,
+  Typography,
 } from '@douyinfe/semi-ui';
+import { IconSetting } from '@douyinfe/semi-icons';
 import {
   timestamp2string,
   getLobeHubIcon,
@@ -161,6 +162,24 @@ const renderQuotaTypes = (arr, t) => {
   });
 };
 
+const renderVisibility = (record, t) => {
+  const ids = Array.isArray(record?.visibility_set_ids)
+    ? record.visibility_set_ids
+    : [];
+  if (ids.length === 0) {
+    return (
+      <Tag size='small' shape='circle' color='green'>
+        {t('所有人可见')}
+      </Tag>
+    );
+  }
+  return (
+    <Tag size='small' shape='circle' color='orange'>
+      {t('指定用户集')} {ids.length}
+    </Tag>
+  );
+};
+
 // Render bound channels
 const renderBoundChannels = (channels) => {
   if (!channels || channels.length === 0) return '-';
@@ -190,12 +209,26 @@ const renderOperations = (
   setShowEdit,
   setDocsEditingModel,
   setShowDocsEdit,
+  setWhitelistModel,
+  setShowWhitelist,
   manageModel,
   refresh,
   t,
 ) => {
   return (
     <Space wrap>
+      <Button
+        type='tertiary'
+        size='small'
+        icon={<IconSetting />}
+        onClick={() => {
+          setWhitelistModel(record);
+          setShowWhitelist(true);
+        }}
+      >
+        {t('设置白名单')}
+      </Button>
+
       {record.status === 1 ? (
         <Button
           type='danger'
@@ -301,6 +334,8 @@ export const getModelsColumns = ({
   setShowEdit,
   setDocsEditingModel,
   setShowDocsEdit,
+  setWhitelistModel,
+  setShowWhitelist,
   refresh,
   vendorMap,
 }) => {
@@ -351,6 +386,11 @@ export const getModelsColumns = ({
       render: renderTags,
     },
     {
+      title: t('可见范围'),
+      dataIndex: 'visibility_set_ids',
+      render: (_, record) => renderVisibility(record, t),
+    },
+    {
       title: t('端点'),
       dataIndex: 'endpoints',
       render: renderEndpoints,
@@ -396,6 +436,8 @@ export const getModelsColumns = ({
           setShowEdit,
           setDocsEditingModel,
           setShowDocsEdit,
+          setWhitelistModel,
+          setShowWhitelist,
           manageModel,
           refresh,
           t,

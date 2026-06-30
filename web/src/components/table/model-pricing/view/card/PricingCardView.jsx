@@ -77,6 +77,7 @@ import ModelPerfCardSection from '../../components/ModelPerfCardSection';
 import { useMinimumLoadingTime } from '../../../../../hooks/common/useMinimumLoadingTime';
 import { renderLimitedItems } from '../../../../common/ui/RenderUtils';
 import { useIsMobile } from '../../../../../hooks/common/useIsMobile';
+import { getModelChannelRouteSuffixes } from '../../utils/channelRoute';
 const CARD_STYLES = {
   container:
     'w-12 h-12 rounded-xl flex items-center justify-center relative shadow-sm border border-semi-color-border bg-white',
@@ -142,12 +143,14 @@ const formatCompactVideoResolution = (resolution, t) => {
   return String(label);
 };
 
-const formatVideoTierSpec = (row, t) => {
-  const unit = String(row?.lane || '').includes('per_second')
-    ? t('秒')
-    : t('个');
-  return `${formatCompactVideoResolution(row?.resolution, t)}/${unit}`;
-};
+const formatVideoTierSpec = (row, t) =>
+  formatCompactVideoResolution(row?.resolution, t);
+
+const formatVideoTierDisplayPrice = (
+  usd,
+  usedGroupRatio,
+  displayPrice,
+) => displayPrice(Number(usd || 0) * usedGroupRatio);
 
 const getVideoTierDiscount = (currentDisplayUsd, officialUsd) => {
   const current = Number(currentDisplayUsd || 0);
@@ -162,9 +165,12 @@ const getVideoTierDiscount = (currentDisplayUsd, officialUsd) => {
   return official > current ? Math.round((1 - current / official) * 100) : 0;
 };
 
+const VIDEO_CARD_TIER_PREVIEW_LIMIT = 2;
+
 const buildVideoTierPreviewItems = (hint, usedGroupRatio, displayPrice, t) => {
   const rows = Array.isArray(hint?.tiers) ? hint.tiers : [];
-  const maxItems = 4;
+  const billingMode = String(hint?.billing_mode || '');
+  const maxItems = VIDEO_CARD_TIER_PREVIEW_LIMIT;
   const seen = new Set();
   const normalizedItems = [];
   for (const row of rows) {
@@ -190,7 +196,11 @@ const buildVideoTierPreviewItems = (hint, usedGroupRatio, displayPrice, t) => {
       label: laneMeta.label,
       labelColor: laneMeta.color,
       spec: formatVideoTierSpec(row, t),
-      platformPrice: displayPrice(platformUsd),
+      platformPrice: formatVideoTierDisplayPrice(
+        currentUsd,
+        usedGroupRatio,
+        displayPrice,
+      ),
       officialPrice:
         Number.isFinite(officialUsd) && officialUsd > 0
           ? displayPrice(officialUsd)
@@ -210,10 +220,7 @@ const buildVideoTierPreviewItems = (hint, usedGroupRatio, displayPrice, t) => {
   });
 
   const items = normalizedItems.slice(0, maxItems);
-  return {
-    items,
-    hiddenCount: Math.max(0, normalizedItems.length - items.length),
-  };
+  return { items };
 };
 
 const groupVideoTierPreviewRows = (rows) => {
@@ -663,10 +670,20 @@ const FixedPricingTable = ({ row, t }) => {
  * 边界逻辑：当所有行均无有效折扣数据（平台价 ≥ 官方价 或 无官方价）时，隐藏官方价和折扣列
  * 折扣视觉：加粗、放大、高饱和度鲜艳色
  */
-const VideoPricingTable = ({ videoTierRows, hiddenCount, openDetail, blurPricing, model, t }) => {
+const VideoPricingTable = ({
+  videoTierRows,
+  videoBillingMode,
+  t,
+}) => {
   if (!videoTierRows || videoTierRows.length === 0) return null;
 
   const videoColumns = getVideoPricingColumns(t);
+  const unitSuffix =
+    videoBillingMode === 'per_second'
+      ? ` / ${t('秒')}`
+      : videoBillingMode === 'per_token'
+        ? ' / M token'
+        : ` / ${t('条')}`;
   const groups = groupVideoTierPreviewRows(videoTierRows);
 
   // 边界隐藏逻辑：所有行都没有有效折扣（discount <= 0 或 null）时，隐藏官方价和折扣列
@@ -715,6 +732,7 @@ const VideoPricingTable = ({ videoTierRows, hiddenCount, openDetail, blurPricing
                 }}
               >
                 {videoColumns.platform}
+                {unitSuffix}
               </th>
               {/* 边界隐藏逻辑：allRowsNoDiscount 为 true 时隐藏官方价和折扣列 */}
               {!allRowsNoDiscount && (
@@ -726,6 +744,7 @@ const VideoPricingTable = ({ videoTierRows, hiddenCount, openDetail, blurPricing
                   }}
                 >
                   {videoColumns.official}
+                  {unitSuffix}
                 </th>
               )}
               {!allRowsNoDiscount && (
@@ -779,19 +798,6 @@ const VideoPricingTable = ({ videoTierRows, hiddenCount, openDetail, blurPricing
           </tbody>
         </table>
       ))}
-      {hiddenCount > 0 ? (
-        <button
-          type='button'
-          className='w-full py-0.5 text-left text-[11px] font-medium text-semi-color-primary bg-transparent hover:text-semi-color-primary-hover'
-          style={{ borderTop: PRICING_TABLE_ROW_BORDER }}
-          onClick={(e) => {
-            e.stopPropagation();
-            !blurPricing && openDetail && openDetail(model);
-          }}
-        >
-          {t('查看更多')} {'>'}
-        </button>
-      ) : null}
     </div>
   );
 };
@@ -959,10 +965,6 @@ const PricingCardView = ({
       };
     };
 
-    const modelHasVideoRatio = hasNumericValue(model.video_ratio);
-    const modelHasVideoCompletion = hasNumericValue(
-      model.video_completion_ratio,
-    );
     const modelHasVideoFlatPrice = hasNumericValue(model.video_price);
     const hideTextTokenPrices = isVideoPricingModel(model);
 
@@ -973,7 +975,6 @@ const PricingCardView = ({
       cache: [],
       createCache: [],
       fixed: [],
-      videoToken: [],
       videoFlat: [],
     };
     const originalPrices = {
@@ -982,7 +983,6 @@ const PricingCardView = ({
       cache: [],
       createCache: [],
       fixed: [],
-      videoToken: [],
       videoFlat: [],
     };
 
@@ -1104,44 +1104,6 @@ const PricingCardView = ({
               formatPrice(billingRates.cacheCreationRatioPrice),
             );
           }
-
-          const vrCh = pickChannelScopedModelFloat(
-            channelVideoRatio,
-            cid,
-            mname,
-          );
-          const vcrCh = pickChannelScopedModelFloat(
-            channelVideoCompletionRatio,
-            cid,
-            mname,
-          );
-          const effVr =
-            vrCh != null
-              ? vrCh
-              : modelHasVideoRatio
-                ? Number(model.video_ratio)
-                : 1;
-          const effVcr =
-            vcrCh != null
-              ? vcrCh
-              : modelHasVideoCompletion
-                ? Number(model.video_completion_ratio)
-                : 1;
-
-          const showVideoToken =
-            modelHasVideoRatio ||
-            modelHasVideoCompletion ||
-            vrCh != null ||
-            vcrCh != null;
-
-          if (showVideoToken) {
-            const videoTokUsd =
-              billingRates.inputRatioPrice * effVr * effVcr * usedGroupRatio;
-            prices.videoToken.push(formatPrice(videoTokUsd));
-            originalPrices.videoToken.push(
-              formatPrice(billingRates.inputRatioPrice * effVr * effVcr),
-            );
-          }
         }
       }
       // 按次计费
@@ -1193,19 +1155,6 @@ const PricingCardView = ({
         model.model_price !== null
       ) {
         rootPrices.fixed = formatPrice(model.model_price);
-      }
-    }
-    if (model.quota_type === 0) {
-      if (model.model_ratio !== undefined && model.model_ratio !== null) {
-        const rootVr = modelHasVideoRatio ? Number(model.video_ratio) : 1;
-        const rootVcr = modelHasVideoCompletion
-          ? Number(model.video_completion_ratio)
-          : 1;
-        if (modelHasVideoRatio || modelHasVideoCompletion) {
-          rootPrices.videoToken = formatPrice(
-            model.model_ratio * rootVr * rootVcr * 2,
-          );
-        }
       }
     }
     if (modelHasVideoFlatPrice && !skipSimpleVideoFlat) {
@@ -1281,13 +1230,8 @@ const PricingCardView = ({
           originalPrices.createCache,
         ),
         fixed: getOriginal(rootPrices.fixed, originalPrices.fixed),
-        videoToken: getOriginal(
-          rootPrices.videoToken,
-          originalPrices.videoToken,
-        ),
         videoFlat: getOriginal(rootPrices.videoFlat, originalPrices.videoFlat),
       },
-      videoToken: calculateRange(prices.videoToken),
       videoFlat: calculateRange(prices.videoFlat),
       unitSuffix,
       fixedSuffix,
@@ -1299,6 +1243,61 @@ const PricingCardView = ({
     };
   };
 
+  const buildVideoPriceCardItems = ({
+    model,
+    hint,
+    videoFlat,
+    videoFlatSuffix,
+    original,
+    useTieredVideoFlat,
+  }) => {
+    const videoBillingMode = String(hint?.billing_mode || '');
+    const out = [];
+
+    if (useTieredVideoFlat) {
+      const { usedGroupRatio } = getUsedGroupContext(
+        model,
+        selectedGroup,
+        groupRatio,
+      );
+      const videoPreview = buildVideoTierPreviewItems(
+        hint,
+        usedGroupRatio,
+        displayPrice,
+        t,
+      );
+      if (videoPreview.items.length > 0) {
+        out.push({
+          key: 'video-tier-table',
+          videoTierRows: videoPreview.items,
+          videoBillingMode,
+        });
+      }
+    } else if (videoFlat) {
+      const flatSuffix =
+        videoBillingMode === 'per_second'
+          ? ` / ${t('秒')}`
+          : videoBillingMode === 'per_token'
+            ? ' / M token'
+            : videoFlatSuffix || ` / ${t('条')}`;
+      out.push({
+        key: 'video-flat',
+        label:
+          videoBillingMode === 'per_token'
+            ? t('视频按 token 计费')
+            : videoBillingMode === 'per_second'
+              ? t('视频按秒计费')
+              : t('视频按条（固定价）'),
+        value:
+          videoFlat.single ||
+          `${videoFlat.symbol}${videoFlat.min} ~ ${videoFlat.symbol}${videoFlat.max}`,
+        suffix: flatSuffix,
+        original: original?.videoFlat,
+      });
+    }
+    return out;
+  };
+
   // 获取模型的价格项（优先使用 channel 价格）
   const getModelPriceItemsForCard = (model, priceData) => {
     const hint = model.video_flat_clip_hint;
@@ -1306,6 +1305,7 @@ const PricingCardView = ({
       hint &&
       Number(hint.tier_count) > 0 &&
       Number(hint.min_usd_after_channel_discount) > 0;
+    const isVideoModel = isVideoPricingModel(model);
     const imageHint = model.image_per_image_hint;
     const useTieredImagePerImage =
       imageHint &&
@@ -1317,12 +1317,21 @@ const PricingCardView = ({
       skipSimpleFixed: useTieredImagePerImage,
     });
 
-    // 如果没有 channel 价格，使用原有逻辑
     if (!channelPrices) {
+      if (isVideoModel) {
+        const videoItems = buildVideoPriceCardItems({
+          model,
+          hint,
+          videoFlat: null,
+          videoFlatSuffix: null,
+          original: null,
+          useTieredVideoFlat,
+        });
+        if (videoItems.length > 0) return videoItems;
+      }
       return getModelPriceItems(priceData, t, siteDisplayType);
     }
 
-    // 使用 channel 价格构建价格项
     const items = [];
     const {
       input,
@@ -1333,16 +1342,25 @@ const PricingCardView = ({
       original,
       unitSuffix,
       fixedSuffix,
-      videoToken,
       videoFlat,
       videoFlatSuffix,
       quotaType,
     } = channelPrices;
 
-    // 阶梯计费检测（提前检测，在 if/else 两个分支中都需要使用）
+    const videoItems = buildVideoPriceCardItems({
+      model,
+      hint,
+      videoFlat,
+      videoFlatSuffix,
+      original,
+      useTieredVideoFlat,
+    });
+    if (isVideoModel) {
+      items.push(...videoItems);
+    }
+
     const tokenTierInfo = detectTokenTierPricing(model);
 
-    // 按次计费
     if (quotaType === 1 && fixed) {
       items.push({
         key: 'fixed-pricing-table',
@@ -1355,17 +1373,13 @@ const PricingCardView = ({
           original: original?.fixed,
         },
       });
-    }
-    // 按量计费
-    else {
-      // 当有阶梯倍率时，跳过对应的平铺价格，用阶梯表替代
+    } else {
       const isTierBilling = quotaType === 3;
       const skipFlatInput =
         isTierBilling || !!tokenTierInfo?.hasModelTier;
       const skipFlatOutput =
         isTierBilling || !!tokenTierInfo?.hasCompletionTier;
 
-      // 收集按量计费表格行（仅输入价格和输出价格）
       const flatTableRows = [];
       if (input && !skipFlatInput) {
         flatTableRows.push({
@@ -1391,7 +1405,6 @@ const PricingCardView = ({
         });
       }
 
-      // 当有按量计费行时，以表格标记项整体输出
       if (flatTableRows.length > 0) {
         items.push({
           key: 'flat-pricing-table',
@@ -1399,51 +1412,10 @@ const PricingCardView = ({
           unitSuffix,
         });
       }
-
-      if (videoToken) {
-        items.push({
-          key: 'video-token',
-          label: t('视频（倍率计价）'),
-          value:
-            videoToken.single ||
-            `${videoToken.symbol}${videoToken.min} ~ ${videoToken.symbol}${videoToken.max}`,
-          suffix: unitSuffix,
-          original: original?.videoToken,
-        });
-      }
     }
 
-    if (videoFlat) {
-      items.push({
-        key: 'video-flat',
-        label: t('视频按条（固定价）'),
-        value:
-          videoFlat.single ||
-          `${videoFlat.symbol}${videoFlat.min} ~ ${videoFlat.symbol}${videoFlat.max}`,
-        suffix: videoFlatSuffix || ` / ${t('条')}`,
-        original: original?.videoFlat,
-      });
-    }
-
-    if (useTieredVideoFlat) {
-      const { usedGroupRatio } = getUsedGroupContext(
-        model,
-        selectedGroup,
-        groupRatio,
-      );
-      const videoPreview = buildVideoTierPreviewItems(
-        hint,
-        usedGroupRatio,
-        displayPrice,
-        t,
-      );
-      if (videoPreview.items.length > 0) {
-        items.push({
-          key: 'video-tier-table',
-          videoTierRows: videoPreview.items,
-          hiddenCount: videoPreview.hiddenCount,
-        });
-      }
+    if (!isVideoModel) {
+      items.push(...videoItems);
     }
 
     if (useTieredImagePerImage) {
@@ -1665,10 +1637,25 @@ const PricingCardView = ({
       });
     }
 
+    const channelSuffixTags = getModelChannelRouteSuffixes(record).map(
+      (suffix, idx) => (
+        <Tag
+          key={`channel-${idx}`}
+          shape='circle'
+          color='blue'
+          type='light'
+          size='small'
+        >
+          {renderHighlightedText(suffix)}
+        </Tag>
+      ),
+    );
+
     return (
       <div className='flex items-center justify-between'>
         <div className='flex items-center gap-2'>
           {billingTag}
+          {channelSuffixTags}
         </div>
         <div className='flex items-center gap-1'>
           {customTags.length > 0 &&
@@ -1789,10 +1776,7 @@ const PricingCardView = ({
                                 item.videoTierRows ? (
                                   <VideoPricingTable
                                     videoTierRows={item.videoTierRows}
-                                    hiddenCount={item.hiddenCount}
-                                    openDetail={openModelDetail}
-                                    blurPricing={blurPricing}
-                                    model={model}
+                                    videoBillingMode={item.videoBillingMode}
                                     t={t}
                                   />
                                 ) : /* 阶梯计费表格 */

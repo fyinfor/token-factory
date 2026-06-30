@@ -3,6 +3,7 @@ Copyright (C) 2025 QuantumNous
 */
 
 import React, { memo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Tag } from '@douyinfe/semi-ui';
 import { getRankingCategoryLabel, getRankingCategoryStyle } from '../../helpers/rankings';
 
@@ -11,8 +12,9 @@ import { getRankingCategoryLabel, getRankingCategoryStyle } from '../../helpers/
 // 'all' 不会到达此处（'all' 仅表示「全部」Tab 的筛选值，不作为模型的分类）。
 // 在「全部」Tab 下，按各模型自身分类显示具体徽章；在子分类 Tab 下，徽章颜色与当前 Tab 一致。
 const CategoryBadge = memo(({ category, size = 'small' }) => {
+  const { t } = useTranslation();
   if (!category || category === 'all') return null;
-  const label = getRankingCategoryLabel(category, null);
+  const label = getRankingCategoryLabel(category, t);
   const style = getRankingCategoryStyle(category);
   return (
     <Tag

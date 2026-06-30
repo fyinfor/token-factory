@@ -24,7 +24,11 @@ import {
   formatBillingUsdDisplay,
   formatTierUsdPrice,
 } from './billingFormula';
-import { formatVideoResolutionDisplayLabel } from './videoResolutionLabel';
+import {
+  formatVideoResolutionDisplayLabel,
+  formatVideoSpecLabel,
+  formatVideoSpecLabelForBilling,
+} from './videoResolutionLabel';
 import { Modal, Tag, Typography, Avatar } from '@douyinfe/semi-ui';
 import { copy, showSuccess } from './utils';
 import { MOBILE_BREAKPOINT } from '../hooks/common/useIsMobile';
@@ -2087,6 +2091,20 @@ function renderPriceSimpleCore({
       return segments;
     }
 
+    if (
+      billingMode === 'video_token_output' &&
+      (modelPrice === 0 || modelPrice === -1)
+    ) {
+      segments.push({
+        tone: 'secondary',
+        text: i18next.t('视频按 token 计费'),
+      });
+      if (isSystemPromptOverride) {
+        segments.push({ tone: 'primary', text: i18next.t('系统提示覆盖') });
+      }
+      return segments;
+    }
+
     if (isVideoPerVideoFlatBilling) {
       segments.push({
         tone: 'secondary',
@@ -3034,6 +3052,87 @@ export function renderLogContent(
   const isVideoPerSecondFlatBilling =
     billingMode === 'video_per_second' &&
     (modelPrice === 0 || modelPrice === -1);
+  const isVideoPerTokenFlatBilling =
+    billingMode === 'video_token_output' &&
+    (modelPrice === 0 || modelPrice === -1);
+  if (isVideoPerTokenFlatBilling) {
+    const estimatedTokens =
+      Number.isFinite(Number(billedQuota)) && Number(billedQuota) > 0
+        ? Math.round(Number(billedQuota))
+        : 0;
+    const totalTokens = Number(
+      videoBillingDetail?.video_total_tokens || videoOutputTokens || 0,
+    );
+    const pricePerMillion = Number(
+      videoBillingDetail?.video_token_unit_price ||
+        videoBillingDetail?.effective_video_token_unit_price ||
+        0,
+    );
+    const quotaPerUnit = Number(videoBillingDetail?.video_quota_per_unit || 0);
+    const groupRatioForVideo = Number(videoBillingDetail?.group_ratio || 1);
+    const channelDiscount = Number(
+      videoBillingDetail?.channel_price_discount || 100,
+    );
+    const resolution = videoBillingDetail?.video_resolution || '';
+    const resolutionFromInput =
+      videoBillingDetail?.video_resolution_from_input === true;
+    const ratioLabel =
+      videoBillingDetail?.video_ratio_label ||
+      videoBillingDetail?.video_aspect_ratio ||
+      '';
+    const ruleWidth = Number(videoBillingDetail?.video_rule_width || 0);
+    const ruleHeight = Number(videoBillingDetail?.video_rule_height || 0);
+    const hasAudio = videoBillingDetail?.video_has_audio === true;
+    const unifiedAudio = videoBillingDetail?.video_unified_audio_price === true;
+    const videoSpecLabel = formatVideoSpecLabelForBilling(
+      resolution,
+      ratioLabel,
+      resolutionFromInput,
+    );
+    const priceLabel = unifiedAudio
+      ? i18next.t('Token价')
+      : hasAudio
+        ? i18next.t('有音轨价')
+        : i18next.t('无音轨价');
+    const audioLabel = hasAudio ? i18next.t('有音轨') : i18next.t('无音轨');
+    const hasDetail =
+      totalTokens > 0 &&
+      pricePerMillion > 0 &&
+      quotaPerUnit > 0 &&
+      (videoSpecLabel || resolution || (ruleWidth > 0 && ruleHeight > 0));
+    const parts = [
+      hasDetail
+        ? i18next.t(
+            '视频按 token 计费：{{tokens}} tokens / 1M × {{spec}}({{audio}}) {{priceLabel}} ${{price}}/1M tokens × QuotaPerUnit {{quotaPerUnit}} × 分组倍率 {{groupRatio}} × 渠道折扣 {{channelDiscount}}%',
+            {
+              tokens: totalTokens,
+              spec:
+                videoSpecLabel ||
+                formatVideoSpecLabelForBilling(
+                  resolution || `${ruleWidth}x${ruleHeight}`,
+                  ratioLabel,
+                  resolutionFromInput,
+                ),
+              audio: audioLabel,
+              priceLabel,
+              price: pricePerMillion,
+              quotaPerUnit,
+              groupRatio: groupRatioForVideo || 1,
+              channelDiscount,
+            },
+          )
+        : i18next.t('视频按 token 计费'),
+    ];
+    if (estimatedTokens > 0) {
+      parts.push(
+        i18next.t('本次实际结算 tokens：{{count}}', { count: estimatedTokens }),
+      );
+    }
+    if (!hideGroupRatioInDetail) {
+      parts.push(getGroupRatioText(groupRatio, user_group_ratio));
+    }
+    return joinBillingSummary(parts);
+  }
   if (isVideoPerSecondFlatBilling) {
     const estimatedTokens =
       Number.isFinite(Number(billedQuota)) && Number(billedQuota) > 0
@@ -3049,12 +3148,21 @@ export function renderLogContent(
       videoBillingDetail?.channel_price_discount || 100,
     );
     const resolution = videoBillingDetail?.video_resolution || '';
+    const resolutionFromInput =
+      videoBillingDetail?.video_resolution_from_input === true;
+    const ratioLabel =
+      videoBillingDetail?.video_ratio_label ||
+      videoBillingDetail?.video_aspect_ratio ||
+      '';
     const ruleWidth = Number(videoBillingDetail?.video_rule_width || 0);
     const ruleHeight = Number(videoBillingDetail?.video_rule_height || 0);
-    const width = Number(videoBillingDetail?.video_width || 0);
-    const height = Number(videoBillingDetail?.video_height || 0);
     const hasAudio = videoBillingDetail?.video_has_audio === true;
     const unifiedAudio = videoBillingDetail?.video_unified_audio_price === true;
+    const videoSpecLabel = formatVideoSpecLabelForBilling(
+      resolution,
+      ratioLabel,
+      resolutionFromInput,
+    );
     const priceLabel = unifiedAudio
       ? i18next.t('每秒价')
       : hasAudio
@@ -3065,18 +3173,20 @@ export function renderLogContent(
       seconds > 0 &&
       pricePerSecond > 0 &&
       quotaPerUnit > 0 &&
-      (resolution || (ruleWidth > 0 && ruleHeight > 0));
+      (videoSpecLabel || resolution || (ruleWidth > 0 && ruleHeight > 0));
     const parts = [
       hasDetail
         ? i18next.t(
-            '分辨率阶梯计费：{{seconds}}秒 × {{resolution}}({{ruleWidth}}×{{ruleHeight}}，实际 {{width}}×{{height}}，{{audio}}) {{priceLabel}} ${{price}}/秒 × QuotaPerUnit {{quotaPerUnit}} × 分组倍率 {{groupRatio}} × 渠道折扣 {{channelDiscount}}%',
+            '分辨率阶梯计费：{{seconds}}秒 × {{spec}}({{audio}}) {{priceLabel}} ${{price}}/秒 × QuotaPerUnit {{quotaPerUnit}} × 分组倍率 {{groupRatio}} × 渠道折扣 {{channelDiscount}}%',
             {
               seconds,
-              resolution: resolution || `${ruleWidth}x${ruleHeight}`,
-              ruleWidth,
-              ruleHeight,
-              width,
-              height,
+              spec:
+                videoSpecLabel ||
+                formatVideoSpecLabelForBilling(
+                  resolution || `${ruleWidth}x${ruleHeight}`,
+                  ratioLabel,
+                  resolutionFromInput,
+                ),
               audio: audioLabel,
               priceLabel,
               price: pricePerSecond,
@@ -3156,6 +3266,15 @@ export function renderLogContent(
         count: videoOutputTokens,
       }),
     ];
+    // 视频规格展示规范：统一「分辨率标识 + 画面比例」，禁止渲染像素尺寸（如 480p 16:9）。
+    const videoSpecLabel = formatVideoSpecLabel(
+      videoBillingDetail?.video_resolution,
+      videoBillingDetail?.video_ratio_label ||
+        videoBillingDetail?.video_aspect_ratio,
+    );
+    if (videoSpecLabel) {
+      parts.push(i18next.t('视频规格：{{spec}}', { spec: videoSpecLabel }));
+    }
     if (videoInputTextTokens > 0) {
       parts.push(
         i18next.t('文本输入价格 {{symbol}}{{price}} / 1M tokens', {
@@ -4462,6 +4581,7 @@ export function renderConsumeBillingProcess({
   }
   if (
     bm === 'video_token' ||
+    bm === 'video_token_output' ||
     bm === 'video_per_second' ||
     bm === 'video_per_video'
   ) {

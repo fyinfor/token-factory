@@ -99,6 +99,52 @@ export function formatVideoResolutionDisplayLabel(raw) {
   return `${short}p`;
 }
 
+/**
+ * 使用日志分辨率展示：预扣时用户输入的 resolution 原样保留；其余场景归一化为 480p/720p 等。
+ */
+export function resolveVideoBillingResolutionLabel(raw, fromInput = false) {
+  const s = String(raw ?? '').trim();
+  if (!s) return '';
+  if (fromInput) return s;
+  return formatVideoResolutionDisplayLabel(s) || s;
+}
+
+/**
+ * 使用日志规格展示（分辨率 + 比例）；fromInput 为 true 时不将 1280x720 转为 720p。
+ */
+export function formatVideoSpecLabelForBilling(
+  resolution,
+  ratio,
+  fromInput = false,
+) {
+  const resLabel = resolveVideoBillingResolutionLabel(resolution, fromInput);
+  const ratioLabel = String(ratio ?? '').trim();
+  if (resLabel && ratioLabel) {
+    return `${resLabel} ${ratioLabel}`;
+  }
+  return resLabel || ratioLabel || '';
+}
+
+/**
+ * 视频规格展示（计费日志规范）：统一展示「分辨率标识 + 画面比例」，禁止渲染像素尺寸。
+ * 例：formatVideoSpecLabel('1280x720', '16:9') => '720p 16:9'；
+ *     formatVideoSpecLabel('480p', '16:9')     => '480p 16:9'。
+ * 任一字段缺失时仅展示已有部分；均缺失返回空串。
+ *
+ * @param {string|number} resolution 分辨率（支持 480p / 720p / 1280x720 等，像素将被转为分辨率标识）
+ * @param {string} ratio 画面比例（如 '16:9'）
+ * @returns {string}
+ */
+export function formatVideoSpecLabel(resolution, ratio) {
+  // formatVideoResolutionDisplayLabel 会把 1280x720 等像素尺寸归一为 720p，确保不渲染像素。
+  const resLabel = formatVideoResolutionDisplayLabel(resolution);
+  const ratioLabel = String(ratio == null ? '' : ratio).trim();
+  if (resLabel && ratioLabel) {
+    return `${resLabel} ${ratioLabel}`;
+  }
+  return resLabel || ratioLabel || '';
+}
+
 const VIDEO_RESOLUTION_DIMENSIONS = {
   '480p': { width: 854, height: 480 },
   '540p': { width: 960, height: 540 },

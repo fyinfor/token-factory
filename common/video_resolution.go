@@ -27,8 +27,65 @@ func ParseVideoResolutionAndRatio(resolution, ratio string) (width, height int, 
 	return 0, 0, false
 }
 
-// VideoDimensionsFromMetadata reads width/height or resolution[/ratio] from task metadata.
+// ResolveVideoDimensionsFromRequest 从任务请求解析像素尺寸（供计费规则匹配）。
+// 优先级：metadata.resolution > 顶层 resolution > metadata.size / metadata 宽高 > 顶层 size。
+func ResolveVideoDimensionsFromRequest(size, resolution, ratio string, metadata map[string]interface{}) (width, height int, ok bool) {
+	r := strings.TrimSpace(ratio)
+	if r == "" && metadata != nil {
+		r = metadataString(metadata, "ratio")
+	}
+	if res := metadataResolution(metadata); res != "" {
+		if w, h, parsed := ParseVideoResolutionAndRatio(res, r); parsed {
+			return w, h, true
+		}
+	}
+	if res := strings.TrimSpace(resolution); res != "" {
+		if w, h, parsed := ParseVideoResolutionAndRatio(res, r); parsed {
+			return w, h, true
+		}
+	}
+	if s := metadataSize(metadata); s != "" {
+		if w, h, parsed := parseVideoSizeLiteral(s, r); parsed {
+			return w, h, true
+		}
+	}
+	if w, h, parsed := metadataExplicitDimensions(metadata); parsed {
+		return w, h, true
+	}
+	if s := strings.TrimSpace(size); s != "" {
+		if w, h, parsed := parseVideoSizeLiteral(s, r); parsed {
+			return w, h, true
+		}
+	}
+	return 0, 0, false
+}
+
+// VideoDimensionsFromMetadata reads billing dimensions from metadata only (same resolution-before-size priority).
 func VideoDimensionsFromMetadata(metadata map[string]interface{}) (width, height int, ok bool) {
+	return ResolveVideoDimensionsFromRequest("", "", "", metadata)
+}
+
+func metadataResolution(metadata map[string]interface{}) string {
+	if metadata == nil {
+		return ""
+	}
+	if v, ok := metadata["resolution"].(string); ok {
+		return strings.TrimSpace(v)
+	}
+	return ""
+}
+
+func metadataSize(metadata map[string]interface{}) string {
+	if metadata == nil {
+		return ""
+	}
+	if v, ok := metadata["size"].(string); ok {
+		return strings.TrimSpace(v)
+	}
+	return ""
+}
+
+func metadataExplicitDimensions(metadata map[string]interface{}) (int, int, bool) {
 	if metadata == nil {
 		return 0, 0, false
 	}
@@ -37,14 +94,21 @@ func VideoDimensionsFromMetadata(metadata map[string]interface{}) (width, height
 	if w > 0 && h > 0 {
 		return w, h, true
 	}
-	if size, _ := metadata["size"].(string); strings.TrimSpace(size) != "" {
-		if pw, ph, parsed := parseVideoResolutionLiteral(strings.ToLower(strings.TrimSpace(size))); parsed {
-			return pw, ph, true
-		}
+	return 0, 0, false
+}
+
+func parseVideoSizeLiteral(s, ratio string) (int, int, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, 0, false
 	}
-	resolution, _ := metadata["resolution"].(string)
-	ratio, _ := metadata["ratio"].(string)
-	return ParseVideoResolutionAndRatio(resolution, ratio)
+	if w, h, parsed := ParseVideoResolutionAndRatio(s, ratio); parsed {
+		return w, h, true
+	}
+	if w, h, parsed := parseVideoResolutionLiteral(strings.ToLower(s)); parsed {
+		return w, h, true
+	}
+	return 0, 0, false
 }
 
 func parseVideoResolutionLiteral(s string) (int, int, bool) {
@@ -119,6 +183,93 @@ func parseAspectRatioFloat(ratio string) float64 {
 		return 16.0 / 9.0
 	}
 	return w / h
+}
+
+// FormatVideoResolutionLabel 将任意分辨率输入归一化为「分辨率标识」展示值（如 480p / 720p / 2K / 4K）。
+// 业务约束：日志/前端展示禁止渲染像素尺寸（如 1280x720），统一转为分辨率档位标识。
+// 入参可为：480p、720、854x480 等；无法识别时原样去空格返回。
+func FormatVideoResolutionLabel(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return ""
+	}
+	compact := strings.ReplaceAll(s, " ", "")
+	lower := strings.ToLower(compact)
+
+	// 已是 720p / 480 等短边形式：规范化为「数字 + p」。
+	if isDigits(strings.TrimSuffix(lower, "p")) && (strings.HasSuffix(lower, "p") || isDigits(lower)) {
+		n, _ := strconv.Atoi(strings.TrimSuffix(lower, "p"))
+		if n > 0 {
+			return labelFromShortSide(n)
+		}
+	}
+	// 2k / 4k / 8k 形式。
+	if strings.HasSuffix(lower, "k") && isDigits(strings.TrimSuffix(lower, "k")) {
+		return strings.ToUpper(lower)
+	}
+	// WxH 像素形式：取短边换算为分辨率档位标识。
+	if w, h, ok := parseVideoResolutionLiteral(lower); ok {
+		short := w
+		if h < short {
+			short = h
+		}
+		return labelFromShortSide(short)
+	}
+	return compact
+}
+
+// labelFromShortSide 依据短边像素映射到主流分辨率档位标识。
+func labelFromShortSide(short int) string {
+	switch {
+	case short >= 4320:
+		return "8K"
+	case short >= 2160:
+		return "4K"
+	case short >= 1440:
+		return "2K"
+	case short >= 1080:
+		return "1080p"
+	case short >= 720:
+		return "720p"
+	case short >= 540:
+		return "540p"
+	case short >= 480:
+		return "480p"
+	case short >= 360:
+		return "360p"
+	case short >= 240:
+		return "240p"
+	default:
+		return strconv.Itoa(short) + "p"
+	}
+}
+
+// FormatVideoSpecLabel 组合「分辨率标识 + 画面比例」展示值，如 480p 16:9。
+// 业务约束：禁止渲染像素尺寸；分辨率走 FormatVideoResolutionLabel 归一化，
+// 画面比例原样展示（如 16:9）。任一缺失时仅展示另一项。
+func FormatVideoSpecLabel(resolution, ratio string) string {
+	label := FormatVideoResolutionLabel(resolution)
+	ratio = strings.TrimSpace(ratio)
+	switch {
+	case label != "" && ratio != "":
+		return label + " " + ratio
+	case label != "":
+		return label
+	default:
+		return ratio
+	}
+}
+
+func isDigits(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func coercePositiveInt(v any) int {

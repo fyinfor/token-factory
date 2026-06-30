@@ -373,6 +373,12 @@ func ModelPriceHelperVideo(c *gin.Context, info *relaycommon.RelayInfo) (types.P
 		return types.PriceData{}, fmt.Errorf("relay info is nil")
 	}
 
+	// 0) 视频「按 Token 计费」（最高优先级）：视频价格配置为 per_token 规则且与当前请求
+	//    （文生/图生/视频生 + 分辨率）匹配时生效；预扣固定 50000 Token，完成后按 total_tokens 补差。
+	if priceData, ok := tryVideoPerTokenRulesPriceData(c, info); ok {
+		return priceData, nil
+	}
+
 	// 1) Per-second rules first (new mode): ceil(seconds) × unit price.
 	if priceData, ok, err := tryVideoPerSecondRulesPriceData(c, info); err != nil {
 		return types.PriceData{}, err
@@ -392,7 +398,7 @@ func ModelPriceHelperVideo(c *gin.Context, info *relaycommon.RelayInfo) (types.P
 	if matchName == "" {
 		matchName = info.OriginModelName
 	}
-	return types.PriceData{}, fmt.Errorf("视频模型 %s 未设置价格，请配置按视频秒收费或按视频条数收费规则；Video model %s price not set, please configure per-second or per-item video pricing rules", matchName, matchName)
+	return types.PriceData{}, fmt.Errorf("视频模型 %s 未设置价格，请配置按视频秒收费、按视频条数收费或按 token 收费规则；Video model %s price not set, please configure per-second, per-item or per-token video pricing rules", matchName, matchName)
 }
 
 // hasAnyPerCallVideoPrice reports whether any per-call price tier is set for
@@ -414,6 +420,70 @@ func hasAnyPerCallVideoPrice(channelID, supplierID int, group, modelName string)
 		return true
 	}
 	return false
+}
+
+// tryVideoPerTokenRulesPriceData 视频「按 token 规则」预扣价格计算。
+//
+// 触发条件：VideoPricingRules 配置了 *_per_token 且与当前请求（素材类型 + 分辨率）匹配。
+// 预扣额度 = 50000 ÷ 1M × 美元/1M tokens × QuotaPerUnit × 分组倍率。
+func tryVideoPerTokenRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo) (types.PriceData, bool) {
+	channelID := 0
+	if info.ChannelMeta != nil {
+		channelID = info.ChannelId
+	}
+	estimateCtx := estimateVideoRequestContext(c)
+	hasAudio := requestHasAudio(c)
+	mode := string(estimateCtx.Mode)
+
+	groupRatioInfo := HandleGroupRatio(c, info)
+	preConsumeTokens := service.SeedanceTokenPreConsumeTokens
+	resolutionLabel := ""
+	if req, err := relaycommon.GetTaskRequest(c); err == nil {
+		resolutionLabel = service.VideoBillingResolutionLabelFromRequest(req)
+	}
+	quota, match, ok := service.CalcVideoTokenQuota(
+		channelID, info.UserId, info.OriginModelName, mode,
+		estimateCtx.Width, estimateCtx.Height, hasAudio,
+		preConsumeTokens, groupRatioInfo.GroupRatio,
+		resolutionLabel,
+	)
+	if !ok || quota <= 0 || match == nil {
+		return types.PriceData{}, false
+	}
+
+	chDisc := model.ResolveChannelPriceDiscountPercent(channelID)
+	markupDisc := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
+	chDiscCopy := chDisc
+
+	priceData := types.PriceData{
+		ModelPrice:            0,
+		ModelRatio:            0,
+		VideoOutputTokens:     preConsumeTokens,
+		VideoInputTextTokens:  estimateCtx.InputTextTokens,
+		GroupRatioInfo:        groupRatioInfo,
+		UsePrice:              true,
+		Quota:                 quota,
+		QuotaToPreConsume:     quota,
+		ChannelPriceDiscount:  &chDiscCopy,
+		CostDiscountPercent:   chDisc,
+		MarkupDiscountPercent: markupDisc,
+		VideoRuleUnit:         service.VideoRuleUnitPerToken,
+		VideoBillingMode:      mode,
+		VideoChannelRulePrice: match.ChannelPricePerToken,
+		VideoGlobalRulePrice:  match.GlobalPricePerToken,
+		VideoRuleWidth:        match.RuleWidth,
+		VideoRuleHeight:       match.RuleHeight,
+		VideoRuleHasAudio:     hasAudio,
+	}
+	if common.DebugEnabled {
+		logger.LogDebug(c, fmt.Sprintf(
+			"[video][per-token-rules] model=%s mode=%s w=%d h=%d pricePerToken=%.8f preConsumeTokens=%d groupRatio=%.4f -> quota=%d",
+			info.OriginModelName, mode, estimateCtx.Width, estimateCtx.Height,
+			match.EffectivePricePerToken, preConsumeTokens, groupRatioInfo.GroupRatio, quota,
+		))
+	}
+	info.PriceData = priceData
+	return priceData, true
 }
 
 // tryVideoTokenPriceData attempts to price the request using token ratios.
@@ -775,15 +845,20 @@ func tryVideoPerSecondRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo
 	}
 	seconds = int(math.Ceil(float64(seconds)))
 
-	var pricePerSecond float64
-	switch estimateCtx.Mode {
-	case videoBillingModeImageToVideo:
-		pricePerSecond, ok = pickAudioPriceByResolution(estimateCtx, hasAudio, rules.ImageToVideoPerSecond)
-	case videoBillingModeVideoToVideo:
-		pricePerSecond, ok = pickAudioPriceByResolution(estimateCtx, hasAudio, rules.VideoToVideoPerSecond)
-	default:
-		pricePerSecond, ok = pickAudioPriceByResolution(estimateCtx, hasAudio, rules.TextToVideoPerSecond)
+	resolutionLabel := ""
+	if req, err := relaycommon.GetTaskRequest(c); err == nil {
+		resolutionLabel = service.VideoBillingResolutionLabelFromRequest(req)
 	}
+
+	var pricePerSecond float64
+	pricePerSecond, ok = service.VideoPerSecondChannelUnitPrice(
+		rules,
+		string(estimateCtx.Mode),
+		estimateCtx.Width,
+		estimateCtx.Height,
+		hasAudio,
+		resolutionLabel,
+	)
 	if !ok || pricePerSecond <= 0 {
 		return types.PriceData{}, false, nil
 	}
@@ -799,6 +874,7 @@ func tryVideoPerSecondRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo
 		hasAudio,
 		chDiscVPS,
 		markupDiscVPS,
+		resolutionLabel,
 	)
 	if !effOK || effPricePerSecond <= 0 {
 		// 渠道未配置按秒规则而仅配置全局规则时，按全局匹配单价计费。
@@ -1229,23 +1305,13 @@ func resolveVideoDuration(req *relaycommon.TaskSubmitReq) int {
 	return defaultVideoDuration
 }
 
-// resolveVideoDimensions parses req.Size ("WIDTHxHEIGHT") or falls back to
-// metadata.width/metadata.height; defaults at the end keep quota non-zero.
+// resolveVideoDimensions 解析请求分辨率像素（metadata / 顶层 resolution / size），
+// 用于按分辨率档位匹配 per_token 单价；无法识别时回退默认值以保证预扣非零。
 func resolveVideoDimensions(req *relaycommon.TaskSubmitReq) (width, height int) {
-	if size := strings.TrimSpace(req.Size); size != "" {
-		parts := strings.Split(strings.ToLower(size), "x")
-		if len(parts) == 2 {
-			if w, err := strconv.Atoi(strings.TrimSpace(parts[0])); err == nil && w > 0 {
-				if h, err := strconv.Atoi(strings.TrimSpace(parts[1])); err == nil && h > 0 {
-					return w, h
-				}
-			}
-		}
-	}
-	if req.Metadata != nil {
-		if w, h, ok := common.VideoDimensionsFromMetadata(req.Metadata); ok {
-			return w, h
-		}
+	if w, h, ok := common.ResolveVideoDimensionsFromRequest(
+		req.Size, req.Resolution, req.Ratio, req.Metadata,
+	); ok {
+		return w, h
 	}
 	return defaultVideoWidth, defaultVideoHeight
 }

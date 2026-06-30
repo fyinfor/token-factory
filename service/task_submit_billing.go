@@ -85,8 +85,18 @@ func calcVideoPerSecondQuotaByTaskData(c *gin.Context, info *relaycommon.RelayIn
 		costDiscVPS = model.ResolveChannelPriceDiscountPercent(info.ChannelId)
 	}
 	markupDiscVPS := info.PriceData.MarkupDiscountPercent
+	resolutionLabel := ""
+	var payload map[string]any
+	if err := common.Unmarshal(taskData, &payload); err == nil {
+		if res, _ := payload["resolution"].(string); strings.TrimSpace(res) != "" {
+			resolutionLabel = common.FormatVideoResolutionLabel(res)
+			if resolutionLabel == "" {
+				resolutionLabel = strings.TrimSpace(res)
+			}
+		}
+	}
 	effPricePerSec, _, _, ok := EffectiveVideoPerSecondUSDForDimensions(
-		info.ChannelId, modelName, mode, meta.Width, meta.Height, meta.HasAudio, costDiscVPS, markupDiscVPS,
+		info.ChannelId, modelName, mode, meta.Width, meta.Height, meta.HasAudio, costDiscVPS, markupDiscVPS, resolutionLabel,
 	)
 	if !ok || effPricePerSec <= 0 {
 		return 0
@@ -126,6 +136,7 @@ func calcVideoPerSecondQuotaFromTaskReq(info *relaycommon.RelayInfo, req *relayc
 	}
 	effPricePerSec, _, _, ok := EffectiveVideoPerSecondUSDForDimensions(
 		info.ChannelId, modelName, mode, width, height, hasAudio, costDiscVPS, markupDisc,
+		VideoBillingResolutionLabelFromRequest(*req),
 	)
 	if !ok || effPricePerSec <= 0 {
 		return 0

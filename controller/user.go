@@ -1170,6 +1170,10 @@ func GetUserModels(c *gin.Context) {
 	var models []string
 	for group := range groups {
 		for _, g := range model.GetGroupEnabledModels(group) {
+			allowed, err := model.UserCanAccessModel(id, g)
+			if err != nil || !allowed {
+				continue
+			}
 			if !common.StringsContains(models, g) {
 				models = append(models, g)
 			}
@@ -1296,7 +1300,7 @@ func GetUserModels(c *gin.Context) {
 		// 之前操练场是按 model_test_results 全表 last_test_success=1 的模糊名字匹配做判定，
 		// 与 /pricing 的「(模型,可见渠道) 严格匹配 + testMs>0 + ManualDisplayResponseTime 兜底 + ModelHasConfiguredPricing」口径不一致，
 		// 导致诸如「最近一次单测失败但运营手动覆盖了展示耗时」「定价未配但偶然有过成功单测」等场景两端展示差异。
-		pricingShowable := CollectPricingShowableModelNames()
+		pricingShowable := CollectPricingShowableModelNames(id)
 		filteredNameRows := make([]struct {
 			ModelName string
 			VendorID  int

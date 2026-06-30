@@ -237,6 +237,7 @@ export default function DistributorCenter() {
   const [withdrawOpen, setWithdrawOpen] = useState(false);
   const [withdrawNoticeLoading, setWithdrawNoticeLoading] = useState(false);
   const [withdrawNoticeContent, setWithdrawNoticeContent] = useState('');
+  const [withdrawCsImageUrl, setWithdrawCsImageUrl] = useState('');
   const [withdrawLogOpen, setWithdrawLogOpen] = useState(false);
   const [wdAccountType, setWdAccountType] = useState(WD_ACCOUNT_PERSONAL);
   const [wdForm, setWdForm] = useState({ ...EMPTY_WD_FORM });
@@ -288,7 +289,9 @@ export default function DistributorCenter() {
   const [identityUrls, setIdentityUrls] = useState([]);
 
   const withdrawImg = (
-    statusState?.status?.distributor_withdraw_cs_image_url || ''
+    withdrawCsImageUrl ||
+    statusState?.status?.distributor_withdraw_cs_image_url ||
+    ''
   ).trim();
 
   const minWithdrawQuota = (() => {
@@ -357,7 +360,13 @@ export default function DistributorCenter() {
           return;
         }
         const txt = String(data?.distributor_withdraw_notice ?? '').trim();
-        if (!cancelled) setWithdrawNoticeContent(txt);
+        const csImageUrl = String(
+          data?.distributor_withdraw_cs_image_url ?? '',
+        ).trim();
+        if (!cancelled) {
+          setWithdrawNoticeContent(txt);
+          setWithdrawCsImageUrl(csImageUrl);
+        }
       } catch {
         if (!cancelled) showError(t('加载失败'));
       } finally {
@@ -1912,11 +1921,11 @@ export default function DistributorCenter() {
               </div>
             )}
           </div>
-          <div className='w-full lg:w-[280px] flex-shrink-0'>
-            <Text strong className='block mb-2'>
-              {t('联系客服')}
-            </Text>
-            {withdrawImg ? (
+          {withdrawImg ? (
+            <div className='w-full lg:w-[280px] flex-shrink-0'>
+              <Text strong className='block mb-2'>
+                {t('联系客服')}
+              </Text>
               <div className='rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)] p-2 overflow-auto max-h-[min(420px,50vh)]'>
                 <img
                   src={withdrawImg}
@@ -1924,12 +1933,8 @@ export default function DistributorCenter() {
                   className='w-full object-contain'
                 />
               </div>
-            ) : (
-              <Text type='tertiary' size='small'>
-                {t('管理员可在运营设置中配置右侧客服图片')}
-              </Text>
-            )}
-          </div>
+            </div>
+          ) : null}
         </div>
       </Modal>
 

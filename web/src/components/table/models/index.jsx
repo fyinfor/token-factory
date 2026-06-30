@@ -28,6 +28,7 @@ import ModelsTabs from './ModelsTabs';
 import EditModelModal from './modals/EditModelModal';
 import EditModelDocsModal from './modals/EditModelDocsModal';
 import EditVendorModal from './modals/EditVendorModal';
+import ModelWhitelistModal from './modals/ModelWhitelistModal';
 import { useModelsData } from '../../../hooks/models/useModelsData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import { createCardProPagination } from '../../../helpers/utils';
@@ -89,6 +90,8 @@ const ModelsPage = ({ apiBasePath } = {}) => {
     });
   const [showDocsEdit, setShowDocsEdit] = useState(false);
   const [docsEditingModel, setDocsEditingModel] = useState({ id: undefined });
+  const [showWhitelist, setShowWhitelist] = useState(false);
+  const [whitelistModel, setWhitelistModel] = useState({ id: undefined });
 
   const confirmCloseMarketplaceDisplayNotice = () => {
     Modal.confirm({
@@ -146,6 +149,16 @@ const ModelsPage = ({ apiBasePath } = {}) => {
         t={t}
       />
 
+      <ModelWhitelistModal
+        visible={showWhitelist}
+        model={whitelistModel}
+        onClose={() => {
+          setShowWhitelist(false);
+          setWhitelistModel({ id: undefined });
+        }}
+        onChanged={refresh}
+      />
+
       {showMarketplaceDisplayNotice ? (
         <div style={{ position: 'relative', marginBottom: 12 }}>
           <Banner
@@ -158,7 +171,7 @@ const ModelsPage = ({ apiBasePath } = {}) => {
               />
             }
             description={t(
-              '提示：此处配置仅用于控制「模型广场」对用户的展示效果，不会影响模型的实际调用与路由。若需配置真实调用行为，请前往「渠道管理」进行设置。',
+              '提示：端点配置用于模型广场展示；模型可见范围会影响首页卡片、模型发现、模型列表和实际调用。',
             )}
             style={{ marginBottom: 0 }}
           />
@@ -224,6 +237,8 @@ const ModelsPage = ({ apiBasePath } = {}) => {
           {...modelsData}
           setDocsEditingModel={setDocsEditingModel}
           setShowDocsEdit={setShowDocsEdit}
+          setWhitelistModel={setWhitelistModel}
+          setShowWhitelist={setShowWhitelist}
         />
       </CardPro>
     </>
