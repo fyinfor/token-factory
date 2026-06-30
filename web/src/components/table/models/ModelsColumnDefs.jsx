@@ -20,12 +20,13 @@ For commercial licensing, please contact support@quantumnous.com
 import React from 'react';
 import {
   Button,
+  Modal,
   Space,
   Tag,
-  Typography,
-  Modal,
   Tooltip,
+  Typography,
 } from '@douyinfe/semi-ui';
+import { IconSetting } from '@douyinfe/semi-icons';
 import {
   timestamp2string,
   getLobeHubIcon,
@@ -219,12 +220,13 @@ const renderOperations = (
       <Button
         type='tertiary'
         size='small'
+        icon={<IconSetting />}
         onClick={() => {
           setWhitelistModel(record);
           setShowWhitelist(true);
         }}
       >
-        {t('白名单')}
+        {t('设置白名单')}
       </Button>
 
       {record.status === 1 ? (
