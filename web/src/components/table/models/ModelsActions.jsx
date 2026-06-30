@@ -21,7 +21,7 @@ import React, { useState } from 'react';
 import MissingModelsModal from './modals/MissingModelsModal';
 import PrefillGroupManagement from './modals/PrefillGroupManagement';
 import EditPrefillGroupModal from './modals/EditPrefillGroupModal';
-import { Button, Modal, Popover, RadioGroup, Radio } from '@douyinfe/semi-ui';
+import { Button, Modal, Popover } from '@douyinfe/semi-ui';
 import { showSuccess, showError, copy } from '../../../helpers';
 import CompactModeToggle from '../../common/ui/CompactModeToggle';
 import SelectionNotification from './components/SelectionNotification';
