@@ -12,6 +12,11 @@ func TestModelCategory(t *testing.T) {
 		{"seedance-lite", "doubao-seedance-1.0-lite", RankingCategoryVideo},
 		{"seedance-pro", "seedance-1.0-pro", RankingCategoryVideo},
 		{"seedance-mixed-case", "Doubao-Seedance-pro-250528", RankingCategoryVideo},
+		// OpenAI-Video 适配器下的 Seedance 2.0 可读别名（playground-facing）。
+		{"seedance2-alias", "Seedance2.0", RankingCategoryVideo},
+		{"seedance2-fast-alias", "Seedance2.0-fast", RankingCategoryVideo},
+		// OpenAI-Video 网关上 Seedance/Doubao 系列返回的「Video-xxx」opaque ID。
+		{"video-opaque-id", "Video-a4lzrja7", RankingCategoryVideo},
 
 		// 通用 video
 		{"kling", "kling-v1-5", RankingCategoryVideo},

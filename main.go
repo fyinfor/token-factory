@@ -59,6 +59,15 @@ var buildFS embed.FS
 var indexPage []byte
 
 func main() {
+	// 一次性回填：把 logs 表中「视频类模型 + 无 token 记录」的历史任务按 (user, model, hour)
+	// 聚合到 quota_data.token_used，使 /rankings 排行的 video 标签页能覆盖到
+	// Seedance/Kling/Sora 等异步视频模型。
+	// 通过 QUOTA_DATA_VIDEO_BACKFILL=1 触发，执行一次后自动退出 HTTP server。
+	if os.Getenv("QUOTA_DATA_VIDEO_BACKFILL") == "1" {
+		runQuotaDataVideoBackfill()
+		return
+	}
+
 	startTime := time.Now()
 
 	err := InitResources()
@@ -356,4 +365,26 @@ func InitResources() error {
 	}
 
 	return nil
+}
+
+// runQuotaDataVideoBackfill 是 QUOTA_DATA_VIDEO_BACKFILL=1 时的一次性回填入口。
+// 不启动 HTTP server / 定时任务，仅完成修复后退出。
+func runQuotaDataVideoBackfill() {
+	common.SysLog("QUOTA_DATA_VIDEO_BACKFILL=1 detected, running one-shot quota_data video token_used backfill")
+	if err := InitResources(); err != nil {
+		common.FatalLog("failed to initialize resources for backfill: " + err.Error())
+		return
+	}
+	defer func() {
+		if err := model.CloseDB(); err != nil {
+			common.SysError("failed to close db: " + err.Error())
+		}
+	}()
+
+	rows, err := model.BackfillVideoQuotaDataTokenUsed()
+	if err != nil {
+		common.FatalLog("quota_data video backfill failed: " + err.Error())
+		return
+	}
+	common.SysLog(fmt.Sprintf("quota_data video backfill finished, total processed buckets=%d", rows))
 }

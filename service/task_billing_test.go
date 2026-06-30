@@ -1212,3 +1212,105 @@ func TestRecordTaskBillingLog_SettlementMarkerDoesNotDoubleCount(t *testing.T) {
 	assert.Equal(t, preConsumed, rows[0].Quota, "settlement_marker 不应再追加 quota")
 	assert.Equal(t, preConsumed, rows[0].TokenUsed, "settlement_marker 不应再追加 token_used")
 }
+
+// ---------------------------------------------------------------------------
+// BackfillVideoQuotaDataTokenUsed
+// ---------------------------------------------------------------------------
+
+// 直接往 logs 写历史 pre_charge 行：模拟「升级前 Seedance/Kling 调用，
+// token_used 在 quota_data 里是 0 但 quota != 0」的状态。
+func seedLogRow(t *testing.T, userID int, username, modelName string, quota int, createdAt int64) {
+	t.Helper()
+	row := &model.Log{
+		UserId:           userID,
+		Username:         username,
+		ModelName:        modelName,
+		Quota:            quota,
+		CreatedAt:        createdAt,
+		PromptTokens:     0,
+		CompletionTokens: 0,
+		Type:             model.LogTypeConsume,
+		Content:          "pre_charge historical",
+	}
+	require.NoError(t, model.LOG_DB.Create(row).Error)
+}
+
+// 模拟「升级后调用，新代码会写入正确 token_used；backfill 跑过之后会变成 update」场景。
+func seedExistingQuotaData(t *testing.T, userID int, username, modelName string, quota, tokenUsed, count int, createdAt int64) {
+	t.Helper()
+	row := &model.QuotaData{
+		UserID:    userID,
+		Username:  username,
+		ModelName: modelName,
+		Quota:     quota,
+		TokenUsed: tokenUsed,
+		Count:     count,
+		CreatedAt: createdAt,
+	}
+	require.NoError(t, model.DB.Table("quota_data").Create(row).Error)
+}
+
+func TestBackfillVideoQuotaDataTokenUsed_FixesSeedanceHistory(t *testing.T) {
+	truncate(t)
+	// 模拟「升级前 Seedance 历史预扣」：
+	// logs 里有 3 条 (user=1, model=Seedance2.0) 的预扣记录（prompt+completion 都是 0），
+	// quota_data 表对应行（按 hour 桶对齐）的 token_used=0、count=0、quota=0（旧路径写过 0）。
+	hour := ((time.Now().Unix() / 3600) * 3600) - 3600 // 1 hour ago, on the hour
+	seedLogRow(t, 1, "alice", "Seedance2.0", 5000, hour+10)
+	seedLogRow(t, 1, "alice", "Seedance2.0", 7000, hour+120)
+	seedLogRow(t, 1, "alice", "Seedance2.0", 6000, hour+240)
+
+	// 跑 backfill：应该把 (1, alice, Seedance2.0, hour) 桶的 token_used 填成 18000。
+	processed, err := model.BackfillVideoQuotaDataTokenUsed()
+	require.NoError(t, err)
+	assert.Greater(t, processed, 0)
+
+	rows := quotaDataFor(t, 1, "Seedance2.0")
+	require.Len(t, rows, 1)
+	assert.Equal(t, 3, rows[0].Count)
+	assert.Equal(t, 18000, rows[0].Quota)
+	assert.Equal(t, 18000, rows[0].TokenUsed, "Seedance 旧历史 pre_charge 应被回填 token_used=sum(quota)")
+}
+
+func TestBackfillVideoQuotaDataTokenUsed_SkipsRowsAlreadyFixed(t *testing.T) {
+	truncate(t)
+	// 模拟「升级后调用」：新代码已经写过 quota_data 行，token_used > 0，count/quota 也是真实值。
+	// backfill 不应该再累加，否则会出现双倍。
+	hour := ((time.Now().Unix() / 3600) * 3600) - 3600
+	seedLogRow(t, 1, "bob", "kling-v3", 9999, hour+15)
+	seedExistingQuotaData(t, 1, "bob", "kling-v3", 9999, 9999, 1, hour)
+
+	processed, err := model.BackfillVideoQuotaDataTokenUsed()
+	require.NoError(t, err)
+	assert.Greater(t, processed, 0)
+
+	rows := quotaDataFor(t, 1, "kling-v3")
+	require.Len(t, rows, 1)
+	assert.Equal(t, 9999, rows[0].TokenUsed, "已正确的 token_used 不应被回填覆盖")
+	assert.Equal(t, 9999, rows[0].Quota, "quota 也不应被重复累加")
+}
+
+func TestBackfillVideoQuotaDataTokenUsed_IgnoresTextModel(t *testing.T) {
+	truncate(t)
+	// 文本模型有真实的 prompt+completion tokens，backfill 应该跳过。
+	hour := ((time.Now().Unix() / 3600) * 3600) - 3600
+	row := &model.Log{
+		UserId:    1,
+		Username:  "carol",
+		ModelName: "gpt-4o",
+		Quota:     500,
+		CreatedAt: hour + 5,
+		PromptTokens:     1000,
+		CompletionTokens: 500,
+		Type:             model.LogTypeConsume,
+		Content:          "real token call",
+	}
+	require.NoError(t, model.LOG_DB.Create(row).Error)
+
+	_, err := model.BackfillVideoQuotaDataTokenUsed()
+	require.NoError(t, err)
+
+	// 不应该给 gpt-4o 写入任何 quota_data 行。
+	rows := quotaDataFor(t, 1, "gpt-4o")
+	assert.Len(t, rows, 0, "文本模型（带真实 token）不应被 backfill 写入")
+}
