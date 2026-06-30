@@ -156,6 +156,7 @@ const ModelWhitelistModal = ({ visible, model, onClose, onChanged }) => {
   const { t } = useTranslation();
   const isMobile = useIsMobile();
   const formApiRef = useRef(null);
+  const previewRequestIDRef = useRef(0);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
@@ -176,6 +177,7 @@ const ModelWhitelistModal = ({ visible, model, onClose, onChanged }) => {
   const [previewKeyword, setPreviewKeyword] = useState('');
   const [previewPage, setPreviewPage] = useState(1);
   const [previewPageSize, setPreviewPageSize] = useState(10);
+  const [previewRefreshKey, setPreviewRefreshKey] = useState(0);
   const [savingBindings, setSavingBindings] = useState(false);
   const [visibilityMode, setVisibilityMode] = useState('public');
   const [selectedSetIDs, setSelectedSetIDs] = useState([]);
@@ -434,28 +436,57 @@ const ModelWhitelistModal = ({ visible, model, onClose, onChanged }) => {
     }
   };
 
-  const previewMatchedUsers = async () => {
-    const values = formApiRef.current?.getValues() || {};
-    setPreviewPage(1);
-    setPreviewing(true);
-    try {
-      const res = await API.post('/api/model_visibility/users/preview', {
+  const requestPreviewRefresh = useCallback(() => {
+    setPreviewRefreshKey((key) => key + 1);
+  }, []);
+
+  const previewMatchedUsers = useCallback(
+    async ({ resetPage = true } = {}) => {
+      const values = formApiRef.current?.getValues() || {};
+      const payload = {
         user_ids: uniqIDs(selectedUsers.map((user) => user.id)),
         user_tags: uniq(values.user_tags || []),
         user_groups: uniq(values.user_groups || []),
         limit: 1000,
-      });
-      if (res.data?.success) {
-        setPreviewUsers(res.data.data?.items || []);
-      } else {
-        showError(res.data?.message || t('预览失败'));
+      };
+      if (
+        payload.user_ids.length === 0 &&
+        payload.user_tags.length === 0 &&
+        payload.user_groups.length === 0
+      ) {
+        setPreviewUsers([]);
+        setPreviewing(false);
+        if (resetPage) setPreviewPage(1);
+        return;
       }
-    } catch (error) {
-      showError(error.message || t('预览失败'));
-    } finally {
-      setPreviewing(false);
-    }
-  };
+
+      const requestID = previewRequestIDRef.current + 1;
+      previewRequestIDRef.current = requestID;
+      if (resetPage) setPreviewPage(1);
+      setPreviewing(true);
+      try {
+        const res = await API.post(
+          '/api/model_visibility/users/preview',
+          payload,
+        );
+        if (requestID !== previewRequestIDRef.current) return;
+        if (res.data?.success) {
+          setPreviewUsers(res.data.data?.items || []);
+        } else {
+          showError(res.data?.message || t('预览失败'));
+        }
+      } catch (error) {
+        if (requestID === previewRequestIDRef.current) {
+          showError(error.message || t('预览失败'));
+        }
+      } finally {
+        if (requestID === previewRequestIDRef.current) {
+          setPreviewing(false);
+        }
+      }
+    },
+    [selectedUsers, t],
+  );
 
   const filteredPreviewUsers = useMemo(() => {
     const keyword = String(previewKeyword || '')
@@ -482,6 +513,15 @@ const ModelWhitelistModal = ({ visible, model, onClose, onChanged }) => {
     const start = (previewPage - 1) * previewPageSize;
     return filteredPreviewUsers.slice(start, start + previewPageSize);
   }, [filteredPreviewUsers, previewPage, previewPageSize]);
+
+  const selectedUserIDsKey = useMemo(
+    () =>
+      selectedUsers
+        .map((user) => user.id)
+        .sort((a, b) => a - b)
+        .join(','),
+    [selectedUsers],
+  );
 
   const columns = useMemo(
     () => [
@@ -665,6 +705,14 @@ const ModelWhitelistModal = ({ visible, model, onClose, onChanged }) => {
     }
   }, [visible, loadSets, loadGroupsAndTags, searchPickerUsers]);
 
+  useEffect(() => {
+    if (!editing) return undefined;
+    const timer = setTimeout(() => {
+      previewMatchedUsers();
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [editing, previewMatchedUsers, previewRefreshKey, selectedUserIDsKey]);
+
   return (
     <SideSheet
       placement='right'
@@ -714,6 +762,28 @@ const ModelWhitelistModal = ({ visible, model, onClose, onChanged }) => {
         </div>
       }
     >
+      <style>
+        {`
+          .model-whitelist-edit-modal .semi-modal-body {
+            scrollbar-width: thin;
+            scrollbar-color: var(--semi-color-fill-2) transparent;
+          }
+
+          .model-whitelist-edit-modal .semi-modal-body::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+          }
+
+          .model-whitelist-edit-modal .semi-modal-body::-webkit-scrollbar-thumb {
+            border-radius: 999px;
+            background: var(--semi-color-fill-2);
+          }
+
+          .model-whitelist-edit-modal .semi-modal-body::-webkit-scrollbar-track {
+            background: transparent;
+          }
+        `}
+      </style>
       <Spin spinning={loading}>
         <div className='flex flex-col gap-3 p-3 pb-4'>
           <Card className='!rounded-lg border border-[var(--semi-color-border)] shadow-sm'>
@@ -867,8 +937,7 @@ const ModelWhitelistModal = ({ visible, model, onClose, onChanged }) => {
         </div>
       </Spin>
 
-      <SideSheet
-        placement='right'
+      <Modal
         title={
           <Space>
             <Avatar size='small' color='blue' className='shrink-0'>
@@ -879,9 +948,14 @@ const ModelWhitelistModal = ({ visible, model, onClose, onChanged }) => {
         }
         visible={showSetManager}
         onCancel={() => setShowSetManager(false)}
-        width={isMobile ? '100%' : 760}
+        footer={null}
+        width={isMobile ? '96%' : 860}
         closeIcon={null}
-        bodyStyle={{ padding: isMobile ? 12 : 16 }}
+        bodyStyle={{
+          padding: isMobile ? 12 : 16,
+          maxHeight: isMobile ? '72vh' : '68vh',
+          overflowY: 'auto',
+        }}
       >
         <div className='mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
           <Text type='tertiary' size='small'>
@@ -939,15 +1013,15 @@ const ModelWhitelistModal = ({ visible, model, onClose, onChanged }) => {
             style={{ padding: 30 }}
           />
         )}
-      </SideSheet>
+      </Modal>
 
-      <SideSheet
-        placement='right'
+      <Modal
         title={editingSet?.id ? t('编辑用户集') : t('新建用户集')}
         visible={editing}
         onCancel={closeEditor}
-        width={isMobile ? '100%' : 560}
+        width={isMobile ? '96%' : 720}
         closeIcon={null}
+        className='model-whitelist-edit-modal'
         footer={
           <div className='flex justify-end'>
             <Space>
@@ -963,6 +1037,11 @@ const ModelWhitelistModal = ({ visible, model, onClose, onChanged }) => {
             </Space>
           </div>
         }
+        bodyStyle={{
+          padding: isMobile ? 12 : 20,
+          maxHeight: isMobile ? '72vh' : '68vh',
+          overflowY: 'auto',
+        }}
       >
         <Form
           key={`visibility-set-${editingSet?.id ?? 'new'}`}
@@ -1034,6 +1113,7 @@ const ModelWhitelistModal = ({ visible, model, onClose, onChanged }) => {
                 showClear
                 optionList={tagOptions}
                 style={{ width: '100%' }}
+                onChange={requestPreviewRefresh}
               />
             </Col>
             <Col span={24}>
@@ -1047,6 +1127,7 @@ const ModelWhitelistModal = ({ visible, model, onClose, onChanged }) => {
                 showClear
                 optionList={groupOptions}
                 style={{ width: '100%' }}
+                onChange={requestPreviewRefresh}
               />
             </Col>
           </Row>
@@ -1105,7 +1186,7 @@ const ModelWhitelistModal = ({ visible, model, onClose, onChanged }) => {
             <Text type='tertiary'>{t('暂无预览结果')}</Text>
           )}
         </Form>
-      </SideSheet>
+      </Modal>
 
       <Modal
         title={t('选择用户')}
