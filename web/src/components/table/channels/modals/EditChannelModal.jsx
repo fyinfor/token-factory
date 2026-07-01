@@ -212,6 +212,26 @@ function type2secretPrompt(type) {
   }
 }
 
+const resolveOperatingCostPercentByPriceDiscount = (priceDiscountPercent) => {
+  if (priceDiscountPercent === null || priceDiscountPercent === undefined) {
+    return 0;
+  }
+  const discount = Number(priceDiscountPercent);
+  if (!Number.isFinite(discount)) {
+    return 0;
+  }
+  if (discount < 50) {
+    return 5;
+  }
+  if (discount < 60) {
+    return 4;
+  }
+  if (discount < 70) {
+    return 3;
+  }
+  return 0;
+};
+
 const EditChannelModal = (props) => {
   const { t } = useTranslation();
   const channelId = props.editingChannel.id;
@@ -669,6 +689,22 @@ const EditChannelModal = (props) => {
           setInputs((inputs) => ({ ...inputs, [name]: value }));
         },
       });
+      return;
+    }
+    if (!isEdit && name === 'price_discount_percent') {
+      const operatingCostPercent =
+        resolveOperatingCostPercentByPriceDiscount(value);
+      if (formApiRef.current) {
+        formApiRef.current.setValue(
+          'operating_cost_percent',
+          operatingCostPercent,
+        );
+      }
+      setInputs((inputs) => ({
+        ...inputs,
+        [name]: value,
+        operating_cost_percent: operatingCostPercent,
+      }));
       return;
     }
     setInputs((inputs) => ({ ...inputs, [name]: value }));
