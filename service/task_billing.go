@@ -134,7 +134,7 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 	if info.PriceData.ChannelPriceDiscount != nil {
 		discPct = *info.PriceData.ChannelPriceDiscount
 	} else {
-		discPct = model.ResolveChannelPriceDiscountPercent(info.ChannelId)
+		discPct = model.ResolveChannelEffectiveCostPercent(info.ChannelId)
 	}
 	other["channel_price_discount_percent"] = discPct
 	other = model.SetBillingLogMetadata(other, model.BillingPhasePreCharge, true, info.PriceData.Quota, -int64(info.PriceData.Quota))
@@ -236,16 +236,7 @@ func taskBillingOther(task *model.Task) map[string]interface{} {
 		other["is_model_mapped"] = true
 		other["upstream_model_name"] = props.UpstreamModelName
 	}
-	discPct := float64(0)
-	if bc := task.PrivateData.BillingContext; bc != nil && bc.ChannelPriceDiscountPercent > 0 {
-		discPct = bc.ChannelPriceDiscountPercent
-	}
-	if discPct <= 0 && task.ChannelId > 0 {
-		discPct = model.ResolveChannelPriceDiscountPercent(task.ChannelId)
-	}
-	if discPct <= 0 {
-		discPct = 100
-	}
+	discPct := taskBillingContextEffectiveCostPercent(task.PrivateData.BillingContext, task.ChannelId)
 	other["channel_price_discount_percent"] = discPct
 	return other
 }
@@ -319,27 +310,27 @@ func videoPerSecondBillingDetailFromSubmit(c *gin.Context, info *relaycommon.Rel
 }
 
 type videoPerTokenBillingDetail struct {
-	Mode                      string
-	TotalTokens               int
-	Width                     int
-	Height                    int
-	HasAudio                  bool
-	Resolution                string
-	RuleWidth                 int
-	RuleHeight                int
-	Ratio                     string
-	Duration                  int
-	PricePerMillionTokens     float64
-	GlobalPricePerMillion     float64
+	Mode                     string
+	TotalTokens              int
+	Width                    int
+	Height                   int
+	HasAudio                 bool
+	Resolution               string
+	RuleWidth                int
+	RuleHeight               int
+	Ratio                    string
+	Duration                 int
+	PricePerMillionTokens    float64
+	GlobalPricePerMillion    float64
 	EffectivePricePerMillion float64
-	MarkupDiscountPercent     float64
-	GroupRatio                float64
-	QuotaPerUnit              float64
-	ChannelDiscountPercent    float64
-	UnifiedAudio              bool
-	CappedToMaxTier           bool
-	IsPreCharge               bool
-	ResolutionFromRequest     bool
+	MarkupDiscountPercent    float64
+	GroupRatio               float64
+	QuotaPerUnit             float64
+	ChannelDiscountPercent   float64
+	UnifiedAudio             bool
+	CappedToMaxTier          bool
+	IsPreCharge              bool
+	ResolutionFromRequest    bool
 }
 
 func videoPerTokenBillingDetailFromSubmit(c *gin.Context, info *relaycommon.RelayInfo) *videoPerTokenBillingDetail {
@@ -424,14 +415,14 @@ func videoPerTokenBillingDetailFromTask(task *model.Task, match *videoTokenRuleM
 		groupRatio = bc.GroupRatio
 	}
 	detail := &videoPerTokenBillingDetail{
-		Mode:        mode,
-		TotalTokens: totalTokens,
-		Width:       width,
-		Height:      height,
-		HasAudio:    hasAudio,
-		Ratio:       spec.Ratio,
-		Duration:    spec.Duration,
-		GroupRatio:  groupRatio,
+		Mode:         mode,
+		TotalTokens:  totalTokens,
+		Width:        width,
+		Height:       height,
+		HasAudio:     hasAudio,
+		Ratio:        spec.Ratio,
+		Duration:     spec.Duration,
+		GroupRatio:   groupRatio,
 		QuotaPerUnit: common.QuotaPerUnit,
 	}
 	if match != nil {
@@ -447,13 +438,13 @@ func videoPerTokenBillingDetailFromTask(task *model.Task, match *videoTokenRuleM
 		detail.Resolution = display
 	}
 	if bc := task.PrivateData.BillingContext; bc != nil {
-		detail.ChannelDiscountPercent = bc.ChannelPriceDiscountPercent
+		detail.ChannelDiscountPercent = taskBillingContextEffectiveCostPercent(bc, task.ChannelId)
 		if detail.PricePerMillionTokens <= 0 {
 			detail.PricePerMillionTokens = bc.VideoChannelRulePrice
 		}
 	}
-	if detail.ChannelDiscountPercent <= 0 {
-		detail.ChannelDiscountPercent = model.ResolveChannelPriceDiscountPercent(task.ChannelId)
+	if detail.ChannelDiscountPercent < 0 {
+		detail.ChannelDiscountPercent = model.ResolveChannelEffectiveCostPercent(task.ChannelId)
 	}
 	fillVideoPerTokenEffectiveRates(detail, task.ChannelId, task.UserId, modelName, mode)
 	return detail
@@ -464,8 +455,8 @@ func fillVideoPerTokenEffectiveRates(detail *videoPerTokenBillingDetail, channel
 		return
 	}
 	costDisc := detail.ChannelDiscountPercent
-	if costDisc <= 0 {
-		costDisc = model.ResolveChannelPriceDiscountPercent(channelId)
+	if costDisc < 0 {
+		costDisc = model.ResolveChannelEffectiveCostPercent(channelId)
 		detail.ChannelDiscountPercent = costDisc
 	}
 	markupDisc := model.ResolveEffectiveMarkupDiscountPercentForInviteeBilling(userId, channelId, modelName)
@@ -524,8 +515,11 @@ func formatVideoPerTokenBillingDetail(prefix string, detail *videoPerTokenBillin
 }
 
 func videoTokenChannelDiscountPercent(detail *videoPerTokenBillingDetail) float64 {
-	if detail == nil || detail.ChannelDiscountPercent <= 0 {
+	if detail == nil {
 		return 100
+	}
+	if detail.ChannelDiscountPercent < 0 {
+		return 0
 	}
 	return detail.ChannelDiscountPercent
 }
@@ -638,16 +632,7 @@ func videoPerSecondBillingDetailFromTask(task *model.Task) *videoPerSecondBillin
 	if bc := task.PrivateData.BillingContext; bc != nil && bc.GroupRatio > 0 {
 		groupRatio = bc.GroupRatio
 	}
-	channelDiscount := float64(0)
-	if bc := task.PrivateData.BillingContext; bc != nil && bc.ChannelPriceDiscountPercent > 0 {
-		channelDiscount = bc.ChannelPriceDiscountPercent
-	}
-	if channelDiscount <= 0 {
-		channelDiscount = model.ResolveChannelPriceDiscountPercent(task.ChannelId)
-	}
-	if channelDiscount <= 0 {
-		channelDiscount = 100
-	}
+	channelDiscount := taskBillingContextEffectiveCostPercent(task.PrivateData.BillingContext, task.ChannelId)
 	detail := &videoPerSecondBillingDetail{
 		Mode:                   mode,
 		Seconds:                seconds,
@@ -683,8 +668,8 @@ func fillVideoPerSecondEffectiveRates(detail *videoPerSecondBillingDetail, chann
 		return
 	}
 	costDisc := detail.ChannelDiscountPercent
-	if costDisc <= 0 {
-		costDisc = model.ResolveChannelPriceDiscountPercent(channelId)
+	if costDisc < 0 {
+		costDisc = model.ResolveChannelEffectiveCostPercent(channelId)
 		detail.ChannelDiscountPercent = costDisc
 	}
 	markupDisc := model.ResolveEffectiveMarkupDiscountPercentForInviteeBilling(userId, channelId, modelName)
@@ -701,7 +686,7 @@ func resolveVideoLogChannelDiscountPercent(info *relaycommon.RelayInfo) float64 
 		return *info.PriceData.ChannelPriceDiscount
 	}
 	if info != nil {
-		return model.ResolveChannelPriceDiscountPercent(info.ChannelId)
+		return model.ResolveChannelEffectiveCostPercent(info.ChannelId)
 	}
 	return 100
 }
@@ -849,8 +834,11 @@ func formatVideoPerSecondBillingDetail(prefix string, detail *videoPerSecondBill
 }
 
 func videoChannelDiscountPercent(detail *videoPerSecondBillingDetail) float64 {
-	if detail == nil || detail.ChannelDiscountPercent <= 0 {
+	if detail == nil {
 		return 100
+	}
+	if detail.ChannelDiscountPercent < 0 {
+		return 0
 	}
 	return detail.ChannelDiscountPercent
 }
@@ -1382,7 +1370,7 @@ func RecalculateTaskQuotaByTokens(ctx context.Context, task *model.Task, totalTo
 		finalGroupRatio = groupRatio
 	}
 
-	costDisc := model.ResolveChannelPriceDiscountPercent(task.ChannelId)
+	costDisc := taskBillingContextEffectiveCostPercent(task.PrivateData.BillingContext, task.ChannelId)
 	markupDisc := model.ResolveEffectiveMarkupDiscountPercentForInviteeBilling(task.UserId, task.ChannelId, modelName)
 	globalMr, globalOK, _ := ratio_setting.GetModelRatio(modelName)
 	if !globalOK {

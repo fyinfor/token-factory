@@ -688,7 +688,7 @@ func recalcVideoPerSecondQuotaDetailOnComplete(task *model.Task, taskResult *rel
 	if seconds <= 0 {
 		return 0, nil
 	}
-	costDisc := model.ResolveChannelPriceDiscountPercent(task.ChannelId)
+	costDisc := taskBillingContextEffectiveCostPercent(task.PrivateData.BillingContext, task.ChannelId)
 	markupDisc := model.ResolveEffectiveMarkupDiscountPercentForInviteeBilling(task.UserId, task.ChannelId, modelName)
 	globalPerSec := globalVideoPerSecondUSDForChannelTier(
 		modelName, mode, match.Resolution, match.RuleWidth, match.RuleHeight, meta.HasAudio, match.UnifiedAudio,

@@ -50,6 +50,52 @@ func ResolveChannelPriceDiscountPercent(channelId int) float64 {
 	return ch.ResolvedPriceDiscountPercent()
 }
 
+// ResolvedOperatingCostPercent returns the channel operating cost percent.
+// Missing values are treated as 0 so existing channels keep their old cost.
+func (c *Channel) ResolvedOperatingCostPercent() float64 {
+	if c == nil || c.OperatingCostPercent == nil {
+		return 0
+	}
+	return clampChannelPriceDiscountPercent(*c.OperatingCostPercent)
+}
+
+// ResolvedEffectiveCostPercent returns price_discount_percent + operating_cost_percent.
+func (c *Channel) ResolvedEffectiveCostPercent() float64 {
+	if c == nil {
+		return 100
+	}
+	return EffectiveCostPercent(c.ResolvedPriceDiscountPercent(), c.ResolvedOperatingCostPercent())
+}
+
+func EffectiveCostPercent(priceDiscountPercent, operatingCostPercent float64) float64 {
+	return clampChannelPriceDiscountPercent(
+		clampChannelPriceDiscountPercent(priceDiscountPercent) +
+			clampChannelPriceDiscountPercent(operatingCostPercent),
+	)
+}
+
+func ResolveChannelOperatingCostPercent(channelId int) float64 {
+	if channelId <= 0 {
+		return 0
+	}
+	ch, err := CacheGetChannel(channelId)
+	if err != nil || ch == nil {
+		return 0
+	}
+	return ch.ResolvedOperatingCostPercent()
+}
+
+func ResolveChannelEffectiveCostPercent(channelId int) float64 {
+	if channelId <= 0 {
+		return 100
+	}
+	ch, err := CacheGetChannel(channelId)
+	if err != nil || ch == nil {
+		return 100
+	}
+	return ch.ResolvedEffectiveCostPercent()
+}
+
 // ChannelPriceDiscountMultiplierForPricing 用于展示：把 60% 转为 0.6。
 func ChannelPriceDiscountMultiplierForPricing(percent float64) float64 {
 	percent = clampChannelPriceDiscountPercent(percent)

@@ -65,6 +65,8 @@ type Channel struct {
 
 	// 成本折扣率（百分数，100=原价无折扣，60=六折/按原价×0.6 计费）。nil=数据库默认/未设，按 100 处理。使用指针以便 GORM Updates 时可将 0% 写回。
 	PriceDiscountPercent *float64 `json:"price_discount_percent" gorm:"type:double precision;default:100"`
+	// 经营成本率（百分数），计费时追加到成本折扣率上；如 60% 成本折扣 + 5% 经营成本 = 65% 最终成本率。
+	OperatingCostPercent *float64 `json:"operating_cost_percent" gorm:"type:double precision;default:0"`
 	// 加价折扣率（百分数，0=不加价；如 5 表示在全局价格基础上加 5% 作为附加收益）。nil=数据库默认/未设，按 0 处理。
 	MarkupDiscountRate *float64 `json:"markup_discount_rate" gorm:"type:double precision;default:0"`
 
@@ -355,6 +357,7 @@ type ChannelPricingMeta struct {
 	CompanyLogoURL        string   `gorm:"column:company_logo_url"`
 	SupplierType          string   `gorm:"column:supplier_type"`
 	PriceDiscountPercent  *float64 `gorm:"column:price_discount_percent"`
+	OperatingCostPercent  *float64 `gorm:"column:operating_cost_percent"`
 	MarkupDiscountRate    *float64 `gorm:"column:markup_discount_rate"`
 }
 
@@ -377,7 +380,7 @@ func ListChannelsForPricing() ([]ChannelSimplePricingItem, error) {
 func ListChannelPricingMeta() ([]ChannelPricingMeta, error) {
 	items := make([]ChannelPricingMeta, 0)
 	err := DB.Model(&Channel{}).
-		Select("channels.id AS channel_id, channels.supplier_application_id, channels.channel_no, channels.models, channels.price_discount_percent, channels.markup_discount_rate, supplier_applications.supplier_alias, COALESCE(NULLIF(supplier_applications.company_logo_url, ''), channels.company_logo_url, '') AS company_logo_url, COALESCE(NULLIF(supplier_applications.supplier_type, ''), channels.supplier_type, '') AS supplier_type").
+		Select("channels.id AS channel_id, channels.supplier_application_id, channels.channel_no, channels.models, channels.price_discount_percent, channels.operating_cost_percent, channels.markup_discount_rate, supplier_applications.supplier_alias, COALESCE(NULLIF(supplier_applications.company_logo_url, ''), channels.company_logo_url, '') AS company_logo_url, COALESCE(NULLIF(supplier_applications.supplier_type, ''), channels.supplier_type, '') AS supplier_type").
 		Joins("LEFT JOIN supplier_applications ON supplier_applications.id = channels.supplier_application_id").
 		Where("channels.status = ?", common.ChannelStatusEnabled).
 		Order("channels.id ASC").
