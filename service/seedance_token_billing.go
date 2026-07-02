@@ -280,7 +280,7 @@ func settleSeedanceVideoTokenDelta(ctx context.Context, task *model.Task, actual
 		other[k] = v
 	}
 
-	// 与按秒计费一致：结算日志统一为「消费」类型，展示实际扣费总额（前端与预扣日志合并为一条）。
+	// 与按秒计费一致：结算日志仅作为展示标记，不再次影响余额。
 	other = model.SetBillingLogMetadata(other, model.BillingPhaseSettlementMarker, false, actualQuota, 0)
 
 	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
@@ -290,7 +290,7 @@ func settleSeedanceVideoTokenDelta(ctx context.Context, task *model.Task, actual
 		ChannelId:      task.ChannelId,
 		ModelName:      taskModelName(task),
 		TokenName:      task.PrivateData.TokenName,
-		Quota:          actualQuota,
+		Quota:          0,
 		TokenId:        task.PrivateData.TokenId,
 		UseTimeSeconds: taskUseTimeSeconds(task),
 		Group:          task.Group,

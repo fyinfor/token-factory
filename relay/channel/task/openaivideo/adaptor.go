@@ -175,10 +175,16 @@ type arkResultResponse struct {
 	Status      string          `json:"status,omitempty"`
 	Content     *arkTaskContent `json:"content,omitempty"`
 	Output      *arkVideoOutput `json:"output,omitempty"`
+	Usage       *videoUsage     `json:"usage,omitempty"`
 	CreatedAt   json.RawMessage `json:"created_at,omitempty"`
 	UpdatedAt   json.RawMessage `json:"updated_at,omitempty"`
 	CompletedAt json.RawMessage `json:"completed_at,omitempty"`
 	Error       *apiError       `json:"error,omitempty"`
+}
+
+type videoUsage struct {
+	CompletionTokens int `json:"completion_tokens,omitempty"`
+	TotalTokens      int `json:"total_tokens,omitempty"`
 }
 
 // --- MaaS protocol responses (Hidream official gateway) ---
@@ -551,7 +557,6 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	ov.CreatedAt = dto.FormatTimeUnixRFC3339(time.Now().Unix())
 	ov.Model = info.OriginModelName
 
-
 	taskcommon.WriteOpenAIVideoResponse(c, ov)
 
 	return taskID, respBody, nil
@@ -756,6 +761,13 @@ func parseArkResult(respBody []byte) (*relaycommon.TaskInfo, error) {
 		} else {
 			taskResult.Status = model.TaskStatusInProgress
 			taskResult.Progress = taskcommon.ProgressInProgress
+		}
+	}
+	if resp.Usage != nil {
+		taskResult.CompletionTokens = resp.Usage.CompletionTokens
+		taskResult.TotalTokens = resp.Usage.TotalTokens
+		if taskResult.TotalTokens == 0 && taskResult.CompletionTokens > 0 {
+			taskResult.TotalTokens = taskResult.CompletionTokens
 		}
 	}
 

@@ -560,6 +560,9 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 			task.FinishTime = now
 		}
 		task.Progress = taskcommon.ProgressComplete
+		if ti.Reason != "" {
+			task.FailReason = ti.Reason
+		}
 	default:
 		if ti.Progress != "" {
 			task.Progress = ti.Progress

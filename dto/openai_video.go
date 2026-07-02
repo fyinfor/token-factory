@@ -26,6 +26,11 @@ type OpenAIVideoOutput struct {
 	SrtURL       string `json:"srt_url,omitempty"`
 }
 
+type OpenAIVideoUsage struct {
+	CompletionTokens int `json:"completion_tokens,omitempty"`
+	TotalTokens      int `json:"total_tokens,omitempty"`
+}
+
 // OpenAIVideo is the unified response for POST submit and GET poll on /v1/videos/* (OpenAI-style video task API).
 // Do not put the result URL in metadata; use Output.VideoURL only. Timestamps are RFC3339 in UTC by default;
 // on /v1/videos* routes they are serialized as Unix int64 for downstream new-api compatibility.
@@ -43,6 +48,7 @@ type OpenAIVideo struct {
 	Error              *OpenAIVideoError  `json:"error"`
 	Output             *OpenAIVideoOutput `json:"output,omitempty"`
 	Metadata           map[string]any     `json:"metadata,omitempty"`
+	Usage              *OpenAIVideoUsage  `json:"usage,omitempty"`
 }
 
 // FormatTimeUnixRFC3339 converts a Unix second timestamp to RFC3339 (UTC), or returns "" if unset.
@@ -171,6 +177,7 @@ func (m OpenAIVideo) MarshalJSON() ([]byte, error) {
 		Error              *OpenAIVideoError  `json:"error"`
 		Output             *OpenAIVideoOutput `json:"output,omitempty"`
 		Metadata           map[string]any     `json:"metadata,omitempty"`
+		Usage              *OpenAIVideoUsage  `json:"usage,omitempty"`
 	}
 	a := alias{
 		ID:                 m.ID,
@@ -186,6 +193,7 @@ func (m OpenAIVideo) MarshalJSON() ([]byte, error) {
 		Error:              m.Error,
 		Output:             m.Output,
 		Metadata:           m.Metadata,
+		Usage:              m.Usage,
 	}
 	return json.Marshal(a)
 }
