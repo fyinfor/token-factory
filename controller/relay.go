@@ -729,11 +729,14 @@ func RelayTask(c *gin.Context) {
 		task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
 		task.PrivateData.TokenId = relayInfo.TokenId
 		task.PrivateData.TokenName = c.GetString("token_name")
-		chDiscPct := model.ResolveChannelPriceDiscountPercent(relayInfo.ChannelId)
+		chDiscPct := model.ResolveChannelEffectiveCostPercent(relayInfo.ChannelId)
 		if relayInfo.PriceData.ChannelPriceDiscount != nil {
 			chDiscPct = *relayInfo.PriceData.ChannelPriceDiscount
 		}
 		markupDiscPct := relayInfo.PriceData.MarkupDiscountPercent
+		rawPriceDiscountPct := relayInfo.PriceData.RawPriceDiscountPercent
+		operatingCostPct := relayInfo.PriceData.OperatingCostPercent
+		effectiveCostPct := chDiscPct
 		task.PrivateData.BillingContext = &model.TaskBillingContext{
 			ModelPrice:                  relayInfo.PriceData.ModelPrice,
 			GroupRatio:                  relayInfo.PriceData.GroupRatioInfo.GroupRatio,
@@ -743,6 +746,9 @@ func RelayTask(c *gin.Context) {
 			PerCallBilling:              common.StringsContains(constant.TaskPricePatches, relayInfo.OriginModelName),
 			ChannelPriceDiscountPercent: chDiscPct,
 			MarkupDiscountPercent:       &markupDiscPct,
+			PriceDiscountPercent:        &rawPriceDiscountPct,
+			OperatingCostPercent:        &operatingCostPct,
+			EffectiveCostPercent:        &effectiveCostPct,
 			VideoRuleUnit:               relayInfo.PriceData.VideoRuleUnit,
 			VideoBillingMode:            relayInfo.PriceData.VideoBillingMode,
 			VideoChannelRulePrice:       relayInfo.PriceData.VideoChannelRulePrice,

@@ -61,10 +61,10 @@ export const CLAUDE_CACHE_CREATE_1H_GLOBAL_MULT = 6 / 3.75;
 /** 成本折扣率百分数 → 乘数（100=1.0） */
 export function costDiscountMultiplier(percent) {
   const n = Number(percent);
-  if (!Number.isFinite(n) || n <= 0) {
+  if (!Number.isFinite(n)) {
     return 1;
   }
-  return n / 100;
+  return Math.max(0, n) / 100;
 }
 
 /** 加价折扣率百分数 → 乘数 */

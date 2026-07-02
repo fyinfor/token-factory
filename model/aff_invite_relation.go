@@ -408,7 +408,7 @@ type InviteeModelMarkupDiscountRateItem struct {
 	DefaultMarkupDiscountRate      float64 `json:"default_markup_discount_rate"`      // 渠道默认官方价加价折扣率(%)
 	CurrentMarkupDiscountRate      float64 `json:"current_markup_discount_rate"`      // 对该被邀请用户生效的加价折扣率(%)
 	OfficialCurrentDiscountPercent float64 `json:"official_current_discount_percent"` // 定价首页当前展示折扣(%)
-	ChannelPriceDiscountPercent    float64 `json:"channel_price_discount_percent"`    // 成本折扣率(%)
+	ChannelPriceDiscountPercent    float64 `json:"channel_price_discount_percent"`    // 最终成本率(%)
 	OfficialBasePrice              float64 `json:"official_base_price"`               // 官方根价/倍率
 	ChannelBasePrice               float64 `json:"channel_base_price"`                // 渠道原始价/倍率
 	PricingQuotaType               int     `json:"pricing_quota_type"`                // 0=按量，1=按次
@@ -641,7 +641,7 @@ func listPricingVisibleMarkupDiscountRateItems() ([]InviteeModelMarkupDiscountRa
 			officialBase = p.ModelPrice
 			channelBase = ch.ModelPrice
 		}
-		costDiscountPercent := ch.PriceDiscountPercent
+		costDiscountPercent := ch.EffectiveCostPercent
 		currentDiscount := inviteeModelActualDiscountPercent(officialBase, channelBase, costDiscountPercent, defaultRate)
 		defaultRates[key] = defaultRate
 		items = append(items, InviteeModelMarkupDiscountRateItem{

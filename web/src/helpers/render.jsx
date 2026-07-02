@@ -3071,7 +3071,7 @@ export function renderLogContent(
     const quotaPerUnit = Number(videoBillingDetail?.video_quota_per_unit || 0);
     const groupRatioForVideo = Number(videoBillingDetail?.group_ratio || 1);
     const channelDiscount = Number(
-      videoBillingDetail?.channel_price_discount || 100,
+      videoBillingDetail?.channel_price_discount ?? 100,
     );
     const resolution = videoBillingDetail?.video_resolution || '';
     const resolutionFromInput =
@@ -3145,7 +3145,7 @@ export function renderLogContent(
     const quotaPerUnit = Number(videoBillingDetail?.video_quota_per_unit || 0);
     const groupRatioForVideo = Number(videoBillingDetail?.group_ratio || 1);
     const channelDiscount = Number(
-      videoBillingDetail?.channel_price_discount || 100,
+      videoBillingDetail?.channel_price_discount ?? 100,
     );
     const resolution = videoBillingDetail?.video_resolution || '';
     const resolutionFromInput =

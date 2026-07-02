@@ -720,6 +720,13 @@ func validateChannel(channel *model.Channel, isAdd bool) error {
 		}
 	}
 
+	if channel != nil && channel.OperatingCostPercent != nil {
+		v := *channel.OperatingCostPercent
+		if v < 0 || v > 1000 {
+			return fmt.Errorf("经营成本（百分比）须介于 0 和 1000 之间")
+		}
+	}
+
 	if rs := strings.TrimSpace(channel.RouteSlug); rs != "" && !model.IsValidRouteSlug(rs) {
 		return fmt.Errorf("route_slug 格式无效（2～32 位字母数字，且不能为 c 加纯数字）")
 	}
@@ -821,23 +828,26 @@ func getVertexArrayKeys(keys string) ([]string, error) {
 }
 
 type upstreamChannelSyncItem struct {
-	ID                   int                `json:"id"`
-	Name                 string             `json:"name"`
-	Models               string             `json:"models"`
-	Group                string             `json:"group"`
-	Status               int                `json:"status"`
-	Type                 int                `json:"type"`
-	ChannelNo            string             `json:"channel_no"`
-	RouteSlug            string             `json:"route_slug"`
-	SupplierApplication  int                `json:"supplier_application_id"`
-	SupplierAlias        string             `json:"supplier_alias"`
-	SupplierType         string             `json:"supplier_type"`
-	CompanyLogoURL       string             `json:"company_logo_url"`
-	PriceDiscountPercent float64            `json:"price_discount_percent"`
-	MarkupDiscountRate   float64            `json:"markup_discount_rate"`
-	ModelMapping         string             `json:"model_mapping"`
-	ModelPrice           map[string]float64 `json:"model_price"`
-	ModelRatio           map[string]float64 `json:"model_ratio"`
+	ID                      int                `json:"id"`
+	Name                    string             `json:"name"`
+	Models                  string             `json:"models"`
+	Group                   string             `json:"group"`
+	Status                  int                `json:"status"`
+	Type                    int                `json:"type"`
+	ChannelNo               string             `json:"channel_no"`
+	RouteSlug               string             `json:"route_slug"`
+	SupplierApplication     int                `json:"supplier_application_id"`
+	SupplierAlias           string             `json:"supplier_alias"`
+	SupplierType            string             `json:"supplier_type"`
+	CompanyLogoURL          string             `json:"company_logo_url"`
+	PriceDiscountPercent    float64            `json:"price_discount_percent"`
+	HasPriceDiscountPercent bool               `json:"-"`
+	OperatingCostPercent    float64            `json:"operating_cost_percent"`
+	HasOperatingCostPercent bool               `json:"-"`
+	MarkupDiscountRate      float64            `json:"markup_discount_rate"`
+	ModelMapping            string             `json:"model_mapping"`
+	ModelPrice              map[string]float64 `json:"model_price"`
+	ModelRatio              map[string]float64 `json:"model_ratio"`
 }
 
 func decodeUpstreamModelMapping(m map[string]any) string {
@@ -991,6 +1001,7 @@ func decodeUpstreamChannelPayload(payload map[string]any, itemsKey string) ([]up
 			CompanyLogoURL:      strings.TrimSpace(common.Interface2String(m["company_logo_url"])),
 		}
 		if v, ok := m["price_discount_percent"]; ok && v != nil {
+			item.HasPriceDiscountPercent = true
 			switch x := v.(type) {
 			case float64:
 				item.PriceDiscountPercent = x
@@ -1001,6 +1012,21 @@ func decodeUpstreamChannelPayload(payload map[string]any, itemsKey string) ([]up
 			default:
 				if f, err := strconv.ParseFloat(strings.TrimSpace(common.Interface2String(v)), 64); err == nil {
 					item.PriceDiscountPercent = f
+				}
+			}
+		}
+		if v, ok := m["operating_cost_percent"]; ok && v != nil {
+			item.HasOperatingCostPercent = true
+			switch x := v.(type) {
+			case float64:
+				item.OperatingCostPercent = x
+			case json.Number:
+				if f, err := x.Float64(); err == nil {
+					item.OperatingCostPercent = f
+				}
+			default:
+				if f, err := strconv.ParseFloat(strings.TrimSpace(common.Interface2String(v)), 64); err == nil {
+					item.OperatingCostPercent = f
 				}
 			}
 		}
@@ -1183,8 +1209,11 @@ func buildTokenFactorySyncedChannels(base *model.Channel) ([]model.Channel, []mo
 		if upstreamLogoURL != "" {
 			clone.CompanyLogoURL = upstreamLogoURL
 		}
-		if upstream.PriceDiscountPercent > 0 {
+		if upstream.HasPriceDiscountPercent {
 			clone.PriceDiscountPercent = &upstream.PriceDiscountPercent
+		}
+		if upstream.HasOperatingCostPercent {
+			clone.OperatingCostPercent = &upstream.OperatingCostPercent
 		}
 		mm := strings.TrimSpace(upstream.ModelMapping)
 		if mm != "" {
@@ -1235,6 +1264,10 @@ func AddChannel(c *gin.Context) {
 	if addChannelRequest.Channel != nil && addChannelRequest.Channel.PriceDiscountPercent == nil {
 		v := 100.0
 		addChannelRequest.Channel.PriceDiscountPercent = &v
+	}
+	if addChannelRequest.Channel != nil && addChannelRequest.Channel.OperatingCostPercent == nil {
+		v := 0.0
+		addChannelRequest.Channel.OperatingCostPercent = &v
 	}
 	if err := applySupplierChannelOwnershipForCreate(c, addChannelRequest.Channel); err != nil {
 		c.JSON(http.StatusForbidden, gin.H{

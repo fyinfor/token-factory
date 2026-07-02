@@ -19,6 +19,7 @@ import (
 const (
 	chFieldName           = "name"
 	chFieldDiscountRate   = "discountRate"
+	chFieldOperatingCost  = "operatingCostRate"
 	chFieldMarkupDiscount = "markupDiscountRate"
 	chFieldRouteSlug      = "routeSlug"
 	chFieldQuota          = "quota"
@@ -37,7 +38,7 @@ const (
 
 // chAllowedExportFields 允许导出的合法字段集合，防止非法字段注入。
 var chAllowedExportFields = map[string]bool{
-	chFieldName: true, chFieldDiscountRate: true, chFieldMarkupDiscount: true, chFieldRouteSlug: true,
+	chFieldName: true, chFieldDiscountRate: true, chFieldOperatingCost: true, chFieldMarkupDiscount: true, chFieldRouteSlug: true,
 	chFieldQuota: true, chFieldDisabled: true,
 	chFieldSupplierName: true, chFieldType: true, chFieldLogo: true,
 	chFieldProviderType: true, chFieldApiKey: true, chFieldApiBaseUrl: true,
@@ -151,6 +152,9 @@ func buildChannelExportItem(ch *model.Channel, fields map[string]bool) map[strin
 	}
 	if fields[chFieldDiscountRate] {
 		item[chFieldDiscountRate] = ch.PriceDiscountPercent
+	}
+	if fields[chFieldOperatingCost] {
+		item[chFieldOperatingCost] = ch.OperatingCostPercent
 	}
 	if fields[chFieldMarkupDiscount] {
 		item[chFieldMarkupDiscount] = ch.MarkupDiscountRate
@@ -551,6 +555,11 @@ func chApplyToExisting(ch *model.Channel, item map[string]interface{}, siteBuild
 		updates.PriceDiscountPercent = &f
 		cols = append(cols, "price_discount_percent")
 	}
+	if v, ok := item["operatingCostRate"]; ok {
+		f := chToFloat64(v)
+		updates.OperatingCostPercent = &f
+		cols = append(cols, "operating_cost_percent")
+	}
 	if v, ok := item["markupDiscountRate"]; ok {
 		f := chToFloat64(v)
 		updates.MarkupDiscountRate = &f
@@ -710,6 +719,10 @@ func chApplyToNew(ch *model.Channel, item map[string]interface{}, siteBuilderApi
 	if v, ok := item["discountRate"]; ok {
 		f := chToFloat64(v)
 		ch.PriceDiscountPercent = &f
+	}
+	if v, ok := item["operatingCostRate"]; ok {
+		f := chToFloat64(v)
+		ch.OperatingCostPercent = &f
 	}
 	if v, ok := item["markupDiscountRate"]; ok {
 		f := chToFloat64(v)

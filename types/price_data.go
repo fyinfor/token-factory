@@ -31,15 +31,19 @@ type PriceData struct {
 	VideoInputTextTokens int
 	OtherRatios          map[string]float64
 	UsePrice             bool
-	// ChannelPriceDiscount 非 nil 时，表示渠道成本折扣（百分数，100=不乘），用于日志展示
+	// ChannelPriceDiscount 非 nil 时，表示最终成本率（成本折扣率 + 经营成本率，百分数），用于日志展示
 	ChannelPriceDiscount *float64
 	Quota                int // 按次计费的最终额度（MJ / Task）
 	QuotaToPreConsume    int // 按量计费的预消耗额度
 	GroupRatioInfo       GroupRatioInfo
 
 	// 新计费公式所需字段
-	// CostDiscountPercent 成本折扣率百分数（price_discount_percent），如 90 表示 90%，默认 100
+	// CostDiscountPercent 最终成本率百分数（price_discount_percent + operating_cost_percent），如 90 表示 90%，默认 100
 	CostDiscountPercent float64
+	// RawPriceDiscountPercent 是渠道原始 price_discount_percent，未叠加经营成本。
+	RawPriceDiscountPercent float64
+	// OperatingCostPercent 是渠道经营成本率，会叠加到 RawPriceDiscountPercent。
+	OperatingCostPercent float64
 	// MarkupDiscountPercent 加价折扣率百分数（markup_discount_rate），如 5 表示 5%，默认 0
 	MarkupDiscountPercent float64
 	// GlobalModelRatio 全局模型输入倍率（不含渠道/分组覆盖），用于新计费公式加价部分

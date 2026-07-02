@@ -39,7 +39,7 @@ type QuotaInfo struct {
 	ModelRatio    float64
 	GroupRatio    float64
 	// 新计费公式字段
-	CostDiscountPercent   float64 // 成本折扣率%，默认 100
+	CostDiscountPercent   float64 // 最终成本率%，默认 100
 	MarkupDiscountPercent float64 // 加价折扣率%，默认 0
 	GlobalModelRatio      float64 // 全局模型输入倍率
 	GlobalModelPrice      float64 // 全局模型固定价格
@@ -54,11 +54,7 @@ func hasCustomModelRatio(modelName string, currentRatio float64) bool {
 }
 
 func calculateAudioQuota(info QuotaInfo) int {
-	// 兼容旧调用路径：CostDiscountPercent 为 0 时默认 100（无折扣）
 	costDisc := info.CostDiscountPercent
-	if costDisc == 0 {
-		costDisc = 100
-	}
 	markupDisc := info.MarkupDiscountPercent
 
 	if info.UsePrice {
@@ -158,7 +154,7 @@ func PreWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usag
 		UsePrice:              relayInfo.UsePrice,
 		ModelRatio:            modelRatio,
 		GroupRatio:            actualGroupRatio,
-		CostDiscountPercent:   model.ResolveChannelPriceDiscountPercent(wssChID),
+		CostDiscountPercent:   model.ResolveChannelEffectiveCostPercent(wssChID),
 		MarkupDiscountPercent: model.ResolveChannelMarkupDiscountRate(wssChID),
 		GlobalModelRatio:      wssGlobalRatio,
 	}
@@ -208,7 +204,7 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	wssPostCostDisc := relayInfo.PriceData.CostDiscountPercent
 	wssPostMarkupDisc := relayInfo.PriceData.MarkupDiscountPercent
 	if wssPostCostDisc == 0 {
-		wssPostCostDisc = model.ResolveChannelPriceDiscountPercent(audioWssChID)
+		wssPostCostDisc = model.ResolveChannelEffectiveCostPercent(audioWssChID)
 	}
 	wssPostGlobalRatio, _, _ := ratio_setting.GetModelRatio(modelName)
 	wssPostGlobalPrice, _ := ratio_setting.GetModelPrice(modelName, false)
@@ -325,7 +321,7 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	audioCostDisc := relayInfo.PriceData.CostDiscountPercent
 	audioMarkupDisc := relayInfo.PriceData.MarkupDiscountPercent
 	if audioCostDisc == 0 {
-		audioCostDisc = model.ResolveChannelPriceDiscountPercent(audioChID)
+		audioCostDisc = model.ResolveChannelEffectiveCostPercent(audioChID)
 	}
 	audioGlobalRatio, _, _ := ratio_setting.GetModelRatio(relayInfo.OriginModelName)
 	audioGlobalPrice, _ := ratio_setting.GetModelPrice(relayInfo.OriginModelName, false)
@@ -504,14 +500,14 @@ func checkAndSendQuotaNotify(relayInfo *relaycommon.RelayInfo, quota int, preCon
 			if notifyType == dto.NotifyTypeBark {
 				// Bark推送使用简短文本，不支持HTML
 				content = "{{value}}，剩余额度：{{value}}，请及时充值"
-values = []interface{}{prompt, logger.FormatQuotaManage(relayInfo.UserQuota)}
-		} else if notifyType == dto.NotifyTypeGotify {
-			content = "{{value}}，当前剩余额度为 {{value}}，请及时充值。"
-			values = []interface{}{prompt, logger.FormatQuotaManage(relayInfo.UserQuota)}
-		} else {
-			// 默认内容格式，适用于Email和Webhook（支持HTML）
-			content = "{{value}}，当前剩余额度为 {{value}}，为了不影响您的使用，请及时充值。<br/>充值链接：<a href='{{value}}'>{{value}}</a>"
-			values = []interface{}{prompt, logger.FormatQuotaManage(relayInfo.UserQuota), topUpLink, topUpLink}
+				values = []interface{}{prompt, logger.FormatQuotaManage(relayInfo.UserQuota)}
+			} else if notifyType == dto.NotifyTypeGotify {
+				content = "{{value}}，当前剩余额度为 {{value}}，请及时充值。"
+				values = []interface{}{prompt, logger.FormatQuotaManage(relayInfo.UserQuota)}
+			} else {
+				// 默认内容格式，适用于Email和Webhook（支持HTML）
+				content = "{{value}}，当前剩余额度为 {{value}}，为了不影响您的使用，请及时充值。<br/>充值链接：<a href='{{value}}'>{{value}}</a>"
+				values = []interface{}{prompt, logger.FormatQuotaManage(relayInfo.UserQuota), topUpLink, topUpLink}
 			}
 
 			err := NotifyUser(relayInfo.UserId, relayInfo.UserEmail, relayInfo.UserSetting, dto.NewNotify(dto.NotifyTypeQuotaExceed, prompt, content, values))
@@ -555,13 +551,13 @@ func checkAndSendSubscriptionQuotaNotify(relayInfo *relaycommon.RelayInfo) {
 
 		if notifyType == dto.NotifyTypeBark {
 			content = "{{value}}，剩余额度：{{value}}，请及时充值"
-values = []interface{}{prompt, logger.FormatQuotaManage(int(remaining))}
-	} else if notifyType == dto.NotifyTypeGotify {
-		content = "{{value}}，当前剩余额度为 {{value}}，请及时充值。"
-		values = []interface{}{prompt, logger.FormatQuotaManage(int(remaining))}
-	} else {
-		content = "{{value}}，当前剩余额度为 {{value}}，为了不影响您的使用，请及时充值。<br/>充值链接：<a href='{{value}}'>{{value}}</a>"
-		values = []interface{}{prompt, logger.FormatQuotaManage(int(remaining)), topUpLink, topUpLink}
+			values = []interface{}{prompt, logger.FormatQuotaManage(int(remaining))}
+		} else if notifyType == dto.NotifyTypeGotify {
+			content = "{{value}}，当前剩余额度为 {{value}}，请及时充值。"
+			values = []interface{}{prompt, logger.FormatQuotaManage(int(remaining))}
+		} else {
+			content = "{{value}}，当前剩余额度为 {{value}}，为了不影响您的使用，请及时充值。<br/>充值链接：<a href='{{value}}'>{{value}}</a>"
+			values = []interface{}{prompt, logger.FormatQuotaManage(int(remaining)), topUpLink, topUpLink}
 		}
 
 		if err := NotifyUser(relayInfo.UserId, relayInfo.UserEmail, relayInfo.UserSetting, dto.NewNotify(dto.NotifyTypeQuotaExceed, prompt, content, values)); err != nil {
