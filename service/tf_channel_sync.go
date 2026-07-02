@@ -6,31 +6,28 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	pb "github.com/QuantumNous/new-api/proto/route"
 )
 
-// ExportChannelsForTFSync 拉取本站可同步渠道（脱敏，排除 tokenfactory_open 类型）。
+// ExportChannelsForTFSync 拉取本站可同步渠道（脱敏，含 TokenFactoryOpen 代理渠道）。
+// TokenFactoryOpen(type=60) 虽经上游 Open 站点接入，但对本站仍是独立路由候选，需参与快照同步。
 func ExportChannelsForTFSync() ([]*model.Channel, error) {
 	var channels []*model.Channel
-	var totalChannels int64
-	model.DB.Model(&model.Channel{}).Count(&totalChannels)
-
-	q := model.DB.Model(&model.Channel{}).
+	if err := model.DB.Model(&model.Channel{}).
 		Omit("key").
-		Where("type <> ?", constant.ChannelTypeTokenFactoryOpen).
-		Order("id asc")
-	if err := q.Find(&channels).Error; err != nil {
+		Order("id asc").
+		Find(&channels).Error; err != nil {
+		var totalChannels int64
+		model.DB.Model(&model.Channel{}).Count(&totalChannels)
 		log.Printf("[SYS] ExportChannelsForTFSync: query failed, total=%d, err=%v", totalChannels, err)
 		return nil, err
 	}
-	log.Printf("[SYS] ExportChannelsForTFSync: total_channels=%d, exported=%d (excluded type=%d)",
-		totalChannels, len(channels), constant.ChannelTypeTokenFactoryOpen)
+	log.Printf("[SYS] ExportChannelsForTFSync: exported=%d", len(channels))
 	return channels, nil
 }
 
-// BuildChannelSnapshotsForTF 将本地渠道转为 TokenFactory gRPC ChannelSnapshot。
+// BuildChannelSnapshotsForTF 将本站渠道转为 TokenFactory gRPC ChannelSnapshot。
 // 仅包含模型/定价等路由元数据，不含渠道密钥。
 func BuildChannelSnapshotsForTF(channels []*model.Channel) []*pb.ChannelSnapshot {
 	snapshots := make([]*pb.ChannelSnapshot, 0, len(channels))
