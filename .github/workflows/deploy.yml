@@ -3,8 +3,11 @@ name: Deploy to Servers
 # ============================================================================
 # Token Factory — SSH 远程部署工作流
 #
-# 前提: 先手动运行 "编译 Docker 镜像 (GHCR)" 工作流构建并推送镜像
-#       镜像地址: ghcr.io/fyinfor/token-factory:latest
+# 前提: 先手动运行 "编译 Docker 镜像 (GHCR + ACR)" 构建并推送镜像
+#
+# 镜像源:
+#   服务器 A → ghcr.io/fyinfor/token-factory:<tag>
+#   服务器 B → crpi-sk2z151c9de4cnvh.cn-hangzhou.personal.cr.aliyuncs.com/fyinfor123/token-factory:<tag>
 #
 # 部署目标 (两台服务器 × 多实例 = 5 个部署):
 #   服务器 A (43.132.223.112):
@@ -15,9 +18,8 @@ name: Deploy to Servers
 #     ├─ /home/ubuntu/token-factory
 #     └─ /home/ubuntu/token-factory-123-tok
 #
-# Server A: pull → up → 健康检查 → 清理 → docker save → scp → Server B
-# Server B: docker load tar → up → 健康检查 → 清理
-#   (Server B 无法直连 GHCR, 通过 Server A 中转镜像)
+# Server A: GHCR pull → up → 健康检查 → 清理
+# Server B: ACR login → pull → up → 健康检查 → 清理
 # ============================================================================
 
 on:
@@ -30,8 +32,10 @@ on:
         type: string
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: fyinfor/token-factory
+  REGISTRY_GHCR: ghcr.io
+  IMAGE_NAME_GHCR: fyinfor/token-factory
+  REGISTRY_ACR: crpi-sk2z151c9de4cnvh.cn-hangzhou.personal.cr.aliyuncs.com
+  IMAGE_NAME_ACR: fyinfor123/token-factory
 
 # 部署脚本 (复用, 避免重复)
 # 用法: 在 SSH script 中 source 此脚本后调用 deploy_instance <路径>
@@ -56,7 +60,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY_112 }}
           script: |
             set -e
-            IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
+            IMAGE="${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME_GHCR }}:${{ inputs.tag }}"
             DIR="/home/ubuntu/tokease-token-factory"
 
             echo "========================================="
@@ -109,7 +113,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY_112 }}
           script: |
             set -e
-            IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
+            IMAGE="${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME_GHCR }}:${{ inputs.tag }}"
             DIR="/home/ubuntu/token-factory"
 
             echo "========================================="
@@ -160,51 +164,6 @@ jobs:
             sudo docker image prune || true
             echo "✅ Cleanup done"
 
-      - name: Save image & transfer to Server B (43.138.142.105)
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.SERVER_A_HOST }}
-          port: ${{ secrets.SERVER_A_PORT || 22 }}
-          username: ${{ secrets.SERVER_A_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY_112 }}
-          script: |
-            set -e
-            IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
-            TAR_FILE="/home/ubuntu/token-factory-${{ inputs.tag }}.tar"
-            TARGET_IP="${{ secrets.SERVER_B_HOST }}"
-            KEY_FILE="/home/ubuntu/.ssh/ssh_key_b_$$"
-
-            echo "========================================="
-            echo "  中转镜像到 Server B: $TARGET_IP"
-            echo "  镜像:  $IMAGE"
-            echo "========================================="
-
-            echo ""
-            echo "[1/4] Setting up SSH key for Server B..."
-            cat > "$KEY_FILE" << 'EOFBKEY'
-            ${{ secrets.SSH_PRIVATE_KEY_105 }}
-            EOFBKEY
-            chmod 600 "$KEY_FILE"
-            echo "✅ Key ready (PID $$)"
-
-            echo ""
-            echo "[2/4] Saving image..."
-            sudo docker save -o "$TAR_FILE" "$IMAGE"
-            # 让 ubuntu 用户能读取 tar (sudo 生成的文件属主是 root)
-            sudo chmod 644 "$TAR_FILE"
-            echo "✅ Saved: $(ls -lh "$TAR_FILE" | awk '{print $5}')"
-
-            echo ""
-            echo "[3/4] Transferring to $TARGET_IP..."
-            scp -i "$KEY_FILE" -o StrictHostKeyChecking=no "$TAR_FILE" ubuntu@"$TARGET_IP":/home/ubuntu/tokease-token-factory/
-            echo "✅ Transferred"
-
-            echo ""
-            echo "[4/4] Cleaning up..."
-            rm -f "$KEY_FILE"
-            sudo rm -f "$TAR_FILE"
-            echo "✅ Done — Server B can now load the image"
-
       - name: Summary (Server A)
         if: always()
         run: |
@@ -215,7 +174,7 @@ jobs:
             echo ""
             echo "| 项目 | 值 |"
             echo "|------|-----|"
-            echo "| 镜像 | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}\` |"
+            echo "| 镜像 | \`${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME_GHCR }}:${{ inputs.tag }}\` |"
             echo "| 实例1 | tokease-token-factory |"
             echo "| 实例2 | token-factory |"
           } >> $GITHUB_STEP_SUMMARY
@@ -227,9 +186,23 @@ jobs:
     name: Deploy → 43.138.142.105
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: deploy-server-a
 
     steps:
+      - name: Login to ACR (43.138.142.105)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_B_HOST }}
+          port: ${{ secrets.SERVER_B_PORT || 22 }}
+          username: ${{ secrets.SERVER_B_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_105 }}
+          script: |
+            set -e
+            echo "${{ secrets.ACR_ALLINONE_PASSWORD }}" | sudo docker login \
+              ${{ env.REGISTRY_ACR }} \
+              -u "${{ secrets.ACR_ALLINONE_USERNAME }}" \
+              --password-stdin
+            echo "✅ ACR login success"
+
       - name: Deploy tokease-token-factory (43.138.142.105)
         uses: appleboy/ssh-action@v1
         with:
@@ -239,8 +212,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY_105 }}
           script: |
             set -e
-            IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
-            TAR_FILE="/home/ubuntu/tokease-token-factory/token-factory-${{ inputs.tag }}.tar"
+            IMAGE="${{ env.REGISTRY_ACR }}/${{ env.IMAGE_NAME_ACR }}:${{ inputs.tag }}"
             DIR="/home/ubuntu/tokease-token-factory"
 
             echo "========================================="
@@ -253,9 +225,8 @@ jobs:
             cd "$DIR" || { echo "❌ 目录不存在: $DIR"; exit 1; }
 
             echo ""
-            echo "[1/3] Loading image from tar..."
-            sudo docker load -i "$TAR_FILE"
-            sudo rm -f "$TAR_FILE"
+            echo "[1/3] Pulling image from ACR..."
+            sudo docker compose pull
 
             echo ""
             echo "[2/3] Starting services..."
@@ -293,7 +264,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY_105 }}
           script: |
             set -e
-            IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
+            IMAGE="${{ env.REGISTRY_ACR }}/${{ env.IMAGE_NAME_ACR }}:${{ inputs.tag }}"
             DIR="/home/ubuntu/token-factory"
 
             echo "========================================="
@@ -304,10 +275,13 @@ jobs:
 
             cd "$DIR" || { echo "❌ 目录不存在: $DIR"; exit 1; }
 
-            echo "[1/2] Starting services (镜像已在 tokease 步骤加载)..."
+            echo "[1/3] Pulling image from ACR..."
+            sudo docker compose pull
+
+            echo "[2/3] Starting services..."
             sudo docker compose up -d
 
-            echo "[2/2] Health check..."
+            echo "[3/3] Health check..."
             sleep 5
             HEALTHY=false
             for i in 1 2 3 4 5; do
@@ -338,7 +312,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY_105 }}
           script: |
             set -e
-            IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}"
+            IMAGE="${{ env.REGISTRY_ACR }}/${{ env.IMAGE_NAME_ACR }}:${{ inputs.tag }}"
             DIR="/home/ubuntu/token-factory-123-tok"
 
             echo "========================================="
@@ -349,10 +323,13 @@ jobs:
 
             cd "$DIR" || { echo "❌ 目录不存在: $DIR"; exit 1; }
 
-            echo "[1/2] Starting services (镜像已在 tokease 步骤加载)..."
+            echo "[1/3] Pulling image from ACR..."
+            sudo docker compose pull
+
+            echo "[2/3] Starting services..."
             sudo docker compose up -d
 
-            echo "[2/2] Health check..."
+            echo "[3/3] Health check..."
             sleep 5
             HEALTHY=false
             for i in 1 2 3 4 5; do
@@ -396,7 +373,7 @@ jobs:
             echo ""
             echo "| 项目 | 值 |"
             echo "|------|-----|"
-            echo "| 镜像 | \`${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ inputs.tag }}\` |"
+            echo "| 镜像 | \`${{ env.REGISTRY_ACR }}/${{ env.IMAGE_NAME_ACR }}:${{ inputs.tag }}\` |"
             echo "| 实例1 | tokease-token-factory |"
             echo "| 实例2 | token-factory |"
             echo "| 实例3 | token-factory-123-tok |"
