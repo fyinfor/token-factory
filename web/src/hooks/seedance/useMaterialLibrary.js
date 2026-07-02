@@ -22,18 +22,21 @@ For commercial licensing, please contact support@quantumnous.com
  * 负责：配置加载、素材列表加载、本地/在线上传、删除等业务逻辑与异常处理，
  * 与 UI 渲染解耦，便于复用与测试。
  */
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   getMaterialConfig,
   listMaterialAssets,
+  getMaterialAsset,
   uploadMaterialFile,
   uploadMaterialByURL,
   deleteMaterialAsset,
   showError,
   showSuccess,
 } from '../../helpers';
-import { detectAssetTypeByName } from '../../constants';
+import { detectAssetTypeByName, MaterialStatus } from '../../constants';
+
+const PENDING_POLL_INTERVAL_MS = 5000;
 
 // 素材库默认配置（接口未就绪时的兜底值）。
 const DEFAULT_CONFIG = {
@@ -44,6 +47,13 @@ const DEFAULT_CONFIG = {
   agreement_en: '',
   agreement_detail_zh: '',
   agreement_detail_en: '',
+};
+
+/** 将上传/详情接口返回的素材合并进列表（置顶，按 asset_id 去重）。 */
+const mergeAssetIntoList = (items, asset) => {
+  if (!asset?.asset_id) return items;
+  const rest = items.filter((a) => a.asset_id !== asset.asset_id);
+  return [asset, ...rest];
 };
 
 export const useMaterialLibrary = () => {
@@ -58,6 +68,9 @@ export const useMaterialLibrary = () => {
   // 已勾选合规协议标记（上传前置校验）。
   const [agreed, setAgreed] = useState(false);
 
+  const assetsRef = useRef(assets);
+  assetsRef.current = assets;
+
   const maxSizeMB = config.max_image_size_mb || 10;
 
   // 加载前端配置：失败时静默回退默认值，不打断页面。
@@ -70,30 +83,63 @@ export const useMaterialLibrary = () => {
     }
   }, []);
 
-  // 加载素材列表：统一异常处理（网络错误 / 业务失败）。
-  const loadAssets = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { success, message, data } = await listMaterialAssets({
-        page: 1,
-        pageSize: 100,
-      });
-      if (success) {
-        setAssets(data?.items || []);
-      } else {
-        showError(message || t('加载素材列表失败'));
+  // 加载素材列表：仅查本地库，不阻塞于上游同步。
+  const loadAssets = useCallback(
+    async ({ silent = false } = {}) => {
+      if (!silent) setLoading(true);
+      try {
+        const { success, message, data } = await listMaterialAssets({
+          page: 1,
+          pageSize: 100,
+        });
+        if (success) {
+          setAssets(data?.items || []);
+        } else if (!silent) {
+          showError(message || t('加载素材列表失败'));
+        }
+      } catch (e) {
+        if (!silent) showError(t('加载素材列表失败'));
+      } finally {
+        if (!silent) setLoading(false);
       }
-    } catch (e) {
-      showError(t('加载素材列表失败'));
-    } finally {
-      setLoading(false);
-    }
-  }, [t]);
+    },
+    [t],
+  );
 
   useEffect(() => {
     loadConfig();
     loadAssets();
   }, [loadConfig, loadAssets]);
+
+  // 后台轻量轮询：仅对 Pending 素材调用详情接口，避免整表刷新。
+  useEffect(() => {
+    const pollPendingAssets = async () => {
+      const pending = assetsRef.current.filter(
+        (a) => a.status === MaterialStatus.PENDING,
+      );
+      if (pending.length === 0) return;
+
+      const results = await Promise.all(
+        pending.map(async (a) => {
+          const { success, data } = await getMaterialAsset(a.asset_id);
+          return success && data ? data : null;
+        }),
+      );
+      const updates = new Map(
+        results.filter(Boolean).map((item) => [item.asset_id, item]),
+      );
+      if (updates.size === 0) return;
+
+      setAssets((prev) =>
+        prev.map((a) =>
+          updates.has(a.asset_id) ? { ...a, ...updates.get(a.asset_id) } : a,
+        ),
+      );
+    };
+
+    const timer = setInterval(pollPendingAssets, PENDING_POLL_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, []);
 
   /**
    * 本地文件上传。
@@ -126,15 +172,15 @@ export const useMaterialLibrary = () => {
       setUploading(true);
       setUploadProgress(0);
       try {
-        const { success, message } = await uploadMaterialFile(
+        const { success, message, data } = await uploadMaterialFile(
           fileInstance,
           agreed,
           {
             onUploadProgress: (ev) => {
               const total = ev.total || ev.loaded || 1;
               const raw = Math.round((ev.loaded * 100) / total);
-              // 文件传输最多展示到 90%，剩余 10% 留给服务端 CreateAsset + GetAsset 轮询。
-              setUploadProgress(Math.min(90, raw));
+              // 文件传输最多展示到 85%，剩余留给服务端 CreateAsset + GetAsset。
+              setUploadProgress(Math.min(85, raw));
             },
           },
         );
@@ -142,9 +188,16 @@ export const useMaterialLibrary = () => {
           showError(message || t('上传失败'));
           return false;
         }
+        // 服务端已轮询上游，直接结束进度并更新列表，不再前端二次轮询。
         setUploadProgress(100);
-        showSuccess(t('上传成功'));
-        await loadAssets();
+        showSuccess(
+          data?.status === MaterialStatus.PENDING
+            ? t('上传成功，素材仍在审核中')
+            : t('上传成功'),
+        );
+        if (data) {
+          setAssets((prev) => mergeAssetIntoList(prev, data));
+        }
         return true;
       } catch (e) {
         showError(t('上传失败，请重试'));
@@ -154,7 +207,7 @@ export const useMaterialLibrary = () => {
         setUploadProgress(null);
       }
     },
-    [agreed, maxSizeMB, t, loadAssets],
+    [agreed, maxSizeMB, t],
   );
 
   /**
@@ -178,9 +231,9 @@ export const useMaterialLibrary = () => {
       const assetType = detectAssetTypeByName(trimmed);
 
       setUploading(true);
-      setUploadProgress(30);
+      setUploadProgress(10);
       try {
-        const { success, message } = await uploadMaterialByURL({
+        const { success, message, data } = await uploadMaterialByURL({
           url: trimmed,
           name,
           assetType,
@@ -191,8 +244,14 @@ export const useMaterialLibrary = () => {
           return false;
         }
         setUploadProgress(100);
-        showSuccess(t('上传成功'));
-        await loadAssets();
+        showSuccess(
+          data?.status === MaterialStatus.PENDING
+            ? t('上传成功，素材仍在审核中')
+            : t('上传成功'),
+        );
+        if (data) {
+          setAssets((prev) => mergeAssetIntoList(prev, data));
+        }
         return true;
       } catch (e) {
         showError(t('上传失败，请重试'));
@@ -202,27 +261,27 @@ export const useMaterialLibrary = () => {
         setUploadProgress(null);
       }
     },
-    [agreed, t, loadAssets],
+    [agreed, t],
   );
 
   /**
-   * 删除素材（删除成功后刷新列表）。
+   * 删除素材（乐观更新列表，后台静默同步）。
    * @param {object} asset 素材对象
    * @returns {Promise<boolean>} 是否删除成功
    */
   const handleDelete = useCallback(
     async (asset) => {
-      if (!asset?.id) return false;
-      setDeletingId(asset.id);
+      const assetId = asset?.asset_id;
+      if (!assetId) return false;
+      setDeletingId(assetId);
       try {
-        const { success, message } = await deleteMaterialAsset(asset.id);
+        const { success, message } = await deleteMaterialAsset(assetId);
         if (!success) {
           showError(message || t('删除失败'));
           return false;
         }
+        setAssets((prev) => prev.filter((a) => a.asset_id !== assetId));
         showSuccess(t('删除成功'));
-        // 删除成功后刷新列表，移除对应资产。
-        await loadAssets();
         return true;
       } catch (e) {
         showError(t('删除失败，请重试'));
@@ -231,7 +290,7 @@ export const useMaterialLibrary = () => {
         setDeletingId(null);
       }
     },
-    [t, loadAssets],
+    [t],
   );
 
   return {

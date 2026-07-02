@@ -5748,7 +5748,14 @@
         "排名下降": "Giảm",
         "暂无上升模型": "Không có mô hình tăng",
         "暂无下降模型": "Không có mô hình giảm",
-        "暂无排行数据": "Chưa có dữ liệu xếp hạng"
+        "暂无排行数据": "Chưa có dữ liệu xếp hạng",
+        "分润用途筛选": "Bộ lọc loại tính phí",
+        "视频按Token": "Video (theo token)",
+        "视频其他": "Video (khác)",
+        "文本对话": "Trò chuyện văn bản",
+        "计费分类": "Loại tính phí",
+        "Token消耗": "Tiêu thụ token",
+        "未分类": "Chưa phân loại"
     },
     "广告按钮文案（英文）": "Button label (English)",
     "广告标题高亮词（英文）": "Title highlight (English)",

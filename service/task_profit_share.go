@@ -78,9 +78,33 @@ func TryPostWalletProfitShareForTaskBilledQuota(ctx context.Context, task *model
 	if reward <= 0 {
 		return
 	}
-	if err := model.CreditDistributorProfitShare(invitee.InviterId, task.UserId, task.ChannelId, modelName, billedQuota, slice, reward, bps); err != nil {
+	if err := model.CreditDistributorProfitShare(invitee.InviterId, task.UserId, task.ChannelId, modelName, billedQuota, slice, reward, bps, taskProfitShareTotalTokens(task, hintTotalTokens), taskProfitShareBillingMode(task)); err != nil {
 		common.SysError("TryPostWalletProfitShareForTaskBilledQuota: " + err.Error())
 	}
+}
+
+// taskProfitShareTotalTokens returns the token consumption for a task, preferring the hint.
+func taskProfitShareTotalTokens(task *model.Task, hintTotalTokens int) int {
+	if hintTotalTokens > 0 {
+		return hintTotalTokens
+	}
+	return 0
+}
+
+// taskProfitShareBillingMode classifies the profit-share billing mode for display/filtering.
+func taskProfitShareBillingMode(task *model.Task) string {
+	if task == nil {
+		return ""
+	}
+	bc := task.PrivateData.BillingContext
+	if bc != nil && strings.EqualFold(strings.TrimSpace(bc.VideoRuleUnit), VideoRuleUnitPerToken) {
+		return "video_token"
+	}
+	ch, err := model.CacheGetChannel(task.ChannelId)
+	if err == nil && ch != nil && constant.IsVideoTaskChannel(ch.Type) {
+		return "video"
+	}
+	return "text"
 }
 
 func taskProfitShareMarkupSliceRatio(task *model.Task, hintTotalTokens int) (float64, bool) {
@@ -92,6 +116,10 @@ func taskProfitShareMarkupSliceRatio(task *model.Task, hintTotalTokens int) (flo
 		return 0, false
 	}
 	if constant.IsVideoTaskChannel(ch.Type) {
+		// 视频按 Token 规则计费：BillingContext 快照单价与 per_video 相同的两档公式，不依赖 ModelRatio。
+		if r, ok := taskProfitShareMarkupRatioVideoPerTokenSubmitInput(task); ok {
+			return r, true
+		}
 		if r, ok := taskProfitShareMarkupRatioVideoComplete(task); ok {
 			return r, true
 		}
@@ -166,6 +194,59 @@ func taskProfitShareMarkupRatioVideoSubmitInput(task *model.Task) (float64, bool
 		return 0, false
 	}
 	return float64(qW-q0) / float64(qW), true
+}
+
+func taskProfitShareMarkupRatioVideoPerTokenSubmitInput(task *model.Task) (float64, bool) {
+	if r, ok := taskProfitShareMarkupRatioVideoPerTokenSnapshot(task); ok {
+		return r, true
+	}
+	if task == nil || strings.TrimSpace(task.Properties.Input) == "" {
+		return 0, false
+	}
+	var req relaycommon.TaskSubmitReq
+	if err := common.UnmarshalJsonStr(task.Properties.Input, &req); err != nil {
+		return 0, false
+	}
+	modelName := strings.TrimSpace(taskModelName(task))
+	if modelName == "" {
+		return 0, false
+	}
+	mode := detectVideoBillingModeFromTaskReq(&req)
+	width, height := videoDimensionsFromTaskRequest(req)
+	hasAudio := taskRequestHasAudio(req)
+	channelUSD := channelVideoPerTokenUSD(task.ChannelId, modelName, mode, width, height, hasAudio)
+	if channelUSD <= 0 {
+		return 0, false
+	}
+	groupRatio := 1.0
+	if task.PrivateData.BillingContext != nil && task.PrivateData.BillingContext.GroupRatio > 0 {
+		groupRatio = task.PrivateData.BillingContext.GroupRatio
+	}
+	costDisc := channelCostDiscountPercentFromTask(task)
+	markup := markupDiscountPercentFromTask(task, modelName)
+	globalUSD := globalVideoPerTokenUSD(modelName, mode, width, height, hasAudio)
+	return taskProfitShareMarkupRatioFromRulePrices(channelUSD, globalUSD, costDisc, markup, groupRatio)
+}
+
+func taskProfitShareMarkupRatioVideoPerTokenSnapshot(task *model.Task) (float64, bool) {
+	if task == nil || task.PrivateData.BillingContext == nil {
+		return 0, false
+	}
+	bc := task.PrivateData.BillingContext
+	if !strings.EqualFold(strings.TrimSpace(bc.VideoRuleUnit), VideoRuleUnitPerToken) || bc.VideoChannelRulePrice <= 0 {
+		return 0, false
+	}
+	modelName := strings.TrimSpace(taskModelName(task))
+	if modelName == "" {
+		return 0, false
+	}
+	groupRatio := bc.GroupRatio
+	if groupRatio <= 0 {
+		groupRatio = 1
+	}
+	costDisc := channelCostDiscountPercentFromTask(task)
+	markup := markupDiscountPercentFromTask(task, modelName)
+	return taskProfitShareMarkupRatioFromRulePrices(bc.VideoChannelRulePrice, bc.VideoGlobalRulePrice, costDisc, markup, groupRatio)
 }
 
 func taskProfitShareMarkupRatioVideoPerVideoSubmitInput(task *model.Task) (float64, bool) {

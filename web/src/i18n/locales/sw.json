@@ -5748,7 +5748,14 @@
         "排名下降": "Inashuka",
         "暂无上升模型": "Hakuna mifano inayopanda",
         "暂无下降模型": "Hakuna mifano inayoshuka",
-        "暂无排行数据": "Hakuna data ya ukadiriaji"
+        "暂无排行数据": "Hakuna data ya ukadiriaji",
+        "分润用途筛选": "Chujio la aina ya ubilling",
+        "视频按Token": "Video (kwa token)",
+        "视频其他": "Video (nyingine)",
+        "文本对话": "Mazungumzo ya maandishi",
+        "计费分类": "Aina ya ubilling",
+        "Token消耗": "Matumizi ya token",
+        "未分类": "Haijasainishwa"
     },
     "广告按钮文案（英文）": "Button label (English)",
     "广告标题高亮词（英文）": "Title highlight (English)",

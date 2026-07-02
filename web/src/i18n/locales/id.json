@@ -5748,7 +5748,14 @@
         "排名下降": "Turun",
         "暂无上升模型": "Tidak ada model naik",
         "暂无下降模型": "Tidak ada model turun",
-        "暂无排行数据": "Belum ada data peringkat"
+        "暂无排行数据": "Belum ada data peringkat",
+        "分润用途筛选": "Filter jenis penagihan",
+        "视频按Token": "Video (per token)",
+        "视频其他": "Video (lain)",
+        "文本对话": "Obrolan teks",
+        "计费分类": "Jenis penagihan",
+        "Token消耗": "Penggunaan token",
+        "未分类": "Tidak dikategorikan"
     },
     "广告按钮文案（英文）": "Button label (English)",
     "广告标题高亮词（英文）": "Title highlight (English)",

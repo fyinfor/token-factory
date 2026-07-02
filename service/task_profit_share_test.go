@@ -116,6 +116,137 @@ func TestTryPostWalletProfitShareForTaskBilledQuota_SeedancePerVideoMarkup(t *te
 	}
 }
 
+func TestTryPostWalletProfitShareForTaskBilledQuota_SeedancePerTokenMarkup(t *testing.T) {
+	require.NoError(t, model.DB.AutoMigrate(
+		&model.AffInviteRelation{},
+		&model.AffInviteProfitShareLog{},
+	))
+
+	oldMode := common.DistributorCommissionMode
+	oldQuotaPerUnit := common.QuotaPerUnit
+	oldVideoRules := ratio_setting.VideoPricingRules2JSONString()
+	oldChannelVideoRules := ratio_setting.ChannelVideoPricingRules2JSONString()
+	t.Cleanup(func() {
+		common.DistributorCommissionMode = oldMode
+		common.QuotaPerUnit = oldQuotaPerUnit
+		require.NoError(t, ratio_setting.UpdateVideoPricingRulesByJSONString(oldVideoRules))
+		require.NoError(t, ratio_setting.UpdateChannelVideoPricingRulesByJSONString(oldChannelVideoRules))
+		model.DB.Exec("DELETE FROM aff_invite_profit_share_logs")
+		model.DB.Exec("DELETE FROM aff_invite_relations")
+		model.DB.Exec("DELETE FROM channels")
+		model.DB.Exec("DELETE FROM users")
+	})
+
+	common.DistributorCommissionMode = common.DistributorCommissionModeProfitShare
+	common.QuotaPerUnit = 500000
+	seedSeedancePerTokenRules(t)
+
+	const totalTokens = 50638
+	input := `{"model":"Seedance2.0","prompt":"test","size":"854x480","metadata":{"has_audio":false}}`
+	channelPrice := 0.15
+	globalPrice := 0.20
+
+	for _, markup := range []float64{0, 30, 31} {
+		t.Run(fmt.Sprintf("per_token_%.0f", markup), func(t *testing.T) {
+			resetSeedanceProfitShareData(t, markup)
+
+			markupSnapshot := markup
+			effW := model.EffectiveRuleUnitPrice(channelPrice, globalPrice, 69, markup)
+			billedQuota := int(math.Round((float64(totalTokens) / VideoTokenPricePerMillion) * effW * common.QuotaPerUnit))
+
+			task := &model.Task{
+				TaskID:    "task_seedance_per_token_profit_share",
+				UserId:    3,
+				ChannelId: 2,
+				Quota:     billedQuota,
+				Group:     "default",
+				Status:    model.TaskStatusSuccess,
+				Properties: model.Properties{
+					Input:           input,
+					OriginModelName: "Seedance2.0",
+				},
+				PrivateData: model.TaskPrivateData{
+					BillingSource: BillingSourceWallet,
+					BillingContext: &model.TaskBillingContext{
+						GroupRatio:                  1,
+						OriginModelName:             "Seedance2.0",
+						ChannelPriceDiscountPercent: 69,
+						MarkupDiscountPercent:       &markupSnapshot,
+						VideoRuleUnit:               VideoRuleUnitPerToken,
+						VideoBillingMode:            "text_to_video",
+						VideoChannelRulePrice:       channelPrice,
+						VideoGlobalRulePrice:        globalPrice,
+						VideoRuleWidth:              854,
+						VideoRuleHeight:             480,
+						VideoRuleHasAudio:           false,
+					},
+				},
+			}
+
+			ratio, ok := taskProfitShareMarkupRatioVideoPerTokenSnapshot(task)
+			var markupSlice, expectedReward int
+			if markup > 0 {
+				require.True(t, ok)
+				markupSlice = int(math.Round(float64(billedQuota) * ratio))
+				expectedReward = int(int64(markupSlice) * 9000 / 10000)
+			} else {
+				require.False(t, ok)
+			}
+
+			TryPostWalletProfitShareForTaskBilledQuota(context.Background(), task, billedQuota, totalTokens)
+
+			var inviter model.User
+			require.NoError(t, model.DB.Select("aff_quota", "aff_history").Where("id = ?", 2).First(&inviter).Error)
+			require.Equal(t, expectedReward, inviter.AffQuota)
+			require.Equal(t, expectedReward, inviter.AffHistoryQuota)
+
+			var rel model.AffInviteRelation
+			require.NoError(t, model.DB.Where("inviter_id = ? AND invitee_user_id = ?", 2, 3).First(&rel).Error)
+			require.Equal(t, expectedReward, rel.ProfitShareEarnedQuota)
+
+			var logs []model.AffInviteProfitShareLog
+			require.NoError(t, model.DB.Order("id ASC").Find(&logs).Error)
+			if expectedReward == 0 {
+				require.Empty(t, logs)
+				return
+			}
+			require.Len(t, logs, 1)
+			require.Equal(t, billedQuota, logs[0].UserQuotaCharged)
+			require.Equal(t, markupSlice, logs[0].MarkupSliceQuota)
+			require.Equal(t, expectedReward, logs[0].RewardQuota)
+			require.Equal(t, totalTokens, logs[0].TotalTokens)
+			require.Equal(t, "video_token", logs[0].BillingMode)
+			require.Equal(t, 9000, logs[0].CommissionBps)
+		})
+	}
+}
+
+func seedSeedancePerTokenRules(t *testing.T) {
+	t.Helper()
+	channelRules := map[string]map[string]ratio_setting.VideoPricingRules{
+		"2": {
+			"Seedance2.0": {
+				TextToVideoPerToken: []ratio_setting.VideoResolutionAudioPriceRule{
+					{Resolution: "854x480", HasAudio: false, Price: 0.15},
+				},
+			},
+		},
+	}
+	globalRules := map[string]ratio_setting.VideoPricingRules{
+		"Seedance2.0": {
+			TextToVideoPerToken: []ratio_setting.VideoResolutionAudioPriceRule{
+				{Resolution: "854x480", HasAudio: false, Price: 0.20},
+			},
+		},
+	}
+	channelJSON, err := common.Marshal(channelRules)
+	require.NoError(t, err)
+	globalJSON, err := common.Marshal(globalRules)
+	require.NoError(t, err)
+	require.NoError(t, ratio_setting.UpdateChannelVideoPricingRulesByJSONString(string(channelJSON)))
+	require.NoError(t, ratio_setting.UpdateVideoPricingRulesByJSONString(string(globalJSON)))
+}
+
 func seedSeedancePerVideoRules(t *testing.T) {
 	t.Helper()
 	channelRules := map[string]map[string]ratio_setting.VideoPricingRules{

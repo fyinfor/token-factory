@@ -36,6 +36,7 @@ import {
   Input,
   InputNumber,
   Popconfirm,
+  Select,
   Tag,
   Spin,
 } from '@douyinfe/semi-ui';
@@ -265,6 +266,8 @@ export default function DistributorCenter() {
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
   const [selectedInviteeIds, setSelectedInviteeIds] = useState([]);
   const [inviteeKeyword, setInviteeKeyword] = useState('');
+  /** 分润分类筛选：video_token(视频按Token)、video(视频其他)、text(文本)、''(全部) */
+  const [billingModeFilter, setBillingModeFilter] = useState('');
   const [batchDiscountSubmitting, setBatchDiscountSubmitting] = useState(false);
   const [openTransfer, setOpenTransfer] = useState(false);
   const [transferAmount, setTransferAmount] = useState(() => getQuotaPerUnit());
@@ -1586,6 +1589,25 @@ export default function DistributorCenter() {
               >
                 {t('查询')}
               </Button>
+              {isProfitShareMode ? (
+                <Select
+                  value={billingModeFilter}
+                  onChange={(v) => setBillingModeFilter(v || '')}
+                  style={{ width: 180 }}
+                  placeholder={t('分润用途筛选')}
+                >
+                  <Select.Option value=''>{'全部类型'}</Select.Option>
+                  <Select.Option value='video_token'>
+                    {t('视频按Token')}
+                  </Select.Option>
+                  <Select.Option value='video'>
+                    {t('视频其他')}
+                  </Select.Option>
+                  <Select.Option value='text'>
+                    {t('文本对话')}
+                  </Select.Option>
+                </Select>
+              ) : null}
             </div>
             <Table
               rowKey='invitee_id'
@@ -1617,6 +1639,7 @@ export default function DistributorCenter() {
         inviteeId={detailInviteeId}
         inviteeLabel={detailInviteeLabel}
         commissionMode={isProfitShareMode ? 'profit_share' : 'topup'}
+        billingModeFilter={billingModeFilter}
       />
 
       <InviteeTopupHistoryModal
