@@ -1,9 +1,11 @@
-# 手动触发：构建根目录 Dockerfile，推送到 GitHub Container Registry (ghcr.io)。
-# 拉取示例：docker pull ghcr.io/<小写 owner>/<小写仓库名>:latest
+# 手动触发：构建根目录 Dockerfile，双推送到 GHCR 与阿里云 ACR（个人版实例，杭州）。
+# 拉取示例：
+#   GHCR：docker pull ghcr.io/<小写 owner>/<小写仓库名>:latest
+#   ACR：docker pull crpi-sk2z151c9de4cnvh.cn-hangzhou.personal.cr.aliyuncs.com/fyinfor123/token-factory:latest
 # 缓存：GHA Buildx 层缓存（按仓库隔离的 scope）
 # 多架构发布、Docker Hub 等另见 workflows/docker-image-arm64.yml、release.yml
 
-name: 编译 Docker 镜像 (GHCR)
+name: 编译 Docker 镜像 (GHCR + ACR)
 
 on:
   workflow_dispatch:
@@ -14,6 +16,8 @@ permissions:
 
 env:
   DOCKER_BUILDKIT: 1
+  REGISTRY_ACR: crpi-sk2z151c9de4cnvh.cn-hangzhou.personal.cr.aliyuncs.com
+  IMAGE_NAME_ACR: fyinfor123/token-factory
 
 jobs:
   build-image:
@@ -40,17 +44,25 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Login to Alibaba Cloud ACR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ env.REGISTRY_ACR }}
+          username: ${{ secrets.ACR_ALLINONE_USERNAME }}
+          password: ${{ secrets.ACR_ALLINONE_PASSWORD }}
+
       - name: Docker metadata
         id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: |
             ${{ steps.ghcr.outputs.image }}
+            ${{ env.REGISTRY_ACR }}/${{ env.IMAGE_NAME_ACR }}
           tags: |
             type=raw,value=latest
             type=sha,prefix=,format=short
 
-      - name: Build and push
+      - name: Build and push (GHCR + ACR)
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
@@ -66,8 +78,15 @@ jobs:
 
       - name: 构建摘要（拉取地址）
         run: |
-          echo "## GHCR 镜像已推送" >> "$GITHUB_STEP_SUMMARY"
+          sha_short=$(echo '${{ github.sha }}' | cut -c1-7)
+          acr_image="${{ env.REGISTRY_ACR }}/${{ env.IMAGE_NAME_ACR }}"
+          echo "## 镜像已推送（GHCR + 阿里云 ACR）" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### GHCR" >> "$GITHUB_STEP_SUMMARY"
           echo "- **Packages**：\`https://github.com/${{ github.repository }}/pkgs/container/${{ steps.ghcr.outputs.repo_pkg }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "- **拉取 latest**：\`docker pull ${{ steps.ghcr.outputs.image }}:latest\`" >> "$GITHUB_STEP_SUMMARY"
-          echo "- **按提交短 SHA**：\`docker pull ${{ steps.ghcr.outputs.image }}:$(echo '${{ github.sha }}' | cut -c1-7)\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **按提交短 SHA**：\`docker pull ${{ steps.ghcr.outputs.image }}:${sha_short}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "### 阿里云 ACR" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **拉取 latest**：\`docker pull ${acr_image}:latest\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **按提交短 SHA**：\`docker pull ${acr_image}:${sha_short}\`" >> "$GITHUB_STEP_SUMMARY"
