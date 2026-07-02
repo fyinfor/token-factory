@@ -231,7 +231,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 	}()
 
-	for ; retryParam.GetRetry() <= common.RetryTimes; retryParam.IncreaseRetry() {
+	maxRelayRetries := service.RouteOrderedMaxRetries(c)
+	for ; retryParam.GetRetry() <= maxRelayRetries; retryParam.IncreaseRetry() {
 		relayInfo.RetryIndex = retryParam.GetRetry()
 		channel := firstChannel
 		if retryParam.GetRetry() > 0 {
@@ -260,7 +261,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			tokenFactoryError = types.NewError(priceErr, types.ErrorCodeModelPriceError)
 			relayInfo.LastError = tokenFactoryError
 			processChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, common.GetContextKeyString(c, constant.ContextKeyChannelKey), channel.GetAutoBan()), tokenFactoryError)
-			if !shouldRetry(c, tokenFactoryError, common.RetryTimes-retryParam.GetRetry()) {
+			if !shouldRetry(c, tokenFactoryError, maxRelayRetries-retryParam.GetRetry()) {
 				break
 			}
 			continue
@@ -304,7 +305,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		// 反馈给 TokenFactory 黏性熔断器：仅统计 TF 选中的那个渠道的连续报错。
 		service.RecordTFRouteResult(c, channel.Id, false)
 
-		if !shouldRetry(c, tokenFactoryError, common.RetryTimes-retryParam.GetRetry()) {
+		if !shouldRetry(c, tokenFactoryError, maxRelayRetries-retryParam.GetRetry()) {
 			break
 		}
 	}
@@ -410,20 +411,20 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 			)
 		}
 	}
-	if orderAny, ok := common.GetContextKey(c, constant.ContextKeySmartRouteChannelOrder); ok {
-		if order, ok := orderAny.([]int); ok && len(order) > 0 {
-			idx := retryParam.GetRetry()
-			if idx < len(order) {
-				ch, chErr := model.CacheGetChannel(order[idx])
-				if chErr == nil && ch != nil && ch.Status == common.ChannelStatusEnabled {
-					info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
-					if tfErr := middleware.SetupContextForSelectedChannel(c, ch, info.OriginModelName); tfErr != nil {
-						return nil, tfErr
-					}
-					return ch, nil
-				}
+	if order, ok := service.RouteOrderedChannelIDs(c); ok {
+		if ch, picked := service.PickNextOrderedRouteChannel(c, order); picked {
+			info.PriceData.GroupRatioInfo = helper.HandleGroupRatio(c, info)
+			if tfErr := middleware.SetupContextForSelectedChannel(c, ch, info.OriginModelName); tfErr != nil {
+				return nil, tfErr
 			}
+			service.RefreshTFRouteStickyChannel(c, ch.Id)
+			return ch, nil
 		}
+		return nil, types.NewError(
+			fmt.Errorf("有序路由候选已用尽"),
+			types.ErrorCodeGetChannelFailed,
+			types.ErrOptionWithSkipRetry(),
+		)
 	}
 	// 命中「指定供应商 + 任意渠道」时，候选池已限定；order 列表耗尽意味着供应商内无更多可用渠道，
 	// 不应回落到全局的 CacheGetRandomSatisfiedChannel（那会跨供应商），直接结束重试。
@@ -647,7 +648,8 @@ func RelayTask(c *gin.Context) {
 		Retry:      common.GetPointer(0),
 	}
 
-	for ; retryParam.GetRetry() <= common.RetryTimes; retryParam.IncreaseRetry() {
+	maxRelayRetries := service.RouteOrderedMaxRetries(c)
+	for ; retryParam.GetRetry() <= maxRelayRetries; retryParam.IncreaseRetry() {
 		var channel *model.Channel
 
 		if lockedCh, ok := relayInfo.LockedChannel.(*model.Channel); ok && lockedCh != nil {

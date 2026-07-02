@@ -833,6 +833,8 @@ func tryTokenFactoryRoute(c *gin.Context, modelName string, group string) (*mode
 	if err != nil || ch == nil || ch.Status != common.ChannelStatusEnabled {
 		return nil, false
 	}
+	// 写入有序候选供 relay 在同请求内按路由模式 failover（与 SmartRouter 一致）。
+	common.SetContextKey(c, constant.ContextKeySmartRouteChannelOrder, ordered)
 	logger.LogInfo(c, fmt.Sprintf("tf_route selected: channel=%s(id=%d) model=%s group=%s strategy=%s ordered=%v", ch.Name, ch.Id, modelName, groupKey, strategy, ordered))
 	return ch, true
 }
