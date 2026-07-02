@@ -13,17 +13,40 @@ import (
 )
 
 type TopUp struct {
-	Id               int     `json:"id"`
-	UserId           int     `json:"user_id" gorm:"index"`
+	Id     int `json:"id"`
+	UserId int `json:"user_id" gorm:"index"`
 	// Username 列表接口填充，关联 users.username，仅 JSON 输出，不参与持久化（不使用 omitempty，便于前端始终拿到字段）
-	Username         string  `json:"username" gorm:"-"`
-	Amount           int64   `json:"amount"`
-	Money            float64 `json:"money"`
-	TradeNo          string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
-	PaymentMethod    string  `json:"payment_method" gorm:"type:varchar(50)"`
-	CreateTime       int64   `json:"create_time"`
-	CompleteTime     int64   `json:"complete_time"`
-	Status           string  `json:"status"`
+	Username      string  `json:"username" gorm:"-"`
+	Amount        int64   `json:"amount"`
+	Money         float64 `json:"money"`
+	InputAmount   float64 `json:"input_amount" gorm:"default:0"`
+	InputCurrency string  `json:"input_currency" gorm:"type:varchar(16);default:''"`
+	PayCurrency   string  `json:"pay_currency" gorm:"type:varchar(16);default:''"`
+	QuotaToAdd    int     `json:"quota_to_add" gorm:"default:0"`
+	TradeNo       string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
+	PaymentMethod string  `json:"payment_method" gorm:"type:varchar(50)"`
+	CreateTime    int64   `json:"create_time"`
+	CompleteTime  int64   `json:"complete_time"`
+	Status        string  `json:"status"`
+}
+
+func (topUp *TopUp) ResolveQuotaToAdd() int {
+	if topUp == nil {
+		return 0
+	}
+	if topUp.QuotaToAdd > 0 {
+		return topUp.QuotaToAdd
+	}
+	switch strings.ToLower(strings.TrimSpace(topUp.PaymentMethod)) {
+	case "stripe":
+		return common.QuotaFromUSD(topUp.Money)
+	case "creem":
+		return int(topUp.Amount)
+	default:
+		dAmount := decimal.NewFromInt(topUp.Amount)
+		dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+		return int(dAmount.Mul(dQuotaPerUnit).IntPart())
+	}
 }
 
 func (topUp *TopUp) Insert() error {
@@ -104,7 +127,7 @@ func Recharge(referenceId string, customerId string) (err error) {
 		return errors.New("未提供支付单号")
 	}
 
-	var quota float64
+	var quota int
 	topUp := &TopUp{}
 
 	refCol := "`trade_no`"
@@ -129,7 +152,10 @@ func Recharge(referenceId string, customerId string) (err error) {
 			return err
 		}
 
-		quota = topUp.Money * common.QuotaPerUnit
+		quota = topUp.ResolveQuotaToAdd()
+		if quota <= 0 {
+			return errors.New("无效的充值额度")
+		}
 		err = tx.Model(&User{}).Where("id = ?", topUp.UserId).Updates(map[string]interface{}{"stripe_customer": customerId, "quota": gorm.Expr("quota + ?", quota)}).Error
 		if err != nil {
 			return err
@@ -143,9 +169,9 @@ func Recharge(referenceId string, customerId string) (err error) {
 		return errors.New("充值失败，请稍后重试")
 	}
 
-	RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%d", logger.FormatQuota(int(quota)), topUp.Amount))
+	RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%d", logger.FormatQuota(quota), topUp.Amount))
 
-	ApplyAffiliateTopupReward(topUp.UserId, int(quota))
+	ApplyAffiliateTopupReward(topUp.UserId, quota)
 	return nil
 }
 
@@ -162,7 +188,7 @@ func RechargeStripe(referenceId string, customerId string, paidMoney float64, cu
 		return errors.New("不支持的支付币种")
 	}
 
-	var quota float64
+	var quota int
 	topUp := &TopUp{}
 
 	refCol := "`trade_no`"
@@ -197,7 +223,10 @@ func RechargeStripe(referenceId string, customerId string, paidMoney float64, cu
 			return err
 		}
 
-		quota = topUp.Money * common.QuotaPerUnit
+		quota = topUp.ResolveQuotaToAdd()
+		if quota <= 0 {
+			return errors.New("无效的充值额度")
+		}
 		err = tx.Model(&User{}).Where("id = ?", topUp.UserId).Updates(map[string]interface{}{"stripe_customer": customerId, "quota": gorm.Expr("quota + ?", quota)}).Error
 		if err != nil {
 			return err
@@ -211,8 +240,8 @@ func RechargeStripe(referenceId string, customerId string, paidMoney float64, cu
 		return errors.New("充值失败，请稍后重试")
 	}
 
-	RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%d", logger.FormatQuota(int(quota)), topUp.Amount))
-	ApplyAffiliateTopupReward(topUp.UserId, int(quota))
+	RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%d", logger.FormatQuota(quota), topUp.Amount))
+	ApplyAffiliateTopupReward(topUp.UserId, quota)
 	return nil
 }
 
@@ -368,17 +397,7 @@ func ManualCompleteTopUp(tradeNo string, adminUsername string) error {
 			return errors.New("订单状态不是待支付，无法补单")
 		}
 
-		// 计算应充值额度：
-		// - Stripe 订单：Money 代表经分组倍率换算后的美元数量，直接 * QuotaPerUnit
-		// - 其他订单（如易支付）：Amount 为美元数量，* QuotaPerUnit
-		if topUp.PaymentMethod == "stripe" {
-			dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
-			quotaToAdd = int(decimal.NewFromFloat(topUp.Money).Mul(dQuotaPerUnit).IntPart())
-		} else {
-			dAmount := decimal.NewFromInt(topUp.Amount)
-			dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
-			quotaToAdd = int(dAmount.Mul(dQuotaPerUnit).IntPart())
-		}
+		quotaToAdd = topUp.ResolveQuotaToAdd()
 		if quotaToAdd <= 0 {
 			return errors.New("无效的充值额度")
 		}
@@ -445,8 +464,10 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 			return err
 		}
 
-		// Creem 直接使用 Amount 作为充值额度（整数）
-		quota = topUp.Amount
+		quota = int64(topUp.ResolveQuotaToAdd())
+		if quota <= 0 {
+			return errors.New("无效的充值额度")
+		}
 
 		// 构建更新字段，优先使用邮箱，如果邮箱为空则使用用户名
 		updateFields := map[string]interface{}{
@@ -514,9 +535,7 @@ func RechargeWaffo(tradeNo string) (err error) {
 			return errors.New("充值订单状态错误")
 		}
 
-		dAmount := decimal.NewFromInt(topUp.Amount)
-		dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
-		quotaToAdd = int(dAmount.Mul(dQuotaPerUnit).IntPart())
+		quotaToAdd = topUp.ResolveQuotaToAdd()
 		if quotaToAdd <= 0 {
 			return errors.New("无效的充值额度")
 		}

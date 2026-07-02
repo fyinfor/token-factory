@@ -39,6 +39,7 @@ const PaymentConfirmModal = ({
   // 新增：用于显示折扣明细
   amountNumber,
   discountRate,
+  creditDisplay = '',
   rechargeDisplayCurrency = 'USD',
 }) => {
   /** getRechargeCurrencyMeta 计算充值金额展示币种（仅 UI 文案）。 */
@@ -99,6 +100,16 @@ const PaymentConfirmModal = ({
                 </div>
               )}
             </div>
+            {creditDisplay && (
+              <div className='flex justify-between items-center'>
+                <Text strong className='text-slate-700 dark:text-slate-200'>
+                  {t('到账额度')}：
+                </Text>
+                <Text className='text-slate-900 dark:text-slate-100'>
+                  {creditDisplay}
+                </Text>
+              </div>
+            )}
             {hasDiscount && !amountLoading && (
               <>
                 <div className='flex justify-between items-center'>
