@@ -235,16 +235,8 @@ func ListMaterialAssets(c *gin.Context) {
 		return
 	}
 
-	// 对仍需同步的素材做 best-effort 状态刷新（最多刷新 10 条，避免阻塞）。
-	refreshed := 0
 	items := make([]materialAssetResponse, 0, len(assets))
 	for _, a := range assets {
-		if materialAssetNeedsUpstreamRefresh(a) && refreshed < 10 && operation_setting.IsSeedanceReady() {
-			if info, e := service.MaterialGetAsset(a.AssetId); e == nil {
-				refreshMaterialAssetFromUpstream(a, info)
-			}
-			refreshed++
-		}
 		items = append(items, toMaterialAssetResponse(a))
 	}
 
@@ -743,16 +735,8 @@ func ListPersonalMaterialAssets(c *gin.Context) {
 		return
 	}
 
-	// 复用列表页 best-effort 状态刷新逻辑（最多刷新 10 条，避免阻塞）。
-	refreshed := 0
 	items := make([]materialAssetResponse, 0, len(assets))
 	for _, a := range assets {
-		if materialAssetNeedsUpstreamRefresh(a) && refreshed < 10 && operation_setting.IsSeedanceReady() {
-			if info, e := service.MaterialGetAsset(a.AssetId); e == nil {
-				refreshMaterialAssetFromUpstream(a, info)
-			}
-			refreshed++
-		}
 		items = append(items, toMaterialAssetResponse(a))
 	}
 

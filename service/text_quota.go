@@ -581,7 +581,7 @@ func tryPostWalletProfitShareCredit(ctx *gin.Context, relayInfo *relaycommon.Rel
 		chID = relayInfo.ChannelId
 	}
 	modelName := strings.TrimSpace(summary.ModelName)
-	if err := model.CreditDistributorProfitShare(invitee.InviterId, relayInfo.UserId, chID, modelName, summary.Quota, slice, reward, bps); err != nil {
+	if err := model.CreditDistributorProfitShare(invitee.InviterId, relayInfo.UserId, chID, modelName, summary.Quota, slice, reward, bps, summary.TotalTokens, "text"); err != nil {
 		common.SysError("tryPostWalletProfitShareCredit: " + err.Error())
 	}
 }
