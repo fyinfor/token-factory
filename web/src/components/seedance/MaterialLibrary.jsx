@@ -192,7 +192,7 @@ const MaterialLibrary = () => {
 
     return (
       <Card
-        key={asset.id}
+        key={asset.asset_id}
         className='material-asset-card'
         style={{ width: 200 }}
         bodyStyle={{ padding: 0 }}
@@ -304,7 +304,7 @@ const MaterialLibrary = () => {
                 type='danger'
                 theme='borderless'
                 icon={<IconDelete />}
-                loading={deletingId === asset.id}
+                loading={deletingId === asset.asset_id}
                 aria-label={t('删除')}
               />
             </Popconfirm>
@@ -410,7 +410,7 @@ const MaterialLibrary = () => {
             </Text>
           </Space>
 
-          {uploadProgress != null && (
+          {uploadProgress != null && !urlModalVisible && (
             <Progress
               percent={uploadDisplayPct ?? uploadProgress}
               showInfo
@@ -444,12 +444,21 @@ const MaterialLibrary = () => {
       <Modal
         title={t('通过在线链接上传')}
         visible={urlModalVisible}
-        onCancel={() => setUrlModalVisible(false)}
+        onCancel={() => !uploading && setUrlModalVisible(false)}
         onOk={submitUrlUpload}
         okText={t('上传')}
         cancelText={t('取消')}
         confirmLoading={uploading}
+        closable={!uploading}
+        maskClosable={!uploading}
       >
+        {uploadProgress != null && (
+          <Progress
+            percent={uploadDisplayPct ?? uploadProgress}
+            showInfo
+            style={{ marginBottom: 16 }}
+          />
+        )}
         <div style={{ marginBottom: 12 }}>
           <Text>{t('资源链接')}</Text>
           <Input

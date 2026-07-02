@@ -33,6 +33,8 @@
         "上传成功": "Uploaded",
         "上传失败": "Upload failed",
         "上传失败，请重试": "Upload failed, please try again",
+        "上传成功，素材仍在审核中": "Uploaded; the material is still under review",
+        "素材审核失败": "Material review failed",
         "加载素材列表失败": "Failed to load material list",
         "可用": "Available",
         "失败": "Failed",
