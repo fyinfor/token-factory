@@ -24,6 +24,7 @@ import { fetchPerfMetricsSummary } from '../../helpers/perfMetrics';
 import { Modal } from '@douyinfe/semi-ui';
 import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
+import { modelMatchesSearchTerm } from '../../components/table/model-pricing/utils/channelRoute';
 
 export const useModelPricingData = (options = {}) => {
   const { defaultSortKey = 'default' } = options;
@@ -213,18 +214,10 @@ export const useModelPricingData = (options = {}) => {
       });
     }
 
-    // 搜索筛选
+    // 搜索筛选（含渠道路径、route_slug、supplier_alias 等）
     if (searchValue.length > 0) {
-      const searchTerm = searchValue.toLowerCase();
-      result = result.filter(
-        (model) =>
-          (model.model_name &&
-            model.model_name.toLowerCase().includes(searchTerm)) ||
-          (model.description &&
-            model.description.toLowerCase().includes(searchTerm)) ||
-          (model.tags && model.tags.toLowerCase().includes(searchTerm)) ||
-          (model.vendor_name &&
-            model.vendor_name.toLowerCase().includes(searchTerm)),
+      result = result.filter((model) =>
+        modelMatchesSearchTerm(model, searchValue),
       );
     }
 

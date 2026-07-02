@@ -77,6 +77,7 @@ import ModelPerfCardSection from '../../components/ModelPerfCardSection';
 import { useMinimumLoadingTime } from '../../../../../hooks/common/useMinimumLoadingTime';
 import { renderLimitedItems } from '../../../../common/ui/RenderUtils';
 import { useIsMobile } from '../../../../../hooks/common/useIsMobile';
+import { getModelChannelRouteSuffixes } from '../../utils/channelRoute';
 const CARD_STYLES = {
   container:
     'w-12 h-12 rounded-xl flex items-center justify-center relative shadow-sm border border-semi-color-border bg-white',
@@ -1636,10 +1637,25 @@ const PricingCardView = ({
       });
     }
 
+    const channelSuffixTags = getModelChannelRouteSuffixes(record).map(
+      (suffix, idx) => (
+        <Tag
+          key={`channel-${idx}`}
+          shape='circle'
+          color='blue'
+          type='light'
+          size='small'
+        >
+          {renderHighlightedText(suffix)}
+        </Tag>
+      ),
+    );
+
     return (
       <div className='flex items-center justify-between'>
         <div className='flex items-center gap-2'>
           {billingTag}
+          {channelSuffixTags}
         </div>
         <div className='flex items-center gap-1'>
           {customTags.length > 0 &&

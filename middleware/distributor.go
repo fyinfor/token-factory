@@ -147,6 +147,14 @@ func Distribute() func(c *gin.Context) {
 					return
 				}
 
+				if allowed, err := model.UserCanAccessAnyModelName(c.GetInt("id"), modelRequest.Model); err != nil {
+					abortWithOpenAiMessage(c, http.StatusInternalServerError, err.Error())
+					return
+				} else if !allowed {
+					abortWithOpenAiMessage(c, http.StatusForbidden, fmt.Sprintf("无权访问模型 %s", modelRequest.Model), types.ErrorCodeAccessDenied)
+					return
+				}
+
 				// 命中「指定渠道直连」：跳过所有自动路由（亲和/SmartRouter/随机）直接使用，
 				// 并同步写入 specific_channel_id，以便 controller.shouldRetry 关闭自动重试。
 				if rawForced, hasForced := common.GetContextKey(c, constant.ContextKeyForcedChannelID); hasForced {
@@ -828,4 +836,3 @@ func tryTokenFactoryRoute(c *gin.Context, modelName string, group string) (*mode
 	logger.LogInfo(c, fmt.Sprintf("tf_route selected: channel=%s(id=%d) model=%s group=%s strategy=%s ordered=%v", ch.Name, ch.Id, modelName, groupKey, strategy, ordered))
 	return ch, true
 }
-

@@ -43,6 +43,8 @@ const ModelsTable = (modelsData) => {
     setShowEdit,
     setDocsEditingModel,
     setShowDocsEdit,
+    setWhitelistModel,
+    setShowWhitelist,
     refresh,
     vendorMap,
     t,
@@ -57,6 +59,8 @@ const ModelsTable = (modelsData) => {
       setShowEdit,
       setDocsEditingModel,
       setShowDocsEdit,
+      setWhitelistModel,
+      setShowWhitelist,
       refresh,
       vendorMap,
     });
@@ -67,6 +71,8 @@ const ModelsTable = (modelsData) => {
     setShowEdit,
     setDocsEditingModel,
     setShowDocsEdit,
+    setWhitelistModel,
+    setShowWhitelist,
     refresh,
     vendorMap,
   ]);

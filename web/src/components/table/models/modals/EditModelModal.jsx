@@ -119,7 +119,6 @@ const EditModelModal = (props) => {
     }
   };
 
-  // 获取模型类型列表
   const fetchVendors = async () => {
     try {
       const res = await API.get('/api/vendors/?page_size=1000'); // 获取全部模型类型
@@ -511,7 +510,7 @@ const EditModelModal = (props) => {
                         />
                       }
                       description={t(
-                        '提示：此处配置仅用于控制「模型广场」对用户的展示效果，不会影响模型的实际调用与路由。若需配置真实调用行为，请前往「渠道管理」进行设置。',
+                        '提示：端点配置用于模型广场展示；模型白名单请在列表操作列中单独设置。',
                       )}
                       style={{ marginBottom: 12 }}
                     />

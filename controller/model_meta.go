@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"sort"
 	"strconv"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 // GetAllModelsMeta 获取模型列表（分页）
@@ -39,6 +39,7 @@ func GetAllModelsMeta(c *gin.Context) {
 	}
 	// 批量填充附加字段，提升列表接口性能
 	enrichModels(modelsMeta)
+	model.FillModelsVisibility(modelsMeta)
 
 	// 统计供应商计数（全部数据，不受分页影响）
 	vendorCounts, _ := model.GetVendorModelCounts()
@@ -184,6 +185,7 @@ func SearchModelsMeta(c *gin.Context) {
 	}
 	// 批量填充附加字段，提升列表接口性能
 	enrichModels(modelsMeta)
+	model.FillModelsVisibility(modelsMeta)
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(modelsMeta)
 	common.ApiSuccess(c, pageInfo)
@@ -207,6 +209,7 @@ func GetModelMeta(c *gin.Context) {
 		return
 	}
 	enrichModels([]*model.Model{&m})
+	model.FillModelsVisibility([]*model.Model{&m})
 	common.ApiSuccess(c, &m)
 }
 
@@ -234,11 +237,15 @@ func CreateModelMeta(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	if err := model.ReplaceModelVisibilityBindings(m.Id, m.VisibilitySetIDs); err != nil {
+		common.ApiError(c, err)
+		return
+	}
 	if err := syncModelTagsInUse(); err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	model.RefreshPricing()
+	model.RefreshModelVisibilityCache()
 	common.ApiSuccess(c, &m)
 }
 
@@ -285,12 +292,16 @@ func UpdateModelMeta(c *gin.Context) {
 			common.ApiError(c, err)
 			return
 		}
+		if err := model.ReplaceModelVisibilityBindings(m.Id, m.VisibilitySetIDs); err != nil {
+			common.ApiError(c, err)
+			return
+		}
 		if err := syncModelTagsInUse(); err != nil {
 			common.ApiError(c, err)
 			return
 		}
 	}
-	model.RefreshPricing()
+	model.RefreshModelVisibilityCache()
 	common.ApiSuccess(c, &m)
 }
 
@@ -302,7 +313,12 @@ func DeleteModelMeta(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	if err := model.DB.Delete(&model.Model{}, id).Error; err != nil {
+	if err := model.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("model_id = ?", id).Delete(&model.ModelVisibilityBinding{}).Error; err != nil {
+			return err
+		}
+		return tx.Delete(&model.Model{}, id).Error
+	}); err != nil {
 		common.ApiError(c, err)
 		return
 	}
@@ -381,7 +397,7 @@ func enrichModels(models []*model.Model) {
 			mm := models[idx]
 			if mm.Endpoints == "" {
 				eps := model.GetModelSupportEndpointTypes(mm.ModelName)
-				if b, err := json.Marshal(eps); err == nil {
+				if b, err := common.Marshal(eps); err == nil {
 					mm.Endpoints = string(b)
 				}
 			}
@@ -471,7 +487,7 @@ func enrichModels(models []*model.Model) {
 			for et := range es {
 				eps = append(eps, et)
 			}
-			if b, err := json.Marshal(eps); err == nil {
+			if b, err := common.Marshal(eps); err == nil {
 				mm.Endpoints = string(b)
 			}
 		}
