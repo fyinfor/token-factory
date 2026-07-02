@@ -40,6 +40,7 @@ const EXPORT_MODE_SITE_BUILDER = 'site_builder';
 const ALL_EXPORT_FIELDS = [
   { key: 'name',              label: '名称' },
   { key: 'discountRate',      label: '折扣率' },
+  { key: 'operatingCostRate', label: '经营成本' },
   { key: 'markupDiscountRate', label: '加价折扣' },
   { key: 'routeSlug',         label: '路由后缀' },
   { key: 'quota',         label: '额度' },
@@ -57,7 +58,7 @@ const ALL_EXPORT_FIELDS = [
 
 /** 标准模式默认勾选的字段 */
 const DEFAULT_SELECTED_FIELDS = [
-  'name', 'discountRate', 'markupDiscountRate', 'quota', 'disabled',
+  'name', 'discountRate', 'operatingCostRate', 'markupDiscountRate', 'quota', 'disabled',
   'type', 'logo', 'providerType', 'apiKey', 'apiBaseUrl',
   'models', 'groups', 'modelRedirect',
 ];

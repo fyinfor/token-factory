@@ -57,7 +57,7 @@ type textQuotaSummary struct {
 	RequestTierPricing       bool
 	RequestTierBreakdown     ratio_setting.RequestTierPricingBreakdown
 	// 新计费公式字段
-	CostDiscountPercent    float64 // 成本折扣率%（price_discount_percent），默认 100
+	CostDiscountPercent    float64 // 最终成本率%（price_discount_percent + operating_cost_percent），默认 100
 	MarkupDiscountPercent  float64 // 加价折扣率%（markup_discount_rate），默认 0
 	GlobalModelRatio       float64 // 全局模型输入倍率
 	GlobalModelPrice       float64 // 全局模型固定价格
@@ -108,7 +108,7 @@ func resolveTextQuotaChannelDiscountPercent(relayInfo *relaycommon.RelayInfo) fl
 	if relayInfo.ChannelMeta != nil {
 		chID = relayInfo.ChannelId
 	}
-	return model.ResolveChannelPriceDiscountPercent(chID)
+	return model.ResolveChannelEffectiveCostPercent(chID)
 }
 
 func shouldRecordInputTokensTotal(relayInfo *relaycommon.RelayInfo, usage *dto.Usage) bool {
@@ -151,7 +151,9 @@ func relayChannelID(relayInfo *relaycommon.RelayInfo) int {
 func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage) textQuotaSummary {
 	// 从 PriceData 中读取成本折扣率和加价折扣率（默认值：100% 成本折扣，0% 加价）
 	costDisc := relayInfo.PriceData.CostDiscountPercent
-	if costDisc == 0 {
+	if relayInfo.PriceData.ChannelPriceDiscount != nil {
+		costDisc = *relayInfo.PriceData.ChannelPriceDiscount
+	} else if costDisc == 0 {
 		costDisc = 100 // 兼容老数据，未设置时默认无折扣
 	}
 	markupDisc := relayInfo.PriceData.MarkupDiscountPercent
@@ -347,6 +349,7 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		effInputRate := model.EffectiveInputRate(summary.ModelRatio, summary.GlobalModelRatio, summary.CostDiscountPercent, summary.MarkupDiscountPercent)
 		effOutputRate := model.EffectiveOutputRate(summary.ModelRatio, summary.CompletionRatio, summary.GlobalModelRatio, summary.GlobalCompletionRatio, summary.CostDiscountPercent, summary.MarkupDiscountPercent)
 		effCacheReadRate := model.EffectiveCacheReadRate(summary.ModelRatio, summary.CacheRatio, summary.GlobalModelRatio, summary.GlobalCacheRatio, summary.CostDiscountPercent, summary.MarkupDiscountPercent)
+		effCacheCreateRate := model.EffectiveCacheCreationRate(summary.ModelRatio, summary.CacheCreationRatio, summary.GlobalModelRatio, summary.GlobalCreateCacheRatio, summary.CostDiscountPercent, summary.MarkupDiscountPercent)
 		effCacheCreate5mRate := model.EffectiveCacheCreationRate(summary.ModelRatio, summary.CacheCreationRatio5m, summary.GlobalModelRatio, summary.GlobalCreateCacheRatio, summary.CostDiscountPercent, summary.MarkupDiscountPercent)
 		// 1h 缓存写入全局倍率 = 5m 全局倍率 × claudeCacheCreation1hMultiplier
 		const claudeCacheCreate1hMult = 6.0 / 3.75
@@ -355,6 +358,7 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 		dEffInputRate := decimal.NewFromFloat(effInputRate)
 		dEffOutputRate := decimal.NewFromFloat(effOutputRate)
 		dEffCacheReadRate := decimal.NewFromFloat(effCacheReadRate)
+		dEffCacheCreateRate := decimal.NewFromFloat(effCacheCreateRate)
 		dEffCacheCreate5mRate := decimal.NewFromFloat(effCacheCreate5mRate)
 		dEffCacheCreate1hRate := decimal.NewFromFloat(effCacheCreate1hRate)
 
@@ -398,6 +402,19 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 			} else {
 				cacheWriteSideTotal = cacheWriteTokensAdj.Mul(dEffCacheCreate5mRate).Mul(dGroupRatio)
 			}
+		}
+
+		if hasSplitCacheCreationTokens {
+			remaining := summary.CacheCreationTokens - summary.CacheCreationTokens5m - summary.CacheCreationTokens1h
+			if remaining < 0 {
+				remaining = 0
+			}
+			cacheWriteSideTotal = decimal.NewFromInt(int64(remaining)).Mul(dEffCacheCreateRate).
+				Add(decimal.NewFromInt(int64(summary.CacheCreationTokens5m)).Mul(dEffCacheCreate5mRate)).
+				Add(decimal.NewFromInt(int64(summary.CacheCreationTokens1h)).Mul(dEffCacheCreate1hRate)).
+				Mul(dGroupRatio)
+		} else if !dCachedCreationTokens.IsZero() {
+			cacheWriteSideTotal = cacheWriteTokensAdj.Mul(dEffCacheCreateRate).Mul(dGroupRatio)
 		}
 
 		// 输出侧
@@ -581,7 +598,7 @@ func tryPostWalletProfitShareCredit(ctx *gin.Context, relayInfo *relaycommon.Rel
 		chID = relayInfo.ChannelId
 	}
 	modelName := strings.TrimSpace(summary.ModelName)
-	if err := model.CreditDistributorProfitShare(invitee.InviterId, relayInfo.UserId, chID, modelName, summary.Quota, slice, reward, bps); err != nil {
+	if err := model.CreditDistributorProfitShare(invitee.InviterId, relayInfo.UserId, chID, modelName, summary.Quota, slice, reward, bps, summary.TotalTokens, "text"); err != nil {
 		common.SysError("tryPostWalletProfitShareCredit: " + err.Error())
 	}
 }

@@ -31,8 +31,8 @@ const MATERIAL_API = {
   ASSETS: '/api/material/assets',
   UPLOAD: '/api/material/upload',
   UPLOAD_URL: '/api/material/upload-url',
-  // 删除：DELETE /api/material/asset/:id
-  ASSET: (id) => `/api/material/asset/${id}`,
+  // 删除：DELETE /api/material/asset/:asset_id
+  ASSET: (assetId) => `/api/material/asset/${encodeURIComponent(assetId)}`,
 };
 
 /**
@@ -92,12 +92,24 @@ export const uploadMaterialByURL = async ({ url, name, assetType, agreed }) => {
 };
 
 /**
- * 删除素材（按本地素材主键 Id）。
- * 后端会先调用上游 DeleteAsset 删除资产，再移除本地记录与临时文件。
- * @param {number} id 素材本地主键 Id
+ * 查询单个素材详情（按上游 asset_id）。
+ * 若素材仍待同步，后端会 best-effort 向上游刷新一次。
+ * @param {string} assetId 上游素材 ID
  */
-export const deleteMaterialAsset = async (id) => {
-  const res = await API.delete(MATERIAL_API.ASSET(id), {
+export const getMaterialAsset = async (assetId) => {
+  const res = await API.get(MATERIAL_API.ASSET(assetId), {
+    skipErrorHandler: true,
+  });
+  return res.data;
+};
+
+/**
+ * 删除素材（按上游 asset_id）。
+ * 后端会先调用上游 DeleteAsset 删除资产，再移除本地记录与临时文件。
+ * @param {string} assetId 上游素材 ID
+ */
+export const deleteMaterialAsset = async (assetId) => {
+  const res = await API.delete(MATERIAL_API.ASSET(assetId), {
     skipErrorHandler: true,
   });
   return res.data;

@@ -85,8 +85,8 @@ func ApplyInviteeMarkupToPricingAPIForUser(inviteeUserId int, pricingData []Pric
 		// 定价 data 按「模型×单渠道」展开，重算分档 hint 使首页卡片/侧栏与实扣一致。
 		if len(pricingData[i].ChannelList) == 1 {
 			ch := pricingData[i].ChannelList[0]
-			pricingData[i].VideoFlatClipHint = BuildVideoFlatClipHint(ch.ChannelID, modelName, ch.PriceDiscountPercent, ch.MarkupDiscountRate)
-			pricingData[i].ImagePerImageHint = BuildImagePerImageHint(ch.ChannelID, modelName, ch.PriceDiscountPercent, ch.MarkupDiscountRate)
+			pricingData[i].VideoFlatClipHint = BuildVideoFlatClipHint(ch.ChannelID, modelName, ch.EffectiveCostPercent, ch.MarkupDiscountRate)
+			pricingData[i].ImagePerImageHint = BuildImagePerImageHint(ch.ChannelID, modelName, ch.EffectiveCostPercent, ch.MarkupDiscountRate)
 		}
 	}
 }

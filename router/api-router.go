@@ -469,7 +469,8 @@ func SetApiRouter(router *gin.Engine) {
 			materialRoute.GET("/assets", controller.ListMaterialAssets)
 			materialRoute.POST("/upload", middleware.UploadRateLimit(), controller.UploadMaterial)
 			materialRoute.POST("/upload-url", middleware.UploadRateLimit(), controller.UploadMaterialByURL)
-			materialRoute.DELETE("/asset/:id", controller.DeleteMaterial)
+			materialRoute.GET("/asset/:asset_id", controller.GetMaterial)
+			materialRoute.DELETE("/asset/:asset_id", controller.DeleteMaterial)
 		}
 
 		// 个人素材接口：基于用户 API 令牌（sk-xxx）鉴权，自动识别归属用户，

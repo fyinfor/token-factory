@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Modal, Table, Tooltip, Typography } from '@douyinfe/semi-ui';
+import { Modal, Table, Tag, Tooltip, Typography } from '@douyinfe/semi-ui';
 import dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
 import {
@@ -42,6 +42,7 @@ export default function AffInviteeCommissionDetailModal({
   inviteeId,
   inviteeLabel,
   commissionMode = 'topup',
+  billingModeFilter = '',
 }) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
@@ -57,8 +58,10 @@ export default function AffInviteeCommissionDetailModal({
       if (!inviteeId) return;
       setLoading(true);
       try {
+        const bm = String(billingModeFilter || '').trim();
+        const bmParam = bm ? `&billing_mode=${encodeURIComponent(bm)}` : '';
         const path = isProfitShare
-          ? `/api/distributor/invitee/${inviteeId}/profit-shares?p=${p}&page_size=${ps}`
+          ? `/api/distributor/invitee/${inviteeId}/profit-shares?p=${p}&page_size=${ps}${bmParam}`
           : `/api/distributor/invitee/${inviteeId}/commissions?p=${p}&page_size=${ps}`;
         const res = await API.get(path);
         const { success, message, data } = res.data;
@@ -75,7 +78,7 @@ export default function AffInviteeCommissionDetailModal({
         setLoading(false);
       }
     },
-    [inviteeId, isProfitShare, t],
+    [inviteeId, isProfitShare, billingModeFilter, t],
   );
 
   useEffect(() => {
@@ -100,6 +103,33 @@ export default function AffInviteeCommissionDetailModal({
           dataIndex: 'model_name',
           width: 200,
           render: (m) => (m ? String(m) : '—'),
+        },
+        {
+          title: t('计费分类'),
+          dataIndex: 'billing_mode',
+          width: 110,
+          render: (bm) => {
+            const mode = String(bm ?? '').trim();
+            if (mode === 'video_token') {
+              return <Tag color='violet' type='light' size='small'>{t('视频按Token')}</Tag>;
+            }
+            if (mode === 'video') {
+              return <Tag color='cyan' type='light' size='small'>{t('视频其他')}</Tag>;
+            }
+            if (mode === 'text') {
+              return <Tag color='grey' type='light' size='small'>{t('文本对话')}</Tag>;
+            }
+            return <Tag type='light' size='small'>{t('未分类')}</Tag>;
+          },
+        },
+        {
+          title: t('Token消耗'),
+          dataIndex: 'total_tokens',
+          width: 120,
+          render: (tk) => {
+            const n = Number(tk);
+            return n > 0 ? n.toLocaleString() : '—';
+          },
         },
         {
           title: t('渠道路由后缀'),
@@ -170,9 +200,6 @@ export default function AffInviteeCommissionDetailModal({
   }, [isProfitShare, t]);
 
   const titleText = isProfitShare ? t('利润分成明细') : t('分成明细');
-  const hintText = isProfitShare
-    ? t('利润分成明细说明')
-    : t('每次被邀请用户充值入账后，按当时适用的分成比例计算一条记录。');
 
   return (
     <Modal
@@ -189,12 +216,9 @@ export default function AffInviteeCommissionDetailModal({
       visible={visible}
       onCancel={onCancel}
       footer={null}
-      width={isProfitShare ? 1180 : 880}
+      width={isProfitShare ? 1420 : 880}
       bodyStyle={isProfitShare ? { overflow: 'visible' } : undefined}
     >
-      <Text type='tertiary' size='small' className='block mb-3'>
-        {hintText}
-      </Text>
       <Table
         loading={loading}
         rowKey='id'

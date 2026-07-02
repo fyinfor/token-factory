@@ -235,16 +235,8 @@ func ListMaterialAssets(c *gin.Context) {
 		return
 	}
 
-	// 对仍需同步的素材做 best-effort 状态刷新（最多刷新 10 条，避免阻塞）。
-	refreshed := 0
 	items := make([]materialAssetResponse, 0, len(assets))
 	for _, a := range assets {
-		if materialAssetNeedsUpstreamRefresh(a) && refreshed < 10 && operation_setting.IsSeedanceReady() {
-			if info, e := service.MaterialGetAsset(a.AssetId); e == nil {
-				refreshMaterialAssetFromUpstream(a, info)
-			}
-			refreshed++
-		}
 		items = append(items, toMaterialAssetResponse(a))
 	}
 
@@ -471,6 +463,39 @@ func UploadMaterialByURL(c *gin.Context) {
 	common.ApiSuccess(c, toMaterialAssetResponse(asset))
 }
 
+// GetMaterial 素材详情查询：校验归属 -> 若仍待同步则向上游刷新一次。
+func GetMaterial(c *gin.Context) {
+	userId := c.GetInt("id")
+	if userId == 0 {
+		common.ApiErrorMsg(c, "未授权")
+		return
+	}
+
+	assetId := strings.TrimSpace(c.Param("asset_id"))
+	if assetId == "" {
+		common.ApiErrorMsg(c, "素材 ID 无效")
+		return
+	}
+
+	asset, err := model.GetMaterialAssetByAssetIdAndUser(assetId, userId)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if asset == nil {
+		common.ApiErrorMsg(c, "素材不存在或无权操作")
+		return
+	}
+
+	if materialAssetNeedsUpstreamRefresh(asset) && operation_setting.IsSeedanceReady() {
+		if info, e := service.MaterialGetAsset(asset.AssetId); e == nil {
+			refreshMaterialAssetFromUpstream(asset, info)
+		}
+	}
+
+	common.ApiSuccess(c, toMaterialAssetResponse(asset))
+}
+
 // DeleteMaterial 删除素材：校验归属 -> 调用上游 DeleteAsset（传入素材唯一 Id）-> 删除本地记录与临时文件。
 // 返回 Result.Id：本次删除成功的资产 ID。
 func DeleteMaterial(c *gin.Context) {
@@ -480,14 +505,14 @@ func DeleteMaterial(c *gin.Context) {
 		return
 	}
 
-	id, err := strconv.Atoi(strings.TrimSpace(c.Param("id")))
-	if err != nil || id <= 0 {
+	assetId := strings.TrimSpace(c.Param("asset_id"))
+	if assetId == "" {
 		common.ApiErrorMsg(c, "素材 ID 无效")
 		return
 	}
 
-	// 校验素材归属当前用户。
-	asset, err := model.GetMaterialAssetByIdAndUser(id, userId)
+	// 校验素材归属当前用户（对外统一使用上游 asset_id，不暴露数据库主键）。
+	asset, err := model.GetMaterialAssetByAssetIdAndUser(assetId, userId)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -514,7 +539,7 @@ func DeleteMaterial(c *gin.Context) {
 	// 清理本地临时文件（仅本地存储模式生效，best-effort）。
 	_ = service.CleanupLocalUploadByURL(asset.URL)
 
-	common.ApiSuccess(c, gin.H{"id": asset.AssetId})
+	common.ApiSuccess(c, gin.H{"asset_id": asset.AssetId})
 }
 
 // UploadPersonalMaterial 个人素材上传：基于 API 令牌（sk-xxx）鉴权，
@@ -743,16 +768,8 @@ func ListPersonalMaterialAssets(c *gin.Context) {
 		return
 	}
 
-	// 复用列表页 best-effort 状态刷新逻辑（最多刷新 10 条，避免阻塞）。
-	refreshed := 0
 	items := make([]materialAssetResponse, 0, len(assets))
 	for _, a := range assets {
-		if materialAssetNeedsUpstreamRefresh(a) && refreshed < 10 && operation_setting.IsSeedanceReady() {
-			if info, e := service.MaterialGetAsset(a.AssetId); e == nil {
-				refreshMaterialAssetFromUpstream(a, info)
-			}
-			refreshed++
-		}
 		items = append(items, toMaterialAssetResponse(a))
 	}
 

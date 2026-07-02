@@ -84,7 +84,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	channelVideoCompletionRatio, hasChannelVideoCompletionRatio := ratio_setting.GetChannelVideoCompletionRatio(channelID, info.OriginModelName)
 
 	// 提前获取成本折扣率、加价折扣率及全局倍率/固定价（新计费公式所需）
-	chDisc := model.ResolveChannelPriceDiscountPercent(channelID)
+	rawDisc, operatingCost, chDisc := resolveChannelCostPercents(channelID)
 	markupDisc := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
 	globalRatio, _, _ := ratio_setting.GetModelRatio(info.OriginModelName)
 	globalPrice, _ := ratio_setting.GetModelPrice(info.OriginModelName, false)
@@ -215,13 +215,15 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		ChannelPriceDiscount: &chDiscCopy,
 		QuotaToPreConsume:    preConsumedQuota,
 		// 新计费公式字段
-		CostDiscountPercent:    chDisc,
-		MarkupDiscountPercent:  markupDisc,
-		GlobalModelRatio:       globalRatio,
-		GlobalModelPrice:       globalPrice,
-		GlobalCompletionRatio:  globalCompletionRatio,
-		GlobalCacheRatio:       globalCacheRatio,
-		GlobalCreateCacheRatio: globalCreateCacheRatio,
+		CostDiscountPercent:     chDisc,
+		RawPriceDiscountPercent: rawDisc,
+		OperatingCostPercent:    operatingCost,
+		MarkupDiscountPercent:   markupDisc,
+		GlobalModelRatio:        globalRatio,
+		GlobalModelPrice:        globalPrice,
+		GlobalCompletionRatio:   globalCompletionRatio,
+		GlobalCacheRatio:        globalCacheRatio,
+		GlobalCreateCacheRatio:  globalCreateCacheRatio,
 	}
 
 	if common.DebugEnabled {
@@ -273,7 +275,7 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 
 	}
 	// 新公式：固定价格 = 渠道固定价 * 成本折扣率% + 全局固定价 * 加价折扣率%
-	chDisc := model.ResolveChannelPriceDiscountPercent(channelID)
+	rawDisc, operatingCost, chDisc := resolveChannelCostPercents(channelID)
 	markupDisc := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
 	globalPrice, _ := ratio_setting.GetModelPrice(info.OriginModelName, false)
 	effModelPrice := model.EffectiveModelPrice(modelPrice, globalPrice, chDisc, markupDisc)
@@ -290,15 +292,17 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 	chDiscCopy := chDisc
 
 	priceData := types.PriceData{
-		FreeModel:             freeModel,
-		ModelPrice:            modelPrice,
-		Quota:                 quota,
-		GroupRatioInfo:        groupRatioInfo,
-		ChannelPriceDiscount:  &chDiscCopy,
-		CostDiscountPercent:   chDisc,
-		MarkupDiscountPercent: markupDisc,
-		GlobalModelRatio:      0,
-		GlobalModelPrice:      globalPrice,
+		FreeModel:               freeModel,
+		ModelPrice:              modelPrice,
+		Quota:                   quota,
+		GroupRatioInfo:          groupRatioInfo,
+		ChannelPriceDiscount:    &chDiscCopy,
+		CostDiscountPercent:     chDisc,
+		RawPriceDiscountPercent: rawDisc,
+		OperatingCostPercent:    operatingCost,
+		MarkupDiscountPercent:   markupDisc,
+		GlobalModelRatio:        0,
+		GlobalModelPrice:        globalPrice,
 	}
 	return priceData, nil
 }
@@ -451,29 +455,31 @@ func tryVideoPerTokenRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo)
 		return types.PriceData{}, false
 	}
 
-	chDisc := model.ResolveChannelPriceDiscountPercent(channelID)
+	rawDisc, operatingCost, chDisc := resolveChannelCostPercents(channelID)
 	markupDisc := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
 	chDiscCopy := chDisc
 
 	priceData := types.PriceData{
-		ModelPrice:            0,
-		ModelRatio:            0,
-		VideoOutputTokens:     preConsumeTokens,
-		VideoInputTextTokens:  estimateCtx.InputTextTokens,
-		GroupRatioInfo:        groupRatioInfo,
-		UsePrice:              true,
-		Quota:                 quota,
-		QuotaToPreConsume:     quota,
-		ChannelPriceDiscount:  &chDiscCopy,
-		CostDiscountPercent:   chDisc,
-		MarkupDiscountPercent: markupDisc,
-		VideoRuleUnit:         service.VideoRuleUnitPerToken,
-		VideoBillingMode:      mode,
-		VideoChannelRulePrice: match.ChannelPricePerToken,
-		VideoGlobalRulePrice:  match.GlobalPricePerToken,
-		VideoRuleWidth:        match.RuleWidth,
-		VideoRuleHeight:       match.RuleHeight,
-		VideoRuleHasAudio:     hasAudio,
+		ModelPrice:              0,
+		ModelRatio:              0,
+		VideoOutputTokens:       preConsumeTokens,
+		VideoInputTextTokens:    estimateCtx.InputTextTokens,
+		GroupRatioInfo:          groupRatioInfo,
+		UsePrice:                true,
+		Quota:                   quota,
+		QuotaToPreConsume:       quota,
+		ChannelPriceDiscount:    &chDiscCopy,
+		CostDiscountPercent:     chDisc,
+		RawPriceDiscountPercent: rawDisc,
+		OperatingCostPercent:    operatingCost,
+		MarkupDiscountPercent:   markupDisc,
+		VideoRuleUnit:           service.VideoRuleUnitPerToken,
+		VideoBillingMode:        mode,
+		VideoChannelRulePrice:   match.ChannelPricePerToken,
+		VideoGlobalRulePrice:    match.GlobalPricePerToken,
+		VideoRuleWidth:          match.RuleWidth,
+		VideoRuleHeight:         match.RuleHeight,
+		VideoRuleHasAudio:       hasAudio,
 	}
 	if common.DebugEnabled {
 		logger.LogDebug(c, fmt.Sprintf(
@@ -575,7 +581,7 @@ func tryVideoTokenPriceData(c *gin.Context, info *relaycommon.RelayInfo) (types.
 	}
 
 	// 新公式（视频 token 计费）：有效倍率 = 渠道倍率 * 成本折扣率% + 全局倍率 * 加价折扣率%
-	chDisc := model.ResolveChannelPriceDiscountPercent(channelID)
+	rawDisc, operatingCost, chDisc := resolveChannelCostPercents(channelID)
 	markupDisc := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
 	globalRatioVideo, _, _ := ratio_setting.GetModelRatio(modelName)
 	effRateVideo := model.EffectiveInputRate(modelRatio, globalRatioVideo, chDisc, markupDisc)
@@ -592,19 +598,21 @@ func tryVideoTokenPriceData(c *gin.Context, info *relaycommon.RelayInfo) (types.
 	}
 
 	priceData := types.PriceData{
-		FreeModel:             freeModel,
-		ModelRatio:            modelRatio,
-		VideoRatio:            appliedVideoRatio,
-		VideoCompletionRatio:  appliedVideoCompletionRatio,
-		VideoOutputTokens:     outputVideoTokens,
-		VideoInputTextTokens:  inputTextTokens,
-		GroupRatioInfo:        groupRatioInfo,
-		Quota:                 quota,
-		QuotaToPreConsume:     quota,
-		ChannelPriceDiscount:  &chDiscCopy,
-		CostDiscountPercent:   chDisc,
-		MarkupDiscountPercent: markupDisc,
-		GlobalModelRatio:      globalRatioVideo,
+		FreeModel:               freeModel,
+		ModelRatio:              modelRatio,
+		VideoRatio:              appliedVideoRatio,
+		VideoCompletionRatio:    appliedVideoCompletionRatio,
+		VideoOutputTokens:       outputVideoTokens,
+		VideoInputTextTokens:    inputTextTokens,
+		GroupRatioInfo:          groupRatioInfo,
+		Quota:                   quota,
+		QuotaToPreConsume:       quota,
+		ChannelPriceDiscount:    &chDiscCopy,
+		CostDiscountPercent:     chDisc,
+		RawPriceDiscountPercent: rawDisc,
+		OperatingCostPercent:    operatingCost,
+		MarkupDiscountPercent:   markupDisc,
+		GlobalModelRatio:        globalRatioVideo,
 		// UsePrice = true tells relay_task to skip the OtherRatios multiplication
 		// loop, since outputVideoTokens already encodes duration and resolution.
 		UsePrice: true,
@@ -863,7 +871,7 @@ func tryVideoPerSecondRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo
 		return types.PriceData{}, false, nil
 	}
 	groupRatioInfo := HandleGroupRatio(c, info)
-	chDiscVPS := model.ResolveChannelPriceDiscountPercent(channelID)
+	rawDiscVPS, operatingCostVPS, chDiscVPS := resolveChannelCostPercents(channelID)
 	markupDiscVPS := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
 	effPricePerSecond, _, _, effOK := service.EffectiveVideoPerSecondUSDForDimensions(
 		channelID,
@@ -892,15 +900,17 @@ func tryVideoPerSecondRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo
 		quota = 1
 	}
 	pd := types.PriceData{
-		ModelPrice:            0,
-		ModelRatio:            0,
-		GroupRatioInfo:        groupRatioInfo,
-		UsePrice:              true,
-		Quota:                 quota,
-		QuotaToPreConsume:     quota,
-		ChannelPriceDiscount:  &chDiscCopyVPS,
-		CostDiscountPercent:   chDiscVPS,
-		MarkupDiscountPercent: markupDiscVPS,
+		ModelPrice:              0,
+		ModelRatio:              0,
+		GroupRatioInfo:          groupRatioInfo,
+		UsePrice:                true,
+		Quota:                   quota,
+		QuotaToPreConsume:       quota,
+		ChannelPriceDiscount:    &chDiscCopyVPS,
+		CostDiscountPercent:     chDiscVPS,
+		RawPriceDiscountPercent: rawDiscVPS,
+		OperatingCostPercent:    operatingCostVPS,
+		MarkupDiscountPercent:   markupDiscVPS,
 	}
 	pd.AddOtherRatio("seconds", float64(seconds))
 	if hasAudio {
@@ -1007,7 +1017,7 @@ func tryVideoPerVideoRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo)
 		}
 	}
 
-	chDiscVPV := model.ResolveChannelPriceDiscountPercent(channelID)
+	rawDiscVPV, operatingCostVPV, chDiscVPV := resolveChannelCostPercents(channelID)
 	markupDiscVPV := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
 	globalUsd := globalVideoPerVideoUSDForRelay(modelName, string(estimateCtx.Mode), estimateCtx.Width, estimateCtx.Height, hasAudio)
 	effUsd := model.EffectiveRuleUnitPrice(usd, globalUsd, chDiscVPV, markupDiscVPV)
@@ -1020,24 +1030,26 @@ func tryVideoPerVideoRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo)
 	}
 
 	priceData := types.PriceData{
-		FreeModel:             freeModel,
-		ModelPrice:            0,
-		ModelRatio:            0,
-		GroupRatioInfo:        groupRatioInfo,
-		UsePrice:              true,
-		Quota:                 quota,
-		QuotaToPreConsume:     quota,
-		ChannelPriceDiscount:  &chDiscCopyVPV,
-		CostDiscountPercent:   chDiscVPV,
-		MarkupDiscountPercent: markupDiscVPV,
-		GlobalModelPrice:      globalUsd,
-		VideoRuleUnit:         "per_video",
-		VideoBillingMode:      string(estimateCtx.Mode),
-		VideoChannelRulePrice: usd,
-		VideoGlobalRulePrice:  globalUsd,
-		VideoRuleWidth:        estimateCtx.Width,
-		VideoRuleHeight:       estimateCtx.Height,
-		VideoRuleHasAudio:     hasAudio,
+		FreeModel:               freeModel,
+		ModelPrice:              0,
+		ModelRatio:              0,
+		GroupRatioInfo:          groupRatioInfo,
+		UsePrice:                true,
+		Quota:                   quota,
+		QuotaToPreConsume:       quota,
+		ChannelPriceDiscount:    &chDiscCopyVPV,
+		CostDiscountPercent:     chDiscVPV,
+		RawPriceDiscountPercent: rawDiscVPV,
+		OperatingCostPercent:    operatingCostVPV,
+		MarkupDiscountPercent:   markupDiscVPV,
+		GlobalModelPrice:        globalUsd,
+		VideoRuleUnit:           "per_video",
+		VideoBillingMode:        string(estimateCtx.Mode),
+		VideoChannelRulePrice:   usd,
+		VideoGlobalRulePrice:    globalUsd,
+		VideoRuleWidth:          estimateCtx.Width,
+		VideoRuleHeight:         estimateCtx.Height,
+		VideoRuleHasAudio:       hasAudio,
 	}
 	if common.DebugEnabled {
 		logger.LogDebug(c, fmt.Sprintf(

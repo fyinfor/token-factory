@@ -355,6 +355,8 @@ const SettingsPanel = ({
           imageUrls={inputs.imageUrls || ['']}
           imageEnabled={true}
           onImageUrlsChange={(urls) => onInputChange('imageUrls', urls)}
+          videoUrls={inputs.videoUrls || ['']}
+          onVideoUrlsChange={(urls) => onInputChange('videoUrls', urls)}
           onImageEnabledChange={() => {}}
           allowToggle={false}
           disabled={customRequestMode}

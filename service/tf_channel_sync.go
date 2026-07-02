@@ -50,10 +50,7 @@ func BuildChannelSnapshotsForTF(channels []*model.Channel) []*pb.ChannelSnapshot
 		if ch.BaseURL != nil {
 			baseURL = *ch.BaseURL
 		}
-		priceDiscount := float64(100)
-		if ch.PriceDiscountPercent != nil {
-			priceDiscount = *ch.PriceDiscountPercent
-		}
+		priceDiscount := ch.ResolvedEffectiveCostPercent()
 		markupRate := float64(0)
 		if ch.MarkupDiscountRate != nil {
 			markupRate = *ch.MarkupDiscountRate

@@ -26,7 +26,7 @@ func resolveConsumeLogChannelDiscountPercent(relayInfo *relaycommon.RelayInfo) f
 	if relayInfo.ChannelMeta != nil {
 		chID = relayInfo.ChannelId
 	}
-	return model.ResolveChannelPriceDiscountPercent(chID)
+	return model.ResolveChannelEffectiveCostPercent(chID)
 }
 
 // appendChannelPriceDiscountToConsumeOther 写入 channel_price_discount_percent、markup_discount_rate 及全局倍率/固定价，供前端展示与实扣对齐。
@@ -34,7 +34,8 @@ func appendChannelPriceDiscountToConsumeOther(relayInfo *relaycommon.RelayInfo, 
 	if other == nil {
 		return
 	}
-	other["channel_price_discount_percent"] = resolveConsumeLogChannelDiscountPercent(relayInfo)
+	effectiveCostPercent := resolveConsumeLogChannelDiscountPercent(relayInfo)
+	other["channel_price_discount_percent"] = effectiveCostPercent
 	if relayInfo != nil {
 		other["markup_discount_rate"] = relayInfo.PriceData.MarkupDiscountPercent
 		other["global_model_ratio"] = relayInfo.PriceData.GlobalModelRatio

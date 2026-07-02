@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AIChatDialogue,
   AIChatInput,
@@ -27,10 +27,21 @@ import {
   Toast,
   Typography,
 } from '@douyinfe/semi-ui';
-import { IconUploadError } from '@douyinfe/semi-icons';
-import { MessageSquare, Eye, EyeOff, MessageSquarePlus } from 'lucide-react';
+import { IconRefresh, IconUploadError } from '@douyinfe/semi-icons';
+import {
+  MessageSquare,
+  Eye,
+  EyeOff,
+  MessageSquarePlus,
+} from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { usePlayground } from '../../contexts/PlaygroundContext';
+import { listMaterialAssets } from '../../helpers/materialApi';
+import {
+  buildAssetMap,
+  isAssetUri,
+  resolveAssetUriToUrl,
+} from '../../helpers/materialAssetUtils';
 import {
   PLAYGROUND_MEDIA_MAX_HEIGHT,
   PLAYGROUND_MEDIA_MAX_WIDTH,
@@ -96,10 +107,36 @@ const PlaygroundDialogueMarkdownImage = ({
   />
 );
 
-const playgroundMarkdownRenderProps = {
+const resolvePlaygroundMediaUrl = (url, assetMap) => {
+  const rawUrl = String(url || '').trim();
+  if (!rawUrl) return '';
+  return assetMap ? resolveAssetUriToUrl(rawUrl, assetMap) : rawUrl;
+};
+
+const createPlaygroundMarkdownRenderProps = (assetMap) => ({
   components: {
-    img: PlaygroundDialogueMarkdownImage,
+    img: ({ src, ...rest }) => (
+      <PlaygroundDialogueMarkdownImage
+        {...rest}
+        src={resolvePlaygroundMediaUrl(src, assetMap)}
+      />
+    ),
   },
+});
+
+const messageHasAssetUri = (message) => {
+  const rawContent = message?.playgroundContent ?? message?.content;
+  if (Array.isArray(rawContent)) {
+    return rawContent.some(
+      (item) =>
+        item?.type === 'image_url' &&
+        isAssetUri(item?.image_url?.url),
+    );
+  }
+  if (typeof rawContent === 'string') {
+    return isAssetUri(rawContent);
+  }
+  return false;
 };
 
 const getInputText = (messageContent) => {
@@ -159,7 +196,7 @@ const restorePlaygroundMessage = (message) => {
   return restored;
 };
 
-const normalizeDialogueContent = (message) => {
+const normalizeDialogueContent = (message, assetMap) => {
   const { role, videoTask } = message || {};
   const rawContent = message?.playgroundContent ?? message?.content;
   const normalizedContent = [];
@@ -174,7 +211,7 @@ const normalizeDialogueContent = (message) => {
       } else if (item?.type === 'image_url' && item.image_url?.url) {
         normalizedContent.push({
           type: 'input_image',
-          image_url: item.image_url.url,
+          image_url: resolvePlaygroundMediaUrl(item.image_url.url, assetMap),
           detail: item.image_url?.detail || 'auto',
         });
       }
@@ -189,7 +226,7 @@ const normalizeDialogueContent = (message) => {
   if (videoTask?.playableUrl) {
     normalizedContent.push({
       type: 'playground_video',
-      video_url: videoTask.playableUrl,
+      video_url: resolvePlaygroundMediaUrl(videoTask.playableUrl, assetMap),
       filename: 'generated-video.mp4',
     });
   }
@@ -226,6 +263,28 @@ const ChatArea = ({
   const { onPasteImage, imageEnabled } = usePlayground();
   const mediaMaxHeightPx = usePlaygroundMediaMaxHeightPx();
   const [inputFocused, setInputFocused] = useState(false);
+  const [assetMap, setAssetMap] = useState(null);
+
+  const needsAssetMap = useMemo(() => {
+    const list = Array.isArray(message) ? message : [];
+    return list.some((item) => messageHasAssetUri(item));
+  }, [message]);
+
+  useEffect(() => {
+    if (!needsAssetMap) return;
+    let cancelled = false;
+    listMaterialAssets({ page: 1, pageSize: 100 })
+      .then((res) => {
+        if (cancelled || !res?.success || !Array.isArray(res.data?.items)) {
+          return;
+        }
+        setAssetMap(buildAssetMap(res.data.items));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [needsAssetMap]);
 
   const safeChats = useMemo(() => {
     const list = Array.isArray(message) ? message : [];
@@ -241,7 +300,7 @@ const ChatArea = ({
       }
       seen.add(nextId);
       const dialogueStatus = toDialogueStatus(item?.status);
-      const dialogueContent = normalizeDialogueContent(item);
+      const dialogueContent = normalizeDialogueContent(item, assetMap);
       return {
         ...item,
         id: nextId,
@@ -259,7 +318,12 @@ const ChatArea = ({
           : {}),
       };
     });
-  }, [message]);
+  }, [assetMap, message]);
+
+  const playgroundMarkdownRenderProps = useMemo(
+    () => createPlaygroundMarkdownRenderProps(assetMap),
+    [assetMap],
+  );
 
   const generating = useMemo(
     () =>
@@ -334,10 +398,30 @@ const ChatArea = ({
 
   const dialogueRenderConfig = useMemo(
     () => ({
-      renderDialogueAction: ({ className, defaultActionsObj }) => {
+      renderDialogueAction: ({ className, defaultActionsObj, message: chat }) => {
+        const chatStatus = chat?.playgroundStatus || chat?.status;
+        const isMessageLoading = ['loading', 'incomplete', 'in_progress'].includes(
+          chatStatus,
+        );
+        const shouldDisableReset = generating || isMessageLoading;
+        const resetNode = (
+          <Button
+            key='reset'
+            theme='borderless'
+            type='tertiary'
+            icon={<IconRefresh />}
+            disabled={shouldDisableReset}
+            onClick={() => {
+              if (!shouldDisableReset) {
+                onMessageReset?.(chat);
+              }
+            }}
+            aria-label={t('重试')}
+          />
+        );
         const actions = [
           ['copy', defaultActionsObj?.copyNode],
-          ['reset', defaultActionsObj?.resetNode],
+          ['reset', resetNode],
           ['more', defaultActionsObj?.moreNode],
         ]
           .filter(([, node]) => Boolean(node))
@@ -353,13 +437,24 @@ const ChatArea = ({
       },
       renderDialogueTitle: () => null,
     }),
-    [],
+    [generating, onMessageReset, t],
   );
 
   const renderDialogueContentItem = useMemo(
     () => ({
+      input_image: (item) => {
+        const imageUrl = resolvePlaygroundMediaUrl(item?.image_url, assetMap);
+        if (!imageUrl) return null;
+        return (
+          <PlaygroundDialogueMarkdownImage
+            src={imageUrl}
+            alt=''
+            className='playground-dialogue-user-image'
+          />
+        );
+      },
       playground_video: (item, currentMessage) => {
-        const videoUrl = getVideoUrl(item);
+        const videoUrl = resolvePlaygroundMediaUrl(getVideoUrl(item), assetMap);
         if (!videoUrl) return null;
 
         const dimensions = currentMessage?.mediaDimensions?.[videoUrl];
@@ -402,7 +497,7 @@ const ChatArea = ({
         );
       },
     }),
-    [mediaMaxHeightPx, onMediaDimensionsChange],
+    [assetMap, mediaMaxHeightPx, onMediaDimensionsChange],
   );
 
   const handleChatsChange = useCallback(
@@ -483,7 +578,6 @@ const ChatArea = ({
           renderDialogueContentItem={renderDialogueContentItem}
           chats={safeChats}
           onChatsChange={handleChatsChange}
-          onMessageReset={onMessageReset}
           className='playground-ai-dialogue'
           style={{
             flex: 1,
