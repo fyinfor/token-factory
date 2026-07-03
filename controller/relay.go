@@ -750,6 +750,7 @@ func RelayTask(c *gin.Context) {
 			VideoRuleWidth:              relayInfo.PriceData.VideoRuleWidth,
 			VideoRuleHeight:             relayInfo.PriceData.VideoRuleHeight,
 			VideoRuleHasAudio:           relayInfo.PriceData.VideoRuleHasAudio,
+			UpstreamBillingOther:        relayInfo.UpstreamTaskBillingOther,
 		}
 		task.Quota = actualQuota
 		task.Data = result.TaskData

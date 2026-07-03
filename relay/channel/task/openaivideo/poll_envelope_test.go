@@ -78,7 +78,7 @@ func TestParseTaskResult_CodeDataEnvelopeArkTaskIDFailed(t *testing.T) {
 	require.Equal(t, "video_failed", ti.Reason)
 }
 
-func TestApplyTokenFactoryTaskBillingHeaderOverridesLocalEstimate(t *testing.T) {
+func TestApplyTokenFactoryTaskBillingHeaderKeepsLocalPriceAndCopiesVideoMetadata(t *testing.T) {
 	chDiscount := float64(100)
 	info := &relaycommon.RelayInfo{
 		PriceData: types.PriceData{
@@ -109,12 +109,15 @@ func TestApplyTokenFactoryTaskBillingHeaderOverridesLocalEstimate(t *testing.T) 
 
 	applyTokenFactoryTaskBillingHeader(resp, info)
 
-	require.Equal(t, 1183335, info.PriceData.Quota)
-	require.Equal(t, 1183335, info.PriceData.QuotaToPreConsume)
-	require.Equal(t, 50000, info.PriceData.VideoOutputTokens)
-	require.Equal(t, service.VideoRuleUnitPerToken, info.PriceData.VideoRuleUnit)
-	require.Equal(t, "text_to_video", info.PriceData.VideoBillingMode)
-	require.InDelta(t, 47.3334, info.PriceData.VideoChannelRulePrice, 1e-9)
+	require.Equal(t, 22500, info.PriceData.Quota)
+	require.Equal(t, 0, info.PriceData.QuotaToPreConsume)
+	require.EqualValues(t, 50000, info.UpstreamTaskBillingOther["video_total_tokens"])
+	require.EqualValues(t, 50000, info.UpstreamTaskBillingOther["video_output_tokens"])
+	require.EqualValues(t, 1280, info.UpstreamTaskBillingOther["video_width"])
+	require.EqualValues(t, 720, info.UpstreamTaskBillingOther["video_height"])
+	require.Equal(t, false, info.UpstreamTaskBillingOther["video_has_audio"])
+	require.NotContains(t, info.UpstreamTaskBillingOther, "video_billed_quota")
+	require.NotContains(t, info.UpstreamTaskBillingOther, "video_token_unit_price")
 	require.Equal(t, 1.0, info.PriceData.GroupRatioInfo.GroupRatio)
 }
 
@@ -135,14 +138,18 @@ func TestApplyTokenFactoryTaskBillingHeaderCopiesUpstreamOther(t *testing.T) {
 		"video_resolution":"720p",
 		"video_price_per_second":3.34,
 		"video_billed_quota":16700000,
-		"video_quota_per_unit":500000
+		"video_quota_per_unit":500000,
+		"balance_delta":-16700000
 	}`)
 
 	applyTokenFactoryTaskBillingHeader(resp, info)
 
-	require.Equal(t, 16700000, info.PriceData.Quota)
+	require.Equal(t, 22500, info.PriceData.Quota)
 	require.Equal(t, "video_per_second", info.UpstreamTaskBillingOther["billing_mode"])
 	require.Equal(t, float64(5), info.UpstreamTaskBillingOther["video_seconds"])
 	require.Equal(t, "720p", info.UpstreamTaskBillingOther["video_resolution"])
-	require.Equal(t, float64(16700000), info.UpstreamTaskBillingOther["video_billed_quota"])
+	require.NotContains(t, info.UpstreamTaskBillingOther, "video_price_per_second")
+	require.NotContains(t, info.UpstreamTaskBillingOther, "video_billed_quota")
+	require.NotContains(t, info.UpstreamTaskBillingOther, "video_quota_per_unit")
+	require.NotContains(t, info.UpstreamTaskBillingOther, "balance_delta")
 }

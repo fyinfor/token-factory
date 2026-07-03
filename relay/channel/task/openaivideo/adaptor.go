@@ -686,19 +686,15 @@ func applyTokenFactoryTaskBillingHeader(resp *http.Response, info *relaycommon.R
 		return
 	}
 	raw := strings.TrimSpace(resp.Header.Get("X-New-Api-Task-Billing"))
-	if raw == "" {
-		return
+	if raw != "" {
+		var upstreamPrice types.PriceData
+		if err := common.UnmarshalJsonStr(raw, &upstreamPrice); err == nil {
+			info.UpstreamTaskBillingOther = mergeTokenFactoryVideoMetadata(
+				info.UpstreamTaskBillingOther,
+				tokenFactoryVideoMetadataFromPriceData(upstreamPrice),
+			)
+		}
 	}
-	var upstreamPrice types.PriceData
-	if err := common.UnmarshalJsonStr(raw, &upstreamPrice); err != nil {
-		return
-	}
-	if upstreamPrice.Quota <= 0 {
-		return
-	}
-	upstreamPrice.GroupRatioInfo = info.PriceData.GroupRatioInfo
-	upstreamPrice.QuotaToPreConsume = upstreamPrice.Quota
-	info.PriceData = upstreamPrice
 
 	otherRaw := strings.TrimSpace(resp.Header.Get(service.TaskBillingOtherHeader))
 	if otherRaw == "" {
@@ -708,7 +704,95 @@ func applyTokenFactoryTaskBillingHeader(resp *http.Response, info *relaycommon.R
 	if err := common.UnmarshalJsonStr(otherRaw, &upstreamOther); err != nil {
 		return
 	}
-	info.UpstreamTaskBillingOther = upstreamOther
+	info.UpstreamTaskBillingOther = mergeTokenFactoryVideoMetadata(
+		info.UpstreamTaskBillingOther,
+		filterTokenFactoryVideoMetadata(upstreamOther),
+	)
+}
+
+func tokenFactoryVideoMetadataFromPriceData(price types.PriceData) map[string]interface{} {
+	metadata := make(map[string]interface{})
+	if price.VideoOutputTokens > 0 {
+		metadata["video_total_tokens"] = price.VideoOutputTokens
+		metadata["video_output_tokens"] = price.VideoOutputTokens
+	}
+	if price.VideoInputTextTokens > 0 {
+		metadata["video_input_text_tokens"] = price.VideoInputTextTokens
+	}
+	if price.VideoRuleWidth > 0 {
+		metadata["video_rule_width"] = price.VideoRuleWidth
+		metadata["video_width"] = price.VideoRuleWidth
+	}
+	if price.VideoRuleHeight > 0 {
+		metadata["video_rule_height"] = price.VideoRuleHeight
+		metadata["video_height"] = price.VideoRuleHeight
+	}
+	if price.VideoRuleWidth > 0 || price.VideoRuleHeight > 0 {
+		metadata["video_has_audio"] = price.VideoRuleHasAudio
+	}
+	if strings.TrimSpace(price.VideoBillingMode) != "" {
+		metadata["video_billing_lane"] = strings.TrimSpace(price.VideoBillingMode)
+	}
+	if strings.TrimSpace(price.VideoRuleUnit) != "" {
+		metadata["video_rule_unit"] = strings.TrimSpace(price.VideoRuleUnit)
+	}
+	return metadata
+}
+
+func mergeTokenFactoryVideoMetadata(base map[string]interface{}, extra map[string]interface{}) map[string]interface{} {
+	if len(extra) == 0 {
+		return base
+	}
+	if base == nil {
+		base = make(map[string]interface{}, len(extra))
+	}
+	for k, v := range extra {
+		base[k] = v
+	}
+	return base
+}
+
+func filterTokenFactoryVideoMetadata(other map[string]interface{}) map[string]interface{} {
+	if len(other) == 0 {
+		return nil
+	}
+	filtered := make(map[string]interface{})
+	for k, v := range other {
+		if !isTokenFactoryVideoMetadataKey(k) {
+			continue
+		}
+		filtered[k] = v
+	}
+	return filtered
+}
+
+func isTokenFactoryVideoMetadataKey(key string) bool {
+	switch key {
+	case "billing_mode",
+		"video_total_tokens",
+		"video_output_tokens",
+		"video_input_text_tokens",
+		"video_seconds",
+		"video_duration",
+		"video_width",
+		"video_height",
+		"video_rule_width",
+		"video_rule_height",
+		"video_resolution",
+		"video_resolution_from_input",
+		"video_ratio_label",
+		"video_aspect_ratio",
+		"video_ratio",
+		"video_has_audio",
+		"video_unified_audio_price",
+		"video_capped_to_max_tier",
+		"video_count",
+		"video_billing_lane",
+		"video_rule_unit":
+		return true
+	default:
+		return false
+	}
 }
 
 func writeTaskBillingHeaders(c *gin.Context, info *relaycommon.RelayInfo) {

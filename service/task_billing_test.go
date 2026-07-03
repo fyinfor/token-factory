@@ -886,7 +886,7 @@ func TestLogTaskConsumption_VideoPerVideoFlatBilling(t *testing.T) {
 	assert.Equal(t, common.QuotaPerUnit, other["video_quota_per_unit"])
 }
 
-func TestLogTaskConsumption_TokenFactoryOpenUsesUpstreamBillingOther(t *testing.T) {
+func TestLogTaskConsumption_TokenFactoryOpenUsesOnlyUpstreamVideoMetadata(t *testing.T) {
 	truncate(t)
 	seedUser(t, 1, 100000000)
 	seedChannel(t, 1)
@@ -921,8 +921,8 @@ func TestLogTaskConsumption_TokenFactoryOpenUsesUpstreamBillingOther(t *testing.
 			"video_seconds":          float64(5),
 			"video_resolution":       "720p",
 			"video_price_per_second": float64(3.34),
-			"video_billed_quota":     float64(16700000),
-			"video_quota_per_unit":   common.QuotaPerUnit,
+			"video_billed_quota":     float64(99999999),
+			"video_quota_per_unit":   float64(123),
 			"balance_delta":          float64(-999999),
 			"task_id":                "task_upstream_should_not_leak",
 		},
@@ -934,11 +934,12 @@ func TestLogTaskConsumption_TokenFactoryOpenUsesUpstreamBillingOther(t *testing.
 	require.NotNil(t, log)
 	var other map[string]interface{}
 	require.NoError(t, common.Unmarshal([]byte(log.Other), &other))
-	assert.Equal(t, "video_per_second", other["billing_mode"])
+	assert.Equal(t, "video_per_video", other["billing_mode"])
 	assert.Equal(t, float64(5), other["video_seconds"])
 	assert.Equal(t, "720p", other["video_resolution"])
-	assert.Equal(t, float64(3.34), other["video_price_per_second"])
+	assert.NotContains(t, other, "video_price_per_second")
 	assert.Equal(t, float64(16700000), other["video_billed_quota"])
+	assert.Equal(t, common.QuotaPerUnit, other["video_quota_per_unit"])
 	assert.Equal(t, "task_downstream_1", other["task_id"])
 	assert.Equal(t, float64(-16700000), other["balance_delta"])
 	assert.Equal(t, string(model.BillingPhasePreCharge), other["billing_phase"])

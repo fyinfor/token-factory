@@ -20,6 +20,9 @@ func ResolveActualTaskQuotaOnSubmit(c *gin.Context, info *relaycommon.RelayInfo,
 	if info == nil {
 		return estimatedQuota
 	}
+	if info.ChannelType == constant.ChannelTypeTokenFactoryOpen && len(info.UpstreamTaskBillingOther) > 0 {
+		return estimatedQuota
+	}
 	if totalTokens := extractTotalTokensFromTaskData(taskData); totalTokens > 0 {
 		if quota := calcQuotaByUpstreamTokens(info, totalTokens); quota > 0 {
 			return quota

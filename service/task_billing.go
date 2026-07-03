@@ -141,10 +141,10 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 	other["channel_price_discount_percent"] = discPct
 	if len(info.UpstreamTaskBillingOther) > 0 {
 		for k, v := range info.UpstreamTaskBillingOther {
-			switch k {
-			case "task_id", "request_path", "billing_phase", "affects_balance", "display_quota", "balance_delta":
+			if !isUpstreamVideoMetadataLogKey(k) {
 				continue
-			default:
+			}
+			if _, exists := other[k]; !exists {
 				other[k] = v
 			}
 		}
@@ -247,6 +247,14 @@ func taskBillingOther(task *model.Task) map[string]interface{} {
 				other["billing_mode"] = "video_per_second"
 			}
 		}
+		for k, v := range bc.UpstreamBillingOther {
+			if !isUpstreamVideoMetadataLogKey(k) {
+				continue
+			}
+			if _, exists := other[k]; !exists {
+				other[k] = v
+			}
+		}
 	}
 	props := task.Properties
 	if props.UpstreamModelName != "" && props.UpstreamModelName != props.OriginModelName {
@@ -265,6 +273,35 @@ func taskBillingOther(task *model.Task) map[string]interface{} {
 	}
 	other["channel_price_discount_percent"] = discPct
 	return other
+}
+
+func isUpstreamVideoMetadataLogKey(key string) bool {
+	switch key {
+	case "billing_mode",
+		"video_total_tokens",
+		"video_output_tokens",
+		"video_input_text_tokens",
+		"video_seconds",
+		"video_duration",
+		"video_width",
+		"video_height",
+		"video_rule_width",
+		"video_rule_height",
+		"video_resolution",
+		"video_resolution_from_input",
+		"video_ratio_label",
+		"video_aspect_ratio",
+		"video_ratio",
+		"video_has_audio",
+		"video_unified_audio_price",
+		"video_capped_to_max_tier",
+		"video_count",
+		"video_billing_lane",
+		"video_rule_unit":
+		return true
+	default:
+		return false
+	}
 }
 
 func videoPerSecondBillingDetailFromSubmit(c *gin.Context, info *relaycommon.RelayInfo) *videoPerSecondBillingDetail {

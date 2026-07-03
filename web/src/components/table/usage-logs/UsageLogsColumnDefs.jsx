@@ -31,6 +31,8 @@ import {
   renderQuota,
   stringToColor,
   getLogOther,
+  getCurrencyConfig,
+  getQuotaPerUnit,
   renderModelTag,
   renderModelPriceSimple,
   trimDecimalsInLogDetailText,
@@ -82,6 +84,60 @@ function buildChannelAffinityTooltip(affinity, t) {
       ))}
     </div>
   );
+}
+
+function formatPreciseNumber(value, digits = 6) {
+  const numberValue = Number(value || 0);
+  if (!Number.isFinite(numberValue)) {
+    return '0';
+  }
+  return numberValue.toFixed(digits).replace(/\.?0+$/, '') || '0';
+}
+
+function getLogVideoQuotaPerUnit(other) {
+  const logQuotaPerUnit = Number(other?.video_quota_per_unit || 0);
+  if (Number.isFinite(logQuotaPerUnit) && logQuotaPerUnit > 0) {
+    return logQuotaPerUnit;
+  }
+  const currentQuotaPerUnit = Number(getQuotaPerUnit() || 0);
+  return Number.isFinite(currentQuotaPerUnit) && currentQuotaPerUnit > 0
+    ? currentQuotaPerUnit
+    : 500000;
+}
+
+function isVideoBillingLog(other) {
+  return (
+    other?.billing_mode === 'video_per_second' ||
+    other?.billing_mode === 'video_token_output' ||
+    other?.billing_mode === 'video_per_video' ||
+    Boolean(other?.video_billed_quota) ||
+    String(other?.request_path || '').includes('/videos')
+  );
+}
+
+function renderLogVideoQuota(other, quota, digits = 6) {
+  const q = Number(quota || 0);
+  if (!Number.isFinite(q)) {
+    return renderQuota(0, digits);
+  }
+
+  const { symbol, rate, type } = getCurrencyConfig();
+  if (type === 'TOKENS') {
+    return formatPreciseNumber(q, 2);
+  }
+
+  const displayValue = (q / getLogVideoQuotaPerUnit(other)) * (rate || 1);
+  const fixedResult = parseFloat(displayValue.toFixed(digits));
+  if (fixedResult === 0 && q > 0 && displayValue > 0) {
+    return `${symbol}${formatPreciseNumber(Math.pow(10, -digits), digits)}`;
+  }
+  return `${symbol}${formatPreciseNumber(fixedResult, digits)}`;
+}
+
+function renderUsageLogQuota(record, quota, other, digits = 2) {
+  return isVideoBillingLog(other)
+    ? renderLogVideoQuota(other, quota, Math.max(digits, 6))
+    : renderQuota(quota, digits);
 }
 
 // Render functions
@@ -356,18 +412,18 @@ function getUsageLogDetailSummary(record, text, billingDisplayMode, t) {
           { text: t('异步任务差额退款'), tone: 'primary' },
           Number.isFinite(preConsumedQuota) && preConsumedQuota > 0
             ? {
-                text: `${t('预扣费')}：${renderQuota(preConsumedQuota)}`,
+                text: `${t('预扣费')}：${renderUsageLogQuota(record, preConsumedQuota, other, 6)}`,
                 tone: 'secondary',
               }
             : null,
           Number.isFinite(actualQuota) && actualQuota > 0
             ? {
-                text: `${t('实际扣费')}：${renderQuota(actualQuota)}`,
+                text: `${t('实际扣费')}：${renderUsageLogQuota(record, actualQuota, other, 6)}`,
                 tone: 'secondary',
               }
             : null,
           {
-            text: `${t('返还差额')}：${renderQuota(refundQuota)}`,
+            text: `${t('返还差额')}：${renderUsageLogQuota(record, refundQuota, other, 6)}`,
             tone: 'secondary',
           },
         ].filter(Boolean),
@@ -855,12 +911,11 @@ export const getLogsColumns = ({
         }
         const other = getLogOther(record.other);
         const isSubscription = other?.billing_source === 'subscription';
-        const quotaDigits =
-          other?.billing_mode === 'video_token_output' ? 6 : 2;
+        const quotaDigits = isVideoBillingLog(other) ? 6 : 2;
         if (isSubscription) {
           // Subscription billed: show only tag (no $0), but keep tooltip for equivalent cost.
           return (
-            <Tooltip content={`${t('由订阅抵扣')}：${renderQuota(text, quotaDigits)}`}>
+            <Tooltip content={`${t('由订阅抵扣')}：${renderUsageLogQuota(record, text, other, quotaDigits)}`}>
               <span>{renderBillingTag(record, t)}</span>
             </Tooltip>
           );
@@ -871,11 +926,11 @@ export const getLogsColumns = ({
           return (
             <span>
               <span className='text-gray-500'>{phaseLabel} </span>
-              {renderQuota(phaseQuota, quotaDigits)}
+              {renderUsageLogQuota(record, phaseQuota, other, quotaDigits)}
             </span>
           );
         }
-        return <>{renderQuota(text, quotaDigits)}</>;
+        return <>{renderUsageLogQuota(record, text, other, quotaDigits)}</>;
       },
     },
     {
