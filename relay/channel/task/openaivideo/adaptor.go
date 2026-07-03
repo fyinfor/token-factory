@@ -25,6 +25,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
+	"github.com/tidwall/sjson"
 )
 
 // ============================================================================
@@ -157,17 +158,63 @@ func IsTfOpenOpenAIVideosStyle(style string) bool {
 // PassthroughOpenAIVideoJSON returns upstream OpenAI-style video JSON with only the public
 // task id substituted so downstream polling can use the local task id.
 func PassthroughOpenAIVideoJSON(respBody []byte, publicTaskID, requestPath string) ([]byte, error) {
-	body := normalizeOpenAIVideoPollJSON(respBody)
-	if publicTaskID != "" {
-		var probe map[string]any
-		if err := common.Unmarshal(body, &probe); err == nil {
-			probe["id"] = publicTaskID
-			if patched, err := common.Marshal(probe); err == nil {
-				body = patched
+	body := respBody
+	publicTaskID = strings.TrimSpace(publicTaskID)
+	if publicTaskID == "" {
+		return body, nil
+	}
+	if patched, err := replaceOpenAIVideoPublicTaskID(body, publicTaskID); err == nil {
+		body = patched
+	}
+	return body, nil
+}
+
+func replaceOpenAIVideoPublicTaskID(respBody []byte, publicTaskID string) ([]byte, error) {
+	var probe map[string]any
+	if err := common.Unmarshal(respBody, &probe); err != nil {
+		return respBody, err
+	}
+	body := respBody
+	var replaced bool
+	if _, ok := probe["id"]; ok {
+		patched, err := sjson.SetBytes(body, "id", publicTaskID)
+		if err != nil {
+			return respBody, err
+		}
+		body = patched
+		replaced = true
+	}
+	if _, ok := probe["task_id"]; ok {
+		patched, err := sjson.SetBytes(body, "task_id", publicTaskID)
+		if err != nil {
+			return respBody, err
+		}
+		body = patched
+		replaced = true
+	}
+	data, _ := probe["data"].(map[string]any)
+	if data != nil {
+		if _, ok := data["id"]; ok {
+			patched, err := sjson.SetBytes(body, "data.id", publicTaskID)
+			if err != nil {
+				return respBody, err
 			}
+			body = patched
+			replaced = true
+		}
+		if _, ok := data["task_id"]; ok {
+			patched, err := sjson.SetBytes(body, "data.task_id", publicTaskID)
+			if err != nil {
+				return respBody, err
+			}
+			body = patched
+			replaced = true
 		}
 	}
-	return dto.AdaptOpenAIVideoJSONForPath(requestPath, body)
+	if !replaced {
+		return respBody, nil
+	}
+	return body, nil
 }
 
 func writePassthroughOpenAIVideoResponse(c *gin.Context, body []byte) {
@@ -360,8 +407,14 @@ func parseTfUpstreamSubmitTaskID(respBody []byte) (string, *dto.TaskError) {
 	if id := asStringAny(probe["id"]); id != "" {
 		return id, nil
 	}
+	if id := asStringAny(probe["task_id"]); id != "" {
+		return id, nil
+	}
 	if data, ok := probe["data"].(map[string]any); ok {
 		if id := asStringAny(data["id"]); id != "" {
+			return id, nil
+		}
+		if id := asStringAny(data["task_id"]); id != "" {
 			return id, nil
 		}
 	}
@@ -732,9 +785,9 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	}
 }
 
-// normalizeOpenAIVideoPollJSON unwraps common reseller / Volc-style envelopes so that
-// Ark-shaped bodies are visible to detectResponseProtocol / parseArkResult.
-// Example: {"code":0,"data":{"id":"...","status":"succeeded","content":{...}}}
+// normalizeOpenAIVideoPollJSON unwraps common reseller / Volc-style envelopes for
+// internal status parsing only. TokenFactoryOpen passthrough responses must not use
+// this helper; downstream should receive the upstream JSON shape unchanged.
 func normalizeOpenAIVideoPollJSON(respBody []byte) []byte {
 	var probe map[string]any
 	if err := common.Unmarshal(respBody, &probe); err != nil {
@@ -749,9 +802,11 @@ func normalizeOpenAIVideoPollJSON(respBody []byte) []byte {
 	}
 	// Ark task object: has id, or has content/output typical of video poll
 	_, hasID := data["id"]
+	_, hasTaskID := data["task_id"]
 	_, hasContent := data["content"]
 	_, hasOutput := data["output"]
-	if !hasID && !hasContent && !hasOutput {
+	_, hasError := data["error"]
+	if !hasID && !hasTaskID && !hasContent && !hasOutput && !hasError && !hasKnownOpenAIVideoStatus(data["status"]) {
 		return respBody
 	}
 	nested, err := common.Marshal(data)
@@ -759,6 +814,15 @@ func normalizeOpenAIVideoPollJSON(respBody []byte) []byte {
 		return respBody
 	}
 	return nested
+}
+
+func hasKnownOpenAIVideoStatus(status any) bool {
+	switch strings.ToLower(strings.TrimSpace(asStringAny(status))) {
+	case "queued", "running", "in_progress", "processing", "succeeded", "completed", "success", "done", "failed", "expired", "cancelled", "canceled":
+		return true
+	default:
+		return false
+	}
 }
 
 // detectResponseProtocol probes characteristic top-level fields to figure out

@@ -30,6 +30,23 @@ func TestPassthroughOpenAIVideoJSON_ReplacesPublicTaskID(t *testing.T) {
 	require.Equal(t, "queued", m["status"])
 }
 
+func TestPassthroughOpenAIVideoJSON_PreservesUpstreamEnvelope(t *testing.T) {
+	body := []byte(`{"code":0,"message":"success","data":{"id":"upstream-id","status":"failed","error":{"message":"upstream failed"}}}`)
+	out, err := PassthroughOpenAIVideoJSON(body, "task_local_1", "/api/playground/videos")
+	require.NoError(t, err)
+	require.JSONEq(t, `{"code":0,"message":"success","data":{"id":"task_local_1","status":"failed","error":{"message":"upstream failed"}}}`, string(out))
+}
+
+func TestParseTfUpstreamSubmitTaskID_TaskIDShapes(t *testing.T) {
+	id, taskErr := parseTfUpstreamSubmitTaskID([]byte(`{"task_id":"upstream-task-id","status":"queued"}`))
+	require.Nil(t, taskErr)
+	require.Equal(t, "upstream-task-id", id)
+
+	id, taskErr = parseTfUpstreamSubmitTaskID([]byte(`{"code":0,"data":{"task_id":"nested-upstream-task-id","status":"queued"}}`))
+	require.Nil(t, taskErr)
+	require.Equal(t, "nested-upstream-task-id", id)
+}
+
 func TestDoResponse_TokenFactoryOpenPassthroughSubmit(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())

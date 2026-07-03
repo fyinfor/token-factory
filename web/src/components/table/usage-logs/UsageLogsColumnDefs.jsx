@@ -348,9 +348,9 @@ function getUsageLogDetailSummary(record, text, billingDisplayMode, t) {
     if (phase === 'delta_refund') {
       const actualQuota = Number(other?.actual_quota);
       const preConsumedQuota = Number(other?.pre_consumed_quota);
-      const refundQuota = Number(
+      const refundQuota = Math.abs(Number(
         other?.display_quota ?? other?.balance_delta ?? record?.quota ?? 0,
-      );
+      ));
       return {
         segments: [
           { text: t('异步任务差额退款'), tone: 'primary' },

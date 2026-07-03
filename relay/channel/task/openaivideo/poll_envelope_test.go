@@ -45,6 +45,39 @@ func TestParseTaskResult_CodeDataEnvelopeArkOutputVideoURL(t *testing.T) {
 	require.Equal(t, "https://cdn.example.com/v.mp4", ti.Url)
 }
 
+func TestParseTaskResult_CodeDataEnvelopeArkFailedWithoutOutput(t *testing.T) {
+	a := &TaskAdaptor{}
+	body := []byte(`{
+		"code": 0,
+		"message": "success",
+		"data": {
+			"id": "cgt-failed-1",
+			"status": "failed",
+			"error": { "message": "generation failed" }
+		}
+	}`)
+	ti, err := a.ParseTaskResult(body)
+	require.NoError(t, err)
+	require.Equal(t, string(model.TaskStatusFailure), ti.Status)
+	require.Equal(t, "generation failed", ti.Reason)
+}
+
+func TestParseTaskResult_CodeDataEnvelopeArkTaskIDFailed(t *testing.T) {
+	a := &TaskAdaptor{}
+	body := []byte(`{
+		"code": 0,
+		"data": {
+			"task_id": "task-upstream-1",
+			"status": "failed",
+			"error": { "code": "video_failed" }
+		}
+	}`)
+	ti, err := a.ParseTaskResult(body)
+	require.NoError(t, err)
+	require.Equal(t, string(model.TaskStatusFailure), ti.Status)
+	require.Equal(t, "video_failed", ti.Reason)
+}
+
 func TestApplyTokenFactoryTaskBillingHeaderOverridesLocalEstimate(t *testing.T) {
 	chDiscount := float64(100)
 	info := &relaycommon.RelayInfo{
