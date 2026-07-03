@@ -136,10 +136,60 @@ func classifyTfOpenVideoClientPath(requestURLPath string) string {
 	if strings.Contains(path, "/v1/videos/") && strings.HasSuffix(path, "/remix") {
 		return tfStyleOpenAIRemix
 	}
-	if strings.HasSuffix(path, "/v1/videos") {
+	if strings.HasSuffix(path, "/v1/videos") ||
+		strings.HasSuffix(path, "/api/playground/videos") {
 		return tfStyleOpenAIVideos
 	}
 	return tfStyleVideoGenerations
+}
+
+// IsTfOpenOpenAIVideosStyle reports whether TokenFactoryOpen (60) should relay video
+// through upstream /v1/videos* with request/response passthrough.
+func IsTfOpenOpenAIVideosStyle(style string) bool {
+	switch strings.TrimSpace(style) {
+	case tfStyleOpenAIVideos, tfStyleOpenAIRemix:
+		return true
+	default:
+		return false
+	}
+}
+
+// PassthroughOpenAIVideoJSON returns upstream OpenAI-style video JSON with only the public
+// task id substituted so downstream polling can use the local task id.
+func PassthroughOpenAIVideoJSON(respBody []byte, publicTaskID, requestPath string) ([]byte, error) {
+	body := normalizeOpenAIVideoPollJSON(respBody)
+	if publicTaskID != "" {
+		var probe map[string]any
+		if err := common.Unmarshal(body, &probe); err == nil {
+			probe["id"] = publicTaskID
+			if patched, err := common.Marshal(probe); err == nil {
+				body = patched
+			}
+		}
+	}
+	return dto.AdaptOpenAIVideoJSONForPath(requestPath, body)
+}
+
+func writePassthroughOpenAIVideoResponse(c *gin.Context, body []byte) {
+	if c == nil {
+		return
+	}
+	c.Data(http.StatusOK, "application/json", body)
+}
+
+func mapArkVideoStatusToOpenAI(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "succeeded", "completed", "success", "done":
+		return dto.VideoStatusCompleted
+	case "failed", "expired", "cancelled", "canceled":
+		return dto.VideoStatusFailed
+	case "queued":
+		return dto.VideoStatusQueued
+	case "running", "in_progress", "processing":
+		return dto.VideoStatusInProgress
+	default:
+		return ""
+	}
 }
 
 // ============================================================================
@@ -533,13 +583,22 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 			return "", nil, service.TaskErrorWrapper(errors.New(msg), "video_submit_failed", http.StatusBadRequest)
 		}
 		taskID = strings.TrimSpace(sub.Result.TaskID)
-	} else if a.protocol == ProtocolTokenFactory && info != nil &&
-		(info.TfOpenVideoUpstreamStyle == tfStyleOpenAIVideos || info.TfOpenVideoUpstreamStyle == tfStyleOpenAIRemix) {
+	} else if a.protocol == ProtocolTokenFactory && info != nil && IsTfOpenOpenAIVideosStyle(info.TfOpenVideoUpstreamStyle) {
 		var terr *dto.TaskError
 		taskID, terr = parseTfUpstreamSubmitTaskID(decodedBody)
 		if terr != nil {
 			return "", nil, terr
 		}
+		requestPath := ""
+		if c != nil && c.Request != nil && c.Request.URL != nil {
+			requestPath = c.Request.URL.Path
+		}
+		if passthroughBody, err := PassthroughOpenAIVideoJSON(decodedBody, info.PublicTaskID, requestPath); err == nil {
+			writePassthroughOpenAIVideoResponse(c, passthroughBody)
+		} else {
+			writePassthroughOpenAIVideoResponse(c, decodedBody)
+		}
+		return taskID, decodedBody, nil
 	} else {
 		var sub arkSubmitResponse
 		if err := common.Unmarshal(decodedBody, &sub); err != nil {
@@ -956,6 +1015,9 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 		if err := common.Unmarshal(normalizedData, &resp); err != nil {
 			return common.Marshal(ov)
 		}
+		if st := mapArkVideoStatusToOpenAI(resp.Status); st != "" {
+			ov.Status = st
+		}
 		if resp.Content != nil && strings.TrimSpace(resp.Content.VideoURL) != "" {
 			ov.SetMetadata("url", resp.Content.VideoURL)
 		} else if resp.Output != nil && strings.TrimSpace(resp.Output.VideoURL) != "" {
@@ -965,6 +1027,11 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 			ov.Error = &dto.OpenAIVideoError{
 				Message: firstNonEmpty(resp.Error.Message, resp.Error.Code),
 				Code:    firstNonEmpty(resp.Error.Code, "video_task_failed"),
+			}
+		} else if ov.Status == dto.VideoStatusFailed && ov.Error == nil {
+			ov.Error = &dto.OpenAIVideoError{
+				Message: firstNonEmpty(resp.Status, "video task failed"),
+				Code:    "video_task_failed",
 			}
 		}
 	}
