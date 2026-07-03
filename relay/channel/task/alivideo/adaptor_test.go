@@ -41,6 +41,24 @@ func TestConvertToAliRequest_TextToVideo(t *testing.T) {
 	if aliReq.Parameters.Resolution != "720P" {
 		t.Fatalf("resolution = %q", aliReq.Parameters.Resolution)
 	}
+	if aliReq.Parameters.Watermark == nil || *aliReq.Parameters.Watermark != false {
+		t.Fatalf("watermark = %v, want false", aliReq.Parameters.Watermark)
+	}
+}
+
+func TestEnrichNativeAliVideoBody_DefaultWatermark(t *testing.T) {
+	body := []byte(`{"model":"happyhorse-1.0-t2v","input":{"prompt":"x"},"parameters":{"duration":5}}`)
+	out, err := enrichNativeAliVideoBody(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var aliReq AliVideoRequest
+	if err := json.Unmarshal(out, &aliReq); err != nil {
+		t.Fatal(err)
+	}
+	if aliReq.Parameters == nil || aliReq.Parameters.Watermark == nil || *aliReq.Parameters.Watermark != false {
+		t.Fatalf("watermark = %v, want false", aliReq.Parameters)
+	}
 }
 
 func TestBuildMediaFromTaskReq_VideoURLsInMetadata(t *testing.T) {

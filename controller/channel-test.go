@@ -1044,6 +1044,7 @@ func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, 
 				"resolution": "720P",
 				"ratio":      "16:9",
 				"duration":   5,
+				"watermark":  false,
 			},
 		}
 	case constant.EndpointTypeSeedanceVideo:

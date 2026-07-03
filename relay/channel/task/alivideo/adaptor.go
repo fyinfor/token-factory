@@ -187,6 +187,16 @@ func ensureMediaFromLegacyFields(input *AliVideoInput, _ string) {
 	}
 }
 
+func ensureDefaultParameters(params *AliVideoParameters) *AliVideoParameters {
+	if params == nil {
+		params = &AliVideoParameters{}
+	}
+	if params.Watermark == nil {
+		params.Watermark = common.GetPointer(false)
+	}
+	return params
+}
+
 func enrichNativeAliVideoBody(body []byte) ([]byte, error) {
 	var aliReq AliVideoRequest
 	if err := common.Unmarshal(body, &aliReq); err != nil {
@@ -197,10 +207,15 @@ func enrichNativeAliVideoBody(body []byte) ([]byte, error) {
 		profile := aliVideoMediaProfile(aliReq.Model)
 		aliReq.Input.Media = finalizeAliVideoMedia(profile, normalizeAliVideoMedia(profile, aliReq.Input.Media))
 	}
-	if len(aliReq.Input.Media) == 0 {
+	aliReq.Parameters = ensureDefaultParameters(aliReq.Parameters)
+	newBody, err := common.Marshal(aliReq)
+	if err != nil {
+		return nil, err
+	}
+	if bytes.Equal(newBody, body) {
 		return body, nil
 	}
-	return common.Marshal(aliReq)
+	return newBody, nil
 }
 
 func (a *TaskAdaptor) BuildRequestURL(_ *relaycommon.RelayInfo) (string, error) {
@@ -253,7 +268,7 @@ func (a *TaskAdaptor) convertToAliRequest(info *relaycommon.RelayInfo, req relay
 		Input: AliVideoInput{
 			Prompt: req.Prompt,
 		},
-		Parameters: &AliVideoParameters{},
+		Parameters: ensureDefaultParameters(nil),
 	}
 
 	media := buildMediaFromTaskReq(upstreamModel, req)
@@ -280,6 +295,7 @@ func (a *TaskAdaptor) convertToAliRequest(info *relaycommon.RelayInfo, req relay
 		return nil, errors.New("can't change model with metadata")
 	}
 
+	aliReq.Parameters = ensureDefaultParameters(aliReq.Parameters)
 	return aliReq, nil
 }
 
