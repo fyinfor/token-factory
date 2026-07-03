@@ -15,6 +15,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const TaskBillingOtherHeader = "X-New-Api-Task-Billing-Other"
+
 // LogTaskConsumption 记录任务消费日志和统计信息（仅记录，不涉及实际扣费）。
 // 实际扣费已由 BillingSession（PreConsumeBilling + SettleBilling）完成。
 func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
@@ -22,29 +24,29 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 	logContent := fmt.Sprintf("操作 %s", info.Action)
 
 	// 视频按 token 规则计费：per_token 表 + 预扣固定 token。
-	isVideoPerTokenRuleBilling := constant.IsVideoTaskChannel(info.ChannelType) &&
-		info.PriceData.UsePrice &&
+	isVideoPerTokenRuleBilling := info.PriceData.UsePrice &&
 		info.PriceData.ModelPrice == 0 &&
 		info.PriceData.VideoRuleUnit == VideoRuleUnitPerToken &&
-		info.PriceData.VideoOutputTokens > 0
+		info.PriceData.VideoOutputTokens > 0 &&
+		constant.UsesRelayVideoPricing(info.ChannelType)
 
 	// 视频按 token 计费分支（legacy token ratio 路径）：任务型视频渠道 + UsePrice + ModelPrice=0 + VideoOutputTokens>0。
 	// 该分支下 quota 已由 outputVideoTokens × ratios × group 直接算出，
 	// OtherRatios 的 seconds/size 不参与计费（已在 relay_task.go 步骤 5/6 跳过），
 	// 因此 logContent 应展示真实公式而非 "计算参数：seconds, size"。
-	isVideoTokenBilling := constant.IsVideoTaskChannel(info.ChannelType) &&
-		info.PriceData.UsePrice &&
+	isVideoTokenBilling := info.PriceData.UsePrice &&
 		info.PriceData.ModelPrice == 0 &&
 		info.PriceData.VideoOutputTokens > 0 &&
-		info.PriceData.VideoRuleUnit != VideoRuleUnitPerToken
+		info.PriceData.VideoRuleUnit != VideoRuleUnitPerToken &&
+		constant.UsesRelayVideoPricing(info.ChannelType)
 
 	// 视频按分辨率/条一口价（*_per_video）：ModelPriceHelperVideo 将 ModelRatio 置 0、
 	// VideoOutputTokens 为 0，预扣已在 relay 中按条合并，不应再展示为「按次 $0」或 seconds 倍率文案。
-	isVideoPerVideoFlatBilling := constant.IsVideoTaskChannel(info.ChannelType) &&
-		info.PriceData.UsePrice &&
+	isVideoPerVideoFlatBilling := info.PriceData.UsePrice &&
 		info.PriceData.ModelPrice == 0 &&
 		info.PriceData.VideoOutputTokens == 0 &&
-		info.PriceData.ModelRatio == 0
+		info.PriceData.ModelRatio == 0 &&
+		constant.UsesRelayVideoPricing(info.ChannelType)
 	isVideoPerSecondBilling := isVideoPerVideoFlatBilling &&
 		info.PriceData.OtherRatios != nil &&
 		info.PriceData.OtherRatios["seconds"] > 0
@@ -137,7 +139,22 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		discPct = model.ResolveChannelEffectiveCostPercent(info.ChannelId)
 	}
 	other["channel_price_discount_percent"] = discPct
+	if len(info.UpstreamTaskBillingOther) > 0 {
+		for k, v := range info.UpstreamTaskBillingOther {
+			if !isUpstreamVideoMetadataLogKey(k) {
+				continue
+			}
+			if _, exists := other[k]; !exists {
+				other[k] = v
+			}
+		}
+	}
 	other = model.SetBillingLogMetadata(other, model.BillingPhasePreCharge, true, info.PriceData.Quota, -int64(info.PriceData.Quota))
+	if c != nil && !c.Writer.Written() {
+		if otherJSON, err := common.Marshal(other); err == nil {
+			c.Header(TaskBillingOtherHeader, string(otherJSON))
+		}
+	}
 	// 异步任务没有真实 prompt/completion tokens，将预扣额度作为 token_used 上报，
 	// 使 /rankings 排行（聚合 quota_data.token_used）能看到 Seedance/Kling/Sora 等视频模型。
 	preChargeTokens := info.PriceData.Quota
@@ -230,6 +247,14 @@ func taskBillingOther(task *model.Task) map[string]interface{} {
 				other["billing_mode"] = "video_per_second"
 			}
 		}
+		for k, v := range bc.UpstreamBillingOther {
+			if !isUpstreamVideoMetadataLogKey(k) {
+				continue
+			}
+			if _, exists := other[k]; !exists {
+				other[k] = v
+			}
+		}
 	}
 	props := task.Properties
 	if props.UpstreamModelName != "" && props.UpstreamModelName != props.OriginModelName {
@@ -239,6 +264,35 @@ func taskBillingOther(task *model.Task) map[string]interface{} {
 	discPct := taskBillingContextEffectiveCostPercent(task.PrivateData.BillingContext, task.ChannelId)
 	other["channel_price_discount_percent"] = discPct
 	return other
+}
+
+func isUpstreamVideoMetadataLogKey(key string) bool {
+	switch key {
+	case "billing_mode",
+		"video_total_tokens",
+		"video_output_tokens",
+		"video_input_text_tokens",
+		"video_seconds",
+		"video_duration",
+		"video_width",
+		"video_height",
+		"video_rule_width",
+		"video_rule_height",
+		"video_resolution",
+		"video_resolution_from_input",
+		"video_ratio_label",
+		"video_aspect_ratio",
+		"video_ratio",
+		"video_has_audio",
+		"video_unified_audio_price",
+		"video_capped_to_max_tier",
+		"video_count",
+		"video_billing_lane",
+		"video_rule_unit":
+		return true
+	default:
+		return false
+	}
 }
 
 func videoPerSecondBillingDetailFromSubmit(c *gin.Context, info *relaycommon.RelayInfo) *videoPerSecondBillingDetail {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
@@ -21,9 +22,11 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
+	"github.com/tidwall/sjson"
 )
 
 // ============================================================================
@@ -135,10 +138,106 @@ func classifyTfOpenVideoClientPath(requestURLPath string) string {
 	if strings.Contains(path, "/v1/videos/") && strings.HasSuffix(path, "/remix") {
 		return tfStyleOpenAIRemix
 	}
-	if strings.HasSuffix(path, "/v1/videos") {
+	if strings.HasSuffix(path, "/v1/videos") ||
+		strings.HasSuffix(path, "/api/playground/videos") {
 		return tfStyleOpenAIVideos
 	}
 	return tfStyleVideoGenerations
+}
+
+// IsTfOpenOpenAIVideosStyle reports whether TokenFactoryOpen (60) should relay video
+// through upstream /v1/videos* with request/response passthrough.
+func IsTfOpenOpenAIVideosStyle(style string) bool {
+	switch strings.TrimSpace(style) {
+	case tfStyleOpenAIVideos, tfStyleOpenAIRemix:
+		return true
+	default:
+		return false
+	}
+}
+
+// PassthroughOpenAIVideoJSON returns upstream OpenAI-style video JSON with only the public
+// task id substituted so downstream polling can use the local task id.
+func PassthroughOpenAIVideoJSON(respBody []byte, publicTaskID, requestPath string) ([]byte, error) {
+	body := respBody
+	publicTaskID = strings.TrimSpace(publicTaskID)
+	if publicTaskID == "" {
+		return body, nil
+	}
+	if patched, err := replaceOpenAIVideoPublicTaskID(body, publicTaskID); err == nil {
+		body = patched
+	}
+	return body, nil
+}
+
+func replaceOpenAIVideoPublicTaskID(respBody []byte, publicTaskID string) ([]byte, error) {
+	var probe map[string]any
+	if err := common.Unmarshal(respBody, &probe); err != nil {
+		return respBody, err
+	}
+	body := respBody
+	var replaced bool
+	if _, ok := probe["id"]; ok {
+		patched, err := sjson.SetBytes(body, "id", publicTaskID)
+		if err != nil {
+			return respBody, err
+		}
+		body = patched
+		replaced = true
+	}
+	if _, ok := probe["task_id"]; ok {
+		patched, err := sjson.SetBytes(body, "task_id", publicTaskID)
+		if err != nil {
+			return respBody, err
+		}
+		body = patched
+		replaced = true
+	}
+	data, _ := probe["data"].(map[string]any)
+	if data != nil {
+		if _, ok := data["id"]; ok {
+			patched, err := sjson.SetBytes(body, "data.id", publicTaskID)
+			if err != nil {
+				return respBody, err
+			}
+			body = patched
+			replaced = true
+		}
+		if _, ok := data["task_id"]; ok {
+			patched, err := sjson.SetBytes(body, "data.task_id", publicTaskID)
+			if err != nil {
+				return respBody, err
+			}
+			body = patched
+			replaced = true
+		}
+	}
+	if !replaced {
+		return respBody, nil
+	}
+	return body, nil
+}
+
+func writePassthroughOpenAIVideoResponse(c *gin.Context, body []byte) {
+	if c == nil {
+		return
+	}
+	c.Data(http.StatusOK, "application/json", body)
+}
+
+func mapArkVideoStatusToOpenAI(status string) string {
+	switch strings.ToLower(strings.TrimSpace(status)) {
+	case "succeeded", "completed", "success", "done":
+		return dto.VideoStatusCompleted
+	case "failed", "expired", "cancelled", "canceled":
+		return dto.VideoStatusFailed
+	case "queued":
+		return dto.VideoStatusQueued
+	case "running", "in_progress", "processing":
+		return dto.VideoStatusInProgress
+	default:
+		return ""
+	}
 }
 
 // ============================================================================
@@ -175,10 +274,16 @@ type arkResultResponse struct {
 	Status      string          `json:"status,omitempty"`
 	Content     *arkTaskContent `json:"content,omitempty"`
 	Output      *arkVideoOutput `json:"output,omitempty"`
+	Usage       *videoUsage     `json:"usage,omitempty"`
 	CreatedAt   json.RawMessage `json:"created_at,omitempty"`
 	UpdatedAt   json.RawMessage `json:"updated_at,omitempty"`
 	CompletedAt json.RawMessage `json:"completed_at,omitempty"`
 	Error       *apiError       `json:"error,omitempty"`
+}
+
+type videoUsage struct {
+	CompletionTokens int `json:"completion_tokens,omitempty"`
+	TotalTokens      int `json:"total_tokens,omitempty"`
 }
 
 // --- MaaS protocol responses (Hidream official gateway) ---
@@ -303,8 +408,14 @@ func parseTfUpstreamSubmitTaskID(respBody []byte) (string, *dto.TaskError) {
 	if id := asStringAny(probe["id"]); id != "" {
 		return id, nil
 	}
+	if id := asStringAny(probe["task_id"]); id != "" {
+		return id, nil
+	}
 	if data, ok := probe["data"].(map[string]any); ok {
 		if id := asStringAny(data["id"]); id != "" {
+			return id, nil
+		}
+		if id := asStringAny(data["task_id"]); id != "" {
 			return id, nil
 		}
 	}
@@ -497,6 +608,9 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	if err != nil {
 		return "", nil, service.TaskErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
 	}
+	if a.protocol == ProtocolTokenFactory && info != nil {
+		applyTokenFactoryTaskBillingHeader(resp, info)
+	}
 	_ = resp.Body.Close()
 
 	// Try to decode base64 if response is a JSON string
@@ -523,13 +637,23 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 			return "", nil, service.TaskErrorWrapper(errors.New(msg), "video_submit_failed", http.StatusBadRequest)
 		}
 		taskID = strings.TrimSpace(sub.Result.TaskID)
-	} else if a.protocol == ProtocolTokenFactory && info != nil &&
-		(info.TfOpenVideoUpstreamStyle == tfStyleOpenAIVideos || info.TfOpenVideoUpstreamStyle == tfStyleOpenAIRemix) {
+	} else if a.protocol == ProtocolTokenFactory && info != nil && IsTfOpenOpenAIVideosStyle(info.TfOpenVideoUpstreamStyle) {
 		var terr *dto.TaskError
 		taskID, terr = parseTfUpstreamSubmitTaskID(decodedBody)
 		if terr != nil {
 			return "", nil, terr
 		}
+		requestPath := ""
+		if c != nil && c.Request != nil && c.Request.URL != nil {
+			requestPath = c.Request.URL.Path
+		}
+		writeTaskBillingHeaders(c, info)
+		if passthroughBody, err := PassthroughOpenAIVideoJSON(decodedBody, info.PublicTaskID, requestPath); err == nil {
+			writePassthroughOpenAIVideoResponse(c, passthroughBody)
+		} else {
+			writePassthroughOpenAIVideoResponse(c, decodedBody)
+		}
+		return taskID, decodedBody, nil
 	} else {
 		var sub arkSubmitResponse
 		if err := common.Unmarshal(decodedBody, &sub); err != nil {
@@ -551,10 +675,229 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	ov.CreatedAt = dto.FormatTimeUnixRFC3339(time.Now().Unix())
 	ov.Model = info.OriginModelName
 
-
+	writeTaskBillingHeaders(c, info)
 	taskcommon.WriteOpenAIVideoResponse(c, ov)
 
 	return taskID, respBody, nil
+}
+
+func applyTokenFactoryTaskBillingHeader(resp *http.Response, info *relaycommon.RelayInfo) {
+	if resp == nil || info == nil {
+		return
+	}
+	raw := strings.TrimSpace(resp.Header.Get("X-New-Api-Task-Billing"))
+	if raw != "" {
+		var upstreamPrice types.PriceData
+		if err := common.UnmarshalJsonStr(raw, &upstreamPrice); err == nil {
+			info.UpstreamTaskBillingOther = mergeTokenFactoryVideoMetadata(
+				info.UpstreamTaskBillingOther,
+				tokenFactoryVideoMetadataFromPriceData(upstreamPrice),
+			)
+		}
+	}
+
+	otherRaw := strings.TrimSpace(resp.Header.Get(service.TaskBillingOtherHeader))
+	if otherRaw == "" {
+		return
+	}
+	var upstreamOther map[string]interface{}
+	if err := common.UnmarshalJsonStr(otherRaw, &upstreamOther); err != nil {
+		return
+	}
+	info.UpstreamTaskBillingOther = mergeTokenFactoryVideoMetadata(
+		info.UpstreamTaskBillingOther,
+		filterTokenFactoryVideoMetadata(upstreamOther),
+	)
+}
+
+func tokenFactoryVideoMetadataFromPriceData(price types.PriceData) map[string]interface{} {
+	metadata := make(map[string]interface{})
+	if price.VideoOutputTokens > 0 {
+		metadata["video_total_tokens"] = price.VideoOutputTokens
+		metadata["video_output_tokens"] = price.VideoOutputTokens
+	}
+	if price.VideoInputTextTokens > 0 {
+		metadata["video_input_text_tokens"] = price.VideoInputTextTokens
+	}
+	if price.VideoRuleWidth > 0 {
+		metadata["video_rule_width"] = price.VideoRuleWidth
+		metadata["video_width"] = price.VideoRuleWidth
+	}
+	if price.VideoRuleHeight > 0 {
+		metadata["video_rule_height"] = price.VideoRuleHeight
+		metadata["video_height"] = price.VideoRuleHeight
+	}
+	if price.VideoRuleWidth > 0 || price.VideoRuleHeight > 0 {
+		metadata["video_has_audio"] = price.VideoRuleHasAudio
+	}
+	if strings.TrimSpace(price.VideoBillingMode) != "" {
+		metadata["video_billing_lane"] = strings.TrimSpace(price.VideoBillingMode)
+	}
+	if strings.TrimSpace(price.VideoRuleUnit) != "" {
+		metadata["video_rule_unit"] = strings.TrimSpace(price.VideoRuleUnit)
+	}
+	return metadata
+}
+
+func mergeTokenFactoryVideoMetadata(base map[string]interface{}, extra map[string]interface{}) map[string]interface{} {
+	if len(extra) == 0 {
+		return base
+	}
+	if base == nil {
+		base = make(map[string]interface{}, len(extra))
+	}
+	for k, v := range extra {
+		base[k] = v
+	}
+	return base
+}
+
+func filterTokenFactoryVideoMetadata(other map[string]interface{}) map[string]interface{} {
+	if len(other) == 0 {
+		return nil
+	}
+	filtered := make(map[string]interface{})
+	for k, v := range other {
+		if !isTokenFactoryVideoMetadataKey(k) {
+			continue
+		}
+		filtered[k] = v
+	}
+	return filtered
+}
+
+func isTokenFactoryVideoMetadataKey(key string) bool {
+	switch key {
+	case "billing_mode",
+		"video_total_tokens",
+		"video_output_tokens",
+		"video_input_text_tokens",
+		"video_seconds",
+		"video_duration",
+		"video_width",
+		"video_height",
+		"video_rule_width",
+		"video_rule_height",
+		"video_resolution",
+		"video_resolution_from_input",
+		"video_ratio_label",
+		"video_aspect_ratio",
+		"video_ratio",
+		"video_has_audio",
+		"video_unified_audio_price",
+		"video_capped_to_max_tier",
+		"video_count",
+		"video_billing_lane",
+		"video_rule_unit":
+		return true
+	default:
+		return false
+	}
+}
+
+func writeTaskBillingHeaders(c *gin.Context, info *relaycommon.RelayInfo) {
+	if c == nil || info == nil || c.Writer.Written() {
+		return
+	}
+	if billingJSON, err := common.Marshal(info.PriceData); err == nil {
+		c.Header("X-New-Api-Task-Billing", string(billingJSON))
+	}
+	if other := buildOpenAIVideoTaskBillingOther(c, info); len(other) > 0 {
+		if otherJSON, err := common.Marshal(other); err == nil {
+			c.Header(service.TaskBillingOtherHeader, string(otherJSON))
+		}
+	}
+}
+
+func buildOpenAIVideoTaskBillingOther(c *gin.Context, info *relaycommon.RelayInfo) map[string]interface{} {
+	if c == nil || info == nil {
+		return nil
+	}
+	other := make(map[string]interface{})
+	if c.Request != nil && c.Request.URL != nil {
+		other["request_path"] = c.Request.URL.Path
+	}
+	if info.TaskRelayInfo != nil && strings.TrimSpace(info.PublicTaskID) != "" {
+		other["task_id"] = strings.TrimSpace(info.PublicTaskID)
+	}
+	other["model_price"] = info.PriceData.ModelPrice
+	other["group_ratio"] = info.PriceData.GroupRatioInfo.GroupRatio
+	if info.PriceData.GroupRatioInfo.HasSpecialRatio {
+		other["user_group_ratio"] = info.PriceData.GroupRatioInfo.GroupSpecialRatio
+	}
+	if info.ChannelMeta != nil && info.IsModelMapped {
+		other["is_model_mapped"] = true
+		other["upstream_model_name"] = info.UpstreamModelName
+	}
+	discPct := float64(100)
+	if info.PriceData.ChannelPriceDiscount != nil {
+		discPct = *info.PriceData.ChannelPriceDiscount
+	}
+	other["channel_price_discount_percent"] = discPct
+
+	switch {
+	case info.PriceData.UsePrice &&
+		info.PriceData.ModelPrice == 0 &&
+		info.PriceData.VideoRuleUnit == service.VideoRuleUnitPerToken &&
+		info.PriceData.VideoOutputTokens > 0:
+		other["billing_mode"] = service.SeedanceVideoTokenBillingMode
+		other["video_total_tokens"] = info.PriceData.VideoOutputTokens
+		other["video_output_tokens"] = info.PriceData.VideoOutputTokens
+		other["video_billed_quota"] = info.PriceData.Quota
+		other["video_quota_per_unit"] = common.QuotaPerUnit
+		other["video_token_unit_price"] = info.PriceData.VideoChannelRulePrice
+		other["video_channel_token_price"] = info.PriceData.VideoChannelRulePrice
+		if info.PriceData.VideoGlobalRulePrice > 0 {
+			other["video_global_token_price"] = info.PriceData.VideoGlobalRulePrice
+		}
+		if info.PriceData.VideoRuleWidth > 0 {
+			other["video_rule_width"] = info.PriceData.VideoRuleWidth
+		}
+		if info.PriceData.VideoRuleHeight > 0 {
+			other["video_rule_height"] = info.PriceData.VideoRuleHeight
+		}
+		other["video_has_audio"] = info.PriceData.VideoRuleHasAudio
+	case info.PriceData.UsePrice &&
+		info.PriceData.ModelPrice == 0 &&
+		info.PriceData.ModelRatio == 0 &&
+		info.PriceData.OtherRatios != nil &&
+		info.PriceData.OtherRatios["seconds"] > 0:
+		other["billing_mode"] = "video_per_second"
+		other["model_ratio"] = info.PriceData.ModelRatio
+		other["video_seconds"] = int(math.Ceil(info.PriceData.OtherRatios["seconds"]))
+		other["video_billed_quota"] = info.PriceData.Quota
+		other["video_quota_per_unit"] = common.QuotaPerUnit
+		other["video_price_per_second"] = info.PriceData.VideoChannelRulePrice
+		if info.PriceData.VideoGlobalRulePrice > 0 {
+			other["global_video_price_per_second"] = info.PriceData.VideoGlobalRulePrice
+		}
+		if info.PriceData.VideoRuleWidth > 0 {
+			other["video_rule_width"] = info.PriceData.VideoRuleWidth
+		}
+		if info.PriceData.VideoRuleHeight > 0 {
+			other["video_rule_height"] = info.PriceData.VideoRuleHeight
+		}
+		other["video_has_audio"] = info.PriceData.VideoRuleHasAudio
+	case info.PriceData.UsePrice &&
+		info.PriceData.ModelPrice == 0 &&
+		info.PriceData.ModelRatio == 0:
+		other["billing_mode"] = "video_per_video"
+		other["model_ratio"] = info.PriceData.ModelRatio
+		other["video_count"] = 1
+		other["video_billed_quota"] = info.PriceData.Quota
+		other["video_quota_per_unit"] = common.QuotaPerUnit
+		other["video_price_per_video"] = float64(info.PriceData.Quota) / common.QuotaPerUnit
+		if info.PriceData.VideoRuleWidth > 0 {
+			other["video_rule_width"] = info.PriceData.VideoRuleWidth
+		}
+		if info.PriceData.VideoRuleHeight > 0 {
+			other["video_rule_height"] = info.PriceData.VideoRuleHeight
+		}
+		other["video_has_audio"] = info.PriceData.VideoRuleHasAudio
+	default:
+		return nil
+	}
+	return model.SetBillingLogMetadata(other, model.BillingPhasePreCharge, true, info.PriceData.Quota, -int64(info.PriceData.Quota))
 }
 
 func channelTypeFromFetchBody(body map[string]any) int {
@@ -644,9 +987,9 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	}
 }
 
-// normalizeOpenAIVideoPollJSON unwraps common reseller / Volc-style envelopes so that
-// Ark-shaped bodies are visible to detectResponseProtocol / parseArkResult.
-// Example: {"code":0,"data":{"id":"...","status":"succeeded","content":{...}}}
+// normalizeOpenAIVideoPollJSON unwraps common reseller / Volc-style envelopes for
+// internal status parsing only. TokenFactoryOpen passthrough responses must not use
+// this helper; downstream should receive the upstream JSON shape unchanged.
 func normalizeOpenAIVideoPollJSON(respBody []byte) []byte {
 	var probe map[string]any
 	if err := common.Unmarshal(respBody, &probe); err != nil {
@@ -661,9 +1004,11 @@ func normalizeOpenAIVideoPollJSON(respBody []byte) []byte {
 	}
 	// Ark task object: has id, or has content/output typical of video poll
 	_, hasID := data["id"]
+	_, hasTaskID := data["task_id"]
 	_, hasContent := data["content"]
 	_, hasOutput := data["output"]
-	if !hasID && !hasContent && !hasOutput {
+	_, hasError := data["error"]
+	if !hasID && !hasTaskID && !hasContent && !hasOutput && !hasError && !hasKnownOpenAIVideoStatus(data["status"]) {
 		return respBody
 	}
 	nested, err := common.Marshal(data)
@@ -671,6 +1016,15 @@ func normalizeOpenAIVideoPollJSON(respBody []byte) []byte {
 		return respBody
 	}
 	return nested
+}
+
+func hasKnownOpenAIVideoStatus(status any) bool {
+	switch strings.ToLower(strings.TrimSpace(asStringAny(status))) {
+	case "queued", "running", "in_progress", "processing", "succeeded", "completed", "success", "done", "failed", "expired", "cancelled", "canceled":
+		return true
+	default:
+		return false
+	}
 }
 
 // detectResponseProtocol probes characteristic top-level fields to figure out
@@ -756,6 +1110,13 @@ func parseArkResult(respBody []byte) (*relaycommon.TaskInfo, error) {
 		} else {
 			taskResult.Status = model.TaskStatusInProgress
 			taskResult.Progress = taskcommon.ProgressInProgress
+		}
+	}
+	if resp.Usage != nil {
+		taskResult.CompletionTokens = resp.Usage.CompletionTokens
+		taskResult.TotalTokens = resp.Usage.TotalTokens
+		if taskResult.TotalTokens == 0 && taskResult.CompletionTokens > 0 {
+			taskResult.TotalTokens = taskResult.CompletionTokens
 		}
 	}
 
@@ -920,6 +1281,9 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 		if err := common.Unmarshal(normalizedData, &resp); err != nil {
 			return common.Marshal(ov)
 		}
+		if st := mapArkVideoStatusToOpenAI(resp.Status); st != "" {
+			ov.Status = st
+		}
 		if resp.Content != nil && strings.TrimSpace(resp.Content.VideoURL) != "" {
 			ov.SetMetadata("url", resp.Content.VideoURL)
 		} else if resp.Output != nil && strings.TrimSpace(resp.Output.VideoURL) != "" {
@@ -929,6 +1293,11 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 			ov.Error = &dto.OpenAIVideoError{
 				Message: firstNonEmpty(resp.Error.Message, resp.Error.Code),
 				Code:    firstNonEmpty(resp.Error.Code, "video_task_failed"),
+			}
+		} else if ov.Status == dto.VideoStatusFailed && ov.Error == nil {
+			ov.Error = &dto.OpenAIVideoError{
+				Message: firstNonEmpty(resp.Status, "video task failed"),
+				Code:    "video_task_failed",
 			}
 		}
 	}

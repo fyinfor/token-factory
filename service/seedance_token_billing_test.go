@@ -1,10 +1,12 @@
 package service
 
 import (
+	"context"
 	"strconv"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/stretchr/testify/require"
@@ -63,4 +65,46 @@ func TestMatchVideoTokenRule_DetectsImageToVideoLane(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, relaycommon.VideoBillingModeImageToVideo, match.Mode)
 	require.InDelta(t, 0.31, match.ChannelPricePerToken, 1e-9)
+}
+
+func TestSettleSeedanceVideoTokenDeltaWritesSettlementMarkerWithZeroQuota(t *testing.T) {
+	truncate(t)
+	seedUser(t, 1, 1000000)
+
+	task := &model.Task{
+		TaskID:    "task_token_marker",
+		UserId:    1,
+		Group:     "default",
+		ChannelId: 1,
+		Quota:     750000,
+		Status:    model.TaskStatusSuccess,
+		PrivateData: model.TaskPrivateData{
+			BillingContext: &model.TaskBillingContext{
+				GroupRatio:    1,
+				VideoRuleUnit: VideoRuleUnitPerToken,
+			},
+		},
+	}
+
+	settleSeedanceVideoTokenDelta(context.Background(), task, 550000, map[string]interface{}{
+		"billing_mode":         SeedanceVideoTokenBillingMode,
+		"video_total_tokens":   50000,
+		"video_billed_quota":   550000,
+		"video_quota_per_unit": common.QuotaPerUnit,
+	})
+
+	var logs []model.Log
+	require.NoError(t, model.LOG_DB.Order("id asc").Find(&logs).Error)
+	require.Len(t, logs, 1)
+	require.Equal(t, model.LogTypeConsume, logs[0].Type)
+	require.Equal(t, 0, logs[0].Quota)
+
+	other, err := common.StrToMap(logs[0].Other)
+	require.NoError(t, err)
+	require.Equal(t, model.BillingPhaseSettlementMarker, other["billing_phase"])
+	require.Equal(t, false, other["affects_balance"])
+	require.EqualValues(t, 550000, other["actual_quota"])
+	require.EqualValues(t, 750000, other["pre_consumed_quota"])
+	require.EqualValues(t, 550000, other["display_quota"])
+	require.EqualValues(t, 0, other["balance_delta"])
 }

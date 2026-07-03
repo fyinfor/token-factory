@@ -6,6 +6,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -307,32 +308,52 @@ var statementDictSW = statementI18n{
 // resolveStatementDict 根据 lang 查表，未命中则回退 zh-CN。
 // 合法 lang 集合与 web/src/i18n/i18n.js 的 supportedLanguages 对齐。
 func resolveStatementDict(lang string) statementI18n {
+	var dict statementI18n
 	switch lang {
 	case "zh-CN":
-		return statementDictZHCN
+		dict = statementDictZHCN
 	case "zh-TW":
-		return statementDictZHTW
+		dict = statementDictZHTW
 	case "en":
-		return statementDictEN
+		dict = statementDictEN
 	case "fr":
-		return statementDictFR
+		dict = statementDictFR
 	case "ru":
-		return statementDictRU
+		dict = statementDictRU
 	case "ja":
-		return statementDictJA
+		dict = statementDictJA
 	case "vi":
-		return statementDictVI
+		dict = statementDictVI
 	case "id":
-		return statementDictID
+		dict = statementDictID
 	case "ms":
-		return statementDictMS
+		dict = statementDictMS
 	case "th":
-		return statementDictTH
+		dict = statementDictTH
 	case "sw":
-		return statementDictSW
+		dict = statementDictSW
 	default:
-		return statementDictZHCN
+		dict = statementDictZHCN
 	}
+	return withStatementDetailsHeader(dict, statementDetailsLabel(lang))
+}
+
+func statementDetailsLabel(lang string) string {
+	if lang == "en" {
+		return "Details"
+	}
+	return "详情"
+}
+
+func withStatementDetailsHeader(dict statementI18n, label string) statementI18n {
+	if len(dict.Header) > 0 && dict.Header[len(dict.Header)-1] == label {
+		return dict
+	}
+	header := make([]string, 0, len(dict.Header)+1)
+	header = append(header, dict.Header...)
+	header = append(header, label)
+	dict.Header = header
+	return dict
 }
 
 // 类型字段的本地化映射（中文，向后兼容保留——具体写入由 statementDict 决定）。
@@ -453,13 +474,13 @@ func (q adminLogExportQuery) toAdminModelFilter() model.AdminLogExportFilter {
 
 func (q logExportQuery) toModelFilter() model.LogExportFilter {
 	return model.LogExportFilter{
-		FromTs:     q.StartTs,
-		ToTs:       q.EndTs,
-		ModelName:  q.ModelName,
-		TokenName:  q.TokenName,
-		Group:      q.Group,
-		RequestID:  q.RequestID,
-		LogTypes:   q.LogTypes,
+		FromTs:    q.StartTs,
+		ToTs:      q.EndTs,
+		ModelName: q.ModelName,
+		TokenName: q.TokenName,
+		Group:     q.Group,
+		RequestID: q.RequestID,
+		LogTypes:  q.LogTypes,
 	}
 }
 
@@ -474,6 +495,153 @@ func writeStatementRow(w *csv.Writer, row []string) error {
 	}
 	w.Flush()
 	return w.Error()
+}
+
+func logExportLabel(lang, zh, en string) string {
+	if lang == "en" {
+		return en
+	}
+	return zh
+}
+
+func logExportString(other map[string]interface{}, keys ...string) string {
+	for _, key := range keys {
+		if v, ok := other[key]; ok && v != nil {
+			s := strings.TrimSpace(fmt.Sprint(v))
+			if s != "" {
+				return s
+			}
+		}
+	}
+	return ""
+}
+
+func logExportNumber(other map[string]interface{}, keys ...string) (float64, bool) {
+	for _, key := range keys {
+		if v, ok := other[key]; ok && v != nil {
+			switch x := v.(type) {
+			case float64:
+				return x, true
+			case float32:
+				return float64(x), true
+			case int:
+				return float64(x), true
+			case int64:
+				return float64(x), true
+			case int32:
+				return float64(x), true
+			case uint:
+				return float64(x), true
+			case uint64:
+				return float64(x), true
+			case uint32:
+				return float64(x), true
+			case string:
+				n, err := strconv.ParseFloat(strings.TrimSpace(x), 64)
+				if err == nil {
+					return n, true
+				}
+			}
+		}
+	}
+	return 0, false
+}
+
+func formatLogDetailForExport(l *model.Log, lang string) string {
+	if l == nil {
+		return ""
+	}
+	other, err := common.StrToMap(l.Other)
+	if err != nil || other == nil {
+		return l.Content
+	}
+
+	lines := make([]string, 0, 8)
+	addLine := func(label string, value string) {
+		if strings.TrimSpace(value) != "" {
+			lines = append(lines, label+": "+value)
+		}
+	}
+	addNumber := func(label string, keys ...string) {
+		if v, ok := logExportNumber(other, keys...); ok {
+			addLine(label, strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.6f", v), "0"), "."))
+		}
+	}
+
+	if l.Type == model.LogTypeRefund {
+		switch logExportString(other, "billing_phase") {
+		case model.BillingPhaseDeltaRefund:
+			lines = append(lines, logExportLabel(lang, "异步任务差额退款", "Async task delta refund"))
+			if v, ok := logExportNumber(other, "pre_consumed_quota"); ok && v > 0 {
+				addLine(logExportLabel(lang, "预扣费", "Pre-charged"), formatQuotaDisplay(int64(v)))
+			}
+			if v, ok := logExportNumber(other, "actual_quota"); ok && v > 0 {
+				addLine(logExportLabel(lang, "实际扣费", "Actual charge"), formatQuotaDisplay(int64(v)))
+			}
+			if v, ok := logExportNumber(other, "display_quota", "balance_delta"); ok {
+				addLine(logExportLabel(lang, "返还差额", "Refunded delta"), formatQuotaDisplay(int64(v)))
+			}
+		case model.BillingPhaseRefund:
+			lines = append(lines, logExportLabel(lang, "异步任务失败退款", "Async task failure refund"))
+		default:
+			lines = append(lines, logExportLabel(lang, "异步任务退款", "Async task refund"))
+		}
+		return strings.Join(lines, "\n")
+	}
+
+	if l.Type != model.LogTypeConsume {
+		return l.Content
+	}
+
+	if v, ok := other["violation_fee"].(bool); ok && v || logExportString(other, "violation_fee_code", "violation_fee_marker") != "" {
+		lines = append(lines, logExportLabel(lang, "违规扣费", "Violation fee"))
+		if v, ok := logExportNumber(other, "fee_quota"); ok {
+			addLine(logExportLabel(lang, "扣费", "Fee"), formatQuotaDisplay(int64(v)))
+		}
+		if l.Content != "" {
+			addLine(logExportLabel(lang, "详情", "Details"), l.Content)
+		}
+		return strings.Join(lines, "\n")
+	}
+
+	billingMode := logExportString(other, "billing_mode")
+	modelPrice, hasModelPrice := logExportNumber(other, "model_price")
+	switch {
+	case billingMode == "video_per_second" && (!hasModelPrice || modelPrice == 0 || modelPrice == -1):
+		lines = append(lines, logExportLabel(lang, "分辨率阶梯计费", "Resolution tier billing"))
+	case billingMode == "video_token_output" && (!hasModelPrice || modelPrice == 0 || modelPrice == -1):
+		lines = append(lines, logExportLabel(lang, "视频按 token 计费", "Video token billing"))
+	case billingMode == "video_per_video" && (!hasModelPrice || modelPrice == 0 || modelPrice == -1):
+		lines = append(lines, logExportLabel(lang, "按视频数量计费", "Per-video billing"))
+	case billingMode == "image_per_image":
+		lines = append(lines, logExportLabel(lang, "按图片数量计费", "Per-image billing"))
+	case logExportString(other, "request_tier_pricing") == "true" || logExportString(other, "request_tier_pricing") == "1":
+		lines = append(lines, logExportLabel(lang, "阶梯计费", "Tier billing"))
+		if display := logExportString(other, "request_tier_display"); display != "" {
+			lines = append(lines, display)
+		}
+	default:
+		if hasModelPrice && modelPrice != 0 && modelPrice != -1 {
+			lines = append(lines, logExportLabel(lang, "按次", "Per request"))
+			addNumber(logExportLabel(lang, "模型价格", "Model price"), "model_price")
+		} else if _, ok := logExportNumber(other, "model_ratio"); ok {
+			addNumber(logExportLabel(lang, "模型", "Model"), "model_ratio")
+		}
+	}
+
+	addLine(logExportLabel(lang, "分辨率", "Resolution"), logExportString(other, "video_resolution"))
+	addNumber(logExportLabel(lang, "缓存", "Cache"), "cache_ratio")
+	addNumber(logExportLabel(lang, "缓存创建", "Cache creation"), "cache_creation_ratio")
+	addNumber(logExportLabel(lang, "5m缓存创建", "5m cache creation"), "cache_creation_ratio_5m")
+	addNumber(logExportLabel(lang, "1h缓存创建", "1h cache creation"), "cache_creation_ratio_1h")
+	if v, ok := other["is_system_prompt_overwritten"].(bool); ok && v {
+		lines = append(lines, logExportLabel(lang, "系统提示覆盖", "System prompt override"))
+	}
+
+	if len(lines) == 0 {
+		return l.Content
+	}
+	return strings.Join(lines, "\n")
 }
 
 // 流式写出单个用户的对账单。filename 不含扩展名，由调用方传入。
@@ -578,6 +746,7 @@ func streamUserStatementCSV(c *gin.Context, user *model.User, query logExportQue
 			formatQuotaDisplay(signed),
 			strconv.FormatInt(running, 10),
 			formatBalanceAmount(int(running)),
+			formatLogDetailForExport(l, query.Lang),
 		}
 		if err := writeStatementRow(w, row); err != nil {
 			common.SysError("write statement row: " + err.Error())
@@ -647,7 +816,7 @@ func extractOrderNo(other string) (string, bool) {
 // extractCacheReadTokens 从 Other JSON 中取"缓存读取命中"的 token 数。
 // 优先顺序（兼容多协议与历史日志）：
 //  1. cache_tokens           —— service/log_info_generate.go:73 写入的标准键
-//                              （前端 web/src/helpers/render.jsx 与所有日志列定义都在读这个键）
+//     （前端 web/src/helpers/render.jsx 与所有日志列定义都在读这个键）
 //  2. cache_read_tokens      —— 历史/扩展名，保留兼容
 //  3. cached_tokens          —— OpenAI 协议 PromptTokensDetails.CachedTokens
 //  4. prompt_cache_hit_tokens—— 一些非标实现
@@ -847,15 +1016,14 @@ func writeSingleUserCSV(w interface {
 	w.Write([]byte("\xEF\xBB\xBF"))
 	cw := csv.NewWriter(w)
 	emptyRow := make([]string, len(dict.Header))
-	cw.Write([]string{fmt.Sprintf(dict.Meta1, user.Username, user.Id), "", "", "", "", "", "", "", "", "", "", "", "", ""})
-	cw.Write([]string{fmt.Sprintf(dict.Meta2,
+	cw.Write(append([]string{fmt.Sprintf(dict.Meta1, user.Username, user.Id)}, emptyRow[1:]...))
+	cw.Write(append([]string{fmt.Sprintf(dict.Meta2,
 		time.Unix(query.StartTs, 0).Format("2006-01-02 15:04:05"),
 		time.Unix(query.EndTs, 0).Format("2006-01-02 15:04:05"),
-	), "", "", "", "", "", "", "", "", "", "", "", ""})
-	cw.Write([]string{
+	)}, emptyRow[1:]...))
+	cw.Write(append([]string{
 		fmt.Sprintf(dict.Meta3, user.Quota, formatBalanceAmount(user.Quota)),
-		"", "", "", "", "", "", "", "", "", "", "", "", "",
-	})
+	}, emptyRow[1:]...))
 	cw.Write(dict.Header)
 	for idx, l := range logs {
 		ts := time.Unix(l.CreatedAt, 0).Format("2006-01-02 15:04:05")
@@ -873,7 +1041,7 @@ func writeSingleUserCSV(w interface {
 			l.ModelName, l.TokenName, strconv.Itoa(l.PromptTokens), strconv.Itoa(l.CompletionTokens),
 			strconv.Itoa(cacheTokens),
 			strconv.FormatInt(signed, 10), formatQuotaDisplay(signed), strconv.FormatInt(running, 10),
-			formatBalanceAmount(int(running)),
+			formatBalanceAmount(int(running)), formatLogDetailForExport(l, query.Lang),
 		})
 	}
 	if !query.hasRowFilterBeyondTime() {
@@ -920,10 +1088,16 @@ var adminLogExportDictEN = adminLogExportI18n{
 }
 
 func resolveAdminLogExportDict(lang string) adminLogExportI18n {
+	var dict adminLogExportI18n
 	if lang == "en" {
-		return adminLogExportDictEN
+		dict = adminLogExportDictEN
+	} else {
+		dict = adminLogExportDictZHCN
 	}
-	return adminLogExportDictZHCN
+	if len(dict.Header) == 0 || dict.Header[len(dict.Header)-1] != statementDetailsLabel(lang) {
+		dict.Header = append(append([]string{}, dict.Header...), statementDetailsLabel(lang))
+	}
+	return dict
 }
 
 // streamAdminLogsCSV 流式写出管理员全站日志 CSV。
@@ -983,6 +1157,7 @@ func streamAdminLogsCSV(c *gin.Context, logs []*model.Log, query logExportQuery,
 			strconv.Itoa(cacheTokens),
 			strconv.FormatInt(quota, 10),
 			formatQuotaDisplay(quota),
+			formatLogDetailForExport(l, query.Lang),
 		}
 		if err := writeStatementRow(w, row); err != nil {
 			common.SysError("write admin export row: " + err.Error())
@@ -1082,25 +1257,25 @@ func streamSupplierChannelLogsCSV(c *gin.Context, logs []*model.Log, query logEx
 
 // supplierDashboardExportI18n 供应商看板使用详情账单导出文案。
 type supplierDashboardExportI18n struct {
-	Meta1              string   // "供应商使用详情账单"
-	Meta2Supplier      string   // "供应商: %s"
-	Meta3Period        string   // "账期: %s ~ %s"
-	SummarySection     string   // "【模型汇总】"
-	SummaryHeader      []string // 模型汇总表头
-	SummaryTotal       string   // "合计"
-	DetailSection      string   // "【使用明细】"
-	DetailHeader       []string // 明细表头（与渠道日志导出一致）
+	Meta1          string   // "供应商使用详情账单"
+	Meta2Supplier  string   // "供应商: %s"
+	Meta3Period    string   // "账期: %s ~ %s"
+	SummarySection string   // "【模型汇总】"
+	SummaryHeader  []string // 模型汇总表头
+	SummaryTotal   string   // "合计"
+	DetailSection  string   // "【使用明细】"
+	DetailHeader   []string // 明细表头（与渠道日志导出一致）
 }
 
 var supplierDashboardExportDictZHCN = supplierDashboardExportI18n{
-	Meta1:         "供应商使用详情账单",
-	Meta2Supplier: "供应商: %s",
-	Meta3Period:   "账期: %s ~ %s",
+	Meta1:          "供应商使用详情账单",
+	Meta2Supplier:  "供应商: %s",
+	Meta3Period:    "账期: %s ~ %s",
 	SummarySection: "【模型汇总】",
 	SummaryHeader: []string{
 		"模型", "请求次数", "输入 tokens", "输出 tokens", "总 tokens", "消耗额度(quota)", "消耗额度(等值)",
 	},
-	SummaryTotal: "合计",
+	SummaryTotal:  "合计",
 	DetailSection: "【使用明细】",
 	DetailHeader: []string{
 		"序号", "时间", "类型", "用户", "令牌", "模型", "渠道", "分组", "Request ID",
@@ -1109,14 +1284,14 @@ var supplierDashboardExportDictZHCN = supplierDashboardExportI18n{
 }
 
 var supplierDashboardExportDictEN = supplierDashboardExportI18n{
-	Meta1:         "Supplier usage detail statement",
-	Meta2Supplier: "Supplier: %s",
-	Meta3Period:   "Period: %s ~ %s",
+	Meta1:          "Supplier usage detail statement",
+	Meta2Supplier:  "Supplier: %s",
+	Meta3Period:    "Period: %s ~ %s",
 	SummarySection: "[Model summary]",
 	SummaryHeader: []string{
 		"Model", "Requests", "Input tokens", "Output tokens", "Total tokens", "Quota", "Amount",
 	},
-	SummaryTotal: "Total",
+	SummaryTotal:  "Total",
 	DetailSection: "[Usage details]",
 	DetailHeader: []string{
 		"No.", "Time", "Type", "User", "Token", "Model", "Channel", "Group", "Request ID",

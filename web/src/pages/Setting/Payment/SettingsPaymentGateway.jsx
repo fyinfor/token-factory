@@ -17,17 +17,33 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import { Button, Form, Row, Col, Typography, Spin, TextArea } from '@douyinfe/semi-ui';
+import React, {
+  useCallback,
+  useContext,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
+import {
+  Button,
+  Form,
+  Row,
+  Col,
+  Typography,
+  Spin,
+  TextArea,
+} from '@douyinfe/semi-ui';
 const { Text } = Typography;
 import {
   API,
+  patchStatusData,
   removeTrailingSlash,
   showError,
   showSuccess,
   verifyJSON,
 } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
+import { StatusContext } from '../../../context/Status';
 
 /**
  * 生成与后端 buildUserEpayNotifyURL(service.GetCallbackAddress()) 一致的默认异步通知地址说明。
@@ -104,6 +120,8 @@ function buildFormModelFromOptions(opts) {
     PayMethods: opts.PayMethods || '',
     AmountOptions: opts.AmountOptions || '',
     AmountDiscount: opts.AmountDiscount || '',
+    'general_setting.recharge_display_currency':
+      opts['general_setting.recharge_display_currency'] || 'USD',
   };
   try {
     if (model.AmountOptions) {
@@ -136,6 +154,7 @@ function buildFormModelFromOptions(opts) {
  */
 export default function SettingsPaymentGateway(props) {
   const { t } = useTranslation();
+  const [statusState, statusDispatch] = useContext(StatusContext);
   const [loading, setLoading] = useState(false);
   const [inputs, setInputs] = useState({
     PayAddress: '',
@@ -156,6 +175,7 @@ export default function SettingsPaymentGateway(props) {
     PayMethods: '',
     AmountOptions: '',
     AmountDiscount: '',
+    'general_setting.recharge_display_currency': 'USD',
   });
   const [originInputs, setOriginInputs] = useState({});
   /** Semi Form API 引用；在 getFormApi 回调内与应用 options 同步，避免早于 Form 挂载的 effect 拿不到实例 */
@@ -168,6 +188,10 @@ export default function SettingsPaymentGateway(props) {
   const currentProvider = normalizeOnlinePayProvider(
     inputs.OnlinePayProvider || 'yipay',
   );
+  const quotaDisplayType =
+    props.options?.['general_setting.quota_display_type'] ||
+    localStorage.getItem('quota_display_type') ||
+    'USD';
 
   /**
    * 将服务端 options 同步到本地 state，并写入 Semi Form。
@@ -319,6 +343,8 @@ export default function SettingsPaymentGateway(props) {
 
     setLoading(true);
     try {
+      const rechargeDisplayCurrency =
+        inputs['general_setting.recharge_display_currency'] || 'USD';
       const options = [
         {
           key: 'OnlinePayProvider',
@@ -421,6 +447,15 @@ export default function SettingsPaymentGateway(props) {
           value: inputs.AmountDiscount,
         });
       }
+      if (
+        originInputs['general_setting.recharge_display_currency'] !==
+        rechargeDisplayCurrency
+      ) {
+        options.push({
+          key: 'general_setting.recharge_display_currency',
+          value: rechargeDisplayCurrency,
+        });
+      }
 
       // 发送请求
       const requestQueue = options.map((opt) =>
@@ -440,8 +475,24 @@ export default function SettingsPaymentGateway(props) {
         });
       } else {
         showSuccess(t('更新成功'));
+        const statusPatch = {
+          recharge_display_currency: rechargeDisplayCurrency,
+        };
+        const cachedStatus = patchStatusData(statusPatch);
+        statusDispatch({
+          type: 'set',
+          payload: {
+            ...(statusState?.status || {}),
+            ...cachedStatus,
+            ...statusPatch,
+          },
+        });
         // 更新本地存储的原始值
-        setOriginInputs({ ...inputs });
+        setOriginInputs({
+          ...inputs,
+          'general_setting.recharge_display_currency':
+            rechargeDisplayCurrency,
+        });
         props.refresh && props.refresh();
       }
     } catch (error) {
@@ -679,6 +730,26 @@ export default function SettingsPaymentGateway(props) {
               </Text>
             </Col>
           </Row>
+          {quotaDisplayType === 'TOKENS' && (
+            <Row
+              gutter={{ xs: 8, sm: 16, md: 24, lg: 24, xl: 24, xxl: 24 }}
+              style={{ marginTop: 16 }}
+            >
+              <Col xs={24} sm={24} md={8} lg={8} xl={8}>
+                <Form.Select
+                  field='general_setting.recharge_display_currency'
+                  label={t('充值展示币种')}
+                  extraText={t(
+                    '仅在积分展示模式下生效，用于决定充值页按美元还是人民币输入并支付',
+                  )}
+                >
+                  <Form.Select.Option value='USD'>USD ($)</Form.Select.Option>
+                  <Form.Select.Option value='CNY'>CNY (¥)</Form.Select.Option>
+                </Form.Select>
+              </Col>
+            </Row>
+          )}
+
           <Form.TextArea
             field='TopupGroupRatio'
             label={t('充值分组倍率')}

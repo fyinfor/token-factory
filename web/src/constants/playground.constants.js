@@ -158,11 +158,11 @@ export const ERROR_MESSAGES = {
   NETWORK_ERROR: '网络连接失败或服务器无响应',
 };
 
-/** 操练场文生视频时长（秒）：3～30，默认 5 */
+/** 操练场文生视频时长（秒）：4～15，默认 5 */
 export const PLAYGROUND_VIDEO_DURATION_OPTIONS = Array.from(
-  { length: 28 },
+  { length: 12 },
   (_, i) => {
-    const sec = i + 3;
+    const sec = i + 4;
     return { label: `${sec}s`, value: sec };
   },
 );

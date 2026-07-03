@@ -331,5 +331,11 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
 	if data, err = sjson.SetBytes(data, "id", task.TaskID); err != nil {
 		return nil, errors.Wrap(err, "set id failed")
 	}
+	// 状态以 task.Status 为准，避免 task.Data 过期导致下游状态不一致
+	if status := task.Status.ToVideoStatus(); status != "" {
+		if data, err = sjson.SetBytes(data, "status", status); err != nil {
+			return nil, errors.Wrap(err, "set status failed")
+		}
+	}
 	return data, nil
 }

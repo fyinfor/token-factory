@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useContext, useEffect, useState, useRef, useMemo } from 'react';
 import {
   Banner,
   Button,
@@ -33,11 +33,13 @@ import {
 import {
   compareObjects,
   API,
+  patchStatusData,
   showError,
   showSuccess,
   showWarning,
 } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
+import { StatusContext } from '../../../context/Status';
 
 const { Text } = Typography;
 
@@ -45,7 +47,6 @@ const FORM_INPUT_DEFAULTS = {
   TopUpLink: '',
   'general_setting.docs_link': '',
   'general_setting.quota_display_type': 'USD',
-  'general_setting.recharge_display_currency': 'USD',
   'general_setting.custom_currency_symbol': '¤',
   'general_setting.custom_currency_exchange_rate': '',
   QuotaPerUnit: '',
@@ -65,6 +66,7 @@ const FORM_INPUT_DEFAULTS = {
 
 export default function GeneralSettings(props) {
   const { t } = useTranslation();
+  const [statusState, statusDispatch] = useContext(StatusContext);
   const [loading, setLoading] = useState(false);
   const [showQuotaWarning, setShowQuotaWarning] = useState(false);
   const [inputs, setInputs] = useState(FORM_INPUT_DEFAULTS);
@@ -113,11 +115,25 @@ export default function GeneralSettings(props) {
             return showError(t('部分保存失败，请重试'));
         }
         showSuccess(t('保存成功'));
-        // 充值展示币种需要在当前会话立即生效，避免切页后仍显示旧币种。
-        localStorage.setItem(
-          'recharge_display_currency',
-          inputs['general_setting.recharge_display_currency'] || 'USD',
-        );
+        const statusPatch = {
+          quota_display_type:
+            inputs['general_setting.quota_display_type'] || 'USD',
+          quota_per_unit: inputs.QuotaPerUnit,
+          usd_exchange_rate: inputs.USDExchangeRate,
+          custom_currency_symbol:
+            inputs['general_setting.custom_currency_symbol'] || '¤',
+          custom_currency_exchange_rate:
+            inputs['general_setting.custom_currency_exchange_rate'],
+        };
+        const cachedStatus = patchStatusData(statusPatch);
+        statusDispatch({
+          type: 'set',
+          payload: {
+            ...(statusState?.status || {}),
+            ...cachedStatus,
+            ...statusPatch,
+          },
+        });
         localStorage.setItem(
           'model_default_docs_enabled',
           inputs.ModelDefaultDocsEnabled,
@@ -373,21 +389,6 @@ export default function GeneralSettings(props) {
                   <Form.Select.Option value='CUSTOM'>
                     {t('自定义货币')}
                   </Form.Select.Option>
-                </Form.Select>
-              </Col>
-              <Col xs={24} sm={12} md={8} lg={8} xl={8}>
-                <Form.Select
-                  field='general_setting.recharge_display_currency'
-                  label={t('充值展示币种')}
-                  extraText={t(
-                    '仅影响钱包管理“实付金额”文案展示，不影响后端实际计费与换算',
-                  )}
-                  onChange={handleFieldChange(
-                    'general_setting.recharge_display_currency',
-                  )}
-                >
-                  <Form.Select.Option value='USD'>USD ($)</Form.Select.Option>
-                  <Form.Select.Option value='CNY'>CNY (¥)</Form.Select.Option>
                 </Form.Select>
               </Col>
               {quotaDisplayType !== 'USD' && (
