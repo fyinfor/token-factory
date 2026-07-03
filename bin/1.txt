@@ -1,0 +1,9 @@
+# 代理用户跨环境迁移脚本依赖（bin/migrate_agent_users.py）
+SQLAlchemy>=2.0,<3.0
+
+# 按目标数据库类型按需安装其一：
+# MySQL / MariaDB
+PyMySQL>=1.1.0
+# PostgreSQL
+psycopg2-binary>=2.9.0
+# SQLite 无需额外驱动（Python 内置）

@@ -19,8 +19,9 @@ For commercial licensing, please contact support@quantumnous.com
 
 import { getPayMethodDisplayName } from '../../../helpers';
 import { Modal, Typography, Card, Skeleton } from '@douyinfe/semi-ui';
-import { SiAlipay, SiWechat, SiStripe } from 'react-icons/si';
+import { SiStripe } from 'react-icons/si';
 import { CreditCard } from 'lucide-react';
+import { AlipayPayLogo, WeChatPayLogo } from '../PaymentBrandIcons';
 
 const { Text } = Typography;
 
@@ -136,17 +137,13 @@ const PaymentConfirmModal = ({
                     return (
                       <>
                         {payMethod.type === 'alipay' ? (
-                          <SiAlipay
-                            className='mr-2'
-                            size={16}
-                            color='#1677FF'
-                          />
+                          <span className='mr-2 inline-flex'>
+                            <AlipayPayLogo size={18} />
+                          </span>
                         ) : payMethod.type === 'wxpay' ? (
-                          <SiWechat
-                            className='mr-2'
-                            size={16}
-                            color='#07C160'
-                          />
+                          <span className='mr-2 inline-flex'>
+                            <WeChatPayLogo size={18} />
+                          </span>
                         ) : payMethod.type === 'stripe' ? (
                           <SiStripe
                             className='mr-2'
@@ -172,11 +169,9 @@ const PaymentConfirmModal = ({
                     if (payWay === 'alipay') {
                       return (
                         <>
-                          <SiAlipay
-                            className='mr-2'
-                            size={16}
-                            color='#1677FF'
-                          />
+                          <span className='mr-2 inline-flex'>
+                            <AlipayPayLogo size={18} />
+                          </span>
                           <Text className='text-slate-900 dark:text-slate-100'>
                             {t('支付宝')}
                           </Text>
@@ -198,11 +193,9 @@ const PaymentConfirmModal = ({
                     } else {
                       return (
                         <>
-                          <SiWechat
-                            className='mr-2'
-                            size={16}
-                            color='#07C160'
-                          />
+                          <span className='mr-2 inline-flex'>
+                            <WeChatPayLogo size={18} />
+                          </span>
                           <Text className='text-slate-900 dark:text-slate-100'>
                             {t('微信')}
                           </Text>

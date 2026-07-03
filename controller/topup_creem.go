@@ -109,7 +109,7 @@ func (*CreemAdaptor) RequestPay(c *gin.Context, req *CreemPayRequest) {
 	// 先创建订单记录，使用产品配置的金额和充值额度
 	topUp := &model.TopUp{
 		UserId:     id,
-		Amount:     selectedProduct.Quota, // 充值额度
+		Amount:     float64(selectedProduct.Quota), // 充值额度
 		Money:      selectedProduct.Price, // 支付金额
 		TradeNo:    referenceId,
 		CreateTime: time.Now().Unix(),
@@ -305,7 +305,7 @@ func handleCheckoutCompleted(c *gin.Context, event *CreemWebhookEvent) {
 	if err := model.CompleteSubscriptionOrder(referenceId, common.GetJsonString(event)); err == nil {
 		c.Status(http.StatusOK)
 		return
-	} else if err != nil && !errors.Is(err, model.ErrSubscriptionOrderNotFound) {
+	} else if !errors.Is(err, model.ErrSubscriptionOrderNotFound) {
 		log.Printf("Creem订阅订单处理失败: %s, 订单号: %s", err.Error(), referenceId)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
@@ -359,7 +359,7 @@ func handleCheckoutCompleted(c *gin.Context, event *CreemWebhookEvent) {
 		return
 	}
 
-	log.Printf("Creem充值成功 - 订单号: %s, 充值额度: %d, 支付金额: %.2f",
+	log.Printf("Creem充值成功 - 订单号: %s, 充值额度: %.6f, 支付金额: %.2f",
 		referenceId, topUp.Amount, topUp.Money)
 	c.Status(http.StatusOK)
 }

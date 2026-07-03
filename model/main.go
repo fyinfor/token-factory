@@ -268,6 +268,7 @@ func migrateLegacyDistributorRole() error {
 func migrateDB() error {
 	// Migrate price_amount column from float/double to decimal for existing tables
 	migrateSubscriptionPlanPriceAmount()
+	migrateTopUpAmountColumn()
 	// Migrate model_limits column from varchar to text for existing tables
 	if err := migrateTokenModelLimitsToText(); err != nil {
 		return err
@@ -447,6 +448,7 @@ func migrateDBFast() error {
 			return err
 		}
 	}
+	migrateTopUpAmountColumn()
 	if err := MigrateLegacyChangelogOption(); err != nil {
 		return fmt.Errorf("migrate legacy changelog option: %w", err)
 	}
@@ -671,6 +673,58 @@ func migrateSubscriptionPlanPriceAmount() {
 			common.SysLog(fmt.Sprintf("Warning: failed to migrate %s.%s to decimal: %v", tableName, columnName, err))
 		} else {
 			common.SysLog(fmt.Sprintf("Successfully migrated %s.%s to decimal(10,6)", tableName, columnName))
+		}
+	}
+}
+
+// migrateTopUpAmountColumn migrates top_ups.amount from integer-like types to decimal(20,6).
+// SQLite uses dynamic type affinity, so AutoMigrate is sufficient there.
+func migrateTopUpAmountColumn() {
+	if common.UsingSQLite {
+		return
+	}
+
+	tableName := "top_ups"
+	columnName := "amount"
+	if !DB.Migrator().HasTable(tableName) {
+		return
+	}
+	if !DB.Migrator().HasColumn(&TopUp{}, columnName) {
+		return
+	}
+
+	var alterSQL string
+	if common.UsingPostgreSQL {
+		var dataType string
+		if err := DB.Raw(`SELECT data_type FROM information_schema.columns
+			WHERE table_schema = current_schema() AND table_name = ? AND column_name = ?`,
+			tableName, columnName).Scan(&dataType).Error; err != nil {
+			common.SysLog(fmt.Sprintf("Warning: failed to query metadata for %s.%s: %v", tableName, columnName, err))
+		} else if dataType == "numeric" {
+			return
+		}
+		alterSQL = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s TYPE decimal(20,6) USING %s::decimal(20,6)`,
+			tableName, columnName, columnName)
+	} else if common.UsingMySQL {
+		var columnType string
+		if err := DB.Raw(`SELECT COLUMN_TYPE FROM information_schema.columns
+				WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`,
+			tableName, columnName).Scan(&columnType).Error; err != nil {
+			common.SysLog(fmt.Sprintf("Warning: failed to query metadata for %s.%s: %v", tableName, columnName, err))
+		} else if strings.HasPrefix(strings.ToLower(columnType), "decimal") {
+			return
+		}
+		alterSQL = fmt.Sprintf("ALTER TABLE %s MODIFY COLUMN %s decimal(20,6) NOT NULL DEFAULT 0",
+			tableName, columnName)
+	} else {
+		return
+	}
+
+	if alterSQL != "" {
+		if err := DB.Exec(alterSQL).Error; err != nil {
+			common.SysLog(fmt.Sprintf("Warning: failed to migrate %s.%s to decimal: %v", tableName, columnName, err))
+		} else {
+			common.SysLog(fmt.Sprintf("Successfully migrated %s.%s to decimal(20,6)", tableName, columnName))
 		}
 	}
 }

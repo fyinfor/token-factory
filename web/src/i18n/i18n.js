@@ -32,12 +32,15 @@ import idTranslation from './locales/id.json';
 import msTranslation from './locales/ms.json';
 import thTranslation from './locales/th.json';
 import swTranslation from './locales/sw.json';
-import { supportedLanguages } from './language';
+import { normalizeLanguage, supportedLanguages } from './language';
 
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)
   .init({
+    detection: {
+      convertDetectedLanguage: (lng) => normalizeLanguage(lng),
+    },
     load: 'currentOnly',
     supportedLngs: supportedLanguages,
     resources: {

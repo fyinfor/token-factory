@@ -87,6 +87,12 @@ func GetTopUpInfo(c *gin.Context) {
 		}
 	}
 
+	enableUcoin := setting.UcoinEnabled &&
+		setting.UcoinBaseUrl != "" &&
+		setting.UcoinMerchantId != "" &&
+		setting.UcoinApiKey != "" &&
+		len(setting.GetUcoinCoinPairs()) > 0
+
 	data := gin.H{
 		"enable_online_topup": (operation_setting.OnlinePayProvider == "yipay" &&
 			(operation_setting.YipayRequestURL != "" || operation_setting.PayAddress != "") &&
@@ -111,6 +117,14 @@ func GetTopUpInfo(c *gin.Context) {
 		"min_topup":           operation_setting.MinTopUp,
 		"stripe_min_topup":    setting.StripeMinTopUp,
 		"waffo_min_topup":     setting.WaffoMinTopUp,
+		"enable_ubcoin_topup": enableUcoin,
+		"ubcoin_min_topup":    setting.UcoinMinTopUp,
+		"ubcoin_coin_pairs": func() interface{} {
+			if enableUcoin {
+				return setting.GetUcoinCoinPairs()
+			}
+			return nil
+		}(),
 		"amount_options":      operation_setting.GetPaymentSetting().AmountOptions,
 		"discount":            operation_setting.GetPaymentSetting().AmountDiscount,
 		"online_pay_provider": operation_setting.OnlinePayProvider,
@@ -587,11 +601,11 @@ func requestYipayOrder(req EpayRequest, id int, payMoney float64, paymentMethod 
 		return "", nil, extractErr
 	}
 	payURL = strings.TrimSpace(payURL)
-	amount := req.Amount
+	amount := float64(req.Amount)
 	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
-		dAmount := decimal.NewFromInt(int64(amount))
+		dAmount := decimal.NewFromInt(req.Amount)
 		dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
-		amount = dAmount.Div(dQuotaPerUnit).IntPart()
+		amount, _ = dAmount.Div(dQuotaPerUnit).Float64()
 	}
 	topUp := &model.TopUp{
 		UserId:        id,
@@ -751,11 +765,11 @@ func RequestEpay(c *gin.Context) {
 		c.JSON(200, gin.H{"message": "error", "data": "拉起支付失败"})
 		return
 	}
-	amount := req.Amount
+	amount := float64(req.Amount)
 	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
-		dAmount := decimal.NewFromInt(int64(amount))
+		dAmount := decimal.NewFromInt(req.Amount)
 		dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
-		amount = dAmount.Div(dQuotaPerUnit).IntPart()
+		amount, _ = dAmount.Div(dQuotaPerUnit).Float64()
 	}
 	topUp := &model.TopUp{
 		UserId:        id,
@@ -896,7 +910,7 @@ func EpayNotify(c *gin.Context) {
 				_, _ = c.Writer.Write([]byte("fail"))
 				return
 			}
-			dAmount := decimal.NewFromInt(int64(topUp.Amount))
+			dAmount := decimal.NewFromFloat(topUp.Amount)
 			dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
 			quotaToAdd := int(dAmount.Mul(dQuotaPerUnit).IntPart())
 			if err := model.IncreaseUserQuota(topUp.UserId, quotaToAdd, true); err != nil {
@@ -955,7 +969,7 @@ func EpayNotify(c *gin.Context) {
 			}
 			//user, _ := model.GetUserById(topUp.UserId, false)
 			//user.Quota += topUp.Amount * 500000
-			dAmount := decimal.NewFromInt(int64(topUp.Amount))
+			dAmount := decimal.NewFromFloat(topUp.Amount)
 			dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
 			quotaToAdd := int(dAmount.Mul(dQuotaPerUnit).IntPart())
 			err = model.IncreaseUserQuota(topUp.UserId, quotaToAdd, true)

@@ -11,7 +11,7 @@ import {
   copy,
   getQuotaPerUnit,
 } from '../../helpers';
-import { Modal, Toast } from '@douyinfe/semi-ui';
+import { Modal, Toast, Button } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
 import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
@@ -23,6 +23,7 @@ import TransferModal from './modals/TransferModal';
 import PaymentConfirmModal from './modals/PaymentConfirmModal';
 import PaymentMethodSelectModal from './modals/PaymentMethodSelectModal';
 import TopupHistoryModal from './modals/TopupHistoryModal';
+import UcoinPayResultModal from './modals/UcoinPayResultModal';
 
 const DEFAULT_EPAY_MAX_TOPUP = 100000;
 
@@ -97,12 +98,21 @@ const TopUp = () => {
   const [waffoPayMethods, setWaffoPayMethods] = useState([]);
   const [waffoMinTopUp, setWaffoMinTopUp] = useState(1);
 
+  // U币（虚拟币）相关状态
+  const [enableUcoinTopUp, setEnableUcoinTopUp] = useState(false);
+  const [ucoinCoinPairs, setUcoinCoinPairs] = useState([]);
+  const [ucoinMinTopUp, setUcoinMinTopUp] = useState(1);
+  const [ucoinResultOpen, setUcoinResultOpen] = useState(false);
+  const [ucoinResult, setUcoinResult] = useState(null);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [open, setOpen] = useState(false);
   const [paymentSelectOpen, setPaymentSelectOpen] = useState(false);
   const [payWay, setPayWay] = useState('');
   const [amountLoading, setAmountLoading] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
+  /** 当前正在发起支付的按钮标识，避免多种支付方式共用 loading */
+  const [activePaymentKey, setActivePaymentKey] = useState('');
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [payMethods, setPayMethods] = useState([]);
   const [wechatQrOpen, setWechatQrOpen] = useState(false);
@@ -191,6 +201,7 @@ const TopUp = () => {
     }
 
     setPayWay(payment);
+    setActivePaymentKey(payment);
     setPaymentLoading(true);
     try {
       if (payment === 'stripe') {
@@ -215,6 +226,7 @@ const TopUp = () => {
       showError(t('获取金额失败'));
     } finally {
       setPaymentLoading(false);
+      setActivePaymentKey('');
     }
   };
 
@@ -372,6 +384,9 @@ const TopUp = () => {
         showError(t('充值数量不能小于') + waffoMinTopUp);
         return;
       }
+      const waffoKey =
+        payMethodIndex != null ? `waffo:${payMethodIndex}` : 'waffo';
+      setActivePaymentKey(waffoKey);
       setPaymentLoading(true);
       const requestBody = {
         amount: parseInt(topUpCount),
@@ -394,6 +409,44 @@ const TopUp = () => {
       showError(t('支付请求失败'));
     } finally {
       setPaymentLoading(false);
+      setActivePaymentKey('');
+    }
+  };
+
+  const ucoinTopUp = async (coinPairIndex) => {
+    try {
+      if (!enableUcoinTopUp) {
+        showError(t('管理员未开启 U币支付！'));
+        return;
+      }
+      if (topUpCount < ucoinMinTopUp) {
+        showError(t('充值数量不能小于') + ucoinMinTopUp);
+        return;
+      }
+      setActivePaymentKey(`ucoin:${coinPairIndex}`);
+      setPaymentLoading(true);
+      const res = await API.post('/api/user/ubcoin/pay', {
+        amount: parseInt(topUpCount),
+        coin_pair_index: coinPairIndex,
+      });
+      if (res !== undefined) {
+        const { message, data } = res.data;
+        if (message === 'success') {
+          setUcoinResult(data);
+          setUcoinResultOpen(true);
+        } else {
+          const errorMsg =
+            typeof data === 'string' ? data : message || t('支付请求失败');
+          showError(errorMsg);
+        }
+      } else {
+        showError(res);
+      }
+    } catch (e) {
+      showError(t('支付请求失败'));
+    } finally {
+      setPaymentLoading(false);
+      setActivePaymentKey('');
     }
   };
 
@@ -559,7 +612,9 @@ const TopUp = () => {
               ? data.stripe_min_topup
               : data.enable_waffo_topup
                 ? data.waffo_min_topup
-                : 1;
+                : data.enable_ubcoin_topup
+                  ? data.ubcoin_min_topup
+                  : 1;
           setEnableOnlineTopUp(enableOnlineTopUp);
           setEnableStripeTopUp(enableStripeTopUp);
           setEnableCreemTopUp(enableCreemTopUp);
@@ -567,6 +622,9 @@ const TopUp = () => {
           setEnableWaffoTopUp(enableWaffoTopUp);
           setWaffoPayMethods(data.waffo_pay_methods || []);
           setWaffoMinTopUp(data.waffo_min_topup || 1);
+          setEnableUcoinTopUp(data.enable_ubcoin_topup || false);
+          setUcoinCoinPairs(data.ubcoin_coin_pairs || []);
+          setUcoinMinTopUp(data.ubcoin_min_topup || 1);
           setMinTopUp(minTopUpValue);
           setTopUpCount(minTopUpValue);
 
@@ -902,8 +960,7 @@ const TopUp = () => {
         enableOnlineTopUp={enableOnlineTopUp}
         enableStripeTopUp={enableStripeTopUp}
         onSelect={handlePaymentMethodSelect}
-        paymentLoading={paymentLoading}
-        payWay={payWay}
+        activePaymentKey={activePaymentKey}
       />
 
       {/* 充值确认模态框 */}
@@ -1015,6 +1072,9 @@ const TopUp = () => {
           enableWaffoTopUp={enableWaffoTopUp}
           waffoTopUp={waffoTopUp}
           waffoPayMethods={waffoPayMethods}
+          enableUcoinTopUp={enableUcoinTopUp}
+          ucoinTopUp={ucoinTopUp}
+          ucoinCoinPairs={ucoinCoinPairs}
           presetAmounts={presetAmounts}
           selectedPreset={selectedPreset}
           selectPresetAmount={selectPresetAmount}
@@ -1031,8 +1091,7 @@ const TopUp = () => {
           amountLoading={amountLoading}
           payMethods={payMethods}
           preTopUp={preTopUp}
-          paymentLoading={paymentLoading}
-          payWay={payWay}
+          activePaymentKey={activePaymentKey}
           redemptionCode={redemptionCode}
           setRedemptionCode={setRedemptionCode}
           topUp={topUp}
@@ -1053,6 +1112,13 @@ const TopUp = () => {
           reloadSubscriptionSelf={getSubscriptionSelf}
         />
       </div>
+
+      {/* U币支付结果弹窗：展示生成的收款地址 */}
+      <UcoinPayResultModal
+        visible={ucoinResultOpen}
+        onCancel={() => setUcoinResultOpen(false)}
+        ucoinResult={ucoinResult}
+      />
     </div>
   );
 };
