@@ -316,7 +316,7 @@ export const useLogsData = () => {
     const seconds = Number(other?.video_seconds || 0);
     const pricePerSecond = Number(other?.video_price_per_second || 0);
     const groupRatio = Number(other?.group_ratio || 1);
-    const channelDiscount = Number(other?.channel_price_discount || 100);
+    const channelDiscount = Number(other?.channel_price_discount ?? 100);
     const billedQuota = Number(other?.video_billed_quota || quota || 0);
     const width = Number(other?.video_width || 0);
     const height = Number(other?.video_height || 0);
@@ -517,7 +517,7 @@ export const useLogsData = () => {
     );
     const pricePerMillion = Number(other?.video_token_unit_price || 0);
     const groupRatio = Number(other?.group_ratio || 1);
-    const channelDiscount = Number(other?.channel_price_discount || 100);
+    const channelDiscount = Number(other?.channel_price_discount ?? 100);
     const billedQuota = Number(other?.video_billed_quota || quota || 0);
     const width = Number(other?.video_width || 0);
     const height = Number(other?.video_height || 0);

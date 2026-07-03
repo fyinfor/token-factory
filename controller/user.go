@@ -1008,7 +1008,7 @@ func collectPlaygroundVideoPricingTiers(modelName string, channelIDs map[int]str
 		hint := model.BuildVideoFlatClipHint(
 			channelID,
 			modelName,
-			ch.ResolvedPriceDiscountPercent(),
+			ch.ResolvedEffectiveCostPercent(),
 			ch.ResolvedMarkupDiscountRate(),
 		)
 		if hint == nil {
@@ -1077,7 +1077,7 @@ func collectPlaygroundImagePricingTiers(modelName string, channelIDs map[int]str
 		hint := model.BuildImagePerImageHint(
 			channelID,
 			modelName,
-			ch.ResolvedPriceDiscountPercent(),
+			ch.ResolvedEffectiveCostPercent(),
 			ch.ResolvedMarkupDiscountRate(),
 		)
 		if hint == nil {

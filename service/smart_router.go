@@ -99,7 +99,7 @@ func ResolveChannelModelUnitPrice(ch *model.Channel, modelName string) float64 {
 func ResolveChannelModelConfiguredUnitPrice(ch *model.Channel, modelName string) (float64, bool) {
 	channelID := ch.Id
 	sid := ch.SupplierApplicationID
-	costDisc := model.ResolveChannelPriceDiscountPercent(channelID) // 成本折扣%（默认 100）
+	costDisc := model.ResolveChannelEffectiveCostPercent(channelID) // 最终成本率%（成本折扣 + 经营成本，默认 100）
 	markupDisc := model.ResolveChannelMarkupDiscountRate(channelID) // 加价折扣%（默认 0）
 
 	// 固定价优先（对应计费 usePrice 分支）。

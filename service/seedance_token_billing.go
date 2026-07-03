@@ -112,7 +112,7 @@ func MatchVideoTokenRuleForRequest(channelID, userID int, modelName, mode string
 	if !ok || match.PricePerSecond <= 0 {
 		return nil, false
 	}
-	costDisc := model.ResolveChannelPriceDiscountPercent(channelID)
+	costDisc := model.ResolveChannelEffectiveCostPercent(channelID)
 	markupDisc := model.ResolveEffectiveMarkupDiscountPercentForInviteeBilling(userID, channelID, modelName)
 	globalPerToken := globalVideoPerTokenUSD(modelName, mode, match.RuleWidth, match.RuleHeight, hasAudio)
 	effPerToken := effectiveVideoPerSecondUSD(match.PricePerSecond, globalPerToken, costDisc, markupDisc)
@@ -214,7 +214,7 @@ func calcVideoTokenQuotaFromBillingContext(task *model.Task, totalTokens int) in
 	effPerToken := effectiveVideoPerSecondUSD(
 		bc.VideoChannelRulePrice,
 		bc.VideoGlobalRulePrice,
-		bc.ChannelPriceDiscountPercent,
+		taskBillingContextEffectiveCostPercent(bc, task.ChannelId),
 		markupDisc,
 	)
 	if effPerToken <= 0 {
@@ -319,7 +319,7 @@ func buildSeedanceVideoTokenLogOther(totalTokens int, match *videoTokenRuleMatch
 		if bc.MarkupDiscountPercent != nil {
 			markupDisc = *bc.MarkupDiscountPercent
 		}
-		effPerToken = effectiveVideoPerSecondUSD(channelPerToken, bc.VideoGlobalRulePrice, bc.ChannelPriceDiscountPercent, markupDisc)
+		effPerToken = effectiveVideoPerSecondUSD(channelPerToken, bc.VideoGlobalRulePrice, taskBillingContextEffectiveCostPercent(bc, task.ChannelId), markupDisc)
 	}
 	other["video_total_tokens"] = totalTokens
 	other["video_token_unit_price"] = effPerToken

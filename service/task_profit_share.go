@@ -401,10 +401,7 @@ func channelCostDiscountPercentFromTask(task *model.Task) float64 {
 	if task == nil {
 		return 100
 	}
-	if bc := task.PrivateData.BillingContext; bc != nil && bc.ChannelPriceDiscountPercent > 0 {
-		return bc.ChannelPriceDiscountPercent
-	}
-	return model.ResolveChannelPriceDiscountPercent(task.ChannelId)
+	return taskBillingContextEffectiveCostPercent(task.PrivateData.BillingContext, task.ChannelId)
 }
 
 func relayInfoSnapshotForProfitShare(task *model.Task) (*relaycommon.RelayInfo, bool) {
@@ -424,10 +421,7 @@ func relayInfoSnapshotForProfitShare(task *model.Task) (*relaycommon.RelayInfo, 
 		return nil, false
 	}
 	markup := markupDiscountPercentFromTask(task, modelName)
-	cost := bc.ChannelPriceDiscountPercent
-	if cost <= 0 {
-		cost = model.ResolveChannelPriceDiscountPercent(task.ChannelId)
-	}
+	cost := taskBillingContextEffectiveCostPercent(bc, task.ChannelId)
 	gr := bc.GroupRatio
 	if gr <= 0 {
 		gr = 1

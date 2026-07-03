@@ -14,26 +14,26 @@ import (
 )
 
 type Pricing struct {
-	ModelName              string                  `json:"model_name"`
-	Description            string                  `json:"description,omitempty"`
-	DescriptionEn          string                  `json:"description_en,omitempty"`
-	DocIntroduction        string                  `json:"doc_introduction,omitempty"`
-	ApiDocs                any                     `json:"api_docs,omitempty"`
-	Icon                   string                  `json:"icon,omitempty"`
-	Tags                   string                  `json:"tags,omitempty"`
-	VendorID               int                     `json:"vendor_id,omitempty"`
-	QuotaType              int                     `json:"quota_type"`
-	ModelRatio             float64                 `json:"model_ratio"`
-	ModelPrice             float64                 `json:"model_price"`
-	OwnerBy                string                  `json:"owner_by"`
-	CompletionRatio        *float64                `json:"completion_ratio,omitempty"`
-	CacheRatio             *float64                `json:"cache_ratio,omitempty"`
-	CreateCacheRatio       *float64                `json:"create_cache_ratio,omitempty"`
+	ModelName        string   `json:"model_name"`
+	Description      string   `json:"description,omitempty"`
+	DescriptionEn    string   `json:"description_en,omitempty"`
+	DocIntroduction  string   `json:"doc_introduction,omitempty"`
+	ApiDocs          any      `json:"api_docs,omitempty"`
+	Icon             string   `json:"icon,omitempty"`
+	Tags             string   `json:"tags,omitempty"`
+	VendorID         int      `json:"vendor_id,omitempty"`
+	QuotaType        int      `json:"quota_type"`
+	ModelRatio       float64  `json:"model_ratio"`
+	ModelPrice       float64  `json:"model_price"`
+	OwnerBy          string   `json:"owner_by"`
+	CompletionRatio  *float64 `json:"completion_ratio,omitempty"`
+	CacheRatio       *float64 `json:"cache_ratio,omitempty"`
+	CreateCacheRatio *float64 `json:"create_cache_ratio,omitempty"`
 	// 全局阶梯倍率（模型名 -> segments），供定价页展示官方阶梯价
-	ModelTierRatio       any `json:"model_tier_ratio,omitempty"`
-	CompletionTierRatio  any `json:"completion_tier_ratio,omitempty"`
-	CacheTierRatio       any `json:"cache_tier_ratio,omitempty"`
-	CreateCacheTierRatio any `json:"create_cache_tier_ratio,omitempty"`
+	ModelTierRatio         any                     `json:"model_tier_ratio,omitempty"`
+	CompletionTierRatio    any                     `json:"completion_tier_ratio,omitempty"`
+	CacheTierRatio         any                     `json:"cache_tier_ratio,omitempty"`
+	CreateCacheTierRatio   any                     `json:"create_cache_tier_ratio,omitempty"`
 	ImageRatio             *float64                `json:"image_ratio,omitempty"`
 	AudioRatio             *float64                `json:"audio_ratio,omitempty"`
 	AudioCompletionRatio   *float64                `json:"audio_completion_ratio,omitempty"`
@@ -81,7 +81,8 @@ type PricingChannelItem struct {
 	CompletionTierRatio  any     `json:"completion_tier_ratio,omitempty"`
 	CacheTierRatio       any     `json:"cache_tier_ratio,omitempty"`
 	CreateCacheTierRatio any     `json:"create_cache_tier_ratio,omitempty"`
-	PriceDiscountPercent float64 `json:"price_discount_percent"` // 成本折扣率（百分数，100=不打折）
+	PriceDiscountPercent float64 `json:"price_discount_percent"` // 最终成本率（成本折扣率 + 经营成本率）
+	EffectiveCostPercent float64 `json:"-"`                      // 内部计算用最终成本率
 	MarkupDiscountRate   float64 `json:"markup_discount_rate"`   // 加价折扣率（百分数，0=不加价）
 	QuotaType            int     `json:"quota_type"`
 
@@ -280,6 +281,11 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			if row.PriceDiscountPercent != nil {
 				d = *row.PriceDiscountPercent
 			}
+			operatingCost := 0.0
+			if row.OperatingCostPercent != nil {
+				operatingCost = *row.OperatingCostPercent
+			}
+			effectiveCost := EffectiveCostPercent(d, operatingCost)
 			markupRate := 0.0
 			if row.MarkupDiscountRate != nil {
 				markupRate = *row.MarkupDiscountRate
@@ -304,7 +310,8 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 				CompletionRatio:       cr,
 				CacheRatio:            chCache,
 				CreateCacheRatio:      chCreate,
-				PriceDiscountPercent:  d,
+				PriceDiscountPercent:  effectiveCost,
+				EffectiveCostPercent:  effectiveCost,
 				MarkupDiscountRate:    markupRate,
 				QuotaType: func() int {
 					if baseMp > 0 {
@@ -361,8 +368,8 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 					SupplierType:   ch.SupplierType,
 				},
 			}
-			item.VideoFlatClipHint = BuildVideoFlatClipHint(ch.ChannelID, modelName, ch.PriceDiscountPercent, ch.MarkupDiscountRate)
-			item.ImagePerImageHint = BuildImagePerImageHint(ch.ChannelID, modelName, ch.PriceDiscountPercent, ch.MarkupDiscountRate)
+			item.VideoFlatClipHint = BuildVideoFlatClipHint(ch.ChannelID, modelName, ch.EffectiveCostPercent, ch.MarkupDiscountRate)
+			item.ImagePerImageHint = BuildImagePerImageHint(ch.ChannelID, modelName, ch.EffectiveCostPercent, ch.MarkupDiscountRate)
 			out = append(out, item)
 		}
 	}

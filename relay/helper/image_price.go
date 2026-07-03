@@ -369,7 +369,7 @@ func buildImagePerImagePriceData(
 		}
 	}
 
-	chDiscImg := model.ResolveChannelPriceDiscountPercent(channelID)
+	rawDiscImg, operatingCostImg, chDiscImg := resolveChannelCostPercents(channelID)
 	markupDiscImg := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
 	channelRuleUSD := channelUSD
 	if !chOK || channelRuleUSD <= 0 {
@@ -392,16 +392,18 @@ func buildImagePerImagePriceData(
 	}
 
 	priceData := types.PriceData{
-		FreeModel:             freeModel,
-		ModelPrice:            channelRuleUSD,
-		GroupRatioInfo:        groupRatioInfo,
-		UsePrice:              true,
-		Quota:                 quota,
-		QuotaToPreConsume:     quota,
-		ChannelPriceDiscount:  &chDiscCopyImg,
-		CostDiscountPercent:   chDiscImg,
-		MarkupDiscountPercent: markupDiscImg,
-		GlobalModelPrice:      globalRuleUSD,
+		FreeModel:               freeModel,
+		ModelPrice:              channelRuleUSD,
+		GroupRatioInfo:          groupRatioInfo,
+		UsePrice:                true,
+		Quota:                   quota,
+		QuotaToPreConsume:       quota,
+		ChannelPriceDiscount:    &chDiscCopyImg,
+		CostDiscountPercent:     chDiscImg,
+		RawPriceDiscountPercent: rawDiscImg,
+		OperatingCostPercent:    operatingCostImg,
+		MarkupDiscountPercent:   markupDiscImg,
+		GlobalModelPrice:        globalRuleUSD,
 	}
 	priceData.AddOtherRatio("n", float64(count))
 	info.ImageBilling = &relaycommon.ImageBillingSnapshot{

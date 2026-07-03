@@ -54,8 +54,10 @@ func calcQuotaByUpstreamTokensWithMarkup(info *relaycommon.RelayInfo, totalToken
 	}
 	// 新公式：有效输入倍率 = 渠道倍率 * 成本折扣率% + 全局倍率 * 加价折扣率%
 	costDisc := info.PriceData.CostDiscountPercent
-	if costDisc == 0 {
-		costDisc = model.ResolveChannelPriceDiscountPercent(info.ChannelId)
+	if info.PriceData.ChannelPriceDiscount != nil {
+		costDisc = *info.PriceData.ChannelPriceDiscount
+	} else if costDisc == 0 {
+		costDisc = model.ResolveChannelEffectiveCostPercent(info.ChannelId)
 	}
 	globalRatio := info.PriceData.GlobalModelRatio
 	effRate := model.EffectiveInputRate(modelRatio, globalRatio, costDisc, markupDisc)
@@ -84,8 +86,10 @@ func calcVideoPerSecondQuotaByTaskData(c *gin.Context, info *relaycommon.RelayIn
 		groupRatio = 1
 	}
 	costDiscVPS := info.PriceData.CostDiscountPercent
-	if costDiscVPS == 0 {
-		costDiscVPS = model.ResolveChannelPriceDiscountPercent(info.ChannelId)
+	if info.PriceData.ChannelPriceDiscount != nil {
+		costDiscVPS = *info.PriceData.ChannelPriceDiscount
+	} else if costDiscVPS == 0 {
+		costDiscVPS = model.ResolveChannelEffectiveCostPercent(info.ChannelId)
 	}
 	markupDiscVPS := info.PriceData.MarkupDiscountPercent
 	resolutionLabel := ""
@@ -134,8 +138,10 @@ func calcVideoPerSecondQuotaFromTaskReq(info *relaycommon.RelayInfo, req *relayc
 		groupRatio = 1
 	}
 	costDiscVPS := info.PriceData.CostDiscountPercent
-	if costDiscVPS == 0 {
-		costDiscVPS = model.ResolveChannelPriceDiscountPercent(info.ChannelId)
+	if info.PriceData.ChannelPriceDiscount != nil {
+		costDiscVPS = *info.PriceData.ChannelPriceDiscount
+	} else if costDiscVPS == 0 {
+		costDiscVPS = model.ResolveChannelEffectiveCostPercent(info.ChannelId)
 	}
 	effPricePerSec, _, _, ok := EffectiveVideoPerSecondUSDForDimensions(
 		info.ChannelId, modelName, mode, width, height, hasAudio, costDiscVPS, markupDisc,

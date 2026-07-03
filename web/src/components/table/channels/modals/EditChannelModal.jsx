@@ -212,6 +212,26 @@ function type2secretPrompt(type) {
   }
 }
 
+const resolveOperatingCostPercentByPriceDiscount = (priceDiscountPercent) => {
+  if (priceDiscountPercent === null || priceDiscountPercent === undefined) {
+    return 0;
+  }
+  const discount = Number(priceDiscountPercent);
+  if (!Number.isFinite(discount)) {
+    return 0;
+  }
+  if (discount < 50) {
+    return 5;
+  }
+  if (discount < 60) {
+    return 4;
+  }
+  if (discount < 70) {
+    return 3;
+  }
+  return 0;
+};
+
 const EditChannelModal = (props) => {
   const { t } = useTranslation();
   const channelId = props.editingChannel.id;
@@ -241,6 +261,7 @@ const EditChannelModal = (props) => {
     priority: 0,
     weight: 0,
     price_discount_percent: 100,
+    operating_cost_percent: 0,
     markup_discount_rate: 0,
     tag: '',
     multi_key_mode: 'random',
@@ -668,6 +689,22 @@ const EditChannelModal = (props) => {
           setInputs((inputs) => ({ ...inputs, [name]: value }));
         },
       });
+      return;
+    }
+    if (!isEdit && name === 'price_discount_percent') {
+      const operatingCostPercent =
+        resolveOperatingCostPercentByPriceDiscount(value);
+      if (formApiRef.current) {
+        formApiRef.current.setValue(
+          'operating_cost_percent',
+          operatingCostPercent,
+        );
+      }
+      setInputs((inputs) => ({
+        ...inputs,
+        [name]: value,
+        operating_cost_percent: operatingCostPercent,
+      }));
       return;
     }
     setInputs((inputs) => ({ ...inputs, [name]: value }));
@@ -1133,6 +1170,12 @@ const EditChannelModal = (props) => {
         data.price_discount_percent === undefined
       ) {
         data.price_discount_percent = 100;
+      }
+      if (
+        data.operating_cost_percent == null ||
+        data.operating_cost_percent === undefined
+      ) {
+        data.operating_cost_percent = 0;
       }
       if (
         data.markup_discount_rate == null ||
@@ -2937,6 +2980,22 @@ const EditChannelModal = (props) => {
                     }
                     extraText={t(
                       '用于「渠道模型输入价 × 成本折扣率%」部分计费。100=无折扣，0=全免。默认 100%。',
+                    )}
+                    style={{ width: '100%' }}
+                  />
+
+                  <Form.InputNumber
+                    field='operating_cost_percent'
+                    label={t('经营成本率(%)')}
+                    placeholder={t('例如 5 表示额外增加 5% 成本')}
+                    min={0}
+                    max={1000}
+                    precision={2}
+                    onNumberChange={(value) =>
+                      handleInputChange('operating_cost_percent', value)
+                    }
+                    extraText={t(
+                      '最终成本率 = 成本折扣率 + 经营成本率；例如 60% + 5% = 65%。默认 0%。',
                     )}
                     style={{ width: '100%' }}
                   />
