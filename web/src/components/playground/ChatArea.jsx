@@ -411,7 +411,9 @@ const ChatArea = ({
             type='tertiary'
             icon={<IconRefresh />}
             disabled={shouldDisableReset}
-            onClick={() => {
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
               if (!shouldDisableReset) {
                 onMessageReset?.(chat);
               }

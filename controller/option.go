@@ -236,6 +236,20 @@ func GetOptions(c *gin.Context) {
 		Key:   "SMSAccessKeySecretIntl",
 		Value: smsSecretIntlDisp,
 	})
+	rawUcoinApiKey := strings.TrimSpace(setting.UcoinApiKey)
+	if rawUcoinApiKey == "" {
+		if v, ok := common.OptionMap["UcoinApiKey"]; ok {
+			rawUcoinApiKey = strings.TrimSpace(common.Interface2String(v))
+		}
+	}
+	ucoinApiKeyDisp := ""
+	if rawUcoinApiKey != "" {
+		ucoinApiKeyDisp = common.MaskCredentialForAdminDisplay(rawUcoinApiKey)
+	}
+	options = append(options, &model.Option{
+		Key:   "UcoinApiKey",
+		Value: ucoinApiKeyDisp,
+	})
 	common.OptionMapRWMutex.Unlock()
 	options = append(options, &model.Option{
 		Key:   "CompletionRatioMeta",
@@ -372,6 +386,16 @@ func UpdateOption(c *gin.Context) {
 	}
 	if option.Key == "SMSAccessKeyIDIntl" && strings.TrimSpace(common.SMSAccessKeyIDIntl) != "" {
 		if valStr == common.MaskCredentialForAdminDisplay(common.SMSAccessKeyIDIntl) {
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"message": "",
+			})
+			return
+		}
+	}
+	// UcoinApiKey 为脱敏回显字段：若提交值与脱敏展示一致或为空，视为未修改，保留原值。
+	if option.Key == "UcoinApiKey" && strings.TrimSpace(setting.UcoinApiKey) != "" {
+		if valStr == "" || valStr == common.MaskCredentialForAdminDisplay(setting.UcoinApiKey) {
 			c.JSON(http.StatusOK, gin.H{
 				"success": true,
 				"message": "",

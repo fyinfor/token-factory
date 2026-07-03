@@ -113,7 +113,7 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 
 	topUp := &model.TopUp{
 		UserId:        id,
-		Amount:        int64(math.Round(req.Amount)),
+		Amount:        req.Amount,
 		Money:         quote.PayAmount,
 		InputAmount:   quote.InputAmount,
 		InputCurrency: quote.InputCurrency,

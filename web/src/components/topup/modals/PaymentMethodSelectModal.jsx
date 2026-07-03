@@ -1,7 +1,11 @@
 import { getPayMethodDisplayName } from '../../../helpers';
 import { Modal, Typography, Space, Button, Tooltip } from '@douyinfe/semi-ui';
-import { SiAlipay, SiWechat, SiStripe } from 'react-icons/si';
+import { SiStripe } from 'react-icons/si';
 import { CreditCard, Wallet } from 'lucide-react';
+import {
+  AlipayPayLogo,
+  WeChatPayLogo,
+} from '../PaymentBrandIcons';
 
 const { Text } = Typography;
 
@@ -15,17 +19,16 @@ const PaymentMethodSelectModal = ({
   enableOnlineTopUp,
   enableStripeTopUp,
   onSelect,
-  paymentLoading,
-  payWay,
+  activePaymentKey = '',
 }) => {
   const epayMethods = payMethods.filter((m) => m.type !== 'waffo');
 
   const renderPayIcon = (payMethod) => {
     if (payMethod.type === 'alipay') {
-      return <SiAlipay size={20} color='#1677FF' />;
+      return <AlipayPayLogo size={22} />;
     }
     if (payMethod.type === 'wxpay') {
-      return <SiWechat size={20} color='#07C160' />;
+      return <WeChatPayLogo size={22} />;
     }
     if (payMethod.type === 'stripe') {
       return <SiStripe size={20} color='#635BFF' />;
@@ -80,7 +83,7 @@ const PaymentMethodSelectModal = ({
                 size='large'
                 onClick={() => onSelect(payMethod.type)}
                 disabled={disabled}
-                loading={paymentLoading && payWay === payMethod.type}
+                loading={activePaymentKey === payMethod.type}
                 icon={renderPayIcon(payMethod)}
                 className='!rounded-xl !justify-start !px-4 !py-3'
               >

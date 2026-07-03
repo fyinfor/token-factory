@@ -886,6 +886,65 @@ func TestLogTaskConsumption_VideoPerVideoFlatBilling(t *testing.T) {
 	assert.Equal(t, common.QuotaPerUnit, other["video_quota_per_unit"])
 }
 
+func TestLogTaskConsumption_TokenFactoryOpenUsesOnlyUpstreamVideoMetadata(t *testing.T) {
+	truncate(t)
+	seedUser(t, 1, 100000000)
+	seedChannel(t, 1)
+
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/videos", nil)
+
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{
+			ChannelType: constant.ChannelTypeTokenFactoryOpen,
+			ChannelId:   1,
+		},
+		TaskRelayInfo: &relaycommon.TaskRelayInfo{
+			Action:       constant.TaskActionGenerate,
+			PublicTaskID: "task_downstream_1",
+		},
+		UserId:          1,
+		TokenId:         0,
+		UsingGroup:      "default",
+		OriginModelName: "seedance-upstream-model",
+		PriceData: types.PriceData{
+			UsePrice:       true,
+			ModelPrice:     0,
+			ModelRatio:     0,
+			Quota:          16700000,
+			GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1.0},
+		},
+		UpstreamTaskBillingOther: map[string]interface{}{
+			"billing_mode":           "video_per_second",
+			"video_seconds":          float64(5),
+			"video_resolution":       "720p",
+			"video_price_per_second": float64(3.34),
+			"video_billed_quota":     float64(99999999),
+			"video_quota_per_unit":   float64(123),
+			"balance_delta":          float64(-999999),
+			"task_id":                "task_upstream_should_not_leak",
+		},
+	}
+
+	LogTaskConsumption(c, info)
+
+	log := getLastLog(t)
+	require.NotNil(t, log)
+	var other map[string]interface{}
+	require.NoError(t, common.Unmarshal([]byte(log.Other), &other))
+	assert.Equal(t, "video_per_video", other["billing_mode"])
+	assert.Equal(t, float64(5), other["video_seconds"])
+	assert.Equal(t, "720p", other["video_resolution"])
+	assert.NotContains(t, other, "video_price_per_second")
+	assert.Equal(t, float64(16700000), other["video_billed_quota"])
+	assert.Equal(t, common.QuotaPerUnit, other["video_quota_per_unit"])
+	assert.Equal(t, "task_downstream_1", other["task_id"])
+	assert.Equal(t, float64(-16700000), other["balance_delta"])
+	assert.Equal(t, string(model.BillingPhasePreCharge), other["billing_phase"])
+}
+
 func TestMatchPerSecondPrice_RoundsUpPseudo540p(t *testing.T) {
 	rules := ratio_setting.VideoPricingRules{
 		TextToVideoPerSecond: []ratio_setting.VideoResolutionAudioPriceRule{
@@ -1038,10 +1097,10 @@ func TestLogTaskConsumption_WritesQuotaDataForSeedance(t *testing.T) {
 		UsingGroup:      "default",
 		OriginModelName: "doubao-seedance-1-0-lite",
 		PriceData: types.PriceData{
-			UsePrice:   true,
-			ModelPrice: 0,
-			ModelRatio: 0,
-			Quota:      preConsumedQuota,
+			UsePrice:       true,
+			ModelPrice:     0,
+			ModelRatio:     0,
+			Quota:          preConsumedQuota,
 			GroupRatioInfo: types.GroupRatioInfo{GroupRatio: 1.0},
 		},
 	}
@@ -1069,8 +1128,8 @@ func TestRecordTaskBillingLog_DeltaChargeAppendsQuotaData(t *testing.T) {
 	// 1) 模拟预扣：pre_charge 写一条 token_used=1000 的 quota_data 记录
 	preConsumed := 1000
 	preChargeOther := map[string]interface{}{
-		"task_id":        "task-delta-charge-001",
-		"billing_phase":  model.BillingPhasePreCharge,
+		"task_id":         "task-delta-charge-001",
+		"billing_phase":   model.BillingPhasePreCharge,
 		"affects_balance": true,
 	}
 	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
@@ -1087,11 +1146,11 @@ func TestRecordTaskBillingLog_DeltaChargeAppendsQuotaData(t *testing.T) {
 	// 2) 模拟结算差额：实际比预扣多 250，应当追加 +250
 	delta := 250
 	deltaOther := map[string]interface{}{
-		"task_id":           "task-delta-charge-001",
+		"task_id":            "task-delta-charge-001",
 		"pre_consumed_quota": preConsumed,
-		"actual_quota":      preConsumed + delta,
-		"billing_phase":     model.BillingPhaseDeltaCharge,
-		"affects_balance":   true,
+		"actual_quota":       preConsumed + delta,
+		"billing_phase":      model.BillingPhaseDeltaCharge,
+		"affects_balance":    true,
 	}
 	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
 		UserId:    1,
@@ -1122,8 +1181,8 @@ func TestRecordTaskBillingLog_FullRefundZerosQuotaData(t *testing.T) {
 
 	preConsumed := 800
 	preChargeOther := map[string]interface{}{
-		"task_id":        "task-refund-001",
-		"billing_phase":  model.BillingPhasePreCharge,
+		"task_id":         "task-refund-001",
+		"billing_phase":   model.BillingPhasePreCharge,
 		"affects_balance": true,
 	}
 	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
@@ -1138,8 +1197,8 @@ func TestRecordTaskBillingLog_FullRefundZerosQuotaData(t *testing.T) {
 	})
 
 	refundOther := map[string]interface{}{
-		"task_id":        "task-refund-001",
-		"billing_phase":  model.BillingPhaseRefund,
+		"task_id":         "task-refund-001",
+		"billing_phase":   model.BillingPhaseRefund,
 		"affects_balance": true,
 	}
 	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
@@ -1172,8 +1231,8 @@ func TestRecordTaskBillingLog_SettlementMarkerDoesNotDoubleCount(t *testing.T) {
 	// pre_charge 写 500
 	preConsumed := 500
 	preChargeOther := map[string]interface{}{
-		"task_id":        "task-marker-001",
-		"billing_phase":  model.BillingPhasePreCharge,
+		"task_id":         "task-marker-001",
+		"billing_phase":   model.BillingPhasePreCharge,
 		"affects_balance": true,
 	}
 	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
@@ -1189,8 +1248,8 @@ func TestRecordTaskBillingLog_SettlementMarkerDoesNotDoubleCount(t *testing.T) {
 
 	// settlement_marker：Quota=0, affectsBalance=false，期望不写 quota_data
 	markerOther := map[string]interface{}{
-		"task_id":        "task-marker-001",
-		"billing_phase":  model.BillingPhaseSettlementMarker,
+		"task_id":         "task-marker-001",
+		"billing_phase":   model.BillingPhaseSettlementMarker,
 		"affects_balance": false,
 	}
 	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
@@ -1338,11 +1397,11 @@ func TestBackfillVideoQuotaDataTokenUsed_IgnoresTextModel(t *testing.T) {
 	// 文本模型有真实的 prompt+completion tokens，backfill 应该跳过。
 	hour := ((time.Now().Unix() / 3600) * 3600) - 3600
 	row := &model.Log{
-		UserId:    1,
-		Username:  "carol",
-		ModelName: "gpt-4o",
-		Quota:     500,
-		CreatedAt: hour + 5,
+		UserId:           1,
+		Username:         "carol",
+		ModelName:        "gpt-4o",
+		Quota:            500,
+		CreatedAt:        hour + 5,
 		PromptTokens:     1000,
 		CompletionTokens: 500,
 		Type:             model.LogTypeConsume,

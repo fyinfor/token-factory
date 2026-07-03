@@ -1,0 +1,51 @@
+{
+  "total_users": 435,
+  "imported": 430,
+  "skipped_same_username": 5,
+  "pending_confirmation": 5,
+  "skipped_list": [
+    {
+      "old_id": 1,
+      "username": "admin",
+      "display_name": "Root User",
+      "email": "",
+      "phone": "",
+      "role": 100
+    },
+    {
+      "old_id": 8,
+      "username": "yufeng",
+      "display_name": "yufeng",
+      "email": "q541490527@163.com",
+      "phone": "",
+      "role": 10
+    },
+    {
+      "old_id": 58,
+      "username": "test",
+      "display_name": "test",
+      "email": "",
+      "phone": null,
+      "role": 1
+    },
+    {
+      "old_id": 182,
+      "username": "QQ",
+      "display_name": "QQ",
+      "email": "284016856@qq.com",
+      "phone": "17620521224",
+      "role": 1
+    },
+    {
+      "old_id": 266,
+      "username": "nmgzdcn",
+      "display_name": "nmgzdcn",
+      "email": "",
+      "phone": "13848514935",
+      "role": 1
+    }
+  ],
+  "tokens_candidate": 113,
+  "tokens_migrated": 113,
+  "tokens_skipped_key_exists": 0
+}

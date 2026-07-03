@@ -50,6 +50,43 @@ func TestNormalizeLogBillingMetadataLegacySettlementMarker(t *testing.T) {
 	}
 }
 
+func TestNormalizeLogBillingMetadataPositiveQuotaSettlementMarker(t *testing.T) {
+	log := &Log{
+		Type:  LogTypeConsume,
+		Quota: 550000,
+		Other: common.MapToJsonStr(map[string]interface{}{
+			"task_id":              "task_legacy_positive_marker",
+			"billing_phase":        BillingPhaseSettlementMarker,
+			"affects_balance":      false,
+			"actual_quota":         550000,
+			"pre_consumed_quota":   750000,
+			"billing_mode":         "video_token_output",
+			"video_final_quota":    550000,
+			"video_billed_quota":   550000,
+			"video_quota_per_unit": 500000,
+		}),
+	}
+
+	normalizeLogBillingMetadata(log)
+	other := mustLogOther(t, log)
+
+	if other["billing_phase"] != BillingPhaseSettlementMarker {
+		t.Fatalf("billing_phase = %v", other["billing_phase"])
+	}
+	if other["affects_balance"] != false {
+		t.Fatalf("affects_balance = %v", other["affects_balance"])
+	}
+	if got, _ := logOtherNumber(other["display_quota"]); int(got) != 550000 {
+		t.Fatalf("display_quota = %v", other["display_quota"])
+	}
+	if got, _ := logOtherNumber(other["balance_delta"]); int(got) != 0 {
+		t.Fatalf("balance_delta = %v", other["balance_delta"])
+	}
+	if !isTaskSettlementMarkerLog(log, other) {
+		t.Fatalf("expected settlement marker")
+	}
+}
+
 func TestNormalizeLogBillingMetadataLegacyPreCharge(t *testing.T) {
 	log := &Log{
 		Type:  LogTypeConsume,
