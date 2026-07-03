@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { PLAYGROUND_MEDIA_MAX_COUNT } from '../../constants/playground.constants';
+import { MaterialAssetType } from '../../constants';
 import { getMaterialAssetUri } from '../../helpers/materialAssetUtils';
 import MaterialSelectorModal from './MaterialSelectorModal';
 import { showError, showSuccess } from '../../helpers';
@@ -40,10 +41,19 @@ import {
   uploadPlaygroundMediaFile,
 } from '../../helpers/playgroundMediaInputUtils';
 
+const appendMaterialUris = (currentUrls, newUris) => {
+  const existingFilled = (currentUrls || []).filter((u) => String(u || '').trim());
+  const merged = [...existingFilled, ...newUris];
+  if (merged.length === 0) merged.push('');
+  return merged;
+};
+
 const ImageUrlInput = ({
   imageUrls,
   imageEnabled,
   onImageUrlsChange,
+  videoUrls,
+  onVideoUrlsChange,
   disabled = false,
   maxCount = PLAYGROUND_MEDIA_MAX_COUNT,
   showMaterialLibrary = false,
@@ -74,22 +84,31 @@ const ImageUrlInput = ({
     onImageUrlsChange(newUrls.length > 0 ? newUrls : ['']);
   };
 
-  // 【需求4/5】素材库确认回调：将选中素材的 asset:// 地址填充到图片地址输入框
+  // 素材库确认：按 asset_type 分别填充图片/视频地址栏
   const handleMaterialConfirm = useCallback(
     (selectedAssets) => {
       if (!Array.isArray(selectedAssets) || selectedAssets.length === 0) return;
-      const currentUrls = imageUrls || [];
-      const newUris = selectedAssets
-        .filter((a) => a && (a.asset_uri || a.asset_id))
-        .map((a) => getMaterialAssetUri(a));
-      // 合并已有非空 URL + 新选素材 URI
-      const existingFilled = currentUrls.filter((u) => String(u || '').trim());
-      const merged = [...existingFilled, ...newUris];
-      // 确保至少保留一个空槽位
-      if (merged.length === 0) merged.push('');
-      onImageUrlsChange(merged);
+
+      const imageUris = [];
+      const videoUris = [];
+      for (const asset of selectedAssets) {
+        if (!asset || !(asset.asset_uri || asset.asset_id)) continue;
+        const uri = getMaterialAssetUri(asset);
+        if (asset.asset_type === MaterialAssetType.VIDEO) {
+          videoUris.push(uri);
+        } else {
+          imageUris.push(uri);
+        }
+      }
+
+      if (imageUris.length > 0) {
+        onImageUrlsChange(appendMaterialUris(imageUrls, imageUris));
+      }
+      if (videoUris.length > 0 && onVideoUrlsChange) {
+        onVideoUrlsChange(appendMaterialUris(videoUrls, videoUris));
+      }
     },
-    [imageUrls, onImageUrlsChange],
+    [imageUrls, videoUrls, onImageUrlsChange, onVideoUrlsChange],
   );
 
   const handleUpload = useCallback(

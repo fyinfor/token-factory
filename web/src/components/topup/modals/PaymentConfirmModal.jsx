@@ -103,7 +103,7 @@ const PaymentConfirmModal = ({
             {creditDisplay && (
               <div className='flex justify-between items-center'>
                 <Text strong className='text-slate-700 dark:text-slate-200'>
-                  {t('到账额度')}：
+                  {t('到账积分')}：
                 </Text>
                 <Text className='text-slate-900 dark:text-slate-100'>
                   {creditDisplay}

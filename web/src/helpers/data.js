@@ -70,6 +70,37 @@ export function setStatusData(data) {
   }
 }
 
+export function patchStatusData(patch) {
+  if (!patch || typeof patch !== 'object') {
+    return {};
+  }
+  let current = {};
+  try {
+    current = JSON.parse(localStorage.getItem('status') || '{}') || {};
+  } catch (e) {
+    current = {};
+  }
+  const next = { ...current, ...patch };
+  localStorage.setItem('status', JSON.stringify(next));
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'quota_per_unit')) {
+    localStorage.setItem('quota_per_unit', patch.quota_per_unit);
+  }
+  if (Object.prototype.hasOwnProperty.call(patch, 'quota_display_type')) {
+    localStorage.setItem('quota_display_type', patch.quota_display_type || 'USD');
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(patch, 'recharge_display_currency')
+  ) {
+    localStorage.setItem(
+      'recharge_display_currency',
+      patch.recharge_display_currency || 'USD',
+    );
+  }
+
+  return next;
+}
+
 /**
  * 解析 /api/status 中 `sms_verification_enabled` 的原始值，兼容字符串与数字，避免 `"false" !== false` 导致误判为开启。
  * @param {unknown} raw 原始字段值

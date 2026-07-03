@@ -50,6 +50,7 @@ const PaymentSetting = () => {
     PayMethods: '',
     AmountOptions: '',
     AmountDiscount: '',
+    'general_setting.recharge_display_currency': 'USD',
 
     StripeApiSecret: '',
     StripeWebhookSecret: '',

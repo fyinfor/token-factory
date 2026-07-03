@@ -125,7 +125,7 @@ const TopUp = () => {
   const [payCurrency, setPayCurrency] = useState('USD');
   const [inputCurrency, setInputCurrency] = useState('USD');
   const [quoteQuotaToAdd, setQuoteQuotaToAdd] = useState(0);
-  const [quoteChargedUsd, setQuoteChargedUsd] = useState(0);
+  const [, setQuoteChargedUsd] = useState(0);
   const [payMethods, setPayMethods] = useState([]);
   const [wechatQrOpen, setWechatQrOpen] = useState(false);
   const [wechatQrValue, setWechatQrValue] = useState('');
@@ -199,10 +199,27 @@ const TopUp = () => {
     window.open(topUpLink, '_blank');
   };
 
+  const getEffectiveQuotaDisplayType = () => {
+    return (
+      statusState?.status?.quota_display_type ||
+      localStorage.getItem('quota_display_type') ||
+      'USD'
+    );
+  };
+
+  const getEffectiveRechargeDisplayCurrency = () => {
+    const currency =
+      statusState?.status?.recharge_display_currency ||
+      localStorage.getItem('recharge_display_currency') ||
+      rechargeDisplayCurrency ||
+      'USD';
+    return String(currency).toUpperCase() === 'CNY' ? 'CNY' : 'USD';
+  };
+
   const resolveRechargeInputCurrency = () => {
-    const displayType = localStorage.getItem('quota_display_type') || 'USD';
+    const displayType = getEffectiveQuotaDisplayType();
     if (displayType === 'CNY') return 'CNY';
-    if (displayType === 'TOKENS') return rechargeDisplayCurrency || 'USD';
+    if (displayType === 'TOKENS') return getEffectiveRechargeDisplayCurrency();
     return 'USD';
   };
 
@@ -682,12 +699,9 @@ const TopUp = () => {
       // setTopUpCount(minTopUpValue);
       setTopUpLink(statusState.status.top_up_link || '');
       setPriceRatio(statusState.status.price || 1);
-      const nextRechargeCurrency =
-        localStorage.getItem('recharge_display_currency') ||
-        statusState.status.recharge_display_currency ||
-        'USD';
+      const nextRechargeCurrency = getEffectiveRechargeDisplayCurrency();
       setRechargeDisplayCurrency(nextRechargeCurrency);
-      const displayType = localStorage.getItem('quota_display_type') || 'USD';
+      const displayType = getEffectiveQuotaDisplayType();
       setInputCurrency(
         displayType === 'CNY'
           ? 'CNY'
@@ -751,20 +765,11 @@ const TopUp = () => {
   };
 
   const renderQuoteCreditAmount = () => {
-    const displayType = localStorage.getItem('quota_display_type') || 'USD';
+    const displayType = getEffectiveQuotaDisplayType();
     if (displayType === 'TOKENS') {
       return quoteQuotaToAdd > 0 ? renderQuota(quoteQuotaToAdd) : '';
     }
-    const chargedUsd = Number(quoteChargedUsd);
-    if (!Number.isFinite(chargedUsd) || chargedUsd <= 0) {
-      return quoteQuotaToAdd > 0 ? renderQuota(quoteQuotaToAdd) : '';
-    }
-    if (displayType === 'CNY') {
-      const rate =
-        Number(statusState?.status?.usd_exchange_rate ?? priceRatio) || 7.3;
-      return formatCurrencyAmount(chargedUsd * rate, 'CNY');
-    }
-    return formatCurrencyAmount(chargedUsd, 'USD');
+    return '';
   };
 
   const getAmount = async (value) => {

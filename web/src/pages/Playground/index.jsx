@@ -177,6 +177,7 @@ const Playground = () => {
   const modeStoreInitializedRef = useRef(false);
   const activeVideoPollTaskIdsRef = useRef(new Set());
   const pendingPlaygroundChatScrollRef = useRef(false);
+  const messageResetInFlightRef = useRef(false);
 
   const state = usePlaygroundState(userState?.user?.id);
   const {
@@ -609,11 +610,11 @@ const Playground = () => {
   }, [inputs, parameterEnabled, message, customRequestMode, customRequestBody]);
 
   // 发送消息
-  function onMessageSend(content, attachment) {
-    console.log('attachment: ', attachment);
-
-    // 创建用户消息和加载消息
-    const userMessage = createMessage(MESSAGE_ROLES.USER, content);
+  function onMessageSend(content, attachment, options = {}) {
+    const baseMessages = Array.isArray(options.baseMessages)
+      ? options.baseMessages
+      : null;
+    const reuseUserMessage = options.reuseUserMessage;
     const loadingMessage = createLoadingAssistantMessage();
 
     // 如果是自定义请求体模式
@@ -621,11 +622,13 @@ const Playground = () => {
       try {
         const mode = inputs.display_mode || 'text';
         const customPayload = JSON.parse(customRequestBody);
+        const userMessage =
+          reuseUserMessage || createMessage(MESSAGE_ROLES.USER, content);
 
         setMessage((prevMessage) => {
-          const newMessages = [...prevMessage, userMessage, loadingMessage];
+          const existingMessages = baseMessages ?? prevMessage;
+          const newMessages = [...existingMessages, userMessage, loadingMessage];
 
-          // 发送自定义请求体
           sendRequest(
             customPayload,
             customPayload.stream !== false,
@@ -633,7 +636,6 @@ const Playground = () => {
             loadingMessage.id,
           );
 
-          // 发送消息后保存，传入新消息列表
           setTimeout(() => saveMessagesForMode(newMessages, mode), 0);
 
           return newMessages;
@@ -657,19 +659,19 @@ const Playground = () => {
       validImageUrls,
       allowMedia,
     );
-    const userMessageWithImages = createMessage(
-      MESSAGE_ROLES.USER,
-      messageContent,
-    );
+    const userMessageWithImages =
+      reuseUserMessage ||
+      createMessage(MESSAGE_ROLES.USER, messageContent);
 
-    const newMessages = [...message, userMessageWithImages];
-    const payload = buildApiPayload(
-      newMessages,
-      null,
-      inputs,
-      parameterEnabled,
-    );
     setMessage((prevMessage) => {
+      const existingMessages = baseMessages ?? prevMessage;
+      const newMessages = [...existingMessages, userMessageWithImages];
+      const payload = buildApiPayload(
+        newMessages,
+        null,
+        inputs,
+        parameterEnabled,
+      );
       const isChatEndpoint = payload?.__endpoint === 'chat';
       sendRequest(
         payload,
@@ -678,7 +680,6 @@ const Playground = () => {
         loadingMessage.id,
       );
 
-      // 发送消息后保存，传入新消息列表（包含用户消息和加载消息）
       const messagesWithLoading = [...newMessages, loadingMessage];
       setTimeout(() => saveMessagesForMode(messagesWithLoading, mode), 0);
 
@@ -717,6 +718,10 @@ const Playground = () => {
 
   const handleDialogueMessageReset = useCallback(
     (targetMessage) => {
+      if (messageResetInFlightRef.current) {
+        return;
+      }
+
       const currentMessages = Array.isArray(currentMessagesRef.current)
         ? currentMessagesRef.current
         : [];
@@ -734,11 +739,11 @@ const Playground = () => {
         return;
       }
 
-      let contentToSend = '';
+      let userMessageToResend = null;
       let messagesToKeep = currentMessages;
 
       if (targetMessage.role === MESSAGE_ROLES.USER) {
-        contentToSend = getTextContent(currentMessages[messageIndex]);
+        userMessageToResend = currentMessages[messageIndex];
         messagesToKeep = currentMessages.slice(0, messageIndex);
       } else {
         let userMessageIndex = messageIndex - 1;
@@ -750,19 +755,33 @@ const Playground = () => {
         }
 
         if (userMessageIndex >= 0) {
-          contentToSend = getTextContent(currentMessages[userMessageIndex]);
+          userMessageToResend = currentMessages[userMessageIndex];
           messagesToKeep = currentMessages.slice(0, userMessageIndex);
         }
       }
 
-      if (!contentToSend || contentToSend.trim() === '') {
+      const contentToSend = getTextContent(userMessageToResend);
+      const hasImageContent =
+        Array.isArray(userMessageToResend?.content) &&
+        userMessageToResend.content.some((item) => item?.type === 'image_url');
+      if (
+        !userMessageToResend ||
+        ((!contentToSend || contentToSend.trim() === '') && !hasImageContent)
+      ) {
         return;
       }
 
+      messageResetInFlightRef.current = true;
       const mode = previousModeRef.current || inputs.display_mode || 'text';
       setMessage(messagesToKeep);
       setTimeout(() => saveMessagesForMode(messagesToKeep, mode), 0);
-      setTimeout(() => onMessageSend(contentToSend), 100);
+      onMessageSend(contentToSend, undefined, {
+        baseMessages: messagesToKeep,
+        reuseUserMessage: userMessageToResend,
+      });
+      window.setTimeout(() => {
+        messageResetInFlightRef.current = false;
+      }, 300);
     },
     [inputs.display_mode, onMessageSend, saveMessagesForMode, setMessage],
   );
