@@ -142,6 +142,11 @@ func GetStatus(c *gin.Context) {
 		"distributor_min_withdraw_quota":    distributorMinWithdrawQuota,
 		"affiliate_default_commission_bps":  common.AffiliateDefaultCommissionBps,
 		"distributor_commission_mode":       common.DistributorCommissionMode,
+		"home_hero_carousel_enabled":        common.OptionMap["HomeHeroCarouselEnabled"] == "true",
+		"home_hero_carousel_slides":         strings.TrimSpace(common.Interface2String(common.OptionMap["HomeHeroCarouselSlides"])),
+		"home_hero_carousel_interval_sec":   strings.TrimSpace(common.Interface2String(common.OptionMap["HomeHeroCarouselIntervalSec"])),
+		"home_footer_certificates_enabled":  common.OptionMap["HomeFooterCertificatesEnabled"] == "true",
+		"home_footer_certificates":          strings.TrimSpace(common.Interface2String(common.OptionMap["HomeFooterCertificates"])),
 		"home_banner_slides":                strings.TrimSpace(common.Interface2String(common.OptionMap["HomeBannerSlides"])),
 		"home_banner_interval_sec":          strings.TrimSpace(common.Interface2String(common.OptionMap["HomeBannerIntervalSec"])),
 
