@@ -5,7 +5,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/QuantumNous/new-api/common"
@@ -78,7 +77,7 @@ func (*CreemAdaptor) RequestPay(c *gin.Context, req *CreemPayRequest) {
 
 	// 解析产品列表
 	var products []CreemProduct
-	err := json.Unmarshal([]byte(setting.CreemProducts), &products)
+	err := common.Unmarshal([]byte(setting.CreemProducts), &products)
 	if err != nil {
 		log.Println("解析Creem产品列表失败", err)
 		c.JSON(200, gin.H{"message": "error", "data": "产品配置错误"})
@@ -108,12 +107,16 @@ func (*CreemAdaptor) RequestPay(c *gin.Context, req *CreemPayRequest) {
 
 	// 先创建订单记录，使用产品配置的金额和充值额度
 	topUp := &model.TopUp{
-		UserId:     id,
-		Amount:     selectedProduct.Quota, // 充值额度
-		Money:      selectedProduct.Price, // 支付金额
-		TradeNo:    referenceId,
-		CreateTime: time.Now().Unix(),
-		Status:     common.TopUpStatusPending,
+		UserId:        id,
+		Amount:        selectedProduct.Quota, // 充值额度
+		Money:         selectedProduct.Price, // 支付金额
+		InputAmount:   float64(selectedProduct.Price),
+		InputCurrency: selectedProduct.Currency,
+		PayCurrency:   selectedProduct.Currency,
+		QuotaToAdd:    int(selectedProduct.Quota),
+		TradeNo:       referenceId,
+		CreateTime:    time.Now().Unix(),
+		Status:        common.TopUpStatusPending,
 	}
 	err = topUp.Insert()
 	if err != nil {
@@ -408,7 +411,7 @@ func genCreemLink(referenceId string, product *CreemProduct, email string, usern
 	}
 
 	// 序列化请求数据
-	jsonData, err := json.Marshal(requestData)
+	jsonData, err := common.Marshal(requestData)
 	if err != nil {
 		return "", fmt.Errorf("序列化请求数据失败: %v", err)
 	}
@@ -450,7 +453,7 @@ func genCreemLink(referenceId string, product *CreemProduct, email string, usern
 	}
 	// 解析响应
 	var checkoutResp CreemCheckoutResponse
-	err = json.Unmarshal(body, &checkoutResp)
+	err = common.Unmarshal(body, &checkoutResp)
 	if err != nil {
 		return "", fmt.Errorf("解析响应失败: %v", err)
 	}
