@@ -118,24 +118,25 @@ type TaskPrivateData struct {
 
 // TaskBillingContext 记录任务提交时的计费参数，以便轮询阶段可以重新计算额度。
 type TaskBillingContext struct {
-	ModelPrice                  float64            `json:"model_price,omitempty"`                    // 模型单价
-	GroupRatio                  float64            `json:"group_ratio,omitempty"`                    // 分组倍率
-	ModelRatio                  float64            `json:"model_ratio,omitempty"`                    // 模型倍率
-	OtherRatios                 map[string]float64 `json:"other_ratios,omitempty"`                   // 附加倍率（时长、分辨率等）
-	OriginModelName             string             `json:"origin_model_name,omitempty"`              // 模型名称，必须为OriginModelName
-	PerCallBilling              bool               `json:"per_call_billing,omitempty"`               // 按次计费：跳过轮询阶段的差额结算
-	ChannelPriceDiscountPercent float64            `json:"channel_price_discount_percent,omitempty"` // 最终成本率（100=无折扣），与扣费时一致
-	MarkupDiscountPercent       *float64           `json:"markup_discount_percent,omitempty"`        // 加价折扣率快照；指针用于保留显式 0%
-	PriceDiscountPercent        *float64           `json:"price_discount_percent,omitempty"`         // 原始成本折扣率快照
-	OperatingCostPercent        *float64           `json:"operating_cost_percent,omitempty"`         // 经营成本率快照
-	EffectiveCostPercent        *float64           `json:"effective_cost_percent,omitempty"`         // 最终成本率快照；指针用于保留显式 0%
-	VideoRuleUnit               string             `json:"video_rule_unit,omitempty"`                // 视频规则计费单位，例如 per_video
-	VideoBillingMode            string             `json:"video_billing_mode,omitempty"`             // text_to_video / image_to_video / video_to_video
-	VideoChannelRulePrice       float64            `json:"video_channel_rule_price,omitempty"`       // 提交时匹配到的渠道规则价（USD）
-	VideoGlobalRulePrice        float64            `json:"video_global_rule_price,omitempty"`        // 提交时匹配到的全局规则价（USD）
-	VideoRuleWidth              int                `json:"video_rule_width,omitempty"`
-	VideoRuleHeight             int                `json:"video_rule_height,omitempty"`
-	VideoRuleHasAudio           bool               `json:"video_rule_has_audio,omitempty"`
+	ModelPrice                  float64                `json:"model_price,omitempty"`                    // 模型单价
+	GroupRatio                  float64                `json:"group_ratio,omitempty"`                    // 分组倍率
+	ModelRatio                  float64                `json:"model_ratio,omitempty"`                    // 模型倍率
+	OtherRatios                 map[string]float64     `json:"other_ratios,omitempty"`                   // 附加倍率（时长、分辨率等）
+	OriginModelName             string                 `json:"origin_model_name,omitempty"`              // 模型名称，必须为OriginModelName
+	PerCallBilling              bool                   `json:"per_call_billing,omitempty"`               // 按次计费：跳过轮询阶段的差额结算
+	ChannelPriceDiscountPercent float64                `json:"channel_price_discount_percent,omitempty"` // 最终成本率（100=无折扣），与扣费时一致
+	MarkupDiscountPercent       *float64               `json:"markup_discount_percent,omitempty"`        // 加价折扣率快照；指针用于保留显式 0%
+	PriceDiscountPercent        *float64               `json:"price_discount_percent,omitempty"`         // 原始成本折扣率快照
+	OperatingCostPercent        *float64               `json:"operating_cost_percent,omitempty"`         // 经营成本率快照
+	EffectiveCostPercent        *float64               `json:"effective_cost_percent,omitempty"`         // 最终成本率快照；指针用于保留显式 0%
+	VideoRuleUnit               string                 `json:"video_rule_unit,omitempty"`                // 视频规则计费单位，例如 per_video
+	VideoBillingMode            string                 `json:"video_billing_mode,omitempty"`             // text_to_video / image_to_video / video_to_video
+	VideoChannelRulePrice       float64                `json:"video_channel_rule_price,omitempty"`       // 提交时匹配到的渠道规则价（USD）
+	VideoGlobalRulePrice        float64                `json:"video_global_rule_price,omitempty"`        // 提交时匹配到的全局规则价（USD）
+	VideoRuleWidth              int                    `json:"video_rule_width,omitempty"`
+	VideoRuleHeight             int                    `json:"video_rule_height,omitempty"`
+	VideoRuleHasAudio           bool                   `json:"video_rule_has_audio,omitempty"`
+	UpstreamBillingOther        map[string]interface{} `json:"upstream_billing_other,omitempty"`
 }
 
 // GetUpstreamTaskID 获取上游真实 task ID（用于与 provider 通信）

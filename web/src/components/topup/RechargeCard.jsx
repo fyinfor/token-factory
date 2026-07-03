@@ -1,3 +1,22 @@
+/*
+Copyright (C) 2025 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Avatar,
@@ -311,7 +330,7 @@ const RechargeCard = ({
                       min={minTopUp}
                       max={999999999}
                       step={1}
-                      precision={0}
+                      precision={2}
                       onChange={async (value) => {
                         if (value && value >= 1) {
                           setTopUpCount(value);
@@ -320,7 +339,7 @@ const RechargeCard = ({
                         }
                       }}
                       onBlur={(e) => {
-                        const value = parseInt(e.target.value);
+                        const value = parseFloat(e.target.value);
                         if (!value || value < 1) {
                           setTopUpCount(1);
                           getAmount(1);
@@ -328,7 +347,7 @@ const RechargeCard = ({
                       }}
                       formatter={(value) => (value ? `${value}` : '')}
                       parser={(value) =>
-                        value ? parseInt(value.replace(/[^\d]/g, '')) : 0
+                        value ? parseFloat(value.replace(/[^\d.]/g, '')) : 0
                       }
                       extraText={
                         <Skeleton
@@ -492,37 +511,8 @@ const RechargeCard = ({
                         preset.discount ||
                         topupInfo?.discount?.[preset.value] ||
                         1.0;
-                      const originalPrice = preset.value * priceRatio;
-                      const discountedPrice = originalPrice * discount;
                       const hasDiscount = discount < 1.0;
-                      const actualPay = discountedPrice;
-                      const save = originalPrice - discountedPrice;
-
-                      // 根据当前货币类型换算显示金额和数量
-                      const { symbol, rate, type } = getCurrencyConfig();
-                      const statusStr = localStorage.getItem('status');
-                      let usdRate = 7; // 默认CNY汇率
-                      try {
-                        if (statusStr) {
-                          const s = JSON.parse(statusStr);
-                          usdRate = s?.usd_exchange_rate || 7;
-                        }
-                      } catch (e) {}
-
-                      // 充值数量始终以美元数量展示，不随全局展示货币切换。
-                      let displayValue = preset.value;
-                      let displayActualPay = actualPay;
-                      let displaySave = save;
-
-                      if (type === 'USD') {
-                        // 数量保持USD，价格从CNY转USD
-                        displayActualPay = actualPay / usdRate;
-                        displaySave = save / usdRate;
-                      } else if (type === 'CUSTOM') {
-                        // 自定义货币仅影响价格显示，数量仍显示为美元数量
-                        displayActualPay = (actualPay / usdRate) * rate;
-                        displaySave = (save / usdRate) * rate;
-                      }
+                      const displayValue = renderTopUpCount(preset.value);
 
                       return (
                         <div
@@ -549,8 +539,8 @@ const RechargeCard = ({
                               heading={6}
                               style={{ margin: '0 0 8px 0' }}
                             >
-                              <Coins size={18} />$
-                              {formatLargeNumber(displayValue)}
+                              <Coins size={18} />
+                              {displayValue}
                               {hasDiscount && (
                                 <Tag style={{ marginLeft: 4 }} color='green'>
                                   {t('折').includes('off')
@@ -570,14 +560,7 @@ const RechargeCard = ({
                                 margin: '4px 0',
                               }}
                             >
-                              {t('实付')} {symbol}
-                              {displayActualPay.toFixed(2)}
-                              {hasDiscount && displaySave > 0.005 && (
-                                <>
-                                  ，{t('节省')} {symbol}
-                                  {displaySave.toFixed(2)}
-                                </>
-                              )}
+                              {hasDiscount && t('优惠已计入到账额度')}
                             </div>
                           </div>
                           </Card>

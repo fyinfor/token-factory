@@ -190,7 +190,6 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	ov.CreatedAt = dto.FormatTimeUnixRFC3339(time.Now().Unix())
 	ov.Model = info.OriginModelName
 
-
 	taskcommon.WriteOpenAIVideoResponse(c, ov)
 	return dResp.ID, responseBody, nil
 }
@@ -398,6 +397,15 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 		openAIVideo.CompletedAt = dto.FormatTimeUnixRFC3339(originTask.FinishTime)
 	}
 	openAIVideo.Model = originTask.Properties.OriginModelName
+	if dResp.Usage.TotalTokens > 0 || dResp.Usage.CompletionTokens > 0 {
+		openAIVideo.Usage = &dto.OpenAIVideoUsage{
+			CompletionTokens: dResp.Usage.CompletionTokens,
+			TotalTokens:      dResp.Usage.TotalTokens,
+		}
+		if openAIVideo.Usage.TotalTokens == 0 {
+			openAIVideo.Usage.TotalTokens = openAIVideo.Usage.CompletionTokens
+		}
+	}
 
 	st := strings.ToLower(strings.TrimSpace(dResp.Status))
 	if st == "failed" || st == "error" || st == "cancelled" || st == "canceled" {

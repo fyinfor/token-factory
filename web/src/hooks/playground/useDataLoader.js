@@ -96,6 +96,54 @@ const normalizeTagList = (csv) => {
 const hasTag = (csv, tag) => normalizeTagList(csv).includes(tag);
 
 /**
+ * 按操练场展示模式（文本/图片/视频）过滤模型行
+ * @param {Array<{ tags?: string }>} items
+ * @param {'text'|'image'|'video'|string} displayMode
+ */
+const filterPlaygroundModelsByDisplayMode = (items, displayMode) =>
+  (items || []).filter((item) => {
+    const tags = item?.tags || '';
+    if (displayMode === 'video') {
+      return hasTag(tags, '视频');
+    }
+    if (displayMode === 'image') {
+      return hasTag(tags, '图片');
+    }
+    // 文本模式：无标签按文本处理；有标签则要求包含文本
+    if (!tags || !tags.trim()) return true;
+    return hasTag(tags, '文本');
+  });
+
+/**
+ * 根据当前模式下的模型列表，筛出可用的模型类型下拉项
+ * @param {Array<{ label: string, value: string|number }>} allTypeOptions
+ * @param {Array<{ vendor_id?: number, vendor?: string }>} modeFilteredItems
+ */
+const buildDisplayModeTypeOptions = (allTypeOptions, modeFilteredItems) => {
+  const availableVendorIds = new Set();
+  const availableVendorLabels = new Set();
+  (modeFilteredItems || []).forEach((item) => {
+    const vendorID = Number(item?.vendor_id ?? 0);
+    if (Number.isFinite(vendorID)) {
+      availableVendorIds.add(vendorID);
+    }
+    const vendorName = String(item?.vendor || '').trim();
+    if (vendorName) {
+      availableVendorLabels.add(vendorName);
+    }
+  });
+  return (allTypeOptions || []).filter((option) => {
+    if (option.value === '') return true;
+    const id = Number(option.value);
+    if (Number.isFinite(id) && availableVendorIds.has(id)) {
+      return true;
+    }
+    const label = String(option.label || '').trim();
+    return label !== '' && availableVendorLabels.has(label);
+  });
+};
+
+/**
  * 操练场数据加载：拉取用户模型与类型（与模型广场同源元数据）、按「全部/类型」在客户端筛模型（同模型广场逻辑），分组单独加载。
  * @param {{ user?: object }} userState 已登录用户状态
  * @param {{ model?: string, model_type?: string|number, group?: string, selected_route_slug?: string }} inputs 当前表单/配置
@@ -134,6 +182,8 @@ export const useDataLoader = (
   const videoPricingTierCacheRef = useRef(new Map());
   const imagePricingTierCacheRef = useRef(new Map());
   const loadModelsRequestIdRef = useRef(0);
+  /** 接口返回的完整模型类型选项，供按展示模式二次过滤 */
+  const allModelTypesRef = useRef([]);
 
   useEffect(() => {
     latestVideoPricingStateRef.current = {
@@ -224,7 +274,7 @@ export const useDataLoader = (
         const modelTypeOptions = [{ label: t('全部类型'), value: '' }].concat(
           rawTypeOptions,
         );
-        setModelTypes(modelTypeOptions);
+        allModelTypesRef.current = modelTypeOptions;
       } else {
         showError(t(message));
       }
@@ -234,7 +284,7 @@ export const useDataLoader = (
       }
       showError(t('加载模型失败'));
     }
-  }, [setModelTypes, t]);
+  }, [t]);
 
   /**
    * 在原始模型行与「模型类型」上按模型广场方式本地筛出模型下拉里模型名；不发起额外请求
@@ -242,6 +292,8 @@ export const useDataLoader = (
   useEffect(() => {
     if (!userState?.user) {
       setPlaygroundRawModels([]);
+      allModelTypesRef.current = [];
+      setModelTypes([]);
       setModels([]);
       setSupplierOptions([{ label: `${t('随机')} (${t('默认')})`, value: '' }]);
       return;
@@ -251,10 +303,29 @@ export const useDataLoader = (
       setSupplierOptions([{ label: `${t('随机')} (${t('默认')})`, value: '' }]);
       return;
     }
-    const typeOptions =
-      modelTypes && modelTypes.length > 0
-        ? modelTypes
-        : [{ label: t('全部类型'), value: '' }];
+    const displayMode = inputs.display_mode || 'text';
+    const modeFilteredAllItems = filterPlaygroundModelsByDisplayMode(
+      playgroundRawModels,
+      displayMode,
+    );
+    const typeOptions = buildDisplayModeTypeOptions(
+      allModelTypesRef.current.length > 0
+        ? allModelTypesRef.current
+        : modelTypes && modelTypes.length > 0
+          ? modelTypes
+          : [{ label: t('全部类型'), value: '' }],
+      modeFilteredAllItems,
+    );
+    if (
+      JSON.stringify(typeOptions) !==
+      JSON.stringify(
+        modelTypes && modelTypes.length > 0
+          ? modelTypes
+          : [{ label: t('全部类型'), value: '' }],
+      )
+    ) {
+      setModelTypes(typeOptions);
+    }
 
     const selectedType = normalizeTypeId(inputs.model_type);
     const hasSelectedType = typeOptions.some((option) => {
@@ -272,19 +343,10 @@ export const useDataLoader = (
       effectiveType,
       typeOptions,
     );
-    const displayMode = inputs.display_mode || 'text';
-    const modeFilteredItems = filteredItems.filter((item) => {
-      const tags = item?.tags || '';
-      if (displayMode === 'video') {
-        return hasTag(tags, '视频');
-      }
-      if (displayMode === 'image') {
-        return hasTag(tags, '图片');
-      }
-      // 文本模式：无标签按文本处理；有标签则要求包含文本
-      if (!tags || !tags.trim()) return true;
-      return hasTag(tags, '文本');
-    });
+    const modeFilteredItems = filterPlaygroundModelsByDisplayMode(
+      filteredItems,
+      displayMode,
+    );
     const { modelOptions, selectedModel } = processModelsData(
       modeFilteredItems.map((item) => item.model_name),
       inputs.model,
@@ -379,6 +441,7 @@ export const useDataLoader = (
     inputs.selected_channel_type,
     t,
     setModels,
+    setModelTypes,
     setSupplierOptions,
     setStatus,
     handleInputChange,

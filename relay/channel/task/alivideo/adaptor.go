@@ -187,6 +187,16 @@ func ensureMediaFromLegacyFields(input *AliVideoInput, _ string) {
 	}
 }
 
+func ensureDefaultParameters(params *AliVideoParameters) *AliVideoParameters {
+	if params == nil {
+		params = &AliVideoParameters{}
+	}
+	if params.Watermark == nil {
+		params.Watermark = common.GetPointer(false)
+	}
+	return params
+}
+
 func enrichNativeAliVideoBody(body []byte) ([]byte, error) {
 	var aliReq AliVideoRequest
 	if err := common.Unmarshal(body, &aliReq); err != nil {
@@ -197,10 +207,15 @@ func enrichNativeAliVideoBody(body []byte) ([]byte, error) {
 		profile := aliVideoMediaProfile(aliReq.Model)
 		aliReq.Input.Media = finalizeAliVideoMedia(profile, normalizeAliVideoMedia(profile, aliReq.Input.Media))
 	}
-	if len(aliReq.Input.Media) == 0 {
+	aliReq.Parameters = ensureDefaultParameters(aliReq.Parameters)
+	newBody, err := common.Marshal(aliReq)
+	if err != nil {
+		return nil, err
+	}
+	if bytes.Equal(newBody, body) {
 		return body, nil
 	}
-	return common.Marshal(aliReq)
+	return newBody, nil
 }
 
 func (a *TaskAdaptor) BuildRequestURL(_ *relaycommon.RelayInfo) (string, error) {
@@ -253,7 +268,7 @@ func (a *TaskAdaptor) convertToAliRequest(info *relaycommon.RelayInfo, req relay
 		Input: AliVideoInput{
 			Prompt: req.Prompt,
 		},
-		Parameters: &AliVideoParameters{},
+		Parameters: ensureDefaultParameters(nil),
 	}
 
 	media := buildMediaFromTaskReq(upstreamModel, req)
@@ -280,6 +295,7 @@ func (a *TaskAdaptor) convertToAliRequest(info *relaycommon.RelayInfo, req relay
 		return nil, errors.New("can't change model with metadata")
 	}
 
+	aliReq.Parameters = ensureDefaultParameters(aliReq.Parameters)
 	return aliReq, nil
 }
 
@@ -675,7 +691,6 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	openAIResp.Status = convertAliStatus(aliResp.Output.TaskStatus)
 	openAIResp.CreatedAt = dto.FormatTimeUnixRFC3339(common.GetTimestamp())
 
-
 	taskcommon.WriteOpenAIVideoResponse(c, openAIResp)
 
 	return aliResp.Output.TaskID, responseBody, nil
@@ -745,26 +760,34 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 }
 
 func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {
-	var aliResp AliVideoResponse
-	if err := common.Unmarshal(task.Data, &aliResp); err != nil {
-		return nil, errors.Wrap(err, "unmarshal ali video response failed")
-	}
-
 	openAIResp := dto.NewOpenAIVideo()
 	openAIResp.ID = task.TaskID
-	openAIResp.Status = convertAliStatus(aliResp.Output.TaskStatus)
+	openAIResp.Status = task.Status.ToVideoStatus()
 	openAIResp.Model = task.Properties.OriginModelName
 	openAIResp.SetProgressStr(task.Progress)
 	openAIResp.CreatedAt = dto.FormatTimeUnixRFC3339(task.CreatedAt)
 	if task.FinishTime > 0 {
 		openAIResp.CompletedAt = dto.FormatTimeUnixRFC3339(task.FinishTime)
 	}
-	openAIResp.SetMetadata("url", aliResp.Output.VideoURL)
 
-	if aliResp.Code != "" {
-		openAIResp.Error = &dto.OpenAIVideoError{Code: aliResp.Code, Message: aliResp.Message}
-	} else if aliResp.Output.Code != "" {
-		openAIResp.Error = &dto.OpenAIVideoError{Code: aliResp.Output.Code, Message: aliResp.Output.Message}
+	// 从 task.Data 提取视频 URL 和错误信息（非权威来源，仅用于补充元数据）。
+	// 状态以 task.Status 为准，避免 task.Data 过期导致状态不一致。
+	var aliResp AliVideoResponse
+	if err := common.Unmarshal(task.Data, &aliResp); err == nil {
+		openAIResp.SetMetadata("url", aliResp.Output.VideoURL)
+		if aliResp.Code != "" {
+			openAIResp.Error = &dto.OpenAIVideoError{Code: aliResp.Code, Message: aliResp.Message}
+		} else if aliResp.Output.Code != "" {
+			openAIResp.Error = &dto.OpenAIVideoError{Code: aliResp.Output.Code, Message: aliResp.Output.Message}
+		}
+	}
+
+	// 当 task.Status 为失败但 task.Data 中无错误信息时，使用 FailReason 补充
+	if openAIResp.Status == dto.VideoStatusFailed && openAIResp.Error == nil && task.FailReason != "" {
+		openAIResp.Error = &dto.OpenAIVideoError{
+			Code:    "video_task_failed",
+			Message: task.FailReason,
+		}
 	}
 
 	return common.Marshal(openAIResp)

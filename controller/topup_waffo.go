@@ -12,7 +12,6 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
-	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/system_setting"
 	"github.com/gin-gonic/gin"
 	"github.com/thanhpk/randstr"
@@ -71,32 +70,11 @@ func formatWaffoAmount(amount float64, currency string) string {
 	return fmt.Sprintf("%.2f", amount)
 }
 
-// getWaffoPayMoney converts the user-facing amount to USD for Waffo payment.
-// Waffo only accepts USD, so this function handles the conversion from different
-// display types (USD/CNY/TOKENS) to the actual USD amount to charge.
-func getWaffoPayMoney(amount float64, group string) float64 {
-	originalAmount := amount
-	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
-		amount = amount / common.QuotaPerUnit
-	}
-	topupGroupRatio := common.GetTopupGroupRatio(group)
-	if topupGroupRatio == 0 {
-		topupGroupRatio = 1
-	}
-	discount := 1.0
-	if ds, ok := operation_setting.GetPaymentSetting().AmountDiscount[int(originalAmount)]; ok {
-		if ds > 0 {
-			discount = ds
-		}
-	}
-	return amount * setting.WaffoUnitPrice * topupGroupRatio * discount
-}
-
 type WaffoPayRequest struct {
-	Amount         int64  `json:"amount"`
-	PayMethodIndex *int   `json:"pay_method_index"` // 服务端支付方式列表的索引，nil 表示由 Waffo 自动选择
-	PayMethodType  string `json:"pay_method_type"`  // Deprecated: 兼容旧前端，优先使用 pay_method_index
-	PayMethodName  string `json:"pay_method_name"`  // Deprecated: 兼容旧前端，优先使用 pay_method_index
+	Amount         float64 `json:"amount"`
+	PayMethodIndex *int    `json:"pay_method_index"` // 服务端支付方式列表的索引，nil 表示由 Waffo 自动选择
+	PayMethodType  string  `json:"pay_method_type"`  // Deprecated: 兼容旧前端，优先使用 pay_method_index
+	PayMethodName  string  `json:"pay_method_name"`  // Deprecated: 兼容旧前端，优先使用 pay_method_index
 }
 
 // RequestWaffoPay 创建 Waffo 支付订单
@@ -111,9 +89,9 @@ func RequestWaffoPay(c *gin.Context) {
 		c.JSON(200, gin.H{"message": "error", "data": "参数错误"})
 		return
 	}
-	waffoMinTopup := int64(setting.WaffoMinTopUp)
+	waffoMinTopup := float64(setting.WaffoMinTopUp)
 	if req.Amount < waffoMinTopup {
-		c.JSON(200, gin.H{"message": "error", "data": fmt.Sprintf("充值数量不能小于 %d", waffoMinTopup)})
+		c.JSON(200, gin.H{"message": "error", "data": fmt.Sprintf("充值数量不能小于 %.0f", waffoMinTopup)})
 		return
 	}
 
@@ -157,7 +135,12 @@ func RequestWaffoPay(c *gin.Context) {
 	// resolvedPayMethodType/Name 为空时，Waffo 自动选择支付方式
 
 	group, _ := model.GetUserGroup(id, true)
-	payMoney := getWaffoPayMoney(float64(req.Amount), group)
+	quote, err := buildTopupQuote(req.Amount, group, topupCurrencyUSD)
+	if err != nil {
+		c.JSON(200, gin.H{"message": "error", "data": err.Error()})
+		return
+	}
+	payMoney := quote.PayAmount
 	if payMoney < 0.01 {
 		c.JSON(200, gin.H{"message": "error", "data": "充值金额过低"})
 		return
@@ -167,20 +150,15 @@ func RequestWaffoPay(c *gin.Context) {
 	merchantOrderId := fmt.Sprintf("WAFFO-%d-%d-%s", id, time.Now().UnixMilli(), randstr.String(6))
 	paymentRequestId := merchantOrderId
 
-	// Token 模式下归一化 Amount（存等价美元/CNY 数量，避免 RechargeWaffo 双重放大）
-	amount := float64(req.Amount)
-	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
-		amount = float64(req.Amount) / common.QuotaPerUnit
-		if amount < 1 {
-			amount = 1
-		}
-	}
-
 	// 创建本地订单
 	topUp := &model.TopUp{
 		UserId:        id,
-		Amount:        amount,
+		Amount:        req.Amount,
 		Money:         payMoney,
+		InputAmount:   quote.InputAmount,
+		InputCurrency: quote.InputCurrency,
+		PayCurrency:   quote.PayCurrency,
+		QuotaToAdd:    quote.QuotaToAdd,
 		TradeNo:       merchantOrderId,
 		PaymentMethod: "waffo",
 		CreateTime:    time.Now().Unix(),
@@ -217,7 +195,7 @@ func RequestWaffoPay(c *gin.Context) {
 		MerchantOrderID:  merchantOrderId,
 		OrderAmount:      formatWaffoAmount(payMoney, currency),
 		OrderCurrency:    currency,
-		OrderDescription: fmt.Sprintf("Recharge %d credits", req.Amount),
+		OrderDescription: fmt.Sprintf("Recharge %.2f credits", req.Amount),
 		OrderRequestedAt: time.Now().UTC().Format("2006-01-02T15:04:05.000Z"),
 		NotifyURL:        notifyUrl,
 		MerchantInfo: &order.MerchantInfo{
