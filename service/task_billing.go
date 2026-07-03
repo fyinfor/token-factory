@@ -28,7 +28,7 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		info.PriceData.ModelPrice == 0 &&
 		info.PriceData.VideoRuleUnit == VideoRuleUnitPerToken &&
 		info.PriceData.VideoOutputTokens > 0 &&
-		(constant.IsVideoTaskChannel(info.ChannelType) || info.ChannelType == constant.ChannelTypeTokenFactoryOpen)
+		constant.UsesRelayVideoPricing(info.ChannelType)
 
 	// 视频按 token 计费分支（legacy token ratio 路径）：任务型视频渠道 + UsePrice + ModelPrice=0 + VideoOutputTokens>0。
 	// 该分支下 quota 已由 outputVideoTokens × ratios × group 直接算出，
@@ -38,7 +38,7 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		info.PriceData.ModelPrice == 0 &&
 		info.PriceData.VideoOutputTokens > 0 &&
 		info.PriceData.VideoRuleUnit != VideoRuleUnitPerToken &&
-		(constant.IsVideoTaskChannel(info.ChannelType) || info.ChannelType == constant.ChannelTypeTokenFactoryOpen)
+		constant.UsesRelayVideoPricing(info.ChannelType)
 
 	// 视频按分辨率/条一口价（*_per_video）：ModelPriceHelperVideo 将 ModelRatio 置 0、
 	// VideoOutputTokens 为 0，预扣已在 relay 中按条合并，不应再展示为「按次 $0」或 seconds 倍率文案。
@@ -46,7 +46,7 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		info.PriceData.ModelPrice == 0 &&
 		info.PriceData.VideoOutputTokens == 0 &&
 		info.PriceData.ModelRatio == 0 &&
-		(constant.IsVideoTaskChannel(info.ChannelType) || info.ChannelType == constant.ChannelTypeTokenFactoryOpen)
+		constant.UsesRelayVideoPricing(info.ChannelType)
 	isVideoPerSecondBilling := isVideoPerVideoFlatBilling &&
 		info.PriceData.OtherRatios != nil &&
 		info.PriceData.OtherRatios["seconds"] > 0

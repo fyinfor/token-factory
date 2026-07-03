@@ -28,7 +28,7 @@ func ResolveActualTaskQuotaOnSubmit(c *gin.Context, info *relaycommon.RelayInfo,
 			return quota
 		}
 	}
-	if constant.IsVideoTaskChannel(info.ChannelType) {
+	if constant.UsesRelayVideoPricing(info.ChannelType) {
 		if quota := calcVideoPerSecondQuotaByTaskData(c, info, taskData); quota > 0 {
 			return quota
 		}

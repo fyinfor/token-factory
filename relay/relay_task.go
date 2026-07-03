@@ -191,7 +191,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		priceData types.PriceData
 		err       error
 	)
-	if constant.IsVideoTaskChannel(info.ChannelType) {
+	if constant.UsesRelayVideoPricing(info.ChannelType) {
 		priceData, err = helper.ModelPriceHelperVideo(c, info)
 	} else {
 		priceData, err = helper.ModelPriceHelperPerCall(c, info)
@@ -209,7 +209,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	//    outputVideoTokens 的公式已经隐含了 duration × W × H × fps，
 	//    若再合并 EstimateBilling 返回的 seconds/size 系数会被日志 content
 	//    误展示为 "计算参数：seconds: 4.00, size: 2.25"，与实际计费不符。
-	isVideoTokenBranch := constant.IsVideoTaskChannel(info.ChannelType) &&
+	isVideoTokenBranch := constant.UsesRelayVideoPricing(info.ChannelType) &&
 		info.PriceData.UsePrice && info.PriceData.ModelPrice == 0
 	if !isVideoTokenBranch {
 		if estimatedRatios := adaptor.EstimateBilling(c, info); len(estimatedRatios) > 0 {
