@@ -7,13 +7,14 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/model"
-	"github.com/QuantumNous/new-api/setting"
 	"io"
 	"log"
 	"net/http"
 	"time"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting"
 
 	"github.com/gin-gonic/gin"
 	"github.com/thanhpk/randstr"
@@ -108,13 +109,14 @@ func (*CreemAdaptor) RequestPay(c *gin.Context, req *CreemPayRequest) {
 	// 先创建订单记录，使用产品配置的金额和充值额度
 	topUp := &model.TopUp{
 		UserId:        id,
-		Amount:        selectedProduct.Quota, // 充值额度
-		Money:         selectedProduct.Price, // 支付金额
+		Amount:        float64(selectedProduct.Quota), // 充值额度
+		Money:         selectedProduct.Price,          // 支付金额
 		InputAmount:   float64(selectedProduct.Price),
 		InputCurrency: selectedProduct.Currency,
 		PayCurrency:   selectedProduct.Currency,
 		QuotaToAdd:    int(selectedProduct.Quota),
 		TradeNo:       referenceId,
+		PaymentMethod: PaymentMethodCreem,
 		CreateTime:    time.Now().Unix(),
 		Status:        common.TopUpStatusPending,
 	}
@@ -308,7 +310,7 @@ func handleCheckoutCompleted(c *gin.Context, event *CreemWebhookEvent) {
 	if err := model.CompleteSubscriptionOrder(referenceId, common.GetJsonString(event)); err == nil {
 		c.Status(http.StatusOK)
 		return
-	} else if err != nil && !errors.Is(err, model.ErrSubscriptionOrderNotFound) {
+	} else if !errors.Is(err, model.ErrSubscriptionOrderNotFound) {
 		log.Printf("Creem订阅订单处理失败: %s, 订单号: %s", err.Error(), referenceId)
 		c.AbortWithStatus(http.StatusInternalServerError)
 		return
@@ -362,7 +364,7 @@ func handleCheckoutCompleted(c *gin.Context, event *CreemWebhookEvent) {
 		return
 	}
 
-	log.Printf("Creem充值成功 - 订单号: %s, 充值额度: %d, 支付金额: %.2f",
+	log.Printf("Creem充值成功 - 订单号: %s, 充值额度: %.6f, 支付金额: %.2f",
 		referenceId, topUp.Amount, topUp.Money)
 	c.Status(http.StatusOK)
 }

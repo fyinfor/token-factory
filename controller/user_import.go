@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
@@ -390,6 +391,7 @@ func ImportUsers(c *gin.Context) {
 			failures = append(failures, item)
 			continue
 		}
+		service.TryProvisionUcoinAddressAsync(cleanUser.Id)
 		if rewardQuota, _ := parseUserImportRewardQuota(item.Reward); rewardQuota > 0 {
 			if err := model.IncreaseUserQuota(cleanUser.Id, rewardQuota, true); err != nil {
 				common.SysLog(fmt.Sprintf("failed to grant imported student reward: user_id=%d quota=%d error=%v", cleanUser.Id, rewardQuota, err))

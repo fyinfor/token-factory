@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"net/http"
 	"strconv"
 	"time"
@@ -154,7 +153,7 @@ func RequestWaffoPay(c *gin.Context) {
 	// 创建本地订单
 	topUp := &model.TopUp{
 		UserId:        id,
-		Amount:        int64(math.Round(req.Amount)),
+		Amount:        req.Amount,
 		Money:         payMoney,
 		InputAmount:   quote.InputAmount,
 		InputCurrency: quote.InputCurrency,
