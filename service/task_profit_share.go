@@ -101,7 +101,7 @@ func taskProfitShareBillingMode(task *model.Task) string {
 		return "video_token"
 	}
 	ch, err := model.CacheGetChannel(task.ChannelId)
-	if err == nil && ch != nil && constant.IsVideoTaskChannel(ch.Type) {
+	if err == nil && ch != nil && constant.UsesRelayVideoPricing(ch.Type) {
 		return "video"
 	}
 	return "text"
@@ -115,7 +115,7 @@ func taskProfitShareMarkupSliceRatio(task *model.Task, hintTotalTokens int) (flo
 	if err != nil || ch == nil {
 		return 0, false
 	}
-	if constant.IsVideoTaskChannel(ch.Type) {
+	if constant.UsesRelayVideoPricing(ch.Type) {
 		// 视频按 Token 规则计费：BillingContext 快照单价与 per_video 相同的两档公式，不依赖 ModelRatio。
 		if r, ok := taskProfitShareMarkupRatioVideoPerTokenSubmitInput(task); ok {
 			return r, true

@@ -438,8 +438,8 @@ const SettingsPanel = ({
           <Select
             optionList={PLAYGROUND_VIDEO_DURATION_OPTIONS}
             value={Math.max(
-              3,
-              Math.min(30, Number(inputs.video_duration) || 5),
+              4,
+              Math.min(15, Number(inputs.video_duration) || 5),
             )}
             onChange={(value) =>
               onInputChange('video_duration', Number(value) || 5)

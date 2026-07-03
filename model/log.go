@@ -37,11 +37,11 @@ type Log struct {
 	ChannelDisplay string `json:"channel_display,omitempty" gorm:"-"`
 	// RouteSlug is the channel route suffix for user-facing logs (model/{route_slug}).
 	RouteSlug string `json:"route_slug,omitempty" gorm:"-"`
-	TokenId        int    `json:"token_id" gorm:"default:0;index"`
-	Group          string `json:"group" gorm:"index"`
-	Ip             string `json:"ip" gorm:"index;default:''"`
-	RequestId      string `json:"request_id,omitempty" gorm:"type:varchar(64);index:idx_logs_request_id;default:''"`
-	Other          string `json:"other"`
+	TokenId   int    `json:"token_id" gorm:"default:0;index"`
+	Group     string `json:"group" gorm:"index"`
+	Ip        string `json:"ip" gorm:"index;default:''"`
+	RequestId string `json:"request_id,omitempty" gorm:"type:varchar(64);index:idx_logs_request_id;default:''"`
+	Other     string `json:"other"`
 }
 
 // don't use iota, avoid change log type value
@@ -116,17 +116,21 @@ func isTaskSettlementMarkerLog(log *Log, other map[string]interface{}) bool {
 	if log == nil || other == nil {
 		return false
 	}
+	if log.Type != LogTypeConsume {
+		return false
+	}
+	_, hasTaskID := other["task_id"].(string)
+	hasSettlementNumbers := hasTaskID &&
+		logOtherHasPositiveNumber(other, "actual_quota") &&
+		logOtherHasPositiveNumber(other, "pre_consumed_quota")
+	if !hasSettlementNumbers {
+		return false
+	}
 	phase, _ := other["billing_phase"].(string)
 	if phase == BillingPhaseSettlementMarker {
 		return true
 	}
-	if log.Type != LogTypeConsume || log.Quota != 0 {
-		return false
-	}
-	_, hasTaskID := other["task_id"].(string)
-	return hasTaskID &&
-		logOtherHasPositiveNumber(other, "actual_quota") &&
-		logOtherHasPositiveNumber(other, "pre_consumed_quota")
+	return log.Quota == 0
 }
 
 func inferBillingPhase(log *Log, other map[string]interface{}) string {
@@ -186,6 +190,10 @@ func normalizeLogBillingMetadata(log *Log) {
 		affectsBalance = false
 		balanceDelta = 0
 	}
+	if v, ok := other["affects_balance"].(bool); ok && !v {
+		affectsBalance = false
+		balanceDelta = 0
+	}
 	SetBillingLogMetadata(other, phase, affectsBalance, displayQuota, balanceDelta)
 	log.Other = common.MapToJsonStr(other)
 }
@@ -211,7 +219,7 @@ func querySettlementMarkerByTaskID(taskID string) (*Log, map[string]interface{})
 	}
 	var marker Log
 	err := LOG_DB.
-		Where("logs.type = ? AND logs.quota = 0 AND logs.other LIKE ? AND logs.other LIKE ? AND logs.other LIKE ?",
+		Where("logs.type = ? AND logs.other LIKE ? AND logs.other LIKE ? AND logs.other LIKE ?",
 			LogTypeConsume,
 			"%"+taskID+"%",
 			"%\"actual_quota\"%",
@@ -327,10 +335,11 @@ func applyBillingLogVisibility(tx *gorm.DB, includeRawBillingLogs bool) *gorm.DB
 	// Hide async task settlement markers by default. They confirm the final task
 	// price but do not change balance; raw mode can still return them for audit.
 	return tx.Where(
-		"NOT (logs.type = ? AND logs.quota = 0 AND logs.other LIKE ? AND logs.other LIKE ?)",
+		"NOT (logs.type = ? AND logs.other LIKE ? AND logs.other LIKE ? AND logs.other LIKE ?)",
 		LogTypeConsume,
 		"%\"actual_quota\"%",
 		"%\"pre_consumed_quota\"%",
+		"%\"affects_balance\":false%",
 	)
 }
 
@@ -535,22 +544,22 @@ func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string,
 }
 
 type RecordConsumeLogParams struct {
-	ChannelId        int                    `json:"channel_id"`
-	PromptTokens     int                    `json:"prompt_tokens"`
-	CompletionTokens int                    `json:"completion_tokens"`
+	ChannelId        int `json:"channel_id"`
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
 	// TokenUsed 显式指定写入 quota_data.token_used 的值；<=0 时回退为 PromptTokens+CompletionTokens。
 	// 异步任务预扣路径（视频按 token/按秒/按次）没有真实 token 数，可将预扣额度作为消耗量上报，
 	// 以便 /rankings 排行（按 quota_data.token_used 聚合）也能覆盖到 Seedance/Kling/Sora 等异步视频模型。
-	TokenUsed        int                    `json:"token_used"`
-	ModelName        string                 `json:"model_name"`
-	TokenName        string                 `json:"token_name"`
-	Quota            int                    `json:"quota"`
-	Content          string                 `json:"content"`
-	TokenId          int                    `json:"token_id"`
-	UseTimeSeconds   int                    `json:"use_time_seconds"`
-	IsStream         bool                   `json:"is_stream"`
-	Group            string                 `json:"group"`
-	Other            map[string]interface{} `json:"other"`
+	TokenUsed      int                    `json:"token_used"`
+	ModelName      string                 `json:"model_name"`
+	TokenName      string                 `json:"token_name"`
+	Quota          int                    `json:"quota"`
+	Content        string                 `json:"content"`
+	TokenId        int                    `json:"token_id"`
+	UseTimeSeconds int                    `json:"use_time_seconds"`
+	IsStream       bool                   `json:"is_stream"`
+	Group          string                 `json:"group"`
+	Other          map[string]interface{} `json:"other"`
 }
 
 func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams) {

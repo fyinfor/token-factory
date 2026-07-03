@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel"
+	"github.com/QuantumNous/new-api/relay/channel/task/openaivideo"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -190,7 +191,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		priceData types.PriceData
 		err       error
 	)
-	if constant.IsVideoTaskChannel(info.ChannelType) {
+	if constant.UsesRelayVideoPricing(info.ChannelType) {
 		priceData, err = helper.ModelPriceHelperVideo(c, info)
 	} else {
 		priceData, err = helper.ModelPriceHelperPerCall(c, info)
@@ -208,7 +209,7 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	//    outputVideoTokens 的公式已经隐含了 duration × W × H × fps，
 	//    若再合并 EstimateBilling 返回的 seconds/size 系数会被日志 content
 	//    误展示为 "计算参数：seconds: 4.00, size: 2.25"，与实际计费不符。
-	isVideoTokenBranch := constant.IsVideoTaskChannel(info.ChannelType) &&
+	isVideoTokenBranch := constant.UsesRelayVideoPricing(info.ChannelType) &&
 		info.PriceData.UsePrice && info.PriceData.ModelPrice == 0
 	if !isVideoTokenBranch {
 		if estimatedRatios := adaptor.EstimateBilling(c, info); len(estimatedRatios) > 0 {
@@ -262,14 +263,20 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	}
 	ratiosJSON, _ := common.Marshal(otherRatios)
 	c.Header("X-New-Api-Other-Ratios", string(ratiosJSON))
+	if billingJSON, err := common.Marshal(info.PriceData); err == nil {
+		c.Header("X-New-Api-Task-Billing", string(billingJSON))
+	}
 
-	// 11. 解析响应
+	// 11. 解析响应（TokenFactoryOpen 会在 DoResponse 内合并上游 X-New-Api-Task-Billing）
 	upstreamTaskID, taskData, taskErr := adaptor.DoResponse(c, resp, info)
 	if taskErr != nil {
 		return nil, taskErr
 	}
+	if billingJSON, err := common.Marshal(info.PriceData); err == nil {
+		c.Header("X-New-Api-Task-Billing", string(billingJSON))
+	}
 
-	// 11. 提交后计费调整：让适配器根据上游实际返回调整 OtherRatios
+	// 12. 提交后计费调整：让适配器根据上游实际返回调整 OtherRatios
 	finalQuota := info.PriceData.Quota
 	if adjustedRatios := adaptor.AdjustBillingOnSubmit(info, taskData); len(adjustedRatios) > 0 {
 		// 基于调整后的 ratios 重新计算 quota
@@ -428,7 +435,7 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 		strings.HasPrefix(path, "/api/playground/videos/")
 
 	// Gemini/Vertex 支持实时查询：用户 fetch 时直接从上游拉取最新状态
-	if realtimeResp := tryRealtimeFetch(originTask, isOpenAIVideoAPI); len(realtimeResp) > 0 {
+	if realtimeResp := tryRealtimeFetch(originTask, isOpenAIVideoAPI, path); len(realtimeResp) > 0 {
 		respBody = realtimeResp
 		return
 	}
@@ -471,7 +478,7 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 // tryRealtimeFetch 尝试从上游实时拉取任务状态。
 // 对操练场视频轮询尤其重要：OpenAI-style 视频渠道在后台轮询落库前，也能实时返回完成态。
 // 当非 OpenAI Video API 时，还会构建自定义格式的响应体。
-func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
+func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool, requestPath string) []byte {
 	channelModel, err := model.GetChannelById(task.ChannelId, true)
 	if err != nil {
 		return nil
@@ -560,6 +567,9 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 			task.FinishTime = now
 		}
 		task.Progress = taskcommon.ProgressComplete
+		if ti.Reason != "" {
+			task.FailReason = ti.Reason
+		}
 	default:
 		if ti.Progress != "" {
 			task.Progress = ti.Progress
@@ -583,6 +593,16 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool) []byte {
 	// /v1/videos 查询链路：任务首次进入 SUCCESS 时补做一次实际结算（与后台轮询保持一致）。
 	if task.Status == model.TaskStatusSuccess && snap.Status != model.TaskStatusSuccess {
 		service.SettleTaskBillingOnFetch(context.TODO(), task, ti)
+	}
+
+	// TokenFactoryOpen /v1/videos 穿透：直接返回上游 JSON（仅替换对外 task id）。
+	if channelModel.Type == constant.ChannelTypeTokenFactoryOpen &&
+		openaivideo.IsTfOpenOpenAIVideosStyle(task.PrivateData.TfOpenVideoUpstreamStyle) &&
+		isOpenAIVideoAPI {
+		if passthrough, err := openaivideo.PassthroughOpenAIVideoJSON(body, task.TaskID, requestPath); err == nil {
+			return passthrough
+		}
+		return body
 	}
 
 	// OpenAI Video API 由调用者的 ConvertToOpenAIVideo 分支处理

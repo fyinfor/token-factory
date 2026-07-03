@@ -160,6 +160,10 @@ type RelayInfo struct {
 	// "" / "video_generations" => POST/GET .../v1/video/generations; "openai_videos" / "openai_remix" => OpenAI-style /v1/videos.
 	TfOpenVideoUpstreamStyle string
 
+	// UpstreamTaskBillingOther carries non-price video metadata returned by
+	// TokenFactoryOpen(60). Downstream site builders keep their own pricing.
+	UpstreamTaskBillingOther map[string]interface{}
+
 	PriceData types.PriceData
 
 	Request dto.Request

@@ -203,9 +203,9 @@ export const buildApiPayload = (
     const motion = Number.isFinite(motionValue) ? motionValue : 0.4;
     const rawVideoDuration = Number(inputs.video_duration);
     const videoDuration = Math.max(
-      3,
+      4,
       Math.min(
-        30,
+        15,
         Number.isFinite(rawVideoDuration) && rawVideoDuration > 0
           ? Math.round(rawVideoDuration)
           : 5,

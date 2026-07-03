@@ -609,83 +609,92 @@ const Playground = () => {
     }
   }, [inputs, parameterEnabled, message, customRequestMode, customRequestBody]);
 
-  // 发送消息
-  function onMessageSend(content, attachment, options = {}) {
-    const baseMessages = Array.isArray(options.baseMessages)
-      ? options.baseMessages
-      : null;
-    const reuseUserMessage = options.reuseUserMessage;
-    const loadingMessage = createLoadingAssistantMessage();
+  // 发送消息（副作用放在 setState 外，避免 StrictMode 重复执行 updater 导致多次请求）
+  const onMessageSend = useCallback(
+    (content, attachment, options = {}) => {
+      const baseMessages = Array.isArray(options.baseMessages)
+        ? options.baseMessages
+        : null;
+      const reuseUserMessage = options.reuseUserMessage;
+      const loadingMessage = createLoadingAssistantMessage();
+      const existingMessages = Array.isArray(baseMessages)
+        ? baseMessages
+        : Array.isArray(currentMessagesRef.current)
+          ? currentMessagesRef.current
+          : [];
 
-    // 如果是自定义请求体模式
-    if (customRequestMode && customRequestBody) {
-      try {
-        const mode = inputs.display_mode || 'text';
-        const customPayload = JSON.parse(customRequestBody);
-        const userMessage =
-          reuseUserMessage || createMessage(MESSAGE_ROLES.USER, content);
+      // 如果是自定义请求体模式
+      if (customRequestMode && customRequestBody) {
+        try {
+          const mode = inputs.display_mode || 'text';
+          const customPayload = JSON.parse(customRequestBody);
+          const userMessage =
+            reuseUserMessage || createMessage(MESSAGE_ROLES.USER, content);
+          const newMessages = [
+            ...existingMessages,
+            userMessage,
+            loadingMessage,
+          ];
 
-        setMessage((prevMessage) => {
-          const existingMessages = baseMessages ?? prevMessage;
-          const newMessages = [...existingMessages, userMessage, loadingMessage];
-
+          setMessage(newMessages);
           sendRequest(
             customPayload,
             customPayload.stream !== false,
             mode,
             loadingMessage.id,
           );
-
           setTimeout(() => saveMessagesForMode(newMessages, mode), 0);
-
-          return newMessages;
-        });
-        return;
-      } catch (error) {
-        console.error('自定义请求体JSON解析失败:', error);
-        Toast.error(ERROR_MESSAGES.JSON_PARSE_ERROR);
-        return;
+          return;
+        } catch (error) {
+          console.error('自定义请求体JSON解析失败:', error);
+          Toast.error(ERROR_MESSAGES.JSON_PARSE_ERROR);
+          return;
+        }
       }
-    }
 
-    // 默认模式
-    const mode = inputs.display_mode || 'text';
-    const allowMedia = mode === 'image' || mode === 'video';
-    const validImageUrls = allowMedia
-      ? inputs.imageUrls.filter((url) => url.trim() !== '')
-      : [];
-    const messageContent = buildMessageContent(
-      content,
-      validImageUrls,
-      allowMedia,
-    );
-    const userMessageWithImages =
-      reuseUserMessage ||
-      createMessage(MESSAGE_ROLES.USER, messageContent);
-
-    setMessage((prevMessage) => {
-      const existingMessages = baseMessages ?? prevMessage;
-      const newMessages = [...existingMessages, userMessageWithImages];
+      // 默认模式
+      const mode = inputs.display_mode || 'text';
+      const allowMedia = mode === 'image' || mode === 'video';
+      const validImageUrls = allowMedia
+        ? inputs.imageUrls.filter((url) => url.trim() !== '')
+        : [];
+      const messageContent = buildMessageContent(
+        content,
+        validImageUrls,
+        allowMedia,
+      );
+      const userMessageWithImages =
+        reuseUserMessage ||
+        createMessage(MESSAGE_ROLES.USER, messageContent);
+      const payloadMessages = [...existingMessages, userMessageWithImages];
       const payload = buildApiPayload(
-        newMessages,
+        payloadMessages,
         null,
         inputs,
         parameterEnabled,
       );
       const isChatEndpoint = payload?.__endpoint === 'chat';
+      const messagesWithLoading = [...payloadMessages, loadingMessage];
+
+      setMessage(messagesWithLoading);
       sendRequest(
         payload,
         isChatEndpoint ? inputs.stream : false,
         mode,
         loadingMessage.id,
       );
-
-      const messagesWithLoading = [...newMessages, loadingMessage];
       setTimeout(() => saveMessagesForMode(messagesWithLoading, mode), 0);
-
-      return messagesWithLoading;
-    });
-  }
+    },
+    [
+      customRequestMode,
+      customRequestBody,
+      inputs,
+      parameterEnabled,
+      sendRequest,
+      saveMessagesForMode,
+      setMessage,
+    ],
+  );
 
   const handleDialogueChatsChange = useCallback(
     (nextMessages = []) => {
@@ -772,18 +781,15 @@ const Playground = () => {
       }
 
       messageResetInFlightRef.current = true;
-      const mode = previousModeRef.current || inputs.display_mode || 'text';
-      setMessage(messagesToKeep);
-      setTimeout(() => saveMessagesForMode(messagesToKeep, mode), 0);
       onMessageSend(contentToSend, undefined, {
         baseMessages: messagesToKeep,
         reuseUserMessage: userMessageToResend,
       });
       window.setTimeout(() => {
         messageResetInFlightRef.current = false;
-      }, 300);
+      }, 500);
     },
-    [inputs.display_mode, onMessageSend, saveMessagesForMode, setMessage],
+    [onMessageSend],
   );
 
   // Effects

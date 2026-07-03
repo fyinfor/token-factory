@@ -227,6 +227,17 @@ func IsVideoTaskChannel(channelType int) bool {
 	}
 }
 
+// UsesRelayVideoPricing reports whether video task submit should use
+// ModelPriceHelperVideo and video settlement helpers.
+//
+// TokenFactoryOpen (60) is included: it proxies /v1/videos through the openaivideo
+// adaptor and must honor local ChannelVideoPricingRules. It is intentionally
+// excluded from IsVideoTaskChannel so the same channel type can still serve text
+// chat via /v1/chat/completions without errVideoTaskChannelOnNonTaskRelay.
+func UsesRelayVideoPricing(channelType int) bool {
+	return IsVideoTaskChannel(channelType) || channelType == ChannelTypeTokenFactoryOpen
+}
+
 type ChannelSpecialBase struct {
 	ClaudeBaseURL string
 	OpenAIBaseURL string
