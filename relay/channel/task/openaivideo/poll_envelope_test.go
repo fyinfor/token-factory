@@ -1,10 +1,15 @@
 package openaivideo
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/QuantumNous/new-api/model"
 	"github.com/stretchr/testify/require"
+
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/types"
 )
 
 func TestParseTaskResult_CodeDataEnvelopeArkSucceeded(t *testing.T) {
@@ -38,4 +43,44 @@ func TestParseTaskResult_CodeDataEnvelopeArkOutputVideoURL(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, string(model.TaskStatusSuccess), ti.Status)
 	require.Equal(t, "https://cdn.example.com/v.mp4", ti.Url)
+}
+
+func TestApplyTokenFactoryTaskBillingHeaderOverridesLocalEstimate(t *testing.T) {
+	chDiscount := float64(100)
+	info := &relaycommon.RelayInfo{
+		PriceData: types.PriceData{
+			ModelPrice: 0.01,
+			Quota:      22500,
+			GroupRatioInfo: types.GroupRatioInfo{
+				GroupRatio: 1,
+			},
+		},
+	}
+	resp := &http.Response{Header: make(http.Header)}
+	resp.Header.Set("X-New-Api-Task-Billing", `{
+		"ModelPrice": 0,
+		"ModelRatio": 0,
+		"VideoOutputTokens": 50000,
+		"UsePrice": true,
+		"ChannelPriceDiscount": 100,
+		"Quota": 1183335,
+		"VideoRuleUnit": "`+service.VideoRuleUnitPerToken+`",
+		"VideoBillingMode": "text_to_video",
+		"VideoChannelRulePrice": 47.3334,
+		"VideoGlobalRulePrice": 0,
+		"VideoRuleWidth": 1280,
+		"VideoRuleHeight": 720,
+		"VideoRuleHasAudio": false
+	}`)
+	info.PriceData.ChannelPriceDiscount = &chDiscount
+
+	applyTokenFactoryTaskBillingHeader(resp, info)
+
+	require.Equal(t, 1183335, info.PriceData.Quota)
+	require.Equal(t, 1183335, info.PriceData.QuotaToPreConsume)
+	require.Equal(t, 50000, info.PriceData.VideoOutputTokens)
+	require.Equal(t, service.VideoRuleUnitPerToken, info.PriceData.VideoRuleUnit)
+	require.Equal(t, "text_to_video", info.PriceData.VideoBillingMode)
+	require.InDelta(t, 47.3334, info.PriceData.VideoChannelRulePrice, 1e-9)
+	require.Equal(t, 1.0, info.PriceData.GroupRatioInfo.GroupRatio)
 }

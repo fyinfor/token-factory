@@ -21,6 +21,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
 	"github.com/pkg/errors"
@@ -503,6 +504,9 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	if err != nil {
 		return "", nil, service.TaskErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
 	}
+	if a.protocol == ProtocolTokenFactory && info != nil {
+		applyTokenFactoryTaskBillingHeader(resp, info)
+	}
 	_ = resp.Body.Close()
 
 	// Try to decode base64 if response is a JSON string
@@ -560,6 +564,26 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	taskcommon.WriteOpenAIVideoResponse(c, ov)
 
 	return taskID, respBody, nil
+}
+
+func applyTokenFactoryTaskBillingHeader(resp *http.Response, info *relaycommon.RelayInfo) {
+	if resp == nil || info == nil {
+		return
+	}
+	raw := strings.TrimSpace(resp.Header.Get("X-New-Api-Task-Billing"))
+	if raw == "" {
+		return
+	}
+	var upstreamPrice types.PriceData
+	if err := common.UnmarshalJsonStr(raw, &upstreamPrice); err != nil {
+		return
+	}
+	if upstreamPrice.Quota <= 0 {
+		return
+	}
+	upstreamPrice.GroupRatioInfo = info.PriceData.GroupRatioInfo
+	upstreamPrice.QuotaToPreConsume = upstreamPrice.Quota
+	info.PriceData = upstreamPrice
 }
 
 func channelTypeFromFetchBody(body map[string]any) int {
