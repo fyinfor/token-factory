@@ -15,6 +15,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const TaskBillingOtherHeader = "X-New-Api-Task-Billing-Other"
+
 // LogTaskConsumption 记录任务消费日志和统计信息（仅记录，不涉及实际扣费）。
 // 实际扣费已由 BillingSession（PreConsumeBilling + SettleBilling）完成。
 func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
@@ -137,7 +139,22 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		discPct = model.ResolveChannelPriceDiscountPercent(info.ChannelId)
 	}
 	other["channel_price_discount_percent"] = discPct
+	if len(info.UpstreamTaskBillingOther) > 0 {
+		for k, v := range info.UpstreamTaskBillingOther {
+			switch k {
+			case "task_id", "request_path", "billing_phase", "affects_balance", "display_quota", "balance_delta":
+				continue
+			default:
+				other[k] = v
+			}
+		}
+	}
 	other = model.SetBillingLogMetadata(other, model.BillingPhasePreCharge, true, info.PriceData.Quota, -int64(info.PriceData.Quota))
+	if c != nil && !c.Writer.Written() {
+		if otherJSON, err := common.Marshal(other); err == nil {
+			c.Header(TaskBillingOtherHeader, string(otherJSON))
+		}
+	}
 	// 异步任务没有真实 prompt/completion tokens，将预扣额度作为 token_used 上报，
 	// 使 /rankings 排行（聚合 quota_data.token_used）能看到 Seedance/Kling/Sora 等视频模型。
 	preChargeTokens := info.PriceData.Quota
@@ -319,27 +336,27 @@ func videoPerSecondBillingDetailFromSubmit(c *gin.Context, info *relaycommon.Rel
 }
 
 type videoPerTokenBillingDetail struct {
-	Mode                      string
-	TotalTokens               int
-	Width                     int
-	Height                    int
-	HasAudio                  bool
-	Resolution                string
-	RuleWidth                 int
-	RuleHeight                int
-	Ratio                     string
-	Duration                  int
-	PricePerMillionTokens     float64
-	GlobalPricePerMillion     float64
+	Mode                     string
+	TotalTokens              int
+	Width                    int
+	Height                   int
+	HasAudio                 bool
+	Resolution               string
+	RuleWidth                int
+	RuleHeight               int
+	Ratio                    string
+	Duration                 int
+	PricePerMillionTokens    float64
+	GlobalPricePerMillion    float64
 	EffectivePricePerMillion float64
-	MarkupDiscountPercent     float64
-	GroupRatio                float64
-	QuotaPerUnit              float64
-	ChannelDiscountPercent    float64
-	UnifiedAudio              bool
-	CappedToMaxTier           bool
-	IsPreCharge               bool
-	ResolutionFromRequest     bool
+	MarkupDiscountPercent    float64
+	GroupRatio               float64
+	QuotaPerUnit             float64
+	ChannelDiscountPercent   float64
+	UnifiedAudio             bool
+	CappedToMaxTier          bool
+	IsPreCharge              bool
+	ResolutionFromRequest    bool
 }
 
 func videoPerTokenBillingDetailFromSubmit(c *gin.Context, info *relaycommon.RelayInfo) *videoPerTokenBillingDetail {
@@ -424,14 +441,14 @@ func videoPerTokenBillingDetailFromTask(task *model.Task, match *videoTokenRuleM
 		groupRatio = bc.GroupRatio
 	}
 	detail := &videoPerTokenBillingDetail{
-		Mode:        mode,
-		TotalTokens: totalTokens,
-		Width:       width,
-		Height:      height,
-		HasAudio:    hasAudio,
-		Ratio:       spec.Ratio,
-		Duration:    spec.Duration,
-		GroupRatio:  groupRatio,
+		Mode:         mode,
+		TotalTokens:  totalTokens,
+		Width:        width,
+		Height:       height,
+		HasAudio:     hasAudio,
+		Ratio:        spec.Ratio,
+		Duration:     spec.Duration,
+		GroupRatio:   groupRatio,
 		QuotaPerUnit: common.QuotaPerUnit,
 	}
 	if match != nil {

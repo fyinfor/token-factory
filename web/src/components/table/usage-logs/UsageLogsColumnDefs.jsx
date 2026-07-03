@@ -867,10 +867,11 @@ export const getLogsColumns = ({
         }
         const phaseLabel = record?.video_billing_phase_label;
         if (phaseLabel) {
+          const phaseQuota = Math.abs(Number(text || 0));
           return (
             <span>
               <span className='text-gray-500'>{phaseLabel} </span>
-              {renderQuota(text, quotaDigits)}
+              {renderQuota(phaseQuota, quotaDigits)}
             </span>
           );
         }

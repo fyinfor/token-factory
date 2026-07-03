@@ -263,6 +263,9 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	}
 	ratiosJSON, _ := common.Marshal(otherRatios)
 	c.Header("X-New-Api-Other-Ratios", string(ratiosJSON))
+	if billingJSON, err := common.Marshal(info.PriceData); err == nil {
+		c.Header("X-New-Api-Task-Billing", string(billingJSON))
+	}
 
 	// 11. 解析响应（TokenFactoryOpen 会在 DoResponse 内合并上游 X-New-Api-Task-Billing）
 	upstreamTaskID, taskData, taskErr := adaptor.DoResponse(c, resp, info)

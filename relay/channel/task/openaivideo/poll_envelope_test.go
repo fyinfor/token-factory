@@ -117,3 +117,32 @@ func TestApplyTokenFactoryTaskBillingHeaderOverridesLocalEstimate(t *testing.T) 
 	require.InDelta(t, 47.3334, info.PriceData.VideoChannelRulePrice, 1e-9)
 	require.Equal(t, 1.0, info.PriceData.GroupRatioInfo.GroupRatio)
 }
+
+func TestApplyTokenFactoryTaskBillingHeaderCopiesUpstreamOther(t *testing.T) {
+	info := &relaycommon.RelayInfo{
+		PriceData: types.PriceData{
+			Quota: 22500,
+			GroupRatioInfo: types.GroupRatioInfo{
+				GroupRatio: 1,
+			},
+		},
+	}
+	resp := &http.Response{Header: make(http.Header)}
+	resp.Header.Set("X-New-Api-Task-Billing", `{"Quota":16700000,"UsePrice":true,"ModelPrice":0}`)
+	resp.Header.Set(service.TaskBillingOtherHeader, `{
+		"billing_mode":"video_per_second",
+		"video_seconds":5,
+		"video_resolution":"720p",
+		"video_price_per_second":3.34,
+		"video_billed_quota":16700000,
+		"video_quota_per_unit":500000
+	}`)
+
+	applyTokenFactoryTaskBillingHeader(resp, info)
+
+	require.Equal(t, 16700000, info.PriceData.Quota)
+	require.Equal(t, "video_per_second", info.UpstreamTaskBillingOther["billing_mode"])
+	require.Equal(t, float64(5), info.UpstreamTaskBillingOther["video_seconds"])
+	require.Equal(t, "720p", info.UpstreamTaskBillingOther["video_resolution"])
+	require.Equal(t, float64(16700000), info.UpstreamTaskBillingOther["video_billed_quota"])
+}

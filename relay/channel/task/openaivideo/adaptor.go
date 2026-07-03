@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
@@ -646,6 +647,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		if c != nil && c.Request != nil && c.Request.URL != nil {
 			requestPath = c.Request.URL.Path
 		}
+		writeTaskBillingHeaders(c, info)
 		if passthroughBody, err := PassthroughOpenAIVideoJSON(decodedBody, info.PublicTaskID, requestPath); err == nil {
 			writePassthroughOpenAIVideoResponse(c, passthroughBody)
 		} else {
@@ -673,6 +675,7 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	ov.CreatedAt = dto.FormatTimeUnixRFC3339(time.Now().Unix())
 	ov.Model = info.OriginModelName
 
+	writeTaskBillingHeaders(c, info)
 	taskcommon.WriteOpenAIVideoResponse(c, ov)
 
 	return taskID, respBody, nil
@@ -696,6 +699,121 @@ func applyTokenFactoryTaskBillingHeader(resp *http.Response, info *relaycommon.R
 	upstreamPrice.GroupRatioInfo = info.PriceData.GroupRatioInfo
 	upstreamPrice.QuotaToPreConsume = upstreamPrice.Quota
 	info.PriceData = upstreamPrice
+
+	otherRaw := strings.TrimSpace(resp.Header.Get(service.TaskBillingOtherHeader))
+	if otherRaw == "" {
+		return
+	}
+	var upstreamOther map[string]interface{}
+	if err := common.UnmarshalJsonStr(otherRaw, &upstreamOther); err != nil {
+		return
+	}
+	info.UpstreamTaskBillingOther = upstreamOther
+}
+
+func writeTaskBillingHeaders(c *gin.Context, info *relaycommon.RelayInfo) {
+	if c == nil || info == nil || c.Writer.Written() {
+		return
+	}
+	if billingJSON, err := common.Marshal(info.PriceData); err == nil {
+		c.Header("X-New-Api-Task-Billing", string(billingJSON))
+	}
+	if other := buildOpenAIVideoTaskBillingOther(c, info); len(other) > 0 {
+		if otherJSON, err := common.Marshal(other); err == nil {
+			c.Header(service.TaskBillingOtherHeader, string(otherJSON))
+		}
+	}
+}
+
+func buildOpenAIVideoTaskBillingOther(c *gin.Context, info *relaycommon.RelayInfo) map[string]interface{} {
+	if c == nil || info == nil {
+		return nil
+	}
+	other := make(map[string]interface{})
+	if c.Request != nil && c.Request.URL != nil {
+		other["request_path"] = c.Request.URL.Path
+	}
+	if info.TaskRelayInfo != nil && strings.TrimSpace(info.PublicTaskID) != "" {
+		other["task_id"] = strings.TrimSpace(info.PublicTaskID)
+	}
+	other["model_price"] = info.PriceData.ModelPrice
+	other["group_ratio"] = info.PriceData.GroupRatioInfo.GroupRatio
+	if info.PriceData.GroupRatioInfo.HasSpecialRatio {
+		other["user_group_ratio"] = info.PriceData.GroupRatioInfo.GroupSpecialRatio
+	}
+	if info.ChannelMeta != nil && info.IsModelMapped {
+		other["is_model_mapped"] = true
+		other["upstream_model_name"] = info.UpstreamModelName
+	}
+	discPct := float64(100)
+	if info.PriceData.ChannelPriceDiscount != nil {
+		discPct = *info.PriceData.ChannelPriceDiscount
+	}
+	other["channel_price_discount_percent"] = discPct
+
+	switch {
+	case info.PriceData.UsePrice &&
+		info.PriceData.ModelPrice == 0 &&
+		info.PriceData.VideoRuleUnit == service.VideoRuleUnitPerToken &&
+		info.PriceData.VideoOutputTokens > 0:
+		other["billing_mode"] = service.SeedanceVideoTokenBillingMode
+		other["video_total_tokens"] = info.PriceData.VideoOutputTokens
+		other["video_output_tokens"] = info.PriceData.VideoOutputTokens
+		other["video_billed_quota"] = info.PriceData.Quota
+		other["video_quota_per_unit"] = common.QuotaPerUnit
+		other["video_token_unit_price"] = info.PriceData.VideoChannelRulePrice
+		other["video_channel_token_price"] = info.PriceData.VideoChannelRulePrice
+		if info.PriceData.VideoGlobalRulePrice > 0 {
+			other["video_global_token_price"] = info.PriceData.VideoGlobalRulePrice
+		}
+		if info.PriceData.VideoRuleWidth > 0 {
+			other["video_rule_width"] = info.PriceData.VideoRuleWidth
+		}
+		if info.PriceData.VideoRuleHeight > 0 {
+			other["video_rule_height"] = info.PriceData.VideoRuleHeight
+		}
+		other["video_has_audio"] = info.PriceData.VideoRuleHasAudio
+	case info.PriceData.UsePrice &&
+		info.PriceData.ModelPrice == 0 &&
+		info.PriceData.ModelRatio == 0 &&
+		info.PriceData.OtherRatios != nil &&
+		info.PriceData.OtherRatios["seconds"] > 0:
+		other["billing_mode"] = "video_per_second"
+		other["model_ratio"] = info.PriceData.ModelRatio
+		other["video_seconds"] = int(math.Ceil(info.PriceData.OtherRatios["seconds"]))
+		other["video_billed_quota"] = info.PriceData.Quota
+		other["video_quota_per_unit"] = common.QuotaPerUnit
+		other["video_price_per_second"] = info.PriceData.VideoChannelRulePrice
+		if info.PriceData.VideoGlobalRulePrice > 0 {
+			other["global_video_price_per_second"] = info.PriceData.VideoGlobalRulePrice
+		}
+		if info.PriceData.VideoRuleWidth > 0 {
+			other["video_rule_width"] = info.PriceData.VideoRuleWidth
+		}
+		if info.PriceData.VideoRuleHeight > 0 {
+			other["video_rule_height"] = info.PriceData.VideoRuleHeight
+		}
+		other["video_has_audio"] = info.PriceData.VideoRuleHasAudio
+	case info.PriceData.UsePrice &&
+		info.PriceData.ModelPrice == 0 &&
+		info.PriceData.ModelRatio == 0:
+		other["billing_mode"] = "video_per_video"
+		other["model_ratio"] = info.PriceData.ModelRatio
+		other["video_count"] = 1
+		other["video_billed_quota"] = info.PriceData.Quota
+		other["video_quota_per_unit"] = common.QuotaPerUnit
+		other["video_price_per_video"] = float64(info.PriceData.Quota) / common.QuotaPerUnit
+		if info.PriceData.VideoRuleWidth > 0 {
+			other["video_rule_width"] = info.PriceData.VideoRuleWidth
+		}
+		if info.PriceData.VideoRuleHeight > 0 {
+			other["video_rule_height"] = info.PriceData.VideoRuleHeight
+		}
+		other["video_has_audio"] = info.PriceData.VideoRuleHasAudio
+	default:
+		return nil
+	}
+	return model.SetBillingLogMetadata(other, model.BillingPhasePreCharge, true, info.PriceData.Quota, -int64(info.PriceData.Quota))
 }
 
 func channelTypeFromFetchBody(body map[string]any) int {
