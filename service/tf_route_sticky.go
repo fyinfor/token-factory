@@ -14,16 +14,16 @@ import (
 // ── TokenFactory 路由黏性 + 报错熔断 ─────────────────────────────
 //
 // 设计目标（对应用户需求「指定渠道后考虑缓存，多次报错才切换」）：
-//   - 黏性：某个 (归类 groupKey + group) 维度一旦选定渠道，后续相同维度复用同一渠道，
-//     避免每次请求抖动（仍按 TokenFactory 返回的有序候选作为候选集）。
-//   - 熔断：对 (维度, 渠道) 维护「连续报错计数」，达到阈值（默认 3）才摘除该黏性渠道、
+//   - 黏性：某个 (用户 + 归类 groupKey + group) 维度一旦选定渠道，该用户后续相同维度复用同一渠道，
+//     避免每次请求抖动（仍按 TokenFactory 返回的有序候选作为候选集）；不同用户互不影响。
+//   - 熔断：对 (用户, 维度, 渠道) 维护「连续报错计数」，达到阈值（默认 3）才摘除该黏性渠道、
 //     顺延到下一个候选；任意一次成功即清零，体现「连续」。
 //
 // 计数与绑定走 HybridCache（内存 + Redis），多实例下也能近似一致；TTL 控制窗口。
 
 const (
-	tfRouteStickyNamespace = "new-api:tf_route_sticky:v1"
-	tfRouteErrorNamespace  = "new-api:tf_route_error:v1"
+	tfRouteStickyNamespace = "new-api:tf_route_sticky:v2"
+	tfRouteErrorNamespace  = "new-api:tf_route_error:v2"
 
 	ginKeyTFRouteStickyKey = "tf_route_sticky_key"
 	ginKeyTFRouteChannelID = "tf_route_channel_id"
@@ -81,8 +81,15 @@ func getTFRouteErrorCache() *cachex.HybridCache[int] {
 	return tfRouteErrorCache
 }
 
-func tfStickyKey(groupKey, group string) string {
-	return groupKey + "#" + group
+func tfStickyKey(groupKey, group string, userID int) string {
+	return fmt.Sprintf("%s#%s#u%d", groupKey, group, userID)
+}
+
+func tfRouteUserID(c *gin.Context) int {
+	if c == nil {
+		return 0
+	}
+	return c.GetInt("id")
 }
 
 func tfErrorKey(stickyKey string, channelID int) string {
@@ -151,7 +158,7 @@ func TFRoutePickChannel(c *gin.Context, groupKey, group string, orderedIDs []int
 	if len(orderedIDs) == 0 {
 		return 0, false
 	}
-	stickyKey := tfStickyKey(groupKey, group)
+	stickyKey := tfStickyKey(groupKey, group, tfRouteUserID(c))
 	threshold := common.TokenFactoryRouteErrorThreshold()
 
 	inOrder := func(id int) bool {

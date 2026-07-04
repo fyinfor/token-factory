@@ -840,7 +840,7 @@ func tryTokenFactoryRoute(c *gin.Context, modelName string, group string) (*mode
 		ordered = append(ordered, int(id))
 	}
 
-	// 黏性 + 报错熔断选择：同一 (归类+group) 维度复用渠道，连续报错达阈值才顺延。
+	// 黏性 + 报错熔断选择：同一 (用户+归类+group) 维度复用渠道，连续报错达阈值才顺延。
 	isEnabled := func(id int) bool {
 		ch, err := model.CacheGetChannel(id)
 		return err == nil && ch != nil && ch.Status == common.ChannelStatusEnabled
