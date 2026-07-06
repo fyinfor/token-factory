@@ -58,7 +58,7 @@ const PaymentMethodSelectModal = ({
     >
       <div className='space-y-4 pb-2'>
         <Text type='tertiary' size='small'>
-          {t('充值数量')}：{renderTopUpCount(topUpCount)}
+          {t('充值金额')}：{renderTopUpCount(topUpCount)}
         </Text>
         <Space vertical spacing='medium' style={{ width: '100%' }}>
           {epayMethods.map((payMethod) => {

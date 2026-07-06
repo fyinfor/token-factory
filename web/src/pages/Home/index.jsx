@@ -48,7 +48,6 @@ import {
 import { Link } from 'react-router-dom';
 import NoticeModal from '../../components/layout/NoticeModal';
 import HomeModelList from '../../components/home/HomeModelList';
-import HomeBannerCarousel from '../../components/home/HomeBannerCarousel';
 import HomeHeroCarousel from '../../components/home/HomeHeroCarousel';
 import HomeFooterCertificates from '../../components/home/HomeFooterCertificates';
 import {
@@ -224,10 +223,6 @@ const Home = () => {
                     intervalSec={
                       statusState?.status?.home_hero_carousel_interval_sec
                     }
-                  />
-                  <HomeBannerCarousel
-                    rawSlides={statusState?.status?.home_banner_slides}
-                    intervalSec={statusState?.status?.home_banner_interval_sec}
                   />
 
                   {/* 操作按钮 */}

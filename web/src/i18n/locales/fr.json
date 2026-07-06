@@ -551,6 +551,7 @@
         "成为供应商": "Become a Supplier",
         "充值": "Recharger",
         "充值额度": "Quota de recharge",
+        "充值金额": "Montant de recharge",
         "充值方式设置": "Méthodes recharge",
         "充值方式设置不是合法的 JSON 字符串": "Les paramètres de la méthode de recharge ne sont pas une chaîne JSON valide",
         "充值分组倍率": "Ratio de groupe de recharge",

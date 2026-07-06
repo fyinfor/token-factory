@@ -551,6 +551,7 @@
         "成为供应商": "Become a Supplier",
         "充值": "Nạp tiền",
         "充值额度": "Hạn ngạch nạp tiền",
+        "充值金额": "Số tiền nạp",
         "充值方式设置": "Cài đặt phương thức nạp tiền",
         "充值方式设置不是合法的 JSON 字符串": "Cài đặt phương thức nạp tiền không phải là chuỗi JSON hợp lệ",
         "充值分组倍率": "Tỷ lệ nhóm nạp tiền",

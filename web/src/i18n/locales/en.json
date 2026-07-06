@@ -611,6 +611,7 @@
         "成为供应商": "Become a Supplier",
         "充值": "Top Up",
         "充值额度": "Top Up Quota",
+        "充值金额": "Top-up Amount",
         "充值方式设置": "Top Up method settings",
         "充值方式设置不是合法的 JSON 字符串": "Top Up method settings is not a valid JSON string",
         "充值分成": "Top-up commission",

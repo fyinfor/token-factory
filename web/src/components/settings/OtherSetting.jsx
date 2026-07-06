@@ -47,7 +47,6 @@ import { StatusContext } from '../../context/Status';
 import Text from '@douyinfe/semi-ui/lib/es/typography/text';
 import MarkdownRenderer from '../common/markdown/MarkdownRenderer';
 import SettingsSeedance from './SettingsSeedance';
-import HomeHeroCarouselSetting from './HomeHeroCarouselSetting';
 import HomeFooterCertificatesSetting from './HomeFooterCertificatesSetting';
 
 const LEGAL_USER_AGREEMENT_KEY = 'legal.user_agreement';
@@ -944,7 +943,6 @@ const OtherSetting = () => {
               >
                 {t('设置首页内容')}
               </Button>
-              <HomeHeroCarouselSetting />
               <HomeFooterCertificatesSetting />
               <Form.TextArea
                 label={t('关于')}

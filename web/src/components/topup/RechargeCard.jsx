@@ -25,7 +25,6 @@ import {
   Card,
   Button,
   Banner,
-  Skeleton,
   Form,
   Space,
   Row,
@@ -52,7 +51,6 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { IconGift } from '@douyinfe/semi-icons';
-import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime';
 import { getCurrencyConfig } from '../../helpers/render';
 import { getPayMethodDisplayName } from '../../helpers';
 import SubscriptionPlansCard from './SubscriptionPlansCard';
@@ -139,8 +137,6 @@ const RechargeCard = ({
   getAmount,
   setTopUpCount,
   setSelectedPreset,
-  renderAmount,
-  amountLoading,
   payMethods,
   preTopUp,
   activePaymentKey = '',
@@ -172,7 +168,6 @@ const RechargeCard = ({
   const onlineFormApiRef = useRef(null);
   const redeemFormApiRef = useRef(null);
   const initialTabSetRef = useRef(false);
-  const showAmountSkeleton = useMinimumLoadingTime(amountLoading);
   const [activeTab, setActiveTab] = useState('topup');
   const shouldShowSubscription =
     !subscriptionLoading && subscriptionPlans.length > 0;
@@ -316,16 +311,14 @@ const RechargeCard = ({
                   <Col xs={24} sm={24} md={24} lg={10} xl={10}>
                     <Form.InputNumber
                       field='topUpCount'
-                      label={t('充值数量')}
+                      label={t('充值金额')}
                       disabled={
                         !enableOnlineTopUp &&
                         !enableStripeTopUp &&
                         !enableWaffoTopUp &&
                         !enableUcoinTopUp
                       }
-                      placeholder={
-                        t('充值数量，最低 ') + renderTopUpCount(minTopUp)
-                      }
+                      placeholder={t('请输入充值金额')}
                       value={topUpCount}
                       min={minTopUp}
                       max={999999999}
@@ -348,28 +341,6 @@ const RechargeCard = ({
                       formatter={(value) => (value ? `${value}` : '')}
                       parser={(value) =>
                         value ? parseFloat(value.replace(/[^\d.]/g, '')) : 0
-                      }
-                      extraText={
-                        <Skeleton
-                          loading={showAmountSkeleton}
-                          active
-                          placeholder={
-                            <Skeleton.Title
-                              style={{
-                                width: 120,
-                                height: 20,
-                                borderRadius: 6,
-                              }}
-                            />
-                          }
-                        >
-                          <Text type='secondary' className='text-red-600'>
-                            {t('实付金额：')}
-                            <span style={{ color: 'red' }}>
-                              {renderAmount()}
-                            </span>
-                          </Text>
-                        </Skeleton>
                       }
                       style={{ width: '100%' }}
                     />

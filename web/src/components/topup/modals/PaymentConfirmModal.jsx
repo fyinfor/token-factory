@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import { getPayMethodDisplayName } from '../../../helpers';
-import { Modal, Typography, Card, Skeleton } from '@douyinfe/semi-ui';
+import { Modal, Typography, Card } from '@douyinfe/semi-ui';
 import { SiStripe } from 'react-icons/si';
 import { CreditCard } from 'lucide-react';
 import { AlipayPayLogo, WeChatPayLogo } from '../PaymentBrandIcons';
@@ -33,28 +33,10 @@ const PaymentConfirmModal = ({
   confirmLoading,
   topUpCount,
   renderTopUpCount,
-  amountLoading,
-  renderAmount,
   payWay,
   payMethods,
-  // 新增：用于显示折扣明细
-  amountNumber,
-  discountRate,
   creditDisplay = '',
-  rechargeDisplayCurrency = 'USD',
 }) => {
-  /** getRechargeCurrencyMeta 计算充值金额展示币种（仅 UI 文案）。 */
-  const getRechargeCurrencyMeta = () => {
-    if (rechargeDisplayCurrency === 'CNY') {
-      return { symbol: '¥', code: 'CNY' };
-    }
-    return { symbol: '$', code: 'USD' };
-  };
-  const { symbol, code } = getRechargeCurrencyMeta();
-  const hasDiscount =
-    discountRate && discountRate > 0 && discountRate < 1 && amountNumber > 0;
-  const originalAmount = hasDiscount ? amountNumber / discountRate : 0;
-  const discountAmount = hasDiscount ? originalAmount - amountNumber : 0;
   return (
     <Modal
       title={
@@ -76,30 +58,11 @@ const PaymentConfirmModal = ({
           <div className='space-y-3'>
             <div className='flex justify-between items-center'>
               <Text strong className='text-slate-700 dark:text-slate-200'>
-                {t('充值数量')}：
+                {t('充值金额')}：
               </Text>
               <Text className='text-slate-900 dark:text-slate-100'>
                 {renderTopUpCount(topUpCount)}
               </Text>
-            </div>
-            <div className='flex justify-between items-center'>
-              <Text strong className='text-slate-700 dark:text-slate-200'>
-                {t('实付金额')}：
-              </Text>
-              {amountLoading ? (
-                <Skeleton.Title style={{ width: '60px', height: '16px' }} />
-              ) : (
-                <div className='flex items-baseline space-x-2'>
-                  <Text strong className='font-bold' style={{ color: 'red' }}>
-                    {renderAmount()}
-                  </Text>
-                  {hasDiscount && (
-                    <Text size='small' className='text-rose-500'>
-                      {Math.round(discountRate * 100)}%
-                    </Text>
-                  )}
-                </div>
-              )}
             </div>
             {creditDisplay && (
               <div className='flex justify-between items-center'>
@@ -110,30 +73,6 @@ const PaymentConfirmModal = ({
                   {creditDisplay}
                 </Text>
               </div>
-            )}
-            {hasDiscount && !amountLoading && (
-              <>
-                <div className='flex justify-between items-center'>
-                  <Text className='text-slate-500 dark:text-slate-400'>
-                    {t('原价')}：
-                  </Text>
-                  <Text delete className='text-slate-500 dark:text-slate-400'>
-                    {code === 'USD'
-                      ? `${symbol}${originalAmount.toFixed(2)} ${code}`
-                      : `${symbol}${originalAmount.toFixed(2)}`}
-                  </Text>
-                </div>
-                <div className='flex justify-between items-center'>
-                  <Text className='text-slate-500 dark:text-slate-400'>
-                    {t('优惠')}：
-                  </Text>
-                  <Text className='text-emerald-600 dark:text-emerald-400'>
-                    {code === 'USD'
-                      ? `- ${symbol}${discountAmount.toFixed(2)} ${code}`
-                      : `- ${symbol}${discountAmount.toFixed(2)}`}
-                  </Text>
-                </div>
-              </>
             )}
             <div className='flex justify-between items-center'>
               <Text strong className='text-slate-700 dark:text-slate-200'>
