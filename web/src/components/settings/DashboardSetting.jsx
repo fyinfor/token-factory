@@ -27,6 +27,7 @@ import SettingsFAQ from '../../pages/Setting/Dashboard/SettingsFAQ';
 import SettingsUptimeKuma from '../../pages/Setting/Dashboard/SettingsUptimeKuma';
 import SettingsDataDashboard from '../../pages/Setting/Dashboard/SettingsDataDashboard';
 import SettingsHomeBanner from '../../pages/Setting/Dashboard/SettingsHomeBanner';
+import HomeHeroCarouselSetting from './HomeHeroCarouselSetting';
 import { useTranslation } from 'react-i18next';
 
 const DashboardSetting = () => {
@@ -188,6 +189,17 @@ const DashboardSetting = () => {
             <Card style={{ marginTop: '10px' }}>
               <SettingsUptimeKuma options={inputs} refresh={onRefresh} />
             </Card>
+          </TabPane>
+          <TabPane
+            tab={
+              <span className='inline-flex items-center gap-1.5'>
+                <ImageIcon size={16} />
+                {t('首页沉浸主轮播')}
+              </span>
+            }
+            itemKey='home-hero'
+          >
+            <HomeHeroCarouselSetting />
           </TabPane>
           <TabPane
             tab={

@@ -551,6 +551,7 @@
         "成为供应商": "Become a Supplier",
         "充值": "Tambah nilai",
         "充值额度": "Kuota tambah nilai",
+        "充值金额": "Jumlah tambah nilai",
         "充值方式设置": "Tetapan kaedah tambah nilai",
         "充值方式设置不是合法的 JSON 字符串": "Tetapan kaedah tambah nilai bukan rentetan JSON sah",
         "充值分组倍率": "Nisbah kumpulan tambah nilai",

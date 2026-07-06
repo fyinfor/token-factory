@@ -551,6 +551,7 @@
         "成为供应商": "Become a Supplier",
         "充值": "Ongeza salio",
         "充值额度": "Kiasi/kuota ya kuongeza",
+        "充值金额": "Kiasi cha kuongeza",
         "充值方式设置": "Mipangilio ya njia ya kuongeza",
         "充值方式设置不是合法的 JSON 字符串": "Mipangilio ya njia ya kuongeza si kamba halali ya JSON",
         "充值分组倍率": "Uwiano wa kikundi wa kuongeza",
