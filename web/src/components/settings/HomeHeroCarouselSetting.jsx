@@ -17,66 +17,307 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Button,
   Card,
+  Checkbox,
   Col,
+  DatePicker,
   Input,
+  InputNumber,
   Modal,
   Popconfirm,
   Row,
+  Select,
   Slider,
   Space,
   Switch,
+  Tabs,
+  TextArea,
+  Typography,
   Upload,
 } from '@douyinfe/semi-ui';
 import {
-  IconArrowDown,
-  IconArrowUp,
-  IconDelete,
-  IconPlus,
-  IconUpload,
-} from '@douyinfe/semi-icons';
-import Text from '@douyinfe/semi-ui/lib/es/typography/text';
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Image as ImageIcon,
+  Monitor,
+  Palette,
+  Plus,
+  Save,
+  Smartphone,
+  Trash2,
+  UploadCloud,
+} from 'lucide-react';
 import Cropper from 'react-easy-crop';
 import 'react-easy-crop/react-easy-crop.css';
 import { useTranslation } from 'react-i18next';
 import { API, showError, showSuccess } from '../../helpers';
 
+const { Text } = Typography;
+
 const ENABLED_KEY = 'HomeHeroCarouselEnabled';
 const SLIDES_KEY = 'HomeHeroCarouselSlides';
 const INTERVAL_KEY = 'HomeHeroCarouselIntervalSec';
 const ASPECT_KEY = 'HomeHeroCarouselAspectRatio';
-const DEFAULT_ASPECT_TEXT = '16:5';
-const CROP_OUTPUT_WIDTH = 1920;
+const DEFAULT_INTERVAL_SEC = 5;
+const MIN_INTERVAL_SEC = 2;
+const MAX_INTERVAL_SEC = 60;
+const DEFAULT_OVERLAY_OPACITY = 0.15;
+const DATE_TIME_FORMAT = 'yyyy-MM-dd HH:mm:ss';
 
-const emptySlide = () => ({
-  image_url: '',
+const CONTENT_ALIGN_OPTIONS = [
+  { label: '居左', value: 'left' },
+  { label: '居中', value: 'center' },
+  { label: '居右', value: 'right' },
+];
+
+const PC_PROFILE = {
+  key: 'pc',
+  imageKey: 'img_pc',
+  label: 'PC 主图',
+  helper: '1920 x 600，核心内容放在中间 1200px 安全区',
+  width: 1920,
+  height: 600,
+  maxBytes: 3 * 1024 * 1024,
+  icon: <Monitor size={16} />,
+};
+
+const MOBILE_PROFILE = {
+  key: 'mobile',
+  imageKey: 'img_mobile',
+  label: '移动端图',
+  helper: '750 x 360，移动端独立构图，避免从 PC 图硬裁文字',
+  width: 750,
+  height: 360,
+  maxBytes: 1200 * 1024,
+  icon: <Smartphone size={16} />,
+};
+
+const HERO_COLOR_PRESETS = [
+  {
+    key: 'clean-white',
+    name: '清透白字',
+    description: '通用展示图，干净耐看',
+    title_color: '#ffffff',
+    subtitle_color: '#e5e7eb',
+    button_color: '#ffffff',
+    button_text_color: '#111827',
+    overlay_opacity: 0.3,
+    preview_from: '#1f2937',
+    preview_to: '#64748b',
+  },
+  {
+    key: 'tech-blue',
+    name: '科技蓝',
+    description: '适合产品、能力、平台',
+    title_color: '#eef6ff',
+    subtitle_color: '#bfdbfe',
+    button_color: '#1677ff',
+    button_text_color: '#ffffff',
+    overlay_opacity: 0.34,
+    preview_from: '#0f172a',
+    preview_to: '#1d4ed8',
+  },
+  {
+    key: 'warm-gold',
+    name: '暖金行动',
+    description: '适合促销、推荐、活动',
+    title_color: '#fff7ed',
+    subtitle_color: '#fed7aa',
+    button_color: '#f59e0b',
+    button_text_color: '#111827',
+    overlay_opacity: 0.36,
+    preview_from: '#451a03',
+    preview_to: '#b45309',
+  },
+  {
+    key: 'dark-minimal',
+    name: '暗色极简',
+    description: '适合浅色图、人物图',
+    title_color: '#f9fafb',
+    subtitle_color: '#d1d5db',
+    button_color: '#111827',
+    button_text_color: '#ffffff',
+    overlay_opacity: 0.42,
+    preview_from: '#020617',
+    preview_to: '#334155',
+  },
+  {
+    key: 'fresh-green',
+    name: '清新绿',
+    description: '适合合规、安全、服务',
+    title_color: '#f0fdf4',
+    subtitle_color: '#bbf7d0',
+    button_color: '#16a34a',
+    button_text_color: '#ffffff',
+    overlay_opacity: 0.32,
+    preview_from: '#064e3b',
+    preview_to: '#15803d',
+  },
+  {
+    key: 'custom',
+    name: '自定义配色',
+    description: '手动调整标题、副标题和按钮',
+    custom: true,
+    preview_from: '#111827',
+    preview_to: '#475569',
+  },
+];
+
+const makeSlideId = () =>
+  `hero-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+function cssUrl(url) {
+  return `url("${String(url).replace(/"/g, '\\"')}")`;
+}
+
+function normalizeContentAlign(value) {
+  return ['left', 'center', 'right'].includes(value) ? value : 'left';
+}
+
+function contentAlignClass(value) {
+  const align = normalizeContentAlign(value);
+  if (align === 'center') {
+    return 'items-center text-center';
+  }
+  if (align === 'right') {
+    return 'items-end text-right';
+  }
+  return 'items-start text-left';
+}
+
+function getVerticalAlignedCropY(mediaSize, cropSize, zoom, placement) {
+  if (!mediaSize?.height || !cropSize?.height) {
+    return 0;
+  }
+  const maxOffset = Math.max(
+    0,
+    (mediaSize.height * zoom - cropSize.height) / 2,
+  );
+  if (placement === 'top') {
+    return maxOffset;
+  }
+  if (placement === 'bottom') {
+    return -maxOffset;
+  }
+  return 0;
+}
+
+const clamp = (value, min, max, fallback) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, n));
+};
+
+const toOverlayOpacity = (value) =>
+  clamp(value, 0, 0.8, DEFAULT_OVERLAY_OPACITY);
+const toOverlayPercent = (value) => Math.round(toOverlayOpacity(value) * 100);
+const percentToOverlayOpacity = (value) =>
+  clamp(Number(value) / 100, 0, 0.8, DEFAULT_OVERLAY_OPACITY);
+
+const pad2 = (value) => String(value).padStart(2, '0');
+
+function formatDateTimeValue(value) {
+  if (!value) {
+    return '';
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
+}
+
+function toDatePickerValue(value) {
+  if (!value) {
+    return undefined;
+  }
+  const text = String(value).trim();
+  if (!text) {
+    return undefined;
+  }
+  const normalized =
+    text.includes(' ') && !text.includes('T') ? text.replace(' ', 'T') : text;
+  const date = new Date(normalized);
+  return Number.isNaN(date.getTime()) ? undefined : date;
+}
+
+const emptySlide = (sort = 1) => ({
+  id: makeSlideId(),
+  enabled: true,
+  status: 1,
+  sort,
+  title: '',
+  subtitle: '',
+  badge_text: '',
+  button_text: '',
+  content_align: 'left',
   link_url: '',
+  open_mode: 'same',
+  img_pc: '',
+  img_mobile: '',
+  image_url: '',
+  overlay_opacity: DEFAULT_OVERLAY_OPACITY,
+  text_color: '#ffffff',
+  title_color: '#ffffff',
+  subtitle_color: '#e5e7eb',
+  button_color: '#ffffff',
+  button_text_color: '#111827',
+  background_color: '#111827',
+  start_at: '',
+  end_at: '',
 });
 
-const parseAspectRatio = (raw) => {
-  const text = String(raw || '').trim();
-  if (!text) {
-    return null;
-  }
+const normalizeSlide = (item, index = 0) => {
+  const legacyImage = String(item?.image_url || '').trim();
+  const enabled =
+    item?.enabled === false ||
+    item?.enabled === 'false' ||
+    item?.status === 0 ||
+    item?.status === '0'
+      ? false
+      : true;
 
-  const pair = text.match(/^(\d+(?:\.\d+)?)\s*[:/]\s*(\d+(?:\.\d+)?)$/);
-  if (pair) {
-    const w = Number(pair[1]);
-    const h = Number(pair[2]);
-    if (w > 0 && h > 0) {
-      return w / h;
-    }
-  }
-
-  const number = Number(text);
-  if (Number.isFinite(number) && number > 0) {
-    return number;
-  }
-  return null;
+  return {
+    ...emptySlide(index + 1),
+    id: String(item?.id || '').trim() || makeSlideId(),
+    enabled,
+    status: enabled ? 1 : 0,
+    sort: Math.max(1, Math.round(Number(item?.sort) || index + 1)),
+    title: String(item?.title || '').trim(),
+    subtitle: String(item?.subtitle || '').trim(),
+    badge_text: String(item?.badge_text || item?.badge || '').trim(),
+    button_text: String(item?.button_text || '').trim(),
+    content_align: normalizeContentAlign(item?.content_align),
+    link_url: String(item?.link_url || '').trim(),
+    open_mode: item?.open_mode === 'blank' ? 'blank' : 'same',
+    img_pc: String(item?.img_pc || legacyImage).trim(),
+    img_mobile: String(item?.img_mobile || '').trim(),
+    image_url: legacyImage,
+    overlay_opacity: toOverlayOpacity(item?.overlay_opacity),
+    text_color: String(item?.text_color || '#ffffff').trim(),
+    title_color: String(
+      item?.title_color || item?.text_color || '#ffffff',
+    ).trim(),
+    subtitle_color: String(
+      item?.subtitle_color || item?.text_color || '#e5e7eb',
+    ).trim(),
+    button_color: String(item?.button_color || '#ffffff').trim(),
+    button_text_color: String(item?.button_text_color || '#111827').trim(),
+    background_color: String(item?.background_color || '#111827').trim(),
+    start_at: String(item?.start_at || '').trim(),
+    end_at: String(item?.end_at || '').trim(),
+    note: String(item?.note || '').trim(),
+  };
 };
+
+const normalizeSlides = (rawSlides) =>
+  rawSlides.map(normalizeSlide).sort((a, b) => a.sort - b.sort);
 
 const parseSlides = (raw) => {
   if (!raw || typeof raw !== 'string') {
@@ -84,32 +325,113 @@ const parseSlides = (raw) => {
   }
   try {
     const value = JSON.parse(raw);
-    if (!Array.isArray(value)) {
-      return [];
-    }
-    return value.map((item) => ({
-      image_url: String(item?.image_url || '').trim(),
-      link_url: String(item?.link_url || '').trim(),
-    }));
+    return Array.isArray(value) ? normalizeSlides(value) : [];
   } catch {
     return [];
   }
 };
 
+const syncSort = (items) =>
+  items.map((item, index) => ({
+    ...item,
+    sort: index + 1,
+    status: item.enabled ? 1 : 0,
+  }));
+
+const slideHasContent = (slide) =>
+  Boolean(
+    slide.img_pc ||
+    slide.img_mobile ||
+    slide.image_url ||
+    slide.title ||
+    slide.subtitle ||
+    slide.badge_text ||
+    slide.button_text,
+  );
+
 const stringifySlides = (slides) => {
-  const cleaned = slides
+  const cleaned = syncSort(slides)
+    .filter(slideHasContent)
     .map((slide) => ({
-      image_url: String(slide?.image_url || '').trim(),
-      link_url: String(slide?.link_url || '').trim(),
-    }))
-    .filter((slide) => slide.image_url);
+      id: slide.id,
+      enabled: Boolean(slide.enabled),
+      status: slide.enabled ? 1 : 0,
+      sort: slide.sort,
+      title: String(slide.title || '').trim(),
+      subtitle: String(slide.subtitle || '').trim(),
+      badge_text: String(slide.badge_text || '').trim(),
+      button_text: String(slide.button_text || '').trim(),
+      content_align: normalizeContentAlign(slide.content_align),
+      link_url: String(slide.link_url || '').trim(),
+      open_mode: slide.open_mode === 'blank' ? 'blank' : 'same',
+      img_pc: String(slide.img_pc || slide.image_url || '').trim(),
+      img_mobile: String(slide.img_mobile || '').trim(),
+      overlay_opacity: toOverlayOpacity(slide.overlay_opacity),
+      text_color: String(slide.text_color || '#ffffff').trim(),
+      title_color: String(
+        slide.title_color || slide.text_color || '#ffffff',
+      ).trim(),
+      subtitle_color: String(
+        slide.subtitle_color || slide.text_color || '#e5e7eb',
+      ).trim(),
+      button_color: String(slide.button_color || '#ffffff').trim(),
+      button_text_color: String(slide.button_text_color || '#111827').trim(),
+      background_color: String(slide.background_color || '#111827').trim(),
+      start_at: String(slide.start_at || '').trim(),
+      end_at: String(slide.end_at || '').trim(),
+      note: String(slide.note || '').trim(),
+    }));
   return JSON.stringify(cleaned);
 };
 
 const clampInterval = (value) =>
-  String(Math.min(60, Math.max(2, Number(value) || 5)));
+  String(
+    Math.min(
+      MAX_INTERVAL_SEC,
+      Math.max(MIN_INTERVAL_SEC, Number(value) || DEFAULT_INTERVAL_SEC),
+    ),
+  );
 
-const makeCroppedFile = (cropState, aspect) =>
+const toBlob = (canvas, type, quality) =>
+  new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+
+const canvasToOptimizedBlob = async (canvas, maxBytes) => {
+  const webpQualities = [0.96, 0.92, 0.88, 0.84];
+  const minWebpQuality = webpQualities[webpQualities.length - 1];
+  for (const quality of webpQualities) {
+    const blob = await toBlob(canvas, 'image/webp', quality);
+    if (blob && (blob.size <= maxBytes || quality === minWebpQuality)) {
+      return blob;
+    }
+  }
+
+  const jpgQualities = [0.96, 0.92, 0.88, 0.84];
+  const minJpgQuality = jpgQualities[jpgQualities.length - 1];
+  for (const quality of jpgQualities) {
+    const blob = await toBlob(canvas, 'image/jpeg', quality);
+    if (blob && (blob.size <= maxBytes || quality === minJpgQuality)) {
+      return blob;
+    }
+  }
+
+  return null;
+};
+
+function normalizeCropArea(area, image) {
+  const imageWidth = image.naturalWidth || image.width;
+  const imageHeight = image.naturalHeight || image.height;
+  const width = Math.min(imageWidth, Math.max(1, Math.round(area.width)));
+  const height = Math.min(imageHeight, Math.max(1, Math.round(area.height)));
+
+  return {
+    x: Math.min(imageWidth - width, Math.max(0, Math.round(area.x))),
+    y: Math.min(imageHeight - height, Math.max(0, Math.round(area.y))),
+    width,
+    height,
+  };
+}
+
+const makeCroppedFile = (cropState) =>
   new Promise((resolve, reject) => {
     if (!cropState.croppedAreaPixels) {
       reject(new Error('crop area unavailable'));
@@ -117,69 +439,279 @@ const makeCroppedFile = (cropState, aspect) =>
     }
 
     const image = new Image();
-    image.onload = () => {
-      const canvas = document.createElement('canvas');
-      const outputHeight = Math.max(1, Math.round(CROP_OUTPUT_WIDTH / aspect));
-      canvas.width = CROP_OUTPUT_WIDTH;
-      canvas.height = outputHeight;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        reject(new Error('canvas context unavailable'));
-        return;
+    image.onload = async () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = cropState.profile.width;
+        canvas.height = cropState.profile.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('canvas context unavailable'));
+          return;
+        }
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+
+        const area = normalizeCropArea(cropState.croppedAreaPixels, image);
+        ctx.drawImage(
+          image,
+          area.x,
+          area.y,
+          area.width,
+          area.height,
+          0,
+          0,
+          cropState.profile.width,
+          cropState.profile.height,
+        );
+
+        const blob = await canvasToOptimizedBlob(
+          canvas,
+          cropState.profile.maxBytes,
+        );
+        if (!blob) {
+          reject(new Error('crop failed'));
+          return;
+        }
+        const baseName = String(cropState.file?.name || 'home-hero')
+          .replace(/\.[^.]+$/, '')
+          .replace(/[^\w.-]+/g, '-');
+        const ext = blob.type === 'image/webp' ? 'webp' : 'jpg';
+        resolve(
+          new File([blob], `${baseName}-${cropState.profile.key}.${ext}`, {
+            type: blob.type,
+          }),
+        );
+      } catch (error) {
+        reject(error);
       }
-
-      const area = cropState.croppedAreaPixels;
-      ctx.drawImage(
-        image,
-        area.x,
-        area.y,
-        area.width,
-        area.height,
-        0,
-        0,
-        CROP_OUTPUT_WIDTH,
-        outputHeight,
-      );
-
-      canvas.toBlob(
-        (blob) => {
-          if (!blob) {
-            reject(new Error('crop failed'));
-            return;
-          }
-          const baseName = String(cropState.file?.name || 'home-hero')
-            .replace(/\.[^.]+$/, '')
-            .replace(/[^\w.-]+/g, '-');
-          resolve(
-            new File([blob], `${baseName}-crop.jpg`, { type: blob.type }),
-          );
-        },
-        'image/jpeg',
-        0.92,
-      );
     };
     image.onerror = () => reject(new Error('image load failed'));
     image.src = cropState.objectUrl;
   });
 
+function ColorField({ label, value, onChange }) {
+  return (
+    <div className='min-w-[132px] flex-1'>
+      <Text strong className='!mb-1 !block'>
+        {label}
+      </Text>
+      <div className='flex h-9 items-center gap-2 rounded-md border border-semi-color-border bg-semi-color-bg-1 px-2'>
+        <input
+          type='color'
+          value={value || '#ffffff'}
+          onChange={(event) => onChange(event.target.value)}
+          className='h-6 w-8 cursor-pointer border-0 bg-transparent p-0'
+        />
+        <Input value={value} onChange={onChange} size='small' />
+      </div>
+    </div>
+  );
+}
+
+function HeroColorPresetPanel({ slide, customActive, onApply, onCustom }) {
+  const { t } = useTranslation();
+  const imageUrl = slide.img_pc || slide.image_url || slide.img_mobile || '';
+  const alignClass = contentAlignClass(slide.content_align);
+
+  return (
+    <div className='rounded-md border border-semi-color-border bg-semi-color-bg-0 p-3'>
+      <div className='mb-3 flex flex-wrap items-center justify-between gap-2'>
+        <Space spacing='tight'>
+          <Palette size={16} />
+          <Text strong>{t('配色预设')}</Text>
+        </Space>
+        <Text type='tertiary' size='small'>
+          {t('点击预览卡片即可套用到当前轮播')}
+        </Text>
+      </div>
+      <div className='grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3'>
+        {HERO_COLOR_PRESETS.map((preset) => {
+          const colors = preset.custom
+            ? {
+                title_color: slide.title_color || slide.text_color || '#ffffff',
+                subtitle_color:
+                  slide.subtitle_color || slide.text_color || '#e5e7eb',
+                button_color: slide.button_color || '#ffffff',
+                button_text_color: slide.button_text_color || '#111827',
+                overlay_opacity: toOverlayOpacity(slide.overlay_opacity),
+                preview_from: slide.background_color || preset.preview_from,
+                preview_to: '#475569',
+              }
+            : preset;
+          const backgroundImage = imageUrl
+            ? cssUrl(imageUrl)
+            : `linear-gradient(135deg, ${colors.preview_from}, ${colors.preview_to})`;
+          return (
+            <button
+              key={preset.key}
+              type='button'
+              className={`group overflow-hidden rounded-md border bg-semi-color-bg-1 p-0 text-left transition hover:border-semi-color-primary hover:shadow-md ${
+                preset.custom && customActive
+                  ? 'border-semi-color-primary'
+                  : 'border-semi-color-border'
+              }`}
+              onClick={() => (preset.custom ? onCustom() : onApply(preset))}
+            >
+              <div
+                className='relative h-32 overflow-hidden'
+                style={{
+                  backgroundImage,
+                  backgroundPosition: 'center',
+                  backgroundSize: 'cover',
+                }}
+              >
+                <div
+                  className='absolute inset-0'
+                  style={{
+                    backgroundColor: `rgba(0,0,0,${colors.overlay_opacity})`,
+                  }}
+                />
+                <div
+                  className={`relative z-[1] flex h-full flex-col justify-center px-4 py-3 ${alignClass}`}
+                >
+                  <div
+                    className='text-lg font-semibold leading-tight'
+                    style={{ color: colors.title_color }}
+                  >
+                    {slide.title || t('标题预览')}
+                  </div>
+                  <div
+                    className='mt-1 line-clamp-2 text-xs leading-relaxed'
+                    style={{ color: colors.subtitle_color }}
+                  >
+                    {slide.subtitle || t('副标题展示效果')}
+                  </div>
+                  <span
+                    className='mt-3 inline-flex w-fit items-center rounded-md px-3 py-1 text-xs font-semibold'
+                    style={{
+                      backgroundColor: colors.button_color,
+                      color: colors.button_text_color,
+                    }}
+                  >
+                    {slide.button_text || t('按钮')}
+                  </span>
+                </div>
+              </div>
+              <div className='flex items-center justify-between gap-2 px-3 py-2'>
+                <div>
+                  <Text strong size='small'>
+                    {t(preset.name)}
+                  </Text>
+                  <div className='text-xs text-semi-color-text-2'>
+                    {t(preset.description)}
+                  </div>
+                </div>
+                <Text type='tertiary' size='small'>
+                  {toOverlayPercent(colors.overlay_opacity)}%
+                </Text>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function ImageUploadPanel({
+  profile,
+  slide,
+  loading,
+  onOpenCropper,
+  onUpdate,
+}) {
+  const { t } = useTranslation();
+  const imageUrl = slide[profile.imageKey] || '';
+
+  return (
+    <div className='rounded-md border border-semi-color-border bg-semi-color-bg-0 p-3'>
+      <div className='mb-2 flex items-center justify-between gap-2'>
+        <Space spacing='tight'>
+          {profile.icon}
+          <Text strong>{t(profile.label)}</Text>
+        </Space>
+        <Text type='tertiary' size='small'>
+          {profile.width} x {profile.height}
+        </Text>
+      </div>
+
+      <div
+        className='mb-3 flex w-full items-center justify-center overflow-hidden rounded-md border border-semi-color-border bg-semi-color-fill-0'
+        style={{ aspectRatio: `${profile.width} / ${profile.height}` }}
+      >
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt=''
+            className='h-full w-full object-cover object-center'
+          />
+        ) : (
+          <div className='flex flex-col items-center gap-2 text-semi-color-text-2'>
+            <ImageIcon size={22} />
+            <Text type='tertiary' size='small'>
+              {t('暂无图片')}
+            </Text>
+          </div>
+        )}
+      </div>
+
+      <Space vertical align='start' spacing='tight' style={{ width: '100%' }}>
+        <Upload
+          action=''
+          accept='image/*'
+          showUploadList={false}
+          customRequest={onOpenCropper(profile)}
+        >
+          <Button icon={<UploadCloud size={16} />} loading={loading} block>
+            {t('裁剪上传')}
+          </Button>
+        </Upload>
+        <Input
+          value={imageUrl}
+          placeholder={t('也可以直接粘贴图片地址')}
+          onChange={(value) => onUpdate({ [profile.imageKey]: value })}
+        />
+        <Text type='tertiary' size='small'>
+          {t(profile.helper)}
+        </Text>
+      </Space>
+    </div>
+  );
+}
+
 export default function HomeHeroCarouselSetting() {
   const { t } = useTranslation();
   const [enabled, setEnabled] = useState(false);
-  const [intervalSec, setIntervalSec] = useState('5');
-  const [aspectText, setAspectText] = useState(DEFAULT_ASPECT_TEXT);
+  const [intervalSec, setIntervalSec] = useState(String(DEFAULT_INTERVAL_SEC));
   const [slides, setSlides] = useState([]);
+  const [activeSlideId, setActiveSlideId] = useState('');
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [customColorSlideIds, setCustomColorSlideIds] = useState([]);
   const [loading, setLoading] = useState(false);
   const [cropState, setCropState] = useState(null);
+  const [cropSize, setCropSize] = useState(null);
+  const cropFrameRef = useRef(null);
 
-  const aspect = useMemo(
-    () => parseAspectRatio(aspectText) || parseAspectRatio(DEFAULT_ASPECT_TEXT),
-    [aspectText],
+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const customColorSet = useMemo(
+    () => new Set(customColorSlideIds),
+    [customColorSlideIds],
   );
-  const aspectCss = useMemo(() => `${aspect} / 1`, [aspect]);
-  const slideCountText = useMemo(
-    () => t('{{count}} 张', { count: slides.length }),
-    [slides.length, t],
-  );
+  const selectedCount = selectedIds.length;
+  const enabledCount = slides.filter((slide) => slide.enabled).length;
+
+  useEffect(() => {
+    if (slides.length === 0) {
+      if (activeSlideId) {
+        setActiveSlideId('');
+      }
+      return;
+    }
+    if (!slides.some((slide) => slide.id === activeSlideId)) {
+      setActiveSlideId(slides[0].id);
+    }
+  }, [activeSlideId, slides]);
 
   const loadOptions = async () => {
     try {
@@ -194,9 +726,12 @@ export default function HomeHeroCarouselSetting() {
         optionMap[item.key] = item.value;
       });
       setEnabled(optionMap[ENABLED_KEY] === 'true');
-      setIntervalSec(optionMap[INTERVAL_KEY] || '5');
-      setAspectText(optionMap[ASPECT_KEY] || DEFAULT_ASPECT_TEXT);
-      setSlides(parseSlides(optionMap[SLIDES_KEY] || '[]'));
+      setIntervalSec(optionMap[INTERVAL_KEY] || String(DEFAULT_INTERVAL_SEC));
+      const nextSlides = parseSlides(optionMap[SLIDES_KEY] || '[]');
+      setSlides(nextSlides);
+      setActiveSlideId(nextSlides[0]?.id || '');
+      setCustomColorSlideIds([]);
+      setSelectedIds([]);
     } catch (error) {
       showError(error?.message || t('加载设置失败'));
     }
@@ -206,18 +741,131 @@ export default function HomeHeroCarouselSetting() {
     loadOptions();
   }, []);
 
-  const updateSlide = (index, key, value) => {
+  useEffect(() => {
+    if (!cropState?.visible || !cropFrameRef.current) {
+      setCropSize(null);
+      return undefined;
+    }
+
+    const frame = cropFrameRef.current;
+    const syncCropSize = () => {
+      const rect = frame.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) {
+        setCropSize({
+          width: Math.round(rect.width),
+          height: Math.round(rect.height),
+        });
+      }
+    };
+
+    syncCropSize();
+    if (typeof ResizeObserver !== 'undefined') {
+      const observer = new ResizeObserver(syncCropSize);
+      observer.observe(frame);
+      return () => observer.disconnect();
+    }
+
+    window.addEventListener('resize', syncCropSize);
+    return () => window.removeEventListener('resize', syncCropSize);
+  }, [cropState?.visible, cropState?.profile?.key]);
+
+  useEffect(() => {
+    if (
+      !cropState?.visible ||
+      cropState.profile?.key !== 'pc' ||
+      cropState.hasAutoAligned ||
+      !cropState.mediaSize ||
+      !cropSize
+    ) {
+      return;
+    }
+
+    const y = getVerticalAlignedCropY(
+      cropState.mediaSize,
+      cropSize,
+      cropState.zoom,
+      'top',
+    );
+    setCropState((state) =>
+      state
+        ? {
+            ...state,
+            crop: { ...state.crop, y },
+            hasAutoAligned: true,
+          }
+        : state,
+    );
+  }, [
+    cropSize,
+    cropState?.hasAutoAligned,
+    cropState?.mediaSize,
+    cropState?.profile?.key,
+    cropState?.visible,
+    cropState?.zoom,
+  ]);
+
+  const updateSlide = (id, patch) => {
     setSlides((items) =>
-      items.map((item, i) => (i === index ? { ...item, [key]: value } : item)),
+      items.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              ...patch,
+              status:
+                patch.enabled == null
+                  ? item.enabled
+                    ? 1
+                    : 0
+                  : patch.enabled
+                    ? 1
+                    : 0,
+            }
+          : item,
+      ),
     );
   };
 
   const addSlide = () => {
-    setSlides((items) => [...items, emptySlide()]);
+    const slide = emptySlide(slides.length + 1);
+    setSlides((items) => [...items, slide]);
+    setActiveSlideId(slide.id);
   };
 
-  const removeSlide = (index) => {
-    setSlides((items) => items.filter((_, i) => i !== index));
+  const duplicateSlide = (slide) => {
+    const copied = {
+      ...slide,
+      id: makeSlideId(),
+      title: slide.title ? `${slide.title} Copy` : '',
+    };
+    setSlides((items) => syncSort([...items, copied]));
+    setActiveSlideId(copied.id);
+  };
+
+  const removeSlide = (id) => {
+    setSlides((items) => {
+      const index = items.findIndex((item) => item.id === id);
+      const next = syncSort(items.filter((item) => item.id !== id));
+      if (activeSlideId === id) {
+        setActiveSlideId(next[Math.min(index, next.length - 1)]?.id || '');
+      }
+      return next;
+    });
+    setSelectedIds((items) => items.filter((item) => item !== id));
+    setCustomColorSlideIds((items) => items.filter((item) => item !== id));
+  };
+
+  const removeSelected = () => {
+    setSlides((items) => {
+      const next = syncSort(items.filter((item) => !selectedSet.has(item.id)));
+      if (selectedSet.has(activeSlideId)) {
+        setActiveSlideId(next[0]?.id || '');
+      }
+      return next;
+    });
+    setSelectedIds([]);
+    setCustomColorSlideIds((items) =>
+      items.filter((item) => !selectedSet.has(item)),
+    );
   };
 
   const moveSlide = (index, offset) => {
@@ -229,11 +877,11 @@ export default function HomeHeroCarouselSetting() {
       const next = [...items];
       const [item] = next.splice(index, 1);
       next.splice(nextIndex, 0, item);
-      return next;
+      return syncSort(next);
     });
   };
 
-  const uploadFile = async (index, file) => {
+  const uploadFile = async (slideId, profile, file) => {
     setLoading(true);
     try {
       const fd = new FormData();
@@ -246,7 +894,10 @@ export default function HomeHeroCarouselSetting() {
       if (!success || !url) {
         throw new Error(message || t('上传失败'));
       }
-      updateSlide(index, 'image_url', url);
+      updateSlide(slideId, {
+        [profile.imageKey]: url,
+        ...(profile.key === 'pc' ? { image_url: url } : {}),
+      });
       showSuccess(t('图片上传成功，请点击保存设置'));
       return data;
     } finally {
@@ -255,7 +906,8 @@ export default function HomeHeroCarouselSetting() {
   };
 
   const openCropper =
-    (index) =>
+    (slideId) =>
+    (profile) =>
     ({ file, onSuccess, onError }) => {
       const inst = file?.fileInstance || file;
       if (!inst) {
@@ -263,22 +915,17 @@ export default function HomeHeroCarouselSetting() {
         return;
       }
 
-      const currentAspect = parseAspectRatio(aspectText);
-      if (!currentAspect) {
-        const err = new Error(t('请先填写有效裁剪比例'));
-        onError?.(err);
-        showError(err.message);
-        return;
-      }
-
       const objectUrl = URL.createObjectURL(inst);
       setCropState({
         visible: true,
-        index,
+        slideId,
+        profile,
         file: inst,
         objectUrl,
         crop: { x: 0, y: 0 },
         zoom: 1,
+        mediaSize: null,
+        hasAutoAligned: false,
         croppedAreaPixels: null,
         onSuccess,
         onError,
@@ -299,14 +946,13 @@ export default function HomeHeroCarouselSetting() {
     if (!cropState) {
       return;
     }
-    const currentAspect = parseAspectRatio(aspectText);
-    if (!currentAspect) {
-      showError(t('请先填写有效裁剪比例'));
-      return;
-    }
     try {
-      const croppedFile = await makeCroppedFile(cropState, currentAspect);
-      const data = await uploadFile(cropState.index, croppedFile);
+      const croppedFile = await makeCroppedFile(cropState);
+      const data = await uploadFile(
+        cropState.slideId,
+        cropState.profile,
+        croppedFile,
+      );
       cropState.onSuccess?.(data);
       closeCropper(false);
     } catch (error) {
@@ -315,14 +961,47 @@ export default function HomeHeroCarouselSetting() {
     }
   };
 
+  const alignCropVertically = (placement) => {
+    setCropState((state) => {
+      if (!state?.mediaSize || !cropSize) {
+        return state;
+      }
+      const y = getVerticalAlignedCropY(
+        state.mediaSize,
+        cropSize,
+        state.zoom,
+        placement,
+      );
+      return {
+        ...state,
+        crop: { ...state.crop, y },
+        hasAutoAligned: true,
+      };
+    });
+  };
+
+  const applyColorPreset = (slideId, preset) => {
+    setCustomColorSlideIds((items) => items.filter((item) => item !== slideId));
+    updateSlide(slideId, {
+      text_color: preset.title_color,
+      title_color: preset.title_color,
+      subtitle_color: preset.subtitle_color,
+      button_color: preset.button_color,
+      button_text_color: preset.button_text_color,
+      overlay_opacity: preset.overlay_opacity,
+    });
+  };
+
+  const showCustomColorFields = (slideId) => {
+    setCustomColorSlideIds((items) =>
+      items.includes(slideId) ? items : [...items, slideId],
+    );
+  };
+
   const save = async () => {
     try {
       setLoading(true);
       const normalizedInterval = clampInterval(intervalSec);
-      const normalizedAspectText = String(aspectText || '').trim();
-      if (!parseAspectRatio(normalizedAspectText)) {
-        throw new Error(t('裁剪比例格式不正确'));
-      }
       const slidesValue = stringifySlides(slides);
       const requests = [
         API.put('/api/option/', {
@@ -335,7 +1014,7 @@ export default function HomeHeroCarouselSetting() {
         }),
         API.put('/api/option/', {
           key: ASPECT_KEY,
-          value: normalizedAspectText,
+          value: '1920:600',
         }),
         API.put('/api/option/', {
           key: SLIDES_KEY,
@@ -348,9 +1027,15 @@ export default function HomeHeroCarouselSetting() {
         throw new Error(failed.data?.message || t('保存失败'));
       }
       setIntervalSec(normalizedInterval);
-      setAspectText(normalizedAspectText);
-      setSlides(parseSlides(slidesValue));
-      showSuccess(t('首页大图沉浸轮播设置已保存'));
+      const savedSlides = parseSlides(slidesValue);
+      setSlides(savedSlides);
+      setActiveSlideId(
+        savedSlides.some((slide) => slide.id === activeSlideId)
+          ? activeSlideId
+          : savedSlides[0]?.id || '',
+      );
+      setSelectedIds([]);
+      showSuccess(t('首页主轮播设置已保存'));
     } catch (error) {
       showError(error?.message || t('保存失败'));
     } finally {
@@ -360,186 +1045,446 @@ export default function HomeHeroCarouselSetting() {
 
   return (
     <Card
-      title={t('首页大图沉浸轮播')}
+      title={t('首页沉浸主轮播')}
       style={{ marginTop: 16, marginBottom: 16 }}
+      headerExtraContent={
+        <Button
+          icon={<Save size={16} />}
+          type='primary'
+          loading={loading}
+          onClick={save}
+        >
+          {t('保存设置')}
+        </Button>
+      }
     >
       <Space vertical align='start' spacing='medium' style={{ width: '100%' }}>
-        <Space wrap style={{ width: '100%', justifyContent: 'space-between' }}>
-          <Space align='center' wrap>
-            <Text>{t('启用')}</Text>
-            <Switch checked={enabled} onChange={setEnabled} />
+        <div className='grid w-full grid-cols-1 gap-3 rounded-md border border-semi-color-border bg-semi-color-fill-0 p-4 lg:grid-cols-[1fr_auto]'>
+          <Space vertical align='start' spacing='tight'>
+            <Space wrap>
+              <Switch checked={enabled} onChange={setEnabled} />
+              <Text strong>{t('启用首页沉浸主轮播')}</Text>
+              <Text type='tertiary' size='small'>
+                {t('当前 {{count}} 张，{{enabledCount}} 张上架', {
+                  count: slides.length,
+                  enabledCount,
+                })}
+              </Text>
+            </Space>
             <Text type='tertiary' size='small'>
-              {t('当前 {{countText}}，单图静态展示，多图自动轮播', {
-                countText: slideCountText,
-              })}
+              {t(
+                'PC 使用 1920x600，移动端使用 750x360；核心文字、按钮、LOGO 请放在安全区内。',
+              )}
             </Text>
           </Space>
-          <Space align='center' wrap>
+          <Space wrap>
             <Text type='tertiary' size='small'>
-              {t('轮播间隔（秒）')}
+              {t('轮播间隔')}
             </Text>
-            <Input
-              type='number'
-              min={2}
-              max={60}
-              value={intervalSec}
-              onChange={setIntervalSec}
-              style={{ width: 96 }}
-            />
-            <Text type='tertiary' size='small'>
-              {t('裁剪比例')}
-            </Text>
-            <Input
-              value={aspectText}
-              placeholder='16:5'
-              onChange={setAspectText}
+            <InputNumber
+              min={MIN_INTERVAL_SEC}
+              max={MAX_INTERVAL_SEC}
+              value={Number(intervalSec)}
+              onChange={(value) =>
+                setIntervalSec(String(value || DEFAULT_INTERVAL_SEC))
+              }
               style={{ width: 112 }}
             />
-            <Button icon={<IconPlus />} theme='light' onClick={addSlide}>
-              {t('添加图片')}
+            <Text type='tertiary' size='small'>
+              {t('秒')}
+            </Text>
+            <Button icon={<Plus size={16} />} theme='light' onClick={addSlide}>
+              {t('新增轮播')}
             </Button>
-            <Button type='primary' loading={loading} onClick={save}>
-              {t('保存设置')}
-            </Button>
+            <Popconfirm
+              title={t('确定删除已选择的轮播吗？')}
+              onConfirm={removeSelected}
+              disabled={selectedCount === 0}
+            >
+              <Button
+                icon={<Trash2 size={16} />}
+                type='danger'
+                theme='light'
+                disabled={selectedCount === 0}
+              >
+                {t('批量删除')}
+              </Button>
+            </Popconfirm>
           </Space>
-        </Space>
-
-        <Text type='tertiary' size='small'>
-          {t(
-            '每张图只有图片和跳转链接；跳转链接为空时不可点击。裁剪比例可填 16:5、3:1、1920:600 或 3.2。',
-          )}
-        </Text>
+        </div>
 
         {slides.length === 0 ? (
-          <Button icon={<IconPlus />} theme='light' onClick={addSlide}>
-            {t('添加第一张图片')}
-          </Button>
+          <div className='flex min-h-[180px] w-full flex-col items-center justify-center gap-3 rounded-md border border-dashed border-semi-color-border bg-semi-color-fill-0'>
+            <ImageIcon size={30} className='text-semi-color-text-2' />
+            <Text type='tertiary'>{t('还没有主轮播，先新增一张开始配置')}</Text>
+            <Button icon={<Plus size={16} />} type='primary' onClick={addSlide}>
+              {t('新增轮播')}
+            </Button>
+          </div>
         ) : (
-          <Space
-            vertical
-            align='start'
-            spacing='medium'
-            style={{ width: '100%' }}
+          <Tabs
+            type='card'
+            activeKey={activeSlideId}
+            onChange={setActiveSlideId}
+            className='w-full'
           >
             {slides.map((slide, index) => (
-              <Card
-                key={index}
-                title={`${t('图片')} #${index + 1}`}
-                style={{ width: '100%' }}
-                headerExtraContent={
-                  <Space spacing='tight'>
-                    <Button
-                      icon={<IconArrowUp />}
-                      disabled={index === 0}
-                      theme='borderless'
-                      onClick={() => moveSlide(index, -1)}
-                    />
-                    <Button
-                      icon={<IconArrowDown />}
-                      disabled={index === slides.length - 1}
-                      theme='borderless'
-                      onClick={() => moveSlide(index, 1)}
-                    />
-                    <Popconfirm
-                      title={t('确定删除这张图片？')}
-                      position='left'
-                      onConfirm={() => removeSlide(index)}
-                    >
-                      <Button
-                        icon={<IconDelete />}
-                        type='danger'
-                        theme='borderless'
-                      />
-                    </Popconfirm>
-                  </Space>
+              <Tabs.TabPane
+                key={slide.id}
+                itemKey={slide.id}
+                tab={
+                  <span className='inline-block max-w-[150px] truncate align-bottom'>
+                    {index + 1}. {slide.title || t('未命名轮播')}
+                  </span>
                 }
               >
-                <Row gutter={16}>
-                  <Col xs={24} md={6}>
-                    {slide.image_url ? (
-                      <img
-                        src={slide.image_url}
-                        alt={t('轮播图预览')}
-                        style={{
-                          width: '100%',
-                          aspectRatio: aspectCss,
-                          objectFit: 'cover',
-                          borderRadius: 8,
-                          border: '1px solid var(--semi-color-border)',
-                          background: 'var(--semi-color-fill-0)',
+                <div className='w-full rounded-md border border-semi-color-border bg-semi-color-bg-1 p-4'>
+                  <div className='mb-4 flex flex-wrap items-center justify-between gap-3'>
+                    <Space wrap>
+                      <Checkbox
+                        checked={selectedSet.has(slide.id)}
+                        onChange={(event) => {
+                          const checked = event.target.checked;
+                          setSelectedIds((items) =>
+                            checked
+                              ? [...items, slide.id]
+                              : items.filter((id) => id !== slide.id),
+                          );
                         }}
                       />
-                    ) : (
-                      <div
-                        style={{
-                          width: '100%',
-                          aspectRatio: aspectCss,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          borderRadius: 8,
-                          border: '1px dashed var(--semi-color-border)',
-                          color: 'var(--semi-color-text-2)',
-                          background: 'var(--semi-color-fill-0)',
-                        }}
-                      >
-                        {t('暂无图片')}
-                      </div>
-                    )}
-                    <Upload
-                      action=''
-                      accept='image/*'
-                      showUploadList={false}
-                      customRequest={openCropper(index)}
-                    >
-                      <Button
-                        icon={<IconUpload />}
-                        loading={loading}
-                        style={{ marginTop: 8, width: '100%' }}
-                      >
-                        {t('裁剪上传')}
-                      </Button>
-                    </Upload>
-                  </Col>
-                  <Col xs={24} md={18}>
-                    <Space
-                      vertical
-                      align='start'
-                      spacing='tight'
-                      style={{ width: '100%' }}
-                    >
-                      <Input
-                        value={slide.image_url}
-                        placeholder={t('图片地址')}
-                        onChange={(value) =>
-                          updateSlide(index, 'image_url', value)
+                      <span className='rounded-md bg-semi-color-fill-0 px-2 py-1 text-xs font-semibold text-semi-color-text-1'>
+                        #{index + 1}
+                      </span>
+                      <Switch
+                        checked={slide.enabled}
+                        onChange={(checked) =>
+                          updateSlide(slide.id, { enabled: checked })
                         }
                       />
+                      <Text strong>{slide.title || t('未命名轮播')}</Text>
+                    </Space>
+                    <Space wrap>
+                      <Button
+                        icon={<ChevronUp size={16} />}
+                        theme='borderless'
+                        disabled={index === 0}
+                        onClick={() => moveSlide(index, -1)}
+                      />
+                      <Button
+                        icon={<ChevronDown size={16} />}
+                        theme='borderless'
+                        disabled={index === slides.length - 1}
+                        onClick={() => moveSlide(index, 1)}
+                      />
+                      <Button
+                        icon={<Copy size={16} />}
+                        theme='borderless'
+                        onClick={() => duplicateSlide(slide)}
+                      >
+                        {t('复制')}
+                      </Button>
+                      <Popconfirm
+                        title={t('确定删除这张轮播吗？')}
+                        position='left'
+                        onConfirm={() => removeSlide(slide.id)}
+                      >
+                        <Button
+                          icon={<Trash2 size={16} />}
+                          type='danger'
+                          theme='borderless'
+                        >
+                          {t('删除')}
+                        </Button>
+                      </Popconfirm>
+                    </Space>
+                  </div>
+
+                  <Row gutter={[16, 16]}>
+                    <Col xs={24} lg={12}>
+                      <ImageUploadPanel
+                        profile={PC_PROFILE}
+                        slide={slide}
+                        loading={loading}
+                        onOpenCropper={openCropper(slide.id)}
+                        onUpdate={(patch) => updateSlide(slide.id, patch)}
+                      />
+                    </Col>
+                    <Col xs={24} lg={12}>
+                      <ImageUploadPanel
+                        profile={MOBILE_PROFILE}
+                        slide={slide}
+                        loading={loading}
+                        onOpenCropper={openCropper(slide.id)}
+                        onUpdate={(patch) => updateSlide(slide.id, patch)}
+                      />
+                    </Col>
+                  </Row>
+
+                  <Row gutter={[16, 12]} style={{ marginTop: 16 }}>
+                    <Col xs={24} md={12}>
+                      <Text strong className='!mb-1 !block'>
+                        {t('标题')}
+                      </Text>
+                      <Input
+                        value={slide.title}
+                        placeholder={t('例如：安全可靠的 AI 能力平台')}
+                        onChange={(value) =>
+                          updateSlide(slide.id, { title: value })
+                        }
+                      />
+                    </Col>
+                    <Col xs={24} md={12}>
+                      <Text strong className='!mb-1 !block'>
+                        {t('副标题')}
+                      </Text>
+                      <Input
+                        value={slide.subtitle}
+                        placeholder={t('一句话说明当前轮播重点')}
+                        onChange={(value) =>
+                          updateSlide(slide.id, { subtitle: value })
+                        }
+                      />
+                    </Col>
+                    <Col xs={24} md={8}>
+                      <Text strong className='!mb-1 !block'>
+                        {t('优惠标签')}
+                      </Text>
+                      <Input
+                        value={slide.badge_text}
+                        placeholder={t('限时 / 新品 / 推荐')}
+                        onChange={(value) =>
+                          updateSlide(slide.id, { badge_text: value })
+                        }
+                      />
+                    </Col>
+                    <Col xs={24} md={8}>
+                      <Text strong className='!mb-1 !block'>
+                        {t('按钮文案')}
+                      </Text>
+                      <Input
+                        value={slide.button_text}
+                        placeholder={t('立即体验')}
+                        onChange={(value) =>
+                          updateSlide(slide.id, { button_text: value })
+                        }
+                      />
+                    </Col>
+                    <Col xs={24} md={8}>
+                      <Text strong className='!mb-1 !block'>
+                        {t('内容对齐')}
+                      </Text>
+                      <Select
+                        value={slide.content_align}
+                        onChange={(value) =>
+                          updateSlide(slide.id, {
+                            content_align: normalizeContentAlign(value),
+                          })
+                        }
+                        optionList={CONTENT_ALIGN_OPTIONS.map((item) => ({
+                          ...item,
+                          label: t(item.label),
+                        }))}
+                        style={{ width: '100%' }}
+                      />
+                    </Col>
+                    <Col xs={24} md={16}>
+                      <Text strong className='!mb-1 !block'>
+                        {t('跳转链接')}
+                      </Text>
                       <Input
                         value={slide.link_url}
-                        placeholder={t('跳转链接（可留空）')}
+                        placeholder={t('为空时不跳转')}
                         onChange={(value) =>
-                          updateSlide(index, 'link_url', value)
+                          updateSlide(slide.id, { link_url: value })
                         }
                       />
-                    </Space>
-                  </Col>
-                </Row>
-              </Card>
+                    </Col>
+                    <Col xs={24} md={8}>
+                      <Text strong className='!mb-1 !block'>
+                        {t('打开方式')}
+                      </Text>
+                      <Select
+                        value={slide.open_mode}
+                        onChange={(value) =>
+                          updateSlide(slide.id, { open_mode: value })
+                        }
+                        optionList={[
+                          { label: t('当前窗口'), value: 'same' },
+                          { label: t('新窗口'), value: 'blank' },
+                        ]}
+                        style={{ width: '100%' }}
+                      />
+                    </Col>
+                    <Col xs={24} md={8}>
+                      <Text strong className='!mb-1 !block'>
+                        {t('排序数字')}
+                      </Text>
+                      <InputNumber
+                        min={1}
+                        value={slide.sort}
+                        onChange={(value) =>
+                          updateSlide(slide.id, {
+                            sort: Number(value) || index + 1,
+                          })
+                        }
+                        style={{ width: '100%' }}
+                      />
+                    </Col>
+                    <Col xs={24} md={8}>
+                      <Text strong className='!mb-1 !block'>
+                        {t('自动上架时间')}
+                      </Text>
+                      <DatePicker
+                        type='dateTime'
+                        format={DATE_TIME_FORMAT}
+                        value={toDatePickerValue(slide.start_at)}
+                        placeholder='2026-07-01 00:00'
+                        showClear
+                        onChange={(value) => {
+                          updateSlide(slide.id, {
+                            start_at: formatDateTimeValue(value),
+                          });
+                        }}
+                        style={{ width: '100%' }}
+                      />
+                    </Col>
+                    <Col xs={24} md={8}>
+                      <Text strong className='!mb-1 !block'>
+                        {t('自动下架时间')}
+                      </Text>
+                      <DatePicker
+                        type='dateTime'
+                        format={DATE_TIME_FORMAT}
+                        value={toDatePickerValue(slide.end_at)}
+                        placeholder='2026-07-31 23:59'
+                        showClear
+                        onChange={(value) => {
+                          updateSlide(slide.id, {
+                            end_at: formatDateTimeValue(value),
+                          });
+                        }}
+                        style={{ width: '100%' }}
+                      />
+                    </Col>
+                    <Col xs={24}>
+                      <HeroColorPresetPanel
+                        slide={slide}
+                        customActive={customColorSet.has(slide.id)}
+                        onApply={(preset) => applyColorPreset(slide.id, preset)}
+                        onCustom={() => showCustomColorFields(slide.id)}
+                      />
+                    </Col>
+                    {customColorSet.has(slide.id) ? (
+                      <Col xs={24}>
+                        <div className='grid grid-cols-1 gap-3 rounded-md border border-semi-color-border bg-semi-color-fill-0 p-3 md:grid-cols-2 xl:grid-cols-6'>
+                          <div className='min-w-[132px] flex-1'>
+                            <Text strong className='!mb-1 !block'>
+                              {t('遮罩透明度')}
+                            </Text>
+                            <div className='flex h-9 items-center gap-2'>
+                              <InputNumber
+                                min={0}
+                                max={80}
+                                step={5}
+                                value={toOverlayPercent(slide.overlay_opacity)}
+                                onChange={(value) =>
+                                  updateSlide(slide.id, {
+                                    overlay_opacity:
+                                      percentToOverlayOpacity(value),
+                                  })
+                                }
+                                style={{ width: 92 }}
+                              />
+                              <span className='text-sm text-semi-color-text-2'>
+                                %
+                              </span>
+                            </div>
+                            <Text type='tertiary' size='small'>
+                              {t('默认 15%，数值越大图片越暗')}
+                            </Text>
+                          </div>
+                          <ColorField
+                            label={t('标题颜色')}
+                            value={slide.title_color}
+                            onChange={(value) =>
+                              updateSlide(slide.id, {
+                                text_color: value,
+                                title_color: value,
+                              })
+                            }
+                          />
+                          <ColorField
+                            label={t('副标题颜色')}
+                            value={slide.subtitle_color}
+                            onChange={(value) =>
+                              updateSlide(slide.id, { subtitle_color: value })
+                            }
+                          />
+                          <ColorField
+                            label={t('按钮颜色')}
+                            value={slide.button_color}
+                            onChange={(value) =>
+                              updateSlide(slide.id, { button_color: value })
+                            }
+                          />
+                          <ColorField
+                            label={t('按钮文字')}
+                            value={slide.button_text_color}
+                            onChange={(value) =>
+                              updateSlide(slide.id, {
+                                button_text_color: value,
+                              })
+                            }
+                          />
+                          <ColorField
+                            label={t('无图底色')}
+                            value={slide.background_color}
+                            onChange={(value) =>
+                              updateSlide(slide.id, {
+                                background_color: value,
+                              })
+                            }
+                          />
+                        </div>
+                      </Col>
+                    ) : null}
+                    <Col xs={24}>
+                      <Text strong className='!mb-1 !block'>
+                        {t('备注')}
+                      </Text>
+                      <TextArea
+                        rows={2}
+                        value={slide.note || ''}
+                        placeholder={t(
+                          '仅后台管理可见，可记录素材来源或投放说明',
+                        )}
+                        onChange={(value) =>
+                          updateSlide(slide.id, { note: value })
+                        }
+                      />
+                    </Col>
+                  </Row>
+                </div>
+              </Tabs.TabPane>
             ))}
-          </Space>
+          </Tabs>
         )}
       </Space>
 
       <Modal
-        title={t('裁剪首页大图')}
+        title={
+          cropState
+            ? t('裁剪 {{label}}', { label: t(cropState.profile.label) })
+            : t('裁剪图片')
+        }
         visible={Boolean(cropState?.visible)}
         onCancel={() => closeCropper(true)}
         onOk={confirmCrop}
         confirmLoading={loading}
         okText={t('裁剪并上传')}
         cancelText={t('取消')}
-        style={{ width: 820, maxWidth: '94vw' }}
+        width={1180}
+        style={{ maxWidth: '96vw' }}
       >
         {cropState ? (
           <Space
@@ -549,15 +1494,18 @@ export default function HomeHeroCarouselSetting() {
             style={{ width: '100%' }}
           >
             <Text type='tertiary' size='small'>
-              {t('拖动图片调整裁剪区域，滚轮或缩放条可调整大小。')}
+              {t(
+                '图片会始终铺满裁剪框，不会导出背景空白。拖动图片或放大即可调整，PC 图会显示中间安全区、左右裁切区和底部避让参考线。',
+              )}
             </Text>
             <div
+              ref={cropFrameRef}
               style={{
                 position: 'relative',
                 width: '100%',
-                height: 420,
-                background: '#111',
-                borderRadius: 8,
+                aspectRatio: `${cropState.profile.width} / ${cropState.profile.height}`,
+                margin: '0 auto',
+                background: '#111827',
                 overflow: 'hidden',
                 border: '1px solid var(--semi-color-border)',
               }}
@@ -566,12 +1514,24 @@ export default function HomeHeroCarouselSetting() {
                 image={cropState.objectUrl}
                 crop={cropState.crop}
                 zoom={cropState.zoom}
-                aspect={aspect}
+                aspect={cropState.profile.width / cropState.profile.height}
+                cropSize={cropSize || undefined}
+                minZoom={1}
+                maxZoom={6}
+                objectFit='cover'
+                restrictPosition
+                showGrid
+                cropShape='rect'
                 onCropChange={(crop) =>
                   setCropState((state) => (state ? { ...state, crop } : state))
                 }
                 onZoomChange={(zoom) =>
                   setCropState((state) => (state ? { ...state, zoom } : state))
+                }
+                onMediaLoaded={(mediaSize) =>
+                  setCropState((state) =>
+                    state ? { ...state, mediaSize } : state,
+                  )
                 }
                 onCropComplete={(_, croppedAreaPixels) =>
                   setCropState((state) =>
@@ -579,6 +1539,37 @@ export default function HomeHeroCarouselSetting() {
                   )
                 }
               />
+              {cropState.profile.key === 'pc' ? (
+                <div className='pointer-events-none absolute inset-0 z-[2]'>
+                  <div
+                    className='absolute border border-dashed border-white/70'
+                    style={{
+                      left: '18.75%',
+                      right: '18.75%',
+                      top: 0,
+                      bottom: '13.333%',
+                    }}
+                  />
+                  <div
+                    className='absolute bottom-0 left-0 right-0 border-t border-dashed border-white/45 bg-white/5'
+                    style={{ height: '13.333%' }}
+                  />
+                  <div
+                    className='absolute bottom-0 left-0 top-0 border-r border-dashed border-white/35 bg-white/5'
+                    style={{ width: '18.75%' }}
+                  />
+                  <div
+                    className='absolute bottom-0 right-0 top-0 border-l border-dashed border-white/35 bg-white/5'
+                    style={{ width: '18.75%' }}
+                  />
+                  <div className='absolute left-[18.75%] top-2 rounded bg-black/40 px-2 py-1 text-xs text-white'>
+                    {t('1200px 安全区')}
+                  </div>
+                  <div className='absolute bottom-2 left-2 rounded bg-black/35 px-2 py-1 text-xs text-white'>
+                    {t('底部避让 80px')}
+                  </div>
+                </div>
+              ) : null}
             </div>
             <div style={{ width: '100%' }}>
               <Text type='tertiary' size='small'>
@@ -586,7 +1577,7 @@ export default function HomeHeroCarouselSetting() {
               </Text>
               <Slider
                 min={1}
-                max={4}
+                max={6}
                 step={0.01}
                 value={cropState.zoom}
                 onChange={(value) =>
@@ -595,6 +1586,31 @@ export default function HomeHeroCarouselSetting() {
                   )
                 }
               />
+              {cropState.profile.key === 'pc' ? (
+                <Space spacing='tight' wrap>
+                  <Button
+                    size='small'
+                    theme='light'
+                    onClick={() => alignCropVertically('top')}
+                  >
+                    {t('图片贴顶')}
+                  </Button>
+                  <Button
+                    size='small'
+                    theme='light'
+                    onClick={() => alignCropVertically('center')}
+                  >
+                    {t('居中')}
+                  </Button>
+                  <Button
+                    size='small'
+                    theme='light'
+                    onClick={() => alignCropVertically('bottom')}
+                  >
+                    {t('贴底')}
+                  </Button>
+                </Space>
+              ) : null}
             </div>
           </Space>
         ) : null}
