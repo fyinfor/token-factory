@@ -14,16 +14,17 @@ import (
 // ── TokenFactory 路由黏性 + 报错熔断 ─────────────────────────────
 //
 // 设计目标（对应用户需求「指定渠道后考虑缓存，多次报错才切换」）：
-//   - 黏性：某个 (归类 groupKey + group) 维度一旦选定渠道，后续相同维度复用同一渠道，
-//     避免每次请求抖动（仍按 TokenFactory 返回的有序候选作为候选集）。
-//   - 熔断：对 (维度, 渠道) 维护「连续报错计数」，达到阈值（默认 3）才摘除该黏性渠道、
+//   - 黏性：某个 (用户 + 路由模式 + 归类 groupKey + group) 维度一旦选定渠道，该用户后续相同维度复用同一渠道，
+//     避免每次请求抖动（仍按 TokenFactory 返回的有序候选作为候选集）；不同用户、不同路由模式互不影响。
+//   - 切换路由模式（如 weight → price）时黏性键变化，立即按新规则的首位候选重新选路。
+//   - 熔断：对 (用户, 路由模式, 维度, 渠道) 维护「连续报错计数」，达到阈值（默认 3）才摘除该黏性渠道、
 //     顺延到下一个候选；任意一次成功即清零，体现「连续」。
 //
 // 计数与绑定走 HybridCache（内存 + Redis），多实例下也能近似一致；TTL 控制窗口。
 
 const (
-	tfRouteStickyNamespace = "new-api:tf_route_sticky:v1"
-	tfRouteErrorNamespace  = "new-api:tf_route_error:v1"
+	tfRouteStickyNamespace = "new-api:tf_route_sticky:v3"
+	tfRouteErrorNamespace  = "new-api:tf_route_error:v3"
 
 	ginKeyTFRouteStickyKey = "tf_route_sticky_key"
 	ginKeyTFRouteChannelID = "tf_route_channel_id"
@@ -81,8 +82,15 @@ func getTFRouteErrorCache() *cachex.HybridCache[int] {
 	return tfRouteErrorCache
 }
 
-func tfStickyKey(groupKey, group string) string {
-	return groupKey + "#" + group
+func tfStickyKey(groupKey, group, strategy string, userID int) string {
+	return fmt.Sprintf("%s#%s#%s#u%d", groupKey, group, strategy, userID)
+}
+
+func tfRouteUserID(c *gin.Context) int {
+	if c == nil {
+		return 0
+	}
+	return c.GetInt("id")
 }
 
 func tfErrorKey(stickyKey string, channelID int) string {
@@ -146,12 +154,13 @@ func tfRouteErrorLock(key string) *sync.Mutex {
 //  2. 否则取首个「启用且未达阈值」的候选，写入黏性。
 //  3. 若全部达阈值，则取首个启用候选并清零其计数（保证可用，给予新机会）。
 //
+// strategy 为 TokenFactory 返回的路由模式（如 weight / price），纳入黏性键以便切换模式后立即生效。
 // isEnabled 由调用方提供（校验渠道是否仍启用）。同时把选择写入 gin 上下文供成功/失败反馈使用。
-func TFRoutePickChannel(c *gin.Context, groupKey, group string, orderedIDs []int, isEnabled func(int) bool) (int, bool) {
+func TFRoutePickChannel(c *gin.Context, groupKey, group, strategy string, orderedIDs []int, isEnabled func(int) bool) (int, bool) {
 	if len(orderedIDs) == 0 {
 		return 0, false
 	}
-	stickyKey := tfStickyKey(groupKey, group)
+	stickyKey := tfStickyKey(groupKey, group, strategy, tfRouteUserID(c))
 	threshold := common.TokenFactoryRouteErrorThreshold()
 
 	inOrder := func(id int) bool {
