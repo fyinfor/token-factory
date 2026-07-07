@@ -296,6 +296,7 @@ const EditChannelModal = (props) => {
     tencent_vod_secret_id: '',
     tencent_vod_secret_key: '',
     tencent_vod_region: '',
+    model_rate_limits: [],
   };
   const [batch, setBatch] = useState(false);
   const [multiToSingle, setMultiToSingle] = useState(false);
@@ -628,6 +629,41 @@ const EditChannelModal = (props) => {
     settings[key] = value;
     const settingsJson = JSON.stringify(settings);
     handleInputChange('settings', settingsJson);
+  };
+
+  const modelRateLimitModelOptions = useMemo(() => {
+    const models = Array.isArray(inputs.models) ? inputs.models : [];
+    return models.map((modelName) => ({
+      label: modelName,
+      value: modelName,
+    }));
+  }, [inputs.models]);
+
+  const updateModelRateLimitRule = (index, patch) => {
+    setInputs((prev) => {
+      const nextRules = [...(prev.model_rate_limits || [])];
+      nextRules[index] = { ...nextRules[index], ...patch };
+      return { ...prev, model_rate_limits: nextRules };
+    });
+  };
+
+  const addModelRateLimitRule = () => {
+    setInputs((prev) => ({
+      ...prev,
+      model_rate_limits: [
+        ...(prev.model_rate_limits || []),
+        { model: '', rpm: 500, burst: 0, enabled: true },
+      ],
+    }));
+  };
+
+  const removeModelRateLimitRule = (index) => {
+    setInputs((prev) => ({
+      ...prev,
+      model_rate_limits: (prev.model_rate_limits || []).filter(
+        (_, itemIndex) => itemIndex !== index,
+      ),
+    }));
   };
 
   const applyClipboardConfig = (config) => {
@@ -1119,6 +1155,14 @@ const EditChannelModal = (props) => {
           )
             ? parsedSettings.upstream_model_update_ignored_models.join(',')
             : '';
+          data.model_rate_limits = Array.isArray(parsedSettings.model_rate_limits)
+            ? parsedSettings.model_rate_limits.map((item) => ({
+                model: String(item?.model || '').trim(),
+                rpm: Number(item?.rpm) || 0,
+                burst: Number(item?.burst) || 0,
+                enabled: item?.enabled !== false,
+              }))
+            : [];
         } catch (error) {
           console.error('解析其他设置失败:', error);
           data.azure_responses_version = '';
@@ -1137,6 +1181,7 @@ const EditChannelModal = (props) => {
           data.upstream_model_update_last_check_time = 0;
           data.upstream_model_update_last_detected_models = [];
           data.upstream_model_update_ignored_models = '';
+          data.model_rate_limits = [];
         }
       } else {
         // 兼容历史数据：老渠道没有 settings 时，默认按 json 展示
@@ -1154,6 +1199,7 @@ const EditChannelModal = (props) => {
         data.upstream_model_update_last_check_time = 0;
         data.upstream_model_update_last_detected_models = [];
         data.upstream_model_update_ignored_models = '';
+        data.model_rate_limits = [];
       }
 
       if (
@@ -1271,7 +1317,8 @@ const EditChannelModal = (props) => {
         data.pass_through_body_enabled ||
         data.force_format ||
         data.claude_beta_query ||
-        data.system_prompt_override;
+        data.system_prompt_override ||
+        (Array.isArray(data.model_rate_limits) && data.model_rate_limits.length > 0);
       if (hasAdvancedValues) {
         setAdvancedSettingsOpen(true);
       }
@@ -1870,6 +1917,7 @@ const EditChannelModal = (props) => {
     const formValues = formApiRef.current ? formApiRef.current.getValues() : {};
     let localInputs = { ...formValues };
     localInputs.param_override = inputs.param_override;
+    localInputs.model_rate_limits = inputs.model_rate_limits || [];
 
     if (localInputs.type === 57) {
       if (batch) {
@@ -2112,6 +2160,30 @@ const EditChannelModal = (props) => {
       return;
     }
 
+    const rawRateLimitRules = Array.isArray(localInputs.model_rate_limits)
+      ? localInputs.model_rate_limits
+      : [];
+    const seenRateLimitModels = new Set();
+    for (const rule of rawRateLimitRules) {
+      const modelName = String(rule?.model || '').trim();
+      const rpm = Number(rule?.rpm) || 0;
+      if (!modelName && rpm > 0) {
+        showError(t('模型 RPM 限流规则需选择模型'));
+        return;
+      }
+      if (modelName && rpm <= 0) {
+        showError(t('模型 RPM 限流规则的 RPM 必须大于 0'));
+        return;
+      }
+      if (modelName) {
+        if (seenRateLimitModels.has(modelName)) {
+          showError(t('模型 RPM 限流规则中存在重复模型'));
+          return;
+        }
+        seenRateLimitModels.add(modelName);
+      }
+    }
+
     // 生成渠道额外设置JSON
     const channelExtraSettings = {
       force_format: localInputs.force_format || false,
@@ -2191,6 +2263,18 @@ const EditChannelModal = (props) => {
       settings.upstream_model_update_last_check_time = 0;
     }
 
+    settings.model_rate_limits = (Array.isArray(localInputs.model_rate_limits)
+      ? localInputs.model_rate_limits
+      : []
+    )
+      .map((item) => ({
+        model: String(item?.model || '').trim(),
+        rpm: Number(item?.rpm) || 0,
+        burst: Math.max(0, Number(item?.burst) || 0),
+        enabled: item?.enabled !== false,
+      }))
+      .filter((item) => item.model && item.rpm > 0);
+
     localInputs.settings = JSON.stringify(settings);
 
     // 清理不需要发送到后端的字段
@@ -2221,6 +2305,7 @@ const EditChannelModal = (props) => {
     delete localInputs.upstream_model_update_last_check_time;
     delete localInputs.upstream_model_update_last_detected_models;
     delete localInputs.upstream_model_update_ignored_models;
+    delete localInputs.model_rate_limits;
 
     let res;
     localInputs.auto_ban = localInputs.auto_ban ? 1 : 0;
@@ -2740,6 +2825,103 @@ const EditChannelModal = (props) => {
                     </div>
                   </div>
                 )}
+
+                <div className='py-3 border-b border-gray-100'>
+                  <div className='flex items-center justify-between gap-2 mb-3'>
+                    <Text className='text-sm font-medium text-gray-500'>
+                      {t('模型 RPM 限流')}
+                    </Text>
+                    <Button size='small' type='primary' onClick={addModelRateLimitRule}>
+                      {t('添加规则')}
+                    </Button>
+                  </div>
+                  <Banner
+                    type='info'
+                    description={t(
+                      '按渠道+模型限制全平台请求频率（所有用户共享配额）。RPM 为每分钟持续速率；突发为分钟级额外额度，瞬时最多可连续请求 RPM+突发 次，之后按 RPM 匀速恢复。突发填 0 时仅按 RPM 做 60 秒滑动窗口限流。',
+                    )}
+                    style={{ marginBottom: 12 }}
+                  />
+                  {(inputs.model_rate_limits || []).length === 0 ? (
+                    <Text type='tertiary' size='small'>
+                      {t('未配置模型 RPM 限流')}
+                    </Text>
+                  ) : (
+                    <div className='space-y-3'>
+                      {(inputs.model_rate_limits || []).map((rule, index) => (
+                        <div
+                          key={`model-rate-limit-${index}`}
+                          className='rounded-xl p-3'
+                          style={{
+                            backgroundColor: 'var(--semi-color-fill-0)',
+                            border: '1px solid var(--semi-color-fill-2)',
+                          }}
+                        >
+                          <Row gutter={12}>
+                            <Col xs={24} sm={10}>
+                              <div className='mb-1 text-sm'>{t('模型')}</div>
+                              <Input
+                                value={rule.model || ''}
+                                placeholder={t('选择或输入模型名')}
+                                list={`model-rate-limit-models-${index}`}
+                                onChange={(value) =>
+                                  updateModelRateLimitRule(index, {
+                                    model: value,
+                                  })
+                                }
+                              />
+                              <datalist id={`model-rate-limit-models-${index}`}>
+                                {modelRateLimitModelOptions.map((option) => (
+                                  <option
+                                    key={option.value}
+                                    value={option.value}
+                                  />
+                                ))}
+                              </datalist>
+                            </Col>
+                            <Col xs={12} sm={5}>
+                              <div className='mb-1 text-sm'>RPM</div>
+                              <Input
+                                value={String(rule.rpm ?? '')}
+                                placeholder='500'
+                                onChange={(value) =>
+                                  updateModelRateLimitRule(index, {
+                                    rpm: Number(value) || 0,
+                                  })
+                                }
+                              />
+                            </Col>
+                            <Col xs={12} sm={5}>
+                              <div className='mb-1 text-sm'>{t('突发 (可选)')}</div>
+                              <Input
+                                value={String(rule.burst ?? '')}
+                                placeholder='0'
+                                extraText={t(
+                                  '分钟级额外额度；与 RPM 相加为瞬时最多连续请求数',
+                                )}
+                                onChange={(value) =>
+                                  updateModelRateLimitRule(index, {
+                                    burst: Math.max(0, Number(value) || 0),
+                                  })
+                                }
+                              />
+                            </Col>
+                            <Col xs={24} sm={4} className='flex items-end'>
+                              <Button
+                                type='danger'
+                                theme='light'
+                                block
+                                onClick={() => removeModelRateLimitRule(index)}
+                              >
+                                {t('删除')}
+                              </Button>
+                            </Col>
+                          </Row>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
 
                 {/* Request Config Section */}
                 <div className='py-3 border-b border-gray-100'>
