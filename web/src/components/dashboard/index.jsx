@@ -173,12 +173,6 @@ const Dashboard = () => {
         CHART_CONFIG={CHART_CONFIG}
       />
 
-      <PerfOverviewPanel CARD_PROPS={CARD_PROPS} t={dashboardData.t} />
-
-      {userIsDistributorUser(userState?.user) ? (
-        <DistributorAnalyticsBoard />
-      ) : null}
-
       {/* 系统公告和 API 信息 */}
       {(dashboardData.announcementsEnabled ||
         dashboardData.hasApiInfoPanel) && (
@@ -211,6 +205,12 @@ const Dashboard = () => {
         </div>
       )}
 
+      {userIsDistributorUser(userState?.user) ? (
+        <DistributorAnalyticsBoard />
+      ) : null}
+
+      <PerfOverviewPanel CARD_PROPS={CARD_PROPS} t={dashboardData.t} />
+
       {/* 图表面板 */}
       <ChartsPanel
         activeChartTab={dashboardData.activeChartTab}
@@ -225,6 +225,8 @@ const Dashboard = () => {
         hasApiInfoPanel={false}
         t={dashboardData.t}
       />
+
+      
 
       {/* 常见问答和可用性监控卡片 */}
       {(dashboardData.faqEnabled || dashboardData.uptimeEnabled) && (
