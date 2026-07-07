@@ -18,8 +18,9 @@ name: Deploy to Servers
 #     ├─ /home/ubuntu/token-factory
 #     └─ /home/ubuntu/token-factory-123-tok
 #
-# Server A: GHCR pull → up → 健康检查 → 清理
-# Server B: ACR login → pull → up → 健康检查 → 清理
+# 手动触发可选部署目标（默认两台都部署）:
+#   deploy_server_a → 112 HK
+#   deploy_server_b → 105 Tencent
 # ============================================================================
 
 on:
@@ -30,6 +31,14 @@ on:
         required: true
         default: 'latest'
         type: string
+      deploy_server_a:
+        description: '部署到 112 HK 国际站 (43.132.223.112)'
+        type: boolean
+        default: true
+      deploy_server_b:
+        description: '部署到 105 Tencent 国内站 (43.138.142.105)'
+        type: boolean
+        default: true
 
 env:
   REGISTRY_GHCR: ghcr.io
@@ -42,11 +51,23 @@ env:
 # 注意: 此处仅作为文档说明, 实际脚本内联在 job 中
 
 jobs:
+  validate-inputs:
+    name: Validate deploy targets
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require at least one server
+        if: ${{ github.event.inputs.deploy_server_a != 'true' && github.event.inputs.deploy_server_b != 'true' }}
+        run: |
+          echo "::error::请至少勾选一台服务器（112 或 105）"
+          exit 1
+
   # ═════════════════════════════════════════════════════════════════════════
   # 服务器 A: 43.132.223.112  (SSH Key 认证)
   # ═════════════════════════════════════════════════════════════════════════
   deploy-server-a:
     name: Deploy → 43.132.223.112
+    needs: validate-inputs
+    if: ${{ github.event.inputs.deploy_server_a == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -184,6 +205,8 @@ jobs:
   # ═════════════════════════════════════════════════════════════════════════
   deploy-server-b:
     name: Deploy → 43.138.142.105
+    needs: validate-inputs
+    if: ${{ github.event.inputs.deploy_server_b == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
