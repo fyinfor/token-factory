@@ -48,11 +48,7 @@ func resolveRelayPriceData(c *gin.Context, relayInfo *relaycommon.RelayInfo, tok
 			return priceData, nil
 		}
 		if hasImageTable {
-			matchName := relayInfo.OriginModelName
-			return types.PriceData{}, fmt.Errorf(
-				"图片模型 %s 已配置按张分辨率价格，但未能匹配有效价格，请检查文生图/图生图规则或兜底每张价；Image model %s per-image pricing configured but no price matched",
-				matchName, matchName,
-			)
+			return types.PriceData{}, helper.ImageModelPriceMatchError(c, channelID, relayInfo)
 		}
 		return helper.ModelPriceHelperForImageFallback(c, relayInfo, tokens, meta)
 	}
