@@ -36,7 +36,7 @@ func GetTopUpInfo(c *gin.Context) {
 	payMethods := operation_setting.PayMethods
 
 	// 如果启用了 Stripe 支付，添加到支付方法列表
-	if setting.StripeApiSecret != "" && setting.StripeWebhookSecret != "" && setting.StripePriceId != "" {
+	if setting.StripeApiSecret != "" && setting.StripeWebhookSecret != "" {
 		// 检查是否已经包含 Stripe
 		hasStripe := false
 		for _, method := range payMethods {
@@ -87,6 +87,12 @@ func GetTopUpInfo(c *gin.Context) {
 		}
 	}
 
+	enableUcoin := setting.UcoinEnabled &&
+		setting.UcoinBaseUrl != "" &&
+		setting.UcoinMerchantId != "" &&
+		setting.UcoinApiKey != "" &&
+		len(setting.GetUcoinCoinPairs()) > 0
+
 	data := gin.H{
 		"enable_online_topup": (operation_setting.OnlinePayProvider == "yipay" &&
 			(operation_setting.YipayRequestURL != "" || operation_setting.PayAddress != "") &&
@@ -97,7 +103,7 @@ func GetTopUpInfo(c *gin.Context) {
 				operation_setting.PayAddress != "" &&
 				operation_setting.EpayId != "" &&
 				operation_setting.EpayKey != ""),
-		"enable_stripe_topup": setting.StripeApiSecret != "" && setting.StripeWebhookSecret != "" && setting.StripePriceId != "",
+		"enable_stripe_topup": setting.StripeApiSecret != "" && setting.StripeWebhookSecret != "",
 		"enable_creem_topup":  setting.CreemApiKey != "" && setting.CreemProducts != "[]",
 		"enable_waffo_topup":  enableWaffo,
 		"waffo_pay_methods": func() interface{} {
@@ -111,6 +117,14 @@ func GetTopUpInfo(c *gin.Context) {
 		"min_topup":           operation_setting.MinTopUp,
 		"stripe_min_topup":    setting.StripeMinTopUp,
 		"waffo_min_topup":     setting.WaffoMinTopUp,
+		"enable_ubcoin_topup": enableUcoin,
+		"ubcoin_min_topup":    setting.UcoinMinTopUp,
+		"ubcoin_coin_pairs": func() interface{} {
+			if enableUcoin {
+				return setting.GetUcoinCoinPairs()
+			}
+			return nil
+		}(),
 		"amount_options":      operation_setting.GetPaymentSetting().AmountOptions,
 		"discount":            operation_setting.GetPaymentSetting().AmountDiscount,
 		"online_pay_provider": operation_setting.OnlinePayProvider,
@@ -119,12 +133,12 @@ func GetTopUpInfo(c *gin.Context) {
 }
 
 type EpayRequest struct {
-	Amount        int64  `json:"amount"`
-	PaymentMethod string `json:"payment_method"`
+	Amount        float64 `json:"amount"`
+	PaymentMethod string  `json:"payment_method"`
 }
 
 type AmountRequest struct {
-	Amount int64 `json:"amount"`
+	Amount float64 `json:"amount"`
 }
 
 // buildUserEpayNotifyURL 规范化用户充值异步回调地址，避免重复拼接 notify 路径。
@@ -194,7 +208,7 @@ func parseYipayUnifiedOrderData(yipayResp map[string]any) (map[string]any, error
 		return nil, fmt.Errorf("data 字段为空")
 	}
 	var m map[string]any
-	if err := json.Unmarshal([]byte(s), &m); err != nil {
+	if err := common.Unmarshal([]byte(s), &m); err != nil {
 		return nil, fmt.Errorf("data JSON 字符串解析失败: %w", err)
 	}
 	return m, nil
@@ -270,9 +284,9 @@ func yipayCoerceValueToHTTPURL(v any, depth int) string {
 		st := strings.TrimSpace(s)
 		if strings.HasPrefix(st, "{") || strings.HasPrefix(st, "[") {
 			var raw json.RawMessage
-			if err := json.Unmarshal([]byte(s), &raw); err == nil {
+			if err := common.Unmarshal([]byte(s), &raw); err == nil {
 				var obj map[string]any
-				if err := json.Unmarshal(raw, &obj); err == nil {
+				if err := common.Unmarshal(raw, &obj); err == nil {
 					if u := yipayExtractHTTPURLFromMap(obj, depth+1); u != "" {
 						return u
 					}
@@ -393,7 +407,7 @@ func yipayJeepayDefaultChannelExtra(wayCode string, returnURL string) string {
 		if ret == "" {
 			ret = "http://127.0.0.1/console/log"
 		}
-		b, err := json.Marshal(map[string]string{
+		b, err := common.Marshal(map[string]string{
 			"payDataType": "payUrl",
 			"cancelUrl":   ret,
 		})
@@ -419,11 +433,11 @@ func mergeYipayJeepayChannelExtra(userJSON string, wayCode string, returnURL str
 		return userJSON
 	}
 	var u map[string]any
-	if err := json.Unmarshal([]byte(userJSON), &u); err != nil {
+	if err := common.Unmarshal([]byte(userJSON), &u); err != nil {
 		return userJSON
 	}
 	var d map[string]any
-	if err := json.Unmarshal([]byte(def), &d); err != nil {
+	if err := common.Unmarshal([]byte(def), &d); err != nil {
 		return userJSON
 	}
 	for k, v := range d {
@@ -431,7 +445,7 @@ func mergeYipayJeepayChannelExtra(userJSON string, wayCode string, returnURL str
 			u[k] = v
 		}
 	}
-	out, err := json.Marshal(u)
+	out, err := common.Marshal(u)
 	if err != nil {
 		return userJSON
 	}
@@ -471,7 +485,7 @@ func yipayJeepayAmountMinorAndCurrency(payMoney float64, wayCode string) (minor 
 }
 
 // requestYipayOrder 按 Yipay OpenAPI 创建统一下单请求。
-func requestYipayOrder(req EpayRequest, id int, payMoney float64, paymentMethod string) (string, map[string]string, error) {
+func requestYipayOrder(req EpayRequest, id int, quote *topupQuote, paymentMethod string) (string, map[string]string, error) {
 	requestURL := operation_setting.YipayRequestURL
 	if requestURL == "" {
 		requestURL = operation_setting.PayAddress
@@ -494,7 +508,7 @@ func requestYipayOrder(req EpayRequest, id int, payMoney float64, paymentMethod 
 	}
 	tradeNo := fmt.Sprintf("%s%d", common.GetRandomString(6), time.Now().Unix())
 	tradeNo = fmt.Sprintf("USR%dNO%s", id, tradeNo)
-	amountMinor, orderCurrency := yipayJeepayAmountMinorAndCurrency(payMoney, paymentMethod)
+	amountMinor, orderCurrency := yipayJeepayAmountMinorAndCurrency(quote.PayAmount, paymentMethod)
 	reqTime := strconv.FormatInt(time.Now().UnixMilli(), 10)
 	chExtra := mergeYipayJeepayChannelExtra(strings.TrimSpace(operation_setting.YipayChannelExtra), paymentMethod, returnURLString)
 	params := map[string]string{
@@ -505,8 +519,8 @@ func requestYipayOrder(req EpayRequest, id int, payMoney float64, paymentMethod 
 		"amount":     strconv.FormatInt(amountMinor, 10),
 		"currency":   strings.ToLower(orderCurrency),
 		"clientIp":   "127.0.0.1",
-		"subject":    fmt.Sprintf("TUC%d", req.Amount),
-		"body":       fmt.Sprintf("TUC%d", req.Amount),
+		"subject":    fmt.Sprintf("TUC%.2f", req.Amount),
+		"body":       fmt.Sprintf("TUC%.2f", req.Amount),
 		"notifyUrl":  notifyURLString,
 		"returnUrl":  returnURLString,
 		"reqTime":    reqTime,
@@ -521,7 +535,7 @@ func requestYipayOrder(req EpayRequest, id int, payMoney float64, paymentMethod 
 		"[Yipay] unifiedOrder params: mchNo=%q(len=%d,trimChanged=%t), appId=%q(len=%d,trimChanged=%t), wayCode=%q, amountMinor=%s currency=%s payMoneyCNY=%.4f channelExtra=%q, notifyUrl=%q, returnUrl=%q, reqTime=%q",
 		params["mchNo"], len(params["mchNo"]), strings.TrimSpace(params["mchNo"]) != params["mchNo"],
 		params["appId"], len(params["appId"]), strings.TrimSpace(params["appId"]) != params["appId"],
-		params["wayCode"], params["amount"], params["currency"], payMoney, chExtra, params["notifyUrl"], params["returnUrl"], params["reqTime"],
+		params["wayCode"], params["amount"], params["currency"], quote.PayAmount, chExtra, params["notifyUrl"], params["returnUrl"], params["reqTime"],
 	))
 	params["sign"] = signYipayMD5(params, operation_setting.YipayAppSecret)
 	requestJSON, err := common.Marshal(params)
@@ -587,16 +601,14 @@ func requestYipayOrder(req EpayRequest, id int, payMoney float64, paymentMethod 
 		return "", nil, extractErr
 	}
 	payURL = strings.TrimSpace(payURL)
-	amount := req.Amount
-	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
-		dAmount := decimal.NewFromInt(int64(amount))
-		dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
-		amount = dAmount.Div(dQuotaPerUnit).IntPart()
-	}
 	topUp := &model.TopUp{
 		UserId:        id,
-		Amount:        amount,
-		Money:         payMoney,
+		Amount:        req.Amount,
+		Money:         quote.PayAmount,
+		InputAmount:   quote.InputAmount,
+		InputCurrency: quote.InputCurrency,
+		PayCurrency:   strings.ToUpper(orderCurrency),
+		QuotaToAdd:    quote.QuotaToAdd,
 		TradeNo:       tradeNo,
 		PaymentMethod: paymentMethod,
 		CreateTime:    time.Now().Unix(),
@@ -623,44 +635,118 @@ func GetEpayClient() *epay.Client {
 	return withUrl
 }
 
-func getPayMoney(amount int64, group string) float64 {
-	dAmount := decimal.NewFromInt(amount)
-	// 充值金额以“展示类型”为准：
-	// - USD/CNY: 前端传 amount 为金额单位；TOKENS: 前端传 tokens，需要换成 USD 金额
-	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
-		dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
-		dAmount = dAmount.Div(dQuotaPerUnit)
+const (
+	topupCurrencyUSD = "USD"
+	topupCurrencyCNY = "CNY"
+)
+
+type topupQuote struct {
+	InputAmount   float64 `json:"input_amount"`
+	InputCurrency string  `json:"input_currency"`
+	PayAmount     float64 `json:"pay_amount"`
+	PayCurrency   string  `json:"pay_currency"`
+	QuotaToAdd    int     `json:"quota_to_add"`
+	ChargedUSD    float64 `json:"charged_usd"`
+	GroupRatio    float64 `json:"group_ratio"`
+	Discount      float64 `json:"discount"`
+}
+
+func normalizeTopupCurrency(currency string) string {
+	switch strings.ToUpper(strings.TrimSpace(currency)) {
+	case topupCurrencyCNY:
+		return topupCurrencyCNY
+	default:
+		return topupCurrencyUSD
+	}
+}
+
+func getRechargeInputCurrency() string {
+	displayType := operation_setting.GetQuotaDisplayType()
+	switch displayType {
+	case operation_setting.QuotaDisplayTypeCNY:
+		return topupCurrencyCNY
+	case operation_setting.QuotaDisplayTypeUSD:
+		return topupCurrencyUSD
+	case operation_setting.QuotaDisplayTypeTokens:
+		return normalizeTopupCurrency(operation_setting.GetGeneralSetting().RechargeDisplayCurrency)
+	default:
+		return normalizeTopupCurrency(operation_setting.GetGeneralSetting().RechargeDisplayCurrency)
+	}
+}
+
+func getRechargePriceRate() decimal.Decimal {
+	rate := operation_setting.Price
+	if rate <= 0 {
+		rate = operation_setting.USDExchangeRate
+	}
+	if rate <= 0 {
+		rate = 7.3
+	}
+	return decimal.NewFromFloat(rate)
+}
+
+func getTopupDiscount(amount float64) decimal.Decimal {
+	discount := 1.0
+	if ds, ok := operation_setting.GetPaymentSetting().AmountDiscount[int(math.Round(amount))]; ok && ds > 0 {
+		discount = ds
+	}
+	return decimal.NewFromFloat(discount)
+}
+
+func buildTopupQuote(amount float64, group string, payCurrency string) (*topupQuote, error) {
+	if amount <= 0 {
+		return nil, fmt.Errorf("充值数量不能小于 %d", getMinTopup())
+	}
+	dAmount := decimal.NewFromFloat(amount)
+	inputCurrency := getRechargeInputCurrency()
+	targetCurrency := normalizeTopupCurrency(payCurrency)
+	rate := getRechargePriceRate()
+
+	inputUSD := dAmount
+	if inputCurrency == topupCurrencyCNY {
+		inputUSD = dAmount.Div(rate)
 	}
 
 	topupGroupRatio := common.GetTopupGroupRatio(group)
-	if topupGroupRatio == 0 {
+	if topupGroupRatio <= 0 || math.IsNaN(topupGroupRatio) || math.IsInf(topupGroupRatio, 0) {
 		topupGroupRatio = 1
 	}
-
 	dTopupGroupRatio := decimal.NewFromFloat(topupGroupRatio)
-	dPrice := decimal.NewFromFloat(operation_setting.Price)
-	// apply optional preset discount by the original request amount (if configured), default 1.0
-	discount := 1.0
-	if ds, ok := operation_setting.GetPaymentSetting().AmountDiscount[int(amount)]; ok {
-		if ds > 0 {
-			discount = ds
+	dDiscount := getTopupDiscount(amount)
+	if dDiscount.LessThanOrEqual(decimal.Zero) {
+		dDiscount = decimal.NewFromInt(1)
+	}
+
+	chargedUSD := inputUSD.Div(dTopupGroupRatio).Div(dDiscount)
+	dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+	quotaToAdd := int(chargedUSD.Mul(dQuotaPerUnit).IntPart())
+	if quotaToAdd <= 0 {
+		return nil, fmt.Errorf("充值金额过低")
+	}
+
+	payAmount := dAmount
+	if targetCurrency != inputCurrency {
+		if targetCurrency == topupCurrencyCNY {
+			payAmount = inputUSD.Mul(rate)
+		} else {
+			payAmount = inputUSD
 		}
 	}
-	dDiscount := decimal.NewFromFloat(discount)
 
-	payMoney := dAmount.Mul(dPrice).Mul(dTopupGroupRatio).Mul(dDiscount)
-
-	return payMoney.InexactFloat64()
+	return &topupQuote{
+		InputAmount:   amount,
+		InputCurrency: inputCurrency,
+		PayAmount:     payAmount.InexactFloat64(),
+		PayCurrency:   targetCurrency,
+		QuotaToAdd:    quotaToAdd,
+		ChargedUSD:    chargedUSD.InexactFloat64(),
+		GroupRatio:    topupGroupRatio,
+		Discount:      dDiscount.InexactFloat64(),
+	}, nil
 }
 
 func getMinTopup() int64 {
-	minTopup := operation_setting.MinTopUp
-	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
-		dMinTopup := decimal.NewFromInt(int64(minTopup))
-		dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
-		minTopup = int(dMinTopup.Mul(dQuotaPerUnit).IntPart())
-	}
-	return int64(minTopup)
+	return int64(operation_setting.MinTopUp)
 }
 
 func getMaxTopup(paymentMethod string) int64 {
@@ -668,16 +754,11 @@ func getMaxTopup(paymentMethod string) int64 {
 	if maxTopup <= 0 {
 		return 0
 	}
-	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
-		dMaxTopup := decimal.NewFromInt(maxTopup)
-		dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
-		maxTopup = dMaxTopup.Mul(dQuotaPerUnit).IntPart()
-	}
 	return maxTopup
 }
 
-func validateEpayTopupAmount(amount int64, paymentMethod string) string {
-	if maxTopup := getMaxTopup(paymentMethod); maxTopup > 0 && amount > maxTopup {
+func validateEpayTopupAmount(amount float64, paymentMethod string) string {
+	if maxTopup := getMaxTopup(paymentMethod); maxTopup > 0 && amount > float64(maxTopup) {
 		return fmt.Sprintf("充值数量不能大于 %d", maxTopup)
 	}
 	return ""
@@ -691,7 +772,7 @@ func RequestEpay(c *gin.Context) {
 		c.JSON(200, gin.H{"message": "error", "data": "参数错误"})
 		return
 	}
-	if req.Amount < getMinTopup() {
+	if req.Amount < float64(getMinTopup()) {
 		c.JSON(200, gin.H{"message": "error", "data": fmt.Sprintf("充值数量不能小于 %d", getMinTopup())})
 		return
 	}
@@ -708,8 +789,12 @@ func RequestEpay(c *gin.Context) {
 		c.JSON(200, gin.H{"message": "error", "data": "获取用户分组失败"})
 		return
 	}
-	payMoney := getPayMoney(req.Amount, group)
-	if payMoney < 0.01 {
+	quote, err := buildTopupQuote(req.Amount, group, topupCurrencyCNY)
+	if err != nil {
+		c.JSON(200, gin.H{"message": "error", "data": err.Error()})
+		return
+	}
+	if quote.PayAmount < 0.01 {
 		c.JSON(200, gin.H{"message": "error", "data": "充值金额过低"})
 		return
 	}
@@ -719,7 +804,7 @@ func RequestEpay(c *gin.Context) {
 		return
 	}
 	if operation_setting.OnlinePayProvider == "yipay" {
-		payURL, params, yipayErr := requestYipayOrder(req, id, payMoney, paymentMethod)
+		payURL, params, yipayErr := requestYipayOrder(req, id, quote, paymentMethod)
 		if yipayErr != nil {
 			c.JSON(200, gin.H{"message": "error", "data": yipayErr.Error()})
 			return
@@ -741,8 +826,8 @@ func RequestEpay(c *gin.Context) {
 	uri, params, err := client.Purchase(&epay.PurchaseArgs{
 		Type:           paymentMethod,
 		ServiceTradeNo: tradeNo,
-		Name:           fmt.Sprintf("TUC%d", req.Amount),
-		Money:          strconv.FormatFloat(payMoney, 'f', 2, 64),
+		Name:           fmt.Sprintf("TUC%.2f", req.Amount),
+		Money:          strconv.FormatFloat(quote.PayAmount, 'f', 2, 64),
 		Device:         epay.PC,
 		NotifyUrl:      notifyUrl,
 		ReturnUrl:      returnUrl,
@@ -751,16 +836,14 @@ func RequestEpay(c *gin.Context) {
 		c.JSON(200, gin.H{"message": "error", "data": "拉起支付失败"})
 		return
 	}
-	amount := req.Amount
-	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
-		dAmount := decimal.NewFromInt(int64(amount))
-		dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
-		amount = dAmount.Div(dQuotaPerUnit).IntPart()
-	}
 	topUp := &model.TopUp{
 		UserId:        id,
-		Amount:        amount,
-		Money:         payMoney,
+		Amount:        req.Amount,
+		Money:         quote.PayAmount,
+		InputAmount:   quote.InputAmount,
+		InputCurrency: quote.InputCurrency,
+		PayCurrency:   quote.PayCurrency,
+		QuotaToAdd:    quote.QuotaToAdd,
 		TradeNo:       tradeNo,
 		PaymentMethod: paymentMethod,
 		CreateTime:    time.Now().Unix(),
@@ -814,6 +897,40 @@ func UnlockOrder(tradeNo string) {
 		orderLocks.Delete(tradeNo)
 	}
 	createLock.Unlock()
+}
+
+func validateYipayTopupPaidAmount(params map[string]string, topUp *model.TopUp) error {
+	rawAmount := strings.TrimSpace(params["amount"])
+	if rawAmount == "" || topUp == nil {
+		return nil
+	}
+	paidMinor, err := strconv.ParseInt(rawAmount, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid callback amount: %s", rawAmount)
+	}
+	expectedMinor, expectedCurrency := yipayJeepayAmountMinorAndCurrency(topUp.Money, topUp.PaymentMethod)
+	if paidMinor != expectedMinor {
+		return fmt.Errorf("paid amount mismatch: expect %d, got %d", expectedMinor, paidMinor)
+	}
+	if rawCurrency := strings.TrimSpace(params["currency"]); rawCurrency != "" && !strings.EqualFold(rawCurrency, expectedCurrency) {
+		return fmt.Errorf("paid currency mismatch: expect %s, got %s", expectedCurrency, rawCurrency)
+	}
+	return nil
+}
+
+func validateEpayTopupPaidAmount(verifyInfo *epay.VerifyRes, topUp *model.TopUp) error {
+	if verifyInfo == nil || topUp == nil || strings.TrimSpace(verifyInfo.Money) == "" {
+		return nil
+	}
+	paidMoney, err := decimal.NewFromString(strings.TrimSpace(verifyInfo.Money))
+	if err != nil {
+		return fmt.Errorf("invalid callback money: %s", verifyInfo.Money)
+	}
+	expectedMoney := decimal.NewFromFloat(topUp.Money)
+	if expectedMoney.Sub(paidMoney).Abs().GreaterThan(decimal.NewFromFloat(0.01)) {
+		return fmt.Errorf("paid money mismatch: expect %s, got %s", expectedMoney.StringFixed(2), paidMoney.StringFixed(2))
+	}
+	return nil
 }
 
 func EpayNotify(c *gin.Context) {
@@ -889,16 +1006,24 @@ func EpayNotify(c *gin.Context) {
 			_, _ = c.Writer.Write([]byte("fail"))
 			return
 		}
+		if err := validateYipayTopupPaidAmount(params, topUp); err != nil {
+			log.Printf("Yipay 回调金额校验失败，mchOrderNo=%s, err=%v", tradeNo, err)
+			_, _ = c.Writer.Write([]byte("fail"))
+			return
+		}
 		if topUp.Status == "pending" {
+			quotaToAdd := topUp.ResolveQuotaToAdd()
+			if quotaToAdd <= 0 {
+				log.Printf("Yipay 回调订单充值额度无效: %v", topUp)
+				_, _ = c.Writer.Write([]byte("fail"))
+				return
+			}
 			topUp.Status = "success"
 			if err := topUp.Update(); err != nil {
 				log.Printf("Yipay 回调更新订单失败: %v", topUp)
 				_, _ = c.Writer.Write([]byte("fail"))
 				return
 			}
-			dAmount := decimal.NewFromInt(int64(topUp.Amount))
-			dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
-			quotaToAdd := int(dAmount.Mul(dQuotaPerUnit).IntPart())
 			if err := model.IncreaseUserQuota(topUp.UserId, quotaToAdd, true); err != nil {
 				log.Printf("Yipay 回调更新用户失败: %v", topUp)
 				_, _ = c.Writer.Write([]byte("fail"))
@@ -946,18 +1071,22 @@ func EpayNotify(c *gin.Context) {
 			log.Printf("易支付回调未找到订单: %v", verifyInfo)
 			return
 		}
+		if err := validateEpayTopupPaidAmount(verifyInfo, topUp); err != nil {
+			log.Printf("易支付回调金额校验失败: %v, err=%v", verifyInfo, err)
+			return
+		}
 		if topUp.Status == "pending" {
+			quotaToAdd := topUp.ResolveQuotaToAdd()
+			if quotaToAdd <= 0 {
+				log.Printf("易支付回调订单充值额度无效: %v", topUp)
+				return
+			}
 			topUp.Status = "success"
 			err := topUp.Update()
 			if err != nil {
 				log.Printf("易支付回调更新订单失败: %v", topUp)
 				return
 			}
-			//user, _ := model.GetUserById(topUp.UserId, false)
-			//user.Quota += topUp.Amount * 500000
-			dAmount := decimal.NewFromInt(int64(topUp.Amount))
-			dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
-			quotaToAdd := int(dAmount.Mul(dQuotaPerUnit).IntPart())
 			err = model.IncreaseUserQuota(topUp.UserId, quotaToAdd, true)
 			if err != nil {
 				log.Printf("易支付回调更新用户失败: %v", topUp)
@@ -981,7 +1110,7 @@ func RequestAmount(c *gin.Context) {
 		return
 	}
 
-	if req.Amount < getMinTopup() {
+	if req.Amount < float64(getMinTopup()) {
 		c.JSON(200, gin.H{"message": "error", "data": fmt.Sprintf("充值数量不能小于 %d", getMinTopup())})
 		return
 	}
@@ -991,12 +1120,16 @@ func RequestAmount(c *gin.Context) {
 		c.JSON(200, gin.H{"message": "error", "data": "获取用户分组失败"})
 		return
 	}
-	payMoney := getPayMoney(req.Amount, group)
-	if payMoney <= 0.01 {
+	quote, err := buildTopupQuote(req.Amount, group, topupCurrencyCNY)
+	if err != nil {
+		c.JSON(200, gin.H{"message": "error", "data": err.Error()})
+		return
+	}
+	if quote.PayAmount <= 0.01 {
 		c.JSON(200, gin.H{"message": "error", "data": "充值金额过低"})
 		return
 	}
-	c.JSON(200, gin.H{"message": "success", "data": strconv.FormatFloat(payMoney, 'f', 2, 64)})
+	c.JSON(200, gin.H{"message": "success", "data": quote})
 }
 
 // parseTopUpListStatusFilter 解析充值列表的 status 查询参数，仅允许预定义状态；非法或 all 视为不按状态筛选。

@@ -173,10 +173,7 @@ func Distribute() func(c *gin.Context) {
 						common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
 						logSelectedUpstream(c, channel, modelRequest.Model)
 						SetupContextForSelectedChannel(c, channel, modelRequest.Model)
-						c.Next()
-						if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
-							service.RecordChannelAffinity(c, channel.Id)
-						}
+						proceedRelayWithChannel(c, channel, modelRequest.Model)
 						return
 					}
 				}
@@ -213,7 +210,7 @@ func Distribute() func(c *gin.Context) {
 						common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
 						logSelectedUpstream(c, channel, modelRequest.Model, "tf_route")
 						SetupContextForSelectedChannel(c, channel, modelRequest.Model)
-						c.Next()
+						proceedRelayWithChannel(c, channel, modelRequest.Model)
 						return
 					}
 				}
@@ -233,10 +230,7 @@ func Distribute() func(c *gin.Context) {
 					common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
 					logSelectedUpstream(c, channel, modelRequest.Model)
 					SetupContextForSelectedChannel(c, channel, modelRequest.Model)
-					c.Next()
-					if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
-						service.RecordChannelAffinity(c, channel.Id)
-					}
+					proceedRelayWithChannel(c, channel, modelRequest.Model)
 					_ = selectGroup
 					return
 				}
@@ -325,10 +319,7 @@ func Distribute() func(c *gin.Context) {
 		common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
 		logSelectedUpstream(c, channel, modelRequest.Model)
 		SetupContextForSelectedChannel(c, channel, modelRequest.Model)
-		c.Next()
-		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
-			service.RecordChannelAffinity(c, channel.Id)
-		}
+		proceedRelayWithChannel(c, channel, modelRequest.Model)
 	}
 }
 
@@ -840,12 +831,12 @@ func tryTokenFactoryRoute(c *gin.Context, modelName string, group string) (*mode
 		ordered = append(ordered, int(id))
 	}
 
-	// 黏性 + 报错熔断选择：同一 (归类+group) 维度复用渠道，连续报错达阈值才顺延。
+	// 黏性 + 报错熔断选择：同一 (用户+路由模式+归类+group) 维度复用渠道；切换路由模式时黏性键变化，立即按新规则选路。
 	isEnabled := func(id int) bool {
 		ch, err := model.CacheGetChannel(id)
 		return err == nil && ch != nil && ch.Status == common.ChannelStatusEnabled
 	}
-	picked, ok := service.TFRoutePickChannel(c, groupKey, group, ordered, isEnabled)
+	picked, ok := service.TFRoutePickChannel(c, groupKey, group, strategy, ordered, isEnabled)
 	if !ok {
 		logger.LogInfo(c, "tf_route skip: 候选均不可用")
 		return nil, false

@@ -47,6 +47,7 @@ import { StatusContext } from '../../context/Status';
 import Text from '@douyinfe/semi-ui/lib/es/typography/text';
 import MarkdownRenderer from '../common/markdown/MarkdownRenderer';
 import SettingsSeedance from './SettingsSeedance';
+import HomeFooterCertificatesSetting from './HomeFooterCertificatesSetting';
 
 const LEGAL_USER_AGREEMENT_KEY = 'legal.user_agreement';
 const LEGAL_PRIVACY_POLICY_KEY = 'legal.privacy_policy';
@@ -942,6 +943,7 @@ const OtherSetting = () => {
               >
                 {t('设置首页内容')}
               </Button>
+              <HomeFooterCertificatesSetting />
               <Form.TextArea
                 label={t('关于')}
                 placeholder={t(

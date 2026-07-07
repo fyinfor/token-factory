@@ -35,7 +35,12 @@ import {
 } from '@douyinfe/semi-illustrations';
 import { Coins } from 'lucide-react';
 import { IconSearch } from '@douyinfe/semi-icons';
-import { API, timestamp2string, getPayMethodDisplayName } from '../../../helpers';
+import {
+  API,
+  timestamp2string,
+  getPayMethodDisplayName,
+  renderQuota,
+} from '../../../helpers';
 import { isAdmin } from '../../../helpers/utils';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import { StatusContext } from '../../../context/Status';
@@ -61,9 +66,21 @@ const TOPUP_STATUS_ALL = '__all__';
  * @param {number} usdExchangeRate 美元兑人民币汇率（与充值页 usd_exchange_rate / price 一致）
  * @returns {string}
  */
-function formatTopupPayMoney(money, paymentMethod, usdExchangeRate) {
+function formatTopupPayMoney(
+  money,
+  paymentMethod,
+  usdExchangeRate,
+  payCurrency,
+) {
   const numericMoney = Number(money);
   const safeMoney = Number.isFinite(numericMoney) ? numericMoney : 0;
+  const currency = String(payCurrency || '').toUpperCase();
+  if (currency === 'USD') {
+    return `$${safeMoney.toFixed(2)} USD`;
+  }
+  if (currency === 'CNY') {
+    return `¥${safeMoney.toFixed(2)}`;
+  }
   const rate =
     Number.isFinite(usdExchangeRate) && usdExchangeRate > 0
       ? usdExchangeRate
@@ -291,7 +308,11 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
           return (
             <span className='flex items-center gap-1'>
               <Coins size={16} />
-              <Text>{amount}</Text>
+              <Text>
+                {Number(record?.quota_to_add || 0) > 0
+                  ? renderQuota(record.quota_to_add)
+                  : amount}
+              </Text>
             </span>
           );
         },
@@ -307,6 +328,7 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
               money,
               record?.payment_method,
               usdExchangeRate,
+              record?.pay_currency,
             )}
           </Text>
         ),

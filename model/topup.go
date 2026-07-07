@@ -13,17 +13,41 @@ import (
 )
 
 type TopUp struct {
-	Id               int     `json:"id"`
-	UserId           int     `json:"user_id" gorm:"index"`
+	Id     int `json:"id"`
+	UserId int `json:"user_id" gorm:"index"`
 	// Username 列表接口填充，关联 users.username，仅 JSON 输出，不参与持久化（不使用 omitempty，便于前端始终拿到字段）
-	Username         string  `json:"username" gorm:"-"`
-	Amount           int64   `json:"amount"`
-	Money            float64 `json:"money"`
-	TradeNo          string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
-	PaymentMethod    string  `json:"payment_method" gorm:"type:varchar(50)"`
-	CreateTime       int64   `json:"create_time"`
-	CompleteTime     int64   `json:"complete_time"`
-	Status           string  `json:"status"`
+	Username       string  `json:"username" gorm:"-"`
+	Amount         float64 `json:"amount" gorm:"type:decimal(20,6);default:0"`
+	Money          float64 `json:"money"`
+	InputAmount    float64 `json:"input_amount" gorm:"default:0"`
+	InputCurrency  string  `json:"input_currency" gorm:"type:varchar(16);default:''"`
+	PayCurrency    string  `json:"pay_currency" gorm:"type:varchar(16);default:''"`
+	QuotaToAdd     int     `json:"quota_to_add" gorm:"default:0"`
+	TradeNo        string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
+	DepositAddress string  `json:"deposit_address" gorm:"type:varchar(255);index"`
+	PaymentMethod  string  `json:"payment_method" gorm:"type:varchar(50)"`
+	CreateTime     int64   `json:"create_time"`
+	CompleteTime   int64   `json:"complete_time"`
+	Status         string  `json:"status"`
+}
+
+func (topUp *TopUp) ResolveQuotaToAdd() int {
+	if topUp == nil {
+		return 0
+	}
+	if topUp.QuotaToAdd > 0 {
+		return topUp.QuotaToAdd
+	}
+	switch strings.ToLower(strings.TrimSpace(topUp.PaymentMethod)) {
+	case "stripe":
+		return common.QuotaFromUSD(topUp.Money)
+	case "creem":
+		return int(topUpAmountDecimal(topUp.Amount).IntPart())
+	default:
+		dAmount := topUpAmountDecimal(topUp.Amount)
+		dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+		return int(dAmount.Mul(dQuotaPerUnit).IntPart())
+	}
 }
 
 func (topUp *TopUp) Insert() error {
@@ -36,6 +60,14 @@ func (topUp *TopUp) Update() error {
 	var err error
 	err = DB.Save(topUp).Error
 	return err
+}
+
+func topUpAmountDecimal(v float64) decimal.Decimal {
+	return decimal.NewFromFloat(v)
+}
+
+func formatTopUpAmount(v float64) string {
+	return topUpAmountDecimal(v).String()
 }
 
 // fillTopUpUsernamesWithDB 为充值记录批量填充关联用户名（管理员全平台列表与当前用户本人充值列表均使用）。
@@ -99,12 +131,49 @@ func GetTopUpByTradeNo(tradeNo string) *TopUp {
 	return topUp
 }
 
+// GetPendingUcoinTopUpByDepositAddress 按收款地址查找待支付的 U币订单（地址大小写不敏感）。
+func GetPendingUcoinTopUpByDepositAddress(address string) *TopUp {
+	address = strings.TrimSpace(address)
+	if address == "" {
+		return nil
+	}
+	var topUp TopUp
+	err := DB.Where(
+		"payment_method = ? AND status = ? AND LOWER(deposit_address) = LOWER(?)",
+		"ubcoin",
+		common.TopUpStatusPending,
+		address,
+	).Order("id desc").First(&topUp).Error
+	if err != nil {
+		return nil
+	}
+	return &topUp
+}
+
+// GetPendingUcoinTopUpByUserId 查找用户最近一笔待支付的 U币订单。
+func GetPendingUcoinTopUpByUserId(userId int) *TopUp {
+	if userId <= 0 {
+		return nil
+	}
+	var topUp TopUp
+	err := DB.Where(
+		"user_id = ? AND payment_method = ? AND status = ?",
+		userId,
+		"ubcoin",
+		common.TopUpStatusPending,
+	).Order("id desc").First(&topUp).Error
+	if err != nil {
+		return nil
+	}
+	return &topUp
+}
+
 func Recharge(referenceId string, customerId string) (err error) {
 	if referenceId == "" {
 		return errors.New("未提供支付单号")
 	}
 
-	var quota float64
+	var quota int
 	topUp := &TopUp{}
 
 	refCol := "`trade_no`"
@@ -129,7 +198,10 @@ func Recharge(referenceId string, customerId string) (err error) {
 			return err
 		}
 
-		quota = topUp.Money * common.QuotaPerUnit
+		quota = topUp.ResolveQuotaToAdd()
+		if quota <= 0 {
+			return errors.New("无效的充值额度")
+		}
 		err = tx.Model(&User{}).Where("id = ?", topUp.UserId).Updates(map[string]interface{}{"stripe_customer": customerId, "quota": gorm.Expr("quota + ?", quota)}).Error
 		if err != nil {
 			return err
@@ -143,9 +215,9 @@ func Recharge(referenceId string, customerId string) (err error) {
 		return errors.New("充值失败，请稍后重试")
 	}
 
-	RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%d", logger.FormatQuota(int(quota)), topUp.Amount))
+	RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%s", logger.FormatQuota(int(quota)), formatTopUpAmount(topUp.Amount)))
 
-	ApplyAffiliateTopupReward(topUp.UserId, int(quota))
+	ApplyAffiliateTopupReward(topUp.UserId, quota)
 	return nil
 }
 
@@ -162,7 +234,7 @@ func RechargeStripe(referenceId string, customerId string, paidMoney float64, cu
 		return errors.New("不支持的支付币种")
 	}
 
-	var quota float64
+	var quota int
 	topUp := &TopUp{}
 
 	refCol := "`trade_no`"
@@ -197,7 +269,10 @@ func RechargeStripe(referenceId string, customerId string, paidMoney float64, cu
 			return err
 		}
 
-		quota = topUp.Money * common.QuotaPerUnit
+		quota = topUp.ResolveQuotaToAdd()
+		if quota <= 0 {
+			return errors.New("无效的充值额度")
+		}
 		err = tx.Model(&User{}).Where("id = ?", topUp.UserId).Updates(map[string]interface{}{"stripe_customer": customerId, "quota": gorm.Expr("quota + ?", quota)}).Error
 		if err != nil {
 			return err
@@ -211,7 +286,7 @@ func RechargeStripe(referenceId string, customerId string, paidMoney float64, cu
 		return errors.New("充值失败，请稍后重试")
 	}
 
-	RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%d", logger.FormatQuota(int(quota)), topUp.Amount))
+	RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%s", logger.FormatQuota(int(quota)), formatTopUpAmount(topUp.Amount)))
 	ApplyAffiliateTopupReward(topUp.UserId, int(quota))
 	return nil
 }
@@ -368,17 +443,7 @@ func ManualCompleteTopUp(tradeNo string, adminUsername string) error {
 			return errors.New("订单状态不是待支付，无法补单")
 		}
 
-		// 计算应充值额度：
-		// - Stripe 订单：Money 代表经分组倍率换算后的美元数量，直接 * QuotaPerUnit
-		// - 其他订单（如易支付）：Amount 为美元数量，* QuotaPerUnit
-		if topUp.PaymentMethod == "stripe" {
-			dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
-			quotaToAdd = int(decimal.NewFromFloat(topUp.Money).Mul(dQuotaPerUnit).IntPart())
-		} else {
-			dAmount := decimal.NewFromInt(topUp.Amount)
-			dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
-			quotaToAdd = int(dAmount.Mul(dQuotaPerUnit).IntPart())
-		}
+		quotaToAdd = topUp.ResolveQuotaToAdd()
 		if quotaToAdd <= 0 {
 			return errors.New("无效的充值额度")
 		}
@@ -445,8 +510,10 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 			return err
 		}
 
-		// Creem 直接使用 Amount 作为充值额度（整数）
-		quota = topUp.Amount
+		quota = int64(topUp.ResolveQuotaToAdd())
+		if quota <= 0 {
+			return errors.New("无效的充值额度")
+		}
 
 		// 构建更新字段，优先使用邮箱，如果邮箱为空则使用用户名
 		updateFields := map[string]interface{}{
@@ -487,6 +554,89 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 	return nil
 }
 
+// RechargeUcoin 按 U币（虚拟币）回调完成充值，幂等处理。
+// U币与美元固定 1:1：回调 amount 即为到账美元额度（如 0.3 U => $0.3）。
+func RechargeUcoin(tradeNo string, actualAmount string) (err error) {
+	if tradeNo == "" {
+		return errors.New("未提供支付单号")
+	}
+	actualAmount = strings.TrimSpace(actualAmount)
+	if actualAmount == "" {
+		return errors.New("未提供实际充值金额")
+	}
+	dActualAmount, err := decimal.NewFromString(actualAmount)
+	if err != nil {
+		return errors.New("实际充值金额格式错误")
+	}
+	if !dActualAmount.IsPositive() {
+		return errors.New("实际充值金额必须大于 0")
+	}
+
+	var quotaToAdd int
+	topUp := &TopUp{}
+
+	refCol := "`trade_no`"
+	if common.UsingPostgreSQL {
+		refCol = `"trade_no"`
+	}
+
+	err = DB.Transaction(func(tx *gorm.DB) error {
+		err := tx.Set("gorm:query_option", "FOR UPDATE").Where(refCol+" = ?", tradeNo).First(topUp).Error
+		if err != nil {
+			return errors.New("充值订单不存在")
+		}
+
+		if topUp.Status == common.TopUpStatusSuccess {
+			return nil // 幂等：已成功直接返回
+		}
+
+		if topUp.Status != common.TopUpStatusPending {
+			return errors.New("充值订单状态错误")
+		}
+
+		if topUp.PaymentMethod != "ubcoin" {
+			return fmt.Errorf("支付渠道不匹配: expect ubcoin, got %s", topUp.PaymentMethod)
+		}
+
+		dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
+		quotaToAdd = int(dActualAmount.Mul(dQuotaPerUnit).IntPart())
+		if quotaToAdd <= 0 {
+			return errors.New("无效的充值额度")
+		}
+
+		actualAmountFloat, _ := dActualAmount.Float64()
+		topUp.Amount = actualAmountFloat
+		topUp.Money = actualAmountFloat
+		topUp.CompleteTime = common.GetTimestamp()
+		topUp.Status = common.TopUpStatusSuccess
+		if err := tx.Save(topUp).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Model(&User{}).Where("id = ?", topUp.UserId).Update("quota", gorm.Expr("quota + ?", quotaToAdd)).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		common.SysError("ubcoin topup failed: " + err.Error())
+		return errors.New("充值失败，请稍后重试")
+	}
+
+	if quotaToAdd > 0 {
+		RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf(
+			"U币充值成功，实际充值金额: %s USDT，到账额度: %v",
+			dActualAmount.String(),
+			logger.FormatQuota(quotaToAdd),
+		))
+		ApplyAffiliateTopupReward(topUp.UserId, quotaToAdd)
+	}
+
+	return nil
+}
+
 func RechargeWaffo(tradeNo string) (err error) {
 	if tradeNo == "" {
 		return errors.New("未提供支付单号")
@@ -514,9 +664,7 @@ func RechargeWaffo(tradeNo string) (err error) {
 			return errors.New("充值订单状态错误")
 		}
 
-		dAmount := decimal.NewFromInt(topUp.Amount)
-		dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
-		quotaToAdd = int(dAmount.Mul(dQuotaPerUnit).IntPart())
+		quotaToAdd = topUp.ResolveQuotaToAdd()
 		if quotaToAdd <= 0 {
 			return errors.New("无效的充值额度")
 		}

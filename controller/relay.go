@@ -413,6 +413,9 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 			if tfErr := middleware.SetupContextForSelectedChannel(c, ch, info.OriginModelName); tfErr != nil {
 				return nil, tfErr
 			}
+			if tfErr := middleware.ChannelModelRateLimitError(ch, info.OriginModelName); tfErr != nil {
+				return nil, tfErr
+			}
 			service.RefreshTFRouteStickyChannel(c, ch.Id)
 			return ch, nil
 		}
@@ -441,6 +444,11 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 	tokenFactoryError := middleware.SetupContextForSelectedChannel(c, channel, info.OriginModelName)
 	if tokenFactoryError != nil {
 		return nil, tokenFactoryError
+	}
+	if retryParam.GetRetry() > 0 {
+		if tfErr := middleware.ChannelModelRateLimitError(channel, info.OriginModelName); tfErr != nil {
+			return nil, tfErr
+		}
 	}
 	return channel, nil
 }

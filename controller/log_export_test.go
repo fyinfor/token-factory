@@ -1,6 +1,11 @@
 package controller
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/QuantumNous/new-api/model"
+)
 
 // extractCacheReadTokens 优先级（与前端渲染完全一致）：
 // 1) cache_tokens         （service/log_info_generate.go:73 标准键，所有前端展示都依赖它）
@@ -45,7 +50,7 @@ func TestExtractCacheReadTokens(t *testing.T) {
 // resolveStatementDict 应当：
 // - 11 种 lang 全部命中、并各自返回正确语言的表头/类型标签；
 // - 未知 lang/空 lang 一律回退到 zh-CN；
-// - 表头列数恒为 14，类型标签 6 项全有。
+// - 表头列数恒为 15，类型标签 6 项全有。
 func TestResolveStatementDict(t *testing.T) {
 	expectLang := map[string]string{
 		"zh-CN": "序号",
@@ -62,8 +67,8 @@ func TestResolveStatementDict(t *testing.T) {
 	}
 	for lang, wantHeader := range expectLang {
 		d := resolveStatementDict(lang)
-		if len(d.Header) != 14 {
-			t.Errorf("lang=%s header 列数=%d, want 14", lang, len(d.Header))
+		if len(d.Header) != 15 {
+			t.Errorf("lang=%s header 列数=%d, want 15", lang, len(d.Header))
 		}
 		if d.Header[0] != wantHeader {
 			t.Errorf("lang=%s header[0]=%q, want %q", lang, d.Header[0], wantHeader)
@@ -85,5 +90,39 @@ func TestResolveStatementDict(t *testing.T) {
 	}
 	if d := resolveStatementDict(""); d.Header[0] != "序号" {
 		t.Errorf("空 lang 未回退 zh-CN, got header[0]=%q", d.Header[0])
+	}
+}
+
+func TestFormatLogDetailForExportUsesTableSummary(t *testing.T) {
+	cases := []struct {
+		name string
+		log  *model.Log
+		want string
+	}{
+		{
+			name: "异步任务失败退款",
+			log: &model.Log{
+				Type:  model.LogTypeRefund,
+				Other: `{"billing_phase":"refund"}`,
+			},
+			want: "异步任务失败退款",
+		},
+		{
+			name: "分辨率阶梯计费",
+			log: &model.Log{
+				Type:  model.LogTypeConsume,
+				Other: `{"billing_mode":"video_per_second","model_price":0,"video_resolution":"720p"}`,
+			},
+			want: "分辨率阶梯计费",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := formatLogDetailForExport(c.log, "zh-CN")
+			if !strings.Contains(got, c.want) {
+				t.Fatalf("formatLogDetailForExport() = %q, want contains %q", got, c.want)
+			}
+		})
 	}
 }

@@ -66,6 +66,12 @@ func InitOptionMap() {
 	common.OptionMap["About"] = ""
 	common.OptionMap["AboutEn"] = ""
 	common.OptionMap["HomePageContent"] = ""
+	common.OptionMap["HomeHeroCarouselEnabled"] = "false"
+	common.OptionMap["HomeHeroCarouselSlides"] = "[]"
+	common.OptionMap["HomeHeroCarouselIntervalSec"] = "5"
+	common.OptionMap["HomeHeroCarouselAspectRatio"] = "16:5"
+	common.OptionMap["HomeFooterCertificatesEnabled"] = "false"
+	common.OptionMap["HomeFooterCertificates"] = "[]"
 	// 首页轮播广告 JSON 数组，见 web SettingsHomeBanner / HomeBannerCarousel
 	common.OptionMap["HomeBannerSlides"] = "[]"
 	// 首页轮播自动切换间隔（秒），2–60
@@ -134,6 +140,13 @@ func InitOptionMap() {
 	common.OptionMap["WaffoUnitPrice"] = strconv.FormatFloat(setting.WaffoUnitPrice, 'f', -1, 64)
 	common.OptionMap["WaffoMinTopUp"] = strconv.Itoa(setting.WaffoMinTopUp)
 	common.OptionMap["WaffoPayMethods"] = setting.WaffoPayMethods2JsonString()
+	common.OptionMap["UcoinEnabled"] = strconv.FormatBool(setting.UcoinEnabled)
+	common.OptionMap["UcoinBaseUrl"] = setting.UcoinBaseUrl
+	common.OptionMap["UcoinMerchantId"] = setting.UcoinMerchantId
+	common.OptionMap["UcoinApiKey"] = setting.UcoinApiKey
+	common.OptionMap["UcoinMinTopUp"] = strconv.Itoa(setting.UcoinMinTopUp)
+	common.OptionMap["UcoinNotifyUrl"] = setting.UcoinNotifyUrl
+	common.OptionMap["UcoinCoinPairs"] = setting.UcoinCoinPairs2JsonString()
 	common.OptionMap["TopupGroupRatio"] = common.TopupGroupRatio2JSONString()
 	common.OptionMap["Chats"] = setting.Chats2JsonString()
 	common.OptionMap["AutoGroups"] = setting.AutoGroups2JsonString()
@@ -539,6 +552,18 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.WaffoUnitPrice, _ = strconv.ParseFloat(value, 64)
 	case "WaffoMinTopUp":
 		setting.WaffoMinTopUp, _ = strconv.Atoi(value)
+	case "UcoinEnabled":
+		setting.UcoinEnabled = value == "true"
+	case "UcoinBaseUrl":
+		setting.UcoinBaseUrl = value
+	case "UcoinMerchantId":
+		setting.UcoinMerchantId = value
+	case "UcoinApiKey":
+		setting.UcoinApiKey = value
+	case "UcoinMinTopUp":
+		setting.UcoinMinTopUp, _ = strconv.Atoi(value)
+	case "UcoinNotifyUrl":
+		setting.UcoinNotifyUrl = value
 	case "TopupGroupRatio":
 		err = common.UpdateTopupGroupRatioByJSONString(value)
 	case "GitHubClientId":
@@ -803,6 +828,9 @@ func updateOptionMap(key string, value string) (err error) {
 		// WaffoPayMethods is read directly from OptionMap via setting.GetWaffoPayMethods().
 		// The value is already stored in OptionMap at the top of this function (line: common.OptionMap[key] = value).
 		// No additional in-memory variable to update.
+	case "UcoinCoinPairs":
+		// UcoinCoinPairs 直接通过 setting.GetUcoinCoinPairs() 从 OptionMap 读取，
+		// 值已在函数顶部写入 OptionMap，无需额外同步内存变量。
 	}
 	return err
 }

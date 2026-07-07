@@ -1,3 +1,21 @@
+/*
+Copyright (C) 2025 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
 
 import React, { useEffect, useState, useContext } from 'react';
 import { useSearchParams } from 'react-router-dom';
@@ -11,7 +29,7 @@ import {
   copy,
   getQuotaPerUnit,
 } from '../../helpers';
-import { Modal, Toast } from '@douyinfe/semi-ui';
+import { Modal, Toast, Button } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
 import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
@@ -23,6 +41,7 @@ import TransferModal from './modals/TransferModal';
 import PaymentConfirmModal from './modals/PaymentConfirmModal';
 import PaymentMethodSelectModal from './modals/PaymentMethodSelectModal';
 import TopupHistoryModal from './modals/TopupHistoryModal';
+import UcoinPayResultModal from './modals/UcoinPayResultModal';
 
 const DEFAULT_EPAY_MAX_TOPUP = 100000;
 
@@ -97,13 +116,26 @@ const TopUp = () => {
   const [waffoPayMethods, setWaffoPayMethods] = useState([]);
   const [waffoMinTopUp, setWaffoMinTopUp] = useState(1);
 
+  // U币（虚拟币）相关状态
+  const [enableUcoinTopUp, setEnableUcoinTopUp] = useState(false);
+  const [ucoinCoinPairs, setUcoinCoinPairs] = useState([]);
+  const [ucoinMinTopUp, setUcoinMinTopUp] = useState(1);
+  const [ucoinResultOpen, setUcoinResultOpen] = useState(false);
+  const [ucoinResult, setUcoinResult] = useState(null);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [open, setOpen] = useState(false);
   const [paymentSelectOpen, setPaymentSelectOpen] = useState(false);
   const [payWay, setPayWay] = useState('');
   const [amountLoading, setAmountLoading] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
+  /** 当前正在发起支付的按钮标识，避免多种支付方式共用 loading */
+  const [activePaymentKey, setActivePaymentKey] = useState('');
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const [payCurrency, setPayCurrency] = useState('USD');
+  const [inputCurrency, setInputCurrency] = useState('USD');
+  const [quoteQuotaToAdd, setQuoteQuotaToAdd] = useState(0);
+  const [, setQuoteChargedUsd] = useState(0);
   const [payMethods, setPayMethods] = useState([]);
   const [wechatQrOpen, setWechatQrOpen] = useState(false);
   const [wechatQrValue, setWechatQrValue] = useState('');
@@ -177,7 +209,31 @@ const TopUp = () => {
     window.open(topUpLink, '_blank');
   };
 
-  const preTopUp = async (payment) => {
+  const getEffectiveQuotaDisplayType = () => {
+    return (
+      statusState?.status?.quota_display_type ||
+      localStorage.getItem('quota_display_type') ||
+      'USD'
+    );
+  };
+
+  const getEffectiveRechargeDisplayCurrency = () => {
+    const currency =
+      statusState?.status?.recharge_display_currency ||
+      localStorage.getItem('recharge_display_currency') ||
+      rechargeDisplayCurrency ||
+      'USD';
+    return String(currency).toUpperCase() === 'CNY' ? 'CNY' : 'USD';
+  };
+
+  const resolveRechargeInputCurrency = () => {
+    const displayType = getEffectiveQuotaDisplayType();
+    if (displayType === 'CNY') return 'CNY';
+    if (displayType === 'TOKENS') return getEffectiveRechargeDisplayCurrency();
+    return 'USD';
+  };
+
+  const preTopUp = async (payment, count = topUpCount) => {
     if (payment === 'stripe') {
       if (!enableStripeTopUp) {
         showError(t('管理员未开启Stripe充值！'));
@@ -191,21 +247,22 @@ const TopUp = () => {
     }
 
     setPayWay(payment);
+    setActivePaymentKey(payment);
     setPaymentLoading(true);
     try {
       if (payment === 'stripe') {
-        await getStripeAmount();
+        await getStripeAmount(count);
       } else {
-        await getAmount();
+        await getAmount(count);
       }
 
-      if (topUpCount < minTopUp) {
+      if (count < minTopUp) {
         showError(t('充值数量不能小于') + minTopUp);
         return;
       }
       if (payment !== 'stripe') {
         const maxTopUp = getPayMethodMaxTopup(payMethods, payment);
-        if (maxTopUp > 0 && Number(topUpCount) > maxTopUp) {
+        if (maxTopUp > 0 && Number(count) > maxTopUp) {
           showError(t('充值数量不能大于') + maxTopUp);
           return;
         }
@@ -215,6 +272,7 @@ const TopUp = () => {
       showError(t('获取金额失败'));
     } finally {
       setPaymentLoading(false);
+      setActivePaymentKey('');
     }
   };
 
@@ -248,13 +306,13 @@ const TopUp = () => {
       if (payWay === 'stripe') {
         // Stripe 支付请求
         res = await API.post('/api/user/stripe/pay', {
-          amount: parseInt(topUpCount),
+          amount: parseFloat(topUpCount),
           payment_method: 'stripe',
         });
       } else {
         // 普通支付请求
         res = await API.post('/api/user/pay', {
-          amount: parseInt(topUpCount),
+          amount: parseFloat(topUpCount),
           payment_method: payWay,
         });
       }
@@ -372,9 +430,12 @@ const TopUp = () => {
         showError(t('充值数量不能小于') + waffoMinTopUp);
         return;
       }
+      const waffoKey =
+        payMethodIndex != null ? `waffo:${payMethodIndex}` : 'waffo';
+      setActivePaymentKey(waffoKey);
       setPaymentLoading(true);
       const requestBody = {
-        amount: parseInt(topUpCount),
+        amount: parseFloat(topUpCount),
       };
       if (payMethodIndex != null) {
         requestBody.pay_method_index = payMethodIndex;
@@ -394,6 +455,44 @@ const TopUp = () => {
       showError(t('支付请求失败'));
     } finally {
       setPaymentLoading(false);
+      setActivePaymentKey('');
+    }
+  };
+
+  const ucoinTopUp = async (coinPairIndex) => {
+    try {
+      if (!enableUcoinTopUp) {
+        showError(t('管理员未开启 U币支付！'));
+        return;
+      }
+      if (topUpCount < ucoinMinTopUp) {
+        showError(t('充值数量不能小于') + ucoinMinTopUp);
+        return;
+      }
+      setActivePaymentKey(`ucoin:${coinPairIndex}`);
+      setPaymentLoading(true);
+      const res = await API.post('/api/user/ubcoin/pay', {
+        amount: parseInt(topUpCount),
+        coin_pair_index: coinPairIndex,
+      });
+      if (res !== undefined) {
+        const { message, data } = res.data;
+        if (message === 'success') {
+          setUcoinResult(data);
+          setUcoinResultOpen(true);
+        } else {
+          const errorMsg =
+            typeof data === 'string' ? data : message || t('支付请求失败');
+          showError(errorMsg);
+        }
+      } else {
+        showError(res);
+      }
+    } catch (e) {
+      showError(t('支付请求失败'));
+    } finally {
+      setPaymentLoading(false);
+      setActivePaymentKey('');
     }
   };
 
@@ -559,7 +658,9 @@ const TopUp = () => {
               ? data.stripe_min_topup
               : data.enable_waffo_topup
                 ? data.waffo_min_topup
-                : 1;
+                : data.enable_ubcoin_topup
+                  ? data.ubcoin_min_topup
+                  : 1;
           setEnableOnlineTopUp(enableOnlineTopUp);
           setEnableStripeTopUp(enableStripeTopUp);
           setEnableCreemTopUp(enableCreemTopUp);
@@ -567,6 +668,9 @@ const TopUp = () => {
           setEnableWaffoTopUp(enableWaffoTopUp);
           setWaffoPayMethods(data.waffo_pay_methods || []);
           setWaffoMinTopUp(data.waffo_min_topup || 1);
+          setEnableUcoinTopUp(data.enable_ubcoin_topup || false);
+          setUcoinCoinPairs(data.ubcoin_coin_pairs || []);
+          setUcoinMinTopUp(data.ubcoin_min_topup || 1);
           setMinTopUp(minTopUpValue);
           setTopUpCount(minTopUpValue);
 
@@ -653,41 +757,77 @@ const TopUp = () => {
       // setTopUpCount(minTopUpValue);
       setTopUpLink(statusState.status.top_up_link || '');
       setPriceRatio(statusState.status.price || 1);
-      setRechargeDisplayCurrency(
-        localStorage.getItem('recharge_display_currency') ||
-          statusState.status.recharge_display_currency ||
-          'USD',
+      const nextRechargeCurrency = getEffectiveRechargeDisplayCurrency();
+      setRechargeDisplayCurrency(nextRechargeCurrency);
+      const displayType = getEffectiveQuotaDisplayType();
+      setInputCurrency(
+        displayType === 'CNY'
+          ? 'CNY'
+          : displayType === 'TOKENS'
+            ? nextRechargeCurrency
+            : 'USD',
       );
+      setPayCurrency(nextRechargeCurrency);
 
       setStatusLoading(false);
     }
   }, [statusState?.status]);
 
-  /** getRechargeCurrencyMeta 获取充值金额展示币种元信息（仅 UI 文案展示）。 */
-  const getRechargeCurrencyMeta = () => {
-    if (rechargeDisplayCurrency === 'CNY') {
+  const getCurrencyMeta = (currency) => {
+    const code = String(currency || 'USD').toUpperCase();
+    if (code === 'CNY') {
       return { symbol: '¥', code: 'CNY' };
     }
     return { symbol: '$', code: 'USD' };
   };
 
-  const renderAmount = () => {
-    const numericAmount = Number(amount);
+  const formatCurrencyAmount = (value, currency) => {
+    const numericAmount = Number(value);
     const formattedAmount = Number.isFinite(numericAmount)
       ? numericAmount.toFixed(2)
       : '0.00';
-    const { symbol, code } = getRechargeCurrencyMeta();
+    const { symbol, code } = getCurrencyMeta(currency);
     if (code === 'USD') {
       return `${symbol}${formattedAmount} ${code}`;
     }
     return `${symbol}${formattedAmount}`;
   };
 
-  // 充值数量统一按美元展示，避免在支付宝/微信场景被全局货币配置影响。
-  const renderTopUpCountInUSD = (value) => {
-    const numericValue = Number(value);
-    const safeValue = Number.isFinite(numericValue) ? numericValue : 0;
-    return `$${safeValue}`;
+  const applyTopupQuote = (data, fallbackCurrency = 'CNY') => {
+    if (data && typeof data === 'object') {
+      const nextAmount = Number(data.pay_amount ?? 0);
+      setAmount(Number.isFinite(nextAmount) ? nextAmount : 0);
+      setPayCurrency(data.pay_currency || fallbackCurrency);
+      setInputCurrency(data.input_currency || resolveRechargeInputCurrency());
+      setQuoteQuotaToAdd(Number(data.quota_to_add || 0));
+      setQuoteChargedUsd(Number(data.charged_usd || 0));
+      return;
+    }
+    const nextAmount = Number(data);
+    setAmount(Number.isFinite(nextAmount) ? nextAmount : 0);
+    setPayCurrency(fallbackCurrency);
+    setInputCurrency(resolveRechargeInputCurrency());
+    setQuoteQuotaToAdd(0);
+    setQuoteChargedUsd(0);
+  };
+
+  const renderAmount = () => {
+    return formatCurrencyAmount(amount, payCurrency);
+  };
+
+  const renderTopUpCountDisplay = (value) => {
+    return formatCurrencyAmount(
+      value,
+      inputCurrency || resolveRechargeInputCurrency(),
+    );
+  };
+
+  const renderQuoteCreditAmount = () => {
+    const displayType = getEffectiveQuotaDisplayType();
+    if (displayType === 'TOKENS') {
+      return quoteQuotaToAdd > 0 ? renderQuota(quoteQuotaToAdd) : '';
+    }
+    return '';
   };
 
   const getAmount = async (value) => {
@@ -702,9 +842,11 @@ const TopUp = () => {
       if (res !== undefined) {
         const { message, data } = res.data;
         if (message === 'success') {
-          setAmount(parseFloat(data));
+          applyTopupQuote(data, 'CNY');
         } else {
           setAmount(0);
+          setQuoteQuotaToAdd(0);
+          setQuoteChargedUsd(0);
           Toast.error({ content: '错误：' + data, id: 'getAmount' });
         }
       } else {
@@ -728,9 +870,11 @@ const TopUp = () => {
       if (res !== undefined) {
         const { message, data } = res.data;
         if (message === 'success') {
-          setAmount(parseFloat(data));
+          applyTopupQuote(data, 'USD');
         } else {
           setAmount(0);
+          setQuoteQuotaToAdd(0);
+          setQuoteChargedUsd(0);
           Toast.error({ content: '错误：' + data, id: 'getAmount' });
         }
       } else {
@@ -811,14 +955,10 @@ const TopUp = () => {
   }, [wechatQrOpen, wechatQrBaseQuota]);
 
   // 选择预设充值额度
-  const selectPresetAmount = (preset) => {
+  const selectPresetAmount = async (preset) => {
     setTopUpCount(preset.value);
     setSelectedPreset(preset.value);
-
-    // 计算实际支付金额，考虑折扣
-    const discount = preset.discount || topupInfo.discount[preset.value] || 1.0;
-    const discountedAmount = preset.value * priceRatio * discount;
-    setAmount(discountedAmount);
+    await getAmount(preset.value);
   };
 
   /** 获取当前额度下可用的在线支付方式（不含 waffo）。 */
@@ -841,14 +981,14 @@ const TopUp = () => {
 
   /** 点击额度卡片：选中额度后弹出支付方式，或仅一种方式时直接进入确认弹窗。 */
   const handlePresetCardClick = async (preset) => {
-    selectPresetAmount(preset);
+    await selectPresetAmount(preset);
     const enabledMethods = getEnabledEpayMethods(preset.value);
     if (enabledMethods.length === 0) {
       showError(t('当前额度暂无可用支付方式'));
       return;
     }
     if (enabledMethods.length === 1) {
-      await preTopUp(enabledMethods[0].type);
+      await preTopUp(enabledMethods[0].type, preset.value);
       return;
     }
     setPaymentSelectOpen(true);
@@ -897,13 +1037,12 @@ const TopUp = () => {
         visible={paymentSelectOpen}
         onCancel={handlePaymentSelectCancel}
         topUpCount={topUpCount}
-        renderTopUpCount={renderTopUpCountInUSD}
+        renderTopUpCount={renderTopUpCountDisplay}
         payMethods={payMethods}
         enableOnlineTopUp={enableOnlineTopUp}
         enableStripeTopUp={enableStripeTopUp}
         onSelect={handlePaymentMethodSelect}
-        paymentLoading={paymentLoading}
-        payWay={payWay}
+        activePaymentKey={activePaymentKey}
       />
 
       {/* 充值确认模态框 */}
@@ -914,14 +1053,15 @@ const TopUp = () => {
         handleCancel={handleCancel}
         confirmLoading={confirmLoading}
         topUpCount={topUpCount}
-        renderTopUpCount={renderTopUpCountInUSD}
+        renderTopUpCount={renderTopUpCountDisplay}
         amountLoading={amountLoading}
         renderAmount={renderAmount}
         payWay={payWay}
         payMethods={payMethods}
         amountNumber={amount}
-        discountRate={topupInfo?.discount?.[topUpCount] || 1.0}
-        rechargeDisplayCurrency={rechargeDisplayCurrency}
+        discountRate={1.0}
+        creditDisplay={renderQuoteCreditAmount()}
+        rechargeDisplayCurrency={payCurrency}
       />
 
       {/* 充值账单模态框 */}
@@ -1015,6 +1155,9 @@ const TopUp = () => {
           enableWaffoTopUp={enableWaffoTopUp}
           waffoTopUp={waffoTopUp}
           waffoPayMethods={waffoPayMethods}
+          enableUcoinTopUp={enableUcoinTopUp}
+          ucoinTopUp={ucoinTopUp}
+          ucoinCoinPairs={ucoinCoinPairs}
           presetAmounts={presetAmounts}
           selectedPreset={selectedPreset}
           selectPresetAmount={selectPresetAmount}
@@ -1023,7 +1166,7 @@ const TopUp = () => {
           priceRatio={priceRatio}
           topUpCount={topUpCount}
           minTopUp={minTopUp}
-          renderTopUpCount={renderTopUpCountInUSD}
+          renderTopUpCount={renderTopUpCountDisplay}
           getAmount={getAmount}
           setTopUpCount={setTopUpCount}
           setSelectedPreset={setSelectedPreset}
@@ -1031,8 +1174,7 @@ const TopUp = () => {
           amountLoading={amountLoading}
           payMethods={payMethods}
           preTopUp={preTopUp}
-          paymentLoading={paymentLoading}
-          payWay={payWay}
+          activePaymentKey={activePaymentKey}
           redemptionCode={redemptionCode}
           setRedemptionCode={setRedemptionCode}
           topUp={topUp}
@@ -1053,6 +1195,13 @@ const TopUp = () => {
           reloadSubscriptionSelf={getSubscriptionSelf}
         />
       </div>
+
+      {/* U币支付结果弹窗：展示生成的收款地址 */}
+      <UcoinPayResultModal
+        visible={ucoinResultOpen}
+        onCancel={() => setUcoinResultOpen(false)}
+        ucoinResult={ucoinResult}
+      />
     </div>
   );
 };

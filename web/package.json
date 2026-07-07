@@ -27,6 +27,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-dropzone": "^14.2.3",
+    "react-easy-crop": "^6.1.0",
     "react-fireworks": "^1.0.4",
     "react-i18next": "^13.0.0",
     "react-icons": "^5.5.0",

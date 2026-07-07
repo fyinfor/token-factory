@@ -68,6 +68,7 @@ type User struct {
 	Remark                                 string         `json:"remark,omitempty" gorm:"type:varchar(255)" validate:"max=255"`
 	Tags                                   string         `json:"tags,omitempty" gorm:"type:varchar(255)"`
 	StripeCustomer                         string         `json:"stripe_customer" gorm:"type:varchar(64);column:stripe_customer;index"`
+	UcoinAddress                           string         `json:"ucoin_address" gorm:"column:ucoin_address;type:varchar(255);index"`
 	SupplierID                             int            `json:"supplier_id" gorm:"type:int;column:supplier_id;index;default:0;comment:供应商申请ID 0表示非供应商"`
 	// AdminInitialSetupCompleted 管理员代建账号首次登录前须为 false；自助注册等为 true。注意：GORM Create 会省略 bool 的 false，代建分支须在 Insert 内显式 UPDATE 落库为 0。
 	AdminInitialSetupCompleted bool `json:"admin_initial_setup_completed" gorm:"column:admin_initial_setup_completed;type:boolean;not null;default:true"`
@@ -702,6 +703,29 @@ func (user *User) TransferAffQuotaToQuota(quota int) error {
 
 	// 提交事务
 	return tx.Commit().Error
+}
+
+// UpdateUserUcoinAddress 写入用户 U币收款地址。
+func UpdateUserUcoinAddress(userId int, address string) error {
+	address = strings.TrimSpace(address)
+	if userId <= 0 || address == "" {
+		return fmt.Errorf("invalid ucoin address update")
+	}
+	return DB.Model(&User{}).Where("id = ?", userId).Update("ucoin_address", address).Error
+}
+
+// GetUserByUcoinAddress 按 U地址查找用户（大小写不敏感）。
+func GetUserByUcoinAddress(address string) *User {
+	address = strings.TrimSpace(address)
+	if address == "" {
+		return nil
+	}
+	var user User
+	err := DB.Where("LOWER(ucoin_address) = LOWER(?)", address).First(&user).Error
+	if err != nil {
+		return nil
+	}
+	return &user
 }
 
 func (user *User) Insert(inviterId int) error {

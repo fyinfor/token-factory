@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -21,6 +23,112 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+func homeHeroSlideTruthy(value any, fallback bool) bool {
+	switch v := value.(type) {
+	case nil:
+		return fallback
+	case bool:
+		return v
+	case float64:
+		return v != 0
+	case int:
+		return v != 0
+	case string:
+		text := strings.TrimSpace(strings.ToLower(v))
+		if text == "" {
+			return fallback
+		}
+		return text == "1" || text == "true" || text == "yes" || text == "on"
+	default:
+		return fallback
+	}
+}
+
+func homeHeroSlideEnabled(slide map[string]any) bool {
+	if value, ok := slide["status"]; ok && !homeHeroSlideTruthy(value, true) {
+		return false
+	}
+	if value, ok := slide["enabled"]; ok && !homeHeroSlideTruthy(value, true) {
+		return false
+	}
+	return true
+}
+
+func homeHeroSlideSort(slide map[string]any, fallback int) float64 {
+	switch value := slide["sort"].(type) {
+	case float64:
+		return value
+	case int:
+		return float64(value)
+	case string:
+		if n, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err == nil {
+			return n
+		}
+	}
+	return float64(fallback)
+}
+
+func parseHomeHeroTime(raw any, endOfDay bool) (time.Time, bool) {
+	text := strings.TrimSpace(common.Interface2String(raw))
+	if text == "" {
+		return time.Time{}, false
+	}
+	layouts := []string{
+		time.RFC3339,
+		"2006-01-02 15:04:05",
+		"2006-01-02 15:04",
+		"2006-01-02",
+	}
+	for _, layout := range layouts {
+		if t, err := time.ParseInLocation(layout, text, time.Local); err == nil {
+			if endOfDay && layout == "2006-01-02" {
+				t = t.Add(24*time.Hour - time.Second)
+			}
+			return t, true
+		}
+	}
+	return time.Time{}, false
+}
+
+func homeHeroSlideInSchedule(slide map[string]any, now time.Time) bool {
+	if start, ok := parseHomeHeroTime(slide["start_at"], false); ok && now.Before(start) {
+		return false
+	}
+	if end, ok := parseHomeHeroTime(slide["end_at"], true); ok && now.After(end) {
+		return false
+	}
+	return true
+}
+
+func homeHeroStatusSlides(raw any) string {
+	text := strings.TrimSpace(common.Interface2String(raw))
+	if text == "" {
+		return "[]"
+	}
+	var slides []map[string]any
+	if err := common.UnmarshalJsonStr(text, &slides); err != nil {
+		return "[]"
+	}
+
+	now := time.Now()
+	filtered := make([]map[string]any, 0, len(slides))
+	for _, slide := range slides {
+		if !homeHeroSlideEnabled(slide) || !homeHeroSlideInSchedule(slide, now) {
+			continue
+		}
+		filtered = append(filtered, slide)
+	}
+	sort.SliceStable(filtered, func(i, j int) bool {
+		return homeHeroSlideSort(filtered[i], i+1) < homeHeroSlideSort(filtered[j], j+1)
+	})
+
+	data, err := common.Marshal(filtered)
+	if err != nil {
+		return "[]"
+	}
+	return string(data)
+}
 
 func TestStatus(c *gin.Context) {
 	err := model.PingDB()
@@ -142,6 +250,12 @@ func GetStatus(c *gin.Context) {
 		"distributor_min_withdraw_quota":    distributorMinWithdrawQuota,
 		"affiliate_default_commission_bps":  common.AffiliateDefaultCommissionBps,
 		"distributor_commission_mode":       common.DistributorCommissionMode,
+		"home_hero_carousel_enabled":        common.OptionMap["HomeHeroCarouselEnabled"] == "true",
+		"home_hero_carousel_slides":         homeHeroStatusSlides(common.OptionMap["HomeHeroCarouselSlides"]),
+		"home_hero_carousel_interval_sec":   strings.TrimSpace(common.Interface2String(common.OptionMap["HomeHeroCarouselIntervalSec"])),
+		"home_hero_carousel_aspect_ratio":   strings.TrimSpace(common.Interface2String(common.OptionMap["HomeHeroCarouselAspectRatio"])),
+		"home_footer_certificates_enabled":  common.OptionMap["HomeFooterCertificatesEnabled"] == "true",
+		"home_footer_certificates":          strings.TrimSpace(common.Interface2String(common.OptionMap["HomeFooterCertificates"])),
 		"home_banner_slides":                strings.TrimSpace(common.Interface2String(common.OptionMap["HomeBannerSlides"])),
 		"home_banner_interval_sec":          strings.TrimSpace(common.Interface2String(common.OptionMap["HomeBannerIntervalSec"])),
 

@@ -48,7 +48,8 @@ import {
 import { Link } from 'react-router-dom';
 import NoticeModal from '../../components/layout/NoticeModal';
 import HomeModelList from '../../components/home/HomeModelList';
-import HomeBannerCarousel from '../../components/home/HomeBannerCarousel';
+import HomeHeroCarousel from '../../components/home/HomeHeroCarousel';
+import HomeFooterCertificates from '../../components/home/HomeFooterCertificates';
 import {
   Moonshot,
   OpenAI,
@@ -216,9 +217,12 @@ const Home = () => {
             <div className='home-banner-bg w-full'>
               <div className='h-full px-4 pt-20 md:pt-24 pb-2'>
                 <div className='mb-6'>
-                  <HomeBannerCarousel
-                    rawSlides={statusState?.status?.home_banner_slides}
-                    intervalSec={statusState?.status?.home_banner_interval_sec}
+                  <HomeHeroCarousel
+                    enabled={statusState?.status?.home_hero_carousel_enabled}
+                    rawSlides={statusState?.status?.home_hero_carousel_slides}
+                    intervalSec={
+                      statusState?.status?.home_hero_carousel_interval_sec
+                    }
                   />
 
                   {/* 操作按钮 */}
@@ -338,6 +342,10 @@ const Home = () => {
             )}
           </div>
         )}
+        <HomeFooterCertificates
+          enabled={statusState?.status?.home_footer_certificates_enabled}
+          rawCertificates={statusState?.status?.home_footer_certificates}
+        />
         <FooterBar />
       </div>
     </>
