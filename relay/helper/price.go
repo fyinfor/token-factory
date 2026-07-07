@@ -377,6 +377,15 @@ func ModelPriceHelperVideo(c *gin.Context, info *relaycommon.RelayInfo) (types.P
 		return types.PriceData{}, fmt.Errorf("relay info is nil")
 	}
 
+	channelID := 0
+	if info.ChannelMeta != nil {
+		channelID = info.ChannelId
+	}
+	// 前置双重校验：能力匹配 + 分辨率档位匹配（不通过则统一友好提示）。
+	if err := validateVideoModelPrice(c, channelID, info.OriginModelName); err != nil {
+		return types.PriceData{}, err
+	}
+
 	// 0) 视频「按 Token 计费」（最高优先级）：视频价格配置为 per_token 规则且与当前请求
 	//    （文生/图生/视频生 + 分辨率）匹配时生效；预扣固定 50000 Token，完成后按 total_tokens 补差。
 	if priceData, ok := tryVideoPerTokenRulesPriceData(c, info); ok {
@@ -397,12 +406,16 @@ func ModelPriceHelperVideo(c *gin.Context, info *relaycommon.RelayInfo) (types.P
 		return priceData, nil
 	}
 
-	// 3) No video rules configured -> explicit "price not set" error.
-	matchName := ratio_setting.FormatMatchingModelName(info.OriginModelName)
-	if matchName == "" {
-		matchName = info.OriginModelName
-	}
-	return types.PriceData{}, fmt.Errorf("视频模型 %s 未设置价格，请配置按视频秒收费、按视频条数收费或按 token 收费规则；Video model %s price not set, please configure per-second, per-item or per-token video pricing rules", matchName, matchName)
+	// 3) 无任何可用视频计费规则 -> 统一友好提示（替换原中英混合报错）。
+	estimateCtx := estimateVideoRequestContext(c)
+	currentInvocation := videoCapabilityLabelCN(string(estimateCtx.Mode))
+	idx := collectVideoCapabilityPricing(channelID, info.OriginModelName)
+	supportedCaps := sortedCapabilityLabelsCN(
+		[]string{capabilityTextToVideo, capabilityImageToVideo, capabilityVideoToVideo},
+		idx, videoCapabilityLabelCN,
+	)
+	allRes := collectAllDisplayResolutions(idx, []string{capabilityTextToVideo, capabilityImageToVideo, capabilityVideoToVideo})
+	return types.PriceData{}, newModelPriceFriendlyError("视频模型", info.OriginModelName, currentInvocation, supportedCaps, allRes)
 }
 
 // hasAnyPerCallVideoPrice reports whether any per-call price tier is set for

@@ -276,6 +276,11 @@ func TryModelPriceHelperImage(c *gin.Context, info *relaycommon.RelayInfo) (type
 		return types.PriceData{}, false, nil
 	}
 
+	// 前置双重校验：能力匹配 + 分辨率档位匹配。
+	if err := validateImageModelPrice(c, channelID, info); err != nil {
+		return types.PriceData{}, false, err
+	}
+
 	names := imageModelNameCandidatesFromInfo(info)
 	if len(names) == 0 {
 		names = imageModelNameCandidates(modelName)
@@ -289,14 +294,15 @@ func TryModelPriceHelperImage(c *gin.Context, info *relaycommon.RelayInfo) (type
 		okPrice = glOK
 	}
 	if !okPrice || usdPerImage <= 0 {
-		matchName := ratio_setting.FormatMatchingModelName(modelName)
-		if matchName == "" {
-			matchName = modelName
-		}
-		return types.PriceData{}, false, fmt.Errorf(
-			"图片模型 %s 未设置按张价格，请配置文生图/图生图分辨率价格或兜底每张价格；Image model %s per-image price not set",
-			matchName, matchName,
+		estimateCtx := estimateImageRequestContext(c, info)
+		currentInvocation := imageCapabilityLabelCN(string(estimateCtx.Mode))
+		idx := collectImageCapabilityPricing(channelID, names)
+		supportedCaps := sortedCapabilityLabelsCN(
+			[]string{capabilityTextToImage, capabilityImageToImage},
+			idx, imageCapabilityLabelCN,
 		)
+		allRes := collectAllDisplayResolutions(idx, []string{capabilityTextToImage, capabilityImageToImage})
+		return types.PriceData{}, false, newModelPriceFriendlyError("图片模型", modelName, currentInvocation, supportedCaps, allRes)
 	}
 
 	count := estimateCtx.Count
@@ -307,14 +313,14 @@ func TryModelPriceHelperImage(c *gin.Context, info *relaycommon.RelayInfo) (type
 
 	priceData, ok := buildImagePerImagePriceData(c, info, channelID, channelUSD, globalUSD, chOK, glOK, channelMatch, globalMatch, usdPerImage, estimateCtx)
 	if !ok {
-		matchName := ratio_setting.FormatMatchingModelName(modelName)
-		if matchName == "" {
-			matchName = modelName
-		}
-		return types.PriceData{}, false, fmt.Errorf(
-			"图片模型 %s 未设置按张价格，请配置文生图/图生图分辨率价格或兜底每张价格；Image model %s per-image price not set",
-			matchName, matchName,
+		currentInvocation := imageCapabilityLabelCN(string(estimateCtx.Mode))
+		idx := collectImageCapabilityPricing(channelID, names)
+		supportedCaps := sortedCapabilityLabelsCN(
+			[]string{capabilityTextToImage, capabilityImageToImage},
+			idx, imageCapabilityLabelCN,
 		)
+		allRes := collectAllDisplayResolutions(idx, []string{capabilityTextToImage, capabilityImageToImage})
+		return types.PriceData{}, false, newModelPriceFriendlyError("图片模型", modelName, currentInvocation, supportedCaps, allRes)
 	}
 	info.PriceData = priceData
 	return priceData, true, nil
