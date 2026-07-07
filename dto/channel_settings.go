@@ -1,5 +1,7 @@
 package dto
 
+import "strings"
+
 type ChannelSettings struct {
 	ForceFormat            bool   `json:"force_format,omitempty"`
 	ThinkingToContent      bool   `json:"thinking_to_content,omitempty"`
@@ -23,6 +25,24 @@ const (
 	AwsKeyTypeApiKey AwsKeyType = "api_key"
 )
 
+// ChannelModelRateLimitRule 渠道内单模型的全平台 RPM 限流（所有用户共享配额）。
+type ChannelModelRateLimitRule struct {
+	Model   string `json:"model"`
+	RPM     int    `json:"rpm"`
+	Burst   int    `json:"burst,omitempty"`
+	Enabled *bool  `json:"enabled,omitempty"`
+}
+
+func (r ChannelModelRateLimitRule) IsEnabled() bool {
+	if r.RPM <= 0 || strings.TrimSpace(r.Model) == "" {
+		return false
+	}
+	if r.Enabled != nil && !*r.Enabled {
+		return false
+	}
+	return true
+}
+
 type ChannelOtherSettings struct {
 	AzureResponsesVersion                 string        `json:"azure_responses_version,omitempty"`
 	VertexKeyType                         VertexKeyType `json:"vertex_key_type,omitempty"` // "json" or "api_key"
@@ -39,7 +59,8 @@ type ChannelOtherSettings struct {
 	UpstreamModelUpdateLastCheckTime      int64         `json:"upstream_model_update_last_check_time,omitempty"`      // 上次检测时间
 	UpstreamModelUpdateLastDetectedModels []string      `json:"upstream_model_update_last_detected_models,omitempty"` // 上次检测到的可加入模型
 	UpstreamModelUpdateLastRemovedModels  []string      `json:"upstream_model_update_last_removed_models,omitempty"`  // 上次检测到的可删除模型
-	UpstreamModelUpdateIgnoredModels      []string      `json:"upstream_model_update_ignored_models,omitempty"`       // 手动忽略的模型
+	UpstreamModelUpdateIgnoredModels      []string                    `json:"upstream_model_update_ignored_models,omitempty"` // 手动忽略的模型
+	ModelRateLimits                       []ChannelModelRateLimitRule `json:"model_rate_limits,omitempty"`                    // 渠道模型 RPM 全局限流
 }
 
 func (s *ChannelOtherSettings) IsOpenRouterEnterprise() bool {

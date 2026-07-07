@@ -173,10 +173,7 @@ func Distribute() func(c *gin.Context) {
 						common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
 						logSelectedUpstream(c, channel, modelRequest.Model)
 						SetupContextForSelectedChannel(c, channel, modelRequest.Model)
-						c.Next()
-						if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
-							service.RecordChannelAffinity(c, channel.Id)
-						}
+						proceedRelayWithChannel(c, channel, modelRequest.Model)
 						return
 					}
 				}
@@ -213,7 +210,7 @@ func Distribute() func(c *gin.Context) {
 						common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
 						logSelectedUpstream(c, channel, modelRequest.Model, "tf_route")
 						SetupContextForSelectedChannel(c, channel, modelRequest.Model)
-						c.Next()
+						proceedRelayWithChannel(c, channel, modelRequest.Model)
 						return
 					}
 				}
@@ -233,10 +230,7 @@ func Distribute() func(c *gin.Context) {
 					common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
 					logSelectedUpstream(c, channel, modelRequest.Model)
 					SetupContextForSelectedChannel(c, channel, modelRequest.Model)
-					c.Next()
-					if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
-						service.RecordChannelAffinity(c, channel.Id)
-					}
+					proceedRelayWithChannel(c, channel, modelRequest.Model)
 					_ = selectGroup
 					return
 				}
@@ -325,10 +319,7 @@ func Distribute() func(c *gin.Context) {
 		common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
 		logSelectedUpstream(c, channel, modelRequest.Model)
 		SetupContextForSelectedChannel(c, channel, modelRequest.Model)
-		c.Next()
-		if channel != nil && c.Writer != nil && c.Writer.Status() < http.StatusBadRequest {
-			service.RecordChannelAffinity(c, channel.Id)
-		}
+		proceedRelayWithChannel(c, channel, modelRequest.Model)
 	}
 }
 

@@ -731,6 +731,10 @@ func validateChannel(channel *model.Channel, isAdd bool) error {
 		return fmt.Errorf("route_slug 格式无效（2～32 位字母数字，且不能为 c 加纯数字）")
 	}
 
+	otherSettings := channel.GetOtherSettings()
+	otherSettings.ModelRateLimits = service.SanitizeChannelModelRateLimits(otherSettings.ModelRateLimits)
+	channel.SetOtherSettings(otherSettings)
+
 	return nil
 }
 
