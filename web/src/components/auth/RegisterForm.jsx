@@ -337,7 +337,9 @@ const RegisterForm = () => {
     }
 
     if (showEmailVerification && emailTrim) {
-      if (!/^\d{6}$/.test((inputs.verification_code || '').trim())) {
+      // 邮箱验证码由 GenerateVerificationCode(6) 生成，取 UUID 去连字符后的前 6 位，
+      // 是十六进制字符（0-9, a-f），可能包含字母，因此不能用纯数字正则校验。
+      if (!/^[0-9a-fA-F]{6}$/.test((inputs.verification_code || '').trim())) {
         showInfo(t('请输入邮箱验证码'));
         return;
       }
