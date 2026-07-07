@@ -32,6 +32,7 @@ const MIN_INTERVAL_SEC = 2;
 const MAX_INTERVAL_SEC = 60;
 const MANUAL_PAUSE_MS = 30000;
 const DEFAULT_OVERLAY_OPACITY = 0.15;
+const DEFAULT_ASPECT_RATIO = 1920 / 300;
 
 function parseSlides(raw) {
   if (Array.isArray(raw)) {
@@ -62,6 +63,40 @@ function clampOpacity(value) {
     return DEFAULT_OVERLAY_OPACITY;
   }
   return Math.min(0.8, Math.max(0, n));
+}
+
+function parseAspectRatio(value) {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  if (!value || typeof value !== 'string') {
+    return DEFAULT_ASPECT_RATIO;
+  }
+  const normalized = value.trim().toLowerCase().replace(/\s+/g, '');
+  if (normalized === '16:5' || normalized === '1920:600') {
+    return DEFAULT_ASPECT_RATIO;
+  }
+  const separator = normalized.includes(':')
+    ? ':'
+    : normalized.includes('/')
+      ? '/'
+      : null;
+  if (!separator) {
+    const n = Number(normalized);
+    return Number.isFinite(n) && n > 0 ? n : DEFAULT_ASPECT_RATIO;
+  }
+  const [rawWidth, rawHeight] = normalized.split(separator);
+  const width = Number(rawWidth);
+  const height = Number(rawHeight);
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    return DEFAULT_ASPECT_RATIO;
+  }
+  return width / height;
 }
 
 function normalizeContentAlign(value) {
@@ -137,7 +172,12 @@ function hasRenderableContent(slide) {
   );
 }
 
-export default function HomeHeroCarousel({ enabled, rawSlides, intervalSec }) {
+export default function HomeHeroCarousel({
+  enabled,
+  rawSlides,
+  intervalSec,
+  aspectRatio,
+}) {
   const { t } = useTranslation();
   const slides = useMemo(
     () =>
@@ -192,14 +232,17 @@ export default function HomeHeroCarousel({ enabled, rawSlides, intervalSec }) {
 
   const overlayOpacity = activeSlide?.overlayOpacity ?? DEFAULT_OVERLAY_OPACITY;
   const alignLayout = contentAlignLayout(activeSlide?.contentAlign);
+  const normalizedAspectRatio = parseAspectRatio(aspectRatio);
 
   return (
     <section
-      className='home-hero-carousel relative z-0 -mt-20 mb-6 h-[360px] overflow-hidden md:-mt-24 md:h-[clamp(360px,31.25vw,600px)]'
+      className='home-hero-carousel relative z-0 -mt-6 mb-6 h-[360px] overflow-hidden md:-mt-10 md:h-[calc(100vw/var(--home-hero-aspect-ratio))]'
       style={{
+        '--home-hero-aspect-ratio': normalizedAspectRatio,
         width: '100vw',
         marginLeft: 'calc(50% - 50vw)',
         marginRight: 'calc(50% - 50vw)',
+        aspectRatio: normalizedAspectRatio,
         backgroundColor: activeSlide?.backgroundColor || '#111827',
       }}
       aria-label={activeSlide?.title || t('首页主轮播')}

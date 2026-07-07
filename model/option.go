@@ -69,7 +69,7 @@ func InitOptionMap() {
 	common.OptionMap["HomeHeroCarouselEnabled"] = "false"
 	common.OptionMap["HomeHeroCarouselSlides"] = "[]"
 	common.OptionMap["HomeHeroCarouselIntervalSec"] = "5"
-	common.OptionMap["HomeHeroCarouselAspectRatio"] = "16:5"
+	common.OptionMap["HomeHeroCarouselAspectRatio"] = "1920:300"
 	common.OptionMap["HomeFooterCertificatesEnabled"] = "false"
 	common.OptionMap["HomeFooterCertificates"] = "[]"
 	// 首页轮播广告 JSON 数组，见 web SettingsHomeBanner / HomeBannerCarousel

@@ -223,6 +223,9 @@ const Home = () => {
                     intervalSec={
                       statusState?.status?.home_hero_carousel_interval_sec
                     }
+                    aspectRatio={
+                      statusState?.status?.home_hero_carousel_aspect_ratio
+                    }
                   />
 
                   {/* 操作按钮 */}
