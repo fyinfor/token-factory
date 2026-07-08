@@ -76,46 +76,61 @@ func IsOpenAIVideosCompatPath(path string) bool {
 // ConvertTimestampsToInt64 converts RFC3339 timestamp strings to int64 Unix timestamps
 // for new-api /v1/videos compatibility.
 func ConvertTimestampsToInt64(video *OpenAIVideo) ([]byte, error) {
-	var videoMap map[string]any
 	data, err := common.Marshal(video)
 	if err != nil {
 		return nil, err
 	}
-	if err := common.Unmarshal(data, &videoMap); err != nil {
-		return nil, err
-	}
-
-	if createdAtStr, ok := videoMap["created_at"].(string); ok && createdAtStr != "" {
-		if t, err := time.Parse(time.RFC3339, createdAtStr); err == nil {
-			videoMap["created_at"] = t.Unix()
-		}
-	}
-
-	if completedAtStr, ok := videoMap["completed_at"].(string); ok && completedAtStr != "" {
-		if t, err := time.Parse(time.RFC3339, completedAtStr); err == nil {
-			videoMap["completed_at"] = t.Unix()
-		}
-	}
-
-	if expiresAtStr, ok := videoMap["expires_at"].(string); ok && expiresAtStr != "" {
-		if t, err := time.Parse(time.RFC3339, expiresAtStr); err == nil {
-			videoMap["expires_at"] = t.Unix()
-		}
-	}
-
-	return common.Marshal(videoMap)
+	return adaptOpenAIVideoMapTimestamps(data)
 }
 
 // AdaptOpenAIVideoJSONForPath applies /v1/videos timestamp conversion when needed.
+// Uses map-based conversion so ratio/resolution/duration and other passthrough keys are preserved.
 func AdaptOpenAIVideoJSONForPath(path string, data []byte) ([]byte, error) {
 	if !IsOpenAIVideosCompatPath(path) {
 		return data, nil
 	}
-	var video OpenAIVideo
-	if err := common.Unmarshal(data, &video); err != nil {
+	return adaptOpenAIVideoMapTimestamps(data)
+}
+
+func adaptOpenAIVideoMapTimestamps(data []byte) ([]byte, error) {
+	var videoMap map[string]any
+	if err := common.Unmarshal(data, &videoMap); err != nil {
 		return data, err
 	}
-	return ConvertTimestampsToInt64(&video)
+	for _, key := range []string{"created_at", "completed_at", "expires_at"} {
+		normalizeVideoTimestampFieldToUnix(videoMap, key)
+	}
+	return common.Marshal(videoMap)
+}
+
+func normalizeVideoTimestampFieldToUnix(videoMap map[string]any, key string) {
+	if videoMap == nil {
+		return
+	}
+	raw, ok := videoMap[key]
+	if !ok || raw == nil {
+		return
+	}
+	switch v := raw.(type) {
+	case string:
+		if strings.TrimSpace(v) == "" {
+			delete(videoMap, key)
+			return
+		}
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			videoMap[key] = t.Unix()
+		}
+	case float64:
+		videoMap[key] = int64(v)
+	case int:
+		videoMap[key] = int64(v)
+	case int64:
+		// already unix seconds
+	case json.Number:
+		if sec, err := v.Int64(); err == nil {
+			videoMap[key] = sec
+		}
+	}
 }
 
 func (m *OpenAIVideo) SetProgressStr(progress string) {
