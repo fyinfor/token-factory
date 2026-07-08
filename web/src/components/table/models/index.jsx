@@ -217,6 +217,8 @@ const ModelsPage = ({ apiBasePath } = {}) => {
                 searchModels={searchModels}
                 loading={loading}
                 searching={searching}
+                vendorOptions={modelsData.vendorOptions}
+                tagOptions={modelsData.tagOptions}
                 t={t}
               />
             </div>

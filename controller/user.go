@@ -368,7 +368,7 @@ func Register(c *gin.Context) {
 		return
 	}
 	if err := common.Validate.Struct(&req); err != nil {
-		common.ApiErrorI18n(c, i18n.MsgUserInputInvalid, map[string]any{"Error": err.Error()})
+		common.ApiErrorI18n(c, i18n.MsgUserInputInvalid, map[string]any{"Error": common.FormatValidationError(err)})
 		return
 	}
 	if common.SMSVerificationEnabled {
@@ -1486,7 +1486,7 @@ func UpdateUser(c *gin.Context) {
 		updatedUser.Password = "$I_LOVE_U" // make Validator happy :)
 	}
 	if err := common.Validate.Struct(&updatedUser); err != nil {
-		common.ApiErrorI18n(c, i18n.MsgUserInputInvalid, map[string]any{"Error": err.Error()})
+		common.ApiErrorI18n(c, i18n.MsgUserInputInvalid, map[string]any{"Error": common.FormatValidationError(err)})
 		return
 	}
 	originUser, err := model.GetUserById(updatedUser.Id, false)
@@ -1771,7 +1771,7 @@ func CreateUser(c *gin.Context) {
 		return
 	}
 	if err := common.Validate.Struct(&user); err != nil {
-		common.ApiErrorI18n(c, i18n.MsgUserInputInvalid, map[string]any{"Error": err.Error()})
+		common.ApiErrorI18n(c, i18n.MsgUserInputInvalid, map[string]any{"Error": common.FormatValidationError(err)})
 		return
 	}
 	if user.DisplayName == "" {

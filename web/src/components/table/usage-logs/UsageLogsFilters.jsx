@@ -33,6 +33,7 @@ const LogsFilters = ({
   loading,
   isAdminUser,
   supplierChannelLogsView,
+  modelOptions = [],
   t,
 }) => {
   return (
@@ -83,10 +84,11 @@ const LogsFilters = ({
             size='small'
           />
 
-          <Form.Input
+          <Form.Select
             field='model_name'
-            prefix={<IconSearch />}
             placeholder={t('模型名称')}
+            optionList={modelOptions}
+            filter
             showClear
             pure
             size='small'

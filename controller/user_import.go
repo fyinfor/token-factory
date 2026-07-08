@@ -613,7 +613,7 @@ func validateUserImportItem(item *userImportFailure, seenUsernames map[string]in
 		Status:      common.UserStatusEnabled,
 	}
 	if err := common.Validate.Struct(&user); err != nil {
-		return "用户信息格式无效: " + err.Error()
+		return "用户信息格式无效: " + common.FormatValidationError(err)
 	}
 	if len([]rune(item.Group)) > 64 {
 		return "分组长度不能超过 64 个字符"

@@ -140,8 +140,17 @@ func ListModelsByOwnerUser(ownerUserID int, offset int, limit int) ([]*Model, in
 	return models, total, nil
 }
 
+func applyModelTagFilter(db *gorm.DB, tag string) *gorm.DB {
+	tag = strings.TrimSpace(tag)
+	if tag == "" {
+		return db
+	}
+	return db.Where("tags = ? OR tags LIKE ? OR tags LIKE ? OR tags LIKE ?",
+		tag, tag+",%", "%,"+tag+",%", "%,"+tag)
+}
+
 // SearchSupplierModels 搜索供应商模型（供应商查自己，管理员查全部供应商）。
-func SearchSupplierModels(ownerUserID *int, keyword string, vendor string, routeSlug string, offset int, limit int) ([]*Model, int64, error) {
+func SearchSupplierModels(ownerUserID *int, keyword string, vendor string, routeSlug string, tag string, offset int, limit int) ([]*Model, int64, error) {
 	var (
 		models []*Model
 		total  int64
@@ -163,6 +172,7 @@ func SearchSupplierModels(ownerUserID *int, keyword string, vendor string, route
 			db = db.Joins("JOIN vendors ON vendors.id = models.vendor_id").Where("vendors.name LIKE ?", "%"+vendor+"%")
 		}
 	}
+	db = applyModelTagFilter(db, tag)
 	db = applyModelRouteSlugFilter(db, routeSlug, ownerUserID)
 	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -200,7 +210,7 @@ func GetBoundChannelsByModelsMap(modelNames []string) (map[string][]BoundChannel
 	return result, nil
 }
 
-func SearchModels(keyword string, vendor string, routeSlug string, offset int, limit int) ([]*Model, int64, error) {
+func SearchModels(keyword string, vendor string, routeSlug string, tag string, offset int, limit int) ([]*Model, int64, error) {
 	var models []*Model
 	db := DB.Model(&Model{})
 	if keyword != "" {
@@ -214,6 +224,7 @@ func SearchModels(keyword string, vendor string, routeSlug string, offset int, l
 			db = db.Joins("JOIN vendors ON vendors.id = models.vendor_id").Where("vendors.name LIKE ?", "%"+vendor+"%")
 		}
 	}
+	db = applyModelTagFilter(db, tag)
 	db = applyModelRouteSlugFilter(db, routeSlug, nil)
 	var total int64
 	if err := db.Count(&total).Error; err != nil {

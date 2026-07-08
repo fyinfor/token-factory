@@ -310,6 +310,17 @@ export function getTodayEndTimestamp() {
   return Math.floor(now.getTime() / 1000);
 }
 
+export function getLast7DaysStartTimestamp() {
+  var now = new Date();
+  now.setDate(now.getDate() - 6);
+  now.setHours(0, 0, 0, 0);
+  return Math.floor(now.getTime() / 1000);
+}
+
+export function getLast7DaysEndTimestamp() {
+  return getTodayEndTimestamp();
+}
+
 export function timestamp2string(timestamp) {
   let date = new Date(timestamp * 1000);
   let year = date.getFullYear().toString();

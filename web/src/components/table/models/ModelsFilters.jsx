@@ -29,6 +29,8 @@ const ModelsFilters = ({
   searchModels,
   loading,
   searching,
+  vendorOptions = [],
+  tagOptions = [],
   t,
 }) => {
   const formApiRef = useRef(null);
@@ -88,15 +90,31 @@ const ModelsFilters = ({
           />
         </div>
 
-        <div className='relative w-full md:w-56'>
-          <Form.Input
+        <div className='relative w-full md:w-44'>
+          <Form.Select
             field='searchVendor'
-            prefix={<IconSearch />}
-            placeholder={t('搜索模型类型')}
+            placeholder={t('选择模型类型')}
+            optionList={vendorOptions}
+            onChange={() => scheduleAutoSearch()}
+            filter
+            className='w-full'
             showClear
             pure
             size='small'
+          />
+        </div>
+
+        <div className='relative w-full md:w-44'>
+          <Form.Select
+            field='searchTag'
+            placeholder={t('选择标签')}
+            optionList={tagOptions}
             onChange={() => scheduleAutoSearch()}
+            filter
+            className='w-full'
+            showClear
+            pure
+            size='small'
           />
         </div>
 

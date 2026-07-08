@@ -59,6 +59,7 @@ export const useModelsData = (options = {}) => {
     searchKeyword: '',
     searchVendor: '',
     searchRouteSlug: '',
+    searchTag: '',
   };
 
   // ---------- helpers ----------
@@ -109,6 +110,24 @@ export const useModelsData = (options = {}) => {
     return map;
   }, [vendors]);
 
+  const vendorOptions = useMemo(
+    () =>
+      vendors.map((v) => ({
+        label: v.name,
+        value: String(v.id),
+      })),
+    [vendors],
+  );
+
+  const tagOptions = useMemo(
+    () =>
+      modelTags.map((tag) => ({
+        label: tag,
+        value: tag,
+      })),
+    [modelTags],
+  );
+
   // Load vendor list
   const loadVendors = async () => {
     try {
@@ -134,13 +153,15 @@ export const useModelsData = (options = {}) => {
         searchKeyword = '',
         searchVendor = '',
         searchRouteSlug = '',
+        searchTag = '',
       } = getFormValues();
       const kw = String(searchKeyword ?? '').trim();
       const sv = String(searchVendor ?? '').trim();
       const routeSlug = String(searchRouteSlug ?? '').trim();
+      const tag = String(searchTag ?? '').trim();
 
       let url;
-      if (kw !== '' || sv !== '' || routeSlug !== '') {
+      if (kw !== '' || sv !== '' || routeSlug !== '' || tag !== '') {
         const effectiveVendor =
           sv !== ''
             ? sv
@@ -151,6 +172,7 @@ export const useModelsData = (options = {}) => {
         params.set('keyword', kw);
         params.set('vendor', effectiveVendor);
         params.set('route_slug', routeSlug);
+        params.set('tag', tag);
         params.set('p', String(page));
         params.set('page_size', String(size));
         url = `${apiBasePath}/search?${params.toString()}`;
@@ -514,6 +536,8 @@ export const useModelsData = (options = {}) => {
     // Vendor data
     vendors,
     vendorMap,
+    vendorOptions,
+    tagOptions,
     vendorCounts,
     activeVendorKey,
     setActiveVendorKey,
