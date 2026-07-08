@@ -118,7 +118,7 @@ func collectSupplierDashboardScope(userID int) (supplierDashboardScope, error) {
 		}
 	}
 
-	models, _, err := model.SearchSupplierModels(&userID, "", "", "", 0, 100000)
+	models, _, err := model.SearchSupplierModels(&userID, "", "", "", "", 0, 100000)
 	if err != nil {
 		return scope, err
 	}
@@ -137,7 +137,7 @@ func collectAllSupplierDashboardScope() (supplierDashboardScope, error) {
 	}
 	mergeChannelModelsIntoScope(&scope, channels)
 
-	models, _, err := model.SearchSupplierModels(nil, "", "", "", 0, 100000)
+	models, _, err := model.SearchSupplierModels(nil, "", "", "", "", 0, 100000)
 	if err != nil {
 		return scope, err
 	}

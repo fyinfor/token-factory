@@ -23,8 +23,8 @@ import { Modal, Tag } from '@douyinfe/semi-ui';
 import { formatVideoResolutionDisplayLabel, resolveVideoBillingResolutionLabel } from '../../helpers/videoResolutionLabel';
 import {
   API,
-  getTodayStartTimestamp,
-  getTodayEndTimestamp,
+  getLast7DaysStartTimestamp,
+  getLast7DaysEndTimestamp,
   isAdmin,
   isSupplier,
   showError,
@@ -98,6 +98,7 @@ export const useLogsData = () => {
   const [logCount, setLogCount] = useState(0);
   const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
   const [logTypes, setLogTypes] = useState([]);
+  const [modelOptions, setModelOptions] = useState([]);
 
   // User and admin
   const isAdminUser = isAdmin();
@@ -806,8 +807,8 @@ export const useLogsData = () => {
     group: '',
     request_id: '',
     dateRange: [
-      timestamp2string(getTodayStartTimestamp()),
-      timestamp2string(getTodayEndTimestamp()),
+      timestamp2string(getLast7DaysStartTimestamp()),
+      timestamp2string(getLast7DaysEndTimestamp()),
     ],
     logType: [],
   };
@@ -956,8 +957,8 @@ export const useLogsData = () => {
   const getFormValues = () => {
     const formValues = formApi ? formApi.getValues() : {};
 
-    let start_timestamp = getTodayStartTimestamp();
-    let end_timestamp = getTodayEndTimestamp();
+    let start_timestamp = getLast7DaysStartTimestamp();
+    let end_timestamp = getLast7DaysEndTimestamp();
 
     if (
       formValues.dateRange &&
@@ -1736,11 +1737,30 @@ export const useLogsData = () => {
     }
   };
 
+  const loadModelOptions = async () => {
+    try {
+      const res = await API.get('/api/user/models');
+      const { success, message, data } = res.data || {};
+      if (success) {
+        const options = (data || []).map((model) => ({
+          label: model,
+          value: model,
+        }));
+        setModelOptions(options);
+      } else {
+        showError(message);
+      }
+    } catch (e) {
+      showError(e.message || t('加载模型列表失败'));
+    }
+  };
+
   // Initialize data
   useEffect(() => {
     const localPageSize =
       parseInt(localStorage.getItem('page-size')) || ITEMS_PER_PAGE;
     setPageSize(localPageSize);
+    loadModelOptions();
     loadLogs(activePage, localPageSize)
       .then()
       .catch((reason) => {
@@ -1773,6 +1793,7 @@ export const useLogsData = () => {
     logCount,
     pageSize,
     logTypes,
+    modelOptions,
     stat,
     isAdminUser,
     supplierChannelLogsView,

@@ -1425,10 +1425,10 @@ func ListMySupplierModels(c *gin.Context) {
 		err   error
 	)
 	if c.GetInt("role") >= common.RoleAdminUser {
-		items, total, err = model.SearchSupplierModels(nil, keyword, vendor, routeSlug, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+		items, total, err = model.SearchSupplierModels(nil, keyword, vendor, routeSlug, "", pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	} else {
 		ownerUserID := c.GetInt("id")
-		items, total, err = model.SearchSupplierModels(&ownerUserID, keyword, vendor, routeSlug, pageInfo.GetStartIdx(), pageInfo.GetPageSize())
+		items, total, err = model.SearchSupplierModels(&ownerUserID, keyword, vendor, routeSlug, "", pageInfo.GetStartIdx(), pageInfo.GetPageSize())
 	}
 	if err != nil {
 		common.ApiError(c, err)
