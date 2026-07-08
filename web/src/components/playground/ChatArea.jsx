@@ -17,7 +17,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   AIChatDialogue,
   AIChatInput,
@@ -28,13 +35,9 @@ import {
   Typography,
 } from '@douyinfe/semi-ui';
 import { IconRefresh, IconUploadError } from '@douyinfe/semi-icons';
-import {
-  MessageSquare,
-  Eye,
-  EyeOff,
-  MessageSquarePlus,
-} from 'lucide-react';
+import { MessageSquare, Eye, EyeOff, MessageSquarePlus } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import StableDialogueMarkdown from './StableDialogueMarkdown';
 import { usePlayground } from '../../contexts/PlaygroundContext';
 import { listMaterialAssets } from '../../helpers/materialApi';
 import {
@@ -42,6 +45,7 @@ import {
   isAssetUri,
   resolveAssetUriToUrl,
 } from '../../helpers/materialAssetUtils';
+import { processIncompleteThinkTags } from '../../helpers';
 import {
   PLAYGROUND_MEDIA_MAX_HEIGHT,
   PLAYGROUND_MEDIA_MAX_WIDTH,
@@ -67,6 +71,11 @@ const getConstrainedMediaSize = (
 
 const getVideoUrl = (item) =>
   item?.video_url || item?.file_url || item?.url || item?.src || '';
+
+const AUTO_SCROLL_BOTTOM_GAP = 48;
+const AUTO_SCROLL_RESUME_BOTTOM_GAP = 8;
+const AUTO_SCROLL_RENDER_SETTLE_MS = 80;
+const TOUCH_SCROLL_DIRECTION_THRESHOLD = 4;
 
 /** 操练场 Markdown 图片：避免 Semi 默认 50% 宽，并保留点击预览 */
 const PlaygroundDialogueMarkdownImage = ({
@@ -128,9 +137,7 @@ const messageHasAssetUri = (message) => {
   const rawContent = message?.playgroundContent ?? message?.content;
   if (Array.isArray(rawContent)) {
     return rawContent.some(
-      (item) =>
-        item?.type === 'image_url' &&
-        isAssetUri(item?.image_url?.url),
+      (item) => item?.type === 'image_url' && isAssetUri(item?.image_url?.url),
     );
   }
   if (typeof rawContent === 'string') {
@@ -196,18 +203,37 @@ const restorePlaygroundMessage = (message) => {
   return restored;
 };
 
+const appendTextContent = (normalizedContent, text, reasoningContentRef) => {
+  const processed = processIncompleteThinkTags(
+    text || '',
+    reasoningContentRef.value,
+  );
+  reasoningContentRef.value = processed.reasoningContent || '';
+
+  if (processed.content?.trim()) {
+    normalizedContent.push({
+      type: 'input_text',
+      text: processed.content,
+    });
+  }
+};
+
 const normalizeDialogueContent = (message, assetMap) => {
   const { role, videoTask } = message || {};
   const rawContent = message?.playgroundContent ?? message?.content;
   const normalizedContent = [];
+  const reasoningContentRef = {
+    value: message?.reasoningContent || '',
+  };
 
   if (Array.isArray(rawContent)) {
     rawContent.forEach((item) => {
       if (item?.type === 'text') {
-        normalizedContent.push({
-          type: 'input_text',
-          text: item.text || '',
-        });
+        appendTextContent(
+          normalizedContent,
+          item.text || '',
+          reasoningContentRef,
+        );
       } else if (item?.type === 'image_url' && item.image_url?.url) {
         normalizedContent.push({
           type: 'input_image',
@@ -217,10 +243,7 @@ const normalizeDialogueContent = (message, assetMap) => {
       }
     });
   } else if (typeof rawContent === 'string' && rawContent.trim()) {
-    normalizedContent.push({
-      type: 'input_text',
-      text: rawContent,
-    });
+    appendTextContent(normalizedContent, rawContent, reasoningContentRef);
   }
 
   if (videoTask?.playableUrl) {
@@ -231,17 +254,31 @@ const normalizeDialogueContent = (message, assetMap) => {
     });
   }
 
-  if (normalizedContent.length === 0) {
-    return rawContent;
+  const reasoningContent = reasoningContentRef.value?.trim();
+  const normalizedMessages = [];
+  if (reasoningContent) {
+    normalizedMessages.push({
+      type: 'reasoning',
+      content: [{ text: reasoningContent }],
+      status: message?.isThinkingComplete
+        ? 'completed'
+        : toDialogueStatus(message?.status),
+    });
   }
 
-  return [
-    {
+  if (normalizedContent.length > 0) {
+    normalizedMessages.push({
       type: 'message',
       role,
       content: normalizedContent,
-    },
-  ];
+    });
+  }
+
+  if (normalizedMessages.length === 0) {
+    return rawContent;
+  }
+
+  return normalizedMessages;
 };
 
 const ChatArea = ({
@@ -264,6 +301,85 @@ const ChatArea = ({
   const mediaMaxHeightPx = usePlaygroundMediaMaxHeightPx();
   const [inputFocused, setInputFocused] = useState(false);
   const [assetMap, setAssetMap] = useState(null);
+  const dialogueHostRef = useRef(null);
+  const autoStickToBottomRef = useRef(true);
+  const dialogueWheelScrollRef = useRef(false);
+  const previousChatCountRef = useRef(0);
+  const autoScrollFrameRef = useRef(null);
+  const autoScrollTimerRef = useRef(null);
+  const lastScrollTopRef = useRef(0);
+  const touchStartYRef = useRef(null);
+
+  const getDialogueListElement = useCallback(
+    () =>
+      dialogueHostRef.current?.querySelector('.semi-ai-chat-dialogue-list') ||
+      null,
+    [],
+  );
+
+  const isDialogueAtBottom = useCallback(
+    (element, gap = AUTO_SCROLL_BOTTOM_GAP) => {
+      if (!element) return true;
+      return (
+        element.scrollHeight - element.scrollTop - element.clientHeight <= gap
+      );
+    },
+    [],
+  );
+
+  const cancelScheduledAutoScroll = useCallback(() => {
+    if (autoScrollFrameRef.current !== null) {
+      window.cancelAnimationFrame(autoScrollFrameRef.current);
+      autoScrollFrameRef.current = null;
+    }
+    if (autoScrollTimerRef.current !== null) {
+      window.clearTimeout(autoScrollTimerRef.current);
+      autoScrollTimerRef.current = null;
+    }
+  }, []);
+
+  const syncDialogueWheelScroll = useCallback(
+    (wheelScroll) => {
+      if (dialogueWheelScrollRef.current === wheelScroll) return;
+      dialogueWheelScrollRef.current = wheelScroll;
+      chatRef.current?.adapter?.setWheelScroll?.(wheelScroll);
+    },
+    [chatRef],
+  );
+
+  const pauseAutoStickToBottom = useCallback(() => {
+    if (!autoStickToBottomRef.current) return;
+    autoStickToBottomRef.current = false;
+    cancelScheduledAutoScroll();
+    syncDialogueWheelScroll(true);
+  }, [cancelScheduledAutoScroll, syncDialogueWheelScroll]);
+
+  const scrollDialogueToBottom = useCallback(() => {
+    if (!autoStickToBottomRef.current) return;
+
+    syncDialogueWheelScroll(false);
+    chatRef.current?.scrollToBottom?.(false);
+
+    const element = getDialogueListElement();
+    if (element) {
+      element.scrollTop = element.scrollHeight;
+      lastScrollTopRef.current = element.scrollTop;
+    }
+  }, [chatRef, getDialogueListElement, syncDialogueWheelScroll]);
+
+  const scheduleAutoScrollToBottom = useCallback(() => {
+    if (!autoStickToBottomRef.current) return;
+
+    cancelScheduledAutoScroll();
+    autoScrollFrameRef.current = window.requestAnimationFrame(() => {
+      autoScrollFrameRef.current = null;
+      scrollDialogueToBottom();
+    });
+    autoScrollTimerRef.current = window.setTimeout(() => {
+      autoScrollTimerRef.current = null;
+      scrollDialogueToBottom();
+    }, AUTO_SCROLL_RENDER_SETTLE_MS);
+  }, [cancelScheduledAutoScroll, scrollDialogueToBottom]);
 
   const needsAssetMap = useMemo(() => {
     const list = Array.isArray(message) ? message : [];
@@ -335,6 +451,102 @@ const ChatArea = ({
     [safeChats],
   );
 
+  useEffect(() => {
+    const element = getDialogueListElement();
+    if (!element) return undefined;
+
+    const initialAtBottom = isDialogueAtBottom(element);
+    autoStickToBottomRef.current = initialAtBottom;
+    lastScrollTopRef.current = element.scrollTop;
+    syncDialogueWheelScroll(!initialAtBottom);
+
+    const handleScroll = () => {
+      const previousScrollTop = lastScrollTopRef.current;
+      const currentScrollTop = element.scrollTop;
+      const scrollingDown = currentScrollTop >= previousScrollTop;
+      lastScrollTopRef.current = currentScrollTop;
+
+      const atBottom = isDialogueAtBottom(
+        element,
+        AUTO_SCROLL_RESUME_BOTTOM_GAP,
+      );
+      if (atBottom && (autoStickToBottomRef.current || scrollingDown)) {
+        if (!autoStickToBottomRef.current) {
+          autoStickToBottomRef.current = true;
+          syncDialogueWheelScroll(false);
+          scheduleAutoScrollToBottom();
+        }
+        return;
+      }
+
+      pauseAutoStickToBottom();
+    };
+
+    const handleWheel = (event) => {
+      if (event.deltaY < 0) {
+        pauseAutoStickToBottom();
+      }
+    };
+
+    const handleTouchStart = (event) => {
+      touchStartYRef.current = event.touches?.[0]?.clientY ?? null;
+    };
+
+    const handleTouchMove = (event) => {
+      const previousY = touchStartYRef.current;
+      const currentY = event.touches?.[0]?.clientY ?? null;
+      if (previousY !== null && currentY !== null) {
+        const deltaY = currentY - previousY;
+        if (deltaY > TOUCH_SCROLL_DIRECTION_THRESHOLD) {
+          pauseAutoStickToBottom();
+        }
+      }
+      touchStartYRef.current = currentY;
+    };
+
+    element.addEventListener('scroll', handleScroll, { passive: true });
+    element.addEventListener('wheel', handleWheel, { passive: true });
+    element.addEventListener('touchstart', handleTouchStart, { passive: true });
+    element.addEventListener('touchmove', handleTouchMove, { passive: true });
+    return () => {
+      element.removeEventListener('scroll', handleScroll);
+      element.removeEventListener('wheel', handleWheel);
+      element.removeEventListener('touchstart', handleTouchStart);
+      element.removeEventListener('touchmove', handleTouchMove);
+    };
+  }, [
+    getDialogueListElement,
+    isDialogueAtBottom,
+    pauseAutoStickToBottom,
+    scheduleAutoScrollToBottom,
+    syncDialogueWheelScroll,
+  ]);
+
+  useEffect(
+    () => () => {
+      cancelScheduledAutoScroll();
+    },
+    [cancelScheduledAutoScroll],
+  );
+
+  useLayoutEffect(() => {
+    const chatCount = safeChats.length;
+    if (chatCount > previousChatCountRef.current) {
+      autoStickToBottomRef.current = true;
+      syncDialogueWheelScroll(false);
+    }
+    previousChatCountRef.current = chatCount;
+
+    if (generating || autoStickToBottomRef.current) {
+      scheduleAutoScrollToBottom();
+    }
+  }, [
+    generating,
+    safeChats,
+    scheduleAutoScrollToBottom,
+    syncDialogueWheelScroll,
+  ]);
+
   const handleInputMessageSend = useCallback(
     (messageContent) => {
       const content = getInputText(messageContent);
@@ -398,11 +610,17 @@ const ChatArea = ({
 
   const dialogueRenderConfig = useMemo(
     () => ({
-      renderDialogueAction: ({ className, defaultActionsObj, message: chat }) => {
+      renderDialogueAction: ({
+        className,
+        defaultActionsObj,
+        message: chat,
+      }) => {
         const chatStatus = chat?.playgroundStatus || chat?.status;
-        const isMessageLoading = ['loading', 'incomplete', 'in_progress'].includes(
-          chatStatus,
-        );
+        const isMessageLoading = [
+          'loading',
+          'incomplete',
+          'in_progress',
+        ].includes(chatStatus);
         const shouldDisableReset = generating || isMessageLoading;
         const resetNode = (
           <Button
@@ -444,6 +662,32 @@ const ChatArea = ({
 
   const renderDialogueContentItem = useMemo(
     () => ({
+      input_text: (item, currentMessage) => {
+        const text = typeof item?.text === 'string' ? item.text : '';
+        if (!text.trim()) return null;
+        const isUserMessage = currentMessage?.role === 'user';
+        const messageStatus =
+          currentMessage?.playgroundStatus || currentMessage?.status;
+        const isStreaming = ['loading', 'incomplete', 'in_progress'].includes(
+          messageStatus,
+        );
+        return (
+          <div
+            className={`semi-ai-chat-dialogue-content semi-ai-chat-dialogue-content-bubble ${
+              isUserMessage ? 'semi-ai-chat-dialogue-content-user' : ''
+            }`}
+            style={{ marginTop: 0 }}
+          >
+            <StableDialogueMarkdown
+              raw={text}
+              components={playgroundMarkdownRenderProps.components}
+              escapeHtml={isUserMessage}
+              streaming={isStreaming}
+              onContentRendered={scheduleAutoScrollToBottom}
+            />
+          </div>
+        );
+      },
       input_image: (item) => {
         const imageUrl = resolvePlaygroundMediaUrl(item?.image_url, assetMap);
         if (!imageUrl) return null;
@@ -499,7 +743,13 @@ const ChatArea = ({
         );
       },
     }),
-    [assetMap, mediaMaxHeightPx, onMediaDimensionsChange],
+    [
+      assetMap,
+      mediaMaxHeightPx,
+      onMediaDimensionsChange,
+      playgroundMarkdownRenderProps.components,
+      scheduleAutoScrollToBottom,
+    ],
   );
 
   const handleChatsChange = useCallback(
@@ -569,7 +819,10 @@ const ChatArea = ({
       )}
 
       {/* 聊天内容区域 */}
-      <div className='flex min-h-0 flex-1 flex-col overflow-hidden'>
+      <div
+        ref={dialogueHostRef}
+        className='flex min-h-0 flex-1 flex-col overflow-hidden'
+      >
         <AIChatDialogue
           ref={chatRef}
           align='leftRight'
