@@ -17,7 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   Button,
   Card,
@@ -78,9 +84,11 @@ const PC_PROFILE = {
   key: 'pc',
   imageKey: 'img_pc',
   label: 'PC 主图',
-  helper: '1920 x 600，核心内容放在中间 1200px 安全区',
+  helper:
+    '按 6.4:1 比例裁剪，不强制导出固定尺寸；建议上传 1920x300 或同等比例大图',
+  aspectLabel: '6.4:1',
   width: 1920,
-  height: 600,
+  height: 300,
   maxBytes: 3 * 1024 * 1024,
   icon: <Monitor size={16} />,
 };
@@ -187,23 +195,6 @@ function contentAlignClass(value) {
     return 'items-end text-right';
   }
   return 'items-start text-left';
-}
-
-function getVerticalAlignedCropY(mediaSize, cropSize, zoom, placement) {
-  if (!mediaSize?.height || !cropSize?.height) {
-    return 0;
-  }
-  const maxOffset = Math.max(
-    0,
-    (mediaSize.height * zoom - cropSize.height) / 2,
-  );
-  if (placement === 'top') {
-    return maxOffset;
-  }
-  if (placement === 'bottom') {
-    return -maxOffset;
-  }
-  return 0;
 }
 
 const clamp = (value, min, max, fallback) => {
@@ -431,9 +422,12 @@ function normalizeCropArea(area, image) {
   };
 }
 
-const makeCroppedFile = (cropState) =>
+const makeCroppedFile = (
+  cropState,
+  cropAreaPixels = cropState.croppedAreaPixels,
+) =>
   new Promise((resolve, reject) => {
-    if (!cropState.croppedAreaPixels) {
+    if (!cropAreaPixels) {
       reject(new Error('crop area unavailable'));
       return;
     }
@@ -441,9 +435,16 @@ const makeCroppedFile = (cropState) =>
     const image = new Image();
     image.onload = async () => {
       try {
+        const area = normalizeCropArea(cropAreaPixels, image);
+        const outputWidth =
+          cropState.profile.key === 'pc' ? area.width : cropState.profile.width;
+        const outputHeight =
+          cropState.profile.key === 'pc'
+            ? area.height
+            : cropState.profile.height;
         const canvas = document.createElement('canvas');
-        canvas.width = cropState.profile.width;
-        canvas.height = cropState.profile.height;
+        canvas.width = outputWidth;
+        canvas.height = outputHeight;
         const ctx = canvas.getContext('2d');
         if (!ctx) {
           reject(new Error('canvas context unavailable'));
@@ -452,7 +453,6 @@ const makeCroppedFile = (cropState) =>
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
 
-        const area = normalizeCropArea(cropState.croppedAreaPixels, image);
         ctx.drawImage(
           image,
           area.x,
@@ -461,8 +461,8 @@ const makeCroppedFile = (cropState) =>
           area.height,
           0,
           0,
-          cropState.profile.width,
-          cropState.profile.height,
+          outputWidth,
+          outputHeight,
         );
 
         const blob = await canvasToOptimizedBlob(
@@ -504,6 +504,90 @@ function ColorField({ label, value, onChange }) {
           className='h-6 w-8 cursor-pointer border-0 bg-transparent p-0'
         />
         <Input value={value} onChange={onChange} size='small' />
+      </div>
+    </div>
+  );
+}
+
+function CropResultPreview({ cropState }) {
+  const { t } = useTranslation();
+  const canvasRef = useRef(null);
+  const areaPixels = cropState?.croppedAreaPixels;
+  const profile = cropState?.profile;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas || !cropState?.objectUrl || !areaPixels || !profile) {
+      return;
+    }
+
+    let disposed = false;
+    const image = new Image();
+    image.onload = () => {
+      if (disposed) {
+        return;
+      }
+
+      const area = normalizeCropArea(areaPixels, image);
+      const previewWidth = profile.key === 'pc' ? 960 : 360;
+      const previewHeight = Math.round(
+        previewWidth * (profile.height / profile.width),
+      );
+      const ratio = window.devicePixelRatio || 1;
+      canvas.width = Math.round(previewWidth * ratio);
+      canvas.height = Math.round(previewHeight * ratio);
+      canvas.style.width = `${previewWidth}px`;
+      canvas.style.height = `${previewHeight}px`;
+
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        return;
+      }
+      ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      ctx.clearRect(0, 0, previewWidth, previewHeight);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(
+        image,
+        area.x,
+        area.y,
+        area.width,
+        area.height,
+        0,
+        0,
+        previewWidth,
+        previewHeight,
+      );
+    };
+    image.src = cropState.objectUrl;
+
+    return () => {
+      disposed = true;
+    };
+  }, [areaPixels, cropState?.objectUrl, profile]);
+
+  if (!cropState) {
+    return null;
+  }
+
+  return (
+    <div className='w-full rounded-md border border-semi-color-border bg-semi-color-bg-0 p-3'>
+      <div className='mb-2 flex items-center justify-between gap-2'>
+        <Text strong size='small'>
+          {t('裁剪结果预览')}
+        </Text>
+        <Text type='tertiary' size='small'>
+          {profile?.aspectLabel || `${profile?.width} x ${profile?.height}`}
+        </Text>
+      </div>
+      <div className='flex w-full justify-center overflow-hidden rounded-md bg-[#111827]'>
+        <canvas
+          ref={canvasRef}
+          className='block max-w-full'
+          style={{
+            aspectRatio: `${profile.width} / ${profile.height}`,
+          }}
+        />
       </div>
     </div>
   );
@@ -632,7 +716,9 @@ function ImageUploadPanel({
           <Text strong>{t(profile.label)}</Text>
         </Space>
         <Text type='tertiary' size='small'>
-          {profile.width} x {profile.height}
+          {profile.aspectLabel
+            ? t('比例 {{ratio}}', { ratio: profile.aspectLabel })
+            : `${profile.width} x ${profile.height}`}
         </Text>
       </div>
 
@@ -690,8 +776,7 @@ export default function HomeHeroCarouselSetting() {
   const [customColorSlideIds, setCustomColorSlideIds] = useState([]);
   const [loading, setLoading] = useState(false);
   const [cropState, setCropState] = useState(null);
-  const [cropSize, setCropSize] = useState(null);
-  const cropFrameRef = useRef(null);
+  const cropAreaPixelsRef = useRef(null);
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const customColorSet = useMemo(
@@ -740,69 +825,6 @@ export default function HomeHeroCarouselSetting() {
   useEffect(() => {
     loadOptions();
   }, []);
-
-  useEffect(() => {
-    if (!cropState?.visible || !cropFrameRef.current) {
-      setCropSize(null);
-      return undefined;
-    }
-
-    const frame = cropFrameRef.current;
-    const syncCropSize = () => {
-      const rect = frame.getBoundingClientRect();
-      if (rect.width > 0 && rect.height > 0) {
-        setCropSize({
-          width: Math.round(rect.width),
-          height: Math.round(rect.height),
-        });
-      }
-    };
-
-    syncCropSize();
-    if (typeof ResizeObserver !== 'undefined') {
-      const observer = new ResizeObserver(syncCropSize);
-      observer.observe(frame);
-      return () => observer.disconnect();
-    }
-
-    window.addEventListener('resize', syncCropSize);
-    return () => window.removeEventListener('resize', syncCropSize);
-  }, [cropState?.visible, cropState?.profile?.key]);
-
-  useEffect(() => {
-    if (
-      !cropState?.visible ||
-      cropState.profile?.key !== 'pc' ||
-      cropState.hasAutoAligned ||
-      !cropState.mediaSize ||
-      !cropSize
-    ) {
-      return;
-    }
-
-    const y = getVerticalAlignedCropY(
-      cropState.mediaSize,
-      cropSize,
-      cropState.zoom,
-      'top',
-    );
-    setCropState((state) =>
-      state
-        ? {
-            ...state,
-            crop: { ...state.crop, y },
-            hasAutoAligned: true,
-          }
-        : state,
-    );
-  }, [
-    cropSize,
-    cropState?.hasAutoAligned,
-    cropState?.mediaSize,
-    cropState?.profile?.key,
-    cropState?.visible,
-    cropState?.zoom,
-  ]);
 
   const updateSlide = (id, patch) => {
     setSlides((items) =>
@@ -916,6 +938,7 @@ export default function HomeHeroCarouselSetting() {
       }
 
       const objectUrl = URL.createObjectURL(inst);
+      cropAreaPixelsRef.current = null;
       setCropState({
         visible: true,
         slideId,
@@ -924,8 +947,6 @@ export default function HomeHeroCarouselSetting() {
         objectUrl,
         crop: { x: 0, y: 0 },
         zoom: 1,
-        mediaSize: null,
-        hasAutoAligned: false,
         croppedAreaPixels: null,
         onSuccess,
         onError,
@@ -940,14 +961,23 @@ export default function HomeHeroCarouselSetting() {
       cropState?.onError?.(new Error('cancelled'));
     }
     setCropState(null);
+    cropAreaPixelsRef.current = null;
   };
+
+  const handleCropComplete = useCallback((_, croppedAreaPixels) => {
+    cropAreaPixelsRef.current = croppedAreaPixels;
+    setCropState((state) => (state ? { ...state, croppedAreaPixels } : state));
+  }, []);
 
   const confirmCrop = async () => {
     if (!cropState) {
       return;
     }
     try {
-      const croppedFile = await makeCroppedFile(cropState);
+      const croppedFile = await makeCroppedFile(
+        cropState,
+        cropAreaPixelsRef.current || cropState.croppedAreaPixels,
+      );
       const data = await uploadFile(
         cropState.slideId,
         cropState.profile,
@@ -959,25 +989,6 @@ export default function HomeHeroCarouselSetting() {
       cropState.onError?.(error);
       showError(error?.message || t('裁剪上传失败'));
     }
-  };
-
-  const alignCropVertically = (placement) => {
-    setCropState((state) => {
-      if (!state?.mediaSize || !cropSize) {
-        return state;
-      }
-      const y = getVerticalAlignedCropY(
-        state.mediaSize,
-        cropSize,
-        state.zoom,
-        placement,
-      );
-      return {
-        ...state,
-        crop: { ...state.crop, y },
-        hasAutoAligned: true,
-      };
-    });
   };
 
   const applyColorPreset = (slideId, preset) => {
@@ -1014,7 +1025,7 @@ export default function HomeHeroCarouselSetting() {
         }),
         API.put('/api/option/', {
           key: ASPECT_KEY,
-          value: '1920:600',
+          value: '1920:300',
         }),
         API.put('/api/option/', {
           key: SLIDES_KEY,
@@ -1073,7 +1084,7 @@ export default function HomeHeroCarouselSetting() {
             </Space>
             <Text type='tertiary' size='small'>
               {t(
-                'PC 使用 1920x600，移动端使用 750x360；核心文字、按钮、LOGO 请放在安全区内。',
+                'PC 按 6.4:1 比例裁剪（如 1920x300），移动端使用 750x360；核心文字、按钮、LOGO 请放在安全区内。',
               )}
             </Text>
           </Space>
@@ -1483,7 +1494,7 @@ export default function HomeHeroCarouselSetting() {
         confirmLoading={loading}
         okText={t('裁剪并上传')}
         cancelText={t('取消')}
-        width={1180}
+        width={1280}
         style={{ maxWidth: '96vw' }}
       >
         {cropState ? (
@@ -1495,19 +1506,24 @@ export default function HomeHeroCarouselSetting() {
           >
             <Text type='tertiary' size='small'>
               {t(
-                '图片会始终铺满裁剪框，不会导出背景空白。拖动图片或放大即可调整，PC 图会显示中间安全区、左右裁切区和底部避让参考线。',
+                '图片会按当前比例裁剪并铺满画面，不会导出背景空白。拖动图片或缩放即可调整，PC 图会显示中间安全区和左右裁切区参考线。',
               )}
             </Text>
             <div
-              ref={cropFrameRef}
               style={{
                 position: 'relative',
-                width: '100%',
-                aspectRatio: `${cropState.profile.width} / ${cropState.profile.height}`,
+                width:
+                  cropState.profile.key === 'pc' ? '100%' : 'min(100%, 750px)',
+                ...(cropState.profile.key === 'pc'
+                  ? { height: 'min(360px, 52vh)', minHeight: 260 }
+                  : {
+                      aspectRatio: `${cropState.profile.width} / ${cropState.profile.height}`,
+                    }),
                 margin: '0 auto',
                 background: '#111827',
                 overflow: 'hidden',
                 border: '1px solid var(--semi-color-border)',
+                borderRadius: 6,
               }}
             >
               <Cropper
@@ -1515,7 +1531,6 @@ export default function HomeHeroCarouselSetting() {
                 crop={cropState.crop}
                 zoom={cropState.zoom}
                 aspect={cropState.profile.width / cropState.profile.height}
-                cropSize={cropSize || undefined}
                 minZoom={1}
                 maxZoom={6}
                 objectFit='cover'
@@ -1528,16 +1543,7 @@ export default function HomeHeroCarouselSetting() {
                 onZoomChange={(zoom) =>
                   setCropState((state) => (state ? { ...state, zoom } : state))
                 }
-                onMediaLoaded={(mediaSize) =>
-                  setCropState((state) =>
-                    state ? { ...state, mediaSize } : state,
-                  )
-                }
-                onCropComplete={(_, croppedAreaPixels) =>
-                  setCropState((state) =>
-                    state ? { ...state, croppedAreaPixels } : state,
-                  )
-                }
+                onCropComplete={handleCropComplete}
               />
               {cropState.profile.key === 'pc' ? (
                 <div className='pointer-events-none absolute inset-0 z-[2]'>
@@ -1547,12 +1553,8 @@ export default function HomeHeroCarouselSetting() {
                       left: '18.75%',
                       right: '18.75%',
                       top: 0,
-                      bottom: '13.333%',
+                      bottom: 0,
                     }}
-                  />
-                  <div
-                    className='absolute bottom-0 left-0 right-0 border-t border-dashed border-white/45 bg-white/5'
-                    style={{ height: '13.333%' }}
                   />
                   <div
                     className='absolute bottom-0 left-0 top-0 border-r border-dashed border-white/35 bg-white/5'
@@ -1565,12 +1567,10 @@ export default function HomeHeroCarouselSetting() {
                   <div className='absolute left-[18.75%] top-2 rounded bg-black/40 px-2 py-1 text-xs text-white'>
                     {t('1200px 安全区')}
                   </div>
-                  <div className='absolute bottom-2 left-2 rounded bg-black/35 px-2 py-1 text-xs text-white'>
-                    {t('底部避让 80px')}
-                  </div>
                 </div>
               ) : null}
             </div>
+            <CropResultPreview cropState={cropState} />
             <div style={{ width: '100%' }}>
               <Text type='tertiary' size='small'>
                 {t('缩放')}
@@ -1586,31 +1586,6 @@ export default function HomeHeroCarouselSetting() {
                   )
                 }
               />
-              {cropState.profile.key === 'pc' ? (
-                <Space spacing='tight' wrap>
-                  <Button
-                    size='small'
-                    theme='light'
-                    onClick={() => alignCropVertically('top')}
-                  >
-                    {t('图片贴顶')}
-                  </Button>
-                  <Button
-                    size='small'
-                    theme='light'
-                    onClick={() => alignCropVertically('center')}
-                  >
-                    {t('居中')}
-                  </Button>
-                  <Button
-                    size='small'
-                    theme='light'
-                    onClick={() => alignCropVertically('bottom')}
-                  >
-                    {t('贴底')}
-                  </Button>
-                </Space>
-              ) : null}
             </div>
           </Space>
         ) : null}
