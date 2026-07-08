@@ -395,6 +395,101 @@ code {
   max-width: min(100%, 780px) !important;
 }
 
+.playground-ai-dialogue .semi-ai-chat-dialogue-code {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--semi-color-border);
+  border-radius: 8px;
+  background: var(--semi-color-fill-0);
+}
+
+.playground-ai-dialogue .semi-ai-chat-dialogue-code-topSlot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--semi-color-border);
+  background: var(--semi-color-fill-1);
+}
+
+.playground-ai-dialogue .semi-ai-chat-dialogue-code-topSlot-type {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--semi-color-text-2);
+  font-size: 12px;
+  line-height: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.playground-ai-dialogue .semi-ai-chat-dialogue-code-topSlot-copy-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  color: var(--semi-color-text-2);
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-radius: 4px;
+}
+
+.playground-ai-dialogue .semi-ai-chat-dialogue-code-topSlot-copy-wrapper:hover {
+  color: var(--semi-color-text-0);
+  background: var(--semi-color-fill-2);
+}
+
+.playground-ai-dialogue .playground-dialogue-code-pre {
+  max-width: 100%;
+  margin: 0;
+  overflow: auto;
+  background: var(--semi-color-fill-0);
+}
+
+.playground-ai-dialogue .playground-dialogue-code-pre code {
+  display: block;
+  min-width: max-content;
+  padding: 12px 14px;
+  color: var(--semi-color-text-0);
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre;
+  background: transparent;
+}
+
+.playground-ai-dialogue .playground-dialogue-code-pre code.hljs {
+  padding: 12px 14px;
+  background: transparent;
+}
+
+.playground-ai-dialogue .semi-ai-chat-dialogue-reasoning-wrapper {
+  box-sizing: border-box;
+  width: min(100%, 780px);
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.playground-ai-dialogue .semi-ai-chat-dialogue-reasoning-content {
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-wrap: anywhere;
+}
+
+.playground-ai-dialogue
+  .semi-ai-chat-dialogue-reasoning-content
+  :is(pre, code, .semi-codeHighlight) {
+  max-width: 100%;
+}
+
 /* 操练场生成图：气泡宽度随图片收缩，消除图片与气泡右边框之间的空白 */
 .playground-ai-dialogue
   .semi-ai-chat-dialogue-content-bubble:has(.playground-dialogue-markdown-img) {
