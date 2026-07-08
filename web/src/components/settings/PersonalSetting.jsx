@@ -42,7 +42,6 @@ import AccountManagement from './personal/cards/AccountManagement';
 import NotificationSettings from './personal/cards/NotificationSettings';
 import PreferencesSettings from './personal/cards/PreferencesSettings';
 import CheckinCalendar from './personal/cards/CheckinCalendar';
-import RoutePolicyCard from './personal/cards/RoutePolicyCard';
 import EmailBindModal from './personal/modals/EmailBindModal';
 import PhoneBindModal from './personal/modals/PhoneBindModal';
 import WeChatBindModal from './personal/modals/WeChatBindModal';
@@ -658,9 +657,6 @@ const PersonalSetting = () => {
 
               {/* 偏好设置（语言等） */}
               <PreferencesSettings t={t} />
-
-              {/* 智能路由 */}
-              <RoutePolicyCard t={t} />
             </div>
 
             {/* 右侧：其他设置 */}

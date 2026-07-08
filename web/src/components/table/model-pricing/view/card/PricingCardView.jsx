@@ -146,11 +146,8 @@ const formatCompactVideoResolution = (resolution, t) => {
 const formatVideoTierSpec = (row, t) =>
   formatCompactVideoResolution(row?.resolution, t);
 
-const formatVideoTierDisplayPrice = (
-  usd,
-  usedGroupRatio,
-  displayPrice,
-) => displayPrice(Number(usd || 0) * usedGroupRatio);
+const formatVideoTierDisplayPrice = (usd, usedGroupRatio, displayPrice) =>
+  displayPrice(Number(usd || 0) * usedGroupRatio);
 
 const getVideoTierDiscount = (currentDisplayUsd, officialUsd) => {
   const current = Number(currentDisplayUsd || 0);
@@ -308,6 +305,130 @@ const renderOfficialCell = (officialPrice, hasDiscount) => {
   );
 };
 
+const normalizePriceUnit = (suffix) => {
+  const text = String(suffix || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) return '/M';
+  const lower = text.toLowerCase();
+  if (lower.includes('token')) {
+    if (text.includes('K')) return '/K';
+    return '/M';
+  }
+  if (text.includes('秒')) return '/秒';
+  if (text.includes('条')) return '/条';
+  if (text.includes('次')) return '/次';
+  return text.replace(/\s/g, '').replace(/^\/1/, '/');
+};
+
+const getDivPricingColumns = (t, unit = '/M') => ({
+  label: t('价格项'),
+  platform: `${t('平台价')}${unit}`,
+  official: `${t('官方价')}${unit}`,
+  discount: t('折扣'),
+});
+
+const PRICE_GRID_TEMPLATE = 'repeat(4, minmax(0, 1fr))';
+const DIV_PRICING_TABLE_STYLE = {
+  borderColor: 'var(--model-price-glass-border, rgba(255, 255, 255, 0.42))',
+  background: 'var(--model-price-glass-bg, rgba(255, 255, 255, 0.36))',
+  backdropFilter: 'blur(14px) saturate(155%)',
+  WebkitBackdropFilter: 'blur(14px) saturate(155%)',
+  boxShadow:
+    'inset 0 1px 0 var(--model-price-glass-highlight, rgba(255, 255, 255, 0.64))',
+};
+const DIV_PRICING_HEAD_STYLE = {
+  background: 'var(--model-price-glass-head-bg, rgba(255, 255, 255, 0.3))',
+  borderBottom:
+    '1px solid var(--model-price-glass-line, rgba(148, 163, 184, 0.16))',
+  fontSize: 11,
+  color: 'var(--model-price-glass-head-text, var(--semi-color-text-2))',
+};
+const DIV_PRICING_ROW_STYLE = {
+  background: 'var(--model-price-glass-row-bg, rgba(255, 255, 255, 0.16))',
+  fontSize: 11,
+  color: 'var(--model-price-glass-text, var(--semi-color-text-0))',
+};
+const DIV_PRICING_ROW_BORDER =
+  '1px solid var(--model-price-glass-line, rgba(148, 163, 184, 0.14))';
+
+const DivPricingTable = ({ columns, rows }) => {
+  if (!Array.isArray(rows) || rows.length === 0) return null;
+
+  return (
+    <div
+      className='w-full min-w-0 overflow-hidden rounded-lg border'
+      style={DIV_PRICING_TABLE_STYLE}
+    >
+      <div
+        className='grid items-center'
+        style={{
+          ...DIV_PRICING_HEAD_STYLE,
+          gridTemplateColumns: PRICE_GRID_TEMPLATE,
+        }}
+      >
+        <div className='min-w-0 px-2 py-1 font-semibold whitespace-nowrap overflow-hidden text-ellipsis'>
+          {columns.label}
+        </div>
+        <div className='min-w-0 px-2 py-1 text-right font-medium whitespace-nowrap overflow-hidden text-ellipsis'>
+          {columns.platform}
+        </div>
+        <div className='min-w-0 px-2 py-1 text-right font-medium whitespace-nowrap overflow-hidden text-ellipsis'>
+          {columns.official}
+        </div>
+        <div className='min-w-0 px-2 py-1 text-center font-medium whitespace-nowrap overflow-hidden text-ellipsis'>
+          {columns.discount}
+        </div>
+      </div>
+
+      {rows.map((row, index) => (
+        <div
+          key={row.key}
+          className='grid items-center'
+          style={{
+            ...DIV_PRICING_ROW_STYLE,
+            gridTemplateColumns: PRICE_GRID_TEMPLATE,
+            borderBottom:
+              index === rows.length - 1 ? 'none' : DIV_PRICING_ROW_BORDER,
+          }}
+        >
+          <div
+            className='min-w-0 px-2 py-1.5 font-semibold whitespace-nowrap overflow-hidden text-ellipsis'
+            style={{
+              color:
+                row.color ||
+                'var(--model-price-glass-text, var(--semi-color-text-0))',
+            }}
+            title={row.title || row.label}
+          >
+            {row.label}
+          </div>
+          <div
+            className='min-w-0 px-2 py-1.5 text-right font-bold whitespace-nowrap overflow-hidden text-ellipsis'
+            style={{
+              color:
+                'var(--model-price-glass-price, var(--semi-color-primary))',
+            }}
+            title={row.platformValue}
+          >
+            {row.platformValue || '-'}
+          </div>
+          <div className='min-w-0 px-2 py-1.5 text-right font-medium whitespace-nowrap overflow-hidden text-ellipsis'>
+            {row.hasOriginal ? (
+              renderOfficialCell(row.officialValue, row.discount > 0)
+            ) : (
+              <span style={{ color: 'var(--semi-color-text-3)' }}>-</span>
+            )}
+          </div>
+          <div className='min-w-0 px-2 py-1.5 text-center whitespace-nowrap overflow-hidden text-ellipsis'>
+            {renderDiscountCell(row.discount)}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
 /**
  * TokenTierTable — 阶梯计费表格
  *
@@ -335,102 +456,120 @@ const TokenTierTable = ({ items, t }) => {
   if (displayRows.length === 0) return null;
 
   const rangeLabel = firstRow.range
-    ? (firstRow.fromToken === 0 && firstRow.upTo > 0
-        ? `< ${formatTierBound(firstRow.upTo)}`
-        : firstRow.range)
+    ? firstRow.fromToken === 0 && firstRow.upTo > 0
+      ? `< ${formatTierBound(firstRow.upTo)}`
+      : firstRow.range
     : '';
 
   // 边界隐藏逻辑：所有行都没有有效折扣（discount <= 0 或 null）时，隐藏官方价和折扣列
   const hideOfficialCols = displayRows.every(
-    ({ cell }) => cell.discount == null || cell.discount <= 0
+    ({ cell }) => cell.discount == null || cell.discount <= 0,
+  );
+
+  const tokenTierDivTable = (
+    <DivPricingTable
+      columns={getDivPricingColumns(t, '/M')}
+      rows={displayRows.map(({ key, label, cell }) => {
+        const catStyle =
+          TIER_CATEGORY_STYLES[key] || TIER_CATEGORY_STYLES.input;
+        return {
+          key,
+          label: rangeLabel ? `${label}·${rangeLabel}` : label,
+          platformValue: cell.platformPrice,
+          officialValue: cell.officialPrice,
+          discount: cell.discount,
+          hasOriginal: cell.officialPriceUsd > 0,
+          color: catStyle.textColor,
+        };
+      })}
+    />
   );
 
   return (
-    <div
-      className='w-full min-w-0 overflow-hidden rounded-lg border'
-      style={PRICING_TABLE_WRAPPER_STYLE}
-    >
-      <table
-        className='w-full border-collapse'
-        style={{ fontSize: 11 }}
+    tokenTierDivTable || (
+      <div
+        className='w-full min-w-0 overflow-hidden rounded-lg border'
+        style={PRICING_TABLE_WRAPPER_STYLE}
       >
-        <thead>
-          <tr style={{ backgroundColor: PRICING_TABLE_HEAD_BG }}>
-            <th
-              className={TABLE_CELL_CLASS.thLeft}
-              style={PRICING_TABLE_HEAD_CELL_STYLE}
-            >
-              {rangeLabel}
-            </th>
-            <th
-              className={TABLE_CELL_CLASS.thCenter}
-              style={PRICING_TABLE_HEAD_CELL_STYLE}
-            >
-              {tierColumns.platform}
-            </th>
-            {/* 边界隐藏逻辑：hideOfficialCols 为 true 时隐藏官方价和折扣列 */}
-            {!hideOfficialCols && (
+        <table className='w-full border-collapse' style={{ fontSize: 11 }}>
+          <thead>
+            <tr style={{ backgroundColor: PRICING_TABLE_HEAD_BG }}>
+              <th
+                className={TABLE_CELL_CLASS.thLeft}
+                style={PRICING_TABLE_HEAD_CELL_STYLE}
+              >
+                {rangeLabel}
+              </th>
               <th
                 className={TABLE_CELL_CLASS.thCenter}
                 style={PRICING_TABLE_HEAD_CELL_STYLE}
               >
-                {tierColumns.official}
+                {tierColumns.platform}
               </th>
-            )}
-            {!hideOfficialCols && (
-              <th
-                className={TABLE_CELL_CLASS.thCenter}
-                style={PRICING_TABLE_HEAD_CELL_STYLE}
-              >
-                {tierColumns.discount}
-              </th>
-            )}
-          </tr>
-        </thead>
-        <tbody>
-          {displayRows.map(({ key, label, cell }) => {
-            const catStyle =
-              TIER_CATEGORY_STYLES[key] || TIER_CATEGORY_STYLES.input;
-            const showStrike =
-              cell.officialPriceUsd > 0 &&
-              cell.officialPriceUsd > cell.platformPriceUsd;
-            return (
-              <tr
-                key={key}
-                style={{
-                  backgroundColor: PRICING_TABLE_BODY_BG,
-                  borderBottom: PRICING_TABLE_ROW_BORDER,
-                }}
-              >
-                <td
-                  className={TABLE_CELL_CLASS.tdLabel}
-                  style={{ color: catStyle.textColor }}
+              {/* 边界隐藏逻辑：hideOfficialCols 为 true 时隐藏官方价和折扣列 */}
+              {!hideOfficialCols && (
+                <th
+                  className={TABLE_CELL_CLASS.thCenter}
+                  style={PRICING_TABLE_HEAD_CELL_STYLE}
                 >
-                  {label}
-                </td>
-                <td
-                  className={TABLE_CELL_CLASS.tdPlatform}
-                  style={{ color: 'var(--semi-color-primary)' }}
+                  {tierColumns.official}
+                </th>
+              )}
+              {!hideOfficialCols && (
+                <th
+                  className={TABLE_CELL_CLASS.thCenter}
+                  style={PRICING_TABLE_HEAD_CELL_STYLE}
                 >
-                  {cell.platformPrice}
-                </td>
-                {/* 边界隐藏逻辑：hideOfficialCols 为 true 时隐藏官方价和折扣列 */}
-                {!hideOfficialCols && (
-                  <td className={TABLE_CELL_CLASS.tdOfficial}>
-                    {renderOfficialCell(cell.officialPrice, showStrike)}
+                  {tierColumns.discount}
+                </th>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            {displayRows.map(({ key, label, cell }) => {
+              const catStyle =
+                TIER_CATEGORY_STYLES[key] || TIER_CATEGORY_STYLES.input;
+              const showStrike =
+                cell.officialPriceUsd > 0 &&
+                cell.officialPriceUsd > cell.platformPriceUsd;
+              return (
+                <tr
+                  key={key}
+                  style={{
+                    backgroundColor: PRICING_TABLE_BODY_BG,
+                    borderBottom: PRICING_TABLE_ROW_BORDER,
+                  }}
+                >
+                  <td
+                    className={TABLE_CELL_CLASS.tdLabel}
+                    style={{ color: catStyle.textColor }}
+                  >
+                    {label}
                   </td>
-                )}
-                {!hideOfficialCols && (
-                  <td className={TABLE_CELL_CLASS.tdDiscount}>
-                    {renderDiscountCell(cell.discount)}
+                  <td
+                    className={TABLE_CELL_CLASS.tdPlatform}
+                    style={{ color: 'var(--semi-color-primary)' }}
+                  >
+                    {cell.platformPrice}
                   </td>
-                )}
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+                  {/* 边界隐藏逻辑：hideOfficialCols 为 true 时隐藏官方价和折扣列 */}
+                  {!hideOfficialCols && (
+                    <td className={TABLE_CELL_CLASS.tdOfficial}>
+                      {renderOfficialCell(cell.officialPrice, showStrike)}
+                    </td>
+                  )}
+                  {!hideOfficialCols && (
+                    <td className={TABLE_CELL_CLASS.tdDiscount}>
+                      {renderDiscountCell(cell.discount)}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    )
   );
 };
 
@@ -471,92 +610,110 @@ const FlatPricingTable = ({ items, unitSuffix, t }) => {
   // 因此 original 不存在意味着：平台价 ≥ 官方价 或 无官方价数据，即折扣 ≤ 0
   const hideOfficialCols = rows.every((r) => !r.hasOriginal);
 
+  const flatDivTable = (
+    <DivPricingTable
+      columns={getDivPricingColumns(t, normalizePriceUnit(unitSuffix))}
+      rows={rows.map((row) => ({
+        key: row.key,
+        label: row.label,
+        platformValue: row.platformValue,
+        officialValue: row.officialValue,
+        discount: row.discount,
+        hasOriginal: row.hasOriginal,
+        color:
+          row.key === 'input' ? 'var(--semi-blue-7)' : 'var(--semi-violet-7)',
+      }))}
+    />
+  );
+
   return (
-    <div
-      className='w-full min-w-0 overflow-hidden rounded-lg border'
-      style={PRICING_TABLE_WRAPPER_STYLE}
-    >
-      <table
-        className='w-full border-collapse'
-        style={{ fontSize: 11 }}
+    flatDivTable || (
+      <div
+        className='w-full min-w-0 overflow-hidden rounded-lg border'
+        style={PRICING_TABLE_WRAPPER_STYLE}
       >
-        <thead>
-          <tr style={{ backgroundColor: PRICING_TABLE_HEAD_BG }}>
-            <th
-              className={TABLE_CELL_CLASS.thLeft}
-              style={PRICING_TABLE_HEAD_CELL_STYLE}
-            >
-              {flatColumns.label}
-            </th>
-            <th
-              className={TABLE_CELL_CLASS.thCenter}
-              style={PRICING_TABLE_HEAD_CELL_STYLE}
-            >
-              {flatColumns.platform}
-            </th>
-            {/* 边界隐藏逻辑：hideOfficialCols 为 true 时隐藏官方价和折扣列 */}
-            {!hideOfficialCols && (
+        <table className='w-full border-collapse' style={{ fontSize: 11 }}>
+          <thead>
+            <tr style={{ backgroundColor: PRICING_TABLE_HEAD_BG }}>
+              <th
+                className={TABLE_CELL_CLASS.thLeft}
+                style={PRICING_TABLE_HEAD_CELL_STYLE}
+              >
+                {flatColumns.label}
+              </th>
               <th
                 className={TABLE_CELL_CLASS.thCenter}
                 style={PRICING_TABLE_HEAD_CELL_STYLE}
               >
-                {flatColumns.official}
+                {flatColumns.platform}
               </th>
-            )}
-            {!hideOfficialCols && (
-              <th
-                className={TABLE_CELL_CLASS.thCenter}
-                style={PRICING_TABLE_HEAD_CELL_STYLE}
-              >
-                {flatColumns.discount}
-              </th>
-            )}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr
-              key={row.key}
-              style={{
-                backgroundColor: PRICING_TABLE_BODY_BG,
-                borderBottom: PRICING_TABLE_ROW_BORDER,
-              }}
-            >
-              <td
-                className={TABLE_CELL_CLASS.tdLabel}
-                style={{
-                  color:
-                    row.key === 'input'
-                      ? 'var(--semi-blue-7)'
-                      : 'var(--semi-violet-7)',
-                }}
-              >
-                {row.label}
-              </td>
-              <td
-                className={TABLE_CELL_CLASS.tdPlatform}
-                style={{ color: 'var(--semi-color-primary)' }}
-              >
-                {row.platformValue}
-              </td>
+              {/* 边界隐藏逻辑：hideOfficialCols 为 true 时隐藏官方价和折扣列 */}
               {!hideOfficialCols && (
-                <td className={TABLE_CELL_CLASS.tdOfficial}>
-                  {row.hasOriginal
-                    ? renderOfficialCell(row.officialValue, row.discount > 0)
-                    : <span style={{ color: 'var(--semi-color-text-3)' }}>-</span>
-                  }
-                </td>
+                <th
+                  className={TABLE_CELL_CLASS.thCenter}
+                  style={PRICING_TABLE_HEAD_CELL_STYLE}
+                >
+                  {flatColumns.official}
+                </th>
               )}
               {!hideOfficialCols && (
-                <td className={TABLE_CELL_CLASS.tdDiscount}>
-                  {renderDiscountCell(row.discount)}
-                </td>
+                <th
+                  className={TABLE_CELL_CLASS.thCenter}
+                  style={PRICING_TABLE_HEAD_CELL_STYLE}
+                >
+                  {flatColumns.discount}
+                </th>
               )}
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr
+                key={row.key}
+                style={{
+                  backgroundColor: PRICING_TABLE_BODY_BG,
+                  borderBottom: PRICING_TABLE_ROW_BORDER,
+                }}
+              >
+                <td
+                  className={TABLE_CELL_CLASS.tdLabel}
+                  style={{
+                    color:
+                      row.key === 'input'
+                        ? 'var(--semi-blue-7)'
+                        : 'var(--semi-violet-7)',
+                  }}
+                >
+                  {row.label}
+                </td>
+                <td
+                  className={TABLE_CELL_CLASS.tdPlatform}
+                  style={{ color: 'var(--semi-color-primary)' }}
+                >
+                  {row.platformValue}
+                </td>
+                {!hideOfficialCols && (
+                  <td className={TABLE_CELL_CLASS.tdOfficial}>
+                    {row.hasOriginal ? (
+                      renderOfficialCell(row.officialValue, row.discount > 0)
+                    ) : (
+                      <span style={{ color: 'var(--semi-color-text-3)' }}>
+                        -
+                      </span>
+                    )}
+                  </td>
+                )}
+                {!hideOfficialCols && (
+                  <td className={TABLE_CELL_CLASS.tdDiscount}>
+                    {renderDiscountCell(row.discount)}
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
   );
 };
 
@@ -580,84 +737,101 @@ const FixedPricingTable = ({ row, t }) => {
   // 边界隐藏逻辑：无 original 数据时隐藏官方价和折扣列
   const hideOfficialCols = !hasOriginal;
 
+  const fixedDivTable = (
+    <DivPricingTable
+      columns={getDivPricingColumns(t, normalizePriceUnit(row.suffix))}
+      rows={[
+        {
+          key: 'fixed',
+          label: row.label,
+          platformValue,
+          officialValue,
+          discount,
+          hasOriginal,
+          color: 'var(--semi-color-teal-7)',
+        },
+      ]}
+    />
+  );
+
   return (
-    <div
-      className='w-full min-w-0 overflow-hidden rounded-lg border'
-      style={PRICING_TABLE_WRAPPER_STYLE}
-    >
-      <table
-        className='w-full border-collapse'
-        style={{ fontSize: 11 }}
+    fixedDivTable || (
+      <div
+        className='w-full min-w-0 overflow-hidden rounded-lg border'
+        style={PRICING_TABLE_WRAPPER_STYLE}
       >
-        <thead>
-          <tr style={{ backgroundColor: PRICING_TABLE_HEAD_BG }}>
-            <th
-              className={TABLE_CELL_CLASS.thLeft}
-              style={PRICING_TABLE_HEAD_CELL_STYLE}
-            >
-              {fixedColumns.label}
-            </th>
-            <th
-              className={TABLE_CELL_CLASS.thCenter}
-              style={PRICING_TABLE_HEAD_CELL_STYLE}
-            >
-              {fixedColumns.platform}
-            </th>
-            {/* 边界隐藏逻辑：hideOfficialCols 为 true 时隐藏官方价和折扣列 */}
-            {!hideOfficialCols && (
+        <table className='w-full border-collapse' style={{ fontSize: 11 }}>
+          <thead>
+            <tr style={{ backgroundColor: PRICING_TABLE_HEAD_BG }}>
+              <th
+                className={TABLE_CELL_CLASS.thLeft}
+                style={PRICING_TABLE_HEAD_CELL_STYLE}
+              >
+                {fixedColumns.label}
+              </th>
               <th
                 className={TABLE_CELL_CLASS.thCenter}
                 style={PRICING_TABLE_HEAD_CELL_STYLE}
               >
-                {fixedColumns.official}
+                {fixedColumns.platform}
               </th>
-            )}
-            {!hideOfficialCols && (
-              <th
-                className={TABLE_CELL_CLASS.thCenter}
-                style={PRICING_TABLE_HEAD_CELL_STYLE}
+              {/* 边界隐藏逻辑：hideOfficialCols 为 true 时隐藏官方价和折扣列 */}
+              {!hideOfficialCols && (
+                <th
+                  className={TABLE_CELL_CLASS.thCenter}
+                  style={PRICING_TABLE_HEAD_CELL_STYLE}
+                >
+                  {fixedColumns.official}
+                </th>
+              )}
+              {!hideOfficialCols && (
+                <th
+                  className={TABLE_CELL_CLASS.thCenter}
+                  style={PRICING_TABLE_HEAD_CELL_STYLE}
+                >
+                  {fixedColumns.discount}
+                </th>
+              )}
+            </tr>
+          </thead>
+          <tbody>
+            <tr
+              style={{
+                backgroundColor: PRICING_TABLE_BODY_BG,
+                borderBottom: PRICING_TABLE_ROW_BORDER,
+              }}
+            >
+              <td
+                className={TABLE_CELL_CLASS.tdLabel}
+                style={{ color: 'var(--semi-color-teal-7)' }}
               >
-                {fixedColumns.discount}
-              </th>
-            )}
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            style={{
-              backgroundColor: PRICING_TABLE_BODY_BG,
-              borderBottom: PRICING_TABLE_ROW_BORDER,
-            }}
-          >
-            <td
-              className={TABLE_CELL_CLASS.tdLabel}
-              style={{ color: 'var(--semi-color-teal-7)' }}
-            >
-              {row.label}
-            </td>
-            <td
-              className={TABLE_CELL_CLASS.tdPlatform}
-              style={{ color: 'var(--semi-color-primary)' }}
-            >
-              {platformValue}
-            </td>
-            {!hideOfficialCols && (
-              <td className={TABLE_CELL_CLASS.tdOfficial}>
-                {hasOriginal
-                  ? renderOfficialCell(officialValue, discount > 0)
-                  : <span style={{ color: 'var(--semi-color-text-3)' }}>-</span>
-                }
+                {row.label}
               </td>
-            )}
-            {!hideOfficialCols && (
-              <td className={TABLE_CELL_CLASS.tdDiscount}>
-                {renderDiscountCell(discount)}
+              <td
+                className={TABLE_CELL_CLASS.tdPlatform}
+                style={{ color: 'var(--semi-color-primary)' }}
+              >
+                {platformValue}
               </td>
-            )}
-          </tr>
-        </tbody>
-      </table>
-    </div>
+              {!hideOfficialCols && (
+                <td className={TABLE_CELL_CLASS.tdOfficial}>
+                  {hasOriginal ? (
+                    renderOfficialCell(officialValue, discount > 0)
+                  ) : (
+                    <span style={{ color: 'var(--semi-color-text-3)' }}>-</span>
+                  )}
+                </td>
+              )}
+              {!hideOfficialCols && (
+                <td className={TABLE_CELL_CLASS.tdDiscount}>
+                  {renderDiscountCell(discount)}
+                </td>
+              )}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    )
   );
 };
 
@@ -670,11 +844,7 @@ const FixedPricingTable = ({ row, t }) => {
  * 边界逻辑：当所有行均无有效折扣数据（平台价 ≥ 官方价 或 无官方价）时，隐藏官方价和折扣列
  * 折扣视觉：加粗、放大、高饱和度鲜艳色
  */
-const VideoPricingTable = ({
-  videoTierRows,
-  videoBillingMode,
-  t,
-}) => {
+const VideoPricingTable = ({ videoTierRows, videoBillingMode, t }) => {
   if (!videoTierRows || videoTierRows.length === 0) return null;
 
   const videoColumns = getVideoPricingColumns(t);
@@ -690,52 +860,68 @@ const VideoPricingTable = ({
   // discount > 0 表示平台价 < 官方价（有折扣），不应隐藏
   // discount <= 0 或 null 表示平台价 ≥ 官方价 或 无数据，应隐藏
   const allRowsNoDiscount = videoTierRows.every(
-    (row) => row.discount == null || row.discount <= 0
+    (row) => row.discount == null || row.discount <= 0,
+  );
+
+  const videoDivTable = (
+    <DivPricingTable
+      columns={getDivPricingColumns(t, normalizePriceUnit(unitSuffix))}
+      rows={groups.flatMap((group) =>
+        group.rows.map((row) => {
+          const groupStyle = getVideoTierGroupStyle(group.family);
+          return {
+            key: row.key,
+            label: row.spec ? `${group.label}·${row.spec}` : group.label,
+            platformValue: row.platformPrice,
+            officialValue: row.officialPrice,
+            discount: row.discount,
+            hasOriginal: row.officialPrice && row.officialPrice !== '-',
+            color: groupStyle.color,
+            title: `${row.title} ${row.audioLabel}`,
+          };
+        }),
+      )}
+    />
   );
 
   return (
-    <div
-      className='w-full min-w-0 overflow-hidden rounded-lg border'
-      style={PRICING_TABLE_WRAPPER_STYLE}
-    >
-      {groups.map((group, groupIdx) => (
-        <table
-          key={group.family}
-          className='w-full border-collapse'
-          style={{ fontSize: 11 }}
-        >
-          {/* 分组表头行：分组名称作为首列标题，后跟 平台价 | 官方价 | 折扣 */}
-          <thead>
-            <tr style={{ backgroundColor: getVideoTierGroupStyle(group.family).backgroundColor }}>
-              <th
-                className={TABLE_CELL_CLASS.thLeft}
+    videoDivTable || (
+      <div
+        className='w-full min-w-0 overflow-hidden rounded-lg border'
+        style={PRICING_TABLE_WRAPPER_STYLE}
+      >
+        {groups.map((group, groupIdx) => (
+          <table
+            key={group.family}
+            className='w-full border-collapse'
+            style={{ fontSize: 11 }}
+          >
+            {/* 分组表头行：分组名称作为首列标题，后跟 平台价 | 官方价 | 折扣 */}
+            <thead>
+              <tr
                 style={{
-                  borderBottom: PRICING_TABLE_ROW_BORDER,
-                  color: getVideoTierGroupStyle(group.family).color,
+                  backgroundColor: getVideoTierGroupStyle(group.family)
+                    .backgroundColor,
                 }}
               >
-                <div className='flex items-center gap-1'>
-                  <span
-                    className='h-3 w-0.5 rounded-full'
-                    style={{
-                      backgroundColor: getVideoTierGroupStyle(group.family).borderColor,
-                    }}
-                  />
-                  <span className='font-semibold'>{group.label}</span>
-                </div>
-              </th>
-              <th
-                className={TABLE_CELL_CLASS.thCenter}
-                style={{
-                  borderBottom: PRICING_TABLE_ROW_BORDER,
-                  color: 'var(--semi-color-text-2)',
-                }}
-              >
-                {videoColumns.platform}
-                {unitSuffix}
-              </th>
-              {/* 边界隐藏逻辑：allRowsNoDiscount 为 true 时隐藏官方价和折扣列 */}
-              {!allRowsNoDiscount && (
+                <th
+                  className={TABLE_CELL_CLASS.thLeft}
+                  style={{
+                    borderBottom: PRICING_TABLE_ROW_BORDER,
+                    color: getVideoTierGroupStyle(group.family).color,
+                  }}
+                >
+                  <div className='flex items-center gap-1'>
+                    <span
+                      className='h-3 w-0.5 rounded-full'
+                      style={{
+                        backgroundColor: getVideoTierGroupStyle(group.family)
+                          .borderColor,
+                      }}
+                    />
+                    <span className='font-semibold'>{group.label}</span>
+                  </div>
+                </th>
                 <th
                   className={TABLE_CELL_CLASS.thCenter}
                   style={{
@@ -743,62 +929,77 @@ const VideoPricingTable = ({
                     color: 'var(--semi-color-text-2)',
                   }}
                 >
-                  {videoColumns.official}
+                  {videoColumns.platform}
                   {unitSuffix}
                 </th>
-              )}
-              {!allRowsNoDiscount && (
-                <th
-                  className={TABLE_CELL_CLASS.thCenter}
-                  style={{
-                    borderBottom: PRICING_TABLE_ROW_BORDER,
-                    color: 'var(--semi-color-text-2)',
-                  }}
-                >
-                  {videoColumns.discount}
-                </th>
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {group.rows.map((row) => (
-              <tr
-                key={row.key}
-                style={{
-                  backgroundColor: PRICING_TABLE_BODY_BG,
-                  borderBottom: PRICING_TABLE_ROW_BORDER,
-                }}
-              >
-                <td
-                  className={TABLE_CELL_CLASS.tdLabel}
-                  style={{ color: getVideoTierGroupStyle(group.family).color }}
-                  title={`${row.title} · ${row.audioLabel}`}
-                >
-                  {row.spec}
-                </td>
-                <td
-                  className={TABLE_CELL_CLASS.tdPlatform}
-                  style={{ color: 'var(--semi-color-primary)' }}
-                >
-                  {row.platformPrice}
-                </td>
                 {/* 边界隐藏逻辑：allRowsNoDiscount 为 true 时隐藏官方价和折扣列 */}
                 {!allRowsNoDiscount && (
-                  <td className={TABLE_CELL_CLASS.tdOfficial}>
-                    {renderOfficialCell(row.officialPrice, row.discount > 0)}
-                  </td>
+                  <th
+                    className={TABLE_CELL_CLASS.thCenter}
+                    style={{
+                      borderBottom: PRICING_TABLE_ROW_BORDER,
+                      color: 'var(--semi-color-text-2)',
+                    }}
+                  >
+                    {videoColumns.official}
+                    {unitSuffix}
+                  </th>
                 )}
                 {!allRowsNoDiscount && (
-                  <td className={TABLE_CELL_CLASS.tdDiscount}>
-                    {renderDiscountCell(row.discount)}
-                  </td>
+                  <th
+                    className={TABLE_CELL_CLASS.thCenter}
+                    style={{
+                      borderBottom: PRICING_TABLE_ROW_BORDER,
+                      color: 'var(--semi-color-text-2)',
+                    }}
+                  >
+                    {videoColumns.discount}
+                  </th>
                 )}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      ))}
-    </div>
+            </thead>
+            <tbody>
+              {group.rows.map((row) => (
+                <tr
+                  key={row.key}
+                  style={{
+                    backgroundColor: PRICING_TABLE_BODY_BG,
+                    borderBottom: PRICING_TABLE_ROW_BORDER,
+                  }}
+                >
+                  <td
+                    className={TABLE_CELL_CLASS.tdLabel}
+                    style={{
+                      color: getVideoTierGroupStyle(group.family).color,
+                    }}
+                    title={`${row.title} · ${row.audioLabel}`}
+                  >
+                    {row.spec}
+                  </td>
+                  <td
+                    className={TABLE_CELL_CLASS.tdPlatform}
+                    style={{ color: 'var(--semi-color-primary)' }}
+                  >
+                    {row.platformPrice}
+                  </td>
+                  {/* 边界隐藏逻辑：allRowsNoDiscount 为 true 时隐藏官方价和折扣列 */}
+                  {!allRowsNoDiscount && (
+                    <td className={TABLE_CELL_CLASS.tdOfficial}>
+                      {renderOfficialCell(row.officialPrice, row.discount > 0)}
+                    </td>
+                  )}
+                  {!allRowsNoDiscount && (
+                    <td className={TABLE_CELL_CLASS.tdDiscount}>
+                      {renderDiscountCell(row.discount)}
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ))}
+      </div>
+    )
   );
 };
 
@@ -828,6 +1029,7 @@ const PricingCardView = ({
   openModelDetail,
   showSizeChanger = true,
   blurPricing = false,
+  homeCardMode = false,
   searchValue = '',
   channelVideoRatio = {},
   channelVideoCompletionRatio = {},
@@ -844,6 +1046,7 @@ const PricingCardView = ({
   const getModelKey = (model) => model.key ?? model.model_name ?? model.id;
   const isMobile = useIsMobile();
   const normalizedSearchValue = String(searchValue || '').trim();
+  const homeBottomTagLimit = isMobile ? 2 : 3;
 
   const renderHighlightedText = (value) => {
     const text = value == null ? '' : String(value);
@@ -867,6 +1070,113 @@ const PricingCardView = ({
       ),
     );
   };
+
+  const renderPriceItem = (item) => (
+    <React.Fragment key={item.key}>
+      {item.flatTableRows ? (
+        <FlatPricingTable
+          items={item.flatTableRows}
+          unitSuffix={item.unitSuffix}
+          t={t}
+        />
+      ) : item.fixedTableRow ? (
+        <FixedPricingTable row={item.fixedTableRow} t={t} />
+      ) : item.videoTierRows ? (
+        <VideoPricingTable
+          videoTierRows={item.videoTierRows}
+          videoBillingMode={item.videoBillingMode}
+          t={t}
+        />
+      ) : item.tokenTierMerged ? (
+        <TokenTierTable items={item.tokenTierMerged} t={t} />
+      ) : !item.valueNode && item.value ? (
+        <DivPricingTable
+          columns={getDivPricingColumns(t, normalizePriceUnit(item.suffix))}
+          rows={[
+            {
+              key: item.key,
+              label: item.label,
+              platformValue: item.value,
+              officialValue: item.original?.text,
+              discount: item.original?.discount,
+              hasOriginal: !!item.original,
+              color: item.labelColor
+                ? `var(--semi-${item.labelColor}-7)`
+                : undefined,
+            },
+          ]}
+        />
+      ) : (
+        <div className='flex items-center'>
+          <span className='w-20 flex-shrink-0'>
+            {item.labelColor ? (
+              <Tag
+                color={item.labelColor}
+                size='small'
+                shape='circle'
+                type='light'
+                className='max-w-full'
+              >
+                {item.label}
+              </Tag>
+            ) : (
+              item.label
+            )}
+          </span>
+          <span className='flex-1 font-bold text-black dark:text-gray-100 inline-flex items-center flex-wrap gap-1'>
+            {item.valueNode ? (
+              item.valueNode
+            ) : item.original ? (
+              <>
+                <span className='line-through text-gray-400 font-normal text-[10px]'>
+                  <span style={{ color: 'var(--semi-color-primary)' }}>
+                    官方
+                  </span>{' '}
+                  {item.original.text}
+                </span>
+                <Tag
+                  size='small'
+                  shape='circle'
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: '#E74C3C',
+                    backgroundColor: 'rgba(231, 76, 60, 0.11)',
+                    border: 'none',
+                  }}
+                >
+                  -{item.original.discount}%
+                </Tag>
+                <span>
+                  <span style={{ color: 'var(--semi-color-warning)' }}>
+                    我们
+                  </span>{' '}
+                  {item.value}
+                  {item.suffix}
+                </span>
+              </>
+            ) : (
+              <span
+                className={
+                  item.labelColor
+                    ? 'inline-flex min-w-0 flex-wrap items-baseline gap-1'
+                    : undefined
+                }
+                title={item.title}
+              >
+                <span>{item.value}</span>
+                {item.suffix ? (
+                  <span className='font-normal text-[10px] text-semi-color-text-2'>
+                    {item.suffix}
+                  </span>
+                ) : null}
+              </span>
+            )}
+          </span>
+        </div>
+      )}
+    </React.Fragment>
+  );
 
   const handleCheckboxChange = (model, checked) => {
     if (!setSelectedRowKeys) return;
@@ -922,6 +1232,167 @@ const PricingCardView = ({
       });
     });
     return items;
+  };
+
+  const getModelHeatScore = (model) => {
+    const channelList = model?.channel_list ?? model?.ChannelList ?? [];
+    const firstChannel = channelList[0];
+    return (
+      Number(
+        firstChannel?.channel_heat_score ?? firstChannel?.ChannelHeatScore ?? 0,
+      ) || 0
+    );
+  };
+
+  const collectDiscountsFromPriceItem = (item) => {
+    const discounts = [];
+    if (item?.original?.discount > 0) discounts.push(item.original.discount);
+    if (item?.fixedTableRow?.original?.discount > 0) {
+      discounts.push(item.fixedTableRow.original.discount);
+    }
+    if (Array.isArray(item?.flatTableRows)) {
+      item.flatTableRows.forEach((row) => {
+        if (row?.original?.discount > 0) discounts.push(row.original.discount);
+      });
+    }
+    if (Array.isArray(item?.videoTierRows)) {
+      item.videoTierRows.forEach((row) => {
+        if (row?.discount > 0) discounts.push(row.discount);
+      });
+    }
+    if (item?.tokenTierMerged?.rows) {
+      item.tokenTierMerged.rows.forEach((row) => {
+        Object.values(row?.cells || {}).forEach((cell) => {
+          if (cell?.discount > 0) discounts.push(cell.discount);
+        });
+      });
+    }
+    return discounts;
+  };
+
+  const getBestDiscount = (priceItems) => {
+    const discounts = priceItems.flatMap(collectDiscountsFromPriceItem);
+    if (discounts.length === 0) return null;
+    return Math.max(...discounts);
+  };
+
+  const formatDiscountBadge = (discount) => {
+    if (!(discount > 0)) return '';
+    const folded = Math.max(0, (100 - Number(discount)) / 10);
+    const text =
+      folded % 1 === 0 ? String(folded.toFixed(0)) : folded.toFixed(1);
+    return `${text}${t('折')}`;
+  };
+
+  const getPrimarySupplierType = (model) => {
+    const channelList = Array.isArray(model?.channel_list)
+      ? model.channel_list
+      : Array.isArray(model?.ChannelList)
+        ? model.ChannelList
+        : [];
+    const supplierType = channelList
+      .map((ch) => String(ch?.supplier_type || '').trim())
+      .find(Boolean);
+    return supplierType || '';
+  };
+
+  const getHomeTagItems = (record) => {
+    const channelQuotaType =
+      record.channel_list && record.channel_list.length > 0
+        ? record.channel_list[0].quota_type
+        : record.quota_type;
+
+    const items = [];
+    const pushItem = (item) => {
+      const key = String(item?.key || item?.text || '')
+        .trim()
+        .toLowerCase();
+      if (!key || items.some((existing) => existing.key === key)) return;
+      items.push({ ...item, key });
+    };
+
+    if (channelQuotaType === 1) {
+      pushItem({ text: t('按次计费'), color: 'teal' });
+    } else if (channelQuotaType === 3) {
+      pushItem({ text: t('阶梯计费'), color: 'orange' });
+    } else if (channelQuotaType === 0) {
+      pushItem({ text: t('按量计费'), color: 'violet' });
+    }
+
+    if (record.tags) {
+      record.tags
+        .split(',')
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+        .filter((tag) => tag !== '热门' && tag.toLowerCase() !== 'hot')
+        .forEach((tag) => {
+          pushItem({
+            key: `tag-${tag}`,
+            text: getModelTagLabel(tag, t),
+            color: stringToColor(tag),
+          });
+        });
+    }
+
+    return items;
+  };
+
+  const renderHomeTag = (item) => (
+    <Tag
+      key={item.key}
+      shape='circle'
+      color={item.color || 'white'}
+      size='small'
+      className='home-model-extra-tag max-w-[86px] shrink-0'
+    >
+      <span className='block min-w-0 truncate'>
+        {renderHighlightedText(item.text)}
+      </span>
+    </Tag>
+  );
+
+  const renderHomePopoverTag = (item) => (
+    <Tag
+      key={`popover-${item.key}`}
+      shape='circle'
+      color={item.color || 'white'}
+      size='small'
+      className='home-model-tag-popover-item'
+    >
+      {renderHighlightedText(item.text)}
+    </Tag>
+  );
+
+  const renderHomeBottomTags = (record) => {
+    const tagItems = getHomeTagItems(record);
+    const visibleItems = tagItems.slice(0, homeBottomTagLimit);
+    const hiddenItems = tagItems.slice(homeBottomTagLimit);
+
+    return (
+      <div className='home-model-bottom-tags'>
+        {visibleItems.map(renderHomeTag)}
+        {hiddenItems.length > 0 ? (
+          <Tooltip
+            content={
+              <div className='home-model-tag-popover'>
+                {tagItems.map(renderHomePopoverTag)}
+              </div>
+            }
+            position='top'
+            showArrow
+          >
+            <Tag
+              shape='circle'
+              color='white'
+              size='small'
+              className='home-model-more-tag shrink-0'
+            >
+              +{hiddenItems.length}
+            </Tag>
+          </Tooltip>
+        ) : null}
+      </div>
+    );
   };
 
   const calculateChannelPrices = (model, opts = {}) => {
@@ -1375,8 +1846,7 @@ const PricingCardView = ({
       });
     } else {
       const isTierBilling = quotaType === 3;
-      const skipFlatInput =
-        isTierBilling || !!tokenTierInfo?.hasModelTier;
+      const skipFlatInput = isTierBilling || !!tokenTierInfo?.hasModelTier;
       const skipFlatOutput =
         isTierBilling || !!tokenTierInfo?.hasCompletionTier;
 
@@ -1448,7 +1918,12 @@ const PricingCardView = ({
         selectedGroup,
         groupRatio,
       );
-      const tierCategoryOrder = ['input', 'output', 'cache_read', 'cache_write'];
+      const tierCategoryOrder = [
+        'input',
+        'output',
+        'cache_read',
+        'cache_write',
+      ];
       const perCategoryRows = {};
       const activeCategories = [];
       for (const cat of tierCategoryOrder) {
@@ -1584,6 +2059,168 @@ const PricingCardView = ({
   const resolveModelDescription = (record) =>
     getModelDescription(record, i18n.language);
 
+  const renderHomeModelCard = ({
+    model,
+    index,
+    modelKey,
+    isSelected,
+    priceData,
+  }) => {
+    const priceItems = getModelPriceItemsForCard(model, priceData);
+    const discountBadge = formatDiscountBadge(getBestDiscount(priceItems));
+    const supplierType = getPrimarySupplierType(model);
+    const supplierTypeLabel = supplierType
+      ? getSupplierTypeLabel(supplierType, t)
+      : '';
+    const supplierSuffix = getModelChannelRouteSuffixes(model)[0] || '';
+    const routeMetaTitle = [supplierTypeLabel, supplierSuffix]
+      .filter(Boolean)
+      .join(' · ');
+    const isHomeHot = getModelHeatScore(model) > 0 && startIndex + index < 8;
+    const pricingBlurStyle = blurPricing
+      ? {
+          filter: 'blur(6px)',
+          userSelect: 'none',
+          pointerEvents: 'none',
+        }
+      : undefined;
+
+    const openDetail = (event) => {
+      event?.stopPropagation?.();
+      if (!blurPricing && openModelDetail) {
+        openModelDetail(model);
+      }
+    };
+
+    return (
+      <Card
+        key={modelKey || index}
+        className={`home-model-card !rounded-[10px] transition-all duration-200 border ${blurPricing ? '' : 'cursor-pointer'} ${isSelected ? CARD_STYLES.selected : CARD_STYLES.default}`}
+        bodyStyle={{ height: '100%', padding: 16 }}
+        onClick={openDetail}
+      >
+        <div className='home-model-card-body flex h-full min-w-0 flex-col'>
+          <div className='grid min-w-0 grid-cols-[48px_minmax(0,1fr)_auto] items-start gap-3'>
+            {getModelIcon(model)}
+            <div className='min-w-0'>
+              <h3
+                className='home-model-card-title m-0 truncate text-lg font-bold leading-tight'
+                title={model.model_name}
+              >
+                {renderHighlightedText(model.model_name)}
+              </h3>
+
+              {(isHomeHot || routeMetaTitle || discountBadge) && (
+                <div className='home-model-title-meta'>
+                  {routeMetaTitle ? (
+                    <button
+                      type='button'
+                      className='home-model-route-chip'
+                      disabled={!supplierSuffix}
+                      title={
+                        supplierSuffix
+                          ? `${routeMetaTitle} | copy ${supplierSuffix}`
+                          : routeMetaTitle
+                      }
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        if (supplierSuffix) {
+                          copyText?.(supplierSuffix);
+                        }
+                      }}
+                    >
+                      {supplierTypeLabel ? (
+                        <span className='home-model-route-chip-supplier'>
+                          {supplierTypeLabel}
+                        </span>
+                      ) : null}
+                      {supplierTypeLabel && supplierSuffix ? (
+                        <span className='home-model-route-chip-dot'>.</span>
+                      ) : null}
+                      {supplierSuffix ? (
+                        <span className='home-model-route-chip-suffix'>
+                          {renderHighlightedText(supplierSuffix)}
+                        </span>
+                      ) : null}
+                    </button>
+                  ) : null}
+                  {discountBadge ? (
+                    <Tag
+                      shape='circle'
+                      size='small'
+                      className='home-model-discount-tag'
+                    >
+                      {discountBadge}
+                    </Tag>
+                  ) : null}
+                  {isHomeHot ? (
+                    <span className='home-model-hot-pill' title={t('热门')}>
+                      <span className='home-model-hot-pill-text'>
+                        {t('热门')}
+                      </span>
+                    </span>
+                  ) : null}
+                </div>
+              )}
+            </div>
+
+            <div className='flex items-center gap-2'>
+              <Button
+                size='small'
+                theme='outline'
+                type='tertiary'
+                icon={<Copy size={12} />}
+                aria-label='Copy model name'
+                onClick={(event) => {
+                  event.stopPropagation();
+                  copyText?.(model.model_name);
+                }}
+              />
+
+              {rowSelection && (
+                <Checkbox
+                  checked={isSelected}
+                  onChange={(event) => {
+                    event.stopPropagation();
+                    handleCheckboxChange(model, event.target.checked);
+                  }}
+                />
+              )}
+            </div>
+          </div>
+
+          <div
+            className='home-model-price-block mt-3 flex min-w-0 flex-col gap-2'
+            style={pricingBlurStyle}
+          >
+            {priceItems.length > 0 ? (
+              priceItems.map(renderPriceItem)
+            ) : (
+              <span className='text-xs text-semi-color-text-2'>-</span>
+            )}
+          </div>
+
+          <div
+            className='mt-auto flex min-w-0 items-end justify-between gap-2 pt-3'
+            style={pricingBlurStyle}
+          >
+            {renderHomeBottomTags(model)}
+            <Button
+              size='small'
+              theme='outline'
+              type='tertiary'
+              className='home-model-detail-btn shrink-0'
+              disabled={blurPricing}
+              onClick={openDetail}
+            >
+              {t('\u8be6\u60c5')}
+            </Button>
+          </div>
+        </div>
+      </Card>
+    );
+  };
+
   // 渲染标签
   const renderTags = (record) => {
     // 计费类型标签（左边）- 使用 channel_list[0].quota_type
@@ -1703,7 +2340,11 @@ const PricingCardView = ({
   return (
     <>
       <div className='px-2 pt-2'>
-        <div className='flex flex-wrap gap-4'>
+        <div
+          className={
+            homeCardMode ? 'home-model-cards-grid' : 'flex flex-wrap gap-4'
+          }
+        >
           {paginatedModels.map((model, index) => {
             const modelKey = getModelKey(model);
             const isSelected = selectedRowKeys.includes(modelKey);
@@ -1719,6 +2360,16 @@ const PricingCardView = ({
               currency,
               quotaDisplayType: siteDisplayType,
             });
+
+            if (homeCardMode) {
+              return renderHomeModelCard({
+                model,
+                index,
+                modelKey,
+                isSelected,
+                priceData,
+              });
+            }
 
             const supplierLogos = getSupplierLogos(model);
             const hasChannelList =
@@ -1826,7 +2477,8 @@ const PricingCardView = ({
                                               fontSize: 11,
                                               fontWeight: 700,
                                               color: '#E74C3C',
-                                              backgroundColor: 'rgba(231, 76, 60, 0.11)',
+                                              backgroundColor:
+                                                'rgba(231, 76, 60, 0.11)',
                                               border: 'none',
                                             }}
                                           >
@@ -1905,7 +2557,10 @@ const PricingCardView = ({
                                         )}
                                         className='mx-1'
                                       >
-                                        {getSupplierTypeLabel(s.supplierType, t)}
+                                        {getSupplierTypeLabel(
+                                          s.supplierType,
+                                          t,
+                                        )}
                                       </Tag>
                                     )}
                                   </div>
