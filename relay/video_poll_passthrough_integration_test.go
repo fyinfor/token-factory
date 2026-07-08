@@ -50,8 +50,8 @@ func TestBuildOpenAIVideoPollResponse_SeedanceUpstreamShape(t *testing.T) {
 			require.Contains(t, s, `"created_at":1700000000`, path)
 			require.Contains(t, s, `"completed_at":1700000100`, path)
 		} else {
-			require.Contains(t, s, dto.FormatTimeUnixRFC3339(1700000000), path)
-			require.Contains(t, s, dto.FormatTimeUnixRFC3339(1700000100), path)
+			require.Contains(t, s, `"created_at":1700000000`, path)
+			require.Contains(t, s, `"completed_at":1700000100`, path)
 		}
 	}
 }

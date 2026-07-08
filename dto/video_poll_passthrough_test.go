@@ -46,14 +46,14 @@ func TestMergeVideoPollPassthroughFields(t *testing.T) {
 
 func TestCorrectVideoPollTimestamps_VideoGenerationsPath(t *testing.T) {
 	resp := map[string]any{
-		"id":         "local_task",
-		"created_at": "2020-01-01T00:00:00Z",
+		"id":           "local_task",
+		"created_at":   "2020-01-01T00:00:00Z",
 		"completed_at": "2020-01-02T00:00:00Z",
 	}
 	ts := VideoPollTimestampContext{SubmitTime: 1700000000, FinishTime: 1700000100}
 	CorrectVideoPollTimestamps(resp, ts, "/v1/video/generations/local_task")
-	require.Equal(t, FormatTimeUnixRFC3339(1700000000), resp["created_at"])
-	require.Equal(t, FormatTimeUnixRFC3339(1700000100), resp["completed_at"])
+	require.Equal(t, int64(1700000000), resp["created_at"])
+	require.Equal(t, int64(1700000100), resp["completed_at"])
 }
 
 func TestCorrectVideoPollTimestamps_VideosCompatPath(t *testing.T) {
@@ -104,6 +104,24 @@ func TestParseVideoGenerationsPollUpstream(t *testing.T) {
 	require.Equal(t, 50638, upstream.Usage.TotalTokens)
 	require.NotNil(t, upstream.Content)
 	require.Equal(t, "https://res.mp4", upstream.Content.VideoURL)
+}
+
+func TestCorrectVideoPollTimestamps_MatchesTaskLogNotUpstream(t *testing.T) {
+	// 任务日志（UTC+8）：提交 16:47:48、结束 16:50:54；上游 created_at/updated_at 偏差约 20 分钟。
+	const (
+		taskSubmitUnix = int64(1783500468)
+		taskFinishUnix = int64(1783500654)
+		upstreamCreated = int64(1783499259)
+	)
+	resp := map[string]any{
+		"id":         "local_task",
+		"created_at": upstreamCreated,
+		"updated_at": int64(1783499381),
+	}
+	ts := VideoPollTimestampContext{SubmitTime: taskSubmitUnix, FinishTime: taskFinishUnix}
+	CorrectVideoPollTimestamps(resp, ts, "/v1/video/generations/local_task")
+	require.Equal(t, taskSubmitUnix, resp["created_at"])
+	require.Equal(t, taskFinishUnix, resp["completed_at"])
 }
 
 func TestIsVideoGenerationsFetchPath(t *testing.T) {

@@ -113,7 +113,9 @@ func formatVideoPollTimestamp(sec int64, requestPath string) any {
 	if sec <= 0 {
 		return nil
 	}
-	if IsOpenAIVideosCompatPath(requestPath) {
+	// /v1/video/generations 与上游 Seedance/Ark 一致返回 Unix 秒，便于与任务日志（本地时区展示）对齐。
+	// /v1/videos* 亦为 int64（new-api 兼容）。
+	if IsOpenAIVideosCompatPath(requestPath) || IsVideoGenerationsFetchPath(requestPath) {
 		return sec
 	}
 	return FormatTimeUnixRFC3339(sec)
