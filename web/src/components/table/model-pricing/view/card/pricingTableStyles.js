@@ -1,3 +1,22 @@
+/*
+Copyright (C) 2025 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+
 /**
  * 计费表格共享样式常量与工具函数
  *
@@ -90,13 +109,12 @@ export const shouldHideOfficialAndDiscount = (
  */
 export const shouldHideOfficialColumnsForRows = (rows) => {
   if (!Array.isArray(rows) || rows.length === 0) return false;
-  return rows.every(
-    (row) =>
-      shouldHideOfficialAndDiscount(
-        row.platformPriceUsd,
-        row.officialPriceUsd,
-        row.discount,
-      ),
+  return rows.every((row) =>
+    shouldHideOfficialAndDiscount(
+      row.platformPriceUsd,
+      row.officialPriceUsd,
+      row.discount,
+    ),
   );
 };
 
@@ -141,10 +159,16 @@ export const getTierPricingColumns = (t) => ({
  * ============================================================ */
 
 export const TABLE_CELL_CLASS = {
-  thLeft: 'px-2 py-1 text-left font-semibold',
-  thCenter: 'px-2 py-1 text-center font-medium',
-  tdLabel: 'px-2 py-1.5 font-semibold',
-  tdPlatform: 'px-2 py-1.5 text-center font-bold',
-  tdOfficial: 'px-2 py-1.5 text-center font-medium',
-  tdDiscount: 'px-2 py-1.5 text-center',
+  thLeft:
+    'px-2 py-1 text-left font-semibold whitespace-nowrap overflow-hidden text-ellipsis',
+  thCenter:
+    'px-2 py-1 text-center font-medium whitespace-nowrap overflow-hidden text-ellipsis',
+  tdLabel:
+    'px-2 py-1.5 font-semibold whitespace-nowrap overflow-hidden text-ellipsis',
+  tdPlatform:
+    'px-2 py-1.5 text-center font-bold whitespace-nowrap overflow-hidden text-ellipsis',
+  tdOfficial:
+    'px-2 py-1.5 text-center font-medium whitespace-nowrap overflow-hidden text-ellipsis',
+  tdDiscount:
+    'px-2 py-1.5 text-center whitespace-nowrap overflow-hidden text-ellipsis',
 };
