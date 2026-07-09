@@ -17,45 +17,113 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useMemo } from 'react';
-import { Typography } from '@douyinfe/semi-ui';
+import React, { useEffect, useState } from 'react';
+import { Empty, Spin, Typography } from '@douyinfe/semi-ui';
+import {
+  IllustrationConstruction,
+  IllustrationConstructionDark,
+} from '@douyinfe/semi-illustrations';
+import { useTranslation } from 'react-i18next';
+import { API, showError } from '../../helpers';
+import LegalContentRenderer, {
+  LEGAL_CONTENT_FORMATS,
+} from './LegalContentRenderer';
 
 const { Title } = Typography;
 
-const parseLegalHtml = (html) => {
-  const tempDiv = document.createElement('div');
-  tempDiv.innerHTML = html;
-
-  const styles = Array.from(tempDiv.querySelectorAll('style'))
-    .map((style) => style.innerHTML)
-    .join('\n');
-
-  const bodyContent = tempDiv.querySelector('body');
-  const content = bodyContent ? bodyContent.innerHTML : html;
-
-  return { content, styles };
-};
-
-const LegalDocumentPage = ({ title, html, styleId }) => {
-  const { content, styles } = useMemo(() => parseLegalHtml(html), [html]);
+const LegalDocumentPage = ({
+  title,
+  apiEndpoint,
+  styleId,
+  defaultContent = '',
+  defaultFormat = LEGAL_CONTENT_FORMATS.html,
+}) => {
+  const { t } = useTranslation();
+  const [content, setContent] = useState(defaultContent);
+  const [format, setFormat] = useState(defaultFormat);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!styles) return undefined;
+    let cancelled = false;
 
-    let styleEl = document.getElementById(styleId);
-    if (!styleEl) {
-      styleEl = document.createElement('style');
-      styleEl.id = styleId;
-      styleEl.type = 'text/css';
-      document.head.appendChild(styleEl);
+    const loadContent = async () => {
+      setLoading(true);
+      try {
+        const res = await API.get(apiEndpoint, { skipErrorHandler: true });
+        if (cancelled) return;
+
+        const {
+          success,
+          message,
+          data,
+          format: contentFormat,
+        } = res.data || {};
+        if (!success) {
+          if (!defaultContent) {
+            showError(message || t('加载内容失败'));
+          }
+          setContent(defaultContent);
+          setFormat(defaultFormat);
+          return;
+        }
+
+        setContent(data || defaultContent);
+        setFormat(contentFormat || defaultFormat);
+      } catch (error) {
+        if (!cancelled) {
+          if (!defaultContent) {
+            showError(
+              error?.response?.data?.message ||
+                error?.message ||
+                t('加载内容失败'),
+            );
+          }
+          setContent(defaultContent);
+          setFormat(defaultFormat);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    };
+
+    if (apiEndpoint) {
+      loadContent();
+    } else {
+      setLoading(false);
     }
-    styleEl.innerHTML = styles;
 
     return () => {
-      const el = document.getElementById(styleId);
-      if (el) el.remove();
+      cancelled = true;
     };
-  }, [styles, styleId]);
+  }, [apiEndpoint, defaultContent, defaultFormat, t]);
+
+  if (loading) {
+    return (
+      <div className='flex justify-center items-center min-h-screen bg-gray-50'>
+        <Spin size='large' />
+      </div>
+    );
+  }
+
+  if (!String(content || '').trim()) {
+    return (
+      <div className='flex justify-center items-center min-h-screen bg-gray-50'>
+        <Empty
+          title={t('暂无内容')}
+          description={title}
+          image={
+            <IllustrationConstruction style={{ width: 150, height: 150 }} />
+          }
+          darkModeImage={
+            <IllustrationConstructionDark style={{ width: 150, height: 150 }} />
+          }
+          className='p-8'
+        />
+      </div>
+    );
+  }
 
   return (
     <div className='min-h-screen bg-gray-50'>
@@ -64,9 +132,11 @@ const LegalDocumentPage = ({ title, html, styleId }) => {
           <Title heading={2} className='text-center mb-8'>
             {title}
           </Title>
-          <div
-            className='prose prose-lg max-w-none'
-            dangerouslySetInnerHTML={{ __html: content }}
+          <LegalContentRenderer
+            content={content}
+            format={format}
+            styleId={styleId}
+            title={title}
           />
         </div>
       </div>

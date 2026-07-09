@@ -337,19 +337,23 @@ func GetAbout(c *gin.Context) {
 }
 
 func GetUserAgreement(c *gin.Context) {
+	legalSetting := system_setting.GetLegalSettings()
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    system_setting.GetLegalSettings().UserAgreement,
+		"data":    legalSetting.UserAgreement,
+		"format":  system_setting.NormalizeLegalContentFormat(legalSetting.UserAgreementFormat),
 	})
 	return
 }
 
 func GetPrivacyPolicy(c *gin.Context) {
+	legalSetting := system_setting.GetLegalSettings()
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
-		"data":    system_setting.GetLegalSettings().PrivacyPolicy,
+		"data":    legalSetting.PrivacyPolicy,
+		"format":  system_setting.NormalizeLegalContentFormat(legalSetting.PrivacyPolicyFormat),
 	})
 	return
 }

@@ -484,6 +484,15 @@ func yipayJeepayAmountMinorAndCurrency(payMoney float64, wayCode string) (minor 
 	return minor, "usd"
 }
 
+func yipayJeepayStoredPayMoney(payMoney float64, amountMinor int64, orderCurrency string) float64 {
+	switch strings.ToLower(strings.TrimSpace(orderCurrency)) {
+	case "cny", "usd":
+		return decimal.NewFromInt(amountMinor).Div(decimal.NewFromInt(100)).InexactFloat64()
+	default:
+		return payMoney
+	}
+}
+
 // requestYipayOrder 按 Yipay OpenAPI 创建统一下单请求。
 func requestYipayOrder(req EpayRequest, id int, quote *topupQuote, paymentMethod string) (string, map[string]string, error) {
 	requestURL := operation_setting.YipayRequestURL
@@ -601,10 +610,11 @@ func requestYipayOrder(req EpayRequest, id int, quote *topupQuote, paymentMethod
 		return "", nil, extractErr
 	}
 	payURL = strings.TrimSpace(payURL)
+	orderMoney := yipayJeepayStoredPayMoney(quote.PayAmount, amountMinor, orderCurrency)
 	topUp := &model.TopUp{
 		UserId:        id,
 		Amount:        req.Amount,
-		Money:         quote.PayAmount,
+		Money:         orderMoney,
 		InputAmount:   quote.InputAmount,
 		InputCurrency: quote.InputCurrency,
 		PayCurrency:   strings.ToUpper(orderCurrency),
@@ -899,6 +909,31 @@ func UnlockOrder(tradeNo string) {
 	createLock.Unlock()
 }
 
+func yipayTopupPaidAmountMinor(topUp *model.TopUp) (int64, string) {
+	payCurrency := strings.ToUpper(strings.TrimSpace(topUp.PayCurrency))
+	switch payCurrency {
+	case topupCurrencyCNY, topupCurrencyUSD:
+		minor := int64(math.Round(topUp.Money * 100))
+		if minor < 1 {
+			minor = 1
+		}
+		return minor, strings.ToLower(payCurrency)
+	default:
+		return yipayJeepayAmountMinorAndCurrency(topUp.Money, topUp.PaymentMethod)
+	}
+}
+
+func isLegacyYipayConvertedUSDTopup(topUp *model.TopUp) bool {
+	if topUp == nil {
+		return false
+	}
+	return isPayPalJeepayWayCode(topUp.PaymentMethod) &&
+		strings.EqualFold(topUp.PayCurrency, topupCurrencyUSD) &&
+		strings.EqualFold(topUp.InputCurrency, topupCurrencyCNY) &&
+		topUp.InputAmount > 0 &&
+		math.Abs(topUp.Money-topUp.InputAmount) <= 0.01
+}
+
 func validateYipayTopupPaidAmount(params map[string]string, topUp *model.TopUp) error {
 	rawAmount := strings.TrimSpace(params["amount"])
 	if rawAmount == "" || topUp == nil {
@@ -908,7 +943,10 @@ func validateYipayTopupPaidAmount(params map[string]string, topUp *model.TopUp) 
 	if err != nil {
 		return fmt.Errorf("invalid callback amount: %s", rawAmount)
 	}
-	expectedMinor, expectedCurrency := yipayJeepayAmountMinorAndCurrency(topUp.Money, topUp.PaymentMethod)
+	expectedMinor, expectedCurrency := yipayTopupPaidAmountMinor(topUp)
+	if isLegacyYipayConvertedUSDTopup(topUp) {
+		expectedMinor, _ = yipayJeepayAmountMinorAndCurrency(topUp.Money, topUp.PaymentMethod)
+	}
 	if paidMinor != expectedMinor {
 		return fmt.Errorf("paid amount mismatch: expect %d, got %d", expectedMinor, paidMinor)
 	}
