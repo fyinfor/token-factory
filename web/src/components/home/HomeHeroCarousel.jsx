@@ -25,6 +25,7 @@ import React, {
   useState,
 } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import DOMPurify from 'dompurify';
 import { useTranslation } from 'react-i18next';
 
 const DEFAULT_INTERVAL_SEC = 5;
@@ -33,6 +34,16 @@ const MAX_INTERVAL_SEC = 60;
 const MANUAL_PAUSE_MS = 30000;
 const DEFAULT_OVERLAY_OPACITY = 0.15;
 const DEFAULT_ASPECT_RATIO = 1920 / 300;
+const DEFAULT_TITLE_WIDTH = 620;
+const DEFAULT_SUBTITLE_WIDTH = 560;
+const MIN_HERO_TEXT_WIDTH = 160;
+const MAX_HERO_TEXT_WIDTH = 1200;
+
+const HERO_RICH_HTML_SANITIZE_CONFIG = {
+  USE_PROFILES: { html: true },
+  ADD_ATTR: ['style', 'target', 'rel'],
+  FORBID_TAGS: ['img', 'video', 'iframe', 'script', 'style', 'svg', 'math'],
+};
 
 function parseSlides(raw) {
   if (Array.isArray(raw)) {
@@ -63,6 +74,43 @@ function clampOpacity(value) {
     return DEFAULT_OVERLAY_OPACITY;
   }
   return Math.min(0.8, Math.max(0, n));
+}
+
+function clampTextWidth(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) {
+    return '';
+  }
+  return Math.min(
+    MAX_HERO_TEXT_WIDTH,
+    Math.max(MIN_HERO_TEXT_WIDTH, Math.round(n)),
+  );
+}
+
+function normalizeRichTextHtml(value) {
+  const text = String(value || '').trim();
+  if (!text || text === '<p><br></p>' || text === '<p></p>') {
+    return '';
+  }
+  return text;
+}
+
+function richTextToPlainText(value) {
+  const html = normalizeRichTextHtml(value);
+  if (!html) return '';
+  return html
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<\/(p|div|h[1-6]|li)>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function sanitizeHeroRichHtml(value) {
+  const html = normalizeRichTextHtml(value);
+  if (!html) return '';
+  return DOMPurify.sanitize(html, HERO_RICH_HTML_SANITIZE_CONFIG);
 }
 
 function parseAspectRatio(value) {
@@ -137,8 +185,10 @@ function normalizeSlide(slide, index) {
     id: String(slide?.id || index).trim(),
     enabled,
     sort: Number(slide?.sort) || index + 1,
-    title: String(slide?.title || '').trim(),
-    subtitle: String(slide?.subtitle || '').trim(),
+    title: normalizeRichTextHtml(slide?.title),
+    subtitle: normalizeRichTextHtml(slide?.subtitle),
+    titleWidth: clampTextWidth(slide?.title_width),
+    subtitleWidth: clampTextWidth(slide?.subtitle_width),
     badgeText: String(slide?.badge_text || slide?.badge || '').trim(),
     buttonText: String(slide?.button_text || '').trim(),
     contentAlign: normalizeContentAlign(slide?.content_align),
@@ -165,8 +215,8 @@ function hasRenderableContent(slide) {
     slide.enabled &&
     (slide.pcImage ||
       slide.mobileImage ||
-      slide.title ||
-      slide.subtitle ||
+      normalizeRichTextHtml(slide.title) ||
+      normalizeRichTextHtml(slide.subtitle) ||
       slide.badgeText ||
       slide.buttonText),
   );
@@ -226,6 +276,24 @@ export default function HomeHeroCarousel({
     window.location.assign(activeSlide.linkUrl);
   }, [activeSlide?.linkUrl, activeSlide?.openMode]);
 
+  const activeTitleHtml = useMemo(
+    () => sanitizeHeroRichHtml(activeSlide?.title),
+    [activeSlide?.title],
+  );
+  const activeSubtitleHtml = useMemo(
+    () => sanitizeHeroRichHtml(activeSlide?.subtitle),
+    [activeSlide?.subtitle],
+  );
+  const activeTitleText = useMemo(
+    () => richTextToPlainText(activeSlide?.title),
+    [activeSlide?.title],
+  );
+  const stopRichLinkClick = useCallback((event) => {
+    if (event.target?.closest?.('a')) {
+      event.stopPropagation();
+    }
+  }, []);
+
   if (!enabled || slides.length === 0) {
     return null;
   }
@@ -233,6 +301,9 @@ export default function HomeHeroCarousel({
   const overlayOpacity = activeSlide?.overlayOpacity ?? DEFAULT_OVERLAY_OPACITY;
   const alignLayout = contentAlignLayout(activeSlide?.contentAlign);
   const normalizedAspectRatio = parseAspectRatio(aspectRatio);
+  const titleWidth = activeSlide?.titleWidth || DEFAULT_TITLE_WIDTH;
+  const subtitleWidth = activeSlide?.subtitleWidth || DEFAULT_SUBTITLE_WIDTH;
+  const contentWidth = Math.max(titleWidth, subtitleWidth);
 
   return (
     <section
@@ -245,7 +316,7 @@ export default function HomeHeroCarousel({
         aspectRatio: normalizedAspectRatio,
         backgroundColor: activeSlide?.backgroundColor || '#111827',
       }}
-      aria-label={activeSlide?.title || t('首页主轮播')}
+      aria-label={activeTitleText || t('首页主轮播')}
     >
       <div
         className={`group/hero absolute inset-0 ${activeSlide?.linkUrl ? 'cursor-pointer' : ''}`}
@@ -313,8 +384,10 @@ export default function HomeHeroCarousel({
           className={`relative z-[2] mx-auto flex h-full max-w-[1200px] items-center px-5 pb-16 pt-20 md:px-8 md:pb-20 md:pt-24 ${alignLayout.containerClass}`}
         >
           <div
-            className={`flex max-w-[620px] -translate-y-3 flex-col md:-translate-y-5 ${alignLayout.contentClass}`}
+            className={`flex min-w-0 -translate-y-3 flex-col md:-translate-y-5 ${alignLayout.contentClass}`}
             style={{
+              width: '100%',
+              maxWidth: contentWidth,
               color:
                 activeSlide.titleColor || activeSlide.textColor || '#ffffff',
             }}
@@ -324,33 +397,39 @@ export default function HomeHeroCarousel({
                 {activeSlide.badgeText}
               </div>
             ) : null}
-            {activeSlide.title ? (
-              <h1
-                className='m-0 text-[2rem] font-semibold leading-[1.08] md:text-[3.25rem]'
+            {activeTitleHtml ? (
+              <div
+                role='heading'
+                aria-level={1}
+                className='m-0 text-[2rem] font-semibold leading-[1.08] md:text-[3.25rem] [&_*]:!m-0 [&_*]:leading-[inherit] [&_a]:underline [&_strong]:font-bold'
                 style={{
+                  width: '100%',
+                  maxWidth: titleWidth,
                   color:
                     activeSlide.titleColor ||
                     activeSlide.textColor ||
                     '#ffffff',
                   textShadow: '0 2px 18px rgba(0,0,0,0.35)',
                 }}
-              >
-                {activeSlide.title}
-              </h1>
+                onClick={stopRichLinkClick}
+                dangerouslySetInnerHTML={{ __html: activeTitleHtml }}
+              />
             ) : null}
-            {activeSlide.subtitle ? (
-              <p
-                className='mt-3 max-w-[560px] text-[0.95rem] leading-relaxed opacity-90 md:mt-5 md:text-lg'
+            {activeSubtitleHtml ? (
+              <div
+                className='mt-3 text-[0.95rem] leading-relaxed opacity-90 md:mt-5 md:text-lg [&_*]:!m-0 [&_*]:leading-[inherit] [&_a]:underline [&_strong]:font-bold'
                 style={{
+                  width: '100%',
+                  maxWidth: subtitleWidth,
                   color:
                     activeSlide.subtitleColor ||
                     activeSlide.textColor ||
                     '#e5e7eb',
                   textShadow: '0 1px 12px rgba(0,0,0,0.28)',
                 }}
-              >
-                {activeSlide.subtitle}
-              </p>
+                onClick={stopRichLinkClick}
+                dangerouslySetInnerHTML={{ __html: activeSubtitleHtml }}
+              />
             ) : null}
             {activeSlide.buttonText && activeSlide.linkUrl ? (
               <button
