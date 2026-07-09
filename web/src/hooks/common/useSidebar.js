@@ -43,6 +43,7 @@ export const DEFAULT_ADMIN_CONFIG = {
   personal: {
     enabled: true,
     topup: true,
+    invoice: true,
     personal: true,
     route_policy: true,
     'seedance-material': true,
@@ -62,6 +63,8 @@ export const DEFAULT_ADMIN_CONFIG = {
     redemption: true,
     user: true,
     subscription: true,
+    'invoice-admin': true,
+    'settlement-export': true,
     setting: true,
     distributor: true,
     'supplier-management': true,

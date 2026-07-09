@@ -1491,11 +1491,11 @@ func updateUserUsedQuotaAndRequestCount(id int, quota int, count int) {
 		common.SysLog("failed to update user used quota and request count: " + err.Error())
 		return
 	}
-
-	//// 更新缓存
-	//if err := invalidateUserCache(id); err != nil {
-	//	common.SysError("failed to invalidate user cache: " + err.Error())
-	//}
+	if quota > 0 {
+		if attrErr := AttributeConsumeQuotaToTopUps(id, quota); attrErr != nil {
+			common.SysLog("failed to attribute consume quota to topups: " + attrErr.Error())
+		}
+	}
 }
 
 func updateUserUsedQuota(id int, quota int) {

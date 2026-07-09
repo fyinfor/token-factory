@@ -57,6 +57,9 @@ const routerMap = {
   'model-heat': '/console/model-heat',
   playground: '/console/playground',
   personal: '/console/personal',
+  invoice: '/console/invoice',
+  'invoice-admin': '/console/invoice-admin',
+  'settlement-export': '/console/settlement-export',
   route_policy: '/console/route-policy',
   'seedance-material': '/console/seedance/material',
   supplier: null,
@@ -149,6 +152,11 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('钱包管理'),
         itemKey: 'topup',
         to: '/topup',
+      },
+      {
+        text: t('发票管理'),
+        itemKey: 'invoice',
+        to: '/invoice',
       },
       {
         text: t('个人设置'),
@@ -271,6 +279,18 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('用户管理'),
         itemKey: 'user',
         to: '/user',
+        className: isAdmin() ? '' : 'tableHiddle',
+      },
+      {
+        text: t('发票审批'),
+        itemKey: 'invoice-admin',
+        to: '/invoice-admin',
+        className: isAdmin() ? '' : 'tableHiddle',
+      },
+      {
+        text: t('结算单导出'),
+        itemKey: 'settlement-export',
+        to: '/settlement-export',
         className: isAdmin() ? '' : 'tableHiddle',
       },
       {

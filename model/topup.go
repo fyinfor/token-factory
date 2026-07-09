@@ -29,6 +29,7 @@ type TopUp struct {
 	CreateTime     int64   `json:"create_time"`
 	CompleteTime   int64   `json:"complete_time"`
 	Status         string  `json:"status"`
+	InvoicedAmount float64 `json:"invoiced_amount" gorm:"type:decimal(20,6);default:0"`
 }
 
 func (topUp *TopUp) ResolveQuotaToAdd() int {

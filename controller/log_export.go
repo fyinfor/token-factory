@@ -19,7 +19,8 @@ import (
 
 // 对账单导出相关常量。
 const (
-	logExportMaxWindowSeconds = int64(90 * 24 * 60 * 60) // 单次导出最长 90 天
+	logExportMaxWindowSeconds        = int64(90 * 24 * 60 * 60)  // 对账单/日志导出最长 90 天
+	settlementExportMaxWindowSeconds = int64(365 * 24 * 60 * 60) // 结算单导出最长 1 年
 	// 复用 model.logExportCountLimit 100000
 )
 
@@ -401,7 +402,17 @@ type adminLogExportQuery struct {
 // 解析对账单导出参数；统一做合法性校验（不抛错时返回 0 表示不限）。
 // 返回 lang 时做白名单校验，未知 lang 回退到 zh-CN。
 func parseLogExportQuery(c *gin.Context) (logExportQuery, error) {
+	return parseLogExportQueryWithMaxWindow(c, logExportMaxWindowSeconds, "最多 3 个月")
+}
+
+func parseLogExportQueryWithMaxWindow(c *gin.Context, maxWindow int64, rangeLimitLabel string) (logExportQuery, error) {
 	var q logExportQuery
+	if maxWindow <= 0 {
+		maxWindow = logExportMaxWindowSeconds
+	}
+	if rangeLimitLabel == "" {
+		rangeLimitLabel = "最多 3 个月"
+	}
 	if s := c.Query("start_timestamp"); s != "" {
 		v, perr := strconv.ParseInt(s, 10, 64)
 		if perr != nil || v < 0 {
@@ -416,19 +427,19 @@ func parseLogExportQuery(c *gin.Context) (logExportQuery, error) {
 		}
 		q.EndTs = v
 	}
-	// 默认窗口：近 3 个月。
+	// 默认窗口：不超过 maxWindow。
 	now := common.GetTimestamp()
 	if q.EndTs == 0 {
 		q.EndTs = now
 	}
 	if q.StartTs == 0 {
-		q.StartTs = q.EndTs - logExportMaxWindowSeconds
+		q.StartTs = q.EndTs - maxWindow
 	}
 	if q.EndTs < q.StartTs {
 		return q, fmt.Errorf("end_timestamp 早于 start_timestamp")
 	}
-	if q.EndTs-q.StartTs > logExportMaxWindowSeconds {
-		return q, fmt.Errorf("时间范围超出限制(最多 3 个月)")
+	if q.EndTs-q.StartTs > maxWindow {
+		return q, fmt.Errorf("时间范围超出限制(%s)", rangeLimitLabel)
 	}
 	q.ModelName = c.Query("model_name")
 	q.TokenName = c.Query("token_name")
@@ -1280,6 +1291,8 @@ var supplierDashboardExportDictZHCN = supplierDashboardExportI18n{
 	DetailHeader: []string{
 		"序号", "时间", "类型", "用户", "令牌", "模型", "渠道", "分组", "Request ID",
 		"输入 tokens", "输出 tokens", "缓存 tokens", "消耗额度(quota)", "消耗额度(等值)",
+		"成本折扣", "经营成本", "加价折扣", "销售折扣",
+		"官方总价", "成本价", "经营单价", "销售单价",
 	},
 }
 
@@ -1296,6 +1309,8 @@ var supplierDashboardExportDictEN = supplierDashboardExportI18n{
 	DetailHeader: []string{
 		"No.", "Time", "Type", "User", "Token", "Model", "Channel", "Group", "Request ID",
 		"Input tokens", "Output tokens", "Cache tokens", "Quota", "Amount",
+		"Cost discount", "Operating cost", "Markup discount", "Sales discount",
+		"Official total", "Cost price", "Operating price", "Sales price",
 	},
 }
 
@@ -1415,7 +1430,7 @@ func streamSupplierDashboardUsageCSV(
 		common.SysError("write supplier dashboard export detail title: " + err.Error())
 		return
 	}
-	if err := writeStatementRow(w, padRowToWidth(dict.DetailHeader, summaryColCount)); err != nil {
+	if err := writeStatementRow(w, padRowToWidth(appendSettlementPriceCurrencyToHeaders(dict.DetailHeader), summaryColCount)); err != nil {
 		common.SysError("write supplier dashboard export detail header: " + err.Error())
 		return
 	}
@@ -1445,6 +1460,7 @@ func streamSupplierDashboardUsageCSV(
 			strconv.FormatInt(quota, 10),
 			formatQuotaDisplay(quota),
 		}
+		detailRow = append(detailRow, buildSettlementDetailSuffix(l)...)
 		if err := writeStatementRow(w, padRowToWidth(detailRow, summaryColCount)); err != nil {
 			common.SysError("write supplier dashboard export detail row: " + err.Error())
 			return
@@ -1460,6 +1476,40 @@ func padRowToWidth(row []string, width int) []string {
 	out := make([]string, width)
 	copy(out, row)
 	return out
+}
+
+func appendSettlementPriceCurrencyToHeaders(headers []string) []string {
+	if len(headers) < 4 {
+		return headers
+	}
+	currency := model.SettlementCurrencyLabel()
+	out := make([]string, len(headers))
+	copy(out, headers)
+	priceStart := len(headers) - 4
+	for i := priceStart; i < len(headers); i++ {
+		out[i] = fmt.Sprintf("%s(%s)", headers[i], currency)
+	}
+	return out
+}
+
+func buildSettlementDetailSuffix(l *model.Log) []string {
+	if l == nil {
+		return make([]string, 8)
+	}
+	otherMap, _ := common.StrToMap(l.Other)
+	cacheTokens := extractCacheReadTokens(l.Other)
+	bd := model.ComputeSettlementPriceBreakdown(l.PromptTokens, l.CompletionTokens, cacheTokens, l.Quota, otherMap)
+	d := bd.Discounts
+	return []string{
+		model.FormatSettlementPercent(d.PriceDiscountPercent),
+		model.FormatSettlementPercent(d.OperatingCostPercent),
+		model.FormatSettlementPercent(d.MarkupDiscountPercent),
+		model.FormatSettlementPercent(d.SalesDiscountPercent),
+		model.FormatSettlementMoney(bd.OfficialTotal),
+		model.FormatSettlementMoney(bd.CostPrice),
+		model.FormatSettlementMoney(bd.OperatingPrice),
+		model.FormatSettlementMoney(bd.SalesPrice),
+	}
 }
 
 // sanitizeFilename 过滤文件名中的非法字符，保留中英文/数字/下划线/点/连字符。

@@ -221,6 +221,13 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/messages/read_all", controller.MarkAllMyMessagesRead)
 				selfRoute.GET("/messages/unread_count", controller.GetMyUnreadMessageCount)
 
+				selfRoute.GET("/invoice/profile", controller.GetInvoiceProfile)
+				selfRoute.PUT("/invoice/profile", controller.PutInvoiceProfile)
+				selfRoute.GET("/invoice/eligible-orders", controller.GetInvoiceEligibleOrders)
+				selfRoute.POST("/invoice/request", controller.PostInvoiceRequest)
+				selfRoute.GET("/invoice/requests", controller.GetInvoiceRequestsSelf)
+				selfRoute.GET("/invoice/requests/:id", controller.GetInvoiceRequestDetailSelf)
+
 				// 2FA routes
 				selfRoute.GET("/2fa/status", controller.Get2FAStatus)
 				selfRoute.POST("/2fa/setup", controller.Setup2FA)
@@ -252,6 +259,11 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.GET("/tags", controller.GetUserTags)
 				adminRoute.GET("/topup", controller.GetAllTopUps)
 				adminRoute.POST("/topup/complete", controller.AdminCompleteTopUp)
+				adminRoute.GET("/invoice/admin/requests", controller.ListInvoiceRequestsAdmin)
+				adminRoute.GET("/invoice/admin/requests/:id", controller.GetInvoiceRequestDetailAdmin)
+				adminRoute.POST("/invoice/admin/requests/:id/issue", controller.IssueInvoiceRequestAdmin)
+				adminRoute.POST("/invoice/admin/requests/:id/reject", controller.RejectInvoiceRequestAdmin)
+				adminRoute.POST("/invoice/admin/backfill-attribution", controller.AdminBackfillInvoiceAttribution)
 				adminRoute.GET("/search", controller.SearchUsers)
 				adminRoute.GET("/import/template", controller.DownloadUserImportTemplate)
 				adminRoute.POST("/import", controller.ImportUsers)
@@ -518,6 +530,8 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/search", middleware.AdminAuth(), controller.SearchAllLogs)
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
 		logRoute.GET("/export", middleware.AdminAuth(), middleware.SearchRateLimit(), controller.ExportAdminLogs)
+		logRoute.GET("/settlement/export", middleware.AdminAuth(), middleware.SearchRateLimit(), controller.ExportSettlementLogs)
+		logRoute.GET("/settlement/summary", middleware.AdminAuth(), middleware.SearchRateLimit(), controller.GetSettlementSummary)
 		logRoute.GET("/self/export", middleware.UserAuth(), middleware.SearchRateLimit(), controller.ExportUserLogsSelf)
 		logRoute.GET("/self/search", middleware.UserAuth(), middleware.SearchRateLimit(), controller.SearchUserLogs)
 
