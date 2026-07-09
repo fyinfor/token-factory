@@ -23,6 +23,7 @@ import {
   formatMessageForAPI,
   isValidMessage,
 } from './utils';
+import { collectPlaygroundImageMediaUrls } from './playgroundImageUtils';
 import {
   applyVideoFrameMetadata,
   buildVideoNativeInput,
@@ -299,6 +300,15 @@ export const buildApiPayload = (
     };
     if (inputs.image_ratio && inputs.image_ratio !== 'auto') {
       payload.ratio = inputs.image_ratio;
+    }
+    // 图片模式：媒体侧栏参考图写入 image 字段（空则省略，与后端 ImageRequest.image 约定一致）
+    const referenceImages = collectPlaygroundImageMediaUrls(
+      inputs.imageUrls,
+      processedMessages,
+    );
+    if (referenceImages.length > 0) {
+      payload.image =
+        referenceImages.length === 1 ? referenceImages[0] : referenceImages;
     }
     return payload;
   }

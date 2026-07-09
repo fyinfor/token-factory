@@ -17,6 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
+import { splitAssetUris } from './materialAssetUtils';
+import {
+  extractImageUrlsFromMessages,
+  isAudioURL,
+  isVideoURL,
+} from './playgroundVideoUtils';
+
 /** 将 b64_json / 裸 base64 转为可在 img src 使用的 data URL */
 export function normalizeBase64ImageSrc(value, mime = 'image/png') {
   const s = String(value || '').trim();
@@ -157,4 +164,31 @@ export function stripGeneratedImageMarkdown(text) {
     .replace(GENERATED_IMAGE_MARKDOWN_STRIP_REGEX, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+/**
+ * 操练场文本 / 图片模式：合并媒体侧栏与消息内的参考图 URL。
+ * 空地址会被过滤，无有效图片时返回空数组（调用方无需传参、也不应报错）。
+ */
+export function collectPlaygroundImageMediaUrls(sidebarImageUrls, messages) {
+  const expandedSidebarUrls = (sidebarImageUrls || []).flatMap((url) => {
+    const trimmed = String(url || '').trim();
+    if (!trimmed) return [];
+    return splitAssetUris(trimmed);
+  });
+  const merged = [
+    ...expandedSidebarUrls.map((url) => String(url || '').trim()).filter(Boolean),
+    ...extractImageUrlsFromMessages(messages),
+  ];
+  const seen = new Set();
+  const images = [];
+  for (const url of merged) {
+    const trimmed = String(url || '').trim();
+    if (!trimmed || seen.has(trimmed) || isVideoURL(trimmed) || isAudioURL(trimmed)) {
+      continue;
+    }
+    seen.add(trimmed);
+    images.push(trimmed);
+  }
+  return images;
 }

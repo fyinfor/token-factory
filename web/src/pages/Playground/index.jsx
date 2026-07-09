@@ -582,7 +582,9 @@ const Playground = () => {
         for (let i = messages.length - 1; i >= 0; i--) {
           if (messages[i].role === MESSAGE_ROLES.USER) {
             const mode = inputs.display_mode || 'text';
-            const allowMedia = mode === 'image' || mode === 'video';
+            // 文本 / 图片 / 视频：媒体侧栏图片需并入用户消息（视频请求体仍由 buildApiPayload 单独组装）
+            const allowMedia =
+              mode === 'text' || mode === 'image' || mode === 'video';
             if (allowMedia && inputs.imageUrls) {
               const validImageUrls = inputs.imageUrls.filter(
                 (url) => url.trim() !== '',
@@ -654,7 +656,9 @@ const Playground = () => {
 
       // 默认模式
       const mode = inputs.display_mode || 'text';
-      const allowMedia = mode === 'image' || mode === 'video';
+      // 文本 / 图片 / 视频：发送前将媒体侧栏图片拼入用户消息多模态 content
+      const allowMedia =
+        mode === 'text' || mode === 'image' || mode === 'video';
       const validImageUrls = allowMedia
         ? inputs.imageUrls.filter((url) => url.trim() !== '')
         : [];
