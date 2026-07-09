@@ -453,9 +453,10 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 				taskResp = service.TaskErrorWrapper(err, "convert_to_openai_video_failed", http.StatusInternalServerError)
 				return
 			}
-			respBody, err = dto.AdaptOpenAIVideoJSONForPath(path, openAIVideoData)
+			tsCtx := dto.VideoPollTimestampContextFromTaskFields(originTask.SubmitTime, originTask.CreatedAt, originTask.FinishTime)
+			respBody, err = dto.FinalizeVideoPollResponseJSON(openAIVideoData, originTask.Data, path, tsCtx)
 			if err != nil {
-				taskResp = service.TaskErrorWrapper(err, "adapt_openai_video_json_failed", http.StatusInternalServerError)
+				taskResp = service.TaskErrorWrapper(err, "finalize_video_poll_response_failed", http.StatusInternalServerError)
 				return
 			}
 			return
@@ -595,18 +596,26 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool, requestPath strin
 		service.SettleTaskBillingOnFetch(context.TODO(), task, ti)
 	}
 
-	// TokenFactoryOpen /v1/videos 穿透：直接返回上游 JSON（仅替换对外 task id）。
+	// TokenFactoryOpen /v1/videos 穿透：直接返回上游 JSON（仅替换对外 task id），并复用通用透传/时间校正。
 	if channelModel.Type == constant.ChannelTypeTokenFactoryOpen &&
 		openaivideo.IsTfOpenOpenAIVideosStyle(task.PrivateData.TfOpenVideoUpstreamStyle) &&
 		isOpenAIVideoAPI {
-		if passthrough, err := openaivideo.PassthroughOpenAIVideoJSON(body, task.TaskID, requestPath); err == nil {
-			return passthrough
+		passthrough := body
+		if patched, err := openaivideo.PassthroughOpenAIVideoJSON(body, task.TaskID, requestPath); err == nil {
+			passthrough = patched
 		}
-		return body
+		tsCtx := dto.VideoPollTimestampContextFromTaskFields(task.SubmitTime, task.CreatedAt, task.FinishTime)
+		if finalized, err := dto.FinalizeVideoPollPassthroughJSON(passthrough, body, requestPath, tsCtx); err == nil {
+			return finalized
+		}
+		return passthrough
 	}
 
-	// OpenAI Video API 由调用者的 ConvertToOpenAIVideo 分支处理
+	// OpenAI Video API：用实时上游回包构建响应，透传 ratio/resolution/duration/usage 并校正时间戳。
 	if isOpenAIVideoAPI {
+		if resp := buildOpenAIVideoPollResponse(task, body, requestPath); len(resp) > 0 {
+			return resp
+		}
 		return nil
 	}
 
@@ -650,6 +659,40 @@ func detectVideoFormat(rawBody []byte) string {
 		return "mp4"
 	}
 	return mt
+}
+
+// buildOpenAIVideoPollResponse 基于实时上游回包构建 OpenAI Video 查询响应。
+// 适用于 /v1/video/generations/*、/v1/videos/* 等 OpenAI Video API 查询路径。
+func buildOpenAIVideoPollResponse(task *model.Task, upstreamBody []byte, requestPath string) []byte {
+	if task == nil {
+		return nil
+	}
+	adaptor := GetTaskAdaptor(task.Platform)
+	if adaptor == nil {
+		return nil
+	}
+	converter, ok := adaptor.(channel.OpenAIVideoConverter)
+	if !ok {
+		return nil
+	}
+
+	workTask := task
+	if len(upstreamBody) > 0 && !bytes.Equal(task.Data, upstreamBody) {
+		cloned := *task
+		cloned.Data = upstreamBody
+		workTask = &cloned
+	}
+
+	openAIVideoData, err := converter.ConvertToOpenAIVideo(workTask)
+	if err != nil {
+		return nil
+	}
+	tsCtx := dto.VideoPollTimestampContextFromTaskFields(task.SubmitTime, task.CreatedAt, task.FinishTime)
+	finalized, err := dto.FinalizeVideoPollResponseJSON(openAIVideoData, upstreamBody, requestPath, tsCtx)
+	if err != nil || len(finalized) == 0 {
+		return openAIVideoData
+	}
+	return finalized
 }
 
 // mapTaskStatusToSimple 将内部 TaskStatus 映射为简化状态字符串

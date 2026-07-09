@@ -2,6 +2,7 @@ package openai
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"net/textproto"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -26,6 +28,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/common_handler"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	relayhelper "github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/types"
@@ -435,6 +438,14 @@ func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInf
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.ImageRequest) (any, error) {
 	switch info.RelayMode {
 	case relayconstant.RelayModeImagesEdits:
+		// JSON 请求（如操练场）：image 字段为 URL，需下载后转为 OpenAI multipart
+		if !strings.HasPrefix(c.ContentType(), gin.MIMEMultipartPOSTForm) {
+			urls := relayhelper.ExtractImageInputURLs(request.Image)
+			if len(urls) == 0 {
+				return nil, errors.New("image is required")
+			}
+			return buildImageEditsMultipartFromURLs(c, request, urls)
+		}
 
 		var requestBody bytes.Buffer
 		writer := multipart.NewWriter(&requestBody)
@@ -557,6 +568,78 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 
 	default:
 		return request, nil
+	}
+}
+
+// buildImageEditsMultipartFromURLs 将 JSON 中的参考图 URL 下载并组装为 /v1/images/edits 所需的 multipart 请求体。
+func buildImageEditsMultipartFromURLs(c *gin.Context, request dto.ImageRequest, urls []string) (*bytes.Buffer, error) {
+	var requestBody bytes.Buffer
+	writer := multipart.NewWriter(&requestBody)
+
+	if request.Model != "" {
+		writer.WriteField("model", request.Model)
+	}
+	if strings.TrimSpace(request.Prompt) != "" {
+		writer.WriteField("prompt", strings.TrimSpace(request.Prompt))
+	}
+	if request.N != nil && *request.N > 0 {
+		writer.WriteField("n", strconv.FormatUint(uint64(*request.N), 10))
+	}
+	if request.Size != "" {
+		writer.WriteField("size", request.Size)
+	}
+	if request.Quality != "" {
+		writer.WriteField("quality", request.Quality)
+	}
+	if request.Watermark != nil {
+		writer.WriteField("watermark", strconv.FormatBool(*request.Watermark))
+	}
+
+	fieldName := "image"
+	if len(urls) > 1 {
+		fieldName = "image[]"
+	}
+	for i, imageURL := range urls {
+		mimeType, dataB64, err := service.GetImageFromUrl(imageURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to download reference image %d: %w", i+1, err)
+		}
+		data, err := base64.StdEncoding.DecodeString(dataB64)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode reference image %d: %w", i+1, err)
+		}
+		ext := mimeTypeToExtension(mimeType)
+		filename := fmt.Sprintf("reference_%d.%s", i+1, ext)
+
+		h := make(textproto.MIMEHeader)
+		h.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, fieldName, filename))
+		h.Set("Content-Type", mimeType)
+		part, err := writer.CreatePart(h)
+		if err != nil {
+			return nil, fmt.Errorf("create form part failed for image %d: %w", i+1, err)
+		}
+		if _, err := io.Copy(part, bytes.NewReader(data)); err != nil {
+			return nil, fmt.Errorf("copy image data failed for image %d: %w", i+1, err)
+		}
+	}
+
+	if err := writer.Close(); err != nil {
+		return nil, err
+	}
+	c.Request.Header.Set("Content-Type", writer.FormDataContentType())
+	return &requestBody, nil
+}
+
+func mimeTypeToExtension(mimeType string) string {
+	switch strings.ToLower(strings.TrimSpace(mimeType)) {
+	case "image/jpeg", "image/jpg":
+		return "jpg"
+	case "image/webp":
+		return "webp"
+	case "image/gif":
+		return "gif"
+	default:
+		return "png"
 	}
 }
 

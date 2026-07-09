@@ -34,6 +34,7 @@ import {
 import {
   buildImageMessageContentPatch,
   extractImageSources,
+  normalizePlaygroundImageResponse,
 } from '../../helpers/playgroundImageUtils';
 import { formatVideoTaskError } from '../../helpers/playgroundVideoUtils';
 
@@ -143,7 +144,7 @@ export const useApiRequest = (
         const status = String(taskData?.status || '').toLowerCase();
         const progress = Number(taskData?.progress || 0);
         const imagePatch = buildImageMessageContentPatch(
-          extractImageSources(data),
+          extractImageSources(normalizePlaygroundImageResponse(data)),
         );
         if (imagePatch) {
           applyImageMessagePatch(imagePatch, updateMessage);
@@ -326,6 +327,8 @@ export const useApiRequest = (
     switch (payload?.__endpoint) {
       case 'image':
         return API_ENDPOINTS.IMAGE_GENERATIONS;
+      case 'image_edits':
+        return API_ENDPOINTS.IMAGE_EDITS;
       case 'video':
         return API_ENDPOINTS.VIDEO_GENERATIONS;
       default:
@@ -587,9 +590,12 @@ export const useApiRequest = (
             }
             return newMessages;
           }, requestMode);
-        } else if (payload?.__endpoint === 'image') {
+        } else if (
+          payload?.__endpoint === 'image' ||
+          payload?.__endpoint === 'image_edits'
+        ) {
           const imagePatch = buildImageMessageContentPatch(
-            extractImageSources(data),
+            extractImageSources(normalizePlaygroundImageResponse(data)),
           );
           const taskData =
             data?.data && typeof data.data === 'object' ? data.data : data;

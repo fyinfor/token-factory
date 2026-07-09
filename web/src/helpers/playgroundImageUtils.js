@@ -17,43 +17,63 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
+import { splitAssetUris } from './materialAssetUtils';
+import {
+  extractImageUrlsFromMessages,
+  isAudioURL,
+  isVideoURL,
+} from './playgroundVideoUtils';
+
 /** 将 b64_json / 裸 base64 转为可在 img src 使用的 data URL */
 export function normalizeBase64ImageSrc(value, mime = 'image/png') {
   const s = String(value || '').trim();
   if (!s) return '';
   if (s.startsWith('data:')) return s;
   if (s.startsWith('http://') || s.startsWith('https://')) return s;
-  return `data:${mime};base64,${s}`;
+  const normalizedMime =
+    typeof mime === 'string' && mime.trim() ? mime.trim() : 'image/png';
+  return `data:${normalizedMime};base64,${s}`;
 }
 
-function itemToImageSrc(item) {
+/** 将 OpenAI 图片响应中的 output_format / response_format 转为 MIME */
+export function outputFormatToMime(outputFormat, responseFormat) {
+  const raw = String(outputFormat || responseFormat || '')
+    .trim()
+    .toLowerCase();
+  if (!raw || raw === 'auto') return 'image/png';
+  if (raw.startsWith('image/')) return raw;
+  if (raw === 'jpg') return 'image/jpeg';
+  return `image/${raw}`;
+}
+
+function itemToImageSrc(item, fallbackMime = 'image/png') {
   if (!item) return '';
   if (typeof item === 'string') {
     const s = item.trim();
     if (!s) return '';
     if (s.startsWith('http://') || s.startsWith('https://') || s.startsWith('data:'))
       return s;
-    return normalizeBase64ImageSrc(s);
+    return normalizeBase64ImageSrc(s, fallbackMime);
   }
   if (typeof item !== 'object') return '';
   if (typeof item.url === 'string' && item.url.trim()) return item.url.trim();
   if (typeof item.image_url === 'string' && item.image_url.trim())
     return item.image_url.trim();
+  const itemMime =
+    typeof item.mime_type === 'string' && item.mime_type.trim()
+      ? item.mime_type.trim()
+      : fallbackMime;
   const b64 =
-    item.b64_json ?? item.base64 ?? item.binary ?? item.image_base64 ?? item.data;
+    item.b64_json ?? item.base64 ?? item.binary ?? item.image_base64;
   if (typeof b64 === 'string' && b64.trim()) {
-    const mime =
-      typeof item.mime_type === 'string' && item.mime_type.trim()
-        ? item.mime_type.trim()
-        : 'image/png';
-    return normalizeBase64ImageSrc(b64, mime);
+    return normalizeBase64ImageSrc(b64, itemMime);
   }
   return '';
 }
 
-function collectSourcesFromList(list) {
+function collectSourcesFromList(list, fallbackMime = 'image/png') {
   if (!Array.isArray(list)) return [];
-  return list.map((item) => itemToImageSrc(item)).filter(Boolean);
+  return list.map((item) => itemToImageSrc(item, fallbackMime)).filter(Boolean);
 }
 
 export function dedupeImageSources(sources) {
@@ -67,20 +87,23 @@ export function dedupeImageSources(sources) {
   return out;
 }
 
-/** 从 OpenAI / 异步任务 / 即梦等响应体中提取全部可展示图片地址 */
+/** 从 OpenAI / 异步任务 / 即梦等响应体中提取全部可展示图片地址（含 b64_json） */
 export function extractImageSources(obj, depth = 0) {
   if (!obj || typeof obj !== 'object' || depth > 6) return [];
 
+  const fallbackMime = outputFormatToMime(obj.output_format, obj.response_format);
   const results = [];
 
-  results.push(...collectSourcesFromList(obj.data));
-  results.push(...collectSourcesFromList(obj.image_urls));
-  results.push(...collectSourcesFromList(obj.images));
-  results.push(...collectSourcesFromList(obj.outputs));
+  if (Array.isArray(obj.data)) {
+    results.push(...collectSourcesFromList(obj.data, fallbackMime));
+  }
+  results.push(...collectSourcesFromList(obj.image_urls, fallbackMime));
+  results.push(...collectSourcesFromList(obj.images, fallbackMime));
+  results.push(...collectSourcesFromList(obj.outputs, fallbackMime));
 
   if (Array.isArray(obj.binary_data_base64)) {
     for (const b64 of obj.binary_data_base64) {
-      const src = normalizeBase64ImageSrc(b64);
+      const src = normalizeBase64ImageSrc(b64, fallbackMime);
       if (src) results.push(src);
     }
   }
@@ -103,6 +126,25 @@ export function extractImageSources(obj, depth = 0) {
   }
 
   return dedupeImageSources(results);
+}
+
+/**
+ * 归一化操练场图片 API 响应（兼容 { success/code, data } 网关包装）。
+ * OpenAI 直出格式示例：{ created, data: [{ b64_json }], output_format: 'png' }
+ */
+export function normalizePlaygroundImageResponse(raw) {
+  if (!raw || typeof raw !== 'object') return raw;
+  const inner = raw.data;
+  const isGatewayWrapper =
+    inner &&
+    typeof inner === 'object' &&
+    !Array.isArray(inner) &&
+    (Object.prototype.hasOwnProperty.call(raw, 'success') ||
+      Object.prototype.hasOwnProperty.call(raw, 'code') ||
+      (Object.prototype.hasOwnProperty.call(raw, 'message') &&
+        Object.prototype.hasOwnProperty.call(raw, 'data')));
+  if (isGatewayWrapper) return inner;
+  return raw;
 }
 
 /** 操练场生成图 markdown 占位（空 alt，兼容旧版 generated-image-N） */
@@ -157,4 +199,31 @@ export function stripGeneratedImageMarkdown(text) {
     .replace(GENERATED_IMAGE_MARKDOWN_STRIP_REGEX, '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+/**
+ * 操练场文本 / 图片模式：合并媒体侧栏与消息内的参考图 URL。
+ * 空地址会被过滤，无有效图片时返回空数组（调用方无需传参、也不应报错）。
+ */
+export function collectPlaygroundImageMediaUrls(sidebarImageUrls, messages) {
+  const expandedSidebarUrls = (sidebarImageUrls || []).flatMap((url) => {
+    const trimmed = String(url || '').trim();
+    if (!trimmed) return [];
+    return splitAssetUris(trimmed);
+  });
+  const merged = [
+    ...expandedSidebarUrls.map((url) => String(url || '').trim()).filter(Boolean),
+    ...extractImageUrlsFromMessages(messages),
+  ];
+  const seen = new Set();
+  const images = [];
+  for (const url of merged) {
+    const trimmed = String(url || '').trim();
+    if (!trimmed || seen.has(trimmed) || isVideoURL(trimmed) || isAudioURL(trimmed)) {
+      continue;
+    }
+    seen.add(trimmed);
+    images.push(trimmed);
+  }
+  return images;
 }

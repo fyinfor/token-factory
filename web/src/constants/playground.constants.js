@@ -80,6 +80,7 @@ export const DEBUG_TABS = {
 export const API_ENDPOINTS = {
   CHAT_COMPLETIONS: '/api/playground/chat/completions',
   IMAGE_GENERATIONS: '/api/playground/images/generations',
+  IMAGE_EDITS: '/api/playground/images/edits',
   IMAGE_GENERATIONS_FETCH_PREFIX: '/api/playground/images/generations',
   VIDEO_GENERATIONS: '/api/playground/videos',
   USER_MODELS: '/api/user/models',
@@ -173,6 +174,13 @@ export const PLAYGROUND_MEDIA_MAX_WIDTH_PX = 780;
 /** 操练场消息内图片/视频最大高度（保持比例） */
 export const PLAYGROUND_MEDIA_MAX_HEIGHT = '60vh';
 export const PLAYGROUND_MEDIA_MAX_HEIGHT_RATIO = 0.6;
+
+/** 操练场 AI 对话中用户参考图预览尺寸（较生成图更小） */
+export const PLAYGROUND_DIALOGUE_REFERENCE_IMAGE_MAX_WIDTH =
+  'min(100%, 240px)';
+export const PLAYGROUND_DIALOGUE_REFERENCE_IMAGE_MAX_WIDTH_PX = 240;
+export const PLAYGROUND_DIALOGUE_REFERENCE_IMAGE_MAX_HEIGHT = '160px';
+export const PLAYGROUND_DIALOGUE_REFERENCE_IMAGE_MAX_HEIGHT_PX = 160;
 
 export function getPlaygroundMediaMaxHeightPx() {
   if (typeof window === 'undefined') {
