@@ -491,8 +491,21 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 		relayMode := relayconstant.RelayModeVideoFetchByID
 		c.Set("relay_mode", relayMode)
 		shouldSelectChannel = false
+	} else if strings.HasPrefix(c.Request.URL.Path, "/api/playground/images/edits") {
+		// 操练场图生图：有参考图时走 OpenAI /v1/images/edits
+		relayMode := relayconstant.RelayModeImagesEdits
+		c.Set("relay_mode", relayMode)
+		if c.Request.Method == http.MethodPost {
+			req, err := getModelFromRequest(c)
+			if err != nil {
+				return nil, false, err
+			}
+			if req != nil {
+				modelRequest.Model = req.Model
+			}
+		}
 	} else if strings.HasPrefix(c.Request.URL.Path, "/api/playground/images/generations") {
-		// 操练场图片生成：按 OpenAI Image relay 路径处理
+		// 操练场文生图：无参考图时走 OpenAI /v1/images/generations
 		relayMode := relayconstant.RelayModeImagesGenerations
 		c.Set("relay_mode", relayMode)
 		if c.Request.Method == http.MethodPost {

@@ -68,7 +68,7 @@ const SECTION_KEYS = {
 const renderPlaygroundGroupOption = (item) =>
   renderGroupOption({ ...item, ratio: undefined });
 
-// 切换文本/图片/视频时默认回到基础分栏；自定义请求模式进入高级分栏。
+// 切换文本/图片/视频时默认回到模型分栏；自定义请求模式进入高级分栏。
 const getDefaultSection = (displayMode, customRequestMode) => {
   if (customRequestMode) {
     return SECTION_KEYS.ADVANCED;
@@ -82,7 +82,7 @@ const getImageResolutionLabel = (selectedImageSize) =>
 const buildSectionTabs = (t) => [
   {
     key: SECTION_KEYS.BASIC,
-    label: t('基础'),
+    label: t('模型'),
     icon: <Sparkles size={14} />,
   },
   {

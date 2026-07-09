@@ -291,22 +291,24 @@ export const buildApiPayload = (
     )
       ? inputs.image_size
       : sizeOptions[0]?.value || '1024x1024';
+    const referenceImages = collectPlaygroundImageMediaUrls(
+      inputs.imageUrls,
+      processedMessages,
+    );
+    const hasReferenceImages = referenceImages.length > 0;
     const payload = {
       model: modelWithRoute,
       prompt: getLastUserPrompt(),
       size: selectedImageSize,
       n: Number(inputs.image_n) || 1,
-      __endpoint: 'image',
+      // 无参考图 → generations；有参考图 → edits（OpenAI Image 渠道约定）
+      __endpoint: hasReferenceImages ? 'image_edits' : 'image',
     };
     if (inputs.image_ratio && inputs.image_ratio !== 'auto') {
       payload.ratio = inputs.image_ratio;
     }
     // 图片模式：媒体侧栏参考图写入 image 字段（空则省略，与后端 ImageRequest.image 约定一致）
-    const referenceImages = collectPlaygroundImageMediaUrls(
-      inputs.imageUrls,
-      processedMessages,
-    );
-    if (referenceImages.length > 0) {
+    if (hasReferenceImages) {
       payload.image =
         referenceImages.length === 1 ? referenceImages[0] : referenceImages;
     }
