@@ -47,9 +47,15 @@ import {
 } from '../../helpers/materialAssetUtils';
 import { processIncompleteThinkTags } from '../../helpers';
 import {
+  resolveMessageGeneratedImages,
+  stripGeneratedImageMarkdown,
+} from '../../helpers/playgroundImageUtils';
+import {
   PLAYGROUND_MEDIA_MAX_HEIGHT,
   PLAYGROUND_MEDIA_MAX_WIDTH,
   PLAYGROUND_MEDIA_MAX_WIDTH_PX,
+  PLAYGROUND_DIALOGUE_REFERENCE_IMAGE_MAX_WIDTH,
+  PLAYGROUND_DIALOGUE_REFERENCE_IMAGE_MAX_HEIGHT,
 } from '../../constants/playground.constants';
 import { usePlaygroundMediaMaxHeightPx } from '../../hooks/playground/usePlaygroundMediaMaxHeight';
 
@@ -83,6 +89,7 @@ const PlaygroundDialogueMarkdownImage = ({
   alt,
   style,
   className,
+  imgStyle,
   ...rest
 }) => (
   <Image
@@ -112,6 +119,7 @@ const PlaygroundDialogueMarkdownImage = ({
       maxHeight: PLAYGROUND_MEDIA_MAX_HEIGHT,
       objectFit: 'contain',
       borderRadius: 8,
+      ...imgStyle,
     }}
   />
 );
@@ -221,6 +229,7 @@ const appendTextContent = (normalizedContent, text, reasoningContentRef) => {
 const normalizeDialogueContent = (message, assetMap) => {
   const { role, videoTask } = message || {};
   const rawContent = message?.playgroundContent ?? message?.content;
+  const generatedImages = resolveMessageGeneratedImages(message);
   const normalizedContent = [];
   const reasoningContentRef = {
     value: message?.reasoningContent || '',
@@ -243,7 +252,20 @@ const normalizeDialogueContent = (message, assetMap) => {
       }
     });
   } else if (typeof rawContent === 'string' && rawContent.trim()) {
-    appendTextContent(normalizedContent, rawContent, reasoningContentRef);
+    const displayText = stripGeneratedImageMarkdown(rawContent);
+    if (displayText.trim()) {
+      appendTextContent(normalizedContent, displayText, reasoningContentRef);
+    }
+  }
+
+  // 图片生成结果（含 b64_json 解码后的 data URL）在对话区以图片气泡展示
+  for (const src of generatedImages) {
+    if (!src) continue;
+    normalizedContent.push({
+      type: 'input_image',
+      image_url: resolvePlaygroundMediaUrl(src, assetMap),
+      detail: 'auto',
+    });
   }
 
   if (videoTask?.playableUrl) {
@@ -688,14 +710,23 @@ const ChatArea = ({
           </div>
         );
       },
-      input_image: (item) => {
+      input_image: (item, currentMessage) => {
         const imageUrl = resolvePlaygroundMediaUrl(item?.image_url, assetMap);
         if (!imageUrl) return null;
+        const isUserReference = currentMessage?.role === 'user';
+        const imageMaxWidth = isUserReference
+          ? PLAYGROUND_DIALOGUE_REFERENCE_IMAGE_MAX_WIDTH
+          : PLAYGROUND_MEDIA_MAX_WIDTH;
+        const imageMaxHeight = isUserReference
+          ? PLAYGROUND_DIALOGUE_REFERENCE_IMAGE_MAX_HEIGHT
+          : PLAYGROUND_MEDIA_MAX_HEIGHT;
         return (
           <PlaygroundDialogueMarkdownImage
             src={imageUrl}
             alt=''
             className='playground-dialogue-user-image'
+            style={{ maxWidth: imageMaxWidth, maxHeight: imageMaxHeight }}
+            imgStyle={{ maxWidth: imageMaxWidth, maxHeight: imageMaxHeight }}
           />
         );
       },

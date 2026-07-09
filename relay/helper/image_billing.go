@@ -97,7 +97,7 @@ func resolveImageDimensions(c *gin.Context, request *dto.ImageRequest, responseB
 		return w, h, true
 	}
 	if request != nil {
-		for _, url := range extractImageInputURLs(request.Image) {
+		for _, url := range ExtractImageInputURLs(request.Image) {
 			if w, h, ok := decodeImageURLDimensions(url); ok {
 				return w, h, true
 			}
@@ -148,7 +148,8 @@ func decodeImageURLDimensions(url string) (int, int, bool) {
 	return cfg.Width, cfg.Height, true
 }
 
-func extractImageInputURLs(raw json.RawMessage) []string {
+// ExtractImageInputURLs 从 ImageRequest.image 字段解析参考图 URL（字符串或数组）。
+func ExtractImageInputURLs(raw json.RawMessage) []string {
 	if len(raw) == 0 {
 		return nil
 	}

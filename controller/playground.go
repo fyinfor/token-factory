@@ -61,7 +61,7 @@ func Playground(c *gin.Context) {
 	Relay(c, types.RelayFormatOpenAI)
 }
 
-func PlaygroundImage(c *gin.Context) {
+func playgroundImageRelay(c *gin.Context, relayMode int) {
 	var tokenFactoryError *types.TokenFactoryError
 	defer func() {
 		if tokenFactoryError != nil {
@@ -74,9 +74,19 @@ func PlaygroundImage(c *gin.Context) {
 	if tokenFactoryError != nil {
 		return
 	}
-	// 兜底：确保图片请求按图片链路处理，避免误走文本链路导致 request type 冲突
-	c.Set("relay_mode", relayconstant.RelayModeImagesGenerations)
+	// 兜底：操练场路径无法被 Path2RelayMode 识别，需显式设置 relay_mode
+	c.Set("relay_mode", relayMode)
 	Relay(c, types.RelayFormatOpenAIImage)
+}
+
+// PlaygroundImage 文生图：无参考图时走 /v1/images/generations
+func PlaygroundImage(c *gin.Context) {
+	playgroundImageRelay(c, relayconstant.RelayModeImagesGenerations)
+}
+
+// PlaygroundImageEdits 图生图：有参考图时走 /v1/images/edits
+func PlaygroundImageEdits(c *gin.Context) {
+	playgroundImageRelay(c, relayconstant.RelayModeImagesEdits)
 }
 
 func PlaygroundVideo(c *gin.Context) {

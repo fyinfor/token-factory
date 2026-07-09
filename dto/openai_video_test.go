@@ -88,4 +88,14 @@ func TestAdaptOpenAIVideoJSONForPath(t *testing.T) {
 	if !strings.Contains(string(converted), `"created_at":1778292296`) {
 		t.Fatalf("expected int64 created_at for /v1/videos path, got: %s", converted)
 	}
+
+	withExtra := []byte(`{"id":"task_test","created_at":"2026-07-03T03:16:23Z","ratio":"16:9","resolution":"480p","duration":5}`)
+	convertedExtra, err := AdaptOpenAIVideoJSONForPath("/v1/videos/task_abc", withExtra)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(convertedExtra)
+	if !strings.Contains(s, `"ratio":"16:9"`) || !strings.Contains(s, `"resolution":"480p"`) {
+		t.Fatalf("expected passthrough fields preserved on /v1/videos path, got: %s", s)
+	}
 }

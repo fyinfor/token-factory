@@ -138,6 +138,7 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			playgroundRoute.POST("/chat/completions", controller.Playground)
 			playgroundRoute.POST("/images/generations", controller.PlaygroundImage)
+			playgroundRoute.POST("/images/edits", controller.PlaygroundImageEdits)
 			playgroundRoute.GET("/images/generations/:task_id", controller.PlaygroundImageFetch)
 			playgroundRoute.POST("/videos", controller.PlaygroundVideo)
 			playgroundRoute.GET("/videos/:task_id", controller.PlaygroundVideoFetch)
