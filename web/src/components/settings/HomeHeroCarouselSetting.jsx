@@ -1514,11 +1514,7 @@ export default function HomeHeroCarouselSetting() {
                 position: 'relative',
                 width:
                   cropState.profile.key === 'pc' ? '100%' : 'min(100%, 750px)',
-                ...(cropState.profile.key === 'pc'
-                  ? { height: 'min(360px, 52vh)', minHeight: 260 }
-                  : {
-                      aspectRatio: `${cropState.profile.width} / ${cropState.profile.height}`,
-                    }),
+                aspectRatio: `${cropState.profile.width} / ${cropState.profile.height}`,
                 margin: '0 auto',
                 background: '#111827',
                 overflow: 'hidden',

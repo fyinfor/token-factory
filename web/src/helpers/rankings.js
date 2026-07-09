@@ -19,6 +19,8 @@ export function normalizeRankingCategory(category) {
   return VALID_CATEGORIES.has(value) ? value : 'all';
 }
 
+export const RANKING_CALL_VOLUME_MULTIPLIER = 100;
+
 export function formatRankingTokens(value) {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) return '0';
@@ -26,6 +28,13 @@ export function formatRankingTokens(value) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return String(Math.round(n));
+}
+
+/** 排行榜调用量展示：消耗 token × 100 */
+export function formatRankingCallVolume(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) return '0';
+  return formatRankingTokens(n * RANKING_CALL_VOLUME_MULTIPLIER);
 }
 
 export function formatRankingShare(share) {

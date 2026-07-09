@@ -6,9 +6,9 @@ import React, { memo } from 'react';
 import { Card, Empty, Spin, Tag } from '@douyinfe/semi-ui';
 import { Trophy } from 'lucide-react';
 import {
+  formatRankingCallVolume,
   formatRankingGrowth,
   formatRankingShare,
-  formatRankingTokens,
   getRankingGrowthColor,
 } from '../../helpers/rankings';
 import { getLobeHubIcon } from '../../helpers';
@@ -59,7 +59,7 @@ const ModelLeaderboard = memo(({ models = [], t, loading }) => (
               </div>
               <div className='text-right shrink-0'>
                 <div className='font-mono text-sm font-semibold'>
-                  {formatRankingTokens(item.total_tokens)}
+                  {formatRankingCallVolume(item.total_tokens)}
                 </div>
                 <div className='text-[10px]' style={{ color: 'var(--semi-color-text-2)' }}>
                   {formatRankingShare(item.share)}

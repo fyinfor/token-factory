@@ -6,8 +6,8 @@ import React, { memo } from 'react';
 import { Card, Empty, Progress, Spin } from '@douyinfe/semi-ui';
 import { PieChart } from 'lucide-react';
 import {
+  formatRankingCallVolume,
   formatRankingShare,
-  formatRankingTokens,
   getRankingCategoryLabel,
   getRankingCategoryStyle,
 } from '../../helpers/rankings';
@@ -64,7 +64,9 @@ const VendorShareSection = memo(({ vendors = [], t, loading }) => (
                   className='flex justify-between text-[10px] mt-1'
                   style={{ color: 'var(--semi-color-text-2)' }}
                 >
-                  <span>{formatRankingTokens(item.total_tokens)} tokens</span>
+                  <span>
+                    {formatRankingCallVolume(item.total_tokens)} {t('调用量')}
+                  </span>
                   <span className='flex items-center gap-1 truncate'>
                     <span>{t('代表模型')}:</span>
                     <span className='truncate'>{item.top_model || '—'}</span>
