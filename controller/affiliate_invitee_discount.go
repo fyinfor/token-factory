@@ -405,7 +405,7 @@ func GetDistributorModelDiscountTemplate(c *gin.Context) {
 		return
 	}
 
-	items, inviteeCount, err := model.GetDistributorModelDiscountTemplate(userId)
+	items, inviteeCount, autoApplyNewInvitees, err := model.GetDistributorModelDiscountTemplate(userId)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
@@ -414,15 +414,17 @@ func GetDistributorModelDiscountTemplate(c *gin.Context) {
 		"success": true,
 		"message": "",
 		"data": gin.H{
-			"items":         items,
-			"total":         len(items),
-			"invitee_count": inviteeCount,
+			"items":                   items,
+			"total":                   len(items),
+			"invitee_count":           inviteeCount,
+			"auto_apply_new_invitees": autoApplyNewInvitees,
 		},
 	})
 }
 
 type putDistributorModelDiscountTemplateRequest struct {
-	Discounts []model.ModelMarkupDiscountRateUpdateRequest `json:"discounts"`
+	Discounts            []model.ModelMarkupDiscountRateUpdateRequest `json:"discounts"`
+	AutoApplyNewInvitees *bool                                        `json:"auto_apply_new_invitees"`
 }
 
 func PutDistributorModelDiscountTemplate(c *gin.Context) {
@@ -441,7 +443,7 @@ func PutDistributorModelDiscountTemplate(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的请求"})
 		return
 	}
-	if err := model.UpdateDistributorModelDiscountTemplate(userId, req.Discounts); err != nil {
+	if err := model.UpdateDistributorModelDiscountTemplate(userId, req.Discounts, req.AutoApplyNewInvitees); err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}

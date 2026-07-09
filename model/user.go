@@ -57,6 +57,7 @@ type User struct {
 	// IsDistributor 分销商资格 0/1（与 role 解耦）；普通用户 role=1 时可同时为分销商。旧版 role=5 已迁移为 role=1 + is_distributor=1。
 	IsDistributor                          int            `json:"is_distributor" gorm:"column:is_distributor;type:integer;default:0;index"`
 	DistributorModelMarkupDiscountTemplate string         `json:"-" gorm:"type:text;column:distributor_model_markup_discount_template;comment:分销商模型加价模板(JSON数组)"`
+	DistributorModelDiscountAutoApply      int            `json:"distributor_model_discount_auto_apply" gorm:"column:distributor_model_discount_auto_apply;type:integer;default:0;comment:模型折扣率模板自动应用到新下级用户"`
 	IsStudent                              int            `json:"is_student" gorm:"column:is_student;type:integer;default:0;index"`
 	StudentStatus                          int            `json:"student_status" gorm:"column:student_status;type:integer;default:0;index"`
 	StudentApplied                         *time.Time     `json:"student_applied_at,omitempty" gorm:"column:student_applied_at"`
