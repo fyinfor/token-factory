@@ -8,42 +8,44 @@ type Store interface {
 }
 
 type Sample struct {
-	Model         string
-	Group         string
-	LatencyMs     int64
-	TtftMs        int64
-	HasTtft       bool
-	Success       bool
-	OutputTokens  int64
-	GenerationMs  int64
-	PromptTokens  int64
-	CachedTokens  int64
+	ChannelId    int
+	Model        string
+	Group        string
+	LatencyMs    int64
+	TtftMs       int64
+	HasTtft      bool
+	Success      bool
+	OutputTokens int64
+	GenerationMs int64
+	PromptTokens int64
+	CachedTokens int64
 }
 
 type QueryParams struct {
-	Model string
-	Group string
-	Hours int
+	ChannelId int
+	Model     string
+	Group     string
+	Hours     int
 }
 
 type BucketPoint struct {
-	Ts            int64   `json:"ts"`
-	AvgTtftMs     int64   `json:"avg_ttft_ms"`
-	AvgLatencyMs  int64   `json:"avg_latency_ms"`
-	SuccessRate   float64 `json:"success_rate"`
-	AvgTps        float64 `json:"avg_tps"`
-	CacheHitRate  float64 `json:"cache_hit_rate"`
-	RequestCount  int64   `json:"request_count,omitempty"`
+	Ts           int64   `json:"ts"`
+	AvgTtftMs    int64   `json:"avg_ttft_ms"`
+	AvgLatencyMs int64   `json:"avg_latency_ms"`
+	SuccessRate  float64 `json:"success_rate"`
+	AvgTps       float64 `json:"avg_tps"`
+	CacheHitRate float64 `json:"cache_hit_rate"`
+	RequestCount int64   `json:"request_count,omitempty"`
 }
 
 type GroupResult struct {
-	Group         string        `json:"group"`
-	AvgTtftMs     int64         `json:"avg_ttft_ms"`
-	AvgLatencyMs  int64         `json:"avg_latency_ms"`
-	SuccessRate   float64       `json:"success_rate"`
-	AvgTps        float64       `json:"avg_tps"`
-	CacheHitRate  float64       `json:"cache_hit_rate"`
-	Series        []BucketPoint `json:"series"`
+	Group        string        `json:"group"`
+	AvgTtftMs    int64         `json:"avg_ttft_ms"`
+	AvgLatencyMs int64         `json:"avg_latency_ms"`
+	SuccessRate  float64       `json:"success_rate"`
+	AvgTps       float64       `json:"avg_tps"`
+	CacheHitRate float64       `json:"cache_hit_rate"`
+	Series       []BucketPoint `json:"series"`
 }
 
 type QueryResult struct {
@@ -179,4 +181,3 @@ func (b *atomicBucket) addCounters(c counters) {
 		b.cachedTokens.Add(c.cachedTokens)
 	}
 }
-

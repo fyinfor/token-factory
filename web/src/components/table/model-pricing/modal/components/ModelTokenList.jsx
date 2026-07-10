@@ -70,7 +70,15 @@ const StepTitle = ({ label, title, desc }) => (
 const TOKEN_LIST_COLLAPSE_THRESHOLD = 2;
 
 /** 模型详情侧栏「我的令牌」列表，2 个及以上时可折叠 */
-const ModelTokenList = ({ visible, t, stepLabel, title, description }) => {
+const ModelTokenList = ({
+  visible,
+  t,
+  stepLabel,
+  title,
+  description,
+  flat = false,
+  showLoginPrompt = false,
+}) => {
   const [tokens, setTokens] = useState([]);
   const [tokenCount, setTokenCount] = useState(0);
   const [showKeys, setShowKeys] = useState({});
@@ -80,7 +88,7 @@ const ModelTokenList = ({ visible, t, stepLabel, title, description }) => {
   const keyRequestsRef = useRef({});
   const navigate = useNavigate();
 
-  const canCollapse = tokens.length >= TOKEN_LIST_COLLAPSE_THRESHOLD;
+  const canCollapse = !flat && tokens.length >= TOKEN_LIST_COLLAPSE_THRESHOLD;
 
   useEffect(() => {
     if (!visible) {
@@ -219,7 +227,7 @@ const ModelTokenList = ({ visible, t, stepLabel, title, description }) => {
       {tokens.map((token) => (
         <div
           key={token.id}
-          className='flex items-center gap-3 rounded-lg px-3 py-2 overflow-hidden'
+          className='grid min-w-0 grid-cols-1 gap-2 rounded-lg px-3 py-2 sm:grid-cols-[minmax(90px,130px)_auto_minmax(0,1fr)_auto] sm:items-center'
           style={{ backgroundColor: 'var(--semi-color-fill-0)' }}
         >
           {(() => {
@@ -230,7 +238,7 @@ const ModelTokenList = ({ visible, t, stepLabel, title, description }) => {
               : '';
             return (
               <>
-                <div className='min-w-[100px] max-w-[140px] truncate'>
+                <div className='min-w-0 truncate'>
                   <Text strong ellipsis={{ showTooltip: true }}>
                     {token.name || `${t('令牌')} #${token.id}`}
                   </Text>
@@ -243,8 +251,9 @@ const ModelTokenList = ({ visible, t, stepLabel, title, description }) => {
                 >
                   {token.status === 1 ? t('启用') : t('禁用')}
                 </Tag>
-                <div className='flex items-center gap-2 min-w-[220px] shrink-0'>
+                <div className='flex min-w-0 items-center gap-2'>
                   <Input
+                    className='min-w-0 flex-1'
                     readOnly
                     size='small'
                     value={revealed && fullKey ? fullKey : 'sk-********'}
@@ -278,7 +287,7 @@ const ModelTokenList = ({ visible, t, stepLabel, title, description }) => {
                     {t('复制')}
                   </Button>
                 </div>
-                <div className='shrink-0 ml-auto'>
+                <div className='min-w-0 sm:ml-auto'>
                   {renderQuotaUsage(token.remain_quota, token, t)}
                 </div>
               </>
@@ -289,12 +298,45 @@ const ModelTokenList = ({ visible, t, stepLabel, title, description }) => {
     </div>
   );
 
-  if (!visible) {
+  if (!visible && !showLoginPrompt) {
     return null;
   }
 
-  return (
-    <Card className='!rounded-2xl shadow-sm border-0 mb-6'>
+  const loginPrompt = (
+    <>
+      <div className='mb-3'>
+        <StepTitle
+          label={stepLabel || t('第三步')}
+          title={title || t('复制API Key')}
+          desc={t('登录后可查看并复制 API Key')}
+        />
+      </div>
+      <div className='model-login-prompt flex items-center justify-between gap-3 rounded-lg px-3 py-2.5'>
+        <Text type='secondary'>{t('请先登录后继续')}</Text>
+        <Button
+          className='model-login-prompt-button'
+          type='primary'
+          theme='light'
+          onClick={() => navigate('/login')}
+        >
+          {t('去登录')}
+        </Button>
+      </div>
+    </>
+  );
+
+  if (!visible) {
+    return flat ? (
+      <section className='mb-6 pb-3'>{loginPrompt}</section>
+    ) : (
+      <Card className='!rounded-2xl shadow-sm border-0 mb-6'>
+        {loginPrompt}
+      </Card>
+    );
+  }
+
+  const content = (
+    <>
       <div className='flex items-center justify-between gap-3 mb-3'>
         <div
           className={`flex items-center min-w-0 ${canCollapse ? 'cursor-pointer' : ''}`}
@@ -372,7 +414,19 @@ const ModelTokenList = ({ visible, t, stepLabel, title, description }) => {
           </Button>
         </div>
       )}
-    </Card>
+    </>
+  );
+
+  if (flat) {
+    return (
+      <section className='mb-6 border-b border-semi-color-border pb-6'>
+        {content}
+      </section>
+    );
+  }
+
+  return (
+    <Card className='!rounded-2xl shadow-sm border-0 mb-6'>{content}</Card>
   );
 };
 

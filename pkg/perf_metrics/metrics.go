@@ -16,6 +16,12 @@ import (
 
 var hotBuckets sync.Map
 
+const channelGroupPrefix = "__channel_"
+
+func channelGroup(channelId int) string {
+	return fmt.Sprintf("%s%d", channelGroupPrefix, channelId)
+}
+
 // seriesSchema is a stable client cache/schema marker. Do not change it when
 // hiding fields or making response-only privacy hardening changes.
 const seriesSchema = "dbcd0a3c01b55203"
@@ -42,7 +48,12 @@ func RecordRelaySample(info *relaycommon.RelayInfo, success bool, outputTokens, 
 	if generationMs <= 0 {
 		generationMs = latencyMs
 	}
+	channelId := 0
+	if info.ChannelMeta != nil {
+		channelId = info.ChannelId
+	}
 	Record(Sample{
+		ChannelId:    channelId,
 		Model:        info.OriginModelName,
 		Group:        info.UsingGroup,
 		LatencyMs:    latencyMs,
@@ -68,11 +79,14 @@ func Record(sample Sample) {
 		sample.LatencyMs = 0
 	}
 
-	key := bucketKey{
-		model:    sample.Model,
-		group:    sample.Group,
-		bucketTs: bucketStart(time.Now().Unix()),
+	recordSampleBucket(sample, sample.Group)
+	if sample.ChannelId > 0 {
+		recordSampleBucket(sample, channelGroup(sample.ChannelId))
 	}
+}
+
+func recordSampleBucket(sample Sample, group string) {
+	key := bucketKey{model: sample.Model, group: group, bucketTs: bucketStart(time.Now().Unix())}
 	actual, _ := hotBuckets.LoadOrStore(key, &atomicBucket{})
 	actual.(*atomicBucket).add(sample)
 	recordRedis(key, sample)
@@ -84,6 +98,9 @@ func Query(params QueryParams) (QueryResult, error) {
 	}
 	if params.Hours > 24*30 {
 		params.Hours = 24 * 30
+	}
+	if params.ChannelId > 0 {
+		params.Group = channelGroup(params.ChannelId)
 	}
 	endTs := time.Now().Unix()
 	startTs := endTs - int64(params.Hours)*3600
@@ -501,4 +518,3 @@ func mergeRedisActiveBuckets(merged map[bucketKey]counters, params QueryParams, 
 func redisBucketKey(key bucketKey) string {
 	return fmt.Sprintf("perf:%s:%s:%d", key.model, key.group, key.bucketTs)
 }
-

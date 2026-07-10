@@ -19,9 +19,13 @@ For commercial licensing, please contact support@quantumnous.com
 
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { Card, Avatar, Typography, Tag, Space } from '@douyinfe/semi-ui';
+import { Avatar, Typography, Tag, Space } from '@douyinfe/semi-ui';
 import { IconInfoCircle } from '@douyinfe/semi-icons';
-import { stringToColor, getModelTagLabel, getModelDescription } from '../../../../../helpers';
+import {
+  stringToColor,
+  getModelTagLabel,
+  getModelDescription,
+} from '../../../../../helpers';
 
 const { Text } = Typography;
 
@@ -60,7 +64,7 @@ const ModelBasicInfo = ({ modelData, vendorsMap = {}, t }) => {
   };
 
   return (
-    <Card className='!rounded-2xl shadow-sm border-0 mb-6'>
+    <section className='model-basic-glass-section'>
       <div className='flex items-center mb-4'>
         <Avatar size='small' color='blue' className='mr-2 shadow-md'>
           <IconInfoCircle size={16} />
@@ -84,7 +88,7 @@ const ModelBasicInfo = ({ modelData, vendorsMap = {}, t }) => {
           </Space>
         )}
       </div>
-    </Card>
+    </section>
   );
 };
 

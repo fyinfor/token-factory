@@ -331,7 +331,10 @@ const TokenTierDetailTable = ({
             </th>
             <th style={{ ...headerStyle, width: '12%' }}>{t('类型')}</th>
             {displayCols.map((cat, i) => (
-              <th key={cat} style={{ ...headerStyle, width: `${60 / displayCols.length}%` }}>
+              <th
+                key={cat}
+                style={{ ...headerStyle, width: `${60 / displayCols.length}%` }}
+              >
                 {colHeaders[i]} / M
               </th>
             ))}
@@ -415,7 +418,10 @@ const TokenTierDetailTable = ({
                       );
                     }
                     return (
-                      <td key={cat} style={{ ...cellStyle, backgroundColor: ts.bgColor }}>
+                      <td
+                        key={cat}
+                        style={{ ...cellStyle, backgroundColor: ts.bgColor }}
+                      >
                         {cell.discount != null && cell.discount > 0 ? (
                           <Tag
                             size='small'
@@ -472,20 +478,11 @@ const PriceComparisonList = ({ items, t, blurPricing = false }) => {
   );
 
   return (
-    <div
-      className='rounded-2xl overflow-hidden'
-      style={{
-        backgroundColor: 'var(--semi-color-bg-1)',
-        border: '1px solid var(--semi-color-border)',
-        boxShadow: '0 12px 26px rgba(15, 23, 42, 0.06)',
-        backdropFilter: 'saturate(180%) blur(18px)',
-      }}
-    >
+    <div className='channel-price-glass-table overflow-hidden rounded-lg'>
       <div
-        className='grid items-center gap-2 mx-2 mt-2 px-2 py-1.5 text-[11px] font-semibold rounded-full'
+        className='channel-price-glass-header grid items-center gap-2 px-3 py-2 text-[11px] font-semibold'
         style={{
           gridTemplateColumns: '96px minmax(0, 1fr) minmax(0, 1fr) 52px',
-          backgroundColor: 'var(--semi-color-fill-0)',
           color: 'var(--semi-color-text-2)',
         }}
       >
@@ -511,41 +508,19 @@ const PriceComparisonList = ({ items, t, blurPricing = false }) => {
             : undefined
         }
       >
-        {items.map((item, idx) => (
+        {items.map((item) => (
           <div
             key={item.key || item.label}
-            className='grid items-center gap-2 mx-2 px-2 py-2.5 text-sm'
+            className='channel-price-glass-row grid items-center gap-2 px-3 py-2 text-sm'
             style={{
               gridTemplateColumns: '96px minmax(0, 1fr) minmax(0, 1fr) 52px',
-              borderTop:
-                idx === 0 ? 'none' : '1px solid var(--semi-color-border)',
             }}
           >
-            <div className='min-w-0 flex items-center gap-1.5'>
-              <span
-                className='inline-flex items-center justify-center rounded-full shrink-0'
-                style={{
-                  width: 20,
-                  height: 20,
-                  color: 'rgb(0, 122, 255)',
-                  backgroundColor: 'rgba(0, 122, 255, 0.12)',
-                }}
-              >
-                <span
-                  className='rounded-full'
-                  style={{
-                    width: 7,
-                    height: 7,
-                    backgroundColor: 'rgb(0, 122, 255)',
-                  }}
-                />
-              </span>
-              <span
-                className='font-semibold text-semi-color-text-0 truncate'
-                title={item.label}
-              >
-                {item.label}
-              </span>
+            <div
+              className='min-w-0 truncate font-semibold text-semi-color-text-0'
+              title={item.label}
+            >
+              {item.label}
             </div>
             <div
               className='min-w-0 font-bold truncate'
@@ -631,6 +606,9 @@ const ModelChannelList = ({
   channelVideoRatioMap = {},
   channelVideoCompletionRatioMap = {},
   channelVideoPriceMap = {},
+  mode = 'details',
+  compactDetails = false,
+  flatDetails = false,
 }) => {
   const [userState] = useContext(UserContext);
   const [docsVisible, setDocsVisible] = useState(false);
@@ -933,7 +911,6 @@ const ModelChannelList = ({
           );
         }
       }
-
     }
 
     const chVideoPrice = pickChannelScopedModelFloat(
@@ -1036,36 +1013,83 @@ const ModelChannelList = ({
       if (!hideTextTokenPrices) return true;
       return item.key === 'video_flat' || item.key === 'model_price';
     });
-    const formatCostDisplay = (displayUsdPerM, isFixedPrice, fixedUnitKey) => {
-      const priceUSD = displayUsdPerM;
-      const value = formatBillingUsdDisplay(priceUSD, { tokenUnit });
-      const preciseValue = formatPreciseCurrencyValue(
-        toDisplayCurrencyValue(priceUSD, { tokenUnit }),
+    const getOfficialCostUsd = (key) => {
+      const modelRatio = Number(modelData?.model_ratio || 0);
+      const completionRatio = Number(modelData?.completion_ratio || 0);
+      const cacheRatio = Number(modelData?.cache_ratio || 0);
+      const createCacheRatio = Number(modelData?.create_cache_ratio || 0);
+      const imageRatio = Number(modelData?.image_ratio || 0);
+      const audioRatio = Number(modelData?.audio_ratio || 0);
+      const audioCompletionRatio = Number(
+        modelData?.audio_completion_ratio || 0,
       );
-      if (isFixedPrice) {
-        const unit = fixedUnitKey === '张' ? t('张') : t('次');
-        return {
-          value: `${value} / ${unit}`,
-          exact: preciseValue,
-        };
-      }
-      const unitLabel = tokenUnit === 'K' ? 'K' : 'M';
+      const videoRatio = Number(modelData?.video_ratio || 0);
+      const videoCompletionRatio = Number(
+        modelData?.video_completion_ratio || 0,
+      );
+      const officialByKey = {
+        model_price: Number(modelData?.model_price || 0),
+        input: modelRatio * 2,
+        output: modelRatio * completionRatio * 2,
+        cache_read: modelRatio * cacheRatio * 2,
+        cache_create: modelRatio * createCacheRatio * 2,
+        image: modelRatio * imageRatio * 2,
+        image_flat: Number(modelData?.image_price || 0),
+        audio_input: modelRatio * audioRatio * 2,
+        audio_output: modelRatio * audioRatio * audioCompletionRatio * 2,
+        video_input: modelRatio * videoRatio * 2,
+        video_output: modelRatio * videoRatio * videoCompletionRatio * 2,
+        video_flat: Number(modelData?.video_price || 0),
+      };
+      const officialUsd = officialByKey[key];
+      return Number.isFinite(officialUsd) && officialUsd > 0
+        ? officialUsd
+        : null;
+    };
+    const formatCostValue = (usd, isFixedPrice, fixedUnitKey) => {
+      const value = formatBillingUsdDisplay(usd, { tokenUnit });
+      const exact = formatPreciseCurrencyValue(
+        toDisplayCurrencyValue(usd, { tokenUnit }),
+      );
       return {
-        value: `${value} / 1${unitLabel} Tokens`,
-        exact: preciseValue,
+        value,
+        exact,
+        unitLabel: isFixedPrice
+          ? fixedUnitKey === '张'
+            ? t('张')
+            : t('次')
+          : tokenUnit === 'K'
+            ? 'K'
+            : 'M',
       };
     };
     return {
       items: costItems.map((item) => {
-        const price = formatCostDisplay(
+        const platform = formatCostValue(
           item.displayUsdPerM,
           item.isFixedPrice,
           item.fixedUnitKey,
         );
+        const officialUsd = getOfficialCostUsd(item.key);
+        const official = officialUsd
+          ? formatCostValue(officialUsd, item.isFixedPrice, item.fixedUnitKey)
+          : null;
+        const discount =
+          officialUsd && item.displayUsdPerM <= officialUsd
+            ? Math.round((1 - item.displayUsdPerM / officialUsd) * 100)
+            : null;
         return {
+          key: item.key,
           label: t(item.labelKey),
-          value: price.value,
-          exact: price.exact,
+          value: platform.value,
+          valueTitle: platform.exact,
+          valueExact: platform.exact,
+          official: official?.value,
+          officialTitle: official?.exact,
+          officialExact: official?.exact,
+          priceUnitLabel: platform.unitLabel,
+          discount,
+          hasDiscount: discount > 0,
         };
       }),
       videoHint: showVideoFlatTable ? vHint : null,
@@ -1077,95 +1101,355 @@ const ModelChannelList = ({
     return null;
   }
 
+  if (flatDetails && channelList.length === 1) {
+    const channel = channelList[0];
+    const channelItems = formatChannelInfo(channel);
+    const vHint = pickVideoFlatClipHintForChannel(modelData, channel);
+    const showVideoFlatTable = hasVideoFlatClipTierTable(vHint);
+    const iHint = pickImagePerImageHintForChannel(modelData, channel);
+    const showImagePerImageTable = hasImagePerImageTierTable(iHint);
+    const channelPath = getChannelRouteModelName(modelData, channel);
+    const channelQuotaType =
+      channel.quota_type !== undefined
+        ? channel.quota_type
+        : modelData?.quota_type;
+    const isTierBilling = channelQuotaType === 3;
+    const costInfo = formatChannelCostInfo(channel);
+    const costItems = costInfo.items || [];
+    const hasCostContent =
+      costItems.length > 0 || costInfo.videoHint || costInfo.imageHint;
+
+    return (
+      <>
+        <section className='mb-6 border-b border-semi-color-border pb-6'>
+          <StepTitle
+            label={t('第二步')}
+            title={t('选择通道路由模型名')}
+            desc={t('复制带渠道路由的模型名，可将请求固定到指定渠道')}
+            icon={<IconListView size={16} />}
+          />
+          <div className='flex min-w-0 items-center gap-2 rounded-lg bg-semi-color-fill-0 px-3 py-2'>
+            <Text
+              className='min-w-0 flex-1 font-mono text-sm'
+              ellipsis={{ showTooltip: true }}
+            >
+              {channelPath}
+            </Text>
+            <Tooltip content={t('复制模型名字')}>
+              <Button
+                type='primary'
+                theme='light'
+                size='small'
+                icon={<IconCopy />}
+                onClick={() => copyModelName(channelPath, t)}
+                aria-label={t('复制模型名字')}
+              >
+                {t('复制')}
+              </Button>
+            </Tooltip>
+          </div>
+        </section>
+
+        <ModelTokenList
+          visible={isLoggedIn}
+          showLoginPrompt
+          t={t}
+          stepLabel={t('第三步')}
+          title={t('复制API Key')}
+          description={t('复制可用于调用上述 API 端点的 API Key')}
+          flat
+        />
+
+        <section className='mb-6 border-b border-semi-color-border pb-6'>
+          <div className='mb-4 flex min-w-0 items-start justify-between gap-3'>
+            <div className='min-w-0'>
+              <Text className='text-lg font-medium'>{t('价格信息')}</Text>
+            </div>
+            <div className='flex shrink-0 items-center gap-2'>
+              <Tooltip content={t('复制模型名字')}>
+                <Button
+                  type='primary'
+                  theme='light'
+                  size='small'
+                  icon={<IconCopy />}
+                  onClick={() => copyModelName(channelPath, t)}
+                  title={channelPath}
+                  aria-label={t('复制模型名字')}
+                >
+                  {t('复制')}
+                </Button>
+              </Tooltip>
+            </div>
+          </div>
+          {showVideoFlatTable ? (
+            <VideoFlatClipHintTable
+              hint={vHint}
+              usedGroupRatio={usedGroupRatio}
+              displayPrice={displayPrice}
+              t={t}
+              blurPricing={blurPricing}
+            />
+          ) : null}
+          {isTierBilling ? (
+            <TokenTierDetailTable
+              model={modelData}
+              channel={channel}
+              usedGroupRatio={usedGroupRatio}
+              displayPrice={displayPrice}
+              t={t}
+            />
+          ) : (
+            <PriceComparisonList
+              items={channelItems}
+              t={t}
+              blurPricing={blurPricing}
+            />
+          )}
+          {showImagePerImageTable ? (
+            <ImagePerImageHintTable
+              hint={iHint}
+              usedGroupRatio={usedGroupRatio}
+              displayPrice={displayPrice}
+              t={t}
+              blurPricing={blurPricing}
+            />
+          ) : null}
+        </section>
+
+        {showCostPricePanel && hasCostContent ? (
+          <section className='mb-3'>
+            <div className='mb-3 flex min-w-0 items-start justify-between gap-3'>
+              <div className='min-w-0'>
+                <Text className='text-lg font-medium'>{t('成本价')}</Text>
+              </div>
+              {channel.price_discount_percent != null
+                ? (() => {
+                    const discountDisplay = formatCostDiscountDisplay(
+                      channel.price_discount_percent,
+                      t,
+                    );
+                    if (!discountDisplay) return null;
+                    return (
+                      <span
+                        className='inline-flex h-[22px] min-w-[42px] items-center justify-center rounded-full px-2 text-[11px] font-semibold'
+                        style={{
+                          color: discountDisplay.hasDiscount
+                            ? '#E74C3C'
+                            : 'var(--semi-color-text-2)',
+                          backgroundColor: discountDisplay.hasDiscount
+                            ? 'rgba(231, 76, 60, 0.11)'
+                            : 'rgba(142, 142, 147, 0.12)',
+                        }}
+                      >
+                        {discountDisplay.text}
+                      </span>
+                    );
+                  })()
+                : null}
+            </div>
+            <div className='flex flex-col gap-2 text-sm'>
+              {costItems.length > 0 ? (
+                <PriceComparisonList
+                  items={costItems}
+                  t={t}
+                  blurPricing={blurPricing}
+                />
+              ) : null}
+              {costInfo.videoHint ? (
+                <VideoFlatClipHintTable
+                  hint={costInfo.videoHint}
+                  usedGroupRatio={1}
+                  displayPrice={formatBillingUsdDisplay}
+                  t={t}
+                  blurPricing={blurPricing}
+                  isCostPrice
+                />
+              ) : null}
+              {costInfo.imageHint ? (
+                <ImagePerImageHintTable
+                  hint={costInfo.imageHint}
+                  usedGroupRatio={1}
+                  displayPrice={formatBillingUsdDisplay}
+                  t={t}
+                  blurPricing={blurPricing}
+                  isCostPrice
+                />
+              ) : null}
+            </div>
+          </section>
+        ) : null}
+      </>
+    );
+  }
+
+  if (mode === 'general') {
+    return (
+      <>
+        <Card className='!rounded-2xl shadow-sm border-0 mb-6'>
+          <StepTitle
+            label={t('第二步')}
+            title={t('选择通道路由模型名')}
+            desc={t('复制带渠道路由的模型名，可将请求固定到指定渠道')}
+            icon={<IconListView size={16} />}
+          />
+          <div className='space-y-2'>
+            {displayedRouteChannels.map(
+              ({ channel, idx, routeModelName, badge }) => {
+                const row = channelMtrMap[String(channel.channel_id)];
+                return (
+                  <div
+                    key={`route-${channel.channel_id}-${idx}`}
+                    className='flex items-center gap-2 rounded-lg px-3 py-2 overflow-hidden'
+                    style={{ backgroundColor: 'var(--semi-color-fill-0)' }}
+                  >
+                    <Tag size='small' shape='circle' color='blue' type='light'>
+                      {badge}
+                    </Tag>
+                    <div className='min-w-0 flex-1 flex items-center gap-2'>
+                      <StabilityBattery row={row} t={t} />
+                      <Text
+                        className='font-mono text-sm min-w-0'
+                        ellipsis={{ showTooltip: true }}
+                      >
+                        {routeModelName}
+                      </Text>
+                    </div>
+                    <Tooltip content={t('复制模型名字')}>
+                      <Button
+                        type='primary'
+                        theme='light'
+                        size='small'
+                        icon={<IconCopy />}
+                        onClick={() => copyModelName(routeModelName, t)}
+                        aria-label={t('复制模型名字')}
+                      >
+                        {t('复制')}
+                      </Button>
+                    </Tooltip>
+                  </div>
+                );
+              },
+            )}
+            {hasHiddenRoutes ? (
+              <Button
+                theme='light'
+                type='tertiary'
+                size='small'
+                className='w-full'
+                onClick={() => setRouteListExpanded((value) => !value)}
+              >
+                {routeListExpanded ? t('收起') : t('展开全部')}（
+                {hiddenRouteCount}）
+              </Button>
+            ) : null}
+          </div>
+        </Card>
+        <ModelTokenList
+          visible={isLoggedIn}
+          showLoginPrompt
+          t={t}
+          stepLabel={t('第三步')}
+          title={t('复制API Key')}
+          description={t('复制可用于调用上述 API 端点的 API Key')}
+          flat={flatDetails}
+        />
+      </>
+    );
+  }
   return (
     <>
-      <Card className='!rounded-2xl shadow-sm border-0 mb-6'>
-        <StepTitle
-          label={t('第二步')}
-          title={t('选择通道路由模型名')}
-          desc={t('复制带渠道路由的模型名，可将请求固定到指定渠道')}
-          icon={<IconListView size={16} />}
-        />
-        <div className='space-y-2'>
-          {displayedRouteChannels.map(
-            ({ channel, idx, routeModelName, badge }) => {
-              const row = channelMtrMap[String(channel.channel_id)];
-              return (
-                <div
-                  key={`route-${channel.channel_id}-${idx}`}
-                  className='flex items-center gap-2 rounded-lg px-3 py-2 overflow-hidden'
-                  style={{
-                    backgroundColor: 'var(--semi-color-fill-0)',
-                  }}
-                >
-                  <Tag
-                    size='small'
-                    shape='circle'
-                    color='blue'
-                    type='light'
-                    className='shrink-0'
+      {!compactDetails ? (
+        <Card className='!rounded-2xl shadow-sm border-0 mb-6'>
+          <StepTitle
+            label={t('第二步')}
+            title={t('选择通道路由模型名')}
+            desc={t('复制带渠道路由的模型名，可将请求固定到指定渠道')}
+            icon={<IconListView size={16} />}
+          />
+          <div className='space-y-2'>
+            {displayedRouteChannels.map(
+              ({ channel, idx, routeModelName, badge }) => {
+                const row = channelMtrMap[String(channel.channel_id)];
+                return (
+                  <div
+                    key={`route-${channel.channel_id}-${idx}`}
+                    className='flex items-center gap-2 rounded-lg px-3 py-2 overflow-hidden'
+                    style={{
+                      backgroundColor: 'var(--semi-color-fill-0)',
+                    }}
                   >
-                    {badge}
-                  </Tag>
-                  <div className='min-w-0 flex-1 flex items-center gap-2'>
-                    {channel.supplier_type ? (
-                      <Tag
-                        size='small'
-                        shape='circle'
-                        color={getSupplierTypeColor(channel.supplier_type)}
-                        className='shrink-0'
-                      >
-                        {getSupplierTypeLabel(channel.supplier_type, t)}
-                      </Tag>
-                    ) : null}
-                    <div className='shrink-0'>
-                      <StabilityBattery row={row} t={t} />
-                    </div>
-                    <Text
-                      className='font-mono text-sm min-w-0'
-                      ellipsis={{ showTooltip: true }}
-                    >
-                      {routeModelName}
-                    </Text>
-                  </div>
-                  <Tooltip content={t('复制模型名字')}>
-                    <Button
-                      type='primary'
-                      theme='light'
+                    <Tag
                       size='small'
-                      icon={<IconCopy />}
-                      onClick={() => copyModelName(routeModelName, t)}
-                      aria-label={t('复制模型名字')}
+                      shape='circle'
+                      color='blue'
+                      type='light'
+                      className='shrink-0'
                     >
-                      {t('复制')}
-                    </Button>
-                  </Tooltip>
-                </div>
-              );
-            },
-          )}
-          {hasHiddenRoutes ? (
-            <Button
-              theme='light'
-              type='tertiary'
-              size='small'
-              className='w-full'
-              onClick={() => setRouteListExpanded((v) => !v)}
-            >
-              {routeListExpanded ? t('收起') : t('展开全部')}（
-              {hiddenRouteCount}）
-            </Button>
-          ) : null}
-        </div>
-      </Card>
+                      {badge}
+                    </Tag>
+                    <div className='min-w-0 flex-1 flex items-center gap-2'>
+                      {channel.supplier_type ? (
+                        <Tag
+                          size='small'
+                          shape='circle'
+                          color={getSupplierTypeColor(channel.supplier_type)}
+                          className='shrink-0'
+                        >
+                          {getSupplierTypeLabel(channel.supplier_type, t)}
+                        </Tag>
+                      ) : null}
+                      <div className='shrink-0'>
+                        <StabilityBattery row={row} t={t} />
+                      </div>
+                      <Text
+                        className='font-mono text-sm min-w-0'
+                        ellipsis={{ showTooltip: true }}
+                      >
+                        {routeModelName}
+                      </Text>
+                    </div>
+                    <Tooltip content={t('复制模型名字')}>
+                      <Button
+                        type='primary'
+                        theme='light'
+                        size='small'
+                        icon={<IconCopy />}
+                        onClick={() => copyModelName(routeModelName, t)}
+                        aria-label={t('复制模型名字')}
+                      >
+                        {t('复制')}
+                      </Button>
+                    </Tooltip>
+                  </div>
+                );
+              },
+            )}
+            {hasHiddenRoutes ? (
+              <Button
+                theme='light'
+                type='tertiary'
+                size='small'
+                className='w-full'
+                onClick={() => setRouteListExpanded((v) => !v)}
+              >
+                {routeListExpanded ? t('收起') : t('展开全部')}（
+                {hiddenRouteCount}）
+              </Button>
+            ) : null}
+          </div>
+        </Card>
+      ) : null}
 
-      <ModelTokenList
-        visible={isLoggedIn}
-        t={t}
-        stepLabel={t('第三步')}
-        title={t('复制API Key')}
-        description={t('复制可用于调用上述 API 端点的 API Key')}
-      />
+      {!compactDetails ? (
+        <ModelTokenList
+          visible={isLoggedIn}
+          showLoginPrompt
+          t={t}
+          stepLabel={t('第三步')}
+          title={t('复制API Key')}
+          description={t('复制可用于调用上述 API 端点的 API Key')}
+        />
+      ) : null}
 
       <Card className='!rounded-2xl shadow-sm border-0 mb-3'>
         <div className='flex items-center justify-between gap-3 mb-4'>

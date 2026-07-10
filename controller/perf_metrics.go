@@ -52,10 +52,12 @@ func GetPerfMetrics(c *gin.Context) {
 		}
 	}
 
+	channelId, _ := strconv.Atoi(c.Query("channel_id"))
 	result, err := perfmetrics.Query(perfmetrics.QueryParams{
-		Model: modelName,
-		Group: c.Query("group"),
-		Hours: hours,
+		ChannelId: channelId,
+		Model:     modelName,
+		Group:     c.Query("group"),
+		Hours:     hours,
 	})
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -65,7 +67,9 @@ func GetPerfMetrics(c *gin.Context) {
 		return
 	}
 
-	result.Groups = filterActiveGroups(result.Groups)
+	if channelId <= 0 {
+		result.Groups = filterActiveGroups(result.Groups)
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -80,4 +84,3 @@ func filterActiveGroups(groups []perfmetrics.GroupResult) []perfmetrics.GroupRes
 		return ok || g.Group == "auto"
 	})
 }
-
