@@ -16,11 +16,14 @@ import (
 
 // 素材库接口 Action 常量（与上游素材库 API 严格对齐，大小写不可改）。
 const (
-	materialActionCreateAssetGroup = "CreateAssetGroup"
-	materialActionGetAssetGroup    = "GetAssetGroup"
-	materialActionCreateAsset      = "CreateAsset"
-	materialActionGetAsset         = "GetAsset"
-	materialActionDeleteAsset      = "DeleteAsset"
+	materialActionCreateAssetGroup            = "CreateAssetGroup"
+	materialActionGetAssetGroup               = "GetAssetGroup"
+	materialActionCreateAsset                 = "CreateAsset"
+	materialActionGetAsset                    = "GetAsset"
+	materialActionDeleteAsset                 = "DeleteAsset"
+	materialActionDeleteAssetGroup            = "DeleteAssetGroup"
+	materialActionCreateVisualValidateSession = "CreateVisualValidateSession"
+	materialActionGetVisualValidateResult     = "GetVisualValidateResult"
 
 	// 素材资产类型枚举（AssetType，与上游接口严格对齐）：图片 / 视频 / 音频。
 	MaterialAssetTypeImage = "Image"
@@ -303,4 +306,110 @@ func MaterialDeleteAsset(assetId string) (string, error) {
 		return "", err
 	}
 	return result.Id, nil
+}
+
+// MaterialDeleteAssetGroup 删除素材分组（DeleteAssetGroup）。
+// 入参：待删除分组 ID（必填）。返回 Result.Id（本次删除成功的分组 ID）。
+func MaterialDeleteAssetGroup(groupId string) (string, error) {
+	payload := map[string]string{"Id": groupId}
+	var result struct {
+		Id string `json:"Id"`
+	}
+	if err := doMaterialRequest(materialActionDeleteAssetGroup, payload, &result); err != nil {
+		return "", err
+	}
+	return result.Id, nil
+}
+
+// ---------------------------------------------------------------------------
+// 真人认证会话（CreateVisualValidateSession / GetVisualValidateResult）
+// ---------------------------------------------------------------------------
+
+// VisualValidateSessionResult CreateVisualValidateSession 返回的认证会话信息。
+// BytedToken 仅用于后端轮询，禁止返回给前端（Web 控制台路由）；
+// 个人 API 令牌路由可直接返回供程序化客户端轮询。
+type VisualValidateSessionResult struct {
+	BytedToken string `json:"BytedToken"` // 轮询令牌（后端存储，前端轮询使用 session_id）
+	H5Link     string `json:"H5Link"`     // H5 认证页面链接（5 分钟有效）
+	QrCode     string `json:"QrCode"`     // H5 链接的二维码（base64 PNG）
+}
+
+// visualValidateResultRaw GetVisualValidateResult 原始返回结构。
+// 认证成功时 Result.GroupId 非空；未完成时上游返回 Error。
+type visualValidateResultRaw struct {
+	GroupId string `json:"GroupId"`
+	Error   *struct {
+		Code    string `json:"Code"`
+		Message string `json:"Message"`
+	} `json:"Error"`
+}
+
+// VisualValidateResult GetVisualValidateResult 的结构化轮询结果。
+// Status 取值：success（GroupId 非空）/ pending（认证中）/ failed（人脸核验失败）。
+type VisualValidateResult struct {
+	Status  string // VisualSessionStatusSuccess / VisualSessionStatusPending / VisualSessionStatusFailed
+	GroupId string
+	Message string
+}
+
+// 视觉认证会话状态枚举（与 model.VisualSessionStatus 对齐，service 层独立定义避免循环依赖）。
+const (
+	visualValidateSuccess = "success"
+	visualValidatePending = "pending"
+	visualValidateFailed  = "failed"
+)
+
+// isFaceVerificationFailure 判断上游错误信息是否为人脸核验失败（启发式匹配关键词）。
+// 官方文档未提供离散状态码，认证未完成时返回 Error.Message，此处按关键词区分"失败"与"认证中"。
+func isFaceVerificationFailure(msg string) bool {
+	lower := strings.ToLower(msg)
+	for _, kw := range []string{"人脸", "活体", "liveness", "face", "核验失败", "认证失败", "verification failed", "verification_fail"} {
+		if strings.Contains(lower, kw) {
+			return true
+		}
+	}
+	return false
+}
+
+// MaterialCreateVisualValidateSession 创建真人认证会话（CreateVisualValidateSession）。
+// 空请求体，返回 BytedToken、H5Link、QrCode。
+func MaterialCreateVisualValidateSession() (*VisualValidateSessionResult, error) {
+	var result VisualValidateSessionResult
+	// 空请求体：官方文档要求 POST 无需参数。
+	if err := doMaterialRequest(materialActionCreateVisualValidateSession, map[string]any{}, &result); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(result.BytedToken) == "" {
+		return nil, errors.New("素材库未返回有效的认证令牌")
+	}
+	return &result, nil
+}
+
+// MaterialGetVisualValidateResult 查询真人认证结果（GetVisualValidateResult）。
+// 入参：CreateVisualValidateSession 返回的 BytedToken。
+// 返回结构化状态：success（GroupId 非空）/ failed（人脸核验失败）/ pending（认证中，含网络/上游错误）。
+func MaterialGetVisualValidateResult(bytedToken string) (*VisualValidateResult, error) {
+	payload := map[string]string{"BytedToken": bytedToken}
+	var result visualValidateResultRaw
+	if err := doMaterialRequest(materialActionGetVisualValidateResult, payload, &result); err != nil {
+		// 轮询期间网络/上游错误均视为"认证中"，交由调用方按 3s 间隔重试。
+		// 不携带原始错误信息：上游在认证未完成时会返回 C500999 等内部错误，
+		// 这些错误对终端用户无意义且会引起误解（如"获取素材组ID失败，请重新认证"）。
+		return &VisualValidateResult{Status: visualValidatePending}, nil
+	}
+	// 认证成功：GroupId 非空。
+	if groupId := strings.TrimSpace(result.GroupId); groupId != "" {
+		return &VisualValidateResult{Status: visualValidateSuccess, GroupId: groupId}, nil
+	}
+	// 认证未完成：上游返回 Error.Message。
+	if result.Error != nil && strings.TrimSpace(result.Error.Message) != "" {
+		if isFaceVerificationFailure(result.Error.Message) {
+			return &VisualValidateResult{Status: visualValidateFailed, Message: result.Error.Message}, nil
+		}
+		// 非人脸核验失败的错误（如 C500999 "获取素材组ID失败"）属于认证中状态，
+		// 不向上层透传原始错误信息，避免在 UI 展示内部错误码。
+		return &VisualValidateResult{Status: visualValidatePending}, nil
+	}
+	// 无 GroupId 也无 Error：视为认证中。
+	return &VisualValidateResult{Status: visualValidatePending}, nil
 }

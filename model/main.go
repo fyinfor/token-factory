@@ -333,6 +333,7 @@ func migrateDB() error {
 		&ModelTag{},
 		&MaterialGroup{},
 		&MaterialAsset{},
+		&MaterialVisualSession{},
 		&PerfMetric{},
 	)
 	if err != nil {
@@ -355,6 +356,9 @@ func migrateDB() error {
 	}
 	if err := BackfillDistributorIdentityApplicationSourcesIfNeeded(); err != nil {
 		common.SysError("distributor identity application source backfill: " + err.Error())
+	}
+	if err := migrateMaterialGroupType(); err != nil {
+		common.SysError("material group type backfill: " + err.Error())
 	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
@@ -424,6 +428,7 @@ func migrateDBFast() error {
 		{&DistributorWithdrawal{}, "DistributorWithdrawal"},
 		{&MaterialGroup{}, "MaterialGroup"},
 		{&MaterialAsset{}, "MaterialAsset"},
+		{&MaterialVisualSession{}, "MaterialVisualSession"},
 	}
 	// 动态计算migration数量，确保errChan缓冲区足够大
 	errChan := make(chan error, len(migrations))

@@ -33,6 +33,16 @@ const MATERIAL_API = {
   UPLOAD_URL: '/api/material/upload-url',
   // 删除：DELETE /api/material/asset/:asset_id
   ASSET: (assetId) => `/api/material/asset/${encodeURIComponent(assetId)}`,
+  // 真人认证会话（Web 控制台）。
+  VISUAL_SESSION: '/api/material/visual/session',
+  VISUAL_RESULT: '/api/material/visual/result',
+  // 真人分组与素材管理（Web 控制台）。
+  REAL_GROUPS: '/api/material/real/groups',
+  REAL_GROUP: (groupId) => `/api/material/real/groups/${encodeURIComponent(groupId)}`,
+  REAL_ASSETS: '/api/material/real/assets',
+  REAL_UPLOAD: '/api/material/real/upload',
+  REAL_UPLOAD_URL: '/api/material/real/upload-url',
+  REAL_ASSET: (assetId) => `/api/material/real/asset/${encodeURIComponent(assetId)}`,
 };
 
 /**
@@ -110,6 +120,140 @@ export const getMaterialAsset = async (assetId) => {
  */
 export const deleteMaterialAsset = async (assetId) => {
   const res = await API.delete(MATERIAL_API.ASSET(assetId), {
+    skipErrorHandler: true,
+  });
+  return res.data;
+};
+
+// ---------------------------------------------------------------------------
+// 真人认证模块 API（Web 控制台，BytedToken 仅后端存储，前端仅持有 session_id）
+// ---------------------------------------------------------------------------
+
+/**
+ * 创建真人认证会话（CreateVisualValidateSession）。
+ * 后端存储 BytedToken，返回 session_id + H5Link + QrCode，前端展示二维码/链接。
+ * @returns {Promise<{success:boolean,data:{session_id:number,h5_link:string,qr_code:string,expires_at:number,status:string}}>}
+ */
+export const createVisualSession = async () => {
+  const res = await API.post(MATERIAL_API.VISUAL_SESSION, {}, {
+    skipErrorHandler: true,
+  });
+  return res.data;
+};
+
+/**
+ * 轮询真人认证结果。前端每 3s 调用一次，最大 5 分钟。
+ * @param {number} sessionId 后端返回的会话 ID
+ * @returns {Promise<{success:boolean,data:{status:string,group_id?:string,message?:string}}>}
+ */
+export const pollVisualResult = async (sessionId) => {
+  const res = await API.get(MATERIAL_API.VISUAL_RESULT, {
+    params: { session_id: sessionId },
+    skipErrorHandler: true,
+  });
+  return res.data;
+};
+
+/**
+ * 查询当前用户的所有真人认证分组。
+ * @returns {Promise<{success:boolean,data:{items:Array}}>}
+ */
+export const listRealGroups = async () => {
+  const res = await API.get(MATERIAL_API.REAL_GROUPS);
+  return res.data;
+};
+
+/**
+ * 删除真人认证分组。
+ * @param {string} groupId 上游分组 ID
+ * @returns {Promise<{success:boolean,data:{group_id:string}}>}
+ */
+export const deleteRealGroup = async (groupId) => {
+  const res = await API.delete(MATERIAL_API.REAL_GROUP(groupId), {
+    skipErrorHandler: true,
+  });
+  return res.data;
+};
+
+/**
+ * 更新真人认证分组（名称、描述）。
+ * @param {string} groupId 上游分组 ID
+ * @param {{group_name?:string, description?:string}} data
+ * @returns {Promise<{success:boolean,data:object}>}
+ */
+export const updateRealGroup = async (groupId, data) => {
+  const res = await API.put(MATERIAL_API.REAL_GROUP(groupId), data, {
+    skipErrorHandler: true,
+  });
+  return res.data;
+};
+
+/**
+ * 分页查询真人素材列表。
+ * @param {{groupId?:string,page?:number,pageSize?:number}} params
+ */
+export const listRealAssets = async ({ groupId, page = 1, pageSize = 100 } = {}) => {
+  const params = { p: page, size: pageSize };
+  if (groupId) params.group_id = groupId;
+  const res = await API.get(MATERIAL_API.REAL_ASSETS, { params });
+  return res.data;
+};
+
+/**
+ * 本地文件上传真人素材。
+ * @param {File} file 本地文件实例
+ * @param {boolean} agreed 是否已勾选合规协议
+ * @param {string} groupId 真人分组 ID
+ * @param {{onUploadProgress?: (ev: import('axios').AxiosProgressEvent) => void}} [options]
+ */
+export const uploadRealMaterialFile = async (file, agreed, groupId, options = {}) => {
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('agreed', agreed ? 'true' : 'false');
+  fd.append('group_id', groupId);
+  const res = await API.post(MATERIAL_API.REAL_UPLOAD, fd, {
+    skipErrorHandler: true,
+    onUploadProgress: options.onUploadProgress,
+  });
+  return res.data;
+};
+
+/**
+ * 在线资源链接上传真人素材。
+ * @param {{url:string,name?:string,assetType?:string,agreed:boolean,groupId:string}} payload
+ */
+export const uploadRealMaterialByURL = async ({ url, name, assetType, agreed, groupId }) => {
+  const res = await API.post(
+    MATERIAL_API.REAL_UPLOAD_URL,
+    {
+      url,
+      name: name || '',
+      asset_type: assetType || '',
+      agreed: !!agreed,
+      group_id: groupId,
+    },
+    { skipErrorHandler: true },
+  );
+  return res.data;
+};
+
+/**
+ * 查询单个真人素材详情（按上游 asset_id）。
+ * @param {string} assetId 上游素材 ID
+ */
+export const getRealMaterial = async (assetId) => {
+  const res = await API.get(MATERIAL_API.REAL_ASSET(assetId), {
+    skipErrorHandler: true,
+  });
+  return res.data;
+};
+
+/**
+ * 删除真人素材（按上游 asset_id）。
+ * @param {string} assetId 上游素材 ID
+ */
+export const deleteRealMaterial = async (assetId) => {
+  const res = await API.delete(MATERIAL_API.REAL_ASSET(assetId), {
     skipErrorHandler: true,
   });
   return res.data;
