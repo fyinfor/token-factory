@@ -1,58 +1,80 @@
 /*
 Copyright (C) 2025 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
 import { Card, Typography } from '@douyinfe/semi-ui';
-import ModelPerfHourlyChart from '../../components/ModelPerfHourlyChart';
+import ModelPerfLineChart from '../../components/ModelPerfLineChart';
 import ModelPerfMetricsGrid from '../../components/ModelPerfMetricsGrid';
 
 const { Text, Title } = Typography;
 
-const ModelPerfPanel = ({ modelName, perfSummary, t }) => {
+const ModelPerfPanel = ({ modelName, perfSummary, t, flat = false }) => {
   if (!modelName) return null;
 
   const summary = perfSummary || null;
-
   if (!summary) {
-    return (
+    const empty = <Text type='secondary'>{t('暂无该模型的性能数据')}</Text>;
+    return flat ? (
+      <section className='mb-6 border-b border-semi-color-border pb-6'>
+        {empty}
+      </section>
+    ) : (
       <Card className='!rounded-xl mb-6' bodyStyle={{ padding: 16 }}>
-        <Text type='secondary'>{t('暂无该模型的性能数据')}</Text>
+        {empty}
       </Card>
     );
   }
 
   const hourlySeries = summary.hourly_series || [];
-  const hasHourlySeries = hourlySeries.some((p) => (p.request_count || 0) > 0);
-
-  return (
-    <Card
-      className='!rounded-xl mb-6'
-      title={
-        <div>
-          <Title heading={6}>{t('运行性能')}</Title>
-          <Text type='tertiary' size='small'>
-            {t('近24小时真实请求统计')}
-          </Text>
+  const hasHourlySeries = hourlySeries.some(
+    (point) => (point.request_count || 0) > 0,
+  );
+  const content = (
+    <>
+      <div className='mb-3'>
+        <Title heading={6}>{t('运行性能')}</Title>
+        <Text type='tertiary' size='small'>
+          {t('近24小时真实请求统计')}
+        </Text>
+      </div>
+      {hasHourlySeries ? (
+        <div className='mb-3'>
+          <ModelPerfLineChart series={hourlySeries} t={t} />
         </div>
-      }
-      bodyStyle={{ paddingTop: 4 }}
-    >
-      {hasHourlySeries && (
-        <div className='mb-4'>
-          <ModelPerfHourlyChart series={hourlySeries} t={t} />
-        </div>
-      )}
-
-      <div
-        className='rounded-xl p-4'
-        style={{
-          backgroundColor: 'var(--semi-color-fill-0)',
-          border: '1px solid var(--semi-color-border)',
-        }}
-      >
+      ) : null}
+      <div className={flat ? 'pt-1' : 'rounded-xl border p-4'}>
         <ModelPerfMetricsGrid perf={summary} t={t} />
       </div>
+    </>
+  );
+
+  if (flat) {
+    return (
+      <section className='mb-6 border-b border-semi-color-border pb-6'>
+        {content}
+      </section>
+    );
+  }
+
+  return (
+    <Card className='!rounded-xl mb-6' bodyStyle={{ paddingTop: 12 }}>
+      {content}
     </Card>
   );
 };

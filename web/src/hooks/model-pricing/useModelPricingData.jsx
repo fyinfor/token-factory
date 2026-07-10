@@ -26,8 +26,146 @@ import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
 import { modelMatchesSearchTerm } from '../../components/table/model-pricing/utils/channelRoute';
 
+const mergeUniqueValues = (values) =>
+  Array.from(
+    new Set(
+      values.filter(
+        (value) => value !== undefined && value !== null && value !== '',
+      ),
+    ),
+  );
+
+const mergeTags = (models) =>
+  mergeUniqueValues(
+    models.flatMap((model) =>
+      String(model.tags || '')
+        .split(/[,;|]+/)
+        .map((tag) => tag.trim())
+        .filter(Boolean),
+    ),
+  ).join(',');
+
+const getChannelMergeKey = (channel, fallbackIndex) => {
+  if (channel?.channel_id !== undefined && channel?.channel_id !== null) {
+    return `channel:${channel.channel_id}`;
+  }
+  return [
+    'fallback',
+    channel?.supplier_application_id,
+    channel?.channel_no,
+    channel?.route_slug,
+    fallbackIndex,
+  ]
+    .map((part) => String(part ?? ''))
+    .join(':');
+};
+
+const getChannelPriceScore = (channel, model) => {
+  const mediaPrice = Number(
+    channel?.video_flat_clip_hint?.min_usd_after_channel_discount ??
+      channel?.image_per_image_hint?.min_usd_after_channel_discount,
+  );
+  if (Number.isFinite(mediaPrice) && mediaPrice >= 0) return mediaPrice;
+
+  const isFixedPrice = model?.quota_type === 1 || channel?.quota_type === 1;
+  const channelBase = Number(
+    isFixedPrice ? channel?.model_price : channel?.model_ratio,
+  );
+  if (!Number.isFinite(channelBase)) return Number.POSITIVE_INFINITY;
+
+  const rootBase = Number(
+    isFixedPrice ? model?.model_price : model?.model_ratio,
+  );
+  const costDiscount = Number(channel?.price_discount_percent ?? 100) / 100;
+  const markupRate = Number(channel?.markup_discount_rate || 0) / 100;
+  const effective =
+    channelBase * costDiscount +
+    (Number.isFinite(rootBase) ? rootBase * markupRate : 0);
+  return Number.isFinite(effective) ? effective : Number.POSITIVE_INFINITY;
+};
+
+const mergeModelsByName = (models) => {
+  const groups = new Map();
+
+  models.forEach((model) => {
+    const modelName = String(model?.model_name || '');
+    if (!groups.has(modelName)) groups.set(modelName, []);
+    groups.get(modelName).push(model);
+  });
+
+  return Array.from(groups.values()).map((sameNameModels) => {
+    const channelMap = new Map();
+    const supplierMap = new Map();
+
+    sameNameModels.forEach((model, modelIndex) => {
+      const channels = Array.isArray(model.channel_list)
+        ? model.channel_list
+        : [];
+      channels.forEach((channel, channelIndex) => {
+        const decoratedChannel = {
+          ...channel,
+          ...(model.video_flat_clip_hint
+            ? { video_flat_clip_hint: model.video_flat_clip_hint }
+            : {}),
+          ...(model.image_per_image_hint
+            ? { image_per_image_hint: model.image_per_image_hint }
+            : {}),
+        };
+        const key = getChannelMergeKey(
+          decoratedChannel,
+          `${modelIndex}-${channelIndex}`,
+        );
+        if (!channelMap.has(key)) channelMap.set(key, decoratedChannel);
+      });
+
+      const suppliers = Array.isArray(model.supplier_list)
+        ? model.supplier_list
+        : [];
+      suppliers.forEach((supplier, supplierIndex) => {
+        const key = String(
+          supplier?.supplier_id ??
+            `${supplier?.supplier_alias || 'supplier'}-${supplierIndex}`,
+        );
+        if (!supplierMap.has(key)) supplierMap.set(key, supplier);
+      });
+    });
+
+    const channels = Array.from(channelMap.values()).sort((a, b) => {
+      const scoreA = getChannelPriceScore(a, sameNameModels[0]);
+      const scoreB = getChannelPriceScore(b, sameNameModels[0]);
+      if (scoreA !== scoreB) return scoreA - scoreB;
+      return Number(a?.channel_id || 0) - Number(b?.channel_id || 0);
+    });
+    const cheapestChannel = channels[0];
+    const cheapestSource =
+      sameNameModels.find((model) =>
+        (model.channel_list || []).some(
+          (channel) =>
+            getChannelMergeKey(channel, '') ===
+            getChannelMergeKey(cheapestChannel, ''),
+        ),
+      ) || sameNameModels[0];
+
+    return {
+      ...cheapestSource,
+      key: cheapestSource.model_name,
+      channel_list: channels,
+      supplier_list: Array.from(supplierMap.values()),
+      enable_groups: mergeUniqueValues(
+        sameNameModels.flatMap((model) => model.enable_groups || []),
+      ),
+      supported_endpoint_types: mergeUniqueValues(
+        sameNameModels.flatMap((model) => model.supported_endpoint_types || []),
+      ),
+      tags: mergeTags(sameNameModels),
+      video_flat_clip_hint: cheapestChannel?.video_flat_clip_hint,
+      image_per_image_hint: cheapestChannel?.image_per_image_hint,
+    };
+  });
+};
+
 export const useModelPricingData = (options = {}) => {
-  const { defaultSortKey = 'default' } = options;
+  const { defaultSortKey = 'default', mergeChannelsByModel = false } = options;
   const { t } = useTranslation();
   const [searchValue, setSearchValue] = useState('');
   const compositionRef = useRef({ isComposition: false });
@@ -73,17 +211,20 @@ export const useModelPricingData = (options = {}) => {
     useState({});
   const [channelVideoPrice, setChannelVideoPrice] = useState({});
   const [channelModelTierRatio, setChannelModelTierRatio] = useState({});
-  const [channelCompletionTierRatio, setChannelCompletionTierRatio] =
-    useState({});
+  const [channelCompletionTierRatio, setChannelCompletionTierRatio] = useState(
+    {},
+  );
   const [channelCacheTierRatio, setChannelCacheTierRatio] = useState({});
   const [channelCreateCacheTierRatio, setChannelCreateCacheTierRatio] =
     useState({});
   const [globalModelTierRatio, setGlobalModelTierRatio] = useState({});
-  const [globalCompletionTierRatio, setGlobalCompletionTierRatio] =
-    useState({});
+  const [globalCompletionTierRatio, setGlobalCompletionTierRatio] = useState(
+    {},
+  );
   const [globalCacheTierRatio, setGlobalCacheTierRatio] = useState({});
-  const [globalCreateCacheTierRatio, setGlobalCreateCacheTierRatio] =
-    useState({});
+  const [globalCreateCacheTierRatio, setGlobalCreateCacheTierRatio] = useState(
+    {},
+  );
   const [pricingChannels, setPricingChannels] = useState([]);
   const [usableGroup, setUsableGroup] = useState({});
   const [endpointMap, setEndpointMap] = useState({});
@@ -458,8 +599,9 @@ export const useModelPricingData = (options = {}) => {
   };
 
   const setModelsFormat = (models, groupRatio, vendorMap) => {
-    for (let i = 0; i < models.length; i++) {
-      const m = models[i];
+    const formattedModels = models.map((model) => ({ ...model }));
+    for (let i = 0; i < formattedModels.length; i++) {
+      const m = formattedModels[i];
       m.key = getModelRowKey(m, i);
       m.group_ratio = groupRatio[m.model_name];
 
@@ -474,11 +616,15 @@ export const useModelPricingData = (options = {}) => {
         m.channel_list = [];
       }
     }
-    models.sort((a, b) => {
+    const displayModels = mergeChannelsByModel
+      ? mergeModelsByName(formattedModels)
+      : formattedModels;
+
+    displayModels.sort((a, b) => {
       return a.quota_type - b.quota_type;
     });
 
-    models.sort((a, b) => {
+    displayModels.sort((a, b) => {
       if (a.model_name.startsWith('gpt') && !b.model_name.startsWith('gpt')) {
         return -1;
       } else if (
@@ -491,7 +637,7 @@ export const useModelPricingData = (options = {}) => {
       }
     });
 
-    setModels(models);
+    setModels(displayModels);
   };
 
   const loadPricing = async () => {

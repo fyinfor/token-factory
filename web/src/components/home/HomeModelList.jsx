@@ -42,7 +42,10 @@ import { UserContext } from '../../context/User';
 
 const HomeModelList = () => {
   const isMobile = useIsMobile();
-  const pricingData = useModelPricingData({ defaultSortKey: 'hot' });
+  const pricingData = useModelPricingData({
+    defaultSortKey: 'hot',
+    mergeChannelsByModel: true,
+  });
   const [statusState] = useContext(StatusContext);
   const [userState] = useContext(UserContext);
 
