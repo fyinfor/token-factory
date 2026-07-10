@@ -28,8 +28,10 @@ const UserAgreement = () => {
   return (
     <LegalDocumentPage
       title={t('用户协议')}
-      html={userAgreementHtml}
+      apiEndpoint='/api/user-agreement'
       styleId='token-factory-user-agreement-styles'
+      defaultContent={userAgreementHtml}
+      defaultFormat='html'
     />
   );
 };

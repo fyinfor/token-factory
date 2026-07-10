@@ -39,6 +39,7 @@ import {
   API,
   timestamp2string,
   getPayMethodDisplayName,
+  formatTopupPayMoney,
   renderQuota,
 } from '../../../helpers';
 import { isAdmin } from '../../../helpers/utils';
@@ -58,38 +59,6 @@ const STATUS_CONFIG = {
 
 /** 支付状态筛选项「不限」占位值（Semi Select 对 value="" 不稳定，勿用空串） */
 const TOPUP_STATUS_ALL = '__all__';
-
-/**
- * 账单「支付金额」展示：易支付等为人民币；Stripe 的 money 为实付美元，按站点汇率换算为人民币展示。
- * @param {unknown} money 后端 TopUp.money
- * @param {string | undefined} paymentMethod 支付方式
- * @param {number} usdExchangeRate 美元兑人民币汇率（与充值页 usd_exchange_rate / price 一致）
- * @returns {string}
- */
-function formatTopupPayMoney(
-  money,
-  paymentMethod,
-  usdExchangeRate,
-  payCurrency,
-) {
-  const numericMoney = Number(money);
-  const safeMoney = Number.isFinite(numericMoney) ? numericMoney : 0;
-  const currency = String(payCurrency || '').toUpperCase();
-  if (currency === 'USD') {
-    return `$${safeMoney.toFixed(2)} USD`;
-  }
-  if (currency === 'CNY') {
-    return `¥${safeMoney.toFixed(2)}`;
-  }
-  const rate =
-    Number.isFinite(usdExchangeRate) && usdExchangeRate > 0
-      ? usdExchangeRate
-      : 7.3;
-  if ((paymentMethod || '').toLowerCase() === 'stripe') {
-    return `¥${(safeMoney * rate).toFixed(2)}`;
-  }
-  return `¥${safeMoney.toFixed(2)}`;
-}
 
 /**
  * 从 Semi Input onChange 首参解析字符串（兼容部分环境下传入合成事件的情况）。
@@ -324,12 +293,7 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
         width: 80,
         render: (money, record) => (
           <Text type='danger'>
-            {formatTopupPayMoney(
-              money,
-              record?.payment_method,
-              usdExchangeRate,
-              record?.pay_currency,
-            )}
+            {formatTopupPayMoney(money, record, usdExchangeRate)}
           </Text>
         ),
       },

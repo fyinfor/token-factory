@@ -28,8 +28,10 @@ const PrivacyPolicy = () => {
   return (
     <LegalDocumentPage
       title={t('隐私政策')}
-      html={privacyPolicyHtml}
+      apiEndpoint='/api/privacy-policy'
       styleId='token-factory-privacy-policy-styles'
+      defaultContent={privacyPolicyHtml}
+      defaultFormat='html'
     />
   );
 };
