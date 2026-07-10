@@ -16,7 +16,7 @@ import {
   Tag,
   Typography,
 } from '@douyinfe/semi-ui';
-import { API, showError, showSuccess, timestamp2string } from '../../../../helpers';
+import { API, showError, showSuccess, timestamp2string, renderQuota } from '../../../../helpers';
 
 const { Text } = Typography;
 
@@ -47,6 +47,18 @@ const InvoiceManagement = ({ t }) => {
     email: '',
     phone: '',
   });
+  const [balanceSummary, setBalanceSummary] = useState(null);
+
+  const loadBalanceSummary = useCallback(async () => {
+    try {
+      const res = await API.get('/api/user/invoice/balance-summary');
+      if (res.data.success) {
+        setBalanceSummary(res.data.data || null);
+      }
+    } catch (e) {
+      // optional summary
+    }
+  }, []);
 
   const loadProfile = useCallback(async () => {
     try {
@@ -91,7 +103,8 @@ const InvoiceManagement = ({ t }) => {
 
   useEffect(() => {
     loadProfile();
-  }, [loadProfile]);
+    loadBalanceSummary();
+  }, [loadProfile, loadBalanceSummary]);
 
   useEffect(() => {
     if (activeTab === 'eligible') {
@@ -144,6 +157,7 @@ const InvoiceManagement = ({ t }) => {
         showSuccess(t('开票申请已提交'));
         setSelectedRowKeys([]);
         loadEligible();
+        loadBalanceSummary();
         setActiveTab('records');
       }
     } catch (e) {
@@ -237,13 +251,29 @@ const InvoiceManagement = ({ t }) => {
         type='info'
         className='!mb-4'
         description={
-          <ul className='list-disc pl-5 space-y-1 text-sm'>
-            <li>{t('发票将在申请提交后的 3-5 个工作日内开具')}</li>
-            <li>{t('电子发票将发送至您的注册邮箱，请注意查收')}</li>
-            <li>{t('仅限「已支付」状态的订单可申请发票')}</li>
-            <li>{t('按实际消耗金额开票，消耗多少即可申请开票多少')}</li>
-            <li>{t('请确保开票信息的准确性，发票一经开出概不退换')}</li>
-          </ul>
+          <div className='space-y-2'>
+            {balanceSummary ? (
+              <div className='flex flex-wrap gap-4 text-sm'>
+                <span>
+                  {t('赠送余额')}: {renderQuota(balanceSummary.gift_quota || 0)}
+                </span>
+                <span>
+                  {t('充值余额')}: {renderQuota(balanceSummary.paid_quota || 0)}
+                </span>
+                <span>
+                  {t('可开票金额')}: ¥{Number(balanceSummary.invoiceable_amount || 0).toFixed(2)}
+                </span>
+              </div>
+            ) : null}
+            <ul className='list-disc pl-5 space-y-1 text-sm'>
+              <li>{t('发票将在申请提交后的 3-5 个工作日内开具')}</li>
+              <li>{t('电子发票将发送至您的注册邮箱，请注意查收')}</li>
+              <li>{t('仅限「已支付」状态的订单可申请发票')}</li>
+              <li>{t('按实际消耗金额开票，消耗多少即可申请开票多少')}</li>
+              <li>{t('赠送余额优先扣费，不可开票；充值与对公入账余额消耗后可开票')}</li>
+              <li>{t('请确保开票信息的准确性，发票一经开出概不退换')}</li>
+            </ul>
+          </div>
         }
       />
 

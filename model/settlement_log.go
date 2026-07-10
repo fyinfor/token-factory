@@ -160,7 +160,7 @@ func BackfillTopUpConsumeAttribution(userID int) error {
 			return nil
 		}
 		var topups []TopUp
-		if err := tx.Where("user_id = ? AND status = ?", userID, common.TopUpStatusSuccess).
+		if err := tx.Where("user_id = ? AND status = ? AND "+topUpInvoiceEligibleWhere(), userID, common.TopUpStatusSuccess).
 			Order("create_time asc").Find(&topups).Error; err != nil {
 			return err
 		}

@@ -533,7 +533,10 @@ func Redeem(key string, userId int) (quota int, err error) {
 			expiredRedeemErr = errors.New("redemption code has expired")
 			return nil
 		}
-		err = tx.Model(&User{}).Where("id = ?", userId).Update("quota", gorm.Expr("quota + ?", redemption.Quota)).Error
+		err = tx.Model(&User{}).Where("id = ?", userId).Updates(map[string]interface{}{
+			"quota":      gorm.Expr("quota + ?", redemption.Quota),
+			"gift_quota": gorm.Expr("gift_quota + ?", redemption.Quota),
+		}).Error
 		if err != nil {
 			return err
 		}

@@ -29,6 +29,11 @@ var ErrOssNotConfigured = errors.New("未配置阿里云 OSS，请先在运营�
 // OssUploadMultipartFile 将表单文件上传到已配置的阿里云 OSS（REST PutObject + 签名版本 1），返回对外访问 URL。
 // 需 Bucket/对象可读（公共读、CDN 或已授权访问）。
 func OssUploadMultipartFile(file *multipart.FileHeader, userID int) (string, error) {
+	cfg := operation_setting.GetOssSetting()
+	return ossUploadMultipartFileWithPrefix(file, userID, cfg.ObjectKeyPrefix)
+}
+
+func ossUploadMultipartFileWithPrefix(file *multipart.FileHeader, userID int, objectPrefix string) (string, error) {
 	_ = userID
 	if !operation_setting.IsOssUploadReady() {
 		return "", ErrOssNotConfigured
@@ -60,7 +65,7 @@ func OssUploadMultipartFile(file *multipart.FileHeader, userID int) (string, err
 		return "", fmt.Errorf("文件超过大小限制（最大 %d MB）", maxFileSizeMB)
 	}
 
-	objectKey := BuildUploadObjectPath(cfg.ObjectKeyPrefix, uploadFileExt(file.Filename))
+	objectKey := BuildUploadObjectPath(objectPrefix, uploadFileExt(file.Filename))
 
 	contentType := file.Header.Get("Content-Type")
 	if contentType == "" {

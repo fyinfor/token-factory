@@ -43,6 +43,7 @@ type User struct {
 	VerificationCode         string     `json:"verification_code" gorm:"-:all"`                                    // this field is only for Email verification, don't save it to database!
 	AccessToken              *string    `json:"access_token" gorm:"type:char(32);column:access_token;uniqueIndex"` // this token is for system management
 	Quota                    int        `json:"quota" gorm:"type:int;default:0"`
+	GiftQuota                int        `json:"gift_quota" gorm:"type:int;default:0;column:gift_quota"` // 不可开票赠送余额
 	UsedQuota                int        `json:"used_quota" gorm:"type:int;default:0;column:used_quota"` // used quota
 	RequestCount             int        `json:"request_count" gorm:"type:int;default:0;"`               // request number
 	Group                    string     `json:"group" gorm:"type:varchar(64);default:'default'"`
@@ -613,7 +614,10 @@ func inviteUser(inviterId int) (err error) {
 		return err
 	}
 	if reward > 0 && !useBatchQuota {
-		if err = tx.Model(&User{}).Where("id = ?", inviterId).UpdateColumn("quota", gorm.Expr("quota + ?", reward)).Error; err != nil {
+		if err = tx.Model(&User{}).Where("id = ?", inviterId).Updates(map[string]interface{}{
+			"quota":      gorm.Expr("quota + ?", reward),
+			"gift_quota": gorm.Expr("gift_quota + ?", reward),
+		}).Error; err != nil {
 			return err
 		}
 	}
@@ -622,7 +626,7 @@ func inviteUser(inviterId int) (err error) {
 	}
 
 	if useBatchQuota {
-		if err = IncreaseUserQuota(inviterId, reward, true); err != nil {
+		if err = GrantUserGiftQuota(inviterId, reward); err != nil {
 			return err
 		}
 	} else if reward > 0 {
@@ -738,6 +742,7 @@ func (user *User) Insert(inviterId int) error {
 		}
 	}
 	user.Quota = common.QuotaForNewUser
+	user.GiftQuota = common.QuotaForNewUser
 	//user.SetAccessToken(common.GetUUID())
 	user.EnsureAffCode()
 
@@ -788,7 +793,7 @@ func (user *User) Insert(inviterId int) error {
 	if inviterId != 0 {
 		_ = EnsureAffInviteRelation(inviterId, user.Id)
 		if common.QuotaForInvitee > 0 {
-			_ = IncreaseUserQuota(user.Id, common.QuotaForInvitee, true)
+			_ = GrantUserGiftQuota(user.Id, common.QuotaForInvitee)
 			RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
 		}
 		if common.QuotaForInviter > 0 {
@@ -812,6 +817,7 @@ func (user *User) InsertWithTx(tx *gorm.DB, inviterId int) error {
 		}
 	}
 	user.Quota = common.QuotaForNewUser
+	user.GiftQuota = common.QuotaForNewUser
 	user.EnsureAffCode()
 
 	// 初始化用户设置
@@ -862,7 +868,7 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 	if inviterId != 0 {
 		_ = EnsureAffInviteRelation(inviterId, user.Id)
 		if common.QuotaForInvitee > 0 {
-			_ = IncreaseUserQuota(user.Id, common.QuotaForInvitee, true)
+			_ = GrantUserGiftQuota(user.Id, common.QuotaForInvitee)
 			RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
 		}
 		if common.QuotaForInviter > 0 {
@@ -1444,11 +1450,21 @@ func DecreaseUserQuota(id int, quota int) (err error) {
 }
 
 func decreaseUserQuota(id int, quota int) (err error) {
-	err = DB.Model(&User{}).Where("id = ?", id).Update("quota", gorm.Expr("quota - ?", quota)).Error
-	if err != nil {
-		return err
-	}
+	_, _, err = decreaseUserQuotaGiftFirst(id, quota)
 	return err
+}
+
+// DecreaseUserQuotaWithGiftSplit 同步扣减钱包额度（先赠送后充值），返回充值/赠送消耗量。
+func DecreaseUserQuotaWithGiftSplit(id int, quota int) (paid, gift int, err error) {
+	if quota < 0 {
+		return 0, 0, errors.New("quota 不能为负数！")
+	}
+	gopool.Go(func() {
+		if cacheErr := cacheDecrUserQuota(id, int64(quota)); cacheErr != nil {
+			common.SysLog("failed to decrease user quota cache: " + cacheErr.Error())
+		}
+	})
+	return decreaseUserQuotaGiftFirst(id, quota)
 }
 
 func DeltaUpdateUserQuota(id int, delta int) (err error) {
@@ -1473,15 +1489,23 @@ func GetRootUser() (user *User) {
 }
 
 func UpdateUserUsedQuotaAndRequestCount(id int, quota int) {
+	UpdateUserUsedQuotaAndRequestCountWithGiftOffset(id, quota, 0)
+}
+
+func UpdateUserUsedQuotaAndRequestCountWithGiftOffset(id int, quota int, giftConsumedEarlier int) {
 	if common.BatchUpdateEnabled {
 		addNewRecord(BatchUpdateTypeUsedQuota, id, quota)
 		addNewRecord(BatchUpdateTypeRequestCount, id, 1)
 		return
 	}
-	updateUserUsedQuotaAndRequestCount(id, quota, 1)
+	updateUserUsedQuotaAndRequestCountWithGiftOffset(id, quota, 1, giftConsumedEarlier)
 }
 
 func updateUserUsedQuotaAndRequestCount(id int, quota int, count int) {
+	updateUserUsedQuotaAndRequestCountWithGiftOffset(id, quota, count, 0)
+}
+
+func updateUserUsedQuotaAndRequestCountWithGiftOffset(id int, quota int, count int, giftConsumedEarlier int) {
 	err := DB.Model(&User{}).Where("id = ?", id).Updates(
 		map[string]interface{}{
 			"used_quota":    gorm.Expr("used_quota + ?", quota),
@@ -1493,8 +1517,11 @@ func updateUserUsedQuotaAndRequestCount(id int, quota int, count int) {
 		return
 	}
 	if quota > 0 {
-		if attrErr := AttributeConsumeQuotaToTopUps(id, quota); attrErr != nil {
-			common.SysLog("failed to attribute consume quota to topups: " + attrErr.Error())
+		paid := ComputePaidConsumeWithGiftOffset(id, quota, giftConsumedEarlier)
+		if paid > 0 {
+			if attrErr := AttributeConsumeQuotaToTopUps(id, paid); attrErr != nil {
+				common.SysLog("failed to attribute consume quota to topups: " + attrErr.Error())
+			}
 		}
 	}
 }

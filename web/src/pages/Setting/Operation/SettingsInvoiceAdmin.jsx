@@ -16,6 +16,7 @@ import {
 import { Receipt } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import CardPro from '../../../components/common/ui/CardPro';
+import InvoiceFileUpload from '../../../components/settings/InvoiceFileUpload';
 import { API, showError, showSuccess, timestamp2string } from '../../../helpers';
 
 const { Text } = Typography;
@@ -50,6 +51,7 @@ const SettingsInvoiceAdmin = () => {
   const [rejectModal, setRejectModal] = useState({ visible: false, record: null });
   const [detailModal, setDetailModal] = useState({ visible: false, data: null });
   const [issueForm, setIssueForm] = useState({ invoice_code: '', invoice_url: '', admin_note: '' });
+  const [issueRecipientEmail, setIssueRecipientEmail] = useState('');
   const [rejectNote, setRejectNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
@@ -84,8 +86,36 @@ const SettingsInvoiceAdmin = () => {
     }
   };
 
+  const openIssueModal = async (record) => {
+    setIssueModal({ visible: true, record });
+    setIssueForm({ invoice_code: '', invoice_url: '', admin_note: '' });
+    setIssueRecipientEmail('');
+    try {
+      const res = await API.get(`/api/user/invoice/admin/requests/${record.id}`);
+      if (res.data.success) {
+        const snapshot = res.data.data?.request?.profile_snapshot;
+        if (snapshot) {
+          try {
+            const profile = JSON.parse(snapshot);
+            setIssueRecipientEmail(profile?.email || res.data.data?.email || '');
+          } catch {
+            setIssueRecipientEmail(res.data.data?.email || '');
+          }
+        } else {
+          setIssueRecipientEmail(res.data.data?.email || '');
+        }
+      }
+    } catch {
+      setIssueRecipientEmail(record.email || '');
+    }
+  };
+
   const submitIssue = async () => {
     if (!issueModal.record) return;
+    if (!issueForm.invoice_url?.trim()) {
+      showError(t('请先上传电子发票 PDF'));
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await API.post(
@@ -96,6 +126,7 @@ const SettingsInvoiceAdmin = () => {
         showSuccess(t('发票已开具'));
         setIssueModal({ visible: false, record: null });
         setIssueForm({ invoice_code: '', invoice_url: '', admin_note: '' });
+        setIssueRecipientEmail('');
         loadList();
       }
     } catch (e) {
@@ -156,10 +187,7 @@ const SettingsInvoiceAdmin = () => {
               <Button
                 size='small'
                 type='primary'
-                onClick={() => {
-                  setIssueModal({ visible: true, record });
-                  setIssueForm({ invoice_code: '', invoice_url: '', admin_note: '' });
-                }}
+                onClick={() => openIssueModal(record)}
               >
                 {t('开具')}
               </Button>
@@ -236,15 +264,20 @@ const SettingsInvoiceAdmin = () => {
           <Text type='secondary'>
             {t('申请单号')}: {issueModal.record?.request_no}
           </Text>
+          {issueRecipientEmail ? (
+            <Text type='secondary'>
+              {t('收票邮箱')}: {issueRecipientEmail}
+            </Text>
+          ) : null}
           <Input
             placeholder={t('发票号码')}
             value={issueForm.invoice_code}
             onChange={(v) => setIssueForm((f) => ({ ...f, invoice_code: v }))}
           />
-          <Input
-            placeholder={t('电子发票下载链接')}
-            value={issueForm.invoice_url}
-            onChange={(v) => setIssueForm((f) => ({ ...f, invoice_url: v }))}
+          <InvoiceFileUpload
+            url={issueForm.invoice_url}
+            onUrlChange={(invoice_url) => setIssueForm((f) => ({ ...f, invoice_url }))}
+            disabled={submitting}
           />
           <Input
             placeholder={t('备注')}

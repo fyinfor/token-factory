@@ -209,7 +209,7 @@ func ListInvoiceEligibleOrders(userID int, tradeNoKeyword string) ([]InvoiceElig
 		return nil, errors.New("invalid user id")
 	}
 	var topups []*TopUp
-	tx := DB.Where("user_id = ? AND status = ?", userID, common.TopUpStatusSuccess).Order("create_time asc")
+	tx := DB.Where("user_id = ? AND status = ? AND "+topUpInvoiceEligibleWhere(), userID, common.TopUpStatusSuccess).Order("create_time asc")
 	if kw := strings.TrimSpace(tradeNoKeyword); kw != "" {
 		tx = tx.Where("trade_no LIKE ?", "%"+kw+"%")
 	}
@@ -269,7 +269,7 @@ func AttributeConsumeQuotaToTopUps(userID, consumeQuota int) error {
 	}
 	return DB.Transaction(func(tx *gorm.DB) error {
 		var topups []TopUp
-		if err := tx.Where("user_id = ? AND status = ?", userID, common.TopUpStatusSuccess).
+		if err := tx.Where("user_id = ? AND status = ? AND "+topUpInvoiceEligibleWhere(), userID, common.TopUpStatusSuccess).
 			Order("create_time asc").Find(&topups).Error; err != nil {
 			return err
 		}
@@ -333,7 +333,7 @@ func CreateInvoiceRequest(userID int, items []InvoiceRequestItemInput, remark st
 				return fmt.Errorf("invalid invoice item for topup %d", item.TopUpId)
 			}
 			var topUp TopUp
-			if err := tx.Where("id = ? AND user_id = ? AND status = ?", item.TopUpId, userID, common.TopUpStatusSuccess).First(&topUp).Error; err != nil {
+			if err := tx.Where("id = ? AND user_id = ? AND status = ? AND "+topUpInvoiceEligibleWhere(), item.TopUpId, userID, common.TopUpStatusSuccess).First(&topUp).Error; err != nil {
 				return fmt.Errorf("topup %d not found or not payable", item.TopUpId)
 			}
 			invoiceable, err := GetTopUpInvoiceableAmount(&topUp, attrMap[topUp.Id])
