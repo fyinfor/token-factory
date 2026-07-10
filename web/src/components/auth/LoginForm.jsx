@@ -226,7 +226,7 @@ const LoginForm = () => {
 
   const onSubmitWeChatVerificationCode = async () => {
     if (turnstileEnabled && turnstileToken === '') {
-      showInfo('请稍后几秒重试，Turnstile 正在检查用户环境！');
+      showInfo(t('请稍后几秒重试，Turnstile 正在检查用户环境！'));
       return;
     }
     setWechatCodeSubmitLoading(true);
@@ -241,13 +241,13 @@ const LoginForm = () => {
         setUserData(data);
         updateAPI();
         navigateAfterLogin('/', data);
-        showSuccess('登录成功！');
+        showSuccess(t('登录成功！'));
         setShowWeChatLoginModal(false);
       } else {
-        showError(message);
+        showError(t(message));
       }
     } catch (error) {
-      showError('登录失败，请重试');
+      showError(t('登录失败，请重试'));
     } finally {
       setWechatCodeSubmitLoading(false);
     }
@@ -263,7 +263,7 @@ const LoginForm = () => {
       return;
     }
     if (turnstileEnabled && turnstileToken === '') {
-      showInfo('请稍后几秒重试，Turnstile 正在检查用户环境！');
+      showInfo(t('请稍后几秒重试，Turnstile 正在检查用户环境！'));
       return;
     }
     setSubmitted(true);
@@ -289,23 +289,23 @@ const LoginForm = () => {
           userDispatch({ type: 'login', payload: data });
           setUserData(data);
           updateAPI();
-          showSuccess('登录成功！');
+          showSuccess(t('登录成功！'));
           if (username === 'root' && password === '123456') {
             Modal.error({
-              title: '您正在使用默认密码！',
-              content: '请立刻修改默认密码！',
+              title: t('您正在使用默认密码！'),
+              content: t('请立刻修改默认密码！'),
               centered: true,
             });
           }
           navigateAfterLogin('/console', data);
         } else {
-          showError(message);
+          showError(t(message));
         }
       } else {
-        showError('请输入用户名和密码！');
+        showError(t('请输入用户名和密码！'));
       }
     } catch (error) {
-      showError('登录失败，请重试');
+      showError(t('登录失败，请重试'));
     } finally {
       setLoginLoading(false);
     }
@@ -339,15 +339,15 @@ const LoginForm = () => {
       if (success) {
         userDispatch({ type: 'login', payload: data });
         localStorage.setItem('user', JSON.stringify(data));
-        showSuccess('登录成功！');
+        showSuccess(t('登录成功！'));
         setUserData(data);
         updateAPI();
         navigateAfterLogin('/', data);
       } else {
-        showError(message);
+        showError(t(message));
       }
     } catch (error) {
-      showError('登录失败，请重试');
+      showError(t('登录失败，请重试'));
     }
   };
 
@@ -481,10 +481,10 @@ const LoginForm = () => {
           });
         }, 1000);
       } else {
-        showError(message || t('发送失败'));
+        showError(t(message || '发送失败'));
       }
     } catch (err) {
-      showError(err?.response?.data?.message || t('发送失败，请稍后重试'));
+      showError(t(err?.response?.data?.message || '发送失败，请稍后重试'));
     } finally {
       setSmsSending(false);
     }
@@ -521,10 +521,10 @@ const LoginForm = () => {
         showSuccess(t('登录成功！'));
         navigateAfterLogin('/console', data);
       } else {
-        showError(message || t('登录失败'));
+        showError(t(message || '登录失败'));
       }
     } catch (err) {
-      showError(err?.response?.data?.message || t('登录失败，请重试'));
+      showError(t(err?.response?.data?.message || '登录失败，请重试'));
     } finally {
       setSmsLoginLoading(false);
     }
@@ -536,11 +536,11 @@ const LoginForm = () => {
       return;
     }
     if (!passkeySupported) {
-      showInfo('当前环境无法使用 Passkey 登录');
+      showInfo(t('当前环境无法使用 Passkey 登录'));
       return;
     }
     if (!window.PublicKeyCredential) {
-      showInfo('当前浏览器不支持 Passkey');
+      showInfo(t('当前浏览器不支持 Passkey'));
       return;
     }
 
@@ -549,7 +549,7 @@ const LoginForm = () => {
       const beginRes = await API.post('/api/user/passkey/login/begin');
       const { success, message, data } = beginRes.data;
       if (!success) {
-        showError(message || '无法发起 Passkey 登录');
+        showError(t(message || '无法发起 Passkey 登录'));
         return;
       }
 
@@ -561,7 +561,7 @@ const LoginForm = () => {
       });
       const payload = buildAssertionResult(assertion);
       if (!payload) {
-        showError('Passkey 验证失败，请重试');
+        showError(t('Passkey 验证失败，请重试'));
         return;
       }
 
@@ -574,16 +574,16 @@ const LoginForm = () => {
         userDispatch({ type: 'login', payload: finish.data });
         setUserData(finish.data);
         updateAPI();
-        showSuccess('登录成功！');
+        showSuccess(t('登录成功！'));
         navigateAfterLogin('/console', finish.data);
       } else {
-        showError(finish.message || 'Passkey 登录失败，请重试');
+        showError(t(finish.message || 'Passkey 登录失败，请重试'));
       }
     } catch (error) {
       if (error?.name === 'AbortError') {
-        showInfo('已取消 Passkey 登录');
+        showInfo(t('已取消 Passkey 登录'));
       } else {
-        showError('Passkey 登录失败，请重试');
+        showError(t('Passkey 登录失败，请重试'));
       }
     } finally {
       setPasskeyLoading(false);
@@ -609,7 +609,7 @@ const LoginForm = () => {
     userDispatch({ type: 'login', payload: data });
     setUserData(data);
     updateAPI();
-    showSuccess('登录成功！');
+    showSuccess(t('登录成功！'));
     navigateAfterLogin('/console', data);
   };
 

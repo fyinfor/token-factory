@@ -1046,6 +1046,12 @@ func (user *User) HardDelete() error {
 	return err
 }
 
+// ErrUsernameOrPasswordEmpty / ErrUsernameOrPasswordWrong 供登录控制器映射为 i18n 文案。
+var (
+	ErrUsernameOrPasswordEmpty = errors.New("用户名或密码为空")
+	ErrUsernameOrPasswordWrong = errors.New("用户名或密码错误，或用户已被封禁")
+)
+
 // ValidateAndFill check password & user status
 func (user *User) ValidateAndFill() (err error) {
 	// When querying with struct, GORM will only query with non-zero fields,
@@ -1054,13 +1060,13 @@ func (user *User) ValidateAndFill() (err error) {
 	password := user.Password
 	username := strings.TrimSpace(user.Username)
 	if username == "" || password == "" {
-		return errors.New("用户名或密码为空")
+		return ErrUsernameOrPasswordEmpty
 	}
 	// find buy username or email
 	DB.Where("username = ? OR email = ?", username, username).First(user)
 	okay := common.ValidatePasswordAndHash(password, user.Password)
 	if !okay || user.Status != common.UserStatusEnabled {
-		return errors.New("用户名或密码错误，或用户已被封禁")
+		return ErrUsernameOrPasswordWrong
 	}
 	return nil
 }

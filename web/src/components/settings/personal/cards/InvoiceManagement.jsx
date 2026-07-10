@@ -14,11 +14,34 @@ import {
   Tabs,
   TabPane,
   Tag,
+  Tooltip,
   Typography,
 } from '@douyinfe/semi-ui';
+import { IconHelpCircle } from '@douyinfe/semi-icons';
 import { API, showError, showSuccess, timestamp2string, renderQuota } from '../../../../helpers';
 
 const { Text } = Typography;
+
+const INVOICE_VAT_RATE_LABEL = '6%';
+
+const formatMoney = (v) => `¥${Number(v || 0).toFixed(2)}`;
+
+const invoiceTaxTipTitle = (label, tip) => (
+  <span className='inline-flex items-center gap-1'>
+    {label}
+    <Tooltip
+      content={
+        <div style={{ maxWidth: 280, whiteSpace: 'normal' }}>{tip}</div>
+      }
+    >
+      <IconHelpCircle
+        size='small'
+        className='cursor-help text-semi-color-text-2'
+        style={{ verticalAlign: 'middle' }}
+      />
+    </Tooltip>
+  </span>
+);
 
 const invoiceStatusTag = (status, t) => {
   const map = {
@@ -165,27 +188,36 @@ const InvoiceManagement = ({ t }) => {
     }
   };
 
+  const taxTip = t(
+    '注意：平台价格为未税价格，如需开票请另外支付6%的增值税额（计算公式为申请开票金额*6%），税额请联系客服支付',
+  );
+
   const eligibleColumns = [
     { title: t('订单号'), dataIndex: 'trade_no' },
     {
       title: t('充值金额'),
       dataIndex: 'money',
-      render: (v) => `¥${Number(v || 0).toFixed(2)}`,
+      render: (v) => formatMoney(v),
     },
     {
-      title: t('已消耗'),
+      title: invoiceTaxTipTitle(t('已消耗金额'), taxTip),
       dataIndex: 'consumed_amount',
-      render: (v) => `¥${Number(v || 0).toFixed(2)}`,
+      render: (v) => formatMoney(v),
     },
     {
-      title: t('可开票金额'),
+      title: invoiceTaxTipTitle(t('价格税点'), taxTip),
+      key: 'price_tax_rate',
+      render: () => INVOICE_VAT_RATE_LABEL,
+    },
+    {
+      title: invoiceTaxTipTitle(t('可开票金额'), taxTip),
       dataIndex: 'invoiceable_amount',
-      render: (v) => `¥${Number(v || 0).toFixed(2)}`,
+      render: (v) => formatMoney(v),
     },
     {
       title: t('已开票金额'),
       dataIndex: 'invoiced_amount',
-      render: (v) => `¥${Number(v || 0).toFixed(2)}`,
+      render: (v) => formatMoney(v),
     },
     {
       title: t('创建时间'),
@@ -260,8 +292,17 @@ const InvoiceManagement = ({ t }) => {
                 <span>
                   {t('充值余额')}: {renderQuota(balanceSummary.paid_quota || 0)}
                 </span>
-                <span>
-                  {t('可开票金额')}: ¥{Number(balanceSummary.invoiceable_amount || 0).toFixed(2)}
+                <span className='inline-flex items-center gap-1'>
+                  {invoiceTaxTipTitle(
+                    `${t('可开票金额')}: ${formatMoney(balanceSummary.invoiceable_amount)}`,
+                    taxTip,
+                  )}
+                </span>
+                <span className='inline-flex items-center gap-1'>
+                  {invoiceTaxTipTitle(
+                    `${t('价格税点')}: ${INVOICE_VAT_RATE_LABEL}`,
+                    taxTip,
+                  )}
                 </span>
               </div>
             ) : null}
@@ -271,6 +312,7 @@ const InvoiceManagement = ({ t }) => {
               <li>{t('仅限「已支付」状态的订单可申请发票')}</li>
               <li>{t('按实际消耗金额开票，消耗多少即可申请开票多少')}</li>
               <li>{t('赠送余额优先扣费，不可开票；充值与对公入账余额消耗后可开票')}</li>
+              <li>{taxTip}</li>
               <li>{t('请确保开票信息的准确性，发票一经开出概不退换')}</li>
             </ul>
           </div>
@@ -299,7 +341,7 @@ const InvoiceManagement = ({ t }) => {
             >
               {t('合并开票')}
               {selectedRowKeys.length > 0
-                ? ` (${selectedRowKeys.length} / ¥${selectedTotal.toFixed(2)})`
+                ? ` (${selectedRowKeys.length} / ${formatMoney(selectedTotal)})`
                 : ''}
             </Button>
           </div>

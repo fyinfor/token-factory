@@ -7,6 +7,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
@@ -70,6 +71,98 @@ func topUpAmountDecimal(v float64) decimal.Decimal {
 
 func formatTopUpAmount(v float64) string {
 	return topUpAmountDecimal(v).String()
+}
+
+func formatTopUpMoneyLogAmount(money float64, currency string) string {
+	d := topUpAmountDecimal(money)
+	switch strings.ToUpper(strings.TrimSpace(currency)) {
+	case "CNY":
+		return fmt.Sprintf("¥%s", d.StringFixed(2))
+	case "USD":
+		return fmt.Sprintf("＄%s", d.StringFixed(2))
+	default:
+		return d.StringFixed(2)
+	}
+}
+
+// formatTopUpCreditedDisplay 按订单实付/输入金额生成到账展示（与支付金额口径对齐，不再从 quota 反算）。
+func formatTopUpCreditedDisplay(topUp *TopUp) string {
+	if topUp == nil {
+		return ""
+	}
+	inputCurrency := strings.ToUpper(strings.TrimSpace(topUp.InputCurrency))
+	payCurrency := strings.ToUpper(strings.TrimSpace(topUp.PayCurrency))
+	displayType := operation_setting.GetQuotaDisplayType()
+
+	switch displayType {
+	case operation_setting.QuotaDisplayTypeCNY:
+		amount := topUp.Money
+		if inputCurrency == "CNY" && topUp.InputAmount > 0 {
+			amount = topUp.InputAmount
+		} else if payCurrency == "USD" {
+			amount = topUp.Money * operation_setting.USDExchangeRate
+		}
+		return fmt.Sprintf("¥%s 额度", topUpAmountDecimal(amount).StringFixed(2))
+	case operation_setting.QuotaDisplayTypeCustom:
+		rate := operation_setting.GetGeneralSetting().CustomCurrencyExchangeRate
+		symbol := operation_setting.GetGeneralSetting().CustomCurrencySymbol
+		if symbol == "" {
+			symbol = "¤"
+		}
+		if rate <= 0 {
+			rate = 1
+		}
+		amount := topUp.Money
+		if topUp.InputAmount > 0 && inputCurrency != "" {
+			amount = topUp.InputAmount
+		} else if payCurrency == "USD" {
+			amount = topUp.Money * rate
+		} else if payCurrency == "CNY" {
+			usdRate := operation_setting.USDExchangeRate
+			if usdRate <= 0 {
+				usdRate = operation_setting.Price
+			}
+			if usdRate > 0 {
+				amount = topUp.Money / usdRate * rate
+			}
+		}
+		return fmt.Sprintf("%s%s 额度", symbol, topUpAmountDecimal(amount).StringFixed(2))
+	case operation_setting.QuotaDisplayTypeTokens:
+		if topUp.QuotaToAdd > 0 {
+			return fmt.Sprintf("%d 点额度", topUp.QuotaToAdd)
+		}
+		return logger.LogQuota(topUp.ResolveQuotaToAdd())
+	default: // USD
+		amount := topUp.Money
+		if inputCurrency == "USD" && topUp.InputAmount > 0 {
+			amount = topUp.InputAmount
+		} else if payCurrency == "CNY" {
+			usdRate := operation_setting.USDExchangeRate
+			if usdRate <= 0 {
+				usdRate = operation_setting.Price
+			}
+			if usdRate > 0 {
+				amount = topUp.Money / usdRate
+			}
+		}
+		return fmt.Sprintf("＄%s 额度", topUpAmountDecimal(amount).StringFixed(2))
+	}
+}
+
+// FormatTopUpSuccessUserLog 充值成功写入用户日志（到账额度与支付金额均按订单实付展示，数值对齐）。
+func FormatTopUpSuccessUserLog(prefix string, topUp *TopUp) string {
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		prefix = "使用在线充值成功"
+	}
+	if topUp == nil {
+		return prefix
+	}
+	return fmt.Sprintf("%s，到账额度: %s，支付金额: %s",
+		prefix,
+		formatTopUpCreditedDisplay(topUp),
+		formatTopUpMoneyLogAmount(topUp.Money, topUp.PayCurrency),
+	)
 }
 
 // fillTopUpUsernamesWithDB 为充值记录批量填充关联用户名（管理员全平台列表与当前用户本人充值列表均使用）。
@@ -217,7 +310,7 @@ func Recharge(referenceId string, customerId string) (err error) {
 		return errors.New("充值失败，请稍后重试")
 	}
 
-	RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%s", logger.FormatQuota(int(quota)), formatTopUpAmount(topUp.Amount)))
+	RecordLog(topUp.UserId, LogTypeTopup, FormatTopUpSuccessUserLog("", topUp))
 
 	ApplyAffiliateTopupReward(topUp.UserId, quota)
 	return nil
@@ -288,7 +381,7 @@ func RechargeStripe(referenceId string, customerId string, paidMoney float64, cu
 		return errors.New("充值失败，请稍后重试")
 	}
 
-	RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%s", logger.FormatQuota(int(quota)), formatTopUpAmount(topUp.Amount)))
+	RecordLog(topUp.UserId, LogTypeTopup, FormatTopUpSuccessUserLog("", topUp))
 	ApplyAffiliateTopupReward(topUp.UserId, int(quota))
 	return nil
 }
@@ -427,7 +520,7 @@ func ManualCompleteTopUp(tradeNo string, adminUsername string) error {
 
 	var userId int
 	var quotaToAdd int
-	var payMoney float64
+	var logTopUp TopUp
 
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		topUp := &TopUp{}
@@ -463,7 +556,7 @@ func ManualCompleteTopUp(tradeNo string, adminUsername string) error {
 		}
 
 		userId = topUp.UserId
-		payMoney = topUp.Money
+		logTopUp = *topUp
 		return nil
 	})
 
@@ -477,7 +570,7 @@ func ManualCompleteTopUp(tradeNo string, adminUsername string) error {
 		if adminUsername != "" {
 			operatorPrefix = adminUsername
 		}
-		RecordLog(userId, LogTypeTopup, fmt.Sprintf("%s管理员补单成功，充值金额: %v，支付金额：%f", operatorPrefix, logger.FormatQuota(quotaToAdd), payMoney))
+		RecordLog(userId, LogTypeTopup, FormatTopUpSuccessUserLog(operatorPrefix+"管理员补单成功", &logTopUp))
 		ApplyAffiliateTopupReward(userId, quotaToAdd)
 	}
 	return nil
@@ -595,7 +688,7 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 		return errors.New("充值失败，请稍后重试")
 	}
 
-	RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("使用Creem充值成功，充值额度: %v，支付金额：%.2f", quota, topUp.Money))
+	RecordLog(topUp.UserId, LogTypeTopup, FormatTopUpSuccessUserLog("使用Creem充值成功", topUp))
 
 	ApplyAffiliateTopupReward(topUp.UserId, int(quota))
 	return nil
@@ -646,7 +739,7 @@ func RechargeUcoin(tradeNo string, actualAmount string) (err error) {
 		}
 
 		dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
-		quotaToAdd = int(dActualAmount.Mul(dQuotaPerUnit).IntPart())
+		quotaToAdd = int(dActualAmount.Mul(dQuotaPerUnit).Round(0).IntPart())
 		if quotaToAdd <= 0 {
 			return errors.New("无效的充值额度")
 		}
@@ -654,6 +747,10 @@ func RechargeUcoin(tradeNo string, actualAmount string) (err error) {
 		actualAmountFloat, _ := dActualAmount.Float64()
 		topUp.Amount = actualAmountFloat
 		topUp.Money = actualAmountFloat
+		topUp.InputAmount = actualAmountFloat
+		topUp.InputCurrency = "USD"
+		topUp.PayCurrency = "USD"
+		topUp.QuotaToAdd = quotaToAdd
 		topUp.CompleteTime = common.GetTimestamp()
 		topUp.Status = common.TopUpStatusSuccess
 		if err := tx.Save(topUp).Error; err != nil {
@@ -673,11 +770,7 @@ func RechargeUcoin(tradeNo string, actualAmount string) (err error) {
 	}
 
 	if quotaToAdd > 0 {
-		RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf(
-			"U币充值成功，实际充值金额: %s USDT，到账额度: %v",
-			dActualAmount.String(),
-			logger.FormatQuota(quotaToAdd),
-		))
+		RecordLog(topUp.UserId, LogTypeTopup, FormatTopUpSuccessUserLog("U币充值成功", topUp))
 		ApplyAffiliateTopupReward(topUp.UserId, quotaToAdd)
 	}
 
@@ -735,7 +828,7 @@ func RechargeWaffo(tradeNo string) (err error) {
 	}
 
 	if quotaToAdd > 0 {
-		RecordLog(topUp.UserId, LogTypeTopup, fmt.Sprintf("Waffo充值成功，充值额度: %v，支付金额: %.2f", logger.FormatQuota(quotaToAdd), topUp.Money))
+		RecordLog(topUp.UserId, LogTypeTopup, FormatTopUpSuccessUserLog("Waffo充值成功", topUp))
 		ApplyAffiliateTopupReward(topUp.UserId, quotaToAdd)
 	}
 

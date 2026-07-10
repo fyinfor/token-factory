@@ -164,10 +164,10 @@ const PasswordResetForm = () => {
         showSuccess(t('验证码已发送，请查收邮箱'));
         setDisableEmailButton(true);
       } else {
-        showError(message || t('发送失败'));
+        showError(t(message || '发送失败'));
       }
     } catch (error) {
-      showError(error?.response?.data?.message || t('发送验证码失败，请重试'));
+      showError(t(error?.response?.data?.message || '发送验证码失败，请重试'));
     } finally {
       setEmailCodeLoading(false);
     }
@@ -212,10 +212,10 @@ const PasswordResetForm = () => {
         showSuccess(t('密码重置成功，请使用新密码登录'));
         navigate('/login');
       } else {
-        showError(message);
+        showError(t(message));
       }
     } catch (error) {
-      showError(error?.response?.data?.message || t('密码重置失败，请重试'));
+      showError(t(error?.response?.data?.message || '密码重置失败，请重试'));
     } finally {
       setLoading(false);
     }
@@ -245,11 +245,11 @@ const PasswordResetForm = () => {
         showSuccess(t('短信验证码发送成功，请注意查收（5分钟内有效）'));
         setDisableSMSButton(true);
       } else {
-        showError(message);
+        showError(t(message));
       }
     } catch (error) {
       showError(
-        error?.response?.data?.message || t('发送短信验证码失败，请重试'),
+        t(error?.response?.data?.message || '发送短信验证码失败，请重试'),
       );
     } finally {
       setSmsLoading(false);
@@ -306,10 +306,10 @@ const PasswordResetForm = () => {
         });
         navigate('/login');
       } else {
-        showError(message);
+        showError(t(message));
       }
     } catch (error) {
-      showError(error?.response?.data?.message || t('密码重置失败，请重试'));
+      showError(t(error?.response?.data?.message || '密码重置失败，请重试'));
     } finally {
       setLoading(false);
     }
