@@ -757,6 +757,7 @@ func GetSelf(c *gin.Context) {
 		"telegram_id":                 user.TelegramId,
 		"group":                       user.Group,
 		"quota":                       user.Quota,
+		"gift_quota":                  user.GiftQuota,
 		"used_quota":                  user.UsedQuota,
 		"request_count":               user.RequestCount,
 		"aff_code":                    user.AffCode,
@@ -2052,7 +2053,7 @@ func ManageUser(c *gin.Context) {
 			rewardQuota = req.RewardQuota
 		}
 		if rewardQuota > 0 {
-			if err := model.IncreaseUserQuota(user.Id, rewardQuota, true); err != nil {
+			if err := model.GrantUserGiftQuota(user.Id, rewardQuota); err != nil {
 				common.ApiError(c, err)
 				return
 			}

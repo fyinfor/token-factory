@@ -46,6 +46,8 @@ import {
   Row,
   Col,
   InputNumber,
+  Radio,
+  Input,
 } from '@douyinfe/semi-ui';
 import {
   IconUser,
@@ -71,6 +73,10 @@ const EditUserModal = (props) => {
   const [addQuotaModalOpen, setIsModalOpen] = useState(false);
   const [addQuotaLocal, setAddQuotaLocal] = useState('');
   const [addAmountLocal, setAddAmountLocal] = useState('');
+  const [addQuotaType, setAddQuotaType] = useState('gift');
+  const [addQuotaReference, setAddQuotaReference] = useState('');
+  const [addQuotaRemark, setAddQuotaRemark] = useState('');
+  const [addQuotaSubmitting, setAddQuotaSubmitting] = useState(false);
   const isMobile = useIsMobile();
   const [groupOptions, setGroupOptions] = useState([]);
   const [bindingModalVisible, setBindingModalVisible] = useState(false);
@@ -202,11 +208,61 @@ const EditUserModal = (props) => {
     setLoading(false);
   };
 
-  /* --------------------- quota helper -------------------- */
-  const addLocalQuota = () => {
-    const current = parseInt(formApiRef.current?.getValue('quota') || 0);
-    const delta = parseInt(addQuotaLocal) || 0;
-    formApiRef.current?.setValue('quota', current + delta);
+  const resetAddQuotaModal = () => {
+    setIsModalOpen(false);
+    setAddQuotaLocal('');
+    setAddAmountLocal('');
+    setAddQuotaType('gift');
+    setAddQuotaReference('');
+    setAddQuotaRemark('');
+  };
+
+  const submitAddQuota = async () => {
+    const delta = parseInt(addQuotaLocal, 10) || 0;
+    if (!userId || delta <= 0) {
+      showError(t('请输入有效额度'));
+      return;
+    }
+    setAddQuotaSubmitting(true);
+    try {
+      if (addQuotaType === 'corporate') {
+        const money = Number(addAmountLocal);
+        if (!money || money <= 0) {
+          showError(t('对公入账请填写金额'));
+          return;
+        }
+        const reference = addQuotaReference.trim();
+        const res = await API.post('/api/user/invoice/admin/corporate-topup', {
+          user_id: userId,
+          money,
+          quota: delta,
+          reference,
+          remark: addQuotaRemark.trim(),
+        });
+        if (!res.data.success) {
+          showError(res.data.message || t('对公入账失败'));
+          return;
+        }
+        showSuccess(t('对公入账成功'));
+      } else {
+        const res = await API.post('/api/user/invoice/admin/grant-gift', {
+          user_id: userId,
+          quota: delta,
+          remark: addQuotaRemark.trim(),
+        });
+        if (!res.data.success) {
+          showError(res.data.message || t('赠送失败'));
+          return;
+        }
+        showSuccess(t('赠送额度已到账'));
+      }
+      await loadUser();
+      resetAddQuotaModal();
+    } catch (e) {
+      showError(e);
+    } finally {
+      setAddQuotaSubmitting(false);
+    }
   };
 
   /* --------------------------- UI --------------------------- */
@@ -480,15 +536,9 @@ const EditUserModal = (props) => {
       <Modal
         centered
         visible={addQuotaModalOpen}
-        onOk={() => {
-          addLocalQuota();
-          setIsModalOpen(false);
-          setAddQuotaLocal('');
-          setAddAmountLocal('');
-        }}
-        onCancel={() => {
-          setIsModalOpen(false);
-        }}
+        confirmLoading={addQuotaSubmitting}
+        onOk={submitAddQuota}
+        onCancel={resetAddQuotaModal}
         closable={null}
         title={
           <div className='flex items-center'>
@@ -498,15 +548,29 @@ const EditUserModal = (props) => {
         }
       >
         <div className='mb-4'>
-          {(() => {
-            const current = formApiRef.current?.getValue('quota') || 0;
-            return (
-              <Text type='secondary' className='block mb-2'>
-                {`${t('新额度：')}${renderQuota(current)} + ${renderQuota(addQuotaLocal)} = ${renderQuota(current + parseInt(addQuotaLocal || 0))}`}
-              </Text>
-            );
-          })()}
+          <Text type='secondary' className='block mb-2'>
+            {t('入账类型')}
+          </Text>
+          <Radio.Group
+            value={addQuotaType}
+            onChange={(e) => setAddQuotaType(e.target.value)}
+          >
+            <Radio value='gift'>{t('赠送（不可开票）')}</Radio>
+            <Radio value='corporate'>{t('对公入账（可开票）')}</Radio>
+          </Radio.Group>
         </div>
+        {addQuotaType === 'corporate' ? (
+          <div className='mb-3'>
+            <div className='mb-1'>
+              <Text size='small'>{t('对公凭证号/流水号')}</Text>
+            </div>
+            <Input
+              value={addQuotaReference}
+              onChange={setAddQuotaReference}
+              placeholder={t('银行转账流水号等（可选）')}
+            />
+          </div>
+        ) : null}
         {getCurrencyConfig().type !== 'TOKENS' && (
           <div className='mb-3'>
             <div className='mb-1'>
@@ -556,6 +620,16 @@ const EditUserModal = (props) => {
             style={{ width: '100%' }}
             showClear
             step={500000}
+          />
+        </div>
+        <div className='mt-3'>
+          <div className='mb-1'>
+            <Text size='small'>{t('备注')}</Text>
+          </div>
+          <Input
+            value={addQuotaRemark}
+            onChange={setAddQuotaRemark}
+            placeholder={t('可选')}
           />
         </div>
       </Modal>

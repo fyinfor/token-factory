@@ -56,6 +56,7 @@ export default function SettingsSidebarModulesAdmin(props) {
     personal: {
       enabled: true,
       topup: true,
+      invoice: true,
       personal: true,
       route_policy: true,
       'seedance-material': true,
@@ -71,6 +72,8 @@ export default function SettingsSidebarModulesAdmin(props) {
       redemption: true,
       user: true,
       subscription: true,
+      'invoice-admin': true,
+      'settlement-export': true,
       setting: true,
       distributor: true,
       'supplier-management': true,
@@ -127,6 +130,7 @@ export default function SettingsSidebarModulesAdmin(props) {
       personal: {
         enabled: true,
         topup: true,
+        invoice: true,
         personal: true,
         'seedance-material': true,
         supplier: true,
@@ -141,6 +145,8 @@ export default function SettingsSidebarModulesAdmin(props) {
         redemption: true,
         user: true,
         subscription: true,
+        'invoice-admin': true,
+        'settlement-export': true,
         setting: true,
         distributor: true,
         'supplier-management': true,
@@ -209,6 +215,7 @@ export default function SettingsSidebarModulesAdmin(props) {
           personal: {
             enabled: true,
             topup: true,
+            invoice: true,
             personal: true,
             'seedance-material': true,
             supplier: true,
@@ -274,6 +281,11 @@ export default function SettingsSidebarModulesAdmin(props) {
       modules: [
         { key: 'topup', title: t('钱包管理'), description: t('余额充值管理') },
         {
+          key: 'invoice',
+          title: t('发票管理'),
+          description: t('充值订单开票申请与记录'),
+        },
+        {
           key: 'personal',
           title: t('个人设置'),
           description: t('个人信息设置'),
@@ -323,6 +335,16 @@ export default function SettingsSidebarModulesAdmin(props) {
           description: t('兑换码生成管理'),
         },
         { key: 'user', title: t('用户管理'), description: t('用户账户管理') },
+        {
+          key: 'invoice-admin',
+          title: t('发票审批'),
+          description: t('充值订单开票申请审批'),
+        },
+        {
+          key: 'settlement-export',
+          title: t('结算单导出'),
+          description: t('平台经营结算明细导出'),
+        },
         {
           key: 'distributor',
           title: t('代理管理'),

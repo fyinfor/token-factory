@@ -29,6 +29,8 @@ type TopUp struct {
 	CreateTime     int64   `json:"create_time"`
 	CompleteTime   int64   `json:"complete_time"`
 	Status         string  `json:"status"`
+	InvoicedAmount float64 `json:"invoiced_amount" gorm:"type:decimal(20,6);default:0"`
+	InvoiceEligible bool   `json:"invoice_eligible" gorm:"not null;default:true"`
 }
 
 func (topUp *TopUp) ResolveQuotaToAdd() int {
@@ -480,6 +482,51 @@ func ManualCompleteTopUp(tradeNo string, adminUsername string) error {
 	}
 	return nil
 }
+
+// CreateCorporateTopUp 管理员对公入账：创建可开票充值订单并增加用户充值余额（非赠送）。
+func CreateCorporateTopUp(userID int, money float64, quota int, reference, remark string, adminID int) (*TopUp, error) {
+	if userID <= 0 || money <= 0 || quota <= 0 {
+		return nil, errors.New("invalid corporate topup")
+	}
+	reference = strings.TrimSpace(reference)
+	tradeNo := fmt.Sprintf("CORP-%d-%d-%s", userID, common.GetTimestamp(), strings.ToUpper(common.GetRandomString(6)))
+	topUp := &TopUp{
+		UserId:          userID,
+		Money:           money,
+		Amount:          money,
+		QuotaToAdd:      quota,
+		TradeNo:         tradeNo,
+		PaymentMethod:   TopUpPaymentMethodCorporate,
+		CreateTime:      common.GetTimestamp(),
+		CompleteTime:    common.GetTimestamp(),
+		Status:          common.TopUpStatusSuccess,
+		InvoiceEligible: true,
+	}
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(topUp).Error; err != nil {
+			return err
+		}
+		return tx.Model(&User{}).Where("id = ?", userID).Update("quota", gorm.Expr("quota + ?", quota)).Error
+	})
+	if err != nil {
+		return nil, err
+	}
+	adminNote := strings.TrimSpace(remark)
+	logMsg := fmt.Sprintf("对公入账成功，金额: %.2f，到账额度: %s", money, logger.FormatQuota(quota))
+	if reference != "" {
+		logMsg = fmt.Sprintf("对公入账成功，凭证号: %s，金额: %.2f，到账额度: %s", reference, money, logger.FormatQuota(quota))
+	}
+	if adminNote != "" {
+		logMsg += "，备注: " + adminNote
+	}
+	if adminID > 0 {
+		logMsg += fmt.Sprintf("（操作人ID: %d）", adminID)
+	}
+	RecordLog(userID, LogTypeTopup, logMsg)
+	ApplyAffiliateTopupReward(userID, quota)
+	return topUp, nil
+}
+
 func RechargeCreem(referenceId string, customerEmail string, customerName string) (err error) {
 	if referenceId == "" {
 		return errors.New("未提供支付单号")

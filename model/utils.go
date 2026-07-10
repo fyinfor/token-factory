@@ -17,6 +17,7 @@ const (
 	BatchUpdateTypeUsedQuota
 	BatchUpdateTypeChannelUsedQuota
 	BatchUpdateTypeRequestCount
+	BatchUpdateTypePaidConsume
 	BatchUpdateTypeCount // if you add a new type, you need to add a new map and a new lock
 )
 
@@ -76,9 +77,18 @@ func batchUpdate() {
 		for key, value := range store {
 			switch i {
 			case BatchUpdateTypeUserQuota:
-				err := increaseUserQuota(key, value)
-				if err != nil {
-					common.SysLog("failed to batch update user quota: " + err.Error())
+				if value < 0 {
+					paid, _, err := decreaseUserQuotaGiftFirst(key, -value)
+					if err != nil {
+						common.SysLog("failed to batch decrease user quota: " + err.Error())
+					} else if paid > 0 {
+						addNewRecord(BatchUpdateTypePaidConsume, key, paid)
+					}
+				} else if value > 0 {
+					err := increaseUserQuota(key, value)
+					if err != nil {
+						common.SysLog("failed to batch update user quota: " + err.Error())
+					}
 				}
 			case BatchUpdateTypeTokenQuota:
 				err := increaseTokenQuota(key, value)
@@ -91,6 +101,12 @@ func batchUpdate() {
 				updateUserRequestCount(key, value)
 			case BatchUpdateTypeChannelUsedQuota:
 				updateChannelUsedQuota(key, value)
+			case BatchUpdateTypePaidConsume:
+				if value > 0 {
+					if attrErr := AttributeConsumeQuotaToTopUps(key, value); attrErr != nil {
+						common.SysLog("failed to attribute consume quota to topups (batch): " + attrErr.Error())
+					}
+				}
 			}
 		}
 	}

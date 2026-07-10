@@ -132,13 +132,7 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		other["model_ratio"] = info.PriceData.ModelRatio
 		appendVideoPerVideoBillingDetailOther(c, other, info)
 	}
-	discPct := float64(100)
-	if info.PriceData.ChannelPriceDiscount != nil {
-		discPct = *info.PriceData.ChannelPriceDiscount
-	} else {
-		discPct = model.ResolveChannelEffectiveCostPercent(info.ChannelId)
-	}
-	other["channel_price_discount_percent"] = discPct
+	appendSettlementDiscountSnapshotsFromPriceData(info.ChannelId, info.PriceData, other)
 	if len(info.UpstreamTaskBillingOther) > 0 {
 		for k, v := range info.UpstreamTaskBillingOther {
 			if !isUpstreamVideoMetadataLogKey(k) {
@@ -173,7 +167,7 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		Group:     info.UsingGroup,
 		Other:     other,
 	})
-	model.UpdateUserUsedQuotaAndRequestCount(info.UserId, info.PriceData.Quota)
+	recordWalletUsedQuota(info, info.UserId, info.PriceData.Quota)
 	model.UpdateChannelUsedQuota(info.ChannelId, info.PriceData.Quota)
 }
 
@@ -261,9 +255,38 @@ func taskBillingOther(task *model.Task) map[string]interface{} {
 		other["is_model_mapped"] = true
 		other["upstream_model_name"] = props.UpstreamModelName
 	}
-	discPct := taskBillingContextEffectiveCostPercent(task.PrivateData.BillingContext, task.ChannelId)
-	other["channel_price_discount_percent"] = discPct
+	appendTaskBillingDiscountSnapshots(task.PrivateData.BillingContext, task.ChannelId, other)
 	return other
+}
+
+func appendTaskBillingDiscountSnapshots(bc *model.TaskBillingContext, channelID int, other map[string]interface{}) {
+	rawDisc := model.ResolveChannelPriceDiscountPercent(channelID)
+	operatingCost := model.ResolveChannelOperatingCostPercent(channelID)
+	operatingDiscount := model.EffectiveCostPercent(rawDisc, operatingCost)
+	markupDisc := model.ResolveChannelMarkupDiscountRate(channelID)
+	if bc != nil {
+		if bc.PriceDiscountPercent != nil {
+			rawDisc = *bc.PriceDiscountPercent
+		}
+		if bc.OperatingCostPercent != nil {
+			operatingCost = *bc.OperatingCostPercent
+		}
+		if bc.EffectiveCostPercent != nil {
+			operatingDiscount = *bc.EffectiveCostPercent
+		} else if bc.ChannelPriceDiscountPercent > 0 {
+			operatingDiscount = bc.ChannelPriceDiscountPercent
+		} else {
+			operatingDiscount = model.EffectiveCostPercent(rawDisc, operatingCost)
+		}
+		if bc.MarkupDiscountPercent != nil {
+			markupDisc = *bc.MarkupDiscountPercent
+		}
+	}
+	other["price_discount_percent"] = rawDisc
+	other["operating_cost_percent"] = operatingCost
+	other["channel_price_discount_percent"] = operatingDiscount
+	other["markup_discount_rate"] = markupDisc
+	other["sales_discount_percent"] = model.SalesDiscountPercent(rawDisc, operatingCost, markupDisc)
 }
 
 func isUpstreamVideoMetadataLogKey(key string) bool {

@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/model"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 )
 
 // ---------------------------------------------------------------------------
@@ -27,8 +28,31 @@ type FundingSource interface {
 // ---------------------------------------------------------------------------
 
 type WalletFunding struct {
-	userId   int
-	consumed int // 实际预扣的用户额度
+	userId       int
+	relayInfo    *relaycommon.RelayInfo
+	consumed     int // 实际预扣的用户额度
+	giftConsumed int
+	paidConsumed int
+}
+
+func NewWalletFunding(userId int, relayInfo *relaycommon.RelayInfo) *WalletFunding {
+	return &WalletFunding{userId: userId, relayInfo: relayInfo}
+}
+
+func (w *WalletFunding) applyConsume(amount int) error {
+	if amount <= 0 {
+		return nil
+	}
+	paid, gift, err := model.DecreaseUserQuotaWithGiftSplit(w.userId, amount)
+	if err != nil {
+		return err
+	}
+	w.giftConsumed += gift
+	w.paidConsumed += paid
+	if w.relayInfo != nil {
+		w.relayInfo.WalletGiftConsumed += gift
+	}
+	return nil
 }
 
 func (w *WalletFunding) Source() string { return BillingSourceWallet }
@@ -37,7 +61,7 @@ func (w *WalletFunding) PreConsume(amount int) error {
 	if amount <= 0 {
 		return nil
 	}
-	if err := model.DecreaseUserQuota(w.userId, amount); err != nil {
+	if err := w.applyConsume(amount); err != nil {
 		return err
 	}
 	w.consumed = amount
@@ -49,7 +73,7 @@ func (w *WalletFunding) Settle(delta int) error {
 		return nil
 	}
 	if delta > 0 {
-		return model.DecreaseUserQuota(w.userId, delta)
+		return w.applyConsume(delta)
 	}
 	return model.IncreaseUserQuota(w.userId, -delta, false)
 }
@@ -58,9 +82,7 @@ func (w *WalletFunding) Refund() error {
 	if w.consumed <= 0 {
 		return nil
 	}
-	// IncreaseUserQuota 是 quota += N 的非幂等操作，不能重试，否则会多退额度。
-	// 订阅的 RefundSubscriptionPreConsume 有 requestId 幂等保护所以可以重试。
-	return model.IncreaseUserQuota(w.userId, w.consumed, false)
+	return model.RestoreUserWalletQuota(w.userId, w.consumed, w.giftConsumed)
 }
 
 // ---------------------------------------------------------------------------

@@ -59,8 +59,10 @@ import {
 } from 'lucide-react';
 import Cropper from 'react-easy-crop';
 import 'react-easy-crop/react-easy-crop.css';
+import DOMPurify from 'dompurify';
 import { useTranslation } from 'react-i18next';
 import { API, showError, showSuccess } from '../../helpers';
+import SimpleRichTextEditor from '../common/ui/SimpleRichTextEditor';
 
 const { Text } = Typography;
 
@@ -73,6 +75,16 @@ const MIN_INTERVAL_SEC = 2;
 const MAX_INTERVAL_SEC = 60;
 const DEFAULT_OVERLAY_OPACITY = 0.15;
 const DATE_TIME_FORMAT = 'yyyy-MM-dd HH:mm:ss';
+const DEFAULT_TITLE_WIDTH = 620;
+const DEFAULT_SUBTITLE_WIDTH = 560;
+const MIN_HERO_TEXT_WIDTH = 160;
+const MAX_HERO_TEXT_WIDTH = 1200;
+
+const RICH_HTML_SANITIZE_CONFIG = {
+  USE_PROFILES: { html: true },
+  ADD_ATTR: ['style', 'target', 'rel'],
+  FORBID_TAGS: ['img', 'video', 'iframe', 'script', 'style', 'svg', 'math'],
+};
 
 const CONTENT_ALIGN_OPTIONS = [
   { label: '居左', value: 'left' },
@@ -197,6 +209,50 @@ function contentAlignClass(value) {
   return 'items-start text-left';
 }
 
+function normalizeRichTextHtml(value) {
+  const text = String(value || '').trim();
+  if (!text || text === '<p><br></p>' || text === '<p></p>') {
+    return '';
+  }
+  return text;
+}
+
+function richTextToPlainText(value) {
+  const html = normalizeRichTextHtml(value);
+  if (!html) return '';
+  return html
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<\/(p|div|h[1-6]|li)>/gi, ' ')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function sanitizeRichTextHtml(value) {
+  const html = normalizeRichTextHtml(value);
+  if (!html) return '';
+  return DOMPurify.sanitize(html, RICH_HTML_SANITIZE_CONFIG);
+}
+
+function RichTextPreview({ html, fallback, className = '', style }) {
+  const safeHtml = useMemo(() => sanitizeRichTextHtml(html), [html]);
+  if (!safeHtml) {
+    return (
+      <div className={className} style={style}>
+        {fallback}
+      </div>
+    );
+  }
+  return (
+    <div
+      className={className}
+      style={style}
+      dangerouslySetInnerHTML={{ __html: safeHtml }}
+    />
+  );
+}
+
 const clamp = (value, min, max, fallback) => {
   const n = Number(value);
   if (!Number.isFinite(n)) {
@@ -210,6 +266,13 @@ const toOverlayOpacity = (value) =>
 const toOverlayPercent = (value) => Math.round(toOverlayOpacity(value) * 100);
 const percentToOverlayOpacity = (value) =>
   clamp(Number(value) / 100, 0, 0.8, DEFAULT_OVERLAY_OPACITY);
+const toHeroTextWidth = (value) => {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) {
+    return '';
+  }
+  return Math.round(clamp(n, MIN_HERO_TEXT_WIDTH, MAX_HERO_TEXT_WIDTH, n));
+};
 
 const pad2 = (value) => String(value).padStart(2, '0');
 
@@ -245,6 +308,8 @@ const emptySlide = (sort = 1) => ({
   sort,
   title: '',
   subtitle: '',
+  title_width: '',
+  subtitle_width: '',
   badge_text: '',
   button_text: '',
   content_align: 'left',
@@ -280,8 +345,10 @@ const normalizeSlide = (item, index = 0) => {
     enabled,
     status: enabled ? 1 : 0,
     sort: Math.max(1, Math.round(Number(item?.sort) || index + 1)),
-    title: String(item?.title || '').trim(),
-    subtitle: String(item?.subtitle || '').trim(),
+    title: normalizeRichTextHtml(item?.title),
+    subtitle: normalizeRichTextHtml(item?.subtitle),
+    title_width: toHeroTextWidth(item?.title_width),
+    subtitle_width: toHeroTextWidth(item?.subtitle_width),
     badge_text: String(item?.badge_text || item?.badge || '').trim(),
     button_text: String(item?.button_text || '').trim(),
     content_align: normalizeContentAlign(item?.content_align),
@@ -334,8 +401,8 @@ const slideHasContent = (slide) =>
     slide.img_pc ||
     slide.img_mobile ||
     slide.image_url ||
-    slide.title ||
-    slide.subtitle ||
+    normalizeRichTextHtml(slide.title) ||
+    normalizeRichTextHtml(slide.subtitle) ||
     slide.badge_text ||
     slide.button_text,
   );
@@ -348,8 +415,10 @@ const stringifySlides = (slides) => {
       enabled: Boolean(slide.enabled),
       status: slide.enabled ? 1 : 0,
       sort: slide.sort,
-      title: String(slide.title || '').trim(),
-      subtitle: String(slide.subtitle || '').trim(),
+      title: normalizeRichTextHtml(slide.title),
+      subtitle: normalizeRichTextHtml(slide.subtitle),
+      title_width: toHeroTextWidth(slide.title_width),
+      subtitle_width: toHeroTextWidth(slide.subtitle_width),
       badge_text: String(slide.badge_text || '').trim(),
       button_text: String(slide.button_text || '').trim(),
       content_align: normalizeContentAlign(slide.content_align),
@@ -654,18 +723,18 @@ function HeroColorPresetPanel({ slide, customActive, onApply, onCustom }) {
                 <div
                   className={`relative z-[1] flex h-full flex-col justify-center px-4 py-3 ${alignClass}`}
                 >
-                  <div
-                    className='text-lg font-semibold leading-tight'
+                  <RichTextPreview
+                    html={slide.title}
+                    fallback={t('标题预览')}
+                    className='line-clamp-2 text-lg font-semibold leading-tight [&_*]:!m-0 [&_*]:leading-[inherit]'
                     style={{ color: colors.title_color }}
-                  >
-                    {slide.title || t('标题预览')}
-                  </div>
-                  <div
-                    className='mt-1 line-clamp-2 text-xs leading-relaxed'
+                  />
+                  <RichTextPreview
+                    html={slide.subtitle}
+                    fallback={t('副标题展示效果')}
+                    className='mt-1 line-clamp-2 text-xs leading-relaxed [&_*]:!m-0 [&_*]:leading-[inherit]'
                     style={{ color: colors.subtitle_color }}
-                  >
-                    {slide.subtitle || t('副标题展示效果')}
-                  </div>
+                  />
                   <span
                     className='mt-3 inline-flex w-fit items-center rounded-md px-3 py-1 text-xs font-semibold'
                     style={{
@@ -857,7 +926,6 @@ export default function HomeHeroCarouselSetting() {
     const copied = {
       ...slide,
       id: makeSlideId(),
-      title: slide.title ? `${slide.title} Copy` : '',
     };
     setSlides((items) => syncSort([...items, copied]));
     setActiveSlideId(copied.id);
@@ -1145,7 +1213,8 @@ export default function HomeHeroCarouselSetting() {
                 itemKey={slide.id}
                 tab={
                   <span className='inline-block max-w-[150px] truncate align-bottom'>
-                    {index + 1}. {slide.title || t('未命名轮播')}
+                    {index + 1}.{' '}
+                    {richTextToPlainText(slide.title) || t('未命名轮播')}
                   </span>
                 }
               >
@@ -1172,7 +1241,9 @@ export default function HomeHeroCarouselSetting() {
                           updateSlide(slide.id, { enabled: checked })
                         }
                       />
-                      <Text strong>{slide.title || t('未命名轮播')}</Text>
+                      <Text strong>
+                        {richTextToPlainText(slide.title) || t('未命名轮播')}
+                      </Text>
                     </Space>
                     <Space wrap>
                       <Button
@@ -1236,25 +1307,67 @@ export default function HomeHeroCarouselSetting() {
                       <Text strong className='!mb-1 !block'>
                         {t('标题')}
                       </Text>
-                      <Input
+                      <SimpleRichTextEditor
                         value={slide.title}
                         placeholder={t('例如：安全可靠的 AI 能力平台')}
+                        minHeight={96}
                         onChange={(value) =>
                           updateSlide(slide.id, { title: value })
                         }
                       />
+                      <div className='mt-2 flex flex-wrap items-center gap-2'>
+                        <Text type='tertiary' size='small'>
+                          {t('标题宽度')}
+                        </Text>
+                        <InputNumber
+                          min={MIN_HERO_TEXT_WIDTH}
+                          max={MAX_HERO_TEXT_WIDTH}
+                          value={slide.title_width || undefined}
+                          placeholder={String(DEFAULT_TITLE_WIDTH)}
+                          onChange={(value) =>
+                            updateSlide(slide.id, {
+                              title_width: toHeroTextWidth(value),
+                            })
+                          }
+                          style={{ width: 128 }}
+                        />
+                        <Text type='tertiary' size='small'>
+                          px
+                        </Text>
+                      </div>
                     </Col>
                     <Col xs={24} md={12}>
                       <Text strong className='!mb-1 !block'>
                         {t('副标题')}
                       </Text>
-                      <Input
+                      <SimpleRichTextEditor
                         value={slide.subtitle}
                         placeholder={t('一句话说明当前轮播重点')}
+                        minHeight={96}
                         onChange={(value) =>
                           updateSlide(slide.id, { subtitle: value })
                         }
                       />
+                      <div className='mt-2 flex flex-wrap items-center gap-2'>
+                        <Text type='tertiary' size='small'>
+                          {t('副标题宽度')}
+                        </Text>
+                        <InputNumber
+                          min={MIN_HERO_TEXT_WIDTH}
+                          max={MAX_HERO_TEXT_WIDTH}
+                          value={slide.subtitle_width || undefined}
+                          placeholder={String(DEFAULT_SUBTITLE_WIDTH)}
+                          onChange={(value) =>
+                            updateSlide(slide.id, {
+                              subtitle_width: toHeroTextWidth(value),
+                            })
+                          }
+                          style={{ width: 128 }}
+                        />
+                        <Text type='tertiary' size='small'>
+                          px
+                        </Text>
+                      </div>
                     </Col>
                     <Col xs={24} md={8}>
                       <Text strong className='!mb-1 !block'>

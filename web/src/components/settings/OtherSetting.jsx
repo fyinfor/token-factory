@@ -48,9 +48,15 @@ import Text from '@douyinfe/semi-ui/lib/es/typography/text';
 import MarkdownRenderer from '../common/markdown/MarkdownRenderer';
 import SettingsSeedance from './SettingsSeedance';
 import HomeFooterCertificatesSetting from './HomeFooterCertificatesSetting';
+import LegalContentEditor from './LegalContentEditor';
+import defaultUserAgreementHtml from '../../content/legal/user-agreement.html?raw';
+import defaultPrivacyPolicyHtml from '../../content/legal/privacy-policy.html?raw';
 
 const LEGAL_USER_AGREEMENT_KEY = 'legal.user_agreement';
+const LEGAL_USER_AGREEMENT_FORMAT_KEY = 'legal.user_agreement_format';
 const LEGAL_PRIVACY_POLICY_KEY = 'legal.privacy_policy';
+const LEGAL_PRIVACY_POLICY_FORMAT_KEY = 'legal.privacy_policy_format';
+const DEFAULT_LEGAL_FORMAT = 'html';
 const DOCS_CONFIG_KEYS = [
   'DocsBrandName',
   'DocsSiteNameEn',
@@ -110,8 +116,10 @@ const OtherSetting = () => {
   let [inputs, setInputs] = useState({
     Notice: '',
     'general_setting.default_site_language': 'zh-CN',
-    [LEGAL_USER_AGREEMENT_KEY]: '',
-    [LEGAL_PRIVACY_POLICY_KEY]: '',
+    [LEGAL_USER_AGREEMENT_KEY]: defaultUserAgreementHtml,
+    [LEGAL_USER_AGREEMENT_FORMAT_KEY]: DEFAULT_LEGAL_FORMAT,
+    [LEGAL_PRIVACY_POLICY_KEY]: defaultPrivacyPolicyHtml,
+    [LEGAL_PRIVACY_POLICY_FORMAT_KEY]: DEFAULT_LEGAL_FORMAT,
     SystemName: '',
     SystemNameEn: '',
     Logo: '',
@@ -171,6 +179,35 @@ const OtherSetting = () => {
       showError(message);
     }
     setLoading(false);
+  };
+
+  const updateOptions = async (entries) => {
+    setLoading(true);
+    try {
+      const results = await Promise.all(
+        entries.map(([key, value]) =>
+          API.put('/api/option/', {
+            key,
+            value,
+          }),
+        ),
+      );
+      const failed = results.find((res) => !res.data?.success);
+      if (failed) {
+        showError(failed.data?.message || t('设置保存失败'));
+        return false;
+      }
+      setInputs((inputs) => {
+        const next = { ...inputs };
+        entries.forEach(([key, value]) => {
+          next[key] = value;
+        });
+        return next;
+      });
+      return true;
+    } finally {
+      setLoading(false);
+    }
   };
 
   const [loadingInput, setLoadingInput] = useState({
@@ -371,11 +408,16 @@ const OtherSetting = () => {
         ...loadingInput,
         [LEGAL_USER_AGREEMENT_KEY]: true,
       }));
-      await updateOption(
-        LEGAL_USER_AGREEMENT_KEY,
-        inputs[LEGAL_USER_AGREEMENT_KEY],
-      );
-      showSuccess(t('用户协议已更新'));
+      const saved = await updateOptions([
+        [LEGAL_USER_AGREEMENT_KEY, inputs[LEGAL_USER_AGREEMENT_KEY] || ''],
+        [
+          LEGAL_USER_AGREEMENT_FORMAT_KEY,
+          inputs[LEGAL_USER_AGREEMENT_FORMAT_KEY] || 'markdown',
+        ],
+      ]);
+      if (saved) {
+        showSuccess(t('用户协议已更新'));
+      }
     } catch (error) {
       console.error(t('用户协议更新失败'), error);
       showError(t('用户协议更新失败'));
@@ -393,11 +435,16 @@ const OtherSetting = () => {
         ...loadingInput,
         [LEGAL_PRIVACY_POLICY_KEY]: true,
       }));
-      await updateOption(
-        LEGAL_PRIVACY_POLICY_KEY,
-        inputs[LEGAL_PRIVACY_POLICY_KEY],
-      );
-      showSuccess(t('隐私政策已更新'));
+      const saved = await updateOptions([
+        [LEGAL_PRIVACY_POLICY_KEY, inputs[LEGAL_PRIVACY_POLICY_KEY] || ''],
+        [
+          LEGAL_PRIVACY_POLICY_FORMAT_KEY,
+          inputs[LEGAL_PRIVACY_POLICY_FORMAT_KEY] || 'markdown',
+        ],
+      ]);
+      if (saved) {
+        showSuccess(t('隐私政策已更新'));
+      }
     } catch (error) {
       console.error(t('隐私政策更新失败'), error);
       showError(t('隐私政策更新失败'));
@@ -677,10 +724,22 @@ const OtherSetting = () => {
           newInputs[item.key] = item.value;
         }
       });
-      setInputs(newInputs);
-      formAPISettingGeneral.current?.setValues(newInputs);
-      formAPIPersonalization.current?.setValues(newInputs);
-      formAPIDocsConfig.current?.setValues(newInputs);
+      const mergedInputs = {
+        ...inputs,
+        ...newInputs,
+      };
+      if (!String(mergedInputs[LEGAL_USER_AGREEMENT_KEY] || '').trim()) {
+        mergedInputs[LEGAL_USER_AGREEMENT_KEY] = defaultUserAgreementHtml;
+        mergedInputs[LEGAL_USER_AGREEMENT_FORMAT_KEY] = DEFAULT_LEGAL_FORMAT;
+      }
+      if (!String(mergedInputs[LEGAL_PRIVACY_POLICY_KEY] || '').trim()) {
+        mergedInputs[LEGAL_PRIVACY_POLICY_KEY] = defaultPrivacyPolicyHtml;
+        mergedInputs[LEGAL_PRIVACY_POLICY_FORMAT_KEY] = DEFAULT_LEGAL_FORMAT;
+      }
+      setInputs(mergedInputs);
+      formAPISettingGeneral.current?.setValues(mergedInputs);
+      formAPIPersonalization.current?.setValues(mergedInputs);
+      formAPIDocsConfig.current?.setValues(mergedInputs);
     } else {
       showError(message);
     }
@@ -785,44 +844,60 @@ const OtherSetting = () => {
               >
                 {t('保存默认界面语言')}
               </Button>
-              <Form.TextArea
-                label={t('用户协议')}
+              <LegalContentEditor
+                title={t('用户协议')}
+                value={inputs[LEGAL_USER_AGREEMENT_KEY]}
+                format={inputs[LEGAL_USER_AGREEMENT_FORMAT_KEY]}
+                styleId='legal-editor-user-agreement-styles'
                 placeholder={t(
                   '在此输入用户协议内容，支持 Markdown & HTML 代码',
                 )}
-                field={LEGAL_USER_AGREEMENT_KEY}
-                onChange={handleInputChange}
-                style={{ fontFamily: 'JetBrains Mono, Consolas' }}
-                autosize={{ minRows: 6, maxRows: 12 }}
                 helpText={t(
                   '填写用户协议内容后，用户注册时将被要求勾选已阅读用户协议',
                 )}
-              />
-              <Button
-                onClick={submitUserAgreement}
+                saveText={t('设置用户协议')}
                 loading={loadingInput[LEGAL_USER_AGREEMENT_KEY]}
-              >
-                {t('设置用户协议')}
-              </Button>
-              <Form.TextArea
-                label={t('隐私政策')}
+                onChange={(value) =>
+                  setInputs((prev) => ({
+                    ...prev,
+                    [LEGAL_USER_AGREEMENT_KEY]: value,
+                  }))
+                }
+                onFormatChange={(format) =>
+                  setInputs((prev) => ({
+                    ...prev,
+                    [LEGAL_USER_AGREEMENT_FORMAT_KEY]: format,
+                  }))
+                }
+                onSave={submitUserAgreement}
+              />
+              <LegalContentEditor
+                title={t('隐私政策')}
+                value={inputs[LEGAL_PRIVACY_POLICY_KEY]}
+                format={inputs[LEGAL_PRIVACY_POLICY_FORMAT_KEY]}
+                styleId='legal-editor-privacy-policy-styles'
                 placeholder={t(
                   '在此输入隐私政策内容，支持 Markdown & HTML 代码',
                 )}
-                field={LEGAL_PRIVACY_POLICY_KEY}
-                onChange={handleInputChange}
-                style={{ fontFamily: 'JetBrains Mono, Consolas' }}
-                autosize={{ minRows: 6, maxRows: 12 }}
                 helpText={t(
                   '填写隐私政策内容后，用户注册时将被要求勾选已阅读隐私政策',
                 )}
-              />
-              <Button
-                onClick={submitPrivacyPolicy}
+                saveText={t('设置隐私政策')}
                 loading={loadingInput[LEGAL_PRIVACY_POLICY_KEY]}
-              >
-                {t('设置隐私政策')}
-              </Button>
+                onChange={(value) =>
+                  setInputs((prev) => ({
+                    ...prev,
+                    [LEGAL_PRIVACY_POLICY_KEY]: value,
+                  }))
+                }
+                onFormatChange={(format) =>
+                  setInputs((prev) => ({
+                    ...prev,
+                    [LEGAL_PRIVACY_POLICY_FORMAT_KEY]: format,
+                  }))
+                }
+                onSave={submitPrivacyPolicy}
+              />
             </Form.Section>
           </Card>
         </Form>

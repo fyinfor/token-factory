@@ -20,8 +20,9 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { API, showError, showSuccess } from '../../helpers';
-import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
+
+const DEFAULT_PAGE_SIZE = 50;
 
 const DEFAULT_QUOTA_PER_UNIT = 500 * 1000;
 const getQuotaPerUnit = () => {
@@ -47,7 +48,7 @@ export const useUsersData = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activePage, setActivePage] = useState(1);
-  const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [searching, setSearching] = useState(false);
   const [studentView, setStudentView] = useState('all');
   const [studentRewardAmount, setStudentRewardAmount] = useState(0);

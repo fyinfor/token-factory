@@ -393,7 +393,7 @@ func ImportUsers(c *gin.Context) {
 		}
 		service.TryProvisionUcoinAddressAsync(cleanUser.Id)
 		if rewardQuota, _ := parseUserImportRewardQuota(item.Reward); rewardQuota > 0 {
-			if err := model.IncreaseUserQuota(cleanUser.Id, rewardQuota, true); err != nil {
+			if err := model.GrantUserGiftQuota(cleanUser.Id, rewardQuota); err != nil {
 				common.SysLog(fmt.Sprintf("failed to grant imported student reward: user_id=%d quota=%d error=%v", cleanUser.Id, rewardQuota, err))
 			} else {
 				model.RecordLog(cleanUser.Id, model.LogTypeManage, fmt.Sprintf("批量导入学员身份，赠送 %s", logger.LogQuota(rewardQuota)))

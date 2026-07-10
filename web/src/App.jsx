@@ -54,6 +54,9 @@ import Playground from './pages/Playground';
 import Subscription from './pages/Subscription';
 import OAuth2Callback from './components/auth/OAuth2Callback';
 import PersonalSetting from './components/settings/PersonalSetting';
+import InvoicePage from './pages/Invoice';
+import InvoiceAdminPage from './pages/InvoiceAdmin';
+import SettlementExportPage from './pages/SettlementExport';
 import RoutePolicyPage from './pages/RoutePolicy';
 import SupplierApplyPage from './pages/Supplier/Apply';
 import SupplierChannelPage from './pages/Supplier/Channel';
@@ -316,6 +319,36 @@ function App() {
                 <PersonalSetting />
               </Suspense>
             </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/invoice'
+          element={
+            <PrivateRoute>
+              <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+                <InvoicePage />
+              </Suspense>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/invoice-admin'
+          element={
+            <AdminRoute>
+              <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+                <InvoiceAdminPage />
+              </Suspense>
+            </AdminRoute>
+          }
+        />
+        <Route
+          path='/console/settlement-export'
+          element={
+            <AdminRoute>
+              <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+                <SettlementExportPage />
+              </Suspense>
+            </AdminRoute>
           }
         />
         <Route

@@ -20,8 +20,9 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { API, showError, showSuccess } from '../../helpers';
-import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
+
+const DEFAULT_PAGE_SIZE = 50;
 
 export const useModelsData = (options = {}) => {
   const { apiBasePath = '/api/models' } = options;
@@ -32,7 +33,7 @@ export const useModelsData = (options = {}) => {
   const [models, setModels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activePage, setActivePage] = useState(1);
-  const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [searching, setSearching] = useState(false);
   const [modelCount, setModelCount] = useState(0);
 

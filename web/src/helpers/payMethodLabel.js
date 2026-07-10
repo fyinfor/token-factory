@@ -88,3 +88,55 @@ export function getPayMethodDisplayName(payMethod, t) {
 
   return type || '-';
 }
+
+function normalizeTopupRate(usdExchangeRate) {
+  const rate = Number(usdExchangeRate);
+  return Number.isFinite(rate) && rate > 0 ? rate : 7.3;
+}
+
+function isLegacyConvertedUsdTopup(record, money) {
+  const currency = String(record?.pay_currency || '').toUpperCase();
+  const inputCurrency = String(record?.input_currency || '').toUpperCase();
+  const paymentMethod = String(record?.payment_method || '').toLowerCase();
+  const inputAmount = Number(record?.input_amount);
+  if (
+    currency !== 'USD' ||
+    inputCurrency !== 'CNY' ||
+    paymentMethod === 'stripe' ||
+    !Number.isFinite(inputAmount) ||
+    inputAmount <= 0
+  ) {
+    return false;
+  }
+  return Math.abs(money - inputAmount) <= 0.01;
+}
+
+/**
+ * 格式化充值订单的实际支付金额。
+ * 兼容旧 Yipay/Jeepay PayPal 订单：历史数据里 pay_currency=USD，但 money 仍存的是人民币金额。
+ * @param {unknown} money 后端 TopUp.money
+ * @param {object} record 后端 TopUp 行
+ * @param {number} usdExchangeRate 美元兑人民币汇率
+ * @returns {string}
+ */
+export function formatTopupPayMoney(money, record = {}, usdExchangeRate) {
+  const numericMoney = Number(money);
+  const safeMoney = Number.isFinite(numericMoney) ? numericMoney : 0;
+  const rate = normalizeTopupRate(usdExchangeRate);
+  const currency = String(record?.pay_currency || '').toUpperCase();
+
+  if (currency === 'USD') {
+    const displayMoney = isLegacyConvertedUsdTopup(record, safeMoney)
+      ? safeMoney / rate
+      : safeMoney;
+    return `$${displayMoney.toFixed(2)} USD`;
+  }
+  if (currency === 'CNY') {
+    return `¥${safeMoney.toFixed(2)}`;
+  }
+
+  if (String(record?.payment_method || '').toLowerCase() === 'stripe') {
+    return `¥${(safeMoney * rate).toFixed(2)}`;
+  }
+  return `¥${safeMoney.toFixed(2)}`;
+}

@@ -1,0 +1,178 @@
+.legal-content-editor {
+  width: 100%;
+  max-width: 100%;
+}
+
+.legal-content-editor-header {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  margin-bottom: 8px;
+}
+
+.legal-content-editor-title-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.legal-content-editor-mode-tabs {
+  position: sticky;
+  top: 12px;
+  z-index: 2;
+  margin-left: auto;
+  background: var(--semi-color-bg-0);
+}
+
+.legal-content-editor-help {
+  display: block;
+  margin-bottom: 12px;
+}
+
+.legal-content-editor-grid {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+  width: 100%;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+.legal-content-editor-panel {
+  flex: 1 1 520px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.legal-content-editor-input-panel {
+  height: 60vh;
+  min-height: 360px;
+  display: flex;
+}
+
+.legal-content-editor-preview-panel {
+  flex-basis: 420px;
+  height: 60vh;
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--semi-color-border);
+  border-radius: 6px;
+  background: var(--semi-color-bg-0);
+  padding: 12px;
+}
+
+.legal-content-editor-textarea {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  flex: 1;
+}
+
+.legal-content-editor-textarea,
+.legal-content-editor-textarea textarea,
+.legal-content-editor-textarea .semi-input-textarea {
+  scrollbar-width: thin;
+  scrollbar-color: var(--semi-color-fill-2) transparent;
+}
+
+.legal-content-editor-textarea textarea,
+.legal-content-editor-textarea .semi-input-textarea {
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+  resize: none;
+}
+
+.legal-content-editor-richtext {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.legal-content-editor-richtext .simple-rich-text-editor {
+  height: 100%;
+  min-height: 100% !important;
+}
+
+.legal-content-editor-richtext .ql-container {
+  height: calc(100% - 44px) !important;
+  min-height: 0 !important;
+}
+
+.legal-content-editor-richtext .ql-editor {
+  height: 100%;
+  min-height: 0 !important;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--semi-color-fill-2) transparent;
+}
+
+.legal-content-editor-preview-scroll {
+  flex: 1;
+  min-height: 0;
+  margin-top: 12px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--semi-color-fill-2) transparent;
+}
+
+@media (max-width: 768px) {
+  .legal-content-editor-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .legal-content-editor-mode-tabs {
+    position: static;
+    margin-left: 0;
+  }
+
+  .legal-content-editor-title-actions {
+    justify-content: space-between;
+  }
+}
+
+.legal-content-editor-textarea::-webkit-scrollbar,
+.legal-content-editor-textarea textarea::-webkit-scrollbar,
+.legal-content-editor-textarea .semi-input-textarea::-webkit-scrollbar,
+.legal-content-editor-richtext .ql-editor::-webkit-scrollbar,
+.legal-content-editor-preview-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.legal-content-editor-textarea::-webkit-scrollbar-track,
+.legal-content-editor-textarea textarea::-webkit-scrollbar-track,
+.legal-content-editor-textarea .semi-input-textarea::-webkit-scrollbar-track,
+.legal-content-editor-richtext .ql-editor::-webkit-scrollbar-track,
+.legal-content-editor-preview-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.legal-content-editor-textarea::-webkit-scrollbar-thumb,
+.legal-content-editor-textarea textarea::-webkit-scrollbar-thumb,
+.legal-content-editor-textarea .semi-input-textarea::-webkit-scrollbar-thumb,
+.legal-content-editor-richtext .ql-editor::-webkit-scrollbar-thumb,
+.legal-content-editor-preview-scroll::-webkit-scrollbar-thumb {
+  background: var(--semi-color-fill-2);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+}
+
+.legal-content-editor-textarea::-webkit-scrollbar-thumb:hover,
+.legal-content-editor-textarea textarea::-webkit-scrollbar-thumb:hover,
+.legal-content-editor-textarea
+  .semi-input-textarea::-webkit-scrollbar-thumb:hover,
+.legal-content-editor-richtext .ql-editor::-webkit-scrollbar-thumb:hover,
+.legal-content-editor-preview-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--semi-color-fill-1);
+  background-clip: content-box;
+}
