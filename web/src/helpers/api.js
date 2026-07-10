@@ -48,6 +48,33 @@ export let API = axios.create({
   },
 });
 
+/** 后端 i18n 仅支持 zh-CN / zh-TW / en；其余 UI 语言回传 zh-CN，由前端 t() 再译。 */
+function resolveAcceptLanguage() {
+  try {
+    const raw =
+      (typeof window !== 'undefined' && window.__i18n?.language) ||
+      localStorage.getItem('i18nextLng') ||
+      'zh-CN';
+    const lang = String(raw).trim();
+    if (lang.startsWith('zh-TW') || lang.startsWith('zh-tw')) return 'zh-TW';
+    if (lang.startsWith('zh')) return 'zh-CN';
+    if (lang.startsWith('en')) return 'en';
+    return 'zh-CN';
+  } catch {
+    return 'zh-CN';
+  }
+}
+
+function attachAcceptLanguageInterceptor(instance) {
+  instance.interceptors.request.use((config) => {
+    config.headers = config.headers || {};
+    config.headers['Accept-Language'] = resolveAcceptLanguage();
+    return config;
+  });
+}
+
+attachAcceptLanguageInterceptor(API);
+
 function redirectToOAuthUrl(url, options = {}) {
   const { openInNewTab = false } = options;
   const targetUrl = typeof url === 'string' ? url : url.toString();
@@ -102,6 +129,7 @@ export function updateAPI() {
   });
 
   patchAPIInstance(API);
+  attachAcceptLanguageInterceptor(API);
 }
 
 API.interceptors.response.use(

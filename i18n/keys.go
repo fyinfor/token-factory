@@ -105,6 +105,22 @@ const (
 	MsgUserTelegramIdEmpty           = "user.telegram_id_empty"
 	MsgUserTelegramNotBound          = "user.telegram_not_bound"
 	MsgUserLinuxDOIdEmpty            = "user.linux_do_id_empty"
+	// SMS login / register related
+	MsgUserSMSLoginDisabled          = "user.sms_login_disabled"
+	MsgUserSMSNotEnabled             = "user.sms_not_enabled"
+	MsgUserPhoneInvalid              = "user.phone_invalid"
+	MsgUserPhoneInvalidLogin         = "user.phone_invalid_login"
+	MsgUserPhoneIntlLoginDisabled    = "user.phone_intl_login_disabled"
+	MsgUserPhoneRestricted           = "user.phone_restricted"
+	MsgUserPhoneNotRegistered        = "user.phone_not_registered"
+	MsgUserPhoneBlacklisted          = "user.phone_blacklisted"
+	MsgUserPhoneTaken                = "user.phone_taken"
+	MsgUserSMSCodeRequired           = "user.sms_code_required"
+	MsgUserSMSCodeInvalid            = "user.sms_code_invalid"
+	MsgUserSMSCodeSendFailed         = "user.sms_code_send_failed"
+	MsgUserSMSCodeStoreFailed        = "user.sms_code_store_failed"
+	MsgUserAccountDisabled           = "user.account_disabled"
+	MsgUserRegisterClosed            = "user.register_closed"
 )
 
 // Quota related messages
