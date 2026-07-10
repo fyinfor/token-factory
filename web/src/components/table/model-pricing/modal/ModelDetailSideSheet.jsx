@@ -17,18 +17,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useState, useEffect } from 'react';
-import { SideSheet, Typography, Button } from '@douyinfe/semi-ui';
+import React, { useEffect, useState } from 'react';
+import { Button, SideSheet, Tabs, Typography } from '@douyinfe/semi-ui';
 import { IconClose } from '@douyinfe/semi-icons';
 
 import { API } from '../../../../helpers';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import ModelHeader from './components/ModelHeader';
+import ApiDocsSidePanel from './components/ApiDocsSidePanel';
 import ModelBasicInfo from './components/ModelBasicInfo';
-import ModelEndpoints from './components/ModelEndpoints';
-import ModelPricingTable from './components/ModelPricingTable';
-import ModelChannelList from './components/ModelChannelList';
-import ModelPerfPanel from './components/ModelPerfPanel';
+import ModelChannelWorkspace from './components/ModelChannelWorkspace';
 
 const { Text } = Typography;
 
@@ -37,17 +35,12 @@ const ModelDetailSideSheet = ({
   onClose,
   modelData,
   groupRatio,
-  groupModelPrice,
-  groupModelRatio,
   currency,
   siteDisplayType,
   tokenUnit,
   displayPrice,
-  showRatio,
-  usableGroup,
   vendorsMap,
   endpointMap,
-  autoGroups,
   t,
   selectedGroup,
   blurPricing = false,
@@ -67,10 +60,14 @@ const ModelDetailSideSheet = ({
   perfMetricsMap = {},
 }) => {
   const isMobile = useIsMobile();
-  /**
-   * channel_id -> 单测/运营展示 DTO（打开详情时按需拉取，不并入 /pricing）
-   */
+  const [activeSection, setActiveSection] = useState('general');
   const [channelMtrMap, setChannelMtrMap] = useState({});
+
+  useEffect(() => {
+    if (!visible) {
+      setActiveSection('general');
+    }
+  }, [visible, modelData?.model_name]);
 
   useEffect(() => {
     if (
@@ -81,58 +78,88 @@ const ModelDetailSideSheet = ({
       setChannelMtrMap({});
       return;
     }
+
     const ids = modelData.channel_list
-      .map((c) => c.channel_id)
+      .map((channel) => channel.channel_id)
       .filter((id) => id != null && id !== '');
     if (ids.length === 0) {
       setChannelMtrMap({});
       return;
     }
+
     let cancelled = false;
     const params = new URLSearchParams();
     params.set('model_name', modelData.model_name);
     params.set('channel_ids', ids.join(','));
+
     (async () => {
       try {
         const res = await API.get(
           `/api/channel/model-test-results?${params.toString()}`,
         );
         const { success, data } = res.data;
-        if (!success || cancelled) {
-          return;
-        }
-        const m = {};
+        if (!success || cancelled) return;
+
+        const metrics = {};
         (data || []).forEach((row) => {
-          m[String(row.channel_id)] = row;
+          metrics[String(row.channel_id)] = row;
         });
         if (!cancelled) {
-          setChannelMtrMap(m);
+          setChannelMtrMap(metrics);
         }
-      } catch (e) {
+      } catch (error) {
         if (!cancelled) {
           setChannelMtrMap({});
         }
       }
     })();
+
     return () => {
       cancelled = true;
     };
   }, [visible, modelData?.model_name, modelData?.channel_list]);
 
+  const channelProps = {
+    modelData,
+    channelMtrMap,
+    displayPrice,
+    currency,
+    siteDisplayType,
+    tokenUnit,
+    t,
+    selectedGroup,
+    groupRatio,
+    blurPricing,
+    showCostPrice,
+    channelModelRatioMap,
+    channelModelPriceMap,
+    channelCompletionRatioMap,
+    channelCacheRatioMap,
+    channelCreateCacheRatioMap,
+    channelImageRatioMap,
+    channelImagePriceMap,
+    channelAudioRatioMap,
+    channelAudioCompletionRatioMap,
+    channelVideoRatioMap,
+    channelVideoCompletionRatioMap,
+    channelVideoPriceMap,
+  };
+
   return (
     <SideSheet
+      className='model-detail-sheet'
       placement='right'
       title={
         <ModelHeader modelData={modelData} vendorsMap={vendorsMap} t={t} />
       }
       bodyStyle={{
-        padding: '0',
+        padding: 0,
         display: 'flex',
         flexDirection: 'column',
-        borderBottom: '1px solid var(--semi-color-border)',
+        overflow: 'hidden',
       }}
       visible={visible}
-      width={isMobile ? '100%' : 600}
+      width={isMobile ? '100%' : 800}
       closeIcon={
         <Button
           className='semi-button-tertiary semi-button-size-small semi-button-borderless'
@@ -144,72 +171,47 @@ const ModelDetailSideSheet = ({
       }
       onCancel={onClose}
     >
-      <div className='p-2 flex flex-col gap-[5px]'>
-        {!modelData && (
-          <div className='flex justify-center items-center py-10'>
-            <Text type='secondary'>{t('加载中...')}</Text>
-          </div>
-        )}
-        {modelData && (
-          <>
-            <ModelBasicInfo
-              modelData={modelData}
-              vendorsMap={vendorsMap}
-              t={t}
-            />
-            <ModelPerfPanel
-              modelName={modelData.model_name}
+      {!modelData ? (
+        <div className='flex flex-1 items-center justify-center py-10'>
+          <Text type='secondary'>{t('加载中...')}</Text>
+        </div>
+      ) : (
+        <Tabs
+          activeKey={activeSection}
+          onChange={setActiveSection}
+          type='button'
+          className='model-detail-tabs flex min-h-0 flex-1 flex-col'
+          contentStyle={{ minHeight: 0, flex: 1, overflow: 'hidden' }}
+        >
+          <Tabs.TabPane tab={t('通用与渠道')} itemKey='general'>
+            <ModelChannelWorkspace
+              {...channelProps}
+              endpointMap={endpointMap}
               perfSummary={perfMetricsMap[modelData.model_name]}
+            />
+          </Tabs.TabPane>
+          <Tabs.TabPane tab={t('基本信息')} itemKey='basic'>
+            <div className='model-basic-content h-full overflow-y-auto p-3'>
+              <ModelBasicInfo
+                modelData={modelData}
+                vendorsMap={vendorsMap}
+                t={t}
+              />
+            </div>
+          </Tabs.TabPane>
+          <Tabs.TabPane tab={t('文档')} itemKey='docs'>
+            <ApiDocsSidePanel
+              visible
+              embedded
+              onClose={() => setActiveSection('general')}
+              modelName={modelData.model_name}
+              docIntroduction={modelData.doc_introduction}
+              apiDocs={modelData.api_docs}
               t={t}
             />
-            <ModelEndpoints
-              modelData={modelData}
-              endpointMap={endpointMap}
-              t={t}
-            />
-            <ModelChannelList
-              modelData={modelData}
-              channelMtrMap={channelMtrMap}
-              endpointMap={endpointMap}
-              displayPrice={displayPrice}
-              currency={currency}
-              siteDisplayType={siteDisplayType}
-              tokenUnit={tokenUnit}
-              t={t}
-              selectedGroup={selectedGroup}
-              groupRatio={groupRatio}
-              blurPricing={blurPricing}
-              showCostPrice={showCostPrice}
-              channelModelRatioMap={channelModelRatioMap}
-              channelModelPriceMap={channelModelPriceMap}
-              channelCompletionRatioMap={channelCompletionRatioMap}
-              channelCacheRatioMap={channelCacheRatioMap}
-              channelCreateCacheRatioMap={channelCreateCacheRatioMap}
-              channelImageRatioMap={channelImageRatioMap}
-              channelImagePriceMap={channelImagePriceMap}
-              channelAudioRatioMap={channelAudioRatioMap}
-              channelAudioCompletionRatioMap={channelAudioCompletionRatioMap}
-              channelVideoRatioMap={channelVideoRatioMap}
-              channelVideoCompletionRatioMap={channelVideoCompletionRatioMap}
-              channelVideoPriceMap={channelVideoPriceMap}
-            />
-            {/* <ModelPricingTable
-              modelData={modelData}
-              groupRatio={groupRatio}
-              groupModelPrice={groupModelPrice}
-              groupModelRatio={groupModelRatio}
-              currency={currency}
-              siteDisplayType={siteDisplayType}
-              tokenUnit={tokenUnit}
-              displayPrice={displayPrice}
-              showRatio={showRatio}
-              usableGroup={usableGroup}
-              autoGroups={autoGroups}
-              t={t}
-            /> */}
-          </>
-        )}
-      </div>
+          </Tabs.TabPane>
+        </Tabs>
+      )}
     </SideSheet>
   );
 };

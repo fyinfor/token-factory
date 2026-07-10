@@ -5,6 +5,16 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as
 published by the Free Software Foundation, either version 3 of the
 License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
 */
 
 import { API } from './api';
@@ -93,13 +103,34 @@ export async function fetchPerfMetricsSummary(hours = 24) {
   return map;
 }
 
-export async function fetchPerfMetrics(modelName, hours = 24, group = '') {
+export async function fetchPerfMetrics(
+  modelName,
+  hours = 24,
+  group = '',
+  channelId,
+) {
   const params = { model: modelName, hours };
   if (group) params.group = group;
+  if (channelId) params.channel_id = channelId;
   const res = await API.get('/api/perf_metrics', { params });
   const { success, data, message } = res.data || {};
   if (!success) {
     throw new Error(message || 'failed to load perf metrics');
   }
   return data;
+}
+
+export function perfQueryResultToSummary(result) {
+  const groups = Array.isArray(result?.groups) ? result.groups : [];
+  if (groups.length === 0) return null;
+  const primary = groups[0];
+  return {
+    model_name: result.model_name,
+    avg_latency_ms: primary.avg_latency_ms,
+    avg_ttft_ms: primary.avg_ttft_ms,
+    success_rate: primary.success_rate,
+    avg_tps: primary.avg_tps,
+    cache_hit_rate: primary.cache_hit_rate,
+    hourly_series: primary.series || [],
+  };
 }

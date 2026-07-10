@@ -111,8 +111,8 @@ func settlementHeader(zh, en string) func(string) string {
 }
 
 func settlementMoneyHeader(zh, en string) func(string) string {
-	currency := model.SettlementCurrencyLabel()
 	return func(lang string) string {
+		currency := model.SettlementCurrencyLabel()
 		if lang == "en" {
 			return fmt.Sprintf("%s (%s)", en, currency)
 		}

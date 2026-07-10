@@ -1457,7 +1457,11 @@ const PricingCardView = ({
       videoFlat: [],
     };
 
-    model.channel_list.forEach((ch) => {
+    const displayChannels = homeCardMode
+      ? model.channel_list.slice(0, 1)
+      : model.channel_list;
+
+    displayChannels.forEach((ch) => {
       const cid = ch.channel_id;
       const mname = model.model_name;
 

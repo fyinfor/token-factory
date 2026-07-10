@@ -82,6 +82,18 @@ func TestParseSettlementDiscountSnapshotLegacy(t *testing.T) {
 	}
 }
 
+func TestFormatSettlementMoneyUSD(t *testing.T) {
+	oldType := operation_setting.GetGeneralSetting().QuotaDisplayType
+	defer func() {
+		operation_setting.GetGeneralSetting().QuotaDisplayType = oldType
+	}()
+	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeUSD
+	got := FormatSettlementMoney(11.73)
+	if got != "$11.73" {
+		t.Fatalf("expected $11.73, got %s", got)
+	}
+}
+
 func TestFormatSettlementMoneyCNY(t *testing.T) {
 	oldType := operation_setting.GetGeneralSetting().QuotaDisplayType
 	oldRate := operation_setting.USDExchangeRate
