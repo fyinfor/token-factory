@@ -82,6 +82,14 @@ type TopUpConsumeAttribution struct {
 
 func (TopUpConsumeAttribution) TableName() string { return "topup_consume_attributions" }
 
+// invoiceTopUpIDColumn 返回充值订单外键列名（PostgreSQL 为 top_up_id，MySQL 为 topup_id）。
+func invoiceTopUpIDColumn() string {
+	if common.UsingPostgreSQL {
+		return "top_up_id"
+	}
+	return "topup_id"
+}
+
 // InvoiceEligibleOrder 待开票订单列表项。
 type InvoiceEligibleOrder struct {
 	TopUpId          int     `json:"topup_id"`
@@ -170,7 +178,7 @@ func getPendingInvoiceItemsByTopUp(topUpID int) ([]InvoiceRequestItem, error) {
 	err := DB.Table("invoice_request_items").
 		Select("invoice_request_items.*").
 		Joins("JOIN invoice_requests ON invoice_requests.id = invoice_request_items.invoice_request_id").
-		Where("invoice_request_items.topup_id = ? AND invoice_requests.status IN ?", topUpID, []string{
+		Where("invoice_request_items."+invoiceTopUpIDColumn()+" = ? AND invoice_requests.status IN ?", topUpID, []string{
 			InvoiceRequestStatusPending,
 			InvoiceRequestStatusProcessing,
 		}).
@@ -275,7 +283,7 @@ func AttributeConsumeQuotaToTopUps(userID, consumeQuota int) error {
 				continue
 			}
 			var attr TopUpConsumeAttribution
-			err := tx.Where("user_id = ? AND topup_id = ?", userID, topUp.Id).First(&attr).Error
+			err := tx.Where("user_id = ? AND "+invoiceTopUpIDColumn()+" = ?", userID, topUp.Id).First(&attr).Error
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				attr = TopUpConsumeAttribution{UserId: userID, TopUpId: topUp.Id}
 			} else if err != nil {

@@ -87,6 +87,11 @@ func batchUpdate() {
 				}
 			case BatchUpdateTypeUsedQuota:
 				updateUserUsedQuota(key, value)
+				if value > 0 {
+					if attrErr := AttributeConsumeQuotaToTopUps(key, value); attrErr != nil {
+						common.SysLog("failed to attribute consume quota to topups (batch): " + attrErr.Error())
+					}
+				}
 			case BatchUpdateTypeRequestCount:
 				updateUserRequestCount(key, value)
 			case BatchUpdateTypeChannelUsedQuota:
