@@ -58,6 +58,7 @@ function TierPriceMatrix({
   rows,
   gridType = 'image',
   accent = 'blue',
+  variant = 'default',
   t,
   zeroDiscountLabel = '0%',
 }) {
@@ -78,63 +79,77 @@ function TierPriceMatrix({
         ? 'rgba(52, 199, 89, 0.12)'
         : 'rgba(0, 122, 255, 0.12)';
 
+  const isGlassTable = variant === 'glass';
+
   return (
     <div
-      className='rounded-2xl overflow-hidden'
-      style={{
-        backgroundColor: 'var(--semi-color-bg-1)',
-        border: '1px solid var(--semi-color-border)',
-        boxShadow: '0 12px 26px rgba(15, 23, 42, 0.06)',
-        backdropFilter: 'saturate(180%) blur(18px)',
-      }}
+      className={
+        isGlassTable
+          ? 'tier-price-glass-table overflow-hidden rounded-lg'
+          : 'overflow-hidden rounded-2xl'
+      }
+      style={
+        isGlassTable
+          ? undefined
+          : {
+              backgroundColor: 'var(--semi-color-bg-1)',
+              border: '1px solid var(--semi-color-border)',
+              boxShadow: '0 12px 26px rgba(15, 23, 42, 0.06)',
+              backdropFilter: 'saturate(180%) blur(18px)',
+            }
+      }
     >
       <div
-        className='flex items-center justify-between gap-2 px-3 py-2.5'
-        style={{ backgroundColor: 'var(--semi-color-fill-0)' }}
+        className={
+          isGlassTable
+            ? 'tier-price-glass-title flex items-center justify-between gap-2 px-3 py-2'
+            : 'flex items-center justify-between gap-2 px-3 py-2.5'
+        }
+        style={
+          isGlassTable
+            ? undefined
+            : { backgroundColor: 'var(--semi-color-fill-0)' }
+        }
       >
-        <div className='flex items-center gap-2 min-w-0'>
-          <span
-            className='inline-flex items-center justify-center rounded-full shrink-0'
-            style={{
-              width: 20,
-              height: 20,
-              backgroundColor: accentBg,
-              color: accentColor,
-            }}
-          >
-            <span
-              className='rounded-full'
-              style={{
-                width: 7,
-                height: 7,
-                backgroundColor: accentColor,
-              }}
-            />
-          </span>
-          <Text strong size='small' className='truncate'>
-            {title}
-          </Text>
-        </div>
+        <Text strong size='small' className='min-w-0 truncate'>
+          {title}
+        </Text>
         {count != null ? (
           <span
-            className='text-[11px] font-semibold shrink-0'
-            style={{
-              color: accentColor,
-              backgroundColor: accentBg,
-              borderRadius: 999,
-              padding: '2px 8px',
-            }}
+            className={
+              isGlassTable
+                ? 'tier-price-glass-count shrink-0 text-[11px] font-medium'
+                : 'shrink-0 text-[11px] font-semibold'
+            }
+            style={
+              isGlassTable
+                ? undefined
+                : {
+                    color: accentColor,
+                    backgroundColor: accentBg,
+                    borderRadius: 999,
+                    padding: '2px 8px',
+                  }
+            }
           >
             {count} {countLabel || t('档')}
           </span>
         ) : null}
       </div>
       <div
-        className='grid items-center gap-2 mx-2 mt-1 mb-1 px-2 py-1.5 text-[11px] font-semibold rounded-full'
+        className={
+          isGlassTable
+            ? 'tier-price-glass-header grid items-center gap-2 px-3 py-2 text-[11px] font-semibold'
+            : 'mx-2 mb-1 mt-1 grid items-center gap-2 rounded-full px-2 py-1.5 text-[11px] font-semibold'
+        }
         style={{
           gridTemplateColumns,
-          backgroundColor: 'var(--semi-color-fill-0)',
-          color: 'var(--semi-color-text-2)',
+          ...(isGlassTable
+            ? { color: 'var(--semi-color-text-2)' }
+            : {
+                backgroundColor: 'var(--semi-color-fill-0)',
+                color: 'var(--semi-color-text-2)',
+              }),
         }}
       >
         {columns.map((column) => (
@@ -152,11 +167,16 @@ function TierPriceMatrix({
       {rows.map((row, idx) => (
         <div
           key={row.key}
-          className='grid items-center gap-2 mx-2 px-2 py-2.5 text-xs'
+          className={
+            isGlassTable
+              ? 'tier-price-glass-row grid items-center gap-2 px-3 py-2.5 text-xs'
+              : 'mx-2 grid items-center gap-2 px-2 py-2.5 text-xs'
+          }
           style={{
             gridTemplateColumns,
-            borderTop:
-              idx === 0 ? 'none' : '1px solid var(--semi-color-border)',
+            ...(isGlassTable || idx === 0
+              ? undefined
+              : { borderTop: '1px solid var(--semi-color-border)' }),
           }}
         >
           {columns.map((column) => {
