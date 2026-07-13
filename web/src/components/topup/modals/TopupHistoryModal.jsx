@@ -40,7 +40,7 @@ import {
   timestamp2string,
   getPayMethodDisplayName,
   formatTopupPayMoney,
-  renderQuota,
+  formatTopupCreditedAmount,
 } from '../../../helpers';
 import { isAdmin } from '../../../helpers/utils';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
@@ -278,9 +278,7 @@ const TopupHistoryModal = ({ visible, onCancel, t }) => {
             <span className='flex items-center gap-1'>
               <Coins size={16} />
               <Text>
-                {Number(record?.quota_to_add || 0) > 0
-                  ? renderQuota(record.quota_to_add)
-                  : amount}
+                {formatTopupCreditedAmount(record?.money, record, usdExchangeRate)}
               </Text>
             </span>
           );

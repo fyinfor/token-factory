@@ -140,3 +140,14 @@ export function formatTopupPayMoney(money, record = {}, usdExchangeRate) {
   }
   return `¥${safeMoney.toFixed(2)}`;
 }
+
+/**
+ * 格式化充值账单「到账额度」展示，与 formatTopupPayMoney 口径一致（按实付/输入金额，不从 quota 反算）。
+ * @param {unknown} money 后端 TopUp.money
+ * @param {object} record 后端 TopUp 行
+ * @param {number} usdExchangeRate 美元兑人民币汇率
+ * @returns {string}
+ */
+export function formatTopupCreditedAmount(money, record = {}, usdExchangeRate) {
+  return formatTopupPayMoney(money, record, usdExchangeRate);
+}
