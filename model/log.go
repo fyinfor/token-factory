@@ -376,8 +376,8 @@ func formatChannelDisplay(routeSlug string, supplierType string, channelID int) 
 	return routeSlug + "_" + supplierType
 }
 
-// userFacingLogRouteSlug 返回控制台日志面向用户的路由后缀（u 开头的 route_slug）。
-// 缺失或非 u 前缀时回退为渠道默认后缀 u+base62(id)，不向普通用户暴露渠道 ID。
+// userFacingLogRouteSlug 返回控制台日志面向用户的路由后缀。
+// 优先展示渠道当前有效 route_slug（含自定义如 tx）；缺失或非法时回退为默认 u+base62(id)。
 func userFacingLogRouteSlug(routeSlug string, channelID int) string {
 	if channelID <= 0 {
 		return ""
@@ -387,7 +387,7 @@ func userFacingLogRouteSlug(routeSlug string, channelID int) string {
 	if slug == "" {
 		return defaultSlug
 	}
-	if strings.HasPrefix(slug, "u") {
+	if IsValidRouteSlug(slug) {
 		return slug
 	}
 	return defaultSlug
