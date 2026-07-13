@@ -158,6 +158,16 @@ func UpdateMaterialAssetGroupType(id int, groupType string) error {
 		Updates(map[string]interface{}{"group_type": groupType, "updated_at": time.Now().Unix()}).Error
 }
 
+// UpdateMaterialAssetName 更新素材名称（UpdateAsset 本地同步）。
+func UpdateMaterialAssetName(id int, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil
+	}
+	return DB.Model(&MaterialAsset{}).Where("id = ?", id).
+		Updates(map[string]interface{}{"name": name, "updated_at": time.Now().Unix()}).Error
+}
+
 // GetMaterialAssetByAssetIdAndUser 按上游 asset_id + user_id 查询素材，不存在时返回 (nil, nil)。
 func GetMaterialAssetByAssetIdAndUser(assetId string, userId int) (*MaterialAsset, error) {
 	var asset MaterialAsset
@@ -309,6 +319,19 @@ func CreateVisualSession(session *MaterialVisualSession) error {
 func GetVisualSessionByIdAndUser(id int, userId int) (*MaterialVisualSession, error) {
 	var session MaterialVisualSession
 	err := DB.Where("id = ? AND user_id = ?", id, userId).First(&session).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &session, nil
+}
+
+// GetVisualSessionByBytedTokenAndUser 按 BytedToken + 用户 ID 查询会话，校验归属。
+func GetVisualSessionByBytedTokenAndUser(bytedToken string, userId int) (*MaterialVisualSession, error) {
+	var session MaterialVisualSession
+	err := DB.Where("byted_token = ? AND user_id = ?", bytedToken, userId).First(&session).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			return nil, nil

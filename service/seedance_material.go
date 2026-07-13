@@ -24,6 +24,11 @@ const (
 	materialActionDeleteAssetGroup            = "DeleteAssetGroup"
 	materialActionCreateVisualValidateSession = "CreateVisualValidateSession"
 	materialActionGetVisualValidateResult     = "GetVisualValidateResult"
+	materialActionUpdateAssetGroup            = "UpdateAssetGroup"
+	materialActionUpdateAsset                 = "UpdateAsset"
+
+	materialRequestMaxRetries = 3
+	materialRequestRetryDelay = 500 * time.Millisecond
 
 	// 素材资产类型枚举（AssetType，与上游接口严格对齐）：图片 / 视频 / 音频。
 	MaterialAssetTypeImage = "Image"
@@ -89,18 +94,95 @@ type MaterialAssetResult struct {
 	UpdateTime  string `json:"UpdateTime"`
 }
 
-// doMaterialRequest 向素材库 API 发送 POST JSON 请求并解析通用响应。
+// materialResultErrorBody Result 内嵌业务错误结构（HTTP 200 时仍可能携带 Error）。
+type materialResultErrorBody struct {
+	Error *struct {
+		Code    string `json:"Code"`
+		Message string `json:"Message"`
+	} `json:"Error"`
+}
+
+// MaterialUpstreamError 上游素材库业务错误，便于上层区分可重试与不可重试场景。
+type MaterialUpstreamError struct {
+	Code    string
+	Message string
+}
+
+func (e *MaterialUpstreamError) Error() string {
+	if e == nil {
+		return "素材库接口错误"
+	}
+	if strings.TrimSpace(e.Message) != "" {
+		return e.Message
+	}
+	if strings.TrimSpace(e.Code) != "" {
+		return e.Code
+	}
+	return "素材库接口错误"
+}
+
+func isRetryableMaterialRequestErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	var upErr *MaterialUpstreamError
+	if errors.As(err, &upErr) {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	for _, kw := range []string{"timeout", "connection reset", "connection refused", "eof", "temporary", "503", "502", "504"} {
+		if strings.Contains(msg, kw) {
+			return true
+		}
+	}
+	return false
+}
+
+func parseMaterialResultError(raw json.RawMessage) error {
+	if len(raw) == 0 {
+		return nil
+	}
+	var body materialResultErrorBody
+	if err := common.Unmarshal(raw, &body); err != nil {
+		return nil
+	}
+	if body.Error != nil && strings.TrimSpace(body.Error.Message) != "" {
+		return &MaterialUpstreamError{Code: body.Error.Code, Message: body.Error.Message}
+	}
+	return nil
+}
+
+// doMaterialRequest 向素材库 API 发送 POST JSON 请求并解析通用响应（含 transient 错误重试）。
 func doMaterialRequest(action string, payload any, result any) error {
+	var lastErr error
+	for attempt := 0; attempt < materialRequestMaxRetries; attempt++ {
+		lastErr = doMaterialRequestOnce(action, payload, result)
+		if lastErr == nil {
+			return nil
+		}
+		if !isRetryableMaterialRequestErr(lastErr) || attempt >= materialRequestMaxRetries-1 {
+			return lastErr
+		}
+		common.SysLog(fmt.Sprintf("[material-upstream] action=%s retry=%d err=%v", action, attempt+1, lastErr))
+		time.Sleep(materialRequestRetryDelay)
+	}
+	return lastErr
+}
+
+// doMaterialRequestOnce 单次向上游素材库发起 POST JSON 请求。
+func doMaterialRequestOnce(action string, payload any, result any) error {
 	base := operation_setting.GetMaterialAPIBaseURL()
 	if base == "" {
 		return errors.New("素材库 API 基础地址未配置")
 	}
-	reqURL := fmt.Sprintf("%s/api/material?Action=%s", base, action)
+	reqURL := fmt.Sprintf("%s/api/material?Action=%s", strings.TrimRight(base, "/"), action)
 
 	body, err := common.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("序列化素材库请求失败: %w", err)
 	}
+
+	common.SysLog(fmt.Sprintf("[material-upstream] action=%s request=%s", action, truncateMaterialBody(body)))
 
 	req, err := http.NewRequest(http.MethodPost, reqURL, bytes.NewReader(body))
 	if err != nil {
@@ -132,13 +214,17 @@ func doMaterialRequest(action string, payload any, result any) error {
 		return fmt.Errorf("解析素材库响应失败: %w", err)
 	}
 	if wrapper.ResponseError != nil && strings.TrimSpace(wrapper.ResponseError.Message) != "" {
-		return fmt.Errorf("素材库接口错误: %s", wrapper.ResponseError.Message)
+		return &MaterialUpstreamError{Code: wrapper.ResponseError.Code, Message: wrapper.ResponseError.Message}
+	}
+	if err := parseMaterialResultError(wrapper.Result); err != nil {
+		return err
 	}
 	if result != nil && len(wrapper.Result) > 0 {
 		if err := common.Unmarshal(wrapper.Result, result); err != nil {
 			return fmt.Errorf("解析素材库返回结果失败: %w", err)
 		}
 	}
+	common.SysLog(fmt.Sprintf("[material-upstream] action=%s success", action))
 	return nil
 }
 
@@ -412,4 +498,45 @@ func MaterialGetVisualValidateResult(bytedToken string) (*VisualValidateResult, 
 	}
 	// 无 GroupId 也无 Error：视为认证中。
 	return &VisualValidateResult{Status: visualValidatePending}, nil
+}
+
+// MaterialUpdateAssetGroup 更新素材组基础信息（UpdateAssetGroup）。
+// 入参 Id 必填；Name/Description 选填，至少传一项。
+func MaterialUpdateAssetGroup(groupId string, name string, description string) (string, error) {
+	payload := map[string]string{"Id": groupId}
+	if name != "" {
+		payload["Name"] = name
+	}
+	if description != "" {
+		payload["Description"] = description
+	}
+	var result struct {
+		Id string `json:"Id"`
+	}
+	if err := doMaterialRequest(materialActionUpdateAssetGroup, payload, &result); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(result.Id) == "" {
+		return groupId, nil
+	}
+	return result.Id, nil
+}
+
+// MaterialUpdateAsset 更新素材信息（UpdateAsset）。
+// 入参 Id 必填；Name 选填。
+func MaterialUpdateAsset(assetId string, name string) (string, error) {
+	payload := map[string]string{"Id": assetId}
+	if name != "" {
+		payload["Name"] = name
+	}
+	var result struct {
+		Id string `json:"Id"`
+	}
+	if err := doMaterialRequest(materialActionUpdateAsset, payload, &result); err != nil {
+		return "", err
+	}
+	if strings.TrimSpace(result.Id) == "" {
+		return assetId, nil
+	}
+	return result.Id, nil
 }

@@ -43,6 +43,11 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/home_page_content", controller.GetHomePageContent)
 		apiRouter.GET("/pricing", middleware.TryUserAuth(), controller.GetPricing)
 		apiRouter.POST("/price_sync", middleware.CriticalRateLimit(), controller.PriceSync)
+
+		// 终端用户素材库 Action 网关：POST /api/material?Action=xxx（Token 鉴权）。
+		// 与 Web 控制台 REST 路由（UserAuth）及上游 tokenspace 内部调用（seedance_material）三层隔离。
+		apiRouter.POST("/material", middleware.TokenAuth(), middleware.CriticalRateLimit(), controller.HandleMaterialAction)
+
 		apiRouter.GET("/verification", middleware.EmailVerificationRateLimit(), middleware.TurnstileCheck(), controller.SendEmailVerification)
 		apiRouter.GET("/sms_verification", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.SendSMSVerification)
 		apiRouter.GET("/reset_password", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.SendPasswordResetEmail)
