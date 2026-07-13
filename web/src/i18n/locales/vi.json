@@ -5819,7 +5819,8 @@
         "邮箱地址已被占用": "Địa chỉ email đã được sử dụng",
         "新用户注册已关闭": "Đăng ký người dùng mới đã đóng",
         "密码长度不得小于 8 位！": "Mật khẩu phải có ít nhất 8 ký tự!",
-        "发送失败，请稍后重试": "Gửi thất bại, vui lòng thử lại sau"
+        "发送失败，请稍后重试": "Gửi thất bại, vui lòng thử lại sau",
+        "控制 /console 首页的模型运行性能概览卡片是否显示": "Controls whether the model runtime overview card is shown on the /console homepage"
     },
     "广告按钮文案（英文）": "Button label (English)",
     "广告标题高亮词（英文）": "Title highlight (English)",

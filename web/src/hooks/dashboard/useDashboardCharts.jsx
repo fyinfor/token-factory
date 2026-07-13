@@ -52,6 +52,7 @@ export const useDashboardCharts = (
   // ========== 图表规格状态 ==========
   const [spec_pie, setSpecPie] = useState({
     type: 'pie',
+    background: 'transparent',
     data: [
       {
         id: 'id0',
@@ -70,12 +71,12 @@ export const useDashboardCharts = (
       state: {
         hover: {
           outerRadius: 0.85,
-          stroke: '#000',
+          stroke: 'rgba(203, 213, 225, 0.72)',
           lineWidth: 1,
         },
         selected: {
           outerRadius: 0.85,
-          stroke: '#000',
+          stroke: 'rgba(203, 213, 225, 0.72)',
           lineWidth: 1,
         },
       },
@@ -109,6 +110,7 @@ export const useDashboardCharts = (
 
   const [spec_line, setSpecLine] = useState({
     type: 'bar',
+    background: 'transparent',
     data: [
       {
         id: 'barData',
@@ -131,7 +133,7 @@ export const useDashboardCharts = (
     bar: {
       state: {
         hover: {
-          stroke: '#000',
+          stroke: 'rgba(203, 213, 225, 0.72)',
           lineWidth: 1,
         },
       },
@@ -141,7 +143,8 @@ export const useDashboardCharts = (
         content: [
           {
             key: (datum) => datum['Model'],
-            value: (datum) => renderQuotaWithAmount(datum['rawDisplayAmount'] || 0),
+            value: (datum) =>
+              renderQuotaWithAmount(datum['rawDisplayAmount'] || 0),
           },
         ],
       },
@@ -184,6 +187,7 @@ export const useDashboardCharts = (
   // 模型消耗趋势折线图
   const [spec_model_line, setSpecModelLine] = useState({
     type: 'line',
+    background: 'transparent',
     data: [
       {
         id: 'lineData',
@@ -220,6 +224,7 @@ export const useDashboardCharts = (
   // 模型调用次数排行柱状图
   const [spec_rank_bar, setSpecRankBar] = useState({
     type: 'bar',
+    background: 'transparent',
     data: [
       {
         id: 'rankData',
@@ -241,7 +246,7 @@ export const useDashboardCharts = (
     bar: {
       state: {
         hover: {
-          stroke: '#000',
+          stroke: 'rgba(203, 213, 225, 0.72)',
           lineWidth: 1,
         },
       },

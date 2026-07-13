@@ -18,9 +18,16 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import { Card, Tabs, TabPane } from '@douyinfe/semi-ui';
+import { Button, Card } from '@douyinfe/semi-ui';
 import { PieChart } from 'lucide-react';
 import { VChart } from '@visactor/react-vchart';
+
+const CHART_TABS = [
+  { key: '1', label: '消耗分布' },
+  { key: '2', label: '消耗趋势' },
+  { key: '3', label: '调用次数分布' },
+  { key: '4', label: '调用次数排行' },
+];
 
 const ChartsPanel = ({
   activeChartTab,
@@ -38,28 +45,34 @@ const ChartsPanel = ({
   return (
     <Card
       {...CARD_PROPS}
-      className={`!rounded-2xl ${hasApiInfoPanel ? 'lg:col-span-3' : ''}`}
+      className={`dashboard-glass-card dashboard-glass-card--chart !rounded-3xl ${hasApiInfoPanel ? 'lg:col-span-3' : ''}`}
       title={
         <div className='flex flex-col lg:flex-row lg:items-center lg:justify-between w-full gap-3'>
           <div className={FLEX_CENTER_GAP2}>
             <PieChart size={16} />
             {t('模型数据分析')}
           </div>
-          <Tabs
-            type='slash'
-            activeKey={activeChartTab}
-            onChange={setActiveChartTab}
-          >
-            <TabPane tab={<span>{t('消耗分布')}</span>} itemKey='1' />
-            <TabPane tab={<span>{t('消耗趋势')}</span>} itemKey='2' />
-            <TabPane tab={<span>{t('调用次数分布')}</span>} itemKey='3' />
-            <TabPane tab={<span>{t('调用次数排行')}</span>} itemKey='4' />
-          </Tabs>
+          <div className='dashboard-chart-switcher' role='tablist'>
+            {CHART_TABS.map((tab) => (
+              <Button
+                key={tab.key}
+                role='tab'
+                aria-selected={activeChartTab === tab.key}
+                size='small'
+                theme={activeChartTab === tab.key ? 'solid' : 'borderless'}
+                type={activeChartTab === tab.key ? 'primary' : 'tertiary'}
+                className='dashboard-chart-switcher__button'
+                onClick={() => setActiveChartTab(tab.key)}
+              >
+                {t(tab.label)}
+              </Button>
+            ))}
+          </div>
         </div>
       }
       bodyStyle={{ padding: 0 }}
     >
-      <div className='h-96 p-2'>
+      <div className='dashboard-chart-canvas h-96 p-2'>
         {activeChartTab === '1' && (
           <VChart spec={spec_line} option={CHART_CONFIG} />
         )}

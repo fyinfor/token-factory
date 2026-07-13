@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useContext, useEffect } from 'react';
+import './dashboard-glass.css';
 import { getRelativeTime, userIsDistributorUser } from '../../helpers';
 import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
@@ -142,7 +143,7 @@ const Dashboard = () => {
   }, []);
 
   return (
-    <div className='h-full flex flex-col gap-6'>
+    <div className='dashboard-glass h-full flex flex-col gap-6'>
       <DashboardHeader
         getGreeting={dashboardData.getGreeting}
         greetingVisible={dashboardData.greetingVisible}
@@ -165,6 +166,27 @@ const Dashboard = () => {
         t={dashboardData.t}
       />
 
+      {/* Model data analytics */}
+      <ChartsPanel
+        activeChartTab={dashboardData.activeChartTab}
+        setActiveChartTab={dashboardData.setActiveChartTab}
+        spec_line={dashboardCharts.spec_line}
+        spec_model_line={dashboardCharts.spec_model_line}
+        spec_pie={dashboardCharts.spec_pie}
+        spec_rank_bar={dashboardCharts.spec_rank_bar}
+        CARD_PROPS={CARD_PROPS}
+        CHART_CONFIG={CHART_CONFIG}
+        FLEX_CENTER_GAP2={FLEX_CENTER_GAP2}
+        hasApiInfoPanel={false}
+        t={dashboardData.t}
+      />
+
+      {/* Model runtime overview */}
+      {dashboardData.perfOverviewEnabled ? (
+        <PerfOverviewPanel CARD_PROPS={CARD_PROPS} t={dashboardData.t} />
+      ) : null}
+
+      {/* Metrics cards */}
       <StatsCards
         groupedStatsData={groupedStatsData}
         loading={dashboardData.loading}
@@ -173,7 +195,7 @@ const Dashboard = () => {
         CHART_CONFIG={CHART_CONFIG}
       />
 
-      {/* 系统公告和 API 信息 */}
+      {/* Announcements and API info */}
       {(dashboardData.announcementsEnabled ||
         dashboardData.hasApiInfoPanel) && (
         <div className='grid grid-cols-1 lg:grid-cols-4 gap-6'>
@@ -209,26 +231,7 @@ const Dashboard = () => {
         <DistributorAnalyticsBoard />
       ) : null}
 
-      <PerfOverviewPanel CARD_PROPS={CARD_PROPS} t={dashboardData.t} />
-
-      {/* 图表面板 */}
-      <ChartsPanel
-        activeChartTab={dashboardData.activeChartTab}
-        setActiveChartTab={dashboardData.setActiveChartTab}
-        spec_line={dashboardCharts.spec_line}
-        spec_model_line={dashboardCharts.spec_model_line}
-        spec_pie={dashboardCharts.spec_pie}
-        spec_rank_bar={dashboardCharts.spec_rank_bar}
-        CARD_PROPS={CARD_PROPS}
-        CHART_CONFIG={CHART_CONFIG}
-        FLEX_CENTER_GAP2={FLEX_CENTER_GAP2}
-        hasApiInfoPanel={false}
-        t={dashboardData.t}
-      />
-
-      
-
-      {/* 常见问答和可用性监控卡片 */}
+      {/* FAQ and uptime panels */}
       {(dashboardData.faqEnabled || dashboardData.uptimeEnabled) && (
         <div>
           <div className='grid grid-cols-1 lg:grid-cols-4 gap-6'>

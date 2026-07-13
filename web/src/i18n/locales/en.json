@@ -6015,7 +6015,8 @@
         "邮箱地址已被占用": "Email address is already in use",
         "新用户注册已关闭": "New user registration is closed",
         "密码长度不得小于 8 位！": "Password must be at least 8 characters!",
-        "发送失败，请稍后重试": "Send failed, please try again later"
+        "发送失败，请稍后重试": "Send failed, please try again later",
+        "控制 /console 首页的模型运行性能概览卡片是否显示": "Controls whether the model runtime overview card is shown on the /console homepage"
     },
     "广告按钮文案（英文）": "Button label (English)",
     "广告标题高亮词（英文）": "Title highlight (English)",

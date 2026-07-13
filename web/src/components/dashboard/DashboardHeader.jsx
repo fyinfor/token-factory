@@ -27,31 +27,32 @@ const DashboardHeader = ({
   showSearchModal,
   refresh,
   loading,
-  t,
 }) => {
-  const ICON_BUTTON_CLASS = 'text-white hover:bg-opacity-80 !rounded-full';
-
   return (
-    <div className='flex items-center justify-between'>
+    <div className='dashboard-glass-header flex items-center justify-between gap-4'>
       <h2
-        className='text-2xl font-semibold text-gray-800 transition-opacity duration-1000 ease-in-out'
+        className='dashboard-glass-header__title text-2xl font-semibold transition-opacity duration-1000 ease-in-out'
         style={{ opacity: greetingVisible ? 1 : 0 }}
       >
         {getGreeting}
       </h2>
-      <div className='flex gap-3'>
+      <div className='dashboard-glass-header__actions flex items-center gap-2'>
         <Button
+          theme='borderless'
           type='tertiary'
-          icon={<Search size={16} />}
+          aria-label='Search dashboard data'
+          icon={<Search size={17} />}
           onClick={showSearchModal}
-          className={`bg-green-500 hover:bg-green-600 ${ICON_BUTTON_CLASS}`}
+          className='dashboard-glass-header__action dashboard-glass-header__action--search'
         />
         <Button
+          theme='borderless'
           type='tertiary'
-          icon={<RefreshCw size={16} />}
+          aria-label='Refresh dashboard data'
+          icon={<RefreshCw size={17} />}
           onClick={refresh}
           loading={loading}
-          className={`bg-blue-500 hover:bg-blue-600 ${ICON_BUTTON_CLASS}`}
+          className='dashboard-glass-header__action dashboard-glass-header__action--refresh'
         />
       </div>
     </div>

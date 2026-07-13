@@ -23,12 +23,19 @@ import { IconClose } from '@douyinfe/semi-icons';
 import SiderBar from './SiderBar';
 import App from '../../App';
 import FooterBar from './Footer';
+import StickyTableScrollbar from '../common/ui/StickyTableScrollbar';
 import { ToastContainer } from 'react-toastify';
 import React, { useContext, useEffect, useState } from 'react';
 import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { useSidebarCollapsed } from '../../hooks/common/useSidebarCollapsed';
 import { useTranslation } from 'react-i18next';
-import { API, getLogo, getSystemName, showError, setStatusData } from '../../helpers';
+import {
+  API,
+  getLogo,
+  getSystemName,
+  showError,
+  setStatusData,
+} from '../../helpers';
 import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
 import { useLocation } from 'react-router-dom';
@@ -71,12 +78,13 @@ const PageLayout = () => {
     '/console/playground',
     '/pricing',
     '/rankings',
-    '/console/model-heat'
+    '/console/model-heat',
   ];
 
   const shouldHideFooter = cardProPages.includes(location.pathname);
 
-  const pricingNaturalScroll = location.pathname === '/pricing' || location.pathname === '/rankings';
+  const pricingNaturalScroll =
+    location.pathname === '/pricing' || location.pathname === '/rankings';
 
   const shouldInnerPadding =
     location.pathname.includes('/console') &&
@@ -186,9 +194,13 @@ const PageLayout = () => {
       ) {
         i18n.changeLanguage(saved);
       }
-      if (localStorage.getItem(I18N_BROWSER_LANG_MISMATCH_PROMPT_KEY) !== 'done') {
+      if (
+        localStorage.getItem(I18N_BROWSER_LANG_MISMATCH_PROMPT_KEY) !== 'done'
+      ) {
         try {
-          const raw = sessionStorage.getItem(I18N_BROWSER_LANG_BANNER_PENDING_KEY);
+          const raw = sessionStorage.getItem(
+            I18N_BROWSER_LANG_BANNER_PENDING_KEY,
+          );
           if (raw) {
             const parsed = JSON.parse(raw);
             if (parsed?.browserLang && parsed?.siteLang) {
@@ -215,7 +227,9 @@ const PageLayout = () => {
       i18n.changeLanguage(siteDefault);
     }
 
-    if (localStorage.getItem(I18N_BROWSER_LANG_MISMATCH_PROMPT_KEY) === 'done') {
+    if (
+      localStorage.getItem(I18N_BROWSER_LANG_MISMATCH_PROMPT_KEY) === 'done'
+    ) {
       return;
     }
 
@@ -232,7 +246,12 @@ const PageLayout = () => {
       }
       setBrowserLangBanner(payload);
     }
-  }, [statusState?.status, userState?.user?.setting, userState?.user?.id, i18n]);
+  }, [
+    statusState?.status,
+    userState?.user?.setting,
+    userState?.user?.id,
+    i18n,
+  ]);
 
   const resolveLangLabel = (code) => {
     try {
@@ -330,7 +349,10 @@ const PageLayout = () => {
               >
                 {t('确认')}
               </Button>
-              <Button size='small' onClick={() => dismissBrowserLangBanner('site')}>
+              <Button
+                size='small'
+                onClick={() => dismissBrowserLangBanner('site')}
+              >
                 {t('取消')}
               </Button>
             </Space>
@@ -415,6 +437,7 @@ const PageLayout = () => {
           )}
         </Layout>
       </Layout>
+      <StickyTableScrollbar />
       <ToastContainer />
     </Layout>
   );
