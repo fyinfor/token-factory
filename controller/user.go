@@ -106,10 +106,15 @@ func Login(c *gin.Context) {
 	}
 	err = user.ValidateAndFill()
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"message": err.Error(),
-			"success": false,
-		})
+		if errors.Is(err, model.ErrUsernameOrPasswordEmpty) {
+			common.ApiErrorI18n(c, i18n.MsgUserUsernameOrPasswordEmpty)
+			return
+		}
+		if errors.Is(err, model.ErrUsernameOrPasswordWrong) {
+			common.ApiErrorI18n(c, i18n.MsgUserUsernameOrPasswordError)
+			return
+		}
+		common.ApiError(c, err)
 		return
 	}
 
@@ -180,73 +185,46 @@ func setupLogin(user *model.User, c *gin.Context) {
 // SendSMSLoginVerification 发送登录短信验证码。
 func SendSMSLoginVerification(c *gin.Context) {
 	if !common.SMSLoginEnabled {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "短信登录未开启",
-		})
+		common.ApiErrorI18n(c, i18n.MsgUserSMSLoginDisabled)
 		return
 	}
 	var req struct {
 		Phone string `json:"phone"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "参数错误",
-		})
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}
 	phone := common.NormalizePhone(req.Phone)
 	region := common.ClassifyPhoneRegion(phone)
 	if region == "" {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "请输入有效的手机号",
-		})
+		common.ApiErrorI18n(c, i18n.MsgUserPhoneInvalidLogin)
 		return
 	}
 	if region == common.SMSRegionInternational && !common.SMSLoginInternationalEnabled {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "暂不支持国际手机号登录",
-		})
+		common.ApiErrorI18n(c, i18n.MsgUserPhoneIntlLoginDisabled)
 		return
 	}
 	if common.IsSMSPhoneBlacklisted(phone) {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "该手机号已被限制",
-		})
+		common.ApiErrorI18n(c, i18n.MsgUserPhoneRestricted)
 		return
 	}
 	// 登录仅允许已存在且未注销的用户
 	if !model.IsPhoneAlreadyTaken(phone) {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "该手机号未注册",
-		})
+		common.ApiErrorI18n(c, i18n.MsgUserPhoneNotRegistered)
 		return
 	}
 	if err := common.CheckSMSLoginCanSend(phone); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		common.ApiError(c, err)
 		return
 	}
 	code := common.GenerateSMSCode()
 	if err := service.SendAliyunSMSCodeWithRegion(phone, code, region); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "验证码发送失败：" + err.Error(),
-		})
+		common.ApiErrorI18n(c, i18n.MsgUserSMSCodeSendFailed, map[string]any{"Error": err.Error()})
 		return
 	}
 	if err := common.StoreSMSLoginCode(phone, code); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "验证码保存失败，请稍后重试",
-		})
+		common.ApiErrorI18n(c, i18n.MsgUserSMSCodeStoreFailed)
 		return
 	}
 	if err := common.RecordSMSLoginSend(phone); err != nil {
@@ -261,10 +239,7 @@ func SendSMSLoginVerification(c *gin.Context) {
 // SMSLogin 通过手机号 + 短信验证码登录。
 func SMSLogin(c *gin.Context) {
 	if !common.SMSLoginEnabled {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "短信登录未开启",
-		})
+		common.ApiErrorI18n(c, i18n.MsgUserSMSLoginDisabled)
 		return
 	}
 	var req struct {
@@ -272,55 +247,34 @@ func SMSLogin(c *gin.Context) {
 		Code  string `json:"code"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "参数错误",
-		})
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}
 	phone := common.NormalizePhone(req.Phone)
 	region := common.ClassifyPhoneRegion(phone)
 	if region == "" {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "请输入有效的手机号",
-		})
+		common.ApiErrorI18n(c, i18n.MsgUserPhoneInvalidLogin)
 		return
 	}
 	if region == common.SMSRegionInternational && !common.SMSLoginInternationalEnabled {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "暂不支持国际手机号登录",
-		})
+		common.ApiErrorI18n(c, i18n.MsgUserPhoneIntlLoginDisabled)
 		return
 	}
 	if strings.TrimSpace(req.Code) == "" {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "请输入验证码",
-		})
+		common.ApiErrorI18n(c, i18n.MsgUserSMSCodeRequired)
 		return
 	}
 	if !common.VerifyAndConsumeSMSLoginCode(phone, req.Code) {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "验证码无效或已过期",
-		})
+		common.ApiErrorI18n(c, i18n.MsgUserSMSCodeInvalid)
 		return
 	}
 	var user model.User
 	if err := model.DB.Where("phone = ?", phone).First(&user).Error; err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "该手机号未注册",
-		})
+		common.ApiErrorI18n(c, i18n.MsgUserPhoneNotRegistered)
 		return
 	}
 	if user.Status != common.UserStatusEnabled {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": "账号已被禁用",
-		})
+		common.ApiErrorI18n(c, i18n.MsgUserAccountDisabled)
 		return
 	}
 	setupLogin(&user, c)
@@ -378,23 +332,23 @@ func Register(c *gin.Context) {
 		}
 		if req.Phone != "" {
 			if !common.IsValidLoginPhone(req.Phone) {
-				common.ApiError(c, fmt.Errorf("手机号格式无效，请输入 11 位中国大陆手机号或 +国码 国际号"))
+				common.ApiErrorI18n(c, i18n.MsgUserPhoneInvalid)
 				return
 			}
 			if common.IsSMSPhoneBlacklisted(req.Phone) {
-				common.ApiError(c, fmt.Errorf("该手机号已被加入短信黑名单"))
+				common.ApiErrorI18n(c, i18n.MsgUserPhoneBlacklisted)
 				return
 			}
 			if len(strings.TrimSpace(req.SMSCode)) != 6 {
-				common.ApiError(c, fmt.Errorf("请输入 6 位短信验证码"))
+				common.ApiErrorI18n(c, i18n.MsgUserSMSCodeRequired)
 				return
 			}
 			if !common.VerifyAndConsumeSMSCode(req.Phone, req.SMSCode) {
-				common.ApiError(c, fmt.Errorf("短信验证码错误或已过期"))
+				common.ApiErrorI18n(c, i18n.MsgUserSMSCodeInvalid)
 				return
 			}
 			if model.IsPhoneAlreadyTaken(req.Phone) {
-				common.ApiError(c, fmt.Errorf("手机号已被占用"))
+				common.ApiErrorI18n(c, i18n.MsgUserPhoneTaken)
 				return
 			}
 		} else {
@@ -757,6 +711,7 @@ func GetSelf(c *gin.Context) {
 		"telegram_id":                 user.TelegramId,
 		"group":                       user.Group,
 		"quota":                       user.Quota,
+		"gift_quota":                  user.GiftQuota,
 		"used_quota":                  user.UsedQuota,
 		"request_count":               user.RequestCount,
 		"aff_code":                    user.AffCode,
@@ -2052,7 +2007,7 @@ func ManageUser(c *gin.Context) {
 			rewardQuota = req.RewardQuota
 		}
 		if rewardQuota > 0 {
-			if err := model.IncreaseUserQuota(user.Id, rewardQuota, true); err != nil {
+			if err := model.GrantUserGiftQuota(user.Id, rewardQuota); err != nil {
 				common.ApiError(c, err)
 				return
 			}

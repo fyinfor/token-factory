@@ -77,7 +77,8 @@ function mapRowsToItems(rows, usedGroupRatio, displayPrice, t) {
     const currentUsd = Number(row.usd_after_channel_discount || 0);
     const platformUsd = currentUsd * usedGroupRatio;
     const discount = getDiscountPercent(platformUsd, row.usd_official);
-    const resolutionLabel = formatVideoResolutionDisplayLabel(row.resolution) || '—';
+    const resolutionLabel =
+      formatVideoResolutionDisplayLabel(row.resolution) || '—';
     return {
       key: `v-${idx}-${row.lane}-${row.resolution}-${row.has_audio}`,
       lane: laneKey ? t(laneKey) : row.lane || '—',
@@ -143,7 +144,7 @@ function VideoFlatClipHintTable({
         ];
 
   return (
-    <div className='mt-1 pt-2 border-t border-semi-color-border flex flex-col gap-2'>
+    <div className='video-price-section mt-1 flex flex-col gap-2 pt-2'>
       <div className='flex items-center justify-between gap-2'>
         <Text strong size='small'>
           {t('视频价格')}
@@ -194,6 +195,7 @@ function VideoFlatClipHintTable({
               rows={items}
               gridType={billingMode === 'per_token' ? 'videoPerToken' : 'video'}
               accent={family === 'image_to_video' ? 'amber' : 'blue'}
+              variant='glass'
               t={t}
               zeroDiscountLabel={isCostPrice ? t('0折扣') : '0%'}
             />

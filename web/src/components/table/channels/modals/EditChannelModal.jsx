@@ -135,6 +135,22 @@ const PARAM_OVERRIDE_OPERATIONS_TEMPLATE = {
 };
 
 const DEPRECATED_DOUBAO_CODING_PLAN_BASE_URL = 'doubao-coding-plan';
+const ROUTE_SLUG_CHANNEL_NO_PATTERN = /^c\d+$/;
+
+/** 与后端 model.IsValidRouteSlug 一致：2～32 位字母数字，且不能为 c+纯数字。 */
+function isValidRouteSlug(value) {
+  const s = String(value ?? '').trim();
+  if (s.length < 2 || s.length > 32) {
+    return false;
+  }
+  if (!/^[0-9A-Za-z]+$/.test(s)) {
+    return false;
+  }
+  if (ROUTE_SLUG_CHANNEL_NO_PATTERN.test(s)) {
+    return false;
+  }
+  return true;
+}
 
 /** 将渠道中存储的 key 解析为腾讯云点播三段密钥（与后端 ParseCredentials 格式一致） */
 function parseTencentVodKeyString(key) {
@@ -257,6 +273,7 @@ const EditChannelModal = (props) => {
     models: [],
     auto_ban: 1,
     test_model: '',
+    route_slug: '',
     groups: ['default'],
     priority: 0,
     weight: 0,
@@ -2051,6 +2068,20 @@ const EditChannelModal = (props) => {
       showInfo(t('请填写渠道密钥！'));
       return;
     }
+
+    // 路由后缀：新建留空则后端自动生成；批量创建强制各自默认，忽略自定义。
+    const routeSlugRaw = String(localInputs.route_slug ?? '').trim();
+    if (batch && !isEdit) {
+      localInputs.route_slug = '';
+    } else if (routeSlugRaw === '') {
+      localInputs.route_slug = '';
+    } else if (!isValidRouteSlug(routeSlugRaw)) {
+      showInfo(t('路由后缀格式无效'));
+      return;
+    } else {
+      localInputs.route_slug = routeSlugRaw;
+    }
+
     if (
       localInputs.type !== 60 &&
       (!Array.isArray(localInputs.models) || localInputs.models.length === 0)
@@ -3608,6 +3639,29 @@ const EditChannelModal = (props) => {
                           showClear
                           onChange={(value) => handleInputChange('name', value)}
                           autoComplete='new-password'
+                        />
+                      )}
+
+                      {(!batch || isEdit) && (
+                        <Form.Input
+                          field='route_slug'
+                          label={t('路由后缀')}
+                          placeholder={
+                            isEdit
+                              ? t('请输入路由后缀')
+                              : t('路由后缀新建占位')
+                          }
+                          showClear
+                          maxLength={32}
+                          onChange={(value) =>
+                            handleInputChange('route_slug', value)
+                          }
+                          autoComplete='off'
+                          extraText={
+                            isEdit
+                              ? t('路由后缀编辑说明')
+                              : t('路由后缀新建说明')
+                          }
                         />
                       )}
 

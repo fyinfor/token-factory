@@ -62,6 +62,23 @@ func defaultCommissionBpsForNewInviteRelation(inviterId int) int {
 	return common.AffiliateDefaultCommissionBps
 }
 
+func defaultModelMarkupDiscountRateForNewInviteRelation(db *gorm.DB, inviterId int) string {
+	if db == nil || inviterId <= 0 {
+		return "[]"
+	}
+	var inviter User
+	err := db.Select("id", "role", "is_distributor", "distributor_model_markup_discount_template", "distributor_model_discount_auto_apply").
+		Where("id = ?", inviterId).First(&inviter).Error
+	if err != nil || !UserIsDistributor(&inviter) || inviter.DistributorModelDiscountAutoApply != common.DistributorFlagYes {
+		return "[]"
+	}
+	raw := strings.TrimSpace(inviter.DistributorModelMarkupDiscountTemplate)
+	if raw == "" {
+		return "[]"
+	}
+	return raw
+}
+
 // EnsureAffInviteRelation 注册成功后建立关系行，比例初始为系统默认或分销商单独默认。
 func EnsureAffInviteRelation(inviterId, inviteeUserId int) error {
 	if inviterId <= 0 || inviteeUserId <= 0 {
@@ -77,13 +94,14 @@ func EnsureAffInviteRelation(inviterId, inviteeUserId int) error {
 	}
 	ts := common.GetTimestamp()
 	bps := defaultCommissionBpsForNewInviteRelation(inviterId)
+	modelMarkupDiscountRate := defaultModelMarkupDiscountRateForNewInviteRelation(DB, inviterId)
 	rel := AffInviteRelation{
 		InviterId:               inviterId,
 		InviteeUserId:           inviteeUserId,
 		CommissionRatioBps:      bps,
 		CommissionEarnedQuota:   0,
 		ProfitShareEarnedQuota:  0,
-		ModelMarkupDiscountRate: "[]",
+		ModelMarkupDiscountRate: modelMarkupDiscountRate,
 		CreatedAt:               ts,
 		UpdatedAt:               ts,
 	}
@@ -849,26 +867,26 @@ func overlayModelMarkupDiscountItems(raw string) ([]InviteeModelMarkupDiscountRa
 	return items, nil
 }
 
-func GetDistributorModelDiscountTemplate(distributorId int) ([]InviteeModelMarkupDiscountRateItem, int64, error) {
+func GetDistributorModelDiscountTemplate(distributorId int) ([]InviteeModelMarkupDiscountRateItem, int64, bool, error) {
 	if distributorId <= 0 {
-		return nil, 0, errors.New("invalid distributor")
+		return nil, 0, false, errors.New("invalid distributor")
 	}
 	var user User
-	if err := DB.Select("id", "distributor_model_markup_discount_template").Where("id = ?", distributorId).First(&user).Error; err != nil {
-		return nil, 0, err
+	if err := DB.Select("id", "distributor_model_markup_discount_template", "distributor_model_discount_auto_apply").Where("id = ?", distributorId).First(&user).Error; err != nil {
+		return nil, 0, false, err
 	}
 	items, err := overlayModelMarkupDiscountItems(user.DistributorModelMarkupDiscountTemplate)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, false, err
 	}
 	total, err := CountAffInvitees(distributorId)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, false, err
 	}
-	return items, total, nil
+	return items, total, user.DistributorModelDiscountAutoApply == common.DistributorFlagYes, nil
 }
 
-func UpdateDistributorModelDiscountTemplate(distributorId int, updates []ModelMarkupDiscountRateUpdateRequest) error {
+func UpdateDistributorModelDiscountTemplate(distributorId int, updates []ModelMarkupDiscountRateUpdateRequest, autoApplyNewInvitees *bool) error {
 	if distributorId <= 0 {
 		return errors.New("invalid distributor")
 	}
@@ -876,7 +894,17 @@ func UpdateDistributorModelDiscountTemplate(distributorId int, updates []ModelMa
 	if err != nil {
 		return err
 	}
-	return DB.Model(&User{}).Where("id = ?", distributorId).UpdateColumn("distributor_model_markup_discount_template", discountsJSON).Error
+	columns := map[string]interface{}{
+		"distributor_model_markup_discount_template": discountsJSON,
+	}
+	if autoApplyNewInvitees != nil {
+		if *autoApplyNewInvitees {
+			columns["distributor_model_discount_auto_apply"] = common.DistributorFlagYes
+		} else {
+			columns["distributor_model_discount_auto_apply"] = common.DistributorFlagNo
+		}
+	}
+	return DB.Model(&User{}).Where("id = ?", distributorId).Updates(columns).Error
 }
 
 func inviteeIDsForBatch(inviterId int, all bool, selectedIDs []int) ([]int, error) {

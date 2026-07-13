@@ -20,6 +20,15 @@ var ErrLocalStorageNotConfigured = fmt.Errorf("本地存储未正确配置，请
 // 文件存储路径为 local_storage_path/uploads/local_object_key_prefix/yyyy/mm/dd/uuid.ext
 // 对外访问 URL 为 {local_url_prefix}/uploads/local_object_key_prefix/yyyy/mm/dd/uuid.ext
 func LocalUploadMultipartFile(file *multipart.FileHeader, userID int) (string, error) {
+	cfg := operation_setting.GetOssSetting()
+	prefix, err := NormalizeLocalUploadPrefix(cfg.LocalObjectKeyPrefix)
+	if err != nil {
+		return "", err
+	}
+	return localUploadMultipartFileWithPrefix(file, userID, prefix)
+}
+
+func localUploadMultipartFileWithPrefix(file *multipart.FileHeader, userID int, prefix string) (string, error) {
 	_ = userID
 	cfg := operation_setting.GetOssSetting()
 
@@ -38,8 +47,8 @@ func LocalUploadMultipartFile(file *multipart.FileHeader, userID int) (string, e
 	// 确定存储根目录：本地上传固定写入 uploads 目录，配置的文件夹前缀只作为 uploads 下的子目录。
 	storeDir := LocalUploadBaseDir(cfg.LocalStoragePath)
 
-	// 生成文件相对路径：local_object_key_prefix/yyyy/mm/dd/uuid.ext
-	relPath, err := BuildLocalUploadObjectPath(cfg.LocalObjectKeyPrefix, uploadFileExt(file.Filename))
+	// 生成文件相对路径：prefix/yyyy/mm/dd/uuid.ext
+	relPath, err := BuildLocalUploadObjectPath(prefix, uploadFileExt(file.Filename))
 	if err != nil {
 		return "", err
 	}
@@ -78,6 +87,41 @@ func LocalUploadMultipartFile(file *multipart.FileHeader, userID int) (string, e
 	}
 
 	return localObjectURL(cfg.LocalURLPrefix, path.Join(LocalUploadFolder, relPath)), nil
+}
+
+// ResolveLocalUploadFilePath 根据对外访问 URL 解析本地磁盘文件路径；非本地 URL 返回 ok=false。
+func ResolveLocalUploadFilePath(publicURL string) (string, bool) {
+	publicURL = strings.TrimSpace(publicURL)
+	if publicURL == "" {
+		return "", false
+	}
+	cfg := operation_setting.GetOssSetting()
+	if cfg.StorageType != operation_setting.StorageTypeLocal {
+		return "", false
+	}
+	marker := "/" + LocalUploadFolder + "/"
+	idx := strings.Index(publicURL, marker)
+	if idx < 0 {
+		return "", false
+	}
+	rel := publicURL[idx+len(marker):]
+	if q := strings.IndexAny(rel, "?#"); q >= 0 {
+		rel = rel[:q]
+	}
+	rel = strings.TrimSpace(rel)
+	if rel == "" {
+		return "", false
+	}
+	cleaned := path.Clean(rel)
+	if cleaned == "." || strings.HasPrefix(cleaned, "..") || path.IsAbs(cleaned) {
+		return "", false
+	}
+	storeDir := LocalUploadBaseDir(cfg.LocalStoragePath)
+	fullPath := filepath.Join(storeDir, filepath.FromSlash(cleaned))
+	if _, err := os.Stat(fullPath); err != nil {
+		return "", false
+	}
+	return fullPath, true
 }
 
 // localObjectURL 根据系统 ServerAddress 和路径生成对外访问 URL。

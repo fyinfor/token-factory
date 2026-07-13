@@ -116,16 +116,12 @@ const getChannelRouteModelName = (modelData, channel) => {
 };
 
 const AddressUsageNote = ({ title, children }) => (
-  <div
-    className='mt-2 rounded-lg px-3 py-2 text-xs leading-5'
-    style={{
-      color: 'var(--semi-color-text-1)',
-      backgroundColor: 'var(--semi-color-primary-light-default)',
-    }}
-  >
-    <div className='font-medium mb-0.5'>{title}</div>
-    <div>{children}</div>
-  </div>
+  <details className='mt-2 text-xs leading-5 text-semi-color-text-1'>
+    <summary className='cursor-pointer select-none font-medium text-semi-color-text-2'>
+      {title}
+    </summary>
+    <div className='mt-1 pl-3'>{children}</div>
+  </details>
 );
 
 const TOOL_LINKS = {
@@ -179,7 +175,7 @@ const isVideoEndpoint = (type, path) => {
   return endpointText.includes('video') || endpointText.includes('视频');
 };
 
-const ModelEndpoints = ({ modelData, endpointMap = {}, t }) => {
+const ModelEndpoints = ({ modelData, endpointMap = {}, t, flat = false }) => {
   const [workBuddyVisible, setWorkBuddyVisible] = useState(false);
   const [tokens, setTokens] = useState([]);
   const [resolvedTokenKeys, setResolvedTokenKeys] = useState({});
@@ -527,11 +523,19 @@ const ModelEndpoints = ({ modelData, endpointMap = {}, t }) => {
       return (
         <div
           key={type}
-          className='rounded-xl border px-3 py-2 transition-all duration-200 hover:shadow-sm'
-          style={{
-            borderColor: 'var(--semi-color-border)',
-            backgroundColor: 'var(--semi-color-bg-0)',
-          }}
+          className={
+            flat
+              ? 'border-b border-semi-color-border px-1 py-3 last:border-b-0'
+              : 'rounded-xl border px-3 py-2 transition-all duration-200 hover:shadow-sm'
+          }
+          style={
+            flat
+              ? undefined
+              : {
+                  borderColor: 'var(--semi-color-border)',
+                  backgroundColor: 'var(--semi-color-bg-0)',
+                }
+          }
         >
           <div className='flex items-center justify-between gap-2 mb-1'>
             <span className='flex items-center min-w-0'>
@@ -555,20 +559,22 @@ const ModelEndpoints = ({ modelData, endpointMap = {}, t }) => {
             <Text className='text-sm text-gray-500 break-all font-mono flex-1'>
               {endpointLink || t('暂无端点路径')}
             </Text>
-            {path && (
-              <Tooltip content={endpointLink}>
-                <Button
-                  size='small'
-                  type='primary'
-                  theme='light'
-                  icon={<IconCopy />}
-                  onClick={() => copyEndpoint(path)}
-                  aria-label={t('复制API端点')}
-                >
-                  {t('复制')}
-                </Button>
-              </Tooltip>
-            )}
+            {path ? (
+              <div className='flex shrink-0 items-center gap-1.5'>
+                <Tooltip content={endpointLink}>
+                  <Button
+                    size='small'
+                    type='primary'
+                    theme='light'
+                    icon={<IconCopy />}
+                    onClick={() => copyEndpoint(path)}
+                    aria-label={t('复制API端点')}
+                  >
+                    {t('复制')}
+                  </Button>
+                </Tooltip>
+              </div>
+            ) : null}
           </div>
           <AddressUsageNote title={t('用途说明')}>
             {getEndpointUsageDescription(type, path)}
@@ -578,8 +584,8 @@ const ModelEndpoints = ({ modelData, endpointMap = {}, t }) => {
     });
   };
 
-  return (
-    <Card className='!rounded-2xl shadow-sm border-0 mb-6'>
+  const content = (
+    <>
       <StepTitle
         label={t('第一步')}
         title={t('接口地址')}
@@ -623,14 +629,22 @@ const ModelEndpoints = ({ modelData, endpointMap = {}, t }) => {
           </Button>
         </div>
       ) : null} */}
-      <div className='rounded-xl bg-gray-50'>
-        <div className='space-y-2'>
+      <div>
+        <div>
           <div
-            className='rounded-xl border px-3 py-2 transition-all duration-200 hover:shadow-sm'
-            style={{
-              borderColor: 'var(--semi-color-border)',
-              backgroundColor: 'var(--semi-color-bg-0)',
-            }}
+            className={
+              flat
+                ? 'border-b border-semi-color-border px-1 pb-3'
+                : 'rounded-xl border px-3 py-2 transition-all duration-200 hover:shadow-sm'
+            }
+            style={
+              flat
+                ? undefined
+                : {
+                    borderColor: 'var(--semi-color-border)',
+                    backgroundColor: 'var(--semi-color-bg-0)',
+                  }
+            }
           >
             <div className='flex items-center justify-between gap-2 mb-1'>
               <span className='flex items-center min-w-0'>
@@ -645,18 +659,20 @@ const ModelEndpoints = ({ modelData, endpointMap = {}, t }) => {
               <Text className='text-sm text-gray-500 break-all font-mono flex-1'>
                 {configuredBaseUrl}
               </Text>
-              <Tooltip content={configuredBaseUrl}>
-                <Button
-                  size='small'
-                  type='primary'
-                  theme='light'
-                  icon={<IconCopy />}
-                  onClick={copyBaseUrl}
-                  aria-label={t('复制BaseURL')}
-                >
-                  {t('复制')}
-                </Button>
-              </Tooltip>
+              <div className='flex shrink-0 items-center gap-1.5'>
+                <Tooltip content={configuredBaseUrl}>
+                  <Button
+                    size='small'
+                    type='primary'
+                    theme='light'
+                    icon={<IconCopy />}
+                    onClick={copyBaseUrl}
+                    aria-label={t('复制BaseURL')}
+                  >
+                    {t('复制')}
+                  </Button>
+                </Tooltip>
+              </div>
             </div>
             <AddressUsageNote title={t('用途说明')}>
               {t(
@@ -786,7 +802,19 @@ const ModelEndpoints = ({ modelData, endpointMap = {}, t }) => {
           </div>
         </div>
       </Modal>
-    </Card>
+    </>
+  );
+
+  if (flat) {
+    return (
+      <section className='border-b border-semi-color-border pb-6 mb-6'>
+        {content}
+      </section>
+    );
+  }
+
+  return (
+    <Card className='!rounded-2xl shadow-sm border-0 mb-6'>{content}</Card>
   );
 };
 

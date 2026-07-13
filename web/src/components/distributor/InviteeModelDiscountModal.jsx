@@ -30,6 +30,7 @@ import {
   Space,
   Select,
   Tooltip,
+  Switch,
 } from '@douyinfe/semi-ui';
 import { IconSearch, IconInfoCircle, IconDownload } from '@douyinfe/semi-icons';
 import {
@@ -160,6 +161,9 @@ const InviteeModelDiscountModal = ({
   const [page, setPage] = useState(1);
   const [baselineValues, setBaselineValues] = useState({});
   const [discountValues, setDiscountValues] = useState({});
+  const [templateAutoApply, setTemplateAutoApply] = useState(false);
+  const [baselineTemplateAutoApply, setBaselineTemplateAutoApply] =
+    useState(false);
 
   const listApiPath = templateMode
     ? '/api/distributor/model-discount-template'
@@ -210,6 +214,11 @@ const InviteeModelDiscountModal = ({
         }
         const items = res.data?.data?.items || [];
         setModelData(items);
+        const autoApply = Boolean(res.data?.data?.auto_apply_new_invitees);
+        if (templateMode) {
+          setTemplateAutoApply(autoApply);
+          setBaselineTemplateAutoApply(autoApply);
+        }
 
         const initialValues = {};
         items.forEach((item) => {
@@ -248,6 +257,8 @@ const InviteeModelDiscountModal = ({
       setPage(1);
       setBaselineValues({});
       setDiscountValues({});
+      setTemplateAutoApply(false);
+      setBaselineTemplateAutoApply(false);
     }
   }, [visible, loadData]);
 
@@ -316,6 +327,10 @@ const InviteeModelDiscountModal = ({
     }, 0);
   }, [modelData, baselineValues, discountValues]);
 
+  const autoApplyModified =
+    templateMode && templateAutoApply !== baselineTemplateAutoApply;
+  const hasUnsavedChanges = modifiedCount > 0 || autoApplyModified;
+
   useEffect(() => {
     setPage(1);
   }, [searchKeyword, filterSupplierType, modelData.length]);
@@ -328,7 +343,7 @@ const InviteeModelDiscountModal = ({
   };
 
   const persistDiscounts = async () => {
-    if (modifiedCount === 0) {
+    if (!hasUnsavedChanges) {
       showInfo(t('暂无修改'));
       return false;
     }
@@ -345,7 +360,10 @@ const InviteeModelDiscountModal = ({
       }));
 
       const body = templateMode
-        ? { discounts }
+        ? {
+            discounts,
+            auto_apply_new_invitees: templateAutoApply,
+          }
         : {
             invitee_id: inviteeId,
             discounts,
@@ -633,6 +651,23 @@ const InviteeModelDiscountModal = ({
                 : '说明：本功能用于为被邀请用户配置各模型的代理加价比例。成本折扣 + 平台加价折扣比例 = 平台售价比例；成本折扣 + 代理加价比例 = 修改后售价比例。代理加价比例上限为 200% - 成本折扣，避免最终售价比例超过 200%。',
             )}
           />
+
+          {templateMode && (
+            <div className='flex flex-col gap-3 rounded-lg border border-semi-color-border bg-semi-color-fill-0 p-3 sm:flex-row sm:items-center sm:justify-between'>
+              <div className='min-w-0'>
+                <Text strong>{t('自动应用到新加入用户')}</Text>
+                <Text type='tertiary' size='small' className='!block'>
+                  {t('邀请注册和绑定成功时应用此模板')}
+                </Text>
+              </div>
+              <Switch
+                checked={templateAutoApply}
+                onChange={(checked) => setTemplateAutoApply(Boolean(checked))}
+                disabled={loading || saving}
+                aria-label={t('自动应用到新加入用户')}
+              />
+            </div>
+          )}
 
           <div className='flex flex-col sm:flex-row gap-2'>
             <Input

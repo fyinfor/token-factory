@@ -27,7 +27,6 @@ import { useMinimumLoadingTime } from '../../../hooks/common/useMinimumLoadingTi
 import { API, showError, showSuccess } from '../../../helpers';
 import { getTodayStartTimestamp } from '../../../helpers/utils';
 import { normalizeLanguage } from '../../../i18n/language';
-
 const LogsActions = ({
   stat,
   loadingStat,

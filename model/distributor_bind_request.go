@@ -246,7 +246,7 @@ func RespondDistributorBindRequest(requestID, targetUserID int, accept bool) (*D
 				CommissionRatioBps:      defaultCommissionBpsForNewInviteRelation(distributor.Id),
 				CommissionEarnedQuota:   0,
 				ProfitShareEarnedQuota:  0,
-				ModelMarkupDiscountRate: "[]",
+				ModelMarkupDiscountRate: defaultModelMarkupDiscountRateForNewInviteRelation(tx, distributor.Id),
 				CreatedAt:               now,
 				UpdatedAt:               now,
 			}

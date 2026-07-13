@@ -18,6 +18,16 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import hljs from 'highlight.js/lib/core';
+import bash from 'highlight.js/lib/languages/bash';
+import csharp from 'highlight.js/lib/languages/csharp';
+import go from 'highlight.js/lib/languages/go';
+import java from 'highlight.js/lib/languages/java';
+import javascript from 'highlight.js/lib/languages/javascript';
+import json from 'highlight.js/lib/languages/json';
+import plaintext from 'highlight.js/lib/languages/plaintext';
+import python from 'highlight.js/lib/languages/python';
 import {
   Avatar,
   Banner,
@@ -47,6 +57,22 @@ import { useIsMobile } from '../../../../../hooks/common/useIsMobile';
 import MarkdownRenderer from '../../../../common/markdown/MarkdownRenderer';
 
 const { Text, Title } = Typography;
+
+hljs.registerLanguage('bash', bash);
+hljs.registerLanguage('shell', bash);
+hljs.registerLanguage('curl', bash);
+hljs.registerLanguage('csharp', csharp);
+hljs.registerLanguage('cs', csharp);
+hljs.registerLanguage('c#', csharp);
+hljs.registerLanguage('go', go);
+hljs.registerLanguage('java', java);
+hljs.registerLanguage('javascript', javascript);
+hljs.registerLanguage('js', javascript);
+hljs.registerLanguage('json', json);
+hljs.registerLanguage('plaintext', plaintext);
+hljs.registerLanguage('text', plaintext);
+hljs.registerLanguage('python', python);
+hljs.registerLanguage('py', python);
 
 const normalizeApiBaseUrl = (baseUrl) =>
   String(baseUrl || '').replace(
@@ -409,6 +435,13 @@ const buildUrlWithQuery = (endpoint, params = [], modelName) => {
 };
 
 const CodeBlock = ({ content, language = 'json', t }) => {
+  const normalizedLanguage = language === 'curl' ? 'bash' : language;
+  const highlightedCode = useMemo(() => {
+    if (!hljs.getLanguage(normalizedLanguage)) {
+      return hljs.highlight(content, { language: 'plaintext' }).value;
+    }
+    return hljs.highlight(content, { language: normalizedLanguage }).value;
+  }, [content, normalizedLanguage]);
   const handleCopy = () => {
     navigator.clipboard
       .writeText(content)
@@ -416,31 +449,23 @@ const CodeBlock = ({ content, language = 'json', t }) => {
       .catch(() => Toast.error({ content: t('复制失败') }));
   };
   return (
-    <div className='relative rounded-lg overflow-hidden border border-gray-100'>
-      <div className='absolute top-1 right-1 z-10'>
+    <div className='api-docs-code-block relative overflow-hidden rounded-lg'>
+      <Tooltip content={t('复制')}>
         <Button
+          className='api-docs-code-copy'
           icon={<IconCopy />}
           size='small'
-          type='primary'
+          type='tertiary'
           theme='light'
           onClick={handleCopy}
-          title={t('复制')}
-        >
-          {t('复制')}
-        </Button>
-      </div>
-      <pre
-        className='m-0 p-3 text-xs overflow-x-auto'
-        style={{
-          backgroundColor: 'var(--semi-color-fill-0)',
-          color: 'var(--semi-color-text-0)',
-          fontFamily:
-            'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-          lineHeight: 1.6,
-          whiteSpace: 'pre',
-        }}
-      >
-        <code className={`language-${language}`}>{content}</code>
+          aria-label={t('复制')}
+        />
+      </Tooltip>
+      <pre className='m-0 overflow-x-auto p-3 pt-11 text-xs'>
+        <code
+          className={`hljs language-${normalizedLanguage}`}
+          dangerouslySetInnerHTML={{ __html: highlightedCode }}
+        />
       </pre>
     </div>
   );
@@ -483,6 +508,7 @@ const ApiDocsSidePanel = ({
   visible,
   onClose,
   modelName,
+  embedded = false,
   docIntroduction = '',
   apiDocs = '',
   t,
@@ -651,15 +677,9 @@ const ApiDocsSidePanel = ({
     const pathParams = api.path_params || [];
     const queryParams = api.query_params || [];
     const displayPath = replaceModelName(api.path || '', modelName);
-    const endpointPath = replacePathParams(
-      displayPath,
-      pathParams,
-      modelName,
-    );
+    const endpointPath = replacePathParams(displayPath, pathParams, modelName);
     const endpoint = `${serverAddress}${endpointPath}`;
-    const requestParams = isPost
-      ? api.body_params || []
-      : pathParams;
+    const requestParams = isPost ? api.body_params || [] : pathParams;
     const responseParams = api.response_params || [];
     const requestJson = isPost
       ? JSON.stringify(buildJsonExample(requestParams, modelName), null, 2)
@@ -846,9 +866,45 @@ const ApiDocsSidePanel = ({
     </div>
   );
 
-  if (isMobile) {
+  if (embedded) {
     return (
+      <div className='api-docs-embedded h-full overflow-y-auto overscroll-contain p-3'>
+        <div className='space-y-4'>
+          {docIntroduction ? (
+            <section className='api-docs-root-section'>
+              <Title heading={6} className='mb-2'>
+                {t('模型介绍')}
+              </Title>
+              <MarkdownRenderer content={docIntroduction} />
+            </section>
+          ) : null}
+          <section className='api-docs-root-section'>
+            <Title heading={6} className='mb-2'>
+              {t('API 列表')}
+            </Title>
+            {docs.length > 0 ? (
+              <Collapse
+                defaultActiveKey={
+                  docs.length > 0 ? docs[0]?.id || 0 : undefined
+                }
+              >
+                {docs.map(renderApiPanel)}
+              </Collapse>
+            ) : (
+              <div className='py-8 text-center'>
+                <Text type='tertiary'>{t('暂无模型文档')}</Text>
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
+    );
+  }
+
+  if (isMobile) {
+    return createPortal(
       <SideSheet
+        className='api-docs-overlay-sheet'
         placement='right'
         title={
           <Space>
@@ -870,17 +926,19 @@ const ApiDocsSidePanel = ({
         }
       >
         {content}
-      </SideSheet>
+      </SideSheet>,
+      document.body,
     );
   }
 
   if (!visible) return null;
-  return (
+  return createPortal(
     <div
-      className='fixed top-0 h-full overflow-y-auto z-[999] semi-sidesheet-inner'
+      className='api-docs-desktop-panel fixed top-0 h-full overflow-y-auto semi-sidesheet-inner'
       style={{
-        width: 640,
-        right: 600,
+        width: 'min(640px, calc(100vw - 800px))',
+        right: 800,
+        zIndex: 1200,
         backgroundColor: 'var(--semi-color-bg-0)',
         borderRight: '1px solid var(--semi-color-border)',
         animation: 'slideInLeft 0.3s ease-out',
@@ -910,7 +968,8 @@ const ApiDocsSidePanel = ({
       <div className='semi-sidesheet-body' style={{ padding: 0 }}>
         {content}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 };
 

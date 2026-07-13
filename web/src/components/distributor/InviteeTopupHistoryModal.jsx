@@ -35,7 +35,14 @@ import {
   Typography,
 } from '@douyinfe/semi-ui';
 import { Search } from 'lucide-react';
-import { API, showError, timestamp2string, getPayMethodDisplayName } from '../../helpers';
+import {
+  API,
+  showError,
+  timestamp2string,
+  getPayMethodDisplayName,
+  formatTopupPayMoney,
+  formatTopupCreditedAmount,
+} from '../../helpers';
 import { StatusContext } from '../../context/Status';
 
 const { Text } = Typography;
@@ -61,19 +68,6 @@ function semiInputString(valOrEvt) {
     return valOrEvt.target.value;
   }
   return '';
-}
-
-function formatTopupPayMoney(money, paymentMethod, usdExchangeRate) {
-  const numericMoney = Number(money);
-  const safeMoney = Number.isFinite(numericMoney) ? numericMoney : 0;
-  const rate =
-    Number.isFinite(usdExchangeRate) && usdExchangeRate > 0
-      ? usdExchangeRate
-      : 7.3;
-  if ((paymentMethod || '').toLowerCase() === 'stripe') {
-    return `￥${(safeMoney * rate).toFixed(2)}`;
-  }
-  return `￥${safeMoney.toFixed(2)}`;
 }
 
 export default function InviteeTopupHistoryModal({
@@ -202,7 +196,11 @@ export default function InviteeTopupHistoryModal({
               </Tag>
             );
           }
-          return <Text>{Number(amount || 0)}</Text>;
+          return (
+            <Text>
+              {formatTopupCreditedAmount(record?.money, record, usdExchangeRate)}
+            </Text>
+          );
         },
       },
       {
@@ -211,11 +209,7 @@ export default function InviteeTopupHistoryModal({
         width: 110,
         render: (money, record) => (
           <Text type='danger'>
-            {formatTopupPayMoney(
-              money,
-              record?.payment_method,
-              usdExchangeRate,
-            )}
+            {formatTopupPayMoney(money, record, usdExchangeRate)}
           </Text>
         ),
       },

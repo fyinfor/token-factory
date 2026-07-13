@@ -18,7 +18,6 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting"
@@ -484,6 +483,15 @@ func yipayJeepayAmountMinorAndCurrency(payMoney float64, wayCode string) (minor 
 	return minor, "usd"
 }
 
+func yipayJeepayStoredPayMoney(payMoney float64, amountMinor int64, orderCurrency string) float64 {
+	switch strings.ToLower(strings.TrimSpace(orderCurrency)) {
+	case "cny", "usd":
+		return decimal.NewFromInt(amountMinor).Div(decimal.NewFromInt(100)).InexactFloat64()
+	default:
+		return payMoney
+	}
+}
+
 // requestYipayOrder 按 Yipay OpenAPI 创建统一下单请求。
 func requestYipayOrder(req EpayRequest, id int, quote *topupQuote, paymentMethod string) (string, map[string]string, error) {
 	requestURL := operation_setting.YipayRequestURL
@@ -601,10 +609,11 @@ func requestYipayOrder(req EpayRequest, id int, quote *topupQuote, paymentMethod
 		return "", nil, extractErr
 	}
 	payURL = strings.TrimSpace(payURL)
+	orderMoney := yipayJeepayStoredPayMoney(quote.PayAmount, amountMinor, orderCurrency)
 	topUp := &model.TopUp{
 		UserId:        id,
 		Amount:        req.Amount,
-		Money:         quote.PayAmount,
+		Money:         orderMoney,
 		InputAmount:   quote.InputAmount,
 		InputCurrency: quote.InputCurrency,
 		PayCurrency:   strings.ToUpper(orderCurrency),
@@ -719,10 +728,7 @@ func buildTopupQuote(amount float64, group string, payCurrency string) (*topupQu
 
 	chargedUSD := inputUSD.Div(dTopupGroupRatio).Div(dDiscount)
 	dQuotaPerUnit := decimal.NewFromFloat(common.QuotaPerUnit)
-	quotaToAdd := int(chargedUSD.Mul(dQuotaPerUnit).IntPart())
-	if quotaToAdd <= 0 {
-		return nil, fmt.Errorf("充值金额过低")
-	}
+	quotaToAdd := int(chargedUSD.Mul(dQuotaPerUnit).Round(0).IntPart())
 
 	payAmount := dAmount
 	if targetCurrency != inputCurrency {
@@ -731,6 +737,27 @@ func buildTopupQuote(amount float64, group string, payCurrency string) (*topupQu
 		} else {
 			payAmount = inputUSD
 		}
+	}
+
+	// 无分组/折扣且定价汇率与展示汇率一致时，按实付金额反推额度，保证到账展示与支付金额对齐。
+	displayRate := decimal.NewFromFloat(operation_setting.USDExchangeRate)
+	if displayRate.LessThanOrEqual(decimal.Zero) {
+		displayRate = rate
+	}
+	if topupGroupRatio == 1 && dDiscount.Equal(decimal.NewFromInt(1)) && rate.Equal(displayRate) {
+		var payUSD decimal.Decimal
+		if targetCurrency == topupCurrencyCNY {
+			payUSD = payAmount.Div(displayRate)
+		} else {
+			payUSD = payAmount
+		}
+		if aligned := int(payUSD.Mul(dQuotaPerUnit).Round(0).IntPart()); aligned > 0 {
+			quotaToAdd = aligned
+		}
+	}
+
+	if quotaToAdd <= 0 {
+		return nil, fmt.Errorf("充值金额过低")
 	}
 
 	return &topupQuote{
@@ -899,6 +926,31 @@ func UnlockOrder(tradeNo string) {
 	createLock.Unlock()
 }
 
+func yipayTopupPaidAmountMinor(topUp *model.TopUp) (int64, string) {
+	payCurrency := strings.ToUpper(strings.TrimSpace(topUp.PayCurrency))
+	switch payCurrency {
+	case topupCurrencyCNY, topupCurrencyUSD:
+		minor := int64(math.Round(topUp.Money * 100))
+		if minor < 1 {
+			minor = 1
+		}
+		return minor, strings.ToLower(payCurrency)
+	default:
+		return yipayJeepayAmountMinorAndCurrency(topUp.Money, topUp.PaymentMethod)
+	}
+}
+
+func isLegacyYipayConvertedUSDTopup(topUp *model.TopUp) bool {
+	if topUp == nil {
+		return false
+	}
+	return isPayPalJeepayWayCode(topUp.PaymentMethod) &&
+		strings.EqualFold(topUp.PayCurrency, topupCurrencyUSD) &&
+		strings.EqualFold(topUp.InputCurrency, topupCurrencyCNY) &&
+		topUp.InputAmount > 0 &&
+		math.Abs(topUp.Money-topUp.InputAmount) <= 0.01
+}
+
 func validateYipayTopupPaidAmount(params map[string]string, topUp *model.TopUp) error {
 	rawAmount := strings.TrimSpace(params["amount"])
 	if rawAmount == "" || topUp == nil {
@@ -908,7 +960,10 @@ func validateYipayTopupPaidAmount(params map[string]string, topUp *model.TopUp) 
 	if err != nil {
 		return fmt.Errorf("invalid callback amount: %s", rawAmount)
 	}
-	expectedMinor, expectedCurrency := yipayJeepayAmountMinorAndCurrency(topUp.Money, topUp.PaymentMethod)
+	expectedMinor, expectedCurrency := yipayTopupPaidAmountMinor(topUp)
+	if isLegacyYipayConvertedUSDTopup(topUp) {
+		expectedMinor, _ = yipayJeepayAmountMinorAndCurrency(topUp.Money, topUp.PaymentMethod)
+	}
 	if paidMinor != expectedMinor {
 		return fmt.Errorf("paid amount mismatch: expect %d, got %d", expectedMinor, paidMinor)
 	}
@@ -1030,7 +1085,7 @@ func EpayNotify(c *gin.Context) {
 				return
 			}
 			log.Printf("Yipay 回调更新用户成功 %v", topUp)
-			model.RecordLog(topUp.UserId, model.LogTypeTopup, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%f", logger.LogQuota(quotaToAdd), topUp.Money))
+			model.RecordLog(topUp.UserId, model.LogTypeTopup, model.FormatTopUpSuccessUserLog("", topUp))
 			// 与易支付成功路径一致：到账后按邀请关系给邀请人分销提成
 			model.ApplyAffiliateTopupReward(topUp.UserId, quotaToAdd)
 		}
@@ -1093,7 +1148,7 @@ func EpayNotify(c *gin.Context) {
 				return
 			}
 			log.Printf("易支付回调更新用户成功 %v", topUp)
-			model.RecordLog(topUp.UserId, model.LogTypeTopup, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%f", logger.LogQuota(quotaToAdd), topUp.Money))
+			model.RecordLog(topUp.UserId, model.LogTypeTopup, model.FormatTopUpSuccessUserLog("", topUp))
 			// 支付回调成功且额度已入账后发放邀请人分销奖励（与 model.Recharge / Yipay 等路径一致）
 			model.ApplyAffiliateTopupReward(topUp.UserId, quotaToAdd)
 		}
