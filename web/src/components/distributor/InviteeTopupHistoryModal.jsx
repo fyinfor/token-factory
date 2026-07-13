@@ -41,6 +41,7 @@ import {
   timestamp2string,
   getPayMethodDisplayName,
   formatTopupPayMoney,
+  formatTopupCreditedAmount,
 } from '../../helpers';
 import { StatusContext } from '../../context/Status';
 
@@ -195,7 +196,11 @@ export default function InviteeTopupHistoryModal({
               </Tag>
             );
           }
-          return <Text>{Number(amount || 0)}</Text>;
+          return (
+            <Text>
+              {formatTopupCreditedAmount(record?.money, record, usdExchangeRate)}
+            </Text>
+          );
         },
       },
       {
