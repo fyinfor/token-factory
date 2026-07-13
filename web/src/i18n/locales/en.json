@@ -1820,6 +1820,7 @@
         "禁用注册": "Disable registration",
         "禁止新用户注册": "New membership are not allowed.",
         "精确": "Exact",
+        "精确值": "Exact value",
         "警告": "Warning",
         "警告：禁用两步验证将永久删除您的验证设置和所有备用码，此操作不可撤销！": "Warning: Disabling two-factor authentication will permanently delete your verification settings and all backup codes. This action is irreversible!",
         "警告：启用保活后，如果已经写入保活数据后渠道出错，系统无法重试，如果必须开启，推荐设置尽可能大的Ping间隔": "Warning: After enabling keep-alive, if the channel fails after keep-alive data has been written, the system cannot retry. If you must enable it, it is recommended to set the Ping interval as large as possible",
