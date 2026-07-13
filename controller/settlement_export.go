@@ -234,7 +234,7 @@ func parseSettlementExportQuery(c *gin.Context) (settlementExportQuery, error) {
 	return out, nil
 }
 
-// GetSettlementSummary 管理员结算汇总（与导出共用筛选条件）。
+// GetSettlementSummary 管理员结算汇总（与导出共用筛选条件；分批聚合，不受导出行数上限限制）。
 func GetSettlementSummary(c *gin.Context) {
 	query, err := parseSettlementExportQuery(c)
 	if err != nil {

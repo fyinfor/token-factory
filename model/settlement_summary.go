@@ -3,12 +3,16 @@ package model
 import (
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"gorm.io/gorm"
 )
 
-const settlementSummaryMaxGroups = 100
+const (
+	settlementSummaryMaxGroups     = 100
+	settlementSummaryScanBatchSize = 5000
+)
 
 // SettlementSummaryAmounts 结算汇总金额与用量。
 type SettlementSummaryAmounts struct {
@@ -143,31 +147,40 @@ func settlementGroupKeyLabel(scope string, l *Log, agentMap map[int]string) (str
 	}
 }
 
-// BuildSettlementSummaryFromLogs 基于已加载日志构建结算汇总（导出与 API 共用）。
-func BuildSettlementSummaryFromLogs(logs []*Log, scope string, agentMap map[int]string) *SettlementSummaryResult {
-	totalsAcc := &settlementSummaryAccumulator{}
-	groupAcc := make(map[string]*settlementSummaryAccumulator)
-	groupLabel := make(map[string]string)
-
-	for _, l := range logs {
-		if l == nil {
-			continue
-		}
-		otherMap, _ := common.StrToMap(l.Other)
-		cacheTokens := ExtractCacheReadTokensFromOther(l.Other)
-		breakdown := ComputeSettlementPriceBreakdown(l.PromptTokens, l.CompletionTokens, cacheTokens, l.Quota, otherMap)
-		totalsAcc.addLog(l, breakdown, cacheTokens)
-
-		key, label := settlementGroupKeyLabel(scope, l, agentMap)
-		acc, ok := groupAcc[key]
-		if !ok {
-			acc = &settlementSummaryAccumulator{}
-			groupAcc[key] = acc
-			groupLabel[key] = label
-		}
-		acc.addLog(l, breakdown, cacheTokens)
+func accumulateSettlementSummaryLog(
+	l *Log,
+	scope string,
+	agentMap map[int]string,
+	totalsAcc *settlementSummaryAccumulator,
+	groupAcc map[string]*settlementSummaryAccumulator,
+	groupLabel map[string]string,
+) {
+	if l == nil {
+		return
 	}
+	otherMap, _ := common.StrToMap(l.Other)
+	cacheTokens := ExtractCacheReadTokensFromOther(l.Other)
+	breakdown := ComputeSettlementPriceBreakdown(l.PromptTokens, l.CompletionTokens, cacheTokens, l.Quota, otherMap)
+	totalsAcc.addLog(l, breakdown, cacheTokens)
 
+	key, label := settlementGroupKeyLabel(scope, l, agentMap)
+	acc, ok := groupAcc[key]
+	if !ok {
+		acc = &settlementSummaryAccumulator{}
+		groupAcc[key] = acc
+		groupLabel[key] = label
+	} else if label != "" && (groupLabel[key] == "" || strings.HasPrefix(groupLabel[key], "#")) {
+		groupLabel[key] = label
+	}
+	acc.addLog(l, breakdown, cacheTokens)
+}
+
+func finalizeSettlementSummary(
+	scope string,
+	totalsAcc *settlementSummaryAccumulator,
+	groupAcc map[string]*settlementSummaryAccumulator,
+	groupLabel map[string]string,
+) *SettlementSummaryResult {
 	groups := make([]SettlementSummaryGroup, 0, len(groupAcc))
 	for key, acc := range groupAcc {
 		groups = append(groups, SettlementSummaryGroup{
@@ -196,20 +209,148 @@ func BuildSettlementSummaryFromLogs(logs []*Log, scope string, agentMap map[int]
 	}
 }
 
-// GetSettlementSummary 按筛选条件汇总结算数据（与导出共用筛选，上限同导出）。
-func GetSettlementSummary(filter SettlementExportFilter, scope string) (*SettlementSummaryResult, error) {
-	logs, _, err := GetSettlementLogsForExport(filter)
-	if err != nil {
-		return nil, err
-	}
-	userIDs := make([]int, 0, len(logs))
+// BuildSettlementSummaryFromLogs 基于已加载日志构建结算汇总（导出与 API 共用）。
+func BuildSettlementSummaryFromLogs(logs []*Log, scope string, agentMap map[int]string) *SettlementSummaryResult {
+	totalsAcc := &settlementSummaryAccumulator{}
+	groupAcc := make(map[string]*settlementSummaryAccumulator)
+	groupLabel := make(map[string]string)
+
 	for _, l := range logs {
-		if l != nil && l.UserId > 0 {
-			userIDs = append(userIDs, l.UserId)
+		accumulateSettlementSummaryLog(l, scope, agentMap, totalsAcc, groupAcc, groupLabel)
+	}
+	return finalizeSettlementSummary(scope, totalsAcc, groupAcc, groupLabel)
+}
+
+func mergeSettlementGroupsByAgent(
+	groupAcc map[string]*settlementSummaryAccumulator,
+	agentMap map[int]string,
+) (map[string]*settlementSummaryAccumulator, map[string]string) {
+	mergedAcc := make(map[string]*settlementSummaryAccumulator)
+	mergedLabel := make(map[string]string)
+	for userKey, acc := range groupAcc {
+		userID, _ := strconv.Atoi(userKey)
+		agent := agentMap[userID]
+		if agent == "" {
+			agent = "(无代理)"
+		}
+		dst, ok := mergedAcc[agent]
+		if !ok {
+			dst = &settlementSummaryAccumulator{}
+			mergedAcc[agent] = dst
+			mergedLabel[agent] = agent
+		}
+		dst.RecordCount += acc.RecordCount
+		dst.PromptTokens += acc.PromptTokens
+		dst.CompletionTokens += acc.CompletionTokens
+		dst.CacheTokens += acc.CacheTokens
+		dst.OfficialTotalUSD += acc.OfficialTotalUSD
+		dst.CostPriceUSD += acc.CostPriceUSD
+		dst.OperatingPriceUSD += acc.OperatingPriceUSD
+		dst.SalesPriceUSD += acc.SalesPriceUSD
+		dst.UserPaidUSD += acc.UserPaidUSD
+	}
+	return mergedAcc, mergedLabel
+}
+
+func fillChannelGroupLabels(groupLabel map[string]string) {
+	if len(groupLabel) == 0 {
+		return
+	}
+	ids := make([]int, 0, len(groupLabel))
+	for key := range groupLabel {
+		id, err := strconv.Atoi(key)
+		if err != nil || id <= 0 {
+			continue
+		}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		return
+	}
+	type channelDisplayRow struct {
+		Id           int
+		RouteSlug    string
+		SupplierType string
+	}
+	var rows []channelDisplayRow
+	if err := DB.Model(&Channel{}).
+		Select("id", "route_slug", "supplier_type").
+		Where("id IN ?", ids).
+		Find(&rows).Error; err != nil {
+		common.SysError("failed to fill settlement channel labels: " + err.Error())
+		return
+	}
+	for _, row := range rows {
+		display := formatChannelDisplay(row.RouteSlug, row.SupplierType, row.Id)
+		if display == "" {
+			continue
+		}
+		key := strconv.Itoa(row.Id)
+		groupLabel[key] = display
+	}
+}
+
+// GetSettlementSummary 按筛选条件汇总结算数据（分批扫描聚合，不受导出行数上限限制）。
+func GetSettlementSummary(filter SettlementExportFilter, scope string) (*SettlementSummaryResult, error) {
+	if scope == "" {
+		scope = "platform"
+	}
+
+	totalsAcc := &settlementSummaryAccumulator{}
+	groupAcc := make(map[string]*settlementSummaryAccumulator)
+	groupLabel := make(map[string]string)
+
+	// 代理视角先按用户聚合，扫描结束后再合并到代理，避免扫描期反复查用户表。
+	scanScope := scope
+	if scope == "agent" {
+		scanScope = "user"
+	}
+
+	var lastID int
+	for {
+		var logs []*Log
+		tx := applySettlementExportFilter(LOG_DB, filter)
+		err := tx.Select(
+			"logs.id",
+			"logs.user_id",
+			"logs.username",
+			"logs.channel_id",
+			"logs.prompt_tokens",
+			"logs.completion_tokens",
+			"logs.quota",
+			"logs.other",
+		).Where("logs.id > ?", lastID).
+			Order("logs.id ASC").
+			Limit(settlementSummaryScanBatchSize).
+			Find(&logs).Error
+		if err != nil {
+			return nil, err
+		}
+		if len(logs) == 0 {
+			break
+		}
+		lastID = logs[len(logs)-1].Id
+
+		for _, l := range logs {
+			accumulateSettlementSummaryLog(l, scanScope, nil, totalsAcc, groupAcc, groupLabel)
 		}
 	}
-	agentMap := LoadInviterUsernameByUserIDs(userIDs)
-	return BuildSettlementSummaryFromLogs(logs, scope, agentMap), nil
+
+	if scope == "agent" {
+		userIDs := make([]int, 0, len(groupAcc))
+		for key := range groupAcc {
+			if id, err := strconv.Atoi(key); err == nil && id > 0 {
+				userIDs = append(userIDs, id)
+			}
+		}
+		agentMap := LoadInviterUsernameByUserIDs(userIDs)
+		groupAcc, groupLabel = mergeSettlementGroupsByAgent(groupAcc, agentMap)
+	}
+	if scope == "platform" || scope == "channel" {
+		fillChannelGroupLabels(groupLabel)
+	}
+
+	return finalizeSettlementSummary(scope, totalsAcc, groupAcc, groupLabel), nil
 }
 
 // applySettlementExportFilter 结算导出/汇总共用筛选。
