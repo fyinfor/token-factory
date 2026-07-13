@@ -1698,6 +1698,43 @@ html.dark .channel-price-value {
 }
 
 /* 侧边抽屉滚动条样式 */
+.sticky-table-horizontal-scrollbar {
+  position: fixed;
+  z-index: 1001;
+  height: 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.sticky-table-horizontal-scrollbar.is-visible {
+  pointer-events: auto;
+  opacity: 1;
+}
+
+.sticky-table-horizontal-scrollbar > div {
+  height: 1px;
+}
+
+.sticky-table-horizontal-scrollbar::-webkit-scrollbar {
+  height: 8px;
+}
+
+.sticky-table-horizontal-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(var(--semi-grey-2), 0.45);
+  border-radius: 2px;
+}
+
+.sticky-table-horizontal-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--semi-grey-2), 0.65);
+}
+
+.sticky-table-horizontal-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 .semi-sidesheet-body::-webkit-scrollbar {
   width: 6px;
   height: 6px;

@@ -40,7 +40,7 @@ import {
 
 // ========== 时间相关工具函数 ==========
 export const getDefaultTime = () => {
-  return localStorage.getItem(STORAGE_KEYS.DATA_EXPORT_DEFAULT_TIME) || 'hour';
+  return localStorage.getItem(STORAGE_KEYS.DATA_EXPORT_DEFAULT_TIME) || 'day';
 };
 
 export const getTimeInterval = (timeType, isSeconds = false) => {
@@ -56,10 +56,11 @@ export const getInitialTimestamp = () => {
   switch (defaultTime) {
     case 'hour':
       return timestamp2string(now - 86400);
+    case 'day':
     case 'week':
       return timestamp2string(now - 86400 * 30);
     default:
-      return timestamp2string(now - 86400 * 7);
+      return timestamp2string(now - 86400 * 30);
   }
 };
 
@@ -108,6 +109,8 @@ export const hasTrendChartData = (trendData) =>
 
 export const getTrendSpec = (data, color) => ({
   type: 'line',
+  background: 'transparent',
+  animation: false,
   data: [{ id: 'trend', values: data.map((val, idx) => ({ x: idx, y: val })) }],
   xField: 'x',
   yField: 'y',
@@ -136,9 +139,6 @@ export const getTrendSpec = (data, color) => ({
   },
   point: {
     visible: false,
-  },
-  background: {
-    fill: 'transparent',
   },
 });
 

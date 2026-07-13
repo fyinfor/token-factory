@@ -5819,7 +5819,8 @@
         "邮箱地址已被占用": "L'adresse e-mail est déjà utilisée",
         "新用户注册已关闭": "L'inscription de nouveaux utilisateurs est fermée",
         "密码长度不得小于 8 位！": "Le mot de passe doit comporter au moins 8 caractères !",
-        "发送失败，请稍后重试": "Échec de l'envoi, réessayez plus tard"
+        "发送失败，请稍后重试": "Échec de l'envoi, réessayez plus tard",
+        "控制 /console 首页的模型运行性能概览卡片是否显示": "Controls whether the model runtime overview card is shown on the /console homepage"
     },
     "广告按钮文案（英文）": "Button label (English)",
     "广告标题高亮词（英文）": "Title highlight (English)",
