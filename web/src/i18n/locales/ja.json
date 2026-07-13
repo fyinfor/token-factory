@@ -5819,7 +5819,8 @@
         "邮箱地址已被占用": "メールアドレスは既に使用されています",
         "新用户注册已关闭": "新規ユーザー登録は閉鎖されています",
         "密码长度不得小于 8 位！": "パスワードは8文字以上である必要があります！",
-        "发送失败，请稍后重试": "送信に失敗しました。後でもう一度お試しください"
+        "发送失败，请稍后重试": "送信に失敗しました。後でもう一度お試しください",
+        "控制 /console 首页的模型运行性能概览卡片是否显示": "Controls whether the model runtime overview card is shown on the /console homepage"
     },
     "广告按钮文案（英文）": "Button label (English)",
     "广告标题高亮词（英文）": "Title highlight (English)",

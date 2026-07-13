@@ -40,7 +40,7 @@ const StatsCards = ({
           <Card
             key={idx}
             {...CARD_PROPS}
-            className={`${group.color} border-0 !rounded-2xl w-full`}
+            className={`dashboard-stats-card ${group.color} w-full border-0 !rounded-2xl`}
             title={group.title}
           >
             <div className='space-y-4'>
@@ -96,7 +96,7 @@ const StatsCards = ({
                   ) : (
                     !loading &&
                     hasTrendChartData(item.trendData) && (
-                      <div className='w-24 h-10'>
+                      <div className='dashboard-mini-chart h-10 w-24'>
                         <VChart
                           spec={getTrendSpec(item.trendData, item.trendColor)}
                           option={CHART_CONFIG}

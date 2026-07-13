@@ -5819,7 +5819,8 @@
         "邮箱地址已被占用": "Anwani ya barua pepe imetumika",
         "新用户注册已关闭": "Usajili wa watumiaji wapya umefungwa",
         "密码长度不得小于 8 位！": "Nenosiri lazima liwe na angalau herufi 8!",
-        "发送失败，请稍后重试": "Kutuma kumeshindwa, jaribu tena baadaye"
+        "发送失败，请稍后重试": "Kutuma kumeshindwa, jaribu tena baadaye",
+        "控制 /console 首页的模型运行性能概览卡片是否显示": "Controls whether the model runtime overview card is shown on the /console homepage"
     },
     "广告按钮文案（英文）": "Button label (English)",
     "广告标题高亮词（英文）": "Title highlight (English)",

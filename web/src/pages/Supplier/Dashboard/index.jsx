@@ -1,4 +1,29 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+/*
+Copyright (C) 2025 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
+
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import {
   Button,
   Card,
@@ -39,6 +64,7 @@ import {
 import dayjs from 'dayjs';
 import { DATE_RANGE_PRESETS } from '../../../constants/console.constants';
 import { normalizeLanguage } from '../../../i18n/language';
+import { StatusContext } from '../../../context/Status';
 
 const { Title, Text } = Typography;
 
@@ -74,8 +100,7 @@ const summarizeSupplierUserRows = (users) =>
   (users || []).reduce(
     (acc, user) => ({
       total_requests: acc.total_requests + (user.requests || 0),
-      total_tokens:
-        acc.total_tokens + (user.tokens ?? user.token_used ?? 0),
+      total_tokens: acc.total_tokens + (user.tokens ?? user.token_used ?? 0),
       total_quota: acc.total_quota + (user.quota || 0),
     }),
     { total_requests: 0, total_tokens: 0, total_quota: 0 },
@@ -125,6 +150,7 @@ const buildSupplierDashboardPresets = (t) => {
  */
 export default function SupplierDashboardPage() {
   const { t, i18n } = useTranslation();
+  const [statusState] = useContext(StatusContext);
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const selectedSupplierId = searchParams.get('supplier_id');
@@ -138,6 +164,16 @@ export default function SupplierDashboardPage() {
   const [detailUsers, setDetailUsers] = useState([]);
   const [detailSummary, setDetailSummary] = useState(null);
   const [exporting, setExporting] = useState(false);
+  const status = statusState?.status || {};
+  const quotaDisplayKey = [
+    status.quota_display_type ||
+      localStorage.getItem('quota_display_type') ||
+      'USD',
+    status.quota_per_unit || localStorage.getItem('quota_per_unit') || '',
+    status.usd_exchange_rate || '',
+    status.custom_currency_symbol || '',
+    status.custom_currency_exchange_rate || '',
+  ].join('|');
 
   /** DatePicker 受控展示用的起止时间（由 timeRange 派生）。 */
   const rangePickerValue = useMemo(
@@ -170,12 +206,7 @@ export default function SupplierDashboardPage() {
     } finally {
       setLoading(false);
     }
-  }, [
-    selectedSupplierId,
-    timeRange.startTimestamp,
-    timeRange.endTimestamp,
-    t,
-  ]);
+  }, [selectedSupplierId, timeRange.startTimestamp, timeRange.endTimestamp, t]);
 
   useEffect(() => {
     loadDashboardData();
@@ -232,7 +263,10 @@ export default function SupplierDashboardPage() {
       const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = objectUrl;
-      a.download = `supplier-usage-detail-${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}.csv`;
+      a.download = `supplier-usage-detail-${new Date()
+        .toISOString()
+        .replace(/[-:T.Z]/g, '')
+        .slice(0, 14)}.csv`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -319,7 +353,7 @@ export default function SupplierDashboardPage() {
 
   const dashboardSpendDisplay = useMemo(
     () => renderQuotaSum(dashboardDisplayQuotas),
-    [dashboardDisplayQuotas],
+    [dashboardDisplayQuotas, quotaDisplayKey],
   );
 
   const usageColumns = useMemo(
@@ -349,7 +383,7 @@ export default function SupplierDashboardPage() {
         ),
       },
     ],
-    [t, openModelUsageDetail],
+    [t, openModelUsageDetail, quotaDisplayKey],
   );
 
   const modelUserDetailColumns = useMemo(
@@ -367,7 +401,7 @@ export default function SupplierDashboardPage() {
         render: (q) => renderQuota(q ?? 0),
       },
     ],
-    [t],
+    [t, quotaDisplayKey],
   );
 
   /**
@@ -473,7 +507,8 @@ export default function SupplierDashboardPage() {
   const canAccess = isSupplier() || isAdmin();
   /** 管理员查看「全部供应商汇总」时不展示单账户；指定 supplier_id 或与供应商本人一致时再展示。 */
   const showAccountSection =
-    !isAdmin() || Boolean(selectedSupplierId && String(selectedSupplierId).trim());
+    !isAdmin() ||
+    Boolean(selectedSupplierId && String(selectedSupplierId).trim());
 
   if (!canAccess) {
     return (
@@ -527,18 +562,16 @@ export default function SupplierDashboardPage() {
                 {isAdmin()
                   ? selectedSupplierId
                     ? selectedSupplierName
-                      ? t('当前展示指定供应商「{{name}}」的数据看板', { name: selectedSupplierName })
+                      ? t('当前展示指定供应商「{{name}}」的数据看板', {
+                          name: selectedSupplierName,
+                        })
                       : t('当前展示指定供应商的数据看板')
                     : t('当前展示全部供应商提供模型的统计数据')
                   : t('当前展示您提供模型的统计数据')}
               </Text>
             </div>
           </div>
-          <Space
-            wrap
-            className='w-full lg:w-auto lg:justify-end'
-            align='end'
-          >
+          <Space wrap className='w-full lg:w-auto lg:justify-end' align='end'>
             <div className='flex flex-col gap-1 min-w-[280px] flex-1 lg:flex-initial'>
               <Text type='tertiary' size='small'>
                 {t('supplier_dashboard_time_range')}

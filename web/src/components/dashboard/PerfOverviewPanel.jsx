@@ -1,5 +1,20 @@
 /*
 Copyright (C) 2025 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useContext, useEffect, useMemo, useState } from 'react';
@@ -38,14 +53,21 @@ const LeaderColumn = ({ title, rows, renderValue, valueColor }) => (
     ) : (
       <div className='flex flex-col gap-2'>
         {rows.map((item, index) => (
-          <div key={item.model_name} className='flex items-center justify-between gap-2'>
+          <div
+            key={item.model_name}
+            className='flex items-center justify-between gap-2'
+          >
             <div className='flex items-center gap-2 min-w-0'>
-              <span className='text-[10px] font-mono text-gray-400 w-4'>{index + 1}</span>
+              <span className='text-[10px] font-mono text-gray-400 w-4'>
+                {index + 1}
+              </span>
               <span className='text-xs truncate'>{item.model_name}</span>
             </div>
             <span
               className='text-xs font-mono font-semibold shrink-0'
-              style={{ color: valueColor?.(item) || 'var(--semi-color-text-0)' }}
+              style={{
+                color: valueColor?.(item) || 'var(--semi-color-text-0)',
+              }}
             >
               {renderValue(item)}
             </span>
@@ -79,7 +101,7 @@ const PerfOverviewPanel = ({ CARD_PROPS, t: propT }) => {
     setLoading(true);
     setError('');
     try {
-      const map = await fetchPerfMetricsSummary(24);
+      const map = await fetchPerfMetricsSummary(24 * 30);
       setModels(Object.values(map || {}));
     } catch (err) {
       setModels([]);
@@ -95,10 +117,6 @@ const PerfOverviewPanel = ({ CARD_PROPS, t: propT }) => {
 
   const leaders = useMemo(() => pickPerfLeaders(models, 5), [models]);
 
-  if (!loading && models.length === 0 && !error) {
-    return null;
-  }
-
   return (
     <Card
       {...CARD_PROPS}
@@ -112,7 +130,7 @@ const PerfOverviewPanel = ({ CARD_PROPS, t: propT }) => {
                 {t('模型运行性能概览')}
               </Title>
               <Text type='tertiary' size='small'>
-                {t('近24小时真实请求统计')}
+                {t('近30天真实请求统计')}
               </Text>
             </div>
           </div>
@@ -131,11 +149,6 @@ const PerfOverviewPanel = ({ CARD_PROPS, t: propT }) => {
                 </Button>
               </Link>
             ) : null}
-            <Link to='/pricing'>
-              <Button size='small' theme='light'>
-                {t('模型广场')}
-              </Button>
-            </Link>
           </div>
         </div>
       }
@@ -155,14 +168,22 @@ const PerfOverviewPanel = ({ CARD_PROPS, t: propT }) => {
             />
             <LeaderColumn
               title={
-                <PerfMetricLabel label='E2E' hint={t('E2E延迟说明')} className='text-xs' />
+                <PerfMetricLabel
+                  label='E2E'
+                  hint={t('E2E延迟说明')}
+                  className='text-xs'
+                />
               }
               rows={leaders.byLatency}
               renderValue={(item) => formatPerfLatency(item.avg_latency_ms)}
             />
             <LeaderColumn
               title={
-                <PerfMetricLabel label='TPS' hint={t('TPS说明')} className='text-xs' />
+                <PerfMetricLabel
+                  label='TPS'
+                  hint={t('TPS说明')}
+                  className='text-xs'
+                />
               }
               rows={leaders.byTps}
               renderValue={(item) => formatPerfThroughput(item.avg_tps)}
