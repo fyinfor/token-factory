@@ -30,7 +30,6 @@ import ApiInfoPanel from './ApiInfoPanel';
 import AnnouncementsPanel from './AnnouncementsPanel';
 import FaqPanel from './FaqPanel';
 import UptimePanel from './UptimePanel';
-import PerfOverviewPanel from './PerfOverviewPanel';
 import SearchModal from './modals/SearchModal';
 import DistributorAnalyticsBoard from '../distributor/DistributorAnalyticsBoard';
 
@@ -137,6 +136,33 @@ const Dashboard = () => {
     }),
   );
 
+  const isAdminDashboard = dashboardData.isAdminUser;
+  const hasDistributorDashboard = userIsDistributorUser(userState?.user);
+  const isDistributorDashboard = !isAdminDashboard && hasDistributorDashboard;
+  const sectionOrder = isAdminDashboard
+    ? {
+        charts: 1,
+        stats: 2,
+        information: 3,
+        distributor: 4,
+        other: 5,
+      }
+    : isDistributorDashboard
+      ? {
+          information: 1,
+          distributor: 2,
+          stats: 3,
+          charts: 4,
+          other: 5,
+        }
+      : {
+          stats: 1,
+          information: 2,
+          charts: 3,
+          distributor: 4,
+          other: 5,
+        };
+
   // ========== Effects ==========
   useEffect(() => {
     initChart();
@@ -166,39 +192,37 @@ const Dashboard = () => {
         t={dashboardData.t}
       />
 
-      {/* Model data analytics */}
-      <ChartsPanel
-        activeChartTab={dashboardData.activeChartTab}
-        setActiveChartTab={dashboardData.setActiveChartTab}
-        spec_line={dashboardCharts.spec_line}
-        spec_model_line={dashboardCharts.spec_model_line}
-        spec_pie={dashboardCharts.spec_pie}
-        spec_rank_bar={dashboardCharts.spec_rank_bar}
-        CARD_PROPS={CARD_PROPS}
-        CHART_CONFIG={CHART_CONFIG}
-        FLEX_CENTER_GAP2={FLEX_CENTER_GAP2}
-        hasApiInfoPanel={false}
-        t={dashboardData.t}
-      />
+      <div className='w-full' style={{ order: sectionOrder.charts }}>
+        {/* Model data analytics */}
+        <ChartsPanel
+          spec_line={dashboardCharts.spec_line}
+          spec_model_line={dashboardCharts.spec_model_line}
+          spec_pie={dashboardCharts.spec_pie}
+          spec_rank_bar={dashboardCharts.spec_rank_bar}
+          CARD_PROPS={CARD_PROPS}
+          CHART_CONFIG={CHART_CONFIG}
+          t={dashboardData.t}
+        />
+      </div>
 
-      {/* Model runtime overview */}
-      {dashboardData.perfOverviewEnabled ? (
-        <PerfOverviewPanel CARD_PROPS={CARD_PROPS} t={dashboardData.t} />
-      ) : null}
-
-      {/* Metrics cards */}
-      <StatsCards
-        groupedStatsData={groupedStatsData}
-        loading={dashboardData.loading}
-        getTrendSpec={getTrendSpec}
-        CARD_PROPS={CARD_PROPS}
-        CHART_CONFIG={CHART_CONFIG}
-      />
+      <div className='w-full' style={{ order: sectionOrder.stats }}>
+        {/* Metrics cards */}
+        <StatsCards
+          groupedStatsData={groupedStatsData}
+          loading={dashboardData.loading}
+          getTrendSpec={getTrendSpec}
+          CARD_PROPS={CARD_PROPS}
+          CHART_CONFIG={CHART_CONFIG}
+        />
+      </div>
 
       {/* Announcements and API info */}
       {(dashboardData.announcementsEnabled ||
         dashboardData.hasApiInfoPanel) && (
-        <div className='grid grid-cols-1 lg:grid-cols-4 gap-6'>
+        <div
+          className='grid grid-cols-1 lg:grid-cols-4 gap-6'
+          style={{ order: sectionOrder.information }}
+        >
           {dashboardData.announcementsEnabled && (
             <AnnouncementsPanel
               announcementData={announcementData}
@@ -227,13 +251,15 @@ const Dashboard = () => {
         </div>
       )}
 
-      {userIsDistributorUser(userState?.user) ? (
-        <DistributorAnalyticsBoard />
+      {hasDistributorDashboard ? (
+        <div className='w-full' style={{ order: sectionOrder.distributor }}>
+          <DistributorAnalyticsBoard />
+        </div>
       ) : null}
 
       {/* FAQ and uptime panels */}
       {(dashboardData.faqEnabled || dashboardData.uptimeEnabled) && (
-        <div>
+        <div style={{ order: sectionOrder.other }}>
           <div className='grid grid-cols-1 lg:grid-cols-4 gap-6'>
             {/* 常见问答卡片 */}
             {dashboardData.faqEnabled && (

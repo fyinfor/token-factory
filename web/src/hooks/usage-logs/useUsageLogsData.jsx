@@ -41,6 +41,8 @@ import {
   renderLogContent,
   renderConsumeBillingProcess,
   trimDecimalsInLogDetailText,
+  ceilToFixedDecimals,
+  formatCeilFixedDecimals,
 } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
@@ -225,7 +227,8 @@ export const useLogsData = () => {
     if (!Number.isFinite(numberValue)) {
       return '0';
     }
-    return numberValue.toFixed(digits).replace(/\.?0+$/, '') || '0';
+    // 进一法最多 6 位，去掉末尾 0（与花费列一致）
+    return formatCeilFixedDecimals(numberValue, digits);
   };
 
   const getVideoQuotaPerUnit = (other) => {
@@ -259,7 +262,7 @@ export const useLogsData = () => {
     )}`;
   };
 
-  const renderVideoQuota = (other, quota, digits = 2) => {
+  const renderVideoQuota = (other, quota, digits = 6) => {
     const q = Number(quota || 0);
     if (!Number.isFinite(q)) {
       return renderQuota(0, digits);
@@ -271,14 +274,15 @@ export const useLogsData = () => {
     }
 
     const displayValue = (q / getVideoQuotaPerUnit(other)) * (rate || 1);
-    const fixedResult = parseFloat(displayValue.toFixed(digits));
+    // 与花费列一致：6 位进一法，展示去尾零
+    const fixedResult = ceilToFixedDecimals(displayValue, digits);
     if (fixedResult === 0 && q > 0 && displayValue > 0) {
-      return `${symbol}${formatVideoDisplayNumber(
+      return `${symbol}${formatCeilFixedDecimals(
         Math.pow(10, -digits),
         digits,
       )}`;
     }
-    return `${symbol}${formatVideoDisplayNumber(fixedResult, digits)}`;
+    return `${symbol}${formatCeilFixedDecimals(fixedResult, digits)}`;
   };
 
   const buildVideoCostDisplayItems = (

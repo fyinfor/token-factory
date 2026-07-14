@@ -147,10 +147,12 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	}
 
 	needSensitiveCheck := setting.ShouldCheckPromptSensitive()
+	needTencentTMSCheck := setting.ShouldCheckPromptWithTencentTMS()
+	needTencentIMSCheck := setting.ShouldCheckImagesWithTencentIMS()
 	needCountToken := constant.CountToken
 	// Avoid building huge CombineText (strings.Join) when token counting and sensitive check are both disabled.
 	var meta *types.TokenCountMeta
-	if needSensitiveCheck || needCountToken {
+	if needSensitiveCheck || needTencentTMSCheck || needTencentIMSCheck || needCountToken {
 		meta = request.GetTokenCountMeta()
 	} else {
 		meta = fastTokenCountMetaForPricing(request)
@@ -161,6 +163,34 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		if contains {
 			logger.LogWarn(c, fmt.Sprintf("user sensitive words detected: %s", strings.Join(words, ", ")))
 			tokenFactoryError = types.NewError(err, types.ErrorCodeSensitiveWordsDetected)
+			return
+		}
+	}
+
+	if needTencentTMSCheck && meta != nil {
+		result, moderationErr := service.CheckTextWithTencentTMS(c.Request.Context(), meta.CombineText)
+		if moderationErr != nil {
+			logger.LogError(c, "tencent tms moderation failed: "+moderationErr.Error())
+			tokenFactoryError = types.NewErrorWithStatusCode(fmt.Errorf("腾讯云文本审核失败 / Tencent Cloud text moderation failed: %w", moderationErr), types.ErrorCodeContentModerationFailed, http.StatusBadGateway)
+			return
+		}
+		if result.Blocked {
+			logger.LogWarn(c, fmt.Sprintf("tencent tms content blocked: suggestion=%s, label=%s, sub_label=%s, score=%d", result.Suggestion, result.Label, result.SubLabel, result.Score))
+			tokenFactoryError = types.NewErrorWithStatusCode(errors.New("内容审核未通过，请修改后重试 / Content moderation rejected the prompt; please revise it and try again"), types.ErrorCodeSensitiveWordsDetected, http.StatusBadRequest)
+			return
+		}
+	}
+
+	if needTencentIMSCheck && meta != nil {
+		result, moderationErr := service.CheckImagesWithTencentIMS(c.Request.Context(), meta.Files)
+		if moderationErr != nil {
+			logger.LogError(c, "tencent ims moderation failed: "+moderationErr.Error())
+			tokenFactoryError = types.NewErrorWithStatusCode(fmt.Errorf("腾讯云图片审核失败 / Tencent Cloud image moderation failed: %w", moderationErr), types.ErrorCodeContentModerationFailed, http.StatusBadGateway)
+			return
+		}
+		if result.Blocked {
+			logger.LogWarn(c, fmt.Sprintf("tencent ims image blocked: suggestion=%s, label=%s, sub_label=%s, score=%d", result.Suggestion, result.Label, result.SubLabel, result.Score))
+			tokenFactoryError = types.NewErrorWithStatusCode(errors.New("图片审核未通过，请更换图片后重试 / Image moderation rejected the image; please replace it and try again"), types.ErrorCodeSensitiveWordsDetected, http.StatusBadRequest)
 			return
 		}
 	}
@@ -276,6 +306,23 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 		c.Request.Body = io.NopCloser(bodyStorage)
 
+		outputTextModeration := setting.ShouldCheckOutputWithTencentTMS() &&
+			relayInfo.RelayMode != relayconstant.RelayModeImagesGenerations &&
+			relayInfo.RelayMode != relayconstant.RelayModeImagesEdits &&
+			relayInfo.RelayMode != relayconstant.RelayModeAudioSpeech &&
+			relayInfo.RelayMode != relayconstant.RelayModeAudioTranslation &&
+			relayInfo.RelayMode != relayconstant.RelayModeAudioTranscription &&
+			relayInfo.RelayMode != relayconstant.RelayModeEmbeddings &&
+			relayInfo.RelayMode != relayconstant.RelayModeRerank
+		outputImageModeration := setting.ShouldCheckOutputImagesWithTencentIMS() &&
+			(relayInfo.RelayMode == relayconstant.RelayModeImagesGenerations || relayInfo.RelayMode == relayconstant.RelayModeImagesEdits)
+		originalWriter := c.Writer
+		var moderationWriter *moderationResponseWriter
+		if outputTextModeration || outputImageModeration {
+			moderationWriter = newModerationResponseWriter(c, outputTextModeration, outputImageModeration, relayInfo.IsStream || request.IsStream(c))
+			c.Writer = moderationWriter
+		}
+
 		switch relayFormat {
 		case types.RelayFormatOpenAIRealtime:
 			tokenFactoryError = relay.WssHelper(c, relayInfo)
@@ -285,6 +332,14 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			tokenFactoryError = geminiRelayHandler(c, relayInfo)
 		default:
 			tokenFactoryError = relayHandler(c, relayInfo)
+		}
+		if moderationWriter != nil {
+			c.Writer = originalWriter
+			if tokenFactoryError == nil {
+				if moderationErr := moderationWriter.Finalize(); moderationErr != nil {
+					tokenFactoryError = outputModerationError(moderationErr)
+				}
+			}
 		}
 
 		if tokenFactoryError == nil {
@@ -632,6 +687,19 @@ func RelayTask(c *gin.Context) {
 		return
 	}
 
+	var taskRequest relaycommon.TaskSubmitReq
+	if err = common.UnmarshalBodyReusable(c, &taskRequest); err != nil {
+		respondTaskError(c, service.TaskErrorWrapperLocal(err, "invalid_request", http.StatusBadRequest))
+		return
+	}
+	if taskRequest.InputReference != "" && relaycommon.DetectVideoBillingMode(&taskRequest) != relaycommon.VideoBillingModeVideoToVideo {
+		taskRequest.Images = append(taskRequest.Images, taskRequest.InputReference)
+	}
+	if taskErr := moderateTaskRequest(c, taskRequest.GetModerationMeta()); taskErr != nil {
+		respondTaskError(c, taskErr)
+		return
+	}
+
 	if taskErr := relay.ResolveOriginTask(c, relayInfo); taskErr != nil {
 		respondTaskError(c, taskErr)
 		return
@@ -775,6 +843,41 @@ func RelayTask(c *gin.Context) {
 	if taskErr != nil {
 		respondTaskError(c, taskErr)
 	}
+}
+
+func moderateTaskRequest(c *gin.Context, meta *types.TokenCountMeta) *dto.TaskError {
+	if meta == nil {
+		return nil
+	}
+	if setting.ShouldCheckPromptSensitive() {
+		if contains, words := service.CheckSensitiveText(meta.CombineText); contains {
+			logger.LogWarn(c, fmt.Sprintf("task sensitive words detected: %s", strings.Join(words, ", ")))
+			return service.TaskErrorWrapperLocal(errors.New("内容包含屏蔽词，请修改后重试 / Content contains blocked words; please revise it and try again"), string(types.ErrorCodeSensitiveWordsDetected), http.StatusBadRequest)
+		}
+	}
+	if setting.ShouldCheckPromptWithTencentTMS() {
+		result, err := service.CheckTextWithTencentTMS(c.Request.Context(), meta.CombineText)
+		if err != nil {
+			logger.LogError(c, "tencent tms task moderation failed: "+err.Error())
+			return service.TaskErrorWrapperLocal(fmt.Errorf("腾讯云文本审核失败 / Tencent Cloud text moderation failed: %w", err), string(types.ErrorCodeContentModerationFailed), http.StatusBadGateway)
+		}
+		if result.Blocked {
+			logger.LogWarn(c, fmt.Sprintf("tencent tms task blocked: suggestion=%s, label=%s, sub_label=%s, score=%d", result.Suggestion, result.Label, result.SubLabel, result.Score))
+			return service.TaskErrorWrapperLocal(errors.New("内容审核未通过，请修改后重试 / Content moderation rejected the prompt; please revise it and try again"), string(types.ErrorCodeSensitiveWordsDetected), http.StatusBadRequest)
+		}
+	}
+	if setting.ShouldCheckImagesWithTencentIMS() {
+		result, err := service.CheckImagesWithTencentIMS(c.Request.Context(), meta.Files)
+		if err != nil {
+			logger.LogError(c, "tencent ims task moderation failed: "+err.Error())
+			return service.TaskErrorWrapperLocal(fmt.Errorf("腾讯云图片审核失败 / Tencent Cloud image moderation failed: %w", err), string(types.ErrorCodeContentModerationFailed), http.StatusBadGateway)
+		}
+		if result.Blocked {
+			logger.LogWarn(c, fmt.Sprintf("tencent ims task image blocked: suggestion=%s, label=%s, sub_label=%s, score=%d", result.Suggestion, result.Label, result.SubLabel, result.Score))
+			return service.TaskErrorWrapperLocal(errors.New("图片审核未通过，请更换图片后重试 / Image moderation rejected the image; please replace it and try again"), string(types.ErrorCodeSensitiveWordsDetected), http.StatusBadRequest)
+		}
+	}
+	return nil
 }
 
 // respondTaskError 统一输出 Task 错误响应（含 429 限流提示改写）
