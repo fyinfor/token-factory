@@ -5819,7 +5819,8 @@
         "邮箱地址已被占用": "Alamat email sudah digunakan",
         "新用户注册已关闭": "Pendaftaran pengguna baru ditutup",
         "密码长度不得小于 8 位！": "Kata sandi minimal 8 karakter!",
-        "发送失败，请稍后重试": "Pengiriman gagal, coba lagi nanti"
+        "发送失败，请稍后重试": "Pengiriman gagal, coba lagi nanti",
+        "控制 /console 首页的模型运行性能概览卡片是否显示": "Controls whether the model runtime overview card is shown on the /console homepage"
     },
     "广告按钮文案（英文）": "Button label (English)",
     "广告标题高亮词（英文）": "Title highlight (English)",

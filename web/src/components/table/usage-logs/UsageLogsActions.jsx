@@ -28,11 +28,22 @@ import {
   API,
   showError,
   showSuccess,
+  renderNumber,
 } from '../../../helpers';
 import CompactModeToggle from '../../common/ui/CompactModeToggle';
 import { useMinimumLoadingTime } from '../../../hooks/common/useMinimumLoadingTime';
 import { getTodayStartTimestamp } from '../../../helpers/utils';
 import { normalizeLanguage } from '../../../i18n/language';
+
+/** RPM/TPM：大数用 k/M/B 紧凑展示；精确值用于 Tooltip。 */
+function formatRateMetric(value, locale) {
+  const n = Number(value);
+  const safe = Number.isFinite(n) && n > 0 ? n : 0;
+  const exact = Math.round(safe).toLocaleString(locale || undefined);
+  const display = safe >= 10000 ? renderNumber(safe) : exact;
+  return { display, exact };
+}
+
 
 /**
  * 日志页顶部统计展示：
@@ -54,6 +65,9 @@ const LogsActions = ({
   const needSkeleton = !showStat || showSkeleton;
   const [exporting, setExporting] = useState(false);
   const { i18n } = useTranslation();
+  const numberLocale = normalizeLanguage(i18n.language) || undefined;
+  const rpmMetric = formatRateMetric(stat?.rpm, numberLocale);
+  const tpmMetric = formatRateMetric(stat?.tpm, numberLocale);
 
   const buildLogTypeQueryParam = (logType) => {
     if (logType == null || logType === '' || logType === '0') {
@@ -181,7 +195,16 @@ const LogsActions = ({
               {t('消耗额度')}: {renderLogStatDisplayQuota(stat, digits)}
             </Tag>
           </Tooltip>
-          <Tooltip content={t('RPM 统计说明')}>
+          <Tooltip
+            content={
+              <div>
+                <div>{t('RPM 统计说明')}</div>
+                <div>
+                  {t('精确值')}: {rpmMetric.exact}
+                </div>
+              </div>
+            }
+          >
             <Tag
               color='pink'
               style={{
@@ -192,10 +215,19 @@ const LogsActions = ({
               }}
               className='!rounded-lg'
             >
-              {t('RPM')}: {stat?.rpm ?? 0}
+              {t('RPM')}: {rpmMetric.display}
             </Tag>
           </Tooltip>
-          <Tooltip content={t('TPM 统计说明')}>
+          <Tooltip
+            content={
+              <div>
+                <div>{t('TPM 统计说明')}</div>
+                <div>
+                  {t('精确值')}: {tpmMetric.exact}
+                </div>
+              </div>
+            }
+          >
             <Tag
               color='white'
               style={{
@@ -207,7 +239,7 @@ const LogsActions = ({
               }}
               className='!rounded-lg'
             >
-              {t('TPM')}: {stat?.tpm ?? 0}
+              {t('TPM')}: {tpmMetric.display}
             </Tag>
           </Tooltip>
         </Space>
