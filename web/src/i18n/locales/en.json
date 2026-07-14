@@ -6016,7 +6016,8 @@
         "新用户注册已关闭": "New user registration is closed",
         "密码长度不得小于 8 位！": "Password must be at least 8 characters!",
         "发送失败，请稍后重试": "Send failed, please try again later",
-        "控制 /console 首页的模型运行性能概览卡片是否显示": "Controls whether the model runtime overview card is shown on the /console homepage"
+        "控制 /console 首页的模型运行性能概览卡片是否显示": "Controls whether the model runtime overview card is shown on the /console homepage",
+        "性能看板": "Performance Dashboard"
     },
     "广告按钮文案（英文）": "Button label (English)",
     "广告标题高亮词（英文）": "Title highlight (English)",
@@ -6033,5 +6034,23 @@
     "确认选择": "Confirm Selection",
     "素材库": "Material Library",
     "图片加载失败": "Image failed to load",
-    "仅支持Seedance2.0模型": "Only supports Seedance 2.0 model"
+    "仅支持Seedance2.0模型": "Only supports Seedance 2.0 model",
+    "启用腾讯云文本内容安全": "Enable Tencent Cloud text moderation",
+    "审核 Prompt，返回 Review 或 Block 时拒绝请求": "Moderate prompts and reject requests marked Review or Block",
+    "腾讯云 SecretId": "Tencent Cloud SecretId",
+    "请输入腾讯云 SecretId": "Enter Tencent Cloud SecretId",
+    "腾讯云 SecretKey": "Tencent Cloud SecretKey",
+    "请输入腾讯云 SecretKey": "Enter Tencent Cloud SecretKey",
+    "腾讯云地域": "Tencent Cloud region",
+    "腾讯云 BizType": "Tencent Cloud BizType",
+    "不使用自定义策略时保留默认值": "Keep the default value when no custom policy is used",
+    "启用腾讯云文本内容安全前请填写完整凭证和地域": "Enter complete credentials and region before enabling Tencent Cloud text moderation",
+    "启用腾讯云图片内容安全": "Enable Tencent Cloud image moderation",
+    "审核请求中的图片，返回 Review 或 Block 时拒绝请求": "Moderate request images and reject requests marked Review or Block",
+    "腾讯云图片 BizType": "Tencent Cloud image BizType",
+    "不使用图片自定义策略时保留默认值": "Keep the default value when no custom image policy is used",
+    "审核上游返回的文本": "Moderate upstream text responses",
+    "非流式完整审核，流式按段审核通过后再返回": "Moderate complete non-streaming responses and release streaming segments only after approval",
+    "审核上游生成的图片": "Moderate upstream generated images",
+    "取得图片 URL 或 Base64 后审核通过再返回": "Moderate image URLs or Base64 data before returning them"
 }

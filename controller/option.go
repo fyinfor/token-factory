@@ -118,6 +118,10 @@ func GetOptions(c *gin.Context) {
 		if k == "SMSAccessKeyIDIntl" || k == "SMSAccessKeySecretIntl" {
 			continue
 		}
+		// 腾讯云文本内容安全凭证在循环结束后单独追加（脱敏）。
+		if k == "TencentTMSSecretID" || k == "TencentTMSSecretKey" {
+			continue
+		}
 		value := common.Interface2String(v)
 		if strings.HasSuffix(k, "Token") ||
 			strings.HasSuffix(k, "Secret") ||
@@ -249,6 +253,22 @@ func GetOptions(c *gin.Context) {
 	options = append(options, &model.Option{
 		Key:   "UcoinApiKey",
 		Value: ucoinApiKeyDisp,
+	})
+	tencentTMSSecretIDDisp := ""
+	if strings.TrimSpace(setting.TencentTMSSecretID) != "" {
+		tencentTMSSecretIDDisp = common.MaskCredentialForAdminDisplay(setting.TencentTMSSecretID)
+	}
+	options = append(options, &model.Option{
+		Key:   "TencentTMSSecretID",
+		Value: tencentTMSSecretIDDisp,
+	})
+	tencentTMSSecretKeyDisp := ""
+	if strings.TrimSpace(setting.TencentTMSSecretKey) != "" {
+		tencentTMSSecretKeyDisp = common.MaskCredentialForAdminDisplay(setting.TencentTMSSecretKey)
+	}
+	options = append(options, &model.Option{
+		Key:   "TencentTMSSecretKey",
+		Value: tencentTMSSecretKeyDisp,
 	})
 	common.OptionMapRWMutex.Unlock()
 	options = append(options, &model.Option{
@@ -396,6 +416,24 @@ func UpdateOption(c *gin.Context) {
 	// UcoinApiKey 为脱敏回显字段：若提交值与脱敏展示一致或为空，视为未修改，保留原值。
 	if option.Key == "UcoinApiKey" && strings.TrimSpace(setting.UcoinApiKey) != "" {
 		if valStr == "" || valStr == common.MaskCredentialForAdminDisplay(setting.UcoinApiKey) {
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"message": "",
+			})
+			return
+		}
+	}
+	if option.Key == "TencentTMSSecretID" && strings.TrimSpace(setting.TencentTMSSecretID) != "" {
+		if valStr == common.MaskCredentialForAdminDisplay(setting.TencentTMSSecretID) {
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"message": "",
+			})
+			return
+		}
+	}
+	if option.Key == "TencentTMSSecretKey" && strings.TrimSpace(setting.TencentTMSSecretKey) != "" {
+		if valStr == common.MaskCredentialForAdminDisplay(setting.TencentTMSSecretKey) {
 			c.JSON(http.StatusOK, gin.H{
 				"success": true,
 				"message": "",

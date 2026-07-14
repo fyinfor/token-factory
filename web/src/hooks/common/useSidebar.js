@@ -35,6 +35,7 @@ export const DEFAULT_ADMIN_CONFIG = {
   console: {
     enabled: true,
     detail: true,
+    performance: true,
     token: true,
     log: true,
     midjourney: true,
@@ -91,7 +92,10 @@ export const mergeAdminConfig = (savedConfig) => {
   }
 
   // 兼容旧配置：个人中心「供应商管理」曾使用 provider 键
-  if (merged.personal && Object.prototype.hasOwnProperty.call(merged.personal, 'provider')) {
+  if (
+    merged.personal &&
+    Object.prototype.hasOwnProperty.call(merged.personal, 'provider')
+  ) {
     if (!Object.prototype.hasOwnProperty.call(merged.personal, 'supplier')) {
       merged.personal.supplier = merged.personal.provider;
     }

@@ -103,6 +103,7 @@ import {
   Info,
   LayoutGrid,
   Route,
+  Gauge,
 } from 'lucide-react';
 import {
   SiAtlassian,
@@ -153,6 +154,8 @@ export function getLucideIcon(key, selected = false) {
       return <Info {...commonProps} color={iconColor} />;
     case 'detail':
       return <LayoutDashboard {...commonProps} color={iconColor} />;
+    case 'performance':
+      return <Gauge {...commonProps} color={iconColor} />;
     case 'playground':
       return <TerminalSquare {...commonProps} color={iconColor} />;
     case 'chat':

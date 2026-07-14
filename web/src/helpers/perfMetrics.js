@@ -88,8 +88,15 @@ export function buildHourlySeriesFromSummary(perf) {
   return [];
 }
 
-export async function fetchPerfMetricsSummary(hours = 24) {
-  const res = await API.get('/api/perf_metrics/summary', { params: { hours } });
+export async function fetchPerfMetricsSummary(options = 24) {
+  const params =
+    typeof options === 'number'
+      ? { hours: options }
+      : {
+          start_timestamp: options?.startTimestamp,
+          end_timestamp: options?.endTimestamp,
+        };
+  const res = await API.get('/api/perf_metrics/summary', { params });
   const { success, data, message } = res.data || {};
   if (!success) {
     throw new Error(message || 'failed to load perf metrics summary');

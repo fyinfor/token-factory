@@ -147,11 +147,22 @@ func QuerySummaryAll(hours int, groups []string) (SummaryAllResult, error) {
 	if hours <= 0 {
 		hours = 24
 	}
-	if hours > 24*30 {
-		hours = 24 * 30
-	}
 	endTs := time.Now().Unix()
 	startTs := endTs - int64(hours)*3600
+	return QuerySummaryRange(startTs, endTs, groups)
+}
+
+func QuerySummaryRange(startTs int64, endTs int64, groups []string) (SummaryAllResult, error) {
+	if endTs <= 0 {
+		endTs = time.Now().Unix()
+	}
+	if startTs <= 0 || startTs >= endTs {
+		startTs = endTs - 24*3600
+	}
+	const maxRangeSeconds = int64(366 * 24 * 3600)
+	if endTs-startTs > maxRangeSeconds {
+		startTs = endTs - maxRangeSeconds
+	}
 	allowedGroups := allowedGroupSet(groups)
 
 	rows, err := model.GetPerfMetricsSummaryBucketsAll(startTs, endTs, groups)
@@ -216,7 +227,7 @@ func QuerySummaryAll(hours int, groups []string) (SummaryAllResult, error) {
 			AvgTps:             math.Round(avgTps*100) / 100,
 			CacheHitRate:       math.Round(cacheHitRate(total)*100) / 100,
 			RecentSuccessRates: recentSuccessRates(modelBuckets[name], 3),
-			HourlySeries:       hourlySeriesForModel(modelBuckets[name], hours),
+			HourlySeries:       hourlySeriesForModelRange(modelBuckets[name], startTs, endTs),
 			RequestCount:       total.requestCount,
 		})
 	}
@@ -264,19 +275,19 @@ func mergeModelBucket(modelBuckets map[string]map[int64]counters, modelName stri
 	modelBuckets[modelName][bucketTs] = current
 }
 
-func hourlySeriesForModel(buckets map[int64]counters, hours int) []BucketPoint {
-	if hours <= 0 {
-		hours = 24
+func hourlySeriesForModelRange(buckets map[int64]counters, startTs int64, endTs int64) []BucketPoint {
+	startBucket := startTs - (startTs % 3600)
+	endBucket := endTs - (endTs % 3600)
+	if endBucket < endTs {
+		endBucket += 3600
 	}
-	if hours > 24 {
-		hours = 24
-	}
-	nowBucket := bucketStart(time.Now().Unix())
-	series := make([]BucketPoint, 0, hours)
-	for i := hours - 1; i >= 0; i-- {
-		slotStart := nowBucket - int64(i)*3600
+	series := make([]BucketPoint, 0, len(buckets))
+	for slotStart := startBucket; slotStart < endBucket; slotStart += 3600 {
 		slotEnd := slotStart + 3600
 		agg := aggregateBucketsInRange(buckets, slotStart, slotEnd)
+		if agg.requestCount == 0 {
+			continue
+		}
 		point := bucketPoint(slotStart, agg)
 		point.RequestCount = agg.requestCount
 		series = append(series, point)
