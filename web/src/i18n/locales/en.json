@@ -4452,7 +4452,7 @@
     "消费明细": "Usage details",
     "消耗": "Consumption",
     "消耗额度": "Used Quota",
-    "消耗额度统计说明": "Sum of consume logs using the same per-row rounding as the Cost column in the list; not affected by the log type dropdown above",
+    "消耗额度统计说明": "Under the current filters, totals include text, image, and video billing; each consume row is ceiled to 6 decimal places (same as the Cost column) then summed; not affected by the log type dropdown above",
     "消耗分布": "Consumption distribution",
     "消耗趋势": "Consumption trend",
     "消息": "Message",

@@ -21,12 +21,24 @@ import React, { useState } from 'react';
 import { Tag, Space, Skeleton, Tooltip, Button } from '@douyinfe/semi-ui';
 import { IconDownload } from '@douyinfe/semi-icons';
 import { useTranslation } from 'react-i18next';
-import { renderLogStatDisplayQuota } from '../../../helpers';
+import {
+  renderLogStatDisplayQuota,
+  formatLogConsumeDisplayAmount,
+  LOG_CONSUME_AMOUNT_DIGITS,
+  API,
+  showError,
+  showSuccess,
+} from '../../../helpers';
 import CompactModeToggle from '../../common/ui/CompactModeToggle';
 import { useMinimumLoadingTime } from '../../../hooks/common/useMinimumLoadingTime';
-import { API, showError, showSuccess } from '../../../helpers';
 import { getTodayStartTimestamp } from '../../../helpers/utils';
 import { normalizeLanguage } from '../../../i18n/language';
+
+/**
+ * 日志页顶部统计展示：
+ * - 消耗额度 = 文本 + 图片 + 视频三类计费总消耗（后端已按 6 位进一汇总）
+ * - Tooltip 展示三类分项（同样 6 位进一）
+ */
 const LogsActions = ({
   stat,
   loadingStat,
@@ -115,6 +127,34 @@ const LogsActions = ({
     }
   };
 
+  const digits = LOG_CONSUME_AMOUNT_DIGITS;
+  const textAmount = Number(stat?.text_display_amount);
+  const imageAmount = Number(stat?.image_display_amount);
+  const videoAmount = Number(stat?.video_display_amount);
+  const hasTypeBreakdown =
+    Number.isFinite(textAmount) ||
+    Number.isFinite(imageAmount) ||
+    Number.isFinite(videoAmount);
+
+  const consumeStatTooltip = (
+    <div style={{ lineHeight: 1.6 }}>
+      <div>{t('消耗额度统计说明')}</div>
+      {hasTypeBreakdown ? (
+        <>
+          <div>
+            {t('文本')}：{formatLogConsumeDisplayAmount(textAmount || 0, digits)}
+          </div>
+          <div>
+            {t('图片')}：{formatLogConsumeDisplayAmount(imageAmount || 0, digits)}
+          </div>
+          <div>
+            {t('视频')}：{formatLogConsumeDisplayAmount(videoAmount || 0, digits)}
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+
   const placeholder = (
     <Space>
       <Skeleton.Title style={{ width: 108, height: 21, borderRadius: 6 }} />
@@ -127,7 +167,7 @@ const LogsActions = ({
     <div className='flex flex-col md:flex-row justify-between items-start md:items-center gap-2 w-full'>
       <Skeleton loading={needSkeleton} active placeholder={placeholder}>
         <Space>
-          <Tooltip content={t('消耗额度统计说明')}>
+          <Tooltip content={consumeStatTooltip}>
             <Tag
               color='blue'
               style={{
@@ -138,7 +178,7 @@ const LogsActions = ({
               }}
               className='!rounded-lg'
             >
-              {t('消耗额度')}: {renderLogStatDisplayQuota(stat)}
+              {t('消耗额度')}: {renderLogStatDisplayQuota(stat, digits)}
             </Tag>
           </Tooltip>
           <Tooltip content={t('RPM 统计说明')}>

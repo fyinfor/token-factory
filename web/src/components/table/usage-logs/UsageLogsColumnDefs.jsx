@@ -36,6 +36,9 @@ import {
   renderModelTag,
   renderModelPriceSimple,
   trimDecimalsInLogDetailText,
+  ceilToFixedDecimals,
+  formatCeilFixedDecimals,
+  LOG_CONSUME_AMOUNT_DIGITS,
 } from '../../../helpers';
 import { IconHelpCircle } from '@douyinfe/semi-icons';
 import { CircleAlert, Sparkles } from 'lucide-react';
@@ -86,12 +89,13 @@ function buildChannelAffinityTooltip(affinity, t) {
   );
 }
 
-function formatPreciseNumber(value, digits = 6) {
+function formatPreciseNumber(value, digits = LOG_CONSUME_AMOUNT_DIGITS) {
   const numberValue = Number(value || 0);
   if (!Number.isFinite(numberValue)) {
-    return '0';
+    return formatCeilFixedDecimals(0, digits);
   }
-  return numberValue.toFixed(digits).replace(/\.?0+$/, '') || '0';
+  // 花费列：进一法后去掉末尾多余 0（如 13.640000 → 13.64）
+  return formatCeilFixedDecimals(numberValue, digits);
 }
 
 function getLogVideoQuotaPerUnit(other) {
@@ -115,7 +119,7 @@ function isVideoBillingLog(other) {
   );
 }
 
-function renderLogVideoQuota(other, quota, digits = 6) {
+function renderLogVideoQuota(other, quota, digits = LOG_CONSUME_AMOUNT_DIGITS) {
   const q = Number(quota || 0);
   if (!Number.isFinite(q)) {
     return renderQuota(0, digits);
@@ -127,17 +131,35 @@ function renderLogVideoQuota(other, quota, digits = 6) {
   }
 
   const displayValue = (q / getLogVideoQuotaPerUnit(other)) * (rate || 1);
-  const fixedResult = parseFloat(displayValue.toFixed(digits));
+  // 进一法保留 6 位，与消费统计总口径一致
+  const fixedResult = ceilToFixedDecimals(displayValue, digits);
   if (fixedResult === 0 && q > 0 && displayValue > 0) {
     return `${symbol}${formatPreciseNumber(Math.pow(10, -digits), digits)}`;
   }
   return `${symbol}${formatPreciseNumber(fixedResult, digits)}`;
 }
 
-function renderUsageLogQuota(record, quota, other, digits = 2) {
-  return isVideoBillingLog(other)
-    ? renderLogVideoQuota(other, quota, Math.max(digits, 6))
-    : renderQuota(quota, digits);
+/**
+ * 日志「花费」列：文本 / 图片 / 视频统一按 6 位进一法展示。
+ * 视频走专用额度换算；其余走通用 renderQuota（digits=6 时内部截断），
+ * 此处对非视频也改为进一法，避免与顶部统计口径不一致。
+ */
+function renderUsageLogQuota(record, quota, other, digits = LOG_CONSUME_AMOUNT_DIGITS) {
+  if (isVideoBillingLog(other)) {
+    return renderLogVideoQuota(other, quota, Math.max(digits, LOG_CONSUME_AMOUNT_DIGITS));
+  }
+  const q = Number(quota || 0);
+  const { symbol, rate, type } = getCurrencyConfig();
+  if (type === 'TOKENS') {
+    return renderQuota(q, digits);
+  }
+  const unit = Number(getQuotaPerUnit() || 0) || 1;
+  const raw = (q / unit) * (rate || 1);
+  const fixedResult = ceilToFixedDecimals(raw, digits);
+  if (fixedResult === 0 && q > 0 && raw > 0) {
+    return `${symbol}${formatCeilFixedDecimals(Math.pow(10, -digits), digits)}`;
+  }
+  return `${symbol}${formatCeilFixedDecimals(fixedResult, digits)}`;
 }
 
 // Render functions
@@ -911,7 +933,7 @@ export const getLogsColumns = ({
         }
         const other = getLogOther(record.other);
         const isSubscription = other?.billing_source === 'subscription';
-        const quotaDigits = isVideoBillingLog(other) ? 6 : 2;
+        const quotaDigits = LOG_CONSUME_AMOUNT_DIGITS;
         if (isSubscription) {
           // Subscription billed: show only tag (no $0), but keep tooltip for equivalent cost.
           return (

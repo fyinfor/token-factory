@@ -25,6 +25,7 @@ export * from './api';
 export * from './billingFormula';
 export * from './render';
 export * from './log';
+export * from './logConsumeStat';
 export * from './data';
 export * from './token';
 export * from './boolean';
