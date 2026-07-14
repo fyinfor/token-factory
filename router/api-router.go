@@ -43,6 +43,11 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/home_page_content", controller.GetHomePageContent)
 		apiRouter.GET("/pricing", middleware.TryUserAuth(), controller.GetPricing)
 		apiRouter.POST("/price_sync", middleware.CriticalRateLimit(), controller.PriceSync)
+
+		// 终端用户素材库 Action 网关：POST /api/material?Action=xxx（Token 鉴权）。
+		// 与 Web 控制台 REST 路由（UserAuth）及上游 tokenspace 内部调用（seedance_material）三层隔离。
+		apiRouter.POST("/material", middleware.TokenAuth(), middleware.CriticalRateLimit(), controller.HandleMaterialAction)
+
 		apiRouter.GET("/verification", middleware.EmailVerificationRateLimit(), middleware.TurnstileCheck(), controller.SendEmailVerification)
 		apiRouter.GET("/sms_verification", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.SendSMSVerification)
 		apiRouter.GET("/reset_password", middleware.CriticalRateLimit(), middleware.TurnstileCheck(), controller.SendPasswordResetEmail)
@@ -490,6 +495,18 @@ func SetApiRouter(router *gin.Engine) {
 			materialRoute.POST("/upload-url", middleware.UploadRateLimit(), controller.UploadMaterialByURL)
 			materialRoute.GET("/asset/:asset_id", controller.GetMaterial)
 			materialRoute.DELETE("/asset/:asset_id", controller.DeleteMaterial)
+			// 真人认证会话（Web 控制台，BytedToken 仅后端存储）。
+			materialRoute.POST("/visual/session", controller.CreateVisualSession)
+			materialRoute.GET("/visual/result", controller.PollVisualResult)
+			// 真人分组与素材管理（Web 控制台）。
+			materialRoute.GET("/real/groups", controller.ListRealGroups)
+			materialRoute.PUT("/real/groups/:group_id", controller.UpdateRealGroup)
+			materialRoute.DELETE("/real/groups/:group_id", controller.DeleteRealGroup)
+			materialRoute.GET("/real/assets", controller.ListRealAssets)
+			materialRoute.POST("/real/upload", middleware.UploadRateLimit(), controller.UploadRealMaterial)
+			materialRoute.POST("/real/upload-url", middleware.UploadRateLimit(), controller.UploadRealMaterialByURL)
+			materialRoute.GET("/real/asset/:asset_id", controller.GetRealMaterial)
+			materialRoute.DELETE("/real/asset/:asset_id", controller.DeleteRealMaterial)
 		}
 
 		// 个人素材接口：基于用户 API 令牌（sk-xxx）鉴权，自动识别归属用户，
@@ -502,6 +519,18 @@ func SetApiRouter(router *gin.Engine) {
 			personalMaterialRoute.GET("/assets", controller.ListPersonalMaterialAssets)
 			personalMaterialRoute.DELETE("/asset/:asset_id", controller.DeletePersonalMaterial)
 			personalMaterialRoute.GET("/asset/:asset_id", controller.GetPersonalMaterial)
+			// 真人认证会话（个人 API 令牌，直接返回 BytedToken 供程序化客户端轮询）。
+			personalMaterialRoute.POST("/visual/session", controller.CreatePersonalVisualSession)
+			personalMaterialRoute.POST("/visual/result", controller.GetPersonalVisualResult)
+			// 真人分组与素材管理（个人 API 令牌）。
+			personalMaterialRoute.GET("/real/groups", controller.ListPersonalRealGroups)
+			personalMaterialRoute.PUT("/real/groups/:group_id", controller.UpdatePersonalRealGroup)
+			personalMaterialRoute.DELETE("/real/groups/:group_id", controller.DeletePersonalRealGroup)
+			personalMaterialRoute.GET("/real/assets", controller.ListPersonalRealAssets)
+			personalMaterialRoute.POST("/real/upload", middleware.UploadRateLimit(), controller.UploadPersonalRealMaterial)
+			personalMaterialRoute.POST("/real/upload-url", middleware.UploadRateLimit(), controller.UploadPersonalRealMaterialByURL)
+			personalMaterialRoute.GET("/real/asset/:asset_id", controller.GetPersonalRealMaterial)
+			personalMaterialRoute.DELETE("/real/asset/:asset_id", controller.DeletePersonalRealMaterial)
 		}
 
 		usageRoute := apiRouter.Group("/usage")

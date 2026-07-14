@@ -1387,6 +1387,29 @@ function toFixedTruncated(num, fractionDigits) {
   return truncated.toFixed(fractionDigits);
 }
 
+/**
+ * 进一法保留指定位小数（日志消费统计口径），返回去尾零后的字符串。
+ * 超出 digits 位时向上进一；与 helpers/logConsumeStat.ceilToFixedDecimals 规则一致。
+ * 例：13.640000 → "13.64"；1.2345671 → "1.234568"
+ */
+function toFixedCeiled(num, fractionDigits) {
+  const n = Number(num);
+  if (!Number.isFinite(n) || n === 0) {
+    return '0';
+  }
+  const factor = Math.pow(10, fractionDigits);
+  const eps = 1e-10;
+  const ceiled =
+    n > 0
+      ? Math.ceil(n * factor - eps) / factor
+      : Math.floor(n * factor + eps) / factor;
+  let s = ceiled.toFixed(fractionDigits);
+  if (s.includes('.')) {
+    s = s.replace(/\.?0+$/, '');
+  }
+  return s || '0';
+}
+
 export function pickQuotaDisplayFractionDigits(
   displayValue,
   minDigits = 2,
@@ -1494,20 +1517,26 @@ export function renderQuotaSum(quotas, digits = 2) {
   return firstParts.symbol + trimFixedDecimalDisplay(totalFixed, digits);
 }
 
-/** 使用日志顶部「消耗额度」：与列表各行 renderQuota 按行舍入后再合计一致。 */
-export function renderLogStatDisplayQuota(stat, digits = 2) {
+/** 使用日志顶部「消耗额度」：金额强制 6 位小数，超出部分进一法向上取入。 */
+export function renderLogStatDisplayQuota(stat, digits = 6) {
+  const { symbol, rate, type } = getCurrencyConfig();
   if (
     stat != null &&
     stat.display_amount != null &&
     Number.isFinite(Number(stat.display_amount))
   ) {
-    const displayType = localStorage.getItem('quota_display_type') || 'USD';
-    if (displayType === 'TOKENS') {
+    if (type === 'TOKENS') {
       return renderNumber(Math.round(Number(stat.display_amount)));
     }
-    return renderQuotaWithAmount(Number(stat.display_amount));
+    // 后端已按 6 位进一汇总；展示侧再进一收口，避免浮点传输误差
+    return symbol + toFixedCeiled(Number(stat.display_amount), digits);
   }
-  return renderQuota(stat?.quota ?? 0, digits);
+  if (type === 'TOKENS') {
+    return renderNumber(stat?.quota ?? 0);
+  }
+  const unit = Number(getQuotaPerUnit() || 0) || 1;
+  const raw = (Number(stat?.quota ?? 0) / unit) * (rate || 1);
+  return symbol + toFixedCeiled(raw, digits);
 }
 
 /**
@@ -1692,23 +1721,45 @@ function formatRatioValue(value, digits = 2) {
   return parseFloat(num.toFixed(digits));
 }
 
-function renderDisplayAmountFromUsd(usdAmount, digits = 2) {
-  return renderQuotaWithAmount(Number(Number(usdAmount || 0).toFixed(digits)));
+function renderDisplayAmountFromUsd(usdAmount, digits = 6) {
+  const { symbol, rate, type } = getCurrencyConfig();
+  const rawUsd = Number(usdAmount || 0);
+  if (type === 'TOKENS') {
+    return renderNumber(Math.round(rawUsd * getQuotaPerUnit()));
+  }
+  // 计费过程金额：与花费列一致，6 位进一后去尾零
+  return symbol + toFixedCeiled(rawUsd * (rate || 1), digits);
 }
 
-function formatBillingDisplayPrice(usdAmount, rate, digits = 2) {
-  return parseFloat((usdAmount * rate).toFixed(digits));
+function formatBillingDisplayPrice(usdAmount, rate, digits = 6) {
+  const raw = Number(usdAmount || 0) * Number(rate || 1);
+  if (digits >= 6) {
+    // 日志计费过程高精度：进一法后去尾零，再转回数值供文案插值
+    return parseFloat(toFixedCeiled(raw, digits));
+  }
+  return parseFloat(raw.toFixed(digits));
 }
 
-/** 消费日志「计费过程」合计：与列表 renderQuota 同一套舍入与最小展示规则 */
+/**
+ * 消费日志「计费过程」合计：与列表「花费」列同一套 6 位进一法。
+ * 优先使用实扣额度 actualQuota，保证与花费列数值一致。
+ */
 function resolveBillingProcessTotalDisplay(
   actualQuota,
   calculatedUsdAmount,
   rate,
-  digits = 2,
+  digits = 6,
 ) {
   if (actualQuota != null && Number.isFinite(Number(actualQuota))) {
-    return quotaToRoundedDisplayValue(Number(actualQuota), digits);
+    const parts = quotaToDisplayCurrencyParts(Number(actualQuota));
+    if (parts === null) {
+      return Number(actualQuota);
+    }
+    let fixed = parseFloat(toFixedCeiled(parts.value, digits));
+    if (fixed === 0 && Number(actualQuota) > 0 && parts.value > 0) {
+      fixed = Math.pow(10, -digits);
+    }
+    return fixed;
   }
   return formatBillingDisplayPrice(calculatedUsdAmount, rate, digits);
 }
@@ -1719,7 +1770,7 @@ function buildBillingText(key, vars) {
 
 function buildBillingPriceText(
   key,
-  { symbol, usdAmount, rate, amountKey = 'price', digits = 2, ...vars },
+  { symbol, usdAmount, rate, amountKey = 'price', digits = 6, ...vars },
 ) {
   return buildBillingText(key, {
     symbol,
@@ -1802,6 +1853,7 @@ function resolveImagePerImageBillingDisplay(
     groupRatio,
     user_group_ratio,
     channelPriceDiscountPercent = 100,
+    actualQuota = null,
   } = {},
 ) {
   const { symbol, rate } = getCurrencyConfig();
@@ -1828,6 +1880,12 @@ function resolveImagePerImageBillingDisplay(
   const ruleResolutionLabel =
     formatVideoResolutionDisplayLabel(imageMeta.ruleResolution) ||
     imageMeta.ruleResolution;
+  const calculatedTotalUsd = perImageUsd * imageMeta.count;
+  // 合计与花费列对齐：有实扣额度时按额度进一；否则对公式结果 6 位进一
+  const totalDisplayPrice =
+    actualQuota != null && Number.isFinite(Number(actualQuota))
+      ? resolveBillingProcessTotalDisplay(actualQuota, calculatedTotalUsd, rate, 6)
+      : formatBillingDisplayPrice(calculatedTotalUsd, rate, 6);
   return {
     symbol,
     rate,
@@ -1835,11 +1893,8 @@ function resolveImagePerImageBillingDisplay(
     perImageUsd,
     resolutionLabel,
     ruleResolutionLabel,
-    displayPrice: formatBillingDisplayPrice(perImageUsd, rate),
-    totalDisplayPrice: formatBillingDisplayPrice(
-      perImageUsd * imageMeta.count,
-      rate,
-    ),
+    displayPrice: formatBillingDisplayPrice(perImageUsd, rate, 6),
+    totalDisplayPrice,
   };
 }
 
@@ -1881,6 +1936,7 @@ function buildImagePerImageBillingTagItems(
     user_group_ratio,
     channelPriceDiscountPercent = 100,
     showTotal = false,
+    actualQuota = null,
     t = i18next.t.bind(i18next),
   } = {},
 ) {
@@ -1897,6 +1953,7 @@ function buildImagePerImageBillingTagItems(
     groupRatio,
     user_group_ratio,
     channelPriceDiscountPercent,
+    actualQuota,
   });
   const items = [
     {
@@ -4022,7 +4079,7 @@ export function renderClaudeModelPrice(
               ratioType: ratioLabel,
               ratio: groupRatio,
               symbol,
-              total: formatBillingDisplayPrice(price, rate),
+              total: formatBillingDisplayPrice(price, rate, 6),
             },
           ),
     ]);
@@ -4574,6 +4631,9 @@ export function renderConsumeBillingProcess({
         groupRatio: other?.group_ratio,
         user_group_ratio: other?.user_group_ratio,
         channelPriceDiscountPercent: chPct,
+        actualQuota: Number.isFinite(Number(record?.quota))
+          ? Number(record.quota)
+          : null,
         t: tr,
       },
       { showTotal: true, showReferenceNote: true },

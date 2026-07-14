@@ -139,34 +139,74 @@ func FormatCommissionRatioAsPercent(ratioTenThousandth int) string {
 	return trimNumericTrailingZeros(s) + "%"
 }
 
-// QuotaToRoundedDisplayAmount 与前端 quotaToRoundedDisplayValue 一致：单行额度对应的展示货币数值。
-func QuotaToRoundedDisplayAmount(quota int, digits int) float64 {
+// CeilToFixedDecimals 进一法保留 digits 位小数（日志页消费统计口径）。
+// 规则：超出 digits 位时向绝对值增大方向进位；恰好落在 digits 位则不变。
+// 例：1.2345671 → 1.234568（digits=6）。
+func CeilToFixedDecimals(value float64, digits int) float64 {
 	if digits <= 0 {
-		digits = 2
+		digits = 6
 	}
+	if value == 0 || math.IsNaN(value) || math.IsInf(value, 0) {
+		return 0
+	}
+	factor := math.Pow(10, float64(digits))
+	const eps = 1e-10
+	if value > 0 {
+		return math.Ceil(value*factor-eps) / factor
+	}
+	return math.Floor(value*factor+eps) / factor
+}
+
+func quotaToRawDisplayAmount(quota int) (value float64, isTokens bool) {
 	displayType := operation_setting.GetQuotaDisplayType()
 	if displayType == operation_setting.QuotaDisplayTypeTokens {
-		return float64(quota)
+		return float64(quota), true
 	}
-	q := float64(quota)
-	usd := q / common.QuotaPerUnit
-	var value float64
+	usd := float64(quota) / common.QuotaPerUnit
 	switch displayType {
 	case operation_setting.QuotaDisplayTypeCNY:
-		value = usd * operation_setting.USDExchangeRate
+		return usd * operation_setting.USDExchangeRate, false
 	case operation_setting.QuotaDisplayTypeCustom:
 		gs := operation_setting.GetGeneralSetting()
 		rate := gs.CustomCurrencyExchangeRate
 		if rate <= 0 {
 			rate = 1
 		}
-		value = usd * rate
+		return usd * rate, false
 	default:
-		value = usd
+		return usd, false
+	}
+}
+
+// QuotaToRoundedDisplayAmount 与前端 quotaToRoundedDisplayValue 一致：单行额度对应的展示货币数值（四舍五入）。
+func QuotaToRoundedDisplayAmount(quota int, digits int) float64 {
+	if digits <= 0 {
+		digits = 2
+	}
+	value, isTokens := quotaToRawDisplayAmount(quota)
+	if isTokens {
+		return value
 	}
 	factor := math.Pow(10, float64(digits))
 	fixedResult := math.Round(value*factor) / factor
 	minVal := 1 / factor
+	if fixedResult == 0 && quota > 0 && value > 0 {
+		return minVal
+	}
+	return fixedResult
+}
+
+// QuotaToCeilDisplayAmount 日志页消费统计：单行额度 → 展示货币金额，强制 digits 位进一法。
+func QuotaToCeilDisplayAmount(quota int, digits int) float64 {
+	if digits <= 0 {
+		digits = 6
+	}
+	value, isTokens := quotaToRawDisplayAmount(quota)
+	if isTokens {
+		return value
+	}
+	fixedResult := CeilToFixedDecimals(value, digits)
+	minVal := math.Pow(10, float64(-digits))
 	if fixedResult == 0 && quota > 0 && value > 0 {
 		return minVal
 	}

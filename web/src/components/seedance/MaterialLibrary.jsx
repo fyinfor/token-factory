@@ -55,6 +55,7 @@ import { useTranslation } from 'react-i18next';
 import { copy, showSuccess, showError } from '../../helpers';
 import { MaterialAssetType, MaterialStatus } from '../../constants';
 import { useMaterialLibrary } from '../../hooks/seedance/useMaterialLibrary';
+import RealPersonLibrary from '../realperson/RealPersonLibrary';
 import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { useSmoothUploadProgress } from '../distributor/useSmoothUploadProgress';
 
@@ -71,16 +72,16 @@ const getAssetTypeMeta = (assetType, t) => {
   return { icon: ImageTypeIcon, label: t('图片'), color: 'var(--semi-color-primary)' };
 };
 
-// 素材状态 -> 图标 + 颜色映射（仅渲染图标，不展示状态文字）。
-const getStatusMeta = (status) => {
+// 素材状态 -> 图标 + 颜色 + 提示文案映射。
+const getStatusMeta = (status, t) => {
   switch (status) {
     case MaterialStatus.ACTIVE:
-      return { icon: CheckCircle2, color: 'var(--semi-color-success)' };
+      return { icon: CheckCircle2, color: 'var(--semi-color-success)', label: t('素材可用') };
     case MaterialStatus.FAILED:
-      return { icon: AlertCircle, color: 'var(--semi-color-danger)' };
+      return { icon: AlertCircle, color: 'var(--semi-color-danger)', label: t('创建/处理失败') };
     case MaterialStatus.PENDING:
     default:
-      return { icon: Clock, color: 'var(--semi-color-warning)' };
+      return { icon: Clock, color: 'var(--semi-color-warning)', label: t('处理中') };
   }
 };
 
@@ -185,7 +186,7 @@ const MaterialLibrary = () => {
 
   const renderAssetCard = (asset) => {
     const typeMeta = getAssetTypeMeta(asset.asset_type, t);
-    const statusMeta = getStatusMeta(asset.status);
+    const statusMeta = getStatusMeta(asset.status, t);
     const TypeIcon = typeMeta.icon;
     const StatusIcon = statusMeta.icon;
     const isVideo = asset.asset_type === MaterialAssetType.VIDEO;
@@ -268,27 +269,41 @@ const MaterialLibrary = () => {
                 {asset.name || t('未命名素材')}
               </Text>
             </Tooltip>
-            <StatusIcon size={16} style={{ color: statusMeta.color, flexShrink: 0 }} />
+            <Tooltip content={statusMeta.label}>
+              <StatusIcon size={16} style={{ color: statusMeta.color, flexShrink: 0 }} />
+            </Tooltip>
           </div>
 
-          {/* 操作区：复制资源地址 + 删除 */}
+          {/* 操作区：展示资源地址 + 复制 + 删除 */}
           <div
             style={{
               display: 'flex',
-              alignItems: 'center',
+              alignItems: 'flex-start',
               justifyContent: 'space-between',
               gap: 6,
             }}
           >
-            <Tooltip content={asset.asset_uri}>
-              <Button
-                size='small'
-                icon={<IconCopy />}
-                onClick={() => handleCopyURI(asset)}
-              >
-                {t('复制地址')}
-              </Button>
-            </Tooltip>
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Tooltip content={asset.asset_uri}>
+                <Text
+                  size='small'
+                  ellipsis={{ showTooltip: false }}
+                  style={{ flex: 1, fontFamily: 'monospace', fontSize: 11 }}
+                >
+                  {asset.asset_uri}
+                </Text>
+              </Tooltip>
+              <Tooltip content={t('复制地址')}>
+                <Button
+                  size='small'
+                  theme='borderless'
+                  type='tertiary'
+                  icon={<IconCopy />}
+                  onClick={() => handleCopyURI(asset)}
+                  aria-label={t('复制地址')}
+                />
+              </Tooltip>
+            </div>
 
             {/* 删除二次确认 */}
             <Popconfirm
@@ -338,7 +353,6 @@ const MaterialLibrary = () => {
           <IconHelpCircle style={{ color: 'var(--semi-color-text-2)' }} />
         </Tooltip>
         <div style={{ flex: 1 }} />
-        <Text type='tertiary'>{t('共 {{n}} 个素材', { n: assets.length })}</Text>
         <Tooltip content={t('刷新列表')}>
           <Button
             theme='borderless'
@@ -437,6 +451,11 @@ const MaterialLibrary = () => {
               />
             )}
           </Spin>
+        </Tabs.TabPane>
+
+        {/* 真人人像分栏：内嵌 RealPersonLibrary 组件，复用本页 Card/标题/配置 Banner */}
+        <Tabs.TabPane tab={t('真人人像')} itemKey='real-portrait'>
+          <RealPersonLibrary embedded />
         </Tabs.TabPane>
       </Tabs>
 
