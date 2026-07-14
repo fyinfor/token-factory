@@ -67,7 +67,7 @@ const SettingsPerfOverview = ({ options, refresh }) => {
                 {t('模型运行性能概览')}
               </Title>
               <Text type='tertiary' size='small'>
-                {t('控制 /console 首页的模型运行性能概览卡片是否显示')}
+                {t('控制性能概览页面及侧边栏入口是否显示')}
               </Text>
             </div>
           </div>

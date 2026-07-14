@@ -737,6 +737,44 @@ func (t *TaskSubmitReq) HasImage() bool {
 	return len(t.Images) > 0
 }
 
+func (t *TaskSubmitReq) GetModerationMeta() *types.TokenCountMeta {
+	texts := make([]string, 0, 2)
+	if prompt := strings.TrimSpace(t.Prompt); prompt != "" {
+		texts = append(texts, prompt)
+	}
+	if negativePrompt := strings.TrimSpace(t.NegativePrompt); negativePrompt != "" {
+		texts = append(texts, negativePrompt)
+	}
+	imageInputs := make([]string, 0, len(t.Images)+1)
+	imageInputs = append(imageInputs, t.Images...)
+	if image := strings.TrimSpace(t.Image); image != "" {
+		imageInputs = append(imageInputs, image)
+	}
+	files := make([]*types.FileMeta, 0, len(imageInputs))
+	seen := make(map[string]struct{}, len(imageInputs))
+	for _, image := range imageInputs {
+		image = strings.TrimSpace(image)
+		if image == "" {
+			continue
+		}
+		if _, exists := seen[image]; exists {
+			continue
+		}
+		seen[image] = struct{}{}
+		var source *types.FileSource
+		if strings.HasPrefix(image, "http://") || strings.HasPrefix(image, "https://") {
+			source = types.NewURLFileSource(image)
+		} else {
+			source = types.NewBase64FileSource(image, "")
+		}
+		files = append(files, types.NewImageFileMeta(source, ""))
+	}
+	return &types.TokenCountMeta{
+		CombineText: strings.Join(texts, "\n"),
+		Files:       files,
+	}
+}
+
 func (t *TaskSubmitReq) UnmarshalJSON(data []byte) error {
 	type Alias TaskSubmitReq
 	aux := &struct {

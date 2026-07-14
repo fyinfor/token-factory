@@ -63,7 +63,7 @@ type ModelSummary struct {
 	CacheHitRate       float64       `json:"cache_hit_rate"`
 	RecentSuccessRates []float64     `json:"recent_success_rates,omitempty"`
 	HourlySeries       []BucketPoint `json:"hourly_series,omitempty"`
-	RequestCount       int64         `json:"-"`
+	RequestCount       int64         `json:"request_count"`
 }
 
 type SummaryAllResult struct {

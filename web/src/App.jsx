@@ -69,6 +69,7 @@ import SetupCheck from './components/layout/SetupCheck';
 
 const Home = lazy(() => import('./pages/Home'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Performance = lazy(() => import('./pages/Performance'));
 const DistributorApply = lazy(() => import('./pages/DistributorApply'));
 const DistributorCenter = lazy(() => import('./pages/DistributorCenter'));
 const DistributorAdmin = lazy(() => import('./pages/DistributorAdmin'));
@@ -461,6 +462,16 @@ function App() {
             <PrivateRoute>
               <Suspense fallback={<Loading></Loading>} key={location.pathname}>
                 <Dashboard />
+              </Suspense>
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/performance'
+          element={
+            <PrivateRoute>
+              <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+                <Performance />
               </Suspense>
             </PrivateRoute>
           }

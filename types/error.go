@@ -40,6 +40,7 @@ type ErrorCode string
 const (
 	ErrorCodeInvalidRequest         ErrorCode = "invalid_request"
 	ErrorCodeSensitiveWordsDetected ErrorCode = "sensitive_words_detected"
+	ErrorCodeContentModerationFailed ErrorCode = "content_moderation_failed"
 	ErrorCodeViolationFeeGrokCSAM   ErrorCode = "violation_fee.grok.csam"
 
 	// token factory error

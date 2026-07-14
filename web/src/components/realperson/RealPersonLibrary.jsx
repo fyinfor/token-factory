@@ -71,20 +71,40 @@ const { Title, Text } = Typography;
 
 const getAssetTypeMeta = (assetType, t) => {
   if (assetType === MaterialAssetType.VIDEO) {
-    return { icon: VideoTypeIcon, label: t('视频'), color: 'var(--semi-color-warning)' };
+    return {
+      icon: VideoTypeIcon,
+      label: t('视频'),
+      color: 'var(--semi-color-warning)',
+    };
   }
-  return { icon: ImageTypeIcon, label: t('图片'), color: 'var(--semi-color-primary)' };
+  return {
+    icon: ImageTypeIcon,
+    label: t('图片'),
+    color: 'var(--semi-color-primary)',
+  };
 };
 
 const getStatusMeta = (status, t) => {
   switch (status) {
     case MaterialStatus.ACTIVE:
-      return { icon: CheckCircle2, color: 'var(--semi-color-success)', label: t('素材可用') };
+      return {
+        icon: CheckCircle2,
+        color: 'var(--semi-color-success)',
+        label: t('素材可用'),
+      };
     case MaterialStatus.FAILED:
-      return { icon: AlertCircle, color: 'var(--semi-color-danger)', label: t('创建/处理失败') };
+      return {
+        icon: AlertCircle,
+        color: 'var(--semi-color-danger)',
+        label: t('创建/处理失败'),
+      };
     case MaterialStatus.PENDING:
     default:
-      return { icon: Clock, color: 'var(--semi-color-warning)', label: t('处理中') };
+      return {
+        icon: Clock,
+        color: 'var(--semi-color-warning)',
+        label: t('处理中'),
+      };
   }
 };
 
@@ -144,7 +164,11 @@ const RealPersonLibrary = ({ embedded = false }) => {
   } = useRealPerson();
 
   // 配置（用于判断功能是否启用）。
-  const [config, setConfig] = useState({ enabled: false, ready: false, max_image_size_mb: 10 });
+  const [config, setConfig] = useState({
+    enabled: false,
+    ready: false,
+    max_image_size_mb: 10,
+  });
   React.useEffect(() => {
     getMaterialConfig()
       .then((res) => {
@@ -165,7 +189,8 @@ const RealPersonLibrary = ({ embedded = false }) => {
   const [editForm, setEditForm] = useState({ group_name: '', description: '' });
   const [editSaving, setEditSaving] = useState(false);
 
-  const uploadDisabled = !agreed || !config.ready || uploading || !selectedGroup;
+  const uploadDisabled =
+    !agreed || !config.ready || uploading || !selectedGroup;
   const uploadDisplayPct = useSmoothUploadProgress(uploadProgress);
 
   // 按素材类型过滤（须在组件顶层调用 Hook，不可放在 renderGroupDetail 等条件渲染函数内）。
@@ -234,7 +259,10 @@ const RealPersonLibrary = ({ embedded = false }) => {
 
   const handleOpenEdit = (group) => {
     setEditTarget(group);
-    setEditForm({ group_name: group?.group_name || '', description: group?.description || '' });
+    setEditForm({
+      group_name: group?.group_name || '',
+      description: group?.description || '',
+    });
     setEditModalVisible(true);
   };
 
@@ -359,7 +387,10 @@ const RealPersonLibrary = ({ embedded = false }) => {
               </Text>
             </Tooltip>
             <Tooltip content={statusMeta.label}>
-              <StatusIcon size={16} style={{ color: statusMeta.color, flexShrink: 0 }} />
+              <StatusIcon
+                size={16}
+                style={{ color: statusMeta.color, flexShrink: 0 }}
+              />
             </Tooltip>
           </div>
 
@@ -372,7 +403,15 @@ const RealPersonLibrary = ({ embedded = false }) => {
               gap: 6,
             }}
           >
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 2 }}>
+            <div
+              style={{
+                flex: 1,
+                minWidth: 0,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 2,
+              }}
+            >
               <Tooltip content={asset.asset_uri}>
                 <Text
                   size='small'
@@ -471,11 +510,7 @@ const RealPersonLibrary = ({ embedded = false }) => {
               {t('或使用 H5 链接认证：')}
             </Text>
             <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-              <Input
-                value={h5Link}
-                readOnly
-                style={{ flex: 1 }}
-              />
+              <Input value={h5Link} readOnly style={{ flex: 1 }} />
               <Button
                 icon={<IconCopy />}
                 onClick={async () => {
@@ -492,7 +527,13 @@ const RealPersonLibrary = ({ embedded = false }) => {
 
         {/* 状态提示 */}
         <Banner
-          type={sessionStatus === 'success' ? 'success' : sessionStatus === 'expired' || sessionStatus === 'failed' ? 'danger' : 'info'}
+          type={
+            sessionStatus === 'success'
+              ? 'success'
+              : sessionStatus === 'expired' || sessionStatus === 'failed'
+                ? 'danger'
+                : 'info'
+          }
           closeIcon={null}
           description={
             sessionStatus === 'success'
@@ -501,7 +542,9 @@ const RealPersonLibrary = ({ embedded = false }) => {
                 ? t('认证会话已过期，请重新发起认证。')
                 : sessionStatus === 'failed'
                   ? t('人脸核验失败，请重新发起认证。')
-                  : t('请使用手机扫描二维码或打开 H5 链接完成实名认证，页面将自动刷新认证结果。')
+                  : t(
+                      '请使用手机扫描二维码或打开 H5 链接完成实名认证，页面将自动刷新认证结果。',
+                    )
           }
           style={{ marginBottom: 12 }}
         />
@@ -541,7 +584,9 @@ const RealPersonLibrary = ({ embedded = false }) => {
           <Text strong>{t('分组名称')}</Text>
           <Input
             value={editForm.group_name}
-            onChange={(value) => setEditForm((f) => ({ ...f, group_name: value }))}
+            onChange={(value) =>
+              setEditForm((f) => ({ ...f, group_name: value }))
+            }
             maxLength={64}
             showClear
             placeholder={t('请输入分组名称')}
@@ -552,7 +597,9 @@ const RealPersonLibrary = ({ embedded = false }) => {
           <Text strong>{t('分组描述')}</Text>
           <TextArea
             value={editForm.description}
-            onChange={(value) => setEditForm((f) => ({ ...f, description: value }))}
+            onChange={(value) =>
+              setEditForm((f) => ({ ...f, description: value }))
+            }
             maxLength={256}
             showClear
             placeholder={t('请输入分组描述（可选）')}
@@ -586,7 +633,11 @@ const RealPersonLibrary = ({ embedded = false }) => {
           >
             {t('返回分组列表')}
           </Button>
-          <Tag color='green' size='large' prefixIcon={<ShieldCheck size={14} />}>
+          <Tag
+            color='green'
+            size='large'
+            prefixIcon={<ShieldCheck size={14} />}
+          >
             {t('真人认证分组')}
           </Tag>
           <Text strong>{selectedGroup?.group_name}</Text>
@@ -616,7 +667,9 @@ const RealPersonLibrary = ({ embedded = false }) => {
             checked={agreed}
             onChange={(e) => setAgreed(e.target.checked)}
           >
-            {t('我已知晓所上传的真人素材均已获得本人授权，并同意真人素材合规要求。')}
+            {t(
+              '我已知晓所上传的真人素材均已获得本人授权，并同意真人素材合规要求。',
+            )}
           </Checkbox>
         </div>
 
@@ -672,7 +725,9 @@ const RealPersonLibrary = ({ embedded = false }) => {
           <Space>
             {selectedAssetIds.size > 0 && (
               <Popconfirm
-                title={t('确认批量删除选中的 {{n}} 个素材？', { n: selectedAssetIds.size })}
+                title={t('确认批量删除选中的 {{n}} 个素材？', {
+                  n: selectedAssetIds.size,
+                })}
                 okType='danger'
                 okText={t('删除')}
                 cancelText={t('取消')}
@@ -689,7 +744,9 @@ const RealPersonLibrary = ({ embedded = false }) => {
                 type='tertiary'
                 icon={<IconRefresh />}
                 loading={assetsLoading}
-                onClick={() => selectedGroup && loadAssets(selectedGroup.group_id)}
+                onClick={() =>
+                  selectedGroup && loadAssets(selectedGroup.group_id)
+                }
               />
             </Tooltip>
           </Space>
@@ -711,7 +768,9 @@ const RealPersonLibrary = ({ embedded = false }) => {
           {filteredAssets.length === 0 && !assetsLoading && (
             <Empty
               style={{ marginTop: 24 }}
-              description={t('暂无真人素材，点击「本地上传」或「链接上传」添加')}
+              description={t(
+                '暂无真人素材，点击「本地上传」或「链接上传」添加',
+              )}
             />
           )}
         </Spin>
@@ -777,7 +836,11 @@ const RealPersonLibrary = ({ embedded = false }) => {
             marginBottom: 16,
           }}
         >
-          <Tag color='green' size='large' prefixIcon={<ShieldCheck size={14} />}>
+          <Tag
+            color='green'
+            size='large'
+            prefixIcon={<ShieldCheck size={14} />}
+          >
             {t('真人认证分组')}
           </Tag>
           <Button
@@ -842,13 +905,27 @@ const RealPersonLibrary = ({ embedded = false }) => {
                         >
                           <ShieldCheck
                             size={18}
-                            style={{ color: 'var(--semi-color-success)', flexShrink: 0 }}
+                            style={{
+                              color: 'var(--semi-color-success)',
+                              flexShrink: 0,
+                            }}
                           />
-                          <Text strong ellipsis={{ showTooltip: true }} style={{ flex: 1 }}>
+                          <Text
+                            strong
+                            ellipsis={{ showTooltip: true }}
+                            style={{ flex: 1 }}
+                          >
                             {group.group_name}
                           </Text>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 2,
+                            flexShrink: 0,
+                          }}
+                        >
                           <Tooltip content={t('编辑分组')}>
                             <Button
                               size='small'
@@ -864,7 +941,9 @@ const RealPersonLibrary = ({ embedded = false }) => {
                           </Tooltip>
                           <Popconfirm
                             title={t('确认删除该真人分组？')}
-                            content={t('删除后将移除云端分组，本地素材记录保留。')}
+                            content={t(
+                              '删除后将移除云端分组，本地素材记录保留。',
+                            )}
                             okType='danger'
                             okText={t('删除')}
                             cancelText={t('取消')}
@@ -910,7 +989,9 @@ const RealPersonLibrary = ({ embedded = false }) => {
                               theme='borderless'
                               type='tertiary'
                               icon={<IconCopy />}
-                              onClick={(e) => handleCopyGroupId(e, group.group_id)}
+                              onClick={(e) =>
+                                handleCopyGroupId(e, group.group_id)
+                              }
                               aria-label={t('复制分组 ID')}
                             />
                           </Tooltip>
@@ -929,7 +1010,11 @@ const RealPersonLibrary = ({ embedded = false }) => {
                         color: 'var(--semi-color-primary)',
                       }}
                     >
-                      <Text size='small' strong style={{ color: 'var(--semi-color-primary)' }}>
+                      <Text
+                        size='small'
+                        strong
+                        style={{ color: 'var(--semi-color-primary)' }}
+                      >
                         {t('查看素材')}
                       </Text>
                       <ChevronRight size={16} strokeWidth={2.25} aria-hidden />
