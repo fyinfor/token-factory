@@ -740,6 +740,8 @@ func buildTopupQuote(amount float64, group string, payCurrency string) (*topupQu
 	}
 
 	// 无分组/折扣且定价汇率与展示汇率一致时，按实付金额反推额度，保证到账展示与支付金额对齐。
+	// 使用 Ceil：钱包 renderQuota 对展示金额做向下截断（toFixedTruncated），四舍五入入账会在
+	// 如 ¥500 / 7.3 场景下反算成 ¥499.99，造成「账单到账 500、当前余额少一截」的观感差额。
 	displayRate := decimal.NewFromFloat(operation_setting.USDExchangeRate)
 	if displayRate.LessThanOrEqual(decimal.Zero) {
 		displayRate = rate
@@ -751,7 +753,7 @@ func buildTopupQuote(amount float64, group string, payCurrency string) (*topupQu
 		} else {
 			payUSD = payAmount
 		}
-		if aligned := int(payUSD.Mul(dQuotaPerUnit).Round(0).IntPart()); aligned > 0 {
+		if aligned := int(payUSD.Mul(dQuotaPerUnit).Ceil().IntPart()); aligned > 0 {
 			quotaToAdd = aligned
 		}
 	}
