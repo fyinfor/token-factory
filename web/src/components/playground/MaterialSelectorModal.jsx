@@ -25,6 +25,7 @@ import {
   Image,
   Modal,
   Spin,
+  Tabs,
   Typography,
 } from '@douyinfe/semi-ui';
 import {
@@ -40,7 +41,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useIsMobile } from '../../hooks/common/useIsMobile';
-import { listMaterialAssets } from '../../helpers/materialApi';
+import { listMaterialAssets, listRealAssets } from '../../helpers/materialApi';
 import { MaterialAssetType, MaterialStatus } from '../../constants';
 
 const { Text } = Typography;
@@ -105,21 +106,29 @@ const MaterialSelectorModal = ({
   const [loading, setLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [imgErrors, setImgErrors] = useState(new Set());
+  // 素材分类标签：虚拟人像 / 真人人像
+  const [activeTab, setActiveTab] = useState('virtual');
 
-  // 加载素材列表（复用 listMaterialAssets 接口）
-  const loadAssets = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await listMaterialAssets({ page: 1, pageSize: 100 });
-      if (res?.success) {
-        setAssets(res.data?.items || []);
+  // 加载素材列表（按标签切换接口：虚拟人像用 listMaterialAssets，真人人像用 listRealAssets）
+  const loadAssets = useCallback(
+    async (tab = activeTab) => {
+      setLoading(true);
+      try {
+        const res =
+          tab === 'real'
+            ? await listRealAssets({ page: 1, pageSize: 100 })
+            : await listMaterialAssets({ page: 1, pageSize: 100 });
+        if (res?.success) {
+          setAssets(res.data?.items || []);
+        }
+      } catch {
+        // 静默失败，展示空状态
+      } finally {
+        setLoading(false);
       }
-    } catch {
-      // 静默失败，展示空状态
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+    },
+    [activeTab],
+  );
 
   // 弹窗打开时加载数据
   useEffect(() => {
@@ -127,6 +136,15 @@ const MaterialSelectorModal = ({
     loadAssets();
     setImgErrors(new Set());
   }, [visible, loadAssets]);
+
+  // 切换标签时重新加载
+  const handleTabChange = useCallback((key) => {
+    setActiveTab(key);
+    setAssets([]);
+    setSelectedIds(new Set());
+    setImgErrors(new Set());
+    loadAssets(key);
+  }, [loadAssets]);
 
   // 弹窗打开时回显已选素材（与加载分离，避免 existingAssets 引用变化导致重复拉取/重置预览）
   useEffect(() => {
@@ -397,6 +415,17 @@ const MaterialSelectorModal = ({
         </div>
       }
     >
+      {/* 素材分类标签：虚拟人像 / 真人人像 */}
+      <Tabs
+        type='line'
+        activeKey={activeTab}
+        onChange={handleTabChange}
+        style={{ marginBottom: 4 }}
+      >
+        <Tabs.TabPane tab={t('虚拟人像')} itemKey='virtual' />
+        <Tabs.TabPane tab={t('真人人像')} itemKey='real' />
+      </Tabs>
+
       {/* 工具栏：全选 + 刷新 */}
       <div
         style={{

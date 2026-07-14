@@ -263,6 +263,7 @@ func ensureMaterialGroup(userId int) (*model.MaterialGroup, error) {
 		UserId:    userId,
 		GroupName: groupName,
 		GroupId:   upstreamGroupId,
+		GroupType: model.MaterialGroupTypeVirtual,
 	}
 	if err := model.CreateMaterialGroup(group); err != nil {
 		return nil, err

@@ -376,8 +376,8 @@ func formatChannelDisplay(routeSlug string, supplierType string, channelID int) 
 	return routeSlug + "_" + supplierType
 }
 
-// userFacingLogRouteSlug 返回控制台日志面向用户的路由后缀（u 开头的 route_slug）。
-// 缺失或非 u 前缀时回退为渠道默认后缀 u+base62(id)，不向普通用户暴露渠道 ID。
+// userFacingLogRouteSlug 返回控制台日志面向用户的路由后缀。
+// 优先展示渠道当前有效 route_slug（含自定义如 tx）；缺失或非法时回退为默认 u+base62(id)。
 func userFacingLogRouteSlug(routeSlug string, channelID int) string {
 	if channelID <= 0 {
 		return ""
@@ -387,7 +387,7 @@ func userFacingLogRouteSlug(routeSlug string, channelID int) string {
 	if slug == "" {
 		return defaultSlug
 	}
-	if strings.HasPrefix(slug, "u") {
+	if IsValidRouteSlug(slug) {
 		return slug
 	}
 	return defaultSlug
@@ -840,15 +840,84 @@ func GetUserLogs(userId int, logTypes []int, startTimestamp int64, endTimestamp 
 	return logs, total, err
 }
 
+// logConsumeAmountDigits 日志页消费统计展示金额固定小数位（与前端 LOG_CONSUME_AMOUNT_DIGITS 一致）。
+const logConsumeAmountDigits = 6
+
 type Stat struct {
-	Quota         int     `json:"quota"`
-	DisplayAmount float64 `json:"display_amount"`
-	Rpm           int     `json:"rpm"`
-	Tpm           int     `json:"tpm"`
+	Quota              int     `json:"quota"`
+	DisplayAmount      float64 `json:"display_amount"`
+	TextDisplayAmount  float64 `json:"text_display_amount"`
+	ImageDisplayAmount float64 `json:"image_display_amount"`
+	VideoDisplayAmount float64 `json:"video_display_amount"`
+	Rpm                int     `json:"rpm"`
+	Tpm                int     `json:"tpm"`
+}
+
+const (
+	logBillingTypeText  = "text"
+	logBillingTypeImage = "image"
+	logBillingTypeVideo = "video"
+)
+
+// classifyLogBillingType 将消费日志 other 归为文本 / 图片 / 视频三类计费。
+func classifyLogBillingType(otherJSON string) string {
+	other, _ := common.StrToMap(otherJSON)
+	if other == nil {
+		return logBillingTypeText
+	}
+	mode, _ := other["billing_mode"].(string)
+	switch mode {
+	case "image_per_image":
+		return logBillingTypeImage
+	case "video_per_second", "video_token_output", "video_per_video", "video_token":
+		return logBillingTypeVideo
+	}
+	if other["video_billed_quota"] != nil || other["video_quota_per_unit"] != nil {
+		return logBillingTypeVideo
+	}
+	if path, ok := other["request_path"].(string); ok && strings.Contains(path, "/videos") {
+		return logBillingTypeVideo
+	}
+	return logBillingTypeText
+}
+
+type logConsumeQuotaRow struct {
+	Quota     int    `gorm:"column:quota"`
+	Other     string `gorm:"column:other"`
+	ModelName string `gorm:"column:model_name"`
+}
+
+// accumulateLogConsumeDisplayStat 按「行级 6 位进一 → 类型分项再进一 → 总计再进一」汇总。
+// 含文本、图片、视频全部计费类型。各模型分项进一逻辑见前端 aggregateLogConsumeStats。
+func accumulateLogConsumeDisplayStat(rows []logConsumeQuotaRow, stat *Stat) {
+	var textSum, imageSum, videoSum float64
+
+	for _, row := range rows {
+		stat.Quota += row.Quota
+		lineAmount := logger.QuotaToCeilDisplayAmount(row.Quota, logConsumeAmountDigits)
+		billingType := classifyLogBillingType(row.Other)
+		switch billingType {
+		case logBillingTypeImage:
+			imageSum += lineAmount
+		case logBillingTypeVideo:
+			videoSum += lineAmount
+		default:
+			textSum += lineAmount
+		}
+	}
+
+	stat.TextDisplayAmount = logger.CeilToFixedDecimals(textSum, logConsumeAmountDigits)
+	stat.ImageDisplayAmount = logger.CeilToFixedDecimals(imageSum, logConsumeAmountDigits)
+	stat.VideoDisplayAmount = logger.CeilToFixedDecimals(videoSum, logConsumeAmountDigits)
+	// 总消耗 = 文本 + 图片 + 视频（三类均已进一）再收口 6 位
+	stat.DisplayAmount = logger.CeilToFixedDecimals(
+		stat.TextDisplayAmount+stat.ImageDisplayAmount+stat.VideoDisplayAmount,
+		logConsumeAmountDigits,
+	)
 }
 
 func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelName string, username string, tokenName string, channel int, group string) (stat Stat, err error) {
-	quotaListQuery := LOG_DB.Table("logs").Select("quota")
+	quotaListQuery := LOG_DB.Table("logs").Select("quota, other, model_name")
 	rpmTpmQuery := LOG_DB.Table("logs").Select("count(*) rpm, COALESCE(sum(prompt_tokens), 0) + COALESCE(sum(completion_tokens), 0) tpm")
 	quotaListQuery = applyBillingLogVisibility(quotaListQuery, false)
 	rpmTpmQuery = applyBillingLogVisibility(rpmTpmQuery, false)
@@ -889,24 +958,19 @@ func SumUsedQuota(logType int, startTimestamp int64, endTimestamp int64, modelNa
 	quotaListQuery = quotaListQuery.Where("type = ?", LogTypeConsume)
 	rpmTpmQuery = rpmTpmQuery.Where("type = ?", LogTypeConsume)
 
-	var quotaRows []struct {
-		Quota int `gorm:"column:quota"`
-	}
+	var quotaRows []logConsumeQuotaRow
 	if err := quotaListQuery.Find(&quotaRows).Error; err != nil {
 		common.SysError("failed to query log stat: " + err.Error())
 		return stat, errors.New("查询统计数据失败")
 	}
-	for _, row := range quotaRows {
-		stat.Quota += row.Quota
-		stat.DisplayAmount += logger.QuotaToRoundedDisplayAmount(row.Quota, 2)
-	}
+	accumulateLogConsumeDisplayStat(quotaRows, &stat)
 
 	var rpmTpmRow struct {
 		Rpm int `gorm:"column:rpm"`
 		Tpm int `gorm:"column:tpm"`
 	}
 	if err := rpmTpmQuery.Scan(&rpmTpmRow).Error; err != nil {
-		common.SysError("failed to query rpm/tpm stat: " + err.Error())
+		common.SysError("failed to query rpm/tpm: " + err.Error())
 		return stat, errors.New("查询统计数据失败")
 	}
 	stat.Rpm = rpmTpmRow.Rpm
@@ -920,7 +984,7 @@ func SumUsedQuotaByModelNames(startTimestamp int64, endTimestamp int64, modelNam
 	if len(modelNames) == 0 {
 		return stat, nil
 	}
-	quotaListQuery := LOG_DB.Table("logs").Select("quota")
+	quotaListQuery := LOG_DB.Table("logs").Select("quota, other, model_name")
 	rpmTpmQuery := LOG_DB.Table("logs").Select("count(*) rpm, COALESCE(sum(prompt_tokens), 0) + COALESCE(sum(completion_tokens), 0) tpm")
 
 	if startTimestamp != 0 {
@@ -937,17 +1001,12 @@ func SumUsedQuotaByModelNames(startTimestamp int64, endTimestamp int64, modelNam
 	quotaListQuery = quotaListQuery.Where("type = ?", LogTypeConsume)
 	rpmTpmQuery = rpmTpmQuery.Where("type = ?", LogTypeConsume)
 
-	var quotaRows []struct {
-		Quota int `gorm:"column:quota"`
-	}
+	var quotaRows []logConsumeQuotaRow
 	if err := quotaListQuery.Find(&quotaRows).Error; err != nil {
 		common.SysError("failed to query supplier log stat: " + err.Error())
 		return stat, errors.New("查询统计数据失败")
 	}
-	for _, row := range quotaRows {
-		stat.Quota += row.Quota
-		stat.DisplayAmount += logger.QuotaToRoundedDisplayAmount(row.Quota, 2)
-	}
+	accumulateLogConsumeDisplayStat(quotaRows, &stat)
 
 	var rpmTpmRow struct {
 		Rpm int `gorm:"column:rpm"`

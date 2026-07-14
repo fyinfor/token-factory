@@ -119,10 +119,13 @@ func GetLogsStat(c *gin.Context) {
 		"success": true,
 		"message": "",
 		"data": gin.H{
-			"quota":          stat.Quota,
-			"display_amount": stat.DisplayAmount,
-			"rpm":            stat.Rpm,
-			"tpm":            stat.Tpm,
+			"quota":                stat.Quota,
+			"display_amount":       stat.DisplayAmount,
+			"text_display_amount":  stat.TextDisplayAmount,
+			"image_display_amount": stat.ImageDisplayAmount,
+			"video_display_amount": stat.VideoDisplayAmount,
+			"rpm":                  stat.Rpm,
+			"tpm":                  stat.Tpm,
 		},
 	})
 	return
@@ -147,10 +150,13 @@ func GetLogsSelfStat(c *gin.Context) {
 		"success": true,
 		"message": "",
 		"data": gin.H{
-			"quota":          quotaNum.Quota,
-			"display_amount": quotaNum.DisplayAmount,
-			"rpm":            quotaNum.Rpm,
-			"tpm":            quotaNum.Tpm,
+			"quota":                quotaNum.Quota,
+			"display_amount":       quotaNum.DisplayAmount,
+			"text_display_amount":  quotaNum.TextDisplayAmount,
+			"image_display_amount": quotaNum.ImageDisplayAmount,
+			"video_display_amount": quotaNum.VideoDisplayAmount,
+			"rpm":                  quotaNum.Rpm,
+			"tpm":                  quotaNum.Tpm,
 			//"token": tokenNum,
 		},
 	})
