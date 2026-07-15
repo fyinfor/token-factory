@@ -52,16 +52,10 @@ export function ProfitShareRewardFormulaTooltipContent({ t }) {
         {t('利润分成计算公式')}
       </div>
       <div className='text-[var(--semi-color-text-2)]'>
-        {t('利润分成计算说明-用户消耗')}
-      </div>
-      <div className='text-[var(--semi-color-text-2)]'>
-        {t('利润分成计算说明-利润')}
-      </div>
-      <div className='text-[var(--semi-color-text-2)]'>
-        {t('利润分成计算说明-分成比例')}
-      </div>
-      <div className='text-[var(--semi-color-text-2)]'>
         {t('利润分成计算说明-收益')}
+      </div>
+      <div className='text-[var(--semi-color-text-2)]'>
+        {t('利润分成计算说明-零收益')}
       </div>
     </div>
   );
