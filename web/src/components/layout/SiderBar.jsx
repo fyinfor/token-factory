@@ -33,7 +33,6 @@ import {
   isDistributor,
 } from '../../helpers';
 import { UserContext } from '../../context/User';
-import { StatusContext } from '../../context/Status';
 import SkeletonWrapper from './components/SkeletonWrapper';
 
 import { Nav, Divider, Button } from '@douyinfe/semi-ui';
@@ -79,7 +78,6 @@ const routerMap = {
 const SiderBar = ({ onNavigate = () => {} }) => {
   const { t } = useTranslation();
   const [userState] = useContext(UserContext);
-  const [statusState] = useContext(StatusContext);
   const [collapsed, toggleCollapsed] = useSidebarCollapsed();
   const {
     isModuleVisible,
@@ -110,10 +108,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('性能看板'),
         itemKey: 'performance',
         to: '/performance',
-        className:
-          statusState?.status?.perf_overview_enabled === false
-            ? 'tableHiddle'
-            : '',
+        className: 'tableHiddle',
       },
       {
         text: t('令牌管理'),
@@ -156,7 +151,6 @@ const SiderBar = ({ onNavigate = () => {} }) => {
     localStorage.getItem('enable_task'),
     t,
     isModuleVisible,
-    statusState?.status?.perf_overview_enabled,
   ]);
 
   const financeItems = useMemo(() => {
