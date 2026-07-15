@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
@@ -39,6 +40,13 @@ type aggSumRow struct {
 	SumIn int64  `gorm:"column:sum_in"`
 }
 
+func mergeAggSumRows(reward, driven map[string]int64, rows []aggSumRow) {
+	for _, r := range rows {
+		reward[r.Day] += r.Sum
+		driven[r.Day] += r.SumIn
+	}
+}
+
 // InviteeTopAnalyticsRow 被邀请人排行（当前分销商维度）。
 type InviteeTopAnalyticsRow struct {
 	InviteeUserId       int    `json:"invitee_user_id"`
@@ -51,13 +59,13 @@ type InviteeTopAnalyticsRow struct {
 
 // DistributorAdminTopRow 管理端分销商排行一行。
 type DistributorAdminTopRow struct {
-	UserId           int    `json:"user_id"`
-	Username         string `json:"username"`
-	DisplayName      string `json:"display_name"`
-	AffCode          string `json:"aff_code"`
-	TotalRewardQuota int64  `json:"total_reward_quota"`
-	PeriodRewardQuota int64 `json:"period_reward_quota"`
-	InviteeCount      int64 `json:"invitee_count"`
+	UserId            int    `json:"user_id"`
+	Username          string `json:"username"`
+	DisplayName       string `json:"display_name"`
+	AffCode           string `json:"aff_code"`
+	TotalRewardQuota  int64  `json:"total_reward_quota"`
+	PeriodRewardQuota int64  `json:"period_reward_quota"`
+	InviteeCount      int64  `json:"invitee_count"`
 }
 
 func distributorUserJoinSQL(alias string) string {
@@ -149,10 +157,18 @@ func sumAffCommissionByDay(inviterId int, startUnix, endUnix int64) (reward map[
 	}
 	reward = make(map[string]int64, len(rows))
 	inviteeIn = make(map[string]int64, len(rows))
-	for _, r := range rows {
-		reward[r.Day] = r.Sum
-		inviteeIn[r.Day] = r.SumIn
+	mergeAggSumRows(reward, inviteeIn, rows)
+
+	rows = nil
+	err = DB.Model(&AffInviteProfitShareLog{}).
+		Select(dayExpr+" AS day, COALESCE(SUM(reward_quota),0) AS sum, COALESCE(SUM(user_quota_charged),0) AS sum_in").
+		Where("inviter_id = ? AND created_at >= ? AND created_at < ?", inviterId, startUnix, endUnix).
+		Group(dayExpr).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, nil, err
 	}
+	mergeAggSumRows(reward, inviteeIn, rows)
 	return reward, inviteeIn, nil
 }
 
@@ -177,6 +193,22 @@ func ListInviteeTopForDistributorAnalytics(inviterId int, topN int) ([]InviteeTo
 		TotalInviteeQuota int64 `gorm:"column:total_invitee_quota"`
 	}
 	var sums []sumRow
+	sumByInvitee := map[int]*sumRow{}
+	addRows := func(rows []sumRow) {
+		for _, r := range rows {
+			if r.InviteeUserId <= 0 {
+				continue
+			}
+			s := sumByInvitee[r.InviteeUserId]
+			if s == nil {
+				sumByInvitee[r.InviteeUserId] = &sumRow{InviteeUserId: r.InviteeUserId}
+				s = sumByInvitee[r.InviteeUserId]
+			}
+			s.TotalReward += r.TotalReward
+			s.PeriodReward += r.PeriodReward
+			s.TotalInviteeQuota += r.TotalInviteeQuota
+		}
+	}
 	sel := fmt.Sprintf(`invitee_user_id,
 			COALESCE(SUM(reward_quota),0) AS total_reward,
 			COALESCE(SUM(CASE WHEN created_at >= %d THEN reward_quota ELSE 0 END),0) AS period_reward,
@@ -185,11 +217,40 @@ func ListInviteeTopForDistributorAnalytics(inviterId int, topN int) ([]InviteeTo
 		Select(sel).
 		Where("inviter_id = ?", inviterId).
 		Group("invitee_user_id").
-		Order("total_reward DESC").
-		Limit(topN).
 		Scan(&sums).Error
 	if err != nil {
 		return nil, err
+	}
+	addRows(sums)
+	sums = nil
+	sel = fmt.Sprintf(`invitee_user_id,
+			COALESCE(SUM(reward_quota),0) AS total_reward,
+			COALESCE(SUM(CASE WHEN created_at >= %d THEN reward_quota ELSE 0 END),0) AS period_reward,
+			COALESCE(SUM(user_quota_charged),0) AS total_invitee_quota`, periodStart)
+	err = DB.Model(&AffInviteProfitShareLog{}).
+		Select(sel).
+		Where("inviter_id = ?", inviterId).
+		Group("invitee_user_id").
+		Scan(&sums).Error
+	if err != nil {
+		return nil, err
+	}
+	addRows(sums)
+	sums = make([]sumRow, 0, len(sumByInvitee))
+	for _, s := range sumByInvitee {
+		sums = append(sums, *s)
+	}
+	sort.SliceStable(sums, func(i, j int) bool {
+		if sums[i].TotalReward != sums[j].TotalReward {
+			return sums[i].TotalReward > sums[j].TotalReward
+		}
+		if sums[i].PeriodReward != sums[j].PeriodReward {
+			return sums[i].PeriodReward > sums[j].PeriodReward
+		}
+		return sums[i].InviteeUserId < sums[j].InviteeUserId
+	})
+	if len(sums) > topN {
+		sums = sums[:topN]
 	}
 	if len(sums) == 0 {
 		return []InviteeTopAnalyticsRow{}, nil
@@ -311,10 +372,18 @@ func sumAllAffCommissionByDay(startUnix, endUnix int64) (reward map[string]int64
 	}
 	reward = make(map[string]int64, len(rows))
 	inviteeIn = make(map[string]int64, len(rows))
-	for _, r := range rows {
-		reward[r.Day] = r.Sum
-		inviteeIn[r.Day] = r.SumIn
+	mergeAggSumRows(reward, inviteeIn, rows)
+
+	rows = nil
+	err = DB.Model(&AffInviteProfitShareLog{}).
+		Select(dayExpr+" AS day, COALESCE(SUM(reward_quota),0) AS sum, COALESCE(SUM(user_quota_charged),0) AS sum_in").
+		Where("created_at >= ? AND created_at < ?", startUnix, endUnix).
+		Group(dayExpr).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, nil, err
 	}
+	mergeAggSumRows(reward, inviteeIn, rows)
 	return reward, inviteeIn, nil
 }
 
@@ -324,6 +393,15 @@ func listAdminTopDistributorsByReward(periodStartUnix int64, limit int) ([]Distr
 		Sum       int64 `gorm:"column:sum_reward"`
 	}
 	var sums []row
+	sumByInviter := map[int]int64{}
+	addRows := func(rows []row) {
+		for _, r := range rows {
+			if r.InviterId <= 0 {
+				continue
+			}
+			sumByInviter[r.InviterId] += r.Sum
+		}
+	}
 	q := DB.Model(&AffInviteCommissionLog{}).Table("aff_invite_commission_logs AS l").
 		Select("l.inviter_id, COALESCE(SUM(l.reward_quota),0) AS sum_reward").
 		Joins(distributorUserJoinSQL("l")).
@@ -331,9 +409,36 @@ func listAdminTopDistributorsByReward(periodStartUnix int64, limit int) ([]Distr
 	if periodStartUnix > 0 {
 		q = q.Where("l.created_at >= ?", periodStartUnix)
 	}
-	err := q.Order("sum_reward DESC").Limit(limit).Scan(&sums).Error
+	err := q.Scan(&sums).Error
 	if err != nil {
 		return nil, err
+	}
+	addRows(sums)
+	sums = nil
+	q = DB.Model(&AffInviteProfitShareLog{}).Table("aff_invite_profit_share_logs AS l").
+		Select("l.inviter_id, COALESCE(SUM(l.reward_quota),0) AS sum_reward").
+		Joins(distributorUserJoinSQL("l")).
+		Group("l.inviter_id")
+	if periodStartUnix > 0 {
+		q = q.Where("l.created_at >= ?", periodStartUnix)
+	}
+	err = q.Scan(&sums).Error
+	if err != nil {
+		return nil, err
+	}
+	addRows(sums)
+	sums = make([]row, 0, len(sumByInviter))
+	for inviterId, sum := range sumByInviter {
+		sums = append(sums, row{InviterId: inviterId, Sum: sum})
+	}
+	sort.SliceStable(sums, func(i, j int) bool {
+		if sums[i].Sum != sums[j].Sum {
+			return sums[i].Sum > sums[j].Sum
+		}
+		return sums[i].InviterId < sums[j].InviterId
+	})
+	if limit > 0 && len(sums) > limit {
+		sums = sums[:limit]
 	}
 	out := make([]DistributorAdminTopRow, 0, len(sums))
 	for _, s := range sums {
@@ -395,7 +500,7 @@ func listAdminTopDistributorsByInviteeCount(limit int) ([]DistributorAdminTopRow
 	out := make([]DistributorAdminTopRow, 0, len(sums))
 	for _, s := range sums {
 		out = append(out, DistributorAdminTopRow{
-			UserId:         s.InviterId,
+			UserId:       s.InviterId,
 			InviteeCount: s.Cnt,
 		})
 	}
