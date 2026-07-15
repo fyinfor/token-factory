@@ -75,3 +75,32 @@ func TestExtractVideoMetadataFromMap_PrefersTencent(t *testing.T) {
 		t.Fatalf("duration = %v", meta.DurationSec)
 	}
 }
+
+func TestExtractTencentVODVideoMetadata_InputOutputConfigFallback(t *testing.T) {
+	payload := map[string]any{
+		"Response": map[string]any{
+			"AigcVideoTask": map[string]any{
+				"Input": map[string]any{
+					"OutputConfig": map[string]any{
+						"Duration":    15,
+						"Resolution":  "720P",
+						"AspectRatio": "16:9",
+					},
+				},
+				"Output": map[string]any{
+					"FileInfos": []any{},
+				},
+			},
+		},
+	}
+	meta, ok := extractTencentVODVideoMetadata(payload)
+	if !ok {
+		t.Fatal("expected OutputConfig fallback metadata")
+	}
+	if meta.DurationSec != 15 {
+		t.Fatalf("duration = %v", meta.DurationSec)
+	}
+	if meta.Width != 1280 || meta.Height != 720 {
+		t.Fatalf("got %dx%d", meta.Width, meta.Height)
+	}
+}

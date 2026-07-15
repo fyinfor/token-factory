@@ -31,10 +31,11 @@ import {
   uploadMaterialFile,
   uploadMaterialByURL,
   deleteMaterialAsset,
+  updateMaterialAsset,
   showError,
   showSuccess,
 } from '../../helpers';
-import { detectAssetTypeByName, MaterialStatus } from '../../constants';
+import { detectAssetTypeByName, isUnsupportedMaterialAudioName, MaterialStatus } from '../../constants';
 
 const PENDING_POLL_INTERVAL_MS = 5000;
 
@@ -157,10 +158,14 @@ export const useMaterialLibrary = () => {
         showError(t('请选择要上传的文件'));
         return false;
       }
-      // 格式拦截：仅允许图片 / 视频。
+      if (isUnsupportedMaterialAudioName(fileInstance.name)) {
+        showError(t('音频素材仅支持 mp3/wav 格式'));
+        return false;
+      }
+      // 格式拦截：允许图片 / 视频 / 音频（mp3/wav）。
       const type = detectAssetTypeByName(fileInstance.name);
       if (!type) {
-        showError(t('仅支持上传图片或视频文件'));
+        showError(t('仅支持上传图片、视频或音频（mp3/wav）文件'));
         return false;
       }
       // 大小拦截。
@@ -227,6 +232,10 @@ export const useMaterialLibrary = () => {
         showError(t('请输入合法的在线资源链接（http/https）'));
         return false;
       }
+      if (isUnsupportedMaterialAudioName(trimmed)) {
+        showError(t('音频素材仅支持 mp3/wav 格式'));
+        return false;
+      }
       // 按扩展名预判类型（后端会以 GetAsset 返回的 AssetType 为准）。
       const assetType = detectAssetTypeByName(trimmed);
 
@@ -262,6 +271,46 @@ export const useMaterialLibrary = () => {
       }
     },
     [agreed, t],
+  );
+
+  /**
+   * 素材改名（虚拟人像）。
+   * @param {object} asset 素材对象
+   * @param {string} name 新名称
+   * @returns {Promise<boolean>}
+   */
+  const handleRename = useCallback(
+    async (asset, name) => {
+      const assetId = asset?.asset_id;
+      const nextName = String(name || '').trim();
+      if (!assetId || !nextName) {
+        showError(t('素材名称不能为空'));
+        return false;
+      }
+      try {
+        const { success, message, data } = await updateMaterialAsset(
+          assetId,
+          nextName,
+        );
+        if (!success) {
+          showError(message || t('改名失败'));
+          return false;
+        }
+        setAssets((prev) =>
+          prev.map((a) =>
+            a.asset_id === assetId
+              ? { ...a, ...(data || {}), name: data?.name || nextName }
+              : a,
+          ),
+        );
+        showSuccess(t('改名成功'));
+        return true;
+      } catch (e) {
+        showError(t('改名失败，请重试'));
+        return false;
+      }
+    },
+    [t],
   );
 
   /**
@@ -308,6 +357,7 @@ export const useMaterialLibrary = () => {
     loadAssets,
     handleUploadFile,
     handleUploadByURL,
+    handleRename,
     handleDelete,
   };
 };

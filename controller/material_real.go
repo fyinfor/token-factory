@@ -425,7 +425,7 @@ func UploadRealMaterial(c *gin.Context) {
 	ext := strings.ToLower(filepath.Ext(file.Filename))
 	assetType, typeOk := detectMaterialAssetType(ext)
 	if !typeOk {
-		common.ApiErrorMsg(c, "仅支持上传图片或视频格式（图片：jpg/jpeg/png/webp/gif/bmp；视频：mp4/mov/webm/mkv/avi/m4v）")
+		common.ApiErrorMsg(c, materialUploadTypeHint)
 		return
 	}
 	maxSizeMB := operation_setting.GetSeedanceSetting().MaxImageSizeMB
@@ -507,13 +507,10 @@ func UploadRealMaterialByURL(c *gin.Context) {
 		common.ApiErrorMsg(c, "请输入合法的在线资源链接（http/https）")
 		return
 	}
-	assetType := ""
-	if t, ok := detectMaterialAssetType(filepath.Ext(parsed.Path)); ok {
-		assetType = t
-	} else if service.IsValidMaterialAssetType(strings.TrimSpace(req.AssetType)) {
-		assetType = strings.TrimSpace(req.AssetType)
-	} else {
-		assetType = service.MaterialAssetTypeImage
+	assetType, typeErr := resolveMaterialURLAssetType(parsed, req.AssetType)
+	if typeErr != nil {
+		common.ApiErrorMsg(c, typeErr.Error())
+		return
 	}
 	assetName := strings.TrimSpace(req.Name)
 	if assetName == "" {
@@ -556,6 +553,61 @@ func GetRealMaterial(c *gin.Context) {
 			refreshMaterialAssetFromUpstream(asset, info)
 		}
 	}
+	common.ApiSuccess(c, toMaterialAssetResponse(asset))
+}
+
+// UpdateRealMaterial 真人素材改名：校验归属+真人组 → 上游 UpdateAsset → 本地同步。
+func UpdateRealMaterial(c *gin.Context) {
+	userId := c.GetInt("id")
+	if userId == 0 {
+		common.ApiErrorMsg(c, "未授权")
+		return
+	}
+	assetId := strings.TrimSpace(c.Param("asset_id"))
+	if assetId == "" {
+		common.ApiErrorMsg(c, "素材 ID 无效")
+		return
+	}
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiErrorMsg(c, "请求参数无效")
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		common.ApiErrorMsg(c, "素材名称不能为空")
+		return
+	}
+	if len([]rune(name)) > 128 {
+		common.ApiErrorMsg(c, "素材名称不能超过 128 个字符")
+		return
+	}
+	asset, err := model.GetMaterialAssetByAssetIdAndUser(assetId, userId)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if asset == nil {
+		common.ApiErrorMsg(c, "素材不存在或无权操作")
+		return
+	}
+	if asset.GroupType != model.MaterialGroupTypeReal {
+		common.ApiErrorMsg(c, "该素材不是真人素材")
+		return
+	}
+	if operation_setting.IsSeedanceReady() && strings.TrimSpace(asset.AssetId) != "" {
+		if _, e := service.MaterialUpdateAsset(asset.AssetId, name); e != nil {
+			common.ApiErrorMsg(c, "素材改名失败: "+e.Error())
+			return
+		}
+	}
+	if err := model.UpdateMaterialAssetName(asset.Id, name); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	asset.Name = name
 	common.ApiSuccess(c, toMaterialAssetResponse(asset))
 }
 

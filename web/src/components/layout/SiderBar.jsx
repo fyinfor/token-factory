@@ -182,7 +182,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         to: '/route-policy',
       },
       {
-        text: t('素材管理'),
+        text: t('SD 素材库'),
         itemKey: 'seedance-material',
         to: '/console/seedance/material',
       },

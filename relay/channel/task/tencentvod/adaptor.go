@@ -2,15 +2,17 @@ package tencentvod
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	taskcommon "github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -34,26 +36,43 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 	a.baseURL = strings.TrimSpace(info.ChannelBaseUrl)
 	a.apiKey = info.ApiKey
 }
+
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) *dto.TaskError {
-	return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionGenerate)
+	return a.validateNativeOrLegacyRequest(c, info)
 }
-func (a *TaskAdaptor) EstimateBilling(_ *gin.Context, _ *relaycommon.RelayInfo) map[string]float64 {
-	return nil
-}
+
 func (a *TaskAdaptor) AdjustBillingOnSubmit(_ *relaycommon.RelayInfo, _ []byte) map[string]float64 {
 	return nil
 }
-func (a *TaskAdaptor) AdjustBillingOnComplete(_ *model.Task, _ *relaycommon.TaskInfo) int { return 0 }
 
 func (a *TaskAdaptor) BuildRequestURL(_ *relaycommon.RelayInfo) (string, error) {
 	u := normalizeVodEndpoint(a.baseURL)
 	return u + "/", nil
 }
+
 func (a *TaskAdaptor) BuildRequestHeader(_ *gin.Context, req *http.Request, _ *relaycommon.RelayInfo) error {
 	req.Header.Set("Content-Type", "application/json")
 	return nil
 }
+
 func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayInfo) (io.Reader, error) {
+	if raw, ok := c.Get(contextKeyNativeBody); ok {
+		if body, ok := raw.([]byte); ok && len(body) > 0 {
+			generateAudio := true
+			if req, err := relaycommon.GetTaskRequest(c); err == nil {
+				generateAudio = parseGenerateAudioFromMetadata(req.Metadata)
+			}
+			var native CreateAigcVideoTaskRequest
+			if err := common.Unmarshal(body, &native); err == nil {
+				enrichNativeCreateRequestAudio(&native, generateAudio)
+				if enriched, err := common.Marshal(native); err == nil {
+					return bytes.NewReader(enriched), nil
+				}
+			}
+			return bytes.NewReader(body), nil
+		}
+	}
+
 	req, err := relaycommon.GetTaskRequest(c)
 	if err != nil {
 		return nil, err
@@ -77,12 +96,24 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 		if u == "" {
 			return
 		}
+		if strings.HasPrefix(strings.ToLower(u), "data:") {
+			b64 := extractBase64Payload(u)
+			if b64 == "" {
+				return
+			}
+			fileInfos = append(fileInfos, map[string]any{
+				"Type":     "Base64",
+				"Category": "Image",
+				"Base64":   b64,
+				"Usage":    "Reference",
+			})
+			return
+		}
 		fileInfos = append(fileInfos, map[string]any{
 			"Type":     "Url",
 			"Category": "Image",
 			"Url":      u,
-			// 参考图生视频：显式标记为参考帧，避免被当作默认首帧。
-			"Usage": "Reference",
+			"Usage":    "Reference",
 		})
 	}
 	appendVideoURL := func(url string) {
@@ -97,25 +128,38 @@ func (a *TaskAdaptor) BuildRequestBody(c *gin.Context, info *relaycommon.RelayIn
 			"ReferenceType": "base",
 		})
 	}
-	// 图生视频：兼容 image 和 images[] 两种入参。
 	if img := strings.TrimSpace(req.Image); img != "" {
 		appendImageURL(img)
 	}
 	for _, img := range req.Images {
 		appendImageURL(img)
 	}
-	// 视频生视频：兼容 input_reference 入参。
 	if ref := strings.TrimSpace(req.InputReference); ref != "" {
 		appendVideoURL(ref)
 	}
 	if len(fileInfos) > 0 {
 		body["FileInfos"] = fileInfos
 	}
+
+	oc, err := outputConfigFromTaskSubmitReq(req)
+	if err != nil {
+		return nil, err
+	}
+	body["OutputConfig"] = oc
+
 	data, err := common.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	return bytes.NewReader(data), nil
+}
+
+func extractBase64Payload(dataURL string) string {
+	s := strings.TrimSpace(dataURL)
+	if idx := strings.Index(s, ","); idx >= 0 {
+		return strings.TrimSpace(s[idx+1:])
+	}
+	return s
 }
 
 func normalizeVodEndpoint(raw string) string {
@@ -148,7 +192,6 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	}
 	_ = resp.Body.Close()
 
-	// Try to decode base64 if response is a JSON string
 	decodedBody := taskcommon.DecodeBase64Response(respBody)
 
 	var env struct {
@@ -178,7 +221,6 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 	ov.CreatedAt = dto.FormatTimeUnixRFC3339(time.Now().Unix())
 	ov.Model = info.OriginModelName
 
-
 	taskcommon.WriteOpenAIVideoResponse(c, ov)
 	return taskID, respBody, nil
 }
@@ -205,12 +247,17 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		Response *struct {
 			Status        *string `json:"Status,omitempty"`
 			AigcVideoTask *struct {
+				Status  *string `json:"Status,omitempty"`
+				ErrCode *int64  `json:"ErrCode,omitempty"`
+				Message *string `json:"Message,omitempty"`
+				Input   *struct {
+					OutputConfig *AigcVideoOutputConfig `json:"OutputConfig,omitempty"`
+				} `json:"Input,omitempty"`
 				Output *struct {
 					FileInfos []struct {
 						FileUrl *string `json:"FileUrl,omitempty"`
 					} `json:"FileInfos,omitempty"`
 				} `json:"Output,omitempty"`
-				Message *string `json:"Message,omitempty"`
 			} `json:"AigcVideoTask,omitempty"`
 		} `json:"Response"`
 	}
@@ -221,6 +268,12 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 	if env.Response == nil || env.Response.Status == nil {
 		return ti, nil
 	}
+
+	// 无论终态与否，先把回包 Input.OutputConfig 落到 TaskInfo，供计费对账使用。
+	if env.Response.AigcVideoTask != nil && env.Response.AigcVideoTask.Input != nil {
+		ApplyActualOutputConfigToTaskInfo(ti, env.Response.AigcVideoTask.Input.OutputConfig)
+	}
+
 	switch strings.ToUpper(strings.TrimSpace(*env.Response.Status)) {
 	case "FINISH":
 		if env.Response.AigcVideoTask != nil && env.Response.AigcVideoTask.Output != nil {
@@ -229,15 +282,27 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 					ti.Status = string(model.TaskStatusSuccess)
 					ti.Progress = "100%"
 					ti.Url = strings.TrimSpace(*fi.FileUrl)
+					if ti.Resolution != "" || ti.Duration > 0 || ti.Ratio != "" {
+						logger.LogInfo(context.Background(), fmt.Sprintf(
+							"[tencentvod] ParseTaskResult 回填计费规格 resolution=%s duration=%d aspect_ratio=%s",
+							ti.Resolution, ti.Duration, ti.Ratio,
+						))
+					}
 					return ti, nil
 				}
 			}
 		}
 		ti.Status = string(model.TaskStatusFailure)
 		ti.Progress = "100%"
+		if env.Response.AigcVideoTask != nil && env.Response.AigcVideoTask.Message != nil {
+			ti.Reason = strings.TrimSpace(*env.Response.AigcVideoTask.Message)
+		}
 	case "ABORTED":
 		ti.Status = string(model.TaskStatusFailure)
 		ti.Progress = "100%"
+		if env.Response.AigcVideoTask != nil && env.Response.AigcVideoTask.Message != nil {
+			ti.Reason = strings.TrimSpace(*env.Response.AigcVideoTask.Message)
+		}
 	}
 	return ti, nil
 }
@@ -255,7 +320,10 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 			} `json:"Error,omitempty"`
 			AigcVideoTask *struct {
 				Message *string `json:"Message,omitempty"`
-				Output  *struct {
+				Input   *struct {
+					OutputConfig *AigcVideoOutputConfig `json:"OutputConfig,omitempty"`
+				} `json:"Input,omitempty"`
+				Output *struct {
 					FileInfos []struct {
 						FileUrl *string `json:"FileUrl,omitempty"`
 					} `json:"FileInfos,omitempty"`
@@ -273,6 +341,19 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 					ov.SetMetadata("url", strings.TrimSpace(*fi.FileUrl))
 					break
 				}
+			}
+		}
+		if env.Response.AigcVideoTask != nil && env.Response.AigcVideoTask.Input != nil && env.Response.AigcVideoTask.Input.OutputConfig != nil {
+			oc := env.Response.AigcVideoTask.Input.OutputConfig
+			spec := oc.ToBillingSpec()
+			if spec.Resolution != "" {
+				ov.SetMetadata("resolution", spec.Resolution)
+			}
+			if spec.Duration > 0 {
+				ov.SetMetadata("duration", strconv.Itoa(spec.Duration))
+			}
+			if spec.AspectRatio != "" {
+				ov.SetMetadata("ratio", spec.AspectRatio)
 			}
 		}
 		if ov.Error == nil && originTask.Status == model.TaskStatusFailure {
