@@ -89,6 +89,33 @@ func TestConvertToRequestPayload_Video2Video(t *testing.T) {
 	assert.Equal(t, "https://example.com/reference-video.mp4", body.Content[1].VideoURL.URL)
 }
 
+// 参考音频列表：metadata.audio_urls → content[].type=audio_url + role=reference_audio
+func TestConvertToRequestPayload_ReferenceAudio(t *testing.T) {
+	a := &TaskAdaptor{}
+	body, err := a.convertToRequestPayload(&relaycommon.TaskSubmitReq{
+		Model:  "doubao-seedance-2-0-260128",
+		Prompt: "根据参考音频生成口型一致的视频",
+		Images: []string{"https://example.com/portrait.png"},
+		Metadata: map[string]interface{}{
+			"audio_urls": []interface{}{
+				"https://example.com/ref1.mp3",
+				"https://example.com/ref2.wav",
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, body.Content, 4)
+	assert.Equal(t, "text", body.Content[0].Type)
+	assert.Equal(t, "image_url", body.Content[1].Type)
+	assert.Equal(t, "reference_image", body.Content[1].Role)
+	assert.Equal(t, "audio_url", body.Content[2].Type)
+	assert.Equal(t, "reference_audio", body.Content[2].Role)
+	assert.Equal(t, "https://example.com/ref1.mp3", body.Content[2].AudioURL.URL)
+	assert.Equal(t, "audio_url", body.Content[3].Type)
+	assert.Equal(t, "reference_audio", body.Content[3].Role)
+	assert.Equal(t, "https://example.com/ref2.wav", body.Content[3].AudioURL.URL)
+}
+
 func TestConvertToRequestPayload_SizeToResolution(t *testing.T) {
 	a := &TaskAdaptor{}
 	req := relaycommon.TaskSubmitReq{

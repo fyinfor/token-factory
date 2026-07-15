@@ -702,6 +702,47 @@ func getTopupDiscount(amount float64) decimal.Decimal {
 	return decimal.NewFromFloat(discount)
 }
 
+// alignTopupQuotaToDisplayAmount 计算使钱包「当前余额」截断展示能覆盖用户输入金额的额度。
+// 与前端 renderQuota / quotaToDisplayCurrencyParts 的汇率口径一致（展示用 USDExchangeRate / 自定义汇率）。
+func alignTopupQuotaToDisplayAmount(inputAmount decimal.Decimal, inputCurrency string, dQuotaPerUnit decimal.Decimal) int {
+	if inputAmount.LessThanOrEqual(decimal.Zero) || dQuotaPerUnit.LessThanOrEqual(decimal.Zero) {
+		return 0
+	}
+
+	displayType := operation_setting.GetQuotaDisplayType()
+	switch displayType {
+	case operation_setting.QuotaDisplayTypeCNY:
+		displayRate := decimal.NewFromFloat(operation_setting.USDExchangeRate)
+		if displayRate.LessThanOrEqual(decimal.Zero) {
+			displayRate = getRechargePriceRate()
+		}
+		targetCNY := inputAmount
+		if normalizeTopupCurrency(inputCurrency) == topupCurrencyUSD {
+			targetCNY = inputAmount.Mul(displayRate)
+		}
+		return int(targetCNY.Div(displayRate).Mul(dQuotaPerUnit).Ceil().IntPart())
+	case operation_setting.QuotaDisplayTypeCustom:
+		gs := operation_setting.GetGeneralSetting()
+		customRate := decimal.NewFromFloat(gs.CustomCurrencyExchangeRate)
+		if customRate.LessThanOrEqual(decimal.Zero) {
+			customRate = decimal.NewFromInt(1)
+		}
+		// 自定义币种下输入金额按展示币理解，直接反推 USD 额度
+		return int(inputAmount.Div(customRate).Mul(dQuotaPerUnit).Ceil().IntPart())
+	default:
+		// USD / TOKENS：输入按美元（TOKENS 展示走点数，这里仍按美元额度对齐输入）
+		targetUSD := inputAmount
+		if normalizeTopupCurrency(inputCurrency) == topupCurrencyCNY {
+			displayRate := decimal.NewFromFloat(operation_setting.USDExchangeRate)
+			if displayRate.LessThanOrEqual(decimal.Zero) {
+				displayRate = getRechargePriceRate()
+			}
+			targetUSD = inputAmount.Div(displayRate)
+		}
+		return int(targetUSD.Mul(dQuotaPerUnit).Ceil().IntPart())
+	}
+}
+
 func buildTopupQuote(amount float64, group string, payCurrency string) (*topupQuote, error) {
 	if amount <= 0 {
 		return nil, fmt.Errorf("充值数量不能小于 %d", getMinTopup())
@@ -739,21 +780,13 @@ func buildTopupQuote(amount float64, group string, payCurrency string) (*topupQu
 		}
 	}
 
-	// 无分组/折扣且定价汇率与展示汇率一致时，按实付金额反推额度，保证到账展示与支付金额对齐。
-	// 使用 Ceil：钱包 renderQuota 对展示金额做向下截断（toFixedTruncated），四舍五入入账会在
-	// 如 ¥500 / 7.3 场景下反算成 ¥499.99，造成「账单到账 500、当前余额少一截」的观感差额。
-	displayRate := decimal.NewFromFloat(operation_setting.USDExchangeRate)
-	if displayRate.LessThanOrEqual(decimal.Zero) {
-		displayRate = rate
-	}
-	if topupGroupRatio == 1 && dDiscount.Equal(decimal.NewFromInt(1)) && rate.Equal(displayRate) {
-		var payUSD decimal.Decimal
-		if targetCurrency == topupCurrencyCNY {
-			payUSD = payAmount.Div(displayRate)
-		} else {
-			payUSD = payAmount
-		}
-		if aligned := int(payUSD.Mul(dQuotaPerUnit).Ceil().IntPart()); aligned > 0 {
+	// 无分组/折扣时：按「用户输入金额 + 钱包展示币种」反推额度，保证充多少、当前余额到账多少。
+	// 注意：入账换算必须用展示汇率（USDExchangeRate / 自定义汇率），不能要求 Price 与之相等。
+	// Price 只影响跨境支付的实付金额；若仍用 Price 且 Price≠展示汇率，账单/日志按实付显示 500，
+	// 钱包用展示汇率反算就会出现固定差额。
+	// 使用 Ceil：前端 renderQuota 对展示金额向下截断（toFixedTruncated），Round 会导致 ¥499.99。
+	if topupGroupRatio == 1 && dDiscount.Equal(decimal.NewFromInt(1)) {
+		if aligned := alignTopupQuotaToDisplayAmount(dAmount, inputCurrency, dQuotaPerUnit); aligned > 0 {
 			quotaToAdd = aligned
 		}
 	}

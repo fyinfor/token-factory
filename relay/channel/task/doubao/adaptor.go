@@ -270,6 +270,50 @@ func collectVideoURLs(req *relaycommon.TaskSubmitReq) []string {
 	return urls
 }
 
+// collectAudioURLs 从 metadata.audio_urls / audio_url 与 Images 中收集参考音频 URL。
+// 上游 Seedance 2.0 要求 content 项固定 role=reference_audio。
+func collectAudioURLs(req *relaycommon.TaskSubmitReq) []string {
+	seen := make(map[string]struct{})
+	var urls []string
+	add := func(raw string) {
+		u := strings.TrimSpace(raw)
+		if u == "" || !isAudioURL(u) {
+			return
+		}
+		key := strings.ToLower(u)
+		if _, ok := seen[key]; ok {
+			return
+		}
+		seen[key] = struct{}{}
+		urls = append(urls, u)
+	}
+	if req.Metadata != nil {
+		if raw, ok := req.Metadata["audio_urls"]; ok {
+			switch arr := raw.(type) {
+			case []interface{}:
+				for _, it := range arr {
+					if u, ok := it.(string); ok {
+						add(u)
+					}
+				}
+			case []string:
+				for _, u := range arr {
+					add(u)
+				}
+			}
+		}
+		if raw, ok := req.Metadata["audio_url"]; ok {
+			if u, ok := raw.(string); ok {
+				add(u)
+			}
+		}
+	}
+	for _, img := range req.Images {
+		add(img)
+	}
+	return urls
+}
+
 func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*requestPayload, error) {
 	r := requestPayload{
 		Model:   req.Model,
@@ -281,10 +325,10 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 		return nil, errors.Wrap(err, "unmarshal metadata failed")
 	}
 
-	// Rebuild content[]: text -> image_url -> video_url (Seedance 2.0 protocol).
+	// Rebuild content[]: text -> image_url -> video_url -> audio_url（Seedance 2.0 协议）。
 	r.Content = lo.Reject(r.Content, func(c ContentItem, _ int) bool {
 		switch c.Type {
-		case "text", "image_url", "video_url":
+		case "text", "image_url", "video_url", "audio_url":
 			return true
 		default:
 			return false
@@ -298,7 +342,7 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 
 	if req.HasImage() {
 		for _, imgURL := range req.Images {
-			if isVideoURL(imgURL) {
+			if isVideoURL(imgURL) || isAudioURL(imgURL) {
 				continue
 			}
 			if u := strings.TrimSpace(imgURL); u != "" {
@@ -316,6 +360,15 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 			Type:     "video_url",
 			VideoURL: &MediaURL{URL: videoURL},
 			Role:     "reference_video",
+		})
+	}
+
+	// Seedance 2.0：参考音频列表固定封装为 type=audio_url + role=reference_audio。
+	for _, audioURL := range collectAudioURLs(req) {
+		r.Content = append(r.Content, ContentItem{
+			Type:     "audio_url",
+			AudioURL: &MediaURL{URL: audioURL},
+			Role:     "reference_audio",
 		})
 	}
 

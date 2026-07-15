@@ -29,3 +29,20 @@ func isVideoURL(raw string) bool {
 	}
 	return false
 }
+
+// isAudioURL 判断 URL 是否为音频资源（用于 Seedance 2.0 参考音频封装）。
+func isAudioURL(raw string) bool {
+	u := strings.ToLower(strings.TrimSpace(raw))
+	if u == "" {
+		return false
+	}
+	if strings.HasPrefix(u, "data:audio/") {
+		return true
+	}
+	for _, ext := range []string{".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"} {
+		if strings.Contains(u, ext) {
+			return true
+		}
+	}
+	return false
+}

@@ -5,65 +5,59 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as
 published by the Free Software Foundation, either version 3 of the
 License, or (at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Affero General Public License for more details.
-
-You should have received a copy of the GNU Affero General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.
-
-For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useCallback, useState } from 'react';
-import { Input, Typography, Button, Upload } from '@douyinfe/semi-ui';
+import { Input, Typography, Button, Switch, Upload } from '@douyinfe/semi-ui';
 import { IconFile } from '@douyinfe/semi-icons';
-import {
-  Plus,
-  X,
-  Image,
-  Upload as UploadIcon,
-  Loader2,
-} from 'lucide-react';
+import { Plus, X, Music, Upload as UploadIcon, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { PLAYGROUND_MEDIA_MAX_COUNT } from '../../constants/playground.constants';
 import { showError, showSuccess } from '../../helpers';
 import {
   appendUploadedMediaUrl,
   canAddMoreMediaUrls,
+  countFilledMediaUrls,
   uploadPlaygroundMediaFile,
 } from '../../helpers/playgroundMediaInputUtils';
 
-const ImageUrlInput = ({
-  imageUrls,
-  imageEnabled,
-  onImageUrlsChange,
+/**
+ * 操练场视频媒体：参考音频链接输入 + 本地音频上传。
+ * 写入 inputs.audioUrls，生成请求时进入 metadata.audio_urls。
+ */
+const AudioUrlInput = ({
+  audioUrls,
+  audioEnabled,
+  onAudioUrlsChange,
+  onAudioEnabledChange,
+  allowToggle = true,
   disabled = false,
   maxCount = PLAYGROUND_MEDIA_MAX_COUNT,
 }) => {
   const { t } = useTranslation();
   const [uploading, setUploading] = useState(false);
 
-  const canAddMore = canAddMoreMediaUrls(imageUrls, maxCount);
+  const enabled = audioEnabled !== false;
+  const list = audioUrls || [];
+  const filledCount = countFilledMediaUrls(list);
+  const canAddMore = canAddMoreMediaUrls(list, maxCount);
 
-  const handleAddImageUrl = () => {
+  const handleAdd = () => {
     if (!canAddMore) {
       return;
     }
-    onImageUrlsChange([...(imageUrls || []), '']);
+    onAudioUrlsChange([...list, '']);
   };
 
-  const handleUpdateImageUrl = (index, value) => {
-    const newUrls = [...imageUrls];
-    newUrls[index] = value;
-    onImageUrlsChange(newUrls);
+  const handleUpdate = (index, value) => {
+    const next = [...list];
+    next[index] = value;
+    onAudioUrlsChange(next);
   };
 
-  const handleRemoveImageUrl = (index) => {
-    const newUrls = imageUrls.filter((_, i) => i !== index);
-    onImageUrlsChange(newUrls.length > 0 ? newUrls : ['']);
+  const handleRemove = (index) => {
+    const next = list.filter((_, i) => i !== index);
+    onAudioUrlsChange(next.length > 0 ? next : ['']);
   };
 
   const handleUpload = useCallback(
@@ -74,7 +68,7 @@ const ImageUrlInput = ({
         return;
       }
 
-      if (!canAddMoreMediaUrls(imageUrls, maxCount)) {
+      if (!canAddMoreMediaUrls(list, maxCount)) {
         showError(
           t('操练场素材已达上限', '最多添加 {{count}} 个', {
             count: maxCount,
@@ -88,7 +82,7 @@ const ImageUrlInput = ({
       try {
         const uploadedUrl = await uploadPlaygroundMediaFile(inst);
         const { urls, ok } = appendUploadedMediaUrl(
-          imageUrls,
+          list,
           uploadedUrl,
           maxCount,
         );
@@ -101,7 +95,7 @@ const ImageUrlInput = ({
           onError?.(new Error('limit'));
           return;
         }
-        onImageUrlsChange(urls);
+        onAudioUrlsChange(urls);
         onSuccess?.({ url: uploadedUrl });
         showSuccess(t('上传成功'));
       } catch (error) {
@@ -115,25 +109,25 @@ const ImageUrlInput = ({
         setUploading(false);
       }
     },
-    [imageUrls, maxCount, onImageUrlsChange, t],
+    [list, maxCount, onAudioUrlsChange, t],
   );
 
   return (
     <div
-      className={`playground-media-input playground-media-input-image ${disabled ? 'opacity-50' : ''}`}
+      className={`playground-media-input playground-media-input-audio ${disabled ? 'opacity-50' : ''}`}
     >
       <div className='mb-2 flex flex-wrap items-center justify-between gap-2'>
         <div className='playground-media-action-bar'>
-          <Image
+          <Music
             size={16}
             className={
-              imageEnabled && !disabled
+              enabled && !disabled
                 ? 'text-[var(--semi-color-primary)]'
                 : 'text-[var(--semi-color-text-2)]'
             }
           />
           <Typography.Text strong className='text-sm'>
-            {t('图片地址')}
+            {t('音频地址')}
           </Typography.Text>
           {disabled && (
             <Typography.Text className='text-xs text-[var(--semi-color-warning)]'>
@@ -142,12 +136,23 @@ const ImageUrlInput = ({
           )}
         </div>
         <div className='flex items-center gap-2'>
+          {allowToggle && (
+            <Switch
+              checked={enabled}
+              onChange={onAudioEnabledChange}
+              checkedText={t('启用')}
+              uncheckedText={t('停用')}
+              size='small'
+              className='flex-shrink-0'
+              disabled={disabled}
+            />
+          )}
           <Upload
             action=''
-            accept='image/*,.jpg,.jpeg,.png,.gif,.webp'
+            accept='audio/*,.mp3,.wav,.m4a,.aac,.ogg,.flac'
             showUploadList={false}
             customRequest={handleUpload}
-            disabled={!imageEnabled || disabled || uploading || !canAddMore}
+            disabled={!enabled || disabled || uploading || !canAddMore}
           >
             <Button
               icon={
@@ -160,7 +165,7 @@ const ImageUrlInput = ({
               size='small'
               theme='light'
               className='playground-media-action !rounded-lg'
-              disabled={!imageEnabled || disabled || uploading || !canAddMore}
+              disabled={!enabled || disabled || uploading || !canAddMore}
             >
               {uploading ? t('上传中') : t('上传')}
             </Button>
@@ -170,27 +175,33 @@ const ImageUrlInput = ({
             size='small'
             theme='solid'
             type='primary'
-            onClick={handleAddImageUrl}
+            onClick={handleAdd}
             className='playground-media-action-round'
-            disabled={!imageEnabled || disabled || !canAddMore}
+            disabled={!enabled || disabled || !canAddMore}
           />
         </div>
       </div>
 
+      {enabled && list.length > 0 && (
+        <Typography.Text className='mb-2 block text-xs text-[var(--semi-color-text-2)]'>
+          {t('已添加')} {filledCount}/{maxCount} {t('个音频')}
+        </Typography.Text>
+      )}
+
       <div
-        className={`space-y-2 max-h-32 overflow-y-auto image-list-scroll ${!imageEnabled || disabled ? 'opacity-50' : ''}`}
+        className={`space-y-2 max-h-32 overflow-y-auto image-list-scroll ${!enabled || disabled ? 'opacity-50' : ''}`}
       >
-        {imageUrls.map((url, index) => (
+        {list.map((url, index) => (
           <div key={index} className='flex items-center gap-2'>
             <div className='flex-1'>
               <Input
-                placeholder={`https://example.com/image${index + 1}.jpg`}
+                placeholder={`https://example.com/audio${index + 1}.mp3`}
                 value={url}
-                onChange={(value) => handleUpdateImageUrl(index, value)}
+                onChange={(value) => handleUpdate(index, value)}
                 className='!rounded-lg'
                 size='small'
                 prefix={<IconFile size='small' />}
-                disabled={!imageEnabled || disabled}
+                disabled={!enabled || disabled}
               />
             </div>
             <Button
@@ -198,9 +209,9 @@ const ImageUrlInput = ({
               size='small'
               theme='borderless'
               type='danger'
-              onClick={() => handleRemoveImageUrl(index)}
+              onClick={() => handleRemove(index)}
               className='playground-media-remove-btn flex-shrink-0'
-              disabled={!imageEnabled || disabled}
+              disabled={!enabled || disabled}
             />
           </div>
         ))}
@@ -209,4 +220,4 @@ const ImageUrlInput = ({
   );
 };
 
-export default ImageUrlInput;
+export default AudioUrlInput;

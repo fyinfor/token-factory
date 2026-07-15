@@ -587,6 +587,8 @@ func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor
 
 	// 1. 视频按秒规则优先按真实成片重算。
 	if actualQuota, detail := recalcVideoPerSecondQuotaDetailOnComplete(task, taskResult); actualQuota > 0 {
+		// 侧写：渠道 adaptor 比对提交/回包计费字段并打点（如腾讯云 Input.OutputConfig），返回值此处忽略。
+		_ = adaptor.AdjustBillingOnComplete(task, taskResult)
 		RecalculateTaskQuota(ctx, task, actualQuota, detail)
 		return
 	}
@@ -628,6 +630,7 @@ func SettleTaskBillingOnFetch(ctx context.Context, task *model.Task, taskResult 
 		}
 	}
 	if actualQuota, detail := recalcVideoPerSecondQuotaDetailOnComplete(task, taskResult); actualQuota > 0 {
+		logTencentVodBillingMismatch(ctx, task, taskResult)
 		RecalculateTaskQuota(ctx, task, actualQuota, detail)
 		return
 	}

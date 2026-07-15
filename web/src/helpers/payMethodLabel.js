@@ -17,6 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
+import { renderQuota } from './render';
+
 /** 支付方式 type / 历史订单 payment_method → i18n 中文 key */
 const PAYMENT_METHOD_TYPE_LABEL_KEYS = {
   alipay: '支付宝',
@@ -142,12 +144,18 @@ export function formatTopupPayMoney(money, record = {}, usdExchangeRate) {
 }
 
 /**
- * 格式化充值账单「到账额度」展示，与 formatTopupPayMoney 口径一致（按实付/输入金额，不从 quota 反算）。
+ * 格式化充值账单「到账额度」展示。
+ * 优先按实际入账 quota_to_add 展示（与钱包当前余额同一套 renderQuota 口径）；
+ * 无额度字段时再回退到实付金额展示。
  * @param {unknown} money 后端 TopUp.money
  * @param {object} record 后端 TopUp 行
  * @param {number} usdExchangeRate 美元兑人民币汇率
  * @returns {string}
  */
 export function formatTopupCreditedAmount(money, record = {}, usdExchangeRate) {
+  const quotaToAdd = Number(record?.quota_to_add || 0);
+  if (quotaToAdd > 0) {
+    return renderQuota(quotaToAdd);
+  }
   return formatTopupPayMoney(money, record, usdExchangeRate);
 }

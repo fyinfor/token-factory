@@ -35,8 +35,14 @@ var allowedMaterialVideoExt = map[string]bool{
 	".m4v":  true,
 }
 
-// detectMaterialAssetType 根据文件扩展名推断素材类型（仅图片/视频）。
-// 返回值：AssetType 枚举值（Image/Video）与是否为受支持类型。
+// 允许上传的音频扩展名（SD 素材库上游仅接受 mp3 / wav）。
+var allowedMaterialAudioExt = map[string]bool{
+	".mp3": true,
+	".wav": true,
+}
+
+// detectMaterialAssetType 根据文件扩展名推断素材类型（图片/视频/音频）。
+// 返回值：AssetType 枚举值（Image/Video/Audio）与是否为受支持类型。
 func detectMaterialAssetType(ext string) (string, bool) {
 	ext = strings.ToLower(strings.TrimSpace(ext))
 	if allowedMaterialImageExt[ext] {
@@ -45,8 +51,41 @@ func detectMaterialAssetType(ext string) (string, bool) {
 	if allowedMaterialVideoExt[ext] {
 		return service.MaterialAssetTypeVideo, true
 	}
+	if allowedMaterialAudioExt[ext] {
+		return service.MaterialAssetTypeAudio, true
+	}
 	return "", false
 }
+
+// 素材库不接受的音频扩展名（上游仅 mp3/wav；提前拦截并给出明确提示）。
+var unsupportedMaterialAudioExt = map[string]bool{
+	".aif": true, ".aiff": true, ".aifc": true,
+	".flac": true, ".ogg": true, ".oga": true,
+	".m4a": true, ".ape": true, ".wma": true, ".aac": true,
+}
+
+// resolveMaterialURLAssetType 根据链接扩展名与可选前端类型推断素材类型。
+// 音频仅允许 mp3/wav；aif/flac/ogg/m4a 等会明确报错而非误标为图片。
+func resolveMaterialURLAssetType(parsed *url.URL, reqAssetType string) (string, error) {
+	ext := strings.ToLower(filepath.Ext(parsed.Path))
+	if unsupportedMaterialAudioExt[ext] {
+		return "", fmt.Errorf("音频素材仅支持 mp3/wav 格式")
+	}
+	if t, ok := detectMaterialAssetType(ext); ok {
+		return t, nil
+	}
+	reqType := strings.TrimSpace(reqAssetType)
+	if reqType == service.MaterialAssetTypeAudio {
+		return "", fmt.Errorf("音频素材仅支持 mp3/wav 格式")
+	}
+	if service.IsValidMaterialAssetType(reqType) {
+		return reqType, nil
+	}
+	return service.MaterialAssetTypeImage, nil
+}
+
+// materialUploadTypeHint 上传格式错误提示文案（虚拟/真人共用）。
+const materialUploadTypeHint = "仅支持上传图片、视频或音频格式（图片：jpg/jpeg/png/webp/gif/bmp；视频：mp4/mov/webm/mkv/avi/m4v；音频：mp3/wav）"
 
 // materialAssetNeedsUpstreamRefresh 判断本地记录是否仍需向上游同步 URL/状态。
 func materialAssetNeedsUpstreamRefresh(asset *model.MaterialAsset) bool {
@@ -109,10 +148,10 @@ func finalizeMaterialUpload(userId int, fallbackGroupId, assetId, name, fallback
 	if t := strings.TrimSpace(info.AssetType); t != "" {
 		assetType = t
 	}
-	// 仅允许图片/视频素材，拦截音频等其他类型（拦截时回收上游素材）。
+	// 仅允许图片/视频/音频素材，拦截其他类型（拦截时回收上游素材）。
 	if !service.IsValidMaterialAssetType(assetType) {
 		_, _ = service.MaterialDeleteAsset(assetId)
-		return nil, fmt.Errorf("仅支持图片或视频素材，当前素材类型: %s", assetType)
+		return nil, fmt.Errorf("仅支持图片、视频或音频素材，当前素材类型: %s", assetType)
 	}
 
 	// URL：素材永久访问地址，优先使用接口返回值。
@@ -305,11 +344,11 @@ func UploadMaterial(c *gin.Context) {
 		return
 	}
 
-	// 扩展名校验（上传格式拦截）：仅支持图片/视频，并据此标记 AssetType。
+	// 扩展名校验（上传格式拦截）：支持图片/视频/音频，并据此标记 AssetType。
 	ext := strings.ToLower(filepath.Ext(file.Filename))
 	assetType, ok := detectMaterialAssetType(ext)
 	if !ok {
-		common.ApiErrorMsg(c, "仅支持上传图片或视频格式（图片：jpg/jpeg/png/webp/gif/bmp；视频：mp4/mov/webm/mkv/avi/m4v）")
+		common.ApiErrorMsg(c, materialUploadTypeHint)
 		return
 	}
 
@@ -351,7 +390,7 @@ func UploadMaterial(c *gin.Context) {
 		return
 	}
 
-	// 调用素材库上传素材（按扩展名标记 AssetType=Image/Video）。
+	// 调用素材库上传素材（按扩展名标记 AssetType=Image/Video/Audio）。
 	assetName := strings.TrimSpace(file.Filename)
 	if assetName == "" {
 		assetName = "portrait"
@@ -421,14 +460,11 @@ func UploadMaterialByURL(c *gin.Context) {
 		return
 	}
 
-	// 素材类型判定：优先按链接扩展名识别，其次采用前端传入的合法类型，默认 Image。
-	assetType := ""
-	if t, ok := detectMaterialAssetType(filepath.Ext(parsed.Path)); ok {
-		assetType = t
-	} else if service.IsValidMaterialAssetType(strings.TrimSpace(req.AssetType)) {
-		assetType = strings.TrimSpace(req.AssetType)
-	} else {
-		assetType = service.MaterialAssetTypeImage
+	// 素材类型判定：扩展名优先；音频仅 mp3/wav，其他音频格式明确拦截。
+	assetType, typeErr := resolveMaterialURLAssetType(parsed, req.AssetType)
+	if typeErr != nil {
+		common.ApiErrorMsg(c, typeErr.Error())
+		return
 	}
 
 	// 自动建组。
@@ -494,6 +530,63 @@ func GetMaterial(c *gin.Context) {
 		}
 	}
 
+	common.ApiSuccess(c, toMaterialAssetResponse(asset))
+}
+
+// UpdateMaterial 素材改名：校验归属 → 上游 UpdateAsset → 本地同步名称。
+// 虚拟人像与个人令牌路径共用落库逻辑；body: { "name": "新名称" }。
+func UpdateMaterial(c *gin.Context) {
+	userId := c.GetInt("id")
+	if userId == 0 {
+		common.ApiErrorMsg(c, "未授权")
+		return
+	}
+
+	assetId := strings.TrimSpace(c.Param("asset_id"))
+	if assetId == "" {
+		common.ApiErrorMsg(c, "素材 ID 无效")
+		return
+	}
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiErrorMsg(c, "请求参数无效")
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		common.ApiErrorMsg(c, "素材名称不能为空")
+		return
+	}
+	if len([]rune(name)) > 128 {
+		common.ApiErrorMsg(c, "素材名称不能超过 128 个字符")
+		return
+	}
+
+	asset, err := model.GetMaterialAssetByAssetIdAndUser(assetId, userId)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if asset == nil {
+		common.ApiErrorMsg(c, "素材不存在或无权操作")
+		return
+	}
+
+	if operation_setting.IsSeedanceReady() && strings.TrimSpace(asset.AssetId) != "" {
+		if _, e := service.MaterialUpdateAsset(asset.AssetId, name); e != nil {
+			common.ApiErrorMsg(c, "素材改名失败: "+e.Error())
+			return
+		}
+	}
+
+	if err := model.UpdateMaterialAssetName(asset.Id, name); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	asset.Name = name
 	common.ApiSuccess(c, toMaterialAssetResponse(asset))
 }
 
@@ -580,11 +673,11 @@ func UploadPersonalMaterial(c *gin.Context) {
 		return
 	}
 
-	// 扩展名校验：仅支持图片 / 视频，并据此标记 AssetType。
+	// 扩展名校验：支持图片 / 视频 / 音频，并据此标记 AssetType。
 	ext := strings.ToLower(filepath.Ext(file.Filename))
 	assetType, ok := detectMaterialAssetType(ext)
 	if !ok {
-		common.ApiErrorMsg(c, "仅支持上传图片或视频格式（图片：jpg/jpeg/png/webp/gif/bmp；视频：mp4/mov/webm/mkv/avi/m4v）")
+		common.ApiErrorMsg(c, materialUploadTypeHint)
 		return
 	}
 
@@ -697,14 +790,11 @@ func UploadPersonalMaterialByURL(c *gin.Context) {
 		return
 	}
 
-	// 素材类型判定：优先按链接扩展名识别，其次采用前端传入的合法类型，默认 Image。
-	assetType := ""
-	if t, ok := detectMaterialAssetType(filepath.Ext(parsed.Path)); ok {
-		assetType = t
-	} else if service.IsValidMaterialAssetType(strings.TrimSpace(req.AssetType)) {
-		assetType = strings.TrimSpace(req.AssetType)
-	} else {
-		assetType = service.MaterialAssetTypeImage
+	// 素材类型判定：扩展名优先；音频仅 mp3/wav，其他音频格式明确拦截。
+	assetType, typeErr := resolveMaterialURLAssetType(parsed, req.AssetType)
+	if typeErr != nil {
+		common.ApiErrorMsg(c, typeErr.Error())
+		return
 	}
 
 	// 复用自动建组逻辑。
