@@ -28,18 +28,7 @@ const ModelPerfPanel = ({ modelName, perfSummary, t, flat = false }) => {
   if (!modelName) return null;
 
   const summary = perfSummary || null;
-  if (!summary) {
-    const empty = <Text type='secondary'>{t('暂无该模型的性能数据')}</Text>;
-    return flat ? (
-      <section className='mb-6 border-b border-semi-color-border pb-6'>
-        {empty}
-      </section>
-    ) : (
-      <Card className='!rounded-xl mb-6' bodyStyle={{ padding: 16 }}>
-        {empty}
-      </Card>
-    );
-  }
+  if (!summary) return null;
 
   const hourlySeries = summary.hourly_series || [];
   const hasHourlySeries = hourlySeries.some(

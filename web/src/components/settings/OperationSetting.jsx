@@ -74,15 +74,6 @@ const OperationSetting = () => {
     CheckSensitiveEnabled: false,
     CheckSensitiveOnPromptEnabled: false,
     SensitiveWords: '',
-    TencentTMSModerationEnabled: false,
-    TencentIMSModerationEnabled: false,
-    TencentTMSOutputModerationEnabled: false,
-    TencentIMSOutputModerationEnabled: false,
-    TencentTMSSecretID: '',
-    TencentTMSSecretKey: '',
-    TencentTMSRegion: 'ap-guangzhou',
-    TencentTMSBizType: 'TencentCloudDefault',
-    TencentIMSBizType: 'TencentCloudDefault',
 
     /* 日志设置 */
     LogConsumeEnabled: false,

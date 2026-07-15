@@ -28,11 +28,11 @@ type ErrorType string
 const (
 	ErrorTypeTokenFactoryError ErrorType = "token_factory_error"
 	ErrorTypeOpenAIError       ErrorType = "openai_error"
-	ErrorTypeClaudeError     ErrorType = "claude_error"
-	ErrorTypeMidjourneyError ErrorType = "midjourney_error"
-	ErrorTypeGeminiError     ErrorType = "gemini_error"
-	ErrorTypeRerankError     ErrorType = "rerank_error"
-	ErrorTypeUpstreamError   ErrorType = "upstream_error"
+	ErrorTypeClaudeError       ErrorType = "claude_error"
+	ErrorTypeMidjourneyError   ErrorType = "midjourney_error"
+	ErrorTypeGeminiError       ErrorType = "gemini_error"
+	ErrorTypeRerankError       ErrorType = "rerank_error"
+	ErrorTypeUpstreamError     ErrorType = "upstream_error"
 )
 
 type ErrorCode string
@@ -40,7 +40,6 @@ type ErrorCode string
 const (
 	ErrorCodeInvalidRequest         ErrorCode = "invalid_request"
 	ErrorCodeSensitiveWordsDetected ErrorCode = "sensitive_words_detected"
-	ErrorCodeContentModerationFailed ErrorCode = "content_moderation_failed"
 	ErrorCodeViolationFeeGrokCSAM   ErrorCode = "violation_fee.grok.csam"
 
 	// token factory error
@@ -77,9 +76,9 @@ const (
 	ErrorCodeBadResponseBody        ErrorCode = "bad_response_body"
 	ErrorCodeEmptyResponse          ErrorCode = "empty_response"
 	ErrorCodeAwsInvokeError         ErrorCode = "aws_invoke_error"
-	ErrorCodeModelNotFound               ErrorCode = "model_not_found"
-	ErrorCodePlatformModelRateLimit      ErrorCode = "platform_model_rate_limit_exceeded"
-	ErrorCodePromptBlocked               ErrorCode = "prompt_blocked"
+	ErrorCodeModelNotFound          ErrorCode = "model_not_found"
+	ErrorCodePlatformModelRateLimit ErrorCode = "platform_model_rate_limit_exceeded"
+	ErrorCodePromptBlocked          ErrorCode = "prompt_blocked"
 
 	// sql error
 	ErrorCodeQueryDataError  ErrorCode = "query_data_error"
