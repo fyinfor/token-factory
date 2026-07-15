@@ -203,7 +203,7 @@ export default function DistributorAnalyticsBoard({ adminMode = false }) {
   const revenueSpec = useMemo(() => {
     const fields = [
       { key: 'reward_quota', label: t('分销收益金额') },
-      { key: 'invitee_quota_added', label: t('下级充值入账金额') },
+      { key: 'invitee_quota_added', label: t('下级充值/消费带动金额') },
     ];
     const values = buildLongSeriesMoney(series, fields);
     return {
@@ -378,7 +378,7 @@ export default function DistributorAnalyticsBoard({ adminMode = false }) {
               title={
                 <span className='flex items-center gap-2'>
                   <LineChart size={16} className={analyticsIconClassName} />
-                  {t('收益与充值带动')}
+                  {t('收益与充值/消费带动')}
                   <Text type='tertiary' size='small' className='!font-normal'>
                     ({t('所选区间')} · {t('金额为展示货币')})
                   </Text>

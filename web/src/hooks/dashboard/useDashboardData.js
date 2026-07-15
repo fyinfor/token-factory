@@ -26,6 +26,26 @@ import { TIME_OPTIONS } from '../../constants/dashboard.constants';
 import { useIsMobile } from '../common/useIsMobile';
 import { useMinimumLoadingTime } from '../common/useMinimumLoadingTime';
 
+const USER_QUOTA_RANGE_SECONDS = 30 * 24 * 60 * 60 - 60;
+
+const normalizeUserQuotaRange = (startValue, endValue) => {
+  const now = Math.floor(Date.now() / 1000);
+  let endTimestamp = Math.floor(Date.parse(endValue) / 1000);
+  let startTimestamp = Math.floor(Date.parse(startValue) / 1000);
+
+  if (!Number.isFinite(endTimestamp) || endTimestamp > now) {
+    endTimestamp = now;
+  }
+  if (!Number.isFinite(startTimestamp) || startTimestamp >= endTimestamp) {
+    startTimestamp = endTimestamp - USER_QUOTA_RANGE_SECONDS;
+  }
+  if (endTimestamp - startTimestamp > USER_QUOTA_RANGE_SECONDS) {
+    startTimestamp = endTimestamp - USER_QUOTA_RANGE_SECONDS;
+  }
+
+  return { startTimestamp, endTimestamp };
+};
+
 export const useDashboardData = (userState, userDispatch, statusState) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -44,7 +64,7 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
     token_name: '',
     model_name: '',
     start_timestamp: getInitialTimestamp(),
-    end_timestamp: timestamp2string(new Date().getTime() / 1000 + 3600),
+    end_timestamp: timestamp2string(new Date().getTime() / 1000),
     channel: '',
     data_export_default_time: '',
   });
@@ -93,8 +113,6 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
     statusState?.status?.announcements_enabled ?? true;
   const faqEnabled = statusState?.status?.faq_enabled ?? true;
   const uptimeEnabled = statusState?.status?.uptime_kuma_enabled ?? true;
-  const perfOverviewEnabled =
-    statusState?.status?.perf_overview_enabled ?? true;
 
   const hasApiInfoPanel = apiInfoEnabled;
   const hasInfoPanels = announcementsEnabled || faqEnabled || uptimeEnabled;
@@ -165,12 +183,32 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
     try {
       let url = '';
       const { start_timestamp, end_timestamp, username } = inputs;
-      let localStartTimestamp = Date.parse(start_timestamp) / 1000;
-      let localEndTimestamp = Date.parse(end_timestamp) / 1000;
+      let localStartTimestamp = Math.floor(Date.parse(start_timestamp) / 1000);
+      let localEndTimestamp = Math.floor(Date.parse(end_timestamp) / 1000);
 
       if (isAdminUser) {
         url = `/api/data/?username=${username}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&default_time=${dataExportDefaultTime}`;
       } else {
+        const normalizedRange = normalizeUserQuotaRange(
+          start_timestamp,
+          end_timestamp,
+        );
+        localStartTimestamp = normalizedRange.startTimestamp;
+        localEndTimestamp = normalizedRange.endTimestamp;
+
+        const normalizedStart = timestamp2string(localStartTimestamp);
+        const normalizedEnd = timestamp2string(localEndTimestamp);
+        if (
+          normalizedStart !== start_timestamp ||
+          normalizedEnd !== end_timestamp
+        ) {
+          setInputs((current) => ({
+            ...current,
+            start_timestamp: normalizedStart,
+            end_timestamp: normalizedEnd,
+          }));
+        }
+
         url = `/api/data/self/?start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&default_time=${dataExportDefaultTime}`;
       }
 
@@ -311,7 +349,6 @@ export const useDashboardData = (userState, userDispatch, statusState) => {
     announcementsEnabled,
     faqEnabled,
     uptimeEnabled,
-    perfOverviewEnabled,
 
     // 函数
     handleInputChange,

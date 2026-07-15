@@ -27,7 +27,11 @@ import {
   formatCommissionRatioPercent,
   renderQuota,
 } from '../../helpers';
-import { renderProfitShareQuotaCell } from './profitShareDisplay';
+import {
+  ProfitShareRewardColumnTitle,
+  renderProfitShareQuotaCell,
+  renderProfitShareRewardCell,
+} from './profitShareDisplay';
 
 const { Text } = Typography;
 
@@ -111,15 +115,31 @@ export default function AffInviteeCommissionDetailModal({
           render: (bm) => {
             const mode = String(bm ?? '').trim();
             if (mode === 'video_token') {
-              return <Tag color='violet' type='light' size='small'>{t('视频按Token')}</Tag>;
+              return (
+                <Tag color='violet' type='light' size='small'>
+                  {t('视频按Token')}
+                </Tag>
+              );
             }
             if (mode === 'video') {
-              return <Tag color='cyan' type='light' size='small'>{t('视频其他')}</Tag>;
+              return (
+                <Tag color='cyan' type='light' size='small'>
+                  {t('视频其他')}
+                </Tag>
+              );
             }
             if (mode === 'text') {
-              return <Tag color='grey' type='light' size='small'>{t('文本对话')}</Tag>;
+              return (
+                <Tag color='grey' type='light' size='small'>
+                  {t('文本对话')}
+                </Tag>
+              );
             }
-            return <Tag type='light' size='small'>{t('未分类')}</Tag>;
+            return (
+              <Tag type='light' size='small'>
+                {t('未分类')}
+              </Tag>
+            );
           },
         },
         {
@@ -165,10 +185,10 @@ export default function AffInviteeCommissionDetailModal({
           render: (bps) => renderLoggedCommissionRatio(bps),
         },
         {
-          title: t('收益金额'),
+          title: <ProfitShareRewardColumnTitle t={t} />,
           dataIndex: 'reward_quota',
           width: 120,
-          render: (q) => renderProfitShareQuotaCell(q),
+          render: (_, row) => renderProfitShareRewardCell(row, t),
         },
       ];
     }

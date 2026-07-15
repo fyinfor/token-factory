@@ -38,7 +38,7 @@ func (AffInviteProfitShareLog) TableName() string {
 // markupSliceQuota：用户扣费中的加价切片（分润基数）；rewardQuota：基数 × 生效分润比例后的入账额度（rewardQuota <= markupSliceQuota）。
 // commissionBps：本条入账采用的万分之一比例（记入流水供明细展示）。
 func CreditDistributorProfitShare(inviterId, inviteeUserId, channelId int, modelName string, userQuotaCharged, markupSliceQuota, rewardQuota, commissionBps int, totalTokens int, billingMode string) error {
-	if inviterId <= 0 || inviteeUserId <= 0 || rewardQuota <= 0 {
+	if inviterId <= 0 || inviteeUserId <= 0 || rewardQuota < 0 {
 		return nil
 	}
 	if markupSliceQuota < 0 {
@@ -49,21 +49,23 @@ func CreditDistributorProfitShare(inviterId, inviteeUserId, channelId int, model
 	ts := common.GetTimestamp()
 
 	return DB.Transaction(func(tx *gorm.DB) error {
-		up := tx.Model(&User{}).Where("id = ?", inviterId).Updates(map[string]interface{}{
-			"aff_quota":   gorm.Expr("aff_quota + ?", reward),
-			"aff_history": gorm.Expr("aff_history + ?", reward),
-		})
-		if up.Error != nil {
-			return up.Error
-		}
-		if up.RowsAffected == 0 {
-			return fmt.Errorf("inviter user not found: %d", inviterId)
-		}
-		res := tx.Model(&AffInviteRelation{}).
-			Where("inviter_id = ? AND invitee_user_id = ?", inviterId, inviteeUserId).
-			UpdateColumn("profit_share_earned_quota", gorm.Expr("profit_share_earned_quota + ?", reward))
-		if res.Error != nil {
-			return res.Error
+		if reward > 0 {
+			up := tx.Model(&User{}).Where("id = ?", inviterId).Updates(map[string]interface{}{
+				"aff_quota":   gorm.Expr("aff_quota + ?", reward),
+				"aff_history": gorm.Expr("aff_history + ?", reward),
+			})
+			if up.Error != nil {
+				return up.Error
+			}
+			if up.RowsAffected == 0 {
+				return fmt.Errorf("inviter user not found: %d", inviterId)
+			}
+			res := tx.Model(&AffInviteRelation{}).
+				Where("inviter_id = ? AND invitee_user_id = ?", inviterId, inviteeUserId).
+				UpdateColumn("profit_share_earned_quota", gorm.Expr("profit_share_earned_quota + ?", reward))
+			if res.Error != nil {
+				return res.Error
+			}
 		}
 		if commissionBps < 0 {
 			commissionBps = 0

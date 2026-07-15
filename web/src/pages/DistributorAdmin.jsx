@@ -64,7 +64,11 @@ import {
 import DistributorAnalyticsBoard from '../components/distributor/DistributorAnalyticsBoard';
 import DistributorWithdrawProfileDetail from '../components/distributor/DistributorWithdrawProfileDetail';
 import InviteeModelDiscountModal from '../components/distributor/InviteeModelDiscountModal';
-import { renderProfitShareQuotaCell } from '../components/distributor/profitShareDisplay';
+import {
+  ProfitShareRewardColumnTitle,
+  renderProfitShareQuotaCell,
+  renderProfitShareRewardCell,
+} from '../components/distributor/profitShareDisplay';
 
 const { Text } = Typography;
 
@@ -1450,10 +1454,10 @@ export default function DistributorAdmin() {
         render: (bps) => renderLoggedCommissionRatio(bps),
       },
       {
-        title: t('收益金额'),
+        title: <ProfitShareRewardColumnTitle t={t} />,
         dataIndex: 'reward_quota',
         width: 110,
-        render: (q) => renderProfitShareQuotaCell(q),
+        render: (_, row) => renderProfitShareRewardCell(row, t),
       },
     ],
     [t],

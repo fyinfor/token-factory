@@ -255,6 +255,15 @@ func InitOptionMap() {
 	common.OptionMap["MjForwardUrlEnabled"] = strconv.FormatBool(setting.MjForwardUrlEnabled)
 	common.OptionMap["MjActionCheckSuccessEnabled"] = strconv.FormatBool(setting.MjActionCheckSuccessEnabled)
 	common.OptionMap["CheckSensitiveEnabled"] = strconv.FormatBool(setting.CheckSensitiveEnabled)
+	common.OptionMap["TencentTMSModerationEnabled"] = strconv.FormatBool(setting.TencentTMSModerationEnabled)
+	common.OptionMap["TencentIMSModerationEnabled"] = strconv.FormatBool(setting.TencentIMSModerationEnabled)
+	common.OptionMap["TencentTMSOutputModerationEnabled"] = strconv.FormatBool(setting.TencentTMSOutputModerationEnabled)
+	common.OptionMap["TencentIMSOutputModerationEnabled"] = strconv.FormatBool(setting.TencentIMSOutputModerationEnabled)
+	common.OptionMap["TencentTMSSecretID"] = setting.TencentTMSSecretID
+	common.OptionMap["TencentTMSSecretKey"] = setting.TencentTMSSecretKey
+	common.OptionMap["TencentTMSRegion"] = setting.TencentTMSRegion
+	common.OptionMap["TencentTMSBizType"] = setting.TencentTMSBizType
+	common.OptionMap["TencentIMSBizType"] = setting.TencentIMSBizType
 	common.OptionMap["DemoSiteEnabled"] = strconv.FormatBool(operation_setting.DemoSiteEnabled)
 	common.OptionMap["SelfUseModeEnabled"] = strconv.FormatBool(operation_setting.SelfUseModeEnabled)
 	common.OptionMap["ChannelBalanceAlertEnabled"] = strconv.FormatBool(false)
@@ -418,6 +427,14 @@ func updateOptionMap(key string, value string) (err error) {
 			setting.MjActionCheckSuccessEnabled = boolValue
 		case "CheckSensitiveEnabled":
 			setting.CheckSensitiveEnabled = boolValue
+		case "TencentTMSModerationEnabled":
+			setting.TencentTMSModerationEnabled = boolValue
+		case "TencentIMSModerationEnabled":
+			setting.TencentIMSModerationEnabled = boolValue
+		case "TencentTMSOutputModerationEnabled":
+			setting.TencentTMSOutputModerationEnabled = boolValue
+		case "TencentIMSOutputModerationEnabled":
+			setting.TencentIMSOutputModerationEnabled = boolValue
 		case "DemoSiteEnabled":
 			operation_setting.DemoSiteEnabled = boolValue
 		case "SelfUseModeEnabled":
@@ -794,6 +811,16 @@ func updateOptionMap(key string, value string) (err error) {
 		common.QuotaPerUnit, _ = strconv.ParseFloat(value, 64)
 	case "SensitiveWords":
 		setting.SensitiveWordsFromString(value)
+	case "TencentTMSSecretID":
+		setting.TencentTMSSecretID = strings.TrimSpace(value)
+	case "TencentTMSSecretKey":
+		setting.TencentTMSSecretKey = strings.TrimSpace(value)
+	case "TencentTMSRegion":
+		setting.TencentTMSRegion = strings.TrimSpace(value)
+	case "TencentTMSBizType":
+		setting.TencentTMSBizType = strings.TrimSpace(value)
+	case "TencentIMSBizType":
+		setting.TencentIMSBizType = strings.TrimSpace(value)
 	case "AutomaticDisableKeywords":
 		operation_setting.AutomaticDisableKeywordsFromString(value)
 	case "AutomaticDisableStatusCodes":
