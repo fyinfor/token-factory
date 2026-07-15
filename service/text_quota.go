@@ -551,6 +551,26 @@ func textQuotaSummaryWithMarkupOverride(ctx *gin.Context, relayInfo *relaycommon
 	return calculateTextQuotaSummary(ctx, &ri, usage)
 }
 
+func textProfitShareAmounts(userQuota, baseQuota, commissionBps int, markupPercent float64) (slice, reward int, shouldRecord bool) {
+	slice = userQuota - baseQuota
+	if slice < 0 {
+		slice = 0
+	}
+	if commissionBps < 0 {
+		commissionBps = 0
+	}
+	const maxAffBps = 10000
+	if commissionBps > maxAffBps {
+		commissionBps = maxAffBps
+	}
+	reward = int(int64(slice) * int64(commissionBps) / int64(maxAffBps))
+	// Small text requests can round both the markup slice and reward down to zero.
+	// Keep an audit row whenever markup pricing was active so the distributor
+	// detail remains reconcilable with the user's consume log.
+	shouldRecord = slice > 0 || markupPercent > 0
+	return
+}
+
 func tryPostWalletProfitShareCredit(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, summary *textQuotaSummary) {
 	if relayInfo == nil || summary == nil {
 		return
@@ -577,20 +597,12 @@ func tryPostWalletProfitShareCredit(ctx *gin.Context, relayInfo *relaycommon.Rel
 		return
 	}
 	s0 := textQuotaSummaryWithMarkupOverride(ctx, relayInfo, usage, 0)
-	slice := summary.Quota - s0.Quota
-	if slice <= 0 {
-		return
-	}
 	bps := model.EffectiveAffiliateCommissionBps(inviter, relayInfo.UserId)
 	if bps <= 0 {
 		return
 	}
-	const maxAffBps = 10000
-	if bps > maxAffBps {
-		bps = maxAffBps
-	}
-	reward := int(int64(slice) * int64(bps) / int64(maxAffBps))
-	if reward <= 0 {
+	slice, reward, shouldRecord := textProfitShareAmounts(summary.Quota, s0.Quota, bps, summary.MarkupDiscountPercent)
+	if !shouldRecord {
 		return
 	}
 	chID := 0
