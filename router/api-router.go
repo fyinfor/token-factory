@@ -494,6 +494,7 @@ func SetApiRouter(router *gin.Engine) {
 			materialRoute.POST("/upload", middleware.UploadRateLimit(), controller.UploadMaterial)
 			materialRoute.POST("/upload-url", middleware.UploadRateLimit(), controller.UploadMaterialByURL)
 			materialRoute.GET("/asset/:asset_id", controller.GetMaterial)
+			materialRoute.PUT("/asset/:asset_id", controller.UpdateMaterial)
 			materialRoute.DELETE("/asset/:asset_id", controller.DeleteMaterial)
 			// 真人认证会话（Web 控制台，BytedToken 仅后端存储）。
 			materialRoute.POST("/visual/session", controller.CreateVisualSession)
@@ -506,6 +507,7 @@ func SetApiRouter(router *gin.Engine) {
 			materialRoute.POST("/real/upload", middleware.UploadRateLimit(), controller.UploadRealMaterial)
 			materialRoute.POST("/real/upload-url", middleware.UploadRateLimit(), controller.UploadRealMaterialByURL)
 			materialRoute.GET("/real/asset/:asset_id", controller.GetRealMaterial)
+			materialRoute.PUT("/real/asset/:asset_id", controller.UpdateRealMaterial)
 			materialRoute.DELETE("/real/asset/:asset_id", controller.DeleteRealMaterial)
 		}
 

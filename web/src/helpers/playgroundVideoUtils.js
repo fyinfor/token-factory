@@ -53,9 +53,15 @@ export function extractImageUrlsFromMessages(messages) {
 }
 
 /**
- * 合并侧栏图片/视频地址与消息内图片。
+ * 合并侧栏图片/视频/音频地址与消息内图片。
+ * sidebarAudioUrls：操练场视频媒体模块的音频链接列表。
  */
-export function collectVideoMediaUrls(sidebarImageUrls, sidebarVideoUrls, messages) {
+export function collectVideoMediaUrls(
+  sidebarImageUrls,
+  sidebarVideoUrls,
+  messages,
+  sidebarAudioUrls,
+) {
   // 【需求5】展开多素材拼接条目（支持分隔符拆分）
   const expandedImageUrls = (sidebarImageUrls || []).flatMap((u) => {
     const s = String(u || '').trim();
@@ -68,7 +74,12 @@ export function collectVideoMediaUrls(sidebarImageUrls, sidebarVideoUrls, messag
   ]);
   const misclassifiedVideos = fromImages.filter((url) => isVideoURL(url));
   const images = fromImages.filter((url) => !isVideoURL(url) && !isAudioURL(url));
-  const audios = fromImages.filter((url) => isAudioURL(url));
+  const audios = dedupeUrls([
+    ...(sidebarAudioUrls || [])
+      .map((u) => String(u || '').trim())
+      .filter(Boolean),
+    ...fromImages.filter((url) => isAudioURL(url)),
+  ]);
   const videos = dedupeUrls([
     ...(sidebarVideoUrls || []).map((u) => String(u || '').trim()).filter(Boolean),
     ...misclassifiedVideos,

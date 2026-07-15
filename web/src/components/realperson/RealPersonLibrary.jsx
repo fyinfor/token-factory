@@ -51,6 +51,7 @@ import {
 import {
   Image as ImageTypeIcon,
   Video as VideoTypeIcon,
+  Music as AudioTypeIcon,
   CheckCircle2,
   Clock,
   AlertCircle,
@@ -60,7 +61,11 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { copy, showSuccess, showError, getMaterialConfig } from '../../helpers';
-import { MaterialAssetType, MaterialStatus } from '../../constants';
+import {
+  MaterialAssetType,
+  MaterialStatus,
+  MATERIAL_UPLOAD_ACCEPT,
+} from '../../constants';
 import { useRealPerson } from '../../hooks/realperson/useRealPerson';
 import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { useSmoothUploadProgress } from '../distributor/useSmoothUploadProgress';
@@ -72,6 +77,9 @@ const { Title, Text } = Typography;
 const getAssetTypeMeta = (assetType, t) => {
   if (assetType === MaterialAssetType.VIDEO) {
     return { icon: VideoTypeIcon, label: t('视频'), color: 'var(--semi-color-warning)' };
+  }
+  if (assetType === MaterialAssetType.AUDIO) {
+    return { icon: AudioTypeIcon, label: t('音频'), color: 'var(--semi-color-tertiary)' };
   }
   return { icon: ImageTypeIcon, label: t('图片'), color: 'var(--semi-color-primary)' };
 };
@@ -130,6 +138,7 @@ const RealPersonLibrary = ({ embedded = false }) => {
     loadAssets,
     handleUploadFile,
     handleUploadByURL,
+    handleRename,
     handleDelete,
     handleBatchDelete,
     // 认证会话
@@ -164,6 +173,11 @@ const RealPersonLibrary = ({ embedded = false }) => {
   const [editTarget, setEditTarget] = useState(null); // 当前编辑的分组对象
   const [editForm, setEditForm] = useState({ group_name: '', description: '' });
   const [editSaving, setEditSaving] = useState(false);
+  // 素材改名弹窗（虚拟/真人共用交互，此处仅真人素材）
+  const [renameVisible, setRenameVisible] = useState(false);
+  const [renameTarget, setRenameTarget] = useState(null);
+  const [renameName, setRenameName] = useState('');
+  const [renameSaving, setRenameSaving] = useState(false);
 
   const uploadDisabled = !agreed || !config.ready || uploading || !selectedGroup;
   const uploadDisplayPct = useSmoothUploadProgress(uploadProgress);
@@ -256,6 +270,24 @@ const RealPersonLibrary = ({ embedded = false }) => {
     }
   };
 
+  const openRenameModal = (asset) => {
+    setRenameTarget(asset);
+    setRenameName(asset?.name || '');
+    setRenameVisible(true);
+  };
+
+  const submitRename = async () => {
+    if (!renameTarget) return;
+    setRenameSaving(true);
+    const ok = await handleRename(renameTarget, renameName);
+    setRenameSaving(false);
+    if (ok) {
+      setRenameVisible(false);
+      setRenameTarget(null);
+      setRenameName('');
+    }
+  };
+
   /* --------------------------- 渲染：单张素材卡片 --------------------------- */
 
   const renderAssetCard = (asset) => {
@@ -264,6 +296,7 @@ const RealPersonLibrary = ({ embedded = false }) => {
     const TypeIcon = typeMeta.icon;
     const StatusIcon = statusMeta.icon;
     const isVideo = asset.asset_type === MaterialAssetType.VIDEO;
+    const isAudio = asset.asset_type === MaterialAssetType.AUDIO;
     const isSelected = selectedAssetIds.has(String(asset.asset_id));
 
     return (
@@ -328,6 +361,20 @@ const RealPersonLibrary = ({ embedded = false }) => {
               preload='metadata'
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             />
+          ) : isAudio ? (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 8,
+                padding: 12,
+                width: '100%',
+              }}
+            >
+              <AudioTypeIcon size={36} style={{ color: 'var(--semi-color-tertiary)' }} />
+              <audio src={asset.url} controls preload='metadata' style={{ width: '100%' }} />
+            </div>
           ) : (
             <Image
               src={asset.url}
@@ -353,14 +400,26 @@ const RealPersonLibrary = ({ embedded = false }) => {
             <Tooltip content={asset.name}>
               <Text
                 ellipsis={{ showTooltip: false }}
-                style={{ maxWidth: 140, fontSize: 13 }}
+                style={{ maxWidth: 110, fontSize: 13 }}
               >
                 {asset.name || t('未命名素材')}
               </Text>
             </Tooltip>
-            <Tooltip content={statusMeta.label}>
-              <StatusIcon size={16} style={{ color: statusMeta.color, flexShrink: 0 }} />
-            </Tooltip>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+              <Tooltip content={t('改名')}>
+                <Button
+                  size='small'
+                  theme='borderless'
+                  type='tertiary'
+                  icon={<IconEdit />}
+                  onClick={() => openRenameModal(asset)}
+                  aria-label={t('改名')}
+                />
+              </Tooltip>
+              <Tooltip content={statusMeta.label}>
+                <StatusIcon size={16} style={{ color: statusMeta.color }} />
+              </Tooltip>
+            </div>
           </div>
 
           {/* 操作区：展示资源地址 + 复制 + 删除 */}
@@ -593,21 +652,7 @@ const RealPersonLibrary = ({ embedded = false }) => {
           <Text type='tertiary' size='small'>
             {selectedGroup?.group_id}
           </Text>
-          <Tooltip content={t('编辑分组')}>
-            <Button
-              size='small'
-              theme='borderless'
-              type='tertiary'
-              icon={<IconEdit />}
-              onClick={() => handleOpenEdit(selectedGroup)}
-              aria-label={t('编辑分组')}
-            />
-          </Tooltip>
-          {selectedGroup?.description && (
-            <Text type='tertiary' size='small' style={{ marginLeft: 4 }}>
-              {selectedGroup.description}
-            </Text>
-          )}
+          {/* 分组素材列表页：隐藏编辑分组按钮，不展示分组描述（改在分组列表卡片展示） */}
         </div>
 
         {/* 协议勾选 */}
@@ -624,7 +669,7 @@ const RealPersonLibrary = ({ embedded = false }) => {
         <Space style={{ marginBottom: 12 }}>
           <Upload
             action=''
-            accept='image/*,video/*'
+            accept={MATERIAL_UPLOAD_ACCEPT}
             showUploadList={false}
             disabled={uploadDisabled}
             customRequest={customRequest}
@@ -646,7 +691,7 @@ const RealPersonLibrary = ({ embedded = false }) => {
             {t('链接上传')}
           </Button>
           <Text type='tertiary' size='small'>
-            {t('支持图片/视频，单个文件不超过 {{n}}MB', { n: maxSizeMB })}
+            {t('支持图片/视频/音频（mp3/wav），单个文件不超过 {{n}}MB', { n: maxSizeMB })}
           </Text>
         </Space>
 
@@ -668,6 +713,7 @@ const RealPersonLibrary = ({ embedded = false }) => {
             <Tabs.TabPane tab={t('全部')} itemKey='all' />
             <Tabs.TabPane tab={t('图片')} itemKey={MaterialAssetType.IMAGE} />
             <Tabs.TabPane tab={t('视频')} itemKey={MaterialAssetType.VIDEO} />
+            <Tabs.TabPane tab={t('音频')} itemKey={MaterialAssetType.AUDIO} />
           </Tabs>
           <Space>
             {selectedAssetIds.size > 0 && (
@@ -756,7 +802,7 @@ const RealPersonLibrary = ({ embedded = false }) => {
           <Banner
             type='info'
             closeIcon={null}
-            description={t('仅支持图片或视频的公开可访问链接（http/https）。')}
+            description={t('仅支持图片、视频或音频（mp3/wav）的公开可访问链接（http/https）。')}
             style={{ marginTop: 12 }}
           />
         </Modal>
@@ -770,25 +816,29 @@ const RealPersonLibrary = ({ embedded = false }) => {
     return (
       <>
         <div
+          className='realperson-library-toolbar'
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 8,
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 12,
             marginBottom: 16,
           }}
         >
-          <Tag color='green' size='large' prefixIcon={<ShieldCheck size={14} />}>
-            {t('真人认证分组')}
-          </Tag>
-          <Button
-            theme='solid'
-            icon={<IconPlus />}
-            loading={sessionCreating}
-            onClick={() => startSession()}
-          >
-            {t('开始真人认证')}
-          </Button>
-          <div style={{ flex: 1 }} />
+          <Space wrap>
+            <Tag color='green' size='large' prefixIcon={<ShieldCheck size={14} />}>
+              {t('真人认证分组')}
+            </Tag>
+            <Button
+              theme='solid'
+              icon={<IconPlus />}
+              loading={sessionCreating}
+              onClick={() => startSession()}
+            >
+              {t('开始真人认证')}
+            </Button>
+          </Space>
           <Tooltip content={t('刷新列表')}>
             <Button
               theme='borderless'
@@ -916,6 +966,22 @@ const RealPersonLibrary = ({ embedded = false }) => {
                           </Tooltip>
                         </div>
                       </div>
+
+                      {/* 分组列表展示描述；进入素材列表后不再展示 */}
+                      {group.description ? (
+                        <div style={{ marginTop: 10 }}>
+                          <Text type='tertiary' size='small'>
+                            {t('分组描述')}
+                          </Text>
+                          <Text
+                            size='small'
+                            ellipsis={{ showTooltip: true }}
+                            style={{ display: 'block', marginTop: 2, lineHeight: 1.5 }}
+                          >
+                            {group.description}
+                          </Text>
+                        </div>
+                      ) : null}
                     </div>
 
                     <div
@@ -954,6 +1020,28 @@ const RealPersonLibrary = ({ embedded = false }) => {
       {renderSessionModal()}
 
       {renderEditModal()}
+
+      {/* 真人素材改名 */}
+      <Modal
+        title={t('素材改名')}
+        visible={renameVisible}
+        onCancel={() => !renameSaving && setRenameVisible(false)}
+        onOk={submitRename}
+        okText={t('保存')}
+        cancelText={t('取消')}
+        confirmLoading={renameSaving}
+        closable={!renameSaving}
+        maskClosable={!renameSaving}
+      >
+        <Text>{t('素材名称')}</Text>
+        <Input
+          value={renameName}
+          onChange={setRenameName}
+          maxLength={128}
+          placeholder={t('请输入素材名称')}
+          style={{ marginTop: 4 }}
+        />
+      </Modal>
     </>
   );
 

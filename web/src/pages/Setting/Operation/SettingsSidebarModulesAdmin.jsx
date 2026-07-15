@@ -297,7 +297,7 @@ export default function SettingsSidebarModulesAdmin(props) {
         },
         {
           key: 'seedance-material',
-          title: t('素材管理'),
+          title: t('SD 素材库'),
           description: t('Seedance2.0 合规素材库'),
         },
         {

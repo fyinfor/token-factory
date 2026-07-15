@@ -109,6 +109,7 @@ export const DEFAULT_CONFIG = {
     imageEnabled: false,
     imageUrls: [''],
     videoUrls: [''],
+    audioUrls: [''],
     selected_model_tags: [],
     image_size: '1280x720',
     image_ratio: 'auto',

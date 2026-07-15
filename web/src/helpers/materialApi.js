@@ -125,6 +125,20 @@ export const deleteMaterialAsset = async (assetId) => {
   return res.data;
 };
 
+/**
+ * 素材改名（虚拟人像）：上游 UpdateAsset + 本地同步。
+ * @param {string} assetId 上游素材 ID
+ * @param {string} name 新名称
+ */
+export const updateMaterialAsset = async (assetId, name) => {
+  const res = await API.put(
+    MATERIAL_API.ASSET(assetId),
+    { name },
+    { skipErrorHandler: true },
+  );
+  return res.data;
+};
+
 // ---------------------------------------------------------------------------
 // 真人认证模块 API（Web 控制台，BytedToken 仅后端存储，前端仅持有 session_id）
 // ---------------------------------------------------------------------------
@@ -256,5 +270,19 @@ export const deleteRealMaterial = async (assetId) => {
   const res = await API.delete(MATERIAL_API.REAL_ASSET(assetId), {
     skipErrorHandler: true,
   });
+  return res.data;
+};
+
+/**
+ * 真人素材改名：上游 UpdateAsset + 本地同步。
+ * @param {string} assetId 上游素材 ID
+ * @param {string} name 新名称
+ */
+export const updateRealMaterial = async (assetId, name) => {
+  const res = await API.put(
+    MATERIAL_API.REAL_ASSET(assetId),
+    { name },
+    { skipErrorHandler: true },
+  );
   return res.data;
 };

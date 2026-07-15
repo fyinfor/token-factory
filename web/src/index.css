@@ -1804,45 +1804,42 @@ html.dark .channel-price-value {
   font-weight: 500;
 }
 
-.playground-material-surface {
-  box-shadow:
-    0 10px 28px rgba(15, 23, 42, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.6);
-}
-
-/* 视频分类媒体模块与文本/图片完全统一：
-   使用与图片一致的浅蓝渐变作为底色，消除紫色色差，保持视觉一致 */
-.playground-material-surface-image,
-.playground-material-surface-video {
-  background:
-    linear-gradient(
-      180deg,
-      rgba(var(--semi-blue-0), 0.88),
-      rgba(var(--semi-blue-0), 0.46)
-    ),
-    var(--semi-color-bg-0);
+/* 媒体分栏：与模型/参数分栏 Surface 对齐，使用主题色以适配浅/深色模式 */
+.playground-media-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .playground-media-input {
-  border-radius: 10px;
-  padding: 10px;
-  background: rgba(var(--semi-white), 0.72);
-  box-shadow:
-    0 1px 2px rgba(15, 23, 42, 0.04),
-    inset 0 0 0 1px rgba(var(--semi-grey-1), 0.22);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--semi-color-fill-0);
+  box-shadow: inset 0 0 0 1px var(--semi-color-border);
 }
 
 .playground-media-input + .playground-media-input {
   margin-top: 0;
 }
 
-.playground-media-input-image {
-  background: rgba(var(--semi-blue-0), 0.52);
+.playground-media-library-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
-/* 视频分类内部子模块（视频地址输入卡）也收敛为与图片一致的浅蓝底色 */
-.playground-media-input-video {
-  background: rgba(var(--semi-blue-0), 0.52);
+.playground-media-remove-btn {
+  width: 24px !important;
+  height: 24px !important;
+  min-width: 0 !important;
+  padding: 0 !important;
+  border-radius: 999px !important;
+  color: var(--semi-color-danger) !important;
+}
+
+.playground-media-remove-btn:hover:not(:disabled) {
+  background: var(--semi-color-danger-light-default) !important;
 }
 
 /* ==================== 画面方向横屏/竖屏 RadioGroup 宽松布局 ==================== */
@@ -1990,12 +1987,18 @@ html.dark .channel-price-value {
 }
 
 .playground-media-input .semi-input-wrapper {
-  background: rgba(var(--semi-white), 0.82);
-  box-shadow: inset 0 0 0 1px rgba(var(--semi-grey-1), 0.18);
+  background: var(--semi-color-bg-0);
+  box-shadow: inset 0 0 0 1px var(--semi-color-border);
 }
 
 .playground-media-input .semi-button-light {
-  background: rgba(var(--semi-white), 0.78);
+  background: var(--semi-color-bg-0);
+  border-color: var(--semi-color-border);
+  color: var(--semi-color-text-0);
+}
+
+.playground-media-input .semi-button-light:hover:not(:disabled) {
+  background: var(--semi-color-fill-1);
 }
 
 .image-list-scroll::-webkit-scrollbar {

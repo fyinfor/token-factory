@@ -1,9 +1,14 @@
 package service
 
 import (
+	"context"
+	"fmt"
+	"math"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 )
@@ -23,8 +28,124 @@ func resolveVideoOutputSpecFromUpstream(task *model.Task, taskResult *relaycommo
 		if err := common.Unmarshal(task.Data, &upstream); err == nil {
 			mergeVideoSpecFields(&spec, upstream.Resolution, upstream.Duration, upstream.Ratio)
 		}
+		// 腾讯云 DescribeTaskDetail：AigcVideoTask.Input.OutputConfig（Temporary 存储时常无 MetaData）
+		res, dur, ratio := extractTencentInputOutputConfig(task.Data)
+		mergeVideoSpecFields(&spec, res, dur, ratio)
 	}
 	return spec
+}
+
+// extractTencentInputOutputConfig 解析腾讯云回包中的计费核心三字段。
+func extractTencentInputOutputConfig(data []byte) (resolution string, duration int, ratio string) {
+	var env struct {
+		Response *struct {
+			AigcVideoTask *struct {
+				Input *struct {
+					OutputConfig *struct {
+						Resolution  string  `json:"Resolution"`
+						Duration    float64 `json:"Duration"`
+						AspectRatio string  `json:"AspectRatio"`
+					} `json:"OutputConfig"`
+				} `json:"Input"`
+			} `json:"AigcVideoTask"`
+		} `json:"Response"`
+	}
+	if err := common.Unmarshal(data, &env); err != nil {
+		return "", 0, ""
+	}
+	if env.Response == nil || env.Response.AigcVideoTask == nil || env.Response.AigcVideoTask.Input == nil || env.Response.AigcVideoTask.Input.OutputConfig == nil {
+		return "", 0, ""
+	}
+	oc := env.Response.AigcVideoTask.Input.OutputConfig
+	resolution = strings.TrimSpace(oc.Resolution)
+	ratio = strings.TrimSpace(oc.AspectRatio)
+	if oc.Duration > 0 {
+		duration = int(oc.Duration)
+		if float64(duration) < oc.Duration {
+			duration++
+		}
+		if duration <= 0 {
+			duration = 1
+		}
+	}
+	return resolution, duration, ratio
+}
+
+// logTencentVodBillingMismatch 查询结算路径下比对提交参数与回包 Input.OutputConfig，不一致时打点。
+func logTencentVodBillingMismatch(ctx context.Context, task *model.Task, taskResult *relaycommon.TaskInfo) {
+	if task == nil || len(task.Data) == 0 {
+		return
+	}
+	actRes, actDur, actRatio := extractTencentInputOutputConfig(task.Data)
+	if actRes == "" && actDur <= 0 && actRatio == "" && taskResult != nil {
+		actRes = strings.TrimSpace(taskResult.Resolution)
+		actDur = taskResult.Duration
+		actRatio = strings.TrimSpace(taskResult.Ratio)
+	}
+	if actRes == "" && actDur <= 0 && actRatio == "" {
+		return
+	}
+	subRes, subDur, subRatio := "", 0, ""
+	input := strings.TrimSpace(task.Properties.Input)
+	if input != "" {
+		var native struct {
+			OutputConfig *struct {
+				Resolution  string  `json:"Resolution"`
+				Duration    float64 `json:"Duration"`
+				AspectRatio string  `json:"AspectRatio"`
+			} `json:"OutputConfig"`
+		}
+		if err := common.UnmarshalJsonStr(input, &native); err == nil && native.OutputConfig != nil {
+			subRes = strings.TrimSpace(native.OutputConfig.Resolution)
+			subRatio = strings.TrimSpace(native.OutputConfig.AspectRatio)
+			if native.OutputConfig.Duration > 0 {
+				subDur = int(math.Ceil(native.OutputConfig.Duration))
+			}
+		} else {
+			var req relaycommon.TaskSubmitReq
+			if err := common.UnmarshalJsonStr(input, &req); err == nil {
+				subRes = strings.TrimSpace(req.Resolution)
+				subRatio = strings.TrimSpace(req.Ratio)
+				subDur = req.Duration
+				if subDur <= 0 {
+					if sec, err := strconv.Atoi(strings.TrimSpace(req.Seconds)); err == nil {
+						subDur = sec
+					}
+				}
+				if subRes == "" && req.Metadata != nil {
+					if v, ok := req.Metadata["resolution"].(string); ok {
+						subRes = strings.TrimSpace(v)
+					}
+				}
+				if subRatio == "" && req.Metadata != nil {
+					if v, ok := req.Metadata["ratio"].(string); ok {
+						subRatio = strings.TrimSpace(v)
+					}
+				}
+			}
+		}
+	}
+	mismatched := false
+	if subRes == "" && subDur <= 0 && subRatio == "" {
+		mismatched = true // 前端未传参
+	} else {
+		if subRes != "" && !strings.EqualFold(subRes, actRes) {
+			mismatched = true
+		}
+		if subDur > 0 && actDur > 0 && subDur != actDur {
+			mismatched = true
+		}
+		if subRatio != "" && actRatio != "" && subRatio != actRatio {
+			mismatched = true
+		}
+	}
+	if !mismatched {
+		return
+	}
+	logger.LogWarn(ctx, fmt.Sprintf(
+		"[tencentvod] 计费核心字段不一致(查询结算) task=%s submitted={res:%s dur:%d ar:%s} actual={res:%s dur:%d ar:%s}",
+		task.TaskID, subRes, subDur, subRatio, actRes, actDur, actRatio,
+	))
 }
 
 func mergeVideoSpecFields(spec *seedanceVideoSpec, resolution string, duration int, ratio string) {

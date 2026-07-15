@@ -117,14 +117,16 @@ const VideoUrlInput = ({
           <Film
             size={16}
             className={
-              enabled && !disabled ? 'text-violet-500' : 'text-gray-400'
+              enabled && !disabled
+                ? 'text-[var(--semi-color-primary)]'
+                : 'text-[var(--semi-color-text-2)]'
             }
           />
           <Typography.Text strong className='text-sm'>
             {t('视频地址')}
           </Typography.Text>
           {disabled && (
-            <Typography.Text className='text-xs text-orange-600'>
+            <Typography.Text className='text-xs text-[var(--semi-color-warning)]'>
               ({t('已在自定义模式中忽略')})
             </Typography.Text>
           )}
@@ -177,7 +179,7 @@ const VideoUrlInput = ({
       </div>
 
       {enabled && list.length > 0 && (
-        <Typography.Text className='text-xs text-gray-500 mb-2 block'>
+        <Typography.Text className='mb-2 block text-xs text-[var(--semi-color-text-2)]'>
           {t('已添加')} {filledCount}/{maxCount} {t('个视频')}
         </Typography.Text>
       )}
@@ -204,7 +206,7 @@ const VideoUrlInput = ({
               theme='borderless'
               type='danger'
               onClick={() => handleRemove(index)}
-              className='!rounded-full !w-6 !h-6 !p-0 !min-w-0 !text-red-500 hover:!bg-red-50 flex-shrink-0'
+              className='playground-media-remove-btn flex-shrink-0'
               disabled={!enabled || disabled}
             />
           </div>
