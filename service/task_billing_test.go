@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -75,8 +76,26 @@ func truncate(t *testing.T) {
 
 func seedUser(t *testing.T, id int, quota int) {
 	t.Helper()
-	user := &model.User{Id: id, Username: "test_user", Quota: quota, Status: common.UserStatusEnabled}
+	seedUserWithUsed(t, id, quota, 0)
+}
+
+func seedUserWithUsed(t *testing.T, id int, quota int, usedQuota int) {
+	t.Helper()
+	user := &model.User{
+		Id:       id,
+		Username: fmt.Sprintf("test_user_%d", id),
+		Quota:    quota,
+		UsedQuota: usedQuota,
+		Status:   common.UserStatusEnabled,
+	}
 	require.NoError(t, model.DB.Create(user).Error)
+}
+
+func getUserUsedQuota(t *testing.T, id int) int {
+	t.Helper()
+	var used int
+	require.NoError(t, model.DB.Model(&model.User{}).Where("id = ?", id).Select("used_quota").Scan(&used).Error)
+	return used
 }
 
 func seedToken(t *testing.T, id int, userId int, key string, remainQuota int) {
@@ -201,7 +220,7 @@ func TestRefundTaskQuota_Wallet(t *testing.T) {
 	const initQuota, preConsumed = 10000, 3000
 	const tokenRemain = 5000
 
-	seedUser(t, userID, initQuota)
+	seedUserWithUsed(t, userID, initQuota, preConsumed)
 	seedToken(t, tokenID, userID, "sk-test-key", tokenRemain)
 	seedChannel(t, channelID)
 
@@ -211,6 +230,8 @@ func TestRefundTaskQuota_Wallet(t *testing.T) {
 
 	// User quota should increase by preConsumed
 	assert.Equal(t, initQuota+preConsumed, getUserQuota(t, userID))
+	// 失败退款必须回退累积已用，否则会出现「已用 > 充值」
+	assert.Equal(t, 0, getUserUsedQuota(t, userID))
 
 	// Token remain_quota should increase, used_quota should decrease
 	assert.Equal(t, tokenRemain+preConsumed, getTokenRemainQuota(t, tokenID))
