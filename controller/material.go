@@ -216,6 +216,29 @@ func toMaterialAssetResponse(a *model.MaterialAsset) materialAssetResponse {
 	}
 }
 
+// personalMaterialAssetResponse 虚拟人像个人 API 返回结构：不暴露 group_id。
+type personalMaterialAssetResponse struct {
+	AssetId   string `json:"asset_id"`
+	AssetURI  string `json:"asset_uri"`
+	Name      string `json:"name"`
+	AssetType string `json:"asset_type"`
+	URL       string `json:"url"`
+	Status    string `json:"status"`
+	CreatedAt int64  `json:"created_at"`
+}
+
+func toPersonalMaterialAssetResponse(a *model.MaterialAsset) personalMaterialAssetResponse {
+	return personalMaterialAssetResponse{
+		AssetId:   a.AssetId,
+		AssetURI:  "asset://" + a.AssetId,
+		Name:      a.Name,
+		AssetType: a.AssetType,
+		URL:       a.URL,
+		Status:    a.Status,
+		CreatedAt: a.CreatedAt,
+	}
+}
+
 // GetMaterialConfig 返回素材库前端所需配置（启用状态、上传大小上限、合规协议中英文文案及详情）。
 func GetMaterialConfig(c *gin.Context) {
 	setting := operation_setting.GetSeedanceSetting()
@@ -737,7 +760,7 @@ func UploadPersonalMaterial(c *gin.Context) {
 		return
 	}
 
-	common.ApiSuccess(c, toMaterialAssetResponse(asset))
+	common.ApiSuccess(c, toPersonalMaterialAssetResponse(asset))
 }
 
 // UploadPersonalMaterialByURL 个人素材在线链接上传：基于 API 令牌鉴权，复用现有 URL 上传核心逻辑。
@@ -827,7 +850,7 @@ func UploadPersonalMaterialByURL(c *gin.Context) {
 		return
 	}
 
-	common.ApiSuccess(c, toMaterialAssetResponse(asset))
+	common.ApiSuccess(c, toPersonalMaterialAssetResponse(asset))
 }
 
 // ListPersonalMaterialAssets 个人素材列表查询：基于 API 令牌鉴权，复用现有列表查询核心逻辑。
@@ -859,9 +882,9 @@ func ListPersonalMaterialAssets(c *gin.Context) {
 		return
 	}
 
-	items := make([]materialAssetResponse, 0, len(assets))
+	items := make([]personalMaterialAssetResponse, 0, len(assets))
 	for _, a := range assets {
-		items = append(items, toMaterialAssetResponse(a))
+		items = append(items, toPersonalMaterialAssetResponse(a))
 	}
 
 	pageInfo.SetTotal(int(total))
@@ -950,5 +973,5 @@ func GetPersonalMaterial(c *gin.Context) {
 		}
 	}
 
-	common.ApiSuccess(c, toMaterialAssetResponse(asset))
+	common.ApiSuccess(c, toPersonalMaterialAssetResponse(asset))
 }
