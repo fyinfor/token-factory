@@ -16,6 +16,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/types"
 
@@ -24,14 +25,26 @@ import (
 
 type imageResponseCaptureWriter struct {
 	gin.ResponseWriter
-	buf *bytes.Buffer
+	buf         *bytes.Buffer
+	captureOnly bool
+	statusCode  int
 }
 
 func (w *imageResponseCaptureWriter) Write(data []byte) (int, error) {
 	if w.buf != nil {
 		_, _ = w.buf.Write(data)
 	}
+	if w.captureOnly {
+		return len(data), nil
+	}
 	return w.ResponseWriter.Write(data)
+}
+
+func (w *imageResponseCaptureWriter) WriteHeader(code int) {
+	w.statusCode = code
+	if !w.captureOnly {
+		w.ResponseWriter.WriteHeader(code)
+	}
 }
 
 func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (tokenFactoryError *types.TokenFactoryError) {
@@ -99,11 +112,14 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (tokenFactoryError
 
 	statusCodeMappingStr := c.GetString("status_code_mapping")
 
-	captureImageResponse := shouldCaptureImageResponse(info)
+	captureImageResponse := shouldCaptureImageResponse(info) || setting.ShouldCheckAliyunGuardrailOutput()
 	var responseCapture *bytes.Buffer
+	originalWriter := c.Writer
+	var captureWriter *imageResponseCaptureWriter
 	if captureImageResponse {
 		responseCapture = &bytes.Buffer{}
-		c.Writer = &imageResponseCaptureWriter{ResponseWriter: c.Writer, buf: responseCapture}
+		captureWriter = &imageResponseCaptureWriter{ResponseWriter: c.Writer, buf: responseCapture, captureOnly: setting.ShouldCheckAliyunGuardrailOutput()}
+		c.Writer = captureWriter
 	}
 
 	resp, err := adaptor.DoRequest(c, info, requestBody)
@@ -132,6 +148,31 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (tokenFactoryError
 		// reset status code 重置状态码
 		service.ResetStatusCode(tokenFactoryError, statusCodeMappingStr)
 		return tokenFactoryError
+	}
+	if captureWriter != nil && captureWriter.captureOnly {
+		c.Writer = originalWriter
+		var imageResponse dto.ImageResponse
+		if err := common.Unmarshal(responseCapture.Bytes(), &imageResponse); err == nil {
+			imageURLs := make([]string, 0, len(imageResponse.Data))
+			for _, image := range imageResponse.Data {
+				if strings.HasPrefix(image.Url, "http") {
+					imageURLs = append(imageURLs, image.Url)
+				}
+			}
+			guardrailResult, guardrailErr := service.CheckAliyunGuardrailImageOutput(c, info, imageURLs)
+			if guardrailErr != nil {
+				logger.LogWarn(c, fmt.Sprintf("aliyun guardrail image output check skipped: %s", guardrailErr.Error()))
+			}
+			if guardrailResult != nil && guardrailResult.Blocked {
+				c.Set("aliyun_guardrail_output_blocked", true)
+				return types.NewOpenAIError(fmt.Errorf("aliyun guardrail blocked image output"), types.ErrorCodeSensitiveWordsDetected, http.StatusBadRequest)
+			}
+		}
+		if captureWriter.statusCode > 0 {
+			originalWriter.WriteHeader(captureWriter.statusCode)
+		}
+		_, _ = originalWriter.Write(responseCapture.Bytes())
+		originalWriter.Flush()
 	}
 
 	imageN := uint(1)

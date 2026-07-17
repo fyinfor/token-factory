@@ -28,26 +28,50 @@ import {
 } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
 
+const defaultInputs = {
+  CheckSensitiveEnabled: false,
+  CheckSensitiveOnPromptEnabled: false,
+  SensitiveWords: '',
+  AliyunGuardrailEnabled: false,
+  AliyunGuardrailInputEnabled: true,
+  AliyunGuardrailOutputEnabled: true,
+  AliyunGuardrailVideoEnabled: false,
+  AliyunGuardrailAccessKeyID: '',
+  AliyunGuardrailAccessKeySecret: '',
+  AliyunGuardrailRegionID: 'cn-shanghai',
+};
+
 export default function SettingsSensitiveWords(props) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
-  const [inputs, setInputs] = useState({
-    CheckSensitiveEnabled: false,
-    CheckSensitiveOnPromptEnabled: false,
-    SensitiveWords: '',
-  });
+  const [inputs, setInputs] = useState(defaultInputs);
   const refForm = useRef();
   const [inputsRow, setInputsRow] = useState(inputs);
 
   function onSubmit() {
-    const updateArray = compareObjects(inputs, inputsRow);
+    const normalizedInputs = {
+      ...inputs,
+      AliyunGuardrailAccessKeyID:
+        inputs.AliyunGuardrailAccessKeyID?.trim() || '',
+      AliyunGuardrailAccessKeySecret:
+        inputs.AliyunGuardrailAccessKeySecret?.trim() || '',
+      AliyunGuardrailRegionID: inputs.AliyunGuardrailRegionID?.trim() || '',
+    };
+    if (
+      normalizedInputs.AliyunGuardrailAccessKeyID &&
+      normalizedInputs.AliyunGuardrailAccessKeyID ===
+        normalizedInputs.AliyunGuardrailAccessKeySecret
+    ) {
+      return showError(t('AccessKey ID 不能与 AccessKey Secret 相同'));
+    }
+    const updateArray = compareObjects(normalizedInputs, inputsRow);
     if (!updateArray.length) return showWarning(t('你似乎并没有修改什么'));
     const requestQueue = updateArray.map((item) => {
       let value = '';
-      if (typeof inputs[item.key] === 'boolean') {
-        value = String(inputs[item.key]);
+      if (typeof normalizedInputs[item.key] === 'boolean') {
+        value = String(normalizedInputs[item.key]);
       } else {
-        value = inputs[item.key];
+        value = normalizedInputs[item.key];
       }
       return API.put('/api/option/', {
         key: item.key,
@@ -75,15 +99,15 @@ export default function SettingsSensitiveWords(props) {
   }
 
   useEffect(() => {
-    const currentInputs = {};
-    for (let key in props.options) {
-      if (Object.keys(inputs).includes(key)) {
+    const currentInputs = { ...defaultInputs };
+    for (const key of Object.keys(defaultInputs)) {
+      if (props.options[key] !== undefined) {
         currentInputs[key] = props.options[key];
       }
     }
     setInputs(currentInputs);
     setInputsRow(structuredClone(currentInputs));
-    refForm.current.setValues(currentInputs);
+    refForm.current?.setValues(currentInputs);
   }, [props.options]);
   return (
     <>
@@ -149,6 +173,98 @@ export default function SettingsSensitiveWords(props) {
                 {t('保存屏蔽词过滤设置')}
               </Button>
             </Row>
+            <Form.Section text='阿里云 AI 安全护栏'>
+              <Row gutter={16}>
+                <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                  <Form.Switch
+                    field='AliyunGuardrailEnabled'
+                    label='启用阿里云安全护栏'
+                    onChange={(value) =>
+                      setInputs({ ...inputs, AliyunGuardrailEnabled: value })
+                    }
+                  />
+                </Col>
+                <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                  <Form.Switch
+                    field='AliyunGuardrailInputEnabled'
+                    label='审核用户输入'
+                    onChange={(value) =>
+                      setInputs({
+                        ...inputs,
+                        AliyunGuardrailInputEnabled: value,
+                      })
+                    }
+                  />
+                </Col>
+                <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                  <Form.Switch
+                    field='AliyunGuardrailOutputEnabled'
+                    label='审核模型非流式输出'
+                    onChange={(value) =>
+                      setInputs({
+                        ...inputs,
+                        AliyunGuardrailOutputEnabled: value,
+                      })
+                    }
+                  />
+                </Col>
+                <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                  <Form.Switch
+                    field='AliyunGuardrailVideoEnabled'
+                    label='审核视频输出（异步）'
+                    extraText='审核通过后才会返回视频链接'
+                    onChange={(value) =>
+                      setInputs({
+                        ...inputs,
+                        AliyunGuardrailVideoEnabled: value,
+                      })
+                    }
+                  />
+                </Col>
+              </Row>
+              <Row gutter={16}>
+                <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                  <Form.Input
+                    field='AliyunGuardrailAccessKeyID'
+                    label='AccessKey ID'
+                    onChange={(value) =>
+                      setInputs({
+                        ...inputs,
+                        AliyunGuardrailAccessKeyID: value,
+                      })
+                    }
+                  />
+                </Col>
+                <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                  <Form.Input
+                    field='AliyunGuardrailAccessKeySecret'
+                    mode='password'
+                    label='AccessKey Secret'
+                    onChange={(value) =>
+                      setInputs({
+                        ...inputs,
+                        AliyunGuardrailAccessKeySecret: value,
+                      })
+                    }
+                  />
+                </Col>
+                <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                  <Form.Input
+                    field='AliyunGuardrailRegionID'
+                    label='地域'
+                    extraText='默认 cn-shanghai'
+                    onChange={(value) =>
+                      setInputs({ ...inputs, AliyunGuardrailRegionID: value })
+                    }
+                  />
+                </Col>
+              </Row>
+              <Row>
+                <Button size='default' onClick={onSubmit}>
+                  保存阿里云安全护栏设置
+                </Button>
+              </Row>
+            </Form.Section>
           </Form.Section>
         </Form>
       </Spin>

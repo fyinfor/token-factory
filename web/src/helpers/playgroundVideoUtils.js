@@ -73,7 +73,9 @@ export function collectVideoMediaUrls(
     ...extractImageUrlsFromMessages(messages),
   ]);
   const misclassifiedVideos = fromImages.filter((url) => isVideoURL(url));
-  const images = fromImages.filter((url) => !isVideoURL(url) && !isAudioURL(url));
+  const images = fromImages.filter(
+    (url) => !isVideoURL(url) && !isAudioURL(url),
+  );
   const audios = dedupeUrls([
     ...(sidebarAudioUrls || [])
       .map((u) => String(u || '').trim())
@@ -81,17 +83,26 @@ export function collectVideoMediaUrls(
     ...fromImages.filter((url) => isAudioURL(url)),
   ]);
   const videos = dedupeUrls([
-    ...(sidebarVideoUrls || []).map((u) => String(u || '').trim()).filter(Boolean),
+    ...(sidebarVideoUrls || [])
+      .map((u) => String(u || '').trim())
+      .filter(Boolean),
     ...misclassifiedVideos,
   ]);
-  return { images, videos, audios, all: dedupeUrls([...images, ...videos, ...audios]) };
+  return {
+    images,
+    videos,
+    audios,
+    all: dedupeUrls([...images, ...videos, ...audios]),
+  };
 }
 
 /**
  * 图片 URL → media：1 张首帧；2 张首尾帧；3+ 张首帧+中间参考图+尾帧。
  */
 export function buildImageMediaItems(imageUrls) {
-  const images = (imageUrls || []).map((u) => String(u || '').trim()).filter(Boolean);
+  const images = (imageUrls || [])
+    .map((u) => String(u || '').trim())
+    .filter(Boolean);
   const media = [];
   if (images.length === 0) return media;
 
@@ -112,7 +123,9 @@ export function buildImageMediaItems(imageUrls) {
 
 /** 写入 metadata 首尾帧字段 */
 export function applyVideoFrameMetadata(metadata, imageUrls) {
-  const images = (imageUrls || []).map((u) => String(u || '').trim()).filter(Boolean);
+  const images = (imageUrls || [])
+    .map((u) => String(u || '').trim())
+    .filter(Boolean);
   if (images.length === 0) return metadata;
   const next = { ...metadata, first_frame_url: images[0] };
   if (images.length >= 2) {
@@ -142,5 +155,13 @@ export function formatVideoTaskError(data) {
       ? data.data
       : data;
   if (taskPayload?.message) return String(taskPayload.message);
+  if (taskPayload?.fail_reason) return String(taskPayload.fail_reason);
+  if (taskPayload?.reason) return String(taskPayload.reason);
+  if (
+    taskPayload?.result_url &&
+    !/^https?:\/\//i.test(String(taskPayload.result_url))
+  ) {
+    return String(taskPayload.result_url);
+  }
   return '';
 }

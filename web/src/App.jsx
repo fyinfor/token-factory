@@ -42,6 +42,7 @@ import SeedanceMaterial from './pages/Seedance';
 import Redemption from './pages/Redemption';
 import TopUp from './pages/TopUp';
 import Log from './pages/Log';
+import AliyunGuardrail from './pages/AliyunGuardrail';
 import Chat from './pages/Chat';
 import Chat2Link from './pages/Chat2Link';
 import Midjourney from './pages/Midjourney';
@@ -455,6 +456,10 @@ function App() {
               <Log />
             </PrivateRoute>
           }
+        />
+        <Route
+          path='/console/aliyun-guardrail'
+          element={<AdminRoute><AliyunGuardrail /></AdminRoute>}
         />
         <Route
           path='/console'
