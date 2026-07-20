@@ -255,21 +255,28 @@ export const useApiRequest = (
         const status = String(taskPayload?.status || '').toLowerCase();
         const progress = Number(taskPayload?.progress || 0);
         const playable = extractVideoPlayableURL(data);
+        const failedStatuses = ['failure', 'failed', 'error', 'cancelled'];
         console.debug('[playground-video] poll tick', {
           taskId,
           status: status || 'queued',
           progress,
           hasPlayable: !!playable,
         });
-        updateMessage({
-          content: '视频生成中，请稍后…',
-          status: MESSAGE_STATUS.COMPLETE,
-          videoTask: {
-            taskId,
-            status: status || 'queued',
-            progress,
-          },
-        });
+        if (failedStatuses.includes(status)) {
+          const errDetail = formatVideoTaskError(data);
+          updateMessage({
+            content: errDetail
+              ? `视频生成失败：${errDetail}`
+              : `视频生成失败（status=${status}）。\n\n${JSON.stringify(data, null, 2)}`,
+            status: MESSAGE_STATUS.ERROR,
+            videoTask: {
+              taskId,
+              status,
+              progress,
+            },
+          });
+          return;
+        }
         if (playable) {
           updateMessage({
             content: '视频已生成完成。',
@@ -283,6 +290,15 @@ export const useApiRequest = (
           });
           return;
         }
+        updateMessage({
+          content: '视频生成中，请稍后…',
+          status: MESSAGE_STATUS.INCOMPLETE,
+          videoTask: {
+            taskId,
+            status: status || 'queued',
+            progress,
+          },
+        });
         if (['succeeded', 'success', 'completed'].includes(status)) {
           updateMessage({
             content: `视频已生成完成。\n\n任务状态：${status}\n\n${JSON.stringify(taskPayload, null, 2)}`,
@@ -291,21 +307,6 @@ export const useApiRequest = (
               taskId,
               status: 'completed',
               progress: 100,
-            },
-          });
-          return;
-        }
-        if (['failed', 'error', 'cancelled'].includes(status)) {
-          const errDetail = formatVideoTaskError(data);
-          updateMessage({
-            content: errDetail
-              ? `视频生成失败：${errDetail}`
-              : `视频生成失败（status=${status}）。\n\n${JSON.stringify(data, null, 2)}`,
-            status: MESSAGE_STATUS.ERROR,
-            videoTask: {
-              taskId,
-              status,
-              progress,
             },
           });
           return;

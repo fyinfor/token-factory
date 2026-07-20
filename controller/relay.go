@@ -111,6 +111,30 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 	defer func() {
 		if tokenFactoryError != nil {
+			if blocked, _ := c.Get("aliyun_guardrail_output_blocked"); blocked == true {
+				if isStream, _ := c.Get("aliyun_guardrail_output_stream"); isStream == true {
+					c.Header("Content-Type", "text/event-stream")
+					_ = helper.ObjectData(c, gin.H{
+						"object": "chat.completion.chunk",
+						"choices": []gin.H{{
+							"index":         0,
+							"delta":         gin.H{"content": setting.AliyunGuardrailBlockedReply},
+							"finish_reason": "content_filter",
+						}},
+					})
+					helper.Done(c)
+					return
+				}
+				c.JSON(http.StatusOK, gin.H{
+					"object": "chat.completion",
+					"choices": []gin.H{{
+						"index":         0,
+						"message":       gin.H{"role": "assistant", "content": setting.AliyunGuardrailBlockedReply},
+						"finish_reason": "content_filter",
+					}},
+				})
+				return
+			}
 			logger.LogError(c, fmt.Sprintf("relay error: %s", tokenFactoryError.Error()))
 			tokenFactoryError.SetMessage(common.MessageWithRequestId(tokenFactoryError.Error(), requestId))
 			switch relayFormat {
@@ -163,6 +187,17 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 			tokenFactoryError = types.NewError(err, types.ErrorCodeSensitiveWordsDetected)
 			return
 		}
+	}
+
+	guardrailResult, guardrailErr := service.CheckAliyunGuardrailInput(c, relayInfo, request)
+	if guardrailErr != nil {
+		logger.LogWarn(c, fmt.Sprintf("aliyun guardrail check skipped: %s", guardrailErr.Error()))
+	}
+	if guardrailResult != nil && guardrailResult.Blocked {
+		c.Set("aliyun_guardrail_output_blocked", true)
+		c.Set("aliyun_guardrail_output_stream", relayInfo.IsStream)
+		tokenFactoryError = types.NewErrorWithStatusCode(fmt.Errorf(setting.AliyunGuardrailBlockedReply), types.ErrorCodeSensitiveWordsDetected, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		return
 	}
 
 	tokens, err := service.EstimateRequestToken(c, meta, relayInfo)

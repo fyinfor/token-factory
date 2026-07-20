@@ -46,6 +46,7 @@ const routerMap = {
   user: '/console/user',
   subscription: '/console/subscription',
   log: '/console/log',
+  'aliyun-guardrail': '/console/aliyun-guardrail',
   midjourney: '/console/midjourney',
   setting: '/console/setting',
   about: '/about',
@@ -250,6 +251,12 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('渠道管理'),
         itemKey: 'channel',
         to: '/channel',
+        className: isAdmin() ? '' : 'tableHiddle',
+      },
+      {
+        text: '安全护栏',
+        itemKey: 'aliyun-guardrail',
+        to: '/console/aliyun-guardrail',
         className: isAdmin() ? '' : 'tableHiddle',
       },
       {

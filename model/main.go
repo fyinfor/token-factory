@@ -294,6 +294,7 @@ func migrateDB() error {
 		&Redemption{},
 		&Ability{},
 		&Log{},
+		&AliyunGuardrailLog{},
 		&Midjourney{},
 		&TopUp{},
 		&QuotaData{},

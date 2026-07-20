@@ -22,6 +22,7 @@ import (
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
 )
@@ -173,6 +174,18 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 	info.UpstreamModelName = modelName
 	if err := helper.ModelMappedHelper(c, info, nil); err != nil {
 		return nil, service.TaskErrorWrapperLocal(err, "model_mapping_failed", http.StatusBadRequest)
+	}
+	if _, checked := c.Get("aliyun_guardrail_task_input_checked"); !checked {
+		c.Set("aliyun_guardrail_task_input_checked", true)
+		if req, err := relaycommon.GetTaskRequest(c); err == nil {
+			guardrailResult, guardrailErr := service.CheckAliyunGuardrailTaskInput(c, info, req)
+			if guardrailErr != nil {
+				common.SysLog(fmt.Sprintf("aliyun task guardrail check skipped: %s", guardrailErr.Error()))
+			}
+			if guardrailResult != nil && guardrailResult.Blocked {
+				return nil, service.TaskErrorWrapperLocal(fmt.Errorf(setting.AliyunGuardrailBlockedReply), "sensitive_words_detected", http.StatusBadRequest)
+			}
+		}
 	}
 
 	// 3. 预生成公开 task ID（仅首次）
@@ -480,6 +493,12 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 // 对操练场视频轮询尤其重要：OpenAI-style 视频渠道在后台轮询落库前，也能实时返回完成态。
 // 当非 OpenAI Video API 时，还会构建自定义格式的响应体。
 func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool, requestPath string) []byte {
+	// Alibaba video moderation is asynchronous. Always use the persisted polling
+	// result while it is enabled so an upstream success response cannot expose an
+	// unmoderated video URL through this realtime path.
+	if setting.ShouldCheckAliyunGuardrailVideo() {
+		return nil
+	}
 	channelModel, err := model.GetChannelById(task.ChannelId, true)
 	if err != nil {
 		return nil
@@ -627,7 +646,7 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool, requestPath strin
 		"metadata": nil,
 		"status":   mapTaskStatusToSimple(task.Status),
 		"task_id":  task.TaskID,
-		"url":      task.GetResultURL(),
+		"url":      task.ResultURLForResponse(),
 	}
 	respBody, _ := common.Marshal(dto.TaskResponse[any]{
 		Code: "success",
@@ -723,7 +742,7 @@ func TaskModel2Dto(task *model.Task) *dto.TaskDto {
 		Action:     task.Action,
 		Status:     string(task.Status),
 		FailReason: task.FailReason,
-		ResultURL:  task.GetResultURL(),
+		ResultURL:  task.ResultURLForResponse(),
 		SubmitTime: task.SubmitTime,
 		StartTime:  task.StartTime,
 		FinishTime: task.FinishTime,

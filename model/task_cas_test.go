@@ -215,3 +215,16 @@ func TestUpdateWithStatus_ConcurrentWinner(t *testing.T) {
 	}
 	assert.Equal(t, 1, winCount, "exactly one goroutine should win the CAS")
 }
+
+func TestTaskResultURLForResponseDoesNotExposeFailureReason(t *testing.T) {
+	task := &Task{
+		Status:     TaskStatusFailure,
+		FailReason: "Input Prompt violates policy",
+	}
+
+	assert.Equal(t, "", task.ResultURLForResponse())
+
+	video := task.ToOpenAIVideo()
+	require.NotNil(t, video)
+	assert.Nil(t, video.Output)
+}

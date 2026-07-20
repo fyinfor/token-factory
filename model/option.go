@@ -255,6 +255,13 @@ func InitOptionMap() {
 	common.OptionMap["MjForwardUrlEnabled"] = strconv.FormatBool(setting.MjForwardUrlEnabled)
 	common.OptionMap["MjActionCheckSuccessEnabled"] = strconv.FormatBool(setting.MjActionCheckSuccessEnabled)
 	common.OptionMap["CheckSensitiveEnabled"] = strconv.FormatBool(setting.CheckSensitiveEnabled)
+	common.OptionMap["AliyunGuardrailEnabled"] = strconv.FormatBool(setting.AliyunGuardrailEnabled)
+	common.OptionMap["AliyunGuardrailInputEnabled"] = strconv.FormatBool(setting.AliyunGuardrailInputEnabled)
+	common.OptionMap["AliyunGuardrailOutputEnabled"] = strconv.FormatBool(setting.AliyunGuardrailOutputEnabled)
+	common.OptionMap["AliyunGuardrailVideoEnabled"] = strconv.FormatBool(setting.AliyunGuardrailVideoEnabled)
+	common.OptionMap["AliyunGuardrailAccessKeyID"] = setting.AliyunGuardrailAccessKeyID
+	common.OptionMap["AliyunGuardrailAccessKeySecret"] = setting.AliyunGuardrailAccessKeySecret
+	common.OptionMap["AliyunGuardrailRegionID"] = setting.AliyunGuardrailRegionID
 	common.OptionMap["DemoSiteEnabled"] = strconv.FormatBool(operation_setting.DemoSiteEnabled)
 	common.OptionMap["SelfUseModeEnabled"] = strconv.FormatBool(operation_setting.SelfUseModeEnabled)
 	common.OptionMap["ChannelBalanceAlertEnabled"] = strconv.FormatBool(false)
@@ -418,6 +425,14 @@ func updateOptionMap(key string, value string) (err error) {
 			setting.MjActionCheckSuccessEnabled = boolValue
 		case "CheckSensitiveEnabled":
 			setting.CheckSensitiveEnabled = boolValue
+		case "AliyunGuardrailEnabled":
+			setting.AliyunGuardrailEnabled = boolValue
+		case "AliyunGuardrailInputEnabled":
+			setting.AliyunGuardrailInputEnabled = boolValue
+		case "AliyunGuardrailOutputEnabled":
+			setting.AliyunGuardrailOutputEnabled = boolValue
+		case "AliyunGuardrailVideoEnabled":
+			setting.AliyunGuardrailVideoEnabled = boolValue
 		case "DemoSiteEnabled":
 			operation_setting.DemoSiteEnabled = boolValue
 		case "SelfUseModeEnabled":
@@ -794,6 +809,12 @@ func updateOptionMap(key string, value string) (err error) {
 		common.QuotaPerUnit, _ = strconv.ParseFloat(value, 64)
 	case "SensitiveWords":
 		setting.SensitiveWordsFromString(value)
+	case "AliyunGuardrailAccessKeyID":
+		setting.AliyunGuardrailAccessKeyID = value
+	case "AliyunGuardrailAccessKeySecret":
+		setting.AliyunGuardrailAccessKeySecret = value
+	case "AliyunGuardrailRegionID":
+		setting.AliyunGuardrailRegionID = value
 	case "AutomaticDisableKeywords":
 		operation_setting.AutomaticDisableKeywordsFromString(value)
 	case "AutomaticDisableStatusCodes":

@@ -569,6 +569,7 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/settlement/summary", middleware.AdminAuth(), middleware.SearchRateLimit(), controller.GetSettlementSummary)
 		logRoute.GET("/self/export", middleware.UserAuth(), middleware.SearchRateLimit(), controller.ExportUserLogsSelf)
 		logRoute.GET("/self/search", middleware.UserAuth(), middleware.SearchRateLimit(), controller.SearchUserLogs)
+		logRoute.GET("/aliyun-guardrail", middleware.AdminAuth(), controller.GetAliyunGuardrailLogs)
 
 		dataRoute := apiRouter.Group("/data")
 		dataRoute.GET("/", middleware.AdminAuth(), controller.GetAllQuotaDates)

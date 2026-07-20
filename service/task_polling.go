@@ -19,6 +19,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay/channel/task/taskcommon"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"github.com/samber/lo"
@@ -399,7 +400,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		t := responseItems.Data
 		taskResult.TaskID = t.TaskID
 		taskResult.Status = string(t.Status)
-		taskResult.Url = t.GetResultURL()
+		taskResult.Url = t.ResultURLForResponse()
 		taskResult.Progress = t.Progress
 		taskResult.Reason = t.FailReason
 		task.Data = t.Data
@@ -450,6 +451,32 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 			task.StartTime = now
 		}
 	case model.TaskStatusSuccess:
+		if setting.ShouldCheckAliyunGuardrailVideo() && taskResult.Url != "" && !strings.HasPrefix(taskResult.Url, "data:") {
+			moderationCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+			complete, blocked, guardrailErr := CheckAliyunVideoGuardrail(moderationCtx, task, taskResult.Url)
+			cancel()
+			if guardrailErr != nil {
+				logger.LogWarn(ctx, fmt.Sprintf("Aliyun video guardrail failed for task %s, allowing result: %s", task.TaskID, guardrailErr.Error()))
+			} else if !complete {
+				task.Status = model.TaskStatusInProgress
+				task.Progress = "95%"
+				break
+			} else if blocked {
+				task.Status = model.TaskStatusFailure
+				task.Progress = taskcommon.ProgressComplete
+				task.FailReason = setting.AliyunGuardrailBlockedReply
+				task.PrivateData.ResultURL = ""
+				taskResult.Status = string(model.TaskStatusFailure)
+				taskResult.Reason = task.FailReason
+				if task.FinishTime == 0 {
+					task.FinishTime = now
+				}
+				if quota != 0 {
+					shouldRefund = true
+				}
+				break
+			}
+		}
 		task.Progress = taskcommon.ProgressComplete
 		if task.FinishTime == 0 {
 			task.FinishTime = now

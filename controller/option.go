@@ -118,6 +118,9 @@ func GetOptions(c *gin.Context) {
 		if k == "SMSAccessKeyIDIntl" || k == "SMSAccessKeySecretIntl" {
 			continue
 		}
+		if k == "AliyunGuardrailAccessKeyID" || k == "AliyunGuardrailAccessKeySecret" {
+			continue
+		}
 		value := common.Interface2String(v)
 		if strings.HasSuffix(k, "Token") ||
 			strings.HasSuffix(k, "Secret") ||
@@ -250,6 +253,16 @@ func GetOptions(c *gin.Context) {
 		Key:   "UcoinApiKey",
 		Value: ucoinApiKeyDisp,
 	})
+	options = append(options,
+		&model.Option{
+			Key:   "AliyunGuardrailAccessKeyID",
+			Value: common.MaskCredentialForAdminDisplay(setting.AliyunGuardrailAccessKeyID),
+		},
+		&model.Option{
+			Key:   "AliyunGuardrailAccessKeySecret",
+			Value: common.MaskCredentialForAdminDisplay(setting.AliyunGuardrailAccessKeySecret),
+		},
+	)
 	common.OptionMapRWMutex.Unlock()
 	options = append(options, &model.Option{
 		Key:   "CompletionRatioMeta",
@@ -402,6 +415,42 @@ func UpdateOption(c *gin.Context) {
 			})
 			return
 		}
+	}
+	if option.Key == "AliyunGuardrailAccessKeyID" && strings.TrimSpace(setting.AliyunGuardrailAccessKeyID) != "" {
+		if valStr == common.MaskCredentialForAdminDisplay(setting.AliyunGuardrailAccessKeyID) {
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"message": "",
+			})
+			return
+		}
+	}
+	if option.Key == "AliyunGuardrailAccessKeySecret" && strings.TrimSpace(setting.AliyunGuardrailAccessKeySecret) != "" {
+		if valStr == common.MaskCredentialForAdminDisplay(setting.AliyunGuardrailAccessKeySecret) {
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"message": "",
+			})
+			return
+		}
+	}
+	if option.Key == "AliyunGuardrailAccessKeyID" || option.Key == "AliyunGuardrailAccessKeySecret" || option.Key == "AliyunGuardrailRegionID" {
+		valStr = strings.TrimSpace(valStr)
+		option.Value = valStr
+	}
+	if option.Key == "AliyunGuardrailAccessKeyID" && valStr != "" && valStr == strings.TrimSpace(setting.AliyunGuardrailAccessKeySecret) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "阿里云 AccessKey ID 不能与 AccessKey Secret 相同",
+		})
+		return
+	}
+	if option.Key == "AliyunGuardrailAccessKeySecret" && valStr != "" && valStr == strings.TrimSpace(setting.AliyunGuardrailAccessKeyID) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "阿里云 AccessKey Secret 不能与 AccessKey ID 相同",
+		})
+		return
 	}
 	switch option.Key {
 	case "GitHubOAuthEnabled":
