@@ -31,6 +31,7 @@ import {
 } from './playgroundVideoUtils';
 import {
   buildPlaygroundImageSizeOptions,
+  getPlaygroundImageSizeForTier,
   buildPlaygroundVideoResolutionOptions,
   getPlaygroundVideoSizeForTier,
 } from './videoResolutionLabel';
@@ -316,6 +317,10 @@ export const buildApiPayload = (
     )
       ? inputs.image_size
       : sizeOptions[0]?.value || '1024x1024';
+    const imageSize = getPlaygroundImageSizeForTier(
+      selectedImageSize,
+      inputs.image_ratio || 'auto',
+    );
     const referenceImages = collectPlaygroundImageMediaUrls(
       inputs.imageUrls,
       processedMessages,
@@ -324,7 +329,7 @@ export const buildApiPayload = (
     const payload = {
       model: modelWithRoute,
       prompt: getLastUserPrompt(),
-      size: selectedImageSize,
+      size: imageSize.size,
       n: Number(inputs.image_n) || 1,
       // 无参考图 → generations；有参考图 → edits（OpenAI Image 渠道约定）
       __endpoint: hasReferenceImages ? 'image_edits' : 'image',
