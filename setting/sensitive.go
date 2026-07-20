@@ -5,16 +5,6 @@ import "strings"
 var CheckSensitiveEnabled = true
 var CheckSensitiveOnPromptEnabled = true
 
-var TencentTMSModerationEnabled = false
-var TencentIMSModerationEnabled = false
-var TencentTMSOutputModerationEnabled = false
-var TencentIMSOutputModerationEnabled = false
-var TencentTMSSecretID = ""
-var TencentTMSSecretKey = ""
-var TencentTMSRegion = "ap-guangzhou"
-var TencentTMSBizType = "TencentCloudDefault"
-var TencentIMSBizType = "TencentCloudDefault"
-
 //var CheckSensitiveOnCompletionEnabled = true
 
 // StopOnSensitiveEnabled 如果检测到敏感词，是否立刻停止生成，否则替换敏感词
@@ -46,22 +36,6 @@ func SensitiveWordsFromString(s string) {
 
 func ShouldCheckPromptSensitive() bool {
 	return CheckSensitiveEnabled && CheckSensitiveOnPromptEnabled
-}
-
-func ShouldCheckPromptWithTencentTMS() bool {
-	return TencentTMSModerationEnabled
-}
-
-func ShouldCheckImagesWithTencentIMS() bool {
-	return TencentIMSModerationEnabled
-}
-
-func ShouldCheckOutputWithTencentTMS() bool {
-	return TencentTMSOutputModerationEnabled
-}
-
-func ShouldCheckOutputImagesWithTencentIMS() bool {
-	return TencentIMSOutputModerationEnabled
 }
 
 //func ShouldCheckCompletionSensitive() bool {

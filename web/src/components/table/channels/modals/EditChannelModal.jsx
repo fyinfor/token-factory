@@ -2631,10 +2631,19 @@ const EditChannelModal = (props) => {
     () =>
       CHANNEL_OPTIONS.map((opt) => ({
         ...opt,
-        // 保持 label 为纯文本以支持搜索
-        label: opt.label,
+        // 按当前语言翻译后仍为纯文本，便于搜索
+        label: t(opt.label),
       })),
-    [],
+    [t],
+  );
+
+  const supplierTypeOptionList = useMemo(
+    () =>
+      CHANNEL_SUPPLIER_TYPE_OPTIONS.map((opt) => ({
+        ...opt,
+        label: t(opt.label),
+      })),
+    [t],
   );
 
   const renderChannelOption = (renderProps) => {
@@ -3620,7 +3629,7 @@ const EditChannelModal = (props) => {
                           field='supplier_type'
                           label={t('供应商类型')}
                           placeholder={t('请选择供应商类型')}
-                          optionList={CHANNEL_SUPPLIER_TYPE_OPTIONS}
+                          optionList={supplierTypeOptionList}
                           rules={[
                             { required: true, message: t('请选择供应商类型') },
                           ]}

@@ -264,6 +264,10 @@ func settleSeedanceVideoTokenDelta(ctx context.Context, task *model.Task, actual
 		if delta > 0 {
 			model.UpdateUserUsedQuotaAndRequestCount(task.UserId, delta)
 			model.UpdateChannelUsedQuota(task.ChannelId, delta)
+		} else if delta < 0 {
+			// 预扣大于实扣：差额退钱包，同步回退累积已用（settlement_marker 不再写 refund 日志）。
+			model.DecreaseUserUsedQuota(task.UserId, -delta)
+			model.UpdateChannelUsedQuota(task.ChannelId, delta)
 		}
 		logger.LogInfo(ctx, fmt.Sprintf("任务 %s Token 差额结算：delta=%s（实际：%s，预扣：%s）",
 			task.TaskID, logger.LogQuota(delta), logger.LogQuota(actualQuota), logger.LogQuota(preConsumed)))
