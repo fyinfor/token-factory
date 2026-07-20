@@ -99,6 +99,35 @@ func TestBuildTopupQuoteCNYDisplayMatchesPayAmount(t *testing.T) {
 	}
 }
 
+func TestBuildTopupQuoteCNYAlignsWhenPriceDiffersFromDisplayRate(t *testing.T) {
+	// 生产常见情况：充值价格倍率与展示汇率不一致时，旧逻辑会跳过对齐，导致钱包少一截。
+	oldUSD := operation_setting.USDExchangeRate
+	oldPrice := operation_setting.Price
+	operation_setting.USDExchangeRate = 7.3
+	operation_setting.Price = 8.0
+	t.Cleanup(func() {
+		operation_setting.USDExchangeRate = oldUSD
+		operation_setting.Price = oldPrice
+	})
+	useQuotaDisplayType(t, operation_setting.QuotaDisplayTypeCNY)
+
+	quote, err := buildTopupQuote(500, "default", topupCurrencyCNY)
+	if err != nil {
+		t.Fatalf("buildTopupQuote: %v", err)
+	}
+	got := truncatedCNYDisplay(quote.QuotaToAdd, 7.3)
+	if got < 500 {
+		t.Fatalf("wallet CNY display = %v (quota=%d, price=8 display=7.3); want >= 500", got, quote.QuotaToAdd)
+	}
+	if got >= 500.01 {
+		t.Fatalf("wallet CNY display = %v; want < 500.01", got)
+	}
+	// 实付仍按输入（同币种）
+	if math.Abs(quote.PayAmount-500) > 0.0001 {
+		t.Fatalf("pay amount = %v; want 500", quote.PayAmount)
+	}
+}
+
 func TestBuildTopupQuoteRoundWouldShortenCNYDisplay(t *testing.T) {
 	useYipayTestRate(t, 7.3)
 	useQuotaDisplayType(t, operation_setting.QuotaDisplayTypeCNY)

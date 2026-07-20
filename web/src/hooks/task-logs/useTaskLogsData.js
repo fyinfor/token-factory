@@ -27,9 +27,27 @@ import {
   showError,
   showSuccess,
   timestamp2string,
+  getLast7DaysStartTimestamp,
+  getLast7DaysEndTimestamp,
 } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
+
+const normalizeTagList = (csv) => {
+  if (!csv || typeof csv !== 'string') return [];
+  return [
+    ...new Set(
+      csv
+        .replaceAll('，', ',')
+        .replaceAll('、', ',')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  ];
+};
+
+const hasTag = (csv, tag) => normalizeTagList(csv).includes(tag);
 
 export const useTaskLogsData = () => {
   const { t } = useTranslation();
@@ -57,13 +75,15 @@ export const useTaskLogsData = () => {
   const [activePage, setActivePage] = useState(1);
   const [logCount, setLogCount] = useState(0);
   const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
+  const [modelOptions, setModelOptions] = useState([]);
 
   // User and admin
   const isAdminUser = isAdmin();
   // Role-specific storage key to prevent different roles from overwriting each other
+  // v2：平台列默认隐藏，与旧缓存隔离以免沿用旧默认勾选
   const STORAGE_KEY = isAdminUser
-    ? 'task-logs-table-columns-admin'
-    : 'task-logs-table-columns-user';
+    ? 'task-logs-table-columns-admin-v2'
+    : 'task-logs-table-columns-user-v2';
 
   // Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -83,17 +103,18 @@ export const useTaskLogsData = () => {
 
   // Form state
   const [formApi, setFormApi] = useState(null);
-  let now = new Date();
-  let zeroNow = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   const formInitValues = {
     channel_id: '',
     task_id: '',
+    request_id: '',
     model_name: '',
-    task_filter: '',
+    video_type: '',
+    status: '',
+    username: '',
     dateRange: [
-      timestamp2string(zeroNow.getTime() / 1000),
-      timestamp2string(now.getTime() / 1000 + 3600),
+      timestamp2string(getLast7DaysStartTimestamp()),
+      timestamp2string(getLast7DaysEndTimestamp()),
     ],
   };
 
@@ -136,7 +157,7 @@ export const useTaskLogsData = () => {
       [COLUMN_KEYS.DURATION]: true,
       [COLUMN_KEYS.CHANNEL]: isAdminUser,
       [COLUMN_KEYS.USERNAME]: isAdminUser,
-      [COLUMN_KEYS.PLATFORM]: true,
+      [COLUMN_KEYS.PLATFORM]: false,
       [COLUMN_KEYS.TYPE]: true,
       [COLUMN_KEYS.MODEL]: true,
       [COLUMN_KEYS.TASK_ID]: true,
@@ -191,8 +212,8 @@ export const useTaskLogsData = () => {
     const formValues = formApi ? formApi.getValues() : {};
 
     // 处理时间范围
-    let start_timestamp = timestamp2string(zeroNow.getTime() / 1000);
-    let end_timestamp = timestamp2string(now.getTime() / 1000 + 3600);
+    let start_timestamp = timestamp2string(getLast7DaysStartTimestamp());
+    let end_timestamp = timestamp2string(getLast7DaysEndTimestamp());
 
     if (
       formValues.dateRange &&
@@ -206,8 +227,11 @@ export const useTaskLogsData = () => {
     return {
       channel_id: formValues.channel_id || '',
       task_id: formValues.task_id || '',
+      request_id: String(formValues.request_id || '').trim(),
       model_name: String(formValues.model_name || '').trim(),
-      task_filter: formValues.task_filter || '',
+      video_type: formValues.video_type || '',
+      status: formValues.status || '',
+      username: String(formValues.username || '').trim(),
       start_timestamp,
       end_timestamp,
     };
@@ -253,19 +277,24 @@ export const useTaskLogsData = () => {
     const {
       channel_id,
       task_id,
+      request_id,
       model_name,
-      task_filter,
+      video_type,
+      status,
+      username,
       start_timestamp,
       end_timestamp,
     } = getFormValues();
     let localStartTimestamp = parseInt(Date.parse(start_timestamp) / 1000);
     let localEndTimestamp = parseInt(Date.parse(end_timestamp) / 1000);
     const modelQuery = encodeURIComponent(model_name);
-    const videoFailedQuery =
-      task_filter === 'video_failure' ? '&video_failed=1' : '';
+    const requestIdQuery = encodeURIComponent(request_id);
+    const videoTypeQuery = encodeURIComponent(video_type);
+    const statusQuery = encodeURIComponent(status);
+    const usernameQuery = encodeURIComponent(username);
     let url = isAdminUser
-      ? `/api/task/?p=${page}&page_size=${size}&channel_id=${channel_id}&task_id=${task_id}&model_name=${modelQuery}${videoFailedQuery}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`
-      : `/api/task/self?p=${page}&page_size=${size}&task_id=${task_id}&model_name=${modelQuery}${videoFailedQuery}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`;
+      ? `/api/task/?p=${page}&page_size=${size}&channel_id=${channel_id}&task_id=${task_id}&request_id=${requestIdQuery}&model_name=${modelQuery}&video_type=${videoTypeQuery}&status=${statusQuery}&username=${usernameQuery}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`
+      : `/api/task/self?p=${page}&page_size=${size}&task_id=${task_id}&request_id=${requestIdQuery}&model_name=${modelQuery}&video_type=${videoTypeQuery}&status=${statusQuery}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`;
     const res = await API.get(url);
     const { success, message, data } = res.data;
     if (success) {
@@ -332,11 +361,37 @@ export const useTaskLogsData = () => {
     }
   };
 
+  const loadModelOptions = async () => {
+    try {
+      const res = await API.get('/api/user/models?scene=playground');
+      const { success, message, data } = res.data || {};
+      if (success) {
+        const items = Array.isArray(data) ? data : data?.items || [];
+        const options = items
+          .filter((item) => hasTag(item?.tags || '', '视频'))
+          .map((item) => {
+            const name = item?.model_name || item?.model || '';
+            return {
+              label: name,
+              value: name,
+            };
+          })
+          .filter((opt) => opt.value);
+        setModelOptions(options);
+      } else {
+        showError(message);
+      }
+    } catch (e) {
+      showError(e.message || t('加载模型列表失败'));
+    }
+  };
+
   // Initialize data
   useEffect(() => {
     const localPageSize =
       parseInt(localStorage.getItem('task-page-size')) || ITEMS_PER_PAGE;
     setPageSize(localPageSize);
+    loadModelOptions();
     loadLogs(1, localPageSize).then();
   }, []);
 
@@ -348,6 +403,7 @@ export const useTaskLogsData = () => {
     logCount,
     pageSize,
     isAdminUser,
+    modelOptions,
 
     // Modal state
     isModalOpen,

@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/QuantumNous/new-api/common"
 )
 
 var dashScopeResolutionFromURLRe = regexp.MustCompile(`(?i)(?:^|[^0-9])(480|720|1080)p(?:[^0-9]|$)`)
@@ -35,44 +37,66 @@ func extractTencentVODVideoMetadata(payload map[string]any) (*VideoMetadata, boo
 		return nil, false
 	}
 	output, _ := aigcVideoTask["Output"].(map[string]any)
-	if output == nil {
-		return nil, false
-	}
-	fileInfos, _ := output["FileInfos"].([]any)
-	if len(fileInfos) == 0 {
-		return nil, false
-	}
-	firstFile, _ := fileInfos[0].(map[string]any)
-	if firstFile == nil {
-		return nil, false
-	}
-	metaMap, _ := firstFile["MetaData"].(map[string]any)
-	if metaMap == nil {
-		return nil, false
-	}
+	if output != nil {
+		fileInfos, _ := output["FileInfos"].([]any)
+		if len(fileInfos) > 0 {
+			firstFile, _ := fileInfos[0].(map[string]any)
+			if firstFile != nil {
+				metaMap, _ := firstFile["MetaData"].(map[string]any)
+				if metaMap != nil {
+					duration := metadataToFloat64(metaMap["Duration"])
+					if duration <= 0 {
+						duration = metadataToFloat64(metaMap["VideoDuration"])
+					}
+					width := metadataToInt(metaMap["Width"])
+					height := metadataToInt(metaMap["Height"])
+					audioDuration := metadataToFloat64(metaMap["AudioDuration"])
 
-	duration := metadataToFloat64(metaMap["Duration"])
-	if duration <= 0 {
-		duration = metadataToFloat64(metaMap["VideoDuration"])
-	}
-	width := metadataToInt(metaMap["Width"])
-	height := metadataToInt(metaMap["Height"])
-	audioDuration := metadataToFloat64(metaMap["AudioDuration"])
-
-	hasAudio := audioDuration > 0
-	if !hasAudio {
-		if audioStreams, ok := metaMap["AudioStreamSet"].([]any); ok && len(audioStreams) > 0 {
-			hasAudio = true
+					hasAudio := audioDuration > 0
+					if !hasAudio {
+						if audioStreams, ok := metaMap["AudioStreamSet"].([]any); ok && len(audioStreams) > 0 {
+							hasAudio = true
+						}
+					}
+					if duration > 0 && width > 0 && height > 0 {
+						return &VideoMetadata{
+							DurationSec: duration,
+							Width:       width,
+							Height:      height,
+							HasAudio:    hasAudio,
+						}, true
+					}
+				}
+			}
 		}
 	}
-	if duration <= 0 || width <= 0 || height <= 0 {
+
+	// Temporary 存储常无 MetaData：回退 AigcVideoTask.Input.OutputConfig（计费核心三字段）
+	input, _ := aigcVideoTask["Input"].(map[string]any)
+	if input == nil {
+		return nil, false
+	}
+	oc, _ := input["OutputConfig"].(map[string]any)
+	if oc == nil {
+		return nil, false
+	}
+	duration := metadataToFloat64(oc["Duration"])
+	resolution, _ := oc["Resolution"].(string)
+	resolution = strings.TrimSpace(resolution)
+	aspectRatio, _ := oc["AspectRatio"].(string)
+	aspectRatio = strings.TrimSpace(aspectRatio)
+	if duration <= 0 {
+		return nil, false
+	}
+	width, height, ok := common.ParseVideoResolutionAndRatio(resolution, aspectRatio)
+	if !ok {
 		return nil, false
 	}
 	return &VideoMetadata{
 		DurationSec: duration,
 		Width:       width,
 		Height:      height,
-		HasAudio:    hasAudio,
+		HasAudio:    false,
 	}, true
 }
 

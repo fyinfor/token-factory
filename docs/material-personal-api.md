@@ -108,7 +108,6 @@ curl -X POST https://tokease.cn/api/material/personal/upload \
   "data": {
     "asset_id": "asset-a1b2c3d4",
     "asset_uri": "asset://asset-a1b2c3d4",
-    "group_id": "group-xxxxxxxx",
     "name": "portrait.jpg",
     "asset_type": "Image",
     "url": "https://tokease.cn/api/uploads/seedance/2026/06/25/xxxxxxxx.jpg",
@@ -177,7 +176,6 @@ curl -X POST https://tokease.cn/api/material/personal/upload-url \
   "data": {
     "asset_id": "asset-a1b2c3d4",
     "asset_uri": "asset://asset-a1b2c3d4",
-    "group_id": "group-xxxxxxxx",
     "name": "portrait.jpg",
     "asset_type": "Image",
     "url": "https://example.com/portrait.jpg",
@@ -241,7 +239,6 @@ curl -X GET "https://tokease.cn/api/material/personal/assets?page=1&page_size=10
       {
         "asset_id": "asset-a1b2c3d4",
         "asset_uri": "asset://asset-a1b2c3d4",
-        "group_id": "group-xxxxxxxx",
         "name": "portrait.jpg",
         "asset_type": "Image",
         "url": "https://tokease.cn/api/uploads/seedance/2026/06/25/xxxxxxxx.jpg",
@@ -251,7 +248,6 @@ curl -X GET "https://tokease.cn/api/material/personal/assets?page=1&page_size=10
       {
         "asset_id": "asset-e5f6g7h8",
         "asset_uri": "asset://asset-e5f6g7h8",
-        "group_id": "group-xxxxxxxx",
         "name": "portrait.jpg",
         "asset_type": "Image",
         "url": "https://example.com/portrait.jpg",
@@ -362,7 +358,6 @@ curl -X GET https://tokease.cn/api/material/personal/asset/asset-a1b2c3d4 \
   "data": {
     "asset_id": "asset-a1b2c3d4",
     "asset_uri": "asset://asset-a1b2c3d4",
-    "group_id": "group-xxxxxxxx",
     "name": "portrait.jpg",
     "asset_type": "Image",
     "url": "https://tokease.cn/api/uploads/seedance/2026/06/25/xxxxxxxx.jpg",
@@ -390,7 +385,6 @@ curl -X GET https://tokease.cn/api/material/personal/asset/asset-a1b2c3d4 \
 |------|------|------|
 | `asset_id` | string | 素材对外唯一标识，后续删除/查询接口均使用该字段 |
 | `asset_uri` | string | 业务资源地址，格式为 `asset://asset_id`，可用于视频生成请求替换素材 |
-| `group_id` | string | 上游素材分组 ID |
 | `name` | string | 素材名称 |
 | `asset_type` | string | 素材类型：`Image` / `Video` |
 | `url` | string | 素材公网访问地址 |
@@ -406,4 +400,3 @@ curl -X GET https://tokease.cn/api/material/personal/asset/asset-a1b2c3d4 \
 3. **文件限制**：支持的图片格式为 `jpg/jpeg/png/webp/gif/bmp`，视频格式为 `mp4/mov/webm/mkv/avi/m4v`，单文件大小由系统运营设置决定（默认最大 10MB）。
 4. **合规协议**：上传接口必须携带 `agreed=true`，表示已阅读并同意虚拟人像合规协议。
 5. **状态刷新**：列表查询与详情查询接口会对仍处于 `Pending` 或本地临时 URL 状态的素材执行一次上游状态刷新。
-6. **返回字段**：接口文档中 `group_id` 为系统内部字段；前端素材管理页面已不再展示素材库 ID。

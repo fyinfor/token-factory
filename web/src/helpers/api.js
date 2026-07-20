@@ -31,12 +31,12 @@ import {
 } from './playgroundVideoUtils';
 import {
   buildPlaygroundImageSizeOptions,
+  getPlaygroundImageSizeForTier,
   buildPlaygroundVideoResolutionOptions,
   getPlaygroundVideoSizeForTier,
 } from './videoResolutionLabel';
 import axios from 'axios';
 import { MESSAGE_ROLES } from '../constants/playground.constants';
-import { CHANNEL_TYPES_WITH_GENERATE_AUDIO } from '../constants/channel.constants';
 
 export let API = axios.create({
   baseURL: import.meta.env.VITE_REACT_APP_SERVER_URL
@@ -259,9 +259,6 @@ export const buildApiPayload = (
         ? 'adaptive'
         : explicitVideoRatio || matchedRatio?.value || 'adaptive';
     const prompt = getLastUserPrompt();
-    const selectedChannelType = Number(inputs.selected_channel_type ?? 0);
-    const supportsGenerateAudio =
-      CHANNEL_TYPES_WITH_GENERATE_AUDIO.has(selectedChannelType);
     const generateAudio = inputs.generate_audio !== false;
     const {
       images: imageMediaUrls,
@@ -271,13 +268,14 @@ export const buildApiPayload = (
       inputs.imageUrls,
       inputs.videoUrls,
       processedMessages,
+      inputs.audioUrls,
     );
     let metadata = applyVideoFrameMetadata(
       {
         duration: videoDuration,
         resolution,
         ratio: metadataRatio,
-        ...(supportsGenerateAudio ? { generate_audio: generateAudio } : {}),
+        generate_audio: generateAudio,
         ...(videoMediaUrls.length > 0 ? { video_urls: videoMediaUrls } : {}),
         ...(audioMediaUrls.length > 0 ? { audio_urls: audioMediaUrls } : {}),
       },
@@ -319,6 +317,10 @@ export const buildApiPayload = (
     )
       ? inputs.image_size
       : sizeOptions[0]?.value || '1024x1024';
+    const imageSize = getPlaygroundImageSizeForTier(
+      selectedImageSize,
+      inputs.image_ratio || 'auto',
+    );
     const referenceImages = collectPlaygroundImageMediaUrls(
       inputs.imageUrls,
       processedMessages,
@@ -327,7 +329,7 @@ export const buildApiPayload = (
     const payload = {
       model: modelWithRoute,
       prompt: getLastUserPrompt(),
-      size: selectedImageSize,
+      size: imageSize.size,
       n: Number(inputs.image_n) || 1,
       // 无参考图 → generations；有参考图 → edits（OpenAI Image 渠道约定）
       __endpoint: hasReferenceImages ? 'image_edits' : 'image',

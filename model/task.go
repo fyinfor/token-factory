@@ -190,12 +190,20 @@ type SyncTaskQueryParams struct {
 	StartTimestamp  int64
 	EndTimestamp    int64
 	UserIDs         []int
+	TaskIDs         []string
+	VideoType       string // text_to_video / image_to_video / video_to_video
 	VideoFailedOnly bool
 }
 
 var videoGenerateTaskActions = []string{
 	constant.TaskActionGenerate,
 	constant.TaskActionTextGenerate,
+	constant.TaskActionFirstTailGenerate,
+	constant.TaskActionReferenceGenerate,
+	constant.TaskActionRemix,
+}
+
+var videoToVideoFallbackActions = []string{
 	constant.TaskActionFirstTailGenerate,
 	constant.TaskActionReferenceGenerate,
 	constant.TaskActionRemix,
@@ -226,6 +234,104 @@ func taskModelNameFilterClause(modelName string) (string, []interface{}) {
 	}
 	return "json_extract(properties, '$.origin_model_name') LIKE ? OR json_extract(properties, '$.upstream_model_name') LIKE ?",
 		[]interface{}{pat, pat}
+}
+
+func normalizeTaskVideoType(videoType string) string {
+	switch strings.TrimSpace(videoType) {
+	case "text_to_video", constant.TaskActionTextGenerate:
+		return "text_to_video"
+	case "image_to_video", constant.TaskActionGenerate:
+		return "image_to_video"
+	case "video_to_video", constant.TaskActionRemix,
+		constant.TaskActionFirstTailGenerate, constant.TaskActionReferenceGenerate:
+		return "video_to_video"
+	default:
+		return strings.TrimSpace(videoType)
+	}
+}
+
+func videoBillingModeEqualsClause(mode string) (string, []interface{}) {
+	if common.UsingMySQL {
+		return "JSON_UNQUOTE(JSON_EXTRACT(private_data, '$.billing_context.video_billing_mode')) = ?",
+			[]interface{}{mode}
+	}
+	if common.UsingPostgreSQL {
+		return "(private_data::json->'billing_context'->>'video_billing_mode') = ?",
+			[]interface{}{mode}
+	}
+	return "json_extract(private_data, '$.billing_context.video_billing_mode') = ?",
+		[]interface{}{mode}
+}
+
+func videoBillingModeEmptyClause() string {
+	if common.UsingMySQL {
+		return "(JSON_EXTRACT(private_data, '$.billing_context.video_billing_mode') IS NULL OR JSON_UNQUOTE(JSON_EXTRACT(private_data, '$.billing_context.video_billing_mode')) IN ('', 'null'))"
+	}
+	if common.UsingPostgreSQL {
+		return "(private_data::json->'billing_context'->>'video_billing_mode' IS NULL OR (private_data::json->'billing_context'->>'video_billing_mode') = '')"
+	}
+	return "(json_extract(private_data, '$.billing_context.video_billing_mode') IS NULL OR json_extract(private_data, '$.billing_context.video_billing_mode') = '')"
+}
+
+func applyVideoTypeFilter(query *gorm.DB, videoType string) *gorm.DB {
+	mode := normalizeTaskVideoType(videoType)
+	if mode == "" {
+		return query
+	}
+	modeClause, modeArgs := videoBillingModeEqualsClause(mode)
+	emptyClause := videoBillingModeEmptyClause()
+	switch mode {
+	case "text_to_video":
+		args := append(append([]interface{}{}, modeArgs...), constant.TaskActionTextGenerate)
+		return query.Where("("+modeClause+") OR (("+emptyClause+") AND action = ?)", args...)
+	case "image_to_video":
+		args := append(append([]interface{}{}, modeArgs...), constant.TaskActionGenerate)
+		return query.Where("("+modeClause+") OR (("+emptyClause+") AND action = ?)", args...)
+	case "video_to_video":
+		args := append(append([]interface{}{}, modeArgs...), videoToVideoFallbackActions)
+		return query.Where("("+modeClause+") OR (("+emptyClause+") AND action IN ?)", args...)
+	default:
+		return query
+	}
+}
+
+func applySyncTaskQueryFilters(query *gorm.DB, queryParams SyncTaskQueryParams) *gorm.DB {
+	if queryParams.ChannelID != "" {
+		query = query.Where("channel_id = ?", queryParams.ChannelID)
+	}
+	if queryParams.Platform != "" {
+		query = query.Where("platform = ?", queryParams.Platform)
+	}
+	if queryParams.UserID != "" {
+		query = query.Where("user_id = ?", queryParams.UserID)
+	}
+	if len(queryParams.UserIDs) != 0 {
+		query = query.Where("user_id in (?)", queryParams.UserIDs)
+	}
+	if queryParams.TaskID != "" {
+		query = query.Where("task_id = ?", queryParams.TaskID)
+	}
+	if len(queryParams.TaskIDs) != 0 {
+		query = query.Where("task_id IN ?", queryParams.TaskIDs)
+	}
+	if queryParams.Action != "" {
+		query = query.Where("action = ?", queryParams.Action)
+	}
+	if queryParams.Status != "" {
+		query = query.Where("status = ?", queryParams.Status)
+	}
+	if queryParams.StartTimestamp != 0 {
+		query = query.Where("submit_time >= ?", queryParams.StartTimestamp)
+	}
+	if queryParams.EndTimestamp != 0 {
+		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
+	}
+	if clause, args := taskModelNameFilterClause(queryParams.ModelName); clause != "" {
+		query = query.Where(clause, args...)
+	}
+	query = applyVideoTypeFilter(query, queryParams.VideoType)
+	query = applyVideoFailedOnlyFilter(query, queryParams.VideoFailedOnly)
+	return query
 }
 
 func InitTask(platform constant.TaskPlatform, relayInfo *commonRelay.RelayInfo) *Task {
@@ -271,34 +377,8 @@ func TaskGetAllUserTask(userId int, startIdx int, num int, queryParams SyncTaskQ
 	var tasks []*Task
 	var err error
 
-	// 初始化查询构建器
-	query := DB.Where("user_id = ?", userId)
+	query := applySyncTaskQueryFilters(DB.Where("user_id = ?", userId), queryParams)
 
-	if queryParams.TaskID != "" {
-		query = query.Where("task_id = ?", queryParams.TaskID)
-	}
-	if queryParams.Action != "" {
-		query = query.Where("action = ?", queryParams.Action)
-	}
-	if queryParams.Status != "" {
-		query = query.Where("status = ?", queryParams.Status)
-	}
-	if queryParams.Platform != "" {
-		query = query.Where("platform = ?", queryParams.Platform)
-	}
-	if queryParams.StartTimestamp != 0 {
-		// 假设您已将前端传来的时间戳转换为数据库所需的时间格式，并处理了时间戳的验证和解析
-		query = query.Where("submit_time >= ?", queryParams.StartTimestamp)
-	}
-	if queryParams.EndTimestamp != 0 {
-		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
-	}
-	if clause, args := taskModelNameFilterClause(queryParams.ModelName); clause != "" {
-		query = query.Where(clause, args...)
-	}
-	query = applyVideoFailedOnlyFilter(query, queryParams.VideoFailedOnly)
-
-	// 获取数据
 	err = query.Omit("channel_id").Order("id desc").Limit(num).Offset(startIdx).Find(&tasks).Error
 	if err != nil {
 		return nil
@@ -311,43 +391,8 @@ func TaskGetAllTasks(startIdx int, num int, queryParams SyncTaskQueryParams) []*
 	var tasks []*Task
 	var err error
 
-	// 初始化查询构建器
-	query := DB
+	query := applySyncTaskQueryFilters(DB, queryParams)
 
-	// 添加过滤条件
-	if queryParams.ChannelID != "" {
-		query = query.Where("channel_id = ?", queryParams.ChannelID)
-	}
-	if queryParams.Platform != "" {
-		query = query.Where("platform = ?", queryParams.Platform)
-	}
-	if queryParams.UserID != "" {
-		query = query.Where("user_id = ?", queryParams.UserID)
-	}
-	if len(queryParams.UserIDs) != 0 {
-		query = query.Where("user_id in (?)", queryParams.UserIDs)
-	}
-	if queryParams.TaskID != "" {
-		query = query.Where("task_id = ?", queryParams.TaskID)
-	}
-	if queryParams.Action != "" {
-		query = query.Where("action = ?", queryParams.Action)
-	}
-	if queryParams.Status != "" {
-		query = query.Where("status = ?", queryParams.Status)
-	}
-	if queryParams.StartTimestamp != 0 {
-		query = query.Where("submit_time >= ?", queryParams.StartTimestamp)
-	}
-	if queryParams.EndTimestamp != 0 {
-		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
-	}
-	if clause, args := taskModelNameFilterClause(queryParams.ModelName); clause != "" {
-		query = query.Where(clause, args...)
-	}
-	query = applyVideoFailedOnlyFilter(query, queryParams.VideoFailedOnly)
-
-	// 获取数据
 	err = query.Order("id desc").Limit(num).Offset(startIdx).Find(&tasks).Error
 	if err != nil {
 		return nil
@@ -505,38 +550,7 @@ type TaskQuotaUsage struct {
 // TaskCountAllTasks returns total tasks that match the given query params (admin usage)
 func TaskCountAllTasks(queryParams SyncTaskQueryParams) int64 {
 	var total int64
-	query := DB.Model(&Task{})
-	if queryParams.ChannelID != "" {
-		query = query.Where("channel_id = ?", queryParams.ChannelID)
-	}
-	if queryParams.Platform != "" {
-		query = query.Where("platform = ?", queryParams.Platform)
-	}
-	if queryParams.UserID != "" {
-		query = query.Where("user_id = ?", queryParams.UserID)
-	}
-	if len(queryParams.UserIDs) != 0 {
-		query = query.Where("user_id in (?)", queryParams.UserIDs)
-	}
-	if queryParams.TaskID != "" {
-		query = query.Where("task_id = ?", queryParams.TaskID)
-	}
-	if queryParams.Action != "" {
-		query = query.Where("action = ?", queryParams.Action)
-	}
-	if queryParams.Status != "" {
-		query = query.Where("status = ?", queryParams.Status)
-	}
-	if queryParams.StartTimestamp != 0 {
-		query = query.Where("submit_time >= ?", queryParams.StartTimestamp)
-	}
-	if queryParams.EndTimestamp != 0 {
-		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
-	}
-	if clause, args := taskModelNameFilterClause(queryParams.ModelName); clause != "" {
-		query = query.Where(clause, args...)
-	}
-	query = applyVideoFailedOnlyFilter(query, queryParams.VideoFailedOnly)
+	query := applySyncTaskQueryFilters(DB.Model(&Task{}), queryParams)
 	_ = query.Count(&total).Error
 	return total
 }
@@ -544,29 +558,7 @@ func TaskCountAllTasks(queryParams SyncTaskQueryParams) int64 {
 // TaskCountAllUserTask returns total tasks for given user
 func TaskCountAllUserTask(userId int, queryParams SyncTaskQueryParams) int64 {
 	var total int64
-	query := DB.Model(&Task{}).Where("user_id = ?", userId)
-	if queryParams.TaskID != "" {
-		query = query.Where("task_id = ?", queryParams.TaskID)
-	}
-	if queryParams.Action != "" {
-		query = query.Where("action = ?", queryParams.Action)
-	}
-	if queryParams.Status != "" {
-		query = query.Where("status = ?", queryParams.Status)
-	}
-	if queryParams.Platform != "" {
-		query = query.Where("platform = ?", queryParams.Platform)
-	}
-	if queryParams.StartTimestamp != 0 {
-		query = query.Where("submit_time >= ?", queryParams.StartTimestamp)
-	}
-	if queryParams.EndTimestamp != 0 {
-		query = query.Where("submit_time <= ?", queryParams.EndTimestamp)
-	}
-	if clause, args := taskModelNameFilterClause(queryParams.ModelName); clause != "" {
-		query = query.Where(clause, args...)
-	}
-	query = applyVideoFailedOnlyFilter(query, queryParams.VideoFailedOnly)
+	query := applySyncTaskQueryFilters(DB.Model(&Task{}).Where("user_id = ?", userId), queryParams)
 	_ = query.Count(&total).Error
 	return total
 }

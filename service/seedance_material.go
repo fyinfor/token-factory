@@ -44,9 +44,12 @@ const (
 	materialGetAssetPollInterval = time.Second
 )
 
-// IsValidMaterialAssetType 判断素材类型是否为业务允许上传的图片/视频（音频等其他类型一律拦截）。
+// IsValidMaterialAssetType 判断素材类型是否为业务允许上传的图片/视频/音频。
+// Seedance 2.0 参考音频需入库，故 Audio 与 Image/Video 一并放行。
 func IsValidMaterialAssetType(assetType string) bool {
-	return assetType == MaterialAssetTypeImage || assetType == MaterialAssetTypeVideo
+	return assetType == MaterialAssetTypeImage ||
+		assetType == MaterialAssetTypeVideo ||
+		assetType == MaterialAssetTypeAudio
 }
 
 // materialResponse 素材库接口通用响应包装。

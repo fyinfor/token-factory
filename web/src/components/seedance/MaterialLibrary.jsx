@@ -43,17 +43,23 @@ import {
   IconDelete,
   IconRefresh,
   IconHelpCircle,
+  IconEdit,
 } from '@douyinfe/semi-icons';
 import {
   Image as ImageTypeIcon,
   Video as VideoTypeIcon,
+  Music as AudioTypeIcon,
   CheckCircle2,
   Clock,
   AlertCircle,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { copy, showSuccess, showError } from '../../helpers';
-import { MaterialAssetType, MaterialStatus } from '../../constants';
+import {
+  MaterialAssetType,
+  MaterialStatus,
+  MATERIAL_UPLOAD_ACCEPT,
+} from '../../constants';
 import { useMaterialLibrary } from '../../hooks/seedance/useMaterialLibrary';
 import RealPersonLibrary from '../realperson/RealPersonLibrary';
 import { useIsMobile } from '../../hooks/common/useIsMobile';
@@ -63,12 +69,14 @@ const { Title, Text } = Typography;
 
 /* ========================= 工具方法（纯展示映射） ========================= */
 
-// 素材类型 -> 图标 + 文案映射（替代纯文字标签）。
+// 素材类型 -> 图标 + 文案映射（含音频）。
 const getAssetTypeMeta = (assetType, t) => {
   if (assetType === MaterialAssetType.VIDEO) {
     return { icon: VideoTypeIcon, label: t('视频'), color: 'var(--semi-color-warning)' };
   }
-  // 默认按图片处理（音频已在后端拦截，理论上不会出现在列表）。
+  if (assetType === MaterialAssetType.AUDIO) {
+    return { icon: AudioTypeIcon, label: t('音频'), color: 'var(--semi-color-tertiary)' };
+  }
   return { icon: ImageTypeIcon, label: t('图片'), color: 'var(--semi-color-primary)' };
 };
 
@@ -105,15 +113,20 @@ const MaterialLibrary = () => {
     loadAssets,
     handleUploadFile,
     handleUploadByURL,
+    handleRename,
     handleDelete,
   } = useMaterialLibrary();
   const isMobile = useIsMobile();
 
-  // 协议详情弹窗 / 在线链接上传弹窗的本地 UI 状态。
+  // 协议详情弹窗 / 在线链接上传弹窗 / 改名弹窗的本地 UI 状态。
   const [detailVisible, setDetailVisible] = useState(false);
   const [urlModalVisible, setUrlModalVisible] = useState(false);
   const [urlInput, setUrlInput] = useState('');
   const [urlName, setUrlName] = useState('');
+  const [renameVisible, setRenameVisible] = useState(false);
+  const [renameTarget, setRenameTarget] = useState(null);
+  const [renameName, setRenameName] = useState('');
+  const [renameSaving, setRenameSaving] = useState(false);
 
   const agreementText = isEn ? config.agreement_en : config.agreement_zh;
   const agreementDetail = isEn
@@ -182,6 +195,24 @@ const MaterialLibrary = () => {
     }
   };
 
+  const openRenameModal = (asset) => {
+    setRenameTarget(asset);
+    setRenameName(asset?.name || '');
+    setRenameVisible(true);
+  };
+
+  const submitRename = async () => {
+    if (!renameTarget) return;
+    setRenameSaving(true);
+    const ok = await handleRename(renameTarget, renameName);
+    setRenameSaving(false);
+    if (ok) {
+      setRenameVisible(false);
+      setRenameTarget(null);
+      setRenameName('');
+    }
+  };
+
   /* --------------------------- 渲染：单张素材卡片 --------------------------- */
 
   const renderAssetCard = (asset) => {
@@ -190,6 +221,7 @@ const MaterialLibrary = () => {
     const TypeIcon = typeMeta.icon;
     const StatusIcon = statusMeta.icon;
     const isVideo = asset.asset_type === MaterialAssetType.VIDEO;
+    const isAudio = asset.asset_type === MaterialAssetType.AUDIO;
 
     return (
       <Card
@@ -238,6 +270,20 @@ const MaterialLibrary = () => {
               preload='metadata'
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
             />
+          ) : isAudio ? (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 8,
+                padding: 12,
+                width: '100%',
+              }}
+            >
+              <AudioTypeIcon size={36} style={{ color: 'var(--semi-color-tertiary)' }} />
+              <audio src={asset.url} controls preload='metadata' style={{ width: '100%' }} />
+            </div>
           ) : (
             <Image
               src={asset.url}
@@ -251,7 +297,7 @@ const MaterialLibrary = () => {
 
         {/* 信息区 */}
         <div style={{ padding: '8px 10px' }}>
-          {/* 名称 + 状态图标（仅图标，无状态文字） */}
+          {/* 名称 + 改名 + 状态图标 */}
           <div
             style={{
               display: 'flex',
@@ -264,14 +310,26 @@ const MaterialLibrary = () => {
             <Tooltip content={asset.name}>
               <Text
                 ellipsis={{ showTooltip: false }}
-                style={{ maxWidth: 140, fontSize: 13 }}
+                style={{ maxWidth: 110, fontSize: 13 }}
               >
                 {asset.name || t('未命名素材')}
               </Text>
             </Tooltip>
-            <Tooltip content={statusMeta.label}>
-              <StatusIcon size={16} style={{ color: statusMeta.color, flexShrink: 0 }} />
-            </Tooltip>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+              <Tooltip content={t('改名')}>
+                <Button
+                  size='small'
+                  theme='borderless'
+                  type='tertiary'
+                  icon={<IconEdit />}
+                  onClick={() => openRenameModal(asset)}
+                  aria-label={t('改名')}
+                />
+              </Tooltip>
+              <Tooltip content={statusMeta.label}>
+                <StatusIcon size={16} style={{ color: statusMeta.color }} />
+              </Tooltip>
+            </div>
           </div>
 
           {/* 操作区：展示资源地址 + 复制 + 删除 */}
@@ -335,6 +393,7 @@ const MaterialLibrary = () => {
     <Card style={{ minHeight: '70vh' }}>
       {/* 标题栏 */}
       <div
+        className='material-library-header'
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -351,16 +410,6 @@ const MaterialLibrary = () => {
           )}
         >
           <IconHelpCircle style={{ color: 'var(--semi-color-text-2)' }} />
-        </Tooltip>
-        <div style={{ flex: 1 }} />
-        <Tooltip content={t('刷新列表')}>
-          <Button
-            theme='borderless'
-            type='tertiary'
-            icon={<IconRefresh />}
-            loading={loading}
-            onClick={loadAssets}
-          />
         </Tooltip>
       </div>
 
@@ -393,36 +442,58 @@ const MaterialLibrary = () => {
           </div>
 
           {/* 上传入口：本地文件 / 在线链接 */}
-          <Space style={{ marginBottom: 16 }}>
-            <Upload
-              action=''
-              accept='image/*,video/*'
-              showUploadList={false}
-              disabled={uploadDisabled}
-              customRequest={customRequest}
-            >
-              <Button
-                icon={<IconUpload />}
-                theme='solid'
-                loading={uploading}
+          <div
+            className='material-library-toolbar'
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: 12,
+              marginBottom: 16,
+            }}
+          >
+            <Space wrap>
+              <Upload
+                action=''
+                accept={MATERIAL_UPLOAD_ACCEPT}
+                showUploadList={false}
                 disabled={uploadDisabled}
+                customRequest={customRequest}
               >
-                {t('本地上传')}
+                <Button
+                  icon={<IconUpload />}
+                  theme='solid'
+                  loading={uploading}
+                  disabled={uploadDisabled}
+                >
+                  {t('本地上传')}
+                </Button>
+              </Upload>
+
+              <Button
+                icon={<IconLink />}
+                disabled={uploadDisabled}
+                onClick={() => setUrlModalVisible(true)}
+              >
+                {t('链接上传')}
               </Button>
-            </Upload>
 
-            <Button
-              icon={<IconLink />}
-              disabled={uploadDisabled}
-              onClick={() => setUrlModalVisible(true)}
-            >
-              {t('链接上传')}
-            </Button>
+              <Text type='tertiary' size='small'>
+                {t('支持图片/视频/音频（mp3/wav），单个文件不超过 {{n}}MB', { n: maxSizeMB })}
+              </Text>
+            </Space>
 
-            <Text type='tertiary' size='small'>
-              {t('支持图片/视频，单个文件不超过 {{n}}MB', { n: maxSizeMB })}
-            </Text>
-          </Space>
+            <Tooltip content={t('刷新列表')}>
+              <Button
+                theme='borderless'
+                type='tertiary'
+                icon={<IconRefresh />}
+                loading={loading}
+                onClick={loadAssets}
+              />
+            </Tooltip>
+          </div>
 
           {uploadProgress != null && !urlModalVisible && (
             <Progress
@@ -499,8 +570,30 @@ const MaterialLibrary = () => {
         <Banner
           type='info'
           closeIcon={null}
-          description={t('仅支持图片或视频的公开可访问链接（http/https）。')}
+          description={t('仅支持图片、视频或音频（mp3/wav）的公开可访问链接（http/https）。')}
           style={{ marginTop: 12 }}
+        />
+      </Modal>
+
+      {/* 素材改名弹窗 */}
+      <Modal
+        title={t('素材改名')}
+        visible={renameVisible}
+        onCancel={() => !renameSaving && setRenameVisible(false)}
+        onOk={submitRename}
+        okText={t('保存')}
+        cancelText={t('取消')}
+        confirmLoading={renameSaving}
+        closable={!renameSaving}
+        maskClosable={!renameSaving}
+      >
+        <Text>{t('素材名称')}</Text>
+        <Input
+          value={renameName}
+          onChange={setRenameName}
+          maxLength={128}
+          placeholder={t('请输入素材名称')}
+          style={{ marginTop: 4 }}
         />
       </Modal>
 

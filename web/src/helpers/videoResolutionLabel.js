@@ -255,6 +255,21 @@ export function getPlaygroundVideoSizeForTier(
   return { width: long, height: short, size: `${long}x${short}` };
 }
 
+/** 操练场图片：按分辨率档位 + 画面比例计算上游 size（如 1920x1080） */
+export function getPlaygroundImageSizeForTier(resolution, ratio = 'auto') {
+  return getPlaygroundVideoSizeForTier(resolution, 'landscape', ratio);
+}
+
+/** 当前分辨率展示：1920x1080 → 1920 x 1080 */
+export function formatPlaygroundPixelSizeLabel(size) {
+  const compact = String(size ?? '').trim().replace(/\s+/g, '');
+  const match = compact.match(/^(\d+)[x×](\d+)$/i);
+  if (match) {
+    return `${match[1]} x ${match[2]}`;
+  }
+  return String(size ?? '').trim();
+}
+
 export function buildPlaygroundVideoResolutionOptions(tiers) {
   const rawResolutions = (Array.isArray(tiers) ? tiers : [])
     .map((tier) => (typeof tier === 'string' ? tier : tier?.resolution))
@@ -315,15 +330,11 @@ export function buildPlaygroundImageSizeOptions(tiers) {
   for (const resolution of rawResolutions) {
     const value = getImageSizeValueForResolution(resolution);
     if (!value || seen.has(value)) continue;
+    // 下拉仅展示 480p / 720p / 1080p 等，像素尺寸由「当前分辨率」与请求 size 另行计算
     const label = formatVideoResolutionDisplayLabel(resolution) || value;
-    const rawCompact = resolution.replace(/\s+/g, '');
-    const displayLabel =
-      rawCompact && rawCompact.toLowerCase() !== String(label).toLowerCase()
-        ? `${label} (${value})`
-        : label;
     seen.add(value);
     options.push({
-      label: displayLabel,
+      label,
       value,
       rawResolution: resolution,
     });

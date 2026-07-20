@@ -140,7 +140,7 @@ export default function SettingsSeedance() {
             <Banner
               type='info'
               description={t(
-                'Seedance2.0 合规素材库配置。启用后，用户可在「个人中心-素材管理」中上传虚拟人像素材。所有素材相关接口将统一拼接下方的 API 基础地址进行请求。',
+                'Seedance2.0 合规素材库配置。启用后，用户可在「个人中心-SD 素材库」中上传虚拟人像素材。所有素材相关接口将统一拼接下方的 API 基础地址进行请求。',
               )}
               closeIcon={null}
               style={{ marginBottom: 16 }}

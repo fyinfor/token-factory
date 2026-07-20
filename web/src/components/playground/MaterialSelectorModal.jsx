@@ -38,6 +38,7 @@ import {
   Library,
   Image as ImageTypeIcon,
   Video as VideoTypeIcon,
+  Music as AudioTypeIcon,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useIsMobile } from '../../hooks/common/useIsMobile';
@@ -50,7 +51,7 @@ const { Text } = Typography;
 const EMPTY_EXISTING_ASSETS = [];
 
 /**
- * 素材类型 -> 图标 + 文案（与素材管理页一致）
+ * 素材类型 -> 图标 + 文案（与 SD 素材库页一致，含音频）
  */
 const getAssetTypeMeta = (assetType, t) => {
   if (assetType === MaterialAssetType.VIDEO) {
@@ -58,6 +59,13 @@ const getAssetTypeMeta = (assetType, t) => {
       icon: VideoTypeIcon,
       label: t('视频'),
       color: 'var(--semi-color-warning)',
+    };
+  }
+  if (assetType === MaterialAssetType.AUDIO) {
+    return {
+      icon: AudioTypeIcon,
+      label: t('音频'),
+      color: 'var(--semi-color-tertiary)',
     };
   }
   return {
@@ -239,6 +247,7 @@ const MaterialSelectorModal = ({
     const StatusIcon = statusMeta.icon;
     const isActive = asset.status === MaterialStatus.ACTIVE;
     const isVideo = asset.asset_type === MaterialAssetType.VIDEO;
+    const isAudio = asset.asset_type === MaterialAssetType.AUDIO;
     const previewFailed = imgErrors.has(assetId);
 
     return (
@@ -293,6 +302,19 @@ const MaterialSelectorModal = ({
               style={{ width: '100%', height: 100, objectFit: 'cover' }}
               onError={() => handleImgError(assetId)}
             />
+          ) : isAudio ? (
+            <div
+              style={{
+                width: '100%',
+                height: 100,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'var(--semi-color-tertiary)',
+              }}
+            >
+              <AudioTypeIcon size={32} />
+            </div>
           ) : (
             <Image
               src={asset.url}
@@ -304,7 +326,7 @@ const MaterialSelectorModal = ({
               onError={() => handleImgError(assetId)}
             />
           )}
-          {/* 左上角：图片/视频类型标签（对齐素材管理页） */}
+          {/* 左上角：图片/视频/音频类型标签（对齐 SD 素材库页） */}
           <div
             style={{
               position: 'absolute',
@@ -384,7 +406,7 @@ const MaterialSelectorModal = ({
       title={
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <Library size={18} />
-          <span>{t('从素材库选择')}</span>
+          <span>{t('从 SD 素材库选择')}</span>
         </div>
       }
       visible={visible}
@@ -466,7 +488,7 @@ const MaterialSelectorModal = ({
             description={
               <div style={{ textAlign: 'center' }}>
                 <Text type='tertiary'>
-                  {t('暂无素材，请先在素材管理中创建素材')}
+                  {t('暂无素材，请先在 SD 素材库中创建素材')}
                 </Text>
                 <br />
                 <Button
@@ -479,7 +501,7 @@ const MaterialSelectorModal = ({
                     window.location.hash = '#/seedance';
                   }}
                 >
-                  {t('前往素材管理')}
+                  {t('前往 SD 素材库')}
                 </Button>
               </div>
             }

@@ -1533,14 +1533,37 @@ func updateUserUsedQuotaAndRequestCountWithGiftOffset(id int, quota int, count i
 }
 
 func updateUserUsedQuota(id int, quota int) {
-	err := DB.Model(&User{}).Where("id = ?", id).Updates(
-		map[string]interface{}{
-			"used_quota": gorm.Expr("used_quota + ?", quota),
-		},
-	).Error
+	if quota == 0 {
+		return
+	}
+	var err error
+	if quota > 0 {
+		err = DB.Model(&User{}).Where("id = ?", id).Update(
+			"used_quota", gorm.Expr("used_quota + ?", quota),
+		).Error
+	} else {
+		// 退款回退已用：不允许 used_quota 变成负数，避免「已用 > 充值」观感再被冲垮。
+		err = DB.Model(&User{}).Where("id = ?", id).Update(
+			"used_quota",
+			gorm.Expr("CASE WHEN used_quota + ? < 0 THEN 0 ELSE used_quota + ? END", quota, quota),
+		).Error
+	}
 	if err != nil {
 		common.SysLog("failed to update user used quota: " + err.Error())
 	}
+}
+
+// DecreaseUserUsedQuota 退还「累积已用」额度（失败退款 / 差额退款）。
+// 消费预扣时会 UpdateUserUsedQuota 增加；若不回退，已用会只增不减，看起来像花得比充值还多。
+func DecreaseUserUsedQuota(id int, amount int) {
+	if id <= 0 || amount <= 0 {
+		return
+	}
+	if common.BatchUpdateEnabled {
+		addNewRecord(BatchUpdateTypeUsedQuota, id, -amount)
+		return
+	}
+	updateUserUsedQuota(id, -amount)
 }
 
 func updateUserRequestCount(id int, count int) {
@@ -1548,6 +1571,23 @@ func updateUserRequestCount(id int, count int) {
 	if err != nil {
 		common.SysLog("failed to update user request count: " + err.Error())
 	}
+}
+
+// GetUserIdByUsername 按用户名精确查找用户 ID；未找到时返回 0。
+func GetUserIdByUsername(username string) (int, error) {
+	username = strings.TrimSpace(username)
+	if username == "" {
+		return 0, nil
+	}
+	var user User
+	err := DB.Select("id").Where("username = ?", username).First(&user).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return user.Id, nil
 }
 
 // GetUsernameById gets username from Redis first, falls back to DB if needed

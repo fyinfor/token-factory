@@ -21,11 +21,12 @@ import {
   uploadRealMaterialFile,
   uploadRealMaterialByURL,
   deleteRealMaterial,
+  updateRealMaterial,
   getRealMaterial,
   showError,
   showSuccess,
 } from '../../helpers';
-import { detectAssetTypeByName, MaterialStatus } from '../../constants';
+import { detectAssetTypeByName, isUnsupportedMaterialAudioName, MaterialStatus } from '../../constants';
 
 // 轮询间隔（3 秒）与最大轮询时长（5 分钟），与 H5 链接有效期对齐。
 const POLL_INTERVAL_MS = 3000;
@@ -251,9 +252,13 @@ export const useRealPerson = () => {
         showError(t('请选择要上传的文件'));
         return false;
       }
+      if (isUnsupportedMaterialAudioName(fileInstance.name)) {
+        showError(t('音频素材仅支持 mp3/wav 格式'));
+        return false;
+      }
       const type = detectAssetTypeByName(fileInstance.name);
       if (!type) {
-        showError(t('仅支持上传图片或视频文件'));
+        showError(t('仅支持上传图片、视频或音频（mp3/wav）文件'));
         return false;
       }
       setUploading(true);
@@ -312,6 +317,10 @@ export const useRealPerson = () => {
         showError(t('请输入合法的在线资源链接（http/https）'));
         return false;
       }
+      if (isUnsupportedMaterialAudioName(trimmed)) {
+        showError(t('音频素材仅支持 mp3/wav 格式'));
+        return false;
+      }
       const assetType = detectAssetTypeByName(trimmed);
       setUploading(true);
       setUploadProgress(10);
@@ -346,6 +355,41 @@ export const useRealPerson = () => {
       }
     },
     [selectedGroup, agreed, t],
+  );
+
+  // 真人素材改名。
+  const handleRename = useCallback(
+    async (asset, name) => {
+      const assetId = asset?.asset_id;
+      const nextName = String(name || '').trim();
+      if (!assetId || !nextName) {
+        showError(t('素材名称不能为空'));
+        return false;
+      }
+      try {
+        const { success, message, data } = await updateRealMaterial(
+          assetId,
+          nextName,
+        );
+        if (!success) {
+          showError(message || t('改名失败'));
+          return false;
+        }
+        setAssets((prev) =>
+          prev.map((a) =>
+            a.asset_id === assetId
+              ? { ...a, ...(data || {}), name: data?.name || nextName }
+              : a,
+          ),
+        );
+        showSuccess(t('改名成功'));
+        return true;
+      } catch (e) {
+        showError(t('改名失败，请重试'));
+        return false;
+      }
+    },
+    [t],
   );
 
   // 删除单个真人素材。
@@ -501,6 +545,7 @@ export const useRealPerson = () => {
     loadAssets,
     handleUploadFile,
     handleUploadByURL,
+    handleRename,
     handleDelete,
     handleBatchDelete,
     // 认证会话

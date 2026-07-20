@@ -1226,8 +1226,13 @@ func updateChannelUsedQuota(id int, quota int) {
 	if common.QuotaPerUnit > 0 {
 		deltaUSD = float64(quota) / common.QuotaPerUnit
 	}
-	updates := map[string]interface{}{
-		"used_quota": gorm.Expr("used_quota + ?", quota),
+	updates := map[string]interface{}{}
+	if quota > 0 {
+		updates["used_quota"] = gorm.Expr("used_quota + ?", quota)
+	} else {
+		updates["used_quota"] = gorm.Expr(
+			"CASE WHEN used_quota + ? < 0 THEN 0 ELSE used_quota + ? END", quota, quota,
+		)
 	}
 	if deltaUSD != 0 {
 		updates["balance"] = gorm.Expr("CASE WHEN (balance - ?) < 0 THEN 0 ELSE (balance - ?) END", deltaUSD, deltaUSD)

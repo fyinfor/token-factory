@@ -42,7 +42,9 @@ import { useTranslation } from 'react-i18next';
 import {
   buildPlaygroundImageSizeOptions,
   buildPlaygroundVideoResolutionOptions,
+  formatPlaygroundPixelSizeLabel,
   formatVideoResolutionDisplayLabel,
+  getPlaygroundImageSizeForTier,
   getPlaygroundVideoSizeForTier,
   renderGroupOption,
   selectFilter,
@@ -51,12 +53,13 @@ import {
   PLAYGROUND_ASPECT_RATIO_OPTIONS,
   PLAYGROUND_VIDEO_DURATION_OPTIONS,
 } from '../../constants/playground.constants';
-import { CHANNEL_TYPES_WITH_GENERATE_AUDIO } from '../../constants/channel.constants';
 import ConfigManager from './ConfigManager';
 import CustomRequestEditor from './CustomRequestEditor';
 import ImageUrlInput from './ImageUrlInput';
+import MaterialLibraryButton from './MaterialLibraryButton';
 import ParameterControl from './ParameterControl';
 import VideoUrlInput from './VideoUrlInput';
+import AudioUrlInput from './AudioUrlInput';
 
 const SECTION_KEYS = {
   BASIC: 'basic',
@@ -75,9 +78,6 @@ const getDefaultSection = (displayMode, customRequestMode) => {
   }
   return SECTION_KEYS.BASIC;
 };
-
-const getImageResolutionLabel = (selectedImageSize) =>
-  formatVideoResolutionDisplayLabel(selectedImageSize) || selectedImageSize;
 
 const buildSectionTabs = (t) => [
   {
@@ -266,8 +266,13 @@ const SettingsPanel = ({
   )
     ? inputs.image_size
     : imageSizeOptions[0]?.value || '1280x720';
-  const selectedImageResolutionLabel =
-    getImageResolutionLabel(selectedImageSize);
+  const selectedImagePixelSize = getPlaygroundImageSizeForTier(
+    selectedImageSize,
+    inputs.image_ratio || 'auto',
+  );
+  const selectedImageResolutionLabel = formatPlaygroundPixelSizeLabel(
+    selectedImagePixelSize.size,
+  );
 
   const videoResolutionOptions = buildPlaygroundVideoResolutionOptions(
     inputs.selected_video_pricing_tiers,
@@ -285,9 +290,7 @@ const SettingsPanel = ({
   const selectedVideoResolutionLabel =
     selectedVideoSize?.size || selectedVideoResolution;
 
-  const selectedChannelType = Number(inputs.selected_channel_type ?? 0);
-  const showGenerateAudioSwitch =
-    isVideoMode && CHANNEL_TYPES_WITH_GENERATE_AUDIO.has(selectedChannelType);
+  const showGenerateAudioSwitch = isVideoMode;
   const preferredSection = getDefaultSection(displayMode, customRequestMode);
   const [activeSection, setActiveSection] = useState(preferredSection);
 
@@ -330,10 +333,7 @@ const SettingsPanel = ({
   };
 
   const renderImageMaterial = () => (
-    <Surface
-      tone='soft'
-      className={`playground-material-surface playground-material-surface-image ${mediaDisabledClassName}`}
-    >
+    <Surface className={mediaDisabledClassName}>
       <ImageUrlInput
         imageUrls={inputs.imageUrls || ['']}
         imageEnabled={true}
@@ -346,27 +346,39 @@ const SettingsPanel = ({
   );
 
   const renderVideoMaterial = () => (
-    <Surface
-      tone='soft'
-      className={`playground-material-surface playground-material-surface-video ${mediaDisabledClassName}`}
-    >
-      <div className='space-y-3'>
+    <Surface className={mediaDisabledClassName}>
+      <div className='playground-media-stack'>
+        <MaterialLibraryButton
+          disabled={customRequestMode}
+          imageUrls={inputs.imageUrls || ['']}
+          onImageUrlsChange={(urls) => onInputChange('imageUrls', urls)}
+          videoUrls={inputs.videoUrls || ['']}
+          onVideoUrlsChange={(urls) => onInputChange('videoUrls', urls)}
+          audioUrls={inputs.audioUrls || ['']}
+          onAudioUrlsChange={(urls) => onInputChange('audioUrls', urls)}
+        />
         <ImageUrlInput
           imageUrls={inputs.imageUrls || ['']}
           imageEnabled={true}
           onImageUrlsChange={(urls) => onInputChange('imageUrls', urls)}
-          videoUrls={inputs.videoUrls || ['']}
-          onVideoUrlsChange={(urls) => onInputChange('videoUrls', urls)}
           onImageEnabledChange={() => {}}
           allowToggle={false}
           disabled={customRequestMode}
-          showMaterialLibrary={true}
         />
         <VideoUrlInput
           videoUrls={inputs.videoUrls || ['']}
           videoEnabled={true}
           onVideoUrlsChange={(urls) => onInputChange('videoUrls', urls)}
           onVideoEnabledChange={() => {}}
+          allowToggle={false}
+          disabled={customRequestMode}
+        />
+        {/* Seedance 2.0：参考音频链接输入 + 本地上传，写入 metadata.audio_urls */}
+        <AudioUrlInput
+          audioUrls={inputs.audioUrls || ['']}
+          audioEnabled={true}
+          onAudioUrlsChange={(urls) => onInputChange('audioUrls', urls)}
+          onAudioEnabledChange={() => {}}
           allowToggle={false}
           disabled={customRequestMode}
         />

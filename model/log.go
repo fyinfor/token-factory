@@ -212,6 +212,40 @@ func logTaskID(other map[string]interface{}) string {
 	return strings.TrimSpace(taskID)
 }
 
+// ResolveTaskIDsByRequestID 通过用量日志的 request_id 反查关联的 task_id（other.task_id）。
+func ResolveTaskIDsByRequestID(requestID string) ([]string, error) {
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return nil, nil
+	}
+	var logs []Log
+	err := LOG_DB.Select("other").Where("request_id = ?", requestID).Find(&logs).Error
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]struct{})
+	taskIDs := make([]string, 0)
+	for i := range logs {
+		if strings.TrimSpace(logs[i].Other) == "" {
+			continue
+		}
+		other, errParse := common.StrToMap(logs[i].Other)
+		if errParse != nil || other == nil {
+			continue
+		}
+		taskID := logTaskID(other)
+		if taskID == "" {
+			continue
+		}
+		if _, ok := seen[taskID]; ok {
+			continue
+		}
+		seen[taskID] = struct{}{}
+		taskIDs = append(taskIDs, taskID)
+	}
+	return taskIDs, nil
+}
+
 func querySettlementMarkerByTaskID(taskID string) (*Log, map[string]interface{}) {
 	taskID = strings.TrimSpace(taskID)
 	if taskID == "" {
@@ -665,18 +699,29 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 	if err != nil {
 		common.SysLog("failed to record task billing log: " + err.Error())
 	}
+
+	affectsBalance := true
+	if params.Other != nil {
+		if v, ok := params.Other["affects_balance"].(bool); ok {
+			affectsBalance = v
+		}
+	}
+
+	// 失败退款 / 差额退款：回退用户与渠道的「累积已用」，避免退款只加余额、已用不回退
+	// 从而出现「已用 > 充值 / 剩余+已用 > 到账」的展示观感。
+	if params.LogType == LogTypeRefund && params.Quota > 0 && affectsBalance {
+		DecreaseUserUsedQuota(params.UserId, params.Quota)
+		if params.ChannelId > 0 {
+			UpdateChannelUsedQuota(params.ChannelId, -params.Quota)
+		}
+	}
+
 	// 异步任务结算（refund / delta_charge / delta_refund）也写一份 quota_data，
 	// 使 /rankings 排行（按 quota_data.token_used 聚合）能覆盖到 Seedance/Kling/Sora 等异步视频模型。
 	// - pre_charge 已经由 LogTaskConsumption → RecordConsumeLog 写入 quota_data；
 	// - settlement_marker (Quota=0, affectsBalance=false) 仅作展示用，不重复写；
 	// - 这里只对真正影响余额的事件做带符号追加/扣减。
 	if common.DataExportEnabled && params.Quota > 0 && LogTypeChargeable(params.LogType) {
-		affectsBalance := true
-		if params.Other != nil {
-			if v, ok := params.Other["affects_balance"].(bool); ok {
-				affectsBalance = v
-			}
-		}
 		if affectsBalance {
 			signedQuota := params.Quota
 			if params.LogType == LogTypeRefund {

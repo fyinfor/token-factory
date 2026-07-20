@@ -89,6 +89,58 @@ func TestConvertToRequestPayload_Video2Video(t *testing.T) {
 	assert.Equal(t, "https://example.com/reference-video.mp4", body.Content[1].VideoURL.URL)
 }
 
+// 参考音频列表：metadata.audio_urls → content[].type=audio_url + role=reference_audio
+func TestConvertToRequestPayload_ReferenceAudio(t *testing.T) {
+	a := &TaskAdaptor{}
+	body, err := a.convertToRequestPayload(&relaycommon.TaskSubmitReq{
+		Model:  "doubao-seedance-2-0-260128",
+		Prompt: "根据参考音频生成口型一致的视频",
+		Images: []string{"https://example.com/portrait.png"},
+		Metadata: map[string]interface{}{
+			"audio_urls": []interface{}{
+				"https://example.com/ref1.mp3",
+				"https://example.com/ref2.wav",
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, body.Content, 4)
+	assert.Equal(t, "text", body.Content[0].Type)
+	assert.Equal(t, "image_url", body.Content[1].Type)
+	assert.Equal(t, "reference_image", body.Content[1].Role)
+	assert.Equal(t, "audio_url", body.Content[2].Type)
+	assert.Equal(t, "reference_audio", body.Content[2].Role)
+	assert.Equal(t, "https://example.com/ref1.mp3", body.Content[2].AudioURL.URL)
+	assert.Equal(t, "audio_url", body.Content[3].Type)
+	assert.Equal(t, "reference_audio", body.Content[3].Role)
+	assert.Equal(t, "https://example.com/ref2.wav", body.Content[3].AudioURL.URL)
+}
+
+// metadata.audio_urls 支持素材库 asset:// 引用（不依赖音频扩展名）
+func TestConvertToRequestPayload_ReferenceAudioAssetURI(t *testing.T) {
+	a := &TaskAdaptor{}
+	body, err := a.convertToRequestPayload(&relaycommon.TaskSubmitReq{
+		Model:  "doubao-seedance-2-0-260128",
+		Prompt: "根据素材库参考音频生成口型一致的视频",
+		Images: []string{"asset://asset-img-001"},
+		Metadata: map[string]interface{}{
+			"audio_urls": []interface{}{
+				"asset://asset-audio-001",
+			},
+			"generate_audio": true,
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, body.Content, 3)
+	assert.Equal(t, "image_url", body.Content[1].Type)
+	assert.Equal(t, "asset://asset-img-001", body.Content[1].ImageURL.URL)
+	assert.Equal(t, "audio_url", body.Content[2].Type)
+	assert.Equal(t, "reference_audio", body.Content[2].Role)
+	assert.Equal(t, "asset://asset-audio-001", body.Content[2].AudioURL.URL)
+	require.NotNil(t, body.GenerateAudio)
+	assert.True(t, bool(*body.GenerateAudio))
+}
+
 func TestConvertToRequestPayload_SizeToResolution(t *testing.T) {
 	a := &TaskAdaptor{}
 	req := relaycommon.TaskSubmitReq{
