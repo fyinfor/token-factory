@@ -127,12 +127,6 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	isAudioModel := strings.Contains(strings.ToLower(model), "audio")
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
-		if lastStreamData != "" {
-			if err := HandleStreamFormat(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent); err != nil {
-				common.SysLog("error handling stream format: " + err.Error())
-				sr.Error(err)
-			}
-		}
 		if len(data) > 0 {
 			// 对音频模型，保存倒数第二个stream data
 			if isAudioModel && lastStreamData != "" {
@@ -169,12 +163,6 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		logger.LogError(c, fmt.Sprintf("error handling last response: %s, lastStreamData: [%s]", err.Error(), lastStreamData))
 	}
 
-	if info.RelayFormat == types.RelayFormatOpenAI {
-		if shouldSendLastResp {
-			_ = sendStreamData(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent)
-		}
-	}
-
 	// 处理token计算
 	if err := processTokens(info.RelayMode, streamItems, &responseTextBuilder, &toolCount); err != nil {
 		logger.LogError(c, "error processing tokens: "+err.Error())
@@ -186,6 +174,30 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	}
 
 	applyUsagePostProcessing(info, usage, common.StringToByteSlice(lastStreamData))
+	guardrailResult, guardrailErr := service.CheckAliyunGuardrailOutput(c, info, responseTextBuilder.String())
+	if guardrailErr != nil {
+		logger.LogWarn(c, fmt.Sprintf("aliyun guardrail stream output check skipped: %s", guardrailErr.Error()))
+	}
+	if guardrailResult != nil && guardrailResult.Blocked {
+		c.Set("aliyun_guardrail_output_blocked", true)
+		c.Set("aliyun_guardrail_output_stream", true)
+		return nil, types.NewOpenAIError(fmt.Errorf("aliyun guardrail blocked stream output"), types.ErrorCodeSensitiveWordsDetected, http.StatusBadRequest)
+	}
+
+	if info.RelayFormat == types.RelayFormatOpenAI {
+		itemsToSend := streamItems
+		if shouldSendLastResp && len(itemsToSend) > 0 {
+			itemsToSend = itemsToSend[:len(itemsToSend)-1]
+		}
+		for _, item := range itemsToSend {
+			if err := HandleStreamFormat(c, info, item, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent); err != nil {
+				return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+			}
+		}
+		if shouldSendLastResp && lastStreamData != "" {
+			_ = sendStreamData(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent)
+		}
+	}
 
 	HandleFinalResponse(c, info, lastStreamData, responseId, createAt, model, systemFingerprint, usage, containStreamUsage)
 
@@ -232,6 +244,20 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 		if choice.FinishReason == constant.FinishReasonContentFilter {
 			common.SetContextKey(c, constant.ContextKeyAdminRejectReason, "openai_finish_reason=content_filter")
 			break
+		}
+	}
+	var responseText strings.Builder
+	for _, choice := range simpleResponse.Choices {
+		responseText.WriteString(choice.Message.StringContent())
+	}
+	if responseText.Len() > 0 {
+		guardrailResult, guardrailErr := service.CheckAliyunGuardrailOutput(c, info, responseText.String())
+		if guardrailErr != nil {
+			logger.LogWarn(c, fmt.Sprintf("aliyun guardrail output check skipped: %s", guardrailErr.Error()))
+		}
+		if guardrailResult != nil && guardrailResult.Blocked {
+			c.Set("aliyun_guardrail_output_blocked", true)
+			return nil, types.NewOpenAIError(fmt.Errorf("aliyun guardrail blocked output"), types.ErrorCodeSensitiveWordsDetected, http.StatusBadRequest)
 		}
 	}
 

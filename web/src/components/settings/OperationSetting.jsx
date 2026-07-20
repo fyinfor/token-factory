@@ -74,6 +74,13 @@ const OperationSetting = () => {
     CheckSensitiveEnabled: false,
     CheckSensitiveOnPromptEnabled: false,
     SensitiveWords: '',
+    AliyunGuardrailEnabled: false,
+    AliyunGuardrailInputEnabled: true,
+    AliyunGuardrailOutputEnabled: true,
+    AliyunGuardrailVideoEnabled: false,
+    AliyunGuardrailAccessKeyID: '',
+    AliyunGuardrailAccessKeySecret: '',
+    AliyunGuardrailRegionID: 'cn-shanghai',
 
     /* 日志设置 */
     LogConsumeEnabled: false,

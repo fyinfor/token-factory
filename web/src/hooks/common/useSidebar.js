@@ -58,6 +58,7 @@ export const DEFAULT_ADMIN_CONFIG = {
   admin: {
     enabled: true,
     channel: true,
+    'aliyun-guardrail': true,
     models: true,
     deployment: true,
     'model-heat': true,
