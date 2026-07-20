@@ -73,6 +73,27 @@ export const normalizeLanguage = (language) => {
     return 'sw';
   }
 
+  // en / en-US / en-GB 等统一到 en，避免不在 supportedLngs 时回退到 zh-CN
+  if (lower === 'en' || lower.startsWith('en-')) {
+    return 'en';
+  }
+
+  if (lower === 'fr' || lower.startsWith('fr-')) {
+    return 'fr';
+  }
+
+  if (lower === 'ru' || lower.startsWith('ru-')) {
+    return 'ru';
+  }
+
+  if (lower === 'ja' || lower.startsWith('ja-')) {
+    return 'ja';
+  }
+
+  if (lower === 'vi' || lower.startsWith('vi-')) {
+    return 'vi';
+  }
+
   const matchedLanguage = supportedLanguages.find(
     (supportedLanguage) => supportedLanguage.toLowerCase() === lower,
   );
