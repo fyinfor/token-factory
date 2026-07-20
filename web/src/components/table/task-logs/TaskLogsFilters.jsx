@@ -31,6 +31,7 @@ const TaskLogsFilters = ({
   formApi,
   loading,
   isAdminUser,
+  modelOptions = [],
   t,
 }) => {
   return (
@@ -75,25 +76,59 @@ const TaskLogsFilters = ({
           />
 
           <Form.Input
-            field='model_name'
+            field='request_id'
             prefix={<IconSearch />}
-            placeholder={t('模型名称')}
+            placeholder={t('Request ID')}
             showClear
             pure
             size='small'
           />
 
           <Form.Select
-            field='task_filter'
-            placeholder={t('任务筛选')}
+            field='model_name'
+            placeholder={t('模型名称')}
+            optionList={modelOptions}
+            filter
+            showClear
+            pure
+            size='small'
+          />
+
+          <Form.Select
+            field='video_type'
+            placeholder={t('类型')}
             showClear
             pure
             size='small'
             optionList={[
-              { value: '', label: t('全部任务') },
-              { value: 'video_failure', label: t('视频生成失败') },
+              { value: 'text_to_video', label: t('文生视频') },
+              { value: 'image_to_video', label: t('图生视频') },
+              { value: 'video_to_video', label: t('视频生视频') },
             ]}
           />
+
+          <Form.Select
+            field='status'
+            placeholder={t('任务状态')}
+            showClear
+            pure
+            size='small'
+            optionList={[
+              { value: 'SUCCESS', label: t('成功') },
+              { value: 'FAILURE', label: t('失败') },
+            ]}
+          />
+
+          {isAdminUser && (
+            <Form.Input
+              field='username'
+              prefix={<IconSearch />}
+              placeholder={t('用户名称')}
+              showClear
+              pure
+              size='small'
+            />
+          )}
 
           {/* 渠道 ID - 仅管理员可见 */}
           {isAdminUser && (

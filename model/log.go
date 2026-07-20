@@ -212,6 +212,40 @@ func logTaskID(other map[string]interface{}) string {
 	return strings.TrimSpace(taskID)
 }
 
+// ResolveTaskIDsByRequestID 通过用量日志的 request_id 反查关联的 task_id（other.task_id）。
+func ResolveTaskIDsByRequestID(requestID string) ([]string, error) {
+	requestID = strings.TrimSpace(requestID)
+	if requestID == "" {
+		return nil, nil
+	}
+	var logs []Log
+	err := LOG_DB.Select("other").Where("request_id = ?", requestID).Find(&logs).Error
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]struct{})
+	taskIDs := make([]string, 0)
+	for i := range logs {
+		if strings.TrimSpace(logs[i].Other) == "" {
+			continue
+		}
+		other, errParse := common.StrToMap(logs[i].Other)
+		if errParse != nil || other == nil {
+			continue
+		}
+		taskID := logTaskID(other)
+		if taskID == "" {
+			continue
+		}
+		if _, ok := seen[taskID]; ok {
+			continue
+		}
+		seen[taskID] = struct{}{}
+		taskIDs = append(taskIDs, taskID)
+	}
+	return taskIDs, nil
+}
+
 func querySettlementMarkerByTaskID(taskID string) (*Log, map[string]interface{}) {
 	taskID = strings.TrimSpace(taskID)
 	if taskID == "" {
