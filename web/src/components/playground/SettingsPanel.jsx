@@ -42,7 +42,9 @@ import { useTranslation } from 'react-i18next';
 import {
   buildPlaygroundImageSizeOptions,
   buildPlaygroundVideoResolutionOptions,
+  formatPlaygroundPixelSizeLabel,
   formatVideoResolutionDisplayLabel,
+  getPlaygroundImageSizeForTier,
   getPlaygroundVideoSizeForTier,
   renderGroupOption,
   selectFilter,
@@ -76,9 +78,6 @@ const getDefaultSection = (displayMode, customRequestMode) => {
   }
   return SECTION_KEYS.BASIC;
 };
-
-const getImageResolutionLabel = (selectedImageSize) =>
-  formatVideoResolutionDisplayLabel(selectedImageSize) || selectedImageSize;
 
 const buildSectionTabs = (t) => [
   {
@@ -267,8 +266,13 @@ const SettingsPanel = ({
   )
     ? inputs.image_size
     : imageSizeOptions[0]?.value || '1280x720';
-  const selectedImageResolutionLabel =
-    getImageResolutionLabel(selectedImageSize);
+  const selectedImagePixelSize = getPlaygroundImageSizeForTier(
+    selectedImageSize,
+    inputs.image_ratio || 'auto',
+  );
+  const selectedImageResolutionLabel = formatPlaygroundPixelSizeLabel(
+    selectedImagePixelSize.size,
+  );
 
   const videoResolutionOptions = buildPlaygroundVideoResolutionOptions(
     inputs.selected_video_pricing_tiers,
