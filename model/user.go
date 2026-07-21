@@ -26,6 +26,8 @@ type User struct {
 	CreatedAt                time.Time  `json:"created_at"`
 	UpdatedAt                time.Time  `json:"updated_at"`
 	LastLoginAt              *time.Time `json:"last_login_at,omitempty" gorm:"column:last_login_at"`
+	RealNameVerified         bool       `json:"real_name_verified" gorm:"-:all"`
+	RealNameVerifiedAt       *time.Time `json:"real_name_verified_at,omitempty" gorm:"-:all"`
 	CreatedBy                string     `json:"created_by,omitempty" gorm:"column:created_by;type:varchar(32)"`
 	Username                 string     `json:"username" gorm:"unique;index" validate:"max=20"`
 	Password                 string     `json:"password" gorm:"not null;" validate:"min=8,max=20"`
@@ -143,9 +145,10 @@ func generateDefaultSidebarConfigForRole(userRole int) string {
 
 	// 个人中心区域 - 所有用户都可以访问
 	defaultConfig["personal"] = map[string]interface{}{
-		"enabled":  true,
-		"topup":    true,
-		"personal": true,
+		"enabled":                true,
+		"topup":                  true,
+		"real-name-verification": true,
+		"personal":               true,
 	}
 
 	// 管理员区域 - 根据角色决定
@@ -363,6 +366,7 @@ func GetAllUsers(pageInfo *common.PageInfo, studentView string, tag string) (use
 	}
 
 	_ = fillInviterProfilesForUsers(users)
+	_ = FillRealNameVerificationForUsers(users)
 
 	return users, total, nil
 }
@@ -497,6 +501,7 @@ func SearchUsers(keyword string, group string, studentView string, tag string, r
 	}
 
 	_ = fillInviterProfilesForUsers(users)
+	_ = FillRealNameVerificationForUsers(users)
 
 	return users, total, nil
 }

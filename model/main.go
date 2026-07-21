@@ -295,6 +295,7 @@ func migrateDB() error {
 		&Ability{},
 		&Log{},
 		&AliyunGuardrailLog{},
+		&RealNameVerification{},
 		&Midjourney{},
 		&TopUp{},
 		&QuotaData{},
@@ -343,6 +344,9 @@ func migrateDB() error {
 	)
 	if err != nil {
 		return err
+	}
+	if err := NormalizeEmptyRealNameVerificationCertifyIDs(); err != nil {
+		return fmt.Errorf("normalize real-name verification certify IDs: %w", err)
 	}
 	if err := MigrateLegacyChangelogOption(); err != nil {
 		return fmt.Errorf("migrate legacy changelog option: %w", err)
@@ -398,6 +402,7 @@ func migrateDBFast() error {
 		{&Redemption{}, "Redemption"},
 		{&Ability{}, "Ability"},
 		{&Log{}, "Log"},
+		{&RealNameVerification{}, "RealNameVerification"},
 		{&Midjourney{}, "Midjourney"},
 		{&TopUp{}, "TopUp"},
 		{&QuotaData{}, "QuotaData"},
@@ -466,6 +471,9 @@ func migrateDBFast() error {
 		}
 	}
 	migrateTopUpAmountColumn()
+	if err := NormalizeEmptyRealNameVerificationCertifyIDs(); err != nil {
+		return fmt.Errorf("normalize real-name verification certify IDs: %w", err)
+	}
 	if err := MigrateLegacyChangelogOption(); err != nil {
 		return fmt.Errorf("migrate legacy changelog option: %w", err)
 	}

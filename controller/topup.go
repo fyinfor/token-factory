@@ -92,6 +92,7 @@ func GetTopUpInfo(c *gin.Context) {
 		setting.UcoinApiKey != "" &&
 		len(setting.GetUcoinCoinPairs()) > 0
 
+	realNameVerified, _ := model.HasPassedRealNameVerification(c.GetInt("id"))
 	data := gin.H{
 		"enable_online_topup": (operation_setting.OnlinePayProvider == "yipay" &&
 			(operation_setting.YipayRequestURL != "" || operation_setting.PayAddress != "") &&
@@ -124,9 +125,11 @@ func GetTopUpInfo(c *gin.Context) {
 			}
 			return nil
 		}(),
-		"amount_options":      operation_setting.GetPaymentSetting().AmountOptions,
-		"discount":            operation_setting.GetPaymentSetting().AmountDiscount,
-		"online_pay_provider": operation_setting.OnlinePayProvider,
+		"amount_options":                  operation_setting.GetPaymentSetting().AmountOptions,
+		"discount":                        operation_setting.GetPaymentSetting().AmountDiscount,
+		"online_pay_provider":             operation_setting.OnlinePayProvider,
+		"real_name_verification_required": setting.AliyunRealNameVerificationEnabled && setting.AliyunRealNameVerificationRequiredForTopUp,
+		"real_name_verified":              realNameVerified,
 	}
 	common.ApiSuccess(c, data)
 }

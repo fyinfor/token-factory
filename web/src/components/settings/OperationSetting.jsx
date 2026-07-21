@@ -28,6 +28,7 @@ import SettingsMonitoring from '../../pages/Setting/Operation/SettingsMonitoring
 import SettingsCreditLimit from '../../pages/Setting/Operation/SettingsCreditLimit';
 import SettingsDistributor from '../../pages/Setting/Operation/SettingsDistributor';
 import SettingsCheckin from '../../pages/Setting/Operation/SettingsCheckin';
+import SettingsAliyunRealNameVerification from '../../pages/Setting/Operation/SettingsAliyunRealNameVerification';
 import { API, showError, toBoolean } from '../../helpers';
 
 const OperationSetting = () => {
@@ -81,6 +82,16 @@ const OperationSetting = () => {
     AliyunGuardrailAccessKeyID: '',
     AliyunGuardrailAccessKeySecret: '',
     AliyunGuardrailRegionID: 'cn-shanghai',
+    AliyunRealNameVerificationEnabled: false,
+    AliyunRealNameVerificationAccessKeyID: '',
+    AliyunRealNameVerificationAccessKeySecret: '',
+    AliyunRealNameVerificationRegionID: 'cn-shanghai',
+    AliyunRealNameVerificationProductCode: 'ID_PRO',
+    AliyunRealNameVerificationCallbackURL: '',
+    AliyunRealNameVerificationReturnURL: '',
+    AliyunRealNameVerificationRewardEnabled: false,
+    AliyunRealNameVerificationRewardAmount: 0,
+    AliyunRealNameVerificationRequiredForTopUp: false,
 
     /* 日志设置 */
     LogConsumeEnabled: false,
@@ -161,6 +172,9 @@ const OperationSetting = () => {
           <SettingsSensitiveWords options={inputs} refresh={onRefresh} />
         </Card>
         {/* 日志设置 */}
+        <Card style={{ marginTop: '10px' }}>
+          <SettingsAliyunRealNameVerification options={inputs} refresh={onRefresh} />
+        </Card>
         <Card style={{ marginTop: '10px' }}>
           <SettingsLog options={inputs} refresh={onRefresh} />
         </Card>

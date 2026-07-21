@@ -118,7 +118,7 @@ func GetOptions(c *gin.Context) {
 		if k == "SMSAccessKeyIDIntl" || k == "SMSAccessKeySecretIntl" {
 			continue
 		}
-		if k == "AliyunGuardrailAccessKeyID" || k == "AliyunGuardrailAccessKeySecret" {
+		if k == "AliyunGuardrailAccessKeyID" || k == "AliyunGuardrailAccessKeySecret" || k == "AliyunRealNameVerificationAccessKeyID" || k == "AliyunRealNameVerificationAccessKeySecret" {
 			continue
 		}
 		value := common.Interface2String(v)
@@ -254,14 +254,10 @@ func GetOptions(c *gin.Context) {
 		Value: ucoinApiKeyDisp,
 	})
 	options = append(options,
-		&model.Option{
-			Key:   "AliyunGuardrailAccessKeyID",
-			Value: common.MaskCredentialForAdminDisplay(setting.AliyunGuardrailAccessKeyID),
-		},
-		&model.Option{
-			Key:   "AliyunGuardrailAccessKeySecret",
-			Value: common.MaskCredentialForAdminDisplay(setting.AliyunGuardrailAccessKeySecret),
-		},
+		&model.Option{Key: "AliyunGuardrailAccessKeyID", Value: common.MaskCredentialForAdminDisplay(setting.AliyunGuardrailAccessKeyID)},
+		&model.Option{Key: "AliyunGuardrailAccessKeySecret", Value: common.MaskCredentialForAdminDisplay(setting.AliyunGuardrailAccessKeySecret)},
+		&model.Option{Key: "AliyunRealNameVerificationAccessKeyID", Value: common.MaskCredentialForAdminDisplay(setting.AliyunRealNameVerificationAccessKeyID)},
+		&model.Option{Key: "AliyunRealNameVerificationAccessKeySecret", Value: common.MaskCredentialForAdminDisplay(setting.AliyunRealNameVerificationAccessKeySecret)},
 	)
 	common.OptionMapRWMutex.Unlock()
 	options = append(options, &model.Option{
@@ -416,6 +412,18 @@ func UpdateOption(c *gin.Context) {
 			return
 		}
 	}
+	if option.Key == "AliyunRealNameVerificationAccessKeyID" && strings.TrimSpace(setting.AliyunRealNameVerificationAccessKeyID) != "" {
+		if valStr == common.MaskCredentialForAdminDisplay(setting.AliyunRealNameVerificationAccessKeyID) {
+			c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+			return
+		}
+	}
+	if option.Key == "AliyunRealNameVerificationAccessKeySecret" && strings.TrimSpace(setting.AliyunRealNameVerificationAccessKeySecret) != "" {
+		if valStr == common.MaskCredentialForAdminDisplay(setting.AliyunRealNameVerificationAccessKeySecret) {
+			c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+			return
+		}
+	}
 	if option.Key == "AliyunGuardrailAccessKeyID" && strings.TrimSpace(setting.AliyunGuardrailAccessKeyID) != "" {
 		if valStr == common.MaskCredentialForAdminDisplay(setting.AliyunGuardrailAccessKeyID) {
 			c.JSON(http.StatusOK, gin.H{
@@ -434,7 +442,7 @@ func UpdateOption(c *gin.Context) {
 			return
 		}
 	}
-	if option.Key == "AliyunGuardrailAccessKeyID" || option.Key == "AliyunGuardrailAccessKeySecret" || option.Key == "AliyunGuardrailRegionID" {
+	if option.Key == "AliyunGuardrailAccessKeyID" || option.Key == "AliyunGuardrailAccessKeySecret" || option.Key == "AliyunGuardrailRegionID" || option.Key == "AliyunRealNameVerificationAccessKeyID" || option.Key == "AliyunRealNameVerificationAccessKeySecret" || option.Key == "AliyunRealNameVerificationRegionID" || option.Key == "AliyunRealNameVerificationProductCode" || option.Key == "AliyunRealNameVerificationSceneID" || option.Key == "AliyunRealNameVerificationModel" || option.Key == "AliyunRealNameVerificationCallbackURL" || option.Key == "AliyunRealNameVerificationReturnURL" || option.Key == "AliyunRealNameVerificationRewardAmount" {
 		valStr = strings.TrimSpace(valStr)
 		option.Value = valStr
 	}
