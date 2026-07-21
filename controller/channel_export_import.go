@@ -18,6 +18,7 @@ import (
 
 const (
 	chFieldName           = "name"
+	chFieldSyncKey        = "syncKey"
 	chFieldDiscountRate   = "discountRate"
 	chFieldOperatingCost  = "operatingCostRate"
 	chFieldMarkupDiscount = "markupDiscountRate"
@@ -38,7 +39,7 @@ const (
 
 // chAllowedExportFields 允许导出的合法字段集合，防止非法字段注入。
 var chAllowedExportFields = map[string]bool{
-	chFieldName: true, chFieldDiscountRate: true, chFieldOperatingCost: true, chFieldMarkupDiscount: true, chFieldRouteSlug: true,
+	chFieldName: true, chFieldSyncKey: true, chFieldDiscountRate: true, chFieldOperatingCost: true, chFieldMarkupDiscount: true, chFieldRouteSlug: true,
 	chFieldQuota: true, chFieldDisabled: true,
 	chFieldSupplierName: true, chFieldType: true, chFieldLogo: true,
 	chFieldProviderType: true, chFieldApiKey: true, chFieldApiBaseUrl: true,
@@ -113,8 +114,9 @@ func ExportChannels(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "请至少选择一个导出字段"})
 		return
 	}
-	// 始终包含 name，以便导入时做名称匹配
+	// 始终包含 name / syncKey，以便导入时做身份匹配
 	fieldSet[chFieldName] = true
+	fieldSet[chFieldSyncKey] = true
 
 	channels, err := model.GetChannelsByIDs(req.ChannelIDs)
 	if err != nil {
@@ -149,6 +151,9 @@ func buildChannelExportItem(ch *model.Channel, fields map[string]bool) map[strin
 
 	if fields[chFieldName] {
 		item[chFieldName] = ch.Name
+	}
+	if fields[chFieldSyncKey] {
+		item[chFieldSyncKey] = ch.SyncKey
 	}
 	if fields[chFieldDiscountRate] {
 		item[chFieldDiscountRate] = ch.PriceDiscountPercent
@@ -276,8 +281,8 @@ func buildSiteBuilderExportItem(c *gin.Context, ch *model.Channel, fields map[st
 
 // ─── 导入接口 ──────────────────────────────────────────────────────────────
 
-// ImportChannels 按名称匹配导入渠道配置。
-// 核心规则：仅通过 name 匹配；同名则更新（仅更新 JSON 中存在的字段）；不存在则新增；
+// ImportChannels 导入渠道配置。
+// 匹配优先级：syncKey >（建站）上游身份 > name；命中则更新（仅更新 JSON 中存在的字段）；不存在则新增；
 // 绝对禁止清空/覆盖未传字段；绝对禁止删除已有渠道。
 // POST /api/channel/import
 func ImportChannels(c *gin.Context) {
@@ -473,8 +478,39 @@ func chSiteBuilderIdentityMatches(a, b chSiteBuilderIdentity) bool {
 }
 
 func chFindExistingForImport(name string, item map[string]interface{}) (*model.Channel, error) {
+	if syncKey, ok := chGetStr(item, chFieldSyncKey); ok {
+		syncKey = model.NormalizeChannelSyncKey(syncKey)
+		if syncKey != "" {
+			if !model.IsValidChannelSyncKey(syncKey) {
+				return nil, fmt.Errorf("sync_key 格式无效")
+			}
+			byKey, err := model.GetChannelBySyncKey(syncKey)
+			if err != nil {
+				return nil, err
+			}
+			if byKey != nil {
+				return byKey, nil
+			}
+		}
+	}
+
 	if !chIsSiteBuilderItem(item) {
-		return model.GetChannelByName(name)
+		existing, err := model.GetChannelByName(name)
+		if err != nil {
+			return nil, err
+		}
+		if existing == nil {
+			return nil, nil
+		}
+		// 名称命中但对方已有不同 sync_key：避免误覆盖绑定，视为未命中（后续走新增）
+		if incoming, ok := chGetStr(item, chFieldSyncKey); ok {
+			incoming = model.NormalizeChannelSyncKey(incoming)
+			existingKey := model.NormalizeChannelSyncKey(existing.SyncKey)
+			if incoming != "" && existingKey != "" && incoming != existingKey {
+				return nil, nil
+			}
+		}
+		return existing, nil
 	}
 
 	var candidates []model.Channel
@@ -550,6 +586,31 @@ func chApplyToExisting(ch *model.Channel, item map[string]interface{}, siteBuild
 	cols := make([]string, 0, len(item))
 	updates := &model.Channel{}
 
+	// sync_key 命中后允许改名；仅 name 命中时写入同名也无害
+	if v, ok := item[chFieldName]; ok {
+		if s, ok := v.(string); ok {
+			s = strings.TrimSpace(s)
+			if s != "" {
+				updates.Name = s
+				cols = append(cols, "name")
+			}
+		}
+	}
+	if v, ok := item[chFieldSyncKey]; ok {
+		if s, ok := v.(string); ok {
+			s = model.NormalizeChannelSyncKey(s)
+			if s != "" {
+				if !model.IsValidChannelSyncKey(s) {
+					return fmt.Errorf("sync_key 格式无效")
+				}
+				if err := model.ValidateChannelSyncKeyUnique(ch.Id, s); err != nil {
+					return err
+				}
+				updates.SyncKey = s
+				cols = append(cols, "sync_key")
+			}
+		}
+	}
 	if v, ok := item["discountRate"]; ok {
 		f := chToFloat64(v)
 		updates.PriceDiscountPercent = &f
@@ -707,6 +768,20 @@ func chApplyToNew(ch *model.Channel, item map[string]interface{}, siteBuilderApi
 		return fmt.Errorf("name 字段缺失")
 	}
 	ch.Name = strings.TrimSpace(name)
+
+	if syncKey, ok := chGetStr(item, chFieldSyncKey); ok {
+		syncKey = model.NormalizeChannelSyncKey(syncKey)
+		if syncKey != "" {
+			if !model.IsValidChannelSyncKey(syncKey) {
+				return fmt.Errorf("sync_key 格式无效")
+			}
+			if err := model.ValidateChannelSyncKeyUnique(0, syncKey); err != nil {
+				return err
+			}
+			ch.SyncKey = syncKey
+		}
+	}
+	model.EnsureChannelSyncKey(ch)
 
 	// 默认启用；若 JSON 中 disabled=true 则禁用
 	ch.Status = 1

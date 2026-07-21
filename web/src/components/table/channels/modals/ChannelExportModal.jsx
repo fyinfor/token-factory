@@ -39,6 +39,7 @@ const EXPORT_MODE_SITE_BUILDER = 'site_builder';
 /** 全部可导出字段的定义 */
 const ALL_EXPORT_FIELDS = [
   { key: 'name',              label: '名称' },
+  { key: 'syncKey',           label: '同步编号' },
   { key: 'discountRate',      label: '折扣率' },
   { key: 'operatingCostRate', label: '经营成本' },
   { key: 'markupDiscountRate', label: '加价折扣' },
@@ -58,14 +59,14 @@ const ALL_EXPORT_FIELDS = [
 
 /** 标准模式默认勾选的字段 */
 const DEFAULT_SELECTED_FIELDS = [
-  'name', 'discountRate', 'operatingCostRate', 'markupDiscountRate', 'quota', 'disabled',
+  'name', 'syncKey', 'discountRate', 'operatingCostRate', 'markupDiscountRate', 'quota', 'disabled',
   'type', 'logo', 'providerType', 'apiKey', 'apiBaseUrl',
   'models', 'groups', 'modelRedirect',
 ];
 
 /** 建站用户模式默认勾选的字段（type、apiKey、apiBaseUrl 由后端强制覆盖，但前端也勾选以保持一致） */
 const SITE_BUILDER_DEFAULT_FIELDS = [
-  'name', 'type', 'apiKey', 'apiBaseUrl', 'models', 'groups',
+  'name', 'syncKey', 'type', 'apiKey', 'apiBaseUrl', 'models', 'groups',
 ];
 
 /** 建站用户模式下禁用取消勾选的字段（后端会强制覆盖这些字段） */
