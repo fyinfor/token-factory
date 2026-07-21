@@ -127,6 +127,10 @@ export function formatTopupPayMoney(money, record = {}, usdExchangeRate) {
   const rate = normalizeTopupRate(usdExchangeRate);
   const currency = String(record?.pay_currency || '').toUpperCase();
 
+  if (String(record?.payment_method || '').toLowerCase() === 'ubcoin') {
+    return `$${safeMoney.toFixed(2)}`;
+  }
+
   if (currency === 'USD') {
     const displayMoney = isLegacyConvertedUsdTopup(record, safeMoney)
       ? safeMoney / rate
