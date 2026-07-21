@@ -1482,8 +1482,11 @@ func appendMaasMetadataMediaContent(content *[]map[string]any, metadata map[stri
 			"type":      contentType,
 			contentType: map[string]any{"url": url},
 		}
-		// Seedance / 火山方舟参考音频：固定 role=reference_audio。
-		if contentType == "audio_url" {
+		// Seedance / 火山方舟：参考视频 role=reference_video，参考音频 role=reference_audio。
+		switch contentType {
+		case "video_url":
+			part["role"] = "reference_video"
+		case "audio_url":
 			part["role"] = "reference_audio"
 		}
 		*content = append(*content, part)

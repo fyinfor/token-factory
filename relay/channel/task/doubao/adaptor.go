@@ -227,12 +227,18 @@ func (a *TaskAdaptor) GetChannelName() string {
 	return ChannelName
 }
 
+// collectVideoURLs 从 metadata.video_urls / video_url、InputReference、Images 收集参考视频 URL。
+// 上游 Seedance 2.0 要求 content 项固定 type=video_url + role=reference_video。
+// metadata 中显式传入的视频地址（含素材库 asset://）一律采纳；InputReference / Images 中仅按扩展名识别视频。
 func collectVideoURLs(req *relaycommon.TaskSubmitReq) []string {
 	seen := make(map[string]struct{})
 	var urls []string
-	add := func(raw string) {
+	add := func(raw string, requireVideoExt bool) {
 		u := strings.TrimSpace(raw)
-		if u == "" || !isVideoURL(u) {
+		if u == "" {
+			return
+		}
+		if requireVideoExt && !isVideoURL(u) {
 			return
 		}
 		key := strings.ToLower(u)
@@ -248,24 +254,24 @@ func collectVideoURLs(req *relaycommon.TaskSubmitReq) []string {
 			case []interface{}:
 				for _, it := range arr {
 					if u, ok := it.(string); ok {
-						add(u)
+						add(u, false)
 					}
 				}
 			case []string:
 				for _, u := range arr {
-					add(u)
+					add(u, false)
 				}
 			}
 		}
 		if raw, ok := req.Metadata["video_url"]; ok {
 			if u, ok := raw.(string); ok {
-				add(u)
+				add(u, false)
 			}
 		}
 	}
-	add(req.InputReference)
+	add(req.InputReference, true)
 	for _, img := range req.Images {
-		add(img)
+		add(img, true)
 	}
 	return urls
 }
