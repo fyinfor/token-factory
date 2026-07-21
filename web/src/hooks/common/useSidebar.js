@@ -46,6 +46,7 @@ export const DEFAULT_ADMIN_CONFIG = {
     topup: true,
     invoice: true,
     personal: true,
+    'real-name-verification': true,
     route_policy: true,
     'seedance-material': true,
     supplier: true,

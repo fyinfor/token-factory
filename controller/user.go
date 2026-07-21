@@ -1971,6 +1971,17 @@ func ManageUser(c *gin.Context) {
 		}
 		user.IsStudent = 0
 		user.StudentStatus = common.StudentStatusNone
+	case "remove_real_name":
+		if myRole != common.RoleAdminUser && myRole != common.RoleRootUser {
+			common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
+			return
+		}
+		if err := model.RevokeRealNameVerification(user.Id); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		common.ApiSuccess(c, user)
+		return
 	case "set_student":
 		if myRole != common.RoleAdminUser && myRole != common.RoleRootUser {
 			common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)

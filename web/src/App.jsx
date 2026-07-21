@@ -43,6 +43,9 @@ import Redemption from './pages/Redemption';
 import TopUp from './pages/TopUp';
 import Log from './pages/Log';
 import AliyunGuardrail from './pages/AliyunGuardrail';
+import RealNameVerification from './pages/RealNameVerification';
+import RealNameVerificationStart from './pages/RealNameVerificationStart';
+import RealNameVerificationResult from './pages/RealNameVerificationResult';
 import Chat from './pages/Chat';
 import Chat2Link from './pages/Chat2Link';
 import Midjourney from './pages/Midjourney';
@@ -311,6 +314,16 @@ function App() {
                 <Setting />
               </Suspense>
             </AdminRoute>
+          }
+        />
+        <Route path='/real-name/start' element={<RealNameVerificationStart />} />
+        <Route path='/real-name/result' element={<RealNameVerificationResult />} />
+        <Route
+          path='/console/real-name-verification'
+          element={
+            <PrivateRoute>
+              <RealNameVerification />
+            </PrivateRoute>
           }
         />
         <Route

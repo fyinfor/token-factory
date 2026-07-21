@@ -33,6 +33,7 @@ import {
   isDistributor,
 } from '../../helpers';
 import { UserContext } from '../../context/User';
+import { StatusContext } from '../../context/Status';
 import SkeletonWrapper from './components/SkeletonWrapper';
 
 import { Nav, Divider, Button } from '@douyinfe/semi-ui';
@@ -59,6 +60,7 @@ const routerMap = {
   'model-heat': '/console/model-heat',
   playground: '/console/playground',
   personal: '/console/personal',
+  'real-name-verification': '/console/real-name-verification',
   invoice: '/console/invoice',
   'invoice-admin': '/console/invoice-admin',
   'settlement-export': '/console/settlement-export',
@@ -77,6 +79,7 @@ const routerMap = {
 };
 
 const SiderBar = ({ onNavigate = () => {} }) => {
+  const [statusState] = useContext(StatusContext);
   const { t } = useTranslation();
   const [userState] = useContext(UserContext);
   const [collapsed, toggleCollapsed] = useSidebarCollapsed();
@@ -167,6 +170,14 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         to: '/invoice',
       },
       {
+        text: t('实名认证'),
+        itemKey: 'real-name-verification',
+        to: '/real-name-verification',
+        className: statusState?.status?.real_name_verification_enabled
+          ? ''
+          : 'tableHiddle',
+      },
+      {
         text: t('个人设置'),
         itemKey: 'personal',
         to: '/personal',
@@ -243,6 +254,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
     isAdmin(),
     isSupplier(),
     isRoot(),
+    statusState?.status?.real_name_verification_enabled,
   ]);
 
   const adminItems = useMemo(() => {
