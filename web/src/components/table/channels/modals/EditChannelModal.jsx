@@ -274,6 +274,7 @@ const EditChannelModal = (props) => {
     auto_ban: 1,
     test_model: '',
     route_slug: '',
+    sync_key: '',
     groups: ['default'],
     priority: 0,
     weight: 0,
@@ -2082,6 +2083,19 @@ const EditChannelModal = (props) => {
       localInputs.route_slug = routeSlugRaw;
     }
 
+    // 同步编号：新建留空则后端自动生成；批量创建各自生成；编辑可手改绑定。
+    const syncKeyRaw = String(localInputs.sync_key ?? '').trim();
+    if (batch && !isEdit) {
+      localInputs.sync_key = '';
+    } else if (syncKeyRaw === '') {
+      localInputs.sync_key = '';
+    } else if (syncKeyRaw.length > 64 || !/^[\x21-\x7E]+$/.test(syncKeyRaw)) {
+      showInfo(t('同步编号格式无效'));
+      return;
+    } else {
+      localInputs.sync_key = syncKeyRaw;
+    }
+
     if (
       localInputs.type !== 60 &&
       (!Array.isArray(localInputs.models) || localInputs.models.length === 0)
@@ -2631,10 +2645,19 @@ const EditChannelModal = (props) => {
     () =>
       CHANNEL_OPTIONS.map((opt) => ({
         ...opt,
-        // 保持 label 为纯文本以支持搜索
-        label: opt.label,
+        // 按当前语言翻译后仍为纯文本，便于搜索
+        label: t(opt.label),
       })),
-    [],
+    [t],
+  );
+
+  const supplierTypeOptionList = useMemo(
+    () =>
+      CHANNEL_SUPPLIER_TYPE_OPTIONS.map((opt) => ({
+        ...opt,
+        label: t(opt.label),
+      })),
+    [t],
   );
 
   const renderChannelOption = (renderProps) => {
@@ -3620,7 +3643,7 @@ const EditChannelModal = (props) => {
                           field='supplier_type'
                           label={t('供应商类型')}
                           placeholder={t('请选择供应商类型')}
-                          optionList={CHANNEL_SUPPLIER_TYPE_OPTIONS}
+                          optionList={supplierTypeOptionList}
                           rules={[
                             { required: true, message: t('请选择供应商类型') },
                           ]}
@@ -3661,6 +3684,63 @@ const EditChannelModal = (props) => {
                             isEdit
                               ? t('路由后缀编辑说明')
                               : t('路由后缀新建说明')
+                          }
+                        />
+                      )}
+
+                      {(!batch || isEdit) && (
+                        <Form.Input
+                          field='sync_key'
+                          label={t('同步编号')}
+                          placeholder={
+                            isEdit
+                              ? t('请输入同步编号')
+                              : t('同步编号新建占位')
+                          }
+                          showClear
+                          maxLength={64}
+                          onChange={(value) =>
+                            handleInputChange('sync_key', value)
+                          }
+                          autoComplete='off'
+                          suffix={
+                            <Button
+                              theme='borderless'
+                              type='tertiary'
+                              size='small'
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const chars =
+                                  '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+                                let next = '';
+                                const bytes = new Uint8Array(6);
+                                if (
+                                  typeof crypto !== 'undefined' &&
+                                  crypto.getRandomValues
+                                ) {
+                                  crypto.getRandomValues(bytes);
+                                  for (let i = 0; i < 6; i++) {
+                                    next += chars[bytes[i] % chars.length];
+                                  }
+                                } else {
+                                  for (let i = 0; i < 6; i++) {
+                                    next +=
+                                      chars[
+                                        Math.floor(Math.random() * chars.length)
+                                      ];
+                                  }
+                                }
+                                handleInputChange('sync_key', next);
+                              }}
+                            >
+                              {t('生成')}
+                            </Button>
+                          }
+                          extraText={
+                            isEdit
+                              ? t('同步编号编辑说明')
+                              : t('同步编号新建说明')
                           }
                         />
                       )}

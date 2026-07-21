@@ -356,6 +356,9 @@ func migrateDB() error {
 	if err := BackfillSupplierChannelNo(); err != nil {
 		return fmt.Errorf("backfill channel_no: %w", err)
 	}
+	if err := BackfillChannelSyncKeys(); err != nil {
+		return fmt.Errorf("backfill sync_key: %w", err)
+	}
 	if err := BackfillAffInviteRelationsIfNeeded(); err != nil {
 		common.SysError("aff_invite_relations backfill: " + err.Error())
 	}
@@ -480,6 +483,9 @@ func migrateDBFast() error {
 	}
 	if err := BackfillSupplierChannelNo(); err != nil {
 		return fmt.Errorf("backfill channel_no: %w", err)
+	}
+	if err := BackfillChannelSyncKeys(); err != nil {
+		return fmt.Errorf("backfill sync_key: %w", err)
 	}
 	if err := BackfillAffInviteRelationsIfNeeded(); err != nil {
 		common.SysError("aff_invite_relations backfill: " + err.Error())

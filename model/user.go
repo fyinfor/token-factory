@@ -1573,6 +1573,23 @@ func updateUserRequestCount(id int, count int) {
 	}
 }
 
+// GetUserIdByUsername 按用户名精确查找用户 ID；未找到时返回 0。
+func GetUserIdByUsername(username string) (int, error) {
+	username = strings.TrimSpace(username)
+	if username == "" {
+		return 0, nil
+	}
+	var user User
+	err := DB.Select("id").Where("username = ?", username).First(&user).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return user.Id, nil
+}
+
 // GetUsernameById gets username from Redis first, falls back to DB if needed
 func GetUsernameById(id int, fromDB bool) (username string, err error) {
 	defer func() {

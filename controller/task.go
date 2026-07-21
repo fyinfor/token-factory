@@ -23,19 +23,12 @@ func UpdateTaskBulk() {
 func GetAllTask(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 
-	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
-	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
-	// 解析其他查询参数
-	queryParams := model.SyncTaskQueryParams{
-		Platform:       constant.TaskPlatform(c.Query("platform")),
-		TaskID:         c.Query("task_id"),
-		ModelName:      c.Query("model_name"),
-		Status:         c.Query("status"),
-		Action:         c.Query("action"),
-		StartTimestamp: startTimestamp,
-		EndTimestamp:   endTimestamp,
-		ChannelID:       c.Query("channel_id"),
-		VideoFailedOnly: parseVideoFailedQuery(c.Query("video_failed")),
+	queryParams, empty := buildSyncTaskQueryParams(c, true)
+	if empty {
+		pageInfo.SetTotal(0)
+		pageInfo.SetItems([]*dto.TaskDto{})
+		common.ApiSuccess(c, pageInfo)
+		return
 	}
 
 	items := model.TaskGetAllTasks(pageInfo.GetStartIdx(), pageInfo.GetPageSize(), queryParams)
@@ -50,18 +43,12 @@ func GetUserTask(c *gin.Context) {
 
 	userId := c.GetInt("id")
 
-	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
-	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
-
-	queryParams := model.SyncTaskQueryParams{
-		Platform:       constant.TaskPlatform(c.Query("platform")),
-		TaskID:         c.Query("task_id"),
-		ModelName:      c.Query("model_name"),
-		Status:         c.Query("status"),
-		Action:         c.Query("action"),
-		StartTimestamp: startTimestamp,
-		EndTimestamp:    endTimestamp,
-		VideoFailedOnly: parseVideoFailedQuery(c.Query("video_failed")),
+	queryParams, empty := buildSyncTaskQueryParams(c, false)
+	if empty {
+		pageInfo.SetTotal(0)
+		pageInfo.SetItems([]*dto.TaskDto{})
+		common.ApiSuccess(c, pageInfo)
+		return
 	}
 
 	items := model.TaskGetAllUserTask(userId, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), queryParams)
@@ -69,6 +56,61 @@ func GetUserTask(c *gin.Context) {
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(tasksToDto(items, false))
 	common.ApiSuccess(c, pageInfo)
+}
+
+func buildSyncTaskQueryParams(c *gin.Context, isAdmin bool) (model.SyncTaskQueryParams, bool) {
+	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+
+	queryParams := model.SyncTaskQueryParams{
+		Platform:        constant.TaskPlatform(c.Query("platform")),
+		TaskID:          c.Query("task_id"),
+		ModelName:       c.Query("model_name"),
+		Status:          normalizeTaskStatusQuery(c.Query("status")),
+		Action:          c.Query("action"),
+		VideoType:       c.Query("video_type"),
+		StartTimestamp:  startTimestamp,
+		EndTimestamp:    endTimestamp,
+		VideoFailedOnly: parseVideoFailedQuery(c.Query("video_failed")),
+	}
+	if isAdmin {
+		queryParams.ChannelID = c.Query("channel_id")
+	}
+
+	if isAdmin {
+		username := strings.TrimSpace(c.Query("username"))
+		if username != "" {
+			userID, err := model.GetUserIdByUsername(username)
+			if err != nil || userID == 0 {
+				return queryParams, true
+			}
+			queryParams.UserID = strconv.Itoa(userID)
+		}
+	}
+
+	requestID := strings.TrimSpace(c.Query("request_id"))
+	if requestID != "" {
+		taskIDs, err := model.ResolveTaskIDsByRequestID(requestID)
+		if err != nil || len(taskIDs) == 0 {
+			return queryParams, true
+		}
+		if queryParams.TaskID != "" {
+			matched := false
+			for _, id := range taskIDs {
+				if id == queryParams.TaskID {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				return queryParams, true
+			}
+		} else {
+			queryParams.TaskIDs = taskIDs
+		}
+	}
+
+	return queryParams, false
 }
 
 func tasksToDto(tasks []*model.Task, fillUser bool) []*dto.TaskDto {
@@ -101,4 +143,16 @@ func tasksToDto(tasks []*model.Task, fillUser bool) []*dto.TaskDto {
 func parseVideoFailedQuery(raw string) bool {
 	raw = strings.TrimSpace(raw)
 	return raw == "1" || strings.EqualFold(raw, "true") || raw == "yes"
+}
+
+func normalizeTaskStatusQuery(raw string) string {
+	raw = strings.TrimSpace(raw)
+	switch strings.ToUpper(raw) {
+	case "SUCCESS", "成功":
+		return string(model.TaskStatusSuccess)
+	case "FAILURE", "FAILED", "FAIL", "失败":
+		return string(model.TaskStatusFailure)
+	default:
+		return raw
+	}
 }

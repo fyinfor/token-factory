@@ -23,6 +23,82 @@ func setupChannelImportTestDB(t *testing.T) {
 	require.NoError(t, db.AutoMigrate(&model.Channel{}, &model.Ability{}, &model.SupplierApplication{}))
 }
 
+func TestFindExistingForImportBySyncKeyRenames(t *testing.T) {
+	setupChannelImportTestDB(t)
+
+	require.NoError(t, model.DB.Create(&model.Channel{
+		Name:    "old-name",
+		SyncKey: "sync-abc",
+		Type:    1,
+		Status:  common.ChannelStatusEnabled,
+	}).Error)
+
+	existing, err := chFindExistingForImport("new-name", map[string]interface{}{
+		"name":    "new-name",
+		"syncKey": "sync-abc",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, existing)
+	require.Equal(t, "old-name", existing.Name)
+	require.Equal(t, "sync-abc", existing.SyncKey)
+
+	err = chApplyToExisting(existing, map[string]interface{}{
+		"name":    "new-name",
+		"syncKey": "sync-abc",
+	}, "")
+	require.NoError(t, err)
+
+	var updated model.Channel
+	require.NoError(t, model.DB.First(&updated, existing.Id).Error)
+	require.Equal(t, "new-name", updated.Name)
+	require.Equal(t, "sync-abc", updated.SyncKey)
+}
+
+func TestFindExistingForImportNameFallbackBindsSyncKey(t *testing.T) {
+	setupChannelImportTestDB(t)
+
+	require.NoError(t, model.DB.Create(&model.Channel{
+		Name:    "same-name",
+		SyncKey: "",
+		Type:    1,
+		Status:  common.ChannelStatusEnabled,
+	}).Error)
+
+	existing, err := chFindExistingForImport("same-name", map[string]interface{}{
+		"name":    "same-name",
+		"syncKey": "bind-001",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, existing)
+
+	err = chApplyToExisting(existing, map[string]interface{}{
+		"syncKey": "bind-001",
+	}, "")
+	require.NoError(t, err)
+
+	var updated model.Channel
+	require.NoError(t, model.DB.First(&updated, existing.Id).Error)
+	require.Equal(t, "bind-001", updated.SyncKey)
+}
+
+func TestFindExistingForImportNameConflictWithDifferentSyncKey(t *testing.T) {
+	setupChannelImportTestDB(t)
+
+	require.NoError(t, model.DB.Create(&model.Channel{
+		Name:    "same-name",
+		SyncKey: "existing-key",
+		Type:    1,
+		Status:  common.ChannelStatusEnabled,
+	}).Error)
+
+	existing, err := chFindExistingForImport("same-name", map[string]interface{}{
+		"name":    "same-name",
+		"syncKey": "other-key",
+	})
+	require.NoError(t, err)
+	require.Nil(t, existing)
+}
+
 func TestFindExistingForImportSiteBuilderDoesNotMatchOrdinaryChannel(t *testing.T) {
 	setupChannelImportTestDB(t)
 
