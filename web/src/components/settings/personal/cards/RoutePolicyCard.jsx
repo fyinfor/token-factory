@@ -13,6 +13,7 @@ import {
   Tag,
   Typography,
   TagInput,
+  Modal,
   Spin,
   Toast,
 } from '@douyinfe/semi-ui';
@@ -49,6 +50,40 @@ const resolveDisplayWeight = (channel) => {
   if (channel.user_configured) return channel.user_weight || 0;
   if (channel.global_configured) return channel.global_weight || 0;
   return 0;
+};
+
+const resolveDefaultWeight = (channel) => {
+  if (channel.global_configured) return channel.global_weight || 0;
+  return 0;
+};
+
+const resolveDefaultEnabled = (channel) => {
+  if (channel.global_configured) return channel.global_enabled;
+  return true;
+};
+
+const isWeightAtDefault = (channel) =>
+  resolveDisplayWeight(channel) === resolveDefaultWeight(channel) &&
+  resolveEffectiveEnabled(channel) === resolveDefaultEnabled(channel);
+
+const ChannelModelsCell = ({ models, t }) => {
+  const modelsInGroup = models || [];
+  if (modelsInGroup.length === 0) {
+    return (
+      <Typography.Text size='small' type='quaternary'>
+        —
+      </Typography.Text>
+    );
+  }
+  return (
+    <div className='flex flex-wrap gap-1'>
+      {modelsInGroup.map((modelName) => (
+        <Tag key={modelName} size='small' color='grey'>
+          {modelName}
+        </Tag>
+      ))}
+    </div>
+  );
 };
 
 const applyOrderWeightsToChannels = (channels) =>
@@ -157,6 +192,7 @@ const RoutePolicyCard = ({ t }) => {
   const [modelSearch, setModelSearch] = useState('');
   const [highlightedGroupKey, setHighlightedGroupKey] = useState('');
   const [pricingIndex, setPricingIndex] = useState(null);
+  const [resettingWeights, setResettingWeights] = useState(false);
   const groupRefs = useRef({});
 
   const tLocal = useCallback(
@@ -299,18 +335,82 @@ const RoutePolicyCard = ({ t }) => {
     }
   };
 
-  const handleDeleteWeight = async (weightID) => {
+  const handleDeleteWeight = async (weightID, { quiet = false } = {}) => {
     try {
       const res = await API.delete(`/api/user/route-policy/weights/${weightID}`);
       if (res.data.success) {
-        showSuccess(tLocal('route_policy.weight_deleted'));
-        fetchPolicy({ silent: true });
-      } else {
+        if (!quiet) {
+          showSuccess(tLocal('route_policy.weight_deleted'));
+          fetchPolicy({ silent: true });
+        }
+        return true;
+      }
+      if (!quiet) {
         showError(res.data.error || tLocal('route_policy.delete_failed'));
       }
+      return false;
     } catch (err) {
-      showError(tLocal('route_policy.delete_failed'));
+      if (!quiet) {
+        showError(tLocal('route_policy.delete_failed'));
+      }
+      return false;
     }
+  };
+
+  const hasNonDefaultWeights = useMemo(
+    () =>
+      groups.some((group) =>
+        (group.channels || []).some((channel) => !isWeightAtDefault(channel)),
+      ),
+    [groups],
+  );
+
+  const handleResetAllWeights = () => {
+    const updates = [];
+    groups.forEach((group) => {
+      (group.channels || []).forEach((channel) => {
+        if (isWeightAtDefault(channel)) return;
+        updates.push({
+          groupKey: group.group_key,
+          channelID: channel.channel_id,
+          weight: resolveDefaultWeight(channel),
+          enabled: resolveDefaultEnabled(channel),
+        });
+      });
+    });
+
+    if (updates.length === 0) {
+      showError(tLocal('route_policy.reset_all_weights_none'));
+      return;
+    }
+
+    Modal.confirm({
+      title: tLocal('route_policy.reset_all_weights'),
+      content: tLocal('route_policy.reset_all_weights_confirm'),
+      okText: tLocal('route_policy.reset_all_weights'),
+      cancelText: tLocal('取消'),
+      onOk: async () => {
+        setResettingWeights(true);
+        let changed = 0;
+        for (const item of updates) {
+          const ok = await handleWeightChange(
+            item.groupKey,
+            item.channelID,
+            item.weight,
+            item.enabled,
+            { quiet: true },
+          );
+          if (ok) changed += 1;
+        }
+        setResettingWeights(false);
+        if (changed > 0) {
+          showSuccess(tLocal('route_policy.reset_all_weights_success'));
+          fetchPolicy({ silent: true });
+        } else {
+          showError(tLocal('route_policy.save_failed'));
+        }
+      },
+    });
   };
 
   const handleAddOverride = async () => {
@@ -531,15 +631,32 @@ const RoutePolicyCard = ({ t }) => {
           {(effectiveMode === 'weight' || effectiveMode === 'price') && groups.length > 0 && (
             <Card className='!rounded-xl border dark:border-gray-700 mb-4'>
               <div className='flex flex-col gap-3 mb-3 lg:flex-row lg:items-start lg:justify-between'>
-                <div>
-                  <Typography.Title heading={6}>
-                    {tLocal('route_policy.model_groups')}
-                  </Typography.Title>
+                <div className='min-w-0 flex-1'>
+                  <div className='flex flex-wrap items-center gap-2'>
+                    <Typography.Title heading={6}>
+                      {tLocal('route_policy.model_groups')}
+                    </Typography.Title>
+                    {effectiveMode === 'weight' && (
+                      <Button
+                        size='small'
+                        type='tertiary'
+                        loading={resettingWeights}
+                        disabled={resettingWeights || !hasNonDefaultWeights}
+                        onClick={handleResetAllWeights}
+                      >
+                        {tLocal('route_policy.reset_all_weights')}
+                      </Button>
+                    )}
+                  </div>
                   <Typography.Text type='tertiary' size='small' className='block mt-1'>
                     {effectiveMode === 'weight'
                       ? tLocal('route_policy.drag_sort_hint')
                       : tLocal('route_policy.mode_price_hint')}
                   </Typography.Text>
+                  <div className='mt-2 flex items-start gap-1.5 rounded-lg bg-blue-50/80 dark:bg-blue-950/30 px-3 py-2 text-xs text-blue-700 dark:text-blue-300'>
+                    <Info size={13} className='mt-0.5 shrink-0' />
+                    <span>{tLocal('route_policy.group_explainer')}</span>
+                  </div>
                 </div>
                 <div className='w-full lg:w-72 shrink-0'>
                   <Typography.Text size='small' className='mb-1 block'>
@@ -568,9 +685,10 @@ const RoutePolicyCard = ({ t }) => {
                           >
                             <div className='font-medium truncate'>{item.model}</div>
                             <div className='text-xs text-gray-500 dark:text-gray-400 truncate'>
-                              {item.displayName}
-                              <span className='mx-1'>·</span>
-                              <code>{item.groupKey}</code>
+                              {tLocal('route_policy.search_maps_to', {
+                                groupKey: item.groupKey,
+                                displayName: item.displayName,
+                              })}
                             </div>
                           </button>
                         ))
@@ -609,25 +727,48 @@ const RoutePolicyCard = ({ t }) => {
                         <Typography.Text strong className='truncate'>
                           {group.display_name || group.group_key}
                         </Typography.Text>
-                        <code className='text-xs text-gray-500 dark:text-gray-400 font-mono truncate max-w-[140px]'>
+                        <Tag size='small' color='cyan'>
+                          {group.models.length} {tLocal('route_policy.models')}
+                        </Tag>
+                        <code
+                          className='text-xs text-gray-500 dark:text-gray-400 font-mono truncate max-w-[140px]'
+                          title={tLocal('route_policy.group_key_label')}
+                        >
                           {group.group_key}
                         </code>
                         <Tag size='small' color='blue'>
                           {group.channel_count} {tLocal('route_policy.channels')}
                         </Tag>
-                        <Typography.Text type='tertiary' size='small'>
-                          {group.models.length} {tLocal('route_policy.models')}
-                        </Typography.Text>
                       </div>
                     </div>
                     <Collapsible isOpen={expandedGroups[group.group_key]}>
                       <div className='px-4 pb-3'>
-                        <div className='flex flex-wrap gap-1 mb-3'>
-                          {(group.models || []).map((modelName) => (
-                            <Tag key={modelName} size='small' color='light-blue'>
-                              {modelName}
-                            </Tag>
-                          ))}
+                        <div className='mb-3 rounded-lg border border-dashed dark:border-gray-600 bg-gray-50/60 dark:bg-gray-900/30 px-3 py-2.5'>
+                          <Typography.Text size='small' strong className='block mb-1'>
+                            {tLocal('route_policy.group_call_models')}
+                          </Typography.Text>
+                          <Typography.Text type='tertiary' size='small' className='block mb-2'>
+                            {tLocal('route_policy.group_models_hint', {
+                              count: group.models.length,
+                              groupKey: group.group_key,
+                            })}
+                          </Typography.Text>
+                          <div className='flex flex-wrap gap-1'>
+                            {(group.models || []).map((modelName) => (
+                              <Tag
+                                key={modelName}
+                                size='small'
+                                color='light-blue'
+                                className='cursor-pointer'
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setModelSearch(modelName);
+                                }}
+                              >
+                                {modelName}
+                              </Tag>
+                            ))}
+                          </div>
                         </div>
                         {effectiveMode === 'weight' ? (
                           <WeightChannelTable
@@ -816,6 +957,7 @@ const WeightChannelTable = ({
             <th className='py-2 pr-2 w-9' />
             <th className='py-2 pr-3'>{t('route_policy.provider')}</th>
             <th className='py-2 pr-3'>{t('route_policy.route_slug')}</th>
+            <th className='py-2 pr-3'>{t('route_policy.group_models')}</th>
             <th className='py-2 pr-3'>{t('route_policy.user_weight')}</th>
             <th className='py-2 pr-3'>{t('route_policy.enabled')}</th>
             <th className='py-2 pr-3'>{t('route_policy.global_weight')}</th>
@@ -917,19 +1059,7 @@ const PriceChannelTable = ({ channels, pricingIndex, t }) => {
                   </Typography.Text>
                 </td>
                 <td className='py-2 pr-3 align-top'>
-                  <div className='flex flex-wrap gap-1'>
-                    {modelsInGroup.length > 0 ? (
-                      modelsInGroup.map((modelName) => (
-                        <Tag key={modelName} size='small' color='grey'>
-                          {modelName}
-                        </Tag>
-                      ))
-                    ) : (
-                      <Typography.Text size='small' type='quaternary'>
-                        —
-                      </Typography.Text>
-                    )}
-                  </div>
+                  <ChannelModelsCell models={modelsInGroup} t={t} />
                 </td>
                 <td className='py-2 pr-3 align-top font-mono'>
                   <Typography.Text size='small'>{priceText}</Typography.Text>
@@ -1036,6 +1166,9 @@ const ChannelRow = ({
         <Typography.Text size='small' className='font-mono'>
           {routeSlugLabel}
         </Typography.Text>
+      </td>
+      <td className='py-2 pr-3 align-top'>
+        <ChannelModelsCell models={channel.models_in_group} t={t} />
       </td>
       <td className='py-2 pr-3'>
         <div className='flex items-center gap-1'>

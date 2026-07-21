@@ -5,21 +5,27 @@ export const getQuotaPerUnit = () => {
   return Number.isFinite(raw) && raw > 0 ? raw : 1;
 };
 
-export const quotaToDisplayAmount = (quota) => {
+export const quotaToDisplayAmount = (
+  quota,
+  quotaPerUnit = getQuotaPerUnit(),
+) => {
   const q = Number(quota || 0);
   if (!Number.isFinite(q) || q <= 0) return 0;
   const { type, rate } = getCurrencyConfig();
   if (type === 'TOKENS') return q;
-  const usd = q / getQuotaPerUnit();
+  const usd = q / quotaPerUnit;
   if (type === 'USD') return usd;
   return usd * (rate || 1);
 };
 
-export const displayAmountToQuota = (amount) => {
+export const displayAmountToQuota = (
+  amount,
+  quotaPerUnit = getQuotaPerUnit(),
+) => {
   const val = Number(amount || 0);
   if (!Number.isFinite(val) || val <= 0) return 0;
   const { type, rate } = getCurrencyConfig();
   if (type === 'TOKENS') return Math.round(val);
   const usd = type === 'USD' ? val : val / (rate || 1);
-  return Math.round(usd * getQuotaPerUnit());
+  return Math.round(usd * quotaPerUnit);
 };

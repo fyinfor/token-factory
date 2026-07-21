@@ -89,6 +89,27 @@ func TestConvertToRequestPayload_Video2Video(t *testing.T) {
 	assert.Equal(t, "https://example.com/reference-video.mp4", body.Content[1].VideoURL.URL)
 }
 
+// metadata.video_urls 支持素材库 asset:// 引用（不依赖视频扩展名），必须封装为上游 video_url 结构。
+func TestConvertToRequestPayload_Video2VideoAssetURI(t *testing.T) {
+	a := &TaskAdaptor{}
+	body, err := a.convertToRequestPayload(&relaycommon.TaskSubmitReq{
+		Model:  "doubao-seedance-2-0-260128",
+		Prompt: "基于素材库参考视频续写",
+		Metadata: map[string]interface{}{
+			"video_urls": []interface{}{"asset://asset-2026xxxx"},
+			"resolution": "480p",
+			"ratio":      "16:9",
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, body.Content, 2)
+	assert.Equal(t, "text", body.Content[0].Type)
+	assert.Equal(t, "video_url", body.Content[1].Type)
+	assert.Equal(t, "reference_video", body.Content[1].Role)
+	require.NotNil(t, body.Content[1].VideoURL)
+	assert.Equal(t, "asset://asset-2026xxxx", body.Content[1].VideoURL.URL)
+}
+
 // 参考音频列表：metadata.audio_urls → content[].type=audio_url + role=reference_audio
 func TestConvertToRequestPayload_ReferenceAudio(t *testing.T) {
 	a := &TaskAdaptor{}

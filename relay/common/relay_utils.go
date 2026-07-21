@@ -260,12 +260,23 @@ func ValidateBasicTaskRequest(c *gin.Context, info *RelayInfo, action string) *d
 
 	// 多个视频 adaptor 误把默认 action 传成 TaskActionGenerate，导致无图请求在任务日志里
 	// 仍显示为「图生视频」。仅在请求侧确实无图时降为文生；remix 等已由 ResolveOriginTask 预设的 action 不得覆盖。
-	actionToStore := action
-	if info.Action == constant.TaskActionRemix {
-		actionToStore = constant.TaskActionRemix
-	} else if action == constant.TaskActionGenerate && !req.HasImage() {
-		actionToStore = constant.TaskActionTextGenerate
-	}
-	storeTaskRequest(c, info, actionToStore, req)
+	// 存在 metadata.video_urls / 视频参考素材时，统一为视频生视频（referenceGenerate），不可降为文生，也不使用 remix。
+	storeTaskRequest(c, info, ResolveTaskActionToStore(info, action, &req), req)
 	return nil
+}
+
+// ResolveTaskActionToStore 根据请求素材决定落库/转发的任务类型：
+// 视频参考素材 → referenceGenerate（视频生视频）；无图默认 generate → textGenerate（文生）；
+// 已由 remix 路由预设的 remixGenerate 不得覆盖。
+func ResolveTaskActionToStore(info *RelayInfo, action string, req *TaskSubmitReq) string {
+	if info != nil && info.TaskRelayInfo != nil && info.Action == constant.TaskActionRemix {
+		return constant.TaskActionRemix
+	}
+	if DetectVideoBillingMode(req) == VideoBillingModeVideoToVideo {
+		return constant.TaskActionReferenceGenerate
+	}
+	if action == constant.TaskActionGenerate && (req == nil || !req.HasImage()) {
+		return constant.TaskActionTextGenerate
+	}
+	return action
 }

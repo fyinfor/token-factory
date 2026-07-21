@@ -89,7 +89,8 @@ const PageLayout = () => {
   const shouldInnerPadding =
     location.pathname.includes('/console') &&
     !location.pathname.startsWith('/console/chat') &&
-    location.pathname !== '/console/playground';
+    location.pathname !== '/console/playground' &&
+    location.pathname !== '/console/real-name-verification';
 
   const isConsoleRoute = location.pathname.startsWith('/console');
   const showSider = isConsoleRoute && (!isMobile || drawerOpen);
@@ -109,11 +110,18 @@ const PageLayout = () => {
   };
 
   /** 与 localStorage 中的 status 派生字段一致（须在 setStatusData 之后调用） */
+  const isRealNamePublicRoute =
+    location.pathname === '/real-name/start' ||
+    location.pathname === '/real-name/result';
+
   const syncDocumentBrandingFromStorage = () => {
+    if (isRealNamePublicRoute) {
+      document.title = '\u5b9e\u540d\u8ba4\u8bc1';
+    }
     const hasCachedName =
       localStorage.getItem('system_name') ||
       localStorage.getItem('system_name_en');
-    if (hasCachedName) {
+    if (hasCachedName && !isRealNamePublicRoute) {
       const systemName = getSystemName(i18n.language);
       if (systemName) {
         document.title = systemName;
@@ -155,12 +163,16 @@ const PageLayout = () => {
     const hasCachedName =
       localStorage.getItem('system_name') ||
       localStorage.getItem('system_name_en');
+    if (isRealNamePublicRoute) {
+      document.title = '\u5b9e\u540d\u8ba4\u8bc1';
+      return;
+    }
     if (!hasCachedName) return;
     const systemName = getSystemName(i18n.language);
     if (systemName) {
       document.title = systemName;
     }
-  }, [i18n.language]);
+  }, [i18n.language, isRealNamePublicRoute]);
 
   useEffect(() => {
     const status = statusState?.status;

@@ -18,7 +18,8 @@ func DetectVideoBillingMode(req *TaskSubmitReq) string {
 	if req == nil {
 		return VideoBillingModeTextToVideo
 	}
-	if metadataHasMedia(req.Metadata, "video_urls") {
+	// metadata.video_urls / video_url 显式携带参考视频（含 asset:// 素材库地址）时，按视频生视频计费与任务类型识别。
+	if metadataHasMedia(req.Metadata, "video_urls") || metadataHasMedia(req.Metadata, "video_url") {
 		return VideoBillingModeVideoToVideo
 	}
 	if isVideoMediaRef(req.InputReference) {

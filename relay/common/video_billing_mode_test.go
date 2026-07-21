@@ -25,6 +25,24 @@ func TestDetectVideoBillingMode_MetadataVideoURLs(t *testing.T) {
 	}
 }
 
+func TestDetectVideoBillingMode_MetadataVideoURLsAssetURI(t *testing.T) {
+	req := &TaskSubmitReq{Metadata: map[string]interface{}{
+		"video_urls": []interface{}{"asset://asset-2026xxxx"},
+	}}
+	if got := DetectVideoBillingMode(req); got != VideoBillingModeVideoToVideo {
+		t.Fatalf("expected %s, got %s", VideoBillingModeVideoToVideo, got)
+	}
+}
+
+func TestDetectVideoBillingMode_MetadataVideoURLSingular(t *testing.T) {
+	req := &TaskSubmitReq{Metadata: map[string]interface{}{
+		"video_url": "asset://asset-2026xxxx",
+	}}
+	if got := DetectVideoBillingMode(req); got != VideoBillingModeVideoToVideo {
+		t.Fatalf("expected %s, got %s", VideoBillingModeVideoToVideo, got)
+	}
+}
+
 func TestDetectVideoBillingMode_Images(t *testing.T) {
 	req := &TaskSubmitReq{Images: []string{"https://example.com/ref.jpg"}}
 	if got := DetectVideoBillingMode(req); got != VideoBillingModeImageToVideo {

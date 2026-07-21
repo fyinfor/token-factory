@@ -61,6 +61,8 @@ type Channel struct {
 	ChannelNo             string `json:"channel_no" gorm:"type:varchar(32);default:'';index;comment:供应商渠道编号 c1,c2 递增"`
 	// RouteSlug 全局唯一渠道路由后缀；调用格式 {model}/{route_slug} 强制该渠道（该渠道下所有模型共用此后缀）。
 	RouteSlug    string `json:"route_slug" gorm:"type:varchar(32);not null;default:'';index"`
+	// SyncKey 跨环境导入/导出同步唯一编号（默认约 6 位）；与 id/route_slug 无关，可手改绑定。
+	SyncKey      string `json:"sync_key" gorm:"type:varchar(64);not null;default:'';index;comment:渠道同步唯一键约6位"`
 	SupplierName string `json:"supplier_name,omitempty" gorm:"-"` // 供应商用户名（由控制器回填，不落库）
 
 	// 成本折扣率（百分数，100=原价无折扣，60=六折/按原价×0.6 计费）。nil=数据库默认/未设，按 100 处理。使用指针以便 GORM Updates 时可将 0% 写回。
@@ -694,6 +696,22 @@ func batchInsertChannelsWithOptionalTfOpenPricing(channels []Channel, tfOpenPric
 			tx.Rollback()
 			return err
 		}
+		for i := range chunk {
+			EnsureChannelSyncKey(&chunk[i])
+		}
+		seenSyncKeys := make(map[string]struct{}, len(chunk))
+		for i := range chunk {
+			key := chunk[i].SyncKey
+			if _, dup := seenSyncKeys[key]; dup {
+				tx.Rollback()
+				return fmt.Errorf("sync_key 重复: %s", key)
+			}
+			seenSyncKeys[key] = struct{}{}
+			if err := ValidateChannelSyncKeyUnique(0, key); err != nil {
+				tx.Rollback()
+				return err
+			}
+		}
 		if err := tx.Create(&chunk).Error; err != nil {
 			tx.Rollback()
 			return err
@@ -860,6 +878,10 @@ func (channel *Channel) Insert() error {
 			return err
 		}
 		*channel = batch[0]
+		EnsureChannelSyncKey(channel)
+		if err := ValidateChannelSyncKeyUnique(0, channel.SyncKey); err != nil {
+			return err
+		}
 		if err := tx.Create(channel).Error; err != nil {
 			return err
 		}

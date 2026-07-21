@@ -1227,6 +1227,7 @@ func buildTokenFactorySyncedChannels(base *model.Channel) ([]model.Channel, []mo
 		}
 		clone.ChannelNo = tfOpenLocalChannelNo(upstream)
 		clone.RouteSlug = ""
+		clone.SyncKey = ""
 		syncMeta := map[string]any{
 			"source":                   "tokenfactory_open",
 			"upstream_channel_id":      upstream.ID,
@@ -1370,6 +1371,28 @@ func AddChannel(c *gin.Context) {
 	if len(channels) > 1 {
 		for i := range channels {
 			channels[i].RouteSlug = ""
+			channels[i].SyncKey = "" // 批量创建各自生成独立 sync_key
+		}
+	}
+	// 单条创建：空 sync_key 由 Insert/BatchInsert 自动生成；非空则校验格式与唯一
+	if len(channels) == 1 {
+		sk := model.NormalizeChannelSyncKey(channels[0].SyncKey)
+		if sk != "" {
+			if !model.IsValidChannelSyncKey(sk) {
+				c.JSON(http.StatusOK, gin.H{
+					"success": false,
+					"message": "sync_key 格式无效（1～64 位可打印 ASCII）",
+				})
+				return
+			}
+			if err := model.ValidateChannelSyncKeyUnique(0, sk); err != nil {
+				c.JSON(http.StatusOK, gin.H{
+					"success": false,
+					"message": err.Error(),
+				})
+				return
+			}
+			channels[0].SyncKey = sk
 		}
 	}
 	if addChannelRequest.Channel.Type == constant.ChannelTypeTokenFactoryOpen {
@@ -1639,6 +1662,34 @@ func UpdateChannel(c *gin.Context) {
 			}
 			routeSlugChanged = true
 		}
+	}
+
+	// sync_key：空则沿用库中值；非空变更时校验格式与全局唯一。
+	if sk := model.NormalizeChannelSyncKey(channel.SyncKey); sk == "" {
+		channel.SyncKey = originChannel.SyncKey
+		if model.NormalizeChannelSyncKey(channel.SyncKey) == "" {
+			if allocated, err := model.AllocateUniqueChannelSyncKey(channel.Id); err == nil {
+				channel.SyncKey = allocated
+			} else {
+				channel.SyncKey = model.NewChannelSyncKey()
+			}
+		}
+	} else {
+		if !model.IsValidChannelSyncKey(sk) {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "sync_key 格式无效（1～64 位可打印 ASCII）",
+			})
+			return
+		}
+		if err := model.ValidateChannelSyncKeyUnique(channel.Id, sk); err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": err.Error(),
+			})
+			return
+		}
+		channel.SyncKey = sk
 	}
 
 	// 使用统一的校验函数
@@ -1996,6 +2047,7 @@ func CopyChannel(c *gin.Context) {
 	}
 	clone.ChannelNo = ""
 	clone.RouteSlug = ""
+	clone.SyncKey = ""
 
 	// insert
 	if err := model.BatchInsertChannels([]model.Channel{clone}); err != nil {

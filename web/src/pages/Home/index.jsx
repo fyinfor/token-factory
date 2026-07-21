@@ -81,8 +81,8 @@ const { Text } = Typography;
 const HOME_FEATURE_CARDS = [
   {
     image: '/home-card-1.png',
-    titleKey: '一个 API，调用任意模型',
-    descKey: '通过统一接口同主流模型，OpenAI 兼容 SDK 可直接使用。',
+    titleKey: '一个 API key，调用任意模型',
+    descKey: '通过统一接口调用主流模型，OpenAI 兼容 SDK 可直接使用。',
   },
   {
     image: '/home-card-2.png',
@@ -298,29 +298,53 @@ const Home = () => {
             </div>
 
             {/* 功能卡片区域 */}
-            <div className='w-full px-4 py-16 md:py-20'>
-              <div className='max-w-6xl mx-auto'>
-                <div className='grid grid-cols-1 md:grid-cols-2 gap-6'>
+            <div className='relative w-full overflow-hidden bg-[linear-gradient(135deg,rgba(239,246,255,0.55)_0%,rgba(255,255,255,0.15)_46%,rgba(245,243,255,0.55)_100%)] px-4 py-16 dark:bg-none md:py-20'>
+              <div
+                aria-hidden='true'
+                className='pointer-events-none absolute -left-12 top-4 h-80 w-80 rounded-full bg-[rgba(56,189,248,0.2)] blur-[90px] dark:bg-[rgba(56,189,248,0.08)]'
+              />
+              <div
+                aria-hidden='true'
+                className='pointer-events-none absolute -right-8 bottom-0 h-80 w-80 rounded-full bg-[rgba(167,139,250,0.18)] blur-[90px] dark:bg-[rgba(167,139,250,0.07)]'
+              />
+              <div
+                aria-hidden='true'
+                className='pointer-events-none absolute left-[44%] top-[38%] h-56 w-56 rounded-full bg-[rgba(103,232,249,0.13)] blur-[80px] dark:opacity-40'
+              />
+              <div className='relative mx-auto max-w-6xl'>
+                <div className='grid grid-cols-1 gap-6 md:grid-cols-2'>
                   {HOME_FEATURE_CARDS.map((card) => (
                     <div
                       key={card.image}
-                      className='group flex flex-col overflow-hidden rounded-2xl border border-semi-color-border bg-semi-color-bg-1 shadow-sm transition-shadow hover:shadow-lg md:flex-row md:items-stretch md:gap-10'
+                      className='group relative isolate flex flex-col overflow-hidden rounded-[30px] border-0 bg-[rgba(255,255,255,0.3)] shadow-[0_20px_60px_-32px_rgba(84,110,145,0.3),inset_0_0_0_1px_rgba(255,255,255,0.68),inset_0_1px_0_rgba(255,255,255,0.95)] backdrop-blur-[28px] backdrop-saturate-[180%] transition-[background-color,box-shadow] duration-500 ease-out hover:bg-[rgba(255,255,255,0.4)] hover:shadow-[0_28px_70px_-34px_rgba(84,110,145,0.36),inset_0_0_0_1px_rgba(255,255,255,0.78),inset_0_1px_0_rgba(255,255,255,1)] dark:bg-[rgba(15,23,42,0.35)] dark:shadow-[0_20px_55px_-32px_rgba(15,23,42,0.45),inset_0_0_0_1px_rgba(255,255,255,0.1),inset_0_1px_0_rgba(255,255,255,0.08)] dark:hover:bg-[rgba(15,23,42,0.45)] md:flex-row md:items-stretch md:gap-8'
                     >
-                      <div className='relative flex shrink-0 items-center justify-center bg-semi-color-bg-1 px-5 pb-2 pt-6 md:w-[42%] md:max-w-[300px] md:p-6 md:pb-6'>
-                        <div className='relative aspect-[4/3] w-full max-w-[320px] overflow-hidden rounded-xl bg-semi-color-bg-0 shadow-md ring-1 ring-semi-color-border md:max-w-none'>
+                      <div
+                        aria-hidden='true'
+                        className='pointer-events-none absolute -left-20 -top-20 h-48 w-48 rounded-full bg-[rgba(125,211,252,0.2)] blur-3xl transition-opacity duration-500 group-hover:opacity-80 dark:bg-[rgba(56,189,248,0.1)]'
+                      />
+                      <div
+                        aria-hidden='true'
+                        className='pointer-events-none absolute inset-x-8 top-0 h-px bg-[linear-gradient(to_right,transparent,rgba(255,255,255,0.9),transparent)] dark:bg-[linear-gradient(to_right,transparent,rgba(255,255,255,0.3),transparent)]'
+                      />
+                      <div
+                        aria-hidden='true'
+                        className='pointer-events-none absolute right-5 top-4 h-20 w-36 rounded-full bg-[rgba(255,255,255,0.22)] blur-2xl dark:opacity-20'
+                      />
+                      <div className='relative flex shrink-0 items-stretch px-4 pb-1 pt-4 md:w-[43%] md:max-w-[300px] md:p-4'>
+                        <div className='relative aspect-[4/3] w-full overflow-hidden rounded-[20px] md:aspect-auto md:min-h-[170px]'>
                           <img
                             src={card.image}
                             alt=''
-                            className='h-full w-full object-cover object-center transition-transform duration-500 ease-out group-hover:scale-[1.02]'
+                            className='absolute inset-0 h-full w-full rounded-[20px] object-cover object-center'
                             decoding='async'
                           />
                         </div>
                       </div>
-                      <div className='flex flex-1 flex-col justify-center px-6 pb-6 pt-5 md:px-8 md:py-8 md:pl-0'>
-                        <h3 className='text-xl font-semibold leading-snug text-semi-color-text-0 md:text-[1.35rem]'>
+                      <div className='relative flex flex-1 flex-col justify-center px-5 pb-5 pt-4 md:py-6 md:pl-1 md:pr-6'>
+                        <h3 className='text-xl font-semibold leading-snug tracking-[-0.015em] text-semi-color-text-0 md:text-[1.35rem]'>
                           {t(card.titleKey)}
                         </h3>
-                        <p className='mt-3 text-sm leading-relaxed text-semi-color-text-2'>
+                        <p className='mt-3 text-sm leading-7 text-semi-color-text-2'>
                           {t(card.descKey)}
                         </p>
                       </div>

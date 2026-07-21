@@ -99,7 +99,10 @@ const renderUserTags = (tags, t) => {
   if (!tags || tags === '') {
     return <span className='text-gray-400'>—</span>;
   }
-  const tagList = tags.split(',').map(tag => tag.trim()).filter(Boolean);
+  const tagList = tags
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean);
   if (tagList.length === 0) {
     return <span className='text-gray-400'>—</span>;
   }
@@ -538,6 +541,35 @@ export const getUsersColumns = ({
       title: t('手机号'),
       dataIndex: 'phone',
       render: (v) => <span>{v || '—'}</span>,
+    },
+    {
+      title: t('\u5b9e\u540d\u8ba4\u8bc1'),
+      dataIndex: 'real_name_verified',
+      width: 170,
+      render: (verified, record) =>
+        verified ? (
+          <div className='inline-flex flex-col items-start gap-1'>
+            <Tag color='green' className='!w-auto'>
+              {t('\u5df2\u5b9e\u540d')}
+            </Tag>
+            <span className='text-xs whitespace-nowrap'>
+              {renderUserDateTime(record.real_name_verified_at)}
+            </span>
+            <Button
+              size='small'
+              type='danger'
+              theme='borderless'
+              className='!px-0'
+              onClick={() => manageUser(record.id, 'remove_real_name', record)}
+            >
+              {t('\u79fb\u9664\u5b9e\u540d')}
+            </Button>
+          </div>
+        ) : (
+          <Tag color='grey' className='!w-auto'>
+            {t('\u672a\u8ba4\u8bc1')}
+          </Tag>
+        ),
     },
     {
       title: t('状态'),
