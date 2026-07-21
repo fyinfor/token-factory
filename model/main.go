@@ -341,6 +341,13 @@ func migrateDB() error {
 		&MaterialAsset{},
 		&MaterialVisualSession{},
 		&PerfMetric{},
+		&RouteConfig{},
+		&ModelGroupWeight{},
+		&ModelGroupOverride{},
+		&ModelGroupMeta{},
+		&UserRouteConfig{},
+		&UserModelGroupWeight{},
+		&UserModelGroupOverride{},
 	)
 	if err != nil {
 		return err
@@ -446,6 +453,13 @@ func migrateDBFast() error {
 		{&MaterialGroup{}, "MaterialGroup"},
 		{&MaterialAsset{}, "MaterialAsset"},
 		{&MaterialVisualSession{}, "MaterialVisualSession"},
+		{&RouteConfig{}, "RouteConfig"},
+		{&ModelGroupWeight{}, "ModelGroupWeight"},
+		{&ModelGroupOverride{}, "ModelGroupOverride"},
+		{&ModelGroupMeta{}, "ModelGroupMeta"},
+		{&UserRouteConfig{}, "UserRouteConfig"},
+		{&UserModelGroupWeight{}, "UserModelGroupWeight"},
+		{&UserModelGroupOverride{}, "UserModelGroupOverride"},
 	}
 	// 动态计算migration数量，确保errChan缓冲区足够大
 	errChan := make(chan error, len(migrations))
