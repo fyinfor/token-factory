@@ -262,6 +262,18 @@ func InitOptionMap() {
 	common.OptionMap["AliyunGuardrailAccessKeyID"] = setting.AliyunGuardrailAccessKeyID
 	common.OptionMap["AliyunGuardrailAccessKeySecret"] = setting.AliyunGuardrailAccessKeySecret
 	common.OptionMap["AliyunGuardrailRegionID"] = setting.AliyunGuardrailRegionID
+	common.OptionMap["AliyunRealNameVerificationEnabled"] = strconv.FormatBool(setting.AliyunRealNameVerificationEnabled)
+	common.OptionMap["AliyunRealNameVerificationAccessKeyID"] = setting.AliyunRealNameVerificationAccessKeyID
+	common.OptionMap["AliyunRealNameVerificationAccessKeySecret"] = setting.AliyunRealNameVerificationAccessKeySecret
+	common.OptionMap["AliyunRealNameVerificationRegionID"] = setting.AliyunRealNameVerificationRegionID
+	common.OptionMap["AliyunRealNameVerificationProductCode"] = setting.AliyunRealNameVerificationProductCode
+	common.OptionMap["AliyunRealNameVerificationSceneID"] = setting.AliyunRealNameVerificationSceneID
+	common.OptionMap["AliyunRealNameVerificationModel"] = setting.AliyunRealNameVerificationModel
+	common.OptionMap["AliyunRealNameVerificationCallbackURL"] = setting.AliyunRealNameVerificationCallbackURL
+	common.OptionMap["AliyunRealNameVerificationReturnURL"] = setting.AliyunRealNameVerificationReturnURL
+	common.OptionMap["AliyunRealNameVerificationRewardEnabled"] = strconv.FormatBool(setting.AliyunRealNameVerificationRewardEnabled)
+	common.OptionMap["AliyunRealNameVerificationRewardAmount"] = strconv.FormatFloat(setting.AliyunRealNameVerificationRewardAmount, 'f', -1, 64)
+	common.OptionMap["AliyunRealNameVerificationRequiredForTopUp"] = strconv.FormatBool(setting.AliyunRealNameVerificationRequiredForTopUp)
 	common.OptionMap["DemoSiteEnabled"] = strconv.FormatBool(operation_setting.DemoSiteEnabled)
 	common.OptionMap["SelfUseModeEnabled"] = strconv.FormatBool(operation_setting.SelfUseModeEnabled)
 	common.OptionMap["ChannelBalanceAlertEnabled"] = strconv.FormatBool(false)
@@ -356,7 +368,10 @@ func updateOptionMap(key string, value string) (err error) {
 			common.ImageDownloadPermission = intValue
 		}
 	}
-	if strings.HasSuffix(key, "Enabled") || key == "DefaultCollapseSidebar" || key == "DefaultUseAutoGroup" {
+	if strings.HasSuffix(key, "Enabled") ||
+		key == "DefaultCollapseSidebar" ||
+		key == "DefaultUseAutoGroup" ||
+		key == "AliyunRealNameVerificationRequiredForTopUp" {
 		boolValue := value == "true"
 		switch key {
 		case "PasswordRegisterEnabled":
@@ -425,6 +440,12 @@ func updateOptionMap(key string, value string) (err error) {
 			setting.MjActionCheckSuccessEnabled = boolValue
 		case "CheckSensitiveEnabled":
 			setting.CheckSensitiveEnabled = boolValue
+		case "AliyunRealNameVerificationEnabled":
+			setting.AliyunRealNameVerificationEnabled = boolValue
+		case "AliyunRealNameVerificationRewardEnabled":
+			setting.AliyunRealNameVerificationRewardEnabled = boolValue
+		case "AliyunRealNameVerificationRequiredForTopUp":
+			setting.AliyunRealNameVerificationRequiredForTopUp = boolValue
 		case "AliyunGuardrailEnabled":
 			setting.AliyunGuardrailEnabled = boolValue
 		case "AliyunGuardrailInputEnabled":
@@ -809,6 +830,24 @@ func updateOptionMap(key string, value string) (err error) {
 		common.QuotaPerUnit, _ = strconv.ParseFloat(value, 64)
 	case "SensitiveWords":
 		setting.SensitiveWordsFromString(value)
+	case "AliyunRealNameVerificationAccessKeyID":
+		setting.AliyunRealNameVerificationAccessKeyID = value
+	case "AliyunRealNameVerificationAccessKeySecret":
+		setting.AliyunRealNameVerificationAccessKeySecret = value
+	case "AliyunRealNameVerificationRegionID":
+		setting.AliyunRealNameVerificationRegionID = value
+	case "AliyunRealNameVerificationCallbackURL":
+		setting.AliyunRealNameVerificationCallbackURL = value
+	case "AliyunRealNameVerificationReturnURL":
+		setting.AliyunRealNameVerificationReturnURL = value
+	case "AliyunRealNameVerificationProductCode":
+		setting.AliyunRealNameVerificationProductCode = value
+	case "AliyunRealNameVerificationSceneID":
+		setting.AliyunRealNameVerificationSceneID = value
+	case "AliyunRealNameVerificationModel":
+		setting.AliyunRealNameVerificationModel = value
+	case "AliyunRealNameVerificationRewardAmount":
+		setting.AliyunRealNameVerificationRewardAmount, _ = strconv.ParseFloat(value, 64)
 	case "AliyunGuardrailAccessKeyID":
 		setting.AliyunGuardrailAccessKeyID = value
 	case "AliyunGuardrailAccessKeySecret":

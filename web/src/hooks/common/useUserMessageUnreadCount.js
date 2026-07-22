@@ -21,6 +21,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { API } from '../../helpers';
 
 const POLL_INTERVAL_MS = 2 * 60 * 1000;
+export const USER_MESSAGE_REFRESH_EVENT = 'user-message-unread-refresh';
 
 // useUserMessageUnreadCount 轮询当前用户未读站内消息数量。
 export const useUserMessageUnreadCount = (user) => {
@@ -55,9 +56,15 @@ export const useUserMessageUnreadCount = (user) => {
       return undefined;
     }
     const timer = setInterval(refreshUnreadCount, POLL_INTERVAL_MS);
+    const handleImmediateRefresh = () => refreshUnreadCount();
+    window.addEventListener(USER_MESSAGE_REFRESH_EVENT, handleImmediateRefresh);
     refreshUnreadCount();
     return () => {
       clearInterval(timer);
+      window.removeEventListener(
+        USER_MESSAGE_REFRESH_EVENT,
+        handleImmediateRefresh,
+      );
     };
   }, [refreshUnreadCount, user?.id]);
 

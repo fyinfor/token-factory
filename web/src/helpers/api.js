@@ -130,19 +130,32 @@ export function updateAPI() {
 
   patchAPIInstance(API);
   attachAcceptLanguageInterceptor(API);
+  attachResponseInterceptor(API);
 }
 
-API.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    // 如果请求配置中显式要求跳过全局错误处理，则不弹出默认错误提示
-    if (error.config && error.config.skipErrorHandler) {
+function attachResponseInterceptor(instance) {
+  instance.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      // 如果请求配置中显式要求跳过全局错误处理，则不弹出默认错误提示
+      if (error.config && error.config.skipErrorHandler) {
+        return Promise.reject(error);
+      }
+      const responseData = error.response?.data;
+      if (responseData?.data?.require_real_name_verification) {
+        showError(responseData.message || '充值前请先完成实名认证');
+        window.location.assign(
+          responseData.data.redirect || '/console/real-name-verification',
+        );
+        return Promise.reject(error);
+      }
+      showError(error);
       return Promise.reject(error);
-    }
-    showError(error);
-    return Promise.reject(error);
-  },
-);
+    },
+  );
+}
+
+attachResponseInterceptor(API);
 
 /** 合并 React 18 Strict Mode 下 useEffect 双次执行导致的重复上报（开发环境）。 */
 const AFF_TRACK_DEDUP_MS = 5000;

@@ -82,6 +82,7 @@ const SubscriptionPlansCard = ({
   activeSubscriptions = [],
   allSubscriptions = [],
   reloadSubscriptionSelf,
+  ensureRealNameVerifiedForTopUp,
   withCard = true,
 }) => {
   const [open, setOpen] = useState(false);
@@ -92,7 +93,8 @@ const SubscriptionPlansCard = ({
 
   const epayMethods = useMemo(() => getEpayMethods(payMethods), [payMethods]);
 
-  const openBuy = (p) => {
+  const openBuy = async (p) => {
+    if ((await ensureRealNameVerifiedForTopUp?.()) === false) return;
     setSelectedPlan(p);
     setSelectedEpayMethod(epayMethods?.[0]?.type || '');
     setOpen(true);

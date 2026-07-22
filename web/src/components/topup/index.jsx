@@ -17,8 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useState, useContext } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import React, { useEffect, useState, useContext, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   API,
   showError,
@@ -80,6 +80,7 @@ const getPayMethodMaxTopup = (payMethods, type) => {
 };
 
 const TopUp = () => {
+  const navigate = useNavigate();
   const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [userState, userDispatch] = useContext(UserContext);
@@ -164,8 +165,67 @@ const TopUp = () => {
     amount_options: [],
     discount: {},
   });
+  const [realNameVerificationRequired, setRealNameVerificationRequired] =
+    useState(false);
+  const [realNameVerificationChecked, setRealNameVerificationChecked] =
+    useState(false);
+  const realNameVerificationModalShownRef = useRef(false);
+
+  const showRealNameVerificationModal = () => {
+    Modal.confirm({
+      title: t('\u8bf7\u5148\u5b8c\u6210\u5b9e\u540d\u8ba4\u8bc1'),
+      content: t(
+        '\u7cfb\u7edf\u5df2\u5f00\u542f\u5145\u503c\u524d\u5f3a\u5236\u5b9e\u540d\u8ba4\u8bc1\uff0c\u5b8c\u6210\u540e\u5373\u53ef\u7ee7\u7eed\u5145\u503c\u3002',
+      ),
+      okText: t('\u53bb\u5b9e\u540d\u8ba4\u8bc1'),
+      cancelText: t('\u7a0d\u540e\u518d\u8bf4'),
+      centered: true,
+      onOk: () => navigate('/console/real-name-verification'),
+    });
+  };
+
+  const syncRealNameVerificationGate = (
+    data,
+    { prompt = false, promptOnce = false } = {},
+  ) => {
+    const required = Boolean(
+      data?.real_name_verification_required && !data?.real_name_verified,
+    );
+    setRealNameVerificationRequired(required);
+    setRealNameVerificationChecked(true);
+    if (required && prompt) {
+      if (!promptOnce || !realNameVerificationModalShownRef.current) {
+        if (promptOnce) realNameVerificationModalShownRef.current = true;
+        showRealNameVerificationModal();
+      }
+    }
+    return !required;
+  };
+
+  const ensureRealNameVerifiedForTopUp = async () => {
+    if (realNameVerificationRequired) {
+      showRealNameVerificationModal();
+      return false;
+    }
+    if (realNameVerificationChecked) return true;
+    try {
+      const res = await API.get('/api/user/topup/info', {
+        disableDuplicate: true,
+      });
+      const { message, data, success } = res.data;
+      if (!success) {
+        showError(message || t('获取实名认证状态失败，请刷新后重试'));
+        return false;
+      }
+      return syncRealNameVerificationGate(data, { prompt: true });
+    } catch (err) {
+      showError(t('获取实名认证状态失败，请刷新后重试'));
+      return false;
+    }
+  };
 
   const topUp = async () => {
+    if (!(await ensureRealNameVerifiedForTopUp())) return;
     if (redemptionCode === '') {
       showInfo(t('请输入兑换码！'));
       return;
@@ -201,7 +261,8 @@ const TopUp = () => {
     }
   };
 
-  const openTopUpLink = () => {
+  const openTopUpLink = async () => {
+    if (!(await ensureRealNameVerifiedForTopUp())) return;
     if (!topUpLink) {
       showError(t('超级管理员未设置充值链接！'));
       return;
@@ -234,6 +295,7 @@ const TopUp = () => {
   };
 
   const preTopUp = async (payment, count = topUpCount) => {
+    if (!(await ensureRealNameVerifiedForTopUp())) return;
     if (payment === 'stripe') {
       if (!enableStripeTopUp) {
         showError(t('管理员未开启Stripe充值！'));
@@ -380,6 +442,7 @@ const TopUp = () => {
   };
 
   const creemPreTopUp = async (product) => {
+    if (!(await ensureRealNameVerifiedForTopUp())) return;
     if (!enableCreemTopUp) {
       showError(t('管理员未开启 Creem 充值！'));
       return;
@@ -425,6 +488,7 @@ const TopUp = () => {
   };
 
   const waffoTopUp = async (payMethodIndex) => {
+    if (!(await ensureRealNameVerifiedForTopUp())) return;
     try {
       if (topUpCount < waffoMinTopUp) {
         showError(t('充值数量不能小于') + waffoMinTopUp);
@@ -460,6 +524,7 @@ const TopUp = () => {
   };
 
   const ucoinTopUp = async (coinPairIndex) => {
+    if (!(await ensureRealNameVerifiedForTopUp())) return;
     try {
       if (!enableUcoinTopUp) {
         showError(t('管理员未开启 U币支付！'));
@@ -592,6 +657,7 @@ const TopUp = () => {
       const res = await API.get('/api/user/topup/info');
       const { message, data, success } = res.data;
       if (success) {
+        syncRealNameVerificationGate(data, { prompt: true, promptOnce: true });
         setTopupInfo({
           amount_options: data.amount_options || [],
           discount: data.discount || {},
@@ -981,6 +1047,7 @@ const TopUp = () => {
 
   /** 点击额度卡片：选中额度后弹出支付方式，或仅一种方式时直接进入确认弹窗。 */
   const handlePresetCardClick = async (preset) => {
+    if (!(await ensureRealNameVerifiedForTopUp())) return;
     await selectPresetAmount(preset);
     const enabledMethods = getEnabledEpayMethods(preset.value);
     if (enabledMethods.length === 0) {
@@ -1193,6 +1260,7 @@ const TopUp = () => {
           activeSubscriptions={activeSubscriptions}
           allSubscriptions={allSubscriptions}
           reloadSubscriptionSelf={getSubscriptionSelf}
+          ensureRealNameVerifiedForTopUp={ensureRealNameVerifiedForTopUp}
         />
       </div>
 

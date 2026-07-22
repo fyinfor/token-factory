@@ -153,8 +153,13 @@ export const useUsersData = () => {
       return;
     }
     setSearching(true);
-    const tagQuery = (searchTag || selectedTag) ? `&tag=${encodeURIComponent(searchTag || selectedTag)}` : '';
-    const remarkQuery = searchRemark ? `&remark=${encodeURIComponent(searchRemark)}` : '';
+    const tagQuery =
+      searchTag || selectedTag
+        ? `&tag=${encodeURIComponent(searchTag || selectedTag)}`
+        : '';
+    const remarkQuery = searchRemark
+      ? `&remark=${encodeURIComponent(searchRemark)}`
+      : '';
     const res = await API.get(
       `/api/user/search?keyword=${encodeURIComponent(searchKeyword || '')}&group=${encodeURIComponent(searchGroup || '')}&student_view=${encodeURIComponent(studentView)}${tagQuery}${remarkQuery}&p=${startIdx}&page_size=${pageSize}`,
     );
@@ -198,6 +203,10 @@ export const useUsersData = () => {
             is_distributor: user.is_distributor,
             is_student: user.is_student,
             student_status: user.student_status,
+            real_name_verified:
+              action === 'remove_real_name' ? false : u.real_name_verified,
+            real_name_verified_at:
+              action === 'remove_real_name' ? null : u.real_name_verified_at,
           };
         }
         return u;
@@ -297,11 +306,25 @@ export const useUsersData = () => {
   const handleStudentViewChange = (nextView) => {
     setStudentView(nextView);
     setActivePage(1);
-    const { searchKeyword, searchRemark, searchGroup, searchTag } = getFormValues();
-    if (searchKeyword === '' && searchRemark === '' && searchGroup === '' && !searchTag && !selectedTag) {
+    const { searchKeyword, searchRemark, searchGroup, searchTag } =
+      getFormValues();
+    if (
+      searchKeyword === '' &&
+      searchRemark === '' &&
+      searchGroup === '' &&
+      !searchTag &&
+      !selectedTag
+    ) {
       loadUsers(0, pageSize).then();
     } else {
-      searchUsers(0, pageSize, searchKeyword, searchGroup, searchTag, searchRemark).then();
+      searchUsers(
+        0,
+        pageSize,
+        searchKeyword,
+        searchGroup,
+        searchTag,
+        searchRemark,
+      ).then();
     }
   };
 
@@ -342,11 +365,25 @@ export const useUsersData = () => {
   // Handle page change
   const handlePageChange = (page) => {
     setActivePage(page);
-    const { searchKeyword, searchRemark, searchGroup, searchTag } = getFormValues();
-    if (searchKeyword === '' && searchRemark === '' && searchGroup === '' && !searchTag && !selectedTag) {
+    const { searchKeyword, searchRemark, searchGroup, searchTag } =
+      getFormValues();
+    if (
+      searchKeyword === '' &&
+      searchRemark === '' &&
+      searchGroup === '' &&
+      !searchTag &&
+      !selectedTag
+    ) {
       loadUsers(page, pageSize).then();
     } else {
-      searchUsers(page, pageSize, searchKeyword, searchGroup, searchTag, searchRemark).then();
+      searchUsers(
+        page,
+        pageSize,
+        searchKeyword,
+        searchGroup,
+        searchTag,
+        searchRemark,
+      ).then();
     }
   };
 
@@ -377,11 +414,25 @@ export const useUsersData = () => {
 
   // Refresh data
   const refresh = async (page = activePage) => {
-    const { searchKeyword, searchRemark, searchGroup, searchTag } = getFormValues();
-    if (searchKeyword === '' && searchRemark === '' && searchGroup === '' && !searchTag && !selectedTag) {
+    const { searchKeyword, searchRemark, searchGroup, searchTag } =
+      getFormValues();
+    if (
+      searchKeyword === '' &&
+      searchRemark === '' &&
+      searchGroup === '' &&
+      !searchTag &&
+      !selectedTag
+    ) {
       await loadUsers(page, pageSize);
     } else {
-      await searchUsers(page, pageSize, searchKeyword, searchGroup, searchTag, searchRemark);
+      await searchUsers(
+        page,
+        pageSize,
+        searchKeyword,
+        searchGroup,
+        searchTag,
+        searchRemark,
+      );
     }
   };
 
