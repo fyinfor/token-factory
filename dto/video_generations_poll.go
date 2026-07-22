@@ -4,7 +4,8 @@ import "github.com/QuantumNous/new-api/common"
 
 // VideoGenerationsPollContent 对应上游 Seedance/Ark 查询回包中的 content 节点。
 type VideoGenerationsPollContent struct {
-	VideoURL string `json:"video_url,omitempty"`
+	VideoURL     string `json:"video_url,omitempty"`
+	LastFrameURL string `json:"last_frame_url,omitempty"` // return_last_frame=true 时返回尾帧图
 }
 
 // VideoGenerationsPollExtra 对应上游 extra 元数据（计费/调试辅助，按需透传解析）。

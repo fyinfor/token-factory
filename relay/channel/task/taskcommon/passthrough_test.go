@@ -99,3 +99,38 @@ func TestRewriteJSONPassThroughBody_KeepsUnknownFields(t *testing.T) {
 	_, hasPrompt := got["prompt"]
 	assert.False(t, hasPrompt)
 }
+
+func TestBuildPassThroughRequestBody_KeepsCallbackURLAndReturnLastFrame(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{
+		"model": "Seedance 2.0",
+		"prompt": "gateway only",
+		"content": [{"type": "text", "text": "一只猫在窗台晒太阳"}],
+		"resolution": "720p",
+		"duration": 5,
+		"callback_url": "https://example.com/api/debug/seedance/callback/tok_test",
+		"return_last_frame": true
+	}`)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/video/generations", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "doubao-seedance-2-0-260128",
+			ChannelSetting:    dto.ChannelSettings{PassThroughBodyEnabled: true},
+		},
+	}
+	reader, err := BuildPassThroughRequestBody(c, info)
+	require.NoError(t, err)
+	out, err := io.ReadAll(reader)
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, common.Unmarshal(out, &got))
+	assert.Equal(t, "doubao-seedance-2-0-260128", got["model"])
+	_, hasPrompt := got["prompt"]
+	assert.False(t, hasPrompt)
+	assert.Equal(t, "https://example.com/api/debug/seedance/callback/tok_test", got["callback_url"])
+	assert.Equal(t, true, got["return_last_frame"])
+}

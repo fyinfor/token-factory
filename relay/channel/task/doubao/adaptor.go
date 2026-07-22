@@ -71,7 +71,8 @@ type responseTask struct {
 	Model   string `json:"model"`
 	Status  string `json:"status"`
 	Content struct {
-		VideoURL string `json:"video_url"`
+		VideoURL     string `json:"video_url"`
+		LastFrameURL string `json:"last_frame_url,omitempty"`
 	} `json:"content"`
 	Seed            int    `json:"seed"`
 	Resolution      string `json:"resolution"`
@@ -462,6 +463,9 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 	openAIVideo.Status = originTask.Status.ToVideoStatus()
 	openAIVideo.SetProgressStr(originTask.Progress)
 	openAIVideo.SetMetadata("url", dResp.Content.VideoURL)
+	if lastFrame := strings.TrimSpace(dResp.Content.LastFrameURL); lastFrame != "" {
+		openAIVideo.SetMetadata("last_frame_url", lastFrame)
+	}
 	openAIVideo.CreatedAt = dto.FormatTimeUnixRFC3339(originTask.CreatedAt)
 	if originTask.FinishTime > 0 {
 		openAIVideo.CompletedAt = dto.FormatTimeUnixRFC3339(originTask.FinishTime)

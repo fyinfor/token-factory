@@ -130,3 +130,31 @@ func TestPromptMissing(t *testing.T) {
 	assert.True(t, promptMissing("  "))
 	assert.False(t, promptMissing("hello"))
 }
+
+func TestValidateSeedanceTaskRequest_PromotesCallbackAndReturnLastFrame(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	body := []byte(`{
+		"model": "Seedance 2.0",
+		"prompt": "拟人小猫在客厅跳舞",
+		"content": [{"type": "text", "text": "拟人小猫在客厅跳舞"}],
+		"callback_url": "https://example.com/hook",
+		"return_last_frame": true,
+		"resolution": "480p",
+		"duration": 5
+	}`)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/video/generations", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	info := &relaycommon.RelayInfo{
+		ChannelMeta: &relaycommon.ChannelMeta{ChannelType: constant.ChannelTypeSeedance},
+	}
+	err := validateSeedanceTaskRequest(c, info)
+	require.Nil(t, err)
+
+	req, gErr := relaycommon.GetTaskRequest(c)
+	require.NoError(t, gErr)
+	require.NotNil(t, req.Metadata)
+	assert.Equal(t, "https://example.com/hook", req.Metadata["callback_url"])
+	assert.Equal(t, true, req.Metadata["return_last_frame"])
+}

@@ -44,6 +44,13 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/pricing", middleware.TryUserAuth(), controller.GetPricing)
 		apiRouter.POST("/price_sync", middleware.CriticalRateLimit(), controller.PriceSync)
 
+		// Seedance callback_url 探测：创建会话后把返回的 callback_url 填入透传请求，
+		// 上游状态变化会 POST 到 Receive；再用 GET 同路径检查是否成功收到回调。
+		apiRouter.POST("/debug/seedance/callback", middleware.CriticalRateLimit(), controller.CreateSeedanceCallbackProbe)
+		apiRouter.POST("/debug/seedance/callback/:token", middleware.CriticalRateLimit(), controller.ReceiveSeedanceCallbackProbe)
+		apiRouter.GET("/debug/seedance/callback/:token", middleware.CriticalRateLimit(), controller.InspectSeedanceCallbackProbe)
+		apiRouter.DELETE("/debug/seedance/callback/:token", middleware.CriticalRateLimit(), controller.DeleteSeedanceCallbackProbe)
+
 		// 终端用户素材库 Action 网关：POST /api/material?Action=xxx（Token 鉴权）。
 		// 与 Web 控制台 REST 路由（UserAuth）及上游 tokenspace 内部调用（seedance_material）三层隔离。
 		apiRouter.POST("/material", middleware.TokenAuth(), middleware.CriticalRateLimit(), controller.HandleMaterialAction)

@@ -88,7 +88,8 @@ func promptMissing(v any) bool {
 }
 
 // enrichSeedanceTaskRequestFromContent 把 content[] 中的参考图/视频同步到 TaskSubmitReq，
-// 以便 ResolveTaskActionToStore / DetectVideoBillingMode 识别正确任务类型。
+// 以便 ResolveTaskActionToStore / DetectVideoBillingMode 识别正确任务类型；
+// 同时把顶层 callback_url / return_last_frame 提升到 metadata，供非透传 convert 路径转发上游。
 func enrichSeedanceTaskRequestFromContent(c *gin.Context, info *relaycommon.RelayInfo) {
 	raw, ok := relaycommon.GetTaskPersistedInput(c)
 	if !ok {
@@ -103,19 +104,32 @@ func enrichSeedanceTaskRequestFromContent(c *gin.Context, info *relaycommon.Rela
 	if err := common.UnmarshalJsonStr(raw, &bodyMap); err != nil {
 		return
 	}
-	contentRaw, ok := bodyMap["content"]
-	if !ok {
-		return
-	}
-	items, ok := contentRaw.([]any)
-	if !ok || len(items) == 0 {
-		return
-	}
 
 	changed := false
 	if req.Metadata == nil {
 		req.Metadata = make(map[string]any)
 	}
+	if promoteSeedanceUpstreamScalars(bodyMap, req.Metadata) {
+		changed = true
+	}
+
+	contentRaw, ok := bodyMap["content"]
+	if !ok {
+		if changed {
+			action := relaycommon.ResolveTaskActionToStore(info, constant.TaskActionGenerate, &req)
+			relaycommon.StoreTaskRequest(c, info, action, req)
+		}
+		return
+	}
+	items, ok := contentRaw.([]any)
+	if !ok || len(items) == 0 {
+		if changed {
+			action := relaycommon.ResolveTaskActionToStore(info, constant.TaskActionGenerate, &req)
+			relaycommon.StoreTaskRequest(c, info, action, req)
+		}
+		return
+	}
+
 	videoURLs := collectMetadataStringList(req.Metadata["video_urls"])
 
 	for _, item := range items {
@@ -148,6 +162,43 @@ func enrichSeedanceTaskRequestFromContent(c *gin.Context, info *relaycommon.Rela
 	relaycommon.StoreTaskRequest(c, info, action, req)
 	logger.LogInfo(c, fmt.Sprintf("seedance: enriched task request from content images=%d videos=%d action=%s",
 		len(req.Images), len(videoURLs), action))
+}
+
+// promoteSeedanceUpstreamScalars 将 Ark 原生顶层可选参数写入 metadata（仅在 metadata 未显式设置时）。
+func promoteSeedanceUpstreamScalars(bodyMap, metadata map[string]any) bool {
+	if bodyMap == nil || metadata == nil {
+		return false
+	}
+	changed := false
+	if _, exists := metadata["callback_url"]; !exists {
+		if v, ok := bodyMap["callback_url"]; ok {
+			if s, ok := v.(string); ok {
+				if t := strings.TrimSpace(s); t != "" {
+					metadata["callback_url"] = t
+					changed = true
+				}
+			}
+		}
+	}
+	if _, exists := metadata["return_last_frame"]; !exists {
+		if v, ok := bodyMap["return_last_frame"]; ok {
+			switch b := v.(type) {
+			case bool:
+				metadata["return_last_frame"] = b
+				changed = true
+			case string:
+				switch strings.ToLower(strings.TrimSpace(b)) {
+				case "true", "1":
+					metadata["return_last_frame"] = true
+					changed = true
+				case "false", "0":
+					metadata["return_last_frame"] = false
+					changed = true
+				}
+			}
+		}
+	}
+	return changed
 }
 
 func mediaURLFromContentItem(item map[string]any, key string) string {
