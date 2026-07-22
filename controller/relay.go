@@ -755,7 +755,10 @@ func RelayTask(c *gin.Context) {
 		service.LogTaskConsumption(c, relayInfo)
 
 		task := model.InitTask(result.Platform, relayInfo)
-		if req, err := relaycommon.GetTaskRequest(c); err == nil {
+		// 优先使用渠道写入的完整原始请求体（如 Seedance 透传），便于线上排查。
+		if raw, ok := relaycommon.GetTaskPersistedInput(c); ok {
+			task.Properties.Input = raw
+		} else if req, err := relaycommon.GetTaskRequest(c); err == nil {
 			if reqBytes, mErr := common.Marshal(req); mErr == nil {
 				task.Properties.Input = string(reqBytes)
 			}

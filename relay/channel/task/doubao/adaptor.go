@@ -115,8 +115,15 @@ func (a *TaskAdaptor) Init(info *relaycommon.RelayInfo) {
 }
 
 // ValidateRequestAndSetAction parses body, validates fields and sets default action.
+// Seedance（火山方舟）走专属逻辑：默认 prompt 兜底 + 完整原始请求体落库。
 func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycommon.RelayInfo) (taskErr *dto.TaskError) {
-	// Accept only POST /v1/video/generations as "generate" action.
+	channelType := a.ChannelType
+	if info != nil && info.ChannelMeta != nil && info.ChannelType != 0 {
+		channelType = info.ChannelType
+	}
+	if channelType == constant.ChannelTypeSeedance {
+		return validateSeedanceTaskRequest(c, info)
+	}
 	return relaycommon.ValidateBasicTaskRequest(c, info, constant.TaskActionGenerate)
 }
 
