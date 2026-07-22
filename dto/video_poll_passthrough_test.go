@@ -86,7 +86,7 @@ func TestFinalizeVideoPollResponseJSON_PreservesPassthroughOnVideosPath(t *testi
 
 func TestParseVideoGenerationsPollUpstream(t *testing.T) {
 	raw := []byte(`{
-		"content":{"video_url":"https://res.mp4"},
+		"content":{"video_url":"https://res.mp4","last_frame_url":"https://res-last.jpg"},
 		"created_at":1781174278,
 		"duration":5,
 		"ratio":"16:9",
@@ -104,6 +104,28 @@ func TestParseVideoGenerationsPollUpstream(t *testing.T) {
 	require.Equal(t, 50638, upstream.Usage.TotalTokens)
 	require.NotNil(t, upstream.Content)
 	require.Equal(t, "https://res.mp4", upstream.Content.VideoURL)
+	require.Equal(t, "https://res-last.jpg", upstream.Content.LastFrameURL)
+}
+
+func TestMergeVideoPollPassthroughFields_IncludesContentLastFrameURL(t *testing.T) {
+	response := []byte(`{"id":"local_task","status":"completed","object":"video.generation"}`)
+	upstream := []byte(`{
+		"status":"succeeded",
+		"ratio":"16:9",
+		"resolution":"480p",
+		"duration":5,
+		"content":{"video_url":"https://res.mp4","last_frame_url":"https://res-last.jpg"},
+		"usage":{"total_tokens":10}
+	}`)
+	out, err := MergeVideoPollPassthroughFields(response, upstream)
+	require.NoError(t, err)
+
+	var m map[string]any
+	require.NoError(t, common.Unmarshal(out, &m))
+	content, ok := m["content"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "https://res.mp4", content["video_url"])
+	require.Equal(t, "https://res-last.jpg", content["last_frame_url"])
 }
 
 func TestCorrectVideoPollTimestamps_MatchesTaskLogNotUpstream(t *testing.T) {

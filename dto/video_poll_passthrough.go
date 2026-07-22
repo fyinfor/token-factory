@@ -7,7 +7,8 @@ import (
 )
 
 // videoPollPassthroughFieldKeys 为视频任务查询需从上游原样透传给用户的字段。
-var videoPollPassthroughFieldKeys = []string{"ratio", "resolution", "duration", "usage"}
+// content 含 video_url / last_frame_url（return_last_frame=true 时）。
+var videoPollPassthroughFieldKeys = []string{"ratio", "resolution", "duration", "usage", "content"}
 
 // VideoPollTimestampContext 提供比上游更可靠的任务时间戳，用于校正 created_at / completed_at。
 type VideoPollTimestampContext struct {
@@ -149,7 +150,7 @@ func FinalizeVideoPollResponseJSON(responseJSON, upstreamJSON []byte, requestPat
 	return AdaptOpenAIVideoJSONForPath(requestPath, corrected)
 }
 
-// FinalizeVideoPollPassthroughJSON 用于渠道全量透传场景：保留上游 JSON 结构，仅补齐四字段并校正时间。
+// FinalizeVideoPollPassthroughJSON 用于渠道全量透传场景：保留上游 JSON 结构，仅补齐透传字段并校正时间。
 func FinalizeVideoPollPassthroughJSON(respJSON, upstreamJSON []byte, requestPath string, ts VideoPollTimestampContext) ([]byte, error) {
 	merged, err := MergeVideoPollPassthroughFields(respJSON, upstreamJSON)
 	if err != nil {
