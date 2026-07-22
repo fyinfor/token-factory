@@ -14,7 +14,7 @@ import (
 )
 
 const seedanceUpstreamPollJSON = `{
-    "content": {"video_url": "https://res.mp4"},
+    "content": {"video_url": "https://res.mp4", "last_frame_url": "https://res-last.jpg"},
     "created_at": 1781174278,
     "duration": 5,
     "id": "task_WZNVZhE1MQ1LX9vTy7pTdv2bmTYNx6x8",
@@ -46,6 +46,8 @@ func TestBuildOpenAIVideoPollResponse_SeedanceUpstreamShape(t *testing.T) {
 		require.Contains(t, s, `"resolution":"480p"`, path)
 		require.Contains(t, s, `"duration":5`, path)
 		require.Contains(t, s, `"usage":`, path)
+		require.Contains(t, s, `"last_frame_url":"https://res-last.jpg"`, path)
+		require.Contains(t, s, `"content":`, path)
 		if path == "/v1/videos/local_task" {
 			require.Contains(t, s, `"created_at":1700000000`, path)
 			require.Contains(t, s, `"completed_at":1700000100`, path)

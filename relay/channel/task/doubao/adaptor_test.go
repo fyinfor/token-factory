@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -195,4 +196,53 @@ func TestBuildRequestBody_IntegrationShape(t *testing.T) {
 	assert.Contains(t, string(data), `"type":"text"`)
 	assert.Contains(t, string(data), `"resolution":"720p"`)
 	_ = io.Discard
+}
+
+func TestConvertToRequestPayload_CallbackURLAndReturnLastFrame(t *testing.T) {
+	a := &TaskAdaptor{}
+	body, err := a.convertToRequestPayload(&relaycommon.TaskSubmitReq{
+		Model:  "doubao-seedance-2-0-260128",
+		Prompt: "一只猫",
+		Metadata: map[string]interface{}{
+			"callback_url":      "https://example.com/api/debug/seedance/callback/tok",
+			"return_last_frame": true,
+			"duration":          5,
+		},
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "https://example.com/api/debug/seedance/callback/tok", body.CallbackURL)
+	require.NotNil(t, body.ReturnLastFrame)
+	assert.True(t, bool(*body.ReturnLastFrame))
+
+	data, err := common.Marshal(body)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"callback_url":"https://example.com/api/debug/seedance/callback/tok"`)
+	assert.Contains(t, string(data), `"return_last_frame":true`)
+}
+
+func TestConvertToOpenAIVideo_IncludesLastFrameURLInMetadata(t *testing.T) {
+	a := &TaskAdaptor{}
+	upstream := []byte(`{
+		"id":"cgt-1",
+		"status":"succeeded",
+		"content":{"video_url":"https://res.mp4","last_frame_url":"https://res-last.jpg"},
+		"usage":{"completion_tokens":10,"total_tokens":10}
+	}`)
+	task := &model.Task{
+		TaskID:   "local_task",
+		Status:   model.TaskStatusSuccess,
+		Progress: "100%",
+		Data:     upstream,
+		Properties: model.Properties{OriginModelName: "doubao-seedance-2-0-260128"},
+	}
+	out, err := a.ConvertToOpenAIVideo(task)
+	require.NoError(t, err)
+	var got map[string]any
+	require.NoError(t, common.Unmarshal(out, &got))
+	meta, ok := got["metadata"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "https://res-last.jpg", meta["last_frame_url"])
+	output, ok := got["output"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "https://res.mp4", output["video_url"])
 }

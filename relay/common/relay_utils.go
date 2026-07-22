@@ -55,9 +55,19 @@ func createTaskError(err error, code string, statusCode int, localError bool) *d
 	}
 }
 
-func storeTaskRequest(c *gin.Context, info *RelayInfo, action string, requestObj TaskSubmitReq) {
-	info.Action = action
+func StoreTaskRequest(c *gin.Context, info *RelayInfo, action string, requestObj TaskSubmitReq) {
+	if info != nil {
+		if info.TaskRelayInfo == nil {
+			info.TaskRelayInfo = &TaskRelayInfo{}
+		}
+		info.Action = action
+	}
 	c.Set("task_request", requestObj)
+}
+
+// storeTaskRequest keeps the historical unexported name used inside this package.
+func storeTaskRequest(c *gin.Context, info *RelayInfo, action string, requestObj TaskSubmitReq) {
+	StoreTaskRequest(c, info, action, requestObj)
 }
 func GetTaskRequest(c *gin.Context) (TaskSubmitReq, error) {
 	v, exists := c.Get("task_request")
