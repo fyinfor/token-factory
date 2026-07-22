@@ -55,6 +55,7 @@ type OpenAIModelsResponse struct {
 
 var channelAllowedSupplierTypes = map[string]struct{}{
 	"公有云":   {},
+	"官转":    {},
 	"AIDC":  {},
 	"企业中转站": {},
 	"个人中转站": {},

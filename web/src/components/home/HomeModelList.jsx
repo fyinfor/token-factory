@@ -39,6 +39,7 @@ import { useModelPricingData } from '../../hooks/model-pricing/useModelPricingDa
 import { usePricingFilterCounts } from '../../hooks/model-pricing/usePricingFilterCounts';
 import { StatusContext } from '../../context/Status';
 import { UserContext } from '../../context/User';
+import { LIVE_HOT_FILTER } from '../table/model-pricing/utils/modelHeat';
 
 const HomeModelList = () => {
   const isMobile = useIsMobile();
@@ -85,8 +86,10 @@ const HomeModelList = () => {
     filterEndpointType: pricingData.filterEndpointType,
     filterVendor: pricingData.filterVendor,
     filterTag: pricingData.filterTag,
+    filterSupplier: pricingData.filterSupplier,
     filterSupplierType: pricingData.filterSupplierType,
     searchValue: pricingData.searchValue,
+    hotChannelScoreMap: pricingData.hotChannelScoreMap,
   });
 
   React.useEffect(() => {
@@ -119,6 +122,13 @@ const HomeModelList = () => {
     }
   };
 
+  const handleFilterTagChange = (tag) => {
+    pricingData.setFilterTag(tag);
+    if (tag === LIVE_HOT_FILTER) {
+      pricingData.setSortKey?.('hot');
+    }
+  };
+
   const sortSelectValue =
     !pricingData.sortKey || pricingData.sortKey === 'default'
       ? 'hot'
@@ -138,7 +148,7 @@ const HomeModelList = () => {
       <style>{`
         .home-model-cards-grid {
           display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+          grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
           gap: 0.75rem;
           align-items: stretch;
         }
@@ -354,6 +364,7 @@ const HomeModelList = () => {
           max-width: 100%;
         }
         .home-model-detail-btn {
+          padding-right: 7px !important;
           border-color: rgba(var(--semi-blue-5), 0.32) !important;
           background: rgba(var(--semi-blue-0), 0.42) !important;
           color: var(--semi-color-primary) !important;
@@ -362,6 +373,13 @@ const HomeModelList = () => {
         .home-model-detail-btn:hover {
           border-color: rgba(var(--semi-blue-5), 0.48) !important;
           background: rgba(var(--semi-blue-0), 0.68) !important;
+        }
+        .home-model-detail-arrow {
+          flex-shrink: 0;
+          transition: transform 180ms ease;
+        }
+        .home-model-detail-btn:hover .home-model-detail-arrow {
+          transform: translateX(2px);
         }
         .home-model-card-hot {
           border-color: rgba(59, 130, 246, 0.4) !important;
@@ -590,8 +608,6 @@ const HomeModelList = () => {
           }
         }
         .home-model-sidebar {
-          position: sticky;
-          top: 60px;
           align-self: flex-start;
           width: 300px;
           min-width: 300px;
@@ -611,9 +627,6 @@ const HomeModelList = () => {
           }
         }
         .home-sidebar-header {
-          position: sticky;
-          top: 0;
-          z-index: 11;
           padding: 1rem 1rem 0.5rem 1rem;
         }
         .home-sidebar-tools {
@@ -897,12 +910,16 @@ const HomeModelList = () => {
 
             <PricingTags
               filterTag={pricingData.filterTag}
-              setFilterTag={pricingData.setFilterTag}
+              setFilterTag={handleFilterTagChange}
               models={tagModels}
               allModels={pricingData.models}
               loading={pricingData.loading}
               t={pricingData.t}
               layout='inline'
+              showLiveHot
+              hotChannelScoreMap={pricingData.hotChannelScoreMap}
+              filterSupplier={pricingData.filterSupplier}
+              filterSupplierType={pricingData.filterSupplierType}
             />
 
             <PricingProviderType
@@ -928,8 +945,8 @@ const HomeModelList = () => {
 
         <div className='home-model-content'>
           <div
-            className={`home-search-wrapper ${isMobile ? 'w-full mb-4' : 'w-full sticky top-[75px] my-4 rounded-xl'}`}
-            style={{ zIndex: 100, backgroundColor: 'transparent' }}
+            className={`home-search-wrapper ${isMobile ? 'w-full mb-4' : 'w-full my-4 rounded-xl'}`}
+            style={{ backgroundColor: 'transparent' }}
           >
             <div className='flex items-center gap-2 w-full'>
               <Input
@@ -1002,6 +1019,9 @@ const HomeModelList = () => {
               blurPricing={blurPricing}
               homeCardMode
               searchValue={pricingData.searchValue}
+              hotChannelScoreMap={pricingData.hotChannelScoreMap}
+              filterSupplier={pricingData.filterSupplier}
+              filterSupplierType={pricingData.filterSupplierType}
             />
           </div>
         </div>
@@ -1046,6 +1066,7 @@ const HomeModelList = () => {
         channelVideoCompletionRatioMap={pricingData.channelVideoCompletionRatio}
         channelVideoPriceMap={pricingData.channelVideoPrice}
         perfMetricsMap={pricingData.perfMetricsMap}
+        hotChannelScoreMap={pricingData.hotChannelScoreMap}
       />
     </div>
   );

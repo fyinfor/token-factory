@@ -32,6 +32,7 @@ import {
 import ModelChannelList from './ModelChannelList';
 import ModelEndpoints from './ModelEndpoints';
 import ModelPerfPanel from './ModelPerfPanel';
+import { getChannelHeatKey } from '../../utils/modelHeat';
 
 const { Text } = Typography;
 
@@ -92,6 +93,48 @@ const ChannelStabilitySignal = ({ row, t }) => {
       </span>
     </Tooltip>
   );
+};
+
+const ChannelHotPill = ({ t }) => (
+  <span className='channel-hot-pill' title={t('热门')}>
+    <span className='channel-hot-pill-text'>{t('热门')}</span>
+  </span>
+);
+
+const ChannelDiscountPill = ({ discountLabel }) => (
+  <Tag size='small' shape='circle' className='channel-discount-tag'>
+    {discountLabel}
+  </Tag>
+);
+
+const ChannelStatusBadge = ({ isHotChannel, discountLabel, t }) => {
+  if (isHotChannel && discountLabel) {
+    return (
+      <span
+        className='channel-badge-carousel'
+        title={`${t('热门')} · ${discountLabel}`}
+        aria-label={`${t('热门')} · ${discountLabel}`}
+      >
+        <span className='channel-badge-carousel-track' aria-hidden='true'>
+          <span className='channel-badge-carousel-item'>
+            <ChannelHotPill t={t} />
+          </span>
+          <span className='channel-badge-carousel-item'>
+            <ChannelDiscountPill discountLabel={discountLabel} />
+          </span>
+          <span className='channel-badge-carousel-item'>
+            <ChannelHotPill t={t} />
+          </span>
+        </span>
+      </span>
+    );
+  }
+
+  if (isHotChannel) return <ChannelHotPill t={t} />;
+  if (discountLabel) {
+    return <ChannelDiscountPill discountLabel={discountLabel} />;
+  }
+  return null;
 };
 
 const getChannelLatencyMeta = (row, t) => {
@@ -263,6 +306,7 @@ const ModelChannelWorkspace = ({
   channelMtrMap = {},
   endpointMap = {},
   perfSummary = null,
+  hotChannelScoreMap = new Map(),
   t,
   ...props
 }) => {
@@ -380,6 +424,9 @@ const ModelChannelWorkspace = ({
             const routeLabel =
               channel.route_slug || channel.channel_no || modelData.model_name;
             const discountLabel = formatDiscountLabel(channel, modelData);
+            const isHotChannel = hotChannelScoreMap.has(
+              getChannelHeatKey(modelData, channel),
+            );
             const priceRows = getChannelPriceRows({
               channel,
               modelData,
@@ -416,16 +463,12 @@ const ModelChannelWorkspace = ({
                       {routeLabel}
                     </span>
                   </span>
-                  <div className='flex shrink-0 items-center gap-2'>
-                    {discountLabel ? (
-                      <Tag
-                        size='small'
-                        shape='circle'
-                        className='channel-discount-tag'
-                      >
-                        {discountLabel}
-                      </Tag>
-                    ) : null}
+                  <div className='flex shrink-0 items-center'>
+                    <ChannelStatusBadge
+                      isHotChannel={isHotChannel}
+                      discountLabel={discountLabel}
+                      t={t}
+                    />
                   </div>
                 </div>
                 <div className='channel-selector-divider my-3 border-t border-dashed' />

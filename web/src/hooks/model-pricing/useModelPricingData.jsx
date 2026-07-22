@@ -25,6 +25,12 @@ import { Modal } from '@douyinfe/semi-ui';
 import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
 import { modelMatchesSearchTerm } from '../../components/table/model-pricing/utils/channelRoute';
+import {
+  getRelevantModelHotScore,
+  getTopHotChannels,
+  isTopHotModel,
+  LIVE_HOT_FILTER,
+} from '../../components/table/model-pricing/utils/modelHeat';
 
 const mergeUniqueValues = (values) =>
   Array.from(
@@ -286,6 +292,15 @@ export const useModelPricingData = (options = {}) => {
     }
   }, [siteDisplayType]);
 
+  const hotChannelScoreMap = useMemo(
+    () => getTopHotChannels(models).scoreMap,
+    [models],
+  );
+  const activeChannelHeatFilters = useMemo(
+    () => ({ filterSupplier, filterSupplierType }),
+    [filterSupplier, filterSupplierType],
+  );
+
   const filteredModels = useMemo(() => {
     let result = models;
 
@@ -343,8 +358,15 @@ export const useModelPricingData = (options = {}) => {
 
     // 标签筛选
     if (filterTag !== 'all') {
-      const tagLower = filterTag.toLowerCase();
       result = result.filter((model) => {
+        if (filterTag === LIVE_HOT_FILTER) {
+          return isTopHotModel(
+            model,
+            hotChannelScoreMap,
+            activeChannelHeatFilters,
+          );
+        }
+        const tagLower = filterTag.toLowerCase();
         if (!model.tags) return false;
         const tagsArr = model.tags
           .toLowerCase()
@@ -491,30 +513,23 @@ export const useModelPricingData = (options = {}) => {
         return av > bv ? -1 : 1;
       };
 
-      // 模型热度分计算（用于热门排序）
-      // 根据 channel_list[0] 的 ChannelHeatScore 排序
-      const modelHeatScore = (m) => {
-        const channelList = m.channel_list ?? m.ChannelList ?? [];
-        if (channelList.length > 0) {
-          const firstChannel = channelList[0];
-          return (
-            firstChannel.channel_heat_score ??
-            firstChannel.ChannelHeatScore ??
-            0
-          );
-        }
-        return 0;
-      };
-
-      // 折扣率排序：按实际折扣降序，相同则按 channel_heat_score 降序
+      // 折扣率排序：按实际折扣降序，相同则按实时热度降序。
       const cmpDiscount = (a, b) => {
         const discountA = modelDiscountRatio(a);
         const discountB = modelDiscountRatio(b);
         if (discountA !== discountB) {
           return discountA > discountB ? -1 : 1;
         }
-        const heatA = modelHeatScore(a);
-        const heatB = modelHeatScore(b);
+        const heatA = getRelevantModelHotScore(
+          a,
+          hotChannelScoreMap,
+          activeChannelHeatFilters,
+        );
+        const heatB = getRelevantModelHotScore(
+          b,
+          hotChannelScoreMap,
+          activeChannelHeatFilters,
+        );
         if (heatA !== heatB) {
           return heatA > heatB ? -1 : 1;
         }
@@ -524,8 +539,20 @@ export const useModelPricingData = (options = {}) => {
       result = [...result].sort((a, b) => {
         switch (sortKey) {
           case 'hot':
-            // 按热度分降序，热度相同按模型名
-            return cmpDesc(modelHeatScore(a), modelHeatScore(b), a, b);
+            return cmpDesc(
+              getRelevantModelHotScore(
+                a,
+                hotChannelScoreMap,
+                activeChannelHeatFilters,
+              ),
+              getRelevantModelHotScore(
+                b,
+                hotChannelScoreMap,
+                activeChannelHeatFilters,
+              ),
+              a,
+              b,
+            );
           case 'price':
             return cmpAsc(modelUnitPrice(a), modelUnitPrice(b), a, b);
           case 'supplier_grade':
@@ -557,6 +584,8 @@ export const useModelPricingData = (options = {}) => {
     filterSupplier,
     filterSupplierType,
     sortKey,
+    hotChannelScoreMap,
+    activeChannelHeatFilters,
   ]);
 
   const rowSelection = useMemo(
@@ -860,6 +889,7 @@ export const useModelPricingData = (options = {}) => {
     tokenUnit,
     setTokenUnit,
     models,
+    hotChannelScoreMap,
     perfMetricsMap,
     loading,
     groupRatio,

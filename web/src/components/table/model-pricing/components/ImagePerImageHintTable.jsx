@@ -143,6 +143,7 @@ function ImagePerImageHintTable({
               rows={items}
               gridType='image'
               accent={family === 'image_to_image' ? 'green' : 'blue'}
+              variant='glass'
               t={t}
               zeroDiscountLabel={isCostPrice ? t('0折扣') : '0%'}
             />
