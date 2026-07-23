@@ -35,6 +35,7 @@ import {
 import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
 import SkeletonWrapper from './components/SkeletonWrapper';
+import SettingsSiderBar from './SettingsSiderBar';
 
 import { Nav, Divider, Button } from '@douyinfe/semi-ui';
 
@@ -78,7 +79,7 @@ const routerMap = {
   'supplier-list': '/console/suppliers',
 };
 
-const SiderBar = ({ onNavigate = () => {} }) => {
+const MainSiderBar = ({ onNavigate = () => {} }) => {
   const [statusState] = useContext(StatusContext);
   const { t } = useTranslation();
   const [userState] = useContext(UserContext);
@@ -350,7 +351,7 @@ const SiderBar = ({ onNavigate = () => {} }) => {
       {
         text: t('系统设置'),
         itemKey: 'setting',
-        to: '/setting',
+        to: '/console/setting',
         className: isRoot() ? '' : 'tableHiddle',
       },
     ];
@@ -723,6 +724,26 @@ const SiderBar = ({ onNavigate = () => {} }) => {
             {!collapsed ? t('收起侧边栏') : null}
           </Button>
         </SkeletonWrapper>
+      </div>
+    </div>
+  );
+};
+
+const SiderBar = (props) => {
+  const location = useLocation();
+  const isSettingsRoute = location.pathname === '/console/setting';
+
+  return (
+    <div className='sidebar-switch-shell'>
+      <div
+        key={isSettingsRoute ? 'settings' : 'main'}
+        className='sidebar-switch-view'
+      >
+        {isSettingsRoute ? (
+          <SettingsSiderBar {...props} />
+        ) : (
+          <MainSiderBar {...props} />
+        )}
       </div>
     </div>
   );

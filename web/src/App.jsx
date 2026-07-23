@@ -25,6 +25,7 @@ import {
   AuthRedirect,
   PrivateRoute,
   AdminRoute,
+  RootRoute,
   AdminOrDistributorRoute,
 } from './helpers';
 import RegisterForm from './components/auth/RegisterForm';
@@ -309,15 +310,21 @@ function App() {
         <Route
           path='/console/setting'
           element={
-            <AdminRoute>
+            <RootRoute>
               <Suspense fallback={<Loading></Loading>} key={location.pathname}>
                 <Setting />
               </Suspense>
-            </AdminRoute>
+            </RootRoute>
           }
         />
-        <Route path='/real-name/start' element={<RealNameVerificationStart />} />
-        <Route path='/real-name/result' element={<RealNameVerificationResult />} />
+        <Route
+          path='/real-name/start'
+          element={<RealNameVerificationStart />}
+        />
+        <Route
+          path='/real-name/result'
+          element={<RealNameVerificationResult />}
+        />
         <Route
           path='/console/real-name-verification'
           element={
@@ -472,7 +479,11 @@ function App() {
         />
         <Route
           path='/console/aliyun-guardrail'
-          element={<AdminRoute><AliyunGuardrail /></AdminRoute>}
+          element={
+            <AdminRoute>
+              <AliyunGuardrail />
+            </AdminRoute>
+          }
         />
         <Route
           path='/console'

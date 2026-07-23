@@ -111,7 +111,7 @@ const formatChangelogDate = (value) => {
   return str;
 };
 
-const OtherSetting = () => {
+const OtherSetting = ({ activeSection = 'system-info' }) => {
   const { t } = useTranslation();
   let [inputs, setInputs] = useState({
     Notice: '',
@@ -776,7 +776,12 @@ const OtherSetting = () => {
       >
         {/* 版本信息 */}
         <Form>
-          <Card>
+          <Card
+            id='setting-section-system-info'
+            style={{
+              display: activeSection === 'system-info' ? undefined : 'none',
+            }}
+          >
             <Form.Section text={t('系统信息')}>
               <Row>
                 <Col span={16}>
@@ -810,7 +815,12 @@ const OtherSetting = () => {
           values={inputs}
           getFormApi={(formAPI) => (formAPISettingGeneral.current = formAPI)}
         >
-          <Card>
+          <Card
+            id='setting-section-general'
+            style={{
+              display: activeSection === 'general' ? undefined : 'none',
+            }}
+          >
             <Form.Section text={t('通用设置')}>
               <Form.TextArea
                 label={t('公告')}
@@ -903,7 +913,12 @@ const OtherSetting = () => {
         </Form>
         {/* 更新日志 */}
         <Form>
-          <Card>
+          <Card
+            id='setting-section-changelog'
+            style={{
+              display: activeSection === 'changelog' ? undefined : 'none',
+            }}
+          >
             <Form.Section text={t('更新日志')}>
               <Space vertical align='start' style={{ width: '100%' }}>
                 <Space wrap>
@@ -949,7 +964,12 @@ const OtherSetting = () => {
           values={inputs}
           getFormApi={(formAPI) => (formAPIPersonalization.current = formAPI)}
         >
-          <Card>
+          <Card
+            id='setting-section-appearance'
+            style={{
+              display: activeSection === 'appearance' ? undefined : 'none',
+            }}
+          >
             <Form.Section text={t('个性化设置')}>
               <Form.Input
                 label={t('中文系统名称')}
@@ -1071,7 +1091,10 @@ const OtherSetting = () => {
           values={inputs}
           getFormApi={(formAPI) => (formAPIDocsConfig.current = formAPI)}
         >
-          <Card>
+          <Card
+            id='setting-section-docs'
+            style={{ display: activeSection === 'docs' ? undefined : 'none' }}
+          >
             <Form.Section text={t('文档配置')}>
               <Card title={t('基础信息')} style={{ marginBottom: 12 }}>
                 <Form.Input
@@ -1301,7 +1324,12 @@ const OtherSetting = () => {
         </Form>
 
         {/* 素材设置（Seedance2.0 合规素材库） */}
-        <SettingsSeedance />
+        <div
+          id='setting-section-material'
+          style={{ display: activeSection === 'material' ? undefined : 'none' }}
+        >
+          <SettingsSeedance />
+        </div>
       </Col>
       <Modal
         title={t('新版本') + '：' + updateData.tag_name}

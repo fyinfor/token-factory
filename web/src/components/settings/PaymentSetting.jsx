@@ -29,7 +29,7 @@ import { API, showError, toBoolean } from '../../helpers';
 import { useTranslation } from 'react-i18next';
 
 /** 系统设置中的支付 Tab：拉取 option 并渲染各支付子表单。 */
-const PaymentSetting = () => {
+const PaymentSetting = ({ activeSection = 'general' }) => {
   const { t } = useTranslation();
   let [inputs, setInputs] = useState({
     ServerAddress: '',
@@ -149,24 +149,39 @@ const PaymentSetting = () => {
   return (
     <>
       <Spin spinning={loading} size='large'>
-        <Card style={{ marginTop: '10px' }}>
-          <SettingsGeneralPayment options={inputs} refresh={onRefresh} />
-        </Card>
-        <Card style={{ marginTop: '10px' }}>
-          <SettingsPaymentGateway options={inputs} refresh={onRefresh} />
-        </Card>
-        <Card style={{ marginTop: '10px' }}>
-          <SettingsPaymentGatewayStripe options={inputs} refresh={onRefresh} />
-        </Card>
-        <Card style={{ marginTop: '10px' }}>
-          <SettingsPaymentGatewayCreem options={inputs} refresh={onRefresh} />
-        </Card>
-        <Card style={{ marginTop: '10px' }}>
-          <SettingsPaymentGatewayWaffo options={inputs} refresh={onRefresh} />
-        </Card>
-        <Card style={{ marginTop: '10px' }}>
-          <SettingsPaymentGatewayUcoin options={inputs} refresh={onRefresh} />
-        </Card>
+        {activeSection === 'general' && (
+          <Card style={{ marginTop: '10px' }}>
+            <SettingsGeneralPayment options={inputs} refresh={onRefresh} />
+          </Card>
+        )}
+        {activeSection === 'gateway' && (
+          <Card style={{ marginTop: '10px' }}>
+            <SettingsPaymentGateway options={inputs} refresh={onRefresh} />
+          </Card>
+        )}
+        {activeSection === 'stripe' && (
+          <Card style={{ marginTop: '10px' }}>
+            <SettingsPaymentGatewayStripe
+              options={inputs}
+              refresh={onRefresh}
+            />
+          </Card>
+        )}
+        {activeSection === 'creem' && (
+          <Card style={{ marginTop: '10px' }}>
+            <SettingsPaymentGatewayCreem options={inputs} refresh={onRefresh} />
+          </Card>
+        )}
+        {activeSection === 'waffo' && (
+          <Card style={{ marginTop: '10px' }}>
+            <SettingsPaymentGatewayWaffo options={inputs} refresh={onRefresh} />
+          </Card>
+        )}
+        {activeSection === 'ucoin' && (
+          <Card style={{ marginTop: '10px' }}>
+            <SettingsPaymentGatewayUcoin options={inputs} refresh={onRefresh} />
+          </Card>
+        )}
       </Spin>
     </>
   );
