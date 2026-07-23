@@ -36,6 +36,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { Flame, Server, TrendingUp, Hash, Save, RefreshCw, Filter, Clock } from 'lucide-react';
 import { API, showError, showSuccess, getLobeHubIcon, stringToColor } from '@/helpers';
+import { getChannelHeatScore } from '../../components/table/model-pricing/utils/modelHeat';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -277,12 +278,10 @@ const CombinedHeatConfig = () => {
   };
 
   // 计算热度分
-  const calculateHeatScore = useCallback((record) => {
-    const base = record.manual_base_req_count ?? 0;
-    const req = record.req_count_7d ?? 0;
-    const weight = record.channel_sort_weight ?? 1;
-    return (base + req) * weight;
-  }, []);
+  const calculateHeatScore = useCallback(
+    (record) => getChannelHeatScore(record),
+    [],
+  );
 
   // 保存单个记录
   const handleSave = async (record, { silent = false } = {}) => {

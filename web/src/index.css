@@ -1181,8 +1181,10 @@ html.dark .api-docs-code-block .hljs-meta {
 
 .channel-route-chip {
   display: inline-flex;
+  width: max-content;
+  max-width: calc(100% - 66px);
+  flex: 0 1 auto;
   min-width: 0;
-  max-width: 132px;
   height: 24px;
   align-items: center;
   gap: 4px;
@@ -1207,6 +1209,8 @@ html.dark .api-docs-code-block .hljs-meta {
 }
 
 .channel-route-chip-supplier {
+  width: max-content;
+  flex: 0 0 auto;
   color: #4d7c0f;
 }
 
@@ -1216,7 +1220,145 @@ html.dark .api-docs-code-block .hljs-meta {
 }
 
 .channel-route-chip-suffix {
+  flex: 1 1 auto;
   color: #0369a1;
+}
+
+.channel-hot-pill {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  overflow: hidden;
+  border: 1px solid rgba(251, 191, 36, 0.36);
+  border-radius: 999px;
+  background: linear-gradient(135deg, #fbbf24, #f97316 48%, #ef4444);
+  box-shadow: 0 8px 20px rgba(249, 115, 22, 0.2);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 24px;
+  white-space: nowrap;
+}
+
+.channel-hot-pill::before {
+  position: absolute;
+  inset: -45% -80%;
+  background: linear-gradient(
+    115deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.86) 50%,
+    transparent 62%
+  );
+  content: '';
+  opacity: 0;
+  transform: translateX(-70%) rotate(8deg);
+  animation: channel-hot-pill-sheen 2.8s ease-in-out infinite;
+}
+
+.channel-hot-pill-text {
+  position: relative;
+  z-index: 1;
+}
+
+.channel-badge-carousel {
+  position: relative;
+  display: inline-flex;
+  width: 58px;
+  height: 24px;
+  flex: 0 0 58px;
+  overflow: hidden;
+  border-radius: 999px;
+  perspective: 180px;
+}
+
+.channel-badge-carousel-track {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  transform: translateY(-48px);
+  transform-origin: center center;
+  animation: channel-badge-page-down 5.2s linear infinite;
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+.channel-badge-carousel-item {
+  display: flex;
+  width: 100%;
+  height: 24px;
+  flex: 0 0 24px;
+  align-items: center;
+  justify-content: center;
+  backface-visibility: hidden;
+}
+
+@keyframes channel-badge-page-down {
+  0%,
+  30% {
+    filter: blur(0);
+    opacity: 1;
+    transform: translateY(-48px) scale(1) rotateX(0deg);
+  }
+  34% {
+    filter: blur(1.4px);
+    opacity: 0.72;
+    transform: translateY(-30px) scale(0.9) rotateX(-24deg);
+  }
+  38% {
+    filter: blur(0);
+    opacity: 1;
+    transform: translateY(-20px) scale(1.04) rotateX(7deg);
+  }
+  41%,
+  69% {
+    filter: blur(0);
+    opacity: 1;
+    transform: translateY(-24px) scale(1) rotateX(0deg);
+  }
+  73% {
+    filter: blur(1.4px);
+    opacity: 0.72;
+    transform: translateY(-6px) scale(0.9) rotateX(-24deg);
+  }
+  77% {
+    filter: blur(0);
+    opacity: 1;
+    transform: translateY(4px) scale(1.04) rotateX(7deg);
+  }
+  80%,
+  100% {
+    filter: blur(0);
+    opacity: 1;
+    transform: translateY(0) scale(1) rotateX(0deg);
+  }
+}
+
+@keyframes channel-hot-pill-sheen {
+  0%,
+  42% {
+    opacity: 0;
+    transform: translateX(-70%) rotate(8deg);
+  }
+  54% {
+    opacity: 0.95;
+  }
+  72%,
+  100% {
+    opacity: 0;
+    transform: translateX(70%) rotate(8deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .channel-badge-carousel-track,
+  .channel-hot-pill::before {
+    animation: none;
+  }
 }
 
 .channel-discount-tag {
@@ -1605,6 +1747,12 @@ html.dark .channel-route-chip-suffix {
 
 html.dark .channel-discount-tag {
   box-shadow: 0 8px 18px rgba(249, 115, 22, 0.12);
+}
+
+html.dark .channel-hot-pill {
+  border-color: rgba(251, 191, 36, 0.28);
+  background: linear-gradient(135deg, #d97706, #ea580c 48%, #dc2626);
+  box-shadow: 0 8px 22px rgba(249, 115, 22, 0.14);
 }
 
 html.dark .channel-price-value {
