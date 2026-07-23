@@ -17,16 +17,18 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useContext, useEffect, useState, useRef } from 'react';
 import { Button, Col, Form, Row, Spin, Tag } from '@douyinfe/semi-ui';
 import {
   compareObjects,
   API,
+  patchStatusData,
   showError,
   showSuccess,
   showWarning,
 } from '../../../helpers';
 import { useTranslation } from 'react-i18next';
+import { StatusContext } from '../../../context/Status';
 
 const defaultInputs = {
   CheckSensitiveEnabled: false,
@@ -36,6 +38,7 @@ const defaultInputs = {
   AliyunGuardrailInputEnabled: true,
   AliyunGuardrailOutputEnabled: true,
   AliyunGuardrailVideoEnabled: false,
+  AliyunGuardrailHidePlaygroundMediaTabs: false,
   AliyunGuardrailAccessKeyID: '',
   AliyunGuardrailAccessKeySecret: '',
   AliyunGuardrailRegionID: 'cn-shanghai',
@@ -43,6 +46,7 @@ const defaultInputs = {
 
 export default function SettingsSensitiveWords(props) {
   const { t } = useTranslation();
+  const [statusState, statusDispatch] = useContext(StatusContext);
   const [loading, setLoading] = useState(false);
   const [inputs, setInputs] = useState(defaultInputs);
   const refForm = useRef();
@@ -88,6 +92,19 @@ export default function SettingsSensitiveWords(props) {
             return showError(t('部分保存失败，请重试'));
         }
         showSuccess(t('保存成功'));
+        const statusPatch = {
+          aliyun_guardrail_hide_playground_media_tabs:
+            normalizedInputs.AliyunGuardrailHidePlaygroundMediaTabs,
+        };
+        const cachedStatus = patchStatusData(statusPatch);
+        statusDispatch({
+          type: 'set',
+          payload: {
+            ...(statusState?.status || {}),
+            ...cachedStatus,
+            ...statusPatch,
+          },
+        });
         props.refresh();
       })
       .catch(() => {
@@ -217,6 +234,19 @@ export default function SettingsSensitiveWords(props) {
                       setInputs({
                         ...inputs,
                         AliyunGuardrailVideoEnabled: value,
+                      })
+                    }
+                  />
+                </Col>
+                <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                  <Form.Switch
+                    field='AliyunGuardrailHidePlaygroundMediaTabs'
+                    label='操练场隐藏图片和视频模型'
+                    extraText='开启后操练场将不显示图片模型和视频模型 Tab'
+                    onChange={(value) =>
+                      setInputs({
+                        ...inputs,
+                        AliyunGuardrailHidePlaygroundMediaTabs: value,
                       })
                     }
                   />

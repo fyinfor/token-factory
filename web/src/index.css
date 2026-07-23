@@ -2371,14 +2371,14 @@ html.dark .channel-price-value {
   flex-shrink: 0;
 }
 
-/* 文本 / 图片 / 视频 模式切换：三等分、无外框 */
+/* 文本 / 图片 / 视频 模式切换：按可见模式均分、无外框 */
 .playground-display-mode-tabs {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
   gap: 8px;
 }
 
 .playground-display-mode-tab {
+  flex: 1 1 0;
   height: 40px;
   margin: 0;
   padding: 0 8px;
