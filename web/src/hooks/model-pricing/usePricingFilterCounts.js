@@ -19,6 +19,10 @@ For commercial licensing, please contact support@quantumnous.com
 
 import { useMemo } from 'react';
 import { modelMatchesSearchTerm } from '../../components/table/model-pricing/utils/channelRoute';
+import {
+  isTopHotModel,
+  LIVE_HOT_FILTER,
+} from '../../components/table/model-pricing/utils/modelHeat';
 
 // 工具函数：将 tags 字符串转为小写去重数组
 const normalizeTags = (tags = '') =>
@@ -38,8 +42,10 @@ export const usePricingFilterCounts = ({
   filterEndpointType = 'all',
   filterVendor = 'all',
   filterTag = 'all',
+  filterSupplier = 'all',
   filterSupplierType = 'all',
   searchValue = '',
+  hotChannelScoreMap = new Map(),
 }) => {
   // 均使用同一份模型列表，避免创建新引用
   const allModels = models;
@@ -82,8 +88,30 @@ export const usePricingFilterCounts = ({
 
     // 标签
     if (!ignore.includes('tag') && filterTag !== 'all') {
-      const tagsArr = normalizeTags(model.tags);
-      if (!tagsArr.includes(filterTag.toLowerCase())) return false;
+      if (filterTag === LIVE_HOT_FILTER) {
+        if (
+          !isTopHotModel(model, hotChannelScoreMap, {
+            filterSupplier,
+            filterSupplierType,
+          })
+        ) {
+          return false;
+        }
+      } else {
+        const tagsArr = normalizeTags(model.tags);
+        if (!tagsArr.includes(filterTag.toLowerCase())) return false;
+      }
+    }
+
+    if (!ignore.includes('supplier') && filterSupplier !== 'all') {
+      if (
+        !model.channel_list ||
+        !model.channel_list.some(
+          (ch) => (ch?.supplier_alias || '') === filterSupplier,
+        )
+      ) {
+        return false;
+      }
     }
 
     // 供应商类型
@@ -119,8 +147,10 @@ export const usePricingFilterCounts = ({
       filterEndpointType,
       filterVendor,
       filterTag,
+      filterSupplier,
       filterSupplierType,
       searchValue,
+      hotChannelScoreMap,
     ],
   );
 
@@ -132,8 +162,10 @@ export const usePricingFilterCounts = ({
       filterQuotaType,
       filterVendor,
       filterTag,
+      filterSupplier,
       filterSupplierType,
       searchValue,
+      hotChannelScoreMap,
     ],
   );
 
@@ -145,8 +177,10 @@ export const usePricingFilterCounts = ({
       filterQuotaType,
       filterEndpointType,
       filterTag,
+      filterSupplier,
       filterSupplierType,
       searchValue,
+      hotChannelScoreMap,
     ],
   );
 
@@ -158,8 +192,10 @@ export const usePricingFilterCounts = ({
       filterQuotaType,
       filterEndpointType,
       filterVendor,
+      filterSupplier,
       filterSupplierType,
       searchValue,
+      hotChannelScoreMap,
     ],
   );
 
@@ -171,8 +207,10 @@ export const usePricingFilterCounts = ({
       filterEndpointType,
       filterVendor,
       filterTag,
+      filterSupplier,
       filterSupplierType,
       searchValue,
+      hotChannelScoreMap,
     ],
   );
 
@@ -185,7 +223,9 @@ export const usePricingFilterCounts = ({
       filterEndpointType,
       filterVendor,
       filterTag,
+      filterSupplier,
       searchValue,
+      hotChannelScoreMap,
     ],
   );
 

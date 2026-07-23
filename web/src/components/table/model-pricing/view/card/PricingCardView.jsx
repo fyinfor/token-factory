@@ -30,7 +30,17 @@ import {
   Avatar,
 } from '@douyinfe/semi-ui';
 import { IconHelpCircle } from '@douyinfe/semi-icons';
-import { Copy } from 'lucide-react';
+import {
+  ArrowRight,
+  ChevronRight,
+  Copy,
+  Database,
+  HardDriveDownload,
+  HardDriveUpload,
+  Image as ImageIcon,
+  Type,
+  Video,
+} from 'lucide-react';
 import {
   IllustrationNoResult,
   IllustrationNoResultDark,
@@ -72,6 +82,11 @@ import {
   getTierPricingColumns,
 } from './pricingTableStyles';
 import { VIDEO_FLAT_LANE_I18N_KEY } from '../../constants/videoFlatClipLaneI18n';
+import {
+  IMAGE_PER_IMAGE_LANE_I18N_KEY,
+  laneToImagePerImageFamily,
+} from '../../constants/imagePerImageHintI18n';
+import { isTopHotModel } from '../../utils/modelHeat';
 import PricingCardSkeleton from './PricingCardSkeleton';
 import ModelPerfCardSection from '../../components/ModelPerfCardSection';
 import { useMinimumLoadingTime } from '../../../../../hooks/common/useMinimumLoadingTime';
@@ -162,7 +177,8 @@ const getVideoTierDiscount = (currentDisplayUsd, officialUsd) => {
   return official > current ? Math.round((1 - current / official) * 100) : 0;
 };
 
-const VIDEO_CARD_TIER_PREVIEW_LIMIT = 2;
+const VIDEO_CARD_TIER_PREVIEW_LIMIT = 3;
+const IMAGE_CARD_TIER_PREVIEW_LIMIT = 3;
 
 const buildVideoTierPreviewItems = (hint, usedGroupRatio, displayPrice, t) => {
   const rows = Array.isArray(hint?.tiers) ? hint.tiers : [];
@@ -220,6 +236,65 @@ const buildVideoTierPreviewItems = (hint, usedGroupRatio, displayPrice, t) => {
   return { items };
 };
 
+const buildImageTierPreviewItems = (hint, usedGroupRatio, displayPrice, t) => {
+  const rows = Array.isArray(hint?.tiers) ? hint.tiers : [];
+  const seen = new Set();
+  const normalizedItems = [];
+
+  for (const row of rows) {
+    const currentUsd = Number(row?.usd_after_channel_discount || 0);
+    if (!Number.isFinite(currentUsd) || currentUsd <= 0) continue;
+
+    const family = laneToImagePerImageFamily(row?.lane);
+    const resolution =
+      formatVideoResolutionDisplayLabel(row?.resolution) ||
+      row?.resolution ||
+      t('默认');
+    const key = `${family}|${resolution}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const officialUsd = Number(row?.usd_official || 0);
+    const platformUsd = currentUsd * usedGroupRatio;
+    const laneKey = IMAGE_PER_IMAGE_LANE_I18N_KEY[row?.lane];
+    normalizedItems.push({
+      key,
+      family,
+      resolution: row?.resolution,
+      label: t(laneKey || '文生图'),
+      spec: resolution,
+      platformPrice: displayPrice(platformUsd),
+      officialPrice:
+        Number.isFinite(officialUsd) && officialUsd > 0
+          ? displayPrice(officialUsd)
+          : '-',
+      discount: getVideoTierDiscount(platformUsd, officialUsd),
+      title: `${t(laneKey || '文生图')} ${resolution}`,
+    });
+  }
+
+  normalizedItems.sort((a, b) => {
+    const familyOrder =
+      (a.family === 'image_to_image' ? 1 : 0) -
+      (b.family === 'image_to_image' ? 1 : 0);
+    if (familyOrder !== 0) return familyOrder;
+    return compareVideoResolutionAsc(a.resolution, b.resolution);
+  });
+
+  // Show both image modes when available, then fill the remaining preview slot.
+  const preview = [];
+  const remaining = [];
+  for (const family of ['text_to_image', 'image_to_image']) {
+    const familyRows = normalizedItems.filter((item) => item.family === family);
+    if (familyRows.length > 0) preview.push(familyRows[0]);
+    remaining.push(...familyRows.slice(1));
+  }
+
+  return {
+    items: [...preview, ...remaining].slice(0, IMAGE_CARD_TIER_PREVIEW_LIMIT),
+  };
+};
+
 const groupVideoTierPreviewRows = (rows) => {
   const groups = [];
   for (const row of rows || []) {
@@ -261,6 +336,70 @@ const getVideoTierGroupStyle = (family) => {
         borderColor: 'var(--semi-blue-4)',
       };
   }
+};
+
+const VideoPipelineLabel = ({ family, title }) => {
+  const SourceIcon =
+    family === 'image_to_video'
+      ? ImageIcon
+      : family === 'video_to_video'
+        ? Video
+        : Type;
+
+  return (
+    <Tooltip content={title} position='right' showArrow>
+      <span
+        className='inline-flex min-w-0 items-center gap-1'
+        role='img'
+        aria-label={title}
+      >
+        <SourceIcon size={14} strokeWidth={2} />
+        <ArrowRight size={12} strokeWidth={2} />
+        <Video size={14} strokeWidth={2} />
+      </span>
+    </Tooltip>
+  );
+};
+
+const ImagePipelineLabel = ({ family, title }) => {
+  const SourceIcon = family === 'image_to_image' ? ImageIcon : Type;
+
+  return (
+    <Tooltip content={title} position='right' showArrow>
+      <span
+        className='inline-flex min-w-0 items-center gap-1'
+        role='img'
+        aria-label={title}
+      >
+        <SourceIcon size={14} strokeWidth={2} />
+        <ArrowRight size={12} strokeWidth={2} />
+        <ImageIcon size={14} strokeWidth={2} />
+      </span>
+    </Tooltip>
+  );
+};
+
+const TOKEN_PRICE_LABELS = {
+  cache: { Icon: Database, titleKey: '缓存读取价格' },
+  'cache-ratio': { Icon: Database, titleKey: '缓存读取倍率' },
+  cache_read: { Icon: HardDriveDownload, titleKey: '缓存读取' },
+  cache_write: { Icon: HardDriveUpload, titleKey: '缓存写入' },
+  'create-cache-ratio': { Icon: HardDriveUpload, titleKey: '缓存创建倍率' },
+};
+
+const TokenPriceLabel = ({ category, t, fallback }) => {
+  const meta = TOKEN_PRICE_LABELS[category];
+  if (!meta) return fallback;
+
+  const { Icon, titleKey } = meta;
+  const title = t(titleKey);
+  return (
+    <Tooltip content={title} position='right' showArrow>
+      <span className='inline-flex' role='img' aria-label={title}>
+        <Icon size={15} strokeWidth={2} />
+      </span>
+    </Tooltip>
+  );
 };
 
 /**
@@ -399,9 +538,8 @@ const DivPricingTable = ({ columns, rows }) => {
                 row.color ||
                 'var(--model-price-glass-text, var(--semi-color-text-0))',
             }}
-            title={row.title || row.label}
           >
-            {row.label}
+            {row.labelNode || row.label}
           </div>
           <div
             className='min-w-0 px-2 py-1.5 text-right font-bold whitespace-nowrap overflow-hidden text-ellipsis'
@@ -475,6 +613,7 @@ const TokenTierTable = ({ items, t }) => {
         return {
           key,
           label: rangeLabel ? `${label}·${rangeLabel}` : label,
+          labelNode: key === 'input' ? t('输入') : t('输出'),
           platformValue: cell.platformPrice,
           officialValue: cell.officialPrice,
           discount: cell.discount,
@@ -616,6 +755,7 @@ const FlatPricingTable = ({ items, unitSuffix, t }) => {
       rows={rows.map((row) => ({
         key: row.key,
         label: row.label,
+        labelNode: row.key === 'input' ? t('输入') : t('输出'),
         platformValue: row.platformValue,
         officialValue: row.officialValue,
         discount: row.discount,
@@ -872,12 +1012,18 @@ const VideoPricingTable = ({ videoTierRows, videoBillingMode, t }) => {
           return {
             key: row.key,
             label: row.spec ? `${group.label}·${row.spec}` : group.label,
+            labelNode: (
+              <VideoPipelineLabel
+                family={row.family}
+                title={`${row.title} ${row.spec}`}
+              />
+            ),
             platformValue: row.platformPrice,
             officialValue: row.officialPrice,
             discount: row.discount,
             hasOriginal: row.officialPrice && row.officialPrice !== '-',
             color: groupStyle.color,
-            title: `${row.title} ${row.audioLabel}`,
+            title: `${row.title} ${row.spec} ${row.audioLabel}`,
           };
         }),
       )}
@@ -1003,6 +1149,30 @@ const VideoPricingTable = ({ videoTierRows, videoBillingMode, t }) => {
   );
 };
 
+const ImagePricingTable = ({ imageTierRows, t }) => {
+  if (!imageTierRows || imageTierRows.length === 0) return null;
+
+  return (
+    <DivPricingTable
+      columns={getDivPricingColumns(t, `/${t('张')}`)}
+      rows={imageTierRows.map((row) => ({
+        key: row.key,
+        label: `${row.label}·${row.spec}`,
+        labelNode: <ImagePipelineLabel family={row.family} title={row.title} />,
+        platformValue: row.platformPrice,
+        officialValue: row.officialPrice,
+        discount: row.discount,
+        hasOriginal: row.officialPrice !== '-',
+        color:
+          row.family === 'image_to_image'
+            ? 'var(--semi-green-7)'
+            : 'var(--semi-blue-7)',
+        title: row.title,
+      }))}
+    />
+  );
+};
+
 const PricingCardView = ({
   filteredModels,
   loading,
@@ -1035,6 +1205,9 @@ const PricingCardView = ({
   channelVideoCompletionRatio = {},
   channelVideoPrice = {},
   perfMetricsMap = {},
+  hotChannelScoreMap = new Map(),
+  filterSupplier = 'all',
+  filterSupplierType = 'all',
 }) => {
   const { i18n } = useTranslation();
   const showSkeleton = useMinimumLoadingTime(loading);
@@ -1087,6 +1260,8 @@ const PricingCardView = ({
           videoBillingMode={item.videoBillingMode}
           t={t}
         />
+      ) : item.imageTierRows ? (
+        <ImagePricingTable imageTierRows={item.imageTierRows} t={t} />
       ) : item.tokenTierMerged ? (
         <TokenTierTable items={item.tokenTierMerged} t={t} />
       ) : !item.valueNode && item.value ? (
@@ -1096,6 +1271,12 @@ const PricingCardView = ({
             {
               key: item.key,
               label: item.label,
+              labelNode:
+                item.key === 'input' || item.key === 'input-ratio'
+                  ? t('输入')
+                  : item.key === 'completion' || item.key === 'completion-ratio'
+                    ? t('输出')
+                    : undefined,
               platformValue: item.value,
               officialValue: item.original?.text,
               discount: item.original?.discount,
@@ -1232,16 +1413,6 @@ const PricingCardView = ({
       });
     });
     return items;
-  };
-
-  const getModelHeatScore = (model) => {
-    const channelList = model?.channel_list ?? model?.ChannelList ?? [];
-    const firstChannel = channelList[0];
-    return (
-      Number(
-        firstChannel?.channel_heat_score ?? firstChannel?.ChannelHeatScore ?? 0,
-      ) || 0
-    );
   };
 
   const collectDiscountsFromPriceItem = (item) => {
@@ -1787,6 +1958,28 @@ const PricingCardView = ({
       Number(imageHint.tier_count) > 0 &&
       Number(imageHint.min_usd_after_channel_discount) > 0;
 
+    if (homeCardMode && useTieredImagePerImage) {
+      const { usedGroupRatio } = getUsedGroupContext(
+        model,
+        selectedGroup,
+        groupRatio,
+      );
+      const imagePreview = buildImageTierPreviewItems(
+        imageHint,
+        usedGroupRatio,
+        displayPrice,
+        t,
+      );
+      if (imagePreview.items.length > 0) {
+        return [
+          {
+            key: 'image-tier-table',
+            imageTierRows: imagePreview.items,
+          },
+        ];
+      }
+    }
+
     const channelPrices = calculateChannelPrices(model, {
       skipSimpleVideoFlat: useTieredVideoFlat,
       skipSimpleFixed: useTieredImagePerImage,
@@ -1802,7 +1995,8 @@ const PricingCardView = ({
           original: null,
           useTieredVideoFlat,
         });
-        if (videoItems.length > 0) return videoItems;
+        // Video pricing must never fall back to generic token input/output rows.
+        return videoItems;
       }
       return getModelPriceItems(priceData, t, siteDisplayType);
     }
@@ -2080,7 +2274,10 @@ const PricingCardView = ({
     const routeMetaTitle = [supplierTypeLabel, supplierSuffix]
       .filter(Boolean)
       .join(' · ');
-    const isHomeHot = getModelHeatScore(model) > 0 && startIndex + index < 8;
+    const isHomeHot = isTopHotModel(model, hotChannelScoreMap, {
+      filterSupplier,
+      filterSupplierType,
+    });
     const pricingBlurStyle = blurPricing
       ? {
           filter: 'blur(6px)',
@@ -2217,7 +2414,15 @@ const PricingCardView = ({
               disabled={blurPricing}
               onClick={openDetail}
             >
-              {t('\u8be6\u60c5')}
+              <span className='inline-flex items-center gap-1'>
+                {t('\u8be6\u60c5')}
+                <ChevronRight
+                  size={14}
+                  strokeWidth={2.25}
+                  className='home-model-detail-arrow'
+                  aria-hidden='true'
+                />
+              </span>
             </Button>
           </div>
         </div>
@@ -2262,7 +2467,11 @@ const PricingCardView = ({
     // 自定义标签（右边）
     const customTags = [];
     if (record.tags) {
-      const tagArr = record.tags.split(',').filter(Boolean);
+      const tagArr = record.tags
+        .split(',')
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+        .filter((tag) => tag !== '热门' && tag.toLowerCase() !== 'hot');
       tagArr.forEach((tg, idx) => {
         const tagText = getModelTagLabel(tg, t);
         customTags.push(
