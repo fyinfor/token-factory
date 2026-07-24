@@ -44,6 +44,7 @@ import ModelChannelList from './ModelChannelList';
 import ModelEndpoints from './ModelEndpoints';
 import ModelPerfPanel from './ModelPerfPanel';
 import { getChannelHeatKey } from '../../utils/modelHeat';
+import { formatPriceRatioFromDiscount } from '../../utils/discount';
 
 const { Text } = Typography;
 
@@ -205,8 +206,8 @@ const formatDiscountLabel = (channel, modelData) => {
   ) {
     return '';
   }
-  const discount = Math.round((channelPrice / officialBase) * 100) / 10;
-  return `${discount.toFixed(discount % 1 === 0 ? 0 : 1)}折`;
+  const discount = Math.round((1 - channelPrice / officialBase) * 100);
+  return formatPriceRatioFromDiscount(discount);
 };
 
 /** 阶梯计费：取第一档输入/输出平台价（USD /1M，已含渠道折扣与分组倍率） */

@@ -17,21 +17,22 @@ type TopUp struct {
 	Id     int `json:"id"`
 	UserId int `json:"user_id" gorm:"index"`
 	// Username 列表接口填充，关联 users.username，仅 JSON 输出，不参与持久化（不使用 omitempty，便于前端始终拿到字段）
-	Username       string  `json:"username" gorm:"-"`
-	Amount         float64 `json:"amount" gorm:"type:decimal(20,6);default:0"`
-	Money          float64 `json:"money"`
-	InputAmount    float64 `json:"input_amount" gorm:"default:0"`
-	InputCurrency  string  `json:"input_currency" gorm:"type:varchar(16);default:''"`
-	PayCurrency    string  `json:"pay_currency" gorm:"type:varchar(16);default:''"`
-	QuotaToAdd     int     `json:"quota_to_add" gorm:"default:0"`
-	TradeNo        string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
-	DepositAddress string  `json:"deposit_address" gorm:"type:varchar(255);index"`
-	PaymentMethod  string  `json:"payment_method" gorm:"type:varchar(50)"`
-	CreateTime     int64   `json:"create_time"`
-	CompleteTime   int64   `json:"complete_time"`
-	Status         string  `json:"status"`
-	InvoicedAmount float64 `json:"invoiced_amount" gorm:"type:decimal(20,6);default:0"`
-	InvoiceEligible bool   `json:"invoice_eligible" gorm:"not null;default:true"`
+	Username             string  `json:"username" gorm:"-"`
+	Amount               float64 `json:"amount" gorm:"type:decimal(20,6);default:0"`
+	Money                float64 `json:"money"`
+	InputAmount          float64 `json:"input_amount" gorm:"default:0"`
+	InputCurrency        string  `json:"input_currency" gorm:"type:varchar(16);default:''"`
+	PayCurrency          string  `json:"pay_currency" gorm:"type:varchar(16);default:''"`
+	QuotaToAdd           int     `json:"quota_to_add" gorm:"default:0"`
+	TradeNo              string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
+	DepositAddress       string  `json:"deposit_address" gorm:"type:varchar(255);index"`
+	PaymentMethod        string  `json:"payment_method" gorm:"type:varchar(50)"`
+	CreateTime           int64   `json:"create_time"`
+	CompleteTime         int64   `json:"complete_time"`
+	Status               string  `json:"status"`
+	InvoicedAmount       float64 `json:"invoiced_amount" gorm:"type:decimal(20,6);default:0"`
+	PendingInvoiceAmount float64 `json:"pending_invoice_amount" gorm:"type:decimal(20,6);default:0"`
+	InvoiceEligible      bool    `json:"invoice_eligible" gorm:"not null;default:true"`
 }
 
 func (topUp *TopUp) ResolveQuotaToAdd() int {

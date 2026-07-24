@@ -33,7 +33,7 @@ import { useMinimumLoadingTime } from './useMinimumLoadingTime';
 export const useHeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
   const { t, i18n } = useTranslation();
   const [userState, userDispatch] = useContext(UserContext);
-  const [statusState] = useContext(StatusContext);
+  const [statusState, statusDispatch] = useContext(StatusContext);
   const isMobile = useIsMobile();
   const [collapsed, toggleCollapsed] = useSidebarCollapsed();
   const [logoLoaded, setLogoLoaded] = useState(false);
@@ -238,6 +238,7 @@ export const useHeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
     // State
     userState,
     statusState,
+    statusDispatch,
     isMobile,
     collapsed,
     logoLoaded,

@@ -11,6 +11,7 @@ import (
 // ImagePerImageTierRow 单档图片按张标价（已乘渠道展示折扣，未乘用户分组倍率）。
 type ImagePerImageTierRow struct {
 	UsdAfterChannelDiscount float64 `json:"usd_after_channel_discount"`
+	UsdChannelRaw           float64 `json:"usd_channel_raw,omitempty"`
 	UsdOfficial             float64 `json:"usd_official,omitempty"`
 	Resolution              string  `json:"resolution,omitempty"`
 	Lane                    string  `json:"lane,omitempty"`
@@ -113,6 +114,7 @@ func buildSortedImagePerImageTierRows(tiers []imagePerImageTier, globalRules rat
 		}
 		rows = append(rows, ImagePerImageTierRow{
 			UsdAfterChannelDiscount: usd,
+			UsdChannelRaw:           ti.RawUSD,
 			UsdOfficial:             globalRaw,
 			Resolution:              strings.TrimSpace(ti.Res),
 			Lane:                    ti.Lane,

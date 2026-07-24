@@ -18,30 +18,55 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import { Button, Badge } from '@douyinfe/semi-ui';
-import { Bell } from 'lucide-react';
+import { Bell, BellRing, ChevronRight } from 'lucide-react';
 
-// NotificationButton 展示站内消息铃铛与未读角标。
-const NotificationButton = ({ unreadCount, onNoticeOpen, t }) => {
-  const buttonProps = {
-    icon: <Bell size={18} />,
-    'aria-label': t('站内消息'),
-    onClick: onNoticeOpen,
-    theme: 'borderless',
-    type: 'tertiary',
-    className:
-      '!p-1.5 !text-current focus:!bg-semi-color-fill-1 dark:focus:!bg-gray-700 !rounded-full !bg-semi-color-fill-0 dark:!bg-semi-color-fill-1 hover:!bg-semi-color-fill-1 dark:hover:!bg-semi-color-fill-2',
-  };
-
-  if (unreadCount > 0) {
-    return (
-      <Badge count={unreadCount} type='danger' overflowCount={99}>
-        <Button {...buttonProps} />
-      </Badge>
-    );
-  }
-
-  return <Button {...buttonProps} />;
-};
+const NotificationButton = ({
+  unreadCount,
+  bubble,
+  bubbleVisible,
+  onNoticeOpen,
+  t,
+}) => (
+  <div className='header-notification-wrap'>
+    <button
+      className='header-notification-button'
+      aria-label={t('通知')}
+      onClick={onNoticeOpen}
+      title={t('通知')}
+      type='button'
+    >
+      <Bell size={18} />
+      {unreadCount > 0 ? (
+        <span className='header-notification-count'>
+          {unreadCount > 99 ? '99+' : unreadCount}
+        </span>
+      ) : null}
+    </button>
+    {bubble ? (
+      <button
+        className='header-notification-preview'
+        data-visible={bubbleVisible ? 'true' : 'false'}
+        aria-hidden={!bubbleVisible}
+        onClick={onNoticeOpen}
+        tabIndex={bubbleVisible ? 0 : -1}
+        type='button'
+      >
+        <span className='notification-preview-pointer' aria-hidden='true' />
+        <span className='notification-preview-icon' aria-hidden='true'>
+          <BellRing size={16} />
+        </span>
+        <span className='notification-preview-copy'>
+          <strong>{bubble.title}</strong>
+          <span>{bubble.message}</span>
+        </span>
+        <ChevronRight
+          className='notification-preview-arrow'
+          size={16}
+          aria-hidden='true'
+        />
+      </button>
+    ) : null}
+  </div>
+);
 
 export default NotificationButton;

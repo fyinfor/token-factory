@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import {
   Button,
   Typography,
@@ -110,6 +110,8 @@ const Home = () => {
   const [homePageContentLoaded, setHomePageContentLoaded] = useState(false);
   const [homePageContent, setHomePageContent] = useState('');
   const [noticeVisible, setNoticeVisible] = useState(false);
+  const noticeCheckedRef = useRef(false);
+  const announcementCount = statusState?.status?.announcements?.length || 0;
   const isMobile = useIsMobile();
   const isDemoSiteMode = statusState?.status?.demo_site_enabled || false;
   const serverAddress =
@@ -168,21 +170,31 @@ const Home = () => {
     const checkNoticeAndShow = async () => {
       const lastCloseDate = localStorage.getItem('notice_close_date');
       const today = new Date().toDateString();
-      if (lastCloseDate !== today) {
-        try {
-          const res = await API.get('/api/notice');
-          const { success, data } = res.data;
-          if (success && data && data.trim() !== '') {
-            setNoticeVisible(true);
-          }
-        } catch (error) {
-          console.error('获取公告失败:', error);
+      if (
+        noticeCheckedRef.current ||
+        lastCloseDate === today ||
+        !statusState?.status
+      ) {
+        return;
+      }
+      noticeCheckedRef.current = true;
+      if (announcementCount > 0) {
+        setNoticeVisible(true);
+        return;
+      }
+      try {
+        const res = await API.get('/api/notice');
+        const { success, data } = res.data;
+        if (success && data && data.trim() !== '') {
+          setNoticeVisible(true);
         }
+      } catch (error) {
+        console.error('获取公告失败:', error);
       }
     };
 
     checkNoticeAndShow();
-  }, []);
+  }, [announcementCount, statusState?.status]);
 
   useEffect(() => {
     displayHomePageContent().then();
@@ -209,7 +221,6 @@ const Home = () => {
         <NoticeModal
           visible={noticeVisible}
           onClose={() => setNoticeVisible(false)}
-          isMobile={isMobile}
         />
         {homePageContentLoaded && homePageContent === '' ? (
           <div className='w-full'>

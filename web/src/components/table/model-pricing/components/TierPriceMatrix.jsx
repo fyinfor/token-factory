@@ -20,6 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 import React from 'react';
 import { Typography } from '@douyinfe/semi-ui';
 import PrecisePriceText from './PrecisePriceText';
+import { formatPriceRatioFromDiscount } from '../utils/discount';
 
 const { Text } = Typography;
 
@@ -60,7 +61,6 @@ function TierPriceMatrix({
   accent = 'blue',
   variant = 'default',
   t,
-  zeroDiscountLabel = '0%',
 }) {
   const gridTemplateColumns =
     typeof gridType === 'string'
@@ -187,11 +187,11 @@ function TierPriceMatrix({
                   {row.discount != null ? (
                     <span style={discountStyle(row.hasDiscount)}>
                       {row.hasDiscount
-                        ? `-${row.discount}%`
-                        : zeroDiscountLabel}
+                        ? formatPriceRatioFromDiscount(row.discount)
+                        : '-'}
                     </span>
                   ) : (
-                    <span className='text-gray-400'>—</span>
+                    <span className='text-gray-400'>-</span>
                   )}
                 </span>
               );

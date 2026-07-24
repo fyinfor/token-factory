@@ -348,6 +348,9 @@ func migrateDB() error {
 	if err := NormalizeEmptyRealNameVerificationCertifyIDs(); err != nil {
 		return fmt.Errorf("normalize real-name verification certify IDs: %w", err)
 	}
+	if err := BackfillPendingInvoiceAmounts(); err != nil {
+		return fmt.Errorf("backfill pending invoice amounts: %w", err)
+	}
 	if err := MigrateLegacyChangelogOption(); err != nil {
 		return fmt.Errorf("migrate legacy changelog option: %w", err)
 	}
@@ -473,6 +476,9 @@ func migrateDBFast() error {
 	migrateTopUpAmountColumn()
 	if err := NormalizeEmptyRealNameVerificationCertifyIDs(); err != nil {
 		return fmt.Errorf("normalize real-name verification certify IDs: %w", err)
+	}
+	if err := BackfillPendingInvoiceAmounts(); err != nil {
+		return fmt.Errorf("backfill pending invoice amounts: %w", err)
 	}
 	if err := MigrateLegacyChangelogOption(); err != nil {
 		return fmt.Errorf("migrate legacy changelog option: %w", err)

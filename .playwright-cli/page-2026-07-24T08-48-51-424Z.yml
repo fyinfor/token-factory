@@ -1,0 +1,103 @@
+- generic [active] [ref=f1e1]:
+  - generic [ref=f1e3]:
+    - generic [ref=f1e7]:
+      - generic [ref=f1e9]:
+        - link [ref=f1e10] [cursor=pointer]:
+          - /url: /
+          - img "logo" [ref=f1e12]
+          - heading "TokenFactory" [level=4] [ref=f1e15]
+        - link "提供算力" [ref=f1e17] [cursor=pointer]:
+          - /url: /login?redirect=%2Fconsole%2Fsupplier%2Fapply
+      - generic [ref=f1e18]:
+        - navigation [ref=f1e19]:
+          - link "首页" [ref=f1e20] [cursor=pointer]:
+            - /url: /
+          - link "控制台" [ref=f1e22] [cursor=pointer]:
+            - /url: /login
+          - link "模型广场" [ref=f1e24] [cursor=pointer]:
+            - /url: /pricing
+          - link "模型排行榜" [ref=f1e26] [cursor=pointer]:
+            - /url: /rankings
+          - link "文档" [ref=f1e28] [cursor=pointer]:
+            - /url: https://docs.newapi.pro
+          - link "关于" [ref=f1e30] [cursor=pointer]:
+            - /url: /about
+        - generic [ref=f1e32]:
+          - button "更新日志" [ref=f1e33] [cursor=pointer]
+          - button "切换主题" [ref=f1e38] [cursor=pointer]
+          - 'button "common.changeLanguage: 简体中文" [ref=f1e41] [cursor=pointer]':
+            - generic [ref=f1e42]: 简体中文
+          - generic [ref=f1e49]:
+            - link [ref=f1e50] [cursor=pointer]:
+              - /url: /login
+              - button "登录" [ref=f1e51]
+            - link [ref=f1e55] [cursor=pointer]:
+              - /url: /register
+              - button "注册" [ref=f1e56]
+    - generic [ref=f1e60]:
+      - main [ref=f1e61]:
+        - generic [ref=f1e65]:
+          - generic [ref=f1e66]:
+            - img "Logo" [ref=f1e67]
+            - heading "TokenFactory" [level=3] [ref=f1e68]
+          - generic [ref=f1e70]:
+            - heading "登 录" [level=3] [ref=f1e72]
+            - generic [ref=f1e73]:
+              - generic [ref=f1e74]:
+                - generic [ref=f1e75]:
+                  - generic [ref=f1e76]: 用户名或邮箱
+                  - generic [ref=f1e79]:
+                    - img "mail" [ref=f1e81]
+                    - textbox "用户名或邮箱" [ref=f1e84]:
+                      - /placeholder: 请输入您的用户名或邮箱地址
+                - generic [ref=f1e85]:
+                  - generic [ref=f1e86]: 密码
+                  - generic [ref=f1e89]:
+                    - img "lock" [ref=f1e91]
+                    - textbox "密码" [ref=f1e94]:
+                      - /placeholder: 请输入您的密码
+                    - button "Show password" [ref=f1e95] [cursor=pointer]:
+                      - img "eye_closed_solid" [ref=f1e96]
+                - generic [ref=f1e101] [cursor=pointer]:
+                  - checkbox "我已阅读并同意用户协议和隐私政策" [ref=f1e103]
+                  - generic [ref=f1e107]:
+                    - text: 我已阅读并同意
+                    - link "用户协议" [ref=f1e108]:
+                      - /url: /user-agreement
+                    - text: 和
+                    - link "隐私政策" [ref=f1e109]:
+                      - /url: /privacy-policy
+                - generic [ref=f1e110]:
+                  - button "继续" [disabled] [ref=f1e111]
+                  - button "忘记密码？" [ref=f1e113] [cursor=pointer]
+              - generic [ref=f1e116]:
+                - text: 没有账户？
+                - link "注册" [ref=f1e117] [cursor=pointer]:
+                  - /url: /register
+      - generic [ref=f1e121]:
+        - generic [ref=f1e122]:
+          - link "粤ICP备2026005965号" [ref=f1e125] [cursor=pointer]:
+            - /url: https://beian.miit.gov.cn
+          - generic [ref=f1e126]:
+            - generic [ref=f1e127]: ·
+            - link "用户协议" [ref=f1e128] [cursor=pointer]:
+              - /url: /user-agreement
+            - generic [ref=f1e129]: ·
+            - link "隐私政策" [ref=f1e130] [cursor=pointer]:
+              - /url: /privacy-policy
+        - link "GitHub" [ref=f1e132] [cursor=pointer]:
+          - /url: https://github.com/fyinfor/token-factory
+  - generic [ref=f1e135]:
+    - alert "error type":
+      - generic [ref=f1e136]:
+        - img "alert_circle" [ref=f1e137]
+        - generic [ref=f1e140]: 错误：未登录或登录已过期，请重新登录
+        - button [ref=f1e142] [cursor=pointer]:
+          - img "close" [ref=f1e144]
+  - generic [ref=f1e147]:
+    - alert "error type":
+      - generic [ref=f1e148]:
+        - img "alert_circle" [ref=f1e149]
+        - generic [ref=f1e152]: 错误：未登录或登录已过期，请重新登录
+        - button [ref=f1e154] [cursor=pointer]:
+          - img "close" [ref=f1e156]
