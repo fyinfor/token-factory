@@ -201,14 +201,13 @@ func Distribute() func(c *gin.Context) {
 					}
 				}
 
-				// ★ TokenFactory 智能路由：在本地路由之前尝试查询 TokenFactory 的策略。
-				// 如果 TokenFactory 返回了排序结果，直接使用第一个渠道。
-				// 注意：未指定渠道时 GetContextKey 返回 (nil, false)，不能用 channelId == "" 判断。
+				// ★ 进程内归类路由（原 TokenFactory 策略已本地化）：在原生选路之前尝试。
+				// weight/price 模式命中则直接使用；default / 未实现则回退。
 				if common.TokenFactoryRouteEnabled() && !ok {
 					if tfChannel, ok := tryTokenFactoryRoute(c, modelRequest.Model, usingGroup); ok && tfChannel != nil {
 						channel = tfChannel
 						common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
-						logSelectedUpstream(c, channel, modelRequest.Model, "tf_route")
+						logSelectedUpstream(c, channel, modelRequest.Model, "local_route")
 						SetupContextForSelectedChannel(c, channel, modelRequest.Model)
 						proceedRelayWithChannel(c, channel, modelRequest.Model)
 						return
@@ -770,22 +769,19 @@ func extractModelNameFromGeminiPath(path string) string {
 	return path[startIndex : startIndex+colonIndex]
 }
 
-// tryTokenFactoryRoute 尝试通过 TokenFactory 智能路由服务获取渠道选择。
+// tryTokenFactoryRoute 尝试通过进程内归类路由（原 TokenFactory 策略，已本地化）获取渠道。
 // 如果成功返回排序后的第一个渠道，返回 (channel, true)。
-// 如果 TokenFactory 不可用或无匹配策略，返回 (nil, false)，调用方应回退到本地路由。
+// 如果模式为 default / 未实现 / 无候选，返回 (nil, false)，调用方回退到原生选路。
 func tryTokenFactoryRoute(c *gin.Context, modelName string, group string) (*model.Channel, bool) {
 	userID := c.GetInt("id")
-	userRole := c.GetInt("role")
 
-	// 获取当前 group 下该模型的所有可用渠道 ID。
 	channelIDs := model.GetGroupEnabledChannelIDs(group, modelName)
 	if len(channelIDs) == 0 {
-		logger.LogInfo(c, fmt.Sprintf("tf_route skip: no enabled channels for model=%s group=%s", modelName, group))
+		logger.LogInfo(c, fmt.Sprintf("local_route skip: no enabled channels for model=%s group=%s", modelName, group))
 		return nil, false
 	}
 
-	// 构建候选渠道信息列表（从缓存获取完整渠道数据）。
-	var candidates []service.ChannelRouteInfo
+	var candidates []service.RouteChannelCandidate
 	seen := make(map[int]bool)
 	for _, cid := range channelIDs {
 		if seen[cid] {
@@ -796,17 +792,15 @@ func tryTokenFactoryRoute(c *gin.Context, modelName string, group string) (*mode
 		if err != nil || ch == nil || ch.Status != common.ChannelStatusEnabled {
 			continue
 		}
-		candidates = append(candidates, service.ChannelRouteInfo{
-			ID:           ch.Id,
-			Name:         ch.Name,
-			Type:         ch.Type,
-			Models:       ch.Models,
-			Group:        ch.Group,
+		candidates = append(candidates, service.RouteChannelCandidate{
+			ChannelID:    ch.Id,
+			ChannelName:  ch.Name,
 			Priority:     int(ch.GetPriority()),
 			Weight:       ch.GetWeight(),
 			Status:       ch.Status,
 			ProviderSlug: strings.ToLower(strings.TrimSpace(ch.SupplierType)),
 			Price:        service.ResolveChannelModelUnitPrice(ch, modelName),
+			Healthy:      true,
 		})
 	}
 
@@ -814,52 +808,31 @@ func tryTokenFactoryRoute(c *gin.Context, modelName string, group string) (*mode
 		return nil, false
 	}
 
-	// 构建 gRPC 请求候选列表。
-	grpcCandidates := service.BuildChannelCandidates(candidates)
-
-	// gRPC 鉴权使用服务账号 JWT（uid=1），与 SyncChannels 一致；实际用户 ID 通过请求体传给 TokenFactory 做 workspace 策略匹配。
-	jwtToken, err := common.IssueTokenFactoryJWT(1, common.RoleRootUser)
-	if err != nil || jwtToken == "" {
-		logger.LogInfo(c, fmt.Sprintf("tf_route skip: issue service jwt failed: %v", err))
+	res := service.SelectChannelLocal(modelName, userID, candidates)
+	if res.Fallback {
+		logger.LogInfo(c, "local_route skip: 默认/未实现模式或无候选 (fallback)")
+		return nil, false
+	}
+	if len(res.OrderedChannelIDs) == 0 {
+		logger.LogInfo(c, "local_route skip: empty ordered channel ids")
 		return nil, false
 	}
 
-	orderedIDs, strategy, groupKey, fallback, err := service.SelectChannelFromTF(jwtToken, modelName, group, userID, userRole, grpcCandidates)
-	if err != nil {
-		logger.LogInfo(c, fmt.Sprintf("tf_route skip: gRPC error: %v", err))
-		return nil, false
-	}
-	if fallback {
-		logger.LogInfo(c, "tf_route skip: 默认/未实现模式或无候选 (fallback)")
-		return nil, false
-	}
-	if len(orderedIDs) == 0 {
-		logger.LogInfo(c, "tf_route skip: empty ordered channel ids")
-		return nil, false
-	}
-
-	// 转为 []int 候选集。
-	ordered := make([]int, 0, len(orderedIDs))
-	for _, id := range orderedIDs {
-		ordered = append(ordered, int(id))
-	}
-
-	// 黏性 + 报错熔断选择：同一 (用户+路由模式+归类+group) 维度复用渠道；切换路由模式时黏性键变化，立即按新规则选路。
+	ordered := res.OrderedChannelIDs
 	isEnabled := func(id int) bool {
 		ch, err := model.CacheGetChannel(id)
 		return err == nil && ch != nil && ch.Status == common.ChannelStatusEnabled
 	}
-	picked, ok := service.TFRoutePickChannel(c, groupKey, group, strategy, ordered, isEnabled)
+	picked, ok := service.TFRoutePickChannel(c, res.GroupKey, group, res.Strategy, ordered, isEnabled)
 	if !ok {
-		logger.LogInfo(c, "tf_route skip: 候选均不可用")
+		logger.LogInfo(c, "local_route skip: 候选均不可用")
 		return nil, false
 	}
 	ch, err := model.CacheGetChannel(picked)
 	if err != nil || ch == nil || ch.Status != common.ChannelStatusEnabled {
 		return nil, false
 	}
-	// 写入有序候选供 relay 在同请求内按路由模式 failover（与 SmartRouter 一致）。
 	common.SetContextKey(c, constant.ContextKeySmartRouteChannelOrder, ordered)
-	logger.LogInfo(c, fmt.Sprintf("tf_route selected: channel=%s(id=%d) model=%s group=%s strategy=%s ordered=%v", ch.Name, ch.Id, modelName, groupKey, strategy, ordered))
+	logger.LogInfo(c, fmt.Sprintf("local_route selected: channel=%s(id=%d) model=%s group=%s strategy=%s ordered=%v", ch.Name, ch.Id, modelName, res.GroupKey, res.Strategy, ordered))
 	return ch, true
 }
