@@ -25,6 +25,12 @@ import { Modal } from '@douyinfe/semi-ui';
 import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
 import { modelMatchesSearchTerm } from '../../components/table/model-pricing/utils/channelRoute';
+import {
+  getRelevantModelHotScore,
+  getTopHotChannels,
+  isTopHotModel,
+  LIVE_HOT_FILTER,
+} from '../../components/table/model-pricing/utils/modelHeat';
 
 const mergeUniqueValues = (values) =>
   Array.from(
@@ -210,21 +216,10 @@ export const useModelPricingData = (options = {}) => {
   const [channelVideoCompletionRatio, setChannelVideoCompletionRatio] =
     useState({});
   const [channelVideoPrice, setChannelVideoPrice] = useState({});
-  const [channelModelTierRatio, setChannelModelTierRatio] = useState({});
-  const [channelCompletionTierRatio, setChannelCompletionTierRatio] = useState(
-    {},
-  );
-  const [channelCacheTierRatio, setChannelCacheTierRatio] = useState({});
-  const [channelCreateCacheTierRatio, setChannelCreateCacheTierRatio] =
+  const [channelModelRequestTierPricing, setChannelModelRequestTierPricing] =
     useState({});
-  const [globalModelTierRatio, setGlobalModelTierRatio] = useState({});
-  const [globalCompletionTierRatio, setGlobalCompletionTierRatio] = useState(
-    {},
-  );
-  const [globalCacheTierRatio, setGlobalCacheTierRatio] = useState({});
-  const [globalCreateCacheTierRatio, setGlobalCreateCacheTierRatio] = useState(
-    {},
-  );
+  const [globalModelRequestTierPricing, setGlobalModelRequestTierPricing] =
+    useState({});
   const [pricingChannels, setPricingChannels] = useState([]);
   const [usableGroup, setUsableGroup] = useState({});
   const [endpointMap, setEndpointMap] = useState({});
@@ -286,6 +281,15 @@ export const useModelPricingData = (options = {}) => {
     }
   }, [siteDisplayType]);
 
+  const hotChannelScoreMap = useMemo(
+    () => getTopHotChannels(models).scoreMap,
+    [models],
+  );
+  const activeChannelHeatFilters = useMemo(
+    () => ({ filterSupplier, filterSupplierType }),
+    [filterSupplier, filterSupplierType],
+  );
+
   const filteredModels = useMemo(() => {
     let result = models;
 
@@ -343,8 +347,15 @@ export const useModelPricingData = (options = {}) => {
 
     // 标签筛选
     if (filterTag !== 'all') {
-      const tagLower = filterTag.toLowerCase();
       result = result.filter((model) => {
+        if (filterTag === LIVE_HOT_FILTER) {
+          return isTopHotModel(
+            model,
+            hotChannelScoreMap,
+            activeChannelHeatFilters,
+          );
+        }
+        const tagLower = filterTag.toLowerCase();
         if (!model.tags) return false;
         const tagsArr = model.tags
           .toLowerCase()
@@ -491,30 +502,23 @@ export const useModelPricingData = (options = {}) => {
         return av > bv ? -1 : 1;
       };
 
-      // 模型热度分计算（用于热门排序）
-      // 根据 channel_list[0] 的 ChannelHeatScore 排序
-      const modelHeatScore = (m) => {
-        const channelList = m.channel_list ?? m.ChannelList ?? [];
-        if (channelList.length > 0) {
-          const firstChannel = channelList[0];
-          return (
-            firstChannel.channel_heat_score ??
-            firstChannel.ChannelHeatScore ??
-            0
-          );
-        }
-        return 0;
-      };
-
-      // 折扣率排序：按实际折扣降序，相同则按 channel_heat_score 降序
+      // 折扣率排序：按实际折扣降序，相同则按实时热度降序。
       const cmpDiscount = (a, b) => {
         const discountA = modelDiscountRatio(a);
         const discountB = modelDiscountRatio(b);
         if (discountA !== discountB) {
           return discountA > discountB ? -1 : 1;
         }
-        const heatA = modelHeatScore(a);
-        const heatB = modelHeatScore(b);
+        const heatA = getRelevantModelHotScore(
+          a,
+          hotChannelScoreMap,
+          activeChannelHeatFilters,
+        );
+        const heatB = getRelevantModelHotScore(
+          b,
+          hotChannelScoreMap,
+          activeChannelHeatFilters,
+        );
         if (heatA !== heatB) {
           return heatA > heatB ? -1 : 1;
         }
@@ -524,8 +528,20 @@ export const useModelPricingData = (options = {}) => {
       result = [...result].sort((a, b) => {
         switch (sortKey) {
           case 'hot':
-            // 按热度分降序，热度相同按模型名
-            return cmpDesc(modelHeatScore(a), modelHeatScore(b), a, b);
+            return cmpDesc(
+              getRelevantModelHotScore(
+                a,
+                hotChannelScoreMap,
+                activeChannelHeatFilters,
+              ),
+              getRelevantModelHotScore(
+                b,
+                hotChannelScoreMap,
+                activeChannelHeatFilters,
+              ),
+              a,
+              b,
+            );
           case 'price':
             return cmpAsc(modelUnitPrice(a), modelUnitPrice(b), a, b);
           case 'supplier_grade':
@@ -557,6 +573,8 @@ export const useModelPricingData = (options = {}) => {
     filterSupplier,
     filterSupplierType,
     sortKey,
+    hotChannelScoreMap,
+    activeChannelHeatFilters,
   ]);
 
   const rowSelection = useMemo(
@@ -664,14 +682,8 @@ export const useModelPricingData = (options = {}) => {
       channel_video_ratio,
       channel_video_completion_ratio,
       channel_video_price,
-      channel_model_tier_ratio,
-      channel_completion_tier_ratio,
-      channel_cache_tier_ratio,
-      channel_create_cache_tier_ratio,
-      global_model_tier_ratio,
-      global_completion_tier_ratio,
-      global_cache_tier_ratio,
-      global_create_cache_tier_ratio,
+      channel_model_request_tier_pricing,
+      model_request_tier_pricing,
       channels,
       usable_group,
       supported_endpoint,
@@ -693,14 +705,8 @@ export const useModelPricingData = (options = {}) => {
       setChannelVideoRatio(channel_video_ratio || {});
       setChannelVideoCompletionRatio(channel_video_completion_ratio || {});
       setChannelVideoPrice(channel_video_price || {});
-      setChannelModelTierRatio(channel_model_tier_ratio || {});
-      setChannelCompletionTierRatio(channel_completion_tier_ratio || {});
-      setChannelCacheTierRatio(channel_cache_tier_ratio || {});
-      setChannelCreateCacheTierRatio(channel_create_cache_tier_ratio || {});
-      setGlobalModelTierRatio(global_model_tier_ratio || {});
-      setGlobalCompletionTierRatio(global_completion_tier_ratio || {});
-      setGlobalCacheTierRatio(global_cache_tier_ratio || {});
-      setGlobalCreateCacheTierRatio(global_create_cache_tier_ratio || {});
+      setChannelModelRequestTierPricing(channel_model_request_tier_pricing || {});
+      setGlobalModelRequestTierPricing(model_request_tier_pricing || {});
       setPricingChannels(channels || []);
       setUsableGroup(usable_group);
       setSelectedGroup('all');
@@ -860,6 +866,7 @@ export const useModelPricingData = (options = {}) => {
     tokenUnit,
     setTokenUnit,
     models,
+    hotChannelScoreMap,
     perfMetricsMap,
     loading,
     groupRatio,
@@ -877,14 +884,8 @@ export const useModelPricingData = (options = {}) => {
     channelVideoRatio,
     channelVideoCompletionRatio,
     channelVideoPrice,
-    channelModelTierRatio,
-    channelCompletionTierRatio,
-    channelCacheTierRatio,
-    channelCreateCacheTierRatio,
-    globalModelTierRatio,
-    globalCompletionTierRatio,
-    globalCacheTierRatio,
-    globalCreateCacheTierRatio,
+    channelModelRequestTierPricing,
+    globalModelRequestTierPricing,
     pricingChannels,
     usableGroup,
     endpointMap,

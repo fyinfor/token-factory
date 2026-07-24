@@ -230,21 +230,9 @@ export default function SupplierModelPricingEditor({
     () => parseJSON(options.ChannelImagePricingRules),
     [options.ChannelImagePricingRules],
   );
-  const channelModelTierRatio = useMemo(
-    () => parseJSON(options.ChannelModelTierRatio),
-    [options.ChannelModelTierRatio],
-  );
-  const channelCompletionTierRatio = useMemo(
-    () => parseJSON(options.ChannelCompletionTierRatio),
-    [options.ChannelCompletionTierRatio],
-  );
-  const channelCacheTierRatio = useMemo(
-    () => parseJSON(options.ChannelCacheTierRatio),
-    [options.ChannelCacheTierRatio],
-  );
-  const channelCreateCacheTierRatio = useMemo(
-    () => parseJSON(options.ChannelCreateCacheTierRatio),
-    [options.ChannelCreateCacheTierRatio],
+  const channelModelRequestTierPricing = useMemo(
+    () => parseJSON(options.ChannelModelRequestTierPricing),
+    [options.ChannelModelRequestTierPricing],
   );
 
   const activeChannelId = channelId === 'all' ? '' : channelId;
@@ -376,23 +364,10 @@ export default function SupplierModelPricingEditor({
           null,
           2,
         ),
-        ModelTierRatio: JSON.stringify(
-          channelModelTierRatio[activeChannelId] || {},
-          null,
-          2,
-        ),
-        CompletionTierRatio: JSON.stringify(
-          channelCompletionTierRatio[activeChannelId] || {},
-          null,
-          2,
-        ),
-        CacheTierRatio: JSON.stringify(
-          channelCacheTierRatio[activeChannelId] || {},
-          null,
-          2,
-        ),
-        CreateCacheTierRatio: JSON.stringify(
-          channelCreateCacheTierRatio[activeChannelId] || {},
+        ModelRequestTierPricing: JSON.stringify(
+          m.ModelRequestTierPricing ||
+            channelModelRequestTierPricing[activeChannelId] ||
+            {},
           null,
           2,
         ),
@@ -470,23 +445,8 @@ export default function SupplierModelPricingEditor({
         null,
         2,
       ),
-      ModelTierRatio: JSON.stringify(
-        channelModelTierRatio[activeChannelId] || {},
-        null,
-        2,
-      ),
-      CompletionTierRatio: JSON.stringify(
-        channelCompletionTierRatio[activeChannelId] || {},
-        null,
-        2,
-      ),
-      CacheTierRatio: JSON.stringify(
-        channelCacheTierRatio[activeChannelId] || {},
-        null,
-        2,
-      ),
-      CreateCacheTierRatio: JSON.stringify(
-        channelCreateCacheTierRatio[activeChannelId] || {},
+      ModelRequestTierPricing: JSON.stringify(
+        channelModelRequestTierPricing[activeChannelId] || {},
         null,
         2,
       ),
@@ -497,14 +457,11 @@ export default function SupplierModelPricingEditor({
     channelAudioRatio,
     channelCacheRatio,
     channelCompletionRatio,
-    channelCompletionTierRatio,
-    channelCreateCacheTierRatio,
     channelCreateCacheRatio,
-    channelCacheTierRatio,
     channelImageRatio,
     channelModelPrice,
     channelModelRatio,
-    channelModelTierRatio,
+    channelModelRequestTierPricing,
     channelVideoCompletionRatio,
     channelVideoPrice,
     channelVideoPricingRules,
@@ -532,6 +489,7 @@ export default function SupplierModelPricingEditor({
           ImageRatio: output.ImageRatio || {},
           AudioRatio: output.AudioRatio || {},
           AudioCompletionRatio: output.AudioCompletionRatio || {},
+          ModelRequestTierPricing: output.ModelRequestTierPricing || {},
         },
       );
       if (!res?.data?.success) {
@@ -587,25 +545,10 @@ export default function SupplierModelPricingEditor({
           mergeChannelData(channelImagePricingRules, output.ImagePricingRules),
         ],
         [
-          'ChannelModelTierRatio',
-          mergeChannelData(channelModelTierRatio, output.ModelTierRatio),
-        ],
-        [
-          'ChannelCompletionTierRatio',
+          'ChannelModelRequestTierPricing',
           mergeChannelData(
-            channelCompletionTierRatio,
-            output.CompletionTierRatio,
-          ),
-        ],
-        [
-          'ChannelCacheTierRatio',
-          mergeChannelData(channelCacheTierRatio, output.CacheTierRatio),
-        ],
-        [
-          'ChannelCreateCacheTierRatio',
-          mergeChannelData(
-            channelCreateCacheTierRatio,
-            output.CreateCacheTierRatio,
+            channelModelRequestTierPricing,
+            output.ModelRequestTierPricing,
           ),
         ],
       ].map(([key, value]) =>
@@ -705,25 +648,10 @@ export default function SupplierModelPricingEditor({
         mergeChannelData(channelImagePricingRules, output.ImagePricingRules),
       ],
       [
-        'ChannelModelTierRatio',
-        mergeChannelData(channelModelTierRatio, output.ModelTierRatio),
-      ],
-      [
-        'ChannelCompletionTierRatio',
+        'ChannelModelRequestTierPricing',
         mergeChannelData(
-          channelCompletionTierRatio,
-          output.CompletionTierRatio,
-        ),
-      ],
-      [
-        'ChannelCacheTierRatio',
-        mergeChannelData(channelCacheTierRatio, output.CacheTierRatio),
-      ],
-      [
-        'ChannelCreateCacheTierRatio',
-        mergeChannelData(
-          channelCreateCacheTierRatio,
-          output.CreateCacheTierRatio,
+          channelModelRequestTierPricing,
+          output.ModelRequestTierPricing,
         ),
       ],
     ].map(([key, value]) =>
@@ -792,6 +720,9 @@ export default function SupplierModelPricingEditor({
               filterMode={filterMode}
               listDescription={listDescription}
               onSaveOutput={handleSaveOutput}
+              optionKeys={{
+                ModelRequestTierPricing: 'ModelRequestTierPricing',
+              }}
             />
           )}
         </>

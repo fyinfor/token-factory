@@ -31,7 +31,7 @@ import SettingsCheckin from '../../pages/Setting/Operation/SettingsCheckin';
 import SettingsAliyunRealNameVerification from '../../pages/Setting/Operation/SettingsAliyunRealNameVerification';
 import { API, showError, toBoolean } from '../../helpers';
 
-const OperationSetting = () => {
+const OperationSetting = ({ activeSection = 'general' }) => {
   let [inputs, setInputs] = useState({
     /* 额度相关 */
     QuotaForNewUser: 0,
@@ -79,6 +79,7 @@ const OperationSetting = () => {
     AliyunGuardrailInputEnabled: true,
     AliyunGuardrailOutputEnabled: true,
     AliyunGuardrailVideoEnabled: false,
+    AliyunGuardrailHidePlaygroundMediaTabs: false,
     AliyunGuardrailAccessKeyID: '',
     AliyunGuardrailAccessKeySecret: '',
     AliyunGuardrailRegionID: 'cn-shanghai',
@@ -156,44 +157,67 @@ const OperationSetting = () => {
     <>
       <Spin spinning={loading} size='large'>
         {/* 通用设置 */}
-        <Card style={{ marginTop: '10px' }}>
-          <SettingsGeneral options={inputs} refresh={onRefresh} />
-        </Card>
+        {activeSection === 'general' && (
+          <Card style={{ marginTop: '10px' }}>
+            <SettingsGeneral options={inputs} refresh={onRefresh} />
+          </Card>
+        )}
         {/* 顶栏模块管理 */}
-        <div style={{ marginTop: '10px' }}>
-          <SettingsHeaderNavModules options={inputs} refresh={onRefresh} />
-        </div>
+        {activeSection === 'header' && (
+          <div style={{ marginTop: '10px' }}>
+            <SettingsHeaderNavModules options={inputs} refresh={onRefresh} />
+          </div>
+        )}
         {/* 左侧边栏模块管理（管理员） */}
-        <div style={{ marginTop: '10px' }}>
-          <SettingsSidebarModulesAdmin options={inputs} refresh={onRefresh} />
-        </div>
+        {activeSection === 'sidebar' && (
+          <div style={{ marginTop: '10px' }}>
+            <SettingsSidebarModulesAdmin options={inputs} refresh={onRefresh} />
+          </div>
+        )}
         {/* 屏蔽词过滤设置 */}
-        <Card style={{ marginTop: '10px' }}>
-          <SettingsSensitiveWords options={inputs} refresh={onRefresh} />
-        </Card>
+        {activeSection === 'sensitive' && (
+          <Card style={{ marginTop: '10px' }}>
+            <SettingsSensitiveWords options={inputs} refresh={onRefresh} />
+          </Card>
+        )}
         {/* 日志设置 */}
-        <Card style={{ marginTop: '10px' }}>
-          <SettingsAliyunRealNameVerification options={inputs} refresh={onRefresh} />
-        </Card>
-        <Card style={{ marginTop: '10px' }}>
-          <SettingsLog options={inputs} refresh={onRefresh} />
-        </Card>
+        {activeSection === 'real-name' && (
+          <Card style={{ marginTop: '10px' }}>
+            <SettingsAliyunRealNameVerification
+              options={inputs}
+              refresh={onRefresh}
+            />
+          </Card>
+        )}
+        {activeSection === 'log' && (
+          <Card style={{ marginTop: '10px' }}>
+            <SettingsLog options={inputs} refresh={onRefresh} />
+          </Card>
+        )}
         {/* 监控设置 */}
-        <Card style={{ marginTop: '10px' }}>
-          <SettingsMonitoring options={inputs} refresh={onRefresh} />
-        </Card>
+        {activeSection === 'monitoring' && (
+          <Card style={{ marginTop: '10px' }}>
+            <SettingsMonitoring options={inputs} refresh={onRefresh} />
+          </Card>
+        )}
         {/* 额度设置 */}
-        <Card style={{ marginTop: '10px' }}>
-          <SettingsCreditLimit options={inputs} refresh={onRefresh} />
-        </Card>
+        {activeSection === 'credit' && (
+          <Card style={{ marginTop: '10px' }}>
+            <SettingsCreditLimit options={inputs} refresh={onRefresh} />
+          </Card>
+        )}
         {/* 代理设置 */}
-        <Card style={{ marginTop: '10px' }}>
-          <SettingsDistributor options={inputs} refresh={onRefresh} />
-        </Card>
+        {activeSection === 'distributor' && (
+          <Card style={{ marginTop: '10px' }}>
+            <SettingsDistributor options={inputs} refresh={onRefresh} />
+          </Card>
+        )}
         {/* 签到设置 */}
-        <Card style={{ marginTop: '10px' }}>
-          <SettingsCheckin options={inputs} refresh={onRefresh} />
-        </Card>
+        {activeSection === 'checkin' && (
+          <Card style={{ marginTop: '10px' }}>
+            <SettingsCheckin options={inputs} refresh={onRefresh} />
+          </Card>
+        )}
       </Spin>
     </>
   );

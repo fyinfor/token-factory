@@ -8,6 +8,7 @@ var AliyunGuardrailEnabled = false
 var AliyunGuardrailInputEnabled = true
 var AliyunGuardrailOutputEnabled = true
 var AliyunGuardrailVideoEnabled = false
+var AliyunGuardrailHidePlaygroundMediaTabs = false
 var AliyunGuardrailAccessKeyID = ``
 var AliyunGuardrailAccessKeySecret = ``
 var AliyunGuardrailRegionID = `cn-shanghai`

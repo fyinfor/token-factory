@@ -7,8 +7,21 @@ import {
   costDiscountMultiplier,
   markupRateFromPercent,
 } from '../../../../../helpers';
+import {
+  convertTierPriceToUSD,
+  getCurrencyRatesFromStatus,
+  normalizeCurrency,
+} from '../../../../../pages/Setting/Ratio/utils/requestTierPricing';
 
-/** 阶梯计费类别 -> 阶梯倍率字段名（渠道与模型全局同名） */
+/** 阶梯计费类别 → prices 字段名 */
+export const TIER_PRICE_KEYS = {
+  input: 'input',
+  output: 'output',
+  cache_read: 'cache_read',
+  cache_write: 'cache_write',
+};
+
+/** @deprecated 旧 4 Key 字段映射，仅 legacy 回退 */
 export const TIER_FIELD_MAP = {
   input: 'model_tier_ratio',
   output: 'completion_tier_ratio',
@@ -61,8 +74,19 @@ export const TIER_CATEGORY_STYLES = {
   },
 };
 
+const normalizeBoundary = (boundary) =>
+  String(boundary || '').toLowerCase() === 'lte' ? 'lte' : 'lt';
+
+/** 读取统一 RequestTierPricing（model / channel 内嵌字段） */
+export const getRequestTierPricing = (source) => {
+  const rtp = source?.request_tier_pricing;
+  if (!rtp || typeof rtp !== 'object') return null;
+  if (!Array.isArray(rtp.tiers) || rtp.tiers.length === 0) return null;
+  return rtp;
+};
+
 /**
- * 取阶梯倍率 segments（结构：{ segments: [{ up_to, ratio }] }，up_to=0 表示无上限）
+ * 取阶梯倍率 segments（legacy：{ segments: [{ up_to, ratio }] }）
  */
 export const getTierSegments = (source, field) =>
   Array.isArray(source?.[field]?.segments) ? source[field].segments : [];
@@ -77,8 +101,40 @@ export const emptyTierFlags = () => ({
   hasCreateCacheTier: false,
 });
 
+const tierCategoryHasPrice = (rule, cat) => {
+  if (!rule?.tiers?.length) return false;
+  const key = TIER_PRICE_KEYS[cat];
+  return rule.tiers.some((row) => Number(row?.prices?.[key] ?? 0) > 0);
+};
+
 /**
- * 按区间起点在 segments 中查找倍率；未匹配到区间返回 null
+ * 按区间起点在 tiers 中查找单价；未匹配到区间返回 null
+ */
+export const findTierPriceAtBand = (tiers, fromToken, priceKey, boundary = 'lt') => {
+  if (!Array.isArray(tiers) || tiers.length === 0) return null;
+  const b = normalizeBoundary(boundary);
+  for (let i = 0; i < tiers.length; i += 1) {
+    const row = tiers[i];
+    const upTo = Number(row?.up_to) || 0;
+    if (upTo === 0) {
+      const price = Number(row?.prices?.[priceKey] ?? 0);
+      return Number.isFinite(price) ? price : null;
+    }
+    if (b === 'lte') {
+      if (fromToken <= upTo) {
+        const price = Number(row?.prices?.[priceKey] ?? 0);
+        return Number.isFinite(price) ? price : null;
+      }
+    } else if (fromToken < upTo) {
+      const price = Number(row?.prices?.[priceKey] ?? 0);
+      return Number.isFinite(price) ? price : null;
+    }
+  }
+  return null;
+};
+
+/**
+ * 按区间起点在 segments 中查找倍率；未匹配到区间返回 null（legacy）
  */
 export const findTierRatioAtBand = (segments, fromToken) => {
   if (!Array.isArray(segments) || segments.length === 0) return null;
@@ -93,9 +149,14 @@ export const findTierRatioAtBand = (segments, fromToken) => {
 };
 
 /**
- * 检查类别是否有阶梯数据（模型全局或渠道内嵌）
+ * 检查类别是否有阶梯数据（统一 rule 或 legacy segments）
  */
 export const categoryHasTierData = (model, channel, cat) => {
+  const globalRule = getRequestTierPricing(model);
+  const channelRule = getRequestTierPricing(channel);
+  if (tierCategoryHasPrice(channelRule, cat) || tierCategoryHasPrice(globalRule, cat)) {
+    return true;
+  }
   const field = TIER_FIELD_MAP[cat];
   return (
     getTierSegments(channel, field).length > 0 ||
@@ -104,18 +165,44 @@ export const categoryHasTierData = (model, channel, cat) => {
 };
 
 /**
- * 解析阶梯 segments：
- *   globalSegments = 模型全局阶梯（官方价）
- *   channelSegments = 渠道阶梯（平台价基准）
- *   bandSegments    = 区间结构，优先渠道阶梯，否则全局阶梯
+ * 解析阶梯数据源：
+ *   globalRule / channelRule = 统一 RequestTierPricing
+ *   bandRule = 优先渠道，否则全局
+ *   legacy segments 字段在 unified=false 时使用
  */
 export const resolveTierSegmentSources = ({ model, channel, cat }) => {
+  const globalRule = getRequestTierPricing(model);
+  const channelRule = getRequestTierPricing(channel);
+  const bandRule = channelRule || globalRule;
+
+  if (bandRule) {
+    return {
+      unified: true,
+      globalRule,
+      channelRule,
+      bandRule,
+      boundary: normalizeBoundary(bandRule.boundary),
+      globalSegments: [],
+      channelSegments: [],
+      bandSegments: bandRule.tiers || [],
+    };
+  }
+
   const field = TIER_FIELD_MAP[cat];
   const globalSegments = getTierSegments(model, field);
   const channelSegments = getTierSegments(channel, field);
   const bandSegments =
     channelSegments.length > 0 ? channelSegments : globalSegments;
-  return { globalSegments, channelSegments, bandSegments };
+  return {
+    unified: false,
+    globalRule: null,
+    channelRule: null,
+    bandRule: null,
+    boundary: 'lt',
+    globalSegments,
+    channelSegments,
+    bandSegments,
+  };
 };
 
 /**
@@ -125,16 +212,25 @@ export const detectTokenTierPricing = (model) => {
   if (!model?.channel_list || model.channel_list.length === 0) return null;
 
   for (const ch of model.channel_list) {
+    const globalRule = getRequestTierPricing(model);
+    const channelRule = getRequestTierPricing(ch);
+    const rule = channelRule || globalRule;
     const flags = emptyTierFlags();
     let matched = ch.quota_type === 3;
+
     for (const { cat, flag } of TIER_CATEGORY_FLAGS) {
       if (categoryHasTierData(model, ch, cat)) {
         flags[flag] = true;
         matched = true;
       }
     }
+
     if (matched) {
-      return { ...flags, channel: ch };
+      return {
+        ...flags,
+        channel: ch,
+        boundary: normalizeBoundary(rule?.boundary),
+      };
     }
   }
   return null;
@@ -149,19 +245,96 @@ export const formatTierBound = (v) => {
   return String(v);
 };
 
-export const formatTierRange = (from, to, t) => {
+export const formatTierRange = (from, to, t, boundary = 'lt') => {
+  const b = normalizeBoundary(boundary);
   if (to === 0) return `${formatTierBound(from)}+`;
-  return `${formatTierBound(from)}~${formatTierBound(to)}`;
+  if (b === 'lte') {
+    return `${formatTierBound(from)}~${formatTierBound(to)} (≤)`;
+  }
+  return `${formatTierBound(from)}~${formatTierBound(to)} (<)`;
+};
+
+const buildUnifiedTierPreviewItems = (
+  bandTiers,
+  globalRule,
+  channelRule,
+  boundary,
+  channel,
+  tierType,
+  usedGroupRatio,
+  displayPrice,
+  t,
+) => {
+  if (!Array.isArray(bandTiers) || bandTiers.length === 0) return [];
+  const priceKey = TIER_PRICE_KEYS[tierType];
+  const globalTiers = globalRule?.tiers || [];
+  const channelTiers = channelRule?.tiers || [];
+  const currencyRates = getCurrencyRatesFromStatus();
+  const globalCurrency = normalizeCurrency(globalRule?.currency);
+  const channelCurrency = normalizeCurrency(
+    channelRule?.currency || globalRule?.currency,
+  );
+  const priceDiscountPercent =
+    channel.price_discount_percent != null ? channel.price_discount_percent : 100;
+  const costDisc = costDiscountMultiplier(priceDiscountPercent);
+  const markupRate = markupRateFromPercent(channel.markup_discount_rate || 0);
+
+  const rows = [];
+  let previousUpTo = 0;
+  for (const seg of bandTiers) {
+    const upTo = Number(seg.up_to) || 0;
+    // 按区间起点取价时固定用 lt 语义（与旧 FindTierRatioAtBand 一致），boundary 只影响区间文案与实扣命中
+    const globalPriceRaw =
+      findTierPriceAtBand(globalTiers, previousUpTo, priceKey, 'lt') ?? 0;
+    const channelPriceRaw =
+      channelTiers.length > 0
+        ? findTierPriceAtBand(channelTiers, previousUpTo, priceKey, 'lt')
+        : null;
+    const globalPrice = convertTierPriceToUSD(
+      globalPriceRaw,
+      globalCurrency,
+      currencyRates,
+    );
+    const channelPrice =
+      channelPriceRaw != null
+        ? convertTierPriceToUSD(channelPriceRaw, channelCurrency, currencyRates)
+        : null;
+    const effectiveChannelPrice =
+      channelTiers.length > 0 && channelPrice != null ? channelPrice : globalPrice;
+
+    const officialUsdPerM = globalPrice;
+    const platformUsdPerM =
+      (effectiveChannelPrice * costDisc + globalPrice * markupRate) *
+      usedGroupRatio;
+
+    if (!Number.isFinite(platformUsdPerM) || platformUsdPerM <= 0) {
+      previousUpTo = upTo || previousUpTo;
+      continue;
+    }
+    const discount =
+      officialUsdPerM > 0 && officialUsdPerM > platformUsdPerM
+        ? Math.round((1 - platformUsdPerM / officialUsdPerM) * 100)
+        : null;
+
+    rows.push({
+      key: `${tierType}-${upTo}-${effectiveChannelPrice}`,
+      range: formatTierRange(previousUpTo, upTo, t, boundary),
+      fromToken: previousUpTo,
+      upTo,
+      platformPrice: displayPrice(platformUsdPerM),
+      platformPriceUsd: platformUsdPerM,
+      officialPrice: officialUsdPerM > 0 ? displayPrice(officialUsdPerM) : '-',
+      officialPriceUsd: officialUsdPerM,
+      discount,
+      tierType,
+    });
+    previousUpTo = upTo || previousUpTo;
+  }
+  return rows;
 };
 
 /**
  * 构建阶梯计费展示行数据
- * 遍历 bandSegments 的所有区间，逐档计算：
- *   全局倍率 = 全局阶梯对应区间 ratio，无值则为 0
- *   渠道倍率 = 渠道阶梯对应区间 ratio，无值则回退全局倍率
- *   官方价   = 全局倍率 × 2
- *   平台价   = (渠道倍率 × 成本折扣率 + 全局倍率 × 加价折扣率) × 2 × 分组倍率
- *   折扣率   = 仅当官方价 > 0 时计算
  */
 export const buildTokenTierPreviewItems = (
   bandSegments,
@@ -172,7 +345,22 @@ export const buildTokenTierPreviewItems = (
   usedGroupRatio,
   displayPrice,
   t,
+  segmentSources = null,
 ) => {
+  if (segmentSources?.unified) {
+    return buildUnifiedTierPreviewItems(
+      segmentSources.bandSegments || bandSegments,
+      segmentSources.globalRule,
+      segmentSources.channelRule,
+      segmentSources.boundary || 'lt',
+      channel,
+      tierType,
+      usedGroupRatio,
+      displayPrice,
+      t,
+    );
+  }
+
   if (!Array.isArray(bandSegments) || bandSegments.length === 0) return [];
   const priceDiscountPercent =
     channel.price_discount_percent != null ? channel.price_discount_percent : 100;
@@ -207,7 +395,7 @@ export const buildTokenTierPreviewItems = (
 
     rows.push({
       key: `${tierType}-${upTo}-${baseRatio}`,
-      range: formatTierRange(previousUpTo, upTo, t),
+      range: formatTierRange(previousUpTo, upTo, t, 'lt'),
       fromToken: previousUpTo,
       upTo,
       platformPrice: displayPrice(platformUsdPerM),

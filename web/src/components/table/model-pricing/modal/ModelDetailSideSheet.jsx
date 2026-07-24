@@ -58,6 +58,7 @@ const ModelDetailSideSheet = ({
   channelVideoCompletionRatioMap = {},
   channelVideoPriceMap = {},
   perfMetricsMap = {},
+  hotChannelScoreMap = new Map(),
 }) => {
   const isMobile = useIsMobile();
   const [activeSection, setActiveSection] = useState('general');
@@ -143,6 +144,7 @@ const ModelDetailSideSheet = ({
     channelVideoRatioMap,
     channelVideoCompletionRatioMap,
     channelVideoPriceMap,
+    hotChannelScoreMap,
   };
 
   return (

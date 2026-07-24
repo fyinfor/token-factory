@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -121,10 +120,21 @@ func GetInvoiceRequestDetailSelf(c *gin.Context) {
 	})
 }
 
+func CancelInvoiceRequestSelf(c *gin.Context) {
+	userID := c.GetInt("id")
+	id, _ := strconv.Atoi(c.Param("id"))
+	if err := model.CancelInvoiceRequest(userID, id); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, nil)
+}
+
 func ListInvoiceRequestsAdmin(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 	status := c.Query("status")
-	rows, total, err := model.ListInvoiceRequestsAdminEnriched(status, pageInfo)
+	keyword := c.Query("keyword")
+	rows, total, err := model.ListInvoiceRequestsAdminEnriched(status, keyword, pageInfo)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -168,6 +178,15 @@ func IssueInvoiceRequestAdmin(c *gin.Context) {
 		"success": true,
 		"message": "",
 	})
+}
+
+func MarkInvoiceRequestProcessingAdmin(c *gin.Context) {
+	id, _ := strconv.Atoi(c.Param("id"))
+	if err := model.MarkInvoiceRequestProcessing(id); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, nil)
 }
 
 func UploadInvoiceFileAdmin(c *gin.Context) {
@@ -242,7 +261,7 @@ func parseInvoiceProfileSnapshot(raw string) *model.InvoiceProfile {
 		return nil
 	}
 	var profile model.InvoiceProfile
-	if err := json.Unmarshal([]byte(raw), &profile); err != nil {
+	if err := common.UnmarshalJsonStr(raw, &profile); err != nil {
 		return nil
 	}
 	return &profile

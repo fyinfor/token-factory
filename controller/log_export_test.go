@@ -1,10 +1,16 @@
 package controller
 
 import (
+	"bytes"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/gin-gonic/gin"
+	"github.com/xuri/excelize/v2"
 )
 
 // extractCacheReadTokens 优先级（与前端渲染完全一致）：
@@ -124,5 +130,104 @@ func TestFormatLogDetailForExportUsesTableSummary(t *testing.T) {
 				t.Fatalf("formatLogDetailForExport() = %q, want contains %q", got, c.want)
 			}
 		})
+	}
+}
+
+func TestFormatUsageLogExportAmountMatchesConsoleCostPrecision(t *testing.T) {
+	oldQuotaPerUnit := common.QuotaPerUnit
+	oldDisplayType := operation_setting.GetGeneralSetting().QuotaDisplayType
+	defer func() {
+		common.QuotaPerUnit = oldQuotaPerUnit
+		operation_setting.GetGeneralSetting().QuotaDisplayType = oldDisplayType
+	}()
+
+	common.QuotaPerUnit = 3
+	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeUSD
+
+	if got := formatUsageLogExportAmount(1, nil); got != "$0.333334\t" {
+		t.Fatalf("normal amount = %q, want %q", got, "$0.333334\\t")
+	}
+	if got := formatUsageLogExportAmount(3, nil); got != "$1.000000\t" {
+		t.Fatalf("whole amount = %q, want fixed six decimals", got)
+	}
+	videoOther := map[string]interface{}{
+		"billing_mode":         "video_per_second",
+		"video_quota_per_unit": float64(6),
+	}
+	if got := formatUsageLogExportAmount(1, videoOther); got != "$0.166667\t" {
+		t.Fatalf("video amount = %q, want %q", got, "$0.166667\\t")
+	}
+}
+
+func TestAdminLogXLSXUsesNumericSixDecimalAmountAndKeepsOrder(t *testing.T) {
+	oldQuotaPerUnit := common.QuotaPerUnit
+	oldDisplayType := operation_setting.GetGeneralSetting().QuotaDisplayType
+	defer func() {
+		common.QuotaPerUnit = oldQuotaPerUnit
+		operation_setting.GetGeneralSetting().QuotaDisplayType = oldDisplayType
+	}()
+
+	common.QuotaPerUnit = 3
+	operation_setting.GetGeneralSetting().QuotaDisplayType = operation_setting.QuotaDisplayTypeUSD
+	logs := []*model.Log{
+		{Id: 2, CreatedAt: 200, Type: model.LogTypeConsume, Quota: 3, RequestId: "newest"},
+		{Id: 1, CreatedAt: 100, Type: model.LogTypeConsume, Quota: 1, RequestId: "oldest"},
+	}
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	streamAdminLogsXLSX(c, logs, logExportQuery{StartTs: 1, EndTs: 300, Lang: "en"}, "logs.xlsx", resolveAdminLogExportDict("en"))
+
+	if got := recorder.Header().Get("Content-Type"); got != logExportXLSXContentType {
+		t.Fatalf("content type = %q, want %q", got, logExportXLSXContentType)
+	}
+	f, err := excelize.OpenReader(bytes.NewReader(recorder.Body.Bytes()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+
+	if got, err := f.GetCellValue("Usage Logs", "I4"); err != nil || got != "newest" {
+		t.Fatalf("first request id = %q, err=%v, want newest", got, err)
+	}
+	if got, err := f.GetCellValue("Usage Logs", "I5"); err != nil || got != "oldest" {
+		t.Fatalf("second request id = %q, err=%v, want oldest", got, err)
+	}
+	if typ, err := f.GetCellType("Usage Logs", "O5"); err != nil || (typ != excelize.CellTypeUnset && typ != excelize.CellTypeNumber) {
+		t.Fatalf("amount cell type = %v, err=%v, want numeric/unset", typ, err)
+	}
+	if raw, err := f.GetCellValue("Usage Logs", "O5", excelize.Options{RawCellValue: true}); err != nil || raw != "0.333334" {
+		t.Fatalf("raw amount = %q, err=%v, want numeric 0.333334", raw, err)
+	}
+	if got, err := f.GetCellValue("Usage Logs", "O4"); err != nil || got != "$1.000000" {
+		t.Fatalf("whole amount = %q, err=%v, want $1.000000", got, err)
+	}
+	if got, err := f.GetCellValue("Usage Logs", "O5"); err != nil || got != "$0.333334" {
+		t.Fatalf("fractional amount = %q, err=%v, want $0.333334", got, err)
+	}
+	styleID, err := f.GetCellStyle("Usage Logs", "O5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	style, err := f.GetStyle(styleID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if style.CustomNumFmt == nil || !strings.Contains(*style.CustomNumFmt, "0.000000") {
+		t.Fatalf("amount number format = %v, want six decimals", style.CustomNumFmt)
+	}
+}
+
+func TestResolveUsageLogExportQuotaUsesSettledAmount(t *testing.T) {
+	log := &model.Log{Quota: 10}
+	other := map[string]interface{}{
+		"actual_quota":       float64(7),
+		"video_billed_quota": float64(10),
+	}
+	if got := resolveUsageLogExportQuota(log, other); got != 7 {
+		t.Fatalf("resolved quota = %d, want 7", got)
+	}
+	log.Type = model.LogTypeConsume
+	if got := resolveUsageLogExportSignedQuota(log, other); got != -7 {
+		t.Fatalf("resolved signed quota = %d, want -7", got)
 	}
 }

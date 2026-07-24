@@ -27,6 +27,9 @@ func TestBuildVideoFlatClipHint_AppliesMarkupDiscount(t *testing.T) {
 	if rows[0].UsdAfterChannelDiscount != 3 {
 		t.Fatalf("usd=%v want 3", rows[0].UsdAfterChannelDiscount)
 	}
+	if rows[0].UsdChannelRaw != 1 {
+		t.Fatalf("channel raw=%v want 1", rows[0].UsdChannelRaw)
+	}
 	if rows[0].UsdOfficial != 2 {
 		t.Fatalf("official=%v want 2", rows[0].UsdOfficial)
 	}

@@ -119,7 +119,7 @@ func AggregateSupplierUsageFromLogs(startTimestamp, endTimestamp int64, channelI
 
 	var hourlyRows []*QuotaData
 	err = base.Session(&gorm.Session{}).
-		Select("model_name, sum(quota) as quota, count(*) as count, "+supplierLogTokenSumExpr+" as token_used, "+logHourBucketExpr+" as created_at").
+		Select("model_name, sum(quota) as quota, count(*) as count, " + supplierLogTokenSumExpr + " as token_used, " + logHourBucketExpr + " as created_at").
 		Group("model_name, " + logHourBucketExpr).
 		Order("created_at asc").
 		Find(&hourlyRows).Error
@@ -129,7 +129,7 @@ func AggregateSupplierUsageFromLogs(startTimestamp, endTimestamp int64, channelI
 
 	var modelRows []SupplierUsageByModel
 	err = base.Session(&gorm.Session{}).
-		Select("model_name, count(*) as count, sum(quota) as quota, "+supplierLogTokenSumExpr+" as token_used").
+		Select("model_name, count(*) as count, sum(quota) as quota, " + supplierLogTokenSumExpr + " as token_used").
 		Group("model_name").
 		Find(&modelRows).Error
 	if err != nil {
@@ -329,7 +329,7 @@ func GetSupplierChannelLogs(
 	return logs, total, nil
 }
 
-// GetSupplierChannelLogsForExport 拉取供应商渠道日志导出数据（升序，不分页）。
+// GetSupplierChannelLogsForExport 拉取供应商渠道日志导出数据（最新日志在前，不分页）。
 func GetSupplierChannelLogsForExport(
 	channelIDs []int,
 	logTypes []int,
@@ -380,10 +380,12 @@ func GetSupplierChannelLogsForExport(
 	if total > logExportCountLimit {
 		return nil, total, fmt.Errorf("导出行数超过 %d 上限", logExportCountLimit)
 	}
-	if err = tx.Order("logs.id ASC").Find(&logs).Error; err != nil {
+	if err = tx.Order("logs.id DESC").Find(&logs).Error; err != nil {
 		return nil, 0, errors.New("查询供应商渠道日志失败")
 	}
 	attachLogChannelDisplays(logs)
+	normalizeLogsBillingMetadata(logs)
+	mergeSettlementMarkersIntoPreChargeLogs(logs)
 	for i := range logs {
 		if logs[i].Other == "" {
 			continue

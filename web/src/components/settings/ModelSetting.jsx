@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useEffect, useState } from 'react';
-import { Card, Spin, Tabs } from '@douyinfe/semi-ui';
+import { Card, Spin } from '@douyinfe/semi-ui';
 
 import { API, showError, showSuccess, toBoolean } from '../../helpers';
 import { useTranslation } from 'react-i18next';
@@ -28,7 +28,7 @@ import SettingGlobalModel from '../../pages/Setting/Model/SettingGlobalModel';
 import SettingGrokModel from '../../pages/Setting/Model/SettingGrokModel';
 import SettingsChannelAffinity from '../../pages/Setting/Operation/SettingsChannelAffinity';
 
-const ModelSetting = () => {
+const ModelSetting = ({ activeSection = 'global' }) => {
   const { t } = useTranslation();
   let [inputs, setInputs] = useState({
     'gemini.safety_settings': '',
@@ -110,25 +110,35 @@ const ModelSetting = () => {
     <>
       <Spin spinning={loading} size='large'>
         {/* OpenAI */}
-        <Card style={{ marginTop: '10px' }}>
-          <SettingGlobalModel options={inputs} refresh={onRefresh} />
-        </Card>
+        {activeSection === 'global' && (
+          <Card style={{ marginTop: '10px' }}>
+            <SettingGlobalModel options={inputs} refresh={onRefresh} />
+          </Card>
+        )}
         {/* Channel affinity */}
-        <Card style={{ marginTop: '10px' }}>
-          <SettingsChannelAffinity options={inputs} refresh={onRefresh} />
-        </Card>
+        {activeSection === 'affinity' && (
+          <Card style={{ marginTop: '10px' }}>
+            <SettingsChannelAffinity options={inputs} refresh={onRefresh} />
+          </Card>
+        )}
         {/* Gemini */}
-        <Card style={{ marginTop: '10px' }}>
-          <SettingGeminiModel options={inputs} refresh={onRefresh} />
-        </Card>
+        {activeSection === 'gemini' && (
+          <Card style={{ marginTop: '10px' }}>
+            <SettingGeminiModel options={inputs} refresh={onRefresh} />
+          </Card>
+        )}
         {/* Claude */}
-        <Card style={{ marginTop: '10px' }}>
-          <SettingClaudeModel options={inputs} refresh={onRefresh} />
-        </Card>
+        {activeSection === 'claude' && (
+          <Card style={{ marginTop: '10px' }}>
+            <SettingClaudeModel options={inputs} refresh={onRefresh} />
+          </Card>
+        )}
         {/* Grok */}
-        <Card style={{ marginTop: '10px' }}>
-          <SettingGrokModel options={inputs} refresh={onRefresh} />
-        </Card>
+        {activeSection === 'grok' && (
+          <Card style={{ marginTop: '10px' }}>
+            <SettingGrokModel options={inputs} refresh={onRefresh} />
+          </Card>
+        )}
       </Spin>
     </>
   );

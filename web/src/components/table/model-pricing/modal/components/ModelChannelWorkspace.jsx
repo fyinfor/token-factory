@@ -21,17 +21,30 @@ import { Tag, Tooltip, Typography } from '@douyinfe/semi-ui';
 
 import {
   computeChannelBillingRates,
+  costDiscountMultiplier,
   formatVideoResolutionDisplayLabel,
   getSupplierTypeLabel,
   getUsedGroupContext,
+  markupRateFromPercent,
 } from '../../../../../helpers';
 import {
   fetchPerfMetrics,
   perfQueryResultToSummary,
 } from '../../../../../helpers/perfMetrics';
+import {
+  convertTierPriceToUSD,
+  getCurrencyRatesFromStatus,
+  normalizeCurrency,
+} from '../../../../../pages/Setting/Ratio/utils/requestTierPricing';
+import {
+  findTierPriceAtBand,
+  getRequestTierPricing,
+} from '../../view/card/tierUtils';
 import ModelChannelList from './ModelChannelList';
 import ModelEndpoints from './ModelEndpoints';
 import ModelPerfPanel from './ModelPerfPanel';
+import { getChannelHeatKey } from '../../utils/modelHeat';
+import { formatPriceRatioFromDiscount } from '../../utils/discount';
 
 const { Text } = Typography;
 
@@ -94,6 +107,48 @@ const ChannelStabilitySignal = ({ row, t }) => {
   );
 };
 
+const ChannelHotPill = ({ t }) => (
+  <span className='channel-hot-pill' title={t('热门')}>
+    <span className='channel-hot-pill-text'>{t('热门')}</span>
+  </span>
+);
+
+const ChannelDiscountPill = ({ discountLabel }) => (
+  <Tag size='small' shape='circle' className='channel-discount-tag'>
+    {discountLabel}
+  </Tag>
+);
+
+const ChannelStatusBadge = ({ isHotChannel, discountLabel, t }) => {
+  if (isHotChannel && discountLabel) {
+    return (
+      <span
+        className='channel-badge-carousel'
+        title={`${t('热门')} · ${discountLabel}`}
+        aria-label={`${t('热门')} · ${discountLabel}`}
+      >
+        <span className='channel-badge-carousel-track' aria-hidden='true'>
+          <span className='channel-badge-carousel-item'>
+            <ChannelHotPill t={t} />
+          </span>
+          <span className='channel-badge-carousel-item'>
+            <ChannelDiscountPill discountLabel={discountLabel} />
+          </span>
+          <span className='channel-badge-carousel-item'>
+            <ChannelHotPill t={t} />
+          </span>
+        </span>
+      </span>
+    );
+  }
+
+  if (isHotChannel) return <ChannelHotPill t={t} />;
+  if (discountLabel) {
+    return <ChannelDiscountPill discountLabel={discountLabel} />;
+  }
+  return null;
+};
+
 const getChannelLatencyMeta = (row, t) => {
   const latency = Number(row?.display_response_time_ms || 0);
   if (!(latency > 0)) {
@@ -151,8 +206,60 @@ const formatDiscountLabel = (channel, modelData) => {
   ) {
     return '';
   }
-  const discount = Math.round((channelPrice / officialBase) * 100) / 10;
-  return `${discount.toFixed(discount % 1 === 0 ? 0 : 1)}折`;
+  const discount = Math.round((1 - channelPrice / officialBase) * 100);
+  return formatPriceRatioFromDiscount(discount);
+};
+
+/** 阶梯计费：取第一档输入/输出平台价（USD /1M，已含渠道折扣与分组倍率） */
+const getFirstTierTokenPricesUsd = (channel, modelData, usedGroupRatio) => {
+  const globalRule = getRequestTierPricing(modelData);
+  const channelRule = getRequestTierPricing(channel);
+  const bandRule = channelRule || globalRule;
+  if (!bandRule?.tiers?.length) return null;
+
+  const currencyRates = getCurrencyRatesFromStatus();
+  const globalCurrency = normalizeCurrency(globalRule?.currency);
+  const channelCurrency = normalizeCurrency(
+    channelRule?.currency || globalRule?.currency,
+  );
+  const costDisc = costDiscountMultiplier(
+    channel?.price_discount_percent != null
+      ? channel.price_discount_percent
+      : 100,
+  );
+  const markupRate = markupRateFromPercent(channel?.markup_discount_rate || 0);
+  const globalTiers = globalRule?.tiers || [];
+  const channelTiers = channelRule?.tiers || [];
+
+  const resolveUsd = (priceKey) => {
+    const globalRaw =
+      findTierPriceAtBand(globalTiers, 0, priceKey, 'lt') ?? 0;
+    const channelRaw =
+      channelTiers.length > 0
+        ? findTierPriceAtBand(channelTiers, 0, priceKey, 'lt')
+        : null;
+    const globalPrice = convertTierPriceToUSD(
+      globalRaw,
+      globalCurrency,
+      currencyRates,
+    );
+    const channelPrice =
+      channelRaw != null
+        ? convertTierPriceToUSD(channelRaw, channelCurrency, currencyRates)
+        : null;
+    const effective =
+      channelTiers.length > 0 && channelPrice != null
+        ? channelPrice
+        : globalPrice;
+    const usd =
+      (effective * costDisc + globalPrice * markupRate) * usedGroupRatio;
+    return Number.isFinite(usd) && usd > 0 ? usd : null;
+  };
+
+  return {
+    input: resolveUsd('input'),
+    output: resolveUsd('output'),
+  };
 };
 
 const getChannelPriceRows = ({
@@ -201,6 +308,38 @@ const getChannelPriceRows = ({
         value: `${formatUsd(imagePrice * usedGroupRatio)}${t('/张起')}`,
       },
     ];
+  }
+
+  const isTiered =
+    channel?.quota_type === 3 ||
+    modelData?.quota_type === 3 ||
+    !!getRequestTierPricing(channel) ||
+    !!getRequestTierPricing(modelData);
+  if (isTiered) {
+    const tierPrices = getFirstTierTokenPricesUsd(
+      channel,
+      modelData,
+      usedGroupRatio,
+    );
+    if (tierPrices) {
+      const unit = tokenUnit === 'K' ? '/K' : '/M';
+      const rows = [];
+      if (tierPrices.input != null) {
+        rows.push({
+          key: 'input',
+          label: t('输入'),
+          value: `${formatUsd(tierPrices.input, true)}${unit}`,
+        });
+      }
+      if (tierPrices.output != null) {
+        rows.push({
+          key: 'output',
+          label: t('输出'),
+          value: `${formatUsd(tierPrices.output, true)}${unit}`,
+        });
+      }
+      if (rows.length > 0) return rows;
+    }
   }
 
   const isFixed = channel?.quota_type === 1 || modelData?.quota_type === 1;
@@ -263,6 +402,7 @@ const ModelChannelWorkspace = ({
   channelMtrMap = {},
   endpointMap = {},
   perfSummary = null,
+  hotChannelScoreMap = new Map(),
   t,
   ...props
 }) => {
@@ -380,6 +520,9 @@ const ModelChannelWorkspace = ({
             const routeLabel =
               channel.route_slug || channel.channel_no || modelData.model_name;
             const discountLabel = formatDiscountLabel(channel, modelData);
+            const isHotChannel = hotChannelScoreMap.has(
+              getChannelHeatKey(modelData, channel),
+            );
             const priceRows = getChannelPriceRows({
               channel,
               modelData,
@@ -416,16 +559,12 @@ const ModelChannelWorkspace = ({
                       {routeLabel}
                     </span>
                   </span>
-                  <div className='flex shrink-0 items-center gap-2'>
-                    {discountLabel ? (
-                      <Tag
-                        size='small'
-                        shape='circle'
-                        className='channel-discount-tag'
-                      >
-                        {discountLabel}
-                      </Tag>
-                    ) : null}
+                  <div className='flex shrink-0 items-center'>
+                    <ChannelStatusBadge
+                      isHotChannel={isHotChannel}
+                      discountLabel={discountLabel}
+                      t={t}
+                    />
                   </div>
                 </div>
                 <div className='channel-selector-divider my-3 border-t border-dashed' />

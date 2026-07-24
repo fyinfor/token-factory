@@ -30,9 +30,9 @@ func filterChannelPricingMapByVisibleChannels(source map[string]map[string]float
 	return filtered
 }
 
-func filterChannelTierPricingMapByVisibleChannels(source map[string]map[string]ratio_setting.TierSegments, visibleChannelIDs map[int]struct{}) map[string]map[string]ratio_setting.TierSegments {
-	filtered := make(map[string]map[string]ratio_setting.TierSegments, len(source))
-	for channelID, modelRatio := range source {
+func filterChannelRequestTierPricingMapByVisibleChannels(source map[string]map[string]ratio_setting.RequestTierPricing, visibleChannelIDs map[int]struct{}) map[string]map[string]ratio_setting.RequestTierPricing {
+	filtered := make(map[string]map[string]ratio_setting.RequestTierPricing, len(source))
+	for channelID, modelRules := range source {
 		id, err := model.ParseSupplierChannelIDFilter(channelID)
 		if err != nil {
 			continue
@@ -40,7 +40,7 @@ func filterChannelTierPricingMapByVisibleChannels(source map[string]map[string]r
 		if _, ok := visibleChannelIDs[id]; !ok {
 			continue
 		}
-		filtered[channelID] = modelRatio
+		filtered[channelID] = modelRules
 	}
 	return filtered
 }
@@ -92,10 +92,7 @@ func sanitizePricingData(data []model.PricingAPIItem) {
 		data[i].CompletionRatio = nil
 		data[i].CacheRatio = nil
 		data[i].CreateCacheRatio = nil
-		data[i].ModelTierRatio = nil
-		data[i].CompletionTierRatio = nil
-		data[i].CacheTierRatio = nil
-		data[i].CreateCacheTierRatio = nil
+		data[i].RequestTierPricing = nil
 		data[i].ImageRatio = nil
 		data[i].AudioRatio = nil
 		data[i].AudioCompletionRatio = nil
@@ -110,10 +107,7 @@ func sanitizePricingData(data []model.PricingAPIItem) {
 			data[i].ChannelList[j].CompletionRatio = 0
 			data[i].ChannelList[j].CacheRatio = 0
 			data[i].ChannelList[j].CreateCacheRatio = 0
-			data[i].ChannelList[j].ModelTierRatio = nil
-			data[i].ChannelList[j].CompletionTierRatio = nil
-			data[i].ChannelList[j].CacheTierRatio = nil
-			data[i].ChannelList[j].CreateCacheTierRatio = nil
+			data[i].ChannelList[j].RequestTierPricing = nil
 			data[i].ChannelList[j].PriceDiscountPercent = 0
 			data[i].ChannelList[j].SupplierAlias = ""
 			data[i].ChannelList[j].CompanyLogoURL = ""
@@ -270,14 +264,8 @@ func GetPricing(c *gin.Context) {
 	channelVideoCompletionRatio := map[string]map[string]float64{}
 	channelVideoPrice := map[string]map[string]float64{}
 	channelImagePrice := map[string]map[string]float64{}
-	channelModelTierRatio := map[string]map[string]ratio_setting.TierSegments{}
-	channelCompletionTierRatio := map[string]map[string]ratio_setting.TierSegments{}
-	channelCacheTierRatio := map[string]map[string]ratio_setting.TierSegments{}
-	channelCreateCacheTierRatio := map[string]map[string]ratio_setting.TierSegments{}
-	globalModelTierRatio := ratio_setting.GetModelTierRatioCopy()
-	globalCompletionTierRatio := ratio_setting.GetCompletionTierRatioCopy()
-	globalCacheTierRatio := ratio_setting.GetCacheTierRatioCopy()
-	globalCreateCacheTierRatio := ratio_setting.GetCreateCacheTierRatioCopy()
+	channelModelRequestTierPricing := ratio_setting.GetChannelModelRequestTierPricingCopy()
+	globalModelRequestTierPricing := ratio_setting.GetModelRequestTierPricingCopy()
 	supplierModelPrice := map[string]map[string]float64{}
 	supplierModelRatio := map[string]map[string]float64{}
 	for s, f := range ratio_setting.GetGroupRatioCopy() {
@@ -350,18 +338,7 @@ func GetPricing(c *gin.Context) {
 	for channelID, modelPrice := range ratio_setting.GetChannelImagePriceCopy() {
 		channelImagePrice[channelID] = modelPrice
 	}
-	for channelID, tierRatio := range ratio_setting.GetChannelModelTierRatioCopy() {
-		channelModelTierRatio[channelID] = tierRatio
-	}
-	for channelID, tierRatio := range ratio_setting.GetChannelCompletionTierRatioCopy() {
-		channelCompletionTierRatio[channelID] = tierRatio
-	}
-	for channelID, tierRatio := range ratio_setting.GetChannelCacheTierRatioCopy() {
-		channelCacheTierRatio[channelID] = tierRatio
-	}
-	for channelID, tierRatio := range ratio_setting.GetChannelCreateCacheTierRatioCopy() {
-		channelCreateCacheTierRatio[channelID] = tierRatio
-	}
+	channelModelRequestTierPricing = filterChannelRequestTierPricingMapByVisibleChannels(channelModelRequestTierPricing, visibleChannelIDs)
 	channelModelPrice = filterChannelPricingMapByVisibleChannels(channelModelPrice, visibleChannelIDs)
 	channelModelRatio = filterChannelPricingMapByVisibleChannels(channelModelRatio, visibleChannelIDs)
 	channelCompletionRatio = filterChannelPricingMapByVisibleChannels(channelCompletionRatio, visibleChannelIDs)
@@ -374,10 +351,6 @@ func GetPricing(c *gin.Context) {
 	channelVideoCompletionRatio = filterChannelPricingMapByVisibleChannels(channelVideoCompletionRatio, visibleChannelIDs)
 	channelVideoPrice = filterChannelPricingMapByVisibleChannels(channelVideoPrice, visibleChannelIDs)
 	channelImagePrice = filterChannelPricingMapByVisibleChannels(channelImagePrice, visibleChannelIDs)
-	channelModelTierRatio = filterChannelTierPricingMapByVisibleChannels(channelModelTierRatio, visibleChannelIDs)
-	channelCompletionTierRatio = filterChannelTierPricingMapByVisibleChannels(channelCompletionTierRatio, visibleChannelIDs)
-	channelCacheTierRatio = filterChannelTierPricingMapByVisibleChannels(channelCacheTierRatio, visibleChannelIDs)
-	channelCreateCacheTierRatio = filterChannelTierPricingMapByVisibleChannels(channelCreateCacheTierRatio, visibleChannelIDs)
 	for supplierID, modelPrice := range ratio_setting.GetSupplierModelPriceCopy() {
 		supplierModelPrice[supplierID] = modelPrice
 	}
@@ -505,14 +478,8 @@ func GetPricing(c *gin.Context) {
 		channelVideoCompletionRatio = map[string]map[string]float64{}
 		channelVideoPrice = map[string]map[string]float64{}
 		channelImagePrice = map[string]map[string]float64{}
-		channelModelTierRatio = map[string]map[string]ratio_setting.TierSegments{}
-		channelCompletionTierRatio = map[string]map[string]ratio_setting.TierSegments{}
-		channelCacheTierRatio = map[string]map[string]ratio_setting.TierSegments{}
-		channelCreateCacheTierRatio = map[string]map[string]ratio_setting.TierSegments{}
-		globalModelTierRatio = map[string]ratio_setting.TierSegments{}
-		globalCompletionTierRatio = map[string]ratio_setting.TierSegments{}
-		globalCacheTierRatio = map[string]ratio_setting.TierSegments{}
-		globalCreateCacheTierRatio = map[string]ratio_setting.TierSegments{}
+		channelModelRequestTierPricing = map[string]map[string]ratio_setting.RequestTierPricing{}
+		globalModelRequestTierPricing = map[string]ratio_setting.RequestTierPricing{}
 		supplierModelPrice = map[string]map[string]float64{}
 		supplierModelRatio = map[string]map[string]float64{}
 	}
@@ -539,15 +506,9 @@ func GetPricing(c *gin.Context) {
 		"channel_video_ratio":             channelVideoRatio,
 		"channel_video_completion_ratio":  channelVideoCompletionRatio,
 		"channel_video_price":             channelVideoPrice,
-		"channel_model_tier_ratio":        channelModelTierRatio,
-		"channel_completion_tier_ratio":   channelCompletionTierRatio,
-		"channel_cache_tier_ratio":        channelCacheTierRatio,
-		"channel_create_cache_tier_ratio": channelCreateCacheTierRatio,
-		"global_model_tier_ratio":         globalModelTierRatio,
-		"global_completion_tier_ratio":    globalCompletionTierRatio,
-		"global_cache_tier_ratio":         globalCacheTierRatio,
-		"global_create_cache_tier_ratio":  globalCreateCacheTierRatio,
-		"supplier_model_price":            supplierModelPrice,
+		"model_request_tier_pricing":         globalModelRequestTierPricing,
+		"channel_model_request_tier_pricing": channelModelRequestTierPricing,
+		"supplier_model_price":               supplierModelPrice,
 		"supplier_model_ratio":            supplierModelRatio,
 		"usable_group":                    usableGroup,
 		"supported_endpoint":              model.GetSupportedEndpointMap(),

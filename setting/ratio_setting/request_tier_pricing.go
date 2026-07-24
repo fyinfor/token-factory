@@ -6,202 +6,185 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/types"
-	"github.com/shopspring/decimal"
 )
 
-const RequestTierModeProgressive = "progressive"
+const (
+	RequestTierModeProgressive = "progressive"
 
-type RequestTierSegment struct {
-	UpTo  int64   `json:"up_to"`
-	Ratio float64 `json:"ratio"`
+	RequestTierDimensionInputTokens = "input_tokens"
+
+	// RequestTierBoundaryLt：prev ≤ tokens < up_to（边界落入下一档），默认，兼容旧逻辑
+	RequestTierBoundaryLt = "lt"
+	// RequestTierBoundaryLte：首档 0 ≤ tokens ≤ up_to，其后 prev < tokens ≤ up_to
+	RequestTierBoundaryLte = "lte"
+
+	RequestTierCurrencyUSD    = "USD"
+	RequestTierCurrencyCNY    = "CNY"
+	RequestTierCurrencyCustom = "CUSTOM"
+
+	// TierRatioBase 价格($/1M) ↔ 内部 ratio 换算基准（与 model_ratio 默认 2 对齐）
+	TierRatioBase = 2.0
+)
+
+// RequestTierPrices 单档四类单价（基准货币 /1M tokens；计费时换算为 USD）
+type RequestTierPrices struct {
+	Input      float64 `json:"input"`
+	Output     float64 `json:"output"`
+	CacheRead  float64 `json:"cache_read"`
+	CacheWrite float64 `json:"cache_write"`
 }
 
-// RequestTierPricingRule 用于模板系统，保留用于兼容性
-type RequestTierPricingRule struct {
-	Mode       string               `json:"mode,omitempty"`
-	Input      []RequestTierSegment `json:"input,omitempty"`
-	Output     []RequestTierSegment `json:"output,omitempty"`
-	CacheRead  []RequestTierSegment `json:"cache_read,omitempty"`
-	CacheWrite []RequestTierSegment `json:"cache_write,omitempty"`
+// RequestTierBand 单个输入 Token 区间档位
+type RequestTierBand struct {
+	UpTo   int64             `json:"up_to"`
+	Prices RequestTierPrices `json:"prices"`
 }
 
-// 新的独立阶梯倍率结构
-type TierSegments struct {
-	Segments []RequestTierSegment `json:"segments,omitempty"`
+// RequestTierPricing 统一阶梯计费规则
+// dimension 预留扩展（当前仅 input_tokens）；boundary 控制上限开闭。
+// Currency 为价格基准货币（USD/CNY/CUSTOM），prices 存该货币下的单价；
+// 使用时换算为系统内部 USD 计价；与系统展示货币一致时前端可直接展示。
+type RequestTierPricing struct {
+	Mode      string            `json:"mode,omitempty"`
+	Dimension string            `json:"dimension,omitempty"`
+	Boundary  string            `json:"boundary,omitempty"` // lt | lte
+	Currency  string            `json:"currency,omitempty"` // USD | CNY | CUSTOM
+	Tiers     []RequestTierBand `json:"tiers,omitempty"`
 }
 
-type RequestTierPricingTemplate struct {
-	Name string `json:"name,omitempty"`
-	RequestTierPricingRule
+// RequestTierHit 命中档结果（含渠道/全局价格，供计费与展示）
+type RequestTierHit struct {
+	FromToken           int64
+	ToToken             int64 // 0 = ∞
+	Boundary            string
+	Label               string
+	ChannelPrices       RequestTierPrices // 已换算为 USD；无渠道时为零值且 HasChannel=false
+	GlobalPrices        RequestTierPrices // 已换算为 USD
+	HasChannel          bool
+	HasGlobal           bool
+	EffectiveInput      float64 // 内部 ratio（usdPrice/TierRatioBase 经折扣后）
+	EffectiveOutput     float64
+	EffectiveCacheRead  float64
+	EffectiveCacheWrite float64
+	InputUnitPrice      float64 // 平台展示单价 $/1M
+	OutputUnitPrice     float64
+	CacheReadUnitPrice  float64
+	CacheWriteUnitPrice float64
 }
 
-type RequestTierPricingBreakdownItem struct {
-	From   int64   `json:"from"`
-	To     int64   `json:"to"`
-	Tokens string  `json:"tokens"`
-	Ratio  float64 `json:"ratio"`
-	Result string  `json:"result"`
-}
+var modelRequestTierPricingMap = types.NewRWMap[string, RequestTierPricing]()
+var channelModelRequestTierPricingMap = types.NewRWMap[string, map[string]RequestTierPricing]()
 
-type RequestTierPricingBreakdown struct {
-	InputBefore      string                                       `json:"input_before,omitempty"`
-	InputAfter       string                                       `json:"input_after,omitempty"`
-	OutputBefore     string                                       `json:"output_before,omitempty"`
-	OutputAfter      string                                       `json:"output_after,omitempty"`
-	CacheReadBefore  string                                       `json:"cache_read_before,omitempty"`
-	CacheReadAfter   string                                       `json:"cache_read_after,omitempty"`
-	CacheWriteBefore string                                       `json:"cache_write_before,omitempty"`
-	CacheWriteAfter  string                                       `json:"cache_write_after,omitempty"`
-	Details          map[string][]RequestTierPricingBreakdownItem `json:"details,omitempty"`
-}
+// ---------- 价格 / ratio 换算 ----------
 
-var requestTierPricingTemplatesMap = types.NewRWMap[string, RequestTierPricingTemplate]()
-
-// 新的四个独立阶梯倍率 Map
-var modelTierRatioMap = types.NewRWMap[string, TierSegments]()
-var completionTierRatioMap = types.NewRWMap[string, TierSegments]()
-var cacheTierRatioMap = types.NewRWMap[string, TierSegments]()
-var createCacheTierRatioMap = types.NewRWMap[string, TierSegments]()
-
-// 渠道级别的四个独立阶梯倍率 Map
-var channelModelTierRatioMap = types.NewRWMap[string, map[string]TierSegments]()
-var channelCompletionTierRatioMap = types.NewRWMap[string, map[string]TierSegments]()
-var channelCacheTierRatioMap = types.NewRWMap[string, map[string]TierSegments]()
-var channelCreateCacheTierRatioMap = types.NewRWMap[string, map[string]TierSegments]()
-
-// BuildTierLabel 根据实际 token 数量确定所属阶梯档位并生成展示标签
-// tokens: 实际使用的 token 数量，用于确定所属档位
-// 示例: "输入token<32k"
-func BuildTierLabel(tokenType string, segments []RequestTierSegment, tokens int64) string {
-	if len(segments) == 0 {
-		return ""
-	}
-	prefix := tokenType + "token"
-	// 找到 token 实际所属的档位（按 up_to 递增排列，最后一个 up_to=0 表示无上限）
-	var matchedSegment *RequestTierSegment
-	previous := int64(0)
-	for i := range segments {
-		seg := &segments[i]
-		if seg.UpTo == 0 {
-			// 无上限档位：tokens >= previous 即命中此档
-			matchedSegment = seg
-			break
-		}
-		if tokens < seg.UpTo {
-			matchedSegment = seg
-			break
-		}
-		previous = seg.UpTo
-	}
-	if matchedSegment == nil {
-		// 兜底：使用最后一个档位
-		matchedSegment = &segments[len(segments)-1]
-	}
-	if matchedSegment.UpTo > 0 {
-		return fmt.Sprintf("%s<%d", prefix, matchedSegment.UpTo)
-	}
-	// 无上限档位
-	return fmt.Sprintf("%s≥%d", prefix, previous)
-}
-
-// TierSegmentPair 渠道与全局阶梯 segments（与前端 resolveTierSegmentSources 一致）
-type TierSegmentPair struct {
-	Channel []RequestTierSegment
-	Global  []RequestTierSegment
-}
-
-// LoadTierSegmentPair 分别加载渠道与全局阶梯 segments
-func LoadTierSegmentPair(
-	channelID int,
-	model string,
-	getChannel func(int, string) (TierSegments, bool),
-	getGlobal func(string) (TierSegments, bool),
-) TierSegmentPair {
-	var pair TierSegmentPair
-	if globalTier, ok := getGlobal(model); ok {
-		pair.Global = globalTier.Segments
-	}
-	if channelTier, ok := getChannel(channelID, model); ok {
-		pair.Channel = channelTier.Segments
-	}
-	return pair
-}
-
-// SelectBandSegments 区间结构优先渠道阶梯，否则全局阶梯
-func SelectBandSegments(pair TierSegmentPair) []RequestTierSegment {
-	if len(pair.Channel) > 0 {
-		return pair.Channel
-	}
-	return pair.Global
-}
-
-// FindTierBandFromTokens 根据 token 数量确定所属区间起点（fromToken）
-func FindTierBandFromTokens(tokens int64, segments []RequestTierSegment) int64 {
-	if len(segments) == 0 {
+func PriceToTierRatio(price float64) float64 {
+	if price < 0 || !isFiniteFloat(price) {
 		return 0
 	}
-	previous := int64(0)
-	for i := range segments {
-		seg := &segments[i]
-		if seg.UpTo == 0 {
-			return previous
-		}
-		if tokens < seg.UpTo {
-			return previous
-		}
-		previous = seg.UpTo
-	}
-	return previous
+	return price / TierRatioBase
 }
 
-// FindTierRatioAtBand 按区间起点在 segments 中查找倍率
-func FindTierRatioAtBand(segments []RequestTierSegment, fromToken int64) (float64, bool) {
-	for _, seg := range segments {
-		if seg.UpTo == 0 || fromToken < seg.UpTo {
-			return seg.Ratio, true
+func TierRatioToPrice(ratio float64) float64 {
+	if ratio < 0 || !isFiniteFloat(ratio) {
+		return 0
+	}
+	return ratio * TierRatioBase
+}
+
+func isFiniteFloat(v float64) bool {
+	return !((v != v) || v > 1e308 || v < -1e308)
+}
+
+func NormalizeRequestTierCurrency(currency string) string {
+	switch strings.ToUpper(strings.TrimSpace(currency)) {
+	case RequestTierCurrencyCNY:
+		return RequestTierCurrencyCNY
+	case RequestTierCurrencyCustom:
+		return RequestTierCurrencyCustom
+	default:
+		return RequestTierCurrencyUSD
+	}
+}
+
+// GetRequestTierCurrencyRate 返回 1 USD = X <currency>
+func GetRequestTierCurrencyRate(currency string) float64 {
+	switch NormalizeRequestTierCurrency(currency) {
+	case RequestTierCurrencyCNY:
+		if operation_setting.USDExchangeRate > 0 {
+			return operation_setting.USDExchangeRate
 		}
-	}
-	return 0, false
-}
-
-func tierEffectiveRate(channelRatio, globalRatio, costDiscPercent, markupDiscPercent float64) float64 {
-	return channelRatio*(costDiscPercent/100.0) + globalRatio*(markupDiscPercent/100.0)
-}
-
-// TierPlatformUsdPerM 计算命中档位下的平台展示单价（$/1M tokens，含分组倍率）
-// 与前端 buildTokenTierPreviewItems 公式一致：
-//
-//	(baseRatio × costDisc% + globalRatio × markupDisc%) × 2 × groupRatio
-func TierPlatformUsdPerM(
-	channelSegments, globalSegments []RequestTierSegment,
-	bandFrom int64,
-	costDiscPercent, markupDiscPercent, groupRatio float64,
-) float64 {
-	globalRatio, globalOk := FindTierRatioAtBand(globalSegments, bandFrom)
-	if !globalOk {
-		globalRatio = 0
-	}
-	baseRatio := globalRatio
-	if len(channelSegments) > 0 {
-		if channelRatio, ok := FindTierRatioAtBand(channelSegments, bandFrom); ok {
-			baseRatio = channelRatio
+		return 1
+	case RequestTierCurrencyCustom:
+		rate := operation_setting.GetGeneralSetting().CustomCurrencyExchangeRate
+		if rate > 0 {
+			return rate
 		}
+		return 1
+	default:
+		return 1
 	}
-	effRate := tierEffectiveRate(baseRatio, globalRatio, costDiscPercent, markupDiscPercent)
-	return effRate * 2 * groupRatio
 }
 
-func normalizeRequestTierSegments(segments []RequestTierSegment) []RequestTierSegment {
-	out := make([]RequestTierSegment, 0, len(segments))
-	for _, segment := range segments {
-		if segment.Ratio < 0 {
+// ConvertRequestTierPriceToUSD 将基准货币单价换算为 USD（同币种或 USD 时原样返回）
+func ConvertRequestTierPriceToUSD(price float64, currency string) float64 {
+	if !isFiniteFloat(price) || price == 0 {
+		return 0
+	}
+	rate := GetRequestTierCurrencyRate(currency)
+	if rate <= 0 || rate == 1 {
+		return price
+	}
+	return price / rate
+}
+
+func pricesToUSD(p RequestTierPrices, currency string) RequestTierPrices {
+	return RequestTierPrices{
+		Input:      ConvertRequestTierPriceToUSD(p.Input, currency),
+		Output:     ConvertRequestTierPriceToUSD(p.Output, currency),
+		CacheRead:  ConvertRequestTierPriceToUSD(p.CacheRead, currency),
+		CacheWrite: ConvertRequestTierPriceToUSD(p.CacheWrite, currency),
+	}
+}
+
+func pricesToRatios(p RequestTierPrices) (input, output, cacheRead, cacheWrite float64) {
+	return PriceToTierRatio(p.Input), PriceToTierRatio(p.Output), PriceToTierRatio(p.CacheRead), PriceToTierRatio(p.CacheWrite)
+}
+
+// ---------- 规范化 / 校验 ----------
+
+func NormalizeRequestTierBoundary(boundary string) string {
+	switch strings.TrimSpace(strings.ToLower(boundary)) {
+	case RequestTierBoundaryLte:
+		return RequestTierBoundaryLte
+	default:
+		return RequestTierBoundaryLt
+	}
+}
+
+func normalizeRequestTierPricing(rule RequestTierPricing) RequestTierPricing {
+	if strings.TrimSpace(rule.Mode) == "" {
+		rule.Mode = RequestTierModeProgressive
+	}
+	if strings.TrimSpace(rule.Dimension) == "" {
+		rule.Dimension = RequestTierDimensionInputTokens
+	}
+	rule.Boundary = NormalizeRequestTierBoundary(rule.Boundary)
+	rule.Currency = NormalizeRequestTierCurrency(rule.Currency)
+	rule.Tiers = normalizeRequestTierBands(rule.Tiers)
+	return rule
+}
+
+func normalizeRequestTierBands(tiers []RequestTierBand) []RequestTierBand {
+	out := make([]RequestTierBand, 0, len(tiers))
+	for _, tier := range tiers {
+		if tier.Prices.Input < 0 || tier.Prices.Output < 0 || tier.Prices.CacheRead < 0 || tier.Prices.CacheWrite < 0 {
 			continue
 		}
-		out = append(out, segment)
+		out = append(out, tier)
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		if out[i].UpTo == 0 {
@@ -215,41 +198,7 @@ func normalizeRequestTierSegments(segments []RequestTierSegment) []RequestTierSe
 	return out
 }
 
-func normalizeRequestTierRule(rule RequestTierPricingRule) RequestTierPricingRule {
-	if strings.TrimSpace(rule.Mode) == "" {
-		rule.Mode = RequestTierModeProgressive
-	}
-	rule.Input = normalizeRequestTierSegments(rule.Input)
-	rule.Output = normalizeRequestTierSegments(rule.Output)
-	rule.CacheRead = normalizeRequestTierSegments(rule.CacheRead)
-	rule.CacheWrite = normalizeRequestTierSegments(rule.CacheWrite)
-	return rule
-}
-
-func validateRequestTierSegments(name string, segments []RequestTierSegment) error {
-	if len(segments) == 0 {
-		return nil
-	}
-	previous := int64(0)
-	for i, segment := range segments {
-		if segment.Ratio < 0 {
-			return fmt.Errorf("%s 第 %d 档 ratio 不能小于 0", name, i+1)
-		}
-		if segment.UpTo == 0 {
-			if i != len(segments)-1 {
-				return fmt.Errorf("%s 只有最后一档 up_to 可以为 0", name)
-			}
-			continue
-		}
-		if segment.UpTo <= previous {
-			return fmt.Errorf("%s 第 %d 档 up_to 必须递增", name, i+1)
-		}
-		previous = segment.UpTo
-	}
-	return nil
-}
-
-func ValidateRequestTierRule(rule RequestTierPricingRule) error {
+func ValidateRequestTierPricing(rule RequestTierPricing) error {
 	mode := strings.TrimSpace(rule.Mode)
 	if mode == "" {
 		mode = RequestTierModeProgressive
@@ -257,657 +206,562 @@ func ValidateRequestTierRule(rule RequestTierPricingRule) error {
 	if mode != RequestTierModeProgressive {
 		return errors.New("仅支持 progressive 阶梯计费模式")
 	}
-	if err := validateRequestTierSegments("input", rule.Input); err != nil {
-		return err
+	dimension := strings.TrimSpace(rule.Dimension)
+	if dimension == "" {
+		dimension = RequestTierDimensionInputTokens
 	}
-	if err := validateRequestTierSegments("output", rule.Output); err != nil {
-		return err
+	if dimension != RequestTierDimensionInputTokens {
+		return fmt.Errorf("暂不支持 dimension=%s，当前仅允许 %s", dimension, RequestTierDimensionInputTokens)
 	}
-	if err := validateRequestTierSegments("cache_read", rule.CacheRead); err != nil {
-		return err
+	boundary := NormalizeRequestTierBoundary(rule.Boundary)
+	if boundary != RequestTierBoundaryLt && boundary != RequestTierBoundaryLte {
+		return errors.New("boundary 仅允许 lt 或 lte")
 	}
-	if err := validateRequestTierSegments("cache_write", rule.CacheWrite); err != nil {
-		return err
+	if len(rule.Tiers) == 0 {
+		return nil
+	}
+	previous := int64(0)
+	hasPositiveInput := false
+	for i, tier := range rule.Tiers {
+		if tier.Prices.Input < 0 || tier.Prices.Output < 0 || tier.Prices.CacheRead < 0 || tier.Prices.CacheWrite < 0 {
+			return fmt.Errorf("第 %d 档价格不能为负数", i+1)
+		}
+		if tier.Prices.Input > 0 {
+			hasPositiveInput = true
+		}
+		if tier.UpTo == 0 {
+			if i != len(rule.Tiers)-1 {
+				return fmt.Errorf("只有最后一档 up_to 可以为 0（无限）")
+			}
+			continue
+		}
+		if tier.UpTo <= previous {
+			return fmt.Errorf("第 %d 档 up_to 必须递增", i+1)
+		}
+		previous = tier.UpTo
+	}
+	if !hasPositiveInput {
+		return errors.New("至少需要一档输入价格大于 0")
 	}
 	return nil
 }
 
-func normalizeRequestTierRuleMap(src map[string]RequestTierPricingRule) (map[string]RequestTierPricingRule, error) {
-	dst := make(map[string]RequestTierPricingRule, len(src))
+func normalizeRequestTierPricingMap(src map[string]RequestTierPricing) (map[string]RequestTierPricing, error) {
+	dst := make(map[string]RequestTierPricing, len(src))
 	for modelName, rule := range src {
 		name := FormatMatchingModelName(strings.TrimSpace(modelName))
 		if name == "" {
 			continue
 		}
-		rule = normalizeRequestTierRule(rule)
-		if err := ValidateRequestTierRule(rule); err != nil {
+		rule = normalizeRequestTierPricing(rule)
+		if err := ValidateRequestTierPricing(rule); err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
+		}
+		if len(rule.Tiers) == 0 {
+			continue
 		}
 		dst[name] = rule
 	}
 	return dst, nil
 }
 
-// ========== 新的四个独立阶梯倍率处理函数 ==========
+// ---------- 命中逻辑 ----------
 
-func normalizeTierSegmentsMap(src map[string]TierSegments) (map[string]TierSegments, error) {
-	dst := make(map[string]TierSegments, len(src))
-	for modelName, tier := range src {
-		name := FormatMatchingModelName(strings.TrimSpace(modelName))
-		if name == "" {
-			continue
+// FindRequestTierBandIndex 按 dimensionValue（当前为输入 token）与 boundary 命中档位下标；无档返回 -1
+func FindRequestTierBandIndex(tokens int64, tiers []RequestTierBand, boundary string) int {
+	if len(tiers) == 0 {
+		return -1
+	}
+	boundary = NormalizeRequestTierBoundary(boundary)
+	for i := range tiers {
+		upTo := tiers[i].UpTo
+		if upTo == 0 {
+			return i
 		}
-		tier.Segments = normalizeRequestTierSegments(tier.Segments)
-		if err := validateRequestTierSegments("segments", tier.Segments); err != nil {
-			return nil, fmt.Errorf("%s: %w", name, err)
-		}
-		dst[name] = tier
-	}
-	return dst, nil
-}
-
-// ModelTierRatio
-func ModelTierRatio2JSONString() string {
-	return modelTierRatioMap.MarshalJSONString()
-}
-
-func UpdateModelTierRatioByJSONString(jsonStr string) error {
-	trimmed := strings.TrimSpace(jsonStr)
-	if trimmed == "" {
-		modelTierRatioMap.Clear()
-		InvalidateExposedDataCache()
-		return nil
-	}
-	var parsed map[string]TierSegments
-	if err := common.UnmarshalJsonStr(trimmed, &parsed); err != nil {
-		return err
-	}
-	normalized, err := normalizeTierSegmentsMap(parsed)
-	if err != nil {
-		return err
-	}
-	modelTierRatioMap.Clear()
-	modelTierRatioMap.AddAll(normalized)
-	InvalidateExposedDataCache()
-	return nil
-}
-
-func GetModelTierRatio(model string) (TierSegments, bool) {
-	return modelTierRatioMap.Get(FormatMatchingModelName(model))
-}
-
-func GetModelTierRatioCopy() map[string]TierSegments {
-	return modelTierRatioMap.ReadAll()
-}
-
-// ChannelModelTierRatio
-func ChannelModelTierRatio2JSONString() string {
-	return channelModelTierRatioMap.MarshalJSONString()
-}
-
-func UpdateChannelModelTierRatioByJSONString(jsonStr string) error {
-	trimmed := strings.TrimSpace(jsonStr)
-	if trimmed == "" {
-		channelModelTierRatioMap.Clear()
-		InvalidateExposedDataCache()
-		return nil
-	}
-	var parsed map[string]map[string]TierSegments
-	if err := common.UnmarshalJsonStr(trimmed, &parsed); err != nil {
-		return err
-	}
-	normalized := make(map[string]map[string]TierSegments, len(parsed))
-	for channelID, rules := range parsed {
-		id, convErr := strconv.Atoi(strings.TrimSpace(channelID))
-		if convErr != nil {
-			continue
-		}
-		key := normalizeChannelID(id)
-		if key == "" {
-			continue
-		}
-		normalizedRules, err := normalizeTierSegmentsMap(rules)
-		if err != nil {
-			return err
-		}
-		normalized[key] = normalizedRules
-	}
-	channelModelTierRatioMap.Clear()
-	channelModelTierRatioMap.AddAll(normalized)
-	InvalidateExposedDataCache()
-	return nil
-}
-
-func GetChannelModelTierRatio(channelID int, model string) (TierSegments, bool) {
-	key := normalizeChannelID(channelID)
-	if key == "" {
-		return TierSegments{}, false
-	}
-	channelRules, ok := channelModelTierRatioMap.Get(key)
-	if !ok {
-		return TierSegments{}, false
-	}
-	rule, ok := channelRules[FormatMatchingModelName(model)]
-	return rule, ok
-}
-
-func GetChannelModelTierRatioCopy() map[string]map[string]TierSegments {
-	return channelModelTierRatioMap.ReadAll()
-}
-
-// CompletionTierRatio
-func CompletionTierRatio2JSONString() string {
-	return completionTierRatioMap.MarshalJSONString()
-}
-
-func UpdateCompletionTierRatioByJSONString(jsonStr string) error {
-	trimmed := strings.TrimSpace(jsonStr)
-	if trimmed == "" {
-		completionTierRatioMap.Clear()
-		InvalidateExposedDataCache()
-		return nil
-	}
-	var parsed map[string]TierSegments
-	if err := common.UnmarshalJsonStr(trimmed, &parsed); err != nil {
-		return err
-	}
-	normalized, err := normalizeTierSegmentsMap(parsed)
-	if err != nil {
-		return err
-	}
-	completionTierRatioMap.Clear()
-	completionTierRatioMap.AddAll(normalized)
-	InvalidateExposedDataCache()
-	return nil
-}
-
-func GetCompletionTierRatio(model string) (TierSegments, bool) {
-	return completionTierRatioMap.Get(FormatMatchingModelName(model))
-}
-
-func GetCompletionTierRatioCopy() map[string]TierSegments {
-	return completionTierRatioMap.ReadAll()
-}
-
-// ChannelCompletionTierRatio
-func ChannelCompletionTierRatio2JSONString() string {
-	return channelCompletionTierRatioMap.MarshalJSONString()
-}
-
-func UpdateChannelCompletionTierRatioByJSONString(jsonStr string) error {
-	trimmed := strings.TrimSpace(jsonStr)
-	if trimmed == "" {
-		channelCompletionTierRatioMap.Clear()
-		InvalidateExposedDataCache()
-		return nil
-	}
-	var parsed map[string]map[string]TierSegments
-	if err := common.UnmarshalJsonStr(trimmed, &parsed); err != nil {
-		return err
-	}
-	normalized := make(map[string]map[string]TierSegments, len(parsed))
-	for channelID, rules := range parsed {
-		id, convErr := strconv.Atoi(strings.TrimSpace(channelID))
-		if convErr != nil {
-			continue
-		}
-		key := normalizeChannelID(id)
-		if key == "" {
-			continue
-		}
-		normalizedRules, err := normalizeTierSegmentsMap(rules)
-		if err != nil {
-			return err
-		}
-		normalized[key] = normalizedRules
-	}
-	channelCompletionTierRatioMap.Clear()
-	channelCompletionTierRatioMap.AddAll(normalized)
-	InvalidateExposedDataCache()
-	return nil
-}
-
-func GetChannelCompletionTierRatio(channelID int, model string) (TierSegments, bool) {
-	key := normalizeChannelID(channelID)
-	if key == "" {
-		return TierSegments{}, false
-	}
-	channelRules, ok := channelCompletionTierRatioMap.Get(key)
-	if !ok {
-		return TierSegments{}, false
-	}
-	rule, ok := channelRules[FormatMatchingModelName(model)]
-	return rule, ok
-}
-
-func GetChannelCompletionTierRatioCopy() map[string]map[string]TierSegments {
-	return channelCompletionTierRatioMap.ReadAll()
-}
-
-// CacheTierRatio
-func CacheTierRatio2JSONString() string {
-	return cacheTierRatioMap.MarshalJSONString()
-}
-
-func UpdateCacheTierRatioByJSONString(jsonStr string) error {
-	trimmed := strings.TrimSpace(jsonStr)
-	if trimmed == "" {
-		cacheTierRatioMap.Clear()
-		InvalidateExposedDataCache()
-		return nil
-	}
-	var parsed map[string]TierSegments
-	if err := common.UnmarshalJsonStr(trimmed, &parsed); err != nil {
-		return err
-	}
-	normalized, err := normalizeTierSegmentsMap(parsed)
-	if err != nil {
-		return err
-	}
-	cacheTierRatioMap.Clear()
-	cacheTierRatioMap.AddAll(normalized)
-	InvalidateExposedDataCache()
-	return nil
-}
-
-func GetCacheTierRatio(model string) (TierSegments, bool) {
-	return cacheTierRatioMap.Get(FormatMatchingModelName(model))
-}
-
-func GetCacheTierRatioCopy() map[string]TierSegments {
-	return cacheTierRatioMap.ReadAll()
-}
-
-// ChannelCacheTierRatio
-func ChannelCacheTierRatio2JSONString() string {
-	return channelCacheTierRatioMap.MarshalJSONString()
-}
-
-func UpdateChannelCacheTierRatioByJSONString(jsonStr string) error {
-	trimmed := strings.TrimSpace(jsonStr)
-	if trimmed == "" {
-		channelCacheTierRatioMap.Clear()
-		InvalidateExposedDataCache()
-		return nil
-	}
-	var parsed map[string]map[string]TierSegments
-	if err := common.UnmarshalJsonStr(trimmed, &parsed); err != nil {
-		return err
-	}
-	normalized := make(map[string]map[string]TierSegments, len(parsed))
-	for channelID, rules := range parsed {
-		id, convErr := strconv.Atoi(strings.TrimSpace(channelID))
-		if convErr != nil {
-			continue
-		}
-		key := normalizeChannelID(id)
-		if key == "" {
-			continue
-		}
-		normalizedRules, err := normalizeTierSegmentsMap(rules)
-		if err != nil {
-			return err
-		}
-		normalized[key] = normalizedRules
-	}
-	channelCacheTierRatioMap.Clear()
-	channelCacheTierRatioMap.AddAll(normalized)
-	InvalidateExposedDataCache()
-	return nil
-}
-
-func GetChannelCacheTierRatio(channelID int, model string) (TierSegments, bool) {
-	key := normalizeChannelID(channelID)
-	if key == "" {
-		return TierSegments{}, false
-	}
-	channelRules, ok := channelCacheTierRatioMap.Get(key)
-	if !ok {
-		return TierSegments{}, false
-	}
-	rule, ok := channelRules[FormatMatchingModelName(model)]
-	return rule, ok
-}
-
-func GetChannelCacheTierRatioCopy() map[string]map[string]TierSegments {
-	return channelCacheTierRatioMap.ReadAll()
-}
-
-// CreateCacheTierRatio
-func CreateCacheTierRatio2JSONString() string {
-	return createCacheTierRatioMap.MarshalJSONString()
-}
-
-func UpdateCreateCacheTierRatioByJSONString(jsonStr string) error {
-	trimmed := strings.TrimSpace(jsonStr)
-	if trimmed == "" {
-		createCacheTierRatioMap.Clear()
-		InvalidateExposedDataCache()
-		return nil
-	}
-	var parsed map[string]TierSegments
-	if err := common.UnmarshalJsonStr(trimmed, &parsed); err != nil {
-		return err
-	}
-	normalized, err := normalizeTierSegmentsMap(parsed)
-	if err != nil {
-		return err
-	}
-	createCacheTierRatioMap.Clear()
-	createCacheTierRatioMap.AddAll(normalized)
-	InvalidateExposedDataCache()
-	return nil
-}
-
-func GetCreateCacheTierRatio(model string) (TierSegments, bool) {
-	return createCacheTierRatioMap.Get(FormatMatchingModelName(model))
-}
-
-func GetCreateCacheTierRatioCopy() map[string]TierSegments {
-	return createCacheTierRatioMap.ReadAll()
-}
-
-// ChannelCreateCacheTierRatio
-func ChannelCreateCacheTierRatio2JSONString() string {
-	return channelCreateCacheTierRatioMap.MarshalJSONString()
-}
-
-func UpdateChannelCreateCacheTierRatioByJSONString(jsonStr string) error {
-	trimmed := strings.TrimSpace(jsonStr)
-	if trimmed == "" {
-		channelCreateCacheTierRatioMap.Clear()
-		InvalidateExposedDataCache()
-		return nil
-	}
-	var parsed map[string]map[string]TierSegments
-	if err := common.UnmarshalJsonStr(trimmed, &parsed); err != nil {
-		return err
-	}
-	normalized := make(map[string]map[string]TierSegments, len(parsed))
-	for channelID, rules := range parsed {
-		id, convErr := strconv.Atoi(strings.TrimSpace(channelID))
-		if convErr != nil {
-			continue
-		}
-		key := normalizeChannelID(id)
-		if key == "" {
-			continue
-		}
-		normalizedRules, err := normalizeTierSegmentsMap(rules)
-		if err != nil {
-			return err
-		}
-		normalized[key] = normalizedRules
-	}
-	channelCreateCacheTierRatioMap.Clear()
-	channelCreateCacheTierRatioMap.AddAll(normalized)
-	InvalidateExposedDataCache()
-	return nil
-}
-
-func GetChannelCreateCacheTierRatio(channelID int, model string) (TierSegments, bool) {
-	key := normalizeChannelID(channelID)
-	if key == "" {
-		return TierSegments{}, false
-	}
-	channelRules, ok := channelCreateCacheTierRatioMap.Get(key)
-	if !ok {
-		return TierSegments{}, false
-	}
-	rule, ok := channelRules[FormatMatchingModelName(model)]
-	return rule, ok
-}
-
-func GetChannelCreateCacheTierRatioCopy() map[string]map[string]TierSegments {
-	return channelCreateCacheTierRatioMap.ReadAll()
-}
-
-func RequestTierPricingTemplates2JSONString() string {
-	return requestTierPricingTemplatesMap.MarshalJSONString()
-}
-
-func requestTierTemplateID(template RequestTierPricingTemplate, index int, existing map[string]RequestTierPricingTemplate) string {
-	base := strings.TrimSpace(template.Name)
-	if base == "" {
-		base = "template"
-	}
-	base = strings.Map(func(r rune) rune {
-		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' {
-			return r
-		}
-		return '_'
-	}, strings.ToLower(base))
-	base = strings.Trim(base, "_")
-	if base == "" {
-		base = "template"
-	}
-	prefix := fmt.Sprintf("tpl_%s_%d", base, time.Now().UnixNano())
-	id := fmt.Sprintf("%s_%d", prefix, index+1)
-	for suffix := 2; ; suffix++ {
-		if _, ok := existing[id]; !ok {
-			return id
-		}
-		id = fmt.Sprintf("%s_%d_%d", prefix, index+1, suffix)
-	}
-}
-
-func UpdateRequestTierPricingTemplatesByJSONString(jsonStr string) error {
-	trimmed := strings.TrimSpace(jsonStr)
-	if trimmed == "" {
-		requestTierPricingTemplatesMap.Clear()
-		return nil
-	}
-	var parsed map[string]RequestTierPricingTemplate
-	if err := common.UnmarshalJsonStr(trimmed, &parsed); err != nil {
-		var list []RequestTierPricingTemplate
-		if listErr := common.UnmarshalJsonStr(trimmed, &list); listErr != nil {
-			return err
-		}
-		parsed = make(map[string]RequestTierPricingTemplate, len(list))
-		for index, template := range list {
-			parsed[requestTierTemplateID(template, index, parsed)] = template
-		}
-	}
-	normalized := make(map[string]RequestTierPricingTemplate, len(parsed))
-	index := 0
-	for key, template := range parsed {
-		name := strings.TrimSpace(key)
-		if name == "" {
-			name = requestTierTemplateID(template, index, normalized)
-		}
-		template.RequestTierPricingRule = normalizeRequestTierRule(template.RequestTierPricingRule)
-		if err := ValidateRequestTierRule(template.RequestTierPricingRule); err != nil {
-			return fmt.Errorf("%s: %w", name, err)
-		}
-		normalized[name] = template
-		index++
-	}
-	requestTierPricingTemplatesMap.Clear()
-	requestTierPricingTemplatesMap.AddAll(normalized)
-	return nil
-}
-
-func applyTierSegments(tokens decimal.Decimal, segments []RequestTierSegment) (decimal.Decimal, []RequestTierPricingBreakdownItem) {
-	if tokens.LessThanOrEqual(decimal.Zero) || len(segments) == 0 {
-		return tokens, nil
-	}
-	remaining := tokens
-	previous := decimal.Zero
-	result := decimal.Zero
-	items := make([]RequestTierPricingBreakdownItem, 0, len(segments))
-	for _, segment := range segments {
-		if remaining.LessThanOrEqual(decimal.Zero) {
-			break
-		}
-		var size decimal.Decimal
-		var to int64
-		if segment.UpTo == 0 {
-			size = remaining
-			to = 0
-		} else {
-			upper := decimal.NewFromInt(segment.UpTo)
-			if upper.LessThanOrEqual(previous) {
-				continue
+		if boundary == RequestTierBoundaryLte {
+			if tokens <= upTo {
+				return i
 			}
-			capacity := upper.Sub(previous)
-			if remaining.GreaterThan(capacity) {
-				size = capacity
-			} else {
-				size = remaining
-			}
-			to = segment.UpTo
+		} else if tokens < upTo {
+			return i
 		}
-		segResult := size.Mul(decimal.NewFromFloat(segment.Ratio))
-		result = result.Add(segResult)
-		items = append(items, RequestTierPricingBreakdownItem{
-			From:   previous.IntPart(),
-			To:     to,
-			Tokens: size.String(),
-			Ratio:  segment.Ratio,
-			Result: segResult.String(),
+	}
+	return len(tiers) - 1
+}
+
+// BandRangeFromIndex 返回档位区间 [from, to]，to=0 表示 ∞
+func BandRangeFromIndex(tiers []RequestTierBand, index int) (from, to int64) {
+	if index < 0 || index >= len(tiers) {
+		return 0, 0
+	}
+	to = tiers[index].UpTo
+	if index == 0 {
+		return 0, to
+	}
+	return tiers[index-1].UpTo, to
+}
+
+// BuildRequestTierLabel 生成档位展示标签，随 boundary 变化比较符
+func BuildRequestTierLabel(tokenType string, tiers []RequestTierBand, tokens int64, boundary string) string {
+	idx := FindRequestTierBandIndex(tokens, tiers, boundary)
+	if idx < 0 {
+		return ""
+	}
+	boundary = NormalizeRequestTierBoundary(boundary)
+	from, to := BandRangeFromIndex(tiers, idx)
+	prefix := tokenType + "token"
+	if to == 0 {
+		if from <= 0 {
+			return prefix + "≥0"
+		}
+		return fmt.Sprintf("%s≥%d", prefix, from)
+	}
+	if boundary == RequestTierBoundaryLte {
+		return fmt.Sprintf("%s≤%d", prefix, to)
+	}
+	return fmt.Sprintf("%s<%d", prefix, to)
+}
+
+func tierEffectiveRate(channelRatio, globalRatio, costDiscPercent, markupDiscPercent float64) float64 {
+	return channelRatio*(costDiscPercent/100.0) + globalRatio*(markupDiscPercent/100.0)
+}
+
+func platformUsdPerMFromPrices(channelPrice, globalPrice float64, hasChannel bool, costDiscPercent, markupDiscPercent, groupRatio float64) float64 {
+	globalRatio := PriceToTierRatio(globalPrice)
+	baseRatio := globalRatio
+	if hasChannel {
+		baseRatio = PriceToTierRatio(channelPrice)
+	}
+	return tierEffectiveRate(baseRatio, globalRatio, costDiscPercent, markupDiscPercent) * TierRatioBase * groupRatio
+}
+
+// ResolveRequestTierPricing 渠道完整规则优先，否则全局；禁止跨源拼装
+func ResolveRequestTierPricing(channelID int, model string) (RequestTierPricing, bool) {
+	if rule, ok := GetChannelModelRequestTierPricing(channelID, model); ok && len(rule.Tiers) > 0 {
+		return rule, true
+	}
+	if rule, ok := GetModelRequestTierPricing(model); ok && len(rule.Tiers) > 0 {
+		return rule, true
+	}
+	return RequestTierPricing{}, false
+}
+
+// HasAnyRequestTierPricing 是否存在任意全局/渠道阶梯配置
+func HasAnyRequestTierPricing() bool {
+	return modelRequestTierPricingMap.Len() > 0 || channelModelRequestTierPricingMap.Len() > 0
+}
+
+// ResolveRequestTierHit 按输入 token 命中档位，并计算有效倍率与展示单价。
+// 渠道有规则时整规则使用渠道（含 boundary）；全局价用于加价折扣侧（若全局同 band 存在）。
+func ResolveRequestTierHit(
+	channelID int,
+	model string,
+	inputTokens int64,
+	costDiscPercent, markupDiscPercent, groupRatio float64,
+) (RequestTierHit, bool) {
+	channelRule, hasChannel := GetChannelModelRequestTierPricing(channelID, model)
+	globalRule, hasGlobal := GetModelRequestTierPricing(model)
+	if hasChannel && len(channelRule.Tiers) == 0 {
+		hasChannel = false
+	}
+	if hasGlobal && len(globalRule.Tiers) == 0 {
+		hasGlobal = false
+	}
+	if !hasChannel && !hasGlobal {
+		return RequestTierHit{}, false
+	}
+
+	bandRule := globalRule
+	if hasChannel {
+		bandRule = channelRule
+	}
+	bandRule = normalizeRequestTierPricing(bandRule)
+	idx := FindRequestTierBandIndex(inputTokens, bandRule.Tiers, bandRule.Boundary)
+	if idx < 0 {
+		return RequestTierHit{}, false
+	}
+	from, to := BandRangeFromIndex(bandRule.Tiers, idx)
+
+	hit := RequestTierHit{
+		FromToken: from,
+		ToToken:   to,
+		Boundary:  bandRule.Boundary,
+		Label:     BuildRequestTierLabel("输入", bandRule.Tiers, inputTokens, bandRule.Boundary),
+		HasChannel: hasChannel,
+		HasGlobal:  hasGlobal,
+	}
+
+	if hasChannel {
+		chRule := normalizeRequestTierPricing(channelRule)
+		chIdx := FindRequestTierBandIndex(inputTokens, chRule.Tiers, chRule.Boundary)
+		if chIdx >= 0 {
+			hit.ChannelPrices = pricesToUSD(chRule.Tiers[chIdx].Prices, chRule.Currency)
+		}
+	}
+	if hasGlobal {
+		gRule := normalizeRequestTierPricing(globalRule)
+		gIdx := FindRequestTierBandIndex(inputTokens, gRule.Tiers, gRule.Boundary)
+		if gIdx >= 0 {
+			hit.GlobalPrices = pricesToUSD(gRule.Tiers[gIdx].Prices, gRule.Currency)
+		}
+	}
+
+	// 有效倍率：有渠道用渠道价作 base，全局价作 markup 侧；仅全局时 base=global
+	chIn, chOut, chCR, chCW := pricesToRatios(hit.ChannelPrices)
+	gIn, gOut, gCR, gCW := pricesToRatios(hit.GlobalPrices)
+	if !hasChannel {
+		chIn, chOut, chCR, chCW = gIn, gOut, gCR, gCW
+	}
+	hit.EffectiveInput = tierEffectiveRate(chIn, gIn, costDiscPercent, markupDiscPercent)
+	hit.EffectiveOutput = tierEffectiveRate(chOut, gOut, costDiscPercent, markupDiscPercent)
+	hit.EffectiveCacheRead = tierEffectiveRate(chCR, gCR, costDiscPercent, markupDiscPercent)
+	hit.EffectiveCacheWrite = tierEffectiveRate(chCW, gCW, costDiscPercent, markupDiscPercent)
+
+	hit.InputUnitPrice = platformUsdPerMFromPrices(hit.ChannelPrices.Input, hit.GlobalPrices.Input, hasChannel, costDiscPercent, markupDiscPercent, groupRatio)
+	hit.OutputUnitPrice = platformUsdPerMFromPrices(hit.ChannelPrices.Output, hit.GlobalPrices.Output, hasChannel, costDiscPercent, markupDiscPercent, groupRatio)
+	hit.CacheReadUnitPrice = platformUsdPerMFromPrices(hit.ChannelPrices.CacheRead, hit.GlobalPrices.CacheRead, hasChannel, costDiscPercent, markupDiscPercent, groupRatio)
+	hit.CacheWriteUnitPrice = platformUsdPerMFromPrices(hit.ChannelPrices.CacheWrite, hit.GlobalPrices.CacheWrite, hasChannel, costDiscPercent, markupDiscPercent, groupRatio)
+
+	return hit, true
+}
+
+// ---------- Option CRUD：全局 ----------
+
+func ModelRequestTierPricing2JSONString() string {
+	return modelRequestTierPricingMap.MarshalJSONString()
+}
+
+func UpdateModelRequestTierPricingByJSONString(jsonStr string) error {
+	trimmed := strings.TrimSpace(jsonStr)
+	if trimmed == "" {
+		modelRequestTierPricingMap.Clear()
+		InvalidateExposedDataCache()
+		return nil
+	}
+	var parsed map[string]RequestTierPricing
+	if err := common.UnmarshalJsonStr(trimmed, &parsed); err != nil {
+		return err
+	}
+	normalized, err := normalizeRequestTierPricingMap(parsed)
+	if err != nil {
+		return err
+	}
+	modelRequestTierPricingMap.Clear()
+	modelRequestTierPricingMap.AddAll(normalized)
+	InvalidateExposedDataCache()
+	return nil
+}
+
+func GetModelRequestTierPricing(model string) (RequestTierPricing, bool) {
+	return modelRequestTierPricingMap.Get(FormatMatchingModelName(model))
+}
+
+func GetModelRequestTierPricingCopy() map[string]RequestTierPricing {
+	return modelRequestTierPricingMap.ReadAll()
+}
+
+// ---------- Option CRUD：渠道 ----------
+
+func ChannelModelRequestTierPricing2JSONString() string {
+	return channelModelRequestTierPricingMap.MarshalJSONString()
+}
+
+func UpdateChannelModelRequestTierPricingByJSONString(jsonStr string) error {
+	trimmed := strings.TrimSpace(jsonStr)
+	if trimmed == "" {
+		channelModelRequestTierPricingMap.Clear()
+		InvalidateExposedDataCache()
+		return nil
+	}
+	var parsed map[string]map[string]RequestTierPricing
+	if err := common.UnmarshalJsonStr(trimmed, &parsed); err != nil {
+		return err
+	}
+	normalized := make(map[string]map[string]RequestTierPricing, len(parsed))
+	for channelID, rules := range parsed {
+		id, convErr := strconv.Atoi(strings.TrimSpace(channelID))
+		if convErr != nil {
+			continue
+		}
+		key := normalizeChannelID(id)
+		if key == "" {
+			continue
+		}
+		normalizedRules, err := normalizeRequestTierPricingMap(rules)
+		if err != nil {
+			return err
+		}
+		if len(normalizedRules) == 0 {
+			continue
+		}
+		normalized[key] = normalizedRules
+	}
+	channelModelRequestTierPricingMap.Clear()
+	channelModelRequestTierPricingMap.AddAll(normalized)
+	InvalidateExposedDataCache()
+	return nil
+}
+
+func GetChannelModelRequestTierPricing(channelID int, model string) (RequestTierPricing, bool) {
+	key := normalizeChannelID(channelID)
+	if key == "" {
+		return RequestTierPricing{}, false
+	}
+	channelRules, ok := channelModelRequestTierPricingMap.Get(key)
+	if !ok {
+		return RequestTierPricing{}, false
+	}
+	rule, ok := channelRules[FormatMatchingModelName(model)]
+	return rule, ok
+}
+
+func GetChannelModelRequestTierPricingCopy() map[string]map[string]RequestTierPricing {
+	return channelModelRequestTierPricingMap.ReadAll()
+}
+
+type legacySegment struct {
+	UpTo  int64   `json:"up_to"`
+	Ratio float64 `json:"ratio"`
+}
+
+// MergeLegacyTierSegmentsToPricing 将旧四路 TierSegments（ratio）合并为统一规则；boundary 固定 lt
+func MergeLegacyTierSegmentsToPricing(
+	input, output, cacheRead, cacheWrite []legacySegment,
+) RequestTierPricing {
+	base := input
+	if len(base) == 0 {
+		base = output
+	}
+	if len(base) == 0 {
+		base = cacheRead
+	}
+	if len(base) == 0 {
+		base = cacheWrite
+	}
+	if len(base) == 0 {
+		return RequestTierPricing{}
+	}
+	outMap := map[int64]float64{}
+	for _, s := range output {
+		outMap[s.UpTo] = s.Ratio
+	}
+	crMap := map[int64]float64{}
+	for _, s := range cacheRead {
+		crMap[s.UpTo] = s.Ratio
+	}
+	cwMap := map[int64]float64{}
+	for _, s := range cacheWrite {
+		cwMap[s.UpTo] = s.Ratio
+	}
+	inMap := map[int64]float64{}
+	for _, s := range input {
+		inMap[s.UpTo] = s.Ratio
+	}
+
+	tiers := make([]RequestTierBand, 0, len(base))
+	for _, s := range base {
+		tiers = append(tiers, RequestTierBand{
+			UpTo: s.UpTo,
+			Prices: RequestTierPrices{
+				Input:      TierRatioToPrice(inMap[s.UpTo]),
+				Output:     TierRatioToPrice(outMap[s.UpTo]),
+				CacheRead:  TierRatioToPrice(crMap[s.UpTo]),
+				CacheWrite: TierRatioToPrice(cwMap[s.UpTo]),
+			},
 		})
-		remaining = remaining.Sub(size)
-		if segment.UpTo == 0 {
-			previous = previous.Add(size)
-		} else {
-			previous = decimal.NewFromInt(segment.UpTo)
-		}
 	}
-	if remaining.GreaterThan(decimal.Zero) {
-		result = result.Add(remaining)
+	rule := RequestTierPricing{
+		Mode:      RequestTierModeProgressive,
+		Dimension: RequestTierDimensionInputTokens,
+		Boundary:  RequestTierBoundaryLt,
+		Currency:  RequestTierCurrencyUSD,
+		Tiers:     tiers,
 	}
-	return result, items
+	return normalizeRequestTierPricing(rule)
 }
 
-// ApplyTierSegmentsForType 应用阶梯倍率到单个类型
-func ApplyTierSegmentsForType(tokens decimal.Decimal, tier TierSegments) decimal.Decimal {
-	if tokens.LessThanOrEqual(decimal.Zero) || len(tier.Segments) == 0 {
-		return tokens
-	}
-	remaining := tokens
-	previous := decimal.Zero
-	result := decimal.Zero
-	for _, segment := range tier.Segments {
-		if remaining.LessThanOrEqual(decimal.Zero) {
-			break
+// MigrateLegacyTierRatioMaps 从旧 8 Key 内存结构迁移到新统一结构（仅当新 map 为空时）
+// legacy JSON 形状：map[model]{segments:[{up_to,ratio}]} / map[channel]map[model]...
+func MigrateLegacyTierRatioMaps(
+	modelTier, completionTier, cacheTier, createCacheTier map[string]legacyTierSegmentsWire,
+	channelModel, channelCompletion, channelCache, channelCreateCache map[string]map[string]legacyTierSegmentsWire,
+) (globalMigrated int, channelMigrated int) {
+	if modelRequestTierPricingMap.Len() == 0 {
+		merged := make(map[string]RequestTierPricing)
+		models := map[string]struct{}{}
+		for k := range modelTier {
+			models[k] = struct{}{}
 		}
-		var size decimal.Decimal
-		if segment.UpTo == 0 {
-			size = remaining
-		} else {
-			upper := decimal.NewFromInt(segment.UpTo)
-			if upper.LessThanOrEqual(previous) {
+		for k := range completionTier {
+			models[k] = struct{}{}
+		}
+		for k := range cacheTier {
+			models[k] = struct{}{}
+		}
+		for k := range createCacheTier {
+			models[k] = struct{}{}
+		}
+		for modelName := range models {
+			rule := MergeLegacyTierSegmentsToPricing(
+				modelTier[modelName].Segments,
+				completionTier[modelName].Segments,
+				cacheTier[modelName].Segments,
+				createCacheTier[modelName].Segments,
+			)
+			if len(rule.Tiers) == 0 {
 				continue
 			}
-			capacity := upper.Sub(previous)
-			if remaining.GreaterThan(capacity) {
-				size = capacity
-			} else {
-				size = remaining
+			if err := ValidateRequestTierPricing(rule); err != nil {
+				continue
+			}
+			merged[FormatMatchingModelName(modelName)] = rule
+			globalMigrated++
+		}
+		if len(merged) > 0 {
+			modelRequestTierPricingMap.AddAll(merged)
+		}
+	}
+
+	if channelModelRequestTierPricingMap.Len() == 0 {
+		mergedCh := make(map[string]map[string]RequestTierPricing)
+		channelIDs := map[string]struct{}{}
+		for k := range channelModel {
+			channelIDs[k] = struct{}{}
+		}
+		for k := range channelCompletion {
+			channelIDs[k] = struct{}{}
+		}
+		for k := range channelCache {
+			channelIDs[k] = struct{}{}
+		}
+		for k := range channelCreateCache {
+			channelIDs[k] = struct{}{}
+		}
+		for chID := range channelIDs {
+			models := map[string]struct{}{}
+			for k := range channelModel[chID] {
+				models[k] = struct{}{}
+			}
+			for k := range channelCompletion[chID] {
+				models[k] = struct{}{}
+			}
+			for k := range channelCache[chID] {
+				models[k] = struct{}{}
+			}
+			for k := range channelCreateCache[chID] {
+				models[k] = struct{}{}
+			}
+			perModel := make(map[string]RequestTierPricing)
+			for modelName := range models {
+				rule := MergeLegacyTierSegmentsToPricing(
+					channelModel[chID][modelName].Segments,
+					channelCompletion[chID][modelName].Segments,
+					channelCache[chID][modelName].Segments,
+					channelCreateCache[chID][modelName].Segments,
+				)
+				if len(rule.Tiers) == 0 {
+					continue
+				}
+				if err := ValidateRequestTierPricing(rule); err != nil {
+					continue
+				}
+				perModel[FormatMatchingModelName(modelName)] = rule
+				channelMigrated++
+			}
+			if len(perModel) > 0 {
+				mergedCh[chID] = perModel
 			}
 		}
-		segResult := size.Mul(decimal.NewFromFloat(segment.Ratio))
-		result = result.Add(segResult)
-		remaining = remaining.Sub(size)
-		if segment.UpTo == 0 {
-			previous = previous.Add(size)
-		} else {
-			previous = decimal.NewFromInt(segment.UpTo)
+		if len(mergedCh) > 0 {
+			channelModelRequestTierPricingMap.AddAll(mergedCh)
 		}
 	}
-	if remaining.GreaterThan(decimal.Zero) {
-		result = result.Add(remaining)
+	if globalMigrated > 0 || channelMigrated > 0 {
+		InvalidateExposedDataCache()
 	}
-	return result
+	return globalMigrated, channelMigrated
 }
 
-// ResolveModelTierRatio 解析模型阶梯倍率（优先使用渠道配置）
-func ResolveModelTierRatio(channelID int, model string) (TierSegments, bool) {
-	if modelTierRatioMap == nil || channelModelTierRatioMap == nil {
-		return TierSegments{}, false
-	}
-	if modelTierRatioMap.Len() == 0 && channelModelTierRatioMap.Len() == 0 {
-		return TierSegments{}, false
-	}
-	if rule, ok := GetChannelModelTierRatio(channelID, model); ok {
-		return rule, true
-	}
-	return GetModelTierRatio(model)
+type legacyTierSegmentsWire struct {
+	Segments []legacySegment `json:"segments,omitempty"`
 }
 
-// ResolveCompletionTierRatio 解析完成阶梯倍率（优先使用渠道配置）
-func ResolveCompletionTierRatio(channelID int, model string) (TierSegments, bool) {
-	if completionTierRatioMap == nil || channelCompletionTierRatioMap == nil {
-		return TierSegments{}, false
+// TryMigrateLegacyTierRatioOptionJSON 解析旧 Option JSON 并尝试迁入（供 option 加载后调用）
+func TryMigrateLegacyTierRatioOptionJSON(
+	modelTierJSON, completionTierJSON, cacheTierJSON, createCacheTierJSON string,
+	channelModelJSON, channelCompletionJSON, channelCacheJSON, channelCreateCacheJSON string,
+) (bool, error) {
+	parseGlobal := func(s string) map[string]legacyTierSegmentsWire {
+		out := map[string]legacyTierSegmentsWire{}
+		s = strings.TrimSpace(s)
+		if s == "" || s == "{}" {
+			return out
+		}
+		_ = common.UnmarshalJsonStr(s, &out)
+		return out
 	}
-	if completionTierRatioMap.Len() == 0 && channelCompletionTierRatioMap.Len() == 0 {
-		return TierSegments{}, false
+	parseChannel := func(s string) map[string]map[string]legacyTierSegmentsWire {
+		out := map[string]map[string]legacyTierSegmentsWire{}
+		s = strings.TrimSpace(s)
+		if s == "" || s == "{}" {
+			return out
+		}
+		_ = common.UnmarshalJsonStr(s, &out)
+		return out
 	}
-	if rule, ok := GetChannelCompletionTierRatio(channelID, model); ok {
-		return rule, true
-	}
-	return GetCompletionTierRatio(model)
+	g, c := MigrateLegacyTierRatioMaps(
+		parseGlobal(modelTierJSON),
+		parseGlobal(completionTierJSON),
+		parseGlobal(cacheTierJSON),
+		parseGlobal(createCacheTierJSON),
+		parseChannel(channelModelJSON),
+		parseChannel(channelCompletionJSON),
+		parseChannel(channelCacheJSON),
+		parseChannel(channelCreateCacheJSON),
+	)
+	return g > 0 || c > 0, nil
 }
 
-// ResolveCacheTierRatio 解析缓存读取阶梯倍率（优先使用渠道配置）
-func ResolveCacheTierRatio(channelID int, model string) (TierSegments, bool) {
-	if cacheTierRatioMap == nil || channelCacheTierRatioMap == nil {
-		return TierSegments{}, false
-	}
-	if cacheTierRatioMap.Len() == 0 && channelCacheTierRatioMap.Len() == 0 {
-		return TierSegments{}, false
-	}
-	if rule, ok := GetChannelCacheTierRatio(channelID, model); ok {
-		return rule, true
-	}
-	return GetCacheTierRatio(model)
+// ---------- 兼容导出：从统一规则派生旧 segments（供尚未切换的展示层过渡，可删）----------
+
+// RequestTierSegment 旧 segment 形状（仅迁移/测试兼容）
+type RequestTierSegment struct {
+	UpTo  int64   `json:"up_to"`
+	Ratio float64 `json:"ratio"`
 }
 
-// ResolveCreateCacheTierRatio 解析缓存写入阶梯倍率（优先使用渠道配置）
-func ResolveCreateCacheTierRatio(channelID int, model string) (TierSegments, bool) {
-	if createCacheTierRatioMap == nil || channelCreateCacheTierRatioMap == nil {
-		return TierSegments{}, false
-	}
-	if createCacheTierRatioMap.Len() == 0 && channelCreateCacheTierRatioMap.Len() == 0 {
-		return TierSegments{}, false
-	}
-	if rule, ok := GetChannelCreateCacheTierRatio(channelID, model); ok {
-		return rule, true
-	}
-	return GetCreateCacheTierRatio(model)
+type TierSegments struct {
+	Segments []RequestTierSegment `json:"segments,omitempty"`
 }
 
-func ApplyRequestTierPricingDecimal(rule RequestTierPricingRule, input, output, cacheRead, cacheWrite decimal.Decimal) (decimal.Decimal, decimal.Decimal, decimal.Decimal, decimal.Decimal, RequestTierPricingBreakdown) {
-	rule = normalizeRequestTierRule(rule)
-	inAfter, inItems := applyTierSegments(input, rule.Input)
-	outAfter, outItems := applyTierSegments(output, rule.Output)
-	cacheReadAfter, cacheReadItems := applyTierSegments(cacheRead, rule.CacheRead)
-	cacheWriteAfter, cacheWriteItems := applyTierSegments(cacheWrite, rule.CacheWrite)
-	breakdown := RequestTierPricingBreakdown{
-		InputBefore:      input.String(),
-		InputAfter:       inAfter.String(),
-		OutputBefore:     output.String(),
-		OutputAfter:      outAfter.String(),
-		CacheReadBefore:  cacheRead.String(),
-		CacheReadAfter:   cacheReadAfter.String(),
-		CacheWriteBefore: cacheWrite.String(),
-		CacheWriteAfter:  cacheWriteAfter.String(),
-		Details:          map[string][]RequestTierPricingBreakdownItem{},
+func pricingToLegacySegments(rule RequestTierPricing, pricePicker func(RequestTierPrices) float64) TierSegments {
+	segs := make([]RequestTierSegment, 0, len(rule.Tiers))
+	for _, tier := range rule.Tiers {
+		segs = append(segs, RequestTierSegment{
+			UpTo:  tier.UpTo,
+			Ratio: PriceToTierRatio(pricePicker(tier.Prices)),
+		})
 	}
-	if len(inItems) > 0 {
-		breakdown.Details["input"] = inItems
+	return TierSegments{Segments: segs}
+}
+
+func LegacySegmentsFromRequestTierPricing(rule RequestTierPricing) (input, output, cacheRead, cacheWrite TierSegments) {
+	return pricingToLegacySegments(rule, func(p RequestTierPrices) float64 { return p.Input }),
+		pricingToLegacySegments(rule, func(p RequestTierPrices) float64 { return p.Output }),
+		pricingToLegacySegments(rule, func(p RequestTierPrices) float64 { return p.CacheRead }),
+		pricingToLegacySegments(rule, func(p RequestTierPrices) float64 { return p.CacheWrite })
+}
+
+// MergeLegacyFourTierSegments 供外部用旧 TierSegments 合并
+func MergeLegacyFourTierSegments(input, output, cacheRead, cacheWrite TierSegments) RequestTierPricing {
+	toWire := func(t TierSegments) []legacySegment {
+		out := make([]legacySegment, 0, len(t.Segments))
+		for _, s := range t.Segments {
+			out = append(out, legacySegment{UpTo: s.UpTo, Ratio: s.Ratio})
+		}
+		return out
 	}
-	if len(outItems) > 0 {
-		breakdown.Details["output"] = outItems
-	}
-	if len(cacheReadItems) > 0 {
-		breakdown.Details["cache_read"] = cacheReadItems
-	}
-	if len(cacheWriteItems) > 0 {
-		breakdown.Details["cache_write"] = cacheWriteItems
-	}
-	if len(breakdown.Details) == 0 {
-		breakdown.Details = nil
-	}
-	return inAfter, outAfter, cacheReadAfter, cacheWriteAfter, breakdown
+	return MergeLegacyTierSegmentsToPricing(
+		toWire(input), toWire(output), toWire(cacheRead), toWire(cacheWrite),
+	)
 }

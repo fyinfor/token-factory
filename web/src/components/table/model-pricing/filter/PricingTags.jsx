@@ -20,6 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 import React from 'react';
 import SelectableButtonGroup from '../../../common/ui/SelectableButtonGroup';
 import { getModelTagLabel } from '@/helpers';
+import { isTopHotModel, LIVE_HOT_FILTER } from '../utils/modelHeat';
 
 /**
  * 模型标签筛选组件
@@ -39,6 +40,10 @@ const PricingTags = ({
   loading = false,
   t,
   layout,
+  showLiveHot = false,
+  hotChannelScoreMap = new Map(),
+  filterSupplier = 'all',
+  filterSupplierType = 'all',
 }) => {
   // 提取系统所有标签
   const getAllTags = React.useMemo(() => {
@@ -50,6 +55,7 @@ const PricingTags = ({
           .split(/[,;|]+/) // 逗号、分号或竖线（保留空格，允许多词标签如 "open weights"）
           .map((tag) => tag.trim())
           .filter(Boolean)
+          .filter((tag) => tag !== '热门' && tag.toLowerCase() !== 'hot')
           .forEach((tag) => tagSet.add(tag.toLowerCase()));
       }
     });
@@ -61,6 +67,14 @@ const PricingTags = ({
   const getTagCount = React.useCallback(
     (tag) => {
       if (tag === 'all') return models.length;
+      if (tag === LIVE_HOT_FILTER) {
+        return models.filter((model) =>
+          isTopHotModel(model, hotChannelScoreMap, {
+            filterSupplier,
+            filterSupplierType,
+          }),
+        ).length;
+      }
 
       const tagLower = tag.toLowerCase();
       return models.filter((model) => {
@@ -72,7 +86,7 @@ const PricingTags = ({
           .includes(tagLower);
       }).length;
     },
-    [models],
+    [models, hotChannelScoreMap, filterSupplier, filterSupplierType],
   );
 
   const items = React.useMemo(() => {
@@ -84,6 +98,14 @@ const PricingTags = ({
       },
     ];
 
+    if (showLiveHot) {
+      result.push({
+        value: LIVE_HOT_FILTER,
+        label: t('热门'),
+        tagCount: getTagCount(LIVE_HOT_FILTER),
+      });
+    }
+
     getAllTags.forEach((tag) => {
       const count = getTagCount(tag);
       result.push({
@@ -94,7 +116,7 @@ const PricingTags = ({
     });
 
     return result;
-  }, [getAllTags, getTagCount, t, models.length]);
+  }, [getAllTags, getTagCount, t, models.length, showLiveHot]);
 
   return (
     <SelectableButtonGroup

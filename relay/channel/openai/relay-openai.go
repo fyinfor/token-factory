@@ -14,6 +14,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting"
 
 	"github.com/QuantumNous/new-api/types"
 
@@ -125,8 +126,16 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 
 	// 检查是否为音频模型
 	isAudioModel := strings.Contains(strings.ToLower(model), "audio")
+	// 开启输出审核时需整段缓冲后再回放；关闭时实时转发以保持与上游一致的 TTFT
+	bufferForGuardrail := setting.ShouldCheckAliyunGuardrailOutput()
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
+		if !bufferForGuardrail && lastStreamData != "" {
+			if err := HandleStreamFormat(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent); err != nil {
+				common.SysLog("error handling stream format: " + err.Error())
+				sr.Error(err)
+			}
+		}
 		if len(data) > 0 {
 			// 对音频模型，保存倒数第二个stream data
 			if isAudioModel && lastStreamData != "" {
@@ -163,6 +172,12 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		logger.LogError(c, fmt.Sprintf("error handling last response: %s, lastStreamData: [%s]", err.Error(), lastStreamData))
 	}
 
+	if !bufferForGuardrail && info.RelayFormat == types.RelayFormatOpenAI {
+		if shouldSendLastResp {
+			_ = sendStreamData(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent)
+		}
+	}
+
 	// 处理token计算
 	if err := processTokens(info.RelayMode, streamItems, &responseTextBuilder, &toolCount); err != nil {
 		logger.LogError(c, "error processing tokens: "+err.Error())
@@ -174,28 +189,31 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	}
 
 	applyUsagePostProcessing(info, usage, common.StringToByteSlice(lastStreamData))
-	guardrailResult, guardrailErr := service.CheckAliyunGuardrailOutput(c, info, responseTextBuilder.String())
-	if guardrailErr != nil {
-		logger.LogWarn(c, fmt.Sprintf("aliyun guardrail stream output check skipped: %s", guardrailErr.Error()))
-	}
-	if guardrailResult != nil && guardrailResult.Blocked {
-		c.Set("aliyun_guardrail_output_blocked", true)
-		c.Set("aliyun_guardrail_output_stream", true)
-		return nil, types.NewOpenAIError(fmt.Errorf("aliyun guardrail blocked stream output"), types.ErrorCodeSensitiveWordsDetected, http.StatusBadRequest)
-	}
 
-	if info.RelayFormat == types.RelayFormatOpenAI {
-		itemsToSend := streamItems
-		if shouldSendLastResp && len(itemsToSend) > 0 {
-			itemsToSend = itemsToSend[:len(itemsToSend)-1]
+	if bufferForGuardrail {
+		guardrailResult, guardrailErr := service.CheckAliyunGuardrailOutput(c, info, responseTextBuilder.String())
+		if guardrailErr != nil {
+			logger.LogWarn(c, fmt.Sprintf("aliyun guardrail stream output check skipped: %s", guardrailErr.Error()))
 		}
-		for _, item := range itemsToSend {
-			if err := HandleStreamFormat(c, info, item, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent); err != nil {
-				return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+		if guardrailResult != nil && guardrailResult.Blocked {
+			c.Set("aliyun_guardrail_output_blocked", true)
+			c.Set("aliyun_guardrail_output_stream", true)
+			return nil, types.NewOpenAIError(fmt.Errorf("aliyun guardrail blocked stream output"), types.ErrorCodeSensitiveWordsDetected, http.StatusBadRequest)
+		}
+
+		if info.RelayFormat == types.RelayFormatOpenAI {
+			itemsToSend := streamItems
+			if shouldSendLastResp && len(itemsToSend) > 0 {
+				itemsToSend = itemsToSend[:len(itemsToSend)-1]
 			}
-		}
-		if shouldSendLastResp && lastStreamData != "" {
-			_ = sendStreamData(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent)
+			for _, item := range itemsToSend {
+				if err := HandleStreamFormat(c, info, item, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent); err != nil {
+					return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
+				}
+			}
+			if shouldSendLastResp && lastStreamData != "" {
+				_ = sendStreamData(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent)
+			}
 		}
 	}
 

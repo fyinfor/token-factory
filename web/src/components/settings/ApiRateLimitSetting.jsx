@@ -22,7 +22,7 @@ import { Card, Spin } from '@douyinfe/semi-ui';
 import SettingsApiRateLimit from '../../pages/Setting/RateLimit/SettingsApiRateLimit';
 import { API, showError, toBoolean } from '../../helpers';
 
-const ApiRateLimitSetting = () => {
+const ApiRateLimitSetting = ({ activeSection = 'limits' }) => {
   const [inputs, setInputs] = useState({
     GlobalApiRateLimitEnable: true,
     GlobalApiRateLimitNum: 180,
@@ -84,7 +84,11 @@ const ApiRateLimitSetting = () => {
   return (
     <Spin spinning={loading} size='large'>
       <Card style={{ marginTop: '10px' }}>
-        <SettingsApiRateLimit options={inputs} refresh={onRefresh} />
+        <SettingsApiRateLimit
+          options={inputs}
+          refresh={onRefresh}
+          activeSection={activeSection}
+        />
       </Card>
     </Spin>
   );

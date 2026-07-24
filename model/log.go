@@ -1187,10 +1187,12 @@ func GetUserLogsForExport(userId int, filter LogExportFilter) ([]*Log, int64, er
 	if err := tx.Order("id ASC").Find(&logs).Error; err != nil {
 		return nil, 0, err
 	}
+	normalizeLogsBillingMetadata(logs)
+	mergeSettlementMarkersIntoPreChargeLogs(logs)
 	return logs, total, nil
 }
 
-// GetAllLogsForExport 拉取管理员全站日志导出数据（升序，不分页），筛选与 GetAllLogs 一致。
+// GetAllLogsForExport 拉取管理员全站日志导出数据（最新日志在前，不分页），筛选与 GetAllLogs 一致。
 func GetAllLogsForExport(filter AdminLogExportFilter) ([]*Log, int64, error) {
 	tx := LOG_DB
 	tx = applyLogTypesFilter(tx, filter.LogTypes)
@@ -1230,10 +1232,12 @@ func GetAllLogsForExport(filter AdminLogExportFilter) ([]*Log, int64, error) {
 	}
 
 	var logs []*Log
-	if err := tx.Order("logs.id ASC").Find(&logs).Error; err != nil {
+	if err := tx.Order("logs.id DESC").Find(&logs).Error; err != nil {
 		return nil, 0, err
 	}
 	attachLogChannelDisplays(logs)
+	normalizeLogsBillingMetadata(logs)
+	mergeSettlementMarkersIntoPreChargeLogs(logs)
 	for i := range logs {
 		if logs[i].Other == "" {
 			continue

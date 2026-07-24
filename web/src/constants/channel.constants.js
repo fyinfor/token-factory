@@ -20,6 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 /** 与渠道编辑弹窗「供应商类型」选项一致（value 与后端存储一致） */
 export const CHANNEL_SUPPLIER_TYPE_OPTIONS = [
   { label: '公有云', value: '公有云' },
+  { label: '官转', value: '官转' },
   { label: 'AIDC', value: 'AIDC' },
   { label: '企业中转站', value: '企业中转站' },
   { label: '个人中转站', value: '个人中转站' },

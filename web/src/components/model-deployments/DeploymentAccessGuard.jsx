@@ -38,7 +38,7 @@ const DeploymentAccessGuard = ({
   const navigate = useNavigate();
 
   const handleGoToSettings = () => {
-    navigate('/console/setting?tab=model-deployment');
+    navigate('/console/setting?category=model&page=models&item=deployment');
   };
 
   if (loading) {

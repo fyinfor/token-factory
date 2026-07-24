@@ -29,6 +29,8 @@ import ChangelogSideSheet from './ChangelogSideSheet';
 const ActionButtons = ({
   isNewYear,
   unreadCount,
+  notificationBubble,
+  notificationBubbleVisible,
   onNoticeOpen,
   theme,
   onThemeToggle,
@@ -65,6 +67,8 @@ const ActionButtons = ({
       {shouldShowNoticeButton && (
         <NotificationButton
           unreadCount={unreadCount}
+          bubble={notificationBubble}
+          bubbleVisible={notificationBubbleVisible}
           onNoticeOpen={onNoticeOpen}
           t={t}
         />

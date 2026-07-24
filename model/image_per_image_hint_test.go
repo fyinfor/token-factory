@@ -26,6 +26,9 @@ func TestBuildSortedImagePerImageTierRows_IncludesOfficialPrice(t *testing.T) {
 	if rows[0].UsdAfterChannelDiscount != 0.03 {
 		t.Fatalf("usd=%v want 0.03", rows[0].UsdAfterChannelDiscount)
 	}
+	if rows[0].UsdChannelRaw != 0.01 {
+		t.Fatalf("channel raw=%v want 0.01", rows[0].UsdChannelRaw)
+	}
 	if rows[0].UsdOfficial != 0.02 {
 		t.Fatalf("official=%v want 0.02", rows[0].UsdOfficial)
 	}

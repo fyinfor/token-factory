@@ -360,6 +360,19 @@ const renderOperations = (
   }
 
   const moreMenu = [
+    ...(record.real_name_verified
+      ? [
+          {
+            node: 'item',
+            name: t('\u79fb\u9664\u5b9e\u540d'),
+            type: 'danger',
+            onClick: () => manageUser(record.id, 'remove_real_name', record),
+          },
+          {
+            node: 'divider',
+          },
+        ]
+      : []),
     {
       node: 'item',
       name: t('订阅管理'),
@@ -555,15 +568,6 @@ export const getUsersColumns = ({
             <span className='text-xs whitespace-nowrap'>
               {renderUserDateTime(record.real_name_verified_at)}
             </span>
-            <Button
-              size='small'
-              type='danger'
-              theme='borderless'
-              className='!px-0'
-              onClick={() => manageUser(record.id, 'remove_real_name', record)}
-            >
-              {t('\u79fb\u9664\u5b9e\u540d')}
-            </Button>
           </div>
         ) : (
           <Tag color='grey' className='!w-auto'>

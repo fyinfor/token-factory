@@ -253,8 +253,13 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		}
 	}
 
-	// 8. 构建请求体
-	requestBody, err := adaptor.BuildRequestBody(c, info)
+	// 8. 构建请求体（开启透传时：原样转发客户端 body，仅改写 model，并去掉网关专用字段如 prompt）
+	var requestBody io.Reader
+	if taskcommon.IsPassThroughBodyEnabled(info) {
+		requestBody, err = taskcommon.BuildPassThroughRequestBody(c, info)
+	} else {
+		requestBody, err = adaptor.BuildRequestBody(c, info)
+	}
 	if err != nil {
 		return nil, service.TaskErrorWrapper(err, "build_request_failed", http.StatusInternalServerError)
 	}
