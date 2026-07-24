@@ -22,13 +22,12 @@ import {
     emptyTierPricing,
     hasTierPricing,
     hasTierSegments,
-    legacyToUnified,
     normalizeTierPricing,
     normalizeTierSegments,
-    normalizeTierRule,
+    parseRequestTierPricing,
+    serializeRequestTierPricing,
     serializeTierRule,
     summarizeTierPricing,
-    unifiedToLegacy,
     validateTierPricing,
 } from '../utils/requestTierPricing';
 import {
@@ -510,13 +509,9 @@ const buildModelState = (name, sourceMaps) => {
     const hasPerImageTable =
         imagePricingRules.textToImage.length > 0 ||
         imagePricingRules.imageToImage.length > 0;
-    // 统一阶梯计价：从4个legacy key合并
-    const tierPricing = legacyToUnified(
-        sourceMaps.ModelTierRatio?.[name] || null,
-        sourceMaps.CompletionTierRatio?.[name] || null,
-        sourceMaps.CacheTierRatio?.[name] || null,
-        sourceMaps.CreateCacheTierRatio?.[name] || null,
-        'USD',
+    // 统一阶梯计价（新 Key）；兼容旧 4 Key 遗留数据仅在后端迁移
+    const tierPricing = parseRequestTierPricing(
+        sourceMaps.ModelRequestTierPricing?.[name] || null,
     );
     const hasPerSecondTable =
         videoPricingRules.textToVideoPerSecond.length > 0 ||
@@ -1123,10 +1118,7 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
         VideoPricingRules: null,
         ImagePrice: null,
         ImagePricingRules: null,
-        ModelTierRatio: null,
-        CompletionTierRatio: null,
-        CacheTierRatio: null,
-        CreateCacheTierRatio: null,
+        ModelRequestTierPricing: null,
     };
 
     if (getEffectiveBillingMode(model) === 'per-request') {
@@ -1135,27 +1127,11 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
         }
     }
 
-    // 统一阶梯计价 → 拆分为4个legacy key
+    // 统一阶梯计价 → 单一 Option 结构
     if (hasTierPricing(model.tierPricing)) {
-        const legacy = unifiedToLegacy(model.tierPricing);
-        if (legacy.modelTierRatio) result.ModelTierRatio = legacy.modelTierRatio;
-        if (
-            (visibleCategories === null || visibleCategories.output) &&
-            legacy.completionTierRatio
-        ) {
-            result.CompletionTierRatio = legacy.completionTierRatio;
-        }
-        if (
-            (visibleCategories === null || visibleCategories.cache_read) &&
-            legacy.cacheTierRatio
-        ) {
-            result.CacheTierRatio = legacy.cacheTierRatio;
-        }
-        if (
-            (visibleCategories === null || visibleCategories.cache_write) &&
-            legacy.createCacheTierRatio
-        ) {
-            result.CreateCacheTierRatio = legacy.createCacheTierRatio;
+        const rule = serializeRequestTierPricing(model.tierPricing);
+        if (rule) {
+            result.ModelRequestTierPricing = rule;
         }
     }
 
@@ -1579,24 +1555,11 @@ export const buildPreviewRows = (model, t) => {
     const tp = normalizeTierPricing(model.tierPricing);
     const tieredRows = [
         {
-            key: 'ModelTierRatio',
-            label: 'ModelTierRatio',
-            value: tp.tiers.length > 0 ? `${tp.tiers.length}${t('档')}` : t('空'),
-        },
-        {
-            key: 'CompletionTierRatio',
-            label: 'CompletionTierRatio',
-            value: tp.tiers.length > 0 ? `${tp.tiers.length}${t('档')}` : t('空'),
-        },
-        {
-            key: 'CacheTierRatio',
-            label: 'CacheTierRatio',
-            value: tp.tiers.length > 0 ? `${tp.tiers.length}${t('档')}` : t('空'),
-        },
-        {
-            key: 'CreateCacheTierRatio',
-            label: 'CreateCacheTierRatio',
-            value: tp.tiers.length > 0 ? `${tp.tiers.length}${t('档')}` : t('空'),
+            key: 'ModelRequestTierPricing',
+            label: 'ModelRequestTierPricing',
+            value: tp.tiers.length > 0
+                ? `${tp.tiers.length}${t('档')} / ${tp.boundary === 'lte' ? '≤' : '<'}`
+                : t('空'),
         },
     ];
 
@@ -1807,7 +1770,7 @@ const collectModelNamesFromPricingSourceMaps = (sourceMaps) => {
     [
         'ModelPrice',
         'ModelRatio',
-        'ModelTierRatio',
+        'ModelRequestTierPricing',
     ].forEach((key) => {
         const obj = sourceMaps[key];
         if (obj && typeof obj === 'object') {
@@ -1882,12 +1845,8 @@ export function useModelPricingEditorState({
             VideoPricingRules: optionKeys?.VideoPricingRules || 'VideoPricingRules',
             ImagePrice: optionKeys?.ImagePrice || 'ImagePrice',
             ImagePricingRules: optionKeys?.ImagePricingRules || 'ImagePricingRules',
-            ModelTierRatio: optionKeys?.ModelTierRatio || 'ModelTierRatio',
-            CompletionTierRatio:
-                optionKeys?.CompletionTierRatio || 'CompletionTierRatio',
-            CacheTierRatio: optionKeys?.CacheTierRatio || 'CacheTierRatio',
-            CreateCacheTierRatio:
-                optionKeys?.CreateCacheTierRatio || 'CreateCacheTierRatio',
+            ModelRequestTierPricing:
+                optionKeys?.ModelRequestTierPricing || 'ModelRequestTierPricing',
         }),
         [optionKeys],
     );
@@ -1923,17 +1882,8 @@ export function useModelPricingEditorState({
             ImagePricingRules: parseOptionJSON(
                 options[resolvedOptionKeys.ImagePricingRules],
             ),
-            ModelTierRatio: parseOptionJSON(
-                options[resolvedOptionKeys.ModelTierRatio],
-            ),
-            CompletionTierRatio: parseOptionJSON(
-                options[resolvedOptionKeys.CompletionTierRatio],
-            ),
-            CacheTierRatio: parseOptionJSON(
-                options[resolvedOptionKeys.CacheTierRatio],
-            ),
-            CreateCacheTierRatio: parseOptionJSON(
-                options[resolvedOptionKeys.CreateCacheTierRatio],
+            ModelRequestTierPricing: parseOptionJSON(
+                options[resolvedOptionKeys.ModelRequestTierPricing],
             ),
             VideoCurrencyRates: videoCurrencyRates,
             VideoPriceUnit: defaultVideoPriceUnit,
@@ -1964,10 +1914,7 @@ export function useModelPricingEditorState({
                 ...Object.keys(sourceMaps.VideoPricingRules),
                 ...Object.keys(sourceMaps.ImagePrice),
                 ...Object.keys(sourceMaps.ImagePricingRules),
-                ...Object.keys(sourceMaps.ModelTierRatio),
-                ...Object.keys(sourceMaps.CompletionTierRatio),
-                ...Object.keys(sourceMaps.CacheTierRatio),
-                ...Object.keys(sourceMaps.CreateCacheTierRatio),
+                ...Object.keys(sourceMaps.ModelRequestTierPricing),
             ]);
 
         const nextModels = Array.from(names)
@@ -2653,10 +2600,7 @@ export function useModelPricingEditorState({
             VideoPricingRules: {},
             ImagePrice: {},
             ImagePricingRules: {},
-            ModelTierRatio: {},
-            CompletionTierRatio: {},
-            CacheTierRatio: {},
-            CreateCacheTierRatio: {},
+            ModelRequestTierPricing: {},
         };
         for (const model of modelList) {
             const serialized = serializeModel(
@@ -2733,29 +2677,41 @@ export function useModelPricingEditorState({
         });
     };
 
+    const handleTierCurrencyChange = (nextCurrency) => {
+        if (!selectedModel) return;
+        const nextUnit = ['USD', 'CNY', 'CUSTOM'].includes(nextCurrency)
+            ? nextCurrency
+            : 'USD';
+        const current = selectedModel.tierPricing || emptyTierPricing();
+        const fromUnit = ['USD', 'CNY', 'CUSTOM'].includes(current.currency)
+            ? current.currency
+            : 'USD';
+        if (nextUnit === fromUnit) return;
+
+        // 仅切换基准货币标记，档位价格数值保持不变
+        upsertModel(selectedModel.name, (model) => {
+            const tp = model.tierPricing || emptyTierPricing();
+            return {
+                ...model,
+                tierPricing: {
+                    ...tp,
+                    currency: nextUnit,
+                },
+            };
+        });
+    };
+
     const clearAllTierRatios = () => {
         if (!selectedModel) return;
         upsertModel(selectedModel.name, (model) => {
             const nextModel = {
                 ...model,
-                tierPricing: emptyTierPricing(),
+                tierPricing: emptyTierPricing(
+                    options?.['general_setting.quota_display_type'] || 'USD',
+                ),
             };
             return nextModel;
         });
-    };
-
-    const applyTierTemplate = (template) => {
-        if (!selectedModel || !template) return;
-
-        const tp = normalizeTierRule(template.RequestTierPricingRule || template);
-        upsertModel(selectedModel.name, (model) => {
-            const nextModel = {
-                ...model,
-                tierPricing: tp,
-            };
-            return nextModel;
-        });
-        return { tierCount: tp.tiers?.length || 0 };
     };
 
     return {
@@ -2791,8 +2747,8 @@ export function useModelPricingEditorState({
         addImageRuleRow,
         removeImageRuleRow,
         updateTierPricing,
+        handleTierCurrencyChange,
         clearAllTierRatios,
-        applyTierTemplate,
         handleSubmit,
         addModel,
         markModelForDelete,

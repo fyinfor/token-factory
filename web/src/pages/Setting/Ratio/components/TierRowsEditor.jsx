@@ -37,10 +37,10 @@ import {
 // ============================================================
 
 const PRICE_COLUMNS = [
-  { key: 'inputPrice', labelKey: '输入价格' },
-  { key: 'outputPrice', labelKey: '输出价格' },
-  { key: 'cacheReadPrice', labelKey: '缓存读取价格' },
-  { key: 'cacheWritePrice', labelKey: '缓存写入价格' },
+  { key: 'inputPrice', labelKey: '输入' },
+  { key: 'outputPrice', labelKey: '输出' },
+  { key: 'cacheReadPrice', labelKey: '缓存读' },
+  { key: 'cacheWritePrice', labelKey: '缓存写' },
 ];
 
 const TierRowsEditor = ({ t, value, onChange, currency = 'USD' }) => {
@@ -159,9 +159,18 @@ const TierRowsEditor = ({ t, value, onChange, currency = 'USD' }) => {
         .tier-table .semi-table-thead th,
         .tier-table .semi-table-tbody td {
           background-color: var(--semi-color-fill-0) !important;
+          padding-left: 8px !important;
+          padding-right: 8px !important;
         }
         .tier-table .semi-table-tbody td {
           vertical-align: middle;
+        }
+        .tier-table .semi-table {
+          table-layout: fixed;
+          width: 100% !important;
+        }
+        .tier-table .semi-table-body {
+          overflow-x: visible !important;
         }
       `}</style>
       <Table
@@ -170,26 +179,27 @@ const TierRowsEditor = ({ t, value, onChange, currency = 'USD' }) => {
         dataSource={dataSource}
         rowKey='_idx'
         className='tier-table'
+        style={{ width: '100%' }}
         columns={[
           // 区间列（只读展示）
           {
             title: t('输入Token区间'),
-            width: 160,
+            width: 100,
             render: (_, row) => getRangeText(row._idx),
           },
           // 区间上限编辑列
           {
             title: t('区间上限'),
-            width: 140,
+            width: 88,
             render: (_, row) => {
               const isLast = row._idx === tiers.length - 1;
               return (
                 <Input
                   size='small'
                   value={isLast ? '∞' : String(row.up_to ?? '')}
-                  placeholder={t('区间上限')}
+                  placeholder={t('上限')}
                   disabled={isLast}
-                  style={{ width: 100 }}
+                  style={{ width: 72 }}
                   onChange={(v) => updateUpTo(row._idx, v)}
                 />
               );
@@ -197,8 +207,8 @@ const TierRowsEditor = ({ t, value, onChange, currency = 'USD' }) => {
           },
           // 4 列价格输入
           ...PRICE_COLUMNS.map(({ key, labelKey }) => ({
-            title: `${t(labelKey)} (${currencySymbol}/1M)`,
-            width: 150,
+            title: `${t(labelKey)}(${currencySymbol})`,
+            width: 96,
             render: (_, row) => {
               const isEditing =
                 editingCell?.index === row._idx && editingCell?.fieldKey === key;
@@ -212,7 +222,7 @@ const TierRowsEditor = ({ t, value, onChange, currency = 'USD' }) => {
                   size='small'
                   value={displayValue}
                   placeholder='0'
-                  style={{ width: 120 }}
+                  style={{ width: 80 }}
                   onFocus={() => beginEdit(row._idx, key)}
                   onChange={(v) => {
                     // 只允许数字和小数点
@@ -232,7 +242,7 @@ const TierRowsEditor = ({ t, value, onChange, currency = 'USD' }) => {
           // 操作列
           {
             title: t('操作'),
-            width: 80,
+            width: 56,
             render: (_, row) => (
               <Button
                 type='danger'

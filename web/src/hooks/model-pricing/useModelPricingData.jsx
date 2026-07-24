@@ -216,21 +216,10 @@ export const useModelPricingData = (options = {}) => {
   const [channelVideoCompletionRatio, setChannelVideoCompletionRatio] =
     useState({});
   const [channelVideoPrice, setChannelVideoPrice] = useState({});
-  const [channelModelTierRatio, setChannelModelTierRatio] = useState({});
-  const [channelCompletionTierRatio, setChannelCompletionTierRatio] = useState(
-    {},
-  );
-  const [channelCacheTierRatio, setChannelCacheTierRatio] = useState({});
-  const [channelCreateCacheTierRatio, setChannelCreateCacheTierRatio] =
+  const [channelModelRequestTierPricing, setChannelModelRequestTierPricing] =
     useState({});
-  const [globalModelTierRatio, setGlobalModelTierRatio] = useState({});
-  const [globalCompletionTierRatio, setGlobalCompletionTierRatio] = useState(
-    {},
-  );
-  const [globalCacheTierRatio, setGlobalCacheTierRatio] = useState({});
-  const [globalCreateCacheTierRatio, setGlobalCreateCacheTierRatio] = useState(
-    {},
-  );
+  const [globalModelRequestTierPricing, setGlobalModelRequestTierPricing] =
+    useState({});
   const [pricingChannels, setPricingChannels] = useState([]);
   const [usableGroup, setUsableGroup] = useState({});
   const [endpointMap, setEndpointMap] = useState({});
@@ -693,14 +682,8 @@ export const useModelPricingData = (options = {}) => {
       channel_video_ratio,
       channel_video_completion_ratio,
       channel_video_price,
-      channel_model_tier_ratio,
-      channel_completion_tier_ratio,
-      channel_cache_tier_ratio,
-      channel_create_cache_tier_ratio,
-      global_model_tier_ratio,
-      global_completion_tier_ratio,
-      global_cache_tier_ratio,
-      global_create_cache_tier_ratio,
+      channel_model_request_tier_pricing,
+      model_request_tier_pricing,
       channels,
       usable_group,
       supported_endpoint,
@@ -722,14 +705,8 @@ export const useModelPricingData = (options = {}) => {
       setChannelVideoRatio(channel_video_ratio || {});
       setChannelVideoCompletionRatio(channel_video_completion_ratio || {});
       setChannelVideoPrice(channel_video_price || {});
-      setChannelModelTierRatio(channel_model_tier_ratio || {});
-      setChannelCompletionTierRatio(channel_completion_tier_ratio || {});
-      setChannelCacheTierRatio(channel_cache_tier_ratio || {});
-      setChannelCreateCacheTierRatio(channel_create_cache_tier_ratio || {});
-      setGlobalModelTierRatio(global_model_tier_ratio || {});
-      setGlobalCompletionTierRatio(global_completion_tier_ratio || {});
-      setGlobalCacheTierRatio(global_cache_tier_ratio || {});
-      setGlobalCreateCacheTierRatio(global_create_cache_tier_ratio || {});
+      setChannelModelRequestTierPricing(channel_model_request_tier_pricing || {});
+      setGlobalModelRequestTierPricing(model_request_tier_pricing || {});
       setPricingChannels(channels || []);
       setUsableGroup(usable_group);
       setSelectedGroup('all');
@@ -907,14 +884,8 @@ export const useModelPricingData = (options = {}) => {
     channelVideoRatio,
     channelVideoCompletionRatio,
     channelVideoPrice,
-    channelModelTierRatio,
-    channelCompletionTierRatio,
-    channelCacheTierRatio,
-    channelCreateCacheTierRatio,
-    globalModelTierRatio,
-    globalCompletionTierRatio,
-    globalCacheTierRatio,
-    globalCreateCacheTierRatio,
+    channelModelRequestTierPricing,
+    globalModelRequestTierPricing,
     pricingChannels,
     usableGroup,
     endpointMap,

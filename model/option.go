@@ -218,16 +218,9 @@ func InitOptionMap() {
 	common.OptionMap["ChannelVideoPricingRules"] = ratio_setting.ChannelVideoPricingRules2JSONString()
 	common.OptionMap["ChannelImagePrice"] = ratio_setting.ChannelImagePrice2JSONString()
 	common.OptionMap["ChannelImagePricingRules"] = ratio_setting.ChannelImagePricingRules2JSONString()
-	// 新的四个独立阶梯倍率 Option
-	common.OptionMap["ModelTierRatio"] = ratio_setting.ModelTierRatio2JSONString()
-	common.OptionMap["CompletionTierRatio"] = ratio_setting.CompletionTierRatio2JSONString()
-	common.OptionMap["CacheTierRatio"] = ratio_setting.CacheTierRatio2JSONString()
-	common.OptionMap["CreateCacheTierRatio"] = ratio_setting.CreateCacheTierRatio2JSONString()
-	common.OptionMap["ChannelModelTierRatio"] = ratio_setting.ChannelModelTierRatio2JSONString()
-	common.OptionMap["ChannelCompletionTierRatio"] = ratio_setting.ChannelCompletionTierRatio2JSONString()
-	common.OptionMap["ChannelCacheTierRatio"] = ratio_setting.ChannelCacheTierRatio2JSONString()
-	common.OptionMap["ChannelCreateCacheTierRatio"] = ratio_setting.ChannelCreateCacheTierRatio2JSONString()
-	common.OptionMap["RequestTierPricingTemplates"] = ratio_setting.RequestTierPricingTemplates2JSONString()
+	// 统一阶梯计费 Option（按输入 Token 区间）
+	common.OptionMap["ModelRequestTierPricing"] = ratio_setting.ModelRequestTierPricing2JSONString()
+	common.OptionMap["ChannelModelRequestTierPricing"] = ratio_setting.ChannelModelRequestTierPricing2JSONString()
 	common.OptionMap["SupplierModelPrice"] = ratio_setting.SupplierModelPrice2JSONString()
 	common.OptionMap["SupplierModelRatio"] = ratio_setting.SupplierModelRatio2JSONString()
 	common.OptionMap["UserUsableGroups"] = setting.UserUsableGroups2JSONString()
@@ -318,6 +311,41 @@ func loadOptionsFromDatabase() {
 			common.SysLog("failed to update option map [" + option.Key + "]: " + err.Error())
 		}
 	}
+	migrateLegacyRequestTierPricingFromOptions(options)
+}
+
+// migrateLegacyRequestTierPricingFromOptions 将旧 8 个 TierRatio Option 合并写入新统一 Key（仅当新 Key 内存为空）
+func migrateLegacyRequestTierPricingFromOptions(options []*Option) {
+	valueOf := func(key string) string {
+		for _, opt := range options {
+			if opt != nil && opt.Key == key {
+				return opt.Value
+			}
+		}
+		common.OptionMapRWMutex.RLock()
+		defer common.OptionMapRWMutex.RUnlock()
+		return common.OptionMap[key]
+	}
+	migrated, err := ratio_setting.TryMigrateLegacyTierRatioOptionJSON(
+		valueOf("ModelTierRatio"),
+		valueOf("CompletionTierRatio"),
+		valueOf("CacheTierRatio"),
+		valueOf("CreateCacheTierRatio"),
+		valueOf("ChannelModelTierRatio"),
+		valueOf("ChannelCompletionTierRatio"),
+		valueOf("ChannelCacheTierRatio"),
+		valueOf("ChannelCreateCacheTierRatio"),
+	)
+	if err != nil {
+		common.SysLog("migrate legacy request tier pricing failed: " + err.Error())
+		return
+	}
+	if !migrated {
+		return
+	}
+	common.SysLog("migrated legacy tier ratio options into ModelRequestTierPricing / ChannelModelRequestTierPricing")
+	_ = UpdateOption("ModelRequestTierPricing", ratio_setting.ModelRequestTierPricing2JSONString())
+	_ = UpdateOption("ChannelModelRequestTierPricing", ratio_setting.ChannelModelRequestTierPricing2JSONString())
 }
 
 func SyncOptions(frequency int) {
@@ -767,25 +795,15 @@ func updateOptionMap(key string, value string) (err error) {
 		err = ratio_setting.UpdateChannelImagePriceByJSONString(value)
 	case "ChannelImagePricingRules":
 		err = ratio_setting.UpdateChannelImagePricingRulesByJSONString(value)
-	// 新的四个独立阶梯倍率 Option
-	case "ModelTierRatio":
-		err = ratio_setting.UpdateModelTierRatioByJSONString(value)
-	case "CompletionTierRatio":
-		err = ratio_setting.UpdateCompletionTierRatioByJSONString(value)
-	case "CacheTierRatio":
-		err = ratio_setting.UpdateCacheTierRatioByJSONString(value)
-	case "CreateCacheTierRatio":
-		err = ratio_setting.UpdateCreateCacheTierRatioByJSONString(value)
-	case "ChannelModelTierRatio":
-		err = ratio_setting.UpdateChannelModelTierRatioByJSONString(value)
-	case "ChannelCompletionTierRatio":
-		err = ratio_setting.UpdateChannelCompletionTierRatioByJSONString(value)
-	case "ChannelCacheTierRatio":
-		err = ratio_setting.UpdateChannelCacheTierRatioByJSONString(value)
-	case "ChannelCreateCacheTierRatio":
-		err = ratio_setting.UpdateChannelCreateCacheTierRatioByJSONString(value)
-	case "RequestTierPricingTemplates":
-		err = ratio_setting.UpdateRequestTierPricingTemplatesByJSONString(value)
+	// 统一阶梯计费 Option（按输入 Token 区间）
+	case "ModelRequestTierPricing":
+		err = ratio_setting.UpdateModelRequestTierPricingByJSONString(value)
+	case "ChannelModelRequestTierPricing":
+		err = ratio_setting.UpdateChannelModelRequestTierPricingByJSONString(value)
+	// 旧 8 Key：加载时仅用于迁移到新结构，不再作为业务数据源
+	case "ModelTierRatio", "CompletionTierRatio", "CacheTierRatio", "CreateCacheTierRatio",
+		"ChannelModelTierRatio", "ChannelCompletionTierRatio", "ChannelCacheTierRatio", "ChannelCreateCacheTierRatio":
+		err = nil
 	case "SupplierModelPrice":
 		err = ratio_setting.UpdateSupplierModelPriceByJSONString(value)
 	case "SupplierModelRatio":

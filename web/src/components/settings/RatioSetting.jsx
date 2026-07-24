@@ -26,7 +26,6 @@ import ModelRatioSettings from '../../pages/Setting/Ratio/ModelRatioSettings';
 import ModelSettingsVisualEditor from '../../pages/Setting/Ratio/ModelSettingsVisualEditor';
 import ModelRatioNotSetEditor from '../../pages/Setting/Ratio/ModelRationNotSetEditor';
 import UpstreamRatioSync from '../../pages/Setting/Ratio/UpstreamRatioSync';
-import RequestTierPricingTemplateSettings from '../../pages/Setting/Ratio/RequestTierPricingTemplateSettings';
 
 import { API, showError, toBoolean } from '../../helpers';
 
@@ -55,9 +54,8 @@ const RatioSetting = () => {
     VideoRatio: '',
     VideoCompletionRatio: '',
     VideoPrice: '',
-    RequestTierPricing: '',
-    ChannelRequestTierPricing: '',
-    RequestTierPricingTemplates: '',
+    ModelRequestTierPricing: '',
+    ChannelModelRequestTierPricing: '',
     AutoGroups: '',
     DefaultUseAutoGroup: false,
     ExposeRatioEnabled: false,
@@ -123,15 +121,6 @@ const RatioSetting = () => {
           </Tabs.TabPane>
           <Tabs.TabPane tab={t('未设置价格模型')} itemKey='unset_models'>
             <ModelRatioNotSetEditor options={inputs} refresh={onRefresh} />
-          </Tabs.TabPane>
-          <Tabs.TabPane
-            tab={t('阶梯计费模板')}
-            itemKey='request_tier_templates'
-          >
-            <RequestTierPricingTemplateSettings
-              options={inputs}
-              refresh={onRefresh}
-            />
           </Tabs.TabPane>
           <Tabs.TabPane tab={t('上游倍率同步')} itemKey='upstream_sync'>
             <UpstreamRatioSync options={inputs} refresh={onRefresh} />

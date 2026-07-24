@@ -207,13 +207,17 @@ const TokenTierDetailTable = ({
   const tierCategoryOrder = ['input', 'output', 'cache_read', 'cache_write'];
   const perCategoryRows = {};
   const activeCategories = [];
+  let tierBoundary = 'lt';
   for (const cat of tierCategoryOrder) {
-    const { globalSegments, channelSegments, bandSegments } =
-      resolveTierSegmentSources({
-        model,
-        channel,
-        cat,
-      });
+    const segmentSources = resolveTierSegmentSources({
+      model,
+      channel,
+      cat,
+    });
+    if (segmentSources.boundary) {
+      tierBoundary = segmentSources.boundary;
+    }
+    const { globalSegments, channelSegments, bandSegments } = segmentSources;
     if (bandSegments.length === 0) continue;
     const rows = buildTokenTierPreviewItems(
       bandSegments,
@@ -224,6 +228,7 @@ const TokenTierDetailTable = ({
       usedGroupRatio,
       displayPrice,
       t,
+      segmentSources,
     );
     if (rows.length > 0) {
       perCategoryRows[cat] = rows;
@@ -361,7 +366,9 @@ const TokenTierDetailTable = ({
                       }}
                     >
                       {range.fromToken === 0 && range.upTo > 0
-                        ? `< ${formatTierBound(range.upTo)}`
+                        ? tierBoundary === 'lte'
+                          ? `≤ ${formatTierBound(range.upTo)}`
+                          : `< ${formatTierBound(range.upTo)}`
                         : range.range}
                     </td>
                   )}

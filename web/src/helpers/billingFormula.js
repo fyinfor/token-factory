@@ -22,12 +22,79 @@ import {
   pickChannelScopedModelFloat,
 } from './utils';
 
-/** 从阶梯倍率对象或映射条目读取 segments */
+/** 从 status 读取阶梯基准货币汇率：1 USD = X */
+function getTierCurrencyRates() {
+  let usdExchangeRate = 7;
+  let customExchangeRate = 1;
+  try {
+    const statusStr = localStorage.getItem('status');
+    if (statusStr) {
+      const s = JSON.parse(statusStr);
+      const cny = Number(s?.usd_exchange_rate);
+      const custom = Number(s?.custom_currency_exchange_rate);
+      if (Number.isFinite(cny) && cny > 0) usdExchangeRate = cny;
+      if (Number.isFinite(custom) && custom > 0) customExchangeRate = custom;
+    }
+  } catch {
+    /* ignore */
+  }
+  return { USD: 1, CNY: usdExchangeRate, CUSTOM: customExchangeRate };
+}
+
+function normalizeTierCurrency(currency) {
+  const key = String(currency || '').toUpperCase();
+  return ['USD', 'CNY', 'CUSTOM'].includes(key) ? key : 'USD';
+}
+
+/** 基准货币单价 → USD；同币种不换算 */
+function convertTierPriceToUSD(price, currency, rates = getTierCurrencyRates()) {
+  const n = Number(price);
+  if (!Number.isFinite(n) || n === 0) return 0;
+  const from = normalizeTierCurrency(currency);
+  if (from === 'USD') return n;
+  const rate = rates[from] > 0 ? rates[from] : 1;
+  return n / rate;
+}
+
+/** 从阶梯规则或 legacy segments 对象读取 tiers */
+function readTierRule(entry) {
+  if (!entry || typeof entry !== 'object') return null;
+  if (Array.isArray(entry.tiers) && entry.tiers.length > 0) {
+    return entry;
+  }
+  if (Array.isArray(entry.segments) && entry.segments.length > 0) {
+    return {
+      boundary: 'lt',
+      currency: 'USD',
+      tiers: entry.segments.map((row) => ({
+        up_to: row.up_to,
+        prices: {
+          input: Number(row.ratio ?? 0) * 2,
+          output: 0,
+          cache_read: 0,
+          cache_write: 0,
+        },
+      })),
+    };
+  }
+  return null;
+}
+
+/** @deprecated 仍支持 legacy segments；优先 unified RequestTierPricing */
 function readTierSegments(tierEntry) {
+  const rule = readTierRule(tierEntry);
+  if (rule?.tiers) {
+    const rates = getTierCurrencyRates();
+    const currency = normalizeTierCurrency(rule.currency);
+    return rule.tiers.map((row) => ({
+      up_to: row.up_to,
+      ratio: convertTierPriceToUSD(Number(row.prices?.input ?? 0), currency, rates) / 2,
+    }));
+  }
   return Array.isArray(tierEntry?.segments) ? tierEntry.segments : [];
 }
 
-/** 按模型名从全局阶梯倍率映射读取 segments（model_name → { segments }） */
+/** 按模型名从全局阶梯映射读取 RequestTierPricing 或 legacy segments */
 export function pickGlobalModelTierSegments(globalTierMap, modelName) {
   if (!globalTierMap || modelName == null) return [];
   const formatted = formatMatchingModelName(modelName);
@@ -38,7 +105,7 @@ export function pickGlobalModelTierSegments(globalTierMap, modelName) {
   return [];
 }
 
-/** 从渠道专属阶梯倍率映射读取 segments（channel_id → model_name → { segments }，不含全局回退） */
+/** 从渠道专属阶梯映射读取 segments（legacy 兼容层） */
 export function pickChannelScopedModelTierSegments(
   channelTierMap,
   channelId,
@@ -53,6 +120,34 @@ export function pickChannelScopedModelTierSegments(
     if (segments.length > 0) return segments;
   }
   return [];
+}
+
+/** 读取全局 unified RequestTierPricing */
+export function pickGlobalModelRequestTierPricing(globalTierMap, modelName) {
+  if (!globalTierMap || modelName == null) return null;
+  const formatted = formatMatchingModelName(modelName);
+  for (const key of [modelName, formatted]) {
+    const rule = readTierRule(globalTierMap[key]);
+    if (rule) return rule;
+  }
+  return null;
+}
+
+/** 读取渠道 scoped unified RequestTierPricing */
+export function pickChannelScopedModelRequestTierPricing(
+  channelTierMap,
+  channelId,
+  modelName,
+) {
+  if (!channelTierMap || channelId == null || modelName == null) return null;
+  const byChannel = channelTierMap[String(channelId)];
+  if (!byChannel || typeof byChannel !== 'object') return null;
+  const formatted = formatMatchingModelName(modelName);
+  for (const key of [modelName, formatted]) {
+    const rule = readTierRule(byChannel[key]);
+    if (rule) return rule;
+  }
+  return null;
 }
 
 /** Claude 1h 缓存创建全局倍率相对 5m 的乘数（与 service/text_quota.go 一致） */

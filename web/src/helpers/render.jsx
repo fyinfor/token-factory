@@ -1579,6 +1579,89 @@ function formatBillingUnitPrice(usdAmount) {
 }
 
 /**
+ * 阶梯单价展示：内部 USD → 系统展示货币，最多 6 位去尾零（与 formatTierUsdPrice 一致）。
+ * tier_*_unit_price 已含分组/专属倍率，调用方勿再乘 groupRatio。
+ */
+function formatTierCurrencyUnitPrice(usdAmount) {
+  const { symbol, rate } = getCurrencyConfig();
+  const n = Number(usdAmount);
+  if (!Number.isFinite(n)) {
+    return `${symbol}0`;
+  }
+  return `${symbol}${formatTierUsdPrice(n * (Number(rate) || 1))}`;
+}
+
+/**
+ * 阶梯计费：推导公式中的「纯输入」token 数。
+ * 非 Claude：prompt_tokens 通常含缓存，需扣除；Claude / 已扣减日志则直接用 prompt_tokens。
+ */
+function resolveRequestTierBilledInputTokens(record, other) {
+  const promptTokens = Number(record?.prompt_tokens) || 0;
+  const cacheTokens = Number(other?.cache_tokens) || 0;
+  const cacheWriteTokens =
+    Number(other?.cache_write_tokens) ||
+    Number(other?.cache_creation_tokens) ||
+    0;
+  const explicit = Number(other?.tier_billed_input_tokens);
+  if (Number.isFinite(explicit) && explicit >= 0) {
+    return explicit;
+  }
+  const isClaude =
+    other?.claude === true || other?.usage_semantic === 'anthropic';
+  if (isClaude) {
+    return Math.max(0, promptTokens);
+  }
+  return Math.max(0, promptTokens - cacheTokens - cacheWriteTokens);
+}
+
+/** 是否为阶梯计费消费日志（有命中档单价或预构建展示） */
+function isRequestTierConsumeLog(other) {
+  return (
+    other?.request_tier_pricing === true &&
+    (other?.tier_input_unit_price != null ||
+      other?.tier_output_unit_price != null ||
+      Boolean(other?.request_tier_display) ||
+      (other?.request_tier_breakdown &&
+        typeof other.request_tier_breakdown === 'object'))
+  );
+}
+
+/**
+ * 日志「渠道价格折扣(%)」展示值 = 销售折扣 = 成本折扣 + 经营成本 + 加价折扣。
+ * 优先读 other.sales_discount_percent；旧日志按分量回算。
+ */
+function resolveLogSalesDiscountPercent(other, fallbackChannelPct = 100) {
+  if (!other || typeof other !== 'object') {
+    const fb = Number(fallbackChannelPct);
+    return Number.isFinite(fb) ? fb : 100;
+  }
+  const sales = Number(other.sales_discount_percent);
+  if (Number.isFinite(sales)) {
+    return sales;
+  }
+  let priceDisc = Number(other.price_discount_percent);
+  const operating = Number(other.operating_cost_percent);
+  const markup = Number(other.markup_discount_rate);
+  const channelPct = Number(
+    other.channel_price_discount_percent ?? fallbackChannelPct,
+  );
+  const opCost = Number.isFinite(operating) ? operating : 0;
+  const markupPct = Number.isFinite(markup) ? markup : 0;
+  if (!Number.isFinite(priceDisc)) {
+    // 旧日志：channel_price_discount_percent ≈ 成本折扣 + 经营成本
+    if (Number.isFinite(channelPct)) {
+      priceDisc = channelPct - opCost;
+      if (priceDisc < 0) {
+        priceDisc = channelPct;
+      }
+    } else {
+      priceDisc = 100;
+    }
+  }
+  return priceDisc + opCost + markupPct;
+}
+
+/**
  * Helper function to get effective ratio and label
  * @param {number} groupRatio - The default group ratio
  * @param {number} user_group_ratio - The user-specific group ratio
@@ -2140,6 +2223,73 @@ function renderPriceSimpleCore({
         : 1;
     const segments = [];
 
+    // 阶梯计费：详情列使用命中档单价（已含分组倍率），并按系统货币展示
+    if (isRequestTierConsumeLog(billingMeta)) {
+      if (isPriceDisplayMode(displayMode, modelPrice)) {
+        if (billingMeta?.tier_input_unit_price != null) {
+          segments.push({
+            tone: 'secondary',
+            text: i18next.t('输入 {{price}} / 1M tokens', {
+              price: formatTierCurrencyUnitPrice(
+                billingMeta.tier_input_unit_price,
+              ),
+            }),
+          });
+        }
+        if (billingMeta?.tier_output_unit_price != null) {
+          segments.push({
+            tone: 'secondary',
+            text: i18next.t('输出 {{price}} / 1M tokens', {
+              price: formatTierCurrencyUnitPrice(
+                billingMeta.tier_output_unit_price,
+              ),
+            }),
+          });
+        }
+        if (
+          (billingMeta?.cache_tokens || 0) > 0 &&
+          billingMeta?.tier_cache_read_unit_price != null &&
+          Number(billingMeta.tier_cache_read_unit_price) > 0
+        ) {
+          segments.push({
+            tone: 'secondary',
+            text: i18next.t('缓存读 {{price}} / 1M tokens', {
+              price: formatTierCurrencyUnitPrice(
+                billingMeta.tier_cache_read_unit_price,
+              ),
+            }),
+          });
+        }
+        const cacheWriteTok =
+          Number(billingMeta?.cache_write_tokens) ||
+          Number(billingMeta?.cache_creation_tokens) ||
+          0;
+        if (
+          cacheWriteTok > 0 &&
+          billingMeta?.tier_cache_write_unit_price != null &&
+          Number(billingMeta.tier_cache_write_unit_price) > 0
+        ) {
+          segments.push({
+            tone: 'secondary',
+            text: i18next.t('缓存创建 {{price}} / 1M tokens', {
+              price: formatTierCurrencyUnitPrice(
+                billingMeta.tier_cache_write_unit_price,
+              ),
+            }),
+          });
+        }
+      } else {
+        segments.push({
+          tone: 'secondary',
+          text: i18next.t('阶梯计费'),
+        });
+      }
+      if (isSystemPromptOverride) {
+        segments.push({ tone: 'primary', text: i18next.t('系统提示覆盖') });
+      }
+      return segments;
+    }
+
     if (isVideoPerSecondFlatBilling) {
       segments.push({
         tone: 'secondary',
@@ -2380,6 +2530,31 @@ function renderPriceSimpleCore({
       i18next.t('估算视频 tokens：{{count}}', { count: videoOutputTokens }),
       getGroupRatioText(groupRatio, user_group_ratio),
     ]);
+  }
+
+  // 阶梯计费文本摘要（非 segments）：须在按次判断之前，避免 model_price 残留误走按次
+  if (
+    isRequestTierConsumeLog(billingMeta) &&
+    isPriceDisplayMode(displayMode, modelPrice)
+  ) {
+    const parts = [];
+    if (billingMeta?.tier_input_unit_price != null) {
+      parts.push(
+        i18next.t('输入 {{price}} / 1M tokens', {
+          price: formatTierCurrencyUnitPrice(billingMeta.tier_input_unit_price),
+        }),
+      );
+    }
+    if (billingMeta?.tier_output_unit_price != null) {
+      parts.push(
+        i18next.t('输出 {{price}} / 1M tokens', {
+          price: formatTierCurrencyUnitPrice(
+            billingMeta.tier_output_unit_price,
+          ),
+        }),
+      );
+    }
+    return joinBillingSummary(parts);
   }
 
   // Treat modelPrice === 0 as "unset" rather than "$0/per-call" — same
@@ -4461,146 +4636,134 @@ export function renderClaudeLogContent(
 }
 
 /**
- * 阶梯区间上界展示，0 表示无穷档。
- * @param {number|string} to
- * @returns {string}
- */
-function formatRequestTierToBoundary(to) {
-  const n = Number(to);
-  if (!Number.isFinite(n) || n === 0) {
-    return '∞';
-  }
-  return String(n);
-}
-
-/**
- * 消费日志「计费过程」：阶梯计费（request_tier_breakdown）说明。
+ * 消费日志「计费过程」：阶梯计费说明。
+ * 单价取命中档 tier_*_unit_price（内部 USD，已含分组倍率），按系统展示货币换算；
+ * 合计优先对齐实扣额度 actualQuota（与花费列一致）。
  * @param {object} other 解析后的 log.other
  * @param {number} channelPriceDiscountPercent 渠道折扣百分数（100=无折扣）
  * @param {function} tr i18n 翻译函数
+ * @param {object|null} record 日志行（取 prompt/completion/quota）
  * @returns {JSX.Element}
  */
 function renderRequestTierConsumeArticle(
   other,
   channelPriceDiscountPercent,
   tr = i18next.t.bind(i18next),
+  record = null,
 ) {
-  // 优先使用后端预构建的展示文本（严格格式）
-  const displayText = other?.request_tier_display;
-  if (displayText) {
-    const lines = [`${tr('阶梯计费')}`];
-    // 预构建文本已包含档位、单价、公式和参考说明
-    const formulaLines = displayText.split('\n');
-    for (const line of formulaLines) {
-      lines.push(line);
-    }
-    return renderBillingArticle(lines, { showReferenceNote: false });
-  }
-
-  // 后端未提供 request_tier_display 时的降级展示
-  const bd = other?.request_tier_breakdown || {};
+  const { symbol, rate } = getCurrencyConfig();
   const lines = [];
-  lines.push(`${tr('阶梯计费')}（progressive）`);
-  const pct = Number(
-    other?.channel_price_discount_percent ?? channelPriceDiscountPercent,
+  lines.push(`${tr('阶梯计费')}`);
+
+  const pct = resolveLogSalesDiscountPercent(
+    other,
+    channelPriceDiscountPercent,
   );
-  if (Number.isFinite(pct) && pct > 0 && pct < 100) {
+  // 默认 100%（无成本/经营/加价调整）不展示；含加价时可能 >100
+  if (Number.isFinite(pct) && Math.abs(pct - 100) > 1e-9) {
     lines.push(`${tr('渠道价格折扣(%)')} ${pct}%`);
   }
-  lines.push(`${tr('说明')}：${tr('阶梯计费价格明细')}`);
-  /**
-   * 追加「阶梯前原始值 → 阶梯折算后加权值」一行（字段来自后端 RequestTierPricingBreakdown）。
-   * @param {string} label 行标题
-   * @param {string} beforeKey breakdown 字段名（before）
-   * @param {string} afterKey breakdown 字段名（after）
-   */
-  const pushBeforeAfter = (label, beforeKey, afterKey) => {
-    const b = bd[beforeKey];
-    const a = bd[afterKey];
-    if (b == null && a == null) {
-      return;
-    }
-    lines.push(`${label}：${b ?? '-'} → ${a ?? '-'}`);
-  };
-  pushBeforeAfter(`${tr('输入')} tokens`, 'input_before', 'input_after');
-  pushBeforeAfter(`${tr('输出')} tokens`, 'output_before', 'output_after');
-  pushBeforeAfter(
-    `${tr('缓存读取价格')} (tokens)`,
-    'cache_read_before',
-    'cache_read_after',
-  );
-  pushBeforeAfter(
-    `${tr('缓存创建')} (tokens)`,
-    'cache_write_before',
-    'cache_write_after',
-  );
 
-  // 使用后端 tier 标签和单价字段（档位判定只依据输入 Token，6 位小数）
   const tierInputLabel = other?.tier_input_label;
-  const tierInputUnitPrice = other?.tier_input_unit_price;
-  const tierOutputUnitPrice = other?.tier_output_unit_price;
-  const tierCacheReadUnitPrice = other?.tier_cache_read_unit_price;
-  const tierCacheWriteUnitPrice = other?.tier_cache_write_unit_price;
+  const tierInputUnitPrice = Number(other?.tier_input_unit_price);
+  const tierOutputUnitPrice = Number(other?.tier_output_unit_price);
+  const tierCacheReadUnitPrice = Number(other?.tier_cache_read_unit_price);
+  const tierCacheWriteUnitPrice = Number(other?.tier_cache_write_unit_price);
 
   if (tierInputLabel) {
-    lines.push('');
     lines.push(`${tr('命中档位')}：${tierInputLabel}`);
-    if (tierInputUnitPrice != null) {
-      lines.push(
-        `${tr('输入价格')}：$${formatTierUsdPrice(tierInputUnitPrice)} / 1M tokens`,
-      );
-    }
-    if (tierOutputUnitPrice != null) {
-      lines.push(
-        `${tr('输出价格')}：$${formatTierUsdPrice(tierOutputUnitPrice)} / 1M tokens`,
-      );
-    }
-    if (
-      other?.cache_tokens > 0 &&
-      tierCacheReadUnitPrice != null &&
-      tierCacheReadUnitPrice > 0
-    ) {
-      lines.push(
-        `${tr('缓存读取价格')}：$${formatTierUsdPrice(tierCacheReadUnitPrice)} / 1M tokens`,
-      );
-    }
-    if (
-      (other?.cache_creation_tokens > 0 || other?.cache_write_tokens > 0) &&
-      tierCacheWriteUnitPrice != null &&
-      tierCacheWriteUnitPrice > 0
-    ) {
-      lines.push(
-        `${tr('缓存写入价格')}：$${formatTierUsdPrice(tierCacheWriteUnitPrice)} / 1M tokens`,
-      );
-    }
   }
 
-  const catLabels = {
-    input: tr('输入'),
-    output: tr('输出'),
-    cache_read: tr('缓存读取价格'),
-    cache_write: tr('缓存创建'),
-  };
-  const details =
-    bd.details && typeof bd.details === 'object' ? bd.details : {};
-  for (const cat of Object.keys(details)) {
-    const items = details[cat];
-    if (!Array.isArray(items) || !items.length) {
-      continue;
-    }
-    lines.push(`— ${catLabels[cat] || cat} —`);
-    for (const it of items) {
-      lines.push(
-        `  [${it.from}, ${formatRequestTierToBoundary(it.to)})  ${it.tokens} tokens × ${it.ratio} ⇒ ${it.result}`,
-      );
-    }
+  if (Number.isFinite(tierInputUnitPrice)) {
+    lines.push(
+      `${tr('输入价格')}：${formatTierCurrencyUnitPrice(tierInputUnitPrice)} / 1M tokens`,
+    );
   }
-  const mr = other?.model_ratio;
-  const gr = other?.group_ratio;
-  const ugr = other?.user_group_ratio;
-  lines.push(
-    `${tr('模型倍率')} ${mr} × ${isValidGroupRatio(ugr) ? `${tr('专属倍率')} ${ugr}` : `${tr('分组倍率')} ${gr}`} → ${tr('额度')}`,
+  if (Number.isFinite(tierOutputUnitPrice)) {
+    lines.push(
+      `${tr('输出价格')}：${formatTierCurrencyUnitPrice(tierOutputUnitPrice)} / 1M tokens`,
+    );
+  }
+
+  const cacheTokens = Number(other?.cache_tokens) || 0;
+  const cacheWriteTokens =
+    Number(other?.cache_write_tokens) ||
+    Number(other?.cache_creation_tokens) ||
+    0;
+  if (
+    cacheTokens > 0 &&
+    Number.isFinite(tierCacheReadUnitPrice) &&
+    tierCacheReadUnitPrice > 0
+  ) {
+    lines.push(
+      `${tr('缓存读取价格')}：${formatTierCurrencyUnitPrice(tierCacheReadUnitPrice)} / 1M tokens`,
+    );
+  }
+  if (
+    cacheWriteTokens > 0 &&
+    Number.isFinite(tierCacheWriteUnitPrice) &&
+    tierCacheWriteUnitPrice > 0
+  ) {
+    lines.push(
+      `${tr('缓存写入价格')}：${formatTierCurrencyUnitPrice(tierCacheWriteUnitPrice)} / 1M tokens`,
+    );
+  }
+
+  const inputTokens = resolveRequestTierBilledInputTokens(record, other);
+  const completionTokens = Number(record?.completion_tokens) || 0;
+  const actualQuota = Number.isFinite(Number(record?.quota))
+    ? Number(record.quota)
+    : null;
+
+  // 公式金额（USD）：单价已含分组倍率，直接 tokens/1M * unitPrice
+  let calculatedTotalUsd = 0;
+  const formulaParts = [];
+  if (inputTokens > 0 && Number.isFinite(tierInputUnitPrice)) {
+    calculatedTotalUsd += (inputTokens / 1_000_000) * tierInputUnitPrice;
+    formulaParts.push(
+      `${tr('输入')} ${inputTokens} tokens / 1M tokens * ${formatTierCurrencyUnitPrice(tierInputUnitPrice)}`,
+    );
+  }
+  if (completionTokens > 0 && Number.isFinite(tierOutputUnitPrice)) {
+    calculatedTotalUsd += (completionTokens / 1_000_000) * tierOutputUnitPrice;
+    formulaParts.push(
+      `${tr('输出')} ${completionTokens} tokens / 1M tokens * ${formatTierCurrencyUnitPrice(tierOutputUnitPrice)}`,
+    );
+  }
+  if (
+    cacheTokens > 0 &&
+    Number.isFinite(tierCacheReadUnitPrice) &&
+    tierCacheReadUnitPrice > 0
+  ) {
+    calculatedTotalUsd += (cacheTokens / 1_000_000) * tierCacheReadUnitPrice;
+    formulaParts.push(
+      `${tr('缓存读取价格')} ${cacheTokens} tokens / 1M tokens * ${formatTierCurrencyUnitPrice(tierCacheReadUnitPrice)}`,
+    );
+  }
+  if (
+    cacheWriteTokens > 0 &&
+    Number.isFinite(tierCacheWriteUnitPrice) &&
+    tierCacheWriteUnitPrice > 0
+  ) {
+    calculatedTotalUsd +=
+      (cacheWriteTokens / 1_000_000) * tierCacheWriteUnitPrice;
+    formulaParts.push(
+      `${tr('缓存写入价格')} ${cacheWriteTokens} tokens / 1M tokens * ${formatTierCurrencyUnitPrice(tierCacheWriteUnitPrice)}`,
+    );
+  }
+
+  const totalDisplay = resolveBillingProcessTotalDisplay(
+    actualQuota,
+    calculatedTotalUsd,
+    rate,
+    6,
   );
+  if (formulaParts.length > 0) {
+    lines.push(`(${formulaParts.join(' + ')}) = ${symbol}${totalDisplay}`);
+  } else {
+    lines.push(`(=) = ${symbol}${totalDisplay}`);
+  }
+
   return renderBillingArticle(lines);
 }
 
@@ -4693,13 +4856,8 @@ export function renderConsumeBillingProcess({
         );
   }
 
-  if (
-    other?.request_tier_pricing &&
-    (other?.request_tier_display ||
-      (other?.request_tier_breakdown &&
-        typeof other.request_tier_breakdown === 'object'))
-  ) {
-    return renderRequestTierConsumeArticle(other, chPct, tr);
+  if (isRequestTierConsumeLog(other)) {
+    return renderRequestTierConsumeArticle(other, chPct, tr, record);
   }
 
   // use_price：后端写入的按量（token 单价）标记；为 true 时不得再按 model_price 走「按次」展示（避免 Playground 等路径 ModelPrice 残留导致「按次 ¥0」）。
