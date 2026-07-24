@@ -60,7 +60,7 @@ func valuesEqual(a, b interface{}) bool {
 	return reflect.DeepEqual(a, b)
 }
 
-var ratioTypes = []string{"model_ratio", "completion_ratio", "cache_ratio", "create_cache_ratio", "model_price", "model_tier_ratio", "completion_tier_ratio", "cache_tier_ratio", "create_cache_tier_ratio"}
+var ratioTypes = []string{"model_ratio", "completion_ratio", "cache_ratio", "create_cache_ratio", "model_price", "model_request_tier_pricing"}
 
 func oldChannelValueOrNil(v float64) interface{} {
 	if nearlyEqual(v, 0) {
@@ -77,6 +77,9 @@ func mapValueByModel(src any, modelName string) (any, bool) {
 	case map[string]any:
 		v, ok := m[modelName]
 		return v, ok
+	case map[string]ratio_setting.RequestTierPricing:
+		v, ok := m[modelName]
+		return v, ok
 	default:
 		return nil, false
 	}
@@ -91,6 +94,16 @@ func mapModelNames(src any, allModels map[string]struct{}) {
 	case map[string]any:
 		for modelName := range m {
 			allModels[modelName] = struct{}{}
+		}
+	case map[string]ratio_setting.RequestTierPricing:
+		for modelName := range m {
+			allModels[modelName] = struct{}{}
+		}
+	case map[string]map[string]ratio_setting.RequestTierPricing:
+		for _, perModel := range m {
+			for modelName := range perModel {
+				allModels[modelName] = struct{}{}
+			}
 		}
 	}
 }
@@ -110,10 +123,7 @@ type pricingChannelItem struct {
 	CompletionRatio      float64                    `json:"completion_ratio"`
 	CacheRatio           float64                    `json:"cache_ratio"`
 	CreateCacheRatio     float64                    `json:"create_cache_ratio"`
-	ModelTierRatio       ratio_setting.TierSegments `json:"model_tier_ratio"`
-	CompletionTierRatio  ratio_setting.TierSegments `json:"completion_tier_ratio"`
-	CacheTierRatio       ratio_setting.TierSegments `json:"cache_tier_ratio"`
-	CreateCacheTierRatio ratio_setting.TierSegments `json:"create_cache_tier_ratio"`
+	RequestTierPricing ratio_setting.RequestTierPricing `json:"request_tier_pricing"`
 }
 
 type pricingItem struct {
@@ -124,10 +134,7 @@ type pricingItem struct {
 	CompletionRatio      float64                    `json:"completion_ratio"`
 	CacheRatio           float64                    `json:"cache_ratio"`
 	CreateCacheRatio     float64                    `json:"create_cache_ratio"`
-	ModelTierRatio       ratio_setting.TierSegments `json:"model_tier_ratio"`
-	CompletionTierRatio  ratio_setting.TierSegments `json:"completion_tier_ratio"`
-	CacheTierRatio       ratio_setting.TierSegments `json:"cache_tier_ratio"`
-	CreateCacheTierRatio ratio_setting.TierSegments `json:"create_cache_tier_ratio"`
+	RequestTierPricing ratio_setting.RequestTierPricing `json:"request_tier_pricing"`
 	ChannelList          []pricingChannelItem       `json:"channel_list"`
 }
 
@@ -164,8 +171,8 @@ func putPricingValues(modelName string, modelRatio, completionRatio, cacheRatio,
 	putPricingValue(modelPriceMap, modelName, modelPrice)
 }
 
-func putTierPricingValue(values map[string]any, modelName string, value ratio_setting.TierSegments) {
-	if len(value.Segments) > 0 {
+func putRequestTierPricingValue(values map[string]any, modelName string, value ratio_setting.RequestTierPricing) {
+	if len(value.Tiers) > 0 {
 		values[modelName] = value
 	}
 }
@@ -176,10 +183,7 @@ func convertOfficialPricingItemsToRatioData(pricingItems []pricingItem) map[stri
 	cacheRatioMap := make(map[string]any)
 	createCacheRatioMap := make(map[string]any)
 	modelPriceMap := make(map[string]any)
-	modelTierRatioMap := make(map[string]any)
-	completionTierRatioMap := make(map[string]any)
-	cacheTierRatioMap := make(map[string]any)
-	createCacheTierRatioMap := make(map[string]any)
+	modelRequestTierPricingMap := make(map[string]any)
 
 	for _, item := range pricingItems {
 		modelName := strings.TrimSpace(item.ModelName)
@@ -187,13 +191,10 @@ func convertOfficialPricingItemsToRatioData(pricingItems []pricingItem) map[stri
 			continue
 		}
 		putPricingValues(modelName, item.ModelRatio, item.CompletionRatio, item.CacheRatio, item.CreateCacheRatio, item.ModelPrice, modelRatioMap, completionRatioMap, cacheRatioMap, createCacheRatioMap, modelPriceMap)
-		putTierPricingValue(modelTierRatioMap, modelName, item.ModelTierRatio)
-		putTierPricingValue(completionTierRatioMap, modelName, item.CompletionTierRatio)
-		putTierPricingValue(cacheTierRatioMap, modelName, item.CacheTierRatio)
-		putTierPricingValue(createCacheTierRatioMap, modelName, item.CreateCacheTierRatio)
+		putRequestTierPricingValue(modelRequestTierPricingMap, modelName, item.RequestTierPricing)
 	}
 
-	return buildConvertedPricingData(modelRatioMap, completionRatioMap, cacheRatioMap, createCacheRatioMap, modelPriceMap, modelTierRatioMap, completionTierRatioMap, cacheTierRatioMap, createCacheTierRatioMap)
+	return buildConvertedPricingData(modelRatioMap, completionRatioMap, cacheRatioMap, createCacheRatioMap, modelPriceMap, modelRequestTierPricingMap)
 }
 
 func convertChannelPricingItemsToRatioData(pricingItems []pricingItem, upstreamChannelID int) map[string]any {
@@ -206,10 +207,7 @@ func convertChannelPricingItemsToRatioData(pricingItems []pricingItem, upstreamC
 	cacheRatioMap := make(map[string]any)
 	createCacheRatioMap := make(map[string]any)
 	modelPriceMap := make(map[string]any)
-	modelTierRatioMap := make(map[string]any)
-	completionTierRatioMap := make(map[string]any)
-	cacheTierRatioMap := make(map[string]any)
-	createCacheTierRatioMap := make(map[string]any)
+	modelRequestTierPricingMap := make(map[string]any)
 
 	for _, item := range pricingItems {
 		modelName := strings.TrimSpace(item.ModelName)
@@ -221,18 +219,15 @@ func convertChannelPricingItemsToRatioData(pricingItems []pricingItem, upstreamC
 				continue
 			}
 			putPricingValues(modelName, channelItem.ModelRatio, channelItem.CompletionRatio, channelItem.CacheRatio, channelItem.CreateCacheRatio, channelItem.ModelPrice, modelRatioMap, completionRatioMap, cacheRatioMap, createCacheRatioMap, modelPriceMap)
-			putTierPricingValue(modelTierRatioMap, modelName, channelItem.ModelTierRatio)
-			putTierPricingValue(completionTierRatioMap, modelName, channelItem.CompletionTierRatio)
-			putTierPricingValue(cacheTierRatioMap, modelName, channelItem.CacheTierRatio)
-			putTierPricingValue(createCacheTierRatioMap, modelName, channelItem.CreateCacheTierRatio)
+			putRequestTierPricingValue(modelRequestTierPricingMap, modelName, channelItem.RequestTierPricing)
 			break
 		}
 	}
 
-	return buildConvertedPricingData(modelRatioMap, completionRatioMap, cacheRatioMap, createCacheRatioMap, modelPriceMap, modelTierRatioMap, completionTierRatioMap, cacheTierRatioMap, createCacheTierRatioMap)
+	return buildConvertedPricingData(modelRatioMap, completionRatioMap, cacheRatioMap, createCacheRatioMap, modelPriceMap, modelRequestTierPricingMap)
 }
 
-func buildConvertedPricingData(modelRatioMap, completionRatioMap, cacheRatioMap, createCacheRatioMap, modelPriceMap, modelTierRatioMap, completionTierRatioMap, cacheTierRatioMap, createCacheTierRatioMap map[string]any) map[string]any {
+func buildConvertedPricingData(modelRatioMap, completionRatioMap, cacheRatioMap, createCacheRatioMap, modelPriceMap, modelRequestTierPricingMap map[string]any) map[string]any {
 	converted := make(map[string]any)
 	if len(modelRatioMap) > 0 {
 		converted["model_ratio"] = modelRatioMap
@@ -249,17 +244,8 @@ func buildConvertedPricingData(modelRatioMap, completionRatioMap, cacheRatioMap,
 	if len(modelPriceMap) > 0 {
 		converted["model_price"] = modelPriceMap
 	}
-	if len(modelTierRatioMap) > 0 {
-		converted["model_tier_ratio"] = modelTierRatioMap
-	}
-	if len(completionTierRatioMap) > 0 {
-		converted["completion_tier_ratio"] = completionTierRatioMap
-	}
-	if len(cacheTierRatioMap) > 0 {
-		converted["cache_tier_ratio"] = cacheTierRatioMap
-	}
-	if len(createCacheTierRatioMap) > 0 {
-		converted["create_cache_tier_ratio"] = createCacheTierRatioMap
+	if len(modelRequestTierPricingMap) > 0 {
+		converted["model_request_tier_pricing"] = modelRequestTierPricingMap
 	}
 	return converted
 }
@@ -696,6 +682,11 @@ func oldEffectiveForUpstream(channelID int, ratioType string, modelName string, 
 			if v, ok := ratio_setting.GetChannelModelPrice(channelID, modelName); ok {
 				return oldChannelValueOrNil(v)
 			}
+		case "model_request_tier_pricing":
+			if v, ok := ratio_setting.GetChannelModelRequestTierPricing(channelID, modelName); ok && len(v.Tiers) > 0 {
+				return v
+			}
+			return nil
 		}
 		return nil
 	}
@@ -736,14 +727,12 @@ func buildSupplierRatioSyncLocalMaps(supplierApplicationID int, ownedNorm map[st
 		cache[mn] = c0
 	}
 	return gin.H{
-		"model_ratio":             mr,
-		"completion_ratio":        cr,
-		"cache_ratio":             cache,
-		"model_price":             mp,
-		"model_tier_ratio":        map[string]ratio_setting.TierSegments{},
-		"completion_tier_ratio":   map[string]ratio_setting.TierSegments{},
-		"cache_tier_ratio":        map[string]ratio_setting.TierSegments{},
-		"create_cache_tier_ratio": map[string]ratio_setting.TierSegments{},
+		"model_ratio":                      mr,
+		"completion_ratio":                 cr,
+		"cache_ratio":                      cache,
+		"model_price":                      mp,
+		"model_request_tier_pricing":       map[string]ratio_setting.RequestTierPricing{},
+		"channel_model_request_tier_pricing": map[string]map[string]ratio_setting.RequestTierPricing{},
 	}
 }
 
@@ -805,6 +794,11 @@ func oldEffectiveForUpstreamSupplier(supplierApplicationID int, channelID int, r
 			if v, ok := ratio_setting.GetChannelModelPrice(channelID, mn); ok {
 				return oldChannelValueOrNil(v)
 			}
+		case "model_request_tier_pricing":
+			if v, ok := ratio_setting.GetChannelModelRequestTierPricing(channelID, mn); ok && len(v.Tiers) > 0 {
+				return v
+			}
+			return nil
 		}
 		return nil
 	}

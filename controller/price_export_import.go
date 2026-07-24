@@ -34,11 +34,8 @@ type PriceExportModelMaps struct {
 	ImagePrice map[string]float64 `json:"ImagePrice"`
 	// 图片阶梯定价规则（按分辨率，嵌套对象）
 	ImagePricingRules map[string]json.RawMessage `json:"ImagePricingRules"`
-	// Token 阶梯计费（输入/输出/缓存读/缓存写）
-	ModelTierRatio       map[string]json.RawMessage `json:"ModelTierRatio"`
-	CompletionTierRatio  map[string]json.RawMessage `json:"CompletionTierRatio"`
-	CacheTierRatio       map[string]json.RawMessage `json:"CacheTierRatio"`
-	CreateCacheTierRatio map[string]json.RawMessage `json:"CreateCacheTierRatio"`
+	// 统一 Token 阶梯计费（输入 token 命中单档）
+	ModelRequestTierPricing map[string]json.RawMessage `json:"ModelRequestTierPricing"`
 }
 
 // PriceExportChannelEntry 单渠道价格导出/导入条目（用 channel_name 标识，不含 ID）。
@@ -144,10 +141,7 @@ func isModelMapsEmpty(m PriceExportModelMaps) bool {
 		len(m.VideoPricingRules) == 0 &&
 		len(m.ImagePrice) == 0 &&
 		len(m.ImagePricingRules) == 0 &&
-		len(m.ModelTierRatio) == 0 &&
-		len(m.CompletionTierRatio) == 0 &&
-		len(m.CacheTierRatio) == 0 &&
-		len(m.CreateCacheTierRatio) == 0
+		len(m.ModelRequestTierPricing) == 0
 }
 
 // globalPriceScalarFields 全局标量价格 Option 键与 PriceExportModelMaps 字段的绑定关系。
@@ -176,10 +170,7 @@ var globalPriceComplexFields = []struct {
 }{
 	{"VideoPricingRules", func(m *PriceExportModelMaps) map[string]json.RawMessage { return m.VideoPricingRules }},
 	{"ImagePricingRules", func(m *PriceExportModelMaps) map[string]json.RawMessage { return m.ImagePricingRules }},
-	{"ModelTierRatio", func(m *PriceExportModelMaps) map[string]json.RawMessage { return m.ModelTierRatio }},
-	{"CompletionTierRatio", func(m *PriceExportModelMaps) map[string]json.RawMessage { return m.CompletionTierRatio }},
-	{"CacheTierRatio", func(m *PriceExportModelMaps) map[string]json.RawMessage { return m.CacheTierRatio }},
-	{"CreateCacheTierRatio", func(m *PriceExportModelMaps) map[string]json.RawMessage { return m.CreateCacheTierRatio }},
+	{"ModelRequestTierPricing", func(m *PriceExportModelMaps) map[string]json.RawMessage { return m.ModelRequestTierPricing }},
 }
 
 // channelPriceScalarFields 渠道标量价格 Option 键（Channel 前缀）与 PriceExportModelMaps 字段的绑定关系。
@@ -208,10 +199,7 @@ var channelPriceComplexFields = []struct {
 }{
 	{"ChannelVideoPricingRules", func(m *PriceExportModelMaps) map[string]json.RawMessage { return m.VideoPricingRules }},
 	{"ChannelImagePricingRules", func(m *PriceExportModelMaps) map[string]json.RawMessage { return m.ImagePricingRules }},
-	{"ChannelModelTierRatio", func(m *PriceExportModelMaps) map[string]json.RawMessage { return m.ModelTierRatio }},
-	{"ChannelCompletionTierRatio", func(m *PriceExportModelMaps) map[string]json.RawMessage { return m.CompletionTierRatio }},
-	{"ChannelCacheTierRatio", func(m *PriceExportModelMaps) map[string]json.RawMessage { return m.CacheTierRatio }},
-	{"ChannelCreateCacheTierRatio", func(m *PriceExportModelMaps) map[string]json.RawMessage { return m.CreateCacheTierRatio }},
+	{"ChannelModelRequestTierPricing", func(m *PriceExportModelMaps) map[string]json.RawMessage { return m.ModelRequestTierPricing }},
 }
 
 // parseRawMessageMapSafe 将 JSON 字符串解析为 map[string]json.RawMessage，失败时返回空 map。
@@ -277,10 +265,7 @@ func ExportPrices(c *gin.Context) {
 		VideoPricingRules:    parseRawMessageMapSafe(readOptionStr("VideoPricingRules")),
 		ImagePrice:           parseFloatMapSafe(readOptionStr("ImagePrice")),
 		ImagePricingRules:    parseRawMessageMapSafe(readOptionStr("ImagePricingRules")),
-		ModelTierRatio:       parseRawMessageMapSafe(readOptionStr("ModelTierRatio")),
-		CompletionTierRatio:  parseRawMessageMapSafe(readOptionStr("CompletionTierRatio")),
-		CacheTierRatio:       parseRawMessageMapSafe(readOptionStr("CacheTierRatio")),
-		CreateCacheTierRatio: parseRawMessageMapSafe(readOptionStr("CreateCacheTierRatio")),
+		ModelRequestTierPricing: parseRawMessageMapSafe(readOptionStr("ModelRequestTierPricing")),
 	}
 
 	// 读取渠道维度标量价格（结构：channel_id(str) → model_name → float64）
@@ -300,10 +285,7 @@ func ExportPrices(c *gin.Context) {
 	// 读取渠道维度复杂价格（结构：channel_id(str) → model_name → raw JSON）
 	chVideoPricingRules := parseNestedRawMessageMapSafe(readOptionStr("ChannelVideoPricingRules"))
 	chImagePricingRules := parseNestedRawMessageMapSafe(readOptionStr("ChannelImagePricingRules"))
-	chModelTierRatio := parseNestedRawMessageMapSafe(readOptionStr("ChannelModelTierRatio"))
-	chCompletionTierRatio := parseNestedRawMessageMapSafe(readOptionStr("ChannelCompletionTierRatio"))
-	chCacheTierRatio := parseNestedRawMessageMapSafe(readOptionStr("ChannelCacheTierRatio"))
-	chCreateCacheTierRatio := parseNestedRawMessageMapSafe(readOptionStr("ChannelCreateCacheTierRatio"))
+	chModelRequestTierPricing := parseNestedRawMessageMapSafe(readOptionStr("ChannelModelRequestTierPricing"))
 
 	// 收集所有出现过的 channel_id（字符串形式）
 	channelIDSet := map[string]struct{}{}
@@ -318,7 +300,7 @@ func ExportPrices(c *gin.Context) {
 	}
 	for _, nm := range []map[string]map[string]json.RawMessage{
 		chVideoPricingRules, chImagePricingRules,
-		chModelTierRatio, chCompletionTierRatio, chCacheTierRatio, chCreateCacheTierRatio,
+		chModelRequestTierPricing,
 	} {
 		for id := range nm {
 			channelIDSet[id] = struct{}{}
@@ -357,10 +339,7 @@ func ExportPrices(c *gin.Context) {
 				VideoPricingRules:    safeRawMessageMap(chVideoPricingRules[idStr]),
 				ImagePrice:           safeFloatMap(chImagePrice[idStr]),
 				ImagePricingRules:    safeRawMessageMap(chImagePricingRules[idStr]),
-				ModelTierRatio:       safeRawMessageMap(chModelTierRatio[idStr]),
-				CompletionTierRatio:  safeRawMessageMap(chCompletionTierRatio[idStr]),
-				CacheTierRatio:       safeRawMessageMap(chCacheTierRatio[idStr]),
-				CreateCacheTierRatio: safeRawMessageMap(chCreateCacheTierRatio[idStr]),
+				ModelRequestTierPricing: safeRawMessageMap(chModelRequestTierPricing[idStr]),
 			},
 		})
 	}

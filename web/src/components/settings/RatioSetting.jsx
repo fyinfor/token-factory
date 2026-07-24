@@ -25,7 +25,6 @@ import ModelRatioSettings from '../../pages/Setting/Ratio/ModelRatioSettings';
 import ModelSettingsVisualEditor from '../../pages/Setting/Ratio/ModelSettingsVisualEditor';
 import ModelRatioNotSetEditor from '../../pages/Setting/Ratio/ModelRationNotSetEditor';
 import UpstreamRatioSync from '../../pages/Setting/Ratio/UpstreamRatioSync';
-import RequestTierPricingTemplateSettings from '../../pages/Setting/Ratio/RequestTierPricingTemplateSettings';
 
 import { API, showError, toBoolean } from '../../helpers';
 
@@ -52,9 +51,8 @@ const RatioSetting = ({ activeSection = 'visual' }) => {
     VideoRatio: '',
     VideoCompletionRatio: '',
     VideoPrice: '',
-    RequestTierPricing: '',
-    ChannelRequestTierPricing: '',
-    RequestTierPricingTemplates: '',
+    ModelRequestTierPricing: '',
+    ChannelModelRequestTierPricing: '',
     AutoGroups: '',
     DefaultUseAutoGroup: false,
     ExposeRatioEnabled: false,
