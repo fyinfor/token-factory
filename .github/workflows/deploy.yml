@@ -8,8 +8,9 @@ name: Deploy to Servers
 # 镜像源:
 #   服务器 A → ghcr.io/fyinfor/token-factory:<tag>
 #   服务器 B → crpi-sk2z151c9de4cnvh.cn-hangzhou.personal.cr.aliyuncs.com/fyinfor123/token-factory:<tag>
+#   Node2    → crpi-sk2z151c9de4cnvh.cn-hangzhou.personal.cr.aliyuncs.com/fyinfor123/token-factory:<tag>
 #
-# 部署目标 (两台服务器 × 多实例 = 6 个部署):
+# 部署目标:
 #   服务器 A (43.132.223.112):
 #     ├─ /home/ubuntu/tokease-token-factory
 #     └─ /home/ubuntu/token-factory
@@ -18,10 +19,13 @@ name: Deploy to Servers
 #     ├─ /home/ubuntu/demo-tokease-token-factory
 #     ├─ /home/ubuntu/token-factory
 #     └─ /home/ubuntu/token-factory-123-tok
+#   Node2 (139.199.57.140):
+#     └─ /home/ubuntu/tokease-token-factory  (slave，仅 app)
 #
-# 手动触发可选部署目标（默认两台都部署）:
+# 手动触发可选部署目标（默认全部部署）:
 #   deploy_server_a → 112 HK
 #   deploy_server_b → 105 Tencent
+#   deploy_node2    → 140 Node2 集群从节点
 # ============================================================================
 
 on:
@@ -40,6 +44,10 @@ on:
         description: '部署到 105 Tencent 国内站 (43.138.142.105)'
         type: boolean
         default: true
+      deploy_node2:
+        description: '部署到 Node2 集群从节点 (139.199.57.140)'
+        type: boolean
+        default: true
 
 env:
   REGISTRY_GHCR: ghcr.io
@@ -47,19 +55,15 @@ env:
   REGISTRY_ACR: crpi-sk2z151c9de4cnvh.cn-hangzhou.personal.cr.aliyuncs.com
   IMAGE_NAME_ACR: fyinfor123/token-factory
 
-# 部署脚本 (复用, 避免重复)
-# 用法: 在 SSH script 中 source 此脚本后调用 deploy_instance <路径>
-# 注意: 此处仅作为文档说明, 实际脚本内联在 job 中
-
 jobs:
   validate-inputs:
     name: Validate deploy targets
     runs-on: ubuntu-latest
     steps:
       - name: Require at least one server
-        if: ${{ github.event.inputs.deploy_server_a != 'true' && github.event.inputs.deploy_server_b != 'true' }}
+        if: ${{ github.event.inputs.deploy_server_a != 'true' && github.event.inputs.deploy_server_b != 'true' && github.event.inputs.deploy_node2 != 'true' }}
         run: |
-          echo "::error::请至少勾选一台服务器（112 或 105）"
+          echo "::error::请至少勾选一台服务器（112 / 105 / Node2）"
           exit 1
 
   # ═════════════════════════════════════════════════════════════════════════
@@ -450,4 +454,111 @@ jobs:
             echo "| 实例2 | demo-tokease-token-factory |"
             echo "| 实例3 | token-factory |"
             echo "| 实例4 | token-factory-123-tok |"
+          } >> $GITHUB_STEP_SUMMARY
+
+  # ═════════════════════════════════════════════════════════════════════════
+  # Node2: 139.199.57.140  (集群从节点，SSH Key 认证，镜像走 ACR)
+  # ═════════════════════════════════════════════════════════════════════════
+  deploy-node2:
+    name: Deploy → Node2 139.199.57.140
+    needs: validate-inputs
+    if: ${{ github.event.inputs.deploy_node2 == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Login to ACR (Node2)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_NODE2_HOST }}
+          port: ${{ secrets.SERVER_NODE2_PORT || 22 }}
+          username: ${{ secrets.SERVER_NODE2_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_NODE2 }}
+          script: |
+            set -e
+            echo "${{ secrets.ACR_ALLINONE_PASSWORD }}" | sudo docker login \
+              ${{ env.REGISTRY_ACR }} \
+              -u "${{ secrets.ACR_ALLINONE_USERNAME }}" \
+              --password-stdin
+            echo "✅ ACR login success"
+
+      - name: Deploy tokease-token-factory Node2 (139.199.57.140)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_NODE2_HOST }}
+          port: ${{ secrets.SERVER_NODE2_PORT || 22 }}
+          username: ${{ secrets.SERVER_NODE2_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_NODE2 }}
+          script: |
+            set -e
+            IMAGE="${{ env.REGISTRY_ACR }}/${{ env.IMAGE_NAME_ACR }}:${{ inputs.tag }}"
+            DIR="/home/ubuntu/tokease-token-factory"
+
+            echo "========================================="
+            echo "  服务器: Node2 ${{ secrets.SERVER_NODE2_HOST }}"
+            echo "  实例:   tokease-token-factory (slave)"
+            echo "  镜像:   $IMAGE"
+            echo "  路径:   $DIR"
+            echo "  时间:   $(date '+%Y-%m-%d %H:%M:%S')"
+            echo "========================================="
+
+            cd "$DIR" || { echo "❌ 目录不存在: $DIR"; exit 1; }
+
+            echo ""
+            echo "[1/3] Pulling image from ACR..."
+            sudo docker compose pull
+
+            echo ""
+            echo "[2/3] Starting services..."
+            sudo docker compose up -d
+
+            echo ""
+            echo "[3/3] Health check..."
+            sleep 5
+            HEALTHY=false
+            for i in 1 2 3 4 5; do
+              if sudo docker compose ps --status running 2>/dev/null | grep -qE '(Up|running|healthy)'; then
+                HEALTHY=true
+                echo "✅ Node2 tokease-token-factory 容器运行中 (第 ${i} 次检查)"
+                break
+              fi
+              echo "⏳ 等待... (${i}/5)"
+              sleep 10
+            done
+
+            if [ "$HEALTHY" = false ]; then
+              echo "⚠️ 健康检查未通过, 当前容器状态:"
+              sudo docker compose ps
+              sudo docker compose logs --tail=30
+              exit 1
+            fi
+
+            sudo docker compose ps
+
+      - name: Cleanup old images (Node2)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_NODE2_HOST }}
+          port: ${{ secrets.SERVER_NODE2_PORT || 22 }}
+          username: ${{ secrets.SERVER_NODE2_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_NODE2 }}
+          script: |
+            echo ">>> Cleaning up images older than 72h..."
+            sudo docker image prune || true
+            echo "✅ Cleanup done"
+
+      - name: Summary (Node2)
+        if: always()
+        run: |
+          STATUS="${{ job.status }}"
+          ICON="$([ "$STATUS" = "success" ] && echo '✅' || echo '❌')"
+          {
+            echo "### ${ICON} Node2 (139.199.57.140) — ${STATUS}"
+            echo ""
+            echo "| 项目 | 值 |"
+            echo "|------|-----|"
+            echo "| 镜像 | \`${{ env.REGISTRY_ACR }}/${{ env.IMAGE_NAME_ACR }}:${{ inputs.tag }}\` |"
+            echo "| 角色 | slave（仅 app，无 PG/Redis） |"
+            echo "| 路径 | /home/ubuntu/tokease-token-factory |"
+            echo "| 实例 | tokease-token-factory |"
           } >> $GITHUB_STEP_SUMMARY
