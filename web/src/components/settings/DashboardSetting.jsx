@@ -18,8 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { Card, Spin, Button, Modal, Tabs, TabPane } from '@douyinfe/semi-ui';
-import { LayoutTemplate, ImageIcon } from 'lucide-react';
+import { Card, Spin, Button, Modal } from '@douyinfe/semi-ui';
 import { API, showError, showSuccess, toBoolean } from '../../helpers';
 import SettingsAPIInfo from '../../pages/Setting/Dashboard/SettingsAPIInfo';
 import SettingsAnnouncements from '../../pages/Setting/Dashboard/SettingsAnnouncements';
@@ -29,10 +28,8 @@ import SettingsDataDashboard from '../../pages/Setting/Dashboard/SettingsDataDas
 import SettingsPerfOverview from '../../pages/Setting/Dashboard/SettingsPerfOverview';
 import SettingsHomeBanner from '../../pages/Setting/Dashboard/SettingsHomeBanner';
 import HomeHeroCarouselSetting from './HomeHeroCarouselSetting';
-import { useTranslation } from 'react-i18next';
 
-const DashboardSetting = () => {
-  const { t } = useTranslation();
+const DashboardSetting = ({ activeSection = 'panels' }) => {
   let [inputs, setInputs] = useState({
     'console_setting.api_info': '',
     'console_setting.announcements': '',
@@ -62,7 +59,6 @@ const DashboardSetting = () => {
 
   let [loading, setLoading] = useState(false);
   const [showMigrateModal, setShowMigrateModal] = useState(false); // 下个版本会删除
-  const [dashTab, setDashTab] = useState('panels');
 
   const getOptions = async () => {
     const res = await API.get('/api/option/');
@@ -152,21 +148,8 @@ const DashboardSetting = () => {
           </p>
         </Modal>
 
-        <Tabs
-          type='line'
-          activeKey={dashTab}
-          onChange={setDashTab}
-          style={{ marginTop: 8 }}
-        >
-          <TabPane
-            tab={
-              <span className='inline-flex items-center gap-1.5'>
-                <LayoutTemplate size={16} />
-                {t('仪表盘内容配置')}
-              </span>
-            }
-            itemKey='panels'
-          >
+        {activeSection === 'panels' && (
+          <>
             {/* 数据看板设置 */}
             <Card style={{ marginTop: '10px' }}>
               <SettingsDataDashboard options={inputs} refresh={onRefresh} />
@@ -195,32 +178,14 @@ const DashboardSetting = () => {
             <Card style={{ marginTop: '10px' }}>
               <SettingsUptimeKuma options={inputs} refresh={onRefresh} />
             </Card>
-          </TabPane>
-          <TabPane
-            tab={
-              <span className='inline-flex items-center gap-1.5'>
-                <ImageIcon size={16} />
-                {t('首页沉浸主轮播')}
-              </span>
-            }
-            itemKey='home-hero'
-          >
-            <HomeHeroCarouselSetting />
-          </TabPane>
-          <TabPane
-            tab={
-              <span className='inline-flex items-center gap-1.5'>
-                <ImageIcon size={16} />
-                {t('首页广告设置')}
-              </span>
-            }
-            itemKey='banner'
-          >
-            <Card style={{ marginTop: '10px' }}>
-              <SettingsHomeBanner options={inputs} refresh={onRefresh} />
-            </Card>
-          </TabPane>
-        </Tabs>
+          </>
+        )}
+        {activeSection === 'home-hero' && <HomeHeroCarouselSetting />}
+        {activeSection === 'banner' && (
+          <Card style={{ marginTop: '10px' }}>
+            <SettingsHomeBanner options={inputs} refresh={onRefresh} />
+          </Card>
+        )}
       </Spin>
     </>
   );

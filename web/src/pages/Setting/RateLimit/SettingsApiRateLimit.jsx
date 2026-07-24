@@ -214,6 +214,8 @@ export default function SettingsApiRateLimit(props) {
     },
   ];
 
+  const activeSection = props.activeSection || 'limits';
+
   return (
     <Spin spinning={loading}>
       <Form
@@ -221,193 +223,197 @@ export default function SettingsApiRateLimit(props) {
         getFormApi={(formAPI) => (refForm.current = formAPI)}
         style={{ marginBottom: 15 }}
       >
-        <Form.Section text={t('接口限流设置')}>
-          <Banner
-            type='info'
-            description={t(
-              '本页面用于配置已登录 API 的全局限流与关键接口限流。保存后立即生效（无需重启）。管理员默认在白名单内，不受限流影响。',
-            )}
-            style={{ marginBottom: 16 }}
-          />
+        {activeSection === 'limits' && (
+          <Form.Section text={t('接口限流设置')}>
+            <Banner
+              type='info'
+              description={t(
+                '本页面用于配置已登录 API 的全局限流与关键接口限流。保存后立即生效（无需重启）。管理员默认在白名单内，不受限流影响。',
+              )}
+              style={{ marginBottom: 16 }}
+            />
 
-          <Row gutter={16}>
-            <Col xs={24} sm={12} md={8}>
-              <Form.Switch
-                field={'GlobalApiRateLimitEnable'}
-                label={
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                    }}
-                  >
-                    {t('启用 API 全局限流')}
-                    <Tooltip
-                      content={t(
-                        '控制已登录用户调用 /api 时的整体访问频率。开启后，会按用户ID在指定时间窗口内限制请求次数。',
-                      )}
+            <Row gutter={16}>
+              <Col xs={24} sm={12} md={8}>
+                <Form.Switch
+                  field={'GlobalApiRateLimitEnable'}
+                  label={
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
                     >
-                      <span
-                        style={{
-                          display: 'inline-flex',
-                          width: 16,
-                          height: 16,
-                          borderRadius: '50%',
-                          border: '1px solid var(--semi-color-border)',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: 12,
-                          cursor: 'help',
-                          userSelect: 'none',
-                        }}
+                      {t('启用 API 全局限流')}
+                      <Tooltip
+                        content={t(
+                          '控制已登录用户调用 /api 时的整体访问频率。开启后，会按用户ID在指定时间窗口内限制请求次数。',
+                        )}
                       >
-                        ?
-                      </span>
-                    </Tooltip>
-                  </span>
-                }
-                size='default'
-                checkedText='｜'
-                uncheckedText='〇'
-                onChange={handleFieldChange('GlobalApiRateLimitEnable')}
-              />
-            </Col>
-            <Col xs={24} sm={12} md={8}>
-              <Form.InputNumber
-                field={'GlobalApiRateLimitNum'}
-                label={t('API 限制次数')}
-                min={1}
-                max={100000000}
-                suffix={t('次')}
-                onChange={handleFieldChange('GlobalApiRateLimitNum')}
-                disabled={!inputs.GlobalApiRateLimitEnable}
-              />
-            </Col>
-            <Col xs={24} sm={12} md={8}>
-              <Form.InputNumber
-                field={'GlobalApiRateLimitDuration'}
-                label={t('API 时间窗口')}
-                min={1}
-                max={86400}
-                suffix={t('秒')}
-                onChange={handleFieldChange('GlobalApiRateLimitDuration')}
-                disabled={!inputs.GlobalApiRateLimitEnable}
-              />
-            </Col>
-          </Row>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            width: 16,
+                            height: 16,
+                            borderRadius: '50%',
+                            border: '1px solid var(--semi-color-border)',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 12,
+                            cursor: 'help',
+                            userSelect: 'none',
+                          }}
+                        >
+                          ?
+                        </span>
+                      </Tooltip>
+                    </span>
+                  }
+                  size='default'
+                  checkedText='｜'
+                  uncheckedText='〇'
+                  onChange={handleFieldChange('GlobalApiRateLimitEnable')}
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8}>
+                <Form.InputNumber
+                  field={'GlobalApiRateLimitNum'}
+                  label={t('API 限制次数')}
+                  min={1}
+                  max={100000000}
+                  suffix={t('次')}
+                  onChange={handleFieldChange('GlobalApiRateLimitNum')}
+                  disabled={!inputs.GlobalApiRateLimitEnable}
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8}>
+                <Form.InputNumber
+                  field={'GlobalApiRateLimitDuration'}
+                  label={t('API 时间窗口')}
+                  min={1}
+                  max={86400}
+                  suffix={t('秒')}
+                  onChange={handleFieldChange('GlobalApiRateLimitDuration')}
+                  disabled={!inputs.GlobalApiRateLimitEnable}
+                />
+              </Col>
+            </Row>
 
-          <Row gutter={16}>
-            <Col xs={24} sm={12} md={8}>
-              <Form.Switch
-                field={'CriticalRateLimitEnable'}
-                label={
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 6,
-                    }}
-                  >
-                    {t('启用关键接口限流')}
-                    <Tooltip
-                      content={t(
-                        '用于保护登录、注册、支付、验证码等敏感接口。开启后，这类接口会使用更严格的访问频率限制。',
-                      )}
+            <Row gutter={16}>
+              <Col xs={24} sm={12} md={8}>
+                <Form.Switch
+                  field={'CriticalRateLimitEnable'}
+                  label={
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}
                     >
-                      <span
-                        style={{
-                          display: 'inline-flex',
-                          width: 16,
-                          height: 16,
-                          borderRadius: '50%',
-                          border: '1px solid var(--semi-color-border)',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: 12,
-                          cursor: 'help',
-                          userSelect: 'none',
-                        }}
+                      {t('启用关键接口限流')}
+                      <Tooltip
+                        content={t(
+                          '用于保护登录、注册、支付、验证码等敏感接口。开启后，这类接口会使用更严格的访问频率限制。',
+                        )}
                       >
-                        ?
-                      </span>
-                    </Tooltip>
-                  </span>
-                }
-                size='default'
-                checkedText='｜'
-                uncheckedText='〇'
-                onChange={handleFieldChange('CriticalRateLimitEnable')}
-              />
-            </Col>
-            <Col xs={24} sm={12} md={8}>
-              <Form.InputNumber
-                field={'CriticalRateLimitNum'}
-                label={t('关键接口限制次数')}
-                min={1}
-                max={100000000}
-                suffix={t('次')}
-                onChange={handleFieldChange('CriticalRateLimitNum')}
-                disabled={!inputs.CriticalRateLimitEnable}
-              />
-            </Col>
-            <Col xs={24} sm={12} md={8}>
-              <Form.InputNumber
-                field={'CriticalRateLimitDuration'}
-                label={t('关键接口时间窗口')}
-                min={1}
-                max={86400}
-                suffix={t('秒')}
-                onChange={handleFieldChange('CriticalRateLimitDuration')}
-                disabled={!inputs.CriticalRateLimitEnable}
-              />
-            </Col>
-          </Row>
+                        <span
+                          style={{
+                            display: 'inline-flex',
+                            width: 16,
+                            height: 16,
+                            borderRadius: '50%',
+                            border: '1px solid var(--semi-color-border)',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: 12,
+                            cursor: 'help',
+                            userSelect: 'none',
+                          }}
+                        >
+                          ?
+                        </span>
+                      </Tooltip>
+                    </span>
+                  }
+                  size='default'
+                  checkedText='｜'
+                  uncheckedText='〇'
+                  onChange={handleFieldChange('CriticalRateLimitEnable')}
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8}>
+                <Form.InputNumber
+                  field={'CriticalRateLimitNum'}
+                  label={t('关键接口限制次数')}
+                  min={1}
+                  max={100000000}
+                  suffix={t('次')}
+                  onChange={handleFieldChange('CriticalRateLimitNum')}
+                  disabled={!inputs.CriticalRateLimitEnable}
+                />
+              </Col>
+              <Col xs={24} sm={12} md={8}>
+                <Form.InputNumber
+                  field={'CriticalRateLimitDuration'}
+                  label={t('关键接口时间窗口')}
+                  min={1}
+                  max={86400}
+                  suffix={t('秒')}
+                  onChange={handleFieldChange('CriticalRateLimitDuration')}
+                  disabled={!inputs.CriticalRateLimitEnable}
+                />
+              </Col>
+            </Row>
 
-          <Row>
-            <Col span={24}>
-              <Form.TextArea
-                field={'RateLimitUserWhitelist'}
-                label={t('限流白名单（用户ID）')}
-                placeholder={'[1, 2, 3]'}
-                autosize={{ minRows: 4, maxRows: 12 }}
-                extraText={t(
-                  '填写 JSON 数组。名单内用户将跳过用户维度限流；管理员默认放行，无需手动填写。',
-                )}
-                onChange={handleFieldChange('RateLimitUserWhitelist')}
-              />
-            </Col>
-          </Row>
+            <Row>
+              <Col span={24}>
+                <Form.TextArea
+                  field={'RateLimitUserWhitelist'}
+                  label={t('限流白名单（用户ID）')}
+                  placeholder={'[1, 2, 3]'}
+                  autosize={{ minRows: 4, maxRows: 12 }}
+                  extraText={t(
+                    '填写 JSON 数组。名单内用户将跳过用户维度限流；管理员默认放行，无需手动填写。',
+                  )}
+                  onChange={handleFieldChange('RateLimitUserWhitelist')}
+                />
+              </Col>
+            </Row>
 
-          <Row>
-            <Button size='default' onClick={onSubmit}>
-              {t('保存接口限流设置')}
-            </Button>
-          </Row>
-        </Form.Section>
+            <Row>
+              <Button size='default' onClick={onSubmit}>
+                {t('保存接口限流设置')}
+              </Button>
+            </Row>
+          </Form.Section>
+        )}
 
-        <Form.Section text={t('临时黑名单')}>
-          <Banner
-            type='warning'
-            description={t(
-              '已触发限流的用户，属于临时状态，会随 TTL 自动过期。可手动移除立即恢复。',
-            )}
-            style={{ marginBottom: 12 }}
-          />
-          <div style={{ marginBottom: 12 }}>
-            <Button onClick={fetchBlacklistUsers} loading={blacklistLoading}>
-              {t('刷新临时黑名单')}
-            </Button>
-          </div>
-          <Table
-            columns={blacklistColumns}
-            dataSource={blacklistUsers}
-            rowKey={'user_id'}
-            pagination={false}
-            size='small'
-            empty={<Text type='tertiary'>{t('当前没有临时黑名单用户')}</Text>}
-          />
-        </Form.Section>
+        {activeSection === 'blacklist' && (
+          <Form.Section text={t('临时黑名单')}>
+            <Banner
+              type='warning'
+              description={t(
+                '已触发限流的用户，属于临时状态，会随 TTL 自动过期。可手动移除立即恢复。',
+              )}
+              style={{ marginBottom: 12 }}
+            />
+            <div style={{ marginBottom: 12 }}>
+              <Button onClick={fetchBlacklistUsers} loading={blacklistLoading}>
+                {t('刷新临时黑名单')}
+              </Button>
+            </div>
+            <Table
+              columns={blacklistColumns}
+              dataSource={blacklistUsers}
+              rowKey={'user_id'}
+              pagination={false}
+              size='small'
+              empty={<Text type='tertiary'>{t('当前没有临时黑名单用户')}</Text>}
+            />
+          </Form.Section>
+        )}
       </Form>
     </Spin>
   );

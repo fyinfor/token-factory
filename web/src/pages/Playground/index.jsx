@@ -30,6 +30,7 @@ import { Layout, Toast, Modal } from '@douyinfe/semi-ui';
 
 // Context
 import { UserContext } from '../../context/User';
+import { StatusContext } from '../../context/Status';
 import { useIsMobile } from '../../hooks/common/useIsMobile';
 
 // hooks
@@ -55,6 +56,7 @@ import {
   getTextContent,
   buildApiPayload,
   encodeToBase64,
+  toBoolean,
 } from '../../helpers';
 
 // Components
@@ -164,6 +166,7 @@ const loadLegacyMessages = (userId) => {
 const Playground = () => {
   const { t } = useTranslation();
   const [userState] = useContext(UserContext);
+  const [statusState] = useContext(StatusContext);
   const isMobile = useIsMobile();
   const styleState = { isMobile };
   const [searchParams] = useSearchParams();
@@ -216,6 +219,9 @@ const Playground = () => {
     setCustomRequestMode,
     setCustomRequestBody,
   } = state;
+  const hideMediaTabs = toBoolean(
+    statusState?.status?.aliyun_guardrail_hide_playground_media_tabs,
+  );
 
   const persistModeMessages = useCallback(() => {
     saveModeMessages(userState?.user?.id, modeMessagesRef.current);
@@ -362,8 +368,7 @@ const Playground = () => {
         ).toLowerCase();
         const nextMessageStatus = String(patch?.status || '').toLowerCase();
         const isTerminal =
-          terminalStatuses.has(nextTaskStatus) ||
-          nextMessageStatus === 'error';
+          terminalStatuses.has(nextTaskStatus) || nextMessageStatus === 'error';
         if (isTerminal) {
           activeVideoPollTaskIdsRef.current.delete(taskId);
         }
@@ -407,6 +412,13 @@ const Playground = () => {
       handleInputChange('stream', false);
     }
   }, [inputs.display_mode, inputs.stream, handleInputChange]);
+
+  useEffect(() => {
+    const displayMode = inputs.display_mode || 'text';
+    if (hideMediaTabs && (displayMode === 'image' || displayMode === 'video')) {
+      handleInputChange('display_mode', 'text');
+    }
+  }, [hideMediaTabs, inputs.display_mode, handleInputChange]);
 
   // 恢复分模式消息（文本/图片/视频）持久化快照
   useEffect(() => {
@@ -668,8 +680,7 @@ const Playground = () => {
         allowMedia,
       );
       const userMessageWithImages =
-        reuseUserMessage ||
-        createMessage(MESSAGE_ROLES.USER, messageContent);
+        reuseUserMessage || createMessage(MESSAGE_ROLES.USER, messageContent);
       const payloadMessages = [...existingMessages, userMessageWithImages];
       const payload = buildApiPayload(
         payloadMessages,
@@ -959,6 +970,7 @@ const Playground = () => {
                 previewPayload={previewPayload}
                 messages={message}
                 userId={userState?.user?.id}
+                hideMediaTabs={hideMediaTabs}
               />
             </Layout.Sider>
           )}

@@ -18,8 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useEffect, useState } from 'react';
-import { Card, Spin, Tabs } from '@douyinfe/semi-ui';
-import { useTranslation } from 'react-i18next';
+import { Card, Spin } from '@douyinfe/semi-ui';
 
 import GroupRatioSettings from '../../pages/Setting/Ratio/GroupRatioSettings';
 import ModelRatioSettings from '../../pages/Setting/Ratio/ModelRatioSettings';
@@ -30,9 +29,7 @@ import RequestTierPricingTemplateSettings from '../../pages/Setting/Ratio/Reques
 
 import { API, showError, toBoolean } from '../../helpers';
 
-const RatioSetting = () => {
-  const { t } = useTranslation();
-
+const RatioSetting = ({ activeSection = 'visual' }) => {
   let [inputs, setInputs] = useState({
     ModelPrice: '',
     ModelRatio: '',
@@ -111,32 +108,27 @@ const RatioSetting = () => {
   return (
     <Spin spinning={loading} size='large'>
       <Card style={{ marginTop: '10px' }}>
-        <Tabs type='card' defaultActiveKey='visual'>
-          <Tabs.TabPane tab={t('模型倍率设置')} itemKey='model'>
-            <ModelRatioSettings options={inputs} refresh={onRefresh} />
-          </Tabs.TabPane>
-          <Tabs.TabPane tab={t('分组相关设置')} itemKey='group'>
-            <GroupRatioSettings options={inputs} refresh={onRefresh} />
-          </Tabs.TabPane>
-          <Tabs.TabPane tab={t('价格设置')} itemKey='visual'>
-            <ModelSettingsVisualEditor options={inputs} refresh={onRefresh} />
-          </Tabs.TabPane>
-          <Tabs.TabPane tab={t('未设置价格模型')} itemKey='unset_models'>
-            <ModelRatioNotSetEditor options={inputs} refresh={onRefresh} />
-          </Tabs.TabPane>
-          <Tabs.TabPane
-            tab={t('阶梯计费模板')}
-            itemKey='request_tier_templates'
-          >
-            <RequestTierPricingTemplateSettings
-              options={inputs}
-              refresh={onRefresh}
-            />
-          </Tabs.TabPane>
-          <Tabs.TabPane tab={t('上游倍率同步')} itemKey='upstream_sync'>
-            <UpstreamRatioSync options={inputs} refresh={onRefresh} />
-          </Tabs.TabPane>
-        </Tabs>
+        {activeSection === 'model' && (
+          <ModelRatioSettings options={inputs} refresh={onRefresh} />
+        )}
+        {activeSection === 'group' && (
+          <GroupRatioSettings options={inputs} refresh={onRefresh} />
+        )}
+        {activeSection === 'visual' && (
+          <ModelSettingsVisualEditor options={inputs} refresh={onRefresh} />
+        )}
+        {activeSection === 'unset_models' && (
+          <ModelRatioNotSetEditor options={inputs} refresh={onRefresh} />
+        )}
+        {activeSection === 'request_tier_templates' && (
+          <RequestTierPricingTemplateSettings
+            options={inputs}
+            refresh={onRefresh}
+          />
+        )}
+        {activeSection === 'upstream_sync' && (
+          <UpstreamRatioSync options={inputs} refresh={onRefresh} />
+        )}
       </Card>
     </Spin>
   );
