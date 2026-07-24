@@ -87,6 +87,7 @@ import {
   laneToImagePerImageFamily,
 } from '../../constants/imagePerImageHintI18n';
 import { isTopHotModel } from '../../utils/modelHeat';
+import { formatPriceRatioFromDiscount } from '../../utils/discount';
 import PricingCardSkeleton from './PricingCardSkeleton';
 import ModelPerfCardSection from '../../components/ModelPerfCardSection';
 import { useMinimumLoadingTime } from '../../../../../hooks/common/useMinimumLoadingTime';
@@ -420,7 +421,7 @@ const renderDiscountCell = (discount) => {
           border: 'none',
         }}
       >
-        -{discount}%
+        {formatPriceRatioFromDiscount(discount)}
       </Tag>
     );
   }
@@ -579,6 +580,8 @@ const TokenTierTable = ({ items, t }) => {
     return null;
   }
 
+  const boundary = items.boundary || 'lt';
+
   const tierColumns = getTierPricingColumns(t);
   const firstRow = items.rows[0];
   const inputCell = firstRow.cells?.input;
@@ -595,7 +598,9 @@ const TokenTierTable = ({ items, t }) => {
 
   const rangeLabel = firstRow.range
     ? firstRow.fromToken === 0 && firstRow.upTo > 0
-      ? `< ${formatTierBound(firstRow.upTo)}`
+      ? boundary === 'lte'
+        ? `≤ ${formatTierBound(firstRow.upTo)}`
+        : `< ${formatTierBound(firstRow.upTo)}`
       : firstRow.range
     : '';
 
@@ -1326,7 +1331,7 @@ const PricingCardView = ({
                     border: 'none',
                   }}
                 >
-                  -{item.original.discount}%
+                  {formatPriceRatioFromDiscount(item.original.discount)}
                 </Tag>
                 <span>
                   <span style={{ color: 'var(--semi-color-warning)' }}>
@@ -1449,10 +1454,7 @@ const PricingCardView = ({
 
   const formatDiscountBadge = (discount) => {
     if (!(discount > 0)) return '';
-    const folded = Math.max(0, (100 - Number(discount)) / 10);
-    const text =
-      folded % 1 === 0 ? String(folded.toFixed(0)) : folded.toFixed(1);
-    return `${text}${t('折')}`;
+    return formatPriceRatioFromDiscount(discount);
   };
 
   const getPrimarySupplierType = (model) => {
@@ -2125,12 +2127,13 @@ const PricingCardView = ({
       const perCategoryRows = {};
       const activeCategories = [];
       for (const cat of tierCategoryOrder) {
+        const segmentSources = resolveTierSegmentSources({
+          model,
+          channel: tokenTierInfo.channel,
+          cat,
+        });
         const { globalSegments, channelSegments, bandSegments } =
-          resolveTierSegmentSources({
-            model,
-            channel: tokenTierInfo.channel,
-            cat,
-          });
+          segmentSources;
         if (bandSegments.length === 0) continue;
         const rows = buildTokenTierPreviewItems(
           bandSegments,
@@ -2141,6 +2144,7 @@ const PricingCardView = ({
           usedGroupRatio,
           displayPrice,
           t,
+          segmentSources,
         );
         if (rows.length > 0) {
           perCategoryRows[cat] = rows;
@@ -2193,6 +2197,7 @@ const PricingCardView = ({
           tokenTierMerged: {
             columns: activeCategories.map((cat) => ({ key: cat })),
             rows: mergedRows,
+            boundary: tokenTierInfo.boundary || 'lt',
           },
         });
       }
@@ -2695,7 +2700,9 @@ const PricingCardView = ({
                                               border: 'none',
                                             }}
                                           >
-                                            -{item.original.discount}%
+                                            {formatPriceRatioFromDiscount(
+                                              item.original.discount,
+                                            )}
                                           </Tag>
                                           <span>
                                             <span

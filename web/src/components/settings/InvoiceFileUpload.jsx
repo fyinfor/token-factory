@@ -1,99 +1,127 @@
 /*
 Copyright (C) 2025 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useState } from 'react';
-import { Button, Progress, Typography, Upload } from '@douyinfe/semi-ui';
-import { IconClose, IconFile } from '@douyinfe/semi-icons';
+import { Progress, Upload } from '@douyinfe/semi-ui';
+import { FileCheck2, FileUp, Trash2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { API, showError, showSuccess } from '../../helpers';
+import { InvoiceSpinner } from '../invoice/InvoiceWorkspace';
 
-const { Text } = Typography;
-
-function isPdfFile(fileInstance) {
-  const type = fileInstance?.type || '';
-  const name = (fileInstance?.name || '').toLowerCase();
-  return type === 'application/pdf' || name.endsWith('.pdf');
+function isPdfFile(file) {
+  return (
+    file?.type === 'application/pdf' ||
+    file?.name?.toLowerCase().endsWith('.pdf')
+  );
 }
 
-export default function InvoiceFileUpload({ url = '', onUrlChange, disabled = false }) {
+export default function InvoiceFileUpload({
+  url = '',
+  onUrlChange,
+  disabled = false,
+}) {
   const { t } = useTranslation();
   const [uploadPct, setUploadPct] = useState(null);
 
-  const customRequest = async ({ file, onSuccess, onError, onProgress }) => {
-    const inst = file.fileInstance || file;
-    if (!isPdfFile(inst)) {
+  const uploadFile = async ({ file, onSuccess, onError, onProgress }) => {
+    const fileInstance = file?.fileInstance || file;
+    if (!isPdfFile(fileInstance)) {
       showError(t('仅支持 PDF 格式电子发票'));
-      onError();
+      onError?.(new Error('invalid pdf'));
       return;
     }
-
-    const fd = new FormData();
-    fd.append('file', inst);
+    const form = new FormData();
+    form.append('file', fileInstance);
     setUploadPct(0);
     try {
-      const res = await API.post('/api/user/invoice/admin/upload', fd, {
+      const res = await API.post('/api/user/invoice/admin/upload', form, {
         skipErrorHandler: true,
-        onUploadProgress: (ev) => {
-          const total = ev.total || ev.loaded || 1;
-          const pct = Math.min(99, Math.round((ev.loaded * 100) / total));
-          setUploadPct(pct);
-          if (typeof onProgress === 'function') {
-            onProgress({ total, loaded: ev.loaded });
-          }
+        onUploadProgress: (event) => {
+          const total = event.total || event.loaded || 1;
+          const percent = Math.min(
+            99,
+            Math.round((event.loaded * 100) / total),
+          );
+          setUploadPct(percent);
+          onProgress?.({ total, loaded: event.loaded });
         },
       });
       const { success, message, data } = res.data || {};
       if (!success || !data?.url) {
-        onError(new Error(message || 'upload'));
         showError(message || t('上传失败'));
+        onError?.(new Error(message || 'upload failed'));
         return;
       }
       setUploadPct(100);
       onUrlChange?.(String(data.url).trim());
-      onSuccess(data);
+      onSuccess?.(data);
       showSuccess(t('电子发票已上传'));
-    } catch (e) {
-      onError(e);
-      showError(e?.response?.data?.message || t('上传失败'));
+    } catch (error) {
+      onError?.(error);
+      showError(error?.response?.data?.message || t('上传失败'));
     } finally {
       setUploadPct(null);
     }
   };
 
   const currentUrl = String(url || '').trim();
-
   return (
-    <div className='space-y-2'>
+    <div className='invoice-upload'>
       <Upload
         action=''
+        className='invoice-semi-upload'
         accept='.pdf,application/pdf'
+        customRequest={uploadFile}
         showUploadList={false}
-        customRequest={customRequest}
-        disabled={disabled}
+        disabled={disabled || uploadPct != null}
       >
-        <Button disabled={disabled}>{t('上传电子发票 PDF')}</Button>
+        <span className='invoice-button'>
+          {uploadPct != null ? <InvoiceSpinner /> : <FileUp size={16} />}
+          {t('上传电子发票 PDF')}
+        </span>
       </Upload>
       {uploadPct != null ? (
-        <Progress percent={uploadPct} showInfo className='!mt-2' />
+        <Progress
+          className='invoice-progress'
+          percent={uploadPct}
+          showInfo={false}
+          size='small'
+          aria-label={t('上传进度')}
+        />
       ) : null}
-      <Text type='tertiary' size='small' className='block'>
-        {t('按运营设置中的文件上传配置保存至本地存储或 OSS；本地存储需挂载目录')}
-      </Text>
+      <small>
+        {t('文件将按运营设置保存至本地存储或 OSS，开具时仅接受已上传的 PDF')}
+      </small>
       {currentUrl ? (
-        <div className='flex items-center gap-2 rounded-lg border border-[var(--semi-color-border)] px-3 py-2'>
-          <IconFile className='text-[var(--semi-color-primary)]' />
-          <Text className='flex-1 truncate' title={currentUrl}>
-            {currentUrl}
-          </Text>
-          <Button
-            size='small'
-            theme='borderless'
-            type='tertiary'
-            icon={<IconClose />}
-            onClick={() => onUrlChange?.('')}
+        <div className='invoice-upload-file'>
+          <FileCheck2 size={17} aria-hidden='true' />
+          <span title={currentUrl}>{currentUrl}</span>
+          <button
+            type='button'
+            className='invoice-icon-button'
             disabled={disabled}
-          />
+            onClick={() => onUrlChange?.('')}
+            title={t('移除文件')}
+            aria-label={t('移除文件')}
+          >
+            <Trash2 size={15} />
+          </button>
         </div>
       ) : null}
     </div>

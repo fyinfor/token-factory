@@ -59,7 +59,8 @@ import {
   getCurrencySymbol,
   hasTierPricing,
   normalizeTierPricing,
-  parseJSONMap,
+  TIER_BOUNDARY_LT,
+  TIER_BOUNDARY_LTE,
 } from '../utils/requestTierPricing';
 import TierRowsEditor from './TierRowsEditor';
 import JsonCodeEditor from '../../../../components/common/ui/JsonCodeEditor';
@@ -313,11 +314,6 @@ export default function ModelPricingEditor({
   const [videoEditMode, setVideoEditMode] = useState('visual');
   const [videoJsonDraft, setVideoJsonDraft] = useState('');
 
-  const tierTemplates = useMemo(
-    () => parseJSONMap(options?.RequestTierPricingTemplates),
-    [options?.RequestTierPricingTemplates],
-  );
-
   const {
     selectedModel,
     selectedModelName,
@@ -350,8 +346,8 @@ export default function ModelPricingEditor({
     addImageRuleRow,
     removeImageRuleRow,
     updateTierPricing,
+    handleTierCurrencyChange,
     clearAllTierRatios,
-    applyTierTemplate,
     handleSubmit,
     addModel,
     markModelForDelete,
@@ -2146,28 +2142,6 @@ export default function ModelPricingEditor({
                 {selectedModel.billingMode === 'tiered' ? (
                   <>
                     <Space wrap>
-                      {Object.keys(tierTemplates).length > 0 ? (
-                        <Select
-                          size='small'
-                          placeholder={t('套用模板')}
-                          style={{ minWidth: 180 }}
-                          value={undefined}
-                          onChange={(id) => {
-                            const template = tierTemplates[id];
-                            if (template) {
-                              applyTierTemplate(template);
-                            }
-                          }}
-                        >
-                          {Object.entries(tierTemplates).map(
-                            ([id, template]) => (
-                              <Select.Option key={id} value={id}>
-                                {template.name || id}
-                              </Select.Option>
-                            ),
-                          )}
-                        </Select>
-                      ) : null}
                       {hasTierPricing(selectedModel?.tierPricing) ? (
                         <Button
                           size='small'
@@ -2179,6 +2153,31 @@ export default function ModelPricingEditor({
                       ) : null}
                       <Select
                         size='small'
+                        value={
+                          selectedModel?.tierPricing?.boundary ||
+                          TIER_BOUNDARY_LT
+                        }
+                        optionList={[
+                          {
+                            label: t('边界：不含上限 (<)'),
+                            value: TIER_BOUNDARY_LT,
+                          },
+                          {
+                            label: t('边界：含上限 (≤)'),
+                            value: TIER_BOUNDARY_LTE,
+                          },
+                        ]}
+                        style={{ minWidth: 180 }}
+                        onChange={(boundary) =>
+                          updateTierPricing({
+                            ...(selectedModel?.tierPricing ||
+                              emptyTierPricing()),
+                            boundary,
+                          })
+                        }
+                      />
+                      <Select
+                        size='small'
                         value={selectedModel?.tierPricing?.currency || 'USD'}
                         optionList={CURRENCY_OPTIONS.map((c) => ({
                           label: c.label,
@@ -2186,10 +2185,7 @@ export default function ModelPricingEditor({
                         }))}
                         style={{ minWidth: 140 }}
                         onChange={(currency) =>
-                          updateTierPricing({
-                            ...(selectedModel?.tierPricing || emptyTierPricing()),
-                            currency,
-                          })
+                          handleTierCurrencyChange(currency)
                         }
                       />
                     </Space>
@@ -2223,7 +2219,9 @@ export default function ModelPricingEditor({
                       )}
                     </div>
                     <div className='my-4 text-xs text-gray-500'>
-                      {t('阶梯区间从 0 开始；最后一档固定为无限且不能删除。每个档位统一配置 4 项价格。')}
+                      {t(
+                        '阶梯区间从 0 开始；最后一档固定为无限且不能删除。每个档位统一配置 4 项价格（基准货币 /1M tokens）。边界可选不含上限(<)或含上限(≤)。使用时按系统货币汇率换算；基准货币与系统货币一致时不换算。',
+                      )}
                     </div>
                     <Card
                       style={{

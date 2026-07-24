@@ -162,10 +162,11 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		effInputRateWithGroup := effInputRate * groupRatioInfo.GroupRatio
 
 		dPreConsumedTokens := decimal.NewFromInt(int64(preConsumedTokens))
-		if tier, ok := ratio_setting.ResolveModelTierRatio(channelID, info.OriginModelName); ok {
-			dPreConsumedTokens = ratio_setting.ApplyTierSegmentsForType(dPreConsumedTokens, tier)
+		if tierHit, ok := ratio_setting.ResolveRequestTierHit(channelID, info.OriginModelName, int64(preConsumedTokens), chDisc, markupDisc, groupRatioInfo.GroupRatio); ok {
+			preConsumedQuota = int(dPreConsumedTokens.Mul(decimal.NewFromFloat(tierHit.EffectiveInput * groupRatioInfo.GroupRatio)).Round(0).IntPart())
+		} else {
+			preConsumedQuota = int(dPreConsumedTokens.Mul(decimal.NewFromFloat(effInputRateWithGroup)).Round(0).IntPart())
 		}
-		preConsumedQuota = int(dPreConsumedTokens.Mul(decimal.NewFromFloat(effInputRateWithGroup)).Round(0).IntPart())
 	} else {
 		// 固定价格：渠道固定价 * 成本折扣率% + 全局固定价 * 加价折扣率%
 		effModelPrice := model.EffectiveModelPrice(modelPrice, globalPrice, chDisc, markupDisc)

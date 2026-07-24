@@ -771,6 +771,12 @@ func RelayTask(c *gin.Context) {
 		}
 		task.PrivateData.BillingSource = relayInfo.BillingSource
 		task.PrivateData.SubscriptionId = relayInfo.SubscriptionId
+		if relayInfo.BillingSource == service.BillingSourceWallet {
+			paidQuota := actualQuota - relayInfo.WalletGiftConsumed
+			if paidQuota > 0 {
+				task.PrivateData.WalletPaidQuota = paidQuota
+			}
+		}
 		task.PrivateData.TokenId = relayInfo.TokenId
 		task.PrivateData.TokenName = c.GetString("token_name")
 		chDiscPct := model.ResolveChannelEffectiveCostPercent(relayInfo.ChannelId)

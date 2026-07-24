@@ -520,7 +520,7 @@ const StepPricing = ({ channel, onboardData, reloadOnboard, t }) => {
             <span>
               <Text>{t('前往')}</Text>&nbsp;
               <a
-                href='/console/setting?tab=ratio'
+                href='/console/setting?category=model&page=pricing&item=upstream-sync'
                 target='_blank'
                 rel='noreferrer'
                 className='underline text-blue-500'
@@ -554,7 +554,12 @@ const StepPricing = ({ channel, onboardData, reloadOnboard, t }) => {
             theme='light'
             type='primary'
             icon={<IconExternalOpen />}
-            onClick={() => window.open('/console/setting?tab=ratio', '_blank')}
+            onClick={() =>
+              window.open(
+                '/console/setting?category=model&page=pricing&item=upstream-sync',
+                '_blank',
+              )
+            }
           >
             {t('前往倍率设置')}
           </Button>

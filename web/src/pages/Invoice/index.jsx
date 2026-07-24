@@ -1,27 +1,35 @@
 /*
 Copyright (C) 2025 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import { Typography } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
 import InvoiceManagement from '../../components/settings/personal/cards/InvoiceManagement';
-
-const { Title, Text } = Typography;
 
 const InvoicePage = () => {
   const { t } = useTranslation();
 
   return (
-    <div className='mt-[64px]'>
-      <div className='px-2 md:px-8 py-4 md:py-6 max-w-6xl mx-auto'>
-        <div className='mb-4 md:mb-6'>
-          <Title heading={3}>{t('发票管理')}</Title>
-          <Text type='tertiary'>{t('管理充值订单的开票申请与开票记录')}</Text>
-        </div>
+    <main className='invoice-page-shell'>
+      <div className='invoice-page-inner'>
         <InvoiceManagement t={t} />
       </div>
-    </div>
+    </main>
   );
 };
 

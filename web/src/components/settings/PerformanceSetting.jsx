@@ -22,7 +22,7 @@ import { Card, Spin } from '@douyinfe/semi-ui';
 import SettingsPerformance from '../../pages/Setting/Performance/SettingsPerformance';
 import { API, showError, toBoolean } from '../../helpers';
 
-const PerformanceSetting = () => {
+const PerformanceSetting = ({ activeSection = 'cache' }) => {
   let [inputs, setInputs] = useState({
     'performance_setting.disk_cache_enabled': false,
     'performance_setting.disk_cache_threshold_mb': 10,
@@ -70,7 +70,11 @@ const PerformanceSetting = () => {
       <Spin spinning={loading} size='large'>
         {/* 性能设置 */}
         <Card style={{ marginTop: '10px' }}>
-          <SettingsPerformance options={inputs} refresh={onRefresh} />
+          <SettingsPerformance
+            options={inputs}
+            refresh={onRefresh}
+            activeSection={activeSection}
+          />
         </Card>
       </Spin>
     </>

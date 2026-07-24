@@ -29,11 +29,8 @@ type Pricing struct {
 	CompletionRatio  *float64 `json:"completion_ratio,omitempty"`
 	CacheRatio       *float64 `json:"cache_ratio,omitempty"`
 	CreateCacheRatio *float64 `json:"create_cache_ratio,omitempty"`
-	// 全局阶梯倍率（模型名 -> segments），供定价页展示官方阶梯价
-	ModelTierRatio         any                     `json:"model_tier_ratio,omitempty"`
-	CompletionTierRatio    any                     `json:"completion_tier_ratio,omitempty"`
-	CacheTierRatio         any                     `json:"cache_tier_ratio,omitempty"`
-	CreateCacheTierRatio   any                     `json:"create_cache_tier_ratio,omitempty"`
+	// 统一阶梯计费（输入 token 命中单档，含 input/output/cache 四类单价）
+	RequestTierPricing     any                     `json:"request_tier_pricing,omitempty"`
 	ImageRatio             *float64                `json:"image_ratio,omitempty"`
 	AudioRatio             *float64                `json:"audio_ratio,omitempty"`
 	AudioCompletionRatio   *float64                `json:"audio_completion_ratio,omitempty"`
@@ -77,10 +74,7 @@ type PricingChannelItem struct {
 	CompletionRatio      float64 `json:"completion_ratio"`
 	CacheRatio           float64 `json:"cache_ratio"`
 	CreateCacheRatio     float64 `json:"create_cache_ratio"`
-	ModelTierRatio       any     `json:"model_tier_ratio,omitempty"`
-	CompletionTierRatio  any     `json:"completion_tier_ratio,omitempty"`
-	CacheTierRatio       any     `json:"cache_tier_ratio,omitempty"`
-	CreateCacheTierRatio any     `json:"create_cache_tier_ratio,omitempty"`
+	RequestTierPricing   any     `json:"request_tier_pricing,omitempty"`
 	PriceDiscountPercent float64 `json:"price_discount_percent"` // 最终成本率（成本折扣率 + 经营成本率）
 	EffectiveCostPercent float64 `json:"-"`                      // 内部计算用最终成本率
 	MarkupDiscountRate   float64 `json:"markup_discount_rate"`   // 加价折扣率（百分数，0=不加价）
@@ -272,10 +266,7 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			}
 			baseMp, baseMr, cr := resolveChannelPricingTriple(row.ChannelID, row.SupplierApplicationID, modelName)
 			chCache, chCreate := resolveChannelCachePair(row.ChannelID, row.SupplierApplicationID, modelName)
-			modelTierRatio, hasModelTierRatio := ratio_setting.ResolveModelTierRatio(row.ChannelID, modelName)
-			completionTierRatio, hasCompletionTierRatio := ratio_setting.ResolveCompletionTierRatio(row.ChannelID, modelName)
-			cacheTierRatio, hasCacheTierRatio := ratio_setting.ResolveCacheTierRatio(row.ChannelID, modelName)
-			createCacheTierRatio, hasCreateCacheTierRatio := ratio_setting.ResolveCreateCacheTierRatio(row.ChannelID, modelName)
+			requestTierPricing, hasRequestTierPricing := ratio_setting.ResolveRequestTierPricing(row.ChannelID, modelName)
 			alias := pricingSupplierAliasFromMeta(row.SupplierApplicationID, row.SupplierAlias)
 			d := 100.0
 			if row.PriceDiscountPercent != nil {
@@ -318,23 +309,14 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 						return 1
 					}
 					// 阶梯计费：quota_type = 3（优先级：按次 > 阶梯 > 按量）
-					if hasModelTierRatio || hasCompletionTierRatio || hasCacheTierRatio || hasCreateCacheTierRatio {
+					if hasRequestTierPricing {
 						return 3
 					}
 					return 0
 				}(),
 			}
-			if hasModelTierRatio {
-				chItem.ModelTierRatio = modelTierRatio
-			}
-			if hasCompletionTierRatio {
-				chItem.CompletionTierRatio = completionTierRatio
-			}
-			if hasCacheTierRatio {
-				chItem.CacheTierRatio = cacheTierRatio
-			}
-			if hasCreateCacheTierRatio {
-				chItem.CreateCacheTierRatio = createCacheTierRatio
+			if hasRequestTierPricing {
+				chItem.RequestTierPricing = requestTierPricing
 			}
 			fillOptionChannelPricingFields(&chItem, row.ChannelID, modelName)
 			chItems = append(chItems, chItem)
@@ -665,17 +647,11 @@ func updatePricing() {
 		if createCacheRatio, ok := ratio_setting.GetCreateCacheRatio(model); ok {
 			pricing.CreateCacheRatio = &createCacheRatio
 		}
-		if tierRatio, ok := ratio_setting.GetModelTierRatio(model); ok && len(tierRatio.Segments) > 0 {
-			pricing.ModelTierRatio = tierRatio
-		}
-		if tierRatio, ok := ratio_setting.GetCompletionTierRatio(model); ok && len(tierRatio.Segments) > 0 {
-			pricing.CompletionTierRatio = tierRatio
-		}
-		if tierRatio, ok := ratio_setting.GetCacheTierRatio(model); ok && len(tierRatio.Segments) > 0 {
-			pricing.CacheTierRatio = tierRatio
-		}
-		if tierRatio, ok := ratio_setting.GetCreateCacheTierRatio(model); ok && len(tierRatio.Segments) > 0 {
-			pricing.CreateCacheTierRatio = tierRatio
+		if rule, ok := ratio_setting.GetModelRequestTierPricing(model); ok && len(rule.Tiers) > 0 {
+			pricing.RequestTierPricing = rule
+			if pricing.QuotaType != 1 {
+				pricing.QuotaType = 3
+			}
 		}
 		if imageRatio, ok := ratio_setting.GetImageRatio(model); ok {
 			pricing.ImageRatio = &imageRatio

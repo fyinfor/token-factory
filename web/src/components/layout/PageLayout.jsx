@@ -85,6 +85,7 @@ const PageLayout = () => {
 
   const pricingNaturalScroll =
     location.pathname === '/pricing' || location.pathname === '/rankings';
+  const settingsNaturalScroll = location.pathname === '/console/setting';
 
   const shouldInnerPadding =
     location.pathname.includes('/console') &&
@@ -415,6 +416,7 @@ const PageLayout = () => {
           </Sider>
         )}
         <Layout
+          className='app-main-layout'
           style={{
             marginLeft: isMobile
               ? '0'
@@ -429,7 +431,10 @@ const PageLayout = () => {
           <Content
             style={{
               flex: '1 0 auto',
-              overflowY: isMobile || pricingNaturalScroll ? 'auto' : 'hidden',
+              overflowY:
+                isMobile || pricingNaturalScroll || settingsNaturalScroll
+                  ? 'auto'
+                  : 'hidden',
               WebkitOverflowScrolling: 'touch',
               padding: shouldInnerPadding ? (isMobile ? '5px' : '24px') : '0',
               position: 'relative',

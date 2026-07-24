@@ -69,10 +69,7 @@ const CHANNEL_PRICING_OPTION_KEYS = [
   'ChannelCompletionRatio',
   'ChannelCacheRatio',
   'ChannelCreateCacheRatio',
-  'ChannelModelTierRatio',
-  'ChannelCompletionTierRatio',
-  'ChannelCacheTierRatio',
-  'ChannelCreateCacheTierRatio',
+  'ChannelModelRequestTierPricing',
 ];
 
 /** Option 中 Channel* 嵌套字段键名 → 供应商渠道 PUT 请求体字段名 */
@@ -185,6 +182,10 @@ function resolutionMatchesUpstream(selected, upstreamVal) {
 function formatCellNumber(v) {
   if (v === null || v === undefined || v === 'same') return '—';
   if (v && typeof v === 'object') {
+    if (Array.isArray(v.tiers)) {
+      const boundary = v.boundary === 'lte' ? '≤' : '<';
+      return `${v.tiers.length}${boundary}`;
+    }
     if (Array.isArray(v.segments)) {
       return `${v.segments.length}档`;
     }
@@ -243,11 +244,35 @@ function formatPriceNumber(v) {
 }
 
 function isTierValue(value) {
-  return value && typeof value === 'object' && Array.isArray(value.segments);
+  return (
+    value &&
+    typeof value === 'object' &&
+    (Array.isArray(value.tiers) || Array.isArray(value.segments))
+  );
 }
 
 function buildTierSegmentDetails(value) {
   if (!isTierValue(value)) return [];
+  if (Array.isArray(value.tiers)) {
+    const boundary = value.boundary === 'lte' ? '≤' : '<';
+    let prev = 0;
+    return value.tiers.map((row) => {
+      const upTo = row?.up_to || 0;
+      const inputPrice = Number(row?.prices?.input ?? 0);
+      const range =
+        upTo === 0
+          ? `${prev}+`
+          : boundary === '≤'
+            ? `${prev}～${upTo}（≤）`
+            : `${prev}～${upTo}（<）`;
+      if (upTo > 0) prev = upTo;
+      return {
+        range,
+        price:
+          inputPrice > 0 ? `$${formatPriceNumber(inputPrice)}` : '-',
+      };
+    });
+  }
   return value.segments.map((row, idx) => {
     const price = ratioToDisplayPrice(row?.ratio);
     return {
@@ -333,12 +358,7 @@ function formatChannelOldNewPair(oldVal, newVal) {
 }
 
 function isTierRatioType(ratioType) {
-  return [
-    'model_tier_ratio',
-    'completion_tier_ratio',
-    'cache_tier_ratio',
-    'create_cache_tier_ratio',
-  ].includes(ratioType);
+  return ratioType === 'model_request_tier_pricing';
 }
 
 function formatChannelPriceOldNewPair(oldVal, newVal) {
@@ -666,7 +686,15 @@ export default function UpstreamRatioSync(props) {
   };
 
   function getBillingCategory(ratioType) {
-    return ratioType === 'model_price' ? 'price' : 'ratio';
+    if (ratioType === 'model_price') return 'price';
+    if (ratioType === 'model_request_tier_pricing') return 'tier';
+    return 'ratio';
+  }
+
+  function resolveBillingCategoryFromRatios(ratios) {
+    if ('model_price' in ratios) return 'price';
+    if ('model_request_tier_pricing' in ratios) return 'tier';
+    return 'ratio';
   }
 
   const selectValue = useCallback(
@@ -711,10 +739,9 @@ export default function UpstreamRatioSync(props) {
       CacheRatio: parseNestedOption(props.options.CacheRatio),
       CreateCacheRatio: parseNestedOption(props.options.CreateCacheRatio),
       ModelPrice: parseNestedOption(props.options.ModelPrice),
-      ModelTierRatio: parseNestedOption(props.options.ModelTierRatio),
-      CompletionTierRatio: parseNestedOption(props.options.CompletionTierRatio),
-      CacheTierRatio: parseNestedOption(props.options.CacheTierRatio),
-      CreateCacheTierRatio: parseNestedOption(props.options.CreateCacheTierRatio),
+      ModelRequestTierPricing: parseNestedOption(
+        props.options.ModelRequestTierPricing,
+      ),
     };
     const channel = {};
     CHANNEL_PRICING_OPTION_KEYS.forEach((k) => {
@@ -731,6 +758,8 @@ export default function UpstreamRatioSync(props) {
     const billingCategoryForChannel = (model, channelIdStr, chMaps) => {
       const priceMap = chMaps.ChannelModelPrice[channelIdStr];
       if (priceMap && priceMap[model] !== undefined) return 'price';
+      const tierMap = chMaps.ChannelModelRequestTierPricing[channelIdStr];
+      if (tierMap && tierMap[model] !== undefined) return 'tier';
       const mr = chMaps.ChannelModelRatio[channelIdStr];
       const cr = chMaps.ChannelCompletionRatio[channelIdStr];
       const cache = chMaps.ChannelCacheRatio[channelIdStr];
@@ -745,6 +774,7 @@ export default function UpstreamRatioSync(props) {
 
     const billingCategoryGlobal = (model, g) => {
       if (g.ModelPrice[model] !== undefined) return 'price';
+      if (g.ModelRequestTierPricing[model] !== undefined) return 'tier';
       if (
         g.ModelRatio[model] !== undefined ||
         g.CompletionRatio[model] !== undefined ||
@@ -772,7 +802,7 @@ export default function UpstreamRatioSync(props) {
       });
 
       groups.forEach(({ cid, ratios: r, srcNames }) => {
-        const newCat = 'model_price' in r ? 'price' : 'ratio';
+        const newCat = resolveBillingCategoryFromRatios(r);
         const localCat =
           cid != null && cid > 0
             ? billingCategoryForChannel(model, String(cid), baseline.channel)
@@ -784,11 +814,15 @@ export default function UpstreamRatioSync(props) {
             const idStr = String(cid);
             if (localCat === 'price') {
               currentDesc = `${t('固定价格')} : ${baseline.channel.ChannelModelPrice[idStr]?.[model]}`;
+            } else if (localCat === 'tier') {
+              currentDesc = t('阶梯计费（统一四价）');
             } else {
               currentDesc = `${t('模型倍率')} : ${baseline.channel.ChannelModelRatio[idStr]?.[model] ?? '-'}\n${t('输出倍率')} : ${baseline.channel.ChannelCompletionRatio[idStr]?.[model] ?? '-'}`;
             }
           } else if (localCat === 'price') {
             currentDesc = `${t('固定价格')} : ${baseline.global.ModelPrice[model]}`;
+          } else if (localCat === 'tier') {
+            currentDesc = t('阶梯计费（统一四价）');
           } else {
             currentDesc = `${t('模型倍率')} : ${baseline.global.ModelRatio[model] ?? '-'}\n${t('输出倍率')} : ${baseline.global.CompletionRatio[model] ?? '-'}`;
           }
@@ -796,6 +830,8 @@ export default function UpstreamRatioSync(props) {
           let newDesc = '';
           if (newCat === 'price') {
             newDesc = `${t('固定价格')} : ${r['model_price']}`;
+          } else if (newCat === 'tier') {
+            newDesc = t('阶梯计费（统一四价）');
           } else {
             const newModelRatio = r['model_ratio'] ?? '-';
             const newCompRatio = r['completion_ratio'] ?? '-';
@@ -834,10 +870,7 @@ export default function UpstreamRatioSync(props) {
         CacheRatio: { ...baseline.global.CacheRatio },
         CreateCacheRatio: { ...baseline.global.CreateCacheRatio },
         ModelPrice: { ...baseline.global.ModelPrice },
-        ModelTierRatio: { ...baseline.global.ModelTierRatio },
-        CompletionTierRatio: { ...baseline.global.CompletionTierRatio },
-        CacheTierRatio: { ...baseline.global.CacheTierRatio },
-        CreateCacheTierRatio: { ...baseline.global.CreateCacheTierRatio },
+        ModelRequestTierPricing: { ...baseline.global.ModelRequestTierPricing },
       };
 
       const finalChannel = {};
@@ -920,29 +953,33 @@ export default function UpstreamRatioSync(props) {
           const normalizedRatios = normalizeRatioSelection(model, cid, r);
           const selectedTypes = Object.keys(normalizedRatios);
           const hasPrice = selectedTypes.includes('model_price');
+          const hasTier = selectedTypes.includes('model_request_tier_pricing');
           const hasRatio = selectedTypes.some(
-            (rt) => rt !== 'model_price' && 
-                   rt !== 'model_tier_ratio' &&
-                   rt !== 'completion_tier_ratio' &&
-                   rt !== 'cache_tier_ratio' &&
-                   rt !== 'create_cache_tier_ratio',
+            (rt) =>
+              rt !== 'model_price' && rt !== 'model_request_tier_pricing',
           );
+          const flatChannelKeys = [
+            'ChannelModelRatio',
+            'ChannelCompletionRatio',
+            'ChannelCacheRatio',
+            'ChannelCreateCacheRatio',
+          ];
 
           if (cid != null && cid > 0) {
             const idStr = String(cid);
-            if (hasPrice) {
-              [
-                'ChannelModelRatio',
-                'ChannelCompletionRatio',
-                'ChannelCacheRatio',
-                'ChannelCreateCacheRatio',
-              ].forEach((rk) => {
+            if (hasPrice || hasRatio) {
+              if (finalChannel.ChannelModelRequestTierPricing[idStr]) {
+                delete finalChannel.ChannelModelRequestTierPricing[idStr][model];
+              }
+            }
+            if (hasPrice || hasTier) {
+              flatChannelKeys.forEach((rk) => {
                 if (finalChannel[rk][idStr]) {
                   delete finalChannel[rk][idStr][model];
                 }
               });
             }
-            if (hasRatio && finalChannel.ChannelModelPrice[idStr]) {
+            if ((hasRatio || hasTier) && finalChannel.ChannelModelPrice[idStr]) {
               delete finalChannel.ChannelModelPrice[idStr][model];
             }
 
@@ -954,12 +991,16 @@ export default function UpstreamRatioSync(props) {
                 : (normalizeStoredNumber(value) ?? value);
             });
           } else {
-            if (hasPrice) {
+            if (hasPrice || hasRatio) {
+              delete finalRatios.ModelRequestTierPricing[model];
+            }
+            if (hasPrice || hasTier) {
               delete finalRatios.ModelRatio[model];
               delete finalRatios.CompletionRatio[model];
               delete finalRatios.CacheRatio[model];
+              delete finalRatios.CreateCacheRatio[model];
             }
-            if (hasRatio) {
+            if (hasRatio || hasTier) {
               delete finalRatios.ModelPrice[model];
             }
 
@@ -985,10 +1026,7 @@ export default function UpstreamRatioSync(props) {
             'CacheRatio',
             'CreateCacheRatio',
             'ModelPrice',
-            'ModelTierRatio',
-            'CompletionTierRatio',
-            'CacheTierRatio',
-            'CreateCacheTierRatio',
+            'ModelRequestTierPricing',
           ];
           let globalDirty = false;
           globalKeysSynced.forEach((key) => {
@@ -1004,10 +1042,7 @@ export default function UpstreamRatioSync(props) {
                 CompletionRatio: finalRatios.CompletionRatio || {},
                 CacheRatio: finalRatios.CacheRatio || {},
                 CreateCacheRatio: finalRatios.CreateCacheRatio || {},
-                ModelTierRatio: finalRatios.ModelTierRatio || {},
-                CompletionTierRatio: finalRatios.CompletionTierRatio || {},
-                CacheTierRatio: finalRatios.CacheTierRatio || {},
-                CreateCacheTierRatio: finalRatios.CreateCacheTierRatio || {},
+                ModelRequestTierPricing: finalRatios.ModelRequestTierPricing || {},
                 ImageRatio: parseNestedOption(props.options.ImageRatio),
                 AudioRatio: parseNestedOption(props.options.AudioRatio),
                 AudioCompletionRatio: parseNestedOption(
@@ -1044,14 +1079,9 @@ export default function UpstreamRatioSync(props) {
               CacheRatio: (finalChannel.ChannelCacheRatio || {})[idStr] || {},
               CreateCacheRatio:
                 (finalChannel.ChannelCreateCacheRatio || {})[idStr] || {},
-              ModelTierRatio:
-                (finalChannel.ChannelModelTierRatio || {})[idStr] || {},
-              CompletionTierRatio:
-                (finalChannel.ChannelCompletionTierRatio || {})[idStr] || {},
-              CacheTierRatio:
-                (finalChannel.ChannelCacheTierRatio || {})[idStr] || {},
-              CreateCacheTierRatio:
-                (finalChannel.ChannelCreateCacheTierRatio || {})[idStr] || {},
+              ModelRequestTierPricing:
+                (finalChannel.ChannelModelRequestTierPricing || {})[idStr] ||
+                {},
             };
             CHANNEL_EXTRA_OPTION_TO_PAYLOAD.forEach(([optKey, payloadKey]) => {
               body[payloadKey] = extractNestedChannelModelMap(
@@ -1070,10 +1100,7 @@ export default function UpstreamRatioSync(props) {
             'CacheRatio',
             'CreateCacheRatio',
             'ModelPrice',
-            'ModelTierRatio',
-            'CompletionTierRatio',
-            'CacheTierRatio',
-            'CreateCacheTierRatio',
+            'ModelRequestTierPricing',
           ];
           globalKeys.forEach((key) => {
             const before = JSON.stringify(baseline.global[key] || {});
@@ -1243,17 +1270,8 @@ export default function UpstreamRatioSync(props) {
                 {t('缓存写入倍率')}
               </Select.Option>
               <Select.Option value='model_price'>{t('固定价格')}</Select.Option>
-              <Select.Option value='model_tier_ratio'>
-                {t('输入阶梯倍率')}
-              </Select.Option>
-              <Select.Option value='completion_tier_ratio'>
-                {t('输出阶梯倍率')}
-              </Select.Option>
-              <Select.Option value='cache_tier_ratio'>
-                {t('缓存读取阶梯倍率')}
-              </Select.Option>
-              <Select.Option value='create_cache_tier_ratio'>
-                {t('缓存写入阶梯倍率')}
+              <Select.Option value='model_request_tier_pricing'>
+                {t('阶梯计费')}
               </Select.Option>
             </Select>
           </div>
@@ -1494,13 +1512,16 @@ export default function UpstreamRatioSync(props) {
         if (canonical === null) return;
 
         const hasPrice = 'model_price' in ratioTypes;
+        const hasTier = 'model_request_tier_pricing' in ratioTypes;
         const hasOtherRatio = [
           'model_ratio',
           'completion_ratio',
           'cache_ratio',
           'create_cache_ratio',
         ].some((rt) => rt in ratioTypes);
-        const billingConflict = hasPrice && hasOtherRatio;
+        const billingConflict =
+          (hasPrice && (hasOtherRatio || hasTier)) ||
+          (hasTier && hasOtherRatio);
 
         Object.entries(ratioTypes).forEach(([ratioType, diff]) => {
           const upstreams = filterChannelOwnedUpstreamMap(
@@ -1597,10 +1618,7 @@ export default function UpstreamRatioSync(props) {
             cache_ratio: t('缓存读取价格（由倍率换算）'),
             create_cache_ratio: t('缓存写入价格（由倍率换算）'),
             model_price: t('固定价格'),
-            model_tier_ratio: t('输入阶梯价格（由倍率换算）'),
-            completion_tier_ratio: t('输出阶梯价格（由倍率换算）'),
-            cache_tier_ratio: t('缓存读取阶梯价格（由倍率换算）'),
-            create_cache_tier_ratio: t('缓存写入阶梯价格（由倍率换算）'),
+            model_request_tier_pricing: t('阶梯计费（统一四价）'),
           };
           const baseTag = (
             <Tag color={stringToColor(text)} shape='circle'>

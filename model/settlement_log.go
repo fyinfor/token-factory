@@ -10,9 +10,9 @@ import (
 // SettlementExportFilter 结算单导出筛选。
 type SettlementExportFilter struct {
 	AdminLogExportFilter
-	UserIDs     []int
-	InviterIDs  []int
-	ChannelIDs  []int
+	UserIDs    []int
+	InviterIDs []int
+	ChannelIDs []int
 }
 
 // GetSettlementLogsForExport 拉取结算单导出日志（仅消费类，升序）。
@@ -105,8 +105,8 @@ type InvoiceRequestAdminItem struct {
 	Email    string `json:"email"`
 }
 
-func ListInvoiceRequestsAdminEnriched(status string, pageInfo *common.PageInfo) ([]InvoiceRequestAdminItem, int64, error) {
-	rows, total, err := ListInvoiceRequestsAdmin(status, pageInfo)
+func ListInvoiceRequestsAdminEnriched(status, keyword string, pageInfo *common.PageInfo) ([]InvoiceRequestAdminItem, int64, error) {
+	rows, total, err := ListInvoiceRequestsAdmin(status, keyword, pageInfo)
 	if err != nil {
 		return nil, 0, err
 	}

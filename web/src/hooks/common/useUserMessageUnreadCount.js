@@ -26,11 +26,13 @@ export const USER_MESSAGE_REFRESH_EVENT = 'user-message-unread-refresh';
 // useUserMessageUnreadCount 轮询当前用户未读站内消息数量。
 export const useUserMessageUnreadCount = (user) => {
   const [unreadCount, setUnreadCount] = useState(0);
+  const [initialized, setInitialized] = useState(false);
 
   // refreshUnreadCount 主动刷新当前用户未读站内消息数量。
   const refreshUnreadCount = useCallback(async () => {
     if (!user?.id) {
       setUnreadCount(0);
+      setInitialized(false);
       return 0;
     }
     try {
@@ -40,19 +42,30 @@ export const useUserMessageUnreadCount = (user) => {
       if (res?.data?.success) {
         const count = Number(res.data.data?.unread_count || 0);
         setUnreadCount(count);
+        setInitialized(true);
         return count;
       }
     } catch (_) {
       // ignore
     }
-    setUnreadCount(0);
-    return 0;
+    return null;
   }, [user?.id]);
+
+  const reduceUnreadCount = useCallback((readCount) => {
+    const normalizedCount = Math.max(0, Number(readCount || 0));
+    if (normalizedCount === 0) {
+      return;
+    }
+    setUnreadCount((currentCount) =>
+      Math.max(0, currentCount - normalizedCount),
+    );
+  }, []);
 
   useEffect(() => {
     // 未登录用户不轮询，避免无效请求。
     if (!user?.id) {
       setUnreadCount(0);
+      setInitialized(false);
       return undefined;
     }
     const timer = setInterval(refreshUnreadCount, POLL_INTERVAL_MS);
@@ -68,5 +81,10 @@ export const useUserMessageUnreadCount = (user) => {
     };
   }, [refreshUnreadCount, user?.id]);
 
-  return { unreadCount, refreshUnreadCount };
+  return {
+    unreadCount,
+    initialized,
+    refreshUnreadCount,
+    reduceUnreadCount,
+  };
 };

@@ -17,211 +17,153 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useState } from 'react';
-import { Layout, TabPane, Tabs } from '@douyinfe/semi-ui';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Tabs } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
-import {
-  Settings,
-  Calculator,
-  Gauge,
-  Shapes,
-  Cog,
-  MoreHorizontal,
-  LayoutDashboard,
-  MessageSquare,
-  Palette,
-  CreditCard,
-  Server,
-  Activity,
-  Shield,
-} from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router-dom';
 
-import SystemSetting from '../../components/settings/SystemSetting';
-import { isRoot } from '../../helpers';
-import OtherSetting from '../../components/settings/OtherSetting';
-import OperationSetting from '../../components/settings/OperationSetting';
-import RateLimitSetting from '../../components/settings/RateLimitSetting';
-import ModelSetting from '../../components/settings/ModelSetting';
-import DashboardSetting from '../../components/settings/DashboardSetting';
-import RatioSetting from '../../components/settings/RatioSetting';
-import ChatsSetting from '../../components/settings/ChatsSetting';
-import DrawingSetting from '../../components/settings/DrawingSetting';
-import PaymentSetting from '../../components/settings/PaymentSetting';
-import ModelDeploymentSetting from '../../components/settings/ModelDeploymentSetting';
-import PerformanceSetting from '../../components/settings/PerformanceSetting';
 import ApiRateLimitSetting from '../../components/settings/ApiRateLimitSetting';
+import ChatsSetting from '../../components/settings/ChatsSetting';
+import DashboardSetting from '../../components/settings/DashboardSetting';
+import DrawingSetting from '../../components/settings/DrawingSetting';
+import ModelDeploymentSetting from '../../components/settings/ModelDeploymentSetting';
+import ModelSetting from '../../components/settings/ModelSetting';
+import OperationSetting from '../../components/settings/OperationSetting';
+import OtherSetting from '../../components/settings/OtherSetting';
+import PaymentSetting from '../../components/settings/PaymentSetting';
+import PerformanceSetting from '../../components/settings/PerformanceSetting';
+import RateLimitSetting from '../../components/settings/RateLimitSetting';
+import RatioSetting from '../../components/settings/RatioSetting';
+import SystemSetting from '../../components/settings/SystemSetting';
+import {
+  getSettingSelection,
+  getSettingUrl,
+} from '../../constants/setting.constants';
+
+const SETTING_COMPONENTS = {
+  operation: OperationSetting,
+  dashboard: DashboardSetting,
+  chats: ChatsSetting,
+  drawing: DrawingSetting,
+  payment: PaymentSetting,
+  ratio: RatioSetting,
+  ratelimit: RateLimitSetting,
+  models: ModelSetting,
+  'model-deployment': ModelDeploymentSetting,
+  performance: PerformanceSetting,
+  'api-rate-limit': ApiRateLimitSetting,
+  system: SystemSetting,
+  other: OtherSetting,
+};
+
+const PAGE_TRANSITION_MS = 160;
+
+const scrollSettingContentToTop = (element) => {
+  if (!element) return;
+
+  const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    ? 'auto'
+    : 'smooth';
+  let scrollParent = element.parentElement;
+  while (scrollParent) {
+    const { overflowY } = window.getComputedStyle(scrollParent);
+    if (
+      /(auto|scroll)/.test(overflowY) &&
+      scrollParent.scrollHeight > scrollParent.clientHeight
+    ) {
+      scrollParent.scrollTo({ top: 0, behavior });
+      return;
+    }
+    scrollParent = scrollParent.parentElement;
+  }
+
+  window.scrollTo({ top: 0, behavior });
+};
 
 const Setting = () => {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const location = useLocation();
-  const [tabActiveKey, setTabActiveKey] = useState('1');
-  let panes = [];
+  const navigate = useNavigate();
+  const selection = useMemo(
+    () => getSettingSelection(location.search),
+    [location.search],
+  );
+  const contentRef = useRef(null);
+  const transitionTimerRef = useRef(null);
+  const [renderedSelection, setRenderedSelection] = useState(selection);
+  const [transitionPhase, setTransitionPhase] = useState('entered');
+  const ActiveSetting = SETTING_COMPONENTS[renderedSelection.item.group];
+  const requestedKey = `${selection.category.key}:${selection.page.key}:${selection.item.key}`;
+  const renderedKey = `${renderedSelection.category.key}:${renderedSelection.page.key}:${renderedSelection.item.key}`;
 
-  if (isRoot()) {
-    panes.push({
-      tab: (
-        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <Settings size={18} />
-          {t('运营设置')}
-        </span>
-      ),
-      content: <OperationSetting />,
-      itemKey: 'operation',
-    });
-    panes.push({
-      tab: (
-        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <LayoutDashboard size={18} />
-          {t('仪表盘设置')}
-        </span>
-      ),
-      content: <DashboardSetting />,
-      itemKey: 'dashboard',
-    });
-    panes.push({
-      tab: (
-        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <MessageSquare size={18} />
-          {t('工具连接设置')}
-        </span>
-      ),
-      content: <ChatsSetting />,
-      itemKey: 'chats',
-    });
-    panes.push({
-      tab: (
-        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <Palette size={18} />
-          {t('绘图设置')}
-        </span>
-      ),
-      content: <DrawingSetting />,
-      itemKey: 'drawing',
-    });
-    panes.push({
-      tab: (
-        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <CreditCard size={18} />
-          {t('支付设置')}
-        </span>
-      ),
-      content: <PaymentSetting />,
-      itemKey: 'payment',
-    });
-    panes.push({
-      tab: (
-        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <Calculator size={18} />
-          {t('分组与模型定价设置')}
-        </span>
-      ),
-      content: <RatioSetting />,
-      itemKey: 'ratio',
-    });
-    panes.push({
-      tab: (
-        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <Gauge size={18} />
-          {t('速率限制设置')}
-        </span>
-      ),
-      content: <RateLimitSetting />,
-      itemKey: 'ratelimit',
-    });
-    panes.push({
-      tab: (
-        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <Shapes size={18} />
-          {t('模型相关设置')}
-        </span>
-      ),
-      content: <ModelSetting />,
-      itemKey: 'models',
-    });
-    panes.push({
-      tab: (
-        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <Server size={18} />
-          {t('模型部署设置')}
-        </span>
-      ),
-      content: <ModelDeploymentSetting />,
-      itemKey: 'model-deployment',
-    });
-    panes.push({
-      tab: (
-        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <Activity size={18} />
-          {t('性能设置')}
-        </span>
-      ),
-      content: <PerformanceSetting />,
-      itemKey: 'performance',
-    });
-    panes.push({
-      tab: (
-        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <Shield size={18} />
-          {t('接口限流设置')}
-        </span>
-      ),
-      content: <ApiRateLimitSetting />,
-      itemKey: 'api-rate-limit',
-    });
-    panes.push({
-      tab: (
-        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <Cog size={18} />
-          {t('系统设置')}
-        </span>
-      ),
-      content: <SystemSetting />,
-      itemKey: 'system',
-    });
-    panes.push({
-      tab: (
-        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
-          <MoreHorizontal size={18} />
-          {t('其他设置')}
-        </span>
-      ),
-      content: <OtherSetting />,
-      itemKey: 'other',
-    });
-  }
-  const onChangeTab = (key) => {
-    setTabActiveKey(key);
-    navigate(`?tab=${key}`);
-  };
   useEffect(() => {
-    const searchParams = new URLSearchParams(window.location.search);
-    const tab = searchParams.get('tab');
-    if (tab) {
-      setTabActiveKey(tab);
-    } else {
-      onChangeTab('operation');
+    const canonicalSearch = `?category=${selection.category.key}&page=${selection.page.key}&item=${selection.item.key}`;
+    if (location.search !== canonicalSearch) {
+      navigate(
+        { pathname: location.pathname, search: canonicalSearch },
+        { replace: true },
+      );
     }
-  }, [location.search]);
+  }, [location.pathname, location.search, navigate, requestedKey, selection]);
+
+  useEffect(() => {
+    window.clearTimeout(transitionTimerRef.current);
+
+    if (renderedKey === requestedKey) {
+      return undefined;
+    }
+
+    setTransitionPhase('exiting');
+    transitionTimerRef.current = window.setTimeout(() => {
+      setRenderedSelection(selection);
+      setTransitionPhase('entering');
+      scrollSettingContentToTop(contentRef.current);
+    }, PAGE_TRANSITION_MS);
+
+    return () => window.clearTimeout(transitionTimerRef.current);
+  }, [renderedKey, requestedKey, selection]);
+
+  if (!ActiveSetting) {
+    return null;
+  }
+
   return (
-    <div className='mt-[60px] px-2'>
-      <Layout>
-        <Layout.Content>
-          <Tabs
-            type='card'
-            collapsible
-            activeKey={tabActiveKey}
-            onChange={(key) => onChangeTab(key)}
-          >
-            {panes.map((pane) => (
-              <TabPane itemKey={pane.itemKey} tab={pane.tab} key={pane.itemKey}>
-                {tabActiveKey === pane.itemKey && pane.content}
-              </TabPane>
-            ))}
-          </Tabs>
-        </Layout.Content>
-      </Layout>
+    <div ref={contentRef} className='settings-page mt-[60px] px-2'>
+      <div className='settings-page-header'>
+        <div className='settings-page-heading'>
+          <span className='settings-page-category'>
+            {t(selection.category.label)}
+          </span>
+          <h1>{t(selection.page.label)}</h1>
+        </div>
+        <Tabs
+          className='settings-page-tabs'
+          type='button'
+          size='small'
+          collapsible
+          activeKey={selection.item.key}
+          tabList={selection.page.items.map((settingItem) => ({
+            itemKey: settingItem.key,
+            tab: t(settingItem.label),
+          }))}
+          onChange={(itemKey) =>
+            navigate(
+              getSettingUrl(
+                selection.category.key,
+                selection.page.key,
+                itemKey,
+              ),
+            )
+          }
+        />
+      </div>
+      <div
+        key={renderedKey}
+        className={`settings-page-transition is-${transitionPhase}`}
+        onAnimationEnd={() => setTransitionPhase('entered')}
+      >
+        <ActiveSetting activeSection={renderedSelection.item.section} />
+      </div>
     </div>
   );
 };
