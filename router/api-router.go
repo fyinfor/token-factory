@@ -244,6 +244,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/invoice/request", controller.PostInvoiceRequest)
 				selfRoute.GET("/invoice/requests", controller.GetInvoiceRequestsSelf)
 				selfRoute.GET("/invoice/requests/:id", controller.GetInvoiceRequestDetailSelf)
+				selfRoute.POST("/invoice/requests/:id/cancel", controller.CancelInvoiceRequestSelf)
 
 				// 2FA routes
 				selfRoute.GET("/2fa/status", controller.Get2FAStatus)
@@ -278,6 +279,7 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.POST("/topup/complete", controller.AdminCompleteTopUp)
 				adminRoute.GET("/invoice/admin/requests", controller.ListInvoiceRequestsAdmin)
 				adminRoute.GET("/invoice/admin/requests/:id", controller.GetInvoiceRequestDetailAdmin)
+				adminRoute.POST("/invoice/admin/requests/:id/process", controller.MarkInvoiceRequestProcessingAdmin)
 				adminRoute.POST("/invoice/admin/requests/:id/issue", controller.IssueInvoiceRequestAdmin)
 				adminRoute.POST("/invoice/admin/upload", controller.UploadInvoiceFileAdmin)
 				adminRoute.POST("/invoice/admin/requests/:id/reject", controller.RejectInvoiceRequestAdmin)

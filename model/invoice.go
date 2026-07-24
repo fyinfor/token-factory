@@ -1,9 +1,10 @@
 package model
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
+	"net/mail"
+	"sort"
 	"strings"
 	"time"
 
@@ -73,18 +74,18 @@ func (InvoiceRequestItem) TableName() string { return "invoice_request_items" }
 
 // TopUpConsumeAttribution 充值订单消耗归因（FIFO）。
 type TopUpConsumeAttribution struct {
-	Id             int   `json:"id" gorm:"primaryKey;autoIncrement"`
-	UserId         int   `json:"user_id" gorm:"not null;index:idx_topup_attr_user_topup,unique"`
-	TopUpId        int   `json:"topup_id" gorm:"not null;index:idx_topup_attr_user_topup,unique"`
-	ConsumedQuota  int   `json:"consumed_quota" gorm:"not null;default:0"`
-	UpdatedAt      int64 `json:"updated_at" gorm:"autoUpdateTime;bigint"`
+	Id            int   `json:"id" gorm:"primaryKey;autoIncrement"`
+	UserId        int   `json:"user_id" gorm:"not null;index:idx_topup_attr_user_topup,unique"`
+	TopUpId       int   `json:"topup_id" gorm:"not null;index:idx_topup_attr_user_topup,unique"`
+	ConsumedQuota int   `json:"consumed_quota" gorm:"not null;default:0"`
+	UpdatedAt     int64 `json:"updated_at" gorm:"autoUpdateTime;bigint"`
 }
 
 func (TopUpConsumeAttribution) TableName() string { return "topup_consume_attributions" }
 
-// invoiceTopUpIDColumn 返回充值订单外键列名（PostgreSQL 为 top_up_id，MySQL 为 topup_id）。
+// invoiceTopUpIDColumn 返回充值订单外键列名（SQLite/PostgreSQL 为 top_up_id，历史 MySQL 表为 topup_id）。
 func invoiceTopUpIDColumn() string {
-	if common.UsingPostgreSQL {
+	if common.UsingPostgreSQL || common.UsingSQLite {
 		return "top_up_id"
 	}
 	return "topup_id"
@@ -92,17 +93,17 @@ func invoiceTopUpIDColumn() string {
 
 // InvoiceEligibleOrder 待开票订单列表项。
 type InvoiceEligibleOrder struct {
-	TopUpId          int     `json:"topup_id"`
-	TradeNo          string  `json:"trade_no"`
-	Money            float64 `json:"money"`
-	QuotaToAdd       int     `json:"quota_to_add"`
-	ConsumedQuota    int     `json:"consumed_quota"`
-	ConsumedAmount   float64 `json:"consumed_amount"`
-	InvoicedAmount   float64 `json:"invoiced_amount"`
-	PendingAmount    float64 `json:"pending_amount"`
+	TopUpId           int     `json:"topup_id"`
+	TradeNo           string  `json:"trade_no"`
+	Money             float64 `json:"money"`
+	QuotaToAdd        int     `json:"quota_to_add"`
+	ConsumedQuota     int     `json:"consumed_quota"`
+	ConsumedAmount    float64 `json:"consumed_amount"`
+	InvoicedAmount    float64 `json:"invoiced_amount"`
+	PendingAmount     float64 `json:"pending_amount"`
 	InvoiceableAmount float64 `json:"invoiceable_amount"`
-	CreateTime       int64   `json:"create_time"`
-	Status           string  `json:"status"`
+	CreateTime        int64   `json:"create_time"`
+	Status            string  `json:"status"`
 }
 
 func GetInvoiceProfileByUserID(userID int) (*InvoiceProfile, error) {
@@ -130,6 +131,15 @@ func UpsertInvoiceProfile(profile *InvoiceProfile) error {
 	}
 	if profile.TitleType == "" {
 		profile.TitleType = InvoiceTitleTypePersonal
+	}
+	if profile.TitleType != InvoiceTitleTypePersonal && profile.TitleType != InvoiceTitleTypeCompany {
+		return errors.New("invalid invoice title type")
+	}
+	if profile.TitleType == InvoiceTitleTypeCompany && profile.TaxNo == "" {
+		return errors.New("company tax number is required")
+	}
+	if _, err := mail.ParseAddress(profile.Email); err != nil {
+		return errors.New("invalid invoice email")
 	}
 	var existing InvoiceProfile
 	err := DB.Where("user_id = ?", profile.UserId).First(&existing).Error
@@ -161,42 +171,13 @@ func consumedAmountForTopUp(topUp *TopUp, consumedQuota int) decimal.Decimal {
 	return topUpMoneyPerQuota(topUp).Mul(decimal.NewFromInt(int64(consumedQuota)))
 }
 
-func getTopUpPendingInvoiceAmount(topUpID int) (decimal.Decimal, error) {
-	var total decimal.Decimal
-	rows, err := getPendingInvoiceItemsByTopUp(topUpID)
-	if err != nil {
-		return decimal.Zero, err
-	}
-	for _, row := range rows {
-		total = total.Add(decimal.NewFromFloat(row.InvoiceAmount))
-	}
-	return total, nil
-}
-
-func getPendingInvoiceItemsByTopUp(topUpID int) ([]InvoiceRequestItem, error) {
-	var items []InvoiceRequestItem
-	err := DB.Table("invoice_request_items").
-		Select("invoice_request_items.*").
-		Joins("JOIN invoice_requests ON invoice_requests.id = invoice_request_items.invoice_request_id").
-		Where("invoice_request_items."+invoiceTopUpIDColumn()+" = ? AND invoice_requests.status IN ?", topUpID, []string{
-			InvoiceRequestStatusPending,
-			InvoiceRequestStatusProcessing,
-		}).
-		Find(&items).Error
-	return items, err
-}
-
 func GetTopUpInvoiceableAmount(topUp *TopUp, consumedQuota int) (float64, error) {
 	if topUp == nil || topUp.Status != common.TopUpStatusSuccess {
 		return 0, nil
 	}
 	consumedMoney := consumedAmountForTopUp(topUp, consumedQuota)
 	available := consumedMoney.Sub(decimal.NewFromFloat(topUp.InvoicedAmount))
-	pending, err := getTopUpPendingInvoiceAmount(topUp.Id)
-	if err != nil {
-		return 0, err
-	}
-	available = available.Sub(pending)
+	available = available.Sub(decimal.NewFromFloat(topUp.PendingInvoiceAmount))
 	if available.IsNegative() {
 		return 0, nil
 	}
@@ -229,11 +210,6 @@ func ListInvoiceEligibleOrders(userID int, tradeNoKeyword string) ([]InvoiceElig
 		if err != nil {
 			return nil, err
 		}
-		pending, err := getTopUpPendingInvoiceAmount(topUp.Id)
-		if err != nil {
-			return nil, err
-		}
-		pendingF, _ := pending.Float64()
 		out = append(out, InvoiceEligibleOrder{
 			TopUpId:           topUp.Id,
 			TradeNo:           topUp.TradeNo,
@@ -242,7 +218,7 @@ func ListInvoiceEligibleOrders(userID int, tradeNoKeyword string) ([]InvoiceElig
 			ConsumedQuota:     consumedQuota,
 			ConsumedAmount:    consumedAmount,
 			InvoicedAmount:    topUp.InvoicedAmount,
-			PendingAmount:     pendingF,
+			PendingAmount:     topUp.PendingInvoiceAmount,
 			InvoiceableAmount: invoiceable,
 			CreateTime:        topUp.CreateTime,
 			Status:            topUp.Status,
@@ -252,8 +228,12 @@ func ListInvoiceEligibleOrders(userID int, tradeNoKeyword string) ([]InvoiceElig
 }
 
 func getTopUpAttributionMap(userID int) (map[int]int, error) {
+	return getTopUpAttributionMapWithDB(DB, userID)
+}
+
+func getTopUpAttributionMapWithDB(db *gorm.DB, userID int) (map[int]int, error) {
 	var rows []TopUpConsumeAttribution
-	if err := DB.Where("user_id = ?", userID).Find(&rows).Error; err != nil {
+	if err := db.Where("user_id = ?", userID).Find(&rows).Error; err != nil {
 		return nil, err
 	}
 	out := make(map[int]int, len(rows))
@@ -307,6 +287,40 @@ func AttributeConsumeQuotaToTopUps(userID, consumeQuota int) error {
 	})
 }
 
+func ReleaseConsumeQuotaFromTopUps(userID, refundQuota int) error {
+	if userID <= 0 || refundQuota <= 0 {
+		return nil
+	}
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var rows []TopUpConsumeAttribution
+		if err := tx.Where("user_id = ? AND consumed_quota > 0", userID).
+			Order("updated_at desc, id desc").Find(&rows).Error; err != nil {
+			return err
+		}
+		remaining := refundQuota
+		for _, row := range rows {
+			if remaining <= 0 {
+				break
+			}
+			release := remaining
+			if release > row.ConsumedQuota {
+				release = row.ConsumedQuota
+			}
+			result := tx.Model(&TopUpConsumeAttribution{}).
+				Where("id = ? AND consumed_quota >= ?", row.Id, release).
+				Update("consumed_quota", gorm.Expr("consumed_quota - ?", release))
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected != 1 {
+				return fmt.Errorf("consume attribution changed for topup %d", row.TopUpId)
+			}
+			remaining -= release
+		}
+		return nil
+	})
+}
+
 type InvoiceRequestItemInput struct {
 	TopUpId       int     `json:"topup_id"`
 	InvoiceAmount float64 `json:"invoice_amount"`
@@ -316,38 +330,58 @@ func CreateInvoiceRequest(userID int, items []InvoiceRequestItemInput, remark st
 	if userID <= 0 || len(items) == 0 || profile == nil {
 		return nil, errors.New("invalid invoice request")
 	}
-	profileJSON, err := json.Marshal(profile)
+	profileJSON, err := common.Marshal(profile)
 	if err != nil {
 		return nil, err
 	}
+	merged := make(map[int]decimal.Decimal, len(items))
+	for _, item := range items {
+		if item.TopUpId <= 0 || item.InvoiceAmount <= 0 {
+			return nil, fmt.Errorf("invalid invoice item for topup %d", item.TopUpId)
+		}
+		amount := decimal.NewFromFloat(item.InvoiceAmount).Round(6)
+		merged[item.TopUpId] = merged[item.TopUpId].Add(amount)
+	}
+	topUpIDs := make([]int, 0, len(merged))
+	for topUpID := range merged {
+		topUpIDs = append(topUpIDs, topUpID)
+	}
+	sort.Ints(topUpIDs)
 	var created *InvoiceRequest
 	err = DB.Transaction(func(tx *gorm.DB) error {
-		attrMap, err := getTopUpAttributionMap(userID)
+		attrMap, err := getTopUpAttributionMapWithDB(tx, userID)
 		if err != nil {
 			return err
 		}
 		total := decimal.Zero
-		prepared := make([]InvoiceRequestItem, 0, len(items))
-		for _, item := range items {
-			if item.TopUpId <= 0 || item.InvoiceAmount <= 0 {
-				return fmt.Errorf("invalid invoice item for topup %d", item.TopUpId)
-			}
+		prepared := make([]InvoiceRequestItem, 0, len(topUpIDs))
+		for _, topUpID := range topUpIDs {
+			amount := merged[topUpID]
 			var topUp TopUp
-			if err := tx.Where("id = ? AND user_id = ? AND status = ? AND "+topUpInvoiceEligibleWhere(), item.TopUpId, userID, common.TopUpStatusSuccess).First(&topUp).Error; err != nil {
-				return fmt.Errorf("topup %d not found or not payable", item.TopUpId)
+			if err := tx.Where("id = ? AND user_id = ? AND status = ? AND "+topUpInvoiceEligibleWhere(), topUpID, userID, common.TopUpStatusSuccess).First(&topUp).Error; err != nil {
+				return fmt.Errorf("topup %d not found or not payable", topUpID)
 			}
-			invoiceable, err := GetTopUpInvoiceableAmount(&topUp, attrMap[topUp.Id])
-			if err != nil {
-				return err
+			consumedMoney := consumedAmountForTopUp(&topUp, attrMap[topUp.Id])
+			maxReserved := consumedMoney.Sub(decimal.NewFromFloat(topUp.InvoicedAmount)).Round(6)
+			if maxReserved.IsNegative() {
+				maxReserved = decimal.Zero
 			}
-			if item.InvoiceAmount > invoiceable+0.000001 {
+			amountF, _ := amount.Float64()
+			maxReservedF, _ := maxReserved.Float64()
+			reserve := tx.Model(&TopUp{}).
+				Where("id = ? AND user_id = ? AND status = ? AND "+topUpInvoiceEligibleWhere()+" AND pending_invoice_amount + ? <= ?", topUp.Id, userID, common.TopUpStatusSuccess, amountF, maxReservedF+0.000001).
+				Update("pending_invoice_amount", gorm.Expr("pending_invoice_amount + ?", amountF))
+			if reserve.Error != nil {
+				return reserve.Error
+			}
+			if reserve.RowsAffected != 1 {
 				return fmt.Errorf("invoice amount exceeds available for %s", topUp.TradeNo)
 			}
-			total = total.Add(decimal.NewFromFloat(item.InvoiceAmount))
+			total = total.Add(amount)
 			prepared = append(prepared, InvoiceRequestItem{
 				TopUpId:       topUp.Id,
 				TradeNo:       topUp.TradeNo,
-				InvoiceAmount: item.InvoiceAmount,
+				InvoiceAmount: amountF,
 			})
 		}
 		totalF, _ := total.Float64()
@@ -395,11 +429,23 @@ func ListInvoiceRequestsByUser(userID int, pageInfo *common.PageInfo) ([]*Invoic
 	return rows, total, nil
 }
 
-func ListInvoiceRequestsAdmin(status string, pageInfo *common.PageInfo) ([]*InvoiceRequest, int64, error) {
+func ListInvoiceRequestsAdmin(status, keyword string, pageInfo *common.PageInfo) ([]*InvoiceRequest, int64, error) {
 	var total int64
 	tx := DB.Model(&InvoiceRequest{})
 	if s := strings.TrimSpace(status); s != "" {
 		tx = tx.Where("status = ?", s)
+	}
+	if kw := strings.TrimSpace(keyword); kw != "" {
+		like := "%" + kw + "%"
+		var userIDs []int
+		if err := DB.Model(&User{}).Where("username LIKE ? OR email LIKE ?", like, like).Pluck("id", &userIDs).Error; err != nil {
+			return nil, 0, err
+		}
+		if len(userIDs) > 0 {
+			tx = tx.Where("request_no LIKE ? OR user_id IN ?", like, userIDs)
+		} else {
+			tx = tx.Where("request_no LIKE ?", like)
+		}
 	}
 	if err := tx.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -431,42 +477,120 @@ func IssueInvoiceRequest(requestID int, invoiceCode, invoiceURL, adminNote strin
 		if err := tx.Where("id = ?", requestID).First(&req).Error; err != nil {
 			return err
 		}
-		if req.Status != InvoiceRequestStatusPending && req.Status != InvoiceRequestStatusProcessing {
+		var items []InvoiceRequestItem
+		if err := tx.Where("invoice_request_id = ?", requestID).Find(&items).Error; err != nil {
+			return err
+		}
+		now := time.Now().Unix()
+		update := tx.Model(&InvoiceRequest{}).
+			Where("id = ? AND status IN ?", requestID, []string{InvoiceRequestStatusPending, InvoiceRequestStatusProcessing}).
+			Updates(map[string]interface{}{
+				"status":       InvoiceRequestStatusIssued,
+				"invoice_code": strings.TrimSpace(invoiceCode),
+				"invoice_url":  strings.TrimSpace(invoiceURL),
+				"admin_note":   strings.TrimSpace(adminNote),
+				"issued_at":    now,
+			})
+		if update.Error != nil {
+			return update.Error
+		}
+		if update.RowsAffected != 1 {
 			return fmt.Errorf("request status not issuable: %s", req.Status)
+		}
+		for _, item := range items {
+			result := tx.Model(&TopUp{}).Where("id = ? AND pending_invoice_amount + ? >= ?", item.TopUpId, 0.000001, item.InvoiceAmount).
+				Updates(map[string]interface{}{
+					"invoiced_amount":        gorm.Expr("invoiced_amount + ?", item.InvoiceAmount),
+					"pending_invoice_amount": gorm.Expr("CASE WHEN pending_invoice_amount - ? < 0 THEN 0 ELSE pending_invoice_amount - ? END", item.InvoiceAmount, item.InvoiceAmount),
+				})
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected != 1 {
+				return fmt.Errorf("pending invoice reservation missing for topup %d", item.TopUpId)
+			}
+		}
+		return nil
+	})
+}
+
+func RejectInvoiceRequest(requestID int, adminNote string) error {
+	if strings.TrimSpace(adminNote) == "" {
+		return errors.New("rejection reason is required")
+	}
+	return transitionInvoiceRequestAndRelease(requestID, 0, InvoiceRequestStatusRejected, adminNote, []string{InvoiceRequestStatusPending, InvoiceRequestStatusProcessing})
+}
+
+func CancelInvoiceRequest(userID, requestID int) error {
+	return transitionInvoiceRequestAndRelease(requestID, userID, InvoiceRequestStatusCancelled, "", []string{InvoiceRequestStatusPending})
+}
+
+func MarkInvoiceRequestProcessing(requestID int) error {
+	result := DB.Model(&InvoiceRequest{}).
+		Where("id = ? AND status = ?", requestID, InvoiceRequestStatusPending).
+		Update("status", InvoiceRequestStatusProcessing)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return fmt.Errorf("request is no longer pending")
+	}
+	return nil
+}
+
+func transitionInvoiceRequestAndRelease(requestID, userID int, targetStatus, adminNote string, allowedStatuses []string) error {
+	return DB.Transaction(func(tx *gorm.DB) error {
+		query := tx.Model(&InvoiceRequest{}).Where("id = ? AND status IN ?", requestID, allowedStatuses)
+		if userID > 0 {
+			query = query.Where("user_id = ?", userID)
+		}
+		updates := map[string]interface{}{"status": targetStatus}
+		if targetStatus == InvoiceRequestStatusRejected {
+			updates["admin_note"] = strings.TrimSpace(adminNote)
+		}
+		result := query.Updates(updates)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return fmt.Errorf("invoice request status changed, please refresh")
 		}
 		var items []InvoiceRequestItem
 		if err := tx.Where("invoice_request_id = ?", requestID).Find(&items).Error; err != nil {
 			return err
 		}
 		for _, item := range items {
-			var topUp TopUp
-			if err := tx.Where("id = ?", item.TopUpId).First(&topUp).Error; err != nil {
-				return err
-			}
-			topUp.InvoicedAmount += item.InvoiceAmount
-			if err := tx.Save(&topUp).Error; err != nil {
+			if err := tx.Model(&TopUp{}).Where("id = ?", item.TopUpId).
+				Update("pending_invoice_amount", gorm.Expr("CASE WHEN pending_invoice_amount - ? < 0 THEN 0 ELSE pending_invoice_amount - ? END", item.InvoiceAmount, item.InvoiceAmount)).Error; err != nil {
 				return err
 			}
 		}
-		now := time.Now().Unix()
-		req.Status = InvoiceRequestStatusIssued
-		req.InvoiceCode = strings.TrimSpace(invoiceCode)
-		req.InvoiceUrl = strings.TrimSpace(invoiceURL)
-		req.AdminNote = strings.TrimSpace(adminNote)
-		req.IssuedAt = now
-		return tx.Save(&req).Error
+		return nil
 	})
 }
 
-func RejectInvoiceRequest(requestID int, adminNote string) error {
-	var req InvoiceRequest
-	if err := DB.Where("id = ?", requestID).First(&req).Error; err != nil {
-		return err
-	}
-	if req.Status != InvoiceRequestStatusPending && req.Status != InvoiceRequestStatusProcessing {
-		return fmt.Errorf("request status not rejectable: %s", req.Status)
-	}
-	req.Status = InvoiceRequestStatusRejected
-	req.AdminNote = strings.TrimSpace(adminNote)
-	return DB.Save(&req).Error
+func BackfillPendingInvoiceAmounts() error {
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&TopUp{}).Where("pending_invoice_amount <> 0").Update("pending_invoice_amount", 0).Error; err != nil {
+			return err
+		}
+		type pendingRow struct {
+			TopUpID int
+			Amount  float64
+		}
+		var rows []pendingRow
+		if err := tx.Table("invoice_request_items").
+			Select("invoice_request_items."+invoiceTopUpIDColumn()+" AS top_up_id, SUM(invoice_request_items.invoice_amount) AS amount").
+			Joins("JOIN invoice_requests ON invoice_requests.id = invoice_request_items.invoice_request_id").
+			Where("invoice_requests.status IN ?", []string{InvoiceRequestStatusPending, InvoiceRequestStatusProcessing}).
+			Group("invoice_request_items." + invoiceTopUpIDColumn()).Scan(&rows).Error; err != nil {
+			return err
+		}
+		for _, row := range rows {
+			if err := tx.Model(&TopUp{}).Where("id = ?", row.TopUpID).Update("pending_invoice_amount", row.Amount).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }

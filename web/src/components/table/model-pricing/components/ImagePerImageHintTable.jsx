@@ -22,6 +22,8 @@ import { Typography } from '@douyinfe/semi-ui';
 import {
   formatVideoResolutionDisplayLabel,
   compareVideoResolutionAsc,
+  costDiscountMultiplier,
+  markupRateFromPercent,
 } from '../../../../helpers';
 import { formatPreciseUsdPrice } from './PrecisePriceText';
 import {
@@ -57,11 +59,39 @@ function getDiscountPercent(currentUsd, officialUsd) {
   return official > current ? Math.round((1 - current / official) * 100) : 0;
 }
 
-function mapRowsToItems(rows, usedGroupRatio, displayPrice, unitLabel) {
+function mapRowsToItems(
+  rows,
+  usedGroupRatio,
+  displayPrice,
+  unitLabel,
+  isCostPrice,
+  priceDiscountPercent,
+  markupDiscountRate,
+) {
   return rows.map((row, idx) => {
-    const currentUsd = Number(row.usd_after_channel_discount || 0);
+    const effectiveUsd = Number(row.usd_after_channel_discount || 0);
+    const channelRawUsd = Number(row.usd_channel_raw);
+    const officialUsd = Number(row.usd_official || 0);
+    const costMultiplier = costDiscountMultiplier(priceDiscountPercent);
+    const markupRate = markupRateFromPercent(markupDiscountRate);
+    const fallbackCostUsd =
+      officialUsd > 0
+        ? Math.max(0, effectiveUsd - officialUsd * markupRate)
+        : costMultiplier + markupRate > 0
+          ? effectiveUsd * (costMultiplier / (costMultiplier + markupRate))
+          : 0;
+    const currentUsd = isCostPrice
+      ? Number.isFinite(channelRawUsd)
+        ? channelRawUsd * costMultiplier
+        : fallbackCostUsd
+      : effectiveUsd;
     const platformUsd = currentUsd * usedGroupRatio;
-    const discount = getDiscountPercent(platformUsd, row.usd_official);
+    const costPercent = Number(priceDiscountPercent);
+    const discount = isCostPrice
+      ? Number.isFinite(costPercent) && costPercent >= 0 && costPercent < 100
+        ? 100 - costPercent
+        : 0
+      : getDiscountPercent(platformUsd, officialUsd);
     return {
       key: `img-${idx}-${row.lane}-${row.resolution}`,
       resolution:
@@ -70,7 +100,7 @@ function mapRowsToItems(rows, usedGroupRatio, displayPrice, unitLabel) {
         '—',
       price: formatTierPrice(currentUsd, usedGroupRatio, displayPrice),
       priceExact: currentUsd > 0 ? formatPreciseUsdPrice(platformUsd) : null,
-      official: formatTierPrice(row.usd_official, 1, displayPrice),
+      official: formatTierPrice(officialUsd, 1, displayPrice),
       officialExact:
         Number(row.usd_official) > 0
           ? formatPreciseUsdPrice(row.usd_official)
@@ -88,6 +118,8 @@ function ImagePerImageHintTable({
   t,
   blurPricing = false,
   isCostPrice = false,
+  priceDiscountPercent = 100,
+  markupDiscountRate = 0,
 }) {
   const groups = useMemo(
     () => groupImagePerImageTiersByFamily(hint?.tiers),
@@ -99,7 +131,12 @@ function ImagePerImageHintTable({
   const unitLabel = t('张');
   const columns = [
     { key: 'resolution', label: t('分辨率') },
-    { key: 'price', label: t('平台价'), unitLabel, strong: true },
+    {
+      key: 'price',
+      label: isCostPrice ? t('成本价') : t('平台价'),
+      unitLabel,
+      strong: true,
+    },
     { key: 'official', label: t('官方价'), unitLabel },
     {
       key: 'discount',
@@ -132,6 +169,9 @@ function ImagePerImageHintTable({
             usedGroupRatio,
             displayPrice,
             unitLabel,
+            isCostPrice,
+            priceDiscountPercent,
+            markupDiscountRate,
           );
 
           return (
@@ -145,7 +185,6 @@ function ImagePerImageHintTable({
               accent={family === 'image_to_image' ? 'green' : 'blue'}
               variant='glass'
               t={t}
-              zeroDiscountLabel={isCostPrice ? t('0折扣') : '0%'}
             />
           );
         })}

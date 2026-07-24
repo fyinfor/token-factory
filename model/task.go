@@ -107,10 +107,11 @@ type TaskPrivateData struct {
 	ResultURL      string `json:"result_url,omitempty"`       // 任务成功后的结果 URL（视频地址等）
 	TokenName      string `json:"token_name,omitempty"`       // 令牌名称（用于差额日志展示）
 	// 计费上下文：用于异步退款/差额结算（轮询阶段读取）
-	BillingSource  string              `json:"billing_source,omitempty"`  // "wallet" 或 "subscription"
-	SubscriptionId int                 `json:"subscription_id,omitempty"` // 订阅 ID，用于订阅退款
-	TokenId        int                 `json:"token_id,omitempty"`        // 令牌 ID，用于令牌额度退款
-	BillingContext *TaskBillingContext `json:"billing_context,omitempty"` // 计费参数快照（用于轮询阶段重新计算）
+	BillingSource   string              `json:"billing_source,omitempty"`    // "wallet" 或 "subscription"
+	SubscriptionId  int                 `json:"subscription_id,omitempty"`   // 订阅 ID，用于订阅退款
+	WalletPaidQuota int                 `json:"wallet_paid_quota,omitempty"` // 钱包预扣中来自可开票充值的额度
+	TokenId         int                 `json:"token_id,omitempty"`          // 令牌 ID，用于令牌额度退款
+	BillingContext  *TaskBillingContext `json:"billing_context,omitempty"`   // 计费参数快照（用于轮询阶段重新计算）
 	// TfOpenVideoUpstreamStyle：TokenFactoryOpen(60) 视频上游路径风格，供轮询与提交一致。
 	// 空或 "video_generations" => GET {base}/v1/video/generations/{id}；"openai_videos" => GET {base}/v1/videos/{id}。
 	TfOpenVideoUpstreamStyle   string `json:"tf_open_video_upstream_style,omitempty"`

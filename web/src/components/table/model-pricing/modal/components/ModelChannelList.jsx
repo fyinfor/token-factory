@@ -69,6 +69,7 @@ import {
   computeChannelCostRates,
   formatBillingUsdDisplay,
 } from '../../../../../helpers/billingFormula';
+import { formatPriceRatioFromDiscount } from '../../utils/discount';
 
 const { Text } = Typography;
 
@@ -183,17 +184,20 @@ const StabilityBattery = ({ row, t }) => {
   );
 };
 
-/** 成本折扣展示：100% - 成本折扣率% = 优惠幅度，如 25% 成本折扣显示 成本折扣：-75% */
+/** 成本折扣展示为成交价占官方价比例；无折扣或超过官方价时显示占位符。 */
 const formatCostDiscountDisplay = (priceDiscountPercent, t) => {
   const costPercent = Number(priceDiscountPercent);
   if (!Number.isFinite(costPercent)) {
     return null;
   }
-  const savingsPercent = Math.round(100 - costPercent);
+  const savingsPercent = 100 - costPercent;
   if (savingsPercent <= 0) {
-    return { text: `${t('成本折扣')}：${t('0折扣')}`, hasDiscount: false };
+    return { text: `${t('成本折扣')}：-`, hasDiscount: false };
   }
-  return { text: `${t('成本折扣')}：-${savingsPercent}%`, hasDiscount: true };
+  return {
+    text: `${t('成本折扣')}：${formatPriceRatioFromDiscount(savingsPercent)}`,
+    hasDiscount: true,
+  };
 };
 // 阶梯计费表格：输入 TOKEN 区间 类型 输入 / M 输出 / M 缓存读取 / M 缓存写入 / M
 const TokenTierDetailTable = ({
@@ -441,11 +445,11 @@ const TokenTierDetailTable = ({
                               border: 'none',
                             }}
                           >
-                            -{cell.discount}%
+                            {formatPriceRatioFromDiscount(cell.discount)}
                           </Tag>
                         ) : (
                           <span style={{ color: 'var(--semi-color-text-3)' }}>
-                            —
+                            -
                           </span>
                         )}
                       </td>
@@ -461,7 +465,12 @@ const TokenTierDetailTable = ({
   );
 };
 
-const PriceComparisonList = ({ items, t, blurPricing = false }) => {
+const PriceComparisonList = ({
+  items,
+  t,
+  blurPricing = false,
+  isCostPrice = false,
+}) => {
   if (!items || items.length === 0) {
     return null;
   }
@@ -495,14 +504,16 @@ const PriceComparisonList = ({ items, t, blurPricing = false }) => {
       >
         <span>{t('价格项')}</span>
         <span>
-          {t('平台价')}
+          {isCostPrice ? t('成本价') : t('平台价')}
           {priceHeaderUnit}
         </span>
         <span>
           {t('官方价')}
           {priceHeaderUnit}
         </span>
-        <span className='text-right'>{t('折扣')}</span>
+        <span className='text-right'>
+          {isCostPrice ? t('成本折扣') : t('折扣')}
+        </span>
       </div>
       <div
         style={
@@ -576,10 +587,12 @@ const PriceComparisonList = ({ items, t, blurPricing = false }) => {
                       : 'rgba(142, 142, 147, 0.12)',
                   }}
                 >
-                  {item.hasDiscount ? `-${item.discount}%` : '0%'}
+                  {item.hasDiscount
+                    ? formatPriceRatioFromDiscount(item.discount)
+                    : '-'}
                 </span>
               ) : (
-                <span className='text-xs text-gray-400'>—</span>
+                <span className='text-xs text-gray-400'>-</span>
               )}
             </div>
           </div>
@@ -1081,9 +1094,10 @@ const ModelChannelList = ({
         const official = officialUsd
           ? formatCostValue(officialUsd, item.isFixedPrice, item.fixedUnitKey)
           : null;
+        const costPercent = Number(channel.price_discount_percent ?? 100);
         const discount =
-          officialUsd && item.displayUsdPerM <= officialUsd
-            ? Math.round((1 - item.displayUsdPerM / officialUsd) * 100)
+          Number.isFinite(costPercent) && costPercent >= 0 && costPercent < 100
+            ? 100 - costPercent
             : null;
         return {
           key: item.key,
@@ -1260,6 +1274,7 @@ const ModelChannelList = ({
                   items={costItems}
                   t={t}
                   blurPricing={blurPricing}
+                  isCostPrice
                 />
               ) : null}
               {costInfo.videoHint ? (
@@ -1270,6 +1285,8 @@ const ModelChannelList = ({
                   t={t}
                   blurPricing={blurPricing}
                   isCostPrice
+                  priceDiscountPercent={channel.price_discount_percent}
+                  markupDiscountRate={channel.markup_discount_rate}
                 />
               ) : null}
               {costInfo.imageHint ? (
@@ -1280,6 +1297,8 @@ const ModelChannelList = ({
                   t={t}
                   blurPricing={blurPricing}
                   isCostPrice
+                  priceDiscountPercent={channel.price_discount_percent}
+                  markupDiscountRate={channel.markup_discount_rate}
                 />
               ) : null}
             </div>
@@ -1731,6 +1750,8 @@ const ModelChannelList = ({
                         t={t}
                         blurPricing={blurPricing}
                         isCostPrice
+                        priceDiscountPercent={channel.price_discount_percent}
+                        markupDiscountRate={channel.markup_discount_rate}
                       />
                     ) : null}
                     {costInfo.imageHint ? (
@@ -1741,6 +1762,8 @@ const ModelChannelList = ({
                         t={t}
                         blurPricing={blurPricing}
                         isCostPrice
+                        priceDiscountPercent={channel.price_discount_percent}
+                        markupDiscountRate={channel.markup_discount_rate}
                       />
                     ) : null}
                   </div>

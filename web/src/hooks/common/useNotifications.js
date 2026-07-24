@@ -17,78 +17,83 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+
+const ANNOUNCEMENT_READ_STORAGE_KEY = 'notice_read_keys';
+export const ANNOUNCEMENT_READ_EVENT = 'announcement-read-state-changed';
+
+export const getAnnouncementKey = (announcement) =>
+  `${announcement?.publishDate || ''}-${(announcement?.content || '').slice(0, 30)}`;
+
+const readStoredKeys = () => {
+  try {
+    const keys = JSON.parse(
+      localStorage.getItem(ANNOUNCEMENT_READ_STORAGE_KEY) || '[]',
+    );
+    return Array.isArray(keys) ? keys : [];
+  } catch (_) {
+    return [];
+  }
+};
+
+export const markAnnouncementKeysRead = (keys) => {
+  const nextKeys = keys.filter(Boolean);
+  if (nextKeys.length === 0) {
+    return;
+  }
+  const mergedKeys = Array.from(new Set([...readStoredKeys(), ...nextKeys]));
+  localStorage.setItem(
+    ANNOUNCEMENT_READ_STORAGE_KEY,
+    JSON.stringify(mergedKeys),
+  );
+  window.dispatchEvent(new Event(ANNOUNCEMENT_READ_EVENT));
+};
 
 export const useNotifications = (statusState) => {
-  const [noticeVisible, setNoticeVisible] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [readVersion, setReadVersion] = useState(0);
+  const announcements = useMemo(
+    () => statusState?.status?.announcements || [],
+    [statusState?.status?.announcements],
+  );
 
-  const announcements = statusState?.status?.announcements || [];
-
-  // Helper functions
-  const getAnnouncementKey = (a) =>
-    `${a?.publishDate || ''}-${(a?.content || '').slice(0, 30)}`;
-
-  const calculateUnreadCount = () => {
-    if (!announcements.length) return 0;
-    let readKeys = [];
-    try {
-      readKeys = JSON.parse(localStorage.getItem('notice_read_keys')) || [];
-    } catch (_) {
-      readKeys = [];
-    }
-    const readSet = new Set(readKeys);
-    return announcements.filter((a) => !readSet.has(getAnnouncementKey(a)))
-      .length;
-  };
-
-  const getUnreadKeys = () => {
-    if (!announcements.length) return [];
-    let readKeys = [];
-    try {
-      readKeys = JSON.parse(localStorage.getItem('notice_read_keys')) || [];
-    } catch (_) {
-      readKeys = [];
-    }
-    const readSet = new Set(readKeys);
+  const unreadKeys = useMemo(() => {
+    const readSet = new Set(readStoredKeys());
     return announcements
-      .filter((a) => !readSet.has(getAnnouncementKey(a)))
-      .map(getAnnouncementKey);
-  };
+      .map(getAnnouncementKey)
+      .filter((key) => !readSet.has(key));
+  }, [announcements, readVersion]);
 
-  // Effects
+  const refreshUnreadCount = useCallback(() => {
+    setReadVersion((version) => version + 1);
+  }, []);
+
+  const markAnnouncementsRead = useCallback((items) => {
+    markAnnouncementKeysRead(items.map(getAnnouncementKey));
+  }, []);
+
   useEffect(() => {
-    setUnreadCount(calculateUnreadCount());
-  }, [announcements]);
-
-  // Actions
-  const handleNoticeOpen = () => {
-    setNoticeVisible(true);
-  };
-
-  const handleNoticeClose = () => {
-    setNoticeVisible(false);
-    if (announcements.length) {
-      let readKeys = [];
-      try {
-        readKeys = JSON.parse(localStorage.getItem('notice_read_keys')) || [];
-      } catch (_) {
-        readKeys = [];
+    const handleReadStateChanged = () => refreshUnreadCount();
+    const handleStorage = (event) => {
+      if (event.key === ANNOUNCEMENT_READ_STORAGE_KEY) {
+        refreshUnreadCount();
       }
-      const mergedKeys = Array.from(
-        new Set([...readKeys, ...announcements.map(getAnnouncementKey)]),
+    };
+    window.addEventListener(ANNOUNCEMENT_READ_EVENT, handleReadStateChanged);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener(
+        ANNOUNCEMENT_READ_EVENT,
+        handleReadStateChanged,
       );
-      localStorage.setItem('notice_read_keys', JSON.stringify(mergedKeys));
-    }
-    setUnreadCount(0);
-  };
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [refreshUnreadCount]);
 
   return {
-    noticeVisible,
-    unreadCount,
     announcements,
-    handleNoticeOpen,
-    handleNoticeClose,
-    getUnreadKeys,
+    unreadCount: unreadKeys.length,
+    unreadKeys,
+    markAnnouncementsRead,
+    refreshUnreadCount,
   };
 };

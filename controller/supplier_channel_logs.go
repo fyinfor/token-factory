@@ -125,6 +125,6 @@ func ExportSupplierChannelLogs(c *gin.Context) {
 	}
 
 	dict := resolveSupplierChannelLogExportDict(query.Lang)
-	filename := fmt.Sprintf("supplier-channel-logs-%d.csv", time.Now().Unix())
-	streamSupplierChannelLogsCSV(c, logs, query, filename, dict)
+	filename := fmt.Sprintf("supplier-channel-logs-%d.xlsx", time.Now().Unix())
+	streamSupplierChannelLogsXLSX(c, logs, query, filename, dict)
 }

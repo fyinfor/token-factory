@@ -269,6 +269,7 @@ const SettingsQuickSearch = ({ userState }) => {
       </button>
 
       <Modal
+        className='settings-quick-search-modal'
         title={t('功能快捷搜索')}
         visible={visible}
         onCancel={closeModal}

@@ -87,6 +87,7 @@ import {
   laneToImagePerImageFamily,
 } from '../../constants/imagePerImageHintI18n';
 import { isTopHotModel } from '../../utils/modelHeat';
+import { formatPriceRatioFromDiscount } from '../../utils/discount';
 import PricingCardSkeleton from './PricingCardSkeleton';
 import ModelPerfCardSection from '../../components/ModelPerfCardSection';
 import { useMinimumLoadingTime } from '../../../../../hooks/common/useMinimumLoadingTime';
@@ -420,7 +421,7 @@ const renderDiscountCell = (discount) => {
           border: 'none',
         }}
       >
-        -{discount}%
+        {formatPriceRatioFromDiscount(discount)}
       </Tag>
     );
   }
@@ -1330,7 +1331,7 @@ const PricingCardView = ({
                     border: 'none',
                   }}
                 >
-                  -{item.original.discount}%
+                  {formatPriceRatioFromDiscount(item.original.discount)}
                 </Tag>
                 <span>
                   <span style={{ color: 'var(--semi-color-warning)' }}>
@@ -1453,10 +1454,7 @@ const PricingCardView = ({
 
   const formatDiscountBadge = (discount) => {
     if (!(discount > 0)) return '';
-    const folded = Math.max(0, (100 - Number(discount)) / 10);
-    const text =
-      folded % 1 === 0 ? String(folded.toFixed(0)) : folded.toFixed(1);
-    return `${text}${t('折')}`;
+    return formatPriceRatioFromDiscount(discount);
   };
 
   const getPrimarySupplierType = (model) => {
@@ -2702,7 +2700,9 @@ const PricingCardView = ({
                                               border: 'none',
                                             }}
                                           >
-                                            -{item.original.discount}%
+                                            {formatPriceRatioFromDiscount(
+                                              item.original.discount,
+                                            )}
                                           </Tag>
                                           <span>
                                             <span

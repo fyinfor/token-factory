@@ -50,7 +50,7 @@ import {
   IconCopy,
   IconHelpCircle,
 } from '@douyinfe/semi-icons';
-import { API } from '../../../../../helpers';
+import { API, copy } from '../../../../../helpers';
 import { StatusContext } from '../../../../../context/Status';
 import { fetchTokenKey, getServerAddress } from '../../../../../helpers/token';
 import { useIsMobile } from '../../../../../hooks/common/useIsMobile';
@@ -442,11 +442,12 @@ const CodeBlock = ({ content, language = 'json', t }) => {
     }
     return hljs.highlight(content, { language: normalizedLanguage }).value;
   }, [content, normalizedLanguage]);
-  const handleCopy = () => {
-    navigator.clipboard
-      .writeText(content)
-      .then(() => Toast.success({ content: t('已复制') }))
-      .catch(() => Toast.error({ content: t('复制失败') }));
+  const handleCopy = async () => {
+    if (await copy(content)) {
+      Toast.success({ content: t('已复制') });
+    } else {
+      Toast.error({ content: t('复制失败') });
+    }
   };
   return (
     <div className='api-docs-code-block relative overflow-hidden rounded-lg'>
