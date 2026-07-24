@@ -27,6 +27,7 @@ import HeaderLogo from './HeaderLogo';
 import MobileSiteNavDropdown from './MobileSiteNavDropdown';
 import Navigation from './Navigation';
 import ActionButtons from './ActionButtons';
+import SettingsQuickSearch from './SettingsQuickSearch';
 
 const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
   const {
@@ -125,6 +126,8 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
               userState={userState}
               pricingRequireAuth={pricingRequireAuth}
             />
+
+            <SettingsQuickSearch userState={userState} />
 
             <ActionButtons
               isNewYear={isNewYear}

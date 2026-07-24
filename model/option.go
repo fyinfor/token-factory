@@ -252,6 +252,7 @@ func InitOptionMap() {
 	common.OptionMap["AliyunGuardrailInputEnabled"] = strconv.FormatBool(setting.AliyunGuardrailInputEnabled)
 	common.OptionMap["AliyunGuardrailOutputEnabled"] = strconv.FormatBool(setting.AliyunGuardrailOutputEnabled)
 	common.OptionMap["AliyunGuardrailVideoEnabled"] = strconv.FormatBool(setting.AliyunGuardrailVideoEnabled)
+	common.OptionMap["AliyunGuardrailHidePlaygroundMediaTabs"] = strconv.FormatBool(setting.AliyunGuardrailHidePlaygroundMediaTabs)
 	common.OptionMap["AliyunGuardrailAccessKeyID"] = setting.AliyunGuardrailAccessKeyID
 	common.OptionMap["AliyunGuardrailAccessKeySecret"] = setting.AliyunGuardrailAccessKeySecret
 	common.OptionMap["AliyunGuardrailRegionID"] = setting.AliyunGuardrailRegionID
@@ -482,6 +483,8 @@ func updateOptionMap(key string, value string) (err error) {
 			setting.AliyunGuardrailOutputEnabled = boolValue
 		case "AliyunGuardrailVideoEnabled":
 			setting.AliyunGuardrailVideoEnabled = boolValue
+		case "AliyunGuardrailHidePlaygroundMediaTabs":
+			setting.AliyunGuardrailHidePlaygroundMediaTabs = boolValue
 		case "DemoSiteEnabled":
 			operation_setting.DemoSiteEnabled = boolValue
 		case "SelfUseModeEnabled":

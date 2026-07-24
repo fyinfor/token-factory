@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Button,
   Card,
@@ -239,6 +239,7 @@ const SettingsPanel = ({
   previewPayload,
   messages,
   userId,
+  hideMediaTabs = false,
 }) => {
   const { t } = useTranslation();
 
@@ -293,13 +294,31 @@ const SettingsPanel = ({
   const showGenerateAudioSwitch = isVideoMode;
   const preferredSection = getDefaultSection(displayMode, customRequestMode);
   const [activeSection, setActiveSection] = useState(preferredSection);
+  const previousDisplayModeRef = useRef(displayMode);
 
   useEffect(() => {
-    setActiveSection(preferredSection);
-  }, [preferredSection]);
+    if (customRequestMode) {
+      setActiveSection(SECTION_KEYS.ADVANCED);
+      previousDisplayModeRef.current = displayMode;
+      return;
+    }
+    if (previousDisplayModeRef.current !== displayMode) {
+      setActiveSection(SECTION_KEYS.BASIC);
+      previousDisplayModeRef.current = displayMode;
+    }
+  }, [customRequestMode, displayMode]);
 
   const sectionTabs = useMemo(() => buildSectionTabs(t), [t]);
   const aspectRatioOptions = useMemo(() => buildAspectRatioOptions(t), [t]);
+  const displayModeTabs = useMemo(
+    () =>
+      [
+        { label: t('文本'), value: 'text' },
+        { label: t('图片'), value: 'image' },
+        { label: t('视频'), value: 'video' },
+      ].filter((mode) => !hideMediaTabs || mode.value === 'text'),
+    [hideMediaTabs, t],
+  );
 
   const applyVideoResolutionPreset = (preset) => {
     onInputChange('video_resolution_preset', preset);
@@ -789,16 +808,11 @@ const SettingsPanel = ({
         </div>
 
         <div className='playground-display-mode-tabs'>
-          {[
-            { label: t('文本'), value: 'text' },
-            { label: t('图片'), value: 'image' },
-            { label: t('视频'), value: 'video' },
-          ].map((mode) => (
+          {displayModeTabs.map((mode) => (
             <DisplayModeTab
               key={mode.value}
               label={mode.label}
               active={displayMode === mode.value}
-              disabled={customRequestMode}
               onClick={() => onInputChange('display_mode', mode.value)}
             />
           ))}

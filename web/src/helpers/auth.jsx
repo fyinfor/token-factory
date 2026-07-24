@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 
 import React from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
+import { USER_ROLES } from '../constants/user.constants';
 import { history } from './history';
 import { userIsDistributorUser } from './utils';
 
@@ -118,6 +119,22 @@ export function AdminRoute({ children }) {
   try {
     const user = JSON.parse(raw);
     if (user && typeof user.role === 'number' && user.role >= 10) {
+      return children;
+    }
+  } catch (e) {
+    // ignore
+  }
+  return <Navigate to='/forbidden' replace />;
+}
+
+export function RootRoute({ children }) {
+  const raw = localStorage.getItem('user');
+  if (!raw) {
+    return <Navigate to='/login' state={{ from: history.location }} />;
+  }
+  try {
+    const user = JSON.parse(raw);
+    if (user && Number(user.role) >= USER_ROLES.ROOT) {
       return children;
     }
   } catch (e) {
