@@ -210,7 +210,7 @@ const RoutePolicyCard = ({ t }) => {
       const { data } = res;
       if (data.success !== false) {
         setMode(data.mode ?? '');
-        setGlobalMode(data.global_mode ?? 'default');
+        setGlobalMode(data.global_mode ?? 'price');
         setGroups(data.groups ?? []);
         setUserOverrides(data.user_overrides ?? []);
         setGlobalOverrides(data.global_overrides ?? []);

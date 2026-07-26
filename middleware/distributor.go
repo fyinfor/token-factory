@@ -108,12 +108,14 @@ func Distribute() func(c *gin.Context) {
 			// 若该渠道来自 TokenFactoryOpen 同步，则将 n 解释为上游 channel_no（c<n>）强制路由。
 			if strings.HasPrefix(c.Request.URL.Path, "/pg/chat/completions") {
 				if _, hasForced := common.GetContextKey(c, constant.ContextKeyForcedChannelID); !hasForced {
-					otherInfo := channel.GetOtherInfo()
-					if source, _ := otherInfo["source"].(string); source == "tokenfactory_open" {
-						if parsedModel, upstreamChannelNo, ok := parsePlaygroundTFOpenUpstreamRoute(modelRequest.Model); ok {
-							modelRequest.Model = parsedModel
-							common.SetContextKey(c, constant.ContextKeyTFOpenUpstreamChannelNoOverride, upstreamChannelNo)
-							_ = rewriteRequestModelField(c, parsedModel)
+					if _, hasPreferred := common.GetContextKey(c, constant.ContextKeyPreferredChannelID); !hasPreferred {
+						otherInfo := channel.GetOtherInfo()
+						if source, _ := otherInfo["source"].(string); source == "tokenfactory_open" {
+							if parsedModel, upstreamChannelNo, ok := parsePlaygroundTFOpenUpstreamRoute(modelRequest.Model); ok {
+								modelRequest.Model = parsedModel
+								common.SetContextKey(c, constant.ContextKeyTFOpenUpstreamChannelNoOverride, upstreamChannelNo)
+								_ = rewriteRequestModelField(c, parsedModel)
+							}
 						}
 					}
 				}
@@ -155,8 +157,7 @@ func Distribute() func(c *gin.Context) {
 					return
 				}
 
-				// 命中「指定渠道直连」：跳过所有自动路由（亲和/SmartRouter/随机）直接使用，
-				// 并同步写入 specific_channel_id，以便 controller.shouldRetry 关闭自动重试。
+				// 命中「指定渠道直连」（{alias}/{model}/cN）：跳过所有自动路由，失败不切换渠道。
 				if rawForced, hasForced := common.GetContextKey(c, constant.ContextKeyForcedChannelID); hasForced {
 					if forcedID, fok := rawForced.(int); fok && forcedID > 0 {
 						forcedChannel, ferr := model.CacheGetChannel(forcedID)
@@ -172,6 +173,34 @@ func Distribute() func(c *gin.Context) {
 						channel = forcedChannel
 						common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
 						logSelectedUpstream(c, channel, modelRequest.Model)
+						SetupContextForSelectedChannel(c, channel, modelRequest.Model)
+						proceedRelayWithChannel(c, channel, modelRequest.Model)
+						return
+					}
+				}
+
+				// 命中「route_slug 偏好渠道」（{model}/{route_slug}）：首跳优先该渠道；
+				// 同时写入同模型智能路由有序候选，失败后可按价格/权重保底重试。
+				if rawPref, hasPref := common.GetContextKey(c, constant.ContextKeyPreferredChannelID); hasPref {
+					if preferredID, pok := rawPref.(int); pok && preferredID > 0 {
+						preferredChannel, perr := model.CacheGetChannel(preferredID)
+						if perr != nil || preferredChannel == nil {
+							abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidChannelId))
+							return
+						}
+						if preferredChannel.Status != common.ChannelStatusEnabled {
+							abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorChannelDisabled))
+							return
+						}
+						usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
+						ordered := service.BuildPreferredChannelFailoverOrder(c, modelRequest.Model, usingGroup, preferredID)
+						if len(ordered) == 0 {
+							ordered = []int{preferredID}
+						}
+						common.SetContextKey(c, constant.ContextKeySmartRouteChannelOrder, ordered)
+						channel = preferredChannel
+						common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
+						logSelectedUpstream(c, channel, modelRequest.Model, "route_slug_preferred")
 						SetupContextForSelectedChannel(c, channel, modelRequest.Model)
 						proceedRelayWithChannel(c, channel, modelRequest.Model)
 						return
@@ -775,36 +804,9 @@ func extractModelNameFromGeminiPath(path string) string {
 func tryTokenFactoryRoute(c *gin.Context, modelName string, group string) (*model.Channel, bool) {
 	userID := c.GetInt("id")
 
-	channelIDs := model.GetGroupEnabledChannelIDs(group, modelName)
-	if len(channelIDs) == 0 {
-		logger.LogInfo(c, fmt.Sprintf("local_route skip: no enabled channels for model=%s group=%s", modelName, group))
-		return nil, false
-	}
-
-	var candidates []service.RouteChannelCandidate
-	seen := make(map[int]bool)
-	for _, cid := range channelIDs {
-		if seen[cid] {
-			continue
-		}
-		seen[cid] = true
-		ch, err := model.CacheGetChannel(cid)
-		if err != nil || ch == nil || ch.Status != common.ChannelStatusEnabled {
-			continue
-		}
-		candidates = append(candidates, service.RouteChannelCandidate{
-			ChannelID:    ch.Id,
-			ChannelName:  ch.Name,
-			Priority:     int(ch.GetPriority()),
-			Weight:       ch.GetWeight(),
-			Status:       ch.Status,
-			ProviderSlug: strings.ToLower(strings.TrimSpace(ch.SupplierType)),
-			Price:        service.ResolveChannelModelUnitPrice(ch, modelName),
-			Healthy:      true,
-		})
-	}
-
+	candidates := service.CollectSameModelRouteCandidates(group, modelName)
 	if len(candidates) == 0 {
+		logger.LogInfo(c, fmt.Sprintf("local_route skip: no enabled channels for model=%s group=%s", modelName, group))
 		return nil, false
 	}
 

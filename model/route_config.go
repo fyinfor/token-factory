@@ -30,22 +30,40 @@ type RouteConfig struct {
 	ID        uint      `gorm:"primarykey" json:"id"`
 	UpdatedAt time.Time `json:"updated_at"`
 	// Mode 当前全局路由模式：default|weight|price|performance|price_perf。
-	Mode string `gorm:"size:32;default:'default'" json:"mode"`
+	// 系统默认价格优先：未配置用户按最终单价升序调度。
+	Mode string `gorm:"size:32;default:'price'" json:"mode"`
 	// PricePerfRatio 价格/性能占比（0-100，占位字段）。
 	PricePerfRatio int `gorm:"default:50" json:"price_perf_ratio"`
 }
 
-// GetRouteConfig 读取全局路由配置；不存在时以 default 模式初始化。
+// GetRouteConfig 读取全局路由配置；不存在时以价格优先模式初始化。
 func GetRouteConfig() RouteConfig {
 	var cfg RouteConfig
 	if err := DB.First(&cfg, 1).Error; err != nil {
-		cfg = RouteConfig{ID: 1, Mode: RouteModeDefault, PricePerfRatio: 50}
+		cfg = RouteConfig{ID: 1, Mode: RouteModePrice, PricePerfRatio: 50}
 		_ = DB.Create(&cfg).Error
 	}
 	if cfg.Mode == "" {
-		cfg.Mode = RouteModeDefault
+		cfg.Mode = RouteModePrice
 	}
 	return cfg
+}
+
+// EnsureDefaultRouteModePrice 将全局默认路由改为价格优先，并让仍为「默认/空」的用户跟随全局。
+// 幂等：已显式配置 weight/price 的用户不受影响。
+func EnsureDefaultRouteModePrice() error {
+	if DB == nil {
+		return nil
+	}
+	if err := DB.Model(&RouteConfig{}).
+		Where("id = ? AND (mode = ? OR mode = ? OR mode IS NULL)", 1, RouteModeDefault, "").
+		Update("mode", RouteModePrice).Error; err != nil {
+		return err
+	}
+	// 用户曾选「默认（原生）」的，改为空串以跟随新的全局价格优先。
+	return DB.Model(&UserRouteConfig{}).
+		Where("mode = ?", RouteModeDefault).
+		Update("mode", "").Error
 }
 
 // SaveRouteConfig 更新全局路由配置（单例 upsert）。
