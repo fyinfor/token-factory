@@ -74,7 +74,7 @@ func SelectChannelFromTF(jwtToken string, model string, group string, userID int
 
 	client, err := GetTFRouteClient()
 	if err != nil {
-		logger.LogError(nil, "TFRouteClient init failed: "+err.Error())
+		logger.LogError(context.Background(), "TFRouteClient init failed: "+err.Error())
 		return nil, "", "", true, err
 	}
 
@@ -95,7 +95,7 @@ func SelectChannelFromTF(jwtToken string, model string, group string, userID int
 
 	resp, err := client.client.SelectChannel(ctx, req)
 	if err != nil {
-		logger.LogError(nil, fmt.Sprintf("TFRouteService.SelectChannel failed: %v", err))
+		logger.LogError(ctx, fmt.Sprintf("TFRouteService.SelectChannel failed: %v", err))
 		return nil, "", "", true, err
 	}
 
