@@ -382,6 +382,9 @@ func migrateDB() error {
 	if err := migrateMaterialGroupType(); err != nil {
 		common.SysError("material group type backfill: " + err.Error())
 	}
+	if err := EnsureDefaultRouteModePrice(); err != nil {
+		common.SysError("ensure default route mode price: " + err.Error())
+	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
 			return err

@@ -424,8 +424,9 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 			}
 		}
 	}
-	// playground specific_channel_id / 强制渠道路由：仅允许首轮命中已选渠道，
+	// playground specific_channel_id / 硬指定渠道路由（{alias}/{model}/cN）：仅允许首轮命中已选渠道，
 	// 禁止在重试阶段切换到 smart-route 或随机候选池。
+	// 注意：{model}/{route_slug} 使用 PreferredChannelID + 有序候选，允许保底切换。
 	if retryParam.GetRetry() > 0 {
 		if _, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId); ok {
 			return nil, types.NewError(
@@ -495,7 +496,8 @@ func shouldRetry(c *gin.Context, openaiErr *types.TokenFactoryError, retryTimes 
 	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
 		return false
 	}
-	// 明确指定渠道（playground specific_channel_id / 强制路由）时，不允许重试切换渠道。
+	// 明确指定渠道（playground specific_channel_id / {alias}/{model}/cN 硬指定）时，不允许重试切换渠道。
+	// {model}/{route_slug} 偏好渠道走有序候选保底，不在此拦截。
 	if _, ok := c.Get("specific_channel_id"); ok {
 		return false
 	}

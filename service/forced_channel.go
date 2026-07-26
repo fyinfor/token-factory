@@ -221,10 +221,10 @@ func ParseModelRouteIndex(raw string) (*ModelRouteResult, bool, error) {
 	}, true, nil
 }
 
-// ApplyModelRouteOnRequestBody 写入强制渠道 ID 上下文并把真实模型名写回请求体。
-// 语义同 ApplyForcedChannelOnRequestBody，用于 {model}/{route_slug} 路由格式。
+// ApplyModelRouteOnRequestBody 写入「偏好渠道」上下文并把真实模型名写回请求体。
+// 与硬指定 ForcedChannel 不同：route_slug 仅优先该渠道，失败后可按同模型智能路由保底重试。
 func ApplyModelRouteOnRequestBody(c *gin.Context, result *ModelRouteResult, originalModel string) error {
-	common.SetContextKey(c, constant.ContextKeyForcedChannelID, result.ChannelID)
+	common.SetContextKey(c, constant.ContextKeyPreferredChannelID, result.ChannelID)
 	common.SetContextKey(c, constant.ContextKeyForcedChannelModelKey, originalModel)
 	return rewriteRequestModelField(c, result.ModelName)
 }
