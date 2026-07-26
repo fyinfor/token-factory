@@ -71,6 +71,9 @@ func Distribute() func(c *gin.Context) {
 						return
 					}
 					modelRequest.Model = indexRoute.ModelName
+					if indexRoute.ChannelID <= 0 {
+						logger.LogInfo(c, fmt.Sprintf("route_slug=%s unavailable or disabled, stripped to model=%s for same-model smart route", indexRoute.RouteSlug, indexRoute.ModelName))
+					}
 				} else {
 					// 未命中以上两种格式时再尝试两段形式（{alias}/{model}）。
 					supplierRoute, supplierMatched, supplierErr := service.ParseForcedSupplierModelName(modelRequest.Model)
@@ -181,29 +184,28 @@ func Distribute() func(c *gin.Context) {
 
 				// 命中「route_slug 偏好渠道」（{model}/{route_slug}）：首跳优先该渠道；
 				// 同时写入同模型智能路由有序候选，失败后可按价格/权重保底重试。
+				// 偏好渠道已关闭/不存在时：清除偏好，落入下方同模型智能路由（模型名已剥后缀）。
 				if rawPref, hasPref := common.GetContextKey(c, constant.ContextKeyPreferredChannelID); hasPref {
 					if preferredID, pok := rawPref.(int); pok && preferredID > 0 {
 						preferredChannel, perr := model.CacheGetChannel(preferredID)
-						if perr != nil || preferredChannel == nil {
-							abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidChannelId))
+						preferOK := perr == nil && preferredChannel != nil && preferredChannel.Status == common.ChannelStatusEnabled
+						if !preferOK {
+							logger.LogInfo(c, fmt.Sprintf("route_slug preferred channel unavailable (id=%d), fallback to same-model smart route for model=%s", preferredID, modelRequest.Model))
+							common.SetContextKey(c, constant.ContextKeyPreferredChannelID, 0)
+						} else {
+							usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
+							ordered := service.BuildPreferredChannelFailoverOrder(c, modelRequest.Model, usingGroup, preferredID)
+							if len(ordered) == 0 {
+								ordered = []int{preferredID}
+							}
+							common.SetContextKey(c, constant.ContextKeySmartRouteChannelOrder, ordered)
+							channel = preferredChannel
+							common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
+							logSelectedUpstream(c, channel, modelRequest.Model, "route_slug_preferred")
+							SetupContextForSelectedChannel(c, channel, modelRequest.Model)
+							proceedRelayWithChannel(c, channel, modelRequest.Model)
 							return
 						}
-						if preferredChannel.Status != common.ChannelStatusEnabled {
-							abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorChannelDisabled))
-							return
-						}
-						usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
-						ordered := service.BuildPreferredChannelFailoverOrder(c, modelRequest.Model, usingGroup, preferredID)
-						if len(ordered) == 0 {
-							ordered = []int{preferredID}
-						}
-						common.SetContextKey(c, constant.ContextKeySmartRouteChannelOrder, ordered)
-						channel = preferredChannel
-						common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
-						logSelectedUpstream(c, channel, modelRequest.Model, "route_slug_preferred")
-						SetupContextForSelectedChannel(c, channel, modelRequest.Model)
-						proceedRelayWithChannel(c, channel, modelRequest.Model)
-						return
 					}
 				}
 

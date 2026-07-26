@@ -520,6 +520,10 @@ func shouldRetry(c *gin.Context, openaiErr *types.TokenFactoryError, retryTimes 
 	if code >= 200 && code < 300 {
 		return false
 	}
+	// 有序智能路由尚有未尝试渠道时：4xx/5xx（含 400/408/504/524）一律切换，优先保证可用性。
+	if code >= 400 && code <= 599 && service.HasUnusedOrderedRouteChannel(c) {
+		return true
+	}
 	if code < 100 || code > 599 {
 		return true
 	}
@@ -847,31 +851,22 @@ func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError,
 	if _, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId); ok {
 		return false
 	}
-	if taskErr.StatusCode == http.StatusTooManyRequests {
-		return true
-	}
-	if taskErr.StatusCode == 307 {
-		return true
-	}
-	if taskErr.StatusCode/100 == 5 {
-		// 超时不重试
-		if operation_setting.IsAlwaysSkipRetryStatusCode(taskErr.StatusCode) {
-			return false
-		}
-		return true
-	}
-	if taskErr.StatusCode == http.StatusBadRequest {
-		return false
-	}
-	if taskErr.StatusCode == 408 {
-		// azure处理超时不重试
-		return false
-	}
 	if taskErr.LocalError {
 		return false
 	}
-	if taskErr.StatusCode/100 == 2 {
+	code := taskErr.StatusCode
+	if code >= 200 && code < 300 {
 		return false
 	}
-	return true
+	// 与聊天中继一致：默认对完整 4xx/5xx 切渠道，优先可用性。
+	if code >= 400 && code <= 599 {
+		return operation_setting.ShouldRetryByStatusCode(code)
+	}
+	if code == 307 || code == http.StatusTooManyRequests {
+		return true
+	}
+	if code < 100 || code > 599 {
+		return true
+	}
+	return operation_setting.ShouldRetryByStatusCode(code)
 }

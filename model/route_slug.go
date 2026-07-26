@@ -38,13 +38,8 @@ func IsValidRouteSlug(s string) bool {
 // ResolveChannelIDByRouteSlugAndModel 按 route_slug 查找已启用渠道，并校验 models 列表包含 modelName。
 // 未命中、已禁用或模型不在列表中时返回 0（供分发器静默降级为普通路由）。
 func ResolveChannelIDByRouteSlugAndModel(slug, modelName string) int {
-	slug = strings.TrimSpace(slug)
-	if slug == "" || !IsValidRouteSlug(slug) {
-		return 0
-	}
-	var ch Channel
-	err := DB.Select("id", "models", "status").Where("route_slug = ?", slug).First(&ch).Error
-	if err != nil {
+	ch := LookupChannelByRouteSlug(slug)
+	if ch == nil {
 		return 0
 	}
 	if ch.Status != common.ChannelStatusEnabled {
@@ -54,6 +49,20 @@ func ResolveChannelIDByRouteSlugAndModel(slug, modelName string) int {
 		return 0
 	}
 	return ch.Id
+}
+
+// LookupChannelByRouteSlug 按 route_slug 查找渠道（不限启用状态）；未找到返回 nil。
+func LookupChannelByRouteSlug(slug string) *Channel {
+	slug = strings.TrimSpace(slug)
+	if slug == "" || !IsValidRouteSlug(slug) {
+		return nil
+	}
+	var ch Channel
+	err := DB.Select("id", "models", "status", "route_slug").Where("route_slug = ?", slug).First(&ch).Error
+	if err != nil {
+		return nil
+	}
+	return &ch
 }
 
 // GetRouteSlugsByChannelIDs 批量返回 channel_id → route_slug（定价等场景）。
