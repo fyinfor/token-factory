@@ -75,6 +75,29 @@ func GetEnabledModels() []string {
 	return models
 }
 
+// ModelHasAnyEnabledAbility 判断系统中是否存在该模型名的启用 ability（用于 route_slug 剥后缀保底）。
+func ModelHasAnyEnabledAbility(modelName string) bool {
+	modelName = strings.TrimSpace(modelName)
+	if modelName == "" || DB == nil {
+		return false
+	}
+	var cnt int64
+	if err := DB.Model(&Ability{}).Where("model = ? AND enabled = ?", modelName, true).Limit(1).Count(&cnt).Error; err != nil {
+		return false
+	}
+	if cnt > 0 {
+		return true
+	}
+	normalized := ratio_setting.FormatMatchingModelName(modelName)
+	if normalized == "" || normalized == modelName {
+		return false
+	}
+	if err := DB.Model(&Ability{}).Where("model = ? AND enabled = ?", normalized, true).Limit(1).Count(&cnt).Error; err != nil {
+		return false
+	}
+	return cnt > 0
+}
+
 func GetAllEnableAbilities() []Ability {
 	var abilities []Ability
 	DB.Find(&abilities, "enabled = ?", true)

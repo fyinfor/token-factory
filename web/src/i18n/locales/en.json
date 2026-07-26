@@ -5310,7 +5310,7 @@
     "支持搜索用户的 ID、用户名、显示名称、邮箱和备注": "Search user ID, username, display name, email, or remark",
     "支持搜索用户的 ID、用户名、显示名称和邮箱地址": "Support searching for user ID, username, display name, and email address",
     "支持填写单个状态码或范围（含首尾），使用逗号分隔": "Supports single status codes or inclusive ranges; separate with commas",
-    "支持填写单个状态码或范围（含首尾），使用逗号分隔；504 和 524 始终不重试，不受此处配置影响": "Supports single status codes or inclusive ranges; separate with commas. 504 and 524 are never retried and are not affected by this setting",
+    "支持填写单个状态码或范围（含首尾），使用逗号分隔；504 和 524 始终不重试，不受此处配置影响": "Supports single status codes or inclusive ranges; separate with commas. Default covers full 4xx/5xx to failover channels for availability",
     "支持通配符格式，如：example.com, *.api.example.com": "Supports wildcard format, e.g.: example.com, *.api.example.com",
     "支持图片或 PDF，最多 5 个；点击图片可大图预览": "Images or PDF, up to 5 files; click an image to enlarge.",
     "支持图片或 PDF；点击图片可大图预览": "Images or PDF supported; click an image to enlarge.",

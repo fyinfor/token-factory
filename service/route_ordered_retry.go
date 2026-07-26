@@ -55,6 +55,26 @@ func UsedChannelIDSet(c *gin.Context) map[int]bool {
 	return used
 }
 
+// HasUnusedOrderedRouteChannel 判断有序智能路由是否仍有未尝试的启用渠道（可用于 4xx/5xx 保底切换）。
+func HasUnusedOrderedRouteChannel(c *gin.Context) bool {
+	order, ok := RouteOrderedChannelIDs(c)
+	if !ok || len(order) == 0 {
+		return false
+	}
+	used := UsedChannelIDSet(c)
+	for _, id := range order {
+		if used[id] {
+			continue
+		}
+		ch, err := model.CacheGetChannel(id)
+		if err != nil || ch == nil || ch.Status != common.ChannelStatusEnabled {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
 // PickNextOrderedRouteChannel 在有序候选中选取下一个「未尝试过且仍启用」的渠道。
 func PickNextOrderedRouteChannel(c *gin.Context, order []int) (*model.Channel, bool) {
 	if len(order) == 0 {
