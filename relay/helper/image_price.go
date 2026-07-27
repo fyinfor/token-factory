@@ -294,15 +294,7 @@ func TryModelPriceHelperImage(c *gin.Context, info *relaycommon.RelayInfo) (type
 		okPrice = glOK
 	}
 	if !okPrice || usdPerImage <= 0 {
-		estimateCtx := estimateImageRequestContext(c, info)
-		currentInvocation := imageCapabilityLabelCN(string(estimateCtx.Mode))
-		idx := collectImageCapabilityPricing(channelID, names)
-		supportedCaps := sortedCapabilityLabelsCN(
-			[]string{capabilityTextToImage, capabilityImageToImage},
-			idx, imageCapabilityLabelCN,
-		)
-		allRes := collectAllDisplayResolutions(idx, []string{capabilityTextToImage, capabilityImageToImage})
-		return types.PriceData{}, false, newModelPriceFriendlyError("图片模型", modelName, currentInvocation, supportedCaps, allRes)
+		return types.PriceData{}, false, ImageModelPriceMatchError(c, channelID, info)
 	}
 
 	count := estimateCtx.Count
@@ -313,14 +305,7 @@ func TryModelPriceHelperImage(c *gin.Context, info *relaycommon.RelayInfo) (type
 
 	priceData, ok := buildImagePerImagePriceData(c, info, channelID, channelUSD, globalUSD, chOK, glOK, channelMatch, globalMatch, usdPerImage, estimateCtx)
 	if !ok {
-		currentInvocation := imageCapabilityLabelCN(string(estimateCtx.Mode))
-		idx := collectImageCapabilityPricing(channelID, names)
-		supportedCaps := sortedCapabilityLabelsCN(
-			[]string{capabilityTextToImage, capabilityImageToImage},
-			idx, imageCapabilityLabelCN,
-		)
-		allRes := collectAllDisplayResolutions(idx, []string{capabilityTextToImage, capabilityImageToImage})
-		return types.PriceData{}, false, newModelPriceFriendlyError("图片模型", modelName, currentInvocation, supportedCaps, allRes)
+		return types.PriceData{}, false, ImageModelPriceMatchError(c, channelID, info)
 	}
 	info.PriceData = priceData
 	return priceData, true, nil
@@ -412,13 +397,15 @@ func buildImagePerImagePriceData(
 		GlobalModelPrice:        globalRuleUSD,
 	}
 	priceData.AddOtherRatio("n", float64(count))
+	fromUpstream := info.ImageBilling != nil && info.ImageBilling.DimensionsFromUpstream
 	info.ImageBilling = &relaycommon.ImageBillingSnapshot{
-		UsdPerImage:     effUsdPerImage,
-		Width:           estimateCtx.Width,
-		Height:          estimateCtx.Height,
-		Count:           count,
-		Mode:            string(estimateCtx.Mode),
-		CappedToMaxTier: selectedMatch != nil && selectedMatch.CappedToMaxTier,
+		UsdPerImage:            effUsdPerImage,
+		Width:                  estimateCtx.Width,
+		Height:                 estimateCtx.Height,
+		Count:                  count,
+		Mode:                   string(estimateCtx.Mode),
+		CappedToMaxTier:        selectedMatch != nil && selectedMatch.CappedToMaxTier,
+		DimensionsFromUpstream: fromUpstream,
 	}
 	if selectedMatch != nil {
 		info.ImageBilling.RuleWidth = selectedMatch.RuleWidth
@@ -533,9 +520,12 @@ func matchFlatPerImageUSDRules(
 	return 0, false, nil
 }
 
-// matchPerImageRulesByPixels picks the closest resolution row. If the image is
-// larger than every configured tier in the current lane, it caps to that lane's
-// highest tier instead of falling back to a generic fixed price.
+// matchPerImageRulesByPixels picks the resolution row for per-image billing.
+// Priority:
+//  1. Exact resolution-tier label match (short-side based, same as validation/display),
+//     so square sizes like 1080x1080 map to 1080p instead of a closer landscape 720p by area.
+//  2. If the image is larger than every configured tier, cap to that lane's highest tier.
+//  3. Otherwise pick the closest row by pixel area within similarity threshold.
 func matchPerImageRulesByPixels(
 	ctx imageEstimateContext,
 	rules []ratio_setting.ImageResolutionPerImageRule,
@@ -555,16 +545,22 @@ func matchPerImageRulesByPixels(
 		}
 		return nil, false
 	}
-	bestIdx := -1
+
+	reqLabel := normalizePricingResolutionLabel(fmt.Sprintf("%dx%d", ctx.Width, ctx.Height))
 	targetPixels := ctx.Width * ctx.Height
+	bestIdx := -1
 	minDiffRatio := math.MaxFloat64
 	maxTierIdx := -1
 	maxTierPixels := 0
+	labelBestIdx := -1
+	labelBestPixels := 0
+	labelBestDiff := math.MaxFloat64
+
 	for i, rule := range rules {
 		if rule.ImagePrice <= 0 {
 			continue
 		}
-		ruleW, ruleH, ok := parseResolution(rule.Resolution)
+		ruleW, ruleH, ok := parseResolutionFlexible(rule.Resolution)
 		if !ok {
 			continue
 		}
@@ -581,6 +577,18 @@ func matchPerImageRulesByPixels(
 			minDiffRatio = diffRatio
 			bestIdx = i
 		}
+		if reqLabel != "" && normalizePricingResolutionLabel(rule.Resolution) == reqLabel {
+			if labelBestIdx < 0 || diffRatio < labelBestDiff ||
+				(diffRatio == labelBestDiff && rulePixels < labelBestPixels) {
+				labelBestIdx = i
+				labelBestPixels = rulePixels
+				labelBestDiff = diffRatio
+			}
+		}
+	}
+	if labelBestIdx >= 0 {
+		match := imagePerImageRuleMatch(rules[labelBestIdx], false)
+		return match, match != nil
 	}
 	if bestIdx < 0 {
 		if hasFallback && fallbackUSD > 0 {
@@ -611,7 +619,7 @@ func imagePerImageRuleMatch(rule ratio_setting.ImageResolutionPerImageRule, capp
 	if rule.ImagePrice <= 0 {
 		return nil
 	}
-	w, h, ok := parseResolution(rule.Resolution)
+	w, h, ok := parseResolutionFlexible(rule.Resolution)
 	if !ok {
 		return nil
 	}

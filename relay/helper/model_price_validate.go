@@ -267,6 +267,8 @@ func formatResolutionList(items []string) string {
 
 // newModelPriceFriendlyError 统一 model_price_error 友好提示。
 // 模板：{模型类型} {模型名称}不支持{当前调用}，仅支持{能力列表}，可用分辨率：{分辨率列表}
+// 当「当前调用」仅是已支持的能力名（如文生图）且已配置分辨率时，避免出现
+// 「不支持文生图，仅支持文生图」这类自相矛盾文案，改为强调分辨率档位未匹配。
 func newModelPriceFriendlyError(modelKind, modelName, currentInvocation string, supportedCaps, resolutions []string) error {
 	currentInvocation = strings.TrimSpace(currentInvocation)
 	if currentInvocation == "" {
@@ -276,12 +278,34 @@ func newModelPriceFriendlyError(modelKind, modelName, currentInvocation string, 
 	if matchName == "" {
 		matchName = strings.TrimSpace(modelName)
 	}
-	msg := fmt.Sprintf("%s %s不支持%s，仅支持%s，可用分辨率：%s",
-		modelKind, matchName, currentInvocation,
-		formatCapabilityList(supportedCaps),
-		formatResolutionList(resolutions),
-	)
+	var msg string
+	if len(resolutions) > 0 && invocationIsSupportedCapabilityOnly(currentInvocation, supportedCaps) {
+		msg = fmt.Sprintf("%s %s无法匹配当前分辨率计费档位，仅支持%s，可用分辨率：%s",
+			modelKind, matchName,
+			formatCapabilityList(supportedCaps),
+			formatResolutionList(resolutions),
+		)
+	} else {
+		msg = fmt.Sprintf("%s %s不支持%s，仅支持%s，可用分辨率：%s",
+			modelKind, matchName, currentInvocation,
+			formatCapabilityList(supportedCaps),
+			formatResolutionList(resolutions),
+		)
+	}
 	return types.NewError(errors.New(msg), types.ErrorCodeModelPriceError, types.ErrOptionWithSkipRetry())
+}
+
+func invocationIsSupportedCapabilityOnly(invocation string, supportedCaps []string) bool {
+	invocation = strings.TrimSpace(invocation)
+	if invocation == "" {
+		return false
+	}
+	for _, cap := range supportedCaps {
+		if strings.TrimSpace(cap) == invocation {
+			return true
+		}
+	}
+	return false
 }
 
 func videoRequestResolutionLabel(c *gin.Context, ctx videoEstimateContext) string {

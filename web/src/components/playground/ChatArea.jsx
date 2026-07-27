@@ -50,6 +50,7 @@ import {
   resolveMessageGeneratedImages,
   stripGeneratedImageMarkdown,
 } from '../../helpers/playgroundImageUtils';
+import { formatPlaygroundPixelSizeLabel } from '../../helpers/videoResolutionLabel';
 import {
   PLAYGROUND_MEDIA_MAX_HEIGHT,
   PLAYGROUND_MEDIA_MAX_WIDTH,
@@ -58,6 +59,29 @@ import {
   PLAYGROUND_DIALOGUE_REFERENCE_IMAGE_MAX_HEIGHT,
 } from '../../constants/playground.constants';
 import { usePlaygroundMediaMaxHeightPx } from '../../hooks/playground/usePlaygroundMediaMaxHeight';
+
+const formatGenerationMetaLabel = (meta) => {
+  if (!meta || typeof meta !== 'object') return '';
+  const model = String(meta.model || '').trim();
+  if (!model) return '';
+  const parts = [model];
+  if (meta.mode === 'image') {
+    const sizeLabel = formatPlaygroundPixelSizeLabel(meta.size);
+    if (sizeLabel) {
+      parts.push(sizeLabel);
+    }
+  } else if (meta.mode === 'video') {
+    const resolution = String(meta.resolution || '').trim();
+    const ratio = String(meta.ratio || '').trim();
+    if (resolution) {
+      parts.push(resolution);
+    }
+    if (ratio && ratio !== 'auto') {
+      parts.push(ratio);
+    }
+  }
+  return parts.join(' · ');
+};
 
 const getConstrainedMediaSize = (
   dimensions,
@@ -274,6 +298,17 @@ const normalizeDialogueContent = (message, assetMap) => {
       video_url: resolvePlaygroundMediaUrl(videoTask.playableUrl, assetMap),
       filename: 'generated-video.mp4',
     });
+  }
+
+  if (role === 'assistant' && message?.generationMeta) {
+    const metaLabel = formatGenerationMetaLabel(message.generationMeta);
+    if (metaLabel) {
+      normalizedContent.push({
+        type: 'playground_generation_meta',
+        text: metaLabel,
+        meta: message.generationMeta,
+      });
+    }
   }
 
   const reasoningContent = reasoningContentRef.value?.trim();
@@ -771,6 +806,22 @@ const ChatArea = ({
               }}
             />
           </div>
+        );
+      },
+      playground_generation_meta: (item) => {
+        const label =
+          typeof item?.text === 'string' && item.text.trim()
+            ? item.text.trim()
+            : formatGenerationMetaLabel(item?.meta);
+        if (!label) return null;
+        return (
+          <Typography.Text
+            type='tertiary'
+            size='small'
+            className='playground-generation-meta mt-1 block text-[12px] leading-5 opacity-75'
+          >
+            {label}
+          </Typography.Text>
         );
       },
     }),
