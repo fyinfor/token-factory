@@ -39,3 +39,13 @@ func TestPickNextOrderedRouteChannelSkipsUsed(t *testing.T) {
 	_, picked := PickNextOrderedRouteChannel(c, order)
 	require.False(t, picked, "should not pick without channel cache/db")
 }
+
+func TestHasUnusedOrderedRouteChannel(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	require.False(t, HasUnusedOrderedRouteChannel(c))
+
+	common.SetContextKey(c, constant.ContextKeySmartRouteChannelOrder, []int{1, 2})
+	c.Set("use_channel", []string{"1", "2"})
+	require.False(t, HasUnusedOrderedRouteChannel(c), "all used -> no unused")
+}

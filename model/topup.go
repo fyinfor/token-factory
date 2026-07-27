@@ -388,6 +388,7 @@ func RechargeStripe(referenceId string, customerId string, paidMoney float64, cu
 }
 
 // topUpStatusFilterQuery 为充值列表查询追加 status 条件；空字符串或非法值不追加。
+// 列名需带表前缀：管理员列表可能 JOIN users，两侧均有 status。
 func topUpStatusFilterQuery(db *gorm.DB, status string) *gorm.DB {
 	s := strings.TrimSpace(strings.ToLower(status))
 	if s == "" {
@@ -395,7 +396,7 @@ func topUpStatusFilterQuery(db *gorm.DB, status string) *gorm.DB {
 	}
 	switch s {
 	case common.TopUpStatusPending, common.TopUpStatusSuccess, common.TopUpStatusFailed, common.TopUpStatusExpired:
-		return db.Where("status = ?", s)
+		return db.Where("top_ups.status = ?", s)
 	default:
 		return db
 	}
@@ -408,7 +409,7 @@ func applyTopUpTradeNoLike(db *gorm.DB, keyword string) *gorm.DB {
 		return db
 	}
 	like := "%%" + kw + "%%"
-	return db.Where("trade_no LIKE ?", like)
+	return db.Where("top_ups.trade_no LIKE ?", like)
 }
 
 // applyTopUpUsernameJoin 管理员全平台列表按用户名模糊筛选：INNER JOIN users（避免 IN 子查询在部分驱动下的兼容问题）。
@@ -491,7 +492,7 @@ func GetAllTopUps(pageInfo *common.PageInfo, statusFilter, tradeNoKeyword, usern
 		return nil, 0, err
 	}
 
-	if err = tx.Model(&TopUp{}).Scopes(allScope).Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&topups).Error; err != nil {
+	if err = tx.Model(&TopUp{}).Scopes(allScope).Order("top_ups.id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&topups).Error; err != nil {
 		tx.Rollback()
 		return nil, 0, err
 	}

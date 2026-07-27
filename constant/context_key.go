@@ -50,9 +50,13 @@ const (
 	ContextKeySmartRouteSelectGroup  ContextKey = "smart_route_select_group"
 
 	// ContextKeyForcedChannelID 当用户通过 {alias}/{model}/{channel_no} 形式指定具体渠道调用时，
-	// 由分发中间件解析后写入该上下文键；存在该键时跳过 SmartRouter 等自动路由逻辑。
+	// 由分发中间件解析后写入该上下文键；存在该键时跳过 SmartRouter 等自动路由逻辑，且失败不切换渠道。
 	ContextKeyForcedChannelID       ContextKey = "forced_channel_id"
 	ContextKeyForcedChannelModelKey ContextKey = "forced_channel_model_key"
+
+	// ContextKeyPreferredChannelID 当用户通过 {model}/{route_slug} 指定偏好渠道时写入。
+	// 首跳优先该渠道；失败后可按同模型智能路由有序候选（价格/权重）保底重试，与硬指定 ForcedChannelID 不同。
+	ContextKeyPreferredChannelID ContextKey = "preferred_channel_id"
 
 	// ContextKeyTFOpenUpstreamChannelRoute 当本地渠道由 TokenFactoryOpen 同步生成、且上游记录了
 	// 有效的 supplier_alias 与 channel_no 时，由 SetupContextForSelectedChannel 写入，

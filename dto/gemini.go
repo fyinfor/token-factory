@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 
@@ -133,14 +134,14 @@ func (r *GeminiChatRequest) GetTools() []GeminiChatTool {
 	if strings.HasPrefix(string(r.Tools), "[") {
 		// is array
 		if err := common.Unmarshal(r.Tools, &tools); err != nil {
-			logger.LogError(nil, "error_unmarshalling_tools: "+err.Error())
+			logger.LogError(context.Background(), "error_unmarshalling_tools: "+err.Error())
 			return nil
 		}
 	} else if strings.HasPrefix(string(r.Tools), "{") {
 		// is object
 		singleTool := GeminiChatTool{}
 		if err := common.Unmarshal(r.Tools, &singleTool); err != nil {
-			logger.LogError(nil, "error_unmarshalling_single_tool: "+err.Error())
+			logger.LogError(context.Background(), "error_unmarshalling_single_tool: "+err.Error())
 			return nil
 		}
 		tools = []GeminiChatTool{singleTool}
@@ -157,7 +158,7 @@ func (r *GeminiChatRequest) SetTools(tools []GeminiChatTool) {
 	// Marshal the tools to JSON
 	data, err := common.Marshal(tools)
 	if err != nil {
-		logger.LogError(nil, "error_marshalling_tools: "+err.Error())
+		logger.LogError(context.Background(), "error_marshalling_tools: "+err.Error())
 		return
 	}
 	r.Tools = data

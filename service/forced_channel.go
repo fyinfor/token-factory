@@ -193,8 +193,10 @@ type ModelRouteResult struct {
 // 解析规则：
 //   - 字符串中至少包含一个 "/"；
 //   - 最后一段须为合法 route_slug（见 model.IsValidRouteSlug），且不能为旧 channel_no 形态 c\d+；
-//   - 去掉最后一段后的部分作为模型名，按 route_slug 查启用渠道并校验 models 列表包含该模型；
-//   - 未命中或渠道禁用或模型不在列表：返回 nil, false, nil（静默降级为普通路由）。
+//   - 命中条件（满足其一即剥后缀）：
+//     1) 存在该 route_slug 的渠道（含已禁用）；或
+//     2) 后缀形态合法且基础模型名在系统中有启用能力（渠道已删除/拼写错误时的可用性保底）；
+//   - 当对应渠道启用且 models 包含该模型时 ChannelID>0（偏好首跳）；否则 ChannelID=0，走同模型智能路由。
 func ParseModelRouteIndex(raw string) (*ModelRouteResult, bool, error) {
 	name := strings.TrimSpace(raw)
 	if name == "" || !strings.Contains(name, "/") {
@@ -210,21 +212,28 @@ func ParseModelRouteIndex(raw string) (*ModelRouteResult, bool, error) {
 		return nil, false, nil
 	}
 
-	channelID := model.ResolveChannelIDByRouteSlugAndModel(potentialSlug, potentialModel)
-	if channelID <= 0 {
+	ch := model.LookupChannelByRouteSlug(potentialSlug)
+	if ch == nil && !model.ModelHasAnyEnabledAbility(potentialModel) {
+		// 既无该后缀渠道、基础模型也不存在 → 不是 route_slug 调用，交由其它解析器（如 alias/model）。
 		return nil, false, nil
 	}
-	return &ModelRouteResult{
-		ModelName:  potentialModel,
-		RouteSlug:  potentialSlug,
-		ChannelID:  channelID,
-	}, true, nil
+
+	result := &ModelRouteResult{
+		ModelName: potentialModel,
+		RouteSlug: potentialSlug,
+	}
+	if ch != nil && ch.Status == common.ChannelStatusEnabled && model.ChannelModelsRawContains(ch.Models, potentialModel) {
+		result.ChannelID = ch.Id
+	}
+	return result, true, nil
 }
 
-// ApplyModelRouteOnRequestBody 写入强制渠道 ID 上下文并把真实模型名写回请求体。
-// 语义同 ApplyForcedChannelOnRequestBody，用于 {model}/{route_slug} 路由格式。
+// ApplyModelRouteOnRequestBody 写入「偏好渠道」上下文（若有）并把真实模型名写回请求体。
+// ChannelID==0 时仅剥后缀，不绑定偏好渠道，后续走同模型智能路由。
 func ApplyModelRouteOnRequestBody(c *gin.Context, result *ModelRouteResult, originalModel string) error {
-	common.SetContextKey(c, constant.ContextKeyForcedChannelID, result.ChannelID)
+	if result.ChannelID > 0 {
+		common.SetContextKey(c, constant.ContextKeyPreferredChannelID, result.ChannelID)
+	}
 	common.SetContextKey(c, constant.ContextKeyForcedChannelModelKey, originalModel)
 	return rewriteRequestModelField(c, result.ModelName)
 }

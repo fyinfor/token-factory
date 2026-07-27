@@ -424,8 +424,9 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 			}
 		}
 	}
-	// playground specific_channel_id / 强制渠道路由：仅允许首轮命中已选渠道，
+	// playground specific_channel_id / 硬指定渠道路由（{alias}/{model}/cN）：仅允许首轮命中已选渠道，
 	// 禁止在重试阶段切换到 smart-route 或随机候选池。
+	// 注意：{model}/{route_slug} 使用 PreferredChannelID + 有序候选，允许保底切换。
 	if retryParam.GetRetry() > 0 {
 		if _, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId); ok {
 			return nil, types.NewError(
@@ -495,7 +496,8 @@ func shouldRetry(c *gin.Context, openaiErr *types.TokenFactoryError, retryTimes 
 	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
 		return false
 	}
-	// 明确指定渠道（playground specific_channel_id / 强制路由）时，不允许重试切换渠道。
+	// 明确指定渠道（playground specific_channel_id / {alias}/{model}/cN 硬指定）时，不允许重试切换渠道。
+	// {model}/{route_slug} 偏好渠道走有序候选保底，不在此拦截。
 	if _, ok := c.Get("specific_channel_id"); ok {
 		return false
 	}
@@ -517,6 +519,10 @@ func shouldRetry(c *gin.Context, openaiErr *types.TokenFactoryError, retryTimes 
 	code := openaiErr.StatusCode
 	if code >= 200 && code < 300 {
 		return false
+	}
+	// 有序智能路由尚有未尝试渠道时：4xx/5xx（含 400/408/504/524）一律切换，优先保证可用性。
+	if code >= 400 && code <= 599 && service.HasUnusedOrderedRouteChannel(c) {
+		return true
 	}
 	if code < 100 || code > 599 {
 		return true
@@ -845,31 +851,22 @@ func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError,
 	if _, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId); ok {
 		return false
 	}
-	if taskErr.StatusCode == http.StatusTooManyRequests {
-		return true
-	}
-	if taskErr.StatusCode == 307 {
-		return true
-	}
-	if taskErr.StatusCode/100 == 5 {
-		// 超时不重试
-		if operation_setting.IsAlwaysSkipRetryStatusCode(taskErr.StatusCode) {
-			return false
-		}
-		return true
-	}
-	if taskErr.StatusCode == http.StatusBadRequest {
-		return false
-	}
-	if taskErr.StatusCode == 408 {
-		// azure处理超时不重试
-		return false
-	}
 	if taskErr.LocalError {
 		return false
 	}
-	if taskErr.StatusCode/100 == 2 {
+	code := taskErr.StatusCode
+	if code >= 200 && code < 300 {
 		return false
 	}
-	return true
+	// 与聊天中继一致：默认对完整 4xx/5xx 切渠道，优先可用性。
+	if code >= 400 && code <= 599 {
+		return operation_setting.ShouldRetryByStatusCode(code)
+	}
+	if code == 307 || code == http.StatusTooManyRequests {
+		return true
+	}
+	if code < 100 || code > 599 {
+		return true
+	}
+	return operation_setting.ShouldRetryByStatusCode(code)
 }
