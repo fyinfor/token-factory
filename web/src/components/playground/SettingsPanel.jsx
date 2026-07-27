@@ -44,8 +44,9 @@ import {
   buildPlaygroundVideoResolutionOptions,
   formatPlaygroundPixelSizeLabel,
   formatVideoResolutionDisplayLabel,
-  getPlaygroundImageSizeForTier,
   getPlaygroundVideoSizeForTier,
+  parsePlaygroundCustomImageSize,
+  resolvePlaygroundImageSize,
   renderGroupOption,
   selectFilter,
 } from '../../helpers';
@@ -267,10 +268,13 @@ const SettingsPanel = ({
   )
     ? inputs.image_size
     : imageSizeOptions[0]?.value || '1280x720';
-  const selectedImagePixelSize = getPlaygroundImageSizeForTier(
-    selectedImageSize,
-    inputs.image_ratio || 'auto',
+  const customImageSize = parsePlaygroundCustomImageSize(
+    inputs.image_custom_size,
   );
+  const selectedImagePixelSize = resolvePlaygroundImageSize({
+    ...inputs,
+    image_size: selectedImageSize,
+  });
   const selectedImageResolutionLabel = formatPlaygroundPixelSizeLabel(
     selectedImagePixelSize.size,
   );
@@ -414,7 +418,7 @@ const SettingsPanel = ({
             optionList={imageSizeOptions}
             value={selectedImageSize}
             onChange={(value) => onInputChange('image_size', value)}
-            disabled={customRequestMode}
+            disabled={customRequestMode || Boolean(customImageSize)}
             style={{ width: '100%' }}
             renderSelectedItem={(option) => (
               <span>
@@ -434,8 +438,16 @@ const SettingsPanel = ({
             onChange={(e) =>
               onInputChange('image_ratio', e?.target?.value || 'auto')
             }
-            disabled={customRequestMode}
+            disabled={customRequestMode || Boolean(customImageSize)}
             className='playground-aspect-ratio-group'
+          />
+        </Field>
+        <Field label={t('自定义尺寸')} className='col-span-2'>
+          <Input
+            placeholder={t('例如 1280x720，填写后优先生效')}
+            value={inputs.image_custom_size || ''}
+            onChange={(value) => onInputChange('image_custom_size', value)}
+            disabled={customRequestMode}
           />
         </Field>
         <Field label={t('生成数量')} className='col-span-2'>
@@ -457,7 +469,9 @@ const SettingsPanel = ({
       </div>
       <ResolutionBadge
         label={selectedImageResolutionLabel}
-        title={t('当前分辨率')}
+        title={
+          customImageSize ? t('当前尺寸（自定义）') : t('当前分辨率')
+        }
       />
     </Surface>
   );

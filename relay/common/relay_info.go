@@ -142,6 +142,9 @@ type RelayInfo struct {
 	SubscriptionPlanTitle string
 	// RequestId is used for idempotent pre-consume/refund
 	RequestId string
+	// UpstreamRequestId is the provider-side request id from upstream response
+	// (e.g. Tencent VOD Response.RequestId). Empty when upstream does not return one.
+	UpstreamRequestId string
 	// SubscriptionAmountTotal / SubscriptionAmountUsedAfterPreConsume are used to compute remaining in logs.
 	SubscriptionAmountTotal               int64
 	SubscriptionAmountUsedAfterPreConsume int64
@@ -193,15 +196,18 @@ type RelayInfo struct {
 
 // ImageBillingSnapshot tracks per-image generation pricing for pre-consume and settlement.
 type ImageBillingSnapshot struct {
-	UsdPerImage     float64
-	Width           int
-	Height          int
-	RuleWidth       int
-	RuleHeight      int
-	RuleRes         string
-	Count           int
-	Mode            string
+	UsdPerImage float64
+	Width       int
+	Height      int
+	RuleWidth   int
+	RuleHeight  int
+	RuleRes     string
+	Count       int
+	Mode        string
 	CappedToMaxTier bool
+	// DimensionsFromUpstream marks Width/Height as taken from upstream output metadata
+	// (e.g. Tencent AigcImageTask FileInfos.MetaData). Finalize prefers these over request.Size.
+	DimensionsFromUpstream bool
 }
 
 func (info *RelayInfo) InitChannelMeta(c *gin.Context) {

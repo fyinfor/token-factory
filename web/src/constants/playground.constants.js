@@ -113,6 +113,7 @@ export const DEFAULT_CONFIG = {
     selected_model_tags: [],
     image_size: '1280x720',
     image_ratio: 'auto',
+    image_custom_size: '',
     image_n: 1,
     selected_image_pricing_tiers: [],
     image_quality: 'standard',

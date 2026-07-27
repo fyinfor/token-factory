@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	tasktencentvod "github.com/QuantumNous/new-api/relay/channel/task/tencentvod"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/types"
 
@@ -56,10 +57,15 @@ func enrichTencentVODImageBody(body map[string]any, modelName string, request dt
 		outputConfig["OutputImageCount"] = capTencentOutputImageCount(modelName, int(*request.N))
 	}
 	sizeForUpstream := tencentSizeForUpstream(strings.TrimSpace(request.Size))
-	applyTencentImageSizeToOutput(modelName, sizeForUpstream, outputConfig)
+	explicitRatio := extractTencentImageRatio(request.Extra)
+	applyTencentImageSizeToOutput(modelName, sizeForUpstream, outputConfig, explicitRatio)
 
 	for k, raw := range request.Extra {
 		if len(raw) == 0 {
+			continue
+		}
+		// 腾讯云 CreateAigcImageTask 不识别顶层 ratio；比例写入 OutputConfig.AspectRatio。
+		if strings.EqualFold(k, "ratio") || strings.EqualFold(k, "aspect_ratio") {
 			continue
 		}
 		if strings.EqualFold(k, "OutputConfig") {
@@ -88,6 +94,28 @@ func enrichTencentVODImageBody(body map[string]any, modelName string, request dt
 			body["ExtInfo"] = ext
 		}
 	}
+}
+
+func extractTencentImageRatio(extra map[string]json.RawMessage) string {
+	if len(extra) == 0 {
+		return ""
+	}
+	for _, key := range []string{"ratio", "aspect_ratio"} {
+		raw, ok := extra[key]
+		if !ok || len(raw) == 0 {
+			continue
+		}
+		var s string
+		if err := common.Unmarshal(raw, &s); err != nil {
+			continue
+		}
+		s = strings.TrimSpace(s)
+		if s == "" || strings.EqualFold(s, "auto") {
+			continue
+		}
+		return s
+	}
+	return ""
 }
 
 const tencentImageSizeAlign = 16
@@ -155,13 +183,18 @@ func mergeTencentOutputConfig(base, override map[string]any) map[string]any {
 	return out
 }
 
-func applyTencentImageSizeToOutput(modelName, size string, outputConfig map[string]any) {
+func applyTencentImageSizeToOutput(modelName, size string, outputConfig map[string]any, explicitRatio string) {
+	if ar := strings.TrimSpace(explicitRatio); ar != "" {
+		outputConfig["AspectRatio"] = ar
+	}
 	w, h, ok := parseTencentImageSize(size)
 	if !ok {
 		return
 	}
-	if ar := tencentAspectRatioFromWH(w, h); ar != "" {
-		outputConfig["AspectRatio"] = ar
+	if _, hasAR := outputConfig["AspectRatio"]; !hasAR {
+		if ar := tencentAspectRatioFromWH(w, h); ar != "" {
+			outputConfig["AspectRatio"] = ar
+		}
 	}
 	if res := tencentResolutionFromWH(modelName, w, h); res != "" {
 		outputConfig["Resolution"] = res
@@ -187,6 +220,30 @@ func parseTencentImageSize(size string) (int, int, bool) {
 }
 
 func tencentAspectRatioFromWH(w, h int) string {
+	if w <= 0 || h <= 0 {
+		return ""
+	}
+	ratio := float64(w) / float64(h)
+	// 尺寸对齐到 16 倍数后（如 854x480→848x480）纯 GCD 会得到非法比例（53:30），
+	// 优先匹配标准画幅，避免上游 UnknownParameter / 非法 AspectRatio。
+	candidates := []struct {
+		value string
+		ratio float64
+	}{
+		{"16:9", 16.0 / 9.0},
+		{"9:16", 9.0 / 16.0},
+		{"1:1", 1.0},
+		{"4:3", 4.0 / 3.0},
+		{"3:4", 3.0 / 4.0},
+		{"3:2", 3.0 / 2.0},
+		{"2:3", 2.0 / 3.0},
+		{"21:9", 21.0 / 9.0},
+	}
+	for _, candidate := range candidates {
+		if diff := ratio - candidate.ratio; diff > -0.03 && diff < 0.03 {
+			return candidate.value
+		}
+	}
 	g := gcdInt(w, h)
 	if g <= 0 {
 		return ""
@@ -321,17 +378,29 @@ func handleTencentVODImageResponse(c *gin.Context, resp *http.Response, info *re
 		return nil, types.NewError(errors.New("missing task id in create image response"), types.ErrorCodeBadResponseBody)
 	}
 
-	urls, pollErr := pollTencentImageURLs(info, taskID, 120, 3*time.Second)
+	pollResult, pollErr := pollTencentImageTask(info, taskID, 120, 3*time.Second)
 	if pollErr != nil {
 		return nil, pollErr
 	}
-	if len(urls) == 0 {
+	if pollResult == nil || len(pollResult.URLs) == 0 {
 		return nil, types.NewError(errors.New("tencent image task timed out after polling"), types.ErrorCodeBadResponseBody)
 	}
 
-	out := dto.ImageResponse{Created: common.GetTimestamp(), Data: make([]dto.ImageData, 0, len(urls))}
-	for _, u := range urls {
+	applyTencentImageActualBilling(info, pollResult)
+	if pollResult.Width > 0 && pollResult.Height > 0 {
+		count := pollResult.OutputImageCount
+		if count <= 0 {
+			count = len(pollResult.URLs)
+		}
+		helper.ApplyActualImageDimensionsForBilling(c, info, pollResult.Width, pollResult.Height, count)
+	}
+
+	out := dto.ImageResponse{Created: common.GetTimestamp(), Data: make([]dto.ImageData, 0, len(pollResult.URLs))}
+	for _, u := range pollResult.URLs {
 		out.Data = append(out.Data, dto.ImageData{Url: u})
+	}
+	if meta, metaErr := buildTencentImageCommonMetadata(pollResult, info); metaErr == nil && len(meta) > 0 {
+		out.Metadata = meta
 	}
 	data, err := common.Marshal(out)
 	if err != nil {
@@ -343,7 +412,112 @@ func handleTencentVODImageResponse(c *gin.Context, resp *http.Response, info *re
 	return &dto.Usage{}, nil
 }
 
-func pollTencentImageURLs(info *relaycommon.RelayInfo, taskID string, maxRetry int, interval time.Duration) ([]string, *types.TokenFactoryError) {
+// tencentImagePollResult holds DescribeTaskDetail fields mapped for common image response + billing.
+type tencentImagePollResult struct {
+	URLs             []string
+	Status           string
+	Progress         int
+	CreateTime       string
+	FinishTime       string
+	StorageMode      string
+	Resolution       string
+	AspectRatio      string
+	OutputImageCount int
+	Width            int
+	Height           int
+	RequestId        string
+}
+
+// tencentImageCommonMetadata is project-common image metadata returned via ImageResponse.Metadata.
+type tencentImageCommonMetadata struct {
+	Status           string `json:"status,omitempty"`
+	Progress         int    `json:"progress,omitempty"`
+	CreateTime       string `json:"create_time,omitempty"`
+	FinishTime       string `json:"finish_time,omitempty"`
+	StorageMode      string `json:"storage_mode,omitempty"`
+	Resolution       string `json:"resolution,omitempty"` // 计费档位：720p / 1080p / 2K / 4K
+	Size             string `json:"size,omitempty"`       // 实际像素尺寸：1360x768
+	AspectRatio      string `json:"aspect_ratio,omitempty"`
+	OutputImageCount int    `json:"output_image_count,omitempty"`
+	Width            int    `json:"width,omitempty"`
+	Height           int    `json:"height,omitempty"`
+	RequestId        string `json:"request_id,omitempty"`
+}
+
+func buildTencentImageCommonMetadata(r *tencentImagePollResult, info *relaycommon.RelayInfo) (json.RawMessage, error) {
+	if r == nil {
+		return nil, nil
+	}
+	size := ""
+	if r.Width > 0 && r.Height > 0 {
+		size = fmt.Sprintf("%dx%d", r.Width, r.Height)
+	}
+	meta := tencentImageCommonMetadata{
+		Status:           strings.TrimSpace(r.Status),
+		Progress:         r.Progress,
+		CreateTime:       strings.TrimSpace(r.CreateTime),
+		FinishTime:       strings.TrimSpace(r.FinishTime),
+		StorageMode:      strings.TrimSpace(r.StorageMode),
+		Resolution:       resolveTencentImageBillingTierLabel(r, info),
+		Size:             size,
+		AspectRatio:      strings.TrimSpace(r.AspectRatio),
+		OutputImageCount: r.OutputImageCount,
+		Width:            r.Width,
+		Height:           r.Height,
+		RequestId:        strings.TrimSpace(r.RequestId),
+	}
+	return common.Marshal(meta)
+}
+
+// resolveTencentImageBillingTierLabel 优先用已匹配的按张计费档位，其次用实际像素推算，最后回退上游 OutputConfig.Resolution。
+func resolveTencentImageBillingTierLabel(r *tencentImagePollResult, info *relaycommon.RelayInfo) string {
+	if info != nil && info.ImageBilling != nil {
+		if res := strings.TrimSpace(info.ImageBilling.RuleRes); res != "" {
+			if label := common.FormatVideoResolutionLabel(res); label != "" {
+				return label
+			}
+			return res
+		}
+		if info.ImageBilling.RuleWidth > 0 && info.ImageBilling.RuleHeight > 0 {
+			if label := common.FormatVideoResolutionLabel(fmt.Sprintf("%dx%d", info.ImageBilling.RuleWidth, info.ImageBilling.RuleHeight)); label != "" {
+				return label
+			}
+		}
+	}
+	if r != nil && r.Width > 0 && r.Height > 0 {
+		if label := common.FormatVideoResolutionLabel(fmt.Sprintf("%dx%d", r.Width, r.Height)); label != "" {
+			return label
+		}
+	}
+	if r != nil {
+		return common.FormatVideoResolutionLabel(strings.TrimSpace(r.Resolution))
+	}
+	return ""
+}
+
+func applyTencentImageActualBilling(info *relaycommon.RelayInfo, r *tencentImagePollResult) {
+	if info == nil || r == nil {
+		return
+	}
+	if rid := strings.TrimSpace(r.RequestId); rid != "" {
+		info.UpstreamRequestId = rid
+	}
+	if info.ImageBilling == nil {
+		return
+	}
+	if r.Width > 0 && r.Height > 0 {
+		info.ImageBilling.Width = r.Width
+		info.ImageBilling.Height = r.Height
+		info.ImageBilling.DimensionsFromUpstream = true
+	}
+	if r.OutputImageCount > 0 {
+		info.ImageBilling.Count = r.OutputImageCount
+	} else if n := len(r.URLs); n > 0 {
+		info.ImageBilling.Count = n
+	}
+}
+
+func pollTencentImageTask(info *relaycommon.RelayInfo, taskID string, maxRetry int, interval time.Duration) (*tencentImagePollResult, *types.TokenFactoryError) {
 	cred, err := tasktencentvod.ParseCredentials(info.ApiKey)
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeBadResponseBody)
@@ -358,63 +532,158 @@ func pollTencentImageURLs(info *relaycommon.RelayInfo, taskID string, maxRetry i
 		}
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
-		var describe struct {
-			Response *struct {
-				Status        *string `json:"Status,omitempty"`
-				AigcImageTask *struct {
-					ErrCode    int     `json:"ErrCode"`
-					ErrCodeExt string  `json:"ErrCodeExt"`
-					Message    *string `json:"Message,omitempty"`
-					Output     *struct {
-						FileInfos []struct {
-							FileUrl *string `json:"FileUrl,omitempty"`
-						} `json:"FileInfos,omitempty"`
-					} `json:"Output,omitempty"`
-				} `json:"AigcImageTask,omitempty"`
-			} `json:"Response,omitempty"`
-		}
-		if err = common.Unmarshal(body, &describe); err != nil || describe.Response == nil {
+
+		parsed, parseErr := parseTencentDescribeImageTask(body)
+		if parseErr != nil || parsed == nil {
 			time.Sleep(interval)
 			continue
 		}
 
-		// Check for task-level error first
-		if describe.Response.AigcImageTask != nil && describe.Response.AigcImageTask.ErrCode != 0 {
-			errMsg := fmt.Sprintf("tencent image task failed (ErrCode=%d, ErrCodeExt=%s)", describe.Response.AigcImageTask.ErrCode, describe.Response.AigcImageTask.ErrCodeExt)
-			if describe.Response.AigcImageTask.Message != nil && strings.TrimSpace(*describe.Response.AigcImageTask.Message) != "" {
-				errMsg = fmt.Sprintf("tencent image task failed: %s (ErrCode=%d, ErrCodeExt=%s)", strings.TrimSpace(*describe.Response.AigcImageTask.Message), describe.Response.AigcImageTask.ErrCode, describe.Response.AigcImageTask.ErrCodeExt)
-			}
-			return nil, types.NewError(errors.New(errMsg), types.ErrorCodeBadResponseBody)
+		if parsed.taskErr != "" {
+			return nil, types.NewError(errors.New(parsed.taskErr), types.ErrorCodeBadResponseBody)
+		}
+		if len(parsed.result.URLs) > 0 {
+			return &parsed.result, nil
 		}
 
-		// Check for completed image URLs
-		if describe.Response.AigcImageTask != nil && describe.Response.AigcImageTask.Output != nil {
-			urls := make([]string, 0)
-			for _, fi := range describe.Response.AigcImageTask.Output.FileInfos {
-				u := strings.TrimSpace(ptrString(fi.FileUrl))
-				if u != "" {
-					urls = append(urls, u)
-				}
-			}
-			if len(urls) > 0 {
-				return urls, nil
-			}
+		upperStatus := strings.ToUpper(strings.TrimSpace(parsed.result.Status))
+		if upperStatus == "ABORTED" {
+			return nil, types.NewError(errors.New("tencent image task was aborted"), types.ErrorCodeBadResponseBody)
 		}
-
-		// Check terminal statuses
-		if describe.Response.Status != nil {
-			upperStatus := strings.ToUpper(strings.TrimSpace(*describe.Response.Status))
-			if upperStatus == "ABORTED" {
-				return nil, types.NewError(errors.New("tencent image task was aborted"), types.ErrorCodeBadResponseBody)
-			}
-			if upperStatus == "FINISH" {
-				return nil, types.NewError(errors.New("tencent image task finished but no image url returned"), types.ErrorCodeBadResponseBody)
-			}
+		if upperStatus == "FINISH" {
+			return nil, types.NewError(errors.New("tencent image task finished but no image url returned"), types.ErrorCodeBadResponseBody)
 		}
 
 		time.Sleep(interval)
 	}
 	return nil, nil
+}
+
+type parsedTencentDescribeImage struct {
+	result  tencentImagePollResult
+	taskErr string
+}
+
+func parseTencentDescribeImageTask(body []byte) (*parsedTencentDescribeImage, error) {
+	var describe struct {
+		Response *struct {
+			Status           *string `json:"Status,omitempty"`
+			CreateTime       *string `json:"CreateTime,omitempty"`
+			FinishTime       *string `json:"FinishTime,omitempty"`
+			RequestId        *string `json:"RequestId,omitempty"`
+			AigcImageTask    *struct {
+				Status   *string `json:"Status,omitempty"`
+				ErrCode  int     `json:"ErrCode"`
+				ErrCodeExt string `json:"ErrCodeExt"`
+				Message  *string `json:"Message,omitempty"`
+				Progress *int    `json:"Progress,omitempty"`
+				Input    *struct {
+					OutputConfig *struct {
+						StorageMode      *string `json:"StorageMode,omitempty"`
+						Resolution       *string `json:"Resolution,omitempty"`
+						AspectRatio      *string `json:"AspectRatio,omitempty"`
+						OutputImageCount *int    `json:"OutputImageCount,omitempty"`
+					} `json:"OutputConfig,omitempty"`
+				} `json:"Input,omitempty"`
+				Output *struct {
+					FileInfos []struct {
+						FileUrl     *string `json:"FileUrl,omitempty"`
+						StorageMode *string `json:"StorageMode,omitempty"`
+						MetaData    *struct {
+							Height *int `json:"Height,omitempty"`
+							Width  *int `json:"Width,omitempty"`
+							VideoStreamSet []struct {
+								Height int `json:"Height"`
+								Width  int `json:"Width"`
+							} `json:"VideoStreamSet,omitempty"`
+						} `json:"MetaData,omitempty"`
+					} `json:"FileInfos,omitempty"`
+				} `json:"Output,omitempty"`
+			} `json:"AigcImageTask,omitempty"`
+		} `json:"Response,omitempty"`
+	}
+	if err := common.Unmarshal(body, &describe); err != nil {
+		return nil, err
+	}
+	if describe.Response == nil {
+		return nil, errors.New("empty describe response")
+	}
+
+	out := &parsedTencentDescribeImage{}
+	out.result.Status = strings.TrimSpace(ptrString(describe.Response.Status))
+	out.result.CreateTime = strings.TrimSpace(ptrString(describe.Response.CreateTime))
+	out.result.FinishTime = strings.TrimSpace(ptrString(describe.Response.FinishTime))
+	out.result.RequestId = strings.TrimSpace(ptrString(describe.Response.RequestId))
+
+	task := describe.Response.AigcImageTask
+	if task == nil {
+		return out, nil
+	}
+
+	if task.ErrCode != 0 {
+		errMsg := fmt.Sprintf("tencent image task failed (ErrCode=%d, ErrCodeExt=%s)", task.ErrCode, task.ErrCodeExt)
+		if task.Message != nil && strings.TrimSpace(*task.Message) != "" {
+			errMsg = fmt.Sprintf("tencent image task failed: %s (ErrCode=%d, ErrCodeExt=%s)", strings.TrimSpace(*task.Message), task.ErrCode, task.ErrCodeExt)
+		}
+		out.taskErr = errMsg
+		return out, nil
+	}
+
+	if st := strings.TrimSpace(ptrString(task.Status)); st != "" {
+		out.result.Status = st
+	}
+	if task.Progress != nil {
+		out.result.Progress = *task.Progress
+	}
+
+	if task.Input != nil && task.Input.OutputConfig != nil {
+		oc := task.Input.OutputConfig
+		out.result.StorageMode = strings.TrimSpace(ptrString(oc.StorageMode))
+		out.result.Resolution = strings.TrimSpace(ptrString(oc.Resolution))
+		out.result.AspectRatio = strings.TrimSpace(ptrString(oc.AspectRatio))
+		if oc.OutputImageCount != nil && *oc.OutputImageCount > 0 {
+			out.result.OutputImageCount = *oc.OutputImageCount
+		}
+	}
+
+	if task.Output != nil {
+		urls := make([]string, 0, len(task.Output.FileInfos))
+		for _, fi := range task.Output.FileInfos {
+			u := strings.TrimSpace(ptrString(fi.FileUrl))
+			if u != "" {
+				urls = append(urls, u)
+			}
+			if out.result.StorageMode == "" {
+				out.result.StorageMode = strings.TrimSpace(ptrString(fi.StorageMode))
+			}
+			if out.result.Width > 0 && out.result.Height > 0 {
+				continue
+			}
+			w, h := 0, 0
+			if fi.MetaData != nil {
+				if fi.MetaData.Width != nil {
+					w = *fi.MetaData.Width
+				}
+				if fi.MetaData.Height != nil {
+					h = *fi.MetaData.Height
+				}
+				if (w <= 0 || h <= 0) && len(fi.MetaData.VideoStreamSet) > 0 {
+					for _, vs := range fi.MetaData.VideoStreamSet {
+						if vs.Width > 0 && vs.Height > 0 {
+							w, h = vs.Width, vs.Height
+							break
+						}
+					}
+				}
+			}
+			if w > 0 && h > 0 {
+				out.result.Width = w
+				out.result.Height = h
+			}
+		}
+		out.result.URLs = urls
+	}
+	return out, nil
 }
 
 func ptrString(v *string) string {
