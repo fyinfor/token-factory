@@ -21,7 +21,10 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useHeaderBar } from '../../../hooks/common/useHeaderBar';
 import { useNavigation } from '../../../hooks/common/useNavigation';
 import { useUserMessageUnreadCount } from '../../../hooks/common/useUserMessageUnreadCount';
-import { useNotifications } from '../../../hooks/common/useNotifications';
+import {
+  OPEN_NOTIFICATION_CENTER_EVENT,
+  useNotifications,
+} from '../../../hooks/common/useNotifications';
 import { API, setStatusData } from '../../../helpers';
 import NotificationCenter from './NotificationCenter';
 import MobileMenuButton from './MobileMenuButton';
@@ -198,6 +201,18 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
   }, [refreshUnreadCount]);
 
   useEffect(() => {
+    window.addEventListener(
+      OPEN_NOTIFICATION_CENTER_EVENT,
+      handleNotificationCenterOpen,
+    );
+    return () =>
+      window.removeEventListener(
+        OPEN_NOTIFICATION_CENTER_EVENT,
+        handleNotificationCenterOpen,
+      );
+  }, [handleNotificationCenterOpen]);
+
+  useEffect(() => {
     if (!userState?.user?.id) {
       notificationCountsRef.current = {
         initialized: false,
@@ -278,6 +293,7 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
       <NotificationCenter
         visible={notificationCenterVisible}
         onClose={handleNotificationCenterClose}
+        showMessages={Boolean(userState?.user?.id)}
         messageUnreadCount={messageUnreadCount}
         announcementUnreadCount={announcementUnreadCount}
         announcements={announcements}

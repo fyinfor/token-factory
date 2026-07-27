@@ -17,13 +17,24 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-/** 将“优惠百分比”转换为成交价占官方价的百分比。 */
-export const formatPriceRatioFromDiscount = (discountPercent) => {
+const formatDiscountNumber = (value) => {
+  const rounded = Math.round((value + Number.EPSILON) * 100) / 100;
+  return String(rounded);
+};
+
+/** 中文显示成交折数，其他语言显示减免百分比。 */
+export const formatPriceRatioFromDiscount = (discountPercent, t) => {
   const discount = Number(discountPercent);
   if (!Number.isFinite(discount) || discount <= 0) {
     return '-';
   }
-  const ratio = Math.max(0, 100 - discount);
-  const rounded = Math.round((ratio + Number.EPSILON) * 100) / 100;
-  return `${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(2)}%`;
+  const normalizedDiscount = Math.min(100, discount);
+  const ratio = (100 - normalizedDiscount) / 10;
+  const values = {
+    ratio: formatDiscountNumber(ratio),
+    discount: formatDiscountNumber(normalizedDiscount),
+  };
+  return typeof t === 'function'
+    ? t('{{ratio}}折', values)
+    : `${values.discount}% off`;
 };

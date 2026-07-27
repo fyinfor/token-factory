@@ -5043,6 +5043,7 @@
     "账户已锁定": "Tài khoản đã bị khóa",
     "账户余额": "Số dư tài khoản",
     "账户状态": "Trạng thái tài khoản",
+    "{{ratio}}折": "{{discount}}% off",
     "折": "% giảm",
     "折扣": "Giảm giá",
     "折扣率": "Tỷ lệ chiết khấu",
@@ -5843,5 +5844,17 @@
   "角标文案（英文）": "Badge text (English)",
   "首页广告中文文案": "Chinese copy",
   "首页广告英文文案": "English copy",
-  "首页广告英文文案说明": "Non-Chinese interfaces prefer English copy; falls back to Chinese when English is empty."
+  "首页广告英文文案说明": "Non-Chinese interfaces prefer English copy; falls back to Chinese when English is empty.",
+  "一键设置分销比例": "Đặt tỷ lệ hoa hồng",
+  "请选择或输入分销比例": "Chọn hoặc nhập tỷ lệ hoa hồng",
+  "已为 {{count}} 位代理更新分销比例": "Đã cập nhật tỷ lệ hoa hồng cho {{count}} đại lý",
+  "跟随系统默认": "Theo mặc định hệ thống",
+  "全部代理": "Tất cả đại lý",
+  "当前筛选结果（{{count}} 人）": "Kết quả lọc hiện tại ({{count}})",
+  "常用比例": "Tỷ lệ thường dùng",
+  "自定义比例": "Tỷ lệ tùy chỉnh",
+  "设置范围": "Áp dụng cho",
+  "确认设置": "Xác nhận",
+  "该操作会覆盖目标代理已有的单独比例设置。设置为 0% 后，代理将跟随系统默认分销比例。": "Thao tác này sẽ ghi đè tỷ lệ riêng của các đại lý đã chọn. Đặt 0% để dùng tỷ lệ mặc định của hệ thống.",
+  "批量设置失败": "Cập nhật hàng loạt thất bại"
 }

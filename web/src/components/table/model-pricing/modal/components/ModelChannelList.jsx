@@ -184,7 +184,7 @@ const StabilityBattery = ({ row, t }) => {
   );
 };
 
-/** 成本折扣展示为成交价占官方价比例；无折扣或超过官方价时显示占位符。 */
+/** 成本优惠按当前语言格式化；无优惠或超过官方价时显示占位符。 */
 const formatCostDiscountDisplay = (priceDiscountPercent, t) => {
   const costPercent = Number(priceDiscountPercent);
   if (!Number.isFinite(costPercent)) {
@@ -195,7 +195,7 @@ const formatCostDiscountDisplay = (priceDiscountPercent, t) => {
     return { text: `${t('成本折扣')}：-`, hasDiscount: false };
   }
   return {
-    text: `${t('成本折扣')}：${formatPriceRatioFromDiscount(savingsPercent)}`,
+    text: `${t('成本折扣')}：${formatPriceRatioFromDiscount(savingsPercent, t)}`,
     hasDiscount: true,
   };
 };
@@ -445,7 +445,7 @@ const TokenTierDetailTable = ({
                               border: 'none',
                             }}
                           >
-                            {formatPriceRatioFromDiscount(cell.discount)}
+                            {formatPriceRatioFromDiscount(cell.discount, t)}
                           </Tag>
                         ) : (
                           <span style={{ color: 'var(--semi-color-text-3)' }}>
@@ -498,7 +498,7 @@ const PriceComparisonList = ({
       <div
         className='channel-price-glass-header grid items-center gap-2 px-3 py-2 text-[11px] font-semibold'
         style={{
-          gridTemplateColumns: '96px minmax(0, 1fr) minmax(0, 1fr) 52px',
+          gridTemplateColumns: '96px minmax(0, 1fr) minmax(0, 1fr) 72px',
           color: 'var(--semi-color-text-2)',
         }}
       >
@@ -531,7 +531,7 @@ const PriceComparisonList = ({
             key={item.key || item.label}
             className='channel-price-glass-row grid items-center gap-2 px-3 py-2 text-sm'
             style={{
-              gridTemplateColumns: '96px minmax(0, 1fr) minmax(0, 1fr) 52px',
+              gridTemplateColumns: '96px minmax(0, 1fr) minmax(0, 1fr) 72px',
             }}
           >
             <div
@@ -588,7 +588,7 @@ const PriceComparisonList = ({
                   }}
                 >
                   {item.hasDiscount
-                    ? formatPriceRatioFromDiscount(item.discount)
+                    ? formatPriceRatioFromDiscount(item.discount, t)
                     : '-'}
                 </span>
               ) : (

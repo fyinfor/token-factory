@@ -191,7 +191,7 @@ const getChannelLatencyMeta = (row, t) => {
   };
 };
 
-const formatDiscountLabel = (channel, modelData) => {
+const formatDiscountLabel = (channel, modelData, t) => {
   const officialBase = Number(
     channel?.quota_type === 1 || modelData?.quota_type === 1
       ? modelData?.model_price
@@ -207,7 +207,7 @@ const formatDiscountLabel = (channel, modelData) => {
     return '';
   }
   const discount = Math.round((1 - channelPrice / officialBase) * 100);
-  return formatPriceRatioFromDiscount(discount);
+  return formatPriceRatioFromDiscount(discount, t);
 };
 
 /** 阶梯计费：取第一档输入/输出平台价（USD /1M，已含渠道折扣与分组倍率） */
@@ -232,8 +232,7 @@ const getFirstTierTokenPricesUsd = (channel, modelData, usedGroupRatio) => {
   const channelTiers = channelRule?.tiers || [];
 
   const resolveUsd = (priceKey) => {
-    const globalRaw =
-      findTierPriceAtBand(globalTiers, 0, priceKey, 'lt') ?? 0;
+    const globalRaw = findTierPriceAtBand(globalTiers, 0, priceKey, 'lt') ?? 0;
     const channelRaw =
       channelTiers.length > 0
         ? findTierPriceAtBand(channelTiers, 0, priceKey, 'lt')
@@ -519,7 +518,7 @@ const ModelChannelWorkspace = ({
             const latencyMeta = getChannelLatencyMeta(row, t);
             const routeLabel =
               channel.route_slug || channel.channel_no || modelData.model_name;
-            const discountLabel = formatDiscountLabel(channel, modelData);
+            const discountLabel = formatDiscountLabel(channel, modelData, t);
             const isHotChannel = hotChannelScoreMap.has(
               getChannelHeatKey(modelData, channel),
             );

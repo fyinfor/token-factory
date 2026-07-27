@@ -31,6 +31,8 @@ import {
   Empty,
   Upload,
   Progress,
+  Radio,
+  RadioGroup,
   Tag,
   Tooltip,
   Image,
@@ -344,6 +346,10 @@ export default function DistributorAdmin() {
   const [bpsUser, setBpsUser] = useState(null);
   /** 弹窗内输入：0～100 的百分比字符串，提交时转为万分之一 bps */
   const [bpsPercentInput, setBpsPercentInput] = useState('0');
+  const [bulkBpsOpen, setBulkBpsOpen] = useState(false);
+  const [bulkBpsPercentInput, setBulkBpsPercentInput] = useState('');
+  const [bulkBpsScope, setBulkBpsScope] = useState('all');
+  const [bulkBpsSaving, setBulkBpsSaving] = useState(false);
 
   const [invOpen, setInvOpen] = useState(false);
   const [invRows, setInvRows] = useState([]);
@@ -1015,6 +1021,56 @@ export default function DistributorAdmin() {
     }
   };
 
+  const openBulkBps = () => {
+    const hasFilters = Boolean(
+      distKeyword.trim() || Number(distApplyTypeFilter),
+    );
+    setBulkBpsScope(hasFilters ? 'filtered' : 'all');
+    setBulkBpsPercentInput('');
+    setBulkBpsOpen(true);
+  };
+
+  const saveBulkBps = async () => {
+    const percentInput = String(bulkBpsPercentInput).trim();
+    if (!percentInput) {
+      showError(t('请选择或输入分销比例'));
+      return;
+    }
+    const validPercent = /^(?:100(?:\.0{1,2})?|\d{1,2}(?:\.\d{1,2})?)$/.test(
+      percentInput,
+    );
+    const bps = parseCommissionPercentStringToBps(percentInput);
+    if (!validPercent || Number.isNaN(bps)) {
+      showError(t('请输入 0～100 之间的百分比'));
+      return;
+    }
+
+    const useFilters = bulkBpsScope === 'filtered';
+    setBulkBpsSaving(true);
+    try {
+      const res = await API.put(
+        '/api/distributor/admin/distributors/commission',
+        {
+          distributor_commission_bps: bps,
+          scope: bulkBpsScope,
+          keyword: useFilters ? distKeyword.trim() : '',
+          apply_type: useFilters ? Number(distApplyTypeFilter) : 0,
+        },
+      );
+      if (res.data.success) {
+        showSuccess(t('批量设置成功'));
+        setBulkBpsOpen(false);
+        await loadDists();
+      } else {
+        showError(res.data.message);
+      }
+    } catch {
+      showError(t('批量设置失败'));
+    } finally {
+      setBulkBpsSaving(false);
+    }
+  };
+
   const wdApprove = async (id) => {
     try {
       const res = await API.post(
@@ -1278,7 +1334,16 @@ export default function DistributorAdmin() {
     {
       title: t('默认分成'),
       dataIndex: 'effective_commission_bps',
-      render: (bps) => formatCommissionRatioPercent(bps),
+      render: (bps, r) => (
+        <div className='flex flex-wrap items-center gap-1.5'>
+          <span>{formatCommissionRatioPercent(bps)}</span>
+          {Number(r.distributor_commission_bps) <= 0 ? (
+            <Tag color='grey' type='light' size='small'>
+              {t('跟随系统默认')}
+            </Tag>
+          ) : null}
+        </div>
+      ),
     },
     {
       title: t('待结算'),
@@ -1980,7 +2045,18 @@ export default function DistributorAdmin() {
             className='w-full'
             type='type1'
             actionsArea={
-              <div className='flex flex-col md:flex-row justify-end items-center gap-2 w-full'>
+              <div className='flex flex-col md:flex-row justify-between items-center gap-2 w-full'>
+                <Button
+                  type='primary'
+                  theme='light'
+                  size='small'
+                  icon={<IconSetting />}
+                  className='w-full md:w-auto'
+                  disabled={distLoading}
+                  onClick={openBulkBps}
+                >
+                  {t('一键设置分销比例')}
+                </Button>
                 <div className='flex flex-col md:flex-row items-center gap-2 w-full md:w-auto'>
                   <div className='relative w-full md:w-64'>
                     <Input
@@ -2343,156 +2419,156 @@ export default function DistributorAdmin() {
               />
             </div>
             {profileApplyType === 2 ? (
-            <div>
-              <div className='mb-2 flex flex-wrap items-center gap-2'>
-                <Text strong>{t('营业执照')}</Text>
-                <Text type='warning' size='small'>
-                  {t('需加盖公章')}
-                </Text>
-              </div>
-              <Upload
-                action=''
-                accept='image/*,.pdf'
-                showUploadList={false}
-                customRequest={async ({
-                  file,
-                  onSuccess,
-                  onError,
-                  onProgress,
-                }) => {
-                  const fd = new FormData();
-                  const inst = file.fileInstance || file;
-                  fd.append('file', inst);
-                  setProfileUploadPct(0);
-                  try {
-                    const res = await API.post('/api/oss/upload', fd, {
-                      skipErrorHandler: true,
-                      onUploadProgress: (ev) => {
-                        const tot = ev.total || ev.loaded || 1;
-                        const pct = Math.min(
-                          100,
-                          Math.round((ev.loaded * 100) / tot),
-                        );
-                        setProfileUploadPct(pct);
-                        if (typeof onProgress === 'function') {
-                          onProgress({ total: tot, loaded: ev.loaded });
-                        }
-                      },
-                    });
-                    const { success, message, data } = res.data || {};
-                    if (!success || !data?.url) {
-                      onError(new Error(message || 'upload'));
-                      showError(message || t('上传失败'));
-                      return;
+              <div>
+                <div className='mb-2 flex flex-wrap items-center gap-2'>
+                  <Text strong>{t('营业执照')}</Text>
+                  <Text type='warning' size='small'>
+                    {t('需加盖公章')}
+                  </Text>
+                </div>
+                <Upload
+                  action=''
+                  accept='image/*,.pdf'
+                  showUploadList={false}
+                  customRequest={async ({
+                    file,
+                    onSuccess,
+                    onError,
+                    onProgress,
+                  }) => {
+                    const fd = new FormData();
+                    const inst = file.fileInstance || file;
+                    fd.append('file', inst);
+                    setProfileUploadPct(0);
+                    try {
+                      const res = await API.post('/api/oss/upload', fd, {
+                        skipErrorHandler: true,
+                        onUploadProgress: (ev) => {
+                          const tot = ev.total || ev.loaded || 1;
+                          const pct = Math.min(
+                            100,
+                            Math.round((ev.loaded * 100) / tot),
+                          );
+                          setProfileUploadPct(pct);
+                          if (typeof onProgress === 'function') {
+                            onProgress({ total: tot, loaded: ev.loaded });
+                          }
+                        },
+                      });
+                      const { success, message, data } = res.data || {};
+                      if (!success || !data?.url) {
+                        onError(new Error(message || 'upload'));
+                        showError(message || t('上传失败'));
+                        return;
+                      }
+                      setProfileQualUrls((prev) =>
+                        prev.length >= PROFILE_QUAL_MAX_FILES
+                          ? prev
+                          : [...prev, data.url],
+                      );
+                      onSuccess(data);
+                      showSuccess(t('已上传'));
+                    } catch (e) {
+                      onError(e);
+                      showError(e?.response?.data?.message || t('上传失败'));
+                    } finally {
+                      setProfileUploadPct(null);
                     }
-                    setProfileQualUrls((prev) =>
-                      prev.length >= PROFILE_QUAL_MAX_FILES
-                        ? prev
-                        : [...prev, data.url],
-                    );
-                    onSuccess(data);
-                    showSuccess(t('已上传'));
-                  } catch (e) {
-                    onError(e);
-                    showError(e?.response?.data?.message || t('上传失败'));
-                  } finally {
-                    setProfileUploadPct(null);
-                  }
-                }}
-                limit={PROFILE_QUAL_MAX_FILES}
-                multiple
-                disabled={profileQualUrls.length >= PROFILE_QUAL_MAX_FILES}
-              >
-                <Button
+                  }}
+                  limit={PROFILE_QUAL_MAX_FILES}
+                  multiple
                   disabled={profileQualUrls.length >= PROFILE_QUAL_MAX_FILES}
                 >
-                  {t('上传文件')}
-                </Button>
-              </Upload>
-              {profileUploadPct != null ? (
-                <Progress
-                  percent={profileUploadPct}
-                  showInfo
-                  className='mt-2'
-                />
-              ) : null}
-              <Text type='tertiary' size='small' className='block mt-1'>
-                {t('支持图片或 PDF，最多 5 个；点击图片可大图预览')}
-              </Text>
-              {profileQualUrls.length > 0 && (
-                <div className='mt-3 flex flex-wrap gap-3'>
-                  {profileQualUrls.map((u, idx) =>
-                    isPdfUrl(u) ? (
-                      <div
-                        key={`prof-pdf-${u}-${idx}`}
-                        className='relative flex h-24 w-24 flex-col items-center justify-center rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)]'
-                      >
-                        <IconFile size='large' />
-                        <span className='mt-1 text-xs text-[var(--semi-color-text-2)]'>
-                          PDF
-                        </span>
-                        <button
-                          type='button'
-                          className='absolute inset-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary'
-                          title={t('在新窗口打开')}
-                          onClick={() =>
-                            window.open(u, '_blank', 'noopener,noreferrer')
-                          }
-                        />
-                        <Button
-                          size='small'
-                          type='danger'
-                          theme='borderless'
-                          className='!absolute -right-1 -top-1 !min-w-0 z-10'
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setProfileQualUrls((prev) =>
-                              prev.filter((_, i) => i !== idx),
-                            );
-                          }}
+                  <Button
+                    disabled={profileQualUrls.length >= PROFILE_QUAL_MAX_FILES}
+                  >
+                    {t('上传文件')}
+                  </Button>
+                </Upload>
+                {profileUploadPct != null ? (
+                  <Progress
+                    percent={profileUploadPct}
+                    showInfo
+                    className='mt-2'
+                  />
+                ) : null}
+                <Text type='tertiary' size='small' className='block mt-1'>
+                  {t('支持图片或 PDF，最多 5 个；点击图片可大图预览')}
+                </Text>
+                {profileQualUrls.length > 0 && (
+                  <div className='mt-3 flex flex-wrap gap-3'>
+                    {profileQualUrls.map((u, idx) =>
+                      isPdfUrl(u) ? (
+                        <div
+                          key={`prof-pdf-${u}-${idx}`}
+                          className='relative flex h-24 w-24 flex-col items-center justify-center rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)]'
                         >
-                          ×
-                        </Button>
-                      </div>
-                    ) : (
-                      <div
-                        key={`prof-img-${u}-${idx}`}
-                        className='relative h-24 w-24 overflow-hidden rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)]'
-                      >
-                        <button
-                          type='button'
-                          className='block h-full w-full cursor-zoom-in border-0 bg-transparent p-0'
-                          onClick={() => setQualImagePreview(u)}
-                        >
-                          <Image
-                            src={u}
-                            alt=''
-                            preview={false}
-                            width='100%'
-                            height='100%'
-                            imgStyle={{ objectFit: 'cover' }}
+                          <IconFile size='large' />
+                          <span className='mt-1 text-xs text-[var(--semi-color-text-2)]'>
+                            PDF
+                          </span>
+                          <button
+                            type='button'
+                            className='absolute inset-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-primary'
+                            title={t('在新窗口打开')}
+                            onClick={() =>
+                              window.open(u, '_blank', 'noopener,noreferrer')
+                            }
                           />
-                        </button>
-                        <Button
-                          size='small'
-                          type='danger'
-                          theme='borderless'
-                          className='!absolute -right-1 -top-1 !min-w-0'
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setProfileQualUrls((prev) =>
-                              prev.filter((_, i) => i !== idx),
-                            );
-                          }}
+                          <Button
+                            size='small'
+                            type='danger'
+                            theme='borderless'
+                            className='!absolute -right-1 -top-1 !min-w-0 z-10'
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setProfileQualUrls((prev) =>
+                                prev.filter((_, i) => i !== idx),
+                              );
+                            }}
+                          >
+                            ×
+                          </Button>
+                        </div>
+                      ) : (
+                        <div
+                          key={`prof-img-${u}-${idx}`}
+                          className='relative h-24 w-24 overflow-hidden rounded-lg border border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)]'
                         >
-                          ×
-                        </Button>
-                      </div>
-                    ),
-                  )}
-                </div>
-              )}
-            </div>
+                          <button
+                            type='button'
+                            className='block h-full w-full cursor-zoom-in border-0 bg-transparent p-0'
+                            onClick={() => setQualImagePreview(u)}
+                          >
+                            <Image
+                              src={u}
+                              alt=''
+                              preview={false}
+                              width='100%'
+                              height='100%'
+                              imgStyle={{ objectFit: 'cover' }}
+                            />
+                          </button>
+                          <Button
+                            size='small'
+                            type='danger'
+                            theme='borderless'
+                            className='!absolute -right-1 -top-1 !min-w-0'
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setProfileQualUrls((prev) =>
+                                prev.filter((_, i) => i !== idx),
+                              );
+                            }}
+                          >
+                            ×
+                          </Button>
+                        </div>
+                      ),
+                    )}
+                  </div>
+                )}
+              </div>
             ) : null}
           </div>
         )}
@@ -2652,6 +2728,79 @@ export default function DistributorAdmin() {
           suffix='%'
           placeholder={t('如 10 或 10.5')}
         />
+      </Modal>
+
+      <Modal
+        title={t('一键设置分销比例')}
+        visible={bulkBpsOpen}
+        onOk={saveBulkBps}
+        onCancel={() => setBulkBpsOpen(false)}
+        confirmLoading={bulkBpsSaving}
+        okText={t('确认设置')}
+        width={520}
+      >
+        <div className='space-y-5'>
+          <div>
+            <Text strong className='mb-2 block'>
+              {t('设置范围')}
+            </Text>
+            <RadioGroup
+              value={bulkBpsScope}
+              onChange={(event) => setBulkBpsScope(event.target.value)}
+            >
+              <Radio value='all'>{t('全部代理')}</Radio>
+              {distKeyword.trim() || Number(distApplyTypeFilter) ? (
+                <Radio value='filtered'>
+                  {t('当前筛选结果（{{count}} 人）', { count: distTotal })}
+                </Radio>
+              ) : null}
+            </RadioGroup>
+          </div>
+
+          <div>
+            <Text strong className='mb-2 block'>
+              {t('常用比例')}
+            </Text>
+            <div className='flex flex-wrap gap-2'>
+              {[0, 60, 80, 90].map((percent) => {
+                const selected =
+                  String(bulkBpsPercentInput) === String(percent);
+                return (
+                  <Button
+                    key={percent}
+                    type={selected ? 'primary' : 'tertiary'}
+                    theme={selected ? 'solid' : 'light'}
+                    size='small'
+                    onClick={() => setBulkBpsPercentInput(String(percent))}
+                  >
+                    {percent === 0 ? t('跟随系统默认') : `${percent}%`}
+                  </Button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div>
+            <Text strong className='mb-2 block'>
+              {t('自定义比例')}
+            </Text>
+            <Input
+              value={bulkBpsPercentInput}
+              onChange={(value) => setBulkBpsPercentInput(String(value ?? ''))}
+              suffix='%'
+              placeholder={t('如 10 或 10.5')}
+            />
+          </div>
+
+          <Banner
+            type='warning'
+            fullMode={false}
+            bordered
+            description={t(
+              '该操作会覆盖目标代理已有的单独比例设置。设置为 0% 后，代理将跟随系统默认分销比例。',
+            )}
+          />
+        </div>
       </Modal>
 
       <Modal

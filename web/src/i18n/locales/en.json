@@ -5243,6 +5243,7 @@
     "账户已锁定": "Account locked",
     "账户余额": "Account balance",
     "账户状态": "Account status",
+    "{{ratio}}折": "{{discount}}% off",
     "折": "% off",
     "折扣": "Discount",
     "折扣率": "Discount Rate",
@@ -6423,5 +6424,17 @@
   "发票管理": "Invoice management",
   "管理充值订单的开票申请与开票记录": "Manage invoice requests and records for top-up orders",
   "发票审批": "Invoice approval",
-  "审核开票申请、上传电子发票并追踪处理状态": "Review invoice requests, upload electronic invoices, and track their status"
+  "审核开票申请、上传电子发票并追踪处理状态": "Review invoice requests, upload electronic invoices, and track their status",
+  "一键设置分销比例": "Set commission rates",
+  "请选择或输入分销比例": "Select or enter a commission rate",
+  "已为 {{count}} 位代理更新分销比例": "Updated the commission rate for {{count}} agents",
+  "跟随系统默认": "Use system default",
+  "全部代理": "All agents",
+  "当前筛选结果（{{count}} 人）": "Current filtered results ({{count}})",
+  "常用比例": "Common rates",
+  "自定义比例": "Custom rate",
+  "设置范围": "Apply to",
+  "确认设置": "Confirm",
+  "该操作会覆盖目标代理已有的单独比例设置。设置为 0% 后，代理将跟随系统默认分销比例。": "This replaces any individual rates already set for the targeted agents. Set the rate to 0% to use the system default.",
+  "批量设置失败": "Bulk update failed"
 }
