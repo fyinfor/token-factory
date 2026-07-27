@@ -5,6 +5,16 @@ This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as
 published by the Free Software Foundation, either version 3 of the
 License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -28,6 +38,7 @@ import {
   showWarning,
   toBoolean,
 } from '../../../helpers';
+import UploadFileManager from './UploadFileManager';
 
 const { Text } = Typography;
 
@@ -37,6 +48,14 @@ const UPLOAD_MODE_OPTIONS = [
   { label: '关闭文件上传', value: UPLOAD_MODE_DISABLED },
   { label: '本地存储', value: 'local' },
   { label: '阿里云 OSS', value: 'oss' },
+];
+
+const PLAYGROUND_RETENTION_OPTIONS = [
+  { label: '12 小时', value: 12 },
+  { label: '1 天', value: 24 },
+  { label: '3 天', value: 72 },
+  { label: '5 天', value: 120 },
+  { label: '7 天', value: 168 },
 ];
 
 const BASE_INPUTS = {
@@ -51,6 +70,7 @@ const BASE_INPUTS = {
   'oss_setting.max_file_size_mb': 20,
   'oss_setting.local_max_file_size_mb': 20,
   'oss_setting.oss_max_file_size_mb': 20,
+  'oss_setting.playground_retention_hours': 24,
   'oss_setting.local_storage_path': '.',
   'oss_setting.local_url_prefix': '',
   'oss_setting.local_object_key_prefix': '',
@@ -63,6 +83,7 @@ const LOCAL_CONFIG_KEYS = [
   'oss_setting.local_url_prefix',
   'oss_setting.local_object_key_prefix',
   'oss_setting.local_max_file_size_mb',
+  'oss_setting.playground_retention_hours',
 ];
 
 const OSS_CONFIG_KEYS = [
@@ -73,6 +94,7 @@ const OSS_CONFIG_KEYS = [
   'oss_setting.public_base_url',
   'oss_setting.object_key_prefix',
   'oss_setting.oss_max_file_size_mb',
+  'oss_setting.playground_retention_hours',
 ];
 
 const panelStyle = {
@@ -91,11 +113,15 @@ const testPanelStyle = {
 };
 
 function trimTrailingSlash(value) {
-  return String(value || '').trim().replace(/\/+$/, '');
+  return String(value || '')
+    .trim()
+    .replace(/\/+$/, '');
 }
 
 function trimWrappingSlash(value) {
-  return String(value || '').trim().replace(/^\/+|\/+$/g, '');
+  return String(value || '')
+    .trim()
+    .replace(/^\/+|\/+$/g, '');
 }
 
 function withTrailingSlash(value) {
@@ -112,7 +138,11 @@ function normalizeLocalFolderPrefix(value) {
   }
   const trimmed = raw.replace(/^\/+|\/+$/g, '');
   if (!trimmed) return { value: '' };
-  if (trimmed.startsWith('../') || trimmed === '..' || trimmed.startsWith('/')) {
+  if (
+    trimmed.startsWith('../') ||
+    trimmed === '..' ||
+    trimmed.startsWith('/')
+  ) {
     return { error: '本地文件夹前缀不能包含上级目录或绝对路径' };
   }
   const parts = trimmed.split('/').filter(Boolean);
@@ -154,7 +184,13 @@ function storageLabel(type, t) {
 
 function requiredLabel(label) {
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', whiteSpace: 'nowrap' }}>
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        whiteSpace: 'nowrap',
+      }}
+    >
       <span style={{ color: 'var(--semi-color-danger)', marginRight: 2 }}>
         *
       </span>
@@ -301,7 +337,10 @@ export default function SettingsOss(props) {
         fields['oss_setting.local_max_file_size_mb'] = 20;
       }
     }
-    if (value === 'oss' && !Number(inputs['oss_setting.oss_max_file_size_mb'])) {
+    if (
+      value === 'oss' &&
+      !Number(inputs['oss_setting.oss_max_file_size_mb'])
+    ) {
       fields['oss_setting.oss_max_file_size_mb'] = 20;
     }
     return fields;
@@ -381,7 +420,10 @@ export default function SettingsOss(props) {
     return hasUnsavedConfigForStorage(selectedStorageType, snapshot);
   }
 
-  function hasUnsavedConfigForStorage(storageType, snapshot = getFormSnapshot()) {
+  function hasUnsavedConfigForStorage(
+    storageType,
+    snapshot = getFormSnapshot(),
+  ) {
     const targetConfigKeys =
       storageType === 'oss' ? OSS_CONFIG_KEYS : LOCAL_CONFIG_KEYS;
     return compareObjects(snapshot, inputsRow).some((item) =>
@@ -433,6 +475,9 @@ export default function SettingsOss(props) {
     if (!next['oss_setting.oss_max_file_size_mb']) {
       next['oss_setting.oss_max_file_size_mb'] =
         next['oss_setting.max_file_size_mb'] || 20;
+    }
+    if (!next['oss_setting.playground_retention_hours']) {
+      next['oss_setting.playground_retention_hours'] = 24;
     }
     return next;
   }
@@ -644,7 +689,8 @@ export default function SettingsOss(props) {
         } else if (
           k === 'oss_setting.max_file_size_mb' ||
           k === 'oss_setting.local_max_file_size_mb' ||
-          k === 'oss_setting.oss_max_file_size_mb'
+          k === 'oss_setting.oss_max_file_size_mb' ||
+          k === 'oss_setting.playground_retention_hours'
         ) {
           const n = parseInt(String(v), 10);
           next[k] = Number.isFinite(n) ? n : 20;
@@ -796,7 +842,9 @@ export default function SettingsOss(props) {
             }}
           />
           <Text type='tertiary' size='small'>
-            {t('可选，表示系统 uploads 目录下的子文件夹；例如填写 a 会写入 uploads/a。前后的 / 会自动移除。')}
+            {t(
+              '可选，表示系统 uploads 目录下的子文件夹；例如填写 a 会写入 uploads/a。前后的 / 会自动移除。',
+            )}
           </Text>
         </Col>
         <Col xs={24} sm={12}>
@@ -808,6 +856,19 @@ export default function SettingsOss(props) {
             onChange={(v) => setField('oss_setting.local_max_file_size_mb', v)}
           />
         </Col>
+        <Col xs={24} sm={12}>
+          <Form.Select
+            field="['oss_setting.playground_retention_hours']"
+            label={t('Playground 默认保留时间')}
+            optionList={PLAYGROUND_RETENTION_OPTIONS.map((item) => ({
+              ...item,
+              label: t(item.label),
+            }))}
+            onChange={(v) =>
+              setField('oss_setting.playground_retention_hours', v)
+            }
+          />
+        </Col>
         <Col span={24}>
           <Text type='tertiary' size='small'>
             {t('生成示例')}: {localPreviewUrl}
@@ -817,10 +878,7 @@ export default function SettingsOss(props) {
       {renderTestPanel()}
       <Row gutter={8} style={{ marginTop: 16 }}>
         <Col>
-          <Button
-            type='primary'
-            onClick={saveCurrentConfigAndApply}
-          >
+          <Button type='primary' onClick={saveCurrentConfigAndApply}>
             {t('保存本地存储配置并应用')}
           </Button>
         </Col>
@@ -863,7 +921,9 @@ export default function SettingsOss(props) {
             onChange={(v) => setField('oss_setting.endpoint', v)}
           />
           <Text type='tertiary' size='small'>
-            {t('不含 https://，与阿里云控制台 Bucket 概览中的外网 Endpoint 一致。')}
+            {t(
+              '不含 https://，与阿里云控制台 Bucket 概览中的外网 Endpoint 一致。',
+            )}
           </Text>
         </Col>
         <Col xs={24} sm={12}>
@@ -900,7 +960,9 @@ export default function SettingsOss(props) {
             onChange={(v) => setField('oss_setting.public_base_url', v)}
           />
           <Text type='tertiary' size='small'>
-            {t('留空则使用 https://{bucket}.{endpoint}/；绑定 CDN 时填 CDN 根地址。')}
+            {t(
+              '留空则使用 https://{bucket}.{endpoint}/；绑定 CDN 时填 CDN 根地址。',
+            )}
           </Text>
         </Col>
       </Row>
@@ -927,6 +989,19 @@ export default function SettingsOss(props) {
             onChange={(v) => setField('oss_setting.oss_max_file_size_mb', v)}
           />
         </Col>
+        <Col xs={24} sm={12}>
+          <Form.Select
+            field="['oss_setting.playground_retention_hours']"
+            label={t('Playground 默认保留时间')}
+            optionList={PLAYGROUND_RETENTION_OPTIONS.map((item) => ({
+              ...item,
+              label: t(item.label),
+            }))}
+            onChange={(v) =>
+              setField('oss_setting.playground_retention_hours', v)
+            }
+          />
+        </Col>
       </Row>
       <Row gutter={16} style={{ marginTop: 8 }}>
         <Col span={24}>
@@ -938,10 +1013,7 @@ export default function SettingsOss(props) {
       {renderTestPanel()}
       <Row gutter={8} style={{ marginTop: 16 }}>
         <Col>
-          <Button
-            type='primary'
-            onClick={saveCurrentConfigAndApply}
-          >
+          <Button type='primary' onClick={saveCurrentConfigAndApply}>
             {t('保存 OSS 配置并应用')}
           </Button>
         </Col>
@@ -957,7 +1029,9 @@ export default function SettingsOss(props) {
       <Banner
         type='info'
         closeIcon={null}
-        description={t('保存后前端仍走统一上传接口，但后端会拒绝文件上传请求。')}
+        description={t(
+          '保存后前端仍走统一上传接口，但后端会拒绝文件上传请求。',
+        )}
         style={{ marginTop: 14 }}
       />
     </div>
@@ -967,94 +1041,107 @@ export default function SettingsOss(props) {
     if (selectedUploadMode === UPLOAD_MODE_DISABLED) {
       return renderDisabledConfig();
     }
-    return selectedStorageType === 'oss' ? renderOssConfig() : renderLocalConfig();
+    return selectedStorageType === 'oss'
+      ? renderOssConfig()
+      : renderLocalConfig();
   };
 
   return (
     <Spin spinning={loading}>
-      <Form
-        values={inputs}
-        getFormApi={(formAPI) => (refForm.current = formAPI)}
-        style={{ marginBottom: 15 }}
-      >
-        <div style={{ ...panelStyle, marginBottom: 16 }}>
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 12,
-              marginBottom: 12,
-              flexWrap: 'wrap',
-            }}
-          >
-            <div>
-              <Text strong style={{ fontSize: 16 }}>
-                {t('文件上传')}
-              </Text>
-              <Tag
-                color={appliedUploadMode === UPLOAD_MODE_DISABLED ? 'grey' : 'green'}
-                shape='circle'
-                style={{ marginLeft: 8 }}
-              >
-                {appliedUploadMode === UPLOAD_MODE_DISABLED ? t('未启用') : t('已启用')}
-              </Tag>
-              <Tag
-                color={
-                  appliedUploadMode === UPLOAD_MODE_DISABLED
-                    ? 'grey'
-                    : appliedStorageType === 'oss'
-                      ? 'blue'
+      <>
+        <Form
+          values={inputs}
+          getFormApi={(formAPI) => (refForm.current = formAPI)}
+          style={{ marginBottom: 15 }}
+        >
+          <div style={{ ...panelStyle, marginBottom: 16 }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                marginBottom: 12,
+                flexWrap: 'wrap',
+              }}
+            >
+              <div>
+                <Text strong style={{ fontSize: 16 }}>
+                  {t('文件上传')}
+                </Text>
+                <Tag
+                  color={
+                    appliedUploadMode === UPLOAD_MODE_DISABLED
+                      ? 'grey'
                       : 'green'
-                }
-                shape='circle'
-                style={{ marginLeft: 8 }}
-              >
-                {t('当前使用')}: {appliedUploadModeLabel}
-              </Tag>
-              {applicationDirty ? (
-                <Tag color='orange' shape='circle' style={{ marginLeft: 8 }}>
-                  {t('应用方式未保存')}
+                  }
+                  shape='circle'
+                  style={{ marginLeft: 8 }}
+                >
+                  {appliedUploadMode === UPLOAD_MODE_DISABLED
+                    ? t('未启用')
+                    : t('已启用')}
                 </Tag>
-              ) : null}
+                <Tag
+                  color={
+                    appliedUploadMode === UPLOAD_MODE_DISABLED
+                      ? 'grey'
+                      : appliedStorageType === 'oss'
+                        ? 'blue'
+                        : 'green'
+                  }
+                  shape='circle'
+                  style={{ marginLeft: 8 }}
+                >
+                  {t('当前使用')}: {appliedUploadModeLabel}
+                </Tag>
+                {applicationDirty ? (
+                  <Tag color='orange' shape='circle' style={{ marginLeft: 8 }}>
+                    {t('应用方式未保存')}
+                  </Tag>
+                ) : null}
+              </div>
+              <Text type='tertiary' size='small'>
+                {t(
+                  '选择文件上传方式后会立即应用；缺少必填配置时会提示先补全。',
+                )}
+              </Text>
             </div>
-            <Text type='tertiary' size='small'>
-              {t('选择文件上传方式后会立即应用；缺少必填配置时会提示先补全。')}
-            </Text>
-          </div>
-          <Row gutter={16} type='flex' align='bottom'>
-            <Col xs={24}>
-              <div style={{ marginBottom: 4 }}>
-                <Text strong>{t('文件上传方式')}</Text>
-              </div>
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  flexWrap: 'wrap',
-                }}
-              >
-                <Select
-                  value={selectedUploadMode}
-                  optionList={UPLOAD_MODE_OPTIONS.map((item) => ({
-                    ...item,
-                    label: t(item.label),
-                  }))}
-                  style={{ width: 220 }}
-                  onChange={async (value) => {
-                    setTestUrl('');
-                    setTestMime('');
-                    await applyUploadMode(value);
+            <Row gutter={16} type='flex' align='bottom'>
+              <Col xs={24}>
+                <div style={{ marginBottom: 4 }}>
+                  <Text strong>{t('文件上传方式')}</Text>
+                </div>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    flexWrap: 'wrap',
                   }}
-                />
-              </div>
-            </Col>
-          </Row>
-        </div>
+                >
+                  <Select
+                    value={selectedUploadMode}
+                    optionList={UPLOAD_MODE_OPTIONS.map((item) => ({
+                      ...item,
+                      label: t(item.label),
+                    }))}
+                    style={{ width: 220 }}
+                    onChange={async (value) => {
+                      setTestUrl('');
+                      setTestMime('');
+                      await applyUploadMode(value);
+                    }}
+                  />
+                </div>
+              </Col>
+            </Row>
+          </div>
 
-        {renderSelectedConfig()}
-      </Form>
+          {renderSelectedConfig()}
+        </Form>
+        {appliedUploadMode === 'local' ? <UploadFileManager /> : null}
+      </>
     </Spin>
   );
 }

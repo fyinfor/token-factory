@@ -154,6 +154,7 @@ export default function HomeFooterCertificatesSetting() {
         setLoading(true);
         const fd = new FormData();
         fd.append('file', inst);
+        fd.append('purpose', 'homepage');
         const res = await API.post('/api/oss/upload', fd, {
           skipErrorHandler: true,
         });
