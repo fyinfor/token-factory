@@ -20,12 +20,13 @@ name: Deploy to Servers
 #     ├─ /home/ubuntu/token-factory
 #     └─ /home/ubuntu/token-factory-123-tok
 #   Node2 (139.199.57.140):
-#     └─ /home/ubuntu/tokease-token-factory  (slave，仅 app)
+#     ├─ /home/ubuntu/tokease-token-factory
+#     └─ /home/ubuntu/seedance2-factory-stack
 #
 # 手动触发可选部署目标（默认全部部署）:
 #   deploy_server_a → 112 HK
 #   deploy_server_b → 105 Tencent
-#   deploy_node2    → 140 Node2 集群从节点
+#   deploy_node2    → 140 Node2
 # ============================================================================
 
 on:
@@ -45,7 +46,7 @@ on:
         type: boolean
         default: true
       deploy_node2:
-        description: '部署到 Node2 集群从节点 (139.199.57.140)'
+        description: '部署到 Node2 (139.199.57.140)'
         type: boolean
         default: true
 
@@ -457,7 +458,7 @@ jobs:
           } >> $GITHUB_STEP_SUMMARY
 
   # ═════════════════════════════════════════════════════════════════════════
-  # Node2: 139.199.57.140  (集群从节点，SSH Key 认证，镜像走 ACR)
+  # Node2: 139.199.57.140  (SSH Key 认证，镜像走 ACR)
   # ═════════════════════════════════════════════════════════════════════════
   deploy-node2:
     name: Deploy → Node2 139.199.57.140
@@ -482,7 +483,7 @@ jobs:
               --password-stdin
             echo "✅ ACR login success"
 
-      - name: Deploy tokease-token-factory Node2 (139.199.57.140)
+      - name: Deploy tokease-token-factory (139.199.57.140)
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.SERVER_NODE2_HOST }}
@@ -496,9 +497,8 @@ jobs:
 
             echo "========================================="
             echo "  服务器: Node2 ${{ secrets.SERVER_NODE2_HOST }}"
-            echo "  实例:   tokease-token-factory (slave)"
+            echo "  实例:   tokease-token-factory"
             echo "  镜像:   $IMAGE"
-            echo "  路径:   $DIR"
             echo "  时间:   $(date '+%Y-%m-%d %H:%M:%S')"
             echo "========================================="
 
@@ -519,7 +519,7 @@ jobs:
             for i in 1 2 3 4 5; do
               if sudo docker compose ps --status running 2>/dev/null | grep -qE '(Up|running|healthy)'; then
                 HEALTHY=true
-                echo "✅ Node2 tokease-token-factory 容器运行中 (第 ${i} 次检查)"
+                echo "✅ tokease-token-factory 容器运行中 (第 ${i} 次检查)"
                 break
               fi
               echo "⏳ 等待... (${i}/5)"
@@ -534,6 +534,58 @@ jobs:
             fi
 
             sudo docker compose ps
+
+      - name: Deploy seedance2-factory (139.199.57.140)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.SERVER_NODE2_HOST }}
+          port: ${{ secrets.SERVER_NODE2_PORT || 22 }}
+          username: ${{ secrets.SERVER_NODE2_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY_NODE2 }}
+          script: |
+            set -e
+            IMAGE="${{ env.REGISTRY_ACR }}/${{ env.IMAGE_NAME_ACR }}:${{ inputs.tag }}"
+            DIR="/home/ubuntu/seedance2-factory-stack/seedance2-factory"
+
+            echo "========================================="
+            echo "  服务器: Node2 ${{ secrets.SERVER_NODE2_HOST }}"
+            echo "  实例:   seedance2-factory"
+            echo "  镜像:   $IMAGE"
+            echo "  时间:   $(date '+%Y-%m-%d %H:%M:%S')"
+            echo "========================================="
+
+            cd "$DIR" || { echo "❌ 目录不存在: $DIR"; exit 1; }
+
+            echo ""
+            echo "[1/3] Pulling image from ACR..."
+            sudo docker compose -f docker-compose.yaml pull
+
+            echo ""
+            echo "[2/3] Starting services..."
+            sudo docker compose -f docker-compose.yaml up -d
+
+            echo ""
+            echo "[3/3] Health check..."
+            sleep 5
+            HEALTHY=false
+            for i in 1 2 3 4 5; do
+              if sudo docker compose -f docker-compose.yaml ps --status running 2>/dev/null | grep -qE '(Up|running|healthy)'; then
+                HEALTHY=true
+                echo "✅ seedance2-factory 容器运行中 (第 ${i} 次检查)"
+                break
+              fi
+              echo "⏳ 等待... (${i}/5)"
+              sleep 10
+            done
+
+            if [ "$HEALTHY" = false ]; then
+              echo "⚠️ 健康检查未通过, 当前容器状态:"
+              sudo docker compose -f docker-compose.yaml ps
+              sudo docker compose -f docker-compose.yaml logs --tail=30
+              exit 1
+            fi
+
+            sudo docker compose -f docker-compose.yaml ps
 
       - name: Cleanup old images (Node2)
         uses: appleboy/ssh-action@v1
@@ -558,7 +610,6 @@ jobs:
             echo "| 项目 | 值 |"
             echo "|------|-----|"
             echo "| 镜像 | \`${{ env.REGISTRY_ACR }}/${{ env.IMAGE_NAME_ACR }}:${{ inputs.tag }}\` |"
-            echo "| 角色 | slave（仅 app，无 PG/Redis） |"
-            echo "| 路径 | /home/ubuntu/tokease-token-factory |"
-            echo "| 实例 | tokease-token-factory |"
+            echo "| 实例1 | tokease-token-factory |"
+            echo "| 实例2 | seedance2-factory |"
           } >> $GITHUB_STEP_SUMMARY
