@@ -852,6 +852,13 @@ type putDistributorCommissionRequest struct {
 	DistributorCommissionBps int `json:"distributor_commission_bps"`
 }
 
+type putDistributorsCommissionRequest struct {
+	DistributorCommissionBps *int   `json:"distributor_commission_bps"`
+	Scope                    string `json:"scope"`
+	Keyword                  string `json:"keyword"`
+	ApplyType                *int   `json:"apply_type"`
+}
+
 // PutDistributorCommissionAdmin 设置单个分销商默认分成比例
 func PutDistributorCommissionAdmin(c *gin.Context) {
 	id, err := strconv.Atoi(c.Param("id"))
@@ -869,6 +876,55 @@ func PutDistributorCommissionAdmin(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+}
+
+// PutDistributorsCommissionAdmin 批量设置全部或当前筛选结果中的分销商默认分成比例。
+func PutDistributorsCommissionAdmin(c *gin.Context) {
+	var req putDistributorsCommissionRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的请求"})
+		return
+	}
+	if req.DistributorCommissionBps == nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "请填写分销比例"})
+		return
+	}
+	applyType := 0
+	if req.ApplyType != nil {
+		applyType = *req.ApplyType
+	}
+	keywordRunes := []rune(strings.TrimSpace(req.Keyword))
+	if len(keywordRunes) > 120 {
+		keywordRunes = keywordRunes[:120]
+	}
+	keyword := string(keywordRunes)
+	switch strings.TrimSpace(req.Scope) {
+	case "all":
+		keyword = ""
+		applyType = 0
+	case "filtered":
+		if keyword == "" && applyType == 0 {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "筛选条件不能为空"})
+			return
+		}
+	default:
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的设置范围"})
+		return
+	}
+	updated, err := model.SetDistributorsCommissionBps(
+		*req.DistributorCommissionBps,
+		keyword,
+		applyType,
+	)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    gin.H{"updated_count": updated},
+	})
 }
 
 // GetDistributorInviteesAdmin 某分销商名下邀请用户明细

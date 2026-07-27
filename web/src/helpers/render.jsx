@@ -1386,7 +1386,11 @@ function toFixedTruncated(num, fractionDigits) {
     return String(num ?? '');
   }
   const factor = Math.pow(10, fractionDigits);
-  const truncated = (n >= 0 ? Math.floor : Math.ceil)(n * factor) / factor;
+  const scaled = n * factor;
+  const epsilon = Number.EPSILON * Math.max(1, Math.abs(scaled));
+  const truncated =
+    (n >= 0 ? Math.floor(scaled + epsilon) : Math.ceil(scaled - epsilon)) /
+    factor;
   return truncated.toFixed(fractionDigits);
 }
 
@@ -1493,6 +1497,21 @@ export function renderQuota(quota, digits = 2) {
   }
   const { symbol, value } = parts;
   const fixedResult = parseFloat(toFixedTruncated(value, digits));
+  if (fixedResult === 0 && quota > 0 && value > 0) {
+    const minValue = Math.pow(10, -digits);
+    return symbol + trimFixedDecimalDisplay(minValue, digits);
+  }
+  return symbol + trimFixedDecimalDisplay(fixedResult, digits);
+}
+
+/** 配置金额按常规四舍五入展示，避免额度整数换算造成少显示一分钱。 */
+export function renderQuotaRounded(quota, digits = 2) {
+  const parts = quotaToDisplayCurrencyParts(quota);
+  if (parts === null) {
+    return renderNumber(quota);
+  }
+  const { symbol, value } = parts;
+  const fixedResult = parseFloat(Number(value).toFixed(digits));
   if (fixedResult === 0 && quota > 0 && value > 0) {
     const minValue = Math.pow(10, -digits);
     return symbol + trimFixedDecimalDisplay(minValue, digits);

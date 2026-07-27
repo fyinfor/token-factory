@@ -17,45 +17,25 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useCallback, useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { CalendarCheck, LoaderCircle, Megaphone, X } from 'lucide-react';
+import { BellRing, Megaphone, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { API, showError } from '../../helpers';
 import { StatusContext } from '../../context/Status';
 import { useNotifications } from '../../hooks/common/useNotifications';
 import AnnouncementList from './AnnouncementList';
 
-const NoticeModal = ({ visible, onClose }) => {
+const NoticeModal = ({
+  visible,
+  onClose,
+  onViewMore,
+  fallbackContent = '',
+}) => {
   const { t } = useTranslation();
   const [statusState] = useContext(StatusContext);
-  const [noticeContent, setNoticeContent] = useState('');
-  const [loading, setLoading] = useState(false);
   const { announcements, unreadKeys, markAnnouncementsRead } =
     useNotifications(statusState);
-  const visibleAnnouncements = announcements.slice(0, 20);
-
-  const loadLegacyNotice = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await API.get('/api/notice', { skipErrorHandler: true });
-      const { success, message, data } = res.data || {};
-      if (!success) {
-        showError(message || t('加载中...'));
-        return;
-      }
-      setNoticeContent(data || '');
-    } catch (error) {
-      showError(error?.message || t('加载中...'));
-    } finally {
-      setLoading(false);
-    }
-  }, [t]);
-
-  const handleCloseToday = useCallback(() => {
-    localStorage.setItem('notice_close_date', new Date().toDateString());
-    onClose();
-  }, [onClose]);
+  const visibleAnnouncements = announcements.slice(0, 1);
 
   useEffect(() => {
     if (!visible) {
@@ -63,8 +43,6 @@ const NoticeModal = ({ visible, onClose }) => {
     }
     if (visibleAnnouncements.length > 0) {
       markAnnouncementsRead(visibleAnnouncements);
-    } else {
-      loadLegacyNotice();
     }
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') {
@@ -118,12 +96,7 @@ const NoticeModal = ({ visible, onClose }) => {
         </header>
 
         <div className='home-notice-scroll'>
-          {loading ? (
-            <div className='notification-empty-state'>
-              <LoaderCircle className='notification-spinner' size={26} />
-              <span>{t('加载中...')}</span>
-            </div>
-          ) : visibleAnnouncements.length === 0 && !noticeContent ? (
+          {visibleAnnouncements.length === 0 && !fallbackContent ? (
             <div className='notification-empty-state'>
               <Megaphone size={30} />
               <span>{t('暂无系统公告')}</span>
@@ -132,7 +105,7 @@ const NoticeModal = ({ visible, onClose }) => {
             <AnnouncementList
               items={visibleAnnouncements}
               unreadKeys={unreadKeys}
-              fallbackContent={noticeContent}
+              fallbackContent={fallbackContent}
             />
           )}
         </div>
@@ -140,12 +113,12 @@ const NoticeModal = ({ visible, onClose }) => {
         <footer className='home-notice-footer'>
           <button
             className='home-notice-secondary-button'
-            onClick={handleCloseToday}
+            onClick={onViewMore}
             tabIndex={visible ? 0 : -1}
             type='button'
           >
-            <CalendarCheck size={16} />
-            <span>{t('今日关闭')}</span>
+            <BellRing size={16} />
+            <span>{t('查看更多')}</span>
           </button>
           <button
             className='home-notice-primary-button'

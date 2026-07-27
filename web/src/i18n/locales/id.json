@@ -5043,6 +5043,7 @@
     "账户已锁定": "Akun terkunci",
     "账户余额": "Saldo akun",
     "账户状态": "Status akun",
+    "{{ratio}}折": "{{discount}}% off",
     "折": "% diskon",
     "折扣": "Diskon",
     "折扣率": "tingkat diskonto",
@@ -5843,5 +5844,17 @@
   "角标文案（英文）": "Badge text (English)",
   "首页广告中文文案": "Chinese copy",
   "首页广告英文文案": "English copy",
-  "首页广告英文文案说明": "Non-Chinese interfaces prefer English copy; falls back to Chinese when English is empty."
+  "首页广告英文文案说明": "Non-Chinese interfaces prefer English copy; falls back to Chinese when English is empty.",
+  "一键设置分销比例": "Atur rasio komisi",
+  "请选择或输入分销比例": "Pilih atau masukkan rasio komisi",
+  "已为 {{count}} 位代理更新分销比例": "Rasio komisi diperbarui untuk {{count}} agen",
+  "跟随系统默认": "Ikuti default sistem",
+  "全部代理": "Semua agen",
+  "当前筛选结果（{{count}} 人）": "Hasil filter saat ini ({{count}})",
+  "常用比例": "Rasio umum",
+  "自定义比例": "Rasio khusus",
+  "设置范围": "Terapkan ke",
+  "确认设置": "Konfirmasi",
+  "该操作会覆盖目标代理已有的单独比例设置。设置为 0% 后，代理将跟随系统默认分销比例。": "Tindakan ini akan menimpa rasio khusus agen yang dituju. Atur ke 0% untuk mengikuti default sistem.",
+  "批量设置失败": "Pembaruan massal gagal"
 }

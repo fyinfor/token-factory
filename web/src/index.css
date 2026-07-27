@@ -4111,6 +4111,10 @@ html:not(.dark) .distributor-center-ratio-badge {
   border-bottom: 1px solid rgba(100, 119, 143, 0.13);
 }
 
+.notification-center-tabs.is-single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .notification-center-tabs button {
   position: relative;
   display: flex;
@@ -4169,6 +4173,10 @@ html:not(.dark) .distributor-center-ratio-badge {
   transform: translateX(calc(100% + 18px));
 }
 
+.notification-center-tabs.is-single .notification-tab-indicator {
+  width: 100%;
+}
+
 .notification-center-scroll {
   position: relative;
   min-height: 0;
@@ -4176,7 +4184,36 @@ html:not(.dark) .distributor-center-ratio-badge {
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
-  scrollbar-color: rgba(91, 111, 136, 0.26) transparent;
+}
+
+.notification-center-scroll,
+.home-notice-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(91, 111, 136, 0.34) transparent;
+}
+
+.notification-center-scroll::-webkit-scrollbar,
+.home-notice-scroll::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.notification-center-scroll::-webkit-scrollbar-track,
+.home-notice-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.notification-center-scroll::-webkit-scrollbar-thumb,
+.home-notice-scroll::-webkit-scrollbar-thumb {
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: rgba(91, 111, 136, 0.34);
+  background-clip: padding-box;
+}
+
+.notification-center-scroll::-webkit-scrollbar-thumb:hover,
+.home-notice-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(91, 111, 136, 0.52);
 }
 
 .notification-pull-indicator {
@@ -4690,6 +4727,21 @@ html.dark .home-notice-dialog {
   box-shadow:
     -20px 20px 70px rgba(0, 0, 0, 0.4),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+html.dark .notification-center-scroll,
+html.dark .home-notice-scroll {
+  scrollbar-color: rgba(148, 163, 184, 0.38) transparent;
+}
+
+html.dark .notification-center-scroll::-webkit-scrollbar-thumb,
+html.dark .home-notice-scroll::-webkit-scrollbar-thumb {
+  background-color: rgba(148, 163, 184, 0.38);
+}
+
+html.dark .notification-center-scroll::-webkit-scrollbar-thumb:hover,
+html.dark .home-notice-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(186, 200, 217, 0.56);
 }
 
 html.dark .notification-center-header,

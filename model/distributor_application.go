@@ -455,6 +455,39 @@ func SetUserDistributorCommissionBps(userId, bps int) error {
 	return DB.Model(&User{}).Where("id = ?", userId).Update("distributor_commission_bps", bps).Error
 }
 
+// SetDistributorsCommissionBps 批量设置满足管理端筛选条件的分销商默认分成比例。
+func SetDistributorsCommissionBps(bps int, keyword string, applyType int) (int64, error) {
+	if bps < 0 || bps > 10000 {
+		return 0, fmt.Errorf("commission bps must be 0..10000")
+	}
+	if applyType != 0 && applyType != DistributorApplyTypePersonal && applyType != DistributorApplyTypeEnterprise {
+		return 0, fmt.Errorf("invalid distributor apply type")
+	}
+
+	tx := DB.Model(&User{}).
+		Where("is_distributor = ? AND role < ?", common.DistributorFlagYes, common.RoleAdminUser)
+	if applyType == DistributorApplyTypePersonal || applyType == DistributorApplyTypeEnterprise {
+		tx = tx.Where(
+			"EXISTS (SELECT 1 FROM distributor_applications WHERE distributor_applications.user_id = users.id AND distributor_applications.apply_type = ?)",
+			applyType,
+		)
+	}
+	if kw := strings.TrimSpace(keyword); kw != "" {
+		pattern := "%" + kw + "%"
+		tx = tx.Where(
+			`(username LIKE ? OR display_name LIKE ? OR EXISTS (
+				SELECT 1 FROM distributor_applications
+				WHERE distributor_applications.user_id = users.id
+				AND (distributor_applications.real_name LIKE ? OR distributor_applications.contact LIKE ? OR distributor_applications.id_card_no LIKE ?)
+			))`,
+			pattern, pattern, pattern, pattern, pattern,
+		)
+	}
+
+	result := tx.Update("distributor_commission_bps", bps)
+	return result.RowsAffected, result.Error
+}
+
 // AdminSettleDistributorAffQuota 结账：清空待结算分销收益额度 aff_quota
 func AdminSettleDistributorAffQuota(userId int) error {
 	if userId <= 0 {

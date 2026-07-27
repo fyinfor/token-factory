@@ -5043,6 +5043,7 @@
     "账户已锁定": "Akaun dikunci",
     "账户余额": "Baki akaun",
     "账户状态": "Status akaun",
+    "{{ratio}}折": "{{discount}}% off",
     "折": "% diskaun",
     "折扣": "Diskaun",
     "折扣率": "kadar diskaun",
@@ -5843,5 +5844,17 @@
   "角标文案（英文）": "Badge text (English)",
   "首页广告中文文案": "Chinese copy",
   "首页广告英文文案": "English copy",
-  "首页广告英文文案说明": "Non-Chinese interfaces prefer English copy; falls back to Chinese when English is empty."
+  "首页广告英文文案说明": "Non-Chinese interfaces prefer English copy; falls back to Chinese when English is empty.",
+  "一键设置分销比例": "Tetapkan kadar komisen",
+  "请选择或输入分销比例": "Pilih atau masukkan kadar komisen",
+  "已为 {{count}} 位代理更新分销比例": "Kadar komisen dikemas kini untuk {{count}} ejen",
+  "跟随系统默认": "Ikut lalai sistem",
+  "全部代理": "Semua ejen",
+  "当前筛选结果（{{count}} 人）": "Hasil tapisan semasa ({{count}})",
+  "常用比例": "Kadar lazim",
+  "自定义比例": "Kadar tersuai",
+  "设置范围": "Terapkan kepada",
+  "确认设置": "Sahkan",
+  "该操作会覆盖目标代理已有的单独比例设置。设置为 0% 后，代理将跟随系统默认分销比例。": "Tindakan ini akan menggantikan kadar individu ejen sasaran. Tetapkan 0% untuk menggunakan kadar lalai sistem.",
+  "批量设置失败": "Kemas kini pukal gagal"
 }

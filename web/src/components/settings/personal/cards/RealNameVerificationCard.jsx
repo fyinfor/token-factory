@@ -1,7 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Button, Modal, Space, Tag, Typography } from '@douyinfe/semi-ui';
 import { QRCodeSVG } from 'qrcode.react';
-import { API, renderQuota, showError, showSuccess } from '../../../../helpers';
+import {
+  API,
+  renderQuotaRounded,
+  showError,
+  showSuccess,
+} from '../../../../helpers';
+import { getQuotaPerUnit } from '../../../../helpers/quota';
 import { useTranslation } from 'react-i18next';
 import { BadgeCheck, Check, Gift, ScanFace, ShieldCheck } from 'lucide-react';
 import { USER_MESSAGE_REFRESH_EVENT } from '../../../../hooks/common/useUserMessageUnreadCount';
@@ -117,8 +123,7 @@ export default function RealNameVerificationCard() {
 
   const config = statusConfig[verification.status] || statusConfig.unverified;
   const rewardQuota = Math.round(
-    Number(verification.reward_amount || 0) *
-      Number(localStorage.getItem('quota_per_unit') || 500000),
+    Number(verification.reward_amount || 0) * getQuotaPerUnit(),
   );
   return (
     <div className='real-name-card'>
@@ -175,7 +180,7 @@ export default function RealNameVerificationCard() {
                 {t('\u5b9e\u540d\u5956\u52b1')}
               </span>
               <span className='real-name-reward__amount'>
-                {renderQuota(rewardQuota)}
+                {renderQuotaRounded(rewardQuota)}
               </span>
             </div>
             <div className='real-name-reward__desc'>

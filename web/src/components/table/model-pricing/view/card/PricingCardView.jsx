@@ -407,7 +407,7 @@ const TokenPriceLabel = ({ category, t, fallback }) => {
  * 渲染折扣单元格
  * 折扣视觉效果：Tag 胶囊标签样式，颜色统一 #E74C3C
  */
-const renderDiscountCell = (discount) => {
+const renderDiscountCell = (discount, t) => {
   if (discount != null && discount > 0) {
     return (
       <Tag
@@ -421,7 +421,7 @@ const renderDiscountCell = (discount) => {
           border: 'none',
         }}
       >
-        {formatPriceRatioFromDiscount(discount)}
+        {formatPriceRatioFromDiscount(discount, t)}
       </Tag>
     );
   }
@@ -492,7 +492,7 @@ const DIV_PRICING_ROW_STYLE = {
 const DIV_PRICING_ROW_BORDER =
   '1px solid var(--model-price-glass-line, rgba(148, 163, 184, 0.14))';
 
-const DivPricingTable = ({ columns, rows }) => {
+const DivPricingTable = ({ columns, rows, t }) => {
   if (!Array.isArray(rows) || rows.length === 0) return null;
 
   return (
@@ -560,7 +560,7 @@ const DivPricingTable = ({ columns, rows }) => {
             )}
           </div>
           <div className='min-w-0 px-2 py-1.5 text-center whitespace-nowrap overflow-hidden text-ellipsis'>
-            {renderDiscountCell(row.discount)}
+            {renderDiscountCell(row.discount, t)}
           </div>
         </div>
       ))}
@@ -612,6 +612,7 @@ const TokenTierTable = ({ items, t }) => {
   const tokenTierDivTable = (
     <DivPricingTable
       columns={getDivPricingColumns(t, '/M')}
+      t={t}
       rows={displayRows.map(({ key, label, cell }) => {
         const catStyle =
           TIER_CATEGORY_STYLES[key] || TIER_CATEGORY_STYLES.input;
@@ -704,7 +705,7 @@ const TokenTierTable = ({ items, t }) => {
                   )}
                   {!hideOfficialCols && (
                     <td className={TABLE_CELL_CLASS.tdDiscount}>
-                      {renderDiscountCell(cell.discount)}
+                      {renderDiscountCell(cell.discount, t)}
                     </td>
                   )}
                 </tr>
@@ -757,6 +758,7 @@ const FlatPricingTable = ({ items, unitSuffix, t }) => {
   const flatDivTable = (
     <DivPricingTable
       columns={getDivPricingColumns(t, normalizePriceUnit(unitSuffix))}
+      t={t}
       rows={rows.map((row) => ({
         key: row.key,
         label: row.label,
@@ -850,7 +852,7 @@ const FlatPricingTable = ({ items, unitSuffix, t }) => {
                 )}
                 {!hideOfficialCols && (
                   <td className={TABLE_CELL_CLASS.tdDiscount}>
-                    {renderDiscountCell(row.discount)}
+                    {renderDiscountCell(row.discount, t)}
                   </td>
                 )}
               </tr>
@@ -885,6 +887,7 @@ const FixedPricingTable = ({ row, t }) => {
   const fixedDivTable = (
     <DivPricingTable
       columns={getDivPricingColumns(t, normalizePriceUnit(row.suffix))}
+      t={t}
       rows={[
         {
           key: 'fixed',
@@ -969,7 +972,7 @@ const FixedPricingTable = ({ row, t }) => {
               )}
               {!hideOfficialCols && (
                 <td className={TABLE_CELL_CLASS.tdDiscount}>
-                  {renderDiscountCell(discount)}
+                  {renderDiscountCell(discount, t)}
                 </td>
               )}
             </tr>
@@ -1011,6 +1014,7 @@ const VideoPricingTable = ({ videoTierRows, videoBillingMode, t }) => {
   const videoDivTable = (
     <DivPricingTable
       columns={getDivPricingColumns(t, normalizePriceUnit(unitSuffix))}
+      t={t}
       rows={groups.flatMap((group) =>
         group.rows.map((row) => {
           const groupStyle = getVideoTierGroupStyle(group.family);
@@ -1141,7 +1145,7 @@ const VideoPricingTable = ({ videoTierRows, videoBillingMode, t }) => {
                   )}
                   {!allRowsNoDiscount && (
                     <td className={TABLE_CELL_CLASS.tdDiscount}>
-                      {renderDiscountCell(row.discount)}
+                      {renderDiscountCell(row.discount, t)}
                     </td>
                   )}
                 </tr>
@@ -1160,6 +1164,7 @@ const ImagePricingTable = ({ imageTierRows, t }) => {
   return (
     <DivPricingTable
       columns={getDivPricingColumns(t, `/${t('张')}`)}
+      t={t}
       rows={imageTierRows.map((row) => ({
         key: row.key,
         label: `${row.label}·${row.spec}`,
@@ -1272,6 +1277,7 @@ const PricingCardView = ({
       ) : !item.valueNode && item.value ? (
         <DivPricingTable
           columns={getDivPricingColumns(t, normalizePriceUnit(item.suffix))}
+          t={t}
           rows={[
             {
               key: item.key,
@@ -1331,7 +1337,7 @@ const PricingCardView = ({
                     border: 'none',
                   }}
                 >
-                  {formatPriceRatioFromDiscount(item.original.discount)}
+                  {formatPriceRatioFromDiscount(item.original.discount, t)}
                 </Tag>
                 <span>
                   <span style={{ color: 'var(--semi-color-warning)' }}>
@@ -1454,7 +1460,7 @@ const PricingCardView = ({
 
   const formatDiscountBadge = (discount) => {
     if (!(discount > 0)) return '';
-    return formatPriceRatioFromDiscount(discount);
+    return formatPriceRatioFromDiscount(discount, t);
   };
 
   const getPrimarySupplierType = (model) => {
@@ -2702,6 +2708,7 @@ const PricingCardView = ({
                                           >
                                             {formatPriceRatioFromDiscount(
                                               item.original.discount,
+                                              t,
                                             )}
                                           </Tag>
                                           <span>

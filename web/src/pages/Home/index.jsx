@@ -47,6 +47,13 @@ import {
 } from '@douyinfe/semi-icons';
 import { Link } from 'react-router-dom';
 import NoticeModal from '../../components/layout/NoticeModal';
+import {
+  OPEN_NOTIFICATION_CENTER_EVENT,
+  acknowledgeAnnouncementPopup,
+  getAnnouncementPopupKey,
+  getLegacyNoticePopupKey,
+  isAnnouncementPopupAcknowledged,
+} from '../../hooks/common/useNotifications';
 import HomeModelList from '../../components/home/HomeModelList';
 import HomeHeroCarousel from '../../components/home/HomeHeroCarousel';
 import HomeFooterCertificates from '../../components/home/HomeFooterCertificates';
@@ -110,8 +117,13 @@ const Home = () => {
   const [homePageContentLoaded, setHomePageContentLoaded] = useState(false);
   const [homePageContent, setHomePageContent] = useState('');
   const [noticeVisible, setNoticeVisible] = useState(false);
+  const [noticePopupKey, setNoticePopupKey] = useState('');
+  const [legacyNoticeContent, setLegacyNoticeContent] = useState('');
   const noticeCheckedRef = useRef(false);
-  const announcementCount = statusState?.status?.announcements?.length || 0;
+  const latestAnnouncement = statusState?.status?.announcements?.[0];
+  const latestAnnouncementPopupKey = latestAnnouncement
+    ? getAnnouncementPopupKey(latestAnnouncement)
+    : '';
   const isMobile = useIsMobile();
   const isDemoSiteMode = statusState?.status?.demo_site_enabled || false;
   const serverAddress =
@@ -168,24 +180,38 @@ const Home = () => {
 
   useEffect(() => {
     const checkNoticeAndShow = async () => {
-      const lastCloseDate = localStorage.getItem('notice_close_date');
-      const today = new Date().toDateString();
-      if (
-        noticeCheckedRef.current ||
-        lastCloseDate === today ||
-        !statusState?.status
-      ) {
+      if (!statusState?.status) {
         return;
       }
-      noticeCheckedRef.current = true;
-      if (announcementCount > 0) {
+
+      if (latestAnnouncementPopupKey) {
+        if (
+          noticeCheckedRef.current === latestAnnouncementPopupKey ||
+          isAnnouncementPopupAcknowledged(latestAnnouncementPopupKey)
+        ) {
+          return;
+        }
+        noticeCheckedRef.current = latestAnnouncementPopupKey;
+        setLegacyNoticeContent('');
+        setNoticePopupKey(latestAnnouncementPopupKey);
         setNoticeVisible(true);
         return;
       }
+
+      if (noticeCheckedRef.current === 'legacy') {
+        return;
+      }
+      noticeCheckedRef.current = 'legacy';
       try {
         const res = await API.get('/api/notice');
         const { success, data } = res.data;
         if (success && data && data.trim() !== '') {
+          const legacyPopupKey = getLegacyNoticePopupKey(data);
+          if (isAnnouncementPopupAcknowledged(legacyPopupKey)) {
+            return;
+          }
+          setLegacyNoticeContent(data);
+          setNoticePopupKey(legacyPopupKey);
           setNoticeVisible(true);
         }
       } catch (error) {
@@ -194,7 +220,17 @@ const Home = () => {
     };
 
     checkNoticeAndShow();
-  }, [announcementCount, statusState?.status]);
+  }, [latestAnnouncementPopupKey, statusState?.status]);
+
+  const acknowledgeNotice = () => {
+    acknowledgeAnnouncementPopup(noticePopupKey);
+    setNoticeVisible(false);
+  };
+
+  const handleViewMoreNotices = () => {
+    acknowledgeNotice();
+    window.dispatchEvent(new Event(OPEN_NOTIFICATION_CENTER_EVENT));
+  };
 
   useEffect(() => {
     displayHomePageContent().then();
@@ -220,7 +256,9 @@ const Home = () => {
       <div className='w-full h-[100dvh] overflow-y-auto home-scroll-container'>
         <NoticeModal
           visible={noticeVisible}
-          onClose={() => setNoticeVisible(false)}
+          fallbackContent={legacyNoticeContent}
+          onClose={acknowledgeNotice}
+          onViewMore={handleViewMoreNotices}
         />
         {homePageContentLoaded && homePageContent === '' ? (
           <div className='w-full'>

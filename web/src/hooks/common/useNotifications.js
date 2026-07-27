@@ -20,20 +20,64 @@ For commercial licensing, please contact support@quantumnous.com
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 const ANNOUNCEMENT_READ_STORAGE_KEY = 'notice_read_keys';
+const ANNOUNCEMENT_POPUP_ACK_STORAGE_KEY = 'notice_popup_acknowledged_keys';
 export const ANNOUNCEMENT_READ_EVENT = 'announcement-read-state-changed';
+export const OPEN_NOTIFICATION_CENTER_EVENT = 'open-notification-center';
+
+const readStoredList = (storageKey) => {
+  try {
+    const values = JSON.parse(localStorage.getItem(storageKey) || '[]');
+    return Array.isArray(values) ? values : [];
+  } catch (_) {
+    return [];
+  }
+};
+
+const hashString = (value) => {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${value.length}-${(hash >>> 0).toString(36)}`;
+};
 
 export const getAnnouncementKey = (announcement) =>
   `${announcement?.publishDate || ''}-${(announcement?.content || '').slice(0, 30)}`;
 
 const readStoredKeys = () => {
-  try {
-    const keys = JSON.parse(
-      localStorage.getItem(ANNOUNCEMENT_READ_STORAGE_KEY) || '[]',
-    );
-    return Array.isArray(keys) ? keys : [];
-  } catch (_) {
-    return [];
+  return readStoredList(ANNOUNCEMENT_READ_STORAGE_KEY);
+};
+
+export const getAnnouncementPopupKey = (announcement) =>
+  `announcement-${hashString(
+    JSON.stringify({
+      id: announcement?.id ?? null,
+      publishDate: announcement?.publishDate || '',
+      type: announcement?.type || 'default',
+      content: announcement?.content || '',
+      extra: announcement?.extra || '',
+    }),
+  )}`;
+
+export const getLegacyNoticePopupKey = (content) =>
+  `legacy-${hashString(content || '')}`;
+
+export const isAnnouncementPopupAcknowledged = (key) =>
+  Boolean(
+    key && readStoredList(ANNOUNCEMENT_POPUP_ACK_STORAGE_KEY).includes(key),
+  );
+
+export const acknowledgeAnnouncementPopup = (key) => {
+  if (!key) {
+    return;
   }
+  const acknowledgedKeys = readStoredList(ANNOUNCEMENT_POPUP_ACK_STORAGE_KEY);
+  const nextKeys = Array.from(new Set([...acknowledgedKeys, key])).slice(-200);
+  localStorage.setItem(
+    ANNOUNCEMENT_POPUP_ACK_STORAGE_KEY,
+    JSON.stringify(nextKeys),
+  );
 };
 
 export const markAnnouncementKeysRead = (keys) => {

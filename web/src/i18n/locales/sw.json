@@ -5043,6 +5043,7 @@
     "账户已锁定": "Akaunti imefungwa",
     "账户余额": "Salio la akaunti",
     "账户状态": "Hali ya akaunti",
+    "{{ratio}}折": "{{discount}}% off",
     "折": "% punguzo",
     "折扣": "Punguzo",
     "折扣率": "kiwango cha punguzo",
@@ -5843,5 +5844,17 @@
   "角标文案（英文）": "Badge text (English)",
   "首页广告中文文案": "Chinese copy",
   "首页广告英文文案": "English copy",
-  "首页广告英文文案说明": "Non-Chinese interfaces prefer English copy; falls back to Chinese when English is empty."
+  "首页广告英文文案说明": "Non-Chinese interfaces prefer English copy; falls back to Chinese when English is empty.",
+  "一键设置分销比例": "Weka kiwango cha kamisheni",
+  "请选择或输入分销比例": "Chagua au uweke kiwango cha kamisheni",
+  "已为 {{count}} 位代理更新分销比例": "Kiwango cha kamisheni kimesasishwa kwa mawakala {{count}}",
+  "跟随系统默认": "Fuata chaguo-msingi la mfumo",
+  "全部代理": "Mawakala wote",
+  "当前筛选结果（{{count}} 人）": "Matokeo ya sasa ya uchujaji ({{count}})",
+  "常用比例": "Viwango vya kawaida",
+  "自定义比例": "Kiwango maalum",
+  "设置范围": "Tumia kwa",
+  "确认设置": "Thibitisha",
+  "该操作会覆盖目标代理已有的单独比例设置。设置为 0% 后，代理将跟随系统默认分销比例。": "Hatua hii itabadilisha viwango binafsi vya mawakala lengwa. Weka 0% ili kutumia chaguo-msingi la mfumo.",
+  "批量设置失败": "Usasishaji wa pamoja umeshindikana"
 }
