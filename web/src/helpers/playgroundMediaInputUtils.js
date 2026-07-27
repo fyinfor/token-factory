@@ -53,6 +53,7 @@ export function appendUploadedMediaUrl(
 export async function uploadPlaygroundMediaFile(file) {
   const fd = new FormData();
   fd.append('file', file);
+  fd.append('purpose', 'playground');
   const res = await API.post('/api/oss/upload', fd, {
     skipErrorHandler: true,
   });

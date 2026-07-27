@@ -146,6 +146,7 @@ export default function DistributorApplyFileUpload({
 
     const fd = new FormData();
     fd.append('file', inst);
+    fd.append('purpose', 'distributor');
     setUploadPct(0);
     try {
       const res = await API.post('/api/oss/upload', fd, {

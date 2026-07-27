@@ -122,6 +122,7 @@ export default function SettingsDistributor(props) {
         setUploadingKey(optionKey);
         const fd = new FormData();
         fd.append('file', inst);
+        fd.append('purpose', 'distributor');
         try {
           const res = await API.post('/api/oss/upload', fd, {
             skipErrorHandler: true,

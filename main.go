@@ -150,6 +150,9 @@ func main() {
 	// Redemption code expiration settlement task
 	service.StartRedemptionSettlementTask()
 
+	// Remove expired Playground media from local storage or OSS.
+	service.StartTemporaryUploadCleanupTask()
+
 	// Wire task polling adaptor factory (breaks service -> relay import cycle)
 	service.GetTaskAdaptorFunc = func(platform constant.TaskPlatform) service.TaskPollingAdaptor {
 		a := relay.GetTaskAdaptor(platform)

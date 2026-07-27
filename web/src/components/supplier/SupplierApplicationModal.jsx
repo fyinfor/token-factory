@@ -593,6 +593,7 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
     try {
       const formData = new FormData();
       formData.append('file', fileInstance);
+      formData.append('purpose', 'supplier');
 
       const res = await API.post('/api/oss/upload', formData, {
         headers: {
@@ -658,6 +659,7 @@ const SupplierApplicationModal = ({ visible, handleClose }) => {
     try {
       const formData = new FormData();
       formData.append('file', fileInstance);
+      formData.append('purpose', 'supplier');
 
       const res = await API.post('/api/oss/upload', formData, {
         headers: {

@@ -29,6 +29,14 @@ func LocalUploadMultipartFile(file *multipart.FileHeader, userID int) (string, e
 }
 
 func localUploadMultipartFileWithPrefix(file *multipart.FileHeader, userID int, prefix string) (string, error) {
+	result, err := localUploadMultipartFileWithPrefixResult(file, userID, prefix)
+	if err != nil {
+		return "", err
+	}
+	return result.URL, nil
+}
+
+func localUploadMultipartFileWithPrefixResult(file *multipart.FileHeader, userID int, prefix string) (*UploadResult, error) {
 	_ = userID
 	cfg := operation_setting.GetOssSetting()
 
@@ -41,7 +49,7 @@ func localUploadMultipartFileWithPrefix(file *multipart.FileHeader, userID int, 
 	}
 	maxBytes := int64(maxFileSizeMB) * 1024 * 1024
 	if file.Size > maxBytes {
-		return "", fmt.Errorf("文件超过大小限制（最大 %d MB）", maxFileSizeMB)
+		return nil, fmt.Errorf("文件超过大小限制（最大 %d MB）", maxFileSizeMB)
 	}
 
 	// 确定存储根目录：本地上传固定写入 uploads 目录，配置的文件夹前缀只作为 uploads 下的子目录。
@@ -50,7 +58,7 @@ func localUploadMultipartFileWithPrefix(file *multipart.FileHeader, userID int, 
 	// 生成文件相对路径：prefix/yyyy/mm/dd/uuid.ext
 	relPath, err := BuildLocalUploadObjectPath(prefix, uploadFileExt(file.Filename))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	// 完整文件路径
@@ -59,34 +67,39 @@ func localUploadMultipartFileWithPrefix(file *multipart.FileHeader, userID int, 
 	// 确保目录存在
 	dir := filepath.Dir(fullPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return "", fmt.Errorf("创建本地存储目录失败: %w", err)
+		return nil, fmt.Errorf("创建本地存储目录失败: %w", err)
 	}
 
 	// 打开上传文件
 	src, err := file.Open()
 	if err != nil {
-		return "", fmt.Errorf("读取上传文件失败: %w", err)
+		return nil, fmt.Errorf("读取上传文件失败: %w", err)
 	}
 	defer src.Close()
 
 	// 创建目标文件
 	dst, err := os.Create(fullPath)
 	if err != nil {
-		return "", fmt.Errorf("创建本地文件失败: %w", err)
+		return nil, fmt.Errorf("创建本地文件失败: %w", err)
 	}
 	defer dst.Close()
 
 	// 复制文件内容（限制大小）
 	written, err := io.Copy(dst, io.LimitReader(src, maxBytes+1))
 	if err != nil {
-		return "", fmt.Errorf("写入本地文件失败: %w", err)
+		return nil, fmt.Errorf("写入本地文件失败: %w", err)
 	}
 	if written > maxBytes {
 		os.Remove(fullPath)
-		return "", fmt.Errorf("文件超过大小限制（最大 %d MB）", maxFileSizeMB)
+		return nil, fmt.Errorf("文件超过大小限制（最大 %d MB）", maxFileSizeMB)
 	}
 
-	return localObjectURL(cfg.LocalURLPrefix, path.Join(LocalUploadFolder, relPath)), nil
+	return &UploadResult{
+		URL:         localObjectURL(cfg.LocalURLPrefix, path.Join(LocalUploadFolder, relPath)),
+		StorageType: operation_setting.StorageTypeLocal,
+		ObjectKey:   relPath,
+		StorageBase: cfg.LocalStoragePath,
+	}, nil
 }
 
 // ResolveLocalUploadFilePath 根据对外访问 URL 解析本地磁盘文件路径；非本地 URL 返回 ok=false。

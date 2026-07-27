@@ -58,6 +58,7 @@ export default function DistributorApplyIntroEditor({
     const uploadImageFile = async (q, file) => {
       const fd = new FormData();
       fd.append('file', file);
+      fd.append('purpose', 'distributor');
       const res = await API.post('/api/oss/upload', fd, {
         skipErrorHandler: true,
       });

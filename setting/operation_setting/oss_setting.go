@@ -27,6 +27,8 @@ type OssSetting struct {
 	LocalMaxFileSizeMB int `json:"local_max_file_size_mb"`
 	// OssMaxFileSizeMB OSS 单文件大小上限（MB）。
 	OssMaxFileSizeMB int `json:"oss_max_file_size_mb"`
+	// PlaygroundRetentionHours Playground 上传文件的默认保留时长（小时）。
+	PlaygroundRetentionHours int `json:"playground_retention_hours"`
 	// LocalStoragePath 本地存储根目录（相对于程序工作目录），默认当前目录；文件固定写入该目录下的 uploads 子目录。
 	LocalStoragePath string `json:"local_storage_path"`
 	// LocalURLPrefix 本地存储对外访问前缀，如 /api 或 https://img.example.com/api；为空时使用 ServerAddress + /api。
@@ -36,14 +38,15 @@ type OssSetting struct {
 }
 
 var ossSetting = OssSetting{
-	StorageType:          StorageTypeLocal,
-	ObjectKeyPrefix:      "uploads/",
-	MaxFileSizeMB:        20,
-	LocalMaxFileSizeMB:   20,
-	OssMaxFileSizeMB:     20,
-	LocalStoragePath:     ".",
-	LocalURLPrefix:       "",
-	LocalObjectKeyPrefix: "",
+	StorageType:              StorageTypeLocal,
+	ObjectKeyPrefix:          "uploads/",
+	MaxFileSizeMB:            20,
+	LocalMaxFileSizeMB:       20,
+	OssMaxFileSizeMB:         20,
+	PlaygroundRetentionHours: 24,
+	LocalStoragePath:         ".",
+	LocalURLPrefix:           "",
+	LocalObjectKeyPrefix:     "",
 }
 
 func init() {

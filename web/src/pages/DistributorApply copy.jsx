@@ -289,6 +289,7 @@ export default function DistributorApply() {
                       const fd = new FormData();
                       const inst = file.fileInstance || file;
                       fd.append('file', inst);
+                      fd.append('purpose', 'distributor');
                       try {
                         const res = await API.post('/api/oss/upload', fd, {
                           skipErrorHandler: true,
