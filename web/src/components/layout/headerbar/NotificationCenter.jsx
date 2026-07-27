@@ -48,6 +48,7 @@ const PULL_THRESHOLD = 72;
 const NotificationCenter = ({
   visible,
   onClose,
+  showMessages,
   messageUnreadCount,
   announcementUnreadCount,
   announcements,
@@ -333,6 +334,12 @@ const NotificationCenter = ({
   }, [visible]);
 
   useEffect(() => {
+    if (!showMessages && activeTab === 'messages') {
+      handleTabChange('announcements');
+    }
+  }, [activeTab, handleTabChange, showMessages]);
+
+  useEffect(() => {
     if (visible && activeTab === 'announcements') {
       markAnnouncementsRead(visibleAnnouncements);
     }
@@ -477,7 +484,10 @@ const NotificationCenter = ({
           </button>
         </header>
 
-        <nav className='notification-center-tabs' aria-label={t('通知')}>
+        <nav
+          className={`notification-center-tabs ${showMessages ? '' : 'is-single'}`}
+          aria-label={t('通知')}
+        >
           <button
             className={activeTab === 'announcements' ? 'is-active' : ''}
             onClick={() => handleTabChange('announcements')}
@@ -490,16 +500,18 @@ const NotificationCenter = ({
               </b>
             ) : null}
           </button>
-          <button
-            className={activeTab === 'messages' ? 'is-active' : ''}
-            onClick={() => handleTabChange('messages')}
-            type='button'
-          >
-            <span>{t('站内消息')}</span>
-            {messageUnreadCount > 0 ? (
-              <b>{messageUnreadCount > 99 ? '99+' : messageUnreadCount}</b>
-            ) : null}
-          </button>
+          {showMessages ? (
+            <button
+              className={activeTab === 'messages' ? 'is-active' : ''}
+              onClick={() => handleTabChange('messages')}
+              type='button'
+            >
+              <span>{t('站内消息')}</span>
+              {messageUnreadCount > 0 ? (
+                <b>{messageUnreadCount > 99 ? '99+' : messageUnreadCount}</b>
+              ) : null}
+            </button>
+          ) : null}
           <span
             className='notification-tab-indicator'
             data-position={activeTab}

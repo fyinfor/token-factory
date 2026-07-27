@@ -25,9 +25,9 @@ import { formatPriceRatioFromDiscount } from '../utils/discount';
 const { Text } = Typography;
 
 const PRICE_GRID_COLUMNS = {
-  image: '74px minmax(96px, 1fr) minmax(96px, 1fr) 52px',
-  video: '70px 58px minmax(92px, 1fr) minmax(92px, 1fr) 52px',
-  videoPerToken: 'minmax(108px, 1fr) minmax(92px, 1fr) minmax(92px, 1fr) 52px',
+  image: '74px minmax(96px, 1fr) minmax(96px, 1fr) 72px',
+  video: '70px 58px minmax(92px, 1fr) minmax(92px, 1fr) 72px',
+  videoPerToken: 'minmax(108px, 1fr) minmax(92px, 1fr) minmax(92px, 1fr) 72px',
 };
 
 const discountStyle = (hasDiscount) => ({
@@ -187,7 +187,7 @@ function TierPriceMatrix({
                   {row.discount != null ? (
                     <span style={discountStyle(row.hasDiscount)}>
                       {row.hasDiscount
-                        ? formatPriceRatioFromDiscount(row.discount)
+                        ? formatPriceRatioFromDiscount(row.discount, t)
                         : '-'}
                     </span>
                   ) : (

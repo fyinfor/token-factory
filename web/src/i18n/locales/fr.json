@@ -5043,6 +5043,7 @@
     "账户已锁定": "Compte verrouillé",
     "账户余额": "Solde du compte",
     "账户状态": "Statut du compte",
+    "{{ratio}}折": "{{discount}}% off",
     "折": "% de réduction",
     "折扣": "Remise",
     "折扣率": "Taux de réduction",
@@ -5843,5 +5844,17 @@
   "角标文案（英文）": "Badge text (English)",
   "首页广告中文文案": "Chinese copy",
   "首页广告英文文案": "English copy",
-  "首页广告英文文案说明": "Non-Chinese interfaces prefer English copy; falls back to Chinese when English is empty."
+  "首页广告英文文案说明": "Non-Chinese interfaces prefer English copy; falls back to Chinese when English is empty.",
+  "一键设置分销比例": "Définir les taux de commission",
+  "请选择或输入分销比例": "Sélectionnez ou saisissez un taux de commission",
+  "已为 {{count}} 位代理更新分销比例": "Taux de commission mis à jour pour {{count}} agents",
+  "跟随系统默认": "Utiliser la valeur système",
+  "全部代理": "Tous les agents",
+  "当前筛选结果（{{count}} 人）": "Résultats filtrés ({{count}})",
+  "常用比例": "Taux courants",
+  "自定义比例": "Taux personnalisé",
+  "设置范围": "Appliquer à",
+  "确认设置": "Confirmer",
+  "该操作会覆盖目标代理已有的单独比例设置。设置为 0% 后，代理将跟随系统默认分销比例。": "Cette action remplace les taux individuels des agents ciblés. Définissez 0 % pour utiliser la valeur système.",
+  "批量设置失败": "Échec de la mise à jour groupée"
 }

@@ -117,6 +117,7 @@ func SetApiRouter(router *gin.Engine) {
 			distributorAdminRoute.POST("/identity_applications/:id/approve", controller.ApproveDistributorIdentityApplicationAdmin)
 			distributorAdminRoute.POST("/identity_applications/:id/reject", controller.RejectDistributorIdentityApplicationAdmin)
 			distributorAdminRoute.GET("/distributors", controller.ListDistributorsAdmin)
+			distributorAdminRoute.PUT("/distributors/commission", controller.PutDistributorsCommissionAdmin)
 			distributorAdminRoute.GET("/distributors/:id/application", controller.GetDistributorApplicationByUserAdmin)
 			distributorAdminRoute.PUT("/distributors/:id/application", controller.PutDistributorApplicationByUserAdmin)
 			distributorAdminRoute.PUT("/distributors/:id/commission", controller.PutDistributorCommissionAdmin)
