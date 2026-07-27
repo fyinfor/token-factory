@@ -1,6 +1,11 @@
 package model
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/glebarez/sqlite"
+	"gorm.io/gorm"
+)
 
 func TestSignedLogDelta(t *testing.T) {
 	cases := []struct {
@@ -78,9 +83,9 @@ func TestStatementRunningBalanceEndsAtCurrentQuota(t *testing.T) {
 			name:         "含 manage/system 行(quota=0),不应影响累加",
 			currentQuota: 9999,
 			logs: []log{
-				{0, LogTypeSystem},  // 赠送,日志里没存金额
+				{0, LogTypeSystem}, // 赠送,日志里没存金额
 				{100, LogTypeConsume},
-				{0, LogTypeManage},  // 管理员调整,日志里没存金额
+				{0, LogTypeManage}, // 管理员调整,日志里没存金额
 				{200, LogTypeConsume},
 			},
 		},
@@ -114,5 +119,40 @@ func TestStatementRunningBalanceEndsAtCurrentQuota(t *testing.T) {
 				t.Errorf("末行余额 %d != currentQuota %d (diff=%d)", running, c.currentQuota, running-int64(c.currentQuota))
 			}
 		})
+	}
+}
+
+func TestGetAllLogsForExportMatchesConsoleOrder(t *testing.T) {
+	oldLogDB := LOG_DB
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&Log{}); err != nil {
+		t.Fatal(err)
+	}
+	LOG_DB = db
+	t.Cleanup(func() { LOG_DB = oldLogDB })
+
+	logs := []Log{
+		{Id: 1, CreatedAt: 100, Type: LogTypeConsume, Quota: 1},
+		{Id: 2, CreatedAt: 200, Type: LogTypeConsume, Quota: 2},
+		{Id: 3, CreatedAt: 300, Type: LogTypeConsume, Quota: 3},
+	}
+	if err := LOG_DB.Create(&logs).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	got, total, err := GetAllLogsForExport(AdminLogExportFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if total != 3 || len(got) != 3 {
+		t.Fatalf("total=%d len=%d, want 3", total, len(got))
+	}
+	for i, wantID := range []int{3, 2, 1} {
+		if got[i].Id != wantID {
+			t.Fatalf("logs[%d].id=%d, want %d", i, got[i].Id, wantID)
+		}
 	}
 }

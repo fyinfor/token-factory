@@ -17,78 +17,127 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+
+const ANNOUNCEMENT_READ_STORAGE_KEY = 'notice_read_keys';
+const ANNOUNCEMENT_POPUP_ACK_STORAGE_KEY = 'notice_popup_acknowledged_keys';
+export const ANNOUNCEMENT_READ_EVENT = 'announcement-read-state-changed';
+export const OPEN_NOTIFICATION_CENTER_EVENT = 'open-notification-center';
+
+const readStoredList = (storageKey) => {
+  try {
+    const values = JSON.parse(localStorage.getItem(storageKey) || '[]');
+    return Array.isArray(values) ? values : [];
+  } catch (_) {
+    return [];
+  }
+};
+
+const hashString = (value) => {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${value.length}-${(hash >>> 0).toString(36)}`;
+};
+
+export const getAnnouncementKey = (announcement) =>
+  `${announcement?.publishDate || ''}-${(announcement?.content || '').slice(0, 30)}`;
+
+const readStoredKeys = () => {
+  return readStoredList(ANNOUNCEMENT_READ_STORAGE_KEY);
+};
+
+export const getAnnouncementPopupKey = (announcement) =>
+  `announcement-${hashString(
+    JSON.stringify({
+      id: announcement?.id ?? null,
+      publishDate: announcement?.publishDate || '',
+      type: announcement?.type || 'default',
+      content: announcement?.content || '',
+      extra: announcement?.extra || '',
+    }),
+  )}`;
+
+export const getLegacyNoticePopupKey = (content) =>
+  `legacy-${hashString(content || '')}`;
+
+export const isAnnouncementPopupAcknowledged = (key) =>
+  Boolean(
+    key && readStoredList(ANNOUNCEMENT_POPUP_ACK_STORAGE_KEY).includes(key),
+  );
+
+export const acknowledgeAnnouncementPopup = (key) => {
+  if (!key) {
+    return;
+  }
+  const acknowledgedKeys = readStoredList(ANNOUNCEMENT_POPUP_ACK_STORAGE_KEY);
+  const nextKeys = Array.from(new Set([...acknowledgedKeys, key])).slice(-200);
+  localStorage.setItem(
+    ANNOUNCEMENT_POPUP_ACK_STORAGE_KEY,
+    JSON.stringify(nextKeys),
+  );
+};
+
+export const markAnnouncementKeysRead = (keys) => {
+  const nextKeys = keys.filter(Boolean);
+  if (nextKeys.length === 0) {
+    return;
+  }
+  const mergedKeys = Array.from(new Set([...readStoredKeys(), ...nextKeys]));
+  localStorage.setItem(
+    ANNOUNCEMENT_READ_STORAGE_KEY,
+    JSON.stringify(mergedKeys),
+  );
+  window.dispatchEvent(new Event(ANNOUNCEMENT_READ_EVENT));
+};
 
 export const useNotifications = (statusState) => {
-  const [noticeVisible, setNoticeVisible] = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [readVersion, setReadVersion] = useState(0);
+  const announcements = useMemo(
+    () => statusState?.status?.announcements || [],
+    [statusState?.status?.announcements],
+  );
 
-  const announcements = statusState?.status?.announcements || [];
-
-  // Helper functions
-  const getAnnouncementKey = (a) =>
-    `${a?.publishDate || ''}-${(a?.content || '').slice(0, 30)}`;
-
-  const calculateUnreadCount = () => {
-    if (!announcements.length) return 0;
-    let readKeys = [];
-    try {
-      readKeys = JSON.parse(localStorage.getItem('notice_read_keys')) || [];
-    } catch (_) {
-      readKeys = [];
-    }
-    const readSet = new Set(readKeys);
-    return announcements.filter((a) => !readSet.has(getAnnouncementKey(a)))
-      .length;
-  };
-
-  const getUnreadKeys = () => {
-    if (!announcements.length) return [];
-    let readKeys = [];
-    try {
-      readKeys = JSON.parse(localStorage.getItem('notice_read_keys')) || [];
-    } catch (_) {
-      readKeys = [];
-    }
-    const readSet = new Set(readKeys);
+  const unreadKeys = useMemo(() => {
+    const readSet = new Set(readStoredKeys());
     return announcements
-      .filter((a) => !readSet.has(getAnnouncementKey(a)))
-      .map(getAnnouncementKey);
-  };
+      .map(getAnnouncementKey)
+      .filter((key) => !readSet.has(key));
+  }, [announcements, readVersion]);
 
-  // Effects
+  const refreshUnreadCount = useCallback(() => {
+    setReadVersion((version) => version + 1);
+  }, []);
+
+  const markAnnouncementsRead = useCallback((items) => {
+    markAnnouncementKeysRead(items.map(getAnnouncementKey));
+  }, []);
+
   useEffect(() => {
-    setUnreadCount(calculateUnreadCount());
-  }, [announcements]);
-
-  // Actions
-  const handleNoticeOpen = () => {
-    setNoticeVisible(true);
-  };
-
-  const handleNoticeClose = () => {
-    setNoticeVisible(false);
-    if (announcements.length) {
-      let readKeys = [];
-      try {
-        readKeys = JSON.parse(localStorage.getItem('notice_read_keys')) || [];
-      } catch (_) {
-        readKeys = [];
+    const handleReadStateChanged = () => refreshUnreadCount();
+    const handleStorage = (event) => {
+      if (event.key === ANNOUNCEMENT_READ_STORAGE_KEY) {
+        refreshUnreadCount();
       }
-      const mergedKeys = Array.from(
-        new Set([...readKeys, ...announcements.map(getAnnouncementKey)]),
+    };
+    window.addEventListener(ANNOUNCEMENT_READ_EVENT, handleReadStateChanged);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener(
+        ANNOUNCEMENT_READ_EVENT,
+        handleReadStateChanged,
       );
-      localStorage.setItem('notice_read_keys', JSON.stringify(mergedKeys));
-    }
-    setUnreadCount(0);
-  };
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [refreshUnreadCount]);
 
   return {
-    noticeVisible,
-    unreadCount,
     announcements,
-    handleNoticeOpen,
-    handleNoticeClose,
-    getUnreadKeys,
+    unreadCount: unreadKeys.length,
+    unreadKeys,
+    markAnnouncementsRead,
+    refreshUnreadCount,
   };
 };

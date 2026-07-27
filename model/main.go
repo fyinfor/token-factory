@@ -341,12 +341,23 @@ func migrateDB() error {
 		&MaterialAsset{},
 		&MaterialVisualSession{},
 		&PerfMetric{},
+		&RouteConfig{},
+		&ModelGroupWeight{},
+		&ModelGroupOverride{},
+		&ModelGroupMeta{},
+		&UserRouteConfig{},
+		&UserModelGroupWeight{},
+		&UserModelGroupOverride{},
+		&TemporaryUpload{},
 	)
 	if err != nil {
 		return err
 	}
 	if err := NormalizeEmptyRealNameVerificationCertifyIDs(); err != nil {
 		return fmt.Errorf("normalize real-name verification certify IDs: %w", err)
+	}
+	if err := BackfillPendingInvoiceAmounts(); err != nil {
+		return fmt.Errorf("backfill pending invoice amounts: %w", err)
 	}
 	if err := MigrateLegacyChangelogOption(); err != nil {
 		return fmt.Errorf("migrate legacy changelog option: %w", err)
@@ -371,6 +382,9 @@ func migrateDB() error {
 	}
 	if err := migrateMaterialGroupType(); err != nil {
 		common.SysError("material group type backfill: " + err.Error())
+	}
+	if err := EnsureDefaultRouteModePrice(); err != nil {
+		common.SysError("ensure default route mode price: " + err.Error())
 	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {
@@ -446,6 +460,14 @@ func migrateDBFast() error {
 		{&MaterialGroup{}, "MaterialGroup"},
 		{&MaterialAsset{}, "MaterialAsset"},
 		{&MaterialVisualSession{}, "MaterialVisualSession"},
+		{&RouteConfig{}, "RouteConfig"},
+		{&ModelGroupWeight{}, "ModelGroupWeight"},
+		{&ModelGroupOverride{}, "ModelGroupOverride"},
+		{&ModelGroupMeta{}, "ModelGroupMeta"},
+		{&UserRouteConfig{}, "UserRouteConfig"},
+		{&UserModelGroupWeight{}, "UserModelGroupWeight"},
+		{&UserModelGroupOverride{}, "UserModelGroupOverride"},
+		{&TemporaryUpload{}, "TemporaryUpload"},
 	}
 	// 动态计算migration数量，确保errChan缓冲区足够大
 	errChan := make(chan error, len(migrations))
@@ -473,6 +495,9 @@ func migrateDBFast() error {
 	migrateTopUpAmountColumn()
 	if err := NormalizeEmptyRealNameVerificationCertifyIDs(); err != nil {
 		return fmt.Errorf("normalize real-name verification certify IDs: %w", err)
+	}
+	if err := BackfillPendingInvoiceAmounts(); err != nil {
+		return fmt.Errorf("backfill pending invoice amounts: %w", err)
 	}
 	if err := MigrateLegacyChangelogOption(); err != nil {
 		return fmt.Errorf("migrate legacy changelog option: %w", err)

@@ -173,6 +173,14 @@ export const CONSOLE_SEARCH_ITEMS = [
     ['开票审批', '充值订单', '发票申请'],
   ),
   consoleSearchItem(
+    'invoice-feature-toggle',
+    '发票功能开关',
+    '/console/setting?category=site&page=navigation&item=sidebar',
+    '系统设置',
+    ['发票管理开关', '发票审批开关', '开票功能', '侧边栏管理'],
+    '导航与模块',
+  ),
+  consoleSearchItem(
     'settlement-export',
     '结算单导出',
     '/console/settlement-export',

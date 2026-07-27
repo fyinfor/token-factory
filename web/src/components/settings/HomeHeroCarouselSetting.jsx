@@ -976,6 +976,7 @@ export default function HomeHeroCarouselSetting() {
     try {
       const fd = new FormData();
       fd.append('file', file);
+      fd.append('purpose', 'homepage');
       const res = await API.post('/api/oss/upload', fd, {
         skipErrorHandler: true,
       });

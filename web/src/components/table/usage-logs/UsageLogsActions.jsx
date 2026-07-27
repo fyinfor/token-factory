@@ -94,7 +94,7 @@ const LogsActions = ({
       const today = getTodayStartTimestamp();
       const startTs = formValues.start_timestamp || today - 90 * 24 * 60 * 60;
       const endTs = formValues.end_timestamp || today + 24 * 60 * 60 - 1;
-      // 把当前界面语言透传给后端，让 CSV 表头/元信息跟随用户语言。
+      // 把当前界面语言透传给后端，让工作簿表头/元信息跟随用户语言。
       // 归一化后只保留 supportedLanguages 内的合法 lang，否则后端兜底 zh-CN。
       const lang = normalizeLanguage(i18n.language || '');
       const params = new URLSearchParams({
@@ -123,11 +123,13 @@ const LogsActions = ({
         url = `/api/log/self/export?${params.toString()}`;
       }
       const res = await API.get(url, { responseType: 'blob' });
-      const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8' });
+      const blob = new Blob([res.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
       const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = objectUrl;
-      a.download = `statement-${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}.csv`;
+      a.download = `statement-${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}.xlsx`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);

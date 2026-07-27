@@ -1,7 +1,9 @@
 package service
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"strings"
 
@@ -41,6 +43,16 @@ func joinUploadPrefix(base, sub string) string {
 func UploadInvoiceFile(file *multipart.FileHeader, userID int) (string, error) {
 	if !isPDFUpload(file) {
 		return "", fmt.Errorf("仅支持 PDF 格式电子发票")
+	}
+	source, err := file.Open()
+	if err != nil {
+		return "", err
+	}
+	header := make([]byte, 5)
+	_, readErr := io.ReadFull(source, header)
+	closeErr := source.Close()
+	if readErr != nil || closeErr != nil || !bytes.Equal(header, []byte("%PDF-")) {
+		return "", fmt.Errorf("电子发票文件不是有效的 PDF")
 	}
 	cfg := operation_setting.GetOssSetting()
 	if !cfg.Enabled {

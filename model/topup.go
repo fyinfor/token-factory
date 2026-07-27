@@ -17,21 +17,22 @@ type TopUp struct {
 	Id     int `json:"id"`
 	UserId int `json:"user_id" gorm:"index"`
 	// Username 列表接口填充，关联 users.username，仅 JSON 输出，不参与持久化（不使用 omitempty，便于前端始终拿到字段）
-	Username       string  `json:"username" gorm:"-"`
-	Amount         float64 `json:"amount" gorm:"type:decimal(20,6);default:0"`
-	Money          float64 `json:"money"`
-	InputAmount    float64 `json:"input_amount" gorm:"default:0"`
-	InputCurrency  string  `json:"input_currency" gorm:"type:varchar(16);default:''"`
-	PayCurrency    string  `json:"pay_currency" gorm:"type:varchar(16);default:''"`
-	QuotaToAdd     int     `json:"quota_to_add" gorm:"default:0"`
-	TradeNo        string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
-	DepositAddress string  `json:"deposit_address" gorm:"type:varchar(255);index"`
-	PaymentMethod  string  `json:"payment_method" gorm:"type:varchar(50)"`
-	CreateTime     int64   `json:"create_time"`
-	CompleteTime   int64   `json:"complete_time"`
-	Status         string  `json:"status"`
-	InvoicedAmount float64 `json:"invoiced_amount" gorm:"type:decimal(20,6);default:0"`
-	InvoiceEligible bool   `json:"invoice_eligible" gorm:"not null;default:true"`
+	Username             string  `json:"username" gorm:"-"`
+	Amount               float64 `json:"amount" gorm:"type:decimal(20,6);default:0"`
+	Money                float64 `json:"money"`
+	InputAmount          float64 `json:"input_amount" gorm:"default:0"`
+	InputCurrency        string  `json:"input_currency" gorm:"type:varchar(16);default:''"`
+	PayCurrency          string  `json:"pay_currency" gorm:"type:varchar(16);default:''"`
+	QuotaToAdd           int     `json:"quota_to_add" gorm:"default:0"`
+	TradeNo              string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
+	DepositAddress       string  `json:"deposit_address" gorm:"type:varchar(255);index"`
+	PaymentMethod        string  `json:"payment_method" gorm:"type:varchar(50)"`
+	CreateTime           int64   `json:"create_time"`
+	CompleteTime         int64   `json:"complete_time"`
+	Status               string  `json:"status"`
+	InvoicedAmount       float64 `json:"invoiced_amount" gorm:"type:decimal(20,6);default:0"`
+	PendingInvoiceAmount float64 `json:"pending_invoice_amount" gorm:"type:decimal(20,6);default:0"`
+	InvoiceEligible      bool    `json:"invoice_eligible" gorm:"not null;default:true"`
 }
 
 func (topUp *TopUp) ResolveQuotaToAdd() int {
@@ -387,6 +388,7 @@ func RechargeStripe(referenceId string, customerId string, paidMoney float64, cu
 }
 
 // topUpStatusFilterQuery 为充值列表查询追加 status 条件；空字符串或非法值不追加。
+// 列名需带表前缀：管理员列表可能 JOIN users，两侧均有 status。
 func topUpStatusFilterQuery(db *gorm.DB, status string) *gorm.DB {
 	s := strings.TrimSpace(strings.ToLower(status))
 	if s == "" {
@@ -394,7 +396,7 @@ func topUpStatusFilterQuery(db *gorm.DB, status string) *gorm.DB {
 	}
 	switch s {
 	case common.TopUpStatusPending, common.TopUpStatusSuccess, common.TopUpStatusFailed, common.TopUpStatusExpired:
-		return db.Where("status = ?", s)
+		return db.Where("top_ups.status = ?", s)
 	default:
 		return db
 	}
@@ -407,7 +409,7 @@ func applyTopUpTradeNoLike(db *gorm.DB, keyword string) *gorm.DB {
 		return db
 	}
 	like := "%%" + kw + "%%"
-	return db.Where("trade_no LIKE ?", like)
+	return db.Where("top_ups.trade_no LIKE ?", like)
 }
 
 // applyTopUpUsernameJoin 管理员全平台列表按用户名模糊筛选：INNER JOIN users（避免 IN 子查询在部分驱动下的兼容问题）。
@@ -490,7 +492,7 @@ func GetAllTopUps(pageInfo *common.PageInfo, statusFilter, tradeNoKeyword, usern
 		return nil, 0, err
 	}
 
-	if err = tx.Model(&TopUp{}).Scopes(allScope).Order("id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&topups).Error; err != nil {
+	if err = tx.Model(&TopUp{}).Scopes(allScope).Order("top_ups.id desc").Limit(pageInfo.GetPageSize()).Offset(pageInfo.GetStartIdx()).Find(&topups).Error; err != nil {
 		tx.Rollback()
 		return nil, 0, err
 	}

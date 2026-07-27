@@ -1792,6 +1792,7 @@ const EditChannelModal = (props) => {
     try {
       const formData = new FormData();
       formData.append('file', fileInstance);
+      formData.append('purpose', 'channel');
       const res = await API.post('/api/oss/upload', formData, {
         headers: {
           'Content-Type': 'multipart/form-data',

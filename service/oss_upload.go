@@ -34,9 +34,17 @@ func OssUploadMultipartFile(file *multipart.FileHeader, userID int) (string, err
 }
 
 func ossUploadMultipartFileWithPrefix(file *multipart.FileHeader, userID int, objectPrefix string) (string, error) {
+	result, err := ossUploadMultipartFileWithPrefixResult(file, userID, objectPrefix)
+	if err != nil {
+		return "", err
+	}
+	return result.URL, nil
+}
+
+func ossUploadMultipartFileWithPrefixResult(file *multipart.FileHeader, userID int, objectPrefix string) (*UploadResult, error) {
 	_ = userID
 	if !operation_setting.IsOssUploadReady() {
-		return "", ErrOssNotConfigured
+		return nil, ErrOssNotConfigured
 	}
 	cfg := operation_setting.GetOssSetting()
 	maxFileSizeMB := cfg.OssMaxFileSizeMB
@@ -48,21 +56,21 @@ func ossUploadMultipartFileWithPrefix(file *multipart.FileHeader, userID int, ob
 	}
 	maxBytes := int64(maxFileSizeMB) * 1024 * 1024
 	if file.Size > maxBytes {
-		return "", fmt.Errorf("文件超过大小限制（最大 %d MB）", maxFileSizeMB)
+		return nil, fmt.Errorf("文件超过大小限制（最大 %d MB）", maxFileSizeMB)
 	}
 
 	f, err := file.Open()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer f.Close()
 
 	data, err := io.ReadAll(io.LimitReader(f, maxBytes+1))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if int64(len(data)) > maxBytes {
-		return "", fmt.Errorf("文件超过大小限制（最大 %d MB）", maxFileSizeMB)
+		return nil, fmt.Errorf("文件超过大小限制（最大 %d MB）", maxFileSizeMB)
 	}
 
 	objectKey := BuildUploadObjectPath(objectPrefix, uploadFileExt(file.Filename))
@@ -73,9 +81,15 @@ func ossUploadMultipartFileWithPrefix(file *multipart.FileHeader, userID int, ob
 	}
 
 	if err := ossPutObject(cfg, objectKey, contentType, data); err != nil {
-		return "", err
+		return nil, err
 	}
-	return publicObjectURL(cfg, objectKey), nil
+	return &UploadResult{
+		URL:         publicObjectURL(cfg, objectKey),
+		StorageType: operation_setting.StorageTypeOSS,
+		ObjectKey:   objectKey,
+		Endpoint:    cfg.Endpoint,
+		Bucket:      cfg.Bucket,
+	}, nil
 }
 
 func publicObjectURL(cfg *operation_setting.OssSetting, objectKey string) string {
@@ -103,14 +117,14 @@ func ossPutObject(cfg *operation_setting.OssSetting, objectKey, contentType stri
 		if err == nil {
 			return nil
 		}
-		if !ossPutShouldRetry(httpStatus, err) || attempt == ossPutMaxAttempts-1 {
+		if !ossRequestShouldRetry(httpStatus, err) || attempt == ossPutMaxAttempts-1 {
 			return err
 		}
 	}
 	return errors.New("OSS Put: 内部错误（不应到达）")
 }
 
-func ossPutShouldRetry(httpStatus int, err error) bool {
+func ossRequestShouldRetry(httpStatus int, err error) bool {
 	if err == nil {
 		return false
 	}

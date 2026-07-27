@@ -518,6 +518,7 @@ const OtherSetting = ({ activeSection = 'system-info' }) => {
       setLoadingInput((loadingInput) => ({ ...loadingInput, Logo: true }));
       const fd = new FormData();
       fd.append('file', inst);
+      fd.append('purpose', 'icons');
       const res = await API.post('/api/oss/upload', fd, {
         skipErrorHandler: true,
       });

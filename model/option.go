@@ -313,6 +313,33 @@ func loadOptionsFromDatabase() {
 		}
 	}
 	migrateLegacyRequestTierPricingFromOptions(options)
+	migrateLegacyAutomaticRetryStatusCodes(options)
+}
+
+// migrateLegacyAutomaticRetryStatusCodes 将旧默认「排除 400/408/504/524」升级为完整 4xx/5xx，优先可用性。
+// 仅当库中仍是旧默认值时迁移，避免覆盖管理员自定义配置。
+func migrateLegacyAutomaticRetryStatusCodes(options []*Option) {
+	const legacyDefault = "100-199,300-399,401-407,409-499,500-503,505-523,525-599"
+	const availabilityDefault = "100-199,300-399,400-599"
+	current := ""
+	for _, opt := range options {
+		if opt != nil && opt.Key == "AutomaticRetryStatusCodes" {
+			current = strings.ReplaceAll(strings.TrimSpace(opt.Value), " ", "")
+			break
+		}
+	}
+	if current == "" {
+		current = strings.ReplaceAll(strings.TrimSpace(common.OptionMap["AutomaticRetryStatusCodes"]), " ", "")
+	}
+	legacy := strings.ReplaceAll(legacyDefault, " ", "")
+	if current != legacy {
+		return
+	}
+	if err := UpdateOption("AutomaticRetryStatusCodes", availabilityDefault); err != nil {
+		common.SysError("migrate AutomaticRetryStatusCodes: " + err.Error())
+		return
+	}
+	common.SysLog("migrated AutomaticRetryStatusCodes to availability default (full 4xx/5xx)")
 }
 
 // migrateLegacyRequestTierPricingFromOptions 将旧 8 个 TierRatio Option 合并写入新统一 Key（仅当新 Key 内存为空）

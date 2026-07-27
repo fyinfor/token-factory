@@ -117,6 +117,7 @@ func SetApiRouter(router *gin.Engine) {
 			distributorAdminRoute.POST("/identity_applications/:id/approve", controller.ApproveDistributorIdentityApplicationAdmin)
 			distributorAdminRoute.POST("/identity_applications/:id/reject", controller.RejectDistributorIdentityApplicationAdmin)
 			distributorAdminRoute.GET("/distributors", controller.ListDistributorsAdmin)
+			distributorAdminRoute.PUT("/distributors/commission", controller.PutDistributorsCommissionAdmin)
 			distributorAdminRoute.GET("/distributors/:id/application", controller.GetDistributorApplicationByUserAdmin)
 			distributorAdminRoute.PUT("/distributors/:id/application", controller.PutDistributorApplicationByUserAdmin)
 			distributorAdminRoute.PUT("/distributors/:id/commission", controller.PutDistributorCommissionAdmin)
@@ -142,8 +143,13 @@ func SetApiRouter(router *gin.Engine) {
 		// Universal secure verification routes
 		apiRouter.POST("/verify", middleware.UserAuth(), middleware.CriticalRateLimit(), controller.UniversalVerify)
 
-		// 阿里云 OSS 通用上传（需在运营设置中启用 OSS）
+		// 通用文件上传与超级管理员文件管理。
 		apiRouter.POST("/oss/upload", middleware.UserAuth(), middleware.UploadRateLimit(), controller.OssUpload)
+		apiRouter.GET("/oss/files", middleware.RootAuth(), controller.ListUploadFiles)
+		apiRouter.POST("/oss/files/sync", middleware.RootAuth(), controller.SyncUploadFiles)
+		apiRouter.POST("/oss/files/batch-delete", middleware.RootAuth(), controller.BatchDeleteUploadFiles)
+		apiRouter.PUT("/oss/files/:id/expiration", middleware.RootAuth(), controller.UpdateUploadFileExpiration)
+		apiRouter.DELETE("/oss/files/:id", middleware.RootAuth(), controller.DeleteUploadFile)
 
 		apiRouter.GET("/playground/media-options", middleware.CORS(), middleware.TokenAuth(), controller.GetPlaygroundMediaOptions)
 
@@ -244,6 +250,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.POST("/invoice/request", controller.PostInvoiceRequest)
 				selfRoute.GET("/invoice/requests", controller.GetInvoiceRequestsSelf)
 				selfRoute.GET("/invoice/requests/:id", controller.GetInvoiceRequestDetailSelf)
+				selfRoute.POST("/invoice/requests/:id/cancel", controller.CancelInvoiceRequestSelf)
 
 				// 2FA routes
 				selfRoute.GET("/2fa/status", controller.Get2FAStatus)
@@ -278,6 +285,7 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.POST("/topup/complete", controller.AdminCompleteTopUp)
 				adminRoute.GET("/invoice/admin/requests", controller.ListInvoiceRequestsAdmin)
 				adminRoute.GET("/invoice/admin/requests/:id", controller.GetInvoiceRequestDetailAdmin)
+				adminRoute.POST("/invoice/admin/requests/:id/process", controller.MarkInvoiceRequestProcessingAdmin)
 				adminRoute.POST("/invoice/admin/requests/:id/issue", controller.IssueInvoiceRequestAdmin)
 				adminRoute.POST("/invoice/admin/upload", controller.UploadInvoiceFileAdmin)
 				adminRoute.POST("/invoice/admin/requests/:id/reject", controller.RejectInvoiceRequestAdmin)

@@ -20,13 +20,14 @@ For commercial licensing, please contact support@quantumnous.com
 import React from 'react';
 import { Typography } from '@douyinfe/semi-ui';
 import PrecisePriceText from './PrecisePriceText';
+import { formatPriceRatioFromDiscount } from '../utils/discount';
 
 const { Text } = Typography;
 
 const PRICE_GRID_COLUMNS = {
-  image: '74px minmax(96px, 1fr) minmax(96px, 1fr) 52px',
-  video: '70px 58px minmax(92px, 1fr) minmax(92px, 1fr) 52px',
-  videoPerToken: 'minmax(108px, 1fr) minmax(92px, 1fr) minmax(92px, 1fr) 52px',
+  image: '74px minmax(96px, 1fr) minmax(96px, 1fr) 72px',
+  video: '70px 58px minmax(92px, 1fr) minmax(92px, 1fr) 72px',
+  videoPerToken: 'minmax(108px, 1fr) minmax(92px, 1fr) minmax(92px, 1fr) 72px',
 };
 
 const discountStyle = (hasDiscount) => ({
@@ -60,7 +61,6 @@ function TierPriceMatrix({
   accent = 'blue',
   variant = 'default',
   t,
-  zeroDiscountLabel = '0%',
 }) {
   const gridTemplateColumns =
     typeof gridType === 'string'
@@ -187,11 +187,11 @@ function TierPriceMatrix({
                   {row.discount != null ? (
                     <span style={discountStyle(row.hasDiscount)}>
                       {row.hasDiscount
-                        ? `-${row.discount}%`
-                        : zeroDiscountLabel}
+                        ? formatPriceRatioFromDiscount(row.discount, t)
+                        : '-'}
                     </span>
                   ) : (
-                    <span className='text-gray-400'>—</span>
+                    <span className='text-gray-400'>-</span>
                   )}
                 </span>
               );

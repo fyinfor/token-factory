@@ -202,6 +202,21 @@ func taskAdjustFunding(task *model.Task, delta int) error {
 	return model.IncreaseUserQuota(task.UserId, -delta, false)
 }
 
+func releaseTaskInvoiceAttribution(task *model.Task, refundQuota int) {
+	if task == nil || refundQuota <= 0 || taskIsSubscription(task) || task.PrivateData.WalletPaidQuota <= 0 {
+		return
+	}
+	paidRefund := refundQuota
+	if paidRefund > task.PrivateData.WalletPaidQuota {
+		paidRefund = task.PrivateData.WalletPaidQuota
+	}
+	if err := model.ReleaseConsumeQuotaFromTopUps(task.UserId, paidRefund); err != nil {
+		common.SysLog(fmt.Sprintf("failed to release invoice attribution for task %s: %s", task.TaskID, err.Error()))
+		return
+	}
+	task.PrivateData.WalletPaidQuota -= paidRefund
+}
+
 // taskAdjustTokenQuota 调整任务的令牌额度，delta > 0 表示扣费，delta < 0 表示退还。
 // 需要通过 resolveTokenKey 运行时获取 key（不从 PrivateData 中读取）。
 func taskAdjustTokenQuota(ctx context.Context, task *model.Task, delta int) {
@@ -1223,6 +1238,7 @@ func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) {
 		logger.LogWarn(ctx, fmt.Sprintf("退还资金来源失败 task %s: %s", task.TaskID, err.Error()))
 		return
 	}
+	releaseTaskInvoiceAttribution(task, quota)
 
 	// 2. 退还令牌额度
 	taskAdjustTokenQuota(ctx, task, -quota)
@@ -1362,6 +1378,7 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 	} else {
 		logType = model.LogTypeRefund
 		logQuota = -quotaDelta
+		releaseTaskInvoiceAttribution(task, logQuota)
 	}
 	other := taskBillingOther(task)
 	other["task_id"] = task.TaskID

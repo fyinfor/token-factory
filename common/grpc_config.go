@@ -19,8 +19,9 @@ func TokenFactoryGRPCEndpoint() string {
 	return ep
 }
 
-// TokenFactoryRouteEnabled 是否启用 TokenFactory 智能路由。
-// 环境变量 TOKENFACTORY_ROUTE_ENABLED=true 时启用。
+// TokenFactoryRouteEnabled 是否启用进程内归类智能路由（原 TokenFactory 路由策略，已本地化）。
+// 环境变量 TOKENFACTORY_ROUTE_ENABLED=true 时启用；控制台 /console/route-policy 与选路均依赖此开关。
+// 注意：启用后不再依赖 TokenFactory gRPC；渠道同步（TOKENFACTORY_CHANNEL_SYNC_*）可单独关闭。
 func TokenFactoryRouteEnabled() bool {
 	return os.Getenv("TOKENFACTORY_ROUTE_ENABLED") == "true"
 }

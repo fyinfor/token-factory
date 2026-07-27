@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
+	"github.com/xuri/excelize/v2"
 )
 
 // 对账单导出相关常量。
@@ -24,7 +25,7 @@ const (
 	// 复用 model.logExportCountLimit 100000
 )
 
-// 对账单 CSV 表头（与时间正序，序号自增，便于 Excel 双击打开）。
+// 对账单 CSV 表头（与日志页面一致，最新记录在前，序号自增）。
 // 最后一列展示"当前账户剩余金额"，对账用户最关心这一列。
 var statementCSVHeader = []string{
 	"序号", "时间", "类型", "事件", "渠道/订单号", "模型", "令牌",
@@ -655,9 +656,132 @@ func formatLogDetailForExport(l *model.Log, lang string) string {
 	return strings.Join(lines, "\n")
 }
 
-// 流式写出单个用户的对账单。filename 不含扩展名，由调用方传入。
-// dict 为表头/元信息/类型文案的语言字典，由 parseStatementParams 解析 lang 后查表得到。
-func streamUserStatementCSV(c *gin.Context, user *model.User, query logExportQuery, filename string, dict statementI18n) {
+const logExportXLSXContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+type usageLogWorkbook struct {
+	file        *excelize.File
+	stream      *excelize.StreamWriter
+	headerStyle int
+	metaStyle   int
+	amountStyle int
+	wrapStyle   int
+}
+
+func usageLogAmountNumberFormat() string {
+	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
+		return "#,##0"
+	}
+	symbol := strings.ReplaceAll(operation_setting.GetCurrencySymbol(), `"`, `""`)
+	literal := `"` + symbol + `"`
+	return literal + "#,##0.000000;[Red]-" + literal + "#,##0.000000"
+}
+
+func newUsageLogWorkbook(sheet string, widths []float64, headerRow int) (*usageLogWorkbook, error) {
+	f := excelize.NewFile()
+	defaultSheet := f.GetSheetName(0)
+	if err := f.SetSheetName(defaultSheet, sheet); err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+
+	headerStyle, err := f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{Bold: true, Color: "FFFFFF"},
+		Fill: excelize.Fill{Type: "pattern", Color: []string{"4472C4"}, Pattern: 1},
+		Alignment: &excelize.Alignment{
+			Horizontal: "center",
+			Vertical:   "center",
+			WrapText:   true,
+		},
+	})
+	if err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	metaStyle, err := f.NewStyle(&excelize.Style{
+		Font:      &excelize.Font{Bold: true},
+		Alignment: &excelize.Alignment{Vertical: "center", WrapText: true},
+	})
+	if err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	amountFormat := usageLogAmountNumberFormat()
+	amountStyle, err := f.NewStyle(&excelize.Style{
+		CustomNumFmt: &amountFormat,
+		Alignment:    &excelize.Alignment{Horizontal: "right", Vertical: "center"},
+	})
+	if err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	wrapStyle, err := f.NewStyle(&excelize.Style{
+		Alignment: &excelize.Alignment{Vertical: "top", WrapText: true},
+	})
+	if err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+
+	stream, err := f.NewStreamWriter(sheet)
+	if err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	for idx, width := range widths {
+		if err := stream.SetColWidth(idx+1, idx+1, width); err != nil {
+			_ = f.Close()
+			return nil, err
+		}
+	}
+	if err := stream.SetPanes(&excelize.Panes{
+		Freeze:      true,
+		YSplit:      headerRow,
+		TopLeftCell: fmt.Sprintf("A%d", headerRow+1),
+		ActivePane:  "bottomLeft",
+	}); err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+
+	return &usageLogWorkbook{
+		file:        f,
+		stream:      stream,
+		headerStyle: headerStyle,
+		metaStyle:   metaStyle,
+		amountStyle: amountStyle,
+		wrapStyle:   wrapStyle,
+	}, nil
+}
+
+func styledLogExportRow(values []string, styleID int) []interface{} {
+	row := make([]interface{}, len(values))
+	for idx, value := range values {
+		row[idx] = excelize.Cell{StyleID: styleID, Value: value}
+	}
+	return row
+}
+
+func finishUsageLogWorkbook(workbook *usageLogWorkbook) (*excelize.File, error) {
+	if err := workbook.stream.Flush(); err != nil {
+		_ = workbook.file.Close()
+		return nil, err
+	}
+	return workbook.file, nil
+}
+
+func writeUsageLogWorkbook(c *gin.Context, workbook *excelize.File, filename string) {
+	defer workbook.Close()
+	c.Header("Content-Type", logExportXLSXContentType)
+	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Status(200)
+	if err := workbook.Write(c.Writer); err != nil {
+		common.SysError("write usage log workbook: " + err.Error())
+	}
+}
+
+// 以 XLSX 写出单个用户的对账单，金额列使用数值单元格并固定显示 6 位小数。
+func streamUserStatementXLSX(c *gin.Context, user *model.User, query logExportQuery, filename string, dict statementI18n) {
 	if user == nil {
 		common.ApiError(c, fmt.Errorf("用户不存在"))
 		return
@@ -683,54 +807,56 @@ func streamUserStatementCSV(c *gin.Context, user *model.User, query logExportQue
 		running = int64(user.Quota) - delta
 	}
 
-	c.Header("Content-Type", "text/csv; charset=utf-8")
-	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
-	c.Header("X-Content-Type-Options", "nosniff")
-	c.Header("X-Statement-Current-Balance", strconv.Itoa(user.Quota))
-	c.Header("X-Statement-Window-Start", strconv.FormatInt(query.StartTs, 10))
-	c.Header("X-Statement-Window-End", strconv.FormatInt(query.EndTs, 10))
-	c.Header("X-Statement-Lang", dictHeaderLangTag(dict))
-	c.Status(200)
-
-	// 写入 UTF-8 BOM，Excel 双击不乱码。
-	c.Writer.WriteString("\xEF\xBB\xBF")
-
-	bw := bufio.NewWriterSize(c.Writer, 32*1024)
-	defer bw.Flush()
-	w := csv.NewWriter(bw)
-	defer w.Flush()
+	workbook, err := newUsageLogWorkbook(
+		"Statement",
+		[]float64{8, 20, 12, 36, 20, 24, 18, 14, 14, 14, 18, 18, 20, 20, 48},
+		4,
+	)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	fail := func(err error) {
+		_ = workbook.file.Close()
+		common.ApiError(c, err)
+	}
 
 	// 顶部元信息行（作为备注，前 3 行；便于用户理解对账口径）。
 	emptyRow := make([]string, len(dict.Header))
 	meta1 := fmt.Sprintf(dict.Meta1, user.Username, user.Id)
-	if err := writeStatementRow(w, append([]string{meta1}, emptyRow[1:]...)); err != nil {
-		common.SysError("write statement meta1: " + err.Error())
+	if err := workbook.stream.SetRow("A1", styledLogExportRow(append([]string{meta1}, emptyRow[1:]...), workbook.metaStyle)); err != nil {
+		fail(err)
 		return
 	}
 	periodStart := time.Unix(query.StartTs, 0).Format("2006-01-02 15:04:05")
 	periodEnd := time.Unix(query.EndTs, 0).Format("2006-01-02 15:04:05")
 	meta2 := fmt.Sprintf(dict.Meta2, periodStart, periodEnd)
-	if err := writeStatementRow(w, append([]string{meta2}, emptyRow[1:]...)); err != nil {
-		common.SysError("write statement meta2: " + err.Error())
+	if err := workbook.stream.SetRow("A2", styledLogExportRow(append([]string{meta2}, emptyRow[1:]...), workbook.metaStyle)); err != nil {
+		fail(err)
 		return
 	}
 	// 期末余额以"quota + 等值金额"双口径展示，避免系统内部单位与展示货币混淆。
 	meta3 := fmt.Sprintf(dict.Meta3, user.Quota, formatBalanceAmount(user.Quota))
-	if err := writeStatementRow(w, append([]string{meta3}, emptyRow[1:]...)); err != nil {
-		common.SysError("write statement meta3: " + err.Error())
+	if err := workbook.stream.SetRow("A3", styledLogExportRow(append([]string{meta3}, emptyRow[1:]...), workbook.metaStyle)); err != nil {
+		fail(err)
 		return
 	}
-	// 表头
-	if err := writeStatementRow(w, dict.Header); err != nil {
-		common.SysError("write statement header: " + err.Error())
+	if err := workbook.stream.SetRow("A4", styledLogExportRow(dict.Header, workbook.headerStyle), excelize.RowOpts{Height: 30}); err != nil {
+		fail(err)
 		return
 	}
 
 	// 2) 逐行输出。
+	balances := make([]int64, len(logs))
+	finalRunning := running
 	for idx, l := range logs {
+		finalRunning += model.SignedLogDelta(l.Quota, l.Type)
+		balances[idx] = finalRunning
+	}
+	for idx := len(logs) - 1; idx >= 0; idx-- {
+		l := logs[idx]
 		ts := time.Unix(l.CreatedAt, 0).Format("2006-01-02 15:04:05")
 		signed := model.SignedLogDelta(l.Quota, l.Type)
-		running += signed
 
 		channelOrOrder := strconv.Itoa(l.ChannelId)
 		if l.Type == model.LogTypeTopup || l.Type == model.LogTypeRefund {
@@ -741,45 +867,61 @@ func streamUserStatementCSV(c *gin.Context, user *model.User, query logExportQue
 		}
 
 		cacheTokens := extractCacheReadTokens(l.Other)
+		other, _ := common.StrToMap(l.Other)
+		displaySigned := resolveUsageLogExportSignedQuota(l, other)
 
-		row := []string{
-			strconv.Itoa(idx + 1),
+		row := []interface{}{
+			len(logs) - idx,
 			ts,
 			logTypeLabelI18n(l.Type, dict),
-			l.Content,
+			excelize.Cell{StyleID: workbook.wrapStyle, Value: l.Content},
 			channelOrOrder,
 			l.ModelName,
 			l.TokenName,
-			strconv.Itoa(l.PromptTokens),
-			strconv.Itoa(l.CompletionTokens),
-			strconv.Itoa(cacheTokens),
-			strconv.FormatInt(signed, 10),
-			formatQuotaDisplay(signed),
-			strconv.FormatInt(running, 10),
-			formatBalanceAmount(int(running)),
-			formatLogDetailForExport(l, query.Lang),
+			l.PromptTokens,
+			l.CompletionTokens,
+			cacheTokens,
+			signed,
+			excelize.Cell{StyleID: workbook.amountStyle, Value: usageLogExportAmountValue(displaySigned, other)},
+			balances[idx],
+			formatBalanceAmount(int(balances[idx])),
+			excelize.Cell{StyleID: workbook.wrapStyle, Value: formatLogDetailForExport(l, query.Lang)},
 		}
-		if err := writeStatementRow(w, row); err != nil {
-			common.SysError("write statement row: " + err.Error())
+		cell := fmt.Sprintf("A%d", 5+len(logs)-1-idx)
+		if err := workbook.stream.SetRow(cell, row); err != nil {
+			fail(err)
 			return
 		}
 	}
+	running = finalRunning
 
 	// 3) 末尾对账校验行：仅全量时间窗口导出时输出，筛选导出跳过以免误导。
 	if !query.hasRowFilterBeyondTime() {
 		footer1 := append([]string{dict.Footer1Label}, emptyRow[1:len(emptyRow)-2]...)
 		footer1 = append(footer1, dict.Footer1Key, fmt.Sprintf("%d / %s", user.Quota, formatBalanceAmount(user.Quota)))
-		if err := writeStatementRow(w, footer1); err != nil {
-			common.SysError("write statement footer: " + err.Error())
+		footerRow := 5 + len(logs)
+		if err := workbook.stream.SetRow(fmt.Sprintf("A%d", footerRow), styledLogExportRow(footer1, workbook.metaStyle)); err != nil {
+			fail(err)
 			return
 		}
 		footer2 := append([]string{dict.Footer2Label}, emptyRow[1:len(emptyRow)-2]...)
 		footer2 = append(footer2, dict.Footer2Key, fmt.Sprintf("%d quota (%s)", running-int64(user.Quota), formatBalanceAmount(int(running-int64(user.Quota)))))
-		if err := writeStatementRow(w, footer2); err != nil {
-			common.SysError("write statement check: " + err.Error())
+		if err := workbook.stream.SetRow(fmt.Sprintf("A%d", footerRow+1), styledLogExportRow(footer2, workbook.metaStyle)); err != nil {
+			fail(err)
 			return
 		}
 	}
+
+	f, err := finishUsageLogWorkbook(workbook)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.Header("X-Statement-Current-Balance", strconv.Itoa(user.Quota))
+	c.Header("X-Statement-Window-Start", strconv.FormatInt(query.StartTs, 10))
+	c.Header("X-Statement-Window-End", strconv.FormatInt(query.EndTs, 10))
+	c.Header("X-Statement-Lang", dictHeaderLangTag(dict))
+	writeUsageLogWorkbook(c, f, filename)
 }
 
 // dictHeaderLangTag 仅用于在 X-Statement-Lang 响应头里标注本次输出用了哪个 lang 字典（便于前端排查）。
@@ -881,6 +1023,83 @@ func formatQuotaDisplay(signed int64) string {
 	return logger.FormatQuota(int(signed))
 }
 
+// resolveUsageLogExportQuota 与 /console/log 花费列保持一致：结算后的异步任务优先展示实际扣费。
+func resolveUsageLogExportQuota(l *model.Log, other map[string]interface{}) int64 {
+	if l == nil {
+		return 0
+	}
+	if v, ok := logExportNumber(other, "video_final_quota", "actual_quota"); ok && v > 0 {
+		return int64(v)
+	}
+	if v, ok := logExportNumber(other, "video_billed_quota"); ok && v > 0 {
+		return int64(v)
+	}
+	return int64(l.Quota)
+}
+
+func isVideoUsageLog(other map[string]interface{}) bool {
+	switch logExportString(other, "billing_mode") {
+	case "video_per_second", "video_token_output", "video_per_video":
+		return true
+	}
+	if v, ok := logExportNumber(other, "video_billed_quota"); ok && v != 0 {
+		return true
+	}
+	return strings.Contains(logExportString(other, "request_path"), "/videos")
+}
+
+// usageLogExportAmountValue 复用 /console/log 花费列的 6 位进一法与视频额度单位换算。
+func usageLogExportAmountValue(quota int64, other map[string]interface{}) float64 {
+	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
+		return float64(quota)
+	}
+
+	quotaPerUnit := common.QuotaPerUnit
+	if isVideoUsageLog(other) {
+		if v, ok := logExportNumber(other, "video_quota_per_unit"); ok && v > 0 {
+			quotaPerUnit = v
+		}
+	}
+	if quotaPerUnit <= 0 {
+		quotaPerUnit = 1
+	}
+
+	rate := 1.0
+	switch operation_setting.GetQuotaDisplayType() {
+	case operation_setting.QuotaDisplayTypeCNY:
+		rate = operation_setting.USDExchangeRate
+	case operation_setting.QuotaDisplayTypeCustom:
+		rate = operation_setting.GetGeneralSetting().CustomCurrencyExchangeRate
+		if rate <= 0 {
+			rate = 1
+		}
+	}
+
+	raw := float64(quota) / quotaPerUnit * rate
+	amount := logger.CeilToFixedDecimals(raw, 6)
+	if amount == 0 && quota > 0 && raw > 0 {
+		amount = 0.000001
+	}
+	return amount
+}
+
+// formatUsageLogExportAmount 保留给批量 ZIP 内的旧 CSV 文件使用。
+func formatUsageLogExportAmount(quota int64, other map[string]interface{}) string {
+	if operation_setting.GetQuotaDisplayType() == operation_setting.QuotaDisplayTypeTokens {
+		return strconv.FormatInt(quota, 10)
+	}
+	amount := usageLogExportAmountValue(quota, other)
+	return fmt.Sprintf("%s%.6f\t", operation_setting.GetCurrencySymbol(), amount)
+}
+
+func resolveUsageLogExportSignedQuota(l *model.Log, other map[string]interface{}) int64 {
+	if l == nil {
+		return 0
+	}
+	displayQuota := resolveUsageLogExportQuota(l, other)
+	return model.SignedLogDelta(int(displayQuota), l.Type)
+}
+
 // formatBalanceAmount 将 quota 数值渲染为"<符号><金额>"字符串。
 // displayType=TOKENS 时按"点额度"展示，其余按系统设置币种（USD/CNY/Custom）。
 // digits=2 与前端默认展示保持一致，避免出现"¥123.456789"。
@@ -912,8 +1131,8 @@ func ExportUserLogsSelf(c *gin.Context) {
 		return
 	}
 	dict := resolveStatementDict(query.Lang)
-	filename := fmt.Sprintf("statement-%s-%d.csv", sanitizeFilename(user.Username), time.Now().Unix())
-	streamUserStatementCSV(c, user, query, filename, dict)
+	filename := fmt.Sprintf("statement-%s-%d.xlsx", sanitizeFilename(user.Username), time.Now().Unix())
+	streamUserStatementXLSX(c, user, query, filename, dict)
 }
 
 // GET /api/log/export 管理员导出全站日志（筛选口径与 /api/log/ 列表一致）
@@ -929,8 +1148,8 @@ func ExportAdminLogs(c *gin.Context) {
 		return
 	}
 	dict := resolveAdminLogExportDict(query.Lang)
-	filename := fmt.Sprintf("admin-logs-%d.csv", time.Now().Unix())
-	streamAdminLogsCSV(c, logs, query.logExportQuery, filename, dict)
+	filename := fmt.Sprintf("admin-logs-%d.xlsx", time.Now().Unix())
+	streamAdminLogsXLSX(c, logs, query.logExportQuery, filename, dict)
 }
 
 // GET /api/admin/log/:userId/export 管理员代查任意用户对账单
@@ -956,8 +1175,8 @@ func ExportUserLogsAdmin(c *gin.Context) {
 		return
 	}
 	dict := resolveStatementDict(query.Lang)
-	filename := fmt.Sprintf("statement-%s-%d-admin.csv", sanitizeFilename(user.Username), time.Now().Unix())
-	streamUserStatementCSV(c, user, query, filename, dict)
+	filename := fmt.Sprintf("statement-%s-%d-admin.xlsx", sanitizeFilename(user.Username), time.Now().Unix())
+	streamUserStatementXLSX(c, user, query, filename, dict)
 }
 
 // POST /api/admin/log/export_all 管理员全平台批量对账单：返回 zip 包，
@@ -1009,7 +1228,7 @@ func ExportAllUsersLogsAdmin(c *gin.Context) {
 	}
 }
 
-// writeSingleUserCSV 复用 streamUserStatementCSV 的写表逻辑，但目标 io.Writer 由调用方控制。
+// writeSingleUserCSV 保留给管理员批量 ZIP 导出，目标 io.Writer 由调用方控制。
 func writeSingleUserCSV(w interface {
 	Write(p []byte) (int, error)
 }, user *model.User, query logExportQuery, dict statementI18n) {
@@ -1036,10 +1255,16 @@ func writeSingleUserCSV(w interface {
 		fmt.Sprintf(dict.Meta3, user.Quota, formatBalanceAmount(user.Quota)),
 	}, emptyRow[1:]...))
 	cw.Write(dict.Header)
+	balances := make([]int64, len(logs))
+	finalRunning := running
 	for idx, l := range logs {
+		finalRunning += model.SignedLogDelta(l.Quota, l.Type)
+		balances[idx] = finalRunning
+	}
+	for idx := len(logs) - 1; idx >= 0; idx-- {
+		l := logs[idx]
 		ts := time.Unix(l.CreatedAt, 0).Format("2006-01-02 15:04:05")
 		signed := model.SignedLogDelta(l.Quota, l.Type)
-		running += signed
 		channelOrOrder := strconv.Itoa(l.ChannelId)
 		if l.Type == model.LogTypeTopup || l.Type == model.LogTypeRefund {
 			if order, ok := extractOrderNo(l.Other); ok {
@@ -1047,14 +1272,17 @@ func writeSingleUserCSV(w interface {
 			}
 		}
 		cacheTokens := extractCacheReadTokens(l.Other)
+		other, _ := common.StrToMap(l.Other)
+		displaySigned := resolveUsageLogExportSignedQuota(l, other)
 		cw.Write([]string{
-			strconv.Itoa(idx + 1), ts, logTypeLabelI18n(l.Type, dict), l.Content, channelOrOrder,
+			strconv.Itoa(len(logs) - idx), ts, logTypeLabelI18n(l.Type, dict), l.Content, channelOrOrder,
 			l.ModelName, l.TokenName, strconv.Itoa(l.PromptTokens), strconv.Itoa(l.CompletionTokens),
 			strconv.Itoa(cacheTokens),
-			strconv.FormatInt(signed, 10), formatQuotaDisplay(signed), strconv.FormatInt(running, 10),
-			formatBalanceAmount(int(running)), formatLogDetailForExport(l, query.Lang),
+			strconv.FormatInt(signed, 10), formatUsageLogExportAmount(displaySigned, other), strconv.FormatInt(balances[idx], 10),
+			formatBalanceAmount(int(balances[idx])), formatLogDetailForExport(l, query.Lang),
 		})
 	}
+	running = finalRunning
 	if !query.hasRowFilterBeyondTime() {
 		footer1 := append([]string{dict.Footer1Label}, emptyRow[1:len(emptyRow)-2]...)
 		footer1 = append(footer1, dict.Footer1Key, fmt.Sprintf("%d / %s", user.Quota, formatBalanceAmount(user.Quota)))
@@ -1111,35 +1339,36 @@ func resolveAdminLogExportDict(lang string) adminLogExportI18n {
 	return dict
 }
 
-// streamAdminLogsCSV 流式写出管理员全站日志 CSV。
-func streamAdminLogsCSV(c *gin.Context, logs []*model.Log, query logExportQuery, filename string, dict adminLogExportI18n) {
-	c.Header("Content-Type", "text/csv; charset=utf-8")
-	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
-	c.Header("X-Content-Type-Options", "nosniff")
-	c.Header("X-Statement-Window-Start", strconv.FormatInt(query.StartTs, 10))
-	c.Header("X-Statement-Window-End", strconv.FormatInt(query.EndTs, 10))
-	c.Status(200)
-
-	c.Writer.WriteString("\xEF\xBB\xBF")
-	bw := bufio.NewWriterSize(c.Writer, 32*1024)
-	defer bw.Flush()
-	w := csv.NewWriter(bw)
-	defer w.Flush()
+// streamAdminLogsXLSX 以日志页面顺序写出管理员全站日志。
+func streamAdminLogsXLSX(c *gin.Context, logs []*model.Log, query logExportQuery, filename string, dict adminLogExportI18n) {
+	workbook, err := newUsageLogWorkbook(
+		"Usage Logs",
+		[]float64{8, 20, 12, 18, 18, 24, 18, 14, 38, 36, 14, 14, 14, 18, 18, 48},
+		3,
+	)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	fail := func(err error) {
+		_ = workbook.file.Close()
+		common.ApiError(c, err)
+	}
 
 	emptyRow := make([]string, len(dict.Header))
-	if err := writeStatementRow(w, append([]string{dict.Meta1}, emptyRow[1:]...)); err != nil {
-		common.SysError("write admin export meta1: " + err.Error())
+	if err := workbook.stream.SetRow("A1", styledLogExportRow(append([]string{dict.Meta1}, emptyRow[1:]...), workbook.metaStyle)); err != nil {
+		fail(err)
 		return
 	}
 	periodStart := time.Unix(query.StartTs, 0).Format("2006-01-02 15:04:05")
 	periodEnd := time.Unix(query.EndTs, 0).Format("2006-01-02 15:04:05")
 	meta2 := fmt.Sprintf(dict.Meta2, periodStart, periodEnd)
-	if err := writeStatementRow(w, append([]string{meta2}, emptyRow[1:]...)); err != nil {
-		common.SysError("write admin export meta2: " + err.Error())
+	if err := workbook.stream.SetRow("A2", styledLogExportRow(append([]string{meta2}, emptyRow[1:]...), workbook.metaStyle)); err != nil {
+		fail(err)
 		return
 	}
-	if err := writeStatementRow(w, dict.Header); err != nil {
-		common.SysError("write admin export header: " + err.Error())
+	if err := workbook.stream.SetRow("A3", styledLogExportRow(dict.Header, workbook.headerStyle), excelize.RowOpts{Height: 30}); err != nil {
+		fail(err)
 		return
 	}
 
@@ -1151,9 +1380,10 @@ func streamAdminLogsCSV(c *gin.Context, logs []*model.Log, query logExportQuery,
 			channelDisplay = strconv.Itoa(l.ChannelId)
 		}
 		cacheTokens := extractCacheReadTokens(l.Other)
-		quota := int64(l.Quota)
-		row := []string{
-			strconv.Itoa(idx + 1),
+		other, _ := common.StrToMap(l.Other)
+		quota := resolveUsageLogExportQuota(l, other)
+		row := []interface{}{
+			idx + 1,
 			ts,
 			logTypeLabelI18n(l.Type, statementDict),
 			l.Username,
@@ -1162,19 +1392,28 @@ func streamAdminLogsCSV(c *gin.Context, logs []*model.Log, query logExportQuery,
 			channelDisplay,
 			l.Group,
 			l.RequestId,
-			l.Content,
-			strconv.Itoa(l.PromptTokens),
-			strconv.Itoa(l.CompletionTokens),
-			strconv.Itoa(cacheTokens),
-			strconv.FormatInt(quota, 10),
-			formatQuotaDisplay(quota),
-			formatLogDetailForExport(l, query.Lang),
+			excelize.Cell{StyleID: workbook.wrapStyle, Value: l.Content},
+			l.PromptTokens,
+			l.CompletionTokens,
+			cacheTokens,
+			quota,
+			excelize.Cell{StyleID: workbook.amountStyle, Value: usageLogExportAmountValue(quota, other)},
+			excelize.Cell{StyleID: workbook.wrapStyle, Value: formatLogDetailForExport(l, query.Lang)},
 		}
-		if err := writeStatementRow(w, row); err != nil {
-			common.SysError("write admin export row: " + err.Error())
+		if err := workbook.stream.SetRow(fmt.Sprintf("A%d", idx+4), row); err != nil {
+			fail(err)
 			return
 		}
 	}
+
+	f, err := finishUsageLogWorkbook(workbook)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.Header("X-Statement-Window-Start", strconv.FormatInt(query.StartTs, 10))
+	c.Header("X-Statement-Window-End", strconv.FormatInt(query.EndTs, 10))
+	writeUsageLogWorkbook(c, f, filename)
 }
 
 var supplierChannelLogExportDictZHCN = supplierChannelLogExportI18n{
@@ -1202,35 +1441,36 @@ func resolveSupplierChannelLogExportDict(lang string) supplierChannelLogExportI1
 	return supplierChannelLogExportDictZHCN
 }
 
-// streamSupplierChannelLogsCSV 流式写出供应商渠道日志 CSV。
-func streamSupplierChannelLogsCSV(c *gin.Context, logs []*model.Log, query logExportQuery, filename string, dict supplierChannelLogExportI18n) {
-	c.Header("Content-Type", "text/csv; charset=utf-8")
-	c.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
-	c.Header("X-Content-Type-Options", "nosniff")
-	c.Header("X-Statement-Window-Start", strconv.FormatInt(query.StartTs, 10))
-	c.Header("X-Statement-Window-End", strconv.FormatInt(query.EndTs, 10))
-	c.Status(200)
-
-	c.Writer.WriteString("\xEF\xBB\xBF")
-	bw := bufio.NewWriterSize(c.Writer, 32*1024)
-	defer bw.Flush()
-	w := csv.NewWriter(bw)
-	defer w.Flush()
+// streamSupplierChannelLogsXLSX 以日志页面顺序写出供应商渠道日志。
+func streamSupplierChannelLogsXLSX(c *gin.Context, logs []*model.Log, query logExportQuery, filename string, dict supplierChannelLogExportI18n) {
+	workbook, err := newUsageLogWorkbook(
+		"Usage Logs",
+		[]float64{8, 20, 12, 18, 18, 24, 18, 14, 38, 14, 14, 14, 18, 18},
+		3,
+	)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	fail := func(err error) {
+		_ = workbook.file.Close()
+		common.ApiError(c, err)
+	}
 
 	emptyRow := make([]string, len(dict.Header))
-	if err := writeStatementRow(w, append([]string{dict.Meta1}, emptyRow[1:]...)); err != nil {
-		common.SysError("write supplier export meta1: " + err.Error())
+	if err := workbook.stream.SetRow("A1", styledLogExportRow(append([]string{dict.Meta1}, emptyRow[1:]...), workbook.metaStyle)); err != nil {
+		fail(err)
 		return
 	}
 	periodStart := time.Unix(query.StartTs, 0).Format("2006-01-02 15:04:05")
 	periodEnd := time.Unix(query.EndTs, 0).Format("2006-01-02 15:04:05")
 	meta2 := fmt.Sprintf(dict.Meta2, periodStart, periodEnd)
-	if err := writeStatementRow(w, append([]string{meta2}, emptyRow[1:]...)); err != nil {
-		common.SysError("write supplier export meta2: " + err.Error())
+	if err := workbook.stream.SetRow("A2", styledLogExportRow(append([]string{meta2}, emptyRow[1:]...), workbook.metaStyle)); err != nil {
+		fail(err)
 		return
 	}
-	if err := writeStatementRow(w, dict.Header); err != nil {
-		common.SysError("write supplier export header: " + err.Error())
+	if err := workbook.stream.SetRow("A3", styledLogExportRow(dict.Header, workbook.headerStyle), excelize.RowOpts{Height: 30}); err != nil {
+		fail(err)
 		return
 	}
 
@@ -1242,9 +1482,10 @@ func streamSupplierChannelLogsCSV(c *gin.Context, logs []*model.Log, query logEx
 			channelDisplay = strconv.Itoa(l.ChannelId)
 		}
 		cacheTokens := extractCacheReadTokens(l.Other)
-		quota := int64(l.Quota)
-		row := []string{
-			strconv.Itoa(idx + 1),
+		other, _ := common.StrToMap(l.Other)
+		quota := resolveUsageLogExportQuota(l, other)
+		row := []interface{}{
+			idx + 1,
 			ts,
 			logTypeLabelI18n(l.Type, statementDict),
 			l.Username,
@@ -1253,17 +1494,26 @@ func streamSupplierChannelLogsCSV(c *gin.Context, logs []*model.Log, query logEx
 			channelDisplay,
 			l.Group,
 			l.RequestId,
-			strconv.Itoa(l.PromptTokens),
-			strconv.Itoa(l.CompletionTokens),
-			strconv.Itoa(cacheTokens),
-			strconv.FormatInt(quota, 10),
-			formatQuotaDisplay(quota),
+			l.PromptTokens,
+			l.CompletionTokens,
+			cacheTokens,
+			quota,
+			excelize.Cell{StyleID: workbook.amountStyle, Value: usageLogExportAmountValue(quota, other)},
 		}
-		if err := writeStatementRow(w, row); err != nil {
-			common.SysError("write supplier export row: " + err.Error())
+		if err := workbook.stream.SetRow(fmt.Sprintf("A%d", idx+4), row); err != nil {
+			fail(err)
 			return
 		}
 	}
+
+	f, err := finishUsageLogWorkbook(workbook)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.Header("X-Statement-Window-Start", strconv.FormatInt(query.StartTs, 10))
+	c.Header("X-Statement-Window-End", strconv.FormatInt(query.EndTs, 10))
+	writeUsageLogWorkbook(c, f, filename)
 }
 
 // supplierDashboardExportI18n 供应商看板使用详情账单导出文案。

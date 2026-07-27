@@ -8,13 +8,13 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/service"
 )
 
-// ── 用户智能路由策略 HTTP API ──────────────────────────────────
+// ── 用户智能路由策略 HTTP API（进程内本地实现）──────────────────
 //
-// 代理到 TokenFactory gRPC 服务，供 token-factory 用户控制台调用。
-// 所有 API 从 JWT session 获取当前用户 ID 和角色。
+// 读写本地 route_* / model_group_* / user_* 表，不再代理 TokenFactory gRPC。
 // TOKENFACTORY_ROUTE_ENABLED=false 时返回 404，前端据此隐藏相关 UI。
 
 func rejectTokenFactoryRouteDisabled(c *gin.Context) bool {
@@ -23,7 +23,7 @@ func rejectTokenFactoryRouteDisabled(c *gin.Context) bool {
 	}
 	c.JSON(http.StatusNotFound, gin.H{
 		"success":         false,
-		"error":           "TokenFactory smart routing is not enabled on this site",
+		"error":           "smart routing is not enabled on this site",
 		"feature_enabled": false,
 	})
 	return true
@@ -41,25 +41,65 @@ func UserGetRoutePolicy(c *gin.Context) {
 		return
 	}
 
-	jwt, err := common.IssueTokenFactoryJWT(userID, userRole)
+	isAdmin := userRole >= common.RoleAdminUser
+	policy, err := service.GetLocalUserRoutePolicy(userID, isAdmin)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "issue JWT failed: " + err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "load route policy: " + err.Error()})
 		return
 	}
 
-	policy, err := service.GetUserRoutePolicyFromTF(jwt, userID, userRole)
-	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "TokenFactory gRPC error: " + err.Error()})
-		return
+	groups := make([]gin.H, 0, len(policy.Groups))
+	for _, g := range policy.Groups {
+		channels := make([]gin.H, 0, len(g.Channels))
+		for _, ch := range g.Channels {
+			channels = append(channels, gin.H{
+				"channel_id":        ch.ChannelID,
+				"route_slug":        ch.RouteSlug,
+				"name":              ch.Name,
+				"masked_name":       ch.MaskedName,
+				"provider_slug":     ch.ProviderSlug,
+				"supplier_alias":    ch.SupplierAlias,
+				"status":            ch.Status,
+				"models_in_group":   ch.ModelsInGroup,
+				"user_weight":       ch.UserWeight,
+				"user_weight_id":    ch.UserWeightID,
+				"user_enabled":      ch.UserEnabled,
+				"user_configured":   ch.UserConfigured,
+				"global_weight":     ch.GlobalWeight,
+				"global_enabled":    ch.GlobalEnabled,
+				"global_configured": ch.GlobalConfigured,
+				"price":             ch.Price,
+			})
+		}
+		groups = append(groups, gin.H{
+			"group_key":     g.GroupKey,
+			"display_name":  g.DisplayName,
+			"models":        g.Models,
+			"channel_count": g.ChannelCount,
+			"channels":      channels,
+		})
+	}
+
+	userOverrides := make([]gin.H, 0, len(policy.UserOverrides))
+	for _, o := range policy.UserOverrides {
+		userOverrides = append(userOverrides, gin.H{
+			"id": o.ID, "raw_model": o.RawModel, "group_key": o.GroupKey, "is_user": o.IsUser,
+		})
+	}
+	globalOverrides := make([]gin.H, 0, len(policy.GlobalOverrides))
+	for _, o := range policy.GlobalOverrides {
+		globalOverrides = append(globalOverrides, gin.H{
+			"id": o.ID, "raw_model": o.RawModel, "group_key": o.GroupKey, "is_user": o.IsUser,
+		})
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"success":         true,
-		"mode":            policy.Mode,
-		"global_mode":     policy.GlobalMode,
-		"groups":          policy.Groups,
-		"user_overrides":  policy.UserOverrides,
-		"global_overrides": policy.GlobalOverrides,
+		"success":          true,
+		"mode":             policy.Mode,
+		"global_mode":      policy.GlobalMode,
+		"groups":           groups,
+		"user_overrides":   userOverrides,
+		"global_overrides": globalOverrides,
 	})
 }
 
@@ -69,7 +109,6 @@ func UserUpdateRouteMode(c *gin.Context) {
 		return
 	}
 	userID := c.GetInt("id")
-	userRole := c.GetInt("role")
 	if userID <= 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
@@ -79,7 +118,6 @@ func UserUpdateRouteMode(c *gin.Context) {
 		Mode      string `json:"mode"`
 		ResetMode bool   `json:"reset_mode"`
 	}
-	// 手动读取 body 并解析，避免 gzip/MaxBytes 中间件包裹后 ShouldBindJSON 偶发 EOF。
 	bodyBytes, readErr := io.ReadAll(c.Request.Body)
 	if readErr != nil && readErr != io.EOF {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "read body: " + readErr.Error()})
@@ -91,24 +129,24 @@ func UserUpdateRouteMode(c *gin.Context) {
 			return
 		}
 	}
-
-	// 至少要有一个明确意图，否则视为无效请求。
 	if req.Mode == "" && !req.ResetMode {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "mode or reset_mode is required"})
 		return
 	}
 
-	jwt, err := common.IssueTokenFactoryJWT(userID, userRole)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "issue JWT failed: " + err.Error()})
+	if req.ResetMode {
+		if err := model.DeleteUserRouteConfig(userID); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"success": true, "message": "mode reset"})
 		return
 	}
 
-	if err := service.UpsertUserRouteModeToTF(jwt, userID, userRole, req.Mode, req.ResetMode); err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "TokenFactory gRPC error: " + err.Error()})
+	if _, err := model.SaveUserRouteConfig(userID, req.Mode); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "mode updated"})
 }
 
@@ -118,7 +156,6 @@ func UserUpsertRouteWeight(c *gin.Context) {
 		return
 	}
 	userID := c.GetInt("id")
-	userRole := c.GetInt("role")
 	if userID <= 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
@@ -151,17 +188,10 @@ func UserUpsertRouteWeight(c *gin.Context) {
 		enabled = *req.Enabled
 	}
 
-	jwt, err := common.IssueTokenFactoryJWT(userID, userRole)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "issue JWT failed: " + err.Error()})
+	if _, err := model.UpsertUserModelGroupWeight(userID, req.GroupKey, req.ChannelID, req.Weight, enabled); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	if err := service.UpsertUserWeightToTF(jwt, userID, userRole, req.GroupKey, req.ChannelID, req.Weight, enabled); err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "TokenFactory gRPC error: " + err.Error()})
-		return
-	}
-
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "weight updated"})
 }
 
@@ -171,7 +201,6 @@ func UserDeleteRouteWeight(c *gin.Context) {
 		return
 	}
 	userID := c.GetInt("id")
-	userRole := c.GetInt("role")
 	if userID <= 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
@@ -184,17 +213,10 @@ func UserDeleteRouteWeight(c *gin.Context) {
 		return
 	}
 
-	jwt, err := common.IssueTokenFactoryJWT(userID, userRole)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "issue JWT failed: " + err.Error()})
+	if err := model.DeleteUserModelGroupWeightByID(uint(id), userID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	if err := service.DeleteUserWeightFromTF(jwt, userID, userRole, uint32(id)); err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "TokenFactory gRPC error: " + err.Error()})
-		return
-	}
-
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "weight deleted"})
 }
 
@@ -204,7 +226,6 @@ func UserUpsertRouteOverride(c *gin.Context) {
 		return
 	}
 	userID := c.GetInt("id")
-	userRole := c.GetInt("role")
 	if userID <= 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
@@ -230,17 +251,10 @@ func UserUpsertRouteOverride(c *gin.Context) {
 		return
 	}
 
-	jwt, err := common.IssueTokenFactoryJWT(userID, userRole)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "issue JWT failed: " + err.Error()})
+	if _, err := model.UpsertUserModelGroupOverride(userID, req.RawModel, req.GroupKey); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	if err := service.UpsertUserOverrideToTF(jwt, userID, userRole, req.RawModel, req.GroupKey); err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "TokenFactory gRPC error: " + err.Error()})
-		return
-	}
-
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "override updated"})
 }
 
@@ -250,7 +264,6 @@ func UserDeleteRouteOverride(c *gin.Context) {
 		return
 	}
 	userID := c.GetInt("id")
-	userRole := c.GetInt("role")
 	if userID <= 0 {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 		return
@@ -263,16 +276,9 @@ func UserDeleteRouteOverride(c *gin.Context) {
 		return
 	}
 
-	jwt, err := common.IssueTokenFactoryJWT(userID, userRole)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "issue JWT failed: " + err.Error()})
+	if err := model.DeleteUserModelGroupOverrideByID(uint(id), userID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-
-	if err := service.DeleteUserOverrideFromTF(jwt, userID, userRole, uint32(id)); err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "TokenFactory gRPC error: " + err.Error()})
-		return
-	}
-
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "override deleted"})
 }

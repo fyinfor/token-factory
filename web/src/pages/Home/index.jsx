@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import {
   Button,
   Typography,
@@ -47,6 +47,13 @@ import {
 } from '@douyinfe/semi-icons';
 import { Link } from 'react-router-dom';
 import NoticeModal from '../../components/layout/NoticeModal';
+import {
+  OPEN_NOTIFICATION_CENTER_EVENT,
+  acknowledgeAnnouncementPopup,
+  getAnnouncementPopupKey,
+  getLegacyNoticePopupKey,
+  isAnnouncementPopupAcknowledged,
+} from '../../hooks/common/useNotifications';
 import HomeModelList from '../../components/home/HomeModelList';
 import HomeHeroCarousel from '../../components/home/HomeHeroCarousel';
 import HomeFooterCertificates from '../../components/home/HomeFooterCertificates';
@@ -110,6 +117,13 @@ const Home = () => {
   const [homePageContentLoaded, setHomePageContentLoaded] = useState(false);
   const [homePageContent, setHomePageContent] = useState('');
   const [noticeVisible, setNoticeVisible] = useState(false);
+  const [noticePopupKey, setNoticePopupKey] = useState('');
+  const [legacyNoticeContent, setLegacyNoticeContent] = useState('');
+  const noticeCheckedRef = useRef(false);
+  const latestAnnouncement = statusState?.status?.announcements?.[0];
+  const latestAnnouncementPopupKey = latestAnnouncement
+    ? getAnnouncementPopupKey(latestAnnouncement)
+    : '';
   const isMobile = useIsMobile();
   const isDemoSiteMode = statusState?.status?.demo_site_enabled || false;
   const serverAddress =
@@ -166,23 +180,57 @@ const Home = () => {
 
   useEffect(() => {
     const checkNoticeAndShow = async () => {
-      const lastCloseDate = localStorage.getItem('notice_close_date');
-      const today = new Date().toDateString();
-      if (lastCloseDate !== today) {
-        try {
-          const res = await API.get('/api/notice');
-          const { success, data } = res.data;
-          if (success && data && data.trim() !== '') {
-            setNoticeVisible(true);
-          }
-        } catch (error) {
-          console.error('获取公告失败:', error);
+      if (!statusState?.status) {
+        return;
+      }
+
+      if (latestAnnouncementPopupKey) {
+        if (
+          noticeCheckedRef.current === latestAnnouncementPopupKey ||
+          isAnnouncementPopupAcknowledged(latestAnnouncementPopupKey)
+        ) {
+          return;
         }
+        noticeCheckedRef.current = latestAnnouncementPopupKey;
+        setLegacyNoticeContent('');
+        setNoticePopupKey(latestAnnouncementPopupKey);
+        setNoticeVisible(true);
+        return;
+      }
+
+      if (noticeCheckedRef.current === 'legacy') {
+        return;
+      }
+      noticeCheckedRef.current = 'legacy';
+      try {
+        const res = await API.get('/api/notice');
+        const { success, data } = res.data;
+        if (success && data && data.trim() !== '') {
+          const legacyPopupKey = getLegacyNoticePopupKey(data);
+          if (isAnnouncementPopupAcknowledged(legacyPopupKey)) {
+            return;
+          }
+          setLegacyNoticeContent(data);
+          setNoticePopupKey(legacyPopupKey);
+          setNoticeVisible(true);
+        }
+      } catch (error) {
+        console.error('获取公告失败:', error);
       }
     };
 
     checkNoticeAndShow();
-  }, []);
+  }, [latestAnnouncementPopupKey, statusState?.status]);
+
+  const acknowledgeNotice = () => {
+    acknowledgeAnnouncementPopup(noticePopupKey);
+    setNoticeVisible(false);
+  };
+
+  const handleViewMoreNotices = () => {
+    acknowledgeNotice();
+    window.dispatchEvent(new Event(OPEN_NOTIFICATION_CENTER_EVENT));
+  };
 
   useEffect(() => {
     displayHomePageContent().then();
@@ -208,8 +256,9 @@ const Home = () => {
       <div className='w-full h-[100dvh] overflow-y-auto home-scroll-container'>
         <NoticeModal
           visible={noticeVisible}
-          onClose={() => setNoticeVisible(false)}
-          isMobile={isMobile}
+          fallbackContent={legacyNoticeContent}
+          onClose={acknowledgeNotice}
+          onViewMore={handleViewMoreNotices}
         />
         {homePageContentLoaded && homePageContent === '' ? (
           <div className='w-full'>

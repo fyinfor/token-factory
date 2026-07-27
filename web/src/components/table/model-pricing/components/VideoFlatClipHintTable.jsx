@@ -23,6 +23,8 @@ import { IconHelpCircle } from '@douyinfe/semi-icons';
 import {
   formatVideoResolutionDisplayLabel,
   compareVideoResolutionAsc,
+  costDiscountMultiplier,
+  markupRateFromPercent,
 } from '../../../../helpers';
 import { formatPreciseUsdPrice } from './PrecisePriceText';
 import {
@@ -71,12 +73,40 @@ function getDiscountPercent(currentUsd, officialUsd) {
   return official > current ? Math.round((1 - current / official) * 100) : 0;
 }
 
-function mapRowsToItems(rows, usedGroupRatio, displayPrice, t) {
+function mapRowsToItems(
+  rows,
+  usedGroupRatio,
+  displayPrice,
+  t,
+  isCostPrice,
+  priceDiscountPercent,
+  markupDiscountRate,
+) {
   return rows.map((row, idx) => {
     const laneKey = VIDEO_FLAT_LANE_I18N_KEY[row.lane];
-    const currentUsd = Number(row.usd_after_channel_discount || 0);
+    const effectiveUsd = Number(row.usd_after_channel_discount || 0);
+    const channelRawUsd = Number(row.usd_channel_raw);
+    const officialUsd = Number(row.usd_official || 0);
+    const costMultiplier = costDiscountMultiplier(priceDiscountPercent);
+    const markupRate = markupRateFromPercent(markupDiscountRate);
+    const fallbackCostUsd =
+      officialUsd > 0
+        ? Math.max(0, effectiveUsd - officialUsd * markupRate)
+        : costMultiplier + markupRate > 0
+          ? effectiveUsd * (costMultiplier / (costMultiplier + markupRate))
+          : 0;
+    const currentUsd = isCostPrice
+      ? Number.isFinite(channelRawUsd)
+        ? channelRawUsd * costMultiplier
+        : fallbackCostUsd
+      : effectiveUsd;
     const platformUsd = currentUsd * usedGroupRatio;
-    const discount = getDiscountPercent(platformUsd, row.usd_official);
+    const costPercent = Number(priceDiscountPercent);
+    const discount = isCostPrice
+      ? Number.isFinite(costPercent) && costPercent >= 0 && costPercent < 100
+        ? 100 - costPercent
+        : 0
+      : getDiscountPercent(platformUsd, officialUsd);
     const resolutionLabel =
       formatVideoResolutionDisplayLabel(row.resolution) || '—';
     return {
@@ -86,7 +116,7 @@ function mapRowsToItems(rows, usedGroupRatio, displayPrice, t) {
       audio: getAudioLabel(row, t),
       price: formatTierPrice(currentUsd, usedGroupRatio, displayPrice),
       priceExact: currentUsd > 0 ? formatPreciseUsdPrice(platformUsd) : null,
-      official: formatTierPrice(row.usd_official, 1, displayPrice),
+      official: formatTierPrice(officialUsd, 1, displayPrice),
       officialExact:
         Number(row.usd_official) > 0
           ? formatPreciseUsdPrice(row.usd_official)
@@ -104,6 +134,8 @@ function VideoFlatClipHintTable({
   t,
   blurPricing = false,
   isCostPrice = false,
+  priceDiscountPercent = 100,
+  markupDiscountRate = 0,
 }) {
   const groups = useMemo(
     () => groupVideoFlatTiersByFamily(hint?.tiers),
@@ -123,7 +155,12 @@ function VideoFlatClipHintTable({
     billingMode === 'per_token'
       ? [
           { key: 'resolution', label: t('分辨率') },
-          { key: 'price', label: t('平台价'), unitLabel, strong: true },
+          {
+            key: 'price',
+            label: isCostPrice ? t('成本价') : t('平台价'),
+            unitLabel,
+            strong: true,
+          },
           { key: 'official', label: t('官方价'), unitLabel },
           {
             key: 'discount',
@@ -134,7 +171,12 @@ function VideoFlatClipHintTable({
       : [
           { key: 'resolution', label: t('分辨率') },
           { key: 'audio', label: t('音轨') },
-          { key: 'price', label: t('平台价'), unitLabel, strong: true },
+          {
+            key: 'price',
+            label: isCostPrice ? t('成本价') : t('平台价'),
+            unitLabel,
+            strong: true,
+          },
           { key: 'official', label: t('官方价'), unitLabel },
           {
             key: 'discount',
@@ -184,6 +226,9 @@ function VideoFlatClipHintTable({
             usedGroupRatio,
             displayPrice,
             t,
+            isCostPrice,
+            priceDiscountPercent,
+            markupDiscountRate,
           );
 
           return (
@@ -197,7 +242,6 @@ function VideoFlatClipHintTable({
               accent={family === 'image_to_video' ? 'amber' : 'blue'}
               variant='glass'
               t={t}
-              zeroDiscountLabel={isCostPrice ? t('0折扣') : '0%'}
             />
           );
         })}
