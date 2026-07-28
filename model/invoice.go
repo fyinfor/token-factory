@@ -246,12 +246,11 @@ func consumedAmountForTopUp(topUp *TopUp, consumedQuota int) decimal.Decimal {
 	return topUpMoneyPerQuota(topUp).Mul(decimal.NewFromInt(int64(consumedQuota)))
 }
 
-func GetTopUpInvoiceableAmount(topUp *TopUp, consumedQuota int) (float64, error) {
+func GetTopUpInvoiceableAmount(topUp *TopUp) (float64, error) {
 	if topUp == nil || topUp.Status != common.TopUpStatusSuccess {
 		return 0, nil
 	}
-	consumedMoney := consumedAmountForTopUp(topUp, consumedQuota)
-	available := consumedMoney.Sub(decimal.NewFromFloat(topUp.InvoicedAmount))
+	available := decimal.NewFromFloat(topUp.Money).Sub(decimal.NewFromFloat(topUp.InvoicedAmount))
 	available = available.Sub(decimal.NewFromFloat(topUp.PendingInvoiceAmount))
 	if available.IsNegative() {
 		return 0, nil
@@ -265,7 +264,7 @@ func ListInvoiceEligibleOrders(userID int, tradeNoKeyword string) ([]InvoiceElig
 		return nil, errors.New("invalid user id")
 	}
 	var topups []*TopUp
-	tx := DB.Where("user_id = ? AND status = ? AND "+topUpInvoiceEligibleWhere(), userID, common.TopUpStatusSuccess).Order("create_time asc")
+	tx := DB.Where("user_id = ? AND status = ?", userID, common.TopUpStatusSuccess).Order("create_time asc")
 	if kw := strings.TrimSpace(tradeNoKeyword); kw != "" {
 		tx = tx.Where("trade_no LIKE ?", "%"+kw+"%")
 	}
@@ -281,7 +280,7 @@ func ListInvoiceEligibleOrders(userID int, tradeNoKeyword string) ([]InvoiceElig
 		consumedQuota := attrMap[topUp.Id]
 		consumedAmountDec := consumedAmountForTopUp(topUp, consumedQuota)
 		consumedAmount, _ := consumedAmountDec.Float64()
-		invoiceable, err := GetTopUpInvoiceableAmount(topUp, consumedQuota)
+		invoiceable, err := GetTopUpInvoiceableAmount(topUp)
 		if err != nil {
 			return nil, err
 		}
@@ -424,27 +423,22 @@ func CreateInvoiceRequest(userID int, items []InvoiceRequestItemInput, remark st
 	sort.Ints(topUpIDs)
 	var created *InvoiceRequest
 	err = DB.Transaction(func(tx *gorm.DB) error {
-		attrMap, err := getTopUpAttributionMapWithDB(tx, userID)
-		if err != nil {
-			return err
-		}
 		total := decimal.Zero
 		prepared := make([]InvoiceRequestItem, 0, len(topUpIDs))
 		for _, topUpID := range topUpIDs {
 			amount := merged[topUpID]
 			var topUp TopUp
-			if err := tx.Where("id = ? AND user_id = ? AND status = ? AND "+topUpInvoiceEligibleWhere(), topUpID, userID, common.TopUpStatusSuccess).First(&topUp).Error; err != nil {
+			if err := tx.Where("id = ? AND user_id = ? AND status = ?", topUpID, userID, common.TopUpStatusSuccess).First(&topUp).Error; err != nil {
 				return fmt.Errorf("topup %d not found or not payable", topUpID)
 			}
-			consumedMoney := consumedAmountForTopUp(&topUp, attrMap[topUp.Id])
-			maxReserved := consumedMoney.Sub(decimal.NewFromFloat(topUp.InvoicedAmount)).Round(6)
+			maxReserved := decimal.NewFromFloat(topUp.Money).Sub(decimal.NewFromFloat(topUp.InvoicedAmount)).Round(6)
 			if maxReserved.IsNegative() {
 				maxReserved = decimal.Zero
 			}
 			amountF, _ := amount.Float64()
 			maxReservedF, _ := maxReserved.Float64()
 			reserve := tx.Model(&TopUp{}).
-				Where("id = ? AND user_id = ? AND status = ? AND "+topUpInvoiceEligibleWhere()+" AND pending_invoice_amount + ? <= ?", topUp.Id, userID, common.TopUpStatusSuccess, amountF, maxReservedF+0.000001).
+				Where("id = ? AND user_id = ? AND status = ? AND pending_invoice_amount + ? <= ?", topUp.Id, userID, common.TopUpStatusSuccess, amountF, maxReservedF+0.000001).
 				Update("pending_invoice_amount", gorm.Expr("pending_invoice_amount + ?", amountF))
 			if reserve.Error != nil {
 				return reserve.Error
