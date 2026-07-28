@@ -282,6 +282,9 @@ func migrateDB() error {
 	if err := migrateAffInviteRelationModelMarkupDiscountRateColumn(); err != nil {
 		return err
 	}
+	if err := migrateInvoiceTopUpIDColumns(); err != nil {
+		return fmt.Errorf("migrate invoice top_up_id columns: %w", err)
+	}
 
 	err := DB.AutoMigrate(
 		&Channel{},
@@ -356,6 +359,9 @@ func migrateDB() error {
 	if err := NormalizeEmptyRealNameVerificationCertifyIDs(); err != nil {
 		return fmt.Errorf("normalize real-name verification certify IDs: %w", err)
 	}
+	if err := migrateInvoiceTopUpIDColumns(); err != nil {
+		return fmt.Errorf("migrate invoice top_up_id columns: %w", err)
+	}
 	if err := BackfillPendingInvoiceAmounts(); err != nil {
 		return fmt.Errorf("backfill pending invoice amounts: %w", err)
 	}
@@ -399,6 +405,9 @@ func migrateDB() error {
 }
 
 func migrateDBFast() error {
+	if err := migrateInvoiceTopUpIDColumns(); err != nil {
+		return fmt.Errorf("migrate invoice top_up_id columns: %w", err)
+	}
 
 	var wg sync.WaitGroup
 
@@ -495,6 +504,9 @@ func migrateDBFast() error {
 	migrateTopUpAmountColumn()
 	if err := NormalizeEmptyRealNameVerificationCertifyIDs(); err != nil {
 		return fmt.Errorf("normalize real-name verification certify IDs: %w", err)
+	}
+	if err := migrateInvoiceTopUpIDColumns(); err != nil {
+		return fmt.Errorf("migrate invoice top_up_id columns: %w", err)
 	}
 	if err := BackfillPendingInvoiceAmounts(); err != nil {
 		return fmt.Errorf("backfill pending invoice amounts: %w", err)
