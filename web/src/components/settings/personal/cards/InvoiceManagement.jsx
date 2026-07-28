@@ -31,7 +31,6 @@ import {
 } from 'lucide-react';
 import {
   API,
-  renderQuota,
   showError,
   showSuccess,
   timestamp2string,
@@ -47,8 +46,6 @@ import {
 } from '../../../invoice/InvoiceWorkspace';
 
 const RECORD_PAGE_SIZE = 10;
-const INVOICE_VAT_RATE_LABEL = '6%';
-
 const InvoiceManagement = ({ t }) => {
   const [activeTab, setActiveTab] = useState('eligible');
   const [eligibleLoading, setEligibleLoading] = useState(false);
@@ -311,23 +308,22 @@ const InvoiceManagement = ({ t }) => {
             <h2>{t('开票须知')}</h2>
             <ul className='invoice-notice-list'>
               <li>{t('发票将在申请提交后的 3-5 个工作日内开具')}</li>
-              <li>{t('赠送额度不可开票，充值与对公余额消费后可申请')}</li>
+              <li>{t('充值成功后即可申请开票，无需等待额度消耗')}</li>
               <li>{t('电子发票将发送至收票邮箱')}</li>
-              <li>
-                {t(
-                  '平台价格为未税价格，开票需另行支付 6% 增值税，请联系客服确认税额',
-                )}
-              </li>
             </ul>
           </div>
           <div className='invoice-notice-metrics' aria-label={t('发票概览')}>
             <div>
-              <span>{t('赠送余额')}</span>
-              <strong>{renderQuota(balanceSummary?.gift_quota || 0)}</strong>
+              <span>{t('申请中金额')}</span>
+              <strong>
+                {formatInvoiceMoney(balanceSummary?.pending_invoice_amount)}
+              </strong>
             </div>
             <div>
-              <span>{t('充值余额')}</span>
-              <strong>{renderQuota(balanceSummary?.paid_quota || 0)}</strong>
+              <span>{t('已开票金额')}</span>
+              <strong>
+                {formatInvoiceMoney(balanceSummary?.invoiced_amount)}
+              </strong>
             </div>
             <div className='is-highlight'>
               <span>{t('可开票金额')}</span>
@@ -441,8 +437,8 @@ const InvoiceManagement = ({ t }) => {
                   <th aria-label={t('选择')} />
                   <th>{t('订单号')}</th>
                   <th>{t('充值金额')}</th>
-                  <th>{t('已消耗金额')}</th>
-                  <th>{t('待审核金额')}</th>
+                  <th>{t('已开票金额')}</th>
+                  <th>{t('申请中金额')}</th>
                   <th>{t('可开票金额')}</th>
                   <th>{t('创建时间')}</th>
                   <th>{t('操作')}</th>
@@ -483,10 +479,10 @@ const InvoiceManagement = ({ t }) => {
                         <td className='is-numeric' data-label={t('充值金额')}>
                           {formatInvoiceMoney(record.money)}
                         </td>
-                        <td className='is-numeric' data-label={t('已消耗金额')}>
-                          {formatInvoiceMoney(record.consumed_amount)}
+                        <td className='is-numeric' data-label={t('已开票金额')}>
+                          {formatInvoiceMoney(record.invoiced_amount)}
                         </td>
-                        <td className='is-numeric' data-label={t('待审核金额')}>
+                        <td className='is-numeric' data-label={t('申请中金额')}>
                           {formatInvoiceMoney(record.pending_amount)}
                         </td>
                         <td
@@ -517,9 +513,7 @@ const InvoiceManagement = ({ t }) => {
                     <td className='invoice-empty-row' colSpan={8}>
                       <InvoiceEmptyState
                         title={t('暂无可开票订单')}
-                        description={t(
-                          '订单完成实际消费后，可开票金额会显示在这里',
-                        )}
+                        description={t('充值成功后，可开票金额会显示在这里')}
                       />
                     </td>
                   </tr>
@@ -762,8 +756,8 @@ const InvoiceManagement = ({ t }) => {
         footer={
           <>
             <span className='invoice-inline-meta'>
-              {t('合计')} <strong>{formatInvoiceMoney(requestTotal)}</strong> ·{' '}
-              {t('税点')} {INVOICE_VAT_RATE_LABEL}
+              {t('本次申请合计')}{' '}
+              <strong>{formatInvoiceMoney(requestTotal)}</strong>
             </span>
             <button
               type='button'
