@@ -32,6 +32,9 @@ type ImageRequest struct {
 	WatermarkEnabled json.RawMessage `json:"watermark_enabled,omitempty"`
 	UserId           json.RawMessage `json:"user_id,omitempty"`
 	Image            json.RawMessage `json:"image,omitempty"`
+	// CallbackURL 非空时开启图片异步：立即返回请求 id 与创建时间，完成后向该地址 POST 结果。
+	// 网关侧消费，不会转发给上游。
+	CallbackURL string `json:"callback_url,omitempty"`
 	// 用匿名参数接收额外参数
 	Extra map[string]json.RawMessage `json:"-"`
 }
@@ -178,4 +181,31 @@ type ImageData struct {
 	Url           string `json:"url"`
 	B64Json       string `json:"b64_json"`
 	RevisedPrompt string `json:"revised_prompt"`
+}
+
+// ImageAsyncSubmitResponse 填写 callback_url 时的即时响应。
+type ImageAsyncSubmitResponse struct {
+	ID      string `json:"id"`
+	Created int64  `json:"created"`
+}
+
+const (
+	ImageCallbackStatusSuccess = "success"
+	ImageCallbackStatusFailed  = "failed"
+)
+
+// ImageCallbackPayload 异步图片完成后向 callback_url 推送的负载。
+type ImageCallbackPayload struct {
+	ID       string               `json:"id"`
+	Created  int64                `json:"created"`
+	Status   string               `json:"status"`
+	Data     []ImageData          `json:"data,omitempty"`
+	Metadata json.RawMessage      `json:"metadata,omitempty"`
+	Error    *ImageCallbackError  `json:"error,omitempty"`
+}
+
+type ImageCallbackError struct {
+	Message string `json:"message"`
+	Type    string `json:"type,omitempty"`
+	Code    any    `json:"code,omitempty"`
 }
