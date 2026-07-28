@@ -675,6 +675,24 @@ func GetAffCode(c *gin.Context) {
 	return
 }
 
+// GetUserQuotaByToken 通过令牌 API Key 查询当前用户余额相关字段。
+// 鉴权：TokenAuthReadOnly（禁用令牌/封禁用户不可查；过期/耗尽可查）。
+func GetUserQuotaByToken(c *gin.Context) {
+	id := c.GetInt("id")
+	user, err := model.GetUserById(id, false)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{
+		"quota":             user.Quota,
+		"gift_quota":        user.GiftQuota,
+		"used_quota":        user.UsedQuota,
+		"aff_quota":         user.AffQuota,
+		"aff_history_quota": user.AffHistoryQuota,
+	})
+}
+
 func GetSelf(c *gin.Context) {
 	id := c.GetInt("id")
 	userRole := c.GetInt("role")
