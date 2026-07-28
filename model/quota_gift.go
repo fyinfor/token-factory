@@ -92,11 +92,13 @@ func decreaseUserQuotaGiftFirst(id, amount int) (paid, gift int, err error) {
 
 // InvoiceBalanceSummary 用户开票相关余额摘要。
 type InvoiceBalanceSummary struct {
-	GiftQuota           int     `json:"gift_quota"`
-	PaidQuota           int     `json:"paid_quota"`
-	TotalQuota          int     `json:"total_quota"`
-	InvoiceableAmount   float64 `json:"invoiceable_amount"`
-	InvoiceableOrderCnt int     `json:"invoiceable_order_count"`
+	GiftQuota            int     `json:"gift_quota"`
+	PaidQuota            int     `json:"paid_quota"`
+	TotalQuota           int     `json:"total_quota"`
+	PendingInvoiceAmount float64 `json:"pending_invoice_amount"`
+	InvoicedAmount       float64 `json:"invoiced_amount"`
+	InvoiceableAmount    float64 `json:"invoiceable_amount"`
+	InvoiceableOrderCnt  int     `json:"invoiceable_order_count"`
 }
 
 func GetInvoiceBalanceSummary(userID int) (*InvoiceBalanceSummary, error) {
@@ -124,8 +126,12 @@ func GetInvoiceBalanceSummary(userID int) (*InvoiceBalanceSummary, error) {
 		return nil, err
 	}
 	totalInvoiceable := 0.0
+	totalPending := 0.0
+	totalInvoiced := 0.0
 	invoiceableCnt := 0
 	for _, order := range orders {
+		totalPending += order.PendingAmount
+		totalInvoiced += order.InvoicedAmount
 		if order.InvoiceableAmount > 0 {
 			invoiceableCnt++
 			totalInvoiceable += order.InvoiceableAmount
@@ -133,11 +139,13 @@ func GetInvoiceBalanceSummary(userID int) (*InvoiceBalanceSummary, error) {
 	}
 
 	return &InvoiceBalanceSummary{
-		GiftQuota:           gift,
-		PaidQuota:           paid,
-		TotalQuota:          user.Quota,
-		InvoiceableAmount:   totalInvoiceable,
-		InvoiceableOrderCnt: invoiceableCnt,
+		GiftQuota:            gift,
+		PaidQuota:            paid,
+		TotalQuota:           user.Quota,
+		PendingInvoiceAmount: totalPending,
+		InvoicedAmount:       totalInvoiced,
+		InvoiceableAmount:    totalInvoiceable,
+		InvoiceableOrderCnt:  invoiceableCnt,
 	}, nil
 }
 
