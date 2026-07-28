@@ -2439,6 +2439,7 @@ export default function DistributorAdmin() {
                     const fd = new FormData();
                     const inst = file.fileInstance || file;
                     fd.append('file', inst);
+                    fd.append('purpose', 'distributor');
                     setProfileUploadPct(0);
                     try {
                       const res = await API.post('/api/oss/upload', fd, {

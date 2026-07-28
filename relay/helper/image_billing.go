@@ -44,7 +44,13 @@ func FinalizeImagePerImageBilling(c *gin.Context, info *relaycommon.RelayInfo, r
 
 	estimateCtx := estimateImageRequestContext(c, info)
 	estimateCtx.Count = actualCount
-	if w, h, ok := resolveImageDimensions(c, request, responseBody); ok {
+	// Prefer upstream-reported pixel size (e.g. Tencent DescribeTaskDetail MetaData)
+	// over request.Size so per-image tier billing can be reconciled after generation.
+	if info.ImageBilling != nil && info.ImageBilling.DimensionsFromUpstream &&
+		info.ImageBilling.Width > 0 && info.ImageBilling.Height > 0 {
+		estimateCtx.Width = info.ImageBilling.Width
+		estimateCtx.Height = info.ImageBilling.Height
+	} else if w, h, ok := resolveImageDimensions(c, request, responseBody); ok {
 		estimateCtx.Width = w
 		estimateCtx.Height = h
 	}
@@ -67,6 +73,33 @@ func FinalizeImagePerImageBilling(c *gin.Context, info *relaycommon.RelayInfo, r
 			info.PriceData.ModelPrice, info.PriceData.GlobalModelPrice, info.ImageBilling.UsdPerImage, info.PriceData.Quota,
 		))
 	}
+}
+
+// ApplyActualImageDimensionsForBilling 用上游实际像素覆盖预扣尺寸，并立即重匹按张计费档位。
+// 供渠道在写出响应 metadata 前调用，使 resolution 能反映结算档位（720p/1080p/2K/4K）。
+func ApplyActualImageDimensionsForBilling(c *gin.Context, info *relaycommon.RelayInfo, width, height, count int) {
+	if info == nil || info.ImageBilling == nil || !info.PriceData.UsePrice {
+		return
+	}
+	if width <= 0 || height <= 0 {
+		return
+	}
+	info.ImageBilling.Width = width
+	info.ImageBilling.Height = height
+	info.ImageBilling.DimensionsFromUpstream = true
+	if count > 0 {
+		info.ImageBilling.Count = count
+	}
+
+	estimateCtx := estimateImageRequestContext(c, info)
+	estimateCtx.Width = width
+	estimateCtx.Height = height
+	if count > 0 {
+		estimateCtx.Count = count
+	} else if info.ImageBilling.Count > 0 {
+		estimateCtx.Count = info.ImageBilling.Count
+	}
+	_ = SyncImagePerImagePriceData(c, info, estimateCtx)
 }
 
 func countImagesInResponseBody(body []byte) int {

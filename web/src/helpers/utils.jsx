@@ -610,13 +610,14 @@ export const createMessage = (role, content, options = {}) => ({
 });
 
 // 创建加载中的助手消息
-export const createLoadingAssistantMessage = () =>
+export const createLoadingAssistantMessage = (options = {}) =>
   createMessage(MESSAGE_ROLES.ASSISTANT, '', {
     reasoningContent: '',
     isReasoningExpanded: true,
     isThinkingComplete: false,
     hasAutoCollapsed: false,
     status: 'loading',
+    ...options,
   });
 
 // 检查消息是否包含图片

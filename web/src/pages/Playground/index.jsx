@@ -55,6 +55,7 @@ import {
   createLoadingAssistantMessage,
   getTextContent,
   buildApiPayload,
+  buildPlaygroundGenerationMeta,
   encodeToBase64,
   toBoolean,
 } from '../../helpers';
@@ -630,7 +631,6 @@ const Playground = () => {
         ? options.baseMessages
         : null;
       const reuseUserMessage = options.reuseUserMessage;
-      const loadingMessage = createLoadingAssistantMessage();
       const existingMessages = Array.isArray(baseMessages)
         ? baseMessages
         : Array.isArray(currentMessagesRef.current)
@@ -642,6 +642,9 @@ const Playground = () => {
         try {
           const mode = inputs.display_mode || 'text';
           const customPayload = JSON.parse(customRequestBody);
+          const loadingMessage = createLoadingAssistantMessage({
+            generationMeta: buildPlaygroundGenerationMeta(inputs),
+          });
           const userMessage =
             reuseUserMessage || createMessage(MESSAGE_ROLES.USER, content);
           const newMessages = [
@@ -688,6 +691,9 @@ const Playground = () => {
         inputs,
         parameterEnabled,
       );
+      const loadingMessage = createLoadingAssistantMessage({
+        generationMeta: buildPlaygroundGenerationMeta(inputs),
+      });
       const isChatEndpoint = payload?.__endpoint === 'chat';
       const messagesWithLoading = [...payloadMessages, loadingMessage];
 

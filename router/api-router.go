@@ -143,8 +143,13 @@ func SetApiRouter(router *gin.Engine) {
 		// Universal secure verification routes
 		apiRouter.POST("/verify", middleware.UserAuth(), middleware.CriticalRateLimit(), controller.UniversalVerify)
 
-		// 阿里云 OSS 通用上传（需在运营设置中启用 OSS）
+		// 通用文件上传与超级管理员文件管理。
 		apiRouter.POST("/oss/upload", middleware.UserAuth(), middleware.UploadRateLimit(), controller.OssUpload)
+		apiRouter.GET("/oss/files", middleware.RootAuth(), controller.ListUploadFiles)
+		apiRouter.POST("/oss/files/sync", middleware.RootAuth(), controller.SyncUploadFiles)
+		apiRouter.POST("/oss/files/batch-delete", middleware.RootAuth(), controller.BatchDeleteUploadFiles)
+		apiRouter.PUT("/oss/files/:id/expiration", middleware.RootAuth(), controller.UpdateUploadFileExpiration)
+		apiRouter.DELETE("/oss/files/:id", middleware.RootAuth(), controller.DeleteUploadFile)
 
 		apiRouter.GET("/playground/media-options", middleware.CORS(), middleware.TokenAuth(), controller.GetPlaygroundMediaOptions)
 

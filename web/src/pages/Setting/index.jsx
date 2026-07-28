@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { Tabs } from '@douyinfe/semi-ui';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -56,8 +56,6 @@ const SETTING_COMPONENTS = {
   other: OtherSetting,
 };
 
-const PAGE_TRANSITION_MS = 160;
-
 const scrollSettingContentToTop = (element) => {
   if (!element) return;
 
@@ -89,12 +87,8 @@ const Setting = () => {
     [location.search],
   );
   const contentRef = useRef(null);
-  const transitionTimerRef = useRef(null);
-  const [renderedSelection, setRenderedSelection] = useState(selection);
-  const [transitionPhase, setTransitionPhase] = useState('entered');
-  const ActiveSetting = SETTING_COMPONENTS[renderedSelection.item.group];
+  const ActiveSetting = SETTING_COMPONENTS[selection.item.group];
   const requestedKey = `${selection.category.key}:${selection.page.key}:${selection.item.key}`;
-  const renderedKey = `${renderedSelection.category.key}:${renderedSelection.page.key}:${renderedSelection.item.key}`;
 
   useEffect(() => {
     const canonicalSearch = `?category=${selection.category.key}&page=${selection.page.key}&item=${selection.item.key}`;
@@ -107,21 +101,8 @@ const Setting = () => {
   }, [location.pathname, location.search, navigate, requestedKey, selection]);
 
   useEffect(() => {
-    window.clearTimeout(transitionTimerRef.current);
-
-    if (renderedKey === requestedKey) {
-      return undefined;
-    }
-
-    setTransitionPhase('exiting');
-    transitionTimerRef.current = window.setTimeout(() => {
-      setRenderedSelection(selection);
-      setTransitionPhase('entering');
-      scrollSettingContentToTop(contentRef.current);
-    }, PAGE_TRANSITION_MS);
-
-    return () => window.clearTimeout(transitionTimerRef.current);
-  }, [renderedKey, requestedKey, selection]);
+    scrollSettingContentToTop(contentRef.current);
+  }, [requestedKey]);
 
   if (!ActiveSetting) {
     return null;
@@ -157,12 +138,8 @@ const Setting = () => {
           }
         />
       </div>
-      <div
-        key={renderedKey}
-        className={`settings-page-transition is-${transitionPhase}`}
-        onAnimationEnd={() => setTransitionPhase('entered')}
-      >
-        <ActiveSetting activeSection={renderedSelection.item.section} />
+      <div key={requestedKey} className='settings-page-transition is-entering'>
+        <ActiveSetting activeSection={selection.item.section} />
       </div>
     </div>
   );

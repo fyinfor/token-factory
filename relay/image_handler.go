@@ -202,8 +202,12 @@ func ImageHelper(c *gin.Context, info *relaycommon.RelayInfo) (tokenFactoryError
 
 	var logContent []string
 
-	if len(request.Size) > 0 {
-		logContent = append(logContent, fmt.Sprintf("大小 %s", request.Size))
+	sizeLabel := strings.TrimSpace(request.Size)
+	if info.ImageBilling != nil && info.ImageBilling.Width > 0 && info.ImageBilling.Height > 0 {
+		sizeLabel = fmt.Sprintf("%dx%d", info.ImageBilling.Width, info.ImageBilling.Height)
+	}
+	if sizeLabel != "" {
+		logContent = append(logContent, fmt.Sprintf("大小 %s", sizeLabel))
 	}
 	if len(quality) > 0 {
 		logContent = append(logContent, fmt.Sprintf("品质 %s", quality))

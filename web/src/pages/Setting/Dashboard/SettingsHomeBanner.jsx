@@ -247,6 +247,7 @@ const SettingsHomeBanner = ({ options, refresh }) => {
       setUploading(true);
       const fd = new FormData();
       fd.append('file', inst);
+      fd.append('purpose', 'homepage');
       try {
         const res = await API.post('/api/oss/upload', fd, {
           skipErrorHandler: true,
