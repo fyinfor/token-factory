@@ -633,6 +633,7 @@ const ModelChannelList = ({
   const [userState] = useContext(UserContext);
   const [docsVisible, setDocsVisible] = useState(false);
   const [docsModelName, setDocsModelName] = useState('');
+  const [docsChannel, setDocsChannel] = useState(null);
   const [routeListExpanded, setRouteListExpanded] = useState(false);
   const channelList = modelData?.channel_list || [];
   const isLoggedIn = Boolean(userState?.user);
@@ -713,8 +714,9 @@ const ModelChannelList = ({
   );
   const hasHiddenRoutes = hiddenRouteCount > 0;
 
-  const openApiDocs = (channelModelName) => {
+  const openApiDocs = (channelModelName, channel) => {
     setDocsModelName(channelModelName || modelData?.model_name || '');
+    setDocsChannel(channel || null);
     setDocsVisible(true);
   };
 
@@ -1619,9 +1621,11 @@ const ModelChannelList = ({
                                       theme='light'
                                       type='warning'
                                       size='small'
-                                      onClick={() => openApiDocs(channelPath)}
+                                      onClick={() =>
+                                        openApiDocs(channelPath, channel)
+                                      }
                                     >
-                                      {t('文档')}
+                                      {t('API 文档')}
                                     </Button>
                                   </Tooltip>
                                 </div>
@@ -1778,10 +1782,14 @@ const ModelChannelList = ({
         onClose={() => {
           setDocsVisible(false);
           setDocsModelName('');
+          setDocsChannel(null);
         }}
         modelName={docsModelName || modelData?.model_name}
-        docIntroduction={modelData?.doc_introduction}
-        apiDocs={modelData?.api_docs}
+        docIntroduction={docsChannel?.doc_introduction || ''}
+        apiDocs={docsChannel?.api_docs || ''}
+        apiDocsMarkdown={docsChannel?.api_docs_markdown || ''}
+        apiDocsMarkdownEn={docsChannel?.api_docs_markdown_en || ''}
+        useDefaultDocs={docsChannel?.doc_configured !== true}
         t={t}
       />
     </>

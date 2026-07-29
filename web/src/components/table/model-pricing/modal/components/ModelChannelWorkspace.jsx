@@ -43,8 +43,10 @@ import {
 import ModelChannelList from './ModelChannelList';
 import ModelEndpoints from './ModelEndpoints';
 import ModelPerfPanel from './ModelPerfPanel';
+import ApiDocsSidePanel from './ApiDocsSidePanel';
 import { getChannelHeatKey } from '../../utils/modelHeat';
 import { formatPriceRatioFromDiscount } from '../../utils/discount';
+import { getChannelRouteModelName } from '../../utils/channelRoute';
 
 const { Text } = Typography;
 
@@ -426,12 +428,14 @@ const ModelChannelWorkspace = ({
   const [channelPerfMap, setChannelPerfMap] = useState({});
   const [loadedChannelPerf, setLoadedChannelPerf] = useState({});
   const [visiblePerfSummary, setVisiblePerfSummary] = useState(perfSummary);
+  const [docsVisible, setDocsVisible] = useState(false);
 
   useEffect(() => {
     setSelectedChannelKey(lowestChannelKey);
     setChannelPerfMap({});
     setLoadedChannelPerf({});
     setVisiblePerfSummary(perfSummary);
+    setDocsVisible(false);
   }, [lowestChannelKey, modelData?.model_name, perfSummary]);
 
   const selectedEntry = useMemo(() => {
@@ -617,6 +621,7 @@ const ModelChannelWorkspace = ({
           endpointMap={endpointMap}
           t={t}
           flat
+          onOpenDocs={() => setDocsVisible(true)}
         />
         <ModelChannelList
           {...props}
@@ -624,6 +629,17 @@ const ModelChannelWorkspace = ({
           channelMtrMap={selectedMetrics}
           t={t}
           flatDetails
+        />
+        <ApiDocsSidePanel
+          visible={docsVisible}
+          onClose={() => setDocsVisible(false)}
+          modelName={getChannelRouteModelName(modelData, selectedEntry.channel)}
+          docIntroduction={selectedEntry.channel.doc_introduction || ''}
+          apiDocs={selectedEntry.channel.api_docs || ''}
+          apiDocsMarkdown={selectedEntry.channel.api_docs_markdown || ''}
+          apiDocsMarkdownEn={selectedEntry.channel.api_docs_markdown_en || ''}
+          useDefaultDocs={selectedEntry.channel.doc_configured !== true}
+          t={t}
         />
       </section>
     </div>

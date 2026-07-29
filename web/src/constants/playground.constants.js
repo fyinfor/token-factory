@@ -111,8 +111,8 @@ export const DEFAULT_CONFIG = {
     videoUrls: [''],
     audioUrls: [''],
     selected_model_tags: [],
-    image_size: '1280x720',
-    image_ratio: 'auto',
+    image_size: '1024x1024',
+    image_ratio: '1:1',
     image_custom_size: '',
     image_n: 1,
     selected_image_pricing_tiers: [],
@@ -191,14 +191,14 @@ export function getPlaygroundMediaMaxHeightPx() {
   return Math.round(window.innerHeight * PLAYGROUND_MEDIA_MAX_HEIGHT_RATIO);
 }
 
-// 操练场图片分辨率：value 为上游 size，label 仅展示 480p / 720p 等
+// 操练场图片分辨率：Ai 绘图档位 1080p / 2K / 4K（1080p ≡ 1K；value 为代表性像素）
 export const PLAYGROUND_IMAGE_SIZE_OPTIONS = [
-  { label: '480p', value: '854x480' },
-  { label: '720p', value: '1280x720' },
-  { label: '1080p', value: '1920x1080' },
-  { label: '2K', value: '2560x1440' },
+  { label: '1080p', value: '1024x1024' },
+  { label: '2K', value: '2048x2048' },
+  { label: '4K', value: '4096x4096' },
 ];
 
+/** 视频比例选项（含 Auto） */
 export const PLAYGROUND_ASPECT_RATIO_OPTIONS = [
   { label: 'Auto', value: 'auto' },
   { label: '16:9', value: '16:9' },
@@ -206,6 +206,16 @@ export const PLAYGROUND_ASPECT_RATIO_OPTIONS = [
   { label: '1:1', value: '1:1' },
   { label: '3:4', value: '3:4' },
   { label: '9:16', value: '9:16' },
+  { label: '21:9', value: '21:9' },
+];
+
+/** 图片比例选项（无 Auto，与 Ai 绘图尺寸表一致） */
+export const PLAYGROUND_IMAGE_ASPECT_RATIO_OPTIONS = [
+  { label: '1:1', value: '1:1' },
+  { label: '16:9', value: '16:9' },
+  { label: '9:16', value: '9:16' },
+  { label: '4:3', value: '4:3' },
+  { label: '3:4', value: '3:4' },
   { label: '21:9', value: '21:9' },
 ];
 

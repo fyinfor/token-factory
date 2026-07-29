@@ -25,6 +25,7 @@ import {
   formatTierUsdPrice,
 } from './billingFormula';
 import {
+  formatImageResolutionDisplayLabel,
   formatVideoResolutionDisplayLabel,
   formatVideoSpecLabel,
   formatVideoSpecLabelForBilling,
@@ -1980,9 +1981,9 @@ function resolveImagePerImageBillingDisplay(
     billingMeta,
   );
   const resolutionLabel = String(imageMeta.resolution || '').trim();
-  // 图片实际尺寸保留像素（如 1360x768）；计费档位归一为 720p / 1080p / 2K / 4K。
+  // 图片实际尺寸保留像素（如 1360x768）；计费档位归一为 1080p（≡1K）/ 2K / 4K。
   const ruleResolutionLabel =
-    formatVideoResolutionDisplayLabel(imageMeta.ruleResolution) ||
+    formatImageResolutionDisplayLabel(imageMeta.ruleResolution) ||
     String(imageMeta.ruleResolution || '').trim();
   const calculatedTotalUsd = perImageUsd * imageMeta.count;
   // 合计与花费列对齐：有实扣额度时按额度进一；否则对公式结果 6 位进一

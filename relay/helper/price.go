@@ -817,6 +817,8 @@ func parseResolutionFlexible(s string) (int, int, bool) {
 		return 1280, 720, true
 	case "1080p":
 		return 1920, 1080, true
+	case "1k":
+		return 1024, 1024, true
 	case "2k":
 		return 2560, 1440, true
 	case "4k":

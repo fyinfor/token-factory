@@ -65,6 +65,11 @@ type PricingChannelItem struct {
 	SupplierAlias         string `json:"supplier_alias"`
 	CompanyLogoURL        string `json:"company_logo_url"`
 	SupplierType          string `json:"supplier_type"`
+	DocIntroduction       string `json:"doc_introduction,omitempty"`
+	ApiDocs               any    `json:"api_docs,omitempty"`
+	ApiDocsMarkdown       string `json:"api_docs_markdown,omitempty"`
+	ApiDocsMarkdownEn     string `json:"api_docs_markdown_en,omitempty"`
+	DocConfigured         bool   `json:"doc_configured,omitempty"`
 	// RouteSlug 渠道全局路由后缀，与模型名组合为 {model}/{route_slug} 强制路由至该渠道（整渠道下各模型共用）。
 	RouteSlug string `json:"route_slug,omitempty"`
 	// TestResponseTimeMs 渠道最近可展示的单测耗时（毫秒）；0 代表未测试或测试失败，接口将省略该字段。
@@ -211,6 +216,11 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 
 	// 一次性批量加载可见渠道的 route_slug，避免 N+1 查询
 	channelSlugMap := GetRouteSlugsByChannelIDs(visibleIDs)
+	channelDocMap, err := GetAllChannelModelDocsMap()
+	if err != nil {
+		common.SysLog(fmt.Sprintf("GetAllChannelModelDocsMap error: %v", err))
+		channelDocMap = nil
+	}
 
 	// 按“模型 × 渠道”打平返回：每条 data 仅包含 1 个 channel_list 与 1 个 supplier_list。
 	// 这样在前端可直接按渠道维度渲染，不再需要先展开聚合模型行。
@@ -314,6 +324,16 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 					}
 					return 0
 				}(),
+			}
+			if doc, ok := channelDocMap[channelModelDocKey(row.ChannelID, modelName)]; ok {
+				chItem.DocConfigured = true
+				chItem.DocIntroduction = doc.DocIntroduction
+				chItem.ApiDocs = parsePricingApiDocs(doc.ApiDocs)
+				chItem.ApiDocsMarkdown = doc.ApiDocsMarkdown
+				chItem.ApiDocsMarkdownEn = doc.ApiDocsMarkdownEn
+			} else {
+				chItem.DocIntroduction = p.DocIntroduction
+				chItem.ApiDocs = p.ApiDocs
 			}
 			if hasRequestTierPricing {
 				chItem.RequestTierPricing = requestTierPricing

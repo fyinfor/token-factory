@@ -50,11 +50,13 @@ import {
   IconCopy,
   IconHelpCircle,
 } from '@douyinfe/semi-icons';
+import { useTranslation } from 'react-i18next';
 import { API, copy } from '../../../../../helpers';
 import { StatusContext } from '../../../../../context/Status';
 import { fetchTokenKey, getServerAddress } from '../../../../../helpers/token';
 import { useIsMobile } from '../../../../../hooks/common/useIsMobile';
 import MarkdownRenderer from '../../../../common/markdown/MarkdownRenderer';
+import ApiMarkdownRenderer from '../../../../common/markdown/ApiMarkdownRenderer';
 
 const { Text, Title } = Typography;
 
@@ -89,6 +91,13 @@ const parseApiDocs = (value) => {
     return [];
   }
 };
+
+const replaceMarkdownTemplateVariables = (content, variables) =>
+  Object.entries(variables).reduce(
+    (result, [name, value]) =>
+      result.split(`{{${name}}}`).join(String(value || '')),
+    String(content || ''),
+  );
 
 const getDefaultApiDocs = () => [
   {
@@ -512,9 +521,13 @@ const ApiDocsSidePanel = ({
   embedded = false,
   docIntroduction = '',
   apiDocs = '',
+  apiDocsMarkdown = '',
+  apiDocsMarkdownEn = '',
+  useDefaultDocs = true,
   t,
 }) => {
   const isMobile = useIsMobile();
+  const { i18n } = useTranslation();
   const [statusState] = useContext(StatusContext);
   const [tokens, setTokens] = useState([]);
   const [selectedTokenId, setSelectedTokenId] = useState();
@@ -532,10 +545,22 @@ const ApiDocsSidePanel = ({
       statusState?.status?.model_default_docs_enabled !== 'false');
   const docs = useMemo(() => {
     const hasCustomDocs =
-      String(docIntroduction || '').trim() || configuredDocs.length > 0;
-    if (!hasCustomDocs && modelDefaultDocsEnabled) return getDefaultApiDocs();
+      String(docIntroduction || '').trim() ||
+      String(apiDocsMarkdown || '').trim() ||
+      String(apiDocsMarkdownEn || '').trim() ||
+      configuredDocs.length > 0;
+    if (!hasCustomDocs && useDefaultDocs && modelDefaultDocsEnabled) {
+      return getDefaultApiDocs();
+    }
     return configuredDocs;
-  }, [configuredDocs, docIntroduction, modelDefaultDocsEnabled]);
+  }, [
+    configuredDocs,
+    apiDocsMarkdown,
+    apiDocsMarkdownEn,
+    docIntroduction,
+    modelDefaultDocsEnabled,
+    useDefaultDocs,
+  ]);
 
   const serverAddress = useMemo(() => {
     try {
@@ -571,6 +596,14 @@ const ApiDocsSidePanel = ({
   }, [visible]);
 
   useEffect(() => {
+    if (!visible || isMobile) return undefined;
+    document.body.classList.add('api-docs-desktop-open');
+    return () => {
+      document.body.classList.remove('api-docs-desktop-open');
+    };
+  }, [isMobile, visible]);
+
+  useEffect(() => {
     if (!selectedTokenId || resolvedTokenKeys[selectedTokenId]) return;
     if (tokenRequestsRef.current[selectedTokenId]) return;
     tokenRequestsRef.current[selectedTokenId] = fetchTokenKey(selectedTokenId)
@@ -589,6 +622,40 @@ const ApiDocsSidePanel = ({
   const selectedToken = selectedTokenId
     ? resolvedTokenKeys[selectedTokenId] || 'apikey'
     : 'apikey';
+  const prefersChinese = String(
+    i18n.resolvedLanguage || i18n.language || '',
+  ).startsWith('zh');
+  const selectedMarkdown = prefersChinese
+    ? apiDocsMarkdown || apiDocsMarkdownEn
+    : apiDocsMarkdownEn || apiDocsMarkdown;
+  const renderedMarkdown = useMemo(
+    () =>
+      replaceMarkdownTemplateVariables(selectedMarkdown, {
+        base_url: serverAddress,
+        model: modelName,
+        api_key: selectedToken,
+      }),
+    [modelName, selectedMarkdown, selectedToken, serverAddress],
+  );
+  const hasMarkdownDocs = Boolean(renderedMarkdown.trim());
+  const markdownUsesApiKey = String(selectedMarkdown).includes('{{api_key}}');
+  const tokenSelect =
+    markdownUsesApiKey && tokens.length > 0 ? (
+      <div className='api-docs-token-select'>
+        <Select
+          size='small'
+          zIndex={1600}
+          value={selectedTokenId}
+          prefix={t('使用令牌')}
+          optionList={tokens.map((token) => ({
+            label: token.name || `${t('令牌')} #${token.id}`,
+            value: token.id,
+          }))}
+          onChange={setSelectedTokenId}
+        />
+      </div>
+    ) : null;
+  const markdownToolbar = tokenSelect;
 
   const getParamColumns = (showRequired = true) => {
     const columns = [
@@ -748,6 +815,7 @@ const ApiDocsSidePanel = ({
             tokens.length > 0 ? (
               <Select
                 size='small'
+                zIndex={1600}
                 value={selectedTokenId}
                 style={{ width: 180 }}
                 optionList={tokens.map((token) => ({
@@ -827,6 +895,28 @@ const ApiDocsSidePanel = ({
     );
   };
 
+  const markdownIntroduction = docIntroduction ? (
+    <section className='api-docs-root-section mb-4'>
+      <Title heading={6} className='mb-2'>
+        {t('模型介绍')}
+      </Title>
+      <MarkdownRenderer content={docIntroduction} />
+    </section>
+  ) : null;
+
+  const containedMarkdownDocs = (
+    <div className='api-docs-contained-layout'>
+      <ApiMarkdownRenderer
+        content={renderedMarkdown}
+        t={t}
+        showToc
+        contained
+        beforeContent={markdownIntroduction}
+        toolbarContent={markdownToolbar}
+      />
+    </div>
+  );
+
   const content = (
     <div className='p-2 space-y-3'>
       <style>
@@ -845,7 +935,15 @@ const ApiDocsSidePanel = ({
           <MarkdownRenderer content={docIntroduction} />
         </Card>
       ) : null}
-      {docs.length > 0 ? (
+      {hasMarkdownDocs ? (
+        <Card
+          className='!rounded-2xl shadow-sm border-0'
+          title={t('API 文档')}
+          headerExtraContent={markdownToolbar}
+        >
+          <ApiMarkdownRenderer content={renderedMarkdown} t={t} showToc />
+        </Card>
+      ) : docs.length > 0 ? (
         <Card
           className='!rounded-2xl shadow-sm border-0 api-docs-list-card'
           title={t('API 列表')}
@@ -869,35 +967,41 @@ const ApiDocsSidePanel = ({
 
   if (embedded) {
     return (
-      <div className='api-docs-embedded h-full overflow-y-auto overscroll-contain p-3'>
-        <div className='space-y-4'>
-          {docIntroduction ? (
+      <div
+        className={`api-docs-embedded h-full min-h-0 ${hasMarkdownDocs ? 'flex flex-col overflow-hidden p-3' : 'overflow-y-auto overscroll-contain p-3'}`}
+      >
+        {hasMarkdownDocs ? (
+          containedMarkdownDocs
+        ) : (
+          <div className='space-y-4'>
+            {docIntroduction ? (
+              <section className='api-docs-root-section'>
+                <Title heading={6} className='mb-2'>
+                  {t('模型介绍')}
+                </Title>
+                <MarkdownRenderer content={docIntroduction} />
+              </section>
+            ) : null}
             <section className='api-docs-root-section'>
               <Title heading={6} className='mb-2'>
-                {t('模型介绍')}
+                {t('API 列表')}
               </Title>
-              <MarkdownRenderer content={docIntroduction} />
+              {docs.length > 0 ? (
+                <Collapse
+                  defaultActiveKey={
+                    docs.length > 0 ? docs[0]?.id || 0 : undefined
+                  }
+                >
+                  {docs.map(renderApiPanel)}
+                </Collapse>
+              ) : (
+                <div className='py-8 text-center'>
+                  <Text type='tertiary'>{t('暂无模型文档')}</Text>
+                </div>
+              )}
             </section>
-          ) : null}
-          <section className='api-docs-root-section'>
-            <Title heading={6} className='mb-2'>
-              {t('API 列表')}
-            </Title>
-            {docs.length > 0 ? (
-              <Collapse
-                defaultActiveKey={
-                  docs.length > 0 ? docs[0]?.id || 0 : undefined
-                }
-              >
-                {docs.map(renderApiPanel)}
-              </Collapse>
-            ) : (
-              <div className='py-8 text-center'>
-                <Text type='tertiary'>{t('暂无模型文档')}</Text>
-              </div>
-            )}
-          </section>
-        </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -921,12 +1025,18 @@ const ApiDocsSidePanel = ({
         visible={visible}
         onCancel={onClose}
         width='100%'
-        bodyStyle={{ padding: 0 }}
+        bodyStyle={{ padding: 0, overflow: 'hidden' }}
         closeIcon={
           <Button type='tertiary' icon={<IconClose />} onClick={onClose} />
         }
       >
-        {content}
+        {hasMarkdownDocs ? (
+          <div className='flex h-full min-h-0 flex-col p-3'>
+            {containedMarkdownDocs}
+          </div>
+        ) : (
+          content
+        )}
       </SideSheet>,
       document.body,
     );
@@ -935,17 +1045,18 @@ const ApiDocsSidePanel = ({
   if (!visible) return null;
   return createPortal(
     <div
-      className='api-docs-desktop-panel fixed top-0 h-full overflow-y-auto semi-sidesheet-inner'
+      className='api-docs-desktop-panel fixed top-0 flex h-full flex-col overflow-hidden semi-sidesheet-inner'
+      role='dialog'
+      aria-label={`${t('在线 API 文档')} ${modelName || ''}`.trim()}
       style={{
-        width: 'min(640px, calc(100vw - 800px))',
-        right: 800,
-        zIndex: 1200,
+        zIndex: 1300,
         backgroundColor: 'var(--semi-color-bg-0)',
-        borderRight: '1px solid var(--semi-color-border)',
-        animation: 'slideInLeft 0.3s ease-out',
+        borderLeft: '1px solid var(--semi-color-border)',
+        boxShadow: 'var(--semi-shadow-elevated)',
+        animation: 'slideInRight 0.25s ease-out',
       }}
     >
-      <div className='semi-sidesheet-header'>
+      <div className='semi-sidesheet-header shrink-0'>
         <div className='semi-sidesheet-title'>
           <Space>
             <Tag color='cyan' shape='circle'>
@@ -966,8 +1077,11 @@ const ApiDocsSidePanel = ({
           onClick={onClose}
         />
       </div>
-      <div className='semi-sidesheet-body' style={{ padding: 0 }}>
-        {content}
+      <div
+        className={`semi-sidesheet-body min-h-0 flex-1 ${hasMarkdownDocs ? 'flex flex-col overflow-hidden p-3' : 'overflow-y-auto overscroll-contain'}`}
+        style={hasMarkdownDocs ? undefined : { padding: 0 }}
+      >
+        {hasMarkdownDocs ? containedMarkdownDocs : content}
       </div>
     </div>,
     document.body,

@@ -1636,7 +1636,6 @@ func UpdateChannel(c *gin.Context) {
 	}
 
 	// route_slug：空则沿用库中值；非空变更时校验格式与全局唯一。
-	routeSlugChanged := false
 	if strings.TrimSpace(channel.RouteSlug) == "" {
 		channel.RouteSlug = originChannel.RouteSlug
 	} else {
@@ -1661,7 +1660,6 @@ func UpdateChannel(c *gin.Context) {
 				})
 				return
 			}
-			routeSlugChanged = true
 		}
 	}
 
@@ -1803,14 +1801,6 @@ func UpdateChannel(c *gin.Context) {
 	notifyChannelBalanceAlertIfNeeded(originChannel, oldBalance, channel.Balance)
 	model.InitChannelCache()
 	service.ResetProxyClientCache()
-	// 路由后缀变更后尽快把新 slug 推到 TokenFactory，避免智能路由 UI / 策略侧仍展示旧后缀。
-	if routeSlugChanged && common.TokenFactoryRouteEnabled() {
-		go func() {
-			if _, _, err := service.SyncChannelsToTokenFactory(); err != nil {
-				common.SysError("sync channels to TokenFactory after route_slug change: " + err.Error())
-			}
-		}()
-	}
 	channel.Key = ""
 	clearChannelInfo(&channel.Channel)
 	c.JSON(http.StatusOK, gin.H{

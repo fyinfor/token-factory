@@ -267,7 +267,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.GET("/oauth/bindings", controller.GetUserOAuthBindings)
 				selfRoute.DELETE("/oauth/bindings/:provider_id", controller.UnbindCustomOAuth)
 
-				// 用户智能路由策略（代理到 TokenFactory gRPC）
+				// 用户智能路由策略（本地 route_* 表）
 				selfRoute.GET("/route-policy", controller.UserGetRoutePolicy)
 				selfRoute.PUT("/route-policy/mode", controller.UserUpdateRouteMode)
 				selfRoute.POST("/route-policy/weights", controller.UserUpsertRouteWeight)
@@ -413,16 +413,6 @@ func SetApiRouter(router *gin.Engine) {
 			priceRoute.POST("/import", controller.ImportPrices)
 		}
 
-		// TokenFactory 智能路由：手动触发一次渠道快照同步（仅管理员）
-		apiRouter.POST("/admin/tokenfactory/sync_channels",
-			middleware.AdminAuth(),
-			controller.AdminTokenFactorySyncChannels,
-		)
-		// TokenFactory 智能路由：手动触发一次用户快照同步（仅管理员）
-		apiRouter.POST("/admin/tokenfactory/sync_users",
-			middleware.AdminAuth(),
-			controller.AdminTokenFactorySyncUsers,
-		)
 		tfOpenSyncRoute := apiRouter.Group("/tf_open_sync")
 		{
 			// 子站 TokenFactoryOpen 拉全站渠道（脱敏+定价）；鉴权见 controller.authorizeTFOpenSyncExport
@@ -645,13 +635,17 @@ func SetApiRouter(router *gin.Engine) {
 			modelsRoute.GET("/missing", middleware.AdminAuth(), controller.GetMissingModels)
 			modelsRoute.GET("/tags", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.GetModelTags)
 			modelsRoute.GET("/export", middleware.AdminAuth(), controller.ExportModelsMeta)
+			modelsRoute.GET("/channel_doc_templates", middleware.AdminAuth(), controller.GetChannelModelDocTemplates)
 			modelsRoute.POST("/import", middleware.AdminAuth(), controller.ImportModelsMeta)
 			modelsRoute.GET("/", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.GetAllModelsMeta)
 			modelsRoute.GET("/search", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.SearchModelsMeta)
 			modelsRoute.GET("/:id", middleware.AdminAuth(), controller.GetModelMeta)
+			modelsRoute.GET("/:id/channel_docs", middleware.AdminAuth(), controller.GetChannelModelDocs)
 			modelsRoute.POST("/", middleware.AdminAuth(), controller.CreateModelMeta)
 			modelsRoute.POST("/batch_tags", middleware.AdminAuth(), controller.BatchSetModelTags)
 			modelsRoute.PUT("/", middleware.AdminAuth(), controller.UpdateModelMeta)
+			modelsRoute.PUT("/:id/channel_docs", middleware.AdminAuth(), controller.PutChannelModelDoc)
+			modelsRoute.DELETE("/:id/channel_docs", middleware.AdminAuth(), controller.DeleteChannelModelDoc)
 			modelsRoute.DELETE("/:id", middleware.AdminAuth(), controller.DeleteModelMeta)
 			modelsRoute.POST("/batch_weight", middleware.AdminAuth(), controller.BatchUpdateModelWeight)
 		}
