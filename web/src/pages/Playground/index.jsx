@@ -223,6 +223,9 @@ const Playground = () => {
   const hideMediaTabs = toBoolean(
     statusState?.status?.aliyun_guardrail_hide_playground_media_tabs,
   );
+  const hideReasoning = toBoolean(
+    statusState?.status?.aliyun_guardrail_hide_playground_reasoning,
+  );
 
   const persistModeMessages = useCallback(() => {
     saveModeMessages(userState?.user?.id, modeMessagesRef.current);
@@ -329,6 +332,7 @@ const Playground = () => {
     setActiveDebugTab,
     sseSourceRef,
     saveMessagesForMode,
+    hideReasoning,
   );
 
   useEffect(() => {
@@ -998,6 +1002,7 @@ const Playground = () => {
                   onStopGenerator={onStopGenerator}
                   onClearMessages={handleClearMessages}
                   onToggleDebugPanel={() => setShowDebugPanel(!showDebugPanel)}
+                  hideReasoning={hideReasoning}
                 />
               </div>
 

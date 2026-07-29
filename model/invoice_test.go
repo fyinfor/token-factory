@@ -98,7 +98,7 @@ func TestCreateInvoiceRequestRejectsOverReservationWithoutPartialChanges(t *test
 	topUp, profile := createInvoiceTestData(t)
 
 	_, err := CreateInvoiceRequest(1, []InvoiceRequestItemInput{
-		{TopUpId: topUp.Id, InvoiceAmount: 81},
+		{TopUpId: topUp.Id, InvoiceAmount: 101},
 	}, "", profile)
 	require.Error(t, err)
 
@@ -107,6 +107,42 @@ func TestCreateInvoiceRequestRejectsOverReservationWithoutPartialChanges(t *test
 	var requestCount int64
 	require.NoError(t, DB.Model(&InvoiceRequest{}).Count(&requestCount).Error)
 	assert.Zero(t, requestCount)
+}
+
+func TestSuccessfulTopUpSupportsPartialInvoicesUpToRechargeAmount(t *testing.T) {
+	setupInvoiceTestDB(t)
+	topUp, profile := createInvoiceTestData(t)
+	topUp.Money = 10000
+	require.NoError(t, DB.Save(topUp).Error)
+
+	first, err := CreateInvoiceRequest(1, []InvoiceRequestItemInput{{TopUpId: topUp.Id, InvoiceAmount: 7000}}, "", profile)
+	require.NoError(t, err)
+	require.NoError(t, IssueInvoiceRequest(first.Id, "INV-7000", "/invoice-7000.pdf", ""))
+
+	orders, err := ListInvoiceEligibleOrders(1, "")
+	require.NoError(t, err)
+	require.Len(t, orders, 1)
+	assert.InDelta(t, 3000, orders[0].InvoiceableAmount, 0.000001)
+
+	second, err := CreateInvoiceRequest(1, []InvoiceRequestItemInput{{TopUpId: topUp.Id, InvoiceAmount: 3000}}, "", profile)
+	require.NoError(t, err)
+	require.NoError(t, IssueInvoiceRequest(second.Id, "INV-3000", "/invoice-3000.pdf", ""))
+
+	updated := reloadInvoiceTopUp(t, topUp.Id)
+	assert.InDelta(t, 10000, updated.InvoicedAmount, 0.000001)
+	_, err = CreateInvoiceRequest(1, []InvoiceRequestItemInput{{TopUpId: topUp.Id, InvoiceAmount: 0.01}}, "", profile)
+	require.Error(t, err)
+}
+
+func TestSuccessfulTopUpIsInvoiceableWithoutConsumptionOrEligibilityFlag(t *testing.T) {
+	setupInvoiceTestDB(t)
+	topUp, profile := createInvoiceTestData(t)
+	require.NoError(t, DB.Where("user_id = ?", 1).Delete(&TopUpConsumeAttribution{}).Error)
+	require.NoError(t, DB.Model(topUp).Update("invoice_eligible", false).Error)
+
+	request, err := CreateInvoiceRequest(1, []InvoiceRequestItemInput{{TopUpId: topUp.Id, InvoiceAmount: 100}}, "", profile)
+	require.NoError(t, err)
+	assert.InDelta(t, 100, request.TotalAmount, 0.000001)
 }
 
 func TestRejectAndCancelInvoiceRequestsReleaseReservations(t *testing.T) {

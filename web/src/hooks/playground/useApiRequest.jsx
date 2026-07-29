@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { SSE } from 'sse.js';
 import {
@@ -47,7 +47,11 @@ export const useApiRequest = (
   setActiveDebugTab,
   sseSourceRef,
   saveMessages,
+  hideReasoning = false,
 ) => {
+  const hideReasoningRef = useRef(hideReasoning);
+  hideReasoningRef.current = hideReasoning;
+
   const getVideoTaskPayload = useCallback((obj) => {
     if (!obj || typeof obj !== 'object') return {};
     // 兼容 {code, data:{...}} 与扁平结构
@@ -561,12 +565,16 @@ export const useApiRequest = (
         if (data.choices?.[0]) {
           const choice = data.choices[0];
           let content = choice.message?.content || '';
-          let reasoningContent =
-            choice.message?.reasoning_content ||
-            choice.message?.reasoning ||
-            '';
+          let reasoningContent = hideReasoningRef.current
+            ? ''
+            : choice.message?.reasoning_content ||
+              choice.message?.reasoning ||
+              '';
 
           const processed = processThinkTags(content, reasoningContent);
+          if (hideReasoningRef.current) {
+            processed.reasoningContent = '';
+          }
 
           setMessage((prevMessage) => {
             const newMessages = [...prevMessage];
@@ -820,14 +828,17 @@ export const useApiRequest = (
 
           const delta = payload.choices?.[0]?.delta;
           if (delta) {
-            if (delta.reasoning_content) {
+            if (
+              !hideReasoningRef.current &&
+              delta.reasoning_content
+            ) {
               streamMessageUpdate(
                 delta.reasoning_content,
                 'reasoning',
                 requestMode,
               );
             }
-            if (delta.reasoning) {
+            if (!hideReasoningRef.current && delta.reasoning) {
               streamMessageUpdate(delta.reasoning, 'reasoning', requestMode);
             }
             if (delta.content) {
