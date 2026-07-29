@@ -24,7 +24,6 @@ import { IconClose } from '@douyinfe/semi-icons';
 import { API } from '../../../../helpers';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import ModelHeader from './components/ModelHeader';
-import ApiDocsSidePanel from './components/ApiDocsSidePanel';
 import ModelBasicInfo from './components/ModelBasicInfo';
 import ModelChannelWorkspace from './components/ModelChannelWorkspace';
 
@@ -200,17 +199,6 @@ const ModelDetailSideSheet = ({
                 t={t}
               />
             </div>
-          </Tabs.TabPane>
-          <Tabs.TabPane tab={t('文档')} itemKey='docs'>
-            <ApiDocsSidePanel
-              visible
-              embedded
-              onClose={() => setActiveSection('general')}
-              modelName={modelData.model_name}
-              docIntroduction={modelData.doc_introduction}
-              apiDocs={modelData.api_docs}
-              t={t}
-            />
           </Tabs.TabPane>
         </Tabs>
       )}

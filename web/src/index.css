@@ -1366,6 +1366,113 @@ html.dark .api-docs-code-block .hljs-meta {
   background: transparent;
 }
 
+body.api-docs-desktop-open {
+  --model-detail-desktop-width: 800px;
+  --api-docs-desktop-width: min(
+    640px,
+    calc(100vw - var(--model-detail-desktop-width))
+  );
+}
+
+.api-docs-desktop-panel {
+  right: var(--model-detail-desktop-width, 800px);
+  width: var(--api-docs-desktop-width, min(640px, 50vw));
+}
+
+.document-ai-running-status {
+  border-color: var(--semi-color-primary-light-active);
+  background-color: var(--semi-color-primary-light-default);
+}
+
+.document-ai-running-icon {
+  color: var(--semi-color-primary);
+  animation: document-ai-icon-pulse 1.6s ease-in-out infinite;
+}
+
+.document-ai-running-dots {
+  display: inline-flex;
+  height: 14px;
+  align-items: center;
+  gap: 3px;
+}
+
+.document-ai-running-dots i {
+  width: 3px;
+  height: 8px;
+  border-radius: 2px;
+  background-color: var(--semi-color-primary);
+  animation: document-ai-bar-pulse 1s ease-in-out infinite;
+}
+
+.document-ai-running-dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.document-ai-running-dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.document-ai-editor-running {
+  border-color: var(--semi-color-primary) !important;
+  animation: document-ai-editor-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes document-ai-icon-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: rotate(-8deg);
+  }
+  50% {
+    opacity: 1;
+    transform: rotate(8deg);
+  }
+}
+
+@keyframes document-ai-bar-pulse {
+  0%,
+  100% {
+    height: 5px;
+    opacity: 0.45;
+  }
+  50% {
+    height: 13px;
+    opacity: 1;
+  }
+}
+
+@keyframes document-ai-editor-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(var(--semi-blue-5), 0);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(var(--semi-blue-5), 0.12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .document-ai-running-icon,
+  .document-ai-running-dots i,
+  .document-ai-editor-running {
+    animation: none;
+  }
+}
+
+@media (max-width: 1439px) {
+  body.api-docs-desktop-open {
+    --api-docs-desktop-width: 100vw;
+  }
+
+  .api-docs-desktop-panel {
+    right: 0;
+  }
+
+  body.api-docs-desktop-open .model-detail-sheet .semi-sidesheet-inner {
+    visibility: hidden;
+  }
+}
+
 .model-detail-tabs > .semi-tabs-bar {
   z-index: 2;
   flex-shrink: 0;

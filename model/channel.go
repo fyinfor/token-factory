@@ -60,7 +60,7 @@ type Channel struct {
 	SupplierApplicationID int    `json:"supplier_application_id" gorm:"type:int;index;default:0"` // 关联 supplier_applications.id
 	ChannelNo             string `json:"channel_no" gorm:"type:varchar(32);default:'';index;comment:供应商渠道编号 c1,c2 递增"`
 	// RouteSlug 全局唯一渠道路由后缀；调用格式 {model}/{route_slug} 强制该渠道（该渠道下所有模型共用此后缀）。
-	RouteSlug    string `json:"route_slug" gorm:"type:varchar(32);not null;default:'';index"`
+	RouteSlug string `json:"route_slug" gorm:"type:varchar(32);not null;default:'';index"`
 	// SyncKey 跨环境导入/导出同步唯一编号（默认约 6 位）；与 id/route_slug 无关，可手改绑定。
 	SyncKey      string `json:"sync_key" gorm:"type:varchar(64);not null;default:'';index;comment:渠道同步唯一键约6位"`
 	SupplierName string `json:"supplier_name,omitempty" gorm:"-"` // 供应商用户名（由控制器回填，不落库）
@@ -827,6 +827,10 @@ func BatchDeleteChannels(ids []int) error {
 			tx.Rollback()
 			return err
 		}
+		if err := deleteChannelModelDocsByChannelIDs(tx, chunk); err != nil {
+			tx.Rollback()
+			return err
+		}
 	}
 	return tx.Commit().Error
 }
@@ -997,13 +1001,15 @@ func (channel *Channel) UpdateBalance(balance float64) {
 }
 
 func (channel *Channel) Delete() error {
-	var err error
-	err = DB.Delete(channel).Error
-	if err != nil {
-		return err
-	}
-	err = channel.DeleteAbilities()
-	return err
+	return DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Delete(channel).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("channel_id = ?", channel.Id).Delete(&Ability{}).Error; err != nil {
+			return err
+		}
+		return deleteChannelModelDocsByChannelIDs(tx, []int{channel.Id})
+	})
 }
 
 var channelStatusLock sync.Mutex
@@ -1359,13 +1365,34 @@ func notifyChannelBalanceAlertOnUsageDelta(channel *Channel, oldRemaining float6
 }
 
 func DeleteChannelByStatus(status int64) (int64, error) {
-	result := DB.Where("status = ?", status).Delete(&Channel{})
-	return result.RowsAffected, result.Error
+	return deleteChannelsByWhere(DB.Where("status = ?", status))
 }
 
 func DeleteDisabledChannel() (int64, error) {
-	result := DB.Where("status = ? or status = ?", common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled).Delete(&Channel{})
-	return result.RowsAffected, result.Error
+	return deleteChannelsByWhere(DB.Where("status = ? or status = ?", common.ChannelStatusAutoDisabled, common.ChannelStatusManuallyDisabled))
+}
+
+func deleteChannelsByWhere(query *gorm.DB) (int64, error) {
+	var ids []int
+	if err := query.Model(&Channel{}).Pluck("id", &ids).Error; err != nil {
+		return 0, err
+	}
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	var deleted int64
+	err := DB.Transaction(func(tx *gorm.DB) error {
+		result := tx.Where("id IN ?", ids).Delete(&Channel{})
+		if result.Error != nil {
+			return result.Error
+		}
+		deleted = result.RowsAffected
+		if err := tx.Where("channel_id IN ?", ids).Delete(&Ability{}).Error; err != nil {
+			return err
+		}
+		return deleteChannelModelDocsByChannelIDs(tx, ids)
+	})
+	return deleted, err
 }
 
 func GetPaginatedTags(offset int, limit int) ([]*string, error) {
