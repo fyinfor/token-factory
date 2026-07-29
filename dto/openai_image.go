@@ -195,17 +195,43 @@ const (
 )
 
 // ImageCallbackPayload 异步图片完成后向 callback_url 推送的负载。
+// 成功时会尽量保留上游同步接口返回的字段（如 data/url/b64_json/usage 等）。
 type ImageCallbackPayload struct {
-	ID       string               `json:"id"`
-	Created  int64                `json:"created"`
-	Status   string               `json:"status"`
-	Data     []ImageData          `json:"data,omitempty"`
-	Metadata json.RawMessage      `json:"metadata,omitempty"`
-	Error    *ImageCallbackError  `json:"error,omitempty"`
+	ID       string              `json:"id"`
+	Created  int64               `json:"created"`
+	Status   string              `json:"status"`
+	Data     []ImageData         `json:"data,omitempty"`
+	Metadata json.RawMessage     `json:"metadata,omitempty"`
+	Error    *ImageCallbackError `json:"error,omitempty"`
+	// Extra 保存上游响应中除标准字段外的原始字段（usage 等），序列化时平铺到顶层。
+	Extra map[string]json.RawMessage `json:"-"`
 }
 
 type ImageCallbackError struct {
 	Message string `json:"message"`
 	Type    string `json:"type,omitempty"`
 	Code    any    `json:"code,omitempty"`
+}
+
+func (p ImageCallbackPayload) MarshalJSON() ([]byte, error) {
+	type Alias ImageCallbackPayload
+	alias := Alias(p)
+	base, err := common.Marshal(alias)
+	if err != nil {
+		return nil, err
+	}
+	if len(p.Extra) == 0 {
+		return base, nil
+	}
+	var baseMap map[string]json.RawMessage
+	if err := common.Unmarshal(base, &baseMap); err != nil {
+		return nil, err
+	}
+	for k, v := range p.Extra {
+		if _, exists := baseMap[k]; exists {
+			continue
+		}
+		baseMap[k] = v
+	}
+	return common.Marshal(baseMap)
 }
