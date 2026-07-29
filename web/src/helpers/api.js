@@ -30,10 +30,9 @@ import {
   collectVideoMediaUrls,
 } from './playgroundVideoUtils';
 import {
-  buildPlaygroundImageSizeOptions,
-  getPlaygroundImageSizeForTier,
   buildPlaygroundVideoResolutionOptions,
   getPlaygroundVideoSizeForTier,
+  resolvePlaygroundImageSize,
 } from './videoResolutionLabel';
 import axios from 'axios';
 import { MESSAGE_ROLES } from '../constants/playground.constants';
@@ -322,18 +321,7 @@ export const buildApiPayload = (
     return payload;
   }
   if (isImageMode) {
-    const sizeOptions = buildPlaygroundImageSizeOptions(
-      inputs.selected_image_pricing_tiers,
-    );
-    const selectedImageSize = sizeOptions.some(
-      (option) => option.value === inputs.image_size,
-    )
-      ? inputs.image_size
-      : sizeOptions[0]?.value || '1024x1024';
-    const imageSize = getPlaygroundImageSizeForTier(
-      selectedImageSize,
-      inputs.image_ratio || 'auto',
-    );
+    const imageSize = resolvePlaygroundImageSize(inputs);
     const referenceImages = collectPlaygroundImageMediaUrls(
       inputs.imageUrls,
       processedMessages,

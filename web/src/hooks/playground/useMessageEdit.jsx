@@ -23,6 +23,7 @@ import { useTranslation } from 'react-i18next';
 import {
   getTextContent,
   buildApiPayload,
+  buildPlaygroundGenerationMeta,
   createLoadingAssistantMessage,
 } from '../../helpers';
 import { MESSAGE_ROLES } from '../../constants/playground.constants';
@@ -106,7 +107,9 @@ export const useMessageEdit = (
                 );
                 setMessage((prevMsg) => [
                   ...prevMsg,
-                  createLoadingAssistantMessage(),
+                  createLoadingAssistantMessage({
+                    generationMeta: buildPlaygroundGenerationMeta(inputs),
+                  }),
                 ]);
                 const isChatEndpoint = payload?.__endpoint === 'chat';
                 sendRequest(

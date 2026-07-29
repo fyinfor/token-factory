@@ -108,6 +108,9 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	appendFinalRequestFormat(relayInfo, other)
 	appendBillingInfo(relayInfo, other)
 	appendImagePerImageBillingInfo(relayInfo, other)
+	if rid := strings.TrimSpace(relayInfo.UpstreamRequestId); rid != "" {
+		other["upstream_request_id"] = rid
+	}
 	appendParamOverrideInfo(relayInfo, other)
 	appendStreamStatus(relayInfo, other)
 	appendChannelPriceDiscountToConsumeOther(relayInfo, other)
@@ -226,8 +229,17 @@ func appendImagePerImageBillingInfo(relayInfo *relaycommon.RelayInfo, other map[
 	if b.RuleWidth > 0 && b.RuleHeight > 0 {
 		other["image_rule_resolution"] = fmt.Sprintf("%dx%d", b.RuleWidth, b.RuleHeight)
 	}
-	if b.RuleRes != "" {
-		other["image_rule_tier"] = b.RuleRes
+	// image_rule_tier：展示用计费档位标识（720p / 1080p / 2K / 4K），不用像素尺寸。
+	tierRaw := strings.TrimSpace(b.RuleRes)
+	if tierRaw == "" && b.RuleWidth > 0 && b.RuleHeight > 0 {
+		tierRaw = fmt.Sprintf("%dx%d", b.RuleWidth, b.RuleHeight)
+	}
+	if tierRaw != "" {
+		if label := common.FormatVideoResolutionLabel(tierRaw); label != "" {
+			other["image_rule_tier"] = label
+		} else {
+			other["image_rule_tier"] = tierRaw
+		}
 	}
 	if b.CappedToMaxTier {
 		other["image_capped_to_max_tier"] = true

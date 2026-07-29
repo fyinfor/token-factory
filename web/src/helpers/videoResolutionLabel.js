@@ -270,6 +270,86 @@ export function formatPlaygroundPixelSizeLabel(size) {
   return String(size ?? '').trim();
 }
 
+/** 解析操练场自定义图片尺寸（如 1280x720 / 1280×720） */
+export function parsePlaygroundCustomImageSize(value) {
+  const compact = String(value ?? '')
+    .trim()
+    .replace(/\s+/g, '');
+  if (!compact) return null;
+  const match = compact.match(/^(\d+)[x×](\d+)$/i);
+  if (!match) return null;
+  const width = Number(match[1]);
+  const height = Number(match[2]);
+  if (
+    !Number.isFinite(width) ||
+    !Number.isFinite(height) ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    return null;
+  }
+  return {
+    width,
+    height,
+    size: `${Math.round(width)}x${Math.round(height)}`,
+  };
+}
+
+/**
+ * 解析操练场最终图片 size：自定义尺寸优先，否则按分辨率档位 + 比例计算。
+ */
+export function resolvePlaygroundImageSize(inputs = {}) {
+  const customSize = parsePlaygroundCustomImageSize(inputs.image_custom_size);
+  if (customSize) {
+    return customSize;
+  }
+  const sizeOptions = buildPlaygroundImageSizeOptions(
+    inputs.selected_image_pricing_tiers,
+  );
+  const selectedImageSize = sizeOptions.some(
+    (option) => option.value === inputs.image_size,
+  )
+    ? inputs.image_size
+    : sizeOptions[0]?.value || '1024x1024';
+  return getPlaygroundImageSizeForTier(
+    selectedImageSize,
+    inputs.image_ratio || 'auto',
+  );
+}
+
+/** 写入助手消息的生成元信息（对话区回复下方展示） */
+export function buildPlaygroundGenerationMeta(inputs = {}) {
+  const mode = inputs.display_mode || 'text';
+  const model = String(inputs.model || '').trim();
+  if (mode === 'image') {
+    const imageSize = resolvePlaygroundImageSize(inputs);
+    return {
+      mode,
+      model,
+      size: imageSize?.size || '',
+    };
+  }
+  if (mode === 'video') {
+    const resolutionOptions = buildPlaygroundVideoResolutionOptions(
+      inputs.selected_video_pricing_tiers,
+    );
+    const selectedResolution = resolutionOptions.some(
+      (option) => option.value === inputs.video_resolution_preset,
+    )
+      ? inputs.video_resolution_preset
+      : resolutionOptions[0]?.value ||
+        String(inputs.video_resolution_preset || '').trim() ||
+        '720p';
+    return {
+      mode,
+      model,
+      resolution: selectedResolution,
+      ratio: String(inputs.video_ratio || '').trim(),
+    };
+  }
+  return { mode, model };
+}
+
 export function buildPlaygroundVideoResolutionOptions(tiers) {
   const rawResolutions = (Array.isArray(tiers) ? tiers : [])
     .map((tier) => (typeof tier === 'string' ? tier : tier?.resolution))

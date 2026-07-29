@@ -64,7 +64,7 @@ func (InvoiceRequest) TableName() string { return "invoice_requests" }
 type InvoiceRequestItem struct {
 	Id               int     `json:"id" gorm:"primaryKey;autoIncrement"`
 	InvoiceRequestId int     `json:"invoice_request_id" gorm:"not null;index"`
-	TopUpId          int     `json:"topup_id" gorm:"not null;index"`
+	TopUpId          int     `json:"topup_id" gorm:"column:top_up_id;not null;index"`
 	TradeNo          string  `json:"trade_no" gorm:"type:varchar(255);not null"`
 	InvoiceAmount    float64 `json:"invoice_amount" gorm:"type:decimal(20,6);not null"`
 	CreatedAt        int64   `json:"created_at" gorm:"autoCreateTime;bigint"`
@@ -76,19 +76,94 @@ func (InvoiceRequestItem) TableName() string { return "invoice_request_items" }
 type TopUpConsumeAttribution struct {
 	Id            int   `json:"id" gorm:"primaryKey;autoIncrement"`
 	UserId        int   `json:"user_id" gorm:"not null;index:idx_topup_attr_user_topup,unique"`
-	TopUpId       int   `json:"topup_id" gorm:"not null;index:idx_topup_attr_user_topup,unique"`
+	TopUpId       int   `json:"topup_id" gorm:"column:top_up_id;not null;index:idx_topup_attr_user_topup,unique"`
 	ConsumedQuota int   `json:"consumed_quota" gorm:"not null;default:0"`
 	UpdatedAt     int64 `json:"updated_at" gorm:"autoUpdateTime;bigint"`
 }
 
 func (TopUpConsumeAttribution) TableName() string { return "topup_consume_attributions" }
 
-// invoiceTopUpIDColumn 返回充值订单外键列名（SQLite/PostgreSQL 为 top_up_id，历史 MySQL 表为 topup_id）。
+// invoiceTopUpIDColumn 返回充值订单外键列名。
+// GORM 将 TopUpId 映射为 top_up_id；历史 MySQL 若仍为 topup_id，由 migrateInvoiceTopUpIDColumns 先重命名。
 func invoiceTopUpIDColumn() string {
-	if common.UsingPostgreSQL || common.UsingSQLite {
-		return "top_up_id"
+	return "top_up_id"
+}
+
+// migrateInvoiceTopUpIDColumns 将历史 MySQL 列 topup_id 重命名为 GORM 标准列 top_up_id。
+func migrateInvoiceTopUpIDColumns() error {
+	tables := []string{"invoice_request_items", "topup_consume_attributions"}
+	for _, table := range tables {
+		if !DB.Migrator().HasTable(table) {
+			continue
+		}
+		legacyExists, err := invoiceTableHasPhysicalColumn(table, "topup_id")
+		if err != nil {
+			return err
+		}
+		canonicalExists, err := invoiceTableHasPhysicalColumn(table, "top_up_id")
+		if err != nil {
+			return err
+		}
+		if !legacyExists || canonicalExists {
+			continue
+		}
+		if err := renameInvoiceTopUpIDColumn(table); err != nil {
+			return fmt.Errorf("rename %s.topup_id -> top_up_id: %w", table, err)
+		}
+		common.SysLog(fmt.Sprintf("migrated %s.topup_id to top_up_id", table))
 	}
-	return "topup_id"
+	return nil
+}
+
+func renameInvoiceTopUpIDColumn(table string) error {
+	if common.UsingPostgreSQL {
+		return DB.Exec(fmt.Sprintf(`ALTER TABLE %s RENAME COLUMN topup_id TO top_up_id`, table)).Error
+	}
+	if common.UsingSQLite {
+		return DB.Exec(fmt.Sprintf(`ALTER TABLE %s RENAME COLUMN topup_id TO top_up_id`, table)).Error
+	}
+	// MySQL 5.7 不支持 RENAME COLUMN，需用 CHANGE 并保留原列类型。
+	var columnType string
+	if err := DB.Raw(`SELECT COLUMN_TYPE FROM information_schema.columns
+		WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`,
+		table, "topup_id").Scan(&columnType).Error; err != nil {
+		return err
+	}
+	if columnType == "" {
+		return fmt.Errorf("empty COLUMN_TYPE for %s.topup_id", table)
+	}
+	var isNullable string
+	if err := DB.Raw(`SELECT IS_NULLABLE FROM information_schema.columns
+		WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`,
+		table, "topup_id").Scan(&isNullable).Error; err != nil {
+		return err
+	}
+	nullSQL := "NULL"
+	if strings.EqualFold(isNullable, "NO") {
+		nullSQL = "NOT NULL"
+	}
+	return DB.Exec(fmt.Sprintf("ALTER TABLE `%s` CHANGE `topup_id` `top_up_id` %s %s", table, columnType, nullSQL)).Error
+}
+
+func invoiceTableHasPhysicalColumn(tableName, columnName string) (bool, error) {
+	if common.UsingPostgreSQL {
+		var count int64
+		err := DB.Raw(`SELECT COUNT(1) FROM information_schema.columns
+			WHERE table_schema = current_schema() AND table_name = ? AND column_name = ?`,
+			tableName, columnName).Scan(&count).Error
+		return count > 0, err
+	}
+	if common.UsingMySQL {
+		var count int64
+		err := DB.Raw(`SELECT COUNT(1) FROM information_schema.columns
+			WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?`,
+			tableName, columnName).Scan(&count).Error
+		return count > 0, err
+	}
+	// SQLite：pragma_table_info 的表名不能参数绑定。
+	var count int64
+	err := DB.Raw(fmt.Sprintf("SELECT COUNT(1) FROM pragma_table_info('%s') WHERE name = ?", tableName), columnName).Scan(&count).Error
+	return count > 0, err
 }
 
 // InvoiceEligibleOrder 待开票订单列表项。

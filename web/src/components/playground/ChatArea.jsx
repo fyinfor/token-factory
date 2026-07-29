@@ -50,6 +50,7 @@ import {
   resolveMessageGeneratedImages,
   stripGeneratedImageMarkdown,
 } from '../../helpers/playgroundImageUtils';
+import { formatPlaygroundPixelSizeLabel } from '../../helpers/videoResolutionLabel';
 import {
   PLAYGROUND_MEDIA_MAX_HEIGHT,
   PLAYGROUND_MEDIA_MAX_WIDTH,
@@ -58,6 +59,29 @@ import {
   PLAYGROUND_DIALOGUE_REFERENCE_IMAGE_MAX_HEIGHT,
 } from '../../constants/playground.constants';
 import { usePlaygroundMediaMaxHeightPx } from '../../hooks/playground/usePlaygroundMediaMaxHeight';
+
+const formatGenerationMetaLabel = (meta) => {
+  if (!meta || typeof meta !== 'object') return '';
+  const model = String(meta.model || '').trim();
+  if (!model) return '';
+  const parts = [model];
+  if (meta.mode === 'image') {
+    const sizeLabel = formatPlaygroundPixelSizeLabel(meta.size);
+    if (sizeLabel) {
+      parts.push(sizeLabel);
+    }
+  } else if (meta.mode === 'video') {
+    const resolution = String(meta.resolution || '').trim();
+    const ratio = String(meta.ratio || '').trim();
+    if (resolution) {
+      parts.push(resolution);
+    }
+    if (ratio && ratio !== 'auto') {
+      parts.push(ratio);
+    }
+  }
+  return parts.join(' · ');
+};
 
 const getConstrainedMediaSize = (
   dimensions,
@@ -211,12 +235,19 @@ const restorePlaygroundMessage = (message) => {
   return restored;
 };
 
-const appendTextContent = (normalizedContent, text, reasoningContentRef) => {
+const appendTextContent = (
+  normalizedContent,
+  text,
+  reasoningContentRef,
+  hideReasoning = false,
+) => {
   const processed = processIncompleteThinkTags(
     text || '',
-    reasoningContentRef.value,
+    hideReasoning ? '' : reasoningContentRef.value,
   );
-  reasoningContentRef.value = processed.reasoningContent || '';
+  reasoningContentRef.value = hideReasoning
+    ? ''
+    : processed.reasoningContent || '';
 
   if (processed.content?.trim()) {
     normalizedContent.push({
@@ -226,13 +257,17 @@ const appendTextContent = (normalizedContent, text, reasoningContentRef) => {
   }
 };
 
-const normalizeDialogueContent = (message, assetMap) => {
+const normalizeDialogueContent = (
+  message,
+  assetMap,
+  hideReasoning = false,
+) => {
   const { role, videoTask } = message || {};
   const rawContent = message?.playgroundContent ?? message?.content;
   const generatedImages = resolveMessageGeneratedImages(message);
   const normalizedContent = [];
   const reasoningContentRef = {
-    value: message?.reasoningContent || '',
+    value: hideReasoning ? '' : message?.reasoningContent || '',
   };
 
   if (Array.isArray(rawContent)) {
@@ -242,6 +277,7 @@ const normalizeDialogueContent = (message, assetMap) => {
           normalizedContent,
           item.text || '',
           reasoningContentRef,
+          hideReasoning,
         );
       } else if (item?.type === 'image_url' && item.image_url?.url) {
         normalizedContent.push({
@@ -254,7 +290,12 @@ const normalizeDialogueContent = (message, assetMap) => {
   } else if (typeof rawContent === 'string' && rawContent.trim()) {
     const displayText = stripGeneratedImageMarkdown(rawContent);
     if (displayText.trim()) {
-      appendTextContent(normalizedContent, displayText, reasoningContentRef);
+      appendTextContent(
+        normalizedContent,
+        displayText,
+        reasoningContentRef,
+        hideReasoning,
+      );
     }
   }
 
@@ -276,15 +317,31 @@ const normalizeDialogueContent = (message, assetMap) => {
     });
   }
 
-  const reasoningContent = reasoningContentRef.value?.trim();
+  if (role === 'assistant' && message?.generationMeta) {
+    const metaLabel = formatGenerationMetaLabel(message.generationMeta);
+    if (metaLabel) {
+      normalizedContent.push({
+        type: 'playground_generation_meta',
+        text: metaLabel,
+        meta: message.generationMeta,
+      });
+    }
+  }
+
+  const reasoningContent = hideReasoning
+    ? ''
+    : reasoningContentRef.value?.trim();
   const normalizedMessages = [];
   if (reasoningContent) {
+    const messageCompleted =
+      message?.status === 'complete' || message?.status === 'error';
     normalizedMessages.push({
       type: 'reasoning',
       content: [{ text: reasoningContent }],
-      status: message?.isThinkingComplete
-        ? 'completed'
-        : toDialogueStatus(message?.status),
+      status:
+        message?.isThinkingComplete || messageCompleted
+          ? 'completed'
+          : toDialogueStatus(message?.status),
     });
   }
 
@@ -317,6 +374,7 @@ const ChatArea = ({
   onStopGenerator,
   onClearMessages,
   onToggleDebugPanel,
+  hideReasoning = false,
 }) => {
   const { t } = useTranslation();
   const { onPasteImage, imageEnabled } = usePlayground();
@@ -438,7 +496,11 @@ const ChatArea = ({
       }
       seen.add(nextId);
       const dialogueStatus = toDialogueStatus(item?.status);
-      const dialogueContent = normalizeDialogueContent(item, assetMap);
+      const dialogueContent = normalizeDialogueContent(
+        item,
+        assetMap,
+        hideReasoning,
+      );
       return {
         ...item,
         id: nextId,
@@ -456,7 +518,7 @@ const ChatArea = ({
           : {}),
       };
     });
-  }, [assetMap, message]);
+  }, [assetMap, hideReasoning, message]);
 
   const playgroundMarkdownRenderProps = useMemo(
     () => createPlaygroundMarkdownRenderProps(assetMap),
@@ -771,6 +833,22 @@ const ChatArea = ({
               }}
             />
           </div>
+        );
+      },
+      playground_generation_meta: (item) => {
+        const label =
+          typeof item?.text === 'string' && item.text.trim()
+            ? item.text.trim()
+            : formatGenerationMetaLabel(item?.meta);
+        if (!label) return null;
+        return (
+          <Typography.Text
+            type='tertiary'
+            size='small'
+            className='playground-generation-meta mt-1 block text-[12px] leading-5 opacity-75'
+          >
+            {label}
+          </Typography.Text>
         );
       },
     }),

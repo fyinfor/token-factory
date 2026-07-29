@@ -496,6 +496,55 @@ func GetLogByTokenId(tokenId int) (logs []*Log, err error) {
 	return logs, err
 }
 
+// GetTokenLogs 按令牌查询使用日志，筛选条件与用户侧日志一致（强制限定 user_id + token_id）。
+func GetTokenLogs(userId int, tokenId int, logTypes []int, startTimestamp int64, endTimestamp int64, modelName string, startIdx int, num int, group string, requestId string, includeRawBillingLogs bool) (logs []*Log, total int64, err error) {
+	if userId == 0 || tokenId == 0 {
+		return nil, 0, errors.New("无效的令牌")
+	}
+	tx := LOG_DB.Where("logs.user_id = ? AND logs.token_id = ?", userId, tokenId)
+	tx = applyLogTypesFilter(tx, logTypes)
+	tx = applyBillingLogVisibility(tx, includeRawBillingLogs)
+
+	if modelName != "" {
+		modelNamePattern, err := sanitizeLikePattern(modelName)
+		if err != nil {
+			return nil, 0, err
+		}
+		tx = tx.Where("logs.model_name LIKE ? ESCAPE '!'", modelNamePattern)
+	}
+	if requestId != "" {
+		tx = tx.Where("logs.request_id = ?", requestId)
+	}
+	if startTimestamp != 0 {
+		tx = tx.Where("logs.created_at >= ?", startTimestamp)
+	}
+	if endTimestamp != 0 {
+		tx = tx.Where("logs.created_at <= ?", endTimestamp)
+	}
+	if group != "" {
+		tx = tx.Where("logs."+logGroupCol+" = ?", group)
+	}
+	err = tx.Model(&Log{}).Limit(logSearchCountLimit).Count(&total).Error
+	if err != nil {
+		common.SysError("failed to count token logs: " + err.Error())
+		return nil, 0, errors.New("查询日志失败")
+	}
+	err = tx.Order("logs.id desc").Limit(num).Offset(startIdx).Find(&logs).Error
+	if err != nil {
+		common.SysError("failed to search token logs: " + err.Error())
+		return nil, 0, errors.New("查询日志失败")
+	}
+
+	normalizeLogsBillingMetadata(logs)
+	fillTaskUseTime(logs)
+	if !includeRawBillingLogs {
+		mergeSettlementMarkersIntoPreChargeLogs(logs)
+	}
+	attachLogChannelDisplays(logs)
+	formatUserLogs(logs, startIdx)
+	return logs, total, err
+}
+
 func RecordLog(userId int, logType int, content string) {
 	if logType == LogTypeConsume && !common.LogConsumeEnabled {
 		return

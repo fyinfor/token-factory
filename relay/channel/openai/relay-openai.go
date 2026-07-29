@@ -104,6 +104,37 @@ func sendStreamData(c *gin.Context, info *relaycommon.RelayInfo, data string, fo
 	return helper.ObjectData(c, lastStreamResponse)
 }
 
+// stripReasoningFromStreamData 去掉 reasoning / reasoning_content。
+// 开启输出护栏时不下发思考过程，避免敏感问题的思考内容被客户端展示。
+func stripReasoningFromStreamData(data string) (string, bool) {
+	if data == "" {
+		return "", false
+	}
+	var streamResponse dto.ChatCompletionsStreamResponse
+	if err := common.UnmarshalJsonStr(data, &streamResponse); err != nil {
+		return data, true
+	}
+	hasSendable := streamResponse.Usage != nil
+	for i := range streamResponse.Choices {
+		streamResponse.Choices[i].Delta.ReasoningContent = nil
+		streamResponse.Choices[i].Delta.Reasoning = nil
+		if streamResponse.Choices[i].Delta.GetContentString() != "" ||
+			len(streamResponse.Choices[i].Delta.ToolCalls) > 0 ||
+			(streamResponse.Choices[i].FinishReason != nil && *streamResponse.Choices[i].FinishReason != "") ||
+			streamResponse.Choices[i].Delta.Role != "" {
+			hasSendable = true
+		}
+	}
+	if !hasSendable {
+		return "", false
+	}
+	jsonData, err := common.Marshal(&streamResponse)
+	if err != nil {
+		return data, true
+	}
+	return string(jsonData), true
+}
+
 func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Response) (*dto.Usage, *types.TokenFactoryError) {
 	if resp == nil || resp.Body == nil {
 		logger.LogError(c, "invalid response or response body")
@@ -207,12 +238,20 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 				itemsToSend = itemsToSend[:len(itemsToSend)-1]
 			}
 			for _, item := range itemsToSend {
-				if err := HandleStreamFormat(c, info, item, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent); err != nil {
+				// 护栏开启时永不下发思考过程，只回放正文
+				contentItem, ok := stripReasoningFromStreamData(item)
+				if !ok {
+					continue
+				}
+				if err := HandleStreamFormat(c, info, contentItem, info.ChannelSetting.ForceFormat, false); err != nil {
 					return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 				}
 			}
 			if shouldSendLastResp && lastStreamData != "" {
-				_ = sendStreamData(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent)
+				contentItem, ok := stripReasoningFromStreamData(lastStreamData)
+				if ok {
+					_ = sendStreamData(c, info, contentItem, info.ChannelSetting.ForceFormat, false)
+				}
 			}
 		}
 	}
@@ -267,6 +306,8 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	var responseText strings.Builder
 	for _, choice := range simpleResponse.Choices {
 		responseText.WriteString(choice.Message.StringContent())
+		responseText.WriteString(choice.Message.ReasoningContent)
+		responseText.WriteString(choice.Message.Reasoning)
 	}
 	if responseText.Len() > 0 {
 		guardrailResult, guardrailErr := service.CheckAliyunGuardrailOutput(c, info, responseText.String())
@@ -276,6 +317,13 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 		if guardrailResult != nil && guardrailResult.Blocked {
 			c.Set("aliyun_guardrail_output_blocked", true)
 			return nil, types.NewOpenAIError(fmt.Errorf("aliyun guardrail blocked output"), types.ErrorCodeSensitiveWordsDetected, http.StatusBadRequest)
+		}
+	}
+	// 输出护栏开启时不下发思考过程，避免敏感思考内容暴露给客户端
+	if setting.ShouldCheckAliyunGuardrailOutput() {
+		for i := range simpleResponse.Choices {
+			simpleResponse.Choices[i].Message.ReasoningContent = ""
+			simpleResponse.Choices[i].Message.Reasoning = ""
 		}
 	}
 

@@ -76,28 +76,37 @@ func SearchUserLogs(c *gin.Context) {
 	})
 }
 
+// GetLogByKey 通过令牌 API Key 查询该令牌的使用日志。
+// 鉴权：TokenAuthReadOnly（禁用令牌/封禁用户不可查；过期/耗尽可查）。
+// 筛选条件与用户侧日志查询一致（不含 token_name，已按当前令牌限定）。
 func GetLogByKey(c *gin.Context) {
 	tokenId := c.GetInt("token_id")
+	userId := c.GetInt("id")
 	if tokenId == 0 {
-		c.JSON(200, gin.H{
-			"success": false,
-			"message": "无效的令牌",
-		})
+		common.ApiErrorMsg(c, "无效的令牌")
 		return
 	}
-	logs, err := model.GetLogByTokenId(tokenId)
+	pageInfo := common.GetPageQuery(c)
+	logTypes := model.ParseLogTypesQuery(c.Query("type"))
+	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	modelName := c.Query("model_name")
+	group := c.Query("group")
+	requestId := c.Query("request_id")
+	logs, total, err := model.GetTokenLogs(userId, tokenId, logTypes, startTimestamp, endTimestamp, modelName, pageInfo.GetStartIdx(), pageInfo.GetPageSize(), group, requestId, includeRawBillingLogs(c))
 	if err != nil {
-		c.JSON(200, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
+		common.ApiError(c, err)
 		return
 	}
-	c.JSON(200, gin.H{
-		"success": true,
-		"message": "",
-		"data":    logs,
-	})
+	pageInfo.SetTotal(int(total))
+	pageInfo.SetItems(logs)
+	common.ApiSuccess(c, pageInfo)
+}
+
+// GetUserLogsByToken 通过令牌 API Key 查询当前用户的使用日志。
+// 鉴权：TokenAuthReadOnly（禁用令牌/封禁用户不可查；过期/耗尽可查）；筛选条件与 GET /api/log/self 一致。
+func GetUserLogsByToken(c *gin.Context) {
+	GetUserLogs(c)
 }
 
 func GetLogsStat(c *gin.Context) {
