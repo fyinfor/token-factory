@@ -282,14 +282,17 @@ function CustomCode(props) {
   const [collapsed, setCollapsed] = useState(true);
   const [showToggle, setShowToggle] = useState(false);
   const { t } = useTranslation();
+  const content = String(props.children ?? '');
+  const isInline = !props.className && !content.includes('\n');
 
   useEffect(() => {
+    if (isInline) return;
     if (ref.current) {
       const codeHeight = ref.current.scrollHeight;
       setShowToggle(codeHeight > 400);
       ref.current.scrollTop = ref.current.scrollHeight;
     }
-  }, [props.children]);
+  }, [isInline, props.children]);
 
   const toggleCollapsed = () => {
     setCollapsed((collapsed) => !collapsed);
@@ -316,6 +319,10 @@ function CustomCode(props) {
     }
     return null;
   };
+
+  if (isInline) {
+    return <code>{props.children}</code>;
+  }
 
   return (
     <div style={{ position: 'relative' }}>

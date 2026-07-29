@@ -38,28 +38,33 @@ import {
 
 const { Text } = Typography;
 
-const StepTitle = ({ label, title, desc, icon, extra }) => (
-  <div className='flex items-start gap-3 mb-4'>
-    <div
-      className='flex items-center justify-center gap-1.5 shrink-0 rounded-full font-semibold text-xs px-3'
-      style={{
-        height: 30,
-        width: 84,
-        color: 'var(--semi-color-bg-0)',
-        backgroundColor: 'var(--semi-color-primary)',
-        boxShadow: '0 6px 14px rgba(var(--semi-blue-5), 0.24)',
-      }}
-    >
-      {icon ? <span className='inline-flex items-center'>{icon}</span> : null}
-      {label}
-    </div>
-    <div className='min-w-0'>
-      <div className='flex items-center gap-2 flex-wrap'>
-        <Text className='text-lg font-medium'>{title}</Text>
-        {extra}
+const StepTitle = ({ label, title, desc, icon, extra, action }) => (
+  <div className='flex items-start justify-between gap-3 mb-4'>
+    <div className='flex min-w-0 items-start gap-3'>
+      <div
+        className='flex items-center justify-center gap-1.5 shrink-0 rounded-full font-semibold text-xs px-3'
+        style={{
+          height: 30,
+          width: 84,
+          color: 'var(--semi-color-bg-0)',
+          backgroundColor: 'var(--semi-color-primary)',
+          boxShadow: '0 6px 14px rgba(var(--semi-blue-5), 0.24)',
+        }}
+      >
+        {icon ? <span className='inline-flex items-center'>{icon}</span> : null}
+        {label}
       </div>
-      {desc ? <div className='text-xs text-gray-600 mt-0.5'>{desc}</div> : null}
+      <div className='min-w-0'>
+        <div className='flex items-center gap-2 flex-wrap'>
+          <Text className='text-lg font-medium'>{title}</Text>
+          {extra}
+        </div>
+        {desc ? (
+          <div className='text-xs text-gray-600 mt-0.5'>{desc}</div>
+        ) : null}
+      </div>
     </div>
+    {action ? <div className='shrink-0'>{action}</div> : null}
   </div>
 );
 
@@ -175,7 +180,13 @@ const isVideoEndpoint = (type, path) => {
   return endpointText.includes('video') || endpointText.includes('视频');
 };
 
-const ModelEndpoints = ({ modelData, endpointMap = {}, t, flat = false }) => {
+const ModelEndpoints = ({
+  modelData,
+  endpointMap = {},
+  t,
+  flat = false,
+  onOpenDocs,
+}) => {
   const [workBuddyVisible, setWorkBuddyVisible] = useState(false);
   const [tokens, setTokens] = useState([]);
   const [resolvedTokenKeys, setResolvedTokenKeys] = useState({});
@@ -595,6 +606,20 @@ const ModelEndpoints = ({ modelData, endpointMap = {}, t, flat = false }) => {
           <Tag size='small' shape='circle' color='blue' type='light'>
             {t('{{count}}选1复制使用', { count: addressCount })}
           </Tag>
+        }
+        action={
+          onOpenDocs ? (
+            <Tooltip content={t('查看 API 文档')}>
+              <Button
+                theme='light'
+                type='warning'
+                size='small'
+                onClick={onOpenDocs}
+              >
+                {t('API 文档')}
+              </Button>
+            </Tooltip>
+          ) : null
         }
       />
       {/* {showWorkBuddy ? (

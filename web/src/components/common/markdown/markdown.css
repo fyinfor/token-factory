@@ -418,6 +418,232 @@ pre:hover .copy-code-button {
   border-radius: 0 6px 6px 0;
 }
 
+/* API documentation favors scanning and copying over article-style decoration. */
+.api-docs-contained-layout,
+.api-markdown-contained {
+  display: flex;
+  height: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  flex-direction: column;
+}
+
+.api-markdown-toolbar {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 0 10px;
+  border-bottom: 1px solid var(--semi-color-border);
+  background: var(--semi-color-bg-0);
+}
+
+.api-markdown-toolbar .api-docs-token-select,
+.api-markdown-toolbar .api-markdown-toc {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.api-markdown-toolbar .semi-select {
+  width: 100%;
+}
+
+.api-markdown-toolbar .semi-select-prefix,
+.api-markdown-toolbar .semi-select-prefix-text {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.api-markdown-contained > .api-markdown-content {
+  height: 0;
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 2px 20px;
+}
+
+.api-markdown-renderer .api-markdown-toc {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.api-markdown-renderer:not(.api-markdown-contained)
+  .api-markdown-toc
+  .semi-select {
+  width: min(100%, 320px);
+}
+
+.api-markdown-renderer .api-markdown-toc .semi-select-prefix {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.api-markdown-renderer .api-markdown-toc .semi-select-prefix-text {
+  white-space: nowrap;
+}
+
+.api-markdown-renderer .api-markdown-toc .semi-select-selection {
+  min-width: 0;
+}
+
+.api-markdown-renderer .api-markdown-toc .semi-select-selection-text {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.api-markdown-toc-dropdown {
+  z-index: 1500 !important;
+}
+
+.api-markdown-renderer .markdown-body h1,
+.api-markdown-renderer .markdown-body h2,
+.api-markdown-renderer .markdown-body h3 {
+  scroll-margin-top: 72px;
+  letter-spacing: 0;
+}
+
+.api-markdown-renderer .markdown-body h1 {
+  margin-top: 8px !important;
+  font-size: 22px !important;
+}
+
+.api-markdown-renderer .markdown-body h2 {
+  margin-top: 28px !important;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--semi-color-border);
+  font-size: 18px !important;
+}
+
+.api-markdown-renderer .markdown-body h3 {
+  margin-top: 22px !important;
+  font-size: 16px !important;
+}
+
+.api-markdown-renderer .markdown-body p,
+.api-markdown-renderer .markdown-body li {
+  line-height: 1.7 !important;
+}
+
+.api-markdown-renderer .markdown-body blockquote {
+  font-style: normal !important;
+}
+
+.api-markdown-renderer .markdown-body blockquote::before {
+  content: none;
+}
+
+.api-markdown-renderer .markdown-body pre {
+  margin: 10px 0 18px;
+  box-shadow: none;
+}
+
+.api-markdown-renderer .copy-code-button {
+  opacity: 0.72;
+}
+
+.api-markdown-renderer .markdown-body table {
+  width: 100%;
+  min-width: 560px;
+  font-size: 13px;
+}
+
+.api-markdown-renderer .markdown-body th,
+.api-markdown-renderer .markdown-body td {
+  vertical-align: top;
+  word-break: normal;
+  overflow-wrap: anywhere;
+}
+
+.api-markdown-renderer .markdown-body table:has(th:nth-child(4)) th:first-child,
+.api-markdown-renderer
+  .markdown-body
+  table:has(th:nth-child(4))
+  td:first-child {
+  width: 26%;
+  min-width: 110px;
+}
+
+.api-markdown-renderer
+  .markdown-body
+  table:has(th:nth-child(4))
+  th:nth-child(2),
+.api-markdown-renderer
+  .markdown-body
+  table:has(th:nth-child(4))
+  td:nth-child(2) {
+  width: 15%;
+  min-width: 76px;
+  white-space: nowrap;
+}
+
+.api-markdown-renderer
+  .markdown-body
+  table:has(th:nth-child(4))
+  th:nth-child(3),
+.api-markdown-renderer
+  .markdown-body
+  table:has(th:nth-child(4))
+  td:nth-child(3) {
+  width: 10%;
+  min-width: 54px;
+  white-space: nowrap;
+}
+
+.api-markdown-renderer
+  .markdown-body
+  table:not(:has(th:nth-child(4)))
+  th:first-child,
+.api-markdown-renderer
+  .markdown-body
+  table:not(:has(th:nth-child(4)))
+  td:first-child {
+  min-width: 126px;
+}
+
+.api-markdown-renderer
+  .markdown-body
+  table:not(:has(th:nth-child(4)))
+  th:nth-child(2),
+.api-markdown-renderer
+  .markdown-body
+  table:not(:has(th:nth-child(4)))
+  td:nth-child(2) {
+  min-width: 92px;
+}
+
+.api-markdown-renderer .markdown-body td code:not(pre code) {
+  display: inline;
+  white-space: nowrap;
+}
+
+.api-markdown-renderer .markdown-body tbody tr:nth-child(even) {
+  background: var(--semi-color-fill-0);
+}
+
+.api-markdown-code-group {
+  margin: 16px 0 22px;
+  border: 1px solid var(--semi-color-border);
+  border-radius: 8px;
+  background: var(--semi-color-bg-0);
+}
+
+.api-markdown-code-group .semi-tabs-bar {
+  padding: 0 12px;
+  background: var(--semi-color-fill-0);
+}
+
+.api-markdown-code-group .semi-tabs-content {
+  padding: 0 12px;
+}
+
+.api-markdown-code-group .markdown-body pre {
+  margin-top: 12px;
+}
+
 .markdown-body .danger {
   background-color: var(--semi-color-danger-light-default);
   border-left: 4px solid var(--semi-color-danger);

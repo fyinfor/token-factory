@@ -13,6 +13,15 @@ import (
 	"gorm.io/gorm"
 )
 
+type channelModelDocRequest struct {
+	ChannelID         int    `json:"channel_id"`
+	ModelName         string `json:"model_name"`
+	DocIntroduction   string `json:"doc_introduction"`
+	ApiDocs           string `json:"api_docs"`
+	ApiDocsMarkdown   string `json:"api_docs_markdown"`
+	ApiDocsMarkdownEn string `json:"api_docs_markdown_en"`
+}
+
 // GetAllModelsMeta 获取模型列表（分页）
 func GetAllModelsMeta(c *gin.Context) {
 
@@ -212,6 +221,110 @@ func GetModelMeta(c *gin.Context) {
 	enrichModels([]*model.Model{&m})
 	model.FillModelsVisibility([]*model.Model{&m})
 	common.ApiSuccess(c, &m)
+}
+
+// GetChannelModelDocs returns the concrete channel-model documents for a model.
+func GetChannelModelDocs(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	var meta model.Model
+	if err := model.DB.First(&meta, id).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	items, err := model.ListChannelModelDocItems(&meta)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{
+		"model_id":                 meta.Id,
+		"model_name":               meta.ModelName,
+		"default_doc_introduction": meta.DocIntroduction,
+		"default_api_docs":         meta.ApiDocs,
+		"items":                    items,
+	})
+}
+
+func GetChannelModelDocTemplates(c *gin.Context) {
+	templates, err := model.ListChannelModelDocTemplates()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, templates)
+}
+
+func PutChannelModelDoc(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	var req channelModelDocRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if req.ChannelID <= 0 || strings.TrimSpace(req.ModelName) == "" {
+		common.ApiErrorMsg(c, "missing channel or model name")
+		return
+	}
+	var meta model.Model
+	if err := model.DB.First(&meta, id).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if err := model.ValidateChannelModelDocBinding(&meta, req.ChannelID, req.ModelName); err != nil {
+		common.ApiErrorMsg(c, "channel and model do not match")
+		return
+	}
+	doc := &model.ChannelModelDoc{
+		ChannelID:         req.ChannelID,
+		ModelName:         req.ModelName,
+		DocIntroduction:   req.DocIntroduction,
+		ApiDocs:           req.ApiDocs,
+		ApiDocsMarkdown:   req.ApiDocsMarkdown,
+		ApiDocsMarkdownEn: req.ApiDocsMarkdownEn,
+	}
+	if err := model.UpsertChannelModelDoc(doc); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	model.RefreshPricing()
+	common.ApiSuccess(c, doc)
+}
+
+func DeleteChannelModelDoc(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	channelID, err := strconv.Atoi(c.Query("channel_id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	modelName := strings.TrimSpace(c.Query("model_name"))
+	var meta model.Model
+	if err := model.DB.First(&meta, id).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if err := model.ValidateChannelModelDocBinding(&meta, channelID, modelName); err != nil {
+		common.ApiErrorMsg(c, "channel and model do not match")
+		return
+	}
+	if err := model.DeleteChannelModelDoc(channelID, modelName); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	model.RefreshPricing()
+	common.ApiSuccess(c, nil)
 }
 
 // CreateModelMeta 新建模型
