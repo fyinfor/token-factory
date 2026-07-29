@@ -337,6 +337,8 @@ export const buildApiPayload = (
     };
     if (inputs.image_ratio && inputs.image_ratio !== 'auto') {
       payload.ratio = inputs.image_ratio;
+    } else {
+      payload.ratio = '1:1';
     }
     // 图片模式：媒体侧栏参考图写入 image 字段（空则省略，与后端 ImageRequest.image 约定一致）
     if (hasReferenceImages) {

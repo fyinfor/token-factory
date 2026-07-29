@@ -522,8 +522,8 @@ func matchFlatPerImageUSDRules(
 
 // matchPerImageRulesByPixels picks the resolution row for per-image billing.
 // Priority:
-//  1. Exact resolution-tier label match (short-side based, same as validation/display),
-//     so square sizes like 1080x1080 map to 1080p instead of a closer landscape 720p by area.
+//  1. Exact Ai-drawing resolution-tier label match (short-side: ≤1024→1080p/1K, ≤2048→2K, else→4K),
+//     so sizes like 1024x1536 map to 1080p and 1080x1080 map to 2K.
 //  2. If the image is larger than every configured tier, cap to that lane's highest tier.
 //  3. Otherwise pick the closest row by pixel area within similarity threshold.
 func matchPerImageRulesByPixels(
@@ -546,7 +546,7 @@ func matchPerImageRulesByPixels(
 		return nil, false
 	}
 
-	reqLabel := normalizePricingResolutionLabel(fmt.Sprintf("%dx%d", ctx.Width, ctx.Height))
+	reqLabel := normalizeImagePricingResolutionLabel(fmt.Sprintf("%dx%d", ctx.Width, ctx.Height))
 	targetPixels := ctx.Width * ctx.Height
 	bestIdx := -1
 	minDiffRatio := math.MaxFloat64
@@ -577,7 +577,7 @@ func matchPerImageRulesByPixels(
 			minDiffRatio = diffRatio
 			bestIdx = i
 		}
-		if reqLabel != "" && normalizePricingResolutionLabel(rule.Resolution) == reqLabel {
+		if reqLabel != "" && normalizeImagePricingResolutionLabel(rule.Resolution) == reqLabel {
 			if labelBestIdx < 0 || diffRatio < labelBestDiff ||
 				(diffRatio == labelBestDiff && rulePixels < labelBestPixels) {
 				labelBestIdx = i

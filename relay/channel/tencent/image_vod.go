@@ -435,7 +435,7 @@ type tencentImageCommonMetadata struct {
 	CreateTime       string `json:"create_time,omitempty"`
 	FinishTime       string `json:"finish_time,omitempty"`
 	StorageMode      string `json:"storage_mode,omitempty"`
-	Resolution       string `json:"resolution,omitempty"` // 计费档位：720p / 1080p / 2K / 4K
+	Resolution       string `json:"resolution,omitempty"` // 计费档位：1080p（≡1K）/ 2K / 4K
 	Size             string `json:"size,omitempty"`       // 实际像素尺寸：1360x768
 	AspectRatio      string `json:"aspect_ratio,omitempty"`
 	OutputImageCount int    `json:"output_image_count,omitempty"`
@@ -473,24 +473,24 @@ func buildTencentImageCommonMetadata(r *tencentImagePollResult, info *relaycommo
 func resolveTencentImageBillingTierLabel(r *tencentImagePollResult, info *relaycommon.RelayInfo) string {
 	if info != nil && info.ImageBilling != nil {
 		if res := strings.TrimSpace(info.ImageBilling.RuleRes); res != "" {
-			if label := common.FormatVideoResolutionLabel(res); label != "" {
+			if label := common.FormatImageResolutionLabel(res); label != "" {
 				return label
 			}
 			return res
 		}
 		if info.ImageBilling.RuleWidth > 0 && info.ImageBilling.RuleHeight > 0 {
-			if label := common.FormatVideoResolutionLabel(fmt.Sprintf("%dx%d", info.ImageBilling.RuleWidth, info.ImageBilling.RuleHeight)); label != "" {
+			if label := common.FormatImageResolutionLabel(fmt.Sprintf("%dx%d", info.ImageBilling.RuleWidth, info.ImageBilling.RuleHeight)); label != "" {
 				return label
 			}
 		}
 	}
 	if r != nil && r.Width > 0 && r.Height > 0 {
-		if label := common.FormatVideoResolutionLabel(fmt.Sprintf("%dx%d", r.Width, r.Height)); label != "" {
+		if label := common.FormatImageResolutionLabel(fmt.Sprintf("%dx%d", r.Width, r.Height)); label != "" {
 			return label
 		}
 	}
 	if r != nil {
-		return common.FormatVideoResolutionLabel(strings.TrimSpace(r.Resolution))
+		return common.FormatImageResolutionLabel(strings.TrimSpace(r.Resolution))
 	}
 	return ""
 }
