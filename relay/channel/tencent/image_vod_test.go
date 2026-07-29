@@ -175,8 +175,8 @@ func TestParseTencentDescribeImageTaskExtractsCommonFields(t *testing.T) {
 	if m["size"] != "1360x768" {
 		t.Fatalf("meta size: %#v", m["size"])
 	}
-	// 无计费匹配时，按实际像素短边归一：768 → 720p
-	if m["resolution"] != "720p" {
+	// 无计费匹配时，按实际像素短边归一：768 → 1080p（与 1K 同档）
+	if m["resolution"] != "1080p" {
 		t.Fatalf("meta resolution tier: %#v", m["resolution"])
 	}
 }

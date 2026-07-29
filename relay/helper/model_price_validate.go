@@ -40,13 +40,25 @@ const (
 	capabilityVideoToVideo = "video_to_video"
 )
 
-// normalizePricingResolutionLabel 将分辨率配置/入参统一为可比对标识（如 720p、1080p、4K）。
+// normalizePricingResolutionLabel 将视频分辨率配置/入参统一为可比对标识（如 720p、1080p、4K）。
 func normalizePricingResolutionLabel(raw string) string {
 	s := strings.TrimSpace(raw)
 	if s == "" {
 		return ""
 	}
 	if label := common.FormatVideoResolutionLabel(s); label != "" {
+		return strings.ToLower(label)
+	}
+	return strings.ToLower(s)
+}
+
+// normalizeImagePricingResolutionLabel 将图片分辨率统一为 Ai 绘图档位标识（1080p≡1k / 2k / 4k）。
+func normalizeImagePricingResolutionLabel(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return ""
+	}
+	if label := common.FormatImageResolutionLabel(s); label != "" {
 		return strings.ToLower(label)
 	}
 	return strings.ToLower(s)
@@ -157,18 +169,40 @@ func ingestVideoPricingRules(idx capabilityPricingIndex, rules ratio_setting.Vid
 	addVideoTokenRows(idx, capabilityVideoToVideo, rules.VideoToVideo)
 }
 
+func addImageCapabilityResolution(idx capabilityPricingIndex, cap, raw string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return
+	}
+	cfg := ensureCapabilityIndex(idx, cap)
+	norm := normalizeImagePricingResolutionLabel(raw)
+	if norm == "" {
+		return
+	}
+	cfg.hasResolutionTiers = true
+	if _, exists := cfg.resolutions[norm]; exists {
+		return
+	}
+	cfg.resolutions[norm] = struct{}{}
+	display := common.FormatImageResolutionLabel(raw)
+	if display == "" {
+		display = raw
+	}
+	cfg.displayResolutions = append(cfg.displayResolutions, display)
+}
+
 func ingestImagePricingRules(idx capabilityPricingIndex, rules ratio_setting.ImagePricingRules) {
 	for _, row := range rules.TextToImagePerImage {
 		if row.ImagePrice <= 0 {
 			continue
 		}
-		addCapabilityResolution(idx, capabilityTextToImage, row.Resolution)
+		addImageCapabilityResolution(idx, capabilityTextToImage, row.Resolution)
 	}
 	for _, row := range rules.ImageToImagePerImage {
 		if row.ImagePrice <= 0 {
 			continue
 		}
-		addCapabilityResolution(idx, capabilityImageToImage, row.Resolution)
+		addImageCapabilityResolution(idx, capabilityImageToImage, row.Resolution)
 	}
 }
 
@@ -322,7 +356,7 @@ func videoRequestResolutionLabel(c *gin.Context, ctx videoEstimateContext) strin
 
 func imageRequestResolutionLabel(ctx imageEstimateContext) string {
 	if ctx.Width > 0 && ctx.Height > 0 {
-		return common.FormatVideoResolutionLabel(fmt.Sprintf("%dx%d", ctx.Width, ctx.Height))
+		return common.FormatImageResolutionLabel(fmt.Sprintf("%dx%d", ctx.Width, ctx.Height))
 	}
 	return ""
 }
@@ -429,7 +463,7 @@ func validateImageModelPrice(c *gin.Context, channelID int, info *relaycommon.Re
 	if reqLabel == "" {
 		return nil
 	}
-	if _, ok := cfg.resolutions[normalizePricingResolutionLabel(reqLabel)]; ok {
+	if _, ok := cfg.resolutions[normalizeImagePricingResolutionLabel(reqLabel)]; ok {
 		return nil
 	}
 	currentInvocation := formatInvocationWithResolution(reqLabel, capabilityCN)
