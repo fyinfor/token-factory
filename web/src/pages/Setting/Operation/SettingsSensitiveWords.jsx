@@ -95,6 +95,9 @@ export default function SettingsSensitiveWords(props) {
         const statusPatch = {
           aliyun_guardrail_hide_playground_media_tabs:
             normalizedInputs.AliyunGuardrailHidePlaygroundMediaTabs,
+          aliyun_guardrail_hide_playground_reasoning:
+            !!normalizedInputs.AliyunGuardrailEnabled &&
+            !!normalizedInputs.AliyunGuardrailOutputEnabled,
         };
         const cachedStatus = patchStatusData(statusPatch);
         statusDispatch({

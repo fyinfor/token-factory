@@ -214,6 +214,7 @@ func GetStatus(c *gin.Context) {
 		"self_use_mode_enabled":                       operation_setting.SelfUseModeEnabled,
 		"real_name_verification_enabled":              setting.AliyunRealNameVerificationEnabled,
 		"aliyun_guardrail_hide_playground_media_tabs": setting.AliyunGuardrailHidePlaygroundMediaTabs,
+		"aliyun_guardrail_hide_playground_reasoning":  setting.ShouldCheckAliyunGuardrailOutput(),
 		"model_default_docs_enabled":                  common.OptionMap["ModelDefaultDocsEnabled"] != "false",
 		"default_use_auto_group":                      setting.DefaultUseAutoGroup,
 
