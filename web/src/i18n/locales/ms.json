@@ -1880,6 +1880,7 @@
     "利润分成计算说明-用户消耗": "Amaun penggunaan pengguna = amaun harga kos + amaun keuntungan",
     "利润分成明细": "Butiran perkongsian keuntungan",
     "利润分成明细说明": "Setiap permintaan API pengguna jemputan yang selesai dijelaskan akan menghasilkan satu rekod; klik ? di sebelah “Amaun pendapatan” untuk melihat formula.",
+    "隐藏零收益记录": "Sembunyikan rekod pendapatan sifar",
     "利润分成模式下本比例作用于加价切片分润；分站/分销商默认分成、单用户覆盖规则与充值分成相同。": "Dalam mod perkongsian keuntungan, peratusan ini digunakan pada amaun keuntungan; peraturan perkongsian lalai pengedar dan tetapan ganti setiap pengguna sama seperti perkongsian tambah nilai.",
     "利润金额": "Amaun keuntungan",
     "利润金额说明": "Keuntungan yang dijana daripada caj pengguna kali ini.",

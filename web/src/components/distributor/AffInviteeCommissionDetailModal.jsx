@@ -18,7 +18,14 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Modal, Table, Tag, Tooltip, Typography } from '@douyinfe/semi-ui';
+import {
+  Modal,
+  Switch,
+  Table,
+  Tag,
+  Tooltip,
+  Typography,
+} from '@douyinfe/semi-ui';
 import dayjs from 'dayjs';
 import { useTranslation } from 'react-i18next';
 import {
@@ -54,6 +61,7 @@ export default function AffInviteeCommissionDetailModal({
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  const [hideZeroReward, setHideZeroReward] = useState(false);
 
   const isProfitShare = commissionMode === 'profit_share';
 
@@ -64,8 +72,9 @@ export default function AffInviteeCommissionDetailModal({
       try {
         const bm = String(billingModeFilter || '').trim();
         const bmParam = bm ? `&billing_mode=${encodeURIComponent(bm)}` : '';
+        const rewardParam = hideZeroReward ? '&hide_zero_reward=true' : '';
         const path = isProfitShare
-          ? `/api/distributor/invitee/${inviteeId}/profit-shares?p=${p}&page_size=${ps}${bmParam}`
+          ? `/api/distributor/invitee/${inviteeId}/profit-shares?p=${p}&page_size=${ps}${bmParam}${rewardParam}`
           : `/api/distributor/invitee/${inviteeId}/commissions?p=${p}&page_size=${ps}`;
         const res = await API.get(path);
         const { success, message, data } = res.data;
@@ -82,7 +91,7 @@ export default function AffInviteeCommissionDetailModal({
         setLoading(false);
       }
     },
-    [inviteeId, isProfitShare, billingModeFilter, t],
+    [inviteeId, isProfitShare, billingModeFilter, hideZeroReward, t],
   );
 
   useEffect(() => {
@@ -239,6 +248,18 @@ export default function AffInviteeCommissionDetailModal({
       width={isProfitShare ? 1420 : 880}
       bodyStyle={isProfitShare ? { overflow: 'visible' } : undefined}
     >
+      {isProfitShare ? (
+        <div className='mb-3 flex items-center justify-end gap-2'>
+          <Text type='secondary'>{t('隐藏零收益记录')}</Text>
+          <Switch
+            size='small'
+            checked={hideZeroReward}
+            disabled={loading}
+            onChange={(checked) => setHideZeroReward(Boolean(checked))}
+            aria-label={t('隐藏零收益记录')}
+          />
+        </div>
+      ) : null}
       <Table
         loading={loading}
         rowKey='id'

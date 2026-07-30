@@ -22,8 +22,16 @@ func TestTextProfitShareAmountsNormalReward(t *testing.T) {
 	require.True(t, shouldRecord)
 }
 
-func TestTextProfitShareAmountsSkipsRequestWithoutMarkup(t *testing.T) {
+func TestTextProfitShareAmountsRecordsRequestWithoutMarkup(t *testing.T) {
 	slice, reward, shouldRecord := textProfitShareAmounts(1000, 1000, 2500, 0)
+
+	require.Zero(t, slice)
+	require.Zero(t, reward)
+	require.True(t, shouldRecord)
+}
+
+func TestTextProfitShareAmountsSkipsUnbilledRequest(t *testing.T) {
+	slice, reward, shouldRecord := textProfitShareAmounts(0, 0, 2500, 0)
 
 	require.Zero(t, slice)
 	require.Zero(t, reward)

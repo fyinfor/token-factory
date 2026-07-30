@@ -54,7 +54,7 @@ type textQuotaSummary struct {
 	FileSearchCallCount      int
 	AudioInputPrice          float64
 	ImageGenerationCallPrice float64
-	RequestTierPricing bool
+	RequestTierPricing       bool
 	// 新计费公式字段
 	CostDiscountPercent    float64 // 最终成本率%（price_discount_percent + operating_cost_percent），默认 100
 	MarkupDiscountPercent  float64 // 加价折扣率%（markup_discount_rate），默认 0
@@ -508,10 +508,9 @@ func textProfitShareAmounts(userQuota, baseQuota, commissionBps int, markupPerce
 		commissionBps = maxAffBps
 	}
 	reward = int(int64(slice) * int64(commissionBps) / int64(maxAffBps))
-	// Small text requests can round both the markup slice and reward down to zero.
-	// Keep an audit row whenever markup pricing was active so the distributor
-	// detail remains reconcilable with the user's consume log.
-	shouldRecord = slice > 0 || markupPercent > 0
+	// In profit-share mode the detail is also the distributor's usage audit.
+	// Keep the billed call visible even when markup and reward are both zero.
+	shouldRecord = userQuota > 0
 	return
 }
 

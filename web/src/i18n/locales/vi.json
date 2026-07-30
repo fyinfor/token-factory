@@ -1880,6 +1880,7 @@
     "利润分成计算说明-用户消耗": "Số tiền người dùng tiêu hao = số tiền giá vốn + số tiền lợi nhuận",
     "利润分成明细": "Chi tiết chia lợi nhuận",
     "利润分成明细说明": "Mỗi yêu cầu API của người được mời sau khi quyết toán sẽ tạo một bản ghi; nhấp ? bên cạnh “Số tiền thu nhập” để xem công thức.",
+    "隐藏零收益记录": "Ẩn bản ghi có thu nhập bằng 0",
     "利润分成模式下本比例作用于加价切片分润；分站/分销商默认分成、单用户覆盖规则与充值分成相同。": "Trong chế độ chia lợi nhuận, tỷ lệ này áp dụng cho số tiền lợi nhuận; quy tắc chia mặc định của nhà phân phối và ghi đè từng người dùng giống với chia theo nạp tiền.",
     "利润金额": "Số tiền lợi nhuận",
     "利润金额说明": "Lợi nhuận phát sinh trong lần khấu trừ này của người dùng.",

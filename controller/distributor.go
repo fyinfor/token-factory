@@ -513,7 +513,8 @@ func GetDistributorInviteeProfitShareLogs(c *gin.Context) {
 	}
 	pageInfo := common.GetPageQuery(c)
 	billingMode := strings.TrimSpace(c.Query("billing_mode"))
-	items, total, err := model.ListAffInviteProfitShareLogs(userId, inviteeId, billingMode, pageInfo)
+	hideZeroReward, _ := strconv.ParseBool(c.Query("hide_zero_reward"))
+	items, total, err := model.ListAffInviteProfitShareLogs(userId, inviteeId, billingMode, hideZeroReward, pageInfo)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
@@ -998,7 +999,7 @@ func GetDistributorInviteeProfitSharesAdmin(c *gin.Context) {
 	}
 	pageInfo := common.GetPageQuery(c)
 	billingMode := strings.TrimSpace(c.Query("billing_mode"))
-	items, total, err := model.ListAffInviteProfitShareLogs(distributorId, inviteeId, billingMode, pageInfo)
+	items, total, err := model.ListAffInviteProfitShareLogs(distributorId, inviteeId, billingMode, false, pageInfo)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return

@@ -1880,6 +1880,7 @@
     "利润分成计算说明-用户消耗": "Montant consommé par l’utilisateur = montant du coût + montant du bénéfice",
     "利润分成明细": "Détail du partage des bénéfices",
     "利润分成明细说明": "Une ligne est créée après le règlement de chaque requête API du filleul ; cliquez sur ? à côté de « Montant des gains » pour voir la formule.",
+    "隐藏零收益记录": "Masquer les lignes sans gains",
     "利润分成模式下本比例作用于加价切片分润；分站/分销商默认分成、单用户覆盖规则与充值分成相同。": "En mode partage des bénéfices, ce pourcentage s’applique au montant du bénéfice ; les règles de partage par défaut du distributeur et les remplacements par utilisateur sont identiques au partage sur recharge.",
     "利润金额": "Montant du bénéfice",
     "利润金额说明": "Bénéfice généré par cette facturation utilisateur.",
