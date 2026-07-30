@@ -26,7 +26,7 @@ import { API, showError, showSuccess } from '../../../../helpers';
 /**
  * ModelExportButton 模型数据一键导出按钮组件。
  * 点击后直接调用后端 API 导出，下载 JSON 文件。
- * 导出固定字段：模型类型（name, description, icon）、模型数据（model_name, name_rule, icon, description, doc_introduction, api_docs, tags, vendor, endpoints, sync_official, status）
+ * 导出模型类型、模型数据，以及使用渠道同步编号绑定的渠道级文档。
  */
 export default function ModelExportButton() {
   const { t } = useTranslation();
@@ -66,11 +66,16 @@ export default function ModelExportButton() {
 
       const vendorCount = data?.vendors?.length || 0;
       const modelCount = data?.models?.length || 0;
+      const docCount = data?.channel_docs?.length || 0;
       showSuccess(
-        t('导出成功：{{vendorCount}} 个模型类型，{{modelCount}} 个模型数据', {
-          vendorCount,
-          modelCount,
-        }),
+        t(
+          '导出成功：{{vendorCount}} 个模型类型，{{modelCount}} 个模型数据，{{docCount}} 份渠道级文档',
+          {
+            vendorCount,
+            modelCount,
+            docCount,
+          },
+        ),
       );
     } catch (err) {
       showError(err?.message || t('导出失败'));

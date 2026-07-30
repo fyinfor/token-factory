@@ -98,6 +98,16 @@ export const SETTING_CATEGORIES = [
           '页脚',
         ]),
         settingItem('docs', 'other', 'docs', '文档配置', ['文档站', 'Docs']),
+        settingItem('compute-page', 'operation', 'compute-page', '算力页面', [
+          '算力',
+          '算力报价',
+          '算力设备报价',
+          '设备报价',
+          'GPU 报价',
+          '算力租赁',
+          'HTML 页面',
+          'Compute',
+        ]),
         settingItem('material', 'other', 'material', '素材设置', [
           '素材库',
           'Seedance',

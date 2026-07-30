@@ -39,7 +39,9 @@ import {
   Braces,
   FileText,
   Languages,
+  RotateCcw,
   Save,
+  Settings2,
   Sparkles,
   Square,
   Upload,
@@ -71,7 +73,7 @@ const normalizeAssistantMarkdown = (content) =>
 
 const streamDocumentCompletion = async ({ payload, signal, onProgress }) => {
   const response = await fetch(
-    API.getUri({ url: '/api/playground/chat/completions' }),
+    API.getUri({ url: '/api/models/document_ai/generate' }),
     {
       method: 'POST',
       credentials: 'include',
@@ -81,7 +83,7 @@ const streamDocumentCompletion = async ({ payload, signal, onProgress }) => {
         'Content-Type': 'application/json',
         'New-API-User': String(getUserIdFromLocalStorage()),
       },
-      body: JSON.stringify({ ...payload, stream: true }),
+      body: JSON.stringify(payload),
     },
   );
   if (!response.ok) {
@@ -165,46 +167,6 @@ Authorization: Bearer {{api_key}}
 
 请在这里补充轮询流程、状态判断和结果处理。
 `;
-
-const POLISH_SYSTEM_PROMPT = `你是 API 文档技术编辑。请把原始 Markdown 重构成面向开发任务、可直接复制使用的发布版文档。目标是去除无效重复，同时保留足够的场景、示例和完整调用流程；不要只做近义词替换，也不要为了缩短篇幅删除实用内容。
-
-你必须直接以“# ”开始输出最终 Markdown。禁止输出思考过程、分析、草稿、检查清单、<think>、<analysis>、前言或第二份文档。
-
-按开发者完成任务的顺序组织：
-1. 一个 H1 标题、适用模型、BaseURL、鉴权方式和简短接口概览。接口概览应让读者立即看见主要方法与路径。
-2. “快速开始”：提供最小可运行请求、请求响应，以及取得最终结果所需的下一步。
-3. 快速开始的同一请求使用一个 :::code-group，依次给出 cURL、JavaScript、Python、Java 四种可运行示例。四个标签必须使用相同 URL、请求字段和业务语义；只转换客户端写法，不改变 API 行为。
-4. 如果原文是异步 API，增加“异步任务流程”：完整说明创建、取得任务 ID、查询、成功和失败处理。语言示例只需完成创建和一次状态查询，不得自行添加轮询间隔、重试次数或超时数字。原文存在 completed 或 failed 响应正文时必须原样保留其字段结构。
-5. “请求参数”：按核心参数、媒体输入、生成控制等业务含义分组；每个字段只完整解释一次。字段的别名或不同传入位置写在同一行。
-6. “常用场景”：先用简表说明差异，再为具有独立输入组合或调用目的的主要场景提供可复制示例。场景表中列出的主要模式必须能在后文找到对应示例或明确的差异 JSON。
-7. “响应、错误与限制”：保留完整成功结果、状态字段、失败处理、能力限制和原文已有的错误信息。
-8. 素材库、回调、尾帧等独有能力放在最后，并保留至少一个可直接套用的示例。
-
-编辑规则：
-- 删除重复章节、重复请求头、重复参数表，以及请求结构完全相同且只更换提示词文本的示例。不得删除独有字段组合、限制、响应结构或必要业务步骤。
-- 原文超过 8000 字符时，最终正文控制在原文的 50%–80%。以信息覆盖为先，绝不能比原文更长。
-- 长文通常保留 4–6 个完整场景请求，不含快速开始的多语言版本、响应示例和状态查询。若原文的独立场景不足则不要凑数；若场景超过 6 个，将结构相近的次要场景改成差异 JSON，不得直接消失。
-- 参数表只能使用“字段 / 类型 / 必填 / 说明”四列或更少。传入位置、默认值、枚举和限制写入“说明”，不得增加第五列。
-- 状态枚举不混入参数表。状态不超过 8 个时使用“状态值 / 含义 / 下一步”三列表格，状态值使用行内代码；“下一步”只写原文明确给出的查询、取值或错误处理动作，不得自行给出简化提示词、减少素材等建议。
-- 只允许一个 H1；主要章节用 H2，子章节用 H3；不保留机械编号，不手写目录，不过度使用分隔线。
-- 一个 :::code-group 最多四个标签，只用于快速开始中同一请求的 cURL、JavaScript、Python、Java 写法。不要把不同业务场景塞进同一个标签组。其他场景沿用原文的示例语言或使用 JSON 差异片段。
-- 多语言代码必须使用各语言标准 HTTP 客户端并保持请求体字段一致。异步接口不得把单次请求机械翻译成虚假的完整轮询流程。
-- 当前站点写成 {{base_url}}，模型写成 {{model}}，API Key 写成 {{api_key}}；不要替换第三方素材地址或业务回调地址。
-- 保持原文语言与事实。严禁补充原文没有的轮询间隔、默认值、支持范围、错误码或最佳实践；不确定时宁可省略，不写“待补充”。
-- 保证所有 Markdown 代码围栏和 :::code-group 成对闭合。
-
-输出前只在内部检查，不要展示检查过程：唯一 H1、无思考内容、无重复整篇、表格不超过四列、模板变量正确、篇幅达标、场景表与示例对应、原文中的完整结果没有丢失。`;
-
-const TRANSLATE_SYSTEM_PROMPT = `Translate the supplied Chinese API documentation into clear technical English.
-
-Rules:
-1. Output only the complete translated Markdown. Do not wrap the whole result in another code fence.
-2. Translate prose, headings, table labels, and comments intended for readers.
-3. Preserve URLs, endpoint paths, HTTP methods, JSON keys, field names, identifiers, shell commands, code syntax, and the placeholders {{base_url}}, {{model}}, and {{api_key}} exactly.
-4. Preserve all Markdown structure and fenced-code language tags.
-5. Do not omit steps, especially asynchronous task creation, polling, failure handling, and result download flows.
-6. Preserve :::code-group containers and fenced-code labels such as \`\`\`javascript [JavaScript].
-7. Do not invent or correct API behavior unless the source explicitly says so.`;
 
 const getChannelDocKey = (item) =>
   `${item?.channel_id || ''}:${item?.model_name || ''}`;
@@ -358,6 +320,14 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
   const [templateChannelDocs, setTemplateChannelDocs] = useState([]);
   const [textModels, setTextModels] = useState([]);
   const [selectedTextModel, setSelectedTextModel] = useState('');
+  const [promptSettingsVisible, setPromptSettingsVisible] = useState(false);
+  const [promptSettingsLoading, setPromptSettingsLoading] = useState(false);
+  const [promptSettingsSaving, setPromptSettingsSaving] = useState(false);
+  const [promptSettings, setPromptSettings] = useState({
+    polish_prompt: '',
+    translate_prompt: '',
+    is_default: true,
+  });
 
   const modelId = editingModel?.id;
 
@@ -509,6 +479,7 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
     setApiDocsMarkdown('');
     setApiDocsMarkdownEn('');
     setTemplateChannelDocs([]);
+    setPromptSettingsVisible(false);
     aiAbortControllerRef.current?.abort();
     aiAbortControllerRef.current = null;
     setAiAction('');
@@ -619,6 +590,80 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
     );
   };
 
+  const applyPromptSettingsResponse = (data) => {
+    setPromptSettings({
+      polish_prompt: data?.polish_prompt || '',
+      translate_prompt: data?.translate_prompt || '',
+      is_default: Boolean(data?.is_default),
+    });
+  };
+
+  const openPromptSettings = async () => {
+    setPromptSettingsVisible(true);
+    setPromptSettingsLoading(true);
+    try {
+      const res = await API.get('/api/models/document_ai/prompts');
+      if (!res.data?.success) {
+        throw new Error(res.data?.message || t('加载提示词失败'));
+      }
+      applyPromptSettingsResponse(res.data.data);
+    } catch (error) {
+      setPromptSettingsVisible(false);
+      showError(error.response?.data?.message || error.message);
+    } finally {
+      setPromptSettingsLoading(false);
+    }
+  };
+
+  const savePromptSettings = async () => {
+    const polishPrompt = promptSettings.polish_prompt.trim();
+    const translatePrompt = promptSettings.translate_prompt.trim();
+    if (!polishPrompt || !translatePrompt) {
+      showError(t('润色和翻译提示词不能为空'));
+      return;
+    }
+    setPromptSettingsSaving(true);
+    try {
+      const res = await API.put('/api/models/document_ai/prompts', {
+        polish_prompt: polishPrompt,
+        translate_prompt: translatePrompt,
+      });
+      if (!res.data?.success) {
+        throw new Error(res.data?.message || t('保存提示词失败'));
+      }
+      applyPromptSettingsResponse(res.data.data);
+      setPromptSettingsVisible(false);
+      showSuccess(t('提示词已保存'));
+    } catch (error) {
+      showError(error.response?.data?.message || error.message);
+    } finally {
+      setPromptSettingsSaving(false);
+    }
+  };
+
+  const resetPromptSettings = () => {
+    Modal.confirm({
+      title: t('恢复默认提示词？'),
+      content: t('当前自定义提示词将被清除，并立即恢复为后端默认内容。'),
+      onOk: async () => {
+        setPromptSettingsSaving(true);
+        try {
+          const res = await API.delete('/api/models/document_ai/prompts');
+          if (!res.data?.success) {
+            throw new Error(res.data?.message || t('恢复默认提示词失败'));
+          }
+          applyPromptSettingsResponse(res.data.data);
+          showSuccess(t('已恢复默认提示词'));
+        } catch (error) {
+          showError(error.response?.data?.message || error.message);
+          throw error;
+        } finally {
+          setPromptSettingsSaving(false);
+        }
+      },
+    });
+  };
+
   const runAiAction = async (action) => {
     const content =
       action === 'translate' ? apiDocsMarkdown.trim() : activeMarkdown.trim();
@@ -650,23 +695,8 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
         },
         payload: {
           model: selectedTextModel,
-          temperature: action === 'translate' ? 0.1 : 0.2,
-          messages: [
-            {
-              role: 'system',
-              content:
-                action === 'translate'
-                  ? TRANSLATE_SYSTEM_PROMPT
-                  : POLISH_SYSTEM_PROMPT,
-            },
-            {
-              role: 'user',
-              content:
-                action === 'translate'
-                  ? content
-                  : `请对下面的原始 API 文档进行明显的结构重构。不要只替换近义词；重点降低参数和示例的重复度，并让首次调用流程出现在最前面。\n\n--- 原始文档开始 ---\n\n${content}\n\n--- 原始文档结束 ---`,
-            },
-          ],
+          action,
+          document: content,
         },
       });
       if (!result) {
@@ -957,6 +987,15 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
                 optionList={textModelOptions}
                 onChange={setSelectedTextModel}
               />
+              <Tooltip content={t('设置润色和翻译提示词')}>
+                <Button
+                  icon={<Settings2 size={16} />}
+                  disabled={Boolean(aiAction)}
+                  onClick={openPromptSettings}
+                >
+                  {t('提示词设置')}
+                </Button>
+              </Tooltip>
               <Button
                 type='primary'
                 theme='light'
@@ -1069,6 +1108,66 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
           </Card>
         </div>
       </Spin>
+      <Modal
+        title={t('文档 AI 提示词设置')}
+        visible={promptSettingsVisible}
+        width={760}
+        centered
+        maskClosable={false}
+        onCancel={() => setPromptSettingsVisible(false)}
+        onOk={savePromptSettings}
+        confirmLoading={promptSettingsSaving}
+        okText={t('保存')}
+        cancelText={t('取消')}
+      >
+        <Spin spinning={promptSettingsLoading}>
+          <div className='mb-3 flex items-center justify-between gap-3'>
+            <Text type='tertiary'>
+              {t('提示词仅由后端读取，不会包含在浏览器发起的 AI 请求中。')}
+            </Text>
+            <Button
+              type='tertiary'
+              theme='light'
+              icon={<RotateCcw size={15} />}
+              loading={promptSettingsSaving}
+              disabled={promptSettings.is_default}
+              onClick={resetPromptSettings}
+            >
+              {t('恢复默认')}
+            </Button>
+          </div>
+          <Tabs type='line'>
+            <Tabs.TabPane tab={t('润色提示词')} itemKey='polish'>
+              <TextArea
+                className='document-ai-prompt-textarea mt-3'
+                autosize={{ minRows: 16, maxRows: 24 }}
+                value={promptSettings.polish_prompt}
+                disabled={promptSettingsLoading || promptSettingsSaving}
+                onChange={(value) =>
+                  setPromptSettings((current) => ({
+                    ...current,
+                    polish_prompt: value,
+                  }))
+                }
+              />
+            </Tabs.TabPane>
+            <Tabs.TabPane tab={t('翻译提示词')} itemKey='translate'>
+              <TextArea
+                className='document-ai-prompt-textarea mt-3'
+                autosize={{ minRows: 16, maxRows: 24 }}
+                value={promptSettings.translate_prompt}
+                disabled={promptSettingsLoading || promptSettingsSaving}
+                onChange={(value) =>
+                  setPromptSettings((current) => ({
+                    ...current,
+                    translate_prompt: value,
+                  }))
+                }
+              />
+            </Tabs.TabPane>
+          </Tabs>
+        </Spin>
+      </Modal>
     </SideSheet>
   );
 };
