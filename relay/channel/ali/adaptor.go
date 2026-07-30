@@ -48,6 +48,31 @@ func isSyncImageModel(modelName string) bool {
 	return model_setting.IsSyncImageModel(modelName)
 }
 
+// resolveIsSyncImageModel mirrors ConvertImageRequest's sync/async decision.
+// Must be recomputed in DoResponse because executeImageRelay creates a fresh Adaptor
+// and the IsSyncImageModel flag set during ConvertImageRequest is lost.
+func resolveIsSyncImageModel(info *relaycommon.RelayInfo) bool {
+	if info == nil {
+		return false
+	}
+	// Dedicated Ali image channel always uses multimodal-generation (sync).
+	if info.ChannelType == apiconstant.ChannelTypeAliImage {
+		return true
+	}
+	switch info.RelayMode {
+	case constant.RelayModeImagesGenerations:
+		return isSyncImageModel(info.OriginModelName)
+	case constant.RelayModeImagesEdits:
+		// wan / old wan image-edit APIs are async even when listed in SyncImageModels
+		if isOldWanModel(info.OriginModelName) || isWanModel(info.OriginModelName) {
+			return false
+		}
+		return isSyncImageModel(info.OriginModelName)
+	default:
+		return false
+	}
+}
+
 func (a *Adaptor) ConvertGeminiRequest(*gin.Context, *relaycommon.RelayInfo, *dto.GeminiChatRequest) (any, error) {
 	//TODO implement me
 	return nil, errors.New("not implemented")
@@ -90,7 +115,7 @@ func (a *Adaptor) GetRequestURL(info *relaycommon.RelayInfo) (string, error) {
 		case constant.RelayModeResponses:
 			fullRequestURL = fmt.Sprintf("%s/api/v2/apps/protocols/compatible-mode/v1/responses", info.ChannelBaseUrl)
 		case constant.RelayModeImagesGenerations:
-			if isSyncImageModel(info.OriginModelName) {
+			if resolveIsSyncImageModel(info) {
 				fullRequestURL = fmt.Sprintf("%s/api/v1/services/aigc/multimodal-generation/generation", info.ChannelBaseUrl)
 			} else {
 				fullRequestURL = fmt.Sprintf("%s/api/v1/services/aigc/text2image/image-synthesis", info.ChannelBaseUrl)
@@ -123,9 +148,7 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Header, info *rel
 		req.Set("X-DashScope-Plugin", c.GetString("plugin"))
 	}
 	if info.RelayMode == constant.RelayModeImagesGenerations {
-		if isSyncImageModel(info.OriginModelName) {
-
-		} else {
+		if !resolveIsSyncImageModel(info) {
 			req.Set("X-DashScope-Async", "enable")
 		}
 	}
@@ -163,9 +186,7 @@ func (a *Adaptor) ConvertOpenAIRequest(c *gin.Context, info *relaycommon.RelayIn
 
 func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.ImageRequest) (any, error) {
 	if info.RelayMode == constant.RelayModeImagesGenerations {
-		if isSyncImageModel(info.OriginModelName) {
-			a.IsSyncImageModel = true
-		}
+		a.IsSyncImageModel = resolveIsSyncImageModel(info)
 		aliRequest, err := oaiImage2AliImageRequest(info, request, a.IsSyncImageModel)
 		if err != nil {
 			return nil, fmt.Errorf("convert image request to async ali image request failed: %w", err)
@@ -175,13 +196,7 @@ func (a *Adaptor) ConvertImageRequest(c *gin.Context, info *relaycommon.RelayInf
 		if isOldWanModel(info.OriginModelName) {
 			return oaiFormEdit2WanxImageEdit(c, info, request)
 		}
-		if isSyncImageModel(info.OriginModelName) {
-			if isWanModel(info.OriginModelName) {
-				a.IsSyncImageModel = false
-			} else {
-				a.IsSyncImageModel = true
-			}
-		}
+		a.IsSyncImageModel = resolveIsSyncImageModel(info)
 		// ali image edit https://bailian.console.aliyun.com/?tab=api#/api/?type=model&url=2976416
 		// 如果用户使用表单，则需要解析表单数据
 		if strings.Contains(c.Request.Header.Get("Content-Type"), "multipart/form-data") {
@@ -234,9 +249,9 @@ func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, info *relaycom
 		return adaptor.DoResponse(c, resp, info)
 	default:
 		switch info.RelayMode {
-		case constant.RelayModeImagesGenerations:
-			err, usage = aliImageHandler(a, c, resp, info)
-		case constant.RelayModeImagesEdits:
+		case constant.RelayModeImagesGenerations, constant.RelayModeImagesEdits:
+			// Recompute: executeImageRelay constructs a new Adaptor after ConvertImageRequest.
+			a.IsSyncImageModel = resolveIsSyncImageModel(info)
 			err, usage = aliImageHandler(a, c, resp, info)
 		case constant.RelayModeRerank:
 			err, usage = RerankHandler(c, resp, info)

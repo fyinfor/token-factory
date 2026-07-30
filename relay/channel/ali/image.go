@@ -301,7 +301,13 @@ func aliImageHandler(a *Adaptor, c *gin.Context, resp *http.Response, info *rela
 		originRespBody []byte
 	)
 
-	if a.IsSyncImageModel {
+	// Sync multimodal responses return choices/results immediately (no task_id poll).
+	// Also treat as sync when the body already contains image data, in case the adaptor
+	// flag was lost across GetAdaptor() recreations.
+	hasImmediateImage := len(aliTaskResponse.Output.Choices) > 0 || len(aliTaskResponse.Output.Results) > 0
+	isSync := a.IsSyncImageModel || hasImmediateImage
+
+	if isSync {
 		aliResponse = &aliTaskResponse
 		originRespBody = responseBody
 	} else {
@@ -320,8 +326,7 @@ func aliImageHandler(a *Adaptor, c *gin.Context, resp *http.Response, info *rela
 		}
 	}
 
-	//logger.LogDebug(c, "ali_async_task_result: "+string(originRespBody))
-	if a.IsSyncImageModel {
+	if isSync {
 		logger.LogDebug(c, "ali_sync_image_result: "+string(originRespBody))
 	} else {
 		logger.LogDebug(c, "ali_async_image_result: "+string(originRespBody))
