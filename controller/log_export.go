@@ -1028,6 +1028,13 @@ func resolveUsageLogExportQuota(l *model.Log, other map[string]interface{}) int6
 	if l == nil {
 		return 0
 	}
+	// 差额结算日志（delta_charge / delta_refund）自身的 quota 就是这一笔真实资金变动，
+	// 而 other 里的 actual_quota / video_final_quota 是任务总额；若按总额导出，
+	// 会与同一任务的预扣日志重复相加，因此这类行必须按行 quota 取值。
+	switch logExportString(other, "billing_phase") {
+	case model.BillingPhaseDeltaCharge, model.BillingPhaseDeltaRefund:
+		return int64(l.Quota)
+	}
 	if v, ok := logExportNumber(other, "video_final_quota", "actual_quota"); ok && v > 0 {
 		return int64(v)
 	}
