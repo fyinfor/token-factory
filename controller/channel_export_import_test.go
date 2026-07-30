@@ -184,7 +184,7 @@ func TestApplyToExistingRefreshesAbilitiesWhenModelsChange(t *testing.T) {
 	require.EqualValues(t, 1, newCount)
 }
 
-func TestApplySiteBuilderDiscountExportCombinesCostAndMarkup(t *testing.T) {
+func TestApplySiteBuilderDiscountExportCombinesCostAndOperating(t *testing.T) {
 	cost := 60.0
 	markup := 20.0
 	operating := 5.0
@@ -202,27 +202,30 @@ func TestApplySiteBuilderDiscountExportCombinesCostAndMarkup(t *testing.T) {
 	item := buildChannelExportItem(ch, fields)
 	applySiteBuilderDiscountExport(item, ch, fields)
 
-	require.Equal(t, 80.0, item[chFieldDiscountRate])
+	// 成本折扣 60 + 经营成本 5 = 65；加价折扣不参与合并
+	require.Equal(t, 65.0, item[chFieldDiscountRate])
+	require.Equal(t, float64(0), item[chFieldOperatingCost])
 	require.Equal(t, float64(0), item[chFieldMarkupDiscount])
-	require.Equal(t, &operating, item[chFieldOperatingCost])
 }
 
-func TestApplySiteBuilderDiscountExportForcesDiscountWhenOnlyMarkupSelected(t *testing.T) {
+func TestApplySiteBuilderDiscountExportForcesDiscountWhenOnlyOperatingSelected(t *testing.T) {
 	cost := 85.0
 	markup := 7.0
+	operating := 3.0
 	ch := &model.Channel{
 		PriceDiscountPercent: &cost,
 		MarkupDiscountRate:   &markup,
+		OperatingCostPercent: &operating,
 	}
 
 	fields := map[string]bool{
-		chFieldMarkupDiscount: true,
+		chFieldOperatingCost: true,
 	}
 	item := buildChannelExportItem(ch, fields)
 	applySiteBuilderDiscountExport(item, ch, fields)
 
-	require.Equal(t, 92.0, item[chFieldDiscountRate])
-	require.Equal(t, float64(0), item[chFieldMarkupDiscount])
+	require.Equal(t, 88.0, item[chFieldDiscountRate])
+	require.Equal(t, float64(0), item[chFieldOperatingCost])
 	require.True(t, fields[chFieldDiscountRate])
 }
 
@@ -232,6 +235,6 @@ func TestApplySiteBuilderDiscountExportNilDefaults(t *testing.T) {
 	item := buildChannelExportItem(ch, fields)
 	applySiteBuilderDiscountExport(item, ch, fields)
 
-	// nil 成本折扣按 100，nil 加价按 0 → 100
+	// nil 成本折扣按 100，nil 经营成本按 0 → 100
 	require.Equal(t, 100.0, item[chFieldDiscountRate])
 }
