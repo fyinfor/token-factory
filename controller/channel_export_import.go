@@ -224,8 +224,12 @@ func buildChannelExportItem(ch *model.Channel, fields map[string]bool) map[strin
 // buildSiteBuilderExportItem 构建建站用户导出项。
 // 核心差异：type 固定为 60 (TokenFactoryOpen)，apiKey 置空（由导入方在导入时指定建站密钥），
 // apiBaseUrl 为本平台 ServerAddress，otherInfo 中标记来源和路由信息。
+// 折扣：导出给建站用户的成本折扣 = 本平台成本折扣 + 加价折扣；加价折扣置 0，避免下游再叠一层重复计费。
+// 经营成本仍原样导出，不并入成本折扣。
 func buildSiteBuilderExportItem(c *gin.Context, ch *model.Channel, fields map[string]bool) map[string]interface{} {
 	item := buildChannelExportItem(ch, fields)
+
+	applySiteBuilderDiscountExport(item, ch, fields)
 
 	// 强制覆盖 type = 60 (TokenFactoryOpen)
 	if fields[chFieldType] {
@@ -277,6 +281,31 @@ func buildSiteBuilderExportItem(c *gin.Context, ch *model.Channel, fields map[st
 	fields[chFieldOtherInfo] = true
 
 	return item
+}
+
+// applySiteBuilderDiscountExport 建站导出折扣改写：
+// discountRate = ResolvedPriceDiscountPercent + ResolvedMarkupDiscountRate；
+// 若勾选了加价折扣字段，则导出为 0（加价已并入成本折扣）。
+func applySiteBuilderDiscountExport(item map[string]interface{}, ch *model.Channel, fields map[string]bool) {
+	if item == nil || ch == nil || fields == nil {
+		return
+	}
+	if !fields[chFieldDiscountRate] && !fields[chFieldMarkupDiscount] {
+		return
+	}
+	combined := ch.ResolvedPriceDiscountPercent() + ch.ResolvedMarkupDiscountRate()
+	if combined < 0 {
+		combined = 0
+	}
+	if combined > 1000 {
+		combined = 1000
+	}
+	// 勾选任一折扣相关字段时，都写出合并后的成本折扣，保证建站侧拿到完整成本口径。
+	item[chFieldDiscountRate] = combined
+	fields[chFieldDiscountRate] = true
+	if fields[chFieldMarkupDiscount] {
+		item[chFieldMarkupDiscount] = float64(0)
+	}
 }
 
 // ─── 导入接口 ──────────────────────────────────────────────────────────────
