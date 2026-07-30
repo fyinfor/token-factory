@@ -650,6 +650,10 @@ func SetApiRouter(router *gin.Engine) {
 
 		modelsRoute := apiRouter.Group("/models")
 		{
+			modelsRoute.GET("/document_ai/prompts", middleware.AdminAuth(), controller.GetDocumentAIPrompts)
+			modelsRoute.PUT("/document_ai/prompts", middleware.AdminAuth(), controller.UpdateDocumentAIPrompts)
+			modelsRoute.DELETE("/document_ai/prompts", middleware.AdminAuth(), controller.ResetDocumentAIPrompts)
+			modelsRoute.POST("/document_ai/generate", middleware.AdminAuth(), controller.PrepareDocumentAIRequest, middleware.Distribute(), controller.Playground)
 			modelsRoute.GET("/sync_upstream/preview", middleware.AdminAuth(), controller.SyncUpstreamPreview)
 			modelsRoute.POST("/sync_upstream", middleware.AdminAuth(), controller.SyncUpstreamModels)
 			modelsRoute.GET("/missing", middleware.AdminAuth(), controller.GetMissingModels)
