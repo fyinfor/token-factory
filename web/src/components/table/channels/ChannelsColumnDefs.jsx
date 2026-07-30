@@ -839,6 +839,42 @@ export const getChannelsColumns = ({
       ),
     },
     {
+      key: COLUMN_KEYS.CREATED_TIME,
+      title: t('添加时间'),
+      dataIndex: 'created_time',
+      render: (text, record) => {
+        if (record.children !== undefined) {
+          return '-';
+        }
+        if (!text) {
+          return '-';
+        }
+        return (
+          <span className='text-xs whitespace-nowrap'>
+            {timestamp2string(text)}
+          </span>
+        );
+      },
+    },
+    {
+      key: COLUMN_KEYS.UPDATED_TIME,
+      title: t('修改时间'),
+      dataIndex: 'updated_time',
+      render: (text, record) => {
+        if (record.children !== undefined) {
+          return '-';
+        }
+        if (!text) {
+          return '-';
+        }
+        return (
+          <span className='text-xs whitespace-nowrap'>
+            {timestamp2string(text)}
+          </span>
+        );
+      },
+    },
+    {
       key: COLUMN_KEYS.OPERATE,
       title: '',
       dataIndex: 'operate',

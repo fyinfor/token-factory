@@ -202,6 +202,8 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
     ROUTE_SLUG: 'route_slug',
     SUPPLIER: 'supplier',
     USED_REMAINING: 'used_remaining',
+    CREATED_TIME: 'created_time',
+    UPDATED_TIME: 'updated_time',
     OPERATE: 'operate',
   };
 
@@ -248,6 +250,8 @@ export const useChannelsData = (apiBasePath = '/api/channel') => {
       [COLUMN_KEYS.ROUTE_SLUG]: true,
       [COLUMN_KEYS.SUPPLIER]: true,
       [COLUMN_KEYS.USED_REMAINING]: true,
+      [COLUMN_KEYS.CREATED_TIME]: false,
+      [COLUMN_KEYS.UPDATED_TIME]: false,
       [COLUMN_KEYS.OPERATE]: true,
     };
   };

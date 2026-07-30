@@ -61,3 +61,28 @@ func TestCreditDistributorProfitShareRecordsZeroRewardWithoutCreditingBalance(t 
 	require.Zero(t, logs[0].RewardQuota)
 	require.Equal(t, "text", logs[0].BillingMode)
 }
+
+func TestListAffInviteProfitShareLogsCanHideZeroReward(t *testing.T) {
+	require.NoError(t, DB.AutoMigrate(&AffInviteProfitShareLog{}))
+	DB.Exec("DELETE FROM aff_invite_profit_share_logs")
+	t.Cleanup(func() {
+		DB.Exec("DELETE FROM aff_invite_profit_share_logs")
+	})
+
+	require.NoError(t, DB.Create(&[]AffInviteProfitShareLog{
+		{InviterId: 901, InviteeUserId: 902, ModelName: "zero", RewardQuota: 0, CreatedAt: 1},
+		{InviterId: 901, InviteeUserId: 902, ModelName: "positive", RewardQuota: 10, CreatedAt: 2},
+	}).Error)
+
+	pageInfo := &common.PageInfo{Page: 1, PageSize: 10}
+	all, total, err := ListAffInviteProfitShareLogs(901, 902, "", false, pageInfo)
+	require.NoError(t, err)
+	require.EqualValues(t, 2, total)
+	require.Len(t, all, 2)
+
+	withReward, filteredTotal, err := ListAffInviteProfitShareLogs(901, 902, "", true, pageInfo)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, filteredTotal)
+	require.Len(t, withReward, 1)
+	require.Equal(t, "positive", withReward[0].ModelName)
+}

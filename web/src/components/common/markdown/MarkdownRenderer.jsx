@@ -189,6 +189,7 @@ export function PreCode(props) {
   return (
     <>
       <pre
+        className='markdown-code-scroll'
         ref={ref}
         style={{
           position: 'relative',
@@ -588,7 +589,14 @@ function _MarkdownContent(props) {
           />
         ),
         table: (props) => (
-          <div style={{ overflow: 'auto', margin: '12px 0' }}>
+          <div
+            className='markdown-table-scroll'
+            style={{
+              overflowX: 'auto',
+              overflowY: 'hidden',
+              margin: '12px 0',
+            }}
+          >
             <table
               {...props}
               style={{

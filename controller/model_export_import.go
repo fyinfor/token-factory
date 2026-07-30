@@ -18,10 +18,11 @@ import (
 
 // ModelExportPayload 模型元数据导出响应结构
 type ModelExportPayload struct {
-	Version    string             `json:"version"`
-	ExportTime string             `json:"exportTime"`
-	Vendors    []VendorExportItem `json:"vendors"`
-	Models     []ModelExportItem  `json:"models"`
+	Version     string                      `json:"version"`
+	ExportTime  string                      `json:"exportTime"`
+	Vendors     []VendorExportItem          `json:"vendors"`
+	Models      []ModelExportItem           `json:"models"`
+	ChannelDocs []ChannelModelDocExportItem `json:"channel_docs"`
 }
 
 // VendorExportItem 模型类型（供应商）导出项
@@ -47,30 +48,47 @@ type ModelExportItem struct {
 	Status          int     `json:"status"`
 }
 
+// ChannelModelDocExportItem 渠道模型文档导出项。渠道 ID 不跨环境复用，使用 sync_key 重新绑定。
+type ChannelModelDocExportItem struct {
+	ModelName         string  `json:"model_name"`
+	ChannelSyncKey    string  `json:"channel_sync_key,omitempty"`
+	ChannelName       string  `json:"channel_name"`
+	DocIntroduction   *string `json:"doc_introduction,omitempty"`
+	ApiDocs           *string `json:"api_docs,omitempty"`
+	ApiDocsMarkdown   *string `json:"api_docs_markdown,omitempty"`
+	ApiDocsMarkdownEn *string `json:"api_docs_markdown_en,omitempty"`
+}
+
 // ModelImportRequest 模型导入请求结构
 type ModelImportRequest struct {
-	Version    string             `json:"version"`
-	ExportTime string             `json:"exportTime"`
-	Vendors    []VendorExportItem `json:"vendors"`
-	Models     []ModelExportItem  `json:"models"`
+	Version     string                      `json:"version"`
+	ExportTime  string                      `json:"exportTime"`
+	Vendors     []VendorExportItem          `json:"vendors"`
+	Models      []ModelExportItem           `json:"models"`
+	ChannelDocs []ChannelModelDocExportItem `json:"channel_docs"`
 }
 
 // ModelImportResult 导入结果统计
 type ModelImportResult struct {
-	VendorsAdded   int                      `json:"vendors_added"`
-	VendorsUpdated int                      `json:"vendors_updated"`
-	ModelsAdded    int                      `json:"models_added"`
-	ModelsUpdated  int                      `json:"models_updated"`
-	ModelsFailed   int                      `json:"models_failed"`
-	VendorsFailed  int                      `json:"vendors_failed"`
-	Failures       []ModelImportFailureItem `json:"failures"`
+	VendorsAdded       int                      `json:"vendors_added"`
+	VendorsUpdated     int                      `json:"vendors_updated"`
+	ModelsAdded        int                      `json:"models_added"`
+	ModelsUpdated      int                      `json:"models_updated"`
+	ModelsFailed       int                      `json:"models_failed"`
+	VendorsFailed      int                      `json:"vendors_failed"`
+	ChannelDocsAdded   int                      `json:"channel_docs_added"`
+	ChannelDocsUpdated int                      `json:"channel_docs_updated"`
+	ChannelDocsSkipped int                      `json:"channel_docs_skipped"`
+	ChannelDocsFailed  int                      `json:"channel_docs_failed"`
+	Failures           []ModelImportFailureItem `json:"failures"`
+	SkippedDocs        []ModelImportFailureItem `json:"skipped_docs"`
 }
 
 // ModelImportFailureItem 单条导入失败详情
 type ModelImportFailureItem struct {
 	Name   string `json:"name"`
 	Reason string `json:"reason"`
-	Type   string `json:"type"` // "vendor" | "model"
+	Type   string `json:"type"` // "vendor" | "model" | "channel_doc"
 }
 
 func stringPtr(s string) *string {
@@ -130,15 +148,54 @@ func ExportModelsMeta(c *gin.Context) {
 		})
 	}
 
+	channelDocItems, err := buildChannelModelDocExportItems()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": ModelExportPayload{
-			Version:    "1.0",
-			ExportTime: time.Now().UTC().Format(time.RFC3339),
-			Vendors:    vendorItems,
-			Models:     modelItems,
+			Version:     "1.1",
+			ExportTime:  time.Now().UTC().Format(time.RFC3339),
+			Vendors:     vendorItems,
+			Models:      modelItems,
+			ChannelDocs: channelDocItems,
 		},
 	})
+}
+
+func buildChannelModelDocExportItems() ([]ChannelModelDocExportItem, error) {
+	type channelModelDocExportRow struct {
+		model.ChannelModelDoc
+		ChannelSyncKey string `gorm:"column:channel_sync_key"`
+		ChannelName    string `gorm:"column:channel_name"`
+	}
+
+	var rows []channelModelDocExportRow
+	err := model.DB.Table("channel_model_docs").
+		Select("channel_model_docs.*, channels.sync_key AS channel_sync_key, channels.name AS channel_name").
+		Joins("JOIN channels ON channels.id = channel_model_docs.channel_id").
+		Order("channel_model_docs.id ASC").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]ChannelModelDocExportItem, 0, len(rows))
+	for _, row := range rows {
+		items = append(items, ChannelModelDocExportItem{
+			ModelName:         row.ModelName,
+			ChannelSyncKey:    row.ChannelSyncKey,
+			ChannelName:       row.ChannelName,
+			DocIntroduction:   stringPtr(row.DocIntroduction),
+			ApiDocs:           stringPtr(row.ApiDocs),
+			ApiDocsMarkdown:   stringPtr(row.ApiDocsMarkdown),
+			ApiDocsMarkdownEn: stringPtr(row.ApiDocsMarkdownEn),
+		})
+	}
+	return items, nil
 }
 
 // ─── 导入接口 ──────────────────────────────────────────────────────────────
@@ -152,7 +209,10 @@ func ImportModelsMeta(c *gin.Context) {
 		return
 	}
 
-	result := &ModelImportResult{Failures: []ModelImportFailureItem{}}
+	result := &ModelImportResult{
+		Failures:    []ModelImportFailureItem{},
+		SkippedDocs: []ModelImportFailureItem{},
+	}
 
 	// 1. 导入模型类型（供应商）
 	if len(req.Vendors) > 0 {
@@ -276,10 +336,10 @@ func ImportModelsMeta(c *gin.Context) {
 					"description":    mItem.Description,
 					"description_en": mItem.DescriptionEn,
 					"tags":           mItem.Tags,
-					"endpoints":     mItem.Endpoints,
-					"sync_official": mItem.SyncOfficial,
-					"status":        mItem.Status,
-					"updated_time":  common.GetTimestamp(),
+					"endpoints":      mItem.Endpoints,
+					"sync_official":  mItem.SyncOfficial,
+					"status":         mItem.Status,
+					"updated_time":   common.GetTimestamp(),
 				}
 				if mItem.DocIntroduction != nil {
 					updates["doc_introduction"] = *mItem.DocIntroduction
@@ -309,10 +369,10 @@ func ImportModelsMeta(c *gin.Context) {
 					Description:   mItem.Description,
 					DescriptionEn: mItem.DescriptionEn,
 					Tags:          mItem.Tags,
-					VendorID:     vendorID,
-					Endpoints:    mItem.Endpoints,
-					SyncOfficial: mItem.SyncOfficial,
-					Status:       mItem.Status,
+					VendorID:      vendorID,
+					Endpoints:     mItem.Endpoints,
+					SyncOfficial:  mItem.SyncOfficial,
+					Status:        mItem.Status,
 				}
 				if mItem.DocIntroduction != nil {
 					newModel.DocIntroduction = *mItem.DocIntroduction
@@ -334,20 +394,129 @@ func ImportModelsMeta(c *gin.Context) {
 		}
 	}
 
+	importChannelModelDocs(req.ChannelDocs, result)
+
 	// 刷新定价缓存
 	model.RefreshPricing()
 	if _, err := model.SyncModelTagsFromModels(); err != nil {
 		common.SysError("sync model tags after import: " + err.Error())
 	}
 
-	common.SysLog(fmt.Sprintf("模型导入完成：供应商新增 %d/更新 %d/失败 %d，模型新增 %d/更新 %d/失败 %d",
+	common.SysLog(fmt.Sprintf("模型导入完成：供应商新增 %d/更新 %d/失败 %d，模型新增 %d/更新 %d/失败 %d，渠道文档新增 %d/更新 %d/跳过 %d/失败 %d",
 		result.VendorsAdded, result.VendorsUpdated, result.VendorsFailed,
-		result.ModelsAdded, result.ModelsUpdated, result.ModelsFailed))
+		result.ModelsAdded, result.ModelsUpdated, result.ModelsFailed,
+		result.ChannelDocsAdded, result.ChannelDocsUpdated, result.ChannelDocsSkipped, result.ChannelDocsFailed))
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "模型导入完成",
 		"data":    result,
+	})
+}
+
+func importChannelModelDocs(items []ChannelModelDocExportItem, result *ModelImportResult) {
+	for _, item := range items {
+		modelName := strings.TrimSpace(item.ModelName)
+		channelName := strings.TrimSpace(item.ChannelName)
+		displayName := modelName
+		if channelName != "" {
+			displayName = channelName + " / " + modelName
+		}
+		if modelName == "" {
+			appendChannelDocFailure(result, displayName, "模型名称不能为空")
+			continue
+		}
+
+		channel, err := resolveChannelModelDocImportChannel(item)
+		if err != nil {
+			appendChannelDocFailure(result, displayName, "查询渠道失败: "+err.Error())
+			continue
+		}
+		if channel == nil {
+			reason := "目标渠道不存在"
+			if strings.TrimSpace(item.ChannelSyncKey) != "" {
+				reason = "未找到同步编号为 " + strings.TrimSpace(item.ChannelSyncKey) + " 的渠道"
+			}
+			appendChannelDocSkip(result, displayName, reason)
+			continue
+		}
+
+		var abilityCount int64
+		if err := model.DB.Model(&model.Ability{}).
+			Where("channel_id = ? AND model = ?", channel.Id, modelName).
+			Count(&abilityCount).Error; err != nil {
+			appendChannelDocFailure(result, displayName, "校验渠道模型失败: "+err.Error())
+			continue
+		}
+		if abilityCount == 0 {
+			appendChannelDocSkip(result, displayName, "目标渠道未提供该模型")
+			continue
+		}
+
+		var doc model.ChannelModelDoc
+		err = model.DB.Where("channel_id = ? AND model_name = ?", channel.Id, modelName).First(&doc).Error
+		exists := err == nil
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			appendChannelDocFailure(result, displayName, "查询已有文档失败: "+err.Error())
+			continue
+		}
+		if !exists {
+			doc = model.ChannelModelDoc{ChannelID: channel.Id, ModelName: modelName}
+		}
+		applyChannelModelDocImportFields(&doc, item)
+		if err := model.UpsertChannelModelDoc(&doc); err != nil {
+			appendChannelDocFailure(result, displayName, "保存文档失败: "+err.Error())
+			continue
+		}
+		if exists {
+			result.ChannelDocsUpdated++
+		} else {
+			result.ChannelDocsAdded++
+		}
+	}
+}
+
+func resolveChannelModelDocImportChannel(item ChannelModelDocExportItem) (*model.Channel, error) {
+	syncKey := model.NormalizeChannelSyncKey(item.ChannelSyncKey)
+	if syncKey != "" {
+		if !model.IsValidChannelSyncKey(syncKey) {
+			return nil, fmt.Errorf("渠道同步编号格式无效")
+		}
+		return model.GetChannelBySyncKey(syncKey)
+	}
+	channelName := strings.TrimSpace(item.ChannelName)
+	if channelName == "" {
+		return nil, nil
+	}
+	return model.GetChannelByName(channelName)
+}
+
+func applyChannelModelDocImportFields(doc *model.ChannelModelDoc, item ChannelModelDocExportItem) {
+	if item.DocIntroduction != nil {
+		doc.DocIntroduction = *item.DocIntroduction
+	}
+	if item.ApiDocs != nil {
+		doc.ApiDocs = *item.ApiDocs
+	}
+	if item.ApiDocsMarkdown != nil {
+		doc.ApiDocsMarkdown = *item.ApiDocsMarkdown
+	}
+	if item.ApiDocsMarkdownEn != nil {
+		doc.ApiDocsMarkdownEn = *item.ApiDocsMarkdownEn
+	}
+}
+
+func appendChannelDocFailure(result *ModelImportResult, name, reason string) {
+	result.ChannelDocsFailed++
+	result.Failures = append(result.Failures, ModelImportFailureItem{
+		Name: name, Reason: reason, Type: "channel_doc",
+	})
+}
+
+func appendChannelDocSkip(result *ModelImportResult, name, reason string) {
+	result.ChannelDocsSkipped++
+	result.SkippedDocs = append(result.SkippedDocs, ModelImportFailureItem{
+		Name: name, Reason: reason, Type: "channel_doc",
 	})
 }
 

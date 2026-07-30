@@ -438,6 +438,25 @@ code {
   }
 }
 
+.compute-page-frame {
+  display: block;
+  width: 100%;
+  height: calc(100dvh - 56px);
+  min-height: calc(100dvh - 56px);
+  margin-top: 56px;
+  border: 0;
+  background: #fff;
+}
+
+.compute-page-state {
+  display: flex;
+  min-height: calc(100dvh - 56px);
+  margin-top: 56px;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
 .semi-navigation-item,
 .semi-navigation-sub-title {
   height: 100% !important;
@@ -1382,6 +1401,63 @@ body.api-docs-desktop-open {
 .document-ai-running-status {
   border-color: var(--semi-color-primary-light-active);
   background-color: var(--semi-color-primary-light-default);
+}
+
+.document-ai-prompt-textarea,
+.document-ai-prompt-textarea textarea,
+.document-ai-prompt-textarea .semi-input-textarea {
+  scrollbar-color: var(--semi-color-fill-2) transparent;
+  scrollbar-width: thin;
+}
+
+.document-ai-prompt-textarea textarea,
+.document-ai-prompt-textarea .semi-input-textarea {
+  scrollbar-gutter: stable;
+}
+
+.document-ai-prompt-textarea::-webkit-scrollbar,
+.document-ai-prompt-textarea textarea::-webkit-scrollbar,
+.document-ai-prompt-textarea .semi-input-textarea::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+.document-ai-prompt-textarea::-webkit-scrollbar-track,
+.document-ai-prompt-textarea textarea::-webkit-scrollbar-track,
+.document-ai-prompt-textarea .semi-input-textarea::-webkit-scrollbar-track {
+  margin: 6px 0;
+  background: transparent;
+}
+
+.document-ai-prompt-textarea::-webkit-scrollbar-thumb,
+.document-ai-prompt-textarea textarea::-webkit-scrollbar-thumb,
+.document-ai-prompt-textarea .semi-input-textarea::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--semi-color-fill-2);
+  background-clip: content-box;
+}
+
+.document-ai-prompt-textarea::-webkit-scrollbar-thumb:hover,
+.document-ai-prompt-textarea textarea::-webkit-scrollbar-thumb:hover,
+.document-ai-prompt-textarea
+  .semi-input-textarea::-webkit-scrollbar-thumb:hover {
+  background: var(--semi-color-fill-1);
+  background-clip: content-box;
+}
+
+.document-ai-prompt-textarea::-webkit-scrollbar-thumb:active,
+.document-ai-prompt-textarea textarea::-webkit-scrollbar-thumb:active,
+.document-ai-prompt-textarea
+  .semi-input-textarea::-webkit-scrollbar-thumb:active {
+  background: var(--semi-color-text-3);
+  background-clip: content-box;
+}
+
+.document-ai-prompt-textarea::-webkit-scrollbar-corner,
+.document-ai-prompt-textarea textarea::-webkit-scrollbar-corner,
+.document-ai-prompt-textarea .semi-input-textarea::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .document-ai-running-icon {
