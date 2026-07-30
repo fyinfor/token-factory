@@ -102,10 +102,6 @@ func TestTryPostWalletProfitShareForTaskBilledQuota_SeedancePerVideoMarkup(t *te
 
 				var logs []model.AffInviteProfitShareLog
 				require.NoError(t, model.DB.Order("id ASC").Find(&logs).Error)
-				if expectedReward == 0 {
-					require.Empty(t, logs)
-					return
-				}
 				require.Len(t, logs, 1)
 				require.Equal(t, billedQuota, logs[0].UserQuotaCharged)
 				require.Equal(t, markupSlice, logs[0].MarkupSliceQuota)
@@ -206,10 +202,6 @@ func TestTryPostWalletProfitShareForTaskBilledQuota_SeedancePerTokenMarkup(t *te
 
 			var logs []model.AffInviteProfitShareLog
 			require.NoError(t, model.DB.Order("id ASC").Find(&logs).Error)
-			if expectedReward == 0 {
-				require.Empty(t, logs)
-				return
-			}
 			require.Len(t, logs, 1)
 			require.Equal(t, billedQuota, logs[0].UserQuotaCharged)
 			require.Equal(t, markupSlice, logs[0].MarkupSliceQuota)

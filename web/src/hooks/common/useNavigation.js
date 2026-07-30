@@ -19,7 +19,12 @@ For commercial licensing, please contact support@quantumnous.com
 
 import { useMemo } from 'react';
 
-export const useNavigation = (t, docsNav, headerNavModules) => {
+export const useNavigation = (
+  t,
+  docsNav,
+  headerNavModules,
+  computePageEnabled = false,
+) => {
   const mainNavLinks = useMemo(() => {
     // 默认配置，如果没有传入配置则显示所有模块
     const defaultModules = {
@@ -40,6 +45,15 @@ export const useNavigation = (t, docsNav, headerNavModules) => {
         itemKey: 'home',
         to: '/',
       },
+      ...(computePageEnabled
+        ? [
+            {
+              text: t('算力'),
+              itemKey: 'compute',
+              to: '/compute',
+            },
+          ]
+        : []),
       {
         text: t('控制台'),
         itemKey: 'console',
@@ -90,7 +104,7 @@ export const useNavigation = (t, docsNav, headerNavModules) => {
       }
       return !!moduleConfig;
     });
-  }, [t, docsNav, headerNavModules]);
+  }, [t, docsNav, headerNavModules, computePageEnabled]);
 
   return {
     mainNavLinks,

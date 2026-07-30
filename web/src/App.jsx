@@ -83,6 +83,7 @@ const About = lazy(() => import('./pages/About'));
 const Rankings = lazy(() => import('./pages/Rankings'));
 const UserAgreement = lazy(() => import('./pages/UserAgreement'));
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy'));
+const ComputePage = lazy(() => import('./pages/Compute'));
 
 function DynamicOAuth2Callback() {
   const { provider } = useParams();
@@ -123,6 +124,14 @@ function App() {
           element={
             <Suspense fallback={<Loading></Loading>} key={location.pathname}>
               <Home />
+            </Suspense>
+          }
+        />
+        <Route
+          path='/compute'
+          element={
+            <Suspense fallback={<Loading></Loading>} key={location.pathname}>
+              <ComputePage />
             </Suspense>
           }
         />

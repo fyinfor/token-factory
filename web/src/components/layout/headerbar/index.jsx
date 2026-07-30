@@ -54,6 +54,7 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
     isSelfUseMode,
     docsNav,
     isDemoSiteMode,
+    computePageEnabled,
     isConsoleRoute,
     theme,
     headerNavModules,
@@ -286,7 +287,12 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
     [],
   );
 
-  const { mainNavLinks } = useNavigation(t, docsNav, headerNavModules);
+  const { mainNavLinks } = useNavigation(
+    t,
+    docsNav,
+    headerNavModules,
+    computePageEnabled,
+  );
 
   return (
     <header className='text-semi-color-text-0 sticky top-0 z-50 bg-[rgba(255,255,255,0.92)] backdrop-blur-xl transition-colors duration-300 dark:bg-[rgba(24,24,27,0.75)]'>

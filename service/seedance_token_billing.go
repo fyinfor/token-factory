@@ -249,6 +249,17 @@ func settleSeedanceVideoTokenDelta(ctx context.Context, task *model.Task, actual
 	preConsumed := task.Quota
 	delta := actualQuota - preConsumed
 
+	// 结算日志的记账口径与按秒计费 RecalculateTaskQuota 一致：
+	//   · delta == 0：资金未变动，只写 quota=0 的展示标记（settlement_marker）；
+	//   · delta != 0：资金已变动，必须把差额写进日志 quota，否则按 quota 求和的
+	//     消费统计（/api/log/stat）与对账单会漏掉这笔差额。
+	logType := model.LogTypeConsume
+	logQuota := 0
+	logPhase := model.BillingPhaseSettlementMarker
+	affectsBalance := false
+	displayQuota := actualQuota
+	balanceDelta := int64(0)
+
 	if delta != 0 {
 		if err := taskAdjustFunding(task, delta); err != nil {
 			logger.LogError(ctx, fmt.Sprintf("Seedance Token 计费差额调整资金失败 task %s: %s", task.TaskID, err.Error()))
@@ -261,14 +272,22 @@ func settleSeedanceVideoTokenDelta(ctx context.Context, task *model.Task, actual
 				logger.LogWarn(ctx, fmt.Sprintf("更新任务实际计费额度失败 task %s: %s", task.TaskID, err.Error()))
 			}
 		}
+		affectsBalance = true
 		if delta > 0 {
+			logQuota = delta
+			logPhase = model.BillingPhaseDeltaCharge
+			balanceDelta = -int64(delta)
 			model.UpdateUserUsedQuotaAndRequestCount(task.UserId, delta)
 			model.UpdateChannelUsedQuota(task.ChannelId, delta)
-		} else if delta < 0 {
-			// 预扣大于实扣：差额退钱包，同步回退累积已用（settlement_marker 不再写 refund 日志）。
-			model.DecreaseUserUsedQuota(task.UserId, -delta)
-			model.UpdateChannelUsedQuota(task.ChannelId, delta)
+		} else {
+			// 预扣大于实扣：差额退回钱包。用户与渠道「累积已用」的回退由
+			// RecordTaskBillingLog 按 refund 日志统一处理，此处不可重复扣减。
+			logType = model.LogTypeRefund
+			logQuota = -delta
+			logPhase = model.BillingPhaseDeltaRefund
+			balanceDelta = int64(logQuota)
 		}
+		displayQuota = logQuota
 		logger.LogInfo(ctx, fmt.Sprintf("任务 %s Token 差额结算：delta=%s（实际：%s，预扣：%s）",
 			task.TaskID, logger.LogQuota(delta), logger.LogQuota(actualQuota), logger.LogQuota(preConsumed)))
 	} else {
@@ -284,17 +303,16 @@ func settleSeedanceVideoTokenDelta(ctx context.Context, task *model.Task, actual
 		other[k] = v
 	}
 
-	// 与按秒计费一致：结算日志仅作为展示标记，不再次影响余额。
-	other = model.SetBillingLogMetadata(other, model.BillingPhaseSettlementMarker, false, actualQuota, 0)
+	other = model.SetBillingLogMetadata(other, logPhase, affectsBalance, displayQuota, balanceDelta)
 
 	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
 		UserId:         task.UserId,
-		LogType:        model.LogTypeConsume,
+		LogType:        logType,
 		Content:        "",
 		ChannelId:      task.ChannelId,
 		ModelName:      taskModelName(task),
 		TokenName:      task.PrivateData.TokenName,
-		Quota:          0,
+		Quota:          logQuota,
 		TokenId:        task.PrivateData.TokenId,
 		UseTimeSeconds: taskUseTimeSeconds(task),
 		Group:          task.Group,

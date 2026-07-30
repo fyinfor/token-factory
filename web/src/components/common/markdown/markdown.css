@@ -459,9 +459,40 @@ pre:hover .copy-code-button {
   height: 0;
   min-height: 0;
   flex: 1 1 auto;
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+  scrollbar-color: var(--semi-color-fill-2) transparent;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
   padding: 0 2px 20px;
+}
+
+.api-markdown-contained > .api-markdown-content::-webkit-scrollbar {
+  width: 9px;
+}
+
+.api-markdown-contained > .api-markdown-content::-webkit-scrollbar-track {
+  margin: 6px 0;
+  background: transparent;
+}
+
+.api-markdown-contained > .api-markdown-content::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--semi-color-fill-2);
+  background-clip: content-box;
+}
+
+.api-markdown-contained > .api-markdown-content::-webkit-scrollbar-thumb:hover {
+  background: var(--semi-color-fill-1);
+  background-clip: content-box;
+}
+
+.api-markdown-contained
+  > .api-markdown-content::-webkit-scrollbar-thumb:active {
+  background: var(--semi-color-text-3);
+  background-clip: content-box;
 }
 
 .api-markdown-renderer .api-markdown-toc {
@@ -539,6 +570,49 @@ pre:hover .copy-code-button {
 .api-markdown-renderer .markdown-body pre {
   margin: 10px 0 18px;
   box-shadow: none;
+}
+
+.api-markdown-renderer .markdown-code-scroll,
+.api-markdown-renderer .markdown-table-scroll {
+  scrollbar-color: var(--semi-color-fill-2) transparent;
+  scrollbar-width: thin;
+}
+
+.api-markdown-renderer .markdown-code-scroll::-webkit-scrollbar,
+.api-markdown-renderer .markdown-table-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.api-markdown-renderer .markdown-code-scroll::-webkit-scrollbar-track,
+.api-markdown-renderer .markdown-table-scroll::-webkit-scrollbar-track {
+  margin: 0 6px;
+  background: transparent;
+}
+
+.api-markdown-renderer .markdown-code-scroll::-webkit-scrollbar-thumb,
+.api-markdown-renderer .markdown-table-scroll::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--semi-color-fill-2);
+  background-clip: content-box;
+}
+
+.api-markdown-renderer .markdown-code-scroll::-webkit-scrollbar-thumb:hover,
+.api-markdown-renderer .markdown-table-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--semi-color-fill-1);
+  background-clip: content-box;
+}
+
+.api-markdown-renderer .markdown-code-scroll::-webkit-scrollbar-thumb:active,
+.api-markdown-renderer .markdown-table-scroll::-webkit-scrollbar-thumb:active {
+  background: var(--semi-color-text-3);
+  background-clip: content-box;
+}
+
+.api-markdown-renderer .markdown-code-scroll::-webkit-scrollbar-corner,
+.api-markdown-renderer .markdown-table-scroll::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 .api-markdown-renderer .copy-code-button {

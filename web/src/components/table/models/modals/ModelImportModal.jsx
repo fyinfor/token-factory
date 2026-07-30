@@ -67,19 +67,33 @@ export default function ModelImportModal({ refresh }) {
     }
 
     // 基础结构校验
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    if (
+      typeof parsed !== 'object' ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
       showError(t('文件格式错误：根节点必须为 JSON 对象'));
       return;
     }
 
-    // 至少包含 models 或 vendors 之一
-    if (!Array.isArray(parsed.models) && !Array.isArray(parsed.vendors)) {
-      showError(t('文件格式错误：缺少 models 或 vendors 数组字段'));
+    // 至少包含 models、vendors 或 channel_docs 之一
+    if (
+      !Array.isArray(parsed.models) &&
+      !Array.isArray(parsed.vendors) &&
+      !Array.isArray(parsed.channel_docs)
+    ) {
+      showError(
+        t('文件格式错误：缺少 models、vendors 或 channel_docs 数组字段'),
+      );
       return;
     }
 
-    if (Array.isArray(parsed.models) && parsed.models.length === 0 && Array.isArray(parsed.vendors) && parsed.vendors.length === 0) {
-      showError(t('文件中未包含任何模型或模型类型数据'));
+    if (
+      (parsed.models?.length || 0) === 0 &&
+      (parsed.vendors?.length || 0) === 0 &&
+      (parsed.channel_docs?.length || 0) === 0
+    ) {
+      showError(t('文件中未包含任何模型、模型类型或渠道级文档数据'));
       return;
     }
 
@@ -87,8 +101,14 @@ export default function ModelImportModal({ refresh }) {
     if (Array.isArray(parsed.models)) {
       for (let i = 0; i < parsed.models.length; i++) {
         const m = parsed.models[i];
-        if (!m.model_name || typeof m.model_name !== 'string' || !m.model_name.trim()) {
-          showError(t('模型数据第 {{index}} 条缺少 model_name 字段', { index: i + 1 }));
+        if (
+          !m.model_name ||
+          typeof m.model_name !== 'string' ||
+          !m.model_name.trim()
+        ) {
+          showError(
+            t('模型数据第 {{index}} 条缺少 model_name 字段', { index: i + 1 }),
+          );
           return;
         }
       }
@@ -99,7 +119,9 @@ export default function ModelImportModal({ refresh }) {
       for (let i = 0; i < parsed.vendors.length; i++) {
         const v = parsed.vendors[i];
         if (!v.name || typeof v.name !== 'string' || !v.name.trim()) {
-          showError(t('模型类型数据第 {{index}} 条缺少 name 字段', { index: i + 1 }));
+          showError(
+            t('模型类型数据第 {{index}} 条缺少 name 字段', { index: i + 1 }),
+          );
           return;
         }
       }
@@ -124,7 +146,9 @@ export default function ModelImportModal({ refresh }) {
       await refresh?.();
       const d = res.data.data;
       if (d?.models_failed === 0 && d?.vendors_failed === 0) {
-        showSuccess(t('模型数据导入成功'));
+        if (d?.channel_docs_failed === 0 && d?.channel_docs_skipped === 0) {
+          showSuccess(t('模型数据导入成功'));
+        }
       }
     } catch (err) {
       showError(err?.message || t('导入失败'));
@@ -143,7 +167,12 @@ export default function ModelImportModal({ refresh }) {
       models_added = 0,
       models_updated = 0,
       models_failed = 0,
+      channel_docs_added = 0,
+      channel_docs_updated = 0,
+      channel_docs_skipped = 0,
+      channel_docs_failed = 0,
       failures = [],
+      skipped_docs = [],
     } = importResult;
 
     return (
@@ -152,7 +181,14 @@ export default function ModelImportModal({ refresh }) {
         <Title heading={6} style={{ marginBottom: 8 }}>
           {t('模型类型（供应商）')}
         </Title>
-        <div style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div
+          style={{
+            marginBottom: 12,
+            display: 'flex',
+            gap: 8,
+            flexWrap: 'wrap',
+          }}
+        >
           <Tag color='green' style={{ padding: '4px 12px' }}>
             {t('新增')} {vendors_added}
           </Tag>
@@ -170,7 +206,14 @@ export default function ModelImportModal({ refresh }) {
         <Title heading={6} style={{ marginBottom: 8 }}>
           {t('模型数据')}
         </Title>
-        <div style={{ marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <div
+          style={{
+            marginBottom: 12,
+            display: 'flex',
+            gap: 8,
+            flexWrap: 'wrap',
+          }}
+        >
           <Tag color='green' style={{ padding: '4px 12px' }}>
             {t('新增')} {models_added}
           </Tag>
@@ -180,6 +223,33 @@ export default function ModelImportModal({ refresh }) {
           {models_failed > 0 && (
             <Tag color='red' style={{ padding: '4px 12px' }}>
               {t('失败')} {models_failed}
+            </Tag>
+          )}
+        </div>
+
+        <Title heading={6} style={{ marginBottom: 8 }}>
+          {t('渠道级文档')}
+        </Title>
+        <div
+          style={{
+            marginBottom: 12,
+            display: 'flex',
+            gap: 8,
+            flexWrap: 'wrap',
+          }}
+        >
+          <Tag color='green' style={{ padding: '4px 12px' }}>
+            {t('新增')} {channel_docs_added}
+          </Tag>
+          <Tag color='blue' style={{ padding: '4px 12px' }}>
+            {t('更新')} {channel_docs_updated}
+          </Tag>
+          <Tag color='amber' style={{ padding: '4px 12px' }}>
+            {t('跳过')} {channel_docs_skipped}
+          </Tag>
+          {channel_docs_failed > 0 && (
+            <Tag color='red' style={{ padding: '4px 12px' }}>
+              {t('失败')} {channel_docs_failed}
             </Tag>
           )}
         </div>
@@ -215,10 +285,20 @@ export default function ModelImportModal({ refresh }) {
                   </Text>
                   <Tag
                     size='small'
-                    color={f.type === 'vendor' ? 'purple' : 'cyan'}
+                    color={
+                      f.type === 'vendor'
+                        ? 'purple'
+                        : f.type === 'channel_doc'
+                          ? 'amber'
+                          : 'cyan'
+                    }
                     style={{ marginRight: 8 }}
                   >
-                    {f.type === 'vendor' ? t('类型') : t('模型')}
+                    {f.type === 'vendor'
+                      ? t('类型')
+                      : f.type === 'channel_doc'
+                        ? t('文档')
+                        : t('模型')}
                   </Tag>
                   <Text type='danger' size='small'>
                     {f.reason}
@@ -229,9 +309,49 @@ export default function ModelImportModal({ refresh }) {
           </>
         )}
 
-        {models_failed === 0 && vendors_failed === 0 && (
-          <Text type='success'>{t('全部数据导入成功，无失败记录')}</Text>
+        {skipped_docs.length > 0 && (
+          <>
+            <Title heading={6} style={{ marginBottom: 8 }}>
+              {t('跳过详情')}
+            </Title>
+            <div
+              style={{
+                maxHeight: 180,
+                overflowY: 'auto',
+                border: '1px solid var(--semi-color-border)',
+                borderRadius: 6,
+                padding: '8px 12px',
+              }}
+            >
+              {skipped_docs.map((item, idx) => (
+                <div
+                  key={`${item.name}-${idx}`}
+                  style={{
+                    padding: '4px 0',
+                    borderBottom:
+                      idx < skipped_docs.length - 1
+                        ? '1px solid var(--semi-color-border)'
+                        : 'none',
+                  }}
+                >
+                  <Text strong style={{ marginRight: 8 }}>
+                    {item.name}
+                  </Text>
+                  <Text type='tertiary' size='small'>
+                    {item.reason}
+                  </Text>
+                </div>
+              ))}
+            </div>
+          </>
         )}
+
+        {models_failed === 0 &&
+          vendors_failed === 0 &&
+          channel_docs_failed === 0 &&
+          channel_docs_skipped === 0 && (
+            <Text type='success'>{t('全部数据导入成功，无失败记录')}</Text>
+          )}
       </div>
     );
   };
@@ -267,7 +387,7 @@ export default function ModelImportModal({ refresh }) {
         onCancel={() => setResultVisible(false)}
         cancelButtonProps={{ style: { display: 'none' } }}
         okText={t('确定')}
-        width={520}
+        width={560}
       >
         {renderImportResult()}
       </Modal>

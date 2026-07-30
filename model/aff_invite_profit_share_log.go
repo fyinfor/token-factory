@@ -91,7 +91,7 @@ func CreditDistributorProfitShare(inviterId, inviteeUserId, channelId int, model
 }
 
 // ListAffInviteProfitShareLogs 分页返回某邀请人对某一被邀请人的利润分成明细。
-func ListAffInviteProfitShareLogs(inviterId, inviteeUserId int, billingMode string, pageInfo *common.PageInfo) ([]AffInviteProfitShareLog, int64, error) {
+func ListAffInviteProfitShareLogs(inviterId, inviteeUserId int, billingMode string, hideZeroReward bool, pageInfo *common.PageInfo) ([]AffInviteProfitShareLog, int64, error) {
 	if inviterId <= 0 || inviteeUserId <= 0 {
 		return nil, 0, errors.New("invalid id")
 	}
@@ -100,6 +100,9 @@ func ListAffInviteProfitShareLogs(inviterId, inviteeUserId int, billingMode stri
 	if billingMode != "" {
 		base = base.Where("billing_mode = ?", billingMode)
 	}
+	if hideZeroReward {
+		base = base.Where("reward_quota > ?", 0)
+	}
 	var total int64
 	if err := base.Count(&total).Error; err != nil {
 		return nil, 0, err
@@ -107,6 +110,9 @@ func ListAffInviteProfitShareLogs(inviterId, inviteeUserId int, billingMode stri
 	q := DB.Where("inviter_id = ? AND invitee_user_id = ?", inviterId, inviteeUserId)
 	if billingMode != "" {
 		q = q.Where("billing_mode = ?", billingMode)
+	}
+	if hideZeroReward {
+		q = q.Where("reward_quota > ?", 0)
 	}
 	var rows []AffInviteProfitShareLog
 	err := q.

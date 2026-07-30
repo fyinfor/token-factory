@@ -22,6 +22,8 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.POST("/setup", controller.PostSetup)
 		apiRouter.GET("/status", controller.GetStatus)
 		apiRouter.GET("/changelog", controller.ListPublicChangelogs)
+		apiRouter.GET("/compute-page/status", controller.GetComputePageStatus)
+		apiRouter.GET("/compute-page/content", controller.GetComputePageContent)
 		apiRouter.GET("/uptime/status", controller.GetUptimeKumaStatus)
 		apiRouter.GET("/api/vendors", controller.GetVendors)
 		apiRouter.GET("/models", middleware.UserAuth(), controller.DashboardListModels)
@@ -375,6 +377,14 @@ func SetApiRouter(router *gin.Engine) {
 			changelogAdminRoute.DELETE("/:id", controller.AdminDeleteChangelog)
 		}
 
+		computePageAdminRoute := apiRouter.Group("/compute-page/admin")
+		computePageAdminRoute.Use(middleware.RootAuth())
+		{
+			computePageAdminRoute.GET("/", controller.AdminGetComputePageConfig)
+			computePageAdminRoute.PUT("/enabled", controller.AdminUpdateComputePageEnabled)
+			computePageAdminRoute.POST("/content", controller.AdminUploadComputePageHTML)
+		}
+
 		// Custom OAuth provider management (root only)
 		customOAuthRoute := apiRouter.Group("/custom-oauth-provider")
 		customOAuthRoute.Use(middleware.RootAuth())
@@ -630,6 +640,10 @@ func SetApiRouter(router *gin.Engine) {
 
 		modelsRoute := apiRouter.Group("/models")
 		{
+			modelsRoute.GET("/document_ai/prompts", middleware.AdminAuth(), controller.GetDocumentAIPrompts)
+			modelsRoute.PUT("/document_ai/prompts", middleware.AdminAuth(), controller.UpdateDocumentAIPrompts)
+			modelsRoute.DELETE("/document_ai/prompts", middleware.AdminAuth(), controller.ResetDocumentAIPrompts)
+			modelsRoute.POST("/document_ai/generate", middleware.AdminAuth(), controller.PrepareDocumentAIRequest, middleware.Distribute(), controller.Playground)
 			modelsRoute.GET("/sync_upstream/preview", middleware.AdminAuth(), controller.SyncUpstreamPreview)
 			modelsRoute.POST("/sync_upstream", middleware.AdminAuth(), controller.SyncUpstreamModels)
 			modelsRoute.GET("/missing", middleware.AdminAuth(), controller.GetMissingModels)

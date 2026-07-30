@@ -25,7 +25,14 @@ import SkeletonWrapper from '../components/SkeletonWrapper';
 import { isAdmin, userIsSupplierUser } from '../../../helpers';
 
 /** 主站入口顺序（与桌面顶栏一致） */
-const PRIMARY_NAV_KEYS = ['home', 'pricing', 'rankings', 'docs', 'about'];
+const PRIMARY_NAV_KEYS = [
+  'compute',
+  'home',
+  'pricing',
+  'rankings',
+  'docs',
+  'about',
+];
 
 const menuClass =
   '!bg-semi-color-bg-overlay !border-semi-color-border !shadow-lg !rounded-lg dark:!bg-gray-700 dark:!border-gray-600';
@@ -73,6 +80,7 @@ const MobileSiteNavDropdown = ({
 
   const currentPageLabel = useMemo(() => {
     const p = location.pathname;
+    if (p === '/compute' || p.startsWith('/compute/')) return t('算力');
     if (p === '/') return t('首页');
     if (p === '/pricing' || p.startsWith('/pricing/')) return t('模型广场');
     if (p === '/rankings' || p.startsWith('/rankings/')) return t('模型排行榜');

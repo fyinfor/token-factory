@@ -28,6 +28,7 @@ import SettingsMonitoring from '../../pages/Setting/Operation/SettingsMonitoring
 import SettingsCreditLimit from '../../pages/Setting/Operation/SettingsCreditLimit';
 import SettingsDistributor from '../../pages/Setting/Operation/SettingsDistributor';
 import SettingsCheckin from '../../pages/Setting/Operation/SettingsCheckin';
+import SettingsComputePage from '../../pages/Setting/Operation/SettingsComputePage';
 import SettingsAliyunRealNameVerification from '../../pages/Setting/Operation/SettingsAliyunRealNameVerification';
 import { API, showError, toBoolean } from '../../helpers';
 
@@ -104,8 +105,7 @@ const OperationSetting = ({ activeSection = 'general' }) => {
     AutomaticEnableChannelEnabled: false,
     AutomaticDisableKeywords: '',
     AutomaticDisableStatusCodes: '401',
-    AutomaticRetryStatusCodes:
-      '100-199,300-399,400-599',
+    AutomaticRetryStatusCodes: '100-199,300-399,400-599',
     'monitor_setting.auto_test_channel_enabled': false,
     'monitor_setting.auto_test_channel_minutes': 10,
     'monitor_setting.auto_test_model_tags': '[]' /* 签到设置 */,
@@ -161,6 +161,12 @@ const OperationSetting = ({ activeSection = 'general' }) => {
           <Card style={{ marginTop: '10px' }}>
             <SettingsGeneral options={inputs} refresh={onRefresh} />
           </Card>
+        )}
+        {/* 算力页面 */}
+        {activeSection === 'compute-page' && (
+          <div style={{ marginTop: '10px' }}>
+            <SettingsComputePage />
+          </div>
         )}
         {/* 顶栏模块管理 */}
         {activeSection === 'header' && (

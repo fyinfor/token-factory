@@ -50,12 +50,15 @@ func TryPostWalletProfitShareForTaskBilledQuota(ctx context.Context, task *model
 		return
 	}
 	ratio, ok := taskProfitShareMarkupSliceRatio(task, hintTotalTokens)
-	if !ok || ratio <= 0 {
+	if !ok && markupDiscountPercentFromTask(task, strings.TrimSpace(taskModelName(task))) != 0 {
 		return
 	}
-	slice := int(math.Round(float64(billedQuota) * ratio))
-	if slice <= 0 {
-		return
+	slice := 0
+	if ok && ratio > 0 {
+		slice = int(math.Round(float64(billedQuota) * ratio))
+		if slice < 0 {
+			slice = 0
+		}
 	}
 	invitee, err := model.GetUserById(task.UserId, false)
 	if err != nil || invitee == nil || invitee.InviterId <= 0 {
@@ -75,9 +78,6 @@ func TryPostWalletProfitShareForTaskBilledQuota(ctx context.Context, task *model
 		bps = maxBps
 	}
 	reward := int(int64(slice) * int64(bps) / int64(maxBps))
-	if reward <= 0 {
-		return
-	}
 	if err := model.CreditDistributorProfitShare(invitee.InviterId, task.UserId, task.ChannelId, modelName, billedQuota, slice, reward, bps, taskProfitShareTotalTokens(task, hintTotalTokens), taskProfitShareBillingMode(task)); err != nil {
 		common.SysError("TryPostWalletProfitShareForTaskBilledQuota: " + err.Error())
 	}
