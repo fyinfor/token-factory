@@ -438,6 +438,25 @@ code {
   }
 }
 
+.compute-page-frame {
+  display: block;
+  width: 100%;
+  height: calc(100dvh - 56px);
+  min-height: calc(100dvh - 56px);
+  margin-top: 56px;
+  border: 0;
+  background: #fff;
+}
+
+.compute-page-state {
+  display: flex;
+  min-height: calc(100dvh - 56px);
+  margin-top: 56px;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
 .semi-navigation-item,
 .semi-navigation-sub-title {
   height: 100% !important;

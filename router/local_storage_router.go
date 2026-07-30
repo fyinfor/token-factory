@@ -100,6 +100,10 @@ func serveLocalStorageFile(c *gin.Context, fileParam string) {
 		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "文件未找到"})
 		return
 	}
+	if firstSegment := strings.Split(filepath.ToSlash(fileParam), "/")[0]; firstSegment == "compute" {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "文件未找到"})
+		return
+	}
 
 	fullPath := filepath.Join(storeDir, filepath.FromSlash(fileParam))
 	absPath, err := filepath.Abs(fullPath)

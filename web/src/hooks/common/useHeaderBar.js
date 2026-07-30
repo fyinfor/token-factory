@@ -37,6 +37,7 @@ export const useHeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
   const isMobile = useIsMobile();
   const [collapsed, toggleCollapsed] = useSidebarCollapsed();
   const [logoLoaded, setLogoLoaded] = useState(false);
+  const [computePageEnabled, setComputePageEnabled] = useState(false);
   const navigate = useNavigate();
   const [currentLang, setCurrentLang] = useState(
     normalizeLanguage(i18n.language),
@@ -58,6 +59,38 @@ export const useHeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
     [rawDocsLink, i18n.language],
   );
   const isDemoSiteMode = statusState?.status?.demo_site_enabled || false;
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadComputePageStatus = async () => {
+      try {
+        const response = await fetch('/api/compute-page/status', {
+          cache: 'no-store',
+        });
+        if (!response.ok) throw new Error('Failed to load compute page status');
+        const payload = await response.json();
+        if (!cancelled) {
+          setComputePageEnabled(
+            payload?.success && payload?.data?.enabled === true,
+          );
+        }
+      } catch {
+        if (!cancelled) setComputePageEnabled(false);
+      }
+    };
+    loadComputePageStatus();
+    window.addEventListener(
+      'compute-page-status-changed',
+      loadComputePageStatus,
+    );
+    return () => {
+      cancelled = true;
+      window.removeEventListener(
+        'compute-page-status-changed',
+        loadComputePageStatus,
+      );
+    };
+  }, []);
 
   // 获取顶栏模块配置
   const headerNavModulesConfig = statusState?.status?.HeaderNavModules;
@@ -251,6 +284,7 @@ export const useHeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
     isSelfUseMode,
     docsNav,
     isDemoSiteMode,
+    computePageEnabled,
     isConsoleRoute,
     theme,
     drawerOpen,

@@ -78,6 +78,7 @@ const PageLayout = () => {
     '/console/playground',
     '/pricing',
     '/rankings',
+    '/compute',
     '/console/model-heat',
   ];
 
@@ -86,6 +87,7 @@ const PageLayout = () => {
   const pricingNaturalScroll =
     location.pathname === '/pricing' || location.pathname === '/rankings';
   const settingsNaturalScroll = location.pathname === '/console/setting';
+  const computePageRoute = location.pathname === '/compute';
 
   const shouldInnerPadding =
     location.pathname.includes('/console') &&
@@ -432,7 +434,10 @@ const PageLayout = () => {
             style={{
               flex: '1 0 auto',
               overflowY:
-                isMobile || pricingNaturalScroll || settingsNaturalScroll
+                isMobile ||
+                pricingNaturalScroll ||
+                settingsNaturalScroll ||
+                computePageRoute
                   ? 'auto'
                   : 'hidden',
               WebkitOverflowScrolling: 'touch',
