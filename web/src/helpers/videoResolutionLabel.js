@@ -102,7 +102,8 @@ export function formatVideoResolutionDisplayLabel(raw) {
 
 /**
  * 将图片分辨率归一化为 Ai 绘图档位标识（1080p / 2K / 4K）。
- * 短边规则：短边 ≤1024 → 1080p（与 1K 同档）；1024＜短边≤2048 → 2K；短边＞2048 → 4K。
+ * 按实际输出图片短边像素：短边 ≤1024 → 1080p（≡1K）；1024＜短边≤2048 → 2K；短边＞2048 → 4K。
+ * 例如 1024×1536→1080p，1536×2048→2K，1920×1080→2K，2160×3840→4K。
  * 显式「1K」「1080p」统一展示为 1080p。
  */
 export function formatImageResolutionDisplayLabel(raw) {
@@ -113,7 +114,7 @@ export function formatImageResolutionDisplayLabel(raw) {
   const compact = s.replace(/\s+/g, '');
   const lower = compact.toLowerCase();
 
-  // 1K ≡ 1080p：显式档位别名优先，避免把「1080p」按短边 1080 误判为 2K。
+  // 显式档位别名优先：1K ≡ 1080p，避免把字面量「1080p」按短边 1080 误判为 2K。
   if (lower === '1k' || lower === '1080p' || lower === '1080') {
     return '1080p';
   }
@@ -135,13 +136,6 @@ export function formatImageResolutionDisplayLabel(raw) {
       const w = parseInt(m[1], 10);
       const h = parseInt(m[2], 10);
       if (Number.isFinite(w) && Number.isFinite(h) && w > 0 && h > 0) {
-        // 定价编辑器将「1080p」存为 1920x1080，需与 1K/1080p 同档
-        if (
-          (w === 1920 && h === 1080) ||
-          (w === 1080 && h === 1920)
-        ) {
-          return '1080p';
-        }
         short = Math.min(w, h);
       }
     }

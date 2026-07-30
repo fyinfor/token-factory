@@ -1473,8 +1473,16 @@ export const useLogsData = () => {
                   channelPriceDiscountPercent: channelPriceDiscountLogPct,
                   t,
                 }));
+          const isPerCallBilling =
+            Number.isFinite(Number(other?.model_price)) &&
+            Number(other?.model_price) > 0;
+          // 按次 / 按张：固定单价用标签展示，键名为「计费详情」；其余仍为「计费过程」
+          const billingDetailKey =
+            other?.billing_mode === 'image_per_image' || isPerCallBilling
+              ? t('计费详情')
+              : t('计费过程');
           expandDataLocal.push({
-            key: t('计费过程'),
+            key: billingDetailKey,
             value: content,
           });
         }
@@ -1634,6 +1642,11 @@ export const useLogsData = () => {
           localCountMode = t('按视频数量计费');
         } else if (other?.billing_mode === 'image_per_image') {
           localCountMode = t('按张计费');
+        } else if (
+          Number.isFinite(Number(other?.model_price)) &&
+          Number(other?.model_price) > 0
+        ) {
+          localCountMode = t('按次计费');
         } else if (
           other?.image_usd_per_image > 0 ||
           (other?.use_price &&

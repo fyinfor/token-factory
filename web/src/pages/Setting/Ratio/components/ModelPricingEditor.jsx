@@ -122,6 +122,12 @@ const VIDEO_RESOLUTION_OPTIONS = [
   { label: '2K', value: '2560x1440' },
   { label: '4K', value: '3840x2160' },
 ];
+/** Ai 绘图按张计费档位：与短边分档一致（1080p≡1K / 2K / 4K） */
+const IMAGE_RESOLUTION_OPTIONS = [
+  { label: '1080p', value: '1080p' },
+  { label: '2K', value: '2K' },
+  { label: '4K', value: '4K' },
+];
 const VIDEO_RESOLUTION_LABEL_MAP = VIDEO_RESOLUTION_OPTIONS.reduce(
   (acc, item) => ({ ...acc, [item.value]: item.label }),
   {},
@@ -157,6 +163,29 @@ const getSelectableResolutionOptions = (rows, currentIndex) => {
       .filter(Boolean),
   );
   return VIDEO_RESOLUTION_OPTIONS.filter((item) => !used.has(item.value));
+};
+
+const getSelectableImageResolutionOptions = (rows, currentIndex) => {
+  const used = new Set(
+    (rows || [])
+      .map((item, index) =>
+        index === currentIndex ? '' : item?.resolution || '',
+      )
+      .filter(Boolean),
+  );
+  const current = String(rows?.[currentIndex]?.resolution || '').trim();
+  const options = IMAGE_RESOLUTION_OPTIONS.filter(
+    (item) => !used.has(item.value),
+  );
+  // 兼容历史像素写法（如 1920x1080），保证已保存行仍可选中展示
+  if (
+    current &&
+    !options.some((item) => item.value === current) &&
+    !used.has(current)
+  ) {
+    options.unshift({ label: current, value: current });
+  }
+  return options;
 };
 
 const getBillingModeMeta = (billingMode, t) => {
@@ -1086,7 +1115,7 @@ export default function ModelPricingEditor({
                                     placeholder={t('选择分辨率')}
                                     filter
                                     style={{ width: 140 }}
-                                    optionList={getSelectableResolutionOptions(
+                                    optionList={getSelectableImageResolutionOptions(
                                       selectedModel.imageTextToImageRules,
                                       index,
                                     )}
@@ -1154,7 +1183,7 @@ export default function ModelPricingEditor({
                                     placeholder={t('选择分辨率')}
                                     filter
                                     style={{ width: 140 }}
-                                    optionList={getSelectableResolutionOptions(
+                                    optionList={getSelectableImageResolutionOptions(
                                       selectedModel.imageImageToImageRules,
                                       index,
                                     )}

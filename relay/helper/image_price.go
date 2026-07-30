@@ -522,8 +522,8 @@ func matchFlatPerImageUSDRules(
 
 // matchPerImageRulesByPixels picks the resolution row for per-image billing.
 // Priority:
-//  1. Exact Ai-drawing resolution-tier label match (short-side: ≤1024→1080p/1K, ≤2048→2K, else→4K),
-//     so sizes like 1024x1536 map to 1080p and 1080x1080 map to 2K.
+//  1. Exact Ai-drawing resolution-tier label match (short-side: ≤1024→1080p/1K,
+//     1024＜short≤2048→2K, else→4K), so 1024x1536→1080p, 1920x1080/1648x1232→2K.
 //  2. If the image is larger than every configured tier, cap to that lane's highest tier.
 //  3. Otherwise pick the closest row by pixel area within similarity threshold.
 func matchPerImageRulesByPixels(
