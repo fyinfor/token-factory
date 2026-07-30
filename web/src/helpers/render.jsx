@@ -2136,6 +2136,90 @@ function renderImagePerImageBillingTags(
   );
 }
 
+/**
+ * 按次计费标签（与图片按张计费同款 Tag 样式；固定单价无「计费过程」算式）。
+ */
+function buildPerCallBillingTagItems({
+  modelPrice,
+  groupRatio,
+  user_group_ratio,
+  channelPriceDiscountPercent = 100,
+  billingMeta = null,
+  showTotal = false,
+  actualQuota = null,
+  t = i18next.t.bind(i18next),
+} = {}) {
+  const tr = typeof t === 'function' ? t : i18next.t.bind(i18next);
+  const { symbol, rate } = getCurrencyConfig();
+  const { ratio: effectiveGroupRatio } = getEffectiveRatio(
+    groupRatio,
+    user_group_ratio,
+  );
+  const { effModelPrice } = resolveConsumeLogBillingRates({
+    modelPrice,
+    channelPriceDiscountPercent,
+    billingMeta,
+  });
+  const perCallUsd =
+    Number(effModelPrice) > 0
+      ? Number(effModelPrice) * (Number(effectiveGroupRatio) || 1)
+      : 0;
+  const displayPrice = formatBillingDisplayPrice(perCallUsd, rate, 6);
+  const items = [
+    {
+      key: 'brief',
+      color: 'green',
+      label: tr('按次 {{symbol}}{{price}}', {
+        symbol,
+        price: displayPrice,
+      }),
+    },
+  ];
+  if (showTotal) {
+    items.push({
+      key: 'total',
+      color: 'red',
+      label: buildBillingText('合计 {{symbol}}{{price}}', {
+        symbol,
+        price: resolveBillingProcessTotalDisplay(
+          actualQuota,
+          perCallUsd,
+          rate,
+          6,
+        ),
+      }),
+    });
+  }
+  return items;
+}
+
+function renderPerCallBillingTags(options = {}, { showTotal = false, showReferenceNote = false } = {}) {
+  const items = buildPerCallBillingTagItems({
+    ...options,
+    showTotal,
+  });
+  return (
+    <div>
+      <div className='flex flex-wrap items-center' style={{ gap: 4 }}>
+        {items.map((item) => (
+          <Tag key={item.key} color={item.color} size='small'>
+            {item.label}
+          </Tag>
+        ))}
+      </div>
+      {showReferenceNote ? (
+        <Typography.Text
+          type='tertiary'
+          size='small'
+          style={{ display: 'block', marginTop: 8 }}
+        >
+          {i18next.t('仅供参考，以实际扣费为准')}
+        </Typography.Text>
+      ) : null}
+    </div>
+  );
+}
+
 function buildImagePerImageLogSummarySegments(billingMeta, options = {}) {
   return [
     {
@@ -3484,6 +3568,17 @@ export function renderLogContent(
       groupRatio,
       user_group_ratio,
       channelPriceDiscountPercent,
+    });
+  }
+
+  // 按次固定价：与图片按张同款标签摘要（无计费算式）
+  if (isExplicitPerCallModelPrice(modelPrice)) {
+    return renderPerCallBillingTags({
+      modelPrice,
+      groupRatio,
+      user_group_ratio,
+      channelPriceDiscountPercent,
+      billingMeta: videoBillingDetail,
     });
   }
 
@@ -4879,16 +4974,35 @@ export function renderConsumeBillingProcess({
     return renderRequestTierConsumeArticle(other, chPct, tr, record);
   }
 
-  // use_price：后端写入的按量（token 单价）标记；为 true 时不得再按 model_price 走「按次」展示（避免 Playground 等路径 ModelPrice 残留导致「按次 ¥0」）。
-  const usePriceVolume =
+  // use_price：与 PriceData.UsePrice 一致。
+  // - use_price + model_price>0：固定单价（按次/按张一口价），应走按次标签
+  // - use_price + model_price≤0：按量等路径上可能残留 model_price，强制不当按次展示（避免「按次 ¥0」）
+  const usePriceFlag =
     other?.use_price === true ||
     other?.use_price === 1 ||
     other?.use_price === 'true';
-  const modelPriceConsume = usePriceVolume ? -1 : (other?.model_price ?? -1);
-  const isPerCall =
-    !usePriceVolume &&
-    Number.isFinite(Number(other?.model_price)) &&
-    Number(other?.model_price) > 0;
+  const rawModelPrice = Number(other?.model_price);
+  const isPerCall = Number.isFinite(rawModelPrice) && rawModelPrice > 0;
+  const modelPriceConsume =
+    usePriceFlag && !isPerCall ? -1 : (other?.model_price ?? -1);
+
+  // 按次计费：固定单价，用标签展示关键信息，不展示「计费过程」算式
+  if (isPerCall) {
+    return renderPerCallBillingTags(
+      {
+        modelPrice: other?.model_price,
+        groupRatio: other?.group_ratio,
+        user_group_ratio: other?.user_group_ratio,
+        channelPriceDiscountPercent: chPct,
+        billingMeta: other,
+        actualQuota: Number.isFinite(Number(record?.quota))
+          ? Number(record.quota)
+          : null,
+        t: tr,
+      },
+      { showTotal: true, showReferenceNote: true },
+    );
+  }
 
   if (other?.claude || other?.usage_semantic === 'anthropic') {
     return renderClaudeModelPrice(

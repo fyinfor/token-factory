@@ -102,18 +102,18 @@ func TestMatchPerImageRulesByPixels_Classic1080pPixelsMatchLowTier(t *testing.T)
 		Height: 1024,
 		Count:  1,
 	}
-	// 定价 UI 将 1080p 存为 1920x1080，应与短边≤1024 输出同属 1080p 档。
+	// 低档须使用 1080p/1K/短边≤1024 像素；1920x1080 按短边属 2K。
 	rules := []ratio_setting.ImageResolutionPerImageRule{
-		{Resolution: "1920x1080", ImagePrice: 0.01},
-		{Resolution: "2560x1440", ImagePrice: 0.02},
-		{Resolution: "3840x2160", ImagePrice: 0.04},
+		{Resolution: "1080p", ImagePrice: 0.01},
+		{Resolution: "2K", ImagePrice: 0.02},
+		{Resolution: "4K", ImagePrice: 0.04},
 	}
 
 	match, ok := matchPerImageRulesByPixels(ctx, rules, 0.35, 0, false)
 
 	require.True(t, ok)
 	require.NotNil(t, match)
-	assert.Equal(t, "1920x1080", match.Resolution)
+	assert.Equal(t, "1080p", match.Resolution)
 	assert.Equal(t, 0.01, match.Price)
 }
 
@@ -124,7 +124,7 @@ func TestMatchPerImageRulesByPixels_Square1080MapsTo2KTier(t *testing.T) {
 		Height: 1080,
 		Count:  1,
 	}
-	// 1080 短边属于 2K；1920x1080 现归一为 1080p 档，故应命中 2560x1440。
+	// 短边 1080 → 2K；1920x1080 同属 2K，像素更近则优先命中。
 	rules := []ratio_setting.ImageResolutionPerImageRule{
 		{Resolution: "1280x720", ImagePrice: 0.01},
 		{Resolution: "1920x1080", ImagePrice: 0.02},
@@ -136,8 +136,8 @@ func TestMatchPerImageRulesByPixels_Square1080MapsTo2KTier(t *testing.T) {
 
 	require.True(t, ok)
 	require.NotNil(t, match)
-	assert.Equal(t, "2560x1440", match.Resolution)
-	assert.Equal(t, 0.03, match.Price)
+	assert.Equal(t, "1920x1080", match.Resolution)
+	assert.Equal(t, 0.02, match.Price)
 	assert.False(t, match.CappedToMaxTier)
 }
 
@@ -149,17 +149,59 @@ func TestMatchPerImageRulesByPixels_Square1080MatchesLabelOnlyTiers(t *testing.T
 		Count:  1,
 	}
 	rules := []ratio_setting.ImageResolutionPerImageRule{
-		{Resolution: "1920x1080", ImagePrice: 0.02},
-		{Resolution: "2560x1440", ImagePrice: 0.03},
-		{Resolution: "3840x2160", ImagePrice: 0.04},
+		{Resolution: "1080p", ImagePrice: 0.01},
+		{Resolution: "2K", ImagePrice: 0.03},
+		{Resolution: "4K", ImagePrice: 0.04},
 	}
 
 	match, ok := matchPerImageRulesByPixels(ctx, rules, 0.35, 0, false)
 
 	require.True(t, ok)
 	require.NotNil(t, match)
-	assert.Equal(t, "2560x1440", match.Resolution)
+	assert.Equal(t, "2K", match.Resolution)
 	assert.Equal(t, 0.03, match.Price)
+}
+
+func TestMatchPerImageRulesByPixels_ClassicFullHDIs2K(t *testing.T) {
+	ctx := imageEstimateContext{
+		Mode:   imageBillingModeTextToImage,
+		Width:  1920,
+		Height: 1080,
+		Count:  1,
+	}
+	rules := []ratio_setting.ImageResolutionPerImageRule{
+		{Resolution: "1080p", ImagePrice: 0.01},
+		{Resolution: "2K", ImagePrice: 0.02},
+		{Resolution: "4K", ImagePrice: 0.04},
+	}
+
+	match, ok := matchPerImageRulesByPixels(ctx, rules, 0.35, 0, false)
+
+	require.True(t, ok)
+	require.NotNil(t, match)
+	assert.Equal(t, "2K", match.Resolution)
+	assert.Equal(t, 0.02, match.Price)
+}
+
+func TestMatchPerImageRulesByPixels_1648x1232Is2K(t *testing.T) {
+	ctx := imageEstimateContext{
+		Mode:   imageBillingModeTextToImage,
+		Width:  1648,
+		Height: 1232,
+		Count:  1,
+	}
+	rules := []ratio_setting.ImageResolutionPerImageRule{
+		{Resolution: "1080p", ImagePrice: 0.01},
+		{Resolution: "2K", ImagePrice: 0.02},
+		{Resolution: "4K", ImagePrice: 0.04},
+	}
+
+	match, ok := matchPerImageRulesByPixels(ctx, rules, 0.35, 0, false)
+
+	require.True(t, ok)
+	require.NotNil(t, match)
+	assert.Equal(t, "2K", match.Resolution)
+	assert.Equal(t, 0.02, match.Price)
 }
 
 func TestTryModelPriceHelperImage_Square1080Uses2KPrice(t *testing.T) {
@@ -171,9 +213,9 @@ func TestTryModelPriceHelperImage_Square1080Uses2KPrice(t *testing.T) {
 	modelName := "Kling-3.0-image"
 	require.NoError(t, ratio_setting.UpdateImagePricingRulesByJSONString(
 		`{"`+modelName+`":{"text_to_image_per_image":[`+
-			`{"resolution":"1920x1080","image_price":0.02},`+
-			`{"resolution":"2560x1440","image_price":0.03},`+
-			`{"resolution":"3840x2160","image_price":0.04}`+
+			`{"resolution":"1080p","image_price":0.01},`+
+			`{"resolution":"2K","image_price":0.03},`+
+			`{"resolution":"4K","image_price":0.04}`+
 			`]}}`,
 	))
 
@@ -192,7 +234,7 @@ func TestTryModelPriceHelperImage_Square1080Uses2KPrice(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.NotNil(t, info.ImageBilling)
-	assert.Equal(t, "2560x1440", info.ImageBilling.RuleRes)
+	assert.Equal(t, "2K", info.ImageBilling.RuleRes)
 	assert.InDelta(t, 0.03, info.ImageBilling.UsdPerImage, 1e-9)
 	assert.True(t, pd.UsePrice)
 }
