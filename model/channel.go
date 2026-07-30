@@ -32,7 +32,8 @@ type Channel struct {
 	Name               string  `json:"name" gorm:"index"`
 	Weight             *uint   `json:"weight" gorm:"default:0"`
 	CreatedTime        int64   `json:"created_time" gorm:"bigint"`
-	TestTime           int64   `json:"test_time" gorm:"bigint"` // 最近一次渠道测试时间（Unix 秒级时间戳）
+	UpdatedTime        int64   `json:"updated_time" gorm:"bigint"` // 渠道配置最近一次修改时间（Unix 秒级时间戳）
+	TestTime           int64   `json:"test_time" gorm:"bigint"`   // 最近一次渠道测试时间（Unix 秒级时间戳）
 	ResponseTime       int     `json:"response_time"`           // 最近一次渠道测试响应耗时（毫秒）
 	BaseURL            *string `json:"base_url" gorm:"column:base_url;default:''"`
 	Other              string  `json:"other"`
@@ -696,8 +697,15 @@ func batchInsertChannelsWithOptionalTfOpenPricing(channels []Channel, tfOpenPric
 			tx.Rollback()
 			return err
 		}
+		now := common.GetTimestamp()
 		for i := range chunk {
 			EnsureChannelSyncKey(&chunk[i])
+			if chunk[i].CreatedTime == 0 {
+				chunk[i].CreatedTime = now
+			}
+			if chunk[i].UpdatedTime == 0 {
+				chunk[i].UpdatedTime = chunk[i].CreatedTime
+			}
 		}
 		seenSyncKeys := make(map[string]struct{}, len(chunk))
 		for i := range chunk {
@@ -875,6 +883,12 @@ func (channel *Channel) GetStatusCodeMapping() string {
 }
 
 func (channel *Channel) Insert() error {
+	if channel.CreatedTime == 0 {
+		channel.CreatedTime = common.GetTimestamp()
+	}
+	if channel.UpdatedTime == 0 {
+		channel.UpdatedTime = channel.CreatedTime
+	}
 	var assigned string
 	err := DB.Transaction(func(tx *gorm.DB) error {
 		batch := []Channel{*channel}
@@ -942,6 +956,7 @@ func (channel *Channel) Update() error {
 			}
 		}
 	}
+	channel.UpdatedTime = common.GetTimestamp()
 	var err error
 	err = DB.Model(channel).Updates(channel).Error
 	if err != nil {
@@ -1682,9 +1697,24 @@ func GetChannelByName(name string) (*Channel, error) {
 
 // PartialUpdateChannelFields 按字段名列表精确更新渠道指定列，不影响其他列。
 // 使用 GORM Select + struct Updates，GORM 会按模型定义正确处理保留字（group/key）的方言转义。
+// 会自动写入 updated_time。
 func PartialUpdateChannelFields(id int, cols []string, updates *Channel) error {
 	if len(cols) == 0 {
 		return nil
+	}
+	if updates == nil {
+		updates = &Channel{}
+	}
+	updates.UpdatedTime = common.GetTimestamp()
+	hasUpdated := false
+	for _, c := range cols {
+		if c == "updated_time" {
+			hasUpdated = true
+			break
+		}
+	}
+	if !hasUpdated {
+		cols = append(cols, "updated_time")
 	}
 	return DB.Model(&Channel{}).Where("id = ?", id).Select(cols).Updates(updates).Error
 }
