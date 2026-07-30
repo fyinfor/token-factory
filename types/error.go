@@ -372,6 +372,61 @@ func IsChannelError(err *TokenFactoryError) bool {
 	return strings.HasPrefix(string(err.errorCode), "channel:")
 }
 
+// ErrorSource 标识错误来源：上游供应商 vs 本平台。
+type ErrorSource string
+
+const (
+	ErrorSourceUpstream ErrorSource = "upstream"
+	ErrorSourcePlatform ErrorSource = "platform"
+)
+
+// GetErrorSource 判断错误主要归属上游还是本平台。
+// 上游：供应商 HTTP/响应体/业务错误，或本平台解析上游响应失败（根因仍在上游数据）。
+// 本平台：鉴权、额度、路由、请求校验、渠道配置等本地逻辑。
+func (e *TokenFactoryError) GetErrorSource() ErrorSource {
+	if e == nil {
+		return ErrorSourcePlatform
+	}
+	switch e.errorType {
+	case ErrorTypeOpenAIError, ErrorTypeClaudeError, ErrorTypeGeminiError,
+		ErrorTypeMidjourneyError, ErrorTypeRerankError, ErrorTypeUpstreamError:
+		return ErrorSourceUpstream
+	}
+	switch e.errorCode {
+	case ErrorCodeBadResponseStatusCode, ErrorCodeBadResponse, ErrorCodeBadResponseBody,
+		ErrorCodeEmptyResponse, ErrorCodeReadResponseBodyFailed, ErrorCodeDoRequestFailed,
+		ErrorCodeAwsInvokeError:
+		return ErrorSourceUpstream
+	default:
+		return ErrorSourcePlatform
+	}
+}
+
+// LogErrorOriginHint 供服务端运维日志使用的中文来源提示（不影响对外/API 错误体）。
+func (e *TokenFactoryError) LogErrorOriginHint() string {
+	if e == nil {
+		return "本平台"
+	}
+	switch e.errorCode {
+	case ErrorCodeBadResponseBody:
+		return "上游(响应体解析失败)"
+	case ErrorCodeBadResponseStatusCode:
+		return "上游(HTTP状态码异常)"
+	case ErrorCodeBadResponse, ErrorCodeEmptyResponse:
+		return "上游(响应异常)"
+	case ErrorCodeReadResponseBodyFailed:
+		return "上游(读取响应失败)"
+	case ErrorCodeDoRequestFailed:
+		return "上游(请求上游失败)"
+	case ErrorCodeAwsInvokeError:
+		return "上游(AWS调用失败)"
+	}
+	if e.GetErrorSource() == ErrorSourceUpstream {
+		return "上游"
+	}
+	return "本平台"
+}
+
 func IsSkipRetryError(err *TokenFactoryError) bool {
 	if err == nil {
 		return false

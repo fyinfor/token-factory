@@ -583,8 +583,12 @@ func prependUsernameBeforeRole(content string, username string) string {
 }
 
 func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string, tokenName string, content string, tokenId int, useTimeSeconds int,
-	isStream bool, group string, other map[string]interface{}) {
-	logger.LogInfo(c, fmt.Sprintf("record error log: userId=%d, channelId=%d, modelName=%s, tokenName=%s, content=%s", userId, channelId, modelName, tokenName, content))
+	isStream bool, group string, other map[string]interface{}, errorOriginHint string) {
+	if errorOriginHint == "" {
+		errorOriginHint = "本平台"
+	}
+	// 来源仅写服务端日志；入库 content 与 other 不变，/log 接口展示不受影响。
+	logger.LogInfo(c, fmt.Sprintf("record error log [来源=%s]: userId=%d, channelId=%d, modelName=%s, tokenName=%s, content=%s", errorOriginHint, userId, channelId, modelName, tokenName, content))
 	username := c.GetString("username")
 	requestId := c.GetString(common.RequestIdKey)
 	otherStr := common.MapToJsonStr(other)

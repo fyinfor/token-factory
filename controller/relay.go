@@ -135,7 +135,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 				})
 				return
 			}
-			logger.LogError(c, fmt.Sprintf("relay error: %s", tokenFactoryError.Error()))
+			logger.LogError(c, fmt.Sprintf("relay error [来源=%s] (error_type=%s, error_code=%s): %s",
+				tokenFactoryError.LogErrorOriginHint(), tokenFactoryError.GetErrorType(), tokenFactoryError.GetErrorCode(), tokenFactoryError.Error()))
 			tokenFactoryError.SetMessage(common.MessageWithRequestId(tokenFactoryError.Error(), requestId))
 			switch relayFormat {
 			case types.RelayFormatOpenAIRealtime:
@@ -534,7 +535,8 @@ func shouldRetry(c *gin.Context, openaiErr *types.TokenFactoryError, retryTimes 
 }
 
 func processChannelError(c *gin.Context, channelError types.ChannelError, err *types.TokenFactoryError) {
-	logger.LogError(c, fmt.Sprintf("channel error (channel #%d, status code: %d): %s", channelError.ChannelId, err.StatusCode, err.Error()))
+	logger.LogError(c, fmt.Sprintf("channel error [来源=%s] (channel #%d, status_code=%d, error_type=%s, error_code=%s): %s",
+		err.LogErrorOriginHint(), channelError.ChannelId, err.StatusCode, err.GetErrorType(), err.GetErrorCode(), err.Error()))
 	// 不要使用context获取渠道信息，异步处理时可能会出现渠道信息不一致的情况
 	// do not use context to get channel info, there may be inconsistent channel info when processing asynchronously
 	if service.ShouldDisableChannel(channelError.ChannelType, err) && channelError.AutoBan {
@@ -575,7 +577,8 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 			startTime = time.Now()
 		}
 		useTimeSeconds := int(time.Since(startTime).Seconds())
-		model.RecordErrorLog(c, userId, channelId, modelName, tokenName, err.MaskSensitiveErrorWithStatusCode(), tokenId, useTimeSeconds, false, userGroup, other)
+		// content / other 写入 DB 供 /log 查看，保持不变；来源提示仅打在服务端日志。
+		model.RecordErrorLog(c, userId, channelId, modelName, tokenName, err.MaskSensitiveErrorWithStatusCode(), tokenId, useTimeSeconds, false, userGroup, other, err.LogErrorOriginHint())
 	}
 
 }
@@ -619,7 +622,7 @@ func RelayMidjourney(c *gin.Context) {
 			"code":        mjErr.Code,
 		})
 		channelId := c.GetInt("channel_id")
-		logger.LogError(c, fmt.Sprintf("relay error (channel #%d, status code %d): %s", channelId, statusCode, fmt.Sprintf("%s %s", mjErr.Description, mjErr.Result)))
+		logger.LogError(c, fmt.Sprintf("relay error [来源=上游] (channel #%d, status_code=%d): %s", channelId, statusCode, fmt.Sprintf("%s %s", mjErr.Description, mjErr.Result)))
 	}
 }
 
