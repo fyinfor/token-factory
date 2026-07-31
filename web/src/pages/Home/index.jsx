@@ -17,36 +17,19 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useContext, useEffect, useRef, useState } from 'react';
-import {
-  Button,
-  Typography,
-  Input,
-  ScrollList,
-  ScrollItem,
-} from '@douyinfe/semi-ui';
-import {
-  API,
-  showError,
-  copy,
-  showSuccess,
-  userIsDistributorUser,
-} from '../../helpers';
-import { useIsMobile } from '../../hooks/common/useIsMobile';
-import { API_ENDPOINTS } from '../../constants/common.constant';
+import React, {
+  lazy,
+  Suspense,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
+import { API } from '../../helpers/apiClient';
+import { showError } from '../../helpers/appBasics';
 import { StatusContext } from '../../context/Status';
-import { UserContext } from '../../context/User';
 import { useActualTheme } from '../../context/Theme';
-import { marked } from 'marked';
 import { useTranslation } from 'react-i18next';
-import {
-  IconGithubLogo,
-  IconPlay,
-  IconFile,
-  IconCopy,
-} from '@douyinfe/semi-icons';
-import { Link } from 'react-router-dom';
-import NoticeModal from '../../components/layout/NoticeModal';
 import {
   OPEN_NOTIFICATION_CENTER_EVENT,
   acknowledgeAnnouncementPopup,
@@ -54,35 +37,15 @@ import {
   getLegacyNoticePopupKey,
   isAnnouncementPopupAcknowledged,
 } from '../../hooks/common/useNotifications';
-import HomeModelList from '../../components/home/HomeModelList';
 import HomeHeroCarousel from '../../components/home/HomeHeroCarousel';
-import HomeFooterCertificates from '../../components/home/HomeFooterCertificates';
-import {
-  Moonshot,
-  OpenAI,
-  XAI,
-  Zhipu,
-  Volcengine,
-  Cohere,
-  Claude,
-  Gemini,
-  Suno,
-  Minimax,
-  Wenxin,
-  Spark,
-  Qingyan,
-  DeepSeek,
-  Qwen,
-  Midjourney,
-  Grok,
-  AzureAI,
-  Hunyuan,
-  Xinference,
-  XiaomiMiMo,
-} from '@lobehub/icons';
-import FooterBar from '../../components/layout/Footer';
+import HomeModelListSkeleton from '../../components/home/HomeModelListSkeleton';
 
-const { Text } = Typography;
+const HomeModelList = lazy(() => import('../../components/home/HomeModelList'));
+const NoticeModal = lazy(() => import('../../components/layout/NoticeModal'));
+const HomeFooterCertificates = lazy(
+  () => import('../../components/home/HomeFooterCertificates'),
+);
+const FooterBar = lazy(() => import('../../components/layout/Footer'));
 
 /** 首页功能卡片：与首张相同的左图右文布局，顺序对应 public/home-card-1..4.png */
 const HOME_FEATURE_CARDS = [
@@ -112,70 +75,46 @@ const HOME_FEATURE_CARDS = [
 const Home = () => {
   const { t, i18n } = useTranslation();
   const [statusState] = useContext(StatusContext);
-  const [userState] = useContext(UserContext);
   const actualTheme = useActualTheme();
-  const [homePageContentLoaded, setHomePageContentLoaded] = useState(false);
-  const [homePageContent, setHomePageContent] = useState('');
+  const [homePageContent, setHomePageContent] = useState(
+    () => localStorage.getItem('home_page_content') || '',
+  );
   const [noticeVisible, setNoticeVisible] = useState(false);
+  const [homeModelListReady, setHomeModelListReady] = useState(false);
   const [noticePopupKey, setNoticePopupKey] = useState('');
   const [legacyNoticeContent, setLegacyNoticeContent] = useState('');
   const noticeCheckedRef = useRef(false);
+  const homePageIframeRef = useRef(null);
   const latestAnnouncement = statusState?.status?.announcements?.[0];
   const latestAnnouncementPopupKey = latestAnnouncement
     ? getAnnouncementPopupKey(latestAnnouncement)
     : '';
-  const isMobile = useIsMobile();
-  const isDemoSiteMode = statusState?.status?.demo_site_enabled || false;
-  const serverAddress =
-    statusState?.status?.server_address || `${window.location.origin}`;
-  const endpointItems = API_ENDPOINTS.map((e) => ({ value: e }));
-  const [endpointIndex, setEndpointIndex] = useState(0);
-  let u = userState?.user;
-  if (!u) {
-    try {
-      const raw = localStorage.getItem('user');
-      if (raw) u = JSON.parse(raw);
-    } catch {
-      u = null;
-    }
-  }
-  const userRole = u?.role ?? null;
-  const showDistributorRecruit = !userIsDistributorUser(u);
-
   const displayHomePageContent = async () => {
-    setHomePageContent(localStorage.getItem('home_page_content') || '');
-    const res = await API.get('/api/home_page_content');
-    const { success, message, data } = res.data;
-    if (success) {
+    try {
+      const res = await API.get('/api/home_page_content');
+      const { success, message, data = '' } = res.data;
+      if (!success) {
+        showError(message);
+        return;
+      }
+
       let content = data;
-      if (!data.startsWith('https://')) {
+      if (!data.startsWith('https://') && data !== '') {
+        const { marked } = await import('marked');
         content = marked.parse(data);
       }
       setHomePageContent(content);
       localStorage.setItem('home_page_content', content);
-
-      // 如果内容是 URL，则发送主题模式
-      if (data.startsWith('https://')) {
-        const iframe = document.querySelector('iframe');
-        if (iframe) {
-          iframe.onload = () => {
-            iframe.contentWindow.postMessage({ themeMode: actualTheme }, '*');
-            iframe.contentWindow.postMessage({ lang: i18n.language }, '*');
-          };
-        }
-      }
-    } else {
-      showError(message);
-      setHomePageContent('加载首页内容失败...');
+    } catch (error) {
+      console.error('Failed to load home page content:', error);
     }
-    setHomePageContentLoaded(true);
   };
 
-  const handleCopyBaseURL = async () => {
-    const ok = await copy(serverAddress);
-    if (ok) {
-      showSuccess(t('已复制到剪切板'));
-    }
+  const syncHomePageIframe = () => {
+    const iframeWindow = homePageIframeRef.current?.contentWindow;
+    if (!iframeWindow) return;
+    iframeWindow.postMessage({ themeMode: actualTheme }, '*');
+    iframeWindow.postMessage({ lang: i18n.language }, '*');
   };
 
   useEffect(() => {
@@ -237,11 +176,17 @@ const Home = () => {
   }, []);
 
   useEffect(() => {
-    const timer = setInterval(() => {
-      setEndpointIndex((prev) => (prev + 1) % endpointItems.length);
-    }, 3000);
-    return () => clearInterval(timer);
-  }, [endpointItems.length]);
+    if (homePageContent !== '') return undefined;
+    if (typeof window.requestIdleCallback === 'function') {
+      const idleId = window.requestIdleCallback(
+        () => setHomeModelListReady(true),
+        { timeout: 800 },
+      );
+      return () => window.cancelIdleCallback(idleId);
+    }
+    const timeoutId = window.setTimeout(() => setHomeModelListReady(true), 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [homePageContent]);
 
   return (
     <>
@@ -254,13 +199,17 @@ const Home = () => {
         }
       `}</style>
       <div className='w-full h-[100dvh] overflow-y-auto home-scroll-container'>
-        <NoticeModal
-          visible={noticeVisible}
-          fallbackContent={legacyNoticeContent}
-          onClose={acknowledgeNotice}
-          onViewMore={handleViewMoreNotices}
-        />
-        {homePageContentLoaded && homePageContent === '' ? (
+        {noticeVisible ? (
+          <Suspense fallback={null}>
+            <NoticeModal
+              visible
+              fallbackContent={legacyNoticeContent}
+              onClose={acknowledgeNotice}
+              onViewMore={handleViewMoreNotices}
+            />
+          </Suspense>
+        ) : null}
+        {homePageContent === '' ? (
           <div className='w-full'>
             {/* Banner 部分 */}
             <div className='home-banner-bg w-full'>
@@ -342,7 +291,19 @@ const Home = () => {
                 </div> */}
 
                 {/* 模型列表区域 */}
-                <HomeModelList />
+                <div className='min-h-[420px]'>
+                  {homeModelListReady ? (
+                    <Suspense
+                      fallback={
+                        <HomeModelListSkeleton label={t('加载中...')} />
+                      }
+                    >
+                      <HomeModelList />
+                    </Suspense>
+                  ) : (
+                    <HomeModelListSkeleton label={t('加载中...')} />
+                  )}
+                </div>
               </div>
             </div>
 
@@ -385,6 +346,7 @@ const Home = () => {
                             src={card.image}
                             alt=''
                             className='absolute inset-0 h-full w-full rounded-[20px] object-cover object-center'
+                            loading='lazy'
                             decoding='async'
                           />
                         </div>
@@ -407,8 +369,10 @@ const Home = () => {
           <div className='overflow-x-hidden w-full'>
             {homePageContent.startsWith('https://') ? (
               <iframe
+                ref={homePageIframeRef}
                 src={homePageContent}
                 className='w-full h-screen border-none'
+                onLoad={syncHomePageIframe}
               />
             ) : (
               <div
@@ -418,11 +382,13 @@ const Home = () => {
             )}
           </div>
         )}
-        <HomeFooterCertificates
-          enabled={statusState?.status?.home_footer_certificates_enabled}
-          rawCertificates={statusState?.status?.home_footer_certificates}
-        />
-        <FooterBar />
+        <Suspense fallback={null}>
+          <HomeFooterCertificates
+            enabled={statusState?.status?.home_footer_certificates_enabled}
+            rawCertificates={statusState?.status?.home_footer_certificates}
+          />
+          <FooterBar />
+        </Suspense>
       </div>
     </>
   );

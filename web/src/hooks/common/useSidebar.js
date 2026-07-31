@@ -20,7 +20,8 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState, useEffect, useMemo, useContext, useRef } from 'react';
 import { StatusContext } from '../../context/Status';
 import { UserContext } from '../../context/User';
-import { API, mergeSelfResponseIntoLocalUser } from '../../helpers';
+import { API } from '../../helpers/apiClient';
+import { mergeSelfResponseIntoLocalUser } from '../../helpers/data';
 
 // 创建一个全局事件系统来同步所有useSidebar实例
 const sidebarEventTarget = new EventTarget();

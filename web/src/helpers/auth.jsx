@@ -21,7 +21,7 @@ import React from 'react';
 import { Navigate, useSearchParams } from 'react-router-dom';
 import { USER_ROLES } from '../constants/user.constants';
 import { history } from './history';
-import { userIsDistributorUser } from './utils';
+import { userIsDistributorUser } from './appBasics';
 
 /** 登录/注册页 ?redirect= 仅允许站内相对路径，防止开放重定向 */
 export function safeInternalRedirectPath(raw) {

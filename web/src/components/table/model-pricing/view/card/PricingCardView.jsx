@@ -2939,4 +2939,4 @@ const PricingCardView = ({
   );
 };
 
-export default PricingCardView;
+export default React.memo(PricingCardView);

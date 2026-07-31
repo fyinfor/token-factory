@@ -18,7 +18,13 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useEffect, useState } from 'react';
-import { Button, SideSheet, Tabs, Typography } from '@douyinfe/semi-ui';
+import {
+  Button,
+  SideSheet,
+  Skeleton,
+  Tabs,
+  Typography,
+} from '@douyinfe/semi-ui';
 import { IconClose } from '@douyinfe/semi-icons';
 
 import { API } from '../../../../helpers';
@@ -28,6 +34,44 @@ import ModelBasicInfo from './components/ModelBasicInfo';
 import ModelChannelWorkspace from './components/ModelChannelWorkspace';
 
 const { Text } = Typography;
+
+const ModelDetailContentSkeleton = () => (
+  <div
+    className='model-channel-workspace grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] overflow-hidden md:grid-cols-[230px_minmax(0,1fr)] md:grid-rows-1'
+    aria-hidden='true'
+  >
+    <aside className='channel-selector-pane max-h-64 min-h-0 border-b p-3 md:h-full md:max-h-none md:border-b-0 md:border-r'>
+      <Skeleton
+        loading
+        active
+        placeholder={
+          <div className='space-y-3'>
+            {[0, 1, 2].map((item) => (
+              <Skeleton.Title
+                key={item}
+                style={{ width: '100%', height: 92, borderRadius: 8 }}
+              />
+            ))}
+          </div>
+        }
+      />
+    </aside>
+    <section className='channel-detail-content h-full min-h-0 overflow-hidden p-3'>
+      <Skeleton
+        loading
+        active
+        placeholder={
+          <div className='space-y-4'>
+            <Skeleton.Title style={{ width: '38%', height: 22 }} />
+            <Skeleton.Paragraph rows={3} />
+            <Skeleton.Title style={{ width: '52%', height: 22 }} />
+            <Skeleton.Paragraph rows={6} />
+          </div>
+        }
+      />
+    </section>
+  </div>
+);
 
 const ModelDetailSideSheet = ({
   visible,
@@ -62,16 +106,18 @@ const ModelDetailSideSheet = ({
   const isMobile = useIsMobile();
   const [activeSection, setActiveSection] = useState('general');
   const [channelMtrMap, setChannelMtrMap] = useState({});
+  const [contentReady, setContentReady] = useState(false);
 
   useEffect(() => {
     if (!visible) {
       setActiveSection('general');
+      setContentReady(false);
     }
   }, [visible, modelData?.model_name]);
 
   useEffect(() => {
     if (
-      !visible ||
+      !contentReady ||
       !modelData?.model_name ||
       !modelData?.channel_list?.length
     ) {
@@ -117,7 +163,7 @@ const ModelDetailSideSheet = ({
     return () => {
       cancelled = true;
     };
-  }, [visible, modelData?.model_name, modelData?.channel_list]);
+  }, [contentReady, modelData?.model_name, modelData?.channel_list]);
 
   const channelProps = {
     modelData,
@@ -171,6 +217,7 @@ const ModelDetailSideSheet = ({
         />
       }
       onCancel={onClose}
+      afterVisibleChange={setContentReady}
     >
       {!modelData ? (
         <div className='flex flex-1 items-center justify-center py-10'>
@@ -185,11 +232,15 @@ const ModelDetailSideSheet = ({
           contentStyle={{ minHeight: 0, flex: 1, overflow: 'hidden' }}
         >
           <Tabs.TabPane tab={t('通用与渠道')} itemKey='general'>
-            <ModelChannelWorkspace
-              {...channelProps}
-              endpointMap={endpointMap}
-              perfSummary={perfMetricsMap[modelData.model_name]}
-            />
+            {contentReady ? (
+              <ModelChannelWorkspace
+                {...channelProps}
+                endpointMap={endpointMap}
+                perfSummary={perfMetricsMap[modelData.model_name]}
+              />
+            ) : (
+              <ModelDetailContentSkeleton />
+            )}
           </Tabs.TabPane>
           <Tabs.TabPane tab={t('基本信息')} itemKey='basic'>
             <div className='model-basic-content h-full overflow-y-auto p-3'>
