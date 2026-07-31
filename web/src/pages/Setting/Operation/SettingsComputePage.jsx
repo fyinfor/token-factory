@@ -104,9 +104,9 @@ export default function SettingsComputePage() {
       onError?.(error);
       return;
     }
-    if (fileInstance.size > 5 * 1024 * 1024) {
+    if (fileInstance.size > 20 * 1024 * 1024) {
       const error = new Error('html too large');
-      showError(t('HTML 文件不能超过 5 MB'));
+      showError(t('HTML 文件不能超过 20 MB'));
       onError?.(error);
       return;
     }
@@ -177,7 +177,7 @@ export default function SettingsComputePage() {
                     {config.file_name || t('尚未上传 HTML 文件')}
                   </Text>
                   <Text type='tertiary' size='small'>
-                    {t('请上传 UTF-8 编码的自包含 HTML 文件，最大 5 MB')}
+                    {t('请上传 UTF-8 编码的自包含 HTML 文件，最大 20 MB')}
                   </Text>
                 </div>
               </div>

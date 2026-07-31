@@ -1981,7 +1981,7 @@ function resolveImagePerImageBillingDisplay(
     billingMeta,
   );
   const resolutionLabel = String(imageMeta.resolution || '').trim();
-  // 图片实际尺寸保留像素（如 1360x768）；计费档位归一为 1080p（≡1K）/ 2K / 4K。
+  // 图片实际尺寸保留像素（如 1360x768）；计费档位归一为 512P / 1K / 2K / 4K。
   const ruleResolutionLabel =
     formatImageResolutionDisplayLabel(imageMeta.ruleResolution) ||
     String(imageMeta.ruleResolution || '').trim();

@@ -339,7 +339,7 @@ func resolutionLabel(raw string) string {
 	return raw
 }
 
-// imageResolutionLabel 按 Ai 绘图短边规则归一化图片分辨率档位（1080p ≡1K / 2K / 4K）。
+// imageResolutionLabel 按 Ai 绘图短边规则归一化图片分辨率档位（512P / 1K / 2K / 4K）。
 func imageResolutionLabel(raw string) string {
 	return common.FormatImageResolutionLabel(raw)
 }
@@ -347,7 +347,9 @@ func imageResolutionLabel(raw string) string {
 func imageResolutionValue(raw string) string {
 	label := imageResolutionLabel(raw)
 	switch strings.ToLower(strings.TrimSpace(label)) {
-	case "1080p", "1k":
+	case "512p":
+		return "512x512"
+	case "1k", "1080p": // 1080p 为历史计费别名，等价 1K
 		return "1024x1024"
 	case "2k":
 		return "2048x2048"
@@ -400,7 +402,7 @@ func normalizeDiscoveryResolutions(mediaMode string, rawTiers interface{}) []pla
 		if label == "" {
 			label = value
 		}
-		// 图片档位按 1080p/2K/4K 去重（1K≡1080p；多种历史像素配置可能落到同一档）
+		// 图片档位按 512P/1K/2K/4K 去重（历史 1080p≡1K；多种像素配置可能落到同一档）
 		seenKey := value
 		if mediaMode == "image" {
 			seenKey = strings.ToLower(label)
@@ -444,7 +446,12 @@ func preferredDiscoveryDefault(mediaMode string, options []playgroundMediaResolu
 	}
 	if mediaMode == "image" {
 		for _, option := range options {
-			if strings.EqualFold(option.Label, "1080p") || strings.EqualFold(option.Label, "1K") {
+			if strings.EqualFold(option.Label, "1K") || strings.EqualFold(option.Label, "1080p") {
+				return option.Value
+			}
+		}
+		for _, option := range options {
+			if strings.EqualFold(option.Label, "512P") {
 				return option.Value
 			}
 		}

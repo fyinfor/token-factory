@@ -429,6 +429,7 @@ const ModelChannelWorkspace = ({
   const [loadedChannelPerf, setLoadedChannelPerf] = useState({});
   const [visiblePerfSummary, setVisiblePerfSummary] = useState(perfSummary);
   const [docsVisible, setDocsVisible] = useState(false);
+  const [docsMounted, setDocsMounted] = useState(false);
 
   useEffect(() => {
     setSelectedChannelKey(lowestChannelKey);
@@ -436,7 +437,14 @@ const ModelChannelWorkspace = ({
     setLoadedChannelPerf({});
     setVisiblePerfSummary(perfSummary);
     setDocsVisible(false);
+    setDocsMounted(false);
   }, [lowestChannelKey, modelData?.model_name, perfSummary]);
+
+  useEffect(() => {
+    if (docsVisible || !docsMounted) return undefined;
+    const timeoutId = window.setTimeout(() => setDocsMounted(false), 300);
+    return () => window.clearTimeout(timeoutId);
+  }, [docsMounted, docsVisible]);
 
   const selectedEntry = useMemo(() => {
     const index = channelList.findIndex(
@@ -459,46 +467,37 @@ const ModelChannelWorkspace = ({
   }, [channelPerfMap, loadedChannelPerf, selectedChannelId]);
 
   useEffect(() => {
-    const channelIds = channelList
-      .map((channel) => Number(channel?.channel_id || 0))
-      .filter(Boolean);
-    const missingChannelIds = channelIds.filter(
-      (channelId) => !loadedChannelPerf[String(channelId)],
-    );
-    if (missingChannelIds.length === 0) return;
+    const channelKey = String(selectedChannelId);
+    if (!selectedChannelId || loadedChannelPerf[channelKey]) return;
 
     let cancelled = false;
-    Promise.allSettled(
-      missingChannelIds.map(async (channelId) => ({
-        channelId,
-        summary: perfQueryResultToSummary(
-          await fetchPerfMetrics(modelData.model_name, 24, '', channelId),
-        ),
-      })),
-    ).then((results) => {
-      if (cancelled) return;
-      const summaries = {};
-      const loaded = {};
-      results.forEach((result, index) => {
-        const fallbackChannelId = missingChannelIds[index];
-        if (result.status === 'fulfilled') {
-          const { channelId, summary } = result.value;
-          if (summary) summaries[String(channelId)] = summary;
-          loaded[String(channelId)] = true;
-          return;
+    fetchPerfMetrics(modelData.model_name, 24, '', selectedChannelId)
+      .then(perfQueryResultToSummary)
+      .then((summary) => {
+        if (cancelled) return;
+        if (summary) {
+          setChannelPerfMap((current) => ({
+            ...current,
+            [channelKey]: summary,
+          }));
         }
-        loaded[String(fallbackChannelId)] = true;
+        setLoadedChannelPerf((current) => ({
+          ...current,
+          [channelKey]: true,
+        }));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setLoadedChannelPerf((current) => ({
+          ...current,
+          [channelKey]: true,
+        }));
       });
-      if (Object.keys(summaries).length > 0) {
-        setChannelPerfMap((current) => ({ ...current, ...summaries }));
-      }
-      setLoadedChannelPerf((current) => ({ ...current, ...loaded }));
-    });
 
     return () => {
       cancelled = true;
     };
-  }, [channelList, loadedChannelPerf, modelData.model_name]);
+  }, [loadedChannelPerf, modelData.model_name, selectedChannelId]);
 
   if (!selectedEntry.channel) return null;
 
@@ -621,7 +620,10 @@ const ModelChannelWorkspace = ({
           endpointMap={endpointMap}
           t={t}
           flat
-          onOpenDocs={() => setDocsVisible(true)}
+          onOpenDocs={() => {
+            setDocsMounted(true);
+            setDocsVisible(true);
+          }}
         />
         <ModelChannelList
           {...props}
@@ -630,17 +632,22 @@ const ModelChannelWorkspace = ({
           t={t}
           flatDetails
         />
-        <ApiDocsSidePanel
-          visible={docsVisible}
-          onClose={() => setDocsVisible(false)}
-          modelName={getChannelRouteModelName(modelData, selectedEntry.channel)}
-          docIntroduction={selectedEntry.channel.doc_introduction || ''}
-          apiDocs={selectedEntry.channel.api_docs || ''}
-          apiDocsMarkdown={selectedEntry.channel.api_docs_markdown || ''}
-          apiDocsMarkdownEn={selectedEntry.channel.api_docs_markdown_en || ''}
-          useDefaultDocs={selectedEntry.channel.doc_configured !== true}
-          t={t}
-        />
+        {docsMounted ? (
+          <ApiDocsSidePanel
+            visible={docsVisible}
+            onClose={() => setDocsVisible(false)}
+            modelName={getChannelRouteModelName(
+              modelData,
+              selectedEntry.channel,
+            )}
+            docIntroduction={selectedEntry.channel.doc_introduction || ''}
+            apiDocs={selectedEntry.channel.api_docs || ''}
+            apiDocsMarkdown={selectedEntry.channel.api_docs_markdown || ''}
+            apiDocsMarkdownEn={selectedEntry.channel.api_docs_markdown_en || ''}
+            useDefaultDocs={selectedEntry.channel.doc_configured !== true}
+            t={t}
+          />
+        ) : null}
       </section>
     </div>
   );

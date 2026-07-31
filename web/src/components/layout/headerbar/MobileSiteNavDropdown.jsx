@@ -22,7 +22,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { Button, Dropdown } from '@douyinfe/semi-ui';
 import { ChevronDown } from 'lucide-react';
 import SkeletonWrapper from '../components/SkeletonWrapper';
-import { isAdmin, userIsSupplierUser } from '../../../helpers';
+import { isAdmin, userIsSupplierUser } from '../../../helpers/appBasics';
 
 /** 主站入口顺序（与桌面顶栏一致） */
 const PRIMARY_NAV_KEYS = [

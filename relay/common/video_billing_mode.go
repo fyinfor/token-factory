@@ -32,7 +32,11 @@ func DetectVideoBillingMode(req *TaskSubmitReq) string {
 	}
 	if strings.TrimSpace(req.InputReference) != "" ||
 		strings.TrimSpace(req.Image) != "" ||
-		hasNonEmptyString(req.Images) {
+		hasNonEmptyString(req.Images) ||
+		strings.TrimSpace(req.FirstFrameURL) != "" ||
+		strings.TrimSpace(req.LastFrameURL) != "" ||
+		metadataHasMedia(req.Metadata, "first_frame_url") ||
+		metadataHasMedia(req.Metadata, "last_frame_url") {
 		return VideoBillingModeImageToVideo
 	}
 	return VideoBillingModeTextToVideo

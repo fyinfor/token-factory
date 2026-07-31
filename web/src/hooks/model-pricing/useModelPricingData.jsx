@@ -17,7 +17,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import { useState, useEffect, useContext, useRef, useMemo } from 'react';
+import {
+  useState,
+  useEffect,
+  useContext,
+  useRef,
+  useMemo,
+  useCallback,
+} from 'react';
 import { useTranslation } from 'react-i18next';
 import { API, copy, showError, showInfo, showSuccess } from '../../helpers';
 import { fetchPerfMetricsSummary } from '../../helpers/perfMetrics';
@@ -587,19 +594,29 @@ export const useModelPricingData = (options = {}) => {
     [selectedRowKeys],
   );
 
-  const displayPrice = (usdPrice) => {
-    let priceInUSD = usdPrice;
-    if (showWithRecharge) {
-      priceInUSD = (usdPrice * priceRate) / usdExchangeRate;
-    }
+  const displayPrice = useCallback(
+    (usdPrice) => {
+      let priceInUSD = usdPrice;
+      if (showWithRecharge) {
+        priceInUSD = (usdPrice * priceRate) / usdExchangeRate;
+      }
 
-    if (currency === 'CNY') {
-      return `¥${parseFloat((priceInUSD * usdExchangeRate).toFixed(2))}`;
-    } else if (currency === 'CUSTOM') {
-      return `${customCurrencySymbol}${parseFloat((priceInUSD * customExchangeRate).toFixed(2))}`;
-    }
-    return `$${parseFloat(priceInUSD.toFixed(2))}`;
-  };
+      if (currency === 'CNY') {
+        return `¥${parseFloat((priceInUSD * usdExchangeRate).toFixed(2))}`;
+      } else if (currency === 'CUSTOM') {
+        return `${customCurrencySymbol}${parseFloat((priceInUSD * customExchangeRate).toFixed(2))}`;
+      }
+      return `$${parseFloat(priceInUSD.toFixed(2))}`;
+    },
+    [
+      currency,
+      customCurrencySymbol,
+      customExchangeRate,
+      priceRate,
+      showWithRecharge,
+      usdExchangeRate,
+    ],
+  );
 
   const getModelRowKey = (model, index) => {
     const parts = [
@@ -705,7 +722,9 @@ export const useModelPricingData = (options = {}) => {
       setChannelVideoRatio(channel_video_ratio || {});
       setChannelVideoCompletionRatio(channel_video_completion_ratio || {});
       setChannelVideoPrice(channel_video_price || {});
-      setChannelModelRequestTierPricing(channel_model_request_tier_pricing || {});
+      setChannelModelRequestTierPricing(
+        channel_model_request_tier_pricing || {},
+      );
       setGlobalModelRequestTierPricing(model_request_tier_pricing || {});
       setPricingChannels(channels || []);
       setUsableGroup(usable_group);
@@ -740,24 +759,27 @@ export const useModelPricingData = (options = {}) => {
     await Promise.all([loadPricing(), loadPerfMetrics()]);
   };
 
-  const copyText = async (text) => {
-    const copyValue = Array.isArray(text)
-      ? text
-          .map(
-            (key) =>
-              models.find((model) => model.key === key)?.model_name ?? key,
-          )
-          .join('\n')
-      : text;
-    if (await copy(copyValue)) {
-      showSuccess(t('已复制：') + copyValue);
-    } else {
-      Modal.error({
-        title: t('无法复制到剪贴板，请手动复制'),
-        content: copyValue,
-      });
-    }
-  };
+  const copyText = useCallback(
+    async (text) => {
+      const copyValue = Array.isArray(text)
+        ? text
+            .map(
+              (key) =>
+                models.find((model) => model.key === key)?.model_name ?? key,
+            )
+            .join('\n')
+        : text;
+      if (await copy(copyValue)) {
+        showSuccess(t('已复制：') + copyValue);
+      } else {
+        Modal.error({
+          title: t('无法复制到剪贴板，请手动复制'),
+          content: copyValue,
+        });
+      }
+    },
+    [models, t],
+  );
 
   const handleChange = (value) => {
     const newSearchValue = value ? value : '';
@@ -791,17 +813,17 @@ export const useModelPricingData = (options = {}) => {
     }
   };
 
-  const openModelDetail = (model) => {
+  const openModelDetail = useCallback((model) => {
     setSelectedModel(model);
     setShowModelDetail(true);
-  };
+  }, []);
 
-  const closeModelDetail = () => {
+  const closeModelDetail = useCallback(() => {
     setShowModelDetail(false);
     setTimeout(() => {
       setSelectedModel(null);
     }, 300);
-  };
+  }, []);
 
   useEffect(() => {
     refresh().then();

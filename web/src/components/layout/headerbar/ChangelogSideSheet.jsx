@@ -19,7 +19,8 @@ For commercial licensing, please contact support@quantumnous.com
 
 import React, { useEffect, useState } from 'react';
 import { Empty, SideSheet, Spin, Tag, Typography } from '@douyinfe/semi-ui';
-import { API, showError } from '../../../helpers';
+import { API } from '../../../helpers/apiClient';
+import { showError } from '../../../helpers/utils';
 import MarkdownRenderer from '../../common/markdown/MarkdownRenderer';
 
 const { Text } = Typography;

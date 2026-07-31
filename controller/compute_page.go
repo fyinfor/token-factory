@@ -13,7 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const maxComputePageHTMLBytes int64 = 5 * 1024 * 1024
+const maxComputePageHTMLBytes int64 = 20 * 1024 * 1024
 
 type computePageEnabledRequest struct {
 	Enabled bool `json:"enabled"`
@@ -96,7 +96,7 @@ func AdminUploadComputePageHTML(c *gin.Context) {
 		return
 	}
 	if fileHeader.Size > maxComputePageHTMLBytes {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "HTML 文件不能超过 5 MB"})
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "HTML 文件不能超过 20 MB"})
 		return
 	}
 
@@ -116,7 +116,7 @@ func AdminUploadComputePageHTML(c *gin.Context) {
 		return
 	}
 	if int64(len(content)) > maxComputePageHTMLBytes {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": "HTML 文件不能超过 5 MB"})
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "HTML 文件不能超过 20 MB"})
 		return
 	}
 	if !utf8.Valid(content) {

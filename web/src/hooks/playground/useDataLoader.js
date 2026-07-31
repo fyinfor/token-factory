@@ -22,6 +22,7 @@ import { useTranslation } from 'react-i18next';
 import {
   API,
   buildPlaygroundImageSizeOptions,
+  preferPlaygroundImageSize,
   buildPlaygroundVideoResolutionOptions,
   processModelsData,
   processGroupsData,
@@ -532,7 +533,7 @@ export const useDataLoader = (
         sizeOptions.length > 0 &&
         !sizeOptions.some((option) => option.value === latest.size)
       ) {
-        handleInputChange('image_size', sizeOptions[0].value);
+        handleInputChange('image_size', preferPlaygroundImageSize(sizeOptions));
       }
     };
     if (imagePricingTierCacheRef.current.has(cacheKey)) {

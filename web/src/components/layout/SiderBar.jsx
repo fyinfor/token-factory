@@ -31,7 +31,7 @@ import {
   isSupplier,
   showError,
   isDistributor,
-} from '../../helpers';
+} from '../../helpers/utils';
 import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
 import SkeletonWrapper from './components/SkeletonWrapper';

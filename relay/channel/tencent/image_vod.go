@@ -435,7 +435,7 @@ type tencentImageCommonMetadata struct {
 	CreateTime       string `json:"create_time,omitempty"`
 	FinishTime       string `json:"finish_time,omitempty"`
 	StorageMode      string `json:"storage_mode,omitempty"`
-	Resolution       string `json:"resolution,omitempty"` // 计费档位：1080p（≡1K）/ 2K / 4K
+	Resolution       string `json:"resolution,omitempty"` // 计费档位：512P / 1K / 2K / 4K
 	Size             string `json:"size,omitempty"`       // 实际像素尺寸：1360x768
 	AspectRatio      string `json:"aspect_ratio,omitempty"`
 	OutputImageCount int    `json:"output_image_count,omitempty"`

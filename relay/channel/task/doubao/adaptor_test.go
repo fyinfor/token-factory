@@ -198,6 +198,55 @@ func TestBuildRequestBody_IntegrationShape(t *testing.T) {
 	_ = io.Discard
 }
 
+func TestConvertToRequestPayload_FirstAndLastFrame(t *testing.T) {
+	a := &TaskAdaptor{}
+	body, err := a.convertToRequestPayload(&relaycommon.TaskSubmitReq{
+		Model:         "doubao-seedance-2-0-260128",
+		Prompt:        "从首帧过渡到尾帧",
+		FirstFrameURL: "https://cdn.example.com/start.png",
+		LastFrameURL:  "https://cdn.example.com/end.png",
+	})
+	require.NoError(t, err)
+	require.Len(t, body.Content, 3)
+	assert.Equal(t, "text", body.Content[0].Type)
+	assert.Equal(t, "image_url", body.Content[1].Type)
+	assert.Equal(t, "first_frame", body.Content[1].Role)
+	assert.Equal(t, "https://cdn.example.com/start.png", body.Content[1].ImageURL.URL)
+	assert.Equal(t, "image_url", body.Content[2].Type)
+	assert.Equal(t, "last_frame", body.Content[2].Role)
+	assert.Equal(t, "https://cdn.example.com/end.png", body.Content[2].ImageURL.URL)
+
+	data, err := common.Marshal(body)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), `"role":"first_frame"`)
+	assert.Contains(t, string(data), `"role":"last_frame"`)
+}
+
+func TestConvertToRequestPayload_FirstLastFrameFromMetadata(t *testing.T) {
+	a := &TaskAdaptor{}
+	body, err := a.convertToRequestPayload(&relaycommon.TaskSubmitReq{
+		Model:  "doubao-seedance-2-0-260128",
+		Prompt: "首尾帧生视频",
+		Images: []string{
+			"https://cdn.example.com/start.png",
+			"https://cdn.example.com/ref.png",
+			"https://cdn.example.com/end.png",
+		},
+		Metadata: map[string]interface{}{
+			"first_frame_url": "https://cdn.example.com/start.png",
+			"last_frame_url":  "https://cdn.example.com/end.png",
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, body.Content, 4)
+	assert.Equal(t, "first_frame", body.Content[1].Role)
+	assert.Equal(t, "https://cdn.example.com/start.png", body.Content[1].ImageURL.URL)
+	assert.Equal(t, "last_frame", body.Content[2].Role)
+	assert.Equal(t, "https://cdn.example.com/end.png", body.Content[2].ImageURL.URL)
+	assert.Equal(t, "reference_image", body.Content[3].Role)
+	assert.Equal(t, "https://cdn.example.com/ref.png", body.Content[3].ImageURL.URL)
+}
+
 func TestConvertToRequestPayload_CallbackURLAndReturnLastFrame(t *testing.T) {
 	a := &TaskAdaptor{}
 	body, err := a.convertToRequestPayload(&relaycommon.TaskSubmitReq{

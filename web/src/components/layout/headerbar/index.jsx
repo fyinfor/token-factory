@@ -17,7 +17,14 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { useHeaderBar } from '../../../hooks/common/useHeaderBar';
 import { useNavigation } from '../../../hooks/common/useNavigation';
 import { useUserMessageUnreadCount } from '../../../hooks/common/useUserMessageUnreadCount';
@@ -25,8 +32,8 @@ import {
   OPEN_NOTIFICATION_CENTER_EVENT,
   useNotifications,
 } from '../../../hooks/common/useNotifications';
-import { API, setStatusData } from '../../../helpers';
-import NotificationCenter from './NotificationCenter';
+import { API } from '../../../helpers/apiClient';
+import { setStatusData } from '../../../helpers/data';
 import MobileMenuButton from './MobileMenuButton';
 import HeaderLogo from './HeaderLogo';
 import MobileSiteNavDropdown from './MobileSiteNavDropdown';
@@ -37,6 +44,8 @@ import SettingsQuickSearch from './SettingsQuickSearch';
 const NOTIFICATION_POLL_INTERVAL_MS = 2 * 60 * 1000;
 const BUBBLE_MERGE_DELAY_MS = 450;
 const BUBBLE_VISIBLE_DURATION_MS = 8000;
+
+const NotificationCenter = lazy(() => import('./NotificationCenter'));
 
 const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
   const {
@@ -296,21 +305,25 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
 
   return (
     <header className='text-semi-color-text-0 sticky top-0 z-50 bg-[rgba(255,255,255,0.92)] backdrop-blur-xl transition-colors duration-300 dark:bg-[rgba(24,24,27,0.75)]'>
-      <NotificationCenter
-        visible={notificationCenterVisible}
-        onClose={handleNotificationCenterClose}
-        showMessages={Boolean(userState?.user?.id)}
-        messageUnreadCount={messageUnreadCount}
-        announcementUnreadCount={announcementUnreadCount}
-        announcements={announcements}
-        announcementUnreadKeys={announcementUnreadKeys}
-        markAnnouncementsRead={markAnnouncementsRead}
-        onMessagesMarkedRead={reduceUnreadCount}
-        onMessageReadStateChanged={refreshUnreadCount}
-        onRefreshAnnouncements={refreshAnnouncementData}
-        fallbackNoticeContent={fallbackNoticeContent}
-        t={t}
-      />
+      {notificationCenterVisible ? (
+        <Suspense fallback={null}>
+          <NotificationCenter
+            visible
+            onClose={handleNotificationCenterClose}
+            showMessages={Boolean(userState?.user?.id)}
+            messageUnreadCount={messageUnreadCount}
+            announcementUnreadCount={announcementUnreadCount}
+            announcements={announcements}
+            announcementUnreadKeys={announcementUnreadKeys}
+            markAnnouncementsRead={markAnnouncementsRead}
+            onMessagesMarkedRead={reduceUnreadCount}
+            onMessageReadStateChanged={refreshUnreadCount}
+            onRefreshAnnouncements={refreshAnnouncementData}
+            fallbackNoticeContent={fallbackNoticeContent}
+            t={t}
+          />
+        </Suspense>
+      ) : null}
 
       <div className='w-full px-4 md:px-6'>
         <div className='flex items-center justify-between h-14 gap-2'>
