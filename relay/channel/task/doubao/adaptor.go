@@ -358,18 +358,45 @@ func (a *TaskAdaptor) convertToRequestPayload(req *relaycommon.TaskSubmitReq) (*
 		Text: req.Prompt,
 	})
 
+	// 通用首尾帧参数 → 上游 content[].role = first_frame / last_frame
+	firstFrameURL := req.ResolveFirstFrameURL()
+	lastFrameURL := req.ResolveLastFrameURL()
+	frameURLSet := make(map[string]struct{}, 2)
+	if firstFrameURL != "" {
+		r.Content = append(r.Content, ContentItem{
+			Type:     "image_url",
+			ImageURL: &MediaURL{URL: firstFrameURL},
+			Role:     "first_frame",
+		})
+		frameURLSet[strings.ToLower(firstFrameURL)] = struct{}{}
+	}
+	if lastFrameURL != "" {
+		r.Content = append(r.Content, ContentItem{
+			Type:     "image_url",
+			ImageURL: &MediaURL{URL: lastFrameURL},
+			Role:     "last_frame",
+		})
+		frameURLSet[strings.ToLower(lastFrameURL)] = struct{}{}
+	}
+
 	if req.HasImage() {
 		for _, imgURL := range req.Images {
 			if isVideoURL(imgURL) || isAudioURL(imgURL) {
 				continue
 			}
-			if u := strings.TrimSpace(imgURL); u != "" {
-				r.Content = append(r.Content, ContentItem{
-					Type:     "image_url",
-					ImageURL: &MediaURL{URL: u},
-					Role:     "reference_image",
-				})
+			u := strings.TrimSpace(imgURL)
+			if u == "" {
+				continue
 			}
+			// 已作为首/尾帧提交的 URL 不再重复封装为 reference_image
+			if _, dup := frameURLSet[strings.ToLower(u)]; dup {
+				continue
+			}
+			r.Content = append(r.Content, ContentItem{
+				Type:     "image_url",
+				ImageURL: &MediaURL{URL: u},
+				Role:     "reference_image",
+			})
 		}
 	}
 
