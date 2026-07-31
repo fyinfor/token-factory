@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"gorm.io/gorm"
@@ -11,6 +13,29 @@ import (
 
 // channelNoRoutePattern 与旧版三段式里 channel_no（c1、c2…）同形；route_slug 禁止使用该形态以免解析歧义。
 var channelNoRoutePattern = regexp.MustCompile(`^c\d+$`)
+
+const routeSlugLookupCacheTTL = 30 * time.Second
+
+type routeSlugLookupCacheEntry struct {
+	ch        *Channel
+	expiresAt time.Time
+}
+
+var routeSlugLookupCache sync.Map // slug -> routeSlugLookupCacheEntry
+
+// InvalidateRouteSlugLookupCache 在渠道 route_slug / status / models 变更后清除缓存。
+// slug 为空时清空全部。
+func InvalidateRouteSlugLookupCache(slug string) {
+	slug = strings.TrimSpace(slug)
+	if slug == "" {
+		routeSlugLookupCache.Range(func(key, _ any) bool {
+			routeSlugLookupCache.Delete(key)
+			return true
+		})
+		return
+	}
+	routeSlugLookupCache.Delete(slug)
+}
 
 // DefaultRouteSlugFromChannelID 返回渠道默认全局路由后缀（与 channels.id 一一对应）。
 // 前缀 "u" 避免与旧 channel_no 段 c\d+ 混淆。
@@ -52,17 +77,34 @@ func ResolveChannelIDByRouteSlugAndModel(slug, modelName string) int {
 }
 
 // LookupChannelByRouteSlug 按 route_slug 查找渠道（不限启用状态）；未找到返回 nil。
+// 命中结果带短 TTL 内存缓存，避免 {model}/{route_slug} 热路径每请求打库。
 func LookupChannelByRouteSlug(slug string) *Channel {
 	slug = strings.TrimSpace(slug)
 	if slug == "" || !IsValidRouteSlug(slug) {
 		return nil
 	}
+	now := time.Now()
+	if raw, ok := routeSlugLookupCache.Load(slug); ok {
+		if entry, ok := raw.(routeSlugLookupCacheEntry); ok && now.Before(entry.expiresAt) {
+			if entry.ch == nil {
+				return nil
+			}
+			// 返回浅拷贝，避免调用方改写缓存对象
+			cp := *entry.ch
+			return &cp
+		}
+	}
+
 	var ch Channel
 	err := DB.Select("id", "models", "status", "route_slug").Where("route_slug = ?", slug).First(&ch).Error
 	if err != nil {
+		routeSlugLookupCache.Store(slug, routeSlugLookupCacheEntry{ch: nil, expiresAt: now.Add(routeSlugLookupCacheTTL)})
 		return nil
 	}
-	return &ch
+	cp := ch
+	routeSlugLookupCache.Store(slug, routeSlugLookupCacheEntry{ch: &cp, expiresAt: now.Add(routeSlugLookupCacheTTL)})
+	out := ch
+	return &out
 }
 
 // GetRouteSlugsByChannelIDs 批量返回 channel_id → route_slug（定价等场景）。

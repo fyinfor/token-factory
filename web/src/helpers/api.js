@@ -75,6 +75,9 @@ function attachAcceptLanguageInterceptor(instance) {
 
 attachAcceptLanguageInterceptor(API);
 
+const tGlobal = (key) =>
+  (typeof window !== 'undefined' ? window.__i18n?.t?.(key) : undefined) || key;
+
 function redirectToOAuthUrl(url, options = {}) {
   const { openInNewTab = false } = options;
   const targetUrl = typeof url === 'string' ? url : url.toString();
@@ -143,7 +146,7 @@ function attachResponseInterceptor(instance) {
       }
       const responseData = error.response?.data;
       if (responseData?.data?.require_real_name_verification) {
-        showError(responseData.message || '充值前请先完成实名认证');
+        showError(responseData.message || tGlobal('充值前请先完成实名认证'));
         window.location.assign(
           responseData.data.redirect || '/console/real-name-verification',
         );

@@ -34,6 +34,16 @@ import thTranslation from './locales/th.json';
 import swTranslation from './locales/sw.json';
 import { normalizeLanguage, supportedLanguages } from './language';
 
+const normalizeResource = (resource) => {
+  const { translation = {}, ...rootTranslations } = resource || {};
+  return {
+    translation: {
+      ...rootTranslations,
+      ...translation,
+    },
+  };
+};
+
 i18n
   .use(LanguageDetector)
   .use(initReactI18next)
@@ -44,17 +54,17 @@ i18n
     load: 'currentOnly',
     supportedLngs: supportedLanguages,
     resources: {
-      en: enTranslation,
-      'zh-CN': zhCNTranslation,
-      'zh-TW': zhTWTranslation,
-      fr: frTranslation,
-      ru: ruTranslation,
-      ja: jaTranslation,
-      vi: viTranslation,
-      id: idTranslation,
-      ms: msTranslation,
-      th: thTranslation,
-      sw: swTranslation,
+      en: normalizeResource(enTranslation),
+      'zh-CN': normalizeResource(zhCNTranslation),
+      'zh-TW': normalizeResource(zhTWTranslation),
+      fr: normalizeResource(frTranslation),
+      ru: normalizeResource(ruTranslation),
+      ja: normalizeResource(jaTranslation),
+      vi: normalizeResource(viTranslation),
+      id: normalizeResource(idTranslation),
+      ms: normalizeResource(msTranslation),
+      th: normalizeResource(thTranslation),
+      sw: normalizeResource(swTranslation),
     },
     fallbackLng: 'zh-CN',
     nsSeparator: false,

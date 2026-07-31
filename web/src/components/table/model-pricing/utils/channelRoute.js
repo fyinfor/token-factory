@@ -1,9 +1,12 @@
 export const getChannelRouteModelName = (modelData, channel) => {
-  const modelName = modelData?.model_name || '';
-  if (channel?.route_slug) {
-    return `${modelName}/${channel.route_slug}`;
+  const modelName = String(modelData?.model_name || '').trim();
+  if (!channel) return modelName;
+  const routeSlug = String(channel.route_slug || '').trim();
+  if (routeSlug) {
+    return modelName ? `${modelName}/${routeSlug}` : routeSlug;
   }
-  return `${channel?.supplier_alias || ''}/${modelName}/${channel?.channel_no || ''}`;
+  const suffix = getChannelRouteSuffix(modelData, channel);
+  return suffix && modelName ? `${modelName}/${suffix}` : modelName || suffix;
 };
 
 export const getModelChannelRouteNames = (model) => {
@@ -61,7 +64,9 @@ export const getModelChannelRouteSuffixes = (model) => {
 };
 
 export const modelMatchesSearchTerm = (model, searchValue) => {
-  const term = String(searchValue || '').trim().toLowerCase();
+  const term = String(searchValue || '')
+    .trim()
+    .toLowerCase();
   if (!term) return true;
 
   const fields = [
@@ -71,7 +76,9 @@ export const modelMatchesSearchTerm = (model, searchValue) => {
     model?.vendor_name,
   ];
 
-  if (fields.some((field) => field && String(field).toLowerCase().includes(term))) {
+  if (
+    fields.some((field) => field && String(field).toLowerCase().includes(term))
+  ) {
     return true;
   }
 

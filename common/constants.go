@@ -164,6 +164,10 @@ var RelayTimeout int // unit is second
 
 var RelayMaxIdleConns int
 var RelayMaxIdleConnsPerHost int
+// RelayIdleConnTimeoutSec 空闲连接回收秒数；0 表示不设置 IdleConnTimeout（沿用 Go 默认行为）。
+var RelayIdleConnTimeoutSec int
+// RelayForceHTTP2 是否强制尝试 HTTP/2；高并发下 H2 多路复用可能放大 TTFT 长尾，默认关闭。
+var RelayForceHTTP2 bool
 
 var GeminiSafetySetting string
 

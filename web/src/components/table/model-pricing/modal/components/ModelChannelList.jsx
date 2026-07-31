@@ -70,6 +70,7 @@ import {
   formatBillingUsdDisplay,
 } from '../../../../../helpers/billingFormula';
 import { formatPriceRatioFromDiscount } from '../../utils/discount';
+import { getChannelRouteModelName } from '../../utils/channelRoute';
 
 const { Text } = Typography;
 
@@ -124,14 +125,6 @@ const getSupplierTypeColor = (supplierType) => {
     default:
       return stringToColor(supplierType);
   }
-};
-
-const getChannelRouteModelName = (modelData, channel) => {
-  const modelName = modelData?.model_name || '';
-  if (channel?.route_slug) {
-    return `${modelName}/${channel.route_slug}`;
-  }
-  return `${channel?.supplier_alias || ''}/${modelName}/${channel?.channel_no || ''}`;
 };
 
 const copyModelName = (modelName, t) => {

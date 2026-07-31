@@ -964,7 +964,8 @@ func (channel *Channel) Update() error {
 	}
 	DB.Model(channel).First(channel, "id = ?", channel.Id)
 	err = channel.UpdateAbilities(nil)
-
+	// 渠道字段（含 route_slug/status/models）变更后失效路由缓存
+	InvalidateRouteSlugLookupCache("")
 	return err
 }
 
@@ -1168,6 +1169,7 @@ func UpdateChannelStatus(channelId int, usingKey string, status int, reason stri
 			common.SysLog(fmt.Sprintf("failed to update channel status: channel_id=%d, status=%d, error=%v", channel.Id, status, err))
 			return false
 		}
+		InvalidateRouteSlugLookupCache(channel.RouteSlug)
 	}
 	return true
 }
