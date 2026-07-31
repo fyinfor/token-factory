@@ -27,7 +27,7 @@ import {
   Megaphone,
   TriangleAlert,
 } from 'lucide-react';
-import { getRelativeTime } from '../../helpers';
+import { getRelativeTime } from '../../helpers/utils';
 import { getAnnouncementKey } from '../../hooks/common/useNotifications';
 
 const TYPE_META = {

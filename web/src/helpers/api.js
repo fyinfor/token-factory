@@ -17,12 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import {
-  getUserIdFromLocalStorage,
-  showError,
-  formatMessageForAPI,
-  isValidMessage,
-} from './utils';
+import { showError, formatMessageForAPI, isValidMessage } from './utils';
 import { collectPlaygroundImageMediaUrls } from './playgroundImageUtils';
 import {
   applyVideoFrameMetadata,
@@ -35,45 +30,10 @@ import {
   parsePlaygroundCustomImageSize,
   resolvePlaygroundImageSize,
 } from './videoResolutionLabel';
-import axios from 'axios';
 import { MESSAGE_ROLES } from '../constants/playground.constants';
+import { API, updateAPI } from './apiClient';
 
-export let API = axios.create({
-  baseURL: import.meta.env.VITE_REACT_APP_SERVER_URL
-    ? import.meta.env.VITE_REACT_APP_SERVER_URL
-    : '',
-  headers: {
-    'New-API-User': getUserIdFromLocalStorage(),
-    'Cache-Control': 'no-store',
-  },
-});
-
-/** 后端 i18n 仅支持 zh-CN / zh-TW / en；其余 UI 语言回传 zh-CN，由前端 t() 再译。 */
-function resolveAcceptLanguage() {
-  try {
-    const raw =
-      (typeof window !== 'undefined' && window.__i18n?.language) ||
-      localStorage.getItem('i18nextLng') ||
-      'zh-CN';
-    const lang = String(raw).trim();
-    if (lang.startsWith('zh-TW') || lang.startsWith('zh-tw')) return 'zh-TW';
-    if (lang.startsWith('zh')) return 'zh-CN';
-    if (lang.startsWith('en')) return 'en';
-    return 'zh-CN';
-  } catch {
-    return 'zh-CN';
-  }
-}
-
-function attachAcceptLanguageInterceptor(instance) {
-  instance.interceptors.request.use((config) => {
-    config.headers = config.headers || {};
-    config.headers['Accept-Language'] = resolveAcceptLanguage();
-    return config;
-  });
-}
-
-attachAcceptLanguageInterceptor(API);
+export { API, updateAPI };
 
 const tGlobal = (key) =>
   (typeof window !== 'undefined' ? window.__i18n?.t?.(key) : undefined) || key;
@@ -89,76 +49,6 @@ function redirectToOAuthUrl(url, options = {}) {
 
   window.location.assign(targetUrl);
 }
-
-function patchAPIInstance(instance) {
-  const originalGet = instance.get.bind(instance);
-  const inFlightGetRequests = new Map();
-
-  const genKey = (url, config = {}) => {
-    const params = config.params ? JSON.stringify(config.params) : '{}';
-    return `${url}?${params}`;
-  };
-
-  instance.get = (url, config = {}) => {
-    if (config?.disableDuplicate) {
-      return originalGet(url, config);
-    }
-
-    const key = genKey(url, config);
-    if (inFlightGetRequests.has(key)) {
-      return inFlightGetRequests.get(key);
-    }
-
-    const reqPromise = originalGet(url, config).finally(() => {
-      inFlightGetRequests.delete(key);
-    });
-
-    inFlightGetRequests.set(key, reqPromise);
-    return reqPromise;
-  };
-}
-
-patchAPIInstance(API);
-
-export function updateAPI() {
-  API = axios.create({
-    baseURL: import.meta.env.VITE_REACT_APP_SERVER_URL
-      ? import.meta.env.VITE_REACT_APP_SERVER_URL
-      : '',
-    headers: {
-      'New-API-User': getUserIdFromLocalStorage(),
-      'Cache-Control': 'no-store',
-    },
-  });
-
-  patchAPIInstance(API);
-  attachAcceptLanguageInterceptor(API);
-  attachResponseInterceptor(API);
-}
-
-function attachResponseInterceptor(instance) {
-  instance.interceptors.response.use(
-    (response) => response,
-    (error) => {
-      // 如果请求配置中显式要求跳过全局错误处理，则不弹出默认错误提示
-      if (error.config && error.config.skipErrorHandler) {
-        return Promise.reject(error);
-      }
-      const responseData = error.response?.data;
-      if (responseData?.data?.require_real_name_verification) {
-        showError(responseData.message || tGlobal('充值前请先完成实名认证'));
-        window.location.assign(
-          responseData.data.redirect || '/console/real-name-verification',
-        );
-        return Promise.reject(error);
-      }
-      showError(error);
-      return Promise.reject(error);
-    },
-  );
-}
-
-attachResponseInterceptor(API);
 
 /** 合并 React 18 Strict Mode 下 useEffect 双次执行导致的重复上报（开发环境）。 */
 const AFF_TRACK_DEDUP_MS = 5000;

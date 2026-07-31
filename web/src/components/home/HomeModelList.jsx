@@ -40,6 +40,11 @@ import { usePricingFilterCounts } from '../../hooks/model-pricing/usePricingFilt
 import { StatusContext } from '../../context/Status';
 import { UserContext } from '../../context/User';
 import { LIVE_HOT_FILTER } from '../table/model-pricing/utils/modelHeat';
+import { useMinimumLoadingTime } from '../../hooks/common/useMinimumLoadingTime';
+import HomeModelListSkeleton from './HomeModelListSkeleton';
+
+const EMPTY_SELECTED_ROW_KEYS = [];
+const ignoreSelectedRows = () => {};
 
 const HomeModelList = () => {
   const isMobile = useIsMobile();
@@ -49,6 +54,7 @@ const HomeModelList = () => {
   });
   const [statusState] = useContext(StatusContext);
   const [userState] = useContext(UserContext);
+  const showInitialSkeleton = useMinimumLoadingTime(pricingData.loading, 450);
 
   const headerNavHomeConfig = useMemo(() => {
     try {
@@ -142,6 +148,10 @@ const HomeModelList = () => {
     { value: 'supplier_grade', label: pricingData.t('供应商等级') },
     { value: 'latency', label: pricingData.t('时延') },
   ];
+
+  if (showInitialSkeleton) {
+    return <HomeModelListSkeleton label={pricingData.t('加载中...')} />;
+  }
 
   return (
     <div id='home-models' className='w-full home-model-list'>
@@ -988,7 +998,7 @@ const HomeModelList = () => {
           <div className='home-model-card-wrapper'>
             <PricingCardView
               filteredModels={pricingData.filteredModels}
-              loading={pricingData.loading}
+              loading={false}
               rowSelection={null}
               pageSize={pricingData.pageSize}
               setPageSize={pricingData.setPageSize}
@@ -1012,8 +1022,8 @@ const HomeModelList = () => {
               channelVideoPrice={pricingData.channelVideoPrice}
               showRatio={false}
               t={pricingData.t}
-              selectedRowKeys={[]}
-              setSelectedRowKeys={() => {}}
+              selectedRowKeys={EMPTY_SELECTED_ROW_KEYS}
+              setSelectedRowKeys={ignoreSelectedRows}
               openModelDetail={pricingData.openModelDetail}
               showSizeChanger={false}
               blurPricing={blurPricing}

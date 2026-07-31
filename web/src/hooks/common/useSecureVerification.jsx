@@ -20,7 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { SecureVerificationService } from '../../services/secureVerification';
-import { showError, showSuccess } from '../../helpers';
+import { showError, showSuccess } from '../../helpers/utils';
 import { isVerificationRequiredError } from '../../helpers/secureApiCall';
 
 /**

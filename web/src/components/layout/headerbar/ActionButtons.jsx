@@ -17,14 +17,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useState } from 'react';
+import React, { lazy, Suspense, useState } from 'react';
 import { Button } from '@douyinfe/semi-ui';
 import { ScrollText } from 'lucide-react';
 import NotificationButton from './NotificationButton';
 import ThemeToggle from './ThemeToggle';
 import LanguageSelector from './LanguageSelector';
 import UserArea from './UserArea';
-import ChangelogSideSheet from './ChangelogSideSheet';
+
+const ChangelogSideSheet = lazy(() => import('./ChangelogSideSheet'));
 
 const ActionButtons = ({
   isNewYear,
@@ -57,12 +58,16 @@ const ActionButtons = ({
         type='tertiary'
         className='!p-1.5 !text-current focus:!bg-semi-color-fill-1 dark:focus:!bg-gray-700 !rounded-full !bg-semi-color-fill-0 dark:!bg-semi-color-fill-1 hover:!bg-semi-color-fill-1 dark:hover:!bg-semi-color-fill-2'
       />
-      <ChangelogSideSheet
-        visible={changelogVisible}
-        onClose={() => setChangelogVisible(false)}
-        isMobile={isMobile}
-        t={t}
-      />
+      {changelogVisible ? (
+        <Suspense fallback={null}>
+          <ChangelogSideSheet
+            visible
+            onClose={() => setChangelogVisible(false)}
+            isMobile={isMobile}
+            t={t}
+          />
+        </Suspense>
+      ) : null}
       <NotificationButton
         unreadCount={unreadCount}
         bubble={notificationBubble}

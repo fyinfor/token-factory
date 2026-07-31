@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import { useCallback, useEffect, useState } from 'react';
-import { API } from '../../helpers';
+import { API } from '../../helpers/apiClient';
 
 const POLL_INTERVAL_MS = 2 * 60 * 1000;
 export const USER_MESSAGE_REFRESH_EVENT = 'user-message-unread-refresh';

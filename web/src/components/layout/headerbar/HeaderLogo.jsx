@@ -21,7 +21,11 @@ import React, { useCallback } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Typography, Tag } from '@douyinfe/semi-ui';
 import SkeletonWrapper from '../components/SkeletonWrapper';
-import { userIsSupplierUser, showInfo, isAdmin } from '../../../helpers';
+import {
+  userIsSupplierUser,
+  showInfo,
+  isAdmin,
+} from '../../../helpers/appBasics';
 
 /**
  * 顶栏申请入口：浅色用 #409EFF 系。
