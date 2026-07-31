@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { useState, useEffect } from 'react';
-import { API } from '../../helpers';
+import { API } from '../../helpers/apiClient';
 
 /**
  * 用户权限钩子 - 从后端获取用户权限，替代前端角色判断

@@ -34,12 +34,12 @@ import {
   Megaphone,
   X,
 } from 'lucide-react';
+import { API } from '../../../helpers/apiClient';
 import {
-  API,
   showError,
   showSuccess,
   timestamp2string,
-} from '../../../helpers';
+} from '../../../helpers/utils';
 import AnnouncementList from '../AnnouncementList';
 
 const PAGE_SIZE = 10;

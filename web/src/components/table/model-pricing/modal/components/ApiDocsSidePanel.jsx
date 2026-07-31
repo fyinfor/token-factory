@@ -99,6 +99,30 @@ const replaceMarkdownTemplateVariables = (content, variables) =>
     String(content || ''),
   );
 
+const isSafeApiDocsHref = (href) =>
+  /^(https?:\/\/|\/(?!\/)|#)/i.test(String(href || '').trim());
+
+const normalizeLegacyApiDocsMarkdown = (content) =>
+  String(content || '').replace(
+    /<a\s+href=(["'])(.*?)\1[^>]*>(.*?)<\/a>/gi,
+    (_match, _quote, href, label) => {
+      const normalizedHref = String(href || '')
+        .replace(/\\_/g, '_')
+        .trim();
+      const normalizedLabel = String(label || '').trim();
+      if (!normalizedLabel) return '';
+      if (
+        normalizedHref &&
+        normalizedHref !== '%1$s' &&
+        !normalizedHref.includes('%1$s') &&
+        isSafeApiDocsHref(normalizedHref)
+      ) {
+        return `[${normalizedLabel}](${normalizedHref})`;
+      }
+      return normalizedLabel;
+    },
+  );
+
 const getDefaultApiDocs = () => [
   {
     id: 'default-chat-completions',
@@ -630,12 +654,25 @@ const ApiDocsSidePanel = ({
     : apiDocsMarkdownEn || apiDocsMarkdown;
   const renderedMarkdown = useMemo(
     () =>
-      replaceMarkdownTemplateVariables(selectedMarkdown, {
-        base_url: serverAddress,
-        model: modelName,
-        api_key: selectedToken,
-      }),
+      normalizeLegacyApiDocsMarkdown(
+        replaceMarkdownTemplateVariables(selectedMarkdown, {
+          base_url: serverAddress,
+          model: modelName,
+          api_key: selectedToken,
+        }),
+      ),
     [modelName, selectedMarkdown, selectedToken, serverAddress],
+  );
+  const renderedDocIntroduction = useMemo(
+    () =>
+      normalizeLegacyApiDocsMarkdown(
+        replaceMarkdownTemplateVariables(docIntroduction, {
+          base_url: serverAddress,
+          model: modelName,
+          api_key: selectedToken,
+        }),
+      ),
+    [docIntroduction, modelName, selectedToken, serverAddress],
   );
   const hasMarkdownDocs = Boolean(renderedMarkdown.trim());
   const markdownUsesApiKey = String(selectedMarkdown).includes('{{api_key}}');
@@ -791,7 +828,15 @@ const ApiDocsSidePanel = ({
             className='!rounded-2xl shadow-sm border-0 mb-3'
             title={t('接口详情')}
           >
-            <MarkdownRenderer content={api.detail} />
+            <MarkdownRenderer
+              content={normalizeLegacyApiDocsMarkdown(
+                replaceMarkdownTemplateVariables(api.detail, {
+                  base_url: serverAddress,
+                  model: modelName,
+                  api_key: selectedToken,
+                }),
+              )}
+            />
           </Card>
         ) : null}
         <Card
@@ -895,12 +940,12 @@ const ApiDocsSidePanel = ({
     );
   };
 
-  const markdownIntroduction = docIntroduction ? (
+  const markdownIntroduction = renderedDocIntroduction ? (
     <section className='api-docs-root-section mb-4'>
       <Title heading={6} className='mb-2'>
         {t('模型介绍')}
       </Title>
-      <MarkdownRenderer content={docIntroduction} />
+      <MarkdownRenderer content={renderedDocIntroduction} />
     </section>
   ) : null;
 
@@ -930,9 +975,9 @@ const ApiDocsSidePanel = ({
           }
         `}
       </style>
-      {docIntroduction ? (
+      {renderedDocIntroduction ? (
         <Card className='!rounded-2xl shadow-sm border-0' title={t('模型介绍')}>
-          <MarkdownRenderer content={docIntroduction} />
+          <MarkdownRenderer content={renderedDocIntroduction} />
         </Card>
       ) : null}
       {hasMarkdownDocs ? (
@@ -974,12 +1019,12 @@ const ApiDocsSidePanel = ({
           containedMarkdownDocs
         ) : (
           <div className='space-y-4'>
-            {docIntroduction ? (
+            {renderedDocIntroduction ? (
               <section className='api-docs-root-section'>
                 <Title heading={6} className='mb-2'>
                   {t('模型介绍')}
                 </Title>
-                <MarkdownRenderer content={docIntroduction} />
+                <MarkdownRenderer content={renderedDocIntroduction} />
               </section>
             ) : null}
             <section className='api-docs-root-section'>

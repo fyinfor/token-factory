@@ -31,7 +31,7 @@ import {
   isSupplier,
   showError,
   isDistributor,
-} from '../../helpers';
+} from '../../helpers/utils';
 import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
 import SkeletonWrapper from './components/SkeletonWrapper';
@@ -267,7 +267,7 @@ const MainSiderBar = ({ onNavigate = () => {} }) => {
         className: isAdmin() ? '' : 'tableHiddle',
       },
       {
-        text: '安全护栏',
+        text: t('安全护栏'),
         itemKey: 'aliyun-guardrail',
         to: '/console/aliyun-guardrail',
         className: isAdmin() ? '' : 'tableHiddle',

@@ -140,26 +140,18 @@ const SettingsQuickSearch = ({ userState }) => {
                     rawPathSearchText.includes(normalizedQuery)
                   ? 3
                   : 4;
-        const displayTitle = includesQuery(item.label, normalizedQuery)
-          ? item.label
-          : includesQuery(item.rawLabel, normalizedQuery)
-            ? item.rawLabel
-            : item.label;
-        const displayPath = includesQuery(item.path, normalizedQuery)
-          ? item.path
-          : includesQuery(item.rawPath, normalizedQuery)
-            ? item.rawPath
-            : item.path;
-        const matchedKeywords = [...item.keywords, ...item.rawKeywords].filter(
-          (keyword, index, values) =>
-            includesQuery(keyword, normalizedQuery) &&
-            values.indexOf(keyword) === index,
-        );
+        const matchedKeywords = item.keywords.filter((keyword, index) => {
+          const rawKeyword = item.rawKeywords[index];
+          return (
+            includesQuery(keyword, normalizedQuery) ||
+            includesQuery(rawKeyword, normalizedQuery)
+          );
+        });
 
         return {
           ...item,
-          displayTitle,
-          displayPath,
+          displayTitle: item.label,
+          displayPath: item.path,
           matchedKeywords,
           score,
         };

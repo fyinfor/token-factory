@@ -27,7 +27,7 @@ import {
   IconCreditCard,
   IconKey,
 } from '@douyinfe/semi-icons';
-import { renderQuota, stringToColor } from '../../../helpers';
+import { renderQuota, stringToColor } from '../../../helpers/display';
 import SkeletonWrapper from '../components/SkeletonWrapper';
 
 const UserArea = ({

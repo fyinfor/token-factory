@@ -15,7 +15,11 @@ import {
   Tooltip,
   Typography,
 } from '@douyinfe/semi-ui';
-import { IconDownload, IconHelpCircle, IconRefresh } from '@douyinfe/semi-icons';
+import {
+  IconDownload,
+  IconHelpCircle,
+  IconRefresh,
+} from '@douyinfe/semi-icons';
 import { BarChart3, FileSpreadsheet } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import CardPro from '../../../components/common/ui/CardPro';
@@ -93,7 +97,11 @@ const COLUMN_GROUPS = [
       { key: 'official_input_price', label: '官方输入价格' },
       { key: 'official_output_price', label: '官方输出价格' },
       { key: 'official_cache_price', label: '官方缓存价格' },
-      { key: 'official_total', label: '官方总价', helpKey: '结算导出官方总价说明' },
+      {
+        key: 'official_total',
+        label: '官方总价',
+        helpKey: '结算导出官方总价说明',
+      },
     ],
   },
   {
@@ -143,7 +151,12 @@ const dateRangeToTimestamps = (dateRange) => {
   const today = getTodayStartTimestamp();
   const defaultStart = today - 90 * 24 * 60 * 60;
   const defaultEnd = today + 24 * 60 * 60 - 1;
-  if (!Array.isArray(dateRange) || dateRange.length < 2 || !dateRange[0] || !dateRange[1]) {
+  if (
+    !Array.isArray(dateRange) ||
+    dateRange.length < 2 ||
+    !dateRange[0] ||
+    !dateRange[1]
+  ) {
     return { startTs: defaultStart, endTs: defaultEnd, valid: false };
   }
   const startTs = Math.floor(new Date(dateRange[0]).getTime() / 1000);
@@ -257,7 +270,12 @@ const SettlementSummaryPanel = ({
             </Text>
           ) : null}
 
-          <SummaryAmountsBlock title={t('汇总合计')} amounts={summary.totals} t={t} highlight />
+          <SummaryAmountsBlock
+            title={t('汇总合计')}
+            amounts={summary.totals}
+            t={t}
+            highlight
+          />
 
           {summary.groups?.length ? (
             <div className='mt-4 pt-4 border-t border-gray-200'>
@@ -361,7 +379,11 @@ const SettingsSettlementExport = () => {
 
   useEffect(() => {
     setOptionsLoading(true);
-    Promise.all([loadChannelOptions(), loadAgentOptions(), searchUsers('')]).finally(() => {
+    Promise.all([
+      loadChannelOptions(),
+      loadAgentOptions(),
+      searchUsers(''),
+    ]).finally(() => {
       setOptionsLoading(false);
     });
   }, [loadChannelOptions, loadAgentOptions, searchUsers]);
@@ -400,7 +422,13 @@ const SettingsSettlementExport = () => {
       }
       return params;
     },
-    [scope, i18n.language, selectedChannelIds, selectedUserIds, selectedAgentIds],
+    [
+      scope,
+      i18n.language,
+      selectedChannelIds,
+      selectedUserIds,
+      selectedAgentIds,
+    ],
   );
 
   const fetchSummary = useCallback(async () => {
@@ -424,7 +452,9 @@ const SettingsSettlementExport = () => {
       }
     } catch (e) {
       setSummaryData(null);
-      setSummaryError(e?.response?.data?.message || e?.message || t('汇总加载失败'));
+      setSummaryError(
+        e?.response?.data?.message || e?.message || t('汇总加载失败'),
+      );
     } finally {
       setSummaryLoading(false);
     }
@@ -510,21 +540,29 @@ const SettingsSettlementExport = () => {
         ...buildSettlementQueryParams(startTs, endTs),
         columns: selectedColumns.join(','),
       });
-      const res = await API.get(`/api/log/settlement/export?${params.toString()}`, {
-        responseType: 'blob',
-      });
+      const res = await API.get(
+        `/api/log/settlement/export?${params.toString()}`,
+        {
+          responseType: 'blob',
+        },
+      );
       const blob = new Blob([res.data], { type: 'text/csv;charset=utf-8' });
       const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = objectUrl;
-      a.download = `settlement-${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}.csv`;
+      a.download = `settlement-${new Date()
+        .toISOString()
+        .replace(/[-:T.Z]/g, '')
+        .slice(0, 14)}.csv`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(objectUrl);
       showSuccess(t('结算单导出成功'));
     } catch (e) {
-      const text = e?.response?.data ? await blobToText(e.response.data) : e?.message || String(e);
+      const text = e?.response?.data
+        ? await blobToText(e.response.data)
+        : e?.message || String(e);
       showError(t('结算单导出失败') + ': ' + text);
     } finally {
       setExporting(false);
@@ -571,7 +609,10 @@ const SettingsSettlementExport = () => {
 
           <div className='mb-4'>
             <div className='mb-2 font-medium'>{t('结算视角')}</div>
-            <RadioGroup value={scope} onChange={(e) => setScope(e.target.value)}>
+            <RadioGroup
+              value={scope}
+              onChange={(e) => setScope(e.target.value)}
+            >
               <Radio value='platform'>{t('全平台')}</Radio>
               <Radio value='channel'>{t('按渠道')}</Radio>
               <Radio value='user'>{t('按用户')}</Radio>
@@ -617,7 +658,9 @@ const SettingsSettlementExport = () => {
 
           {scope === 'agent' ? (
             <div className='mb-4'>
-              <div className='mb-1 text-sm text-gray-600'>{t('选择代理商')}</div>
+              <div className='mb-1 text-sm text-gray-600'>
+                {t('选择代理商')}
+              </div>
               <Select
                 multiple
                 filter

@@ -193,12 +193,12 @@ export default function SettingsSensitiveWords(props) {
                 {t('保存屏蔽词过滤设置')}
               </Button>
             </Row>
-            <Form.Section text='阿里云 AI 安全护栏'>
+            <Form.Section text={t('阿里云 AI 安全护栏')}>
               <Row gutter={16}>
                 <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                   <Form.Switch
                     field='AliyunGuardrailEnabled'
-                    label='启用阿里云安全护栏'
+                    label={t('启用阿里云安全护栏')}
                     onChange={(value) =>
                       setInputs({ ...inputs, AliyunGuardrailEnabled: value })
                     }
@@ -207,7 +207,7 @@ export default function SettingsSensitiveWords(props) {
                 <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                   <Form.Switch
                     field='AliyunGuardrailInputEnabled'
-                    label='审核用户输入'
+                    label={t('审核用户输入')}
                     onChange={(value) =>
                       setInputs({
                         ...inputs,
@@ -219,7 +219,7 @@ export default function SettingsSensitiveWords(props) {
                 <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                   <Form.Switch
                     field='AliyunGuardrailOutputEnabled'
-                    label='审核模型非流式输出'
+                    label={t('审核模型非流式输出')}
                     onChange={(value) =>
                       setInputs({
                         ...inputs,
@@ -231,8 +231,8 @@ export default function SettingsSensitiveWords(props) {
                 <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                   <Form.Switch
                     field='AliyunGuardrailVideoEnabled'
-                    label='审核视频输出（异步）'
-                    extraText='审核通过后才会返回视频链接'
+                    label={t('审核视频输出（异步）')}
+                    extraText={t('审核通过后才会返回视频链接')}
                     onChange={(value) =>
                       setInputs({
                         ...inputs,
@@ -244,8 +244,8 @@ export default function SettingsSensitiveWords(props) {
                 <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                   <Form.Switch
                     field='AliyunGuardrailHidePlaygroundMediaTabs'
-                    label='操练场隐藏图片和视频模型'
-                    extraText='开启后操练场将不显示图片模型和视频模型 Tab'
+                    label={t('操练场隐藏图片和视频模型')}
+                    extraText={t('开启后操练场将不显示图片模型和视频模型 Tab')}
                     onChange={(value) =>
                       setInputs({
                         ...inputs,
@@ -284,8 +284,8 @@ export default function SettingsSensitiveWords(props) {
                 <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                   <Form.Input
                     field='AliyunGuardrailRegionID'
-                    label='地域'
-                    extraText='默认 cn-shanghai'
+                    label={t('地域')}
+                    extraText={t('默认 cn-shanghai')}
                     onChange={(value) =>
                       setInputs({ ...inputs, AliyunGuardrailRegionID: value })
                     }
@@ -294,7 +294,7 @@ export default function SettingsSensitiveWords(props) {
               </Row>
               <Row>
                 <Button size='default' onClick={onSubmit}>
-                  保存阿里云安全护栏设置
+                  {t('保存阿里云安全护栏设置')}
                 </Button>
               </Row>
             </Form.Section>

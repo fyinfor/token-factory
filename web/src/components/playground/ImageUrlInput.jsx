@@ -20,13 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 import React, { useCallback, useState } from 'react';
 import { Input, Typography, Button, Upload } from '@douyinfe/semi-ui';
 import { IconFile } from '@douyinfe/semi-icons';
-import {
-  Plus,
-  X,
-  Image,
-  Upload as UploadIcon,
-  Loader2,
-} from 'lucide-react';
+import { Plus, X, Image, Upload as UploadIcon, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { PLAYGROUND_MEDIA_MAX_COUNT } from '../../constants/playground.constants';
 import { showError, showSuccess } from '../../helpers';

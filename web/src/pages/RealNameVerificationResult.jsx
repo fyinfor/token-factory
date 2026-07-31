@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Spin, Typography } from '@douyinfe/semi-ui';
+import { useTranslation } from 'react-i18next';
 import { API } from '../helpers';
 
 function getToken() {
@@ -30,17 +31,18 @@ const statusContent = {
 };
 
 export default function RealNameVerificationResult() {
+  const { t } = useTranslation();
   const [status, setStatus] = useState('pending');
   const token = getToken();
 
   useEffect(() => {
     const setPageTitle = () => {
-      document.title = '\u5b9e\u540d\u8ba4\u8bc1';
+      document.title = t('\u5b9e\u540d\u8ba4\u8bc1');
     };
     setPageTitle();
     const titleTimer = window.setTimeout(setPageTitle, 0);
     return () => window.clearTimeout(titleTimer);
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!token) {
@@ -123,8 +125,8 @@ export default function RealNameVerificationResult() {
             </svg>
           </div>
         ) : null}
-        <Typography.Title heading={4}>{content[0]}</Typography.Title>
-        <Typography.Text type='tertiary'>{content[1]}</Typography.Text>
+        <Typography.Title heading={4}>{t(content[0])}</Typography.Title>
+        <Typography.Text type='tertiary'>{t(content[1])}</Typography.Text>
       </div>
     </div>
   );

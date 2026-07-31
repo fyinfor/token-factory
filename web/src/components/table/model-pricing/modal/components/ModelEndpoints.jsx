@@ -35,6 +35,7 @@ import {
   fetchTokenKey as fetchTokenKeyById,
   getServerAddress,
 } from '../../../../../helpers/token';
+import { getChannelRouteModelName } from '../../utils/channelRoute';
 
 const { Text } = Typography;
 
@@ -110,14 +111,6 @@ const isTextModel = (modelData) => {
   const tags = modelData?.tags || '';
   if (!tags || !String(tags).trim()) return true;
   return hasTag(tags, '文本');
-};
-
-const getChannelRouteModelName = (modelData, channel) => {
-  const modelName = modelData?.model_name || '';
-  if (channel?.route_slug) {
-    return `${modelName}/${channel.route_slug}`;
-  }
-  return `${channel?.supplier_alias || ''}/${modelName}/${channel?.channel_no || ''}`;
 };
 
 const AddressUsageNote = ({ title, children }) => (

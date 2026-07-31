@@ -20,7 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 import React from 'react';
 import { Button } from '@douyinfe/semi-ui';
 import { Wallet, Plus } from 'lucide-react';
-import { renderQuota } from '../../../helpers';
+import { renderQuota } from '../../../helpers/display';
 
 const WalletButton = ({ userState, isMobile, navigate, t }) => {
   if (!userState?.user) {
@@ -62,7 +62,7 @@ const WalletButton = ({ userState, isMobile, navigate, t }) => {
           size='small'
           className='!px-1.5 !py-1 !text-current focus:!bg-semi-color-fill-1 dark:focus:!bg-gray-700 !rounded-full !bg-semi-color-fill-0 dark:!bg-semi-color-fill-1 hover:!bg-semi-color-fill-1 dark:hover:!bg-semi-color-fill-2 !text-xs'
         >
-          <span className='text-xs font-medium'>{t('³äÖµ')}</span>
+          <span className='text-xs font-medium'>{t('å……å€¼')}</span>
         </Button>
       )}
     </div>

@@ -21,21 +21,53 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
 
-import enTranslation from './locales/en.json';
-import frTranslation from './locales/fr.json';
-import zhCNTranslation from './locales/zh-CN.json';
-import zhTWTranslation from './locales/zh-TW.json';
-import ruTranslation from './locales/ru.json';
-import jaTranslation from './locales/ja.json';
-import viTranslation from './locales/vi.json';
-import idTranslation from './locales/id.json';
-import msTranslation from './locales/ms.json';
-import thTranslation from './locales/th.json';
-import swTranslation from './locales/sw.json';
 import { normalizeLanguage, supportedLanguages } from './language';
 
-i18n
+const localeLoaders = {
+  en: () => import('./locales/en.json'),
+  fr: () => import('./locales/fr.json'),
+  'zh-CN': () => import('./locales/zh-CN.json'),
+  'zh-TW': () => import('./locales/zh-TW.json'),
+  ru: () => import('./locales/ru.json'),
+  ja: () => import('./locales/ja.json'),
+  vi: () => import('./locales/vi.json'),
+  id: () => import('./locales/id.json'),
+  ms: () => import('./locales/ms.json'),
+  th: () => import('./locales/th.json'),
+  sw: () => import('./locales/sw.json'),
+};
+
+const normalizeResource = (resource) => {
+  const { translation = {}, ...rootTranslations } = resource || {};
+  return {
+    translation: {
+      ...rootTranslations,
+      ...translation,
+    },
+  };
+};
+
+const dynamicLocaleBackend = {
+  type: 'backend',
+  read(language, _namespace, callback) {
+    const normalizedLanguage = normalizeLanguage(language);
+    const loadLocale = localeLoaders[normalizedLanguage];
+    if (!loadLocale) {
+      callback(new Error(`Unsupported language: ${language}`), false);
+      return;
+    }
+    loadLocale()
+      .then((module) => {
+        const resource = normalizeResource(module.default || module);
+        callback(null, resource.translation);
+      })
+      .catch((error) => callback(error, false));
+  },
+};
+
+export const i18nReady = i18n
   .use(LanguageDetector)
+  .use(dynamicLocaleBackend)
   .use(initReactI18next)
   .init({
     detection: {
@@ -43,19 +75,6 @@ i18n
     },
     load: 'currentOnly',
     supportedLngs: supportedLanguages,
-    resources: {
-      en: enTranslation,
-      'zh-CN': zhCNTranslation,
-      'zh-TW': zhTWTranslation,
-      fr: frTranslation,
-      ru: ruTranslation,
-      ja: jaTranslation,
-      vi: viTranslation,
-      id: idTranslation,
-      ms: msTranslation,
-      th: thTranslation,
-      sw: swTranslation,
-    },
     fallbackLng: 'zh-CN',
     nsSeparator: false,
     interpolation: {

@@ -70,6 +70,7 @@ import {
   formatBillingUsdDisplay,
 } from '../../../../../helpers/billingFormula';
 import { formatPriceRatioFromDiscount } from '../../utils/discount';
+import { getChannelRouteModelName } from '../../utils/channelRoute';
 
 const { Text } = Typography;
 
@@ -124,14 +125,6 @@ const getSupplierTypeColor = (supplierType) => {
     default:
       return stringToColor(supplierType);
   }
-};
-
-const getChannelRouteModelName = (modelData, channel) => {
-  const modelName = modelData?.model_name || '';
-  if (channel?.route_slug) {
-    return `${modelName}/${channel.route_slug}`;
-  }
-  return `${channel?.supplier_alias || ''}/${modelName}/${channel?.channel_no || ''}`;
 };
 
 const copyModelName = (modelName, t) => {
@@ -632,6 +625,7 @@ const ModelChannelList = ({
 }) => {
   const [userState] = useContext(UserContext);
   const [docsVisible, setDocsVisible] = useState(false);
+  const [docsMounted, setDocsMounted] = useState(false);
   const [docsModelName, setDocsModelName] = useState('');
   const [docsChannel, setDocsChannel] = useState(null);
   const [routeListExpanded, setRouteListExpanded] = useState(false);
@@ -717,8 +711,15 @@ const ModelChannelList = ({
   const openApiDocs = (channelModelName, channel) => {
     setDocsModelName(channelModelName || modelData?.model_name || '');
     setDocsChannel(channel || null);
+    setDocsMounted(true);
     setDocsVisible(true);
   };
+
+  useEffect(() => {
+    if (docsVisible || !docsMounted) return undefined;
+    const timeoutId = window.setTimeout(() => setDocsMounted(false), 300);
+    return () => window.clearTimeout(timeoutId);
+  }, [docsMounted, docsVisible]);
 
   const handleCollapseChange = (nextKey) => {
     setActiveKey(Array.isArray(nextKey) ? nextKey : nextKey ? [nextKey] : []);
@@ -1777,21 +1778,23 @@ const ModelChannelList = ({
           </div>
         </Card>
       ) : null}
-      <ApiDocsSidePanel
-        visible={docsVisible}
-        onClose={() => {
-          setDocsVisible(false);
-          setDocsModelName('');
-          setDocsChannel(null);
-        }}
-        modelName={docsModelName || modelData?.model_name}
-        docIntroduction={docsChannel?.doc_introduction || ''}
-        apiDocs={docsChannel?.api_docs || ''}
-        apiDocsMarkdown={docsChannel?.api_docs_markdown || ''}
-        apiDocsMarkdownEn={docsChannel?.api_docs_markdown_en || ''}
-        useDefaultDocs={docsChannel?.doc_configured !== true}
-        t={t}
-      />
+      {docsMounted ? (
+        <ApiDocsSidePanel
+          visible={docsVisible}
+          onClose={() => {
+            setDocsVisible(false);
+            setDocsModelName('');
+            setDocsChannel(null);
+          }}
+          modelName={docsModelName || modelData?.model_name}
+          docIntroduction={docsChannel?.doc_introduction || ''}
+          apiDocs={docsChannel?.api_docs || ''}
+          apiDocsMarkdown={docsChannel?.api_docs_markdown || ''}
+          apiDocsMarkdownEn={docsChannel?.api_docs_markdown_en || ''}
+          useDefaultDocs={docsChannel?.doc_configured !== true}
+          t={t}
+        />
+      ) : null}
     </>
   );
 };
