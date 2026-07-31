@@ -175,8 +175,8 @@ func TestParseTencentDescribeImageTaskExtractsCommonFields(t *testing.T) {
 	if m["size"] != "1360x768" {
 		t.Fatalf("meta size: %#v", m["size"])
 	}
-	// 无计费匹配时，按实际像素短边归一：768 → 1080p（与 1K 同档）
-	if m["resolution"] != "1080p" {
+	// 无计费匹配时，按实际像素短边归一：768 → 1K（512＜短边≤1024）
+	if m["resolution"] != "1K" {
 		t.Fatalf("meta resolution tier: %#v", m["resolution"])
 	}
 }
@@ -201,8 +201,9 @@ func TestBuildTencentImageCommonMetadataUsesMatchedBillingTier(t *testing.T) {
 	if err := json.Unmarshal(meta, &m); err != nil {
 		t.Fatalf("unmarshal meta: %v", err)
 	}
-	if m["resolution"] != "1080p" {
-		t.Fatalf("want matched billing tier 1080p, got %#v", m["resolution"])
+	// 1920x1080 短边 1080 → 图片档位 2K（与视频 1080p 标识相互独立）
+	if m["resolution"] != "2K" {
+		t.Fatalf("want matched billing tier 2K, got %#v", m["resolution"])
 	}
 	if m["size"] != "1360x768" {
 		t.Fatalf("size: %#v", m["size"])

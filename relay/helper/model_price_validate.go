@@ -52,7 +52,7 @@ func normalizePricingResolutionLabel(raw string) string {
 	return strings.ToLower(s)
 }
 
-// normalizeImagePricingResolutionLabel 将图片分辨率统一为 Ai 绘图档位标识（1080p≡1k / 2k / 4k）。
+// normalizeImagePricingResolutionLabel 将图片分辨率统一为 Ai 绘图档位标识（512P / 1K / 2K / 4K）。
 func normalizeImagePricingResolutionLabel(raw string) string {
 	s := strings.TrimSpace(raw)
 	if s == "" {
@@ -266,6 +266,33 @@ func sortedDisplayResolutions(cfg *capabilityPricingConfig) []string {
 	return out
 }
 
+func sortedImageDisplayResolutions(cfg *capabilityPricingConfig) []string {
+	if cfg == nil || len(cfg.displayResolutions) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(cfg.displayResolutions))
+	out := make([]string, 0, len(cfg.displayResolutions))
+	for _, res := range cfg.displayResolutions {
+		key := normalizeImagePricingResolutionLabel(res)
+		if key == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		display := common.FormatImageResolutionLabel(res)
+		if display == "" {
+			display = res
+		}
+		out = append(out, display)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return normalizeImagePricingResolutionLabel(out[i]) < normalizeImagePricingResolutionLabel(out[j])
+	})
+	return out
+}
+
 func collectAllDisplayResolutions(idx capabilityPricingIndex, capabilityOrder []string) []string {
 	seen := make(map[string]struct{})
 	out := make([]string, 0, 8)
@@ -281,6 +308,25 @@ func collectAllDisplayResolutions(idx capabilityPricingIndex, capabilityOrder []
 	}
 	sort.Slice(out, func(i, j int) bool {
 		return normalizePricingResolutionLabel(out[i]) < normalizePricingResolutionLabel(out[j])
+	})
+	return out
+}
+
+func collectAllImageDisplayResolutions(idx capabilityPricingIndex, capabilityOrder []string) []string {
+	seen := make(map[string]struct{})
+	out := make([]string, 0, 8)
+	for _, cap := range capabilityOrder {
+		for _, res := range sortedImageDisplayResolutions(idx[cap]) {
+			key := normalizeImagePricingResolutionLabel(res)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, res)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return normalizeImagePricingResolutionLabel(out[i]) < normalizeImagePricingResolutionLabel(out[j])
 	})
 	return out
 }
@@ -425,7 +471,7 @@ func ImageModelPriceMatchError(c *gin.Context, channelID int, info *relaycommon.
 		[]string{capabilityTextToImage, capabilityImageToImage},
 		idx, imageCapabilityLabelCN,
 	)
-	allRes := collectAllDisplayResolutions(idx, []string{capabilityTextToImage, capabilityImageToImage})
+	allRes := collectAllImageDisplayResolutions(idx, []string{capabilityTextToImage, capabilityImageToImage})
 	return newModelPriceFriendlyError("图片模型", info.OriginModelName, currentInvocation, supportedCaps, allRes)
 }
 
@@ -452,7 +498,7 @@ func validateImageModelPrice(c *gin.Context, channelID int, info *relaycommon.Re
 	cfg := idx[mode]
 	if cfg == nil || !cfg.configured() {
 		return newModelPriceFriendlyError("图片模型", info.OriginModelName, capabilityCN, supportedCaps,
-			collectAllDisplayResolutions(idx, []string{capabilityTextToImage, capabilityImageToImage}))
+			collectAllImageDisplayResolutions(idx, []string{capabilityTextToImage, capabilityImageToImage}))
 	}
 
 	// ② 分辨率校验
@@ -467,5 +513,5 @@ func validateImageModelPrice(c *gin.Context, channelID int, info *relaycommon.Re
 		return nil
 	}
 	currentInvocation := formatInvocationWithResolution(reqLabel, capabilityCN)
-	return newModelPriceFriendlyError("图片模型", info.OriginModelName, currentInvocation, supportedCaps, sortedDisplayResolutions(cfg))
+	return newModelPriceFriendlyError("图片模型", info.OriginModelName, currentInvocation, supportedCaps, sortedImageDisplayResolutions(cfg))
 }

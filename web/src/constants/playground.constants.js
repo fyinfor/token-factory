@@ -191,9 +191,10 @@ export function getPlaygroundMediaMaxHeightPx() {
   return Math.round(window.innerHeight * PLAYGROUND_MEDIA_MAX_HEIGHT_RATIO);
 }
 
-// 操练场图片分辨率：Ai 绘图档位 1080p / 2K / 4K（1080p ≡ 1K；value 为代表性像素）
+// 操练场图片分辨率：Ai 绘图档位 512P / 1K / 2K / 4K（与视频档位相互独立；value 为代表性像素）
 export const PLAYGROUND_IMAGE_SIZE_OPTIONS = [
-  { label: '1080p', value: '1024x1024' },
+  { label: '512P', value: '512x512' },
+  { label: '1K', value: '1024x1024' },
   { label: '2K', value: '2048x2048' },
   { label: '4K', value: '4096x4096' },
 ];

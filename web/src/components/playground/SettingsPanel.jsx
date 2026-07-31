@@ -41,6 +41,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import {
   buildPlaygroundImageSizeOptions,
+  preferPlaygroundImageSize,
   buildPlaygroundVideoResolutionOptions,
   formatImageResolutionDisplayLabel,
   formatPlaygroundPixelSizeLabel,
@@ -266,7 +267,7 @@ const SettingsPanel = ({
     (option) => option.value === inputs.image_size,
   )
     ? inputs.image_size
-    : imageSizeOptions[0]?.value || '1024x1024';
+    : preferPlaygroundImageSize(imageSizeOptions);
   const customImageSize = parsePlaygroundCustomImageSize(
     inputs.image_custom_size,
   );

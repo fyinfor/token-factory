@@ -67,6 +67,7 @@ import JsonCodeEditor from '../../../../components/common/ui/JsonCodeEditor';
 import { VIDEO_PRICING_JSON_PLACEHOLDER } from '../utils/videoPricingJson';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import { getCurrencyConfig, showError } from '../../../../helpers';
+import { formatImageResolutionDisplayLabel } from '../../../../helpers/videoResolutionLabel';
 
 const { Text } = Typography;
 const EMPTY_CANDIDATE_MODEL_NAMES = [];
@@ -122,9 +123,10 @@ const VIDEO_RESOLUTION_OPTIONS = [
   { label: '2K', value: '2560x1440' },
   { label: '4K', value: '3840x2160' },
 ];
-/** Ai 绘图按张计费档位：与短边分档一致（1080p≡1K / 2K / 4K） */
+/** Ai 绘图按张计费档位：与短边分档一致（512P / 1K / 2K / 4K），与视频档位相互独立 */
 const IMAGE_RESOLUTION_OPTIONS = [
-  { label: '1080p', value: '1080p' },
+  { label: '512P', value: '512P' },
+  { label: '1K', value: '1K' },
   { label: '2K', value: '2K' },
   { label: '4K', value: '4K' },
 ];
@@ -166,24 +168,49 @@ const getSelectableResolutionOptions = (rows, currentIndex) => {
 };
 
 const getSelectableImageResolutionOptions = (rows, currentIndex) => {
-  const used = new Set(
+  const usedLabels = new Set(
     (rows || [])
       .map((item, index) =>
         index === currentIndex ? '' : item?.resolution || '',
       )
-      .filter(Boolean),
+      .filter(Boolean)
+      .map((resolution) =>
+        (
+          formatImageResolutionDisplayLabel(resolution) || resolution
+        )
+          .toLowerCase()
+          .trim(),
+      ),
   );
   const current = String(rows?.[currentIndex]?.resolution || '').trim();
-  const options = IMAGE_RESOLUTION_OPTIONS.filter(
-    (item) => !used.has(item.value),
-  );
-  // 兼容历史像素写法（如 1920x1080），保证已保存行仍可选中展示
-  if (
-    current &&
-    !options.some((item) => item.value === current) &&
-    !used.has(current)
-  ) {
-    options.unshift({ label: current, value: current });
+  const options = IMAGE_RESOLUTION_OPTIONS.filter((item) => {
+    const label = (
+      formatImageResolutionDisplayLabel(item.value) || item.value
+    )
+      .toLowerCase()
+      .trim();
+    return !usedLabels.has(label);
+  });
+  // 兼容历史写法（如 1080p、1024x1024），保证已保存行仍可选中展示
+  if (current) {
+    const currentLabel = (
+      formatImageResolutionDisplayLabel(current) || current
+    )
+      .toLowerCase()
+      .trim();
+    const alreadyListed = options.some(
+      (item) =>
+        (
+          formatImageResolutionDisplayLabel(item.value) || item.value
+        )
+          .toLowerCase()
+          .trim() === currentLabel,
+    );
+    if (!alreadyListed && !usedLabels.has(currentLabel)) {
+      const display =
+        formatImageResolutionDisplayLabel(current) || current;
+      options.unshift({ label: display, value: current });
+    }
   }
   return options;
 };
