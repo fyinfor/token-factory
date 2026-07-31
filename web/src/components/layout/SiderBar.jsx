@@ -267,7 +267,7 @@ const MainSiderBar = ({ onNavigate = () => {} }) => {
         className: isAdmin() ? '' : 'tableHiddle',
       },
       {
-        text: '安全护栏',
+        text: t('安全护栏'),
         itemKey: 'aliyun-guardrail',
         to: '/console/aliyun-guardrail',
         className: isAdmin() ? '' : 'tableHiddle',

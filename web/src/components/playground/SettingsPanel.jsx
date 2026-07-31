@@ -469,9 +469,7 @@ const SettingsPanel = ({
       </div>
       <ResolutionBadge
         label={selectedImageResolutionLabel}
-        title={
-          customImageSize ? t('当前尺寸（自定义）') : t('当前分辨率')
-        }
+        title={customImageSize ? t('当前尺寸（自定义）') : t('当前分辨率')}
       />
     </Surface>
   );
