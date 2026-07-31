@@ -9,33 +9,31 @@ import {
   Tooltip,
 } from '@douyinfe/semi-ui';
 import { IconCopy, IconSearch } from '@douyinfe/semi-icons';
+import { useTranslation } from 'react-i18next';
 import { API, copy, toUnixTimestamp } from '../../helpers';
 import { DATE_RANGE_PRESETS } from '../../constants/console.constants';
 
 const riskStyles = {
-  high: { color: 'red', label: '高风险' },
-  medium: { color: 'orange', label: '中风险' },
-  low: { color: 'green', label: '低风险' },
-  none: { color: 'green', label: '无风险' },
-  block: { color: 'red', label: '已拦截' },
-  pass: { color: 'green', label: '通过' },
-  error: { color: 'red', label: '调用失败' },
+  high: { color: 'red', label: '安全护栏风险：高风险' },
+  medium: { color: 'orange', label: '安全护栏风险：中风险' },
+  low: { color: 'green', label: '安全护栏风险：低风险' },
+  none: { color: 'green', label: '安全护栏风险：无风险' },
+  block: { color: 'red', label: '安全护栏风险：已拦截' },
+  pass: { color: 'green', label: '安全护栏风险：通过' },
+  error: { color: 'red', label: '安全护栏风险：调用失败' },
 };
 
-function RiskTag({ value }) {
+function RiskTag({ value, t }) {
   const normalized = String(value || '').toLowerCase();
-  const config = riskStyles[normalized] || {
-    color: 'grey',
-    label: value || '未知',
-  };
+  const config = riskStyles[normalized];
   return (
-    <Tag color={config.color} size='small'>
-      {config.label}
+    <Tag color={config?.color || 'grey'} size='small'>
+      {config ? t(config.label) : value || t('安全护栏风险：未知')}
     </Tag>
   );
 }
 
-function parseModerationDetail(value, fallbackRisk) {
+function parseModerationDetail(value, fallbackRisk, t) {
   try {
     const parsed = JSON.parse(value);
     const descriptions = [
@@ -46,7 +44,7 @@ function parseModerationDetail(value, fallbackRisk) {
       .filter(Boolean);
     return {
       riskLevel: parsed.RiskLevel || parsed.AttackLevel || fallbackRisk,
-      description: [...new Set(descriptions)].join('；') || '未返回风险说明',
+      description: [...new Set(descriptions)].join('；') || t('未返回风险说明'),
       formatted: JSON.stringify(parsed, null, 2),
     };
   } catch {
@@ -58,7 +56,7 @@ function parseModerationDetail(value, fallbackRisk) {
   }
 }
 
-function PreviewBlock({ value, onView, actionText = '查看完整内容', accent }) {
+function PreviewBlock({ value, onView, actionText, accent }) {
   if (!value) return '-';
   return (
     <div
@@ -108,8 +106,8 @@ function PreviewBlock({ value, onView, actionText = '查看完整内容', accent
   );
 }
 
-function DetailPreview({ value, riskLevel, onView }) {
-  const detail = parseModerationDetail(value, riskLevel);
+function DetailPreview({ value, riskLevel, onView, t }) {
+  const detail = parseModerationDetail(value, riskLevel, t);
   return (
     <div
       style={{
@@ -125,7 +123,7 @@ function DetailPreview({ value, riskLevel, onView }) {
     >
       <div className='flex items-start gap-2'>
         <div style={{ flex: '0 0 auto' }}>
-          <RiskTag value={detail.riskLevel} />
+          <RiskTag value={detail.riskLevel} t={t} />
         </div>
         <div
           style={{
@@ -158,17 +156,17 @@ function DetailPreview({ value, riskLevel, onView }) {
           fontSize: 12,
         }}
       >
-        查看完整详情
+        {t('查看完整详情')}
       </Button>
     </div>
   );
 }
 
-function ChannelSuffix({ record }) {
+function ChannelSuffix({ record, t }) {
   const suffix = String(record?.route_slug || '').trim();
   if (!suffix) return '-';
   return (
-    <Tooltip content={`渠道路由后缀：${suffix}`}>
+    <Tooltip content={`${t('渠道路由后缀')}：${suffix}`}>
       <Tag color='blue' size='small' style={{ maxWidth: 120 }}>
         <span
           style={{
@@ -194,12 +192,12 @@ function shortRequestId(value) {
   return `…${requestId.slice(-8)}`;
 }
 
-function RequestIdCell({ value }) {
+function RequestIdCell({ value, t }) {
   const requestId = String(value || '').trim();
   if (!requestId) return '-';
   const handleCopy = async () => {
     if (await copy(requestId)) {
-      Toast.success({ content: '请求 ID 已复制' });
+      Toast.success({ content: t('请求 ID 已复制') });
     }
   };
   return (
@@ -218,7 +216,7 @@ function RequestIdCell({ value }) {
       >
         {shortRequestId(requestId)}
       </span>
-      <Tooltip content='复制请求 ID'>
+      <Tooltip content={t('复制请求 ID')}>
         <Button
           icon={<IconCopy />}
           theme='borderless'
@@ -233,6 +231,7 @@ function RequestIdCell({ value }) {
 }
 
 export default function AliyunGuardrail() {
+  const { t } = useTranslation();
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
   const [formApi, setFormApi] = useState(null);
@@ -269,15 +268,15 @@ export default function AliyunGuardrail() {
     API.get(`/api/log/aliyun-guardrail?${params.toString()}`)
       .then((res) => {
         if (res.data.success) setData(res.data.data.items || []);
-        else Toast.error(res.data.message || '加载安全护栏记录失败');
+        else Toast.error(res.data.message || t('加载安全护栏记录失败'));
       })
       .catch((error) => {
         const status = error?.response?.status;
         const message = error?.response?.data?.message || error?.message;
         Toast.error(
-          '加载安全护栏记录失败' +
-            (status ? '（HTTP ' + status + '）' : '') +
-            (message ? '：' + message : ''),
+          t('加载安全护栏记录失败') +
+            (status ? `（HTTP ${status}）` : '') +
+            (message ? `：${message}` : ''),
         );
       })
       .finally(() => setLoading(false));
@@ -302,12 +301,12 @@ export default function AliyunGuardrail() {
               field='dateRange'
               className='w-full'
               type='dateTimeRange'
-              placeholder={['开始时间', '结束时间']}
+              placeholder={[t('开始时间'), t('结束时间')]}
               showClear
               pure
               size='small'
               presets={DATE_RANGE_PRESETS.map((preset) => ({
-                text: preset.text,
+                text: t(preset.text),
                 start: preset.start(),
                 end: preset.end(),
               }))}
@@ -316,7 +315,7 @@ export default function AliyunGuardrail() {
           <Form.Input
             field='username'
             prefix={<IconSearch />}
-            placeholder='用户名称'
+            placeholder={t('用户名称')}
             showClear
             pure
             size='small'
@@ -328,7 +327,7 @@ export default function AliyunGuardrail() {
               size='small'
               loading={loading}
             >
-              搜索
+              {t('搜索')}
             </Button>
             <Button
               size='small'
@@ -337,7 +336,7 @@ export default function AliyunGuardrail() {
                 fetchLogs();
               }}
             >
-              重置
+              {t('重置')}
             </Button>
           </div>
         </div>
@@ -349,51 +348,53 @@ export default function AliyunGuardrail() {
         pagination={{ pageSize: 20 }}
         columns={[
           {
-            title: '时间',
+            title: t('时间'),
             dataIndex: 'created_at',
             render: (value) => new Date(value * 1000).toLocaleString(),
           },
-          { title: '用户', dataIndex: 'username' },
-          { title: '方向', dataIndex: 'direction' },
+          { title: t('用户'), dataIndex: 'username' },
+          { title: t('方向'), dataIndex: 'direction' },
           {
-            title: '风险等级',
+            title: t('风险等级'),
             dataIndex: 'risk_level',
-            render: (value) => <RiskTag value={value} />,
+            render: (value) => <RiskTag value={value} t={t} />,
           },
-          { title: '服务', dataIndex: 'service' },
-          { title: '模型', dataIndex: 'model_name', width: 150 },
+          { title: t('服务'), dataIndex: 'service' },
+          { title: t('模型'), dataIndex: 'model_name', width: 150 },
           {
-            title: '渠道后缀',
+            title: t('渠道后缀'),
             dataIndex: 'channel',
             width: 130,
-            render: (value, record) => <ChannelSuffix record={record} />,
+            render: (value, record) => <ChannelSuffix record={record} t={t} />,
           },
           {
-            title: '请求 ID',
+            title: t('请求 ID'),
             dataIndex: 'request_id',
             width: 130,
-            render: (value) => <RequestIdCell value={value} />,
+            render: (value) => <RequestIdCell value={value} t={t} />,
           },
           {
-            title: '内容',
+            title: t('内容'),
             dataIndex: 'content',
             width: 280,
             render: (value) => (
               <PreviewBlock
                 value={value}
-                onView={() => showDetail('审核内容', value)}
+                actionText={t('查看完整内容')}
+                onView={() => showDetail(t('审核内容'), value)}
               />
             ),
           },
           {
-            title: '详情',
+            title: t('详情'),
             dataIndex: 'detail',
             width: 300,
             render: (value, record) => (
               <DetailPreview
                 value={value}
                 riskLevel={record.risk_level}
-                onView={(formatted) => showDetail('审核详情', formatted)}
+                onView={(formatted) => showDetail(t('审核详情'), formatted)}
+                t={t}
               />
             ),
           },
