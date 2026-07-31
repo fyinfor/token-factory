@@ -26,6 +26,7 @@ function parseResolutionDimsForSort(raw) {
   if (lower === '4k') return { short: 2160, long: 3840 };
   if (lower === '2k') return { short: 1440, long: 2560 };
   if (lower === '1k') return { short: 1024, long: 1024 };
+  if (lower === '512p' || lower === '512') return { short: 512, long: 512 };
 
   if (/^\d+k$/i.test(compact)) {
     const n = parseInt(compact, 10);
@@ -101,10 +102,14 @@ export function formatVideoResolutionDisplayLabel(raw) {
 }
 
 /**
- * 将图片分辨率归一化为 Ai 绘图档位标识（1080p / 2K / 4K）。
- * 按实际输出图片短边像素：短边 ≤1024 → 1080p（≡1K）；1024＜短边≤2048 → 2K；短边＞2048 → 4K。
- * 例如 1024×1536→1080p，1536×2048→2K，1920×1080→2K，2160×3840→4K。
- * 显式「1K」「1080p」统一展示为 1080p。
+ * 将图片分辨率归一化为 Ai 绘图档位标识（512P / 1K / 2K / 4K）。
+ * 与视频分辨率规则相互独立。按实际输出图片短边像素：
+ *   512P：短边 ≤ 512px
+ *   1K：短边 ≤ 1024px（512＜短边≤1024）
+ *   2K：1024px ＜ 短边 ≤ 2048px
+ *   4K：短边 ＞ 2048px
+ * 例如 512×512→512P，1024×1536→1K，1920×1080→2K，2160×3840→4K。
+ * 显式「1K」「1080p」统一展示为 1K（历史计费别名）。
  */
 export function formatImageResolutionDisplayLabel(raw) {
   if (raw == null) return '';
@@ -114,14 +119,18 @@ export function formatImageResolutionDisplayLabel(raw) {
   const compact = s.replace(/\s+/g, '');
   const lower = compact.toLowerCase();
 
-  // 显式档位别名优先：1K ≡ 1080p，避免把字面量「1080p」按短边 1080 误判为 2K。
+  // 显式档位别名优先：历史「1080p」≡ 1K，避免把字面量「1080p」按短边 1080 误判为 2K。
+  if (lower === '512p' || lower === '512') {
+    return '512P';
+  }
   if (lower === '1k' || lower === '1080p' || lower === '1080') {
-    return '1080p';
+    return '1K';
   }
 
   if (/^\d+k$/i.test(compact)) {
     const n = parseInt(compact, 10);
     if (!Number.isFinite(n)) return s;
+    if (n === 1) return '1K';
     if (n === 2 || n === 4) return `${n}K`;
     return `${n}K`;
   }
@@ -141,7 +150,8 @@ export function formatImageResolutionDisplayLabel(raw) {
     }
   }
   if (short == null) return s;
-  if (short <= 1024) return '1080p';
+  if (short <= 512) return '512P';
+  if (short <= 1024) return '1K';
   if (short <= 2048) return '2K';
   return '4K';
 }
@@ -202,9 +212,17 @@ const VIDEO_RESOLUTION_DIMENSIONS = {
   '8K': { width: 7680, height: 4320 },
 };
 
-/** Ai 绘图：分辨率档位 × 画面比例 → 固定像素尺寸（1080p 档 ≡ 原 1K 尺寸表） */
+/** Ai 绘图：分辨率档位 × 画面比例 → 固定像素尺寸（与视频档位表相互独立） */
 const AI_DRAWING_SIZE_TABLE = {
-  '1080p': {
+  '512P': {
+    '1:1': { width: 512, height: 512 },
+    '16:9': { width: 768, height: 432 },
+    '9:16': { width: 432, height: 768 },
+    '4:3': { width: 512, height: 384 },
+    '3:4': { width: 384, height: 512 },
+    '21:9': { width: 768, height: 328 },
+  },
+  '1K': {
     '1:1': { width: 1024, height: 1024 },
     '16:9': { width: 1536, height: 864 },
     '9:16': { width: 864, height: 1536 },
@@ -231,12 +249,13 @@ const AI_DRAWING_SIZE_TABLE = {
 };
 
 const AI_DRAWING_TIER_REPRESENTATIVE = {
-  '1080p': { width: 1024, height: 1024 },
+  '512P': { width: 512, height: 512 },
+  '1K': { width: 1024, height: 1024 },
   '2K': { width: 2048, height: 2048 },
   '4K': { width: 4096, height: 4096 },
 };
 
-const AI_DRAWING_TIERS = ['1080p', '2K', '4K'];
+const AI_DRAWING_TIERS = ['512P', '1K', '2K', '4K'];
 
 function parseResolutionDimensions(raw) {
   if (raw == null) return null;
@@ -347,13 +366,13 @@ export function getPlaygroundImageSizeForTier(resolution, ratio = '1:1') {
       tier = formatImageResolutionDisplayLabel(`${dims.width}x${dims.height}`);
     }
   }
-  const normalizedTier = AI_DRAWING_TIERS.includes(tier) ? tier : '1080p';
+  const normalizedTier = AI_DRAWING_TIERS.includes(tier) ? tier : '1K';
   const ratioKey =
     !ratio || ratio === 'auto' ? '1:1' : String(ratio).trim();
   const dims =
     AI_DRAWING_SIZE_TABLE[normalizedTier]?.[ratioKey] ||
     AI_DRAWING_SIZE_TABLE[normalizedTier]?.['1:1'] ||
-    AI_DRAWING_TIER_REPRESENTATIVE['1080p'];
+    AI_DRAWING_TIER_REPRESENTATIVE['1K'];
   return {
     width: dims.width,
     height: dims.height,
@@ -411,7 +430,7 @@ export function resolvePlaygroundImageSize(inputs = {}) {
     (option) => option.value === inputs.image_size,
   )
     ? inputs.image_size
-    : sizeOptions[0]?.value || '1024x1024';
+    : preferPlaygroundImageSize(sizeOptions);
   return getPlaygroundImageSizeForTier(
     selectedImageSize,
     inputs.image_ratio === 'auto' || !inputs.image_ratio
@@ -488,7 +507,8 @@ export function buildPlaygroundVideoResolutionOptions(tiers) {
 }
 
 const DEFAULT_PLAYGROUND_IMAGE_SIZE_OPTIONS = [
-  { label: '1080p', value: '1024x1024', rawResolution: '1024x1024' },
+  { label: '512P', value: '512x512', rawResolution: '512x512' },
+  { label: '1K', value: '1024x1024', rawResolution: '1024x1024' },
   { label: '2K', value: '2048x2048', rawResolution: '2048x2048' },
   { label: '4K', value: '4096x4096', rawResolution: '4096x4096' },
 ];
@@ -533,4 +553,16 @@ export function buildPlaygroundImageSizeOptions(tiers) {
   return options.sort((a, b) =>
     compareVideoResolutionAsc(a.rawResolution, b.rawResolution),
   );
+}
+
+/** 操练场图片默认选中：优先 1K（1024x1024），否则取最低档 */
+export function preferPlaygroundImageSize(options) {
+  const list = Array.isArray(options) ? options : [];
+  if (list.length === 0) return '1024x1024';
+  const oneK = list.find((option) => {
+    const label = String(option?.label || '').toLowerCase();
+    return label === '1k' || label === '1080p' || option?.value === '1024x1024';
+  });
+  if (oneK?.value) return oneK.value;
+  return list[0]?.value || '1024x1024';
 }

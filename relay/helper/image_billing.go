@@ -76,7 +76,7 @@ func FinalizeImagePerImageBilling(c *gin.Context, info *relaycommon.RelayInfo, r
 }
 
 // ApplyActualImageDimensionsForBilling 用上游实际像素覆盖预扣尺寸，并立即重匹按张计费档位。
-// 供渠道在写出响应 metadata 前调用，使 resolution 能反映结算档位（720p/1080p/2K/4K）。
+// 供渠道在写出响应 metadata 前调用，使 resolution 能反映结算档位（512P / 1K / 2K / 4K）。
 func ApplyActualImageDimensionsForBilling(c *gin.Context, info *relaycommon.RelayInfo, width, height, count int) {
 	if info == nil || info.ImageBilling == nil || !info.PriceData.UsePrice {
 		return
