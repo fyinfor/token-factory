@@ -44,16 +44,25 @@ func checkRedirect(req *http.Request, via []*http.Request) error {
 	return nil
 }
 
-func InitHttpClient() {
+func newRelayTransport(proxyFunc func(*http.Request) (*url.URL, error)) *http.Transport {
 	transport := &http.Transport{
 		MaxIdleConns:        common.RelayMaxIdleConns,
 		MaxIdleConnsPerHost: common.RelayMaxIdleConnsPerHost,
-		ForceAttemptHTTP2:   true,
-		Proxy:               http.ProxyFromEnvironment, // Support HTTP_PROXY, HTTPS_PROXY, NO_PROXY env vars
+		ForceAttemptHTTP2:   common.RelayForceHTTP2,
+		Proxy:               proxyFunc,
+		TLSHandshakeTimeout: 15 * time.Second,
+	}
+	if common.RelayIdleConnTimeoutSec > 0 {
+		transport.IdleConnTimeout = time.Duration(common.RelayIdleConnTimeoutSec) * time.Second
 	}
 	if common.TLSInsecureSkipVerify {
 		transport.TLSClientConfig = common.InsecureTLSConfig
 	}
+	return transport
+}
+
+func InitHttpClient() {
+	transport := newRelayTransport(http.ProxyFromEnvironment)
 
 	if common.RelayTimeout == 0 {
 		httpClient = &http.Client{
@@ -148,15 +157,7 @@ func NewProxyHttpClient(proxyURL string) (*http.Client, error) {
 
 	switch parsedURL.Scheme {
 	case "http", "https":
-		transport := &http.Transport{
-			MaxIdleConns:        common.RelayMaxIdleConns,
-			MaxIdleConnsPerHost: common.RelayMaxIdleConnsPerHost,
-			ForceAttemptHTTP2:   true,
-			Proxy:               http.ProxyURL(parsedURL),
-		}
-		if common.TLSInsecureSkipVerify {
-			transport.TLSClientConfig = common.InsecureTLSConfig
-		}
+		transport := newRelayTransport(http.ProxyURL(parsedURL))
 		client := &http.Client{
 			Transport:     transport,
 			CheckRedirect: checkRedirect,
@@ -190,10 +191,14 @@ func NewProxyHttpClient(proxyURL string) (*http.Client, error) {
 		transport := &http.Transport{
 			MaxIdleConns:        common.RelayMaxIdleConns,
 			MaxIdleConnsPerHost: common.RelayMaxIdleConnsPerHost,
-			ForceAttemptHTTP2:   true,
+			ForceAttemptHTTP2:   common.RelayForceHTTP2,
+			TLSHandshakeTimeout: 15 * time.Second,
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				return dialer.Dial(network, addr)
 			},
+		}
+		if common.RelayIdleConnTimeoutSec > 0 {
+			transport.IdleConnTimeout = time.Duration(common.RelayIdleConnTimeoutSec) * time.Second
 		}
 		if common.TLSInsecureSkipVerify {
 			transport.TLSClientConfig = common.InsecureTLSConfig

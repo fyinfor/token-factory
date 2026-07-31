@@ -157,25 +157,25 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 
 	// 检查是否为音频模型
 	isAudioModel := strings.Contains(strings.ToLower(model), "audio")
-	// 开启输出审核时需整段缓冲后再回放；关闭时实时转发以保持与上游一致的 TTFT
+	// 开启输出审核时需整段缓冲后再回放；关闭时逐 chunk 立即转发，避免「等下一块再发上一块」抬高 TTFT
 	bufferForGuardrail := setting.ShouldCheckAliyunGuardrailOutput()
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
-		if !bufferForGuardrail && lastStreamData != "" {
-			if err := HandleStreamFormat(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent); err != nil {
+		if len(data) == 0 {
+			return
+		}
+		// 对音频模型，保存倒数第二个 stream data（用于 usage）
+		if isAudioModel && lastStreamData != "" {
+			secondLastStreamData = lastStreamData
+		}
+		if !bufferForGuardrail {
+			if err := HandleStreamFormat(c, info, data, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent); err != nil {
 				common.SysLog("error handling stream format: " + err.Error())
 				sr.Error(err)
 			}
 		}
-		if len(data) > 0 {
-			// 对音频模型，保存倒数第二个stream data
-			if isAudioModel && lastStreamData != "" {
-				secondLastStreamData = lastStreamData
-			}
-
-			lastStreamData = data
-			streamItems = append(streamItems, data)
-		}
+		lastStreamData = data
+		streamItems = append(streamItems, data)
 	})
 
 	// 对音频模型，从倒数第二个stream data中提取usage信息
@@ -196,17 +196,11 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 		}
 	}
 
-	// 处理最后的响应
+	// 处理最后的响应（提取 usage / id；实时转发路径已下发全部 chunk，不再重发最后一块）
 	shouldSendLastResp := true
 	if err := handleLastResponse(lastStreamData, &responseId, &createAt, &systemFingerprint, &model, &usage,
 		&containStreamUsage, info, &shouldSendLastResp); err != nil {
 		logger.LogError(c, fmt.Sprintf("error handling last response: %s, lastStreamData: [%s]", err.Error(), lastStreamData))
-	}
-
-	if !bufferForGuardrail && info.RelayFormat == types.RelayFormatOpenAI {
-		if shouldSendLastResp {
-			_ = sendStreamData(c, info, lastStreamData, info.ChannelSetting.ForceFormat, info.ChannelSetting.ThinkingToContent)
-		}
 	}
 
 	// 处理token计算
