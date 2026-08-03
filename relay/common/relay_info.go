@@ -721,6 +721,8 @@ type TaskSubmitReq struct {
 	Mode           string                 `json:"mode,omitempty"`
 	Image          string                 `json:"image,omitempty"`
 	Images         []string               `json:"images,omitempty"`
+	FirstFrameURL  string                 `json:"first_frame_url,omitempty"` // 通用首帧图 URL（首尾帧生视频）
+	LastFrameURL   string                 `json:"last_frame_url,omitempty"`  // 通用尾帧图 URL（首尾帧生视频）
 	N              *int                   `json:"n,omitempty"`
 	Size           string                 `json:"size,omitempty"`
 	Resolution     string                 `json:"resolution,omitempty"` // 分辨率标识，如 480p（Seedance/Doubao 顶层字段）
@@ -748,7 +750,53 @@ func (t *TaskSubmitReq) SetModelName(modelName string) {
 }
 
 func (t *TaskSubmitReq) HasImage() bool {
-	return len(t.Images) > 0
+	if len(t.Images) > 0 {
+		return true
+	}
+	if strings.TrimSpace(t.FirstFrameURL) != "" || strings.TrimSpace(t.LastFrameURL) != "" {
+		return true
+	}
+	if t.Metadata != nil {
+		if s, ok := t.Metadata["first_frame_url"].(string); ok && strings.TrimSpace(s) != "" {
+			return true
+		}
+		if s, ok := t.Metadata["last_frame_url"].(string); ok && strings.TrimSpace(s) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// ResolveFirstFrameURL 解析通用首帧地址：顶层 first_frame_url 优先，其次 metadata.first_frame_url。
+func (t *TaskSubmitReq) ResolveFirstFrameURL() string {
+	if t == nil {
+		return ""
+	}
+	if u := strings.TrimSpace(t.FirstFrameURL); u != "" {
+		return u
+	}
+	return metadataString(t.Metadata, "first_frame_url")
+}
+
+// ResolveLastFrameURL 解析通用尾帧地址：顶层 last_frame_url 优先，其次 metadata.last_frame_url。
+func (t *TaskSubmitReq) ResolveLastFrameURL() string {
+	if t == nil {
+		return ""
+	}
+	if u := strings.TrimSpace(t.LastFrameURL); u != "" {
+		return u
+	}
+	return metadataString(t.Metadata, "last_frame_url")
+}
+
+func metadataString(metadata map[string]interface{}, key string) string {
+	if metadata == nil {
+		return ""
+	}
+	if s, ok := metadata[key].(string); ok {
+		return strings.TrimSpace(s)
+	}
+	return ""
 }
 
 func (t *TaskSubmitReq) GetModerationMeta() *types.TokenCountMeta {
@@ -759,10 +807,16 @@ func (t *TaskSubmitReq) GetModerationMeta() *types.TokenCountMeta {
 	if negativePrompt := strings.TrimSpace(t.NegativePrompt); negativePrompt != "" {
 		texts = append(texts, negativePrompt)
 	}
-	imageInputs := make([]string, 0, len(t.Images)+1)
+	imageInputs := make([]string, 0, len(t.Images)+3)
 	imageInputs = append(imageInputs, t.Images...)
 	if image := strings.TrimSpace(t.Image); image != "" {
 		imageInputs = append(imageInputs, image)
+	}
+	if first := t.ResolveFirstFrameURL(); first != "" {
+		imageInputs = append(imageInputs, first)
+	}
+	if last := t.ResolveLastFrameURL(); last != "" {
+		imageInputs = append(imageInputs, last)
 	}
 	files := make([]*types.FileMeta, 0, len(imageInputs))
 	seen := make(map[string]struct{}, len(imageInputs))

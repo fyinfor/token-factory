@@ -41,9 +41,10 @@ import {
 import { useTranslation } from 'react-i18next';
 import {
   buildPlaygroundImageSizeOptions,
+  preferPlaygroundImageSize,
   buildPlaygroundVideoResolutionOptions,
+  formatImageResolutionDisplayLabel,
   formatPlaygroundPixelSizeLabel,
-  formatVideoResolutionDisplayLabel,
   getPlaygroundVideoSizeForTier,
   parsePlaygroundCustomImageSize,
   resolvePlaygroundImageSize,
@@ -52,6 +53,7 @@ import {
 } from '../../helpers';
 import {
   PLAYGROUND_ASPECT_RATIO_OPTIONS,
+  PLAYGROUND_IMAGE_ASPECT_RATIO_OPTIONS,
   PLAYGROUND_VIDEO_DURATION_OPTIONS,
 } from '../../constants/playground.constants';
 import ConfigManager from './ConfigManager';
@@ -197,10 +199,8 @@ const AspectRatioIcon = ({ ratio }) => {
   );
 };
 
-const buildAspectRatioOptions = (t, includeAuto = true) =>
-  PLAYGROUND_ASPECT_RATIO_OPTIONS.filter(
-    (option) => includeAuto || option.value !== 'auto',
-  ).map((option) => ({
+const buildAspectRatioOptions = (t, options = PLAYGROUND_ASPECT_RATIO_OPTIONS) =>
+  options.map((option) => ({
     value: option.value,
     label: (
       <span className='playground-aspect-ratio-option'>
@@ -267,7 +267,7 @@ const SettingsPanel = ({
     (option) => option.value === inputs.image_size,
   )
     ? inputs.image_size
-    : imageSizeOptions[0]?.value || '1280x720';
+    : preferPlaygroundImageSize(imageSizeOptions);
   const customImageSize = parsePlaygroundCustomImageSize(
     inputs.image_custom_size,
   );
@@ -314,6 +314,14 @@ const SettingsPanel = ({
 
   const sectionTabs = useMemo(() => buildSectionTabs(t), [t]);
   const aspectRatioOptions = useMemo(() => buildAspectRatioOptions(t), [t]);
+  const imageAspectRatioOptions = useMemo(
+    () => buildAspectRatioOptions(t, PLAYGROUND_IMAGE_ASPECT_RATIO_OPTIONS),
+    [t],
+  );
+  const selectedImageRatio =
+    !inputs.image_ratio || inputs.image_ratio === 'auto'
+      ? '1:1'
+      : inputs.image_ratio;
   const displayModeTabs = useMemo(
     () =>
       [
@@ -423,7 +431,7 @@ const SettingsPanel = ({
             renderSelectedItem={(option) => (
               <span>
                 {option?.label ??
-                  formatVideoResolutionDisplayLabel(selectedImageSize) ??
+                  formatImageResolutionDisplayLabel(selectedImageSize) ??
                   selectedImageSize}
               </span>
             )}
@@ -433,10 +441,10 @@ const SettingsPanel = ({
           <RadioGroup
             type='button'
             buttonSize='small'
-            value={inputs.image_ratio || 'auto'}
-            options={aspectRatioOptions}
+            value={selectedImageRatio}
+            options={imageAspectRatioOptions}
             onChange={(e) =>
-              onInputChange('image_ratio', e?.target?.value || 'auto')
+              onInputChange('image_ratio', e?.target?.value || '1:1')
             }
             disabled={customRequestMode || Boolean(customImageSize)}
             className='playground-aspect-ratio-group'

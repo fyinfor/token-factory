@@ -40,13 +40,25 @@ const (
 	capabilityVideoToVideo = "video_to_video"
 )
 
-// normalizePricingResolutionLabel 将分辨率配置/入参统一为可比对标识（如 720p、1080p、4K）。
+// normalizePricingResolutionLabel 将视频分辨率配置/入参统一为可比对标识（如 720p、1080p、4K）。
 func normalizePricingResolutionLabel(raw string) string {
 	s := strings.TrimSpace(raw)
 	if s == "" {
 		return ""
 	}
 	if label := common.FormatVideoResolutionLabel(s); label != "" {
+		return strings.ToLower(label)
+	}
+	return strings.ToLower(s)
+}
+
+// normalizeImagePricingResolutionLabel 将图片分辨率统一为 Ai 绘图档位标识（512P / 1K / 2K / 4K）。
+func normalizeImagePricingResolutionLabel(raw string) string {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return ""
+	}
+	if label := common.FormatImageResolutionLabel(s); label != "" {
 		return strings.ToLower(label)
 	}
 	return strings.ToLower(s)
@@ -157,18 +169,40 @@ func ingestVideoPricingRules(idx capabilityPricingIndex, rules ratio_setting.Vid
 	addVideoTokenRows(idx, capabilityVideoToVideo, rules.VideoToVideo)
 }
 
+func addImageCapabilityResolution(idx capabilityPricingIndex, cap, raw string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return
+	}
+	cfg := ensureCapabilityIndex(idx, cap)
+	norm := normalizeImagePricingResolutionLabel(raw)
+	if norm == "" {
+		return
+	}
+	cfg.hasResolutionTiers = true
+	if _, exists := cfg.resolutions[norm]; exists {
+		return
+	}
+	cfg.resolutions[norm] = struct{}{}
+	display := common.FormatImageResolutionLabel(raw)
+	if display == "" {
+		display = raw
+	}
+	cfg.displayResolutions = append(cfg.displayResolutions, display)
+}
+
 func ingestImagePricingRules(idx capabilityPricingIndex, rules ratio_setting.ImagePricingRules) {
 	for _, row := range rules.TextToImagePerImage {
 		if row.ImagePrice <= 0 {
 			continue
 		}
-		addCapabilityResolution(idx, capabilityTextToImage, row.Resolution)
+		addImageCapabilityResolution(idx, capabilityTextToImage, row.Resolution)
 	}
 	for _, row := range rules.ImageToImagePerImage {
 		if row.ImagePrice <= 0 {
 			continue
 		}
-		addCapabilityResolution(idx, capabilityImageToImage, row.Resolution)
+		addImageCapabilityResolution(idx, capabilityImageToImage, row.Resolution)
 	}
 }
 
@@ -232,6 +266,33 @@ func sortedDisplayResolutions(cfg *capabilityPricingConfig) []string {
 	return out
 }
 
+func sortedImageDisplayResolutions(cfg *capabilityPricingConfig) []string {
+	if cfg == nil || len(cfg.displayResolutions) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(cfg.displayResolutions))
+	out := make([]string, 0, len(cfg.displayResolutions))
+	for _, res := range cfg.displayResolutions {
+		key := normalizeImagePricingResolutionLabel(res)
+		if key == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		display := common.FormatImageResolutionLabel(res)
+		if display == "" {
+			display = res
+		}
+		out = append(out, display)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return normalizeImagePricingResolutionLabel(out[i]) < normalizeImagePricingResolutionLabel(out[j])
+	})
+	return out
+}
+
 func collectAllDisplayResolutions(idx capabilityPricingIndex, capabilityOrder []string) []string {
 	seen := make(map[string]struct{})
 	out := make([]string, 0, 8)
@@ -247,6 +308,25 @@ func collectAllDisplayResolutions(idx capabilityPricingIndex, capabilityOrder []
 	}
 	sort.Slice(out, func(i, j int) bool {
 		return normalizePricingResolutionLabel(out[i]) < normalizePricingResolutionLabel(out[j])
+	})
+	return out
+}
+
+func collectAllImageDisplayResolutions(idx capabilityPricingIndex, capabilityOrder []string) []string {
+	seen := make(map[string]struct{})
+	out := make([]string, 0, 8)
+	for _, cap := range capabilityOrder {
+		for _, res := range sortedImageDisplayResolutions(idx[cap]) {
+			key := normalizeImagePricingResolutionLabel(res)
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, res)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return normalizeImagePricingResolutionLabel(out[i]) < normalizeImagePricingResolutionLabel(out[j])
 	})
 	return out
 }
@@ -322,7 +402,7 @@ func videoRequestResolutionLabel(c *gin.Context, ctx videoEstimateContext) strin
 
 func imageRequestResolutionLabel(ctx imageEstimateContext) string {
 	if ctx.Width > 0 && ctx.Height > 0 {
-		return common.FormatVideoResolutionLabel(fmt.Sprintf("%dx%d", ctx.Width, ctx.Height))
+		return common.FormatImageResolutionLabel(fmt.Sprintf("%dx%d", ctx.Width, ctx.Height))
 	}
 	return ""
 }
@@ -391,7 +471,7 @@ func ImageModelPriceMatchError(c *gin.Context, channelID int, info *relaycommon.
 		[]string{capabilityTextToImage, capabilityImageToImage},
 		idx, imageCapabilityLabelCN,
 	)
-	allRes := collectAllDisplayResolutions(idx, []string{capabilityTextToImage, capabilityImageToImage})
+	allRes := collectAllImageDisplayResolutions(idx, []string{capabilityTextToImage, capabilityImageToImage})
 	return newModelPriceFriendlyError("图片模型", info.OriginModelName, currentInvocation, supportedCaps, allRes)
 }
 
@@ -418,7 +498,7 @@ func validateImageModelPrice(c *gin.Context, channelID int, info *relaycommon.Re
 	cfg := idx[mode]
 	if cfg == nil || !cfg.configured() {
 		return newModelPriceFriendlyError("图片模型", info.OriginModelName, capabilityCN, supportedCaps,
-			collectAllDisplayResolutions(idx, []string{capabilityTextToImage, capabilityImageToImage}))
+			collectAllImageDisplayResolutions(idx, []string{capabilityTextToImage, capabilityImageToImage}))
 	}
 
 	// ② 分辨率校验
@@ -429,9 +509,9 @@ func validateImageModelPrice(c *gin.Context, channelID int, info *relaycommon.Re
 	if reqLabel == "" {
 		return nil
 	}
-	if _, ok := cfg.resolutions[normalizePricingResolutionLabel(reqLabel)]; ok {
+	if _, ok := cfg.resolutions[normalizeImagePricingResolutionLabel(reqLabel)]; ok {
 		return nil
 	}
 	currentInvocation := formatInvocationWithResolution(reqLabel, capabilityCN)
-	return newModelPriceFriendlyError("图片模型", info.OriginModelName, currentInvocation, supportedCaps, sortedDisplayResolutions(cfg))
+	return newModelPriceFriendlyError("图片模型", info.OriginModelName, currentInvocation, supportedCaps, sortedImageDisplayResolutions(cfg))
 }

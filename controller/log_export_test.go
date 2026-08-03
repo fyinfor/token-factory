@@ -231,3 +231,35 @@ func TestResolveUsageLogExportQuotaUsesSettledAmount(t *testing.T) {
 		t.Fatalf("resolved signed quota = %d, want -7", got)
 	}
 }
+
+// 差额结算行必须导出这一笔差额，而不是任务总额；否则与同一任务的预扣行相加会翻倍。
+func TestResolveUsageLogExportQuotaUsesRowQuotaForDeltaLogs(t *testing.T) {
+	deltaCharge := &model.Log{Type: model.LogTypeConsume, Quota: 181458}
+	chargeOther := map[string]interface{}{
+		"billing_phase":      model.BillingPhaseDeltaCharge,
+		"pre_consumed_quota": float64(154039),
+		"actual_quota":       float64(335497),
+		"video_final_quota":  float64(335497),
+		"video_billed_quota": float64(335497),
+	}
+	if got := resolveUsageLogExportQuota(deltaCharge, chargeOther); got != 181458 {
+		t.Fatalf("delta charge quota = %d, want 181458", got)
+	}
+	if got := resolveUsageLogExportSignedQuota(deltaCharge, chargeOther); got != -181458 {
+		t.Fatalf("delta charge signed quota = %d, want -181458", got)
+	}
+
+	deltaRefund := &model.Log{Type: model.LogTypeRefund, Quota: 200000}
+	refundOther := map[string]interface{}{
+		"billing_phase":      model.BillingPhaseDeltaRefund,
+		"pre_consumed_quota": float64(750000),
+		"actual_quota":       float64(550000),
+		"video_final_quota":  float64(550000),
+	}
+	if got := resolveUsageLogExportQuota(deltaRefund, refundOther); got != 200000 {
+		t.Fatalf("delta refund quota = %d, want 200000", got)
+	}
+	if got := resolveUsageLogExportSignedQuota(deltaRefund, refundOther); got != 200000 {
+		t.Fatalf("delta refund signed quota = %d, want 200000", got)
+	}
+}

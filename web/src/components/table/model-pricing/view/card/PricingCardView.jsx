@@ -54,6 +54,7 @@ import {
   pickChannelScopedModelFloat,
   computeChannelBillingRates,
   formatVideoResolutionDisplayLabel,
+  formatImageResolutionDisplayLabel,
   compareVideoResolutionAsc,
   isVideoPricingModel,
   hasNumericValue,
@@ -248,7 +249,7 @@ const buildImageTierPreviewItems = (hint, usedGroupRatio, displayPrice, t) => {
 
     const family = laneToImagePerImageFamily(row?.lane);
     const resolution =
-      formatVideoResolutionDisplayLabel(row?.resolution) ||
+      formatImageResolutionDisplayLabel(row?.resolution) ||
       row?.resolution ||
       t('默认');
     const key = `${family}|${resolution}`;

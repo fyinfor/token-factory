@@ -27,6 +27,7 @@ import {
 import {
   buildPlaygroundVideoResolutionOptions,
   getPlaygroundVideoSizeForTier,
+  parsePlaygroundCustomImageSize,
   resolvePlaygroundImageSize,
 } from './videoResolutionLabel';
 import { MESSAGE_ROLES } from '../constants/playground.constants';
@@ -228,8 +229,16 @@ export const buildApiPayload = (
       // 无参考图 → generations；有参考图 → edits（OpenAI Image 渠道约定）
       __endpoint: hasReferenceImages ? 'image_edits' : 'image',
     };
-    if (inputs.image_ratio && inputs.image_ratio !== 'auto') {
-      payload.ratio = inputs.image_ratio;
+    // 自定义尺寸时只提交 size，不带 ratio，避免上游按比例覆盖自定义宽高
+    const hasCustomImageSize = Boolean(
+      parsePlaygroundCustomImageSize(inputs.image_custom_size),
+    );
+    if (!hasCustomImageSize) {
+      if (inputs.image_ratio && inputs.image_ratio !== 'auto') {
+        payload.ratio = inputs.image_ratio;
+      } else {
+        payload.ratio = '1:1';
+      }
     }
     // 图片模式：媒体侧栏参考图写入 image 字段（空则省略，与后端 ImageRequest.image 约定一致）
     if (hasReferenceImages) {

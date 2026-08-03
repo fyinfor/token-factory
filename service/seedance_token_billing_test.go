@@ -67,16 +67,13 @@ func TestMatchVideoTokenRule_DetectsImageToVideoLane(t *testing.T) {
 	require.InDelta(t, 0.31, match.ChannelPricePerToken, 1e-9)
 }
 
-func TestSettleSeedanceVideoTokenDeltaWritesSettlementMarkerWithZeroQuota(t *testing.T) {
-	truncate(t)
-	seedUser(t, 1, 1000000)
-
-	task := &model.Task{
-		TaskID:    "task_token_marker",
+func newSeedanceTokenSettleTask(preConsumed int) *model.Task {
+	return &model.Task{
+		TaskID:    "task_token_settle",
 		UserId:    1,
 		Group:     "default",
 		ChannelId: 1,
-		Quota:     750000,
+		Quota:     preConsumed,
 		Status:    model.TaskStatusSuccess,
 		PrivateData: model.TaskPrivateData{
 			BillingContext: &model.TaskBillingContext{
@@ -85,26 +82,104 @@ func TestSettleSeedanceVideoTokenDeltaWritesSettlementMarkerWithZeroQuota(t *tes
 			},
 		},
 	}
+}
 
-	settleSeedanceVideoTokenDelta(context.Background(), task, 550000, map[string]interface{}{
+func settleSeedanceTokenExtra(actualQuota int) map[string]interface{} {
+	return map[string]interface{}{
 		"billing_mode":         SeedanceVideoTokenBillingMode,
 		"video_total_tokens":   50000,
-		"video_billed_quota":   550000,
+		"video_billed_quota":   actualQuota,
 		"video_quota_per_unit": common.QuotaPerUnit,
-	})
+	}
+}
+
+// 预扣与实扣一致：没有资金变动，结算日志只作展示标记，quota 必须为 0，
+// 否则会和预扣日志一起被重复计入消费统计。
+func TestSettleSeedanceVideoTokenDelta_ZeroDeltaWritesSettlementMarker(t *testing.T) {
+	truncate(t)
+	seedUser(t, 1, 1000000)
+
+	task := newSeedanceTokenSettleTask(550000)
+	settleSeedanceVideoTokenDelta(context.Background(), task, 550000, settleSeedanceTokenExtra(550000))
 
 	var logs []model.Log
 	require.NoError(t, model.LOG_DB.Order("id asc").Find(&logs).Error)
 	require.Len(t, logs, 1)
 	require.Equal(t, model.LogTypeConsume, logs[0].Type)
 	require.Equal(t, 0, logs[0].Quota)
+	require.Equal(t, 1000000, getUserQuota(t, 1))
 
 	other, err := common.StrToMap(logs[0].Other)
 	require.NoError(t, err)
 	require.Equal(t, model.BillingPhaseSettlementMarker, other["billing_phase"])
 	require.Equal(t, false, other["affects_balance"])
 	require.EqualValues(t, 550000, other["actual_quota"])
-	require.EqualValues(t, 750000, other["pre_consumed_quota"])
+	require.EqualValues(t, 550000, other["pre_consumed_quota"])
 	require.EqualValues(t, 550000, other["display_quota"])
 	require.EqualValues(t, 0, other["balance_delta"])
+}
+
+// 实扣大于预扣：差额已经从余额扣走，日志 quota 必须记这笔差额。
+// 这样「预扣日志 + 差额日志」按 quota 求和才等于实扣总额（/api/log/stat、对账单同一口径）。
+func TestSettleSeedanceVideoTokenDelta_PositiveDeltaWritesDeltaChargeLog(t *testing.T) {
+	truncate(t)
+	seedUserWithUsed(t, 1, 1000000, 154039)
+
+	const preConsumed, actualQuota = 154039, 335497
+	const delta = actualQuota - preConsumed
+
+	task := newSeedanceTokenSettleTask(preConsumed)
+	settleSeedanceVideoTokenDelta(context.Background(), task, actualQuota, settleSeedanceTokenExtra(actualQuota))
+
+	require.Equal(t, actualQuota, task.Quota)
+	require.Equal(t, 1000000-delta, getUserQuota(t, 1))
+	require.Equal(t, preConsumed+delta, getUserUsedQuota(t, 1))
+
+	var logs []model.Log
+	require.NoError(t, model.LOG_DB.Order("id asc").Find(&logs).Error)
+	require.Len(t, logs, 1)
+	require.Equal(t, model.LogTypeConsume, logs[0].Type)
+	require.Equal(t, delta, logs[0].Quota)
+
+	other, err := common.StrToMap(logs[0].Other)
+	require.NoError(t, err)
+	require.Equal(t, model.BillingPhaseDeltaCharge, other["billing_phase"])
+	require.Equal(t, true, other["affects_balance"])
+	require.EqualValues(t, actualQuota, other["actual_quota"])
+	require.EqualValues(t, preConsumed, other["pre_consumed_quota"])
+	require.EqualValues(t, actualQuota, other["video_final_quota"])
+	require.EqualValues(t, delta, other["display_quota"])
+	require.EqualValues(t, -delta, other["balance_delta"])
+}
+
+// 预扣大于实扣：差额退回余额，写 refund 日志。
+// 「累积已用」只应回退一次（由 RecordTaskBillingLog 统一处理）。
+func TestSettleSeedanceVideoTokenDelta_NegativeDeltaWritesDeltaRefundLog(t *testing.T) {
+	truncate(t)
+	seedUserWithUsed(t, 1, 1000000, 750000)
+
+	const preConsumed, actualQuota = 750000, 550000
+	const refund = preConsumed - actualQuota
+
+	task := newSeedanceTokenSettleTask(preConsumed)
+	settleSeedanceVideoTokenDelta(context.Background(), task, actualQuota, settleSeedanceTokenExtra(actualQuota))
+
+	require.Equal(t, actualQuota, task.Quota)
+	require.Equal(t, 1000000+refund, getUserQuota(t, 1))
+	require.Equal(t, actualQuota, getUserUsedQuota(t, 1))
+
+	var logs []model.Log
+	require.NoError(t, model.LOG_DB.Order("id asc").Find(&logs).Error)
+	require.Len(t, logs, 1)
+	require.Equal(t, model.LogTypeRefund, logs[0].Type)
+	require.Equal(t, refund, logs[0].Quota)
+
+	other, err := common.StrToMap(logs[0].Other)
+	require.NoError(t, err)
+	require.Equal(t, model.BillingPhaseDeltaRefund, other["billing_phase"])
+	require.Equal(t, true, other["affects_balance"])
+	require.EqualValues(t, actualQuota, other["actual_quota"])
+	require.EqualValues(t, preConsumed, other["pre_consumed_quota"])
+	require.EqualValues(t, refund, other["display_quota"])
+	require.EqualValues(t, refund, other["balance_delta"])
 }

@@ -49,3 +49,23 @@ func TestDetectVideoBillingMode_Images(t *testing.T) {
 		t.Fatalf("expected %s, got %s", VideoBillingModeImageToVideo, got)
 	}
 }
+
+func TestDetectVideoBillingMode_FirstLastFrameURL(t *testing.T) {
+	req := &TaskSubmitReq{
+		FirstFrameURL: "https://example.com/start.png",
+		LastFrameURL:  "https://example.com/end.png",
+	}
+	if got := DetectVideoBillingMode(req); got != VideoBillingModeImageToVideo {
+		t.Fatalf("expected %s, got %s", VideoBillingModeImageToVideo, got)
+	}
+}
+
+func TestDetectVideoBillingMode_MetadataFirstLastFrameURL(t *testing.T) {
+	req := &TaskSubmitReq{Metadata: map[string]interface{}{
+		"first_frame_url": "https://example.com/start.png",
+		"last_frame_url":  "https://example.com/end.png",
+	}}
+	if got := DetectVideoBillingMode(req); got != VideoBillingModeImageToVideo {
+		t.Fatalf("expected %s, got %s", VideoBillingModeImageToVideo, got)
+	}
+}

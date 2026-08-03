@@ -3,25 +3,14 @@ package common
 import (
 	"os"
 	"strconv"
-	"strings"
-	"time"
 )
 
-// ── TokenFactory gRPC 连接配置 ──────────────────────────────────
+// ── TokenFactory 智能路由（进程内本地实现）──────────────────────
+//
+// 选路与用户策略均读写本地库，不再依赖 TokenFactory gRPC。
 
-// TokenFactoryGRPCEndpoint 返回 TokenFactory gRPC 服务地址。
-// 环境变量 TOKENFACTORY_GRPC_ENDPOINT，默认 ":9000"。
-func TokenFactoryGRPCEndpoint() string {
-	ep := os.Getenv("TOKENFACTORY_GRPC_ENDPOINT")
-	if ep == "" {
-		return ":9000"
-	}
-	return ep
-}
-
-// TokenFactoryRouteEnabled 是否启用进程内归类智能路由（原 TokenFactory 路由策略，已本地化）。
+// TokenFactoryRouteEnabled 是否启用进程内归类智能路由。
 // 环境变量 TOKENFACTORY_ROUTE_ENABLED=true 时启用；控制台 /console/route-policy 与选路均依赖此开关。
-// 注意：启用后不再依赖 TokenFactory gRPC；渠道同步（TOKENFACTORY_CHANNEL_SYNC_*）可单独关闭。
 func TokenFactoryRouteEnabled() bool {
 	return os.Getenv("TOKENFACTORY_ROUTE_ENABLED") == "true"
 }
@@ -58,7 +47,7 @@ func TokenFactoryRouteErrorTTLSeconds() int {
 	return 600
 }
 
-// TokenFactorySiteKey 返回当前站点的唯一标识，用于多站点隔离。
+// TokenFactorySiteKey 返回当前站点的唯一标识。
 // 环境变量 TOKENFACTORY_SITE_KEY，如 "site-a"、"site-b"。
 // 若为空，默认 "default"。
 func TokenFactorySiteKey() string {
@@ -67,26 +56,4 @@ func TokenFactorySiteKey() string {
 		return "default"
 	}
 	return key
-}
-
-// TokenFactoryChannelSyncEnabled 是否启用定时站点数据同步到 TokenFactory（渠道快照 + 外部用户，同频率）。
-// 默认：TOKENFACTORY_ROUTE_ENABLED=true 时启用；可用 TOKENFACTORY_CHANNEL_SYNC_ENABLED=false 关闭。
-func TokenFactoryChannelSyncEnabled() bool {
-	if !TokenFactoryRouteEnabled() {
-		return false
-	}
-	v := strings.TrimSpace(os.Getenv("TOKENFACTORY_CHANNEL_SYNC_ENABLED"))
-	if v == "false" || v == "0" || strings.EqualFold(v, "off") || strings.EqualFold(v, "no") {
-		return false
-	}
-	return true
-}
-
-// TokenFactoryChannelSyncInterval 定时同步间隔，默认 5 分钟。
-// 环境变量 TOKENFACTORY_CHANNEL_SYNC_INTERVAL（秒）。
-func TokenFactoryChannelSyncInterval() time.Duration {
-	if v, err := strconv.Atoi(os.Getenv("TOKENFACTORY_CHANNEL_SYNC_INTERVAL")); err == nil && v > 0 {
-		return time.Duration(v) * time.Second
-	}
-	return 5 * time.Minute
 }

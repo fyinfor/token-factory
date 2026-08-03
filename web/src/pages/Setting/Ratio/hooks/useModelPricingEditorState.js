@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect, useMemo, useState } from 'react';
 import { API, showError, showSuccess } from '../../../../helpers';
+import { formatImageResolutionDisplayLabel } from '../../../../helpers/videoResolutionLabel';
 import {
     emptyTierPricing,
     hasTierPricing,
@@ -801,6 +802,21 @@ const hasDuplicateResolution = (rows) => {
     return false;
 };
 
+/** 图片分辨率去重：按 Ai 绘图档位归一化（512P/1K/2K/4K；历史 1080p≡1K） */
+const hasDuplicateImageResolution = (rows) => {
+    const seen = new Set();
+    for (const row of rows || []) {
+        const raw = String(row?.resolution || '').trim();
+        if (!raw) continue;
+        const label = formatImageResolutionDisplayLabel(raw) || raw;
+        const key = String(label).replace(/\s+/g, '').toLowerCase();
+        if (!key) continue;
+        if (seen.has(key)) return true;
+        seen.add(key);
+    }
+    return false;
+};
+
 export const getModelWarnings = (model, t) => {
     if (!model) {
         return [];
@@ -980,13 +996,13 @@ export const getModelWarnings = (model, t) => {
     ) {
         warnings.push(
             t(
-                '按图片计费的分辨率行请使用如 1280x720、480p 或 2K 的格式，并填写大于 0 的每张价格（与站点额度展示币种一致）。',
+                '按图片计费的分辨率行请使用如 512x512、512P、1K、2K 或 4K 的格式，并填写大于 0 的每张价格（与站点额度展示币种一致）。',
             ),
         );
     }
     if (
-        hasDuplicateResolution(model.imageTextToImageRules) ||
-        hasDuplicateResolution(model.imageImageToImageRules)
+        hasDuplicateImageResolution(model.imageTextToImageRules) ||
+        hasDuplicateImageResolution(model.imageImageToImageRules)
     ) {
         warnings.push(t('同一规则组内分辨率不能重复，请删除重复项。'));
     }

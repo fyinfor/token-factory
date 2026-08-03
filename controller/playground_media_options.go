@@ -339,22 +339,24 @@ func resolutionLabel(raw string) string {
 	return raw
 }
 
+// imageResolutionLabel 按 Ai 绘图短边规则归一化图片分辨率档位（512P / 1K / 2K / 4K）。
+func imageResolutionLabel(raw string) string {
+	return common.FormatImageResolutionLabel(raw)
+}
+
 func imageResolutionValue(raw string) string {
-	compact := compactResolution(raw)
-	switch compact {
-	case "480", "480p":
-		return "854x480"
-	case "540", "540p":
-		return "960x540"
-	case "720", "720p":
-		return "1280x720"
-	case "1080", "1080p":
-		return "1920x1080"
+	label := imageResolutionLabel(raw)
+	switch strings.ToLower(strings.TrimSpace(label)) {
+	case "512p":
+		return "512x512"
+	case "1k", "1080p": // 1080p 为历史计费别名，等价 1K
+		return "1024x1024"
 	case "2k":
-		return "2560x1440"
+		return "2048x2048"
 	case "4k":
-		return "3840x2160"
+		return "4096x4096"
 	}
+	compact := compactResolution(raw)
 	if strings.Contains(compact, "x") {
 		return compact
 	}
@@ -389,9 +391,9 @@ func normalizeDiscoveryResolutions(mediaMode string, rawTiers interface{}) []pla
 		label := value
 		if mediaMode == "image" {
 			value = imageResolutionValue(raw)
-			label = resolutionLabel(raw)
-			if label != "" && value != "" && compactResolution(label) != compactResolution(value) {
-				label = label + " (" + value + ")"
+			label = imageResolutionLabel(raw)
+			if label == "" {
+				label = value
 			}
 		}
 		if value == "" {
@@ -400,10 +402,18 @@ func normalizeDiscoveryResolutions(mediaMode string, rawTiers interface{}) []pla
 		if label == "" {
 			label = value
 		}
-		if _, ok := seen[value]; ok {
+		// 图片档位按 512P/1K/2K/4K 去重（历史 1080p≡1K；多种像素配置可能落到同一档）
+		seenKey := value
+		if mediaMode == "image" {
+			seenKey = strings.ToLower(label)
+			if seenKey == "" {
+				seenKey = value
+			}
+		}
+		if _, ok := seen[seenKey]; ok {
 			continue
 		}
-		seen[value] = struct{}{}
+		seen[seenKey] = struct{}{}
 		out = append(out, playgroundMediaResolutionOption{
 			Label:         label,
 			Value:         value,
@@ -423,15 +433,27 @@ func preferredDiscoveryDefault(mediaMode string, options []playgroundMediaResolu
 		if mediaMode == "video" {
 			return "720p"
 		}
-		return "1280x720"
+		return "1024x1024"
 	}
 	preferred := "720p"
 	if mediaMode == "image" {
-		preferred = "1280x720"
+		preferred = "1024x1024"
 	}
 	for _, option := range options {
 		if strings.EqualFold(option.Value, preferred) {
 			return option.Value
+		}
+	}
+	if mediaMode == "image" {
+		for _, option := range options {
+			if strings.EqualFold(option.Label, "1K") || strings.EqualFold(option.Label, "1080p") {
+				return option.Value
+			}
+		}
+		for _, option := range options {
+			if strings.EqualFold(option.Label, "512P") {
+				return option.Value
+			}
 		}
 	}
 	return options[0].Value

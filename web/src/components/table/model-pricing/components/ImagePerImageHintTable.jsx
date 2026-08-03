@@ -20,7 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 import React, { useMemo } from 'react';
 import { Typography } from '@douyinfe/semi-ui';
 import {
-  formatVideoResolutionDisplayLabel,
+  formatImageResolutionDisplayLabel,
   compareVideoResolutionAsc,
   costDiscountMultiplier,
   markupRateFromPercent,
@@ -95,7 +95,7 @@ function mapRowsToItems(
     return {
       key: `img-${idx}-${row.lane}-${row.resolution}`,
       resolution:
-        formatVideoResolutionDisplayLabel(row.resolution) ||
+        formatImageResolutionDisplayLabel(row.resolution) ||
         row.resolution ||
         '—',
       price: formatTierPrice(currentUsd, usedGroupRatio, displayPrice),

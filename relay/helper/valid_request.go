@@ -173,6 +173,7 @@ func GetAndValidOpenAIImageRequest(c *gin.Context, relayMode int) (*dto.ImageReq
 				watermark := formData.Get("watermark") == "true"
 				imageRequest.Watermark = &watermark
 			}
+			imageRequest.CallbackURL = strings.TrimSpace(formData.Get("callback_url"))
 			break
 		}
 		fallthrough

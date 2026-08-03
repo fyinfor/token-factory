@@ -522,8 +522,9 @@ func matchFlatPerImageUSDRules(
 
 // matchPerImageRulesByPixels picks the resolution row for per-image billing.
 // Priority:
-//  1. Exact resolution-tier label match (short-side based, same as validation/display),
-//     so square sizes like 1080x1080 map to 1080p instead of a closer landscape 720p by area.
+//  1. Exact Ai-drawing resolution-tier label match (short-side independent of video):
+//     ≤512→512P, ≤1024→1K, ≤2048→2K, else→4K；
+//     e.g. 512x512→512P, 1024x1536→1K, 1920x1080/1648x1232→2K.
 //  2. If the image is larger than every configured tier, cap to that lane's highest tier.
 //  3. Otherwise pick the closest row by pixel area within similarity threshold.
 func matchPerImageRulesByPixels(
@@ -546,7 +547,7 @@ func matchPerImageRulesByPixels(
 		return nil, false
 	}
 
-	reqLabel := normalizePricingResolutionLabel(fmt.Sprintf("%dx%d", ctx.Width, ctx.Height))
+	reqLabel := normalizeImagePricingResolutionLabel(fmt.Sprintf("%dx%d", ctx.Width, ctx.Height))
 	targetPixels := ctx.Width * ctx.Height
 	bestIdx := -1
 	minDiffRatio := math.MaxFloat64
@@ -560,7 +561,7 @@ func matchPerImageRulesByPixels(
 		if rule.ImagePrice <= 0 {
 			continue
 		}
-		ruleW, ruleH, ok := parseResolutionFlexible(rule.Resolution)
+		ruleW, ruleH, ok := parseImageResolutionFlexible(rule.Resolution)
 		if !ok {
 			continue
 		}
@@ -577,7 +578,7 @@ func matchPerImageRulesByPixels(
 			minDiffRatio = diffRatio
 			bestIdx = i
 		}
-		if reqLabel != "" && normalizePricingResolutionLabel(rule.Resolution) == reqLabel {
+		if reqLabel != "" && normalizeImagePricingResolutionLabel(rule.Resolution) == reqLabel {
 			if labelBestIdx < 0 || diffRatio < labelBestDiff ||
 				(diffRatio == labelBestDiff && rulePixels < labelBestPixels) {
 				labelBestIdx = i
@@ -619,7 +620,7 @@ func imagePerImageRuleMatch(rule ratio_setting.ImageResolutionPerImageRule, capp
 	if rule.ImagePrice <= 0 {
 		return nil
 	}
-	w, h, ok := parseResolutionFlexible(rule.Resolution)
+	w, h, ok := parseImageResolutionFlexible(rule.Resolution)
 	if !ok {
 		return nil
 	}
@@ -629,6 +630,30 @@ func imagePerImageRuleMatch(rule ratio_setting.ImageResolutionPerImageRule, capp
 		RuleWidth:       w,
 		RuleHeight:      h,
 		CappedToMaxTier: capped,
+	}
+}
+
+// parseImageResolutionFlexible 解析图片计费分辨率（与视频 parseResolutionFlexible 相互独立）。
+// 档位别名映射到 Ai 绘图代表性像素：512P→512²、1K/1080p→1024²、2K→2048²、4K→4096²。
+func parseImageResolutionFlexible(s string) (int, int, bool) {
+	raw := strings.ToLower(strings.TrimSpace(s))
+	if raw == "" {
+		return 0, 0, false
+	}
+	if w, h, ok := parseResolution(raw); ok {
+		return w, h, true
+	}
+	switch raw {
+	case "512p", "512":
+		return 512, 512, true
+	case "1k", "1080p", "1080":
+		return 1024, 1024, true
+	case "2k":
+		return 2048, 2048, true
+	case "4k":
+		return 4096, 4096, true
+	default:
+		return 0, 0, false
 	}
 }
 

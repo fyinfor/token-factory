@@ -64,9 +64,10 @@ const DEFAULT_SELECTED_FIELDS = [
   'models', 'groups', 'modelRedirect',
 ];
 
-/** 建站用户模式默认勾选的字段（type、apiKey、apiBaseUrl 由后端强制覆盖，但前端也勾选以保持一致） */
+/** 建站用户模式默认勾选的字段（type、apiKey、apiBaseUrl 由后端强制覆盖，但前端也勾选以保持一致）
+ * 折扣率会按「成本折扣 + 经营成本」合并导出；经营成本与加价折扣若勾选则导出为 0。 */
 const SITE_BUILDER_DEFAULT_FIELDS = [
-  'name', 'syncKey', 'type', 'apiKey', 'apiBaseUrl', 'models', 'groups',
+  'name', 'syncKey', 'discountRate', 'operatingCostRate', 'type', 'apiKey', 'apiBaseUrl', 'models', 'groups',
 ];
 
 /** 建站用户模式下禁用取消勾选的字段（后端会强制覆盖这些字段） */
@@ -229,7 +230,7 @@ export default function ChannelExportModal({ visible, onCancel, selectedChannels
         {isSiteBuilder && (
           <div style={{ marginTop: 8, padding: '8px 12px', background: 'var(--semi-color-warning-light-default)', borderRadius: 6 }}>
             <Text type='warning' size='small'>
-              {t('建站用户模式：type 强制为 60 (TokenFactoryOpen)，apiKey 为自动生成的令牌密钥，apiBaseUrl 为本平台地址。每个渠道将创建独立令牌并限定其模型范围。')}
+              {t('建站用户模式：type 强制为 60 (TokenFactoryOpen)，apiKey 置空（导入时指定），apiBaseUrl 为本平台地址。成本折扣按「成本折扣 + 经营成本」合并导出，经营成本与加价折扣导出为 0。')}
             </Text>
           </div>
         )}

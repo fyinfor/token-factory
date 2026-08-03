@@ -229,13 +229,13 @@ func appendImagePerImageBillingInfo(relayInfo *relaycommon.RelayInfo, other map[
 	if b.RuleWidth > 0 && b.RuleHeight > 0 {
 		other["image_rule_resolution"] = fmt.Sprintf("%dx%d", b.RuleWidth, b.RuleHeight)
 	}
-	// image_rule_tier：展示用计费档位标识（720p / 1080p / 2K / 4K），不用像素尺寸。
+	// image_rule_tier：展示用计费档位标识（512P / 1K / 2K / 4K），按 Ai 绘图短边规则归一化。
 	tierRaw := strings.TrimSpace(b.RuleRes)
 	if tierRaw == "" && b.RuleWidth > 0 && b.RuleHeight > 0 {
 		tierRaw = fmt.Sprintf("%dx%d", b.RuleWidth, b.RuleHeight)
 	}
 	if tierRaw != "" {
-		if label := common.FormatVideoResolutionLabel(tierRaw); label != "" {
+		if label := common.FormatImageResolutionLabel(tierRaw); label != "" {
 			other["image_rule_tier"] = label
 		} else {
 			other["image_rule_tier"] = tierRaw

@@ -246,59 +246,114 @@ func ResolveTaskIDsByRequestID(requestID string) ([]string, error) {
 	return taskIDs, nil
 }
 
-func querySettlementMarkerByTaskID(taskID string) (*Log, map[string]interface{}) {
-	taskID = strings.TrimSpace(taskID)
-	if taskID == "" {
-		return nil, nil
-	}
-	var marker Log
-	err := LOG_DB.
-		Where("logs.type = ? AND logs.other LIKE ? AND logs.other LIKE ? AND logs.other LIKE ?",
-			LogTypeConsume,
-			"%"+taskID+"%",
-			"%\"actual_quota\"%",
-			"%\"pre_consumed_quota\"%",
-		).
-		Order("logs.id desc").
-		Limit(1).
-		Find(&marker).Error
-	if err != nil || marker.Id == 0 {
-		return nil, nil
-	}
-	other, err := common.StrToMap(marker.Other)
-	if err != nil || other == nil || !isTaskSettlementMarkerLog(&marker, other) {
-		return nil, nil
-	}
-	return &marker, other
+// settlementMarkerTaskIDPattern 匹配 other JSON 中的 "task_id":"<id>"（MapToJsonStr 紧凑编码）。
+func settlementMarkerTaskIDPattern(taskID string) string {
+	return "%\"task_id\":\"" + taskID + "\"%"
 }
 
-func queryTaskUseTimeByTaskID(taskID string) int {
-	taskID = strings.TrimSpace(taskID)
-	if taskID == "" {
+type settlementMarkerHit struct {
+	log   *Log
+	other map[string]interface{}
+}
+
+// querySettlementMarkersByTaskIDs 一次查出多个 task 的结算标记，避免日志列表页对每个 task 扫全表。
+// userIDs / minCreatedAt 用于收窄扫描范围（预扣与结算通常同 user，且结算晚于预扣）。
+func querySettlementMarkersByTaskIDs(taskIDs []string, userIDs []int, minCreatedAt int64) map[string]settlementMarkerHit {
+	out := make(map[string]settlementMarkerHit, len(taskIDs))
+	if len(taskIDs) == 0 {
+		return out
+	}
+
+	const chunkSize = 40
+	for start := 0; start < len(taskIDs); start += chunkSize {
+		end := start + chunkSize
+		if end > len(taskIDs) {
+			end = len(taskIDs)
+		}
+		chunk := taskIDs[start:end]
+
+		orParts := make([]string, 0, len(chunk))
+		args := make([]interface{}, 0, 3+len(chunk)+len(userIDs)+1)
+		args = append(args, LogTypeConsume, "%\"actual_quota\"%", "%\"pre_consumed_quota\"%")
+		for _, taskID := range chunk {
+			orParts = append(orParts, "logs.other LIKE ?")
+			args = append(args, settlementMarkerTaskIDPattern(taskID))
+		}
+		where := "logs.type = ? AND logs.other LIKE ? AND logs.other LIKE ? AND (" + strings.Join(orParts, " OR ") + ")"
+		tx := LOG_DB.Where(where, args...)
+		if len(userIDs) > 0 {
+			tx = tx.Where("logs.user_id IN ?", userIDs)
+		}
+		if minCreatedAt > 0 {
+			// 结算标记一般不早于对应预扣；留 1 小时余量覆盖时钟/写入顺序偏差。
+			tx = tx.Where("logs.created_at >= ?", minCreatedAt-3600)
+		}
+
+		var markers []Log
+		if err := tx.Order("logs.id desc").Find(&markers).Error; err != nil {
+			common.SysError("failed to batch query settlement markers: " + err.Error())
+			continue
+		}
+		for i := range markers {
+			marker := &markers[i]
+			other, err := common.StrToMap(marker.Other)
+			if err != nil || other == nil || !isTaskSettlementMarkerLog(marker, other) {
+				continue
+			}
+			taskID := logTaskID(other)
+			if taskID == "" {
+				continue
+			}
+			// ORDER BY id desc：同 task 只保留最新一条。
+			if _, exists := out[taskID]; exists {
+				continue
+			}
+			out[taskID] = settlementMarkerHit{log: marker, other: other}
+		}
+	}
+	return out
+}
+
+func taskUseTimeSeconds(submitTime, startTime, finishTime int64) int {
+	if finishTime <= 0 {
 		return 0
 	}
-	var task Task
-	err := DB.
-		Select("id", "submit_time", "start_time", "finish_time").
-		Where("task_id = ?", taskID).
-		Limit(1).
-		Find(&task).Error
-	if err != nil || task.ID == 0 || task.FinishTime <= 0 {
-		return 0
-	}
-	start := task.SubmitTime
+	start := submitTime
 	if start <= 0 {
-		start = task.StartTime
+		start = startTime
 	}
-	if start <= 0 || task.FinishTime <= start {
+	if start <= 0 || finishTime <= start {
 		return 0
 	}
-	return int(task.FinishTime - start)
+	return int(finishTime - start)
+}
+
+func queryTaskUseTimeByTaskIDs(taskIDs []string) map[string]int {
+	out := make(map[string]int, len(taskIDs))
+	if len(taskIDs) == 0 {
+		return out
+	}
+	var tasks []Task
+	err := DB.
+		Select("task_id", "submit_time", "start_time", "finish_time").
+		Where("task_id IN ?", taskIDs).
+		Find(&tasks).Error
+	if err != nil {
+		common.SysError("failed to batch query task use time: " + err.Error())
+		return out
+	}
+	for i := range tasks {
+		out[tasks[i].TaskID] = taskUseTimeSeconds(tasks[i].SubmitTime, tasks[i].StartTime, tasks[i].FinishTime)
+	}
+	return out
 }
 
 func fillTaskUseTime(logs []*Log) {
-	cache := make(map[string]int)
-	for _, log := range logs {
+	needIDs := make([]string, 0)
+	seen := make(map[string]struct{})
+	logTaskIDs := make([]string, len(logs))
+
+	for i, log := range logs {
 		if log == nil || log.UseTime > 0 || strings.TrimSpace(log.Other) == "" {
 			continue
 		}
@@ -310,18 +365,38 @@ func fillTaskUseTime(logs []*Log) {
 		if taskID == "" {
 			continue
 		}
-		useTime, ok := cache[taskID]
-		if !ok {
-			useTime = queryTaskUseTimeByTaskID(taskID)
-			cache[taskID] = useTime
+		logTaskIDs[i] = taskID
+		if _, ok := seen[taskID]; ok {
+			continue
 		}
-		if useTime > 0 {
-			log.UseTime = useTime
+		seen[taskID] = struct{}{}
+		needIDs = append(needIDs, taskID)
+	}
+	if len(needIDs) == 0 {
+		return
+	}
+	cache := queryTaskUseTimeByTaskIDs(needIDs)
+	for i, taskID := range logTaskIDs {
+		if taskID == "" {
+			continue
+		}
+		if useTime := cache[taskID]; useTime > 0 {
+			logs[i].UseTime = useTime
 		}
 	}
 }
 
 func mergeSettlementMarkersIntoPreChargeLogs(logs []*Log) {
+	type pendingMerge struct {
+		log   *Log
+		other map[string]interface{}
+	}
+	pendingByTask := make(map[string][]pendingMerge)
+	userSeen := make(map[int]struct{})
+	userIDs := make([]int, 0)
+	taskIDs := make([]string, 0)
+	var minCreatedAt int64
+
 	for _, log := range logs {
 		if log == nil || log.Type != LogTypeConsume || log.Quota <= 0 {
 			continue
@@ -337,28 +412,51 @@ func mergeSettlementMarkersIntoPreChargeLogs(logs []*Log) {
 		if taskID == "" {
 			continue
 		}
-		marker, markerOther := querySettlementMarkerByTaskID(taskID)
-		if marker == nil || markerOther == nil {
-			continue
+		if _, ok := pendingByTask[taskID]; !ok {
+			taskIDs = append(taskIDs, taskID)
 		}
-		for key, value := range markerOther {
-			switch key {
-			case "request_path", "billing_phase", "affects_balance", "balance_delta", "display_quota":
-				continue
-			default:
-				other[key] = value
+		pendingByTask[taskID] = append(pendingByTask[taskID], pendingMerge{log: log, other: other})
+		if log.UserId > 0 {
+			if _, ok := userSeen[log.UserId]; !ok {
+				userSeen[log.UserId] = struct{}{}
+				userIDs = append(userIDs, log.UserId)
 			}
 		}
-		actualQuota := log.Quota
-		if actual, ok := logOtherNumber(markerOther["actual_quota"]); ok && actual > 0 {
-			actualQuota = int(actual)
+		if log.CreatedAt > 0 && (minCreatedAt == 0 || log.CreatedAt < minCreatedAt) {
+			minCreatedAt = log.CreatedAt
 		}
-		other["source_log_ids"] = map[string]interface{}{
-			"pre_charge": log.Id,
-			"settlement": marker.Id,
+	}
+	if len(taskIDs) == 0 {
+		return
+	}
+
+	markers := querySettlementMarkersByTaskIDs(taskIDs, userIDs, minCreatedAt)
+	for taskID, pendings := range pendingByTask {
+		hit, ok := markers[taskID]
+		if !ok || hit.log == nil || hit.other == nil {
+			continue
 		}
-		SetBillingLogMetadata(other, BillingPhaseSettlementMerged, true, actualQuota, SignedLogDelta(log.Quota, log.Type))
-		log.Other = common.MapToJsonStr(other)
+		for _, item := range pendings {
+			other := item.other
+			for key, value := range hit.other {
+				switch key {
+				case "request_path", "billing_phase", "affects_balance", "balance_delta", "display_quota":
+					continue
+				default:
+					other[key] = value
+				}
+			}
+			actualQuota := item.log.Quota
+			if actual, ok := logOtherNumber(hit.other["actual_quota"]); ok && actual > 0 {
+				actualQuota = int(actual)
+			}
+			other["source_log_ids"] = map[string]interface{}{
+				"pre_charge": item.log.Id,
+				"settlement": hit.log.Id,
+			}
+			SetBillingLogMetadata(other, BillingPhaseSettlementMerged, true, actualQuota, SignedLogDelta(item.log.Quota, item.log.Type))
+			item.log.Other = common.MapToJsonStr(other)
+		}
 	}
 }
 
@@ -583,8 +681,12 @@ func prependUsernameBeforeRole(content string, username string) string {
 }
 
 func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string, tokenName string, content string, tokenId int, useTimeSeconds int,
-	isStream bool, group string, other map[string]interface{}) {
-	logger.LogInfo(c, fmt.Sprintf("record error log: userId=%d, channelId=%d, modelName=%s, tokenName=%s, content=%s", userId, channelId, modelName, tokenName, content))
+	isStream bool, group string, other map[string]interface{}, errorOriginHint string) {
+	if errorOriginHint == "" {
+		errorOriginHint = "本平台"
+	}
+	// 来源仅写服务端日志；入库 content 与 other 不变，/log 接口展示不受影响。
+	logger.LogInfo(c, fmt.Sprintf("record error log [来源=%s]: userId=%d, channelId=%d, modelName=%s, tokenName=%s, content=%s", errorOriginHint, userId, channelId, modelName, tokenName, content))
 	username := c.GetString("username")
 	requestId := c.GetString(common.RequestIdKey)
 	otherStr := common.MapToJsonStr(other)
