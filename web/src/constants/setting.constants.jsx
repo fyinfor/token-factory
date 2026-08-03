@@ -98,6 +98,16 @@ export const SETTING_CATEGORIES = [
           '页脚',
         ]),
         settingItem('docs', 'other', 'docs', '文档配置', ['文档站', 'Docs']),
+        settingItem('seo', 'other', 'seo', 'SEO 设置', [
+          'SEO',
+          '搜索引擎优化',
+          '标题',
+          '描述',
+          '关键词',
+          '站点地图',
+          'robots',
+          'Open Graph',
+        ]),
         settingItem('compute-page', 'operation', 'compute-page', '算力页面', [
           '算力',
           '算力报价',

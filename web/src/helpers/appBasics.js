@@ -38,6 +38,77 @@ export function getSystemName(language) {
 export const getLogo = () => localStorage.getItem('logo') || '/logo.png';
 export const getFooterHTML = () => localStorage.getItem('footer_html');
 
+const upsertMeta = (attribute, value, content) => {
+  let element = document.head.querySelector(`meta[${attribute}="${value}"]`);
+  if (!content) {
+    element?.remove();
+    return;
+  }
+  if (!element) {
+    element = document.createElement('meta');
+    element.setAttribute(attribute, value);
+    document.head.appendChild(element);
+  }
+  element.setAttribute('content', content);
+};
+
+export function applySeoMetadata(status = {}, language) {
+  if (typeof document === 'undefined') return;
+
+  const stored = (key) => localStorage.getItem(key) || '';
+  const value = (statusKey, storageKey) =>
+    String(status[statusKey] || '').trim() || stored(storageKey);
+
+  const lang = normalizeLanguage(
+    language || localStorage.getItem('i18nextLng'),
+  );
+  const isChinese = lang === 'zh-CN' || lang === 'zh-TW';
+  const title =
+    (isChinese
+      ? value('seo_title', 'seo_title')
+      : value('seo_title_en', 'seo_title_en')) ||
+    (isChinese ? status.system_name : status.system_name_en) ||
+    status.system_name ||
+    'TokenFactory';
+  const description =
+    (isChinese
+      ? value('seo_description', 'seo_description')
+      : value('seo_description_en', 'seo_description_en')) ||
+    (isChinese
+      ? value('seo_description_en', 'seo_description_en')
+      : value('seo_description', 'seo_description')) ||
+    'A unified AI model gateway for personal and enterprise applications.';
+  const keywords = value('seo_keywords', 'seo_keywords');
+  const robots = value('seo_robots', 'seo_robots') || 'index,follow';
+
+  document.title = title;
+  document.documentElement.lang = isChinese ? lang || 'zh-CN' : 'en';
+  upsertMeta('name', 'description', description);
+  upsertMeta('name', 'keywords', keywords);
+  upsertMeta('name', 'robots', robots);
+  upsertMeta('property', 'og:title', title);
+  upsertMeta('property', 'og:description', description);
+  upsertMeta('property', 'og:type', 'website');
+  upsertMeta('property', 'og:image', value('seo_og_image', 'seo_og_image'));
+  upsertMeta('name', 'twitter:card', 'summary_large_image');
+  upsertMeta('name', 'twitter:title', title);
+  upsertMeta('name', 'twitter:description', description);
+  upsertMeta('name', 'twitter:image', value('seo_og_image', 'seo_og_image'));
+
+  const canonicalUrl = value('seo_canonical_url', 'seo_canonical_url');
+  let canonical = document.head.querySelector('link[rel="canonical"]');
+  if (canonicalUrl) {
+    if (!canonical) {
+      canonical = document.createElement('link');
+      canonical.rel = 'canonical';
+      document.head.appendChild(canonical);
+    }
+    canonical.href = canonicalUrl;
+  } else if (canonical) {
+    canonical.remove();
+  }
+}
+
 export function getUserIdFromLocalStorage() {
   try {
     const user = JSON.parse(localStorage.getItem('user') || 'null');
