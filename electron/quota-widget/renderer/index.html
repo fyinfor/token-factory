@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+    <title>TokenFactory额度悬浮窗</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="widget" id="widget">
+      <form class="config-form" id="configForm" autocomplete="off">
+        <select id="sitePreset" aria-label="站点">
+          <option value="https://tokease.com">tokease.com · 国际站</option>
+          <option value="https://tokease.cn">tokease.cn · 国内站</option>
+          <option value="custom">自定义地址</option>
+        </select>
+        <input id="baseUrl" class="custom-address" type="url" aria-label="自定义站点地址" placeholder="https://example.com" spellcheck="false" autocomplete="off" hidden>
+        <div class="key-row">
+          <input id="apiKey" type="password" aria-label="API Key" placeholder="sk-..." spellcheck="false" autocomplete="off">
+          <button type="submit">OK</button>
+        </div>
+      </form>
+
+      <section class="face balance-face" id="balanceFace" hidden>
+        <strong id="balance">--</strong>
+      </section>
+
+      <section class="face logs-face" id="logsFace" hidden>
+        <div class="logs" id="logList"></div>
+      </section>
+
+      <div class="message" id="message" hidden></div>
+    </main>
+    <script src="./app.js"></script>
+  </body>
+</html>

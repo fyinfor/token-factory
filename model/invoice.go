@@ -23,19 +23,23 @@ const (
 
 	InvoiceTitleTypePersonal = "personal"
 	InvoiceTitleTypeCompany  = "company"
+
+	InvoiceTypeElectronicOrdinary = "electronic_ordinary"
+	InvoiceTypeElectronicSpecial  = "electronic_special"
 )
 
-// InvoiceProfile 用户开票信息（电子普票）。
+// InvoiceProfile 用户开票信息。
 type InvoiceProfile struct {
-	Id        int    `json:"id" gorm:"primaryKey;autoIncrement"`
-	UserId    int    `json:"user_id" gorm:"not null;uniqueIndex"`
-	TitleType string `json:"title_type" gorm:"type:varchar(16);not null;default:personal"`
-	Title     string `json:"title" gorm:"type:varchar(256);not null"`
-	TaxNo     string `json:"tax_no" gorm:"type:varchar(64);default:''"`
-	Email     string `json:"email" gorm:"type:varchar(128);not null"`
-	Phone     string `json:"phone" gorm:"type:varchar(32);default:''"`
-	CreatedAt int64  `json:"created_at" gorm:"autoCreateTime;bigint"`
-	UpdatedAt int64  `json:"updated_at" gorm:"autoUpdateTime;bigint"`
+	Id          int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	UserId      int    `json:"user_id" gorm:"not null;uniqueIndex"`
+	TitleType   string `json:"title_type" gorm:"type:varchar(16);not null;default:personal"`
+	InvoiceType string `json:"invoice_type" gorm:"type:varchar(32);not null;default:electronic_ordinary"`
+	Title       string `json:"title" gorm:"type:varchar(256);not null"`
+	TaxNo       string `json:"tax_no" gorm:"type:varchar(64);default:''"`
+	Email       string `json:"email" gorm:"type:varchar(128);not null"`
+	Phone       string `json:"phone" gorm:"type:varchar(32);default:''"`
+	CreatedAt   int64  `json:"created_at" gorm:"autoCreateTime;bigint"`
+	UpdatedAt   int64  `json:"updated_at" gorm:"autoUpdateTime;bigint"`
 }
 
 func (InvoiceProfile) TableName() string { return "invoice_profiles" }
@@ -66,6 +70,7 @@ type InvoiceRequestItem struct {
 	InvoiceRequestId int     `json:"invoice_request_id" gorm:"not null;index"`
 	TopUpId          int     `json:"topup_id" gorm:"column:top_up_id;not null;index"`
 	TradeNo          string  `json:"trade_no" gorm:"type:varchar(255);not null"`
+	PaymentMethod    string  `json:"payment_method" gorm:"column:payment_method;->;-:migration"`
 	InvoiceAmount    float64 `json:"invoice_amount" gorm:"type:decimal(20,6);not null"`
 	CreatedAt        int64   `json:"created_at" gorm:"autoCreateTime;bigint"`
 }
@@ -209,6 +214,12 @@ func UpsertInvoiceProfile(profile *InvoiceProfile) error {
 	}
 	if profile.TitleType != InvoiceTitleTypePersonal && profile.TitleType != InvoiceTitleTypeCompany {
 		return errors.New("invalid invoice title type")
+	}
+	if profile.InvoiceType == "" {
+		profile.InvoiceType = InvoiceTypeElectronicOrdinary
+	}
+	if profile.InvoiceType != InvoiceTypeElectronicOrdinary && profile.InvoiceType != InvoiceTypeElectronicSpecial {
+		return errors.New("invalid invoice type")
 	}
 	if profile.TitleType == InvoiceTitleTypeCompany && profile.TaxNo == "" {
 		return errors.New("company tax number is required")
@@ -454,12 +465,19 @@ func CreateInvoiceRequest(userID int, items []InvoiceRequestItemInput, remark st
 			})
 		}
 		totalF, _ := total.Float64()
+		invoiceType := profile.InvoiceType
+		if invoiceType == "" {
+			invoiceType = InvoiceTypeElectronicOrdinary
+		}
+		if invoiceType != InvoiceTypeElectronicOrdinary && invoiceType != InvoiceTypeElectronicSpecial {
+			return errors.New("invalid invoice type")
+		}
 		req := &InvoiceRequest{
 			UserId:          userID,
 			RequestNo:       generateInvoiceRequestNo(),
 			Status:          InvoiceRequestStatusPending,
 			TotalAmount:     totalF,
-			InvoiceType:     "electronic_ordinary",
+			InvoiceType:     invoiceType,
 			ProfileSnapshot: string(profileJSON),
 			Remark:          strings.TrimSpace(remark),
 		}
@@ -536,7 +554,12 @@ func GetInvoiceRequestByID(id int) (*InvoiceRequest, error) {
 
 func GetInvoiceRequestItems(requestID int) ([]InvoiceRequestItem, error) {
 	var items []InvoiceRequestItem
-	err := DB.Where("invoice_request_id = ?", requestID).Order("id asc").Find(&items).Error
+	err := DB.Model(&InvoiceRequestItem{}).
+		Select("invoice_request_items.*, top_ups.payment_method AS payment_method").
+		Joins("LEFT JOIN top_ups ON top_ups.id = invoice_request_items."+invoiceTopUpIDColumn()).
+		Where("invoice_request_items.invoice_request_id = ?", requestID).
+		Order("invoice_request_items.id asc").
+		Find(&items).Error
 	return items, err
 }
 
