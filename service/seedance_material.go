@@ -291,13 +291,14 @@ func MaterialCreateAsset(groupId string, url string, name string, assetType stri
 }
 
 // NormalizeMaterialStatus 归一化上游 Status 枚举（兼容大小写差异）。
+// ListAssets 文档使用 Processing，本地与 GetAsset 统一为 Pending。
 func NormalizeMaterialStatus(status string) string {
 	switch strings.ToLower(strings.TrimSpace(status)) {
 	case "active":
 		return MaterialStatusActive
 	case "failed":
 		return MaterialStatusFailed
-	case "pending":
+	case "pending", "processing":
 		return MaterialStatusPending
 	default:
 		return strings.TrimSpace(status)

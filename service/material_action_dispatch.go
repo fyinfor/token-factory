@@ -16,8 +16,10 @@ func init() {
 	materialActionRegistry = map[string]MaterialActionHandler{
 		MaterialActionCreateAssetGroup:            dispatchCreateAssetGroup,
 		MaterialActionGetAssetGroup:               dispatchGetAssetGroup,
+		MaterialActionListAssetGroups:             dispatchListAssetGroups,
 		MaterialActionCreateAsset:                 dispatchCreateAsset,
 		MaterialActionGetAsset:                    dispatchGetAsset,
+		MaterialActionListAssets:                  dispatchListAssets,
 		MaterialActionUpdateAssetGroup:            dispatchUpdateAssetGroup,
 		MaterialActionUpdateAsset:                 dispatchUpdateAsset,
 		MaterialActionDeleteAsset:                 dispatchDeleteAsset,
@@ -76,6 +78,14 @@ func dispatchGetAssetGroup(userId int, body []byte) (any, error) {
 	return ActionGetAssetGroup(userId, input)
 }
 
+func dispatchListAssetGroups(userId int, body []byte) (any, error) {
+	var input ListAssetGroupsInput
+	if err := common.Unmarshal(body, &input); err != nil {
+		return nil, materialActionErr(common.MaterialCodeInvalidParameter, "请求参数 JSON 格式无效")
+	}
+	return ActionListAssetGroups(userId, input)
+}
+
 func dispatchCreateAsset(userId int, body []byte) (any, error) {
 	var input CreateAssetInput
 	if err := common.Unmarshal(body, &input); err != nil {
@@ -90,6 +100,14 @@ func dispatchGetAsset(userId int, body []byte) (any, error) {
 		return nil, materialActionErr(common.MaterialCodeInvalidParameter, "请求参数 JSON 格式无效")
 	}
 	return ActionGetAsset(userId, input)
+}
+
+func dispatchListAssets(userId int, body []byte) (any, error) {
+	var input ListAssetsInput
+	if err := common.Unmarshal(body, &input); err != nil {
+		return nil, materialActionErr(common.MaterialCodeInvalidParameter, "请求参数 JSON 格式无效")
+	}
+	return ActionListAssets(userId, input)
 }
 
 func dispatchUpdateAssetGroup(userId int, body []byte) (any, error) {

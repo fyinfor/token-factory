@@ -15,8 +15,10 @@ import (
 const (
 	MaterialActionCreateAssetGroup            = "CreateAssetGroup"
 	MaterialActionGetAssetGroup               = "GetAssetGroup"
-	MaterialActionCreateAsset                   = "CreateAsset"
-	MaterialActionGetAsset                      = "GetAsset"
+	MaterialActionListAssetGroups             = "ListAssetGroups"
+	MaterialActionCreateAsset                 = "CreateAsset"
+	MaterialActionGetAsset                    = "GetAsset"
+	MaterialActionListAssets                  = "ListAssets"
 	MaterialActionDeleteAsset                 = "DeleteAsset"
 	MaterialActionDeleteAssetGroup            = "DeleteAssetGroup"
 	MaterialActionCreateVisualValidateSession = "CreateVisualValidateSession"
@@ -28,7 +30,14 @@ const (
 const (
 	materialNameMaxLen        = 128
 	materialDescriptionMaxLen = 512
+	materialFilterNameMaxLen  = 64
+	materialListPageSizeMax   = 100
+	materialListPageSizeDefault = 10
 	visualSessionTTLSeconds   = 300
+
+	// 上游素材组类型枚举（与 ListAssetGroups / ListAssets 对齐）。
+	MaterialUpstreamGroupTypeAIGC         = "AIGC"
+	MaterialUpstreamGroupTypeLivenessFace = "LivenessFace"
 )
 
 // MaterialActionError 业务层错误，携带标准 code 供 Controller 映射。
@@ -89,6 +98,53 @@ type CreateAssetInput struct {
 
 type VisualValidateResultInput struct {
 	BytedToken string `json:"BytedToken"`
+}
+
+type ListAssetGroupsFilter struct {
+	GroupType string   `json:"GroupType"`
+	GroupIds  []string `json:"GroupIds"`
+	Name      string   `json:"Name"`
+}
+
+type ListAssetGroupsInput struct {
+	Filter      *ListAssetGroupsFilter `json:"Filter"`
+	PageNumber  int                    `json:"PageNumber"`
+	PageSize    int                    `json:"PageSize"`
+	SortBy      string                 `json:"SortBy"`
+	SortOrder   string                 `json:"SortOrder"`
+	ProjectName string                 `json:"ProjectName"`
+}
+
+type ListAssetsFilter struct {
+	GroupType string   `json:"GroupType"`
+	GroupIds  []string `json:"GroupIds"`
+	Statuses  []string `json:"Statuses"`
+	Name      string   `json:"Name"`
+}
+
+type ListAssetsInput struct {
+	Filter      *ListAssetsFilter `json:"Filter"`
+	PageNumber  int               `json:"PageNumber"`
+	PageSize    int               `json:"PageSize"`
+	SortBy      string            `json:"SortBy"`
+	SortOrder   string            `json:"SortOrder"`
+	ProjectName string            `json:"ProjectName"`
+}
+
+// ListAssetGroupsResult 与上游 ListAssetGroups Result 对齐。
+type ListAssetGroupsResult struct {
+	Items      []MaterialGroupResult `json:"Items"`
+	TotalCount int64                 `json:"TotalCount"`
+	PageNumber int                   `json:"PageNumber"`
+	PageSize   int                   `json:"PageSize"`
+}
+
+// ListAssetsResult 与上游 ListAssets Result 对齐。
+type ListAssetsResult struct {
+	Items      []MaterialAssetResult `json:"Items"`
+	TotalCount int64                 `json:"TotalCount"`
+	PageNumber int                   `json:"PageNumber"`
+	PageSize   int                   `json:"PageSize"`
 }
 
 // ---------------------------------------------------------------------------
@@ -517,6 +573,286 @@ func ActionUpdateAsset(userId int, input UpdateAssetInput) (map[string]string, e
 	}
 	materialActionLog(userId, MaterialActionUpdateAsset, assetId, "success")
 	return map[string]string{"Id": assetId}, nil
+}
+
+// ActionListAssetGroups 分页查询素材组列表（普通用户仅本人；管理员可查全部）。
+func ActionListAssetGroups(userId int, input ListAssetGroupsInput) (*ListAssetGroupsResult, error) {
+	if !operation_setting.IsSeedanceReady() {
+		return nil, materialActionNotReady()
+	}
+	if input.Filter == nil {
+		return nil, materialActionErr(common.MaterialCodeInvalidParameter, "Filter 不能为空")
+	}
+	localGroupType, err := mapUpstreamGroupTypeToLocal(input.Filter.GroupType)
+	if err != nil {
+		return nil, err
+	}
+	name := strings.TrimSpace(input.Filter.Name)
+	if len([]rune(name)) > materialFilterNameMaxLen {
+		return nil, materialActionErr(common.MaterialCodeInvalidParameter, fmt.Sprintf("Name 长度不能超过 %d 个字符", materialFilterNameMaxLen))
+	}
+	pageNumber, pageSize, err := normalizeListPagination(input.PageNumber, input.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	sortBy, sortOrder, err := normalizeListSort(input.SortBy, input.SortOrder, false)
+	if err != nil {
+		return nil, err
+	}
+
+	filterUserId := userId
+	if model.IsAdmin(userId) {
+		filterUserId = 0
+	}
+	groups, total, err := model.ListMaterialGroupsFiltered(model.MaterialGroupListFilter{
+		UserId:    filterUserId,
+		GroupType: localGroupType,
+		GroupIds:  trimStringSlice(input.Filter.GroupIds),
+		Name:      name,
+		SortBy:    sortBy,
+		SortOrder: sortOrder,
+		Offset:    (pageNumber - 1) * pageSize,
+		Limit:     pageSize,
+	})
+	if err != nil {
+		return nil, materialActionErr(common.MaterialCodeInternalError, "查询素材组列表失败")
+	}
+
+	items := make([]MaterialGroupResult, 0, len(groups))
+	for _, g := range groups {
+		if g == nil {
+			continue
+		}
+		items = append(items, MaterialGroupResult{
+			Id:          g.GroupId,
+			Name:        g.GroupName,
+			Description: g.Description,
+			GroupType:   mapLocalGroupTypeToUpstream(g.GroupType),
+			ProjectName: normalizeProjectName(input.ProjectName),
+			CreateTime:  formatMaterialUnixTime(g.CreatedAt),
+			UpdateTime:  formatMaterialUnixTime(g.UpdatedAt),
+		})
+	}
+	materialActionLog(userId, MaterialActionListAssetGroups, "", fmt.Sprintf("success total=%d page=%d", total, pageNumber))
+	return &ListAssetGroupsResult{
+		Items:      items,
+		TotalCount: total,
+		PageNumber: pageNumber,
+		PageSize:   pageSize,
+	}, nil
+}
+
+// ActionListAssets 分页查询素材列表（普通用户仅本人；管理员可查全部）。
+func ActionListAssets(userId int, input ListAssetsInput) (*ListAssetsResult, error) {
+	if !operation_setting.IsSeedanceReady() {
+		return nil, materialActionNotReady()
+	}
+	localGroupType := ""
+	var groupIds []string
+	var statuses []string
+	name := ""
+	var err error
+	if input.Filter != nil {
+		// 文档要求：Filter 存在时 GroupType 必填。
+		localGroupType, err = mapUpstreamGroupTypeToLocal(input.Filter.GroupType)
+		if err != nil {
+			return nil, err
+		}
+		groupIds = trimStringSlice(input.Filter.GroupIds)
+		statuses, err = normalizeListStatuses(input.Filter.Statuses)
+		if err != nil {
+			return nil, err
+		}
+		name = strings.TrimSpace(input.Filter.Name)
+		if len([]rune(name)) > materialFilterNameMaxLen {
+			return nil, materialActionErr(common.MaterialCodeInvalidParameter, fmt.Sprintf("Name 长度不能超过 %d 个字符", materialFilterNameMaxLen))
+		}
+	}
+	pageNumber, pageSize, err := normalizeListPagination(input.PageNumber, input.PageSize)
+	if err != nil {
+		return nil, err
+	}
+	sortBy, sortOrder, err := normalizeListSort(input.SortBy, input.SortOrder, true)
+	if err != nil {
+		return nil, err
+	}
+
+	filterUserId := userId
+	if model.IsAdmin(userId) {
+		filterUserId = 0
+	}
+	assets, total, err := model.ListMaterialAssetsFiltered(model.MaterialAssetListFilter{
+		UserId:    filterUserId,
+		GroupType: localGroupType,
+		GroupIds:  groupIds,
+		Statuses:  statuses,
+		Name:      name,
+		SortBy:    sortBy,
+		SortOrder: sortOrder,
+		Offset:    (pageNumber - 1) * pageSize,
+		Limit:     pageSize,
+	})
+	if err != nil {
+		return nil, materialActionErr(common.MaterialCodeInternalError, "查询素材列表失败")
+	}
+
+	items := make([]MaterialAssetResult, 0, len(assets))
+	for _, a := range assets {
+		if a == nil {
+			continue
+		}
+		item := MaterialAssetResult{
+			Id:          a.AssetId,
+			Name:        a.Name,
+			URL:         a.URL,
+			AssetType:   a.AssetType,
+			GroupId:     a.GroupId,
+			Status:      NormalizeMaterialStatus(a.Status),
+			ProjectName: normalizeProjectName(input.ProjectName),
+			CreateTime:  formatMaterialUnixTime(a.CreatedAt),
+			UpdateTime:  formatMaterialUnixTime(a.UpdatedAt),
+		}
+		item.Moderation.Strategy = "Default"
+		items = append(items, item)
+	}
+	materialActionLog(userId, MaterialActionListAssets, "", fmt.Sprintf("success total=%d page=%d", total, pageNumber))
+	return &ListAssetsResult{
+		Items:      items,
+		TotalCount: total,
+		PageNumber: pageNumber,
+		PageSize:   pageSize,
+	}, nil
+}
+
+func mapUpstreamGroupTypeToLocal(groupType string) (string, error) {
+	switch strings.TrimSpace(groupType) {
+	case MaterialUpstreamGroupTypeAIGC:
+		return model.MaterialGroupTypeVirtual, nil
+	case MaterialUpstreamGroupTypeLivenessFace:
+		return model.MaterialGroupTypeReal, nil
+	case "":
+		return "", materialActionErr(common.MaterialCodeInvalidParameter, "Filter.GroupType 不能为空")
+	default:
+		return "", materialActionErr(common.MaterialCodeInvalidParameter, "Filter.GroupType 必须为 AIGC 或 LivenessFace")
+	}
+}
+
+func mapLocalGroupTypeToUpstream(groupType string) string {
+	switch strings.TrimSpace(groupType) {
+	case model.MaterialGroupTypeReal:
+		return MaterialUpstreamGroupTypeLivenessFace
+	default:
+		return MaterialUpstreamGroupTypeAIGC
+	}
+}
+
+func normalizeProjectName(projectName string) string {
+	if strings.TrimSpace(projectName) == "" {
+		return "default"
+	}
+	return strings.TrimSpace(projectName)
+}
+
+func normalizeListPagination(pageNumber int, pageSize int) (int, int, error) {
+	if pageNumber < 0 {
+		return 0, 0, materialActionErr(common.MaterialCodeInvalidParameter, "PageNumber 必须大于等于 1")
+	}
+	if pageNumber == 0 {
+		pageNumber = 1
+	}
+	if pageSize < 0 {
+		return 0, 0, materialActionErr(common.MaterialCodeInvalidParameter, "PageSize 必须大于等于 1")
+	}
+	if pageSize == 0 {
+		pageSize = materialListPageSizeDefault
+	}
+	if pageSize > materialListPageSizeMax {
+		return 0, 0, materialActionErr(common.MaterialCodeInvalidParameter, fmt.Sprintf("PageSize 不能超过 %d", materialListPageSizeMax))
+	}
+	return pageNumber, pageSize, nil
+}
+
+func normalizeListSort(sortBy string, sortOrder string, allowGroupId bool) (string, string, error) {
+	sortBy = strings.TrimSpace(sortBy)
+	if sortBy == "" {
+		sortBy = "CreateTime"
+	}
+	var col string
+	switch sortBy {
+	case "CreateTime":
+		col = "created_at"
+	case "UpdateTime":
+		col = "updated_at"
+	case "GroupId":
+		if !allowGroupId {
+			return "", "", materialActionErr(common.MaterialCodeInvalidParameter, "SortBy 必须为 CreateTime 或 UpdateTime")
+		}
+		col = "group_id"
+	default:
+		if allowGroupId {
+			return "", "", materialActionErr(common.MaterialCodeInvalidParameter, "SortBy 必须为 CreateTime、UpdateTime 或 GroupId")
+		}
+		return "", "", materialActionErr(common.MaterialCodeInvalidParameter, "SortBy 必须为 CreateTime 或 UpdateTime")
+	}
+
+	sortOrder = strings.TrimSpace(sortOrder)
+	if sortOrder == "" {
+		sortOrder = "Desc"
+	}
+	switch sortOrder {
+	case "Desc", "desc":
+		return col, "desc", nil
+	case "Asc", "asc":
+		return col, "asc", nil
+	default:
+		return "", "", materialActionErr(common.MaterialCodeInvalidParameter, "SortOrder 必须为 Desc 或 Asc")
+	}
+}
+
+func normalizeListStatuses(statuses []string) ([]string, error) {
+	if len(statuses) == 0 {
+		return nil, nil
+	}
+	out := make([]string, 0, len(statuses))
+	seen := make(map[string]struct{}, len(statuses))
+	for _, s := range statuses {
+		normalized := NormalizeMaterialStatus(s)
+		switch normalized {
+		case MaterialStatusActive, MaterialStatusPending, MaterialStatusFailed:
+		default:
+			return nil, materialActionErr(common.MaterialCodeInvalidParameter, "Filter.Statuses 仅支持 Active、Processing、Failed")
+		}
+		if _, ok := seen[normalized]; ok {
+			continue
+		}
+		seen[normalized] = struct{}{}
+		out = append(out, normalized)
+	}
+	return out, nil
+}
+
+func trimStringSlice(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	for _, v := range values {
+		v = strings.TrimSpace(v)
+		if v != "" {
+			out = append(out, v)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func formatMaterialUnixTime(ts int64) string {
+	if ts <= 0 {
+		return ""
+	}
+	return time.Unix(ts, 0).UTC().Format(time.RFC3339)
 }
 
 // ensureRealGroupForUser 认证成功后去重创建真人分组本地记录。
