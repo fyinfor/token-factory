@@ -80,6 +80,14 @@ func InitOptionMap() {
 	common.OptionMap["SystemName"] = common.SystemName
 	common.OptionMap["SystemNameEn"] = common.SystemNameEn
 	common.OptionMap["Logo"] = common.Logo
+	common.OptionMap["SeoTitle"] = ""
+	common.OptionMap["SeoTitleEn"] = ""
+	common.OptionMap["SeoDescription"] = ""
+	common.OptionMap["SeoDescriptionEn"] = ""
+	common.OptionMap["SeoKeywords"] = ""
+	common.OptionMap["SeoCanonicalUrl"] = ""
+	common.OptionMap["SeoOgImage"] = ""
+	common.OptionMap["SeoRobots"] = "index,follow"
 	common.OptionMap["DocsBrandName"] = "TokenFactory"
 	common.OptionMap["DocsSiteNameEn"] = "TokenFactory"
 	common.OptionMap["DocsSiteNameZh"] = "开放词元工厂"

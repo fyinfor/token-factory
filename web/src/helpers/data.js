@@ -22,6 +22,14 @@ export function setStatusData(data) {
   localStorage.setItem('system_name', data.system_name);
   localStorage.setItem('system_name_en', data.system_name_en || '');
   localStorage.setItem('logo', data.logo);
+  localStorage.setItem('seo_title', data.seo_title || '');
+  localStorage.setItem('seo_title_en', data.seo_title_en || '');
+  localStorage.setItem('seo_description', data.seo_description || '');
+  localStorage.setItem('seo_description_en', data.seo_description_en || '');
+  localStorage.setItem('seo_keywords', data.seo_keywords || '');
+  localStorage.setItem('seo_canonical_url', data.seo_canonical_url || '');
+  localStorage.setItem('seo_og_image', data.seo_og_image || '');
+  localStorage.setItem('seo_robots', data.seo_robots || 'index,follow');
   localStorage.setItem('footer_html', data.footer_html);
   localStorage.setItem('quota_per_unit', data.quota_per_unit);
   // 兼容：保留旧字段，同时写入新的额度展示类型
@@ -87,7 +95,10 @@ export function patchStatusData(patch) {
     localStorage.setItem('quota_per_unit', patch.quota_per_unit);
   }
   if (Object.prototype.hasOwnProperty.call(patch, 'quota_display_type')) {
-    localStorage.setItem('quota_display_type', patch.quota_display_type || 'USD');
+    localStorage.setItem(
+      'quota_display_type',
+      patch.quota_display_type || 'USD',
+    );
   }
   if (
     Object.prototype.hasOwnProperty.call(patch, 'recharge_display_currency')
