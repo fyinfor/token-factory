@@ -8,8 +8,10 @@ func TestMaterialActionRegistryIncludesAssetAPIs(t *testing.T) {
 	required := []string{
 		MaterialActionCreateAssetGroup,
 		MaterialActionGetAssetGroup,
+		MaterialActionListAssetGroups,
 		MaterialActionCreateAsset,
 		MaterialActionGetAsset,
+		MaterialActionListAssets,
 		MaterialActionUpdateAssetGroup,
 		MaterialActionUpdateAsset,
 		MaterialActionDeleteAsset,
