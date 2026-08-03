@@ -73,6 +73,16 @@ const DOCS_CONFIG_KEYS = [
   'DocsBusinessWorkTimeJa',
   'DocsBusinessWechatQrUrl',
 ];
+const SEO_CONFIG_KEYS = [
+  'SeoTitle',
+  'SeoTitleEn',
+  'SeoDescription',
+  'SeoDescriptionEn',
+  'SeoKeywords',
+  'SeoCanonicalUrl',
+  'SeoOgImage',
+  'SeoRobots',
+];
 
 const docsImagePreviewStyle = {
   width: 96,
@@ -123,6 +133,14 @@ const OtherSetting = ({ activeSection = 'system-info' }) => {
     SystemName: '',
     SystemNameEn: '',
     Logo: '',
+    SeoTitle: '',
+    SeoTitleEn: '',
+    SeoDescription: '',
+    SeoDescriptionEn: '',
+    SeoKeywords: '',
+    SeoCanonicalUrl: '',
+    SeoOgImage: '',
+    SeoRobots: 'index,follow',
     DocsBrandName: '',
     DocsSiteNameEn: '',
     DocsSiteNameZh: '',
@@ -165,6 +183,14 @@ const OtherSetting = ({ activeSection = 'system-info' }) => {
     url: '',
     title: '',
   });
+  const seoConfiguredCount = SEO_CONFIG_KEYS.filter((key) =>
+    String(inputs[key] || '').trim(),
+  ).length;
+  const seoPreviewTitle =
+    inputs.SeoTitle || inputs.SystemName || t('未设置 SEO 标题');
+  const seoPreviewDescription =
+    inputs.SeoDescription || t('未设置 SEO 描述，将使用系统默认描述。');
+  const seoPreviewUrl = inputs.SeoCanonicalUrl || window.location.origin;
 
   const updateOption = async (key, value) => {
     setLoading(true);
@@ -217,6 +243,7 @@ const OtherSetting = ({ activeSection = 'system-info' }) => {
     SystemName: false,
     Logo: false,
     DocsConfig: false,
+    SeoConfig: false,
     DocsLogoUrl: false,
     DocsBusinessWechatQrUrl: false,
     HomePageContent: false,
@@ -458,6 +485,7 @@ const OtherSetting = ({ activeSection = 'system-info' }) => {
   // 个性化设置
   const formAPIPersonalization = useRef();
   const formAPIDocsConfig = useRef();
+  const formAPISeoConfig = useRef();
   //  个性化设置 - SystemName
   const submitSystemName = async () => {
     try {
@@ -591,6 +619,53 @@ const OtherSetting = ({ activeSection = 'system-info' }) => {
         ...loadingInput,
         DocsConfig: false,
       }));
+    }
+  };
+  const submitSeoConfig = async () => {
+    try {
+      setLoadingInput((state) => ({ ...state, SeoConfig: true }));
+      const results = await Promise.all(
+        SEO_CONFIG_KEYS.map((key) =>
+          API.put('/api/option/', { key, value: inputs[key] || '' }),
+        ),
+      );
+      const failed = results.find((res) => !res.data?.success);
+      if (failed)
+        throw new Error(failed.data?.message || t('SEO 设置保存失败'));
+      await getOptions();
+      showSuccess(t('SEO 设置已更新'));
+      const seoStorageKeys = {
+        SeoTitle: 'seo_title',
+        SeoTitleEn: 'seo_title_en',
+        SeoDescription: 'seo_description',
+        SeoDescriptionEn: 'seo_description_en',
+        SeoKeywords: 'seo_keywords',
+        SeoCanonicalUrl: 'seo_canonical_url',
+        SeoOgImage: 'seo_og_image',
+        SeoRobots: 'seo_robots',
+      };
+      SEO_CONFIG_KEYS.forEach((key) => {
+        localStorage.setItem(seoStorageKeys[key], inputs[key] || '');
+      });
+      window.dispatchEvent(
+        new CustomEvent('seo-config-updated', {
+          detail: {
+            seo_title: inputs.SeoTitle || '',
+            seo_title_en: inputs.SeoTitleEn || '',
+            seo_description: inputs.SeoDescription || '',
+            seo_description_en: inputs.SeoDescriptionEn || '',
+            seo_keywords: inputs.SeoKeywords || '',
+            seo_canonical_url: inputs.SeoCanonicalUrl || '',
+            seo_og_image: inputs.SeoOgImage || '',
+            seo_robots: inputs.SeoRobots || '',
+          },
+        }),
+      );
+    } catch (error) {
+      console.error(t('SEO 设置保存失败'), error);
+      showError(error?.message || t('SEO 设置保存失败'));
+    } finally {
+      setLoadingInput((state) => ({ ...state, SeoConfig: false }));
     }
   };
   const uploadDocsImage =
@@ -741,6 +816,7 @@ const OtherSetting = ({ activeSection = 'system-info' }) => {
       formAPISettingGeneral.current?.setValues(mergedInputs);
       formAPIPersonalization.current?.setValues(mergedInputs);
       formAPIDocsConfig.current?.setValues(mergedInputs);
+      formAPISeoConfig.current?.setValues(mergedInputs);
     } else {
       showError(message);
     }
@@ -1319,6 +1395,149 @@ const OtherSetting = ({ activeSection = 'system-info' }) => {
                 loading={loadingInput['DocsConfig']}
               >
                 {t('保存文档配置')}
+              </Button>
+            </Form.Section>
+          </Card>
+        </Form>
+        <Form
+          values={inputs}
+          getFormApi={(formAPI) => (formAPISeoConfig.current = formAPI)}
+        >
+          <Card
+            id='setting-section-seo'
+            style={{ display: activeSection === 'seo' ? undefined : 'none' }}
+          >
+            <Form.Section text={t('SEO 设置')}>
+              <Banner
+                type={seoConfiguredCount > 0 ? 'success' : 'info'}
+                description={
+                  seoConfiguredCount > 0
+                    ? t('SEO 配置已生效，当前已配置 {{count}} 项。', {
+                        count: seoConfiguredCount,
+                      })
+                    : t(
+                        '用于主站首页的搜索引擎标题、描述、关键词和社交分享信息。留空时会回退到系统名称和默认描述。',
+                      )
+                }
+              />
+              <div
+                aria-label={t('搜索结果预览')}
+                style={{
+                  margin: '12px 0 16px',
+                  padding: '14px 16px',
+                  border: '1px solid var(--semi-color-border)',
+                  borderRadius: 8,
+                  background: 'var(--semi-color-bg-0)',
+                }}
+              >
+                <Text type='tertiary' size='small'>
+                  {t('搜索结果预览')}
+                </Text>
+                <div
+                  style={{
+                    marginTop: 8,
+                    color: '#1a0dab',
+                    fontSize: 18,
+                    lineHeight: '24px',
+                    overflowWrap: 'anywhere',
+                  }}
+                >
+                  {seoPreviewTitle}
+                </div>
+                <div
+                  style={{
+                    marginTop: 3,
+                    color: '#188038',
+                    fontSize: 13,
+                    overflowWrap: 'anywhere',
+                  }}
+                >
+                  {seoPreviewUrl}
+                </div>
+                <div
+                  style={{
+                    marginTop: 5,
+                    color: 'var(--semi-color-text-1)',
+                    fontSize: 14,
+                    lineHeight: '21px',
+                    overflowWrap: 'anywhere',
+                  }}
+                >
+                  {seoPreviewDescription}
+                </div>
+              </div>
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Input
+                    label={t('SEO 标题（中文）')}
+                    field='SeoTitle'
+                    placeholder={t('例如：统一 AI 模型网关')}
+                    onChange={handleInputChange}
+                  />
+                </Col>
+                <Col span={12}>
+                  <Form.Input
+                    label={t('SEO 标题（英文）')}
+                    field='SeoTitleEn'
+                    placeholder='Unified AI Model Gateway'
+                    onChange={handleInputChange}
+                  />
+                </Col>
+              </Row>
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.TextArea
+                    label={t('SEO 描述（中文）')}
+                    field='SeoDescription'
+                    autosize={{ minRows: 3, maxRows: 6 }}
+                    onChange={handleInputChange}
+                  />
+                </Col>
+                <Col span={12}>
+                  <Form.TextArea
+                    label={t('SEO 描述（英文）')}
+                    field='SeoDescriptionEn'
+                    autosize={{ minRows: 3, maxRows: 6 }}
+                    onChange={handleInputChange}
+                  />
+                </Col>
+              </Row>
+              <Form.TextArea
+                label={t('SEO 关键词')}
+                field='SeoKeywords'
+                placeholder={t('多个关键词用英文逗号分隔')}
+                autosize={{ minRows: 2, maxRows: 5 }}
+                onChange={handleInputChange}
+              />
+              <Row gutter={16}>
+                <Col span={12}>
+                  <Form.Input
+                    label={t('规范链接（Canonical URL）')}
+                    field='SeoCanonicalUrl'
+                    placeholder='https://example.com/'
+                    onChange={handleInputChange}
+                  />
+                </Col>
+                <Col span={12}>
+                  <Form.Input
+                    label={t('社交分享图片（OG Image）')}
+                    field='SeoOgImage'
+                    placeholder='https://example.com/og-image.png'
+                    onChange={handleInputChange}
+                  />
+                </Col>
+              </Row>
+              <Form.Input
+                label={t('爬虫规则（robots）')}
+                field='SeoRobots'
+                placeholder='index,follow'
+                onChange={handleInputChange}
+              />
+              <Button
+                onClick={submitSeoConfig}
+                loading={loadingInput.SeoConfig}
+              >
+                {t('保存 SEO 设置')}
               </Button>
             </Form.Section>
           </Card>
