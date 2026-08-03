@@ -28,7 +28,12 @@ import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { useSidebarCollapsed } from '../../hooks/common/useSidebarCollapsed';
 import { useTranslation } from 'react-i18next';
 import { API } from '../../helpers/apiClient';
-import { getLogo, getSystemName, showError } from '../../helpers/appBasics';
+import {
+  applySeoMetadata,
+  getLogo,
+  getSystemName,
+  showError,
+} from '../../helpers/appBasics';
 import { setStatusData } from '../../helpers/data';
 import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
@@ -160,23 +165,18 @@ const PageLayout = () => {
   }, []);
 
   useEffect(() => {
-    const hasCachedName =
-      localStorage.getItem('system_name') ||
-      localStorage.getItem('system_name_en');
     if (isRealNamePublicRoute) {
       document.title = '\u5b9e\u540d\u8ba4\u8bc1';
       return;
     }
-    if (!hasCachedName) return;
-    const systemName = getSystemName(i18n.language);
-    if (systemName) {
-      document.title = systemName;
-    }
-  }, [i18n.language, isRealNamePublicRoute]);
+    applySeoMetadata(statusState?.status || {}, i18n.language);
+  }, [i18n.language, isRealNamePublicRoute, statusState?.status]);
 
   useEffect(() => {
     const status = statusState?.status;
     if (!status) return;
+
+    applySeoMetadata(status, i18n.language);
 
     let userLang;
     if (userState?.user?.setting) {
@@ -264,6 +264,18 @@ const PageLayout = () => {
     userState?.user?.id,
     i18n,
   ]);
+
+  useEffect(() => {
+    const handleSeoUpdate = (event) => {
+      applySeoMetadata(
+        { ...(statusState?.status || {}), ...(event.detail || {}) },
+        i18n.language,
+      );
+    };
+    window.addEventListener('seo-config-updated', handleSeoUpdate);
+    return () =>
+      window.removeEventListener('seo-config-updated', handleSeoUpdate);
+  }, [i18n.language, statusState?.status]);
 
   const resolveLangLabel = (code) => {
     try {
