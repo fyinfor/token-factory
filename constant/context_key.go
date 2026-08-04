@@ -58,14 +58,14 @@ const (
 	// 首跳优先该渠道；失败后可按同模型智能路由有序候选（价格/权重）保底重试，与硬指定 ForcedChannelID 不同。
 	ContextKeyPreferredChannelID ContextKey = "preferred_channel_id"
 
-	// ContextKeyTFOpenUpstreamChannelRoute 当本地渠道由 TokenFactoryOpen 同步生成、且上游记录了
-	// 有效的 supplier_alias 与 channel_no 时，由 SetupContextForSelectedChannel 写入，
-	// 格式为 "{alias}|{channel_no}"（竖线分隔）。relay 层读取后将发往上游的模型名改写为
-	// "{alias}/{model}/{channel_no}"，使上游按同一渠道路由，实现精准流量对齐。
+	// ContextKeyTFOpenUpstreamChannelRoute 仅当本地渠道类型为 TokenFactoryOpen(60)，且来自上游同步并
+	// 记录了有效 route_slug（或旧版 alias|channel_no）时，由 SetupContextForSelectedChannel 写入。
+	// relay 层读取后将发往上游 TF 的模型名改写为 "{model}/{route_slug}" 或
+	// "{alias}/{model}/{channel_no}"。非 60 类型渠道（即使 source=tokenfactory_open）不得写入/拼接。
 	ContextKeyTFOpenUpstreamChannelRoute ContextKey = "tf_open_upstream_channel_route"
 	// ContextKeyTFOpenUpstreamChannelNoOverride 允许 playground 在已指定本地渠道时，
 	// 通过模型名后缀 "{model}/{n}" 显式覆盖上游 channel_no（写入为 "c<n>"）。
-	// 仅对 source=tokenfactory_open 的渠道生效。
+	// 仅对 type=TokenFactoryOpen 且 source=tokenfactory_open 的渠道生效。
 	ContextKeyTFOpenUpstreamChannelNoOverride ContextKey = "tf_open_upstream_channel_no_override"
 
 	// ContextKeyForcedSupplierApplicationID 当用户通过 {alias}/{model} 形式指定「某供应商下任意渠道」时，

@@ -1154,9 +1154,9 @@ func GetUserModels(c *gin.Context) {
 		}
 	}
 	// scene=playground 时返回结构化模型列表：
-	// - 展示口径与 /pricing 完全一致：模型必须已配置定价（ratio_setting.ModelHasConfiguredPricing），
+	// - 展示口径与 /pricing 完全一致：模型须具备定价（自身配置或渠道映射继承规范模型），
 	//   且至少存在一个 (模型, 可见渠道) 在 model_test_results 中满足
-	//   ManualDisplayResponseTime>0 或 (LastTestSuccess && LastResponseTime>0)；
+	//   ManualDisplayResponseTime>0 或 (LastTestSuccess && LastResponseTime>0)（别名可继承规范模型测通）；
 	//   不再使用 model_test_results 全表 last_test_success=1 的模糊名字匹配（口径偏宽且与定价页不一致）。
 	// - 在此基础上再叠加「该模型在用户可用分组下的 abilities 已 enabled」的用户视角过滤；
 	//   也即同时通过 GetGroupEnabledModels 与 CollectPricingShowableModelNames 两层门禁。
@@ -1252,6 +1252,42 @@ func GetUserModels(c *gin.Context) {
 					row := modelRows[bestIdx]
 					modelVendorIDByName[targetModelName] = row.VendorID
 					modelTagsByName[targetModelName] = strings.TrimSpace(row.Tags)
+				}
+				// 别名自身元数据缺失时，从渠道映射规范模型继承 vendor/tags。
+				if modelTagsByName[targetModelName] == "" || modelVendorIDByName[targetModelName] == 0 {
+					canonical := model.LookupCachedAliasCanonical(targetModelName)
+					if canonical == "" {
+						canonical = model.ResolveDisplayPricingModelName(targetModelName)
+					}
+					if canonical == "" || canonical == targetModelName {
+						continue
+					}
+					cBest := -1
+					for i := range modelRows {
+						row := modelRows[i]
+						if !matchRule(row.ModelName, canonical, row.NameRule) {
+							continue
+						}
+						if cBest < 0 {
+							cBest = i
+							continue
+						}
+						cur := modelRows[cBest]
+						curPriority := rulePriority(cur.NameRule)
+						newPriority := rulePriority(row.NameRule)
+						if newPriority < curPriority || (newPriority == curPriority && len(row.ModelName) > len(cur.ModelName)) {
+							cBest = i
+						}
+					}
+					if cBest >= 0 {
+						row := modelRows[cBest]
+						if modelVendorIDByName[targetModelName] == 0 {
+							modelVendorIDByName[targetModelName] = row.VendorID
+						}
+						if modelTagsByName[targetModelName] == "" {
+							modelTagsByName[targetModelName] = strings.TrimSpace(row.Tags)
+						}
+					}
 				}
 			}
 		}

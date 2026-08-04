@@ -10,7 +10,6 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
-	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
 	"gorm.io/gorm"
 )
@@ -611,7 +610,7 @@ func listPricingVisibleMarkupDiscountRateItems() ([]InviteeModelMarkupDiscountRa
 	pricing := GetPricing()
 	filtered := make([]Pricing, 0, len(pricing))
 	for _, p := range pricing {
-		if ratio_setting.ModelHasConfiguredPricing(p.ModelName) {
+		if ModelHasDisplayConfiguredPricing(p.ModelName) {
 			filtered = append(filtered, p)
 		}
 	}

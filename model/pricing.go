@@ -230,24 +230,40 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 
 		modelName := p.ModelName
 		// 为当前模型预加载各可见渠道的测试耗时：手动覆盖耗时优先，否则使用最近一次成功测试耗时。
+		// 别名模型同时合并规范模型的测通结果（渠道映射继承）。
 		testResponseTimeByChannel := make(map[int]int)
+		mergeTestRows := func(rows []ModelTestResult) {
+			for i := range rows {
+				r := rows[i]
+				if r.ChannelId <= 0 {
+					continue
+				}
+				if r.ManualDisplayResponseTime > 0 {
+					if prev, ok := testResponseTimeByChannel[r.ChannelId]; !ok || prev <= 0 {
+						testResponseTimeByChannel[r.ChannelId] = r.ManualDisplayResponseTime
+					}
+					continue
+				}
+				if r.LastTestSuccess && r.LastResponseTime > 0 {
+					if prev, ok := testResponseTimeByChannel[r.ChannelId]; !ok || prev <= 0 {
+						testResponseTimeByChannel[r.ChannelId] = r.LastResponseTime
+					}
+				}
+			}
+		}
 		if len(visibleIDs) > 0 {
 			rows, err := GetModelTestResultsByModelNameAndChannelIDs(modelName, visibleIDs)
 			if err != nil {
 				common.SysLog(fmt.Sprintf("GetModelTestResultsByModelNameAndChannelIDs error: model=%s err=%v", modelName, err))
 			} else {
-				for i := range rows {
-					r := rows[i]
-					if r.ChannelId <= 0 {
-						continue
-					}
-					if r.ManualDisplayResponseTime > 0 {
-						testResponseTimeByChannel[r.ChannelId] = r.ManualDisplayResponseTime
-						continue
-					}
-					if r.LastTestSuccess && r.LastResponseTime > 0 {
-						testResponseTimeByChannel[r.ChannelId] = r.LastResponseTime
-					}
+				mergeTestRows(rows)
+			}
+			if canonical := LookupCachedAliasCanonical(modelName); canonical != "" && canonical != modelName {
+				cRows, cErr := GetModelTestResultsByModelNameAndChannelIDs(canonical, visibleIDs)
+				if cErr != nil {
+					common.SysLog(fmt.Sprintf("GetModelTestResultsByModelNameAndChannelIDs error: model=%s err=%v", canonical, cErr))
+				} else {
+					mergeTestRows(cRows)
 				}
 			}
 		}
@@ -261,11 +277,16 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			if !ChannelModelsRawContains(row.Models, modelName) {
 				continue
 			}
+			pricingModelName := ResolvePricingModelName(row.ModelMapping, modelName)
 			// 单测门禁：仅当该渠道在库中已有「至少一条」成功单测记录时，才要求本模型也有成功记录。
 			// 否则新渠道/供应商从未跑过单测时 names 为空，旧逻辑会对所有模型 continue，导致供应商只见自有渠道时 data 全空。
+			// 别名可匹配自身或映射规范模型的成功单测名。
 			if !includeUntestedChannelPricingRows && testSuccessByChannel != nil {
 				namesOK := testSuccessByChannel[row.ChannelID]
-				if len(namesOK) > 0 && !ChannelPricingRowMatchesLastTestSuccess(testSuccessByChannel, row.ChannelID, modelName) {
+				if len(namesOK) > 0 &&
+					!ChannelPricingRowMatchesLastTestSuccess(testSuccessByChannel, row.ChannelID, modelName) &&
+					(pricingModelName == modelName ||
+						!ChannelPricingRowMatchesLastTestSuccess(testSuccessByChannel, row.ChannelID, pricingModelName)) {
 					continue
 				}
 			}
@@ -274,9 +295,9 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			if !includeUntestedChannelPricingRows && testMs <= 0 {
 				continue
 			}
-			baseMp, baseMr, cr := resolveChannelPricingTriple(row.ChannelID, row.SupplierApplicationID, modelName)
-			chCache, chCreate := resolveChannelCachePair(row.ChannelID, row.SupplierApplicationID, modelName)
-			requestTierPricing, hasRequestTierPricing := ratio_setting.ResolveRequestTierPricing(row.ChannelID, modelName)
+			baseMp, baseMr, cr := resolveChannelPricingTriple(row.ChannelID, row.SupplierApplicationID, pricingModelName)
+			chCache, chCreate := resolveChannelCachePair(row.ChannelID, row.SupplierApplicationID, pricingModelName)
+			requestTierPricing, hasRequestTierPricing := ratio_setting.ResolveRequestTierPricing(row.ChannelID, pricingModelName)
 			alias := pricingSupplierAliasFromMeta(row.SupplierApplicationID, row.SupplierAlias)
 			d := 100.0
 			if row.PriceDiscountPercent != nil {
@@ -626,6 +647,14 @@ func updatePricing() {
 	}
 
 	pricingMap = make([]Pricing, 0)
+	pricingMetas, metaErr := ListChannelPricingMeta()
+	if metaErr != nil {
+		common.SysLog(fmt.Sprintf("ListChannelPricingMeta for alias index error: %v", metaErr))
+		pricingMetas = nil
+	}
+	aliasCanonical := buildAliasCanonicalIndexFromMeta(pricingMetas)
+	setEnabledAliasCanonicalIndex(aliasCanonical)
+
 	for model, groups := range modelGroupsMap {
 		pricing := Pricing{
 			ModelName:              model,
@@ -634,7 +663,8 @@ func updatePricing() {
 		}
 
 		// 补充模型元数据（描述、标签、供应商、状态）
-		if meta, ok := metaMap[model]; ok {
+		meta, hasMeta := metaMap[model]
+		if hasMeta {
 			// 若模型被禁用(status!=1)，则直接跳过，不返回给前端
 			if meta.Status != 1 {
 				continue
@@ -647,55 +677,40 @@ func updatePricing() {
 			pricing.Tags = meta.Tags
 			pricing.VendorID = meta.VendorID
 		}
-		modelPrice, findPrice := ratio_setting.GetModelPrice(model, false)
-		if findPrice {
-			pricing.ModelPrice = modelPrice
-			pricing.QuotaType = 1
-		} else {
-			modelRatio, _, _ := ratio_setting.GetModelRatio(model)
-			pricing.ModelRatio = modelRatio
-			// 仅当模型有显式配置的输出倍率时才返回，否则前端不展示输出价格
-			if ratio_setting.ContainsCompletionRatio(model) {
-				cr := ratio_setting.GetCompletionRatio(model)
-				pricing.CompletionRatio = &cr
+		// 别名无完整元数据时，从渠道映射的规范模型继承展示字段（tags/vendor 等）。
+		if canonical := aliasCanonical[model]; canonical != "" {
+			if cMeta, ok := metaMap[canonical]; ok && cMeta.Status == 1 {
+				if strings.TrimSpace(pricing.Tags) == "" {
+					pricing.Tags = cMeta.Tags
+				}
+				if pricing.VendorID == 0 {
+					pricing.VendorID = cMeta.VendorID
+				}
+				if strings.TrimSpace(pricing.Description) == "" {
+					pricing.Description = cMeta.Description
+				}
+				if strings.TrimSpace(pricing.DescriptionEn) == "" {
+					pricing.DescriptionEn = cMeta.DescriptionEn
+				}
+				if strings.TrimSpace(pricing.DocIntroduction) == "" {
+					pricing.DocIntroduction = cMeta.DocIntroduction
+				}
+				if pricing.ApiDocs == nil {
+					pricing.ApiDocs = parsePricingApiDocs(cMeta.ApiDocs)
+				}
+				if strings.TrimSpace(pricing.Icon) == "" {
+					pricing.Icon = cMeta.Icon
+				}
 			}
-			pricing.QuotaType = 0
 		}
-		if cacheRatio, ok := ratio_setting.GetCacheRatio(model); ok {
-			pricing.CacheRatio = &cacheRatio
-		}
-		if createCacheRatio, ok := ratio_setting.GetCreateCacheRatio(model); ok {
-			pricing.CreateCacheRatio = &createCacheRatio
-		}
-		if rule, ok := ratio_setting.GetModelRequestTierPricing(model); ok && len(rule.Tiers) > 0 {
-			pricing.RequestTierPricing = rule
-			if pricing.QuotaType != 1 {
-				pricing.QuotaType = 3
+
+		pricingModelName := model
+		if !ratio_setting.ModelHasConfiguredPricing(model) {
+			if canonical := aliasCanonical[model]; canonical != "" {
+				pricingModelName = canonical
 			}
 		}
-		if imageRatio, ok := ratio_setting.GetImageRatio(model); ok {
-			pricing.ImageRatio = &imageRatio
-		}
-		if ratio_setting.ContainsAudioRatio(model) {
-			audioRatio := ratio_setting.GetAudioRatio(model)
-			pricing.AudioRatio = &audioRatio
-		}
-		if ratio_setting.ContainsAudioCompletionRatio(model) {
-			audioCompletionRatio := ratio_setting.GetAudioCompletionRatio(model)
-			pricing.AudioCompletionRatio = &audioCompletionRatio
-		}
-		if ratio_setting.ContainsVideoRatio(model) {
-			videoRatio := ratio_setting.GetVideoRatio(model)
-			pricing.VideoRatio = &videoRatio
-		}
-		if ratio_setting.ContainsVideoCompletionRatio(model) {
-			videoCompletionRatio := ratio_setting.GetVideoCompletionRatio(model)
-			pricing.VideoCompletionRatio = &videoCompletionRatio
-		}
-		if ratio_setting.ContainsVideoPrice(model) {
-			videoPrice, _ := ratio_setting.GetVideoPrice(model)
-			pricing.VideoPrice = &videoPrice
-		}
+		fillPricingFieldsFromRatioSetting(&pricing, pricingModelName)
 		pricingMap = append(pricingMap, pricing)
 	}
 
