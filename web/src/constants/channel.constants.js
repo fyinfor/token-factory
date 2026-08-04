@@ -248,6 +248,16 @@ export const CHANNEL_OPTIONS = [
         color: 'blue',
         label: '智象未来（图像）',
     },
+    {
+        value: 69,
+        color: 'orange',
+        label: '阿里云-ASR 同步转写',
+    },
+    {
+        value: 70,
+        color: 'orange',
+        label: '阿里云-ASR 异步转写',
+    },
 ];
 
 /** 火山方舟-Seedance 2.0 视频（与后端 constant.ChannelTypeSeedance 一致） */
@@ -258,6 +268,12 @@ export const CHANNEL_TYPE_ALI_IMAGE = 66;
 
 /** 智象未来图像（与后端 constant.ChannelTypeHiDreamImage 一致） */
 export const CHANNEL_TYPE_HIDREAM_IMAGE = 67;
+
+/** 阿里云 ASR 同步转写（与后端 constant.ChannelTypeAliASRSync 一致） */
+export const CHANNEL_TYPE_ALI_ASR_SYNC = 69;
+
+/** 阿里云 ASR 异步转写（与后端 constant.ChannelTypeAliASRAsync 一致） */
+export const CHANNEL_TYPE_ALI_ASR_ASYNC = 70;
 
 // Channel types that support upstream model list fetching in UI.
 export const MODEL_FETCHABLE_CHANNEL_TYPES = new Set([

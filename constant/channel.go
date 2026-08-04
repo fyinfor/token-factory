@@ -65,6 +65,8 @@ const (
 	ChannelTypeSeedance          = 65 // Seedance 2.0 / VolcEngine contents generations (e.g. TokenSpace)
 	ChannelTypeAliImage          = 66 // Alibaba DashScope Qwen-Image text-to-image & image edit (multimodal-generation)
 	ChannelTypeHiDreamImage      = 67 // HiDream MaaS async image generation (/v1/images/generations)
+	ChannelTypeAliASRSync        = 69 // Alibaba DashScope ASR sync transcription (multimodal-generation)
+	ChannelTypeAliASRAsync       = 70 // Alibaba DashScope ASR async file transcription (X-DashScope-Async)
 	ChannelTypeDummy                  // this one is only for count, do not add any channel after this
 
 )
@@ -138,7 +140,10 @@ var ChannelBaseURLs = []string{
 	"https://api.tokenspace.net.cn",      //65 Seedance (词元算力 / 火山 contents generations)
 	"https://dashscope.aliyuncs.com",     //66 AliImage (Qwen-Image multimodal-generation)
 	"https://maas.hidreamai.com/api/maas/gw", //67 HiDreamImage
-	"",                                   //68 Dummy
+	"",                                   //68 (reserved, formerly Dummy)
+	"",                                   //69 AliASRSync（基础地址需在渠道配置填写，如 https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api）
+	"",                                   //70 AliASRAsync（同 AliASRSync）
+	"",                                   //71 Dummy
 }
 
 var ChannelTypeNames = map[int]string{
@@ -206,6 +211,8 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeSeedance:          "Seedance",
 	ChannelTypeAliImage:          "AliImage",
 	ChannelTypeHiDreamImage:      "HiDreamImage",
+	ChannelTypeAliASRSync:        "AliASRSync",
+	ChannelTypeAliASRAsync:       "AliASRAsync",
 }
 
 func GetChannelTypeName(channelType int) string {
@@ -225,6 +232,18 @@ func IsVideoTaskChannel(channelType int) bool {
 	default:
 		return false
 	}
+}
+
+// IsASRChannel reports whether the channel is an Alibaba DashScope ASR
+// channel (sync transcription or async file transcription).
+func IsASRChannel(channelType int) bool {
+	return channelType == ChannelTypeAliASRSync || channelType == ChannelTypeAliASRAsync
+}
+
+// IsASRAsyncChannel reports whether the channel serves async ASR file
+// transcription (submit task -> poll -> fetch result) only.
+func IsASRAsyncChannel(channelType int) bool {
+	return channelType == ChannelTypeAliASRAsync
 }
 
 // UsesRelayVideoPricing reports whether video task submit should use

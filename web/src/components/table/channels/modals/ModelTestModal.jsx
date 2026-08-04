@@ -172,6 +172,8 @@ const ModelTestModal = ({
     'tokenfactory-video',
     'ali-video',
     'seedance-video',
+    'ali-asr-sync',
+    'ali-asr-async',
   ].includes(selectedEndpointType);
 
   React.useEffect(() => {
@@ -230,6 +232,14 @@ const ModelTestModal = ({
     {
       value: 'seedance-video',
       label: t('火山方舟-Seedance 2.0 视频') + ' (/v1/video/generations)',
+    },
+    {
+      value: 'ali-asr-sync',
+      label: t('阿里云-ASR 同步转写') + ' (/v1/audio/transcriptions)',
+    },
+    {
+      value: 'ali-asr-async',
+      label: t('阿里云-ASR 异步转写') + ' (/v1/audio/transcriptions/async)',
     },
   ];
 

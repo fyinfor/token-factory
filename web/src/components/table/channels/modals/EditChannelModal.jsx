@@ -2118,6 +2118,17 @@ const EditChannelModal = (props) => {
       showInfo(t('TokenFactoryOpen 渠道必须填写平台地址！'));
       return;
     }
+    if (
+      (localInputs.type === 69 || localInputs.type === 70) &&
+      (!localInputs.base_url || localInputs.base_url.trim() === '')
+    ) {
+      showInfo(
+        t(
+          '阿里云 ASR 渠道必须填写上游基础地址（例如 https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api）！',
+        ),
+      );
+      return;
+    }
     const hasModelMapping =
       typeof localInputs.model_mapping === 'string' &&
       localInputs.model_mapping.trim() !== '';
@@ -4570,6 +4581,16 @@ const EditChannelModal = (props) => {
                             />
                           )}
 
+                          {(inputs.type === 69 || inputs.type === 70) && (
+                            <Banner
+                              type='info'
+                              description={t(
+                                '请填写百炼（DashScope）上游基础地址，例如 https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api；网关会自动拼接转写接口路径，无需填写完整 URL。',
+                              )}
+                              className='!rounded-lg'
+                            />
+                          )}
+
                           {inputs.type !== 3 &&
                             inputs.type !== 8 &&
                             inputs.type !== 22 &&
@@ -4579,17 +4600,29 @@ const EditChannelModal = (props) => {
                                 <Form.Input
                                   field='base_url'
                                   label={t('API地址')}
-                                  placeholder={t(
-                                    '此项可选，用于通过自定义API地址来进行 API 调用，末尾不要带/v1和/',
-                                  )}
+                                  placeholder={
+                                    inputs.type === 69 || inputs.type === 70
+                                      ? t(
+                                          '必填，例如：https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api',
+                                        )
+                                      : t(
+                                          '此项可选，用于通过自定义API地址来进行 API 调用，末尾不要带/v1和/',
+                                        )
+                                  }
                                   onChange={(value) =>
                                     handleInputChange('base_url', value)
                                   }
                                   showClear
                                   disabled={isIonetLocked}
-                                  extraText={t(
-                                    '对于官方渠道，new-api已经内置地址，除非是第三方代理站点或者Azure的特殊接入地址，否则不需要填写',
-                                  )}
+                                  extraText={
+                                    inputs.type === 69 || inputs.type === 70
+                                      ? t(
+                                          '阿里云 ASR 渠道必须填写上游基础地址，路径由网关自动拼接',
+                                        )
+                                      : t(
+                                          '对于官方渠道，new-api已经内置地址，除非是第三方代理站点或者Azure的特殊接入地址，否则不需要填写',
+                                        )
+                                  }
                                 />
                               </div>
                             )}

@@ -57,6 +57,7 @@ import {
   formatImageResolutionDisplayLabel,
   compareVideoResolutionAsc,
   isVideoPricingModel,
+  isASRPricingModel,
   hasNumericValue,
   getModelTagLabel,
   getSupplierTypeLabel,
@@ -1623,7 +1624,8 @@ const PricingCardView = ({
     };
 
     const modelHasVideoFlatPrice = hasNumericValue(model.video_price);
-    const hideTextTokenPrices = isVideoPricingModel(model);
+    const modelHasASRPrice = isASRPricingModel(model);
+    const hideTextTokenPrices = isVideoPricingModel(model) || modelHasASRPrice;
 
     // 提取所有通道的价格（与 relay 一致：ch.model_ratio 已含渠道折扣；再乘分组倍率）
     const prices = {
@@ -1633,6 +1635,7 @@ const PricingCardView = ({
       createCache: [],
       fixed: [],
       videoFlat: [],
+      asrPrice: [],
     };
     const originalPrices = {
       input: [],
@@ -1641,6 +1644,7 @@ const PricingCardView = ({
       createCache: [],
       fixed: [],
       videoFlat: [],
+      asrPrice: [],
     };
 
     const displayChannels = homeCardMode
@@ -1683,6 +1687,15 @@ const PricingCardView = ({
       if (!skipSimpleVideoFlat && flatUsd != null && flatUsd > 0) {
         prices.videoFlat.push(formatPrice(flatUsd * usedGroupRatio));
         originalPrices.videoFlat.push(formatPrice(flatUsd));
+      }
+
+      // ASR 语音识别：按秒单价（美元/秒）× 分组倍率
+      if (modelHasASRPrice) {
+        const asrUsd = Number(model.asr_price);
+        if (asrUsd > 0) {
+          prices.asrPrice.push(formatPrice(asrUsd * usedGroupRatio));
+          originalPrices.asrPrice.push(formatPrice(asrUsd));
+        }
       }
 
       // 全局子倍率（用于加价侧）
@@ -1821,6 +1834,9 @@ const PricingCardView = ({
     if (modelHasVideoFlatPrice && !skipSimpleVideoFlat) {
       rootPrices.videoFlat = formatPrice(Number(model.video_price));
     }
+    if (modelHasASRPrice) {
+      rootPrices.asrPrice = formatPrice(Number(model.asr_price));
+    }
 
     // 若根价格高于任意一个 channel 的对应价格，则返回划线原价与折扣
     const getOriginal = (rootPrice, channelPriceArray) => {
@@ -1892,11 +1908,14 @@ const PricingCardView = ({
         ),
         fixed: getOriginal(rootPrices.fixed, originalPrices.fixed),
         videoFlat: getOriginal(rootPrices.videoFlat, originalPrices.videoFlat),
+        asrPrice: getOriginal(rootPrices.asrPrice, originalPrices.asrPrice),
       },
       videoFlat: calculateRange(prices.videoFlat),
+      asrPrice: calculateRange(prices.asrPrice),
       unitSuffix,
       fixedSuffix,
       videoFlatSuffix: ` / ${t('条')}`,
+      asrPriceSuffix: ` / ${t('秒')}`,
       quotaType:
         model.channel_list?.[0]?.quota_type != null
           ? model.channel_list[0].quota_type
@@ -2028,6 +2047,8 @@ const PricingCardView = ({
       fixedSuffix,
       videoFlat,
       videoFlatSuffix,
+      asrPrice,
+      asrPriceSuffix,
       quotaType,
     } = channelPrices;
 
@@ -2099,6 +2120,21 @@ const PricingCardView = ({
 
     if (!isVideoModel) {
       items.push(...videoItems);
+    }
+
+    // ASR 语音识别：按秒单价（美元/秒）单独成表
+    if (isASRPricingModel(model) && asrPrice) {
+      items.push({
+        key: 'asr-pricing-table',
+        fixedTableRow: {
+          label: t('语音识别价格'),
+          value:
+            asrPrice.single ||
+            `${asrPrice.symbol}${asrPrice.min} ~ ${asrPrice.symbol}${asrPrice.max}`,
+          suffix: asrPriceSuffix || ` / ${t('秒')}`,
+          original: original?.asrPrice,
+        },
+      });
     }
 
     if (useTieredImagePerImage) {

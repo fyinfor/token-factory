@@ -37,5 +37,6 @@ const (
 	APITypeReplicate
 	APITypeCodex
 	APITypeHiDreamImage
-	APITypeDummy // this one is only for count, do not add any channel after this
+	APITypeAliASR // Alibaba DashScope ASR (sync transcription & async file transcription)
+	APITypeDummy  // this one is only for count, do not add any channel after this
 )

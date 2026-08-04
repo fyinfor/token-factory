@@ -242,6 +242,7 @@ func InitOptionMap() {
 	common.OptionMap["VideoPricingRules"] = ratio_setting.VideoPricingRules2JSONString()
 	common.OptionMap["ImagePrice"] = ratio_setting.ImagePrice2JSONString()
 	common.OptionMap["ImagePricingRules"] = ratio_setting.ImagePricingRules2JSONString()
+	common.OptionMap["ASRPrice"] = ratio_setting.ASRPrice2JSONString()
 	common.OptionMap["TopUpLink"] = common.TopUpLink
 	//common.OptionMap["ChatLink"] = common.ChatLink
 	//common.OptionMap["ChatLink2"] = common.ChatLink2
@@ -875,6 +876,8 @@ func updateOptionMap(key string, value string) (err error) {
 		err = ratio_setting.UpdateImagePriceByJSONString(value)
 	case "ImagePricingRules":
 		err = ratio_setting.UpdateImagePricingRulesByJSONString(value)
+	case "ASRPrice":
+		err = ratio_setting.UpdateASRPriceByJSONString(value)
 	case "TopUpLink":
 		common.TopUpLink = value
 	//case "ChatLink":

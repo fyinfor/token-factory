@@ -60,7 +60,7 @@ const nameRuleOptions = [
 ];
 
 // 仅作为下拉建议，不会写入 model_tags，直到保存到模型
-const SUGGESTED_MODEL_TAGS = ['文本', '视频', '图片'];
+const SUGGESTED_MODEL_TAGS = ['文本', '视频', '图片', 'ASR'];
 
 const normalizeTags = (tags) => {
   if (!Array.isArray(tags)) return [];

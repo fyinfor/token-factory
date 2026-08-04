@@ -215,6 +215,10 @@ func inferTags(name string) string {
 		strings.Contains(lower, "tts") {
 		add("audio")
 	}
+	// ASR 语音识别（阿里云 qwen-*-asr*、Fun-ASR 等）：固定标签 ASR
+	if strings.Contains(lower, "-asr") {
+		add("ASR")
+	}
 	// 轻量/经济型
 	if strings.Contains(lower, "mini") ||
 		strings.Contains(lower, "lite") ||
@@ -247,6 +251,7 @@ var validTagSet = map[string]bool{
 	"rerank":     true,
 	"image":      true,
 	"audio":      true,
+	"asr":        true,
 	"video":      true,
 	"budget":     true,
 	// 模型属性

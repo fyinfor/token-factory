@@ -128,6 +128,9 @@ func SetRelayRouter(router *gin.Engine) {
 		httpRouter.POST("/audio/transcriptions", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatOpenAIAudio)
 		})
+		// 阿里云 ASR 异步转写任务（提交 + 查询）
+		httpRouter.POST("/audio/transcriptions/async", controller.RelayASRTaskSubmit)
+		httpRouter.GET("/audio/transcriptions/async/:task_id", controller.RelayASRTaskFetch)
 		httpRouter.POST("/audio/translations", func(c *gin.Context) {
 			controller.Relay(c, types.RelayFormatOpenAIAudio)
 		})

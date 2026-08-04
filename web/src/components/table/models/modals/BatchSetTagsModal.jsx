@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Form, Typography } from '@douyinfe/semi-ui';
 
-const SUGGESTED_MODEL_TAGS = ['文本', '视频', '图片'];
+const SUGGESTED_MODEL_TAGS = ['文本', '视频', '图片', 'ASR'];
 
 const normalizeTags = (tags = []) => {
   const seen = new Set();

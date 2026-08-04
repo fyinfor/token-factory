@@ -43,6 +43,7 @@ import {
   trimDecimalsInLogDetailText,
   ceilToFixedDecimals,
   formatCeilFixedDecimals,
+  formatASRSecondsDisplay,
 } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
@@ -480,6 +481,23 @@ export const useLogsData = () => {
                 resolution,
                 cost: renderVideoQuota(other, billedQuota),
               })}
+        </span>
+      </div>
+    );
+  };
+
+  const renderASRBillingBrief = (other, quota) => {
+    const seconds = Number(other?.audio_seconds || 0);
+    return (
+      <div className='flex flex-wrap items-center gap-2'>
+        <span className='rounded-full bg-teal-600 px-2 py-0.5 text-xs font-medium text-white'>
+          {t('语音识别按秒计费')}
+        </span>
+        <span className='text-sm text-gray-700'>
+          {t('{{seconds}}秒 · {{cost}}', {
+            seconds: formatASRSecondsDisplay(seconds),
+            cost: renderQuota(quota, 6),
+          })}
         </span>
       </div>
     );
@@ -1274,6 +1292,9 @@ export const useLogsData = () => {
         videoPerSecondBillingDetail ||
         videoPerTokenBillingDetail ||
         videoPerVideoBillingDetail;
+      // ASR 语音识别按秒计费日志（other.asr=true，含 audio_seconds）
+      const asrBillingDetail =
+        other?.asr === true && Number(other?.audio_seconds || 0) > 0;
       const zeroBilledVideoNoChargeText = isZeroBilledVideoNoChargeLog(
         logs[i],
         other,
@@ -1310,6 +1331,19 @@ export const useLogsData = () => {
         expandDataLocal.push({
           key: t('Request ID'),
           value: logs[i].request_id,
+        });
+      }
+      // ASR 异步任务：展示 task_id（type=6 退款日志走下方专属分支，避免重复）
+      if (other?.task_id && logs[i].type !== 6) {
+        expandDataLocal.push({
+          key: t('任务ID'),
+          value: other.task_id,
+        });
+      }
+      if (asrBillingDetail) {
+        expandDataLocal.push({
+          key: t('音频时长'),
+          value: `${formatASRSecondsDisplay(other.audio_seconds)} ${t('秒')}`,
         });
       }
       if (logs[i].type === 5) {
@@ -1373,7 +1407,9 @@ export const useLogsData = () => {
                 ? renderVideoPerTokenBillingBrief(other, aggregatedQuota)
                 : videoPerVideoBillingDetail
                 ? renderVideoPerVideoBillingBrief(other, aggregatedQuota)
-                : other?.claude
+                : asrBillingDetail
+                  ? renderASRBillingBrief(other, aggregatedQuota)
+                  : other?.claude
                   ? renderClaudeLogContent(
                       other?.model_ratio,
                       other?.completion_ratio,
@@ -1642,6 +1678,8 @@ export const useLogsData = () => {
           localCountMode = t('按视频数量计费');
         } else if (other?.billing_mode === 'image_per_image') {
           localCountMode = t('按张计费');
+        } else if (other?.asr === true) {
+          localCountMode = t('语音识别按秒计费');
         } else if (
           Number.isFinite(Number(other?.model_price)) &&
           Number(other?.model_price) > 0

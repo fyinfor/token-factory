@@ -33,6 +33,8 @@ var defaultEndpointInfoMap = map[constant.EndpointType]EndpointInfo{
 	constant.EndpointTypeTencentCloudVODImage:  {Path: "/v1/images/generations", Method: "POST"},
 	constant.EndpointTypeAliVideo:              {Path: "/v1/video/generations", Method: "POST"},
 	constant.EndpointTypeSeedanceVideo:         {Path: "/v1/video/generations", Method: "POST"},
+	constant.EndpointTypeAliASRSync:            {Path: "/v1/audio/transcriptions", Method: "POST"},
+	constant.EndpointTypeAliASRAsync:           {Path: "/v1/audio/transcriptions/async", Method: "POST"},
 }
 
 // GetDefaultEndpointInfo 返回指定端点类型的默认信息以及是否存在
