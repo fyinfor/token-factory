@@ -417,18 +417,31 @@ func UnbindDistributorInvitee(inviterId, inviteeUserId, operatorId int, reason s
 
 // InviteeModelMarkupDiscountRateItem 定价页可见的模型×渠道加价折扣配置项（API 列表元素）。
 type InviteeModelMarkupDiscountRateItem struct {
-	ModelName                      string  `json:"model_name"`
-	ChannelID                      int     `json:"channel_id"`
-	ChannelPath                    string  `json:"channel_path"` // 与定价页通道列表「复制」一致：model/route_slug 或 alias/model/channel_no
-	SupplierType                   string  `json:"supplier_type"`
-	ChannelName                    string  `json:"channel_name"`
-	DefaultMarkupDiscountRate      float64 `json:"default_markup_discount_rate"`      // 渠道默认官方价加价折扣率(%)
-	CurrentMarkupDiscountRate      float64 `json:"current_markup_discount_rate"`      // 对该被邀请用户生效的加价折扣率(%)
-	OfficialCurrentDiscountPercent float64 `json:"official_current_discount_percent"` // 定价首页当前展示折扣(%)
-	ChannelPriceDiscountPercent    float64 `json:"channel_price_discount_percent"`    // 最终成本率(%)
-	OfficialBasePrice              float64 `json:"official_base_price"`               // 官方根价/倍率
-	ChannelBasePrice               float64 `json:"channel_base_price"`                // 渠道原始价/倍率
-	PricingQuotaType               int     `json:"pricing_quota_type"`                // 0=按量，1=按次
+	ModelName                      string                            `json:"model_name"`
+	ChannelID                      int                               `json:"channel_id"`
+	ChannelPath                    string                            `json:"channel_path"` // 与定价页通道列表「复制」一致：model/route_slug 或 alias/model/channel_no
+	SupplierType                   string                            `json:"supplier_type"`
+	ChannelName                    string                            `json:"channel_name"`
+	DefaultMarkupDiscountRate      float64                           `json:"default_markup_discount_rate"`      // 渠道默认官方价加价折扣率(%)
+	CurrentMarkupDiscountRate      float64                           `json:"current_markup_discount_rate"`      // 对该被邀请用户生效的加价折扣率(%)
+	OfficialCurrentDiscountPercent float64                           `json:"official_current_discount_percent"` // 定价首页当前展示折扣(%)
+	ChannelPriceDiscountPercent    float64                           `json:"channel_price_discount_percent"`    // 最终成本率(%)
+	OfficialBasePrice              float64                           `json:"official_base_price"`               // 官方根价/倍率
+	ChannelBasePrice               float64                           `json:"channel_base_price"`                // 渠道原始价/倍率
+	PricingQuotaType               int                               `json:"pricing_quota_type"`                // 当前渠道计费类型：0=按量，1=按次，3=阶梯
+	OfficialPricingQuotaType       int                               `json:"-"`                                 // 全局官方计费类型，仅供导出：0=按量，1=按次，3=阶梯
+	OfficialModelRatio             float64                           `json:"-"`                                 // 全局模型输入倍率，仅供媒体价格导出
+	OfficialCompletionRatio        float64                           `json:"-"`                                 // 全局输出倍率，仅供按量官方价导出
+	OfficialCacheRatio             *float64                          `json:"-"`                                 // 全局缓存读取倍率，仅供按量官方价导出
+	OfficialCreateCacheRatio       *float64                          `json:"-"`                                 // 全局缓存创建倍率，仅供按量官方价导出
+	OfficialImageRatio             *float64                          `json:"-"`                                 // 全局图片输入倍率，仅供导出
+	OfficialImagePrice             *float64                          `json:"-"`                                 // 全局图片按张价，仅供导出
+	OfficialImagePricingRules      *ratio_setting.ImagePricingRules  `json:"-"`                                 // 全局图片分辨率按张价，仅供导出
+	OfficialVideoRatio             *float64                          `json:"-"`                                 // 全局视频输入倍率，仅供导出
+	OfficialVideoCompletionRatio   float64                           `json:"-"`                                 // 全局视频输出倍率，仅供导出
+	OfficialVideoPrice             *float64                          `json:"-"`                                 // 全局视频按条价，仅供导出
+	OfficialVideoPricingRules      *ratio_setting.VideoPricingRules  `json:"-"`                                 // 全局视频专用规则，仅供导出
+	OfficialRequestTierPricing     *ratio_setting.RequestTierPricing `json:"-"`                                 // 全局官方阶梯价，仅供导出
 }
 
 // inviteePricingChannelPath 与前端 ModelChannelList 复制通道路径格式一致。
@@ -606,6 +619,17 @@ func bestImagePerImageDiscountBases(hint *ImagePerImagePricingHint, markupDiscou
 	return officialBase, channelCostPart, bestDiscount, true
 }
 
+func officialVideoPricingRulesForExport(modelName string) *ratio_setting.VideoPricingRules {
+	rules, ok := ratio_setting.GetVideoPricingRules(modelName)
+	if !ok || (!ratio_setting.HasUsableVideoPerTokenRules(rules) &&
+		!ratio_setting.HasUsableVideoPerSecondRules(rules) &&
+		!ratio_setting.HasUsableVideoPerVideoRules(rules)) {
+		return nil
+	}
+	rulesCopy := rules
+	return &rulesCopy
+}
+
 func listPricingVisibleMarkupDiscountRateItems() ([]InviteeModelMarkupDiscountRateItem, map[string]float64, error) {
 	pricing := GetPricing()
 	filtered := make([]Pricing, 0, len(pricing))
@@ -652,14 +676,36 @@ func listPricingVisibleMarkupDiscountRateItems() ([]InviteeModelMarkupDiscountRa
 		if ch.QuotaType == 1 {
 			quotaType = 1
 		}
-		officialBase := p.ModelRatio
+		officialBaseForDiscount := p.ModelRatio
 		channelBase := ch.ModelRatio
 		if quotaType == 1 {
-			officialBase = p.ModelPrice
+			officialBaseForDiscount = p.ModelPrice
 			channelBase = ch.ModelPrice
 		}
+		officialBase := p.ModelRatio
+		if p.QuotaType == 1 {
+			officialBase = p.ModelPrice
+		}
+		var officialTierPricing *ratio_setting.RequestTierPricing
+		if p.QuotaType == 3 {
+			if rule, ok := ratio_setting.GetModelRequestTierPricing(modelName); ok && len(rule.Tiers) > 0 {
+				ruleCopy := rule
+				officialTierPricing = &ruleCopy
+			}
+		}
+		var officialImagePrice *float64
+		if price, ok := ratio_setting.GetImagePrice(modelName); ok && price > 0 {
+			priceCopy := price
+			officialImagePrice = &priceCopy
+		}
+		var officialImagePricingRules *ratio_setting.ImagePricingRules
+		if rules, ok := ratio_setting.GetImagePricingRules(modelName); ok && ratio_setting.HasUsableImagePerImageRules(rules) {
+			rulesCopy := rules
+			officialImagePricingRules = &rulesCopy
+		}
+		officialVideoPricingRules := officialVideoPricingRulesForExport(modelName)
 		costDiscountPercent := ch.EffectiveCostPercent
-		currentDiscount := inviteeModelActualDiscountPercent(officialBase, channelBase, costDiscountPercent, defaultRate)
+		currentDiscount := inviteeModelActualDiscountPercent(officialBaseForDiscount, channelBase, costDiscountPercent, defaultRate)
 		defaultRates[key] = defaultRate
 		items = append(items, InviteeModelMarkupDiscountRateItem{
 			ModelName:                      modelName,
@@ -674,6 +720,19 @@ func listPricingVisibleMarkupDiscountRateItems() ([]InviteeModelMarkupDiscountRa
 			OfficialBasePrice:              officialBase,
 			ChannelBasePrice:               channelBase,
 			PricingQuotaType:               quotaType,
+			OfficialPricingQuotaType:       p.QuotaType,
+			OfficialModelRatio:             p.ModelRatio,
+			OfficialCompletionRatio:        ratio_setting.GetCompletionRatio(modelName),
+			OfficialCacheRatio:             p.CacheRatio,
+			OfficialCreateCacheRatio:       p.CreateCacheRatio,
+			OfficialImageRatio:             p.ImageRatio,
+			OfficialImagePrice:             officialImagePrice,
+			OfficialImagePricingRules:      officialImagePricingRules,
+			OfficialVideoRatio:             p.VideoRatio,
+			OfficialVideoCompletionRatio:   ratio_setting.GetVideoCompletionRatio(modelName),
+			OfficialVideoPrice:             p.VideoPrice,
+			OfficialVideoPricingRules:      officialVideoPricingRules,
+			OfficialRequestTierPricing:     officialTierPricing,
 		})
 	}
 	sort.Slice(items, func(i, j int) bool {
