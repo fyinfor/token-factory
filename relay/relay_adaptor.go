@@ -6,6 +6,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/relay/channel"
 	"github.com/QuantumNous/new-api/relay/channel/ali"
+	"github.com/QuantumNous/new-api/relay/channel/aliyunasr"
 	"github.com/QuantumNous/new-api/relay/channel/aws"
 	"github.com/QuantumNous/new-api/relay/channel/baidu"
 	"github.com/QuantumNous/new-api/relay/channel/baidu_v2"
@@ -126,6 +127,8 @@ func GetAdaptor(apiType int) channel.Adaptor {
 		return &codex.Adaptor{}
 	case constant.APITypeHiDreamImage:
 		return &hidreamimage.Adaptor{}
+	case constant.APITypeAliASR:
+		return &aliyunasr.Adaptor{}
 	}
 	return nil
 }

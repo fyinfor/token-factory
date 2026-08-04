@@ -336,6 +336,9 @@ var defaultVideoPrice = map[string]float64{}
 // 图片生成按次价格默认值（每生成一张图片固定收费多少美元）。
 var defaultImagePrice = map[string]float64{}
 
+// 阿里云 ASR 语音转写默认按秒单价（美元/秒），管理员可在定价页面覆盖。
+var defaultASRPrice = map[string]float64{}
+
 var modelPriceMap = types.NewRWMap[string, float64]()
 var modelRatioMap = types.NewRWMap[string, float64]()
 var completionRatioMap = types.NewRWMap[string, float64]()
@@ -361,6 +364,7 @@ func InitRatioSettings() {
 	videoCompletionRatioMap.AddAll(defaultVideoCompletionRatio)
 	videoPriceMap.AddAll(defaultVideoPrice)
 	imagePriceMap.AddAll(defaultImagePrice)
+	asrPriceMap.AddAll(defaultASRPrice)
 }
 
 func GetModelPriceMap() map[string]float64 {
@@ -433,12 +437,16 @@ func GetModelRatio(name string) (float64, bool, string) {
 
 // ModelHasConfiguredPricing 表示模型在价格表或倍率表中存在显式配置（含 compact 通配）。
 // 未命中表键时 GetModelRatio 不再提供可用倍率（非自用为 success=false；自用为占位倍率），此类模型不应出现在定价接口。
+// ASR 语音模型仅配置按秒价格（ASRPrice）即可视为已配置定价。
 func ModelHasConfiguredPricing(model string) bool {
 	if _, ok := GetModelPrice(model, false); ok {
 		return true
 	}
 	name := FormatMatchingModelName(model)
 	if _, ok := modelRatioMap.Get(name); ok {
+		return true
+	}
+	if _, ok := asrPriceMap.Get(name); ok {
 		return true
 	}
 	if strings.HasSuffix(name, CompactModelSuffix) {
@@ -853,6 +861,35 @@ func ContainsImagePrice(name string) bool {
 
 func GetImagePriceCopy() map[string]float64 {
 	return imagePriceMap.ReadAll()
+}
+
+var asrPriceMap = types.NewRWMap[string, float64]()
+
+func ASRPrice2JSONString() string {
+	return asrPriceMap.MarshalJSONString()
+}
+
+func UpdateASRPriceByJSONString(jsonStr string) error {
+	return types.LoadFloat64MapFromJSONStringFlexibleWithCallback(asrPriceMap, jsonStr, InvalidateExposedDataCache)
+}
+
+// GetASRPrice 返回 ASR 语音识别模型的按秒单价（美元/秒），未配置返回 -1, false。
+func GetASRPrice(name string) (float64, bool) {
+	name = FormatMatchingModelName(name)
+	if price, ok := asrPriceMap.Get(name); ok {
+		return price, true
+	}
+	return -1, false
+}
+
+func ContainsASRPrice(name string) bool {
+	name = FormatMatchingModelName(name)
+	_, ok := asrPriceMap.Get(name)
+	return ok
+}
+
+func GetASRPriceCopy() map[string]float64 {
+	return asrPriceMap.ReadAll()
 }
 
 func GetModelRatioCopy() map[string]float64 {

@@ -9,7 +9,14 @@ export const VIDEO_ENDPOINT_TYPES = new Set([
   'ali-video',
 ]);
 
-const TRANSLATABLE_MODEL_TAGS = new Set(['文本', '视频', '图片', '多模态', '热门']);
+const TRANSLATABLE_MODEL_TAGS = new Set([
+  '文本',
+  '视频',
+  '图片',
+  '多模态',
+  '热门',
+  'ASR',
+]);
 
 /** 按界面语言选择中文/英文内容（英文缺失时回退中文） */
 export function getLocalizedContent(zhContent, enContent, language) {
@@ -69,4 +76,10 @@ export const isVideoPricingModel = (model) => {
     hasNumericValue(model.video_price) ||
     !!model.video_flat_clip_hint
   );
+};
+
+/** ASR 语音识别定价模型：配置了按秒单价（asr_price，美元/秒） */
+export const isASRPricingModel = (model) => {
+  if (!model) return false;
+  return hasNumericValue(model.asr_price);
 };

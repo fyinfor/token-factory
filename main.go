@@ -169,6 +169,9 @@ func main() {
 		gopool.Go(func() {
 			controller.UpdateTaskBulk()
 		})
+		gopool.Go(func() {
+			controller.UpdateAsrTaskBulk()
+		})
 	}
 	if os.Getenv("BATCH_UPDATE_ENABLED") == "true" {
 		common.BatchUpdateEnabled = true

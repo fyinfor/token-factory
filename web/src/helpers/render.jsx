@@ -445,6 +445,8 @@ export function getChannelIcon(channelType) {
       return <Sora.Color size={iconSize} />;
     case 63: // 阿里云-视频
     case 66: // 阿里通义千问（图像）
+    case 69: // 阿里云-ASR 同步转写
+    case 70: // 阿里云-ASR 异步转写
       return <Qwen.Color size={iconSize} />;
     case 2: // Midjourney Proxy
     case 5: // Midjourney Proxy Plus
@@ -2220,6 +2222,103 @@ function renderPerCallBillingTags(options = {}, { showTotal = false, showReferen
   );
 }
 
+/** 音频时长展示：最多 2 位小数并去掉末尾 0（10.00 → 10，10.50 → 10.5）。 */
+export function formatASRSecondsDisplay(seconds) {
+  const n = Number(seconds);
+  if (!Number.isFinite(n)) {
+    return '0';
+  }
+  return trimFixedDecimalDisplay(n, 2);
+}
+
+/**
+ * ASR 语音识别按秒计费标签（与按次/按张计费同款 Tag 样式）。
+ * other 需包含 audio_seconds（音频时长，秒）与 model_price（每秒美元单价）。
+ * 需在按次（isPerCall）分支前分流：ASR 的 use_price=true 且 model_price>0 会被误判为按次计费。
+ */
+function renderASRBillingTags(
+  other,
+  options = {},
+  { showTotal = false, showReferenceNote = false } = {},
+) {
+  const tr = typeof options?.t === 'function' ? options.t : i18next.t.bind(i18next);
+  const { symbol, rate } = getCurrencyConfig();
+  const chPct = Number(
+    other?.channel_price_discount_percent ??
+      options?.channelPriceDiscountPercent ??
+      100,
+  );
+  const seconds = Number(other?.audio_seconds || 0);
+  const { effModelPrice } = resolveConsumeLogBillingRates({
+    modelPrice: other?.model_price,
+    channelPriceDiscountPercent: chPct,
+    billingMeta: other,
+  });
+  const { ratio: effectiveGroupRatio } = getEffectiveRatio(
+    other?.group_ratio,
+    other?.user_group_ratio,
+  );
+  const perSecondUsd =
+    Number(effModelPrice) > 0
+      ? Number(effModelPrice) * (Number(effectiveGroupRatio) || 1)
+      : 0;
+  const displayPrice = formatBillingDisplayPrice(perSecondUsd, rate, 6);
+  const items = [
+    {
+      key: 'seconds',
+      color: 'cyan',
+      label: tr('音频时长 {{seconds}} 秒', {
+        seconds: formatASRSecondsDisplay(seconds),
+      }),
+    },
+    {
+      key: 'per-second',
+      color: 'green',
+      label: tr('每秒 {{symbol}}{{price}}', {
+        symbol,
+        price: displayPrice,
+      }),
+    },
+  ];
+  if (showTotal) {
+    items.push({
+      key: 'total',
+      color: 'red',
+      label: buildBillingText('合计 {{symbol}}{{price}}', {
+        symbol,
+        price: resolveBillingProcessTotalDisplay(
+          Number.isFinite(Number(options?.actualQuota))
+            ? Number(options.actualQuota)
+            : null,
+          perSecondUsd * (seconds > 0 ? seconds : 1),
+          rate,
+          6,
+        ),
+      }),
+    });
+  }
+  return (
+    <div>
+      <div className='flex flex-wrap items-center' style={{ gap: 4 }}>
+        {items.map((item) => (
+          <Tag key={item.key} color={item.color} size='small'>
+            {item.label}
+          </Tag>
+        ))}
+      </div>
+      {showReferenceNote ? (
+        <Typography.Text
+          type='tertiary'
+          size='small'
+          style={{ display: 'block', marginTop: 8 }}
+        >
+          {i18next.t('仅供参考，以实际扣费为准')}
+        </Typography.Text>
+      ) : null}
+    </div>
+  );
+}
+
 function buildImagePerImageLogSummarySegments(billingMeta, options = {}) {
   return [
     {
@@ -2475,13 +2574,20 @@ function renderPriceSimpleCore({
     // "explicitly $0 per call" — see the matching guard in renderLogContent
     // for the full rationale (legacy task logs may stamp literal 0).
     if (modelPrice !== -1 && modelPrice !== 0) {
+      const isAsrPerSecond = billingMeta?.asr === true;
       segments.push({
         tone: 'secondary',
         text: isPriceDisplayMode(displayMode, modelPrice)
-          ? i18next.t('模型价格 {{price}}', {
-              price: formatBillingUnitPrice(mp * groupMult),
-            })
-          : i18next.t('按次'),
+          ? isAsrPerSecond
+            ? i18next.t('模型价格 {{price}} / 秒', {
+                price: formatBillingUnitPrice(mp * groupMult),
+              })
+            : i18next.t('模型价格 {{price}}', {
+                price: formatBillingUnitPrice(mp * groupMult),
+              })
+          : isAsrPerSecond
+            ? i18next.t('按秒')
+            : i18next.t('按次'),
       });
     } else if (isPriceDisplayMode(displayMode, modelPrice)) {
       segments.push({
@@ -2663,13 +2769,21 @@ function renderPriceSimpleCore({
   // Treat modelPrice === 0 as "unset" rather than "$0/per-call" — same
   // rationale as in renderLogContent.
   if (modelPrice !== -1 && modelPrice !== 0) {
+    const isAsrPerSecond = billingMeta?.asr === true;
     if (isPriceDisplayMode(displayMode, modelPrice)) {
       return joinBillingSummary([
-        i18next.t('模型价格：{{symbol}}{{price}}', {
-          symbol: symbol,
-          price: parseFloat((mp * rate).toFixed(2)),
-        }),
-        getGroupRatioText(groupRatio, user_group_ratio),
+        isAsrPerSecond
+          ? i18next.t('模型价格：{{symbol}}{{price}} / 秒', {
+              symbol: symbol,
+              price: parseFloat((mp * rate).toFixed(2)),
+            })
+          : i18next.t('模型价格：{{symbol}}{{price}}', {
+              symbol: symbol,
+              price: parseFloat((mp * rate).toFixed(2)),
+            }),
+        ...(isAsrPerSecond
+          ? []
+          : [getGroupRatioText(groupRatio, user_group_ratio)]),
       ]);
     }
     const displayPrice = parseFloat((mp * rate).toFixed(2));
@@ -3652,13 +3766,19 @@ export function renderLogContent(
     //   should render as such. Either way, falling through to the ratio
     //   rendering path is safer than rendering the misleading "$0 / 次".
     if (modelPrice !== -1 && modelPrice !== 0) {
+      const isAsrPerSecond = videoBillingDetail?.asr === true;
       const parts = [
-        i18next.t('模型价格 {{symbol}}{{price}} / 次', {
-          symbol,
-          price: parseFloat((mp * displayMultiplier * rate).toFixed(2)),
-        }),
+        isAsrPerSecond
+          ? i18next.t('模型价格 {{symbol}}{{price}} / 秒', {
+              symbol,
+              price: parseFloat((mp * displayMultiplier * rate).toFixed(2)),
+            })
+          : i18next.t('模型价格 {{symbol}}{{price}} / 次', {
+              symbol,
+              price: parseFloat((mp * displayMultiplier * rate).toFixed(2)),
+            }),
       ];
-      if (!hideGroupRatioInDetail) {
+      if (!hideGroupRatioInDetail && !isAsrPerSecond) {
         parts.push(getGroupRatioText(groupRatio, user_group_ratio));
       }
       return joinBillingSummary(parts);
@@ -4972,6 +5092,21 @@ export function renderConsumeBillingProcess({
 
   if (isRequestTierConsumeLog(other)) {
     return renderRequestTierConsumeArticle(other, chPct, tr, record);
+  }
+
+  // ASR 语音识别按秒计费：use_price=true 且 model_price>0 会命中下方按次分支，需提前分流
+  if (other?.asr === true) {
+    return renderASRBillingTags(
+      other,
+      {
+        channelPriceDiscountPercent: chPct,
+        actualQuota: Number.isFinite(Number(record?.quota))
+          ? Number(record.quota)
+          : null,
+        t: tr,
+      },
+      { showTotal: true, showReferenceNote: true },
+    );
   }
 
   // use_price：与 PriceData.UsePrice 一致。

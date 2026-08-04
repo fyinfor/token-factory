@@ -33,6 +33,7 @@ import {
   copy,
   stringToColor,
   isVideoPricingModel,
+  isASRPricingModel,
   getSupplierTypeLabel,
 } from '../../../../../helpers';
 import {
@@ -768,7 +769,8 @@ const ModelChannelList = ({
       modelData?.create_cache_ratio != null
         ? Number(modelData.create_cache_ratio)
         : 0;
-    const hideTextTokenPrices = isVideoPricingModel(modelData);
+    const hideTextTokenPrices =
+      isVideoPricingModel(modelData) || isASRPricingModel(modelData);
 
     // 计算价格，返回 { display, value }
     const calculatePrice = (
@@ -969,6 +971,28 @@ const ModelChannelList = ({
         ),
       );
     }
+
+    // ASR 语音识别：按秒单价（美元/秒）× 分组倍率
+    const rootAsrPrice = hasRatioValue(modelData?.asr_price)
+      ? Number(modelData.asr_price)
+      : null;
+    if (rootAsrPrice != null && rootAsrPrice > 0) {
+      const asrValue = toDisplayCurrencyValue(rootAsrPrice * usedGroupRatio, {
+        tokenUnit,
+      });
+      const asrDisplay = formatCurrencyAmount(asrValue);
+      const asrExact = formatPreciseCurrencyValue(asrValue);
+      items.push({
+        label: t('语音识别按秒计费'),
+        value: `${asrDisplay} / ${t('秒')}`,
+        valueTitle: `${asrExact} / ${t('秒')}`,
+        valueExact: `${asrExact} / ${t('秒')}`,
+        original: null,
+        priceUnitLabel: null,
+        discount: null,
+        hasDiscount: false,
+      });
+    }
     return items.filter(Boolean);
   };
 
@@ -982,7 +1006,8 @@ const ModelChannelList = ({
     const showVideoFlatTable = hasVideoFlatClipTierTable(vHint);
     const iHint = pickImagePerImageHintForChannel(modelData, channel);
     const showImagePerImageTable = hasImagePerImageTierTable(iHint);
-    const hideTextTokenPrices = isVideoPricingModel(modelData);
+    const hideTextTokenPrices =
+      isVideoPricingModel(modelData) || isASRPricingModel(modelData);
 
     const costItems = computeChannelCostRates({
       channelId: channel.channel_id,

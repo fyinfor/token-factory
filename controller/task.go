@@ -20,6 +20,11 @@ func UpdateTaskBulk() {
 	service.TaskPollingLoop()
 }
 
+// UpdateAsrTaskBulk 阿里云 ASR 异步转写后台轮询入口（对齐视频任务轮询）。
+func UpdateAsrTaskBulk() {
+	relay.AsrTaskPollingLoop()
+}
+
 func GetAllTask(c *gin.Context) {
 	pageInfo := common.GetPageQuery(c)
 

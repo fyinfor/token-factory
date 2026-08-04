@@ -303,6 +303,7 @@ func migrateDB() error {
 		&TopUp{},
 		&QuotaData{},
 		&Task{},
+		&AsrTask{},
 		&Model{},
 		&ModelVisibilitySet{},
 		&ModelVisibilitySetUser{},

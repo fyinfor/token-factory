@@ -643,6 +643,17 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 			}
 			modelRequest.Model = common.GetStringIfEmpty(modelRequest.Model, "whisper-1")
 			relayMode = relayconstant.RelayModeAudioTranslation
+		} else if strings.HasPrefix(c.Request.URL.Path, "/v1/audio/transcriptions/async") {
+			// 阿里云 ASR 异步转写：POST 提交任务需按模型选渠道；GET 查询按 task_id 定位任务与渠道，无需选渠道
+			if c.Request.Method == http.MethodPost {
+				if req, err := getModelFromRequest(c); err == nil && req.Model != "" {
+					modelRequest.Model = req.Model
+				}
+				relayMode = relayconstant.RelayModeAudioTranscriptionAsyncSubmit
+			} else {
+				shouldSelectChannel = false
+				relayMode = relayconstant.RelayModeAudioTranscriptionAsyncFetch
+			}
 		} else if strings.HasPrefix(c.Request.URL.Path, "/v1/audio/transcriptions") {
 			// 先尝试从请求读取
 			if req, err := getModelFromRequest(c); err == nil && req.Model != "" {

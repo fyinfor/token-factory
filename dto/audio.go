@@ -42,7 +42,8 @@ func (r *AudioRequest) SetModelName(modelName string) {
 }
 
 type AudioResponse struct {
-	Text string `json:"text"`
+	Text     string  `json:"text"`
+	Duration float64 `json:"duration,omitempty"` // 音频时长（秒）
 }
 
 type WhisperVerboseJSONResponse struct {
@@ -64,4 +65,69 @@ type Segment struct {
 	AvgLogprob       float64 `json:"avg_logprob"`
 	CompressionRatio float64 `json:"compression_ratio"`
 	NoSpeechProb     float64 `json:"no_speech_prob"`
+}
+
+// ============================== ASR 异步转录（OpenAI 兼容） ==============================
+
+// ASRTaskSubmitRequest POST /v1/audio/transcriptions/async 提交异步转录任务请求体。
+// 异步链路（filetrans）上游要求公网可访问的音频 URL，因此 audio_url 必填；
+// 支持 multipart 表单字段（model/audio_url）或 JSON body。
+type ASRTaskSubmitRequest struct {
+	Model          string `json:"model"`
+	AudioURL       string `json:"audio_url"`
+	FileURL        string `json:"file_url"`
+	Language       string `json:"language,omitempty"`
+	ResponseFormat string `json:"response_format,omitempty"`
+}
+
+func (r *ASRTaskSubmitRequest) GetAudioURL() string {
+	if r.AudioURL != "" {
+		return r.AudioURL
+	}
+	return r.FileURL
+}
+
+func (r *ASRTaskSubmitRequest) SetModelName(modelName string) {
+	if modelName != "" {
+		r.Model = modelName
+	}
+}
+
+func (r *ASRTaskSubmitRequest) IsStream(c *gin.Context) bool {
+	return false
+}
+
+func (r *ASRTaskSubmitRequest) GetTokenCountMeta() *types.TokenCountMeta {
+	return &types.TokenCountMeta{
+		TokenType: types.TokenTypeTextNumber,
+	}
+}
+
+// ASR 异步任务对外状态（映射上游 PENDING/RUNNING/SUCCEEDED/FAILED/CANCELED）
+const (
+	ASRTaskStatusPending   = "pending"
+	ASRTaskStatusRunning   = "running"
+	ASRTaskStatusSucceeded = "succeeded"
+	ASRTaskStatusFailed    = "failed"
+)
+
+// ASRTaskSubmitResponse POST /v1/audio/transcriptions/async 提交响应。
+type ASRTaskSubmitResponse struct {
+	TaskID    string `json:"task_id"`
+	Status    string `json:"status"`
+	Model     string `json:"model"`
+	CreatedAt int64  `json:"created_at"`
+}
+
+// ASRTaskFetchResponse GET /v1/audio/transcriptions/async/{task_id} 查询响应。
+// 任务成功后 text/duration 有值；失败时 error 有值。
+type ASRTaskFetchResponse struct {
+	TaskID     string  `json:"task_id"`
+	Status     string  `json:"status"`
+	Model      string  `json:"model"`
+	Text       string  `json:"text,omitempty"`
+	Duration   float64 `json:"duration,omitempty"`
+	Error      string  `json:"error,omitempty"`
+	CreatedAt  int64   `json:"created_at"`
+	FinishedAt int64   `json:"finished_at,omitempty"`
 }

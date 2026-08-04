@@ -61,6 +61,10 @@ func GetEndpointTypesByChannelTypeWithTags(channelType int, modelName string, mo
 		endpointTypes = []constant.EndpointType{constant.EndpointTypeAliVideo}
 	case constant.ChannelTypeDoubaoVideo, constant.ChannelTypeSeedance:
 		endpointTypes = []constant.EndpointType{constant.EndpointTypeSeedanceVideo}
+	case constant.ChannelTypeAliASRSync:
+		endpointTypes = []constant.EndpointType{constant.EndpointTypeAliASRSync}
+	case constant.ChannelTypeAliASRAsync:
+		endpointTypes = []constant.EndpointType{constant.EndpointTypeAliASRAsync}
 	default:
 		if IsOpenAIResponseOnlyModel(modelName) {
 			endpointTypes = []constant.EndpointType{constant.EndpointTypeOpenAIResponse}
