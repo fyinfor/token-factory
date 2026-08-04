@@ -915,10 +915,11 @@ export default function DistributorCenter() {
         return;
       }
 
-      const timestamp = new Date()
-        .toISOString()
-        .replace(/[-:]/g, '')
-        .replace(/\.\d{3}Z$/, '');
+      const now = new Date();
+      const pad = (value) => String(value).padStart(2, '0');
+      const timestamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(
+        now.getDate(),
+      )}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
       downloadBlob(
         new Blob([res.data], {
           type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',

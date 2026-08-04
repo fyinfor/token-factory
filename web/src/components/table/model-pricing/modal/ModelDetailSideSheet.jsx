@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Button,
   SideSheet,
@@ -32,6 +32,7 @@ import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import ModelHeader from './components/ModelHeader';
 import ModelBasicInfo from './components/ModelBasicInfo';
 import ModelChannelWorkspace from './components/ModelChannelWorkspace';
+import { MODEL_PRICE_MAX_DECIMALS } from '../utils/priceDisplay';
 
 const { Text } = Typography;
 
@@ -107,6 +108,11 @@ const ModelDetailSideSheet = ({
   const [activeSection, setActiveSection] = useState('general');
   const [channelMtrMap, setChannelMtrMap] = useState({});
   const [contentReady, setContentReady] = useState(false);
+  const sideSheetDisplayPrice = useCallback(
+    (usdPrice) =>
+      displayPrice(usdPrice, { precision: MODEL_PRICE_MAX_DECIMALS }),
+    [displayPrice],
+  );
 
   useEffect(() => {
     if (!visible) {
@@ -168,7 +174,7 @@ const ModelDetailSideSheet = ({
   const channelProps = {
     modelData,
     channelMtrMap,
-    displayPrice,
+    displayPrice: sideSheetDisplayPrice,
     currency,
     siteDisplayType,
     tokenUnit,

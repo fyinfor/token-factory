@@ -53,6 +53,7 @@ import ImagePerImageHintTable from '../../components/ImagePerImageHintTable';
 import PrecisePriceText, {
   formatCurrencyAmount,
   formatPreciseCurrencyValue,
+  formatPreciseUsdPrice,
   toDisplayCurrencyValue,
 } from '../../components/PrecisePriceText';
 import {
@@ -65,10 +66,7 @@ import {
 } from '../../constants/imagePerImageHintI18n';
 
 import { renderModelTestResultSummary } from '../../../../../helpers/modelStability';
-import {
-  computeChannelCostRates,
-  formatBillingUsdDisplay,
-} from '../../../../../helpers/billingFormula';
+import { computeChannelCostRates } from '../../../../../helpers/billingFormula';
 import { formatPriceRatioFromDiscount } from '../../utils/discount';
 import { getChannelRouteModelName } from '../../utils/channelRoute';
 
@@ -1099,7 +1097,7 @@ const ModelChannelList = ({
         : null;
     };
     const formatCostValue = (usd, isFixedPrice, fixedUnitKey) => {
-      const value = formatBillingUsdDisplay(usd, { tokenUnit });
+      const value = formatPreciseUsdPrice(usd, { tokenUnit });
       const exact = formatPreciseCurrencyValue(
         toDisplayCurrencyValue(usd, { tokenUnit }),
       );
@@ -1309,7 +1307,7 @@ const ModelChannelList = ({
                 <VideoFlatClipHintTable
                   hint={costInfo.videoHint}
                   usedGroupRatio={1}
-                  displayPrice={formatBillingUsdDisplay}
+                  displayPrice={formatPreciseUsdPrice}
                   t={t}
                   blurPricing={blurPricing}
                   isCostPrice
@@ -1321,7 +1319,7 @@ const ModelChannelList = ({
                 <ImagePerImageHintTable
                   hint={costInfo.imageHint}
                   usedGroupRatio={1}
-                  displayPrice={formatBillingUsdDisplay}
+                  displayPrice={formatPreciseUsdPrice}
                   t={t}
                   blurPricing={blurPricing}
                   isCostPrice
@@ -1804,7 +1802,7 @@ const ModelChannelList = ({
                       <VideoFlatClipHintTable
                         hint={costInfo.videoHint}
                         usedGroupRatio={1}
-                        displayPrice={formatBillingUsdDisplay}
+                        displayPrice={formatPreciseUsdPrice}
                         t={t}
                         blurPricing={blurPricing}
                         isCostPrice
@@ -1816,7 +1814,7 @@ const ModelChannelList = ({
                       <ImagePerImageHintTable
                         hint={costInfo.imageHint}
                         usedGroupRatio={1}
-                        displayPrice={formatBillingUsdDisplay}
+                        displayPrice={formatPreciseUsdPrice}
                         t={t}
                         blurPricing={blurPricing}
                         isCostPrice

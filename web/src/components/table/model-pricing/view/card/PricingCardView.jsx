@@ -89,6 +89,10 @@ import {
 } from '../../constants/imagePerImageHintI18n';
 import { isTopHotModel } from '../../utils/modelHeat';
 import { formatPriceRatioFromDiscount } from '../../utils/discount';
+import {
+  MODEL_CARD_PRICE_MAX_DECIMALS,
+  truncateModelPriceValue,
+} from '../../utils/priceDisplay';
 import PricingCardSkeleton from './PricingCardSkeleton';
 import ModelPerfCardSection from '../../components/ModelPerfCardSection';
 import { useMinimumLoadingTime } from '../../../../../hooks/common/useMinimumLoadingTime';
@@ -1589,10 +1593,12 @@ const PricingCardView = ({
 
     // 辅助函数：格式化价格
     const formatPrice = (priceUSD) => {
-      const rawDisplayPrice = displayPrice(priceUSD);
       const unitDivisor = tokenUnit === 'K' ? 1000 : 1;
-      const numericPrice =
-        parseFloat(rawDisplayPrice.replace(/[^0-9.]/g, '')) / unitDivisor;
+      const rawDisplayPrice = displayPrice(priceUSD / unitDivisor);
+      const numericPrice = truncateModelPriceValue(
+        parseFloat(rawDisplayPrice.replace(/[^0-9.]/g, '')),
+        MODEL_CARD_PRICE_MAX_DECIMALS,
+      );
 
       let symbol = '$';
       if (currency === 'CNY') {
@@ -1610,7 +1616,7 @@ const PricingCardView = ({
       }
 
       return {
-        value: parseFloat(numericPrice.toFixed(2)),
+        value: numericPrice,
         rawUsd: Number(priceUSD) || 0,
         symbol,
       };
