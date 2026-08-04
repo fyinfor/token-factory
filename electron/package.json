@@ -6,6 +6,9 @@
   "scripts": {
     "start-app": "electron .",
     "dev-app": "cross-env NODE_ENV=development electron .",
+    "start:quota": "electron quota-widget/main.js",
+    "test:quota": "node --test quota-widget/test",
+    "build:quota:win": "electron-builder --config quota-widget/electron-builder.yml --win portable",
     "build": "electron-builder",
     "build:mac": "electron-builder --mac",
     "build:win": "electron-builder --win",

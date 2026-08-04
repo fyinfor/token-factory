@@ -45,6 +45,7 @@ func createInvoiceTestData(t *testing.T) (*TopUp, *InvoiceProfile) {
 		Money:           100,
 		QuotaToAdd:      1000,
 		TradeNo:         "invoice-test-topup",
+		PaymentMethod:   "wxpay",
 		Status:          common.TopUpStatusSuccess,
 		InvoiceEligible: true,
 		CreateTime:      1,
@@ -83,14 +84,41 @@ func TestCreateInvoiceRequestMergesDuplicateTopUpsAndReservesAmount(t *testing.T
 	}, "", profile)
 	require.NoError(t, err)
 	assert.InDelta(t, 40, request.TotalAmount, 0.000001)
+	assert.Equal(t, InvoiceTypeElectronicOrdinary, request.InvoiceType)
 
 	items, err := GetInvoiceRequestItems(request.Id)
 	require.NoError(t, err)
 	require.Len(t, items, 1)
 	assert.InDelta(t, 40, items[0].InvoiceAmount, 0.000001)
+	assert.Equal(t, "wxpay", items[0].PaymentMethod)
 
 	updated := reloadInvoiceTopUp(t, topUp.Id)
 	assert.InDelta(t, 40, updated.PendingInvoiceAmount, 0.000001)
+}
+
+func TestInvoiceProfileDefaultsToOrdinaryAndSpecialTypePropagatesToRequest(t *testing.T) {
+	setupInvoiceTestDB(t)
+
+	profile := &InvoiceProfile{
+		UserId: 2,
+		Title:  "Default Invoice Type",
+		Email:  "default@example.com",
+	}
+	require.NoError(t, UpsertInvoiceProfile(profile))
+	assert.Equal(t, InvoiceTypeElectronicOrdinary, profile.InvoiceType)
+
+	persisted, err := GetInvoiceProfileByUserID(profile.UserId)
+	require.NoError(t, err)
+	assert.Equal(t, InvoiceTypeElectronicOrdinary, persisted.InvoiceType)
+
+	topUp, requestProfile := createInvoiceTestData(t)
+	requestProfile.InvoiceType = InvoiceTypeElectronicSpecial
+	request, err := CreateInvoiceRequest(1, []InvoiceRequestItemInput{{
+		TopUpId:       topUp.Id,
+		InvoiceAmount: 10,
+	}}, "", requestProfile)
+	require.NoError(t, err)
+	assert.Equal(t, InvoiceTypeElectronicSpecial, request.InvoiceType)
 }
 
 func TestCreateInvoiceRequestRejectsOverReservationWithoutPartialChanges(t *testing.T) {

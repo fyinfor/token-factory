@@ -102,6 +102,7 @@ func SetApiRouter(router *gin.Engine) {
 			distributorRoute.PUT("/invitee-model-discounts", controller.PutInviteeModelDiscounts)
 			distributorRoute.POST("/invitee-model-discounts/batch", controller.PostBatchInviteeModelDiscounts)
 			distributorRoute.GET("/model-discount-template", controller.GetDistributorModelDiscountTemplate)
+			distributorRoute.GET("/model-discount-template/export", controller.ExportDistributorModelDiscountTemplate)
 			distributorRoute.PUT("/model-discount-template", controller.PutDistributorModelDiscountTemplate)
 			distributorRoute.POST("/withdrawal", controller.PostDistributorWithdrawal)
 			distributorRoute.GET("/withdrawals", controller.GetDistributorWithdrawals)
