@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import {
   API,
+  getPayMethodDisplayName,
   showError,
   showSuccess,
   timestamp2string,
@@ -68,6 +69,7 @@ const InvoiceManagement = ({ t }) => {
   const [detail, setDetail] = useState(null);
   const [profile, setProfile] = useState({
     title_type: 'personal',
+    invoice_type: 'electronic_ordinary',
     title: '',
     tax_no: '',
     email: '',
@@ -87,7 +89,12 @@ const InvoiceManagement = ({ t }) => {
   const loadProfile = useCallback(async () => {
     try {
       const res = await API.get('/api/user/invoice/profile');
-      if (res.data.success && res.data.data) setProfile(res.data.data);
+      if (res.data.success && res.data.data) {
+        setProfile({
+          ...res.data.data,
+          invoice_type: res.data.data.invoice_type || 'electronic_ordinary',
+        });
+      }
     } catch {
       // New users do not have an invoice profile yet.
     }
@@ -674,6 +681,31 @@ const InvoiceManagement = ({ t }) => {
             </div>
           </div>
           <div className='invoice-field is-full'>
+            <span>{t('发票类型')}</span>
+            <div className='invoice-radio-group'>
+              {[
+                ['electronic_ordinary', '普票'],
+                ['electronic_special', '专票'],
+              ].map(([value, label]) => (
+                <label className='invoice-radio-option' key={value}>
+                  <input
+                    type='radio'
+                    name='invoice-type'
+                    value={value}
+                    checked={profile.invoice_type === value}
+                    onChange={(event) =>
+                      setProfile((current) => ({
+                        ...current,
+                        invoice_type: event.target.value,
+                      }))
+                    }
+                  />
+                  {t(label)}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className='invoice-field is-full'>
             <label htmlFor='invoice-profile-title'>{t('发票抬头')}</label>
             <input
               id='invoice-profile-title'
@@ -841,6 +873,14 @@ const InvoiceManagement = ({ t }) => {
                 </strong>
               </div>
               <div className='invoice-detail-item'>
+                <span>{t('发票类型')}</span>
+                <strong>
+                  {detail.request?.invoice_type === 'electronic_special'
+                    ? t('专票')
+                    : t('普票')}
+                </strong>
+              </div>
+              <div className='invoice-detail-item'>
                 <span>{t('发票抬头')}</span>
                 <strong>{profileSnapshot?.title || '-'}</strong>
               </div>
@@ -877,6 +917,7 @@ const InvoiceManagement = ({ t }) => {
                 <thead>
                   <tr>
                     <th>{t('订单号')}</th>
+                    <th>{t('支付方式')}</th>
                     <th>{t('开票金额')}</th>
                   </tr>
                 </thead>
@@ -885,6 +926,9 @@ const InvoiceManagement = ({ t }) => {
                     <tr key={item.id}>
                       <td className='is-strong' data-label={t('订单号')}>
                         {item.trade_no}
+                      </td>
+                      <td data-label={t('支付方式')}>
+                        {getPayMethodDisplayName(item.payment_method, t)}
                       </td>
                       <td className='is-numeric' data-label={t('开票金额')}>
                         {formatInvoiceMoney(item.invoice_amount)}

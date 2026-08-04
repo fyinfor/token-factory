@@ -28,6 +28,7 @@ plans
 
 electron/node_modules
 electron/dist
+electron/dist-quota/
 data/
 postgres_data/
 mysql_data/

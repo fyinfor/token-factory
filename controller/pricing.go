@@ -125,7 +125,7 @@ func buildPricingAPIData() []model.PricingAPIItem {
 	pricing := model.GetPricing()
 	filtered := make([]model.Pricing, 0, len(pricing))
 	for _, p := range pricing {
-		if ratio_setting.ModelHasConfiguredPricing(p.ModelName) {
+		if model.ModelHasDisplayConfiguredPricing(p.ModelName) {
 			filtered = append(filtered, p)
 		}
 	}
@@ -146,9 +146,9 @@ func buildPricingAPIData() []model.PricingAPIItem {
 
 // CollectPricingShowableModelNames 返回 /pricing 接口前端可展示的模型名集合（与 GetPricing 同源条件）。
 // 判定条件与 /pricing 完全一致：
-//  1. 模型已配置定价（ratio_setting.ModelHasConfiguredPricing）。
+//  1. 模型已配置定价，或可通过渠道 model_mapping 继承规范模型定价（ModelHasDisplayConfiguredPricing）。
 //  2. 至少存在一个 (model, 可见渠道) 满足 model.BuildPricingAPIItems 的单测门禁
-//     （ManualDisplayResponseTime>0 或 LastTestSuccess && LastResponseTime>0；该渠道若已有任何成功单测，则本模型也需通过模糊匹配）。
+//     （ManualDisplayResponseTime>0 或 LastTestSuccess && LastResponseTime>0；该渠道若已有任何成功单测，则本模型也需通过模糊匹配；别名可匹配规范模型测通）。
 //
 // 用于操练场等需要"配好定价 + 测试连通性通过"判定与定价页保持一致的位置，避免两端各自实现的判定门槛漂移导致少展示。
 func CollectPricingShowableModelNames(userID ...int) map[string]bool {
@@ -159,7 +159,7 @@ func CollectPricingShowableModelNames(userID ...int) map[string]bool {
 		uid = userID[0]
 	}
 	for _, p := range pricing {
-		if ratio_setting.ModelHasConfiguredPricing(p.ModelName) {
+		if model.ModelHasDisplayConfiguredPricing(p.ModelName) {
 			allowed, err := model.UserCanAccessModel(uid, p.ModelName)
 			if err != nil || !allowed {
 				continue
@@ -236,7 +236,7 @@ func GetPricing(c *gin.Context) {
 	pricing := model.GetPricing()
 	filtered := make([]model.Pricing, 0, len(pricing))
 	for _, p := range pricing {
-		if ratio_setting.ModelHasConfiguredPricing(p.ModelName) {
+		if model.ModelHasDisplayConfiguredPricing(p.ModelName) {
 			allowed, err := model.UserCanAccessModel(uid, p.ModelName)
 			if err != nil || !allowed {
 				continue

@@ -57,6 +57,42 @@ func TestTryDelegateTokenFactoryOpenChannelTestSendsUpstreamIdentity(t *testing.
 	require.Equal(t, "c3", gotReq.UpstreamChannelNo)
 }
 
+func TestTryDelegateTokenFactoryOpenChannelTestAppliesLocalModelMapping(t *testing.T) {
+	var gotReq tfOpenSyncChannelTestRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		require.NoError(t, common.DecodeJson(r.Body, &gotReq))
+		body, err := common.Marshal(tfOpenSyncChannelTestResponse{
+			Success: true,
+			Model:   gotReq.Model,
+		})
+		require.NoError(t, err)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(body)
+	}))
+	defer server.Close()
+
+	otherInfo, err := common.Marshal(map[string]any{
+		"source":              "tokenfactory_open",
+		"upstream_route_slug": "uAb12",
+	})
+	require.NoError(t, err)
+	mapping := `{"kk":"kimi-k2.5"}`
+	channel := &model.Channel{
+		Type:         constant.ChannelTypeTokenFactoryOpen,
+		BaseURL:      &server.URL,
+		Key:          "sk-test",
+		OtherInfo:    string(otherInfo),
+		ModelMapping: &mapping,
+	}
+
+	result, handled := tryDelegateTokenFactoryOpenChannelTest(channel, "kk", "", false)
+
+	require.True(t, handled)
+	require.NoError(t, result.localErr)
+	require.Equal(t, "kk", result.recordedModelName)
+	require.Equal(t, "kimi-k2.5", gotReq.Model)
+}
+
 func TestTryDelegateTokenFactoryOpenChannelTestFallsBackWhenEndpointMissing(t *testing.T) {
 	server := httptest.NewServer(http.NotFoundHandler())
 	defer server.Close()

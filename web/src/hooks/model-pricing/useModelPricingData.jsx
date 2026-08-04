@@ -33,6 +33,10 @@ import { UserContext } from '../../context/User';
 import { StatusContext } from '../../context/Status';
 import { modelMatchesSearchTerm } from '../../components/table/model-pricing/utils/channelRoute';
 import {
+  formatModelPriceNumber,
+  MODEL_CARD_PRICE_MAX_DECIMALS,
+} from '../../components/table/model-pricing/utils/priceDisplay';
+import {
   getRelevantModelHotScore,
   getTopHotChannels,
   isTopHotModel,
@@ -595,18 +599,24 @@ export const useModelPricingData = (options = {}) => {
   );
 
   const displayPrice = useCallback(
-    (usdPrice) => {
+    (usdPrice, { precision = MODEL_CARD_PRICE_MAX_DECIMALS } = {}) => {
       let priceInUSD = usdPrice;
       if (showWithRecharge) {
         priceInUSD = (usdPrice * priceRate) / usdExchangeRate;
       }
 
       if (currency === 'CNY') {
-        return `¥${parseFloat((priceInUSD * usdExchangeRate).toFixed(2))}`;
+        return `¥${formatModelPriceNumber(
+          priceInUSD * usdExchangeRate,
+          precision,
+        )}`;
       } else if (currency === 'CUSTOM') {
-        return `${customCurrencySymbol}${parseFloat((priceInUSD * customExchangeRate).toFixed(2))}`;
+        return `${customCurrencySymbol}${formatModelPriceNumber(
+          priceInUSD * customExchangeRate,
+          precision,
+        )}`;
       }
-      return `$${parseFloat(priceInUSD.toFixed(2))}`;
+      return `$${formatModelPriceNumber(priceInUSD, precision)}`;
     },
     [
       currency,

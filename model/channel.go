@@ -356,6 +356,7 @@ type ChannelPricingMeta struct {
 	SupplierApplicationID int      `gorm:"column:supplier_application_id"`
 	ChannelNo             string   `gorm:"column:channel_no"`
 	Models                string   `gorm:"column:models"`
+	ModelMapping          string   `gorm:"column:model_mapping"`
 	SupplierAlias         *string  `gorm:"column:supplier_alias"`
 	CompanyLogoURL        string   `gorm:"column:company_logo_url"`
 	SupplierType          string   `gorm:"column:supplier_type"`
@@ -383,7 +384,7 @@ func ListChannelsForPricing() ([]ChannelSimplePricingItem, error) {
 func ListChannelPricingMeta() ([]ChannelPricingMeta, error) {
 	items := make([]ChannelPricingMeta, 0)
 	err := DB.Model(&Channel{}).
-		Select("channels.id AS channel_id, channels.supplier_application_id, channels.channel_no, channels.models, channels.price_discount_percent, channels.operating_cost_percent, channels.markup_discount_rate, supplier_applications.supplier_alias, COALESCE(NULLIF(supplier_applications.company_logo_url, ''), channels.company_logo_url, '') AS company_logo_url, COALESCE(NULLIF(supplier_applications.supplier_type, ''), channels.supplier_type, '') AS supplier_type").
+		Select("channels.id AS channel_id, channels.supplier_application_id, channels.channel_no, channels.models, COALESCE(channels.model_mapping, '') AS model_mapping, channels.price_discount_percent, channels.operating_cost_percent, channels.markup_discount_rate, supplier_applications.supplier_alias, COALESCE(NULLIF(supplier_applications.company_logo_url, ''), channels.company_logo_url, '') AS company_logo_url, COALESCE(NULLIF(supplier_applications.supplier_type, ''), channels.supplier_type, '') AS supplier_type").
 		Joins("LEFT JOIN supplier_applications ON supplier_applications.id = channels.supplier_application_id").
 		Where("channels.status = ?", common.ChannelStatusEnabled).
 		Order("channels.id ASC").

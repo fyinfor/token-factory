@@ -54,6 +54,7 @@ import ImagePerImageHintTable from '../../components/ImagePerImageHintTable';
 import PrecisePriceText, {
   formatCurrencyAmount,
   formatPreciseCurrencyValue,
+  formatPreciseUsdPrice,
   toDisplayCurrencyValue,
 } from '../../components/PrecisePriceText';
 import {
@@ -66,10 +67,7 @@ import {
 } from '../../constants/imagePerImageHintI18n';
 
 import { renderModelTestResultSummary } from '../../../../../helpers/modelStability';
-import {
-  computeChannelCostRates,
-  formatBillingUsdDisplay,
-} from '../../../../../helpers/billingFormula';
+import { computeChannelCostRates } from '../../../../../helpers/billingFormula';
 import { formatPriceRatioFromDiscount } from '../../utils/discount';
 import { getChannelRouteModelName } from '../../utils/channelRoute';
 
@@ -131,6 +129,34 @@ const getSupplierTypeColor = (supplierType) => {
 const copyModelName = (modelName, t) => {
   copyText(modelName, t, '模型{{modelName}}复制成功', { modelName });
 };
+
+const ModelNameCopyOption = ({ description, modelName, t }) => (
+  <div>
+    <div className='flex min-w-0 items-center gap-2 rounded-lg bg-semi-color-fill-0 px-3 py-2.5'>
+      <Text
+        className='min-w-0 flex-1 font-mono text-sm'
+        ellipsis={{ showTooltip: true }}
+      >
+        {modelName}
+      </Text>
+      <Tooltip content={t('复制模型名字')}>
+        <Button
+          type='primary'
+          theme='light'
+          size='small'
+          icon={<IconCopy />}
+          onClick={() => copyModelName(modelName, t)}
+          aria-label={t('复制模型名字')}
+        >
+          {t('复制')}
+        </Button>
+      </Tooltip>
+    </div>
+    <Text type='secondary' size='small' className='mt-1.5 block px-1 leading-5'>
+      {description}
+    </Text>
+  </div>
+);
 
 const getStabilityLevel = (row) => {
   if (!row) return 0;
@@ -631,6 +657,7 @@ const ModelChannelList = ({
   const [docsChannel, setDocsChannel] = useState(null);
   const [routeListExpanded, setRouteListExpanded] = useState(false);
   const channelList = modelData?.channel_list || [];
+  const defaultModelName = modelData?.model_name || modelData?.modelName || '';
   const isLoggedIn = Boolean(userState?.user);
   const canViewCostPrice = useMemo(
     () => userCanViewHomeCostPrice(userState?.user),
@@ -1095,7 +1122,7 @@ const ModelChannelList = ({
         : null;
     };
     const formatCostValue = (usd, isFixedPrice, fixedUnitKey) => {
-      const value = formatBillingUsdDisplay(usd, { tokenUnit });
+      const value = formatPreciseUsdPrice(usd, { tokenUnit });
       const exact = formatPreciseCurrencyValue(
         toDisplayCurrencyValue(usd, { tokenUnit }),
       );
@@ -1173,29 +1200,25 @@ const ModelChannelList = ({
         <section className='mb-6 border-b border-semi-color-border pb-6'>
           <StepTitle
             label={t('第二步')}
-            title={t('选择通道路由模型名')}
-            desc={t('复制带渠道路由的模型名，可将请求固定到指定渠道')}
+            title={t('选择模型名')}
+            desc={t('根据路由策略选择模型名。')}
             icon={<IconListView size={16} />}
           />
-          <div className='flex min-w-0 items-center gap-2 rounded-lg bg-semi-color-fill-0 px-3 py-2'>
-            <Text
-              className='min-w-0 flex-1 font-mono text-sm'
-              ellipsis={{ showTooltip: true }}
-            >
-              {channelPath}
-            </Text>
-            <Tooltip content={t('复制模型名字')}>
-              <Button
-                type='primary'
-                theme='light'
-                size='small'
-                icon={<IconCopy />}
-                onClick={() => copyModelName(channelPath, t)}
-                aria-label={t('复制模型名字')}
-              >
-                {t('复制')}
-              </Button>
-            </Tooltip>
+          <div className='space-y-2'>
+            <ModelNameCopyOption
+              description={t(
+                '通用模型名：优先选择低价可用渠道；请求失败后自动切换至其他可用渠道。',
+              )}
+              modelName={defaultModelName}
+              t={t}
+            />
+            <ModelNameCopyOption
+              description={t(
+                '指定渠道模型名：优先使用对应渠道；请求失败后自动切换至其他可用渠道。',
+              )}
+              modelName={channelPath}
+              t={t}
+            />
           </div>
         </section>
 
@@ -1309,7 +1332,7 @@ const ModelChannelList = ({
                 <VideoFlatClipHintTable
                   hint={costInfo.videoHint}
                   usedGroupRatio={1}
-                  displayPrice={formatBillingUsdDisplay}
+                  displayPrice={formatPreciseUsdPrice}
                   t={t}
                   blurPricing={blurPricing}
                   isCostPrice
@@ -1321,7 +1344,7 @@ const ModelChannelList = ({
                 <ImagePerImageHintTable
                   hint={costInfo.imageHint}
                   usedGroupRatio={1}
-                  displayPrice={formatBillingUsdDisplay}
+                  displayPrice={formatPreciseUsdPrice}
                   t={t}
                   blurPricing={blurPricing}
                   isCostPrice
@@ -1342,11 +1365,20 @@ const ModelChannelList = ({
         <Card className='!rounded-2xl shadow-sm border-0 mb-6'>
           <StepTitle
             label={t('第二步')}
-            title={t('选择通道路由模型名')}
-            desc={t('复制带渠道路由的模型名，可将请求固定到指定渠道')}
+            title={t('选择模型名')}
+            desc={t('根据路由策略选择模型名。')}
             icon={<IconListView size={16} />}
           />
-          <div className='space-y-2'>
+          <div className='space-y-3'>
+            <ModelNameCopyOption
+              description={t(
+                '通用模型名：优先选择低价可用渠道；请求失败后自动切换至其他可用渠道。',
+              )}
+              modelName={defaultModelName}
+              t={t}
+            />
+          </div>
+          <div className='mt-2 space-y-2'>
             {displayedRouteChannels.map(
               ({ channel, idx, routeModelName, badge }) => {
                 const row = channelMtrMap[String(channel.channel_id)];
@@ -1397,6 +1429,11 @@ const ModelChannelList = ({
               </Button>
             ) : null}
           </div>
+          <Text type='secondary' size='small' className='mt-2 block leading-5'>
+            {t(
+              '指定渠道模型名：优先使用对应渠道；请求失败后自动切换至其他可用渠道。',
+            )}
+          </Text>
         </Card>
         <ModelTokenList
           visible={isLoggedIn}
@@ -1416,11 +1453,20 @@ const ModelChannelList = ({
         <Card className='!rounded-2xl shadow-sm border-0 mb-6'>
           <StepTitle
             label={t('第二步')}
-            title={t('选择通道路由模型名')}
-            desc={t('复制带渠道路由的模型名，可将请求固定到指定渠道')}
+            title={t('选择模型名')}
+            desc={t('根据路由策略选择模型名。')}
             icon={<IconListView size={16} />}
           />
-          <div className='space-y-2'>
+          <div className='space-y-3'>
+            <ModelNameCopyOption
+              description={t(
+                '通用模型名：优先选择低价可用渠道；请求失败后自动切换至其他可用渠道。',
+              )}
+              modelName={defaultModelName}
+              t={t}
+            />
+          </div>
+          <div className='mt-2 space-y-2'>
             {displayedRouteChannels.map(
               ({ channel, idx, routeModelName, badge }) => {
                 const row = channelMtrMap[String(channel.channel_id)];
@@ -1491,6 +1537,11 @@ const ModelChannelList = ({
               </Button>
             ) : null}
           </div>
+          <Text type='secondary' size='small' className='mt-2 block leading-5'>
+            {t(
+              '指定渠道模型名：优先使用对应渠道；请求失败后自动切换至其他可用渠道。',
+            )}
+          </Text>
         </Card>
       ) : null}
 
@@ -1776,7 +1827,7 @@ const ModelChannelList = ({
                       <VideoFlatClipHintTable
                         hint={costInfo.videoHint}
                         usedGroupRatio={1}
-                        displayPrice={formatBillingUsdDisplay}
+                        displayPrice={formatPreciseUsdPrice}
                         t={t}
                         blurPricing={blurPricing}
                         isCostPrice
@@ -1788,7 +1839,7 @@ const ModelChannelList = ({
                       <ImagePerImageHintTable
                         hint={costInfo.imageHint}
                         usedGroupRatio={1}
-                        displayPrice={formatBillingUsdDisplay}
+                        displayPrice={formatPreciseUsdPrice}
                         t={t}
                         blurPricing={blurPricing}
                         isCostPrice

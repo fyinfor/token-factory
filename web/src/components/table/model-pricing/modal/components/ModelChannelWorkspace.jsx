@@ -17,7 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import React, { useEffect, useMemo, useState } from 'react';
-import { Tag, Tooltip, Typography } from '@douyinfe/semi-ui';
+import { Button, Tag, Tooltip, Typography } from '@douyinfe/semi-ui';
+import { IconArticle } from '@douyinfe/semi-icons';
 
 import {
   computeChannelBillingRates,
@@ -615,15 +616,37 @@ const ModelChannelWorkspace = ({
           t={t}
           flat
         />
+        <div className='model-api-docs-card mb-3 rounded-lg border p-3'>
+          <div className='flex min-w-0 items-center justify-between gap-3'>
+            <div className='flex min-w-0 items-center gap-2'>
+              <span className='model-api-docs-card-icon' aria-hidden='true'>
+                <IconArticle size={16} />
+              </span>
+              <Text strong className='text-sm'>
+                {t('API 文档')}
+              </Text>
+            </div>
+            <Tooltip content={t('查看 API 文档')}>
+              <Button
+                type='primary'
+                theme='light'
+                size='small'
+                onClick={() => {
+                  setDocsMounted(true);
+                  setDocsVisible(true);
+                }}
+                aria-label={t('查看 API 文档')}
+              >
+                {t('查看')}
+              </Button>
+            </Tooltip>
+          </div>
+        </div>
         <ModelEndpoints
           modelData={selectedModelData}
           endpointMap={endpointMap}
           t={t}
           flat
-          onOpenDocs={() => {
-            setDocsMounted(true);
-            setDocsVisible(true);
-          }}
         />
         <ModelChannelList
           {...props}

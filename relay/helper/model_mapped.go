@@ -32,17 +32,14 @@ func ModelMappedHelper(c *gin.Context, info *relaycommon.RelayInfo, request dto.
 		mappingModelName = strings.TrimSuffix(originModelName, ratio_setting.CompactModelSuffix)
 	}
 
-	// TokenFactoryOpen 渠道指向上游 TokenFactory 平台，上游 distributor 会将含 "/" 的模型名
-	// 误解析为路由格式（{model}/{route_slug} 或 {alias}/{model}/{channel_no}）。
-	// 因此当上游是 TF 平台时，跳过 model_mapping，保留本地原始模型名。
-	// TFOpen 同步渠道（source=tokenfactory_open）会在下方 tfRoute 逻辑中拼接三段式路由，
-	// 同样使用原始模型名。
+	// TokenFactoryOpen 渠道同样先应用本地 model_mapping（本站别名 → 上游真实模型名），
+	// 再在下方 tfRoute 逻辑中用映射后的名称拼接路由；OriginModelName 保持客户侧原始名用于计费/日志。
 	channelType := common.GetContextKeyInt(c, constant.ContextKeyChannelType)
 	isTFOpenUpstream := channelType == constant.ChannelTypeTokenFactoryOpen
 
 	// map model name
 	modelMapping := c.GetString("model_mapping")
-	if modelMapping != "" && modelMapping != "{}" && !isTFOpenUpstream {
+	if modelMapping != "" && modelMapping != "{}" {
 		modelMap := make(map[string]string)
 		err := json.Unmarshal([]byte(modelMapping), &modelMap)
 		if err != nil {
@@ -105,39 +102,43 @@ func ModelMappedHelper(c *gin.Context, info *relaycommon.RelayInfo, request dto.
 		info.UpstreamModelName = finalUpstreamModelName
 		info.OriginModelName = ratio_setting.WithCompactModelSuffix(finalUpstreamModelName)
 	}
-	// TFOpen 上游渠道精准路由：
+	// TFOpen 上游渠道精准路由（仅 ChannelTypeTokenFactoryOpen）：
 	// 新版：route_slug 格式（优先），将 UpstreamModelName 改写为 "{model}/{route_slug}"，
 	// 上游的 ParseModelRouteIndex 解析此格式精准路由到对应渠道。
 	// 旧版（兼容）：alias|channelNo 三段式路由，格式为 "legacy|{alias}|{channelNo}"，
 	// 将 UpstreamModelName 改写为 "{alias}/{model}/{channelNo}"。
-	// 当上游也是 TokenFactory 平台时，使用原始模型名（上游可识别的本地模型名）而非
-	// model_mapping 映射后的名称（如 HuggingFace 格式），避免上游 distributor 误解析。
-	if tfRoute := c.GetString(string(constant.ContextKeyTFOpenUpstreamChannelRoute)); tfRoute != "" {
-		// 使用原始模型名（而非映射后的名称），因为上游 TF 平台理解本地原始模型名
-		modelForUpstream := info.OriginModelName
-		if isResponsesCompact && strings.HasSuffix(modelForUpstream, ratio_setting.CompactModelSuffix) {
-			modelForUpstream = strings.TrimSuffix(modelForUpstream, ratio_setting.CompactModelSuffix)
-		}
+	// 使用映射后的上游模型名（未映射时等同 OriginModelName），避免本站别名穿透到上游。
+	// 非 60 类型渠道即使上下文误带了路由提示也不拼接后缀（真实 OpenAI 网关不识别）。
+	if isTFOpenUpstream {
+		if tfRoute := c.GetString(string(constant.ContextKeyTFOpenUpstreamChannelRoute)); tfRoute != "" {
+			modelForUpstream := info.UpstreamModelName
+			if modelForUpstream == "" {
+				modelForUpstream = info.OriginModelName
+			}
+			if isResponsesCompact && strings.HasSuffix(modelForUpstream, ratio_setting.CompactModelSuffix) {
+				modelForUpstream = strings.TrimSuffix(modelForUpstream, ratio_setting.CompactModelSuffix)
+			}
 
-		if strings.HasPrefix(tfRoute, "legacy|") {
-			// 旧版三段式路由兼容：legacy|alias|channelNo → alias/model/channelNo
-			parts := strings.SplitN(tfRoute, "|", 3)
-			if len(parts) == 3 {
-				alias := parts[1]
-				channelNo := parts[2]
-				if alias != "" && channelNo != "" {
-					info.UpstreamModelName = alias + "/" + modelForUpstream + "/" + channelNo
+			if strings.HasPrefix(tfRoute, "legacy|") {
+				// 旧版三段式路由兼容：legacy|alias|channelNo → alias/model/channelNo
+				parts := strings.SplitN(tfRoute, "|", 3)
+				if len(parts) == 3 {
+					alias := parts[1]
+					channelNo := parts[2]
+					if alias != "" && channelNo != "" {
+						info.UpstreamModelName = alias + "/" + modelForUpstream + "/" + channelNo
+						info.IsModelMapped = false
+						info.TFOpenUpstreamRouteApplied = true
+					}
+				}
+			} else {
+				// 新版二段式路由：route_slug → model/route_slug
+				routeSlug := strings.TrimSpace(tfRoute)
+				if routeSlug != "" {
+					info.UpstreamModelName = modelForUpstream + "/" + routeSlug
 					info.IsModelMapped = false
 					info.TFOpenUpstreamRouteApplied = true
 				}
-			}
-		} else {
-			// 新版二段式路由：route_slug → model/route_slug
-			routeSlug := strings.TrimSpace(tfRoute)
-			if routeSlug != "" {
-				info.UpstreamModelName = modelForUpstream + "/" + routeSlug
-				info.IsModelMapped = false
-				info.TFOpenUpstreamRouteApplied = true
 			}
 		}
 	}
@@ -171,4 +172,9 @@ func ModelMappedHelper(c *gin.Context, info *relaycommon.RelayInfo, request dto.
 		request.SetModelName(info.UpstreamModelName)
 	}
 	return nil
+}
+
+// ApplyChannelModelMapping 按渠道 model_mapping 做链式重定向，委托 model 包统一实现。
+func ApplyChannelModelMapping(mappingJSON, startModel string) string {
+	return model.ApplyChannelModelMapping(mappingJSON, startModel)
 }

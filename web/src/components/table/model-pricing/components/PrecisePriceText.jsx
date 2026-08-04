@@ -20,14 +20,13 @@ For commercial licensing, please contact support@quantumnous.com
 import React from 'react';
 import { Tooltip } from '@douyinfe/semi-ui';
 import { getBillingCurrencyConfig } from '../../../../helpers/billingFormula';
-
-const MAX_PRECISE_DECIMALS = 12;
+import {
+  formatModelPriceNumber,
+  MODEL_PRICE_MAX_DECIMALS,
+} from '../utils/priceDisplay';
 
 function trimNumberText(value) {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return '0';
-  if (Object.is(n, -0) || Math.abs(n) < Number.EPSILON) return '0';
-  return n.toFixed(MAX_PRECISE_DECIMALS).replace(/0+$/, '').replace(/\.$/, '');
+  return formatModelPriceNumber(value);
 }
 
 export function getDisplayCurrencyConfig() {
@@ -41,11 +40,12 @@ export function toDisplayCurrencyValue(usdAmount, { tokenUnit = 'M' } = {}) {
   return Number.isFinite(value) ? value : 0;
 }
 
-export function formatCurrencyAmount(value, { precision = 2 } = {}) {
+export function formatCurrencyAmount(
+  value,
+  { precision = MODEL_PRICE_MAX_DECIMALS } = {},
+) {
   const { symbol } = getDisplayCurrencyConfig();
-  const n = Number(value);
-  if (!Number.isFinite(n)) return `${symbol}0`;
-  return `${symbol}${parseFloat(n.toFixed(precision))}`;
+  return `${symbol}${formatModelPriceNumber(value, precision)}`;
 }
 
 export function formatPreciseCurrencyValue(value) {
