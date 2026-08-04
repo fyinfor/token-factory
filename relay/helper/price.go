@@ -72,29 +72,31 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	}
 	groupRatioInfo := HandleGroupRatio(c, info)
 	supplierID := resolveSupplierIDByChannel(info)
-	modelPrice, usePrice := model.ResolveSupplierScopedFixedModelPrice(channelID, supplierID, info.OriginModelName)
+	// 计价名可回退到渠道 model_mapping 规范模型；日志仍用 OriginModelName。
+	pricingModelName := model.ResolvePricingModelName(c.GetString("model_mapping"), info.OriginModelName)
+	modelPrice, usePrice := model.ResolveSupplierScopedFixedModelPrice(channelID, supplierID, pricingModelName)
 	// 归属供应商的渠道：固定价以 supplier_* 独立表优先于用户分组价；非供应商渠道保留分组覆盖。
 	if supplierID <= 0 {
-		if groupPrice, ok := ratio_setting.GetGroupModelPrice(info.UsingGroup, info.OriginModelName); ok {
+		if groupPrice, ok := ratio_setting.GetGroupModelPrice(info.UsingGroup, pricingModelName); ok {
 			modelPrice = groupPrice
 			usePrice = true
 		}
 	}
-	channelVideoRatio, hasChannelVideoRatio := ratio_setting.GetChannelVideoRatio(channelID, info.OriginModelName)
-	channelVideoCompletionRatio, hasChannelVideoCompletionRatio := ratio_setting.GetChannelVideoCompletionRatio(channelID, info.OriginModelName)
+	channelVideoRatio, hasChannelVideoRatio := ratio_setting.GetChannelVideoRatio(channelID, pricingModelName)
+	channelVideoCompletionRatio, hasChannelVideoCompletionRatio := ratio_setting.GetChannelVideoCompletionRatio(channelID, pricingModelName)
 
 	// 提前获取成本折扣率、加价折扣率及全局倍率/固定价（新计费公式所需）
 	rawDisc, operatingCost, chDisc := resolveChannelCostPercents(channelID)
-	markupDisc := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
-	globalRatio, _, _ := ratio_setting.GetModelRatio(info.OriginModelName)
-	globalPrice, _ := ratio_setting.GetModelPrice(info.OriginModelName, false)
+	markupDisc := effectiveMarkupDiscountPercent(c, info, channelID, pricingModelName)
+	globalRatio, _, _ := ratio_setting.GetModelRatio(pricingModelName)
+	globalPrice, _ := ratio_setting.GetModelPrice(pricingModelName, false)
 	// 全局子倍率（用于各类型加价部分的独立计算）
-	globalCompletionRatio := ratio_setting.GetCompletionRatio(info.OriginModelName)
-	globalCacheRatio, globalCacheRatioOK := ratio_setting.GetCacheRatio(info.OriginModelName)
+	globalCompletionRatio := ratio_setting.GetCompletionRatio(pricingModelName)
+	globalCacheRatio, globalCacheRatioOK := ratio_setting.GetCacheRatio(pricingModelName)
 	if !globalCacheRatioOK {
 		globalCacheRatio = 1.0
 	}
-	globalCreateCacheRatio, globalCreateCacheRatioOK := ratio_setting.GetCreateCacheRatio(info.OriginModelName)
+	globalCreateCacheRatio, globalCreateCacheRatioOK := ratio_setting.GetCreateCacheRatio(pricingModelName)
 	if !globalCreateCacheRatioOK {
 		globalCreateCacheRatio = 1.25
 	}
@@ -119,10 +121,10 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		}
 		var success bool
 		var matchName string
-		modelRatio, success, matchName = model.ResolveSupplierScopedModelRatio(channelID, supplierID, info.OriginModelName)
+		modelRatio, success, matchName = model.ResolveSupplierScopedModelRatio(channelID, supplierID, pricingModelName)
 		// 供应商自有渠道：输入倍率以独立表（及 Resolve 内平台渠道 Option 回退）为准，不被用户分组倍率覆盖。
 		if supplierID <= 0 {
-			if groupModelRatio, ok := ratio_setting.GetGroupModelRatio(info.UsingGroup, info.OriginModelName); ok {
+			if groupModelRatio, ok := ratio_setting.GetGroupModelRatio(info.UsingGroup, pricingModelName); ok {
 				modelRatio = groupModelRatio
 				success = true
 			}
@@ -138,18 +140,18 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		}
 		// 输出/缓存/图音倍率：ResolveSupplierScoped* 内已为「供应商渠道表 > 供应商全局表 > 平台渠道 Option > 全局」；
 		// 此处禁止再次用 channel_* Option 覆盖，否则会同模型下压过供应商独立表。
-		completionRatio = model.ResolveSupplierScopedCompletionRatio(channelID, supplierID, info.OriginModelName)
-		cacheRatio, cacheCreationRatio = model.ResolveSupplierScopedCacheRatios(channelID, supplierID, info.OriginModelName)
+		completionRatio = model.ResolveSupplierScopedCompletionRatio(channelID, supplierID, pricingModelName)
+		cacheRatio, cacheCreationRatio = model.ResolveSupplierScopedCacheRatios(channelID, supplierID, pricingModelName)
 		cacheCreationRatio5m = cacheCreationRatio
 		// 固定1h和5min缓存写入价格的比例
 		cacheCreationRatio1h = cacheCreationRatio * claudeCacheCreation1hMultiplier
 
-		imageRatio, _ = model.ResolveSupplierScopedImageRatio(channelID, supplierID, info.OriginModelName)
-		audioRatio = model.ResolveSupplierScopedAudioRatio(channelID, supplierID, info.OriginModelName)
-		audioCompletionRatio = model.ResolveSupplierScopedAudioCompletionRatio(channelID, supplierID, info.OriginModelName)
+		imageRatio, _ = model.ResolveSupplierScopedImageRatio(channelID, supplierID, pricingModelName)
+		audioRatio = model.ResolveSupplierScopedAudioRatio(channelID, supplierID, pricingModelName)
+		audioCompletionRatio = model.ResolveSupplierScopedAudioCompletionRatio(channelID, supplierID, pricingModelName)
 		// 供应商表暂无 Video 字段：仍采用全局 + 平台渠道 Option（与旧逻辑一致）。
-		videoRatio = ratio_setting.GetVideoRatio(info.OriginModelName)
-		videoCompletionRatio = ratio_setting.GetVideoCompletionRatio(info.OriginModelName)
+		videoRatio = ratio_setting.GetVideoRatio(pricingModelName)
+		videoCompletionRatio = ratio_setting.GetVideoCompletionRatio(pricingModelName)
 		if hasChannelVideoRatio {
 			videoRatio = channelVideoRatio
 		}
@@ -162,7 +164,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		effInputRateWithGroup := effInputRate * groupRatioInfo.GroupRatio
 
 		dPreConsumedTokens := decimal.NewFromInt(int64(preConsumedTokens))
-		if tierHit, ok := ratio_setting.ResolveRequestTierHit(channelID, info.OriginModelName, int64(preConsumedTokens), chDisc, markupDisc, groupRatioInfo.GroupRatio); ok {
+		if tierHit, ok := ratio_setting.ResolveRequestTierHit(channelID, pricingModelName, int64(preConsumedTokens), chDisc, markupDisc, groupRatioInfo.GroupRatio); ok {
 			preConsumedQuota = int(dPreConsumedTokens.Mul(decimal.NewFromFloat(tierHit.EffectiveInput * groupRatioInfo.GroupRatio)).Round(0).IntPart())
 		} else {
 			preConsumedQuota = int(dPreConsumedTokens.Mul(decimal.NewFromFloat(effInputRateWithGroup)).Round(0).IntPart())
@@ -246,9 +248,10 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 	groupRatioInfo := HandleGroupRatio(c, info)
 
 	supplierID := resolveSupplierIDByChannel(info)
-	modelPrice, success := model.ResolveSupplierScopedFixedModelPrice(channelID, supplierID, info.OriginModelName)
+	pricingModelName := model.ResolvePricingModelName(c.GetString("model_mapping"), info.OriginModelName)
+	modelPrice, success := model.ResolveSupplierScopedFixedModelPrice(channelID, supplierID, pricingModelName)
 	if supplierID <= 0 {
-		if groupPrice, ok := ratio_setting.GetGroupModelPrice(info.UsingGroup, info.OriginModelName); ok {
+		if groupPrice, ok := ratio_setting.GetGroupModelPrice(info.UsingGroup, pricingModelName); ok {
 			modelPrice = groupPrice
 			success = true
 		}
@@ -257,12 +260,12 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 	if !success {
 
 		// 没有配置费用，也要使用默认费用,否则按费率计费模型无法使用
-		defaultPrice, ok := ratio_setting.GetDefaultModelPriceMap()[info.OriginModelName]
+		defaultPrice, ok := ratio_setting.GetDefaultModelPriceMap()[pricingModelName]
 		if ok {
 			modelPrice = defaultPrice
 		} else {
 			// 没有配置倍率也不接受没配置,那就返回错误
-			_, ratioSuccess, matchName := model.ResolveSupplierScopedModelRatio(channelID, supplierID, info.OriginModelName)
+			_, ratioSuccess, matchName := model.ResolveSupplierScopedModelRatio(channelID, supplierID, pricingModelName)
 			acceptUnsetRatio := false
 			if info.UserSetting.AcceptUnsetRatioModel {
 				acceptUnsetRatio = true
@@ -277,8 +280,8 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 	}
 	// 新公式：固定价格 = 渠道固定价 * 成本折扣率% + 全局固定价 * 加价折扣率%
 	rawDisc, operatingCost, chDisc := resolveChannelCostPercents(channelID)
-	markupDisc := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
-	globalPrice, _ := ratio_setting.GetModelPrice(info.OriginModelName, false)
+	markupDisc := effectiveMarkupDiscountPercent(c, info, channelID, pricingModelName)
+	globalPrice, _ := ratio_setting.GetModelPrice(pricingModelName, false)
 	effModelPrice := model.EffectiveModelPrice(modelPrice, globalPrice, chDisc, markupDisc)
 	quota := int(effModelPrice * common.QuotaPerUnit * groupRatioInfo.GroupRatio)
 

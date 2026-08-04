@@ -81,13 +81,20 @@ func tokenFactoryOpenTestEndpointFromMeta(modelName string) string {
 }
 
 // tfOpenUpstreamModelForChannelTest 对齐 relay/helper.ModelMappedHelper 中 TokenFactoryOpen 路由改写：
-// 将发往上游的模型名设为 {model}/{route_slug} 或旧版 alias/model/channelNo。
-func tfOpenUpstreamModelForChannelTest(c *gin.Context, originModel string, upstreamAfterMapping string) string {
+// 仅当渠道类型为 TokenFactoryOpen(60) 时，将发往上游的模型名设为 {model}/{route_slug} 或旧版 alias/model/channelNo。
+// 优先使用映射后的 upstreamAfterMapping，避免本站别名穿透到上游。
+func tfOpenUpstreamModelForChannelTest(c *gin.Context, channel *model.Channel, originModel string, upstreamAfterMapping string) string {
+	if channel == nil || channel.Type != constant.ChannelTypeTokenFactoryOpen {
+		return upstreamAfterMapping
+	}
 	tfRoute := strings.TrimSpace(common.GetContextKeyString(c, constant.ContextKeyTFOpenUpstreamChannelRoute))
 	if tfRoute == "" {
 		return upstreamAfterMapping
 	}
-	modelForUpstream := strings.TrimSpace(originModel)
+	modelForUpstream := strings.TrimSpace(upstreamAfterMapping)
+	if modelForUpstream == "" {
+		modelForUpstream = strings.TrimSpace(originModel)
+	}
 	if strings.HasSuffix(modelForUpstream, ratio_setting.CompactModelSuffix) {
 		modelForUpstream = strings.TrimSuffix(modelForUpstream, ratio_setting.CompactModelSuffix)
 	}
@@ -208,8 +215,11 @@ func tryDelegateTokenFactoryOpenChannelTest(channel *model.Channel, testModel st
 		}, true
 	}
 
+	// 委托上游测试前先做本地 model_mapping；记录名仍用本站原始别名。
+	originModel := strings.TrimSpace(testModel)
+	upstreamModel := helper.ApplyChannelModelMapping(channel.GetModelMapping(), originModel)
 	reqBody := tfOpenSyncChannelTestRequest{
-		Model:                 strings.TrimSpace(testModel),
+		Model:                 upstreamModel,
 		EndpointType:          strings.TrimSpace(endpointType),
 		Stream:                isStream,
 		UpstreamChannelID:     channelID,
@@ -222,7 +232,7 @@ func tryDelegateTokenFactoryOpenChannelTest(channel *model.Channel, testModel st
 		return testResult{
 			localErr:          err,
 			tokenFactoryError: types.NewError(err, types.ErrorCodeJsonMarshalFailed),
-			recordedModelName: reqBody.Model,
+			recordedModelName: originModel,
 		}, true
 	}
 
@@ -232,7 +242,7 @@ func tryDelegateTokenFactoryOpenChannelTest(channel *model.Channel, testModel st
 		return testResult{
 			localErr:          err,
 			tokenFactoryError: types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError),
-			recordedModelName: reqBody.Model,
+			recordedModelName: originModel,
 		}, true
 	}
 	httpReq.Header.Set("Authorization", "Bearer "+key)
@@ -248,7 +258,7 @@ func tryDelegateTokenFactoryOpenChannelTest(channel *model.Channel, testModel st
 		return testResult{
 			localErr:          err,
 			tokenFactoryError: types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError),
-			recordedModelName: reqBody.Model,
+			recordedModelName: originModel,
 		}, true
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -261,7 +271,7 @@ func tryDelegateTokenFactoryOpenChannelTest(channel *model.Channel, testModel st
 		return testResult{
 			localErr:          readErr,
 			tokenFactoryError: types.NewOpenAIError(readErr, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError),
-			recordedModelName: reqBody.Model,
+			recordedModelName: originModel,
 		}, true
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -273,17 +283,13 @@ func tryDelegateTokenFactoryOpenChannelTest(channel *model.Channel, testModel st
 		return testResult{
 			localErr:          err,
 			tokenFactoryError: types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError),
-			recordedModelName: reqBody.Model,
+			recordedModelName: originModel,
 		}, true
 	}
 
 	var payload tfOpenSyncChannelTestResponse
 	if err := common.Unmarshal(respBody, &payload); err != nil {
 		return testResult{}, false
-	}
-	recordedModel := strings.TrimSpace(payload.Model)
-	if recordedModel == "" {
-		recordedModel = reqBody.Model
 	}
 	if !payload.Success {
 		msg := strings.TrimSpace(payload.Message)
@@ -294,13 +300,13 @@ func tryDelegateTokenFactoryOpenChannelTest(channel *model.Channel, testModel st
 		return testResult{
 			localErr:          err,
 			tokenFactoryError: types.NewOpenAIError(err, types.ErrorCodeBadResponse, http.StatusInternalServerError),
-			recordedModelName: recordedModel,
+			recordedModelName: originModel,
 		}, true
 	}
 	return testResult{
 		localErr:          nil,
 		tokenFactoryError: nil,
-		recordedModelName: recordedModel,
+		recordedModelName: originModel,
 	}, true
 }
 
@@ -860,31 +866,10 @@ func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, 
 		}
 	}
 
-	// 模型映射：与正式 relay 对齐；TokenFactoryOpen(60) 指向上游 TF 时跳过 model_mapping（见 relay/helper/model_mapped.go）。
+	// 模型映射：与正式 relay 对齐（含 TokenFactoryOpen），再按需拼接 TF 精准路由。
 	originModel := strings.TrimSpace(testModel)
-	upstreamModel := originModel
-	if channel == nil || channel.Type != constant.ChannelTypeTokenFactoryOpen {
-		if mapping := strings.TrimSpace(c.GetString("model_mapping")); mapping != "" && mapping != "{}" {
-			modelMap := make(map[string]string)
-			if err := common.UnmarshalJsonStr(mapping, &modelMap); err == nil {
-				current := upstreamModel
-				visited := map[string]bool{current: true}
-				for {
-					next, exists := modelMap[current]
-					if !exists || next == "" || next == current {
-						break
-					}
-					if visited[next] {
-						break
-					}
-					visited[next] = true
-					current = next
-				}
-				upstreamModel = current
-			}
-		}
-	}
-	upstreamModel = tfOpenUpstreamModelForChannelTest(c, originModel, upstreamModel)
+	upstreamModel := helper.ApplyChannelModelMapping(c.GetString("model_mapping"), originModel)
+	upstreamModel = tfOpenUpstreamModelForChannelTest(c, channel, originModel, upstreamModel)
 
 	apiKey := common.GetContextKeyString(c, constant.ContextKeyChannelKey)
 	if apiKey == "" {

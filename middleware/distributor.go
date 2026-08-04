@@ -739,32 +739,32 @@ func SetupContextForSelectedChannel(c *gin.Context, channel *model.Channel, mode
 		c.Set("bot_id", channel.Other)
 	}
 
-	// 若本地渠道来自 TokenFactoryOpen 同步且上游有有效的 route_slug，
-	// 将路由提示写入上下文供 relay 层改写发往上游的模型名为 {model}/{route_slug} 格式，
-	// 上游平台的 Distribute 中间件会通过 ParseModelRouteIndex 解析此格式，
-	// 精准路由到上游对应渠道。
-	// 优先使用 route_slug（新版二段式路由），其次回退到 alias|channelNo（旧版三段式路由）。
+	// 仅当本地渠道类型为 TokenFactoryOpen(60) 时才拼装上游精准路由。
+	// 从 TF Open 同步下来的普通 OpenAI 等渠道（source=tokenfactory_open 但 type≠60）
+	// 已直连真实上游网关，模型名不得带 /route_slug，否则会被上游判为模型不存在。
 	otherInfo := channel.GetOtherInfo()
-	if source, _ := otherInfo["source"].(string); source == "tokenfactory_open" {
-		upstreamRouteSlug := strings.TrimSpace(common.Interface2String(otherInfo["upstream_route_slug"]))
-		if upstreamRouteSlug != "" && model.IsValidRouteSlug(upstreamRouteSlug) {
-			common.SetContextKey(c, constant.ContextKeyTFOpenUpstreamChannelRoute, upstreamRouteSlug)
-			logger.LogInfo(c, fmt.Sprintf("tfopen route selected: route_slug=%s channel=%s(id=%d) model=%s", upstreamRouteSlug, channel.Name, channel.Id, modelName))
-		} else {
-			// 回退到旧版 alias|channelNo 三段式路由（兼容未同步 route_slug 的旧渠道）
-			alias := strings.TrimSpace(common.Interface2String(otherInfo["upstream_supplier_alias"]))
-			if alias == "" {
-				if strings.TrimSpace(common.Interface2String(otherInfo["upstream_supplier_app_id"])) == "0" {
-					alias = "P0"
+	if channel.Type == constant.ChannelTypeTokenFactoryOpen {
+		if source, _ := otherInfo["source"].(string); source == "tokenfactory_open" {
+			upstreamRouteSlug := strings.TrimSpace(common.Interface2String(otherInfo["upstream_route_slug"]))
+			if upstreamRouteSlug != "" && model.IsValidRouteSlug(upstreamRouteSlug) {
+				common.SetContextKey(c, constant.ContextKeyTFOpenUpstreamChannelRoute, upstreamRouteSlug)
+				logger.LogInfo(c, fmt.Sprintf("tfopen route selected: route_slug=%s channel=%s(id=%d) model=%s", upstreamRouteSlug, channel.Name, channel.Id, modelName))
+			} else {
+				// 回退到旧版 alias|channelNo 三段式路由（兼容未同步 route_slug 的旧渠道）
+				alias := strings.TrimSpace(common.Interface2String(otherInfo["upstream_supplier_alias"]))
+				if alias == "" {
+					if strings.TrimSpace(common.Interface2String(otherInfo["upstream_supplier_app_id"])) == "0" {
+						alias = "P0"
+					}
 				}
-			}
-			channelNo := strings.TrimSpace(common.Interface2String(otherInfo["upstream_channel_no"]))
-			if override := strings.TrimSpace(common.GetContextKeyString(c, constant.ContextKeyTFOpenUpstreamChannelNoOverride)); override != "" {
-				channelNo = override
-			}
-			if alias != "" && channelNo != "" {
-				common.SetContextKey(c, constant.ContextKeyTFOpenUpstreamChannelRoute, "legacy|"+alias+"|"+channelNo)
-				logger.LogInfo(c, fmt.Sprintf("tfopen route selected (legacy): route=%s|%s channel=%s(id=%d) model=%s", alias, channelNo, channel.Name, channel.Id, modelName))
+				channelNo := strings.TrimSpace(common.Interface2String(otherInfo["upstream_channel_no"]))
+				if override := strings.TrimSpace(common.GetContextKeyString(c, constant.ContextKeyTFOpenUpstreamChannelNoOverride)); override != "" {
+					channelNo = override
+				}
+				if alias != "" && channelNo != "" {
+					common.SetContextKey(c, constant.ContextKeyTFOpenUpstreamChannelRoute, "legacy|"+alias+"|"+channelNo)
+					logger.LogInfo(c, fmt.Sprintf("tfopen route selected (legacy): route=%s|%s channel=%s(id=%d) model=%s", alias, channelNo, channel.Name, channel.Id, modelName))
+				}
 			}
 		}
 	}
