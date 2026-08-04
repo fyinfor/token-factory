@@ -33,6 +33,7 @@ import { useTranslation } from 'react-i18next';
 import InvoiceFileUpload from '../../../components/settings/InvoiceFileUpload';
 import {
   API,
+  getPayMethodDisplayName,
   showError,
   showSuccess,
   timestamp2string,
@@ -507,6 +508,14 @@ const SettingsInvoiceAdmin = () => {
                 <strong>{formatInvoiceMoney(issueTarget?.total_amount)}</strong>
               </div>
               <div className='invoice-detail-item'>
+                <span>{t('发票类型')}</span>
+                <strong>
+                  {issueTarget?.invoice_type === 'electronic_special'
+                    ? t('专票')
+                    : t('普票')}
+                </strong>
+              </div>
+              <div className='invoice-detail-item'>
                 <span>{t('收票邮箱')}</span>
                 <strong>
                   {issueProfile?.email || issueDetail?.email || '-'}
@@ -633,6 +642,14 @@ const SettingsInvoiceAdmin = () => {
                 </strong>
               </div>
               <div className='invoice-detail-item'>
+                <span>{t('发票类型')}</span>
+                <strong>
+                  {detail.request?.invoice_type === 'electronic_special'
+                    ? t('专票')
+                    : t('普票')}
+                </strong>
+              </div>
+              <div className='invoice-detail-item'>
                 <span>{t('发票抬头')}</span>
                 <strong>{detailProfile?.title || '-'}</strong>
               </div>
@@ -667,6 +684,7 @@ const SettingsInvoiceAdmin = () => {
                 <thead>
                   <tr>
                     <th>{t('订单号')}</th>
+                    <th>{t('支付方式')}</th>
                     <th>{t('开票金额')}</th>
                   </tr>
                 </thead>
@@ -675,6 +693,9 @@ const SettingsInvoiceAdmin = () => {
                     <tr key={item.id}>
                       <td className='is-strong' data-label={t('订单号')}>
                         {item.trade_no}
+                      </td>
+                      <td data-label={t('支付方式')}>
+                        {getPayMethodDisplayName(item.payment_method, t)}
                       </td>
                       <td className='is-numeric' data-label={t('开票金额')}>
                         {formatInvoiceMoney(item.invoice_amount)}

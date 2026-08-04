@@ -1,0 +1,19 @@
+appId: com.tokenfactory.quota-widget
+productName: TokenFactory额度悬浮窗
+asar: true
+directories:
+  output: dist-quota
+files:
+  - quota-widget/**/*
+  - icon.png
+  - tray-icon-windows.png
+  - package.json
+extraMetadata:
+  main: quota-widget/main.js
+win:
+  icon: quota-widget/assets/logo.png
+  target:
+    - target: portable
+      arch:
+        - x64
+artifactName: TokenFactory额度悬浮窗-${version}-portable.${ext}

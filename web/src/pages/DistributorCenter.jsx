@@ -110,6 +110,7 @@ const QR_DOWNLOAD_BORDER_RADIUS = 14;
 const IDENTITY_APP_STATUS_PENDING = 1;
 const IDENTITY_APP_STATUS_APPROVED = 2;
 const IDENTITY_APP_STATUS_REJECTED = 3;
+const INVITEE_TABLE_MIN_WIDTH = 700;
 
 function distributorIdentityLabel(t, type) {
   return Number(type) === WD_ACCOUNT_ENTERPRISE ? t('企业') : t('个人');
@@ -264,6 +265,8 @@ export default function DistributorCenter() {
   const [discountModalInviteeLabel, setDiscountModalInviteeLabel] =
     useState('');
   const [templateModalOpen, setTemplateModalOpen] = useState(false);
+  const [templateDiscountExporting, setTemplateDiscountExporting] =
+    useState(false);
   const [selectedInviteeIds, setSelectedInviteeIds] = useState([]);
   const [inviteeKeyword, setInviteeKeyword] = useState('');
   /** 分润分类筛选：video_token(视频按Token)、video(视频其他)、text(文本)、''(全部) */
@@ -890,6 +893,46 @@ export default function DistributorCenter() {
     setDiscountModalOpen(true);
   };
 
+  const exportTemplateCallDiscounts = useCallback(async () => {
+    setTemplateDiscountExporting(true);
+    try {
+      const res = await API.get(
+        '/api/distributor/model-discount-template/export',
+        {
+          responseType: 'blob',
+          disableDuplicate: true,
+        },
+      );
+      const contentType = res.headers?.['content-type'] || res.data?.type || '';
+      if (contentType.includes('application/json')) {
+        const text = await res.data.text();
+        try {
+          const payload = JSON.parse(text);
+          showError(payload?.message || t('导出失败'));
+        } catch {
+          showError(text || t('导出失败'));
+        }
+        return;
+      }
+
+      const timestamp = new Date()
+        .toISOString()
+        .replace(/[-:]/g, '')
+        .replace(/\.\d{3}Z$/, '');
+      downloadBlob(
+        new Blob([res.data], {
+          type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        }),
+        `调用折扣-${timestamp}.xlsx`,
+      );
+      showSuccess(t('调用折扣导出成功'));
+    } catch {
+      showError(t('导出失败'));
+    } finally {
+      setTemplateDiscountExporting(false);
+    }
+  }, [t]);
+
   const submitBatchModelDiscounts = useCallback(
     async (action, scope) => {
       setBatchDiscountSubmitting(true);
@@ -964,12 +1007,23 @@ export default function DistributorCenter() {
       {
         title: t('用户'),
         dataIndex: 'username',
-        render: (_, r) => r.display_name || r.username || r.invitee_id,
+        width: 170,
+        ellipsis: { showTooltip: true },
+        render: (_, r) => {
+          const username = String(
+            r.display_name || r.username || r.invitee_id,
+          );
+          return (
+            <Text className='block min-w-0' ellipsis={{ showTooltip: true }}>
+              {username}
+            </Text>
+          );
+        },
       },
       {
         title: t('邀请时间'),
         dataIndex: 'created_at',
-        width: 180,
+        width: 150,
         render: (ts) =>
           ts ? dayjs.unix(Number(ts)).format('YYYY-MM-DD HH:mm') : '—',
       },
@@ -978,15 +1032,17 @@ export default function DistributorCenter() {
         dataIndex: isProfitShareMode
           ? 'profit_share_earned_quota'
           : 'commission_earned_quota',
+        width: 140,
+        ellipsis: { showTooltip: true },
         render: (q) => renderQuota(q || 0),
       },
       {
         title: t('操作'),
-        width: isProfitShareMode ? 360 : 240,
+        width: isProfitShareMode ? 190 : 185,
         fixed: 'right',
         align: 'right',
         render: (_, r) => (
-          <div className='flex flex-nowrap items-center justify-end gap-2 whitespace-nowrap'>
+          <div className='distributor-invitees-table__actions flex flex-wrap items-center justify-end gap-2'>
             <Button
               size='small'
               type='primary'
@@ -1487,6 +1543,16 @@ export default function DistributorCenter() {
                       size='small'
                       type='warning'
                       theme='light'
+                      icon={<Download size={14} />}
+                      loading={templateDiscountExporting}
+                      onClick={exportTemplateCallDiscounts}
+                    >
+                      {t('调用折扣导出')}
+                    </Button>
+                    <Button
+                      size='small'
+                      type='warning'
+                      theme='light'
                       icon={<SlidersHorizontal size={14} />}
                       onClick={() => setTemplateModalOpen(true)}
                     >
@@ -1610,10 +1676,13 @@ export default function DistributorCenter() {
               ) : null}
             </div>
             <Table
+              className='distributor-invitees-table'
               rowKey='invitee_id'
               columns={columns}
               dataSource={rows}
               rowSelection={inviteeRowSelection}
+              scroll={{ x: INVITEE_TABLE_MIN_WIDTH }}
+              tableLayout='fixed'
               pagination={{
                 currentPage: page,
                 pageSize,

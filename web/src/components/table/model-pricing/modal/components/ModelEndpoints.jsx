@@ -173,13 +173,7 @@ const isVideoEndpoint = (type, path) => {
   return endpointText.includes('video') || endpointText.includes('视频');
 };
 
-const ModelEndpoints = ({
-  modelData,
-  endpointMap = {},
-  t,
-  flat = false,
-  onOpenDocs,
-}) => {
+const ModelEndpoints = ({ modelData, endpointMap = {}, t, flat = false }) => {
   const [workBuddyVisible, setWorkBuddyVisible] = useState(false);
   const [tokens, setTokens] = useState([]);
   const [resolvedTokenKeys, setResolvedTokenKeys] = useState({});
@@ -599,20 +593,6 @@ const ModelEndpoints = ({
           <Tag size='small' shape='circle' color='blue' type='light'>
             {t('{{count}}选1复制使用', { count: addressCount })}
           </Tag>
-        }
-        action={
-          onOpenDocs ? (
-            <Tooltip content={t('查看 API 文档')}>
-              <Button
-                theme='light'
-                type='warning'
-                size='small'
-                onClick={onOpenDocs}
-              >
-                {t('API 文档')}
-              </Button>
-            </Tooltip>
-          ) : null
         }
       />
       {/* {showWorkBuddy ? (

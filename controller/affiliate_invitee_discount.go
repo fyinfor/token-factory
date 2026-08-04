@@ -46,6 +46,11 @@ var inviteeModelDiscountExportHeaders = []string{
 	"修改后售价比例",
 }
 
+var distributorModelDiscountTemplateExportHeaders = []string{
+	"模型 / 通道路径",
+	"调用折扣",
+}
+
 // GetInviteeModelDiscounts 获取被邀请用户的模型折扣列表
 // GET /api/distributor/invitee-model-discounts?invitee_id=xxx
 func GetInviteeModelDiscounts(c *gin.Context) {
@@ -420,6 +425,112 @@ func GetDistributorModelDiscountTemplate(c *gin.Context) {
 			"auto_apply_new_invitees": autoApplyNewInvitees,
 		},
 	})
+}
+
+// ExportDistributorModelDiscountTemplate 导出分销商模版调用折扣。
+// GET /api/distributor/model-discount-template/export
+func ExportDistributorModelDiscountTemplate(c *gin.Context) {
+	userId := c.GetInt("id")
+	u, err := model.GetUserById(userId, false)
+	if err != nil || !model.UserIsDistributor(u) {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "仅分销商可查看"})
+		return
+	}
+	if !common.IsDistributorProfitShareMode() {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "当前站点未启用利润分成模式"})
+		return
+	}
+
+	items, _, _, err := model.GetDistributorModelDiscountTemplate(userId)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	items = filterInviteeModelDiscountExportItems(items, c.Query("q"), c.Query("supplier_type"))
+
+	data, err := buildDistributorModelDiscountTemplateExportWorkbook(items)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	filename := fmt.Sprintf("调用折扣-%s.xlsx", time.Now().Format("20060102-150405"))
+	c.Header("Content-Type", inviteeModelDiscountExportContentType)
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	c.Header("Content-Length", strconv.Itoa(len(data)))
+	c.Data(http.StatusOK, inviteeModelDiscountExportContentType, data)
+}
+
+func buildDistributorModelDiscountTemplateExportWorkbook(items []model.InviteeModelMarkupDiscountRateItem) ([]byte, error) {
+	f := excelize.NewFile()
+	defer f.Close()
+
+	sheet := "调用折扣"
+	defaultSheet := f.GetSheetName(0)
+	if err := f.SetSheetName(defaultSheet, sheet); err != nil {
+		return nil, err
+	}
+
+	for i, header := range distributorModelDiscountTemplateExportHeaders {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		if err := f.SetCellValue(sheet, cell, header); err != nil {
+			return nil, err
+		}
+	}
+
+	headerStyle, _ := f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{Bold: true, Color: "FFFFFF"},
+		Fill: excelize.Fill{Type: "pattern", Color: []string{"4472C4"}, Pattern: 1},
+		Alignment: &excelize.Alignment{
+			Horizontal: "center",
+			Vertical:   "center",
+			WrapText:   true,
+		},
+	})
+	bodyStyle, _ := f.NewStyle(&excelize.Style{
+		Alignment: &excelize.Alignment{
+			Vertical: "center",
+			WrapText: true,
+		},
+	})
+	centerStyle, _ := f.NewStyle(&excelize.Style{
+		Alignment: &excelize.Alignment{
+			Horizontal: "center",
+			Vertical:   "center",
+		},
+	})
+
+	_ = f.SetCellStyle(sheet, "A1", "B1", headerStyle)
+	_ = f.SetColWidth(sheet, "A", "A", 46)
+	_ = f.SetColWidth(sheet, "B", "B", 20)
+	_ = f.SetRowHeight(sheet, 1, 28)
+	_ = f.SetPanes(sheet, &excelize.Panes{
+		Freeze:      true,
+		Split:       false,
+		XSplit:      0,
+		YSplit:      1,
+		TopLeftCell: "A2",
+		ActivePane:  "bottomLeft",
+	})
+
+	for idx, item := range items {
+		row := idx + 2
+		if err := f.SetCellValue(sheet, fmt.Sprintf("A%d", row), inviteeModelDiscountExportModelPath(item)); err != nil {
+			return nil, err
+		}
+		if err := f.SetCellValue(sheet, fmt.Sprintf("B%d", row), formatInviteeModelDiscountMarkupRate(item.ChannelPriceDiscountPercent)); err != nil {
+			return nil, err
+		}
+		_ = f.SetRowHeight(sheet, row, 38)
+		_ = f.SetCellStyle(sheet, fmt.Sprintf("A%d", row), fmt.Sprintf("A%d", row), bodyStyle)
+		_ = f.SetCellStyle(sheet, fmt.Sprintf("B%d", row), fmt.Sprintf("B%d", row), centerStyle)
+	}
+
+	var buf bytes.Buffer
+	if err := f.Write(&buf); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
 type putDistributorModelDiscountTemplateRequest struct {

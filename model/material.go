@@ -276,6 +276,112 @@ func ListMaterialAssetsByGroupType(userId int, groupType string, offset int, lim
 	return assets, total, nil
 }
 
+// MaterialGroupListFilter Action ListAssetGroups 本地筛选条件。
+// UserId=0 表示不按用户过滤（管理员查全部）。
+type MaterialGroupListFilter struct {
+	UserId    int
+	GroupType string   // virtual / real；空表示不限
+	GroupIds  []string // 上游 group_id 列表
+	Name      string   // 名称模糊匹配
+	SortBy    string   // created_at / updated_at
+	SortOrder string   // asc / desc
+	Offset    int
+	Limit     int
+}
+
+// MaterialAssetListFilter Action ListAssets 本地筛选条件。
+// UserId=0 表示不按用户过滤（管理员查全部）。
+type MaterialAssetListFilter struct {
+	UserId    int
+	GroupType string   // virtual / real；空表示不限
+	GroupIds  []string // 上游 group_id 列表
+	Statuses  []string // Active / Pending / Failed
+	Name      string   // 名称模糊匹配
+	SortBy    string   // created_at / updated_at / group_id
+	SortOrder string   // asc / desc
+	Offset    int
+	Limit     int
+}
+
+func applyMaterialSort(query *gorm.DB, sortBy string, sortOrder string, defaultCol string) *gorm.DB {
+	col := strings.TrimSpace(sortBy)
+	if col == "" {
+		col = defaultCol
+	}
+	order := strings.ToLower(strings.TrimSpace(sortOrder))
+	if order != "asc" {
+		order = "desc"
+	}
+	return query.Order(col + " " + order)
+}
+
+func applyMaterialGroupTypeFilter(query *gorm.DB, groupType string) *gorm.DB {
+	groupType = strings.TrimSpace(groupType)
+	if groupType == "" {
+		return query
+	}
+	if groupType == MaterialGroupTypeVirtual {
+		// 兼容旧数据：group_type 为空时视为 virtual
+		return query.Where("(group_type = ? OR group_type = '' OR group_type IS NULL)", MaterialGroupTypeVirtual)
+	}
+	return query.Where("group_type = ?", groupType)
+}
+
+// ListMaterialGroupsFiltered 按筛选条件分页查询素材组（供 ListAssetGroups Action 使用）。
+func ListMaterialGroupsFiltered(filter MaterialGroupListFilter) ([]*MaterialGroup, int64, error) {
+	var groups []*MaterialGroup
+	var total int64
+	query := DB.Model(&MaterialGroup{})
+	if filter.UserId > 0 {
+		query = query.Where("user_id = ?", filter.UserId)
+	}
+	query = applyMaterialGroupTypeFilter(query, filter.GroupType)
+	if len(filter.GroupIds) > 0 {
+		query = query.Where("group_id IN ?", filter.GroupIds)
+	}
+	if name := strings.TrimSpace(filter.Name); name != "" {
+		query = query.Where("group_name LIKE ?", "%"+name+"%")
+	}
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	query = applyMaterialSort(query, filter.SortBy, filter.SortOrder, "created_at")
+	err := query.Offset(filter.Offset).Limit(filter.Limit).Find(&groups).Error
+	if err != nil {
+		return nil, 0, err
+	}
+	return groups, total, nil
+}
+
+// ListMaterialAssetsFiltered 按筛选条件分页查询素材（供 ListAssets Action 使用）。
+func ListMaterialAssetsFiltered(filter MaterialAssetListFilter) ([]*MaterialAsset, int64, error) {
+	var assets []*MaterialAsset
+	var total int64
+	query := DB.Model(&MaterialAsset{})
+	if filter.UserId > 0 {
+		query = query.Where("user_id = ?", filter.UserId)
+	}
+	query = applyMaterialGroupTypeFilter(query, filter.GroupType)
+	if len(filter.GroupIds) > 0 {
+		query = query.Where("group_id IN ?", filter.GroupIds)
+	}
+	if len(filter.Statuses) > 0 {
+		query = query.Where("status IN ?", filter.Statuses)
+	}
+	if name := strings.TrimSpace(filter.Name); name != "" {
+		query = query.Where("name LIKE ?", "%"+name+"%")
+	}
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	query = applyMaterialSort(query, filter.SortBy, filter.SortOrder, "created_at")
+	err := query.Offset(filter.Offset).Limit(filter.Limit).Find(&assets).Error
+	if err != nil {
+		return nil, 0, err
+	}
+	return assets, total, nil
+}
+
 // ---------------------------------------------------------------------------
 // 真人认证会话（BytedToken 仅后端存储，禁止前端传输/展示）
 // ---------------------------------------------------------------------------
