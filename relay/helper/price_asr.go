@@ -43,11 +43,13 @@ func ModelPriceHelperASR(c *gin.Context, info *relaycommon.RelayInfo, seconds fl
 	rawDisc, operatingCost, chDisc := resolveChannelCostPercents(channelID)
 	markupDisc := effectiveMarkupDiscountPercent(c, info, channelID, info.OriginModelName)
 
-	// 预扣额度 = 每秒单价 × 成本/加价折扣 × QuotaPerUnit × 分组倍率 × 预估秒数
+	// 预扣额度 = 每秒单价 × 成本/加价折扣 × QuotaPerUnit × 分组倍率 × 预估秒数。
+	// ASR 仅有全局 ASRPrice，无独立渠道价表：渠道价与全局价均取该单价，
+	// 与图片/视频规则价一致走 EffectiveRuleUnitPrice，使加价折扣进入用户扣费与利润分成切片。
 	var preConsumedQuota int
 	estSeconds := math.Ceil(seconds)
 	if estSeconds > 0 {
-		effModelPrice := model.EffectiveModelPrice(modelPrice, 0, chDisc, markupDisc)
+		effModelPrice := model.EffectiveRuleUnitPrice(modelPrice, modelPrice, chDisc, markupDisc)
 		preConsumedQuota = int(decimal.NewFromFloat(effModelPrice).
 			Mul(decimal.NewFromFloat(common.QuotaPerUnit)).
 			Mul(decimal.NewFromFloat(groupRatioInfo.GroupRatio)).
@@ -66,7 +68,8 @@ func ModelPriceHelperASR(c *gin.Context, info *relaycommon.RelayInfo, seconds fl
 	chDiscCopy := chDisc
 	priceData := types.PriceData{
 		FreeModel:               freeModel,
-		ModelPrice:              modelPrice, // 美元/秒
+		ModelPrice:              modelPrice, // 美元/秒（渠道侧，当前等同全局 ASRPrice）
+		GlobalModelPrice:        modelPrice, // 全局每秒单价，供 calculateTextQuotaSummary / 分润加价切片使用
 		GroupRatioInfo:          groupRatioInfo,
 		UsePrice:                true,
 		ChannelPriceDiscount:    &chDiscCopy,

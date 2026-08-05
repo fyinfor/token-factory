@@ -1,4 +1,4 @@
-{
+﻿{
   "translation": {
     "Seedance2.0合规素材库": "Seedance 2.0 Compliant Material Library",
     "素材管理": "SD Material Library",
@@ -6002,6 +6002,7 @@
     "分润用途筛选": "Billing type filter",
     "视频按Token": "Video (by token)",
     "视频其他": "Video (other)",
+    "ASR按秒": "ASR (per second)",
     "文本对话": "Text chat",
     "计费分类": "Billing type",
     "Token消耗": "Token usage",

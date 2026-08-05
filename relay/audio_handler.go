@@ -1,9 +1,13 @@
 package relay
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -11,6 +15,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
@@ -40,12 +45,53 @@ func AudioHelper(c *gin.Context, info *relaycommon.RelayInfo) (tokenFactoryError
 	}
 	adaptor.Init(info)
 
-	ioReader, err := adaptor.ConvertAudioRequest(c, info, *request)
-	if err != nil {
-		return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+	var requestBody io.Reader
+	// 同步 ASR 透传仅适用于 application/json 且已是上游原生体（如 DashScope input.messages）。
+	// multipart / OpenAI 兼容 audio_url JSON 必须走 ConvertAudioRequest，否则上游会直接非 200。
+	passThroughEnabled := model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled
+	passThroughJSON := passThroughEnabled && strings.HasPrefix(strings.ToLower(c.ContentType()), "application/json")
+	if passThroughJSON {
+		storage, err := common.GetBodyStorage(c)
+		if err != nil {
+			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		}
+		body, err := storage.Bytes()
+		if err != nil {
+			return types.NewErrorWithStatusCode(err, types.ErrorCodeReadRequestBodyFailed, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
+		}
+		if audioJSONHasNativeInputMessages(body) {
+			upstreamModel := strings.TrimSpace(request.Model)
+			if upstreamModel == "" {
+				upstreamModel = strings.TrimSpace(info.UpstreamModelName)
+			}
+			if upstreamModel != "" {
+				rewritten, rewriteErr := rewriteAudioJSONModelField(body, upstreamModel)
+				if rewriteErr != nil {
+					return types.NewError(fmt.Errorf("透传改写 model 失败: %w", rewriteErr), types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+				}
+				body = rewritten
+			}
+			if common.DebugEnabled {
+				println("audio requestBody: ", string(body))
+			}
+			requestBody = bytes.NewReader(body)
+		} else {
+			// 透传开关打开但 body 仍是 OpenAI 兼容格式：交给渠道转换
+			ioReader, err := adaptor.ConvertAudioRequest(c, info, *request)
+			if err != nil {
+				return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+			}
+			requestBody = ioReader
+		}
+	} else {
+		ioReader, err := adaptor.ConvertAudioRequest(c, info, *request)
+		if err != nil {
+			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		}
+		requestBody = ioReader
 	}
 
-	resp, err := adaptor.DoRequest(c, info, ioReader)
+	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
 		return types.NewError(err, types.ErrorCodeDoRequestFailed)
 	}
@@ -55,7 +101,8 @@ func AudioHelper(c *gin.Context, info *relaycommon.RelayInfo) (tokenFactoryError
 	if resp != nil {
 		httpResp = resp.(*http.Response)
 		if httpResp.StatusCode != http.StatusOK {
-			tokenFactoryError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)
+			// ASR 上游（尤其 MaaS）常返回纯文本或非常规 JSON 错误体，带上 body 便于定位
+			tokenFactoryError = service.RelayErrorHandler(c.Request.Context(), httpResp, true)
 			// reset status code 重置状态码
 			service.ResetStatusCode(tokenFactoryError, statusCodeMappingStr)
 			return tokenFactoryError
@@ -85,4 +132,27 @@ func AudioHelper(c *gin.Context, info *relaycommon.RelayInfo) (tokenFactoryError
 	}
 
 	return nil
+}
+
+// audioJSONHasNativeInputMessages 判断 JSON 是否已是上游原生 multimodal 体（含 input.messages）。
+func audioJSONHasNativeInputMessages(body []byte) bool {
+	var peek struct {
+		Input *struct {
+			Messages json.RawMessage `json:"messages"`
+		} `json:"input"`
+	}
+	if err := common.Unmarshal(body, &peek); err != nil {
+		return false
+	}
+	return peek.Input != nil && len(peek.Input.Messages) > 0
+}
+
+// rewriteAudioJSONModelField 在 JSON 透传体中写入映射后的上游模型名。
+func rewriteAudioJSONModelField(cachedBody []byte, upstreamModel string) ([]byte, error) {
+	var payload map[string]any
+	if err := common.Unmarshal(cachedBody, &payload); err != nil {
+		return nil, err
+	}
+	payload["model"] = upstreamModel
+	return common.Marshal(payload)
 }

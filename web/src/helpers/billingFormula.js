@@ -686,8 +686,48 @@ export function getBillingCurrencyConfig() {
 }
 
 /**
- * 将 USD 单价格式化为与首页卡片 formatPrice 一致的展示字符串（默认 2 位小数）。
+ * ASR 用户实付每秒单价（USD）：成本/加价折扣后的有效价 × 分组/专属倍率。
+ * 优先使用后端写入的 other.asr_unit_price（与实扣一致）。
  */
+export function resolveASRUserPerSecondUsd(other = {}) {
+  const explicit = Number(other?.asr_unit_price);
+  if (Number.isFinite(explicit) && explicit > 0) {
+    return explicit;
+  }
+  const chPct = Number(other?.channel_price_discount_percent ?? 100);
+  const { effModelPrice } = resolveConsumeLogBillingRates({
+    modelPrice: other?.model_price,
+    channelPriceDiscountPercent: chPct,
+    billingMeta: other,
+  });
+  const userGroupRatio = Number(other?.user_group_ratio);
+  const groupRatio = Number(other?.group_ratio);
+  const useUserGroupRatio = Number.isFinite(userGroupRatio) && userGroupRatio !== -1;
+  const effectiveGroupRatio = useUserGroupRatio
+    ? userGroupRatio
+    : Number.isFinite(groupRatio) && groupRatio !== -1
+      ? groupRatio
+      : 1;
+  const unit = Number(effModelPrice);
+  if (!Number.isFinite(unit) || unit <= 0) {
+    return 0;
+  }
+  return unit * (Number(effectiveGroupRatio) || 1);
+}
+
+/**
+ * ASR 每秒单价展示（含货币符号），与使用日志「每秒价格」口径一致。
+ */
+export function formatASRUserPerSecondPrice(other = {}) {
+  const { symbol, rate } = getBillingCurrencyConfig();
+  const usd = resolveASRUserPerSecondUsd(other);
+  return {
+    symbol,
+    price: formatTierUsdPrice(usd * (Number(rate) || 1)),
+    usd,
+  };
+}
+
 /**
  * 阶梯/日志单价：最多 6 位小数，去除尾随零（7.500000 → 7.5，0.06666666 → 0.066667）
  */

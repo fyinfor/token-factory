@@ -1,4 +1,4 @@
-{
+﻿{
   "视频生成": "penjanaan video",
   "translation": {
     " ": " ",
@@ -5769,6 +5769,7 @@
     "分润用途筛选": "Penapis jenis pengebilan",
     "视频按Token": "Video (mengikut token)",
     "视频其他": "Video (lain)",
+    "ASR按秒": "ASR (setiap saat)",
     "文本对话": "Sembang teks",
     "计费分类": "Jenis pengebilan",
     "Token消耗": "Penggunaan token",

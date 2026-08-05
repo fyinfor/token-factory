@@ -269,7 +269,7 @@ export default function DistributorCenter() {
     useState(false);
   const [selectedInviteeIds, setSelectedInviteeIds] = useState([]);
   const [inviteeKeyword, setInviteeKeyword] = useState('');
-  /** 分润分类筛选：video_token(视频按Token)、video(视频其他)、text(文本)、''(全部) */
+  /** 分润分类筛选：video_token(视频按Token)、video(视频其他)、asr(ASR按秒)、text(文本)、''(全部) */
   const [billingModeFilter, setBillingModeFilter] = useState('');
   const [batchDiscountSubmitting, setBatchDiscountSubmitting] = useState(false);
   const [openTransfer, setOpenTransfer] = useState(false);
@@ -1669,6 +1669,9 @@ export default function DistributorCenter() {
                   </Select.Option>
                   <Select.Option value='video'>
                     {t('视频其他')}
+                  </Select.Option>
+                  <Select.Option value='asr'>
+                    {t('ASR按秒')}
                   </Select.Option>
                   <Select.Option value='text'>
                     {t('文本对话')}
