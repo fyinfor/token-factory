@@ -194,6 +194,10 @@ func EstimateRequestToken(c *gin.Context, meta *types.TokenCountMeta, info *rela
 		return 0, nil
 	}
 	if info.RelayMode == constant2.RelayModeAudioTranscription || info.RelayMode == constant2.RelayModeAudioTranslation {
+		// URL 模式（JSON 请求体）无本地音频文件可解析时长：返回 0，计费由上游返回信息折算
+		if !strings.HasPrefix(c.ContentType(), "multipart/form-data") {
+			return 0, nil
+		}
 		multiForm, err := common.ParseMultipartFormReusable(c)
 		if err != nil {
 			return 0, fmt.Errorf("error parsing multipart form: %v", err)

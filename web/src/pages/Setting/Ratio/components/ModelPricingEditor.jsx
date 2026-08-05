@@ -2192,6 +2192,75 @@ export default function ModelPricingEditor({
                         )}
                       </div>
                     </Card>
+                    <Card
+                      bodyStyle={{ padding: 16 }}
+                      style={{
+                        marginBottom: 16,
+                        background: 'var(--semi-color-fill-0)',
+                      }}
+                    >
+                      <div className='mb-1 font-medium text-gray-700 flex items-center justify-between gap-3 flex-wrap'>
+                        <span className='flex items-center gap-1'>
+                          {t('ASR 语音识别（按秒计费）')}
+                          <Tooltip
+                            position='top'
+                            content={
+                              <div style={{ maxWidth: 360 }}>
+                                <div className='text-sm'>
+                                  {t(
+                                    '适用于阿里云 ASR 语音转写模型（同步/异步渠道），按识别音频时长（秒）× 每秒单价计费。',
+                                  )}
+                                </div>
+                              </div>
+                            }
+                          >
+                            <IconHelpCircle
+                              style={{
+                                cursor: 'help',
+                                color: 'var(--semi-color-text-2)',
+                              }}
+                            />
+                          </Tooltip>
+                        </span>
+                        <Switch
+                          size='small'
+                          checked={isOptionalFieldEnabled(
+                            selectedModel,
+                            'asrSecondPrice',
+                          )}
+                          onChange={(checked) =>
+                            handleOptionalFieldToggle('asrSecondPrice', checked)
+                          }
+                        />
+                      </div>
+                      {!isOptionalFieldEnabled(selectedModel, 'asrSecondPrice') ? (
+                        <div className='mt-1 text-xs text-gray-500'>
+                          {t('当前未启用，需要时再打开即可。')}
+                        </div>
+                      ) : (
+                        <div
+                          style={{
+                            marginTop: 8,
+                            padding: 12,
+                            background: 'var(--semi-color-fill-1)',
+                            borderRadius: 6,
+                          }}
+                        >
+                          <PriceInput
+                            label={t('每秒价格')}
+                            value={selectedModel.asrSecondPrice}
+                            placeholder={t('输入每秒价格（USD）')}
+                            suffix='$ / 秒'
+                            onChange={(value) =>
+                              handleNumericFieldChange('asrSecondPrice', value)
+                            }
+                            extraText={t(
+                              '按识别音频时长（秒）计费；同步与异步 ASR 渠道共用该单价。',
+                            )}
+                          />
+                        </div>
+                      )}
+                    </Card>
                   </>
                 ) : null}
 

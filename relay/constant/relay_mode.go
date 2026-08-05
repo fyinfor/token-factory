@@ -52,6 +52,9 @@ const (
 	RelayModeGemini
 
 	RelayModeResponsesCompact
+
+	RelayModeAudioTranscriptionAsyncSubmit // 阿里云 ASR 异步任务提交
+	RelayModeAudioTranscriptionAsyncFetch  // 阿里云 ASR 异步任务查询/取结果
 )
 
 func Path2RelayMode(path string) int {
@@ -78,6 +81,14 @@ func Path2RelayMode(path string) int {
 		relayMode = RelayModeResponses
 	} else if strings.HasPrefix(path, "/v1/audio/speech") {
 		relayMode = RelayModeAudioSpeech
+	} else if strings.HasPrefix(path, "/v1/audio/transcriptions/async") {
+		// 注意：必须先于 /v1/audio/transcriptions 判断异步子路径
+		if path == "/v1/audio/transcriptions/async" {
+			relayMode = RelayModeAudioTranscriptionAsyncSubmit
+		} else {
+			// /v1/audio/transcriptions/async/{task_id}
+			relayMode = RelayModeAudioTranscriptionAsyncFetch
+		}
 	} else if strings.HasPrefix(path, "/v1/audio/transcriptions") {
 		relayMode = RelayModeAudioTranscription
 	} else if strings.HasPrefix(path, "/v1/audio/translations") {

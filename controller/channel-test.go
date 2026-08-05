@@ -21,6 +21,7 @@ import (
 	"github.com/QuantumNous/new-api/middleware"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/relay"
+	"github.com/QuantumNous/new-api/relay/channel/aliyunasr"
 	taskalivideo "github.com/QuantumNous/new-api/relay/channel/task/alivideo"
 	taskdoubao "github.com/QuantumNous/new-api/relay/channel/task/doubao"
 	taskopenaivideo "github.com/QuantumNous/new-api/relay/channel/task/openaivideo"
@@ -158,6 +159,12 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 	if channel != nil && (channel.Type == constant.ChannelTypeDoubaoVideo || channel.Type == constant.ChannelTypeSeedance) {
 		return string(constant.EndpointTypeSeedanceVideo)
 	}
+	if channel != nil && channel.Type == constant.ChannelTypeAliASRSync {
+		return string(constant.EndpointTypeAliASRSync)
+	}
+	if channel != nil && channel.Type == constant.ChannelTypeAliASRAsync {
+		return string(constant.EndpointTypeAliASRAsync)
+	}
 	return normalized
 }
 
@@ -170,6 +177,15 @@ func isVideoChannelTestEndpoint(endpointType string) bool {
 		constant.EndpointTypeTencentCloudVODVideo,
 		constant.EndpointTypeAliVideo,
 		constant.EndpointTypeSeedanceVideo:
+		return true
+	default:
+		return false
+	}
+}
+
+func isASRChannelTestEndpoint(endpointType string) bool {
+	switch constant.EndpointType(endpointType) {
+	case constant.EndpointTypeAliASRSync, constant.EndpointTypeAliASRAsync:
 		return true
 	default:
 		return false
@@ -346,6 +362,10 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 					testModel = "qwen-image-2.0-pro"
 				case constant.ChannelTypeHiDreamImage:
 					testModel = "hidream-H4.5-image"
+				case constant.ChannelTypeAliASRSync:
+					testModel = "qwen3-asr-flash"
+				case constant.ChannelTypeAliASRAsync:
+					testModel = "qwen3-asr-flash-filetrans"
 				default:
 					testModel = "gpt-4o-mini"
 				}
@@ -438,6 +458,12 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 	// 仅校验上游能正确接收任务创建请求并返回 task_id，不做轮询。
 	if isVideoChannelTestEndpoint(endpointType) {
 		return testChannelVideo(c, channel, testModel, endpointType, tik)
+	}
+
+	// ASR 语音转写渠道不支持 chat completions，旁路到专用连通性测试：
+	// 同步：用官方短音频样例打 multimodal-generation；异步：仅提交任务校验返回 task_id。
+	if isASRChannelTestEndpoint(endpointType) {
+		return testChannelASR(c, channel, testModel, endpointType, tik)
 	}
 
 	// Determine relay format based on endpoint type or request path
@@ -1256,6 +1282,249 @@ func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, 
 		TokenName:      "模型测试",
 		Quota:          0,
 		Content:        fmt.Sprintf("模型测试-视频生成(task_id=%s)", taskID),
+		UseTimeSeconds: int(milliseconds / 1000),
+		IsStream:       false,
+		Group:          group,
+	})
+
+	return testResult{
+		context:           c,
+		localErr:          nil,
+		tokenFactoryError: nil,
+		recordedModelName: originModel,
+	}
+}
+
+// testChannelASR 处理阿里云 ASR 同步/异步转写渠道的连通性测试。
+// ASR 适配器不支持 chat completions，因此旁路常规 relay 流程，直接按上游协议探测：
+//   - 同步：POST multimodal-generation，携带官方短音频样例 URL，校验 HTTP 200 且无错误码；
+//   - 异步：仅提交转写任务并校验返回 task_id，不做轮询，避免测试阻塞与额外费用。
+func testChannelASR(c *gin.Context, channel *model.Channel, testModel string, endpointType string, tik time.Time) testResult {
+	if _, ok := common.GetDefaultEndpointInfo(constant.EndpointType(endpointType)); !ok {
+		err := fmt.Errorf("unsupported asr endpoint type: %s", endpointType)
+		return testResult{
+			context:           c,
+			localErr:          err,
+			tokenFactoryError: types.NewError(err, types.ErrorCodeInvalidApiType),
+		}
+	}
+
+	originModel := strings.TrimSpace(testModel)
+	upstreamModel := originModel
+	if mapping := strings.TrimSpace(c.GetString("model_mapping")); mapping != "" && mapping != "{}" {
+		modelMap := make(map[string]string)
+		if err := common.UnmarshalJsonStr(mapping, &modelMap); err == nil {
+			current := upstreamModel
+			visited := map[string]bool{current: true}
+			for {
+				next, exists := modelMap[current]
+				if !exists || next == "" || next == current {
+					break
+				}
+				if visited[next] {
+					break
+				}
+				visited[next] = true
+				current = next
+			}
+			upstreamModel = current
+		}
+	}
+
+	apiKey := common.GetContextKeyString(c, constant.ContextKeyChannelKey)
+	if apiKey == "" {
+		apiKey = channel.Key
+	}
+	baseURL := strings.TrimRight(strings.TrimSpace(channel.GetBaseURL()), "/")
+	if baseURL == "" {
+		err := fmt.Errorf("阿里云 ASR 渠道未配置上游基础地址（Base URL）")
+		return testResult{
+			context:           c,
+			localErr:          err,
+			tokenFactoryError: types.NewError(err, types.ErrorCodeChannelBaseUrlEmpty),
+		}
+	}
+
+	proxy := ""
+	if channel != nil {
+		proxy = strings.TrimSpace(channel.GetSetting().Proxy)
+	}
+
+	var (
+		detail   string
+		localErr error
+	)
+
+	switch constant.EndpointType(endpointType) {
+	case constant.EndpointTypeAliASRAsync:
+		taskResp, raw, err := aliyunasr.SubmitAsyncTask(baseURL, apiKey, proxy, upstreamModel, aliyunasr.SampleAudioURL)
+		if err != nil {
+			localErr = err
+			break
+		}
+		taskID := strings.TrimSpace(taskResp.Output.TaskID)
+		if taskID == "" {
+			localErr = fmt.Errorf("上游未返回 task_id: %s", truncateForError(string(raw)))
+			break
+		}
+		detail = fmt.Sprintf("task_id=%s", taskID)
+		common.SysLog(fmt.Sprintf(
+			"asr async test channel #%d ok, model=%s -> %s, %s, body=%s",
+			channel.Id, originModel, upstreamModel, detail, truncateForError(string(raw)),
+		))
+
+	case constant.EndpointTypeAliASRSync:
+		fullURL := baseURL + aliyunasr.SyncGenerationPath
+		var bodyMap map[string]any
+		if aliyunasr.UsesFunASRFlashSyncProtocol(upstreamModel) {
+			bodyMap = map[string]any{
+				"model": upstreamModel,
+				"input": map[string]any{
+					"messages": []map[string]any{
+						{
+							"role": "user",
+							"content": []map[string]any{
+								{
+									"type": "input_audio",
+									"input_audio": map[string]any{
+										"data": aliyunasr.SampleAudioURL,
+									},
+								},
+							},
+						},
+					},
+				},
+				"parameters": map[string]any{
+					"format":      aliyunasr.InferAudioFormat(aliyunasr.SampleAudioURL, ""),
+					"sample_rate": "16000",
+				},
+			}
+		} else {
+			// Qwen3-ASR-Flash：DashScope MultiModalItem 要求 {"audio": url}，不能用 input_audio
+			bodyMap = map[string]any{
+				"model": upstreamModel,
+				"input": map[string]any{
+					"messages": []map[string]any{
+						{
+							"role": "user",
+							"content": []map[string]any{
+								{"audio": aliyunasr.SampleAudioURL},
+							},
+						},
+					},
+				},
+				"parameters": map[string]any{
+					"result_format": "message",
+					"asr_options":   map[string]any{},
+				},
+			}
+		}
+		bodyBytes, err := common.Marshal(bodyMap)
+		if err != nil {
+			localErr = err
+			break
+		}
+		client, err := service.GetHttpClientWithProxy(proxy)
+		if err != nil {
+			localErr = fmt.Errorf("创建代理 HTTP 客户端失败: %w", err)
+			break
+		}
+		httpReq, err := http.NewRequest(http.MethodPost, fullURL, bytes.NewReader(bodyBytes))
+		if err != nil {
+			localErr = err
+			break
+		}
+		httpReq.Header.Set("Authorization", "Bearer "+apiKey)
+		httpReq.Header.Set("Content-Type", "application/json")
+
+		common.SysLog(fmt.Sprintf(
+			"asr sync test channel #%d (%s) url=%s model=%s -> %s, body=%s",
+			channel.Id, channel.Name, fullURL, originModel, upstreamModel, string(bodyBytes),
+		))
+
+		resp, err := client.Do(httpReq)
+		if err != nil {
+			localErr = err
+			break
+		}
+		respBody, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if err != nil {
+			localErr = err
+			break
+		}
+		common.SysLog(fmt.Sprintf(
+			"asr sync test channel #%d response: status=%d, body=%s",
+			channel.Id, resp.StatusCode, truncateForError(string(respBody)),
+		))
+		if resp.StatusCode != http.StatusOK {
+			msg := detectErrorMessageFromJSONBytes(respBody)
+			if msg == "" {
+				msg = strings.TrimSpace(string(respBody))
+			}
+			if msg == "" {
+				msg = fmt.Sprintf("upstream returned status %d", resp.StatusCode)
+			}
+			localErr = fmt.Errorf("status=%d, body=%s", resp.StatusCode, msg)
+			break
+		}
+		// DashScope 部分错误以 HTTP 200 + code/message 返回
+		errCode := strings.TrimSpace(gjson.GetBytes(respBody, "code").String())
+		errMsg := strings.TrimSpace(gjson.GetBytes(respBody, "message").String())
+		if errCode != "" {
+			localErr = fmt.Errorf("上游错误 [%s]: %s", errCode, errMsg)
+			break
+		}
+		// Fun-ASR-Flash / Qwen-Audio 同步响应：output.text；旧形态兼容 choices
+		text := strings.TrimSpace(gjson.GetBytes(respBody, "output.text").String())
+		if text == "" {
+			text = strings.TrimSpace(gjson.GetBytes(respBody, "output.sentence.text").String())
+		}
+		if text == "" {
+			text = strings.TrimSpace(gjson.GetBytes(respBody, "output.choices.0.message.content").String())
+		}
+		if text == "" {
+			text = strings.TrimSpace(gjson.GetBytes(respBody, "output.choices.0.message.content.0.text").String())
+		}
+		requestID := strings.TrimSpace(gjson.GetBytes(respBody, "request_id").String())
+		if text != "" {
+			detail = fmt.Sprintf("text=%s", truncateForError(text))
+		} else if requestID != "" {
+			detail = fmt.Sprintf("request_id=%s", requestID)
+		} else {
+			detail = "ok"
+		}
+
+	default:
+		err := fmt.Errorf("unsupported asr endpoint type: %s", endpointType)
+		return testResult{
+			context:           c,
+			localErr:          err,
+			tokenFactoryError: types.NewError(err, types.ErrorCodeInvalidApiType),
+		}
+	}
+
+	if localErr != nil {
+		return testResult{
+			context:           c,
+			localErr:          localErr,
+			tokenFactoryError: types.NewOpenAIError(localErr, types.ErrorCodeBadResponse, http.StatusInternalServerError),
+			recordedModelName: originModel,
+		}
+	}
+
+	milliseconds := time.Since(tik).Milliseconds()
+	group, _ := model.GetUserGroup(1, false)
+	content := "模型测试-ASR语音转写"
+	if detail != "" {
+		content = fmt.Sprintf("%s(%s)", content, detail)
+	}
+	model.RecordConsumeLog(c, 1, model.RecordConsumeLogParams{
+		ChannelId:      channel.Id,
+		ModelName:      originModel,
+		TokenName:      "模型测试",
+		Quota:          0,
+		Content:        content,
 		UseTimeSeconds: int(milliseconds / 1000),
 		IsStream:       false,
 		Group:          group,

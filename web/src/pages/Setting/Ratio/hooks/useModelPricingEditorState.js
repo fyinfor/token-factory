@@ -69,6 +69,7 @@ const EMPTY_MODEL = {
     imageTextToImageRules: [],
     imageImageToImageRules: [],
     imageSimilarityThreshold: '',
+    asrSecondPrice: '',
     rawRatios: {
         modelRatio: '',
         completionRatio: '',
@@ -757,6 +758,7 @@ const buildModelState = (name, sourceMaps) => {
             ? imageToImageDisplay
             : imagePricingRules.imageToImage,
         imageSimilarityThreshold: imagePricingRules.similarityThreshold,
+        asrSecondPrice: toNumericString(sourceMaps.ASRPrice?.[name]),
         rawRatios: {
             modelRatio,
             completionRatio,
@@ -1055,6 +1057,7 @@ export const buildOptionalFieldToggles = (model) => ({
         hasValue(model.imageGenFixedPrice) ||
         (model.imageTextToImageRules || []).some((r) => hasValue(r?.imagePrice)) ||
         (model.imageImageToImageRules || []).some((r) => hasValue(r?.imagePrice)),
+    asrSecondPrice: hasValue(model.asrSecondPrice),
 });
 
 const normalizePerImagePricingRows = (rows) =>
@@ -1134,12 +1137,21 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
         VideoPricingRules: null,
         ImagePrice: null,
         ImagePricingRules: null,
+        ASRPrice: null,
         ModelRequestTierPricing: null,
     };
 
     if (getEffectiveBillingMode(model) === 'per-request') {
         if (hasValue(model.fixedPrice)) {
             result.ModelPrice = toNormalizedNumber(model.fixedPrice);
+        }
+    }
+
+    // ASR 语音识别按秒价格（美元/秒）：独立于 token 计费体系，与输入价格无关
+    if (hasValue(model.asrSecondPrice)) {
+        const asrPriceNumber = toNumberOrNull(model.asrSecondPrice);
+        if (asrPriceNumber !== null && asrPriceNumber > 0) {
+            result.ASRPrice = toNormalizedNumber(asrPriceNumber);
         }
     }
 
@@ -1754,6 +1766,13 @@ export const buildPreviewRows = (model, t) => {
                         ? t('按分辨率见 ImagePricingRules')
                         : t('空'),
         },
+        {
+            key: 'ASRPrice',
+            label: 'ASRPrice',
+            value: hasValue(model.asrSecondPrice)
+                ? `$${formatNumber(toNumberOrNull(model.asrSecondPrice))} / ${t('秒')}`
+                : t('空'),
+        },
     );
 
     return [
@@ -1861,6 +1880,7 @@ export function useModelPricingEditorState({
             VideoPricingRules: optionKeys?.VideoPricingRules || 'VideoPricingRules',
             ImagePrice: optionKeys?.ImagePrice || 'ImagePrice',
             ImagePricingRules: optionKeys?.ImagePricingRules || 'ImagePricingRules',
+            ASRPrice: optionKeys?.ASRPrice || 'ASRPrice',
             ModelRequestTierPricing:
                 optionKeys?.ModelRequestTierPricing || 'ModelRequestTierPricing',
         }),
@@ -1898,6 +1918,7 @@ export function useModelPricingEditorState({
             ImagePricingRules: parseOptionJSON(
                 options[resolvedOptionKeys.ImagePricingRules],
             ),
+            ASRPrice: parseOptionJSON(options[resolvedOptionKeys.ASRPrice]),
             ModelRequestTierPricing: parseOptionJSON(
                 options[resolvedOptionKeys.ModelRequestTierPricing],
             ),
@@ -2616,6 +2637,7 @@ export function useModelPricingEditorState({
             VideoPricingRules: {},
             ImagePrice: {},
             ImagePricingRules: {},
+            ASRPrice: {},
             ModelRequestTierPricing: {},
         };
         for (const model of modelList) {

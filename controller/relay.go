@@ -33,6 +33,12 @@ import (
 )
 
 func resolveRelayPriceData(c *gin.Context, relayInfo *relaycommon.RelayInfo, tokens int, meta *types.TokenCountMeta) (types.PriceData, error) {
+	if relayInfo != nil && relayInfo.ChannelMeta != nil && constant.IsASRChannel(relayInfo.ChannelType) {
+		// 阿里云 ASR 按秒计费：预估 token 按 1000 token/分钟（EstimateRequestToken 音频口径）折算回秒数；
+		// URL 模式 tokens=0 表示不预扣，结算时按上游返回时长一次性扣费。
+		estSeconds := float64(tokens) * 60.0 / 1000.0
+		return helper.ModelPriceHelperASR(c, relayInfo, estSeconds)
+	}
 	if relayInfo != nil &&
 		(relayInfo.RelayMode == relayconstant.RelayModeImagesGenerations ||
 			relayInfo.RelayMode == relayconstant.RelayModeImagesEdits) {

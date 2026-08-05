@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -67,6 +68,16 @@ func AudioHelper(c *gin.Context, info *relaycommon.RelayInfo) (tokenFactoryError
 		service.ResetStatusCode(tokenFactoryError, statusCodeMappingStr)
 		return tokenFactoryError
 	}
+
+	// 阿里云 ASR 按秒计费：DoResponse 已将真实音频秒数写入 PriceData.OtherRatios["seconds"]
+	if constant.IsASRChannel(info.ChannelType) {
+		seconds := info.PriceData.OtherRatios["seconds"]
+		if tfErr := service.PostASRConsumeQuota(c, info, seconds, "", ""); tfErr != nil {
+			return tfErr
+		}
+		return nil
+	}
+
 	if usage.(*dto.Usage).CompletionTokenDetails.AudioTokens > 0 || usage.(*dto.Usage).PromptTokensDetails.AudioTokens > 0 {
 		service.PostAudioConsumeQuota(c, info, usage.(*dto.Usage), "")
 	} else {
