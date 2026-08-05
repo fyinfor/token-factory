@@ -1,4 +1,4 @@
-{
+﻿{
   "视频生成": "utengenezaji wa video",
   "translation": {
     " ": " ",
@@ -5769,6 +5769,7 @@
     "分润用途筛选": "Chujio la aina ya ubilling",
     "视频按Token": "Video (kwa token)",
     "视频其他": "Video (nyingine)",
+    "ASR按秒": "ASR (kwa sekunde)",
     "文本对话": "Mazungumzo ya maandishi",
     "计费分类": "Aina ya ubilling",
     "Token消耗": "Matumizi ya token",

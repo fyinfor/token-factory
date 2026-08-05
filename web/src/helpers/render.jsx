@@ -21,6 +21,7 @@ import { useState } from 'react';
 import i18next from 'i18next';
 import {
   resolveConsumeLogBillingRates,
+  resolveASRUserPerSecondUsd,
   formatBillingUsdDisplay,
   formatTierUsdPrice,
 } from './billingFormula';
@@ -2243,25 +2244,15 @@ function renderASRBillingTags(
 ) {
   const tr = typeof options?.t === 'function' ? options.t : i18next.t.bind(i18next);
   const { symbol, rate } = getCurrencyConfig();
-  const chPct = Number(
-    other?.channel_price_discount_percent ??
+  const seconds = Number(other?.audio_seconds || 0);
+  // 与简要行一致：折扣后用户实付每秒价（含分组/专属倍率）
+  const perSecondUsd = resolveASRUserPerSecondUsd({
+    ...other,
+    channel_price_discount_percent:
+      other?.channel_price_discount_percent ??
       options?.channelPriceDiscountPercent ??
       100,
-  );
-  const seconds = Number(other?.audio_seconds || 0);
-  const { effModelPrice } = resolveConsumeLogBillingRates({
-    modelPrice: other?.model_price,
-    channelPriceDiscountPercent: chPct,
-    billingMeta: other,
   });
-  const { ratio: effectiveGroupRatio } = getEffectiveRatio(
-    other?.group_ratio,
-    other?.user_group_ratio,
-  );
-  const perSecondUsd =
-    Number(effModelPrice) > 0
-      ? Number(effModelPrice) * (Number(effectiveGroupRatio) || 1)
-      : 0;
   const displayPrice = formatBillingDisplayPrice(perSecondUsd, rate, 6);
   const items = [
     {

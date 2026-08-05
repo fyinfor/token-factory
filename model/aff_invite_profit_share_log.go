@@ -23,7 +23,7 @@ type AffInviteProfitShareLog struct {
 	RewardQuota      int    `json:"reward_quota" gorm:"not null;column:reward_quota"`
 	// TotalTokens 视频按 Token 计费时记录的实际 token 消耗量；非 token 计费为 0。
 	TotalTokens int `json:"total_tokens" gorm:"not null;default:0;column:total_tokens"`
-	// BillingMode 计费分类：video_token(视频按token)、video(视频其他)、text(文本，默认空)。
+	// BillingMode 计费分类：video_token(视频按token)、video(视频其他)、asr(ASR按秒)、text(文本，默认空)。
 	BillingMode string `json:"billing_mode" gorm:"type:varchar(32);not null;default:'';column:billing_mode;index:idx_aff_ps_billing_mode"`
 	// CommissionBps 本条结算适用的代理分润比例（万分之一，与 AffiliateDefaultCommissionBps / EffectiveAffiliateCommissionBps 同单位）。
 	CommissionBps int   `json:"commission_bps" gorm:"not null;default:0;column:commission_bps"`

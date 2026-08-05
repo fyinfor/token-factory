@@ -10,19 +10,35 @@ import (
 )
 
 type AudioRequest struct {
-	Model          string          `json:"model"`
-	Input          string          `json:"input"`
+	Model string `json:"model"`
+	// Input TTS 为文本字符串；同步 ASR 透传上游原生 JSON（如 DashScope）时可为对象，故用 RawMessage。
+	Input          json.RawMessage `json:"input,omitempty"`
 	Voice          string          `json:"voice"`
 	Instructions   string          `json:"instructions,omitempty"`
 	ResponseFormat string          `json:"response_format,omitempty"`
 	Speed          *float64        `json:"speed,omitempty"`
 	StreamFormat   string          `json:"stream_format,omitempty"`
 	Metadata       json.RawMessage `json:"metadata,omitempty"`
+	// AudioURL / FileURL 同步 ASR OpenAI 兼容 JSON 字段（multipart 表单同名字段由 adaptor 另行读取）。
+	AudioURL string `json:"audio_url,omitempty"`
+	FileURL  string `json:"file_url,omitempty"`
+}
+
+// GetInputText 返回 TTS 文本输入；input 为对象（透传上游原生体）时返回空字符串。
+func (r *AudioRequest) GetInputText() string {
+	if r == nil || len(r.Input) == 0 {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(r.Input, &s); err == nil {
+		return s
+	}
+	return ""
 }
 
 func (r *AudioRequest) GetTokenCountMeta() *types.TokenCountMeta {
 	meta := &types.TokenCountMeta{
-		CombineText: r.Input,
+		CombineText: r.GetInputText(),
 		TokenType:   types.TokenTypeTextNumber,
 	}
 	if strings.Contains(r.Model, "gpt") {

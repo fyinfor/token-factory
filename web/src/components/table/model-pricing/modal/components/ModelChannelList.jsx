@@ -68,7 +68,11 @@ import {
 
 import { renderModelTestResultSummary } from '../../../../../helpers/modelStability';
 import { computeChannelCostRates } from '../../../../../helpers/billingFormula';
-import { formatPriceRatioFromDiscount } from '../../utils/discount';
+import {
+  calculatePriceDiscountPercent,
+  formatPriceRatioFromDiscount,
+  getBestPriceDiscountPercent,
+} from '../../utils/discount';
 import { getChannelRouteModelName } from '../../utils/channelRoute';
 
 const { Text } = Typography;
@@ -204,13 +208,12 @@ const StabilityBattery = ({ row, t }) => {
   );
 };
 
-/** 成本优惠按当前语言格式化；无优惠或超过官方价时显示占位符。 */
-const formatCostDiscountDisplay = (priceDiscountPercent, t) => {
-  const costPercent = Number(priceDiscountPercent);
-  if (!Number.isFinite(costPercent)) {
+/** 成本价相对官方价的最低折数；无优惠或超过官方价时显示占位符。 */
+const formatCostDiscountDisplay = (discountPercent, t) => {
+  const savingsPercent = Number(discountPercent);
+  if (!Number.isFinite(savingsPercent)) {
     return null;
   }
-  const savingsPercent = 100 - costPercent;
   if (savingsPercent <= 0) {
     return { text: `${t('成本折扣')}：-`, hasDiscount: false };
   }
@@ -853,11 +856,10 @@ const ModelChannelList = ({
           isFixedPrice,
           false,
         );
-        if (root.rawUsd >= channelOriginal.rawUsd && root.rawUsd > 0) {
-          discount = Math.round(
-            (1 - channelOriginal.rawUsd / root.rawUsd) * 100,
-          );
-        }
+        discount = calculatePriceDiscountPercent(
+          channelOriginal.rawUsd,
+          root.rawUsd,
+        );
       }
       return {
         label,
@@ -999,25 +1001,42 @@ const ModelChannelList = ({
       );
     }
 
-    // ASR 语音识别：按秒单价（美元/秒）× 分组倍率
+    // ASR 语音识别：
+    //   官方价 = 全局 asr_price（美元/秒）
+    //   平台价 = (渠道价（空则全局价）× 成本折扣率 + 全局价 × 加价折扣率) × 分组倍率
+    //   其中 price_discount_percent 已含经营成本率；折扣与其他模型一致
     const rootAsrPrice = hasRatioValue(modelData?.asr_price)
       ? Number(modelData.asr_price)
       : null;
     if (rootAsrPrice != null && rootAsrPrice > 0) {
-      const asrValue = toDisplayCurrencyValue(rootAsrPrice * usedGroupRatio, {
+      const channelAsrPrice = rootAsrPrice; // 暂无渠道级 ASR 价，空则回退全局
+      const platformAsrUsd =
+        channelAsrPrice * costDisc + rootAsrPrice * markupRate;
+      const asrValue = toDisplayCurrencyValue(platformAsrUsd * usedGroupRatio, {
         tokenUnit,
       });
       const asrDisplay = formatCurrencyAmount(asrValue);
       const asrExact = formatPreciseCurrencyValue(asrValue);
+      const officialValue = toDisplayCurrencyValue(rootAsrPrice, { tokenUnit });
+      const officialDisplay = formatCurrencyAmount(officialValue);
+      const officialExact = formatPreciseCurrencyValue(officialValue);
+      let discount = null;
+      if (rootAsrPrice > 0 && platformAsrUsd < rootAsrPrice) {
+        discount = Math.round((1 - platformAsrUsd / rootAsrPrice) * 100);
+      }
+      const hasDiscount = discount != null && discount > 0;
       items.push({
-        label: t('语音识别按秒计费'),
+        label: t('语音识别'),
         value: `${asrDisplay} / ${t('秒')}`,
         valueTitle: `${asrExact} / ${t('秒')}`,
         valueExact: `${asrExact} / ${t('秒')}`,
-        original: null,
+        original: hasDiscount ? officialDisplay : null,
+        originalExact: hasDiscount ? `${officialExact} / ${t('秒')}` : undefined,
+        officialTitle: hasDiscount ? `${officialExact} / ${t('秒')}` : undefined,
+        officialExact: hasDiscount ? `${officialExact} / ${t('秒')}` : undefined,
         priceUnitLabel: null,
-        discount: null,
-        hasDiscount: false,
+        discount: hasDiscount ? discount : null,
+        hasDiscount,
       });
     }
     return items.filter(Boolean);
@@ -1149,11 +1168,10 @@ const ModelChannelList = ({
         const official = officialUsd
           ? formatCostValue(officialUsd, item.isFixedPrice, item.fixedUnitKey)
           : null;
-        const costPercent = Number(channel.price_discount_percent ?? 100);
-        const discount =
-          Number.isFinite(costPercent) && costPercent >= 0 && costPercent < 100
-            ? 100 - costPercent
-            : null;
+        const discount = calculatePriceDiscountPercent(
+          item.displayUsdPerM,
+          officialUsd,
+        );
         return {
           key: item.key,
           label: t(item.labelKey),
@@ -1192,6 +1210,10 @@ const ModelChannelList = ({
     const isTierBilling = channelQuotaType === 3;
     const costInfo = formatChannelCostInfo(channel);
     const costItems = costInfo.items || [];
+    const costDiscountDisplay = formatCostDiscountDisplay(
+      getBestPriceDiscountPercent(costItems.map((item) => item.discount)),
+      t,
+    );
     const hasCostContent =
       costItems.length > 0 || costInfo.videoHint || costInfo.imageHint;
 
@@ -1294,30 +1316,21 @@ const ModelChannelList = ({
               <div className='min-w-0'>
                 <Text className='text-lg font-medium'>{t('成本价')}</Text>
               </div>
-              {channel.price_discount_percent != null
-                ? (() => {
-                    const discountDisplay = formatCostDiscountDisplay(
-                      channel.price_discount_percent,
-                      t,
-                    );
-                    if (!discountDisplay) return null;
-                    return (
-                      <span
-                        className='inline-flex h-[22px] min-w-[42px] items-center justify-center rounded-full px-2 text-[11px] font-semibold'
-                        style={{
-                          color: discountDisplay.hasDiscount
-                            ? '#E74C3C'
-                            : 'var(--semi-color-text-2)',
-                          backgroundColor: discountDisplay.hasDiscount
-                            ? 'rgba(231, 76, 60, 0.11)'
-                            : 'rgba(142, 142, 147, 0.12)',
-                        }}
-                      >
-                        {discountDisplay.text}
-                      </span>
-                    );
-                  })()
-                : null}
+              {costDiscountDisplay ? (
+                <span
+                  className='inline-flex h-[22px] min-w-[42px] items-center justify-center rounded-full px-2 text-[11px] font-semibold'
+                  style={{
+                    color: costDiscountDisplay.hasDiscount
+                      ? '#E74C3C'
+                      : 'var(--semi-color-text-2)',
+                    backgroundColor: costDiscountDisplay.hasDiscount
+                      ? 'rgba(231, 76, 60, 0.11)'
+                      : 'rgba(142, 142, 147, 0.12)',
+                  }}
+                >
+                  {costDiscountDisplay.text}
+                </span>
+              ) : null}
             </div>
             <div className='flex flex-col gap-2 text-sm'>
               {costItems.length > 0 ? (
@@ -1764,6 +1777,12 @@ const ModelChannelList = ({
             {channelList.map((channel, idx) => {
               const costInfo = formatChannelCostInfo(channel);
               const costItems = costInfo.items || [];
+              const costDiscountDisplay = formatCostDiscountDisplay(
+                getBestPriceDiscountPercent(
+                  costItems.map((item) => item.discount),
+                ),
+                t,
+              );
               const hasCostContent =
                 costItems.length > 0 ||
                 costInfo.videoHint ||
@@ -1776,37 +1795,26 @@ const ModelChannelList = ({
                   key={`cost-${channel.channel_id}-${idx}`}
                   className='rounded-lg border border-semi-color-border px-3 py-2'
                 >
-                  {channel.price_discount_percent != null
-                    ? (() => {
-                        const discountDisplay = formatCostDiscountDisplay(
-                          channel.price_discount_percent,
-                          t,
-                        );
-                        if (!discountDisplay) {
-                          return null;
-                        }
-                        return (
-                          <div className='mb-2'>
-                            <span
-                              className='inline-flex items-center justify-center text-[11px] font-semibold rounded-full'
-                              style={{
-                                minWidth: 42,
-                                height: 22,
-                                padding: '0 7px',
-                                color: discountDisplay.hasDiscount
-                                  ? '#E74C3C'
-                                  : 'var(--semi-color-text-2)',
-                                backgroundColor: discountDisplay.hasDiscount
-                                  ? 'rgba(231, 76, 60, 0.11)'
-                                  : 'rgba(142, 142, 147, 0.12)',
-                              }}
-                            >
-                              {discountDisplay.text}
-                            </span>
-                          </div>
-                        );
-                      })()
-                    : null}
+                  {costDiscountDisplay ? (
+                    <div className='mb-2'>
+                      <span
+                        className='inline-flex items-center justify-center text-[11px] font-semibold rounded-full'
+                        style={{
+                          minWidth: 42,
+                          height: 22,
+                          padding: '0 7px',
+                          color: costDiscountDisplay.hasDiscount
+                            ? '#E74C3C'
+                            : 'var(--semi-color-text-2)',
+                          backgroundColor: costDiscountDisplay.hasDiscount
+                            ? 'rgba(231, 76, 60, 0.11)'
+                            : 'rgba(142, 142, 147, 0.12)',
+                        }}
+                      >
+                        {costDiscountDisplay.text}
+                      </span>
+                    </div>
+                  ) : null}
                   <div className='flex flex-col gap-1 text-sm'>
                     {costItems.map((item) => (
                       <div

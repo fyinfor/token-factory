@@ -684,8 +684,13 @@ func (a *Adaptor) ConvertOpenAIResponsesRequest(c *gin.Context, info *relaycommo
 
 func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, requestBody io.Reader) (any, error) {
 	if info.RelayMode == relayconstant.RelayModeAudioTranscription ||
-		info.RelayMode == relayconstant.RelayModeAudioTranslation ||
-		info.RelayMode == relayconstant.RelayModeImagesEdits {
+		info.RelayMode == relayconstant.RelayModeAudioTranslation {
+		// JSON 透传走普通 API 请求；multipart 仍走 form
+		if strings.HasPrefix(strings.ToLower(c.ContentType()), "application/json") {
+			return channel.DoApiRequest(a, c, info, requestBody)
+		}
+		return channel.DoFormRequest(a, c, info, requestBody)
+	} else if info.RelayMode == relayconstant.RelayModeImagesEdits {
 		return channel.DoFormRequest(a, c, info, requestBody)
 	} else if info.RelayMode == relayconstant.RelayModeRealtime {
 		return channel.DoWssRequest(a, c, info, requestBody)

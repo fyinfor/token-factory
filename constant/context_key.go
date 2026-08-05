@@ -58,6 +58,10 @@ const (
 	// 首跳优先该渠道；失败后可按同模型智能路由有序候选（价格/权重）保底重试，与硬指定 ForcedChannelID 不同。
 	ContextKeyPreferredChannelID ContextKey = "preferred_channel_id"
 
+	// ContextKeyNoFailover 当请求头 X-TF-No-Failover 为真时写入。
+	// 禁止渠道级重试/切换（含 route_slug 偏好后的有序保底切换），用于压测归因等场景。
+	ContextKeyNoFailover ContextKey = "no_failover"
+
 	// ContextKeyTFOpenUpstreamChannelRoute 仅当本地渠道类型为 TokenFactoryOpen(60)，且来自上游同步并
 	// 记录了有效 route_slug（或旧版 alias|channel_no）时，由 SetupContextForSelectedChannel 写入。
 	// relay 层读取后将发往上游 TF 的模型名改写为 "{model}/{route_slug}" 或

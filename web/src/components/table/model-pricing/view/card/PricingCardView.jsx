@@ -1689,12 +1689,20 @@ const PricingCardView = ({
         originalPrices.videoFlat.push(formatPrice(flatUsd));
       }
 
-      // ASR 语音识别：按秒单价（美元/秒）× 分组倍率
+      // ASR 语音识别：
+      //   官方价 = 全局 asr_price（美元/秒）
+      //   平台价 = (渠道价（空则全局价）× 成本折扣率 + 全局价 × 加价折扣率) × 分组倍率
+      //   其中 price_discount_percent 已含经营成本率，与 EffectiveModelPrice 一致
       if (modelHasASRPrice) {
-        const asrUsd = Number(model.asr_price);
-        if (asrUsd > 0) {
-          prices.asrPrice.push(formatPrice(asrUsd * usedGroupRatio));
-          originalPrices.asrPrice.push(formatPrice(asrUsd));
+        const globalAsrUsd = Number(model.asr_price);
+        if (globalAsrUsd > 0) {
+          const channelAsrUsd = globalAsrUsd; // 暂无渠道级 ASR 价，空则回退全局
+          const costDisc = priceDiscountPercent / 100;
+          const markupRate = markupDiscountPercent / 100;
+          const platformAsrUsd =
+            channelAsrUsd * costDisc + globalAsrUsd * markupRate;
+          prices.asrPrice.push(formatPrice(platformAsrUsd * usedGroupRatio));
+          originalPrices.asrPrice.push(formatPrice(platformAsrUsd));
         }
       }
 
@@ -2127,7 +2135,7 @@ const PricingCardView = ({
       items.push({
         key: 'asr-pricing-table',
         fixedTableRow: {
-          label: t('语音识别价格'),
+          label: t('语音识别'),
           value:
             asrPrice.single ||
             `${asrPrice.symbol}${asrPrice.min} ~ ${asrPrice.symbol}${asrPrice.max}`,

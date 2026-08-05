@@ -22,6 +22,37 @@ const formatDiscountNumber = (value) => {
   return String(rounded);
 };
 
+/**
+ * Calculate the savings percentage represented by current / official prices.
+ * A larger return value means a lower final price ratio (for example, 77 => 2.3折).
+ */
+export const calculatePriceDiscountPercent = (currentPrice, officialPrice) => {
+  const current = Number(currentPrice);
+  const official = Number(officialPrice);
+  if (
+    !Number.isFinite(current) ||
+    current < 0 ||
+    !Number.isFinite(official) ||
+    official <= 0
+  ) {
+    return null;
+  }
+  if (current >= official) return 0;
+  return Math.round((1 - current / official) * 100);
+};
+
+/** Pick the lowest price ratio, i.e. the largest valid savings percentage. */
+export const getBestPriceDiscountPercent = (discounts) => {
+  if (!Array.isArray(discounts)) return null;
+  let best = null;
+  for (const discount of discounts) {
+    const value = Number(discount);
+    if (!Number.isFinite(value) || value <= 0) continue;
+    best = best == null ? value : Math.max(best, value);
+  }
+  return best;
+};
+
 /** 中文显示成交折数，其他语言显示减免百分比。 */
 export const formatPriceRatioFromDiscount = (discountPercent, t) => {
   const discount = Number(discountPercent);

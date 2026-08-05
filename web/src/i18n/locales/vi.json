@@ -1,4 +1,4 @@
-{
+﻿{
   "视频生成": "Tạo video",
   "translation": {
     " ": " ",
@@ -5769,6 +5769,7 @@
     "分润用途筛选": "Bộ lọc loại tính phí",
     "视频按Token": "Video (theo token)",
     "视频其他": "Video (khác)",
+    "ASR按秒": "ASR (theo giây)",
     "文本对话": "Trò chuyện văn bản",
     "计费分类": "Loại tính phí",
     "Token消耗": "Tiêu thụ token",
