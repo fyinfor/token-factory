@@ -46,7 +46,11 @@ import ModelEndpoints from './ModelEndpoints';
 import ModelPerfPanel from './ModelPerfPanel';
 import ApiDocsSidePanel from './ApiDocsSidePanel';
 import { getChannelHeatKey } from '../../utils/modelHeat';
-import { formatPriceRatioFromDiscount } from '../../utils/discount';
+import {
+  calculatePriceDiscountPercent,
+  formatPriceRatioFromDiscount,
+  getBestPriceDiscountPercent,
+} from '../../utils/discount';
 import { getChannelRouteModelName } from '../../utils/channelRoute';
 
 const { Text } = Typography;
@@ -194,24 +198,26 @@ const getChannelLatencyMeta = (row, t) => {
   };
 };
 
-const formatDiscountLabel = (channel, modelData, t) => {
-  const officialBase = Number(
-    channel?.quota_type === 1 || modelData?.quota_type === 1
-      ? modelData?.model_price
-      : modelData?.model_ratio,
+const formatDiscountLabel = (discountPercent, t) =>
+  discountPercent > 0 ? formatPriceRatioFromDiscount(discountPercent, t) : '';
+
+const getTierBestDiscountPercent = (hint, usedGroupRatio = 1) =>
+  getBestPriceDiscountPercent(
+    (Array.isArray(hint?.tiers) ? hint.tiers : []).map((row) =>
+      calculatePriceDiscountPercent(
+        Number(row?.usd_after_channel_discount || 0) * usedGroupRatio,
+        row?.usd_official,
+      ),
+    ),
   );
-  const channelPrice = getChannelPriceScore(channel, modelData);
-  if (
-    !Number.isFinite(officialBase) ||
-    officialBase <= 0 ||
-    !Number.isFinite(channelPrice) ||
-    channelPrice >= officialBase
-  ) {
-    return '';
-  }
-  const discount = Math.round((1 - channelPrice / officialBase) * 100);
-  return formatPriceRatioFromDiscount(discount, t);
-};
+
+const buildChannelPriceSummary = (rows, extraDiscounts = []) => ({
+  rows,
+  bestDiscount: getBestPriceDiscountPercent([
+    ...rows.map((row) => row.discount),
+    ...extraDiscounts,
+  ]),
+});
 
 /** 阶梯计费：取第一档输入/输出平台价（USD /1M，已含渠道折扣与分组倍率） */
 const getFirstTierTokenPricesUsd = (channel, modelData, usedGroupRatio) => {
@@ -253,9 +259,13 @@ const getFirstTierTokenPricesUsd = (channel, modelData, usedGroupRatio) => {
       channelTiers.length > 0 && channelPrice != null
         ? channelPrice
         : globalPrice;
-    const usd =
+    const current =
       (effective * costDisc + globalPrice * markupRate) * usedGroupRatio;
-    return Number.isFinite(usd) && usd > 0 ? usd : null;
+    return {
+      current: Number.isFinite(current) && current > 0 ? current : null,
+      official:
+        Number.isFinite(globalPrice) && globalPrice > 0 ? globalPrice : null,
+    };
   };
 
   return {
@@ -264,7 +274,7 @@ const getFirstTierTokenPricesUsd = (channel, modelData, usedGroupRatio) => {
   };
 };
 
-const getChannelPriceRows = ({
+const getChannelPriceSummary = ({
   channel,
   modelData,
   selectedGroup,
@@ -291,25 +301,27 @@ const getChannelPriceRows = ({
       t('视频');
     const unit =
       videoHint?.billing_mode === 'per_second' ? t('/秒起') : t('/条起');
-    return [
+    return buildChannelPriceSummary([
       {
         key: 'video',
         label: resolution,
         value: `${formatUsd(videoPrice * usedGroupRatio)}${unit}`,
+        discount: getTierBestDiscountPercent(videoHint, usedGroupRatio),
       },
-    ];
+    ]);
   }
 
   const imageHint = channel?.image_per_image_hint;
   const imagePrice = Number(imageHint?.min_usd_after_channel_discount);
   if (Number.isFinite(imagePrice) && imagePrice > 0) {
-    return [
+    return buildChannelPriceSummary([
       {
         key: 'image',
         label: t('图片'),
         value: `${formatUsd(imagePrice * usedGroupRatio)}${t('/张起')}`,
+        discount: getTierBestDiscountPercent(imageHint, usedGroupRatio),
       },
-    ];
+    ]);
   }
 
   const isTiered =
@@ -326,21 +338,29 @@ const getChannelPriceRows = ({
     if (tierPrices) {
       const unit = tokenUnit === 'K' ? '/K' : '/M';
       const rows = [];
-      if (tierPrices.input != null) {
+      if (tierPrices.input?.current != null) {
         rows.push({
           key: 'input',
           label: t('输入'),
-          value: `${formatUsd(tierPrices.input, true)}${unit}`,
+          value: `${formatUsd(tierPrices.input.current, true)}${unit}`,
+          discount: calculatePriceDiscountPercent(
+            tierPrices.input.current,
+            tierPrices.input.official,
+          ),
         });
       }
-      if (tierPrices.output != null) {
+      if (tierPrices.output?.current != null) {
         rows.push({
           key: 'output',
           label: t('输出'),
-          value: `${formatUsd(tierPrices.output, true)}${unit}`,
+          value: `${formatUsd(tierPrices.output.current, true)}${unit}`,
+          discount: calculatePriceDiscountPercent(
+            tierPrices.output.current,
+            tierPrices.output.official,
+          ),
         });
       }
-      if (rows.length > 0) return rows;
+      if (rows.length > 0) return buildChannelPriceSummary(rows);
     }
   }
 
@@ -360,14 +380,20 @@ const getChannelPriceRows = ({
     globalCreateCacheRatio: modelData?.create_cache_ratio,
   });
   if (isFixed) {
-    if (!(billingRates.effModelPrice >= 0)) return [];
-    return [
+    if (!(billingRates.effModelPrice >= 0)) {
+      return buildChannelPriceSummary([]);
+    }
+    return buildChannelPriceSummary([
       {
         key: 'fixed',
         label: t('价格'),
         value: `${formatUsd(billingRates.effModelPrice * usedGroupRatio)}${t('/次起')}`,
+        discount: calculatePriceDiscountPercent(
+          billingRates.effModelPrice,
+          modelData?.model_price,
+        ),
       },
-    ];
+    ]);
   }
 
   const unit = tokenUnit === 'K' ? '/K' : '/M';
@@ -380,6 +406,10 @@ const getChannelPriceRows = ({
         billingRates.inputRatioPrice * usedGroupRatio,
         true,
       )}${unit}`,
+      discount: calculatePriceDiscountPercent(
+        billingRates.inputRatioPrice,
+        Number(modelData?.model_ratio) * 2,
+      ),
     });
   }
   if (
@@ -394,9 +424,42 @@ const getChannelPriceRows = ({
         billingRates.completionRatioPrice * usedGroupRatio,
         true,
       )}${unit}`,
+      discount: calculatePriceDiscountPercent(
+        billingRates.completionRatioPrice,
+        Number(modelData?.model_ratio) *
+          Number(modelData?.completion_ratio) *
+          2,
+      ),
     });
   }
-  return rows;
+  const extraDiscounts = [];
+  if (
+    modelData?.cache_ratio != null &&
+    channel?.cache_ratio != null &&
+    Number.isFinite(billingRates.cacheRatioPrice)
+  ) {
+    extraDiscounts.push(
+      calculatePriceDiscountPercent(
+        billingRates.cacheRatioPrice,
+        Number(modelData?.model_ratio) * Number(modelData?.cache_ratio) * 2,
+      ),
+    );
+  }
+  if (
+    modelData?.create_cache_ratio != null &&
+    channel?.create_cache_ratio != null &&
+    Number.isFinite(billingRates.cacheCreationRatioPrice)
+  ) {
+    extraDiscounts.push(
+      calculatePriceDiscountPercent(
+        billingRates.cacheCreationRatioPrice,
+        Number(modelData?.model_ratio) *
+          Number(modelData?.create_cache_ratio) *
+          2,
+      ),
+    );
+  }
+  return buildChannelPriceSummary(rows, extraDiscounts);
 };
 
 const ModelChannelWorkspace = ({
@@ -522,11 +585,10 @@ const ModelChannelWorkspace = ({
             const latencyMeta = getChannelLatencyMeta(row, t);
             const routeLabel =
               channel.route_slug || channel.channel_no || modelData.model_name;
-            const discountLabel = formatDiscountLabel(channel, modelData, t);
             const isHotChannel = hotChannelScoreMap.has(
               getChannelHeatKey(modelData, channel),
             );
-            const priceRows = getChannelPriceRows({
+            const priceSummary = getChannelPriceSummary({
               channel,
               modelData,
               selectedGroup: props.selectedGroup,
@@ -535,6 +597,11 @@ const ModelChannelWorkspace = ({
               tokenUnit: props.tokenUnit,
               t,
             });
+            const priceRows = priceSummary.rows;
+            const discountLabel = formatDiscountLabel(
+              priceSummary.bestDiscount,
+              t,
+            );
             return (
               <button
                 key={key}
