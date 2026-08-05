@@ -1,4 +1,4 @@
-{
+﻿{
   "视频生成": "Génération vidéo",
   "translation": {
     " ": " ",
@@ -5769,6 +5769,7 @@
     "分润用途筛选": "Filtre de type de facturation",
     "视频按Token": "Vidéo (par token)",
     "视频其他": "Vidéo (autre)",
+    "ASR按秒": "ASR (par seconde)",
     "文本对话": "Chat texte",
     "计费分类": "Type de facturation",
     "Token消耗": "Consommation de tokens",

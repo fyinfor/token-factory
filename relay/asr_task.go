@@ -269,13 +269,25 @@ func failASRTaskAndRefund(ctx context.Context, task *model.AsrTask, reason strin
 	if !won {
 		return nil
 	}
+
+	c, billingInfo, prepErr := prepareASRBillingContext(task, nil)
+	if prepErr != nil {
+		logger.LogError(ctx, fmt.Sprintf("ASR 失败日志/退款准备计费上下文失败 task=%s: %v", task.TaskID, prepErr))
+	} else {
+		// 上游失败原因写入使用日志（错误类型），便于在日志页排查
+		apiErr := types.NewOpenAIError(
+			fmt.Errorf("ASR 异步任务失败: %s", reason),
+			types.ErrorCodeBadResponse,
+			http.StatusBadGateway,
+		)
+		service.RecordASRErrorLog(c, billingInfo, apiErr, task.TaskID)
+	}
+
 	if task.Quota <= 0 {
 		return nil
 	}
 	preConsumed := task.Quota
-	c, billingInfo, prepErr := prepareASRBillingContext(task, nil)
 	if prepErr != nil {
-		logger.LogError(ctx, fmt.Sprintf("ASR 退款准备计费上下文失败 task=%s: %v", task.TaskID, prepErr))
 		return nil
 	}
 	service.RefundASRPreConsumedQuota(c, billingInfo, preConsumed, task.TaskID, reason)

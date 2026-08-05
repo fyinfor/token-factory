@@ -22,6 +22,7 @@ type OpenAIErrorWithStatusCode struct {
 
 type GeneralErrorResponse struct {
 	Error    json.RawMessage `json:"error"`
+	Code     string          `json:"code"`
 	Message  string          `json:"message"`
 	Msg      string          `json:"msg"`
 	Err      string          `json:"err"`
@@ -58,6 +59,22 @@ func (e GeneralErrorResponse) ToMessage() string {
 			if err == nil && openAIError.Message != "" {
 				return openAIError.Message
 			}
+			// 部分上游 error 对象只有 code 无 message
+			var coded struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			}
+			if err := common.Unmarshal(e.Error, &coded); err == nil {
+				if coded.Message != "" && coded.Code != "" {
+					return coded.Code + ": " + coded.Message
+				}
+				if coded.Message != "" {
+					return coded.Message
+				}
+				if coded.Code != "" {
+					return coded.Code
+				}
+			}
 		case "string":
 			var msg string
 			err := common.Unmarshal(e.Error, &msg)
@@ -69,7 +86,13 @@ func (e GeneralErrorResponse) ToMessage() string {
 		}
 	}
 	if e.Message != "" {
+		if e.Code != "" {
+			return e.Code + ": " + e.Message
+		}
 		return e.Message
+	}
+	if e.Code != "" {
+		return e.Code
 	}
 	if e.Msg != "" {
 		return e.Msg

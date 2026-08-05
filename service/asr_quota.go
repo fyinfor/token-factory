@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/model"
@@ -67,7 +69,7 @@ func PostASRConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, sec
 		if err := SettleBilling(ctx, relayInfo, summary.Quota); err != nil {
 			logger.LogError(ctx, "error settling billing: "+err.Error())
 		} else {
-			tryPostWalletProfitShareCredit(ctx, relayInfo, usage, &summary)
+			tryPostWalletProfitShareCredit(ctx, relayInfo, usage, &summary, "asr")
 		}
 	case preConsumed > 0:
 		// 异步链路：提交时已预扣，此处仅补差价 / 退差额
@@ -78,7 +80,7 @@ func PostASRConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, sec
 				return types.NewError(err, types.ErrorCodeUpdateDataError)
 			}
 		}
-		tryPostWalletProfitShareCredit(ctx, relayInfo, usage, &summary)
+		tryPostWalletProfitShareCredit(ctx, relayInfo, usage, &summary, "asr")
 	default:
 		// 兼容旧异步任务（提交未预扣）：全额新建会话扣费
 		if summary.Quota > 0 {
@@ -89,7 +91,7 @@ func PostASRConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, sec
 		if err := SettleBilling(ctx, relayInfo, summary.Quota); err != nil {
 			logger.LogError(ctx, "error settling billing: "+err.Error())
 		} else {
-			tryPostWalletProfitShareCredit(ctx, relayInfo, usage, &summary)
+			tryPostWalletProfitShareCredit(ctx, relayInfo, usage, &summary, "asr")
 		}
 	}
 
@@ -102,8 +104,16 @@ func PostASRConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, sec
 	}
 
 	useTimeSeconds := time.Now().Unix() - relayInfo.StartTime.Unix()
+	// 展示用户实付每秒价：成本/加价折扣后的有效单价 × 分组倍率（与 summary.Quota 实扣口径一致）
+	effUnitUSD := model.EffectiveModelPrice(
+		relayInfo.PriceData.ModelPrice,
+		relayInfo.PriceData.GlobalModelPrice,
+		relayInfo.PriceData.CostDiscountPercent,
+		relayInfo.PriceData.MarkupDiscountPercent,
+	)
+	userUnitUSD := effUnitUSD * summary.GroupRatio
 	logContent := fmt.Sprintf("ASR 语音转写时长 %s 秒，每秒价格 %s",
-		formatASRSecondsDisplay(seconds), formatASRUnitPriceDisplay(relayInfo.PriceData.ModelPrice))
+		formatASRSecondsDisplay(seconds), formatASRUnitPriceDisplay(userUnitUSD))
 	if preConsumed > 0 && relayInfo.Billing == nil {
 		logContent += fmt.Sprintf("，预扣 %s，实际 %s", logger.FormatQuota(preConsumed), logger.FormatQuota(summary.Quota))
 	}
@@ -115,6 +125,7 @@ func PostASRConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, sec
 		0, 0, summary.ModelPrice, relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio)
 	other["asr"] = true
 	other["audio_seconds"] = seconds
+	other["asr_unit_price"] = userUnitUSD // 折扣后用户实付每秒价（USD），供前端日志详情展示
 	if taskID != "" {
 		other["task_id"] = taskID
 	}
@@ -157,6 +168,103 @@ func RefundASRPreConsumedQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 	}
 	logger.LogInfo(ctx, fmt.Sprintf("ASR 异步任务失败已退还预扣 %s（task_id=%s）: %s",
 		logger.FormatQuota(preConsumed), taskID, reason))
+}
+
+// RecordASRErrorLog 将 ASR 上游/请求失败写入使用日志（LogTypeError）。
+// ASR 错误日志不受 ERROR_LOG_ENABLED 开关限制，便于在使用日志中排查上游返回。
+func RecordASRErrorLog(c *gin.Context, relayInfo *relaycommon.RelayInfo, apiErr *types.TokenFactoryError, taskID string) {
+	if c == nil || apiErr == nil || !types.IsRecordErrorLog(apiErr) {
+		return
+	}
+	userId := 0
+	tokenId := 0
+	channelId := 0
+	channelType := 0
+	modelName := ""
+	tokenName := ""
+	userGroup := ""
+	isStream := false
+	if relayInfo != nil {
+		userId = relayInfo.UserId
+		tokenId = relayInfo.TokenId
+		modelName = relayInfo.OriginModelName
+		userGroup = relayInfo.UsingGroup
+		isStream = relayInfo.IsStream
+		if relayInfo.ChannelMeta != nil {
+			channelId = relayInfo.ChannelId
+			channelType = relayInfo.ChannelType
+		}
+	}
+	if userId == 0 {
+		userId = c.GetInt("id")
+	}
+	if tokenId == 0 {
+		tokenId = c.GetInt("token_id")
+	}
+	if channelId == 0 {
+		channelId = c.GetInt("channel_id")
+	}
+	if channelType == 0 {
+		channelType = c.GetInt("channel_type")
+	}
+	if modelName == "" {
+		modelName = c.GetString("original_model")
+	}
+	if tokenName == "" {
+		tokenName = c.GetString("token_name")
+	}
+	if userGroup == "" {
+		userGroup = c.GetString("group")
+	}
+
+	other := make(map[string]interface{})
+	if c.Request != nil && c.Request.URL != nil {
+		other["request_path"] = c.Request.URL.Path
+	}
+	other["asr"] = true
+	other["error_type"] = apiErr.GetErrorType()
+	other["error_code"] = apiErr.GetErrorCode()
+	other["status_code"] = apiErr.StatusCode
+	other["channel_id"] = channelId
+	other["channel_name"] = c.GetString("channel_name")
+	other["channel_type"] = channelType
+	if taskID != "" {
+		other["task_id"] = taskID
+	}
+	adminInfo := make(map[string]interface{})
+	adminInfo["use_channel"] = c.GetStringSlice("use_channel")
+	isMultiKey := common.GetContextKeyBool(c, constant.ContextKeyChannelIsMultiKey)
+	if isMultiKey {
+		adminInfo["is_multi_key"] = true
+		adminInfo["multi_key_index"] = common.GetContextKeyInt(c, constant.ContextKeyChannelMultiKeyIndex)
+	}
+	AppendChannelAffinityAdminInfo(c, adminInfo)
+	other["admin_info"] = adminInfo
+
+	useTimeSeconds := 0
+	if relayInfo != nil && !relayInfo.StartTime.IsZero() {
+		useTimeSeconds = int(time.Now().Unix() - relayInfo.StartTime.Unix())
+	} else {
+		startTime := common.GetContextKeyTime(c, constant.ContextKeyRequestStartTime)
+		if !startTime.IsZero() {
+			useTimeSeconds = int(time.Since(startTime).Seconds())
+		}
+	}
+
+	model.RecordErrorLog(
+		c,
+		userId,
+		channelId,
+		modelName,
+		tokenName,
+		apiErr.MaskSensitiveErrorWithStatusCode(),
+		tokenId,
+		useTimeSeconds,
+		isStream,
+		userGroup,
+		other,
+		apiErr.LogErrorOriginHint(),
+	)
 }
 
 // formatASRSecondsDisplay 音频时长展示：最多 2 位小数并去掉末尾 0（10.00 → 10，10.50 → 10.5）。

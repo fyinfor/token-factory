@@ -1001,25 +1001,42 @@ const ModelChannelList = ({
       );
     }
 
-    // ASR 语音识别：按秒单价（美元/秒）× 分组倍率
+    // ASR 语音识别：
+    //   官方价 = 全局 asr_price（美元/秒）
+    //   平台价 = (渠道价（空则全局价）× 成本折扣率 + 全局价 × 加价折扣率) × 分组倍率
+    //   其中 price_discount_percent 已含经营成本率；折扣与其他模型一致
     const rootAsrPrice = hasRatioValue(modelData?.asr_price)
       ? Number(modelData.asr_price)
       : null;
     if (rootAsrPrice != null && rootAsrPrice > 0) {
-      const asrValue = toDisplayCurrencyValue(rootAsrPrice * usedGroupRatio, {
+      const channelAsrPrice = rootAsrPrice; // 暂无渠道级 ASR 价，空则回退全局
+      const platformAsrUsd =
+        channelAsrPrice * costDisc + rootAsrPrice * markupRate;
+      const asrValue = toDisplayCurrencyValue(platformAsrUsd * usedGroupRatio, {
         tokenUnit,
       });
       const asrDisplay = formatCurrencyAmount(asrValue);
       const asrExact = formatPreciseCurrencyValue(asrValue);
+      const officialValue = toDisplayCurrencyValue(rootAsrPrice, { tokenUnit });
+      const officialDisplay = formatCurrencyAmount(officialValue);
+      const officialExact = formatPreciseCurrencyValue(officialValue);
+      let discount = null;
+      if (rootAsrPrice > 0 && platformAsrUsd < rootAsrPrice) {
+        discount = Math.round((1 - platformAsrUsd / rootAsrPrice) * 100);
+      }
+      const hasDiscount = discount != null && discount > 0;
       items.push({
-        label: t('语音识别按秒计费'),
+        label: t('语音识别'),
         value: `${asrDisplay} / ${t('秒')}`,
         valueTitle: `${asrExact} / ${t('秒')}`,
         valueExact: `${asrExact} / ${t('秒')}`,
-        original: null,
+        original: hasDiscount ? officialDisplay : null,
+        originalExact: hasDiscount ? `${officialExact} / ${t('秒')}` : undefined,
+        officialTitle: hasDiscount ? `${officialExact} / ${t('秒')}` : undefined,
+        officialExact: hasDiscount ? `${officialExact} / ${t('秒')}` : undefined,
         priceUnitLabel: null,
-        discount: null,
-        hasDiscount: false,
+        discount: hasDiscount ? discount : null,
+        hasDiscount,
       });
     }
     return items.filter(Boolean);

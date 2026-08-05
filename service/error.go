@@ -84,48 +84,92 @@ func ClaudeErrorWrapperLocal(err error, code string, statusCode int) *dto.Claude
 }
 
 func RelayErrorHandler(ctx context.Context, resp *http.Response, showBodyWhenFail bool) (tokenFactoryErr *types.TokenFactoryError) {
-	tokenFactoryErr = types.InitOpenAIError(types.ErrorCodeBadResponseStatusCode, resp.StatusCode)
-
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return
+		return types.NewOpenAIError(
+			fmt.Errorf("bad response status code %d, read body failed: %w", resp.StatusCode, err),
+			types.ErrorCodeBadResponseStatusCode,
+			resp.StatusCode,
+		)
 	}
 	CloseResponseBodyGracefully(resp)
-	var errResponse dto.GeneralErrorResponse
-	buildErrWithBody := func(message string) error {
+
+	bodyText := strings.TrimSpace(string(responseBody))
+	truncatedBody := truncateUpstreamErrorBody(bodyText)
+	buildMessage := func(message string) string {
 		if message == "" {
-			return fmt.Errorf("bad response status code %d, body: %s", resp.StatusCode, string(responseBody))
+			if truncatedBody == "" {
+				return fmt.Sprintf("bad response status code %d", resp.StatusCode)
+			}
+			return fmt.Sprintf("bad response status code %d, body: %s", resp.StatusCode, truncatedBody)
 		}
-		return fmt.Errorf("bad response status code %d, message: %s, body: %s", resp.StatusCode, message, string(responseBody))
+		if showBodyWhenFail && truncatedBody != "" {
+			return fmt.Sprintf("bad response status code %d, message: %s, body: %s", resp.StatusCode, message, truncatedBody)
+		}
+		// 形如 "<400> xxx.InvalidParameter: ..." 的上游文本/非常规 JSON：保留原文，避免只剩状态码
+		if strings.HasPrefix(message, "<") || strings.Contains(message, "InvalidParameter") {
+			return message
+		}
+		return message
 	}
 
+	var errResponse dto.GeneralErrorResponse
 	err = common.Unmarshal(responseBody, &errResponse)
 	if err != nil {
-		if showBodyWhenFail {
-			tokenFactoryErr.Err = buildErrWithBody("")
-		} else {
-			logger.LogError(ctx, fmt.Sprintf("bad response status code %d, body: %s", resp.StatusCode, string(responseBody)))
-			tokenFactoryErr.Err = fmt.Errorf("bad response status code %d", resp.StatusCode)
+		// 非 JSON（MaaS 常见纯文本 "<400> xxx.InvalidParameter: ..."）直接回传正文
+		logger.LogError(ctx, fmt.Sprintf("bad response status code %d, body: %s", resp.StatusCode, truncatedBody))
+		if bodyText != "" {
+			return types.NewOpenAIError(errors.New(truncatedBody), types.ErrorCodeBadResponseStatusCode, resp.StatusCode)
 		}
-		return
+		return types.NewOpenAIError(
+			fmt.Errorf("bad response status code %d", resp.StatusCode),
+			types.ErrorCodeBadResponseStatusCode,
+			resp.StatusCode,
+		)
 	}
 
 	if common.GetJsonType(errResponse.Error) == "object" {
 		// General format error (OpenAI, Anthropic, Gemini, etc.)
 		oaiError := errResponse.TryToOpenAIError()
 		if oaiError != nil {
-			tokenFactoryErr = types.WithOpenAIError(*oaiError, resp.StatusCode)
-			if showBodyWhenFail {
-				tokenFactoryErr.Err = buildErrWithBody(tokenFactoryErr.Error())
+			msg := strings.TrimSpace(oaiError.Message)
+			if msg == "" {
+				msg = buildMessage("")
+			} else if showBodyWhenFail {
+				msg = buildMessage(msg)
 			}
-			return
+			oaiError.Message = msg
+			if oaiError.Type == "" {
+				oaiError.Type = string(types.ErrorCodeBadResponseStatusCode)
+			}
+			if oaiError.Code == nil {
+				oaiError.Code = types.ErrorCodeBadResponseStatusCode
+			}
+			return types.WithOpenAIError(*oaiError, resp.StatusCode)
 		}
 	}
-	tokenFactoryErr = types.NewOpenAIError(errors.New(errResponse.ToMessage()), types.ErrorCodeBadResponseStatusCode, resp.StatusCode)
-	if showBodyWhenFail {
-		tokenFactoryErr.Err = buildErrWithBody(tokenFactoryErr.Error())
+
+	msg := strings.TrimSpace(errResponse.ToMessage())
+	if msg == "" {
+		// JSON 可解析但无 message 字段（或仅有 code）：把原始 body 带给客户端便于排查
+		msg = buildMessage("")
+		logger.LogError(ctx, fmt.Sprintf("bad response status code %d, empty message, body: %s", resp.StatusCode, truncatedBody))
+	} else if showBodyWhenFail {
+		msg = buildMessage(msg)
 	}
-	return
+	return types.NewOpenAIError(errors.New(msg), types.ErrorCodeBadResponseStatusCode, resp.StatusCode)
+}
+
+func truncateUpstreamErrorBody(s string) string {
+	const maxLen = 800
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "...(truncated)"
 }
 
 func ResetStatusCode(tokenFactoryErr *types.TokenFactoryError, statusCodeMappingStr string) {

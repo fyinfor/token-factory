@@ -43,7 +43,7 @@ func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInf
 
 	minimaxRequest := MiniMaxTTSRequest{
 		Model: info.OriginModelName,
-		Text:  request.Input,
+		Text:  request.GetInputText(),
 		VoiceSetting: VoiceSetting{
 			VoiceID: voiceID,
 			Speed:   speed,

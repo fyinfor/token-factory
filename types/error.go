@@ -203,6 +203,10 @@ func (e *TokenFactoryError) ToOpenAIError() OpenAIError {
 			Code:    e.errorCode,
 		}
 	}
+	// RelayError.Message 为空时（例如 InitOpenAIError 后仅更新了 Err），回退到底层 Err，避免客户端只看到 "openai_error"。
+	if result.Message == "" {
+		result.Message = e.Error()
+	}
 	if e.errorCode != ErrorCodeCountTokenFailed {
 		result.Message = common.MaskSensitiveInfo(result.Message)
 	}

@@ -1,4 +1,4 @@
-{
+﻿{
   "translation": {
     "Seedance2.0合规素材库": "Seedance 2.0 Compliant Material Library",
     "素材管理": "SD Material Library",
@@ -5067,6 +5067,7 @@
     "语言偏好": "Language Preference",
     "语言偏好已保存": "Language preference saved",
     "语言设置": "Language settings",
+    "语音识别": "Speech Recognition",
     "语音识别按秒计费": "Speech recognition billed per second",
     "语音识别价格": "Speech Recognition Price",
     "语音输出": "Voice output",
@@ -6001,6 +6002,7 @@
     "分润用途筛选": "Billing type filter",
     "视频按Token": "Video (by token)",
     "视频其他": "Video (other)",
+    "ASR按秒": "ASR (per second)",
     "文本对话": "Text chat",
     "计费分类": "Billing type",
     "Token消耗": "Token usage",

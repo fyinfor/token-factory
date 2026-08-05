@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relay"
@@ -67,6 +68,12 @@ func RelayASRTaskSubmit(c *gin.Context) {
 	addUsedChannel(c, channelModel.Id)
 
 	tokenFactoryError = relay.SubmitASRTask(c, relayInfo, submitReq, channelModel.GetSetting().Proxy)
+	if tokenFactoryError != nil {
+		processChannelError(c,
+			*types.NewChannelError(channelModel.Id, channelModel.Type, channelModel.Name, channelModel.ChannelInfo.IsMultiKey,
+				common.GetContextKeyString(c, constant.ContextKeyChannelKey), channelModel.GetAutoBan()),
+			tokenFactoryError)
+	}
 }
 
 // RelayASRTaskFetch GET /v1/audio/transcriptions/async/:task_id

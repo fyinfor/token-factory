@@ -562,6 +562,16 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		})
 	}
 
+	// ASR 上游错误始终写入使用日志（不受 ERROR_LOG_ENABLED 默认关闭影响）
+	if constant.IsASRChannel(channelError.ChannelType) && types.IsRecordErrorLog(err) {
+		// 以本次失败渠道为准写入，避免重试时上下文渠道信息不一致
+		c.Set("channel_id", channelError.ChannelId)
+		c.Set("channel_name", channelError.ChannelName)
+		c.Set("channel_type", channelError.ChannelType)
+		service.RecordASRErrorLog(c, nil, err, "")
+		return
+	}
+
 	if constant.ErrorLogEnabled && types.IsRecordErrorLog(err) {
 		// 保存错误日志到mysql中
 		userId := c.GetInt("id")
