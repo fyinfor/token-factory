@@ -36,6 +36,8 @@ type ModelRequest struct {
 func Distribute() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		var channel *model.Channel
+		// 压测/归因：X-TF-No-Failover=true 时禁止渠道级 failover（见 shouldRetry / getChannel）。
+		service.ApplyNoFailoverHeader(c)
 		modelRequest, shouldSelectChannel, err := getModelRequest(c)
 		if err != nil {
 			abortWithOpenAiMessage(c, http.StatusBadRequest, i18n.T(c, i18n.MsgDistributorInvalidRequest, map[string]any{"Error": err.Error()}))
@@ -194,9 +196,15 @@ func Distribute() func(c *gin.Context) {
 							common.SetContextKey(c, constant.ContextKeyPreferredChannelID, 0)
 						} else {
 							usingGroup := common.GetContextKeyString(c, constant.ContextKeyUsingGroup)
-							ordered := service.BuildPreferredChannelFailoverOrder(c, modelRequest.Model, usingGroup, preferredID)
-							if len(ordered) == 0 {
+							var ordered []int
+							if service.ContextNoFailover(c) {
+								// 关 failover 时只保留偏好渠道，避免有序候选被后续路径消费。
 								ordered = []int{preferredID}
+							} else {
+								ordered = service.BuildPreferredChannelFailoverOrder(c, modelRequest.Model, usingGroup, preferredID)
+								if len(ordered) == 0 {
+									ordered = []int{preferredID}
+								}
 							}
 							common.SetContextKey(c, constant.ContextKeySmartRouteChannelOrder, ordered)
 							channel = preferredChannel
