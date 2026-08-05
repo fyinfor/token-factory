@@ -433,7 +433,8 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 	}
 	// playground specific_channel_id / 硬指定渠道路由（{alias}/{model}/cN）：仅允许首轮命中已选渠道，
 	// 禁止在重试阶段切换到 smart-route 或随机候选池。
-	// 注意：{model}/{route_slug} 使用 PreferredChannelID + 有序候选，允许保底切换。
+	// 注意：{model}/{route_slug} 使用 PreferredChannelID + 有序候选，允许保底切换；
+	// 若带 X-TF-No-Failover 则同样禁止切换。
 	if retryParam.GetRetry() > 0 {
 		if _, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId); ok {
 			return nil, types.NewError(
@@ -445,6 +446,13 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		if _, ok := common.GetContextKey(c, constant.ContextKeyForcedChannelID); ok {
 			return nil, types.NewError(
 				fmt.Errorf("已指定渠道，禁用重试切换渠道"),
+				types.ErrorCodeGetChannelFailed,
+				types.ErrOptionWithSkipRetry(),
+			)
+		}
+		if service.ContextNoFailover(c) {
+			return nil, types.NewError(
+				fmt.Errorf("已禁用渠道切换（X-TF-No-Failover）"),
 				types.ErrorCodeGetChannelFailed,
 				types.ErrOptionWithSkipRetry(),
 			)
@@ -504,7 +512,7 @@ func shouldRetry(c *gin.Context, openaiErr *types.TokenFactoryError, retryTimes 
 		return false
 	}
 	// 明确指定渠道（playground specific_channel_id / {alias}/{model}/cN 硬指定）时，不允许重试切换渠道。
-	// {model}/{route_slug} 偏好渠道走有序候选保底，不在此拦截。
+	// {model}/{route_slug} 偏好渠道走有序候选保底，不在此拦截；X-TF-No-Failover 显式关闭切换。
 	if _, ok := c.Get("specific_channel_id"); ok {
 		return false
 	}
@@ -512,6 +520,9 @@ func shouldRetry(c *gin.Context, openaiErr *types.TokenFactoryError, retryTimes 
 		return false
 	}
 	if _, ok := common.GetContextKey(c, constant.ContextKeyForcedChannelID); ok {
+		return false
+	}
+	if service.ContextNoFailover(c) {
 		return false
 	}
 	if types.IsChannelError(openaiErr) {
@@ -868,6 +879,12 @@ func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError,
 		return false
 	}
 	if _, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId); ok {
+		return false
+	}
+	if _, ok := common.GetContextKey(c, constant.ContextKeyForcedChannelID); ok {
+		return false
+	}
+	if service.ContextNoFailover(c) {
 		return false
 	}
 	if taskErr.LocalError {
