@@ -30,6 +30,7 @@ import {
   groupImagePerImageTiersByFamily,
   IMAGE_PER_IMAGE_FAMILY_TITLE_KEY,
 } from '../constants/imagePerImageHintI18n';
+import { calculatePriceDiscountPercent } from '../utils/discount';
 import TierPriceMatrix from './TierPriceMatrix';
 
 const { Text } = Typography;
@@ -44,19 +45,6 @@ function formatTierPrice(usd, usedGroupRatio, displayPrice) {
   const value = Number(usd || 0);
   if (!Number.isFinite(value) || value <= 0) return null;
   return displayPrice(value * usedGroupRatio);
-}
-
-function getDiscountPercent(currentUsd, officialUsd) {
-  const current = Number(currentUsd || 0);
-  const official = Number(officialUsd || 0);
-  if (
-    !Number.isFinite(current) ||
-    !Number.isFinite(official) ||
-    official <= 0
-  ) {
-    return null;
-  }
-  return official > current ? Math.round((1 - current / official) * 100) : 0;
 }
 
 function mapRowsToItems(
@@ -86,12 +74,7 @@ function mapRowsToItems(
         : fallbackCostUsd
       : effectiveUsd;
     const platformUsd = currentUsd * usedGroupRatio;
-    const costPercent = Number(priceDiscountPercent);
-    const discount = isCostPrice
-      ? Number.isFinite(costPercent) && costPercent >= 0 && costPercent < 100
-        ? 100 - costPercent
-        : 0
-      : getDiscountPercent(platformUsd, officialUsd);
+    const discount = calculatePriceDiscountPercent(platformUsd, officialUsd);
     return {
       key: `img-${idx}-${row.lane}-${row.resolution}`,
       resolution:
