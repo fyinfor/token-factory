@@ -174,6 +174,11 @@ func Distribute() func(c *gin.Context) {
 							abortWithOpenAiMessage(c, http.StatusForbidden, i18n.T(c, i18n.MsgDistributorChannelDisabled))
 							return
 						}
+						// 用户指定价：硬指定渠道超出价格上限时直接拒绝（硬指定语义不切换渠道）。
+						if !service.ChannelWithinUserPriceCap(c.GetInt("id"), modelRequest.Model, forcedChannel) {
+							abortWithOpenAiMessage(c, http.StatusForbidden, fmt.Sprintf("指定渠道价格超出您对模型 %s 的指定价上限，禁止调用", modelRequest.Model))
+							return
+						}
 						common.SetContextKey(c, constant.ContextKeyTokenSpecificChannelId, strconv.Itoa(forcedID))
 						channel = forcedChannel
 						common.SetContextKey(c, constant.ContextKeyRequestStartTime, time.Now())
@@ -191,6 +196,11 @@ func Distribute() func(c *gin.Context) {
 					if preferredID, pok := rawPref.(int); pok && preferredID > 0 {
 						preferredChannel, perr := model.CacheGetChannel(preferredID)
 						preferOK := perr == nil && preferredChannel != nil && preferredChannel.Status == common.ChannelStatusEnabled
+						// 用户指定价：偏好渠道超出价格上限时清除偏好，回落同模型智能路由（可保底切换）。
+						if preferOK && !service.ChannelWithinUserPriceCap(c.GetInt("id"), modelRequest.Model, preferredChannel) {
+							logger.LogInfo(c, fmt.Sprintf("route_slug preferred channel (id=%d) exceeds user price cap, fallback to same-model smart route for model=%s", preferredID, modelRequest.Model))
+							preferOK = false
+						}
 						if !preferOK {
 							logger.LogInfo(c, fmt.Sprintf("route_slug preferred channel unavailable (id=%d), fallback to same-model smart route for model=%s", preferredID, modelRequest.Model))
 							common.SetContextKey(c, constant.ContextKeyPreferredChannelID, 0)
@@ -282,6 +292,8 @@ func Distribute() func(c *gin.Context) {
 								return
 							}
 						} else if endpointChannelFilter != nil && !endpointChannelFilter(preferred) {
+						} else if !service.ChannelWithinUserPriceCap(c.GetInt("id"), modelRequest.Model, preferred) {
+							// 用户指定价：亲和渠道超出价格上限时跳过，走正常选路。
 						} else if usingGroup == "auto" {
 							autoGroups := service.GetUserAutoGroup(userGroup)
 							for _, g := range autoGroups {
@@ -828,6 +840,12 @@ func tryTokenFactoryRoute(c *gin.Context, modelName string, group string) (*mode
 	candidates := service.CollectSameModelRouteCandidates(group, modelName)
 	if len(candidates) == 0 {
 		logger.LogInfo(c, fmt.Sprintf("local_route skip: no enabled channels for model=%s group=%s", modelName, group))
+		return nil, false
+	}
+	// 用户指定价：排除单价超出用户价格上限的渠道。
+	candidates = service.FilterRouteCandidatesByUserPriceCap(userID, modelName, candidates)
+	if len(candidates) == 0 {
+		logger.LogInfo(c, fmt.Sprintf("local_route skip: no channels within user price cap for model=%s group=%s user=%d", modelName, group, userID))
 		return nil, false
 	}
 

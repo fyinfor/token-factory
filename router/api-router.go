@@ -424,6 +424,16 @@ func SetApiRouter(router *gin.Engine) {
 			priceRoute.POST("/import", controller.ImportPrices)
 		}
 
+		// 用户指定价管理（仅管理员）：按 用户×模型 覆盖三折扣并约束智能路由价格上限
+		userModelPricingRoute := apiRouter.Group("/user_model_pricing")
+		userModelPricingRoute.Use(middleware.AdminAuth())
+		{
+			userModelPricingRoute.GET("/", controller.ListUserModelPricing)
+			userModelPricingRoute.GET("/preview", controller.PreviewUserModelPricing)
+			userModelPricingRoute.POST("/", controller.UpsertUserModelPricing)
+			userModelPricingRoute.DELETE("/:id", controller.DeleteUserModelPricing)
+		}
+
 		tfOpenSyncRoute := apiRouter.Group("/tf_open_sync")
 		{
 			// 子站 TokenFactoryOpen 拉全站渠道（脱敏+定价）；鉴权见 controller.authorizeTFOpenSyncExport

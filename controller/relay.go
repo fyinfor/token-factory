@@ -492,6 +492,15 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		return nil, types.NewError(fmt.Errorf("分组 %s 下模型 %s 的可用渠道不存在（retry）", selectGroup, info.OriginModelName), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}
 
+	// 用户指定价：重试随机兜底选中的渠道也不允许超出用户价格上限。
+	if !service.ChannelWithinUserPriceCap(c.GetInt("id"), info.OriginModelName, channel) {
+		return nil, types.NewError(
+			fmt.Errorf("分组 %s 下模型 %s 已无满足用户指定价上限的可用渠道（retry）", selectGroup, info.OriginModelName),
+			types.ErrorCodeGetChannelFailed,
+			types.ErrOptionWithSkipRetry(),
+		)
+	}
+
 	tokenFactoryError := middleware.SetupContextForSelectedChannel(c, channel, info.OriginModelName)
 	if tokenFactoryError != nil {
 		return nil, tokenFactoryError

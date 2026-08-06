@@ -78,6 +78,21 @@ func resolveConcreteGroupForModel(c *gin.Context, usingGroup, modelName string) 
 func BuildPreferredChannelFailoverOrder(c *gin.Context, modelName, group string, preferredID int) []int {
 	group = resolveConcreteGroupForModel(c, group, modelName)
 	candidates := CollectSameModelRouteCandidates(group, modelName)
+
+	userID := 0
+	if c != nil {
+		userID = c.GetInt("id")
+	}
+	// 用户指定价：保底候选与偏好首跳都不允许超出价格上限。
+	candidates = FilterRouteCandidatesByUserPriceCap(userID, modelName, candidates)
+	if preferredID > 0 {
+		if ch, err := model.CacheGetChannel(preferredID); err == nil && ch != nil {
+			if !ChannelWithinUserPriceCap(userID, modelName, ch) {
+				preferredID = 0
+			}
+		}
+	}
+
 	if len(candidates) == 0 {
 		if preferredID > 0 {
 			return []int{preferredID}
@@ -85,10 +100,6 @@ func BuildPreferredChannelFailoverOrder(c *gin.Context, modelName, group string,
 		return nil
 	}
 
-	userID := 0
-	if c != nil {
-		userID = c.GetInt("id")
-	}
 	res := SelectChannelLocal(modelName, userID, candidates)
 	var ordered []int
 	if !res.Fallback && len(res.OrderedChannelIDs) > 0 {
