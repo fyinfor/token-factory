@@ -164,3 +164,88 @@ func PreviewUserModelPricing(c *gin.Context) {
 		"total_channels": len(channels),
 	})
 }
+
+// ListUserModelPricingUsers GET /api/user_model_pricing/users
+// 已配置指定价的用户汇总，供管理页「按用户」筛选。
+func ListUserModelPricingUsers(c *gin.Context) {
+	rows, err := model.ListUsersWithModelPricing()
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, rows)
+}
+
+type importUserModelPricingReq struct {
+	UserId  int   `json:"user_id"`
+	Enabled *bool `json:"enabled"`
+}
+
+// PreviewImportUserModelPricing GET /api/user_model_pricing/import_preview?user_id=
+// 预览：每个已定价模型将抄自当前最便宜启用渠道的三项折扣（不写入）。
+func PreviewImportUserModelPricing(c *gin.Context) {
+	userId, _ := strconv.Atoi(c.Query("user_id"))
+	if userId <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "user_id 不能为空"})
+		return
+	}
+	_, preview := service.BuildUserModelPricingImportFromCheapestChannels(userId, true)
+	common.ApiSuccess(c, gin.H{
+		"total_models": len(preview),
+		"items":        preview,
+	})
+}
+
+// ImportUserModelPricing POST /api/user_model_pricing/import
+// 一键导入：将当前平台「已启用且已配置展示定价」的模型，按每个模型当前最便宜启用渠道的三项折扣绑定到指定用户（已存在则覆盖为该渠道当前折扣）。
+func ImportUserModelPricing(c *gin.Context) {
+	var req importUserModelPricingReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if req.UserId <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "user_id 不能为空"})
+		return
+	}
+	if _, err := model.GetUserById(req.UserId, false); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "用户不存在"})
+		return
+	}
+	enabled := true
+	if req.Enabled != nil {
+		enabled = *req.Enabled
+	}
+	rows, preview := service.BuildUserModelPricingImportFromCheapestChannels(req.UserId, enabled)
+	if len(rows) == 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "当前没有可导入的已定价模型（或无已配置单价的启用渠道）"})
+		return
+	}
+	created, updated, err := model.BulkUpsertUserModelPricingOverrideRows(rows)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{
+		"total_models": len(rows),
+		"created":      created,
+		"updated":      updated,
+		"items":        preview,
+	})
+}
+
+// DeleteUserModelPricingByUser DELETE /api/user_model_pricing/by_user/:user_id
+// 清空某用户下全部指定价配置。
+func DeleteUserModelPricingByUser(c *gin.Context) {
+	userId, err := strconv.Atoi(c.Param("user_id"))
+	if err != nil || userId <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的 user_id"})
+		return
+	}
+	n, err := model.DeleteUserModelPricingOverridesByUserId(userId)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{"deleted": n})
+}

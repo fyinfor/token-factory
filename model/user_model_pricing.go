@@ -190,6 +190,205 @@ func DeleteUserModelPricingOverrideById(id int) error {
 	return err
 }
 
+// DeleteUserModelPricingOverridesByUserId 删除某用户下全部指定价配置。
+func DeleteUserModelPricingOverridesByUserId(userId int) (int64, error) {
+	if userId <= 0 {
+		return 0, errors.New("invalid user_id")
+	}
+	result := DB.Where("user_id = ?", userId).Delete(&UserModelPricingOverride{})
+	if result.Error == nil && result.RowsAffected > 0 {
+		InvalidateUserModelPricingCache()
+	}
+	return result.RowsAffected, result.Error
+}
+
+// UserModelPricingUserSummary 已配置指定价的用户汇总（管理页按用户筛选用）。
+type UserModelPricingUserSummary struct {
+	UserId      int    `json:"user_id"`
+	Username    string `json:"username"`
+	ModelCount  int64  `json:"model_count"`
+	EnabledCount int64 `json:"enabled_count"`
+}
+
+// ListUsersWithModelPricing 列出所有已有指定价配置的用户（按最近更新倒序）。
+func ListUsersWithModelPricing() ([]UserModelPricingUserSummary, error) {
+	type row struct {
+		UserId       int
+		ModelCount   int64
+		EnabledCount int64
+		MaxUpdated   int64
+	}
+	var rows []row
+	err := DB.Model(&UserModelPricingOverride{}).
+		Select("user_id, COUNT(*) AS model_count, SUM(CASE WHEN enabled THEN 1 ELSE 0 END) AS enabled_count, MAX(updated_time) AS max_updated").
+		Group("user_id").
+		Order("max_updated DESC").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]int, 0, len(rows))
+	for _, r := range rows {
+		ids = append(ids, r.UserId)
+	}
+	names := GetUsernamesByIds(ids)
+	out := make([]UserModelPricingUserSummary, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, UserModelPricingUserSummary{
+			UserId:       r.UserId,
+			Username:     names[r.UserId],
+			ModelCount:   r.ModelCount,
+			EnabledCount: r.EnabledCount,
+		})
+	}
+	return out, nil
+}
+
+// ListImportablePricedModels 返回可一键导入的模型名：当前启用能力中且已配置展示定价的模型。
+func ListImportablePricedModels() []string {
+	enabled := GetEnabledModels()
+	out := make([]string, 0, len(enabled))
+	seen := make(map[string]struct{}, len(enabled))
+	for _, name := range enabled {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		if !ModelHasDisplayConfiguredPricing(name) {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	return out
+}
+
+// BulkUpsertUserModelPricingOverrides 按统一三折扣批量为某用户 upsert 多个模型指定价。
+// 返回新建条数、更新条数。
+func BulkUpsertUserModelPricingOverrides(userId int, modelNames []string, priceDisc, operating, markup float64, enabled bool) (created int, updated int, err error) {
+	if userId <= 0 {
+		return 0, 0, errors.New("invalid user_id")
+	}
+	names := make([]string, 0, len(modelNames))
+	seen := make(map[string]struct{}, len(modelNames))
+	for _, n := range modelNames {
+		n = strings.TrimSpace(n)
+		if n == "" {
+			continue
+		}
+		if _, ok := seen[n]; ok {
+			continue
+		}
+		seen[n] = struct{}{}
+		names = append(names, n)
+	}
+	if len(names) == 0 {
+		return 0, 0, nil
+	}
+	rows := make([]UserModelPricingOverride, 0, len(names))
+	for _, name := range names {
+		rows = append(rows, UserModelPricingOverride{
+			UserId:               userId,
+			ModelName:            name,
+			PriceDiscountPercent: priceDisc,
+			OperatingCostPercent: operating,
+			MarkupDiscountRate:   markup,
+			Enabled:              enabled,
+		})
+	}
+	return BulkUpsertUserModelPricingOverrideRows(rows)
+}
+
+// BulkUpsertUserModelPricingOverrideRows 批量 upsert，每条可带各自的三折扣（用于从渠道当前定价导入）。
+func BulkUpsertUserModelPricingOverrideRows(rows []UserModelPricingOverride) (created int, updated int, err error) {
+	if len(rows) == 0 {
+		return 0, 0, nil
+	}
+	// 按 user_id 分组处理（导入场景通常同一用户）。
+	byUser := make(map[int][]UserModelPricingOverride)
+	for _, r := range rows {
+		r.ModelName = strings.TrimSpace(r.ModelName)
+		if r.UserId <= 0 || r.ModelName == "" {
+			continue
+		}
+		byUser[r.UserId] = append(byUser[r.UserId], r)
+	}
+	if len(byUser) == 0 {
+		return 0, 0, nil
+	}
+
+	now := time.Now().Unix()
+	tx := DB.Begin()
+	if tx.Error != nil {
+		return 0, 0, tx.Error
+	}
+	totalCreated, totalUpdated := 0, 0
+	for userId, userRows := range byUser {
+		names := make([]string, 0, len(userRows))
+		rowByName := make(map[string]UserModelPricingOverride, len(userRows))
+		for _, r := range userRows {
+			// 同名后者覆盖前者
+			if _, ok := rowByName[r.ModelName]; !ok {
+				names = append(names, r.ModelName)
+			}
+			rowByName[r.ModelName] = r
+		}
+		var existing []UserModelPricingOverride
+		if err = tx.Where("user_id = ? AND model_name IN ?", userId, names).Find(&existing).Error; err != nil {
+			tx.Rollback()
+			return 0, 0, err
+		}
+		existByName := make(map[string]UserModelPricingOverride, len(existing))
+		for _, e := range existing {
+			existByName[e.ModelName] = e
+		}
+
+		toCreate := make([]UserModelPricingOverride, 0)
+		for _, name := range names {
+			src := rowByName[name]
+			if e, ok := existByName[name]; ok {
+				if err = tx.Model(&UserModelPricingOverride{}).Where("id = ?", e.Id).Updates(map[string]interface{}{
+					"price_discount_percent": src.PriceDiscountPercent,
+					"operating_cost_percent": src.OperatingCostPercent,
+					"markup_discount_rate":   src.MarkupDiscountRate,
+					"enabled":                src.Enabled,
+					"updated_time":           now,
+				}).Error; err != nil {
+					tx.Rollback()
+					return 0, 0, err
+				}
+				totalUpdated++
+				continue
+			}
+			toCreate = append(toCreate, UserModelPricingOverride{
+				UserId:               userId,
+				ModelName:            name,
+				PriceDiscountPercent: src.PriceDiscountPercent,
+				OperatingCostPercent: src.OperatingCostPercent,
+				MarkupDiscountRate:   src.MarkupDiscountRate,
+				Enabled:              src.Enabled,
+				CreatedTime:          now,
+				UpdatedTime:          now,
+			})
+		}
+		if len(toCreate) > 0 {
+			if err = tx.CreateInBatches(toCreate, 100).Error; err != nil {
+				tx.Rollback()
+				return 0, 0, err
+			}
+			totalCreated += len(toCreate)
+		}
+	}
+	if err = tx.Commit().Error; err != nil {
+		return 0, 0, err
+	}
+	InvalidateUserModelPricingCache()
+	return totalCreated, totalUpdated, nil
+}
+
 // GetUsernamesByIds 批量查询用户名（管理界面展示用）。
 func GetUsernamesByIds(ids []int) map[int]string {
 	out := make(map[int]string, len(ids))

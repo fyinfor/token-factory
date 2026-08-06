@@ -1,6 +1,9 @@
 package service
 
 import (
+	"strings"
+
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
@@ -88,4 +91,82 @@ func filterEndpointCandidatesByUserPriceCap(userID int, modelName string, cands 
 		}
 	}
 	return out
+}
+
+// UserModelPricingImportPreviewItem 一键导入预览：每个模型抄自最便宜渠道的当前三项折扣。
+type UserModelPricingImportPreviewItem struct {
+	ModelName            string  `json:"model_name"`
+	ChannelId            int     `json:"channel_id"`
+	ChannelName          string  `json:"channel_name"`
+	UnitPrice            float64 `json:"unit_price"`
+	PriceDiscountPercent float64 `json:"price_discount_percent"`
+	OperatingCostPercent float64 `json:"operating_cost_percent"`
+	MarkupDiscountRate   float64 `json:"markup_discount_rate"`
+	TotalPercent         float64 `json:"total_percent"`
+}
+
+// BuildUserModelPricingImportFromCheapestChannels 为用户构建「从当前最便宜渠道抄折扣」的导入行。
+// 跳过找不到已配置单价渠道的模型。
+func BuildUserModelPricingImportFromCheapestChannels(userID int, enabled bool) (rows []model.UserModelPricingOverride, preview []UserModelPricingImportPreviewItem) {
+	if userID <= 0 {
+		return nil, nil
+	}
+	models := model.ListImportablePricedModels()
+	rows = make([]model.UserModelPricingOverride, 0, len(models))
+	preview = make([]UserModelPricingImportPreviewItem, 0, len(models))
+	for _, name := range models {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		ch, price, ok := findCheapestEnabledChannelForModel(name)
+		if !ok || ch == nil {
+			continue
+		}
+		raw := ch.ResolvedPriceDiscountPercent()
+		operating := ch.ResolvedOperatingCostPercent()
+		markup := ch.ResolvedMarkupDiscountRate()
+		rows = append(rows, model.UserModelPricingOverride{
+			UserId:               userID,
+			ModelName:            name,
+			PriceDiscountPercent: raw,
+			OperatingCostPercent: operating,
+			MarkupDiscountRate:   markup,
+			Enabled:              enabled,
+		})
+		preview = append(preview, UserModelPricingImportPreviewItem{
+			ModelName:            name,
+			ChannelId:            ch.Id,
+			ChannelName:          ch.Name,
+			UnitPrice:            price,
+			PriceDiscountPercent: raw,
+			OperatingCostPercent: operating,
+			MarkupDiscountRate:   markup,
+			TotalPercent:         raw + operating + markup,
+		})
+	}
+	return rows, preview
+}
+
+func findCheapestEnabledChannelForModel(modelName string) (*model.Channel, float64, bool) {
+	ids := model.GetEnabledChannelIDsByModel(modelName)
+	var best *model.Channel
+	var bestPrice float64
+	found := false
+	for _, id := range ids {
+		ch, err := model.CacheGetChannel(id)
+		if err != nil || ch == nil || ch.Status != common.ChannelStatusEnabled {
+			continue
+		}
+		price, ok := ResolveChannelModelConfiguredUnitPrice(ch, modelName)
+		if !ok || price <= 0 {
+			continue
+		}
+		if !found || price < bestPrice {
+			best = ch
+			bestPrice = price
+			found = true
+		}
+	}
+	return best, bestPrice, found
 }
