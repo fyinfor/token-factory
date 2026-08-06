@@ -429,8 +429,12 @@ func SetApiRouter(router *gin.Engine) {
 		userModelPricingRoute.Use(middleware.AdminAuth())
 		{
 			userModelPricingRoute.GET("/", controller.ListUserModelPricing)
+			userModelPricingRoute.GET("/users", controller.ListUserModelPricingUsers)
 			userModelPricingRoute.GET("/preview", controller.PreviewUserModelPricing)
+			userModelPricingRoute.GET("/import_preview", controller.PreviewImportUserModelPricing)
 			userModelPricingRoute.POST("/", controller.UpsertUserModelPricing)
+			userModelPricingRoute.POST("/import", controller.ImportUserModelPricing)
+			userModelPricingRoute.DELETE("/by_user/:user_id", controller.DeleteUserModelPricingByUser)
 			userModelPricingRoute.DELETE("/:id", controller.DeleteUserModelPricing)
 		}
 
