@@ -7,7 +7,7 @@ import (
 
 // ============================== 同步转写（multimodal-generation） ==============================
 
-// aliASRInputAudio 同步转写音频载荷：URL 或 data URI。
+// aliASRInputAudio 同步转写音频载荷：公网可访问的音频 URL（multipart file 会先上传附件库再填入）。
 type aliASRInputAudio struct {
 	Data string `json:"data"`
 }

@@ -20,6 +20,7 @@ import (
 // RelayASRTaskSubmit POST /v1/audio/transcriptions/async
 // 提交阿里云 ASR 异步转写任务：渠道分发沿用 Distribute 中间件，此处复用首个选中渠道，
 // 不做渠道重试以避免重复创建上游任务；提交预扣 60 秒费用，成功取结果后按 usage.duration 补差价。
+// 支持 JSON/multipart 的 audio_url，或 multipart file（先上传操练场附件库再以上游可拉取 URL 提交）。
 func RelayASRTaskSubmit(c *gin.Context) {
 	requestId := c.GetString(common.RequestIdKey)
 	var tokenFactoryError *types.TokenFactoryError

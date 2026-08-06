@@ -86,8 +86,9 @@ type Segment struct {
 // ============================== ASR 异步转录（OpenAI 兼容） ==============================
 
 // ASRTaskSubmitRequest POST /v1/audio/transcriptions/async 提交异步转录任务请求体。
-// 异步链路（filetrans）上游要求公网可访问的音频 URL，因此 audio_url 必填；
-// 支持 multipart 表单字段（model/audio_url）或 JSON body。
+// 异步链路（filetrans）上游要求公网可访问的音频 URL：
+// 可直接传 audio_url/file_url，或 multipart file（网关先上传到操练场附件库再取在线地址）。
+// 支持 multipart 表单字段（model/audio_url/file）或 JSON body。
 type ASRTaskSubmitRequest struct {
 	Model          string `json:"model"`
 	AudioURL       string `json:"audio_url"`

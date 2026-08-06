@@ -116,33 +116,6 @@ func InferAudioFormat(audioSource, filename string) string {
 	}
 }
 
-// AudioMIMEFromExt 构造 data URI 用的 MIME 类型。
-func AudioMIMEFromExt(ext string) string {
-	ext = strings.TrimPrefix(strings.ToLower(ext), ".")
-	switch ext {
-	case "wav":
-		return "audio/wav"
-	case "mp3", "mpeg", "mpga":
-		return "audio/mpeg"
-	case "opus":
-		return "audio/opus"
-	case "aac":
-		return "audio/aac"
-	case "flac":
-		return "audio/flac"
-	case "ogg":
-		return "audio/ogg"
-	case "m4a", "mp4":
-		return "audio/mp4"
-	case "webm":
-		return "audio/webm"
-	case "amr":
-		return "audio/amr"
-	default:
-		return "audio/mpeg"
-	}
-}
-
 // UsesSingularFileURL 判断异步提交是否应使用 input.file_url（单值）。
 // Qwen3-ASR-Flash-Filetrans 使用 file_url；Qwen-Audio-3.0 / Fun-ASR 使用 file_urls 数组。
 func UsesSingularFileURL(model string) bool {
