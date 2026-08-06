@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -25,6 +26,54 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// resolveASRAsyncAudioURL 解析异步转写音频地址：
+// 优先使用请求中的 audio_url/file_url；若缺失且为 multipart，则将 file 上传到操练场附件库后取公网 URL。
+func resolveASRAsyncAudioURL(c *gin.Context, request *dto.ASRTaskSubmitRequest) (string, error) {
+	fileURL := ""
+	if request != nil {
+		fileURL = strings.TrimSpace(request.GetAudioURL())
+	}
+	if fileURL == "" && strings.HasPrefix(c.ContentType(), "multipart/form-data") {
+		form, err := common.ParseMultipartFormReusable(c)
+		if err != nil {
+			return "", fmt.Errorf("解析 multipart 表单失败: %w", err)
+		}
+		fileURL = firstASRMultipartFormValue(form, "audio_url", "file_url", "url")
+		if fileURL == "" {
+			fileHeaders := form.File["file"]
+			if len(fileHeaders) == 0 {
+				return "", errors.New("异步转写需提供 audio_url，或通过 multipart file 上传音频文件")
+			}
+			uploadedURL, uploadErr := aliyunasr.UploadPlaygroundAudioFile(c, fileHeaders[0])
+			if uploadErr != nil {
+				return "", uploadErr
+			}
+			fileURL = uploadedURL
+		}
+	}
+	if fileURL == "" {
+		return "", errors.New("异步转写需提供 audio_url（公网可访问的音频地址），或通过 multipart file 上传音频文件")
+	}
+	if !strings.HasPrefix(fileURL, "http://") && !strings.HasPrefix(fileURL, "https://") {
+		return "", errors.New("audio_url 必须是 http/https 可公开访问的音频地址")
+	}
+	return fileURL, nil
+}
+
+func firstASRMultipartFormValue(form *multipart.Form, keys ...string) string {
+	if form == nil {
+		return ""
+	}
+	for _, key := range keys {
+		if values, ok := form.Value[key]; ok && len(values) > 0 {
+			if v := strings.TrimSpace(values[0]); v != "" {
+				return v
+			}
+		}
+	}
+	return ""
+}
+
 // SubmitASRTask 提交阿里云 ASR 异步转写任务（POST /v1/audio/transcriptions/async）。
 //
 // 计费：提交时预扣 60 秒费用；成功取结果后按 usage.duration 补差价；失败退还预扣。
@@ -38,15 +87,10 @@ func SubmitASRTask(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ASR
 			types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 	}
 
-	fileURL := strings.TrimSpace(request.GetAudioURL())
-	if fileURL == "" {
+	fileURL, resolveErr := resolveASRAsyncAudioURL(c, request)
+	if resolveErr != nil {
 		return types.NewErrorWithStatusCode(
-			errors.New("异步转写需提供 audio_url（公网可访问的音频地址）"),
-			types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
-	}
-	if !strings.HasPrefix(fileURL, "http://") && !strings.HasPrefix(fileURL, "https://") {
-		return types.NewErrorWithStatusCode(
-			errors.New("audio_url 必须是 http/https 可公开访问的音频地址"),
+			resolveErr,
 			types.ErrorCodeInvalidRequest, http.StatusBadRequest, types.ErrOptionWithSkipRetry())
 	}
 
