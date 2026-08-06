@@ -3,7 +3,6 @@ package aliyunasr
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,7 +30,7 @@ type Adaptor struct {
 	ChannelType    int
 	responseFormat string
 	// audioSeconds 同步链路本地解析的音频时长（秒），按秒计费的核心依据；
-	// 仅在上传文件时可本地解析，URL 模式下为 0，由上游 usage.duration 折算。
+	// multipart file 上传时可本地解析；纯 URL 模式下为 0，由上游 usage.duration 折算。
 	audioSeconds float64
 	audioFormat  string // 上游 parameters.format（必填）
 }
@@ -79,7 +78,7 @@ func (a *Adaptor) DoRequest(c *gin.Context, info *relaycommon.RelayInfo, request
 
 // ConvertAudioRequest 同步转写请求转换。
 // 支持三种输入：
-//  1. multipart/form-data：file 字段上传音频文件（本地解析时长），或 audio_url/file_url 表单字段提供音频地址；
+//  1. multipart/form-data：file 字段上传音频文件（先入操练场附件库再取公网 URL），或 audio_url/file_url 表单字段提供音频地址；
 //  2. application/json OpenAI 兼容：{"model": "...", "audio_url": "https://..."}，网关转换为上游协议；
 //  3. application/json 透传：客户端直接提交上游原生 multimodal 体（含 input.messages），原样转发。
 func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInfo, request dto.AudioRequest) (io.Reader, error) {
@@ -92,19 +91,19 @@ func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInf
 		if err != nil {
 			return nil, fmt.Errorf("解析 multipart 表单失败: %w", err)
 		}
-		// 优先使用表单中的音频 URL，否则读取上传文件并转 base64 data-uri
+		// 优先使用表单中的音频 URL；否则将 file 上传到附件库，以上游可拉取的在线地址请求
 		audioSource = firstFormValue(form, "audio_url", "file_url", "url")
 		if audioSource == "" {
 			fileHeaders := form.File["file"]
 			if len(fileHeaders) == 0 {
 				return nil, errors.New("请上传音频文件（file 字段）或通过 audio_url 提供音频地址")
 			}
-			src, err := readAudioFile(fileHeaders[0])
+			src, err := processUploadedSyncAudioFile(c, fileHeaders[0])
 			if err != nil {
 				return nil, err
 			}
 			a.audioSeconds = src.seconds
-			audioSource = src.dataURI
+			audioSource = src.url
 			filename = fileHeaders[0].Filename
 		} else {
 			filename = firstFormValue(form, "filename")
@@ -277,12 +276,13 @@ func firstFormValue(form *multipart.Form, keys ...string) string {
 }
 
 type audioFileSource struct {
-	dataURI string
+	url     string
 	seconds float64
 }
 
-// readAudioFile 读取上传的音频文件：校验上游 10MB 限制、本地解析时长、转 base64 data-uri。
-func readAudioFile(fileHeader *multipart.FileHeader) (*audioFileSource, error) {
+// processUploadedSyncAudioFile 处理同步转写 multipart file：
+// 校验 10MB 上限 → 本地解析时长 → 上传到操练场附件库 → 返回公网 URL 供上游拉取。
+func processUploadedSyncAudioFile(c *gin.Context, fileHeader *multipart.FileHeader) (*audioFileSource, error) {
 	if fileHeader.Size > maxSyncAudioFileSize {
 		return nil, fmt.Errorf("音频文件 %.1fMB 超过同步转写 10MB 上游限制，请改用异步转写接口", float64(fileHeader.Size)/1024/1024)
 	}
@@ -290,8 +290,8 @@ func readAudioFile(fileHeader *multipart.FileHeader) (*audioFileSource, error) {
 	if err != nil {
 		return nil, fmt.Errorf("打开音频文件失败: %w", err)
 	}
-	defer file.Close()
 	fileBytes, err := io.ReadAll(io.LimitReader(file, maxSyncAudioFileSize+1))
+	_ = file.Close()
 	if err != nil {
 		return nil, fmt.Errorf("读取音频文件失败: %w", err)
 	}
@@ -304,9 +304,13 @@ func readAudioFile(fileHeader *multipart.FileHeader) (*audioFileSource, error) {
 		// 时长解析失败不阻断请求：后续 DoResponse 会用上游 usage.duration 折算秒数
 		common.SysLog("aliyunasr: get audio duration failed: " + err.Error())
 	}
-	mime := AudioMIMEFromExt(ext)
+
+	publicURL, err := UploadPlaygroundAudioFile(c, fileHeader)
+	if err != nil {
+		return nil, err
+	}
 	return &audioFileSource{
-		dataURI: "data:" + mime + ";base64," + base64.StdEncoding.EncodeToString(fileBytes),
+		url:     publicURL,
 		seconds: seconds,
 	}, nil
 }

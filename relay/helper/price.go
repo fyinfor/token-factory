@@ -101,6 +101,18 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		globalCreateCacheRatio = 1.25
 	}
 
+	// 用户指定价：命中时三折扣替换为用户级覆盖值，计费基价改用全局官方价（渠道无关），
+	// 最终价 = 全局官方价 × (成本折扣 + 经营成本 + 加价折扣)，且不再叠加分组倍率。
+	userPricingOverride := false
+	if ov, ok := model.GetEnabledUserModelPricingOverride(info.UserId, info.OriginModelName, pricingModelName); ok {
+		userPricingOverride = true
+		rawDisc = ov.PriceDiscountPercent
+		operatingCost = ov.OperatingCostPercent
+		chDisc = model.EffectiveCostPercent(rawDisc, operatingCost)
+		markupDisc = ov.MarkupDiscountRate
+		groupRatioInfo = types.GroupRatioInfo{GroupRatio: 1.0, GroupSpecialRatio: -1}
+	}
+
 	var preConsumedQuota int
 	var modelRatio float64
 	var completionRatio float64
@@ -128,6 +140,11 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 				modelRatio = groupModelRatio
 				success = true
 			}
+		}
+		// 用户指定价：基价整体替换为全局官方倍率，保证任何渠道下计费结果一致。
+		if userPricingOverride && globalRatio > 0 {
+			modelRatio = globalRatio
+			success = true
 		}
 		if !success {
 			acceptUnsetRatio := false
@@ -159,17 +176,30 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 			videoCompletionRatio = channelVideoCompletionRatio
 		}
 
+		// 用户指定价：输出/缓存等子倍率同样替换为全局值（渠道无关）。
+		if userPricingOverride && globalRatio > 0 {
+			completionRatio = globalCompletionRatio
+			cacheRatio = globalCacheRatio
+			cacheCreationRatio = globalCreateCacheRatio
+			cacheCreationRatio5m = cacheCreationRatio
+			cacheCreationRatio1h = cacheCreationRatio * claudeCacheCreation1hMultiplier
+		}
+
 		// 新公式：有效输入倍率 = 渠道倍率 * 成本折扣率% + 全局倍率 * 加价折扣率%
 		effInputRate := model.EffectiveInputRate(modelRatio, globalRatio, chDisc, markupDisc)
 		effInputRateWithGroup := effInputRate * groupRatioInfo.GroupRatio
 
 		dPreConsumedTokens := decimal.NewFromInt(int64(preConsumedTokens))
-		if tierHit, ok := ratio_setting.ResolveRequestTierHit(channelID, pricingModelName, int64(preConsumedTokens), chDisc, markupDisc, groupRatioInfo.GroupRatio); ok {
+		if tierHit, ok := ratio_setting.ResolveRequestTierHit(channelID, pricingModelName, int64(preConsumedTokens), chDisc, markupDisc, groupRatioInfo.GroupRatio); ok && !userPricingOverride {
 			preConsumedQuota = int(dPreConsumedTokens.Mul(decimal.NewFromFloat(tierHit.EffectiveInput * groupRatioInfo.GroupRatio)).Round(0).IntPart())
 		} else {
 			preConsumedQuota = int(dPreConsumedTokens.Mul(decimal.NewFromFloat(effInputRateWithGroup)).Round(0).IntPart())
 		}
 	} else {
+		// 用户指定价：固定价基价替换为全局官方固定价。
+		if userPricingOverride && globalPrice > 0 {
+			modelPrice = globalPrice
+		}
 		// 固定价格：渠道固定价 * 成本折扣率% + 全局固定价 * 加价折扣率%
 		effModelPrice := model.EffectiveModelPrice(modelPrice, globalPrice, chDisc, markupDisc)
 		if meta.ImagePriceRatio != 0 {
@@ -222,6 +252,7 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		RawPriceDiscountPercent: rawDisc,
 		OperatingCostPercent:    operatingCost,
 		MarkupDiscountPercent:   markupDisc,
+		UserPricingOverride:     userPricingOverride,
 		GlobalModelRatio:        globalRatio,
 		GlobalModelPrice:        globalPrice,
 		GlobalCompletionRatio:   globalCompletionRatio,
@@ -282,6 +313,19 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 	rawDisc, operatingCost, chDisc := resolveChannelCostPercents(channelID)
 	markupDisc := effectiveMarkupDiscountPercent(c, info, channelID, pricingModelName)
 	globalPrice, _ := ratio_setting.GetModelPrice(pricingModelName, false)
+	// 用户指定价：三折扣替换为用户覆盖值，基价替换为全局官方固定价，分组倍率强制为 1。
+	userPricingOverride := false
+	if ov, ok := model.GetEnabledUserModelPricingOverride(info.UserId, info.OriginModelName, pricingModelName); ok {
+		userPricingOverride = true
+		rawDisc = ov.PriceDiscountPercent
+		operatingCost = ov.OperatingCostPercent
+		chDisc = model.EffectiveCostPercent(rawDisc, operatingCost)
+		markupDisc = ov.MarkupDiscountRate
+		groupRatioInfo = types.GroupRatioInfo{GroupRatio: 1.0, GroupSpecialRatio: -1}
+		if globalPrice > 0 {
+			modelPrice = globalPrice
+		}
+	}
 	effModelPrice := model.EffectiveModelPrice(modelPrice, globalPrice, chDisc, markupDisc)
 	quota := int(effModelPrice * common.QuotaPerUnit * groupRatioInfo.GroupRatio)
 
@@ -305,6 +349,7 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 		RawPriceDiscountPercent: rawDisc,
 		OperatingCostPercent:    operatingCost,
 		MarkupDiscountPercent:   markupDisc,
+		UserPricingOverride:     userPricingOverride,
 		GlobalModelRatio:        0,
 		GlobalModelPrice:        globalPrice,
 	}

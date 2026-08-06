@@ -354,6 +354,7 @@ func migrateDB() error {
 		&UserRouteConfig{},
 		&UserModelGroupWeight{},
 		&UserModelGroupOverride{},
+		&UserModelPricingOverride{},
 		&TemporaryUpload{},
 	)
 	if err != nil {

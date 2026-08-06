@@ -75,6 +75,13 @@ func rateLimitRetryAfterSeconds(tfErr *types.TokenFactoryError) int {
 }
 
 func proceedRelayWithChannel(c *gin.Context, channel *model.Channel, modelName string) {
+	// 用户指定价最终守卫：任何选路路径落到超出用户价格上限的渠道都直接拒绝，
+	// 保证不会以高于指定价的渠道成本服务该用户。
+	if channel != nil && !service.ChannelWithinUserPriceCap(c.GetInt("id"), modelName, channel) {
+		abortWithOpenAiMessage(c, http.StatusForbidden,
+			fmt.Sprintf("模型 %s 无满足您指定价上限的可用渠道，禁止调用", modelName))
+		return
+	}
 	if !enforceChannelModelRateLimit(c, channel, modelName) {
 		return
 	}
