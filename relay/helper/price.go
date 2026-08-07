@@ -904,10 +904,13 @@ func tryVideoPerSecondRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo
 		resolutionLabel,
 	)
 	if !effOK || effPricePerSecond <= 0 {
-		// 渠道未配置按秒规则而仅配置全局规则时，按全局匹配单价计费。
-		// service.EffectiveVideoPerSecondUSDForDimensions 需要渠道档位，故这里回退。
+		// 正常应由 EffectiveVideoPerSecondUSDForDimensions 完成全局垫底+折扣；
+		// 此处仅作安全回退，仍须套用成本/加价折扣，禁止按档位原价实扣。
 		if !hasChannelVideoPerSecondPricingRules(channelID, info.OriginModelName) {
-			effPricePerSecond = pricePerSecond
+			effPricePerSecond = model.EffectiveRuleUnitPrice(pricePerSecond, pricePerSecond, chDiscVPS, markupDiscVPS)
+			if effPricePerSecond <= 0 {
+				return types.PriceData{}, false, nil
+			}
 		} else {
 			return types.PriceData{}, false, nil
 		}

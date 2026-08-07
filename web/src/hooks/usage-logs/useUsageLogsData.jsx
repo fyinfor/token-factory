@@ -356,6 +356,12 @@ export const useLogsData = () => {
       effectivePerSecond > 0
         ? effectivePerSecond * groupRatio
         : pricePerSecond * groupRatio * (channelDiscount / 100);
+    // 结算算式右侧必须由左侧运算元推出（秒 × 折扣后单价），不得直接贴 actual_quota，
+    // 否则会出现「4×折扣价=原价总额」的假等式；实际扣费仍走 settlementQuota。
+    const formulaTotalUsd =
+      seconds > 0 && calculatedPricePerSecond > 0
+        ? seconds * calculatedPricePerSecond
+        : 0;
     const settlementQuota = getVideoSettlementQuota(other, billedQuota);
     const tagValue = (value, color = 'blue', key = String(value)) => (
       <Tag key={key} color={color} size='small'>
@@ -405,7 +411,9 @@ export const useLogsData = () => {
         =
       </span>,
       tagValue(
-        renderVideoQuota(other, settlementQuota, 6),
+        formulaTotalUsd > 0
+          ? formatVideoUsdAmount(other, formulaTotalUsd)
+          : renderVideoQuota(other, settlementQuota, 6),
         'red',
         'calc-total',
       ),
