@@ -161,6 +161,7 @@ const InviteeModelDiscountModal = ({
   const [page, setPage] = useState(1);
   const [baselineValues, setBaselineValues] = useState({});
   const [discountValues, setDiscountValues] = useState({});
+  const [batchMarkupRate, setBatchMarkupRate] = useState(null);
   const [templateAutoApply, setTemplateAutoApply] = useState(false);
   const [baselineTemplateAutoApply, setBaselineTemplateAutoApply] =
     useState(false);
@@ -257,6 +258,7 @@ const InviteeModelDiscountModal = ({
       setPage(1);
       setBaselineValues({});
       setDiscountValues({});
+      setBatchMarkupRate(null);
       setTemplateAutoApply(false);
       setBaselineTemplateAutoApply(false);
     }
@@ -313,6 +315,20 @@ const InviteeModelDiscountModal = ({
     });
   }, [modelData, searchKeyword, filterSupplierType, t]);
 
+  const batchMarkupRateNumber = Number(batchMarkupRate);
+  const batchMarkupRateIsValid =
+    batchMarkupRate !== null &&
+    batchMarkupRate !== '' &&
+    Number.isFinite(batchMarkupRateNumber);
+  const batchMarkupOverLimitCount = useMemo(() => {
+    if (!batchMarkupRateIsValid) return 0;
+    return filteredData.reduce(
+      (count, item) =>
+        batchMarkupRateNumber > maxAgentMarkupRate(item) ? count + 1 : count,
+      0,
+    );
+  }, [batchMarkupRateIsValid, batchMarkupRateNumber, filteredData]);
+
   const hasActiveFilter =
     (filterSupplierType != null && filterSupplierType !== '') ||
     !!searchKeyword.trim();
@@ -340,6 +356,50 @@ const InviteeModelDiscountModal = ({
       ...prev,
       [rowKey]: clampMarkupRate(value, maxRate),
     }));
+  };
+
+  const applyBatchMarkupRate = (rate) => {
+    const updates = {};
+    let changedCount = 0;
+    filteredData.forEach((item) => {
+      const rowKey = getRowKey(item);
+      const nextValue = clampMarkupRate(rate, maxAgentMarkupRate(item));
+      const currentValue =
+        discountValues[rowKey] ??
+        baselineValues[rowKey] ??
+        item.current_markup_discount_rate;
+      updates[rowKey] = nextValue;
+      if (!markupRatesEqual(nextValue, currentValue)) {
+        changedCount += 1;
+      }
+    });
+
+    if (changedCount === 0) {
+      showInfo(t('暂无修改'));
+      return;
+    }
+
+    setDiscountValues((prev) => ({ ...prev, ...updates }));
+    showSuccess(t('批量设置成功'));
+  };
+
+  const handleBatchMarkupApply = () => {
+    if (!batchMarkupRateIsValid || filteredData.length === 0) return;
+
+    if (batchMarkupOverLimitCount > 0) {
+      Modal.confirm({
+        title: t('操作确认'),
+        content: t(
+          '输入值会超过 ${count} 个模型的代理加价上限，这些模型将按各自上限设置。',
+        ).replace('${count}', String(batchMarkupOverLimitCount)),
+        okText: t('继续'),
+        cancelText: t('取消'),
+        onOk: () => applyBatchMarkupRate(batchMarkupRateNumber),
+      });
+      return;
+    }
+
+    applyBatchMarkupRate(batchMarkupRateNumber);
   };
 
   const persistDiscounts = async () => {
@@ -666,6 +726,58 @@ const InviteeModelDiscountModal = ({
                 disabled={loading || saving}
                 aria-label={t('自动应用到新加入用户')}
               />
+            </div>
+          )}
+
+          {templateMode && (
+            <div className='space-y-3 rounded-lg border border-semi-color-border bg-semi-color-fill-0 p-3'>
+              <div className='flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between'>
+                <div className='min-w-0'>
+                  <Text strong>
+                    {t('批量设置')} · {t('代理加价比例')}
+                  </Text>
+                  <Text type='tertiary' size='small' className='!block'>
+                    {t('上限 = 200% - 成本折扣')}
+                  </Text>
+                </div>
+                <div className='flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center'>
+                  <InputNumber
+                    value={batchMarkupRate}
+                    onChange={setBatchMarkupRate}
+                    min={0}
+                    max={MAX_SALE_RATE_PERCENT}
+                    precision={1}
+                    suffix='%'
+                    placeholder={t('代理加价比例')}
+                    aria-label={`${t('批量设置')} ${t('代理加价比例')}`}
+                    disabled={loading || saving}
+                    className='w-full sm:w-[220px]'
+                  />
+                  <Button
+                    type='primary'
+                    theme='solid'
+                    onClick={handleBatchMarkupApply}
+                    disabled={
+                      loading ||
+                      saving ||
+                      filteredData.length === 0 ||
+                      !batchMarkupRateIsValid
+                    }
+                    className='w-full sm:w-auto'
+                  >
+                    {t('应用')} ({filteredData.length})
+                  </Button>
+                </div>
+              </div>
+              {batchMarkupOverLimitCount > 0 && (
+                <Banner
+                  type='warning'
+                  closeIcon={null}
+                  description={t(
+                    '输入值会超过 ${count} 个模型的代理加价上限，这些模型将按各自上限设置。',
+                  ).replace('${count}', String(batchMarkupOverLimitCount))}
+                />
+              )}
             </div>
           )}
 

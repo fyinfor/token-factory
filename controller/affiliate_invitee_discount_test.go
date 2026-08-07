@@ -2,13 +2,18 @@ package controller
 
 import (
 	"bytes"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"sort"
 	"strings"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
+	"github.com/gin-gonic/gin"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -36,6 +41,71 @@ func setDistributorModelDiscountExportCurrencyForTest(
 func useDistributorModelDiscountUSDForTest(t *testing.T) {
 	t.Helper()
 	setDistributorModelDiscountExportCurrencyForTest(t, operation_setting.QuotaDisplayTypeUSD, 7, "¤", 1)
+}
+
+func TestExportDistributorModelDiscountTemplateAdminRequiresProfitShareMode(t *testing.T) {
+	previousMode := common.DistributorCommissionMode
+	common.DistributorCommissionMode = common.DistributorCommissionModeTopup
+	t.Cleanup(func() {
+		common.DistributorCommissionMode = previousMode
+	})
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/distributor/admin/model-discount-template/export", nil)
+	ctx.Set("id", 1)
+
+	ExportDistributorModelDiscountTemplateAdmin(ctx)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	if body := recorder.Body.String(); !strings.Contains(body, "当前站点未启用利润分成模式") {
+		t.Fatalf("body = %q", body)
+	}
+}
+
+func TestExportDistributorModelDiscountTemplateResponseWritesWorkbook(t *testing.T) {
+	useDistributorModelDiscountUSDForTest(t)
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/distributor/admin/model-discount-template/export", nil)
+
+	exportDistributorModelDiscountTemplateResponse(ctx, []model.InviteeModelMarkupDiscountRateItem{{
+		ModelName:                   "gpt-test",
+		ChannelPath:                 "gpt-test/default",
+		SupplierType:                "AIDC",
+		ChannelPriceDiscountPercent: 80,
+		OfficialBasePrice:           1,
+		OfficialCompletionRatio:     1,
+	}}, 0)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+	if contentType := recorder.Header().Get("Content-Type"); contentType != inviteeModelDiscountExportContentType {
+		t.Fatalf("content type = %q", contentType)
+	}
+	disposition := recorder.Header().Get("Content-Disposition")
+	if !strings.HasPrefix(disposition, `attachment; filename="call-discount-`) || !strings.Contains(disposition, `.xlsx"; filename*=UTF-8''`) {
+		t.Fatalf("content disposition = %q", disposition)
+	}
+	encodedFilename := strings.SplitN(disposition, "filename*=UTF-8''", 2)
+	if len(encodedFilename) != 2 {
+		t.Fatalf("missing RFC 5987 filename*: %q", disposition)
+	}
+	decodedFilename, err := url.PathUnescape(encodedFilename[1])
+	if err != nil {
+		t.Fatalf("decode filename*: %v", err)
+	}
+	if !strings.HasPrefix(decodedFilename, "调用折扣-") || !strings.HasSuffix(decodedFilename, ".xlsx") {
+		t.Fatalf("decoded filename* = %q", decodedFilename)
+	}
+	workbook, err := excelize.OpenReader(bytes.NewReader(recorder.Body.Bytes()))
+	if err != nil {
+		t.Fatalf("response is not an xlsx workbook: %v", err)
+	}
+	defer workbook.Close()
 }
 
 func TestBuildDistributorModelDiscountTemplateExportWorkbook(t *testing.T) {
