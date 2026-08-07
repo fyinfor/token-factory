@@ -31,6 +31,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 
@@ -53,8 +54,10 @@ var distributorModelDiscountTemplateExportHeaders = []string{
 	"模型 / 通道路径",
 	"模型类型",
 	"官方价格（全局价）",
-	"调用折扣",
-	"折扣后价格",
+	"代理调用折扣",
+	"代理折扣后价格",
+	"平台折扣",
+	"平台折扣后价格",
 }
 
 // GetInviteeModelDiscounts 获取被邀请用户的模型折扣列表
@@ -454,7 +457,7 @@ func ExportDistributorModelDiscountTemplate(c *gin.Context) {
 	}
 	items = filterInviteeModelDiscountExportItems(items, c.Query("q"), c.Query("supplier_type"))
 
-	data, err := buildDistributorModelDiscountTemplateExportWorkbook(items)
+	data, err := buildDistributorModelDiscountTemplateExportWorkbookForUser(items, userId)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
@@ -468,6 +471,10 @@ func ExportDistributorModelDiscountTemplate(c *gin.Context) {
 }
 
 func buildDistributorModelDiscountTemplateExportWorkbook(items []model.InviteeModelMarkupDiscountRateItem) ([]byte, error) {
+	return buildDistributorModelDiscountTemplateExportWorkbookForUser(items, 0)
+}
+
+func buildDistributorModelDiscountTemplateExportWorkbookForUser(items []model.InviteeModelMarkupDiscountRateItem, userID int) ([]byte, error) {
 	f := excelize.NewFile()
 	defer f.Close()
 
@@ -507,12 +514,14 @@ func buildDistributorModelDiscountTemplateExportWorkbook(items []model.InviteeMo
 		},
 	})
 
-	_ = f.SetCellStyle(sheet, "A1", "E1", headerStyle)
+	_ = f.SetCellStyle(sheet, "A1", "G1", headerStyle)
 	_ = f.SetColWidth(sheet, "A", "A", 46)
 	_ = f.SetColWidth(sheet, "B", "B", 16)
 	_ = f.SetColWidth(sheet, "C", "C", 46)
 	_ = f.SetColWidth(sheet, "D", "D", 16)
 	_ = f.SetColWidth(sheet, "E", "E", 46)
+	_ = f.SetColWidth(sheet, "F", "F", 22)
+	_ = f.SetColWidth(sheet, "G", "G", 46)
 	_ = f.SetRowHeight(sheet, 1, 28)
 	_ = f.SetPanes(sheet, &excelize.Panes{
 		Freeze:      true,
@@ -523,14 +532,18 @@ func buildDistributorModelDiscountTemplateExportWorkbook(items []model.InviteeMo
 		ActivePane:  "bottomLeft",
 	})
 
+	platformGroupContext := newDistributorModelDiscountPlatformGroupContext(userID)
 	for idx, item := range items {
 		row := idx + 2
+		platformGroupRatio := platformGroupContext.ratioFor(item)
 		values := []any{
 			inviteeModelDiscountExportModelPath(item),
 			formatDistributorModelDiscountSupplierType(item.SupplierType),
 			formatDistributorModelDiscountOfficialPrice(item, 1),
 			formatInviteeModelDiscountMarkupRate(item.ChannelPriceDiscountPercent),
 			formatDistributorModelDiscountOfficialPrice(item, distributorModelDiscountCallMultiplier(item.ChannelPriceDiscountPercent)),
+			formatInviteeModelDiscountMarkupRate(item.ChannelPriceDiscountPercent + item.DefaultMarkupDiscountRate),
+			formatDistributorModelDiscountPlatformPrice(item, platformGroupRatio),
 		}
 		for col, value := range values {
 			cell, _ := excelize.CoordinatesToCellName(col+1, row)
@@ -538,9 +551,9 @@ func buildDistributorModelDiscountTemplateExportWorkbook(items []model.InviteeMo
 				return nil, err
 			}
 		}
-		_ = f.SetRowHeight(sheet, row, distributorModelDiscountExportRowHeight(item))
+		_ = f.SetRowHeight(sheet, row, distributorModelDiscountExportRowHeight(values...))
 		_ = f.SetCellStyle(sheet, fmt.Sprintf("A%d", row), fmt.Sprintf("A%d", row), bodyStyle)
-		_ = f.SetCellStyle(sheet, fmt.Sprintf("B%d", row), fmt.Sprintf("E%d", row), centerStyle)
+		_ = f.SetCellStyle(sheet, fmt.Sprintf("B%d", row), fmt.Sprintf("G%d", row), centerStyle)
 	}
 
 	var buf bytes.Buffer
@@ -563,6 +576,326 @@ func distributorModelDiscountCallMultiplier(percent float64) float64 {
 		return math.NaN()
 	}
 	return percent / 100
+}
+
+// distributorModelDiscountPlatformGroupContext is built once per workbook so
+// a large export does not repeatedly load the distributor or copy group maps.
+type distributorModelDiscountPlatformGroupContext struct {
+	groupRatio   map[string]float64
+	usableGroups map[string]string
+}
+
+// newDistributorModelDiscountPlatformGroupContext mirrors the home pricing
+// page's initial selectedGroup="all" state and controller/pricing's user
+// group override/usable-group filtering.
+func newDistributorModelDiscountPlatformGroupContext(userID int) distributorModelDiscountPlatformGroupContext {
+	userGroup := ""
+	if userID > 0 {
+		if user, err := model.GetUserById(userID, false); err == nil && user != nil {
+			userGroup = user.Group
+		}
+	}
+	groupRatio := ratio_setting.GetGroupRatioCopy()
+	for group := range groupRatio {
+		if ratio, ok := ratio_setting.GetGroupGroupRatio(userGroup, group); ok {
+			groupRatio[group] = ratio
+		}
+	}
+	return distributorModelDiscountPlatformGroupContext{
+		groupRatio:   groupRatio,
+		usableGroups: service.GetUserUsableGroups(userGroup),
+	}
+}
+
+func (ctx distributorModelDiscountPlatformGroupContext) ratioFor(item model.InviteeModelMarkupDiscountRateItem) float64 {
+	enabledGroups := item.PlatformPricing
+	if enabledGroups != nil && len(enabledGroups.EnableGroup) > 0 {
+		best := math.Inf(1)
+		for _, group := range enabledGroups.EnableGroup {
+			if _, ok := ctx.usableGroups[group]; !ok {
+				continue
+			}
+			if ratio, ok := ctx.groupRatio[group]; ok && isFiniteInviteeModelDiscountFloat(ratio) && ratio < best {
+				best = ratio
+			}
+		}
+		if !math.IsInf(best, 1) {
+			return best
+		}
+	}
+	return 1
+}
+
+func distributorModelDiscountPlatformMultiplier(item model.InviteeModelMarkupDiscountRateItem) float64 {
+	cost := distributorModelDiscountCallMultiplier(item.ChannelPriceDiscountPercent)
+	markup := item.DefaultMarkupDiscountRate / 100
+	if !isFiniteInviteeModelDiscountFloat(cost) || !isFiniteInviteeModelDiscountFloat(markup) || markup < 0 {
+		return math.NaN()
+	}
+	return cost + markup
+}
+
+func distributorModelDiscountPlatformUnitPrice(valueUSD float64, unit string, groupRatio float64) string {
+	return formatDistributorModelDiscountUnitPrice(valueUSD*groupRatio, unit)
+}
+
+// distributorModelDiscountPlatformHidesTextTokenPrices mirrors
+// isVideoPricingModel/isASRPricingModel in ModelChannelList. Video and ASR
+// rows have their own side-sheet presentation and must not be exported as
+// ordinary text token pricing.
+func distributorModelDiscountPlatformHidesTextTokenPrices(p model.PricingAPIItem) bool {
+	if p.ASRPrice != nil {
+		return true
+	}
+	if p.VideoRatio != nil || p.VideoCompletionRatio != nil || p.VideoPrice != nil || p.VideoFlatClipHint != nil {
+		return true
+	}
+	for _, endpointType := range p.SupportedEndpointTypes {
+		switch string(endpointType) {
+		case "openai-video", "hidream-video", "tokenfactory-video", "videogenerator", "tencentcloud-vod-video", "ali-video":
+			return true
+		}
+	}
+	return false
+}
+
+func formatDistributorModelDiscountPlatformPrice(item model.InviteeModelMarkupDiscountRateItem, groupRatio float64) string {
+	if !isFiniteInviteeModelDiscountFloat(groupRatio) || groupRatio <= 0 {
+		groupRatio = 1
+	}
+	p := item.PlatformPricing
+	if p == nil || len(p.ChannelList) == 0 {
+		return formatDistributorModelDiscountOfficialPrice(item, distributorModelDiscountPlatformMultiplier(item)*groupRatio)
+	}
+	ch := p.ChannelList[0]
+	cost := ch.EffectiveCostPercent / 100
+	if !isFiniteInviteeModelDiscountFloat(cost) || cost < 0 {
+		cost = distributorModelDiscountCallMultiplier(item.ChannelPriceDiscountPercent)
+	}
+	markup := ch.MarkupDiscountRate / 100
+	sections := make([]string, 0, 3)
+	if !distributorModelDiscountPlatformHidesTextTokenPrices(*p) {
+		switch ch.QuotaType {
+		case 1:
+			price := ch.ModelPrice*cost + p.ModelPrice*markup
+			if price > 0 {
+				sections = append(sections, distributorModelDiscountPlatformUnitPrice(price, "次", groupRatio))
+			}
+		case 3:
+			if tier := formatDistributorModelDiscountPlatformTierPricing(item, ch, cost, markup, groupRatio); tier != "" {
+				sections = append(sections, tier)
+			}
+		default:
+			if text := formatDistributorModelDiscountPlatformTokenPricing(*p, ch, cost, markup, groupRatio); text != "" {
+				sections = append(sections, text)
+			}
+		}
+	}
+	if image := formatDistributorModelDiscountPlatformImagePricing(*p, groupRatio); image != "" {
+		sections = append(sections, image)
+	}
+	if !distributorModelDiscountPlatformHidesTextTokenPrices(*p) {
+		if audio := formatDistributorModelDiscountPlatformAudioPricing(*p, ch, cost, markup, groupRatio); audio != "" {
+			sections = append(sections, audio)
+		}
+	}
+	if video := formatDistributorModelDiscountPlatformVideoPricing(*p, ch, groupRatio); video != "" {
+		sections = append(sections, video)
+	}
+	if p.ASRPrice != nil && *p.ASRPrice > 0 {
+		sections = append(sections, "语音识别："+
+			distributorModelDiscountPlatformUnitPrice(*p.ASRPrice, "秒", groupRatio))
+	}
+	if len(sections) == 0 {
+		return "-"
+	}
+	return strings.Join(sections, "\n")
+}
+
+func formatDistributorModelDiscountPlatformTokenPricing(p model.PricingAPIItem, ch model.PricingChannelItem, cost, markup, groupRatio float64) string {
+	if p.ModelRatio <= 0 || ch.ModelRatio <= 0 {
+		return ""
+	}
+	input := (ch.ModelRatio*cost + p.ModelRatio*markup) * ratio_setting.TierRatioBase
+	parts := []string{"输入 " + distributorModelDiscountPlatformUnitPrice(input, "1M tokens", groupRatio)}
+	if p.CompletionRatio != nil && *p.CompletionRatio > 0 && ch.CompletionRatio > 0 {
+		output := (ch.ModelRatio*ch.CompletionRatio*cost + p.ModelRatio**p.CompletionRatio*markup) * ratio_setting.TierRatioBase
+		parts = append(parts, "输出 "+distributorModelDiscountPlatformUnitPrice(output, "1M tokens", groupRatio))
+	}
+	if p.CacheRatio != nil && *p.CacheRatio > 0 && ch.CacheRatio > 0 {
+		read := (ch.ModelRatio*ch.CacheRatio*cost + p.ModelRatio**p.CacheRatio*markup) * ratio_setting.TierRatioBase
+		parts = append(parts, "缓存读 "+distributorModelDiscountPlatformUnitPrice(read, "1M tokens", groupRatio))
+	}
+	if p.CreateCacheRatio != nil && *p.CreateCacheRatio > 0 && ch.CreateCacheRatio > 0 {
+		write := (ch.ModelRatio*ch.CreateCacheRatio*cost + p.ModelRatio**p.CreateCacheRatio*markup) * ratio_setting.TierRatioBase
+		parts = append(parts, "缓存写 "+distributorModelDiscountPlatformUnitPrice(write, "1M tokens", groupRatio))
+	}
+	return "文本按量\n" + strings.Join(parts, "；")
+}
+
+// Audio billing uses the effective text input rate and the global audio
+// multipliers. Channel AudioRatio options are intentionally not used here:
+// relay/service/quota.go's calculateAudioQuota applies the global audio ratios
+// after resolving the channel/global input rate.
+func formatDistributorModelDiscountPlatformAudioPricing(p model.PricingAPIItem, ch model.PricingChannelItem, cost, markup, groupRatio float64) string {
+	if p.AudioRatio == nil || *p.AudioRatio <= 0 || p.ModelRatio <= 0 || ch.ModelRatio <= 0 {
+		return ""
+	}
+	effectiveInputRate := ch.ModelRatio*cost + p.ModelRatio*markup
+	input := effectiveInputRate * *p.AudioRatio * ratio_setting.TierRatioBase
+	parts := []string{"音频输入 " + distributorModelDiscountPlatformUnitPrice(input, "1M tokens", groupRatio)}
+	if p.AudioCompletionRatio != nil && *p.AudioCompletionRatio > 0 {
+		output := input * *p.AudioCompletionRatio
+		parts = append(parts, "音频输出 "+distributorModelDiscountPlatformUnitPrice(output, "1M tokens", groupRatio))
+	}
+	return "音频按量\n" + strings.Join(parts, "；")
+}
+
+func requestTierPricingFromAny(value any) (*ratio_setting.RequestTierPricing, bool) {
+	switch v := value.(type) {
+	case ratio_setting.RequestTierPricing:
+		return &v, true
+	case *ratio_setting.RequestTierPricing:
+		return v, v != nil
+	default:
+		return nil, false
+	}
+}
+
+// distributorModelDiscountTierPricesAtBand mirrors the side sheet's
+// findTierPriceAtBand(previousUpTo, ..., "lt") lookup. Global and channel
+// rules may have different boundaries, so matching by slice index is wrong.
+func distributorModelDiscountTierPricesAtBand(rule *ratio_setting.RequestTierPricing, from int64) ratio_setting.RequestTierPrices {
+	if rule == nil {
+		return ratio_setting.RequestTierPrices{}
+	}
+	for _, tier := range rule.Tiers {
+		if tier.UpTo == 0 || from < tier.UpTo {
+			return tier.Prices
+		}
+	}
+	return ratio_setting.RequestTierPrices{}
+}
+
+func formatDistributorModelDiscountPlatformTierPricing(item model.InviteeModelMarkupDiscountRateItem, ch model.PricingChannelItem, cost, markup, groupRatio float64) string {
+	channelRule, ok := requestTierPricingFromAny(ch.RequestTierPricing)
+	if !ok || channelRule == nil || len(channelRule.Tiers) == 0 {
+		return ""
+	}
+	globalRule := item.OfficialRequestTierPricing
+	lines := []string{"阶梯价"}
+	previous := int64(0)
+	boundary := ratio_setting.NormalizeRequestTierBoundary(channelRule.Boundary)
+	for index, tier := range channelRule.Tiers {
+		global := distributorModelDiscountTierPricesAtBand(globalRule, previous)
+		currency := ratio_setting.NormalizeRequestTierCurrency(channelRule.Currency)
+		globalCurrency := ratio_setting.RequestTierCurrencyUSD
+		if globalRule != nil {
+			globalCurrency = ratio_setting.NormalizeRequestTierCurrency(globalRule.Currency)
+		}
+		price := func(raw, official float64) string {
+			effective := model.EffectiveRuleUnitPrice(
+				ratio_setting.ConvertRequestTierPriceToUSD(raw, currency),
+				ratio_setting.ConvertRequestTierPriceToUSD(official, globalCurrency),
+				cost*100, markup*100,
+			)
+			return distributorModelDiscountPlatformUnitPrice(effective, "1M tokens", groupRatio)
+		}
+		lines = append(lines, fmt.Sprintf("%s：输入 %s；输出 %s；缓存读 %s；缓存写 %s",
+			distributorModelDiscountTierRangeLabel(previous, tier.UpTo, boundary, index == 0),
+			price(tier.Prices.Input, global.Input), price(tier.Prices.Output, global.Output),
+			price(tier.Prices.CacheRead, global.CacheRead), price(tier.Prices.CacheWrite, global.CacheWrite),
+		))
+		if tier.UpTo > 0 {
+			previous = tier.UpTo
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatDistributorModelDiscountPlatformImagePricing(p model.PricingAPIItem, groupRatio float64) string {
+	if hint := p.ImagePerImageHint; hint != nil && len(hint.Tiers) > 0 {
+		lines := []string{"图片生成"}
+		for _, row := range hint.Tiers {
+			mode := "文生图"
+			if row.Lane == "image_to_image" {
+				mode = "图生图"
+			}
+			lines = append(lines, fmt.Sprintf("%s · %s：%s", mode, distributorModelDiscountResolutionLabel(row.Resolution),
+				distributorModelDiscountPlatformUnitPrice(row.UsdAfterChannelDiscount, "张", groupRatio)))
+		}
+		return strings.Join(lines, "\n")
+	}
+	return ""
+}
+
+func formatDistributorModelDiscountPlatformVideoPricing(p model.PricingAPIItem, ch model.PricingChannelItem, groupRatio float64) string {
+	if hint := p.VideoFlatClipHint; hint != nil && len(hint.Tiers) > 0 {
+		unit := "条"
+		switch hint.BillingMode {
+		case "per_second":
+			unit = "秒"
+		case "per_token":
+			unit = "1M tokens"
+		}
+		layout := distributorModelDiscountVideoPriceLayout{}
+		audioRowsByMode := make(map[string][]ratio_setting.VideoResolutionAudioPriceRule)
+		for _, row := range hint.Tiers {
+			mode := distributorModelDiscountVideoLaneLabel(row.Lane)
+			layout.ensureMode(mode)
+			if row.HasAudio == nil {
+				layout.addLine(mode, distributorModelDiscountVideoPriceGeneral, row.Resolution, row.UsdAfterChannelDiscount)
+				continue
+			}
+			audioRowsByMode[mode] = append(audioRowsByMode[mode], ratio_setting.VideoResolutionAudioPriceRule{
+				Resolution: row.Resolution,
+				HasAudio:   *row.HasAudio,
+				Price:      row.UsdAfterChannelDiscount,
+			})
+		}
+		for _, mode := range layout.modeLabels() {
+			layout.addAudioMode(mode, audioRowsByMode[mode])
+		}
+		return strings.Join(layout.appendTo([]string{"视频生成（" + distributorModelDiscountVideoBillingLabel(hint.BillingMode) + "）"}, groupRatio, unit), "\n")
+	}
+	if p.VideoPrice != nil && *p.VideoPrice > 0 {
+		channelPrice := *p.VideoPrice
+		if ch.OptionVideoPrice != nil && *ch.OptionVideoPrice > 0 {
+			channelPrice = *ch.OptionVideoPrice
+		}
+		return "视频生成：" + distributorModelDiscountPlatformUnitPrice(channelPrice, "条", groupRatio)
+	}
+	return ""
+}
+
+func distributorModelDiscountVideoLaneLabel(lane string) string {
+	switch lane {
+	case "text_to_video_legacy":
+		return "文生视频"
+	case "image_to_video_legacy":
+		return "图生视频"
+	case "video_to_video_input_legacy":
+		return "视频生视频（输入）"
+	case "video_to_video_output_legacy":
+		return "视频生视频（输出）"
+	case "image_to_video", "image_to_video_per_second", "image_to_video_per_token":
+		return "图生视频"
+	case "video_to_video", "video_to_video_per_second", "video_to_video_per_token":
+		return "视频生视频"
+	default:
+		return "文生视频"
+	}
+}
+
+func distributorModelDiscountVideoBillingLabel(mode string) string {
+	switch mode {
+	case "per_second":
+		return "按秒"
+	case "per_token":
+		return "按 token"
+	default:
+		return "按条"
+	}
 }
 
 func formatDistributorModelDiscountPriceNumber(value float64) string {
@@ -616,17 +949,19 @@ func formatDistributorModelDiscountOfficialPrice(item model.InviteeModelMarkupDi
 	// 不使用 ChannelBasePrice，也不叠加 Default/CurrentMarkupDiscountRate。
 	sections := make([]string, 0, 3)
 	var basePrice string
-	switch item.OfficialPricingQuotaType {
-	case 1:
-		value := item.OfficialBasePrice * multiplier
-		formatted := formatDistributorModelDiscountUnitPrice(value, "次")
-		if formatted != "-" {
-			basePrice = formatted
+	if item.OfficialASRPrice == nil {
+		switch item.OfficialPricingQuotaType {
+		case 1:
+			value := item.OfficialBasePrice * multiplier
+			formatted := formatDistributorModelDiscountUnitPrice(value, "次")
+			if formatted != "-" {
+				basePrice = formatted
+			}
+		case 3:
+			basePrice = formatDistributorModelDiscountTierPricing(item.OfficialRequestTierPricing, multiplier)
+		default:
+			basePrice = formatDistributorModelDiscountTokenPricing(item, multiplier)
 		}
-	case 3:
-		basePrice = formatDistributorModelDiscountTierPricing(item.OfficialRequestTierPricing, multiplier)
-	default:
-		basePrice = formatDistributorModelDiscountTokenPricing(item, multiplier)
 	}
 	if basePrice != "" && basePrice != "-" {
 		sections = append(sections, basePrice)
@@ -634,13 +969,37 @@ func formatDistributorModelDiscountOfficialPrice(item model.InviteeModelMarkupDi
 	if imagePricing := formatDistributorModelDiscountImagePricing(item, multiplier); imagePricing != "" {
 		sections = append(sections, imagePricing)
 	}
+	if audioPricing := formatDistributorModelDiscountAudioPricing(item, multiplier); audioPricing != "" {
+		sections = append(sections, audioPricing)
+	}
 	if videoPricing := formatDistributorModelDiscountVideoPricing(item, multiplier); videoPricing != "" {
 		sections = append(sections, videoPricing)
+	}
+	if item.OfficialASRPrice != nil && *item.OfficialASRPrice > 0 {
+		sections = append(sections, "语音识别："+
+			formatDistributorModelDiscountUnitPrice(*item.OfficialASRPrice*multiplier, "秒"))
 	}
 	if len(sections) == 0 {
 		return "-"
 	}
 	return strings.Join(sections, "\n")
+}
+
+func formatDistributorModelDiscountAudioPricing(item model.InviteeModelMarkupDiscountRateItem, multiplier float64) string {
+	if item.OfficialAudioRatio == nil || *item.OfficialAudioRatio <= 0 {
+		return ""
+	}
+	modelRatio := distributorModelDiscountGlobalModelRatio(item)
+	if modelRatio <= 0 {
+		return ""
+	}
+	input := modelRatio * ratio_setting.TierRatioBase * *item.OfficialAudioRatio * multiplier
+	parts := []string{"音频输入 " + formatDistributorModelDiscountUnitPrice(input, "1M tokens")}
+	if item.OfficialAudioCompletionRatio != nil && *item.OfficialAudioCompletionRatio > 0 {
+		output := input * *item.OfficialAudioCompletionRatio
+		parts = append(parts, "音频输出 "+formatDistributorModelDiscountUnitPrice(output, "1M tokens"))
+	}
+	return "音频按量\n" + strings.Join(parts, "；")
 }
 
 func formatDistributorModelDiscountTokenPricing(item model.InviteeModelMarkupDiscountRateItem, multiplier float64) string {
@@ -719,37 +1078,37 @@ func formatDistributorModelDiscountVideoPricing(item model.InviteeModelMarkupDis
 		switch {
 		case ratio_setting.HasUsableVideoPerTokenRules(*rules):
 			lines := []string{"视频生成（按 token）"}
-			groups := distributorModelDiscountVideoPriceGroups{}
-			groups.addAudioMode("文生视频", rules.TextToVideoPerToken)
-			groups.addAudioMode("图生视频", rules.ImageToVideoPerToken)
-			groups.addAudioMode("视频生视频", rules.VideoToVideoPerToken)
-			lines = groups.appendTo(lines, multiplier, "1M tokens")
+			layout := distributorModelDiscountVideoPriceLayout{}
+			layout.addAudioMode("文生视频", rules.TextToVideoPerToken)
+			layout.addAudioMode("图生视频", rules.ImageToVideoPerToken)
+			layout.addAudioMode("视频生视频", rules.VideoToVideoPerToken)
+			lines = layout.appendTo(lines, multiplier, "1M tokens")
 			if len(lines) > 1 {
 				return strings.Join(lines, "\n")
 			}
 		case ratio_setting.HasUsableVideoPerSecondRules(*rules):
 			lines := []string{"视频生成（按秒）"}
-			groups := distributorModelDiscountVideoPriceGroups{}
-			groups.addAudioMode("文生视频", rules.TextToVideoPerSecond)
-			groups.addAudioMode("图生视频", rules.ImageToVideoPerSecond)
-			groups.addAudioMode("视频生视频", rules.VideoToVideoPerSecond)
-			lines = groups.appendTo(lines, multiplier, "秒")
+			layout := distributorModelDiscountVideoPriceLayout{}
+			layout.addAudioMode("文生视频", rules.TextToVideoPerSecond)
+			layout.addAudioMode("图生视频", rules.ImageToVideoPerSecond)
+			layout.addAudioMode("视频生视频", rules.VideoToVideoPerSecond)
+			lines = layout.appendTo(lines, multiplier, "秒")
 			if len(lines) > 1 {
 				return strings.Join(lines, "\n")
 			}
 		case ratio_setting.HasUsableVideoPerVideoRules(*rules):
 			lines := []string{"视频生成（按条）"}
-			groups := distributorModelDiscountVideoPriceGroups{}
-			groups.addPerVideoMode("文生视频", rules.TextToVideoPerVideo, rules.TextToVideoPerItem)
-			groups.addPerVideoMode("图生视频", rules.ImageToVideoPerVideo, rules.ImageToVideoPerItem)
+			layout := distributorModelDiscountVideoPriceLayout{}
+			layout.addPerVideoMode("文生视频", rules.TextToVideoPerVideo, rules.TextToVideoPerItem)
+			layout.addPerVideoMode("图生视频", rules.ImageToVideoPerVideo, rules.ImageToVideoPerItem)
 			if hasPositiveDistributorModelDiscountLegacyVideoRows(rules.VideoToVideoInputPerVideo) ||
 				hasPositiveDistributorModelDiscountLegacyVideoRows(rules.VideoToVideoOutputPerVideo) {
-				groups.addLegacyMode("视频生视频（输入）", rules.VideoToVideoInputPerVideo)
-				groups.addLegacyMode("视频生视频（输出）", rules.VideoToVideoOutputPerVideo)
+				layout.addLegacyMode("视频生视频（输入）", rules.VideoToVideoInputPerVideo)
+				layout.addLegacyMode("视频生视频（输出）", rules.VideoToVideoOutputPerVideo)
 			} else {
-				groups.addAudioMode("视频生视频", rules.VideoToVideoPerItem)
+				layout.addAudioMode("视频生视频", rules.VideoToVideoPerItem)
 			}
-			lines = groups.appendTo(lines, multiplier, "条")
+			lines = layout.appendTo(lines, multiplier, "条")
 			if len(lines) > 1 {
 				return strings.Join(lines, "\n")
 			}
@@ -781,19 +1140,57 @@ const (
 )
 
 type distributorModelDiscountVideoPriceLine struct {
-	mode       string
 	resolution string
 	priceUSD   float64
 }
 
-type distributorModelDiscountVideoPriceGroups [3][]distributorModelDiscountVideoPriceLine
+type distributorModelDiscountVideoPriceMode struct {
+	label  string
+	groups [3][]distributorModelDiscountVideoPriceLine
+}
+
+// distributorModelDiscountVideoPriceLayout keeps the export hierarchy aligned
+// across the agent and platform columns: generation mode first, then audio
+// category, then naturally sorted resolution rows.
+type distributorModelDiscountVideoPriceLayout struct {
+	modes []distributorModelDiscountVideoPriceMode
+}
 
 type distributorModelDiscountVideoAudioPrices struct {
 	silent *float64
 	audio  *float64
 }
 
-func (groups *distributorModelDiscountVideoPriceGroups) addAudioMode(mode string, rows []ratio_setting.VideoResolutionAudioPriceRule) {
+func (layout *distributorModelDiscountVideoPriceLayout) ensureMode(label string) *distributorModelDiscountVideoPriceMode {
+	for i := range layout.modes {
+		if layout.modes[i].label == label {
+			return &layout.modes[i]
+		}
+	}
+	layout.modes = append(layout.modes, distributorModelDiscountVideoPriceMode{label: label})
+	return &layout.modes[len(layout.modes)-1]
+}
+
+func (layout *distributorModelDiscountVideoPriceLayout) modeLabels() []string {
+	labels := make([]string, 0, len(layout.modes))
+	for _, mode := range layout.modes {
+		labels = append(labels, mode.label)
+	}
+	return labels
+}
+
+func (layout *distributorModelDiscountVideoPriceLayout) addLine(mode string, category int, resolution string, priceUSD float64) {
+	if !isFiniteInviteeModelDiscountFloat(priceUSD) || priceUSD <= 0 {
+		return
+	}
+	group := layout.ensureMode(mode)
+	group.groups[category] = append(group.groups[category], distributorModelDiscountVideoPriceLine{
+		resolution: distributorModelDiscountResolutionLabel(resolution),
+		priceUSD:   priceUSD,
+	})
+}
+
+func (layout *distributorModelDiscountVideoPriceLayout) addAudioMode(mode string, rows []ratio_setting.VideoResolutionAudioPriceRule) {
 	pricesByResolution := make(map[string]*distributorModelDiscountVideoAudioPrices)
 	for _, row := range rows {
 		if !isFiniteInviteeModelDiscountFloat(row.Price) || row.Price <= 0 {
@@ -826,37 +1223,31 @@ func (groups *distributorModelDiscountVideoPriceGroups) addAudioMode(mode string
 	for _, resolution := range resolutions {
 		prices := pricesByResolution[resolution]
 		if prices.silent != nil && prices.audio != nil && distributorModelDiscountVideoPricesEqual(*prices.silent, *prices.audio) {
-			groups[distributorModelDiscountVideoPriceGeneral] = append(groups[distributorModelDiscountVideoPriceGeneral], distributorModelDiscountVideoPriceLine{
-				mode: mode, resolution: resolution, priceUSD: *prices.silent,
-			})
+			layout.addLine(mode, distributorModelDiscountVideoPriceGeneral, resolution, *prices.silent)
 			continue
 		}
 		if prices.silent != nil {
-			groups[distributorModelDiscountVideoPriceSilent] = append(groups[distributorModelDiscountVideoPriceSilent], distributorModelDiscountVideoPriceLine{
-				mode: mode, resolution: resolution, priceUSD: *prices.silent,
-			})
+			layout.addLine(mode, distributorModelDiscountVideoPriceSilent, resolution, *prices.silent)
 		}
 		if prices.audio != nil {
-			groups[distributorModelDiscountVideoPriceAudio] = append(groups[distributorModelDiscountVideoPriceAudio], distributorModelDiscountVideoPriceLine{
-				mode: mode, resolution: resolution, priceUSD: *prices.audio,
-			})
+			layout.addLine(mode, distributorModelDiscountVideoPriceAudio, resolution, *prices.audio)
 		}
 	}
 }
 
-func (groups *distributorModelDiscountVideoPriceGroups) addPerVideoMode(
+func (layout *distributorModelDiscountVideoPriceLayout) addPerVideoMode(
 	mode string,
 	legacyRows []ratio_setting.VideoResolutionPerVideoRule,
 	itemRows []ratio_setting.VideoResolutionAudioPriceRule,
 ) {
 	if hasPositiveDistributorModelDiscountLegacyVideoRows(legacyRows) {
-		groups.addLegacyMode(mode, legacyRows)
+		layout.addLegacyMode(mode, legacyRows)
 		return
 	}
-	groups.addAudioMode(mode, itemRows)
+	layout.addAudioMode(mode, itemRows)
 }
 
-func (groups *distributorModelDiscountVideoPriceGroups) addLegacyMode(mode string, rows []ratio_setting.VideoResolutionPerVideoRule) {
+func (layout *distributorModelDiscountVideoPriceLayout) addLegacyMode(mode string, rows []ratio_setting.VideoResolutionPerVideoRule) {
 	sortedRows := append([]ratio_setting.VideoResolutionPerVideoRule(nil), rows...)
 	sort.SliceStable(sortedRows, func(i, j int) bool {
 		left := distributorModelDiscountResolutionLabel(sortedRows[i].Resolution)
@@ -864,28 +1255,43 @@ func (groups *distributorModelDiscountVideoPriceGroups) addLegacyMode(mode strin
 		return distributorModelDiscountResolutionLess(left, right)
 	})
 	for _, row := range sortedRows {
-		if !isFiniteInviteeModelDiscountFloat(row.VideoPrice) || row.VideoPrice <= 0 {
-			continue
-		}
-		groups[distributorModelDiscountVideoPriceGeneral] = append(groups[distributorModelDiscountVideoPriceGeneral], distributorModelDiscountVideoPriceLine{
-			mode: mode, resolution: distributorModelDiscountResolutionLabel(row.Resolution), priceUSD: row.VideoPrice,
-		})
+		layout.addLine(mode, distributorModelDiscountVideoPriceGeneral, row.Resolution, row.VideoPrice)
 	}
 }
 
-func (groups distributorModelDiscountVideoPriceGroups) appendTo(lines []string, multiplier float64, unit string) []string {
+func (layout distributorModelDiscountVideoPriceLayout) appendTo(lines []string, multiplier float64, unit string) []string {
 	labels := [...]string{"通用", "无声", "有声"}
-	for category, rows := range groups {
-		if len(rows) == 0 {
+	for _, mode := range layout.modes {
+		categoryCount := 0
+		for _, rows := range mode.groups {
+			if len(rows) > 0 {
+				categoryCount++
+			}
+		}
+		if categoryCount == 0 {
 			continue
 		}
-		lines = append(lines, labels[category])
-		for _, row := range rows {
-			lines = append(lines, fmt.Sprintf("%s · %s：%s",
-				row.mode,
-				row.resolution,
-				formatDistributorModelDiscountUnitPrice(row.priceUSD*multiplier, unit),
-			))
+		lines = append(lines, mode.label)
+		for category, rawRows := range mode.groups {
+			if len(rawRows) == 0 {
+				continue
+			}
+			rows := append([]distributorModelDiscountVideoPriceLine(nil), rawRows...)
+			sort.SliceStable(rows, func(left, right int) bool {
+				return distributorModelDiscountResolutionLess(rows[left].resolution, rows[right].resolution)
+			})
+			// A mode containing only unified prices needs no redundant "通用"
+			// heading. Non-unified audio data keeps its category label so the
+			// exported price remains unambiguous.
+			if categoryCount > 1 || category != distributorModelDiscountVideoPriceGeneral {
+				lines = append(lines, labels[category])
+			}
+			for _, row := range rows {
+				lines = append(lines, fmt.Sprintf("%s：%s",
+					row.resolution,
+					formatDistributorModelDiscountUnitPrice(row.priceUSD*multiplier, unit),
+				))
+			}
 		}
 	}
 	return lines
@@ -999,8 +1405,14 @@ func distributorModelDiscountTierRangeLabel(previous, upTo int64, boundary strin
 	return fmt.Sprintf("%d ≤ 输入 token < %d", previous, upTo)
 }
 
-func distributorModelDiscountExportRowHeight(item model.InviteeModelMarkupDiscountRateItem) float64 {
-	lineCount := strings.Count(formatDistributorModelDiscountOfficialPrice(item, 1), "\n") + 1
+func distributorModelDiscountExportRowHeight(values ...any) float64 {
+	lineCount := 1
+	for _, value := range values {
+		count := strings.Count(fmt.Sprint(value), "\n") + 1
+		if count > lineCount {
+			lineCount = count
+		}
+	}
 	return math.Min(409, math.Max(38, float64(lineCount)*22))
 }
 

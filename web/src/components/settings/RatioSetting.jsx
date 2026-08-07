@@ -25,6 +25,7 @@ import ModelRatioSettings from '../../pages/Setting/Ratio/ModelRatioSettings';
 import ModelSettingsVisualEditor from '../../pages/Setting/Ratio/ModelSettingsVisualEditor';
 import ModelRatioNotSetEditor from '../../pages/Setting/Ratio/ModelRationNotSetEditor';
 import UpstreamRatioSync from '../../pages/Setting/Ratio/UpstreamRatioSync';
+import UserModelPricingSettings from '../../pages/Setting/Ratio/UserModelPricingSettings';
 
 import { API, showError, toBoolean } from '../../helpers';
 
@@ -118,6 +119,7 @@ const RatioSetting = ({ activeSection = 'visual' }) => {
         {activeSection === 'unset_models' && (
           <ModelRatioNotSetEditor options={inputs} refresh={onRefresh} />
         )}
+        {activeSection === 'user_pricing' && <UserModelPricingSettings />}
         {activeSection === 'request_tier_templates' && (
           <RequestTierPricingTemplateSettings
             options={inputs}

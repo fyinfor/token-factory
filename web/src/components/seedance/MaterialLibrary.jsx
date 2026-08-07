@@ -406,7 +406,7 @@ const MaterialLibrary = () => {
         </Title>
         <Tooltip
           content={t(
-            '上传已授权的虚拟人像素材，获取 asset:// 资源地址后可用于视频生成。',
+            '虚拟人像可直接上传。真人人像：同一人物进入其空间继续传素材；换人（新面孔）需先「认证新人物」再上传。拿到 asset:// 地址后可用于视频生成。',
           )}
         >
           <IconHelpCircle style={{ color: 'var(--semi-color-text-2)' }} />

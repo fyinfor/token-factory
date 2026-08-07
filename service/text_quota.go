@@ -321,6 +321,10 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 			summary.MarkupDiscountPercent,
 			summary.GroupRatio,
 		)
+		// 用户指定价为最终价（全局官方价 × 总折扣），不再套用渠道阶梯计费。
+		if relayInfo.PriceData.UserPricingOverride {
+			hasTierHit = false
+		}
 		if hasTierHit {
 			summary.RequestTierPricing = true
 		}

@@ -206,6 +206,11 @@ export const SETTING_CATEGORIES = [
         settingItem('unset-models', 'ratio', 'unset_models', '未设置价格模型', [
           '漏价模型',
         ]),
+        settingItem('user-pricing', 'ratio', 'user_pricing', '用户指定价', [
+          '用户定价',
+          '指定价',
+          '用户折扣',
+        ]),
         settingItem(
           'tier-templates',
           'ratio',
