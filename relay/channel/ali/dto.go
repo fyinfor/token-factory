@@ -175,6 +175,7 @@ type AliImageParameters struct {
 	N                int    `json:"n,omitempty"`
 	Steps            string `json:"steps,omitempty"`
 	Scale            string `json:"scale,omitempty"`
+	NegativePrompt   string `json:"negative_prompt,omitempty"`
 	Watermark        *bool  `json:"watermark,omitempty"`
 	PromptExtend     *bool  `json:"prompt_extend,omitempty"`
 	ThinkingMode     *bool  `json:"thinking_mode,omitempty"`

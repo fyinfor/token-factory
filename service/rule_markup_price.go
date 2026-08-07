@@ -161,7 +161,9 @@ func EffectiveVideoPerTokenUSDForDimensions(
 	return effUSD, channelUSD, globalUSD, true
 }
 
-// EffectiveVideoPerSecondUSDForDimensions 按 resolution 标识（优先）或像素匹配渠道档位后计算有效单价。
+// EffectiveVideoPerSecondUSDForDimensions 按 resolution 标识（优先）或像素匹配档位后计算有效单价。
+// 优先渠道 ChannelVideoPricingRules；无可用按秒档位时回退全局 VideoPricingRules（与按 token 路径一致），
+// 仍套用成本折扣% + 加价折扣%，避免全局垫底按原价实扣、日志却展示折扣单价。
 func EffectiveVideoPerSecondUSDForDimensions(
 	channelID int,
 	modelName, mode string,
@@ -171,14 +173,21 @@ func EffectiveVideoPerSecondUSDForDimensions(
 	resolutionLabel string,
 ) (effUSD, channelUSD, globalUSD float64, ok bool) {
 	modelName = strings.TrimSpace(modelName)
-	if modelName == "" || channelID <= 0 {
+	if modelName == "" {
 		return 0, 0, 0, false
 	}
-	channelRules, okRules := ratio_setting.GetChannelVideoPricingRules(channelID, modelName)
-	if !okRules {
-		return 0, 0, 0, false
+	var rules ratio_setting.VideoPricingRules
+	var okRules bool
+	if channelID > 0 {
+		rules, okRules = ratio_setting.GetChannelVideoPricingRules(channelID, modelName)
 	}
-	match, okMatch := MatchVideoPerSecondUnitPrice(channelRules, mode, width, height, hasAudio, resolutionLabel)
+	if !okRules || !ratio_setting.HasUsableVideoPerSecondRules(rules) {
+		rules, okRules = ratio_setting.GetVideoPricingRules(modelName)
+		if !okRules || !ratio_setting.HasUsableVideoPerSecondRules(rules) {
+			return 0, 0, 0, false
+		}
+	}
+	match, okMatch := MatchVideoPerSecondUnitPrice(rules, mode, width, height, hasAudio, resolutionLabel)
 	if !okMatch || match.PricePerSecond <= 0 {
 		return 0, 0, 0, false
 	}

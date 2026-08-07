@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/model"
@@ -115,11 +116,17 @@ func TestBuildDistributorModelDiscountTemplateExportWorkbook(t *testing.T) {
 	if value, err := f.GetCellValue(sheet, "C1"); err != nil || value != "官方价格（全局价）" {
 		t.Fatalf("C1 = %q, %v", value, err)
 	}
-	if value, err := f.GetCellValue(sheet, "D1"); err != nil || value != "调用折扣" {
+	if value, err := f.GetCellValue(sheet, "D1"); err != nil || value != "代理调用折扣" {
 		t.Fatalf("D1 = %q, %v", value, err)
 	}
-	if value, err := f.GetCellValue(sheet, "E1"); err != nil || value != "折扣后价格" {
+	if value, err := f.GetCellValue(sheet, "E1"); err != nil || value != "代理折扣后价格" {
 		t.Fatalf("E1 = %q, %v", value, err)
+	}
+	if value, err := f.GetCellValue(sheet, "F1"); err != nil || value != "平台折扣" {
+		t.Fatalf("F1 = %q, %v", value, err)
+	}
+	if value, err := f.GetCellValue(sheet, "G1"); err != nil || value != "平台折扣后价格" {
+		t.Fatalf("G1 = %q, %v", value, err)
 	}
 	if value, err := f.GetCellValue(sheet, "A2"); err != nil || value != "gpt-4.1\ngpt-4.1/primary" {
 		t.Fatalf("A2 = %q, %v", value, err)
@@ -136,11 +143,23 @@ func TestBuildDistributorModelDiscountTemplateExportWorkbook(t *testing.T) {
 	if value, err := f.GetCellValue(sheet, "E2"); err != nil || value != "文本按量\n输入 $2.1702 / 1M tokens；输出 $8.6808 / 1M tokens；缓存读 $0.21702 / 1M tokens；缓存写 $2.71275 / 1M tokens" {
 		t.Fatalf("E2 = %q, %v", value, err)
 	}
+	if value, err := f.GetCellValue(sheet, "F2"); err != nil || value != "97.3%" {
+		t.Fatalf("F2 = %q, %v", value, err)
+	}
+	if value, err := f.GetCellValue(sheet, "G2"); err != nil || value != "文本按量\n输入 $2.9202 / 1M tokens；输出 $11.6808 / 1M tokens；缓存读 $0.29202 / 1M tokens；缓存写 $3.65025 / 1M tokens" {
+		t.Fatalf("G2 = %q, %v", value, err)
+	}
 	if value, err := f.GetCellValue(sheet, "C3"); err != nil || value != "$0.04 / 次" {
 		t.Fatalf("C3 = %q, %v", value, err)
 	}
 	if value, err := f.GetCellValue(sheet, "E3"); err != nil || value != "$0.032 / 次" {
 		t.Fatalf("E3 = %q, %v", value, err)
+	}
+	if value, err := f.GetCellValue(sheet, "F3"); err != nil || value != "100.0%" {
+		t.Fatalf("F3 = %q, %v", value, err)
+	}
+	if value, err := f.GetCellValue(sheet, "G3"); err != nil || value != "$0.04 / 次" {
+		t.Fatalf("G3 = %q, %v", value, err)
 	}
 	if value, err := f.GetCellValue(sheet, "C4"); err != nil || value != "阶梯价\n0 ≤ 输入 token < 32000：输入 $2 / 1M tokens；输出 $8 / 1M tokens；缓存读 $0.2 / 1M tokens；缓存写 $2.5 / 1M tokens\n输入 token ≥ 32000：输入 $3 / 1M tokens；输出 $12 / 1M tokens；缓存读 $0.3 / 1M tokens；缓存写 $3.75 / 1M tokens" {
 		t.Fatalf("C4 = %q, %v", value, err)
@@ -213,6 +232,208 @@ func TestFormatDistributorModelDiscountOfficialPriceCombinesTextImageVideo(t *te
 	}
 }
 
+func TestDistributorModelDiscountPlatformPriceAndCombinedDiscount(t *testing.T) {
+	useDistributorModelDiscountUSDForTest(t)
+	completion := 2.0
+	item := model.InviteeModelMarkupDiscountRateItem{
+		PlatformPricing: &model.PricingAPIItem{
+			Pricing: model.Pricing{ModelRatio: 1, CompletionRatio: &completion},
+			ChannelList: []model.PricingChannelItem{{
+				ModelRatio: 0.5, CompletionRatio: 3, EffectiveCostPercent: 80, MarkupDiscountRate: 10,
+			}},
+		},
+	}
+	if got, want := formatDistributorModelDiscountPlatformPrice(item, 1.5), "文本按量\n输入 $1.5 / 1M tokens；输出 $4.2 / 1M tokens"; got != want {
+		t.Fatalf("platform token price = %q, want %q", got, want)
+	}
+	// 平台折扣为代理调用折扣与默认加价折扣之和。
+	item.ChannelPriceDiscountPercent = 72.34
+	item.DefaultMarkupDiscountRate = 10
+	if got, want := formatInviteeModelDiscountMarkupRate(item.ChannelPriceDiscountPercent+item.DefaultMarkupDiscountRate), "82.3%"; got != want {
+		t.Fatalf("platform call discount = %q, want %q", got, want)
+	}
+
+	requestItem := model.InviteeModelMarkupDiscountRateItem{
+		PlatformPricing: &model.PricingAPIItem{
+			Pricing: model.Pricing{ModelPrice: 1},
+			ChannelList: []model.PricingChannelItem{{
+				QuotaType: 1, ModelPrice: 0.5, EffectiveCostPercent: 80, MarkupDiscountRate: 10,
+			}},
+		},
+	}
+	if got, want := formatDistributorModelDiscountPlatformPrice(requestItem, 1.5), "$0.75 / 次"; got != want {
+		t.Fatalf("platform request price = %q, want %q", got, want)
+	}
+	requestItem.ChannelPriceDiscountPercent = 80
+	requestItem.DefaultMarkupDiscountRate = 10
+	if got, want := formatInviteeModelDiscountMarkupRate(requestItem.ChannelPriceDiscountPercent+requestItem.DefaultMarkupDiscountRate), "90.0%"; got != want {
+		t.Fatalf("platform request call discount = %q, want %q", got, want)
+	}
+}
+
+func TestDistributorModelDiscountAudioPricing(t *testing.T) {
+	useDistributorModelDiscountUSDForTest(t)
+	audioRatio := 0.5
+	audioCompletionRatio := 3.0
+	channelOnlyAudioRatio := 9.0
+	channelOnlyAudioCompletionRatio := 8.0
+	item := model.InviteeModelMarkupDiscountRateItem{
+		OfficialModelRatio:           2,
+		OfficialAudioRatio:           &audioRatio,
+		OfficialAudioCompletionRatio: &audioCompletionRatio,
+		PlatformPricing: &model.PricingAPIItem{
+			Pricing: model.Pricing{
+				ModelRatio:           2,
+				AudioRatio:           &audioRatio,
+				AudioCompletionRatio: &audioCompletionRatio,
+			},
+			ChannelList: []model.PricingChannelItem{{
+				ModelRatio:                 1,
+				EffectiveCostPercent:       80,
+				MarkupDiscountRate:         10,
+				OptionAudioRatio:           &channelOnlyAudioRatio,
+				OptionAudioCompletionRatio: &channelOnlyAudioCompletionRatio,
+			}},
+		},
+	}
+	if got := formatDistributorModelDiscountOfficialPrice(item, 1); !strings.Contains(got, "音频输入 $2 / 1M tokens") || !strings.Contains(got, "音频输出 $6 / 1M tokens") {
+		t.Fatalf("official audio pricing = %q", got)
+	}
+	if got := formatDistributorModelDiscountOfficialPrice(item, 0.5); !strings.Contains(got, "音频输入 $1 / 1M tokens") || !strings.Contains(got, "音频输出 $3 / 1M tokens") {
+		t.Fatalf("agent audio pricing = %q", got)
+	}
+	if got := formatDistributorModelDiscountPlatformPrice(item, 1.5); !strings.Contains(got, "音频输入 $1.5 / 1M tokens") || !strings.Contains(got, "音频输出 $4.5 / 1M tokens") {
+		t.Fatalf("platform audio must use global audio ratios after effective input rate: %q", got)
+	}
+
+	onlyInputAudioRatio := 0.25
+	onlyInput := model.InviteeModelMarkupDiscountRateItem{
+		OfficialModelRatio: 1,
+		OfficialAudioRatio: &onlyInputAudioRatio,
+		PlatformPricing: &model.PricingAPIItem{
+			Pricing:     model.Pricing{ModelRatio: 1, AudioRatio: &onlyInputAudioRatio},
+			ChannelList: []model.PricingChannelItem{{ModelRatio: 0.5, EffectiveCostPercent: 100}},
+		},
+	}
+	if got := formatDistributorModelDiscountPlatformPrice(onlyInput, 1); !strings.Contains(got, "音频输入") || strings.Contains(got, "音频输出") {
+		t.Fatalf("input-only audio pricing = %q", got)
+	}
+}
+
+func TestDistributorModelDiscountPlatformTierAndMediaPricesUseGroupRatio(t *testing.T) {
+	useDistributorModelDiscountUSDForTest(t)
+	imageTier := model.ImagePerImageTierRow{UsdAfterChannelDiscount: 0.5, UsdOfficial: 1, Resolution: "1K", Lane: "text_to_image"}
+	videoTier := model.VideoFlatClipTierRow{UsdAfterChannelDiscount: 0.5, UsdOfficial: 1, Resolution: "720p", Lane: "text_to_video"}
+	item := model.InviteeModelMarkupDiscountRateItem{
+		OfficialRequestTierPricing: &ratio_setting.RequestTierPricing{Tiers: []ratio_setting.RequestTierBand{{Prices: ratio_setting.RequestTierPrices{Input: 1, Output: 1, CacheRead: 1, CacheWrite: 1}}}},
+		PlatformPricing: &model.PricingAPIItem{
+			Pricing: model.Pricing{},
+			ChannelList: []model.PricingChannelItem{{
+				QuotaType:            3,
+				RequestTierPricing:   ratio_setting.RequestTierPricing{Tiers: []ratio_setting.RequestTierBand{{Prices: ratio_setting.RequestTierPrices{Input: 0.5, Output: 0.5, CacheRead: 0.5, CacheWrite: 0.5}}}},
+				EffectiveCostPercent: 100,
+			}},
+			ImagePerImageHint: &model.ImagePerImagePricingHint{Tiers: []model.ImagePerImageTierRow{imageTier}},
+		},
+	}
+	if got := formatDistributorModelDiscountPlatformPrice(item, 1.5); !strings.Contains(got, "$0.75 / 张") {
+		t.Fatalf("tier/image platform prices = %q", got)
+	}
+
+	videoItem := item
+	videoItem.PlatformPricing.VideoFlatClipHint = &model.VideoFlatClipPricingHint{BillingMode: "per_item", Tiers: []model.VideoFlatClipTierRow{videoTier}}
+	if got := formatDistributorModelDiscountPlatformPrice(videoItem, 1.5); !strings.Contains(got, "$0.75 / 条") || strings.Contains(got, "阶梯价") {
+		t.Fatalf("video model must hide text tiers and keep video price: %q", got)
+	}
+}
+
+func TestDistributorModelDiscountPlatformSimpleVideoMatchesSideSheet(t *testing.T) {
+	useDistributorModelDiscountUSDForTest(t)
+	videoPrice := 2.0
+	channelVideoPrice := 1.0
+	item := model.InviteeModelMarkupDiscountRateItem{
+		PlatformPricing: &model.PricingAPIItem{
+			Pricing: model.Pricing{ModelRatio: 1, VideoPrice: &videoPrice},
+			ChannelList: []model.PricingChannelItem{{
+				ModelRatio: 1, EffectiveCostPercent: 10, MarkupDiscountRate: 90, OptionVideoPrice: &channelVideoPrice,
+			}},
+		},
+	}
+	// The simple-video row uses channel_video_price directly: it does not apply
+	// cost/markup again. Its display price uses the selected group ratio.
+	if got, want := formatDistributorModelDiscountPlatformPrice(item, 1.5), "视频生成：$1.5 / 条"; got != want {
+		t.Fatalf("simple video platform price = %q, want %q", got, want)
+	}
+	imagePrice := 0.1
+	item.OfficialImagePrice = &imagePrice
+	item.PlatformPricing.VideoPrice = nil
+	if got := formatDistributorModelDiscountPlatformPrice(item, 1); strings.Contains(got, "图片生成") {
+		t.Fatalf("simple image price is not rendered by the side sheet: %q", got)
+	}
+}
+
+func TestDistributorModelDiscountPlatformVideoUsesAgentColumnModeFirstLayout(t *testing.T) {
+	useDistributorModelDiscountUSDForTest(t)
+	silent := false
+	audio := true
+	item := model.InviteeModelMarkupDiscountRateItem{
+		PlatformPricing: &model.PricingAPIItem{
+			Pricing:     model.Pricing{},
+			ChannelList: []model.PricingChannelItem{{}},
+			VideoFlatClipHint: &model.VideoFlatClipPricingHint{
+				BillingMode: "per_item",
+				Tiers: []model.VideoFlatClipTierRow{
+					// nil is the hint's already-collapsed same-price audio pair.
+					{UsdAfterChannelDiscount: 1, Resolution: "720p", Lane: "text_to_video"},
+					{UsdAfterChannelDiscount: 2, Resolution: "1080p", Lane: "image_to_video", HasAudio: &silent},
+					{UsdAfterChannelDiscount: 3, Resolution: "1080p", Lane: "image_to_video", HasAudio: &audio},
+					// Be defensive if an uncollapsed equal-price pair reaches export.
+					{UsdAfterChannelDiscount: 4, Resolution: "480p", Lane: "video_to_video", HasAudio: &silent},
+					{UsdAfterChannelDiscount: 4, Resolution: "480p", Lane: "video_to_video", HasAudio: &audio},
+					{UsdAfterChannelDiscount: 5, Resolution: "720p", Lane: "video_to_video_input_legacy"},
+				},
+			},
+		},
+	}
+	got := formatDistributorModelDiscountPlatformPrice(item, 1)
+	want := "视频生成（按条）\n" +
+		"文生视频\n" +
+		"720p：$1 / 条\n" +
+		"图生视频\n" +
+		"无声\n" +
+		"1080p：$2 / 条\n" +
+		"有声\n" +
+		"1080p：$3 / 条\n" +
+		"视频生视频\n" +
+		"480p：$4 / 条\n" +
+		"视频生视频（输入）\n" +
+		"720p：$5 / 条"
+	if got != want {
+		t.Fatalf("platform video categories = %q, want %q", got, want)
+	}
+}
+
+func TestDistributorModelDiscountASRPricingMatchesSideSheet(t *testing.T) {
+	useDistributorModelDiscountUSDForTest(t)
+	asrPrice := 0.1234567
+	item := model.InviteeModelMarkupDiscountRateItem{
+		OfficialASRPrice: &asrPrice,
+		PlatformPricing: &model.PricingAPIItem{
+			Pricing:     model.Pricing{ModelRatio: 9, ASRPrice: &asrPrice},
+			ChannelList: []model.PricingChannelItem{{ModelRatio: 9}},
+		},
+	}
+	if got, want := formatDistributorModelDiscountOfficialPrice(item, 1), "语音识别：$0.123456 / 秒"; got != want {
+		t.Fatalf("official ASR price = %q, want %q", got, want)
+	}
+	if got, want := formatDistributorModelDiscountOfficialPrice(item, 0.5), "语音识别：$0.061728 / 秒"; got != want {
+		t.Fatalf("agent ASR price = %q, want %q", got, want)
+	}
+	if got, want := formatDistributorModelDiscountPlatformPrice(item, 1.5), "语音识别：$0.185185 / 秒"; got != want {
+		t.Fatalf("platform ASR price = %q, want %q", got, want)
+	}
+}
+
 func TestFormatDistributorModelDiscountVideoPricingPriorityAndUnits(t *testing.T) {
 	useDistributorModelDiscountUSDForTest(t)
 	videoPrice := 5.0
@@ -237,7 +458,7 @@ func TestFormatDistributorModelDiscountVideoPricingPriorityAndUnits(t *testing.T
 					},
 				},
 			},
-			want: "视频生成（按 token）\n无声\n文生视频 · 720p：$2 / 1M tokens",
+			want: "视频生成（按 token）\n文生视频\n无声\n720p：$2 / 1M tokens",
 		},
 		{
 			name: "per second",
@@ -248,7 +469,7 @@ func TestFormatDistributorModelDiscountVideoPricingPriorityAndUnits(t *testing.T
 					},
 				},
 			},
-			want: "视频生成（按秒）\n有声\n图生视频 · 1080p：$1.6 / 秒",
+			want: "视频生成（按秒）\n图生视频\n有声\n1080p：$1.6 / 秒",
 		},
 		{
 			name: "per item",
@@ -259,7 +480,7 @@ func TestFormatDistributorModelDiscountVideoPricingPriorityAndUnits(t *testing.T
 					},
 				},
 			},
-			want: "视频生成（按条）\n无声\n视频生视频 · 720p：$3 / 条",
+			want: "视频生成（按条）\n视频生视频\n无声\n720p：$3 / 条",
 		},
 		{
 			name: "legacy per video",
@@ -270,7 +491,21 @@ func TestFormatDistributorModelDiscountVideoPricingPriorityAndUnits(t *testing.T
 					},
 				},
 			},
-			want: "视频生成（按条）\n通用\n文生视频 · 1080p：$4 / 条",
+			want: "视频生成（按条）\n文生视频\n1080p：$4 / 条",
+		},
+		{
+			name: "legacy video input and output keep separate mode blocks",
+			item: model.InviteeModelMarkupDiscountRateItem{
+				OfficialVideoPricingRules: &ratio_setting.VideoPricingRules{
+					VideoToVideoInputPerVideo: []ratio_setting.VideoResolutionPerVideoRule{
+						{Resolution: "720p", VideoPrice: 6},
+					},
+					VideoToVideoOutputPerVideo: []ratio_setting.VideoResolutionPerVideoRule{
+						{Resolution: "1080p", VideoPrice: 10},
+					},
+				},
+			},
+			want: "视频生成（按条）\n视频生视频（输入）\n720p：$3 / 条\n视频生视频（输出）\n1080p：$5 / 条",
 		},
 		{
 			name: "video price precedes legacy ratio",
@@ -394,13 +629,20 @@ func TestFormatDistributorModelDiscountVideoPricingGroupsAudioPrices(t *testing.
 					{Resolution: "480p", HasAudio: false, Price: 0.5},
 					{Resolution: "480p", HasAudio: true, Price: 0.5},
 				},
+				VideoToVideoPerSecond: []ratio_setting.VideoResolutionAudioPriceRule{
+					{Resolution: "360p", HasAudio: false, Price: 0.25},
+					{Resolution: "360p", HasAudio: true, Price: 0.25},
+				},
 			},
 		}
 		want := "视频生成（按秒）\n" +
-			"通用\n" +
-			"文生视频 · 720p：$1 / 秒\n" +
-			"文生视频 · 1080p：$2 / 秒\n" +
-			"图生视频 · 480p：$0.5 / 秒"
+			"文生视频\n" +
+			"720p：$1 / 秒\n" +
+			"1080p：$2 / 秒\n" +
+			"图生视频\n" +
+			"480p：$0.5 / 秒\n" +
+			"视频生视频\n" +
+			"360p：$0.25 / 秒"
 		if got := formatDistributorModelDiscountVideoPricing(item, 1); got != want {
 			t.Fatalf("same-price video pricing = %q, want %q", got, want)
 		}
@@ -416,10 +658,11 @@ func TestFormatDistributorModelDiscountVideoPricingGroupsAudioPrices(t *testing.
 			},
 		}
 		want := "视频生成（按秒）\n" +
+			"文生视频\n" +
 			"无声\n" +
-			"文生视频 · 720p：$1 / 秒\n" +
+			"720p：$1 / 秒\n" +
 			"有声\n" +
-			"文生视频 · 720p：$2 / 秒"
+			"720p：$2 / 秒"
 		if got := formatDistributorModelDiscountVideoPricing(item, 1); got != want {
 			t.Fatalf("split video pricing = %q, want %q", got, want)
 		}
@@ -525,7 +768,7 @@ func TestDistributorModelDiscountVideoRulesKeepExactModelNames(t *testing.T) {
 		t.Fatal("Seedance 2.0 rules not found")
 	}
 	spaced := model.InviteeModelMarkupDiscountRateItem{OfficialVideoPricingRules: &spacedRules}
-	spacedWant := "视频生成（按 token）\n无声\n文生视频 · 720p：$6.745 / 1M tokens"
+	spacedWant := "视频生成（按 token）\n文生视频\n无声\n720p：$6.745 / 1M tokens"
 	if got := formatDistributorModelDiscountVideoPricing(spaced, 1); got != spacedWant {
 		t.Fatalf("Seedance 2.0 pricing = %q, want %q", got, spacedWant)
 	}
@@ -535,7 +778,7 @@ func TestDistributorModelDiscountVideoRulesKeepExactModelNames(t *testing.T) {
 		t.Fatal("Seedance2.0 rules not found")
 	}
 	compact := model.InviteeModelMarkupDiscountRateItem{OfficialVideoPricingRules: &compactRules}
-	compactWant := "视频生成（按条）\n有声\n文生视频 · 1080p：$9.5 / 条"
+	compactWant := "视频生成（按条）\n文生视频\n有声\n1080p：$9.5 / 条"
 	if got := formatDistributorModelDiscountVideoPricing(compact, 1); got != compactWant {
 		t.Fatalf("Seedance2.0 pricing = %q, want %q", got, compactWant)
 	}

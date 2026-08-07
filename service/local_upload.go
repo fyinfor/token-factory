@@ -169,16 +169,10 @@ func IsLocalMaterialUploadURL(publicURL string) bool {
 }
 
 // CleanupLocalUploadByURL 根据对外访问 URL 删除本地存储的临时上传文件。
-// 仅在本地存储模式下生效；OSS 模式或无法解析的 URL 直接忽略（best-effort，不影响主流程）。
-// 用途：素材上传拿到上游永久 URL 后，丢弃本地临时文件，避免冗余占用磁盘。
+// 仅当 URL 指向本系统 /uploads/ 路径时生效；远端 URL 直接忽略（best-effort，不影响主流程）。
 func CleanupLocalUploadByURL(publicURL string) error {
 	publicURL = strings.TrimSpace(publicURL)
 	if publicURL == "" {
-		return nil
-	}
-	cfg := operation_setting.GetOssSetting()
-	// 仅清理本地存储产生的临时文件，远端 URL（OSS/在线链接）不在此处理。
-	if cfg.StorageType != operation_setting.StorageTypeLocal {
 		return nil
 	}
 
@@ -204,6 +198,7 @@ func CleanupLocalUploadByURL(publicURL string) error {
 		return nil
 	}
 
+	cfg := operation_setting.GetOssSetting()
 	storeDir := LocalUploadBaseDir(cfg.LocalStoragePath)
 	fullPath := filepath.Join(storeDir, filepath.FromSlash(cleaned))
 	if _, err := os.Stat(fullPath); err != nil {
