@@ -294,15 +294,26 @@ func ActionCreateAsset(userId int, input CreateAssetInput) (map[string]string, e
 		resolvedGroupId = g
 	}
 
+	// Action 创建若资源 URL 为本系统托管（本地/OSS），按配置设预览过期；外链不设过期。
+	previewURL := strings.TrimSpace(resourceURL)
+	var previewExpiresAt int64
+	if previewURL != "" && IsManagedUploadURL(previewURL) {
+		hours := operation_setting.GetMaterialPreviewRetentionHours()
+		previewExpiresAt = time.Now().Unix() + int64(hours)*3600
+	} else if previewURL == "" {
+		previewURL = permanentURL
+	}
+
 	asset := &model.MaterialAsset{
-		UserId:    userId,
-		GroupId:   resolvedGroupId,
-		GroupType: group.GroupType,
-		AssetId:   assetId,
-		Name:      name,
-		AssetType: resolvedType,
-		URL:       permanentURL,
-		Status:    status,
+		UserId:           userId,
+		GroupId:          resolvedGroupId,
+		GroupType:        group.GroupType,
+		AssetId:          assetId,
+		Name:             name,
+		AssetType:        resolvedType,
+		URL:              previewURL,
+		PreviewExpiresAt: previewExpiresAt,
+		Status:           status,
 	}
 	if err := model.CreateMaterialAsset(asset); err != nil {
 		_, _ = MaterialDeleteAsset(assetId)
@@ -340,6 +351,10 @@ func ActionGetAsset(userId int, input AssetGroupIdInput) (*MaterialAssetResult, 
 	newStatus := NormalizeMaterialStatus(result.Status)
 	newURL := strings.TrimSpace(result.URL)
 	newAssetType := strings.TrimSpace(result.AssetType)
+	// 托管预览未过期时不覆盖预览 URL。
+	if asset.PreviewExpiresAt > 0 && asset.PreviewExpiresAt > time.Now().Unix() && strings.TrimSpace(asset.URL) != "" {
+		newURL = ""
+	}
 	if newStatus != "" || newURL != "" || newAssetType != "" {
 		_ = model.UpdateMaterialAssetInfo(asset.Id, newStatus, newURL, newAssetType)
 	}
@@ -373,7 +388,7 @@ func ActionDeleteAsset(userId int, input AssetGroupIdInput) (map[string]string, 
 	if err := model.DeleteMaterialAsset(asset.Id); err != nil {
 		return nil, materialActionErr(common.MaterialCodeInternalError, "删除本地素材记录失败")
 	}
-	_ = CleanupLocalUploadByURL(asset.URL)
+	_ = CleanupManagedUploadByURL(asset.URL)
 	materialActionLog(userId, MaterialActionDeleteAsset, assetId, "success")
 	return map[string]string{"Id": assetId}, nil
 }

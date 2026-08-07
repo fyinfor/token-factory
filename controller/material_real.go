@@ -631,7 +631,7 @@ func DeleteRealMaterial(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	_ = service.CleanupLocalUploadByURL(asset.URL)
+	_ = service.CleanupManagedUploadByURL(asset.URL)
 	common.ApiSuccess(c, gin.H{"asset_id": asset.AssetId})
 }
 
