@@ -137,6 +137,13 @@ export default function AffInviteeCommissionDetailModal({
                 </Tag>
               );
             }
+            if (mode === 'asr') {
+              return (
+                <Tag color='teal' type='light' size='small'>
+                  {t('ASR按秒')}
+                </Tag>
+              );
+            }
             if (mode === 'text') {
               return (
                 <Tag color='grey' type='light' size='small'>

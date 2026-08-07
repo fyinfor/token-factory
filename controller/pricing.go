@@ -370,6 +370,11 @@ func GetPricing(c *gin.Context) {
 		}
 	}
 
+	// 用户指定价：改写命中模型的渠道展示价为「全局官方价 × 用户折扣」，并隐藏超出上限的渠道。
+	if uid > 0 {
+		pricingData = model.ApplyUserPricingOverrideToPricingAPI(uid, pricingData)
+	}
+
 	// 读取热度统计周期配置
 	common.OptionMapRWMutex.RLock()
 	heatStatPeriod := common.OptionMap["HeatStatPeriod"]

@@ -44,6 +44,7 @@ import {
   ceilToFixedDecimals,
   formatCeilFixedDecimals,
   formatASRSecondsDisplay,
+  formatASRUserPerSecondPrice,
 } from '../../helpers';
 import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
@@ -486,17 +487,19 @@ export const useLogsData = () => {
     );
   };
 
-  const renderASRBillingBrief = (other, quota) => {
+  const renderASRBillingBrief = (other) => {
     const seconds = Number(other?.audio_seconds || 0);
+    const { symbol, price } = formatASRUserPerSecondPrice(other);
     return (
       <div className='flex flex-wrap items-center gap-2'>
         <span className='rounded-full bg-teal-600 px-2 py-0.5 text-xs font-medium text-white'>
           {t('语音识别按秒计费')}
         </span>
         <span className='text-sm text-gray-700'>
-          {t('{{seconds}}秒 · {{cost}}', {
+          {t('{{seconds}}秒 · {{symbol}}{{price}}/秒', {
             seconds: formatASRSecondsDisplay(seconds),
-            cost: renderQuota(quota, 6),
+            symbol,
+            price,
           })}
         </span>
       </div>
@@ -1408,7 +1411,7 @@ export const useLogsData = () => {
                 : videoPerVideoBillingDetail
                 ? renderVideoPerVideoBillingBrief(other, aggregatedQuota)
                 : asrBillingDetail
-                  ? renderASRBillingBrief(other, aggregatedQuota)
+                  ? renderASRBillingBrief(other)
                   : other?.claude
                   ? renderClaudeLogContent(
                       other?.model_ratio,

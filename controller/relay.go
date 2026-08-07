@@ -433,7 +433,8 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 	}
 	// playground specific_channel_id / 硬指定渠道路由（{alias}/{model}/cN）：仅允许首轮命中已选渠道，
 	// 禁止在重试阶段切换到 smart-route 或随机候选池。
-	// 注意：{model}/{route_slug} 使用 PreferredChannelID + 有序候选，允许保底切换。
+	// 注意：{model}/{route_slug} 使用 PreferredChannelID + 有序候选，允许保底切换；
+	// 若带 X-TF-No-Failover 则同样禁止切换。
 	if retryParam.GetRetry() > 0 {
 		if _, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId); ok {
 			return nil, types.NewError(
@@ -445,6 +446,13 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		if _, ok := common.GetContextKey(c, constant.ContextKeyForcedChannelID); ok {
 			return nil, types.NewError(
 				fmt.Errorf("已指定渠道，禁用重试切换渠道"),
+				types.ErrorCodeGetChannelFailed,
+				types.ErrOptionWithSkipRetry(),
+			)
+		}
+		if service.ContextNoFailover(c) {
+			return nil, types.NewError(
+				fmt.Errorf("已禁用渠道切换（X-TF-No-Failover）"),
 				types.ErrorCodeGetChannelFailed,
 				types.ErrOptionWithSkipRetry(),
 			)
@@ -484,6 +492,15 @@ func getChannel(c *gin.Context, info *relaycommon.RelayInfo, retryParam *service
 		return nil, types.NewError(fmt.Errorf("分组 %s 下模型 %s 的可用渠道不存在（retry）", selectGroup, info.OriginModelName), types.ErrorCodeGetChannelFailed, types.ErrOptionWithSkipRetry())
 	}
 
+	// 用户指定价：重试随机兜底选中的渠道也不允许超出用户价格上限。
+	if !service.ChannelWithinUserPriceCap(c.GetInt("id"), info.OriginModelName, channel) {
+		return nil, types.NewError(
+			fmt.Errorf("分组 %s 下模型 %s 已无满足用户指定价上限的可用渠道（retry）", selectGroup, info.OriginModelName),
+			types.ErrorCodeGetChannelFailed,
+			types.ErrOptionWithSkipRetry(),
+		)
+	}
+
 	tokenFactoryError := middleware.SetupContextForSelectedChannel(c, channel, info.OriginModelName)
 	if tokenFactoryError != nil {
 		return nil, tokenFactoryError
@@ -504,7 +521,7 @@ func shouldRetry(c *gin.Context, openaiErr *types.TokenFactoryError, retryTimes 
 		return false
 	}
 	// 明确指定渠道（playground specific_channel_id / {alias}/{model}/cN 硬指定）时，不允许重试切换渠道。
-	// {model}/{route_slug} 偏好渠道走有序候选保底，不在此拦截。
+	// {model}/{route_slug} 偏好渠道走有序候选保底，不在此拦截；X-TF-No-Failover 显式关闭切换。
 	if _, ok := c.Get("specific_channel_id"); ok {
 		return false
 	}
@@ -512,6 +529,9 @@ func shouldRetry(c *gin.Context, openaiErr *types.TokenFactoryError, retryTimes 
 		return false
 	}
 	if _, ok := common.GetContextKey(c, constant.ContextKeyForcedChannelID); ok {
+		return false
+	}
+	if service.ContextNoFailover(c) {
 		return false
 	}
 	if types.IsChannelError(openaiErr) {
@@ -549,6 +569,16 @@ func processChannelError(c *gin.Context, channelError types.ChannelError, err *t
 		gopool.Go(func() {
 			service.DisableChannel(channelError, err.ErrorWithStatusCode())
 		})
+	}
+
+	// ASR 上游错误始终写入使用日志（不受 ERROR_LOG_ENABLED 默认关闭影响）
+	if constant.IsASRChannel(channelError.ChannelType) && types.IsRecordErrorLog(err) {
+		// 以本次失败渠道为准写入，避免重试时上下文渠道信息不一致
+		c.Set("channel_id", channelError.ChannelId)
+		c.Set("channel_name", channelError.ChannelName)
+		c.Set("channel_type", channelError.ChannelType)
+		service.RecordASRErrorLog(c, nil, err, "")
+		return
 	}
 
 	if constant.ErrorLogEnabled && types.IsRecordErrorLog(err) {
@@ -858,6 +888,12 @@ func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError,
 		return false
 	}
 	if _, ok := common.GetContextKey(c, constant.ContextKeyTokenSpecificChannelId); ok {
+		return false
+	}
+	if _, ok := common.GetContextKey(c, constant.ContextKeyForcedChannelID); ok {
+		return false
+	}
+	if service.ContextNoFailover(c) {
 		return false
 	}
 	if taskErr.LocalError {

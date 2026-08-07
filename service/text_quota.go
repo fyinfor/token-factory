@@ -321,6 +321,10 @@ func calculateTextQuotaSummary(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 			summary.MarkupDiscountPercent,
 			summary.GroupRatio,
 		)
+		// 用户指定价为最终价（全局官方价 × 总折扣），不再套用渠道阶梯计费。
+		if relayInfo.PriceData.UserPricingOverride {
+			hasTierHit = false
+		}
 		if hasTierHit {
 			summary.RequestTierPricing = true
 		}
@@ -514,7 +518,7 @@ func textProfitShareAmounts(userQuota, baseQuota, commissionBps int, markupPerce
 	return
 }
 
-func tryPostWalletProfitShareCredit(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, summary *textQuotaSummary) {
+func tryPostWalletProfitShareCredit(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, summary *textQuotaSummary, billingMode string) {
 	if relayInfo == nil || summary == nil {
 		return
 	}
@@ -553,7 +557,11 @@ func tryPostWalletProfitShareCredit(ctx *gin.Context, relayInfo *relaycommon.Rel
 		chID = relayInfo.ChannelId
 	}
 	modelName := strings.TrimSpace(summary.ModelName)
-	if err := model.CreditDistributorProfitShare(invitee.InviterId, relayInfo.UserId, chID, modelName, summary.Quota, slice, reward, bps, summary.TotalTokens, "text"); err != nil {
+	billingMode = strings.TrimSpace(billingMode)
+	if billingMode == "" {
+		billingMode = "text"
+	}
+	if err := model.CreditDistributorProfitShare(invitee.InviterId, relayInfo.UserId, chID, modelName, summary.Quota, slice, reward, bps, summary.TotalTokens, billingMode); err != nil {
 		common.SysError("tryPostWalletProfitShareCredit: " + err.Error())
 	}
 }
@@ -607,7 +615,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 	if err := SettleBilling(ctx, relayInfo, summary.Quota); err != nil {
 		logger.LogError(ctx, "error settling billing: "+err.Error())
 	} else {
-		tryPostWalletProfitShareCredit(ctx, relayInfo, usage, &summary)
+		tryPostWalletProfitShareCredit(ctx, relayInfo, usage, &summary, "text")
 	}
 
 	logModel := summary.ModelName

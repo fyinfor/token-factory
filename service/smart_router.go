@@ -204,6 +204,11 @@ func TrySmartRouteChannel(c *gin.Context, usingGroup, userGroup, modelName, prov
 	if err != nil || len(cands) == 0 {
 		return nil, "", false
 	}
+	// 用户指定价：排除单价超出用户价格上限的渠道。
+	cands = filterEndpointCandidatesByUserPriceCap(c.GetInt("id"), modelName, cands)
+	if len(cands) == 0 {
+		return nil, "", false
+	}
 	models := []string{modelName}
 	if raw, ok := common.GetContextKey(c, constant.ContextKeyRequestModelsList); ok {
 		if sl, ok := raw.([]string); ok && len(sl) > 0 {
@@ -262,6 +267,11 @@ func TrySupplierRouteChannel(c *gin.Context, usingGroup, userGroup, modelName, p
 
 	cands, err := buildRouterCandidatesFiltered(selectGroup, modelName, filter)
 	if err != nil || len(cands) == 0 {
+		return nil, "", false
+	}
+	// 用户指定价：供应商内候选同样受价格上限约束。
+	cands = filterEndpointCandidatesByUserPriceCap(c.GetInt("id"), modelName, cands)
+	if len(cands) == 0 {
 		return nil, "", false
 	}
 

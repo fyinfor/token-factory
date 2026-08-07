@@ -79,7 +79,7 @@ func (a *Adaptor) ConvertAudioRequest(c *gin.Context, info *relaycommon.RelayInf
 		},
 		Request: VolcengineTTSReqInfo{
 			ReqID:     generateRequestID(),
-			Text:      request.Input,
+			Text:      request.GetInputText(),
 			Operation: "submit",
 			Model:     info.OriginModelName,
 		},

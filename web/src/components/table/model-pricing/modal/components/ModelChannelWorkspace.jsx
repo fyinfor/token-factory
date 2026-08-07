@@ -26,6 +26,7 @@ import {
   formatVideoResolutionDisplayLabel,
   getSupplierTypeLabel,
   getUsedGroupContext,
+  isASRPricingModel,
   markupRateFromPercent,
 } from '../../../../../helpers';
 import {
@@ -62,6 +63,20 @@ const getChannelKey = (channel, index) =>
   );
 
 const getChannelPriceScore = (channel, modelData) => {
+  const costDiscount = Number(channel?.price_discount_percent ?? 100) / 100;
+  const markupRate = Number(channel?.markup_discount_rate || 0) / 100;
+
+  // ASR：按秒单价优先（渠道价空则全局价）
+  if (isASRPricingModel(modelData)) {
+    const globalAsr = Number(modelData?.asr_price);
+    if (!Number.isFinite(globalAsr) || globalAsr <= 0) {
+      return Number.POSITIVE_INFINITY;
+    }
+    const channelAsr = globalAsr; // 暂无渠道级 ASR 价，空则回退全局
+    const effective = channelAsr * costDiscount + globalAsr * markupRate;
+    return Number.isFinite(effective) ? effective : Number.POSITIVE_INFINITY;
+  }
+
   const quotaType = channel?.quota_type ?? modelData?.quota_type;
   const channelBase = Number(
     quotaType === 1 ? channel?.model_price : channel?.model_ratio,
@@ -71,8 +86,6 @@ const getChannelPriceScore = (channel, modelData) => {
   );
   if (!Number.isFinite(channelBase)) return Number.POSITIVE_INFINITY;
 
-  const costDiscount = Number(channel?.price_discount_percent ?? 100) / 100;
-  const markupRate = Number(channel?.markup_discount_rate || 0) / 100;
   const effective =
     channelBase * costDiscount +
     (Number.isFinite(globalBase) ? globalBase * markupRate : 0);
@@ -292,6 +305,37 @@ const getChannelPriceSummary = ({
     const normalized = perToken && tokenUnit === 'K' ? usd / 1000 : usd;
     return displayPrice(normalized);
   };
+
+  // ASR 按秒计费优先：语音识别 ¥x/秒（不以输入/输出 token 价展示）
+  if (isASRPricingModel(modelData)) {
+    const globalAsrUsd = Number(modelData?.asr_price);
+    if (Number.isFinite(globalAsrUsd) && globalAsrUsd > 0) {
+      const costDisc = costDiscountMultiplier(
+        channel?.price_discount_percent != null
+          ? channel.price_discount_percent
+          : 100,
+      );
+      const markupRate = markupRateFromPercent(
+        channel?.markup_discount_rate || 0,
+      );
+      const channelAsrUsd = globalAsrUsd; // 暂无渠道级 ASR 价，空则回退全局
+      const effectiveAsrUsd =
+        channelAsrUsd * costDisc + globalAsrUsd * markupRate;
+      const platformAsrUsd = effectiveAsrUsd * usedGroupRatio;
+      return buildChannelPriceSummary([
+        {
+          key: 'asr',
+          label: t('语音识别'),
+          value: `${formatUsd(platformAsrUsd)}${t('/秒')}`,
+          discount: calculatePriceDiscountPercent(
+            effectiveAsrUsd,
+            globalAsrUsd,
+          ),
+        },
+      ]);
+    }
+  }
+
   const videoHint = channel?.video_flat_clip_hint;
   const videoPrice = Number(videoHint?.min_usd_after_channel_discount);
   if (Number.isFinite(videoPrice) && videoPrice > 0) {
