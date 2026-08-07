@@ -42,7 +42,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useIsMobile } from '../../hooks/common/useIsMobile';
-import { listMaterialAssets, listRealAssets } from '../../helpers/materialApi';
+import { listMaterialAssets, listRealAssets, listRealGroups } from '../../helpers/materialApi';
 import { MaterialAssetType, MaterialStatus } from '../../constants';
 
 const { Text } = Typography;
@@ -111,23 +111,37 @@ const MaterialSelectorModal = ({
 
   // 【需求1】数据同源：复用素材管理模块接口
   const [assets, setAssets] = useState([]);
+  const [realGroups, setRealGroups] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [imgErrors, setImgErrors] = useState(new Set());
   // 素材分类标签：虚拟人像 / 真人人像
   const [activeTab, setActiveTab] = useState('virtual');
 
-  // 加载素材列表（按标签切换接口：虚拟人像用 listMaterialAssets，真人人像用 listRealAssets）
+  // 加载素材列表（按标签切换接口：虚拟人像用 listMaterialAssets，真人人像用 listRealAssets + groups）
   const loadAssets = useCallback(
     async (tab = activeTab) => {
       setLoading(true);
       try {
-        const res =
-          tab === 'real'
-            ? await listRealAssets({ page: 1, pageSize: 100 })
-            : await listMaterialAssets({ page: 1, pageSize: 100 });
-        if (res?.success) {
-          setAssets(res.data?.items || []);
+        if (tab === 'real') {
+          const [assetsRes, groupsRes] = await Promise.all([
+            listRealAssets({ page: 1, pageSize: 100 }),
+            listRealGroups(),
+          ]);
+          if (assetsRes?.success) {
+            setAssets(assetsRes.data?.items || []);
+          }
+          if (groupsRes?.success) {
+            setRealGroups(groupsRes.data?.items || []);
+          } else {
+            setRealGroups([]);
+          }
+        } else {
+          const res = await listMaterialAssets({ page: 1, pageSize: 100 });
+          if (res?.success) {
+            setAssets(res.data?.items || []);
+          }
+          setRealGroups([]);
         }
       } catch {
         // 静默失败，展示空状态
@@ -170,6 +184,38 @@ const MaterialSelectorModal = ({
     () => assets.filter((a) => a.status === MaterialStatus.ACTIVE),
     [assets],
   );
+
+  // 真人人像：按人物空间（group_id）分组展示
+  const realAssetSections = useMemo(() => {
+    if (activeTab !== 'real') return [];
+    const nameMap = new Map(
+      (realGroups || []).map((g) => [
+        g.group_id,
+        g.group_name?.trim() || t('未命名人物'),
+      ]),
+    );
+    const buckets = new Map();
+    for (const asset of assets) {
+      const gid = asset.group_id || '__unknown__';
+      if (!buckets.has(gid)) buckets.set(gid, []);
+      buckets.get(gid).push(asset);
+    }
+    const orderedIds = [
+      ...(realGroups || []).map((g) => g.group_id),
+      ...[...buckets.keys()].filter(
+        (id) => !(realGroups || []).some((g) => g.group_id === id),
+      ),
+    ];
+    return orderedIds
+      .filter((id) => buckets.has(id))
+      .map((id) => ({
+        groupId: id,
+        title:
+          nameMap.get(id) ||
+          (id === '__unknown__' ? t('未分组素材') : t('未命名人物')),
+        items: buckets.get(id) || [],
+      }));
+  }, [activeTab, assets, realGroups, t]);
 
   // 【需求4】全选/取消全选
   const allSelectableIds = useMemo(
@@ -488,7 +534,9 @@ const MaterialSelectorModal = ({
             description={
               <div style={{ textAlign: 'center' }}>
                 <Text type='tertiary'>
-                  {t('暂无素材，请先在 SD 素材库中创建素材')}
+                  {activeTab === 'real'
+                    ? t('暂无真人素材，请先在 SD 素材库核验人物并上传')
+                    : t('暂无素材，请先在 SD 素材库中创建素材')}
                 </Text>
                 <br />
                 <Button
@@ -506,6 +554,43 @@ const MaterialSelectorModal = ({
               </div>
             }
           />
+        ) : activeTab === 'real' ? (
+          <div
+            style={{
+              maxHeight: '50vh',
+              overflowY: 'auto',
+              paddingRight: 4,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+            }}
+          >
+            {realAssetSections.map((section) => (
+              <div key={section.groupId}>
+                <Text
+                  strong
+                  size='small'
+                  style={{ display: 'block', marginBottom: 8 }}
+                >
+                  {section.title}
+                  <Text type='tertiary' size='small' style={{ marginLeft: 8 }}>
+                    {t('{{n}} 个素材', { n: section.items.length })}
+                  </Text>
+                </Text>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: isMobile
+                      ? 'repeat(2, 1fr)'
+                      : 'repeat(4, 1fr)',
+                    gap: 10,
+                  }}
+                >
+                  {section.items.map((asset) => renderAssetCard(asset))}
+                </div>
+              </div>
+            ))}
+          </div>
         ) : (
           <div
             style={{

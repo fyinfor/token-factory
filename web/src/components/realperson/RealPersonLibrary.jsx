@@ -56,7 +56,6 @@ import {
   Clock,
   AlertCircle,
   ShieldCheck,
-  QrCode as QrCodeIcon,
   ChevronRight,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -66,11 +65,33 @@ import {
   MaterialStatus,
   MATERIAL_UPLOAD_ACCEPT,
 } from '../../constants';
-import { useRealPerson } from '../../hooks/realperson/useRealPerson';
+import {
+  isDefaultPersonDescription,
+  isDefaultPersonName,
+  useRealPerson,
+} from '../../hooks/realperson/useRealPerson';
 import { useIsMobile } from '../../hooks/common/useIsMobile';
 import { useSmoothUploadProgress } from '../distributor/useSmoothUploadProgress';
 
 const { Title, Text } = Typography;
+
+const UserRoundIcon = ({ size = 18, style }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox='0 0 24 24'
+    fill='none'
+    stroke='currentColor'
+    strokeWidth='2'
+    strokeLinecap='round'
+    strokeLinejoin='round'
+    style={style}
+    aria-hidden
+  >
+    <path d='M20 21a8 8 0 0 0-16 0' />
+    <circle cx='12' cy='7' r='4' />
+  </svg>
+);
 
 /* ========================= 工具方法（纯展示映射） ========================= */
 
@@ -143,6 +164,8 @@ const RealPersonLibrary = ({ embedded = false }) => {
     backToGroups,
     handleDeleteGroup,
     handleUpdateGroup,
+    namePromptGroup,
+    clearNamePrompt,
     // 素材列表
     assets,
     assetsLoading,
@@ -190,7 +213,7 @@ const RealPersonLibrary = ({ embedded = false }) => {
   const [assetTypeFilter, setAssetTypeFilter] = useState('all'); // all / Image / Video
   const [selectedAssetIds, setSelectedAssetIds] = useState(new Set());
   const [editModalVisible, setEditModalVisible] = useState(false);
-  const [editTarget, setEditTarget] = useState(null); // 当前编辑的分组对象
+  const [editTarget, setEditTarget] = useState(null); // 当前编辑的人物对象
   const [editForm, setEditForm] = useState({ group_name: '', description: '' });
   const [editSaving, setEditSaving] = useState(false);
   // 素材改名弹窗（虚拟/真人共用交互，此处仅真人素材）
@@ -198,6 +221,26 @@ const RealPersonLibrary = ({ embedded = false }) => {
   const [renameTarget, setRenameTarget] = useState(null);
   const [renameName, setRenameName] = useState('');
   const [renameSaving, setRenameSaving] = useState(false);
+  // 认证成功后的人物命名引导
+  const [namePromptVisible, setNamePromptVisible] = useState(false);
+  const [namePromptValue, setNamePromptValue] = useState('');
+  const [namePromptSaving, setNamePromptSaving] = useState(false);
+
+  React.useEffect(() => {
+    if (!namePromptGroup) {
+      setNamePromptVisible(false);
+      return;
+    }
+    setNamePromptValue(
+      isDefaultPersonName(
+        namePromptGroup.group_name,
+        namePromptGroup.group_id,
+      )
+        ? ''
+        : namePromptGroup.group_name || '',
+    );
+    setNamePromptVisible(true);
+  }, [namePromptGroup]);
 
   const uploadDisabled =
     !agreed || !config.ready || uploading || !selectedGroup;
@@ -240,16 +283,6 @@ const RealPersonLibrary = ({ embedded = false }) => {
     }
   };
 
-  const handleCopyGroupId = async (e, groupId) => {
-    e.stopPropagation();
-    const ok = await copy(groupId);
-    if (ok) {
-      showSuccess(t('已复制 ID 到剪贴板'));
-    } else {
-      showError(t('复制失败，请手动复制：') + groupId);
-    }
-  };
-
   const handleBatchDeleteConfirm = async () => {
     const ids = Array.from(selectedAssetIds);
     if (ids.length === 0) return;
@@ -279,7 +312,7 @@ const RealPersonLibrary = ({ embedded = false }) => {
   const handleEditSubmit = async () => {
     const name = editForm.group_name.trim();
     if (!name) {
-      showError(t('分组名称不能为空'));
+      showError(t('人物名称不能为空'));
       return;
     }
     setEditSaving(true);
@@ -292,6 +325,32 @@ const RealPersonLibrary = ({ embedded = false }) => {
       setEditModalVisible(false);
       setEditTarget(null);
     }
+  };
+
+  const submitNamePrompt = async () => {
+    if (!namePromptGroup) return;
+    const name = namePromptValue.trim();
+    if (!name) {
+      showError(t('请输入人物称呼，例如「张三」'));
+      return;
+    }
+    setNamePromptSaving(true);
+    const ok = await handleUpdateGroup(namePromptGroup, {
+      group_name: name,
+      description: isDefaultPersonDescription(namePromptGroup.description)
+        ? t('已核验人物的专属素材空间')
+        : namePromptGroup.description || '',
+    });
+    setNamePromptSaving(false);
+    if (ok) {
+      setNamePromptVisible(false);
+      clearNamePrompt();
+    }
+  };
+
+  const skipNamePrompt = () => {
+    setNamePromptVisible(false);
+    clearNamePrompt();
   };
 
   const openRenameModal = (asset) => {
@@ -516,12 +575,12 @@ const RealPersonLibrary = ({ embedded = false }) => {
     const h5Link = session?.h5_link;
     return (
       <Modal
-        title={t('真人实名认证')}
+        title={t('核验新人物')}
         visible={sessionModalOpen}
         onCancel={closeSessionModal}
         footer={
           <Button theme='solid' onClick={closeSessionModal}>
-            {t('关闭')}
+            {sessionStatus === 'success' ? t('去上传素材') : t('关闭')}
           </Button>
         }
         width={isMobile ? 'calc(100vw - 32px)' : 480}
@@ -587,17 +646,17 @@ const RealPersonLibrary = ({ embedded = false }) => {
                 : 'info'
           }
           closeIcon={null}
-          description={
-            sessionStatus === 'success'
-              ? t('真人认证成功，已创建真人专属分组。')
-              : sessionStatus === 'expired'
-                ? t('认证会话已过期，请重新发起认证。')
-                : sessionStatus === 'failed'
-                  ? t('人脸核验失败，请重新发起认证。')
-                  : t(
-                      '请使用手机扫描二维码或打开 H5 链接完成实名认证，页面将自动刷新认证结果。',
-                    )
-          }
+              description={
+                sessionStatus === 'success'
+                  ? t('核验成功，已为该人物创建专属素材空间，即将进入上传。')
+                  : sessionStatus === 'expired'
+                    ? t('认证会话已过期，请重新发起认证。')
+                    : sessionStatus === 'failed'
+                      ? t('人脸核验失败，请重新发起认证。')
+                      : t(
+                          '请用手机扫码完成实名与活体核验。成功后会新建一位「已核验人物」；仅换人才需要再做一次，同一人物不必重复认证。',
+                        )
+              }
           style={{ marginBottom: 12 }}
         />
 
@@ -610,7 +669,7 @@ const RealPersonLibrary = ({ embedded = false }) => {
             loading={sessionCreating}
             block
           >
-            {t('重新认证')}
+            {t('重新核验')}
           </Button>
         )}
       </Modal>
@@ -620,7 +679,7 @@ const RealPersonLibrary = ({ embedded = false }) => {
   const renderEditModal = () => {
     return (
       <Modal
-        title={t('编辑分组')}
+        title={t('编辑人物')}
         visible={editModalVisible}
         onOk={handleEditSubmit}
         onCancel={() => {
@@ -633,7 +692,7 @@ const RealPersonLibrary = ({ embedded = false }) => {
         maskClosable={false}
       >
         <div style={{ marginBottom: 12 }}>
-          <Text strong>{t('分组名称')}</Text>
+          <Text strong>{t('人物名称')}</Text>
           <Input
             value={editForm.group_name}
             onChange={(value) =>
@@ -641,12 +700,12 @@ const RealPersonLibrary = ({ embedded = false }) => {
             }
             maxLength={64}
             showClear
-            placeholder={t('请输入分组名称')}
+            placeholder={t('例如：张三、主演 A')}
             style={{ marginTop: 4 }}
           />
         </div>
         <div>
-          <Text strong>{t('分组描述')}</Text>
+          <Text strong>{t('备注（可选）')}</Text>
           <TextArea
             value={editForm.description}
             onChange={(value) =>
@@ -654,7 +713,7 @@ const RealPersonLibrary = ({ embedded = false }) => {
             }
             maxLength={256}
             showClear
-            placeholder={t('请输入分组描述（可选）')}
+            placeholder={t('可填写用途说明，便于区分不同人物')}
             autosize
             style={{ marginTop: 4 }}
           />
@@ -663,18 +722,55 @@ const RealPersonLibrary = ({ embedded = false }) => {
     );
   };
 
+  const renderNamePromptModal = () => {
+    return (
+      <Modal
+        title={t('给这位人物起个称呼')}
+        visible={namePromptVisible}
+        onOk={submitNamePrompt}
+        onCancel={skipNamePrompt}
+        okText={t('保存并继续')}
+        cancelText={t('稍后命名')}
+        confirmLoading={namePromptSaving}
+        maskClosable={false}
+      >
+        <Banner
+          type='info'
+          closeIcon={null}
+          description={t(
+            '该称呼仅用于本地管理，帮助区分不同已核验人物；同一人物的素材请放在同一空间下。',
+          )}
+          style={{ marginBottom: 12 }}
+        />
+        <Text strong>{t('人物名称')}</Text>
+        <Input
+          value={namePromptValue}
+          onChange={setNamePromptValue}
+          maxLength={64}
+          showClear
+          placeholder={t('例如：张三、主演 A')}
+          style={{ marginTop: 4 }}
+          onEnterPress={submitNamePrompt}
+        />
+      </Modal>
+    );
+  };
+
   /* --------------------------- 渲染：分组详情视图 --------------------------- */
 
   const renderGroupDetail = () => {
+    const personLabel =
+      selectedGroup?.group_name || t('未命名人物');
     return (
       <>
-        {/* 返回 + 分组信息 */}
+        {/* 返回 + 人物信息 */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: 8,
             marginBottom: 12,
+            flexWrap: 'wrap',
           }}
         >
           <Button
@@ -683,21 +779,35 @@ const RealPersonLibrary = ({ embedded = false }) => {
             icon={<IconArrowLeft />}
             onClick={backToGroups}
           >
-            {t('返回分组列表')}
+            {t('返回人物列表')}
           </Button>
           <Tag
             color='green'
             size='large'
             prefixIcon={<ShieldCheck size={14} />}
           >
-            {t('真人认证分组')}
+            {t('已核验人物')}
           </Tag>
-          <Text strong>{selectedGroup?.group_name}</Text>
-          <Text type='tertiary' size='small'>
-            {selectedGroup?.group_id}
-          </Text>
-          {/* 分组素材列表页：隐藏编辑分组按钮，不展示分组描述（改在分组列表卡片展示） */}
+          <Text strong>{personLabel}</Text>
+          <Button
+            size='small'
+            theme='borderless'
+            type='tertiary'
+            icon={<IconEdit />}
+            onClick={() => handleOpenEdit(selectedGroup)}
+          >
+            {t('改名')}
+          </Button>
         </div>
+
+        <Banner
+          type='info'
+          closeIcon={null}
+          description={t(
+            '当前空间仅存放该核验人物本人的素材，可继续上传更多图片/视频/音频。若要管理另一位真人，请返回列表后「认证新人物」，不要混传到此空间。',
+          )}
+          style={{ marginBottom: 12 }}
+        />
 
         {/* 协议勾选 */}
         <div style={{ margin: '8px 0' }}>
@@ -808,7 +918,7 @@ const RealPersonLibrary = ({ embedded = false }) => {
             <Empty
               style={{ marginTop: 24 }}
               description={t(
-                '暂无真人素材，点击「本地上传」或「链接上传」添加',
+                '该人物暂无素材，点击「本地上传」或「链接上传」添加',
               )}
             />
           )}
@@ -862,11 +972,19 @@ const RealPersonLibrary = ({ embedded = false }) => {
     );
   };
 
-  /* --------------------------- 渲染：分组列表视图 --------------------------- */
+  /* --------------------------- 渲染：人物列表视图 --------------------------- */
 
   const renderGroupList = () => {
     return (
       <>
+        <Banner
+          type='info'
+          closeIcon={null}
+          description={t(
+            '按「已核验人物」管理：一位人物 = 一次实名+活体核验 = 一个素材空间。同一人物可反复上传素材，无需重新认证；换人（另一张脸）请点「认证新人物」。',
+          )}
+          style={{ marginBottom: 16 }}
+        />
         <div
           className='realperson-library-toolbar'
           style={{
@@ -880,16 +998,22 @@ const RealPersonLibrary = ({ embedded = false }) => {
         >
           <Space wrap>
             <Tag color='green' size='large' prefixIcon={<ShieldCheck size={14} />}>
-              {t('真人认证分组')}
+              {t('已核验人物')}
             </Tag>
-            <Button
-              theme='solid'
-              icon={<IconPlus />}
-              loading={sessionCreating}
-              onClick={() => startSession()}
+            <Tooltip
+              content={t(
+                '仅在需要另一位真人（另一张脸）时使用。同一人物请进入其素材空间继续上传。',
+              )}
             >
-              {t('开始真人认证')}
-            </Button>
+              <Button
+                theme='solid'
+                icon={<IconPlus />}
+                loading={sessionCreating}
+                onClick={() => startSession()}
+              >
+                {t('认证新人物')}
+              </Button>
+            </Tooltip>
           </Space>
           <Tooltip content={t('刷新列表')}>
             <Button
@@ -906,177 +1030,217 @@ const RealPersonLibrary = ({ embedded = false }) => {
           {groups.length === 0 && !groupsLoading ? (
             <Empty
               style={{ marginTop: 24 }}
-              description={t('暂无真人认证分组，请先完成真人实名认证')}
+              description={t('暂无已核验人物，请先完成真人实名与活体核验')}
             />
           ) : (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
-              {groups.map((group) => (
-                <Tooltip key={group.group_id} content={t('点击查看素材列表')}>
-                  <Card
-                    style={{
-                      width: 280,
-                      cursor: 'pointer',
-                      transition: 'box-shadow 0.2s ease, transform 0.2s ease',
-                    }}
-                    bordered
-                    hoverable
-                    onClick={() => openGroup(group)}
-                    bodyStyle={{ padding: 0 }}
+              {groups.map((group) => {
+                const displayName =
+                  group.group_name?.trim() || t('未命名人物');
+                const showDefaultTip = isDefaultPersonName(
+                  group.group_name,
+                  group.group_id,
+                );
+                const assetCount =
+                  typeof group.asset_count === 'number'
+                    ? group.asset_count
+                    : null;
+                const descriptionVisible =
+                  group.description &&
+                  !isDefaultPersonDescription(group.description);
+                return (
+                  <Tooltip
+                    key={group.group_id}
+                    content={t('点击进入该人物的素材空间')}
                   >
-                    <div style={{ padding: '14px 16px' }}>
+                    <Card
+                      style={{
+                        width: 280,
+                        cursor: 'pointer',
+                        transition: 'box-shadow 0.2s ease, transform 0.2s ease',
+                        overflow: 'hidden',
+                      }}
+                      bordered
+                      hoverable
+                      onClick={() => openGroup(group)}
+                      bodyStyle={{ padding: 0 }}
+                    >
                       <div
                         style={{
+                          height: 120,
+                          background: 'var(--semi-color-fill-1)',
                           display: 'flex',
-                          alignItems: 'flex-start',
-                          justifyContent: 'space-between',
-                          gap: 8,
-                          marginBottom: 10,
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          overflow: 'hidden',
+                          position: 'relative',
                         }}
                       >
+                        {group.cover_url ? (
+                          <Image
+                            src={group.cover_url}
+                            width='100%'
+                            height={120}
+                            style={{ objectFit: 'cover' }}
+                            alt={displayName}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'center',
+                              gap: 6,
+                              color: 'var(--semi-color-tertiary)',
+                            }}
+                          >
+                            <UserRoundIcon size={36} />
+                            <Text type='tertiary' size='small'>
+                              {assetCount === 0
+                                ? t('已认证，尚未上传素材')
+                                : t('暂无封面')}
+                            </Text>
+                          </div>
+                        )}
+                      </div>
+
+                      <div style={{ padding: '14px 16px' }}>
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'flex-start',
+                            justifyContent: 'space-between',
+                            gap: 8,
+                            marginBottom: 8,
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 8,
+                              minWidth: 0,
+                              flex: 1,
+                            }}
+                          >
+                            <ShieldCheck
+                              size={18}
+                              style={{
+                                color: 'var(--semi-color-success)',
+                                flexShrink: 0,
+                              }}
+                            />
+                            <Text
+                              strong
+                              ellipsis={{ showTooltip: true }}
+                              style={{ flex: 1 }}
+                            >
+                              {displayName}
+                            </Text>
+                          </div>
+                          <div
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 2,
+                              flexShrink: 0,
+                            }}
+                          >
+                            <Tooltip content={t('编辑人物')}>
+                              <Button
+                                size='small'
+                                theme='borderless'
+                                type='tertiary'
+                                icon={<IconEdit />}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleOpenEdit(group);
+                                }}
+                                aria-label={t('编辑人物')}
+                              />
+                            </Tooltip>
+                            <Popconfirm
+                              title={t('确认删除该已核验人物？')}
+                              content={t(
+                                '删除后将移除云端人物空间，本地素材记录保留。',
+                              )}
+                              okType='danger'
+                              okText={t('删除')}
+                              cancelText={t('取消')}
+                              onConfirm={(e) => {
+                                e?.stopPropagation?.();
+                                handleDeleteGroup(group);
+                              }}
+                            >
+                              <Button
+                                size='small'
+                                type='danger'
+                                theme='borderless'
+                                icon={<IconDelete />}
+                                onClick={(e) => e.stopPropagation()}
+                                aria-label={t('删除')}
+                              />
+                            </Popconfirm>
+                          </div>
+                        </div>
+
                         <div
                           style={{
                             display: 'flex',
                             alignItems: 'center',
                             gap: 8,
-                            minWidth: 0,
-                            flex: 1,
+                            flexWrap: 'wrap',
+                            marginBottom: 8,
                           }}
                         >
-                          <ShieldCheck
-                            size={18}
-                            style={{
-                              color: 'var(--semi-color-success)',
-                              flexShrink: 0,
-                            }}
-                          />
-                          <Text
-                            strong
-                            ellipsis={{ showTooltip: true }}
-                            style={{ flex: 1 }}
-                          >
-                            {group.group_name}
-                          </Text>
+                          {assetCount != null && (
+                            <Tag size='small' color='white'>
+                              {t('{{n}} 个素材', { n: assetCount })}
+                            </Tag>
+                          )}
+                          {showDefaultTip && (
+                            <Tag size='small' color='orange'>
+                              {t('建议改名')}
+                            </Tag>
+                          )}
                         </div>
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 2,
-                            flexShrink: 0,
-                          }}
-                        >
-                          <Tooltip content={t('编辑分组')}>
-                            <Button
-                              size='small'
-                              theme='borderless'
-                              type='tertiary'
-                              icon={<IconEdit />}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleOpenEdit(group);
-                              }}
-                              aria-label={t('编辑分组')}
-                            />
-                          </Tooltip>
-                          <Popconfirm
-                            title={t('确认删除该真人分组？')}
-                            content={t(
-                              '删除后将移除云端分组，本地素材记录保留。',
-                            )}
-                            okType='danger'
-                            okText={t('删除')}
-                            cancelText={t('取消')}
-                            onConfirm={(e) => {
-                              e?.stopPropagation?.();
-                              handleDeleteGroup(group);
-                            }}
-                          >
-                            <Button
-                              size='small'
-                              type='danger'
-                              theme='borderless'
-                              icon={<IconDelete />}
-                              onClick={(e) => e.stopPropagation()}
-                              aria-label={t('删除分组')}
-                            />
-                          </Popconfirm>
-                        </div>
-                      </div>
 
-                      <div>
-                        <Text type='tertiary' size='small'>
-                          {t('分组 ID')}
-                        </Text>
-                        <div
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 4,
-                            marginTop: 2,
-                          }}
-                        >
+                        {descriptionVisible ? (
                           <Text
                             size='small'
+                            type='tertiary'
                             ellipsis={{ showTooltip: true }}
-                            style={{ flex: 1, fontFamily: 'monospace' }}
-                          >
-                            {group.group_id}
-                          </Text>
-                          <Tooltip content={t('复制分组 ID')}>
-                            <Button
-                              size='small'
-                              theme='borderless'
-                              type='tertiary'
-                              icon={<IconCopy />}
-                              onClick={(e) =>
-                                handleCopyGroupId(e, group.group_id)
-                              }
-                              aria-label={t('复制分组 ID')}
-                            />
-                          </Tooltip>
-                        </div>
-                      </div>
-
-                      {/* 分组列表展示描述；进入素材列表后不再展示 */}
-                      {group.description ? (
-                        <div style={{ marginTop: 10 }}>
-                          <Text type='tertiary' size='small'>
-                            {t('分组描述')}
-                          </Text>
-                          <Text
-                            size='small'
-                            ellipsis={{ showTooltip: true }}
-                            style={{ display: 'block', marginTop: 2, lineHeight: 1.5 }}
+                            style={{ display: 'block', lineHeight: 1.5 }}
                           >
                             {group.description}
                           </Text>
-                        </div>
-                      ) : null}
-                    </div>
+                        ) : null}
+                      </div>
 
-                    <div
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '8px 16px',
-                        borderTop: '1px solid var(--semi-color-border)',
-                        background: 'var(--semi-color-fill-0)',
-                        color: 'var(--semi-color-primary)',
-                      }}
-                    >
-                      <Text
-                        size='small'
-                        strong
-                        style={{ color: 'var(--semi-color-primary)' }}
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 16px',
+                          borderTop: '1px solid var(--semi-color-border)',
+                          background: 'var(--semi-color-fill-0)',
+                          color: 'var(--semi-color-primary)',
+                        }}
                       >
-                        {t('查看素材')}
-                      </Text>
-                      <ChevronRight size={16} strokeWidth={2.25} aria-hidden />
-                    </div>
-                  </Card>
-                </Tooltip>
-              ))}
+                        <Text
+                          size='small'
+                          strong
+                          style={{ color: 'var(--semi-color-primary)' }}
+                        >
+                          {t('进入素材空间')}
+                        </Text>
+                        <ChevronRight size={16} strokeWidth={2.25} aria-hidden />
+                      </div>
+                    </Card>
+                  </Tooltip>
+                );
+              })}
             </div>
           )}
         </Spin>
@@ -1086,7 +1250,7 @@ const RealPersonLibrary = ({ embedded = false }) => {
 
   /* --------------------------- 渲染：主体 --------------------------- */
 
-  // 核心内容（分组列表/详情 + 认证模态框），嵌入与独立模式共用。
+  // 核心内容（人物列表/详情 + 认证/命名模态框），嵌入与独立模式共用。
   const coreContent = (
     <>
       {selectedGroup ? renderGroupDetail() : renderGroupList()}
@@ -1094,6 +1258,8 @@ const RealPersonLibrary = ({ embedded = false }) => {
       {renderSessionModal()}
 
       {renderEditModal()}
+
+      {renderNamePromptModal()}
 
       {/* 真人素材改名 */}
       <Modal
@@ -1136,10 +1302,10 @@ const RealPersonLibrary = ({ embedded = false }) => {
         }}
       >
         <Title heading={4} style={{ margin: 0 }}>
-          {t('真人分组管理')}
+          {t('已核验人物管理')}
         </Title>
         <Tag color='blue' size='small'>
-          {t('真人认证')}
+          {t('真人人像')}
         </Tag>
       </div>
 

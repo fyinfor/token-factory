@@ -201,24 +201,9 @@ func PollVisualResult(c *gin.Context) {
 			common.ApiErrorMsg(c, "认证成功但未返回有效分组 ID")
 			return
 		}
-		// 去重：同 GroupId 已存在则复用。
-		existing, gErr := model.GetMaterialGroupByGroupId(groupId)
-		if gErr != nil {
-			common.ApiError(c, gErr)
+		if err := service.EnsureRealGroupForUser(userId, groupId); err != nil {
+			common.ApiErrorMsg(c, "创建真人分组失败: "+err.Error())
 			return
-		}
-		if existing == nil {
-			groupName := "未命名"
-			newGroup := &model.MaterialGroup{
-				UserId:      userId,
-				GroupName:   groupName,
-				GroupId:     groupId,
-				GroupType:   model.MaterialGroupTypeReal,
-			}
-			if cErr := model.CreateMaterialGroup(newGroup); cErr != nil {
-				common.ApiErrorMsg(c, "创建真人分组失败: "+cErr.Error())
-				return
-			}
 		}
 		_ = model.UpdateVisualSessionStatus(session.Id, model.VisualSessionStatusSuccess, groupId, "")
 		common.ApiSuccess(c, gin.H{

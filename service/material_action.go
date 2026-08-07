@@ -478,7 +478,7 @@ func ActionGetVisualValidateResult(userId int, input VisualValidateResultInput) 
 		if groupId == "" {
 			return map[string]any{"Status": model.VisualSessionStatusPending}, nil
 		}
-		if err := ensureRealGroupForUser(userId, groupId); err != nil {
+		if err := EnsureRealGroupForUser(userId, groupId); err != nil {
 			return nil, materialActionErr(common.MaterialCodeInternalError, "保存真人分组失败")
 		}
 		_ = model.UpdateVisualSessionStatus(session.Id, model.VisualSessionStatusSuccess, groupId, "")
@@ -855,8 +855,9 @@ func formatMaterialUnixTime(ts int64) string {
 	return time.Unix(ts, 0).UTC().Format(time.RFC3339)
 }
 
-// ensureRealGroupForUser 认证成功后去重创建真人分组本地记录。
-func ensureRealGroupForUser(userId int, groupId string) error {
+// EnsureRealGroupForUser 认证成功后去重创建真人分组本地记录。
+// 默认按「已核验人物」命名，避免技术向 groupId 后缀让用户误以为是机器资源桶。
+func EnsureRealGroupForUser(userId int, groupId string) error {
 	existing, err := model.GetMaterialGroupByGroupId(groupId)
 	if err != nil {
 		return err
@@ -867,10 +868,14 @@ func ensureRealGroupForUser(userId int, groupId string) error {
 		}
 		return nil
 	}
+	shortId := groupId
+	if len(shortId) > 6 {
+		shortId = shortId[len(shortId)-6:]
+	}
 	group := &model.MaterialGroup{
 		UserId:      userId,
-		GroupName:   model.BuildMaterialGroupName(userId) + "_real_" + groupId,
-		Description: "真人认证分组",
+		GroupName:   "未命名人物-" + shortId,
+		Description: "已核验人物的专属素材空间",
 		GroupId:     groupId,
 		GroupType:   model.MaterialGroupTypeReal,
 	}
