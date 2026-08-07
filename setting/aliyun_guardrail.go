@@ -2,7 +2,7 @@ package setting
 
 import "strings"
 
-const AliyunGuardrailBlockedReply = `我无法回答这个问题，你可以尝试提供其他话题，我会尽力为你解答。`
+const AliyunGuardrailBlockedReply = `抱歉，我无法协助处理这个请求。你可以换个安全、合规的方向提问，我会尽力帮助。`
 
 var AliyunGuardrailEnabled = false
 var AliyunGuardrailInputEnabled = true
