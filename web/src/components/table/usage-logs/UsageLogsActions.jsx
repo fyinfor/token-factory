@@ -39,7 +39,13 @@ import { normalizeLanguage } from '../../../i18n/language';
 function formatRateMetric(value, locale) {
   const n = Number(value);
   const safe = Number.isFinite(n) && n > 0 ? n : 0;
-  const exact = Math.round(safe).toLocaleString(locale || undefined);
+  const rounded = Math.round(safe);
+  let exact;
+  try {
+    exact = rounded.toLocaleString(locale || undefined);
+  } catch (_) {
+    exact = rounded.toLocaleString();
+  }
   const display = safe >= 10000 ? renderNumber(safe) : exact;
   return { display, exact };
 }
