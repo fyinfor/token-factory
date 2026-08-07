@@ -438,11 +438,17 @@ type InviteeModelMarkupDiscountRateItem struct {
 	OfficialImageRatio             *float64                          `json:"-"`                                 // 全局图片输入倍率，仅供导出
 	OfficialImagePrice             *float64                          `json:"-"`                                 // 全局图片按张价，仅供导出
 	OfficialImagePricingRules      *ratio_setting.ImagePricingRules  `json:"-"`                                 // 全局图片分辨率按张价，仅供导出
+	OfficialAudioRatio             *float64                          `json:"-"`                                 // 全局音频输入倍率，仅供导出
+	OfficialAudioCompletionRatio   *float64                          `json:"-"`                                 // 全局音频输出相对输入倍率，仅供导出
 	OfficialVideoRatio             *float64                          `json:"-"`                                 // 全局视频输入倍率，仅供导出
 	OfficialVideoCompletionRatio   float64                           `json:"-"`                                 // 全局视频输出倍率，仅供导出
 	OfficialVideoPrice             *float64                          `json:"-"`                                 // 全局视频按条价，仅供导出
 	OfficialVideoPricingRules      *ratio_setting.VideoPricingRules  `json:"-"`                                 // 全局视频专用规则，仅供导出
+	OfficialASRPrice               *float64                          `json:"-"`                                 // 全局 ASR 按秒价，仅供导出
 	OfficialRequestTierPricing     *ratio_setting.RequestTierPricing `json:"-"`                                 // 全局官方阶梯价，仅供导出
+	// PlatformPricing 保留定价首页的「模型×单渠道」视图，仅供分销商调用折扣导出复用首页侧栏口径。
+	// 不对外 API 暴露，以免改变既有分销商配置列表响应。
+	PlatformPricing *PricingAPIItem `json:"-"`
 }
 
 // inviteePricingChannelPath 与前端 ModelChannelList 复制通道路径格式一致。
@@ -708,6 +714,7 @@ func listPricingVisibleMarkupDiscountRateItems() ([]InviteeModelMarkupDiscountRa
 		costDiscountPercent := ch.EffectiveCostPercent
 		currentDiscount := inviteeModelActualDiscountPercent(officialBaseForDiscount, channelBase, costDiscountPercent, defaultRate)
 		defaultRates[key] = defaultRate
+		pricingItem := p
 		items = append(items, InviteeModelMarkupDiscountRateItem{
 			ModelName:                      modelName,
 			ChannelID:                      ch.ChannelID,
@@ -729,11 +736,15 @@ func listPricingVisibleMarkupDiscountRateItems() ([]InviteeModelMarkupDiscountRa
 			OfficialImageRatio:             p.ImageRatio,
 			OfficialImagePrice:             officialImagePrice,
 			OfficialImagePricingRules:      officialImagePricingRules,
+			OfficialAudioRatio:             p.AudioRatio,
+			OfficialAudioCompletionRatio:   p.AudioCompletionRatio,
 			OfficialVideoRatio:             p.VideoRatio,
 			OfficialVideoCompletionRatio:   ratio_setting.GetVideoCompletionRatio(modelName),
 			OfficialVideoPrice:             p.VideoPrice,
 			OfficialVideoPricingRules:      officialVideoPricingRules,
+			OfficialASRPrice:               p.ASRPrice,
 			OfficialRequestTierPricing:     officialTierPricing,
+			PlatformPricing:                &pricingItem,
 		})
 	}
 	sort.Slice(items, func(i, j int) bool {
