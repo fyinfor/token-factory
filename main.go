@@ -147,6 +147,9 @@ func main() {
 	// Redemption code expiration settlement task
 	service.StartRedemptionSettlementTask()
 
+	// Supplier T+1/hourly revenue push task
+	service.StartSupplierRevenuePushTask()
+
 	// Remove expired Playground media from local storage or OSS.
 	service.StartTemporaryUploadCleanupTask()
 	service.StartMaterialPreviewCleanupTask()

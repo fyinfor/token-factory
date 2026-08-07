@@ -30,10 +30,6 @@ import {
   markupRateFromPercent,
 } from '../../../../../helpers';
 import {
-  fetchPerfMetrics,
-  perfQueryResultToSummary,
-} from '../../../../../helpers/perfMetrics';
-import {
   convertTierPriceToUSD,
   getCurrencyRatesFromStatus,
   normalizeCurrency,
@@ -44,7 +40,6 @@ import {
 } from '../../view/card/tierUtils';
 import ModelChannelList from './ModelChannelList';
 import ModelEndpoints from './ModelEndpoints';
-import ModelPerfPanel from './ModelPerfPanel';
 import ApiDocsSidePanel from './ApiDocsSidePanel';
 import { getChannelHeatKey } from '../../utils/modelHeat';
 import {
@@ -510,7 +505,6 @@ const ModelChannelWorkspace = ({
   modelData,
   channelMtrMap = {},
   endpointMap = {},
-  perfSummary = null,
   hotChannelScoreMap = new Map(),
   t,
   ...props
@@ -533,20 +527,14 @@ const ModelChannelWorkspace = ({
   }, [channelList, modelData]);
   const [selectedChannelKey, setSelectedChannelKey] =
     useState(lowestChannelKey);
-  const [channelPerfMap, setChannelPerfMap] = useState({});
-  const [loadedChannelPerf, setLoadedChannelPerf] = useState({});
-  const [visiblePerfSummary, setVisiblePerfSummary] = useState(perfSummary);
   const [docsVisible, setDocsVisible] = useState(false);
   const [docsMounted, setDocsMounted] = useState(false);
 
   useEffect(() => {
     setSelectedChannelKey(lowestChannelKey);
-    setChannelPerfMap({});
-    setLoadedChannelPerf({});
-    setVisiblePerfSummary(perfSummary);
     setDocsVisible(false);
     setDocsMounted(false);
-  }, [lowestChannelKey, modelData?.model_name, perfSummary]);
+  }, [lowestChannelKey, modelData?.model_name]);
 
   useEffect(() => {
     if (docsVisible || !docsMounted) return undefined;
@@ -565,47 +553,6 @@ const ModelChannelWorkspace = ({
       index: selectedIndex,
     };
   }, [channelList, selectedChannelKey]);
-
-  const selectedChannelId = Number(selectedEntry.channel?.channel_id || 0);
-
-  useEffect(() => {
-    const channelKey = String(selectedChannelId);
-    if (!selectedChannelId || !loadedChannelPerf[channelKey]) return;
-    setVisiblePerfSummary(channelPerfMap[channelKey] || null);
-  }, [channelPerfMap, loadedChannelPerf, selectedChannelId]);
-
-  useEffect(() => {
-    const channelKey = String(selectedChannelId);
-    if (!selectedChannelId || loadedChannelPerf[channelKey]) return;
-
-    let cancelled = false;
-    fetchPerfMetrics(modelData.model_name, 24, '', selectedChannelId)
-      .then(perfQueryResultToSummary)
-      .then((summary) => {
-        if (cancelled) return;
-        if (summary) {
-          setChannelPerfMap((current) => ({
-            ...current,
-            [channelKey]: summary,
-          }));
-        }
-        setLoadedChannelPerf((current) => ({
-          ...current,
-          [channelKey]: true,
-        }));
-      })
-      .catch(() => {
-        if (cancelled) return;
-        setLoadedChannelPerf((current) => ({
-          ...current,
-          [channelKey]: true,
-        }));
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [loadedChannelPerf, modelData.model_name, selectedChannelId]);
 
   if (!selectedEntry.channel) return null;
 
@@ -721,12 +668,6 @@ const ModelChannelWorkspace = ({
         </div>
       </aside>
       <section className='channel-detail-content h-full min-h-0 overflow-y-auto overscroll-contain p-3'>
-        <ModelPerfPanel
-          modelName={modelData.model_name}
-          perfSummary={visiblePerfSummary}
-          t={t}
-          flat
-        />
         <div className='model-api-docs-card mb-3 rounded-lg border p-3'>
           <div className='flex min-w-0 items-center justify-between gap-3'>
             <div className='flex min-w-0 items-center gap-2'>

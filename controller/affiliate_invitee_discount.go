@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -455,17 +456,44 @@ func ExportDistributorModelDiscountTemplate(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
+	exportDistributorModelDiscountTemplateResponse(c, items, userId)
+}
+
+// ExportDistributorModelDiscountTemplateAdmin exports the platform's default
+// model×channel call-discount table. The route is protected by AdminAuth; it
+// intentionally does not reuse the distributor identity check above.
+// GET /api/distributor/admin/model-discount-template/export
+func ExportDistributorModelDiscountTemplateAdmin(c *gin.Context) {
+	if !common.IsDistributorProfitShareMode() {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "当前站点未启用利润分成模式"})
+		return
+	}
+	items, err := model.GetDefaultDistributorModelDiscountTemplate()
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	exportDistributorModelDiscountTemplateResponse(c, items, c.GetInt("id"))
+}
+
+func exportDistributorModelDiscountTemplateResponse(c *gin.Context, items []model.InviteeModelMarkupDiscountRateItem, userID int) {
 	items = filterInviteeModelDiscountExportItems(items, c.Query("q"), c.Query("supplier_type"))
 
-	data, err := buildDistributorModelDiscountTemplateExportWorkbookForUser(items, userId)
+	data, err := buildDistributorModelDiscountTemplateExportWorkbookForUser(items, userID)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
 
-	filename := fmt.Sprintf("调用折扣-%s.xlsx", time.Now().Format("20060102-150405"))
+	timestamp := time.Now().Format("20060102-150405")
+	filename := fmt.Sprintf("调用折扣-%s.xlsx", timestamp)
+	asciiFilename := fmt.Sprintf("call-discount-%s.xlsx", timestamp)
 	c.Header("Content-Type", inviteeModelDiscountExportContentType)
-	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	c.Header("Content-Disposition", fmt.Sprintf(
+		`attachment; filename=%q; filename*=UTF-8''%s`,
+		asciiFilename,
+		url.PathEscape(filename),
+	))
 	c.Header("Content-Length", strconv.Itoa(len(data)))
 	c.Data(http.StatusOK, inviteeModelDiscountExportContentType, data)
 }

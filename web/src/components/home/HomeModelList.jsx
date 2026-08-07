@@ -1075,7 +1075,6 @@ const HomeModelList = () => {
         channelVideoRatioMap={pricingData.channelVideoRatio}
         channelVideoCompletionRatioMap={pricingData.channelVideoCompletionRatio}
         channelVideoPriceMap={pricingData.channelVideoPrice}
-        perfMetricsMap={pricingData.perfMetricsMap}
         hotChannelScoreMap={pricingData.hotChannelScoreMap}
       />
     </div>

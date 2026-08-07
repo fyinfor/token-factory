@@ -101,7 +101,6 @@ const ModelDetailSideSheet = ({
   channelVideoRatioMap = {},
   channelVideoCompletionRatioMap = {},
   channelVideoPriceMap = {},
-  perfMetricsMap = {},
   hotChannelScoreMap = new Map(),
 }) => {
   const isMobile = useIsMobile();
@@ -242,7 +241,6 @@ const ModelDetailSideSheet = ({
               <ModelChannelWorkspace
                 {...channelProps}
                 endpointMap={endpointMap}
-                perfSummary={perfMetricsMap[modelData.model_name]}
               />
             ) : (
               <ModelDetailContentSkeleton />

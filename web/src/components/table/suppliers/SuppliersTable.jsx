@@ -33,6 +33,7 @@ const SuppliersTable = ({
   handleDeactivate,
   handleActivate,
   openDashboard,
+  openRevenuePush,
   compactMode,
 }) => {
   const isMobile = useIsMobile();
@@ -42,6 +43,7 @@ const SuppliersTable = ({
     handleDeactivate,
     handleActivate,
     openDashboard,
+    openRevenuePush,
   );
   const statusColumn = columns.find((col) => col.dataIndex === 'status');
   const createdAtColumn = columns.find((col) => col.dataIndex === 'created_at');
@@ -127,7 +129,7 @@ const SuppliersTable = ({
       loading={loading}
       pagination={false}
       size={compactMode ? 'small' : 'default'}
-      scroll={{ x: 1680 }}
+      scroll={{ x: 1800 }}
     />
   );
 };
