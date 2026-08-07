@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	relayhelper "github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/types"
 
@@ -25,18 +26,14 @@ func oaiImage2AliImageRequest(info *relaycommon.RelayInfo, request dto.ImageRequ
 	var imageRequest AliImageRequest
 	imageRequest.Model = request.Model
 	imageRequest.ResponseFormat = request.ResponseFormat
+
+	hasExtraParameters := false
 	if request.Extra != nil {
 		if val, ok := request.Extra["parameters"]; ok {
+			hasExtraParameters = true
 			err := common.Unmarshal(val, &imageRequest.Parameters)
 			if err != nil {
 				return nil, fmt.Errorf("invalid parameters field: %w", err)
-			}
-		} else {
-			// 兼容没有parameters字段的情况，从openai标准字段中提取参数
-			imageRequest.Parameters = AliImageParameters{
-				Size:      strings.Replace(request.Size, "x", "*", -1),
-				N:         int(lo.FromPtrOr(request.N, uint(1))),
-				Watermark: request.Watermark,
 			}
 		}
 		if val, ok := request.Extra["input"]; ok {
@@ -44,6 +41,14 @@ func oaiImage2AliImageRequest(info *relaycommon.RelayInfo, request dto.ImageRequ
 			if err != nil {
 				return nil, fmt.Errorf("invalid input field: %w", err)
 			}
+		}
+	}
+	if !hasExtraParameters {
+		// 兼容没有 parameters 字段的情况，从 OpenAI 标准字段中提取参数
+		imageRequest.Parameters = AliImageParameters{
+			Size:      strings.Replace(request.Size, "x", "*", -1),
+			N:         int(lo.FromPtrOr(request.N, uint(1))),
+			Watermark: request.Watermark,
 		}
 	}
 
@@ -61,18 +66,7 @@ func oaiImage2AliImageRequest(info *relaycommon.RelayInfo, request dto.ImageRequ
 	// 同步图片模型和异步图片模型请求格式不一样
 	if isSync {
 		if imageRequest.Input == nil {
-			imageRequest.Input = AliImageInput{
-				Messages: []AliMessage{
-					{
-						Role: "user",
-						Content: []AliMediaContent{
-							{
-								Text: request.Prompt,
-							},
-						},
-					},
-				},
-			}
+			imageRequest.Input = buildAliSyncImageInput(request.Prompt, relayhelper.ExtractImageInputURLs(request.Image))
 		}
 	} else {
 		if imageRequest.Input == nil {
@@ -83,6 +77,30 @@ func oaiImage2AliImageRequest(info *relaycommon.RelayInfo, request dto.ImageRequ
 	}
 
 	return &imageRequest, nil
+}
+
+// buildAliSyncImageInput 构造 multimodal-generation 同步请求的 messages。
+// imageRefs 可为 https 在线链接或 data URL；有参考图时按「图片在前、文本在后」排列。
+func buildAliSyncImageInput(prompt string, imageRefs []string) AliImageInput {
+	content := make([]AliMediaContent, 0, len(imageRefs)+1)
+	for _, ref := range imageRefs {
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
+			continue
+		}
+		content = append(content, AliMediaContent{Image: ref})
+	}
+	if prompt != "" {
+		content = append(content, AliMediaContent{Text: prompt})
+	}
+	return AliImageInput{
+		Messages: []AliMessage{
+			{
+				Role:    "user",
+				Content: content,
+			},
+		},
+	}
 }
 func getImageBase64sFromForm(c *gin.Context, fieldName string) ([]string, error) {
 	mf := c.Request.MultipartForm
@@ -157,29 +175,17 @@ func oaiFormEdit2AliImageEdit(c *gin.Context, info *relaycommon.RelayInfo, reque
 	imageRequest.Model = request.Model
 	imageRequest.ResponseFormat = request.ResponseFormat
 
-	imageBase64s, err := getImageBase64sFromForm(c, "image")
+	imageRefs, err := getImageBase64sFromForm(c, "image")
 	if err != nil {
-		return nil, fmt.Errorf("get image base64s from form failed: %w", err)
-	}
-	//dto.MediaContent{}
-	mediaContents := make([]AliMediaContent, len(imageBase64s))
-	for i, b64 := range imageBase64s {
-		mediaContents[i] = AliMediaContent{
-			Image: b64,
+		// multipart 未传文件时，兼容表单/JSON 中的在线图片链接（https://xxx.png）
+		imageRefs = relayhelper.ExtractImageInputURLs(request.Image)
+		if len(imageRefs) == 0 {
+			return nil, fmt.Errorf("get image base64s from form failed: %w", err)
 		}
 	}
-	mediaContents = append(mediaContents, AliMediaContent{
-		Text: request.Prompt,
-	})
-	imageRequest.Input = AliImageInput{
-		Messages: []AliMessage{
-			{
-				Role:    "user",
-				Content: mediaContents,
-			},
-		},
-	}
+	imageRequest.Input = buildAliSyncImageInput(request.Prompt, imageRefs)
 	imageRequest.Parameters = AliImageParameters{
+		Size:      strings.Replace(request.Size, "x", "*", -1),
 		N:         int(lo.FromPtrOr(request.N, uint(1))),
 		Watermark: request.Watermark,
 	}
