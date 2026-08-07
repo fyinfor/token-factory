@@ -222,6 +222,7 @@ const MaterialLibrary = () => {
     const StatusIcon = statusMeta.icon;
     const isVideo = asset.asset_type === MaterialAssetType.VIDEO;
     const isAudio = asset.asset_type === MaterialAssetType.AUDIO;
+    const hasPreview = Boolean(String(asset.url || '').trim());
 
     return (
       <Card
@@ -263,7 +264,24 @@ const MaterialLibrary = () => {
             <span style={{ fontSize: 12 }}>{typeMeta.label}</span>
           </div>
 
-          {isVideo ? (
+          {!hasPreview ? (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 6,
+                color: 'var(--semi-color-tertiary)',
+                padding: 12,
+                textAlign: 'center',
+              }}
+            >
+              <TypeIcon size={28} />
+              <Text type='tertiary' size='small'>
+                {t('预览已过期')}
+              </Text>
+            </div>
+          ) : isVideo ? (
             <video
               src={asset.url}
               controls
@@ -406,7 +424,7 @@ const MaterialLibrary = () => {
         </Title>
         <Tooltip
           content={t(
-            '上传已授权的虚拟人像素材，获取 asset:// 资源地址后可用于视频生成。',
+            '虚拟人像可直接上传。真人人像：同一人物进入其空间继续传素材；换人（新面孔）需先「认证新人物」再上传。拿到 asset:// 地址后可用于视频生成。',
           )}
         >
           <IconHelpCircle style={{ color: 'var(--semi-color-text-2)' }} />

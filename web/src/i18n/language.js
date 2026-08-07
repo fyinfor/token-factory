@@ -36,12 +36,17 @@ export const normalizeLanguage = (language) => {
     return language;
   }
 
-  const normalized = language.trim().replace(/_/g, '-');
+  // zh_CN → zh-CN；zhCN（Semi/部分历史存储）→ zh-CN，供 Intl / toLocaleString 使用
+  const normalized = language
+    .trim()
+    .replace(/_/g, '-')
+    .replace(/([a-z])([A-Z])/g, '$1-$2');
   const lower = normalized.toLowerCase();
 
   if (
     lower === 'zh' ||
     lower === 'zh-cn' ||
+    lower === 'zhcn' ||
     lower === 'zh-sg' ||
     lower.startsWith('zh-hans')
   ) {
@@ -50,6 +55,7 @@ export const normalizeLanguage = (language) => {
 
   if (
     lower === 'zh-tw' ||
+    lower === 'zhtw' ||
     lower === 'zh-hk' ||
     lower === 'zh-mo' ||
     lower.startsWith('zh-hant')

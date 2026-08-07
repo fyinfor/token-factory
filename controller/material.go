@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
@@ -108,6 +109,14 @@ func refreshMaterialAssetFromUpstream(asset *model.MaterialAsset, info *service.
 	newURL := strings.TrimSpace(info.URL)
 	newAssetType := strings.TrimSpace(info.AssetType)
 
+	// 有托管预览且未过期时：不要用上游永久 URL 覆盖本地/OSS 预览，避免「7 天预览」失效。
+	keepManagedPreview := asset.PreviewExpiresAt > 0 &&
+		asset.PreviewExpiresAt > time.Now().Unix() &&
+		strings.TrimSpace(asset.URL) != ""
+	if keepManagedPreview {
+		newURL = ""
+	}
+
 	changed := (newStatus != "" && newStatus != asset.Status) ||
 		(newURL != "" && newURL != asset.URL) ||
 		(newAssetType != "" && newAssetType != asset.AssetType)
@@ -117,7 +126,7 @@ func refreshMaterialAssetFromUpstream(asset *model.MaterialAsset, info *service.
 
 	_ = model.UpdateMaterialAssetInfo(asset.Id, newStatus, newURL, newAssetType)
 	if newURL != "" && newURL != oldURL {
-		_ = service.CleanupLocalUploadByURL(oldURL)
+		_ = service.CleanupManagedUploadByURL(oldURL)
 		asset.URL = newURL
 	}
 	if newStatus != "" {
@@ -130,10 +139,10 @@ func refreshMaterialAssetFromUpstream(asset *model.MaterialAsset, info *service.
 }
 
 // finalizeMaterialUpload 上传后置逻辑：上游 CreateAsset 成功后，
-// 必须同步等待 GetAsset 拉取完整素材信息，再持久化关键字段（URL/AssetType/Status/GroupId），
-// 最后清理本地临时文件。
+// 同步等待 GetAsset 拉取状态/类型，再持久化关键字段。
+// 本地/OSS 上传的 tempLocalURL 作为控制台预览 URL，按配置保留（默认 7 天），到期只清预览不删素材。
 //   - fallbackGroupId/fallbackType/fallbackURL：接口缺失字段时的回退值。
-//   - tempLocalURL：本地上传产生的临时公网 URL（在线链接上传时传空，无需清理）。
+//   - tempLocalURL：本地/OSS 上传产生的中转公网 URL（在线链接上传时传空）。
 func finalizeMaterialUpload(userId int, fallbackGroupId, assetId, name, fallbackType, fallbackURL, tempLocalURL string) (*model.MaterialAsset, error) {
 	// 上传后置逻辑（硬性要求）：轮询 GetAsset 直至拿到上游永久 URL 或超时。
 	info, err := service.MaterialPollAsset(assetId, tempLocalURL)
@@ -154,11 +163,19 @@ func finalizeMaterialUpload(userId int, fallbackGroupId, assetId, name, fallback
 		return nil, fmt.Errorf("仅支持图片、视频或音频素材，当前素材类型: %s", assetType)
 	}
 
-	// URL：素材永久访问地址，优先使用接口返回值。
-	permanentURL := fallbackURL
-	if u := strings.TrimSpace(info.URL); u != "" {
-		permanentURL = u
+	// 预览 URL：有托管中转则优先用本地/OSS URL，并设置过期时间；外链上传无托管文件则不设过期。
+	previewURL := strings.TrimSpace(tempLocalURL)
+	var previewExpiresAt int64
+	if previewURL != "" {
+		hours := operation_setting.GetMaterialPreviewRetentionHours()
+		previewExpiresAt = time.Now().Unix() + int64(hours)*3600
+	} else {
+		previewURL = strings.TrimSpace(fallbackURL)
+		if u := strings.TrimSpace(info.URL); u != "" {
+			previewURL = u
+		}
 	}
+
 	// Status：素材可用性状态，缺失时按处理中处理。
 	status := service.MaterialStatusPending
 	if s := service.NormalizeMaterialStatus(info.Status); s != "" {
@@ -170,24 +187,20 @@ func finalizeMaterialUpload(userId int, fallbackGroupId, assetId, name, fallback
 	}
 
 	asset := &model.MaterialAsset{
-		UserId:    userId,
-		GroupId:   groupId,
-		AssetId:   assetId,
-		Name:      name,
-		AssetType: assetType,
-		URL:       permanentURL,
-		Status:    status,
+		UserId:           userId,
+		GroupId:          groupId,
+		AssetId:          assetId,
+		Name:             name,
+		AssetType:        assetType,
+		URL:              previewURL,
+		PreviewExpiresAt: previewExpiresAt,
+		Status:           status,
 	}
 	if err := model.CreateMaterialAsset(asset); err != nil {
 		return nil, err
 	}
 
-	// 清理临时文件：已拿到上游永久 URL 且与本地临时 URL 不一致时，丢弃本地临时上传文件。
-	// 若上游仍在处理（未返回永久 URL），暂不清理以保证图片可正常预览，待列表轮询拿到永久 URL 后再清理。
-	if tempLocalURL != "" && permanentURL != tempLocalURL {
-		_ = service.CleanupLocalUploadByURL(tempLocalURL)
-	}
-
+	// 托管预览保留期内不立即删除中转文件；到期由定时任务清空 URL 并删对象。
 	return asset, nil
 }
 
@@ -204,13 +217,18 @@ type materialAssetResponse struct {
 }
 
 func toMaterialAssetResponse(a *model.MaterialAsset) materialAssetResponse {
+	previewURL := a.URL
+	// 已过期但尚未被定时任务清理时，接口层也不返回预览 URL（素材本身仍保留）。
+	if a.PreviewExpiresAt > 0 && a.PreviewExpiresAt <= time.Now().Unix() {
+		previewURL = ""
+	}
 	return materialAssetResponse{
 		AssetId:   a.AssetId,
 		AssetURI:  "asset://" + a.AssetId,
 		GroupId:   a.GroupId,
 		Name:      a.Name,
 		AssetType: a.AssetType,
-		URL:       a.URL,
+		URL:       previewURL,
 		Status:    a.Status,
 		CreatedAt: a.CreatedAt,
 	}
@@ -654,7 +672,7 @@ func DeleteMaterial(c *gin.Context) {
 	}
 
 	// 清理本地临时文件（仅本地存储模式生效，best-effort）。
-	_ = service.CleanupLocalUploadByURL(asset.URL)
+	_ = service.CleanupManagedUploadByURL(asset.URL)
 
 	common.ApiSuccess(c, gin.H{"asset_id": asset.AssetId})
 }
@@ -934,7 +952,7 @@ func DeletePersonalMaterial(c *gin.Context) {
 	}
 
 	// 复用本地临时文件清理逻辑（best-effort）。
-	_ = service.CleanupLocalUploadByURL(asset.URL)
+	_ = service.CleanupManagedUploadByURL(asset.URL)
 
 	common.ApiSuccess(c, gin.H{"asset_id": asset.AssetId})
 }

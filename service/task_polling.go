@@ -678,9 +678,13 @@ func recalcVideoPerSecondQuotaDetailOnComplete(task *model.Task, taskResult *rel
 	if strings.TrimSpace(modelName) == "" {
 		return 0, nil
 	}
-	channelRules, chRulesOK := ratio_setting.GetChannelVideoPricingRules(task.ChannelId, modelName)
-	if !chRulesOK || !ratio_setting.HasUsableVideoPerSecondRules(channelRules) {
-		return 0, nil
+	// 优先渠道按秒档位；无则回退全局 VideoPricingRules 垫底（与预扣 EffectiveVideoPerSecond 一致）。
+	rules, rulesOK := ratio_setting.GetChannelVideoPricingRules(task.ChannelId, modelName)
+	if !rulesOK || !ratio_setting.HasUsableVideoPerSecondRules(rules) {
+		rules, rulesOK = ratio_setting.GetVideoPricingRules(modelName)
+		if !rulesOK || !ratio_setting.HasUsableVideoPerSecondRules(rules) {
+			return 0, nil
+		}
 	}
 	videoURL := strings.TrimSpace(taskResult.Url)
 	if videoURL == "" {
@@ -706,7 +710,7 @@ func recalcVideoPerSecondQuotaDetailOnComplete(task *model.Task, taskResult *rel
 	}
 	mode := detectTaskVideoBillingMode(task)
 	resolutionLabel := VideoBillingResolutionLabelForTask(task, taskResult)
-	match, ok := matchPerSecondPriceDetail(channelRules, mode, meta.Width, meta.Height, meta.HasAudio, resolutionLabel)
+	match, ok := matchPerSecondPriceDetail(rules, mode, meta.Width, meta.Height, meta.HasAudio, resolutionLabel)
 	if !ok || match.PricePerSecond <= 0 {
 		return 0, nil
 	}

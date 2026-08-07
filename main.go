@@ -152,6 +152,7 @@ func main() {
 
 	// Remove expired Playground media from local storage or OSS.
 	service.StartTemporaryUploadCleanupTask()
+	service.StartMaterialPreviewCleanupTask()
 
 	// Wire task polling adaptor factory (breaks service -> relay import cycle)
 	service.GetTaskAdaptorFunc = func(platform constant.TaskPlatform) service.TaskPollingAdaptor {
