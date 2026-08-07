@@ -6336,5 +6336,6 @@
   "规范链接（Canonical URL）": "URL kanonik",
   "社交分享图片（OG Image）": "Imej perkongsian sosial (OG Image)",
   "爬虫规则（robots）": "Peraturan perangkak (robots)",
-  "保存 SEO 设置": "Simpan tetapan SEO"
+  "保存 SEO 设置": "Simpan tetapan SEO",
+  "输入值会超过 ${count} 个模型的代理加价上限，这些模型将按各自上限设置。": "Nilai yang dimasukkan melebihi had tokokan ejen untuk ${count} model. Model tersebut akan ditetapkan kepada had maksimum masing-masing."
 }
