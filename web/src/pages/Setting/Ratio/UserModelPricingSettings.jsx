@@ -21,6 +21,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Banner,
   Button,
+  Checkbox,
   Input,
   InputNumber,
   Modal,
@@ -38,6 +39,52 @@ import { API, showError, showSuccess } from '../../../helpers';
 const { Text } = Typography;
 
 const PAGE_SIZE = 20;
+
+const EXPORT_FIELD_OPTIONS = [
+  { value: 'model_name', labelKey: '模型', defaultChecked: true },
+  { value: 'price_discount_percent', labelKey: '成本折扣', defaultChecked: true },
+  { value: 'operating_cost_percent', labelKey: '经营成本', defaultChecked: true },
+  { value: 'markup_discount_rate', labelKey: '加价折扣', defaultChecked: true },
+  { value: 'total_percent', labelKey: '总折扣', defaultChecked: true },
+  { value: 'enabled', labelKey: '启用', defaultChecked: true },
+  { value: 'updated_time', labelKey: '更新时间', defaultChecked: true },
+  { value: 'username', labelKey: '用户名', defaultChecked: false },
+  { value: 'user_id', labelKey: '用户ID', defaultChecked: false },
+];
+
+const defaultExportFields = () =>
+  EXPORT_FIELD_OPTIONS.filter((o) => o.defaultChecked).map((o) => o.value);
+
+const formatExportTimestamp = () => {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(
+    d.getHours(),
+  )}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+};
+
+const downloadBlob = (blob, filename) => {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+};
+
+const getDownloadFilename = (disposition, fallback) => {
+  const text = String(disposition || '');
+  const utf8Match = text.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch {
+      return fallback;
+    }
+  }
+  const asciiMatch = text.match(/filename="?([^";]+)"?/i);
+  return asciiMatch?.[1] || fallback;
+};
 
 const emptyForm = {
   id: 0,
@@ -97,6 +144,11 @@ export default function UserModelPricingSettings() {
   const [importing, setImporting] = useState(false);
   const [importPreview, setImportPreview] = useState([]);
   const [importPreviewLoading, setImportPreviewLoading] = useState(false);
+
+  const [exportVisible, setExportVisible] = useState(false);
+  const [exportFields, setExportFields] = useState(defaultExportFields);
+  const [exportOnlyFiltered, setExportOnlyFiltered] = useState(true);
+  const [exporting, setExporting] = useState(false);
 
   const [preview, setPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -261,6 +313,75 @@ export default function UserModelPricingSettings() {
       showError(e?.response?.data?.message || t('预览失败'));
     } finally {
       setImportPreviewLoading(false);
+    }
+  };
+
+  const openExport = () => {
+    if (!selectedUserId) {
+      showError(t('请先选择用户'));
+      return;
+    }
+    if (!items.length) {
+      showError(t('该用户暂无指定价配置可导出'));
+      return;
+    }
+    setExportFields(defaultExportFields());
+    setExportOnlyFiltered(!!filterModel);
+    setExportVisible(true);
+  };
+
+  const doExport = async () => {
+    if (!selectedUserId) {
+      showError(t('请先选择用户'));
+      return;
+    }
+    if (!exportFields.length) {
+      showError(t('请至少选择一个导出字段'));
+      return;
+    }
+    const fallbackName = `user-model-pricing-${selectedUserId}-${formatExportTimestamp()}.xlsx`;
+    setExporting(true);
+    try {
+      const params = {
+        user_id: selectedUserId,
+        fields: exportFields.join(','),
+      };
+      if (exportOnlyFiltered && filterModel) {
+        params.model_name = filterModel;
+      }
+      const res = await API.get('/api/user_model_pricing/export', {
+        responseType: 'blob',
+        disableDuplicate: true,
+        params,
+      });
+      const contentType =
+        res.headers?.['content-type'] || res.data?.type || '';
+      if (contentType.includes('application/json')) {
+        const text = await res.data.text();
+        try {
+          const payload = JSON.parse(text);
+          showError(payload?.message || t('导出失败'));
+        } catch {
+          showError(text || t('导出失败'));
+        }
+        return;
+      }
+      const blob = new Blob([res.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      downloadBlob(
+        blob,
+        getDownloadFilename(
+          res.headers?.['content-disposition'],
+          fallbackName,
+        ),
+      );
+      showSuccess(t('导出成功'));
+      setExportVisible(false);
+    } catch (e) {
+      showError(e?.response?.data?.message || t('导出失败'));
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -781,6 +902,12 @@ export default function UserModelPricingSettings() {
               <Button onClick={() => refreshAll({ resetPage: false })}>
                 {t('刷新')}
               </Button>
+              <Button
+                disabled={!items.length}
+                onClick={openExport}
+              >
+                {t('导出')}
+              </Button>
               <Button onClick={openImport}>{t('一键导入当前折扣')}</Button>
               <Button theme='solid' type='primary' onClick={openAdd}>
                 {t('新增模型指定价')}
@@ -968,6 +1095,80 @@ export default function UserModelPricingSettings() {
         ) : (
           <Text type='tertiary'>{t('暂无预览数据')}</Text>
         )}
+      </Modal>
+
+      <Modal
+        title={t('导出用户指定价')}
+        visible={exportVisible}
+        onCancel={() => setExportVisible(false)}
+        onOk={doExport}
+        okText={t('确认导出')}
+        cancelText={t('取消')}
+        confirmLoading={exporting}
+        okButtonProps={{ disabled: !exportFields.length }}
+        width={560}
+      >
+        <div className='flex flex-col gap-3'>
+          <Banner
+            type='info'
+            closeIcon={null}
+            className='!rounded-lg'
+            description={`${t('将导出')} ${selectedUserLabel} ${t('的模型折扣配置为 Excel。可勾选需要的列；未勾选的字段不会出现在文件中。')}`}
+          />
+          <div>
+            <div className='flex items-center justify-between mb-2'>
+              <Text strong>{t('导出字段')}</Text>
+              <Space>
+                <Button
+                  size='small'
+                  onClick={() =>
+                    setExportFields(EXPORT_FIELD_OPTIONS.map((o) => o.value))
+                  }
+                >
+                  {t('全选')}
+                </Button>
+                <Button
+                  size='small'
+                  onClick={() => setExportFields(defaultExportFields())}
+                >
+                  {t('常用')}
+                </Button>
+                <Button size='small' onClick={() => setExportFields([])}>
+                  {t('清空')}
+                </Button>
+              </Space>
+            </div>
+            <Checkbox.Group
+              value={exportFields}
+              onChange={setExportFields}
+              direction='horizontal'
+              className='flex flex-wrap gap-x-4 gap-y-2'
+            >
+              {EXPORT_FIELD_OPTIONS.map((opt) => (
+                <Checkbox key={opt.value} value={opt.value}>
+                  {t(opt.labelKey)}
+                </Checkbox>
+              ))}
+            </Checkbox.Group>
+          </div>
+          {!!filterModel && (
+            <div className='flex items-center justify-between'>
+              <div>
+                <Text strong>{t('仅导出当前筛选结果')}</Text>
+                <div>
+                  <Text type='tertiary' size='small'>
+                    {t('当前模型筛选')}：{filterModel}（
+                    {filteredItems.length}/{items.length}）
+                  </Text>
+                </div>
+              </div>
+              <Switch
+                checked={exportOnlyFiltered}
+                onChange={setExportOnlyFiltered}
+              />
+            </div>
+          )}
+        </div>
       </Modal>
 
       <Modal
