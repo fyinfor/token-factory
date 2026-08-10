@@ -28,24 +28,26 @@ type ModelExportPayload struct {
 // VendorExportItem 模型类型（供应商）导出项
 type VendorExportItem struct {
 	Name        string `json:"name"`
+	NameEn      string `json:"name_en,omitempty"`
 	Description string `json:"description"`
 	Icon        string `json:"icon"`
 }
 
 // ModelExportItem 模型数据导出项
 type ModelExportItem struct {
-	ModelName       string  `json:"model_name"`
-	NameRule        int     `json:"name_rule"`
-	Icon            string  `json:"icon"`
-	Description     string  `json:"description"`
-	DescriptionEn   string  `json:"description_en,omitempty"`
-	DocIntroduction *string `json:"doc_introduction,omitempty"`
-	ApiDocs         *string `json:"api_docs,omitempty"`
-	Tags            string  `json:"tags"`
-	Vendor          string  `json:"vendor"`
-	Endpoints       string  `json:"endpoints"`
-	SyncOfficial    int     `json:"sync_official"`
-	Status          int     `json:"status"`
+	ModelName         string  `json:"model_name"`
+	NameRule          int     `json:"name_rule"`
+	Icon              string  `json:"icon"`
+	Description       string  `json:"description"`
+	DescriptionEn     string  `json:"description_en,omitempty"`
+	DocIntroduction   *string `json:"doc_introduction,omitempty"`
+	DocIntroductionEn *string `json:"doc_introduction_en,omitempty"`
+	ApiDocs           *string `json:"api_docs,omitempty"`
+	Tags              string  `json:"tags"`
+	Vendor            string  `json:"vendor"`
+	Endpoints         string  `json:"endpoints"`
+	SyncOfficial      int     `json:"sync_official"`
+	Status            int     `json:"status"`
 }
 
 // ChannelModelDocExportItem 渠道模型文档导出项。渠道 ID 不跨环境复用，使用 sync_key 重新绑定。
@@ -54,6 +56,7 @@ type ChannelModelDocExportItem struct {
 	ChannelSyncKey    string  `json:"channel_sync_key,omitempty"`
 	ChannelName       string  `json:"channel_name"`
 	DocIntroduction   *string `json:"doc_introduction,omitempty"`
+	DocIntroductionEn *string `json:"doc_introduction_en,omitempty"`
 	ApiDocs           *string `json:"api_docs,omitempty"`
 	ApiDocsMarkdown   *string `json:"api_docs_markdown,omitempty"`
 	ApiDocsMarkdownEn *string `json:"api_docs_markdown_en,omitempty"`
@@ -111,6 +114,7 @@ func ExportModelsMeta(c *gin.Context) {
 	for _, v := range vendors {
 		vendorItems = append(vendorItems, VendorExportItem{
 			Name:        v.Name,
+			NameEn:      v.NameEn,
 			Description: v.Description,
 			Icon:        v.Icon,
 		})
@@ -133,18 +137,19 @@ func ExportModelsMeta(c *gin.Context) {
 	for _, m := range models {
 		vendorName := vendorNameMap[m.VendorID]
 		modelItems = append(modelItems, ModelExportItem{
-			ModelName:       m.ModelName,
-			NameRule:        m.NameRule,
-			Icon:            m.Icon,
-			Description:     m.Description,
-			DescriptionEn:   m.DescriptionEn,
-			DocIntroduction: stringPtr(m.DocIntroduction),
-			ApiDocs:         stringPtr(m.ApiDocs),
-			Tags:            m.Tags,
-			Vendor:          vendorName,
-			Endpoints:       m.Endpoints,
-			SyncOfficial:    m.SyncOfficial,
-			Status:          m.Status,
+			ModelName:         m.ModelName,
+			NameRule:          m.NameRule,
+			Icon:              m.Icon,
+			Description:       m.Description,
+			DescriptionEn:     m.DescriptionEn,
+			DocIntroduction:   stringPtr(m.DocIntroduction),
+			DocIntroductionEn: stringPtr(m.DocIntroductionEn),
+			ApiDocs:           stringPtr(m.ApiDocs),
+			Tags:              m.Tags,
+			Vendor:            vendorName,
+			Endpoints:         m.Endpoints,
+			SyncOfficial:      m.SyncOfficial,
+			Status:            m.Status,
 		})
 	}
 
@@ -157,7 +162,7 @@ func ExportModelsMeta(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data": ModelExportPayload{
-			Version:     "1.1",
+			Version:     "1.2",
 			ExportTime:  time.Now().UTC().Format(time.RFC3339),
 			Vendors:     vendorItems,
 			Models:      modelItems,
@@ -190,6 +195,7 @@ func buildChannelModelDocExportItems() ([]ChannelModelDocExportItem, error) {
 			ChannelSyncKey:    row.ChannelSyncKey,
 			ChannelName:       row.ChannelName,
 			DocIntroduction:   stringPtr(row.DocIntroduction),
+			DocIntroductionEn: stringPtr(row.DocIntroductionEn),
 			ApiDocs:           stringPtr(row.ApiDocs),
 			ApiDocsMarkdown:   stringPtr(row.ApiDocsMarkdown),
 			ApiDocsMarkdownEn: stringPtr(row.ApiDocsMarkdownEn),
@@ -243,10 +249,13 @@ func ImportModelsMeta(c *gin.Context) {
 			}
 
 			if existing.Id > 0 {
-				// 已存在：仅更新描述和图标
+				// 已存在：仅更新描述、英文名称和图标
 				updates := map[string]interface{}{}
 				if vItem.Description != "" {
 					updates["description"] = vItem.Description
+				}
+				if vItem.NameEn != "" {
+					updates["name_en"] = vItem.NameEn
 				}
 				if vItem.Icon != "" {
 					updates["icon"] = vItem.Icon
@@ -268,6 +277,7 @@ func ImportModelsMeta(c *gin.Context) {
 				// 不存在：新增
 				newVendor := &model.Vendor{
 					Name:        vName,
+					NameEn:      vItem.NameEn,
 					Description: vItem.Description,
 					Icon:        vItem.Icon,
 					Status:      1,
@@ -344,6 +354,9 @@ func ImportModelsMeta(c *gin.Context) {
 				if mItem.DocIntroduction != nil {
 					updates["doc_introduction"] = *mItem.DocIntroduction
 				}
+				if mItem.DocIntroductionEn != nil {
+					updates["doc_introduction_en"] = *mItem.DocIntroductionEn
+				}
 				if mItem.ApiDocs != nil {
 					updates["api_docs"] = *mItem.ApiDocs
 				}
@@ -376,6 +389,9 @@ func ImportModelsMeta(c *gin.Context) {
 				}
 				if mItem.DocIntroduction != nil {
 					newModel.DocIntroduction = *mItem.DocIntroduction
+				}
+				if mItem.DocIntroductionEn != nil {
+					newModel.DocIntroductionEn = *mItem.DocIntroductionEn
 				}
 				if mItem.ApiDocs != nil {
 					newModel.ApiDocs = *mItem.ApiDocs
@@ -494,6 +510,9 @@ func resolveChannelModelDocImportChannel(item ChannelModelDocExportItem) (*model
 func applyChannelModelDocImportFields(doc *model.ChannelModelDoc, item ChannelModelDocExportItem) {
 	if item.DocIntroduction != nil {
 		doc.DocIntroduction = *item.DocIntroduction
+	}
+	if item.DocIntroductionEn != nil {
+		doc.DocIntroductionEn = *item.DocIntroductionEn
 	}
 	if item.ApiDocs != nil {
 		doc.ApiDocs = *item.ApiDocs

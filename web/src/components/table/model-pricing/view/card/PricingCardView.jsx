@@ -61,7 +61,7 @@ import {
   hasNumericValue,
   getModelTagLabel,
   getSupplierTypeLabel,
-  getModelDescription,
+  getModelCardDescription,
 } from '../../../../../helpers';
 import {
   TIER_CATEGORY_STYLES,
@@ -96,6 +96,7 @@ import {
 } from '../../utils/priceDisplay';
 import PricingCardSkeleton from './PricingCardSkeleton';
 import ModelPerfCardSection from '../../components/ModelPerfCardSection';
+import './homeModelCard.css';
 import { useMinimumLoadingTime } from '../../../../../hooks/common/useMinimumLoadingTime';
 import { renderLimitedItems } from '../../../../common/ui/RenderUtils';
 import { useIsMobile } from '../../../../../hooks/common/useIsMobile';
@@ -109,6 +110,55 @@ const CARD_STYLES = {
 };
 
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const HOME_MODEL_DESCRIPTION_LINE_HEIGHT = 18;
+
+const AdaptiveModelDescription = ({ children, style }) => {
+  const slotRef = React.useRef(null);
+  const [lineCount, setLineCount] = React.useState(0);
+
+  React.useLayoutEffect(() => {
+    const slot = slotRef.current;
+    if (!slot) return undefined;
+
+    const updateLineCount = () => {
+      const availableHeight = slot.getBoundingClientRect().height;
+      const nextLineCount = Math.max(
+        0,
+        Math.floor(availableHeight / HOME_MODEL_DESCRIPTION_LINE_HEIGHT),
+      );
+      setLineCount((current) =>
+        current === nextLineCount ? current : nextLineCount,
+      );
+    };
+
+    updateLineCount();
+    if (typeof ResizeObserver === 'undefined') {
+      setLineCount(1);
+      return undefined;
+    }
+
+    const observer = new ResizeObserver(updateLineCount);
+    observer.observe(slot);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={slotRef} className='home-model-description-slot' style={style}>
+      {lineCount > 0 ? (
+        <p
+          className='home-model-description m-0'
+          style={{
+            maxHeight: lineCount * HOME_MODEL_DESCRIPTION_LINE_HEIGHT,
+            WebkitLineClamp: lineCount,
+          }}
+        >
+          {children}
+        </p>
+      ) : null}
+    </div>
+  );
+};
 
 const getAudioLabel = (row, t) => {
   if (row?.has_audio === true) return t('有音轨');
@@ -1216,6 +1266,7 @@ const PricingCardView = ({
   showSizeChanger = true,
   blurPricing = false,
   homeCardMode = false,
+  showModelDescription = false,
   searchValue = '',
   channelVideoRatio = {},
   channelVideoCompletionRatio = {},
@@ -2317,7 +2368,7 @@ const PricingCardView = ({
 
   // 获取模型描述
   const resolveModelDescription = (record) =>
-    getModelDescription(record, i18n.language);
+    getModelCardDescription(record, i18n.language);
 
   const renderHomeModelCard = ({
     model,
@@ -2333,6 +2384,9 @@ const PricingCardView = ({
       ? getSupplierTypeLabel(supplierType, t)
       : '';
     const supplierSuffix = getModelChannelRouteSuffixes(model)[0] || '';
+    const modelDescription = showModelDescription
+      ? resolveModelDescription(model)
+      : '';
     const routeMetaTitle = [supplierTypeLabel, supplierSuffix]
       .filter(Boolean)
       .join(' · ');
@@ -2462,6 +2516,12 @@ const PricingCardView = ({
               <span className='text-xs text-semi-color-text-2'>-</span>
             )}
           </div>
+
+          {modelDescription ? (
+            <AdaptiveModelDescription style={pricingBlurStyle}>
+              {renderHighlightedText(modelDescription)}
+            </AdaptiveModelDescription>
+          ) : null}
 
           <div
             className='mt-auto flex min-w-0 items-end justify-between gap-2 pt-3'

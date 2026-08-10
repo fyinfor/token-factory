@@ -19,12 +19,17 @@ type computePageEnabledRequest struct {
 	Enabled bool `json:"enabled"`
 }
 
+type computePageJavaScriptRequest struct {
+	AllowJavaScript bool `json:"allow_javascript"`
+}
+
 func computePageResponse(config service.ComputePageConfig) gin.H {
 	return gin.H{
-		"enabled":    config.Enabled && config.HasHTML,
-		"has_html":   config.HasHTML,
-		"file_name":  config.FileName,
-		"updated_at": config.UpdatedAt,
+		"enabled":          config.Enabled && config.HasHTML,
+		"allow_javascript": config.AllowJavaScript,
+		"has_html":         config.HasHTML,
+		"file_name":        config.FileName,
+		"updated_at":       config.UpdatedAt,
 	}
 }
 
@@ -39,13 +44,14 @@ func GetComputePageStatus(c *gin.Context) {
 		"success": true,
 		"message": "",
 		"data": gin.H{
-			"enabled": config.Enabled && config.HasHTML,
+			"enabled":          config.Enabled && config.HasHTML,
+			"allow_javascript": config.AllowJavaScript,
 		},
 	})
 }
 
 func GetComputePageContent(c *gin.Context) {
-	content, err := service.ReadEnabledComputePageHTML()
+	content, config, err := service.ReadEnabledComputePageHTML()
 	if err != nil {
 		if errors.Is(err, service.ErrComputePageDisabled) {
 			c.JSON(http.StatusNotFound, gin.H{"success": false, "message": err.Error()})
@@ -55,9 +61,19 @@ func GetComputePageContent(c *gin.Context) {
 		return
 	}
 	c.Header("Cache-Control", "no-store")
-	c.Header("Content-Security-Policy", "sandbox allow-same-origin; default-src 'none'; style-src 'unsafe-inline' https:; img-src data: blob: https: http:; font-src data: https:; media-src data: blob: https: http:; frame-src https: http:; base-uri 'none'; form-action 'none'")
+	c.Header("Content-Security-Policy", computePageContentSecurityPolicy(config.AllowJavaScript))
 	c.Header("X-Content-Type-Options", "nosniff")
 	c.Data(http.StatusOK, "text/html; charset=utf-8", content)
+}
+
+func computePageContentSecurityPolicy(allowJavaScript bool) string {
+	sandbox := "sandbox allow-same-origin"
+	scriptPolicy := ""
+	if allowJavaScript {
+		sandbox += " allow-scripts"
+		scriptPolicy = "; script-src 'unsafe-inline' 'unsafe-eval' data: blob: https: http:; connect-src https: http: ws: wss:"
+	}
+	return sandbox + "; default-src 'none'" + scriptPolicy + "; style-src 'unsafe-inline' https:; img-src data: blob: https: http:; font-src data: https:; media-src data: blob: https: http:; frame-src https: http:; base-uri 'none'; form-action 'none'"
 }
 
 func AdminGetComputePageConfig(c *gin.Context) {
@@ -76,6 +92,20 @@ func AdminUpdateComputePageEnabled(c *gin.Context) {
 		return
 	}
 	config, err := service.UpdateComputePageEnabled(request.Enabled)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": computePageResponse(config)})
+}
+
+func AdminUpdateComputePageJavaScript(c *gin.Context) {
+	var request computePageJavaScriptRequest
+	if err := common.DecodeJson(c.Request.Body, &request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的参数"})
+		return
+	}
+	config, err := service.UpdateComputePageJavaScriptAllowed(request.AllowJavaScript)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return

@@ -392,6 +392,7 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			computePageAdminRoute.GET("/", controller.AdminGetComputePageConfig)
 			computePageAdminRoute.PUT("/enabled", controller.AdminUpdateComputePageEnabled)
+			computePageAdminRoute.PUT("/javascript", controller.AdminUpdateComputePageJavaScript)
 			computePageAdminRoute.POST("/content", controller.AdminUploadComputePageHTML)
 		}
 
@@ -515,6 +516,11 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.DELETE("/:id/heats/:model_name", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.DeleteChannelModelHeat)
 			channelRoute.GET("/heat/period", middleware.AdminAuth(), controller.GetHeatStatPeriod)
 			channelRoute.PUT("/heat/period", middleware.AdminAuth(), controller.SetHeatStatPeriod)
+			channelRoute.GET("/hot-overrides", middleware.AdminAuth(), controller.GetChannelModelHotOverrides)
+			channelRoute.PUT("/hot-override", middleware.AdminAuth(), controller.SaveChannelModelHotOverride)
+			channelRoute.PUT("/hot-overrides/batch", middleware.AdminAuth(), controller.BatchSaveChannelModelHotOverrides)
+			channelRoute.GET("/hot-settings", middleware.AdminAuth(), controller.GetHomeHotSettings)
+			channelRoute.PUT("/hot-settings", middleware.AdminAuth(), controller.SetHomeHotSettings)
 		}
 		tokenRoute := apiRouter.Group("/token")
 		tokenRoute.Use(middleware.UserAuth())
@@ -680,10 +686,12 @@ func SetApiRouter(router *gin.Engine) {
 			modelsRoute.GET("/search", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.SearchModelsMeta)
 			modelsRoute.GET("/:id", middleware.AdminAuth(), controller.GetModelMeta)
 			modelsRoute.GET("/:id/channel_docs", middleware.AdminAuth(), controller.GetChannelModelDocs)
+			modelsRoute.PUT("/:id/introduction", middleware.AdminAuth(), controller.PutModelIntroduction)
 			modelsRoute.POST("/", middleware.AdminAuth(), controller.CreateModelMeta)
 			modelsRoute.POST("/batch_tags", middleware.AdminAuth(), controller.BatchSetModelTags)
 			modelsRoute.PUT("/", middleware.AdminAuth(), controller.UpdateModelMeta)
 			modelsRoute.PUT("/:id/channel_docs", middleware.AdminAuth(), controller.PutChannelModelDoc)
+			modelsRoute.POST("/:id/channel_docs/sync", middleware.AdminAuth(), controller.SyncChannelModelDocs)
 			modelsRoute.DELETE("/:id/channel_docs", middleware.AdminAuth(), controller.DeleteChannelModelDoc)
 			modelsRoute.DELETE("/:id", middleware.AdminAuth(), controller.DeleteModelMeta)
 			modelsRoute.POST("/batch_weight", middleware.AdminAuth(), controller.BatchUpdateModelWeight)

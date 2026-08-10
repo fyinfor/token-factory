@@ -544,6 +544,7 @@ const ApiDocsSidePanel = ({
   modelName,
   embedded = false,
   docIntroduction = '',
+  docIntroductionEn = '',
   apiDocs = '',
   apiDocsMarkdown = '',
   apiDocsMarkdownEn = '',
@@ -570,6 +571,7 @@ const ApiDocsSidePanel = ({
   const docs = useMemo(() => {
     const hasCustomDocs =
       String(docIntroduction || '').trim() ||
+      String(docIntroductionEn || '').trim() ||
       String(apiDocsMarkdown || '').trim() ||
       String(apiDocsMarkdownEn || '').trim() ||
       configuredDocs.length > 0;
@@ -582,6 +584,7 @@ const ApiDocsSidePanel = ({
     apiDocsMarkdown,
     apiDocsMarkdownEn,
     docIntroduction,
+    docIntroductionEn,
     modelDefaultDocsEnabled,
     useDefaultDocs,
   ]);
@@ -652,6 +655,9 @@ const ApiDocsSidePanel = ({
   const selectedMarkdown = prefersChinese
     ? apiDocsMarkdown || apiDocsMarkdownEn
     : apiDocsMarkdownEn || apiDocsMarkdown;
+  const selectedDocIntroduction = prefersChinese
+    ? docIntroduction || docIntroductionEn
+    : docIntroductionEn || docIntroduction;
   const renderedMarkdown = useMemo(
     () =>
       normalizeLegacyApiDocsMarkdown(
@@ -666,13 +672,13 @@ const ApiDocsSidePanel = ({
   const renderedDocIntroduction = useMemo(
     () =>
       normalizeLegacyApiDocsMarkdown(
-        replaceMarkdownTemplateVariables(docIntroduction, {
+        replaceMarkdownTemplateVariables(selectedDocIntroduction, {
           base_url: serverAddress,
           model: modelName,
           api_key: selectedToken,
         }),
       ),
-    [docIntroduction, modelName, selectedToken, serverAddress],
+    [modelName, selectedDocIntroduction, selectedToken, serverAddress],
   );
   const hasMarkdownDocs = Boolean(renderedMarkdown.trim());
   const markdownUsesApiKey = String(selectedMarkdown).includes('{{api_key}}');

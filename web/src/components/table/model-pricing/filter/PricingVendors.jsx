@@ -18,8 +18,10 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import SelectableButtonGroup from '../../../common/ui/SelectableButtonGroup';
 import { getLobeHubIcon } from '../../../../helpers';
+import { getVendorLocalizedName } from '../../../../helpers/modelPricing';
 
 /**
  * 供应商筛选组件
@@ -40,10 +42,13 @@ const PricingVendors = ({
   t,
   layout,
 }) => {
+  const { i18n } = useTranslation();
+
   // 获取系统中所有供应商（基于 allModels，如果未提供则退化为 models）
   const getAllVendors = React.useMemo(() => {
     const vendors = new Set();
     const vendorIcons = new Map();
+    const vendorNameEn = new Map();
     let hasUnknownVendor = false;
 
     (allModels.length > 0 ? allModels : models).forEach((model) => {
@@ -51,6 +56,12 @@ const PricingVendors = ({
         vendors.add(model.vendor_name);
         if (model.vendor_icon && !vendorIcons.has(model.vendor_name)) {
           vendorIcons.set(model.vendor_name, model.vendor_icon);
+        }
+        if (
+          model.vendor_name_en &&
+          !vendorNameEn.has(model.vendor_name)
+        ) {
+          vendorNameEn.set(model.vendor_name, model.vendor_name_en);
         }
       } else {
         hasUnknownVendor = true;
@@ -60,6 +71,7 @@ const PricingVendors = ({
     return {
       vendors: Array.from(vendors).sort(),
       vendorIcons,
+      vendorNameEn,
       hasUnknownVendor,
     };
   }, [allModels, models]);
@@ -92,9 +104,14 @@ const PricingVendors = ({
     getAllVendors.vendors.forEach((vendor) => {
       const count = getVendorCount(vendor);
       const icon = getAllVendors.vendorIcons.get(vendor);
+      const vendorNameEn = getAllVendors.vendorNameEn.get(vendor);
+      const localizedName = getVendorLocalizedName(
+        { name: vendor, name_en: vendorNameEn },
+        i18n.language,
+      );
       result.push({
         value: vendor,
-        label: t(vendor, { defaultValue: vendor }),
+        label: t(localizedName, { defaultValue: localizedName }),
         icon: icon ? getLobeHubIcon(icon, 16) : null,
         tagCount: count,
       });
@@ -111,7 +128,7 @@ const PricingVendors = ({
     }
 
     return result;
-  }, [getAllVendors, getVendorCount, t]);
+  }, [getAllVendors, getVendorCount, t, i18n.language]);
 
   return (
     <SelectableButtonGroup

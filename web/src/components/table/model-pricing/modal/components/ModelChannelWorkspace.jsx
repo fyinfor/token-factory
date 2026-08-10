@@ -525,16 +525,31 @@ const ModelChannelWorkspace = ({
     });
     return getChannelKey(channelList[bestIndex], bestIndex);
   }, [channelList, modelData]);
+  const preferredChannelKey = useMemo(() => {
+    const preferredId = modelData?.preferred_hot_channel_id;
+    if (
+      preferredId === undefined ||
+      preferredId === null ||
+      preferredId === ''
+    ) {
+      return '';
+    }
+    const index = channelList.findIndex(
+      (channel) => String(channel?.channel_id ?? '') === String(preferredId),
+    );
+    return index >= 0 ? getChannelKey(channelList[index], index) : '';
+  }, [channelList, modelData?.preferred_hot_channel_id]);
+  const initialChannelKey = preferredChannelKey || lowestChannelKey;
   const [selectedChannelKey, setSelectedChannelKey] =
-    useState(lowestChannelKey);
+    useState(initialChannelKey);
   const [docsVisible, setDocsVisible] = useState(false);
   const [docsMounted, setDocsMounted] = useState(false);
 
   useEffect(() => {
-    setSelectedChannelKey(lowestChannelKey);
+    setSelectedChannelKey(initialChannelKey);
     setDocsVisible(false);
     setDocsMounted(false);
-  }, [lowestChannelKey, modelData?.model_name]);
+  }, [initialChannelKey, modelData?.model_name]);
 
   useEffect(() => {
     if (docsVisible || !docsMounted) return undefined;
@@ -716,6 +731,7 @@ const ModelChannelWorkspace = ({
               selectedEntry.channel,
             )}
             docIntroduction={selectedEntry.channel.doc_introduction || ''}
+            docIntroductionEn={selectedEntry.channel.doc_introduction_en || ''}
             apiDocs={selectedEntry.channel.api_docs || ''}
             apiDocsMarkdown={selectedEntry.channel.api_docs_markdown || ''}
             apiDocsMarkdownEn={selectedEntry.channel.api_docs_markdown_en || ''}

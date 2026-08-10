@@ -235,6 +235,7 @@ export const useModelPricingData = (options = {}) => {
   const [usableGroup, setUsableGroup] = useState({});
   const [endpointMap, setEndpointMap] = useState({});
   const [autoGroups, setAutoGroups] = useState([]);
+  const [hotModelLimit, setHotModelLimit] = useState(8);
 
   const [statusState] = useContext(StatusContext);
   const [userState] = useContext(UserContext);
@@ -292,14 +293,17 @@ export const useModelPricingData = (options = {}) => {
     }
   }, [siteDisplayType]);
 
-  const hotChannelScoreMap = useMemo(
-    () => getTopHotChannels(models).scoreMap,
-    [models],
-  );
   const activeChannelHeatFilters = useMemo(
     () => ({ filterSupplier, filterSupplierType }),
     [filterSupplier, filterSupplierType],
   );
+  const hotChannelResult = useMemo(
+    () => getTopHotChannels(models, hotModelLimit, activeChannelHeatFilters),
+    [models, hotModelLimit, activeChannelHeatFilters],
+  );
+  const hotChannelScoreMap = hotChannelResult.scoreMap;
+  const hotPrimaryChannelMap = hotChannelResult.primaryChannelMap;
+  const hotSourceMap = hotChannelResult.sourceMap;
 
   const filteredModels = useMemo(() => {
     let result = models;
@@ -653,6 +657,7 @@ export const useModelPricingData = (options = {}) => {
       if (m.vendor_id && vendorMap[m.vendor_id]) {
         const vendor = vendorMap[m.vendor_id];
         m.vendor_name = vendor.name;
+        m.vendor_name_en = vendor.name_en;
         m.vendor_icon = vendor.icon;
         m.vendor_description = vendor.description;
       }
@@ -715,6 +720,7 @@ export const useModelPricingData = (options = {}) => {
       usable_group,
       supported_endpoint,
       auto_groups,
+      hot_model_limit,
     } = res.data;
     if (success) {
       setGroupRatio(group_ratio);
@@ -749,6 +755,9 @@ export const useModelPricingData = (options = {}) => {
       setVendorsMap(vendorMap);
       setEndpointMap(supported_endpoint || {});
       setAutoGroups(auto_groups || []);
+      setHotModelLimit(
+        Number(hot_model_limit) > 0 ? Number(hot_model_limit) : 8,
+      );
       setModelsFormat(data, group_ratio, vendorMap);
     } else {
       showError(message);
@@ -823,10 +832,20 @@ export const useModelPricingData = (options = {}) => {
     }
   };
 
-  const openModelDetail = useCallback((model) => {
-    setSelectedModel(model);
-    setShowModelDetail(true);
-  }, []);
+  const openModelDetail = useCallback(
+    (model) => {
+      const preferredHotChannelId = hotPrimaryChannelMap.get(
+        String(model?.model_name || ''),
+      );
+      setSelectedModel(
+        preferredHotChannelId
+          ? { ...model, preferred_hot_channel_id: preferredHotChannelId }
+          : model,
+      );
+      setShowModelDetail(true);
+    },
+    [hotPrimaryChannelMap],
+  );
 
   const closeModelDetail = useCallback(() => {
     setShowModelDetail(false);
@@ -899,6 +918,9 @@ export const useModelPricingData = (options = {}) => {
     setTokenUnit,
     models,
     hotChannelScoreMap,
+    hotPrimaryChannelMap,
+    hotSourceMap,
+    hotModelLimit,
     perfMetricsMap,
     loading,
     groupRatio,

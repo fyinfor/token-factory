@@ -20,8 +20,10 @@ For commercial licensing, please contact support@quantumnous.com
 import React from 'react';
 import { Tabs, TabPane, Tag, Button, Dropdown, Modal } from '@douyinfe/semi-ui';
 import { IconEdit, IconDelete } from '@douyinfe/semi-icons';
+import { useTranslation } from 'react-i18next';
 import { getLobeHubIcon, showError, showSuccess } from '../../../helpers';
 import { API } from '../../../helpers';
+import { getVendorLocalizedName } from '../../../helpers/modelPricing';
 
 const ModelsTabs = ({
   activeVendorKey,
@@ -38,6 +40,7 @@ const ModelsTabs = ({
   loadVendors,
   t,
 }) => {
+  const { i18n } = useTranslation();
   const handleTabChange = (key) => {
     setActiveVendorKey(key);
     setActivePage(1);
@@ -114,7 +117,7 @@ const ModelsTabs = ({
             tab={
               <span className='flex items-center gap-2'>
                 {getLobeHubIcon(vendor.icon || 'Layers', 14)}
-                {vendor.name}
+                {getVendorLocalizedName(vendor, i18n.language)}
                 <Tag
                   color={activeVendorKey === key ? 'red' : 'grey'}
                   shape='circle'
