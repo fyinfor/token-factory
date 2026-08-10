@@ -514,6 +514,11 @@ func SetApiRouter(router *gin.Engine) {
 			channelRoute.DELETE("/:id/heats/:model_name", middleware.UserAuth(), middleware.AdminOrApprovedSupplierAuth(), controller.DeleteChannelModelHeat)
 			channelRoute.GET("/heat/period", middleware.AdminAuth(), controller.GetHeatStatPeriod)
 			channelRoute.PUT("/heat/period", middleware.AdminAuth(), controller.SetHeatStatPeriod)
+			channelRoute.GET("/hot-overrides", middleware.AdminAuth(), controller.GetChannelModelHotOverrides)
+			channelRoute.PUT("/hot-override", middleware.AdminAuth(), controller.SaveChannelModelHotOverride)
+			channelRoute.PUT("/hot-overrides/batch", middleware.AdminAuth(), controller.BatchSaveChannelModelHotOverrides)
+			channelRoute.GET("/hot-settings", middleware.AdminAuth(), controller.GetHomeHotSettings)
+			channelRoute.PUT("/hot-settings", middleware.AdminAuth(), controller.SetHomeHotSettings)
 		}
 		tokenRoute := apiRouter.Group("/token")
 		tokenRoute.Use(middleware.UserAuth())

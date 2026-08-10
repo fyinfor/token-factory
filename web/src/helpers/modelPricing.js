@@ -34,6 +34,13 @@ export function getModelDescription(record, language) {
   return getLocalizedContent(record?.description, record?.description_en, language);
 }
 
+/** 模型类型（供应商）名称：优先使用英文名称（更通用易识别），未设置时回退中文名称 */
+export function getVendorLocalizedName(vendor, language) {
+  const en = String(vendor?.name_en ?? '').trim();
+  const zh = String(vendor?.name ?? '').trim();
+  return en || zh;
+}
+
 const TRANSLATABLE_SUPPLIER_TYPES = new Set([
   '公有云',
   'AIDC',

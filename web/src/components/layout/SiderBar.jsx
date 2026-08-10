@@ -291,7 +291,7 @@ const MainSiderBar = ({ onNavigate = () => {} }) => {
         className: isAdmin() ? '' : 'tableHiddle',
       },
       {
-        text: t('热度配置'),
+        text: t('首页热门'),
         itemKey: 'model-heat',
         to: '/console/model-heat',
         className: isAdmin() ? '' : 'tableHiddle',

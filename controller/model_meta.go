@@ -428,8 +428,17 @@ func DeleteModelMeta(c *gin.Context) {
 		return
 	}
 	if err := model.DB.Transaction(func(tx *gorm.DB) error {
+		var modelName string
+		if err := tx.Model(&model.Model{}).Where("id = ?", id).Pluck("model_name", &modelName).Error; err != nil {
+			return err
+		}
 		if err := tx.Where("model_id = ?", id).Delete(&model.ModelVisibilityBinding{}).Error; err != nil {
 			return err
+		}
+		if modelName != "" {
+			if err := tx.Where("model_name = ?", modelName).Delete(&model.ChannelModelHotOverride{}).Error; err != nil {
+				return err
+			}
 		}
 		return tx.Delete(&model.Model{}, id).Error
 	}); err != nil {

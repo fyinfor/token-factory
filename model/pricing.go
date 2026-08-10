@@ -46,6 +46,7 @@ type Pricing struct {
 type PricingVendor struct {
 	ID          int    `json:"id"`
 	Name        string `json:"name"`
+	NameEn      string `json:"name_en,omitempty"`
 	Description string `json:"description,omitempty"`
 	Icon        string `json:"icon,omitempty"`
 }
@@ -106,6 +107,8 @@ type PricingChannelItem struct {
 	AutoReqCount       int64   `json:"auto_req_count"`        // 自动统计调用次数
 	FinalReqCount      int64   `json:"final_req_count"`       // 最终调用次数 (= manual + auto)
 	ChannelHeatScore   float64 `json:"channel_heat_score"`    // 渠道热度得分 (= final * weight)
+	HotOverride        string  `json:"hot_override,omitempty"`
+	HotManualRank      int     `json:"hot_manual_rank,omitempty"`
 }
 
 // PricingAPIItem 在 Pricing 基础上扩展渠道维度统计字段（定价接口 data 元素类型）。
@@ -541,6 +544,7 @@ func updatePricing() {
 		vendorsList = append(vendorsList, PricingVendor{
 			ID:          v.Id,
 			Name:        v.Name,
+			NameEn:      v.NameEn,
 			Description: v.Description,
 			Icon:        v.Icon,
 		})

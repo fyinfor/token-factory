@@ -90,10 +90,24 @@ func IsModelNameDuplicated(id int, name string) (bool, error) {
 
 func (mi *Model) Update() error {
 	mi.UpdatedTime = common.GetTimestamp()
-	// 使用 Select 强制更新所有字段，包括零值
-	return DB.Model(&Model{}).Where("id = ?", mi.Id).
-		Select("model_name", "description", "description_en", "doc_introduction", "api_docs", "icon", "tags", "vendor_id", "endpoints", "status", "sync_official", "name_rule", "owner_user_id", "supplier_application_id", "updated_time").
-		Updates(mi).Error
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var existing Model
+		if err := tx.Select("model_name").Where("id = ?", mi.Id).First(&existing).Error; err != nil {
+			return err
+		}
+		// 使用 Select 强制更新所有字段，包括零值
+		if err := tx.Model(&Model{}).Where("id = ?", mi.Id).
+			Select("model_name", "description", "description_en", "doc_introduction", "api_docs", "icon", "tags", "vendor_id", "endpoints", "status", "sync_official", "name_rule", "owner_user_id", "supplier_application_id", "updated_time").
+			Updates(mi).Error; err != nil {
+			return err
+		}
+		if existing.ModelName != mi.ModelName {
+			return tx.Model(&ChannelModelHotOverride{}).
+				Where("model_name = ?", existing.ModelName).
+				Update("model_name", mi.ModelName).Error
+		}
+		return nil
+	})
 }
 
 func (mi *Model) Delete() error {

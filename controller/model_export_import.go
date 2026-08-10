@@ -28,6 +28,7 @@ type ModelExportPayload struct {
 // VendorExportItem 模型类型（供应商）导出项
 type VendorExportItem struct {
 	Name        string `json:"name"`
+	NameEn      string `json:"name_en,omitempty"`
 	Description string `json:"description"`
 	Icon        string `json:"icon"`
 }
@@ -111,6 +112,7 @@ func ExportModelsMeta(c *gin.Context) {
 	for _, v := range vendors {
 		vendorItems = append(vendorItems, VendorExportItem{
 			Name:        v.Name,
+			NameEn:      v.NameEn,
 			Description: v.Description,
 			Icon:        v.Icon,
 		})
@@ -243,10 +245,13 @@ func ImportModelsMeta(c *gin.Context) {
 			}
 
 			if existing.Id > 0 {
-				// 已存在：仅更新描述和图标
+				// 已存在：仅更新描述、英文名称和图标
 				updates := map[string]interface{}{}
 				if vItem.Description != "" {
 					updates["description"] = vItem.Description
+				}
+				if vItem.NameEn != "" {
+					updates["name_en"] = vItem.NameEn
 				}
 				if vItem.Icon != "" {
 					updates["icon"] = vItem.Icon
@@ -268,6 +273,7 @@ func ImportModelsMeta(c *gin.Context) {
 				// 不存在：新增
 				newVendor := &model.Vendor{
 					Name:        vName,
+					NameEn:      vItem.NameEn,
 					Description: vItem.Description,
 					Icon:        vItem.Icon,
 					Status:      1,
