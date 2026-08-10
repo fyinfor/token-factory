@@ -39,3 +39,4 @@ redis_data/
 .reasonix/
 scripts/
 .codegraph/
+output/
