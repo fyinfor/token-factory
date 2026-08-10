@@ -731,6 +731,7 @@ const ModelChannelWorkspace = ({
               selectedEntry.channel,
             )}
             docIntroduction={selectedEntry.channel.doc_introduction || ''}
+            docIntroductionEn={selectedEntry.channel.doc_introduction_en || ''}
             apiDocs={selectedEntry.channel.api_docs || ''}
             apiDocsMarkdown={selectedEntry.channel.api_docs_markdown || ''}
             apiDocsMarkdownEn={selectedEntry.channel.api_docs_markdown_en || ''}

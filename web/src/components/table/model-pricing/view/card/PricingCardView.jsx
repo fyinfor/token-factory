@@ -61,7 +61,7 @@ import {
   hasNumericValue,
   getModelTagLabel,
   getSupplierTypeLabel,
-  getModelDescription,
+  getModelCardDescription,
 } from '../../../../../helpers';
 import {
   TIER_CATEGORY_STYLES,
@@ -110,6 +110,55 @@ const CARD_STYLES = {
 };
 
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const HOME_MODEL_DESCRIPTION_LINE_HEIGHT = 18;
+
+const AdaptiveModelDescription = ({ children, style }) => {
+  const slotRef = React.useRef(null);
+  const [lineCount, setLineCount] = React.useState(0);
+
+  React.useLayoutEffect(() => {
+    const slot = slotRef.current;
+    if (!slot) return undefined;
+
+    const updateLineCount = () => {
+      const availableHeight = slot.getBoundingClientRect().height;
+      const nextLineCount = Math.max(
+        0,
+        Math.floor(availableHeight / HOME_MODEL_DESCRIPTION_LINE_HEIGHT),
+      );
+      setLineCount((current) =>
+        current === nextLineCount ? current : nextLineCount,
+      );
+    };
+
+    updateLineCount();
+    if (typeof ResizeObserver === 'undefined') {
+      setLineCount(1);
+      return undefined;
+    }
+
+    const observer = new ResizeObserver(updateLineCount);
+    observer.observe(slot);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div ref={slotRef} className='home-model-description-slot' style={style}>
+      {lineCount > 0 ? (
+        <p
+          className='home-model-description m-0'
+          style={{
+            maxHeight: lineCount * HOME_MODEL_DESCRIPTION_LINE_HEIGHT,
+            WebkitLineClamp: lineCount,
+          }}
+        >
+          {children}
+        </p>
+      ) : null}
+    </div>
+  );
+};
 
 const getAudioLabel = (row, t) => {
   if (row?.has_audio === true) return t('有音轨');
@@ -2319,7 +2368,7 @@ const PricingCardView = ({
 
   // 获取模型描述
   const resolveModelDescription = (record) =>
-    getModelDescription(record, i18n.language);
+    getModelCardDescription(record, i18n.language);
 
   const renderHomeModelCard = ({
     model,
@@ -2469,14 +2518,9 @@ const PricingCardView = ({
           </div>
 
           {modelDescription ? (
-            <div
-              className='home-model-description-slot'
-              style={pricingBlurStyle}
-            >
-              <p className='home-model-description m-0'>
-                {renderHighlightedText(modelDescription)}
-              </p>
-            </div>
+            <AdaptiveModelDescription style={pricingBlurStyle}>
+              {renderHighlightedText(modelDescription)}
+            </AdaptiveModelDescription>
           ) : null}
 
           <div

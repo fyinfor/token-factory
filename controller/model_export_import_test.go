@@ -50,6 +50,7 @@ func TestBuildChannelModelDocExportItemsIncludesMarkdownAndEmptyOverrides(t *tes
 		ChannelID:         channel.Id,
 		ModelName:         "video-model",
 		DocIntroduction:   "intro",
+		DocIntroductionEn: "intro en",
 		ApiDocs:           `[{"path":"/v1/videos"}]`,
 		ApiDocsMarkdown:   "# 中文文档",
 		ApiDocsMarkdownEn: "# English docs",
@@ -64,6 +65,7 @@ func TestBuildChannelModelDocExportItemsIncludesMarkdownAndEmptyOverrides(t *tes
 	require.Len(t, items, 2)
 	require.Equal(t, "sync-doc", items[0].ChannelSyncKey)
 	require.Equal(t, "renamed-channel", items[0].ChannelName)
+	require.Equal(t, "intro en", *items[0].DocIntroductionEn)
 	require.Equal(t, "# 中文文档", *items[0].ApiDocsMarkdown)
 	require.Equal(t, "# English docs", *items[0].ApiDocsMarkdownEn)
 	require.NotNil(t, items[1].ApiDocsMarkdown)

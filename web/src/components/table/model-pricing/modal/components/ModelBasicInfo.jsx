@@ -25,28 +25,42 @@ import {
   stringToColor,
   getModelTagLabel,
   getModelDescription,
+  getLocalizedContent,
 } from '../../../../../helpers';
+import MarkdownRenderer from '../../../../common/markdown/MarkdownRenderer';
 
 const { Text } = Typography;
 
 const ModelBasicInfo = ({ modelData, vendorsMap = {}, t }) => {
   const { i18n } = useTranslation();
-  // 获取模型描述（使用后端真实数据）
-  const getModelDescriptionText = () => {
-    if (!modelData) return t('暂无模型描述');
-
+  const basicInfoContent = React.useMemo(() => {
+    if (!modelData) {
+      return { content: t('暂无模型描述'), markdown: false };
+    }
     const description = getModelDescription(modelData, i18n.language);
     if (description) {
-      return description;
+      return { content: description, markdown: false };
+    }
+
+    const introduction = getLocalizedContent(
+      modelData.doc_introduction,
+      modelData.doc_introduction_en,
+      i18n.language,
+    );
+    if (introduction) {
+      return { content: introduction, markdown: true };
     }
 
     // 如果没有描述但有供应商描述，显示供应商信息
     if (modelData.vendor_description) {
-      return t('供应商信息：') + modelData.vendor_description;
+      return {
+        content: t('供应商信息：') + modelData.vendor_description,
+        markdown: false,
+      };
     }
 
-    return t('暂无模型描述');
-  };
+    return { content: t('暂无模型描述'), markdown: false };
+  }, [i18n.language, modelData, t]);
 
   // 获取模型标签
   const getModelTags = () => {
@@ -77,7 +91,14 @@ const ModelBasicInfo = ({ modelData, vendorsMap = {}, t }) => {
         </div>
       </div>
       <div className='text-gray-600'>
-        <p className='mb-4'>{getModelDescriptionText()}</p>
+        {basicInfoContent.markdown ? (
+          <MarkdownRenderer
+            content={basicInfoContent.content}
+            className='mb-4'
+          />
+        ) : (
+          <p className='mb-4'>{basicInfoContent.content}</p>
+        )}
         {getModelTags().length > 0 && (
           <Space wrap>
             {getModelTags().map((tag, index) => (

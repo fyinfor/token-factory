@@ -14,21 +14,22 @@ import (
 )
 
 type Pricing struct {
-	ModelName        string   `json:"model_name"`
-	Description      string   `json:"description,omitempty"`
-	DescriptionEn    string   `json:"description_en,omitempty"`
-	DocIntroduction  string   `json:"doc_introduction,omitempty"`
-	ApiDocs          any      `json:"api_docs,omitempty"`
-	Icon             string   `json:"icon,omitempty"`
-	Tags             string   `json:"tags,omitempty"`
-	VendorID         int      `json:"vendor_id,omitempty"`
-	QuotaType        int      `json:"quota_type"`
-	ModelRatio       float64  `json:"model_ratio"`
-	ModelPrice       float64  `json:"model_price"`
-	OwnerBy          string   `json:"owner_by"`
-	CompletionRatio  *float64 `json:"completion_ratio,omitempty"`
-	CacheRatio       *float64 `json:"cache_ratio,omitempty"`
-	CreateCacheRatio *float64 `json:"create_cache_ratio,omitempty"`
+	ModelName         string   `json:"model_name"`
+	Description       string   `json:"description,omitempty"`
+	DescriptionEn     string   `json:"description_en,omitempty"`
+	DocIntroduction   string   `json:"doc_introduction,omitempty"`
+	DocIntroductionEn string   `json:"doc_introduction_en,omitempty"`
+	ApiDocs           any      `json:"api_docs,omitempty"`
+	Icon              string   `json:"icon,omitempty"`
+	Tags              string   `json:"tags,omitempty"`
+	VendorID          int      `json:"vendor_id,omitempty"`
+	QuotaType         int      `json:"quota_type"`
+	ModelRatio        float64  `json:"model_ratio"`
+	ModelPrice        float64  `json:"model_price"`
+	OwnerBy           string   `json:"owner_by"`
+	CompletionRatio   *float64 `json:"completion_ratio,omitempty"`
+	CacheRatio        *float64 `json:"cache_ratio,omitempty"`
+	CreateCacheRatio  *float64 `json:"create_cache_ratio,omitempty"`
 	// 统一阶梯计费（输入 token 命中单档，含 input/output/cache 四类单价）
 	RequestTierPricing     any                     `json:"request_tier_pricing,omitempty"`
 	ImageRatio             *float64                `json:"image_ratio,omitempty"`
@@ -68,6 +69,7 @@ type PricingChannelItem struct {
 	CompanyLogoURL        string `json:"company_logo_url"`
 	SupplierType          string `json:"supplier_type"`
 	DocIntroduction       string `json:"doc_introduction,omitempty"`
+	DocIntroductionEn     string `json:"doc_introduction_en,omitempty"`
 	ApiDocs               any    `json:"api_docs,omitempty"`
 	ApiDocsMarkdown       string `json:"api_docs_markdown,omitempty"`
 	ApiDocsMarkdownEn     string `json:"api_docs_markdown_en,omitempty"`
@@ -353,11 +355,16 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			if doc, ok := channelDocMap[channelModelDocKey(row.ChannelID, modelName)]; ok {
 				chItem.DocConfigured = true
 				chItem.DocIntroduction = doc.DocIntroduction
+				chItem.DocIntroductionEn = doc.DocIntroductionEn
+				if strings.TrimSpace(chItem.DocIntroductionEn) == "" {
+					chItem.DocIntroductionEn = p.DocIntroductionEn
+				}
 				chItem.ApiDocs = parsePricingApiDocs(doc.ApiDocs)
 				chItem.ApiDocsMarkdown = doc.ApiDocsMarkdown
 				chItem.ApiDocsMarkdownEn = doc.ApiDocsMarkdownEn
 			} else {
 				chItem.DocIntroduction = p.DocIntroduction
+				chItem.DocIntroductionEn = p.DocIntroductionEn
 				chItem.ApiDocs = p.ApiDocs
 			}
 			if hasRequestTierPricing {
@@ -677,6 +684,7 @@ func updatePricing() {
 			pricing.Description = meta.Description
 			pricing.DescriptionEn = meta.DescriptionEn
 			pricing.DocIntroduction = meta.DocIntroduction
+			pricing.DocIntroductionEn = meta.DocIntroductionEn
 			pricing.ApiDocs = parsePricingApiDocs(meta.ApiDocs)
 			pricing.Icon = meta.Icon
 			pricing.Tags = meta.Tags
@@ -699,6 +707,9 @@ func updatePricing() {
 				}
 				if strings.TrimSpace(pricing.DocIntroduction) == "" {
 					pricing.DocIntroduction = cMeta.DocIntroduction
+				}
+				if strings.TrimSpace(pricing.DocIntroductionEn) == "" {
+					pricing.DocIntroductionEn = cMeta.DocIntroductionEn
 				}
 				if pricing.ApiDocs == nil {
 					pricing.ApiDocs = parsePricingApiDocs(cMeta.ApiDocs)

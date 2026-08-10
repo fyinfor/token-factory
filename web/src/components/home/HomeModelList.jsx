@@ -352,14 +352,12 @@ const HomeModelList = () => {
         }
         .home-model-description {
           display: -webkit-box;
-          max-height: 3em;
           overflow: hidden;
           color: var(--semi-color-text-2);
           font-size: 12px;
-          line-height: 1.5;
+          line-height: 18px;
           overflow-wrap: anywhere;
           -webkit-box-orient: vertical;
-          -webkit-line-clamp: 2;
         }
         .home-model-bottom-tags {
           display: flex;

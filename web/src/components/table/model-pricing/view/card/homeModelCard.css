@@ -41,11 +41,32 @@ For commercial licensing, please contact support@quantumnous.com
   --home-card-accent-c: rgba(45, 212, 191, 0.06);
   border-color: rgba(59, 130, 246, 0.1) !important;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.82)),
-    radial-gradient(circle at 12% 0%, var(--home-card-accent-a), transparent 42%),
-    radial-gradient(circle at 98% 18%, var(--home-card-accent-b), transparent 38%),
-    radial-gradient(circle at 70% 112%, var(--home-card-accent-c), transparent 42%),
-    linear-gradient(135deg, rgba(248, 250, 252, 0.82), rgba(255, 255, 255, 0.9) 48%, rgba(248, 250, 252, 0.78)),
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.9),
+      rgba(248, 250, 252, 0.82)
+    ),
+    radial-gradient(
+      circle at 12% 0%,
+      var(--home-card-accent-a),
+      transparent 42%
+    ),
+    radial-gradient(
+      circle at 98% 18%,
+      var(--home-card-accent-b),
+      transparent 38%
+    ),
+    radial-gradient(
+      circle at 70% 112%,
+      var(--home-card-accent-c),
+      transparent 42%
+    ),
+    linear-gradient(
+      135deg,
+      rgba(248, 250, 252, 0.82),
+      rgba(255, 255, 255, 0.9) 48%,
+      rgba(248, 250, 252, 0.78)
+    ),
     var(--semi-color-bg-2);
   box-shadow: none;
   transition:
@@ -81,10 +102,22 @@ For commercial licensing, please contact support@quantumnous.com
 .home-model-card:hover {
   border-color: rgba(37, 99, 235, 0.34) !important;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(239, 246, 255, 0.9)),
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.96),
+      rgba(239, 246, 255, 0.9)
+    ),
     radial-gradient(circle at 12% 0%, rgba(37, 99, 235, 0.1), transparent 42%),
-    radial-gradient(circle at 98% 18%, rgba(37, 99, 235, 0.08), transparent 38%),
-    radial-gradient(circle at 70% 112%, rgba(37, 99, 235, 0.07), transparent 42%),
+    radial-gradient(
+      circle at 98% 18%,
+      rgba(37, 99, 235, 0.08),
+      transparent 38%
+    ),
+    radial-gradient(
+      circle at 70% 112%,
+      rgba(37, 99, 235, 0.07),
+      transparent 42%
+    ),
     var(--semi-color-bg-2);
   box-shadow: 0 14px 34px rgba(37, 99, 235, 0.14) !important;
   transform: translateY(-2px);
@@ -137,10 +170,15 @@ For commercial licensing, please contact support@quantumnous.com
   white-space: nowrap;
 }
 .home-model-hot-pill::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: -45% -80%;
-  background: linear-gradient(115deg, transparent 38%, rgba(255, 255, 255, 0.86) 50%, transparent 62%);
+  background: linear-gradient(
+    115deg,
+    transparent 38%,
+    rgba(255, 255, 255, 0.86) 50%,
+    transparent 62%
+  );
   opacity: 0;
   transform: translateX(-70%) rotate(8deg);
   animation: home-model-hot-pill-sheen 2.8s ease-in-out infinite;
@@ -260,13 +298,37 @@ button.home-model-route-chip:not(:disabled):hover {
 .home-model-card-hot {
   border-color: rgba(59, 130, 246, 0.4) !important;
   background:
-    linear-gradient(120deg, rgba(255, 255, 255, 0.88), rgba(248, 250, 252, 0.78)),
-    radial-gradient(circle at 10% 10%, rgba(34, 211, 238, 0.34), transparent 32%),
+    linear-gradient(
+      120deg,
+      rgba(255, 255, 255, 0.88),
+      rgba(248, 250, 252, 0.78)
+    ),
+    radial-gradient(
+      circle at 10% 10%,
+      rgba(34, 211, 238, 0.34),
+      transparent 32%
+    ),
     radial-gradient(circle at 92% 8%, rgba(99, 102, 241, 0.3), transparent 32%),
-    radial-gradient(circle at 72% 96%, rgba(236, 72, 153, 0.24), transparent 34%),
-    linear-gradient(130deg, rgba(224, 242, 254, 0.96), rgba(237, 233, 254, 0.88) 42%, rgba(204, 251, 241, 0.92) 72%, rgba(252, 231, 243, 0.78)),
+    radial-gradient(
+      circle at 72% 96%,
+      rgba(236, 72, 153, 0.24),
+      transparent 34%
+    ),
+    linear-gradient(
+      130deg,
+      rgba(224, 242, 254, 0.96),
+      rgba(237, 233, 254, 0.88) 42%,
+      rgba(204, 251, 241, 0.92) 72%,
+      rgba(252, 231, 243, 0.78)
+    ),
     var(--semi-color-bg-2);
-  background-size: 100% 100%, 170% 170%, 165% 165%, 170% 170%, 320% 320%, 100% 100%;
+  background-size:
+    100% 100%,
+    170% 170%,
+    165% 165%,
+    170% 170%,
+    320% 320%,
+    100% 100%;
   animation: home-model-card-aurora 7.2s ease-in-out infinite;
   box-shadow:
     0 18px 44px rgba(59, 130, 246, 0.16),
@@ -281,18 +343,26 @@ button.home-model-route-chip:not(:disabled):hover {
     0 14px 32px rgba(15, 23, 42, 0.1) !important;
 }
 .home-model-card-hot::before {
-  content: "";
+  content: '';
   position: absolute;
   inset: -64%;
   z-index: 0;
   pointer-events: none;
-  background: conic-gradient(from 90deg, transparent 0deg, rgba(34, 211, 238, 0.28) 48deg, rgba(99, 102, 241, 0.22) 104deg, rgba(236, 72, 153, 0.18) 156deg, transparent 228deg, transparent 360deg);
+  background: conic-gradient(
+    from 90deg,
+    transparent 0deg,
+    rgba(34, 211, 238, 0.28) 48deg,
+    rgba(99, 102, 241, 0.22) 104deg,
+    rgba(236, 72, 153, 0.18) 156deg,
+    transparent 228deg,
+    transparent 360deg
+  );
   opacity: 0.72;
   filter: blur(10px);
   animation: home-model-card-ribbon 8.5s linear infinite;
 }
 .home-model-card-hot::after {
-  content: "";
+  content: '';
   position: absolute;
   top: -82px;
   right: -70px;
@@ -301,7 +371,13 @@ button.home-model-route-chip:not(:disabled):hover {
   height: 210px;
   border-radius: 999px;
   pointer-events: none;
-  background: radial-gradient(circle, rgba(34, 211, 238, 0.34), rgba(99, 102, 241, 0.18) 38%, rgba(236, 72, 153, 0.1) 58%, transparent 68%);
+  background: radial-gradient(
+    circle,
+    rgba(34, 211, 238, 0.34),
+    rgba(99, 102, 241, 0.18) 38%,
+    rgba(236, 72, 153, 0.1) 58%,
+    transparent 68%
+  );
   filter: blur(2px);
   animation: home-model-card-orbit 7.8s ease-in-out infinite;
 }
@@ -309,12 +385,36 @@ html.dark .home-model-card-hot {
   border-color: rgba(34, 211, 238, 0.34) !important;
   background:
     linear-gradient(120deg, rgba(15, 23, 42, 0.97), rgba(17, 24, 39, 0.94)),
-    radial-gradient(circle at 10% 10%, rgba(6, 182, 212, 0.34), transparent 34%),
-    radial-gradient(circle at 92% 4%, rgba(124, 58, 237, 0.32), transparent 34%),
-    radial-gradient(circle at 72% 96%, rgba(244, 63, 94, 0.18), transparent 34%),
-    linear-gradient(130deg, rgba(8, 47, 73, 0.78), rgba(49, 46, 129, 0.66) 42%, rgba(15, 118, 110, 0.44) 72%, rgba(131, 24, 67, 0.34)),
+    radial-gradient(
+      circle at 10% 10%,
+      rgba(6, 182, 212, 0.34),
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at 92% 4%,
+      rgba(124, 58, 237, 0.32),
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at 72% 96%,
+      rgba(244, 63, 94, 0.18),
+      transparent 34%
+    ),
+    linear-gradient(
+      130deg,
+      rgba(8, 47, 73, 0.78),
+      rgba(49, 46, 129, 0.66) 42%,
+      rgba(15, 118, 110, 0.44) 72%,
+      rgba(131, 24, 67, 0.34)
+    ),
     var(--semi-color-bg-2);
-  background-size: 100% 100%, 175% 175%, 165% 165%, 170% 170%, 340% 340%, 100% 100%;
+  background-size:
+    100% 100%,
+    175% 175%,
+    165% 165%,
+    170% 170%,
+    340% 340%,
+    100% 100%;
   box-shadow:
     0 18px 46px rgba(34, 211, 238, 0.16),
     0 0 0 1px rgba(125, 211, 252, 0.06) inset,
@@ -328,7 +428,13 @@ html.dark .home-model-card-hot:hover {
     0 16px 36px rgba(0, 0, 0, 0.4) !important;
 }
 html.dark .home-model-card-hot::after {
-  background: radial-gradient(circle, rgba(34, 211, 238, 0.26), rgba(168, 85, 247, 0.18) 42%, rgba(244, 63, 94, 0.08) 58%, transparent 68%);
+  background: radial-gradient(
+    circle,
+    rgba(34, 211, 238, 0.26),
+    rgba(168, 85, 247, 0.18) 42%,
+    rgba(244, 63, 94, 0.08) 58%,
+    transparent 68%
+  );
 }
 html.dark .home-model-card {
   border-color: var(--semi-color-border) !important;
@@ -348,7 +454,11 @@ html.dark .home-model-card:hover {
   background:
     linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(30, 41, 59, 0.92)),
     radial-gradient(circle at 12% 0%, rgba(96, 165, 250, 0.1), transparent 42%),
-    radial-gradient(circle at 98% 18%, rgba(96, 165, 250, 0.08), transparent 38%),
+    radial-gradient(
+      circle at 98% 18%,
+      rgba(96, 165, 250, 0.08),
+      transparent 38%
+    ),
     var(--semi-color-bg-2);
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.28) !important;
 }
@@ -361,21 +471,33 @@ html.dark .home-model-hot-pill {
   box-shadow: 0 8px 22px rgba(249, 115, 22, 0.14);
 }
 html.dark .home-model-route-chip {
-  background: linear-gradient(135deg, rgba(132, 204, 22, 0.16), rgba(14, 165, 233, 0.16));
+  background: linear-gradient(
+    135deg,
+    rgba(132, 204, 22, 0.16),
+    rgba(14, 165, 233, 0.16)
+  );
 }
 html.dark button.home-model-route-chip:not(:disabled):hover {
-  background: linear-gradient(135deg, rgba(132, 204, 22, 0.22), rgba(14, 165, 233, 0.2));
+  background: linear-gradient(
+    135deg,
+    rgba(132, 204, 22, 0.22),
+    rgba(14, 165, 233, 0.2)
+  );
 }
 html.dark .home-model-route-chip-supplier {
   color: #bef264;
 }
-html.dark button.home-model-route-chip:not(:disabled):hover .home-model-route-chip-supplier {
+html.dark
+  button.home-model-route-chip:not(:disabled):hover
+  .home-model-route-chip-supplier {
   color: #d9f99d;
 }
 html.dark .home-model-route-chip-suffix {
   color: #7dd3fc;
 }
-html.dark button.home-model-route-chip:not(:disabled):hover .home-model-route-chip-suffix {
+html.dark
+  button.home-model-route-chip:not(:disabled):hover
+  .home-model-route-chip-suffix {
   color: #bae6fd;
 }
 @keyframes home-model-card-sheen {
