@@ -145,11 +145,12 @@ export const CONSOLE_SEARCH_ITEMS = [
     '算力',
     '部署服务',
   ]),
-  consoleSearchItem('model-heat', '热度配置', '/console/model-heat', '管理员', [
-    '模型热度',
+  consoleSearchItem('model-heat', '首页热门', '/console/model-heat', '管理员', [
+    '热门模型',
+    '人工热门',
+    '自动热度',
     '推荐',
     '排序',
-    '热门模型',
   ]),
   consoleSearchItem(
     'redemption',

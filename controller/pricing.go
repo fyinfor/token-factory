@@ -383,45 +383,26 @@ func GetPricing(c *gin.Context) {
 		heatStatPeriod = model.HeatStatPeriod7d
 	}
 
-	// 查询模型和渠道的请求统计数据
-	modelStats, _ := model.GetModelRequestStatsByPeriod(heatStatPeriod)
-
-	// 将 visibleChannelIDs (map) 转换为 slice
-	visibleIDSlice := make([]int, 0, len(visibleChannelIDs))
-	for id := range visibleChannelIDs {
-		visibleIDSlice = append(visibleIDSlice, id)
-	}
-	channelStats, _ := model.GetChannelModelRequestStatsByPeriod(visibleIDSlice, heatStatPeriod)
-
-	// 构建查询映射
-	modelStatsMap := make(map[string]model.ModelRequestStats)
-	for _, s := range modelStats {
-		modelStatsMap[s.ModelName] = s
-	}
-
+	// 热度统计按渠道-模型维度缓存，避免每次公开定价请求都扫描日志表。
+	channelStats, _ := model.GetCachedChannelModelRequestStatsByPeriod(heatStatPeriod)
 	channelStatsMap := make(map[string]model.ChannelModelRequestStats)
 	for _, s := range channelStats {
+		if _, visible := visibleChannelIDs[s.ChannelID]; !visible {
+			continue
+		}
 		key := fmt.Sprintf("%d:%s", s.ChannelID, s.ModelName)
 		channelStatsMap[key] = s
 	}
 
-	// 预加载所有模型的权重配置
-	modelConfigs := make(map[string]model.Model)
-	var allModels []model.Model
-	model.DB.Find(&allModels)
-	for _, m := range allModels {
-		modelConfigs[m.ModelName] = m
+	// 人工覆盖只有强制热门/强制非热门两种；没有记录即跟随自动排名。
+	hotOverrides, _ := model.GetAllChannelModelHotOverrides()
+	hotOverrideMap := make(map[string]model.ChannelModelHotOverride, len(hotOverrides))
+	for _, override := range hotOverrides {
+		key := fmt.Sprintf("%d:%s", override.ChannelID, override.ModelName)
+		hotOverrideMap[key] = override
 	}
 
-	// 预加载所有渠道-模型热力配置
-	channelModelHeats, _ := model.GetAllChannelModelHeats()
-	channelHeatMap := make(map[string]model.ChannelModelHeat)
-	for _, heat := range channelModelHeats {
-		key := fmt.Sprintf("%d:%s", heat.ChannelID, heat.ModelName)
-		channelHeatMap[key] = heat
-	}
-
-	// 整合统计数据到 pricingData
+	// 整合统计和人工覆盖到 pricingData。旧权重字段保留兼容，但不再参与首页热门判定。
 	for i := range pricingData {
 		item := &pricingData[i]
 		modelName := item.ModelName
@@ -431,38 +412,22 @@ func GetPricing(c *gin.Context) {
 			ch := &item.ChannelList[j]
 			key := fmt.Sprintf("%d:%s", ch.ChannelID, modelName)
 
-			var modelWeight float64 = 1
-			// 获取渠道-模型热力配置（新表）
-			if heat, ok := channelHeatMap[key]; ok {
-				ch.SortWeight = heat.ChannelSortWeight
-				ch.ManualBaseReqCount = heat.ManualBaseReqCount
-				modelWeight = heat.ModelSortWeight
-				if modelWeight <= 0 {
-					modelWeight = 1
-				}
-			} else {
-				// 默认配置
-				ch.SortWeight = 1
-				ch.ManualBaseReqCount = 0
-			}
-
-			// 获取渠道-模型自动统计数据
+			ch.SortWeight = 1
+			ch.ManualBaseReqCount = 0
 			if cs, ok := channelStatsMap[key]; ok {
 				ch.AutoReqCount = cs.RequestCount7d
 			} else {
 				ch.AutoReqCount = 0
 			}
-
-			// 计算渠道最终调用次数和热度得分
-			ch.FinalReqCount = ch.ManualBaseReqCount + ch.AutoReqCount
-			// 热度分 = 最终调用次数 × 渠道权重 × 模型权重
-			// 防止权重为0导致热度分为0
-			if ch.SortWeight <= 0 {
-				ch.SortWeight = 1
+			ch.FinalReqCount = ch.AutoReqCount
+			ch.ChannelHeatScore = float64(ch.AutoReqCount)
+			if override, ok := hotOverrideMap[key]; ok {
+				ch.HotOverride = override.OverrideMode
+				ch.HotManualRank = override.ManualRank
 			}
-			ch.ChannelHeatScore = float64(ch.FinalReqCount) * ch.SortWeight * modelWeight
 		}
 	}
+	_, homeHotModelLimit := getHomeHotSettings()
 
 	blurPricing := false
 	if !exists && shouldBlurPricing() {
@@ -494,31 +459,32 @@ func GetPricing(c *gin.Context) {
 		"data":             pricingData,
 		"blur_pricing":     blurPricing,
 		"heat_stat_period": heatStatPeriod,
+		"hot_model_limit":  homeHotModelLimit,
 		"vendors":          model.GetVendors(),
 		// "channels":                       channels,
-		"group_ratio":                     groupRatio,
-		"group_model_price":               groupModelPrice,
-		"group_model_ratio":               groupModelRatio,
-		"channel_model_price":             channelModelPrice,
-		"channel_model_ratio":             channelModelRatio,
-		"channel_completion_ratio":        channelCompletionRatio,
-		"channel_cache_ratio":             channelCacheRatio,
-		"channel_create_cache_ratio":      channelCreateCacheRatio,
-		"channel_image_ratio":             channelImageRatio,
-		"channel_image_price":             channelImagePrice,
-		"channel_audio_ratio":             channelAudioRatio,
-		"channel_audio_completion_ratio":  channelAudioCompletionRatio,
-		"channel_video_ratio":             channelVideoRatio,
-		"channel_video_completion_ratio":  channelVideoCompletionRatio,
-		"channel_video_price":             channelVideoPrice,
+		"group_ratio":                        groupRatio,
+		"group_model_price":                  groupModelPrice,
+		"group_model_ratio":                  groupModelRatio,
+		"channel_model_price":                channelModelPrice,
+		"channel_model_ratio":                channelModelRatio,
+		"channel_completion_ratio":           channelCompletionRatio,
+		"channel_cache_ratio":                channelCacheRatio,
+		"channel_create_cache_ratio":         channelCreateCacheRatio,
+		"channel_image_ratio":                channelImageRatio,
+		"channel_image_price":                channelImagePrice,
+		"channel_audio_ratio":                channelAudioRatio,
+		"channel_audio_completion_ratio":     channelAudioCompletionRatio,
+		"channel_video_ratio":                channelVideoRatio,
+		"channel_video_completion_ratio":     channelVideoCompletionRatio,
+		"channel_video_price":                channelVideoPrice,
 		"model_request_tier_pricing":         globalModelRequestTierPricing,
 		"channel_model_request_tier_pricing": channelModelRequestTierPricing,
 		"supplier_model_price":               supplierModelPrice,
-		"supplier_model_ratio":            supplierModelRatio,
-		"usable_group":                    usableGroup,
-		"supported_endpoint":              model.GetSupportedEndpointMap(),
-		"auto_groups":                     service.GetUserAutoGroup(group),
-		"pricing_version":                 "b58e1c9a3f7d4e2a8c0b1d6e9f4a2c7d8e0f1b2a3",
+		"supplier_model_ratio":               supplierModelRatio,
+		"usable_group":                       usableGroup,
+		"supported_endpoint":                 model.GetSupportedEndpointMap(),
+		"auto_groups":                        service.GetUserAutoGroup(group),
+		"pricing_version":                    "b58e1c9a3f7d4e2a8c0b1d6e9f4a2c7d8e0f1b2a3",
 	})
 }
 

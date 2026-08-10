@@ -17,6 +17,20 @@ type channelModelDocRequest struct {
 	ChannelID         int    `json:"channel_id"`
 	ModelName         string `json:"model_name"`
 	DocIntroduction   string `json:"doc_introduction"`
+	DocIntroductionEn string `json:"doc_introduction_en"`
+	ApiDocs           string `json:"api_docs"`
+	ApiDocsMarkdown   string `json:"api_docs_markdown"`
+	ApiDocsMarkdownEn string `json:"api_docs_markdown_en"`
+}
+
+type modelIntroductionRequest struct {
+	DocIntroduction   string `json:"doc_introduction"`
+	DocIntroductionEn string `json:"doc_introduction_en"`
+}
+
+type syncChannelModelDocsRequest struct {
+	SourceChannelID   int    `json:"source_channel_id"`
+	SourceModelName   string `json:"source_model_name"`
 	ApiDocs           string `json:"api_docs"`
 	ApiDocsMarkdown   string `json:"api_docs_markdown"`
 	ApiDocsMarkdownEn string `json:"api_docs_markdown_en"`
@@ -241,11 +255,69 @@ func GetChannelModelDocs(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, gin.H{
-		"model_id":                 meta.Id,
-		"model_name":               meta.ModelName,
-		"default_doc_introduction": meta.DocIntroduction,
-		"default_api_docs":         meta.ApiDocs,
-		"items":                    items,
+		"model_id":                    meta.Id,
+		"model_name":                  meta.ModelName,
+		"default_doc_introduction":    meta.DocIntroduction,
+		"default_doc_introduction_en": meta.DocIntroductionEn,
+		"default_api_docs":            meta.ApiDocs,
+		"items":                       items,
+	})
+}
+
+func PutModelIntroduction(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	var req modelIntroductionRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	var meta model.Model
+	if err := model.DB.First(&meta, id).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	items, err := model.ListChannelModelDocItems(&meta)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	now := common.GetTimestamp()
+	err = model.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&model.Model{}).Where("id = ?", id).Updates(map[string]interface{}{
+			"doc_introduction":    req.DocIntroduction,
+			"doc_introduction_en": req.DocIntroductionEn,
+			"updated_time":        now,
+		}).Error; err != nil {
+			return err
+		}
+		for _, item := range items {
+			if !item.Configured {
+				continue
+			}
+			if err := tx.Model(&model.ChannelModelDoc{}).
+				Where("channel_id = ? AND model_name = ?", item.ChannelID, item.ModelName).
+				Updates(map[string]interface{}{
+					"doc_introduction":    req.DocIntroduction,
+					"doc_introduction_en": req.DocIntroductionEn,
+					"updated_time":        now,
+				}).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	model.RefreshPricing()
+	common.ApiSuccess(c, gin.H{
+		"doc_introduction":    req.DocIntroduction,
+		"doc_introduction_en": req.DocIntroductionEn,
 	})
 }
 
@@ -286,6 +358,7 @@ func PutChannelModelDoc(c *gin.Context) {
 		ChannelID:         req.ChannelID,
 		ModelName:         req.ModelName,
 		DocIntroduction:   req.DocIntroduction,
+		DocIntroductionEn: req.DocIntroductionEn,
 		ApiDocs:           req.ApiDocs,
 		ApiDocsMarkdown:   req.ApiDocsMarkdown,
 		ApiDocsMarkdownEn: req.ApiDocsMarkdownEn,
@@ -296,6 +369,72 @@ func PutChannelModelDoc(c *gin.Context) {
 	}
 	model.RefreshPricing()
 	common.ApiSuccess(c, doc)
+}
+
+func SyncChannelModelDocs(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	var req syncChannelModelDocsRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	req.SourceModelName = strings.TrimSpace(req.SourceModelName)
+	if req.SourceChannelID <= 0 || req.SourceModelName == "" {
+		common.ApiErrorMsg(c, "missing source channel or model name")
+		return
+	}
+	var meta model.Model
+	if err := model.DB.First(&meta, id).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	items, err := model.ListChannelModelDocItems(&meta)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	sourceFound := false
+	for _, item := range items {
+		if item.ChannelID == req.SourceChannelID && item.ModelName == req.SourceModelName {
+			sourceFound = true
+			break
+		}
+	}
+	if !sourceFound {
+		common.ApiErrorMsg(c, "source channel and model do not match")
+		return
+	}
+
+	err = model.DB.Transaction(func(tx *gorm.DB) error {
+		for _, item := range items {
+			doc := &model.ChannelModelDoc{
+				ChannelID:         item.ChannelID,
+				ModelName:         item.ModelName,
+				DocIntroduction:   item.DocIntroduction,
+				DocIntroductionEn: item.DocIntroductionEn,
+				ApiDocs:           req.ApiDocs,
+				ApiDocsMarkdown:   req.ApiDocsMarkdown,
+				ApiDocsMarkdownEn: req.ApiDocsMarkdownEn,
+			}
+			if err := model.UpsertChannelModelDocWithDB(tx, doc); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	model.RefreshPricing()
+	common.ApiSuccess(c, gin.H{
+		"synced":       len(items),
+		"other_synced": max(len(items)-1, 0),
+	})
 }
 
 func DeleteChannelModelDoc(c *gin.Context) {
@@ -380,8 +519,9 @@ func UpdateModelMeta(c *gin.Context) {
 
 	if docsOnly {
 		if err := model.DB.Model(&model.Model{}).Where("id = ?", m.Id).Updates(map[string]interface{}{
-			"doc_introduction": m.DocIntroduction,
-			"api_docs":         m.ApiDocs,
+			"doc_introduction":    m.DocIntroduction,
+			"doc_introduction_en": m.DocIntroductionEn,
+			"api_docs":            m.ApiDocs,
 		}).Error; err != nil {
 			common.ApiError(c, err)
 			return
@@ -428,8 +568,17 @@ func DeleteModelMeta(c *gin.Context) {
 		return
 	}
 	if err := model.DB.Transaction(func(tx *gorm.DB) error {
+		var modelName string
+		if err := tx.Model(&model.Model{}).Where("id = ?", id).Pluck("model_name", &modelName).Error; err != nil {
+			return err
+		}
 		if err := tx.Where("model_id = ?", id).Delete(&model.ModelVisibilityBinding{}).Error; err != nil {
 			return err
+		}
+		if modelName != "" {
+			if err := tx.Where("model_name = ?", modelName).Delete(&model.ChannelModelHotOverride{}).Error; err != nil {
+				return err
+			}
 		}
 		return tx.Delete(&model.Model{}, id).Error
 	}); err != nil {

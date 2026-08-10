@@ -16,6 +16,7 @@ type ChannelModelDoc struct {
 	ChannelID         int    `json:"channel_id" gorm:"not null;uniqueIndex:uk_channel_model_doc,priority:1;index"`
 	ModelName         string `json:"model_name" gorm:"size:255;not null;uniqueIndex:uk_channel_model_doc,priority:2;index"`
 	DocIntroduction   string `json:"doc_introduction,omitempty" gorm:"type:text"`
+	DocIntroductionEn string `json:"doc_introduction_en,omitempty" gorm:"type:text"`
 	ApiDocs           string `json:"api_docs,omitempty" gorm:"type:text"`
 	ApiDocsMarkdown   string `json:"api_docs_markdown,omitempty" gorm:"type:text"`
 	ApiDocsMarkdownEn string `json:"api_docs_markdown_en,omitempty" gorm:"type:text"`
@@ -33,6 +34,7 @@ type ChannelModelDocItem struct {
 	ModelName         string `json:"model_name"`
 	Configured        bool   `json:"configured"`
 	DocIntroduction   string `json:"doc_introduction,omitempty"`
+	DocIntroductionEn string `json:"doc_introduction_en,omitempty"`
 	ApiDocs           string `json:"api_docs,omitempty"`
 	ApiDocsMarkdown   string `json:"api_docs_markdown,omitempty"`
 	ApiDocsMarkdownEn string `json:"api_docs_markdown_en,omitempty"`
@@ -47,6 +49,7 @@ type ChannelModelDocTemplate struct {
 	RouteSlug         string `json:"route_slug,omitempty"`
 	ModelName         string `json:"model_name"`
 	DocIntroduction   string `json:"doc_introduction,omitempty"`
+	DocIntroductionEn string `json:"doc_introduction_en,omitempty"`
 	ApiDocs           string `json:"api_docs,omitempty"`
 	ApiDocsMarkdown   string `json:"api_docs_markdown,omitempty"`
 	ApiDocsMarkdownEn string `json:"api_docs_markdown_en,omitempty"`
@@ -72,9 +75,9 @@ func GetAllChannelModelDocsMap() (map[string]ChannelModelDoc, error) {
 func ListChannelModelDocTemplates() ([]ChannelModelDocTemplate, error) {
 	var templates []ChannelModelDocTemplate
 	err := DB.Table("channel_model_docs").
-		Select("channel_model_docs.id, channel_model_docs.channel_id, channels.name AS channel_name, channels.channel_no, channels.route_slug, channel_model_docs.model_name, channel_model_docs.doc_introduction, channel_model_docs.api_docs, channel_model_docs.api_docs_markdown, channel_model_docs.api_docs_markdown_en, channel_model_docs.updated_time").
+		Select("channel_model_docs.id, channel_model_docs.channel_id, channels.name AS channel_name, channels.channel_no, channels.route_slug, channel_model_docs.model_name, channel_model_docs.doc_introduction, channel_model_docs.doc_introduction_en, channel_model_docs.api_docs, channel_model_docs.api_docs_markdown, channel_model_docs.api_docs_markdown_en, channel_model_docs.updated_time").
 		Joins("LEFT JOIN channels ON channels.id = channel_model_docs.channel_id").
-		Where("channel_model_docs.doc_introduction <> ? OR channel_model_docs.api_docs <> ? OR channel_model_docs.api_docs_markdown <> ? OR channel_model_docs.api_docs_markdown_en <> ?", "", "", "", "").
+		Where("channel_model_docs.doc_introduction <> ? OR channel_model_docs.doc_introduction_en <> ? OR channel_model_docs.api_docs <> ? OR channel_model_docs.api_docs_markdown <> ? OR channel_model_docs.api_docs_markdown_en <> ?", "", "", "", "", "").
 		Order("channel_model_docs.updated_time DESC, channel_model_docs.id DESC").
 		Scan(&templates).Error
 	if err != nil {
@@ -132,6 +135,10 @@ func ListChannelModelDocItems(meta *Model) ([]ChannelModelDocItem, error) {
 		if doc, ok := docMap[channelModelDocKey(item.ChannelID, item.ModelName)]; ok {
 			item.Configured = true
 			item.DocIntroduction = doc.DocIntroduction
+			item.DocIntroductionEn = doc.DocIntroductionEn
+			if strings.TrimSpace(item.DocIntroductionEn) == "" {
+				item.DocIntroductionEn = meta.DocIntroductionEn
+			}
 			item.ApiDocs = doc.ApiDocs
 			item.ApiDocsMarkdown = doc.ApiDocsMarkdown
 			item.ApiDocsMarkdownEn = doc.ApiDocsMarkdownEn
@@ -139,6 +146,7 @@ func ListChannelModelDocItems(meta *Model) ([]ChannelModelDocItem, error) {
 			continue
 		}
 		item.DocIntroduction = meta.DocIntroduction
+		item.DocIntroductionEn = meta.DocIntroductionEn
 		item.ApiDocs = meta.ApiDocs
 	}
 	return filtered, nil
@@ -158,7 +166,7 @@ func ValidateChannelModelDocBinding(meta *Model, channelID int, modelName string
 	return gorm.ErrRecordNotFound
 }
 
-func UpsertChannelModelDoc(doc *ChannelModelDoc) error {
+func upsertChannelModelDoc(db *gorm.DB, doc *ChannelModelDoc) error {
 	if doc == nil || doc.ChannelID <= 0 || strings.TrimSpace(doc.ModelName) == "" {
 		return gorm.ErrInvalidData
 	}
@@ -166,16 +174,28 @@ func UpsertChannelModelDoc(doc *ChannelModelDoc) error {
 	now := common.GetTimestamp()
 	doc.CreatedTime = now
 	doc.UpdatedTime = now
-	return DB.Clauses(clause.OnConflict{
+	return db.Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "channel_id"}, {Name: "model_name"}},
 		DoUpdates: clause.AssignmentColumns([]string{
 			"doc_introduction",
+			"doc_introduction_en",
 			"api_docs",
 			"api_docs_markdown",
 			"api_docs_markdown_en",
 			"updated_time",
 		}),
 	}).Create(doc).Error
+}
+
+func UpsertChannelModelDoc(doc *ChannelModelDoc) error {
+	return upsertChannelModelDoc(DB, doc)
+}
+
+func UpsertChannelModelDocWithDB(db *gorm.DB, doc *ChannelModelDoc) error {
+	if db == nil {
+		return gorm.ErrInvalidDB
+	}
+	return upsertChannelModelDoc(db, doc)
 }
 
 func DeleteChannelModelDoc(channelID int, modelName string) error {

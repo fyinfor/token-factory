@@ -33,6 +33,8 @@ import {
   renderDescription,
 } from '../../../../common/ui/RenderUtils';
 import { useIsMobile } from '../../../../../hooks/common/useIsMobile';
+import { getVendorLocalizedName } from '../../../../../helpers/modelPricing';
+import i18n from '../../../../../i18n/i18n';
 
 function renderQuotaType(type, t) {
   switch (type) {
@@ -54,15 +56,16 @@ function renderQuotaType(type, t) {
 }
 
 // Render vendor name
-const renderVendor = (vendorName, vendorIcon, t) => {
+const renderVendor = (vendorName, vendorIcon, t, record) => {
   if (!vendorName) return '-';
+  const localizedName = getVendorLocalizedName(record, i18n.language);
   return (
     <Tag
       color='white'
       shape='circle'
       prefixIcon={getLobeHubIcon(vendorIcon || 'Layers', 14)}
     >
-      {vendorName}
+      {localizedName || vendorName}
     </Tag>
   );
 };
@@ -195,7 +198,7 @@ export const getPricingTableColumns = ({
   const vendorColumn = {
     title: t('供应商'),
     dataIndex: 'vendor_name',
-    render: (text, record) => renderVendor(text, record.vendor_icon, t),
+    render: (text, record) => renderVendor(text, record.vendor_icon, t, record),
   };
 
   const baseColumns = [

@@ -1031,9 +1031,15 @@ const ModelChannelList = ({
         valueTitle: `${asrExact} / ${t('秒')}`,
         valueExact: `${asrExact} / ${t('秒')}`,
         original: hasDiscount ? officialDisplay : null,
-        originalExact: hasDiscount ? `${officialExact} / ${t('秒')}` : undefined,
-        officialTitle: hasDiscount ? `${officialExact} / ${t('秒')}` : undefined,
-        officialExact: hasDiscount ? `${officialExact} / ${t('秒')}` : undefined,
+        originalExact: hasDiscount
+          ? `${officialExact} / ${t('秒')}`
+          : undefined,
+        officialTitle: hasDiscount
+          ? `${officialExact} / ${t('秒')}`
+          : undefined,
+        officialExact: hasDiscount
+          ? `${officialExact} / ${t('秒')}`
+          : undefined,
         priceUnitLabel: null,
         discount: hasDiscount ? discount : null,
         hasDiscount,
@@ -1872,6 +1878,7 @@ const ModelChannelList = ({
           }}
           modelName={docsModelName || modelData?.model_name}
           docIntroduction={docsChannel?.doc_introduction || ''}
+          docIntroductionEn={docsChannel?.doc_introduction_en || ''}
           apiDocs={docsChannel?.api_docs || ''}
           apiDocsMarkdown={docsChannel?.api_docs_markdown || ''}
           apiDocsMarkdownEn={docsChannel?.api_docs_markdown_en || ''}

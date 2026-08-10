@@ -25,7 +25,7 @@ func TestChannelModelDocsUseChannelIDAndModelName(t *testing.T) {
 	}
 	DB = db
 
-	meta := Model{ModelName: "demo-model", NameRule: NameRuleExact, Status: 1, DocIntroduction: "model fallback", ApiDocs: "[]"}
+	meta := Model{ModelName: "demo-model", NameRule: NameRuleExact, Status: 1, DocIntroduction: "model fallback", DocIntroductionEn: "model fallback en", ApiDocs: "[]"}
 	if err := DB.Create(&meta).Error; err != nil {
 		t.Fatalf("create model: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestChannelModelDocsUseChannelIDAndModelName(t *testing.T) {
 	if err != nil || len(items) != 2 {
 		t.Fatalf("list fallback docs: len=%d err=%v", len(items), err)
 	}
-	if items[0].Configured || items[0].DocIntroduction != "model fallback" {
+	if items[0].Configured || items[0].DocIntroduction != "model fallback" || items[0].DocIntroductionEn != "model fallback en" {
 		t.Fatalf("expected model fallback before channel override: %+v", items[0])
 	}
 
@@ -57,6 +57,7 @@ func TestChannelModelDocsUseChannelIDAndModelName(t *testing.T) {
 		ChannelID:         channels[1].Id,
 		ModelName:         "demo-model",
 		DocIntroduction:   "channel-b docs",
+		DocIntroductionEn: "channel-b docs en",
 		ApiDocs:           `[{"path":"/v1/demo"}]`,
 		ApiDocsMarkdown:   "```http\nPOST /v1/demo\n```",
 		ApiDocsMarkdownEn: "```http\nPOST /v1/demo\n```\n\nEnglish docs",
@@ -67,6 +68,7 @@ func TestChannelModelDocsUseChannelIDAndModelName(t *testing.T) {
 		ChannelID:         channels[1].Id,
 		ModelName:         "demo-model",
 		DocIntroduction:   "channel-b updated",
+		DocIntroductionEn: "channel-b updated en",
 		ApiDocs:           `[{"path":"/v1/demo-updated"}]`,
 		ApiDocsMarkdown:   "```http\nPOST /v1/demo-updated\n```",
 		ApiDocsMarkdownEn: "```http\nPOST /v1/demo-updated\n```\n\nUpdated English docs",
@@ -77,7 +79,7 @@ func TestChannelModelDocsUseChannelIDAndModelName(t *testing.T) {
 	if err := DB.Where("channel_id = ? AND model_name = ?", channels[1].Id, "demo-model").First(&secondDoc).Error; err != nil {
 		t.Fatalf("load updated second channel doc: %v", err)
 	}
-	if secondDoc.DocIntroduction != "channel-b updated" {
+	if secondDoc.DocIntroduction != "channel-b updated" || secondDoc.DocIntroductionEn != "channel-b updated en" {
 		t.Fatalf("expected upsert to update channel doc: %+v", secondDoc)
 	}
 	if secondDoc.ApiDocsMarkdown != "```http\nPOST /v1/demo-updated\n```" {
@@ -98,9 +100,10 @@ func TestChannelModelDocsUseChannelIDAndModelName(t *testing.T) {
 	}
 	pricingItems := BuildPricingAPIItems(
 		[]Pricing{{
-			ModelName:       "demo-model",
-			DocIntroduction: "pricing fallback",
-			ApiDocs:         []any{},
+			ModelName:         "demo-model",
+			DocIntroduction:   "pricing fallback",
+			DocIntroductionEn: "pricing fallback en",
+			ApiDocs:           []any{},
 		}},
 		map[int]struct{}{channels[0].Id: {}, channels[1].Id: {}},
 		[]ChannelPricingMeta{
@@ -123,7 +126,7 @@ func TestChannelModelDocsUseChannelIDAndModelName(t *testing.T) {
 	if item := pricingDocs[channels[0].Id]; !item.DocConfigured || item.DocIntroduction != "" || item.ApiDocsMarkdown != "" {
 		t.Fatalf("expected explicit empty channel document in pricing response: %+v", item)
 	}
-	if item := pricingDocs[channels[1].Id]; !item.DocConfigured || item.ApiDocsMarkdown != secondDoc.ApiDocsMarkdown || item.ApiDocsMarkdownEn != secondDoc.ApiDocsMarkdownEn {
+	if item := pricingDocs[channels[1].Id]; !item.DocConfigured || item.DocIntroductionEn != secondDoc.DocIntroductionEn || item.ApiDocsMarkdown != secondDoc.ApiDocsMarkdown || item.ApiDocsMarkdownEn != secondDoc.ApiDocsMarkdownEn {
 		t.Fatalf("expected channel Markdown document in pricing response: %+v", item)
 	}
 	if err := DB.Model(&Channel{}).Where("id = ?", channels[0].Id).Update("route_slug", "renamed").Error; err != nil {

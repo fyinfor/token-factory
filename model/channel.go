@@ -1025,6 +1025,9 @@ func (channel *Channel) Delete() error {
 		if err := tx.Where("channel_id = ?", channel.Id).Delete(&Ability{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("channel_id = ?", channel.Id).Delete(&ChannelModelHotOverride{}).Error; err != nil {
+			return err
+		}
 		return deleteChannelModelDocsByChannelIDs(tx, []int{channel.Id})
 	})
 }
@@ -1406,6 +1409,9 @@ func deleteChannelsByWhere(query *gorm.DB) (int64, error) {
 		}
 		deleted = result.RowsAffected
 		if err := tx.Where("channel_id IN ?", ids).Delete(&Ability{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("channel_id IN ?", ids).Delete(&ChannelModelHotOverride{}).Error; err != nil {
 			return err
 		}
 		return deleteChannelModelDocsByChannelIDs(tx, ids)

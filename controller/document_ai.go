@@ -51,6 +51,29 @@ Requirements:
 - Preserve URLs, endpoint paths, HTTP methods, JSON keys, field names, identifiers, commands, code syntax, and the placeholders {{base_url}}, {{model}}, and {{api_key}} exactly.
 - Preserve fenced-code language tags and :::code-group containers.
 - Keep asynchronous task creation, status queries, success and failure handling, result retrieval, limitations, and examples complete.`
+
+	defaultIntroductionGeneratePrompt = `你是一名严谨的 AI 模型资料编辑。请联网检索目标模型，优先使用模型厂商官网、官方文档、官方发布记录等一手来源，生成可直接展示的中文 Markdown 模型介绍。
+
+要求：
+- 只输出最终 Markdown，不输出思考过程或额外代码围栏。
+- 内容简洁准确，建议包含模型定位、主要能力、典型用途和已公开限制；没有可靠来源的内容不要猜测。
+- 不要编造上下文长度、价格、发布日期、参数规模、性能分数或接口能力。
+- 模型名称保持原样；若存在多个同名模型，应明确说明无法可靠区分，而不是自行选择。
+- 文末增加“资料来源”，列出实际参考的一手来源链接。`
+
+	defaultIntroductionPolishPrompt = `你是一名 AI 产品内容编辑。请润色给定的模型介绍，使其准确、简洁、结构清晰并适合直接发布。
+
+要求：
+- 保持原文语言，只输出最终 Markdown。
+- 不得新增原文未提供的模型能力、参数、价格、发布日期或性能结论。
+- 保留已有链接、限定条件和事实信息，删除重复、空泛和营销化表达。`
+
+	defaultIntroductionTranslatePrompt = `Translate the supplied Chinese AI model introduction into clear, publishable English.
+
+Requirements:
+- Output only the complete translated Markdown without reasoning or an outer code fence.
+- Preserve all factual content, model names, identifiers, links, Markdown structure, limitations, and source references.
+- Do not add, remove, correct, or speculate about model capabilities, pricing, dates, benchmarks, or technical limits.`
 )
 
 type documentAIPromptPayload struct {
@@ -59,9 +82,11 @@ type documentAIPromptPayload struct {
 }
 
 type documentAIGenerateRequest struct {
-	Model    string `json:"model"`
-	Action   string `json:"action"`
-	Document string `json:"document"`
+	Model       string `json:"model"`
+	Section     string `json:"section"`
+	Action      string `json:"action"`
+	Document    string `json:"document"`
+	TargetModel string `json:"target_model"`
 }
 
 func getEffectiveDocumentAIPrompts() (documentAIPromptPayload, int64, bool, error) {
@@ -145,17 +170,28 @@ func PrepareDocumentAIRequest(c *gin.Context) {
 		return
 	}
 	payload.Model = strings.TrimSpace(payload.Model)
+	payload.Section = strings.ToLower(strings.TrimSpace(payload.Section))
 	payload.Action = strings.ToLower(strings.TrimSpace(payload.Action))
 	payload.Document = strings.TrimSpace(payload.Document)
+	payload.TargetModel = strings.TrimSpace(payload.TargetModel)
+	if payload.Section == "" {
+		payload.Section = "api_docs"
+	}
 	if payload.Model == "" || utf8.RuneCountInString(payload.Model) > 256 {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"success": false, "message": "请选择有效的文本模型"})
 		return
 	}
-	if payload.Action != "polish" && payload.Action != "translate" {
+	validAction := (payload.Section == "api_docs" && (payload.Action == "polish" || payload.Action == "translate")) ||
+		(payload.Section == "introduction" && (payload.Action == "generate" || payload.Action == "polish" || payload.Action == "translate"))
+	if !validAction {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"success": false, "message": "不支持的文档处理方式"})
 		return
 	}
-	if payload.Document == "" {
+	if payload.Section == "introduction" && (payload.TargetModel == "" || utf8.RuneCountInString(payload.TargetModel) > 256) {
+		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"success": false, "message": "目标模型名称不能为空"})
+		return
+	}
+	if payload.Action != "generate" && payload.Document == "" {
 		c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"success": false, "message": "文档内容不能为空"})
 		return
 	}
@@ -164,18 +200,29 @@ func PrepareDocumentAIRequest(c *gin.Context) {
 		return
 	}
 
-	prompts, _, _, err := getEffectiveDocumentAIPrompts()
-	if err != nil {
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error()})
-		return
-	}
-	systemPrompt := prompts.PolishPrompt
+	systemPrompt := defaultIntroductionGeneratePrompt
 	temperature := 0.2
-	userPrompt := "请依据系统规范整理下面的原始 API 文档。\n\n目标模型：{{model}}\n请以原文为唯一事实来源，输出可直接发布的完整 Markdown。\n\n--- 原始文档开始 ---\n\n" + payload.Document + "\n\n--- 原始文档结束 ---"
-	if payload.Action == "translate" {
-		systemPrompt = prompts.TranslatePrompt
+	userPrompt := "请联网检索并介绍这个模型：" + payload.TargetModel
+	if payload.Section == "api_docs" {
+		prompts, _, _, err := getEffectiveDocumentAIPrompts()
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+		systemPrompt = prompts.PolishPrompt
+		userPrompt = "请依据系统规范整理下面的原始 API 文档。\n\n目标模型：{{model}}\n请以原文为唯一事实来源，输出可直接发布的完整 Markdown。\n\n--- 原始文档开始 ---\n\n" + payload.Document + "\n\n--- 原始文档结束 ---"
+		if payload.Action == "translate" {
+			systemPrompt = prompts.TranslatePrompt
+			temperature = 0.1
+			userPrompt = "Translate the following API documentation into English according to the system requirements.\n\nTarget model: {{model}}\n\n--- Source document begins ---\n\n" + payload.Document + "\n\n--- Source document ends ---"
+		}
+	} else if payload.Action == "polish" {
+		systemPrompt = defaultIntroductionPolishPrompt
+		userPrompt = "请润色下面的模型介绍。\n\n目标模型：" + payload.TargetModel + "\n\n--- 原文开始 ---\n\n" + payload.Document + "\n\n--- 原文结束 ---"
+	} else if payload.Action == "translate" {
+		systemPrompt = defaultIntroductionTranslatePrompt
 		temperature = 0.1
-		userPrompt = "Translate the following API documentation into English according to the system requirements.\n\nTarget model: {{model}}\n\n--- Source document begins ---\n\n" + payload.Document + "\n\n--- Source document ends ---"
+		userPrompt = "Translate the following model introduction into English.\n\nTarget model: " + payload.TargetModel + "\n\n--- Source begins ---\n\n" + payload.Document + "\n\n--- Source ends ---"
 	}
 
 	relayRequest := dto.GeneralOpenAIRequest{
@@ -186,6 +233,9 @@ func PrepareDocumentAIRequest(c *gin.Context) {
 		},
 		Stream:      common.GetPointer(true),
 		Temperature: common.GetPointer(temperature),
+	}
+	if payload.Section == "introduction" && payload.Action == "generate" {
+		relayRequest.WebSearchOptions = &dto.WebSearchOptions{SearchContextSize: "medium"}
 	}
 	body, err := common.Marshal(relayRequest)
 	if err != nil {
