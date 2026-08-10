@@ -43,6 +43,7 @@ export function getVendorLocalizedName(vendor, language) {
 
 const TRANSLATABLE_SUPPLIER_TYPES = new Set([
   '公有云',
+  '官转',
   'AIDC',
   '企业中转站',
   '个人中转站',
