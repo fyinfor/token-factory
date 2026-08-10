@@ -34,11 +34,9 @@ export function getModelDescription(record, language) {
   return getLocalizedContent(record?.description, record?.description_en, language);
 }
 
-/** 模型类型（供应商）名称：优先使用英文名称（更通用易识别），未设置时回退中文名称 */
+/** 模型类型（供应商）名称：中文界面用 name，其他语言优先 name_en（英文缺失时回退中文） */
 export function getVendorLocalizedName(vendor, language) {
-  const en = String(vendor?.name_en ?? '').trim();
-  const zh = String(vendor?.name ?? '').trim();
-  return en || zh;
+  return getLocalizedContent(vendor?.name, vendor?.name_en, language);
 }
 
 const TRANSLATABLE_SUPPLIER_TYPES = new Set([
