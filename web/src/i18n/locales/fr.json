@@ -6337,5 +6337,6 @@
   "规范链接（Canonical URL）": "URL canonique",
   "社交分享图片（OG Image）": "Image de partage social (OG Image)",
   "爬虫规则（robots）": "Règles des robots (robots)",
-  "保存 SEO 设置": "Enregistrer les paramètres SEO"
+  "保存 SEO 设置": "Enregistrer les paramètres SEO",
+  "输入值会超过 ${count} 个模型的代理加价上限，这些模型将按各自上限设置。": "La valeur saisie dépasse la limite de majoration de l’agent pour ${count} modèles. Ces modèles seront réglés sur leur plafond respectif."
 }

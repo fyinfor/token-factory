@@ -39,18 +39,20 @@ const (
 // MaterialAsset 素材记录。每次上传成功后落库，供素材列表查询及资源地址复制使用。
 // GroupType 标识素材所属分组类型（virtual/real），与 MaterialGroup.GroupType 对齐，
 // 用于虚拟人像与真人素材的业务隔离。
+// URL 仅作控制台预览（本地/OSS 中转），到期后清空；正本引用始终为 asset://{AssetId}。
 type MaterialAsset struct {
-	Id        int    `json:"id" gorm:"primaryKey;autoIncrement"`
-	UserId    int    `json:"user_id" gorm:"index;not null"`
-	GroupId   string `json:"group_id" gorm:"type:varchar(128);index"` // 上游分组 ID
-	GroupType string `json:"group_type" gorm:"type:varchar(32);default:'virtual';index"`
-	AssetId   string `json:"asset_id" gorm:"type:varchar(128);index"` // 上游素材 ID，如 asset-xxxx
-	Name      string `json:"name" gorm:"type:varchar(255)"`
-	AssetType string `json:"asset_type" gorm:"type:varchar(32)"` // Image / Video / Audio
-	URL       string `json:"url" gorm:"type:text"`               // 上传后生成的公网 URL
-	Status    string `json:"status" gorm:"type:varchar(32)"`     // Active / Pending / Failed
-	CreatedAt int64  `json:"created_at" gorm:"bigint"`
-	UpdatedAt int64  `json:"updated_at" gorm:"bigint"`
+	Id               int    `json:"id" gorm:"primaryKey;autoIncrement"`
+	UserId           int    `json:"user_id" gorm:"index;not null"`
+	GroupId          string `json:"group_id" gorm:"type:varchar(128);index"` // 上游分组 ID
+	GroupType        string `json:"group_type" gorm:"type:varchar(32);default:'virtual';index"`
+	AssetId          string `json:"asset_id" gorm:"type:varchar(128);index"` // 上游素材 ID，如 asset-xxxx
+	Name             string `json:"name" gorm:"type:varchar(255)"`
+	AssetType        string `json:"asset_type" gorm:"type:varchar(32)"` // Image / Video / Audio
+	URL              string `json:"url" gorm:"type:text"`               // 预览用公网 URL（可过期清空）
+	PreviewExpiresAt int64  `json:"preview_expires_at" gorm:"bigint;index;default:0"` // 预览过期时间；0 表示无托管预览或不清理
+	Status           string `json:"status" gorm:"type:varchar(32)"`                   // Active / Pending / Failed
+	CreatedAt        int64  `json:"created_at" gorm:"bigint"`
+	UpdatedAt        int64  `json:"updated_at" gorm:"bigint"`
 }
 
 func (MaterialAsset) TableName() string {
@@ -136,8 +138,8 @@ func UpdateMaterialAssetStatus(id int, status string) error {
 		Updates(map[string]interface{}{"status": status, "updated_at": time.Now().Unix()}).Error
 }
 
-// UpdateMaterialAssetInfo 刷新素材的状态/URL/类型（GetAsset 轮询拿到上游永久 URL 时使用）。
-// 仅更新非空字段，避免空值覆盖已有数据。
+// UpdateMaterialAssetInfo 刷新素材的状态/类型；可选更新预览 URL。
+// 仅更新非空字段，避免空值覆盖已有数据。托管预览未过期时调用方应避免写入上游永久 URL。
 func UpdateMaterialAssetInfo(id int, status string, url string, assetType string) error {
 	updates := map[string]interface{}{"updated_at": time.Now().Unix()}
 	if strings.TrimSpace(status) != "" {
@@ -150,6 +152,29 @@ func UpdateMaterialAssetInfo(id int, status string, url string, assetType string
 		updates["asset_type"] = assetType
 	}
 	return DB.Model(&MaterialAsset{}).Where("id = ?", id).Updates(updates).Error
+}
+
+// ClearMaterialAssetPreview 清空预览 URL 与过期时间（保留素材行与 asset_id）。
+func ClearMaterialAssetPreview(id int) error {
+	return DB.Model(&MaterialAsset{}).Where("id = ?", id).
+		Updates(map[string]interface{}{
+			"url":                "",
+			"preview_expires_at": 0,
+			"updated_at":         time.Now().Unix(),
+		}).Error
+}
+
+// ListExpiredMaterialPreviews 列出预览已到期且仍有预览 URL 的素材（不删素材行）。
+func ListExpiredMaterialPreviews(now int64, limit int) ([]*MaterialAsset, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	var assets []*MaterialAsset
+	err := DB.Where("preview_expires_at > 0 AND preview_expires_at <= ? AND url <> ''", now).
+		Order("preview_expires_at asc").
+		Limit(limit).
+		Find(&assets).Error
+	return assets, err
 }
 
 // UpdateMaterialAssetGroupType 更新素材的分组类型（用于真人素材上传后标记）。

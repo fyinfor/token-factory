@@ -71,6 +71,7 @@ const BASE_INPUTS = {
   'oss_setting.local_max_file_size_mb': 20,
   'oss_setting.oss_max_file_size_mb': 20,
   'oss_setting.playground_retention_hours': 24,
+  'oss_setting.material_preview_retention_hours': 168,
   'oss_setting.local_storage_path': '.',
   'oss_setting.local_url_prefix': '',
   'oss_setting.local_object_key_prefix': '',
@@ -84,6 +85,7 @@ const LOCAL_CONFIG_KEYS = [
   'oss_setting.local_object_key_prefix',
   'oss_setting.local_max_file_size_mb',
   'oss_setting.playground_retention_hours',
+  'oss_setting.material_preview_retention_hours',
 ];
 
 const OSS_CONFIG_KEYS = [
@@ -95,6 +97,7 @@ const OSS_CONFIG_KEYS = [
   'oss_setting.object_key_prefix',
   'oss_setting.oss_max_file_size_mb',
   'oss_setting.playground_retention_hours',
+  'oss_setting.material_preview_retention_hours',
 ];
 
 const panelStyle = {
@@ -479,6 +482,9 @@ export default function SettingsOss(props) {
     if (!next['oss_setting.playground_retention_hours']) {
       next['oss_setting.playground_retention_hours'] = 24;
     }
+    if (!next['oss_setting.material_preview_retention_hours']) {
+      next['oss_setting.material_preview_retention_hours'] = 168;
+    }
     return next;
   }
 
@@ -690,7 +696,8 @@ export default function SettingsOss(props) {
           k === 'oss_setting.max_file_size_mb' ||
           k === 'oss_setting.local_max_file_size_mb' ||
           k === 'oss_setting.oss_max_file_size_mb' ||
-          k === 'oss_setting.playground_retention_hours'
+          k === 'oss_setting.playground_retention_hours' ||
+          k === 'oss_setting.material_preview_retention_hours'
         ) {
           const n = parseInt(String(v), 10);
           next[k] = Number.isFinite(n) ? n : 20;
@@ -869,6 +876,24 @@ export default function SettingsOss(props) {
             }
           />
         </Col>
+        <Col xs={24} sm={12}>
+          <Form.Select
+            field="['oss_setting.material_preview_retention_hours']"
+            label={t('素材库预览保留时间')}
+            optionList={PLAYGROUND_RETENTION_OPTIONS.map((item) => ({
+              ...item,
+              label: t(item.label),
+            }))}
+            onChange={(v) =>
+              setField('oss_setting.material_preview_retention_hours', v)
+            }
+          />
+          <Text type='tertiary' size='small'>
+            {t(
+              '仅清理本地/OSS 预览文件并停止展示缩略图，不删除素材与 asset://。建议 7 天。',
+            )}
+          </Text>
+        </Col>
         <Col span={24}>
           <Text type='tertiary' size='small'>
             {t('生成示例')}: {localPreviewUrl}
@@ -1001,6 +1026,24 @@ export default function SettingsOss(props) {
               setField('oss_setting.playground_retention_hours', v)
             }
           />
+        </Col>
+        <Col xs={24} sm={12}>
+          <Form.Select
+            field="['oss_setting.material_preview_retention_hours']"
+            label={t('素材库预览保留时间')}
+            optionList={PLAYGROUND_RETENTION_OPTIONS.map((item) => ({
+              ...item,
+              label: t(item.label),
+            }))}
+            onChange={(v) =>
+              setField('oss_setting.material_preview_retention_hours', v)
+            }
+          />
+          <Text type='tertiary' size='small'>
+            {t(
+              '仅清理本地/OSS 预览文件并停止展示缩略图，不删除素材与 asset://。建议 7 天。',
+            )}
+          </Text>
         </Col>
       </Row>
       <Row gutter={16} style={{ marginTop: 8 }}>

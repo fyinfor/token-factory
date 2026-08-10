@@ -956,6 +956,15 @@ func GetDistributorModelDiscountTemplate(distributorId int) ([]InviteeModelMarku
 	return items, total, user.DistributorModelDiscountAutoApply == common.DistributorFlagYes, nil
 }
 
+// GetDefaultDistributorModelDiscountTemplate returns the current visible
+// model×channel defaults without applying any distributor-owned overrides.
+// It is used by the admin export, whose result represents the platform's
+// default call-discount table rather than an individual distributor template.
+func GetDefaultDistributorModelDiscountTemplate() ([]InviteeModelMarkupDiscountRateItem, error) {
+	items, _, err := listPricingVisibleMarkupDiscountRateItems()
+	return items, err
+}
+
 func UpdateDistributorModelDiscountTemplate(distributorId int, updates []ModelMarkupDiscountRateUpdateRequest, autoApplyNewInvitees *bool) error {
 	if distributorId <= 0 {
 		return errors.New("invalid distributor")

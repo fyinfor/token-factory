@@ -29,6 +29,10 @@ type OssSetting struct {
 	OssMaxFileSizeMB int `json:"oss_max_file_size_mb"`
 	// PlaygroundRetentionHours Playground 上传文件的默认保留时长（小时）。
 	PlaygroundRetentionHours int `json:"playground_retention_hours"`
+	// MaterialPreviewRetentionHours Seedance 合规素材库「本地/OSS 预览文件」保留时长（小时）。
+	// 到期后仅删除预览对象并清空预览 URL，不删除素材记录与上游 asset://。
+	// 默认 168（7 天）。
+	MaterialPreviewRetentionHours int `json:"material_preview_retention_hours"`
 	// LocalStoragePath 本地存储根目录（相对于程序工作目录），默认当前目录；文件固定写入该目录下的 uploads 子目录。
 	LocalStoragePath string `json:"local_storage_path"`
 	// LocalURLPrefix 本地存储对外访问前缀，如 /api 或 https://img.example.com/api；为空时使用 ServerAddress + /api。
@@ -38,15 +42,16 @@ type OssSetting struct {
 }
 
 var ossSetting = OssSetting{
-	StorageType:              StorageTypeLocal,
-	ObjectKeyPrefix:          "uploads/",
-	MaxFileSizeMB:            20,
-	LocalMaxFileSizeMB:       20,
-	OssMaxFileSizeMB:         20,
-	PlaygroundRetentionHours: 24,
-	LocalStoragePath:         ".",
-	LocalURLPrefix:           "",
-	LocalObjectKeyPrefix:     "",
+	StorageType:                   StorageTypeLocal,
+	ObjectKeyPrefix:               "uploads/",
+	MaxFileSizeMB:                 20,
+	LocalMaxFileSizeMB:            20,
+	OssMaxFileSizeMB:              20,
+	PlaygroundRetentionHours:      24,
+	MaterialPreviewRetentionHours: 168,
+	LocalStoragePath:              ".",
+	LocalURLPrefix:                "",
+	LocalObjectKeyPrefix:          "",
 }
 
 func init() {
@@ -77,4 +82,16 @@ func IsOssUploadReady() bool {
 		return false
 	}
 	return true
+}
+
+// DefaultMaterialPreviewRetentionHours 素材预览默认保留 7 天。
+const DefaultMaterialPreviewRetentionHours = 168
+
+// GetMaterialPreviewRetentionHours 返回素材预览保留时长（小时），非法值回退为 7 天。
+func GetMaterialPreviewRetentionHours() int {
+	hours := ossSetting.MaterialPreviewRetentionHours
+	if hours <= 0 || hours > 24*365 {
+		return DefaultMaterialPreviewRetentionHours
+	}
+	return hours
 }

@@ -881,9 +881,6 @@ func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError,
 	if service.ShouldSkipRetryAfterChannelAffinityFailure(c) {
 		return false
 	}
-	if retryTimes <= 0 {
-		return false
-	}
 	if _, ok := c.Get("specific_channel_id"); ok {
 		return false
 	}
@@ -899,8 +896,23 @@ func shouldRetryTaskRelay(c *gin.Context, channelId int, taskErr *dto.TaskError,
 	if taskErr.LocalError {
 		return false
 	}
+	// 本地/业务明确的不可切换错误码：换渠也解决不了（参数、审核等）。
+	switch strings.ToLower(strings.TrimSpace(taskErr.Code)) {
+	case "invalid_request", "invalid_model", "sensitive_words_detected",
+		"missing_output_config", "invalid_output_config", "invalid_tencent_vod_params",
+		"invalid_tencent_vod_body", "invalid_credentials", "read_request_body_failed",
+		"read_body_failed":
+		return false
+	}
 	code := taskErr.StatusCode
 	if code >= 200 && code < 300 {
+		return false
+	}
+	// 有序路由尚有未尝试渠道时：对 4xx/5xx 继续保底切换（与聊天中继对齐，且不受 RetryTimes 剩余次数卡死）。
+	if code >= 400 && code <= 599 && service.HasUnusedOrderedRouteChannel(c) {
+		return true
+	}
+	if retryTimes <= 0 {
 		return false
 	}
 	// 与聊天中继一致：默认对完整 4xx/5xx 切渠道，优先可用性。

@@ -29,7 +29,8 @@ CREATE TABLE IF NOT EXISTS material_assets (
     asset_id    VARCHAR(128) DEFAULT NULL,           -- 上游素材 ID，如 asset-20260612200812-mmq8g
     name        VARCHAR(255) DEFAULT '',
     asset_type  VARCHAR(32)  DEFAULT '',             -- Image | Video | Audio
-    url         TEXT         DEFAULT '',
+    url         TEXT         DEFAULT '',             -- 控制台预览 URL（可按 preview_expires_at 清空）
+    preview_expires_at BIGINT DEFAULT 0,             -- 预览过期时间；到期只清预览不删素材
     status      VARCHAR(32)  DEFAULT '',             -- Active | Pending | Failed
     created_at  BIGINT       DEFAULT 0,
     updated_at  BIGINT       DEFAULT 0
@@ -38,6 +39,7 @@ CREATE INDEX IF NOT EXISTS idx_material_assets_user_id ON material_assets (user_
 CREATE INDEX IF NOT EXISTS idx_material_assets_group_id ON material_assets (group_id);
 CREATE INDEX IF NOT EXISTS idx_material_assets_group_type ON material_assets (group_type);
 CREATE INDEX IF NOT EXISTS idx_material_assets_asset_id ON material_assets (asset_id);
+CREATE INDEX IF NOT EXISTS idx_material_assets_preview_expires_at ON material_assets (preview_expires_at);
 
 -- ---------------------------------------------------------------------------
 -- 真人认证会话表 material_visual_sessions

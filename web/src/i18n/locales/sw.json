@@ -6336,5 +6336,6 @@
   "规范链接（Canonical URL）": "URL kanoni",
   "社交分享图片（OG Image）": "Picha ya kushiriki kijamii (OG Image)",
   "爬虫规则（robots）": "Kanuni za roboti (robots)",
-  "保存 SEO 设置": "Hifadhi mipangilio ya SEO"
+  "保存 SEO 设置": "Hifadhi mipangilio ya SEO",
+  "输入值会超过 ${count} 个模型的代理加价上限，这些模型将按各自上限设置。": "Thamani iliyoingizwa inazidi kikomo cha ongezeko la bei la wakala kwa modeli ${count}. Modeli hizo zitawekwa kwenye vikomo vyao vya juu."
 }

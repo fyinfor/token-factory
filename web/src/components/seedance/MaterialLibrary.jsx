@@ -222,6 +222,7 @@ const MaterialLibrary = () => {
     const StatusIcon = statusMeta.icon;
     const isVideo = asset.asset_type === MaterialAssetType.VIDEO;
     const isAudio = asset.asset_type === MaterialAssetType.AUDIO;
+    const hasPreview = Boolean(String(asset.url || '').trim());
 
     return (
       <Card
@@ -263,7 +264,24 @@ const MaterialLibrary = () => {
             <span style={{ fontSize: 12 }}>{typeMeta.label}</span>
           </div>
 
-          {isVideo ? (
+          {!hasPreview ? (
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 6,
+                color: 'var(--semi-color-tertiary)',
+                padding: 12,
+                textAlign: 'center',
+              }}
+            >
+              <TypeIcon size={28} />
+              <Text type='tertiary' size='small'>
+                {t('预览已过期')}
+              </Text>
+            </div>
+          ) : isVideo ? (
             <video
               src={asset.url}
               controls

@@ -59,6 +59,7 @@ import CardPro from '../components/common/ui/CardPro';
 import CardTable from '../components/common/ui/CardTable';
 import {
   IconDelete,
+  IconDownload,
   IconFile,
   IconSearch,
   IconSetting,
@@ -140,6 +141,18 @@ function getDownloadFilenameFromDisposition(disposition, fallback) {
   }
   const asciiMatch = text.match(/filename="?([^";]+)"?/i);
   return asciiMatch?.[1]?.trim() || fallback;
+}
+
+async function getBlobErrorMessage(blob, fallback) {
+  if (!blob || typeof blob.text !== 'function') return fallback;
+  const text = await blob.text();
+  if (!text) return fallback;
+  try {
+    const payload = JSON.parse(text);
+    return payload?.message || fallback;
+  } catch {
+    return text;
+  }
 }
 
 async function downloadPreviewImage(url) {
@@ -341,6 +354,7 @@ export default function DistributorAdmin() {
   const [distPageSize, setDistPageSize] = useState(10);
   const [distKeyword, setDistKeyword] = useState('');
   const [distApplyTypeFilter, setDistApplyTypeFilter] = useState(0);
+  const [distDiscountExporting, setDistDiscountExporting] = useState(false);
 
   const [bpsOpen, setBpsOpen] = useState(false);
   const [bpsUser, setBpsUser] = useState(null);
@@ -1474,6 +1488,41 @@ export default function DistributorAdmin() {
 
   const isAdminProfitShare = adminDistCommissionMode === 'profit_share';
 
+  const exportDistributorCallDiscounts = useCallback(async () => {
+    setDistDiscountExporting(true);
+    try {
+      const res = await API.get(
+        '/api/distributor/admin/model-discount-template/export',
+        {
+          responseType: 'blob',
+          disableDuplicate: true,
+        },
+      );
+      const contentType = res.headers?.['content-type'] || res.data?.type || '';
+      if (String(contentType).includes('application/json')) {
+        showError(await getBlobErrorMessage(res.data, t('导出失败')));
+        return;
+      }
+
+      const fallback = `调用折扣-${dayjs().format('YYYYMMDD-HHmmss')}.xlsx`;
+      const filename = getDownloadFilenameFromDisposition(
+        res.headers?.['content-disposition'],
+        fallback,
+      );
+      saveBlob(res.data, filename);
+      showSuccess(t('调用折扣导出成功'));
+    } catch (error) {
+      const responseData = error?.response?.data;
+      if (responseData && typeof responseData.text === 'function') {
+        showError(await getBlobErrorMessage(responseData, t('导出失败')));
+      } else {
+        showError(responseData?.message || t('导出失败'));
+      }
+    } finally {
+      setDistDiscountExporting(false);
+    }
+  }, [t]);
+
   const profitConsumptionColumns = useMemo(
     () => [
       {
@@ -2046,17 +2095,33 @@ export default function DistributorAdmin() {
             type='type1'
             actionsArea={
               <div className='flex flex-col md:flex-row justify-between items-center gap-2 w-full'>
-                <Button
-                  type='primary'
-                  theme='light'
-                  size='small'
-                  icon={<IconSetting />}
-                  className='w-full md:w-auto'
-                  disabled={distLoading}
-                  onClick={openBulkBps}
-                >
-                  {t('一键设置分销比例')}
-                </Button>
+                <div className='flex w-full flex-wrap items-center gap-2 md:w-auto'>
+                  <Button
+                    type='primary'
+                    theme='light'
+                    size='small'
+                    icon={<IconSetting />}
+                    className='w-full sm:w-auto'
+                    disabled={distLoading}
+                    onClick={openBulkBps}
+                  >
+                    {t('一键设置分销比例')}
+                  </Button>
+                  {isAdminProfitShare && (
+                    <Button
+                      type='primary'
+                      theme='light'
+                      size='small'
+                      icon={<IconDownload />}
+                      className='w-full sm:w-auto'
+                      loading={distDiscountExporting}
+                      disabled={distLoading || distDiscountExporting}
+                      onClick={exportDistributorCallDiscounts}
+                    >
+                      {t('调用折扣导出')}
+                    </Button>
+                  )}
+                </div>
                 <div className='flex flex-col md:flex-row items-center gap-2 w-full md:w-auto'>
                   <div className='relative w-full md:w-64'>
                     <Input

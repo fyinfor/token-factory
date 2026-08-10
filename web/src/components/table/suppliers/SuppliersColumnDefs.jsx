@@ -19,7 +19,11 @@ For commercial licensing, please contact support@quantumnous.com
 
 import React from 'react';
 import { Button, Space, Tag, Typography } from '@douyinfe/semi-ui';
-import { timestamp2string, renderQuota, renderQuotaWithPrompt } from '../../../helpers';
+import {
+  timestamp2string,
+  renderQuota,
+  renderQuotaWithPrompt,
+} from '../../../helpers';
 
 const { Text } = Typography;
 
@@ -58,6 +62,7 @@ export const getSuppliersColumns = (
   handleDeactivate,
   handleActivate,
   openDashboard,
+  openRevenuePush,
 ) => {
   return [
     {
@@ -196,7 +201,7 @@ export const getSuppliersColumns = (
     {
       title: t('操作'),
       dataIndex: 'operate',
-      width: 260,
+      width: 360,
       fixed: 'right',
       render: (text, record) => {
         const isDeactivated = record.status === 3;
@@ -230,6 +235,15 @@ export const getSuppliersColumns = (
               onClick={() => openDashboard(record)}
             >
               {t('数据看板')}
+            </Button>
+            <Button
+              theme='light'
+              type='warning'
+              size='small'
+              disabled={isDeactivated}
+              onClick={() => openRevenuePush(record)}
+            >
+              {t('收益推送')}
             </Button>
           </Space>
         );

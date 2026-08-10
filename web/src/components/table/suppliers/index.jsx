@@ -17,8 +17,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useState } from 'react';
-import { Button } from '@douyinfe/semi-ui';
+import React, { lazy, Suspense, useState } from 'react';
+import { Button, Spin } from '@douyinfe/semi-ui';
 import { IconPlus } from '@douyinfe/semi-icons';
 import { useNavigate } from 'react-router-dom';
 import CardPro from '../../common/ui/CardPro';
@@ -32,6 +32,10 @@ import { useSuppliersData } from '../../../hooks/suppliers/useSuppliersData';
 import { useIsMobile } from '../../../hooks/common/useIsMobile';
 import { createCardProPagination } from '../../../helpers/utils';
 
+const SupplierRevenuePushSideSheet = lazy(
+  () => import('./modals/SupplierRevenuePushSideSheet'),
+);
+
 const SuppliersPage = () => {
   const suppliersData = useSuppliersData();
   const navigate = useNavigate();
@@ -40,6 +44,7 @@ const SuppliersPage = () => {
   const [deactivatingSupplier, setDeactivatingSupplier] = useState(null);
   const [showActivateModal, setShowActivateModal] = useState(false);
   const [activatingSupplier, setActivatingSupplier] = useState(null);
+  const [revenuePushSupplier, setRevenuePushSupplier] = useState(null);
 
   const {
     showEditModal,
@@ -114,6 +119,16 @@ const SuppliersPage = () => {
         onSuccess={refresh}
       />
 
+      {revenuePushSupplier ? (
+        <Suspense fallback={<Spin spinning />}>
+          <SupplierRevenuePushSideSheet
+            visible
+            supplier={revenuePushSupplier}
+            onClose={() => setRevenuePushSupplier(null)}
+          />
+        </Suspense>
+      ) : null}
+
       <CardPro
         type='type1'
         descriptionArea={
@@ -164,6 +179,7 @@ const SuppliersPage = () => {
           handleDeactivate={handleDeactivate}
           handleActivate={handleActivate}
           openDashboard={openSupplierDashboard}
+          openRevenuePush={setRevenuePushSupplier}
           compactMode={compactMode}
         />
       </CardPro>
