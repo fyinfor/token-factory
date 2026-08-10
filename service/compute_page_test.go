@@ -19,6 +19,7 @@ func TestComputePageFileLifecycle(t *testing.T) {
 	config, err := GetComputePageConfig()
 	require.NoError(t, err)
 	require.False(t, config.Enabled)
+	require.False(t, config.AllowJavaScript)
 	require.False(t, config.HasHTML)
 
 	_, err = UpdateComputePageEnabled(true)
@@ -34,9 +35,19 @@ func TestComputePageFileLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, config.Enabled)
 
-	content, err := ReadEnabledComputePageHTML()
+	content, contentConfig, err := ReadEnabledComputePageHTML()
 	require.NoError(t, err)
 	require.Equal(t, firstHTML, content)
+	require.False(t, contentConfig.AllowJavaScript)
+
+	config, err = UpdateComputePageJavaScriptAllowed(true)
+	require.NoError(t, err)
+	require.True(t, config.AllowJavaScript)
+
+	content, contentConfig, err = ReadEnabledComputePageHTML()
+	require.NoError(t, err)
+	require.Equal(t, firstHTML, content)
+	require.True(t, contentConfig.AllowJavaScript)
 
 	secondHTML := []byte("<!doctype html><title>second</title>")
 	config, err = SaveComputePageHTML("replacement.htm", secondHTML)
@@ -44,14 +55,15 @@ func TestComputePageFileLifecycle(t *testing.T) {
 	require.True(t, config.Enabled)
 	require.Equal(t, "replacement.htm", config.FileName)
 
-	content, err = ReadEnabledComputePageHTML()
+	content, contentConfig, err = ReadEnabledComputePageHTML()
 	require.NoError(t, err)
 	require.Equal(t, secondHTML, content)
+	require.True(t, contentConfig.AllowJavaScript)
 
 	config, err = UpdateComputePageEnabled(false)
 	require.NoError(t, err)
 	require.False(t, config.Enabled)
 
-	_, err = ReadEnabledComputePageHTML()
+	_, _, err = ReadEnabledComputePageHTML()
 	require.True(t, errors.Is(err, ErrComputePageDisabled))
 }

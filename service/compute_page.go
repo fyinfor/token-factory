@@ -25,10 +25,11 @@ var (
 )
 
 type ComputePageConfig struct {
-	Enabled   bool   `json:"enabled"`
-	FileName  string `json:"file_name"`
-	UpdatedAt int64  `json:"updated_at"`
-	HasHTML   bool   `json:"-"`
+	Enabled         bool   `json:"enabled"`
+	AllowJavaScript bool   `json:"allow_javascript"`
+	FileName        string `json:"file_name"`
+	UpdatedAt       int64  `json:"updated_at"`
+	HasHTML         bool   `json:"-"`
 }
 
 func computePageDir() string {
@@ -154,6 +155,23 @@ func UpdateComputePageEnabled(enabled bool) (ComputePageConfig, error) {
 	return config, nil
 }
 
+func UpdateComputePageJavaScriptAllowed(allowed bool) (ComputePageConfig, error) {
+	computePageMutex.Lock()
+	defer computePageMutex.Unlock()
+
+	config, err := readComputePageConfigLocked()
+	if err != nil {
+		return config, err
+	}
+	config.AllowJavaScript = allowed
+	config.UpdatedAt = time.Now().Unix()
+	if err := writeComputePageConfigLocked(config); err != nil {
+		return config, err
+	}
+	config.HasHTML = computePageHTMLExists()
+	return config, nil
+}
+
 func SaveComputePageHTML(fileName string, content []byte) (ComputePageConfig, error) {
 	computePageMutex.Lock()
 	defer computePageMutex.Unlock()
@@ -174,20 +192,20 @@ func SaveComputePageHTML(fileName string, content []byte) (ComputePageConfig, er
 	return config, nil
 }
 
-func ReadEnabledComputePageHTML() ([]byte, error) {
+func ReadEnabledComputePageHTML() ([]byte, ComputePageConfig, error) {
 	computePageMutex.RLock()
 	defer computePageMutex.RUnlock()
 
 	config, err := readComputePageConfigLocked()
 	if err != nil {
-		return nil, err
+		return nil, config, err
 	}
 	if !config.Enabled || !config.HasHTML {
-		return nil, ErrComputePageDisabled
+		return nil, config, ErrComputePageDisabled
 	}
 	data, err := os.ReadFile(computePageHTMLPath())
 	if err != nil {
-		return nil, fmt.Errorf("读取算力页面 HTML 失败: %w", err)
+		return nil, config, fmt.Errorf("读取算力页面 HTML 失败: %w", err)
 	}
-	return data, nil
+	return data, config, nil
 }

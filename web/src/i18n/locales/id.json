@@ -5932,6 +5932,8 @@
     "方向": "Arah",
     "服务": "Layanan",
     "算力页面": "Halaman Komputasi",
+    "允许执行 JavaScript": "Izinkan eksekusi JavaScript",
+    "开启后，上传的 HTML 可执行脚本、访问当前站点上下文并发起网络请求，请仅上传完全可信的内容": "Saat diaktifkan, HTML yang diunggah dapat menjalankan skrip, mengakses konteks situs saat ini, dan membuat permintaan jaringan. Unggah hanya konten yang sepenuhnya tepercaya.",
     "开启后将在顶部导航首页前显示算力入口": "Saat diaktifkan, tautan Komputasi muncul sebelum Beranda di navigasi atas",
     "开启后将在顶部导航首页后显示算力入口": "Saat diaktifkan, tautan Komputasi muncul setelah Beranda di navigasi atas",
     "已开启": "Aktif",

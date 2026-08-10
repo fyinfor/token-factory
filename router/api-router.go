@@ -392,6 +392,7 @@ func SetApiRouter(router *gin.Engine) {
 		{
 			computePageAdminRoute.GET("/", controller.AdminGetComputePageConfig)
 			computePageAdminRoute.PUT("/enabled", controller.AdminUpdateComputePageEnabled)
+			computePageAdminRoute.PUT("/javascript", controller.AdminUpdateComputePageJavaScript)
 			computePageAdminRoute.POST("/content", controller.AdminUploadComputePageHTML)
 		}
 

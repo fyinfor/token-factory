@@ -5933,6 +5933,8 @@
     "服务": "Service",
     "今天": "Aujourd'hui",
     "算力页面": "Page de calcul",
+    "允许执行 JavaScript": "Autoriser l’exécution de JavaScript",
+    "开启后，上传的 HTML 可执行脚本、访问当前站点上下文并发起网络请求，请仅上传完全可信的内容": "Une fois activé, le HTML importé peut exécuter des scripts, accéder au contexte du site actuel et envoyer des requêtes réseau. N’importez que du contenu entièrement fiable.",
     "开启后将在顶部导航首页前显示算力入口": "Une fois active, le lien Calcul apparait avant Accueil dans la navigation superieure",
     "开启后将在顶部导航首页后显示算力入口": "Une fois active, le lien Calcul apparait apres Accueil dans la navigation superieure",
     "已开启": "Active",

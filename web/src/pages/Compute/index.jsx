@@ -28,6 +28,7 @@ import { useTranslation } from 'react-i18next';
 export default function ComputePage() {
   const { t } = useTranslation();
   const [state, setState] = useState('loading');
+  const [allowJavaScript, setAllowJavaScript] = useState(false);
   const iframeRef = useRef(null);
   const resizeObserverRef = useRef(null);
   const copyCleanupRef = useRef(null);
@@ -103,6 +104,7 @@ export default function ComputePage() {
       })
       .then((payload) => {
         if (cancelled) return;
+        setAllowJavaScript(Boolean(payload?.data?.allow_javascript));
         setState(
           payload?.success && payload?.data?.enabled ? 'enabled' : 'disabled',
         );
@@ -152,7 +154,11 @@ export default function ComputePage() {
       className='compute-page-frame'
       src='/api/compute-page/content'
       title={t('算力')}
-      sandbox='allow-same-origin'
+      sandbox={
+        allowJavaScript
+          ? 'allow-same-origin allow-scripts'
+          : 'allow-same-origin'
+      }
       onLoad={handleIframeLoad}
       referrerPolicy='no-referrer'
     />

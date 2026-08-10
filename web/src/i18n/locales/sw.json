@@ -5932,6 +5932,8 @@
     "方向": "Mwelekeo",
     "服务": "Huduma",
     "算力页面": "Ukurasa wa Ukokotoaji",
+    "允许执行 JavaScript": "Ruhusu JavaScript kutekelezwa",
+    "开启后，上传的 HTML 可执行脚本、访问当前站点上下文并发起网络请求，请仅上传完全可信的内容": "Ikiwashwa, HTML iliyopakiwa inaweza kutekeleza hati, kufikia muktadha wa tovuti ya sasa na kutuma maombi ya mtandao. Pakia tu maudhui unayoyaamini kabisa.",
     "开启后将在顶部导航首页前显示算力入口": "Ikiwashwa, kiungo cha Ukokotoaji kitaonekana kabla ya Mwanzo kwenye menyu ya juu",
     "开启后将在顶部导航首页后显示算力入口": "Ikiwashwa, kiungo cha Ukokotoaji kitaonekana baada ya Mwanzo kwenye menyu ya juu",
     "已开启": "Imewashwa",

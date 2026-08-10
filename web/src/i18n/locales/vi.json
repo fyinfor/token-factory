@@ -5932,6 +5932,8 @@
     "方向": "Hướng",
     "服务": "Dịch vụ",
     "算力页面": "Trang năng lực tính toán",
+    "允许执行 JavaScript": "Cho phép thực thi JavaScript",
+    "开启后，上传的 HTML 可执行脚本、访问当前站点上下文并发起网络请求，请仅上传完全可信的内容": "Khi bật, HTML đã tải lên có thể chạy tập lệnh, truy cập ngữ cảnh của trang hiện tại và gửi yêu cầu mạng. Chỉ tải lên nội dung hoàn toàn đáng tin cậy.",
     "开启后将在顶部导航首页前显示算力入口": "Khi bật, liên kết Năng lực tính toán sẽ xuất hiện trước Trang chủ trên thanh điều hướng",
     "开启后将在顶部导航首页后显示算力入口": "Khi bật, liên kết Năng lực tính toán sẽ xuất hiện sau Trang chủ trên thanh điều hướng",
     "已开启": "Đã bật",
