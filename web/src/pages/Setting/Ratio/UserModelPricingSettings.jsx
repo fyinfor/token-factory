@@ -7,7 +7,7 @@ published by the Free Software Foundation, either version 3 of the
 License, or (at your option) any later version.
 
 This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 GNU Affero General Public License for more details.
 
@@ -37,6 +37,8 @@ import { API, showError, showSuccess } from '../../../helpers';
 
 const { Text } = Typography;
 
+const PAGE_SIZE = 20;
+
 const emptyForm = {
   id: 0,
   user_id: undefined,
@@ -51,15 +53,35 @@ const emptyImportForm = {
   enabled: true,
 };
 
+const pickEditable = (row) => ({
+  price_discount_percent: Number(row.price_discount_percent) || 0,
+  operating_cost_percent: Number(row.operating_cost_percent) || 0,
+  markup_discount_rate: Number(row.markup_discount_rate) || 0,
+  enabled: !!row.enabled,
+});
+
+const sameEditable = (a, b) =>
+  Number(a.price_discount_percent) === Number(b.price_discount_percent) &&
+  Number(a.operating_cost_percent) === Number(b.operating_cost_percent) &&
+  Number(a.markup_discount_rate) === Number(b.markup_discount_rate) &&
+  !!a.enabled === !!b.enabled;
+
+const calcTotalPercent = (row) =>
+  (Number(row.price_discount_percent) || 0) +
+  (Number(row.operating_cost_percent) || 0) +
+  (Number(row.markup_discount_rate) || 0);
+
 /**
  * UserModelPricingSettings 用户指定价管理（按用户视角）：
- * 先选用户，再看/管该用户下的模型指定价；支持一键导入当前已定价模型并统一三项折扣。
+ * 先选用户，再在表格内统一填三项折扣；支持一键导入当前已定价模型。
  */
 export default function UserModelPricingSettings() {
   const { t } = useTranslation();
   const [items, setItems] = useState([]);
+  const [baselines, setBaselines] = useState({});
   const [loading, setLoading] = useState(false);
   const [filterModel, setFilterModel] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
 
   const [pricingUsers, setPricingUsers] = useState([]);
   const [selectedUserId, setSelectedUserId] = useState(undefined);
@@ -68,7 +90,6 @@ export default function UserModelPricingSettings() {
   const [modalVisible, setModalVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(emptyForm);
-  const [editing, setEditing] = useState(false);
   const [modelOptions, setModelOptions] = useState([]);
 
   const [importVisible, setImportVisible] = useState(false);
@@ -79,12 +100,14 @@ export default function UserModelPricingSettings() {
 
   const [preview, setPreview] = useState(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewVisible, setPreviewVisible] = useState(false);
+  const [previewTitle, setPreviewTitle] = useState('');
+
+  const [savingRowId, setSavingRowId] = useState(null);
+  const [savingAll, setSavingAll] = useState(false);
 
   const totalPercent = useMemo(
-    () =>
-      (Number(form.price_discount_percent) || 0) +
-      (Number(form.operating_cost_percent) || 0) +
-      (Number(form.markup_discount_rate) || 0),
+    () => calcTotalPercent(form),
     [form],
   );
 
@@ -106,6 +129,16 @@ export default function UserModelPricingSettings() {
         label: `${u.username}${u.display_name ? ` (${u.display_name})` : ''} #${u.id}`,
       }));
 
+  const syncItems = (data) => {
+    const list = data || [];
+    setItems(list);
+    const next = {};
+    for (const row of list) {
+      next[row.id] = pickEditable(row);
+    }
+    setBaselines(next);
+  };
+
   const loadPricingUsers = async () => {
     try {
       const res = await API.get('/api/user_model_pricing/users');
@@ -120,7 +153,7 @@ export default function UserModelPricingSettings() {
   const loadList = async (userId) => {
     const uid = userId ?? selectedUserId;
     if (!uid) {
-      setItems([]);
+      syncItems([]);
       return;
     }
     setLoading(true);
@@ -128,7 +161,7 @@ export default function UserModelPricingSettings() {
       const res = await API.get(`/api/user_model_pricing/?user_id=${uid}`);
       const { success, message, data } = res.data;
       if (success) {
-        setItems(data || []);
+        syncItems(data || []);
       } else {
         showError(message);
       }
@@ -175,14 +208,18 @@ export default function UserModelPricingSettings() {
   }, []);
 
   useEffect(() => {
+    setCurrentPage(1);
     if (selectedUserId) {
       loadList(selectedUserId);
     } else {
-      setItems([]);
+      syncItems([]);
     }
   }, [selectedUserId]);
 
-  const refreshAll = async () => {
+  const refreshAll = async ({ resetPage = false } = {}) => {
+    if (resetPage) {
+      setCurrentPage(1);
+    }
     await loadPricingUsers();
     if (selectedUserId) {
       await loadList(selectedUserId);
@@ -198,22 +235,6 @@ export default function UserModelPricingSettings() {
       ...emptyForm,
       user_id: selectedUserId,
     });
-    setEditing(false);
-    setPreview(null);
-    setModalVisible(true);
-  };
-
-  const openEdit = (row) => {
-    setForm({
-      id: row.id,
-      user_id: row.user_id,
-      model_name: row.model_name,
-      price_discount_percent: row.price_discount_percent,
-      operating_cost_percent: row.operating_cost_percent,
-      markup_discount_rate: row.markup_discount_rate,
-      enabled: row.enabled,
-    });
-    setEditing(true);
     setPreview(null);
     setModalVisible(true);
   };
@@ -243,13 +264,14 @@ export default function UserModelPricingSettings() {
     }
   };
 
-  const doPreview = async (f) => {
-    const target = f || form;
-    if (!target.model_name) {
+  const doPreview = async (target, title = '') => {
+    if (!target?.model_name) {
       showError(t('请先选择模型'));
       return;
     }
     setPreviewLoading(true);
+    setPreviewTitle(title || target.model_name);
+    setPreviewVisible(true);
     try {
       const params = new URLSearchParams({
         model_name: target.model_name,
@@ -270,6 +292,35 @@ export default function UserModelPricingSettings() {
     }
   };
 
+  const upsertPricing = async (payload) => {
+    const res = await API.post('/api/user_model_pricing/', {
+      user_id: payload.user_id,
+      model_name: payload.model_name,
+      price_discount_percent: Number(payload.price_discount_percent) || 0,
+      operating_cost_percent: Number(payload.operating_cost_percent) || 0,
+      markup_discount_rate: Number(payload.markup_discount_rate) || 0,
+      enabled: !!payload.enabled,
+    });
+    return res.data;
+  };
+
+  const applySavedRow = (saved, fallbackRow) => {
+    const next = {
+      ...fallbackRow,
+      ...(saved || {}),
+      total_percent:
+        saved?.total_percent ??
+        calcTotalPercent({ ...fallbackRow, ...(saved || {}) }),
+    };
+    setItems((prev) =>
+      prev.map((it) => (it.id === fallbackRow.id ? { ...it, ...next } : it)),
+    );
+    setBaselines((prev) => ({
+      ...prev,
+      [fallbackRow.id]: pickEditable(next),
+    }));
+  };
+
   const doSave = async () => {
     const uid = form.user_id || selectedUserId;
     if (!uid || !form.model_name) {
@@ -278,25 +329,92 @@ export default function UserModelPricingSettings() {
     }
     setSaving(true);
     try {
-      const res = await API.post('/api/user_model_pricing/', {
+      const { success, message } = await upsertPricing({
         user_id: uid,
         model_name: form.model_name,
-        price_discount_percent: Number(form.price_discount_percent) || 0,
-        operating_cost_percent: Number(form.operating_cost_percent) || 0,
-        markup_discount_rate: Number(form.markup_discount_rate) || 0,
-        enabled: !!form.enabled,
+        price_discount_percent: form.price_discount_percent,
+        operating_cost_percent: form.operating_cost_percent,
+        markup_discount_rate: form.markup_discount_rate,
+        enabled: form.enabled,
       });
-      if (res.data.success) {
+      if (success) {
         showSuccess(t('保存成功'));
         setModalVisible(false);
-        refreshAll();
+        // 新增可能改变列表长度，刷新但保留当前页
+        await refreshAll({ resetPage: false });
       } else {
-        showError(res.data.message);
+        showError(message);
       }
     } catch (e) {
       showError(e?.response?.data?.message || t('保存失败'));
     } finally {
       setSaving(false);
+    }
+  };
+
+  const doSaveRow = async (row) => {
+    if (!row?.user_id || !row?.model_name) {
+      showError(t('请选择用户和模型'));
+      return;
+    }
+    setSavingRowId(row.id);
+    try {
+      const { success, message, data } = await upsertPricing(row);
+      if (success) {
+        showSuccess(t('保存成功'));
+        applySavedRow(data, row);
+        // 用户汇总里的 model_count 不变，可不重置列表页
+        await loadPricingUsers();
+      } else {
+        showError(message);
+      }
+    } catch (e) {
+      showError(e?.response?.data?.message || t('保存失败'));
+    } finally {
+      setSavingRowId(null);
+    }
+  };
+
+  const doSaveAllDirty = async () => {
+    const dirty = items.filter((row) => {
+      const base = baselines[row.id];
+      return base && !sameEditable(row, base);
+    });
+    if (!dirty.length) {
+      showError(t('没有待保存的修改'));
+      return;
+    }
+    setSavingAll(true);
+    let ok = 0;
+    let fail = 0;
+    try {
+      for (const row of dirty) {
+        try {
+          const { success, message, data } = await upsertPricing(row);
+          if (success) {
+            applySavedRow(data, row);
+            ok += 1;
+          } else {
+            fail += 1;
+            showError(`${row.model_name}: ${message}`);
+          }
+        } catch (e) {
+          fail += 1;
+          showError(
+            `${row.model_name}: ${e?.response?.data?.message || t('保存失败')}`,
+          );
+        }
+      }
+      if (ok > 0) {
+        showSuccess(
+          fail > 0
+            ? `${t('已保存')} ${ok} ${t('条')}，${t('失败')} ${fail} ${t('条')}`
+            : `${t('已保存')} ${ok} ${t('条修改')}`,
+        );
+        await loadPricingUsers();
+      }
+    } finally {
+      setSavingAll(false);
     }
   };
 
@@ -321,7 +439,7 @@ export default function UserModelPricingSettings() {
           `${t('导入完成')}：${t('新建')} ${d.created ?? 0}，${t('更新')} ${d.updated ?? 0}（${t('共')} ${d.total_models ?? 0} ${t('个模型')}）`,
         );
         setImportVisible(false);
-        refreshAll();
+        await refreshAll({ resetPage: true });
       } else {
         showError(res.data.message);
       }
@@ -337,7 +455,13 @@ export default function UserModelPricingSettings() {
       const res = await API.delete(`/api/user_model_pricing/${row.id}`);
       if (res.data.success) {
         showSuccess(t('删除成功'));
-        refreshAll();
+        setItems((prev) => prev.filter((it) => it.id !== row.id));
+        setBaselines((prev) => {
+          const next = { ...prev };
+          delete next[row.id];
+          return next;
+        });
+        await loadPricingUsers();
       } else {
         showError(res.data.message);
       }
@@ -356,13 +480,24 @@ export default function UserModelPricingSettings() {
         showSuccess(
           `${t('已清空')} ${res.data.data?.deleted ?? 0} ${t('条指定价')}`,
         );
-        refreshAll();
+        await refreshAll({ resetPage: true });
       } else {
         showError(res.data.message);
       }
     } catch (e) {
       showError(e?.response?.data?.message || t('清空失败'));
     }
+  };
+
+  const updateRowField = (rowId, key, value) => {
+    setItems((prev) =>
+      prev.map((it) => {
+        if (it.id !== rowId) return it;
+        const next = { ...it, [key]: value };
+        next.total_percent = calcTotalPercent(next);
+        return next;
+      }),
+    );
   };
 
   const filteredItems = useMemo(() => {
@@ -372,6 +507,15 @@ export default function UserModelPricingSettings() {
       (it.model_name || '').toLowerCase().includes(kw),
     );
   }, [items, filterModel]);
+
+  const dirtyCount = useMemo(() => {
+    let count = 0;
+    for (const row of items) {
+      const base = baselines[row.id];
+      if (base && !sameEditable(row, base)) count += 1;
+    }
+    return count;
+  }, [items, baselines]);
 
   // 顶部用户选择：已有配置的用户优先，合并搜索结果
   const mergedUserOptions = useMemo(() => {
@@ -396,69 +540,134 @@ export default function UserModelPricingSettings() {
     return Array.from(map.values());
   }, [pricingUsers, userOptions, selectedUserId, selectedUserLabel, t]);
 
+  const maxPage = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE) || 1);
+  const safePage = Math.min(currentPage, maxPage);
+
+  useEffect(() => {
+    if (currentPage !== safePage) {
+      setCurrentPage(safePage);
+    }
+  }, [currentPage, safePage]);
+
   const columns = [
     {
       title: t('模型'),
       dataIndex: 'model_name',
+      width: 200,
       render: (text) => <Tag color='blue'>{text}</Tag>,
     },
     {
-      title: t('成本折扣'),
+      title: t('成本折扣') + ' (%)',
       dataIndex: 'price_discount_percent',
-      render: (v) => `${v}%`,
+      width: 130,
+      render: (v, row) => (
+        <InputNumber
+          style={{ width: '100%' }}
+          min={0}
+          max={1000}
+          value={v}
+          onChange={(val) =>
+            updateRowField(row.id, 'price_discount_percent', val ?? 0)
+          }
+        />
+      ),
     },
     {
-      title: t('经营成本'),
+      title: t('经营成本') + ' (%)',
       dataIndex: 'operating_cost_percent',
-      render: (v) => `${v}%`,
+      width: 130,
+      render: (v, row) => (
+        <InputNumber
+          style={{ width: '100%' }}
+          min={0}
+          max={1000}
+          value={v}
+          onChange={(val) =>
+            updateRowField(row.id, 'operating_cost_percent', val ?? 0)
+          }
+        />
+      ),
     },
     {
-      title: t('加价折扣'),
+      title: t('加价折扣') + ' (%)',
       dataIndex: 'markup_discount_rate',
-      render: (v) => `${v}%`,
+      width: 130,
+      render: (v, row) => (
+        <InputNumber
+          style={{ width: '100%' }}
+          min={0}
+          max={1000}
+          value={v}
+          onChange={(val) =>
+            updateRowField(row.id, 'markup_discount_rate', val ?? 0)
+          }
+        />
+      ),
     },
     {
       title: t('总折扣'),
       dataIndex: 'total_percent',
-      render: (v) => (
+      width: 100,
+      render: (_, row) => (
         <Tag color='green' size='large'>
-          {Math.round(v * 100) / 100}%
+          {Math.round(calcTotalPercent(row) * 100) / 100}%
         </Tag>
       ),
     },
     {
       title: t('状态'),
       dataIndex: 'enabled',
-      render: (v) =>
-        v ? (
-          <Tag color='green'>{t('启用')}</Tag>
-        ) : (
-          <Tag color='grey'>{t('禁用')}</Tag>
-        ),
+      width: 90,
+      render: (v, row) => (
+        <Switch
+          checked={!!v}
+          onChange={(checked) => updateRowField(row.id, 'enabled', checked)}
+        />
+      ),
     },
     {
       title: t('更新时间'),
       dataIndex: 'updated_time',
+      width: 170,
       render: (v) => (v ? new Date(v * 1000).toLocaleString() : '-'),
     },
     {
       title: t('操作'),
-      render: (_, row) => (
-        <Space>
-          <Button size='small' onClick={() => openEdit(row)}>
-            {t('编辑')}
-          </Button>
-          <Popconfirm
-            title={t('确认删除该指定价配置？')}
-            content={t('删除后该用户对该模型恢复默认渠道定价与选路')}
-            onConfirm={() => doDelete(row)}
-          >
-            <Button size='small' type='danger'>
-              {t('删除')}
+      width: 220,
+      fixed: 'right',
+      render: (_, row) => {
+        const dirty =
+          baselines[row.id] && !sameEditable(row, baselines[row.id]);
+        return (
+          <Space wrap>
+            <Button
+              size='small'
+              theme='solid'
+              type='primary'
+              disabled={!dirty}
+              loading={savingRowId === row.id}
+              onClick={() => doSaveRow(row)}
+            >
+              {t('保存')}
             </Button>
-          </Popconfirm>
-        </Space>
-      ),
+            <Button
+              size='small'
+              onClick={() => doPreview(row, row.model_name)}
+            >
+              {t('预览')}
+            </Button>
+            <Popconfirm
+              title={t('确认删除该指定价配置？')}
+              content={t('删除后该用户对该模型恢复默认渠道定价与选路')}
+              onConfirm={() => doDelete(row)}
+            >
+              <Button size='small' type='danger'>
+                {t('删除')}
+              </Button>
+            </Popconfirm>
+          </Space>
+        );
+      },
     },
   ];
 
@@ -470,6 +679,11 @@ export default function UserModelPricingSettings() {
     setImportForm((prev) => ({ ...prev, [key]: value }));
   };
 
+  const handleFilterChange = (v) => {
+    setFilterModel(v);
+    setCurrentPage(1);
+  };
+
   return (
     <div>
       <Banner
@@ -477,7 +691,7 @@ export default function UserModelPricingSettings() {
         closeIcon={null}
         className='!rounded-lg mb-3'
         description={t(
-          '按用户管理指定价：先选择用户，再配置该用户下各模型的固定折扣。「一键导入」会为每个已定价模型，抄录当前最便宜启用渠道的三项折扣（不是统一手填覆盖）。计费按「全局官方价 × 总折扣」，超价渠道对该用户不可用。',
+          '按用户管理指定价：先选择用户，再在表格中直接填写各模型的三项折扣。「一键导入」会为每个已定价模型，抄录当前最便宜启用渠道的三项折扣（不是统一手填覆盖）。计费按「全局官方价 × 总折扣」，超价渠道对该用户不可用。',
         )}
       />
 
@@ -495,15 +709,22 @@ export default function UserModelPricingSettings() {
           onChange={(v) => {
             setSelectedUserId(v);
             setFilterModel('');
+            setCurrentPage(1);
           }}
           onClear={() => {
             setSelectedUserId(undefined);
-            setItems([]);
+            syncItems([]);
+            setCurrentPage(1);
           }}
         />
         {selectedUserId && (
           <Tag color='purple' size='large'>
             {selectedUserLabel} · {items.length} {t('个模型')}
+          </Tag>
+        )}
+        {dirtyCount > 0 && (
+          <Tag color='orange' size='large'>
+            {t('未保存')} {dirtyCount} {t('条')}
           </Tag>
         )}
       </div>
@@ -515,7 +736,11 @@ export default function UserModelPricingSettings() {
               key={u.user_id}
               color={selectedUserId === u.user_id ? 'blue' : 'white'}
               style={{ cursor: 'pointer' }}
-              onClick={() => setSelectedUserId(u.user_id)}
+              onClick={() => {
+                setSelectedUserId(u.user_id);
+                setFilterModel('');
+                setCurrentPage(1);
+              }}
             >
               {u.username || `#${u.user_id}`}（{u.model_count}）
             </Tag>
@@ -539,11 +764,23 @@ export default function UserModelPricingSettings() {
               style={{ width: 280 }}
               placeholder={t('按模型名筛选')}
               value={filterModel}
-              onChange={setFilterModel}
+              onChange={handleFilterChange}
               showClear
             />
             <Space wrap>
-              <Button onClick={refreshAll}>{t('刷新')}</Button>
+              <Button
+                theme='solid'
+                type='secondary'
+                disabled={dirtyCount === 0}
+                loading={savingAll}
+                onClick={doSaveAllDirty}
+              >
+                {t('保存全部修改')}
+                {dirtyCount > 0 ? ` (${dirtyCount})` : ''}
+              </Button>
+              <Button onClick={() => refreshAll({ resetPage: false })}>
+                {t('刷新')}
+              </Button>
               <Button onClick={openImport}>{t('一键导入当前折扣')}</Button>
               <Button theme='solid' type='primary' onClick={openAdd}>
                 {t('新增模型指定价')}
@@ -562,14 +799,21 @@ export default function UserModelPricingSettings() {
             dataSource={filteredItems}
             loading={loading}
             rowKey='id'
-            pagination={{ pageSize: 20 }}
+            scroll={{ x: 1200 }}
+            pagination={{
+              currentPage: safePage,
+              pageSize: PAGE_SIZE,
+              total: filteredItems.length,
+              showSizeChanger: false,
+              onPageChange: (page) => setCurrentPage(page),
+            }}
             empty={t('该用户暂无指定价，可用「一键导入当前折扣」从最便宜渠道批量绑定')}
           />
         </>
       )}
 
       <Modal
-        title={editing ? t('编辑模型指定价') : t('新增模型指定价')}
+        title={t('新增模型指定价')}
         visible={modalVisible}
         onCancel={() => setModalVisible(false)}
         onOk={doSave}
@@ -597,7 +841,6 @@ export default function UserModelPricingSettings() {
               optionList={modelOptions.map((m) => ({ value: m, label: m }))}
               value={form.model_name || undefined}
               onChange={(v) => setField('model_name', v)}
-              disabled={editing}
             />
           </div>
           <div className='grid grid-cols-3 gap-3'>
@@ -648,61 +891,83 @@ export default function UserModelPricingSettings() {
             </Space>
           </div>
           <div>
-            <Button loading={previewLoading} onClick={() => doPreview()} block>
+            <Button
+              loading={previewLoading}
+              onClick={() => doPreview(form)}
+              block
+            >
               {t('预览可用渠道（价格上限校验）')}
             </Button>
           </div>
-          {preview && (
-            <div>
-              <Banner
-                type={
-                  !preview.cap_defined
-                    ? 'warning'
-                    : preview.within_count > 0
-                      ? 'success'
-                      : 'danger'
-                }
-                closeIcon={null}
-                className='!rounded-lg'
-                description={
-                  !preview.cap_defined
-                    ? t(
-                        '该模型未配置全局官方价，指定价上限无法计算：计费将回退渠道基价，选路不做价格限制。建议先在「价格设置」中配置全局价。',
-                      )
-                    : `${t('价格上限')} ${Math.round(preview.cap * 1e6) / 1e6}，${preview.within_count}/${preview.total_channels} ${t('个渠道在上限内可被调用')}`
-                }
-              />
-              {preview.cap_defined && (preview.channels || []).length > 0 && (
-                <Table
-                  size='small'
-                  className='mt-2'
-                  columns={[
-                    { title: t('渠道'), dataIndex: 'channel_name' },
-                    { title: 'ID', dataIndex: 'channel_id', width: 80 },
-                    {
-                      title: t('有效单价'),
-                      dataIndex: 'unit_price',
-                      render: (v) => Math.round(v * 1e6) / 1e6,
-                    },
-                    {
-                      title: t('可调用'),
-                      dataIndex: 'within_cap',
-                      render: (v) =>
-                        v ? (
-                          <Tag color='green'>{t('是')}</Tag>
-                        ) : (
-                          <Tag color='red'>{t('超价排除')}</Tag>
-                        ),
-                    },
-                  ]}
-                  dataSource={preview.channels}
-                  rowKey='channel_id'
-                  pagination={{ pageSize: 5 }}
-                />
-              )}
-            </div>
-          )}
         </div>
+      </Modal>
+
+      <Modal
+        title={`${t('预览可用渠道')}${previewTitle ? ` · ${previewTitle}` : ''}`}
+        visible={previewVisible}
+        onCancel={() => {
+          setPreviewVisible(false);
+          setPreview(null);
+        }}
+        footer={
+          <Button onClick={() => setPreviewVisible(false)}>{t('关闭')}</Button>
+        }
+        width={720}
+      >
+        {previewLoading && !preview ? (
+          <Text type='tertiary'>{t('加载中')}...</Text>
+        ) : preview ? (
+          <div>
+            <Banner
+              type={
+                !preview.cap_defined
+                  ? 'warning'
+                  : preview.within_count > 0
+                    ? 'success'
+                    : 'danger'
+              }
+              closeIcon={null}
+              className='!rounded-lg'
+              description={
+                !preview.cap_defined
+                  ? t(
+                      '该模型未配置全局官方价，指定价上限无法计算：计费将回退渠道基价，选路不做价格限制。建议先在「价格设置」中配置全局价。',
+                    )
+                  : `${t('价格上限')} ${Math.round(preview.cap * 1e6) / 1e6}，${preview.within_count}/${preview.total_channels} ${t('个渠道在上限内可被调用')}`
+              }
+            />
+            {preview.cap_defined && (preview.channels || []).length > 0 && (
+              <Table
+                size='small'
+                className='mt-2'
+                columns={[
+                  { title: t('渠道'), dataIndex: 'channel_name' },
+                  { title: 'ID', dataIndex: 'channel_id', width: 80 },
+                  {
+                    title: t('有效单价'),
+                    dataIndex: 'unit_price',
+                    render: (v) => Math.round(v * 1e6) / 1e6,
+                  },
+                  {
+                    title: t('可调用'),
+                    dataIndex: 'within_cap',
+                    render: (v) =>
+                      v ? (
+                        <Tag color='green'>{t('是')}</Tag>
+                      ) : (
+                        <Tag color='red'>{t('超价排除')}</Tag>
+                      ),
+                  },
+                ]}
+                dataSource={preview.channels}
+                rowKey='channel_id'
+                pagination={{ pageSize: 5 }}
+              />
+            )}
+          </div>
+        ) : (
+          <Text type='tertiary'>{t('暂无预览数据')}</Text>
+        )}
       </Modal>
 
       <Modal
