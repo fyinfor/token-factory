@@ -57,6 +57,7 @@ const PricingPage = () => {
     viewMode,
     setViewMode,
     blurPricing,
+    homeCardMode: true,
   };
 
   return (

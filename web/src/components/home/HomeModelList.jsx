@@ -344,6 +344,23 @@ const HomeModelList = () => {
         .home-model-price-block {
           color: var(--semi-color-text-0);
         }
+        .home-model-description-slot {
+          flex: 1 1 0;
+          min-height: 0;
+          margin-top: 0.75rem;
+          overflow: hidden;
+        }
+        .home-model-description {
+          display: -webkit-box;
+          max-height: 3em;
+          overflow: hidden;
+          color: var(--semi-color-text-2);
+          font-size: 12px;
+          line-height: 1.5;
+          overflow-wrap: anywhere;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+        }
         .home-model-bottom-tags {
           display: flex;
           min-width: 0;
@@ -1028,6 +1045,7 @@ const HomeModelList = () => {
               showSizeChanger={false}
               blurPricing={blurPricing}
               homeCardMode
+              showModelDescription
               searchValue={pricingData.searchValue}
               hotChannelScoreMap={pricingData.hotChannelScoreMap}
               filterSupplier={pricingData.filterSupplier}

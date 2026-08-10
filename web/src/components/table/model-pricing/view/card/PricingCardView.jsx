@@ -96,6 +96,7 @@ import {
 } from '../../utils/priceDisplay';
 import PricingCardSkeleton from './PricingCardSkeleton';
 import ModelPerfCardSection from '../../components/ModelPerfCardSection';
+import './homeModelCard.css';
 import { useMinimumLoadingTime } from '../../../../../hooks/common/useMinimumLoadingTime';
 import { renderLimitedItems } from '../../../../common/ui/RenderUtils';
 import { useIsMobile } from '../../../../../hooks/common/useIsMobile';
@@ -1216,6 +1217,7 @@ const PricingCardView = ({
   showSizeChanger = true,
   blurPricing = false,
   homeCardMode = false,
+  showModelDescription = false,
   searchValue = '',
   channelVideoRatio = {},
   channelVideoCompletionRatio = {},
@@ -2333,6 +2335,9 @@ const PricingCardView = ({
       ? getSupplierTypeLabel(supplierType, t)
       : '';
     const supplierSuffix = getModelChannelRouteSuffixes(model)[0] || '';
+    const modelDescription = showModelDescription
+      ? resolveModelDescription(model)
+      : '';
     const routeMetaTitle = [supplierTypeLabel, supplierSuffix]
       .filter(Boolean)
       .join(' · ');
@@ -2462,6 +2467,17 @@ const PricingCardView = ({
               <span className='text-xs text-semi-color-text-2'>-</span>
             )}
           </div>
+
+          {modelDescription ? (
+            <div
+              className='home-model-description-slot'
+              style={pricingBlurStyle}
+            >
+              <p className='home-model-description m-0'>
+                {renderHighlightedText(modelDescription)}
+              </p>
+            </div>
+          ) : null}
 
           <div
             className='mt-auto flex min-w-0 items-end justify-between gap-2 pt-3'
