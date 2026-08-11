@@ -876,29 +876,49 @@ func tryTokenFactoryRoute(c *gin.Context, modelName string, group string, channe
 		logger.LogInfo(c, fmt.Sprintf("local_route skip: no enabled channels for model=%s group=%s", modelName, group))
 		return nil, false
 	}
-	// 用户指定价：排除单价超出用户价格上限的渠道。
+	// 用户指定价：price_cap 按上限过滤；channel_list 按勾选集过滤（智能路由仍自排序）。
 	candidates = service.FilterRouteCandidatesByUserPriceCap(userID, modelName, candidates)
 	if len(candidates) == 0 {
-		logger.LogInfo(c, fmt.Sprintf("local_route skip: no channels within user price cap for model=%s group=%s user=%d", modelName, group, userID))
+		logger.LogInfo(c, fmt.Sprintf("local_route skip: no channels within user pricing constraint for model=%s group=%s user=%d", modelName, group, userID))
 		return nil, false
 	}
 
 	res := service.SelectChannelLocal(modelName, userID, candidates)
+	var ordered []int
+	strategy := res.Strategy
+	groupKey := res.GroupKey
 	if res.Fallback {
-		logger.LogInfo(c, "local_route skip: 默认/未实现模式或无候选 (fallback)")
-		return nil, false
-	}
-	if len(res.OrderedChannelIDs) == 0 {
+		// channel_list：智能路由未启用时，按管理员手动 priority 调用。
+		if service.UserPricingUsesManualChannelPriority(userID, modelName) {
+			sorted := service.SortRouteCandidatesByUserPricingPriority(userID, modelName, candidates)
+			ordered = make([]int, 0, len(sorted))
+			for _, cand := range sorted {
+				ordered = append(ordered, cand.ChannelID)
+			}
+			strategy = model.UserPricingModeChannelList
+			if groupKey == "" {
+				groupKey = modelName
+			}
+			logger.LogInfo(c, fmt.Sprintf("local_route channel_list manual priority for model=%s user=%d ordered=%v", modelName, userID, ordered))
+		} else {
+			logger.LogInfo(c, "local_route skip: 默认/未实现模式或无候选 (fallback)")
+			return nil, false
+		}
+	} else if len(res.OrderedChannelIDs) == 0 {
 		logger.LogInfo(c, "local_route skip: empty ordered channel ids")
 		return nil, false
+	} else {
+		ordered = res.OrderedChannelIDs
 	}
-
-	ordered := res.OrderedChannelIDs
+	if len(ordered) == 0 {
+		logger.LogInfo(c, "local_route skip: empty ordered channel ids after user pricing")
+		return nil, false
+	}
 	isEnabled := func(id int) bool {
 		ch, err := model.CacheGetChannel(id)
 		return err == nil && ch != nil && ch.Status == common.ChannelStatusEnabled
 	}
-	picked, ok := service.TFRoutePickChannel(c, res.GroupKey, group, res.Strategy, ordered, isEnabled)
+	picked, ok := service.TFRoutePickChannel(c, groupKey, group, strategy, ordered, isEnabled)
 	if !ok {
 		logger.LogInfo(c, "local_route skip: 候选均不可用")
 		return nil, false
@@ -908,6 +928,6 @@ func tryTokenFactoryRoute(c *gin.Context, modelName string, group string, channe
 		return nil, false
 	}
 	common.SetContextKey(c, constant.ContextKeySmartRouteChannelOrder, ordered)
-	logger.LogInfo(c, fmt.Sprintf("local_route selected: channel=%s(id=%d) model=%s group=%s strategy=%s ordered=%v", ch.Name, ch.Id, modelName, res.GroupKey, res.Strategy, ordered))
+	logger.LogInfo(c, fmt.Sprintf("local_route selected: channel=%s(id=%d) model=%s group=%s strategy=%s ordered=%v", ch.Name, ch.Id, modelName, groupKey, strategy, ordered))
 	return ch, true
 }

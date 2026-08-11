@@ -360,6 +360,7 @@ func migrateDB() error {
 		&UserModelGroupWeight{},
 		&UserModelGroupOverride{},
 		&UserModelPricingOverride{},
+		&UserModelPricingChannel{},
 		&TemporaryUpload{},
 	)
 	if err != nil {

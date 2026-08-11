@@ -26,6 +26,8 @@ import {
   InputNumber,
   Modal,
   Popconfirm,
+  Radio,
+  RadioGroup,
   Select,
   Space,
   Switch,
@@ -42,6 +44,7 @@ const PAGE_SIZE = 20;
 
 const EXPORT_FIELD_OPTIONS = [
   { value: 'model_name', labelKey: '模型', defaultChecked: true },
+  { value: 'mode', labelKey: '模式', defaultChecked: true },
   { value: 'price_discount_percent', labelKey: '成本折扣', defaultChecked: true },
   { value: 'operating_cost_percent', labelKey: '经营成本', defaultChecked: true },
   { value: 'markup_discount_rate', labelKey: '加价折扣', defaultChecked: true },
@@ -90,28 +93,63 @@ const emptyForm = {
   id: 0,
   user_id: undefined,
   model_name: '',
+  mode: 'price_cap',
   price_discount_percent: 100,
   operating_cost_percent: 0,
   markup_discount_rate: 0,
   enabled: true,
+  channels: [],
 };
 
 const emptyImportForm = {
   enabled: true,
 };
 
+const MODE_PRICE_CAP = 'price_cap';
+const MODE_CHANNEL_LIST = 'channel_list';
+
+const modeLabel = (mode, t) =>
+  mode === MODE_CHANNEL_LIST ? t('渠道清单') : t('价格上限');
+
 const pickEditable = (row) => ({
+  mode: row.mode === MODE_CHANNEL_LIST ? MODE_CHANNEL_LIST : MODE_PRICE_CAP,
   price_discount_percent: Number(row.price_discount_percent) || 0,
   operating_cost_percent: Number(row.operating_cost_percent) || 0,
   markup_discount_rate: Number(row.markup_discount_rate) || 0,
   enabled: !!row.enabled,
+  channels: normalizeChannels(row.channels),
 });
 
+const normalizeChannels = (channels) => {
+  const list = Array.isArray(channels) ? channels : [];
+  const seen = new Set();
+  const out = [];
+  for (const ch of list) {
+    const id = Number(ch?.channel_id) || 0;
+    if (id <= 0 || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ channel_id: id, priority: out.length + 1 });
+  }
+  return out;
+};
+
+const sameChannels = (a, b) => {
+  const aa = normalizeChannels(a);
+  const bb = normalizeChannels(b);
+  if (aa.length !== bb.length) return false;
+  for (let i = 0; i < aa.length; i += 1) {
+    if (aa[i].channel_id !== bb[i].channel_id) return false;
+  }
+  return true;
+};
+
 const sameEditable = (a, b) =>
+  (a.mode || MODE_PRICE_CAP) === (b.mode || MODE_PRICE_CAP) &&
   Number(a.price_discount_percent) === Number(b.price_discount_percent) &&
   Number(a.operating_cost_percent) === Number(b.operating_cost_percent) &&
   Number(a.markup_discount_rate) === Number(b.markup_discount_rate) &&
-  !!a.enabled === !!b.enabled;
+  !!a.enabled === !!b.enabled &&
+  sameChannels(a.channels, b.channels);
 
 const calcTotalPercent = (row) =>
   (Number(row.price_discount_percent) || 0) +
@@ -154,6 +192,13 @@ export default function UserModelPricingSettings() {
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewVisible, setPreviewVisible] = useState(false);
   const [previewTitle, setPreviewTitle] = useState('');
+
+  const [channelOptions, setChannelOptions] = useState([]);
+  const [channelOptionsLoading, setChannelOptionsLoading] = useState(false);
+
+  const [convertingMode, setConvertingMode] = useState(false);
+  const [convertVisible, setConvertVisible] = useState(false);
+  const [convertModelNames, setConvertModelNames] = useState([]);
 
   const [savingRowId, setSavingRowId] = useState(null);
   const [savingAll, setSavingAll] = useState(false);
@@ -287,8 +332,60 @@ export default function UserModelPricingSettings() {
       ...emptyForm,
       user_id: selectedUserId,
     });
+    setChannelOptions([]);
     setPreview(null);
     setModalVisible(true);
+  };
+
+  const openEdit = (row) => {
+    if (!row) return;
+    setForm({
+      id: row.id,
+      user_id: row.user_id,
+      model_name: row.model_name,
+      mode: row.mode === MODE_CHANNEL_LIST ? MODE_CHANNEL_LIST : MODE_PRICE_CAP,
+      price_discount_percent: Number(row.price_discount_percent) || 0,
+      operating_cost_percent: Number(row.operating_cost_percent) || 0,
+      markup_discount_rate: Number(row.markup_discount_rate) || 0,
+      enabled: !!row.enabled,
+      channels: normalizeChannels(row.channels),
+    });
+    setPreview(null);
+    setModalVisible(true);
+    if (row.model_name) {
+      loadChannelOptions(row.model_name, {
+        price_discount_percent: row.price_discount_percent,
+        operating_cost_percent: row.operating_cost_percent,
+        markup_discount_rate: row.markup_discount_rate,
+      });
+    }
+  };
+
+  const loadChannelOptions = async (modelName, discounts = {}) => {
+    if (!modelName) {
+      setChannelOptions([]);
+      return;
+    }
+    setChannelOptionsLoading(true);
+    try {
+      const params = new URLSearchParams({
+        model_name: modelName,
+        mode: MODE_CHANNEL_LIST,
+        price_discount_percent: String(discounts.price_discount_percent ?? 100),
+        operating_cost_percent: String(discounts.operating_cost_percent ?? 0),
+        markup_discount_rate: String(discounts.markup_discount_rate ?? 0),
+      });
+      const res = await API.get(`/api/user_model_pricing/preview?${params}`);
+      if (res.data.success) {
+        setChannelOptions(res.data.data?.channels || []);
+      } else {
+        showError(res.data.message);
+      }
+    } catch (e) {
+      showError(e?.response?.data?.message || t('加载渠道失败'));
+    } finally {
+      setChannelOptionsLoading(false);
+    }
   };
 
   const openImport = async () => {
@@ -396,10 +493,17 @@ export default function UserModelPricingSettings() {
     try {
       const params = new URLSearchParams({
         model_name: target.model_name,
+        mode: target.mode === MODE_CHANNEL_LIST ? MODE_CHANNEL_LIST : MODE_PRICE_CAP,
         price_discount_percent: String(target.price_discount_percent ?? 100),
         operating_cost_percent: String(target.operating_cost_percent ?? 0),
         markup_discount_rate: String(target.markup_discount_rate ?? 0),
       });
+      const selected = normalizeChannels(target.channels)
+        .map((c) => c.channel_id)
+        .join(',');
+      if (selected) {
+        params.set('selected_channel_ids', selected);
+      }
       const res = await API.get(`/api/user_model_pricing/preview?${params}`);
       if (res.data.success) {
         setPreview(res.data.data);
@@ -414,14 +518,21 @@ export default function UserModelPricingSettings() {
   };
 
   const upsertPricing = async (payload) => {
-    const res = await API.post('/api/user_model_pricing/', {
+    const mode =
+      payload.mode === MODE_CHANNEL_LIST ? MODE_CHANNEL_LIST : MODE_PRICE_CAP;
+    const body = {
       user_id: payload.user_id,
       model_name: payload.model_name,
+      mode,
       price_discount_percent: Number(payload.price_discount_percent) || 0,
       operating_cost_percent: Number(payload.operating_cost_percent) || 0,
       markup_discount_rate: Number(payload.markup_discount_rate) || 0,
       enabled: !!payload.enabled,
-    });
+    };
+    if (mode === MODE_CHANNEL_LIST) {
+      body.channels = normalizeChannels(payload.channels);
+    }
+    const res = await API.post('/api/user_model_pricing/', body);
     return res.data;
   };
 
@@ -429,6 +540,11 @@ export default function UserModelPricingSettings() {
     const next = {
       ...fallbackRow,
       ...(saved || {}),
+      mode:
+        (saved?.mode || fallbackRow.mode) === MODE_CHANNEL_LIST
+          ? MODE_CHANNEL_LIST
+          : MODE_PRICE_CAP,
+      channels: normalizeChannels(saved?.channels ?? fallbackRow.channels),
       total_percent:
         saved?.total_percent ??
         calcTotalPercent({ ...fallbackRow, ...(saved || {}) }),
@@ -448,20 +564,22 @@ export default function UserModelPricingSettings() {
       showError(t('请选择用户和模型'));
       return;
     }
+    if (
+      form.mode === MODE_CHANNEL_LIST &&
+      normalizeChannels(form.channels).length === 0
+    ) {
+      showError(t('渠道清单模式请至少勾选一个渠道'));
+      return;
+    }
     setSaving(true);
     try {
       const { success, message } = await upsertPricing({
+        ...form,
         user_id: uid,
-        model_name: form.model_name,
-        price_discount_percent: form.price_discount_percent,
-        operating_cost_percent: form.operating_cost_percent,
-        markup_discount_rate: form.markup_discount_rate,
-        enabled: form.enabled,
       });
       if (success) {
         showSuccess(t('保存成功'));
         setModalVisible(false);
-        // 新增可能改变列表长度，刷新但保留当前页
         await refreshAll({ resetPage: false });
       } else {
         showError(message);
@@ -478,13 +596,19 @@ export default function UserModelPricingSettings() {
       showError(t('请选择用户和模型'));
       return;
     }
+    if (
+      row.mode === MODE_CHANNEL_LIST &&
+      normalizeChannels(row.channels).length === 0
+    ) {
+      showError(t('渠道清单模式请至少勾选一个渠道'));
+      return;
+    }
     setSavingRowId(row.id);
     try {
       const { success, message, data } = await upsertPricing(row);
       if (success) {
         showSuccess(t('保存成功'));
         applySavedRow(data, row);
-        // 用户汇总里的 model_count 不变，可不重置列表页
         await loadPricingUsers();
       } else {
         showError(message);
@@ -568,6 +692,65 @@ export default function UserModelPricingSettings() {
       showError(e?.response?.data?.message || t('导入失败'));
     } finally {
       setImporting(false);
+    }
+  };
+
+  const openConvertChannelList = () => {
+    if (!selectedUserId) {
+      showError(t('请先选择用户'));
+      return;
+    }
+    if (!items.length) {
+      showError(t('该用户暂无指定价配置'));
+      return;
+    }
+    setConvertModelNames([]);
+    setConvertVisible(true);
+  };
+
+  const convertTargetCount = convertModelNames.length
+    ? convertModelNames.length
+    : items.length;
+
+  const doConvertToChannelList = async () => {
+    if (!selectedUserId) {
+      showError(t('请先选择用户'));
+      return;
+    }
+    if (!items.length) {
+      showError(t('该用户暂无指定价配置'));
+      return;
+    }
+    setConvertingMode(true);
+    try {
+      const payload = { user_id: selectedUserId };
+      if (convertModelNames.length > 0) {
+        payload.model_names = convertModelNames;
+      }
+      const res = await API.post(
+        '/api/user_model_pricing/convert_channel_list',
+        payload,
+      );
+      if (res.data.success) {
+        const d = res.data.data || {};
+        const skipped = d.skipped ?? 0;
+        const scopeTip = convertModelNames.length
+          ? t('所选模型')
+          : t('全部模型');
+        showSuccess(
+          skipped > 0
+            ? `${t('已切换')}（${scopeTip}）${d.converted ?? 0} ${t('个为渠道清单')}，${t('跳过')} ${skipped} ${t('个')}`
+            : `${t('已切换')}（${scopeTip}）${d.converted ?? 0} ${t('个为渠道清单')}`,
+        );
+        setConvertVisible(false);
+        await refreshAll({ resetPage: false });
+      } else {
+        showError(res.data.message);
+      }
+    } catch (e) {
+      showError(e?.response?.data?.message || t('切换失败'));
+    } finally {
+      setConvertingMode(false);
     }
   };
 
@@ -661,6 +844,15 @@ export default function UserModelPricingSettings() {
     return Array.from(map.values());
   }, [pricingUsers, userOptions, selectedUserId, selectedUserLabel, t]);
 
+  const convertModelOptions = useMemo(
+    () =>
+      items.map((row) => ({
+        value: row.model_name,
+        label: `${row.model_name}（${modeLabel(row.mode, t)} · ${Math.round(calcTotalPercent(row) * 100) / 100}%）`,
+      })),
+    [items, t],
+  );
+
   const maxPage = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE) || 1);
   const safePage = Math.min(currentPage, maxPage);
 
@@ -676,6 +868,28 @@ export default function UserModelPricingSettings() {
       dataIndex: 'model_name',
       width: 200,
       render: (text) => <Tag color='blue'>{text}</Tag>,
+    },
+    {
+      title: t('模式'),
+      dataIndex: 'mode',
+      width: 120,
+      render: (v) => (
+        <Tag color={v === MODE_CHANNEL_LIST ? 'purple' : 'cyan'}>
+          {modeLabel(v, t)}
+        </Tag>
+      ),
+    },
+    {
+      title: t('渠道'),
+      width: 110,
+      render: (_, row) =>
+        row.mode === MODE_CHANNEL_LIST ? (
+          <Tag color='purple'>
+            {normalizeChannels(row.channels).length} {t('个')}
+          </Tag>
+        ) : (
+          <Text type='tertiary'>{t('按上限自动')}</Text>
+        ),
     },
     {
       title: t('成本折扣') + ' (%)',
@@ -754,7 +968,7 @@ export default function UserModelPricingSettings() {
     },
     {
       title: t('操作'),
-      width: 220,
+      width: 280,
       fixed: 'right',
       render: (_, row) => {
         const dirty =
@@ -770,6 +984,9 @@ export default function UserModelPricingSettings() {
               onClick={() => doSaveRow(row)}
             >
               {t('保存')}
+            </Button>
+            <Button size='small' onClick={() => openEdit(row)}>
+              {t('编辑')}
             </Button>
             <Button
               size='small'
@@ -796,6 +1013,56 @@ export default function UserModelPricingSettings() {
     setForm((prev) => ({ ...prev, [key]: value }));
   };
 
+  const toggleFormChannel = (channelId, checked) => {
+    setForm((prev) => {
+      const current = normalizeChannels(prev.channels);
+      let next;
+      if (checked) {
+        if (current.some((c) => c.channel_id === channelId)) {
+          next = current;
+        } else {
+          next = [...current, { channel_id: channelId, priority: current.length + 1 }];
+        }
+      } else {
+        next = current.filter((c) => c.channel_id !== channelId);
+      }
+      return { ...prev, channels: normalizeChannels(next) };
+    });
+  };
+
+  const moveFormChannel = (channelId, direction) => {
+    setForm((prev) => {
+      const list = normalizeChannels(prev.channels);
+      const idx = list.findIndex((c) => c.channel_id === channelId);
+      if (idx < 0) return prev;
+      const swapWith = idx + direction;
+      if (swapWith < 0 || swapWith >= list.length) return prev;
+      const next = [...list];
+      [next[idx], next[swapWith]] = [next[swapWith], next[idx]];
+      return { ...prev, channels: normalizeChannels(next) };
+    });
+  };
+
+  const selectAllWithinCapChannels = () => {
+    const ids = (channelOptions || [])
+      .filter((ch) => ch.within_cap)
+      .map((ch) => ch.channel_id);
+    const existingPri = new Map(
+      normalizeChannels(form.channels).map((c) => [c.channel_id, c.priority]),
+    );
+    // 保留已选顺序，追加未选的 within_cap 渠道
+    const ordered = normalizeChannels(form.channels).map((c) => c.channel_id);
+    for (const id of ids) {
+      if (!existingPri.has(id) && !ordered.includes(id)) {
+        ordered.push(id);
+      }
+    }
+    setForm((prev) => ({
+      ...prev,
+      channels: normalizeChannels(ordered.map((id) => ({ channel_id: id }))),
+    }));
+  };
+
   const setImportField = (key, value) => {
     setImportForm((prev) => ({ ...prev, [key]: value }));
   };
@@ -812,7 +1079,7 @@ export default function UserModelPricingSettings() {
         closeIcon={null}
         className='!rounded-lg mb-3'
         description={t(
-          '按用户管理指定价：先选择用户，再在表格中直接填写各模型的三项折扣。「一键导入」会为每个已定价模型，抄录当前最便宜启用渠道的三项折扣（不是统一手填覆盖）。计费按「全局官方价 × 总折扣」，超价渠道对该用户不可用。',
+          '按用户管理指定价：计费均为「全局官方价 × 总折扣」。价格上限模式：自动放行单价 ≤ 指定售价的渠道；渠道清单模式：手动勾选可用渠道并排序，首页模型详情与智能路由仅展示勾选渠道。走智能路由时在勾选集内按智能规则选渠，否则按手动优先级。',
         )}
       />
 
@@ -909,6 +1176,13 @@ export default function UserModelPricingSettings() {
                 {t('导出')}
               </Button>
               <Button onClick={openImport}>{t('一键导入当前折扣')}</Button>
+              <Button
+                type='secondary'
+                disabled={!items.length}
+                onClick={openConvertChannelList}
+              >
+                {t('切换为渠道清单')}
+              </Button>
               <Button theme='solid' type='primary' onClick={openAdd}>
                 {t('新增模型指定价')}
               </Button>
@@ -926,7 +1200,7 @@ export default function UserModelPricingSettings() {
             dataSource={filteredItems}
             loading={loading}
             rowKey='id'
-            scroll={{ x: 1200 }}
+            scroll={{ x: 1400 }}
             pagination={{
               currentPage: safePage,
               pageSize: PAGE_SIZE,
@@ -940,14 +1214,14 @@ export default function UserModelPricingSettings() {
       )}
 
       <Modal
-        title={t('新增模型指定价')}
+        title={form.id ? t('编辑模型指定价') : t('新增模型指定价')}
         visible={modalVisible}
         onCancel={() => setModalVisible(false)}
         onOk={doSave}
         okText={t('保存')}
         cancelText={t('取消')}
         confirmLoading={saving}
-        width={640}
+        width={760}
       >
         <div className='flex flex-col gap-3'>
           <div>
@@ -967,8 +1241,47 @@ export default function UserModelPricingSettings() {
               placeholder={t('选择或输入模型名')}
               optionList={modelOptions.map((m) => ({ value: m, label: m }))}
               value={form.model_name || undefined}
-              onChange={(v) => setField('model_name', v)}
+              disabled={!!form.id}
+              onChange={(v) => {
+                setField('model_name', v);
+                setField('channels', []);
+                if (v) {
+                  loadChannelOptions(v, form);
+                } else {
+                  setChannelOptions([]);
+                }
+              }}
             />
+          </div>
+          <div>
+            <Text strong>{t('选路模式')}</Text>
+            <div className='mt-1'>
+              <RadioGroup
+                type='button'
+                value={form.mode || MODE_PRICE_CAP}
+                onChange={(event) => {
+                  const mode = event.target.value;
+                  setField('mode', mode);
+                  if (
+                    mode === MODE_CHANNEL_LIST &&
+                    form.model_name &&
+                    channelOptions.length === 0
+                  ) {
+                    loadChannelOptions(form.model_name, form);
+                  }
+                }}
+              >
+                <Radio value={MODE_PRICE_CAP}>{t('价格上限')}</Radio>
+                <Radio value={MODE_CHANNEL_LIST}>{t('渠道清单')}</Radio>
+              </RadioGroup>
+            </div>
+            <Text type='tertiary' size='small'>
+              {form.mode === MODE_CHANNEL_LIST
+                ? t(
+                    '手动勾选可用渠道并排序；未勾选不可见也不可调用。智能路由优先于手动排序。',
+                  )
+                : t('自动放行有效单价不超过「全局官方价 × 总折扣」的渠道。')}
+            </Text>
           </div>
           <div className='grid grid-cols-3 gap-3'>
             <div>
@@ -1017,13 +1330,137 @@ export default function UserModelPricingSettings() {
               />
             </Space>
           </div>
+
+          {form.mode === MODE_CHANNEL_LIST && (
+            <div className='flex flex-col gap-2'>
+              <div className='flex items-center justify-between'>
+                <Text strong>
+                  {t('勾选渠道并排序')}（
+                  {normalizeChannels(form.channels).length}）
+                </Text>
+                <Space>
+                  <Button
+                    size='small'
+                    loading={channelOptionsLoading}
+                    onClick={() =>
+                      form.model_name && loadChannelOptions(form.model_name, form)
+                    }
+                  >
+                    {t('刷新渠道')}
+                  </Button>
+                  <Button size='small' onClick={selectAllWithinCapChannels}>
+                    {t('勾选未超价渠道')}
+                  </Button>
+                </Space>
+              </div>
+              <Banner
+                type='warning'
+                closeIcon={null}
+                className='!rounded-lg'
+                description={t(
+                  '单价高于指定售价的渠道可勾选但平台可能亏损。排序靠前优先；若用户走智能路由则在勾选集内按智能规则选渠。',
+                )}
+              />
+              <Table
+                size='small'
+                loading={channelOptionsLoading}
+                columns={[
+                  {
+                    title: t('启用'),
+                    width: 70,
+                    render: (_, ch) => (
+                      <Checkbox
+                        checked={normalizeChannels(form.channels).some(
+                          (c) => c.channel_id === ch.channel_id,
+                        )}
+                        onChange={(e) =>
+                          toggleFormChannel(ch.channel_id, !!e?.target?.checked)
+                        }
+                      />
+                    ),
+                  },
+                  {
+                    title: t('优先级'),
+                    width: 100,
+                    render: (_, ch) => {
+                      const list = normalizeChannels(form.channels);
+                      const idx = list.findIndex(
+                        (c) => c.channel_id === ch.channel_id,
+                      );
+                      if (idx < 0) return '-';
+                      return (
+                        <Space>
+                          <Tag color='blue'>{idx + 1}</Tag>
+                          <Button
+                            size='small'
+                            disabled={idx === 0}
+                            onClick={() => moveFormChannel(ch.channel_id, -1)}
+                          >
+                            ↑
+                          </Button>
+                          <Button
+                            size='small'
+                            disabled={idx === list.length - 1}
+                            onClick={() => moveFormChannel(ch.channel_id, 1)}
+                          >
+                            ↓
+                          </Button>
+                        </Space>
+                      );
+                    },
+                  },
+                  { title: t('渠道'), dataIndex: 'channel_name' },
+                  { title: 'ID', dataIndex: 'channel_id', width: 70 },
+                  {
+                    title: t('有效单价'),
+                    dataIndex: 'unit_price',
+                    width: 110,
+                    render: (v) => Math.round(v * 1e6) / 1e6,
+                  },
+                  {
+                    title: t('相对指定售价'),
+                    dataIndex: 'within_cap',
+                    width: 120,
+                    render: (v) =>
+                      v ? (
+                        <Tag color='green'>{t('未超价')}</Tag>
+                      ) : (
+                        <Tag color='orange'>{t('高于售价')}</Tag>
+                      ),
+                  },
+                ]}
+                dataSource={[...(channelOptions || [])].sort((a, b) => {
+                  const pa = normalizeChannels(form.channels).findIndex(
+                    (c) => c.channel_id === a.channel_id,
+                  );
+                  const pb = normalizeChannels(form.channels).findIndex(
+                    (c) => c.channel_id === b.channel_id,
+                  );
+                  const ra = pa < 0 ? 9999 : pa;
+                  const rb = pb < 0 ? 9999 : pb;
+                  if (ra !== rb) return ra - rb;
+                  return (a.channel_id || 0) - (b.channel_id || 0);
+                })}
+                rowKey='channel_id'
+                pagination={{ pageSize: 6 }}
+                empty={
+                  form.model_name
+                    ? t('该模型暂无启用渠道')
+                    : t('请先选择模型')
+                }
+              />
+            </div>
+          )}
+
           <div>
             <Button
               loading={previewLoading}
               onClick={() => doPreview(form)}
               block
             >
-              {t('预览可用渠道（价格上限校验）')}
+              {form.mode === MODE_CHANNEL_LIST
+                ? t('预览勾选渠道')
+                : t('预览可用渠道（价格上限校验）')}
             </Button>
           </div>
         </div>
@@ -1047,23 +1484,29 @@ export default function UserModelPricingSettings() {
           <div>
             <Banner
               type={
-                !preview.cap_defined
-                  ? 'warning'
-                  : preview.within_count > 0
+                preview.mode === 'channel_list'
+                  ? preview.selected_count > 0
                     ? 'success'
-                    : 'danger'
+                    : 'warning'
+                  : !preview.cap_defined
+                    ? 'warning'
+                    : preview.within_count > 0
+                      ? 'success'
+                      : 'danger'
               }
               closeIcon={null}
               className='!rounded-lg'
               description={
-                !preview.cap_defined
-                  ? t(
-                      '该模型未配置全局官方价，指定价上限无法计算：计费将回退渠道基价，选路不做价格限制。建议先在「价格设置」中配置全局价。',
-                    )
-                  : `${t('价格上限')} ${Math.round(preview.cap * 1e6) / 1e6}，${preview.within_count}/${preview.total_channels} ${t('个渠道在上限内可被调用')}`
+                preview.mode === 'channel_list'
+                  ? `${t('渠道清单模式')}：${t('已勾选')} ${preview.selected_count || 0}/${preview.total_channels} ${t('个渠道（用户端仅可见勾选渠道）')}`
+                  : !preview.cap_defined
+                    ? t(
+                        '该模型未配置全局官方价，指定价上限无法计算：计费将回退渠道基价，选路不做价格限制。建议先在「价格设置」中配置全局价。',
+                      )
+                    : `${t('价格上限')} ${Math.round(preview.cap * 1e6) / 1e6}，${preview.within_count}/${preview.total_channels} ${t('个渠道在上限内可被调用')}`
               }
             />
-            {preview.cap_defined && (preview.channels || []).length > 0 && (
+            {(preview.channels || []).length > 0 && (
               <Table
                 size='small'
                 className='mt-2'
@@ -1075,16 +1518,43 @@ export default function UserModelPricingSettings() {
                     dataIndex: 'unit_price',
                     render: (v) => Math.round(v * 1e6) / 1e6,
                   },
-                  {
-                    title: t('可调用'),
-                    dataIndex: 'within_cap',
-                    render: (v) =>
-                      v ? (
-                        <Tag color='green'>{t('是')}</Tag>
-                      ) : (
-                        <Tag color='red'>{t('超价排除')}</Tag>
-                      ),
-                  },
+                  ...(preview.mode === 'channel_list'
+                    ? [
+                        {
+                          title: t('勾选'),
+                          dataIndex: 'selected',
+                          render: (v, row) =>
+                            v ? (
+                              <Tag color='blue'>
+                                #{row.priority || '-'}
+                              </Tag>
+                            ) : (
+                              <Tag color='grey'>{t('未勾选')}</Tag>
+                            ),
+                        },
+                        {
+                          title: t('相对指定售价'),
+                          dataIndex: 'within_cap',
+                          render: (v) =>
+                            v ? (
+                              <Tag color='green'>{t('未超价')}</Tag>
+                            ) : (
+                              <Tag color='orange'>{t('高于售价')}</Tag>
+                            ),
+                        },
+                      ]
+                    : [
+                        {
+                          title: t('可调用'),
+                          dataIndex: 'within_cap',
+                          render: (v) =>
+                            v ? (
+                              <Tag color='green'>{t('是')}</Tag>
+                            ) : (
+                              <Tag color='red'>{t('超价排除')}</Tag>
+                            ),
+                        },
+                      ]),
                 ]}
                 dataSource={preview.channels}
                 rowKey='channel_id'
@@ -1095,6 +1565,77 @@ export default function UserModelPricingSettings() {
         ) : (
           <Text type='tertiary'>{t('暂无预览数据')}</Text>
         )}
+      </Modal>
+
+      <Modal
+        title={t('切换为渠道清单')}
+        visible={convertVisible}
+        onCancel={() => setConvertVisible(false)}
+        onOk={doConvertToChannelList}
+        okText={
+          convertModelNames.length
+            ? `${t('切换所选')}（${convertModelNames.length}）`
+            : `${t('切换全部')}（${items.length}）`
+        }
+        cancelText={t('取消')}
+        confirmLoading={convertingMode}
+        width={640}
+      >
+        <div className='flex flex-col gap-3'>
+          <Banner
+            type='info'
+            closeIcon={null}
+            className='!rounded-lg'
+            description={t(
+              '将指定价改为渠道清单：每个模型勾选当前未超指定售价的渠道，并按单价从低到高排序。已是渠道清单的也会按此规则重写勾选；无可用渠道的模型会跳过。',
+            )}
+          />
+          <div>
+            <div className='flex items-center justify-between mb-2'>
+              <Text strong>{t('选择模型')}</Text>
+              <Space>
+                <Button
+                  size='small'
+                  onClick={() =>
+                    setConvertModelNames(items.map((r) => r.model_name))
+                  }
+                >
+                  {t('全选')}
+                </Button>
+                <Button size='small' onClick={() => setConvertModelNames([])}>
+                  {t('清空（默认全切）')}
+                </Button>
+              </Space>
+            </div>
+            <Select
+              multiple
+              filter
+              showClear
+              style={{ width: '100%' }}
+              placeholder={t('不选则默认切换该用户全部模型')}
+              optionList={convertModelOptions}
+              value={convertModelNames}
+              onChange={(v) => setConvertModelNames(v || [])}
+              maxTagCount={4}
+            />
+            <div className='mt-2'>
+              <Text type='tertiary' size='small'>
+                {convertModelNames.length
+                  ? `${t('将切换所选')} ${convertModelNames.length} ${t('个模型')}`
+                  : `${t('未选择模型，将切换全部')} ${items.length} ${t('个模型')}`}
+                {filterModel
+                  ? `（${t('列表筛选不影响范围，以勾选为准')}）`
+                  : ''}
+              </Text>
+            </div>
+          </div>
+          <Banner
+            type='warning'
+            closeIcon={null}
+            className='!rounded-lg'
+            description={`${t('确认后将对')} ${selectedUserLabel} ${t('的')} ${convertTargetCount} ${t('个模型执行切换，三折扣保持不变。')}`}
+          />
+        </div>
       </Modal>
 
       <Modal

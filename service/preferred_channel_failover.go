@@ -122,6 +122,13 @@ func BuildPreferredChannelFailoverOrderWithFilter(c *gin.Context, modelName, gro
 	var ordered []int
 	if !res.Fallback && len(res.OrderedChannelIDs) > 0 {
 		ordered = res.OrderedChannelIDs
+	} else if UserPricingUsesManualChannelPriority(userID, modelName) {
+		// 智能路由未启用时，channel_list 保底按手动 priority。
+		sorted := SortRouteCandidatesByUserPricingPriority(userID, modelName, candidates)
+		ordered = make([]int, 0, len(sorted))
+		for _, cand := range sorted {
+			ordered = append(ordered, cand.ChannelID)
+		}
 	} else {
 		// 未启用 weight/price 时仍按价格升序保底，与系统默认价格优先对齐。
 		sorted := sortRouteCandidatesByPrice(candidates)
