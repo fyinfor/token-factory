@@ -19,6 +19,13 @@ For commercial licensing, please contact support@quantumnous.com
 
 export const LIVE_HOT_FILTER = '__live_hot__';
 export const HOME_HOT_CHANNEL_LIMIT = 8;
+export const HOT_OVERRIDE_AUTO = 'auto';
+export const HOT_OVERRIDE_FORCE_HOT = 'force_hot';
+export const HOT_OVERRIDE_FORCE_NOT_HOT = 'force_not_hot';
+
+const MANUAL_HOT_SCORE_BASE = 8000000000000000;
+const MANUAL_HOT_RANK_STEP = 1000000000;
+const UNRANKED_MANUAL_HOT = 1000000;
 
 const getModelName = (model) =>
   String(model?.model_name ?? model?.ModelName ?? '').trim();
@@ -32,11 +39,11 @@ const getChannelList = (model) =>
 
 const getChannelIdentity = (channel) => {
   const identity = [
-    channel?.ChannelNo,
-    channel?.channel_no,
     channel?.channel_id,
     channel?.ChannelID,
     channel?.id,
+    channel?.ChannelNo,
+    channel?.channel_no,
   ].find(
     (value) =>
       value !== undefined && value !== null && String(value).trim() !== '',
@@ -44,30 +51,29 @@ const getChannelIdentity = (channel) => {
   return identity === undefined ? '' : String(identity).trim();
 };
 
-// Matches the score shown and used for sorting in the model-heat console.
+const getHotOverride = (channel) =>
+  String(channel?.hot_override ?? channel?.HotOverride ?? '')
+    .trim()
+    .toLowerCase();
+
+const getManualRank = (channel) => {
+  const rank = Number(channel?.hot_manual_rank ?? channel?.HotManualRank ?? 0);
+  return Number.isFinite(rank) && rank > 0
+    ? Math.min(Math.floor(rank), UNRANKED_MANUAL_HOT)
+    : UNRANKED_MANUAL_HOT;
+};
+
 export const getChannelHeatScore = (channel) => {
-  const manualBase = Number(
-    channel?.manual_base_req_count ?? channel?.ManualBaseReqCount ?? 0,
-  );
   const requestCount = Number(
-    channel?.req_count_7d ??
+    channel?.channel_heat_score ??
+      channel?.ChannelHeatScore ??
+      channel?.req_count_7d ??
       channel?.RequestCount7d ??
       channel?.auto_req_count ??
       channel?.AutoReqCount ??
       0,
   );
-  const channelWeight = Number(
-    channel?.channel_sort_weight ??
-      channel?.ChannelSortWeight ??
-      channel?.sort_weight ??
-      channel?.SortWeight ??
-      1,
-  );
-
-  const base = Number.isFinite(manualBase) ? manualBase : 0;
-  const requests = Number.isFinite(requestCount) ? requestCount : 0;
-  const weight = Number.isFinite(channelWeight) ? channelWeight : 1;
-  return (base + requests) * weight;
+  return Number.isFinite(requestCount) ? Math.max(0, requestCount) : 0;
 };
 
 export const getChannelHeatKey = (model, channel) => {
@@ -77,43 +83,137 @@ export const getChannelHeatKey = (model, channel) => {
   return `${channelIdentity}:${modelName}`;
 };
 
-export const getTopHotChannels = (models, limit = HOME_HOT_CHANNEL_LIMIT) => {
-  const rankedChannelMap = new Map();
+const getManualHotScore = (channel) => {
+  const rank = getManualRank(channel);
+  return (
+    MANUAL_HOT_SCORE_BASE -
+    rank * MANUAL_HOT_RANK_STEP +
+    Math.min(getChannelHeatScore(channel), MANUAL_HOT_RANK_STEP - 1)
+  );
+};
+
+export const getTopHotChannels = (
+  models,
+  limit = HOME_HOT_CHANNEL_LIMIT,
+  filters = {},
+) => {
+  const modelCandidates = new Map();
 
   (Array.isArray(models) ? models : []).forEach((model, modelIndex) => {
     getChannelList(model).forEach((channel, channelIndex) => {
+      if (!channelMatchesHeatFilters(channel, filters)) return;
       const key = getChannelHeatKey(model, channel);
       const score = getChannelHeatScore(channel);
-      if (!key || !Number.isFinite(score) || score <= 0) return;
+      if (!key) return;
+
+      const modelName = getModelName(model);
+      if (!modelCandidates.has(modelName)) {
+        modelCandidates.set(modelName, {
+          modelName,
+          modelIndex,
+          forcedChannels: [],
+          bestAutoChannel: null,
+        });
+      }
+      const candidate = modelCandidates.get(modelName);
+      candidate.modelIndex = Math.min(candidate.modelIndex, modelIndex);
 
       const entry = {
         key,
         score,
-        modelName: getModelName(model),
+        modelName,
         channel,
         modelIndex,
         channelIndex,
       };
-      const existing = rankedChannelMap.get(key);
-      if (!existing || score > existing.score) {
-        rankedChannelMap.set(key, entry);
+
+      const override = getHotOverride(channel);
+      if (override === HOT_OVERRIDE_FORCE_HOT) {
+        entry.manualRank = getManualRank(channel);
+        entry.effectiveScore = getManualHotScore(channel);
+        candidate.forcedChannels.push(entry);
+        return;
+      }
+      if (override === HOT_OVERRIDE_FORCE_NOT_HOT || score <= 0) return;
+
+      const existing = candidate.bestAutoChannel;
+      if (
+        !existing ||
+        score > existing.score ||
+        (score === existing.score && channelIndex < existing.channelIndex)
+      ) {
+        entry.effectiveScore = score;
+        candidate.bestAutoChannel = entry;
       }
     });
   });
 
-  const rankedChannels = Array.from(rankedChannelMap.values());
+  const forcedModels = [];
+  const automaticModels = [];
+  modelCandidates.forEach((candidate) => {
+    if (candidate.forcedChannels.length > 0) {
+      candidate.forcedChannels.sort(
+        (a, b) =>
+          a.manualRank - b.manualRank ||
+          b.score - a.score ||
+          a.channelIndex - b.channelIndex,
+      );
+      forcedModels.push({
+        ...candidate,
+        primary: candidate.forcedChannels[0],
+      });
+      return;
+    }
+    if (candidate.bestAutoChannel) {
+      automaticModels.push({
+        ...candidate,
+        primary: candidate.bestAutoChannel,
+      });
+    }
+  });
 
-  rankedChannels.sort(
+  forcedModels.sort(
     (a, b) =>
-      b.score - a.score ||
-      a.modelIndex - b.modelIndex ||
-      a.channelIndex - b.channelIndex,
+      b.primary.effectiveScore - a.primary.effectiveScore ||
+      a.modelIndex - b.modelIndex,
+  );
+  automaticModels.sort(
+    (a, b) => b.primary.score - a.primary.score || a.modelIndex - b.modelIndex,
   );
 
-  const entries = rankedChannels.slice(0, Math.max(0, limit));
+  const normalizedLimit = Number.isFinite(Number(limit))
+    ? Math.max(0, Math.floor(Number(limit)))
+    : HOME_HOT_CHANNEL_LIMIT;
+  const automaticSlots = Math.max(0, normalizedLimit - forcedModels.length);
+  const selectedModels = [
+    ...forcedModels,
+    ...automaticModels.slice(0, automaticSlots),
+  ];
+  const entries = selectedModels.map((candidate) => candidate.primary);
+  const scoreMap = new Map();
+  const primaryChannelMap = new Map();
+  const sourceMap = new Map();
+
+  selectedModels.forEach((candidate) => {
+    const isManual = candidate.forcedChannels.length > 0;
+    const selectedChannels = isManual
+      ? candidate.forcedChannels
+      : [candidate.primary];
+    selectedChannels.forEach((entry) => {
+      scoreMap.set(entry.key, entry.effectiveScore);
+    });
+    primaryChannelMap.set(
+      candidate.modelName,
+      getChannelIdentity(candidate.primary.channel),
+    );
+    sourceMap.set(candidate.modelName, isManual ? 'manual' : 'auto');
+  });
+
   return {
     entries,
-    scoreMap: new Map(entries.map((entry) => [entry.key, entry.score])),
+    scoreMap,
+    primaryChannelMap,
+    sourceMap,
   };
 };
 

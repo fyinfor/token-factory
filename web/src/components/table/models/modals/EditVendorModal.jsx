@@ -35,6 +35,7 @@ const EditVendorModal = ({ visible, handleClose, refresh, editingVendor }) => {
 
   const getInitValues = () => ({
     name: '',
+    name_en: '',
     description: '',
     icon: '',
     status: true,
@@ -137,6 +138,14 @@ const EditVendorModal = ({ visible, handleClose, refresh, editingVendor }) => {
               label={t('模型类型名称')}
               placeholder={t('请输入模型类型名称，如：OpenAI')}
               rules={[{ required: true, message: t('请输入模型类型名称') }]}
+              showClear
+            />
+          </Col>
+          <Col span={24}>
+            <Form.Input
+              field='name_en'
+              label={t('模型类型英文名称')}
+              placeholder={t('请输入模型类型英文名称，如：OpenAI')}
               showClear
             />
           </Col>

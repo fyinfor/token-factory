@@ -354,7 +354,10 @@ export default function GeneralSettings(props) {
                   field={'general_setting.docs_link'}
                   label={t('文档地址')}
                   initValue={''}
-                  placeholder={t('例如 https://docs.newapi.pro')}
+                  placeholder={t('例如 https://tokease.com 或留空走同域')}
+                  extraText={t(
+                    '建议填文档站根地址（勿写死 /zh/docs）。导航会按界面语言跳转到 /en|/zh|/ja/docs，不支持的语言回落英文。',
+                  )}
                   onChange={handleFieldChange('general_setting.docs_link')}
                   showClear
                 />

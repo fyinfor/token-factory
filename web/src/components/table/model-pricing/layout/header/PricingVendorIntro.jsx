@@ -26,7 +26,9 @@ import {
   Tooltip,
   Modal,
 } from '@douyinfe/semi-ui';
+import { useTranslation } from 'react-i18next';
 import { getLobeHubIcon } from '../../../../../helpers';
+import { getVendorLocalizedName } from '../../../../../helpers/modelPricing';
 import SearchActions from './SearchActions';
 
 const { Paragraph } = Typography;
@@ -78,10 +80,12 @@ const CONTENT_TEXTS = {
   },
 };
 
-const getVendorDisplayName = (vendorName, t) => {
-  return vendorName === CONFIG.UNKNOWN_VENDOR
-    ? CONTENT_TEXTS.unknown.displayName(t)
-    : vendorName;
+const getVendorDisplayName = (vendor, language, t) => {
+  if (!vendor) return '';
+  if (vendor.name === CONFIG.UNKNOWN_VENDOR) {
+    return CONTENT_TEXTS.unknown.displayName(t);
+  }
+  return getVendorLocalizedName(vendor, language);
 };
 
 const createDefaultAvatar = () => (
@@ -117,12 +121,12 @@ const createAvatarContent = (vendor, isAllVendors) => {
   );
 };
 
-const renderVendorAvatar = (vendor, t, isAllVendors = false) => {
+const renderVendorAvatar = (vendor, t, isAllVendors = false, language) => {
   if (!vendor) {
     return createDefaultAvatar();
   }
 
-  const displayName = getVendorDisplayName(vendor.name, t);
+  const displayName = getVendorDisplayName(vendor, language, t);
   const avatarContent = createAvatarContent(vendor, isAllVendors);
 
   return (
@@ -157,6 +161,7 @@ const PricingVendorIntro = memo(
     tokenUnit,
     setTokenUnit,
   }) => {
+    const { i18n } = useTranslation();
     const [currentOffset, setCurrentOffset] = useState(0);
     const [descModalVisible, setDescModalVisible] = useState(false);
     const [descModalContent, setDescModalContent] = useState('');
@@ -204,6 +209,7 @@ const PricingVendorIntro = memo(
           } else {
             vendors.set(model.vendor_name, {
               name: model.vendor_name,
+              name_en: model.vendor_name_en,
               icon: model.vendor_icon,
               description: model.vendor_description,
               count: 1,
@@ -370,8 +376,8 @@ const PricingVendorIntro = memo(
         vendorInfo.length > 0
           ? vendorInfo[currentOffset % vendorInfo.length]
           : null;
-      return renderVendorAvatar(currentVendor, t, true);
-    }, [vendorInfo, currentOffset, t]);
+      return renderVendorAvatar(currentVendor, t, true, i18n.language);
+    }, [vendorInfo, currentOffset, t, i18n.language]);
 
     if (filterVendor === 'all') {
       const headerCard = renderHeaderCard({
@@ -394,14 +400,14 @@ const PricingVendorIntro = memo(
       return null;
     }
 
-    const vendorDisplayName = getVendorDisplayName(currentVendor.name, t);
+    const vendorDisplayName = getVendorDisplayName(currentVendor, i18n.language, t);
 
     const headerCard = renderHeaderCard({
       title: vendorDisplayName,
       count: currentModelCount,
       description:
         currentVendor.description || getVendorDescription(currentVendor.name),
-      rightContent: renderVendorAvatar(currentVendor, t, false),
+      rightContent: renderVendorAvatar(currentVendor, t, false, i18n.language),
       primaryDarkerChannel: THEME_COLORS.specific.primary,
     });
 

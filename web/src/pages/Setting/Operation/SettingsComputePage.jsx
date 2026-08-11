@@ -37,6 +37,7 @@ const { Text, Title } = Typography;
 
 const EMPTY_CONFIG = {
   enabled: false,
+  allow_javascript: false,
   has_html: false,
   file_name: '',
   updated_at: 0,
@@ -89,6 +90,26 @@ export default function SettingsComputePage() {
       setConfig({ ...EMPTY_CONFIG, ...data });
       window.dispatchEvent(new Event(COMPUTE_PAGE_STATUS_CHANGED_EVENT));
       showSuccess(enabled ? t('算力页面已开启') : t('算力页面已关闭'));
+    } catch (error) {
+      showError(error?.response?.data?.message || t('保存失败，请重试'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateJavaScript = async (allowJavaScript) => {
+    setSaving(true);
+    try {
+      const res = await API.put('/api/compute-page/admin/javascript', {
+        allow_javascript: allowJavaScript,
+      });
+      const { success, message, data } = res.data || {};
+      if (!success) {
+        showError(message || t('保存失败，请重试'));
+        return;
+      }
+      setConfig({ ...EMPTY_CONFIG, ...data });
+      showSuccess(t('保存成功'));
     } catch (error) {
       showError(error?.response?.data?.message || t('保存失败，请重试'));
     } finally {
@@ -209,6 +230,32 @@ export default function SettingsComputePage() {
                   </Button>
                 ) : null}
               </Space>
+            </div>
+          </div>
+
+          <div className='rounded-md border border-solid border-semi-color-border bg-semi-color-fill-0 p-4'>
+            <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+              <div className='flex min-w-0 flex-col gap-1'>
+                <Text strong>{t('允许执行 JavaScript')}</Text>
+                <Text type='warning' size='small'>
+                  {t(
+                    '开启后，上传的 HTML 可执行脚本、访问当前站点上下文并发起网络请求，请仅上传完全可信的内容',
+                  )}
+                </Text>
+              </div>
+              <div className='flex shrink-0 items-center gap-3'>
+                <Text>
+                  {config.allow_javascript ? t('已开启') : t('已关闭')}
+                </Text>
+                <Switch
+                  checked={config.allow_javascript}
+                  disabled={loading || saving}
+                  loading={saving}
+                  checkedText='｜'
+                  uncheckedText='〇'
+                  onChange={updateJavaScript}
+                />
+              </div>
             </div>
           </div>
 

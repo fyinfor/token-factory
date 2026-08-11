@@ -37,10 +37,12 @@ import {
 } from '@douyinfe/semi-ui';
 import {
   Braces,
+  CopyCheck,
   FileText,
   Languages,
   RotateCcw,
   Save,
+  Search,
   Settings2,
   Sparkles,
   Square,
@@ -307,13 +309,16 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
   const aiAbortControllerRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [aiAction, setAiAction] = useState('');
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const [introductionLanguage, setIntroductionLanguage] = useState('zh');
   const [documentLanguage, setDocumentLanguage] = useState('zh');
   const [modelDetail, setModelDetail] = useState(null);
   const [channelDocs, setChannelDocs] = useState([]);
   const [selectedChannelDocKey, setSelectedChannelDocKey] = useState('');
   const [docIntroduction, setDocIntroduction] = useState('');
+  const [docIntroductionEn, setDocIntroductionEn] = useState('');
   const [apiDocsMarkdown, setApiDocsMarkdown] = useState('');
   const [apiDocsMarkdownEn, setApiDocsMarkdownEn] = useState('');
   const [templateModels, setTemplateModels] = useState([]);
@@ -355,6 +360,7 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
           (item) =>
             getChannelDocKey(item) !== selectedChannelDocKey &&
             (item.doc_introduction ||
+              item.doc_introduction_en ||
               item.api_docs ||
               item.api_docs_markdown ||
               item.api_docs_markdown_en),
@@ -366,7 +372,10 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
       ...templateModels
         .filter(
           (item) =>
-            item.id !== modelId && (item.doc_introduction || item.api_docs),
+            item.id !== modelId &&
+            (item.doc_introduction ||
+              item.doc_introduction_en ||
+              item.api_docs),
         )
         .map((item) => ({
           label: item.model_name,
@@ -385,9 +394,17 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
     [textModels],
   );
 
-  const applyDocItem = (item, targetModelName = item?.model_name) => {
+  const applyDocItem = (
+    item,
+    targetModelName = item?.model_name,
+    includeIntroduction = false,
+  ) => {
     const rawLegacy = item?.api_docs || '';
-    setDocIntroduction(item?.doc_introduction || '');
+    if (includeIntroduction) {
+      setDocIntroduction(item?.doc_introduction || '');
+      setDocIntroductionEn(item?.doc_introduction_en || '');
+      setIntroductionLanguage('zh');
+    }
     setApiDocsMarkdown(
       item?.api_docs_markdown ||
         legacyApiDocsToMarkdown(rawLegacy, targetModelName),
@@ -413,6 +430,8 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
       setModelDetail({ id: data?.model_id, model_name: data?.model_name });
       setChannelDocs(items);
       setSelectedChannelDocKey(first ? getChannelDocKey(first) : '');
+      setDocIntroduction(data?.default_doc_introduction || '');
+      setDocIntroductionEn(data?.default_doc_introduction_en || '');
       applyDocItem(first);
     } catch (_) {
       showError(t('加载模型信息失败'));
@@ -476,6 +495,8 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
     setChannelDocs([]);
     setSelectedChannelDocKey('');
     setDocIntroduction('');
+    setDocIntroductionEn('');
+    setIntroductionLanguage('zh');
     setApiDocsMarkdown('');
     setApiDocsMarkdownEn('');
     setTemplateChannelDocs([]);
@@ -483,6 +504,7 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
     aiAbortControllerRef.current?.abort();
     aiAbortControllerRef.current = null;
     setAiAction('');
+    setSyncing(false);
     setIsDraggingFiles(false);
   }, [visible, modelId]);
 
@@ -505,7 +527,7 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
       content: t('当前编辑内容将被所选模型的文档配置覆盖。'),
       onOk: async () => {
         if (kind === 'channel') {
-          applyDocItem(picked, selectedChannelDoc?.model_name);
+          applyDocItem(picked, selectedChannelDoc?.model_name, true);
           return;
         }
         let detail = picked;
@@ -515,6 +537,7 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
         } catch (_) {}
         const raw = detail?.api_docs || '';
         setDocIntroduction(detail?.doc_introduction || '');
+        setDocIntroductionEn(detail?.doc_introduction_en || '');
         setApiDocsMarkdown(
           legacyApiDocsToMarkdown(raw, selectedChannelDoc?.model_name),
         );
@@ -528,6 +551,10 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
     documentLanguage === 'en' ? apiDocsMarkdownEn : apiDocsMarkdown;
   const setActiveMarkdown =
     documentLanguage === 'en' ? setApiDocsMarkdownEn : setApiDocsMarkdown;
+  const activeIntroduction =
+    introductionLanguage === 'en' ? docIntroductionEn : docIntroduction;
+  const setActiveIntroduction =
+    introductionLanguage === 'en' ? setDocIntroductionEn : setDocIntroduction;
 
   const importDocuments = async (fileList) => {
     if (aiAction) return;
@@ -695,6 +722,7 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
         },
         payload: {
           model: selectedTextModel,
+          section: 'api_docs',
           action,
           document: content,
         },
@@ -730,18 +758,122 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
     }
   };
 
+  const runIntroductionAiAction = async (action) => {
+    const targetModel =
+      selectedChannelDoc?.model_name || modelDetail?.model_name || '';
+    const content =
+      action === 'generate'
+        ? ''
+        : action === 'translate'
+          ? docIntroduction.trim()
+          : activeIntroduction.trim();
+    if (action !== 'generate' && !content) {
+      showError(t('请先填写模型介绍'));
+      return;
+    }
+    if (!selectedTextModel) {
+      showError(t('暂无可用文本模型'));
+      return;
+    }
+    if (!targetModel) {
+      showError(t('目标模型名称不能为空'));
+      return;
+    }
+    if (content.length > MAX_AI_DOCUMENT_LENGTH) {
+      showError(t('模型介绍过长，请精简后再进行 AI 处理'));
+      return;
+    }
+
+    const targetOriginal =
+      action === 'generate'
+        ? docIntroduction
+        : action === 'translate'
+          ? docIntroductionEn
+          : activeIntroduction;
+    const updateTarget =
+      action === 'generate'
+        ? setDocIntroduction
+        : action === 'translate'
+          ? setDocIntroductionEn
+          : setActiveIntroduction;
+    const controller = new AbortController();
+    const actionKey = `introduction_${action}`;
+    aiAbortControllerRef.current = controller;
+    setAiAction(actionKey);
+    if (action === 'generate') setIntroductionLanguage('zh');
+    if (action === 'translate') setIntroductionLanguage('en');
+    try {
+      const result = await streamDocumentCompletion({
+        signal: controller.signal,
+        onProgress: (streamed) => {
+          updateTarget(normalizeAssistantMarkdown(streamed));
+        },
+        payload: {
+          model: selectedTextModel,
+          section: 'introduction',
+          action,
+          document: content,
+          target_model: targetModel,
+        },
+      });
+      if (!result) {
+        throw new Error(t('文本模型未返回有效内容'));
+      }
+      updateTarget(result);
+      showSuccess(
+        action === 'generate'
+          ? t('模型介绍已生成')
+          : action === 'translate'
+            ? t('模型介绍中译英完成')
+            : t('模型介绍润色完成'),
+      );
+    } catch (error) {
+      updateTarget(targetOriginal);
+      if (error.name === 'AbortError') {
+        showSuccess(t('已停止 AI 处理，并恢复原文'));
+        return;
+      }
+      showError(
+        error.message || t('AI 处理失败，请确认所选模型支持联网搜索或文本生成'),
+      );
+    } finally {
+      if (aiAbortControllerRef.current === controller) {
+        aiAbortControllerRef.current = null;
+      }
+      setAiAction('');
+    }
+  };
+
   const stopAiAction = () => {
     aiAbortControllerRef.current?.abort();
   };
 
   const save = async () => {
-    if (!modelDetail?.id || !selectedChannelDoc) return;
+    if (!modelDetail?.id) return;
     setSaving(true);
     try {
+      const introRes = await API.put(
+        `/api/models/${modelDetail.id}/introduction`,
+        {
+          doc_introduction: docIntroduction || '',
+          doc_introduction_en: docIntroductionEn || '',
+        },
+      );
+      if (!introRes.data?.success) {
+        showError(introRes.data?.message || t('模型介绍保存失败'));
+        return;
+      }
+      if (!selectedChannelDoc) {
+        await loadModel();
+        showSuccess(t('模型介绍已保存'));
+        refresh?.();
+        return;
+      }
       const payload = {
         channel_id: selectedChannelDoc.channel_id,
         model_name: selectedChannelDoc.model_name,
         doc_introduction: docIntroduction || '',
+        doc_introduction_en: docIntroductionEn || '',
         api_docs: '',
         api_docs_markdown: apiDocsMarkdown || '',
         api_docs_markdown_en: apiDocsMarkdownEn || '',
@@ -756,6 +888,7 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
         return;
       }
       if (
+        (savedDoc?.doc_introduction_en || '') !== payload.doc_introduction_en ||
         (savedDoc?.api_docs_markdown || '') !== payload.api_docs_markdown ||
         (savedDoc?.api_docs_markdown_en || '') !== payload.api_docs_markdown_en
       ) {
@@ -773,6 +906,53 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const syncApiDocsToChannels = () => {
+    if (!modelDetail?.id || !selectedChannelDoc || channelDocs.length <= 1) {
+      return;
+    }
+    if (!apiDocsMarkdown.trim() && !apiDocsMarkdownEn.trim()) {
+      showError(t('请先填写或导入 API 文档'));
+      return;
+    }
+    Modal.confirm({
+      title: t('同步 API 文档到其他渠道？'),
+      content: t(
+        '将使用当前编辑的中英文 API 文档覆盖该模型其他渠道的 API 文档，模型介绍不会被覆盖。',
+      ),
+      onOk: async () => {
+        setSyncing(true);
+        try {
+          const res = await API.post(
+            `/api/models/${modelDetail.id}/channel_docs/sync`,
+            {
+              source_channel_id: selectedChannelDoc.channel_id,
+              source_model_name: selectedChannelDoc.model_name,
+              api_docs: '',
+              api_docs_markdown: apiDocsMarkdown || '',
+              api_docs_markdown_en: apiDocsMarkdownEn || '',
+            },
+          );
+          if (!res.data?.success) {
+            throw new Error(res.data?.message || t('同步失败'));
+          }
+          const otherSynced = Number(res.data?.data?.other_synced || 0);
+          await loadModel(selectedChannelDocKey);
+          showSuccess(
+            t('已同步到 {{count}} 个其他渠道', { count: otherSynced }),
+          );
+          refresh?.();
+        } catch (error) {
+          showError(
+            error.response?.data?.message || error.message || t('同步失败'),
+          );
+          throw error;
+        } finally {
+          setSyncing(false);
+        }
+      },
+    });
   };
 
   const restoreInheritedDocs = async () => {
@@ -823,7 +1003,9 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
           <Space wrap>
             <Button
               type='tertiary'
-              disabled={!selectedChannelDoc?.configured || Boolean(aiAction)}
+              disabled={
+                !selectedChannelDoc?.configured || Boolean(aiAction) || syncing
+              }
               loading={saving}
               onClick={restoreInheritedDocs}
             >
@@ -832,7 +1014,7 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
             <Button
               icon={<Save size={16} />}
               loading={saving}
-              disabled={!selectedChannelDoc || Boolean(aiAction)}
+              disabled={!modelDetail?.id || Boolean(aiAction) || syncing}
               onClick={save}
             >
               {t('保存')}
@@ -890,10 +1072,123 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
                 />
               </Form.Slot>
               <Form.Slot label={t('模型介绍')}>
+                <div className='mb-2 text-xs text-semi-color-text-2'>
+                  {t('模型介绍为通用内容，所有渠道默认共用。')}
+                </div>
+                <div className='mb-3 flex flex-wrap items-center gap-2'>
+                  <div
+                    className='flex items-center gap-2'
+                    role='group'
+                    aria-label={t('模型介绍语言')}
+                  >
+                    <Button
+                      type={
+                        introductionLanguage === 'zh' ? 'primary' : 'tertiary'
+                      }
+                      theme={introductionLanguage === 'zh' ? 'solid' : 'light'}
+                      disabled={Boolean(aiAction)}
+                      onClick={() => setIntroductionLanguage('zh')}
+                    >
+                      {t('中文介绍')}
+                    </Button>
+                    <Button
+                      type={
+                        introductionLanguage === 'en' ? 'primary' : 'tertiary'
+                      }
+                      theme={introductionLanguage === 'en' ? 'solid' : 'light'}
+                      disabled={Boolean(aiAction)}
+                      onClick={() => setIntroductionLanguage('en')}
+                    >
+                      {t('英文介绍')}
+                    </Button>
+                  </div>
+                  <Select
+                    filter
+                    disabled={Boolean(aiAction)}
+                    style={{ minWidth: 220, flex: '1 1 240px' }}
+                    prefix={t('AI 处理模型')}
+                    value={selectedTextModel || undefined}
+                    placeholder={t('请选择模型')}
+                    emptyContent={t('暂无可用文本模型')}
+                    optionList={textModelOptions}
+                    onChange={setSelectedTextModel}
+                  />
+                  <Button
+                    type='primary'
+                    theme='light'
+                    icon={<Search size={16} />}
+                    loading={aiAction === 'introduction_generate'}
+                    disabled={!selectedTextModel || Boolean(aiAction)}
+                    onClick={() => runIntroductionAiAction('generate')}
+                  >
+                    {t('AI 搜索生成')}
+                  </Button>
+                  <Button
+                    type='primary'
+                    theme='light'
+                    icon={<Sparkles size={16} />}
+                    loading={aiAction === 'introduction_polish'}
+                    disabled={!selectedTextModel || Boolean(aiAction)}
+                    onClick={() => runIntroductionAiAction('polish')}
+                  >
+                    {t('AI 润色')}
+                  </Button>
+                  <Button
+                    type='tertiary'
+                    icon={<Languages size={16} />}
+                    loading={aiAction === 'introduction_translate'}
+                    disabled={!selectedTextModel || Boolean(aiAction)}
+                    onClick={() => runIntroductionAiAction('translate')}
+                  >
+                    {t('中译英')}
+                  </Button>
+                  {aiAction.startsWith('introduction_') ? (
+                    <Button
+                      type='danger'
+                      theme='light'
+                      icon={<Square size={14} fill='currentColor' />}
+                      onClick={stopAiAction}
+                    >
+                      {t('停止 AI 处理')}
+                    </Button>
+                  ) : null}
+                </div>
+                {aiAction.startsWith('introduction_') ? (
+                  <div
+                    className='document-ai-running-status mb-3 flex items-center gap-3 rounded-lg border px-3 py-2'
+                    role='status'
+                    aria-live='polite'
+                  >
+                    <Sparkles
+                      className='document-ai-running-icon shrink-0'
+                      size={18}
+                    />
+                    <Text strong>
+                      {aiAction === 'introduction_generate'
+                        ? t('正在搜索并生成 {{model}} 的模型介绍', {
+                            model:
+                              selectedChannelDoc?.model_name ||
+                              modelDetail?.model_name,
+                          })
+                        : aiAction === 'introduction_translate'
+                          ? t('正在生成英文模型介绍')
+                          : t('正在润色模型介绍')}
+                    </Text>
+                    <span
+                      className='document-ai-running-dots'
+                      aria-hidden='true'
+                    >
+                      <i />
+                      <i />
+                      <i />
+                    </span>
+                  </div>
+                ) : null}
                 <MarkdownEditor
-                  value={docIntroduction}
-                  onChange={setDocIntroduction}
+                  value={activeIntroduction}
+                  onChange={setActiveIntroduction}
                   placeholder={t('可填写 Markdown 格式的模型介绍')}
+                  disabled={Boolean(aiAction)}
                   t={t}
                 />
               </Form.Slot>
@@ -935,6 +1230,20 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
                 >
                   {t('插入请求模板')}
                 </Button>
+                <Tooltip
+                  content={t('将当前中英文 API 文档覆盖到该模型的其他渠道')}
+                >
+                  <Button
+                    icon={<CopyCheck size={16} />}
+                    loading={syncing}
+                    disabled={
+                      channelDocs.length <= 1 || Boolean(aiAction) || saving
+                    }
+                    onClick={syncApiDocsToChannels}
+                  >
+                    {t('同步到其他渠道')}
+                  </Button>
+                </Tooltip>
               </div>
             </div>
 
@@ -1015,7 +1324,7 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
               >
                 {t('中译英')}
               </Button>
-              {aiAction ? (
+              {['polish', 'translate'].includes(aiAction) ? (
                 <Button
                   type='danger'
                   theme='light'
@@ -1027,7 +1336,7 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
               ) : null}
             </div>
 
-            {aiAction ? (
+            {['polish', 'translate'].includes(aiAction) ? (
               <div
                 className='document-ai-running-status mb-3 flex items-center gap-3 rounded-lg border px-3 py-2'
                 role='status'
@@ -1061,7 +1370,9 @@ const EditModelDocsModal = ({ visible, editingModel, onClose, refresh, t }) => {
 
             <div
               className={`relative rounded-lg border-2 border-dashed p-2 transition-colors ${
-                aiAction ? 'document-ai-editor-running' : ''
+                ['polish', 'translate'].includes(aiAction)
+                  ? 'document-ai-editor-running'
+                  : ''
               } ${
                 isDraggingFiles
                   ? 'border-semi-color-primary bg-semi-color-primary-light-default'
