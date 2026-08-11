@@ -118,6 +118,10 @@ func GetLocalUserRoutePolicy(userID int, isAdmin bool) (*LocalUserRoutePolicy, e
 			if m == "" {
 				continue
 			}
+			// 用户指定价：price_cap / channel_list 下不可用渠道不进入智能路由 UI。
+			if userID > 0 && !ChannelAllowedForUserPricing(userID, m, ch) {
+				continue
+			}
 			key := model.ResolveModelGroupKey(m, globalOverrideMap)
 			if uov, ok := userOverrideMap[strings.ToLower(m)]; ok && uov != "" {
 				key = uov
@@ -204,6 +208,11 @@ func GetLocalUserRoutePolicy(userID int, isAdmin bool) (*LocalUserRoutePolicy, e
 			}
 			return ci.ChannelID < cj.ChannelID
 		})
+
+		// 跳过无可用渠道的分组（用户指定价过滤后可能为空）
+		if len(chans) == 0 {
+			continue
+		}
 
 		display := sanitizeUTF8(displayMap[key])
 		if display == "" {
@@ -307,4 +316,27 @@ func ResolveChannelModelConfiguredUnitPriceOrZero(ch *model.Channel, modelName s
 		return price
 	}
 	return 0
+}
+
+// UserRouteChannelVisibleInGroup 判断渠道是否出现在用户智能路由视图的指定分组中
+// （已叠加用户指定价 price_cap / channel_list 过滤）。
+func UserRouteChannelVisibleInGroup(userID int, groupKey string, channelID int) bool {
+	if userID <= 0 || groupKey == "" || channelID <= 0 {
+		return false
+	}
+	policy, err := GetLocalUserRoutePolicy(userID, true)
+	if err != nil || policy == nil {
+		return false
+	}
+	for _, g := range policy.Groups {
+		if g.GroupKey != groupKey {
+			continue
+		}
+		for _, ch := range g.Channels {
+			if ch.ChannelID == channelID {
+				return true
+			}
+		}
+	}
+	return false
 }

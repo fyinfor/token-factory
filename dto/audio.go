@@ -90,11 +90,13 @@ type Segment struct {
 // 可直接传 audio_url/file_url，或 multipart file（网关先上传到操练场附件库再取在线地址）。
 // 支持 multipart 表单字段（model/audio_url/file）或 JSON body。
 type ASRTaskSubmitRequest struct {
-	Model          string `json:"model"`
-	AudioURL       string `json:"audio_url"`
-	FileURL        string `json:"file_url"`
-	Language       string `json:"language,omitempty"`
-	ResponseFormat string `json:"response_format,omitempty"`
+	Model                string `json:"model"`
+	AudioURL             string `json:"audio_url"`
+	FileURL              string `json:"file_url"`
+	Language             string `json:"language,omitempty"`
+	ResponseFormat       string `json:"response_format,omitempty"`
+	// DiarizationEnabled 说话人分离；兼容 JSON bool 与 multipart/form 字符串（"true"/"false"）。
+	DiarizationEnabled *BoolValue `json:"diarization_enabled,omitempty"`
 }
 
 func (r *ASRTaskSubmitRequest) GetAudioURL() string {
@@ -136,15 +138,29 @@ type ASRTaskSubmitResponse struct {
 	CreatedAt int64  `json:"created_at"`
 }
 
+// ASRTranscriptSentence 异步转写单句结果（含说话人分离时的 speaker_id）。
+type ASRTranscriptSentence struct {
+	BeginTime int64  `json:"begin_time"`
+	EndTime   int64  `json:"end_time"`
+	Text      string `json:"text"`
+	SpeakerID *int   `json:"speaker_id,omitempty"`
+}
+
+// ASRTranscript 异步转写音轨/通道级识别结果。
+type ASRTranscript struct {
+	Sentences []ASRTranscriptSentence `json:"sentences"`
+}
+
 // ASRTaskFetchResponse GET /v1/audio/transcriptions/async/{task_id} 查询响应。
-// 任务成功后 text/duration 有值；失败时 error 有值。
+// 任务成功后 text/duration 有值；启用说话人分离时 transcripts 含逐句 speaker_id；失败时 error 有值。
 type ASRTaskFetchResponse struct {
-	TaskID     string  `json:"task_id"`
-	Status     string  `json:"status"`
-	Model      string  `json:"model"`
-	Text       string  `json:"text,omitempty"`
-	Duration   float64 `json:"duration,omitempty"`
-	Error      string  `json:"error,omitempty"`
-	CreatedAt  int64   `json:"created_at"`
-	FinishedAt int64   `json:"finished_at,omitempty"`
+	TaskID      string            `json:"task_id"`
+	Status      string            `json:"status"`
+	Model       string            `json:"model"`
+	Text        string            `json:"text,omitempty"`
+	Duration    float64           `json:"duration,omitempty"`
+	Transcripts []ASRTranscript   `json:"transcripts,omitempty"`
+	Error       string            `json:"error,omitempty"`
+	CreatedAt   int64             `json:"created_at"`
+	FinishedAt  int64             `json:"finished_at,omitempty"`
 }

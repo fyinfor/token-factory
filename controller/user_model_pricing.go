@@ -15,12 +15,15 @@ import (
 // ── 用户指定价管理（仅管理员）────────────────────────────────
 //
 // 对「用户 × 模型」维度单独管理成本折扣 / 经营成本 / 加价折扣三项，
-// 命中后计费为「全局官方价 × 三折扣总和」，且选路排除单价超上限的渠道。
+// 命中后计费为「全局官方价 × 三折扣总和」。
+// Mode=price_cap：选路排除单价超上限的渠道。
+// Mode=channel_list：仅勾选渠道可用；展示与智能路由 UI 同步过滤。
 
 type userModelPricingItem struct {
 	model.UserModelPricingOverride
-	Username     string  `json:"username"`
-	TotalPercent float64 `json:"total_percent"`
+	Username     string                               `json:"username"`
+	TotalPercent float64                              `json:"total_percent"`
+	Channels     []model.UserModelPricingChannelBinding `json:"channels"`
 }
 
 // ListUserModelPricing GET /api/user_model_pricing?user_id=&model_name=
@@ -37,24 +40,60 @@ func ListUserModelPricing(c *gin.Context) {
 		ids = append(ids, r.UserId)
 	}
 	usernames := model.GetUsernamesByIds(ids)
+
+	channelsByUserModel := map[int]map[string][]model.UserModelPricingChannelBinding{}
+	if userId > 0 {
+		chMap, chErr := model.ListUserModelPricingChannelsByUser(userId)
+		if chErr != nil {
+			common.ApiError(c, chErr)
+			return
+		}
+		channelsByUserModel[userId] = chMap
+	} else {
+		// 全量列表：按行懒加载渠道（管理端通常带 user_id）
+		for _, r := range rows {
+			if channelsByUserModel[r.UserId] != nil {
+				continue
+			}
+			chMap, chErr := model.ListUserModelPricingChannelsByUser(r.UserId)
+			if chErr != nil {
+				common.ApiError(c, chErr)
+				return
+			}
+			channelsByUserModel[r.UserId] = chMap
+		}
+	}
+
 	items := make([]userModelPricingItem, 0, len(rows))
 	for _, r := range rows {
+		chs := channelsByUserModel[r.UserId][r.ModelName]
+		if chs == nil {
+			chs = []model.UserModelPricingChannelBinding{}
+		}
 		items = append(items, userModelPricingItem{
 			UserModelPricingOverride: r,
 			Username:                 usernames[r.UserId],
 			TotalPercent:             r.TotalPercent(),
+			Channels:                 chs,
 		})
 	}
 	common.ApiSuccess(c, items)
 }
 
+type upsertUserModelPricingChannelReq struct {
+	ChannelId int `json:"channel_id"`
+	Priority  int `json:"priority"`
+}
+
 type upsertUserModelPricingReq struct {
-	UserId               int     `json:"user_id"`
-	ModelName            string  `json:"model_name"`
-	PriceDiscountPercent float64 `json:"price_discount_percent"`
-	OperatingCostPercent float64 `json:"operating_cost_percent"`
-	MarkupDiscountRate   float64 `json:"markup_discount_rate"`
-	Enabled              bool    `json:"enabled"`
+	UserId               int                                `json:"user_id"`
+	ModelName            string                             `json:"model_name"`
+	Mode                 string                             `json:"mode"`
+	PriceDiscountPercent float64                            `json:"price_discount_percent"`
+	OperatingCostPercent float64                            `json:"operating_cost_percent"`
+	MarkupDiscountRate   float64                            `json:"markup_discount_rate"`
+	Enabled              bool                               `json:"enabled"`
+	Channels             []upsertUserModelPricingChannelReq `json:"channels"`
 }
 
 func validatePricingPercent(v float64) bool {
@@ -79,24 +118,69 @@ func UpsertUserModelPricing(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "折扣百分比需在 0-1000 之间"})
 		return
 	}
+	mode := strings.TrimSpace(req.Mode)
+	if mode == "" {
+		mode = model.UserPricingModePriceCap
+	}
+	if mode != model.UserPricingModePriceCap && mode != model.UserPricingModeChannelList {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "mode 须为 price_cap 或 channel_list"})
+		return
+	}
 	if _, err := model.GetUserById(req.UserId, false); err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "用户不存在"})
 		return
 	}
+
+	bindings := make([]model.UserModelPricingChannelBinding, 0, len(req.Channels))
+	if mode == model.UserPricingModeChannelList {
+		enabledIDs := model.GetEnabledChannelIDsByModel(req.ModelName)
+		enabledSet := make(map[int]struct{}, len(enabledIDs))
+		for _, id := range enabledIDs {
+			enabledSet[id] = struct{}{}
+		}
+		for _, ch := range req.Channels {
+			if ch.ChannelId <= 0 {
+				continue
+			}
+			if _, ok := enabledSet[ch.ChannelId]; !ok {
+				c.JSON(http.StatusOK, gin.H{
+					"success": false,
+					"message": "渠道 #" + strconv.Itoa(ch.ChannelId) + " 未启用或不支持该模型",
+				})
+				return
+			}
+			bindings = append(bindings, model.UserModelPricingChannelBinding{
+				ChannelId: ch.ChannelId,
+				Priority:  ch.Priority,
+			})
+		}
+		if len(bindings) == 0 {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "渠道清单模式至少勾选一个渠道"})
+			return
+		}
+	}
+
 	ov := &model.UserModelPricingOverride{
 		UserId:               req.UserId,
 		ModelName:            req.ModelName,
+		Mode:                 mode,
 		PriceDiscountPercent: req.PriceDiscountPercent,
 		OperatingCostPercent: req.OperatingCostPercent,
 		MarkupDiscountRate:   req.MarkupDiscountRate,
 		Enabled:              req.Enabled,
 	}
-	saved, err := model.UpsertUserModelPricingOverride(ov)
+	saved, err := model.UpsertUserModelPricingOverrideWithChannels(ov, bindings)
 	if err != nil {
 		common.ApiError(c, err)
 		return
 	}
-	common.ApiSuccess(c, saved)
+	chs, _ := model.ListUserModelPricingChannels(saved.UserId, saved.ModelName)
+	common.ApiSuccess(c, userModelPricingItem{
+		UserModelPricingOverride: *saved,
+		Username:                 "",
+		TotalPercent:             saved.TotalPercent(),
+		Channels:                 chs,
+	})
 }
 
 // DeleteUserModelPricing DELETE /api/user_model_pricing/:id
@@ -118,15 +202,21 @@ type userModelPricingPreviewChannel struct {
 	ChannelName string  `json:"channel_name"`
 	UnitPrice   float64 `json:"unit_price"`
 	WithinCap   bool    `json:"within_cap"`
+	Selected    bool    `json:"selected"`
+	Priority    int     `json:"priority"`
 }
 
-// PreviewUserModelPricing GET /api/user_model_pricing/preview?model_name=&price_discount_percent=&operating_cost_percent=&markup_discount_rate=
-// 按给定三折扣实时预览：价格上限，以及该模型各渠道是否在上限内（保存前校验用）。
+// PreviewUserModelPricing GET /api/user_model_pricing/preview?...
+// 按给定三折扣实时预览渠道；mode=channel_list 时附带勾选/排序参考。
 func PreviewUserModelPricing(c *gin.Context) {
 	modelName := strings.TrimSpace(c.Query("model_name"))
 	if modelName == "" {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "model_name 不能为空"})
 		return
+	}
+	mode := strings.TrimSpace(c.DefaultQuery("mode", model.UserPricingModePriceCap))
+	if mode != model.UserPricingModeChannelList {
+		mode = model.UserPricingModePriceCap
 	}
 	costDisc, _ := strconv.ParseFloat(c.DefaultQuery("price_discount_percent", "100"), 64)
 	operating, _ := strconv.ParseFloat(c.DefaultQuery("operating_cost_percent", "0"), 64)
@@ -134,6 +224,19 @@ func PreviewUserModelPricing(c *gin.Context) {
 	totalPercent := costDisc + operating + markup
 
 	cap, capOK := service.UnitPriceCapForTotalPercent(modelName, totalPercent)
+
+	selectedSet := map[int]int{}
+	if selectedRaw := strings.TrimSpace(c.Query("selected_channel_ids")); selectedRaw != "" {
+		for i, part := range strings.Split(selectedRaw, ",") {
+			id, err := strconv.Atoi(strings.TrimSpace(part))
+			if err != nil || id <= 0 {
+				continue
+			}
+			if _, ok := selectedSet[id]; !ok {
+				selectedSet[id] = i + 1
+			}
+		}
+	}
 
 	channelIDs := model.GetEnabledChannelIDsByModel(modelName)
 	channels := make([]userModelPricingPreviewChannel, 0, len(channelIDs))
@@ -148,20 +251,25 @@ func PreviewUserModelPricing(c *gin.Context) {
 		if within {
 			withinCount++
 		}
+		pri, selected := selectedSet[ch.Id]
 		channels = append(channels, userModelPricingPreviewChannel{
 			ChannelId:   ch.Id,
 			ChannelName: ch.Name,
 			UnitPrice:   price,
 			WithinCap:   within,
+			Selected:    selected,
+			Priority:    pri,
 		})
 	}
 	common.ApiSuccess(c, gin.H{
+		"mode":           mode,
 		"total_percent":  totalPercent,
 		"cap":            cap,
 		"cap_defined":    capOK,
 		"channels":       channels,
 		"within_count":   withinCount,
 		"total_channels": len(channels),
+		"selected_count": len(selectedSet),
 	})
 }
 
@@ -198,6 +306,7 @@ func PreviewImportUserModelPricing(c *gin.Context) {
 
 // ImportUserModelPricing POST /api/user_model_pricing/import
 // 一键导入：将当前平台「已启用且已配置展示定价」的模型，按每个模型当前最便宜启用渠道的三项折扣绑定到指定用户（已存在则覆盖为该渠道当前折扣）。
+// 新建为 price_cap；已存在 channel_list 仅更新三折扣，保留渠道清单。
 func ImportUserModelPricing(c *gin.Context) {
 	var req importUserModelPricingReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -248,4 +357,56 @@ func DeleteUserModelPricingByUser(c *gin.Context) {
 		return
 	}
 	common.ApiSuccess(c, gin.H{"deleted": n})
+}
+
+type convertChannelListReq struct {
+	UserId     int      `json:"user_id"`
+	ModelNames []string `json:"model_names"` // 空 = 该用户全部模型
+}
+
+// ConvertUserModelPricingToChannelList POST /api/user_model_pricing/convert_channel_list
+// 将该用户（可选模型子集）指定价改为渠道清单：每模型勾选未超指定售价渠道，按单价升序。
+// model_names 为空或不传时默认全切。
+func ConvertUserModelPricingToChannelList(c *gin.Context) {
+	var req convertChannelListReq
+	if err := c.ShouldBindJSON(&req); err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if req.UserId <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "user_id 不能为空"})
+		return
+	}
+	if _, err := model.GetUserById(req.UserId, false); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "用户不存在"})
+		return
+	}
+	converted, skipped, items, err := service.ConvertUserModelPricingToChannelList(req.UserId, req.ModelNames)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	if converted == 0 && skipped == 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "该用户暂无指定价配置"})
+		return
+	}
+	if converted == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "没有可转换的模型（均无未超价启用渠道）",
+			"data": gin.H{
+				"converted": converted,
+				"skipped":   skipped,
+				"items":     items,
+			},
+		})
+		return
+	}
+	common.ApiSuccess(c, gin.H{
+		"converted":    converted,
+		"skipped":      skipped,
+		"items":        items,
+		"scope":        len(req.ModelNames),
+		"scope_all":    len(req.ModelNames) == 0,
+	})
 }

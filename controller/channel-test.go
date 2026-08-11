@@ -1357,7 +1357,7 @@ func testChannelASR(c *gin.Context, channel *model.Channel, testModel string, en
 
 	switch constant.EndpointType(endpointType) {
 	case constant.EndpointTypeAliASRAsync:
-		taskResp, raw, err := aliyunasr.SubmitAsyncTask(baseURL, apiKey, proxy, upstreamModel, aliyunasr.SampleAudioURL)
+		taskResp, raw, err := aliyunasr.SubmitAsyncTask(baseURL, apiKey, proxy, upstreamModel, aliyunasr.SampleAudioURL, nil)
 		if err != nil {
 			localErr = err
 			break

@@ -34,6 +34,17 @@ var userModelPricingExportColumns = []userModelPricingExportColumn{
 		},
 	},
 	{
+		Key:    "mode",
+		Header: "模式",
+		Width:  14,
+		CellValue: func(row model.UserModelPricingOverride, _ string) any {
+			if row.NormalizedMode() == model.UserPricingModeChannelList {
+				return "渠道清单"
+			}
+			return "价格上限"
+		},
+	},
+	{
 		Key:    "price_discount_percent",
 		Header: "成本折扣(%)",
 		Width:  14,

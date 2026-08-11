@@ -5934,6 +5934,8 @@
     "算力页面": "Ukurasa wa Ukokotoaji",
     "允许执行 JavaScript": "Ruhusu JavaScript kutekelezwa",
     "开启后，上传的 HTML 可执行脚本、访问当前站点上下文并发起网络请求，请仅上传完全可信的内容": "Ikiwashwa, HTML iliyopakiwa inaweza kutekeleza hati, kufikia muktadha wa tovuti ya sasa na kutuma maombi ya mtandao. Pakia tu maudhui unayoyaamini kabisa.",
+    "允许新窗口跳转": "Ruhusu kufungua madirisha mapya",
+    "开启后，页面可通过链接或脚本打开新窗口，目标页面不会继承算力页沙箱限制": "Ikiwashwa, ukurasa unaweza kufungua madirisha mapya kupitia viungo au hati. Kurasa lengwa hazitarithi vizuizi vya sandbox vya ukurasa wa Ukokotoaji.",
     "开启后将在顶部导航首页前显示算力入口": "Ikiwashwa, kiungo cha Ukokotoaji kitaonekana kabla ya Mwanzo kwenye menyu ya juu",
     "开启后将在顶部导航首页后显示算力入口": "Ikiwashwa, kiungo cha Ukokotoaji kitaonekana baada ya Mwanzo kwenye menyu ya juu",
     "已开启": "Imewashwa",

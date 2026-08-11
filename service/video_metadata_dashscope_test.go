@@ -30,6 +30,59 @@ func TestExtractDashScopeVideoMetadata_ExplicitDuration(t *testing.T) {
 	}
 }
 
+func TestExtractDashScopeVideoMetadata_TopLevelUsage(t *testing.T) {
+	raw := []byte(`{
+		"request_id": "99243b47-ec5f-9413-9993-xxxxxx",
+		"output": {
+			"task_id": "4673458e-28be-4a05-bf2a-xxxxxx",
+			"task_status": "SUCCEEDED",
+			"video_url": "https://dashscope-result.oss-cn-beijing.aliyuncs.com/xxx.mp4?Expires=xxx"
+		},
+		"usage": {
+			"duration": 5,
+			"input_video_duration": 0,
+			"output_video_duration": 5,
+			"video_count": 1,
+			"SR": 720,
+			"ratio": "16:9"
+		}
+	}`)
+	var payload map[string]any
+	if err := common.Unmarshal(raw, &payload); err != nil {
+		t.Fatal(err)
+	}
+	meta, ok := extractDashScopeVideoMetadata(payload)
+	if !ok {
+		t.Fatal("expected dashscope metadata from top-level usage")
+	}
+	if meta.DurationSec != 5 {
+		t.Fatalf("duration = %v, want 5", meta.DurationSec)
+	}
+	if meta.Width != 1280 || meta.Height != 720 {
+		t.Fatalf("resolution = %dx%d, want 1280x720", meta.Width, meta.Height)
+	}
+}
+
+func TestExtractDashScopeUsageSpec(t *testing.T) {
+	raw := []byte(`{
+		"usage": {
+			"output_video_duration": 5.2,
+			"SR": 720,
+			"ratio": "16:9"
+		}
+	}`)
+	res, dur, ratio := extractDashScopeUsageSpec(raw)
+	if res != "720p" {
+		t.Fatalf("resolution = %q, want 720p", res)
+	}
+	if dur != 6 {
+		t.Fatalf("duration = %d, want 6 (ceil)", dur)
+	}
+	if ratio != "16:9" {
+		t.Fatalf("ratio = %q", ratio)
+	}
+}
+
 func TestDashScopeDurationFromOutput_IgnoresTaskWallClock(t *testing.T) {
 	output := map[string]any{
 		"submit_time": "2026-05-26 20:18:44.938",

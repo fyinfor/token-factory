@@ -27,6 +27,7 @@ var (
 type ComputePageConfig struct {
 	Enabled         bool   `json:"enabled"`
 	AllowJavaScript bool   `json:"allow_javascript"`
+	AllowPopups     bool   `json:"allow_popups"`
 	FileName        string `json:"file_name"`
 	UpdatedAt       int64  `json:"updated_at"`
 	HasHTML         bool   `json:"-"`
@@ -164,6 +165,23 @@ func UpdateComputePageJavaScriptAllowed(allowed bool) (ComputePageConfig, error)
 		return config, err
 	}
 	config.AllowJavaScript = allowed
+	config.UpdatedAt = time.Now().Unix()
+	if err := writeComputePageConfigLocked(config); err != nil {
+		return config, err
+	}
+	config.HasHTML = computePageHTMLExists()
+	return config, nil
+}
+
+func UpdateComputePagePopupsAllowed(allowed bool) (ComputePageConfig, error) {
+	computePageMutex.Lock()
+	defer computePageMutex.Unlock()
+
+	config, err := readComputePageConfigLocked()
+	if err != nil {
+		return config, err
+	}
+	config.AllowPopups = allowed
 	config.UpdatedAt = time.Now().Unix()
 	if err := writeComputePageConfigLocked(config); err != nil {
 		return config, err

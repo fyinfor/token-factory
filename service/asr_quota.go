@@ -33,16 +33,88 @@ func ComputeASRQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, seconds
 	return calculateTextQuotaSummary(ctx, relayInfo, usage).Quota
 }
 
+// LogASRAsyncPreConsume 异步任务提交成功后写入预扣消费日志（billing_phase=pre_charge）。
+// 实际扣费已由 PreConsumeBilling 完成；此处仅记日志并累计 used_quota / 渠道用量。
+func LogASRAsyncPreConsume(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, taskID string, preConsumed int, preSeconds float64) {
+	if relayInfo == nil || preConsumed <= 0 {
+		return
+	}
+	if preSeconds <= 0 {
+		preSeconds = 60
+	}
+	chID := 0
+	if relayInfo.ChannelMeta != nil {
+		chID = relayInfo.ChannelId
+	}
+	tokenName := ""
+	if ctx != nil {
+		tokenName = ctx.GetString("token_name")
+	}
+
+	effUnitUSD := model.EffectiveModelPrice(
+		relayInfo.PriceData.ModelPrice,
+		relayInfo.PriceData.GlobalModelPrice,
+		relayInfo.PriceData.CostDiscountPercent,
+		relayInfo.PriceData.MarkupDiscountPercent,
+	)
+	groupRatio := relayInfo.PriceData.GroupRatioInfo.GroupRatio
+	if groupRatio <= 0 {
+		groupRatio = 1
+	}
+	userUnitUSD := effUnitUSD * groupRatio
+	logContent := fmt.Sprintf("ASR 异步转写预扣 %s 秒，每秒价格 %s，预扣 %s",
+		formatASRSecondsDisplay(preSeconds), formatASRUnitPriceDisplay(userUnitUSD), logger.FormatQuota(preConsumed))
+
+	other := GenerateTextOtherInfo(ctx, relayInfo, 0, groupRatio, 0,
+		0, 0, relayInfo.PriceData.ModelPrice, relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio)
+	other["asr"] = true
+	other["audio_seconds"] = preSeconds
+	other["asr_unit_price"] = userUnitUSD
+	other["use_price"] = true
+	other["pre_consumed_quota"] = preConsumed
+	if taskID != "" {
+		other["task_id"] = taskID
+	}
+	other = model.SetBillingLogMetadata(other, model.BillingPhasePreCharge, true, preConsumed, -int64(preConsumed))
+
+	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{
+		ChannelId:      chID,
+		PromptTokens:   int(math.Ceil(preSeconds)),
+		ModelName:      relayInfo.OriginModelName,
+		TokenName:      tokenName,
+		Quota:          preConsumed,
+		TokenUsed:      preConsumed,
+		Content:        logContent,
+		TokenId:        relayInfo.TokenId,
+		UseTimeSeconds: 0,
+		IsStream:       false,
+		Group:          relayInfo.UsingGroup,
+		Other:          other,
+	})
+	recordWalletUsedQuota(relayInfo, relayInfo.UserId, preConsumed)
+	model.UpdateChannelUsedQuota(chID, preConsumed)
+}
+
 // PostASRConsumeQuota 阿里云 ASR 语音转写结算、日志与分润。
 //
 // 三条链路：
 //  1. 同步转写：Relay 主流程已建立 Billing 会话（可能预扣），此处按真实秒数 SettleBilling 差额；
-//  2. 异步转写（提交已预扣）：relayInfo.FinalPreConsumedQuota > 0 且 Billing == nil，按实际秒数与预扣差额补扣/退还；
-//  3. 异步转写（兼容旧任务无预扣）：Billing == nil 且 FinalPreConsumedQuota == 0，全额新建计费会话扣费。
+//  2. 异步转写（已写预扣日志）：写结算标记（合并进预扣日志展示实际扣费总额），余额仅按差额调整；
+//  3. 异步转写（兼容旧任务无预扣日志）：按实际秒数差额结算并写一条全额消费日志。
 //
 // 分润沿用钱包分润链路（tryPostWalletProfitShareCredit），按按秒消耗金额核算代理收益。
 // taskID 非空时写入日志 other（异步任务日志详情展示）。
+// prechargeLogged=true 表示提交阶段已调用 LogASRAsyncPreConsume（used_quota 已计入预扣）。
 func PostASRConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, seconds float64, taskID string, extraContent string) *types.TokenFactoryError {
+	return postASRConsumeQuota(ctx, relayInfo, seconds, taskID, extraContent, false)
+}
+
+// PostASRConsumeQuotaAsync 异步任务成功结算：在已写预扣日志的前提下按真实时长差额结算并写结算日志。
+func PostASRConsumeQuotaAsync(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, seconds float64, taskID string, extraContent string, prechargeLogged bool) *types.TokenFactoryError {
+	return postASRConsumeQuota(ctx, relayInfo, seconds, taskID, extraContent, prechargeLogged)
+}
+
+func postASRConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, seconds float64, taskID string, extraContent string, prechargeLogged bool) *types.TokenFactoryError {
 	if seconds <= 0 {
 		seconds = 1
 	}
@@ -95,6 +167,29 @@ func PostASRConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, sec
 		}
 	}
 
+	useTimeSeconds := 0
+	if !relayInfo.StartTime.IsZero() {
+		useTimeSeconds = int(time.Now().Unix() - relayInfo.StartTime.Unix())
+	}
+	effUnitUSD := model.EffectiveModelPrice(
+		relayInfo.PriceData.ModelPrice,
+		relayInfo.PriceData.GlobalModelPrice,
+		relayInfo.PriceData.CostDiscountPercent,
+		relayInfo.PriceData.MarkupDiscountPercent,
+	)
+	userUnitUSD := effUnitUSD * summary.GroupRatio
+
+	// 已写预扣日志的异步任务：只记差额/结算标记，避免 UI 出现双倍消费
+	if prechargeLogged && taskID != "" && relayInfo.Billing == nil && preConsumed > 0 {
+		recordASRAsyncSettlementLog(ctx, relayInfo, chID, summary, seconds, userUnitUSD, preConsumed, taskID, useTimeSeconds, extraContent)
+		if !relayInfo.IsChannelTest {
+			gopool.Go(func() {
+				perfmetrics.RecordRelaySample(relayInfo, true, 0, int64(summary.PromptTokens), 0)
+			})
+		}
+		return nil
+	}
+
 	if summary.TotalTokens == 0 {
 		logger.LogError(ctx, fmt.Sprintf("asr total tokens is 0, cannot consume quota, userId %d, channelId %d, tokenId %d, model %s",
 			relayInfo.UserId, chID, relayInfo.TokenId, summary.ModelName))
@@ -103,15 +198,6 @@ func PostASRConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, sec
 		model.UpdateChannelUsedQuota(chID, summary.Quota)
 	}
 
-	useTimeSeconds := time.Now().Unix() - relayInfo.StartTime.Unix()
-	// 展示用户实付每秒价：成本/加价折扣后的有效单价 × 分组倍率（与 summary.Quota 实扣口径一致）
-	effUnitUSD := model.EffectiveModelPrice(
-		relayInfo.PriceData.ModelPrice,
-		relayInfo.PriceData.GlobalModelPrice,
-		relayInfo.PriceData.CostDiscountPercent,
-		relayInfo.PriceData.MarkupDiscountPercent,
-	)
-	userUnitUSD := effUnitUSD * summary.GroupRatio
 	logContent := fmt.Sprintf("ASR 语音转写时长 %s 秒，每秒价格 %s",
 		formatASRSecondsDisplay(seconds), formatASRUnitPriceDisplay(userUnitUSD))
 	if preConsumed > 0 && relayInfo.Billing == nil {
@@ -125,7 +211,7 @@ func PostASRConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, sec
 		0, 0, summary.ModelPrice, relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio)
 	other["asr"] = true
 	other["audio_seconds"] = seconds
-	other["asr_unit_price"] = userUnitUSD // 折扣后用户实付每秒价（USD），供前端日志详情展示
+	other["asr_unit_price"] = userUnitUSD
 	if taskID != "" {
 		other["task_id"] = taskID
 	}
@@ -144,7 +230,7 @@ func PostASRConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, sec
 		Quota:            summary.Quota,
 		Content:          logContent,
 		TokenId:          relayInfo.TokenId,
-		UseTimeSeconds:   int(useTimeSeconds),
+		UseTimeSeconds:   useTimeSeconds,
 		IsStream:         false,
 		Group:            relayInfo.UsingGroup,
 		Other:            other,
@@ -157,8 +243,68 @@ func PostASRConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, sec
 	return nil
 }
 
-// RefundASRPreConsumedQuota 异步任务失败时退还提交阶段预扣额度。
-func RefundASRPreConsumedQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, preConsumed int, taskID, reason string) {
+func recordASRAsyncSettlementLog(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, chID int, summary textQuotaSummary, seconds float64, userUnitUSD float64, preConsumed int, taskID string, useTimeSeconds int, extraContent string) {
+	actualQuota := summary.Quota
+	delta := actualQuota - preConsumed
+	tokenName := summary.TokenName
+	if tokenName == "" && ctx != nil {
+		tokenName = ctx.GetString("token_name")
+	}
+
+	// 余额差额已在 postASRConsumeQuota 中通过 PostConsumeQuota 调整；
+	// 此处仅同步 used_quota / 渠道用量，并写入结算标记供列表合并进预扣日志。
+	if delta > 0 {
+		model.UpdateUserUsedQuotaAndRequestCountWithGiftOffset(relayInfo.UserId, delta, walletGiftOffset(relayInfo))
+		model.UpdateChannelUsedQuota(chID, delta)
+	} else if delta < 0 {
+		refundQuota := -delta
+		model.DecreaseUserUsedQuota(relayInfo.UserId, refundQuota)
+		model.UpdateChannelUsedQuota(chID, -refundQuota)
+	}
+
+	other := GenerateTextOtherInfo(ctx, relayInfo, summary.ModelRatio, summary.GroupRatio, summary.CompletionRatio,
+		0, 0, summary.ModelPrice, relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio)
+	other["asr"] = true
+	other["audio_seconds"] = seconds
+	other["asr_unit_price"] = userUnitUSD
+	other["use_price"] = true
+	other["task_id"] = taskID
+	other["pre_consumed_quota"] = preConsumed
+	other["actual_quota"] = actualQuota
+
+	baseContent := fmt.Sprintf("ASR 语音转写时长 %s 秒，每秒价格 %s，实际扣费 %s（预扣 %s）",
+		formatASRSecondsDisplay(seconds), formatASRUnitPriceDisplay(userUnitUSD),
+		logger.FormatQuota(actualQuota), logger.FormatQuota(preConsumed))
+	if delta > 0 {
+		baseContent += fmt.Sprintf("，补扣 %s", logger.FormatQuota(delta))
+	} else if delta < 0 {
+		baseContent += fmt.Sprintf("，退还差额 %s", logger.FormatQuota(-delta))
+	}
+	if extraContent != "" {
+		baseContent += ", " + extraContent
+	}
+
+	// 仅写结算标记（Quota=0, affects_balance=false）：列表默认隐藏，
+	// 由 mergeSettlementMarkersIntoPreChargeLogs 合并进预扣日志并展示实际扣费总额。
+	other = model.SetBillingLogMetadata(other, model.BillingPhaseSettlementMarker, false, actualQuota, 0)
+	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
+		UserId:         relayInfo.UserId,
+		LogType:        model.LogTypeConsume,
+		Content:        baseContent,
+		ChannelId:      chID,
+		ModelName:      summary.ModelName,
+		TokenName:      tokenName,
+		Quota:          0,
+		TokenId:        relayInfo.TokenId,
+		UseTimeSeconds: useTimeSeconds,
+		Group:          relayInfo.UsingGroup,
+		Other:          other,
+	})
+}
+
+// RefundASRPreConsumedQuota 异步任务失败时退还提交阶段预扣额度，并写入退款使用日志。
+// prechargeLogged=true 时同步回退 used_quota（与预扣日志配套）；旧任务无预扣日志则只退余额。
+func RefundASRPreConsumedQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, preConsumed int, taskID, reason string, prechargeLogged bool) {
 	if relayInfo == nil || preConsumed <= 0 {
 		return
 	}
@@ -168,6 +314,38 @@ func RefundASRPreConsumedQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInf
 	}
 	logger.LogInfo(ctx, fmt.Sprintf("ASR 异步任务失败已退还预扣 %s（task_id=%s）: %s",
 		logger.FormatQuota(preConsumed), taskID, reason))
+
+	chID := 0
+	if relayInfo.ChannelMeta != nil {
+		chID = relayInfo.ChannelId
+	}
+	tokenName := ""
+	if ctx != nil {
+		tokenName = ctx.GetString("token_name")
+	}
+	useTimeSeconds := 0
+	if !relayInfo.StartTime.IsZero() {
+		useTimeSeconds = int(time.Now().Unix() - relayInfo.StartTime.Unix())
+	}
+	other := map[string]interface{}{
+		"asr":     true,
+		"task_id": taskID,
+		"reason":  reason,
+	}
+	other = model.SetBillingLogMetadata(other, model.BillingPhaseRefund, prechargeLogged, preConsumed, int64(preConsumed))
+	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
+		UserId:         relayInfo.UserId,
+		LogType:        model.LogTypeRefund,
+		Content:        fmt.Sprintf("ASR 异步任务失败退还预扣 %s：%s", logger.FormatQuota(preConsumed), reason),
+		ChannelId:      chID,
+		ModelName:      relayInfo.OriginModelName,
+		TokenName:      tokenName,
+		Quota:          preConsumed,
+		TokenId:        relayInfo.TokenId,
+		UseTimeSeconds: useTimeSeconds,
+		Group:          relayInfo.UsingGroup,
+		Other:          other,
+	})
 }
 
 // RecordASRErrorLog 将 ASR 上游/请求失败写入使用日志（LogTypeError）。

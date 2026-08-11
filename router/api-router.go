@@ -393,6 +393,7 @@ func SetApiRouter(router *gin.Engine) {
 			computePageAdminRoute.GET("/", controller.AdminGetComputePageConfig)
 			computePageAdminRoute.PUT("/enabled", controller.AdminUpdateComputePageEnabled)
 			computePageAdminRoute.PUT("/javascript", controller.AdminUpdateComputePageJavaScript)
+			computePageAdminRoute.PUT("/popups", controller.AdminUpdateComputePagePopups)
 			computePageAdminRoute.POST("/content", controller.AdminUploadComputePageHTML)
 		}
 
@@ -445,6 +446,7 @@ func SetApiRouter(router *gin.Engine) {
 			userModelPricingRoute.GET("/export", controller.ExportUserModelPricing)
 			userModelPricingRoute.POST("/", controller.UpsertUserModelPricing)
 			userModelPricingRoute.POST("/import", controller.ImportUserModelPricing)
+			userModelPricingRoute.POST("/convert_channel_list", controller.ConvertUserModelPricingToChannelList)
 			userModelPricingRoute.DELETE("/by_user/:user_id", controller.DeleteUserModelPricingByUser)
 			userModelPricingRoute.DELETE("/:id", controller.DeleteUserModelPricing)
 		}

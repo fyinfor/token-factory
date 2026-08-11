@@ -31,8 +31,31 @@ func resolveVideoOutputSpecFromUpstream(task *model.Task, taskResult *relaycommo
 		// 腾讯云 DescribeTaskDetail：AigcVideoTask.Input.OutputConfig（Temporary 存储时常无 MetaData）
 		res, dur, ratio := extractTencentInputOutputConfig(task.Data)
 		mergeVideoSpecFields(&spec, res, dur, ratio)
+		// 阿里云 DashScope video-synthesis：顶层 usage.duration / SR / ratio
+		res, dur, ratio = extractDashScopeUsageSpec(task.Data)
+		mergeVideoSpecFields(&spec, res, dur, ratio)
 	}
 	return spec
+}
+
+// extractDashScopeUsageSpec 从 DashScope 查询回包顶层 usage 解析计费核心字段。
+func extractDashScopeUsageSpec(data []byte) (resolution string, duration int, ratio string) {
+	if len(data) == 0 {
+		return "", 0, ""
+	}
+	var payload map[string]any
+	if err := common.Unmarshal(data, &payload); err != nil {
+		return "", 0, ""
+	}
+	resolution = dashScopeResolutionLabelFromUsage(payload)
+	ratio = dashScopeRatioFromUsage(payload)
+	if d := dashScopeDurationFromUsage(payload); d > 0 {
+		duration = int(math.Ceil(d))
+		if duration <= 0 {
+			duration = 1
+		}
+	}
+	return resolution, duration, ratio
 }
 
 // extractTencentInputOutputConfig 解析腾讯云回包中的计费核心三字段。

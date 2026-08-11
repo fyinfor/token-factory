@@ -3,6 +3,7 @@ package aliyunasr
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,8 +11,52 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/service"
 )
+
+// UpstreamHTTPError 上游 HTTP 非 2xx 响应（含 DashScope code/message）。
+type UpstreamHTTPError struct {
+	StatusCode int
+	Code       string
+	Message    string
+	Body       []byte
+}
+
+func (e *UpstreamHTTPError) Error() string {
+	if e == nil {
+		return "upstream http error"
+	}
+	return fmt.Sprintf("上游返回状态码 %d: [%s] %s", e.StatusCode, e.Code, e.Message)
+}
+
+// IsPermanentUpstreamHTTPError 判断是否应终止轮询并标记任务失败（鉴权/未开通/资源不存在等）。
+// 429 与 5xx 视为可重试，保持 pending/running。
+func IsPermanentUpstreamHTTPError(err error) bool {
+	var u *UpstreamHTTPError
+	if !errors.As(err, &u) || u == nil {
+		return false
+	}
+	if u.StatusCode == http.StatusTooManyRequests || u.StatusCode >= 500 {
+		return false
+	}
+	switch u.StatusCode {
+	case http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound:
+		return true
+	}
+	if u.StatusCode >= 400 && u.StatusCode < 500 {
+		code := strings.ToLower(u.Code)
+		msg := strings.ToLower(u.Message)
+		if strings.Contains(code, "accessdenied") ||
+			strings.Contains(code, "unpurchased") ||
+			strings.Contains(code, "invalid") ||
+			strings.Contains(msg, "access denied") ||
+			strings.Contains(msg, "unpurchased") {
+			return true
+		}
+	}
+	return false
+}
 
 // 异步任务相关 HTTP 超时设置
 const (
@@ -23,14 +68,24 @@ const (
 // SubmitAsyncTask 提交异步转写任务：POST {baseURL}/v1/services/audio/asr/transcription。
 // DashScope 异步模式必须携带 X-DashScope-Async: enable 请求头。
 // baseURL 为渠道配置的上游基础地址（如 https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api）。
-func SubmitAsyncTask(baseURL, apiKey, proxy, model, fileURL string) (*ASRTaskResponse, []byte, error) {
+func SubmitAsyncTask(baseURL, apiKey, proxy, model, fileURL string, parameters *aliASRAsyncParameters) (*ASRTaskResponse, []byte, error) {
 	url := strings.TrimSuffix(baseURL, "/") + AsyncSubmitPath
+	asyncParams := &aliASRAsyncParameters{ChannelID: []int{0}}
+	if parameters != nil {
+		if parameters.DiarizationEnabled != nil {
+			asyncParams.DiarizationEnabled = parameters.DiarizationEnabled
+		}
+		if len(parameters.LanguageHints) > 0 {
+			asyncParams.LanguageHints = parameters.LanguageHints
+		}
+		if len(parameters.ChannelID) > 0 {
+			asyncParams.ChannelID = parameters.ChannelID
+		}
+	}
 	reqBody := &aliASRAsyncSubmitRequest{
-		Model: model,
-		Input: BuildAsyncInput(model, fileURL),
-		Parameters: &aliASRAsyncParameters{
-			ChannelID: []int{0},
-		},
+		Model:      model,
+		Input:      BuildAsyncInput(model, fileURL),
+		Parameters: asyncParams,
 	}
 	jsonBytes, err := common.Marshal(reqBody)
 	if err != nil {
@@ -66,7 +121,12 @@ func SubmitAsyncTask(baseURL, apiKey, proxy, model, fileURL string) (*ASRTaskRes
 		return nil, respBody, fmt.Errorf("解析上游响应失败: %w, body: %s", err, string(respBody))
 	}
 	if resp.StatusCode != http.StatusOK {
-		return &taskResp, respBody, fmt.Errorf("上游返回状态码 %d: [%s] %s", resp.StatusCode, taskResp.Code, taskResp.Message)
+		return &taskResp, respBody, &UpstreamHTTPError{
+			StatusCode: resp.StatusCode,
+			Code:       taskResp.Code,
+			Message:    taskResp.Message,
+			Body:       respBody,
+		}
 	}
 	if taskResp.Output.TaskID == "" {
 		return &taskResp, respBody, fmt.Errorf("上游未返回 task_id: %s", string(respBody))
@@ -105,7 +165,12 @@ func FetchAsyncTask(baseURL, apiKey, proxy, upstreamTaskID string) (*ASRTaskResp
 		return nil, respBody, fmt.Errorf("解析上游响应失败: %w, body: %s", err, string(respBody))
 	}
 	if resp.StatusCode != http.StatusOK {
-		return &taskResp, respBody, fmt.Errorf("上游返回状态码 %d: [%s] %s", resp.StatusCode, taskResp.Code, taskResp.Message)
+		return &taskResp, respBody, &UpstreamHTTPError{
+			StatusCode: resp.StatusCode,
+			Code:       taskResp.Code,
+			Message:    taskResp.Message,
+			Body:       respBody,
+		}
 	}
 	return &taskResp, respBody, nil
 }
@@ -165,4 +230,40 @@ func MergeTranscriptsText(result *aliASRTranscriptionResult) (text string, secon
 		maxDurationMs = result.Properties.OriginalDurationInMilliseconds
 	}
 	return strings.Join(texts, "\n"), float64(maxDurationMs) / 1000.0
+}
+
+// BuildAsyncSubmitParameters 构造异步提交 upstream parameters。
+func BuildAsyncSubmitParameters(diarizationEnabled *bool) *aliASRAsyncParameters {
+	params := &aliASRAsyncParameters{ChannelID: []int{0}}
+	if diarizationEnabled != nil {
+		params.DiarizationEnabled = diarizationEnabled
+	}
+	return params
+}
+
+// BuildUserTranscripts 将上游识别结果转为对外 transcripts 结构（含说话人分离 speaker_id）。
+func BuildUserTranscripts(result *aliASRTranscriptionResult) []dto.ASRTranscript {
+	if result == nil || len(result.Transcripts) == 0 {
+		return nil
+	}
+	out := make([]dto.ASRTranscript, 0, len(result.Transcripts))
+	for _, tr := range result.Transcripts {
+		if len(tr.Sentences) == 0 {
+			continue
+		}
+		sentences := make([]dto.ASRTranscriptSentence, 0, len(tr.Sentences))
+		for _, s := range tr.Sentences {
+			sentences = append(sentences, dto.ASRTranscriptSentence{
+				BeginTime: s.BeginTime,
+				EndTime:   s.EndTime,
+				Text:      s.Text,
+				SpeakerID: s.SpeakerID,
+			})
+		}
+		out = append(out, dto.ASRTranscript{Sentences: sentences})
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }

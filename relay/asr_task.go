@@ -127,7 +127,14 @@ func SubmitASRTask(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ASR
 		}
 	}()
 
-	taskResp, rawBody, err := aliyunasr.SubmitAsyncTask(info.ChannelBaseUrl, info.ApiKey, proxy, request.Model, fileURL)
+	taskResp, rawBody, err := aliyunasr.SubmitAsyncTask(
+		info.ChannelBaseUrl,
+		info.ApiKey,
+		proxy,
+		request.Model,
+		fileURL,
+		aliyunasr.BuildAsyncSubmitParameters(request.DiarizationEnabled.BoolPtr()),
+	)
 	if err != nil {
 		return types.NewErrorWithStatusCode(
 			fmt.Errorf("异步任务提交失败: %w", err),
@@ -152,11 +159,19 @@ func SubmitASRTask(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ASR
 		return types.NewError(fmt.Errorf("保存异步任务失败: %w, 上游响应: %s", err, string(rawBody)), types.ErrorCodeInvalidRequest)
 	}
 
-	// 提交成功：取消 defer 退款（预扣保留至结果结算）
+	// 提交成功：取消 defer 退款（预扣保留至结果结算），并写入预扣使用日志
 	if info.Billing != nil {
 		// 通过 Settle(预扣额度) 把会话标记为已结算，阻止 defer Refund
 		_ = info.Billing.Settle(preConsumed)
 		info.Billing = nil
+	}
+	if preConsumed > 0 {
+		info.PriceData = priceData
+		info.FinalPreConsumedQuota = preConsumed
+		service.LogASRAsyncPreConsume(c, info, task.TaskID, preConsumed, aliyunasr.AsyncPreConsumeSeconds)
+		task.QuotaLogged = preConsumed
+		_ = model.DB.Model(&model.AsrTask{}).Where("id = ?", task.ID).
+			Updates(map[string]any{"quota_logged": preConsumed, "updated_at": time.Now().Unix()}).Error
 	}
 
 	c.JSON(http.StatusOK, dto.ASRTaskSubmitResponse{
@@ -276,6 +291,18 @@ func pollAndSettleASRTask(ctx context.Context, task *model.AsrTask) error {
 
 	taskResp, rawBody, err := aliyunasr.FetchAsyncTask(baseURL, apiKey, proxy, task.UpstreamTaskID)
 	if err != nil {
+		// 403 AccessDenied 等永久错误：标记失败、退款并写错误/退款日志，避免任务永久卡在 pending
+		if aliyunasr.IsPermanentUpstreamHTTPError(err) {
+			reason := err.Error()
+			if taskResp != nil {
+				if fr := taskResp.Output.FailReason(); fr != "" {
+					reason = fr
+				} else if taskResp.Code != "" || taskResp.Message != "" {
+					reason = fmt.Sprintf("[%s] %s", taskResp.Code, taskResp.Message)
+				}
+			}
+			return failASRTaskAndRefund(ctx, task, reason)
+		}
 		return fmt.Errorf("查询上游任务失败: %w", err)
 	}
 
@@ -317,24 +344,26 @@ func failASRTaskAndRefund(ctx context.Context, task *model.AsrTask, reason strin
 	c, billingInfo, prepErr := prepareASRBillingContext(task, nil)
 	if prepErr != nil {
 		logger.LogError(ctx, fmt.Sprintf("ASR 失败日志/退款准备计费上下文失败 task=%s: %v", task.TaskID, prepErr))
-	} else {
-		// 上游失败原因写入使用日志（错误类型），便于在日志页排查
-		apiErr := types.NewOpenAIError(
-			fmt.Errorf("ASR 异步任务失败: %s", reason),
-			types.ErrorCodeBadResponse,
-			http.StatusBadGateway,
-		)
-		service.RecordASRErrorLog(c, billingInfo, apiErr, task.TaskID)
+		return fmt.Errorf("准备失败计费上下文失败: %w", prepErr)
 	}
+
+	// 上游失败原因写入使用日志（错误类型），便于在日志页排查
+	statusCode := http.StatusBadGateway
+	if strings.Contains(reason, "状态码 403") || strings.Contains(strings.ToLower(reason), "accessdenied") {
+		statusCode = http.StatusForbidden
+	}
+	apiErr := types.NewOpenAIError(
+		fmt.Errorf("ASR 异步任务失败: %s", reason),
+		types.ErrorCodeBadResponse,
+		statusCode,
+	)
+	service.RecordASRErrorLog(c, billingInfo, apiErr, task.TaskID)
 
 	if task.Quota <= 0 {
 		return nil
 	}
 	preConsumed := task.Quota
-	if prepErr != nil {
-		return nil
-	}
-	service.RefundASRPreConsumedQuota(c, billingInfo, preConsumed, task.TaskID, reason)
+	service.RefundASRPreConsumedQuota(c, billingInfo, preConsumed, task.TaskID, reason, task.QuotaLogged > 0)
 	task.Quota = 0
 	_ = model.DB.Model(&model.AsrTask{}).Where("id = ?", task.ID).Update("quota", 0).Error
 	return nil
@@ -354,6 +383,13 @@ func settleASRTaskSuccess(ctx context.Context, task *model.AsrTask, taskResp *al
 	text, fileSeconds := aliyunasr.MergeTranscriptsText(result)
 	if strings.TrimSpace(text) == "" {
 		return errors.New("识别结果文件无有效文本内容")
+	}
+	transcripts := aliyunasr.BuildUserTranscripts(result)
+	resultTranscripts := ""
+	if len(transcripts) > 0 {
+		if b, marshalErr := common.Marshal(transcripts); marshalErr == nil {
+			resultTranscripts = string(b)
+		}
 	}
 
 	// 优先使用查询响应 usage.duration，其次结果文件时长，兜底 1 秒
@@ -376,7 +412,7 @@ func settleASRTaskSuccess(ctx context.Context, task *model.AsrTask, taskResp *al
 	preConsumed := task.Quota // 提交预扣额度，必须在占位更新前保存
 	billingInfo.FinalPreConsumedQuota = preConsumed
 
-	won, err := task.TryMarkSucceededAndBilled(text, seconds, actualQuota)
+	won, err := task.TryMarkSucceededAndBilled(text, resultTranscripts, seconds, actualQuota)
 	if err != nil {
 		return fmt.Errorf("更新任务状态失败: %w", err)
 	}
@@ -385,7 +421,7 @@ func settleASRTaskSuccess(ctx context.Context, task *model.AsrTask, taskResp *al
 		return nil
 	}
 
-	if settleErr := service.PostASRConsumeQuota(c, billingInfo, seconds, task.TaskID, fmt.Sprintf("异步任务 %s", task.TaskID)); settleErr != nil {
+	if settleErr := service.PostASRConsumeQuotaAsync(c, billingInfo, seconds, task.TaskID, fmt.Sprintf("异步任务 %s", task.TaskID), task.QuotaLogged > 0); settleErr != nil {
 		_ = task.ResetBilledAt()
 		return fmt.Errorf("ASR 结算失败: %w", settleErr)
 	}
@@ -459,7 +495,7 @@ func prepareASRBillingContext(task *model.AsrTask, channelModel *model.Channel) 
 }
 
 func writeASRFetchResponse(c *gin.Context, task *model.AsrTask, errMsg string) {
-	c.JSON(http.StatusOK, dto.ASRTaskFetchResponse{
+	resp := dto.ASRTaskFetchResponse{
 		TaskID:     task.TaskID,
 		Status:     task.Status,
 		Model:      task.Model,
@@ -468,5 +504,12 @@ func writeASRFetchResponse(c *gin.Context, task *model.AsrTask, errMsg string) {
 		Error:      errMsg,
 		CreatedAt:  task.CreatedAt,
 		FinishedAt: task.FinishedAt,
-	})
+	}
+	if raw := strings.TrimSpace(task.ResultTranscripts); raw != "" {
+		var transcripts []dto.ASRTranscript
+		if err := common.UnmarshalJsonStr(raw, &transcripts); err == nil && len(transcripts) > 0 {
+			resp.Transcripts = transcripts
+		}
+	}
+	c.JSON(http.StatusOK, resp)
 }
