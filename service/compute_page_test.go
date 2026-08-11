@@ -20,6 +20,7 @@ func TestComputePageFileLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, config.Enabled)
 	require.False(t, config.AllowJavaScript)
+	require.False(t, config.AllowPopups)
 	require.False(t, config.HasHTML)
 
 	_, err = UpdateComputePageEnabled(true)
@@ -48,6 +49,16 @@ func TestComputePageFileLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, firstHTML, content)
 	require.True(t, contentConfig.AllowJavaScript)
+	require.False(t, contentConfig.AllowPopups)
+
+	config, err = UpdateComputePagePopupsAllowed(true)
+	require.NoError(t, err)
+	require.True(t, config.AllowPopups)
+
+	content, contentConfig, err = ReadEnabledComputePageHTML()
+	require.NoError(t, err)
+	require.Equal(t, firstHTML, content)
+	require.True(t, contentConfig.AllowPopups)
 
 	secondHTML := []byte("<!doctype html><title>second</title>")
 	config, err = SaveComputePageHTML("replacement.htm", secondHTML)
@@ -59,6 +70,7 @@ func TestComputePageFileLifecycle(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, secondHTML, content)
 	require.True(t, contentConfig.AllowJavaScript)
+	require.True(t, contentConfig.AllowPopups)
 
 	config, err = UpdateComputePageEnabled(false)
 	require.NoError(t, err)

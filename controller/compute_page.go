@@ -23,10 +23,15 @@ type computePageJavaScriptRequest struct {
 	AllowJavaScript bool `json:"allow_javascript"`
 }
 
+type computePagePopupsRequest struct {
+	AllowPopups bool `json:"allow_popups"`
+}
+
 func computePageResponse(config service.ComputePageConfig) gin.H {
 	return gin.H{
 		"enabled":          config.Enabled && config.HasHTML,
 		"allow_javascript": config.AllowJavaScript,
+		"allow_popups":     config.AllowPopups,
 		"has_html":         config.HasHTML,
 		"file_name":        config.FileName,
 		"updated_at":       config.UpdatedAt,
@@ -46,6 +51,7 @@ func GetComputePageStatus(c *gin.Context) {
 		"data": gin.H{
 			"enabled":          config.Enabled && config.HasHTML,
 			"allow_javascript": config.AllowJavaScript,
+			"allow_popups":     config.AllowPopups,
 		},
 	})
 }
@@ -61,14 +67,17 @@ func GetComputePageContent(c *gin.Context) {
 		return
 	}
 	c.Header("Cache-Control", "no-store")
-	c.Header("Content-Security-Policy", computePageContentSecurityPolicy(config.AllowJavaScript))
+	c.Header("Content-Security-Policy", computePageContentSecurityPolicy(config.AllowJavaScript, config.AllowPopups))
 	c.Header("X-Content-Type-Options", "nosniff")
 	c.Data(http.StatusOK, "text/html; charset=utf-8", content)
 }
 
-func computePageContentSecurityPolicy(allowJavaScript bool) string {
+func computePageContentSecurityPolicy(allowJavaScript bool, allowPopups bool) string {
 	sandbox := "sandbox allow-same-origin"
 	scriptPolicy := ""
+	if allowPopups {
+		sandbox += " allow-popups allow-popups-to-escape-sandbox"
+	}
 	if allowJavaScript {
 		sandbox += " allow-scripts"
 		scriptPolicy = "; script-src 'unsafe-inline' 'unsafe-eval' data: blob: https: http:; connect-src https: http: ws: wss:"
@@ -106,6 +115,20 @@ func AdminUpdateComputePageJavaScript(c *gin.Context) {
 		return
 	}
 	config, err := service.UpdateComputePageJavaScriptAllowed(request.AllowJavaScript)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": computePageResponse(config)})
+}
+
+func AdminUpdateComputePagePopups(c *gin.Context) {
+	var request computePagePopupsRequest
+	if err := common.DecodeJson(c.Request.Body, &request); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "无效的参数"})
+		return
+	}
+	config, err := service.UpdateComputePagePopupsAllowed(request.AllowPopups)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return

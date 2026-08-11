@@ -38,6 +38,7 @@ const { Text, Title } = Typography;
 const EMPTY_CONFIG = {
   enabled: false,
   allow_javascript: false,
+  allow_popups: false,
   has_html: false,
   file_name: '',
   updated_at: 0,
@@ -102,6 +103,26 @@ export default function SettingsComputePage() {
     try {
       const res = await API.put('/api/compute-page/admin/javascript', {
         allow_javascript: allowJavaScript,
+      });
+      const { success, message, data } = res.data || {};
+      if (!success) {
+        showError(message || t('保存失败，请重试'));
+        return;
+      }
+      setConfig({ ...EMPTY_CONFIG, ...data });
+      showSuccess(t('保存成功'));
+    } catch (error) {
+      showError(error?.response?.data?.message || t('保存失败，请重试'));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updatePopups = async (allowPopups) => {
+    setSaving(true);
+    try {
+      const res = await API.put('/api/compute-page/admin/popups', {
+        allow_popups: allowPopups,
       });
       const { success, message, data } = res.data || {};
       if (!success) {
@@ -230,6 +251,30 @@ export default function SettingsComputePage() {
                   </Button>
                 ) : null}
               </Space>
+            </div>
+          </div>
+
+          <div className='rounded-md border border-solid border-semi-color-border bg-semi-color-fill-0 p-4'>
+            <div className='flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
+              <div className='flex min-w-0 flex-col gap-1'>
+                <Text strong>{t('允许新窗口跳转')}</Text>
+                <Text type='warning' size='small'>
+                  {t(
+                    '开启后，页面可通过链接或脚本打开新窗口，目标页面不会继承算力页沙箱限制',
+                  )}
+                </Text>
+              </div>
+              <div className='flex shrink-0 items-center gap-3'>
+                <Text>{config.allow_popups ? t('已开启') : t('已关闭')}</Text>
+                <Switch
+                  checked={config.allow_popups}
+                  disabled={loading || saving}
+                  loading={saving}
+                  checkedText='｜'
+                  uncheckedText='〇'
+                  onChange={updatePopups}
+                />
+              </div>
             </div>
           </div>
 
