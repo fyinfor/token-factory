@@ -456,6 +456,16 @@ func mergeSettlementMarkersIntoPreChargeLogs(logs []*Log) {
 			}
 			SetBillingLogMetadata(other, BillingPhaseSettlementMerged, true, actualQuota, SignedLogDelta(item.log.Quota, item.log.Type))
 			item.log.Other = common.MapToJsonStr(other)
+			// ASR/视频结算文案与用时合并进预扣行，便于详情展示实际扣费说明
+			if content := strings.TrimSpace(hit.log.Content); content != "" {
+				item.log.Content = content
+			}
+			if hit.log.UseTime > 0 {
+				item.log.UseTime = hit.log.UseTime
+			}
+			if secs, ok := logOtherNumber(hit.other["audio_seconds"]); ok && secs > 0 {
+				item.log.PromptTokens = int(secs + 0.999999) // ceil
+			}
 		}
 	}
 }

@@ -24,6 +24,19 @@ func TestResolveVideoOutputSpecFromUpstream_TaskResultFirst(t *testing.T) {
 	require.Equal(t, "16:9", spec.Ratio)
 }
 
+func TestResolveVideoOutputSpecFromUpstream_DashScopeUsage(t *testing.T) {
+	task := &model.Task{
+		Data: []byte(`{
+			"output": {"task_status":"SUCCEEDED","video_url":"https://example.com/a.mp4"},
+			"usage": {"duration":5,"output_video_duration":5,"SR":720,"ratio":"16:9"}
+		}`),
+	}
+	spec := resolveVideoOutputSpecFromUpstream(task, nil)
+	require.Equal(t, "720p", spec.Resolution)
+	require.Equal(t, 5, spec.Duration)
+	require.Equal(t, "16:9", spec.Ratio)
+}
+
 func TestResolveSeedanceVideoSpec_FallsBackToRequest(t *testing.T) {
 	task := &model.Task{
 		Properties: model.Properties{

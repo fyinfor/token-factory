@@ -292,7 +292,7 @@ export const useLogsData = () => {
     billedQuota,
     tagValue,
     inlineTags,
-    quotaDigits = 2,
+    quotaDigits = 6,
   ) => {
     const phase = getVideoBillingPhase(other, billedQuota);
     if (!phase) {
@@ -356,12 +356,6 @@ export const useLogsData = () => {
       effectivePerSecond > 0
         ? effectivePerSecond * groupRatio
         : pricePerSecond * groupRatio * (channelDiscount / 100);
-    // 结算算式右侧必须由左侧运算元推出（秒 × 折扣后单价），不得直接贴 actual_quota，
-    // 否则会出现「4×折扣价=原价总额」的假等式；实际扣费仍走 settlementQuota。
-    const formulaTotalUsd =
-      seconds > 0 && calculatedPricePerSecond > 0
-        ? seconds * calculatedPricePerSecond
-        : 0;
     const settlementQuota = getVideoSettlementQuota(other, billedQuota);
     const tagValue = (value, color = 'blue', key = String(value)) => (
       <Tag key={key} color={color} size='small'>
@@ -397,6 +391,7 @@ export const useLogsData = () => {
       ),
       tagValue(priceLabel, 'grey', 'price-label'),
     );
+    // 结算合计与「实际扣费 / 花费列」同一实扣额度口径（6 位进一去尾零），避免浮点公式与整数 quota 不一致
     const calculationValue = inlineTags(
       tagValue(t('{{seconds}} 秒', { seconds }), 'orange', 'calc-seconds'),
       <span key='multiply-1' className='mx-1 text-gray-400'>
@@ -411,9 +406,7 @@ export const useLogsData = () => {
         =
       </span>,
       tagValue(
-        formulaTotalUsd > 0
-          ? formatVideoUsdAmount(other, formulaTotalUsd)
-          : renderVideoQuota(other, settlementQuota, 6),
+        renderVideoQuota(other, settlementQuota, 6),
         'red',
         'calc-total',
       ),
@@ -433,6 +426,7 @@ export const useLogsData = () => {
       billedQuota,
       tagValue,
       inlineTags,
+      6,
     );
 
     const items = [
@@ -693,7 +687,6 @@ export const useLogsData = () => {
     const upstreamModelName = other?.upstream_model_name || '';
     const audioText = hasAudio ? t('有音频') : t('无音频');
     const priceLabel = hasAudio ? t('有音轨价') : t('无音轨价');
-    const totalPrice = count * pricePerVideo;
     const tagValue = (value, color = 'blue', key = String(value)) => (
       <Tag key={key} color={color} size='small'>
         {value}
@@ -747,6 +740,7 @@ export const useLogsData = () => {
       ),
       tagValue(priceLabel, 'grey', 'price-label'),
     );
+    const settlementQuota = getVideoSettlementQuota(other, billedQuota);
     const calculationValue = inlineTags(
       tagValue(t('{{count}} 条', { count }), 'orange', 'calc-count'),
       <span key='multiply' className='mx-1 text-gray-400'>
@@ -760,13 +754,18 @@ export const useLogsData = () => {
       <span key='equals' className='mx-1 text-gray-400'>
         =
       </span>,
-      tagValue(formatVideoUsdAmount(other, totalPrice), 'red', 'calc-total'),
+      tagValue(
+        renderVideoQuota(other, settlementQuota, 6),
+        'red',
+        'calc-total',
+      ),
     );
     const costItems = buildVideoCostDisplayItems(
       other,
       billedQuota,
       tagValue,
       inlineTags,
+      6,
     );
 
     const items = [
@@ -1158,8 +1157,8 @@ export const useLogsData = () => {
   };
 
   /**
-   * 同一异步视频任务的预扣日志与差额结算日志合并为一条展示。
-   * 预扣在提交时写入；结算在成片完成后写入（other 含 actual_quota / pre_consumed_quota）。
+   * 同一异步任务（视频 / ASR）的预扣日志与结算日志合并为一条展示。
+   * 预扣在提交时写入；结算在任务成功后写入（other 含 actual_quota / pre_consumed_quota）。
    */
   const mergeVideoTaskBillingLogs = (rawLogs) => {
     const byTaskId = new Map();
@@ -1175,12 +1174,15 @@ export const useLogsData = () => {
         actualQuota > 0 &&
         other?.pre_consumed_quota !== undefined &&
         other?.pre_consumed_quota !== null;
+      const requestPath = String(other?.request_path || '');
       const isPreCharge =
         !isSettlement &&
-        (other?.billing_mode === 'video_per_second' ||
+        (other?.asr === true ||
+          other?.billing_mode === 'video_per_second' ||
           other?.billing_mode === 'video_token_output' ||
           other?.billing_mode === 'video_per_video' ||
-          String(other?.request_path || '').includes('/videos'));
+          requestPath.includes('/videos') ||
+          requestPath.includes('/audio/transcriptions/async'));
       if (!isSettlement && !isPreCharge) {
         continue;
       }

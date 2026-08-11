@@ -173,8 +173,9 @@ type aliASRAsyncInput struct {
 }
 
 type aliASRAsyncParameters struct {
-	ChannelID     []int    `json:"channel_id,omitempty"`
-	LanguageHints []string `json:"language_hints,omitempty"`
+	ChannelID            []int    `json:"channel_id,omitempty"`
+	LanguageHints        []string `json:"language_hints,omitempty"`
+	DiarizationEnabled   *bool    `json:"diarization_enabled,omitempty"`
 }
 
 // aliASRAsyncSubmitRequest POST /v1/services/audio/asr/transcription 请求体。
