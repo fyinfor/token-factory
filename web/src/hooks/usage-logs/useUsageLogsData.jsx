@@ -1157,8 +1157,8 @@ export const useLogsData = () => {
   };
 
   /**
-   * 同一异步视频任务的预扣日志与差额结算日志合并为一条展示。
-   * 预扣在提交时写入；结算在成片完成后写入（other 含 actual_quota / pre_consumed_quota）。
+   * 同一异步任务（视频 / ASR）的预扣日志与结算日志合并为一条展示。
+   * 预扣在提交时写入；结算在任务成功后写入（other 含 actual_quota / pre_consumed_quota）。
    */
   const mergeVideoTaskBillingLogs = (rawLogs) => {
     const byTaskId = new Map();
@@ -1174,12 +1174,15 @@ export const useLogsData = () => {
         actualQuota > 0 &&
         other?.pre_consumed_quota !== undefined &&
         other?.pre_consumed_quota !== null;
+      const requestPath = String(other?.request_path || '');
       const isPreCharge =
         !isSettlement &&
-        (other?.billing_mode === 'video_per_second' ||
+        (other?.asr === true ||
+          other?.billing_mode === 'video_per_second' ||
           other?.billing_mode === 'video_token_output' ||
           other?.billing_mode === 'video_per_video' ||
-          String(other?.request_path || '').includes('/videos'));
+          requestPath.includes('/videos') ||
+          requestPath.includes('/audio/transcriptions/async'));
       if (!isSettlement && !isPreCharge) {
         continue;
       }
