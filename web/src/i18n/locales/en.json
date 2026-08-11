@@ -6323,6 +6323,8 @@
     "算力页面": "Compute Page",
     "允许执行 JavaScript": "Allow JavaScript execution",
     "开启后，上传的 HTML 可执行脚本、访问当前站点上下文并发起网络请求，请仅上传完全可信的内容": "When enabled, uploaded HTML can run scripts, access the current site context, and make network requests. Upload only fully trusted content.",
+    "允许新窗口跳转": "Allow opening new windows",
+    "开启后，页面可通过链接或脚本打开新窗口，目标页面不会继承算力页沙箱限制": "When enabled, the page can open new windows through links or scripts. Target pages will not inherit the Compute page sandbox restrictions.",
     "开启后将在顶部导航首页前显示算力入口": "When enabled, a Compute link appears before Home in the top navigation",
     "开启后将在顶部导航首页后显示算力入口": "When enabled, a Compute link appears after Home in the top navigation",
     "已开启": "Enabled",

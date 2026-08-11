@@ -25,10 +25,22 @@ import {
 } from '@douyinfe/semi-illustrations';
 import { useTranslation } from 'react-i18next';
 
+const COMPUTE_PAGE_SANDBOX = 'allow-same-origin';
+
+function getComputePageSandbox(allowJavaScript, allowPopups) {
+  const permissions = [COMPUTE_PAGE_SANDBOX];
+  if (allowPopups) {
+    permissions.push('allow-popups', 'allow-popups-to-escape-sandbox');
+  }
+  if (allowJavaScript) permissions.push('allow-scripts');
+  return permissions.join(' ');
+}
+
 export default function ComputePage() {
   const { t } = useTranslation();
   const [state, setState] = useState('loading');
   const [allowJavaScript, setAllowJavaScript] = useState(false);
+  const [allowPopups, setAllowPopups] = useState(false);
   const iframeRef = useRef(null);
   const resizeObserverRef = useRef(null);
   const copyCleanupRef = useRef(null);
@@ -105,6 +117,7 @@ export default function ComputePage() {
       .then((payload) => {
         if (cancelled) return;
         setAllowJavaScript(Boolean(payload?.data?.allow_javascript));
+        setAllowPopups(Boolean(payload?.data?.allow_popups));
         setState(
           payload?.success && payload?.data?.enabled ? 'enabled' : 'disabled',
         );
@@ -154,11 +167,7 @@ export default function ComputePage() {
       className='compute-page-frame'
       src='/api/compute-page/content'
       title={t('算力')}
-      sandbox={
-        allowJavaScript
-          ? 'allow-same-origin allow-scripts'
-          : 'allow-same-origin'
-      }
+      sandbox={getComputePageSandbox(allowJavaScript, allowPopups)}
       onLoad={handleIframeLoad}
       referrerPolicy='no-referrer'
     />
