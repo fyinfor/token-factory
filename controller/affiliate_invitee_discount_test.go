@@ -2,20 +2,101 @@ package controller
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
 	"github.com/xuri/excelize/v2"
+	"gorm.io/gorm"
 )
+
+func setupAdminInviteeModelDiscountTestDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	previousDB := model.DB
+	dsn := fmt.Sprintf(
+		"file:admin_invitee_model_discount_%d?mode=memory&cache=shared",
+		time.Now().UnixNano(),
+	)
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	model.DB = db
+	t.Cleanup(func() {
+		model.DB = previousDB
+		sqlDB, sqlErr := db.DB()
+		if sqlErr == nil {
+			_ = sqlDB.Close()
+		}
+	})
+	if err := db.AutoMigrate(&model.User{}); err != nil {
+		t.Fatalf("migrate users: %v", err)
+	}
+	return db
+}
+
+func TestValidateAdminInviteeModelDiscountTargetChecksOwnership(t *testing.T) {
+	db := setupAdminInviteeModelDiscountTestDB(t)
+	previousMode := common.DistributorCommissionMode
+	common.DistributorCommissionMode = common.DistributorCommissionModeProfitShare
+	t.Cleanup(func() {
+		common.DistributorCommissionMode = previousMode
+	})
+
+	distributor := model.User{
+		Username:      "discount-owner",
+		Password:      "password",
+		AffCode:       "discount-owner-code",
+		Role:          common.RoleCommonUser,
+		Status:        common.UserStatusEnabled,
+		IsDistributor: common.DistributorFlagYes,
+	}
+	if err := db.Create(&distributor).Error; err != nil {
+		t.Fatalf("create distributor: %v", err)
+	}
+	invitee := model.User{
+		Username:  "discount-invitee",
+		Password:  "password",
+		AffCode:   "discount-invitee-code",
+		Role:      common.RoleCommonUser,
+		Status:    common.UserStatusEnabled,
+		InviterId: distributor.Id,
+	}
+	if err := db.Create(&invitee).Error; err != nil {
+		t.Fatalf("create invitee: %v", err)
+	}
+	unrelated := model.User{
+		Username: "discount-unrelated",
+		Password: "password",
+		AffCode:  "discount-unrelated-code",
+		Role:     common.RoleCommonUser,
+		Status:   common.UserStatusEnabled,
+	}
+	if err := db.Create(&unrelated).Error; err != nil {
+		t.Fatalf("create unrelated user: %v", err)
+	}
+
+	if msg := validateAdminInviteeModelDiscountTarget(distributor.Id, invitee.Id); msg != "" {
+		t.Fatalf("valid distributor invitee rejected: %s", msg)
+	}
+	if msg := validateAdminInviteeModelDiscountTarget(distributor.Id, unrelated.Id); msg == "" {
+		t.Fatal("unrelated user was accepted as distributor invitee")
+	}
+	if msg := validateAdminInviteeModelDiscountTarget(unrelated.Id, invitee.Id); msg == "" {
+		t.Fatal("ordinary user was accepted as distributor")
+	}
+}
 
 func setDistributorModelDiscountExportCurrencyForTest(
 	t *testing.T,

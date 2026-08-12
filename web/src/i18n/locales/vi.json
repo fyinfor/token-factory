@@ -4477,6 +4477,7 @@
     "邀请的用户充值后，您将获得对应比例的分销额度（待使用收益）。分成比例以您账号当前设置为准；可在「详情」中查看每笔充值的入账额度、当时比例与收益。": "Khi người được mời nạp tiền, bạn nhận hạn mức hoa hồng (thu nhập chờ dùng) theo tỷ lệ áp dụng. Tỷ lệ chia theo cài đặt hiện tại của tài khoản; mở «Chi tiết» để xem hạn mức ghi có, tỷ lệ và thu nhập từng lần nạp.",
     "邀请好友获得额外奖励": "Mời bạn bè để nhận thêm phần thưởng",
     "邀请好友注册，好友充值后您可获得相应奖励": "Mời bạn bè đăng ký, bạn có thể nhận được phần thưởng tương ứng sau khi bạn bè nạp tiền",
+    "每成功邀请一位好友注册，奖励直接到账": "Phần thưởng được cộng trực tiếp cho mỗi người bạn đăng ký thành công",
     "邀请获得额度": "Hạn ngạch nhận được từ lời mời",
     "邀请奖励": "Phần thưởng mời",
     "邀请链接": "Liên kết mời",
@@ -6384,5 +6385,16 @@
   "将使用当前编辑的中英文 API 文档覆盖该模型其他渠道的 API 文档，模型介绍不会被覆盖。": "The current Chinese and English API documentation will replace the API documentation for this model on other channels. Model introductions will not be overwritten.",
   "已同步到 {{count}} 个其他渠道": "Synced to {{count}} other channels",
   "将当前中英文 API 文档覆盖到该模型的其他渠道": "Replace this model's API documentation on other channels with the current Chinese and English documentation",
-  "同步到其他渠道": "Sync to other channels"
+  "同步到其他渠道": "Sync to other channels",
+  "绑定用户": "Liên kết người dùng",
+  "请输入用户名或手机号": "Nhập tên người dùng hoặc số điện thoại",
+  "未找到匹配用户": "Không tìm thấy người dùng phù hợp",
+  "该用户已绑定代理": "Người dùng này đã được liên kết với đại lý",
+  "不允许多级代理": "Không cho phép đại lý nhiều cấp",
+  "只能绑定普通用户": "Chỉ có thể liên kết người dùng thông thường",
+  "该用户已有待确认请求，管理员仍可直接绑定": "Người dùng này có yêu cầu đang chờ xác nhận; quản trị viên vẫn có thể liên kết trực tiếp",
+  "该用户可以直接绑定，无需用户确认": "Có thể liên kết trực tiếp người dùng này mà không cần xác nhận",
+  "确认绑定": "Xác nhận liên kết",
+  "管理员绑定后立即生效，无需用户确认。仅支持尚未绑定代理的普通用户。": "Liên kết của quản trị viên có hiệu lực ngay mà không cần người dùng xác nhận. Chỉ hỗ trợ người dùng thông thường chưa liên kết với đại lý.",
+  "输入普通用户的用户名或手机号，按回车搜索": "Nhập tên người dùng hoặc số điện thoại của người dùng thông thường rồi nhấn Enter để tìm kiếm"
 }

@@ -13,9 +13,10 @@ import (
 )
 
 const (
-	DistributorBindRequestStatusPending  = 1
-	DistributorBindRequestStatusAccepted = 2
-	DistributorBindRequestStatusRejected = 3
+	DistributorBindRequestStatusPending    = 1
+	DistributorBindRequestStatusAccepted   = 2
+	DistributorBindRequestStatusRejected   = 3
+	DistributorBindRequestStatusSuperseded = 4
 )
 
 const (
@@ -29,7 +30,7 @@ type DistributorBindRequest struct {
 	ID                int   `json:"id" gorm:"primaryKey;comment:主键ID"`
 	DistributorUserID int   `json:"distributor_user_id" gorm:"type:int;index;not null;comment:发起绑定的代理用户ID"`
 	TargetUserID      int   `json:"target_user_id" gorm:"type:int;index;not null;comment:被请求绑定的用户ID"`
-	Status            int   `json:"status" gorm:"type:int;index;not null;default:1;comment:状态 1待处理 2已接受 3已拒绝"`
+	Status            int   `json:"status" gorm:"type:int;index;not null;default:1;comment:状态 1待处理 2已接受 3已拒绝 4已失效"`
 	MessageID         int   `json:"message_id" gorm:"type:int;index;default:0;comment:绑定请求站内消息ID"`
 	CreatedAt         int64 `json:"created_at" gorm:"type:bigint;index;comment:创建时间戳"`
 	UpdatedAt         int64 `json:"updated_at" gorm:"type:bigint;comment:更新时间戳"`
@@ -180,6 +181,101 @@ func CreateDistributorBindRequest(distributorUserID, targetUserID int) (*Distrib
 		return nil, err
 	}
 	return req, nil
+}
+
+// AdminBindDistributorInvitee 管理员将普通用户直接绑定到指定代理名下，无需目标用户确认。
+func AdminBindDistributorInvitee(distributorUserID, targetUserID int) error {
+	if distributorUserID <= 0 || targetUserID <= 0 || distributorUserID == targetUserID {
+		return errors.New("参数错误")
+	}
+	now := time.Now().Unix()
+	return DB.Transaction(func(tx *gorm.DB) error {
+		var distributor User
+		if err := tx.Where("id = ?", distributorUserID).First(&distributor).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return errors.New("代理用户不存在")
+			}
+			return err
+		}
+		if !UserIsDistributor(&distributor) {
+			return errors.New("用户不是代理")
+		}
+
+		var target User
+		if err := tx.Where("id = ?", targetUserID).First(&target).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return errors.New("用户不存在")
+			}
+			return err
+		}
+		if UserIsDistributor(&target) {
+			return errors.New("不允许多级代理")
+		}
+		if target.Role != common.RoleCommonUser {
+			return errors.New("只能绑定普通用户")
+		}
+		if target.InviterId > 0 {
+			return errors.New("该用户已绑定代理")
+		}
+
+		res := tx.Model(&User{}).
+			Where("id = ? AND inviter_id = ?", target.Id, 0).
+			Update("inviter_id", distributor.Id)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			return errors.New("该用户已绑定代理")
+		}
+		if err := tx.Model(&User{}).Where("id = ?", distributor.Id).
+			UpdateColumn("aff_count", gorm.Expr("aff_count + ?", 1)).Error; err != nil {
+			return err
+		}
+		rel := AffInviteRelation{
+			InviterId:               distributor.Id,
+			InviteeUserId:           target.Id,
+			CommissionRatioBps:      defaultCommissionBpsForNewInviteRelation(distributor.Id),
+			CommissionEarnedQuota:   0,
+			ProfitShareEarnedQuota:  0,
+			ModelMarkupDiscountRate: defaultModelMarkupDiscountRateForNewInviteRelation(tx, distributor.Id),
+			CreatedAt:               now,
+			UpdatedAt:               now,
+		}
+		if err := tx.Clauses(clause.OnConflict{DoNothing: true}).Create(&rel).Error; err != nil {
+			return err
+		}
+
+		var pending []DistributorBindRequest
+		if err := tx.Where("target_user_id = ? AND status = ?", target.Id, DistributorBindRequestStatusPending).
+			Find(&pending).Error; err != nil {
+			return err
+		}
+		if len(pending) > 0 {
+			requestIDs := make([]int, 0, len(pending))
+			messageIDs := make([]int, 0, len(pending))
+			for _, req := range pending {
+				requestIDs = append(requestIDs, req.ID)
+				if req.MessageID > 0 {
+					messageIDs = append(messageIDs, req.MessageID)
+				}
+			}
+			if err := tx.Model(&DistributorBindRequest{}).Where("id IN ? AND status = ?", requestIDs, DistributorBindRequestStatusPending).
+				Updates(map[string]any{
+					"status":       DistributorBindRequestStatusSuperseded,
+					"updated_at":   now,
+					"responded_at": now,
+				}).Error; err != nil {
+				return err
+			}
+			if len(messageIDs) > 0 {
+				if err := tx.Model(&UserMessage{}).Where("id IN ? AND receiver_user_id = ?", messageIDs, target.Id).
+					Updates(map[string]any{"is_read": true, "read_at": now}).Error; err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	})
 }
 
 func RespondDistributorBindRequest(requestID, targetUserID int, accept bool) (*DistributorBindRequest, error) {

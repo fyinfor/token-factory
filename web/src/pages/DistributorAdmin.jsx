@@ -33,6 +33,7 @@ import {
   Progress,
   Radio,
   RadioGroup,
+  Checkbox,
   Tag,
   Tooltip,
   Image,
@@ -63,6 +64,7 @@ import {
   IconFile,
   IconSearch,
   IconSetting,
+  IconUserAdd,
 } from '@douyinfe/semi-icons';
 import DistributorAnalyticsBoard from '../components/distributor/DistributorAnalyticsBoard';
 import DistributorWithdrawProfileDetail from '../components/distributor/DistributorWithdrawProfileDetail';
@@ -346,6 +348,10 @@ export default function DistributorAdmin() {
   const [approveAppId, setApproveAppId] = useState(null);
   const [approvePercentInput, setApprovePercentInput] = useState('0');
   const [approveSystemDefaultBps, setApproveSystemDefaultBps] = useState(1000);
+  const [approveOrdinaryInvitePreview, setApproveOrdinaryInvitePreview] =
+    useState(null);
+  const [approveConvertOrdinaryInvites, setApproveConvertOrdinaryInvites] =
+    useState(false);
 
   const [distLoading, setDistLoading] = useState(false);
   const [distRows, setDistRows] = useState([]);
@@ -382,6 +388,11 @@ export default function DistributorAdmin() {
   const [unbindTarget, setUnbindTarget] = useState(null);
   const [unbindReason, setUnbindReason] = useState('');
   const [unbindSubmitting, setUnbindSubmitting] = useState(false);
+  const [bindOpen, setBindOpen] = useState(false);
+  const [bindKeyword, setBindKeyword] = useState('');
+  const [bindUser, setBindUser] = useState(null);
+  const [bindSearchLoading, setBindSearchLoading] = useState(false);
+  const [bindSubmitting, setBindSubmitting] = useState(false);
   const [invDiscountOpen, setInvDiscountOpen] = useState(false);
   const [invDiscountInviteeId, setInvDiscountInviteeId] = useState(null);
   const [invDiscountInviteeLabel, setInvDiscountInviteeLabel] = useState('');
@@ -724,15 +735,25 @@ export default function DistributorAdmin() {
 
   const openApproveApplication = async (id) => {
     setApproveAppId(id);
+    setApproveOrdinaryInvitePreview(null);
+    setApproveConvertOrdinaryInvites(false);
     let defBps = 1000;
     try {
-      const res = await API.get('/api/status');
-      const { success, data } = res.data || {};
+      const [statusRes, applicationRes] = await Promise.all([
+        API.get('/api/status'),
+        API.get(`/api/distributor/admin/applications/${id}`),
+      ]);
+      const { success, data } = statusRes.data || {};
       if (success && data?.affiliate_default_commission_bps != null) {
         const n = Number(data.affiliate_default_commission_bps);
         if (Number.isFinite(n) && n >= 0) {
           defBps = n;
         }
+      }
+      if (applicationRes.data?.success) {
+        setApproveOrdinaryInvitePreview(
+          applicationRes.data.data?.ordinary_invite_preview || null,
+        );
       }
     } catch {
       /* 使用 fallback */
@@ -752,12 +773,26 @@ export default function DistributorAdmin() {
     try {
       const res = await API.post(
         `/api/distributor/admin/applications/${approveAppId}/approve`,
-        { distributor_commission_bps: bps },
+        {
+          distributor_commission_bps: bps,
+          convert_ordinary_invites: approveConvertOrdinaryInvites,
+        },
       );
       if (res.data.success) {
-        showSuccess(t('已通过'));
+        const converted = Number(
+          res.data.data?.ordinary_invite_conversion?.converted || 0,
+        );
+        showSuccess(
+          converted > 0
+            ? t('已通过，并转入 {{count}} 位历史邀请用户', {
+                count: converted,
+              })
+            : t('已通过'),
+        );
         setApproveOpen(false);
         setApproveAppId(null);
+        setApproveOrdinaryInvitePreview(null);
+        setApproveConvertOrdinaryInvites(false);
         loadApps();
       } else {
         showError(res.data.message);
@@ -1010,6 +1045,86 @@ export default function DistributorAdmin() {
     setInvKeyword(trimmed);
     fetchInvitees(invDistributorId, 1, invPs, trimmed);
   };
+
+  const openBindUserModal = useCallback(() => {
+    setBindKeyword('');
+    setBindUser(null);
+    setBindOpen(true);
+  }, []);
+
+  const searchAdminBindableUser = useCallback(async () => {
+    const keyword = bindKeyword.trim().slice(0, ADMIN_KEYWORD_MAX_LEN);
+    if (!keyword || !invDistributorId) {
+      showError(t('请输入用户名或手机号'));
+      return;
+    }
+    setBindSearchLoading(true);
+    setBindUser(null);
+    try {
+      const res = await API.get(
+        `/api/distributor/admin/distributors/${invDistributorId}/bindable-user`,
+        {
+          params: { keyword },
+          disableDuplicate: true,
+        },
+      );
+      const { success, message, data } = res.data || {};
+      if (!success) {
+        showError(message || t('搜索失败'));
+        return;
+      }
+      if (!data) {
+        showError(t('未找到匹配用户'));
+        return;
+      }
+      setBindUser(data);
+    } catch {
+      showError(t('搜索失败'));
+    } finally {
+      setBindSearchLoading(false);
+    }
+  }, [bindKeyword, invDistributorId, t]);
+
+  const submitAdminBindUser = useCallback(async () => {
+    if (!bindUser?.user_id || !invDistributorId || bindSubmitting) return;
+    setBindSubmitting(true);
+    try {
+      const res = await API.post(
+        `/api/distributor/admin/distributors/${invDistributorId}/invitees/bind`,
+        { user_id: bindUser.user_id },
+      );
+      const { success, message } = res.data || {};
+      if (!success) {
+        showError(message || t('绑定失败'));
+        return;
+      }
+      showSuccess(message || t('绑定成功'));
+      setBindOpen(false);
+      setBindKeyword('');
+      setBindUser(null);
+      setInvKeyword('');
+      await fetchInvitees(invDistributorId, 1, invPs, '');
+      await loadDists();
+    } catch {
+      showError(t('绑定失败'));
+    } finally {
+      setBindSubmitting(false);
+    }
+  }, [bindSubmitting, bindUser, invDistributorId, invPs, loadDists, t]);
+
+  const bindStatusText = useMemo(() => {
+    if (!bindUser) return '';
+    if (bindUser.status === 'bound') return t('该用户已绑定代理');
+    if (bindUser.status === 'distributor') return t('不允许多级代理');
+    if (bindUser.status === 'not_allowed') return t('只能绑定普通用户');
+    if (bindUser.status === 'pending') {
+      return t('该用户已有待确认请求，管理员仍可直接绑定');
+    }
+    return t('该用户可以直接绑定，无需用户确认');
+  }, [bindUser, t]);
+
+  const bindButtonDisabled =
+    !bindUser || !['bindable', 'pending'].includes(bindUser.status);
 
   const saveBps = async () => {
     if (!bpsUser) return;
@@ -2722,6 +2837,8 @@ export default function DistributorAdmin() {
         onCancel={() => {
           setApproveOpen(false);
           setApproveAppId(null);
+          setApproveOrdinaryInvitePreview(null);
+          setApproveConvertOrdinaryInvites(false);
         }}
       >
         <Text type='tertiary' size='small' className='mb-2 block'>
@@ -2757,6 +2874,33 @@ export default function DistributorAdmin() {
           suffix='%'
           placeholder={t('如 10 或 10.5')}
         />
+        {Number(approveOrdinaryInvitePreview?.total || 0) > 0 ? (
+          <div className='mt-4 rounded-lg border border-semi-color-border bg-semi-color-fill-0 p-3'>
+            <Text strong className='mb-2 block'>
+              {t('历史普通邀请')}
+            </Text>
+            <Text type='tertiary' size='small' className='mb-3 block'>
+              {t(
+                '共有 {{total}} 位历史普通邀请用户，其中 {{convertible}} 位当前可转为代理下级；已绑定其他代理或身份不符合的用户不会被覆盖。转换后仅从此刻开始产生分成。',
+                {
+                  total: approveOrdinaryInvitePreview.total || 0,
+                  convertible: approveOrdinaryInvitePreview.convertible || 0,
+                },
+              )}
+            </Text>
+            <Checkbox
+              checked={approveConvertOrdinaryInvites}
+              disabled={
+                Number(approveOrdinaryInvitePreview.convertible || 0) <= 0
+              }
+              onChange={(event) =>
+                setApproveConvertOrdinaryInvites(Boolean(event.target.checked))
+              }
+            >
+              {t('审批通过后，将可转换的历史邀请用户加入该代理名下')}
+            </Checkbox>
+          </div>
+        ) : null}
       </Modal>
 
       <Modal
@@ -2877,6 +3021,7 @@ export default function DistributorAdmin() {
           setInvProfitOpen(false);
           setInvDiscountOpen(false);
           setUnbindModalOpen(false);
+          setBindOpen(false);
           setInvKeyword('');
         }}
         footer={null}
@@ -2894,10 +3039,10 @@ export default function DistributorAdmin() {
         >
           <Tabs.TabPane tab={t('当前下级')} itemKey='current'>
             <div className='pt-3'>
-              <div className='flex items-center gap-2 mb-3'>
+              <div className='grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 mb-3'>
                 <Input
                   size='small'
-                  className='w-[200px]'
+                  className='w-full min-w-0'
                   prefix={<IconSearch />}
                   showClear
                   placeholder={t('邀请用户搜索占位')}
@@ -2916,6 +3061,15 @@ export default function DistributorAdmin() {
                   onClick={submitInviteeSearch}
                 >
                   {t('搜索')}
+                </Button>
+                <Button
+                  type='primary'
+                  theme='light'
+                  size='small'
+                  icon={<IconUserAdd />}
+                  onClick={openBindUserModal}
+                >
+                  {t('绑定用户')}
                 </Button>
               </div>
               <Table
@@ -2957,6 +3111,77 @@ export default function DistributorAdmin() {
             </div>
           </Tabs.TabPane>
         </Tabs>
+      </Modal>
+
+      <Modal
+        title={t('绑定用户')}
+        visible={bindOpen}
+        onCancel={() => {
+          if (bindSubmitting) return;
+          setBindOpen(false);
+          setBindKeyword('');
+          setBindUser(null);
+        }}
+        onOk={submitAdminBindUser}
+        okText={t('确认绑定')}
+        confirmLoading={bindSubmitting}
+        okButtonProps={{ disabled: bindButtonDisabled }}
+        width={520}
+      >
+        <Banner
+          type='warning'
+          className='mb-3 !rounded-lg'
+          closeIcon={null}
+          description={t(
+            '管理员绑定后立即生效，无需用户确认。仅支持尚未绑定代理的普通用户。',
+          )}
+        />
+        <Input
+          value={bindKeyword}
+          maxLength={ADMIN_KEYWORD_MAX_LEN}
+          onChange={(value) => {
+            setBindKeyword(String(value ?? '').slice(0, ADMIN_KEYWORD_MAX_LEN));
+            setBindUser(null);
+          }}
+          onEnterPress={searchAdminBindableUser}
+          placeholder={t('输入普通用户的用户名或手机号，按回车搜索')}
+          suffix={
+            <Button
+              size='small'
+              type='primary'
+              theme='light'
+              loading={bindSearchLoading}
+              onClick={searchAdminBindableUser}
+            >
+              {t('搜索')}
+            </Button>
+          }
+        />
+        {bindUser ? (
+          <div className='mt-3 rounded-lg border border-semi-color-border bg-semi-color-fill-0 p-3'>
+            <div className='flex flex-col gap-1'>
+              <Text strong>{bindUser.display_name || bindUser.username}</Text>
+              <Text type='tertiary' size='small'>
+                {t('用户名')}：{bindUser.username || '—'}
+              </Text>
+              <Text type='tertiary' size='small'>
+                {t('用户ID')}：{bindUser.user_id}
+              </Text>
+              {bindUser.phone ? (
+                <Text type='tertiary' size='small'>
+                  {t('手机号')}：{bindUser.phone}
+                </Text>
+              ) : null}
+              <Text
+                type={bindButtonDisabled ? 'warning' : 'success'}
+                size='small'
+                className='mt-1'
+              >
+                {bindStatusText}
+              </Text>
+            </div>
+          </div>
+        ) : null}
       </Modal>
 
       <Modal
