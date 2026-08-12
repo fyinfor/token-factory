@@ -30,6 +30,7 @@ import {
   buildRegistrationResult,
   isPasskeySupported,
   setUserData,
+  userIsDistributorUser,
 } from '../../helpers';
 import { normalizeSmsVerificationEnabled } from '../../helpers/data';
 import { UserContext } from '../../context/User';
@@ -42,6 +43,7 @@ import AccountManagement from './personal/cards/AccountManagement';
 import NotificationSettings from './personal/cards/NotificationSettings';
 import PreferencesSettings from './personal/cards/PreferencesSettings';
 import CheckinCalendar from './personal/cards/CheckinCalendar';
+import InvitationCard from './personal/cards/InvitationCard';
 import EmailBindModal from './personal/modals/EmailBindModal';
 import PhoneBindModal from './personal/modals/PhoneBindModal';
 import WeChatBindModal from './personal/modals/WeChatBindModal';
@@ -586,6 +588,15 @@ const PersonalSetting = () => {
         <div className='w-full max-w-7xl mx-auto px-2'>
           {/* 顶部用户信息区域 */}
           <UserInfoHeader t={t} userState={userState} />
+
+          {userState?.user?.id &&
+            (userState.user.role || 0) < 10 &&
+            !userIsDistributorUser(userState.user) && (
+              <div className='mt-4 md:mt-6'>
+                <InvitationCard t={t} />
+              </div>
+            )}
+
           <div className='mt-4 md:mt-6'>
             <Card>
               <div className='flex flex-col md:flex-row md:items-center md:justify-between gap-3'>

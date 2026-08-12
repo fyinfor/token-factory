@@ -17,7 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from 'react';
 import {
   Modal,
   Button,
@@ -165,6 +171,7 @@ const InviteeModelDiscountModal = ({
   const [templateAutoApply, setTemplateAutoApply] = useState(false);
   const [baselineTemplateAutoApply, setBaselineTemplateAutoApply] =
     useState(false);
+  const loadRequestIdRef = useRef(0);
 
   const listApiPath = templateMode
     ? '/api/distributor/model-discount-template'
@@ -203,12 +210,19 @@ const InviteeModelDiscountModal = ({
         (adminMode && !distributorId)
       )
         return;
-      if (!silent) setLoading(true);
+      const requestId = ++loadRequestIdRef.current;
+      if (!silent) {
+        setLoading(true);
+        setModelData([]);
+        setBaselineValues({});
+        setDiscountValues({});
+      }
       try {
         const res = await API.get(listApiPath, {
           params: buildRequestParams(),
           disableDuplicate: true,
         });
+        if (requestId !== loadRequestIdRef.current) return;
         if (!res.data?.success) {
           showError(res.data?.message || t('加载失败'));
           return;
@@ -232,9 +246,12 @@ const InviteeModelDiscountModal = ({
         setBaselineValues(initialValues);
         setDiscountValues(initialValues);
       } catch (e) {
+        if (requestId !== loadRequestIdRef.current) return;
         showError(t('加载失败'));
       } finally {
-        if (!silent) setLoading(false);
+        if (!silent && requestId === loadRequestIdRef.current) {
+          setLoading(false);
+        }
       }
     },
     [
@@ -253,6 +270,9 @@ const InviteeModelDiscountModal = ({
     if (visible) {
       loadData();
     } else {
+      loadRequestIdRef.current += 1;
+      setLoading(false);
+      setModelData([]);
       setSearchKeyword('');
       setFilterSupplierType(null);
       setPage(1);
@@ -729,7 +749,7 @@ const InviteeModelDiscountModal = ({
             </div>
           )}
 
-          {templateMode && (
+          {(templateMode || adminMode) && (
             <div className='space-y-3 rounded-lg border border-semi-color-border bg-semi-color-fill-0 p-3'>
               <div className='flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between'>
                 <div className='min-w-0'>

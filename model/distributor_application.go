@@ -287,11 +287,12 @@ func GetDistributorApplicationByIdAdmin(id int) (*DistributorApplication, string
 
 // ApproveDistributorApplication 通过：用户角色改为分销商，申请状态已通过。
 // distributorCommissionBps 非 nil 时写入该用户的 distributor_commission_bps（0～10000，万分之一；0 表示跟随系统默认）；nil 表示不修改该字段（兼容无请求体调用）。
-func ApproveDistributorApplication(appId, reviewerId int, distributorCommissionBps *int) error {
+func ApproveDistributorApplication(appId, reviewerId int, distributorCommissionBps *int, convertOrdinaryInvites bool) (*OrdinaryInviteConversionResult, error) {
 	if appId <= 0 || reviewerId <= 0 {
-		return errors.New("invalid params")
+		return nil, errors.New("invalid params")
 	}
-	return DB.Transaction(func(tx *gorm.DB) error {
+	conversionResult := &OrdinaryInviteConversionResult{}
+	err := DB.Transaction(func(tx *gorm.DB) error {
 		var app DistributorApplication
 		if err := tx.Where("id = ?", appId).First(&app).Error; err != nil {
 			return err
@@ -329,8 +330,19 @@ func ApproveDistributorApplication(appId, reviewerId int, distributorCommissionB
 				return err
 			}
 		}
+		if convertOrdinaryInvites {
+			converted, err := ConvertOrdinaryInvitesToDistributor(tx, app.UserId, reviewerId)
+			if err != nil {
+				return err
+			}
+			conversionResult = converted
+		}
 		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	return conversionResult, nil
 }
 
 // RejectDistributorApplication 驳回

@@ -4477,6 +4477,7 @@
     "邀请的用户充值后，您将获得对应比例的分销额度（待使用收益）。分成比例以您账号当前设置为准；可在「详情」中查看每笔充值的入账额度、当时比例与收益。": "Lorsque les utilisateurs invités rechargent, vous recevez une commission (gains en attente) au taux applicable. La répartition suit les paramètres actuels de votre compte. Ouvrez « Détails » pour chaque recharge : quota crédité, taux au moment de l’opération et gains.",
     "邀请好友获得额外奖励": "Invitez des amis pour obtenir des récompenses supplémentaires",
     "邀请好友注册，好友充值后您可获得相应奖励": "Invitez des amis à s'inscrire et vous pourrez obtenir la récompense correspondante après que l'ami ait rechargé",
+    "每成功邀请一位好友注册，奖励直接到账": "La récompense est créditée pour chaque inscription réussie d'un ami",
     "邀请获得额度": "Quota d'invitation",
     "邀请奖励": "Récompense d'invitation",
     "邀请链接": "Lien d'invitation",
@@ -6385,5 +6386,16 @@
   "将使用当前编辑的中英文 API 文档覆盖该模型其他渠道的 API 文档，模型介绍不会被覆盖。": "The current Chinese and English API documentation will replace the API documentation for this model on other channels. Model introductions will not be overwritten.",
   "已同步到 {{count}} 个其他渠道": "Synced to {{count}} other channels",
   "将当前中英文 API 文档覆盖到该模型的其他渠道": "Replace this model's API documentation on other channels with the current Chinese and English documentation",
-  "同步到其他渠道": "Sync to other channels"
+  "同步到其他渠道": "Sync to other channels",
+  "绑定用户": "Lier un utilisateur",
+  "请输入用户名或手机号": "Saisissez un nom d'utilisateur ou un numéro de téléphone",
+  "未找到匹配用户": "Aucun utilisateur correspondant trouvé",
+  "该用户已绑定代理": "Cet utilisateur est déjà lié à un agent",
+  "不允许多级代理": "Les agents multiniveaux ne sont pas autorisés",
+  "只能绑定普通用户": "Seuls les utilisateurs ordinaires peuvent être liés",
+  "该用户已有待确认请求，管理员仍可直接绑定": "Cet utilisateur a une demande en attente ; un administrateur peut tout de même le lier directement",
+  "该用户可以直接绑定，无需用户确认": "Cet utilisateur peut être lié directement sans confirmation",
+  "确认绑定": "Confirmer la liaison",
+  "管理员绑定后立即生效，无需用户确认。仅支持尚未绑定代理的普通用户。": "La liaison par un administrateur prend effet immédiatement, sans confirmation de l'utilisateur. Seuls les utilisateurs ordinaires non encore liés à un agent sont pris en charge.",
+  "输入普通用户的用户名或手机号，按回车搜索": "Saisissez le nom d'utilisateur ou le numéro de téléphone d'un utilisateur ordinaire, puis appuyez sur Entrée"
 }

@@ -20,6 +20,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { API, showError, showSuccess } from '../../helpers';
+import { Modal, Typography, Checkbox } from '@douyinfe/semi-ui';
 import { useTableCompactMode } from '../common/useTableCompactMode';
 
 const DEFAULT_PAGE_SIZE = 50;
@@ -177,12 +178,58 @@ export const useUsersData = () => {
 
   // Manage user operations (promote, demote, enable, disable, delete)
   const manageUser = async (userId, action, record) => {
+    let convertOrdinaryInvites = false;
+    if (action === 'set_distributor') {
+      try {
+        const previewRes = await API.get(
+          `/api/user/${userId}/ordinary-invite-preview`,
+        );
+        const preview = previewRes.data?.data;
+        if (previewRes.data?.success && Number(preview?.total || 0) > 0) {
+          let checked = false;
+          const confirmed = await new Promise((resolve) => {
+            Modal.confirm({
+              title: t('设为代理'),
+              content: (
+                <div className='flex flex-col gap-3'>
+                  <Typography.Text type='tertiary' size='small'>
+                    {t(
+                      '该用户有 {{total}} 位历史普通邀请，其中 {{convertible}} 位可转为代理下级。未勾选时只开通代理身份，不转换历史邀请。',
+                      {
+                        total: preview.total || 0,
+                        convertible: preview.convertible || 0,
+                      },
+                    )}
+                  </Typography.Text>
+                  <Checkbox
+                    disabled={Number(preview.convertible || 0) <= 0}
+                    onChange={(event) => {
+                      checked = Boolean(event.target.checked);
+                    }}
+                  >
+                    {t('将可转换的历史邀请用户加入该代理名下')}
+                  </Checkbox>
+                </div>
+              ),
+              onOk: () => resolve({ confirmed: true, checked }),
+              onCancel: () => resolve({ confirmed: false, checked: false }),
+            });
+          });
+          if (!confirmed.confirmed) return;
+          convertOrdinaryInvites = confirmed.checked;
+        }
+      } catch {
+        showError(t('加载历史邀请信息失败'));
+        return;
+      }
+    }
     // Trigger loading state to force table re-render
     setLoading(true);
 
     const res = await API.post('/api/user/manage', {
       id: userId,
       action,
+      convert_ordinary_invites: convertOrdinaryInvites,
     });
 
     const { success, message } = res.data;
