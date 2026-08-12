@@ -653,8 +653,8 @@ func GetAffCode(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	if !model.UserIsDistributor(user) {
-		common.ApiErrorMsg(c, "仅分销商可使用邀请链接")
+	if user.Status != common.UserStatusEnabled || user.Role >= common.RoleAdminUser {
+		common.ApiErrorMsg(c, "当前账号不可参与邀请活动")
 		return
 	}
 	if user.AffCode == "" {
@@ -668,9 +668,14 @@ func GetAffCode(c *gin.Context) {
 		}
 	}
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    user.AffCode,
+		"success":              true,
+		"message":              "",
+		"data":                 user.AffCode,
+		"aff_code":             user.AffCode,
+		"aff_count":            user.AffCount,
+		"inviter_reward_quota": common.QuotaForInviter,
+		"invitee_reward_quota": common.QuotaForInvitee,
+		"is_distributor":       model.UserIsDistributor(user),
 	})
 	return
 }

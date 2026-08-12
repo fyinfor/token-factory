@@ -521,12 +521,26 @@ func GetUserById(id int, selectAll bool) (*User, error) {
 }
 
 func GetUserIdByAffCode(affCode string) (int, error) {
+	inviter, err := GetInviterByAffCode(affCode)
+	if err != nil {
+		return 0, err
+	}
+	return inviter.Id, nil
+}
+
+// GetInviterByAffCode returns an enabled, non-admin user who can participate
+// in ordinary invitations. Distributor-only capabilities are checked separately
+// at the point where commission or analytics are produced.
+func GetInviterByAffCode(affCode string) (*User, error) {
+	affCode = strings.TrimSpace(affCode)
 	if affCode == "" {
-		return 0, errors.New("affCode 为空！")
+		return nil, errors.New("affCode 为空！")
 	}
 	var user User
-	err := DB.Select("id").First(&user, "aff_code = ?", affCode).Error
-	return user.Id, err
+	err := DB.Select("id", "role", "status", "is_distributor").
+		Where("aff_code = ? AND status = ? AND role >= ? AND role < ?", affCode, common.UserStatusEnabled, common.RoleCommonUser, common.RoleAdminUser).
+		First(&user).Error
+	return &user, err
 }
 
 // EnsureAffCode generates a unique aff_code for the user if it is empty,
