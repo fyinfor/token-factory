@@ -325,6 +325,7 @@ func migrateDB() error {
 		&SubscriptionPreConsumeRecord{},
 		&CustomOAuthProvider{},
 		&UserOAuthBinding{},
+		&OrdinaryInviteRelation{},
 		&AffInviteRelation{},
 		&DistributorInviteeUnbindLog{},
 		&SupplierApplication{},
@@ -379,6 +380,9 @@ func migrateDB() error {
 	}
 	if err := migrateLegacyDistributorRole(); err != nil {
 		return err
+	}
+	if err := MigrateLegacyOrdinaryInvitesIfNeeded(); err != nil {
+		return fmt.Errorf("migrate legacy ordinary invitations: %w", err)
 	}
 	if err := BackfillSupplierApplicationAlias(); err != nil {
 		return fmt.Errorf("backfill supplier_alias: %w", err)
@@ -460,6 +464,7 @@ func migrateDBFast() error {
 		{&SubscriptionPreConsumeRecord{}, "SubscriptionPreConsumeRecord"},
 		{&CustomOAuthProvider{}, "CustomOAuthProvider"},
 		{&UserOAuthBinding{}, "UserOAuthBinding"},
+		{&OrdinaryInviteRelation{}, "OrdinaryInviteRelation"},
 		{&AffInviteRelation{}, "AffInviteRelation"},
 		{&DistributorInviteeUnbindLog{}, "DistributorInviteeUnbindLog"},
 		{&SupplierApplication{}, "SupplierApplication"},
@@ -529,6 +534,9 @@ func migrateDBFast() error {
 	}
 	if err := MigrateLegacyChangelogOption(); err != nil {
 		return fmt.Errorf("migrate legacy changelog option: %w", err)
+	}
+	if err := MigrateLegacyOrdinaryInvitesIfNeeded(); err != nil {
+		return fmt.Errorf("migrate legacy ordinary invitations: %w", err)
 	}
 	if common.UsingSQLite {
 		if err := ensureSubscriptionPlanTableSQLite(); err != nil {

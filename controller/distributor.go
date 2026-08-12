@@ -674,12 +674,20 @@ func GetDistributorApplicationAdmin(c *gin.Context) {
 			"reviewed_at":        app.ReviewedAt,
 			"created_at":         app.CreatedAt,
 			"updated_at":         app.UpdatedAt,
+			"ordinary_invite_preview": func() interface{} {
+				preview, previewErr := model.GetOrdinaryInviteConversionPreview(app.UserId)
+				if previewErr != nil {
+					return nil
+				}
+				return preview
+			}(),
 		},
 	})
 }
 
 type approveDistributorApplicationRequest struct {
 	DistributorCommissionBps *int `json:"distributor_commission_bps"`
+	ConvertOrdinaryInvites   bool `json:"convert_ordinary_invites"`
 }
 
 // ApproveDistributorApplicationAdmin 通过申请（可选 body：distributor_commission_bps 万分之一，0=跟随系统）
@@ -702,14 +710,15 @@ func ApproveDistributorApplicationAdmin(c *gin.Context) {
 		}
 	}
 	reviewerId := c.GetInt("id")
-	if err := model.ApproveDistributorApplication(id, reviewerId, req.DistributorCommissionBps); err != nil {
+	conversionResult, err := model.ApproveDistributorApplication(id, reviewerId, req.DistributorCommissionBps, req.ConvertOrdinaryInvites)
+	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
 	if app, _, err := model.GetDistributorApplicationByIdAdmin(id); err == nil && app != nil {
 		service.NotifyDistributorApplicationApproved(app.UserId)
 	}
-	c.JSON(http.StatusOK, gin.H{"success": true, "message": ""})
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": gin.H{"ordinary_invite_conversion": conversionResult}})
 }
 
 // RejectDistributorApplicationAdmin 驳回
@@ -953,6 +962,54 @@ func GetDistributorInviteesAdmin(c *gin.Context) {
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(items)
 	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": pageInfo})
+}
+
+// GetDistributorBindableUserAdmin 管理端查找可直接绑定到指定代理名下的普通用户。
+func GetDistributorBindableUserAdmin(c *gin.Context) {
+	distributorId, err := strconv.Atoi(c.Param("id"))
+	if err != nil || distributorId <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "invalid distributor id"})
+		return
+	}
+	dist, err := model.GetUserById(distributorId, false)
+	if err != nil || dist == nil || !model.UserIsDistributor(dist) {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "用户不是代理"})
+		return
+	}
+	keyword := strings.TrimSpace(c.Query("keyword"))
+	if len(keyword) > 120 {
+		keyword = keyword[:120]
+	}
+	item, err := model.SearchDistributorBindableUser(distributorId, keyword)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": item})
+}
+
+type distributorInviteeBindAdminRequest struct {
+	UserID int `json:"user_id"`
+}
+
+// PostDistributorInviteeBindAdmin 管理端直接建立代理与普通用户的邀请关系，无需目标用户确认。
+func PostDistributorInviteeBindAdmin(c *gin.Context) {
+	distributorId, err := strconv.Atoi(c.Param("id"))
+	if err != nil || distributorId <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "invalid distributor id"})
+		return
+	}
+	var req distributorInviteeBindAdminRequest
+	if err := common.DecodeJson(c.Request.Body, &req); err != nil || req.UserID <= 0 {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的请求"})
+		return
+	}
+	if err := model.AdminBindDistributorInvitee(distributorId, req.UserID); err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	model.RecordLog(req.UserID, model.LogTypeManage, fmt.Sprintf("管理员将用户绑定到代理ID %d 名下", distributorId))
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "绑定成功"})
 }
 
 // GetDistributorInviteeProfitSharesAdmin 管理端查看某分销商下某一被邀请用户的利润分成消费流水（分页），包含已解绑用户的历史流水。

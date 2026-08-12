@@ -31,7 +31,7 @@ func setupOrdinaryInvitationTestDB(t *testing.T) {
 	common.QuotaForInviter = 500
 	common.AffiliateDefaultCommissionBps = 1000
 	common.DistributorCommissionMode = common.DistributorCommissionModeTopup
-	require.NoError(t, DB.AutoMigrate(&User{}, &AffInviteRelation{}, &AffInviteCommissionLog{}, &Log{}))
+	require.NoError(t, DB.AutoMigrate(&User{}, &OrdinaryInviteRelation{}, &AffInviteRelation{}, &AffInviteCommissionLog{}, &Log{}))
 
 	t.Cleanup(func() {
 		DB = previousDB
@@ -56,26 +56,30 @@ func TestOrdinaryInvitationRewardsThenOnlyFutureCommissionAfterUpgrade(t *testin
 	}
 	require.NoError(t, DB.Create(&inviter).Error)
 	invitee := User{
-		Username:  "ordinary-invitee",
-		AffCode:   "ordinary-invitee-code",
-		Role:      common.RoleCommonUser,
-		Status:    common.UserStatusEnabled,
-		InviterId: inviter.Id,
+		Username: "ordinary-invitee",
+		AffCode:  "ordinary-invitee-code",
+		Role:     common.RoleCommonUser,
+		Status:   common.UserStatusEnabled,
 	}
 	require.NoError(t, DB.Create(&invitee).Error)
 
-	require.NoError(t, EnsureAffInviteRelation(inviter.Id, invitee.Id))
+	require.NoError(t, CreateRegistrationInviteRelation(inviter.Id, invitee.Id, common.QuotaForInviter))
 	require.NoError(t, inviteUser(inviter.Id))
 
 	var reloaded User
 	require.NoError(t, DB.First(&reloaded, inviter.Id).Error)
-	require.Equal(t, 1, reloaded.AffCount)
+	require.Zero(t, reloaded.AffCount)
 	require.Equal(t, 600, reloaded.Quota)
 	require.Equal(t, 520, reloaded.GiftQuota)
 
-	var relation AffInviteRelation
-	require.NoError(t, DB.Where("inviter_id = ? AND invitee_user_id = ?", inviter.Id, invitee.Id).First(&relation).Error)
-	require.Zero(t, relation.CommissionRatioBps)
+	var ordinaryRelation OrdinaryInviteRelation
+	require.NoError(t, DB.Where("inviter_user_id = ? AND invitee_user_id = ?", inviter.Id, invitee.Id).First(&ordinaryRelation).Error)
+	require.Equal(t, OrdinaryInviteStatusActive, ordinaryRelation.Status)
+	var affRelationCount int64
+	require.NoError(t, DB.Model(&AffInviteRelation{}).Where("inviter_id = ? AND invitee_user_id = ?", inviter.Id, invitee.Id).Count(&affRelationCount).Error)
+	require.Zero(t, affRelationCount)
+	require.NoError(t, DB.First(&invitee, invitee.Id).Error)
+	require.Zero(t, invitee.InviterId)
 
 	// 普通用户阶段发生的充值不产生分成，也不会在升级后补发。
 	ApplyAffiliateTopupReward(invitee.Id, 10000)
@@ -88,7 +92,23 @@ func TestOrdinaryInvitationRewardsThenOnlyFutureCommissionAfterUpgrade(t *testin
 		"distributor_commission_bps": 1500,
 	}).Error)
 
-	// 升级后的新充值按升级后的当前比例结算。
+	// 只升级身份但未确认转换时，历史普通邀请仍不产生分成。
+	ApplyAffiliateTopupReward(invitee.Id, 10000)
+	require.NoError(t, DB.First(&reloaded, inviter.Id).Error)
+	require.Zero(t, reloaded.AffQuota)
+
+	preview, err := GetOrdinaryInviteConversionPreview(inviter.Id)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, preview.Convertible)
+	var conversion *OrdinaryInviteConversionResult
+	require.NoError(t, DB.Transaction(func(tx *gorm.DB) error {
+		var convertErr error
+		conversion, convertErr = ConvertOrdinaryInvitesToDistributor(tx, inviter.Id, 999)
+		return convertErr
+	}))
+	require.EqualValues(t, 1, conversion.Converted)
+
+	// 明确转换完成后的新充值，按升级后的当前比例结算。
 	ApplyAffiliateTopupReward(invitee.Id, 10000)
 	require.NoError(t, DB.First(&reloaded, inviter.Id).Error)
 	require.Equal(t, 1500, reloaded.AffQuota)
@@ -99,6 +119,37 @@ func TestOrdinaryInvitationRewardsThenOnlyFutureCommissionAfterUpgrade(t *testin
 	require.Len(t, logs, 1)
 	require.Equal(t, 1500, logs[0].RewardQuota)
 	require.Equal(t, 1500, logs[0].CommissionBps)
+	require.NoError(t, DB.First(&invitee, invitee.Id).Error)
+	require.Equal(t, inviter.Id, invitee.InviterId)
+	require.NoError(t, DB.First(&ordinaryRelation, ordinaryRelation.Id).Error)
+	require.Equal(t, OrdinaryInviteStatusConverted, ordinaryRelation.Status)
+}
+
+func TestDistributorRegistrationCreatesOnlyDistributorRelation(t *testing.T) {
+	setupOrdinaryInvitationTestDB(t)
+
+	inviter := User{
+		Username:      "distributor-inviter",
+		AffCode:       "distributor-inviter-code",
+		Role:          common.RoleCommonUser,
+		Status:        common.UserStatusEnabled,
+		IsDistributor: common.DistributorFlagYes,
+	}
+	invitee := User{Username: "direct-distributor-invitee", AffCode: "direct-distributor-invitee-code", Role: common.RoleCommonUser, Status: common.UserStatusEnabled}
+	require.NoError(t, DB.Create(&inviter).Error)
+	require.NoError(t, DB.Create(&invitee).Error)
+	require.NoError(t, CreateRegistrationInviteRelation(inviter.Id, invitee.Id, common.QuotaForInviter))
+
+	require.NoError(t, DB.First(&invitee, invitee.Id).Error)
+	require.Equal(t, inviter.Id, invitee.InviterId)
+	var ordinaryCount int64
+	require.NoError(t, DB.Model(&OrdinaryInviteRelation{}).Count(&ordinaryCount).Error)
+	require.Zero(t, ordinaryCount)
+	var affCount int64
+	require.NoError(t, DB.Model(&AffInviteRelation{}).Where("inviter_id = ? AND invitee_user_id = ?", inviter.Id, invitee.Id).Count(&affCount).Error)
+	require.EqualValues(t, 1, affCount)
+	require.NoError(t, DB.First(&inviter, inviter.Id).Error)
+	require.Equal(t, 1, inviter.AffCount)
 }
 
 func TestInvitationCodeOnlyAcceptsEnabledNonAdminUsers(t *testing.T) {

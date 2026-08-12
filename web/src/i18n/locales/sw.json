@@ -6385,5 +6385,16 @@
   "将使用当前编辑的中英文 API 文档覆盖该模型其他渠道的 API 文档，模型介绍不会被覆盖。": "The current Chinese and English API documentation will replace the API documentation for this model on other channels. Model introductions will not be overwritten.",
   "已同步到 {{count}} 个其他渠道": "Synced to {{count}} other channels",
   "将当前中英文 API 文档覆盖到该模型的其他渠道": "Replace this model's API documentation on other channels with the current Chinese and English documentation",
-  "同步到其他渠道": "Sync to other channels"
+  "同步到其他渠道": "Sync to other channels",
+  "绑定用户": "Unganisha mtumiaji",
+  "请输入用户名或手机号": "Weka jina la mtumiaji au nambari ya simu",
+  "未找到匹配用户": "Hakuna mtumiaji anayelingana aliyepatikana",
+  "该用户已绑定代理": "Mtumiaji huyu tayari ameunganishwa na wakala",
+  "不允许多级代理": "Mawakala wa ngazi nyingi hawaruhusiwi",
+  "只能绑定普通用户": "Watumiaji wa kawaida pekee ndio wanaoweza kuunganishwa",
+  "该用户已有待确认请求，管理员仍可直接绑定": "Mtumiaji huyu ana ombi linalosubiri uthibitisho; msimamizi bado anaweza kumuunganisha moja kwa moja",
+  "该用户可以直接绑定，无需用户确认": "Mtumiaji huyu anaweza kuunganishwa moja kwa moja bila uthibitisho",
+  "确认绑定": "Thibitisha uunganishaji",
+  "管理员绑定后立即生效，无需用户确认。仅支持尚未绑定代理的普通用户。": "Uunganishaji wa msimamizi unaanza kutumika mara moja bila uthibitisho wa mtumiaji. Watumiaji wa kawaida ambao bado hawajaunganishwa na wakala pekee ndio wanaoruhusiwa.",
+  "输入普通用户的用户名或手机号，按回车搜索": "Weka jina la mtumiaji au nambari ya simu ya mtumiaji wa kawaida, kisha bonyeza Enter kutafuta"
 }

@@ -605,8 +605,7 @@ func HardDeleteUserById(id int) error {
 	return err
 }
 
-// inviteUser 在新用户通过邀请注册成功后调用：邀请人数（aff_count）+1；
-// 若运营配置了邀请人注册奖励（QuotaForInviter），则直接增加邀请人可用额度（quota）。
+// inviteUser 在新用户通过邀请注册成功后调用，发放邀请人注册奖励。
 //
 // 说明：注册类邀请奖励与「分销充值提成」分流——后者仍通过 IncreaseUserAffCommissionQuota
 // 写入 aff_quota / aff_history；本函数不再触碰 aff_quota、aff_history，避免与分销待结算/历史统计混淆。
@@ -629,9 +628,6 @@ func inviteUser(inviterId int) (err error) {
 	}
 	defer tx.Rollback()
 
-	if err = tx.Model(&User{}).Where("id = ?", inviterId).UpdateColumn("aff_count", gorm.Expr("aff_count + ?", 1)).Error; err != nil {
-		return err
-	}
 	if reward > 0 && !useBatchQuota {
 		if err = tx.Model(&User{}).Where("id = ?", inviterId).Updates(map[string]interface{}{
 			"quota":      gorm.Expr("quota + ?", reward),
@@ -810,7 +806,7 @@ func (user *User) Insert(inviterId int) error {
 		RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", logger.LogQuota(common.QuotaForNewUser)))
 	}
 	if inviterId != 0 {
-		_ = EnsureAffInviteRelation(inviterId, user.Id)
+		_ = CreateRegistrationInviteRelation(inviterId, user.Id, common.QuotaForInviter)
 		if common.QuotaForInvitee > 0 {
 			_ = GrantUserGiftQuota(user.Id, common.QuotaForInvitee)
 			RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
@@ -885,7 +881,7 @@ func (user *User) FinalizeOAuthUserCreation(inviterId int) {
 		RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", logger.LogQuota(common.QuotaForNewUser)))
 	}
 	if inviterId != 0 {
-		_ = EnsureAffInviteRelation(inviterId, user.Id)
+		_ = CreateRegistrationInviteRelation(inviterId, user.Id, common.QuotaForInviter)
 		if common.QuotaForInvitee > 0 {
 			_ = GrantUserGiftQuota(user.Id, common.QuotaForInvitee)
 			RecordLog(user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", logger.LogQuota(common.QuotaForInvitee)))
