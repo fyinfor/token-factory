@@ -41,6 +41,9 @@ func appendChannelPriceDiscountToConsumeOther(relayInfo *relaycommon.RelayInfo, 
 		other["global_completion_ratio"] = relayInfo.PriceData.GlobalCompletionRatio
 		other["global_cache_ratio"] = relayInfo.PriceData.GlobalCacheRatio
 		other["global_create_cache_ratio"] = relayInfo.PriceData.GlobalCreateCacheRatio
+		other["global_image_ratio"] = relayInfo.PriceData.GlobalImageRatio
+		other["global_audio_ratio"] = relayInfo.PriceData.GlobalAudioRatio
+		other["global_audio_completion_ratio"] = relayInfo.PriceData.GlobalAudioCompletionRatio
 	}
 }
 
@@ -350,6 +353,9 @@ func GenerateMjOtherInfo(relayInfo *relaycommon.RelayInfo, priceData types.Price
 	other["global_completion_ratio"] = priceData.GlobalCompletionRatio
 	other["global_cache_ratio"] = priceData.GlobalCacheRatio
 	other["global_create_cache_ratio"] = priceData.GlobalCreateCacheRatio
+	other["global_image_ratio"] = priceData.GlobalImageRatio
+	other["global_audio_ratio"] = priceData.GlobalAudioRatio
+	other["global_audio_completion_ratio"] = priceData.GlobalAudioCompletionRatio
 	appendRequestPath(nil, relayInfo, other)
 	return other
 }

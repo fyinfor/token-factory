@@ -897,6 +897,19 @@ const EditChannelModal = (props) => {
             );
           }
           break;
+        case 68:
+          localModels = getChannelModels(value);
+          setInputs((prevInputs) => ({
+            ...prevInputs,
+            base_url: 'https://api.minimaxi.com/v2',
+          }));
+          if (formApiRef.current) {
+            formApiRef.current.setValue(
+              'base_url',
+              'https://api.minimaxi.com/v2',
+            );
+          }
+          break;
         default:
           localModels = getChannelModels(value);
           break;
@@ -2125,6 +2138,17 @@ const EditChannelModal = (props) => {
       showInfo(
         t(
           '阿里云 ASR 渠道必须填写上游基础地址（例如 https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api）！',
+        ),
+      );
+      return;
+    }
+    if (
+      localInputs.type === 68 &&
+      (!localInputs.base_url || localInputs.base_url.trim() === '')
+    ) {
+      showInfo(
+        t(
+          'MiniMax H3 视频渠道必须填写 V2 基础地址（例如 https://api.minimaxi.com/v2），接口路径由网关自动拼接！',
         ),
       );
       return;
@@ -4591,6 +4615,16 @@ const EditChannelModal = (props) => {
                             />
                           )}
 
+                          {inputs.type === 68 && (
+                            <Banner
+                              type='info'
+                              description={t(
+                                '请填写 MiniMax 视频 V2 基础地址，例如 https://api.minimaxi.com/v2；网关会自动拼接 /video_generation 与查询路径，无需填写完整 URL。',
+                              )}
+                              className='!rounded-lg'
+                            />
+                          )}
+
                           {inputs.type !== 3 &&
                             inputs.type !== 8 &&
                             inputs.type !== 22 &&
@@ -4601,13 +4635,15 @@ const EditChannelModal = (props) => {
                                   field='base_url'
                                   label={t('API地址')}
                                   placeholder={
-                                    inputs.type === 69 || inputs.type === 70
-                                      ? t(
-                                          '必填，例如：https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api',
-                                        )
-                                      : t(
-                                          '此项可选，用于通过自定义API地址来进行 API 调用，末尾不要带/v1和/',
-                                        )
+                                    inputs.type === 68
+                                      ? t('必填，例如：https://api.minimaxi.com/v2')
+                                      : inputs.type === 69 || inputs.type === 70
+                                        ? t(
+                                            '必填，例如：https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api',
+                                          )
+                                        : t(
+                                            '此项可选，用于通过自定义API地址来进行 API 调用，末尾不要带/v1和/',
+                                          )
                                   }
                                   onChange={(value) =>
                                     handleInputChange('base_url', value)
@@ -4615,13 +4651,17 @@ const EditChannelModal = (props) => {
                                   showClear
                                   disabled={isIonetLocked}
                                   extraText={
-                                    inputs.type === 69 || inputs.type === 70
+                                    inputs.type === 68
                                       ? t(
-                                          '阿里云 ASR 渠道必须填写上游基础地址，路径由网关自动拼接',
+                                          'MiniMax H3 视频渠道必须填写 V2 基础地址，路径由网关自动拼接',
                                         )
-                                      : t(
-                                          '对于官方渠道，new-api已经内置地址，除非是第三方代理站点或者Azure的特殊接入地址，否则不需要填写',
-                                        )
+                                      : inputs.type === 69 || inputs.type === 70
+                                        ? t(
+                                            '阿里云 ASR 渠道必须填写上游基础地址，路径由网关自动拼接',
+                                          )
+                                        : t(
+                                            '对于官方渠道，new-api已经内置地址，除非是第三方代理站点或者Azure的特殊接入地址，否则不需要填写',
+                                          )
                                   }
                                 />
                               </div>

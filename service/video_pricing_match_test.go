@@ -31,3 +31,16 @@ func TestMatchPerSecondPriceDetail_LabelBeforePixelBucket(t *testing.T) {
 	require.True(t, ok)
 	require.InDelta(t, 0.03, match.PricePerSecond, 1e-9)
 }
+
+func TestMatchPerSecondPriceRowByLabel_MiniMaxH3768P(t *testing.T) {
+	rows := []ratio_setting.VideoResolutionAudioPriceRule{
+		{Resolution: "720p", HasAudio: false, Price: 0.01},
+		{Resolution: "1366x768", HasAudio: false, Price: 0.015},
+		{Resolution: "2K", HasAudio: false, Price: 0.04},
+	}
+	match, ok := matchPerSecondPriceRowByLabel(rows, "768P", 1366, 768, false, true)
+	require.True(t, ok)
+	require.NotNil(t, match)
+	require.InDelta(t, 0.015, match.PricePerSecond, 1e-9)
+	require.Equal(t, "1366x768", match.Resolution)
+}

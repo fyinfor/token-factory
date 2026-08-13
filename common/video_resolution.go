@@ -132,6 +132,8 @@ func parseVideoResolutionPreset(s string) (int, int, bool) {
 		return 960, 540, true
 	case "720", "720p":
 		return 1280, 720, true
+	case "768", "768p":
+		return 1366, 768, true
 	case "1080", "1080p":
 		return 1920, 1080, true
 	case "2k":
@@ -152,6 +154,8 @@ func parseVideoResolutionWithAspect(resolution string, aspect float64) (int, int
 		shortSide = 540
 	case "720", "720p":
 		shortSide = 720
+	case "768", "768p":
+		shortSide = 768
 	case "1080", "1080p":
 		shortSide = 1080
 	case "2k":
@@ -229,6 +233,8 @@ func labelFromShortSide(short int) string {
 		return "2K"
 	case short >= 1080:
 		return "1080p"
+	case short >= 768:
+		return "768p"
 	case short >= 720:
 		return "720p"
 	case short >= 540:

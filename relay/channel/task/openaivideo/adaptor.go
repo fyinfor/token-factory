@@ -860,8 +860,8 @@ func buildOpenAIVideoTaskBillingOther(c *gin.Context, info *relaycommon.RelayInf
 	case info.PriceData.UsePrice &&
 		info.PriceData.ModelPrice == 0 &&
 		info.PriceData.ModelRatio == 0 &&
-		info.PriceData.OtherRatios != nil &&
-		info.PriceData.OtherRatios["seconds"] > 0:
+		((strings.EqualFold(strings.TrimSpace(info.PriceData.VideoRuleUnit), "per_second")) ||
+			(info.PriceData.OtherRatios != nil && info.PriceData.OtherRatios["seconds"] > 0)):
 		other["billing_mode"] = "video_per_second"
 		other["model_ratio"] = info.PriceData.ModelRatio
 		other["video_seconds"] = int(math.Ceil(info.PriceData.OtherRatios["seconds"]))
@@ -887,6 +887,14 @@ func buildOpenAIVideoTaskBillingOther(c *gin.Context, info *relaycommon.RelayInf
 		other["video_billed_quota"] = info.PriceData.Quota
 		other["video_quota_per_unit"] = common.QuotaPerUnit
 		other["video_price_per_video"] = float64(info.PriceData.Quota) / common.QuotaPerUnit
+		if strings.TrimSpace(info.PriceData.VideoBillingMode) != "" {
+			other["video_billing_lane"] = strings.TrimSpace(info.PriceData.VideoBillingMode)
+		}
+		if info.PriceData.VideoGlobalRulePrice > 0 {
+			other["global_video_price_per_video"] = info.PriceData.VideoGlobalRulePrice
+		} else if info.PriceData.GlobalModelPrice > 0 {
+			other["global_video_price_per_video"] = info.PriceData.GlobalModelPrice
+		}
 		if info.PriceData.VideoRuleWidth > 0 {
 			other["video_rule_width"] = info.PriceData.VideoRuleWidth
 		}

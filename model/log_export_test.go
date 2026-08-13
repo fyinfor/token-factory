@@ -156,3 +156,35 @@ func TestGetAllLogsForExportMatchesConsoleOrder(t *testing.T) {
 		}
 	}
 }
+
+func TestGetTaskBillingTerminalLogsForExport(t *testing.T) {
+	oldLogDB := LOG_DB
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&Log{}); err != nil {
+		t.Fatal(err)
+	}
+	LOG_DB = db
+	t.Cleanup(func() { LOG_DB = oldLogDB })
+
+	logs := []Log{
+		{Id: 1, UserId: 10, CreatedAt: 100, Type: LogTypeConsume, Other: `{"task_id":"task-a","billing_phase":"pre_charge"}`},
+		{Id: 2, UserId: 10, CreatedAt: 200, Type: LogTypeConsume, Other: `{"task_id":"task-a","billing_phase":"delta_charge"}`},
+		{Id: 3, UserId: 11, CreatedAt: 210, Type: LogTypeRefund, Other: `{"task_id":"task-b","billing_phase":"delta_refund"}`},
+		{Id: 4, UserId: 10, CreatedAt: 220, Type: LogTypeConsume, Other: `{"task_id":"task-a","billing_phase":"normal"}`},
+		{Id: 5, UserId: 10, CreatedAt: 230, Type: LogTypeRefund, Other: `{"task_id":"task-x","billing_phase":"refund"}`},
+	}
+	if err := LOG_DB.Create(&logs).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := GetTaskBillingTerminalLogsForExport([]string{"task-a", "task-b"}, []int{10}, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Id != 2 {
+		t.Fatalf("got=%+v, want only task-a delta charge", got)
+	}
+}

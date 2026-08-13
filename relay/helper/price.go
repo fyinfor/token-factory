@@ -100,6 +100,9 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 	if !globalCreateCacheRatioOK {
 		globalCreateCacheRatio = 1.25
 	}
+	globalImageRatio, _ := ratio_setting.GetImageRatio(pricingModelName)
+	globalAudioRatio := ratio_setting.GetAudioRatio(pricingModelName)
+	globalAudioCompletionRatio := ratio_setting.GetAudioCompletionRatio(pricingModelName)
 
 	// 用户指定价：命中时三折扣替换为用户级覆盖值，计费基价改用全局官方价（渠道无关），
 	// 最终价 = 全局官方价 × (成本折扣 + 经营成本 + 加价折扣)，且不再叠加分组倍率。
@@ -248,16 +251,19 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		ChannelPriceDiscount: &chDiscCopy,
 		QuotaToPreConsume:    preConsumedQuota,
 		// 新计费公式字段
-		CostDiscountPercent:     chDisc,
-		RawPriceDiscountPercent: rawDisc,
-		OperatingCostPercent:    operatingCost,
-		MarkupDiscountPercent:   markupDisc,
-		UserPricingOverride:     userPricingOverride,
-		GlobalModelRatio:        globalRatio,
-		GlobalModelPrice:        globalPrice,
-		GlobalCompletionRatio:   globalCompletionRatio,
-		GlobalCacheRatio:        globalCacheRatio,
-		GlobalCreateCacheRatio:  globalCreateCacheRatio,
+		CostDiscountPercent:        chDisc,
+		RawPriceDiscountPercent:    rawDisc,
+		OperatingCostPercent:       operatingCost,
+		MarkupDiscountPercent:      markupDisc,
+		UserPricingOverride:        userPricingOverride,
+		GlobalModelRatio:           globalRatio,
+		GlobalModelPrice:           globalPrice,
+		GlobalCompletionRatio:      globalCompletionRatio,
+		GlobalCacheRatio:           globalCacheRatio,
+		GlobalCreateCacheRatio:     globalCreateCacheRatio,
+		GlobalImageRatio:           globalImageRatio,
+		GlobalAudioRatio:           globalAudioRatio,
+		GlobalAudioCompletionRatio: globalAudioCompletionRatio,
 	}
 
 	if common.DebugEnabled {
@@ -835,6 +841,8 @@ func parseResolutionFlexibleForRatio(s string, ratio float64) (int, int, bool) {
 		shortSide = 540
 	case "720p":
 		shortSide = 720
+	case "768p":
+		shortSide = 768
 	case "1080p":
 		shortSide = 1080
 	case "2k":
@@ -863,6 +871,8 @@ func parseResolutionFlexible(s string) (int, int, bool) {
 		return 960, 540, true
 	case "720p":
 		return 1280, 720, true
+	case "768p":
+		return 1366, 768, true
 	case "1080p":
 		return 1920, 1080, true
 	case "1k":
@@ -960,6 +970,16 @@ func tryVideoPerSecondRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo
 			return types.PriceData{}, false, nil
 		}
 	}
+	globalPricePerSecond := globalVideoPerSecondUSDForRelay(
+		info.OriginModelName,
+		string(estimateCtx.Mode),
+		estimateCtx.Width,
+		estimateCtx.Height,
+		hasAudio,
+	)
+	if globalPricePerSecond <= 0 && !hasChannelVideoPerSecondPricingRules(channelID, info.OriginModelName) {
+		globalPricePerSecond = pricePerSecond
+	}
 	rawQuota := float64(seconds) * effPricePerSecond * common.QuotaPerUnit * groupRatioInfo.GroupRatio
 	chDiscCopyVPS := chDiscVPS
 	quota := int(math.Round(rawQuota))
@@ -978,6 +998,13 @@ func tryVideoPerSecondRulesPriceData(c *gin.Context, info *relaycommon.RelayInfo
 		RawPriceDiscountPercent: rawDiscVPS,
 		OperatingCostPercent:    operatingCostVPS,
 		MarkupDiscountPercent:   markupDiscVPS,
+		VideoRuleUnit:           "per_second",
+		VideoBillingMode:        string(estimateCtx.Mode),
+		VideoChannelRulePrice:   pricePerSecond,
+		VideoGlobalRulePrice:    globalPricePerSecond,
+		VideoRuleWidth:          estimateCtx.Width,
+		VideoRuleHeight:         estimateCtx.Height,
+		VideoRuleHasAudio:       hasAudio,
 	}
 	pd.AddOtherRatio("seconds", float64(seconds))
 	if hasAudio {

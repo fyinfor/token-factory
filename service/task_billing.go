@@ -302,6 +302,34 @@ func appendTaskBillingDiscountSnapshots(bc *model.TaskBillingContext, channelID 
 	other["channel_price_discount_percent"] = operatingDiscount
 	other["markup_discount_rate"] = markupDisc
 	other["sales_discount_percent"] = model.SalesDiscountPercent(rawDisc, operatingCost, markupDisc)
+	if bc != nil {
+		if strings.TrimSpace(bc.VideoBillingMode) != "" {
+			other["video_billing_lane"] = strings.TrimSpace(bc.VideoBillingMode)
+		}
+		if bc.VideoRuleWidth > 0 {
+			other["video_rule_width"] = bc.VideoRuleWidth
+		}
+		if bc.VideoRuleHeight > 0 {
+			other["video_rule_height"] = bc.VideoRuleHeight
+		}
+		other["video_has_audio"] = bc.VideoRuleHasAudio
+		switch strings.ToLower(strings.TrimSpace(bc.VideoRuleUnit)) {
+		case "per_second":
+			if bc.VideoChannelRulePrice > 0 {
+				other["video_price_per_second"] = bc.VideoChannelRulePrice
+			}
+			if bc.VideoGlobalRulePrice > 0 {
+				other["global_video_price_per_second"] = bc.VideoGlobalRulePrice
+			}
+		case "per_video":
+			if bc.VideoChannelRulePrice > 0 {
+				other["video_price_per_video"] = bc.VideoChannelRulePrice
+			}
+			if bc.VideoGlobalRulePrice > 0 {
+				other["global_video_price_per_video"] = bc.VideoGlobalRulePrice
+			}
+		}
+	}
 }
 
 func isUpstreamVideoMetadataLogKey(key string) bool {

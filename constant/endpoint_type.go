@@ -34,6 +34,10 @@ const (
 	// EndpointTypeSeedanceVideo is VolcEngine contents generations (Seedance 2.0 async API).
 	// Client entry: POST /v1/video/generations; upstream: POST /api/v3/contents/generations/tasks.
 	EndpointTypeSeedanceVideo EndpointType = "seedance-video"
+	// EndpointTypeMiniMaxH3Video is MiniMax Hailuo-03 / H3 video generation V2.
+	// Client entry: POST /v1/video/generations; upstream: POST {baseUrl}/video_generation
+	// where baseUrl is typically https://api.minimaxi.com/v2.
+	EndpointTypeMiniMaxH3Video EndpointType = "minimax-h3-video"
 	// EndpointTypeAliASRSync is Alibaba DashScope ASR sync transcription.
 	// Client entry: POST /v1/audio/transcriptions; upstream: multimodal-generation.
 	EndpointTypeAliASRSync EndpointType = "ali-asr-sync"
