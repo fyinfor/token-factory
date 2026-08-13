@@ -38,7 +38,21 @@ func validateChangelogRequest(req changelogRequest) (model.Changelog, bool) {
 	return changelog, changelog.Date != "" && changelog.Content != ""
 }
 
+func isChangelogEnabled() bool {
+	common.OptionMapRWMutex.RLock()
+	defer common.OptionMapRWMutex.RUnlock()
+	return strings.EqualFold(strings.TrimSpace(common.OptionMap["ChangelogEnabled"]), "true")
+}
+
 func ListPublicChangelogs(c *gin.Context) {
+	if !isChangelogEnabled() {
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "",
+			"data":    make([]*model.Changelog, 0),
+		})
+		return
+	}
 	changelogs, err := model.ListAllChangelogs()
 	if err != nil {
 		common.ApiError(c, err)

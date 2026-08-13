@@ -27,6 +27,7 @@ import {
   Modal,
   Popconfirm,
   Space,
+  Switch,
   Card,
   Tabs,
   Table,
@@ -159,10 +160,11 @@ const OtherSetting = ({ activeSection = 'system-info' }) => {
     About: '',
     AboutEn: '',
     HomePageContent: '',
+    ChangelogEnabled: 'false',
   });
   let [loading, setLoading] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const [statusState] = useContext(StatusContext);
+  const [statusState, statusDispatch] = useContext(StatusContext);
   const [changelogEntries, setChangelogEntries] = useState([]);
   const [changelogTotal, setChangelogTotal] = useState(0);
   const [changelogPage, setChangelogPage] = useState(1);
@@ -252,6 +254,7 @@ const OtherSetting = ({ activeSection = 'system-info' }) => {
     Footer: false,
     CheckUpdate: false,
     Changelog: false,
+    ChangelogEnabled: false,
     DefaultSiteLanguage: false,
   });
   const handleInputChange = async (value, e) => {
@@ -282,6 +285,40 @@ const OtherSetting = ({ activeSection = 'system-info' }) => {
       showError(error?.message || t('加载更新日志失败'));
     } finally {
       setChangelogLoading(false);
+    }
+  };
+  const handleChangelogEnabledChange = async (checked) => {
+    const value = checked ? 'true' : 'false';
+    setLoadingInput((loadingInput) => ({
+      ...loadingInput,
+      ChangelogEnabled: true,
+    }));
+    try {
+      const res = await API.put('/api/option/', {
+        key: 'ChangelogEnabled',
+        value,
+      });
+      const { success, message } = res.data || {};
+      if (!success) {
+        showError(message || t('设置保存失败'));
+        return;
+      }
+      setInputs((inputs) => ({ ...inputs, ChangelogEnabled: value }));
+      statusDispatch({
+        type: 'set',
+        payload: {
+          ...(statusState?.status || {}),
+          changelog_enabled: checked,
+        },
+      });
+      showSuccess(t('设置已保存'));
+    } catch (error) {
+      showError(error?.message || t('设置保存失败'));
+    } finally {
+      setLoadingInput((loadingInput) => ({
+        ...loadingInput,
+        ChangelogEnabled: false,
+      }));
     }
   };
   const openCreateChangelogModal = () => {
@@ -349,6 +386,31 @@ const OtherSetting = ({ activeSection = 'system-info' }) => {
       showError(error?.message || t('删除更新日志失败'));
     }
   };
+  const renderChangelogHeader = () => (
+    <div className='flex w-full items-center justify-between gap-3'>
+      <Text strong>{t('更新日志')}</Text>
+      <Space align='center'>
+        <Text>{t('启用')}</Text>
+        <Switch
+          checked={
+            inputs.ChangelogEnabled === true ||
+            inputs.ChangelogEnabled === 'true'
+          }
+          loading={loadingInput.ChangelogEnabled}
+          onChange={handleChangelogEnabledChange}
+        />
+        <Text type='tertiary'>
+          {inputs.ChangelogEnabled === true ||
+          inputs.ChangelogEnabled === 'true'
+            ? t('已启用')
+            : t('已禁用')}
+        </Text>
+        <Button type='primary' onClick={openCreateChangelogModal}>
+          {t('新增更新日志')}
+        </Button>
+      </Space>
+    </div>
+  );
   const changelogColumns = [
     {
       title: t('日期'),
@@ -996,13 +1058,8 @@ const OtherSetting = ({ activeSection = 'system-info' }) => {
               display: activeSection === 'changelog' ? undefined : 'none',
             }}
           >
-            <Form.Section text={t('更新日志')}>
+            <Form.Section text={renderChangelogHeader()}>
               <Space vertical align='start' style={{ width: '100%' }}>
-                <Space wrap>
-                  <Button type='primary' onClick={openCreateChangelogModal}>
-                    {t('新增更新日志')}
-                  </Button>
-                </Space>
                 <Table
                   rowKey='id'
                   columns={changelogColumns}

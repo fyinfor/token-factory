@@ -66,6 +66,7 @@ func InitOptionMap() {
 	common.OptionMap["About"] = ""
 	common.OptionMap["AboutEn"] = ""
 	common.OptionMap["HomePageContent"] = ""
+	common.OptionMap["ChangelogEnabled"] = "false"
 	common.OptionMap["HomeHeroCarouselEnabled"] = "false"
 	common.OptionMap["HomeHeroCarouselSlides"] = "[]"
 	common.OptionMap["HomeHeroCarouselIntervalSec"] = "5"

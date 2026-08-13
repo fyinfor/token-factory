@@ -27,6 +27,7 @@ const Navigation = ({
   isLoading,
   userState,
   pricingRequireAuth,
+  t,
 }) => {
   const location = useLocation();
 
@@ -41,7 +42,7 @@ const Navigation = ({
 
   const renderNavLinks = () => {
     const baseClasses =
-      'flex-shrink-0 flex items-center text-sm font-medium transition-all duration-200 ease-in-out rounded-md';
+      'flex-shrink-0 flex items-center text-sm font-medium transition-colors duration-200 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-semi-color-primary';
     const spacingClasses = isMobile ? 'px-2 py-1' : 'px-3 py-2';
     const hoverClasses =
       'hover:!bg-semi-color-fill-1 dark:hover:!bg-gray-700/50 hover:!text-semi-color-text-0 dark:hover:!text-white';
@@ -82,6 +83,7 @@ const Navigation = ({
         <Link
           key={link.itemKey}
           to={targetPath}
+          aria-current={active ? 'page' : undefined}
           className={`${baseClasses} ${spacingClasses} ${hoverClasses} ${activeClasses}`}
         >
           {linkContent}
@@ -91,7 +93,10 @@ const Navigation = ({
   };
 
   return (
-    <nav className='hidden md:flex items-center gap-1 overflow-x-auto whitespace-nowrap scrollbar-hide'>
+    <nav
+      className='hidden min-w-0 flex-1 items-center justify-end gap-1 overflow-x-auto whitespace-nowrap scrollbar-hide xl:flex'
+      aria-label={t('页面导航')}
+    >
       <SkeletonWrapper
         loading={isLoading}
         type='navigation'
