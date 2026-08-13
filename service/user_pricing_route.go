@@ -343,13 +343,27 @@ func BuildWithinCapChannelBindings(modelName string, totalPercent float64) []mod
 	return out
 }
 
-// ConvertUserModelPricingToChannelList 将指定价改为 channel_list：
-// 每个模型勾选当前未超指定售价的渠道，并按单价升序。
+// ConvertUserModelPricingToChannelList 将指定价改为 channel_list（兼容旧调用）。
 // modelNames 为空时处理该用户全部配置；非空时仅处理名单内模型。
-// 无可用渠道的模型跳过（保留原配置）。
 func ConvertUserModelPricingToChannelList(userID int, modelNames []string) (converted, skipped int, items []UserModelPricingConvertItem, err error) {
+	return ConvertUserModelPricingMode(userID, modelNames, model.UserPricingModeChannelList)
+}
+
+// ConvertUserModelPricingMode 批量切换选路模式。
+//   - targetMode=channel_list：每模型勾选未超指定售价渠道，按单价升序；无可用渠道则跳过。
+//   - targetMode=price_cap：改回价格上限并清空渠道清单。
+// modelNames 为空 / 不传时默认处理该用户全部配置（「默认不选 = 全切」）。
+func ConvertUserModelPricingMode(userID int, modelNames []string, targetMode string) (converted, skipped int, items []UserModelPricingConvertItem, err error) {
 	if userID <= 0 {
 		return 0, 0, nil, errors.New("invalid user_id")
+	}
+	switch strings.TrimSpace(targetMode) {
+	case "", model.UserPricingModeChannelList:
+		targetMode = model.UserPricingModeChannelList
+	case model.UserPricingModePriceCap:
+		targetMode = model.UserPricingModePriceCap
+	default:
+		return 0, 0, nil, errors.New("target_mode 须为 price_cap 或 channel_list")
 	}
 	rows, err := model.ListUserModelPricingOverrides(userID, "")
 	if err != nil {
@@ -366,6 +380,7 @@ func ConvertUserModelPricingToChannelList(userID int, modelNames []string) (conv
 	useFilter := len(filter) > 0
 
 	items = make([]UserModelPricingConvertItem, 0, len(rows))
+	touched := false
 	for _, row := range rows {
 		if useFilter {
 			if _, ok := filter[row.ModelName]; !ok {
@@ -373,6 +388,30 @@ func ConvertUserModelPricingToChannelList(userID int, modelNames []string) (conv
 			}
 		}
 		prevMode := row.NormalizedMode()
+		ov := row
+
+		if targetMode == model.UserPricingModePriceCap {
+			ov.Mode = model.UserPricingModePriceCap
+			if _, upsertErr := model.UpsertUserModelPricingOverrideWithChannelsOpt(&ov, nil, false); upsertErr != nil {
+				skipped++
+				items = append(items, UserModelPricingConvertItem{
+					ModelName:    row.ModelName,
+					Skipped:      true,
+					SkipReason:   upsertErr.Error(),
+					PreviousMode: prevMode,
+				})
+				continue
+			}
+			touched = true
+			converted++
+			items = append(items, UserModelPricingConvertItem{
+				ModelName:    row.ModelName,
+				ChannelCount: 0,
+				PreviousMode: prevMode,
+			})
+			continue
+		}
+
 		bindings := BuildWithinCapChannelBindings(row.ModelName, row.TotalPercent())
 		if len(bindings) == 0 {
 			skipped++
@@ -384,9 +423,8 @@ func ConvertUserModelPricingToChannelList(userID int, modelNames []string) (conv
 			})
 			continue
 		}
-		ov := row
 		ov.Mode = model.UserPricingModeChannelList
-		if _, upsertErr := model.UpsertUserModelPricingOverrideWithChannels(&ov, bindings); upsertErr != nil {
+		if _, upsertErr := model.UpsertUserModelPricingOverrideWithChannelsOpt(&ov, bindings, false); upsertErr != nil {
 			skipped++
 			items = append(items, UserModelPricingConvertItem{
 				ModelName:    row.ModelName,
@@ -396,12 +434,16 @@ func ConvertUserModelPricingToChannelList(userID int, modelNames []string) (conv
 			})
 			continue
 		}
+		touched = true
 		converted++
 		items = append(items, UserModelPricingConvertItem{
 			ModelName:    row.ModelName,
 			ChannelCount: len(bindings),
 			PreviousMode: prevMode,
 		})
+	}
+	if touched {
+		model.InvalidateUserModelPricingCache()
 	}
 	if useFilter && converted == 0 && skipped == 0 {
 		return 0, 0, items, errors.New("所选模型均不在该用户指定价配置中")
