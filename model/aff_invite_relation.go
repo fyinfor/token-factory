@@ -17,6 +17,7 @@ import (
 
 // AffInviteRelation 邀请人与被邀请人关系表：为每个被邀请人单独配置充值分销比例。
 // CommissionRatioBps 存储单位为万分之一（相对于「百分比」）：1 表示 0.01%，100 表示 1%，10000 表示 100%。
+// 0 表示未设置关系级覆盖，结算时跟随邀请人的当前默认比例或系统默认比例。
 type AffInviteRelation struct {
 	Id                    int `json:"id" gorm:"primaryKey;autoIncrement"`
 	InviterId             int `json:"inviter_id" gorm:"not null;uniqueIndex:idx_aff_inv_pair"`
@@ -50,16 +51,10 @@ type AffInviteeListItem struct {
 	CreatedAt              int64  `json:"created_at"` // 邀请关系建立时间（aff_invite_relations.created_at）
 }
 
-func defaultCommissionBpsForNewInviteRelation(inviterId int) int {
-	var inviter User
-	err := DB.Select("id", "role", "distributor_commission_bps", "is_distributor").Where("id = ?", inviterId).First(&inviter).Error
-	if err != nil {
-		return common.AffiliateDefaultCommissionBps
-	}
-	if UserIsDistributor(&inviter) && inviter.DistributorCommissionBps > 0 {
-		return inviter.DistributorCommissionBps
-	}
-	return common.AffiliateDefaultCommissionBps
+func defaultCommissionBpsForNewInviteRelation(_ int) int {
+	// 新关系不固化邀请当时的默认比例。普通用户后续升级为分销商时，
+	// 以及分销商默认比例后续调整时，均从下一笔结算开始采用最新配置。
+	return 0
 }
 
 func defaultModelMarkupDiscountRateForNewInviteRelation(db *gorm.DB, inviterId int) string {
@@ -79,7 +74,7 @@ func defaultModelMarkupDiscountRateForNewInviteRelation(db *gorm.DB, inviterId i
 	return raw
 }
 
-// EnsureAffInviteRelation 注册成功后建立关系行，比例初始为系统默认或分销商单独默认。
+// EnsureAffInviteRelation 注册成功后建立关系行。比例 0 表示跟随结算时的当前默认配置。
 func EnsureAffInviteRelation(inviterId, inviteeUserId int) error {
 	if inviterId <= 0 || inviteeUserId <= 0 {
 		return nil
@@ -136,8 +131,8 @@ func BackfillAffInviteRelationsFromUsers() error {
 }
 
 // EffectiveAffiliateCommissionBps 计算邀请人对某一被邀请人生效的分销比例（万分之一）。
-// 与充值分成、利润分成（加价切片分润）共用同一套优先级：分销商账号 distributor_commission_bps > 0 优先，
-// 否则 aff_invite_relations.commission_ratio_bps（>0），否则系统 AffiliateDefaultCommissionBps。
+// 与充值分成、利润分成（加价切片分润）共用同一套优先级：分销商账号 distributor_commission_bps（>0）优先，
+// 其次为历史关系级比例（>0），最后为系统 AffiliateDefaultCommissionBps。新关系写 0，不固化创建时的默认比例。
 func EffectiveAffiliateCommissionBps(inviter *User, inviteeUserId int) int {
 	return effectiveAffiliateCommissionBps(inviter, inviteeUserId)
 }
@@ -145,28 +140,30 @@ func EffectiveAffiliateCommissionBps(inviter *User, inviteeUserId int) int {
 // effectiveAffiliateCommissionBps（内部）：充值与利润分成逻辑一致。
 func effectiveAffiliateCommissionBps(inviter *User, inviteeUserId int) int {
 	if inviter == nil || inviter.Id <= 0 {
-		return common.AffiliateDefaultCommissionBps
+		return clampAffiliateCommissionBps(common.AffiliateDefaultCommissionBps)
 	}
 	if UserIsDistributor(inviter) && inviter.DistributorCommissionBps > 0 {
-		bps := inviter.DistributorCommissionBps
-		if bps > maxAffiliateCommissionBps {
-			bps = maxAffiliateCommissionBps
-		}
-		return bps
+		return clampAffiliateCommissionBps(inviter.DistributorCommissionBps)
 	}
 	var rel AffInviteRelation
 	err := DB.Where("inviter_id = ? AND invitee_user_id = ?", inviter.Id, inviteeUserId).First(&rel).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return common.AffiliateDefaultCommissionBps
-		}
+	if err == nil && rel.CommissionRatioBps > 0 {
+		return clampAffiliateCommissionBps(rel.CommissionRatioBps)
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		common.SysError("effectiveAffiliateCommissionBps: " + err.Error())
-		return common.AffiliateDefaultCommissionBps
 	}
-	if rel.CommissionRatioBps <= 0 {
-		return common.AffiliateDefaultCommissionBps
+	return clampAffiliateCommissionBps(common.AffiliateDefaultCommissionBps)
+}
+
+func clampAffiliateCommissionBps(bps int) int {
+	if bps < 0 {
+		return 0
 	}
-	return rel.CommissionRatioBps
+	if bps > maxAffiliateCommissionBps {
+		return maxAffiliateCommissionBps
+	}
+	return bps
 }
 
 // ApplyAffiliateTopupReward 被邀请用户获得充值额度 quotaAdded 后，按 effectiveAffiliateCommissionBps 将提成记入邀请人 aff_quota / aff_history（不增加 quota）。
@@ -279,6 +276,12 @@ func ListAffInvitees(inviterId int, keyword string, pageInfo *common.PageInfo) (
 		relCreatedMap[r.InviteeUserId] = r.CreatedAt
 	}
 	defaultBps := common.AffiliateDefaultCommissionBps
+	var inviter User
+	if err := DB.Select("id", "role", "is_distributor", "distributor_commission_bps").Where("id = ?", inviterId).First(&inviter).Error; err == nil {
+		if UserIsDistributor(&inviter) && inviter.DistributorCommissionBps > 0 {
+			defaultBps = clampAffiliateCommissionBps(inviter.DistributorCommissionBps)
+		}
+	}
 	items := make([]AffInviteeListItem, 0, len(users))
 	for _, u := range users {
 		bps, ok := bpsMap[u.Id]
@@ -392,7 +395,11 @@ func UnbindDistributorInvitee(inviterId, inviteeUserId, operatorId int, reason s
 			CreatedAt:               common.GetTimestamp(),
 		}
 		if log.CommissionRatioBps <= 0 {
-			log.CommissionRatioBps = defaultCommissionBpsForNewInviteRelation(inviterId)
+			if inviter.DistributorCommissionBps > 0 {
+				log.CommissionRatioBps = clampAffiliateCommissionBps(inviter.DistributorCommissionBps)
+			} else {
+				log.CommissionRatioBps = clampAffiliateCommissionBps(common.AffiliateDefaultCommissionBps)
+			}
 		}
 		if err := tx.Create(&log).Error; err != nil {
 			return err

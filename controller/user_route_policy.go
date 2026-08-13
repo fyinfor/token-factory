@@ -183,6 +183,12 @@ func UserUpsertRouteWeight(c *gin.Context) {
 		return
 	}
 
+	// 用户指定价约束：不可配置未放行渠道的权重。
+	if !service.UserRouteChannelVisibleInGroup(userID, req.GroupKey, req.ChannelID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "该渠道不在您的可用渠道范围内"})
+		return
+	}
+
 	enabled := true
 	if req.Enabled != nil {
 		enabled = *req.Enabled

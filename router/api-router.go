@@ -125,6 +125,8 @@ func SetApiRouter(router *gin.Engine) {
 			distributorAdminRoute.PUT("/distributors/:id/application", controller.PutDistributorApplicationByUserAdmin)
 			distributorAdminRoute.PUT("/distributors/:id/commission", controller.PutDistributorCommissionAdmin)
 			distributorAdminRoute.GET("/distributors/:id/invitees", controller.GetDistributorInviteesAdmin)
+			distributorAdminRoute.GET("/distributors/:id/bindable-user", controller.GetDistributorBindableUserAdmin)
+			distributorAdminRoute.POST("/distributors/:id/invitees/bind", controller.PostDistributorInviteeBindAdmin)
 			distributorAdminRoute.GET("/distributors/:id/invitee-unbind-logs", controller.GetDistributorInviteeUnbindLogsAdmin)
 			distributorAdminRoute.GET("/distributors/:id/invitees/:invitee_id/profit-shares", controller.GetDistributorInviteeProfitSharesAdmin)
 			distributorAdminRoute.POST("/distributors/:id/invitees/:invitee_id/unbind", controller.PostDistributorInviteeUnbindAdmin)
@@ -320,6 +322,7 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.DELETE("/:id/bindings/:binding_type", controller.AdminClearUserBinding)
 				adminRoute.GET("/check_phone", controller.AdminCheckPhoneAvailable)
 				adminRoute.GET("/:id", controller.GetUser)
+				adminRoute.GET("/:id/ordinary-invite-preview", controller.GetUserOrdinaryInvitePreview)
 				adminRoute.GET("/:id/log/export", controller.ExportUserLogsAdmin)
 				adminRoute.POST("/log/export_all", controller.ExportAllUsersLogsAdmin)
 				adminRoute.POST("/", controller.CreateUser)
@@ -393,6 +396,7 @@ func SetApiRouter(router *gin.Engine) {
 			computePageAdminRoute.GET("/", controller.AdminGetComputePageConfig)
 			computePageAdminRoute.PUT("/enabled", controller.AdminUpdateComputePageEnabled)
 			computePageAdminRoute.PUT("/javascript", controller.AdminUpdateComputePageJavaScript)
+			computePageAdminRoute.PUT("/popups", controller.AdminUpdateComputePagePopups)
 			computePageAdminRoute.POST("/content", controller.AdminUploadComputePageHTML)
 		}
 
@@ -445,6 +449,7 @@ func SetApiRouter(router *gin.Engine) {
 			userModelPricingRoute.GET("/export", controller.ExportUserModelPricing)
 			userModelPricingRoute.POST("/", controller.UpsertUserModelPricing)
 			userModelPricingRoute.POST("/import", controller.ImportUserModelPricing)
+			userModelPricingRoute.POST("/convert_channel_list", controller.ConvertUserModelPricingToChannelList)
 			userModelPricingRoute.DELETE("/by_user/:user_id", controller.DeleteUserModelPricingByUser)
 			userModelPricingRoute.DELETE("/:id", controller.DeleteUserModelPricing)
 		}

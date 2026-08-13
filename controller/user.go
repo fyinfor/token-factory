@@ -25,6 +25,7 @@ import (
 
 	"github.com/gin-contrib/sessions"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type LoginRequest struct {
@@ -397,7 +398,6 @@ func Register(c *gin.Context) {
 		Username:    req.Username,
 		Password:    req.Password,
 		DisplayName: req.Username,
-		InviterId:   inviterId,
 		Role:        common.RoleCommonUser, // 明确设置角色为普通用户
 		Phone:       req.Phone,
 		Email:       req.Email,
@@ -508,6 +508,30 @@ func GetUser(c *gin.Context) {
 		"data":    user,
 	})
 	return
+}
+
+// GetUserOrdinaryInvitePreview 管理员在直接开通代理前查看该用户历史普通邀请的可转换情况。
+func GetUserOrdinaryInvitePreview(c *gin.Context) {
+	id, err := strconv.Atoi(c.Param("id"))
+	if err != nil || id <= 0 {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+	user, err := model.GetUserById(id, false)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if user.Role >= common.RoleAdminUser {
+		common.ApiErrorMsg(c, "管理员账号不能开通代理")
+		return
+	}
+	preview, err := model.GetOrdinaryInviteConversionPreview(id)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, preview)
 }
 
 // AdminCheckPhoneAvailable 管理端校验手机号是否未被他人占用：新建时不传 exclude_id；编辑用户时传 exclude_id 为当前用户 ID。
@@ -653,8 +677,8 @@ func GetAffCode(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	if !model.UserIsDistributor(user) {
-		common.ApiErrorMsg(c, "仅分销商可使用邀请链接")
+	if user.Status != common.UserStatusEnabled || user.Role >= common.RoleAdminUser {
+		common.ApiErrorMsg(c, "当前账号不可参与邀请活动")
 		return
 	}
 	if user.AffCode == "" {
@@ -667,10 +691,30 @@ func GetAffCode(c *gin.Context) {
 			return
 		}
 	}
+	ordinaryInviteCount, err := model.CountOrdinaryInvitees(user.Id)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	distributorInviteCount := int64(0)
+	if model.UserIsDistributor(user) {
+		distributorInviteCount, err = model.CountAffInvitees(user.Id)
+		if err != nil {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+			return
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "",
-		"data":    user.AffCode,
+		"success":                  true,
+		"message":                  "",
+		"data":                     user.AffCode,
+		"aff_code":                 user.AffCode,
+		"aff_count":                ordinaryInviteCount,
+		"ordinary_invite_count":    ordinaryInviteCount,
+		"distributor_invite_count": distributorInviteCount,
+		"inviter_reward_quota":     common.QuotaForInviter,
+		"invitee_reward_quota":     common.QuotaForInvitee,
+		"is_distributor":           model.UserIsDistributor(user),
 	})
 	return
 }
@@ -1848,9 +1892,10 @@ func CreateUser(c *gin.Context) {
 }
 
 type ManageRequest struct {
-	Id          int    `json:"id"`
-	Action      string `json:"action"`
-	RewardQuota int    `json:"reward_quota,omitempty"`
+	Id                     int    `json:"id"`
+	Action                 string `json:"action"`
+	RewardQuota            int    `json:"reward_quota,omitempty"`
+	ConvertOrdinaryInvites bool   `json:"convert_ordinary_invites"`
 }
 
 // ManageUser 管理员对用户启用/禁用、删除、提升/降级身份；分销商资格使用 is_distributor 与 set_distributor / unset_distributor。
@@ -2062,7 +2107,28 @@ func ManageUser(c *gin.Context) {
 		return
 	}
 
-	if err := user.Update(false); err != nil {
+	var ordinaryInviteConversion *model.OrdinaryInviteConversionResult
+	if req.Action == "set_distributor" {
+		err := model.DB.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Model(&model.User{}).Where("id = ?", user.Id).
+				Update("is_distributor", common.DistributorFlagYes).Error; err != nil {
+				return err
+			}
+			user.IsDistributor = common.DistributorFlagYes
+			if req.ConvertOrdinaryInvites {
+				converted, err := model.ConvertOrdinaryInvitesToDistributor(tx, user.Id, c.GetInt("id"))
+				if err != nil {
+					return err
+				}
+				ordinaryInviteConversion = converted
+			}
+			return nil
+		})
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+	} else if err := user.Update(false); err != nil {
 		common.ApiError(c, err)
 		return
 	}
@@ -2107,11 +2173,12 @@ func ManageUser(c *gin.Context) {
 		"success": true,
 		"message": "",
 		"data": gin.H{
-			"role":           user.Role,
-			"status":         user.Status,
-			"is_distributor": user.IsDistributor,
-			"is_student":     user.IsStudent,
-			"student_status": user.StudentStatus,
+			"role":                       user.Role,
+			"status":                     user.Status,
+			"is_distributor":             user.IsDistributor,
+			"is_student":                 user.IsStudent,
+			"student_status":             user.StudentStatus,
+			"ordinary_invite_conversion": ordinaryInviteConversion,
 		},
 	})
 	return

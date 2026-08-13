@@ -32,11 +32,12 @@ func PostAffiliateTrack(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": true})
 		return
 	}
-	inviterId, err := model.GetUserIdByAffCode(aff)
-	if err != nil || inviterId <= 0 {
+	inviter, err := model.GetInviterByAffCode(aff)
+	if err != nil || inviter == nil || !model.UserIsDistributor(inviter) {
 		c.JSON(http.StatusOK, gin.H{"success": true})
 		return
 	}
+	inviterId := inviter.Id
 	day := time.Now().UTC().Format("2006-01-02")
 	var incErr error
 	if ev == "short_link_click" {
