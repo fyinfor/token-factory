@@ -62,6 +62,11 @@ type PriceData struct {
 	// GlobalCreateCacheRatio 全局缓存创建倍率，用于缓存写入侧加价计算
 	// 新公式缓存创建加价部分 = globalMr × GlobalCreateCacheRatio × markupRate%
 	GlobalCreateCacheRatio float64
+	// GlobalImageRatio / GlobalAudioRatio / GlobalAudioCompletionRatio are
+	// official sub-ratio snapshots used by historical billing exports.
+	GlobalImageRatio           float64
+	GlobalAudioRatio           float64
+	GlobalAudioCompletionRatio float64
 
 	// Video rule billing snapshot. Used by async task settlement/profit share to
 	// keep per-task billing stable when pricing settings change after submit.

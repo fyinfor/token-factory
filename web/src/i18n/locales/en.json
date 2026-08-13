@@ -7226,5 +7226,16 @@
   "该用户可以直接绑定，无需用户确认": "This user can be bound directly without confirmation",
   "确认绑定": "Confirm binding",
   "管理员绑定后立即生效，无需用户确认。仅支持尚未绑定代理的普通用户。": "Admin binding takes effect immediately without user confirmation. Only regular users who are not already bound to an agent are supported.",
-  "输入普通用户的用户名或手机号，按回车搜索": "Enter a regular user's username or phone number and press Enter to search"
+  "输入普通用户的用户名或手机号，按回车搜索": "Enter a regular user's username or phone number and press Enter to search",
+  "导出计费汇总": "Export Billing Summary",
+  "计费汇总导出成功": "Billing summary exported successfully",
+  "计费汇总导出失败": "Failed to export billing summary",
+  "请选择完整的导出时间范围": "Select a complete export time range",
+  "导出时间范围无效": "The export time range is invalid",
+  "工作簿按文本、视频、图片、音频拆分；视频按秒、图片按张等项目会显示真实计费单位。": "The workbook is split into text, video, image, and audio sheets. Per-second video and per-image charges use their actual billing units.",
+  "导出时间范围": "Export time range",
+  "汇总粒度": "Summary granularity",
+  "整个时间范围": "Entire time range",
+  "按日": "By day",
+  "按月": "By month"
 }

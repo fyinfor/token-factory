@@ -407,13 +407,21 @@ func parseLogExportQuery(c *gin.Context) (logExportQuery, error) {
 }
 
 func parseLogExportQueryWithMaxWindow(c *gin.Context, maxWindow int64, rangeLimitLabel string) (logExportQuery, error) {
-	var q logExportQuery
 	if maxWindow <= 0 {
 		maxWindow = logExportMaxWindowSeconds
 	}
 	if rangeLimitLabel == "" {
 		rangeLimitLabel = "最多 3 个月"
 	}
+	return parseLogExportQueryWithWindow(c, maxWindow, rangeLimitLabel, true)
+}
+
+func parseLogExportQueryWithoutMaxWindow(c *gin.Context) (logExportQuery, error) {
+	return parseLogExportQueryWithWindow(c, logExportMaxWindowSeconds, "", false)
+}
+
+func parseLogExportQueryWithWindow(c *gin.Context, defaultWindow int64, rangeLimitLabel string, enforceMaxWindow bool) (logExportQuery, error) {
+	var q logExportQuery
 	if s := c.Query("start_timestamp"); s != "" {
 		v, perr := strconv.ParseInt(s, 10, 64)
 		if perr != nil || v < 0 {
@@ -434,12 +442,12 @@ func parseLogExportQueryWithMaxWindow(c *gin.Context, maxWindow int64, rangeLimi
 		q.EndTs = now
 	}
 	if q.StartTs == 0 {
-		q.StartTs = q.EndTs - maxWindow
+		q.StartTs = q.EndTs - defaultWindow
 	}
 	if q.EndTs < q.StartTs {
 		return q, fmt.Errorf("end_timestamp 早于 start_timestamp")
 	}
-	if q.EndTs-q.StartTs > maxWindow {
+	if enforceMaxWindow && q.EndTs-q.StartTs > defaultWindow {
 		return q, fmt.Errorf("时间范围超出限制(%s)", rangeLimitLabel)
 	}
 	q.ModelName = c.Query("model_name")
