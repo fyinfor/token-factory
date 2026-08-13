@@ -881,6 +881,12 @@ export default function UserModelPricingSettings() {
   const maxPage = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE) || 1);
   const safePage = Math.min(currentPage, maxPage);
 
+  // Semi Table 在传入 currentPage 的受控分页下不会自动切片 dataSource，需自行切当前页
+  const pagedItems = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE;
+    return filteredItems.slice(start, start + PAGE_SIZE);
+  }, [filteredItems, safePage]);
+
   useEffect(() => {
     if (currentPage !== safePage) {
       setCurrentPage(safePage);
@@ -1222,7 +1228,7 @@ export default function UserModelPricingSettings() {
           </div>
           <Table
             columns={columns}
-            dataSource={filteredItems}
+            dataSource={pagedItems}
             loading={loading}
             rowKey='id'
             scroll={{ x: 1400 }}
@@ -1231,7 +1237,7 @@ export default function UserModelPricingSettings() {
               pageSize: PAGE_SIZE,
               total: filteredItems.length,
               showSizeChanger: false,
-              onPageChange: (page) => setCurrentPage(page),
+              onChange: (page) => setCurrentPage(page),
             }}
             empty={t('该用户暂无指定价，可用「一键导入当前折扣」从最便宜渠道批量绑定')}
           />
