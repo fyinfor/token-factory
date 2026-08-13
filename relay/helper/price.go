@@ -101,10 +101,11 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 		globalCreateCacheRatio = 1.25
 	}
 
-	// 用户指定价：命中时三折扣替换为用户级覆盖值，计费基价改用全局官方价（渠道无关），
+	// 用户指定价（非代理）：三折扣替换为用户级覆盖值，计费基价改用全局官方价（渠道无关），
 	// 最终价 = 全局官方价 × (成本折扣 + 经营成本 + 加价折扣)，且不再叠加分组倍率。
+	// 代理身份：指定价只约束选路，计费仍走渠道成本（加价=0，见 ResolveEffectiveMarkup…）。
 	userPricingOverride := false
-	if ov, ok := model.GetEnabledUserModelPricingOverride(info.UserId, info.OriginModelName, pricingModelName); ok {
+	if ov, ok := model.GetEnabledUserModelPricingBillingOverride(info.UserId, info.OriginModelName, pricingModelName); ok {
 		userPricingOverride = true
 		rawDisc = ov.PriceDiscountPercent
 		operatingCost = ov.OperatingCostPercent
@@ -313,9 +314,10 @@ func ModelPriceHelperPerCall(c *gin.Context, info *relaycommon.RelayInfo) (types
 	rawDisc, operatingCost, chDisc := resolveChannelCostPercents(channelID)
 	markupDisc := effectiveMarkupDiscountPercent(c, info, channelID, pricingModelName)
 	globalPrice, _ := ratio_setting.GetModelPrice(pricingModelName, false)
-	// 用户指定价：三折扣替换为用户覆盖值，基价替换为全局官方固定价，分组倍率强制为 1。
+	// 用户指定价（非代理）：三折扣替换为用户覆盖值，基价替换为全局官方固定价，分组倍率强制为 1。
+	// 代理身份：指定价只约束选路，计费仍走渠道成本价。
 	userPricingOverride := false
-	if ov, ok := model.GetEnabledUserModelPricingOverride(info.UserId, info.OriginModelName, pricingModelName); ok {
+	if ov, ok := model.GetEnabledUserModelPricingBillingOverride(info.UserId, info.OriginModelName, pricingModelName); ok {
 		userPricingOverride = true
 		rawDisc = ov.PriceDiscountPercent
 		operatingCost = ov.OperatingCostPercent

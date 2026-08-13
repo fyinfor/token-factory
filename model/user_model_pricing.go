@@ -12,8 +12,9 @@ import (
 
 // ── 用户指定价（用户 × 模型 维度的三折扣覆盖）────────────────────
 //
-// 命中覆盖时，该用户调用该模型的计费改为「全局官方价 × (成本折扣 + 经营成本 + 加价折扣)」，
-// 与渠道无关。
+// 普通用户命中覆盖时，计费改为「全局官方价 × (成本折扣 + 经营成本 + 加价折扣)」，与渠道无关。
+// 代理身份（UserIsDistributor）命中覆盖时：计费不改写，自用仍按渠道成本价（加价=0）；
+// 指定价只约束选路 / 可见渠道（与 Mode 一致）。
 //
 // 选路 / 展示约束由 Mode 决定：
 //   - price_cap：排除「渠道有效单价 > 用户指定价上限」的渠道（默认）
@@ -195,12 +196,36 @@ func InvalidateUserModelPricingCache() {
 
 // GetEnabledUserModelPricingOverride 查询用户对某模型的启用中指定价。
 // 可传入多个候选模型名（如原始名与计价名），按顺序返回第一个命中的配置。
+// 注意：命中仅表示存在启用配置（选路/展示仍可用）；计费是否改写见 UserPricingBillingApplies。
 func GetEnabledUserModelPricingOverride(userId int, modelNames ...string) (UserModelPricingOverride, bool) {
 	cached, ok := getEnabledUserModelPricingCached(userId, modelNames...)
 	if !ok {
 		return UserModelPricingOverride{}, false
 	}
 	return cached.Override, true
+}
+
+// UserPricingBillingApplies 指定价是否改写该用户的实扣计费。
+// 代理自用保持渠道成本价（加价=0），指定价仅作选路/可见渠道上限。
+func UserPricingBillingApplies(userId int) bool {
+	if userId <= 0 {
+		return false
+	}
+	u, err := GetUserById(userId, false)
+	if err != nil || u == nil {
+		// 查用户失败时保持「可改写计费」，与改造前行为一致，避免误放过。
+		return true
+	}
+	return !UserIsDistributor(u)
+}
+
+// GetEnabledUserModelPricingBillingOverride 返回应用于计费改写的指定价。
+// 无启用配置、或用户为代理（仅选路约束）时 ok=false。
+func GetEnabledUserModelPricingBillingOverride(userId int, modelNames ...string) (UserModelPricingOverride, bool) {
+	if !UserPricingBillingApplies(userId) {
+		return UserModelPricingOverride{}, false
+	}
+	return GetEnabledUserModelPricingOverride(userId, modelNames...)
 }
 
 // GetEnabledUserModelPricingChannels 返回 channel_list 模式下的勾选渠道（已按 priority 升序）。

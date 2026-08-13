@@ -370,7 +370,7 @@ func GetPricing(c *gin.Context) {
 		}
 	}
 
-	// 用户指定价：改写命中模型的渠道展示价为「全局官方价 × 用户折扣」，并隐藏超出上限的渠道。
+	// 用户指定价：普通用户改写展示为指定售价；代理仅过滤渠道并展示自用成本价；均隐藏未放行渠道。
 	if uid > 0 {
 		pricingData = model.ApplyUserPricingOverrideToPricingAPI(uid, pricingData)
 	}

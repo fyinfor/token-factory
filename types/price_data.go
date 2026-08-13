@@ -46,8 +46,9 @@ type PriceData struct {
 	OperatingCostPercent float64
 	// MarkupDiscountPercent 加价折扣率百分数（markup_discount_rate），如 5 表示 5%，默认 0
 	MarkupDiscountPercent float64
-	// UserPricingOverride 为 true 时表示本次计费命中「用户指定价」：三折扣为用户级覆盖值、
+	// UserPricingOverride 为 true 时表示本次计费命中「用户指定价」改写：三折扣为用户级覆盖值、
 	// 基价已替换为全局官方价（渠道无关）、分组倍率强制为 1，且不再套用阶梯计费。
+	// 代理身份不会置 true（指定价仅约束选路，自用仍按渠道成本价）。
 	UserPricingOverride bool
 	// GlobalModelRatio 全局模型输入倍率（不含渠道/分组覆盖），用于新计费公式加价部分
 	GlobalModelRatio float64
