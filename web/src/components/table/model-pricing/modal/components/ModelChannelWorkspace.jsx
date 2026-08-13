@@ -28,6 +28,10 @@ import {
   getUsedGroupContext,
   isASRPricingModel,
   markupRateFromPercent,
+  pickModelCNYPrices,
+  computeCNYEffectivePrices,
+  getUsdCnyExchangeRate,
+  resolvePricingDisplayCurrency,
 } from '../../../../../helpers';
 import {
   convertTierPriceToUSD,
@@ -48,6 +52,7 @@ import {
   getBestPriceDiscountPercent,
 } from '../../utils/discount';
 import { getChannelRouteModelName } from '../../utils/channelRoute';
+import { formatCurrencyAmount } from '../../components/PrecisePriceText';
 
 const { Text } = Typography;
 
@@ -289,6 +294,7 @@ const getChannelPriceSummary = ({
   groupRatio,
   displayPrice,
   tokenUnit,
+  currency,
   t,
 }) => {
   const { usedGroupRatio } = getUsedGroupContext(
@@ -404,6 +410,51 @@ const getChannelPriceSummary = ({
   }
 
   const isFixed = channel?.quota_type === 1 || modelData?.quota_type === 1;
+  const cnyPrices = pickModelCNYPrices(modelData, channel);
+  if (!isFixed && cnyPrices) {
+    const cnyEffective = computeCNYEffectivePrices({
+      channel: cnyPrices.channel,
+      global: cnyPrices.global,
+      priceDiscountPercent: channel?.price_discount_percent ?? 100,
+      markupDiscountPercent: channel?.markup_discount_rate || 0,
+    });
+    const displayCurrency = resolvePricingDisplayCurrency(currency);
+    const usdRate = getUsdCnyExchangeRate();
+    const formatCny = (amount) => {
+      const cny = Number(amount) * usedGroupRatio;
+      if (displayCurrency === 'CNY') {
+        return formatCurrencyAmount(cny, { currency: 'CNY' });
+      }
+      const usd = usdRate > 0 ? cny / usdRate : cny;
+      return displayPrice(usd);
+    };
+    const unit = tokenUnit === 'K' ? '/K' : '/M';
+    const rows = [];
+    if (cnyEffective.input > 0) {
+      rows.push({
+        key: 'input',
+        label: t('输入'),
+        value: `${formatCny(cnyEffective.input)}${unit}`,
+        discount: calculatePriceDiscountPercent(
+          cnyEffective.input,
+          cnyPrices.global.input,
+        ),
+      });
+    }
+    if (cnyEffective.output > 0 || cnyPrices.global.output > 0) {
+      rows.push({
+        key: 'output',
+        label: t('输出'),
+        value: `${formatCny(cnyEffective.output)}${unit}`,
+        discount: calculatePriceDiscountPercent(
+          cnyEffective.output,
+          cnyPrices.global.output,
+        ),
+      });
+    }
+    if (rows.length > 0) return buildChannelPriceSummary(rows);
+  }
+
   const billingRates = computeChannelBillingRates({
     channelModelRatio: channel?.model_ratio,
     channelCompletionRatio: channel?.completion_ratio,
@@ -601,6 +652,7 @@ const ModelChannelWorkspace = ({
               groupRatio: props.groupRatio,
               displayPrice: props.displayPrice,
               tokenUnit: props.tokenUnit,
+              currency: props.currency,
               t,
             });
             const priceRows = priceSummary.rows;

@@ -34,7 +34,9 @@ export const truncateModelPriceValue = (
   if (!Number.isFinite(numeric)) return 0;
   const digits = normalizePrecision(precision);
   const factor = 10 ** digits;
-  const truncated = Math.trunc(numeric * factor) / factor;
+  // 先吸附二进制浮点误差，再截断：避免 0.02×0.57 → 0.011399999… 被截成 0.011399
+  const snapped = Math.round(numeric * 1e12) / 1e12;
+  const truncated = Math.trunc(snapped * factor) / factor;
   return Object.is(truncated, -0) ? 0 : truncated;
 };
 

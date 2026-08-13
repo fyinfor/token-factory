@@ -40,6 +40,7 @@ import {
   pickModelCNYPrices,
   computeCNYEffectivePrices,
   getUsdCnyExchangeRate,
+  resolvePricingDisplayCurrency,
 } from '../../../../../helpers/billingFormula';
 import {
   getUsedGroupContext,
@@ -61,7 +62,6 @@ import PrecisePriceText, {
   formatPreciseCurrencyValue,
   formatPreciseUsdPrice,
   toDisplayCurrencyValue,
-  getDisplayCurrencyConfig,
 } from '../../components/PrecisePriceText';
 import {
   pickVideoFlatClipHintForChannel,
@@ -897,16 +897,21 @@ const ModelChannelList = ({
     const calculateCNYPrice = (cnyAmount, applyGroupRatio = true) => {
       const ratio = applyGroupRatio ? usedGroupRatio : 1;
       const cny = (Number(cnyAmount) || 0) * ratio;
-      const cfg = getDisplayCurrencyConfig();
+      const displayCurrency = resolvePricingDisplayCurrency(
+        currency || siteDisplayType,
+      );
       const unitDivisor = tokenUnit === 'K' ? 1000 : 1;
       const usdRate = getUsdCnyExchangeRate();
       const rawUsd = usdRate > 0 ? cny / usdRate : cny;
+      // 人民币标价在 CNY 展示下直接用 ¥/1M，禁止 CNY→USD→CNY 换汇（否则会跟官方价对不上）。
       const value =
-        cfg.type === 'CNY'
+        displayCurrency === 'CNY'
           ? cny / unitDivisor
           : toDisplayCurrencyValue(rawUsd, { tokenUnit });
-      const display = formatCurrencyAmount(value);
-      const exactDisplay = formatPreciseCurrencyValue(value);
+      const display = formatCurrencyAmount(value, { currency: displayCurrency });
+      const exactDisplay = formatPreciseCurrencyValue(value, {
+        currency: displayCurrency,
+      });
       const unitLabel = tokenUnit === 'K' ? 'K' : 'M';
       return {
         display,
@@ -915,21 +920,23 @@ const ModelChannelList = ({
         unitLabel,
         value,
         rawUsd,
+        cny,
       };
     };
 
     const makeCNYItem = (label, channelCNY, rootCNY) => {
       if (!hasRatioValue(channelCNY)) return null;
-      const current = calculateCNYPrice(Number(channelCNY));
+      // 价格信息表：平台价 / 官方价 / 折扣同一口径（不含分组倍率），
+      // 避免 ¥1 × 5.7折 与平台价因分组或换汇对不上。
+      const current = calculateCNYPrice(Number(channelCNY), false);
       let official = null;
       let discount = null;
       if (hasRatioValue(rootCNY) && Number(rootCNY) > 0) {
         const root = calculateCNYPrice(Number(rootCNY), false);
         official = root.display;
-        const channelOriginal = calculateCNYPrice(Number(channelCNY), false);
         discount = calculatePriceDiscountPercent(
-          channelOriginal.rawUsd,
-          root.rawUsd,
+          current.cny,
+          root.cny,
         );
       }
       return {
@@ -1181,6 +1188,95 @@ const ModelChannelList = ({
     const showImagePerImageTable = hasImagePerImageTierTable(iHint);
     const hideTextTokenPrices =
       isVideoPricingModel(modelData) || isASRPricingModel(modelData);
+
+    const cnyPrices = pickModelCNYPrices(modelData, channel);
+    if (!hideTextTokenPrices && cnyPrices) {
+      const costDisc =
+        (channel.price_discount_percent != null
+          ? channel.price_discount_percent
+          : 100) / 100;
+      const displayCurrency = resolvePricingDisplayCurrency(
+        currency || siteDisplayType,
+      );
+      const formatCostCNY = (cnyAmount) => {
+        const cny = Number(cnyAmount) || 0;
+        const usdRate = getUsdCnyExchangeRate();
+        const rawUsd = usdRate > 0 ? cny / usdRate : cny;
+        const unitDivisor = tokenUnit === 'K' ? 1000 : 1;
+        const value =
+          displayCurrency === 'CNY'
+            ? cny / unitDivisor
+            : toDisplayCurrencyValue(rawUsd, { tokenUnit });
+        const exact = formatPreciseCurrencyValue(value, {
+          currency: displayCurrency,
+        });
+        return {
+          value: formatCurrencyAmount(value, { currency: displayCurrency }),
+          exact,
+          unitLabel: tokenUnit === 'K' ? 'K' : 'M',
+        };
+      };
+      const makeCostCNYItem = (key, label, channelCNY, rootCNY) => {
+        if (!hasRatioValue(channelCNY) && !hasRatioValue(rootCNY)) {
+          return null;
+        }
+        const platformCNY = (Number(channelCNY) || 0) * costDisc;
+        const platform = formatCostCNY(platformCNY);
+        const official =
+          Number(rootCNY) > 0 ? formatCostCNY(rootCNY) : null;
+        const discount = calculatePriceDiscountPercent(platformCNY, rootCNY);
+        return {
+          key,
+          label,
+          value: platform.value,
+          valueTitle: platform.exact,
+          valueExact: platform.exact,
+          official: official?.value,
+          officialTitle: official?.exact,
+          officialExact: official?.exact,
+          priceUnitLabel: platform.unitLabel,
+          discount,
+          hasDiscount: discount > 0,
+        };
+      };
+      const items = [
+        makeCostCNYItem(
+          'input',
+          t('输入价格'),
+          cnyPrices.channel.input,
+          cnyPrices.global.input,
+        ),
+        cnyPrices.channel.output > 0 || cnyPrices.global.output > 0
+          ? makeCostCNYItem(
+              'output',
+              t('输出价格'),
+              cnyPrices.channel.output,
+              cnyPrices.global.output,
+            )
+          : null,
+        cnyPrices.channel.cacheRead > 0 || cnyPrices.global.cacheRead > 0
+          ? makeCostCNYItem(
+              'cache_read',
+              t('缓存读取价格'),
+              cnyPrices.channel.cacheRead,
+              cnyPrices.global.cacheRead,
+            )
+          : null,
+        cnyPrices.channel.cacheWrite > 0 || cnyPrices.global.cacheWrite > 0
+          ? makeCostCNYItem(
+              'cache_create',
+              t('缓存创建价格'),
+              cnyPrices.channel.cacheWrite,
+              cnyPrices.global.cacheWrite,
+            )
+          : null,
+      ].filter(Boolean);
+      return {
+        items,
+        videoHint: showVideoFlatTable ? vHint : null,
+        imageHint: showImagePerImageTable ? iHint : null,
+      };
+    }
 
     const costItems = computeChannelCostRates({
       channelId: channel.channel_id,

@@ -19,7 +19,10 @@ For commercial licensing, please contact support@quantumnous.com
 
 import React from 'react';
 import { Tooltip } from '@douyinfe/semi-ui';
-import { getBillingCurrencyConfig } from '../../../../helpers/billingFormula';
+import {
+  getBillingCurrencyConfig,
+  resolvePricingDisplayCurrency,
+} from '../../../../helpers/billingFormula';
 import {
   formatModelPriceNumber,
   MODEL_PRICE_MAX_DECIMALS,
@@ -33,6 +36,14 @@ export function getDisplayCurrencyConfig() {
   return getBillingCurrencyConfig();
 }
 
+function resolveDisplaySymbol(currency) {
+  const cfg = getDisplayCurrencyConfig();
+  const displayCurrency = resolvePricingDisplayCurrency(currency || cfg.type);
+  if (displayCurrency === 'CNY') return '¥';
+  if (displayCurrency === 'CUSTOM') return cfg.symbol || '¤';
+  return cfg.symbol || '$';
+}
+
 export function toDisplayCurrencyValue(usdAmount, { tokenUnit = 'M' } = {}) {
   const { rate } = getDisplayCurrencyConfig();
   const unitDivisor = tokenUnit === 'K' ? 1000 : 1;
@@ -42,15 +53,13 @@ export function toDisplayCurrencyValue(usdAmount, { tokenUnit = 'M' } = {}) {
 
 export function formatCurrencyAmount(
   value,
-  { precision = MODEL_PRICE_MAX_DECIMALS } = {},
+  { precision = MODEL_PRICE_MAX_DECIMALS, currency } = {},
 ) {
-  const { symbol } = getDisplayCurrencyConfig();
-  return `${symbol}${formatModelPriceNumber(value, precision)}`;
+  return `${resolveDisplaySymbol(currency)}${formatModelPriceNumber(value, precision)}`;
 }
 
-export function formatPreciseCurrencyValue(value) {
-  const { symbol } = getDisplayCurrencyConfig();
-  return `${symbol}${trimNumberText(value)}`;
+export function formatPreciseCurrencyValue(value, { currency } = {}) {
+  return `${resolveDisplaySymbol(currency)}${trimNumberText(value)}`;
 }
 
 export function formatPreciseUsdPrice(usdAmount, { tokenUnit = 'M' } = {}) {

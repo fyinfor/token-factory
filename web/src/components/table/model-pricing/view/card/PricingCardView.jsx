@@ -1689,6 +1689,7 @@ const PricingCardView = ({
         return {
           value: numericPrice,
           rawUsd: usd,
+          cny: Number(cnyAmount) || 0,
           symbol: '¥',
         };
       }
@@ -1701,15 +1702,6 @@ const PricingCardView = ({
 
     // 提取所有通道的价格（与 relay 一致：ch.model_ratio 已含渠道折扣；再乘分组倍率）
     const prices = {
-      input: [],
-      output: [],
-      cache: [],
-      createCache: [],
-      fixed: [],
-      videoFlat: [],
-      asrPrice: [],
-    };
-    const originalPrices = {
       input: [],
       output: [],
       cache: [],
@@ -1758,7 +1750,6 @@ const PricingCardView = ({
             : null;
       if (!skipSimpleVideoFlat && flatUsd != null && flatUsd > 0) {
         prices.videoFlat.push(formatPrice(flatUsd * usedGroupRatio));
-        originalPrices.videoFlat.push(formatPrice(flatUsd));
       }
 
       // ASR 语音识别：
@@ -1774,7 +1765,6 @@ const PricingCardView = ({
           const platformAsrUsd =
             channelAsrUsd * costDisc + globalAsrUsd * markupRate;
           prices.asrPrice.push(formatPrice(platformAsrUsd * usedGroupRatio));
-          originalPrices.asrPrice.push(formatPrice(platformAsrUsd));
         }
       }
 
@@ -1816,13 +1806,9 @@ const PricingCardView = ({
             prices.input.push(
               formatPriceFromCNY(cnyEffective.input * usedGroupRatio),
             );
-            originalPrices.input.push(formatPriceFromCNY(cnyEffective.input));
             if (cnyPrices.channel.output > 0 || cnyPrices.global.output > 0) {
               prices.output.push(
                 formatPriceFromCNY(cnyEffective.output * usedGroupRatio),
-              );
-              originalPrices.output.push(
-                formatPriceFromCNY(cnyEffective.output),
               );
             }
             if (
@@ -1832,9 +1818,6 @@ const PricingCardView = ({
               prices.cache.push(
                 formatPriceFromCNY(cnyEffective.cacheRead * usedGroupRatio),
               );
-              originalPrices.cache.push(
-                formatPriceFromCNY(cnyEffective.cacheRead),
-              );
             }
             if (
               cnyPrices.channel.cacheWrite > 0 ||
@@ -1843,18 +1826,12 @@ const PricingCardView = ({
               prices.createCache.push(
                 formatPriceFromCNY(cnyEffective.cacheWrite * usedGroupRatio),
               );
-              originalPrices.createCache.push(
-                formatPriceFromCNY(cnyEffective.cacheWrite),
-              );
             }
           }
         } else if (ch.model_ratio !== undefined && ch.model_ratio !== null) {
           if (!hideTextTokenPrices) {
             prices.input.push(
               formatPrice(billingRates.inputRatioPrice * usedGroupRatio),
-            );
-            originalPrices.input.push(
-              formatPrice(billingRates.inputRatioPrice),
             );
           }
 
@@ -1868,9 +1845,6 @@ const PricingCardView = ({
             prices.output.push(
               formatPrice(billingRates.completionRatioPrice * usedGroupRatio),
             );
-            originalPrices.output.push(
-              formatPrice(billingRates.completionRatioPrice),
-            );
           }
 
           // 缓存读取价格：仅当全局模型配置了 cache_ratio 时才展示
@@ -1882,9 +1856,6 @@ const PricingCardView = ({
           ) {
             prices.cache.push(
               formatPrice(billingRates.cacheRatioPrice * usedGroupRatio),
-            );
-            originalPrices.cache.push(
-              formatPrice(billingRates.cacheRatioPrice),
             );
           }
 
@@ -1900,9 +1871,6 @@ const PricingCardView = ({
                 billingRates.cacheCreationRatioPrice * usedGroupRatio,
               ),
             );
-            originalPrices.createCache.push(
-              formatPrice(billingRates.cacheCreationRatioPrice),
-            );
           }
         }
       }
@@ -1916,7 +1884,6 @@ const PricingCardView = ({
           prices.fixed.push(
             formatPrice(billingRates.effModelPrice * usedGroupRatio),
           );
-          originalPrices.fixed.push(formatPrice(billingRates.effModelPrice));
         }
       }
     });
@@ -1980,10 +1947,13 @@ const PricingCardView = ({
     const getOriginal = (rootPrice, channelPriceArray) => {
       if (!rootPrice || !channelPriceArray || channelPriceArray.length === 0)
         return null;
-      const rootValue = rootPrice.rawUsd ?? rootPrice.value;
-      const minChannel = Math.min(
-        ...channelPriceArray.map((p) => p.rawUsd ?? p.value),
-      );
+      const sameSymbol =
+        rootPrice.symbol &&
+        channelPriceArray.every((p) => p.symbol === rootPrice.symbol);
+      const pickAmount = (p) =>
+        sameSymbol ? Number(p.value) : (p.rawUsd ?? p.value);
+      const rootValue = pickAmount(rootPrice);
+      const minChannel = Math.min(...channelPriceArray.map(pickAmount));
       if (rootValue > minChannel && rootValue > 0) {
         const discount = Math.round((1 - minChannel / rootValue) * 100);
         return {
@@ -2036,17 +2006,15 @@ const PricingCardView = ({
       cache: calculateRange(prices.cache),
       createCache: calculateRange(prices.createCache),
       fixed: calculateRange(prices.fixed),
+      // 折扣与界面展示的平台价同一口径（含分组倍率），避免出现「5.7折但平台价≠官方价×0.57」
       original: {
-        input: getOriginal(rootPrices.input, originalPrices.input),
-        output: getOriginal(rootPrices.output, originalPrices.output),
-        cache: getOriginal(rootPrices.cache, originalPrices.cache),
-        createCache: getOriginal(
-          rootPrices.createCache,
-          originalPrices.createCache,
-        ),
-        fixed: getOriginal(rootPrices.fixed, originalPrices.fixed),
-        videoFlat: getOriginal(rootPrices.videoFlat, originalPrices.videoFlat),
-        asrPrice: getOriginal(rootPrices.asrPrice, originalPrices.asrPrice),
+        input: getOriginal(rootPrices.input, prices.input),
+        output: getOriginal(rootPrices.output, prices.output),
+        cache: getOriginal(rootPrices.cache, prices.cache),
+        createCache: getOriginal(rootPrices.createCache, prices.createCache),
+        fixed: getOriginal(rootPrices.fixed, prices.fixed),
+        videoFlat: getOriginal(rootPrices.videoFlat, prices.videoFlat),
+        asrPrice: getOriginal(rootPrices.asrPrice, prices.asrPrice),
       },
       videoFlat: calculateRange(prices.videoFlat),
       asrPrice: calculateRange(prices.asrPrice),

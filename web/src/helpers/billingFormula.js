@@ -702,9 +702,11 @@ export function getUsdCnyExchangeRate() {
 
 function readCNYUnitPrices(obj) {
   if (!obj || typeof obj !== 'object') return null;
-  if (String(obj.price_currency || '').toUpperCase() !== 'CNY') return null;
+  const currency = String(obj.price_currency || '').toUpperCase();
   const input = Number(obj.input_price_cny);
   if (!Number.isFinite(input) || input <= 0) return null;
+  // 显式 USD/CUSTOM 走倍率链路；缺省 currency 但带了人民币单价时仍按 CNY 展示。
+  if (currency && currency !== 'CNY') return null;
   return {
     input,
     output: Number(obj.output_price_cny) > 0 ? Number(obj.output_price_cny) : 0,
@@ -719,6 +721,14 @@ function readCNYUnitPrices(obj) {
   };
 }
 
+/** 定价页展示币种：优先用页面选择，其次站点额度展示类型。 */
+export function resolvePricingDisplayCurrency(currencyProp) {
+  const fromProp = String(currencyProp || '').toUpperCase();
+  if (['USD', 'CNY', 'CUSTOM'].includes(fromProp)) return fromProp;
+  const fromStatus = String(getBillingCurrencyConfig().type || '').toUpperCase();
+  return ['USD', 'CNY', 'CUSTOM'].includes(fromStatus) ? fromStatus : 'USD';
+}
+
 /** 读取模型/渠道人民币标价；渠道优先，缺省回退全局。 */
 export function pickModelCNYPrices(model, channel) {
   const global = readCNYUnitPrices(model);
@@ -728,6 +738,13 @@ export function pickModelCNYPrices(model, channel) {
     channel: ch || global,
     global: global || ch,
   };
+}
+
+/** 吸附乘除产生的二进制浮点噪声，保持 ¥/1M 十进制可读。 */
+function snapCNYUnitPrice(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(n * 1e12) / 1e12;
 }
 
 /** 人民币标价套用成本折扣 + 加价，结果仍为 ¥/1M。 */
@@ -742,12 +759,18 @@ export function computeCNYEffectivePrices({
   const ch = channel || global || {};
   const g = global || channel || {};
   return {
-    input: (ch.input || 0) * costDisc + (g.input || 0) * markupRate,
-    output: (ch.output || 0) * costDisc + (g.output || 0) * markupRate,
-    cacheRead:
+    input: snapCNYUnitPrice(
+      (ch.input || 0) * costDisc + (g.input || 0) * markupRate,
+    ),
+    output: snapCNYUnitPrice(
+      (ch.output || 0) * costDisc + (g.output || 0) * markupRate,
+    ),
+    cacheRead: snapCNYUnitPrice(
       (ch.cacheRead || 0) * costDisc + (g.cacheRead || 0) * markupRate,
-    cacheWrite:
+    ),
+    cacheWrite: snapCNYUnitPrice(
       (ch.cacheWrite || 0) * costDisc + (g.cacheWrite || 0) * markupRate,
+    ),
   };
 }
 
