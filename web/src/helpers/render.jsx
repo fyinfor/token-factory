@@ -1602,6 +1602,15 @@ function formatBillingUnitPrice(usdAmount) {
   return formatBillingUsdDisplay(usdAmount);
 }
 
+/** 消费日志详情单价：与计费过程同一套 6 位进一，避免缓存价被 2 位展示成 ¥0.01 */
+function formatConsumeLogDetailUnitPrice(usdAmount) {
+  const { symbol, rate, type } = getCurrencyConfig();
+  if (type === 'TOKENS') {
+    return formatBillingUsdDisplay(usdAmount);
+  }
+  return `${symbol}${toFixedCeiled(Number(usdAmount || 0) * (Number(rate) || 1), 6)}`;
+}
+
 /**
  * 阶梯单价展示：内部 USD → 系统展示货币，最多 6 位去尾零（与 formatTierUsdPrice 一致）。
  * tier_*_unit_price 已含分组/专属倍率，调用方勿再乘 groupRatio。
@@ -1850,6 +1859,22 @@ function formatBillingDisplayPrice(usdAmount, rate, digits = 6) {
   return parseFloat(raw.toFixed(digits));
 }
 
+function cnyFromDisplayedUnitTimesTokens(tokens, usdPerM, rate) {
+  const n = Number(tokens) || 0;
+  if (n === 0) {
+    return 0;
+  }
+  return (n / 1_000_000) * formatBillingDisplayPrice(usdPerM, rate);
+}
+
+function cnyFromDisplayedUnitTimesCount(count, usdAmount, rate, divisor = 1) {
+  const n = Number(count) || 0;
+  if (n === 0) {
+    return 0;
+  }
+  return (n / divisor) * formatBillingDisplayPrice(usdAmount, rate);
+}
+
 /**
  * 消费日志「计费过程」合计：与列表「花费」列同一套 6 位进一法。
  * 优先使用实扣额度 actualQuota，保证与花费列数值一致。
@@ -1872,6 +1897,62 @@ function resolveBillingProcessTotalDisplay(
     return fixed;
   }
   return formatBillingDisplayPrice(calculatedUsdAmount, rate, digits);
+}
+
+/**
+ * 计费过程等号：先按页面展示单价×用量算出客户可核对的式子结果；
+ * 若与花费列（实扣额度进一）不一致，再单独一行写实扣。
+ */
+function resolveBillingFormulaSettlement({
+  actualQuota,
+  formulaCny,
+  calculatedUsd,
+  rate,
+  symbol,
+}) {
+  const { type } = getCurrencyConfig();
+  if (type === 'TOKENS') {
+    return {
+      total: resolveBillingProcessTotalDisplay(actualQuota, calculatedUsd, rate),
+      extraLines: [],
+      showReferenceNote: true,
+    };
+  }
+  const formulaDisplay = (() => {
+    const n = Number(formulaCny) || 0;
+    if (n === 0) {
+      return 0;
+    }
+    // 与「页面单价 × token」手算一致，不对乘积再进一
+    let s = n.toFixed(8);
+    if (s.includes('.')) {
+      s = s.replace(/0+$/, '').replace(/\.$/, '');
+    }
+    return parseFloat(s);
+  })();
+  const actualDisplay = resolveBillingProcessTotalDisplay(
+    actualQuota,
+    calculatedUsd,
+    rate,
+  );
+  const hasActual = actualQuota != null && Number.isFinite(Number(actualQuota));
+  if (!hasActual || formulaDisplay === actualDisplay) {
+    return {
+      total: hasActual ? actualDisplay : formulaDisplay,
+      extraLines: [],
+      showReferenceNote: true,
+    };
+  }
+  return {
+    total: formulaDisplay,
+    extraLines: [
+      buildBillingText('实扣 {{symbol}}{{actual}}（额度取整，与花费列一致）', {
+        symbol,
+        actual: actualDisplay,
+      }),
+    ],
+    showReferenceNote: false,
+  };
 }
 
 function buildBillingText(key, vars) {
@@ -2585,7 +2666,7 @@ function renderPriceSimpleCore({
       segments.push({
         tone: 'secondary',
         text: i18next.t('输入 {{price}} / 1M tokens', {
-          price: formatBillingUnitPrice(inputRatioPrice * groupMult),
+          price: formatConsumeLogDetailUnitPrice(inputRatioPrice * groupMult),
         }),
       });
 
@@ -2593,7 +2674,7 @@ function renderPriceSimpleCore({
         segments.push({
           tone: 'secondary',
           text: i18next.t('缓存读 {{price}} / 1M tokens', {
-            price: formatBillingUnitPrice(cacheRatioPrice * groupMult),
+            price: formatConsumeLogDetailUnitPrice(cacheRatioPrice * groupMult),
           }),
         });
       }
@@ -2602,7 +2683,7 @@ function renderPriceSimpleCore({
         segments.push({
           tone: 'secondary',
           text: i18next.t('5m缓存创建 {{price}} / 1M tokens', {
-            price: formatBillingUnitPrice(
+            price: formatConsumeLogDetailUnitPrice(
               cacheCreationRatioPrice5m * groupMult,
             ),
           }),
@@ -2612,7 +2693,7 @@ function renderPriceSimpleCore({
         segments.push({
           tone: 'secondary',
           text: i18next.t('1h缓存创建 {{price}} / 1M tokens', {
-            price: formatBillingUnitPrice(
+            price: formatConsumeLogDetailUnitPrice(
               cacheCreationRatioPrice1h * groupMult,
             ),
           }),
@@ -2622,7 +2703,9 @@ function renderPriceSimpleCore({
         segments.push({
           tone: 'secondary',
           text: i18next.t('缓存创建 {{price}} / 1M tokens', {
-            price: formatBillingUnitPrice(cacheCreationRatioPrice * groupMult),
+            price: formatConsumeLogDetailUnitPrice(
+              cacheCreationRatioPrice * groupMult,
+            ),
           }),
         });
       }
@@ -2631,7 +2714,7 @@ function renderPriceSimpleCore({
         segments.push({
           tone: 'secondary',
           text: i18next.t('图片输入 {{price}} / 1M tokens', {
-            price: formatBillingUnitPrice(
+            price: formatConsumeLogDetailUnitPrice(
               inputRatioPrice * imageRatio * groupMult,
             ),
           }),
@@ -3226,6 +3309,92 @@ export function renderModelPrice(
             rate,
           })
         : null,
+    ];
+
+    let formulaCny = 0;
+    if (image && imageOutputTokens > 0) {
+      formulaCny += cnyFromDisplayedUnitTimesTokens(
+        inputTokens - imageOutputTokens,
+        inputRatioPrice * gDisp,
+        rate,
+      );
+      formulaCny += cnyFromDisplayedUnitTimesTokens(
+        imageOutputTokens,
+        imageInputUnitPrice * gDisp,
+        rate,
+      );
+    } else if (cacheTokens > 0) {
+      formulaCny += cnyFromDisplayedUnitTimesTokens(
+        inputTokens - cacheTokens,
+        inputRatioPrice * gDisp,
+        rate,
+      );
+      formulaCny += cnyFromDisplayedUnitTimesTokens(
+        cacheTokens,
+        cacheRatioPrice * gDisp,
+        rate,
+      );
+    } else if (audioInputSeperatePrice && audioInputTokens > 0) {
+      formulaCny += cnyFromDisplayedUnitTimesTokens(
+        inputTokens - audioInputTokens,
+        inputRatioPrice * gDisp,
+        rate,
+      );
+      formulaCny += cnyFromDisplayedUnitTimesTokens(
+        audioInputTokens,
+        aip * gDisp,
+        rate,
+      );
+    } else {
+      formulaCny += cnyFromDisplayedUnitTimesTokens(
+        inputTokens,
+        inputRatioPrice * gDisp,
+        rate,
+      );
+    }
+    formulaCny += cnyFromDisplayedUnitTimesTokens(
+      completionTokens,
+      completionRatioPrice * gDisp,
+      rate,
+    );
+    if (webSearch && webSearchCallCount > 0) {
+      formulaCny += cnyFromDisplayedUnitTimesCount(
+        webSearchCallCount,
+        wsp * gDisp,
+        rate,
+        1000,
+      );
+    }
+    if (fileSearch && fileSearchCallCount > 0) {
+      formulaCny += cnyFromDisplayedUnitTimesCount(
+        fileSearchCallCount,
+        fsp * gDisp,
+        rate,
+        1000,
+      );
+    }
+    if (imageGenerationCall && imageGenerationCallPrice > 0) {
+      formulaCny += formatBillingDisplayPrice(igp * gDisp, rate);
+    }
+    if (!billingProcessFoldGroupMultiplier) {
+      formulaCny *= Number(groupRatio) || 1;
+    }
+
+    const settlement = billingProcessFoldGroupMultiplier
+      ? resolveBillingFormulaSettlement({
+          actualQuota,
+          formulaCny,
+          calculatedUsd: price,
+          rate,
+          symbol,
+        })
+      : {
+          total: formatBillingDisplayPrice(price, rate),
+          extraLines: [],
+          showReferenceNote: true,
+        };
+
+    billingLines.push(
       buildBillingText(
         '{{inputDesc}} + {{outputDesc}}{{extraServices}} = {{symbol}}{{total}}',
         {
@@ -3233,16 +3402,15 @@ export function renderModelPrice(
           outputDesc,
           extraServices,
           symbol,
-          total: resolveBillingProcessTotalDisplay(
-            billingProcessFoldGroupMultiplier ? actualQuota : null,
-            price,
-            rate,
-          ),
+          total: settlement.total,
         },
       ),
-    ];
+      ...settlement.extraLines,
+    );
 
-    return renderBillingArticle(billingLines);
+    return renderBillingArticle(billingLines, {
+      showReferenceNote: settlement.showReferenceNote,
+    });
   }
 
   if (isExplicitPerCallModelPrice(modelPrice)) {
@@ -3779,14 +3947,16 @@ export function renderLogContent(
     const parts = [
       i18next.t('输入价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
-        price: parseFloat(
-          (inputRatioPrice * displayMultiplier * rate).toFixed(2),
+        price: formatBillingDisplayPrice(
+          inputRatioPrice * displayMultiplier,
+          rate,
         ),
       }),
       i18next.t('输出价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
-        price: parseFloat(
-          (completionRatioPrice * displayMultiplier * rate).toFixed(2),
+        price: formatBillingDisplayPrice(
+          completionRatioPrice * displayMultiplier,
+          rate,
         ),
       }),
     ];
@@ -3796,8 +3966,9 @@ export function renderLogContent(
       '缓存读取价格 {{symbol}}{{price}} / 1M tokens',
       {
         symbol,
-        price: parseFloat(
-          (cacheRatioPrice * displayMultiplier * rate).toFixed(2),
+        price: formatBillingDisplayPrice(
+          cacheRatioPrice * displayMultiplier,
+          rate,
         ),
       },
     );
@@ -3807,8 +3978,9 @@ export function renderLogContent(
       '图片输入价格 {{symbol}}{{price}} / 1M tokens',
       {
         symbol,
-        price: parseFloat(
-          (inputRatioPrice * imageRatio * displayMultiplier * rate).toFixed(2),
+        price: formatBillingDisplayPrice(
+          inputRatioPrice * imageRatio * displayMultiplier,
+          rate,
         ),
       },
     );
@@ -4335,12 +4507,24 @@ export function renderClaudeModelPrice(
     const price =
       (effectiveInputTokens / 1000000) * inputRatioPrice * groupRatio +
       (completionTokens / 1000000) * completionRatioPrice * groupRatio;
-    const inputUnitPrice = inputRatioPrice * gDisp * rate;
-    const completionUnitPrice = completionRatioPrice * gDisp * rate;
-    const cacheUnitPrice = cacheRatioPrice * gDisp * rate;
-    const cacheCreationUnitPrice = cacheCreationRatioPrice * gDisp * rate;
-    const cacheCreationUnitPrice5m = cacheCreationRatioPrice5m * gDisp * rate;
-    const cacheCreationUnitPrice1h = cacheCreationRatioPrice1h * gDisp * rate;
+    const dispInput = formatBillingDisplayPrice(inputRatioPrice * gDisp, rate);
+    const dispOutput = formatBillingDisplayPrice(
+      completionRatioPrice * gDisp,
+      rate,
+    );
+    const dispCache = formatBillingDisplayPrice(cacheRatioPrice * gDisp, rate);
+    const dispCacheCreate = formatBillingDisplayPrice(
+      cacheCreationRatioPrice * gDisp,
+      rate,
+    );
+    const dispCacheCreate5m = formatBillingDisplayPrice(
+      cacheCreationRatioPrice5m * gDisp,
+      rate,
+    );
+    const dispCacheCreate1h = formatBillingDisplayPrice(
+      cacheCreationRatioPrice1h * gDisp,
+      rate,
+    );
     const shouldShowCache = cacheTokens > 0;
     const shouldShowLegacyCacheCreation =
       !hasSplitCacheCreation && cacheCreationTokens > 0;
@@ -4353,17 +4537,27 @@ export function renderClaudeModelPrice(
       i18next.t('提示 {{input}} tokens / 1M tokens * {{symbol}}{{price}}', {
         input: inputTokens,
         symbol,
-        price: inputUnitPrice.toFixed(2),
+        price: dispInput,
       }),
     ];
+    let formulaCny = cnyFromDisplayedUnitTimesTokens(
+      inputTokens,
+      inputRatioPrice * gDisp,
+      rate,
+    );
 
     if (shouldShowCache) {
       breakdownSegments.push(
         i18next.t('缓存 {{tokens}} tokens / 1M tokens * {{symbol}}{{price}}', {
           tokens: cacheTokens,
           symbol,
-          price: cacheUnitPrice.toFixed(2),
+          price: dispCache,
         }),
+      );
+      formulaCny += cnyFromDisplayedUnitTimesTokens(
+        cacheTokens,
+        cacheRatioPrice * gDisp,
+        rate,
       );
     }
 
@@ -4374,9 +4568,14 @@ export function renderClaudeModelPrice(
           {
             tokens: cacheCreationTokens,
             symbol,
-            price: cacheCreationUnitPrice.toFixed(2),
+            price: dispCacheCreate,
           },
         ),
+      );
+      formulaCny += cnyFromDisplayedUnitTimesTokens(
+        cacheCreationTokens,
+        cacheCreationRatioPrice * gDisp,
+        rate,
       );
     }
 
@@ -4387,9 +4586,14 @@ export function renderClaudeModelPrice(
           {
             tokens: cacheCreationTokens5m,
             symbol,
-            price: cacheCreationUnitPrice5m.toFixed(2),
+            price: dispCacheCreate5m,
           },
         ),
+      );
+      formulaCny += cnyFromDisplayedUnitTimesTokens(
+        cacheCreationTokens5m,
+        cacheCreationRatioPrice5m * gDisp,
+        rate,
       );
     }
 
@@ -4400,9 +4604,14 @@ export function renderClaudeModelPrice(
           {
             tokens: cacheCreationTokens1h,
             symbol,
-            price: cacheCreationUnitPrice1h.toFixed(2),
+            price: dispCacheCreate1h,
           },
         ),
+      );
+      formulaCny += cnyFromDisplayedUnitTimesTokens(
+        cacheCreationTokens1h,
+        cacheCreationRatioPrice1h * gDisp,
+        rate,
       );
     }
 
@@ -4412,81 +4621,106 @@ export function renderClaudeModelPrice(
         {
           completion: completionTokens,
           symbol,
-          price: completionUnitPrice.toFixed(2),
+          price: dispOutput,
         },
       ),
     );
+    formulaCny += cnyFromDisplayedUnitTimesTokens(
+      completionTokens,
+      completionRatioPrice * gDisp,
+      rate,
+    );
+    if (!billingProcessFoldGroupMultiplier) {
+      formulaCny *= Number(groupRatio) || 1;
+    }
 
     const breakdownText = breakdownSegments.join(' + ');
+    const settlement = billingProcessFoldGroupMultiplier
+      ? resolveBillingFormulaSettlement({
+          actualQuota,
+          formulaCny,
+          calculatedUsd: price,
+          rate,
+          symbol,
+        })
+      : {
+          total: formatBillingDisplayPrice(price, rate, 6),
+          extraLines: [],
+          showReferenceNote: true,
+        };
 
-    return renderBillingArticle([
-      buildBillingPriceText('输入价格：{{symbol}}{{price}} / 1M tokens', {
-        symbol,
-        usdAmount: inputRatioPrice * gDisp,
-        rate,
-      }),
-      buildBillingPriceText('输出价格：{{symbol}}{{price}} / 1M tokens', {
-        symbol,
-        usdAmount: completionRatioPrice * gDisp,
-        rate,
-      }),
-      cacheTokens > 0
-        ? buildBillingPriceText(
-            '缓存读取价格：{{symbol}}{{price}} / 1M tokens',
-            {
-              symbol,
-              usdAmount: cacheRatioPrice * gDisp,
-              rate,
-            },
-          )
-        : null,
-      !hasSplitCacheCreation && cacheCreationTokens > 0
-        ? buildBillingPriceText(
-            '缓存创建价格：{{symbol}}{{price}} / 1M tokens',
-            {
-              symbol,
-              usdAmount: cacheCreationRatioPrice * gDisp,
-              rate,
-            },
-          )
-        : null,
-      hasSplitCacheCreation && cacheCreationTokens5m > 0
-        ? buildBillingPriceText(
-            '5m缓存创建价格：{{symbol}}{{price}} / 1M tokens',
-            {
-              symbol,
-              usdAmount: cacheCreationRatioPrice5m * gDisp,
-              rate,
-            },
-          )
-        : null,
-      hasSplitCacheCreation && cacheCreationTokens1h > 0
-        ? buildBillingPriceText(
-            '1h缓存创建价格：{{symbol}}{{price}} / 1M tokens',
-            {
-              symbol,
-              usdAmount: cacheCreationRatioPrice1h * gDisp,
-              rate,
-            },
-          )
-        : null,
-      billingProcessFoldGroupMultiplier
-        ? buildBillingText('{{breakdown}} = {{symbol}}{{total}}', {
-            breakdown: breakdownText,
-            symbol,
-            total: resolveBillingProcessTotalDisplay(actualQuota, price, rate),
-          })
-        : buildBillingText(
-            '{{breakdown}} * {{ratioType}} {{ratio}} = {{symbol}}{{total}}',
-            {
+    return renderBillingArticle(
+      [
+        buildBillingPriceText('输入价格：{{symbol}}{{price}} / 1M tokens', {
+          symbol,
+          usdAmount: inputRatioPrice * gDisp,
+          rate,
+        }),
+        buildBillingPriceText('输出价格：{{symbol}}{{price}} / 1M tokens', {
+          symbol,
+          usdAmount: completionRatioPrice * gDisp,
+          rate,
+        }),
+        cacheTokens > 0
+          ? buildBillingPriceText(
+              '缓存读取价格：{{symbol}}{{price}} / 1M tokens',
+              {
+                symbol,
+                usdAmount: cacheRatioPrice * gDisp,
+                rate,
+              },
+            )
+          : null,
+        !hasSplitCacheCreation && cacheCreationTokens > 0
+          ? buildBillingPriceText(
+              '缓存创建价格：{{symbol}}{{price}} / 1M tokens',
+              {
+                symbol,
+                usdAmount: cacheCreationRatioPrice * gDisp,
+                rate,
+              },
+            )
+          : null,
+        hasSplitCacheCreation && cacheCreationTokens5m > 0
+          ? buildBillingPriceText(
+              '5m缓存创建价格：{{symbol}}{{price}} / 1M tokens',
+              {
+                symbol,
+                usdAmount: cacheCreationRatioPrice5m * gDisp,
+                rate,
+              },
+            )
+          : null,
+        hasSplitCacheCreation && cacheCreationTokens1h > 0
+          ? buildBillingPriceText(
+              '1h缓存创建价格：{{symbol}}{{price}} / 1M tokens',
+              {
+                symbol,
+                usdAmount: cacheCreationRatioPrice1h * gDisp,
+                rate,
+              },
+            )
+          : null,
+        billingProcessFoldGroupMultiplier
+          ? buildBillingText('{{breakdown}} = {{symbol}}{{total}}', {
               breakdown: breakdownText,
-              ratioType: ratioLabel,
-              ratio: groupRatio,
               symbol,
-              total: formatBillingDisplayPrice(price, rate, 6),
-            },
-          ),
-    ]);
+              total: settlement.total,
+            })
+          : buildBillingText(
+              '{{breakdown}} * {{ratioType}} {{ratio}} = {{symbol}}{{total}}',
+              {
+                breakdown: breakdownText,
+                ratioType: ratioLabel,
+                ratio: groupRatio,
+                symbol,
+                total: settlement.total,
+              },
+            ),
+        ...settlement.extraLines,
+      ],
+      { showReferenceNote: settlement.showReferenceNote },
+    );
   }
 
   if (isExplicitPerCallModelPrice(modelPrice)) {
@@ -4740,20 +4974,23 @@ export function renderClaudeLogContent(
     const parts = [
       i18next.t('输入价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
-        price: parseFloat(
-          (inputRatioPrice * displayMultiplier * rate).toFixed(2),
+        price: formatBillingDisplayPrice(
+          inputRatioPrice * displayMultiplier,
+          rate,
         ),
       }),
       i18next.t('输出价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
-        price: parseFloat(
-          (completionRatioPrice * displayMultiplier * rate).toFixed(2),
+        price: formatBillingDisplayPrice(
+          completionRatioPrice * displayMultiplier,
+          rate,
         ),
       }),
       i18next.t('缓存读取价格 {{symbol}}{{price}} / 1M tokens', {
         symbol,
-        price: parseFloat(
-          (cacheRatioPrice * displayMultiplier * rate).toFixed(2),
+        price: formatBillingDisplayPrice(
+          cacheRatioPrice * displayMultiplier,
+          rate,
         ),
       }),
     ];
@@ -4765,8 +5002,9 @@ export function renderClaudeLogContent(
       '5m缓存创建价格 {{symbol}}{{price}} / 1M tokens',
       {
         symbol,
-        price: parseFloat(
-          (cacheCreationRatioPrice5m * displayMultiplier * rate).toFixed(2),
+        price: formatBillingDisplayPrice(
+          cacheCreationRatioPrice5m * displayMultiplier,
+          rate,
         ),
       },
     );
@@ -4776,8 +5014,9 @@ export function renderClaudeLogContent(
       '1h缓存创建价格 {{symbol}}{{price}} / 1M tokens',
       {
         symbol,
-        price: parseFloat(
-          (cacheCreationRatioPrice1h * displayMultiplier * rate).toFixed(2),
+        price: formatBillingDisplayPrice(
+          cacheCreationRatioPrice1h * displayMultiplier,
+          rate,
         ),
       },
     );
@@ -4787,8 +5026,9 @@ export function renderClaudeLogContent(
       '缓存创建价格 {{symbol}}{{price}} / 1M tokens',
       {
         symbol,
-        price: parseFloat(
-          (cacheCreationRatioPrice * displayMultiplier * rate).toFixed(2),
+        price: formatBillingDisplayPrice(
+          cacheCreationRatioPrice * displayMultiplier,
+          rate,
         ),
       },
     );
@@ -4941,17 +5181,25 @@ function renderRequestTierConsumeArticle(
     ? Number(record.quota)
     : null;
 
-  // 公式金额（USD）：单价已含分组倍率，直接 tokens/1M * unitPrice
-  let calculatedTotalUsd = 0;
+  // 公式金额：用页面展示单价（与式子里看到的数字一致）× token，便于客户核对
+  let formulaCny = 0;
   const formulaParts = [];
   if (inputTokens > 0 && Number.isFinite(tierInputUnitPrice)) {
-    calculatedTotalUsd += (inputTokens / 1_000_000) * tierInputUnitPrice;
+    formulaCny +=
+      (inputTokens / 1_000_000) *
+      parseFloat(
+        formatTierUsdPrice(tierInputUnitPrice * (Number(rate) || 1)),
+      );
     formulaParts.push(
       `${tr('输入')} ${inputTokens} tokens / 1M tokens * ${formatTierCurrencyUnitPrice(tierInputUnitPrice)}`,
     );
   }
   if (completionTokens > 0 && Number.isFinite(tierOutputUnitPrice)) {
-    calculatedTotalUsd += (completionTokens / 1_000_000) * tierOutputUnitPrice;
+    formulaCny +=
+      (completionTokens / 1_000_000) *
+      parseFloat(
+        formatTierUsdPrice(tierOutputUnitPrice * (Number(rate) || 1)),
+      );
     formulaParts.push(
       `${tr('输出')} ${completionTokens} tokens / 1M tokens * ${formatTierCurrencyUnitPrice(tierOutputUnitPrice)}`,
     );
@@ -4961,7 +5209,11 @@ function renderRequestTierConsumeArticle(
     Number.isFinite(tierCacheReadUnitPrice) &&
     tierCacheReadUnitPrice > 0
   ) {
-    calculatedTotalUsd += (cacheTokens / 1_000_000) * tierCacheReadUnitPrice;
+    formulaCny +=
+      (cacheTokens / 1_000_000) *
+      parseFloat(
+        formatTierUsdPrice(tierCacheReadUnitPrice * (Number(rate) || 1)),
+      );
     formulaParts.push(
       `${tr('缓存读取价格')} ${cacheTokens} tokens / 1M tokens * ${formatTierCurrencyUnitPrice(tierCacheReadUnitPrice)}`,
     );
@@ -4971,26 +5223,47 @@ function renderRequestTierConsumeArticle(
     Number.isFinite(tierCacheWriteUnitPrice) &&
     tierCacheWriteUnitPrice > 0
   ) {
-    calculatedTotalUsd +=
-      (cacheWriteTokens / 1_000_000) * tierCacheWriteUnitPrice;
+    formulaCny +=
+      (cacheWriteTokens / 1_000_000) *
+      parseFloat(
+        formatTierUsdPrice(tierCacheWriteUnitPrice * (Number(rate) || 1)),
+      );
     formulaParts.push(
       `${tr('缓存写入价格')} ${cacheWriteTokens} tokens / 1M tokens * ${formatTierCurrencyUnitPrice(tierCacheWriteUnitPrice)}`,
     );
   }
 
-  const totalDisplay = resolveBillingProcessTotalDisplay(
-    actualQuota,
-    calculatedTotalUsd,
-    rate,
-    6,
-  );
-  if (formulaParts.length > 0) {
-    lines.push(`(${formulaParts.join(' + ')}) = ${symbol}${totalDisplay}`);
-  } else {
-    lines.push(`(=) = ${symbol}${totalDisplay}`);
-  }
+  const calculatedTotalUsd =
+    (Number.isFinite(tierInputUnitPrice)
+      ? (inputTokens / 1_000_000) * tierInputUnitPrice
+      : 0) +
+    (Number.isFinite(tierOutputUnitPrice)
+      ? (completionTokens / 1_000_000) * tierOutputUnitPrice
+      : 0) +
+    (cacheTokens > 0 && Number.isFinite(tierCacheReadUnitPrice)
+      ? (cacheTokens / 1_000_000) * tierCacheReadUnitPrice
+      : 0) +
+    (cacheWriteTokens > 0 && Number.isFinite(tierCacheWriteUnitPrice)
+      ? (cacheWriteTokens / 1_000_000) * tierCacheWriteUnitPrice
+      : 0);
 
-  return renderBillingArticle(lines);
+  const settlement = resolveBillingFormulaSettlement({
+    actualQuota,
+    formulaCny,
+    calculatedUsd: calculatedTotalUsd,
+    rate,
+    symbol,
+  });
+  if (formulaParts.length > 0) {
+    lines.push(`(${formulaParts.join(' + ')}) = ${symbol}${settlement.total}`);
+  } else {
+    lines.push(`(=) = ${symbol}${settlement.total}`);
+  }
+  lines.push(...settlement.extraLines);
+
+  return renderBillingArticle(lines, {
+    showReferenceNote: settlement.showReferenceNote,
+  });
 }
 
 /**
