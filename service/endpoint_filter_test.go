@@ -81,7 +81,7 @@ func TestChannelSupportsRelayMode(t *testing.T) {
 			want:      true,
 		},
 		{
-			name: "nil channel returns false",
+			name:      "nil channel returns false",
 			channel:   nil,
 			modelName: "any",
 			relayMode: relayconstant.RelayModeVideoSubmit,
@@ -151,6 +151,7 @@ func TestGetEndpointTypesByChannelTypeForVideo(t *testing.T) {
 		constant.ChannelTypeAliVideo,
 		constant.ChannelTypeDoubaoVideo,
 		constant.ChannelTypeSeedance,
+		constant.ChannelTypeMiniMaxH3Video,
 	}
 
 	for _, channelType := range videoChannelTypes {
@@ -169,7 +170,8 @@ func TestGetEndpointTypesByChannelTypeForVideo(t *testing.T) {
 				constant.EndpointTypeVideoGenerator,
 				constant.EndpointTypeTencentCloudVODVideo,
 				constant.EndpointTypeAliVideo,
-				constant.EndpointTypeSeedanceVideo:
+				constant.EndpointTypeSeedanceVideo,
+				constant.EndpointTypeMiniMaxH3Video:
 				hasVideoEndpoint = true
 			}
 		}

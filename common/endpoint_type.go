@@ -61,6 +61,8 @@ func GetEndpointTypesByChannelTypeWithTags(channelType int, modelName string, mo
 		endpointTypes = []constant.EndpointType{constant.EndpointTypeAliVideo}
 	case constant.ChannelTypeDoubaoVideo, constant.ChannelTypeSeedance:
 		endpointTypes = []constant.EndpointType{constant.EndpointTypeSeedanceVideo}
+	case constant.ChannelTypeMiniMaxH3Video:
+		endpointTypes = []constant.EndpointType{constant.EndpointTypeMiniMaxH3Video}
 	case constant.ChannelTypeAliASRSync:
 		endpointTypes = []constant.EndpointType{constant.EndpointTypeAliASRSync}
 	case constant.ChannelTypeAliASRAsync:

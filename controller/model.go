@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/moonshot"
 	taskalivideo "github.com/QuantumNous/new-api/relay/channel/task/alivideo"
 	taskdoubao "github.com/QuantumNous/new-api/relay/channel/task/doubao"
+	taskminimaxh3 "github.com/QuantumNous/new-api/relay/channel/task/minimaxh3"
 	taskopenaivideo "github.com/QuantumNous/new-api/relay/channel/task/openaivideo"
 	tasktencentvod "github.com/QuantumNous/new-api/relay/channel/task/tencentvod"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -115,6 +116,14 @@ func init() {
 			OwnedBy: taskalivideo.ChannelName,
 		})
 	}
+	for _, modelName := range taskminimaxh3.ModelList {
+		openAIModels = append(openAIModels, dto.OpenAIModels{
+			Id:      modelName,
+			Object:  "model",
+			Created: 1626777600,
+			OwnedBy: taskminimaxh3.ChannelName,
+		})
+	}
 	openAIModelsMap = make(map[string]dto.OpenAIModels)
 	for _, aiModel := range openAIModels {
 		openAIModelsMap[aiModel.Id] = aiModel
@@ -140,6 +149,7 @@ func init() {
 	channelId2Models[constant.ChannelTypeAliVideo] = taskalivideo.ModelList
 	channelId2Models[constant.ChannelTypeDoubaoVideo] = taskdoubao.ModelList
 	channelId2Models[constant.ChannelTypeSeedance] = taskdoubao.ModelList
+	channelId2Models[constant.ChannelTypeMiniMaxH3Video] = taskminimaxh3.ModelList
 	openAIModels = lo.UniqBy(openAIModels, func(m dto.OpenAIModels) string {
 		return m.Id
 	})

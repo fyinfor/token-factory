@@ -65,6 +65,7 @@ const (
 	ChannelTypeSeedance          = 65 // Seedance 2.0 / VolcEngine contents generations (e.g. TokenSpace)
 	ChannelTypeAliImage          = 66 // Alibaba DashScope Qwen-Image text-to-image & image edit (multimodal-generation)
 	ChannelTypeHiDreamImage      = 67 // HiDream MaaS async image generation (/v1/images/generations)
+	ChannelTypeMiniMaxH3Video    = 68 // MiniMax H3 video generation V2 (/v2/video_generation)
 	ChannelTypeAliASRSync        = 69 // Alibaba DashScope ASR sync transcription (multimodal-generation)
 	ChannelTypeAliASRAsync       = 70 // Alibaba DashScope ASR async file transcription (X-DashScope-Async)
 	ChannelTypeDummy                  // this one is only for count, do not add any channel after this
@@ -132,18 +133,18 @@ var ChannelBaseURLs = []string{
 	"https://chatgpt.com",                       //57
 	"https://maas.hidreamai.com",                //58
 	"https://www.sophnet.com/api/open-apis/projects/easyllms", //59 VideoGenerator
-	"",                                   //60 TokenFactoryOpen
-	"https://vod.tencentcloudapi.com",    //61 TencentCloudVideo
-	"https://vod.tencentcloudapi.com",    //62 TencentCloudImage
-	"https://dashscope.aliyuncs.com/api", //63 AliVideo (user may override)
-	"https://api.openai.com",             //64 OpenAIImage
-	"https://api.tokenspace.net.cn",      //65 Seedance (词元算力 / 火山 contents generations)
-	"https://dashscope.aliyuncs.com",     //66 AliImage (Qwen-Image multimodal-generation)
+	"",                                       //60 TokenFactoryOpen
+	"https://vod.tencentcloudapi.com",        //61 TencentCloudVideo
+	"https://vod.tencentcloudapi.com",        //62 TencentCloudImage
+	"https://dashscope.aliyuncs.com/api",     //63 AliVideo (user may override)
+	"https://api.openai.com",                 //64 OpenAIImage
+	"https://api.tokenspace.net.cn",          //65 Seedance (词元算力 / 火山 contents generations)
+	"https://dashscope.aliyuncs.com",         //66 AliImage (Qwen-Image multimodal-generation)
 	"https://maas.hidreamai.com/api/maas/gw", //67 HiDreamImage
-	"",                                   //68 (reserved, formerly Dummy)
-	"",                                   //69 AliASRSync（基础地址需在渠道配置填写，如 https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api）
-	"",                                   //70 AliASRAsync（同 AliASRSync）
-	"",                                   //71 Dummy
+	"https://api.minimaxi.com/v2",            //68 MiniMaxH3Video（用户填写 V2 基础地址，后缀由网关拼接）
+	"",                                       //69 AliASRSync（基础地址需在渠道配置填写，如 https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api）
+	"",                                       //70 AliASRAsync（同 AliASRSync）
+	"",                                       //71 Dummy
 }
 
 var ChannelTypeNames = map[int]string{
@@ -211,6 +212,7 @@ var ChannelTypeNames = map[int]string{
 	ChannelTypeSeedance:          "Seedance",
 	ChannelTypeAliImage:          "AliImage",
 	ChannelTypeHiDreamImage:      "HiDreamImage",
+	ChannelTypeMiniMaxH3Video:    "MiniMaxH3Video",
 	ChannelTypeAliASRSync:        "AliASRSync",
 	ChannelTypeAliASRAsync:       "AliASRAsync",
 }
@@ -227,7 +229,7 @@ func GetChannelTypeName(channelType int) string {
 func IsVideoTaskChannel(channelType int) bool {
 	switch channelType {
 	case ChannelTypeSora, ChannelTypeOpenAIVideo, ChannelTypeVideoGenerator, ChannelTypeTencentCloudVideo, ChannelTypeAliVideo,
-		ChannelTypeDoubaoVideo, ChannelTypeSeedance:
+		ChannelTypeDoubaoVideo, ChannelTypeSeedance, ChannelTypeMiniMaxH3Video:
 		return true
 	default:
 		return false
