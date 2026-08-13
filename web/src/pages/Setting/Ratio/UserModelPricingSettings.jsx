@@ -199,6 +199,7 @@ export default function UserModelPricingSettings() {
   const [convertingMode, setConvertingMode] = useState(false);
   const [convertVisible, setConvertVisible] = useState(false);
   const [convertModelNames, setConvertModelNames] = useState([]);
+  const [convertTargetMode, setConvertTargetMode] = useState(MODE_CHANNEL_LIST);
 
   const [savingRowId, setSavingRowId] = useState(null);
   const [savingAll, setSavingAll] = useState(false);
@@ -629,6 +630,17 @@ export default function UserModelPricingSettings() {
       showError(t('没有待保存的修改'));
       return;
     }
+    const invalid = dirty.find(
+      (row) =>
+        row.mode === MODE_CHANNEL_LIST &&
+        normalizeChannels(row.channels).length === 0,
+    );
+    if (invalid) {
+      showError(
+        `${invalid.model_name}: ${t('渠道清单模式请至少勾选一个渠道')}`,
+      );
+      return;
+    }
     setSavingAll(true);
     let ok = 0;
     let fail = 0;
@@ -705,12 +717,16 @@ export default function UserModelPricingSettings() {
       return;
     }
     setConvertModelNames([]);
+    setConvertTargetMode(MODE_CHANNEL_LIST);
     setConvertVisible(true);
   };
 
   const convertTargetCount = convertModelNames.length
     ? convertModelNames.length
     : items.length;
+
+  const convertTargetModeLabel =
+    convertTargetMode === MODE_PRICE_CAP ? t('价格上限') : t('渠道清单');
 
   const doConvertToChannelList = async () => {
     if (!selectedUserId) {
@@ -721,9 +737,17 @@ export default function UserModelPricingSettings() {
       showError(t('该用户暂无指定价配置'));
       return;
     }
+    const targetMode =
+      convertTargetMode === MODE_PRICE_CAP
+        ? MODE_PRICE_CAP
+        : MODE_CHANNEL_LIST;
     setConvertingMode(true);
     try {
-      const payload = { user_id: selectedUserId };
+      // 默认不选模型 = 不传 model_names，后端按该用户全部配置切换
+      const payload = {
+        user_id: Number(selectedUserId),
+        target_mode: targetMode,
+      };
       if (convertModelNames.length > 0) {
         payload.model_names = convertModelNames;
       }
@@ -737,10 +761,11 @@ export default function UserModelPricingSettings() {
         const scopeTip = convertModelNames.length
           ? t('所选模型')
           : t('全部模型');
+        const modeTip = modeLabel(targetMode, t);
         showSuccess(
           skipped > 0
-            ? `${t('已切换')}（${scopeTip}）${d.converted ?? 0} ${t('个为渠道清单')}，${t('跳过')} ${skipped} ${t('个')}`
-            : `${t('已切换')}（${scopeTip}）${d.converted ?? 0} ${t('个为渠道清单')}`,
+            ? `${t('已切换')}（${scopeTip}）${d.converted ?? 0} ${t('个为')}${modeTip}，${t('跳过')} ${skipped} ${t('个')}`
+            : `${t('已切换')}（${scopeTip}）${d.converted ?? 0} ${t('个为')}${modeTip}`,
         );
         setConvertVisible(false);
         await refreshAll({ resetPage: false });
@@ -855,6 +880,12 @@ export default function UserModelPricingSettings() {
 
   const maxPage = Math.max(1, Math.ceil(filteredItems.length / PAGE_SIZE) || 1);
   const safePage = Math.min(currentPage, maxPage);
+
+  // Semi Table 在传入 currentPage 的受控分页下不会自动切片 dataSource，需自行切当前页
+  const pagedItems = useMemo(() => {
+    const start = (safePage - 1) * PAGE_SIZE;
+    return filteredItems.slice(start, start + PAGE_SIZE);
+  }, [filteredItems, safePage]);
 
   useEffect(() => {
     if (currentPage !== safePage) {
@@ -1181,7 +1212,7 @@ export default function UserModelPricingSettings() {
                 disabled={!items.length}
                 onClick={openConvertChannelList}
               >
-                {t('切换为渠道清单')}
+                {t('切换选路模式')}
               </Button>
               <Button theme='solid' type='primary' onClick={openAdd}>
                 {t('新增模型指定价')}
@@ -1197,7 +1228,7 @@ export default function UserModelPricingSettings() {
           </div>
           <Table
             columns={columns}
-            dataSource={filteredItems}
+            dataSource={pagedItems}
             loading={loading}
             rowKey='id'
             scroll={{ x: 1400 }}
@@ -1206,7 +1237,7 @@ export default function UserModelPricingSettings() {
               pageSize: PAGE_SIZE,
               total: filteredItems.length,
               showSizeChanger: false,
-              onPageChange: (page) => setCurrentPage(page),
+              onChange: (page) => setCurrentPage(page),
             }}
             empty={t('该用户暂无指定价，可用「一键导入当前折扣」从最便宜渠道批量绑定')}
           />
@@ -1259,15 +1290,55 @@ export default function UserModelPricingSettings() {
               <RadioGroup
                 type='button'
                 value={form.mode || MODE_PRICE_CAP}
-                onChange={(event) => {
+                onChange={async (event) => {
                   const mode = event.target.value;
                   setField('mode', mode);
-                  if (
-                    mode === MODE_CHANNEL_LIST &&
-                    form.model_name &&
-                    channelOptions.length === 0
-                  ) {
-                    loadChannelOptions(form.model_name, form);
+                  if (mode !== MODE_CHANNEL_LIST || !form.model_name) {
+                    return;
+                  }
+                  // 切到渠道清单且当前未勾选时，默认勾选未超价渠道，避免「默认不选 → 保存失效」
+                  let options = channelOptions;
+                  if (!options.length) {
+                    setChannelOptionsLoading(true);
+                    try {
+                      const params = new URLSearchParams({
+                        model_name: form.model_name,
+                        mode: MODE_CHANNEL_LIST,
+                        price_discount_percent: String(
+                          form.price_discount_percent ?? 100,
+                        ),
+                        operating_cost_percent: String(
+                          form.operating_cost_percent ?? 0,
+                        ),
+                        markup_discount_rate: String(
+                          form.markup_discount_rate ?? 0,
+                        ),
+                      });
+                      const res = await API.get(
+                        `/api/user_model_pricing/preview?${params}`,
+                      );
+                      if (res.data.success) {
+                        options = res.data.data?.channels || [];
+                        setChannelOptions(options);
+                      }
+                    } catch (e) {
+                      // 加载失败时仍允许手动勾选
+                    } finally {
+                      setChannelOptionsLoading(false);
+                    }
+                  }
+                  if (normalizeChannels(form.channels).length === 0) {
+                    const ids = (options || [])
+                      .filter((ch) => ch.within_cap)
+                      .map((ch) => ch.channel_id);
+                    if (ids.length) {
+                      setField(
+                        'channels',
+                        normalizeChannels(
+                          ids.map((id) => ({ channel_id: id })),
+                        ),
+                      );
+                    }
                   }
                 }}
               >
@@ -1568,27 +1639,52 @@ export default function UserModelPricingSettings() {
       </Modal>
 
       <Modal
-        title={t('切换为渠道清单')}
+        title={t('切换选路模式')}
         visible={convertVisible}
         onCancel={() => setConvertVisible(false)}
         onOk={doConvertToChannelList}
         okText={
           convertModelNames.length
-            ? `${t('切换所选')}（${convertModelNames.length}）`
-            : `${t('切换全部')}（${items.length}）`
+            ? `${t('切换所选')}（${convertModelNames.length}）→ ${convertTargetModeLabel}`
+            : `${t('切换全部')}（${items.length}）→ ${convertTargetModeLabel}`
         }
         cancelText={t('取消')}
         confirmLoading={convertingMode}
         width={640}
       >
         <div className='flex flex-col gap-3'>
+          <div>
+            <Text strong>{t('目标模式')}</Text>
+            <div className='mt-1'>
+              <RadioGroup
+                type='button'
+                value={convertTargetMode}
+                onChange={(event) =>
+                  setConvertTargetMode(
+                    event.target.value === MODE_PRICE_CAP
+                      ? MODE_PRICE_CAP
+                      : MODE_CHANNEL_LIST,
+                  )
+                }
+              >
+                <Radio value={MODE_CHANNEL_LIST}>{t('渠道清单')}</Radio>
+                <Radio value={MODE_PRICE_CAP}>{t('价格上限')}</Radio>
+              </RadioGroup>
+            </div>
+          </div>
           <Banner
             type='info'
             closeIcon={null}
             className='!rounded-lg'
-            description={t(
-              '将指定价改为渠道清单：每个模型勾选当前未超指定售价的渠道，并按单价从低到高排序。已是渠道清单的也会按此规则重写勾选；无可用渠道的模型会跳过。',
-            )}
+            description={
+              convertTargetMode === MODE_PRICE_CAP
+                ? t(
+                    '改回价格上限：清空渠道清单，按「有效单价 ≤ 指定售价」自动放行渠道。三折扣保持不变。',
+                  )
+                : t(
+                    '改为渠道清单：每个模型勾选当前未超指定售价的渠道，并按单价从低到高排序。已是渠道清单的也会按此规则重写勾选；无可用渠道的模型会跳过。',
+                  )
+            }
           />
           <div>
             <div className='flex items-center justify-between mb-2'>
@@ -1621,8 +1717,8 @@ export default function UserModelPricingSettings() {
             <div className='mt-2'>
               <Text type='tertiary' size='small'>
                 {convertModelNames.length
-                  ? `${t('将切换所选')} ${convertModelNames.length} ${t('个模型')}`
-                  : `${t('未选择模型，将切换全部')} ${items.length} ${t('个模型')}`}
+                  ? `${t('将切换所选')} ${convertModelNames.length} ${t('个模型')} → ${convertTargetModeLabel}`
+                  : `${t('未选择模型，将切换全部')} ${items.length} ${t('个模型')} → ${convertTargetModeLabel}`}
                 {filterModel
                   ? `（${t('列表筛选不影响范围，以勾选为准')}）`
                   : ''}
@@ -1633,7 +1729,7 @@ export default function UserModelPricingSettings() {
             type='warning'
             closeIcon={null}
             className='!rounded-lg'
-            description={`${t('确认后将对')} ${selectedUserLabel} ${t('的')} ${convertTargetCount} ${t('个模型执行切换，三折扣保持不变。')}`}
+            description={`${t('确认后将对')} ${selectedUserLabel} ${t('的')} ${convertTargetCount} ${t('个模型切换为')}${convertTargetModeLabel}，${t('三折扣保持不变。')}`}
           />
         </div>
       </Modal>

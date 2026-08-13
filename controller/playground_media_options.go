@@ -223,7 +223,8 @@ func endpointListHasMedia(modelName, mediaMode string) bool {
 				endpointType == constant.EndpointTypeVideoGenerator ||
 				endpointType == constant.EndpointTypeTencentCloudVODVideo ||
 				endpointType == constant.EndpointTypeAliVideo ||
-				endpointType == constant.EndpointTypeSeedanceVideo {
+				endpointType == constant.EndpointTypeSeedanceVideo ||
+				endpointType == constant.EndpointTypeMiniMaxH3Video {
 				return true
 			}
 		}

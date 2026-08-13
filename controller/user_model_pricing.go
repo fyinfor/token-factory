@@ -361,12 +361,14 @@ func DeleteUserModelPricingByUser(c *gin.Context) {
 
 type convertChannelListReq struct {
 	UserId     int      `json:"user_id"`
-	ModelNames []string `json:"model_names"` // 空 = 该用户全部模型
+	ModelNames []string `json:"model_names"`  // 空 = 该用户全部模型（默认不选 = 全切）
+	TargetMode string   `json:"target_mode"`  // price_cap | channel_list；空 = channel_list
 }
 
 // ConvertUserModelPricingToChannelList POST /api/user_model_pricing/convert_channel_list
-// 将该用户（可选模型子集）指定价改为渠道清单：每模型勾选未超指定售价渠道，按单价升序。
-// model_names 为空或不传时默认全切。
+// 批量切换选路模式。model_names 为空或不传时默认全切。
+// target_mode=channel_list（默认）：勾选未超指定售价渠道；
+// target_mode=price_cap：改回价格上限并清空渠道清单。
 func ConvertUserModelPricingToChannelList(c *gin.Context) {
 	var req convertChannelListReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -377,11 +379,19 @@ func ConvertUserModelPricingToChannelList(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "user_id 不能为空"})
 		return
 	}
+	targetMode := strings.TrimSpace(req.TargetMode)
+	if targetMode == "" {
+		targetMode = model.UserPricingModeChannelList
+	}
+	if targetMode != model.UserPricingModePriceCap && targetMode != model.UserPricingModeChannelList {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "target_mode 须为 price_cap 或 channel_list"})
+		return
+	}
 	if _, err := model.GetUserById(req.UserId, false); err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "用户不存在"})
 		return
 	}
-	converted, skipped, items, err := service.ConvertUserModelPricingToChannelList(req.UserId, req.ModelNames)
+	converted, skipped, items, err := service.ConvertUserModelPricingMode(req.UserId, req.ModelNames, targetMode)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
@@ -391,22 +401,28 @@ func ConvertUserModelPricingToChannelList(c *gin.Context) {
 		return
 	}
 	if converted == 0 {
+		msg := "没有可转换的模型"
+		if targetMode == model.UserPricingModeChannelList {
+			msg = "没有可转换的模型（均无未超价启用渠道）"
+		}
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": "没有可转换的模型（均无未超价启用渠道）",
+			"message": msg,
 			"data": gin.H{
-				"converted": converted,
-				"skipped":   skipped,
-				"items":     items,
+				"converted":   converted,
+				"skipped":     skipped,
+				"items":       items,
+				"target_mode": targetMode,
 			},
 		})
 		return
 	}
 	common.ApiSuccess(c, gin.H{
-		"converted":    converted,
-		"skipped":      skipped,
-		"items":        items,
-		"scope":        len(req.ModelNames),
-		"scope_all":    len(req.ModelNames) == 0,
+		"converted":   converted,
+		"skipped":     skipped,
+		"items":       items,
+		"scope":       len(req.ModelNames),
+		"scope_all":   len(req.ModelNames) == 0,
+		"target_mode": targetMode,
 	})
 }

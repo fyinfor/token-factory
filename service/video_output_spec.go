@@ -34,6 +34,9 @@ func resolveVideoOutputSpecFromUpstream(task *model.Task, taskResult *relaycommo
 		// 阿里云 DashScope video-synthesis：顶层 usage.duration / SR / ratio
 		res, dur, ratio = extractDashScopeUsageSpec(task.Data)
 		mergeVideoSpecFields(&spec, res, dur, ratio)
+		// MiniMax H3 V2：规格在嵌套 task 对象中
+		res, dur, ratio = extractMiniMaxH3TaskSpec(task.Data)
+		mergeVideoSpecFields(&spec, res, dur, ratio)
 	}
 	return spec
 }
@@ -58,7 +61,36 @@ func extractDashScopeUsageSpec(data []byte) (resolution string, duration int, ra
 	return resolution, duration, ratio
 }
 
-// extractTencentInputOutputConfig 解析腾讯云回包中的计费核心三字段。
+// extractMiniMaxH3TaskSpec 从 MiniMax H3 V2 查询回包的嵌套 task 解析计费规格。
+func extractMiniMaxH3TaskSpec(data []byte) (resolution string, duration int, ratio string) {
+	if len(data) == 0 {
+		return "", 0, ""
+	}
+	var env struct {
+		Task *struct {
+			Resolution string `json:"resolution"`
+			Duration   int    `json:"duration"`
+			Ratio      string `json:"ratio"`
+			Usage      *struct {
+				TotalSeconds  int `json:"total_seconds"`
+				OutputSeconds int `json:"output_seconds"`
+			} `json:"usage"`
+		} `json:"task"`
+	}
+	if err := common.Unmarshal(data, &env); err != nil || env.Task == nil {
+		return "", 0, ""
+	}
+	resolution = strings.TrimSpace(env.Task.Resolution)
+	ratio = strings.TrimSpace(env.Task.Ratio)
+	duration = env.Task.Duration
+	if duration <= 0 && env.Task.Usage != nil {
+		duration = env.Task.Usage.OutputSeconds
+		if duration <= 0 {
+			duration = env.Task.Usage.TotalSeconds
+		}
+	}
+	return resolution, duration, ratio
+}
 func extractTencentInputOutputConfig(data []byte) (resolution string, duration int, ratio string) {
 	var env struct {
 		Response *struct {

@@ -21,3 +21,12 @@ func TestNormalizeTaskVideoMetadata_KeepsExplicitResolution(t *testing.T) {
 		t.Fatalf("resolution=%v", meta["resolution"])
 	}
 }
+
+func TestPixelsToResolution_768p(t *testing.T) {
+	if got := PixelsToResolution(1366, 768); got != "768p" {
+		t.Fatalf("got %q want 768p", got)
+	}
+	if got := PixelsToResolution(1280, 720); got != "720p" {
+		t.Fatalf("got %q want 720p", got)
+	}
+}

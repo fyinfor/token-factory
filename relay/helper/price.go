@@ -865,6 +865,8 @@ func parseResolutionFlexibleForRatio(s string, ratio float64) (int, int, bool) {
 		shortSide = 540
 	case "720p":
 		shortSide = 720
+	case "768p":
+		shortSide = 768
 	case "1080p":
 		shortSide = 1080
 	case "2k":
@@ -893,6 +895,8 @@ func parseResolutionFlexible(s string) (int, int, bool) {
 		return 960, 540, true
 	case "720p":
 		return 1280, 720, true
+	case "768p":
+		return 1366, 768, true
 	case "1080p":
 		return 1920, 1080, true
 	case "1k":

@@ -67,7 +67,7 @@ import JsonCodeEditor from '../../../../components/common/ui/JsonCodeEditor';
 import { VIDEO_PRICING_JSON_PLACEHOLDER } from '../utils/videoPricingJson';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import { getCurrencyConfig, showError } from '../../../../helpers';
-import { formatImageResolutionDisplayLabel } from '../../../../helpers/videoResolutionLabel';
+import { formatImageResolutionDisplayLabel, formatVideoResolutionDisplayLabel } from '../../../../helpers/videoResolutionLabel';
 
 const { Text } = Typography;
 const EMPTY_CANDIDATE_MODEL_NAMES = [];
@@ -119,6 +119,7 @@ const VIDEO_RESOLUTION_OPTIONS = [
   { label: '480p', value: '854x480' },
   { label: '540p', value: '960x540' },
   { label: '720p', value: '1280x720' },
+  { label: '768p', value: '1366x768' },
   { label: '1080p', value: '1920x1080' },
   { label: '2K', value: '2560x1440' },
   { label: '4K', value: '3840x2160' },
@@ -157,14 +158,54 @@ const VIDEO_RULE_INPUT_ROW_STYLE = {
 };
 
 const getSelectableResolutionOptions = (rows, currentIndex) => {
-  const used = new Set(
+  const usedLabels = new Set(
     (rows || [])
       .map((item, index) =>
         index === currentIndex ? '' : item?.resolution || '',
       )
-      .filter(Boolean),
+      .filter(Boolean)
+      .map((resolution) =>
+        (formatVideoResolutionDisplayLabel(resolution) || resolution)
+          .toLowerCase()
+          .trim(),
+      ),
   );
-  return VIDEO_RESOLUTION_OPTIONS.filter((item) => !used.has(item.value));
+  const current = String(rows?.[currentIndex]?.resolution || '').trim();
+  const options = VIDEO_RESOLUTION_OPTIONS.filter((item) => {
+    const label = (
+      formatVideoResolutionDisplayLabel(item.value) || item.value
+    )
+      .toLowerCase()
+      .trim();
+    return !usedLabels.has(label);
+  });
+  // 兼容 MiniMax H3 的 768P 等官方档位：当前行值与下拉 canonical 像素不一致时，仍展示同一档位。
+  if (current) {
+    const currentLabel = (
+      formatVideoResolutionDisplayLabel(current) || current
+    )
+      .toLowerCase()
+      .trim();
+    const withoutDup = options.filter((item) => {
+      if (item.value === current) {
+        return true;
+      }
+      const itemLabel = (
+        formatVideoResolutionDisplayLabel(item.value) || item.value
+      )
+        .toLowerCase()
+        .trim();
+      return itemLabel !== currentLabel;
+    });
+    if (!withoutDup.some((item) => item.value === current)) {
+      withoutDup.unshift({
+        label: formatVideoResolutionDisplayLabel(current) || current,
+        value: current,
+      });
+    }
+    return withoutDup;
+  }
+  return options;
 };
 
 const getSelectableImageResolutionOptions = (rows, currentIndex) => {

@@ -355,6 +355,12 @@ func UpsertUserModelPricingOverride(ov *UserModelPricingOverride) (*UserModelPri
 // UpsertUserModelPricingOverrideWithChannels 创建或更新指定价，并在 channel_list 模式下同步渠道清单。
 // price_cap 模式下会清空该用户×模型的渠道绑定。
 func UpsertUserModelPricingOverrideWithChannels(ov *UserModelPricingOverride, channels []UserModelPricingChannelBinding) (*UserModelPricingOverride, error) {
+	return UpsertUserModelPricingOverrideWithChannelsOpt(ov, channels, true)
+}
+
+// UpsertUserModelPricingOverrideWithChannelsOpt 同 UpsertUserModelPricingOverrideWithChannels，
+// invalidateCache=false 时跳过缓存失效（供批量转换末尾统一失效）。
+func UpsertUserModelPricingOverrideWithChannelsOpt(ov *UserModelPricingOverride, channels []UserModelPricingChannelBinding, invalidateCache bool) (*UserModelPricingOverride, error) {
 	if ov == nil {
 		return nil, errors.New("override is nil")
 	}
@@ -431,7 +437,9 @@ func UpsertUserModelPricingOverrideWithChannels(ov *UserModelPricingOverride, ch
 	if err := tx.Commit().Error; err != nil {
 		return nil, err
 	}
-	InvalidateUserModelPricingCache()
+	if invalidateCache {
+		InvalidateUserModelPricingCache()
+	}
 	existing.Mode = normalizeUserPricingMode(existing.Mode)
 	return &existing, nil
 }
