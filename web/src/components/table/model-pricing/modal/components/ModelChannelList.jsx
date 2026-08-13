@@ -37,6 +37,11 @@ import {
   getSupplierTypeLabel,
 } from '../../../../../helpers';
 import {
+  pickModelCNYPrices,
+  computeCNYEffectivePrices,
+  getUsdCnyExchangeRate,
+} from '../../../../../helpers/billingFormula';
+import {
   getUsedGroupContext,
   pickChannelScopedModelFloat,
   userCanViewHomeCostPrice,
@@ -56,6 +61,7 @@ import PrecisePriceText, {
   formatPreciseCurrencyValue,
   formatPreciseUsdPrice,
   toDisplayCurrencyValue,
+  getDisplayCurrencyConfig,
 } from '../../components/PrecisePriceText';
 import {
   pickVideoFlatClipHintForChannel,
@@ -888,6 +894,68 @@ const ModelChannelList = ({
       };
     };
 
+    const calculateCNYPrice = (cnyAmount, applyGroupRatio = true) => {
+      const ratio = applyGroupRatio ? usedGroupRatio : 1;
+      const cny = (Number(cnyAmount) || 0) * ratio;
+      const cfg = getDisplayCurrencyConfig();
+      const unitDivisor = tokenUnit === 'K' ? 1000 : 1;
+      const usdRate = getUsdCnyExchangeRate();
+      const rawUsd = usdRate > 0 ? cny / usdRate : cny;
+      const value =
+        cfg.type === 'CNY'
+          ? cny / unitDivisor
+          : toDisplayCurrencyValue(rawUsd, { tokenUnit });
+      const display = formatCurrencyAmount(value);
+      const exactDisplay = formatPreciseCurrencyValue(value);
+      const unitLabel = tokenUnit === 'K' ? 'K' : 'M';
+      return {
+        display,
+        fullDisplay: `${exactDisplay} / 1${unitLabel} Tokens`,
+        exactDisplay,
+        unitLabel,
+        value,
+        rawUsd,
+      };
+    };
+
+    const makeCNYItem = (label, channelCNY, rootCNY) => {
+      if (!hasRatioValue(channelCNY)) return null;
+      const current = calculateCNYPrice(Number(channelCNY));
+      let official = null;
+      let discount = null;
+      if (hasRatioValue(rootCNY) && Number(rootCNY) > 0) {
+        const root = calculateCNYPrice(Number(rootCNY), false);
+        official = root.display;
+        const channelOriginal = calculateCNYPrice(Number(channelCNY), false);
+        discount = calculatePriceDiscountPercent(
+          channelOriginal.rawUsd,
+          root.rawUsd,
+        );
+      }
+      return {
+        label,
+        value: current.display,
+        valueTitle: current.exactDisplay,
+        valueExact: current.exactDisplay,
+        original: official,
+        originalExact:
+          official && hasRatioValue(rootCNY)
+            ? calculateCNYPrice(Number(rootCNY), false).exactDisplay
+            : undefined,
+        officialTitle:
+          official && hasRatioValue(rootCNY)
+            ? calculateCNYPrice(Number(rootCNY), false).exactDisplay
+            : undefined,
+        officialExact:
+          official && hasRatioValue(rootCNY)
+            ? calculateCNYPrice(Number(rootCNY), false).exactDisplay
+            : undefined,
+        priceUnitLabel: current.unitLabel,
+        discount,
+        hasDiscount: discount > 0,
+      };
+    };
+
     const items = [];
 
     // 按次计费
@@ -903,6 +971,58 @@ const ModelChannelList = ({
     // 按量计费
     else {
       if (!hideTextTokenPrices) {
+        const cnyPrices = pickModelCNYPrices(modelData, channel);
+        if (cnyPrices) {
+          const cnyEffective = computeCNYEffectivePrices({
+            channel: cnyPrices.channel,
+            global: cnyPrices.global,
+            priceDiscountPercent:
+              channel.price_discount_percent != null
+                ? channel.price_discount_percent
+                : 100,
+            markupDiscountPercent: channel.markup_discount_rate || 0,
+          });
+          items.push(
+            makeCNYItem(
+              t('输入价格'),
+              cnyEffective.input,
+              cnyPrices.global.input,
+            ),
+          );
+          if (cnyPrices.channel.output > 0 || cnyPrices.global.output > 0) {
+            items.push(
+              makeCNYItem(
+                t('输出价格'),
+                cnyEffective.output,
+                cnyPrices.global.output,
+              ),
+            );
+          }
+          if (
+            cnyPrices.channel.cacheRead > 0 ||
+            cnyPrices.global.cacheRead > 0
+          ) {
+            items.push(
+              makeCNYItem(
+                t('缓存读取价格'),
+                cnyEffective.cacheRead,
+                cnyPrices.global.cacheRead,
+              ),
+            );
+          }
+          if (
+            cnyPrices.channel.cacheWrite > 0 ||
+            cnyPrices.global.cacheWrite > 0
+          ) {
+            items.push(
+              makeCNYItem(
+                t('缓存创建价格'),
+                cnyEffective.cacheWrite,
+                cnyPrices.global.cacheWrite,
+              ),
+            );
+          }
+        } else {
         // 输入：ch.model_ratio × costDisc + globalMr × markupRate
         const effInputRate = hasRatioValue(channel.model_ratio)
           ? Number(channel.model_ratio) * costDisc + globalMr * markupRate
@@ -963,6 +1083,7 @@ const ModelChannelList = ({
           items.push(
             makeItem(t('缓存创建价格'), effCreateCacheRate, rootCC, false),
           );
+        }
         }
       }
     }

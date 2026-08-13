@@ -46,6 +46,7 @@ const EMPTY_CANDIDATE_MODEL_NAMES = [];
 const EMPTY_MODEL = {
     name: '',
     billingMode: 'per-token',
+    tokenPriceCurrency: 'USD',
     fixedPrice: '',
     inputPrice: '',
     completionPrice: '',
@@ -529,7 +530,15 @@ const buildModelState = (name, sourceMaps) => {
         videoPricingRules.videoUploadPerVideo.length > 0 ||
         videoPricingRules.videoGeneratePerVideo.length > 0;
     const fixedPrice = toNumericString(sourceMaps.ModelPrice[name]);
-    const inputPrice = ratioToBasePrice(modelRatio);
+    const cnyPricing = sourceMaps.ModelCNYPricing?.[name];
+    const hasCNYPricing =
+        cnyPricing &&
+        typeof cnyPricing === 'object' &&
+        Number(cnyPricing.input) > 0;
+    const tokenPriceCurrency = hasCNYPricing ? 'CNY' : 'USD';
+    const inputPrice = hasCNYPricing
+        ? formatNumber(cnyPricing.input)
+        : ratioToBasePrice(modelRatio);
     const inputPriceNumber = toNumberOrNull(inputPrice);
     const audioInputPrice =
         inputPriceNumber !== null && hasValue(audioRatio)
@@ -639,12 +648,16 @@ const buildModelState = (name, sourceMaps) => {
             fixedPrice,
             tierPricing,
         }),
+        tokenPriceCurrency,
         fixedPrice,
         inputPrice,
         completionRatioLocked: completionRatioMeta.locked,
         lockedCompletionRatio: completionRatioMeta.ratio,
-        completionPrice:
-            inputPriceNumber !== null &&
+        completionPrice: hasCNYPricing
+            ? Number(cnyPricing.output) > 0
+                ? formatNumber(cnyPricing.output)
+                : ''
+            : inputPriceNumber !== null &&
                 hasValue(
                     completionRatioMeta.locked
                         ? completionRatioMeta.ratio
@@ -659,12 +672,18 @@ const buildModelState = (name, sourceMaps) => {
                     ),
                 )
                 : '',
-        cachePrice:
-            inputPriceNumber !== null && hasValue(cacheRatio)
+        cachePrice: hasCNYPricing
+            ? Number(cnyPricing.cache_read) > 0
+                ? formatNumber(cnyPricing.cache_read)
+                : ''
+            : inputPriceNumber !== null && hasValue(cacheRatio)
                 ? formatNumber(inputPriceNumber * Number(cacheRatio))
                 : '',
-        createCachePrice:
-            inputPriceNumber !== null && hasValue(createCacheRatio)
+        createCachePrice: hasCNYPricing
+            ? Number(cnyPricing.cache_write) > 0
+                ? formatNumber(cnyPricing.cache_write)
+                : ''
+            : inputPriceNumber !== null && hasValue(createCacheRatio)
                 ? formatNumber(inputPriceNumber * Number(createCacheRatio))
                 : '',
         imagePrice:
@@ -1023,9 +1042,10 @@ export const buildSummaryText = (model, t, visibleCategories = null) => {
     }
 
     if (hasValue(model.inputPrice)) {
-        const inputLabel = `$${model.inputPrice}`;
+        const symbol = model.tokenPriceCurrency === 'CNY' ? '¥' : '$';
+        const inputLabel = `${symbol}${model.inputPrice}`;
         const outputLabel = hasValue(model.completionPrice)
-            ? `$${model.completionPrice}`
+            ? `${symbol}${model.completionPrice}`
             : '-';
         return `${t('输入')}：${inputLabel}｜${t('输出')}：${outputLabel}`;
     }
@@ -1139,6 +1159,7 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
         ImagePricingRules: null,
         ASRPrice: null,
         ModelRequestTierPricing: null,
+        ModelCNYPricing: null,
     };
 
     if (getEffectiveBillingMode(model) === 'per-request') {
@@ -1295,7 +1316,22 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
         return result;
     }
 
-    result.ModelRatio = toNormalizedNumber(inputPrice / 2);
+    const isCNYTokenPrice = model.tokenPriceCurrency === 'CNY';
+    const cnyRate =
+        currencyRates && currencyRates.CNY > 0 ? currencyRates.CNY : 1;
+    if (isCNYTokenPrice) {
+        result.ModelCNYPricing = {
+            input: toNormalizedNumber(inputPrice),
+            output:
+                completionPrice !== null ? toNormalizedNumber(completionPrice) : 0,
+            cache_read: cachePrice !== null ? toNormalizedNumber(cachePrice) : 0,
+            cache_write:
+                createCachePrice !== null ? toNormalizedNumber(createCachePrice) : 0,
+        };
+        result.ModelRatio = toNormalizedNumber(inputPrice / cnyRate / 2);
+    } else {
+        result.ModelRatio = toNormalizedNumber(inputPrice / 2);
+    }
 
     if (!model.completionRatioLocked && completionPrice !== null) {
         result.CompletionRatio = toNormalizedNumber(completionPrice / inputPrice);
@@ -1806,6 +1842,7 @@ const collectModelNamesFromPricingSourceMaps = (sourceMaps) => {
         'ModelPrice',
         'ModelRatio',
         'ModelRequestTierPricing',
+        'ModelCNYPricing',
     ].forEach((key) => {
         const obj = sourceMaps[key];
         if (obj && typeof obj === 'object') {
@@ -1883,6 +1920,7 @@ export function useModelPricingEditorState({
             ASRPrice: optionKeys?.ASRPrice || 'ASRPrice',
             ModelRequestTierPricing:
                 optionKeys?.ModelRequestTierPricing || 'ModelRequestTierPricing',
+            ModelCNYPricing: optionKeys?.ModelCNYPricing || 'ModelCNYPricing',
         }),
         [optionKeys],
     );
@@ -1922,6 +1960,9 @@ export function useModelPricingEditorState({
             ModelRequestTierPricing: parseOptionJSON(
                 options[resolvedOptionKeys.ModelRequestTierPricing],
             ),
+            ModelCNYPricing: parseOptionJSON(
+                options[resolvedOptionKeys.ModelCNYPricing],
+            ),
             VideoCurrencyRates: videoCurrencyRates,
             VideoPriceUnit: defaultVideoPriceUnit,
         };
@@ -1952,6 +1993,7 @@ export function useModelPricingEditorState({
                 ...Object.keys(sourceMaps.ImagePrice),
                 ...Object.keys(sourceMaps.ImagePricingRules),
                 ...Object.keys(sourceMaps.ModelRequestTierPricing),
+                ...Object.keys(sourceMaps.ModelCNYPricing || {}),
             ]);
 
         const nextModels = Array.from(names)
@@ -2548,6 +2590,7 @@ export function useModelPricingEditorState({
                 const nextModel = {
                     ...model,
                     billingMode: selectedModel.billingMode,
+                    tokenPriceCurrency: selectedModel.tokenPriceCurrency,
                     fixedPrice: selectedModel.fixedPrice,
                     inputPrice: selectedModel.inputPrice,
                     completionPrice: selectedModel.completionPrice,
@@ -2639,6 +2682,7 @@ export function useModelPricingEditorState({
             ImagePricingRules: {},
             ASRPrice: {},
             ModelRequestTierPricing: {},
+            ModelCNYPricing: {},
         };
         for (const model of modelList) {
             const serialized = serializeModel(
@@ -2715,6 +2759,34 @@ export function useModelPricingEditorState({
         });
     };
 
+    const handleTokenPriceCurrencyChange = (nextCurrency) => {
+        if (!selectedModel) return;
+        const nextUnit = nextCurrency === 'CNY' ? 'CNY' : 'USD';
+        const fromUnit =
+            selectedModel.tokenPriceCurrency === 'CNY' ? 'CNY' : 'USD';
+        if (nextUnit === fromUnit) return;
+        const cnyRate = videoCurrencyRates.CNY > 0 ? videoCurrencyRates.CNY : 1;
+        const convert = (val) => {
+            const n = toNumberOrNull(val);
+            if (n === null) return val;
+            if (fromUnit === 'USD' && nextUnit === 'CNY') {
+                return formatNumber(n * cnyRate);
+            }
+            if (fromUnit === 'CNY' && nextUnit === 'USD') {
+                return formatNumber(n / cnyRate);
+            }
+            return val;
+        };
+        upsertModel(selectedModel.name, (model) => ({
+            ...model,
+            tokenPriceCurrency: nextUnit,
+            inputPrice: convert(model.inputPrice),
+            completionPrice: convert(model.completionPrice),
+            cachePrice: convert(model.cachePrice),
+            createCachePrice: convert(model.createCachePrice),
+        }));
+    };
+
     const handleTierCurrencyChange = (nextCurrency) => {
         if (!selectedModel) return;
         const nextUnit = ['USD', 'CNY', 'CUSTOM'].includes(nextCurrency)
@@ -2773,6 +2845,7 @@ export function useModelPricingEditorState({
         handleOptionalFieldToggle,
         handleNumericFieldChange,
         handleBillingModeChange,
+        handleTokenPriceCurrencyChange,
         handleVideoBillingModeChange,
         handleVideoPriceUnitChange,
         updateVideoRuleRow,

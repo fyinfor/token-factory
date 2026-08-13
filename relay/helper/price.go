@@ -147,6 +147,11 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 			success = true
 		}
 		if !success {
+			if _, _, cnyOK := ratio_setting.ResolveCNYTokenRatios(channelID, pricingModelName); cnyOK {
+				success = true
+			}
+		}
+		if !success {
 			acceptUnsetRatio := false
 			if info.UserSetting.AcceptUnsetRatioModel {
 				acceptUnsetRatio = true
@@ -183,6 +188,31 @@ func ModelPriceHelper(c *gin.Context, info *relaycommon.RelayInfo, promptTokens 
 			cacheCreationRatio = globalCreateCacheRatio
 			cacheCreationRatio5m = cacheCreationRatio
 			cacheCreationRatio1h = cacheCreationRatio * claudeCacheCreation1hMultiplier
+		}
+
+		if chCNY, globalCNY, cnyOK := ratio_setting.ResolveCNYTokenRatios(channelID, pricingModelName); cnyOK {
+			applyPositive := func(dst *float64, src float64) {
+				if src > 0 {
+					*dst = src
+				}
+			}
+			if userPricingOverride {
+				modelRatio = globalCNY.ModelRatio
+				applyPositive(&completionRatio, globalCNY.CompletionRatio)
+				applyPositive(&cacheRatio, globalCNY.CacheRatio)
+				applyPositive(&cacheCreationRatio, globalCNY.CreateCacheRatio)
+			} else {
+				modelRatio = chCNY.ModelRatio
+				applyPositive(&completionRatio, chCNY.CompletionRatio)
+				applyPositive(&cacheRatio, chCNY.CacheRatio)
+				applyPositive(&cacheCreationRatio, chCNY.CreateCacheRatio)
+			}
+			cacheCreationRatio5m = cacheCreationRatio
+			cacheCreationRatio1h = cacheCreationRatio * claudeCacheCreation1hMultiplier
+			globalRatio = globalCNY.ModelRatio
+			applyPositive(&globalCompletionRatio, globalCNY.CompletionRatio)
+			applyPositive(&globalCacheRatio, globalCNY.CacheRatio)
+			applyPositive(&globalCreateCacheRatio, globalCNY.CreateCacheRatio)
 		}
 
 		// 新公式：有效输入倍率 = 渠道倍率 * 成本折扣率% + 全局倍率 * 加价折扣率%

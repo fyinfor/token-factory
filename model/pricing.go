@@ -14,22 +14,27 @@ import (
 )
 
 type Pricing struct {
-	ModelName         string   `json:"model_name"`
-	Description       string   `json:"description,omitempty"`
-	DescriptionEn     string   `json:"description_en,omitempty"`
-	DocIntroduction   string   `json:"doc_introduction,omitempty"`
-	DocIntroductionEn string   `json:"doc_introduction_en,omitempty"`
-	ApiDocs           any      `json:"api_docs,omitempty"`
-	Icon              string   `json:"icon,omitempty"`
-	Tags              string   `json:"tags,omitempty"`
-	VendorID          int      `json:"vendor_id,omitempty"`
-	QuotaType         int      `json:"quota_type"`
-	ModelRatio        float64  `json:"model_ratio"`
-	ModelPrice        float64  `json:"model_price"`
-	OwnerBy           string   `json:"owner_by"`
-	CompletionRatio   *float64 `json:"completion_ratio,omitempty"`
-	CacheRatio        *float64 `json:"cache_ratio,omitempty"`
-	CreateCacheRatio  *float64 `json:"create_cache_ratio,omitempty"`
+	ModelName          string   `json:"model_name"`
+	Description        string   `json:"description,omitempty"`
+	DescriptionEn      string   `json:"description_en,omitempty"`
+	DocIntroduction    string   `json:"doc_introduction,omitempty"`
+	DocIntroductionEn  string   `json:"doc_introduction_en,omitempty"`
+	ApiDocs            any      `json:"api_docs,omitempty"`
+	Icon               string   `json:"icon,omitempty"`
+	Tags               string   `json:"tags,omitempty"`
+	VendorID           int      `json:"vendor_id,omitempty"`
+	QuotaType          int      `json:"quota_type"`
+	ModelRatio         float64  `json:"model_ratio"`
+	ModelPrice         float64  `json:"model_price"`
+	PriceCurrency      string   `json:"price_currency,omitempty"`
+	InputPriceCNY      float64  `json:"input_price_cny,omitempty"`
+	OutputPriceCNY     float64  `json:"output_price_cny,omitempty"`
+	CacheReadPriceCNY  float64  `json:"cache_read_price_cny,omitempty"`
+	CacheWritePriceCNY float64  `json:"cache_write_price_cny,omitempty"`
+	OwnerBy            string   `json:"owner_by"`
+	CompletionRatio    *float64 `json:"completion_ratio,omitempty"`
+	CacheRatio         *float64 `json:"cache_ratio,omitempty"`
+	CreateCacheRatio   *float64 `json:"create_cache_ratio,omitempty"`
 	// 统一阶梯计费（输入 token 命中单档，含 input/output/cache 四类单价）
 	RequestTierPricing     any                     `json:"request_tier_pricing,omitempty"`
 	ImageRatio             *float64                `json:"image_ratio,omitempty"`
@@ -80,6 +85,11 @@ type PricingChannelItem struct {
 	TestResponseTimeMs   int     `json:"test_response_time_ms,omitempty"`
 	ModelPrice           float64 `json:"model_price"`
 	ModelRatio           float64 `json:"model_ratio"`
+	PriceCurrency        string  `json:"price_currency,omitempty"`
+	InputPriceCNY        float64 `json:"input_price_cny,omitempty"`
+	OutputPriceCNY       float64 `json:"output_price_cny,omitempty"`
+	CacheReadPriceCNY    float64 `json:"cache_read_price_cny,omitempty"`
+	CacheWritePriceCNY   float64 `json:"cache_write_price_cny,omitempty"`
 	CompletionRatio      float64 `json:"completion_ratio"`
 	CacheRatio           float64 `json:"cache_ratio"`
 	CreateCacheRatio     float64 `json:"create_cache_ratio"`
@@ -369,6 +379,13 @@ func BuildPricingAPIItems(filtered []Pricing, visibleChannelIDs map[int]struct{}
 			}
 			if hasRequestTierPricing {
 				chItem.RequestTierPricing = requestTierPricing
+			}
+			if cny, ok := ratio_setting.ResolveCNYPricing(row.ChannelID, pricingModelName); ok {
+				chItem.PriceCurrency = "CNY"
+				chItem.InputPriceCNY = cny.Input
+				chItem.OutputPriceCNY = cny.Output
+				chItem.CacheReadPriceCNY = cny.CacheRead
+				chItem.CacheWritePriceCNY = cny.CacheWrite
 			}
 			fillOptionChannelPricingFields(&chItem, row.ChannelID, modelName)
 			chItems = append(chItems, chItem)

@@ -53,6 +53,9 @@ import {
   getUsedGroupContext,
   pickChannelScopedModelFloat,
   computeChannelBillingRates,
+  pickModelCNYPrices,
+  computeCNYEffectivePrices,
+  getUsdCnyExchangeRate,
   formatVideoResolutionDisplayLabel,
   formatImageResolutionDisplayLabel,
   compareVideoResolutionAsc,
@@ -1674,6 +1677,24 @@ const PricingCardView = ({
       };
     };
 
+    const formatPriceFromCNY = (cnyAmount) => {
+      const usdRate = getUsdCnyExchangeRate();
+      const usd = usdRate > 0 ? Number(cnyAmount) / usdRate : Number(cnyAmount);
+      if (currency === 'CNY') {
+        const unitDivisor = tokenUnit === 'K' ? 1000 : 1;
+        const numericPrice = truncateModelPriceValue(
+          Number(cnyAmount) / unitDivisor,
+          MODEL_CARD_PRICE_MAX_DECIMALS,
+        );
+        return {
+          value: numericPrice,
+          rawUsd: usd,
+          symbol: '¥',
+        };
+      }
+      return formatPrice(usd);
+    };
+
     const modelHasVideoFlatPrice = hasNumericValue(model.video_price);
     const modelHasASRPrice = isASRPricingModel(model);
     const hideTextTokenPrices = isVideoPricingModel(model) || modelHasASRPrice;
@@ -1778,10 +1799,56 @@ const PricingCardView = ({
         globalCacheRatio: globalCacheR,
         globalCreateCacheRatio: globalCreateCacheR,
       });
+      const cnyPrices = pickModelCNYPrices(model, ch);
+      const cnyEffective = cnyPrices
+        ? computeCNYEffectivePrices({
+            channel: cnyPrices.channel,
+            global: cnyPrices.global,
+            priceDiscountPercent,
+            markupDiscountPercent,
+          })
+        : null;
 
       // 按量计费
       if (model.quota_type === 0) {
-        if (ch.model_ratio !== undefined && ch.model_ratio !== null) {
+        if (cnyEffective) {
+          if (!hideTextTokenPrices) {
+            prices.input.push(
+              formatPriceFromCNY(cnyEffective.input * usedGroupRatio),
+            );
+            originalPrices.input.push(formatPriceFromCNY(cnyEffective.input));
+            if (cnyPrices.channel.output > 0 || cnyPrices.global.output > 0) {
+              prices.output.push(
+                formatPriceFromCNY(cnyEffective.output * usedGroupRatio),
+              );
+              originalPrices.output.push(
+                formatPriceFromCNY(cnyEffective.output),
+              );
+            }
+            if (
+              cnyPrices.channel.cacheRead > 0 ||
+              cnyPrices.global.cacheRead > 0
+            ) {
+              prices.cache.push(
+                formatPriceFromCNY(cnyEffective.cacheRead * usedGroupRatio),
+              );
+              originalPrices.cache.push(
+                formatPriceFromCNY(cnyEffective.cacheRead),
+              );
+            }
+            if (
+              cnyPrices.channel.cacheWrite > 0 ||
+              cnyPrices.global.cacheWrite > 0
+            ) {
+              prices.createCache.push(
+                formatPriceFromCNY(cnyEffective.cacheWrite * usedGroupRatio),
+              );
+              originalPrices.createCache.push(
+                formatPriceFromCNY(cnyEffective.cacheWrite),
+              );
+            }
+          }
+        } else if (ch.model_ratio !== undefined && ch.model_ratio !== null) {
           if (!hideTextTokenPrices) {
             prices.input.push(
               formatPrice(billingRates.inputRatioPrice * usedGroupRatio),
@@ -1857,7 +1924,19 @@ const PricingCardView = ({
     // 根数据价格（用同一口径计算，用于与 channel 价格比较）
     const rootPrices = {};
     if (model.quota_type === 0 && !hideTextTokenPrices) {
-      if (model.model_ratio !== undefined && model.model_ratio !== null) {
+      const rootCNY = pickModelCNYPrices(model, model.channel_list?.[0]);
+      if (rootCNY?.global) {
+        rootPrices.input = formatPriceFromCNY(rootCNY.global.input);
+        if (rootCNY.global.output > 0) {
+          rootPrices.output = formatPriceFromCNY(rootCNY.global.output);
+        }
+        if (rootCNY.global.cacheRead > 0) {
+          rootPrices.cache = formatPriceFromCNY(rootCNY.global.cacheRead);
+        }
+        if (rootCNY.global.cacheWrite > 0) {
+          rootPrices.createCache = formatPriceFromCNY(rootCNY.global.cacheWrite);
+        }
+      } else if (model.model_ratio !== undefined && model.model_ratio !== null) {
         rootPrices.input = formatPrice(model.model_ratio * 2);
         if (
           model.completion_ratio !== undefined &&

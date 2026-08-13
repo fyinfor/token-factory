@@ -187,4 +187,11 @@ func fillPricingFieldsFromRatioSetting(pricing *Pricing, modelName string) {
 		videoPrice, _ := ratio_setting.GetVideoPrice(modelName)
 		pricing.VideoPrice = &videoPrice
 	}
+	if cny, ok := ratio_setting.GetModelCNYPricing(modelName); ok {
+		pricing.PriceCurrency = "CNY"
+		pricing.InputPriceCNY = cny.Input
+		pricing.OutputPriceCNY = cny.Output
+		pricing.CacheReadPriceCNY = cny.CacheRead
+		pricing.CacheWritePriceCNY = cny.CacheWrite
+	}
 }

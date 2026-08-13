@@ -9,20 +9,22 @@ import (
 
 // supplierEditableModelOptionKeys 定义供应商可操作的模型倍率相关配置键。
 var supplierEditableModelOptionKeys = map[string]struct{}{
-	"ModelPrice":           {},
-	"ModelRatio":           {},
-	"CompletionRatio":      {},
-	"CacheRatio":           {},
-	"CreateCacheRatio":     {},
-	"ImageRatio":           {},
-	"AudioRatio":           {},
-	"AudioCompletionRatio": {},
-	"VideoRatio":           {},
-	"VideoCompletionRatio": {},
-	"VideoPrice":           {},
-	"VideoPricingRules":    {},
-	"ImagePrice":           {},
-	"ImagePricingRules":    {},
+	"ModelPrice":             {},
+	"ModelRatio":             {},
+	"CompletionRatio":        {},
+	"CacheRatio":             {},
+	"CreateCacheRatio":       {},
+	"ImageRatio":             {},
+	"AudioRatio":             {},
+	"AudioCompletionRatio":   {},
+	"VideoRatio":             {},
+	"VideoCompletionRatio":   {},
+	"VideoPrice":             {},
+	"VideoPricingRules":      {},
+	"ImagePrice":             {},
+	"ImagePricingRules":      {},
+	"ModelCNYPricing":        {},
+	"ChannelModelCNYPricing": {},
 }
 
 // supplierDashboardScope 供应商看板范围：统计这些渠道上的全部模型消费（不按模型名录截断）。

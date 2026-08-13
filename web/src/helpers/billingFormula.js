@@ -685,6 +685,72 @@ export function getBillingCurrencyConfig() {
   return { symbol, rate, type: quotaDisplayType };
 }
 
+/** 读取站点美元兑人民币汇率（与展示无关，用于 CNY 标价换算） */
+export function getUsdCnyExchangeRate() {
+  try {
+    const statusStr = localStorage.getItem('status');
+    if (statusStr) {
+      const s = JSON.parse(statusStr);
+      const n = Number(s?.usd_exchange_rate);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+  } catch {
+    /* ignore */
+  }
+  return 7;
+}
+
+function readCNYUnitPrices(obj) {
+  if (!obj || typeof obj !== 'object') return null;
+  if (String(obj.price_currency || '').toUpperCase() !== 'CNY') return null;
+  const input = Number(obj.input_price_cny);
+  if (!Number.isFinite(input) || input <= 0) return null;
+  return {
+    input,
+    output: Number(obj.output_price_cny) > 0 ? Number(obj.output_price_cny) : 0,
+    cacheRead:
+      Number(obj.cache_read_price_cny) > 0
+        ? Number(obj.cache_read_price_cny)
+        : 0,
+    cacheWrite:
+      Number(obj.cache_write_price_cny) > 0
+        ? Number(obj.cache_write_price_cny)
+        : 0,
+  };
+}
+
+/** 读取模型/渠道人民币标价；渠道优先，缺省回退全局。 */
+export function pickModelCNYPrices(model, channel) {
+  const global = readCNYUnitPrices(model);
+  const ch = readCNYUnitPrices(channel);
+  if (!global && !ch) return null;
+  return {
+    channel: ch || global,
+    global: global || ch,
+  };
+}
+
+/** 人民币标价套用成本折扣 + 加价，结果仍为 ¥/1M。 */
+export function computeCNYEffectivePrices({
+  channel,
+  global,
+  priceDiscountPercent = 100,
+  markupDiscountPercent = 0,
+} = {}) {
+  const costDisc = costDiscountMultiplier(priceDiscountPercent);
+  const markupRate = markupRateFromPercent(markupDiscountPercent);
+  const ch = channel || global || {};
+  const g = global || channel || {};
+  return {
+    input: (ch.input || 0) * costDisc + (g.input || 0) * markupRate,
+    output: (ch.output || 0) * costDisc + (g.output || 0) * markupRate,
+    cacheRead:
+      (ch.cacheRead || 0) * costDisc + (g.cacheRead || 0) * markupRate,
+    cacheWrite:
+      (ch.cacheWrite || 0) * costDisc + (g.cacheWrite || 0) * markupRate,
+  };
+}
+
 /**
  * ASR 用户实付每秒单价（USD）：成本/加价折扣后的有效价 × 分组/专属倍率。
  * 优先使用后端写入的 other.asr_unit_price（与实扣一致）。

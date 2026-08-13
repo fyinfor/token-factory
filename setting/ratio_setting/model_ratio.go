@@ -449,6 +449,9 @@ func ModelHasConfiguredPricing(model string) bool {
 	if _, ok := asrPriceMap.Get(name); ok {
 		return true
 	}
+	if _, ok := GetModelCNYPricing(name); ok {
+		return true
+	}
 	if strings.HasSuffix(name, CompactModelSuffix) {
 		if _, ok := modelRatioMap.Get(CompactWildcardModelKey); ok {
 			return true

@@ -390,6 +390,7 @@ export default function ModelPricingEditor({
     handleOptionalFieldToggle,
     handleNumericFieldChange,
     handleBillingModeChange,
+    handleTokenPriceCurrencyChange,
     handleVideoBillingModeChange,
     handleVideoPriceUnitChange,
     updateVideoRuleRow,
@@ -420,6 +421,13 @@ export default function ModelPricingEditor({
     onSaveOutput,
     visibleCategories,
   });
+
+  const tokenPriceSuffix =
+    selectedModel?.tokenPriceCurrency === 'CNY' ? '¥/1M' : PRICE_SUFFIX;
+  const tokenPricePlaceholder =
+    selectedModel?.tokenPriceCurrency === 'CNY'
+      ? t('输入 ¥/1M')
+      : t('输入 $/1M');
 
   const tierPriceDetails = useMemo(() => {
     if (!selectedModel?.tierPricing) return [];
@@ -873,10 +881,47 @@ export default function ModelPricingEditor({
                       }}
                     >
                       <div className='font-medium mb-3'>{t('基础价格')}</div>
+                      <div className='mb-3'>
+                        <div className='mb-1 font-medium text-gray-700'>
+                          {t('计价货币')}
+                        </div>
+                        <RadioGroup
+                          type='button'
+                          value={
+                            selectedModel.tokenPriceCurrency === 'CNY'
+                              ? 'CNY'
+                              : 'USD'
+                          }
+                          onChange={(event) =>
+                            handleTokenPriceCurrencyChange(event.target.value)
+                          }
+                        >
+                          <Radio value='USD'>USD ($/1M)</Radio>
+                          <Radio value='CNY'>CNY (¥/1M)</Radio>
+                        </RadioGroup>
+                        <div className='mt-1 text-xs text-gray-500'>
+                          {selectedModel.tokenPriceCurrency === 'CNY'
+                            ? t(
+                                '人民币标价会原样展示与结算，不再经美元倍率往返换算，适合国内模型。',
+                              )
+                            : t(
+                                '美元标价按倍率存储；站点展示人民币时会再乘汇率。',
+                              )}
+                        </div>
+                      </div>
                       <PriceInput
                         label={t('输入价格')}
                         value={selectedModel.inputPrice}
-                        placeholder={t('输入 $/1M')}
+                        placeholder={
+                          selectedModel.tokenPriceCurrency === 'CNY'
+                            ? t('输入 ¥/1M')
+                            : t('输入 $/1M')
+                        }
+                        suffix={
+                          selectedModel.tokenPriceCurrency === 'CNY'
+                            ? '¥/1M'
+                            : PRICE_SUFFIX
+                        }
                         onChange={(value) =>
                           handleNumericFieldChange('inputPrice', value)
                         }
@@ -900,7 +945,8 @@ export default function ModelPricingEditor({
                       <PriceInput
                         label={t('输出价格')}
                         value={selectedModel.completionPrice}
-                        placeholder={t('输入 $/1M')}
+                        placeholder={tokenPricePlaceholder}
+                        suffix={tokenPriceSuffix}
                         onChange={(value) =>
                           handleNumericFieldChange('completionPrice', value)
                         }
@@ -950,7 +996,8 @@ export default function ModelPricingEditor({
                       <PriceInput
                         label={t('缓存读取价格')}
                         value={selectedModel.cachePrice}
-                        placeholder={t('输入 $/1M')}
+                        placeholder={tokenPricePlaceholder}
+                        suffix={tokenPriceSuffix}
                         onChange={(value) =>
                           handleNumericFieldChange('cachePrice', value)
                         }
@@ -979,7 +1026,8 @@ export default function ModelPricingEditor({
                       <PriceInput
                         label={t('缓存创建价格')}
                         value={selectedModel.createCachePrice}
-                        placeholder={t('输入 $/1M')}
+                        placeholder={tokenPricePlaceholder}
+                        suffix={tokenPriceSuffix}
                         onChange={(value) =>
                           handleNumericFieldChange('createCachePrice', value)
                         }
@@ -1032,7 +1080,8 @@ export default function ModelPricingEditor({
                       <PriceInput
                         label={t('图片输入价格')}
                         value={selectedModel.imagePrice}
-                        placeholder={t('输入 $/1M')}
+                        placeholder={tokenPricePlaceholder}
+                        suffix={tokenPriceSuffix}
                         onChange={(value) =>
                           handleNumericFieldChange('imagePrice', value)
                         }
@@ -1294,7 +1343,8 @@ export default function ModelPricingEditor({
                       <PriceInput
                         label={t('音频输入价格')}
                         value={selectedModel.audioInputPrice}
-                        placeholder={t('输入 $/1M')}
+                        placeholder={tokenPricePlaceholder}
+                        suffix={tokenPriceSuffix}
                         onChange={(value) =>
                           handleNumericFieldChange('audioInputPrice', value)
                         }
@@ -1332,7 +1382,8 @@ export default function ModelPricingEditor({
                       <PriceInput
                         label={t('音频输出价格')}
                         value={selectedModel.audioOutputPrice}
-                        placeholder={t('输入 $/1M')}
+                        placeholder={tokenPricePlaceholder}
+                        suffix={tokenPriceSuffix}
                         onChange={(value) =>
                           handleNumericFieldChange('audioOutputPrice', value)
                         }

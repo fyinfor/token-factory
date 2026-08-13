@@ -234,6 +234,10 @@ export default function SupplierModelPricingEditor({
     () => parseJSON(options.ChannelModelRequestTierPricing),
     [options.ChannelModelRequestTierPricing],
   );
+  const channelModelCNYPricing = useMemo(
+    () => parseJSON(options.ChannelModelCNYPricing),
+    [options.ChannelModelCNYPricing],
+  );
 
   const activeChannelId = channelId === 'all' ? '' : channelId;
 
@@ -371,6 +375,11 @@ export default function SupplierModelPricingEditor({
           null,
           2,
         ),
+        ModelCNYPricing: JSON.stringify(
+          channelModelCNYPricing[activeChannelId] || {},
+          null,
+          2,
+        ),
       };
     }
     return {
@@ -450,6 +459,11 @@ export default function SupplierModelPricingEditor({
         null,
         2,
       ),
+      ModelCNYPricing: JSON.stringify(
+        channelModelCNYPricing[activeChannelId] || {},
+        null,
+        2,
+      ),
     };
   }, [
     activeChannelId,
@@ -462,6 +476,7 @@ export default function SupplierModelPricingEditor({
     channelModelPrice,
     channelModelRatio,
     channelModelRequestTierPricing,
+    channelModelCNYPricing,
     channelVideoCompletionRatio,
     channelVideoPrice,
     channelVideoPricingRules,
@@ -550,6 +565,10 @@ export default function SupplierModelPricingEditor({
             channelModelRequestTierPricing,
             output.ModelRequestTierPricing,
           ),
+        ],
+        [
+          'ChannelModelCNYPricing',
+          mergeChannelData(channelModelCNYPricing, output.ModelCNYPricing),
         ],
       ].map(([key, value]) =>
         API.put('/api/option/', { key, value: JSON.stringify(value, null, 2) }),
@@ -653,6 +672,10 @@ export default function SupplierModelPricingEditor({
           channelModelRequestTierPricing,
           output.ModelRequestTierPricing,
         ),
+      ],
+      [
+        'ChannelModelCNYPricing',
+        mergeChannelData(channelModelCNYPricing, output.ModelCNYPricing),
       ],
     ].map(([key, value]) =>
       API.put('/api/option/', { key, value: JSON.stringify(value, null, 2) }),

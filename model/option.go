@@ -229,6 +229,8 @@ func InitOptionMap() {
 	// 统一阶梯计费 Option（按输入 Token 区间）
 	common.OptionMap["ModelRequestTierPricing"] = ratio_setting.ModelRequestTierPricing2JSONString()
 	common.OptionMap["ChannelModelRequestTierPricing"] = ratio_setting.ChannelModelRequestTierPricing2JSONString()
+	common.OptionMap["ModelCNYPricing"] = ratio_setting.ModelCNYPricing2JSONString()
+	common.OptionMap["ChannelModelCNYPricing"] = ratio_setting.ChannelModelCNYPricing2JSONString()
 	common.OptionMap["SupplierModelPrice"] = ratio_setting.SupplierModelPrice2JSONString()
 	common.OptionMap["SupplierModelRatio"] = ratio_setting.SupplierModelRatio2JSONString()
 	common.OptionMap["UserUsableGroups"] = setting.UserUsableGroups2JSONString()
@@ -840,6 +842,16 @@ func updateOptionMap(key string, value string) (err error) {
 		err = ratio_setting.UpdateModelRequestTierPricingByJSONString(value)
 	case "ChannelModelRequestTierPricing":
 		err = ratio_setting.UpdateChannelModelRequestTierPricingByJSONString(value)
+	case "ModelCNYPricing":
+		err = ratio_setting.UpdateModelCNYPricingByJSONString(value)
+		if err == nil {
+			lastGetPricingTime = time.Time{}
+		}
+	case "ChannelModelCNYPricing":
+		err = ratio_setting.UpdateChannelModelCNYPricingByJSONString(value)
+		if err == nil {
+			lastGetPricingTime = time.Time{}
+		}
 	// 旧 8 Key：加载时仅用于迁移到新结构，不再作为业务数据源
 	case "ModelTierRatio", "CompletionTierRatio", "CacheTierRatio", "CreateCacheTierRatio",
 		"ChannelModelTierRatio", "ChannelCompletionTierRatio", "ChannelCacheTierRatio", "ChannelCreateCacheTierRatio":
