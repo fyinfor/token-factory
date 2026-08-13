@@ -31,6 +31,7 @@ import {
   renderNumber,
 } from '../../../helpers';
 import CompactModeToggle from '../../common/ui/CompactModeToggle';
+import BillingSummaryExportModal from './modals/BillingSummaryExportModal';
 import { useMinimumLoadingTime } from '../../../hooks/common/useMinimumLoadingTime';
 import { getTodayStartTimestamp } from '../../../helpers/utils';
 import { normalizeLanguage } from '../../../i18n/language';
@@ -49,7 +50,6 @@ function formatRateMetric(value, locale) {
   const display = safe >= 10000 ? renderNumber(safe) : exact;
   return { display, exact };
 }
-
 
 /**
  * 日志页顶部统计展示：
@@ -70,6 +70,8 @@ const LogsActions = ({
   const showSkeleton = useMinimumLoadingTime(loadingStat);
   const needSkeleton = !showStat || showSkeleton;
   const [exporting, setExporting] = useState(false);
+  const [billingSummaryVisible, setBillingSummaryVisible] = useState(false);
+  const [billingSummaryFilters, setBillingSummaryFilters] = useState(null);
   const { i18n } = useTranslation();
   const numberLocale = normalizeLanguage(i18n.language) || undefined;
   const rpmMetric = formatRateMetric(stat?.rpm, numberLocale);
@@ -135,18 +137,30 @@ const LogsActions = ({
       const objectUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = objectUrl;
-      a.download = `statement-${new Date().toISOString().replace(/[-:T.Z]/g, '').slice(0, 14)}.xlsx`;
+      a.download = `statement-${new Date()
+        .toISOString()
+        .replace(/[-:T.Z]/g, '')
+        .slice(0, 14)}.xlsx`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(objectUrl);
       showSuccess(t('对账单导出成功'));
     } catch (e) {
-      const text = e?.response?.data ? await blobToText(e.response.data) : e?.message || String(e);
+      const text = e?.response?.data
+        ? await blobToText(e.response.data)
+        : e?.message || String(e);
       showError(t('对账单导出失败') + ': ' + text);
     } finally {
       setExporting(false);
     }
+  };
+
+  const openBillingSummaryExport = () => {
+    setBillingSummaryFilters(
+      typeof getFormValues === 'function' ? getFormValues() : {},
+    );
+    setBillingSummaryVisible(true);
   };
 
   const digits = LOG_CONSUME_AMOUNT_DIGITS;
@@ -164,13 +178,16 @@ const LogsActions = ({
       {hasTypeBreakdown ? (
         <>
           <div>
-            {t('文本')}：{formatLogConsumeDisplayAmount(textAmount || 0, digits)}
+            {t('文本')}：
+            {formatLogConsumeDisplayAmount(textAmount || 0, digits)}
           </div>
           <div>
-            {t('图片')}：{formatLogConsumeDisplayAmount(imageAmount || 0, digits)}
+            {t('图片')}：
+            {formatLogConsumeDisplayAmount(imageAmount || 0, digits)}
           </div>
           <div>
-            {t('视频')}：{formatLogConsumeDisplayAmount(videoAmount || 0, digits)}
+            {t('视频')}：
+            {formatLogConsumeDisplayAmount(videoAmount || 0, digits)}
           </div>
         </>
       ) : null}
@@ -186,92 +203,112 @@ const LogsActions = ({
   );
 
   return (
-    <div className='flex flex-col md:flex-row justify-between items-start md:items-center gap-2 w-full'>
-      <Skeleton loading={needSkeleton} active placeholder={placeholder}>
-        <Space>
-          <Tooltip content={consumeStatTooltip}>
-            <Tag
-              color='blue'
-              style={{
-                fontWeight: 500,
-                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-                padding: 13,
-                cursor: 'help',
-              }}
-              className='!rounded-lg'
-            >
-              {t('消耗额度')}: {renderLogStatDisplayQuota(stat, digits)}
-            </Tag>
-          </Tooltip>
-          <Tooltip
-            content={
-              <div>
-                <div>{t('RPM 统计说明')}</div>
+    <>
+      <BillingSummaryExportModal
+        visible={billingSummaryVisible}
+        onCancel={() => setBillingSummaryVisible(false)}
+        filters={billingSummaryFilters}
+        t={t}
+      />
+      <div className='flex flex-col md:flex-row justify-between items-start md:items-center gap-2 w-full'>
+        <Skeleton loading={needSkeleton} active placeholder={placeholder}>
+          <Space>
+            <Tooltip content={consumeStatTooltip}>
+              <Tag
+                color='blue'
+                style={{
+                  fontWeight: 500,
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+                  padding: 13,
+                  cursor: 'help',
+                }}
+                className='!rounded-lg'
+              >
+                {t('消耗额度')}: {renderLogStatDisplayQuota(stat, digits)}
+              </Tag>
+            </Tooltip>
+            <Tooltip
+              content={
                 <div>
-                  {t('精确值')}: {rpmMetric.exact}
+                  <div>{t('RPM 统计说明')}</div>
+                  <div>
+                    {t('精确值')}: {rpmMetric.exact}
+                  </div>
                 </div>
-              </div>
-            }
-          >
-            <Tag
-              color='pink'
-              style={{
-                fontWeight: 500,
-                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-                padding: 13,
-                cursor: 'help',
-              }}
-              className='!rounded-lg'
+              }
             >
-              {t('RPM')}: {rpmMetric.display}
-            </Tag>
-          </Tooltip>
-          <Tooltip
-            content={
-              <div>
-                <div>{t('TPM 统计说明')}</div>
+              <Tag
+                color='pink'
+                style={{
+                  fontWeight: 500,
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+                  padding: 13,
+                  cursor: 'help',
+                }}
+                className='!rounded-lg'
+              >
+                {t('RPM')}: {rpmMetric.display}
+              </Tag>
+            </Tooltip>
+            <Tooltip
+              content={
                 <div>
-                  {t('精确值')}: {tpmMetric.exact}
+                  <div>{t('TPM 统计说明')}</div>
+                  <div>
+                    {t('精确值')}: {tpmMetric.exact}
+                  </div>
                 </div>
-              </div>
-            }
-          >
-            <Tag
-              color='white'
-              style={{
-                border: 'none',
-                boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
-                fontWeight: 500,
-                padding: 13,
-                cursor: 'help',
-              }}
-              className='!rounded-lg'
+              }
             >
-              {t('TPM')}: {tpmMetric.display}
-            </Tag>
-          </Tooltip>
-        </Space>
-      </Skeleton>
+              <Tag
+                color='white'
+                style={{
+                  border: 'none',
+                  boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)',
+                  fontWeight: 500,
+                  padding: 13,
+                  cursor: 'help',
+                }}
+                className='!rounded-lg'
+              >
+                {t('TPM')}: {tpmMetric.display}
+              </Tag>
+            </Tooltip>
+          </Space>
+        </Skeleton>
 
-      <Space>
-        <Tooltip content={t('导出对账单')}>
-          <Button
-            icon={<IconDownload />}
-            loading={exporting}
-            onClick={handleExportStatement}
-            theme='outline'
-            type='tertiary'
-          >
-            {t('导出对账单')}
-          </Button>
-        </Tooltip>
-        <CompactModeToggle
-          compactMode={compactMode}
-          setCompactMode={setCompactMode}
-          t={t}
-        />
-      </Space>
-    </div>
+        <Space>
+          {isAdminUser && !supplierChannelLogsView ? (
+            <Tooltip content={t('导出计费汇总')}>
+              <Button
+                icon={<IconDownload />}
+                onClick={openBillingSummaryExport}
+                theme='outline'
+                type='primary'
+              >
+                {t('导出计费汇总')}
+              </Button>
+            </Tooltip>
+          ) : null}
+          <Tooltip content={t('导出对账单')}>
+            <Button
+              icon={<IconDownload />}
+              loading={exporting}
+              onClick={handleExportStatement}
+              theme='outline'
+              type='tertiary'
+            >
+              {t('导出对账单')}
+            </Button>
+          </Tooltip>
+          <CompactModeToggle
+            compactMode={compactMode}
+            setCompactMode={setCompactMode}
+            t={t}
+          />
+        </Space>
+      </div>
+    </>
   );
 };
 

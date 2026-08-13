@@ -1413,6 +1413,58 @@ func GetAllLogsForExport(filter AdminLogExportFilter) ([]*Log, int64, error) {
 	return logs, total, nil
 }
 
+// GetTaskBillingTerminalLogsForExport 查询指定异步任务在时间范围之后产生的最终补差/退款日志。
+// 仅供累计计费汇总追踪“范围内发起、范围外结算”的任务；普通日志/对账单导出保持原有时间筛选语义。
+func GetTaskBillingTerminalLogsForExport(taskIDs []string, userIDs []int, minCreatedAt int64) ([]*Log, error) {
+	if len(taskIDs) == 0 {
+		return nil, nil
+	}
+	const chunkSize = 40
+	logs := make([]*Log, 0)
+	for start := 0; start < len(taskIDs); start += chunkSize {
+		end := start + chunkSize
+		if end > len(taskIDs) {
+			end = len(taskIDs)
+		}
+		chunk := taskIDs[start:end]
+		orParts := make([]string, 0, len(chunk))
+		args := make([]interface{}, 0, len(chunk))
+		for _, taskID := range chunk {
+			taskID = strings.TrimSpace(taskID)
+			if taskID == "" {
+				continue
+			}
+			orParts = append(orParts, "logs.other LIKE ?")
+			args = append(args, settlementMarkerTaskIDPattern(taskID))
+		}
+		if len(orParts) == 0 {
+			continue
+		}
+		tx := LOG_DB.
+			Where("logs.type IN ?", []int{LogTypeConsume, LogTypeRefund}).
+			Where("(logs.other LIKE ? OR logs.other LIKE ? OR logs.other LIKE ?)",
+				"%\"billing_phase\":\""+BillingPhaseDeltaCharge+"\"%",
+				"%\"billing_phase\":\""+BillingPhaseDeltaRefund+"\"%",
+				"%\"billing_phase\":\""+BillingPhaseRefund+"\"%",
+			).
+			Where("("+strings.Join(orParts, " OR ")+")", args...)
+		if len(userIDs) > 0 {
+			tx = tx.Where("logs.user_id IN ?", userIDs)
+		}
+		if minCreatedAt > 0 {
+			tx = tx.Where("logs.created_at >= ?", minCreatedAt-3600)
+		}
+		var chunkLogs []*Log
+		if err := tx.Order("logs.id ASC").Find(&chunkLogs).Error; err != nil {
+			return nil, err
+		}
+		logs = append(logs, chunkLogs...)
+	}
+	attachLogChannelDisplays(logs)
+	normalizeLogsBillingMetadata(logs)
+	return logs, nil
+}
+
 func DeleteOldLog(ctx context.Context, targetTimestamp int64, limit int) (int64, error) {
 	var total int64 = 0
 
