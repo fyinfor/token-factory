@@ -24,6 +24,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/aliyunasr"
 	taskalivideo "github.com/QuantumNous/new-api/relay/channel/task/alivideo"
 	taskdoubao "github.com/QuantumNous/new-api/relay/channel/task/doubao"
+	taskminimaxh3 "github.com/QuantumNous/new-api/relay/channel/task/minimaxh3"
 	taskopenaivideo "github.com/QuantumNous/new-api/relay/channel/task/openaivideo"
 	tasktencentvod "github.com/QuantumNous/new-api/relay/channel/task/tencentvod"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -64,7 +65,8 @@ func tokenFactoryOpenTestEndpointFromMeta(modelName string) string {
 			constant.EndpointTypeVideoGenerator,
 			constant.EndpointTypeTencentCloudVODVideo,
 			constant.EndpointTypeAliVideo,
-			constant.EndpointTypeSeedanceVideo:
+			constant.EndpointTypeSeedanceVideo,
+			constant.EndpointTypeMiniMaxH3Video:
 			unique[constant.EndpointTypeTokenFactoryVideo] = struct{}{}
 		default:
 			if _, ok := common.GetDefaultEndpointInfo(et); ok {
@@ -159,6 +161,9 @@ func normalizeChannelTestEndpoint(channel *model.Channel, modelName, endpointTyp
 	if channel != nil && (channel.Type == constant.ChannelTypeDoubaoVideo || channel.Type == constant.ChannelTypeSeedance) {
 		return string(constant.EndpointTypeSeedanceVideo)
 	}
+	if channel != nil && channel.Type == constant.ChannelTypeMiniMaxH3Video {
+		return string(constant.EndpointTypeMiniMaxH3Video)
+	}
 	if channel != nil && channel.Type == constant.ChannelTypeAliASRSync {
 		return string(constant.EndpointTypeAliASRSync)
 	}
@@ -176,7 +181,8 @@ func isVideoChannelTestEndpoint(endpointType string) bool {
 		constant.EndpointTypeVideoGenerator,
 		constant.EndpointTypeTencentCloudVODVideo,
 		constant.EndpointTypeAliVideo,
-		constant.EndpointTypeSeedanceVideo:
+		constant.EndpointTypeSeedanceVideo,
+		constant.EndpointTypeMiniMaxH3Video:
 		return true
 	default:
 		return false
@@ -362,6 +368,8 @@ func testChannel(channel *model.Channel, testModel string, endpointType string, 
 					testModel = "qwen-image-2.0-pro"
 				case constant.ChannelTypeHiDreamImage:
 					testModel = "hidream-H4.5-image"
+				case constant.ChannelTypeMiniMaxH3Video:
+					testModel = taskminimaxh3.ModelMiniMaxH3
 				case constant.ChannelTypeAliASRSync:
 					testModel = "qwen3-asr-flash"
 				case constant.ChannelTypeAliASRAsync:
@@ -1066,11 +1074,23 @@ func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, 
 			"content": []map[string]any{
 				{"type": "text", "text": "a cute cat dancing in a sunny garden"},
 			},
-			"resolution":      "480p",
-			"ratio":           "16:9",
-			"duration":        5,
-			"watermark":       false,
-			"generate_audio":  true,
+			"resolution":     "480p",
+			"ratio":          "16:9",
+			"duration":       5,
+			"watermark":      false,
+			"generate_audio": true,
+		}
+	case constant.EndpointTypeMiniMaxH3Video:
+		// MiniMax H3 V2：POST {baseUrl}/video_generation，baseUrl 为 https://api.minimaxi.com/v2。
+		fullURL = taskminimaxh3.SubmitURL(baseURL)
+		bodyMap = map[string]any{
+			"model": upstreamModel,
+			"content": []map[string]any{
+				{"type": "text", "text": "a cute cat dancing in a sunny garden"},
+			},
+			"resolution": "768P",
+			"duration":   5,
+			"ratio":      "16:9",
 		}
 	default:
 		err := fmt.Errorf("unsupported video endpoint type: %s", endpointType)
@@ -1238,6 +1258,16 @@ func testChannelVideo(c *gin.Context, channel *model.Channel, testModel string, 
 			}
 		}
 		taskID = strings.TrimSpace(gjson.GetBytes(respBody, "output.task_id").String())
+	case constant.EndpointTypeMiniMaxH3Video:
+		if errMsg := strings.TrimSpace(gjson.GetBytes(respBody, "error.message").String()); errMsg != "" {
+			bodyErr := fmt.Errorf("upstream error: %s, body: %s", errMsg, truncateForError(string(respBody)))
+			return testResult{
+				context:           c,
+				localErr:          bodyErr,
+				tokenFactoryError: types.NewOpenAIError(bodyErr, types.ErrorCodeBadResponseBody, http.StatusInternalServerError),
+			}
+		}
+		taskID = strings.TrimSpace(gjson.GetBytes(respBody, "task_id").String())
 	case constant.EndpointTypeVideoGenerator:
 		if codeRes := gjson.GetBytes(respBody, "status"); codeRes.Exists() && codeRes.Int() != 0 {
 			errMsg := strings.TrimSpace(gjson.GetBytes(respBody, "message").String())

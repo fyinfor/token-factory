@@ -93,6 +93,7 @@ export function formatVideoResolutionDisplayLabel(raw) {
   if (short >= 2160) return '4K';
   if (short >= 1440) return '2K';
   if (short >= 1080) return '1080p';
+  if (short >= 768) return '768p';
   if (short >= 720) return '720p';
   if (short >= 540) return '540p';
   if (short >= 480) return '480p';
@@ -206,6 +207,7 @@ const VIDEO_RESOLUTION_DIMENSIONS = {
   '480p': { width: 854, height: 480 },
   '540p': { width: 960, height: 540 },
   '720p': { width: 1280, height: 720 },
+  '768p': { width: 1366, height: 768 },
   '1080p': { width: 1920, height: 1080 },
   '2K': { width: 2560, height: 1440 },
   '4K': { width: 3840, height: 2160 },
@@ -497,6 +499,7 @@ export function buildPlaygroundVideoResolutionOptions(tiers) {
     return [
       { label: '540p', value: '540p', rawResolution: '540p' },
       { label: '720p', value: '720p', rawResolution: '720p' },
+      { label: '768p', value: '768p', rawResolution: '768p' },
       { label: '1080p', value: '1080p', rawResolution: '1080p' },
     ];
   }
