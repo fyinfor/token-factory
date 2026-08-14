@@ -1812,6 +1812,52 @@ function joinBillingSummary(parts) {
   return parts.filter(Boolean).join('，');
 }
 
+function formatUpscaleResolutionTagLabel(raw) {
+  const label = formatVideoResolutionDisplayLabel(raw) || String(raw || '').trim();
+  if (!label) {
+    return '';
+  }
+  return label.replace(/p$/i, 'P');
+}
+
+export function formatVideoUpscaleLogTag(detail) {
+  if (!detail || detail.video_upscale !== true) {
+    return '';
+  }
+  const target = formatUpscaleResolutionTagLabel(detail.video_upscale_resolution);
+  const source = formatUpscaleResolutionTagLabel(
+    detail.video_upscale_source_resolution,
+  );
+  const price = Number(detail.video_upscale_price_per_second || 0);
+  if (!target || !(price > 0)) {
+    return '';
+  }
+  const { symbol, rate } = getCurrencyConfig();
+  const displayPrice = parseFloat((price * (rate || 1)).toFixed(6));
+  if (source) {
+    return i18next.t('{{source}}超分到{{target}} {{symbol}}{{price}}/秒', {
+      source,
+      target,
+      symbol,
+      price: displayPrice,
+    });
+  }
+  return i18next.t('超分到{{target}} {{symbol}}{{price}}/秒', {
+    target,
+    symbol,
+    price: displayPrice,
+  });
+}
+
+function appendVideoUpscaleParts(parts, detail) {
+  const next = Array.isArray(parts) ? [...parts] : [];
+  const tag = formatVideoUpscaleLogTag(detail);
+  if (tag) {
+    next.push(tag);
+  }
+  return next;
+}
+
 function getGroupRatioText(groupRatio, user_group_ratio) {
   const { ratio, label } = getEffectiveRatio(groupRatio, user_group_ratio);
   const ratioDisplay = Number.isFinite(Number(ratio))
@@ -3575,7 +3621,7 @@ export function renderLogContent(
     if (!hideGroupRatioInDetail) {
       parts.push(getGroupRatioText(groupRatio, user_group_ratio));
     }
-    return joinBillingSummary(parts);
+    return joinBillingSummary(appendVideoUpscaleParts(parts, videoBillingDetail));
   }
   if (isVideoPerSecondFlatBilling) {
     const estimatedTokens =
@@ -3649,7 +3695,7 @@ export function renderLogContent(
     if (!hideGroupRatioInDetail) {
       parts.push(getGroupRatioText(groupRatio, user_group_ratio));
     }
-    return joinBillingSummary(parts);
+    return joinBillingSummary(appendVideoUpscaleParts(parts, videoBillingDetail));
   }
   if (isVideoPerVideoFlatBilling) {
     const estimatedTokens =
@@ -3665,7 +3711,7 @@ export function renderLogContent(
     if (!hideGroupRatioInDetail) {
       parts.push(getGroupRatioText(groupRatio, user_group_ratio));
     }
-    return joinBillingSummary(parts);
+    return joinBillingSummary(appendVideoUpscaleParts(parts, videoBillingDetail));
   }
 
   if (billingMode === 'image_per_image') {
@@ -3741,7 +3787,7 @@ export function renderLogContent(
     if (!hideGroupRatioInDetail) {
       parts.push(getGroupRatioText(groupRatio, user_group_ratio));
     }
-    return joinBillingSummary(parts);
+    return joinBillingSummary(appendVideoUpscaleParts(parts, videoBillingDetail));
   }
 
   if (isPriceDisplayMode(displayMode, modelPrice)) {

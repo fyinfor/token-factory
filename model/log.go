@@ -112,6 +112,25 @@ func logOtherHasPositiveNumber(other map[string]interface{}, key string) bool {
 	return ok && n > 0
 }
 
+// isTaskSettlementResultLog 预扣行合并用：结算标记或差额补扣/退款日志都带 actual_quota。
+// 超分成功后通常会写 delta（quota!=0），不能只认 quota=0 的 marker，否则列表仍显示预扣费。
+func isTaskSettlementResultLog(log *Log, other map[string]interface{}) bool {
+	if log == nil || other == nil {
+		return false
+	}
+	if log.Type != LogTypeConsume && log.Type != LogTypeRefund {
+		return false
+	}
+	if logTaskID(other) == "" {
+		return false
+	}
+	if !logOtherHasPositiveNumber(other, "actual_quota") {
+		return false
+	}
+	_, hasPre := other["pre_consumed_quota"]
+	return hasPre
+}
+
 func isTaskSettlementMarkerLog(log *Log, other map[string]interface{}) bool {
 	if log == nil || other == nil {
 		return false
@@ -273,13 +292,13 @@ func querySettlementMarkersByTaskIDs(taskIDs []string, userIDs []int, minCreated
 		chunk := taskIDs[start:end]
 
 		orParts := make([]string, 0, len(chunk))
-		args := make([]interface{}, 0, 3+len(chunk)+len(userIDs)+1)
-		args = append(args, LogTypeConsume, "%\"actual_quota\"%", "%\"pre_consumed_quota\"%")
+		args := make([]interface{}, 0, 4+len(chunk)+len(userIDs)+1)
+		args = append(args, []int{LogTypeConsume, LogTypeRefund}, "%\"actual_quota\"%", "%\"pre_consumed_quota\"%")
 		for _, taskID := range chunk {
 			orParts = append(orParts, "logs.other LIKE ?")
 			args = append(args, settlementMarkerTaskIDPattern(taskID))
 		}
-		where := "logs.type = ? AND logs.other LIKE ? AND logs.other LIKE ? AND (" + strings.Join(orParts, " OR ") + ")"
+		where := "logs.type IN ? AND logs.other LIKE ? AND logs.other LIKE ? AND (" + strings.Join(orParts, " OR ") + ")"
 		tx := LOG_DB.Where(where, args...)
 		if len(userIDs) > 0 {
 			tx = tx.Where("logs.user_id IN ?", userIDs)
@@ -297,7 +316,7 @@ func querySettlementMarkersByTaskIDs(taskIDs []string, userIDs []int, minCreated
 		for i := range markers {
 			marker := &markers[i]
 			other, err := common.StrToMap(marker.Other)
-			if err != nil || other == nil || !isTaskSettlementMarkerLog(marker, other) {
+			if err != nil || other == nil || !isTaskSettlementResultLog(marker, other) {
 				continue
 			}
 			taskID := logTaskID(other)

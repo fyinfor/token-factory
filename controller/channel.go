@@ -734,6 +734,7 @@ func validateChannel(channel *model.Channel, isAdd bool) error {
 
 	otherSettings := channel.GetOtherSettings()
 	otherSettings.ModelRateLimits = service.SanitizeChannelModelRateLimits(otherSettings.ModelRateLimits)
+	otherSettings.VideoUpscaleRules = service.SanitizeChannelVideoUpscaleRules(otherSettings.VideoUpscaleRules)
 	channel.SetOtherSettings(otherSettings)
 
 	return nil

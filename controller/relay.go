@@ -853,6 +853,7 @@ func RelayTask(c *gin.Context) {
 			VideoRuleHasAudio:           relayInfo.PriceData.VideoRuleHasAudio,
 			UpstreamBillingOther:        relayInfo.UpstreamTaskBillingOther,
 		}
+		service.AttachVideoUpscaleToTask(c, task)
 		task.Quota = actualQuota
 		task.Data = result.TaskData
 		task.Action = relayInfo.Action

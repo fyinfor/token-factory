@@ -132,6 +132,11 @@ func LogTaskConsumption(c *gin.Context, info *relaycommon.RelayInfo) {
 		other["model_ratio"] = info.PriceData.ModelRatio
 		appendVideoPerVideoBillingDetailOther(c, other, info)
 	}
+	if upsOther := videoUpscalePreChargeOther(c, info); upsOther != nil {
+		for k, v := range upsOther {
+			other[k] = v
+		}
+	}
 	appendSettlementDiscountSnapshotsFromPriceData(info.ChannelId, info.PriceData, other)
 	if len(info.UpstreamTaskBillingOther) > 0 {
 		for k, v := range info.UpstreamTaskBillingOther {
@@ -341,6 +346,7 @@ func videoPerSecondBillingDetailFromSubmit(c *gin.Context, info *relaycommon.Rel
 	if err != nil {
 		return nil
 	}
+	applyUpscaleTargetToBillingRequest(c, &req)
 	modelName := strings.TrimSpace(info.OriginModelName)
 	if modelName == "" {
 		return nil
@@ -433,6 +439,7 @@ func videoPerTokenBillingDetailFromSubmit(c *gin.Context, info *relaycommon.Rela
 	if err != nil {
 		return nil
 	}
+	applyUpscaleTargetToBillingRequest(c, &req)
 	modelName := strings.TrimSpace(info.OriginModelName)
 	if modelName == "" {
 		return nil
@@ -489,13 +496,16 @@ func videoPerTokenBillingDetailFromTask(task *model.Task, match *videoTokenRuleM
 	}
 	var req relaycommon.TaskSubmitReq
 	_ = common.UnmarshalJsonStr(task.Properties.Input, &req)
+	usedUpscaleTarget := applyTaskUpscaleTargetToBillingRequest(task, &req)
 	modelName := strings.TrimSpace(taskModelName(task))
 	if modelName == "" {
 		return nil
 	}
 	width, height := videoDimensionsFromTaskRequest(req)
-	if w, h, ok := videoDimensionsFromTaskCompletion(task, nil); ok {
-		width, height = w, h
+	if !usedUpscaleTarget {
+		if w, h, ok := videoDimensionsFromTaskCompletion(task, nil); ok {
+			width, height = w, h
+		}
 	}
 	hasAudio := taskRequestHasAudio(req)
 	mode := relaycommon.DetectVideoBillingMode(&req)
@@ -528,6 +538,12 @@ func videoPerTokenBillingDetailFromTask(task *model.Task, match *videoTokenRuleM
 	}
 	if display := common.FormatVideoResolutionLabel(strings.TrimSpace(spec.Resolution)); display != "" {
 		detail.Resolution = display
+	}
+	if usedUpscaleTarget {
+		if label := common.FormatVideoResolutionLabel(task.PrivateData.VideoUpscale.TargetResolution); label != "" {
+			detail.Resolution = label
+		}
+		detail.ResolutionFromRequest = true
 	}
 	if bc := task.PrivateData.BillingContext; bc != nil {
 		detail.ChannelDiscountPercent = taskBillingContextEffectiveCostPercent(bc, task.ChannelId)
@@ -673,6 +689,7 @@ func videoPerSecondBillingDetailFromTask(task *model.Task) *videoPerSecondBillin
 	if err := common.UnmarshalJsonStr(task.Properties.Input, &req); err != nil {
 		return nil
 	}
+	usedUpscaleTarget := applyTaskUpscaleTargetToBillingRequest(task, &req)
 	modelName := strings.TrimSpace(taskModelName(task))
 	if modelName == "" {
 		return nil
@@ -686,8 +703,10 @@ func videoPerSecondBillingDetailFromTask(task *model.Task) *videoPerSecondBillin
 		}
 	}
 	width, height := videoDimensionsFromTaskRequest(req)
-	if w, h, ok := videoDimensionsFromTaskCompletion(task, nil); ok {
-		width, height = w, h
+	if !usedUpscaleTarget {
+		if w, h, ok := videoDimensionsFromTaskCompletion(task, nil); ok {
+			width, height = w, h
+		}
 	}
 	hasAudio := taskRequestHasAudio(req)
 	if bc := task.PrivateData.BillingContext; bc != nil && bc.OtherRatios != nil {
@@ -749,6 +768,9 @@ func videoPerSecondBillingDetailFromTask(task *model.Task) *videoPerSecondBillin
 		if detail.Resolution == "" {
 			detail.Resolution = label
 		}
+	}
+	if usedUpscaleTarget {
+		detail.ResolutionFromRequest = true
 	}
 	fillVideoPerSecondEffectiveRates(detail, task.ChannelId, task.UserId, modelName, mode)
 	return detail
@@ -1001,6 +1023,7 @@ func videoPerVideoBillingDetailFromSubmit(c *gin.Context, info *relaycommon.Rela
 	if err != nil {
 		return nil
 	}
+	applyUpscaleTargetToBillingRequest(c, &req)
 	modelName := strings.TrimSpace(info.OriginModelName)
 	if modelName == "" {
 		return nil
@@ -1265,7 +1288,7 @@ func RefundTaskQuota(ctx context.Context, task *model.Task, reason string) {
 
 // recordVideoTaskSettlementMarker 在任务成功且预扣与实扣一致（或无法差额结算）时，
 // 写入带 actual_quota 与视频计费 other 的结算日志；content 留空，由前端按 other 渲染（与预扣日志一致）。
-func recordVideoTaskSettlementMarker(ctx context.Context, task *model.Task, actualQuota int, detail *videoPerSecondBillingDetail) {
+func recordVideoTaskSettlementMarker(ctx context.Context, task *model.Task, actualQuota int, detail *videoPerSecondBillingDetail, extraOther ...map[string]interface{}) {
 	if task == nil || actualQuota <= 0 || task.Status != model.TaskStatusSuccess {
 		return
 	}
@@ -1281,12 +1304,26 @@ func recordVideoTaskSettlementMarker(ctx context.Context, task *model.Task, actu
 	other["actual_quota"] = actualQuota
 	other["pre_consumed_quota"] = preConsumed
 	other["video_final_quota"] = actualQuota
-	other["billing_mode"] = "video_per_second"
+	if other["billing_mode"] == nil || other["billing_mode"] == "" {
+		other["billing_mode"] = "video_per_second"
+	}
+	for _, extra := range extraOther {
+		if extra == nil {
+			continue
+		}
+		for k, v := range extra {
+			if k == profitShareExtraTotalTokensKey {
+				continue
+			}
+			other[k] = v
+		}
+	}
 	other = model.SetBillingLogMetadata(other, model.BillingPhaseSettlementMarker, false, actualQuota, 0)
 	if detail == nil {
 		detail = videoPerSecondBillingDetailFromTask(task)
 	}
 	if detail != nil {
+		other["billing_mode"] = "video_per_second"
 		appendVideoPerSecondBillingDetailOther(other, detail, actualQuota)
 	}
 	model.RecordTaskBillingLog(model.RecordTaskBillingLogParams{
@@ -1312,6 +1349,9 @@ func taskNeedsVideoSettlementMarker(task *model.Task) bool {
 	if bc.PerCallBilling {
 		return false
 	}
+	if bc.VideoRuleUnit == VideoRuleUnitPerToken {
+		return true
+	}
 	if bc.ModelPrice == 0 && bc.ModelRatio == 0 {
 		return true
 	}
@@ -1320,6 +1360,9 @@ func taskNeedsVideoSettlementMarker(task *model.Task) bool {
 			return true
 		}
 	}
+	if task.PrivateData.VideoUpscale != nil {
+		return true
+	}
 	return false
 }
 
@@ -1327,6 +1370,13 @@ func taskNeedsVideoSettlementMarker(task *model.Task) bool {
 // actualQuota 是任务完成后的实际应扣额度，与预扣额度 (task.Quota) 做差额结算。
 // detail 为视频按秒计费明细（写入 other，供前端展示）；结算日志 content 恒为空。
 func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int, detail *videoPerSecondBillingDetail, extraOther ...map[string]interface{}) {
+	if task != nil {
+		var upsOther map[string]interface{}
+		actualQuota, upsOther = appendVideoUpscaleBilling(task, actualQuota)
+		if upsOther != nil {
+			extraOther = append(extraOther, upsOther)
+		}
+	}
 	if actualQuota <= 0 {
 		return
 	}
@@ -1340,7 +1390,7 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 	if quotaDelta == 0 {
 		logger.LogInfo(ctx, fmt.Sprintf("任务 %s 预扣费准确（%s，%s）",
 			task.TaskID, logger.LogQuota(actualQuota), logReason))
-		recordVideoTaskSettlementMarker(ctx, task, actualQuota, detail)
+		recordVideoTaskSettlementMarker(ctx, task, actualQuota, detail, extraOther...)
 		return
 	}
 
@@ -1385,6 +1435,7 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 	//other["reason"] = reason
 	other["pre_consumed_quota"] = preConsumedQuota
 	other["actual_quota"] = actualQuota
+	other["video_final_quota"] = actualQuota
 	for _, extra := range extraOther {
 		if extra == nil {
 			continue
@@ -1403,6 +1454,10 @@ func RecalculateTaskQuota(ctx context.Context, task *model.Task, actualQuota int
 		other["billing_mode"] = "video_per_second"
 		appendVideoPerSecondBillingDetailOther(other, detail, actualQuota)
 	}
+	// 明细写入后再次对齐：保证实际扣费含超分附加费。
+	other["actual_quota"] = actualQuota
+	other["video_final_quota"] = actualQuota
+	other["video_billed_quota"] = actualQuota
 	phase := model.BillingPhaseDeltaCharge
 	balanceDelta := -int64(logQuota)
 	if logType == model.LogTypeRefund {

@@ -489,7 +489,12 @@ func (a *TaskAdaptor) ConvertToOpenAIVideo(originTask *model.Task) ([]byte, erro
 	openAIVideo.ID = originTask.TaskID
 	openAIVideo.Status = originTask.Status.ToVideoStatus()
 	openAIVideo.SetProgressStr(originTask.Progress)
-	openAIVideo.SetMetadata("url", dResp.Content.VideoURL)
+	// 超分成功后优先返回超分结果 URL，避免继续暴露大模型原始成片链接。
+	if resultURL := strings.TrimSpace(originTask.GetResultURL()); resultURL != "" {
+		openAIVideo.SetMetadata("url", resultURL)
+	} else {
+		openAIVideo.SetMetadata("url", dResp.Content.VideoURL)
+	}
 	if lastFrame := strings.TrimSpace(dResp.Content.LastFrameURL); lastFrame != "" {
 		openAIVideo.SetMetadata("last_frame_url", lastFrame)
 	}
