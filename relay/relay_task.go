@@ -501,7 +501,7 @@ func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool, requestPath strin
 	// Alibaba video moderation is asynchronous. Always use the persisted polling
 	// result while it is enabled so an upstream success response cannot expose an
 	// unmoderated video URL through this realtime path.
-	if setting.ShouldCheckAliyunGuardrailVideo() {
+	if setting.ShouldCheckAliyunGuardrailVideoForUser(task.UserId) {
 		return nil
 	}
 	channelModel, err := model.GetChannelById(task.ChannelId, true)

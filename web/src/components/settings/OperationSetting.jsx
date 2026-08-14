@@ -81,6 +81,7 @@ const OperationSetting = ({ activeSection = 'general' }) => {
     AliyunGuardrailOutputEnabled: true,
     AliyunGuardrailVideoEnabled: false,
     AliyunGuardrailHidePlaygroundMediaTabs: false,
+    AliyunGuardrailUserIDs: '',
     AliyunGuardrailAccessKeyID: '',
     AliyunGuardrailAccessKeySecret: '',
     AliyunGuardrailRegionID: 'cn-shanghai',
