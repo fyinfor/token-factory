@@ -61,12 +61,13 @@ const LanguageSelector = ({ currentLang, onLanguageChange }) => {
     >
       <Button
         icon={<Languages size={18} />}
-        aria-label={`${t('common.changeLanguage')}: ${currentLabel}`}
+        aria-label={`${t('语言')}: ${currentLabel}`}
+        title={`${t('语言')}: ${currentLabel}`}
         theme='borderless'
         type='tertiary'
-        className='!px-2 !py-1.5 !text-current focus:!bg-semi-color-fill-1 dark:focus:!bg-gray-700 !rounded-full !bg-semi-color-fill-0 dark:!bg-semi-color-fill-1 hover:!bg-semi-color-fill-1 dark:hover:!bg-semi-color-fill-2 !max-w-[11rem] sm:!max-w-[14rem]'
+        className='header-language-button !rounded-full !bg-semi-color-fill-0 !text-current hover:!bg-semi-color-fill-1 focus-visible:!ring-2 focus-visible:!ring-semi-color-primary dark:!bg-semi-color-fill-1 dark:hover:!bg-semi-color-fill-2'
       >
-        <span className='truncate text-sm font-medium min-w-0'>
+        <span className='header-language-label min-w-0 truncate text-sm font-medium'>
           {currentLabel}
         </span>
       </Button>

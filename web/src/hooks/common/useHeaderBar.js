@@ -60,6 +60,7 @@ export const useHeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
     [rawDocsLink, i18n.language],
   );
   const isDemoSiteMode = statusState?.status?.demo_site_enabled || false;
+  const changelogEnabled = statusState?.status?.changelog_enabled === true;
 
   useEffect(() => {
     let cancelled = false;
@@ -285,6 +286,7 @@ export const useHeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
     isSelfUseMode,
     docsNav,
     isDemoSiteMode,
+    changelogEnabled,
     computePageEnabled,
     isConsoleRoute,
     theme,

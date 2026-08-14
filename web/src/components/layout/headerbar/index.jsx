@@ -39,7 +39,6 @@ import HeaderLogo from './HeaderLogo';
 import MobileSiteNavDropdown from './MobileSiteNavDropdown';
 import Navigation from './Navigation';
 import ActionButtons from './ActionButtons';
-import SettingsQuickSearch from './SettingsQuickSearch';
 
 const NOTIFICATION_POLL_INTERVAL_MS = 2 * 60 * 1000;
 const BUBBLE_MERGE_DELAY_MS = 450;
@@ -63,6 +62,7 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
     isSelfUseMode,
     docsNav,
     isDemoSiteMode,
+    changelogEnabled,
     computePageEnabled,
     isConsoleRoute,
     theme,
@@ -326,8 +326,8 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
       ) : null}
 
       <div className='w-full px-4 md:px-6'>
-        <div className='flex items-center justify-between h-14 gap-2'>
-          <div className='flex items-center gap-2 md:gap-4 flex-1 min-w-0 md:flex-initial'>
+        <div className='flex h-14 items-center justify-between gap-2'>
+          <div className='flex min-w-0 flex-1 items-center gap-2 xl:flex-none xl:gap-4'>
             <MobileMenuButton
               isConsoleRoute={isConsoleRoute}
               isMobile={isMobile}
@@ -350,7 +350,7 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
               t={t}
             />
 
-            <div className='min-w-0 flex-1 overflow-hidden md:hidden'>
+            <div className='min-w-0 flex-1 overflow-hidden sm:max-w-[240px] xl:hidden'>
               <MobileSiteNavDropdown
                 mainNavLinks={mainNavLinks}
                 pricingRequireAuth={pricingRequireAuth}
@@ -363,16 +363,15 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
             {/* {!isMobile && <SearchDropdown isMobile={isMobile} />} */}
           </div>
 
-          <div className='flex flex-shrink-0 items-center gap-2 md:gap-6'>
+          <div className='flex min-w-0 flex-shrink-0 items-center gap-1.5 sm:gap-2 xl:flex-1 xl:justify-end xl:gap-3 min-[1800px]:gap-4'>
             <Navigation
               mainNavLinks={mainNavLinks}
               isMobile={isMobile}
               isLoading={isLoading}
               userState={userState}
               pricingRequireAuth={pricingRequireAuth}
+              t={t}
             />
-
-            <SettingsQuickSearch userState={userState} />
 
             <ActionButtons
               isNewYear={isNewYear}
@@ -388,6 +387,7 @@ const HeaderBar = ({ onMobileMenuToggle, drawerOpen }) => {
               isLoading={isLoading}
               isMobile={isMobile}
               isSelfUseMode={isSelfUseMode}
+              changelogEnabled={changelogEnabled}
               logout={logout}
               navigate={navigate}
               t={t}

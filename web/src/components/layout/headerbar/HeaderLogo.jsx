@@ -32,7 +32,7 @@ import {
  * 注意：tailwind.config 覆盖了默认 colors，无 blue/zinc 等键，暗色必须用任意值或 semi-color-*，否则 dark: 不会产出 CSS。
  */
 const APPLY_BTN_BASE =
-  'flex-shrink-0 inline-flex items-center justify-center text-sm font-semibold transition-all duration-200 ease-in-out rounded-lg px-3.5 py-2 min-h-[2.25rem] border shadow-sm dark:shadow-none';
+  'flex-shrink-0 inline-flex items-center justify-center text-sm font-semibold transition-colors duration-200 rounded-lg px-3.5 py-2 min-h-[2.25rem] border shadow-sm dark:shadow-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-semi-color-primary';
 const APPLY_BTN_IDLE =
   'border-[#b3d8ff] bg-[#ecf5ff] text-[#409EFF] hover:bg-[#d9ecff] hover:border-[#409EFF] active:bg-[#c6e2ff] dark:border-[rgba(96,165,250,0.35)] dark:bg-[rgba(59,130,246,0.1)] dark:text-[rgba(147,197,253,0.92)] dark:hover:bg-[rgba(59,130,246,0.15)] dark:hover:border-[rgba(96,165,250,0.48)] dark:active:bg-[rgba(59,130,246,0.12)]';
 const APPLY_BTN_ACTIVE =
@@ -85,18 +85,20 @@ const HeaderLogo = ({
   const supplierActive = location.pathname.startsWith(supplierApplyPath);
 
   return (
-    <div className='flex items-center gap-2 md:gap-3 flex-shrink-0'>
-      <Link to='/' className='group flex items-center gap-2'>
+    <div className='flex min-w-0 flex-shrink-0 items-center gap-2 min-[1600px]:gap-3'>
+      <Link to='/' className='group flex min-w-0 items-center gap-2'>
         <div className='relative w-8 h-8 md:w-8 md:h-8'>
           <SkeletonWrapper loading={isLoading || !logoLoaded} type='image' />
           <img
             src={logo}
-            alt='logo'
-            className={`absolute inset-0 w-full h-full transition-all duration-200 group-hover:scale-110 rounded-full ${!isLoading && logoLoaded ? 'opacity-100' : 'opacity-0'}`}
+            alt={`${systemName} logo`}
+            width={32}
+            height={32}
+            className={`absolute inset-0 h-full w-full rounded-full transition-[transform,opacity] duration-200 group-hover:scale-110 ${!isLoading && logoLoaded ? 'opacity-100' : 'opacity-0'}`}
           />
         </div>
-        <div className='hidden md:flex items-center gap-2'>
-          <div className='flex items-center gap-2'>
+        <div className='flex min-w-0 items-center gap-2'>
+          <div className='flex min-w-0 items-center gap-2'>
             <SkeletonWrapper
               loading={isLoading}
               type='title'
@@ -105,7 +107,7 @@ const HeaderLogo = ({
             >
               <Typography.Title
                 heading={4}
-                className='!text-lg !font-semibold !mb-0'
+                className='!mb-0 max-w-[6rem] truncate !text-sm !font-semibold sm:max-w-[10rem] sm:!text-base min-[1600px]:!text-lg min-[1800px]:max-w-[14rem]'
               >
                 {systemName}
               </Typography.Title>
@@ -113,7 +115,7 @@ const HeaderLogo = ({
             {(isSelfUseMode || isDemoSiteMode) && !isLoading && (
               <Tag
                 color={isSelfUseMode ? 'purple' : 'blue'}
-                className='text-xs px-1.5 py-0.5 rounded whitespace-nowrap shadow-sm'
+                className='hidden whitespace-nowrap rounded px-1.5 py-0.5 text-xs shadow-sm min-[1800px]:inline-flex'
                 size='small'
                 shape='circle'
               >
@@ -124,7 +126,7 @@ const HeaderLogo = ({
         </div>
       </Link>
       {showSupplierApply && (
-        <div className='hidden sm:flex items-center gap-2 flex-shrink-0'>
+        <div className='hidden flex-shrink-0 items-center gap-2 min-[1600px]:flex'>
           <Link
             to={supplierTo}
             onClick={handleApplyEntryClick(supplierApplyPath)}

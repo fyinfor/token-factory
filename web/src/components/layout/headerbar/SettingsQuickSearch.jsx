@@ -48,10 +48,14 @@ const getShortcutLabel = () => {
   return /mac|iphone|ipad|ipod/i.test(platform) ? '⌘ K' : 'Ctrl K';
 };
 
-const SettingsQuickSearch = ({ userState }) => {
+const SettingsQuickSearch = ({
+  userState,
+  visible,
+  onVisibleChange,
+  triggerClassName = '',
+}) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [visible, setVisible] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const resultRefs = useRef([]);
@@ -195,19 +199,19 @@ const SettingsQuickSearch = ({ userState }) => {
       }
 
       event.preventDefault();
-      setVisible(true);
+      onVisibleChange(true);
     };
 
     window.addEventListener('keydown', handleShortcut);
     return () => window.removeEventListener('keydown', handleShortcut);
-  }, [isRootUser]);
+  }, [isRootUser, onVisibleChange]);
 
   if (!isRootUser) {
     return null;
   }
 
   const closeModal = () => {
-    setVisible(false);
+    onVisibleChange(false);
     setQuery('');
   };
 
@@ -243,22 +247,24 @@ const SettingsQuickSearch = ({ userState }) => {
 
   return (
     <>
-      <button
-        type='button'
-        className='settings-quick-search-trigger'
-        onClick={() => setVisible(true)}
-        aria-label={t('搜索功能')}
-        title={`${t('搜索功能')} (${shortcutLabel})`}
-        aria-haspopup='dialog'
-        aria-expanded={visible}
-        aria-keyshortcuts='Control+K Meta+K'
-      >
-        <Search size={15} strokeWidth={2} />
-        <span className='settings-quick-search-trigger-label'>
-          {t('搜索功能')}
-        </span>
-        <kbd className='settings-quick-search-shortcut'>{shortcutLabel}</kbd>
-      </button>
+      <div className={triggerClassName}>
+        <button
+          type='button'
+          className='settings-quick-search-trigger'
+          onClick={() => onVisibleChange(true)}
+          aria-label={t('搜索功能')}
+          title={`${t('搜索功能')} (${shortcutLabel})`}
+          aria-haspopup='dialog'
+          aria-expanded={visible}
+          aria-keyshortcuts='Control+K Meta+K'
+        >
+          <Search size={15} strokeWidth={2} />
+          <span className='settings-quick-search-trigger-label'>
+            {t('搜索功能')}
+          </span>
+          <kbd className='settings-quick-search-shortcut'>{shortcutLabel}</kbd>
+        </button>
+      </div>
 
       <Modal
         className='settings-quick-search-modal'
