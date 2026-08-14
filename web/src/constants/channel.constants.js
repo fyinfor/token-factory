@@ -249,6 +249,11 @@ export const CHANNEL_OPTIONS = [
         label: '智象未来（图像）',
     },
     {
+        value: 68,
+        color: 'green',
+        label: 'MiniMax H3 视频',
+    },
+    {
         value: 69,
         color: 'orange',
         label: '阿里云-ASR 同步转写',
@@ -269,6 +274,9 @@ export const CHANNEL_TYPE_ALI_IMAGE = 66;
 /** 智象未来图像（与后端 constant.ChannelTypeHiDreamImage 一致） */
 export const CHANNEL_TYPE_HIDREAM_IMAGE = 67;
 
+/** MiniMax H3 视频 V2（与后端 constant.ChannelTypeMiniMaxH3Video 一致） */
+export const CHANNEL_TYPE_MINIMAX_H3_VIDEO = 68;
+
 /** 阿里云 ASR 同步转写（与后端 constant.ChannelTypeAliASRSync 一致） */
 export const CHANNEL_TYPE_ALI_ASR_SYNC = 69;
 
@@ -277,7 +285,7 @@ export const CHANNEL_TYPE_ALI_ASR_ASYNC = 70;
 
 // Channel types that support upstream model list fetching in UI.
 export const MODEL_FETCHABLE_CHANNEL_TYPES = new Set([
-    1, 4, 14, 34, 17, 26, 27, 24, 47, 25, 20, 23, 31, 40, 42, 48, 43, 61, 62, 63, 64,
+    1, 4, 14, 34, 17, 26, 27, 24, 47, 25, 20, 23, 31, 40, 42, 48, 43, 61, 62, 63, 64, 68,
 ]);
 
 export const MODEL_TABLE_PAGE_SIZE = 10;

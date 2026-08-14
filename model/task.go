@@ -118,6 +118,28 @@ type TaskPrivateData struct {
 	AliyunVideoGuardrailTaskID string `json:"aliyun_video_guardrail_task_id,omitempty"`
 	AliyunVideoGuardrailStatus string `json:"aliyun_video_guardrail_status,omitempty"`
 	AliyunVideoGuardrailURL    string `json:"aliyun_video_guardrail_url,omitempty"`
+	// VideoUpscale 视频超分上下文：命中渠道超分规则时写入，轮询阶段驱动 MPS 超分任务。
+	VideoUpscale *TaskVideoUpscaleInfo `json:"video_upscale,omitempty"`
+}
+
+// 视频超分任务状态（TaskVideoUpscaleInfo.Status 取值）。
+const (
+	TaskVideoUpscaleStatusPending    = "pending"    // 已命中规则，等待视频生成完成
+	TaskVideoUpscaleStatusProcessing = "processing" // MPS 超分任务已提交，处理中
+	TaskVideoUpscaleStatusSuccess    = "success"    // 超分完成
+	TaskVideoUpscaleStatusFailed     = "failed"     // 超分失败
+)
+
+// TaskVideoUpscaleInfo 视频超分上下文：记录命中的渠道规则与 MPS 任务进度。
+type TaskVideoUpscaleInfo struct {
+	SourceResolution string  `json:"source_resolution"`          // 生成分辨率（实际生成档位）
+	TargetResolution string  `json:"target_resolution"`          // 超分分辨率（对外输出档位）
+	TemplateId       uint64  `json:"template_id"`                // MPS 超分模版 ID
+	MpsTaskId        string  `json:"mps_task_id,omitempty"`      // MPS 任务 ID（提交后回填）
+	Status           string  `json:"status,omitempty"`           // pending/processing/success/failed
+	OutputUrl        string  `json:"output_url,omitempty"`       // 超分后视频 URL（完成后回填）
+	DurationSec      float64 `json:"duration_sec,omitempty"`     // 超分后视频时长（秒，计费用）
+	FailReason       string  `json:"fail_reason,omitempty"`      // 超分失败原因
 }
 
 // TaskBillingContext 记录任务提交时的计费参数，以便轮询阶段可以重新计算额度。

@@ -110,6 +110,10 @@ func GetOptions(c *gin.Context) {
 		if k == "oss_setting.access_key_id" || k == "oss_setting.access_key_secret" {
 			continue
 		}
+		// 视频超分腾讯云密钥在循环结束后单独追加（脱敏）
+		if k == "video_upscale_setting.secret_id" || k == "video_upscale_setting.secret_key" {
+			continue
+		}
 		// 阿里云短信 AccessKey 在循环结束后单独追加（脱敏）。
 		if k == "SMSAccessKeyID" || k == "SMSAccessKeySecret" {
 			continue
@@ -181,6 +185,34 @@ func GetOptions(c *gin.Context) {
 	options = append(options, &model.Option{
 		Key:   "oss_setting.access_key_secret",
 		Value: ossSecretDisp,
+	})
+	rawUpscaleID := strings.TrimSpace(operation_setting.GetVideoUpscaleSetting().SecretId)
+	if rawUpscaleID == "" {
+		if v, ok := common.OptionMap["video_upscale_setting.secret_id"]; ok {
+			rawUpscaleID = strings.TrimSpace(common.Interface2String(v))
+		}
+	}
+	upscaleIDDisp := ""
+	if rawUpscaleID != "" {
+		upscaleIDDisp = common.MaskCredentialForAdminDisplay(rawUpscaleID)
+	}
+	options = append(options, &model.Option{
+		Key:   "video_upscale_setting.secret_id",
+		Value: upscaleIDDisp,
+	})
+	rawUpscaleSecret := strings.TrimSpace(operation_setting.GetVideoUpscaleSetting().SecretKey)
+	if rawUpscaleSecret == "" {
+		if v, ok := common.OptionMap["video_upscale_setting.secret_key"]; ok {
+			rawUpscaleSecret = strings.TrimSpace(common.Interface2String(v))
+		}
+	}
+	upscaleSecretDisp := ""
+	if rawUpscaleSecret != "" {
+		upscaleSecretDisp = common.MaskCredentialForAdminDisplay(rawUpscaleSecret)
+	}
+	options = append(options, &model.Option{
+		Key:   "video_upscale_setting.secret_key",
+		Value: upscaleSecretDisp,
 	})
 	rawSMSID := strings.TrimSpace(common.SMSAccessKeyID)
 	if rawSMSID == "" {
@@ -359,6 +391,24 @@ func UpdateOption(c *gin.Context) {
 	}
 	if option.Key == "oss_setting.access_key_secret" && strings.TrimSpace(operation_setting.GetOssSetting().AccessKeySecret) != "" {
 		if valStr == common.MaskCredentialForAdminDisplay(operation_setting.GetOssSetting().AccessKeySecret) {
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"message": "",
+			})
+			return
+		}
+	}
+	if option.Key == "video_upscale_setting.secret_id" && strings.TrimSpace(operation_setting.GetVideoUpscaleSetting().SecretId) != "" {
+		if valStr == common.MaskCredentialForAdminDisplay(operation_setting.GetVideoUpscaleSetting().SecretId) {
+			c.JSON(http.StatusOK, gin.H{
+				"success": true,
+				"message": "",
+			})
+			return
+		}
+	}
+	if option.Key == "video_upscale_setting.secret_key" && strings.TrimSpace(operation_setting.GetVideoUpscaleSetting().SecretKey) != "" {
+		if valStr == common.MaskCredentialForAdminDisplay(operation_setting.GetVideoUpscaleSetting().SecretKey) {
 			c.JSON(http.StatusOK, gin.H{
 				"success": true,
 				"message": "",

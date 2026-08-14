@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -63,6 +64,17 @@ type AliVideoResponse struct {
 	RequestID string         `json:"request_id"`
 	Code      string         `json:"code,omitempty"`
 	Message   string         `json:"message,omitempty"`
+	Usage     *AliVideoUsage `json:"usage,omitempty"`
+}
+
+// AliVideoUsage is the DashScope task query usage block (billing source of truth).
+type AliVideoUsage struct {
+	Duration            float64 `json:"duration,omitempty"`
+	InputVideoDuration  float64 `json:"input_video_duration,omitempty"`
+	OutputVideoDuration float64 `json:"output_video_duration,omitempty"`
+	VideoCount          int     `json:"video_count,omitempty"`
+	SR                  int     `json:"SR,omitempty"`
+	Ratio               string  `json:"ratio,omitempty"`
 }
 
 // AliVideoOutput is the task output section.
@@ -756,7 +768,31 @@ func (a *TaskAdaptor) ParseTaskResult(respBody []byte) (*relaycommon.TaskInfo, e
 		taskResult.Status = model.TaskStatusQueued
 		taskResult.Progress = taskcommon.ProgressQueued
 	}
+	applyAliVideoUsageToTaskInfo(&taskResult, aliResp.Usage)
 	return &taskResult, nil
+}
+
+// applyAliVideoUsageToTaskInfo 将查询回包 usage 写入 TaskInfo，供结算按成片时长/分辨率对齐。
+func applyAliVideoUsageToTaskInfo(taskResult *relaycommon.TaskInfo, usage *AliVideoUsage) {
+	if taskResult == nil || usage == nil {
+		return
+	}
+	dur := usage.OutputVideoDuration
+	if dur <= 0 {
+		dur = usage.Duration
+	}
+	if dur > 0 {
+		taskResult.Duration = int(math.Ceil(dur))
+		if taskResult.Duration <= 0 {
+			taskResult.Duration = 1
+		}
+	}
+	if usage.SR > 0 {
+		taskResult.Resolution = common.FormatVideoResolutionLabel(strconv.Itoa(usage.SR))
+	}
+	if r := strings.TrimSpace(usage.Ratio); r != "" {
+		taskResult.Ratio = r
+	}
 }
 
 func (a *TaskAdaptor) ConvertToOpenAIVideo(task *model.Task) ([]byte, error) {

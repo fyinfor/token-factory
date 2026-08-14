@@ -367,6 +367,38 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 		logger.LogError(ctx, fmt.Sprintf("Task %s not found in taskM", taskId))
 		return fmt.Errorf("task %s not found", taskId)
 	}
+
+	// 超分处理中：改查 MPS，不再请求上游生成任务。
+	// 必须先 Snapshot：HandleVideoUpscalePoll 会把内存状态改成 SUCCESS，
+	// 若再用变更后的 Status 做 CAS，WHERE status=SUCCESS 对不上库中的 IN_PROGRESS，
+	// 会导致结束时间/结果地址/结算全部落库失败。
+	upscaleSnap := task.Snapshot()
+	if handled, shouldSettleUpscale := HandleVideoUpscalePoll(ctx, task); handled {
+		if shouldSettleUpscale {
+			won, err := task.UpdateWithStatus(upscaleSnap.Status)
+			if err != nil {
+				logger.LogError(ctx, fmt.Sprintf("UpdateWithStatus failed for upscale task %s: %s", task.TaskID, err.Error()))
+				return nil
+			}
+			if !won {
+				logger.LogWarn(ctx, fmt.Sprintf("Task %s already transitioned by another process, skip upscale billing", task.TaskID))
+				return nil
+			}
+			if task.Status == model.TaskStatusSuccess {
+				settleTaskBillingOnComplete(ctx, adaptor, task, &relaycommon.TaskInfo{
+					Status: string(model.TaskStatusSuccess),
+					Url:    task.GetResultURL(),
+				})
+			}
+			return nil
+		}
+		if !upscaleSnap.Equal(task.Snapshot()) {
+			if _, err := task.UpdateWithStatus(upscaleSnap.Status); err != nil {
+				logger.LogError(ctx, fmt.Sprintf("Failed to update upscale task %s: %s", task.TaskID, err.Error()))
+			}
+		}
+		return nil
+	}
 	key := ch.Key
 
 	privateData := task.PrivateData
@@ -491,6 +523,17 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 			// No URL from adaptor — construct proxy URL using public task ID
 			task.PrivateData.ResultURL = taskcommon.BuildProxyURL(task.TaskID)
 		}
+		// 命中超分规则：提交 MPS 后保持 IN_PROGRESS，本轮不结算。
+		if BeginVideoUpscaleAfterGenerate(ctx, task, task.PrivateData.ResultURL) {
+			task.Status = model.TaskStatusInProgress
+			task.Progress = "97%"
+			task.FinishTime = 0
+			// 避免下方用上游 100% 覆盖超分进行中进度。
+			taskResult.Progress = ""
+			shouldSettle = false
+			shouldRefund = false
+			break
+		}
 	case model.TaskStatusFailure:
 		logger.LogJson(ctx, fmt.Sprintf("Task %s failed", taskId), task)
 		task.Status = model.TaskStatusFailure
@@ -507,7 +550,8 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 	default:
 		return fmt.Errorf("unknown task status %s for task %s", taskResult.Status, task.TaskID)
 	}
-	if taskResult.Progress != "" {
+	// 超分进行中进度由 MPS 流程维护，勿被上游生成回包的 Progress 覆盖。
+	if taskResult.Progress != "" && !IsVideoUpscaleInProgress(task) {
 		task.Progress = taskResult.Progress
 	}
 
@@ -588,6 +632,7 @@ func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor
 	if task == nil {
 		return
 	}
+	taskResult = enrichTaskInfoFromStoredVideoResult(task, taskResult)
 	hintTokens := 0
 	if taskResult != nil {
 		hintTokens = taskResult.TotalTokens
@@ -595,9 +640,10 @@ func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor
 	defer func() {
 		TryPostWalletProfitShareForTaskBilledQuota(ctx, task, task.Quota, hintTokens)
 	}()
-	// 0. 按次计费的任务不做差额结算
+	// 0. 按次计费的任务不做差额结算（超分附加费仍在 RecalculateTaskQuota 中叠加）
 	if bc := task.PrivateData.BillingContext; bc != nil && bc.PerCallBilling {
 		logger.LogInfo(ctx, fmt.Sprintf("任务 %s 按次计费，跳过差额结算", task.TaskID))
+		RecalculateTaskQuota(ctx, task, task.Quota, nil)
 		return
 	}
 	// 0.3 视频「按 Token 计费」模式（按量计费基础价格配置了输出价格）：
@@ -625,9 +671,9 @@ func settleTaskBillingOnComplete(ctx context.Context, adaptor TaskPollingAdaptor
 		RecalculateTaskQuota(ctx, task, actualQuota, nil)
 		return
 	}
-	// 3. 无调整，保持预扣额度（估算值）；仍写入结算标记供前端展示「实际扣费」。
+	// 3. 无调整，保持预扣额度（估算值）；超分附加费由 RecalculateTaskQuota 叠加。
 	_, markerDetail := recalcVideoPerSecondQuotaDetailOnComplete(task, taskResult)
-	recordVideoTaskSettlementMarker(ctx, task, task.Quota, markerDetail)
+	RecalculateTaskQuota(ctx, task, task.Quota, markerDetail)
 }
 
 // SettleTaskBillingOnFetch 用于 /v1/videos/{task_id} 查询链路下的成功结算。
@@ -639,12 +685,14 @@ func SettleTaskBillingOnFetch(ctx context.Context, task *model.Task, taskResult 
 	if task == nil || taskResult == nil {
 		return
 	}
+	taskResult = enrichTaskInfoFromStoredVideoResult(task, taskResult)
 	hintTokens := taskResult.TotalTokens
 	defer func() {
 		TryPostWalletProfitShareForTaskBilledQuota(ctx, task, task.Quota, hintTokens)
 	}()
-	// 按次模型不做差额结算
+	// 按次模型不做差额结算（超分附加费仍在 RecalculateTaskQuota 中叠加）
 	if bc := task.PrivateData.BillingContext; bc != nil && bc.PerCallBilling {
+		RecalculateTaskQuota(ctx, task, task.Quota, nil)
 		return
 	}
 	// 视频「按 Token 计费」模式优先：以 total_tokens × 输出单价补差并覆盖视频规格日志字段。
@@ -662,7 +710,48 @@ func SettleTaskBillingOnFetch(ctx context.Context, task *model.Task, taskResult 
 		return
 	}
 	_, markerDetail := recalcVideoPerSecondQuotaDetailOnComplete(task, taskResult)
-	recordVideoTaskSettlementMarker(ctx, task, task.Quota, markerDetail)
+	RecalculateTaskQuota(ctx, task, task.Quota, markerDetail)
+}
+
+// enrichTaskInfoFromStoredVideoResult 超分结算时轮询入口只带了 Status/Url，
+// 从任务落库的上游回包补全 total_tokens / duration / resolution，避免跳过按 token 结算。
+func enrichTaskInfoFromStoredVideoResult(task *model.Task, taskResult *relaycommon.TaskInfo) *relaycommon.TaskInfo {
+	if taskResult == nil {
+		taskResult = &relaycommon.TaskInfo{Status: string(model.TaskStatusSuccess)}
+	}
+	if task == nil {
+		return taskResult
+	}
+	if taskResult.TotalTokens <= 0 {
+		if n := extractTotalTokensFromTaskData(task.Data); n > 0 {
+			taskResult.TotalTokens = n
+		}
+	}
+	// 超分成功：时长用 MPS 回包；配置了超分价时分辨率保持目标档，不做上游校准。
+	if ups := task.PrivateData.VideoUpscale; ups != nil && ups.Status == model.TaskVideoUpscaleStatusSuccess {
+		if taskResult.Duration <= 0 && ups.DurationSec > 0 {
+			taskResult.Duration = int(math.Ceil(ups.DurationSec))
+		}
+		if shouldKeepUpscaleTargetResolution(task) {
+			if label := common.FormatVideoResolutionLabel(ups.TargetResolution); label != "" {
+				taskResult.Resolution = label
+			}
+		}
+	}
+	spec := resolveVideoOutputSpecFromUpstream(task, taskResult)
+	if taskResult.Duration <= 0 && spec.Duration > 0 {
+		taskResult.Duration = spec.Duration
+	}
+	if strings.TrimSpace(taskResult.Resolution) == "" && strings.TrimSpace(spec.Resolution) != "" {
+		taskResult.Resolution = spec.Resolution
+	}
+	if strings.TrimSpace(taskResult.Ratio) == "" && strings.TrimSpace(spec.Ratio) != "" {
+		taskResult.Ratio = spec.Ratio
+	}
+	if strings.TrimSpace(taskResult.Url) == "" {
+		taskResult.Url = task.GetResultURL()
+	}
+	return taskResult
 }
 
 func recalcVideoPerSecondQuotaOnComplete(task *model.Task, taskResult *relaycommon.TaskInfo) int {
@@ -760,6 +849,13 @@ func recalcVideoPerSecondQuotaDetailOnComplete(task *model.Task, taskResult *rel
 	} else if label := strings.TrimSpace(upstreamSpec.Resolution); label != "" {
 		detail.Resolution = common.FormatVideoResolutionLabel(label)
 		if detail.Resolution == "" {
+			detail.Resolution = label
+		}
+	}
+	// 超分成功且配置了超分价：按用户选择的目标分辨率展示，不做上游矫正。
+	if shouldKeepUpscaleTargetResolution(task) {
+		detail.ResolutionFromRequest = true
+		if label := common.FormatVideoResolutionLabel(task.PrivateData.VideoUpscale.TargetResolution); label != "" {
 			detail.Resolution = label
 		}
 	}
@@ -1154,6 +1250,8 @@ func parseVideoResolutionFlexibleForRatio(v string, ratio float64) (int, int, bo
 		shortSide = 540
 	case "720p":
 		shortSide = 720
+	case "768p":
+		shortSide = 768
 	case "1080p":
 		shortSide = 1080
 	case "2k":
@@ -1184,6 +1282,8 @@ func parseVideoResolutionFlexible(v string) (int, int, bool) {
 		return 960, 540, true
 	case "720p":
 		return 1280, 720, true
+	case "768p":
+		return 1366, 768, true
 	case "1080p":
 		return 1920, 1080, true
 	case "2k":

@@ -20,6 +20,40 @@ func TestSubmitURL(t *testing.T) {
 	}
 }
 
+func TestParseTaskResult_UsageBillingFields(t *testing.T) {
+	body := []byte(`{
+		"request_id": "req-1",
+		"output": {
+			"task_id": "task-1",
+			"task_status": "SUCCEEDED",
+			"video_url": "https://example.com/out.mp4"
+		},
+		"usage": {
+			"duration": 5,
+			"output_video_duration": 5,
+			"SR": 720,
+			"ratio": "16:9"
+		}
+	}`)
+	a := &TaskAdaptor{}
+	info, err := a.ParseTaskResult(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Duration != 5 {
+		t.Fatalf("Duration = %d, want 5", info.Duration)
+	}
+	if info.Resolution != "720p" {
+		t.Fatalf("Resolution = %q, want 720p", info.Resolution)
+	}
+	if info.Ratio != "16:9" {
+		t.Fatalf("Ratio = %q, want 16:9", info.Ratio)
+	}
+	if info.Url != "https://example.com/out.mp4" {
+		t.Fatalf("Url = %q", info.Url)
+	}
+}
+
 func TestConvertToAliRequest_TextToVideo(t *testing.T) {
 	a := &TaskAdaptor{}
 	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}}

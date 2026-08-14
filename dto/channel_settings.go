@@ -33,6 +33,15 @@ type ChannelModelRateLimitRule struct {
 	Enabled *bool  `json:"enabled,omitempty"`
 }
 
+// ChannelVideoUpscaleRule 渠道视频超分规则：用户请求 TargetResolution 时，
+// 底层按 SourceResolution 生成原始视频，再调用腾讯云 MPS 超分到 TargetResolution。
+// 同一渠道内 TargetResolution 必须唯一。
+type ChannelVideoUpscaleRule struct {
+	SourceResolution string `json:"source_resolution"` // 生成分辨率：480P/540P/720P/768P/1080P/2K/4K
+	TargetResolution string `json:"target_resolution"` // 超分分辨率：720P/1080P/2K/4K
+	TemplateId       uint64 `json:"template_id"`       // MPS 超分模版 ID
+}
+
 func (r ChannelModelRateLimitRule) IsEnabled() bool {
 	if r.RPM <= 0 || strings.TrimSpace(r.Model) == "" {
 		return false
@@ -61,6 +70,7 @@ type ChannelOtherSettings struct {
 	UpstreamModelUpdateLastRemovedModels  []string      `json:"upstream_model_update_last_removed_models,omitempty"`  // 上次检测到的可删除模型
 	UpstreamModelUpdateIgnoredModels      []string                    `json:"upstream_model_update_ignored_models,omitempty"` // 手动忽略的模型
 	ModelRateLimits                       []ChannelModelRateLimitRule `json:"model_rate_limits,omitempty"`                    // 渠道模型 RPM 全局限流
+	VideoUpscaleRules                     []ChannelVideoUpscaleRule   `json:"video_upscale_rules,omitempty"`                  // 渠道视频超分规则
 }
 
 func (s *ChannelOtherSettings) IsOpenRouterEnterprise() bool {

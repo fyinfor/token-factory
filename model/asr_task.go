@@ -22,15 +22,17 @@ type AsrTask struct {
 	ChannelID      int     `json:"channel_id" gorm:"index"`
 	Model          string  `json:"model" gorm:"type:varchar(128)"`
 	AudioURL       string  `json:"audio_url" gorm:"type:text"`
-	Status         string  `json:"status" gorm:"type:varchar(16);index"` // dto.ASRTaskStatus*
-	Quota          int     `json:"quota"`                                // 提交时=预扣额度；结算后=实际额度
-	AudioSeconds   float64 `json:"audio_seconds"`
-	ResultText     string  `json:"result_text" gorm:"type:text"`
-	FailReason     string  `json:"fail_reason" gorm:"type:text"`
-	BilledAt       int64   `json:"billed_at"` // 结算时间戳，0 表示尚未按真实时长结算（幂等键）
-	CreatedAt      int64   `json:"created_at" gorm:"index"`
-	UpdatedAt      int64   `json:"updated_at"`
-	FinishedAt     int64   `json:"finished_at"`
+	Status            string  `json:"status" gorm:"type:varchar(16);index"` // dto.ASRTaskStatus*
+	Quota             int     `json:"quota"`                                // 提交时=预扣额度；结算后=实际额度
+	QuotaLogged       int     `json:"quota_logged"`                         // 已写入预扣消费日志的额度；0=旧任务未写预扣日志
+	AudioSeconds      float64 `json:"audio_seconds"`
+	ResultText        string  `json:"result_text" gorm:"type:text"`
+	ResultTranscripts string  `json:"result_transcripts" gorm:"type:text"` // JSON: []dto.ASRTranscript
+	FailReason        string  `json:"fail_reason" gorm:"type:text"`
+	BilledAt          int64   `json:"billed_at"` // 结算时间戳，0 表示尚未按真实时长结算（幂等键）
+	CreatedAt         int64   `json:"created_at" gorm:"index"`
+	UpdatedAt         int64   `json:"updated_at"`
+	FinishedAt        int64   `json:"finished_at"`
 }
 
 func NewAsrTaskID() string {
@@ -128,17 +130,18 @@ func (t *AsrTask) MarkFailed(reason string) (bool, error) {
 // TryMarkSucceededAndBilled 任务成功并占位结算：仅当 billed_at = 0 时生效。
 // 不覆盖 Quota（提交预扣额度需保留至差额结算成功后再更新为实际额度）。
 // 返回 true 表示本次调用赢得了结算权，重复轮询/并发请求返回 false。
-func (t *AsrTask) TryMarkSucceededAndBilled(resultText string, seconds float64, _ int) (bool, error) {
+func (t *AsrTask) TryMarkSucceededAndBilled(resultText string, resultTranscripts string, seconds float64, _ int) (bool, error) {
 	now := time.Now().Unix()
 	result := DB.Model(&AsrTask{}).
 		Where("id = ? AND billed_at = 0 AND status IN ?", t.ID, []string{dto.ASRTaskStatusPending, dto.ASRTaskStatusRunning}).
 		Updates(map[string]any{
-			"status":        dto.ASRTaskStatusSucceeded,
-			"result_text":   resultText,
-			"audio_seconds": seconds,
-			"billed_at":     now,
-			"updated_at":    now,
-			"finished_at":   now,
+			"status":             dto.ASRTaskStatusSucceeded,
+			"result_text":        resultText,
+			"result_transcripts": resultTranscripts,
+			"audio_seconds":      seconds,
+			"billed_at":          now,
+			"updated_at":         now,
+			"finished_at":        now,
 		})
 	if result.Error != nil {
 		return false, result.Error
@@ -146,6 +149,7 @@ func (t *AsrTask) TryMarkSucceededAndBilled(resultText string, seconds float64, 
 	if result.RowsAffected > 0 {
 		t.Status = dto.ASRTaskStatusSucceeded
 		t.ResultText = resultText
+		t.ResultTranscripts = resultTranscripts
 		t.AudioSeconds = seconds
 		t.BilledAt = now
 		t.FinishedAt = now

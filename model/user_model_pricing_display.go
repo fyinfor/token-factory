@@ -9,7 +9,8 @@ import (
 // ApplyUserPricingOverrideToPricingAPI 将登录用户的「用户指定价」应用到定价接口展示数据：
 //   - 命中覆盖的模型：渠道展示价改写为「全局官方价 × (成本折扣 + 经营成本 + 加价折扣)」，
 //     与计费口径一致（渠道无关）；
-//   - 渠道有效单价超出用户指定价上限的条目整条隐藏（该用户无法调用这些渠道）；
+//   - price_cap：渠道有效单价超出用户指定价上限的条目整条隐藏；
+//   - channel_list：仅保留勾选渠道，未勾选整条隐藏；
 //   - 未命中覆盖的模型原样保留。
 //
 // 返回过滤后的新切片。data 为「模型 × 单渠道」打平结构，每条仅一个 ChannelList 元素。
@@ -33,6 +34,8 @@ func ApplyUserPricingOverrideToPricingAPI(userId int, pricingData []PricingAPIIt
 		if markupOv < 0 {
 			markupOv = 0
 		}
+		mode := ov.NormalizedMode()
+		allowSet, allowOK := GetEnabledUserModelPricingChannelAllowSet(userId, modelName)
 
 		globalRatio, _, _ := ratio_setting.GetModelRatio(modelName)
 		globalPrice, hasGlobalPrice := ratio_setting.GetModelPrice(modelName, false)
@@ -50,49 +53,40 @@ func ApplyUserPricingOverrideToPricingAPI(userId int, pricingData []PricingAPIIt
 		for j := range item.ChannelList {
 			ch := &item.ChannelList[j]
 
-			// 渠道现价与上限（与 service.ResolveChannelModelUnitPrice / UserModelUnitPriceCap 同口径）。
-			var chEff, capBasis float64
-			if ch.ModelPrice > 0 && hasGlobalPrice && globalPrice > 0 {
-				chEff = EffectiveModelPrice(ch.ModelPrice, globalPrice, ch.EffectiveCostPercent, ch.MarkupDiscountRate)
-				capBasis = globalPrice
-			} else if globalRatio > 0 {
-				chEff = EffectiveInputRate(ch.ModelRatio, globalRatio, ch.EffectiveCostPercent, ch.MarkupDiscountRate)
-				capBasis = globalRatio
+			if mode == UserPricingModeChannelList {
+				if !allowOK || allowSet == nil {
+					hide = true
+					break
+				}
+				if _, ok := allowSet[ch.ChannelID]; !ok {
+					hide = true
+					break
+				}
 			} else {
-				// 全局官方价未配置：上限无法定义，保留原展示（计费同样回退渠道基价）。
-				continue
-			}
-			if chEff > capBasis*(totalPercent/100.0)*(1+1e-9) {
-				hide = true
-				break
+				// 渠道现价与上限（与 service.ResolveChannelModelUnitPrice / UserModelUnitPriceCap 同口径）。
+				var chEff, capBasis float64
+				if ch.ModelPrice > 0 && hasGlobalPrice && globalPrice > 0 {
+					chEff = EffectiveModelPrice(ch.ModelPrice, globalPrice, ch.EffectiveCostPercent, ch.MarkupDiscountRate)
+					capBasis = globalPrice
+				} else if globalRatio > 0 {
+					chEff = EffectiveInputRate(ch.ModelRatio, globalRatio, ch.EffectiveCostPercent, ch.MarkupDiscountRate)
+					capBasis = globalRatio
+				} else {
+					// 全局官方价未配置：上限无法定义，保留原展示（计费同样回退渠道基价）。
+					rewriteUserPricingChannelDisplay(ch, globalRatio, globalPrice, hasGlobalPrice,
+						globalCompletionRatio, globalCacheRatio, globalCreateCacheRatio, effCostOv, markupOv)
+					item.VideoFlatClipHint = BuildVideoFlatClipHint(ch.ChannelID, modelName, effCostOv, markupOv)
+					item.ImagePerImageHint = BuildImagePerImageHint(ch.ChannelID, modelName, effCostOv, markupOv)
+					continue
+				}
+				if chEff > capBasis*(totalPercent/100.0)*(1+1e-9) {
+					hide = true
+					break
+				}
 			}
 
-			// 展示改写：基价替换为全局官方价，三折扣替换为用户覆盖值，
-			// 前端公式 chMr×cost% + globalMr×markup% 即得 全局价 × 总折扣。
-			if globalRatio > 0 {
-				ch.ModelRatio = globalRatio
-			}
-			if ch.ModelPrice > 0 && hasGlobalPrice && globalPrice > 0 {
-				ch.ModelPrice = globalPrice
-			}
-			ch.CompletionRatio = globalCompletionRatio
-			ch.CacheRatio = globalCacheRatio
-			ch.CreateCacheRatio = globalCreateCacheRatio
-			ch.PriceDiscountPercent = effCostOv
-			ch.EffectiveCostPercent = effCostOv
-			ch.MarkupDiscountRate = markupOv
-			// 指定价不套阶梯计费；Option 渠道成本价字段一并清除避免误导。
-			ch.RequestTierPricing = nil
-			if ch.QuotaType == 3 {
-				ch.QuotaType = 0
-			}
-			ch.OptionModelRatio = nil
-			ch.OptionCompletionRatio = nil
-			ch.OptionCacheRatio = nil
-			ch.OptionCreateCacheRatio = nil
-			ch.OptionModelPrice = nil
-
-			// 分档展示价（视频/图片）按用户折扣重算，与被邀请人加价覆盖处理一致。
+			rewriteUserPricingChannelDisplay(ch, globalRatio, globalPrice, hasGlobalPrice,
+				globalCompletionRatio, globalCacheRatio, globalCreateCacheRatio, effCostOv, markupOv)
 			item.VideoFlatClipHint = BuildVideoFlatClipHint(ch.ChannelID, modelName, effCostOv, markupOv)
 			item.ImagePerImageHint = BuildImagePerImageHint(ch.ChannelID, modelName, effCostOv, markupOv)
 		}
@@ -101,4 +95,37 @@ func ApplyUserPricingOverrideToPricingAPI(userId int, pricingData []PricingAPIIt
 		}
 	}
 	return out
+}
+
+func rewriteUserPricingChannelDisplay(
+	ch *PricingChannelItem,
+	globalRatio, globalPrice float64,
+	hasGlobalPrice bool,
+	globalCompletionRatio, globalCacheRatio, globalCreateCacheRatio, effCostOv, markupOv float64,
+) {
+	if ch == nil {
+		return
+	}
+	if globalRatio > 0 {
+		ch.ModelRatio = globalRatio
+	}
+	if ch.ModelPrice > 0 && hasGlobalPrice && globalPrice > 0 {
+		ch.ModelPrice = globalPrice
+	}
+	ch.CompletionRatio = globalCompletionRatio
+	ch.CacheRatio = globalCacheRatio
+	ch.CreateCacheRatio = globalCreateCacheRatio
+	ch.PriceDiscountPercent = effCostOv
+	ch.EffectiveCostPercent = effCostOv
+	ch.MarkupDiscountRate = markupOv
+	// 指定价不套阶梯计费；Option 渠道成本价字段一并清除避免误导。
+	ch.RequestTierPricing = nil
+	if ch.QuotaType == 3 {
+		ch.QuotaType = 0
+	}
+	ch.OptionModelRatio = nil
+	ch.OptionCompletionRatio = nil
+	ch.OptionCacheRatio = nil
+	ch.OptionCreateCacheRatio = nil
+	ch.OptionModelPrice = nil
 }

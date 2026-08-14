@@ -50,6 +50,8 @@ require (
 	github.com/swaggo/gin-swagger v1.6.1
 	github.com/swaggo/swag v1.16.6
 	github.com/tcolgate/mp3 v0.0.0-20170426193717-e79c5a46d300
+	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.3.158
+	github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/mps v1.3.158
 	github.com/thanhpk/randstr v1.0.6
 	github.com/tidwall/gjson v1.18.0
 	github.com/tidwall/sjson v1.2.5

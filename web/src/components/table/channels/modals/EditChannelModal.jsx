@@ -51,6 +51,7 @@ import {
   Col,
   Highlight,
   Input,
+  Select,
   Tooltip,
   Collapse,
   Dropdown,
@@ -315,6 +316,7 @@ const EditChannelModal = (props) => {
     tencent_vod_secret_key: '',
     tencent_vod_region: '',
     model_rate_limits: [],
+    video_upscale_rules: [],
   };
   const [batch, setBatch] = useState(false);
   const [multiToSingle, setMultiToSingle] = useState(false);
@@ -684,6 +686,51 @@ const EditChannelModal = (props) => {
     }));
   };
 
+  const VIDEO_UPSCALE_SOURCE_OPTIONS = [
+    { label: '480p', value: '480p' },
+    { label: '540p', value: '540p' },
+    { label: '720p', value: '720p' },
+    { label: '768p', value: '768p' },
+    { label: '1080p', value: '1080p' },
+    { label: '2K', value: '2K' },
+    { label: '4K', value: '4K' },
+  ];
+  const VIDEO_UPSCALE_TARGET_OPTIONS = [
+    { label: '720p', value: '720p' },
+    { label: '1080p', value: '1080p' },
+    { label: '2K', value: '2K' },
+    { label: '4K', value: '4K' },
+  ];
+
+  const [videoUpscaleTemplates, setVideoUpscaleTemplates] = useState([]);
+
+  const updateVideoUpscaleRule = (index, patch) => {
+    setInputs((prev) => {
+      const nextRules = [...(prev.video_upscale_rules || [])];
+      nextRules[index] = { ...nextRules[index], ...patch };
+      return { ...prev, video_upscale_rules: nextRules };
+    });
+  };
+
+  const addVideoUpscaleRule = () => {
+    setInputs((prev) => ({
+      ...prev,
+      video_upscale_rules: [
+        ...(prev.video_upscale_rules || []),
+        { source_resolution: '480p', target_resolution: '720p', template_id: 0 },
+      ],
+    }));
+  };
+
+  const removeVideoUpscaleRule = (index) => {
+    setInputs((prev) => ({
+      ...prev,
+      video_upscale_rules: (prev.video_upscale_rules || []).filter(
+        (_, itemIndex) => itemIndex !== index,
+      ),
+    }));
+  };
+
   const applyClipboardConfig = (config) => {
     if (!config) return;
     setInputs((prev) => ({
@@ -894,6 +941,19 @@ const EditChannelModal = (props) => {
             formApiRef.current.setValue(
               'base_url',
               'https://maas.hidreamai.com/api/maas/gw',
+            );
+          }
+          break;
+        case 68:
+          localModels = getChannelModels(value);
+          setInputs((prevInputs) => ({
+            ...prevInputs,
+            base_url: 'https://api.minimaxi.com/v2',
+          }));
+          if (formApiRef.current) {
+            formApiRef.current.setValue(
+              'base_url',
+              'https://api.minimaxi.com/v2',
             );
           }
           break;
@@ -1181,6 +1241,15 @@ const EditChannelModal = (props) => {
                 enabled: item?.enabled !== false,
               }))
             : [];
+          data.video_upscale_rules = Array.isArray(
+            parsedSettings.video_upscale_rules,
+          )
+            ? parsedSettings.video_upscale_rules.map((item) => ({
+                source_resolution: String(item?.source_resolution || '').trim(),
+                target_resolution: String(item?.target_resolution || '').trim(),
+                template_id: Number(item?.template_id) || 0,
+              }))
+            : [];
         } catch (error) {
           console.error('解析其他设置失败:', error);
           data.azure_responses_version = '';
@@ -1200,6 +1269,7 @@ const EditChannelModal = (props) => {
           data.upstream_model_update_last_detected_models = [];
           data.upstream_model_update_ignored_models = '';
           data.model_rate_limits = [];
+          data.video_upscale_rules = [];
         }
       } else {
         // 兼容历史数据：老渠道没有 settings 时，默认按 json 展示
@@ -1218,6 +1288,7 @@ const EditChannelModal = (props) => {
         data.upstream_model_update_last_detected_models = [];
         data.upstream_model_update_ignored_models = '';
         data.model_rate_limits = [];
+        data.video_upscale_rules = [];
       }
 
       if (
@@ -1649,6 +1720,28 @@ const EditChannelModal = (props) => {
         } catch {}
       }
       fetchModelGroups();
+      API.get('/api/option/')
+        .then((res) => {
+          const list = res?.data?.data;
+          if (!Array.isArray(list)) return;
+          const item = list.find(
+            (opt) => opt.key === 'video_upscale_setting.templates',
+          );
+          if (!item?.value) {
+            setVideoUpscaleTemplates([]);
+            return;
+          }
+          try {
+            const parsed =
+              typeof item.value === 'string'
+                ? JSON.parse(item.value)
+                : item.value;
+            setVideoUpscaleTemplates(Array.isArray(parsed) ? parsed : []);
+          } catch (e) {
+            setVideoUpscaleTemplates([]);
+          }
+        })
+        .catch(() => setVideoUpscaleTemplates([]));
       // 重置手动输入模式状态
       setUseManualInput(false);
       // 编辑模式下恢复用户偏好，创建模式一律折叠
@@ -1937,6 +2030,7 @@ const EditChannelModal = (props) => {
     let localInputs = { ...formValues };
     localInputs.param_override = inputs.param_override;
     localInputs.model_rate_limits = inputs.model_rate_limits || [];
+    localInputs.video_upscale_rules = inputs.video_upscale_rules || [];
 
     if (localInputs.type === 57) {
       if (batch) {
@@ -2125,6 +2219,17 @@ const EditChannelModal = (props) => {
       showInfo(
         t(
           '阿里云 ASR 渠道必须填写上游基础地址（例如 https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api）！',
+        ),
+      );
+      return;
+    }
+    if (
+      localInputs.type === 68 &&
+      (!localInputs.base_url || localInputs.base_url.trim() === '')
+    ) {
+      showInfo(
+        t(
+          'MiniMax H3 视频渠道必须填写 V2 基础地址（例如 https://api.minimaxi.com/v2），接口路径由网关自动拼接！',
         ),
       );
       return;
@@ -2332,6 +2437,20 @@ const EditChannelModal = (props) => {
       }))
       .filter((item) => item.model && item.rpm > 0);
 
+    settings.video_upscale_rules = (Array.isArray(localInputs.video_upscale_rules)
+      ? localInputs.video_upscale_rules
+      : []
+    )
+      .map((item) => ({
+        source_resolution: String(item?.source_resolution || '').trim(),
+        target_resolution: String(item?.target_resolution || '').trim(),
+        template_id: Number(item?.template_id) || 0,
+      }))
+      .filter(
+        (item) =>
+          item.source_resolution && item.target_resolution && item.template_id > 0,
+      );
+
     localInputs.settings = JSON.stringify(settings);
 
     // 清理不需要发送到后端的字段
@@ -2363,6 +2482,7 @@ const EditChannelModal = (props) => {
     delete localInputs.upstream_model_update_last_detected_models;
     delete localInputs.upstream_model_update_ignored_models;
     delete localInputs.model_rate_limits;
+    delete localInputs.video_upscale_rules;
 
     let res;
     localInputs.auto_ban = localInputs.auto_ban ? 1 : 0;
@@ -2978,6 +3098,100 @@ const EditChannelModal = (props) => {
                                 theme='light'
                                 block
                                 onClick={() => removeModelRateLimitRule(index)}
+                              >
+                                {t('删除')}
+                              </Button>
+                            </Col>
+                          </Row>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className='py-3 border-b border-gray-100'>
+                  <div className='flex items-center justify-between gap-2 mb-3'>
+                    <Text className='text-sm font-medium text-gray-500'>
+                      {t('视频超分规则')}
+                    </Text>
+                    <Button size='small' type='primary' onClick={addVideoUpscaleRule}>
+                      {t('添加规则')}
+                    </Button>
+                  </div>
+                  <Banner
+                    type='info'
+                    description={t(
+                      '用户请求超分分辨率时，底层按生成分辨率出片，再调用腾讯云 MPS 超分。同一渠道内超分分辨率不可重复。全局 SecretId/SecretKey/输出路径未配齐时不生效。',
+                    )}
+                    style={{ marginBottom: 12 }}
+                  />
+                  {(inputs.video_upscale_rules || []).length === 0 ? (
+                    <Text type='tertiary' size='small'>
+                      {t('未配置视频超分规则')}
+                    </Text>
+                  ) : (
+                    <div className='space-y-3'>
+                      {(inputs.video_upscale_rules || []).map((rule, index) => (
+                        <div
+                          key={`video-upscale-${index}`}
+                          className='rounded-xl p-3'
+                          style={{
+                            backgroundColor: 'var(--semi-color-fill-0)',
+                            border: '1px solid var(--semi-color-fill-2)',
+                          }}
+                        >
+                          <Row gutter={12}>
+                            <Col xs={24} sm={7}>
+                              <div className='mb-1 text-sm'>{t('生成分辨率')}</div>
+                              <Select
+                                value={rule.source_resolution || '480p'}
+                                optionList={VIDEO_UPSCALE_SOURCE_OPTIONS}
+                                style={{ width: '100%' }}
+                                onChange={(value) =>
+                                  updateVideoUpscaleRule(index, {
+                                    source_resolution: value,
+                                  })
+                                }
+                              />
+                            </Col>
+                            <Col xs={24} sm={7}>
+                              <div className='mb-1 text-sm'>{t('超分分辨率')}</div>
+                              <Select
+                                value={rule.target_resolution || '720p'}
+                                optionList={VIDEO_UPSCALE_TARGET_OPTIONS}
+                                style={{ width: '100%' }}
+                                onChange={(value) =>
+                                  updateVideoUpscaleRule(index, {
+                                    target_resolution: value,
+                                  })
+                                }
+                              />
+                            </Col>
+                            <Col xs={24} sm={7}>
+                              <div className='mb-1 text-sm'>{t('超分模版')}</div>
+                              <Select
+                                value={rule.template_id || undefined}
+                                placeholder={t('选择模版')}
+                                optionList={(videoUpscaleTemplates || [])
+                                  .filter((item) => Number(item?.id) > 0)
+                                  .map((item) => ({
+                                    label: `${item.name || item.id} (${item.id})`,
+                                    value: Number(item.id),
+                                  }))}
+                                style={{ width: '100%' }}
+                                onChange={(value) =>
+                                  updateVideoUpscaleRule(index, {
+                                    template_id: Number(value) || 0,
+                                  })
+                                }
+                              />
+                            </Col>
+                            <Col xs={24} sm={3} className='flex items-end'>
+                              <Button
+                                type='danger'
+                                theme='light'
+                                block
+                                onClick={() => removeVideoUpscaleRule(index)}
                               >
                                 {t('删除')}
                               </Button>
@@ -4591,6 +4805,16 @@ const EditChannelModal = (props) => {
                             />
                           )}
 
+                          {inputs.type === 68 && (
+                            <Banner
+                              type='info'
+                              description={t(
+                                '请填写 MiniMax 视频 V2 基础地址，例如 https://api.minimaxi.com/v2；网关会自动拼接 /video_generation 与查询路径，无需填写完整 URL。',
+                              )}
+                              className='!rounded-lg'
+                            />
+                          )}
+
                           {inputs.type !== 3 &&
                             inputs.type !== 8 &&
                             inputs.type !== 22 &&
@@ -4601,13 +4825,15 @@ const EditChannelModal = (props) => {
                                   field='base_url'
                                   label={t('API地址')}
                                   placeholder={
-                                    inputs.type === 69 || inputs.type === 70
-                                      ? t(
-                                          '必填，例如：https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api',
-                                        )
-                                      : t(
-                                          '此项可选，用于通过自定义API地址来进行 API 调用，末尾不要带/v1和/',
-                                        )
+                                    inputs.type === 68
+                                      ? t('必填，例如：https://api.minimaxi.com/v2')
+                                      : inputs.type === 69 || inputs.type === 70
+                                        ? t(
+                                            '必填，例如：https://{WorkspaceId}.cn-beijing.maas.aliyuncs.com/api',
+                                          )
+                                        : t(
+                                            '此项可选，用于通过自定义API地址来进行 API 调用，末尾不要带/v1和/',
+                                          )
                                   }
                                   onChange={(value) =>
                                     handleInputChange('base_url', value)
@@ -4615,13 +4841,17 @@ const EditChannelModal = (props) => {
                                   showClear
                                   disabled={isIonetLocked}
                                   extraText={
-                                    inputs.type === 69 || inputs.type === 70
+                                    inputs.type === 68
                                       ? t(
-                                          '阿里云 ASR 渠道必须填写上游基础地址，路径由网关自动拼接',
+                                          'MiniMax H3 视频渠道必须填写 V2 基础地址，路径由网关自动拼接',
                                         )
-                                      : t(
-                                          '对于官方渠道，new-api已经内置地址，除非是第三方代理站点或者Azure的特殊接入地址，否则不需要填写',
-                                        )
+                                      : inputs.type === 69 || inputs.type === 70
+                                        ? t(
+                                            '阿里云 ASR 渠道必须填写上游基础地址，路径由网关自动拼接',
+                                          )
+                                        : t(
+                                            '对于官方渠道，new-api已经内置地址，除非是第三方代理站点或者Azure的特殊接入地址，否则不需要填写',
+                                          )
                                   }
                                 />
                               </div>

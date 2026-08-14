@@ -68,6 +68,8 @@ func PixelsToResolution(width, height int) string {
 	switch {
 	case short >= 1080:
 		return "1080p"
+	case short >= 768:
+		return "768p"
 	case short >= 720:
 		return "720p"
 	case short >= 540:

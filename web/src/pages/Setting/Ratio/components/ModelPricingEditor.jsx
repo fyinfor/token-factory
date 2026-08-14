@@ -67,7 +67,7 @@ import JsonCodeEditor from '../../../../components/common/ui/JsonCodeEditor';
 import { VIDEO_PRICING_JSON_PLACEHOLDER } from '../utils/videoPricingJson';
 import { useIsMobile } from '../../../../hooks/common/useIsMobile';
 import { getCurrencyConfig, showError } from '../../../../helpers';
-import { formatImageResolutionDisplayLabel } from '../../../../helpers/videoResolutionLabel';
+import { formatImageResolutionDisplayLabel, formatVideoResolutionDisplayLabel } from '../../../../helpers/videoResolutionLabel';
 
 const { Text } = Typography;
 const EMPTY_CANDIDATE_MODEL_NAMES = [];
@@ -119,6 +119,7 @@ const VIDEO_RESOLUTION_OPTIONS = [
   { label: '480p', value: '854x480' },
   { label: '540p', value: '960x540' },
   { label: '720p', value: '1280x720' },
+  { label: '768p', value: '1366x768' },
   { label: '1080p', value: '1920x1080' },
   { label: '2K', value: '2560x1440' },
   { label: '4K', value: '3840x2160' },
@@ -157,14 +158,54 @@ const VIDEO_RULE_INPUT_ROW_STYLE = {
 };
 
 const getSelectableResolutionOptions = (rows, currentIndex) => {
-  const used = new Set(
+  const usedLabels = new Set(
     (rows || [])
       .map((item, index) =>
         index === currentIndex ? '' : item?.resolution || '',
       )
-      .filter(Boolean),
+      .filter(Boolean)
+      .map((resolution) =>
+        (formatVideoResolutionDisplayLabel(resolution) || resolution)
+          .toLowerCase()
+          .trim(),
+      ),
   );
-  return VIDEO_RESOLUTION_OPTIONS.filter((item) => !used.has(item.value));
+  const current = String(rows?.[currentIndex]?.resolution || '').trim();
+  const options = VIDEO_RESOLUTION_OPTIONS.filter((item) => {
+    const label = (
+      formatVideoResolutionDisplayLabel(item.value) || item.value
+    )
+      .toLowerCase()
+      .trim();
+    return !usedLabels.has(label);
+  });
+  // 兼容 MiniMax H3 的 768P 等官方档位：当前行值与下拉 canonical 像素不一致时，仍展示同一档位。
+  if (current) {
+    const currentLabel = (
+      formatVideoResolutionDisplayLabel(current) || current
+    )
+      .toLowerCase()
+      .trim();
+    const withoutDup = options.filter((item) => {
+      if (item.value === current) {
+        return true;
+      }
+      const itemLabel = (
+        formatVideoResolutionDisplayLabel(item.value) || item.value
+      )
+        .toLowerCase()
+        .trim();
+      return itemLabel !== currentLabel;
+    });
+    if (!withoutDup.some((item) => item.value === current)) {
+      withoutDup.unshift({
+        label: formatVideoResolutionDisplayLabel(current) || current,
+        value: current,
+      });
+    }
+    return withoutDup;
+  }
+  return options;
 };
 
 const getSelectableImageResolutionOptions = (rows, currentIndex) => {
@@ -2192,6 +2233,125 @@ export default function ModelPricingEditor({
                         )}
                       </div>
                     </Card>
+                    {isOptionalFieldEnabled(selectedModel, 'video') ? (
+                    <Card
+                      bodyStyle={{ padding: 16 }}
+                      style={{
+                        marginBottom: 16,
+                        background: 'var(--semi-color-fill-0)',
+                      }}
+                    >
+                      <div className='mb-2 font-medium text-gray-700'>
+                        {t('视频超分（按秒）')}
+                      </div>
+                      <div className='mb-2 text-xs text-gray-600'>
+                        {t(
+                          '按「原分辨率 → 超分分辨率」配置每秒单价，表示从原分辨率转到该超分分辨率。任务命中渠道超分规则且超分成功时，在原视频计费上叠加：向上取整秒数 × 本表单价。未配置对应档位则不收超分费。',
+                        )}
+                      </div>
+                      {(selectedModel.videoUpscaleRules || []).length > 0 ? (
+                        <div
+                          className='mb-2 text-xs text-gray-500'
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: '140px 140px 180px 64px',
+                            gap: 8,
+                            padding: '0 12px',
+                          }}
+                        >
+                          <span>{t('超分分辨率')}</span>
+                          <span>{t('原分辨率')}</span>
+                          <span>{t('价格')}</span>
+                          <span />
+                        </div>
+                      ) : null}
+                      {(selectedModel.videoUpscaleRules || []).map(
+                        (row, index, arr) => (
+                          <div
+                            key={`upscale-rule-${index}`}
+                            style={{
+                              ...VIDEO_RULE_CARD_STYLE,
+                              marginBottom: index < arr.length - 1 ? 10 : 0,
+                              display: 'grid',
+                              gridTemplateColumns: '140px 140px 180px 64px',
+                              alignItems: 'center',
+                              gap: 8,
+                            }}
+                          >
+                            <Select
+                              value={row.resolution}
+                              placeholder={t('超分分辨率')}
+                              optionList={VIDEO_RESOLUTION_OPTIONS.filter((item) =>
+                                ['1280x720', '1920x1080', '2560x1440', '3840x2160'].includes(
+                                  item.value,
+                                ),
+                              )}
+                              style={{ width: 140 }}
+                              onChange={(value) =>
+                                updateVideoRuleRow(
+                                  'upscale',
+                                  index,
+                                  'resolution',
+                                  value,
+                                )
+                              }
+                            />
+                            <Select
+                              value={row.sourceResolution}
+                              placeholder={t('原分辨率')}
+                              optionList={VIDEO_RESOLUTION_OPTIONS}
+                              style={{ width: 140 }}
+                              onChange={(value) =>
+                                updateVideoRuleRow(
+                                  'upscale',
+                                  index,
+                                  'sourceResolution',
+                                  value,
+                                )
+                              }
+                            />
+                            <Input
+                              value={row.tokenPrice}
+                              placeholder={t('每秒价格')}
+                              suffix={
+                                selectedModel.videoPriceUnit === 'CNY'
+                                  ? '¥/秒'
+                                  : selectedModel.videoPriceUnit === 'CUSTOM'
+                                    ? `${getCurrencyConfig().symbol || '¤'}/秒`
+                                    : '$/秒'
+                              }
+                              style={{ width: 180 }}
+                              onChange={(value) =>
+                                updateVideoRuleRow(
+                                  'upscale',
+                                  index,
+                                  'tokenPrice',
+                                  value,
+                                )
+                              }
+                            />
+                            <Button
+                              theme='borderless'
+                              type='danger'
+                              onClick={() =>
+                                removeVideoRuleRow('upscale', index)
+                              }
+                            >
+                              {t('删除')}
+                            </Button>
+                          </div>
+                        ),
+                      )}
+                      <Button
+                        theme='borderless'
+                        icon={<IconPlus />}
+                        onClick={() => addVideoRuleRow('upscale')}
+                        style={{ marginTop: 8 }}
+                      >
+                        {t('添加超分价格')}
+                      </Button>
+                    </Card>
+                    ) : null}
                     <Card
                       bodyStyle={{ padding: 16 }}
                       style={{

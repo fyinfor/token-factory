@@ -39,6 +39,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/channel/task/hailuo"
 	taskjimeng "github.com/QuantumNous/new-api/relay/channel/task/jimeng"
 	"github.com/QuantumNous/new-api/relay/channel/task/kling"
+	taskminimaxh3 "github.com/QuantumNous/new-api/relay/channel/task/minimaxh3"
 	taskopenaivideo "github.com/QuantumNous/new-api/relay/channel/task/openaivideo"
 	tasksora "github.com/QuantumNous/new-api/relay/channel/task/sora"
 	"github.com/QuantumNous/new-api/relay/channel/task/suno"
@@ -175,6 +176,8 @@ func GetTaskAdaptor(platform constant.TaskPlatform) channel.TaskAdaptor {
 			return &tasktencentvod.TaskAdaptor{}
 		case constant.ChannelTypeAliVideo:
 			return &taskalivideo.TaskAdaptor{}
+		case constant.ChannelTypeMiniMaxH3Video:
+			return &taskminimaxh3.TaskAdaptor{}
 		}
 	}
 	return nil

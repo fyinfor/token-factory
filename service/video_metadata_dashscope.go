@@ -102,12 +102,27 @@ func extractTencentVODVideoMetadata(payload map[string]any) (*VideoMetadata, boo
 
 func extractDashScopeVideoMetadata(payload map[string]any) (*VideoMetadata, bool) {
 	output := dashScopeOutput(payload)
-	if output == nil {
+	if output == nil && dashScopeUsage(payload) == nil {
 		return nil, false
 	}
 	duration := dashScopeDurationFromOutput(output)
-	videoURL := dashScopeVideoURL(output)
-	width, height := dashScopeResolutionFromURL(videoURL)
+	if duration <= 0 {
+		duration = dashScopeDurationFromUsage(payload)
+	}
+	ratio := dashScopeRatioFromUsage(payload)
+	resolution := dashScopeResolutionLabelFromUsage(payload)
+	width, height := 0, 0
+	if resolution != "" {
+		if w, h, ok := common.ParseVideoResolutionAndRatio(resolution, ratio); ok {
+			width, height = w, h
+		}
+	}
+	if width <= 0 || height <= 0 {
+		videoURL := dashScopeVideoURL(output)
+		if videoURL != "" {
+			width, height = dashScopeResolutionFromURL(videoURL)
+		}
+	}
 	if duration <= 0 || width <= 0 || height <= 0 {
 		return nil, false
 	}
@@ -120,6 +135,9 @@ func extractDashScopeVideoMetadata(payload map[string]any) (*VideoMetadata, bool
 }
 
 func dashScopeOutput(payload map[string]any) map[string]any {
+	if payload == nil {
+		return nil
+	}
 	if output, _ := payload["output"].(map[string]any); output != nil {
 		return output
 	}
@@ -129,7 +147,30 @@ func dashScopeOutput(payload map[string]any) map[string]any {
 	return nil
 }
 
+// dashScopeUsage 读取 DashScope 查询回包顶层 usage（计费权威来源）。
+func dashScopeUsage(payload map[string]any) map[string]any {
+	if payload == nil {
+		return nil
+	}
+	if usage, _ := payload["usage"].(map[string]any); usage != nil {
+		return usage
+	}
+	if usage, _ := payload["Usage"].(map[string]any); usage != nil {
+		return usage
+	}
+	// 兼容误嵌套在 output 内的 usage
+	if output := dashScopeOutput(payload); output != nil {
+		if usage, _ := output["usage"].(map[string]any); usage != nil {
+			return usage
+		}
+	}
+	return nil
+}
+
 func dashScopeVideoURL(output map[string]any) string {
+	if output == nil {
+		return ""
+	}
 	for _, key := range []string{"video_url", "VideoURL", "videoUrl"} {
 		if u, _ := output[key].(string); strings.TrimSpace(u) != "" {
 			return strings.TrimSpace(u)
@@ -139,6 +180,9 @@ func dashScopeVideoURL(output map[string]any) string {
 }
 
 func dashScopeDurationFromOutput(output map[string]any) float64 {
+	if output == nil {
+		return 0
+	}
 	// 仅使用成片时长字段。切勿用 end_time-submit_time：那是任务排队/生成耗时，不是视频秒数。
 	for _, key := range []string{
 		"duration", "Duration", "video_duration", "VideoDuration",
@@ -153,14 +197,62 @@ func dashScopeDurationFromOutput(output map[string]any) float64 {
 			return d
 		}
 	}
-	if usage, _ := output["usage"].(map[string]any); usage != nil {
-		for _, key := range []string{"video_duration", "duration", "output_video_duration"} {
-			if d := metadataToFloat64(usage[key]); d > 0 {
-				return d
-			}
+	return 0
+}
+
+func dashScopeDurationFromUsage(payload map[string]any) float64 {
+	usage := dashScopeUsage(payload)
+	if usage == nil {
+		return 0
+	}
+	// 优先成片输出时长，其次 usage.duration
+	for _, key := range []string{
+		"output_video_duration", "OutputVideoDuration",
+		"duration", "Duration",
+		"video_duration", "VideoDuration",
+	} {
+		if d := metadataToFloat64(usage[key]); d > 0 {
+			return d
 		}
 	}
 	return 0
+}
+
+func dashScopeRatioFromUsage(payload map[string]any) string {
+	usage := dashScopeUsage(payload)
+	if usage == nil {
+		return ""
+	}
+	for _, key := range []string{"ratio", "Ratio", "aspect_ratio", "AspectRatio"} {
+		if r, _ := usage[key].(string); strings.TrimSpace(r) != "" {
+			return strings.TrimSpace(r)
+		}
+	}
+	return ""
+}
+
+func dashScopeResolutionLabelFromUsage(payload map[string]any) string {
+	usage := dashScopeUsage(payload)
+	if usage == nil {
+		return ""
+	}
+	for _, key := range []string{"SR", "sr", "resolution", "Resolution"} {
+		if v, ok := usage[key]; ok {
+			switch x := v.(type) {
+			case string:
+				if label := common.FormatVideoResolutionLabel(x); label != "" {
+					return label
+				}
+			default:
+				if n := metadataToInt(v); n > 0 {
+					if label := common.FormatVideoResolutionLabel(strconv.Itoa(n)); label != "" {
+						return label
+					}
+				}
+			}
+		}
+	}
+	return ""
 }
 
 func dashScopeResolutionFromURL(videoURL string) (int, int) {

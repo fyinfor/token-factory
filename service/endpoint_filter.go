@@ -36,6 +36,7 @@ func ChannelSupportsRelayMode(channel *model.Channel, modelName string, relayMod
 			constant.EndpointTypeTencentCloudVODVideo,
 			constant.EndpointTypeAliVideo,
 			constant.EndpointTypeSeedanceVideo,
+			constant.EndpointTypeMiniMaxH3Video,
 		)
 	case relayconstant.RelayModeImagesGenerations, relayconstant.RelayModeImagesEdits:
 		return supports(constant.EndpointTypeImageGeneration, constant.EndpointTypeTencentCloudVODImage)

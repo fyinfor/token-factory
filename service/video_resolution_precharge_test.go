@@ -1,9 +1,12 @@
 package service
 
 import (
+	"net/http/httptest"
 	"testing"
 
+	"github.com/QuantumNous/new-api/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
 
@@ -40,6 +43,23 @@ func TestApplyPreChargeVideoResolution_InferWhenMissing(t *testing.T) {
 	applyPreChargeVideoResolution(req, &resolution, &fromRequest, "1280x720")
 	require.False(t, fromRequest)
 	require.Equal(t, "720p", resolution)
+}
+
+func TestApplyUpscaleTargetToBillingRequest_RestoresUserResolution(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Set(contextKeyVideoUpscaleRule, dto.ChannelVideoUpscaleRule{
+		SourceResolution: "480p",
+		TargetResolution: "720p",
+		TemplateId:       1,
+	})
+	req := relaycommon.TaskSubmitReq{
+		Resolution: "480p",
+		Metadata:   map[string]interface{}{"resolution": "480p", "ratio": "16:9"},
+	}
+	applyUpscaleTargetToBillingRequest(c, &req)
+	require.Equal(t, "720p", req.Resolution)
+	require.Equal(t, "720p", req.Metadata["resolution"])
 }
 
 func TestWriteVideoResolutionLogOther_FromInput(t *testing.T) {

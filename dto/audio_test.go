@@ -35,3 +35,27 @@ func TestAudioRequest_AudioURLFields(t *testing.T) {
 	require.NoError(t, common.Unmarshal(raw, &req))
 	assert.Equal(t, "https://example.com/a.mp3", req.AudioURL)
 }
+
+func TestASRTaskSubmitRequest_DiarizationEnabledStringAndBool(t *testing.T) {
+	var fromString ASRTaskSubmitRequest
+	require.NoError(t, common.Unmarshal([]byte(`{"model":"fun-asr","diarization_enabled":"true"}`), &fromString))
+	require.NotNil(t, fromString.DiarizationEnabled)
+	assert.True(t, bool(*fromString.DiarizationEnabled))
+	require.NotNil(t, fromString.DiarizationEnabled.BoolPtr())
+	assert.True(t, *fromString.DiarizationEnabled.BoolPtr())
+
+	var fromBool ASRTaskSubmitRequest
+	require.NoError(t, common.Unmarshal([]byte(`{"model":"fun-asr","diarization_enabled":true}`), &fromBool))
+	require.NotNil(t, fromBool.DiarizationEnabled)
+	assert.True(t, bool(*fromBool.DiarizationEnabled))
+
+	var fromOne ASRTaskSubmitRequest
+	require.NoError(t, common.Unmarshal([]byte(`{"model":"fun-asr","diarization_enabled":"1"}`), &fromOne))
+	require.NotNil(t, fromOne.DiarizationEnabled)
+	assert.True(t, bool(*fromOne.DiarizationEnabled))
+
+	var omitted ASRTaskSubmitRequest
+	require.NoError(t, common.Unmarshal([]byte(`{"model":"fun-asr"}`), &omitted))
+	assert.Nil(t, omitted.DiarizationEnabled)
+	assert.Nil(t, omitted.DiarizationEnabled.BoolPtr())
+}

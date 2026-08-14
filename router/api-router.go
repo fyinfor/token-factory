@@ -446,8 +446,10 @@ func SetApiRouter(router *gin.Engine) {
 			userModelPricingRoute.GET("/users", controller.ListUserModelPricingUsers)
 			userModelPricingRoute.GET("/preview", controller.PreviewUserModelPricing)
 			userModelPricingRoute.GET("/import_preview", controller.PreviewImportUserModelPricing)
+			userModelPricingRoute.GET("/export", controller.ExportUserModelPricing)
 			userModelPricingRoute.POST("/", controller.UpsertUserModelPricing)
 			userModelPricingRoute.POST("/import", controller.ImportUserModelPricing)
+			userModelPricingRoute.POST("/convert_channel_list", controller.ConvertUserModelPricingToChannelList)
 			userModelPricingRoute.DELETE("/by_user/:user_id", controller.DeleteUserModelPricingByUser)
 			userModelPricingRoute.DELETE("/:id", controller.DeleteUserModelPricing)
 		}
