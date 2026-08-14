@@ -483,7 +483,7 @@ func updateVideoSingleTask(ctx context.Context, adaptor TaskPollingAdaptor, ch *
 			task.StartTime = now
 		}
 	case model.TaskStatusSuccess:
-		if setting.ShouldCheckAliyunGuardrailVideo() && taskResult.Url != "" && !strings.HasPrefix(taskResult.Url, "data:") {
+		if setting.ShouldCheckAliyunGuardrailVideoForUser(task.UserId) && taskResult.Url != "" && !strings.HasPrefix(taskResult.Url, "data:") {
 			moderationCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 			complete, blocked, guardrailErr := CheckAliyunVideoGuardrail(moderationCtx, task, taskResult.Url)
 			cancel()
