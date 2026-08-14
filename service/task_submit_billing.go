@@ -184,6 +184,43 @@ func extractTotalTokensFromTaskData(taskData []byte) int {
 	return findTokenCount(payload)
 }
 
+func extractDurationFromTaskData(taskData []byte) int {
+	if len(taskData) == 0 {
+		return 0
+	}
+	var payload any
+	if err := common.Unmarshal(taskData, &payload); err != nil {
+		return 0
+	}
+	return findDurationSeconds(payload)
+}
+
+func findDurationSeconds(node any) int {
+	switch v := node.(type) {
+	case map[string]any:
+		for k, raw := range v {
+			lk := strings.ToLower(strings.TrimSpace(k))
+			if lk == "duration" || lk == "duration_sec" || lk == "duration_seconds" {
+				if n := int(math.Ceil(submitToFloat64(raw))); n > 0 {
+					return n
+				}
+			}
+		}
+		for _, child := range v {
+			if n := findDurationSeconds(child); n > 0 {
+				return n
+			}
+		}
+	case []any:
+		for _, child := range v {
+			if n := findDurationSeconds(child); n > 0 {
+				return n
+			}
+		}
+	}
+	return 0
+}
+
 func findTokenCount(node any) int {
 	switch v := node.(type) {
 	case map[string]any:

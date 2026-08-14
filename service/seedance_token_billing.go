@@ -174,7 +174,13 @@ func SettleSeedanceVideoTokenBillingOnComplete(ctx context.Context, task *model.
 
 	modelName := taskModelName(task)
 	mode, width, height, hasAudio := videoTokenBillingParamsFromTask(task)
-	if w, h, ok := videoDimensionsFromTaskCompletion(task, taskResult); ok {
+	if shouldKeepUpscaleTargetResolution(task) {
+		var req relaycommon.TaskSubmitReq
+		_ = common.UnmarshalJsonStr(task.Properties.Input, &req)
+		if applyTaskUpscaleTargetToBillingRequest(task, &req) {
+			width, height = videoDimensionsFromTaskRequest(req)
+		}
+	} else if w, h, ok := videoDimensionsFromTaskCompletion(task, taskResult); ok {
 		width, height = w, h
 	}
 	resolutionLabel := VideoBillingResolutionLabelForTask(task, taskResult)
@@ -193,6 +199,16 @@ func SettleSeedanceVideoTokenBillingOnComplete(ctx context.Context, task *model.
 	}
 
 	spec := resolveSeedanceVideoSpec(task, taskResult)
+	if spec.Duration <= 0 {
+		if d := extractDurationFromTaskData(task.Data); d > 0 {
+			spec.Duration = d
+		}
+	}
+	if shouldKeepUpscaleTargetResolution(task) {
+		if label := common.FormatVideoResolutionLabel(task.PrivateData.VideoUpscale.TargetResolution); label != "" {
+			spec.Resolution = label
+		}
+	}
 	extra := buildSeedanceVideoTokenLogOther(totalTokens, match, task, spec, actualQuota)
 	settleSeedanceVideoTokenDelta(ctx, task, actualQuota, extra)
 	return true
@@ -246,6 +262,16 @@ func videoTokenBillingParamsFromTask(task *model.Task) (mode string, width, heig
 }
 
 func settleSeedanceVideoTokenDelta(ctx context.Context, task *model.Task, actualQuota int, extra map[string]interface{}) {
+	var upsOther map[string]interface{}
+	actualQuota, upsOther = appendVideoUpscaleBilling(task, actualQuota)
+	if extra == nil {
+		extra = map[string]interface{}{}
+	}
+	if upsOther != nil {
+		for k, v := range upsOther {
+			extra[k] = v
+		}
+	}
 	preConsumed := task.Quota
 	delta := actualQuota - preConsumed
 
@@ -302,6 +328,10 @@ func settleSeedanceVideoTokenDelta(ctx context.Context, task *model.Task, actual
 	for k, v := range extra {
 		other[k] = v
 	}
+	// extra 里的 video_billed_quota 可能是叠超分费之前的模型费用；最终展示/合并统一用含超分的实扣。
+	other["actual_quota"] = actualQuota
+	other["video_final_quota"] = actualQuota
+	other["video_billed_quota"] = actualQuota
 
 	other = model.SetBillingLogMetadata(other, logPhase, affectsBalance, displayQuota, balanceDelta)
 
@@ -365,6 +395,17 @@ func buildSeedanceVideoTokenLogOther(totalTokens int, match *videoTokenRuleMatch
 
 func resolveSeedanceVideoSpec(task *model.Task, taskResult *relaycommon.TaskInfo) seedanceVideoSpec {
 	spec := resolveVideoOutputSpecFromUpstream(task, taskResult)
+	if task != nil && task.PrivateData.VideoUpscale != nil {
+		ups := task.PrivateData.VideoUpscale
+		if shouldKeepUpscaleTargetResolution(task) {
+			if label := common.FormatVideoResolutionLabel(ups.TargetResolution); label != "" {
+				spec.Resolution = label
+			}
+		}
+		if ups.Status == model.TaskVideoUpscaleStatusSuccess && ups.DurationSec > 0 {
+			spec.Duration = int(math.Ceil(ups.DurationSec))
+		}
+	}
 	if spec.Resolution != "" && spec.Ratio != "" && spec.Duration > 0 {
 		return spec
 	}

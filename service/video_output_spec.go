@@ -28,6 +28,11 @@ func resolveVideoOutputSpecFromUpstream(task *model.Task, taskResult *relaycommo
 		if err := common.Unmarshal(task.Data, &upstream); err == nil {
 			mergeVideoSpecFields(&spec, upstream.Resolution, upstream.Duration, upstream.Ratio)
 		}
+		if spec.Duration <= 0 {
+			if d := extractDurationFromTaskData(task.Data); d > 0 {
+				spec.Duration = d
+			}
+		}
 		// 腾讯云 DescribeTaskDetail：AigcVideoTask.Input.OutputConfig（Temporary 存储时常无 MetaData）
 		res, dur, ratio := extractTencentInputOutputConfig(task.Data)
 		mergeVideoSpecFields(&spec, res, dur, ratio)
@@ -223,11 +228,20 @@ func mergeVideoSpecFields(spec *seedanceVideoSpec, resolution string, duration i
 }
 
 // videoMetadataFromTaskCompletion 优先从上游 resolution 解析成片元数据，无 resolution 时回退请求 size。
+// 超分成功后优先用超分回包时长校准；分辨率由 videoDimensionsFromTaskCompletion 决定（有超分价格/规则时不矫正）。
 func videoMetadataFromTaskCompletion(task *model.Task, taskResult *relaycommon.TaskInfo) (*VideoMetadata, bool) {
 	duration := 0.0
 	hasAudio := false
-	if spec := resolveVideoOutputSpecFromUpstream(task, taskResult); spec.Duration > 0 {
-		duration = float64(spec.Duration)
+	// 超分完成后以 MPS 回包时长为准，再回退上游/请求估算。
+	if task != nil && task.PrivateData.VideoUpscale != nil &&
+		task.PrivateData.VideoUpscale.Status == model.TaskVideoUpscaleStatusSuccess &&
+		task.PrivateData.VideoUpscale.DurationSec > 0 {
+		duration = task.PrivateData.VideoUpscale.DurationSec
+	}
+	if duration <= 0 {
+		if spec := resolveVideoOutputSpecFromUpstream(task, taskResult); spec.Duration > 0 {
+			duration = float64(spec.Duration)
+		}
 	}
 	if taskResult != nil && duration <= 0 && taskResult.Duration > 0 {
 		duration = float64(taskResult.Duration)
@@ -263,8 +277,12 @@ func videoMetadataFromTaskCompletion(task *model.Task, taskResult *relaycommon.T
 	return nil, false
 }
 
-// videoDimensionsFromTaskCompletion 计费匹配：上游 resolution > 请求 resolution > 请求 size > 回包其它推断。
+// videoDimensionsFromTaskCompletion 计费匹配：超分目标分辨率 > 上游 resolution > 请求 resolution > 请求 size > 回包其它推断。
+// 配置了超分计费时按用户选择的超分分辨率匹配/展示，不做上游成片校准。
 func videoDimensionsFromTaskCompletion(task *model.Task, taskResult *relaycommon.TaskInfo) (int, int, bool) {
+	if w, h, ok := videoDimensionsFromUpscaleTarget(task); ok {
+		return w, h, true
+	}
 	spec := resolveVideoOutputSpecFromUpstream(task, taskResult)
 	if strings.TrimSpace(spec.Resolution) != "" {
 		if w, h, ok := common.ParseVideoResolutionAndRatio(spec.Resolution, spec.Ratio); ok {
@@ -285,6 +303,27 @@ func videoDimensionsFromTaskCompletion(task *model.Task, taskResult *relaycommon
 	return 0, 0, false
 }
 
+func videoDimensionsFromUpscaleTarget(task *model.Task) (int, int, bool) {
+	if !shouldKeepUpscaleTargetResolution(task) {
+		return 0, 0, false
+	}
+	target := strings.TrimSpace(task.PrivateData.VideoUpscale.TargetResolution)
+	if target == "" {
+		return 0, 0, false
+	}
+	ratio := ""
+	var req relaycommon.TaskSubmitReq
+	if err := common.UnmarshalJsonStr(task.Properties.Input, &req); err == nil {
+		ratio = strings.TrimSpace(req.Ratio)
+		if ratio == "" && req.Metadata != nil {
+			if v, ok := req.Metadata["ratio"].(string); ok {
+				ratio = strings.TrimSpace(v)
+			}
+		}
+	}
+	return common.ParseVideoResolutionAndRatio(target, ratio)
+}
+
 // VideoBillingResolutionLabelFromRequest 提取用于计费档位匹配的 resolution 标识（如 720p）。
 func VideoBillingResolutionLabelFromRequest(req relaycommon.TaskSubmitReq) string {
 	if raw := videoResolutionParamFromRequest(req); raw != "" {
@@ -296,8 +335,14 @@ func VideoBillingResolutionLabelFromRequest(req relaycommon.TaskSubmitReq) strin
 	return ""
 }
 
-// VideoBillingResolutionLabelForTask 成片结算时优先取上游 resolution，否则回退请求参数。
+// VideoBillingResolutionLabelForTask 成片结算时：超分成功且配置了超分价则用目标分辨率；
+// 否则取上游 resolution，再回退请求参数。
 func VideoBillingResolutionLabelForTask(task *model.Task, taskResult *relaycommon.TaskInfo) string {
+	if shouldKeepUpscaleTargetResolution(task) {
+		if label := common.FormatVideoResolutionLabel(task.PrivateData.VideoUpscale.TargetResolution); label != "" {
+			return label
+		}
+	}
 	spec := resolveVideoOutputSpecFromUpstream(task, taskResult)
 	if raw := strings.TrimSpace(spec.Resolution); raw != "" {
 		if label := common.FormatVideoResolutionLabel(raw); label != "" {

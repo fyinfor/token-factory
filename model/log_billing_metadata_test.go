@@ -203,6 +203,67 @@ func TestMergeSettlementMarkersIntoPreChargeLogsBatch(t *testing.T) {
 	}
 }
 
+func TestIsTaskSettlementResultLog_DeltaCharge(t *testing.T) {
+	log := &Log{
+		Type:  LogTypeConsume,
+		Quota: 43400,
+		Other: common.MapToJsonStr(SetBillingLogMetadata(map[string]interface{}{
+			"task_id":            "task_ups",
+			"actual_quota":       1793400,
+			"pre_consumed_quota": 1750000,
+			"video_final_quota":  1793400,
+		}, BillingPhaseDeltaCharge, true, 43400, -43400)),
+	}
+	other := mustLogOther(t, log)
+	if !isTaskSettlementResultLog(log, other) {
+		t.Fatalf("delta charge should be a settlement result")
+	}
+	if isTaskSettlementMarkerLog(log, other) {
+		t.Fatalf("delta charge should not be treated as a zero-quota marker")
+	}
+}
+
+func TestMergeSettlementDeltaChargeIntoPreChargeLogs(t *testing.T) {
+	setupSettlementMergeTestDB(t)
+
+	pre := &Log{
+		UserId: 7, Type: LogTypeConsume, Quota: 1750000, CreatedAt: 1_000,
+		Other: common.MapToJsonStr(map[string]interface{}{
+			"task_id": "task_ups", "billing_mode": "video_token_output",
+		}),
+	}
+	delta := &Log{
+		UserId: 7, Type: LogTypeConsume, Quota: 43400, CreatedAt: 1_200,
+		Other: common.MapToJsonStr(SetBillingLogMetadata(map[string]interface{}{
+			"task_id":            "task_ups",
+			"actual_quota":       1793400,
+			"pre_consumed_quota": 1750000,
+			"video_final_quota":  1793400,
+			"video_total_tokens": 48000,
+		}, BillingPhaseDeltaCharge, true, 43400, -43400)),
+	}
+	if err := LOG_DB.Create([]*Log{pre, delta}).Error; err != nil {
+		t.Fatalf("seed logs: %v", err)
+	}
+
+	logs := []*Log{pre}
+	mergeSettlementMarkersIntoPreChargeLogs(logs)
+
+	other := mustLogOther(t, logs[0])
+	if other["billing_phase"] != BillingPhaseSettlementMerged {
+		t.Fatalf("billing_phase = %v", other["billing_phase"])
+	}
+	if got, _ := logOtherNumber(other["actual_quota"]); int(got) != 1793400 {
+		t.Fatalf("actual_quota = %v", other["actual_quota"])
+	}
+	if got, _ := logOtherNumber(other["video_final_quota"]); int(got) != 1793400 {
+		t.Fatalf("video_final_quota = %v", other["video_final_quota"])
+	}
+	if got, _ := logOtherNumber(other["video_total_tokens"]); int(got) != 48000 {
+		t.Fatalf("video_total_tokens = %v", other["video_total_tokens"])
+	}
+}
+
 func TestFillTaskUseTimeBatch(t *testing.T) {
 	setupSettlementMergeTestDB(t)
 	if err := DB.Create([]*Task{

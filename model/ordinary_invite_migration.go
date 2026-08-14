@@ -14,7 +14,7 @@ const ordinaryInviteSplitMigrationOption = "OrdinaryInviteRelationSplitMigratedV
 // 只处理当前邀请人不是分销商、且关系尚无任何分销收益的记录；已产生收益的数据保持原状，避免破坏结算。
 func MigrateLegacyOrdinaryInvitesIfNeeded() error {
 	var option Option
-	err := DB.Where("key = ?", ordinaryInviteSplitMigrationOption).First(&option).Error
+	err := DB.Where(commonKeyCol+" = ?", ordinaryInviteSplitMigrationOption).First(&option).Error
 	if err == nil && option.Value == "1" {
 		return nil
 	}

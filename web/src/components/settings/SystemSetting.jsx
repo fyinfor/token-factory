@@ -45,6 +45,7 @@ import axios from 'axios';
 import { useTranslation } from 'react-i18next';
 import CustomOAuthSetting from './CustomOAuthSetting';
 import SettingsOss from '../../pages/Setting/System/SettingsOss';
+import SettingsVideoUpscale from '../../pages/Setting/System/SettingsVideoUpscale';
 
 const SystemSetting = ({ activeSection = 'general' }) => {
   const { t } = useTranslation();
@@ -2260,6 +2261,15 @@ const SystemSetting = ({ activeSection = 'general' }) => {
             }}
           >
             <SettingsOss options={inputs} refresh={getOptions} />
+          </Card>
+          <Card
+            id='setting-section-video-upscale'
+            style={{
+              marginTop: '10px',
+              display: activeSection === 'video-upscale' ? undefined : 'none',
+            }}
+          >
+            <SettingsVideoUpscale options={inputs} refresh={getOptions} />
           </Card>
         </>
       ) : (
