@@ -21,6 +21,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal, Tag } from '@douyinfe/semi-ui';
 import { formatVideoResolutionDisplayLabel, resolveVideoBillingResolutionLabel } from '../../helpers/videoResolutionLabel';
+import { formatVideoUpscaleLogTag } from '../../helpers/render';
 import {
   API,
   getLast7DaysStartTimestamp,
@@ -131,10 +132,15 @@ export const useLogsData = () => {
   const hasVideoPerVideoDetail = (other) =>
     other?.billing_mode === 'video_per_video';
 
-  /** 规格展示：优先 video_resolution；用户输入分辨率原样展示，否则归一化推断值。 */
+  /** 规格展示：优先 video_resolution；用户输入/超分目标分辨率原样展示，否则归一化推断值。 */
   const getVideoSpecResolutionLabel = (other, specWidth, specHeight) => {
-    const fromInput = other?.video_resolution_from_input === true;
-    const upstream = String(other?.video_resolution || '').trim();
+    const fromInput =
+      other?.video_resolution_from_input === true || other?.video_upscale === true;
+    const upstream = String(
+      (other?.video_upscale === true && other?.video_upscale_resolution) ||
+        other?.video_resolution ||
+        '',
+    ).trim();
     if (upstream) {
       return resolveVideoBillingResolutionLabel(upstream, fromInput);
     }
@@ -145,6 +151,22 @@ export const useLogsData = () => {
       return fromPixels || `${specWidth}×${specHeight}`;
     }
     return '';
+  };
+
+  const getVideoDurationSeconds = (other) => {
+    const duration = Number(other?.video_duration || 0);
+    if (Number.isFinite(duration) && duration > 0) {
+      return duration;
+    }
+    const seconds = Number(other?.video_seconds || 0);
+    if (Number.isFinite(seconds) && seconds > 0) {
+      return seconds;
+    }
+    const ups = Number(other?.video_upscale_seconds || 0);
+    if (Number.isFinite(ups) && ups > 0) {
+      return ups;
+    }
+    return 0;
   };
 
   const isZeroBilledVideoNoChargeLog = (record, other) => {
@@ -214,16 +236,6 @@ export const useLogsData = () => {
     return null;
   };
 
-  /** 结算展示用 quota：与「实际扣费/预扣费」同一口径，避免浮点公式与整数 round 不一致 */
-  const getVideoSettlementQuota = (other, quota = 0) => {
-    const phase = getVideoBillingPhase(other, quota);
-    if (phase) {
-      return phase.amount;
-    }
-    const billed = Number(other?.video_billed_quota || quota || 0);
-    return Number.isFinite(billed) && billed > 0 ? billed : 0;
-  };
-
   const formatVideoDisplayNumber = (value, digits = 6) => {
     const numberValue = Number(value || 0);
     if (!Number.isFinite(numberValue)) {
@@ -285,6 +297,47 @@ export const useLogsData = () => {
       )}`;
     }
     return `${symbol}${formatCeilFixedDecimals(fixedResult, digits)}`;
+  };
+
+  const getVideoUpscaleSettlementUsd = (other) => {
+    if (other?.video_upscale !== true) {
+      return 0;
+    }
+    // 仅在结算写入 video_upscale_seconds 后展示超分项，避免用视频时长兜底冒充已扣超分费。
+    const upsSeconds = Number(other?.video_upscale_seconds || 0);
+    const upsPrice = Number(other?.video_upscale_price_per_second || 0);
+    if (!(upsSeconds > 0) || !(upsPrice > 0)) {
+      return 0;
+    }
+    return upsSeconds * upsPrice;
+  };
+
+  const formatVideoFormulaTotal = (other, usdAmount) =>
+    formatVideoUsdAmount(other, usdAmount, 6);
+
+  const buildVideoUpscaleSettlementNodes = (other, tagValue) => {
+    if (other?.video_upscale !== true) {
+      return [];
+    }
+    const upsSeconds = Number(other?.video_upscale_seconds || 0);
+    const upsPrice = Number(other?.video_upscale_price_per_second || 0);
+    if (!(upsSeconds > 0) || !(upsPrice > 0)) {
+      return [];
+    }
+    return [
+      <span key='plus-upscale' className='mx-1 text-gray-400'>
+        +
+      </span>,
+      tagValue(t('{{seconds}}秒', { seconds: upsSeconds }), 'orange', 'ups-seconds'),
+      <span key='multiply-ups' className='mx-1 text-gray-400'>
+        ×
+      </span>,
+      tagValue(
+        `${formatVideoUsdAmount(other, upsPrice)} / ${t('秒')}`,
+        'violet',
+        'ups-price',
+      ),
+    ];
   };
 
   const buildVideoCostDisplayItems = (
@@ -356,7 +409,8 @@ export const useLogsData = () => {
       effectivePerSecond > 0
         ? effectivePerSecond * groupRatio
         : pricePerSecond * groupRatio * (channelDiscount / 100);
-    const settlementQuota = getVideoSettlementQuota(other, billedQuota);
+    const formulaTotalUsd =
+      seconds * calculatedPricePerSecond + getVideoUpscaleSettlementUsd(other);
     const tagValue = (value, color = 'blue', key = String(value)) => (
       <Tag key={key} color={color} size='small'>
         {value}
@@ -377,12 +431,16 @@ export const useLogsData = () => {
           )
         : null,
     );
+    const specDuration = getVideoDurationSeconds(other) || seconds;
     const specValue = inlineTags(
       tagValue(specResolutionLabel, 'cyan', 'spec-resolution'),
       ratioLabel ? tagValue(ratioLabel, 'purple', 'spec-ratio') : null,
       tagValue(audioText, hasAudio ? 'green' : 'grey', 'spec-audio'),
-      tagValue(t('{{seconds}} 秒', { seconds }), 'orange', 'spec-seconds'),
+      specDuration > 0
+        ? tagValue(t('{{seconds}} 秒', { seconds: specDuration }), 'orange', 'spec-seconds')
+        : null,
     );
+    const upscalePriceTag = formatVideoUpscaleLogTag(other);
     const calculatedPriceValue = inlineTags(
       tagValue(
         `${formatVideoUsdAmount(other, calculatedPricePerSecond)} / ${t('秒')}`,
@@ -390,6 +448,9 @@ export const useLogsData = () => {
         'calculated-price',
       ),
       tagValue(priceLabel, 'grey', 'price-label'),
+      upscalePriceTag
+        ? tagValue(upscalePriceTag, 'violet', 'upscale-price')
+        : null,
     );
     // 结算合计与「实际扣费 / 花费列」同一实扣额度口径（6 位进一去尾零），避免浮点公式与整数 quota 不一致
     const calculationValue = inlineTags(
@@ -402,14 +463,11 @@ export const useLogsData = () => {
         'green',
         'calc-price',
       ),
+      ...buildVideoUpscaleSettlementNodes(other, tagValue),
       <span key='equals' className='mx-1 text-gray-400'>
         =
       </span>,
-      tagValue(
-        renderVideoQuota(other, settlementQuota, 6),
-        'red',
-        'calc-total',
-      ),
+      tagValue(formatVideoFormulaTotal(other, formulaTotalUsd), 'red', 'calc-total'),
     );
     const modeValue = inlineTags(
       tagValue(t('分辨率阶梯计费'), 'blue', 'billing-mode'),
@@ -460,6 +518,16 @@ export const useLogsData = () => {
     );
   };
 
+  const renderVideoUpscaleBriefTags = (other) => {
+    const tag = formatVideoUpscaleLogTag(other);
+    if (!tag) return null;
+    return (
+      <span className='rounded-full bg-violet-600 px-2 py-0.5 text-xs font-medium text-white'>
+        {tag}
+      </span>
+    );
+  };
+
   const renderVideoPerSecondBillingBrief = (other, quota) => {
     const billedQuota = Number(other?.video_billed_quota || quota || 0);
     const seconds = Number(other?.video_seconds || 0);
@@ -485,6 +553,7 @@ export const useLogsData = () => {
                 cost: renderVideoQuota(other, billedQuota),
               })}
         </span>
+        {renderVideoUpscaleBriefTags(other)}
       </div>
     );
   };
@@ -535,6 +604,7 @@ export const useLogsData = () => {
                 cost: renderVideoQuota(other, billedQuota, 6),
               })}
         </span>
+        {renderVideoUpscaleBriefTags(other)}
       </div>
     );
   };
@@ -567,7 +637,9 @@ export const useLogsData = () => {
       effectivePerMillion > 0
         ? effectivePerMillion * groupRatio
         : pricePerMillion * groupRatio * (channelDiscount / 100);
-    const settlementQuota = getVideoSettlementQuota(other, billedQuota);
+    const formulaTotalUsd =
+      (totalTokens / 1e6) * calculatedPricePerMillion +
+      getVideoUpscaleSettlementUsd(other);
     const unitPriceText = `${formatVideoUsdAmount(other, calculatedPricePerMillion)}/ 1M tokens`;
     const tagValue = (value, color = 'blue', key = String(value)) => (
       <Tag key={key} color={color} size='small'>
@@ -589,6 +661,7 @@ export const useLogsData = () => {
           )
         : null,
     );
+    const specDuration = getVideoDurationSeconds(other);
     const specValue = inlineTags(
       tagValue(
         getVideoSpecResolutionLabel(other, specWidth, specHeight) ||
@@ -600,10 +673,17 @@ export const useLogsData = () => {
         ? tagValue(ratioLabel, 'purple', 'spec-ratio')
         : null,
       tagValue(audioText, hasAudio ? 'green' : 'grey', 'spec-audio'),
+      specDuration > 0
+        ? tagValue(t('{{seconds}} 秒', { seconds: specDuration }), 'orange', 'spec-duration')
+        : null,
       tagValue(t('{{count}} tokens', { count: totalTokens }), 'orange', 'spec-tokens'),
     );
+    const upscalePriceTag = formatVideoUpscaleLogTag(other);
     const calculatedPriceValue = inlineTags(
       tagValue(unitPriceText, 'green', 'calculated-price'),
+      upscalePriceTag
+        ? tagValue(upscalePriceTag, 'violet', 'upscale-price')
+        : null,
     );
     const calculationValue = inlineTags(
       tagValue(`${totalTokens} tokens`, 'orange', 'calc-tokens'),
@@ -611,14 +691,11 @@ export const useLogsData = () => {
         ×
       </span>,
       tagValue(unitPriceText, 'green', 'calc-price'),
+      ...buildVideoUpscaleSettlementNodes(other, tagValue),
       <span key='equals' className='mx-1 text-gray-400'>
         =
       </span>,
-      tagValue(
-        renderVideoQuota(other, settlementQuota, 6),
-        'red',
-        'calc-total',
-      ),
+      tagValue(formatVideoFormulaTotal(other, formulaTotalUsd), 'red', 'calc-total'),
     );
     const modeValue = inlineTags(
       tagValue(t('视频按 token 计费'), 'blue', 'billing-mode'),
@@ -722,9 +799,10 @@ export const useLogsData = () => {
         ),
       );
     }
-    if (seconds > 0) {
+    const specDuration = getVideoDurationSeconds(other) || seconds;
+    if (specDuration > 0) {
       specTags.push(
-        tagValue(t('{{seconds}} 秒', { seconds }), 'orange', 'seconds'),
+        tagValue(t('{{seconds}} 秒', { seconds: specDuration }), 'orange', 'seconds'),
       );
     }
     specTags.push(tagValue(audioText, hasAudio ? 'green' : 'grey', 'audio'));
@@ -732,6 +810,7 @@ export const useLogsData = () => {
     const countValue = inlineTags(
       tagValue(t('{{count}} 条', { count }), 'orange', 'count'),
     );
+    const upscalePriceTag = formatVideoUpscaleLogTag(other);
     const priceValue = inlineTags(
       tagValue(
         `${formatVideoUsdAmount(other, pricePerVideo)} / ${t('条')}`,
@@ -739,8 +818,12 @@ export const useLogsData = () => {
         'price',
       ),
       tagValue(priceLabel, 'grey', 'price-label'),
+      upscalePriceTag
+        ? tagValue(upscalePriceTag, 'violet', 'upscale-price')
+        : null,
     );
-    const settlementQuota = getVideoSettlementQuota(other, billedQuota);
+    const formulaTotalUsd =
+      count * pricePerVideo + getVideoUpscaleSettlementUsd(other);
     const calculationValue = inlineTags(
       tagValue(t('{{count}} 条', { count }), 'orange', 'calc-count'),
       <span key='multiply' className='mx-1 text-gray-400'>
@@ -751,14 +834,11 @@ export const useLogsData = () => {
         'green',
         'calc-price',
       ),
+      ...buildVideoUpscaleSettlementNodes(other, tagValue),
       <span key='equals' className='mx-1 text-gray-400'>
         =
       </span>,
-      tagValue(
-        renderVideoQuota(other, settlementQuota, 6),
-        'red',
-        'calc-total',
-      ),
+      tagValue(formatVideoFormulaTotal(other, formulaTotalUsd), 'red', 'calc-total'),
     );
     const costItems = buildVideoCostDisplayItems(
       other,
@@ -818,6 +898,7 @@ export const useLogsData = () => {
                 cost: renderVideoQuota(other, billedQuota),
               })}
         </span>
+        {renderVideoUpscaleBriefTags(other)}
       </div>
     );
   };
@@ -1169,28 +1250,39 @@ export const useLogsData = () => {
         continue;
       }
       const actualQuota = Number(other?.actual_quota);
-      const isSettlement =
+      const hasSettlementNumbers =
         Number.isFinite(actualQuota) &&
         actualQuota > 0 &&
         other?.pre_consumed_quota !== undefined &&
         other?.pre_consumed_quota !== null;
+      const phase = String(other?.billing_phase || '');
+      const isMergedPreCharge = phase === 'settlement_merged';
+      const isSettlementExtra =
+        hasSettlementNumbers &&
+        !isMergedPreCharge &&
+        (phase === 'settlement_marker' ||
+          phase === 'delta_charge' ||
+          phase === 'delta_refund' ||
+          Number(log?.quota) === 0 ||
+          (Number(log?.quota) > 0 && Number(log?.quota) !== actualQuota));
       const requestPath = String(other?.request_path || '');
       const isPreCharge =
-        !isSettlement &&
-        (other?.asr === true ||
-          other?.billing_mode === 'video_per_second' ||
-          other?.billing_mode === 'video_token_output' ||
-          other?.billing_mode === 'video_per_video' ||
-          requestPath.includes('/videos') ||
-          requestPath.includes('/audio/transcriptions/async'));
-      if (!isSettlement && !isPreCharge) {
+        isMergedPreCharge ||
+        (!isSettlementExtra &&
+          (other?.asr === true ||
+            other?.billing_mode === 'video_per_second' ||
+            other?.billing_mode === 'video_token_output' ||
+            other?.billing_mode === 'video_per_video' ||
+            requestPath.includes('/videos') ||
+            requestPath.includes('/audio/transcriptions/async')));
+      if (!isSettlementExtra && !isPreCharge) {
         continue;
       }
       if (!byTaskId.has(taskId)) {
         byTaskId.set(taskId, { pre: null, settle: null });
       }
       const entry = byTaskId.get(taskId);
-      if (isSettlement) {
+      if (isSettlementExtra) {
         entry.settle = log;
       } else if (isPreCharge) {
         entry.pre = log;
@@ -1203,10 +1295,21 @@ export const useLogsData = () => {
       if (!pre || !settle) {
         continue;
       }
-      hideIds.add(pre.id);
       const preOther = getLogOther(pre.other);
       const settleOther = getLogOther(settle.other);
-      const actualQuota = Number(settleOther.actual_quota);
+      const actualQuota = Number(
+        preOther?.actual_quota || settleOther.actual_quota,
+      );
+      // 后端已把结算结果合并进预扣行时，只保留预扣行，隐藏差额/标记行。
+      if (
+        preOther?.billing_phase === 'settlement_merged' ||
+        (Number(preOther?.actual_quota) > 0 &&
+          preOther?.pre_consumed_quota !== undefined)
+      ) {
+        hideIds.add(settle.id);
+        continue;
+      }
+      hideIds.add(pre.id);
       const preConsumed = Number(
         settleOther.pre_consumed_quota ?? pre.quota ?? 0,
       );

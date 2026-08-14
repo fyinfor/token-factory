@@ -66,6 +66,7 @@ func InitOptionMap() {
 	common.OptionMap["About"] = ""
 	common.OptionMap["AboutEn"] = ""
 	common.OptionMap["HomePageContent"] = ""
+	common.OptionMap["ChangelogEnabled"] = "false"
 	common.OptionMap["HomeHeroCarouselEnabled"] = "false"
 	common.OptionMap["HomeHeroCarouselSlides"] = "[]"
 	common.OptionMap["HomeHeroCarouselIntervalSec"] = "5"
@@ -262,6 +263,7 @@ func InitOptionMap() {
 	common.OptionMap["AliyunGuardrailOutputEnabled"] = strconv.FormatBool(setting.AliyunGuardrailOutputEnabled)
 	common.OptionMap["AliyunGuardrailVideoEnabled"] = strconv.FormatBool(setting.AliyunGuardrailVideoEnabled)
 	common.OptionMap["AliyunGuardrailHidePlaygroundMediaTabs"] = strconv.FormatBool(setting.AliyunGuardrailHidePlaygroundMediaTabs)
+	common.OptionMap["AliyunGuardrailUserIDs"] = setting.AliyunGuardrailUserIDsToString()
 	common.OptionMap["AliyunGuardrailAccessKeyID"] = setting.AliyunGuardrailAccessKeyID
 	common.OptionMap["AliyunGuardrailAccessKeySecret"] = setting.AliyunGuardrailAccessKeySecret
 	common.OptionMap["AliyunGuardrailRegionID"] = setting.AliyunGuardrailRegionID
@@ -914,6 +916,8 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.AliyunGuardrailAccessKeySecret = value
 	case "AliyunGuardrailRegionID":
 		setting.AliyunGuardrailRegionID = value
+	case "AliyunGuardrailUserIDs":
+		err = setting.UpdateAliyunGuardrailUserIDs(value)
 	case "AutomaticDisableKeywords":
 		operation_setting.AutomaticDisableKeywordsFromString(value)
 	case "AutomaticDisableStatusCodes":

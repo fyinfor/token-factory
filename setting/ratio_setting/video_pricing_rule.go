@@ -60,6 +60,17 @@ type VideoPricingRules struct {
 	TextToVideoPerToken  []VideoResolutionAudioPriceRule `json:"text_to_video_per_token,omitempty"`
 	ImageToVideoPerToken []VideoResolutionAudioPriceRule `json:"image_to_video_per_token,omitempty"`
 	VideoToVideoPerToken []VideoResolutionAudioPriceRule `json:"video_to_video_per_token,omitempty"`
+	// 视频超分按秒价格：按「原分辨率 → 超分分辨率」分档，price 为美元/秒（与其他 per_second 表同口径）。
+	// 超分费用 = ceil(超分后视频时长) × 匹配档位的 price，叠加在原视频计费之上。
+	VideoUpscalePerSecond []VideoUpscalePriceRule `json:"video_upscale_per_second,omitempty"`
+}
+
+// VideoUpscalePriceRule 超分按秒价：从 SourceResolution 超分到 Resolution。
+// 旧数据可能只有 resolution（无 source_resolution），匹配时按超分分辨率兜底。
+type VideoUpscalePriceRule struct {
+	Resolution       string  `json:"resolution"`                  // 超分分辨率（目标档位）
+	SourceResolution string  `json:"source_resolution,omitempty"` // 原分辨率（生成档位）
+	Price            float64 `json:"price"`
 }
 
 var videoPricingRulesMap = types.NewRWMap[string, VideoPricingRules]()
@@ -136,7 +147,21 @@ func normalizeVideoRules(v VideoPricingRules) VideoPricingRules {
 	for i := range v.VideoToVideoPerToken {
 		v.VideoToVideoPerToken[i].Resolution = strings.TrimSpace(v.VideoToVideoPerToken[i].Resolution)
 	}
+	for i := range v.VideoUpscalePerSecond {
+		v.VideoUpscalePerSecond[i].Resolution = strings.TrimSpace(v.VideoUpscalePerSecond[i].Resolution)
+		v.VideoUpscalePerSecond[i].SourceResolution = strings.TrimSpace(v.VideoUpscalePerSecond[i].SourceResolution)
+	}
 	return v
+}
+
+// HasUsableVideoUpscaleRules 模型是否配置了「视频超分按秒」分辨率价格（price>0）。
+func HasUsableVideoUpscaleRules(v VideoPricingRules) bool {
+	for _, r := range v.VideoUpscalePerSecond {
+		if r.Price > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // HasUsableVideoPerTokenRules 模型是否配置了「按 token 收费」分辨率规则（price>0）。

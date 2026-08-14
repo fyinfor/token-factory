@@ -158,7 +158,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 	// 检查是否为音频模型
 	isAudioModel := strings.Contains(strings.ToLower(model), "audio")
 	// 开启输出审核时需整段缓冲后再回放；关闭时逐 chunk 立即转发，避免「等下一块再发上一块」抬高 TTFT
-	bufferForGuardrail := setting.ShouldCheckAliyunGuardrailOutput()
+	bufferForGuardrail := setting.ShouldCheckAliyunGuardrailOutputForUser(c.GetInt(`id`))
 
 	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 		if len(data) == 0 {
@@ -314,7 +314,7 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 		}
 	}
 	// 输出护栏开启时不下发思考过程，避免敏感思考内容暴露给客户端
-	if setting.ShouldCheckAliyunGuardrailOutput() {
+	if setting.ShouldCheckAliyunGuardrailOutputForUser(c.GetInt(`id`)) {
 		for i := range simpleResponse.Choices {
 			simpleResponse.Choices[i].Message.ReasoningContent = ""
 			simpleResponse.Choices[i].Message.Reasoning = ""

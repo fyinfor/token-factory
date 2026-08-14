@@ -304,7 +304,8 @@ func executeImageRelay(c *gin.Context, info *relaycommon.RelayInfo, request *dto
 
 	statusCodeMappingStr := c.GetString("status_code_mapping")
 
-	captureImageResponse := asyncCapture || shouldCaptureImageResponse(info) || setting.ShouldCheckAliyunGuardrailOutput()
+	shouldCheckGuardrailOutput := setting.ShouldCheckAliyunGuardrailOutputForUser(c.GetInt(`id`))
+	captureImageResponse := asyncCapture || shouldCaptureImageResponse(info) || shouldCheckGuardrailOutput
 	var responseCapture *bytes.Buffer
 	originalWriter := c.Writer
 	var captureWriter *imageResponseCaptureWriter
@@ -313,7 +314,7 @@ func executeImageRelay(c *gin.Context, info *relaycommon.RelayInfo, request *dto
 		captureWriter = &imageResponseCaptureWriter{
 			ResponseWriter: c.Writer,
 			buf:            responseCapture,
-			captureOnly:    asyncCapture || setting.ShouldCheckAliyunGuardrailOutput(),
+			captureOnly:    asyncCapture || shouldCheckGuardrailOutput,
 		}
 		c.Writer = captureWriter
 	}

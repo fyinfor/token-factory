@@ -29,7 +29,7 @@ type AliyunGuardrailResult struct {
 }
 
 func CheckAliyunGuardrailInput(c *gin.Context, info *relaycommon.RelayInfo, request dto.Request) (*AliyunGuardrailResult, error) {
-	if !setting.ShouldCheckAliyunGuardrailInput() || request == nil {
+	if !setting.ShouldCheckAliyunGuardrailInputForUser(aliyunGuardrailUserID(c)) || request == nil {
 		return nil, nil
 	}
 	meta := request.GetTokenCountMeta()
@@ -90,21 +90,21 @@ func CheckAliyunGuardrailInput(c *gin.Context, info *relaycommon.RelayInfo, requ
 }
 
 func CheckAliyunGuardrailTaskInput(c *gin.Context, info *relaycommon.RelayInfo, request relaycommon.TaskSubmitReq) (*AliyunGuardrailResult, error) {
-	if !setting.ShouldCheckAliyunGuardrailInput() {
+	if !setting.ShouldCheckAliyunGuardrailInputForUser(aliyunGuardrailUserID(c)) {
 		return nil, nil
 	}
 	return checkAliyunGuardrailInputMeta(c, info, request.GetModerationMeta())
 }
 
 func CheckAliyunGuardrailOutput(c *gin.Context, info *relaycommon.RelayInfo, content string) (*AliyunGuardrailResult, error) {
-	if !setting.ShouldCheckAliyunGuardrailOutput() || content == `` {
+	if !setting.ShouldCheckAliyunGuardrailOutputForUser(aliyunGuardrailUserID(c)) || content == `` {
 		return nil, nil
 	}
 	return checkAliyunGuardrail(c, info, map[string]any{`content`: truncateAliyunGuardrailContent(content)}, `response_security_check`, `output`)
 }
 
 func CheckAliyunGuardrailImageOutput(c *gin.Context, info *relaycommon.RelayInfo, imageURLs []string) (*AliyunGuardrailResult, error) {
-	if !setting.ShouldCheckAliyunGuardrailOutput() || len(imageURLs) == 0 {
+	if !setting.ShouldCheckAliyunGuardrailOutputForUser(aliyunGuardrailUserID(c)) || len(imageURLs) == 0 {
 		return nil, nil
 	}
 	return checkAliyunGuardrail(c, info, map[string]any{`imageUrls`: imageURLs[:1]}, `MultiModalGuard`, `output`)
@@ -113,7 +113,7 @@ func CheckAliyunGuardrailImageOutput(c *gin.Context, info *relaycommon.RelayInfo
 // CheckAliyunVideoGuardrail submits or polls an asynchronous Alibaba Cloud video moderation task.
 // It returns complete=false while the moderation result is still pending.
 func CheckAliyunVideoGuardrail(ctx context.Context, task *model.Task, videoURL string) (complete bool, blocked bool, err error) {
-	if !setting.ShouldCheckAliyunGuardrailVideo() || task == nil || strings.TrimSpace(videoURL) == `` {
+	if task == nil || !setting.ShouldCheckAliyunGuardrailVideoForUser(task.UserId) || strings.TrimSpace(videoURL) == `` {
 		return true, false, nil
 	}
 	client, err := newAliyunGuardrailClient()
@@ -161,6 +161,13 @@ func CheckAliyunVideoGuardrail(ctx context.Context, task *model.Task, videoURL s
 		return true, true, nil
 	}
 	return true, false, nil
+}
+
+func aliyunGuardrailUserID(c *gin.Context) int {
+	if c == nil {
+		return 0
+	}
+	return c.GetInt(`id`)
 }
 
 func checkAliyunGuardrailInputMeta(c *gin.Context, info *relaycommon.RelayInfo, meta *types.TokenCountMeta) (*AliyunGuardrailResult, error) {

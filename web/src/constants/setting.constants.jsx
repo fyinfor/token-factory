@@ -364,6 +364,11 @@ export const SETTING_CATEGORIES = [
           '对象存储',
           '上传',
         ]),
+        settingItem('video-upscale', 'system', 'video-upscale', '视频超分配置', [
+          '超分',
+          'MPS',
+          '腾讯云',
+        ]),
       ]),
       settingPage('performance', '性能设置', [
         settingItem('monitoring', 'operation', 'monitoring', '渠道监控设置', [

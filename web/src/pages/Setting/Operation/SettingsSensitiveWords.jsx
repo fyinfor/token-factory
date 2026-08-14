@@ -18,7 +18,17 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React, { useContext, useEffect, useState, useRef } from 'react';
-import { Button, Col, Form, Row, Spin, Tag } from '@douyinfe/semi-ui';
+import {
+  Button,
+  Col,
+  Form,
+  Input,
+  Modal,
+  Row,
+  Spin,
+  Table,
+} from '@douyinfe/semi-ui';
+import { IconSearch } from '@douyinfe/semi-icons';
 import {
   compareObjects,
   API,
@@ -39,9 +49,23 @@ const defaultInputs = {
   AliyunGuardrailOutputEnabled: true,
   AliyunGuardrailVideoEnabled: false,
   AliyunGuardrailHidePlaygroundMediaTabs: false,
+  AliyunGuardrailUserIDs: '',
   AliyunGuardrailAccessKeyID: '',
   AliyunGuardrailAccessKeySecret: '',
   AliyunGuardrailRegionID: 'cn-shanghai',
+};
+
+const parseGuardrailUserIDs = (value) => {
+  const ids = new Set();
+  for (const line of String(value || '').split(/[\r\n,]+/)) {
+    const normalized = line.trim();
+    if (!/^\+?\d+$/.test(normalized)) continue;
+    const id = Number(normalized);
+    if (Number.isSafeInteger(id) && id > 0) {
+      ids.add(id);
+    }
+  }
+  return [...ids];
 };
 
 export default function SettingsSensitiveWords(props) {
@@ -51,6 +75,86 @@ export default function SettingsSensitiveWords(props) {
   const [inputs, setInputs] = useState(defaultInputs);
   const refForm = useRef();
   const [inputsRow, setInputsRow] = useState(inputs);
+  const [userPickerVisible, setUserPickerVisible] = useState(false);
+  const [userSearchKeyword, setUserSearchKeyword] = useState('');
+  const [userSearchResults, setUserSearchResults] = useState([]);
+  const [userSearchLoading, setUserSearchLoading] = useState(false);
+  const [selectedUserIDs, setSelectedUserIDs] = useState([]);
+  const userSearchRequestID = useRef(0);
+
+  const searchUsers = async () => {
+    const keyword = userSearchKeyword.trim();
+    if (!keyword) return;
+
+    const requestID = ++userSearchRequestID.current;
+    setUserSearchLoading(true);
+    setUserSearchResults([]);
+    try {
+      const res = await API.get('/api/user/search', {
+        params: { keyword, p: 1, page_size: 50 },
+      });
+      if (requestID !== userSearchRequestID.current) return;
+      if (!res.data?.success) {
+        showError(res.data?.message || t('搜索用户失败'));
+        return;
+      }
+      setUserSearchResults(res.data.data?.items || []);
+    } catch {
+      if (requestID === userSearchRequestID.current) {
+        showError(t('搜索用户失败'));
+      }
+    } finally {
+      if (requestID === userSearchRequestID.current) {
+        setUserSearchLoading(false);
+      }
+    }
+  };
+
+  const openUserPicker = () => {
+    setSelectedUserIDs(parseGuardrailUserIDs(inputs.AliyunGuardrailUserIDs));
+    setUserSearchKeyword('');
+    setUserSearchResults([]);
+    setUserSearchLoading(false);
+    setUserPickerVisible(true);
+  };
+
+  const appendSelectedUserIDs = () => {
+    const existingUserIDs = parseGuardrailUserIDs(
+      inputs.AliyunGuardrailUserIDs,
+    );
+    const existingIDSet = new Set(existingUserIDs);
+    const additionalUserIDs = selectedUserIDs.filter(
+      (id) => !existingIDSet.has(id),
+    );
+    if (additionalUserIDs.length > 0) {
+      const existingValue = String(inputs.AliyunGuardrailUserIDs || '').trim();
+      const nextUserIDs = [existingValue, ...additionalUserIDs]
+        .filter(Boolean)
+        .join(', ');
+      setInputs((currentInputs) => ({
+        ...currentInputs,
+        AliyunGuardrailUserIDs: nextUserIDs,
+      }));
+      refForm.current?.setValue('AliyunGuardrailUserIDs', nextUserIDs);
+    }
+    setUserPickerVisible(false);
+  };
+
+  const userPickerColumns = [
+    { title: 'ID', dataIndex: 'id', width: 88 },
+    { title: t('用户名'), dataIndex: 'username', width: 160 },
+    {
+      title: t('显示名称'),
+      dataIndex: 'display_name',
+      width: 160,
+      render: (value) => value || '-',
+    },
+    {
+      title: t('邮箱'),
+      dataIndex: 'email',
+      render: (value) => value || '-',
+    },
+  ];
 
   function onSubmit() {
     const normalizedInputs = {
@@ -97,7 +201,8 @@ export default function SettingsSensitiveWords(props) {
             normalizedInputs.AliyunGuardrailHidePlaygroundMediaTabs,
           aliyun_guardrail_hide_playground_reasoning:
             !!normalizedInputs.AliyunGuardrailEnabled &&
-            !!normalizedInputs.AliyunGuardrailOutputEnabled,
+            !!normalizedInputs.AliyunGuardrailOutputEnabled &&
+            !normalizedInputs.AliyunGuardrailUserIDs?.trim(),
         };
         const cachedStatus = patchStatusData(statusPatch);
         statusDispatch({
@@ -255,6 +360,34 @@ export default function SettingsSensitiveWords(props) {
                   />
                 </Col>
               </Row>
+              <Row>
+                <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+                  <Form.TextArea
+                    field='AliyunGuardrailUserIDs'
+                    label={t('安全护栏适用用户 ID')}
+                    extraText={t(
+                      '留空则对所有用户启用；填写后仅名单内用户启用，多个用户 ID 使用逗号分隔',
+                    )}
+                    placeholder={t('用户 ID 以逗号分隔，例如：1,2,3')}
+                    onChange={(value) =>
+                      setInputs({
+                        ...inputs,
+                        AliyunGuardrailUserIDs: value,
+                      })
+                    }
+                    style={{ fontFamily: 'JetBrains Mono, Consolas' }}
+                    autosize={{ minRows: 3, maxRows: 8 }}
+                  />
+                  <Button
+                    size='small'
+                    icon={<IconSearch />}
+                    onClick={openUserPicker}
+                    style={{ marginTop: 8 }}
+                  >
+                    {t('选择用户')}
+                  </Button>
+                </Col>
+              </Row>
               <Row gutter={16}>
                 <Col xs={24} sm={12} md={8} lg={8} xl={8}>
                   <Form.Input
@@ -300,6 +433,63 @@ export default function SettingsSensitiveWords(props) {
             </Form.Section>
           </Form.Section>
         </Form>
+        <Modal
+          title={t('选择用户')}
+          visible={userPickerVisible}
+          onCancel={() => {
+            userSearchRequestID.current += 1;
+            setUserSearchLoading(false);
+            setUserPickerVisible(false);
+          }}
+          onOk={appendSelectedUserIDs}
+          okText={t('确定')}
+          width={760}
+          bodyStyle={{ maxHeight: '65vh', overflowY: 'auto' }}
+        >
+          <div className='flex gap-2 mb-3'>
+            <Input
+              prefix={<IconSearch />}
+              placeholder={t('支持搜索用户的 ID、用户名、显示名称和邮箱地址')}
+              value={userSearchKeyword}
+              onChange={(value) => setUserSearchKeyword(value || '')}
+              onEnterPress={searchUsers}
+              style={{ flex: 1 }}
+            />
+            <Button
+              type='primary'
+              theme='solid'
+              onClick={searchUsers}
+              loading={userSearchLoading}
+              disabled={!userSearchKeyword.trim()}
+            >
+              {t('查询')}
+            </Button>
+          </div>
+          <Table
+            columns={userPickerColumns}
+            dataSource={userSearchResults}
+            rowKey='id'
+            loading={userSearchLoading}
+            pagination={false}
+            size='small'
+            scroll={{ x: '100%' }}
+            rowSelection={{
+              selectedRowKeys: selectedUserIDs,
+              onChange: (selectedRowKeys) => {
+                const visibleIDs = new Set(
+                  userSearchResults.map((user) => user.id),
+                );
+                const nextVisibleIDs = selectedRowKeys
+                  .map((id) => Number(id))
+                  .filter((id) => Number.isSafeInteger(id) && id > 0);
+                setSelectedUserIDs((previousIDs) => [
+                  ...previousIDs.filter((id) => !visibleIDs.has(id)),
+                  ...nextVisibleIDs,
+                ]);
+              },
+            }}
+          />
+        </Modal>
       </Spin>
     </>
   );

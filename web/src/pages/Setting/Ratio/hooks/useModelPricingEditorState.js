@@ -63,6 +63,7 @@ const EMPTY_MODEL = {
     videoImageToVideoRules: [],
     videoUploadRules: [],
     videoGenerateRules: [],
+    videoUpscaleRules: [],
     videoSimilarityThreshold: '',
     imageGenPriceUnit: 'USD',
     imageGenFixedPrice: '',
@@ -248,6 +249,29 @@ const parseImagePricingRules = (rawRules) => {
     };
 };
 
+const normalizeUpscalePricedRows = (rows) => {
+    if (!Array.isArray(rows) || rows.length === 0) return [];
+    return rows
+        .map((row) => {
+            const resolution = String(row?.resolution || '').trim();
+            const sourceResolution = String(
+                row?.source_resolution || row?.sourceResolution || '',
+            ).trim();
+            const price = toNumericString(row?.price ?? row?.tokenPrice);
+            if (!resolution || !price) return null;
+            return {
+                resolution,
+                sourceResolution,
+                tokenPrice: price,
+                videoPrice: '',
+                noAudioPrice: '',
+                withAudioPrice: '',
+                audioPricingEnabled: false,
+            };
+        })
+        .filter(Boolean);
+};
+
 const normalizeAudioPricedRows = (rows, valueKey) => {
     if (!Array.isArray(rows) || rows.length === 0) return [];
     const grouped = new Map();
@@ -340,6 +364,7 @@ const parseVideoPricingRules = (rawRules) => {
             videoGeneratePerVideo: [],
             similarityThreshold: '',
             priceUnit: '',
+            videoUpscalePerSecond: [],
         };
     }
     const textToVideo = Array.isArray(rawRules.text_to_video)
@@ -460,6 +485,9 @@ const parseVideoPricingRules = (rawRules) => {
         priceUnit: String(rawRules.price_unit || '')
             .trim()
             .toUpperCase(),
+        videoUpscalePerSecond: normalizeUpscalePricedRows(
+            rawRules.video_upscale_per_second,
+        ),
     };
 };
 
@@ -748,6 +776,11 @@ const buildModelState = (name, sourceMaps) => {
                             },
                         ]
                         : videoPricingRules.videoGenerate,
+        videoUpscaleRules: mapVideoRuleRowsToDisplayUnit(
+            videoPricingRules.videoUpscalePerSecond,
+            resolvedVideoPriceUnit,
+            sourceMaps.VideoCurrencyRates,
+        ),
         videoSimilarityThreshold: videoPricingRules.similarityThreshold,
         imageGenPriceUnit: resolvedImagePriceUnit,
         imageGenFixedPrice: displayImageFixedPrice,
@@ -1115,6 +1148,32 @@ const normalizePerVideoPricingRows = (rows) =>
                 ) === index,
         );
 
+const attachVideoUpscalePricing = (result, model, toUSD) => {
+    const rows = (model.videoUpscaleRules || [])
+        .filter(
+            (row) =>
+                hasValue(row?.resolution) &&
+                hasValue(row?.tokenPrice) &&
+                isValidVideoResolution(row.resolution),
+        )
+        .map((row) => ({
+            resolution: row.resolution,
+            source_resolution: row.sourceResolution || '',
+            price: toUSD(toNumberOrNull(row.tokenPrice)),
+        }))
+        .filter((row) => Number(row.price) > 0);
+    if (rows.length === 0) {
+        return result;
+    }
+    const pricing =
+        result.VideoPricingRules && typeof result.VideoPricingRules === 'object'
+            ? { ...result.VideoPricingRules }
+            : {};
+    pricing.video_upscale_per_second = rows;
+    result.VideoPricingRules = pricing;
+    return result;
+};
+
 const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
     const fromUnit = ['USD', 'CNY', 'CUSTOM'].includes(model.videoPriceUnit)
         ? model.videoPriceUnit
@@ -1292,7 +1351,7 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
                 result.VideoPricingRules = pricingRules;
             }
         }
-        return result;
+        return attachVideoUpscalePricing(result, model, toUSD);
     }
 
     result.ModelRatio = toNormalizedNumber(inputPrice / 2);
@@ -1533,7 +1592,7 @@ const serializeModel = (model, t, currencyRates, visibleCategories = null) => {
         result.ImagePrice = toNormalizedNumber(model.rawRatios.imagePrice);
     }
 
-    return result;
+    return attachVideoUpscalePricing(result, model, toUSD);
 };
 
 export const buildPreviewRows = (model, t) => {
@@ -2109,6 +2168,7 @@ export function useModelPricingEditorState({
                 nextModel.videoImageToVideoRules = [];
                 nextModel.videoUploadRules = [];
                 nextModel.videoGenerateRules = [];
+                nextModel.videoUpscaleRules = [];
                 nextModel.videoSimilarityThreshold = '';
             }
 
@@ -2177,6 +2237,7 @@ export function useModelPricingEditorState({
                 model.videoGenerateRules,
                 model.videoBillingMode === 'per-item' ? 'videoPrice' : 'tokenPrice',
             ),
+            videoUpscaleRules: convertRows(model.videoUpscaleRules, 'tokenPrice'),
         }));
     };
 
@@ -2194,6 +2255,7 @@ export function useModelPricingEditorState({
                     image: 'videoImageToVideoRules',
                     videoUpload: 'videoUploadRules',
                     videoGenerate: 'videoGenerateRules',
+                    upscale: 'videoUpscaleRules',
                 }[section];
                 if (!target) return model;
                 const rows = [...(model[target] || [])];
@@ -2214,18 +2276,25 @@ export function useModelPricingEditorState({
         }
         if (
             key !== 'resolution' &&
+            key !== 'sourceResolution' &&
             !numericKeys.has(key) &&
             key !== 'noAudioPrice' &&
             key !== 'withAudioPrice'
         )
             return;
-        if (key !== 'resolution' && !NUMERIC_INPUT_REGEX.test(value)) return;
+        if (
+            key !== 'resolution' &&
+            key !== 'sourceResolution' &&
+            !NUMERIC_INPUT_REGEX.test(value)
+        )
+            return;
         upsertModel(selectedModel.name, (model) => {
             const target = {
                 text: 'videoTextToVideoRules',
                 image: 'videoImageToVideoRules',
                 videoUpload: 'videoUploadRules',
                 videoGenerate: 'videoGenerateRules',
+                upscale: 'videoUpscaleRules',
             }[section];
             if (!target) return model;
             const rows = [...(model[target] || [])];
@@ -2242,10 +2311,17 @@ export function useModelPricingEditorState({
                 text: 'videoTextToVideoRules',
                 image: 'videoImageToVideoRules',
                 videoGenerate: 'videoGenerateRules',
+                upscale: 'videoUpscaleRules',
             }[section];
             if (!target) return model;
-            const isPerVideo = model.videoBillingMode === 'per-item';
-            const newRow = isPerVideo
+            const isPerVideo = section !== 'upscale' && model.videoBillingMode === 'per-item';
+            const newRow = section === 'upscale'
+                ? {
+                    resolution: '',
+                    sourceResolution: '',
+                    tokenPrice: '',
+                }
+                : isPerVideo
                 ? {
                     resolution: '',
                     videoPrice: '',
@@ -2303,6 +2379,7 @@ export function useModelPricingEditorState({
                 text: 'videoTextToVideoRules',
                 image: 'videoImageToVideoRules',
                 videoGenerate: 'videoGenerateRules',
+                upscale: 'videoUpscaleRules',
             }[section];
             if (!target) return model;
             return {

@@ -188,6 +188,9 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 		}
 	}
 
+	// 2.6 渠道视频超分：命中规则时写入 context，预扣仍按用户选择的超分分辨率计价。
+	service.ApplyChannelVideoUpscaleRule(c, info)
+
 	// 3. 预生成公开 task ID（仅首次）
 	if info.PublicTaskID == "" {
 		info.PublicTaskID = model.GenerateTaskID()
@@ -252,6 +255,9 @@ func RelayTaskSubmit(c *gin.Context, info *relaycommon.RelayInfo) (*TaskSubmitRe
 			return nil, service.TaskErrorFromAPIError(apiErr)
 		}
 	}
+
+	// 7.5 超分：预扣完成后将上游请求分辨率改写为生成档位。
+	service.RewriteTaskRequestForVideoUpscale(c)
 
 	// 8. 构建请求体（开启透传时：原样转发客户端 body，仅改写 model，并去掉网关专用字段如 prompt）
 	var requestBody io.Reader
@@ -452,6 +458,11 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 		strings.HasPrefix(path, "/v1/video/generations/") ||
 		strings.HasPrefix(path, "/api/playground/videos/")
 
+	// 超分进行中：查询时同步推进 MPS，完成后回写结束时间/状态/结果地址并结算。
+	if service.SyncVideoUpscaleOnFetch(c.Request.Context(), originTask) {
+		// originTask 已是最新落库状态，继续走下方响应构建。
+	}
+
 	// Gemini/Vertex 支持实时查询：用户 fetch 时直接从上游拉取最新状态
 	if realtimeResp := tryRealtimeFetch(originTask, isOpenAIVideoAPI, path); len(realtimeResp) > 0 {
 		respBody = realtimeResp
@@ -477,6 +488,7 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 				taskResp = service.TaskErrorWrapper(err, "finalize_video_poll_response_failed", http.StatusInternalServerError)
 				return
 			}
+			respBody = service.ApplyVideoUpscaleToClientVideoResponse(respBody, originTask)
 			return
 		}
 		taskResp = service.TaskErrorWrapperLocal(fmt.Errorf("not_implemented:%s", originTask.Platform), "not_implemented", http.StatusNotImplemented)
@@ -498,10 +510,14 @@ func videoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *d
 // 对操练场视频轮询尤其重要：OpenAI-style 视频渠道在后台轮询落库前，也能实时返回完成态。
 // 当非 OpenAI Video API 时，还会构建自定义格式的响应体。
 func tryRealtimeFetch(task *model.Task, isOpenAIVideoAPI bool, requestPath string) []byte {
+	// 超分进行中或已成功：禁止走实时上游拉取，避免把原始生成视频 URL/480P resolution 覆盖回来。
+	if service.IsVideoUpscaleInProgress(task) || service.HasSuccessfulVideoUpscale(task) {
+		return nil
+	}
 	// Alibaba video moderation is asynchronous. Always use the persisted polling
 	// result while it is enabled so an upstream success response cannot expose an
 	// unmoderated video URL through this realtime path.
-	if setting.ShouldCheckAliyunGuardrailVideo() {
+	if setting.ShouldCheckAliyunGuardrailVideoForUser(task.UserId) {
 		return nil
 	}
 	channelModel, err := model.GetChannelById(task.ChannelId, true)
@@ -716,9 +732,9 @@ func buildOpenAIVideoPollResponse(task *model.Task, upstreamBody []byte, request
 	tsCtx := dto.VideoPollTimestampContextFromTaskFields(task.SubmitTime, task.CreatedAt, task.FinishTime)
 	finalized, err := dto.FinalizeVideoPollResponseJSON(openAIVideoData, upstreamBody, requestPath, tsCtx)
 	if err != nil || len(finalized) == 0 {
-		return openAIVideoData
+		return service.ApplyVideoUpscaleToClientVideoResponse(openAIVideoData, task)
 	}
-	return finalized
+	return service.ApplyVideoUpscaleToClientVideoResponse(finalized, task)
 }
 
 // mapTaskStatusToSimple 将内部 TaskStatus 映射为简化状态字符串

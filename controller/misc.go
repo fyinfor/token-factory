@@ -222,7 +222,7 @@ func GetStatus(c *gin.Context) {
 		"self_use_mode_enabled":                       operation_setting.SelfUseModeEnabled,
 		"real_name_verification_enabled":              setting.AliyunRealNameVerificationEnabled,
 		"aliyun_guardrail_hide_playground_media_tabs": setting.AliyunGuardrailHidePlaygroundMediaTabs,
-		"aliyun_guardrail_hide_playground_reasoning":  setting.ShouldCheckAliyunGuardrailOutput(),
+		"aliyun_guardrail_hide_playground_reasoning":  setting.ShouldCheckAliyunGuardrailOutput() && !setting.HasAliyunGuardrailUserScope(),
 		"model_default_docs_enabled":                  common.OptionMap["ModelDefaultDocsEnabled"] != "false",
 		"default_use_auto_group":                      setting.DefaultUseAutoGroup,
 
@@ -270,6 +270,7 @@ func GetStatus(c *gin.Context) {
 		"home_footer_certificates":          strings.TrimSpace(common.Interface2String(common.OptionMap["HomeFooterCertificates"])),
 		"home_banner_slides":                strings.TrimSpace(common.Interface2String(common.OptionMap["HomeBannerSlides"])),
 		"home_banner_interval_sec":          strings.TrimSpace(common.Interface2String(common.OptionMap["HomeBannerIntervalSec"])),
+		"changelog_enabled":                 common.OptionMap["ChangelogEnabled"] == "true",
 
 		// 路由能力开关（供前端隐藏 TokenFactory 智能路由 UI；实际选路见 middleware/distributor）
 		"tokenfactory_route_enabled": common.TokenFactoryRouteEnabled(),

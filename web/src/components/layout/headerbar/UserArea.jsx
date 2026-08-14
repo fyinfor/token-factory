@@ -163,7 +163,7 @@ const UserArea = ({
             >
               {user.username?.[0]?.toUpperCase() || ''}
             </Avatar>
-            <span className='hidden md:inline'>
+            <span className='hidden min-[1800px]:inline'>
               <span className='flex h-8 max-w-[7rem] flex-col items-start justify-center gap-[1px] leading-none mr-1'>
                 <Typography.Text
                   ellipsis={{ showTooltip: true }}
@@ -215,7 +215,7 @@ const UserArea = ({
           </Button>
         </Link>
         {showRegisterButton && (
-          <div className='hidden md:block'>
+          <div className='hidden min-[1600px]:block'>
             <Link to='/register' className='flex'>
               <Button
                 theme='solid'
